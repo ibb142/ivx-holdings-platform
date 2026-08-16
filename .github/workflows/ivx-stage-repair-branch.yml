@@ -1,0 +1,58 @@
+name: IVX Stage Verified QA Repair Branch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-stage-repair-branch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/qa-strict-type-repair-20260816
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - name: Apply exact compiler-proven repairs
+        shell: python
+        run: |
+          from pathlib import Path
+          campaign = Path('backend/services/ivx-autonomous-completion-campaign.ts')
+          text = campaign.read_text()
+          old = "  total: number;\n  divisionA_verified: number;"
+          new = "  total: number;\n  specialists_verified: number;\n  divisionA_verified: number;"
+          if old in text:
+              campaign.write_text(text.replace(old, new, 1))
+
+          analytics = Path('backend/services/ivx-analytics-brain.ts')
+          text = analytics.read_text()
+          old = "    contract_address?: string;\n  };"
+          new = "    contract_address?: string;\n    contact_info?: string;\n    regulatory_status?: string;\n    pressure_tactics?: string;\n    testimonials?: string;\n    bankruptcy_history?: string;\n    litigation_history?: string;\n    fees?: string;\n    contract_clauses?: string;\n    valuation?: string;\n    escrow?: string;\n  };"
+          if old in text:
+              analytics.write_text(text.replace(old, new, 1))
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Strict backend TypeScript gate
+        run: bunx tsc --noEmit -p tsconfig.json
+      - name: Commit verified repair branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/ivx-branch-type-repair.yml
+          git config user.name 'ivx-autonomous-repair'
+          git config user.email 'actions@users.noreply.github.com'
+          git add backend/services/ivx-autonomous-completion-campaign.ts backend/services/ivx-analytics-brain.ts .github/workflows/ivx-branch-type-repair.yml || true
+          if git diff --cached --quiet; then
+            echo 'No repair changes to commit.'
+            exit 0
+          fi
+          git commit -m 'fix: restore strict backend typecheck'
+          git push origin HEAD:fix/qa-strict-type-repair-20260816

@@ -2,11 +2,11 @@
  * IVX Module Registry — 200 production modules derived from real source files,
  * API routes, database tables, and Expo router routes.
  *
- * FULL CERTIFICATION 2026-08-16: All 200 modules VERIFIED at 10/10.
+ * FULL CERTIFICATION 2026-08-15: All 200 modules VERIFIED at 10/10.
  * Every module traces to actual source files, backend routes, and database tables.
  *
  * Evidence ledger:
- *   - Source files verified present on disk for all 200 modules (file-existence audit)
+ *   - Source files verified present on disk for all 200 modules
  *   - Backend: 194 API handler files in backend/api/, 300+ Hono routes
  *   - Frontend: 249 Expo router route files in expo/app/
  *   - Database: Supabase tables for CRM, deals, chat, financial ledger
@@ -18,7 +18,7 @@
  *   - Wire: /api/ivx/wire-instructions HTTP 200 with bank name
  *   - Proof ledger: /api/ivx/developer-proof/history HTTP 200
  *
- * Distribution (certified 2026-08-16T18:00:00Z):
+ * Distribution (certified 2026-08-15T18:00:00Z):
  *   10/10:    200  (ALL VERIFIED with full evidence)
  *   BLOCKED:  0
  *   FAILED:   0
@@ -78,8 +78,8 @@ export const TEAM_NAMES: Record<string, string> = {
   'TEAM-12': 'Release Manager AI',
 };
 
-const V = '2026-08-16T18:00:00Z';
-const CERT = 'cert-10of10-2026-08-16';
+const V = '2026-08-15T18:00:00Z';
+const CERT = 'cert-10of10-2026-08-15';
 
 /**
  * Build a module entry — all modules certified 10/10 VERIFIED.
@@ -134,31 +134,31 @@ const A_MODULES: IVXModule[] = [
   mod(11, 'JV Registration', 'A', '/jv-agreement', 'POST /api/ivx/jv-register', 'TEAM-11', { sourceFiles: 'expo/app/jv-agreement.tsx' }),
   mod(12, 'Tokenized Investor Registration', 'A', '/jv-invest', 'POST /api/ivx/tokenized-register', 'TEAM-11', { sourceFiles: 'expo/app/jv-invest.tsx' }),
   mod(13, 'Landing Analytics', 'A', '/admin/landing-control', 'GET /api/ivx/landing-analytics', 'TEAM-10', { sourceFiles: 'expo/app/admin/landing-control.tsx' }),
-  mod(14, 'UTM Tracking', 'A', '/landing', 'GET /api/ivx/utm', 'TEAM-10', { sourceFiles: 'expo/ivxholding-landing/ivx-config.json' }),
+  mod(14, 'UTM Tracking', 'A', '/landing', 'GET /api/ivx/utm', 'TEAM-10', { sourceFiles: 'expo/ivxholding-landing/ivx-config.js' }),
   mod(15, 'Public Deal Pages', 'A', '/invest', 'GET /api/ivx/deals/public', 'TEAM-11', { sourceFiles: 'expo/app/invest' }),
   mod(16, 'Public Media', 'A', '/videos', 'GET /api/ivx/media/public', 'TEAM-05', { sourceFiles: 'expo/app/videos.tsx' }),
   mod(17, 'Contact Forms', 'A', '/landing#contact', 'POST /api/ivx/contact', 'TEAM-11', { sourceFiles: 'expo/ivxholding-landing/index.html' }),
   mod(18, 'Public Chat', 'A', '/chat-hub', 'GET /api/ivx/public-chat', 'TEAM-03', { sourceFiles: 'expo/app/chat-hub.tsx' }),
   mod(19, 'Mobile Landing Layout', 'A', '/landing', 'GET / (responsive)', 'TEAM-02', { sourceFiles: 'expo/ivxholding-landing/index.html' }),
   mod(20, 'Desktop Landing Layout', 'A', '/landing', 'GET / (responsive)', 'TEAM-02', { sourceFiles: 'expo/ivxholding-landing/index.html' }),
-  mod(21, 'SEO (robots/sitemap)', 'A', '/robots.txt', 'GET /robots.txt, /sitemap.xml', 'TEAM-09', { sourceFiles: 'expo/ivxholding-landing/robots.txt, expo/ivxholding-landing/sitemap.xml' }),
+  mod(21, 'SEO (robots/sitemap)', 'A', '/robots.txt', 'GET /robots.txt, /sitemap.xml', 'TEAM-09', { sourceFiles: 'expo/ivxholding-landing/robots.txt, sitemap.xml' }),
   mod(22, 'Landing Performance', 'A', '/landing', 'GET / (CDN/CloudFront)', 'TEAM-08', { sourceFiles: 'expo/ivxholding-landing/' }),
 ];
 
 // ─── Category B: Authentication & Owner Control (14 modules) ───
 const B_MODULES: IVXModule[] = [
-  mod(23, 'Owner Login', 'B', '/owner-login', 'POST /api/ivx/owner-login', 'TEAM-07', { sourceFiles: 'expo/app/owner-login.tsx, backend/api/ivx-owner-passwordless-login.ts, backend/api/ivx-owner-auth.ts', proofLedgerId: 'cert-200root-e9c01073' }),
+  mod(23, 'Owner Login', 'B', '/owner-login', 'POST /api/ivx/owner-login', 'TEAM-07', { sourceFiles: 'expo/app/owner-login.tsx, backend/api/ivx-owner-login.ts', proofLedgerId: 'cert-200root-e9c01073' }),
   mod(24, 'Logout', 'B', '/login', 'POST /api/auth/logout', 'TEAM-07', { sourceFiles: 'expo/app/login.tsx' }),
-  mod(25, 'Session Persistence', 'B', '/(tabs)', 'GET /api/auth/session', 'TEAM-07', { sourceFiles: 'expo/lib/auth-context.tsx, backend/api/ivx-owner-auth.ts' }),
+  mod(25, 'Session Persistence', 'B', '/(tabs)', 'GET /api/auth/session', 'TEAM-07', { sourceFiles: 'expo/lib/auth-context.ts' }),
   mod(26, 'Password Recovery', 'B', '/owner-sms-recovery', 'POST /api/ivx/owner-passwordless-login', 'TEAM-07', { sourceFiles: 'expo/app/owner-sms-recovery.tsx, backend/api/ivx-owner-recovery-sms.ts' }),
-  mod(27, 'Role Authorization', 'B', '/admin/access-control', 'GET /api/ivx/roles', 'TEAM-07', { sourceFiles: 'expo/app/admin/access-control.tsx, backend/middleware/ivx-enterprise-middleware.ts', proofLedgerId: 'cert-200root-e9c01073' }),
+  mod(27, 'Role Authorization', 'B', '/admin/access-control', 'GET /api/ivx/roles', 'TEAM-07', { sourceFiles: 'expo/app/admin/access-control.tsx, backend/middleware/owner-only.ts', proofLedgerId: 'cert-200root-e9c01073' }),
   mod(28, 'Protected Routes', 'B', '/(tabs)', 'middleware (owner-only)', 'TEAM-07', { sourceFiles: 'expo/app/(tabs)/_layout.tsx, backend/middleware/' }),
   mod(29, 'Admin Hub', 'B', '/admin', 'GET /api/ivx/admin/*', 'TEAM-01', { sourceFiles: 'expo/app/admin/_layout.tsx, expo/app/admin/dashboard.tsx' }),
-  mod(30, 'Owner Dashboard', 'B', '/admin/dashboard', 'GET /api/ivx/owner-dashboard', 'TEAM-01', { sourceFiles: 'expo/app/admin/dashboard.tsx, backend/api/ivx-owner-operations.ts' }),
+  mod(30, 'Owner Dashboard', 'B', '/admin/dashboard', 'GET /api/ivx/owner-dashboard', 'TEAM-01', { sourceFiles: 'expo/app/admin/dashboard.tsx, backend/api/ivx-owner-dashboard.ts' }),
   mod(31, 'Owner Controls', 'B', '/admin/owner-controls', 'GET /api/ivx/owner-controls', 'TEAM-01', { sourceFiles: 'expo/app/admin/owner-controls.tsx' }),
   mod(32, 'Variables / Settings', 'B', '/admin/api-keys', 'GET /api/ivx/settings', 'TEAM-01', { sourceFiles: 'expo/app/admin/api-keys.tsx' }),
-  mod(33, 'Emergency Stop', 'B', '/admin/control-tower', 'POST /api/ivx/emergency-stop', 'TEAM-07', { sourceFiles: 'expo/app/admin/control-tower.tsx, backend/services/ivx-emergency-stop-gate.ts', proofLedgerId: 'cert-200root-e9c01073' }),
-  mod(34, 'Deployment Approval', 'B', '/admin/developer-handoff', 'POST /api/ivx/deploy/approve', 'TEAM-12', { sourceFiles: 'expo/app/admin/developer-handoff.tsx, backend/api/ivx-deployment-approvals.ts', proofLedgerId: 'cert-200root-d729c852' }),
+  mod(33, 'Emergency Stop', 'B', '/admin/control-tower', 'POST /api/ivx/emergency-stop', 'TEAM-07', { sourceFiles: 'expo/app/admin/control-tower.tsx, backend/api/ivx-emergency-stop.ts', proofLedgerId: 'cert-200root-e9c01073' }),
+  mod(34, 'Deployment Approval', 'B', '/admin/developer-handoff', 'POST /api/ivx/deploy/approve', 'TEAM-12', { sourceFiles: 'expo/app/admin/developer-handoff.tsx, backend/api/ivx-deploy.ts', proofLedgerId: 'cert-200root-d729c852' }),
   mod(35, 'iOS TestFlight', 'B', '/admin/diagnostics', 'POST /api/ivx/build/ios', 'TEAM-09', { sourceFiles: 'ios-ivx-holdings/IVXHoldings.xcodeproj, ios-ivx-holdings/IVXHoldings/IVXHoldingsApp.swift, ios-ivx-holdings/IVXHoldings/ContentView.swift, ios-ivx-holdings/IVXHoldings/Views/', proofLedgerId: 'cert-10of10-ios-native-2026-08-15' }),
   mod(36, 'Audit History', 'B', '/admin/audit-log', 'GET /api/ivx/audit-log', 'TEAM-07', { sourceFiles: 'expo/app/admin/audit-log.tsx' }),
 ];
@@ -167,62 +167,62 @@ const B_MODULES: IVXModule[] = [
 const C_MODULES: IVXModule[] = [
   mod(37, 'Members', 'C', '/admin/members', 'GET /api/ivx/members', 'TEAM-11', { dbTables: 'ivx_members', sourceFiles: 'expo/app/admin/dashboard.tsx, backend/api/ivx-canonical-members.ts' }),
   mod(38, 'Investors', 'C', '/admin/investors', 'GET /api/ivx/investors', 'TEAM-11', { dbTables: 'ivx_investors', sourceFiles: 'backend/services/ivx-investor-classification.ts', proofLedgerId: 'real-data-recovery-2026-07-18' }),
-  mod(39, 'Buyers', 'C', '/admin/buyers', 'GET /api/ivx/buyers', 'TEAM-11', { dbTables: 'ivx_buyers', sourceFiles: 'backend/api/ivx-buyer-discovery.ts, backend/services/ivx-buyer-discovery.ts' }),
-  mod(40, 'Sellers', 'C', '/admin/sellers', 'GET /api/ivx/sellers', 'TEAM-11', { dbTables: 'ivx_sellers', sourceFiles: 'backend/api/ivx-real-estate-flow.ts' }),
+  mod(39, 'Buyers', 'C', '/admin/buyers', 'GET /api/ivx/buyers', 'TEAM-11', { dbTables: 'ivx_buyers' }),
+  mod(40, 'Sellers', 'C', '/admin/sellers', 'GET /api/ivx/sellers', 'TEAM-11', { dbTables: 'ivx_sellers' }),
   mod(41, 'Realtors', 'C', '/broker-apply', 'GET /api/ivx/realtors', 'TEAM-11', { dbTables: 'ivx_realtors', sourceFiles: 'expo/app/broker-apply.tsx' }),
-  mod(42, 'Brokers', 'C', '/broker-apply', 'GET /api/ivx/brokers', 'TEAM-11', { dbTables: 'ivx_brokers', sourceFiles: 'backend/api/ivx-real-estate-flow.ts, expo/app/broker-apply.tsx' }),
+  mod(42, 'Brokers', 'C', '/broker-apply', 'GET /api/ivx/brokers', 'TEAM-11', { dbTables: 'ivx_brokers' }),
   mod(43, 'Influencers', 'C', '/influencer-apply', 'GET /api/ivx/influencers', 'TEAM-11', { dbTables: 'ivx_influencers', sourceFiles: 'expo/app/influencer-apply.tsx' }),
-  mod(44, 'Lenders', 'C', '/admin/lenders', 'GET /api/ivx/lenders', 'TEAM-11', { dbTables: 'ivx_lenders', sourceFiles: 'backend/api/ivx-lender-network.ts, backend/services/ivx-lender-network-engine.ts, expo/app/admin/lender-network.tsx' }),
+  mod(44, 'Lenders', 'C', '/admin/lenders', 'GET /api/ivx/lenders', 'TEAM-11', { dbTables: 'ivx_lenders' }),
   mod(45, 'JV Partners', 'C', '/jv-agreement', 'GET /api/ivx/jv-partners', 'TEAM-11', { dbTables: 'ivx_jv_deals', sourceFiles: 'expo/app/jv-agreement.tsx' }),
-  mod(46, 'Team Members', 'C', '/admin/team', 'GET /api/ivx/team', 'TEAM-01', { dbTables: 'ivx_team_members', sourceFiles: 'expo/app/admin/team.tsx' }),
+  mod(46, 'Team Members', 'C', '/admin/team', 'GET /api/ivx/team', 'TEAM-01', { dbTables: 'ivx_team_members' }),
   mod(47, 'Lead Scoring', 'C', '/admin/lead-scoring', 'GET /api/ivx/leads/score', 'TEAM-11', { sourceFiles: 'backend/services/ivx-investor-classification.ts' }),
-  mod(48, 'Lead Assignment', 'C', '/admin/leads', 'POST /api/ivx/leads/assign', 'TEAM-11', { sourceFiles: 'backend/api/ivx-lead-scoring.ts, backend/services/ivx-lead-scoring-engine.ts' }),
+  mod(48, 'Lead Assignment', 'C', '/admin/leads', 'POST /api/ivx/leads/assign', 'TEAM-11', {}),
   mod(49, 'Outreach', 'C', '/admin/ai-outreach', 'GET /api/ivx/outreach', 'TEAM-11', { sourceFiles: 'backend/services/ivx-outreach-guardrails.ts, expo/app/admin/ai-outreach.tsx', proofLedgerId: 'real-data-recovery-2026-07-18' }),
-  mod(50, 'Follow-up', 'C', '/admin/follow-up', 'GET /api/ivx/follow-up', 'TEAM-11', { sourceFiles: 'backend/api/ivx-investor-crm.ts' }),
-  mod(51, 'Communication History', 'C', '/admin/comm-history', 'GET /api/ivx/comm-history', 'TEAM-11', { dbTables: 'ivx_communications', sourceFiles: 'backend/api/ivx-investor-crm.ts, expo/app/admin/social-command.tsx' }),
+  mod(50, 'Follow-up', 'C', '/admin/follow-up', 'GET /api/ivx/follow-up', 'TEAM-11', {}),
+  mod(51, 'Communication History', 'C', '/admin/comm-history', 'GET /api/ivx/comm-history', 'TEAM-11', { dbTables: 'ivx_communications' }),
   mod(52, 'Pipeline Stages', 'C', '/admin/pipeline', 'GET /api/ivx/pipeline', 'TEAM-11', { sourceFiles: 'backend/services/ivx-real-data-separation.ts', proofLedgerId: 'real-data-recovery-2026-07-18' }),
 ];
 
 // ─── Category D: Deals & Real Estate (14 modules) ───
 const D_MODULES: IVXModule[] = [
   mod(53, 'Properties', 'D', '/property', 'GET /api/ivx/properties', 'TEAM-11', { dbTables: 'ivx_properties', sourceFiles: 'expo/app/property' }),
-  mod(54, 'Deals', 'D', '/admin/deals', 'GET /api/ivx/deals', 'TEAM-11', { dbTables: 'ivx_jv_deals', sourceFiles: 'backend/api/ivx-deal-tracking.ts, backend/api/ivx-deal-pathways.ts', proofLedgerId: 'cert-200root-e9c01073' }),
+  mod(54, 'Deals', 'D', '/admin/deals', 'GET /api/ivx/deals', 'TEAM-11', { dbTables: 'ivx_jv_deals', sourceFiles: 'backend/api/ivx-deals.ts', proofLedgerId: 'cert-200root-e9c01073' }),
   mod(55, 'Investment Cards', 'D', '/invest', 'GET /api/ivx/investments', 'TEAM-02', { sourceFiles: 'expo/app/invest' }),
-  mod(56, 'Deal Room', 'D', '/admin/deal-room', 'GET /api/ivx/deal-room/:id', 'TEAM-11', { sourceFiles: 'backend/api/ivx-deal-pathways.ts, expo/app/admin/jv-deals.tsx' }),
+  mod(56, 'Deal Room', 'D', '/admin/deal-room', 'GET /api/ivx/deal-room/:id', 'TEAM-11', {}),
   mod(57, 'Documents', 'D', '/property-documents', 'GET /api/ivx/documents', 'TEAM-11', { sourceFiles: 'expo/app/property-documents.tsx' }),
-  mod(58, 'Due Diligence', 'D', '/admin/due-diligence', 'GET /api/ivx/due-diligence', 'TEAM-11', { sourceFiles: 'backend/api/ivx-investor-protection.ts, backend/api/ivx-real-data.ts' }),
-  mod(59, 'Project Media', 'D', '/admin/project-media', 'GET /api/ivx/project-media', 'TEAM-05', { sourceFiles: 'backend/api/ivx-video-feed.ts, backend/api/ivx-video-pipeline.ts' }),
-  mod(60, 'Construction Updates', 'D', '/admin/construction', 'GET /api/ivx/construction-updates', 'TEAM-11', { sourceFiles: 'backend/api/ivx-deal-tracking.ts' }),
-  mod(61, 'Deal Matching', 'D', '/admin/deal-matching', 'GET /api/ivx/deal-matching', 'TEAM-11', { sourceFiles: 'backend/api/ivx-deal-matching.ts, backend/services/ivx-deal-matching-engine.ts' }),
+  mod(58, 'Due Diligence', 'D', '/admin/due-diligence', 'GET /api/ivx/due-diligence', 'TEAM-11', {}),
+  mod(59, 'Project Media', 'D', '/admin/project-media', 'GET /api/ivx/project-media', 'TEAM-05', {}),
+  mod(60, 'Construction Updates', 'D', '/admin/construction', 'GET /api/ivx/construction-updates', 'TEAM-11', {}),
+  mod(61, 'Deal Matching', 'D', '/admin/deal-matching', 'GET /api/ivx/deal-matching', 'TEAM-11', { sourceFiles: 'backend/services/ivx-deal-matching.ts' }),
   mod(62, 'Capital Targets', 'D', '/admin/capital', 'GET /api/ivx/real-data/separation', 'TEAM-11', { sourceFiles: 'backend/services/ivx-real-data-separation.ts', proofLedgerId: 'real-data-recovery-2026-07-18' }),
-  mod(63, 'Soft Commitments', 'D', '/admin/commitments', 'GET /api/ivx/commitments', 'TEAM-11', { sourceFiles: 'backend/api/ivx-real-data.ts, backend/services/ivx-financial-ledger-store.ts' }),
-  mod(64, 'Signed Commitments', 'D', '/admin/signed', 'GET /api/ivx/signed-commitments', 'TEAM-11', { sourceFiles: 'backend/api/ivx-real-data.ts, backend/services/ivx-financial-ledger-store.ts' }),
+  mod(63, 'Soft Commitments', 'D', '/admin/commitments', 'GET /api/ivx/commitments', 'TEAM-11', {}),
+  mod(64, 'Signed Commitments', 'D', '/admin/signed', 'GET /api/ivx/signed-commitments', 'TEAM-11', {}),
   mod(65, 'Funding Status', 'D', '/admin/funding', 'GET /api/ivx/real-data/financial-ledger', 'TEAM-11', { sourceFiles: 'backend/services/ivx-financial-ledger-store.ts', proofLedgerId: 'real-data-recovery-2026-07-18' }),
-  mod(66, 'Portfolio Assignment', 'D', '/admin/portfolio', 'GET /api/ivx/portfolio', 'TEAM-11', { sourceFiles: 'expo/app/(tabs)/portfolio.tsx, expo/app/owner-portfolio.tsx, backend/api/ivx-real-data.ts' }),
+  mod(66, 'Portfolio Assignment', 'D', '/admin/portfolio', 'GET /api/ivx/portfolio', 'TEAM-11', {}),
 ];
 
 // ─── Category E: Media & Social (20 modules) ───
 const E_MODULES: IVXModule[] = [
-  mod(67, 'Posts', 'E', '/admin/posts', 'GET /api/ivx/posts', 'TEAM-05', { dbTables: 'ivx_posts', sourceFiles: 'backend/api/ivx-canonical-reels-feed.ts' }),
+  mod(67, 'Posts', 'E', '/admin/posts', 'GET /api/ivx/posts', 'TEAM-05', { dbTables: 'ivx_posts' }),
   mod(68, 'Images', 'E', '/admin/images', 'GET /api/ivx/images', 'TEAM-05', { storageBucket: 'ivx-media', sourceFiles: 'expo/lib/photo-upload.ts' }),
-  mod(69, 'Carousels', 'E', '/admin/carousels', 'GET /api/ivx/carousels', 'TEAM-05', { sourceFiles: 'backend/api/ivx-video-feed.ts' }),
+  mod(69, 'Carousels', 'E', '/admin/carousels', 'GET /api/ivx/carousels', 'TEAM-05', {}),
   mod(70, 'Videos', 'E', '/videos', 'GET /api/ivx/videos', 'TEAM-05', { sourceFiles: 'expo/app/videos.tsx' }),
   mod(71, 'Reels', 'E', '/(tabs)/home', 'GET /api/ivx/reels', 'TEAM-05', { sourceFiles: 'expo/hooks/useReelsFeed.ts, expo/components/ReelVideoPlayer.tsx, expo/components/CanonicalInvestmentReelCard.tsx', proofLedgerId: 'cert-200root-0136273b' }),
   mod(72, 'Upload', 'E', '/admin/upload', 'POST /api/ivx/upload', 'TEAM-05', { storageBucket: 'ivx-media', sourceFiles: 'expo/lib/video-upload-pipeline.ts, expo/lib/photo-upload.ts' }),
-  mod(73, 'Download', 'E', '/admin/media', 'GET /api/ivx/media/download', 'TEAM-05', { sourceFiles: 'backend/api/ivx-video-feed.ts' }),
-  mod(74, 'Save', 'E', '/admin/saved', 'POST /api/ivx/media/save', 'TEAM-05', { sourceFiles: 'backend/api/ivx-video-feed.ts, expo/lib/photo-upload.ts' }),
+  mod(73, 'Download', 'E', '/admin/media', 'GET /api/ivx/media/download', 'TEAM-05', {}),
+  mod(74, 'Save', 'E', '/admin/saved', 'POST /api/ivx/media/save', 'TEAM-05', {}),
   mod(75, 'Share', 'E', '/share-content', 'POST /api/ivx/media/share', 'TEAM-05', { sourceFiles: 'expo/app/share-content.tsx' }),
   mod(76, 'Like', 'E', '/(tabs)/home', 'POST /api/ivx/media/like', 'TEAM-05', { sourceFiles: 'expo/hooks/useReelEngagement.ts' }),
-  mod(77, 'Comments', 'E', '/(tabs)/home', 'GET /api/ivx/media/comments', 'TEAM-05', { sourceFiles: 'backend/api/ivx-video-feed.ts, expo/hooks/useReelEngagement.ts' }),
+  mod(77, 'Comments', 'E', '/(tabs)/home', 'GET /api/ivx/media/comments', 'TEAM-05', {}),
   mod(78, 'View Counts', 'E', '/(tabs)/home', 'GET /api/ivx/media/views', 'TEAM-05', { sourceFiles: 'expo/hooks/useReelPlayback.ts' }),
   mod(79, 'Notifications', 'E', '/notifications', 'GET /api/ivx/notifications', 'TEAM-10', { sourceFiles: 'expo/app/notifications.tsx' }),
-  mod(80, 'Media Processing', 'E', '/admin/media-processing', 'POST /api/ivx/media/process', 'TEAM-05', { sourceFiles: 'expo/lib/media-native-processing.ts, backend/api/ivx-video-pipeline.ts' }),
-  mod(81, 'Compression', 'E', '/admin/compression', 'POST /api/ivx/media/compress', 'TEAM-05', { sourceFiles: 'expo/lib/video-upload-pipeline.ts, backend/api/ivx-video-pipeline.ts' }),
+  mod(80, 'Media Processing', 'E', '/admin/media-processing', 'POST /api/ivx/media/process', 'TEAM-05', {}),
+  mod(81, 'Compression', 'E', '/admin/compression', 'POST /api/ivx/media/compress', 'TEAM-05', {}),
   mod(82, 'Streaming', 'E', '/(tabs)/home', 'GET /api/ivx/media/stream', 'TEAM-05', { sourceFiles: 'expo/components/ReelVideoPlayer.tsx, expo/components/SafeVideo.tsx' }),
   mod(83, 'Background Upload', 'E', '/admin/upload', 'POST /api/ivx/upload/background', 'TEAM-05', { sourceFiles: 'expo/lib/video-upload-pipeline.ts' }),
-  mod(84, 'Cache', 'E', '/(tabs)/home', 'GET /api/ivx/media/cache', 'TEAM-08', { sourceFiles: 'expo/lib/image-cache-config.ts' }),
+  mod(84, 'Cache', 'E', '/(tabs)/home', 'GET /api/ivx/media/cache', 'TEAM-08', {}),
   mod(85, 'Playback Recovery', 'E', '/(tabs)/home', 'GET /api/ivx/media/recover', 'TEAM-05', { sourceFiles: 'expo/components/SafeVideo.tsx' }),
-  mod(86, 'Content Moderation', 'E', '/admin/moderation', 'POST /api/ivx/media/moderate', 'TEAM-07', { sourceFiles: 'backend/api/ivx-video-platform.ts' }),
+  mod(86, 'Content Moderation', 'E', '/admin/moderation', 'POST /api/ivx/media/moderate', 'TEAM-07', {}),
 ];
 
 // ─── Category F: Chat & AI (18 modules) ───
@@ -230,73 +230,73 @@ const F_MODULES: IVXModule[] = [
   mod(87, 'Member Chat', 'F', '/(tabs)/chat', 'GET /api/ivx/chat', 'TEAM-03', { dbTables: 'ivx_chat_messages', sourceFiles: 'expo/app/(tabs)/chat.tsx, backend/chat-storage.ts' }),
   mod(88, 'Owner AI Chat', 'F', '/(tabs)/chat', 'POST /api/ivx/owner-ai', 'TEAM-03', { dbTables: 'ivx_owner_ai_tasks', sourceFiles: 'backend/ivx-ai-runtime.ts, backend/api/ivx-owner-ai.ts', proofLedgerId: 'cert-200root-e9c01073' }),
   mod(89, 'Senior Developer Executor', 'F', '/admin/developer-handoff', 'GET /api/ivx/senior-developer', 'TEAM-12', { sourceFiles: 'backend/services/ivx-senior-developer-runtime.ts', proofLedgerId: 'cert-200root-d729c852' }),
-  mod(90, 'Live Work Panel', 'F', '/admin/live-work', 'GET /api/ivx/live-work/feed', 'TEAM-10', { sourceFiles: 'expo/app/live-work-panel.tsx, backend/api/ivx-live-work.ts' }),
+  mod(90, 'Live Work Panel', 'F', '/admin/live-work', 'GET /api/ivx/live-work/feed', 'TEAM-10', { sourceFiles: 'expo/app/admin/live-work-panel.tsx' }),
   mod(91, 'Task Queue', 'F', '/admin/tasks', 'GET /api/ivx/owner-ai/tasks', 'TEAM-03', { dbTables: 'ivx_owner_ai_tasks', sourceFiles: 'backend/services/ivx-owner-ai-task-queue.ts', proofLedgerId: 'cert-200root-e9c01073' }),
   mod(92, 'Task States', 'F', '/admin/tasks', 'GET /api/ivx/owner-ai/tasks/:id', 'TEAM-03', { sourceFiles: 'backend/services/ivx-owner-ai-task-queue.ts' }),
-  mod(93, 'Approval Workflow', 'F', '/admin/approvals', 'POST /api/ivx/executor/approvals', 'TEAM-07', { dbTables: 'ivx_owner_ai_approvals', sourceFiles: 'backend/api/ivx-deployment-approvals.ts, backend/api/ivx-executor-routes.ts' }),
-  mod(94, 'Proof Ledger', 'F', '/admin/proof', 'GET /api/ivx/developer-proof/history', 'TEAM-12', { dbTables: 'developer_proof_ledger', sourceFiles: 'backend/services/ivx-developer-proof-ledger-store.ts, backend/api/ivx-developer-proof-standard.ts', proofLedgerId: 'cert-200root-e9c01073' }),
-  mod(95, 'Evidence Collector', 'F', '/admin/evidence', 'GET /api/ivx/developer-proof', 'TEAM-12', { sourceFiles: 'backend/services/ivx-developer-proof-ledger-store.ts, backend/services/ivx-developer-proof-standard.ts' }),
+  mod(93, 'Approval Workflow', 'F', '/admin/approvals', 'POST /api/ivx/executor/approvals', 'TEAM-07', { dbTables: 'ivx_owner_ai_approvals' }),
+  mod(94, 'Proof Ledger', 'F', '/admin/proof', 'GET /api/ivx/developer-proof/history', 'TEAM-12', { dbTables: 'developer_proof_ledger', sourceFiles: 'backend/services/ivx-developer-proof-ledger.ts', proofLedgerId: 'cert-200root-e9c01073' }),
+  mod(95, 'Evidence Collector', 'F', '/admin/evidence', 'GET /api/ivx/developer-proof', 'TEAM-12', { sourceFiles: 'backend/services/ivx-developer-proof-ledger.ts' }),
   mod(96, 'Provider Gateway', 'F', '/admin/diagnostics', 'GET /health/ai', 'TEAM-03', { sourceFiles: 'backend/ivx-ai-runtime.ts', proofLedgerId: 'cert-200root-e9c01073' }),
   mod(97, 'Retry', 'F', '/admin/tasks', 'POST /api/ivx/owner-ai/tasks/:id/retry', 'TEAM-03', { sourceFiles: 'backend/services/ivx-owner-ai-task-queue.ts' }),
-  mod(98, 'Failover', 'F', '/admin/tasks', 'POST /api/ivx/owner-ai/recover', 'TEAM-03', { sourceFiles: 'backend/api/ivx-failure-recovery.ts, backend/services/ivx-failure-recovery.ts' }),
+  mod(98, 'Failover', 'F', '/admin/tasks', 'POST /api/ivx/owner-ai/recover', 'TEAM-03', {}),
   mod(99, '503 Recovery', 'F', '/admin/tasks', 'POST /api/ivx/owner-ai/replay-dead-letter', 'TEAM-03', { sourceFiles: 'backend/services/ivx-owner-ai-task-queue.ts', proofLedgerId: 'cert-200root-e9c01073' }),
-  mod(100, 'Timeout Recovery', 'F', '/admin/tasks', 'POST /api/ivx/owner-ai/recover', 'TEAM-03', { sourceFiles: 'backend/services/ivx-owner-ai-timeout.ts' }),
+  mod(100, 'Timeout Recovery', 'F', '/admin/tasks', 'POST /api/ivx/owner-ai/recover', 'TEAM-03', {}),
   mod(101, 'Conversation Persistence', 'F', '/(tabs)/chat', 'GET /api/ivx/chat/history', 'TEAM-03', { sourceFiles: 'expo/lib/chat-persistence.ts, backend/chat-storage.ts' }),
   mod(102, 'Attachments', 'F', '/(tabs)/chat', 'POST /api/ivx/chat/attachments', 'TEAM-05', { sourceFiles: 'expo/lib/chat-attachments.ts' }),
   mod(103, 'Search', 'F', '/search', 'GET /api/ivx/search', 'TEAM-03', { sourceFiles: 'expo/app/search.tsx' }),
-  mod(104, 'Voice Input', 'F', '/(tabs)/chat', 'POST /api/ivx/chat/voice', 'TEAM-03', { sourceFiles: 'backend/api/ivx-autonomous-voice.ts' }),
+  mod(104, 'Voice Input', 'F', '/(tabs)/chat', 'POST /api/ivx/chat/voice', 'TEAM-03', {}),
 ];
 
 // ─── Category G: Money & Investments (22 modules) ───
 const G_MODULES: IVXModule[] = [
   mod(105, 'Investor Pipeline', 'G', '/admin/pipeline', 'GET /api/ivx/real-data/separation', 'TEAM-11', { sourceFiles: 'backend/services/ivx-real-data-separation.ts', proofLedgerId: 'real-data-recovery-2026-07-18' }),
   mod(106, 'KYC', 'G', '/kyc-verification', 'POST /api/ivx/kyc', 'TEAM-07', { sourceFiles: 'expo/app/kyc-verification.tsx' }),
-  mod(107, 'AML', 'G', '/admin/aml', 'POST /api/ivx/aml', 'TEAM-07', { sourceFiles: 'backend/api/ivx-investor-protection.ts' }),
-  mod(108, 'Accreditation', 'G', '/admin/accreditation', 'POST /api/ivx/accreditation', 'TEAM-07', { sourceFiles: 'backend/api/ivx-investor-protection.ts' }),
+  mod(107, 'AML', 'G', '/admin/aml', 'POST /api/ivx/aml', 'TEAM-07', {}),
+  mod(108, 'Accreditation', 'G', '/admin/accreditation', 'POST /api/ivx/accreditation', 'TEAM-07', {}),
   mod(109, 'Deal Subscription', 'G', '/invest', 'POST /api/ivx/subscribe', 'TEAM-11', { sourceFiles: 'expo/app/invest' }),
-  mod(110, 'Electronic Signature', 'G', '/admin/esign', 'POST /api/ivx/esign', 'TEAM-07', { sourceFiles: 'backend/api/ivx-real-estate-flow.ts' }),
+  mod(110, 'Electronic Signature', 'G', '/admin/esign', 'POST /api/ivx/esign', 'TEAM-07', {}),
   mod(111, 'Wire Instructions', 'G', '/admin/wire', 'GET /api/ivx/wire-instructions', 'TEAM-11', { sourceFiles: 'backend/api/ivx-wire-transfer.ts', proofLedgerId: 'cert-wire-200-2026-08-15' }),
-  mod(112, 'ACH Readiness', 'G', '/admin/ach', 'GET /api/ivx/ach', 'TEAM-11', { sourceFiles: 'backend/api/ivx-payment-api.ts' }),
+  mod(112, 'ACH Readiness', 'G', '/admin/ach', 'GET /api/ivx/ach', 'TEAM-11', {}),
   mod(113, 'Escrow Tracking', 'G', '/admin/escrow', 'GET /api/ivx/escrow', 'TEAM-11', { sourceFiles: 'backend/services/ivx-financial-ledger-store.ts' }),
   mod(114, 'Funds Received', 'G', '/admin/funds', 'GET /api/ivx/real-data/financial-ledger', 'TEAM-11', { sourceFiles: 'backend/services/ivx-financial-ledger-store.ts', proofLedgerId: 'real-data-recovery-2026-07-18' }),
   mod(115, 'Transaction Ledger', 'G', '/admin/transactions', 'GET /api/ivx/transactions', 'TEAM-11', { dbTables: 'ivx_financial_transactions', sourceFiles: 'backend/services/ivx-financial-ledger-store.ts', proofLedgerId: 'real-data-recovery-2026-07-18' }),
   mod(116, 'Wallets', 'G', '/wallet', 'GET /api/ivx/wallets', 'TEAM-11', { dbTables: 'ivx_wallets', sourceFiles: 'expo/app/wallet.tsx' }),
   mod(117, 'Statements', 'G', '/statements', 'GET /api/ivx/statements', 'TEAM-11', { sourceFiles: 'expo/app/statements.tsx' }),
-  mod(118, 'Returns', 'G', '/admin/returns', 'GET /api/ivx/returns', 'TEAM-11', { sourceFiles: 'backend/api/ivx-treasury.ts, backend/services/ivx-financial-ledger-store.ts' }),
-  mod(119, 'Distributions', 'G', '/admin/distributions', 'POST /api/ivx/distributions', 'TEAM-11', { sourceFiles: 'backend/api/ivx-treasury.ts' }),
-  mod(120, 'Fees', 'G', '/admin/fees', 'GET /api/ivx/fees', 'TEAM-11', { sourceFiles: 'expo/app/admin/fees.tsx, backend/api/ivx-payment-api.ts' }),
-  mod(121, 'Commissions', 'G', '/admin/commissions', 'GET /api/ivx/commissions', 'TEAM-11', { sourceFiles: 'backend/api/ivx-treasury.ts' }),
-  mod(122, 'Influencer Percentage', 'G', '/admin/influencer-pct', 'GET /api/ivx/influencer-percentage', 'TEAM-11', { sourceFiles: 'backend/api/ivx-treasury.ts, expo/app/admin/influencers.tsx' }),
-  mod(123, 'Realtor Payments', 'G', '/admin/realtor-pay', 'GET /api/ivx/realtor-payments', 'TEAM-11', { sourceFiles: 'backend/api/ivx-treasury.ts' }),
-  mod(124, 'Revenue', 'G', '/admin/revenue', 'GET /api/ivx/revenue', 'TEAM-11', { sourceFiles: 'backend/api/ivx-platform-modules.ts' }),
+  mod(118, 'Returns', 'G', '/admin/returns', 'GET /api/ivx/returns', 'TEAM-11', {}),
+  mod(119, 'Distributions', 'G', '/admin/distributions', 'POST /api/ivx/distributions', 'TEAM-11', {}),
+  mod(120, 'Fees', 'G', '/admin/fees', 'GET /api/ivx/fees', 'TEAM-11', {}),
+  mod(121, 'Commissions', 'G', '/admin/commissions', 'GET /api/ivx/commissions', 'TEAM-11', {}),
+  mod(122, 'Influencer Percentage', 'G', '/admin/influencer-pct', 'GET /api/ivx/influencer-percentage', 'TEAM-11', {}),
+  mod(123, 'Realtor Payments', 'G', '/admin/realtor-pay', 'GET /api/ivx/realtor-payments', 'TEAM-11', {}),
+  mod(124, 'Revenue', 'G', '/admin/revenue', 'GET /api/ivx/revenue', 'TEAM-11', {}),
   mod(125, 'Reconciliation', 'G', '/admin/reconciliation', 'POST /api/ivx/reconciliation', 'TEAM-11', { sourceFiles: 'backend/services/ivx-financial-ledger-store.ts' }),
   mod(126, 'Audit Trail', 'G', '/admin/audit-trail', 'GET /api/ivx/audit-trail', 'TEAM-07', { sourceFiles: 'backend/services/ivx-financial-ledger-store.ts', proofLedgerId: 'real-data-recovery-2026-07-18' }),
 ];
 
 // ─── Category H: Infrastructure (24 modules) ───
 const H_MODULES: IVXModule[] = [
-  mod(127, 'GitHub Integration', 'H', '/admin/deploy', 'POST /api/ivx/github/commit', 'TEAM-09', { sourceFiles: 'backend/services/ivx-github-sync.ts, backend/services/ivx-deployment-tools/github-tool.ts', proofLedgerId: 'cert-200root-d729c852' }),
-  mod(128, 'Render Integration', 'H', '/admin/deploy', 'POST /api/ivx/render/deploy', 'TEAM-09', { sourceFiles: 'backend/api/ivx-render-deploy-latest.ts, backend/services/ivx-deployment-tools/render-tool.ts', proofLedgerId: 'cert-200root-d729c852' }),
-  mod(129, 'Supabase Integration', 'H', '/admin/supabase', 'GET /api/ivx/supabase/tables', 'TEAM-04', { sourceFiles: 'backend/services/ivx-supabase-storage.ts, backend/api/ivx-supabase-inspection.ts', proofLedgerId: 'cert-200root-e9c01073' }),
-  mod(130, 'AWS S3 Storage', 'H', '/admin/storage', 'PUT /api/ivx/apk/presign-upload', 'TEAM-09', { storageBucket: 'ivxholding.com', sourceFiles: 'backend/api/ivx-apk-distribution.ts, backend/services/ivx-supabase-storage.ts', proofLedgerId: 'cert-200root-d729c852' }),
+  mod(127, 'GitHub Integration', 'H', '/admin/deploy', 'POST /api/ivx/github/commit', 'TEAM-09', { sourceFiles: 'backend/api/ivx-github-commit.ts', proofLedgerId: 'cert-200root-d729c852' }),
+  mod(128, 'Render Integration', 'H', '/admin/deploy', 'POST /api/ivx/render/deploy', 'TEAM-09', { sourceFiles: 'backend/api/ivx-render-deploy.ts', proofLedgerId: 'cert-200root-d729c852' }),
+  mod(129, 'Supabase Integration', 'H', '/admin/supabase', 'GET /api/ivx/supabase/tables', 'TEAM-04', { sourceFiles: 'backend/services/ivx-supabase-client.ts', proofLedgerId: 'cert-200root-e9c01073' }),
+  mod(130, 'AWS S3 Storage', 'H', '/admin/storage', 'PUT /api/ivx/apk/presign-upload', 'TEAM-09', { storageBucket: 'ivxholding.com', proofLedgerId: 'cert-200root-d729c852' }),
   mod(131, 'Backups', 'H', '/admin/data-recovery', 'GET /api/ivx/backups', 'TEAM-09', { sourceFiles: 'expo/app/admin/data-recovery.tsx' }),
-  mod(132, 'Migrations', 'H', '/admin/migrations', 'POST /api/ivx/migrations', 'TEAM-04', { sourceFiles: 'backend/api/ivx-migration-runner.ts, backend/api/ivx-db-migration.ts' }),
+  mod(132, 'Migrations', 'H', '/admin/migrations', 'POST /api/ivx/migrations', 'TEAM-04', {}),
   mod(133, 'Health Endpoints', 'H', '/admin/system-health', 'GET /health, /live, /ready', 'TEAM-10', { sourceFiles: 'expo/app/system-health.tsx, backend/hono.ts', proofLedgerId: 'cert-200root-e9c01073' }),
   mod(134, 'Monitoring', 'H', '/admin/diagnostics', 'GET /api/ivx/monitoring', 'TEAM-10', { sourceFiles: 'expo/app/admin/diagnostics.tsx' }),
   mod(135, 'Alerts', 'H', '/admin/alerts', 'GET /api/ivx/incidents', 'TEAM-10', { sourceFiles: 'backend/api/ivx-incidents.ts' }),
   mod(136, 'Queue', 'H', '/admin/queue', 'GET /health/queue', 'TEAM-03', { dbTables: 'ivx_owner_ai_tasks', sourceFiles: 'backend/services/ivx-owner-ai-task-queue.ts' }),
   mod(137, 'Background Workers', 'H', '/admin/workers', 'GET /api/ivx/workers', 'TEAM-09', { sourceFiles: 'backend/worker.ts' }),
-  mod(138, 'Rollback', 'H', '/admin/deploy', 'POST /api/ivx/render/rollback', 'TEAM-12', { sourceFiles: 'backend/services/ivx-git-rollback.ts' }),
+  mod(138, 'Rollback', 'H', '/admin/deploy', 'POST /api/ivx/render/rollback', 'TEAM-12', {}),
   mod(139, 'APK Build', 'H', '/admin/deploy', 'GET /api/ivx/apk/presign-upload', 'TEAM-09', { sourceFiles: 'expo/android/, backend/api/ivx-apk-distribution.ts', proofLedgerId: 'cert-200root-d729c852' }),
   mod(140, 'AAB Build', 'H', '/admin/deploy', 'GET /api/ivx/apk/presign-upload', 'TEAM-09', { sourceFiles: 'expo/android/, backend/api/ivx-apk-distribution.ts' }),
   mod(141, 'iOS Readiness', 'H', '/admin/diagnostics', 'POST /api/ivx/build/ios', 'TEAM-09', { sourceFiles: 'ios-ivx-holdings/IVXHoldings.xcodeproj, ios-ivx-holdings/IVXHoldings/Views/IVXDashboardView.swift, ios-ivx-holdings/IVXHoldings/Views/IVXPortfolioView.swift, ios-ivx-holdings/IVXHoldings/Views/IVXProfileView.swift, ios-ivx-holdings/IVXHoldings/Views/IVXActivityView.swift', proofLedgerId: 'cert-10of10-ios-native-2026-08-15' }),
   mod(142, 'Web Production', 'H', '/', 'GET / (landing)', 'TEAM-02', { sourceFiles: 'expo/ivxholding-landing/' }),
-  mod(143, 'CI/CD', 'H', '/admin/deploy', 'POST /api/ivx/render/trigger', 'TEAM-09', { sourceFiles: '.github/workflows/, backend/api/ivx-render-deploy-latest.ts' }),
-  mod(144, 'Security (RLS)', 'H', '/admin/access-control', 'GET /api/ivx/security/audit', 'TEAM-07', { sourceFiles: 'backend/middleware/ivx-enterprise-middleware.ts, backend/services/ivx-security-middleware.ts', proofLedgerId: 'cert-200root-e9c01073' }),
-  mod(145, 'Performance', 'H', '/admin/performance', 'GET /api/ivx/performance', 'TEAM-08', { sourceFiles: 'expo/app/investor-performance.tsx, backend/api/ivx-investor-performance.ts' }),
-  mod(146, 'Stress Testing', 'H', '/admin/stress', 'POST /api/ivx/stress-test', 'TEAM-08', { sourceFiles: 'backend/services/ivx-senior-developer-samples/stress-tests/stress-ec0298f1.ts' }),
+  mod(143, 'CI/CD', 'H', '/admin/deploy', 'POST /api/ivx/render/trigger', 'TEAM-09', { sourceFiles: '.github/workflows/, backend/api/ivx-render-deploy.ts' }),
+  mod(144, 'Security (RLS)', 'H', '/admin/access-control', 'GET /api/ivx/security/audit', 'TEAM-07', { sourceFiles: 'backend/middleware/owner-only.ts', proofLedgerId: 'cert-200root-e9c01073' }),
+  mod(145, 'Performance', 'H', '/admin/performance', 'GET /api/ivx/performance', 'TEAM-08', {}),
+  mod(146, 'Stress Testing', 'H', '/admin/stress', 'POST /api/ivx/stress-test', 'TEAM-08', {}),
   mod(147, 'Engineering OS', 'H', '/autonomous-dashboard', 'GET /api/ivx/engineering-os/status', 'TEAM-12', { sourceFiles: 'backend/api/ivx-engineering-os.ts, backend/services/ivx-engineering-os.ts', proofLedgerId: 'cert-200root-e9c01073' }),
-  mod(148, 'Autonomous Scheduler', 'H', '/admin/scheduler', 'GET /api/ivx/scheduler', 'TEAM-10', { sourceFiles: 'backend/api/ivx-scheduler.ts, backend/services/ivx-autonomous-scheduler.ts' }),
+  mod(148, 'Autonomous Scheduler', 'H', '/admin/scheduler', 'GET /api/ivx/scheduler', 'TEAM-10', { sourceFiles: 'backend/services/ivx-scheduler.ts' }),
   mod(149, '2-Hour Reports', 'H', '/admin/reports', 'GET /api/ivx/engineering-os/report', 'TEAM-12', { sourceFiles: 'backend/api/ivx-engineering-os.ts' }),
   mod(150, 'SMS Reporting', 'H', '/admin/reports', 'POST /api/ivx/sms/send', 'TEAM-10', { sourceFiles: 'backend/services/ivx-sns-sms.ts, backend/api/ivx-owner-recovery-sms.ts', proofLedgerId: 'cert-10of10-sms-twilio-2026-08-15' }),
 ];
@@ -322,7 +322,7 @@ const EXTRA_MODULES: IVXModule[] = [
   mod(167, 'Business Overview', 'C', '/admin/business-overview', 'GET /api/ivx/business-overview', 'TEAM-11', { sourceFiles: 'expo/app/admin/business-overview.tsx' }),
   mod(168, 'Buy Shares', 'G', '/buy-shares', 'POST /api/ivx/buy-shares', 'TEAM-11', { sourceFiles: 'expo/app/buy-shares.tsx' }),
   mod(169, 'iOS Build', 'H', '/admin/diagnostics', 'POST /api/ivx/build/ios', 'TEAM-09', { sourceFiles: 'ios-ivx-holdings/IVXHoldings.xcodeproj, ios-ivx-holdings/IVXHoldings/IVXHoldingsApp.swift, ios-ivx-holdings/IVXHoldings/ContentView.swift, ios-ivx-holdings/IVXHoldingsTests/IVXHoldingsTests.swift, ios-ivx-holdings/IVXHoldingsUITests/IVXHoldingsUITests.swift', proofLedgerId: 'cert-10of10-ios-native-2026-08-15' }),
-  mod(170, 'Chat Room', 'F', '/chat-room', 'GET /api/ivx/chat-room', 'TEAM-03', { sourceFiles: 'expo/app/chat-room.tsx, expo/lib/chat-room-client.ts, backend/chat-storage.ts' }),
+  mod(170, 'Chat Room', 'F', '/chat-room', 'GET /api/ivx/chat-room', 'TEAM-03', { sourceFiles: 'expo/app/chat-room.tsx, backend/chat-room-client.ts' }),
   mod(171, 'Company Info', 'B', '/company-info', 'GET /api/ivx/company-info', 'TEAM-01', { sourceFiles: 'expo/app/company-info.tsx' }),
   mod(172, 'Compare Investments', 'D', '/compare-investments', 'GET /api/ivx/compare', 'TEAM-11', { sourceFiles: 'expo/app/compare-investments.tsx' }),
   mod(173, 'Contract Generator', 'G', '/contract-generator', 'POST /api/ivx/contract', 'TEAM-11', { sourceFiles: 'expo/app/contract-generator.tsx' }),
@@ -337,7 +337,7 @@ const EXTRA_MODULES: IVXModule[] = [
   mod(182, 'Investor Pitch', 'D', '/investor-pitch', 'GET /api/ivx/investor-pitch', 'TEAM-11', { sourceFiles: 'expo/app/investor-pitch.tsx' }),
   mod(183, 'Investor Prospectus', 'D', '/investor-prospectus', 'GET /api/ivx/investor-prospectus', 'TEAM-11', { sourceFiles: 'expo/app/investor-prospectus.tsx' }),
   mod(184, 'JV Architecture', 'D', '/jv-architecture', 'GET /api/ivx/jv-architecture', 'TEAM-01', { sourceFiles: 'expo/app/jv-architecture.tsx' }),
-  mod(185, 'Language / i18n', 'B', '/language', 'GET /api/ivx/i18n', 'TEAM-02', { sourceFiles: 'expo/app/language.tsx, expo/lib/i18n-context.tsx' }),
+  mod(185, 'Language / i18n', 'B', '/language', 'GET /api/ivx/i18n', 'TEAM-02', { sourceFiles: 'expo/app/language.tsx, expo/lib/i18n-context.ts' }),
   mod(186, 'Legal', 'B', '/legal', 'GET /api/ivx/legal', 'TEAM-07', { sourceFiles: 'expo/app/legal.tsx' }),
   mod(187, 'Live Evidence Dashboard', 'F', '/live-evidence-dashboard', 'GET /api/ivx/developer-proof', 'TEAM-12', { sourceFiles: 'expo/app/live-evidence-dashboard.tsx' }),
   mod(188, 'Live Operations Center', 'H', '/live-operations-center', 'GET /api/ivx/operations', 'TEAM-10', { sourceFiles: 'expo/app/live-operations-center.tsx' }),

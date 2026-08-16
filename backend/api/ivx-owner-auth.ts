@@ -9,13 +9,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const DEPLOYMENT_MARKER = 'ivx-owner-auth-v2';
-const PRODUCTION_SUPABASE_URL = 'https://kvclcdjmjghndxsngfzb.supabase.co';
-const PRODUCTION_SUPABASE_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2Y2xjZGptamdobmR4c25nZnpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTQwMjcsImV4cCI6MjA4ODc3MDAyN30.OLDwa21VHQNs151AD-8k--_HigQ2d-N7yJfFn5UeNPk';
-const HOSTED_SUPABASE_URL_PATTERN = /https:\/\/([a-z0-9-]+)\.supabase\.co\b/i;
-const PRODUCTION_PROJECT_REF = 'kvclcdjmjghndxsngfzb';
-const JWT_PATTERN = /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g;
+const DEPLOYMENT_MARKER = 'ivx-owner-auth-v1';
 const ADMIN_ROLES = ['owner', 'admin', 'ceo', 'staff', 'manager', 'analyst', 'support'] as const;
 const ROLE_ALIASES: Record<string, string> = {
   super_admin: 'admin',
@@ -83,69 +77,11 @@ function jsonResponse(data: unknown, status = 200): Response {
   });
 }
 
-function decodeJwtPayload(token: string): Record<string, unknown> | null {
-  try {
-    const payloadSegment = token.split('.')[1] ?? '';
-    const normalized = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
-    const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
-    return JSON.parse(Buffer.from(padded, 'base64').toString('utf8')) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
-function extractSupabaseUrl(raw: string): string | null {
-  const value = raw.trim();
-  if (!value) return null;
-  const hosted = value.match(HOSTED_SUPABASE_URL_PATTERN);
-  if (hosted?.[0]) {
-    const projectRef = hosted[1]?.toLowerCase() ?? '';
-    return projectRef === PRODUCTION_PROJECT_REF ? hosted[0].replace(/\/$/, '') : null;
-  }
-  return null;
-}
-
-function extractSupabaseAnonKey(raw: string): string | null {
-  const matches = raw.trim().match(JWT_PATTERN) ?? [];
-  for (const candidate of matches) {
-    const payload = decodeJwtPayload(candidate);
-    if (payload?.role === 'anon' && payload?.ref === PRODUCTION_PROJECT_REF) {
-      return candidate;
-    }
-  }
-  return null;
-}
-
 function getSupabaseConfig(): { url: string; anonKey: string } | null {
-  const rawUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-  const rawKey = process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-  const url = extractSupabaseUrl(rawUrl) || extractSupabaseUrl(rawKey) || PRODUCTION_SUPABASE_URL;
-  const anonKey = extractSupabaseAnonKey(rawKey) || PRODUCTION_SUPABASE_ANON_KEY;
+  const url = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+  if (!url || !anonKey) return null;
   return { url, anonKey };
-}
-
-function getServiceRoleKey(): string {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
-}
-
-const OWNER_BASELINE_EMAILS = ['iperez4242@gmail.com'];
-
-function getOwnerAllowlist(): string[] {
-  const sources = [
-    ...OWNER_BASELINE_EMAILS,
-    process.env.IVX_OWNER_REGISTRATION_EMAILS,
-    process.env.EXPO_PUBLIC_OWNER_EMAIL,
-    process.env.OWNER_REPAIR_EMAIL,
-    process.env.NEXT_PUBLIC_OWNER_EMAIL,
-    process.env.OWNER_EMAIL,
-    process.env.IVX_OWNER_EMAIL,
-  ];
-  return Array.from(new Set(
-    sources
-      .flatMap((v) => (typeof v === 'string' ? v.split(',') : []))
-      .map((e) => e.trim().toLowerCase())
-      .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
-  ));
 }
 
 export async function handleOwnerAuthorize(request: Request): Promise<Response> {
@@ -200,45 +136,21 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
     const email = user.email ?? '';
 
     let role: string | null = null;
-    let roleSource: 'profiles' | 'rpc_verify_admin_access' | 'email_allowlist' = 'profiles';
+    let roleSource: 'profiles' | 'rpc_verify_admin_access' | 'email_not_owner' = 'profiles';
 
-    // Strategy 1: Use service role key to bypass RLS for profile lookup
-    const serviceKey = getServiceRoleKey();
-    if (serviceKey) {
-      try {
-        const adminClient = createClient(config.url, serviceKey, {
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-        const { data: profile, error: profileError } = await adminClient
-          .from('profiles')
-          .select('role')
-          .eq('id', userId)
-          .single();
-        if (!profileError && profile?.role) {
-          role = typeof profile.role === 'string' ? profile.role : null;
-        }
-      } catch (profileError) {
-        console.log(`[OwnerAuth] ${traceId} service-role profile lookup note:`, (profileError as Error)?.message ?? 'unknown');
+    try {
+      const { data: profile, error: profileError } = await client
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single();
+      if (!profileError && profile?.role) {
+        role = typeof profile.role === 'string' ? profile.role : null;
       }
+    } catch (profileError) {
+      console.log(`[OwnerAuth] ${traceId} profile lookup note:`, (profileError as Error)?.message ?? 'unknown');
     }
 
-    // Strategy 2: Try with user's token (RLS may allow self-read)
-    if (!role) {
-      try {
-        const { data: profile, error: profileError } = await client
-          .from('profiles')
-          .select('role')
-          .eq('id', userId)
-          .single();
-        if (!profileError && profile?.role) {
-          role = typeof profile.role === 'string' ? profile.role : null;
-        }
-      } catch (profileError) {
-        console.log(`[OwnerAuth] ${traceId} profile lookup note:`, (profileError as Error)?.message ?? 'unknown');
-      }
-    }
-
-    // Strategy 3: verify_admin_access RPC
     if (!role) {
       try {
         const { data: rpcData, error: rpcError } = await client.rpc('verify_admin_access');
@@ -248,18 +160,6 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
         }
       } catch (rpcError) {
         console.log(`[OwnerAuth] ${traceId} verify_admin_access note:`, (rpcError as Error)?.message ?? 'unknown');
-      }
-    }
-
-    // Strategy 4: Owner email allowlist fallback — if the authenticated user's
-    // email is on the pinned owner allowlist, grant owner role. This is the
-    // last-resort path that ensures the owner can always authorize even if
-    // RLS blocks profile reads and the RPC is unavailable.
-    if (!role) {
-      const allowlist = getOwnerAllowlist();
-      if (allowlist.includes(email.toLowerCase())) {
-        role = 'owner';
-        roleSource = 'email_allowlist';
       }
     }
 

@@ -1,19 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildFreshCompletionCampaignState,
-  getSupervisorDistribution,
   IVX_COMPLETION_CAMPAIGN_MARKER,
 } from './services/ivx-autonomous-completion-campaign';
 
-describe('IVX autonomous 12x100 completion campaign', () => {
-  it('starts with exactly 12 specialists, 50 IVX agents, and 50 Factory agents', () => {
+describe('IVX 112-agent completion campaign', () => {
+  it('starts with exactly 112 agents', () => {
     const state = buildFreshCompletionCampaignState();
     expect(state.marker).toBe(IVX_COMPLETION_CAMPAIGN_MARKER);
-    expect(state.phase).toBe('specialists_12');
-    expect(state.specialists).toHaveLength(12);
-    expect(state.divisionA).toHaveLength(50);
-    expect(state.divisionB).toHaveLength(50);
-    expect(new Set([...state.divisionA, ...state.divisionB].map((x) => x.id)).size).toBe(100);
+    expect(state.phase).toBe('agents_112');
+    expect(state.agents).toHaveLength(112);
+    expect(new Set(state.agents.map((x) => x.id)).size).toBe(112);
   });
 
   it('keeps money, destructive actions, and production claims owner/proof gated', () => {
@@ -23,9 +20,9 @@ describe('IVX autonomous 12x100 completion campaign', () => {
     expect(state.productionClaimsRequireProof).toBe(true);
   });
 
-  it('assigns every enterprise agent to one of the 12 specialist supervisors', () => {
-    const distribution = getSupervisorDistribution();
-    expect(Object.keys(distribution)).toHaveLength(12);
-    expect(Object.values(distribution).reduce((sum, count) => sum + count, 0)).toBe(100);
+  it('has IA-01 as first agent and IA-112 as last', () => {
+    const state = buildFreshCompletionCampaignState();
+    expect(state.agents[0].name).toBe('IA-01 Executive Operations');
+    expect(state.agents[111].name).toBe('IA-112 Continuous Innovation Lab');
   });
 });

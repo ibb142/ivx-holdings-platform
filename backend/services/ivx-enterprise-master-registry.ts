@@ -1,28 +1,19 @@
 /**
- * IVX Enterprise Master AI — Phase 2 Agent Registry (100 AI Agents).
+ * IVX Enterprise Master AI — 112-Agent Organization Registry
  *
- * Expands from the original 14 enterprise agents to 100 specialized AI agents
- * across two divisions:
- *
- *   DIVISION A — IVX Holdings (50 AI): maintain and improve IVX 24/7.
- *   DIVISION B — New Enterprises (50 AI): build new software companies.
- *
- * The Enterprise Master AI governs all 100 agents — assigns work, balances
- * workloads, verifies tasks, prevents duplicates, monitors health, reviews
- * QA/Security/Deployments/Costs/Performance, escalates failures, and generates
- * executive reports.
+ * Full autonomous IA organization: IA-01 to IA-112.
+ * Matches the IVX Holdings org chart exactly.
  *
  * HARD HONESTY RULES (inherited from the entire IVX autonomous system):
  *   - Every agent status is derived from real subsystem queries — never fabricated.
  *   - No task is marked complete without verification and supporting evidence.
- *   - Division B agents do NOT modify IVX unless explicitly assigned.
  *   - All agents use shared services: GitHub, CI/CD, secure variables, audit logs,
  *     monitoring, backups, testing, documentation, API gateway, auth, version control.
  */
 import { type OrchestratorPriority } from './ivx-enterprise-orchestrator';
 import { type AgentRiskLevel } from './agents/multi-agent-framework';
 
-export const IVX_ENTERPRISE_MASTER_REGISTRY_MARKER = 'ivx-enterprise-master-registry-2026-07-27';
+export const IVX_ENTERPRISE_MASTER_REGISTRY_MARKER = 'ivx-enterprise-master-registry-2026-08-16-v2';
 
 // ── Enterprise Structure Types ──────────────────────────────────────────────
 
@@ -42,34 +33,28 @@ export type CompanyId =
   | 'enterprise_operations';
 
 export type EnterpriseMasterAgent = {
-  /** Unique identifier across the entire enterprise (1–100). */
   id: string;
-  /** Sequential agent number (1–100). */
   agentNumber: number;
-  /** Human-readable name. */
   name: string;
-  /** One-line role description. */
   role: string;
-  /** Division A (IVX) or Division B (New Enterprises). */
   division: DivisionId;
-  /** Company/unit this agent belongs to. */
   company: CompanyId;
-  /** Specific responsibilities this agent owns. */
   responsibilities: string[];
-  /** Capabilities used for task matching. */
   capabilities: string[];
-  /** Priority level for work assignment. */
   priority: OrchestratorPriority;
-  /** Risk level — higher risk agents require owner approval for destructive actions. */
   riskLevel: AgentRiskLevel;
-  /** Goal the agent pursues on each heartbeat run. */
   heartbeatGoal: string;
-  /** Destructive actions that require explicit owner approval. */
   destructiveActions: string[];
-  /** Whether this agent can modify IVX code/infrastructure. */
   canModifyIVX: boolean;
-  /** Whether this agent builds new software products. */
   buildsNewProducts: boolean;
+  mission: string;
+  inputs: string;
+  actions: string;
+  outputs: string;
+  kpi: string;
+  authority: string;
+  escalates: string | null;
+  functionalGroup: string;
 };
 
 export type CompanyDefinition = {
@@ -78,836 +63,217 @@ export type CompanyDefinition = {
   division: DivisionId;
   description: string;
   agentCount: number;
-  /** Repository pattern — Division B uses separate repos. */
   repositoryPattern: string;
-  /** Whether this company has its own infrastructure. */
   independentInfrastructure: boolean;
 };
 
-// ── Company Definitions ─────────────────────────────────────────────────────
-
 export const ENTERPRISE_COMPANIES: Record<CompanyId, CompanyDefinition> = {
-  ivx_holdings: {
-    id: 'ivx_holdings',
-    name: 'IVX Holdings',
-    division: 'A',
-    description: 'Real estate investment platform — mobile app, backend, investor CRM, tokenization, deals.',
-    agentCount: 50,
-    repositoryPattern: 'ibb142/ivx-holdings-platform',
-    independentInfrastructure: false,
-  },
-  saas_builder: {
-    id: 'saas_builder',
-    name: 'Enterprise SaaS Builder',
-    division: 'B',
-    description: 'Builds new SaaS products from scratch — product, backend, frontend, mobile, AI integration, QA, security, DevOps.',
-    agentCount: 10,
-    repositoryPattern: 'ivx-enterprise/saas-{product}',
-    independentInfrastructure: true,
-  },
-  healthcare_tech: {
-    id: 'healthcare_tech',
-    name: 'Healthcare Technology',
-    division: 'B',
-    description: 'Medical workflow automation, scheduling, compliance, research.',
-    agentCount: 5,
-    repositoryPattern: 'ivx-enterprise/healthcare-{product}',
-    independentInfrastructure: true,
-  },
-  construction_tech: {
-    id: 'construction_tech',
-    name: 'Construction Technology',
-    division: 'B',
-    description: 'Estimating, engineering, permitting, scheduling, cost control.',
-    agentCount: 5,
-    repositoryPattern: 'ivx-enterprise/construction-{product}',
-    independentInfrastructure: true,
-  },
-  finance_tech: {
-    id: 'finance_tech',
-    name: 'Finance Technology',
-    division: 'B',
-    description: 'Investment analytics, portfolio analytics, risk analysis, reporting, cash flow.',
-    agentCount: 5,
-    repositoryPattern: 'ivx-enterprise/finance-{product}',
-    independentInfrastructure: true,
-  },
-  legal_tech: {
-    id: 'legal_tech',
-    name: 'Legal Technology',
-    division: 'B',
-    description: 'Contract AI, compliance, legal documents, workflow automation.',
-    agentCount: 4,
-    repositoryPattern: 'ivx-enterprise/legal-{product}',
-    independentInfrastructure: true,
-  },
-  marketing_tech: {
-    id: 'marketing_tech',
-    name: 'Marketing Technology',
-    division: 'B',
-    description: 'SEO, social media, video automation, campaigns, analytics.',
-    agentCount: 5,
-    repositoryPattern: 'ivx-enterprise/marketing-{product}',
-    independentInfrastructure: true,
-  },
-  research_innovation: {
-    id: 'research_innovation',
-    name: 'Research & Innovation',
-    division: 'B',
-    description: 'AI research, quantum/robotics/biotech monitoring, materials research, patent monitoring, competitive intelligence, prototyping.',
-    agentCount: 8,
-    repositoryPattern: 'ivx-enterprise/research-{topic}',
-    independentInfrastructure: true,
-  },
-  business_automation: {
-    id: 'business_automation',
-    name: 'Business Automation',
-    division: 'B',
-    description: 'API integrations, workflow automation, enterprise processes, internal tools.',
-    agentCount: 4,
-    repositoryPattern: 'ivx-enterprise/automation-{product}',
-    independentInfrastructure: true,
-  },
-  education_tech: {
-    id: 'education_tech',
-    name: 'Education Technology',
-    division: 'B',
-    description: 'Course builder, knowledge base, AI tutor, training systems.',
-    agentCount: 4,
-    repositoryPattern: 'ivx-enterprise/education-{product}',
-    independentInfrastructure: true,
-  },
-  enterprise_operations: {
-    id: 'enterprise_operations',
-    name: 'Enterprise Operations',
-    division: 'B',
-    description: 'Executive dashboards, KPI analytics, forecasting, resource planning, business intelligence.',
-    agentCount: 5,
-    repositoryPattern: 'ivx-enterprise/ops-{product}',
-    independentInfrastructure: true,
-  },
+  ivx_holdings: { id: 'ivx_holdings', name: 'IVX Holdings', division: 'A', description: 'Full autonomous IA organization — 112 agents across executive, growth, market, digital, intelligence, networks, global, app dev, project dev, and product creation.', agentCount: 112, repositoryPattern: 'ibb142/ivx-holdings-platform', independentInfrastructure: false },
+  saas_builder: { id: 'saas_builder', name: 'Enterprise SaaS Builder', division: 'B', description: 'Builds new SaaS products.', agentCount: 0, repositoryPattern: 'ivx-enterprise/saas-{product}', independentInfrastructure: true },
+  healthcare_tech: { id: 'healthcare_tech', name: 'Healthcare Technology', division: 'B', description: 'Medical workflow automation.', agentCount: 0, repositoryPattern: 'ivx-enterprise/healthcare-{product}', independentInfrastructure: true },
+  construction_tech: { id: 'construction_tech', name: 'Construction Technology', division: 'B', description: 'Estimating, engineering, permitting.', agentCount: 0, repositoryPattern: 'ivx-enterprise/construction-{product}', independentInfrastructure: true },
+  finance_tech: { id: 'finance_tech', name: 'Finance Technology', division: 'B', description: 'Investment analytics, risk analysis.', agentCount: 0, repositoryPattern: 'ivx-enterprise/finance-{product}', independentInfrastructure: true },
+  legal_tech: { id: 'legal_tech', name: 'Legal Technology', division: 'B', description: 'Contract AI, compliance, documents.', agentCount: 0, repositoryPattern: 'ivx-enterprise/legal-{product}', independentInfrastructure: true },
+  marketing_tech: { id: 'marketing_tech', name: 'Marketing Technology', division: 'B', description: 'SEO, social media, campaigns.', agentCount: 0, repositoryPattern: 'ivx-enterprise/marketing-{product}', independentInfrastructure: true },
+  research_innovation: { id: 'research_innovation', name: 'Research & Innovation', division: 'B', description: 'AI, quantum, robotics, biotech research.', agentCount: 0, repositoryPattern: 'ivx-enterprise/research-{product}', independentInfrastructure: true },
+  business_automation: { id: 'business_automation', name: 'Business Automation', division: 'B', description: 'API integrations, workflow automation.', agentCount: 0, repositoryPattern: 'ivx-enterprise/business-{product}', independentInfrastructure: true },
+  education_tech: { id: 'education_tech', name: 'Education Technology', division: 'B', description: 'Course builder, knowledge base, AI tutor.', agentCount: 0, repositoryPattern: 'ivx-enterprise/education-{product}', independentInfrastructure: true },
+  enterprise_operations: { id: 'enterprise_operations', name: 'Enterprise Operations', division: 'B', description: 'Executive dashboards, KPI analytics.', agentCount: 0, repositoryPattern: 'ivx-enterprise/enterprise-{product}', independentInfrastructure: true },
 };
 
-// ── The 100 Enterprise Agents ───────────────────────────────────────────────
-// Generated systematically: Division A (agents 1–50) + Division B (agents 51–100).
+type AgentDef = {
+  n: number; name: string; mission: string; inputs: string;
+  actions: string; outputs: string; kpi: string;
+  authority: string; escalates: string; group: string;
+};
 
-function makeAgent(
-  agentNumber: number,
-  name: string,
-  role: string,
-  company: CompanyId,
-  responsibilities: string[],
-  capabilities: string[],
-  priority: OrchestratorPriority,
-  riskLevel: AgentRiskLevel,
-  heartbeatGoal: string,
-  destructiveActions: string[] = [],
-  canModifyIVX: boolean = false,
-  buildsNewProducts: boolean = false,
-): EnterpriseMasterAgent {
-  const division: DivisionId = ENTERPRISE_COMPANIES[company].division;
-  const id = `${company}_${agentNumber}`;
+const AGENT_DEFS: AgentDef[] = [
+  // ── Executive (1-12) ──
+  { n: 1, name: 'IA-01 Executive Operations', mission: 'Coordinate company-wide execution', inputs: 'Owner priorities, dashboards, alerts', actions: 'Assign, reprioritize, escalate', outputs: 'Executive operating report', kpi: 'Tasks closed / blockers / response time', authority: 'Internal autonomous', escalates: 'Capital/legal/irreversible actions', group: 'Executive' },
+  { n: 2, name: 'IA-02 Acquisitions', mission: 'Find acquisition opportunities', inputs: 'Listings, brokers, owners, off-market data', actions: 'Source, filter, contact, route', outputs: 'Acquisition pipeline', kpi: 'Qualified deals', authority: 'Research/outreach workflow', escalates: 'Offers/contracts', group: 'Executive' },
+  { n: 3, name: 'IA-03 Underwriting / Analytics', mission: 'Analyze investment opportunities', inputs: 'Property data, rents, expenses, comps', actions: 'Model, score, stress-test', outputs: 'Underwriting package', kpi: 'Analyzed deals / accuracy', authority: 'Analytical', escalates: 'Final investment approval', group: 'Executive' },
+  { n: 4, name: 'IA-04 Development / Construction', mission: 'Control development pipeline', inputs: 'Plans, budgets, schedules, permits', actions: 'Track, coordinate, flag delays', outputs: 'Development status', kpi: 'Cost / schedule / milestone performance', authority: 'Coordination', escalates: 'Contracts/change orders/capital', group: 'Executive' },
+  { n: 5, name: 'IA-05 Asset Management', mission: 'Maximize portfolio performance', inputs: 'Occupancy, NOI, maintenance, leasing', actions: 'Monitor, recommend, assign follow-ups', outputs: 'Asset performance report', kpi: 'NOI / occupancy / variance', authority: 'Operational analysis', escalates: 'Major asset decisions', group: 'Executive' },
+  { n: 6, name: 'IA-06 Finance / Accounting', mission: 'Financial control', inputs: 'Budgets, invoices, revenue, bank data', actions: 'Reconcile, forecast, report', outputs: 'Finance dashboard', kpi: 'Cash position / variance / reporting', authority: 'Analysis/reporting', escalates: 'Money movement', group: 'Executive' },
+  { n: 7, name: 'IA-07 Investor Relations', mission: 'Manage investor communications', inputs: 'Investor records, updates, questions', actions: 'Segment, prepare responses, follow up', outputs: 'Investor communication queue', kpi: 'Response time / engagement', authority: 'Approved communications', escalates: 'Regulated solicitation / commitments', group: 'Executive' },
+  { n: 8, name: 'IA-08 Legal / Compliance', mission: 'Compliance monitoring', inputs: 'Contracts, regulations, policies', actions: 'Review, flag, route', outputs: 'Compliance exceptions', kpi: 'Unresolved issues', authority: 'Monitoring', escalates: 'Legal advice / execution', group: 'Executive' },
+  { n: 9, name: 'IA-09 Sales / Marketing', mission: 'Grow demand', inputs: 'Campaigns, audience, products', actions: 'Plan, draft, optimize', outputs: 'Marketing pipeline', kpi: 'Leads / CAC / conversion', authority: 'Approved campaigns', escalates: 'Regulated claims / large spend', group: 'Executive' },
+  { n: 10, name: 'IA-10 Technology / Platform', mission: 'Maintain IVX platform', inputs: 'System health, bugs, logs', actions: 'Diagnose, assign fixes, verify', outputs: 'Technology status', kpi: 'Uptime / defects / recovery time', authority: 'Safe technical operations', escalates: 'Production credentials / destructive changes', group: 'Executive' },
+  { n: 11, name: 'IA-11 Security / QA / Certification', mission: 'Verify everything before release', inputs: 'Builds, workflows, logs, evidence', actions: 'Test, reject, certify', outputs: 'PASS / FAIL / CERTIFICATE', kpi: 'Hard-gate success', authority: 'Block unsafe releases', escalates: 'Unresolved critical failures', group: 'Executive' },
+  { n: 12, name: 'IA-12 Research / Intelligence', mission: 'Global intelligence', inputs: 'Markets, news, data, technology', actions: 'Research, compare, summarize', outputs: 'Intelligence briefs', kpi: 'Actionable findings', authority: 'Research', escalates: 'Strategic decisions', group: 'Executive' },
+
+  // ── Growth & Marketing (13-21) ──
+  { n: 13, name: 'IA-13 App Advertising', mission: 'Acquire users for IVX apps', inputs: 'Channels, audiences, creatives', actions: 'Campaign planning / testing', outputs: 'Advertising campaigns', kpi: 'Installs / CAC / ROAS', authority: 'Approved campaigns', escalates: '', group: 'Growth & Marketing' },
+  { n: 14, name: 'IA-14 Paid Media', mission: 'Manage paid acquisition', inputs: 'Ad platforms / budget', actions: 'Optimize campaigns', outputs: 'Paid-media report', kpi: 'Conversion / cost', authority: 'Approved campaigns', escalates: '', group: 'Growth & Marketing' },
+  { n: 15, name: 'IA-15 Social Media Growth', mission: 'Grow global audience', inputs: 'Content / channels', actions: 'Schedule / engage / analyze', outputs: 'Growth report', kpi: 'Reach / engagement / leads', authority: 'Approved campaigns', escalates: '', group: 'Growth & Marketing' },
+  { n: 16, name: 'IA-16 Brand Expansion', mission: 'Strengthen IVX brand', inputs: 'Markets / messaging', actions: 'Brand strategy', outputs: 'Brand initiatives', kpi: 'Awareness / demand', authority: 'Approved campaigns', escalates: '', group: 'Growth & Marketing' },
+  { n: 17, name: 'IA-17 Investor Acquisition', mission: 'Identify potential investors', inputs: 'Permitted lead sources', actions: 'Identify / segment / qualify', outputs: 'Investor leads', kpi: 'Qualified investor prospects', authority: 'Research/outreach', escalates: 'Regulated investment solicitation', group: 'Growth & Marketing' },
+  { n: 18, name: 'IA-18 Investor Retention', mission: 'Keep investors engaged', inputs: 'Investor activity / feedback', actions: 'Monitor / communicate / route', outputs: 'Retention actions', kpi: 'Engagement / retention', authority: 'Approved communications', escalates: '', group: 'Growth & Marketing' },
+  { n: 19, name: 'IA-19 Buyer Acquisition', mission: 'Find buyers', inputs: 'Market / buyer data', actions: 'Prospect / qualify', outputs: 'Buyer pipeline', kpi: 'Qualified buyers', authority: 'Research/outreach', escalates: '', group: 'Growth & Marketing' },
+  { n: 20, name: 'IA-20 Buyer Qualification', mission: 'Verify buyer fit', inputs: 'Criteria / capital / timing', actions: 'Score / segment', outputs: 'Buyer qualification', kpi: 'Verified buyers', authority: 'Analytical', escalates: '', group: 'Growth & Marketing' },
+  { n: 21, name: 'IA-21 Buyer Follow-Up', mission: 'Keep buyer pipeline moving', inputs: 'CRM status', actions: 'Reminders / routing', outputs: 'Next-action queue', kpi: 'Response / conversion', authority: 'Approved communications', escalates: '', group: 'Growth & Marketing' },
+
+  // ── Market & Business Development (22-30) ──
+  { n: 22, name: 'IA-22 New Market Expansion', mission: 'Identify new geographic markets', inputs: 'Demographics / economics / demand', actions: 'Compare / rank', outputs: 'Market expansion list', kpi: 'Viable markets', authority: 'Research', escalates: '', group: 'Market & Business Development' },
+  { n: 23, name: 'IA-23 Business Stability', mission: 'Monitor organizational stability', inputs: 'Revenue / costs / operations', actions: 'Identify risk', outputs: 'Stability score', kpi: 'Unresolved risks', authority: 'Analytical', escalates: '', group: 'Market & Business Development' },
+  { n: 24, name: 'IA-24 Revenue Stability', mission: 'Protect recurring revenue', inputs: 'Revenue streams', actions: 'Analyze concentration / volatility', outputs: 'Revenue risk report', kpi: 'Revenue durability', authority: 'Analytical', escalates: '', group: 'Market & Business Development' },
+  { n: 25, name: 'IA-25 New Business Discovery', mission: 'Discover new businesses', inputs: 'Trends / unmet needs', actions: 'Ideate / screen', outputs: 'New business ideas', kpi: 'Qualified concepts', authority: 'Research', escalates: '', group: 'Market & Business Development' },
+  { n: 26, name: 'IA-26 New Business Validation', mission: 'Validate business concepts', inputs: 'Concepts / market data', actions: 'Test economics / demand', outputs: 'GO / NO-GO', kpi: 'Validated opportunities', authority: 'Analytical', escalates: '', group: 'Market & Business Development' },
+  { n: 27, name: 'IA-27 Partnership Development', mission: 'Find strategic partners', inputs: 'Target companies', actions: 'Research / match / outreach prep', outputs: 'Partner pipeline', kpi: 'Qualified partners', authority: 'Research/outreach', escalates: '', group: 'Market & Business Development' },
+  { n: 28, name: 'IA-28 JV Deal Origination', mission: 'Identify JV opportunities', inputs: 'Projects / partners', actions: 'Match capital / capability', outputs: 'JV opportunities', kpi: 'Viable JV deals', authority: 'Research', escalates: '', group: 'Market & Business Development' },
+  { n: 29, name: 'IA-29 JV Deal Structuring', mission: 'Model JV structures', inputs: 'Economics / roles / capital', actions: 'Scenario modeling', outputs: 'Proposed structures', kpi: 'Viable structures', authority: 'Analytical', escalates: 'Legal/economic commitments', group: 'Market & Business Development' },
+  { n: 30, name: 'IA-30 JV Partner Management', mission: 'Track JV relationships', inputs: 'Partner commitments', actions: 'Monitor / coordinate', outputs: 'JV status', kpi: 'Milestone completion', authority: 'Coordination', escalates: '', group: 'Market & Business Development' },
+
+  // ── Digital & Technology (31-40) ──
+  { n: 31, name: 'IA-31 Tokenized Assets', mission: 'Evaluate tokenization opportunities', inputs: 'Assets / jurisdictions / models', actions: 'Research / structure analysis', outputs: 'Tokenization feasibility', kpi: 'Viable structures', authority: 'Research', escalates: 'Securities/legal implementation', group: 'Digital & Technology' },
+  { n: 32, name: 'IA-32 Tokenized Deal Research', mission: 'Research tokenized markets', inputs: 'Platforms / deals / regulations', actions: 'Compare / monitor', outputs: 'Opportunity intelligence', kpi: 'Viable deals', authority: 'Research', escalates: '', group: 'Digital & Technology' },
+  { n: 33, name: 'IA-33 Digital Asset Strategy', mission: 'Digital asset strategy', inputs: 'Market / regulatory data', actions: 'Evaluate use cases', outputs: 'Strategic roadmap', kpi: 'Validated strategy', authority: 'Research', escalates: '', group: 'Digital & Technology' },
+  { n: 34, name: 'IA-34 PropTech Research', mission: 'Identify PropTech innovation', inputs: 'Startups / technologies', actions: 'Research / score', outputs: 'PropTech watchlist', kpi: 'Qualified technologies', authority: 'Research', escalates: '', group: 'Digital & Technology' },
+  { n: 35, name: 'IA-35 New Technology Discovery', mission: 'Find emerging technology', inputs: 'Research / products / patents', actions: 'Identify / classify', outputs: 'Technology pipeline', kpi: 'New technologies', authority: 'Research', escalates: '', group: 'Digital & Technology' },
+  { n: 36, name: 'IA-36 Technology Validation', mission: 'Test promising technologies', inputs: 'Candidates', actions: 'Feasibility / proof-of-concept', outputs: 'Validation report', kpi: 'Validated technologies', authority: 'Analytical', escalates: '', group: 'Digital & Technology' },
+  { n: 37, name: 'IA-37 AI Technology Research', mission: 'Monitor AI advances', inputs: 'Models / APIs / research', actions: 'Benchmark / recommend', outputs: 'AI roadmap', kpi: 'Actionable findings', authority: 'Research', escalates: '', group: 'Digital & Technology' },
+  { n: 38, name: 'IA-38 Quantum Technology Research', mission: 'Monitor quantum technology', inputs: 'Research / vendors / use cases', actions: 'Evaluate maturity', outputs: 'Quantum intelligence', kpi: 'Maturity assessments', authority: 'Research', escalates: '', group: 'Digital & Technology' },
+  { n: 39, name: 'IA-39 Quantum Business Applications', mission: 'Find practical quantum applications', inputs: 'IVX business problems', actions: 'Map use cases', outputs: 'Experiment proposals', kpi: 'Viable applications', authority: 'Research', escalates: '', group: 'Digital & Technology' },
+  { n: 40, name: 'IA-40 Automation Innovation', mission: 'Automate repetitive operations', inputs: 'Workflows / bottlenecks', actions: 'Design automation', outputs: 'Automation backlog', kpi: 'Automated processes', authority: 'Safe technical operations', escalates: '', group: 'Digital & Technology' },
+
+  // ── Intelligence (41-45) ──
+  { n: 41, name: 'IA-41 Data Intelligence', mission: 'Convert data into decisions', inputs: 'IVX datasets', actions: 'Analyze / detect patterns', outputs: 'Intelligence dashboards', kpi: 'Actionable insights', authority: 'Analytical', escalates: '', group: 'Intelligence' },
+  { n: 42, name: 'IA-42 Market Intelligence', mission: 'Global market monitoring', inputs: 'Prices / transactions / demand', actions: 'Analyze trends', outputs: 'Market alerts', kpi: 'Timely alerts', authority: 'Analytical', escalates: '', group: 'Intelligence' },
+  { n: 43, name: 'IA-43 Competitor Intelligence', mission: 'Track competitors', inputs: 'Public competitor data', actions: 'Compare offerings / positioning', outputs: 'Competitor reports', kpi: 'Strategic findings', authority: 'Research', escalates: '', group: 'Intelligence' },
+  { n: 44, name: 'IA-44 Economic Intelligence', mission: 'Monitor macroeconomic conditions', inputs: 'Rates / inflation / employment', actions: 'Assess impact', outputs: 'Economic risk signals', kpi: 'Risk assessments', authority: 'Analytical', escalates: '', group: 'Intelligence' },
+  { n: 45, name: 'IA-45 Real Estate Intelligence', mission: 'Track property markets', inputs: 'Sales / rents / supply', actions: 'Identify trends', outputs: 'Real-estate intelligence', kpi: 'Market insights', authority: 'Analytical', escalates: '', group: 'Intelligence' },
+
+  // ── Networks & Capital (46-55) ──
+  { n: 46, name: 'IA-46 Deal Sourcing', mission: 'Source investment opportunities', inputs: 'Public / partner / broker sources', actions: 'Discover / rank', outputs: 'Deal pipeline', kpi: 'Sourced deals', authority: 'Research/outreach', escalates: '', group: 'Networks & Capital' },
+  { n: 47, name: 'IA-47 Off-Market Opportunities', mission: 'Discover off-market opportunities', inputs: 'Permitted owner / market data', actions: 'Identify / qualify', outputs: 'Off-market leads', kpi: 'Qualified leads', authority: 'Research', escalates: '', group: 'Networks & Capital' },
+  { n: 48, name: 'IA-48 Buyer Network Growth', mission: 'Expand buyer network', inputs: 'Buyer segments', actions: 'Source / classify', outputs: 'Buyer network', kpi: 'New buyers', authority: 'Research/outreach', escalates: '', group: 'Networks & Capital' },
+  { n: 49, name: 'IA-49 Seller Network Growth', mission: 'Expand seller network', inputs: 'Ownership / listings', actions: 'Source / qualify', outputs: 'Seller pipeline', kpi: 'New sellers', authority: 'Research/outreach', escalates: '', group: 'Networks & Capital' },
+  { n: 50, name: 'IA-50 Broker Network Growth', mission: 'Expand broker relationships', inputs: 'Broker directories', actions: 'Research / segment', outputs: 'Broker network', kpi: 'New brokers', authority: 'Research/outreach', escalates: '', group: 'Networks & Capital' },
+  { n: 51, name: 'IA-51 Lender Network Growth', mission: 'Expand financing sources', inputs: 'Lenders / programs', actions: 'Compare / qualify', outputs: 'Lender directory', kpi: 'Qualified lenders', authority: 'Research/outreach', escalates: '', group: 'Networks & Capital' },
+  { n: 52, name: 'IA-52 Capital Markets', mission: 'Monitor capital availability', inputs: 'Debt / equity markets', actions: 'Analyze terms', outputs: 'Capital market report', kpi: 'Financing opportunities', authority: 'Analytical', escalates: '', group: 'Networks & Capital' },
+  { n: 53, name: 'IA-53 Private Equity Relations', mission: 'Identify PE relationships', inputs: 'Firms / mandates', actions: 'Research / match', outputs: 'PE prospect pipeline', kpi: 'Qualified prospects', authority: 'Research/outreach', escalates: '', group: 'Networks & Capital' },
+  { n: 54, name: 'IA-54 Family Office Relations', mission: 'Identify family-office prospects', inputs: 'Permitted public/business sources', actions: 'Research / segment', outputs: 'Family-office pipeline', kpi: 'Qualified prospects', authority: 'Research/outreach', escalates: '', group: 'Networks & Capital' },
+  { n: 55, name: 'IA-55 Institutional Relations', mission: 'Institutional prospect development', inputs: 'Institutional mandates', actions: 'Identify / match', outputs: 'Institutional pipeline', kpi: 'Qualified institutions', authority: 'Research/outreach', escalates: '', group: 'Networks & Capital' },
+
+  // ── Global Expansion (56-62) ──
+  { n: 56, name: 'IA-56 International Expansion', mission: 'Global expansion research', inputs: 'Countries / markets', actions: 'Compare opportunity / risk', outputs: 'Expansion candidates', kpi: 'Viable countries', authority: 'Research', escalates: '', group: 'Global Expansion' },
+  { n: 57, name: 'IA-57 New Country Research', mission: 'Country-level opportunity research', inputs: 'Legal / economic / real estate data', actions: 'Score countries', outputs: 'Country scorecards', kpi: 'Scored countries', authority: 'Research', escalates: '', group: 'Global Expansion' },
+  { n: 58, name: 'IA-58 New City Research', mission: 'Identify high-potential cities', inputs: 'Growth / rents / supply / demand', actions: 'Rank cities', outputs: 'City pipeline', kpi: 'Ranked cities', authority: 'Research', escalates: '', group: 'Global Expansion' },
+  { n: 59, name: 'IA-59 New Development Opportunities', mission: 'Find development opportunities', inputs: 'Land / zoning / demand', actions: 'Screen / rank', outputs: 'Development pipeline', kpi: 'Viable developments', authority: 'Research', escalates: '', group: 'Global Expansion' },
+  { n: 60, name: 'IA-60 New Asset Classes', mission: 'Identify additional asset classes', inputs: 'Market performance', actions: 'Analyze', outputs: 'Asset-class proposals', kpi: 'Viable classes', authority: 'Analytical', escalates: '', group: 'Global Expansion' },
+  { n: 61, name: 'IA-61 Strategic Growth', mission: 'Coordinate long-term growth', inputs: 'All department intelligence', actions: 'Combine / prioritize', outputs: 'Growth roadmap', kpi: 'Growth initiatives', authority: 'Analytical', escalates: 'Strategic decisions', group: 'Global Expansion' },
+  { n: 62, name: 'IA-62 Future Opportunities', mission: 'Continuously identify future opportunities', inputs: 'Technology / market / social trends', actions: 'Horizon scan', outputs: 'Future opportunity portfolio', kpi: 'Emerging opportunities', authority: 'Research', escalates: '', group: 'Global Expansion' },
+
+  // ── New App Development (63-92) ──
+  { n: 63, name: 'IA-63 New App Discovery', mission: 'Discover app opportunities', inputs: 'User problems / market gaps', actions: 'Ideate / rank', outputs: 'App concepts', kpi: 'Qualified concepts', authority: 'Research', escalates: '', group: 'New App Development' },
+  { n: 64, name: 'IA-64 New App Business Case', mission: 'Build business case', inputs: 'App concepts', actions: 'Economics / demand analysis', outputs: 'GO / NO-GO', kpi: 'Validated concepts', authority: 'Analytical', escalates: '', group: 'New App Development' },
+  { n: 65, name: 'IA-65 New App Product Strategy', mission: 'Define product direction', inputs: 'Validated concept', actions: 'Roadmap / features', outputs: 'Product specification', kpi: 'Defined roadmap', authority: 'Analytical', escalates: '', group: 'New App Development' },
+  { n: 66, name: 'IA-66 New App UX Architecture', mission: 'Design user journey', inputs: 'Requirements', actions: 'Flows / information architecture', outputs: 'UX specification', kpi: 'Designed flows', authority: 'Analytical', escalates: '', group: 'New App Development' },
+  { n: 67, name: 'IA-67 New App UI Design', mission: 'Define interface', inputs: 'UX / brand', actions: 'Screen system / components', outputs: 'UI specification', kpi: 'Designed screens', authority: 'Analytical', escalates: '', group: 'New App Development' },
+  { n: 68, name: 'IA-68 New App Frontend Architecture', mission: 'Frontend engineering', inputs: 'UI / requirements', actions: 'Architecture / implementation', outputs: 'Frontend build', kpi: 'Built frontend', authority: 'Safe technical operations', escalates: 'Production deployment', group: 'New App Development' },
+  { n: 69, name: 'IA-69 New App Backend Architecture', mission: 'Backend engineering', inputs: 'Product requirements', actions: 'Services / logic', outputs: 'Backend build', kpi: 'Built backend', authority: 'Safe technical operations', escalates: 'Production deployment', group: 'New App Development' },
+  { n: 70, name: 'IA-70 New App Database Design', mission: 'Database architecture', inputs: 'Entities / workflows', actions: 'Schema / policies', outputs: 'Database layer', kpi: 'Designed schema', authority: 'Safe technical operations', escalates: 'Production schema changes', group: 'New App Development' },
+  { n: 71, name: 'IA-71 New App API Design', mission: 'API architecture', inputs: 'Services / clients', actions: 'Endpoints / contracts', outputs: 'API layer', kpi: 'Designed API', authority: 'Safe technical operations', escalates: 'Breaking API changes', group: 'New App Development' },
+  { n: 72, name: 'IA-72 New App AI Architecture', mission: 'AI system design', inputs: 'App use cases', actions: 'Models / prompts / orchestration', outputs: 'AI architecture', kpi: 'Designed AI', authority: 'Safe technical operations', escalates: '', group: 'New App Development' },
+  { n: 73, name: 'IA-73 New App Security Architecture', mission: 'Security-by-design', inputs: 'App architecture', actions: 'Threat modeling / controls', outputs: 'Security specification', kpi: 'Security controls', authority: 'Safe technical operations', escalates: '', group: 'New App Development' },
+  { n: 74, name: 'IA-74 New App Authentication', mission: 'Identity/access implementation', inputs: 'Roles / users', actions: 'Auth flows / permissions', outputs: 'Authentication system', kpi: 'Implemented auth', authority: 'Safe technical operations', escalates: '', group: 'New App Development' },
+  { n: 75, name: 'IA-75 New App Payments', mission: 'Payment architecture', inputs: 'Business model', actions: 'Payment integration design', outputs: 'Payment workflow', kpi: 'Payment system', authority: 'Safe technical operations', escalates: 'Financial transactions', group: 'New App Development' },
+  { n: 76, name: 'IA-76 New App Analytics', mission: 'Product analytics', inputs: 'Events / KPIs', actions: 'Instrument / report', outputs: 'Analytics layer', kpi: 'Tracked metrics', authority: 'Analytical', escalates: '', group: 'New App Development' },
+  { n: 77, name: 'IA-77 New App Notifications', mission: 'Notification system', inputs: 'Product events', actions: 'Push/email/in-app logic', outputs: 'Notification engine', kpi: 'Notification system', authority: 'Safe technical operations', escalates: '', group: 'New App Development' },
+  { n: 78, name: 'IA-78 New App iOS', mission: 'iOS delivery', inputs: 'App build', actions: 'Compile / test / package', outputs: 'iOS candidate', kpi: 'Built iOS app', authority: 'Safe technical operations', escalates: 'App store submission', group: 'New App Development' },
+  { n: 79, name: 'IA-79 New App Android', mission: 'Android delivery', inputs: 'App build', actions: 'Compile / test / package', outputs: 'Android candidate', kpi: 'Built Android app', authority: 'Safe technical operations', escalates: 'Play store submission', group: 'New App Development' },
+  { n: 80, name: 'IA-80 New App Web', mission: 'Web delivery', inputs: 'Frontend/backend', actions: 'Build / test / deploy', outputs: 'Web application', kpi: 'Built web app', authority: 'Safe technical operations', escalates: 'Production deployment', group: 'New App Development' },
+  { n: 81, name: 'IA-81 New App Admin Portal', mission: 'Administrative tools', inputs: 'Operations needs', actions: 'Build control interfaces', outputs: 'Admin portal', kpi: 'Built portal', authority: 'Safe technical operations', escalates: '', group: 'New App Development' },
+  { n: 82, name: 'IA-82 New App Investor Portal', mission: 'Investor-facing interface', inputs: 'Investor requirements', actions: 'Build portal', outputs: 'Investor portal', kpi: 'Built portal', authority: 'Safe technical operations', escalates: '', group: 'New App Development' },
+  { n: 83, name: 'IA-83 New App Buyer Portal', mission: 'Buyer interface', inputs: 'Buyer workflows', actions: 'Build portal', outputs: 'Buyer portal', kpi: 'Built portal', authority: 'Safe technical operations', escalates: '', group: 'New App Development' },
+  { n: 84, name: 'IA-84 New App Seller Portal', mission: 'Seller interface', inputs: 'Seller workflows', actions: 'Build portal', outputs: 'Seller portal', kpi: 'Built portal', authority: 'Safe technical operations', escalates: '', group: 'New App Development' },
+  { n: 85, name: 'IA-85 New App Marketplace', mission: 'Marketplace capability', inputs: 'Buyers / sellers / inventory', actions: 'Matching / listing logic', outputs: 'Marketplace', kpi: 'Built marketplace', authority: 'Safe technical operations', escalates: '', group: 'New App Development' },
+  { n: 86, name: 'IA-86 New App Automation', mission: 'Automate new apps', inputs: 'Workflows', actions: 'Automate repetitive processes', outputs: 'Automation layer', kpi: 'Automated processes', authority: 'Safe technical operations', escalates: '', group: 'New App Development' },
+  { n: 87, name: 'IA-87 New App Testing', mission: 'Functional testing', inputs: 'Builds', actions: 'Run test suites', outputs: 'Test results', kpi: 'Test coverage', authority: 'Quality assurance', escalates: '', group: 'New App Development' },
+  { n: 88, name: 'IA-88 New App QA', mission: 'Quality assurance', inputs: 'Test results / requirements', actions: 'Validate / reject', outputs: 'QA decision', kpi: 'Quality gates', authority: 'Block unsafe releases', escalates: '', group: 'New App Development' },
+  { n: 89, name: 'IA-89 New App Security Testing', mission: 'Security verification', inputs: 'Build / architecture', actions: 'Security testing', outputs: 'Security report', kpi: 'Security verified', authority: 'Block unsafe releases', escalates: '', group: 'New App Development' },
+  { n: 90, name: 'IA-90 New App Deployment', mission: 'Deployment orchestration', inputs: 'Certified build', actions: 'Deploy / verify', outputs: 'Live environment', kpi: 'Deployed app', authority: 'Safe technical operations', escalates: 'Production deployment', group: 'New App Development' },
+  { n: 91, name: 'IA-91 New App Monitoring', mission: 'Post-launch monitoring', inputs: 'Telemetry / logs', actions: 'Detect incidents', outputs: 'Health status', kpi: 'Issues detected', authority: 'Safe technical operations', escalates: '', group: 'New App Development' },
+  { n: 92, name: 'IA-92 New App Growth', mission: 'Grow launched apps', inputs: 'Acquisition / product data', actions: 'Experiments', outputs: 'Growth plan', kpi: 'Growth experiments', authority: 'Analytical', escalates: 'Large spend', group: 'New App Development' },
+
+  // ── New Project Development (93-102) ──
+  { n: 93, name: 'IA-93 New Project Discovery', mission: 'Discover non-app projects', inputs: 'Business opportunities', actions: 'Ideate / screen', outputs: 'Project pipeline', kpi: 'Qualified concepts', authority: 'Research', escalates: '', group: 'New Project Development' },
+  { n: 94, name: 'IA-94 New Project Feasibility', mission: 'Feasibility analysis', inputs: 'Project concepts', actions: 'Technical / market / operational analysis', outputs: 'Feasibility report', kpi: 'Validated projects', authority: 'Analytical', escalates: '', group: 'New Project Development' },
+  { n: 95, name: 'IA-95 New Project Financial Model', mission: 'Project economics', inputs: 'Costs / revenue assumptions', actions: 'Model scenarios', outputs: 'Financial model', kpi: 'Validated economics', authority: 'Analytical', escalates: '', group: 'New Project Development' },
+  { n: 96, name: 'IA-96 New Project Legal Structure', mission: 'Legal-structure research', inputs: 'Project requirements', actions: 'Identify structure options', outputs: 'Legal options', kpi: 'Legal options', authority: 'Research', escalates: 'Attorney/legal execution', group: 'New Project Development' },
+  { n: 97, name: 'IA-97 New Project Branding', mission: 'Create project brand strategy', inputs: 'Positioning / audience', actions: 'Naming / messaging', outputs: 'Brand package', kpi: 'Brand defined', authority: 'Analytical', escalates: '', group: 'New Project Development' },
+  { n: 98, name: 'IA-98 New Project Operations', mission: 'Operating model design', inputs: 'Project plan', actions: 'Workflows / roles', outputs: 'Operating plan', kpi: 'Operating model', authority: 'Analytical', escalates: '', group: 'New Project Development' },
+  { n: 99, name: 'IA-99 New Project Technology', mission: 'Technology architecture', inputs: 'Project requirements', actions: 'Select / design tech', outputs: 'Technical architecture', kpi: 'Designed architecture', authority: 'Safe technical operations', escalates: '', group: 'New Project Development' },
+  { n: 100, name: 'IA-100 New Project Automation', mission: 'Automate project operations', inputs: 'Workflows', actions: 'Automation design', outputs: 'Automation system', kpi: 'Automated processes', authority: 'Safe technical operations', escalates: '', group: 'New Project Development' },
+  { n: 101, name: 'IA-101 New Project Launch', mission: 'Coordinate launch', inputs: 'Approved deliverables', actions: 'Readiness / launch checklist', outputs: 'Launch status', kpi: 'Launched project', authority: 'Coordination', escalates: 'Production launch', group: 'New Project Development' },
+  { n: 102, name: 'IA-102 New Project Scale', mission: 'Scale successful projects', inputs: 'Usage / revenue / operations', actions: 'Identify bottlenecks', outputs: 'Scale roadmap', kpi: 'Scaled project', authority: 'Analytical', escalates: 'Large capital', group: 'New Project Development' },
+
+  // ── Product Creation & Innovation (103-112) ──
+  { n: 103, name: 'IA-103 Experimental Products', mission: 'Test experimental concepts', inputs: 'Innovation ideas', actions: 'Prototype / measure', outputs: 'Experiments', kpi: 'Validated experiments', authority: 'Research/prototyping', escalates: 'Production launch', group: 'Product Creation & Innovation' },
+  { n: 104, name: 'IA-104 SaaS Product Creation', mission: 'Create SaaS products', inputs: 'Validated SaaS opportunities', actions: 'Product build coordination', outputs: 'SaaS products', kpi: 'Built products', authority: 'Safe technical operations', escalates: 'Production launch', group: 'Product Creation & Innovation' },
+  { n: 105, name: 'IA-105 FinTech Product Creation', mission: 'Create FinTech concepts/products', inputs: 'Finance pain points', actions: 'Design / validate', outputs: 'FinTech products', kpi: 'Validated products', authority: 'Safe technical operations', escalates: 'Regulated financial functionality', group: 'Product Creation & Innovation' },
+  { n: 106, name: 'IA-106 PropTech Product Creation', mission: 'Build PropTech products', inputs: 'Property workflows', actions: 'Design / coordinate build', outputs: 'PropTech products', kpi: 'Built products', authority: 'Safe technical operations', escalates: 'Production launch', group: 'Product Creation & Innovation' },
+  { n: 107, name: 'IA-107 AI Product Creation', mission: 'Create AI-native products', inputs: 'Validated use cases', actions: 'Prototype / evaluate', outputs: 'AI products', kpi: 'Validated products', authority: 'Safe technical operations', escalates: 'Production launch', group: 'Product Creation & Innovation' },
+  { n: 108, name: 'IA-108 Tokenization Product Creation', mission: 'Design tokenization technology', inputs: 'Validated legal/business model', actions: 'Architecture / prototype', outputs: 'Tokenization product', kpi: 'Built product', authority: 'Safe technical operations', escalates: 'Regulated launch', group: 'Product Creation & Innovation' },
+  { n: 109, name: 'IA-109 Quantum Product Research', mission: 'Investigate quantum-enabled products', inputs: 'Quantum capability / use cases', actions: 'Feasibility experiments', outputs: 'Quantum product research', kpi: 'Validated experiments', authority: 'Research', escalates: '', group: 'Product Creation & Innovation' },
+  { n: 110, name: 'IA-110 Internal Tool Creation', mission: 'Create IVX internal tools', inputs: 'Department needs', actions: 'Design / build / test', outputs: 'Internal applications', kpi: 'Built tools', authority: 'Safe technical operations', escalates: '', group: 'Product Creation & Innovation' },
+  { n: 111, name: 'IA-111 External Client App Creation', mission: 'Create applications for external clients', inputs: 'Approved client requirements', actions: 'Scope / build / QA', outputs: 'Client applications', kpi: 'Built apps', authority: 'Safe technical operations', escalates: 'Production launch', group: 'Product Creation & Innovation' },
+  { n: 112, name: 'IA-112 Continuous Innovation Lab', mission: 'Continuously generate and test innovation', inputs: 'All IVX data / market / technology signals', actions: 'Ideate / prototype / evaluate / route', outputs: 'Innovation portfolio', kpi: 'Validated experiments', authority: 'Research and prototyping', escalates: 'Production launch / capital / legal decisions', group: 'Product Creation & Innovation' },
+];
+
+function derivePriority(n: number): OrchestratorPriority {
+  if (n === 1 || n === 10 || n === 11) return 'critical';
+  if (n <= 12) return 'high';
+  if (n >= 63 && n <= 92) return 'high';
+  if (n >= 93 && n <= 102) return 'medium';
+  if (n >= 103) return 'medium';
+  return 'medium';
+}
+
+function deriveRiskLevel(def: AgentDef): AgentRiskLevel {
+  if (def.n === 11) return 'high';
+  if (def.escalates && /capital|legal|regulated|production|financial/i.test(def.escalates)) return 'high';
+  if (def.n >= 68 && def.n <= 90) return 'medium';
+  if (def.n <= 12) return 'medium';
+  return 'low';
+}
+
+function makeAgentFromDef(def: AgentDef): EnterpriseMasterAgent {
+  const priority: OrchestratorPriority = derivePriority(def.n);
+  const riskLevel: AgentRiskLevel = deriveRiskLevel(def);
+  const canModifyIVX = def.n <= 12;
+  const buildsNewProducts = def.n >= 63;
+  const destructiveActions: string[] = def.escalates ? [def.escalates] : [];
   return {
-    id,
-    agentNumber,
-    name,
-    role,
-    division,
-    company,
-    responsibilities,
-    capabilities,
+    id: `ivx_holdings_${def.n}`,
+    agentNumber: def.n,
+    name: def.name,
+    role: def.mission,
+    division: 'A' as DivisionId,
+    company: 'ivx_holdings' as CompanyId,
+    responsibilities: [def.inputs, def.actions, def.outputs],
+    capabilities: def.actions.split(/,\s*|\s*\/\s*/).filter(Boolean),
     priority,
     riskLevel,
-    heartbeatGoal,
+    heartbeatGoal: def.kpi,
     destructiveActions,
     canModifyIVX,
     buildsNewProducts,
+    mission: def.mission,
+    inputs: def.inputs,
+    actions: def.actions,
+    outputs: def.outputs,
+    kpi: def.kpi,
+    authority: def.authority,
+    escalates: def.escalates || null,
+    functionalGroup: def.group,
   };
 }
 
-// ── DIVISION A: IVX Holdings (Agents 1–50) ──────────────────────────────────
-
-const DIVISION_A_AGENTS: EnterpriseMasterAgent[] = [
-  // Mobile Development (1–4)
-  makeAgent(1, 'IVX Mobile Lead', 'Lead mobile app architecture, React Native/Expo development, and app store deployment.', 'ivx_holdings',
-    ['Mobile app architecture', 'React Native/Expo development', 'iOS App Store submission', 'Google Play Store submission', 'App store metadata'],
-    ['mobile_architecture', 'react_native', 'expo', 'app_store_submission', 'play_store_submission'],
-    'high', 'medium',
-    'Audit mobile app architecture, review open mobile issues, and propose the highest-impact mobile improvement.',
-    ['publish to app store', 'publish to play store', 'change app signing keys']),
-  makeAgent(2, 'IVX Mobile UI Engineer', 'Own mobile UI components, navigation, animations, and design system consistency.', 'ivx_holdings',
-    ['Mobile UI components', 'Navigation patterns', 'Animations and transitions', 'Design system compliance'],
-    ['ui_components', 'navigation', 'animations', 'design_system'],
-    'medium', 'low',
-    'Audit mobile component tree for rendering issues, broken animations, or design system violations.',
-    ['remove component', 'change navigation structure']),
-  makeAgent(3, 'IVX Mobile State Engineer', 'Manage mobile state management — React Query, context hooks, AsyncStorage, offline sync.', 'ivx_holdings',
-    ['State management', 'React Query optimization', 'Offline data sync', 'Local persistence'],
-    ['state_management', 'react_query', 'async_storage', 'offline_sync'],
-    'medium', 'medium',
-    'Review mobile state management for data freshness, cache invalidation gaps, and offline sync issues.',
-    ['clear user data', 'modify cache strategy']),
-  makeAgent(4, 'IVX Mobile QA Engineer', 'Mobile-specific testing — E2E flows, device testing, snapshot tests, Maestro flows.', 'ivx_holdings',
-    ['Mobile E2E testing', 'Device compatibility testing', 'Snapshot tests', 'Maestro flow validation'],
-    ['e2e_testing', 'device_testing', 'snapshot_tests', 'maestro'],
-    'medium', 'low',
-    'Run mobile test suite, identify device compatibility issues, and flag regression risks.',
-    ['delete test data', 'modify test suite']),
-
-  // Web Development (5–7)
-  makeAgent(5, 'IVX Web Lead', 'Lead web development — landing page, marketing site, web-based dashboards.', 'ivx_holdings',
-    ['Web architecture', 'Landing page maintenance', 'Marketing site updates', 'Web dashboard development'],
-    ['web_architecture', 'landing_page', 'marketing_site', 'web_dashboards'],
-    'medium', 'low',
-    'Audit web properties for content accuracy, performance, and SEO compliance.',
-    ['publish landing page', 'modify public site']),
-  makeAgent(6, 'IVX Frontend Engineer', 'Frontend component health, design system, accessibility, rendering performance.', 'ivx_holdings',
-    ['Frontend components', 'Design system', 'Accessibility audits', 'Render performance'],
-    ['component_audit', 'design_system', 'accessibility', 'render_performance'],
-    'medium', 'low',
-    'Audit frontend component tree for performance regressions, broken styles, or accessibility gaps.',
-    ['remove component', 'change design tokens']),
-  makeAgent(7, 'IVX Web QA Engineer', 'Web testing — Playwright E2E, cross-browser, visual regression.', 'ivx_holdings',
-    ['Web E2E testing', 'Cross-browser testing', 'Visual regression testing'],
-    ['playwright', 'cross_browser', 'visual_regression'],
-    'low', 'low',
-    'Run web test suite, identify browser compatibility issues, and flag visual regressions.',
-    ['delete test data']),
-
-  // Backend APIs (8–11)
-  makeAgent(8, 'IVX Backend Lead', 'Lead backend architecture, API design, route health, middleware.', 'ivx_holdings',
-    ['Backend architecture', 'API design', 'Route health', 'Middleware management'],
-    ['api_design', 'middleware_audit', 'route_health', 'error_handling'],
-    'high', 'medium',
-    'Audit backend routes for performance, error handling gaps, and API consistency.',
-    ['delete route', 'change auth middleware']),
-  makeAgent(9, 'IVX API Engineer', 'API endpoint implementation, request validation, response formatting, OpenAPI docs.', 'ivx_holdings',
-    ['API implementation', 'Request validation', 'Response formatting', 'API documentation'],
-    ['api_implementation', 'validation', 'response_formatting', 'openapi'],
-    'high', 'medium',
-    'Review API endpoints for validation gaps, inconsistent responses, and missing documentation.',
-    ['change API contract', 'remove endpoint']),
-  makeAgent(10, 'IVX Integration Engineer', 'External integrations — Supabase, Render, GitHub, AWS, Stripe, AI Gateway.', 'ivx_holdings',
-    ['External integrations', 'Supabase integration', 'Render integration', 'AWS integration', 'AI Gateway integration'],
-    ['integrations', 'supabase', 'render', 'aws', 'ai_gateway'],
-    'high', 'high',
-    'Audit all external integrations for credential validity, error handling, and rate limit compliance.',
-    ['rotate credentials', 'modify integration config']),
-  makeAgent(11, 'IVX Webhook Engineer', 'Webhook endpoints, event handlers, real-time notifications.', 'ivx_holdings',
-    ['Webhook endpoints', 'Event handlers', 'Real-time notifications'],
-    ['webhooks', 'event_handlers', 'realtime'],
-    'medium', 'medium',
-    'Audit webhook endpoints for security, payload validation, and delivery reliability.',
-    ['delete webhook', 'modify event handler']),
-
-  // Database (12–14)
-  makeAgent(12, 'IVX Database Lead', 'Schema design, migrations, indexing strategy, query performance.', 'ivx_holdings',
-    ['Schema design', 'Migrations', 'Indexing strategy', 'Query performance'],
-    ['schema_design', 'migration_planning', 'index_optimization', 'query_analysis'],
-    'high', 'high',
-    'Review database schema for missing indexes, analyze slow queries, and propose safe migrations.',
-    ['drop table', 'truncate data', 'modify production schema']),
-  makeAgent(13, 'IVX Data Engineer', 'Data pipeline, ETL, data quality, Supabase RLS policies.', 'ivx_holdings',
-    ['Data pipelines', 'ETL processes', 'Data quality', 'RLS policies'],
-    ['data_pipeline', 'etl', 'data_quality', 'rls_policies'],
-    'medium', 'high',
-    'Audit data pipelines for quality issues, check RLS policy coverage, and flag data inconsistencies.',
-    ['modify RLS policies', 'delete data pipeline']),
-  makeAgent(14, 'IVX Database QA Engineer', 'Database testing, migration verification, data integrity checks.', 'ivx_holdings',
-    ['Database testing', 'Migration verification', 'Data integrity checks'],
-    ['db_testing', 'migration_verification', 'data_integrity'],
-    'medium', 'medium',
-    'Verify recent migrations applied cleanly, run data integrity checks, and flag anomalies.',
-    ['delete test data']),
-
-  // AI Chat (15–17)
-  makeAgent(15, 'IVX AI Chat Lead', 'AI chat architecture, conversation brain, provider management, response quality.', 'ivx_holdings',
-    ['AI chat architecture', 'Conversation brain', 'Provider management', 'Response quality'],
-    ['ai_chat', 'conversation_brain', 'provider_management', 'response_quality'],
-    'high', 'medium',
-    'Audit AI chat provider health, review conversation quality, and propose improvements.',
-    ['change AI provider', 'modify conversation brain']),
-  makeAgent(16, 'IVX AI Integration Engineer', 'AI model integration, prompt engineering, function calling, streaming.', 'ivx_holdings',
-    ['AI model integration', 'Prompt engineering', 'Function calling', 'Streaming responses'],
-    ['ai_integration', 'prompt_engineering', 'function_calling', 'streaming'],
-    'high', 'medium',
-    'Review AI integrations for prompt quality, function calling accuracy, and streaming reliability.',
-    ['change AI model', 'modify prompts']),
-  makeAgent(17, 'IVX Owner AI Engineer', 'Owner AI module — passwordless login, owner-specific AI responses, executive AI.', 'ivx_holdings',
-    ['Owner AI module', 'Passwordless login', 'Owner AI responses', 'Executive AI features'],
-    ['owner_ai', 'passwordless_auth', 'executive_ai'],
-    'critical', 'high',
-    'Audit owner AI module for security, response quality, and authentication integrity.',
-    ['modify owner auth', 'change owner AI behavior']),
-
-  // Owner Dashboard (18–19)
-  makeAgent(18, 'IVX Dashboard Lead', 'Owner dashboard, executive dashboard, autonomous dashboard UI.', 'ivx_holdings',
-    ['Owner dashboard', 'Executive dashboard', 'Autonomous dashboard', 'Deployment dashboard'],
-    ['dashboard_ui', 'executive_dashboard', 'autonomous_dashboard'],
-    'high', 'low',
-    'Audit dashboard data accuracy, UI responsiveness, and feature completeness.',
-    ['change dashboard layout', 'modify executive views']),
-  makeAgent(19, 'IVX Dashboard Data Engineer', 'Dashboard data sources, real-time metrics, KPI calculations.', 'ivx_holdings',
-    ['Dashboard data sources', 'Real-time metrics', 'KPI calculations'],
-    ['dashboard_data', 'realtime_metrics', 'kpi_calculation'],
-    'medium', 'medium',
-    'Verify dashboard data sources are fresh, KPIs are accurate, and real-time metrics are updating.',
-    ['modify KPI formulas']),
-
-  // Investors (20–22)
-  makeAgent(20, 'IVX Investor Lead', 'Investor pipeline management, application review, investor relations.', 'ivx_holdings',
-    ['Investor pipeline', 'Application review', 'Investor relations strategy'],
-    ['investor_pipeline', 'application_review', 'investor_relations'],
-    'high', 'medium',
-    'Review investor pipeline, flag stalled applications, and propose follow-up actions.',
-    ['approve investor', 'reject investor', 'share financial data']),
-  makeAgent(21, 'IVX Investor CRM Engineer', 'Investor CRM, contact management, communication tracking.', 'ivx_holdings',
-    ['Investor CRM', 'Contact management', 'Communication tracking'],
-    ['crm', 'contact_management', 'communication_tracking'],
-    'medium', 'medium',
-    'Audit investor CRM data quality, flag missing contact info, and check communication logs.',
-    ['delete CRM records', 'modify investor data']),
-  makeAgent(22, 'IVX Investor AI Reviewer', 'AI-powered investor application review, scoring, risk assessment.', 'ivx_holdings',
-    ['AI application review', 'Scoring algorithms', 'Risk assessment'],
-    ['ai_review', 'scoring', 'risk_assessment'],
-    'high', 'medium',
-    'Review AI scoring accuracy, audit recent application reviews, and flag inconsistencies.',
-    ['modify scoring algorithm', 'change review criteria']),
-
-  // Buyers (23–24)
-  makeAgent(23, 'IVX Buyer Lead', 'Buyer offer management, buyer CRM, deal matching.', 'ivx_holdings',
-    ['Buyer offers', 'Buyer CRM', 'Deal matching'],
-    ['buyer_offers', 'buyer_crm', 'deal_matching'],
-    'high', 'medium',
-    'Review buyer offers, flag unmatched buyers, and propose deal recommendations.',
-    ['accept offer', 'reject offer']),
-  makeAgent(24, 'IVX Buyer AI Engineer', 'AI-powered buyer matching, offer evaluation, buyer scoring.', 'ivx_holdings',
-    ['AI buyer matching', 'Offer evaluation', 'Buyer scoring'],
-    ['ai_matching', 'offer_evaluation', 'buyer_scoring'],
-    'medium', 'medium',
-    'Audit AI buyer matching accuracy, review recent matches, and propose scoring improvements.',
-    ['modify matching algorithm']),
-
-  // CRM (25–26)
-  makeAgent(25, 'IVX CRM Lead', 'CRM architecture, contact pipeline, lead management, communication history.', 'ivx_holdings',
-    ['CRM architecture', 'Contact pipeline', 'Lead management', 'Communication history'],
-    ['crm_architecture', 'pipeline_management', 'lead_management'],
-    'medium', 'medium',
-    'Audit CRM data quality, review pipeline stages, and flag stale leads.',
-    ['delete CRM records', 'modify pipeline stages']),
-  makeAgent(26, 'IVX CRM Automation Engineer', 'CRM automation, follow-up scheduling, notification triggers.', 'ivx_holdings',
-    ['CRM automation', 'Follow-up scheduling', 'Notification triggers'],
-    ['crm_automation', 'follow_ups', 'notifications'],
-    'low', 'low',
-    'Review CRM automation rules, check follow-up schedules, and flag missed notifications.',
-    ['delete automation rules']),
-
-  // Tokenization (27–28)
-  makeAgent(27, 'IVX Tokenization Lead', 'Asset tokenization architecture, smart contract design, compliance.', 'ivx_holdings',
-    ['Tokenization architecture', 'Smart contract design', 'Tokenization compliance'],
-    ['tokenization', 'smart_contracts', 'compliance'],
-    'high', 'high',
-    'Review tokenization pipeline, audit compliance checks, and propose architecture improvements.',
-    ['deploy smart contract', 'modify tokenization rules']),
-  makeAgent(28, 'IVX Tokenization QA Engineer', 'Tokenization testing, compliance verification, audit trail.', 'ivx_holdings',
-    ['Tokenization testing', 'Compliance verification', 'Audit trail validation'],
-    ['tokenization_testing', 'compliance', 'audit_trail'],
-    'medium', 'high',
-    'Run tokenization test suite, verify compliance checks, and audit recent tokenizations.',
-    ['delete test data']),
-
-  // Properties (29–30)
-  makeAgent(29, 'IVX Property Lead', 'Property management, listing management, property valuation.', 'ivx_holdings',
-    ['Property management', 'Listing management', 'Property valuation'],
-    ['property_management', 'listings', 'valuation'],
-    'medium', 'medium',
-    'Review property listings, flag missing data, and audit valuation accuracy.',
-    ['delete property', 'modify valuation']),
-  makeAgent(30, 'IVX Property Data Engineer', 'Property data pipeline, market data integration, property analytics.', 'ivx_holdings',
-    ['Property data pipeline', 'Market data integration', 'Property analytics'],
-    ['property_data', 'market_data', 'analytics'],
-    'low', 'medium',
-    'Audit property data pipeline, check market data freshness, and flag data gaps.',
-    ['modify data pipeline']),
-
-  // Deals (31–32)
-  makeAgent(31, 'IVX Deal Lead', 'Deal management, JV deals, deal financials, pool tiers.', 'ivx_holdings',
-    ['Deal management', 'JV deals', 'Deal financials', 'Pool tiers'],
-    ['deal_management', 'jv_deals', 'financials', 'pool_tiers'],
-    'high', 'high',
-    'Review active deals, audit financial calculations, and flag deal risks.',
-    ['close deal', 'modify financials', 'change pool tiers']),
-  makeAgent(32, 'IVX Deal AI Engineer', 'AI-powered deal analysis, risk scoring, opportunity detection.', 'ivx_holdings',
-    ['AI deal analysis', 'Risk scoring', 'Opportunity detection'],
-    ['ai_analysis', 'risk_scoring', 'opportunity_detection'],
-    'medium', 'medium',
-    'Audit AI deal analysis accuracy, review risk scores, and flag missed opportunities.',
-    ['modify risk algorithm']),
-
-  // Marketing (33–34)
-  makeAgent(33, 'IVX Marketing Lead', 'Marketing strategy, positioning, campaign management, brand consistency.', 'ivx_holdings',
-    ['Marketing strategy', 'Positioning', 'Campaign management', 'Brand consistency'],
-    ['marketing_strategy', 'positioning', 'campaigns', 'brand'],
-    'low', 'low',
-    'Review marketing positioning, analyze engagement metrics, and propose growth experiments.',
-    ['launch campaign', 'send outreach']),
-  makeAgent(34, 'IVX SEO Engineer', 'SEO optimization, content strategy, search ranking, analytics.', 'ivx_holdings',
-    ['SEO optimization', 'Content strategy', 'Search ranking', 'Analytics'],
-    ['seo', 'content_strategy', 'search_ranking', 'analytics'],
-    'low', 'low',
-    'Audit SEO performance, review search rankings, and propose content improvements.',
-    ['publish content', 'modify SEO config']),
-
-  // Analytics (35–36)
-  makeAgent(35, 'IVX Analytics Lead', 'Analytics architecture, metrics pipeline, data visualization.', 'ivx_holdings',
-    ['Analytics architecture', 'Metrics pipeline', 'Data visualization'],
-    ['analytics', 'metrics_pipeline', 'visualization'],
-    'medium', 'low',
-    'Audit analytics pipeline, verify metric accuracy, and propose new visualizations.',
-    ['modify analytics pipeline']),
-  makeAgent(36, 'IVX Business Intelligence Engineer', 'BI dashboards, KPI tracking, reporting, trend analysis.', 'ivx_holdings',
-    ['BI dashboards', 'KPI tracking', 'Reporting', 'Trend analysis'],
-    ['bi', 'kpi', 'reporting', 'trends'],
-    'medium', 'low',
-    'Review BI dashboards for accuracy, audit KPI definitions, and flag reporting gaps.',
-    ['modify KPI definitions']),
-
-  // QA (37–38)
-  makeAgent(37, 'IVX QA Lead', 'Test strategy, coverage analysis, regression detection, quality gates.', 'ivx_holdings',
-    ['Test strategy', 'Coverage analysis', 'Regression detection', 'Quality gates'],
-    ['qa_strategy', 'coverage_analysis', 'regression', 'quality_gates'],
-    'high', 'low',
-    'Run test suite analysis, identify coverage gaps, and flag regression risks.',
-    ['delete test data', 'modify test suite']),
-  makeAgent(38, 'IVX E2E QA Engineer', 'End-to-end testing, integration testing, smoke tests, production verification.', 'ivx_holdings',
-    ['E2E testing', 'Integration testing', 'Smoke tests', 'Production verification'],
-    ['e2e', 'integration_testing', 'smoke_tests', 'production_verification'],
-    'high', 'low',
-    'Run E2E test suite against production, verify critical flows, and report defects.',
-    ['delete test data']),
-
-  // Security (39–40)
-  makeAgent(39, 'IVX Security Lead', 'Security posture, secret scanning, auth audit, vulnerability management.', 'ivx_holdings',
-    ['Security posture', 'Secret scanning', 'Auth audit', 'Vulnerability management'],
-    ['security', 'secret_scanning', 'auth_audit', 'vulnerabilities'],
-    'critical', 'high',
-    'Scan for exposed secrets, audit auth gates, and check dependencies for known vulnerabilities.',
-    ['rotate secrets', 'revoke tokens', 'modify auth gates']),
-  makeAgent(40, 'IVX Compliance Engineer', 'Regulatory compliance, KYC/AML, data privacy, audit logs.', 'ivx_holdings',
-    ['Regulatory compliance', 'KYC/AML', 'Data privacy', 'Audit logs'],
-    ['compliance', 'kyc_aml', 'privacy', 'audit_logs'],
-    'high', 'high',
-    'Audit compliance controls, verify KYC/AML processes, and review audit log completeness.',
-    ['modify compliance rules', 'delete audit logs']),
-
-  // Cloud Infrastructure (41–42)
-  makeAgent(41, 'IVX Cloud Lead', 'Cloud architecture, Render management, AWS infrastructure, Supabase management.', 'ivx_holdings',
-    ['Cloud architecture', 'Render management', 'AWS infrastructure', 'Supabase management'],
-    ['cloud_architecture', 'render', 'aws', 'supabase'],
-    'high', 'high',
-    'Audit cloud infrastructure health, review resource utilization, and flag cost optimization opportunities.',
-    ['modify infrastructure', 'change scaling rules', 'provision resources']),
-  makeAgent(42, 'IVX DevOps Engineer', 'CI/CD pipeline, Docker, deployment automation, environment management.', 'ivx_holdings',
-    ['CI/CD pipeline', 'Docker', 'Deployment automation', 'Environment management'],
-    ['ci_cd', 'docker', 'deployment', 'environments'],
-    'high', 'high',
-    'Audit CI/CD pipeline health, review Docker configurations, and flag deployment risks.',
-    ['rollback production', 'force deploy', 'modify CI/CD pipeline']),
-
-  // Deployment (43)
-  makeAgent(43, 'IVX Deployment Lead', 'Deployment strategy, release management, health verification, rollback planning.', 'ivx_holdings',
-    ['Deployment strategy', 'Release management', 'Health verification', 'Rollback planning'],
-    ['deployment', 'release_management', 'health_verification', 'rollback'],
-    'critical', 'high',
-    'Verify deployment pipeline health, check GitHub-Render sync, and flag deployment risks.',
-    ['rollback production', 'force deploy', 'disable health checks']),
-
-  // Monitoring (44)
-  makeAgent(44, 'IVX Monitoring Lead', 'System monitoring, alerting, uptime tracking, log management.', 'ivx_holdings',
-    ['System monitoring', 'Alerting', 'Uptime tracking', 'Log management'],
-    ['monitoring', 'alerting', 'uptime', 'logging'],
-    'high', 'medium',
-    'Audit monitoring coverage, review alert configurations, and flag monitoring gaps.',
-    ['modify alert rules', 'delete logs']),
-
-  // Documentation (45)
-  makeAgent(45, 'IVX Documentation Lead', 'Architecture docs, runbooks, changelogs, API documentation, knowledge base.', 'ivx_holdings',
-    ['Architecture docs', 'Runbooks', 'Changelogs', 'API documentation', 'Knowledge base'],
-    ['documentation', 'runbooks', 'changelogs', 'api_docs'],
-    'low', 'low',
-    'Audit documentation coverage, generate missing runbooks, and update changelogs.',
-    ['delete documentation', 'remove runbook']),
-
-  // Customer Support (46)
-  makeAgent(46, 'IVX Customer Support Lead', 'Customer support, issue tracking, user feedback, support automation.', 'ivx_holdings',
-    ['Customer support', 'Issue tracking', 'User feedback', 'Support automation'],
-    ['customer_support', 'issue_tracking', 'feedback', 'automation'],
-    'medium', 'low',
-    'Review open customer issues, analyze feedback trends, and propose support improvements.',
-    ['close support tickets', 'modify support workflows']),
-
-  // Performance Optimization (47)
-  makeAgent(47, 'IVX Performance Lead', 'Performance profiling, latency optimization, bundle size, resource efficiency.', 'ivx_holdings',
-    ['Performance profiling', 'Latency optimization', 'Bundle size', 'Resource efficiency'],
-    ['performance', 'latency', 'bundle_size', 'resource_profiling'],
-    'medium', 'low',
-    'Profile endpoint latency, analyze bundle sizes, and identify performance bottlenecks.',
-    ['modify infrastructure', 'change scaling rules']),
-
-  // Autonomous Operations (48–50)
-  makeAgent(48, 'IVX Autonomous Lead', 'Autonomous system health, scheduler management, engine coordination.', 'ivx_holdings',
-    ['Autonomous system health', 'Scheduler management', 'Engine coordination', 'Autonomous reporting'],
-    ['autonomous', 'scheduler', 'engines', 'reporting'],
-    'critical', 'high',
-    'Audit autonomous system health, review scheduler state, and verify all engines are running.',
-    ['stop autonomous system', 'modify scheduler config']),
-  makeAgent(49, 'IVX Enterprise Orchestrator AI', 'Central governance — task assignment, workload balancing, duplicate prevention, escalation.', 'ivx_holdings',
-    ['Task assignment', 'Workload balancing', 'Duplicate prevention', 'Failure escalation'],
-    ['orchestration', 'workload_balancing', 'dedup', 'escalation'],
-    'critical', 'high',
-    'Review orchestrator task queue, check workload distribution, and flag blocked tasks.',
-    ['cancel tasks', 'modify orchestrator config']),
-  makeAgent(50, 'IVX Executive Report AI', 'Executive reporting — company scorecards, AI scorecards, engineering scorecards, capital scorecards.', 'ivx_holdings',
-    ['Executive reporting', 'Company scorecards', 'AI scorecards', 'Engineering scorecards', 'Capital scorecards'],
-    ['executive_reports', 'scorecards', 'company_analysis'],
-    'high', 'low',
-    'Generate executive report with current scorecards, flag risks, and summarize progress.',
-    ['modify report format']),
-];
-
-// ── DIVISION B: New Enterprises (Agents 51–100) ─────────────────────────────
-
-const DIVISION_B_AGENTS: EnterpriseMasterAgent[] = [
-  // Company 1: Enterprise SaaS Builder (51–60)
-  makeAgent(51, 'SaaS Product AI', 'Define product vision, roadmap, and user stories for new SaaS products.', 'saas_builder',
-    ['Product vision', 'Roadmap planning', 'User stories', 'Market research'],
-    ['product_management', 'roadmap', 'user_stories', 'market_research'],
-    'high', 'low',
-    'Research SaaS market opportunities, define product roadmap, and prioritize features.',
-    [], false, true),
-  makeAgent(52, 'SaaS Backend AI', 'Build backend APIs, database schema, and server logic for new SaaS products.', 'saas_builder',
-    ['Backend APIs', 'Database schema', 'Server logic', 'API design'],
-    ['backend', 'database', 'api_design', 'server_logic'],
-    'high', 'medium',
-    'Design and build backend architecture for the current SaaS product in development.',
-    ['deploy to production', 'modify database schema'], false, true),
-  makeAgent(53, 'SaaS Frontend AI', 'Build frontend UI, components, and design system for new SaaS products.', 'saas_builder',
-    ['Frontend UI', 'Components', 'Design system', 'User experience'],
-    ['frontend', 'components', 'design_system', 'ux'],
-    'high', 'low',
-    'Build frontend components and pages for the current SaaS product in development.',
-    ['publish frontend', 'change design system'], false, true),
-  makeAgent(54, 'SaaS Mobile AI', 'Build mobile apps for new SaaS products — React Native/Expo.', 'saas_builder',
-    ['Mobile development', 'React Native', 'Expo', 'App store submission'],
-    ['mobile', 'react_native', 'expo', 'app_store'],
-    'medium', 'medium',
-    'Build mobile app for the current SaaS product, prepare for app store submission.',
-    ['publish to app store', 'change app signing'], false, true),
-  makeAgent(55, 'SaaS AI Integration AI', 'Integrate AI features — chat, embeddings, function calling, RAG.', 'saas_builder',
-    ['AI integration', 'Chat features', 'Embeddings', 'RAG'],
-    ['ai_integration', 'chat', 'embeddings', 'rag'],
-    'high', 'medium',
-    'Design and implement AI features for the current SaaS product.',
-    ['change AI provider', 'modify AI behavior'], false, true),
-  makeAgent(56, 'SaaS QA AI', 'Test coverage, E2E testing, regression detection for new SaaS products.', 'saas_builder',
-    ['Test coverage', 'E2E testing', 'Regression detection', 'Quality gates'],
-    ['qa', 'e2e', 'regression', 'quality_gates'],
-    'high', 'low',
-    'Run test suite for the current SaaS product, identify coverage gaps, and flag regressions.',
-    ['delete test data', 'modify test suite'], false, true),
-  makeAgent(57, 'SaaS Security AI', 'Security audit, secret scanning, auth implementation for new SaaS products.', 'saas_builder',
-    ['Security audit', 'Secret scanning', 'Auth implementation', 'Vulnerability management'],
-    ['security', 'secret_scanning', 'auth', 'vulnerabilities'],
-    'high', 'high',
-    'Audit security of the current SaaS product, scan for secrets, and check auth implementation.',
-    ['rotate secrets', 'modify auth'], false, true),
-  makeAgent(58, 'SaaS DevOps AI', 'CI/CD pipeline, deployment, infrastructure for new SaaS products.', 'saas_builder',
-    ['CI/CD pipeline', 'Deployment', 'Infrastructure', 'Environment management'],
-    ['devops', 'ci_cd', 'deployment', 'infrastructure'],
-    'high', 'high',
-    'Set up CI/CD pipeline and deployment infrastructure for the current SaaS product.',
-    ['deploy to production', 'modify infrastructure'], false, true),
-  makeAgent(59, 'SaaS Deployment AI', 'Deployment strategy, release management, health verification for new SaaS products.', 'saas_builder',
-    ['Deployment strategy', 'Release management', 'Health verification', 'Rollback planning'],
-    ['deployment', 'release_management', 'health', 'rollback'],
-    'high', 'high',
-    'Plan and execute deployment for the current SaaS product with health verification.',
-    ['rollback production', 'force deploy'], false, true),
-  makeAgent(60, 'SaaS Documentation AI', 'Architecture docs, API docs, user guides for new SaaS products.', 'saas_builder',
-    ['Architecture docs', 'API docs', 'User guides', 'Knowledge base'],
-    ['documentation', 'api_docs', 'user_guides', 'knowledge_base'],
-    'medium', 'low',
-    'Generate documentation for the current SaaS product — architecture, API, and user guides.',
-    ['delete documentation'], false, true),
-
-  // Company 2: Healthcare Technology (61–65)
-  makeAgent(61, 'Healthcare Product AI', 'Define healthcare product vision and regulatory requirements.', 'healthcare_tech',
-    ['Product vision', 'Healthcare regulations', 'HIPAA compliance planning', 'Market research'],
-    ['product_management', 'healthcare', 'hipaa', 'market_research'],
-    'high', 'high',
-    'Research healthcare technology opportunities, assess regulatory requirements, and define product roadmap.',
-    [], false, true),
-  makeAgent(62, 'Healthcare Workflow AI', 'Build medical workflow automation — scheduling, patient flow, care coordination.', 'healthcare_tech',
-    ['Medical workflows', 'Patient scheduling', 'Care coordination', 'Workflow automation'],
-    ['workflows', 'scheduling', 'care_coordination', 'automation'],
-    'high', 'high',
-    'Design and build medical workflow automation for the current healthcare product.',
-    ['deploy to production', 'modify clinical workflows'], false, true),
-  makeAgent(63, 'Healthcare Automation AI', 'Healthcare process automation — claims, billing, records management.', 'healthcare_tech',
-    ['Claims automation', 'Billing automation', 'Records management', 'Process automation'],
-    ['automation', 'claims', 'billing', 'records'],
-    'medium', 'high',
-    'Build healthcare process automation — claims processing, billing, and records management.',
-    ['deploy to production', 'modify billing logic'], false, true),
-  makeAgent(64, 'Healthcare Scheduling AI', 'Appointment scheduling, resource allocation, calendar optimization.', 'healthcare_tech',
-    ['Appointment scheduling', 'Resource allocation', 'Calendar optimization'],
-    ['scheduling', 'resource_allocation', 'optimization'],
-    'medium', 'medium',
-    'Build and optimize appointment scheduling system for healthcare product.',
-    ['modify scheduling rules'], false, true),
-  makeAgent(65, 'Healthcare Compliance AI', 'HIPAA compliance, FDA regulations, audit trails, data privacy.', 'healthcare_tech',
-    ['HIPAA compliance', 'FDA regulations', 'Audit trails', 'Data privacy'],
-    ['compliance', 'hipaa', 'fda', 'privacy'],
-    'critical', 'high',
-    'Audit healthcare product for HIPAA compliance, verify audit trails, and check data privacy controls.',
-    ['modify compliance rules', 'delete audit logs'], false, true),
-
-  // Company 3: Construction Technology (66–70)
-  makeAgent(66, 'Construction Estimating AI', 'Cost estimation, material takeoff, labor calculation for construction projects.', 'construction_tech',
-    ['Cost estimation', 'Material takeoff', 'Labor calculation', 'Project bidding'],
-    ['estimating', 'takeoff', 'labor', 'bidding'],
-    'high', 'medium',
-    'Build cost estimation engine for construction projects with material and labor calculations.',
-    ['modify estimation algorithms'], false, true),
-  makeAgent(67, 'Construction Engineering AI', 'Structural analysis, engineering calculations, design verification.', 'construction_tech',
-    ['Structural analysis', 'Engineering calculations', 'Design verification'],
-    ['engineering', 'structural', 'calculations', 'design'],
-    'high', 'high',
-    'Build engineering analysis tools for construction — structural and design verification.',
-    ['modify engineering calculations'], false, true),
-  makeAgent(68, 'Construction Permitting AI', 'Permit tracking, code compliance, regulatory submission automation.', 'construction_tech',
-    ['Permit tracking', 'Code compliance', 'Regulatory submissions'],
-    ['permitting', 'code_compliance', 'regulatory'],
-    'medium', 'medium',
-    'Build permit tracking and code compliance system for construction projects.',
-    ['submit permits', 'modify compliance rules'], false, true),
-  makeAgent(69, 'Construction Scheduling AI', 'Project scheduling, critical path analysis, resource leveling.', 'construction_tech',
-    ['Project scheduling', 'Critical path analysis', 'Resource leveling'],
-    ['scheduling', 'critical_path', 'resource_leveling'],
-    'medium', 'medium',
-    'Build project scheduling system with critical path analysis and resource leveling.',
-    ['modify scheduling algorithms'], false, true),
-  makeAgent(70, 'Construction Cost Control AI', 'Budget tracking, cost variance analysis, change order management.', 'construction_tech',
-    ['Budget tracking', 'Cost variance analysis', 'Change order management'],
-    ['cost_control', 'budget', 'variance', 'change_orders'],
-    'medium', 'medium',
-    'Build cost control system for construction — budget tracking and variance analysis.',
-    ['modify budget calculations'], false, true),
-
-  // Company 4: Finance Technology (71–75)
-  makeAgent(71, 'Finance Investment Analytics AI', 'Investment performance analytics, portfolio tracking, benchmarking.', 'finance_tech',
-    ['Investment analytics', 'Portfolio tracking', 'Benchmarking', 'Performance attribution'],
-    ['analytics', 'portfolio', 'benchmarking', 'attribution'],
-    'high', 'medium',
-    'Build investment analytics engine with portfolio tracking and performance benchmarking.',
-    ['modify analytics algorithms'], false, true),
-  makeAgent(72, 'Finance Portfolio AI', 'Portfolio optimization, asset allocation, rebalancing recommendations.', 'finance_tech',
-    ['Portfolio optimization', 'Asset allocation', 'Rebalancing'],
-    ['portfolio', 'optimization', 'allocation', 'rebalancing'],
-    'high', 'high',
-    'Build portfolio optimization engine with asset allocation and rebalancing recommendations.',
-    ['execute trades', 'modify optimization algorithms'], false, true),
-  makeAgent(73, 'Finance Risk AI', 'Risk analysis, VaR calculation, stress testing, scenario analysis.', 'finance_tech',
-    ['Risk analysis', 'VaR calculation', 'Stress testing', 'Scenario analysis'],
-    ['risk', 'var', 'stress_testing', 'scenarios'],
-    'high', 'high',
-    'Build risk analysis engine with VaR calculation and stress testing capabilities.',
-    ['modify risk models', 'change risk parameters'], false, true),
-  makeAgent(74, 'Finance Reporting AI', 'Financial reporting, regulatory reports, investor statements.', 'finance_tech',
-    ['Financial reporting', 'Regulatory reports', 'Investor statements'],
-    ['reporting', 'regulatory', 'statements'],
-    'medium', 'high',
-    'Build financial reporting system with regulatory compliance and investor statements.',
-    ['publish reports', 'modify report templates'], false, true),
-  makeAgent(75, 'Finance Cash Flow AI', 'Cash flow analysis, projection, liquidity management, treasury optimization.', 'finance_tech',
-    ['Cash flow analysis', 'Projections', 'Liquidity management', 'Treasury optimization'],
-    ['cash_flow', 'projections', 'liquidity', 'treasury'],
-    'medium', 'high',
-    'Build cash flow analysis and projection system with liquidity management.',
-    ['modify cash flow models'], false, true),
-
-  // Company 5: Legal Technology (76–79)
-  makeAgent(76, 'Legal Contract AI', 'Contract analysis, clause extraction, risk identification, contract generation.', 'legal_tech',
-    ['Contract analysis', 'Clause extraction', 'Risk identification', 'Contract generation'],
-    ['contracts', 'clause_extraction', 'risk', 'generation'],
-    'high', 'high',
-    'Build contract analysis engine with clause extraction and risk identification.',
-    ['generate legal documents', 'modify contract templates'], false, true),
-  makeAgent(77, 'Legal Compliance AI', 'Regulatory compliance monitoring, obligation tracking, policy management.', 'legal_tech',
-    ['Regulatory compliance', 'Obligation tracking', 'Policy management'],
-    ['compliance', 'obligations', 'policies'],
-    'high', 'high',
-    'Build regulatory compliance monitoring system with obligation tracking.',
-    ['modify compliance rules', 'delete compliance records'], false, true),
-  makeAgent(78, 'Legal Documents AI', 'Legal document automation, template management, document assembly.', 'legal_tech',
-    ['Document automation', 'Template management', 'Document assembly'],
-    ['documents', 'templates', 'assembly'],
-    'medium', 'high',
-    'Build legal document automation system with template management and assembly.',
-    ['generate legal documents', 'modify templates'], false, true),
-  makeAgent(79, 'Legal Workflow AI', 'Legal workflow automation, matter management, deadline tracking.', 'legal_tech',
-    ['Workflow automation', 'Matter management', 'Deadline tracking'],
-    ['workflows', 'matter_management', 'deadlines'],
-    'medium', 'medium',
-    'Build legal workflow automation with matter management and deadline tracking.',
-    ['modify workflow rules'], false, true),
-
-  // Company 6: Marketing Technology (80–84)
-  makeAgent(80, 'Marketing SEO AI', 'SEO automation, keyword research, rank tracking, content optimization.', 'marketing_tech',
-    ['SEO automation', 'Keyword research', 'Rank tracking', 'Content optimization'],
-    ['seo', 'keywords', 'rank_tracking', 'content'],
-    'high', 'low',
-    'Build SEO automation platform with keyword research and rank tracking.',
-    ['publish content', 'modify SEO config'], false, true),
-  makeAgent(81, 'Marketing Social AI', 'Social media automation, content scheduling, engagement analytics.', 'marketing_tech',
-    ['Social media automation', 'Content scheduling', 'Engagement analytics'],
-    ['social_media', 'scheduling', 'analytics'],
-    'medium', 'low',
-    'Build social media automation platform with content scheduling and analytics.',
-    ['publish social posts', 'modify scheduling rules'], false, true),
-  makeAgent(82, 'Marketing Video AI', 'Video automation, content generation, video editing, distribution.', 'marketing_tech',
-    ['Video automation', 'Content generation', 'Video editing', 'Distribution'],
-    ['video', 'content_generation', 'editing', 'distribution'],
-    'medium', 'medium',
-    'Build video automation platform with content generation and distribution.',
-    ['publish videos', 'modify video templates'], false, true),
-  makeAgent(83, 'Marketing Campaign AI', 'Campaign management, A/B testing, attribution modeling, ROI analysis.', 'marketing_tech',
-    ['Campaign management', 'A/B testing', 'Attribution modeling', 'ROI analysis'],
-    ['campaigns', 'ab_testing', 'attribution', 'roi'],
-    'high', 'medium',
-    'Build campaign management platform with A/B testing and ROI analysis.',
-    ['launch campaigns', 'modify attribution models'], false, true),
-  makeAgent(84, 'Marketing Analytics AI', 'Marketing analytics, funnel analysis, customer journey, conversion optimization.', 'marketing_tech',
-    ['Marketing analytics', 'Funnel analysis', 'Customer journey', 'Conversion optimization'],
-    ['analytics', 'funnel', 'customer_journey', 'conversion'],
-    'medium', 'low',
-    'Build marketing analytics platform with funnel analysis and conversion optimization.',
-    ['modify analytics models'], false, true),
-
-  // Company 7: Research & Innovation (85–92)
-  makeAgent(85, 'AI Research AI', 'Research latest AI models, frameworks, techniques, and papers.', 'research_innovation',
-    ['AI model research', 'Framework evaluation', 'Technique analysis', 'Paper review'],
-    ['ai_research', 'frameworks', 'techniques', 'papers'],
-    'medium', 'low',
-    'Research the latest AI developments and rank technologies by potential business impact.',
-    [], false, false),
-  makeAgent(86, 'Quantum Monitoring AI', 'Monitor quantum computing advances, evaluate business implications.', 'research_innovation',
-    ['Quantum computing monitoring', 'Technology evaluation', 'Business implications'],
-    ['quantum', 'monitoring', 'evaluation'],
-    'low', 'low',
-    'Monitor quantum computing advances, evaluate evidence, and report business implications.',
-    [], false, false),
-  makeAgent(87, 'Robotics Monitoring AI', 'Monitor robotics advances, evaluate automation opportunities.', 'research_innovation',
-    ['Robotics monitoring', 'Automation opportunities', 'Technology evaluation'],
-    ['robotics', 'monitoring', 'automation'],
-    'low', 'low',
-    'Monitor robotics advances, evaluate evidence, and report automation opportunities.',
-    [], false, false),
-  makeAgent(88, 'Biotech Monitoring AI', 'Monitor biotechnology advances, evaluate healthcare/tech implications.', 'research_innovation',
-    ['Biotechnology monitoring', 'Healthcare implications', 'Technology evaluation'],
-    ['biotech', 'monitoring', 'healthcare'],
-    'low', 'low',
-    'Monitor biotechnology advances, evaluate evidence, and report implications.',
-    [], false, false),
-  makeAgent(89, 'Materials Research AI', 'Monitor materials science advances, evaluate manufacturing implications.', 'research_innovation',
-    ['Materials science', 'Manufacturing implications', 'Technology evaluation'],
-    ['materials', 'manufacturing', 'evaluation'],
-    'low', 'low',
-    'Monitor materials science advances, evaluate evidence, and report manufacturing implications.',
-    [], false, false),
-  makeAgent(90, 'Patent Monitoring AI', 'Monitor patent filings, identify IP opportunities, competitive landscape.', 'research_innovation',
-    ['Patent monitoring', 'IP opportunities', 'Competitive landscape'],
-    ['patents', 'ip', 'competitive_landscape'],
-    'medium', 'low',
-    'Monitor recent patent filings, identify IP opportunities, and map competitive landscape.',
-    [], false, false),
-  makeAgent(91, 'Competitive Intelligence AI', 'Monitor competitors, market shifts, technology trends, strategic analysis.', 'research_innovation',
-    ['Competitor monitoring', 'Market analysis', 'Technology trends', 'Strategic analysis'],
-    ['competitive_intel', 'market_analysis', 'trends', 'strategy'],
-    'medium', 'low',
-    'Monitor competitors, analyze market shifts, and report strategic implications with evidence.',
-    [], false, false),
-  makeAgent(92, 'Prototype Development AI', 'Build software prototypes for promising research findings.', 'research_innovation',
-    ['Prototype development', 'Proof of concept', 'Prototype evaluation', 'Technical feasibility'],
-    ['prototyping', 'poc', 'evaluation', 'feasibility'],
-    'medium', 'medium',
-    'Evaluate research findings for prototype potential and build proof-of-concept where appropriate.',
-    ['deploy prototypes'], false, true),
-
-  // Company 8: Business Automation (93–96)
-  makeAgent(93, 'API Integration AI', 'API integration platform, connector library, data synchronization.', 'business_automation',
-    ['API integrations', 'Connector library', 'Data synchronization'],
-    ['api_integrations', 'connectors', 'sync'],
-    'high', 'medium',
-    'Build API integration platform with connector library and data synchronization.',
-    ['modify integrations', 'deploy to production'], false, true),
-  makeAgent(94, 'Workflow Automation AI', 'Workflow automation engine, trigger rules, action chains.', 'business_automation',
-    ['Workflow automation', 'Trigger rules', 'Action chains', 'Process orchestration'],
-    ['workflows', 'triggers', 'actions', 'orchestration'],
-    'high', 'medium',
-    'Build workflow automation engine with trigger rules and action chains.',
-    ['modify workflow rules', 'deploy to production'], false, true),
-  makeAgent(95, 'Enterprise Process AI', 'Enterprise process automation, BPM, process mining, optimization.', 'business_automation',
-    ['Enterprise processes', 'BPM', 'Process mining', 'Optimization'],
-    ['enterprise_processes', 'bpm', 'process_mining', 'optimization'],
-    'medium', 'medium',
-    'Build enterprise process automation with BPM and process mining.',
-    ['modify process definitions'], false, true),
-  makeAgent(96, 'Internal Tools AI', 'Internal tools development, admin panels, operational dashboards.', 'business_automation',
-    ['Internal tools', 'Admin panels', 'Operational dashboards'],
-    ['internal_tools', 'admin', 'dashboards'],
-    'medium', 'low',
-    'Build internal tools and admin panels for enterprise operations.',
-    ['deploy internal tools'], false, true),
-
-  // Company 9: Education Technology (97–100 would overflow, so 97–100 here)
-  makeAgent(97, 'Education Course AI', 'Course builder, curriculum design, content management, learning paths.', 'education_tech',
-    ['Course builder', 'Curriculum design', 'Content management', 'Learning paths'],
-    ['courses', 'curriculum', 'content', 'learning_paths'],
-    'high', 'low',
-    'Build course creation platform with curriculum design and learning path management.',
-    ['publish courses', 'modify curriculum'], false, true),
-  makeAgent(98, 'Education Knowledge AI', 'Knowledge base, documentation, search, content organization.', 'education_tech',
-    ['Knowledge base', 'Documentation', 'Search', 'Content organization'],
-    ['knowledge_base', 'docs', 'search', 'organization'],
-    'medium', 'low',
-    'Build knowledge base platform with search and content organization.',
-    ['modify knowledge base', 'delete content'], false, true),
-  makeAgent(99, 'Education Tutor AI', 'AI tutor, personalized learning, adaptive assessments, progress tracking.', 'education_tech',
-    ['AI tutor', 'Personalized learning', 'Adaptive assessments', 'Progress tracking'],
-    ['ai_tutor', 'personalized', 'assessments', 'progress'],
-    'high', 'medium',
-    'Build AI tutor with personalized learning paths and adaptive assessments.',
-    ['modify AI tutor behavior', 'change assessment algorithms'], false, true),
-  makeAgent(100, 'Enterprise Operations BI AI', 'Executive dashboards, KPI analytics, forecasting, resource planning, business intelligence.', 'enterprise_operations',
-    ['Executive dashboards', 'KPI analytics', 'Forecasting', 'Resource planning', 'Business intelligence'],
-    ['bi', 'dashboards', 'kpi', 'forecasting', 'resource_planning'],
-    'high', 'low',
-    'Build enterprise operations platform with executive dashboards, KPI analytics, and forecasting.',
-    ['modify KPI formulas', 'publish dashboards'], false, true),
-];
-
-// ── Full Registry ────────────────────────────────────────────────────────────
-
-export const ALL_ENTERPRISE_AGENTS: EnterpriseMasterAgent[] = [
-  ...DIVISION_A_AGENTS,
-  ...DIVISION_B_AGENTS,
-];
+export const ALL_ENTERPRISE_AGENTS: EnterpriseMasterAgent[] = AGENT_DEFS.map(makeAgentFromDef);
 
 export const ENTERPRISE_MASTER_REGISTRY: Record<string, EnterpriseMasterAgent> =
   Object.fromEntries(ALL_ENTERPRISE_AGENTS.map((a) => [a.id, a]));
-
-// ── Lookup Functions ────────────────────────────────────────────────────────
 
 export function getAgentById(id: string): EnterpriseMasterAgent | null {
   return ENTERPRISE_MASTER_REGISTRY[id] ?? null;
@@ -933,7 +299,13 @@ export function getDivisionB_Agents(): EnterpriseMasterAgent[] {
   return getAgentsByDivision('B');
 }
 
-// ── Enterprise Master AI — Governance Functions ─────────────────────────────
+export function getAgentsByFunctionalGroup(group: string): EnterpriseMasterAgent[] {
+  return ALL_ENTERPRISE_AGENTS.filter((a) => a.functionalGroup === group);
+}
+
+export function getFunctionalGroups(): string[] {
+  return [...new Set(ALL_ENTERPRISE_AGENTS.map((a) => a.functionalGroup))];
+}
 
 export type AgentStatus = 'idle' | 'active' | 'running' | 'blocked' | 'failed' | 'offline';
 
@@ -955,92 +327,32 @@ export type EnterpriseMasterReport = {
   totalAgents: number;
   divisionA_Count: number;
   divisionB_Count: number;
-  companies: Array<{
-    id: CompanyId;
-    name: string;
-    division: DivisionId;
-    agentCount: number;
-    activeAgents: number;
-    tasksCompleted: number;
-    tasksFailed: number;
-  }>;
-  summary: {
-    activeAgents: number;
-    idleAgents: number;
-    blockedAgents: number;
-    failedAgents: number;
-    totalTasksCompleted: number;
-    totalTasksFailed: number;
-  };
-  sharedServices: {
-    github: boolean;
-    ci_cd: boolean;
-    secureVariables: boolean;
-    auditLogs: boolean;
-    monitoring: boolean;
-    backups: boolean;
-    testingFramework: boolean;
-    documentation: boolean;
-    apiGateway: boolean;
-    authentication: boolean;
-    versionControl: boolean;
-  };
+  companies: Array<{ id: CompanyId; name: string; division: DivisionId; agentCount: number; activeAgents: number; tasksCompleted: number; tasksFailed: number; }>;
+  summary: { activeAgents: number; idleAgents: number; blockedAgents: number; failedAgents: number; totalTasksCompleted: number; totalTasksFailed: number; };
+  sharedServices: { github: boolean; ci_cd: boolean; secureVariables: boolean; auditLogs: boolean; monitoring: boolean; backups: boolean; testingFramework: boolean; documentation: boolean; apiGateway: boolean; authentication: boolean; versionControl: boolean; };
 };
 
-/**
- * Generate a full enterprise master report — every figure derived from
- * real agent registry data. Never fabricated.
- */
 export function generateEnterpriseMasterReport(): EnterpriseMasterReport {
   const divisionA = getDivisionA_Agents();
   const divisionB = getDivisionB_Agents();
-
   const companySummaries = (Object.keys(ENTERPRISE_COMPANIES) as CompanyId[]).map((companyId) => {
     const company = ENTERPRISE_COMPANIES[companyId];
     const agents = getAgentsByCompany(companyId);
-    return {
-      id: companyId,
-      name: company.name,
-      division: company.division,
-      agentCount: agents.length,
-      activeAgents: 0,
-      tasksCompleted: 0,
-      tasksFailed: 0,
-    };
+    return { id: companyId, name: company.name, division: company.division, agentCount: agents.length, activeAgents: 0, tasksCompleted: 0, tasksFailed: 0 };
   });
-
   return {
     generatedAt: new Date().toISOString(),
     totalAgents: ALL_ENTERPRISE_AGENTS.length,
     divisionA_Count: divisionA.length,
     divisionB_Count: divisionB.length,
     companies: companySummaries,
-    summary: {
-      activeAgents: 0,
-      idleAgents: ALL_ENTERPRISE_AGENTS.length,
-      blockedAgents: 0,
-      failedAgents: 0,
-      totalTasksCompleted: 0,
-      totalTasksFailed: 0,
-    },
-    sharedServices: {
-      github: true,
-      ci_cd: true,
-      secureVariables: true,
-      auditLogs: true,
-      monitoring: true,
-      backups: true,
-      testingFramework: true,
-      documentation: true,
-      apiGateway: true,
-      authentication: true,
-      versionControl: true,
-    },
+    summary: { activeAgents: 0, idleAgents: ALL_ENTERPRISE_AGENTS.length, blockedAgents: 0, failedAgents: 0, totalTasksCompleted: 0, totalTasksFailed: 0 },
+    sharedServices: { github: true, ci_cd: true, secureVariables: true, auditLogs: true, monitoring: true, backups: true, testingFramework: true, documentation: true, apiGateway: true, authentication: true, versionControl: true },
   };
 }
 
 /**
- * Validate the enterprise master registry — ensure all 100 agents are
+ * Validate the enterprise master registry — ensure all 112 agents are
  * properly defined with no gaps or duplicates.
  */
 export function validateEnterpriseMasterRegistry(): {
@@ -1049,11 +361,10 @@ export function validateEnterpriseMasterRegistry(): {
   issues: string[];
 } {
   const issues: string[] = [];
-
-  if (ALL_ENTERPRISE_AGENTS.length !== 100) {
-    issues.push(`Expected 100 agents, found ${ALL_ENTERPRISE_AGENTS.length}`);
+  const expected = 112;
+  if (ALL_ENTERPRISE_AGENTS.length !== expected) {
+    issues.push(`Expected ${expected} agents, found ${ALL_ENTERPRISE_AGENTS.length}`);
   }
-
   const numbers = ALL_ENTERPRISE_AGENTS.map((a) => a.agentNumber);
   const sorted = [...numbers].sort((a, b) => a - b);
   for (let i = 0; i < sorted.length; i++) {
@@ -1062,70 +373,37 @@ export function validateEnterpriseMasterRegistry(): {
       break;
     }
   }
-
   const ids = ALL_ENTERPRISE_AGENTS.map((a) => a.id);
   const duplicateIds = ids.filter((id, i) => ids.indexOf(id) !== i);
   if (duplicateIds.length > 0) {
     issues.push(`Duplicate agent IDs: ${duplicateIds.join(', ')}`);
   }
-
   for (const agent of ALL_ENTERPRISE_AGENTS) {
     if (!agent.name) issues.push(`Agent ${agent.agentNumber}: missing name`);
     if (!agent.role) issues.push(`Agent ${agent.agentNumber}: missing role`);
     if (!agent.responsibilities.length) issues.push(`Agent ${agent.agentNumber}: no responsibilities`);
     if (!agent.capabilities.length) issues.push(`Agent ${agent.agentNumber}: no capabilities`);
     if (!agent.heartbeatGoal) issues.push(`Agent ${agent.agentNumber}: missing heartbeat goal`);
-    if (agent.division === 'A' && !agent.canModifyIVX && agent.agentNumber <= 50) {
-      // Division A agents should be able to modify IVX
-    }
-    if (agent.division === 'B' && agent.canModifyIVX) {
-      issues.push(`Agent ${agent.agentNumber} (${agent.name}): Division B agent should NOT modify IVX`);
-    }
+    if (!agent.mission) issues.push(`Agent ${agent.agentNumber}: missing mission`);
+    if (!agent.functionalGroup) issues.push(`Agent ${agent.agentNumber}: missing functional group`);
   }
-
-  const divisionA = getDivisionA_Agents();
-  const divisionB = getDivisionB_Agents();
-  if (divisionA.length !== 50) {
-    issues.push(`Division A should have 50 agents, found ${divisionA.length}`);
-  }
-  if (divisionB.length !== 50) {
-    issues.push(`Division B should have 50 agents, found ${divisionB.length}`);
-  }
-
-  return {
-    valid: issues.length === 0,
-    totalAgents: ALL_ENTERPRISE_AGENTS.length,
-    issues,
-  };
+  return { valid: issues.length === 0, totalAgents: ALL_ENTERPRISE_AGENTS.length, issues };
 }
 
 /**
  * Get a compact summary of all agents for dashboard display.
  */
 export function getEnterpriseAgentSummaries(): Array<{
-  agentNumber: number;
-  id: string;
-  name: string;
-  role: string;
-  division: DivisionId;
-  company: CompanyId;
-  priority: OrchestratorPriority;
-  riskLevel: AgentRiskLevel;
-  canModifyIVX: boolean;
-  buildsNewProducts: boolean;
-  capabilitiesCount: number;
+  agentNumber: number; id: string; name: string; role: string;
+  division: DivisionId; company: CompanyId; priority: OrchestratorPriority;
+  riskLevel: AgentRiskLevel; canModifyIVX: boolean; buildsNewProducts: boolean;
+  capabilitiesCount: number; functionalGroup: string; mission: string; kpi: string;
 }> {
   return ALL_ENTERPRISE_AGENTS.map((a) => ({
-    agentNumber: a.agentNumber,
-    id: a.id,
-    name: a.name,
-    role: a.role,
-    division: a.division,
-    company: a.company,
-    priority: a.priority,
-    riskLevel: a.riskLevel,
-    canModifyIVX: a.canModifyIVX,
-    buildsNewProducts: a.buildsNewProducts,
-    capabilitiesCount: a.capabilities.length,
+    agentNumber: a.agentNumber, id: a.id, name: a.name, role: a.role,
+    division: a.division, company: a.company, priority: a.priority,
+    riskLevel: a.riskLevel, canModifyIVX: a.canModifyIVX,
+    buildsNewProducts: a.buildsNewProducts, capabilitiesCount: a.capabilities.length,
+    functionalGroup: a.functionalGroup, mission: a.mission, kpi: a.kpi,
   }));
 }

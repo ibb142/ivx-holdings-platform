@@ -1,9 +1,6 @@
 import SwiftUI
 
 struct ContentView: View {
-    @Environment(IVXAuthService.self) private var authService
-    @State private var apiClient = IVXAPIClient.shared
-
     var body: some View {
         TabView {
             Tab("Overview", systemImage: "square.grid.2x2.fill") {
@@ -20,18 +17,18 @@ struct ContentView: View {
 
             Tab("Profile", systemImage: "person.crop.circle") {
                 IVXProfileView()
-                    .environment(authService)
             }
         }
         .tint(.ivxCopper)
-        .task {
-            apiClient.setAuthToken(authService.authToken)
-            await apiClient.checkHealth()
-        }
     }
 }
 
 #Preview {
     ContentView()
-        .environment(IVXAuthService())
+}
+
+extension Color {
+    static let ivxInk: Color = Color(red: 0.055, green: 0.071, blue: 0.075)
+    static let ivxCopper: Color = Color(red: 0.76, green: 0.42, blue: 0.20)
+    static let ivxSand: Color = Color(red: 0.94, green: 0.90, blue: 0.82)
 }

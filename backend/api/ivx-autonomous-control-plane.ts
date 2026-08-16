@@ -1,9 +1,10 @@
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
-import { getCompletionCampaignState, getSupervisorDistribution, verifyAllEnterpriseAgents } from '../services/ivx-autonomous-completion-campaign';
+import { getCompletionCampaignState, verifyAllEnterpriseAgents } from '../services/ivx-autonomous-completion-campaign';
 import { getSmsNotifierStatus } from '../services/ivx-autonomous-sms-notifier';
 import { isDurableStoreConfigured } from '../services/ivx-durable-store';
+import { getFunctionalGroups, getAgentsByFunctionalGroup } from '../services/ivx-enterprise-master-registry';
 
-export const IVX_AUTONOMOUS_CONTROL_PLANE_MARKER = 'ivx-autonomous-control-plane-v1-2026-08-12';
+export const IVX_AUTONOMOUS_CONTROL_PLANE_MARKER = 'ivx-autonomous-control-plane-v2-2026-08-16';
 
 function countStatuses<T extends { status: string }>(items: T[]) {
   return items.reduce<Record<string, number>>((acc, item) => {
@@ -32,14 +33,11 @@ export async function handleAutonomousControlPlaneVerifyAll(request: Request): P
     return ownerOnlyJson({
       ok: true,
       marker: IVX_AUTONOMOUS_CONTROL_PLANE_MARKER,
-      action: 'verify_all_enterprise_agents',
+      action: 'verify_all_agents',
       generatedAt: new Date().toISOString(),
       result: {
         verified: result.verified,
         total: result.total,
-        specialists_verified: result.specialists_verified,
-        divisionA_verified: result.divisionA_verified,
-        divisionB_verified: result.divisionB_verified,
         registryValid: result.registryValid,
         sourceFile: result.sourceFile,
         evidence: result.evidence,
@@ -48,7 +46,7 @@ export async function handleAutonomousControlPlaneVerifyAll(request: Request): P
         phase: campaign.phase,
         enabled: campaign.enabled,
         totals: campaign.totals,
-        verifiedTotal: campaign.totals.verifiedSpecialists + campaign.totals.verifiedDivisionA + campaign.totals.verifiedDivisionB,
+        verifiedTotal: campaign.totals.verifiedAgents,
         expectedTotal: 112,
       },
     });
@@ -56,7 +54,7 @@ export async function handleAutonomousControlPlaneVerifyAll(request: Request): P
     return ownerOnlyJson({
       ok: false,
       marker: IVX_AUTONOMOUS_CONTROL_PLANE_MARKER,
-      error: error instanceof Error ? error.message : 'Unable to verify enterprise agents.',
+      error: error instanceof Error ? error.message : 'Unable to verify agents.',
     }, 500);
   }
 }
@@ -74,15 +72,28 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
   try {
     const campaign = await getCompletionCampaignState();
     const sms = getSmsNotifierStatus();
-    const specialists = countStatuses(campaign.specialists);
-    const divisionA = countStatuses(campaign.divisionA);
-    const divisionB = countStatuses(campaign.divisionB);
-    const verifiedTotal = campaign.totals.verifiedSpecialists + campaign.totals.verifiedDivisionA + campaign.totals.verifiedDivisionB;
-    const total = campaign.specialists.length + campaign.divisionA.length + campaign.divisionB.length;
-    const blocked = (specialists.blocked || 0) + (divisionA.blocked || 0) + (divisionB.blocked || 0);
-    const failed = (specialists.failed || 0) + (divisionA.failed || 0) + (divisionB.failed || 0);
-    const running = (specialists.running || 0) + (divisionA.running || 0) + (divisionB.running || 0);
-    const queued = (specialists.queued || 0) + (divisionA.queued || 0) + (divisionB.queued || 0);
+    const agentStatuses = countStatuses(campaign.agents);
+    const verifiedTotal = campaign.totals.verifiedAgents;
+    const total = campaign.agents.length;
+    const blocked = agentStatuses.blocked || 0;
+    const failed = agentStatuses.failed || 0;
+    const running = agentStatuses.running || 0;
+    const queued = agentStatuses.queued || 0;
+
+    // Build functional group breakdown
+    const groups = getFunctionalGroups();
+    const groupBreakdown = groups.map((g) => {
+      const groupAgents = getAgentsByFunctionalGroup(g);
+      const campaignGroupAgents = campaign.agents.filter((a) => {
+        const num = parseInt(a.id.split(':')[1], 10);
+        return groupAgents.some((ga) => ga.agentNumber === num);
+      });
+      return {
+        name: g,
+        total: groupAgents.length,
+        verified: campaignGroupAgents.filter((a) => a.status === 'verified').length,
+      };
+    });
 
     return ownerOnlyJson({
       ok: true,
@@ -92,7 +103,7 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
       enterprise: {
         totalAgents: total,
         expectedAgents: 112,
-        registryShapeValid: campaign.specialists.length === 12 && campaign.divisionA.length === 50 && campaign.divisionB.length === 50,
+        registryShapeValid: campaign.agents.length === 112,
         phase: campaign.phase,
         enabled: campaign.enabled,
         completionPercent: total > 0 ? Math.round((verifiedTotal / total) * 100) : 0,
@@ -106,27 +117,13 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
         paidSpendRequiresOwnerApproval: campaign.paidSpendRequiresOwnerApproval,
         destructiveActionsRequireOwnerApproval: campaign.destructiveActionsRequireOwnerApproval,
       },
-      specialists: {
-        total: campaign.specialists.length,
-        verified: campaign.totals.verifiedSpecialists,
-        statuses: specialists,
-        items: campaign.specialists,
+      agents: {
+        total: campaign.agents.length,
+        verified: campaign.totals.verifiedAgents,
+        statuses: agentStatuses,
+        items: campaign.agents,
       },
-      divisionA: {
-        label: 'IVX Operations',
-        total: campaign.divisionA.length,
-        verified: campaign.totals.verifiedDivisionA,
-        statuses: divisionA,
-        items: campaign.divisionA,
-      },
-      divisionB: {
-        label: 'Factory',
-        total: campaign.divisionB.length,
-        verified: campaign.totals.verifiedDivisionB,
-        statuses: divisionB,
-        items: campaign.divisionB,
-      },
-      supervisors: getSupervisorDistribution(),
+      functionalGroups: groupBreakdown,
       sms: {
         marker: sms.marker,
         phoneConfigured: sms.phoneConfigured,

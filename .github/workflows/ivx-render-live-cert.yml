@@ -148,6 +148,25 @@ jobs:
           fi
           echo "health=PASS"
 
+      - name: Verify production version exact SHA - HARD GATE
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -m 20 -o /tmp/version.json -w '%{http_code}' "${API_BASE}/version" || true)
+          if [ "$code" != "200" ]; then
+            echo "Production /version returned HTTP ${code}"
+            exit 1
+          fi
+          VERSION_OK=$(jq -r '.ok // false' /tmp/version.json 2>/dev/null || echo false)
+          VERSION_COMMIT=$(jq -r '.commit // empty' /tmp/version.json 2>/dev/null || true)
+          echo "version_ok=$VERSION_OK version_commit=${VERSION_COMMIT:-missing} expected=${GITHUB_SHA}"
+          if [ "$VERSION_OK" != "true" ] || [ "$VERSION_COMMIT" != "$GITHUB_SHA" ]; then
+            echo "Production /version exact-SHA parity failed"
+            cat /tmp/version.json || true
+            exit 1
+          fi
+          echo "version_sha_parity=PASS"
+
       - name: Verify AI provider status - HARD GATE
         shell: bash
         run: |
@@ -200,6 +219,7 @@ jobs:
             "renderDeployId": "${DEPLOY_ID:-bridge-or-auto}",
             "renderCommit": "${RENDER_COMMIT:-}",
             "health": "PASS",
+            "versionExactSha": "PASS",
             "aiProvider": "PASS",
             "realInference": "PASS",
             "shaParity": "PASS",
