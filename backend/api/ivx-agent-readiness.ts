@@ -18,6 +18,8 @@ export async function handleAgentReadinessCheck(c: Context): Promise<Response> {
   const heartbeatVerified = !!state.lastHeartbeat;
   const schedulerVerified = verifyAgentScheduler().ok;
   const independenceVerified = verifyIndependence().ok;
+  const qaSecurityGatesVerified = verifyQaSecurityGates().ok;
+  const evidenceRecorded = recordAgentEvidence(agentId).ok;
 
   return c.json({
     ok: true,
@@ -26,6 +28,8 @@ export async function handleAgentReadinessCheck(c: Context): Promise<Response> {
     toolsVerified,
     permissionsVerified,
     heartbeatVerified,
+    qaSecurityGatesVerified,
+    evidenceRecorded,
     schedulerVerified,
     independenceVerified,
   });
