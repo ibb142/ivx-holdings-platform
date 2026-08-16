@@ -37,7 +37,7 @@ import {
 
 const TEST_EMAIL = `wf-test-${Date.now()}@ivx-test.local`;
 const TEST_PASSWORD = 'TestPass123';
-const TEST_DATA_ROOT = path.join(process.cwd(), 'logs', 'audit', 'deal-tracking');
+const TEST_DATA_ROOT = path.join(process.env.IVX_DATA_DIR?.trim() || process.cwd(), 'logs', 'audit', 'deal-tracking');
 
 async function resetDealStore(): Promise<void> {
   try {
@@ -178,7 +178,7 @@ describe('IVX Business Workflows — JV / private-lender / tokenized deals', () 
     const second = await joinDeal(dealId, {
       participantId: 'investor-b',
       displayName: 'Investor B',
-      ownershipPercentage: 50, // 70 + 50 = 120 > 100
+      ownershipPercentage: 50,
       investedAmount: 50000,
       profitPercentage: 30,
     });

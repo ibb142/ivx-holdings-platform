@@ -1,0 +1,82 @@
+name: IVX Autonomous Senior Developer Guard
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/services/ivx-autonomous-completion-campaign.ts'
+      - 'backend/services/ivx-senior-developer-worker.ts'
+      - 'backend/services/ivx-specialist-router.ts'
+      - '.github/workflows/ivx-autonomy-rork-guard.yml'
+  pull_request:
+    paths:
+      - 'backend/services/ivx-autonomous-completion-campaign.ts'
+      - 'backend/services/ivx-senior-developer-worker.ts'
+      - 'backend/services/ivx-specialist-router.ts'
+      - '.github/workflows/ivx-autonomy-rork-guard.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  autonomous-invariants:
+    name: Senior Developer + 12 IA autonomy invariants
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Block read-only downgrade of completion campaign
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE='backend/services/ivx-autonomous-completion-campaign.ts'
+
+          if grep -Eq "executionMode:[[:space:]]*'read_only'" "$FILE"; then
+            echo 'HARD FAIL: autonomous completion campaign was downgraded to read_only.'
+            echo 'The owner requires the Senior Developer and 12 IA specialists to retain code-changing autonomous execution.'
+            exit 1
+          fi
+
+          if ! grep -Eq "executionMode:[[:space:]]*'code_change'" "$FILE"; then
+            echo 'HARD FAIL: autonomous completion campaign no longer uses code_change execution.'
+            exit 1
+          fi
+
+          echo 'campaign_code_change_mode=PASS'
+
+      - name: Require exactly 12 specialist identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE='backend/services/ivx-autonomous-completion-campaign.ts'
+          if ! grep -Fq 'if (roles.length !== 12)' "$FILE"; then
+            echo 'HARD FAIL: 12-specialist invariant was removed from the autonomous campaign.'
+            exit 1
+          fi
+          echo 'specialist_count_invariant=PASS'
+
+      - name: Require autonomous worker mutation modes
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE='backend/services/ivx-senior-developer-worker.ts'
+          grep -Fq "'code_change'" "$FILE" || { echo 'HARD FAIL: code_change worker mode missing.'; exit 1; }
+          grep -Fq "'deploy'" "$FILE" || { echo 'HARD FAIL: deploy worker mode missing.'; exit 1; }
+          grep -Fq "'factory'" "$FILE" || { echo 'HARD FAIL: factory worker mode missing.'; exit 1; }
+          echo 'worker_autonomous_modes=PASS'
+
+      - name: Guard result evidence contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE='backend/services/ivx-senior-developer-worker.ts'
+          grep -Fq 'result: IVXWorkerJobResult | null' "$FILE" || { echo 'HARD FAIL: worker result contract missing.'; exit 1; }
+          grep -Fq "finalStatus: 'COMPLETE' | 'LOCAL_ONLY' | 'BLOCKED' | 'FAILED'" "$FILE" || { echo 'HARD FAIL: terminal result evidence contract missing.'; exit 1; }
+          echo 'worker_result_contract=PASS'
+
+      - name: Emit autonomy guard result
+        run: |
+          echo 'IVX_AUTONOMY_GUARD=PASS'
+          echo 'Senior Developer autonomous mutation path retained.'
+          echo '12 IA specialist invariant retained.'

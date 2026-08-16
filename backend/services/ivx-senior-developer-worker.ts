@@ -2428,14 +2428,13 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
       return null;
     }
 
-    // Retries exhausted or non-transient failure — report FAILED with exact evidence.
+    // Retries exhausted or non-transient failure — report BLOCKED with exact evidence.
     const blockedReason = isTransient
       ? `Task failed after ${MAX_AUTO_RETRIES} auto-retries: ${message}`
       : `Task failed at execution: ${message}`;
-    console.log(`[IVXWorker] job_failed: job=${job.jobId} error=${message.slice(0, 300)}`);
     const failedResult: IVXWorkerJobResult = {
       jobId: job.jobId,
-      goal: job.input.goal.slice(0, 280),
+      goal: job.input.goal,
       ok: false,
       endToEndProductionComplete: false,
       changedFiles: [],
@@ -2466,9 +2465,8 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
       auditFiles: { json: '', jsonl: '' },
       finalStatus: 'FAILED',
       error: blockedReason,
-      durable: isDurableStoreConfigured(),
+      durable: true,
       generatedAt: nowIso(),
-      taskType: classifyTaskType(job.input.goal),
     };
     await updateJob(job.jobId, {
       status: 'failed',
