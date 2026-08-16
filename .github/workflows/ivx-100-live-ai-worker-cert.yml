@@ -1,0 +1,162 @@
+name: IVX 100 Live AI Worker Certificate
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  live-100-worker-cert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      API_BASE: https://api.ivxholding.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for production exact SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          matched=0
+          for i in $(seq 1 120); do
+            code=$(curl -sS -m 20 -o /tmp/version.json -w '%{http_code}' "${API_BASE}/version" || true)
+            if [ "$code" = "200" ]; then
+              ok=$(jq -r '.ok // false' /tmp/version.json 2>/dev/null || echo false)
+              commit=$(jq -r '.commit // empty' /tmp/version.json 2>/dev/null || true)
+              echo "poll=$i ok=$ok production_sha=${commit:-missing} expected=${GITHUB_SHA}"
+              if [ "$ok" = "true" ] && [ "$commit" = "$GITHUB_SHA" ]; then
+                matched=1
+                break
+              fi
+            fi
+            sleep 10
+          done
+          if [ "$matched" != "1" ]; then
+            echo "Production did not reach exact SHA ${GITHUB_SHA}."
+            exit 1
+          fi
+          echo "exact_sha=PASS"
+
+      - name: Load all 100 registered agents
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 3 --retry-delay 2 "${API_BASE}/api/ivx/agents" -o /tmp/agents.json
+          ok=$(jq -r '.ok // false' /tmp/agents.json)
+          total=$(jq -r '.totalAgents // 0' /tmp/agents.json)
+          unique=$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)
+          divA=$(jq '[.agents[] | select(.division == "A")] | length' /tmp/agents.json)
+          divB=$(jq '[.agents[] | select(.division == "B")] | length' /tmp/agents.json)
+          echo "ok=$ok total=$total unique=$unique divisionA=$divA divisionB=$divB"
+          test "$ok" = "true"
+          test "$total" = "100"
+          test "$unique" = "100"
+          test "$divA" = "50"
+          test "$divB" = "50"
+
+      - name: Execute 100 distinct live AI activations
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence
+          : > /tmp/worker-results.jsonl
+          failures=0
+
+          for idx in $(seq 0 99); do
+            agentId=$(jq -r ".agents[$idx].agentId" /tmp/agents.json)
+            agentNumber=$(jq -r ".agents[$idx].agentNumber" /tmp/agents.json)
+            agentName=$(jq -r ".agents[$idx].name" /tmp/agents.json)
+            role=$(jq -r ".agents[$idx].role" /tmp/agents.json)
+            division=$(jq -r ".agents[$idx].division" /tmp/agents.json)
+            token="IVX-LIVE-${GITHUB_RUN_ID}-${agentNumber}"
+            requestId="ivx-live-worker-${GITHUB_RUN_ID}-${agentNumber}"
+            clientId="ivx-live-worker-${agentNumber}"
+
+            payload=$(jq -cn \
+              --arg message "You are IVX live worker activation ${agentNumber}, ${agentName}, role ${role}, division ${division}. Return the exact token ${token}, then add one short role-specific action you would take next. Do not omit the token." \
+              --arg sessionId "ivx-live-100-${GITHUB_RUN_ID}" \
+              --arg requestId "$requestId" \
+              '{message:$message,sessionId:$sessionId,requestId:$requestId,history:[]}')
+
+            http=$(curl -sS --retry 4 --retry-delay 2 -m 60 \
+              -o "/tmp/worker-${agentNumber}.json" -w '%{http_code}' \
+              -X POST "${API_BASE}/api/public/chat" \
+              -H "Content-Type: application/json" \
+              -H "x-ivx-client-id: ${clientId}" \
+              --data "$payload" || true)
+
+            source=$(jq -r '.source // empty' "/tmp/worker-${agentNumber}.json" 2>/dev/null || true)
+            endpoint=$(jq -r '.endpoint // empty' "/tmp/worker-${agentNumber}.json" 2>/dev/null || true)
+            answer=$(jq -r '.answer // .text // empty' "/tmp/worker-${agentNumber}.json" 2>/dev/null || true)
+            containsToken=false
+            if printf '%s' "$answer" | grep -Fq "$token"; then containsToken=true; fi
+            answerHash=$(printf '%s' "$answer" | sha256sum | awk '{print $1}')
+            passed=false
+            if [ "$http" = "200" ] && [ "$source" = "chatgpt" ] && [ -n "$endpoint" ] && [ -n "$answer" ] && [ "$containsToken" = "true" ]; then
+              passed=true
+            else
+              failures=$((failures + 1))
+            fi
+
+            jq -cn \
+              --arg agentId "$agentId" \
+              --argjson agentNumber "$agentNumber" \
+              --arg agentName "$agentName" \
+              --arg role "$role" \
+              --arg division "$division" \
+              --arg requestId "$requestId" \
+              --arg source "$source" \
+              --arg endpoint "$endpoint" \
+              --arg answerHash "$answerHash" \
+              --argjson http "$http" \
+              --argjson passed "$passed" \
+              '{agentId:$agentId,agentNumber:$agentNumber,agentName:$agentName,role:$role,division:$division,requestId:$requestId,http:$http,source:$source,endpoint:$endpoint,answerHash:$answerHash,tokenObserved:$passed,passed:$passed}' \
+              >> /tmp/worker-results.jsonl
+
+            echo "worker=$agentNumber division=$division source=${source:-missing} http=$http token=$containsToken pass=$passed"
+            sleep 1
+          done
+
+          jq -s '.' /tmp/worker-results.jsonl > /tmp/worker-results.json
+          total=$(jq 'length' /tmp/worker-results.json)
+          passed=$(jq '[.[] | select(.passed == true)] | length' /tmp/worker-results.json)
+          uniqueAgents=$(jq '[.[].agentId] | unique | length' /tmp/worker-results.json)
+          uniqueRequests=$(jq '[.[].requestId] | unique | length' /tmp/worker-results.json)
+          sourcePass=$(jq '[.[] | select(.source == "chatgpt")] | length' /tmp/worker-results.json)
+          endpointPass=$(jq '[.[] | select((.endpoint // "") != "")] | length' /tmp/worker-results.json)
+          divA=$(jq '[.[] | select(.division == "A" and .passed == true)] | length' /tmp/worker-results.json)
+          divB=$(jq '[.[] | select(.division == "B" and .passed == true)] | length' /tmp/worker-results.json)
+
+          jq -n \
+            --arg githubSha "$GITHUB_SHA" \
+            --arg workflowRunId "$GITHUB_RUN_ID" \
+            --arg certifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson total "$total" \
+            --argjson passed "$passed" \
+            --argjson failed "$failures" \
+            --argjson uniqueAgents "$uniqueAgents" \
+            --argjson uniqueRequests "$uniqueRequests" \
+            --argjson sourcePass "$sourcePass" \
+            --argjson endpointPass "$endpointPass" \
+            --argjson divisionAPass "$divA" \
+            --argjson divisionBPass "$divB" \
+            --slurpfile workers /tmp/worker-results.json \
+            '{marker:"ivx-100-live-ai-worker-cert-2026-08-16-v1",githubSha:$githubSha,workflowRunId:$workflowRunId,certifiedAt:$certifiedAt,exactSha:true,totalWorkers:$total,passedWorkers:$passed,failedWorkers:$failed,uniqueAgents:$uniqueAgents,uniqueRequests:$uniqueRequests,realProviderResponses:$sourcePass,providerEndpointsReported:$endpointPass,divisionAPass:$divisionAPass,divisionBPass:$divisionBPass,certified:($total==100 and $passed==100 and $failed==0 and $uniqueAgents==100 and $uniqueRequests==100 and $sourcePass==100 and $endpointPass==100 and $divisionAPass==50 and $divisionBPass==50),proofDefinition:"100 distinct registered logical IVX worker identities each completed an independent real remote AI inference against exact production SHA; this does not claim 100 operating-system processes or 100 separate model-provider accounts.",workers:$workers[0]}' \
+            > qa/evidence/ivx-100-live-ai-worker-cert.json
+
+          jq '{certified,githubSha,totalWorkers,passedWorkers,failedWorkers,uniqueAgents,uniqueRequests,realProviderResponses,providerEndpointsReported,divisionAPass,divisionBPass,proofDefinition}' qa/evidence/ivx-100-live-ai-worker-cert.json
+
+          certified=$(jq -r '.certified' qa/evidence/ivx-100-live-ai-worker-cert.json)
+          if [ "$certified" != "true" ]; then
+            echo "100 live AI worker certificate failed."
+            exit 1
+          fi
+          echo "live_100_ai_workers=PASS"
+
+      - name: Upload 100-worker live certificate evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-100-live-ai-worker-cert-${{ github.sha }}
+          path: qa/evidence/ivx-100-live-ai-worker-cert.json
+          if-no-files-found: error
