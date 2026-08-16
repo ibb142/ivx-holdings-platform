@@ -34,7 +34,16 @@ export async function handleAutonomousControlPlaneVerifyAll(request: Request): P
       marker: IVX_AUTONOMOUS_CONTROL_PLANE_MARKER,
       action: 'verify_all_enterprise_agents',
       generatedAt: new Date().toISOString(),
-      result,
+      result: {
+        verified: result.verified,
+        total: result.total,
+        specialists_verified: result.specialists_verified,
+        divisionA_verified: result.divisionA_verified,
+        divisionB_verified: result.divisionB_verified,
+        registryValid: result.registryValid,
+        sourceFile: result.sourceFile,
+        evidence: result.evidence,
+      },
       campaign: {
         phase: campaign.phase,
         enabled: campaign.enabled,
