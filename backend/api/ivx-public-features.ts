@@ -136,17 +136,20 @@ export async function handleJVDealsList(req: Request): Promise<Response> {
     const sb = await getSB();
     // Race against a timeout to prevent Supabase 522 from hanging the request
     const queryPromise = sb.from('jv_deals')
-      .select('id,title,slug,description,location,property_type,target_raise,minimum_investment,projected_roi,term_length,status,published,display_order,featured_image_url,gallery_urls,updated_at')
+      .select('id,title,project_name,description,property_address,city,state,property_type,total_investment,expected_roi,term_months,status,published,photos,created_at,updated_at', { count: 'exact' })
       .eq('published', true)
-      .order('display_order', { ascending: true, nullsFirst: false })
-      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(50);
     const timeoutPromise = new Promise<{ data: null; error: { message: string }; count: null }>((resolve) =>
       setTimeout(() => resolve({ data: null, error: { message: 'Supabase request timed out' }, count: null }), 8000)
     );
     const { data, error, count } = await Promise.race([queryPromise, timeoutPromise]);
-    if (error) return json({ deals: [], count: 0, deploymentMarker: DEPLOYMENT_MARKER });
-    return json({ deals: data || [], count: count || 0, deploymentMarker: DEPLOYMENT_MARKER });
+    if (error) {
+      console.error('[handleJVDealsList] Supabase query error:', error.message);
+      return json({ deals: [], count: 0, error: error.message, deploymentMarker: DEPLOYMENT_MARKER });
+    }
+    const deals = data || [];
+    return json({ deals, count: count ?? deals.length, deploymentMarker: DEPLOYMENT_MARKER });
   } catch (err: unknown) {
     const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
     // If Supabase is unreachable, return empty deals instead of hanging or 500
