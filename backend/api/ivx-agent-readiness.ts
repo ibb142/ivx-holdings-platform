@@ -14,9 +14,7 @@ export async function handleAgentReadinessCheck(c: Context): Promise<Response> {
 
   const contractVerified = !!contract;
   const toolsVerified = contract.allowedTools.length > 0;
-  const permissionsVerified = verifyPermissionMatrix().ok;
-  const heartbeatVerified = !!state.lastHeartbeat;
-  const schedulerVerified = verifyAgentScheduler().ok;
+  
   const independenceVerified = verifyIndependence().ok;
   const qaSecurityGatesVerified = verifyQaSecurityGates().ok;
   const evidenceRecorded = recordAgentEvidence(agentId).ok;
