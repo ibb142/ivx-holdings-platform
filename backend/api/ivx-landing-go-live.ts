@@ -83,7 +83,7 @@ export async function handleLandingGoLive(request: Request): Promise<Response> {
       if (existing && existing.length > 0) {
         // Update it to published
         const { error: updateErr } = await sb.from('jv_deals')
-          .update({ published: true, status: 'open', display_order: 1 })
+          .update({ published: true, status: 'open' })
           .eq('id', SEED_DEAL.id);
         if (updateErr) {
           steps.push({ step: 'seed_deal', ok: false, detail: `Update failed: ${updateErr.message}` });
