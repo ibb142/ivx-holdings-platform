@@ -48,6 +48,7 @@ interface FullDeployResult {
   };
   wwwRedirect: WwwRedirectResult;
   missingEnv: string[];
+  credentialSources?: Record<string, string>;
   timestamp: string;
   durationMs: number;
 }
@@ -114,27 +115,80 @@ async function resolveAwsCredentials(credsFromRequest?: AwsCredentials): Promise
 /** Store AWS credentials in the ivx_owner_variables table for future use. */
 async function storeAwsCredentialsInDb(creds: AwsCredentials): Promise<boolean> {
   try {
-    const { createClient } = await import('@supabase/supabase-js');
-    const url = readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL');
-    const key = readEnv('SUPABASE_SERVICE_ROLE_KEY') || readEnv('SUPABASE_SERVICE_KEY');
+    // Use the Supabase REST API (same as ivx-owner-variables.ts) instead of
+    // the supabase-js client, and encrypt values with AES-256-GCM using the
+    // same key derivation as the owner variables store.
+    const { randomBytes, createCipheriv, createHash } = await import('node:crypto');
+    const { Buffer } = await import('node:buffer');
+    const url = (readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL') || readEnv('IVX_SUPABASE_URL') || '').replace(/\/+$/, '');
+    const key = readEnv('SUPABASE_SERVICE_ROLE_KEY') || readEnv('SUPABASE_SERVICE_KEY') || readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY') || readEnv('SUPABASE_ANON_KEY');
     if (!url || !key) return false;
-    const sb = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+
+    // Derive encryption key candidates (same logic as ivx-owner-variables.ts)
+    const aad = Buffer.from('ivx_owner_variables:v1', 'utf8');
+    const candidates: Buffer[] = [];
+    const seen = new Set<string>();
+    for (const source of [
+      readEnv('IVX_OWNER_VARIABLES_ENCRYPTION_KEY'),
+      readEnv('APP_SECRET'),
+      readEnv('JWT_SECRET'),
+      (() => {
+        const su = readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL') || readEnv('IVX_SUPABASE_URL');
+        const sk = readEnv('SUPABASE_SERVICE_ROLE_KEY') || readEnv('SUPABASE_SERVICE_KEY') || readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY') || readEnv('SUPABASE_ANON_KEY');
+        return (su && sk) ? createHash('sha256').update(`${su}:${sk}`, 'utf8').digest('hex') : '';
+      })(),
+    ]) {
+      if (!source || seen.has(source)) continue;
+      seen.add(source);
+      candidates.push(createHash('sha256').update(source, 'utf8').digest());
+    }
+    if (candidates.length === 0) return false;
+    const encKey = candidates[0]!;
+
     const entries = [
-      { name: 'AWS_ACCESS_KEY_ID', value: creds.accessKeyId },
-      { name: 'AWS_SECRET_ACCESS_KEY', value: creds.secretAccessKey },
-      { name: 'AWS_REGION', value: creds.region || 'us-east-1' },
-      { name: 'S3_BUCKET_NAME', value: creds.bucket || 'ivxholding.com' },
-      { name: 'CLOUDFRONT_DISTRIBUTION_ID', value: creds.cloudFrontDistributionId || '' },
+      { name: 'AWS_ACCESS_KEY_ID', value: creds.accessKeyId, provider: 'aws' },
+      { name: 'AWS_SECRET_ACCESS_KEY', value: creds.secretAccessKey, provider: 'aws' },
+      { name: 'AWS_REGION', value: creds.region || 'us-east-1', provider: 'aws' },
+      { name: 'S3_BUCKET_NAME', value: creds.bucket || 'ivxholding.com', provider: 'storage' },
+      { name: 'CLOUDFRONT_DISTRIBUTION_ID', value: creds.cloudFrontDistributionId || '', provider: 'storage' },
     ];
+
+    const headers: Record<string, string> = {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates,return=representation',
+    };
+
     for (const entry of entries) {
       if (!entry.value) continue;
-      const { error } = await sb.from('ivx_owner_variables').upsert({
+      const iv = randomBytes(12);
+      const cipher = createCipheriv('aes-256-gcm', encKey, iv);
+      cipher.setAAD(aad);
+      const encrypted = Buffer.concat([cipher.update(entry.value, 'utf8'), cipher.final()]);
+      const tag = cipher.getAuthTag();
+      const hash = createHash('sha256').update(entry.value, 'utf8').digest('hex');
+      const masked = entry.value.substring(0, 4) + '****' + entry.value.slice(-4);
+      const row = {
         name: entry.name,
-        encrypted_value: entry.value,
-        masked_preview: entry.value.substring(0, 4) + '****',
+        provider: entry.provider,
+        encrypted_value: encrypted.toString('base64'),
+        value_iv: iv.toString('base64'),
+        value_tag: tag.toString('base64'),
+        value_hash: hash,
+        masked_preview: masked,
+        status: 'saved',
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'name' });
-      if (error) console.log(`[LandingFullDeploy] Failed to store ${entry.name}: ${error.message}`);
+      };
+      const res = await fetch(`${url}/rest/v1/ivx_owner_variables?on_conflict=name`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify([row]),
+      });
+      if (!res.ok) {
+        console.log(`[LandingFullDeploy] Failed to store ${entry.name}: HTTP ${res.status}`);
+      }
     }
     return true;
   } catch (err) {

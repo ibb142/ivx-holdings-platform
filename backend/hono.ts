@@ -6392,6 +6392,43 @@ app.get('/api/trpc/waitlist.getStats', async () => {
   });
 });
 
+// tRPC-compatible waitlist join — proxies to the lead capture endpoint
+app.post('/api/trpc/waitlist.join', async (context) => {
+  try {
+    const body = await context.req.json().catch(() => ({}));
+    // Forward to the existing lead capture handler with consent
+    const leadBody = JSON.stringify({
+      name: body.fullName || body.name || 'Landing Signup',
+      email: body.email || '',
+      phone: body.phone || '',
+      source: body.source || 'landing_trpc',
+      consent: true,
+      consentText: 'I agree to be contacted by IVX Holdings',
+      investRange: body.investRange || '',
+      dealId: body.dealId || '',
+      partnerType: body.partnerType || '',
+    });
+    return await handleLeadCaptureRequest(new Request(context.req.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: leadBody,
+    }));
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    return context.json({ ok: false, error: msg.slice(0, 320), timestamp: nowIso(), deploymentMarker: DEPLOYMENT_MARKER }, 500);
+  }
+});
+
+// tRPC-compatible landing deals — proxies to the existing landing-deals endpoint
+app.get('/api/trpc/landing.getDeals', async (context) => {
+  try {
+    return await handleJVDealsList(context.req.raw);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    return context.json({ deals: [], count: 0, ok: false, error: msg.slice(0, 320), deploymentMarker: DEPLOYMENT_MARKER }, 200);
+  }
+});
+
 app.notFound(async (context) => {
   const webResponse = await loadWebResponse(context.req.path, context.req.method);
   if (webResponse) {
