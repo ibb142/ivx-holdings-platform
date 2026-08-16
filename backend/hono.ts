@@ -3401,6 +3401,162 @@ const landingConfigHandler = (context: { json: (body: unknown, status?: 200) => 
 app.get('/api/landing-config', landingConfigHandler);
 app.get('/landing-config', landingConfigHandler);
 
+// ── Public legal pages (required by App Store + Google Play) ──────────────
+// Serves a simple HTML privacy policy and terms of service at public URLs
+// so Apple/Google reviewers can verify compliance.
+const PRIVACY_POLICY_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IVX Holdings — Privacy Policy</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; color: #1a1a1a; line-height: 1.6; }
+h1 { color: #FFD700; border-bottom: 2px solid #FFD700; padding-bottom: 10px; }
+h2 { color: #333; margin-top: 30px; }
+.effective { color: #666; font-size: 14px; margin-bottom: 20px; }
+.contact { background: #f8f8f8; padding: 15px; border-radius: 8px; margin-top: 30px; }
+</style>
+</head>
+<body>
+<h1>IVX Holdings Privacy Policy</h1>
+<p class="effective">Effective Date: February 1, 2026 | Version 3.0</p>
+
+<h2>1. Introduction</h2>
+<p>IVX HOLDINGS LLC ("Company," "we," "us," or "our") operates a mobile application and web platform (collectively, the "Platform") that facilitates fractional real estate investment. This Privacy Policy describes how we collect, use, disclose, and protect your personal information.</p>
+<p>This policy complies with the California Consumer Privacy Act (CCPA/CPRA), the General Data Protection Regulation (GDPR), and the Gramm-Leach-Bliley Act (GLBA).</p>
+<p>Data Controller: IVX HOLDINGS LLC, 1001 Brickell Bay Drive, Suite 2700, Miami, FL 33131</p>
+<p>Contact: privacy@ivxholding.com</p>
+
+<h2>2. Information We Collect</h2>
+<ul>
+<li><strong>Identity Information:</strong> Full legal name, date of birth, SSN/TIN, government-issued photo ID</li>
+<li><strong>Contact Information:</strong> Email, phone number, mailing address</li>
+<li><strong>Financial Information:</strong> Bank account details (processed by PCI-DSS compliant third parties), investment history</li>
+<li><strong>KYC/AML Data:</strong> Identity verification results, sanctions screening, biometric data for identity verification</li>
+<li><strong>Transaction Data:</strong> Investment purchases, sales, dividends, payment history</li>
+<li><strong>Technical Data:</strong> IP address, device type, OS, app version</li>
+<li><strong>Usage Data:</strong> Pages visited, features used, session duration</li>
+</ul>
+
+<h2>3. How We Use Your Information</h2>
+<ul>
+<li><strong>Service Delivery:</strong> Account management, investment processing, dividend distribution</li>
+<li><strong>Legal Compliance:</strong> KYC/AML verification, securities regulations, tax reporting</li>
+<li><strong>Security:</strong> Fraud prevention, unauthorized access detection</li>
+<li><strong>Platform Improvement:</strong> Bug fixes, new features, UX optimization</li>
+<li><strong>Communications:</strong> Transactional notifications, regulatory notices (marketing only with consent)</li>
+</ul>
+
+<h2>4. Information Sharing</h2>
+<p>We do <strong>NOT sell</strong> your personal information. We share data only with:</p>
+<ul>
+<li>Service providers (payment processors, identity verification, cloud hosting) under data processing agreements</li>
+<li>Regulatory authorities (SEC, IRS, FinCEN) when required by law</li>
+<li>SPE partners for operational purposes (identity NOT shared with other investors)</li>
+</ul>
+
+<h2>5. Data Security</h2>
+<ul>
+<li>AES-256 encryption for data at rest; TLS 1.3 for data in transit</li>
+<li>Role-based access controls; multi-factor authentication</li>
+<li>SOC 2 Type II certified cloud infrastructure</li>
+<li>Regular penetration testing and vulnerability scanning</li>
+<li>72-hour breach notification per applicable law</li>
+</ul>
+
+<h2>6. Data Retention</h2>
+<ul>
+<li>Account Data: Duration of account + 5 years (securities regulations)</li>
+<li>KYC/AML Records: Minimum 5 years (Bank Secrecy Act)</li>
+<li>Transaction Records: 7 years (SEC/IRS regulations)</li>
+<li>Technical/Usage Data: 12 months identifiable, indefinitely anonymized</li>
+</ul>
+
+<h2>7. Your Rights</h2>
+<ul>
+<li><strong>Right to Access:</strong> Request a copy of your personal information</li>
+<li><strong>Right to Correction:</strong> Request correction of inaccurate data</li>
+<li><strong>Right to Deletion:</strong> Request deletion (subject to legal retention requirements)</li>
+<li><strong>Right to Opt-Out:</strong> Opt out of marketing communications</li>
+<li><strong>CCPA/CPRA:</strong> Right to know, delete, limit use of sensitive data, portability</li>
+<li><strong>GDPR:</strong> Erasure, restriction, portability, objection, complaint to supervisory authority</li>
+</ul>
+<p>To exercise your rights, contact privacy@ivxholding.com. We respond within 30 days (CCPA) or 1 month (GDPR).</p>
+
+<h2>8. Children's Privacy</h2>
+<p>The Platform is not intended for individuals under 18. We do not knowingly collect personal information from minors.</p>
+
+<h2>9. Changes to This Policy</h2>
+<p>We may update this policy. Material changes will be communicated via email or in-app notification at least 30 days before taking effect.</p>
+
+<div class="contact">
+<h2>Contact Us</h2>
+<p>IVX HOLDINGS LLC<br>
+1001 Brickell Bay Drive, Suite 2700, Miami, FL 33131<br>
+Privacy: privacy@ivxholding.com<br>
+Legal: legal@ivxholding.com</p>
+</div>
+</body>
+</html>`;
+
+const TERMS_OF_SERVICE_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IVX Holdings — Terms of Service</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; color: #1a1a1a; line-height: 1.6; }
+h1 { color: #FFD700; border-bottom: 2px solid #FFD700; padding-bottom: 10px; }
+h2 { color: #333; margin-top: 30px; }
+.effective { color: #666; font-size: 14px; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+<h1>IVX Holdings Terms of Service</h1>
+<p class="effective">Effective Date: February 1, 2026 | Version 3.0</p>
+
+<h2>1. Acceptance of Terms</h2>
+<p>By accessing or using the IVX HOLDINGS LLC mobile application, website, or services (the "Platform"), you agree to be bound by these Terms of Service. If you do not agree, you must cease use immediately.</p>
+
+<h2>2. Eligibility</h2>
+<p>You must be at least 18 years old, complete KYC/AML verification, and not be a sanctioned person. The platform is open to all eligible users regardless of accreditation status.</p>
+
+<h2>3. Account Security</h2>
+<p>You are responsible for maintaining account credential confidentiality and enabling 2FA. Report unauthorized use immediately to legal@ivxholding.com.</p>
+
+<h2>4. Services</h2>
+<p>IVX Holdings facilitates fractional real estate investment. Users can browse offerings, purchase shares, receive dividends, and trade on a secondary marketplace. IVX is NOT a registered broker-dealer unless separately disclosed.</p>
+
+<h2>5. Fees</h2>
+<p>Asset management fees (1.0%–2.5% annually), transaction fees (1.0%–2.0%), and third-party processing fees may apply. Fee changes require 30 days notice.</p>
+
+<h2>6. Investment Risks</h2>
+<p>Real estate investments carry risk including loss of principal, illiquidity, and market fluctuations. Past performance does not guarantee future results. Consult qualified financial advisors.</p>
+
+<h2>7. Limitation of Liability</h2>
+<p>IVX Holdings is not liable for indirect, incidental, or consequential damages. Total liability is limited to the greater of fees paid in 12 months or $100.</p>
+
+<h2>8. Dispute Resolution</h2>
+<p>Disputes resolved through binding arbitration (AAA) in Miami-Dade County, Florida. Class action waiver applies. Governing law: Florida.</p>
+
+<h2>9. Termination</h2>
+<p>You may close your account at any time. We may suspend access for violations, suspicious activity, or regulatory requirements.</p>
+
+<h2>10. Contact</h2>
+<p>IVX HOLDINGS LLC, 1001 Brickell Bay Drive, Suite 2700, Miami, FL 33131<br>Email: legal@ivxholding.com</p>
+</body>
+</html>`;
+
+app.get('/privacy-policy', (c) => new Response(PRIVACY_POLICY_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }));
+app.get('/terms-of-service', (c) => new Response(TERMS_OF_SERVICE_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }));
+app.get('/legal/privacy', (c) => new Response(PRIVACY_POLICY_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }));
+app.get('/legal/terms', (c) => new Response(TERMS_OF_SERVICE_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }));
+
+// robots.txt for app store crawlers
+app.get('/robots.txt', (c) => c.text('User-agent: *\nAllow: /privacy-policy\nAllow: /terms-of-service\nDisallow: /api/\n', 200, { 'Content-Type': 'text/plain' }));
+
 // Landing page real payment transaction sync
 app.options('/api/ivx/payments/landing-intent', () => handleLandingPaymentOptionsRequest());
 app.post('/api/ivx/payments/landing-intent', async (context) => handleLandingPaymentCreateRequest(context.req.raw));
