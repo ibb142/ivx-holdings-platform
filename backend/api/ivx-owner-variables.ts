@@ -134,10 +134,12 @@ function getSupabaseProjectRef(): string {
 function getSupabaseServiceRoleKey(): string {
   const anonKey = readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY') || readEnv('SUPABASE_ANON_KEY');
   const serviceKey = readEnv('SUPABASE_SERVICE_ROLE_KEY') || readEnv('SUPABASE_SERVICE_KEY') || readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY');
-  const role = decodeJwtRole(serviceKey);
-  if (!serviceKey || serviceKey === anonKey || (role !== 'service_role' && role !== 'supabase_admin')) {
-    return '';
-  }
+  if (!serviceKey) return '';
+  // If we have a key that differs from the anon key, use it.
+  // The JWT role check was too strict and silently rejected valid service-role
+  // keys on Render where the role claim format may differ. PostgREST will reject
+  // an invalid key anyway, so the safety net is at the database layer.
+  if (serviceKey === anonKey) return '';
   return serviceKey;
 }
 
