@@ -1,0 +1,43 @@
+name: IVX One Shot Credit Drain Type Fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-one-shot-credit-drain-type-fix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch type errors and publish repair branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('backend/api/ivx-credentials-status.ts')
+          s = p.read_text()
+          s = s.replace("const liveAnswer: string | null = null;", "let liveAnswer: string | null = null;", 1)
+          s = s.replace("if (health.state === 'AI_READY' || health.state === 'FALLBACK_READY') {\n      liveHttpStatus = 200;", "if (health.state === 'PROVIDER_READY' || health.state === 'FALLBACK_READY') {\n      liveHttpStatus = 200;\n      liveAnswer = 'OK (provider state ready)';", 1)
+          s = s.replace("liveHttpStatus = health.lastStatus ?? null;\n      liveError = health.lastReason ?? 'AI provider unavailable';", "liveHttpStatus = health.lastHttpStatus ?? null;\n      liveError = health.error ?? 'AI provider unavailable';", 1)
+          p.write_text(s)
+
+          q = Path('backend/services/ivx-owner-ai-task-queue.ts')
+          t = q.read_text()
+          t = t.replace('providerHealth.lastStatus', 'providerHealth.lastHttpStatus')
+          q.write_text(t)
+          PY
+          git config user.name 'IVX Release Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git checkout -b fix/credit-drain-typecheck
+          git add backend/api/ivx-credentials-status.ts backend/services/ivx-owner-ai-task-queue.ts
+          git diff --cached --check
+          git commit -m 'fix: align credit-drain guards with provider health types'
+          git push --force origin HEAD:fix/credit-drain-typecheck
