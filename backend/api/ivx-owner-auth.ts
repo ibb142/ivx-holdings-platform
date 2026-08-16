@@ -124,6 +124,30 @@ function getSupabaseConfig(): { url: string; anonKey: string } | null {
   return { url, anonKey };
 }
 
+function getServiceRoleKey(): string {
+  return process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
+}
+
+const OWNER_BASELINE_EMAILS = ['iperez4242@gmail.com'];
+
+function getOwnerAllowlist(): string[] {
+  const sources = [
+    ...OWNER_BASELINE_EMAILS,
+    process.env.IVX_OWNER_REGISTRATION_EMAILS,
+    process.env.EXPO_PUBLIC_OWNER_EMAIL,
+    process.env.OWNER_REPAIR_EMAIL,
+    process.env.NEXT_PUBLIC_OWNER_EMAIL,
+    process.env.OWNER_EMAIL,
+    process.env.IVX_OWNER_EMAIL,
+  ];
+  return Array.from(new Set(
+    sources
+      .flatMap((v) => (typeof v === 'string' ? v.split(',') : []))
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
+  ));
+}
+
 export async function handleOwnerAuthorize(request: Request): Promise<Response> {
   const traceId = request.headers.get('x-ivx-trace-id') || `owner-auth-${Date.now()}`;
   const startedAt = Date.now();
@@ -176,21 +200,45 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
     const email = user.email ?? '';
 
     let role: string | null = null;
-    let roleSource: 'profiles' | 'rpc_verify_admin_access' | 'email_not_owner' = 'profiles';
+    let roleSource: 'profiles' | 'rpc_verify_admin_access' | 'email_allowlist' = 'profiles';
 
-    try {
-      const { data: profile, error: profileError } = await client
-        .from('profiles')
-        .select('role')
-        .eq('id', userId)
-        .single();
-      if (!profileError && profile?.role) {
-        role = typeof profile.role === 'string' ? profile.role : null;
+    // Strategy 1: Use service role key to bypass RLS for profile lookup
+    const serviceKey = getServiceRoleKey();
+    if (serviceKey) {
+      try {
+        const adminClient = createClient(config.url, serviceKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        const { data: profile, error: profileError } = await adminClient
+          .from('profiles')
+          .select('role')
+          .eq('id', userId)
+          .single();
+        if (!profileError && profile?.role) {
+          role = typeof profile.role === 'string' ? profile.role : null;
+        }
+      } catch (profileError) {
+        console.log(`[OwnerAuth] ${traceId} service-role profile lookup note:`, (profileError as Error)?.message ?? 'unknown');
       }
-    } catch (profileError) {
-      console.log(`[OwnerAuth] ${traceId} profile lookup note:`, (profileError as Error)?.message ?? 'unknown');
     }
 
+    // Strategy 2: Try with user's token (RLS may allow self-read)
+    if (!role) {
+      try {
+        const { data: profile, error: profileError } = await client
+          .from('profiles')
+          .select('role')
+          .eq('id', userId)
+          .single();
+        if (!profileError && profile?.role) {
+          role = typeof profile.role === 'string' ? profile.role : null;
+        }
+      } catch (profileError) {
+        console.log(`[OwnerAuth] ${traceId} profile lookup note:`, (profileError as Error)?.message ?? 'unknown');
+      }
+    }
+
+    // Strategy 3: verify_admin_access RPC
     if (!role) {
       try {
         const { data: rpcData, error: rpcError } = await client.rpc('verify_admin_access');
@@ -200,6 +248,18 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
         }
       } catch (rpcError) {
         console.log(`[OwnerAuth] ${traceId} verify_admin_access note:`, (rpcError as Error)?.message ?? 'unknown');
+      }
+    }
+
+    // Strategy 4: Owner email allowlist fallback — if the authenticated user's
+    // email is on the pinned owner allowlist, grant owner role. This is the
+    // last-resort path that ensures the owner can always authorize even if
+    // RLS blocks profile reads and the RPC is unavailable.
+    if (!role) {
+      const allowlist = getOwnerAllowlist();
+      if (allowlist.includes(email.toLowerCase())) {
+        role = 'owner';
+        roleSource = 'email_allowlist';
       }
     }
 
