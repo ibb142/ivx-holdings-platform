@@ -754,6 +754,11 @@ import {
   handleUpdateOwnerActionStatus,
 } from './api/ivx-owner-action-requests';
 import { OPTIONS as autonomousOpsDashboardOptions, handleAutonomousOpsDashboardRequest } from './api/ivx-autonomous-ops-dashboard';
+import {
+  autonomousControlPlaneOptions,
+  handleAutonomousControlPlaneGet,
+  handleAutonomousControlPlaneVerifyAll,
+} from './api/ivx-autonomous-control-plane';
 import { OPTIONS as autonomousProofOptions, handleAutonomousProofRequest } from './api/ivx-autonomous-proof';
 import {
   OPTIONS as agentAuditOptions,
@@ -6462,6 +6467,14 @@ app.post('/api/ivx/owner-action/:traceId/status', async (context) => handleUpdat
 // ============================================================================
 app.options('/api/ivx/autonomous-ops/dashboard', () => autonomousOpsDashboardOptions());
 app.get('/api/ivx/autonomous-ops/dashboard', async (context) => handleAutonomousOpsDashboardRequest(context.req.raw));
+
+// ============================================================================
+// IVX Autonomous Control Plane — 12x100 campaign state + verify-all endpoint
+// ============================================================================
+app.options('/api/ivx/autonomous-control-plane', () => autonomousControlPlaneOptions());
+app.get('/api/ivx/autonomous-control-plane', async (context) => handleAutonomousControlPlaneGet(context.req.raw));
+app.options('/api/ivx/autonomous-control-plane/verify-all', () => autonomousControlPlaneOptions());
+app.post('/api/ivx/autonomous-control-plane/verify-all', async (context) => handleAutonomousControlPlaneVerifyAll(context.req.raw));
 app.options('/api/ivx/autonomous-proof', () => autonomousProofOptions());
 app.get('/api/ivx/autonomous-proof', async (context) => handleAutonomousProofRequest(context.req.raw));
 
