@@ -1,5 +1,5 @@
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
-import { getCompletionCampaignState, getSupervisorDistribution } from '../services/ivx-autonomous-completion-campaign';
+import { getCompletionCampaignState, getSupervisorDistribution, verifyAllEnterpriseAgents } from '../services/ivx-autonomous-completion-campaign';
 import { getSmsNotifierStatus } from '../services/ivx-autonomous-sms-notifier';
 import { isDurableStoreConfigured } from '../services/ivx-durable-store';
 
@@ -14,6 +14,42 @@ function countStatuses<T extends { status: string }>(items: T[]) {
 
 export function autonomousControlPlaneOptions(): Response {
   return ownerOnlyOptions();
+}
+
+export async function handleAutonomousControlPlaneVerifyAll(request: Request): Promise<Response> {
+  try {
+    await assertIVXOwnerOnly(request);
+  } catch (error) {
+    return ownerOnlyJson({
+      ok: false,
+      error: error instanceof Error ? error.message : 'IVX owner authentication required.',
+    }, 401);
+  }
+
+  try {
+    const result = await verifyAllEnterpriseAgents();
+    const campaign = await getCompletionCampaignState();
+    return ownerOnlyJson({
+      ok: true,
+      marker: IVX_AUTONOMOUS_CONTROL_PLANE_MARKER,
+      action: 'verify_all_enterprise_agents',
+      generatedAt: new Date().toISOString(),
+      result,
+      campaign: {
+        phase: campaign.phase,
+        enabled: campaign.enabled,
+        totals: campaign.totals,
+        verifiedTotal: campaign.totals.verifiedSpecialists + campaign.totals.verifiedDivisionA + campaign.totals.verifiedDivisionB,
+        expectedTotal: 112,
+      },
+    });
+  } catch (error) {
+    return ownerOnlyJson({
+      ok: false,
+      marker: IVX_AUTONOMOUS_CONTROL_PLANE_MARKER,
+      error: error instanceof Error ? error.message : 'Unable to verify enterprise agents.',
+    }, 500);
+  }
 }
 
 export async function handleAutonomousControlPlaneGet(request: Request): Promise<Response> {
