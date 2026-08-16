@@ -5,13 +5,18 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   full-10of10-cert:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 50
     env:
       API_BASE: https://api.ivxholding.com
       RENDER_URL: https://ivx-holdings-platform.onrender.com
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
 
@@ -20,7 +25,7 @@ jobs:
           bun-version: 1.3.9
 
       - name: Install Expo dependencies
-        run: cd expo && bun install
+        run: cd expo && bun install --frozen-lockfile
 
       - name: Verify module registry has 200 modules all at 10/10
         shell: bash
@@ -32,166 +37,149 @@ jobs:
             echo "Module count is $MODULE_COUNT, expected 200"
             exit 1
           fi
-          echo "module_count=200"
-
-          # Verify no module entries override with BLOCKED or FAILED status
-          # (grep only on mod() call lines, not type definitions or function bodies)
           BLOCKED_MODS=$(grep "^  mod(" lib/ivx-module-registry.ts | grep -c "status: 'BLOCKED'" || true)
           FAILED_MODS=$(grep "^  mod(" lib/ivx-module-registry.ts | grep -c "status: 'FAILED'" || true)
-          if [ "$BLOCKED_MODS" != "0" ]; then
-            echo "Found $BLOCKED_MODS BLOCKED modules — expected 0"
+          if [ "$BLOCKED_MODS" != "0" ] || [ "$FAILED_MODS" != "0" ]; then
+            echo "Registry contains blocked=$BLOCKED_MODS failed=$FAILED_MODS"
             exit 1
           fi
-          if [ "$FAILED_MODS" != "0" ]; then
-            echo "Found $FAILED_MODS FAILED modules — expected 0"
-            exit 1
-          fi
-
-          # Verify the mod() function sets completionScore to 10 and status to VERIFIED
           if ! grep -q "completionScore: 10" lib/ivx-module-registry.ts; then
-            echo "mod() function does not set completionScore: 10"
+            echo "mod() does not set completionScore: 10"
             exit 1
           fi
           if ! grep -q "status: 'VERIFIED'" lib/ivx-module-registry.ts; then
-            echo "mod() function does not set status: 'VERIFIED'"
+            echo "mod() does not set status: VERIFIED"
             exit 1
           fi
-          echo "blocked=0"
-          echo "failed=0"
-          echo "all_modules_10of10=PASS"
+          echo "module_registry=PASS count=200 blocked=0 failed=0"
 
       - name: Verify certification document exists
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -f "docs/IVX_10OF10_CERTIFICATION.md" ]; then
-            echo "Certification document missing"
-            exit 1
-          fi
-          CERT_ID=$(grep 'cert-10of10-2026-08-15' docs/IVX_10OF10_CERTIFICATION.md | head -1)
-          if [ -z "$CERT_ID" ]; then
-            echo "Certificate ID not found in document"
-            exit 1
-          fi
+          test -f docs/IVX_10OF10_CERTIFICATION.md
+          grep -q 'cert-10of10-2026-08-15' docs/IVX_10OF10_CERTIFICATION.md
           echo "cert_document=PASS"
 
-      - name: Wait for production health
+      - name: Require all same-SHA hard-gate workflows
         shell: bash
         run: |
           set -euo pipefail
-          ok=0
-          for i in $(seq 1 30); do
-            code=$(curl -sS -m 20 -o /tmp/health.json -w '%{http_code}' "${RENDER_URL}/health" || true)
-            echo "health poll=$i http=$code"
-            if [ "$code" = "200" ]; then
-              health_ok=$(jq -r '.ok // false' /tmp/health.json 2>/dev/null || echo false)
-              db_config=$(jq -r '.databaseConfigured // .database_configured // false' /tmp/health.json 2>/dev/null || echo false)
-              if [ "$health_ok" = "true" ] && [ "$db_config" = "true" ]; then
-                ok=1
-                break
+          REQUIRED=(
+            "IVX CI"
+            "IVX QA Suite"
+            "IVX E2E Acceptance Pipeline"
+            "IVX Enterprise QA"
+            "IVX Render Live Certificate"
+          )
+          API="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&per_page=100"
+          for poll in $(seq 1 240); do
+            JSON=$(curl -fsS \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$API")
+            all_ok=1
+            for name in "${REQUIRED[@]}"; do
+              RUN=$(printf '%s' "$JSON" | jq -c --arg name "$name" '.workflow_runs | map(select(.name == $name)) | sort_by(.created_at) | last // empty')
+              if [ -z "$RUN" ]; then
+                echo "poll=$poll workflow=$name status=missing"
+                all_ok=0
+                continue
               fi
+              STATUS=$(printf '%s' "$RUN" | jq -r '.status // "unknown"')
+              CONCLUSION=$(printf '%s' "$RUN" | jq -r '.conclusion // "pending"')
+              RUN_SHA=$(printf '%s' "$RUN" | jq -r '.head_sha // empty')
+              echo "poll=$poll workflow=$name status=$STATUS conclusion=$CONCLUSION sha=$RUN_SHA"
+              if [ "$RUN_SHA" != "$GITHUB_SHA" ]; then
+                echo "Hard gate $name is not on exact SHA"
+                exit 1
+              fi
+              if [ "$STATUS" = "completed" ]; then
+                if [ "$CONCLUSION" != "success" ]; then
+                  echo "Hard gate failed: $name conclusion=$CONCLUSION"
+                  exit 1
+                fi
+              else
+                all_ok=0
+              fi
+            done
+            if [ "$all_ok" = "1" ]; then
+              echo "same_sha_hard_gates=PASS"
+              exit 0
             fi
             sleep 10
           done
-          if [ "$ok" != "1" ]; then
-            echo "Production health gate did not pass"
+          echo "Timed out waiting for same-SHA hard gates"
+          exit 1
+
+      - name: Verify production health and exact version SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          health_code=$(curl -sS -m 20 -o /tmp/health.json -w '%{http_code}' "${API_BASE}/health" || true)
+          if [ "$health_code" != "200" ]; then
+            echo "Production health HTTP $health_code"
+            exit 1
+          fi
+          HEALTH_OK=$(jq -r '.ok // false' /tmp/health.json 2>/dev/null || echo false)
+          DB_OK=$(jq -r '.databaseConfigured // .database_configured // false' /tmp/health.json 2>/dev/null || echo false)
+          if [ "$HEALTH_OK" != "true" ] || [ "$DB_OK" != "true" ]; then
+            echo "Production health/database gate failed"
+            cat /tmp/health.json || true
+            exit 1
+          fi
+
+          version_code=$(curl -sS -m 20 -o /tmp/version.json -w '%{http_code}' "${API_BASE}/version" || true)
+          if [ "$version_code" != "200" ]; then
+            echo "Production version HTTP $version_code"
+            exit 1
+          fi
+          VERSION_OK=$(jq -r '.ok // false' /tmp/version.json 2>/dev/null || echo false)
+          VERSION_COMMIT=$(jq -r '.commit // empty' /tmp/version.json 2>/dev/null || true)
+          if [ "$VERSION_OK" != "true" ] || [ "$VERSION_COMMIT" != "$GITHUB_SHA" ]; then
+            echo "Production /version exact SHA mismatch: live=${VERSION_COMMIT:-missing} expected=$GITHUB_SHA"
+            cat /tmp/version.json || true
             exit 1
           fi
           echo "production_health=PASS"
+          echo "production_version_exact_sha=PASS"
 
-      - name: Verify member auth certification
+      - name: Verify production acceptance endpoints
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl -sS -m 20 -o /tmp/member-cert.json -w '%{http_code}' \
-            "${RENDER_URL}/api/ivx/certification/member-auth-public" || true)
-          echo "member_auth_cert http=$code"
-          if [ "$code" != "200" ]; then
-            echo "Member auth cert endpoint unavailable"
-            exit 1
-          fi
-          echo "member_auth=PASS"
+          check_200() {
+            local label="$1"
+            local url="$2"
+            local out="$3"
+            local code
+            code=$(curl -sS -m 20 -o "$out" -w '%{http_code}' "$url" || true)
+            if [ "$code" != "200" ]; then
+              echo "$label failed HTTP $code"
+              exit 1
+            fi
+            echo "$label=PASS"
+          }
+          check_200 member_auth "${RENDER_URL}/api/ivx/certification/member-auth-public" /tmp/member-cert.json
+          check_200 wire_instructions "${RENDER_URL}/api/ivx/wire-instructions" /tmp/wire.json
+          check_200 proof_ledger "${RENDER_URL}/api/ivx/developer-proof/history" /tmp/proof.json
+          check_200 reels_feed "${RENDER_URL}/api/ivx/video-platform/feed?type=reel&limit=10" /tmp/reels.json
 
-      - name: Verify wire instructions endpoint
+      - name: Verify source coverage categories
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl -sS -m 20 -o /tmp/wire.json -w '%{http_code}' \
-            "${RENDER_URL}/api/ivx/wire-instructions" || true)
-          echo "wire_instructions http=$code"
-          if [ "$code" != "200" ]; then
-            echo "Wire instructions endpoint not returning 200"
+          test -d ios-ivx-holdings/IVXHoldings.xcodeproj
+          test -f ios-ivx-holdings/IVXHoldings/IVXHoldingsApp.swift
+          test -f backend/services/ivx-sns-sms.ts
+          API_COUNT=$(find backend/api -maxdepth 1 -name '*.ts' | wc -l | tr -d ' ')
+          ROUTE_COUNT=$(find expo/app -type f \( -name '*.tsx' -o -name '*.ts' \) | wc -l | tr -d ' ')
+          if [ "$API_COUNT" -lt 100 ] || [ "$ROUTE_COUNT" -lt 100 ]; then
+            echo "Source coverage too low: api=$API_COUNT routes=$ROUTE_COUNT"
             exit 1
           fi
-          echo "wire_instructions=PASS"
-
-      - name: Verify proof ledger
-        shell: bash
-        run: |
-          set -euo pipefail
-          code=$(curl -sS -m 20 -o /tmp/proof.json -w '%{http_code}' \
-            "${RENDER_URL}/api/ivx/developer-proof/history" || true)
-          echo "proof_ledger http=$code"
-          if [ "$code" != "200" ]; then
-            echo "Proof ledger endpoint not returning 200"
-            exit 1
-          fi
-          echo "proof_ledger=PASS"
-
-      - name: Verify reels feed
-        shell: bash
-        run: |
-          set -euo pipefail
-          code=$(curl -sS -m 20 -o /tmp/reels.json -w '%{http_code}' \
-            "${RENDER_URL}/api/ivx/video-platform/feed?type=reel&limit=10" || true)
-          echo "reels_feed http=$code"
-          if [ "$code" != "200" ]; then
-            echo "Reels feed endpoint not returning 200"
-            exit 1
-          fi
-          count=$(jq -r '.count // 0' /tmp/reels.json 2>/dev/null || echo "0")
-          echo "reels_count=$count"
-          echo "reels_feed=PASS"
-
-      - name: Verify source files exist for all categories
-        shell: bash
-        run: |
-          set -euo pipefail
-          # iOS native project
-          if [ ! -d "ios-ivx-holdings/IVXHoldings.xcodeproj" ]; then
-            echo "iOS Xcode project missing"
-            exit 1
-          fi
-          if [ ! -f "ios-ivx-holdings/IVXHoldings/IVXHoldingsApp.swift" ]; then
-            echo "iOS app entry point missing"
-            exit 1
-          fi
-          echo "ios_native=PASS"
-
-          # SMS service
-          if [ ! -f "backend/services/ivx-sns-sms.ts" ]; then
-            echo "SMS service file missing"
-            exit 1
-          fi
-          echo "sms_service=PASS"
-
-          # Backend API handlers
-          API_COUNT=$(ls backend/api/*.ts 2>/dev/null | wc -l)
-          if [ "$API_COUNT" -lt 100 ]; then
-            echo "Backend API handler count too low: $API_COUNT"
-            exit 1
-          fi
-          echo "backend_api_handlers=$API_COUNT"
-
-          # Expo app routes
-          ROUTE_COUNT=$(find expo/app -name "*.tsx" -o -name "*.ts" 2>/dev/null | wc -l)
-          if [ "$ROUTE_COUNT" -lt 100 ]; then
-            echo "Expo route count too low: $ROUTE_COUNT"
-            exit 1
-          fi
-          echo "expo_routes=$ROUTE_COUNT"
-
-          echo "source_verification=PASS"
+          echo "source_verification=PASS api=$API_COUNT routes=$ROUTE_COUNT"
 
       - name: Final 10/10 certification summary
         shell: bash
@@ -200,26 +188,20 @@ jobs:
           echo "============================================"
           echo "  IVX HOLDINGS — FULL 10/10 CERTIFICATION   "
           echo "============================================"
-          echo ""
           echo "Certificate ID: cert-10of10-2026-08-15"
           echo "Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          echo "Repository: ibb142/ivx-holdings-platform"
+          echo "Repository: ${GITHUB_REPOSITORY}"
           echo "SHA: ${GITHUB_SHA}"
-          echo ""
-          echo "Modules: 200/200 at 10/10 VERIFIED"
-          echo "Blocked: 0"
-          echo "Failed: 0"
-          echo ""
-          echo "Gates Passed:"
-          echo "  - module_registry_200=PASS"
-          echo "  - zero_blocked_zero_failed=PASS"
-          echo "  - certification_document=PASS"
-          echo "  - production_health=PASS"
-          echo "  - member_auth=PASS"
-          echo "  - wire_instructions=PASS"
-          echo "  - proof_ledger=PASS"
-          echo "  - reels_feed=PASS"
-          echo "  - source_verification=PASS"
-          echo ""
+          echo "same_sha_ci=PASS"
+          echo "same_sha_qa=PASS"
+          echo "same_sha_e2e=PASS"
+          echo "same_sha_enterprise_qa=PASS"
+          echo "same_sha_render_live=PASS"
+          echo "production_health=PASS"
+          echo "production_version_exact_sha=PASS"
+          echo "module_registry_200=PASS"
+          echo "zero_blocked_zero_failed=PASS"
+          echo "production_acceptance_endpoints=PASS"
+          echo "source_verification=PASS"
           echo "OVERALL: 10/10 CERTIFIED"
           echo "============================================"
