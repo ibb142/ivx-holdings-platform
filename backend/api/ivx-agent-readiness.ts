@@ -1,6 +1,6 @@
 import { Context } from 'hono';
 import { getContractByAgentId, verifyPermissionMatrix } from '../services/ivx-agent-contracts';
-import { getExecutionState, verifyIndependence, recordAgentEvidence, verifyQaSecurityGates } from '../services/ivx-agent-runtime';
+import { getExecutionState, verifyIndependence } from '../services/ivx-agent-runtime';
 import { verifyAgentScheduler } from '../services/ivx-scheduler';
 
 export async function handleAgentReadinessCheck(c: Context): Promise<Response> {
@@ -20,6 +20,12 @@ export async function handleAgentReadinessCheck(c: Context): Promise<Response> {
   const independenceVerified = verifyIndependence().ok;
   const qaSecurityGatesVerified = verifyQaSecurityGates().ok;
   const evidenceRecorded = recordAgentEvidence(agentId).ok;
+  const permissionsVerified = verifyPermissionMatrix().ok;
+  const heartbeatVerified = !!state.lastHeartbeat;
+  const schedulerVerified = verifyAgentScheduler().ok;
+  const independenceVerified = verifyIndependence().ok;
+  const qaSecurityGatesVerified = verifyQaSecurityGates().ok;
+  const evidenceRecorded = recordAgentEvidence(agentId).ok;
 
   return c.json({
     ok: true,
@@ -31,7 +37,11 @@ export async function handleAgentReadinessCheck(c: Context): Promise<Response> {
     qaSecurityGatesVerified,
     evidenceRecorded,
     schedulerVerified,
-    orchestratorRoutingVerified: schedulerVerified,
+    independenceVerified,
+    heartbeatVerified,
+    qaSecurityGatesVerified,
+    evidenceRecorded,
+    schedulerVerified,
     independenceVerified,
   });
 }
