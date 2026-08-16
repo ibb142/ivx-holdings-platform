@@ -1,6 +1,6 @@
 import { Context } from 'hono';
 import { getContractByAgentId, verifyPermissionMatrix } from '../services/ivx-agent-contracts';
-import { getExecutionState, verifyIndependence } from '../services/ivx-agent-runtime';
+import { getExecutionState, verifyIndependence, recordAgentEvidence, verifyQaSecurityGates } from '../services/ivx-agent-runtime';
 import { verifyAgentScheduler } from '../services/ivx-scheduler';
 
 export async function handleAgentReadinessCheck(c: Context): Promise<Response> {
