@@ -1,4 +1,4 @@
-name: IVX 100 Live AI Worker Certificate
+name: IVX 112 Live AI Worker Certificate
 
 on:
   push:
@@ -6,11 +6,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  live-100-worker-cert:
+  live-112-worker-cert:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     env:
       API_BASE: https://api.ivxholding.com
+      EXPECTED_AGENT_COUNT: '112'
     steps:
       - uses: actions/checkout@v4
 
@@ -38,32 +39,38 @@ jobs:
           fi
           echo "exact_sha=PASS"
 
-      - name: Load all 100 registered agents
+      - name: Load and validate every registered agent
         shell: bash
         run: |
           set -euo pipefail
           curl -fsS --retry 3 --retry-delay 2 "${API_BASE}/api/ivx/agents" -o /tmp/agents.json
           ok=$(jq -r '.ok // false' /tmp/agents.json)
           total=$(jq -r '.totalAgents // 0' /tmp/agents.json)
-          unique=$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)
-          divA=$(jq '[.agents[] | select(.division == "A")] | length' /tmp/agents.json)
-          divB=$(jq '[.agents[] | select(.division == "B")] | length' /tmp/agents.json)
-          echo "ok=$ok total=$total unique=$unique divisionA=$divA divisionB=$divB"
+          unique_ids=$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)
+          unique_numbers=$(jq '[.agents[].agentNumber] | unique | length' /tmp/agents.json)
+          min_number=$(jq '[.agents[].agentNumber] | min // 0' /tmp/agents.json)
+          max_number=$(jq '[.agents[].agentNumber] | max // 0' /tmp/agents.json)
+          missing_identity=$(jq '[.agents[] | select((.agentId // "") == "" or (.name // "") == "" or (.role // "") == "" or (.division // "") == "")] | length' /tmp/agents.json)
+          echo "ok=$ok total=$total unique_ids=$unique_ids unique_numbers=$unique_numbers min=$min_number max=$max_number missing_identity=$missing_identity"
           test "$ok" = "true"
-          test "$total" = "100"
-          test "$unique" = "100"
-          test "$divA" = "50"
-          test "$divB" = "50"
+          test "$total" = "$EXPECTED_AGENT_COUNT"
+          test "$unique_ids" = "$EXPECTED_AGENT_COUNT"
+          test "$unique_numbers" = "$EXPECTED_AGENT_COUNT"
+          test "$min_number" = "1"
+          test "$max_number" = "$EXPECTED_AGENT_COUNT"
+          test "$missing_identity" = "0"
+          echo "registered_agent_registry=PASS count=$total"
 
-      - name: Execute 100 distinct live AI activations
+      - name: Execute every registered agent through real live AI inference
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p qa/evidence
           : > /tmp/worker-results.jsonl
           failures=0
+          total=$(jq -r '.totalAgents' /tmp/agents.json)
 
-          for idx in $(seq 0 99); do
+          for idx in $(seq 0 $((total - 1))); do
             agentId=$(jq -r ".agents[$idx].agentId" /tmp/agents.json)
             agentNumber=$(jq -r ".agents[$idx].agentNumber" /tmp/agents.json)
             agentName=$(jq -r ".agents[$idx].name" /tmp/agents.json)
@@ -75,7 +82,7 @@ jobs:
 
             payload=$(jq -cn \
               --arg message "You are IVX live worker activation ${agentNumber}, ${agentName}, role ${role}, division ${division}. Return the exact token ${token}, then add one short role-specific action you would take next. Do not omit the token." \
-              --arg sessionId "ivx-live-100-${GITHUB_RUN_ID}" \
+              --arg sessionId "ivx-live-all-${GITHUB_RUN_ID}" \
               --arg requestId "$requestId" \
               '{message:$message,sessionId:$sessionId,requestId:$requestId,history:[]}')
 
@@ -119,44 +126,41 @@ jobs:
           done
 
           jq -s '.' /tmp/worker-results.jsonl > /tmp/worker-results.json
-          total=$(jq 'length' /tmp/worker-results.json)
+          executed=$(jq 'length' /tmp/worker-results.json)
           passed=$(jq '[.[] | select(.passed == true)] | length' /tmp/worker-results.json)
           uniqueAgents=$(jq '[.[].agentId] | unique | length' /tmp/worker-results.json)
           uniqueRequests=$(jq '[.[].requestId] | unique | length' /tmp/worker-results.json)
           sourcePass=$(jq '[.[] | select(.source == "chatgpt")] | length' /tmp/worker-results.json)
           endpointPass=$(jq '[.[] | select((.endpoint // "") != "")] | length' /tmp/worker-results.json)
-          divA=$(jq '[.[] | select(.division == "A" and .passed == true)] | length' /tmp/worker-results.json)
-          divB=$(jq '[.[] | select(.division == "B" and .passed == true)] | length' /tmp/worker-results.json)
 
           jq -n \
             --arg githubSha "$GITHUB_SHA" \
             --arg workflowRunId "$GITHUB_RUN_ID" \
             --arg certifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --argjson total "$total" \
-            --argjson passed "$passed" \
-            --argjson failed "$failures" \
+            --argjson expectedAgents "$EXPECTED_AGENT_COUNT" \
+            --argjson totalWorkers "$executed" \
+            --argjson passedWorkers "$passed" \
+            --argjson failedWorkers "$failures" \
             --argjson uniqueAgents "$uniqueAgents" \
             --argjson uniqueRequests "$uniqueRequests" \
-            --argjson sourcePass "$sourcePass" \
-            --argjson endpointPass "$endpointPass" \
-            --argjson divisionAPass "$divA" \
-            --argjson divisionBPass "$divB" \
+            --argjson realProviderResponses "$sourcePass" \
+            --argjson providerEndpointsReported "$endpointPass" \
             --slurpfile workers /tmp/worker-results.json \
-            '{marker:"ivx-100-live-ai-worker-cert-2026-08-16-v1",githubSha:$githubSha,workflowRunId:$workflowRunId,certifiedAt:$certifiedAt,exactSha:true,totalWorkers:$total,passedWorkers:$passed,failedWorkers:$failed,uniqueAgents:$uniqueAgents,uniqueRequests:$uniqueRequests,realProviderResponses:$sourcePass,providerEndpointsReported:$endpointPass,divisionAPass:$divisionAPass,divisionBPass:$divisionBPass,certified:($total==100 and $passed==100 and $failed==0 and $uniqueAgents==100 and $uniqueRequests==100 and $sourcePass==100 and $endpointPass==100 and $divisionAPass==50 and $divisionBPass==50),proofDefinition:"100 distinct registered logical IVX worker identities each completed an independent real remote AI inference against exact production SHA; this does not claim 100 operating-system processes or 100 separate model-provider accounts.",workers:$workers[0]}' \
-            > qa/evidence/ivx-100-live-ai-worker-cert.json
+            '{marker:"ivx-112-live-ai-worker-cert-2026-08-16-v2",githubSha:$githubSha,workflowRunId:$workflowRunId,certifiedAt:$certifiedAt,exactSha:true,expectedAgents:$expectedAgents,totalWorkers:$totalWorkers,passedWorkers:$passedWorkers,failedWorkers:$failedWorkers,uniqueAgents:$uniqueAgents,uniqueRequests:$uniqueRequests,realProviderResponses:$realProviderResponses,providerEndpointsReported:$providerEndpointsReported,certified:($totalWorkers==$expectedAgents and $passedWorkers==$expectedAgents and $failedWorkers==0 and $uniqueAgents==$expectedAgents and $uniqueRequests==$expectedAgents and $realProviderResponses==$expectedAgents and $providerEndpointsReported==$expectedAgents),proofDefinition:"Every agent in the current 112-agent IVX enterprise registry completed an independent real remote AI inference against the exact production SHA; this does not claim separate operating-system processes or separate model-provider accounts.",workers:$workers[0]}' \
+            > qa/evidence/ivx-112-live-ai-worker-cert.json
 
-          jq '{certified,githubSha,totalWorkers,passedWorkers,failedWorkers,uniqueAgents,uniqueRequests,realProviderResponses,providerEndpointsReported,divisionAPass,divisionBPass,proofDefinition}' qa/evidence/ivx-100-live-ai-worker-cert.json
+          jq '{certified,githubSha,expectedAgents,totalWorkers,passedWorkers,failedWorkers,uniqueAgents,uniqueRequests,realProviderResponses,providerEndpointsReported,proofDefinition}' qa/evidence/ivx-112-live-ai-worker-cert.json
 
-          certified=$(jq -r '.certified' qa/evidence/ivx-100-live-ai-worker-cert.json)
+          certified=$(jq -r '.certified' qa/evidence/ivx-112-live-ai-worker-cert.json)
           if [ "$certified" != "true" ]; then
-            echo "100 live AI worker certificate failed."
+            echo "112 live AI worker certificate failed."
             exit 1
           fi
-          echo "live_100_ai_workers=PASS"
+          echo "live_112_ai_workers=PASS"
 
-      - name: Upload 100-worker live certificate evidence
+      - name: Upload 112-worker live certificate evidence
         uses: actions/upload-artifact@v4
         with:
-          name: ivx-100-live-ai-worker-cert-${{ github.sha }}
-          path: qa/evidence/ivx-100-live-ai-worker-cert.json
+          name: ivx-112-live-ai-worker-cert-${{ github.sha }}
+          path: qa/evidence/ivx-112-live-ai-worker-cert.json
           if-no-files-found: error
