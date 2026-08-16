@@ -168,18 +168,24 @@ jobs:
           set -euo pipefail
           RESPONSE=$(curl -fsS --retry 3 --retry-delay 2 -X POST "${API_BASE}/api/public/chat" \
             -H "Content-Type: application/json" \
-            --data '{"message":"Return only the number: what is 17 plus 25?","sessionId":"github-live-cert","requestId":"github-live-cert-'"${GITHUB_RUN_ID}"'","history":[]}')
+            -H "x-ivx-client-id: github-live-cert-${GITHUB_RUN_ID}" \
+            --data '{"message":"In one sentence, compare fixed-rate and floating-rate debt for a commercial real-estate acquisition and state one tradeoff of each.","sessionId":"github-live-cert","requestId":"github-live-cert-'"${GITHUB_RUN_ID}"'","history":[]}')
           SOURCE=$(printf '%s' "$RESPONSE" | jq -r '.source // empty')
           ANSWER=$(printf '%s' "$RESPONSE" | jq -r '.answer // .text // empty')
+          ENDPOINT=$(printf '%s' "$RESPONSE" | jq -r '.endpoint // empty')
           if [ -z "$ANSWER" ]; then
             echo "No AI answer returned - HARD FAIL"
             exit 1
           fi
-          if [ "$SOURCE" = "fallback" ]; then
-            echo "Public chat returned fallback - HARD FAIL"
+          if [ "$SOURCE" != "chatgpt" ]; then
+            echo "Public chat did not use the certified real-inference source (source=${SOURCE:-missing}) - HARD FAIL"
             exit 1
           fi
-          echo "live_inference=PASS source=${SOURCE:-unknown}"
+          if [ -z "$ENDPOINT" ]; then
+            echo "Public chat did not report a provider endpoint - HARD FAIL"
+            exit 1
+          fi
+          echo "live_inference=PASS source=$SOURCE endpoint=$ENDPOINT"
 
       - name: Emit certificate evidence
         shell: bash
