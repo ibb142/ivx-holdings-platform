@@ -149,6 +149,7 @@ export function registerAgentRoutes(app: Hono): void {
         instructionHash: contract.instructionHash,
         systemInstructionsLength: contract.systemInstructions.length,
       },
+      heartbeat: state.lastHeartbeat,
       executionState: state,
     });
   });
