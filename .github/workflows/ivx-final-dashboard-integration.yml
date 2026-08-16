@@ -14,6 +14,9 @@ jobs:
   integrate-and-verify:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      NODE_ENV: test
+      IVX_WIRE_ENCRYPTION_KEY: ivx-ci-wire-encryption-key-v1
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,13 +50,33 @@ jobs:
           bun install --frozen-lockfile
           bun install --cwd expo --frozen-lockfile
       - name: Backend TypeScript
-        run: bunx tsc --noEmit
+        run: cd backend && bunx tsc --noEmit
       - name: Expo TypeScript
         run: cd expo && bunx tsc --noEmit
         env:
           NODE_OPTIONS: --max-old-space-size=6144
-      - name: Backend tests
-        run: bun test
+      - name: Backend tests - process isolated
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/.tmp/test-logs"
+          failed=0
+          count=0
+          while IFS= read -r test_file; do
+            count=$((count + 1))
+            safe_name=$(printf '%s' "$test_file" | tr '/ ' '__')
+            test_root="${GITHUB_WORKSPACE}/.tmp/ivx-final-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${count}"
+            test_log="${GITHUB_WORKSPACE}/.tmp/test-logs/${safe_name}.log"
+            rm -rf "$test_root"
+            mkdir -p "$test_root"
+            if ! (cd "$test_root" && IVX_DATA_DIR="$test_root" NODE_ENV=test bun test "$GITHUB_WORKSPACE/$test_file" --reporter=dots) 2>&1 | tee "$test_log"; then
+              failed=$((failed + 1))
+              echo "FAILED_FILE=$test_file"
+            fi
+            rm -rf "$test_root"
+          done < <(find backend -type f \( -name '*.test.ts' -o -name '*.test.tsx' \) -print | sort)
+          echo "isolated_test_files=$count failed_files=$failed"
+          test "$failed" -eq 0
       - name: Expo lint
         run: cd expo && bun run lint
       - name: Commit verified integration and remove one-shot workflow
