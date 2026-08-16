@@ -33,7 +33,7 @@ import {
   type CreateDealInput,
 } from './ivx-deal-tracking-store';
 
-const ROOT = path.join(process.cwd(), 'logs', 'audit', 'deal-tracking');
+const ROOT = path.join(process.env.IVX_DATA_DIR?.trim() || process.cwd(), 'logs', 'audit', 'deal-tracking');
 
 async function clean(): Promise<void> {
   await rm(ROOT, { recursive: true, force: true });

@@ -26,7 +26,7 @@ import {
 } from './ivx-crm-import';
 import { importInvestors, listInvestors, summarizeInvestors } from './ivx-investor-crm-store';
 
-const CRM_ROOT = path.join(process.cwd(), 'logs', 'audit', 'investor-crm');
+const CRM_ROOT = path.join(process.env.IVX_DATA_DIR?.trim() || process.cwd(), 'logs', 'audit', 'investor-crm');
 
 async function clean(): Promise<void> {
   await rm(CRM_ROOT, { recursive: true, force: true });

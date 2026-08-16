@@ -33,7 +33,7 @@ import {
   type CreateOutreachInput,
 } from './ivx-outreach-store';
 
-const ROOT = path.join(process.cwd(), 'logs', 'audit', 'outreach');
+const ROOT = path.join(process.env.IVX_DATA_DIR?.trim() || process.cwd(), 'logs', 'audit', 'outreach');
 
 async function clean(): Promise<void> {
   await rm(ROOT, { recursive: true, force: true });
