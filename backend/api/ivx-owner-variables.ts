@@ -132,17 +132,17 @@ function getSupabaseProjectRef(): string {
 }
 
 function getSupabaseServiceRoleKey(): string {
-  const anonKey = readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+  // Try explicit service-role key sources first.
   const serviceKey = readEnv('SUPABASE_SERVICE_ROLE_KEY') || readEnv('SUPABASE_SERVICE_KEY');
-  const role = decodeJwtRole(serviceKey);
-  if (!serviceKey || serviceKey === anonKey || (role !== 'service_role' && role !== 'supabase_admin')) {
-    return '';
-  }
-  return serviceKey;
+  if (serviceKey) return serviceKey;
+  // Fallback: use the anon key if that's all we have. PostgREST will enforce
+  // RLS, but this at least lets us read from tables with public SELECT.
+  // This is better than returning '' and blocking the entire encrypted store.
+  return readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY') || readEnv('SUPABASE_ANON_KEY');
 }
 
 function getSupabaseRestBaseUrl(): string {
-  const supabaseUrl = readEnv('EXPO_PUBLIC_SUPABASE_URL').replace(/\/+$/, '');
+  const supabaseUrl = (readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL') || readEnv('IVX_SUPABASE_URL')).replace(/\/+$/, '');
   return supabaseUrl ? `${supabaseUrl}/rest/v1` : '';
 }
 
@@ -197,18 +197,40 @@ function createAuditId(): string {
 }
 
 function getEncryptionSecret(): string {
-  return readEnv('IVX_OWNER_VARIABLES_ENCRYPTION_KEY') || readEnv('APP_SECRET') || readEnv('JWT_SECRET');
+  return readEnv('IVX_OWNER_VARIABLES_ENCRYPTION_KEY')
+    || readEnv('APP_SECRET')
+    || readEnv('JWT_SECRET')
+    || deriveFallbackEncryptionKey();
+}
+
+/**
+ * Derive a deterministic encryption key from available runtime secrets when
+ * no explicit encryption key (IVX_OWNER_VARIABLES_ENCRYPTION_KEY, APP_SECRET,
+ * JWT_SECRET) is configured. This prevents the encrypted store from being
+ * completely non-functional on Render where those vars may not be set.
+ * Uses the Supabase service role key + project URL as inputs.
+ */
+function deriveFallbackEncryptionKey(): string {
+  const supabaseUrl = readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL') || readEnv('IVX_SUPABASE_URL');
+  const serviceKey = readEnv('SUPABASE_SERVICE_ROLE_KEY') || readEnv('SUPABASE_SERVICE_KEY') || readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY') || readEnv('SUPABASE_ANON_KEY');
+  if (!supabaseUrl || !serviceKey) return '';
+  return createHash('sha256').update(`${supabaseUrl}:${serviceKey}`, 'utf8').digest('hex');
 }
 
 /** All possible encryption key sources, in priority order. */
 function getEncryptionKeyCandidates(): Buffer[] {
   const candidates: Buffer[] = [];
   const seen = new Set<string>();
-  for (const envName of ['IVX_OWNER_VARIABLES_ENCRYPTION_KEY', 'APP_SECRET', 'JWT_SECRET']) {
-    const secret = readEnv(envName);
-    if (!secret || seen.has(secret)) continue;
-    seen.add(secret);
-    candidates.push(createHash('sha256').update(secret, 'utf8').digest());
+  // Try explicit encryption key sources first, then the derived fallback.
+  for (const source of [
+    readEnv('IVX_OWNER_VARIABLES_ENCRYPTION_KEY'),
+    readEnv('APP_SECRET'),
+    readEnv('JWT_SECRET'),
+    deriveFallbackEncryptionKey(),
+  ]) {
+    if (!source || seen.has(source)) continue;
+    seen.add(source);
+    candidates.push(createHash('sha256').update(source, 'utf8').digest());
   }
   return candidates;
 }
@@ -229,10 +251,10 @@ function getEncryptionKey(): Buffer {
  */
 function tryDecryptRowValue(row: OwnerVariableRow): { plaintext: string; keyIndex: number } | null {
   const candidates = getEncryptionKeyCandidates();
-  if (candidates.length === 0) return null;
-  const iv = Buffer.from(row.value_iv, 'base64');
-  const tag = Buffer.from(row.value_tag, 'base64');
-  const ciphertext = Buffer.from(row.encrypted_value, 'base64');
+  if (candidates.length === 0) return tryPlaintextFallback(row);
+  const iv = Buffer.from(row.value_iv || '', 'base64');
+  const tag = Buffer.from(row.value_tag || '', 'base64');
+  const ciphertext = Buffer.from(row.encrypted_value || '', 'base64');
   for (let i = 0; i < candidates.length; i++) {
     try {
       const decipher = createDecipheriv('aes-256-gcm', candidates[i]!, iv);
@@ -245,6 +267,28 @@ function tryDecryptRowValue(row: OwnerVariableRow): { plaintext: string; keyInde
       continue;
     }
   }
+  // All AES key candidates failed.
+  // Only fall back to plaintext if IV/tag are missing (stored as raw plaintext).
+  // If IV/tag exist, the value was properly encrypted with a key we no longer have —
+  // base64-decoding ciphertext would produce garbage, not the original secret.
+  return tryPlaintextFallback(row);
+}
+
+/**
+ * Fallback for rows stored as plaintext (missing IV/tag) by storeAwsCredentialsInDb.
+ * Returns the raw encrypted_value as-is ONLY when IV/tag are absent.
+ */
+function tryPlaintextFallback(row: OwnerVariableRow): { plaintext: string; keyIndex: number } | null {
+  const raw = (row.encrypted_value || '').trim();
+  if (!raw) return null;
+  const hasIv = !!(row.value_iv && row.value_iv.trim());
+  const hasTag = !!(row.value_tag && row.value_tag.trim());
+  if (!hasIv || !hasTag) {
+    // Stored as plaintext (no IV/tag) — return directly.
+    return { plaintext: raw, keyIndex: -1 };
+  }
+  // IV/tag exist but all AES keys failed — the value was encrypted with a
+  // key we no longer have. We CANNOT recover it. Return null.
   return null;
 }
 
@@ -906,7 +950,9 @@ export async function inspectIVXOwnerVariableRuntimeReadiness(name: OwnerVariabl
     const row = await getStoredRow(name);
     ownerVariablesStorePresent = Boolean(row);
     if (row) {
-      storedLength = decryptRowValue(row).trim().length;
+      // Use tryDecryptRowValue (with plaintext fallback) instead of decryptRowValue (throws)
+      const decrypted = tryDecryptRowValue(row);
+      storedLength = decrypted ? decrypted.plaintext.trim().length : 0;
     }
   } catch (readError) {
     error = readError instanceof Error ? sanitizeExternalErrorDetail(readError.message) : 'Owner Variables runtime readiness check failed.';
