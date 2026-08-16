@@ -143,9 +143,7 @@ const runCompletionCycleSafely = async (reason: string): Promise<void> => {
     console.log('[IVX Completion Campaign]', {
       reason,
       phase: state.phase,
-      verifiedSpecialists: state.totals.verifiedSpecialists,
-      verifiedDivisionA: state.totals.verifiedDivisionA,
-      verifiedDivisionB: state.totals.verifiedDivisionB,
+      verifiedAgents: state.totals.verifiedAgents,
     });
   } catch (error) {
     console.error('[IVX Completion Campaign] cycle failed', {
