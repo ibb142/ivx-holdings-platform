@@ -378,11 +378,35 @@ export async function handleLandingEnvDiagnostic(): Promise<Response> {
     }
   }
 
+  // Deep diagnostic: show intermediate values for Supabase REST store activation
+  const supabaseRestBaseUrl = (readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL') || readEnv('IVX_SUPABASE_URL')).replace(/\/+$/, '');
+  const supabaseServiceKey = readEnv('SUPABASE_SERVICE_ROLE_KEY') || readEnv('SUPABASE_SERVICE_KEY') || readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+  const supabaseAnonKey = readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY') || readEnv('SUPABASE_ANON_KEY');
+  const nodeEnv = readEnv('NODE_ENV');
+  const storageFlag = readEnv('IVX_OWNER_VARIABLES_STORAGE');
+  const encryptionSecret = readEnv('IVX_OWNER_VARIABLES_ENCRYPTION_KEY') || readEnv('APP_SECRET') || readEnv('JWT_SECRET');
+
+  const supabaseRestStoreDiagnostic = {
+    nodeEnv,
+    isProduction: nodeEnv.toLowerCase() === 'production',
+    storageFlag: storageFlag || '(empty)',
+    supabaseRestBaseUrl: supabaseRestBaseUrl ? supabaseRestBaseUrl + '/rest/v1' : '(empty)',
+    supabaseServiceKeyPresent: !!supabaseServiceKey,
+    supabaseServiceKeyLength: supabaseServiceKey ? supabaseServiceKey.length : 0,
+    supabaseServiceKeyIsAnonKey: supabaseServiceKey === supabaseAnonKey,
+    supabaseAnonKeyPresent: !!supabaseAnonKey,
+    encryptionSecretPresent: !!encryptionSecret,
+    encryptionSecretSource: readEnv('IVX_OWNER_VARIABLES_ENCRYPTION_KEY') ? 'IVX_OWNER_VARIABLES_ENCRYPTION_KEY' : readEnv('APP_SECRET') ? 'APP_SECRET' : readEnv('JWT_SECRET') ? 'JWT_SECRET' : 'none',
+    databaseUrlPresent: !!(readEnv('IVX_OWNER_VARIABLES_DATABASE_URL') || readEnv('SUPABASE_DB_URL') || readEnv('DATABASE_URL') || readEnv('POSTGRES_URL')),
+    canUseSupabaseRestStore: !!(supabaseRestBaseUrl && supabaseServiceKey && supabaseServiceKey !== supabaseAnonKey),
+  };
+
   return json({
     ok: true,
     present,
     relevantKeys,
     toolkitProxy,
+    supabaseRestStoreDiagnostic,
     ownerVariablesStore: {
       audited: true,
       variables: ownerVarAudit,
