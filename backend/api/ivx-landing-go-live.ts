@@ -8,6 +8,7 @@
  * 3. Web domain not live → triggers full S3 + CloudFront deploy
  */
 import { summarizeAnalytics } from '../services/ivx-platform-modules-store';
+import { getRawOwnerVariableValue, inspectIVXOwnerVariableRuntimeReadiness } from './ivx-owner-variables';
 
 const GO_LIVE_TOKEN = 'IVX_LANDING_GO_LIVE_2026';
 
@@ -279,8 +280,8 @@ export async function handleLandingAnalyticsPublicSummary(): Promise<Response> {
 }
 
 /**
- * Public env diagnostic — shows which env vars are present (not values) on the Render runtime.
- * Used to diagnose why AWS credentials aren't found.
+ * Public env diagnostic — shows which env vars are present (not values) on the Render runtime,
+ * AND audits the Owner Variables encrypted store for AWS credentials.
  */
 export async function handleLandingEnvDiagnostic(): Promise<Response> {
   const checkVars = [
@@ -302,7 +303,10 @@ export async function handleLandingEnvDiagnostic(): Promise<Response> {
     'EXPO_PUBLIC_PROJECT_ID',
     'EXPO_PUBLIC_SUPABASE_URL',
     'SUPABASE_URL',
+    'IVX_SUPABASE_URL',
     'SUPABASE_SERVICE_ROLE_KEY',
+    'SUPABASE_SERVICE_KEY',
+    'EXPO_PUBLIC_SUPABASE_ANON_KEY',
     'GITHUB_TOKEN',
     'IVX_OWNER_TOKEN',
   ];
@@ -331,11 +335,59 @@ export async function handleLandingEnvDiagnostic(): Promise<Response> {
     hasKey: !!toolkitKey,
   };
 
+  // Audit Owner Variables encrypted store for AWS-related vars
+  const ownerVarAuditNames = [
+    'AWS_ACCESS_KEY_ID',
+    'AWS_SECRET_ACCESS_KEY',
+    'AWS_REGION',
+    'S3_BUCKET_NAME',
+    'CLOUDFRONT_DISTRIBUTION_ID',
+    'IVX_AWS_READONLY_ACCESS_KEY_ID',
+    'IVX_AWS_READONLY_SECRET_ACCESS_KEY',
+  ] as const;
+
+  const ownerVarAudit: Record<string, { present: boolean; length: number; source: string; error: string | null }> = {};
+  for (const name of ownerVarAuditNames) {
+    try {
+      const readiness = await inspectIVXOwnerVariableRuntimeReadiness(name);
+      ownerVarAudit[name] = {
+        present: readiness.present,
+        length: readiness.length,
+        source: readiness.source,
+        error: readiness.error,
+      };
+    } catch (err) {
+      ownerVarAudit[name] = {
+        present: false,
+        length: 0,
+        source: 'unavailable',
+        error: err instanceof Error ? err.message : 'unknown error',
+      };
+    }
+  }
+
+  // Also check raw owner variable values (without returning them) for non-standard names
+  const rawCheckNames = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'CLOUDFRONT_DISTRIBUTION_ID'];
+  const rawAudit: Record<string, { found: boolean; source: string }> = {};
+  for (const name of rawCheckNames) {
+    try {
+      const value = await getRawOwnerVariableValue(name);
+      rawAudit[name] = { found: !!value, source: value ? 'owner_variables_or_env' : 'not_found' };
+    } catch {
+      rawAudit[name] = { found: false, source: 'error' };
+    }
+  }
+
   return json({
     ok: true,
     present,
     relevantKeys,
     toolkitProxy,
+    ownerVariablesStore: {
+      audited: true,
+      variables: ownerVarAudit,
+      rawLookup: rawAudit,
+    },
     timestamp: new Date().toISOString(),
   });
 }

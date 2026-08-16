@@ -132,8 +132,8 @@ function getSupabaseProjectRef(): string {
 }
 
 function getSupabaseServiceRoleKey(): string {
-  const anonKey = readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY');
-  const serviceKey = readEnv('SUPABASE_SERVICE_ROLE_KEY') || readEnv('SUPABASE_SERVICE_KEY');
+  const anonKey = readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY') || readEnv('SUPABASE_ANON_KEY');
+  const serviceKey = readEnv('SUPABASE_SERVICE_ROLE_KEY') || readEnv('SUPABASE_SERVICE_KEY') || readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY');
   const role = decodeJwtRole(serviceKey);
   if (!serviceKey || serviceKey === anonKey || (role !== 'service_role' && role !== 'supabase_admin')) {
     return '';
@@ -142,7 +142,7 @@ function getSupabaseServiceRoleKey(): string {
 }
 
 function getSupabaseRestBaseUrl(): string {
-  const supabaseUrl = readEnv('EXPO_PUBLIC_SUPABASE_URL').replace(/\/+$/, '');
+  const supabaseUrl = (readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL') || readEnv('IVX_SUPABASE_URL')).replace(/\/+$/, '');
   return supabaseUrl ? `${supabaseUrl}/rest/v1` : '';
 }
 
