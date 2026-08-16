@@ -2,14 +2,65 @@ import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-onl
 import { getCompletionCampaignState, getSupervisorDistribution, verifyAllEnterpriseAgents } from '../services/ivx-autonomous-completion-campaign';
 import { getSmsNotifierStatus } from '../services/ivx-autonomous-sms-notifier';
 import { isDurableStoreConfigured } from '../services/ivx-durable-store';
+import { getSeniorDeveloperJob } from '../services/ivx-senior-developer-worker';
 
-export const IVX_AUTONOMOUS_CONTROL_PLANE_MARKER = 'ivx-autonomous-control-plane-v1-2026-08-12';
+export const IVX_AUTONOMOUS_CONTROL_PLANE_MARKER = 'ivx-autonomous-control-plane-v2-2026-08-16';
 
 function countStatuses<T extends { status: string }>(items: T[]) {
   return items.reduce<Record<string, number>>((acc, item) => {
     acc[item.status] = (acc[item.status] || 0) + 1;
     return acc;
   }, {});
+}
+
+function heartbeatState(value: string | null): 'live' | 'stale' | 'none' {
+  if (!value) return 'none';
+  const at = Date.parse(value);
+  if (!Number.isFinite(at)) return 'none';
+  return Date.now() - at <= 90_000 ? 'live' : 'stale';
+}
+
+async function enrichItems<T extends {
+  id: string;
+  name: string;
+  supervisor: string;
+  status: string;
+  jobId: string | null;
+  evidence: string[];
+  lastError: string | null;
+  updatedAt: string;
+}>(items: T[]) {
+  return Promise.all(items.map(async (item) => {
+    const job = item.jobId ? await getSeniorDeveloperJob(item.jobId) : null;
+    const lastHeartbeatAt = job?.lastHeartbeatAt ?? null;
+    const heartbeat = heartbeatState(lastHeartbeatAt);
+    return {
+      ...item,
+      worker: {
+        registered: true,
+        heartbeat,
+        lastHeartbeatAt,
+        stage: job?.stage ?? null,
+        progressPercent: job?.progressPercent ?? null,
+        stageDetail: job?.stageDetail ?? null,
+        currentTask: job?.input.goal ?? null,
+        startedAt: job?.startedAt ?? null,
+        finishedAt: job?.finishedAt ?? null,
+        attempts: job?.attempts ?? 0,
+        workerStatus: job?.status ?? null,
+      },
+    };
+  }));
+}
+
+function summarizeHeartbeat(items: Array<{ worker: { heartbeat: 'live' | 'stale' | 'none'; workerStatus: string | null } }>) {
+  const live = items.filter((item) => item.worker.heartbeat === 'live').length;
+  const stale = items.filter((item) => item.worker.heartbeat === 'stale').length;
+  const activeJobs = items.filter((item) => {
+    const status = item.worker.workerStatus;
+    return status !== null && !['completed', 'failed', 'blocked', 'cancelled'].includes(status);
+  }).length;
+  return { live, stale, activeJobs };
 }
 
 export function autonomousControlPlaneOptions(): Response {
@@ -84,14 +135,32 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
     const running = (specialists.running || 0) + (divisionA.running || 0) + (divisionB.running || 0);
     const queued = (specialists.queued || 0) + (divisionA.queued || 0) + (divisionB.queued || 0);
 
+    const [specialistItems, divisionAItems, divisionBItems] = await Promise.all([
+      enrichItems(campaign.specialists),
+      enrichItems(campaign.divisionA),
+      enrichItems(campaign.divisionB),
+    ]);
+    const allLiveItems = [...specialistItems, ...divisionAItems, ...divisionBItems];
+    const liveSummary = summarizeHeartbeat(allLiveItems);
+    const lastHeartbeatAt = allLiveItems
+      .map((item) => item.worker.lastHeartbeatAt)
+      .filter((value): value is string => Boolean(value))
+      .sort()
+      .at(-1) ?? null;
+
     return ownerOnlyJson({
       ok: true,
       marker: IVX_AUTONOMOUS_CONTROL_PLANE_MARKER,
       generatedAt: new Date().toISOString(),
-      source: 'runtime_state',
+      source: 'runtime_state_plus_worker_queue',
       enterprise: {
         totalAgents: total,
         expectedAgents: 112,
+        registered: total,
+        heartbeating: liveSummary.live,
+        staleHeartbeats: liveSummary.stale,
+        activeJobs: liveSummary.activeJobs,
+        lastHeartbeatAt,
         registryShapeValid: campaign.specialists.length === 12 && campaign.divisionA.length === 50 && campaign.divisionB.length === 50,
         phase: campaign.phase,
         enabled: campaign.enabled,
@@ -110,21 +179,21 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
         total: campaign.specialists.length,
         verified: campaign.totals.verifiedSpecialists,
         statuses: specialists,
-        items: campaign.specialists,
+        items: specialistItems,
       },
       divisionA: {
         label: 'IVX Operations',
         total: campaign.divisionA.length,
         verified: campaign.totals.verifiedDivisionA,
         statuses: divisionA,
-        items: campaign.divisionA,
+        items: divisionAItems,
       },
       divisionB: {
         label: 'Factory',
         total: campaign.divisionB.length,
         verified: campaign.totals.verifiedDivisionB,
         statuses: divisionB,
-        items: campaign.divisionB,
+        items: divisionBItems,
       },
       supervisors: getSupervisorDistribution(),
       sms: {
@@ -139,7 +208,8 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
       certification: {
         liveReady: campaign.enabled && isDurableStoreConfigured() && sms.schedulerRunning,
         campaignComplete: verifiedTotal === total && total === 112,
-        proofPolicy: 'No PASS without runtime evidence. Completion requires 112/112 verified plus live deployment/health proof.',
+        liveWorkforceObserved: liveSummary.live > 0,
+        proofPolicy: 'No PASS without runtime evidence. Completion requires 112/112 verified plus live deployment/health proof. Heartbeat counts are based only on real worker lastHeartbeatAt telemetry.',
       },
     });
   } catch (error) {
