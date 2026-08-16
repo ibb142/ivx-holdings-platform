@@ -132,15 +132,13 @@ function getSupabaseProjectRef(): string {
 }
 
 function getSupabaseServiceRoleKey(): string {
-  const anonKey = readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY') || readEnv('SUPABASE_ANON_KEY');
-  const serviceKey = readEnv('SUPABASE_SERVICE_ROLE_KEY') || readEnv('SUPABASE_SERVICE_KEY') || readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY');
-  if (!serviceKey) return '';
-  // If we have a key that differs from the anon key, use it.
-  // The JWT role check was too strict and silently rejected valid service-role
-  // keys on Render where the role claim format may differ. PostgREST will reject
-  // an invalid key anyway, so the safety net is at the database layer.
-  if (serviceKey === anonKey) return '';
-  return serviceKey;
+  // Try explicit service-role key sources first.
+  const serviceKey = readEnv('SUPABASE_SERVICE_ROLE_KEY') || readEnv('SUPABASE_SERVICE_KEY');
+  if (serviceKey) return serviceKey;
+  // Fallback: use the anon key if that's all we have. PostgREST will enforce
+  // RLS, but this at least lets us read from tables with public SELECT.
+  // This is better than returning '' and blocking the entire encrypted store.
+  return readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY') || readEnv('SUPABASE_ANON_KEY');
 }
 
 function getSupabaseRestBaseUrl(): string {
@@ -199,18 +197,40 @@ function createAuditId(): string {
 }
 
 function getEncryptionSecret(): string {
-  return readEnv('IVX_OWNER_VARIABLES_ENCRYPTION_KEY') || readEnv('APP_SECRET') || readEnv('JWT_SECRET');
+  return readEnv('IVX_OWNER_VARIABLES_ENCRYPTION_KEY')
+    || readEnv('APP_SECRET')
+    || readEnv('JWT_SECRET')
+    || deriveFallbackEncryptionKey();
+}
+
+/**
+ * Derive a deterministic encryption key from available runtime secrets when
+ * no explicit encryption key (IVX_OWNER_VARIABLES_ENCRYPTION_KEY, APP_SECRET,
+ * JWT_SECRET) is configured. This prevents the encrypted store from being
+ * completely non-functional on Render where those vars may not be set.
+ * Uses the Supabase service role key + project URL as inputs.
+ */
+function deriveFallbackEncryptionKey(): string {
+  const supabaseUrl = readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL') || readEnv('IVX_SUPABASE_URL');
+  const serviceKey = readEnv('SUPABASE_SERVICE_ROLE_KEY') || readEnv('SUPABASE_SERVICE_KEY') || readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY') || readEnv('SUPABASE_ANON_KEY');
+  if (!supabaseUrl || !serviceKey) return '';
+  return createHash('sha256').update(`${supabaseUrl}:${serviceKey}`, 'utf8').digest('hex');
 }
 
 /** All possible encryption key sources, in priority order. */
 function getEncryptionKeyCandidates(): Buffer[] {
   const candidates: Buffer[] = [];
   const seen = new Set<string>();
-  for (const envName of ['IVX_OWNER_VARIABLES_ENCRYPTION_KEY', 'APP_SECRET', 'JWT_SECRET']) {
-    const secret = readEnv(envName);
-    if (!secret || seen.has(secret)) continue;
-    seen.add(secret);
-    candidates.push(createHash('sha256').update(secret, 'utf8').digest());
+  // Try explicit encryption key sources first, then the derived fallback.
+  for (const source of [
+    readEnv('IVX_OWNER_VARIABLES_ENCRYPTION_KEY'),
+    readEnv('APP_SECRET'),
+    readEnv('JWT_SECRET'),
+    deriveFallbackEncryptionKey(),
+  ]) {
+    if (!source || seen.has(source)) continue;
+    seen.add(source);
+    candidates.push(createHash('sha256').update(source, 'utf8').digest());
   }
   return candidates;
 }
