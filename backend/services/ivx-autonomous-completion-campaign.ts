@@ -352,6 +352,7 @@ export async function runCompletionCampaignCycle(maxNewJobs = 4): Promise<Comple
 export async function verifyAllEnterpriseAgents(): Promise<{
   verified: number;
   total: number;
+  specialists_verified: number;
   divisionA_verified: number;
   divisionB_verified: number;
   registryValid: boolean;
