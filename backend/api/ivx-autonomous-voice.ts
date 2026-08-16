@@ -4,10 +4,11 @@ import {
   getSignalWireVoiceStatus,
   listAutonomousVoiceCalls,
   placeAutonomousVoiceCall,
+  recordAutonomousVoiceCallback,
   verifyVoiceTrace,
 } from '../services/ivx-signalwire-voice';
 
-export const IVX_AUTONOMOUS_VOICE_API_MARKER = 'ivx-autonomous-voice-api-2026-08-13';
+export const IVX_AUTONOMOUS_VOICE_API_MARKER = 'ivx-autonomous-voice-api-2026-08-16-live-cert';
 
 function xml(body: string, status = 200): Response {
   return new Response(body, { status, headers: { 'Content-Type': 'text/xml; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -49,8 +50,65 @@ export async function handleAutonomousVoiceCallback(request: Request): Promise<R
   const traceId = url.searchParams.get('traceId') || '';
   const sig = url.searchParams.get('sig') || '';
   if (!traceId || !verifyVoiceTrace(traceId, sig)) return ownerOnlyJson({ ok: false }, 403);
-  // SignalWire callback delivery itself is evidence that the provider reached IVX.
-  // The create-call ledger stores SID/status; provider callbacks are intentionally
-  // acknowledged without echoing request fields or credentials.
-  return ownerOnlyJson({ ok: true, traceId });
+
+  let callSid = '';
+  let providerStatus = '';
+  try {
+    const contentType = request.headers.get('content-type') || '';
+    if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
+      const form = await request.formData();
+      callSid = String(form.get('CallSid') || form.get('call_sid') || '').trim();
+      providerStatus = String(form.get('CallStatus') || form.get('call_status') || form.get('Status') || '').trim();
+    } else {
+      const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+      if (body) {
+        callSid = typeof body.CallSid === 'string' ? body.CallSid.trim() : typeof body.call_sid === 'string' ? body.call_sid.trim() : '';
+        providerStatus = typeof body.CallStatus === 'string'
+          ? body.CallStatus.trim()
+          : typeof body.call_status === 'string'
+            ? body.call_status.trim()
+            : typeof body.status === 'string' ? body.status.trim() : '';
+      }
+    }
+  } catch {
+    // A valid signed callback is still provider-delivery evidence even if its
+    // optional body cannot be parsed. The callback timestamp is persisted.
+  }
+
+  const record = await recordAutonomousVoiceCallback({ traceId, callSid, providerStatus }).catch(() => null);
+  return ownerOnlyJson({ ok: true, traceId, recorded: Boolean(record) });
+}
+
+export async function handleAutonomousVoicePublicCertificate(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const traceId = (url.searchParams.get('traceId') || '').trim();
+  if (!traceId || traceId.length > 160) {
+    return ownerOnlyJson({ ok: false, certified: false, error: 'valid traceId required', secretValuesReturned: false }, 400);
+  }
+
+  const calls = await listAutonomousVoiceCalls(200).catch(() => []);
+  const call = calls.find((row) => row.traceId === traceId) || null;
+  const callSidPresent = Boolean(call?.callSid);
+  const callbackReceived = Boolean(call?.callbackAt);
+  const providerStatus = (call?.providerStatus || '').toLowerCase();
+  const terminalFailure = /failed|busy|no-answer|canceled|cancelled/.test(providerStatus);
+  const certified = Boolean(call && call.requestStatus === 'queued' && callSidPresent && callbackReceived && !terminalFailure);
+  const commit = (process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT_SHA || process.env.SOURCE_VERSION || '').trim() || null;
+
+  return ownerOnlyJson({
+    ok: Boolean(call),
+    certified,
+    marker: IVX_AUTONOMOUS_VOICE_API_MARKER,
+    commit,
+    traceId,
+    requestStatus: call?.requestStatus || null,
+    providerStatus: call?.providerStatus || null,
+    callSidPresent,
+    callSid: call?.callSid || null,
+    callbackReceived,
+    callbackAt: call?.callbackAt || null,
+    toMasked: call?.toMasked || null,
+    createdAt: call?.createdAt || null,
+    secretValuesReturned: false,
+  }, call ? 200 : 404);
 }
