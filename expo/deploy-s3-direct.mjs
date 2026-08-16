@@ -12,7 +12,7 @@
  *
  * If env vars are not set, falls back to legacy credentials with a warning.
  */
-import { S3Client, PutObjectCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, HeadBucketCommand, PutBucketWebsiteCommand } from '@aws-sdk/client-s3';
 import {
   CloudFrontClient,
   CreateInvalidationCommand,
@@ -279,6 +279,8 @@ async function deploy() {
     { path: ASSETS_DIR + '/ivx-symbol.png', key: 'ivx-symbol.png', type: 'image/png' },
     { path: ASSETS_DIR + '/ivx-og-image.png', key: 'ivx-og-image.png', type: 'image/png' },
     { path: ASSETS_DIR + '/favicon.png', key: 'favicon.png', type: 'image/png' },
+    // Favicon .ico — served from LANDING_DIR, must be image/x-icon not SPA fallback HTML
+    { path: LANDING_DIR + '/favicon.ico', key: 'favicon.ico', type: 'image/x-icon' },
     // Favicon variants referenced in index.html
     { path: ASSETS_DIR + '/favicon-16.png', key: 'favicon-16.png', type: 'image/png' },
     { path: ASSETS_DIR + '/favicon-32.png', key: 'favicon-32.png', type: 'image/png' },
@@ -490,6 +492,34 @@ async function deploy() {
       console.warn('  Could not attach policy to distribution:', e?.message || 'Unknown');
       if (e?.$metadata) console.warn('   HTTP:', e.$metadata.httpStatusCode, '| Request ID:', e.$metadata.requestId || 'N/A');
     }
+  }
+
+  // ── www.ivxholding.com S3 bucket redirect to apex ──
+  console.log('');
+  console.log('Configuring www bucket redirect...');
+  try {
+    const wwwBucket = 'www.ivxholding.com';
+    try {
+      await s3.send(new HeadBucketCommand({ Bucket: wwwBucket }));
+    } catch {
+      console.log('  www bucket does not exist — skipping redirect setup');
+      console.log('  OWNER: Create www.ivxholding.com S3 bucket with website redirect to ivxholding.com');
+    }
+    if (true) {
+      await s3.send(new PutBucketWebsiteCommand({
+        Bucket: wwwBucket,
+        WebsiteConfiguration: {
+          RedirectAllRequestsTo: {
+            HostName: 'ivxholding.com',
+            Protocol: 'https',
+          },
+        },
+      }));
+      console.log('✅ www.ivxholding.com → ivxholding.com redirect configured');
+    }
+  } catch (e) {
+    console.error('❌ www redirect setup FAILED:', e?.name || 'Unknown', e?.message || 'Unknown error');
+    if (e?.$metadata) console.error('   HTTP:', e.$metadata.httpStatusCode, '| Request ID:', e.$metadata.requestId || 'N/A');
   }
 
   // ── CloudFront invalidation ────────────────────────
