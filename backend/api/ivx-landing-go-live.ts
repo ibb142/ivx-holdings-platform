@@ -384,6 +384,10 @@ export async function handleLandingEnvDiagnostic(): Promise<Response> {
   const nodeEnv = readEnv('NODE_ENV');
   const storageFlag = readEnv('IVX_OWNER_VARIABLES_STORAGE');
   const encryptionSecret = readEnv('IVX_OWNER_VARIABLES_ENCRYPTION_KEY') || readEnv('APP_SECRET') || readEnv('JWT_SECRET');
+  // Check if the derived fallback key is available (used when no explicit secret exists)
+  const supabaseUrlForFallback = readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL') || readEnv('IVX_SUPABASE_URL');
+  const serviceKeyForFallback = readEnv('SUPABASE_SERVICE_ROLE_KEY') || readEnv('SUPABASE_SERVICE_KEY') || readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY') || readEnv('SUPABASE_ANON_KEY');
+  const hasDerivedFallbackKey = !!(supabaseUrlForFallback && serviceKeyForFallback);
 
   const supabaseRestStoreDiagnostic = {
     nodeEnv,
@@ -394,10 +398,13 @@ export async function handleLandingEnvDiagnostic(): Promise<Response> {
     supabaseServiceKeyLength: supabaseServiceKey ? supabaseServiceKey.length : 0,
     supabaseServiceKeyIsAnonKey: supabaseServiceKey === supabaseAnonKey,
     supabaseAnonKeyPresent: !!supabaseAnonKey,
-    encryptionSecretPresent: !!encryptionSecret,
-    encryptionSecretSource: readEnv('IVX_OWNER_VARIABLES_ENCRYPTION_KEY') ? 'IVX_OWNER_VARIABLES_ENCRYPTION_KEY' : readEnv('APP_SECRET') ? 'APP_SECRET' : readEnv('JWT_SECRET') ? 'JWT_SECRET' : 'none',
+    encryptionSecretPresent: !!encryptionSecret || hasDerivedFallbackKey,
+    encryptionSecretSource: readEnv('IVX_OWNER_VARIABLES_ENCRYPTION_KEY') ? 'IVX_OWNER_VARIABLES_ENCRYPTION_KEY' : readEnv('APP_SECRET') ? 'APP_SECRET' : readEnv('JWT_SECRET') ? 'JWT_SECRET' : hasDerivedFallbackKey ? 'derived_fallback' : 'none',
     databaseUrlPresent: !!(readEnv('IVX_OWNER_VARIABLES_DATABASE_URL') || readEnv('SUPABASE_DB_URL') || readEnv('DATABASE_URL') || readEnv('POSTGRES_URL')),
-    canUseSupabaseRestStore: !!(supabaseRestBaseUrl && supabaseServiceKey && supabaseServiceKey !== supabaseAnonKey),
+    // Match the actual canUseSupabaseRestStore() function — it does NOT check
+    // whether serviceKey !== anonKey. The store is usable with the anon key
+    // (PostgREST enforces RLS for security).
+    canUseSupabaseRestStore: !!(supabaseRestBaseUrl && supabaseServiceKey),
   };
 
   return json({
