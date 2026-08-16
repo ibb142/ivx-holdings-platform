@@ -38,7 +38,10 @@ const config: ExpoConfig = {
   scheme: 'ivx-app',
   userInterfaceStyle: 'dark',
   backgroundColor: '#000000',
-  newArchEnabled: false,
+  // react-native-maps 1.26.1+ targets Fabric with React Native >=0.81.1.
+  // This project uses RN 0.81.5 / react-native-maps 1.29, so compiling the
+  // generated RNMaps*.mm components under the legacy architecture is invalid.
+  newArchEnabled: true,
   updates: {
     enabled: false,
     checkAutomatically: 'NEVER',
