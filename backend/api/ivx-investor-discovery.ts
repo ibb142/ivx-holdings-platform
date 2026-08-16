@@ -10,7 +10,7 @@
  *
  * Owner-only. No personal mobile numbers, no scraped private data.
  */
-import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
+import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions, checkSecurityBoundary } from './owner-only';
 import {
   discoverInvestors,
   type InvestorDiscoveryClass,
@@ -73,6 +73,7 @@ function buildOptions(source: Record<string, unknown>): InvestorDiscoveryOptions
 }
 
 export async function handleInvestorDiscoveryGetRequest(request: Request): Promise<Response> {
+  await checkSecurityBoundary(request);
   const denied = await requireOwner(request);
   if (denied) return denied;
   const url = new URL(request.url);
