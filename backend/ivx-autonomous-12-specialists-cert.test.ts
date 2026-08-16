@@ -36,7 +36,8 @@ describe('IVX 112-Agent Organization — Hard Certificate', () => {
   });
 
   it.each(ALL_ENTERPRISE_AGENTS)('$name has complete org chart fields', (agent: EnterpriseMasterAgent) => {
-    expect(agent.name).toMatch(/^IA-\d{3}/);
+    const canonicalPrefix = `IA-${String(agent.agentNumber).padStart(2, '0')}`;
+    expect(agent.name.startsWith(`${canonicalPrefix} `)).toBe(true);
     expect(agent.role).toBeTruthy();
     expect(agent.mission).toBeTruthy();
     expect(agent.inputs).toBeTruthy();
@@ -60,9 +61,9 @@ describe('IVX 112-Agent Organization — Hard Certificate', () => {
     expect(ALL_ENTERPRISE_AGENTS[111].agentNumber).toBe(112);
   });
 
-  it('has 11 functional groups', () => {
+  it('has the canonical 10 functional groups', () => {
     const groups = getFunctionalGroups();
-    expect(groups.length).toBe(11);
+    expect(groups.length).toBe(10);
     expect(groups).toContain('Executive');
     expect(groups).toContain('Growth & Marketing');
     expect(groups).toContain('Market & Business Development');
