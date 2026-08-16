@@ -728,6 +728,20 @@ import {
   handleBlockerFixVerifyTables,
 } from './api/ivx-blocker-fix-migration';
 import { handleIVXOwnerAuditOptions, handleIVXOwnerAuditRecentConversationsRequest } from './api/ivx-owner-audit';
+import {
+  analyticsBrainOptions,
+  handleAnalyticsEventIngest,
+  handleAnalyticsBatchIngest,
+  handleAnalyticsMemberAnalyze,
+  handleAnalyticsMemberGet,
+  handleAnalyticsScamAnalyze,
+  handleAnalyticsScamList,
+  handleAnalyticsRetention,
+  handleAnalyticsDashboard,
+  handleAnalyticsMembersList,
+  handleAnalyticsPathways,
+  handleAnalyticsRuns,
+} from './api/ivx-analytics-brain';
 import { OPTIONS as variablesToolOptions, handleIVXVariablesToolSaveRequest, handleIVXVariablesToolStatusRequest } from './api/ivx-variables-tool';
 import { OPTIONS as ownerVariablesOptions, getIVXOwnerVariableRuntimeValue, hasIVXOwnerVariableRuntimeValue, handleIVXOwnerVariablesDeleteRequest, handleIVXOwnerVariablesDeploymentStatusRequest, handleIVXOwnerVariablesSaveRequest, handleIVXOwnerVariablesSelfSyncRequest, handleIVXOwnerVariablesStatusRequest, handleIVXOwnerVariablesSyncFromProjectStoreRequest, handleIVXOwnerVariablesTestRequest } from './api/ivx-owner-variables';
 import {
@@ -6962,5 +6976,36 @@ app.put('/api/ivx/pilot/markets/:marketId', (c) => handlePilotMarketsUpdate(c.re
 
 // Point 9: Security status
 app.get('/api/ivx/security/status', () => handleSecurityStatus());
+
+// ============================================================================
+// IVX Analytics Brain — Per-member behavioral intelligence, retention,
+// conversion pathways, JV deal & tokenized asset scam detection
+// ============================================================================
+app.options('/api/ivx/analytics/*', analyticsBrainOptions);
+
+// Event ingestion (from app/website)
+app.post('/api/ivx/analytics/events', (c) => handleAnalyticsEventIngest(c.req.raw));
+app.post('/api/ivx/analytics/events/batch', (c) => handleAnalyticsBatchIngest(c.req.raw));
+
+// Member analysis
+app.get('/api/ivx/analytics/members', (c) => handleAnalyticsMembersList(c.req.raw));
+app.get('/api/ivx/analytics/members/analyze', (c) => handleAnalyticsMemberAnalyze(c.req.raw));
+app.get('/api/ivx/analytics/members/profile', (c) => handleAnalyticsMemberGet(c.req.raw));
+
+// Scam detection
+app.post('/api/ivx/analytics/scam/analyze', (c) => handleAnalyticsScamAnalyze(c.req.raw));
+app.get('/api/ivx/analytics/scam/list', (c) => handleAnalyticsScamList(c.req.raw));
+
+// Retention cohorts
+app.get('/api/ivx/analytics/retention', (c) => handleAnalyticsRetention(c.req.raw));
+
+// Conversion pathways
+app.get('/api/ivx/analytics/pathways', (c) => handleAnalyticsPathways(c.req.raw));
+
+// Brain analysis runs (audit trail)
+app.get('/api/ivx/analytics/runs', (c) => handleAnalyticsRuns(c.req.raw));
+
+// Brain dashboard (aggregated overview)
+app.get('/api/ivx/analytics/dashboard', (c) => handleAnalyticsDashboard(c.req.raw));
 
 export default app;// CI trigger comment
