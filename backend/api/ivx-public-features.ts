@@ -136,10 +136,9 @@ export async function handleJVDealsList(req: Request): Promise<Response> {
     const sb = await getSB();
     // Race against a timeout to prevent Supabase 522 from hanging the request
     const queryPromise = sb.from('jv_deals')
-      .select('id,title,slug,description,location,property_type,target_raise,minimum_investment,projected_roi,term_length,status,published,display_order,featured_image_url,gallery_urls,updated_at')
+      .select('id,title,project_name,description,property_address,city,state,property_type,total_investment,expected_roi,term_months,status,published,photos,created_at,updated_at')
       .eq('published', true)
-      .order('display_order', { ascending: true, nullsFirst: false })
-      .order('updated_at', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(50);
     const timeoutPromise = new Promise<{ data: null; error: { message: string }; count: null }>((resolve) =>
       setTimeout(() => resolve({ data: null, error: { message: 'Supabase request timed out' }, count: null }), 8000)

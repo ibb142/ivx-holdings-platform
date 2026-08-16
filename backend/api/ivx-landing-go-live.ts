@@ -40,19 +40,18 @@ async function getSB() {
 const SEED_DEAL = {
   id: 'ivx-deal-casa-rosario-2026',
   title: 'Casa Rosario — Mixed-Use Development',
-  slug: 'casa-rosario-mixed-use-development',
+  project_name: 'Casa Rosario',
   description: 'Prime mixed-use development opportunity in a high-growth corridor. Features residential units, ground-floor retail, and structured parking. Projected strong cash-on-cash return with appreciation upside.',
-  location: 'San Antonio, TX',
+  property_address: '123 Commerce St',
+  city: 'San Antonio',
+  state: 'TX',
   property_type: 'Mixed-Use',
-  target_raise: 2500000,
-  minimum_investment: 50,
-  projected_roi: 25,
-  term_length: '36 months',
+  total_investment: 2500000,
+  expected_roi: 25,
+  term_months: 36,
   status: 'open',
   published: true,
-  display_order: 1,
-  featured_image_url: '',
-  gallery_urls: [] as string[],
+  photos: [] as string[],
 };
 
 export async function handleLandingGoLive(request: Request): Promise<Response> {
