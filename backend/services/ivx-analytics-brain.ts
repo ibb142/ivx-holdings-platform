@@ -107,6 +107,16 @@ export interface ScamAnalysisInput {
     minimum_investment?: string;
     tokenization_platform?: string;
     contract_address?: string;
+    contact_info?: string;
+    regulatory_status?: string;
+    pressure_tactics?: string;
+    testimonials?: string;
+    bankruptcy_history?: string;
+    litigation_history?: string;
+    fees?: string;
+    contract_clauses?: string;
+    valuation?: string;
+    escrow?: string;
   };
 }
 
