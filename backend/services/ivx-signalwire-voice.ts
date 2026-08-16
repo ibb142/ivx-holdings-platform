@@ -1,9 +1,14 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { resolveOwnerRecoveryPhone } from './ivx-sns-sms';
+import { normalizePhoneToE164, resolveOwnerRecoveryPhone } from './ivx-sns-sms';
 import { readDurableJson, writeDurableJson } from './ivx-durable-store';
+import {
+  extractIVXSupabaseServiceRoleKey,
+  getIVXOwnerEmailAllowlist,
+  resolveIVXSupabaseUrl,
+} from '../../expo/shared/ivx/access-control';
 
-export const IVX_SIGNALWIRE_VOICE_MARKER = 'ivx-signalwire-voice-2026-08-16-live-cert';
+export const IVX_SIGNALWIRE_VOICE_MARKER = 'ivx-signalwire-voice-2026-08-16-live-cert-v2';
 
 const CALL_LEDGER_PATH = path.join(process.cwd(), 'logs', 'audit', 'autonomous-voice', 'calls.json');
 const API_BASE = (process.env.IVX_PUBLIC_API_BASE_URL || process.env.IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
@@ -40,7 +45,7 @@ export function getSignalWireVoiceConfig(): SignalWireConfig | null {
   const projectId = trim(process.env.SIGNALWIRE_PROJECT_ID || process.env.SIGNALWIRE_PROJECT_KEY);
   const apiToken = trim(process.env.SIGNALWIRE_API_TOKEN || process.env.SIGNALWIRE_TOKEN);
   const spaceUrl = normalizeSpaceUrl(trim(process.env.SIGNALWIRE_SPACE_URL || process.env.SIGNALWIRE_SPACE));
-  const fromNumber = trim(process.env.SIGNALWIRE_FROM_NUMBER) || null;
+  const fromNumber = normalizePhoneToE164(trim(process.env.SIGNALWIRE_FROM_NUMBER)) || null;
   if (!projectId || !apiToken || !spaceUrl) return null;
   return { projectId, apiToken, spaceUrl, fromNumber };
 }
@@ -61,6 +66,60 @@ export function getSignalWireVoiceStatus(): {
     fromNumberConfigured: Boolean(trim(process.env.SIGNALWIRE_FROM_NUMBER)),
     ownerPhoneConfigured: Boolean(resolveOwnerRecoveryPhone()),
   };
+}
+
+function resolveServiceRoleKey(): string {
+  return extractIVXSupabaseServiceRoleKey(process.env.SUPABASE_SERVICE_ROLE_KEY)
+    || extractIVXSupabaseServiceRoleKey(process.env.SUPABASE_SERVICE_KEY)
+    || '';
+}
+
+/**
+ * Resolve an owner phone without hard-coding personal data in source.
+ * Priority: explicit call target -> protected runtime env -> allowlisted owner profile.
+ * The database lookup uses the backend service-role key and only accepts a profile
+ * whose email is already in the canonical IVX owner allowlist.
+ */
+async function resolveAutonomousOwnerPhone(explicit?: string | null): Promise<string> {
+  const direct = normalizePhoneToE164(trim(explicit));
+  if (direct) return direct;
+
+  const envPhone = normalizePhoneToE164(resolveOwnerRecoveryPhone());
+  if (envPhone) return envPhone;
+
+  const serviceRole = resolveServiceRoleKey();
+  const ownerEmails = getIVXOwnerEmailAllowlist();
+  if (!serviceRole || ownerEmails.length === 0) return '';
+
+  const supabaseUrl = resolveIVXSupabaseUrl().replace(/\/+$/, '');
+  for (const ownerEmail of ownerEmails) {
+    try {
+      const query = new URLSearchParams({
+        select: 'email,phone,role',
+        email: `eq.${ownerEmail}`,
+        limit: '1',
+      });
+      const response = await fetch(`${supabaseUrl}/rest/v1/profiles?${query.toString()}`, {
+        headers: {
+          apikey: serviceRole,
+          Authorization: `Bearer ${serviceRole}`,
+          Accept: 'application/json',
+        },
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!response.ok) continue;
+      const rows = await response.json().catch(() => []) as Array<Record<string, unknown>>;
+      const row = Array.isArray(rows) ? rows[0] : null;
+      if (!row) continue;
+      const email = trim(row.email).toLowerCase();
+      const role = trim(row.role).toLowerCase();
+      const phone = normalizePhoneToE164(trim(row.phone));
+      if (email === ownerEmail && role === 'owner' && phone) return phone;
+    } catch {
+      // Continue to the next allowlisted owner; caller will persist a clear failure if none resolve.
+    }
+  }
+  return '';
 }
 
 function basicAuth(config: SignalWireConfig): string {
@@ -87,7 +146,7 @@ async function discoverVoiceFromNumber(config: SignalWireConfig): Promise<string
     const record = item as Record<string, unknown>;
     const capabilities = record.capabilities && typeof record.capabilities === 'object' ? record.capabilities as Record<string, unknown> : null;
     const voiceAllowed = capabilities ? capabilities.voice !== false : true;
-    const phone = trim(record.phone_number);
+    const phone = normalizePhoneToE164(trim(record.phone_number));
     if (voiceAllowed && phone) return phone;
   }
   return null;
@@ -110,12 +169,7 @@ export function verifyVoiceTrace(traceId: string, signature: string): boolean {
 }
 
 function xmlEscape(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }
 
 export function buildAutonomousVoiceLaml(message: string): string {
@@ -134,11 +188,7 @@ export async function listAutonomousVoiceCalls(limit = 50): Promise<AutonomousVo
   return (Array.isArray(rows) ? rows : []).slice(0, Math.max(1, Math.min(200, limit)));
 }
 
-export async function recordAutonomousVoiceCallback(input: {
-  traceId: string;
-  providerStatus?: string | null;
-  callSid?: string | null;
-}): Promise<AutonomousVoiceCallRecord | null> {
+export async function recordAutonomousVoiceCallback(input: { traceId: string; providerStatus?: string | null; callSid?: string | null }): Promise<AutonomousVoiceCallRecord | null> {
   const rows = await readDurableJson<AutonomousVoiceCallRecord[]>(CALL_LEDGER_PATH, []);
   if (!Array.isArray(rows)) return null;
   const index = rows.findIndex((row) => row.traceId === input.traceId);
@@ -155,13 +205,9 @@ export async function recordAutonomousVoiceCallback(input: {
   return updated;
 }
 
-export async function placeAutonomousVoiceCall(input: {
-  traceId: string;
-  message: string;
-  to?: string | null;
-}): Promise<AutonomousVoiceCallRecord> {
+export async function placeAutonomousVoiceCall(input: { traceId: string; message: string; to?: string | null }): Promise<AutonomousVoiceCallRecord> {
   const config = getSignalWireVoiceConfig();
-  const to = trim(input.to) || resolveOwnerRecoveryPhone() || '';
+  const to = await resolveAutonomousOwnerPhone(input.to);
   const createdAt = new Date().toISOString();
   const id = `voice-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 
@@ -183,7 +229,7 @@ export async function placeAutonomousVoiceCall(input: {
   };
 
   if (!config) return fail('SignalWire voice credentials are not bound to runtime variables.');
-  if (!to) return fail('Owner recovery phone is not configured.');
+  if (!to) return fail('Owner phone could not be resolved from explicit target, protected runtime config, or allowlisted owner profile.');
 
   const from = await discoverVoiceFromNumber(config).catch(() => null);
   if (!from) return fail('No SignalWire voice-capable From number could be resolved.');
@@ -203,11 +249,7 @@ export async function placeAutonomousVoiceCall(input: {
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        Authorization: basicAuth(config),
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Accept: 'application/json',
-      },
+      headers: { Authorization: basicAuth(config), 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
       body: form.toString(),
       signal: AbortSignal.timeout(15_000),
     });
