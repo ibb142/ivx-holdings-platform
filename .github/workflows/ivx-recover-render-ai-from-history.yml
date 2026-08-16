@@ -16,22 +16,22 @@ env:
 
 jobs:
   recover-bind-and-certify:
-    environment: 'Production – ibb142-rork-global-real-estate-invest'
+    environment: production
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
-      LEGACY_IVX_AI_GATEWAY_KEY: ${{ secrets.IVX_AI_GATEWAY_KEY }}
-      LEGACY_AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+      PROTECTED_IVX_AI_GATEWAY_KEY: ${{ secrets.IVX_AI_GATEWAY_KEY }}
+      PROTECTED_AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Validate existing protected AI gateway secret
+      - name: Validate protected AI gateway secret and production chat model
         shell: bash
         run: |
           set -euo pipefail
-          key="${LEGACY_IVX_AI_GATEWAY_KEY:-${LEGACY_AI_GATEWAY_API_KEY:-}}"
+          key="${PROTECTED_IVX_AI_GATEWAY_KEY:-${PROTECTED_AI_GATEWAY_API_KEY:-}}"
           test -n "$key"
           echo "::add-mask::$key"
           code=$(curl -sS -o /tmp/provider.json -w '%{http_code}' \
@@ -40,9 +40,9 @@ jobs:
             -H 'Content-Type: application/json' \
             --data '{"model":"openai/gpt-4o-mini","messages":[{"role":"user","content":"Return only 42"}],"max_tokens":16}' || true)
           test "$code" = "200"
-          echo 'existing_protected_ai_gateway_key=PASS'
+          echo 'protected_ai_gateway_key_and_model=PASS'
 
-      - name: Bind existing protected AI gateway secret into active Render service
+      - name: Bind protected AI gateway secret and verified chat model into Render
         shell: bash
         run: |
           set -euo pipefail
@@ -50,7 +50,7 @@ jobs:
           import { execFileSync } from 'node:child_process';
 
           const serviceId = process.env.RENDER_SERVICE_ID;
-          const aiKey = String(process.env.LEGACY_IVX_AI_GATEWAY_KEY || process.env.LEGACY_AI_GATEWAY_API_KEY || '').trim();
+          const aiKey = String(process.env.PROTECTED_IVX_AI_GATEWAY_KEY || process.env.PROTECTED_AI_GATEWAY_API_KEY || '').trim();
           if (!aiKey) throw new Error('protected_ai_gateway_secret_missing');
           console.log(`::add-mask::${aiKey}`);
 
@@ -77,13 +77,14 @@ jobs:
           }
           env.set('IVX_AI_GATEWAY_KEY', aiKey);
           env.set('AI_GATEWAY_API_KEY', aiKey);
+          env.set('PUBLIC_CHAT_MODEL', 'gpt-4o-mini');
 
           const put = await rf(`/services/${serviceId}/env-vars`, {
             method:'PUT',
             body:JSON.stringify(Array.from(env,([key,value])=>({key,value}))),
           });
           if (!put.ok) throw new Error(`render_env_put_http_${put.status}`);
-          console.log('render_ai_binding=PASS');
+          console.log('render_ai_binding_and_chat_model=PASS');
 
           const deploy = await rf(`/services/${serviceId}/deploys`, {
             method:'POST', body:JSON.stringify({ clearCache:'do_not_clear' }),
@@ -132,4 +133,5 @@ jobs:
           jq '.' /tmp/chat.json
           test -n "$(jq -r '.answer // .text // empty' /tmp/chat.json)"
           test "$(jq -r '.source // empty' /tmp/chat.json)" = "chatgpt"
+          test "$(jq -r '.model // empty' /tmp/chat.json)" != "ivx-local-fallback"
           echo 'live_ai_and_public_chat=PASS'
