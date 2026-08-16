@@ -1,0 +1,44 @@
+name: IVX Brain Wiring QA Repair
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: contains(github.event.head_commit.message, '[brain-escalate-v2]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Repair Bun-based QA install
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('.github/workflows/ivx-wire-live-agent-brains.yml')
+          s = p.read_text()
+          old = "          npm ci --ignore-scripts\n          npx tsc --noEmit --pretty false || { echo 'Repository typecheck failed; refusing brain wiring commit.'; exit 1; }"
+          new = "          curl -fsSL https://bun.sh/install | bash\n          export BUN_INSTALL=\"$HOME/.bun\"\n          export PATH=\"$BUN_INSTALL/bin:$PATH\"\n          bun install --frozen-lockfile\n          bunx tsc --noEmit --pretty false || { echo 'Repository typecheck failed; refusing brain wiring commit.'; exit 1; }"
+          if old not in s:
+              raise SystemExit('Expected npm QA block not found; refusing blind edit')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          grep -q "bun install --frozen-lockfile" .github/workflows/ivx-wire-live-agent-brains.yml
+
+      - name: Commit repair and retrigger brain wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "IVX Autonomous"
+          git config user.email "actions@users.noreply.github.com"
+          git add .github/workflows/ivx-wire-live-agent-brains.yml
+          git commit -m "[brain-escalate] fix Bun QA gate for live IA brain wiring"
+          git push origin HEAD:main
