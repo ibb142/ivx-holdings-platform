@@ -85,7 +85,7 @@ jobs:
           headers=$(curl -sSI --max-time 20 https://www.ivxholding.com/ || true)
           printf '%s\n' "$headers"
           status=$(printf '%s\n' "$headers" | head -n 1 | awk '{print $2}')
-          location=$(printf '%s\n' "$headers" | awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/\r$/,""); print $2; exit}')
+          location=$(printf '%s\n' "$headers" | grep -i '^location:' | head -n 1 | sed -E 's/^[Ll]ocation:[[:space:]]*//; s/\r$//' || true)
           case "$status" in
             301|302|307|308) ;;
             *) echo "::error::www.ivxholding.com did not return an HTTP redirect (status=${status:-missing})."; exit 1 ;;
