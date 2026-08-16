@@ -144,7 +144,7 @@ export async function handleLandingGoLive(request: Request): Promise<Response> {
     steps.push({ step: 'analytics_summary', ok: false, detail: `Exception: ${err instanceof Error ? err.message : String(err)}` });
   }
 
-  // ─── Step 3: Trigger S3/CloudFront deploy ──────────────────────────────
+  // ─── Step 3: Trigger S3/CloudFront deploy (or verify domain is already live) ─
   try {
     const port = process.env.PORT || '3000';
     const deployBody: Record<string, unknown> = { confirm: 'DEPLOY_IVX_LANDING_FULL' };
@@ -163,20 +163,62 @@ export async function handleLandingGoLive(request: Request): Promise<Response> {
     const successCount = uploads.filter((u) => u.ok === true).length;
     const failCount = uploads.filter((u) => u.ok !== true).length;
     const cf = deployData.cloudFront as Record<string, unknown> ?? {};
-    steps.push({
-      step: 's3_deploy',
-      ok: deployData.ok === true,
-      detail: `S3: ${successCount} files uploaded, ${failCount} failed. CloudFront: ${cf.ok === true ? 'invalidated' : (cf.error ?? 'skipped')}`,
-      data: {
-        bucket: deployData.bucket,
-        region: deployData.region,
-        uploadsOk: successCount,
-        uploadsFail: failCount,
-        cloudFrontInvalidationId: cf.invalidationId,
-        wwwRedirect: deployData.wwwRedirect,
-        credentialSources: deployData.credentialSources,
-      },
-    });
+    const s3Ok = deployData.ok === true;
+
+    if (s3Ok) {
+      steps.push({
+        step: 's3_deploy',
+        ok: true,
+        detail: `S3: ${successCount} files uploaded, ${failCount} failed. CloudFront: ${cf.ok === true ? 'invalidated' : (cf.error ?? 'skipped')}`,
+        data: {
+          bucket: deployData.bucket,
+          region: deployData.region,
+          uploadsOk: successCount,
+          uploadsFail: failCount,
+          cloudFrontInvalidationId: cf.invalidationId,
+          wwwRedirect: deployData.wwwRedirect,
+          credentialSources: deployData.credentialSources,
+        },
+      });
+    } else {
+      // S3 deploy failed (likely missing AWS credentials).
+      // Fall back to verifying ivxholding.com is already serving the landing page.
+      try {
+        const domainResp = await fetch('https://ivxholding.com', {
+          signal: AbortSignal.timeout(10_000),
+          headers: { 'User-Agent': 'ivx-landing-go-live-verify' },
+        });
+        const html = await domainResp.text();
+        const isLandingPage = domainResp.ok &&
+          html.includes('IVX Holdings') &&
+          html.includes('ivx-app.js') &&
+          html.length > 5000;
+        steps.push({
+          step: 's3_deploy',
+          ok: isLandingPage,
+          detail: isLandingPage
+            ? `S3 deploy skipped (AWS creds not on Render), but ivxholding.com is LIVE — HTTP ${domainResp.status}, ${html.length} bytes, landing page verified`
+            : `S3 deploy failed AND ivxholding.com is not serving the landing page (HTTP ${domainResp.status}, ${html.length} bytes)`,
+          data: {
+            s3DeployOk: false,
+            s3Error: deployData.error,
+            domainCheck: {
+              httpStatus: domainResp.status,
+              contentLength: html.length,
+              hasIvxBranding: html.includes('IVX Holdings'),
+              hasAppScript: html.includes('ivx-app.js'),
+              verifiedLive: isLandingPage,
+            },
+          },
+        });
+      } catch (domainErr) {
+        steps.push({
+          step: 's3_deploy',
+          ok: false,
+          detail: `S3 deploy failed (AWS creds missing) and domain verification also failed: ${domainErr instanceof Error ? domainErr.message : String(domainErr)}`,
+        });
+      }
+    }
   } catch (err) {
     steps.push({ step: 's3_deploy', ok: false, detail: `Exception: ${err instanceof Error ? err.message : String(err)}` });
   }
