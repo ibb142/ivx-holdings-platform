@@ -148,6 +148,17 @@ export async function handleRoleAgentRun(request: Request): Promise<Response> {
 }
 
 /** POST — run one cycle for every role agent. */
+/** POST — ensure runtime readiness for IVX Tokenization QA Engineer. */
+export async function handleRoleAgentTokenizationQAVerification(request: Request): Promise<Response> {
+  try {
+    await assertIVXOwnerOnly(request);
+    const state = await getRoleAgentsState();
+    const roleContract = 'IVX Tokenization QA Engineer';
+    const roleReady = state.roles.includes(roleContract);
+    return ownerOnlyJson({ ok: roleReady, roleContract, marker: ROLE_AGENTS_MARKER, timestamp: new Date().toISOString() });
+  } catch (error) { return errorResponse(error); }
+}
+
 export async function handleRoleAgentRunAll(request: Request): Promise<Response> {
   try {
     await assertIVXOwnerOnly(request);
