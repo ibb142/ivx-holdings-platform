@@ -336,9 +336,8 @@ export async function handleLandingEnvDiagnostic(): Promise<Response> {
   };
 
   // Audit Owner Variables encrypted store for AWS-related vars
+  // Typed Owner Variables only; raw aliases are audited separately below.
   const ownerVarAuditNames = [
-    'AWS_ACCESS_KEY_ID',
-    'AWS_SECRET_ACCESS_KEY',
     'AWS_REGION',
     'S3_BUCKET_NAME',
     'CLOUDFRONT_DISTRIBUTION_ID',

@@ -48,6 +48,7 @@ interface FullDeployResult {
   };
   wwwRedirect: WwwRedirectResult;
   missingEnv: string[];
+  credentialSources?: Record<string, string>;
   timestamp: string;
   durationMs: number;
 }
