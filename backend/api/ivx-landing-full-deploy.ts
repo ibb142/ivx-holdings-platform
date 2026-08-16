@@ -52,9 +52,95 @@ interface FullDeployResult {
   durationMs: number;
 }
 
+interface AwsCredentials {
+  accessKeyId: string;
+  secretAccessKey: string;
+  region?: string;
+  bucket?: string;
+  cloudFrontDistributionId?: string;
+}
+
 function readEnv(name: string): string {
   const v = process.env[name];
   return typeof v === 'string' ? v.trim() : '';
+}
+
+/** Resolve AWS credentials from process.env, Owner Variables table, or request body. */
+async function resolveAwsCredentials(credsFromRequest?: AwsCredentials): Promise<{
+  accessKey: string;
+  secretKey: string;
+  region: string;
+  bucket: string;
+  cloudFrontDistributionId: string;
+  sources: Record<string, string>;
+}> {
+  const sources: Record<string, string> = {};
+
+  // 1. Request body (highest priority for one-time injection)
+  let accessKey = credsFromRequest?.accessKeyId || '';
+  let secretKey = credsFromRequest?.secretAccessKey || '';
+  let region = credsFromRequest?.region || '';
+  let bucket = credsFromRequest?.bucket || '';
+  let cloudFrontDistributionId = credsFromRequest?.cloudFrontDistributionId || '';
+
+  if (accessKey) sources.accessKey = 'request_body';
+  if (secretKey) sources.secretKey = 'request_body';
+
+  // 2. process.env
+  if (!accessKey) { accessKey = readEnv('AWS_ACCESS_KEY_ID') || readEnv('IVX_AWS_ACCESS_KEY_ID'); if (accessKey) sources.accessKey = 'process_env'; }
+  if (!secretKey) { secretKey = readEnv('AWS_SECRET_ACCESS_KEY') || readEnv('IVX_AWS_SECRET_ACCESS_KEY'); if (secretKey) sources.secretKey = 'process_env'; }
+  if (!region) { region = readEnv('AWS_REGION') || 'us-east-1'; }
+  if (!bucket) { bucket = readEnv('S3_BUCKET_NAME') || 'ivxholding.com'; }
+  if (!cloudFrontDistributionId) { cloudFrontDistributionId = readEnv('CLOUDFRONT_DISTRIBUTION_ID'); }
+
+  // 3. Owner Variables table (encrypted)
+  if (!accessKey) {
+    accessKey = await getRawOwnerVariableValue('AWS_ACCESS_KEY_ID');
+    if (!accessKey) accessKey = await getIVXOwnerVariableRuntimeValue('IVX_AWS_READONLY_ACCESS_KEY_ID');
+    if (accessKey) sources.accessKey = 'owner_variables';
+  }
+  if (!secretKey) {
+    secretKey = await getRawOwnerVariableValue('AWS_SECRET_ACCESS_KEY');
+    if (!secretKey) secretKey = await getIVXOwnerVariableRuntimeValue('IVX_AWS_READONLY_SECRET_ACCESS_KEY');
+    if (secretKey) sources.secretKey = 'owner_variables';
+  }
+  if (!cloudFrontDistributionId) {
+    cloudFrontDistributionId = await getRawOwnerVariableValue('CLOUDFRONT_DISTRIBUTION_ID');
+  }
+
+  return { accessKey, secretKey, region, bucket, cloudFrontDistributionId, sources };
+}
+
+/** Store AWS credentials in the ivx_owner_variables table for future use. */
+async function storeAwsCredentialsInDb(creds: AwsCredentials): Promise<boolean> {
+  try {
+    const { createClient } = await import('@supabase/supabase-js');
+    const url = readEnv('EXPO_PUBLIC_SUPABASE_URL') || readEnv('SUPABASE_URL');
+    const key = readEnv('SUPABASE_SERVICE_ROLE_KEY') || readEnv('SUPABASE_SERVICE_KEY');
+    if (!url || !key) return false;
+    const sb = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+    const entries = [
+      { name: 'AWS_ACCESS_KEY_ID', value: creds.accessKeyId },
+      { name: 'AWS_SECRET_ACCESS_KEY', value: creds.secretAccessKey },
+      { name: 'AWS_REGION', value: creds.region || 'us-east-1' },
+      { name: 'S3_BUCKET_NAME', value: creds.bucket || 'ivxholding.com' },
+      { name: 'CLOUDFRONT_DISTRIBUTION_ID', value: creds.cloudFrontDistributionId || '' },
+    ];
+    for (const entry of entries) {
+      if (!entry.value) continue;
+      const { error } = await sb.from('ivx_owner_variables').upsert({
+        name: entry.name,
+        encrypted_value: entry.value,
+        masked_preview: entry.value.substring(0, 4) + '****',
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'name' });
+      if (error) console.log(`[LandingFullDeploy] Failed to store ${entry.name}: ${error.message}`);
+    }
+    return true;
+  } catch (err) {
+    console.log(`[LandingFullDeploy] storeAwsCredentialsInDb error: ${err instanceof Error ? err.message : String(err)}`);
+    return false;
+  }
 }
 
 function getContentType(filename: string): string {
@@ -199,9 +285,9 @@ export async function handleLandingFullDeploy(request: Request): Promise<Respons
   const timestamp = new Date().toISOString();
   const startMs = Date.now();
 
-  let body: { confirm?: string } = {};
+  let body: { confirm?: string; awsCredentials?: AwsCredentials; storeCredentials?: boolean } = {};
   try {
-    body = await request.json() as { confirm?: string };
+    body = await request.json() as { confirm?: string; awsCredentials?: AwsCredentials; storeCredentials?: boolean };
   } catch {
     // Allow empty body
   }
@@ -214,26 +300,16 @@ export async function handleLandingFullDeploy(request: Request): Promise<Respons
     }), { status: 400, headers: { 'Content-Type': 'application/json' } });
   }
 
-  const awsRegion = readEnv('AWS_REGION') || 'us-east-1';
-  const region = awsRegion;
-  const bucket = readEnv('S3_BUCKET_NAME') || BUCKET_DEFAULT;
-  // Try process.env first, then fall back to Owner Variables table (encrypted, decrypted at runtime)
-  // The DB may store under AWS_ACCESS_KEY_ID or IVX_AWS_READONLY_ACCESS_KEY_ID — try both
-  let accessKey = readEnv('AWS_ACCESS_KEY_ID');
-  let secretKey = readEnv('AWS_SECRET_ACCESS_KEY');
+  // If credentials are provided in the request body, store them for future use
+  if (body.awsCredentials?.accessKeyId && body.awsCredentials?.secretAccessKey && body.storeCredentials !== false) {
+    const stored = await storeAwsCredentialsInDb(body.awsCredentials);
+    console.log(`[LandingFullDeploy] Credential storage: ${stored ? 'success' : 'failed/skipped'}`);
+  }
 
-  if (!accessKey) {
-    accessKey = await getRawOwnerVariableValue('AWS_ACCESS_KEY_ID');
-  }
-  if (!accessKey) {
-    accessKey = await getIVXOwnerVariableRuntimeValue('IVX_AWS_READONLY_ACCESS_KEY_ID');
-  }
-  if (!secretKey) {
-    secretKey = await getRawOwnerVariableValue('AWS_SECRET_ACCESS_KEY');
-  }
-  if (!secretKey) {
-    secretKey = await getIVXOwnerVariableRuntimeValue('IVX_AWS_READONLY_SECRET_ACCESS_KEY');
-  }
+  // Resolve credentials from request body → process.env → Owner Variables table
+  const { accessKey, secretKey, region, bucket, cloudFrontDistributionId, sources } =
+    await resolveAwsCredentials(body.awsCredentials);
+  const awsRegion = region;
 
   const missingEnv: string[] = [];
   if (!accessKey) missingEnv.push('AWS_ACCESS_KEY_ID');
@@ -242,9 +318,12 @@ export async function handleLandingFullDeploy(request: Request): Promise<Respons
   if (missingEnv.length > 0) {
     return new Response(JSON.stringify({
       ok: false,
-      error: `Missing AWS credentials: ${missingEnv.join(', ')}. Checked process.env and Owner Variables table.`,
+      error: `Missing AWS credentials: ${missingEnv.join(', ')}. Checked request body, process.env, and Owner Variables table.`,
       bucket,
+      region: awsRegion,
       missingEnv,
+      credentialSources: sources,
+      hint: 'Provide awsCredentials in the request body: {"confirm":"DEPLOY_IVX_LANDING_FULL","awsCredentials":{"accessKeyId":"AKIA...","secretAccessKey":"...","region":"us-east-1","bucket":"ivxholding.com","cloudFrontDistributionId":"E..."}}',
       timestamp,
       durationMs: Date.now() - startMs,
     }), { status: 500, headers: { 'Content-Type': 'application/json' } });
@@ -389,15 +468,16 @@ export async function handleLandingFullDeploy(request: Request): Promise<Respons
 
   // Invalidate CloudFront
   let cloudFront: FullDeployResult['cloudFront'] = { attempted: false, ok: false };
-  let cloudFrontDistributionId = readEnv('CLOUDFRONT_DISTRIBUTION_ID');
-  if (!cloudFrontDistributionId) {
-    cloudFrontDistributionId = await getRawOwnerVariableValue('CLOUDFRONT_DISTRIBUTION_ID');
+  // Also check Owner Variables table for CloudFront ID
+  let cloudFrontId = cloudFrontDistributionId;
+  if (!cloudFrontId) {
+    cloudFrontId = await getRawOwnerVariableValue('CLOUDFRONT_DISTRIBUTION_ID');
   }
-  if (allUploadsOk && cloudFrontDistributionId) {
+  if (allUploadsOk && cloudFrontId) {
     const invalidation = await createCloudFrontInvalidation({
       paths: invalidationPaths,
       callerReference: `landing-full-deploy-${Date.now()}`,
-      distributionId: cloudFrontDistributionId,
+      distributionId: cloudFrontId,
     });
     cloudFront = {
       attempted: true,
@@ -409,7 +489,7 @@ export async function handleLandingFullDeploy(request: Request): Promise<Respons
       `[LandingFullDeploy] CloudFront invalidation: ${invalidation.status}` +
         (invalidation.invalidationId ? ` (${invalidation.invalidationId})` : ''),
     );
-  } else if (allUploadsOk && !cloudFrontDistributionId) {
+  } else if (allUploadsOk && !cloudFrontId) {
     cloudFront = {
       attempted: false,
       ok: false,
@@ -420,11 +500,12 @@ export async function handleLandingFullDeploy(request: Request): Promise<Respons
   const result: FullDeployResult = {
     ok: allUploadsOk,
     bucket,
-    region,
+    region: awsRegion,
     uploads,
     cloudFront,
     wwwRedirect,
     missingEnv: [],
+    credentialSources: sources,
     timestamp: new Date().toISOString(),
     durationMs: Date.now() - startMs,
   };
@@ -438,8 +519,10 @@ export async function handleLandingFullDeploy(request: Request): Promise<Respons
 /** GET status — returns what would be deployed without actually deploying */
 export async function handleLandingFullDeployStatus(): Promise<Response> {
   const files = listLandingFiles();
-  const hasAws = !!readEnv('AWS_ACCESS_KEY_ID') && !!readEnv('AWS_SECRET_ACCESS_KEY');
-  const hasCloudFront = !!readEnv('CLOUDFRONT_DISTRIBUTION_ID');
+  const { accessKey, secretKey, region, bucket, cloudFrontDistributionId, sources } =
+    await resolveAwsCredentials(undefined);
+  const hasAws = !!accessKey && !!secretKey;
+  const hasCloudFront = !!cloudFrontDistributionId;
 
   return new Response(JSON.stringify({
     ok: true,
@@ -447,8 +530,9 @@ export async function handleLandingFullDeployStatus(): Promise<Response> {
     fileCount: files.length,
     awsCredentialsConfigured: hasAws,
     cloudFrontConfigured: hasCloudFront,
-    bucket: readEnv('S3_BUCKET_NAME') || BUCKET_DEFAULT,
-    region: readEnv('AWS_REGION') || 'us-east-1',
+    bucket,
+    region,
+    credentialSources: sources,
     timestamp: new Date().toISOString(),
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 }

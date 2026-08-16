@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
-import { Activity, AlertTriangle, ArrowLeft, CheckCircle2, Clock3, RefreshCw, ShieldCheck } from 'lucide-react-native';
+import { Activity, AlertTriangle, ArrowLeft, CheckCircle2, Clock3, Globe2, RefreshCw, ShieldCheck } from 'lucide-react-native';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
 
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
@@ -10,6 +10,7 @@ const CONTROL_PLANE_URL = `${API_BASE}/api/ivx/autonomous/control-plane`;
 const POLL_INTERVAL_MS = 5_000;
 
 type HeartbeatState = 'live' | 'stale' | 'none';
+type Presence = 'WORKING' | 'QUEUED' | 'IDLE' | 'STALE' | 'ATTENTION' | 'OFFLINE';
 
 type WorkerTelemetry = {
   registered: boolean;
@@ -27,9 +28,14 @@ type WorkerTelemetry = {
 
 type LiveAgent = {
   id: string;
+  agentNumber: number;
   name: string;
-  supervisor: string;
+  role: string | null;
+  functionalGroup: string;
+  mission: string | null;
   status: string;
+  presence: Presence;
+  operatingRegion: string;
   jobId: string | null;
   evidence: string[];
   lastError: string | null;
@@ -37,12 +43,15 @@ type LiveAgent = {
   worker: WorkerTelemetry;
 };
 
-type Workforce = {
-  label?: string;
+type GroupRow = {
+  name: string;
   total: number;
   verified: number;
-  statuses: Record<string, number>;
-  items: LiveAgent[];
+  working: number;
+  queued: number;
+  idle: number;
+  stale: number;
+  attention: number;
 };
 
 type ControlPlane = {
@@ -68,9 +77,13 @@ type ControlPlane = {
     failed: number;
     durableState: boolean;
   };
-  specialists?: Workforce;
-  divisionA?: Workforce;
-  divisionB?: Workforce;
+  agents?: {
+    total: number;
+    verified: number;
+    statuses: Record<string, number>;
+    items: LiveAgent[];
+  };
+  functionalGroups?: GroupRow[];
   certification?: {
     liveReady: boolean;
     campaignComplete: boolean;
@@ -83,22 +96,21 @@ type ControlPlane = {
 function formatTime(value?: string | null) {
   if (!value) return 'NO HEARTBEAT';
   const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString();
+  return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
 }
 
-function toneForHeartbeat(state: HeartbeatState) {
+function heartbeatTone(state: HeartbeatState) {
   if (state === 'live') return '#22C55E';
   if (state === 'stale') return '#F59E0B';
   return '#64748B';
 }
 
-function toneForStatus(status: string) {
-  const value = status.toLowerCase();
-  if (value === 'verified' || value === 'completed') return '#22C55E';
-  if (['running', 'patching', 'testing', 'committing', 'deploying', 'verifying'].includes(value)) return '#38BDF8';
-  if (value === 'queued' || value === 'pending') return '#F59E0B';
-  if (value === 'blocked' || value === 'failed' || value === 'cancelled') return '#EF4444';
+function presenceTone(presence: Presence) {
+  if (presence === 'WORKING') return '#38BDF8';
+  if (presence === 'QUEUED') return '#A78BFA';
+  if (presence === 'IDLE') return '#94A3B8';
+  if (presence === 'STALE') return '#F59E0B';
+  if (presence === 'ATTENTION' || presence === 'OFFLINE') return '#EF4444';
   return '#94A3B8';
 }
 
@@ -111,71 +123,56 @@ function Metric({ label, value, tone }: { label: string; value: string | number;
   );
 }
 
-function AgentRow({ agent }: { agent: LiveAgent }) {
-  const workerStatus = agent.worker.workerStatus || agent.status;
+function AgentCard({ agent }: { agent: LiveAgent }) {
   const progress = agent.worker.progressPercent;
   return (
     <View style={styles.agentCard}>
       <View style={styles.agentHeader}>
-        <View style={[styles.heartbeatDot, { backgroundColor: toneForHeartbeat(agent.worker.heartbeat) }]} />
+        <View style={[styles.heartbeatDot, { backgroundColor: heartbeatTone(agent.worker.heartbeat) }]} />
         <View style={styles.agentIdentity}>
-          <Text style={styles.agentName}>{agent.name}</Text>
-          <Text style={styles.agentMeta}>{agent.id} · Supervisor: {agent.supervisor}</Text>
+          <Text style={styles.agentName}>IA-{String(agent.agentNumber).padStart(2, '0')} · {agent.name}</Text>
+          <Text style={styles.agentMeta}>{agent.functionalGroup} · {agent.role || 'IA'}</Text>
         </View>
-        <Text style={[styles.agentStatus, { color: toneForStatus(workerStatus) }]}>{workerStatus.toUpperCase()}</Text>
+        <Text style={[styles.agentStatus, { color: presenceTone(agent.presence) }]}>{agent.presence}</Text>
+      </View>
+
+      <View style={styles.regionRow}>
+        <Globe2 size={14} color="#D4AF37" />
+        <Text style={styles.regionLabel}>OPERATING REGION</Text>
+        <Text style={styles.regionValue}>{agent.operatingRegion}</Text>
       </View>
 
       <View style={styles.liveLine}>
         <Text style={styles.liveLabel}>HEARTBEAT</Text>
-        <Text style={[styles.liveValue, { color: toneForHeartbeat(agent.worker.heartbeat) }]}>
-          {agent.worker.heartbeat.toUpperCase()} · {formatTime(agent.worker.lastHeartbeatAt)}
-        </Text>
+        <Text style={[styles.liveValue, { color: heartbeatTone(agent.worker.heartbeat) }]}>{agent.worker.heartbeat.toUpperCase()} · {formatTime(agent.worker.lastHeartbeatAt)}</Text>
       </View>
       <View style={styles.liveLine}>
         <Text style={styles.liveLabel}>STAGE</Text>
-        <Text style={styles.liveValue}>{agent.worker.stage || 'NO ACTIVE STAGE'}</Text>
-      </View>
-      <View style={styles.liveLine}>
-        <Text style={styles.liveLabel}>PROGRESS</Text>
-        <Text style={styles.liveValue}>{progress === null ? '—' : `${progress}%`}</Text>
+        <Text style={styles.liveValue}>{agent.worker.stage || 'IDLE'}</Text>
       </View>
       <View style={styles.liveLine}>
         <Text style={styles.liveLabel}>CURRENT ACTION</Text>
-        <Text style={styles.liveValue}>{agent.worker.stageDetail || 'No live worker detail reported.'}</Text>
+        <Text style={styles.liveValue}>{agent.worker.stageDetail || (agent.presence === 'IDLE' ? 'Standing by for the next assignment.' : 'No worker detail reported.')}</Text>
       </View>
       <View style={styles.liveLine}>
         <Text style={styles.liveLabel}>CURRENT TASK</Text>
-        <Text style={styles.liveTask} numberOfLines={4}>{agent.worker.currentTask || 'No active task assigned.'}</Text>
+        <Text style={styles.liveTask} numberOfLines={4}>{agent.worker.currentTask || agent.mission || 'No active task assigned.'}</Text>
       </View>
       <View style={styles.liveLine}>
         <Text style={styles.liveLabel}>JOB</Text>
-        <Text style={styles.liveValue}>{agent.jobId || 'NO JOB'}</Text>
-      </View>
-      <View style={styles.liveLine}>
-        <Text style={styles.liveLabel}>STARTED</Text>
-        <Text style={styles.liveValue}>{formatTime(agent.worker.startedAt)}</Text>
+        <Text style={styles.liveValue}>{agent.jobId || 'NO ACTIVE JOB'}</Text>
       </View>
       <View style={styles.liveLine}>
         <Text style={styles.liveLabel}>EVIDENCE</Text>
         <Text style={styles.liveValue}>{agent.evidence.length} records</Text>
       </View>
-      {agent.lastError ? <Text style={styles.errorText}>ERROR: {agent.lastError}</Text> : null}
+      {agent.lastError ? <Text style={styles.errorText}>ATTENTION: {agent.lastError}</Text> : null}
       {progress !== null ? (
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: `${Math.max(0, Math.min(100, progress))}%` }]} />
+          <Text style={styles.progressText}>{progress}%</Text>
         </View>
       ) : null}
-    </View>
-  );
-}
-
-function WorkforceBlock({ title, workforce }: { title: string; workforce?: Workforce }) {
-  if (!workforce) return null;
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <Text style={styles.sectionSub}>{workforce.verified}/{workforce.total} VERIFIED</Text>
-      {workforce.items.map((agent) => <AgentRow key={agent.id} agent={agent} />)}
     </View>
   );
 }
@@ -209,40 +206,43 @@ export default function AutonomousLiveScreen() {
   useEffect(() => {
     void load(false);
     pollRef.current = setInterval(() => void load(true), POLL_INTERVAL_MS);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [load]);
 
   const enterprise = control?.enterprise;
-  const overallState = useMemo(() => {
-    if (!enterprise?.enabled) return 'OFFLINE';
-    if ((enterprise.failed || 0) > 0 || (enterprise.blocked || 0) > 0) return 'DEGRADED';
-    if ((enterprise.heartbeating || 0) > 0) return 'ONLINE';
-    return 'IDLE';
-  }, [enterprise]);
+  const agents = control?.agents?.items || [];
+  const presenceCounts = useMemo(() => agents.reduce<Record<string, number>>((acc, agent) => {
+    acc[agent.presence] = (acc[agent.presence] || 0) + 1;
+    return acc;
+  }, {}), [agents]);
+  const regions = useMemo(() => agents.reduce<Record<string, number>>((acc, agent) => {
+    acc[agent.operatingRegion] = (acc[agent.operatingRegion] || 0) + 1;
+    return acc;
+  }, {}), [agents]);
+  const regionRows = useMemo(() => Object.entries(regions).sort((a, b) => b[1] - a[1]), [regions]);
+
+  const overallState = !enterprise?.enabled
+    ? 'OFFLINE'
+    : (enterprise.failed || 0) > 0 || (enterprise.blocked || 0) > 0
+      ? 'DEGRADED'
+      : (enterprise.heartbeating || 0) > 0
+        ? 'ONLINE'
+        : 'IDLE';
   const overallTone = overallState === 'ONLINE' ? '#22C55E' : overallState === 'DEGRADED' ? '#F59E0B' : '#94A3B8';
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
-        <TouchableOpacity style={styles.iconButton} onPress={() => router.back()}>
-          <ArrowLeft size={20} color="#E2E8F0" />
-        </TouchableOpacity>
+        <TouchableOpacity style={styles.iconButton} onPress={() => router.back()}><ArrowLeft size={20} color="#E2E8F0" /></TouchableOpacity>
         <View style={styles.headerText}>
-          <Text style={styles.title}>IVX Autonomous Command Center</Text>
-          <Text style={styles.subtitle}>Live IA telemetry · owner only · refreshes every 5 seconds</Text>
+          <Text style={styles.title}>IVX Enterprise IA Control Tower</Text>
+          <Text style={styles.subtitle}>112 IA · live work telemetry · 5 second refresh</Text>
         </View>
-        <TouchableOpacity style={styles.iconButton} onPress={() => { setRefreshing(true); void load(true); }}>
-          <RefreshCw size={18} color="#FBBF24" />
-        </TouchableOpacity>
+        <TouchableOpacity style={styles.iconButton} onPress={() => { setRefreshing(true); void load(true); }}><RefreshCw size={18} color="#FBBF24" /></TouchableOpacity>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(true); }} tintColor="#FBBF24" />}
-      >
+      <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(true); }} tintColor="#FBBF24" />}>
         <View style={styles.hero}>
           <View style={styles.heroTop}>
             <Activity size={22} color={overallTone} />
@@ -250,43 +250,50 @@ export default function AutonomousLiveScreen() {
             <Text style={[styles.overallState, { color: overallTone }]}>{overallState}</Text>
           </View>
           <View style={styles.metrics}>
-            <Metric label="Registered" value={`${enterprise?.registered ?? 0}/${enterprise?.expectedAgents ?? 112}`} tone="#E2E8F0" />
+            <Metric label="Registered" value={`${enterprise?.registered ?? 0}/${enterprise?.expectedAgents ?? 112}`} />
+            <Metric label="Working" value={presenceCounts.WORKING ?? 0} tone="#38BDF8" />
+            <Metric label="Queued" value={presenceCounts.QUEUED ?? 0} tone="#A78BFA" />
+            <Metric label="Idle" value={presenceCounts.IDLE ?? 0} tone="#94A3B8" />
             <Metric label="Heartbeating" value={enterprise?.heartbeating ?? 0} tone="#22C55E" />
-            <Metric label="Active jobs" value={enterprise?.activeJobs ?? 0} tone="#38BDF8" />
-            <Metric label="Stale" value={enterprise?.staleHeartbeats ?? 0} tone="#F59E0B" />
-            <Metric label="Verified" value={enterprise?.verifiedTotal ?? 0} tone="#22C55E" />
-            <Metric label="Blocked" value={(enterprise?.blocked ?? 0) + (enterprise?.failed ?? 0)} tone="#EF4444" />
+            <Metric label="Attention" value={(presenceCounts.ATTENTION ?? 0) + (presenceCounts.STALE ?? 0)} tone="#EF4444" />
           </View>
-          <View style={styles.proofRow}>
-            <ShieldCheck size={15} color={enterprise?.durableState ? '#22C55E' : '#EF4444'} />
-            <Text style={styles.proofText}>Durable state: {enterprise?.durableState ? 'CONNECTED' : 'NOT CONFIRMED'}</Text>
-          </View>
-          <View style={styles.proofRow}>
-            <CheckCircle2 size={15} color={enterprise?.registryShapeValid ? '#22C55E' : '#EF4444'} />
-            <Text style={styles.proofText}>Registry shape: {enterprise?.registryShapeValid ? '12 + 50 + 50 VALID' : 'INVALID'}</Text>
-          </View>
-          <View style={styles.proofRow}>
-            <Clock3 size={15} color="#94A3B8" />
-            <Text style={styles.proofText}>Last real worker heartbeat: {formatTime(enterprise?.lastHeartbeatAt)}</Text>
-          </View>
+          <View style={styles.proofRow}><ShieldCheck size={15} color={enterprise?.durableState ? '#22C55E' : '#EF4444'} /><Text style={styles.proofText}>Durable state: {enterprise?.durableState ? 'CONNECTED' : 'NOT CONFIRMED'}</Text></View>
+          <View style={styles.proofRow}><CheckCircle2 size={15} color={enterprise?.registryShapeValid ? '#22C55E' : '#EF4444'} /><Text style={styles.proofText}>Registry: {enterprise?.registryShapeValid ? '112 / 112 VALID' : 'INVALID'}</Text></View>
+          <View style={styles.proofRow}><Clock3 size={15} color="#94A3B8" /><Text style={styles.proofText}>Last real worker heartbeat: {formatTime(enterprise?.lastHeartbeatAt)}</Text></View>
           <Text style={styles.generated}>Snapshot: {formatTime(control?.generatedAt)} · Source: {control?.source || 'unknown'}</Text>
         </View>
 
-        {loading && !control ? <Text style={styles.message}>Loading live telemetry…</Text> : null}
-        {error ? (
-          <View style={styles.alert}>
-            <AlertTriangle size={18} color="#EF4444" />
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        ) : null}
+        {loading && !control ? <Text style={styles.message}>Connecting to live IA telemetry…</Text> : null}
+        {error ? <View style={styles.alert}><AlertTriangle size={18} color="#EF4444" /><Text style={styles.errorText}>{error}</Text></View> : null}
 
-        <WorkforceBlock title="12 CORE IA SUPERVISORS" workforce={control?.specialists} />
-        <WorkforceBlock title="50 IVX OPERATIONS IA" workforce={control?.divisionA} />
-        <WorkforceBlock title="50 FACTORY IA" workforce={control?.divisionB} />
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>GLOBAL OPERATING REGIONS</Text>
+          <Text style={styles.sectionSub}>This is task jurisdiction / operating scope, not physical GPS.</Text>
+          <View style={styles.regionGrid}>
+            {regionRows.map(([region, count]) => <View key={region} style={styles.regionChip}><Text style={styles.regionChipValue}>{count}</Text><Text style={styles.regionChipLabel}>{region}</Text></View>)}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>FUNCTIONAL GROUPS</Text>
+          {(control?.functionalGroups || []).map((group) => (
+            <View key={group.name} style={styles.groupRow}>
+              <View style={styles.groupIdentity}><Text style={styles.groupName}>{group.name}</Text><Text style={styles.groupMeta}>{group.verified}/{group.total} verified</Text></View>
+              <Text style={styles.groupWorking}>{group.working} working</Text>
+              <Text style={styles.groupIdle}>{group.idle} idle</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>112 IA — LIVE WORK MAP</Text>
+          <Text style={styles.sectionSub}>Tap-refresh or wait 5 seconds. Every row is sourced from the real campaign registry and worker queue.</Text>
+          {agents.map((agent) => <AgentCard key={agent.id} agent={agent} />)}
+        </View>
 
         <View style={styles.certificate}>
           <Text style={styles.certificateTitle}>LIVE WORKFORCE CERTIFICATE GATE</Text>
-          <Text style={styles.certificateText}>Registry complete: {control?.certification?.campaignComplete ? 'YES' : 'NO'}</Text>
+          <Text style={styles.certificateText}>112 registry complete: {control?.certification?.campaignComplete ? 'YES' : 'NO'}</Text>
           <Text style={styles.certificateText}>Live workforce observed: {control?.certification?.liveWorkforceObserved ? 'YES' : 'NO'}</Text>
           <Text style={styles.certificateText}>Runtime ready: {control?.certification?.liveReady ? 'YES' : 'NO'}</Text>
           <Text style={styles.certificatePolicy}>{control?.certification?.proofPolicy || 'No certificate without runtime proof.'}</Text>
@@ -314,28 +321,42 @@ const styles = StyleSheet.create({
   metricLabel: { color: '#64748B', fontSize: 10, marginTop: 3, textTransform: 'uppercase' },
   proofRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 10 },
   proofText: { color: '#CBD5E1', fontSize: 12, flex: 1 },
-  generated: { color: '#64748B', fontSize: 10, marginTop: 12 },
-  message: { color: '#CBD5E1', textAlign: 'center', padding: 20 },
-  alert: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#7F1D1D', backgroundColor: '#1F0A0A', marginBottom: 12 },
+  generated: { color: '#64748B', fontSize: 10, marginTop: 10 },
+  message: { color: '#94A3B8', textAlign: 'center', marginVertical: 18 },
+  alert: { flexDirection: 'row', gap: 8, borderWidth: 1, borderColor: '#7F1D1D', backgroundColor: '#2B0B0B', borderRadius: 10, padding: 12, marginBottom: 12 },
+  errorText: { color: '#FCA5A5', fontSize: 12, flex: 1 },
   section: { marginBottom: 18 },
-  sectionTitle: { color: '#F8FAFC', fontSize: 15, fontWeight: '900' },
-  sectionSub: { color: '#64748B', fontSize: 11, marginTop: 2, marginBottom: 8 },
-  agentCard: { backgroundColor: '#0F172A', borderRadius: 12, borderWidth: 1, borderColor: '#1E293B', padding: 12, marginBottom: 8 },
+  sectionTitle: { color: '#F8FAFC', fontSize: 16, fontWeight: '900', marginBottom: 4 },
+  sectionSub: { color: '#64748B', fontSize: 11, marginBottom: 10 },
+  regionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  regionChip: { minWidth: 110, flexGrow: 1, backgroundColor: '#0F172A', borderWidth: 1, borderColor: '#263A50', borderRadius: 10, padding: 10 },
+  regionChipValue: { color: '#D4AF37', fontSize: 18, fontWeight: '900' },
+  regionChipLabel: { color: '#CBD5E1', fontSize: 10, marginTop: 3 },
+  groupRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0F172A', borderRadius: 10, padding: 10, marginBottom: 7 },
+  groupIdentity: { flex: 1 },
+  groupName: { color: '#E2E8F0', fontSize: 12, fontWeight: '800' },
+  groupMeta: { color: '#64748B', fontSize: 10, marginTop: 2 },
+  groupWorking: { color: '#38BDF8', fontSize: 10, fontWeight: '800', marginRight: 10 },
+  groupIdle: { color: '#94A3B8', fontSize: 10, fontWeight: '800' },
+  agentCard: { borderWidth: 1, borderColor: '#1E293B', backgroundColor: '#0B1220', borderRadius: 12, padding: 12, marginBottom: 9 },
   agentHeader: { flexDirection: 'row', alignItems: 'center' },
-  heartbeatDot: { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
+  heartbeatDot: { width: 10, height: 10, borderRadius: 5, marginRight: 9 },
   agentIdentity: { flex: 1 },
   agentName: { color: '#F8FAFC', fontSize: 13, fontWeight: '800' },
   agentMeta: { color: '#64748B', fontSize: 10, marginTop: 2 },
   agentStatus: { fontSize: 10, fontWeight: '900', marginLeft: 8 },
+  regionRow: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#101827', borderRadius: 8, padding: 8, marginTop: 10 },
+  regionLabel: { color: '#64748B', fontSize: 9, fontWeight: '800', flex: 1 },
+  regionValue: { color: '#D4AF37', fontSize: 11, fontWeight: '900' },
   liveLine: { marginTop: 8 },
   liveLabel: { color: '#64748B', fontSize: 9, fontWeight: '800' },
   liveValue: { color: '#CBD5E1', fontSize: 11, marginTop: 2 },
-  liveTask: { color: '#E2E8F0', fontSize: 11, lineHeight: 16, marginTop: 2 },
-  errorText: { color: '#FCA5A5', fontSize: 11, marginTop: 8, flex: 1 },
-  progressTrack: { height: 5, borderRadius: 3, backgroundColor: '#1E293B', overflow: 'hidden', marginTop: 10 },
-  progressFill: { height: 5, backgroundColor: '#38BDF8' },
-  certificate: { borderWidth: 1, borderColor: '#334155', backgroundColor: '#0F172A', borderRadius: 14, padding: 14 },
-  certificateTitle: { color: '#F8FAFC', fontSize: 13, fontWeight: '900', marginBottom: 8 },
-  certificateText: { color: '#CBD5E1', fontSize: 12, marginTop: 4 },
-  certificatePolicy: { color: '#94A3B8', fontSize: 10, lineHeight: 15, marginTop: 10 },
+  liveTask: { color: '#E2E8F0', fontSize: 12, lineHeight: 17, marginTop: 2 },
+  progressTrack: { height: 18, backgroundColor: '#020617', borderRadius: 9, marginTop: 10, overflow: 'hidden', justifyContent: 'center' },
+  progressFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#0EA5E9' },
+  progressText: { color: '#F8FAFC', fontSize: 9, fontWeight: '900', textAlign: 'center' },
+  certificate: { borderWidth: 1, borderColor: '#365314', backgroundColor: '#0B1F11', borderRadius: 12, padding: 14 },
+  certificateTitle: { color: '#86EFAC', fontSize: 13, fontWeight: '900', marginBottom: 8 },
+  certificateText: { color: '#D1FAE5', fontSize: 11, marginTop: 4 },
+  certificatePolicy: { color: '#94A3B8', fontSize: 10, lineHeight: 15, marginTop: 8 },
 });

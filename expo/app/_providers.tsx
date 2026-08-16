@@ -34,20 +34,28 @@ import { EarnProvider } from '@/lib/earn-context';
 import { EmailProvider } from '@/lib/email-context';
 import { NetworkProvider } from '@/lib/network-context';
 
+/**
+ * Cache-first/offline-first session policy for modules using React Query.
+ * Cached data stays visible during navigation and reconnect refreshes happen
+ * without forcing full-screen loading. Sensitive financial data is not
+ * indiscriminately persisted to device storage by this provider.
+ */
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60_000,
-      gcTime: 30 * 60_000,
+      staleTime: 15 * 60_000,
+      gcTime: 24 * 60 * 60_000,
       retry: 1,
+      retryDelay: (attempt) => Math.min(500 * 2 ** attempt, 3_000),
       refetchOnMount: false,
       refetchOnReconnect: true,
       refetchOnWindowFocus: false,
-      networkMode: 'online',
+      networkMode: 'offlineFirst',
+      structuralSharing: true,
     },
     mutations: {
       retry: 1,
-      networkMode: 'online',
+      networkMode: 'offlineFirst',
     },
   },
 });

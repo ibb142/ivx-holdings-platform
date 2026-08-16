@@ -768,7 +768,7 @@ import {
   handleAgentAuditLedgerUpdate,
 } from './api/ivx-agent-audit';
 import { handleLandingFullDeploy, handleLandingFullDeployStatus } from './api/ivx-landing-full-deploy';
-import { handleLandingGoLive, handleLandingAnalyticsPublicSummary } from './api/ivx-landing-go-live';
+import { handleLandingGoLive, handleLandingAnalyticsPublicSummary, handleLandingEnvDiagnostic } from './api/ivx-landing-go-live';
 import { qaMigrationOptions, handleQaMigrationRun, handleQaMigrationVerify } from './api/ivx-qa-migration-runner';
 import { handleProofTestRequest, proofTestOptions } from './api/proof-test';
 import {
@@ -6492,6 +6492,7 @@ app.post('/api/ivx/landing-deploy', async (context) => handleLandingFullDeploy(c
 app.options('/api/ivx/landing-go-live', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
 app.post('/api/ivx/landing-go-live', async (context) => handleLandingGoLive(context.req.raw));
 app.get('/api/ivx/landing-analytics/public', async () => handleLandingAnalyticsPublicSummary());
+app.get('/api/ivx/landing-env-diagnostic', async () => handleLandingEnvDiagnostic());
 
 // ============================================================================
 // IVX AI Engineering Command Center — 12-agent audit, scores, task ledger

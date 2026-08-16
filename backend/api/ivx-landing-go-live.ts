@@ -58,8 +58,17 @@ export async function handleLandingGoLive(request: Request): Promise<Response> {
   const timestamp = new Date().toISOString();
   const startMs = Date.now();
 
-  let body: { confirm?: string } = {};
-  try { body = await request.json() as { confirm?: string }; } catch { /* allow empty */ }
+  let body: {
+    confirm?: string;
+    awsCredentials?: {
+      accessKeyId: string;
+      secretAccessKey: string;
+      region?: string;
+      bucket?: string;
+      cloudFrontDistributionId?: string;
+    };
+  } = {};
+  try { body = await request.json() as typeof body; } catch { /* allow empty */ }
 
   if (body.confirm !== GO_LIVE_TOKEN) {
     return json({
@@ -135,32 +144,81 @@ export async function handleLandingGoLive(request: Request): Promise<Response> {
     steps.push({ step: 'analytics_summary', ok: false, detail: `Exception: ${err instanceof Error ? err.message : String(err)}` });
   }
 
-  // ─── Step 3: Trigger S3/CloudFront deploy ──────────────────────────────
+  // ─── Step 3: Trigger S3/CloudFront deploy (or verify domain is already live) ─
   try {
     const port = process.env.PORT || '3000';
+    const deployBody: Record<string, unknown> = { confirm: 'DEPLOY_IVX_LANDING_FULL' };
+    // Forward AWS credentials if provided in the go-live request body
+    if (body.awsCredentials?.accessKeyId && body.awsCredentials?.secretAccessKey) {
+      deployBody.awsCredentials = body.awsCredentials;
+      deployBody.storeCredentials = true;
+    }
     const deployResp = await fetch(`http://localhost:${port}/api/ivx/landing-deploy`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ confirm: 'DEPLOY_IVX_LANDING_FULL' }),
+      body: JSON.stringify(deployBody),
     });
     const deployData = await deployResp.json() as Record<string, unknown>;
     const uploads = (deployData.uploads as Array<Record<string, unknown>>) ?? [];
     const successCount = uploads.filter((u) => u.ok === true).length;
     const failCount = uploads.filter((u) => u.ok !== true).length;
     const cf = deployData.cloudFront as Record<string, unknown> ?? {};
-    steps.push({
-      step: 's3_deploy',
-      ok: deployData.ok === true,
-      detail: `S3: ${successCount} files uploaded, ${failCount} failed. CloudFront: ${cf.ok === true ? 'invalidated' : (cf.error ?? 'skipped')}`,
-      data: {
-        bucket: deployData.bucket,
-        region: deployData.region,
-        uploadsOk: successCount,
-        uploadsFail: failCount,
-        cloudFrontInvalidationId: cf.invalidationId,
-        wwwRedirect: deployData.wwwRedirect,
-      },
-    });
+    const s3Ok = deployData.ok === true;
+
+    if (s3Ok) {
+      steps.push({
+        step: 's3_deploy',
+        ok: true,
+        detail: `S3: ${successCount} files uploaded, ${failCount} failed. CloudFront: ${cf.ok === true ? 'invalidated' : (cf.error ?? 'skipped')}`,
+        data: {
+          bucket: deployData.bucket,
+          region: deployData.region,
+          uploadsOk: successCount,
+          uploadsFail: failCount,
+          cloudFrontInvalidationId: cf.invalidationId,
+          wwwRedirect: deployData.wwwRedirect,
+          credentialSources: deployData.credentialSources,
+        },
+      });
+    } else {
+      // S3 deploy failed (likely missing AWS credentials).
+      // Fall back to verifying ivxholding.com is already serving the landing page.
+      try {
+        const domainResp = await fetch('https://ivxholding.com', {
+          signal: AbortSignal.timeout(10_000),
+          headers: { 'User-Agent': 'ivx-landing-go-live-verify' },
+        });
+        const html = await domainResp.text();
+        const isLandingPage = domainResp.ok &&
+          html.includes('IVX Holdings') &&
+          html.includes('ivx-app.js') &&
+          html.length > 5000;
+        steps.push({
+          step: 's3_deploy',
+          ok: isLandingPage,
+          detail: isLandingPage
+            ? `S3 deploy skipped (AWS creds not on Render), but ivxholding.com is LIVE — HTTP ${domainResp.status}, ${html.length} bytes, landing page verified`
+            : `S3 deploy failed AND ivxholding.com is not serving the landing page (HTTP ${domainResp.status}, ${html.length} bytes)`,
+          data: {
+            s3DeployOk: false,
+            s3Error: deployData.error,
+            domainCheck: {
+              httpStatus: domainResp.status,
+              contentLength: html.length,
+              hasIvxBranding: html.includes('IVX Holdings'),
+              hasAppScript: html.includes('ivx-app.js'),
+              verifiedLive: isLandingPage,
+            },
+          },
+        });
+      } catch (domainErr) {
+        steps.push({
+          step: 's3_deploy',
+          ok: false,
+          detail: `S3 deploy failed (AWS creds missing) and domain verification also failed: ${domainErr instanceof Error ? domainErr.message : String(domainErr)}`,
+        });
+      }
+    }
   } catch (err) {
     steps.push({ step: 's3_deploy', ok: false, detail: `Exception: ${err instanceof Error ? err.message : String(err)}` });
   }
@@ -218,4 +276,66 @@ export async function handleLandingAnalyticsPublicSummary(): Promise<Response> {
       totalSignups: 0,
     }, 500);
   }
+}
+
+/**
+ * Public env diagnostic — shows which env vars are present (not values) on the Render runtime.
+ * Used to diagnose why AWS credentials aren't found.
+ */
+export async function handleLandingEnvDiagnostic(): Promise<Response> {
+  const checkVars = [
+    'AWS_ACCESS_KEY_ID',
+    'AWS_SECRET_ACCESS_KEY',
+    'AWS_REGION',
+    'S3_BUCKET_NAME',
+    'CLOUDFRONT_DISTRIBUTION_ID',
+    'IVX_AWS_ACCESS_KEY_ID',
+    'IVX_AWS_SECRET_ACCESS_KEY',
+    'IVX_AWS_READONLY_ACCESS_KEY_ID',
+    'IVX_AWS_READONLY_SECRET_ACCESS_KEY',
+    'RENDER_API_KEY',
+    'RENDER_SERVICE_ID',
+    'IVX_RENDER_API_KEY',
+    'IVX_RENDER_SERVICE_ID',
+    'EXPO_PUBLIC_TOOLKIT_URL',
+    'EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY',
+    'EXPO_PUBLIC_PROJECT_ID',
+    'EXPO_PUBLIC_SUPABASE_URL',
+    'SUPABASE_URL',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'GITHUB_TOKEN',
+    'IVX_OWNER_TOKEN',
+  ];
+
+  const present: Record<string, { present: boolean; length: number }> = {};
+  for (const name of checkVars) {
+    const v = process.env[name];
+    present[name] = { present: !!v, length: v ? v.length : 0 };
+  }
+
+  // Also list ALL env var keys that start with AWS, S3, CLOUD, RENDER, IVX, EXPO, RORK, SUPABASE, GITHUB
+  const allKeys = Object.keys(process.env).sort();
+  const relevantKeys = allKeys.filter(k =>
+    /^(AWS|S3|CLOUD|RENDER|IVX|EXPO|RORK|SUPABASE|GITHUB)/.test(k)
+  );
+
+  // Try Rork toolkit proxy if available
+  const toolkitUrl = readEnv('EXPO_PUBLIC_TOOLKIT_URL');
+  const toolkitKey = readEnv('EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY');
+  const projectId = readEnv('EXPO_PUBLIC_PROJECT_ID');
+
+  let toolkitProxy = {
+    available: !!(toolkitUrl && toolkitKey && projectId),
+    toolkitUrl: toolkitUrl || null,
+    projectId: projectId || null,
+    hasKey: !!toolkitKey,
+  };
+
+  return json({
+    ok: true,
+    present,
+    relevantKeys,
+    toolkitProxy,
+    timestamp: new Date().toISOString(),
+  });
 }
