@@ -1,0 +1,442 @@
+name: IVX Live Brain E2E Builder V2
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  build-live-brain-e2e:
+    if: contains(github.event.head_commit.message, '[live-brain-e2e-v2]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Create source branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="fix/live-ia-brains-e2e-${GITHUB_RUN_ID}"
+          echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
+          git checkout -b "$BRANCH"
+
+      - name: Wire agent runtime to real IVX AI inference
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('backend/services/ivx-agent-runtime.ts')
+          s = p.read_text()
+
+          anchor = "import { type CompanyId, type DivisionId } from './ivx-enterprise-master-registry';\n"
+          imp = "import { getIVXAIConfigurationSnapshot, requestIVXAIText } from '../ivx-ai-runtime';\n"
+          if imp not in s:
+              if anchor not in s: raise SystemExit('runtime import anchor missing')
+              s = s.replace(anchor, anchor + imp, 1)
+
+          old_marker = "export const IVX_AGENT_RUNTIME_MARKER = 'ivx-agent-runtime-2026-07-27';"
+          new_marker = """export const IVX_AGENT_RUNTIME_MARKER = 'ivx-agent-runtime-2026-08-16-live-brain-v2';
+
+const IVX_AGENT_BRAIN_ESCALATION_POLICY = [
+  'Use the live IVX AI runtime for reasoning; deterministic template output is not a brain.',
+  'Preserve agent identity, mission, memory namespace, permissions, tool limits, and owner-approval gates.',
+  'Continuously improve reasoning, memory, tool use, reliability, and evidence without an artificial capability ceiling.',
+  'Evaluate credible quantum computing, quantum-inspired optimization, agent orchestration, memory, and reasoning advances when relevant.',
+  'Separate deployable technology from speculative research. Never represent simulation or fallback text as deployed capability.',
+  'Never claim a tool or external action executed unless durable run evidence proves it.',
+].join(' ');"""
+          if old_marker in s:
+              s = s.replace(old_marker, new_marker, 1)
+          elif 'ivx-agent-runtime-2026-08-16-live-brain-v2' not in s:
+              raise SystemExit('runtime marker anchor missing')
+
+          s = s.replace("const toolsUsed = contract.allowedTools.slice(0, Math.min(3, contract.allowedTools.length));", "const toolsUsed: string[] = [];", 1)
+
+          old_exec = """  const taskId = `direct-${agentId}-${startTime}`;
+  const output = produceAgentOutput(contract, taskType, payload);
+
+  const endTime = Date.now();
+  const endISO = new Date(endTime).toISOString();
+"""
+          new_exec = """  const taskId = `direct-${agentId}-${startTime}`;
+  const requestId = `agent-brain-${agentId}-${startTime}`;
+  const memoryContext = memResult.ok && memResult.record?.value
+    ? memResult.record.value
+    : 'No prior agent memory is available.';
+  let aiResult: Awaited<ReturnType<typeof requestIVXAIText>>;
+  try {
+    aiResult = await requestIVXAIText({
+      module: `enterprise-agent-${contract.agentNumber}`,
+      requestId,
+      system: `${contract.systemInstructions}\n\nCONTINUOUS BRAIN ESCALATION POLICY: ${IVX_AGENT_BRAIN_ESCALATION_POLICY}`,
+      prompt: [
+        `Agent: ${contract.agentNumber} ${contract.agentName}`,
+        `Role: ${contract.roleName}`,
+        `Division: ${contract.divisionId}`,
+        `Company: ${contract.companyId}`,
+        `Mission: ${contract.mission}`,
+        `Task type: ${taskType}`,
+        `Authorized tools (not automatically executed): ${contract.allowedTools.join(', ')}`,
+        `Prior memory: ${memoryContext}`,
+        `Task payload: ${JSON.stringify(payload)}`,
+        'Return concise role-specific reasoning and the next safe action. Never claim a tool ran unless evidence proves execution.',
+      ].join('\n'),
+      maxOutputTokens: 1200,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Live IVX AI brain invocation failed';
+    const endTime = Date.now();
+    const endISO = new Date(endTime).toISOString();
+    state.activeTaskId = null;
+    state.availability = state.pauseState ? 'paused' : 'available';
+    state.totalRuns += 1;
+    state.failedRuns += 1;
+    state.lastFailedRun = endISO;
+    state.health = 'degraded';
+    state.errorState = message;
+    state.retryCount += 1;
+    const failedRecord: AgentRunRecord = {
+      runId: `run-${agentId}-${startTime}`,
+      agentId,
+      agentNumber: contract.agentNumber,
+      agentName: contract.agentName,
+      taskId,
+      taskType,
+      contractVersion: contract.version,
+      instructionHash: contract.instructionHash,
+      memoryNamespace: contract.memoryNamespace,
+      queueNamespace: contract.queueNamespace,
+      toolsAuthorized: contract.allowedTools,
+      toolsUsed: [],
+      startTime: startISO,
+      endTime: endISO,
+      durationMs: endTime - startTime,
+      output: {
+        brainMode: 'live_ivx_ai_runtime',
+        requestId,
+        providerConfigured: getIVXAIConfigurationSnapshot().configured,
+      },
+      evidence: [{ type: 'live_brain_failure', description: message, reference: requestId }],
+      finalStatus: 'failed',
+      error: message,
+      ownerApprovalRecord: approvalRecord,
+      commitSha: process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT_SHA || null,
+    };
+    recordRun(failedRecord);
+    return { ok: false, runRecord: failedRecord, error: message };
+  }
+
+  const output = {
+    summary: aiResult.text.trim(),
+    details: {
+      brainMode: 'live_ivx_ai_runtime',
+      requestId,
+      providerMetadata: aiResult.providerMetadata,
+      memoryLoaded: Boolean(memResult.record?.value),
+      escalationPolicy: 'continuous_quantum_and_ai_discovery',
+      payloadKeys: Object.keys(payload),
+    },
+  };
+
+  const endTime = Date.now();
+  const endISO = new Date(endTime).toISOString();
+"""
+          if old_exec in s:
+              s = s.replace(old_exec, new_exec, 1)
+          elif 'agent-brain-${agentId}-${startTime}' not in s:
+              raise SystemExit('executeAgentRun anchor missing')
+
+          old_ev = """    {
+      type: 'output_artifact',
+      description: output.summary,
+      reference: `output-${agentId}-${startTime}`,
+    },
+  ];
+"""
+          new_ev = """    {
+      type: 'output_artifact',
+      description: output.summary,
+      reference: `output-${agentId}-${startTime}`,
+    },
+    {
+      type: 'live_ai_provider',
+      description: `Live IVX AI inference completed with ${aiResult.providerMetadata.provider} / ${aiResult.providerMetadata.model}`,
+      reference: aiResult.providerMetadata.endpoint || requestId,
+    },
+    {
+      type: 'brain_escalation_policy',
+      description: 'Continuous AI plus quantum-technology discovery policy was loaded into this agent reasoning context.',
+      reference: IVX_AGENT_RUNTIME_MARKER,
+    },
+  ];
+"""
+          if old_ev in s:
+              s = s.replace(old_ev, new_ev, 1)
+          elif "type: 'live_ai_provider'" not in s:
+              raise SystemExit('evidence anchor missing')
+
+          s = s.replace("commitSha: null,", "commitSha: process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT_SHA || null,", 1)
+
+          old_complete = """  // Update execution state
+  completeTask(agentId, taskId, { status: 'completed' });
+
+  return { ok: true, runRecord, error: null };
+"""
+          new_complete = """  // This is a direct controlled run, not an inbox task. Update state directly.
+  state.activeTaskId = null;
+  state.availability = state.pauseState ? 'paused' : 'available';
+  state.totalRuns += 1;
+  state.successfulRuns += 1;
+  state.lastSuccessfulRun = endISO;
+  state.health = 'healthy';
+  state.errorState = null;
+  state.retryCount = 0;
+  state.evidenceCount += evidence.length;
+
+  return { ok: true, runRecord, error: null };
+"""
+          if old_complete in s:
+              s = s.replace(old_complete, new_complete, 1)
+
+          type_anchor = """  failedRuns: number;
+  divisionA: { total: number; active: number; idle: number; paused: number; disabled: number };
+"""
+          type_repl = """  failedRuns: number;
+  brain: {
+    mode: 'live_ivx_ai_runtime';
+    escalationEnabled: true;
+    quantumDiscoveryEnabled: true;
+    continuousImprovement: true;
+    liveInferenceRequired: true;
+    providerConfigured: boolean;
+    model: string;
+    endpoint: string | null;
+    certificationStatus: 'LIVE_RUNTIME_WIRED_REQUIRES_100_WORKER_RERUN' | 'AI_PROVIDER_NOT_CONFIGURED';
+  };
+  divisionA: { total: number; active: number; idle: number; paused: number; disabled: number };
+"""
+          if type_anchor in s:
+              s = s.replace(type_anchor, type_repl, 1)
+
+          fn_anchor = """export function generateDashboard(): EnterpriseAgentDashboard {
+  const states = getAllExecutionStates();
+  const contracts = ALL_AGENT_CONTRACTS;
+"""
+          fn_repl = """export function generateDashboard(): EnterpriseAgentDashboard {
+  const states = getAllExecutionStates();
+  const contracts = ALL_AGENT_CONTRACTS;
+  const ai = getIVXAIConfigurationSnapshot();
+"""
+          if fn_anchor in s:
+              s = s.replace(fn_anchor, fn_repl, 1)
+
+          return_anchor = """    failedRuns: states.reduce((sum, s) => sum + s.failedRuns, 0),
+    divisionA: {
+"""
+          return_repl = """    failedRuns: states.reduce((sum, s) => sum + s.failedRuns, 0),
+    brain: {
+      mode: 'live_ivx_ai_runtime',
+      escalationEnabled: true,
+      quantumDiscoveryEnabled: true,
+      continuousImprovement: true,
+      liveInferenceRequired: true,
+      providerConfigured: ai.configured,
+      model: ai.model,
+      endpoint: ai.endpoint,
+      certificationStatus: ai.configured
+        ? 'LIVE_RUNTIME_WIRED_REQUIRES_100_WORKER_RERUN'
+        : 'AI_PROVIDER_NOT_CONFIGURED',
+    },
+    divisionA: {
+"""
+          if return_anchor in s:
+              s = s.replace(return_anchor, return_repl, 1)
+
+          p.write_text(s)
+          PY
+
+      - name: Add live brain status to Autonomous dashboard
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('expo/app/ivx/autonomous-activity.tsx')
+          s = p.read_text()
+
+          # React Native's fetch HeadersInit rejects a generic Record in this TS config.
+          old_headers = """async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getIVXAccessToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+"""
+          new_headers = """async function authHeaders(): Promise<Array<[string, string]>> {
+  const token = await getIVXAccessToken();
+  const headers: Array<[string, string]> = [['Content-Type', 'application/json']];
+  if (token) headers.push(['Authorization', `Bearer ${token}`]);
+  return headers;
+}
+"""
+          if old_headers in s:
+              s = s.replace(old_headers, new_headers, 1)
+
+          growth = """type GrowthOverview = {
+  ideas: number;
+  jvDeals: number;
+  tokenizationConcepts: number;
+  moduleSpecs: number;
+  outreachDrafts: number;
+};
+"""
+          if 'type AgentBrainDashboard' not in s:
+              extra = growth + """
+type AgentBrainDashboard = {
+  totalAgents: number;
+  brain?: {
+    mode: string;
+    escalationEnabled: boolean;
+    quantumDiscoveryEnabled: boolean;
+    continuousImprovement: boolean;
+    liveInferenceRequired: boolean;
+    providerConfigured: boolean;
+    model: string;
+    endpoint: string | null;
+    certificationStatus: string;
+  };
+};
+"""
+              if growth not in s: raise SystemExit('dashboard type anchor missing')
+              s = s.replace(growth, extra, 1)
+
+          old_data = """type ActivityData = {
+  reports: ReportsResponse | null;
+  growth: GrowthOverview | null;
+  leads: StagedLead[];
+};
+"""
+          new_data = """type ActivityData = {
+  reports: ReportsResponse | null;
+  growth: GrowthOverview | null;
+  leads: StagedLead[];
+  agentBrain: AgentBrainDashboard | null;
+};
+"""
+          if old_data in s: s = s.replace(old_data, new_data, 1)
+
+          old_fetch = """  const [reportsRes, growthRes, leadsRes] = await Promise.all([
+    fetch(`${base}/api/ivx/autonomous-scale/reports?limit=50`, { headers }).catch(() => null),
+    fetch(`${base}/api/growth/overview`, { headers }).catch(() => null),
+    fetch(`${base}/api/growth/leads`, { headers }).catch(() => null),
+  ]);
+"""
+          new_fetch = """  const [reportsRes, growthRes, leadsRes, agentBrainRes] = await Promise.all([
+    fetch(`${base}/api/ivx/autonomous-scale/reports?limit=50`, { headers }).catch(() => null),
+    fetch(`${base}/api/growth/overview`, { headers }).catch(() => null),
+    fetch(`${base}/api/growth/leads`, { headers }).catch(() => null),
+    fetch(`${base}/api/ivx/agents/dashboard`, { headers }).catch(() => null),
+  ]);
+"""
+          if old_fetch in s: s = s.replace(old_fetch, new_fetch, 1)
+
+          old_return = """  if (!reports && !growth && leads.length === 0) {
+    throw new Error('Could not reach the autonomous endpoints. Confirm you are signed in as owner.');
+  }
+
+  return { reports, growth, leads };
+"""
+          new_return = """  let agentBrain: AgentBrainDashboard | null = null;
+  if (agentBrainRes) {
+    const json = (await agentBrainRes.json().catch(() => ({}))) as AgentBrainDashboard & { ok?: boolean };
+    if (agentBrainRes.ok && json.ok !== false && typeof json.totalAgents === 'number') agentBrain = json;
+  }
+
+  if (!reports && !growth && leads.length === 0 && !agentBrain) {
+    throw new Error('Could not reach the autonomous endpoints. Confirm you are signed in as owner.');
+  }
+
+  return { reports, growth, leads, agentBrain };
+"""
+          if old_return in s: s = s.replace(old_return, new_return, 1)
+
+          card_anchor = """            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Growth pipeline (where the work lands)</Text>
+"""
+          if 'IA Brain Escalation' not in s:
+              if card_anchor not in s: raise SystemExit('dashboard card anchor missing')
+              brain_card = """            <View style={styles.card}>
+              <Text style={styles.cardTitle}>IA Brain Escalation</Text>
+              <View style={styles.pipeRow}><Text style={styles.pipeLabel}>Registered IA agents</Text><Text style={styles.pipeValue}>{data?.agentBrain?.totalAgents ?? 0}</Text></View>
+              <View style={styles.pipeRow}><Text style={styles.pipeLabel}>Brain mode</Text><Text style={styles.pipeValue}>{data?.agentBrain?.brain?.mode ?? 'not deployed'}</Text></View>
+              <View style={styles.pipeRow}><Text style={styles.pipeLabel}>Live inference required</Text><Text style={styles.pipeValue}>{data?.agentBrain?.brain?.liveInferenceRequired ? 'YES' : 'NO'}</Text></View>
+              <View style={styles.pipeRow}><Text style={styles.pipeLabel}>AI provider configured</Text><Text style={styles.pipeValue}>{data?.agentBrain?.brain?.providerConfigured ? 'YES' : 'NO'}</Text></View>
+              <View style={styles.pipeRow}><Text style={styles.pipeLabel}>Continuous improvement</Text><Text style={styles.pipeValue}>{data?.agentBrain?.brain?.continuousImprovement ? 'ON' : 'OFF'}</Text></View>
+              <View style={styles.pipeRow}><Text style={styles.pipeLabel}>Quantum technology discovery</Text><Text style={styles.pipeValue}>{data?.agentBrain?.brain?.quantumDiscoveryEnabled ? 'ON' : 'OFF'}</Text></View>
+              <View style={styles.pipeRow}><Text style={styles.pipeLabel}>Model</Text><Text style={styles.pipeValue}>{data?.agentBrain?.brain?.model ?? 'unknown'}</Text></View>
+              <Text style={styles.cardBody}>Certificate: {data?.agentBrain?.brain?.certificationStatus ?? 'not deployed'}</Text>
+            </View>
+
+""" + card_anchor
+              s = s.replace(card_anchor, brain_card, 1)
+
+          p.write_text(s)
+          PY
+
+      - name: Verify source markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "requestIVXAIText" backend/services/ivx-agent-runtime.ts
+          grep -q "live_ai_provider" backend/services/ivx-agent-runtime.ts
+          grep -q "continuous_quantum_and_ai_discovery" backend/services/ivx-agent-runtime.ts
+          grep -q "IA Brain Escalation" expo/app/ivx/autonomous-activity.tsx
+          grep -q "quantumDiscoveryEnabled" expo/app/ivx/autonomous-activity.tsx
+          grep -q "Promise<Array<\[string, string\]>>" expo/app/ivx/autonomous-activity.tsx
+
+      - name: Install dependencies
+        shell: bash
+        run: bun install --frozen-lockfile
+
+      - name: Backend TypeScript QA
+        shell: bash
+        run: bun x tsc --noEmit --pretty false
+
+      - name: Expo TypeScript QA
+        shell: bash
+        run: bun x tsc -p expo/tsconfig.json --noEmit --pretty false
+
+      - name: Commit and push QA-passing implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "IVX Autonomous"
+          git config user.email "actions@users.noreply.github.com"
+          git add backend/services/ivx-agent-runtime.ts expo/app/ivx/autonomous-activity.tsx
+          git commit -m "feat: wire 100 IA agents to live IVX AI brain runtime"
+          git push origin "$BRANCH"
+
+      - name: Open pull request
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          PR_URL=$(gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "feat: wire 100 IA agents to live IVX AI brain runtime" \
+            --body "QA-gated implementation. Replaces deterministic agent reasoning with requestIVXAIText, preserves per-agent system instructions/memory/permissions/approval gates, exposes live brain status in Autonomous Activity, and keeps quantum discovery evidence-bound. Backend and Expo TypeScript gates must pass before this PR is created.")
+          echo "PR_URL=$PR_URL" >> "$GITHUB_ENV"
+          echo "$PR_URL"
