@@ -31,6 +31,7 @@ export async function handleAgentReadinessCheck(c: Context): Promise<Response> {
     qaSecurityGatesVerified,
     evidenceRecorded,
     schedulerVerified,
+    orchestratorRoutingVerified: schedulerVerified,
     independenceVerified,
   });
 }
