@@ -248,14 +248,16 @@ export async function ingestBehaviorEvent(event: BehaviorEvent): Promise<{ ok: b
 
 async function upsertMemberProfile(event: BehaviorEvent, intent_delta: number, now: string): Promise<void> {
   const sb = getSupabase();
-  const identifier = event.user_id ? { user_id: event.user_id } : { anonymous_id: event.anonymous_id };
   if (!event.user_id && !event.anonymous_id) return;
+  const identifier: Record<string, string> = event.user_id
+    ? { user_id: event.user_id }
+    : { anonymous_id: event.anonymous_id! };
 
   // Try to fetch existing profile
   const { data: existing } = await sb
     .from('member_behavior_profiles')
     .select('*')
-    .match(identifier as Record<string, string>)
+    .match(identifier)
     .maybeSingle();
 
   const isScreenView = event.event_type === 'screen_view';
