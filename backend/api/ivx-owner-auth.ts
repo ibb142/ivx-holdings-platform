@@ -9,7 +9,13 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const DEPLOYMENT_MARKER = 'ivx-owner-auth-v1';
+const DEPLOYMENT_MARKER = 'ivx-owner-auth-v2';
+const PRODUCTION_SUPABASE_URL = 'https://kvclcdjmjghndxsngfzb.supabase.co';
+const PRODUCTION_SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2Y2xjZGptamdobmR4c25nZnpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTQwMjcsImV4cCI6MjA4ODc3MDAyN30.OLDwa21VHQNs151AD-8k--_HigQ2d-N7yJfFn5UeNPk';
+const HOSTED_SUPABASE_URL_PATTERN = /https:\/\/([a-z0-9-]+)\.supabase\.co\b/i;
+const PRODUCTION_PROJECT_REF = 'kvclcdjmjghndxsngfzb';
+const JWT_PATTERN = /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g;
 const ADMIN_ROLES = ['owner', 'admin', 'ceo', 'staff', 'manager', 'analyst', 'support'] as const;
 const ROLE_ALIASES: Record<string, string> = {
   super_admin: 'admin',
@@ -77,10 +83,44 @@ function jsonResponse(data: unknown, status = 200): Response {
   });
 }
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const payloadSegment = token.split('.')[1] ?? '';
+    const normalized = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+    return JSON.parse(Buffer.from(padded, 'base64').toString('utf8')) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function extractSupabaseUrl(raw: string): string | null {
+  const value = raw.trim();
+  if (!value) return null;
+  const hosted = value.match(HOSTED_SUPABASE_URL_PATTERN);
+  if (hosted?.[0]) {
+    const projectRef = hosted[1]?.toLowerCase() ?? '';
+    return projectRef === PRODUCTION_PROJECT_REF ? hosted[0].replace(/\/$/, '') : null;
+  }
+  return null;
+}
+
+function extractSupabaseAnonKey(raw: string): string | null {
+  const matches = raw.trim().match(JWT_PATTERN) ?? [];
+  for (const candidate of matches) {
+    const payload = decodeJwtPayload(candidate);
+    if (payload?.role === 'anon' && payload?.ref === PRODUCTION_PROJECT_REF) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 function getSupabaseConfig(): { url: string; anonKey: string } | null {
-  const url = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-  if (!url || !anonKey) return null;
+  const rawUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+  const rawKey = process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+  const url = extractSupabaseUrl(rawUrl) || extractSupabaseUrl(rawKey) || PRODUCTION_SUPABASE_URL;
+  const anonKey = extractSupabaseAnonKey(rawKey) || PRODUCTION_SUPABASE_ANON_KEY;
   return { url, anonKey };
 }
 
