@@ -33,15 +33,6 @@ import path from 'node:path';
 export const IVX_CREDENTIALS_STATUS_MARKER = 'ivx-credentials-status-2026-07-17-v2';
 
 const STATE_FILE = path.join(process.cwd(), 'logs', 'audit', 'credentials-status', 'state.json');
-
-// Validate response and log errors
-function logAndValidateResponse(response:any) {
-  if (!response) {
-    console.error('Empty response received.');
-  } else if (response.errors) {
-    console.error('Errors in response:', response.errors);
-  }
-}
 const TEST_TIMEOUT_MS = 8000;
 
 /**

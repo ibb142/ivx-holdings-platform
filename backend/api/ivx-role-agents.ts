@@ -63,31 +63,6 @@ export async function handleRoleAgentRegistry(request: Request): Promise<Respons
 }
 
 /** GET — full durable state (queues + outputs). */
-
-/** POST — ensure runtime readiness for IVX Webhook Engineer. */
-export async function handleRoleAgentWebhookReadiness(request: Request): Promise<Response> {
-  try {
-    await assertIVXOwnerOnly(request);
-    const state = await getRoleAgentsState(); // Modify/get more specific state info if needed
-    const roleContract = 'IVX Webhook Engineer';
-    const roleReady = state.roles.includes(roleContract);
-    return ownerOnlyJson({ ok: roleReady, roleContract, marker: ROLE_AGENTS_MARKER, timestamp: new Date().toISOString() });
-  } catch (error) { return errorResponse(error); }
-}
-
-/** POST — execute a task for IVX Webhook Engineer. */
-export async function handleRoleAgentWebhookTaskExecution(request: Request): Promise<Response> {
-  try {
-    await assertIVXOwnerOnly(request);
-    const task = await request.json();
-    if (!task || !task.command) throw new Error('Command is required to execute task.');
-    // Example: Validate task.command for IVX Webhook Engineer role
-    const validCommands = ['deploy', 'test', 'validate'];
-    if (!validCommands.includes(task.command)) throw new Error('Invalid command.');
-    const executionResult = await runRoleAgent('IVX Webhook Engineer', task.command);
-    return ownerOnlyJson({ ok: true, result: executionResult, marker: ROLE_AGENTS_MARKER, timestamp: new Date().toISOString() });
-  } catch (error) { return errorResponse(error); }
-}
 export async function handleRoleAgentState(request: Request): Promise<Response> {
   try {
     await assertIVXOwnerOnly(request);
@@ -148,17 +123,6 @@ export async function handleRoleAgentRun(request: Request): Promise<Response> {
 }
 
 /** POST — run one cycle for every role agent. */
-/** POST — ensure runtime readiness for IVX Tokenization QA Engineer. */
-export async function handleRoleAgentTokenizationQAVerification(request: Request): Promise<Response> {
-  try {
-    await assertIVXOwnerOnly(request);
-    const state = await getRoleAgentsState();
-    const roleContract = 'IVX Tokenization QA Engineer';
-    const roleReady = state.roles.includes(roleContract);
-    return ownerOnlyJson({ ok: roleReady, roleContract, marker: ROLE_AGENTS_MARKER, timestamp: new Date().toISOString() });
-  } catch (error) { return errorResponse(error); }
-}
-
 export async function handleRoleAgentRunAll(request: Request): Promise<Response> {
   try {
     await assertIVXOwnerOnly(request);

@@ -211,18 +211,8 @@ async function enqueueItem(item: CampaignItem): Promise<void> {
 
 async function refreshItem(item: CampaignItem): Promise<void> {
   if (!item.jobId) return;
-
-  // If the item was already verified with commit evidence, preserve that status.
-  // The worker queue may have been cleared (jobs removed after completion),
-  // but the evidence (commitSha, testsRun, testsPassed) is still valid.
-  const hasExistingProof = item.status === 'verified'
-    && item.evidence.some((e) => e.startsWith('commitSha:') && !e.includes('commitSha:none'));
-  if (hasExistingProof) return;
-
   const job = await getSeniorDeveloperJob(item.jobId);
   if (!job) {
-    // Don't overwrite a verified item if the job was already completed and cleared.
-    if (item.status === 'verified') return;
     item.status = 'blocked';
     item.lastError = 'Worker job not found.';
     return;

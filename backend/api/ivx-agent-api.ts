@@ -73,16 +73,6 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.get('/api/ivx/agents', (c) => {
     const states = getAllExecutionStates();
-    // Verify role contract
-    verifyRoleContract(states);
-    // Verify tools
-    verifyTools(states);
-    // Verify permissions
-    verifyPermissions(states);
-    // Verify heartbeat
-    verifyHeartbeat(states);
-    // Verify evidence recording
-    verifyEvidenceRecording(states);
     const agents = states.map((state) => {
       const contract = AGENT_CONTRACT_REGISTRY[state.agentId];
       return {
@@ -159,7 +149,6 @@ export function registerAgentRoutes(app: Hono): void {
         instructionHash: contract.instructionHash,
         systemInstructionsLength: contract.systemInstructions.length,
       },
-      heartbeat: state.lastHeartbeat,
       executionState: state,
     });
   });
