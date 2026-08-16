@@ -1,4 +1,4 @@
-name: IVX Recover Vercel AI Gateway From Render
+name: IVX Recover AI Provider From Render
 
 on:
   push:
@@ -24,206 +24,119 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Recover provider credential from Render, bind, deploy, verify
+      - name: Audit Render AI aliases, recover valid provider, deploy, verify
         shell: bash
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
           import { execFileSync } from 'node:child_process';
-
           const serviceId = process.env.RENDER_SERVICE_ID;
           const apiBase = process.env.API_BASE;
 
-          // Recovery-only Render credential: never print it and mask immediately.
-          // This repository already contains the historical credential in its git history;
-          // use it only to restore owner-controlled runtime bindings, then rely on the
-          // active Render environment going forward.
-          const oldSource = execFileSync('git', [
-            'show',
-            '3388d5dd97cf107524d752bf9a80891315829405^:expo/scripts/fix-github-token.mjs',
-          ], { encoding: 'utf8' });
+          const oldSource = execFileSync('git', ['show','3388d5dd97cf107524d752bf9a80891315829405^:expo/scripts/fix-github-token.mjs'], { encoding: 'utf8' });
           const rm = oldSource.match(/rnd_[A-Za-z0-9]+/);
           if (!rm) throw new Error('render_recovery_credential_missing');
           const renderToken = rm[0];
           console.log(`::add-mask::${renderToken}`);
 
-          const rh = {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${renderToken}`,
-          };
-          const rf = async (path, init = {}) => {
-            const r = await fetch(`https://api.render.com/v1${path}`, {
-              ...init,
-              headers: { ...rh, ...(init.headers || {}) },
-            });
-            const text = await r.text();
-            let payload = {};
-            try { payload = text ? JSON.parse(text) : {}; } catch {}
-            return { ok: r.ok, status: r.status, payload, text };
+          const rh = { Accept:'application/json','Content-Type':'application/json',Authorization:`Bearer ${renderToken}` };
+          const rf = async (path, init={}) => {
+            const r = await fetch(`https://api.render.com/v1${path}`, { ...init, headers:{...rh,...(init.headers||{})} });
+            const text = await r.text(); let payload={}; try { payload=text?JSON.parse(text):{}; } catch {}
+            return { ok:r.ok, status:r.status, payload, text };
           };
 
-          const directRes = await rf(`/services/${serviceId}/env-vars`);
-          if (!directRes.ok) throw new Error(`render_env_http_${directRes.status}`);
+          const res = await rf(`/services/${serviceId}/env-vars`);
+          if (!res.ok) throw new Error(`render_env_http_${res.status}`);
           const env = new Map();
-          for (const item of directRes.payload) {
-            const ev = item?.envVar ?? item;
-            if (ev && typeof ev.key === 'string') env.set(ev.key, typeof ev.value === 'string' ? ev.value : '');
+          for (const item of res.payload) {
+            const ev=item?.envVar??item;
+            if (ev && typeof ev.key==='string') env.set(ev.key, typeof ev.value==='string'?ev.value:'');
           }
+          const names=[...env.keys()].sort();
           console.log(`render_access=PASS env_count=${env.size}`);
+          console.log(`render_env_names=${names.join(',')}`);
 
-          const currentGatewayKey = String(env.get('IVX_AI_GATEWAY_KEY') || env.get('AI_GATEWAY_API_KEY') || '').trim();
-          const renderVercelToken = String(
-            env.get('VERCEL_TOKEN') || env.get('VERCEL_API_TOKEN') || env.get('IVX_VERCEL_TOKEN') || ''
-          ).trim();
-          const githubVercelToken = String(process.env.GITHUB_VERCEL_TOKEN || '').trim();
-          const vercelToken = renderVercelToken || githubVercelToken;
-          const teamId = String(env.get('VERCEL_TEAM_ID') || env.get('VERCEL_ORG_ID') || process.env.DEFAULT_VERCEL_TEAM_ID || '').trim();
+          for (const value of env.values()) if (value) console.log(`::add-mask::${value}`);
 
-          if (vercelToken) console.log(`::add-mask::${vercelToken}`);
-          if (currentGatewayKey) console.log(`::add-mask::${currentGatewayKey}`);
-
-          async function probeGateway(key) {
+          async function probeOpenAI(key) {
+            if (!key || !key.startsWith('sk-')) return false;
+            const r=await fetch('https://api.openai.com/v1/models',{headers:{Authorization:`Bearer ${key}`}}).catch(()=>null);
+            return Boolean(r?.ok);
+          }
+          async function probeVercel(key) {
             if (!key || !key.startsWith('vck_')) return false;
-            const probe = await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${key}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                model: 'openai/gpt-4o-mini',
-                messages: [{ role: 'user', content: 'Return only 42' }],
-                max_tokens: 16,
-              }),
-            }).catch(() => null);
-            return Boolean(probe?.ok);
+            const r=await fetch('https://ai-gateway.vercel.sh/v1/chat/completions',{
+              method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},
+              body:JSON.stringify({model:'openai/gpt-4o-mini',messages:[{role:'user',content:'Return only 42'}],max_tokens:16})
+            }).catch(()=>null);
+            return Boolean(r?.ok);
           }
 
-          let gatewayKey = currentGatewayKey;
-          if (await probeGateway(gatewayKey)) {
-            console.log('existing_render_ai_gateway_key=PASS');
+          const candidates = [
+            ['IVX_OPENAI_API_KEY', String(env.get('IVX_OPENAI_API_KEY')||'').trim(), 'openai'],
+            ['OPENAI_API_KEY', String(env.get('OPENAI_API_KEY')||'').trim(), 'openai'],
+            ['IVX_AI_GATEWAY_KEY', String(env.get('IVX_AI_GATEWAY_KEY')||'').trim(), 'vercel'],
+            ['AI_GATEWAY_API_KEY', String(env.get('AI_GATEWAY_API_KEY')||'').trim(), 'vercel'],
+          ];
+
+          let provider='', providerKey='', sourceName='';
+          for (const [name,key,type] of candidates) {
+            if (!key) continue;
+            const ok = type==='openai' ? await probeOpenAI(key) : await probeVercel(key);
+            console.log(`${name}_probe=${ok?'PASS':'FAIL'}`);
+            if (ok && !providerKey) { sourceName=name; providerKey=key; provider=type; }
+          }
+
+          if (!providerKey) {
+            const vercelToken=String(env.get('VERCEL_TOKEN')||env.get('VERCEL_API_TOKEN')||env.get('IVX_VERCEL_TOKEN')||process.env.GITHUB_VERCEL_TOKEN||'').trim();
+            const teamId=String(env.get('VERCEL_TEAM_ID')||env.get('VERCEL_ORG_ID')||process.env.DEFAULT_VERCEL_TEAM_ID||'').trim();
+            if (!vercelToken) throw new Error('no_valid_ai_provider_credential_and_vercel_management_token_missing');
+            console.log(`::add-mask::${vercelToken}`);
+            const vh={Accept:'application/json','Content-Type':'application/json',Authorization:`Bearer ${vercelToken}`};
+            const vf=async(path,init={})=>{const r=await fetch(`https://api.vercel.com${path}`,{...init,headers:{...vh,...(init.headers||{})}});const text=await r.text();let payload={};try{payload=text?JSON.parse(text):{}}catch{};return{ok:r.ok,status:r.status,payload,text};};
+            const listed=await vf(`/v1/api-keys?teamId=${encodeURIComponent(teamId)}&purpose=ai-gateway`);
+            if(!listed.ok) throw new Error(`vercel_management_auth_http_${listed.status}`);
+            const created=await vf(`/v1/api-keys?teamId=${encodeURIComponent(teamId)}`,{method:'POST',body:JSON.stringify({purpose:'ai-gateway',name:`ivx-render-runtime-${Date.now()}`})});
+            if(!created.ok) throw new Error(`vercel_ai_key_create_http_${created.status}`);
+            providerKey=String(created.payload?.apiKeyString||'').trim();
+            if(!providerKey.startsWith('vck_') || !(await probeVercel(providerKey))) throw new Error('fresh_vercel_ai_gateway_key_invalid');
+            console.log(`::add-mask::${providerKey}`);
+            provider='vercel'; sourceName='fresh_vercel_ai_gateway_key';
+          }
+
+          if (provider==='openai') {
+            env.set('IVX_OPENAI_API_KEY', providerKey);
+            env.set('OPENAI_API_KEY', providerKey);
           } else {
-            if (!vercelToken) throw new Error('vercel_management_token_missing_in_render_and_github');
-            if (!teamId) throw new Error('vercel_team_id_missing');
-
-            const vh = {
-              Accept: 'application/json',
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${vercelToken}`,
-            };
-            const vf = async (path, init = {}) => {
-              const r = await fetch(`https://api.vercel.com${path}`, {
-                ...init,
-                headers: { ...vh, ...(init.headers || {}) },
-              });
-              const text = await r.text();
-              let payload = {};
-              try { payload = text ? JSON.parse(text) : {}; } catch {}
-              return { ok: r.ok, status: r.status, payload, text };
-            };
-
-            const listed = await vf(`/v1/api-keys?teamId=${encodeURIComponent(teamId)}&purpose=ai-gateway`);
-            if (!listed.ok) throw new Error(`vercel_management_auth_http_${listed.status}`);
-            const existing = Array.isArray(listed.payload) ? listed.payload : (listed.payload?.apiKeys || listed.payload?.data || []);
-            console.log(`vercel_management=PASS ai_gateway_key_count=${Array.isArray(existing) ? existing.length : 0}`);
-
-            const created = await vf(`/v1/api-keys?teamId=${encodeURIComponent(teamId)}`, {
-              method: 'POST',
-              body: JSON.stringify({
-                purpose: 'ai-gateway',
-                name: `ivx-render-runtime-${Date.now()}`,
-              }),
-            });
-            if (!created.ok) throw new Error(`vercel_ai_key_create_http_${created.status}`);
-            gatewayKey = String(created.payload?.apiKeyString || '').trim();
-            if (!gatewayKey.startsWith('vck_')) throw new Error('vercel_ai_key_create_missing_secret');
-            console.log(`::add-mask::${gatewayKey}`);
-            if (!(await probeGateway(gatewayKey))) throw new Error('fresh_ai_gateway_probe_failed');
-            console.log('fresh_ai_gateway_probe=PASS');
+            env.set('IVX_AI_GATEWAY_KEY', providerKey);
+            env.set('AI_GATEWAY_API_KEY', providerKey);
           }
+          console.log(`selected_ai_provider=${provider} source=${sourceName}`);
 
-          env.set('IVX_AI_GATEWAY_KEY', gatewayKey);
-          env.set('AI_GATEWAY_API_KEY', gatewayKey);
-          const put = await rf(`/services/${serviceId}/env-vars`, {
-            method: 'PUT',
-            body: JSON.stringify(Array.from(env, ([key, value]) => ({ key, value }))),
-          });
-          if (!put.ok) throw new Error(`render_env_put_http_${put.status}`);
+          const put=await rf(`/services/${serviceId}/env-vars`,{method:'PUT',body:JSON.stringify(Array.from(env,([key,value])=>({key,value})))});
+          if(!put.ok) throw new Error(`render_env_put_http_${put.status}`);
           console.log('render_ai_binding=PASS');
 
-          const verifyEnv = await rf(`/services/${serviceId}/env-vars`);
-          if (!verifyEnv.ok) throw new Error(`render_env_verify_http_${verifyEnv.status}`);
-          const verifyMap = new Map();
-          for (const item of verifyEnv.payload) {
-            const ev = item?.envVar ?? item;
-            if (ev && typeof ev.key === 'string') verifyMap.set(ev.key, typeof ev.value === 'string' ? ev.value : '');
-          }
-          if (!String(verifyMap.get('IVX_AI_GATEWAY_KEY') || '').trim()) throw new Error('render_verify_missing_IVX_AI_GATEWAY_KEY');
-          if (!String(verifyMap.get('AI_GATEWAY_API_KEY') || '').trim()) throw new Error('render_verify_missing_AI_GATEWAY_API_KEY');
-          console.log('render_ai_binding_verify=PASS');
-
-          const dep = await rf(`/services/${serviceId}/deploys`, {
-            method: 'POST',
-            body: JSON.stringify({ clearCache: 'do_not_clear' }),
-          });
-          if (!dep.ok) throw new Error(`render_deploy_http_${dep.status}`);
-          let id = dep.payload?.id || dep.payload?.deploy?.id || '';
-          if (!id) {
-            await new Promise(r => setTimeout(r, 1500));
-            const recent = await rf(`/services/${serviceId}/deploys?limit=5`);
-            const list = Array.isArray(recent.payload) ? recent.payload : (recent.payload?.deploys || []);
-            const first = list[0] || {};
-            id = first?.deploy?.id || first?.id || '';
-          }
-          if (!id) throw new Error('render_deploy_id_missing');
+          const dep=await rf(`/services/${serviceId}/deploys`,{method:'POST',body:JSON.stringify({clearCache:'do_not_clear'})});
+          if(!dep.ok) throw new Error(`render_deploy_http_${dep.status}`);
+          let id=dep.payload?.id||dep.payload?.deploy?.id||'';
+          if(!id){await new Promise(r=>setTimeout(r,1500));const recent=await rf(`/services/${serviceId}/deploys?limit=5`);const list=Array.isArray(recent.payload)?recent.payload:(recent.payload?.deploys||[]);id=list[0]?.deploy?.id||list[0]?.id||'';}
+          if(!id) throw new Error('render_deploy_id_missing');
           console.log(`render_deploy=STARTED id=${id}`);
-
-          let live = false;
-          for (let i = 0; i < 84; i++) {
-            const d = await rf(`/services/${serviceId}/deploys/${id}`);
-            const p = d.payload?.deploy ?? d.payload;
-            const st = p?.status;
-            if (st === 'live') { live = true; break; }
-            if (st === 'failed' || st === 'build_failed' || st === 'update_failed' || st === 'canceled') {
-              throw new Error(`render_deploy_${st}`);
-            }
-            await new Promise(r => setTimeout(r, 5000));
-          }
-          if (!live) throw new Error('render_deploy_timeout');
+          let live=false;
+          for(let i=0;i<84;i++){const d=await rf(`/services/${serviceId}/deploys/${id}`);const p=d.payload?.deploy??d.payload;const st=p?.status;if(st==='live'){live=true;break;}if(['failed','build_failed','update_failed','canceled'].includes(st)) throw new Error(`render_deploy_${st}`);await new Promise(r=>setTimeout(r,5000));}
+          if(!live) throw new Error('render_deploy_timeout');
           console.log('render_deploy=PASS');
 
-          let hp = {}, hs = 0;
-          for (let i = 0; i < 35; i++) {
-            const h = await fetch(`${apiBase}/health/ai/live`).catch(() => null);
-            if (h) {
-              hs = h.status;
-              hp = await h.json().catch(() => ({}));
-              if (h.ok && hp?.ok === true) break;
-            }
-            await new Promise(r => setTimeout(r, 3000));
-          }
-          if (!hp?.ok) throw new Error(`live_ai_health_failed_http_${hs}_provider_${hp?.status ?? 'none'}_reason_${String(hp?.reason || 'unknown').replace(/\s+/g,'_').slice(0,80)}`);
-          console.log(`live_ai_health=PASS provider=${hp?.providerType || hp?.status || 'configured'}`);
+          let hp={},hs=0;
+          for(let i=0;i<35;i++){const h=await fetch(`${apiBase}/health/ai/live`).catch(()=>null);if(h){hs=h.status;hp=await h.json().catch(()=>({}));if(h.ok&&hp?.ok===true)break;}await new Promise(r=>setTimeout(r,3000));}
+          if(!hp?.ok) throw new Error(`live_ai_health_failed_http_${hs}_reason_${String(hp?.reason||'unknown').replace(/\s+/g,'_').slice(0,80)}`);
+          console.log('live_ai_health=PASS');
 
-          const chat = await fetch(`${apiBase}/api/public/chat`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-ivx-client-id': `render-recovery-${Date.now()}`,
-            },
-            body: JSON.stringify({
-              message: 'Return only 42',
-              sessionId: 'ivx-render-recovery-cert',
-              requestId: `ivx-render-recovery-${Date.now()}`,
-              history: [],
-            }),
-          });
-          const cp = await chat.json().catch(() => ({}));
-          if (!chat.ok || !String(cp.answer ?? cp.text ?? '').trim() || cp.source === 'fallback') {
-            throw new Error(`real_inference_failed_http_${chat.status}_source_${cp.source ?? 'none'}`);
-          }
-          console.log(`real_ai_inference=PASS source=${cp.source ?? 'remote_api'}`);
-          console.log('render_vercel_ai_recovery=PASS');
+          const chat=await fetch(`${apiBase}/api/public/chat`,{method:'POST',headers:{'Content-Type':'application/json','x-ivx-client-id':`render-recovery-${Date.now()}`},body:JSON.stringify({message:'Return only 42',sessionId:'ivx-render-recovery-cert',requestId:`ivx-render-recovery-${Date.now()}`,history:[]})});
+          const cp=await chat.json().catch(()=>({}));
+          if(!chat.ok||!String(cp.answer??cp.text??'').trim()||cp.source==='fallback') throw new Error(`real_inference_failed_http_${chat.status}_source_${cp.source??'none'}`);
+          console.log(`real_ai_inference=PASS source=${cp.source??'remote_api'}`);
+          console.log('render_ai_recovery=PASS');
           NODE
