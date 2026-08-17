@@ -5874,6 +5874,9 @@ app.get('/api/ivx/crm', async (c) => handleCRMMain(c.req.raw));
 // JV Deals
 app.options('/api/ivx/jv-deals', () => publicFeatureOptions());
 app.get('/api/ivx/jv-deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => Response.json({ deals: [], count: 0, deploymentMarker: 'ivx-public-features-api-v1-2026-07-01' })));
+// Android app canonical aliases
+app.options('/api/ivx/deals', () => publicFeatureOptions());
+app.get('/api/ivx/deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => Response.json({ deals: [], totalCount: 0, deploymentMarker: 'ivx-android-home-deals-fallback' })));
 // Canonical aliases — /api/deals and /api/properties map to the ivx-prefixed routes
 app.options('/api/deals', () => publicFeatureOptions());
 app.get('/api/deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => Response.json({ deals: [], count: 0, deploymentMarker: 'ivx-public-features-api-v1-2026-07-01' })));
@@ -5882,10 +5885,16 @@ app.options('/api/published-jv-deals', () => publicFeatureOptions());
 app.get('/api/published-jv-deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => Response.json({ deals: [], count: 0, deploymentMarker: 'ivx-public-features-api-v1-2026-07-01' })));
 app.options('/api/landing-deals', () => publicFeatureOptions());
 app.get('/api/landing-deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => Response.json({ deals: [], count: 0, deploymentMarker: 'ivx-public-features-api-v1-2026-07-01' })));
+// Android app canonical aliases
+app.options('/api/ivx/properties', () => publicFeatureOptions());
+app.get('/api/ivx/properties', async (c) => withTimeout(() => handleFeaturedProperties(c.req.raw), () => Response.json({ properties: [], totalCount: 0, deploymentMarker: 'ivx-android-home-properties-fallback' })));
 app.options('/api/properties', () => publicFeatureOptions());
 app.get('/api/properties', async (c) => withTimeout(() => handleFeaturedProperties(c.req.raw), () => Response.json({ properties: [], count: 0, deploymentMarker: 'ivx-public-features-api-v1-2026-07-01' })));
 app.options('/api/properties/:propertyId', () => publicFeatureOptions());
 app.get('/api/properties/:propertyId', async (c) => handlePropertyDetails(c.req.raw, c.req.param('propertyId')));
+// Investor CRM placeholder for Android home dashboard
+app.options('/api/ivx/investor-crm', () => publicFeatureOptions());
+app.get('/api/ivx/investor-crm', async (c) => Response.json({ investors: [], totalCount: 0, totalInvested: 0, deploymentMarker: 'ivx-android-home-investors-fallback' }));
 
 // Deal Pathways (admin-controlled, owner-only writes)
 app.options('/api/ivx/deals/pathways', () => publicFeatureOptions());
