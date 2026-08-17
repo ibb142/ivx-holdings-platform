@@ -21,7 +21,8 @@ object AppConfig {
     const val MEMBERS_PATH = "/api/ivx/members"
 
     const val OWNER_EMAIL = "iperez4242@gmail.com"
-    const val APP_VERSION = "1.4.3"
-    const val VERSION_CODE = 12
-    const val GIT_SHA = "4098a66"
+    const val OWNER_PHONE = "+15616443503"
+    const val APP_VERSION = "1.5.0"
+    const val VERSION_CODE = 13
+    const val GIT_SHA = "d11d13a"
 }
