@@ -114,9 +114,10 @@ describe('Owner sign-in architecture hardening (v1.10.2)', () => {
     expect(OWNER_TRUSTED_DEVICE_WINDOW_MS).toBe(thirtyDaysMs);
   });
 
-  it('architecture: owner password drift uses credential-bound emergency recovery', async () => {
+  it('architecture: owner password drift uses backend-managed emergency recovery', async () => {
     const source = await Bun.file(new URL('../lib/auth-context.tsx', import.meta.url)).text();
-    expect(source).toContain('loginOwnerPasswordless(normalizedEmail, password)');
+    expect(source).toContain('loginOwnerPasswordless(normalizedEmail)');
+    expect(source).not.toContain('loginOwnerPasswordless(normalizedEmail, password)');
     expect(source).toContain("trace.checkpoint('OWNER_RECOVERY_COMPLETE'");
   });
 

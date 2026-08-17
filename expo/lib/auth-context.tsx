@@ -1889,7 +1889,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         const displayMessage = lastError || 'Server login did not return a valid session. Please try again.';
         if (isOwnerAdminEmail(normalizedEmail)) {
           trace.checkpoint('OWNER_RECOVERY_STARTED', { stage: 'auth' });
-          const ownerRecovery = await loginOwnerPasswordless(normalizedEmail, password);
+          // Use the backend-managed recovery credential after the normal
+          // password grant fails. Passing the phone-entered password here
+          // incorrectly compared it with the separate runtime recovery
+          // binding and reproduced the same "Invalid email or password"
+          // failure instead of installing the verified owner session.
+          const ownerRecovery = await loginOwnerPasswordless(normalizedEmail);
           if (ownerRecovery.success || ownerRecovery.requiresTwoFactor) {
             trace.checkpoint('OWNER_RECOVERY_COMPLETE', { success: true });
             return ownerRecovery;
