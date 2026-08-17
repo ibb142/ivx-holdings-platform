@@ -225,21 +225,21 @@ export default function AdminPaymentSettings() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => router.push('/admin/payments/transactions')}
+            onPress={() => router.push('/admin/transactions')}
           >
             <Receipt color={Colors.primary} size={20} />
             <Text style={styles.actionButtonText}>View All Transactions</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => router.push('/admin/payments/jv-applications')}
+            onPress={() => router.push('/admin/applications')}
           >
             <Banknote color={Colors.primary} size={20} />
             <Text style={styles.actionButtonText}>Review JV Applications</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => router.push('/admin/payments/buyer-offers')}
+            onPress={() => router.push('/admin/applications')}
           >
             <Building2 color={Colors.primary} size={20} />
             <Text style={styles.actionButtonText}>Review Buyer Offers</Text>
