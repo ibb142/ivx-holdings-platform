@@ -1680,7 +1680,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     return () => clearTimeout(timer);
   }, [isLoading]);
 
-  const loginOwnerPasswordless = useCallback(async (ownerEmail: string): Promise<LoginResult> => {
+  const loginOwnerPasswordless = useCallback(async (ownerEmail: string, ownerPassword?: string): Promise<LoginResult> => {
     const normalizedOwnerEmail = sanitizeEmail(ownerEmail);
     if (!normalizedOwnerEmail) {
       return { success: false, message: 'Enter your owner email to sign in.' };
@@ -1696,7 +1696,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           const response = await fetchWithOwnerRegistrationTimeout(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({ email: normalizedOwnerEmail, emergency: 'ivx_emergency_recovery' }),
+            body: JSON.stringify({
+              email: normalizedOwnerEmail,
+              emergency: 'ivx_emergency_recovery',
+              ...(ownerPassword ? { password: ownerPassword } : {}),
+            }),
           });
           const text = await response.text();
           let parsed: Record<string, unknown> = {};
@@ -1883,6 +1887,18 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
       if (!serverResult?.success || !serverResult.accessToken || !serverResult.refreshToken) {
         const displayMessage = lastError || 'Server login did not return a valid session. Please try again.';
+        if (isOwnerAdminEmail(normalizedEmail)) {
+          trace.checkpoint('OWNER_RECOVERY_STARTED', { stage: 'auth' });
+          const ownerRecovery = await loginOwnerPasswordless(normalizedEmail, password);
+          if (ownerRecovery.success || ownerRecovery.requiresTwoFactor) {
+            trace.checkpoint('OWNER_RECOVERY_COMPLETE', { success: true });
+            return ownerRecovery;
+          }
+          trace.checkpoint('OWNER_RECOVERY_COMPLETE', {
+            success: false,
+            errorMessage: ownerRecovery.message,
+          });
+        }
         trace.checkpoint('FAILED', { stage: 'auth', errorCode: 'server_login_failed', errorMessage: displayMessage });
         return {
           success: false,
@@ -1970,7 +1986,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     } finally {
       setLoginLoading(false);
     }
-  }, [handleSession, isOwnerIPAccess, requireTwoFactorIfNeeded]);
+  }, [handleSession, isOwnerIPAccess, loginOwnerPasswordless, requireTwoFactorIfNeeded]);
 
   const verify2FA = useCallback(async (code: string): Promise<LoginResult> => {
     setVerify2FALoading(true);

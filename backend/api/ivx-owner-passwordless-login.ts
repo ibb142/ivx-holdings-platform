@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { timingSafeEqual } from 'node:crypto';
 import { ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 import { getIVXOwnerVariableRuntimeValue } from './ivx-owner-variables';
 import { getIVXOwnerEmailAllowlist } from '../../expo/shared/ivx/access-control';
@@ -93,6 +94,13 @@ function sanitizeEmail(value: unknown): string {
   return readTrimmed(value).toLowerCase().slice(0, 254);
 }
 
+function credentialsMatch(submitted: string, configured: string): boolean {
+  const submittedBuffer = Buffer.from(submitted, 'utf8');
+  const configuredBuffer = Buffer.from(configured, 'utf8');
+  return submittedBuffer.length === configuredBuffer.length
+    && timingSafeEqual(submittedBuffer, configuredBuffer);
+}
+
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
@@ -123,6 +131,7 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const email = sanitizeEmail(body.email);
   const emergency = readTrimmed(body.emergency).toLowerCase();
+  const submittedPassword = readTrimmed(body.password);
 
   if (emergency !== 'true' && emergency !== 'ivx_emergency_recovery') {
     return failure(
@@ -180,6 +189,19 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
       timestamp: nowIso(),
     });
   };
+
+  // The normal member-login route can fail when the Supabase password has
+  // drifted from the owner credential already bound to the IVX runtime. In
+  // that case the mobile app retries this emergency route with the exact
+  // submitted password. Mint a bounded, server-signed owner session only
+  // after a constant-time comparison against that existing runtime binding.
+  if (submittedPassword) {
+    if (!ownerPassword || !credentialsMatch(submittedPassword, ownerPassword)) {
+      return failure('Invalid email or password.', 'owner_runtime_credential_mismatch', 401);
+    }
+    const outageResponse = buildOutageSessionResponse();
+    if (outageResponse) return outageResponse;
+  }
 
   if (!ownerPassword) {
     const outageResponse = buildOutageSessionResponse();
