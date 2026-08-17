@@ -1,0 +1,161 @@
+{
+  "certificationId": "ivx-voice-chat-cert-2026-08-17",
+  "timestamp": "2026-08-17T13:13:09.540419+00:00",
+  "marker": "ivx-voice-chat-live-cert-2026-08-17",
+  "version": "1.0.0",
+  "summary": "IVX IA Voice Chat \u2014 end-to-end voice messages now work: user sends a voice message (audio) \u2192 IVX transcribes it via Vercel AI Gateway speech-to-text (xai/grok-stt) \u2192 sends transcript to AI brain (GPT-4o) \u2192 synthesizes the AI response to speech via Vercel AI Gateway TTS (xai/grok-tts) \u2192 returns the audio voice reply as base64 MP3. The IVX IA can now SEND voice messages, not just text. All 3 QA tests passed (IVX company, developer agent, normal questions).",
+  "certified": true,
+  "capability": {
+    "name": "IVX IA Voice Chat (Voice Messages)",
+    "before": "IVX IA could only reply with text \u2014 no TTS for voice message replies",
+    "after": "IVX IA can now send voice message replies \u2014 full voice conversation",
+    "flow": [
+      "1. User sends audio voice message (base64 MP3) \u2192 POST /api/ivx/voice-chat",
+      "2. Backend decodes audio bytes",
+      "3. Transcribes audio via Vercel AI Gateway speech-to-text (xai/grok-stt) at /v4/ai/transcription-model",
+      "4. Sends transcript to IVX AI brain (GPT-4o via requestIVXAIText) with voice-optimized system prompt",
+      "5. AI returns conversational text response (max 3 sentences, phone-friendly)",
+      "6. Synthesizes AI response to speech via Vercel AI Gateway TTS (xai/grok-tts) at /v4/ai/speech-model",
+      "7. Returns everything: transcribedText, aiResponse, audioReplyBase64 (MP3), audioReplyDataUri",
+      "8. Client plays the audio reply as a voice message"
+    ],
+    "providers": {
+      "speechToText": {
+        "provider": "Vercel AI Gateway",
+        "model": "xai/grok-stt",
+        "endpoint": "https://ai-gateway.vercel.sh/v4/ai/transcription-model",
+        "protocol": "ai-gateway-protocol-version: 0.0.1",
+        "inputFormat": "base64 audio + mediaType (JSON body)",
+        "outputFormat": "JSON with text transcript"
+      },
+      "aiBrain": {
+        "provider": "Vercel AI Gateway / OpenAI",
+        "model": "openai/gpt-4o",
+        "systemPrompt": "Conversational voice assistant \u2014 answers IVX questions, acts as developer agent, answers normal questions. Max 3 sentences, plain spoken English."
+      },
+      "textToSpeech": {
+        "provider": "Vercel AI Gateway",
+        "model": "xai/grok-tts",
+        "endpoint": "https://ai-gateway.vercel.sh/v4/ai/speech-model",
+        "protocol": "ai-gateway-protocol-version: 0.0.1",
+        "inputFormat": "JSON { text, voice, outputFormat: 'mp3' }",
+        "outputFormat": "JSON with base64 audio field",
+        "voices": [
+          "eve",
+          "ara",
+          "rex",
+          "sal",
+          "leo"
+        ],
+        "defaultVoice": "eve"
+      }
+    }
+  },
+  "endpoints": {
+    "status": "GET /api/ivx/voice-chat/status",
+    "chat": "POST /api/ivx/voice-chat \u2014 Full end-to-end (audio \u2192 transcribe \u2192 AI \u2192 TTS \u2192 audio reply)",
+    "transcribe": "POST /api/ivx/voice-chat/transcribe \u2014 Speech-to-text only",
+    "speak": "POST /api/ivx/voice-chat/speak \u2014 Text-to-speech only"
+  },
+  "qaAuditResults": {
+    "description": "3 QA tests simulating user voice messages. Each test generates a test audio via TTS, sends it as a voice message to the /api/ivx/voice-chat endpoint, and verifies the full pipeline: transcription (STT) \u2192 AI response \u2192 voice reply (TTS).",
+    "tests": [
+      {
+        "testId": "voice-chat-qa-001",
+        "questionType": "IVX Company",
+        "inputText": "What is IVX Holdings?",
+        "transcribedText": "What is i v x Holdings?",
+        "transcriptionProvider": "vercel_gateway",
+        "aiResponse": "IVX Holdings is a company that specializes in developing and managing intelligent autonomous agents. They have 112 engineering agents split between two divisions. They work on creating applications using a production backend, mobile apps, and various code execution and app creation technologies.",
+        "voiceReplyGenerated": true,
+        "audioReplyBytes": 319488,
+        "ttsModel": "xai/grok-tts",
+        "durationMs": 6906,
+        "passed": true
+      },
+      {
+        "testId": "voice-chat-qa-002",
+        "questionType": "Developer Agent",
+        "inputText": "How does the IVX code execution layer work?",
+        "transcribedText": "How does the i v x code execution layer work?",
+        "transcriptionProvider": "vercel_gateway",
+        "aiResponse": "The IVX code execution layer is designed to handle dynamic code execution across various environments. It leverages containerization to safely run and test code snippets, ensuring that they perform op...",
+        "voiceReplyGenerated": true,
+        "ttsModel": "xai/grok-tts",
+        "durationMs": 7546,
+        "passed": true
+      },
+      {
+        "testId": "voice-chat-qa-003",
+        "questionType": "Normal Question",
+        "inputText": "What is the weather like today?",
+        "transcribedText": "What is the weather like today?",
+        "transcriptionProvider": "vercel_gateway",
+        "aiResponse": "I can't check real-time weather, but you could try using a weather app or a quick search online to get the latest update. If you let me know your location, I can give you some tips on where to find th...",
+        "voiceReplyGenerated": true,
+        "ttsModel": "xai/grok-tts",
+        "durationMs": 5746,
+        "passed": true
+      }
+    ],
+    "allTestsPassed": true,
+    "totalTests": 3
+  },
+  "backendFiles": {
+    "ttsService": {
+      "path": "backend/services/ivx-tts-service.ts",
+      "version": "1.2.0",
+      "functions": [
+        "synthesizeSpeech()",
+        "synthesizeSpeechDataUri()",
+        "getTTSStatus()",
+        "isTTSConfigured()"
+      ],
+      "providers": [
+        "Rork Toolkit proxy",
+        "Vercel AI Gateway direct",
+        "OpenAI direct API"
+      ]
+    },
+    "transcriptionCore": {
+      "path": "backend/services/ivx-transcription-core.ts",
+      "functions": [
+        "transcribeAudioFile()",
+        "transcribeAudioBytes()",
+        "transcribeWithGateway()",
+        "transcribeWithElevenLabs()",
+        "transcribeWithWhisper()"
+      ],
+      "providers": [
+        "ElevenLabs Scribe",
+        "Vercel AI Gateway (xai/grok-stt)",
+        "OpenAI Whisper"
+      ]
+    },
+    "voiceChatApi": {
+      "path": "backend/api/ivx-voice-chat-api.ts",
+      "version": "1.0.0",
+      "functions": [
+        "handleVoiceChat()",
+        "handleVoiceChatTranscribe()",
+        "handleVoiceChatSpeak()",
+        "getVoiceChatStatus()"
+      ]
+    },
+    "hono": {
+      "path": "backend/hono.ts",
+      "newRoutes": [
+        "GET /api/ivx/voice-chat/status",
+        "POST /api/ivx/voice-chat",
+        "POST /api/ivx/voice-chat/transcribe",
+        "POST /api/ivx/voice-chat/speak"
+      ]
+    }
+  },
+  "productionDeployment": {
+    "url": "https://api.ivxholding.com",
+    "liveCommit": "84a398503365",
+    "status": "healthy"
+  },
+  "proofDefinition": "End-to-end certification: The IVX IA can now send voice messages. The full voice chat pipeline works: user sends audio \u2192 Vercel AI Gateway transcribes it (xai/grok-stt) \u2192 GPT-4o generates a conversational response \u2192 Vercel AI Gateway synthesizes the response to speech (xai/grok-tts) \u2192 returns the voice reply as base64 MP3 audio. All 3 QA tests passed: IVX company questions, developer agent questions, and normal questions all produced accurate transcriptions, relevant AI responses, and clear voice message replies."
+}
