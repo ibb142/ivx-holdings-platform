@@ -874,6 +874,7 @@ import { recordIncident } from './services/ivx-incident-store';
 import { evaluateAndMaybeRollback } from './services/ivx-production-guard';
 import { OPTIONS as agentJobsOptions, handleIVXAgentJobActionRequest, handleIVXAgentJobGetRequest, handleIVXAgentJobsCreateRequest, handleIVXAgentJobsListRequest, handleIVXAgentJobsLiveActivityRequest, handleIVXAgentJobsStatusRequest, handleIVXAgentWorkerRunOnceRequest } from './api/ivx-agent-jobs';
 import { OPTIONS as agentTestTokenOptions, handleIVXAgentTestRunRequest, handleIVXAgentTestTokenMintRequest } from './api/ivx-agent-test-token';
+import { handleAppPipelineStatusRequest, handleAppPipelineAgentsRequest, handleAppPipelineRunRequest } from './api/ivx-app-creation-pipeline';
 import { OPTIONS as seniorDeveloperOptions, handleIVXSeniorDeveloperCredentialAuditRequest, handleIVXSeniorDeveloperGithubAuditRequest, handleIVXSeniorDeveloperRunRequest, handleIVXSeniorDeveloperStatusRequest } from './api/ivx-senior-developer-runtime';
 import { auditIVXProductionCredentialRuntime, IVX_SENIOR_DEVELOPER_RUNTIME_MARKER, IVX_GITHUB_CANONICAL_PATH, IVX_GITHUB_CANONICAL_PATH_DESCRIPTION } from './services/ivx-senior-developer-runtime';
 import { OPTIONS as seniorDevToolsOptions, handleIVXSeniorDevAuditReportRequest, handleIVXSeniorDevToolsExecuteRequest, handleIVXSeniorDevToolsListRequest } from './api/ivx-senior-dev-tools';
@@ -4799,6 +4800,14 @@ app.options('/api/ivx/agent-jobs/test-token', () => agentTestTokenOptions());
 app.post('/api/ivx/agent-jobs/test-token', async (context) => handleIVXAgentTestTokenMintRequest(context.req.raw));
 app.options('/api/ivx/agent-jobs/test-run', () => agentTestTokenOptions());
 app.post('/api/ivx/agent-jobs/test-run', async (context) => handleIVXAgentTestRunRequest(context.req.raw));
+
+// ── New App Creation Pipeline (IA-63 to IA-92, 30 agents end-to-end) ──
+// Sequential pipeline: Discovery → Strategy → Engineering → Delivery → Launch
+// Each agent receives the output of the previous agent and produces a deliverable
+// that feeds the next, all through real remote AI inference.
+app.get('/api/ivx/app-creation-pipeline/status', () => handleAppPipelineStatusRequest());
+app.get('/api/ivx/app-creation-pipeline/agents', () => handleAppPipelineAgentsRequest());
+app.post('/api/ivx/app-creation-pipeline/run', async (context) => handleAppPipelineRunRequest(context.req.raw));
 
 // Owner-only Render deploy diagnostic — reads private credentials from process.env
 // or the encrypted Owner Variables runtime bridge, without returning secret values.
