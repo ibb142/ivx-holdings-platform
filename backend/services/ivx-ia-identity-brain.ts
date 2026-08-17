@@ -312,6 +312,9 @@ export function buildIVXIdentityAnswer(type: IVXIdentityQuestionType, language: 
  */
 export function resolveIVXIdentityAnswer(message: string): string | null {
   const type = detectIVXIdentityQuestion(message);
+  // Only intercept PURE identity questions (name, creator, owner, what-is-IVX).
+  // Project, investment, capabilities, greeting, and help questions flow through
+  // to the upgraded AI prompt for 10/10 ChatGPT-level responses.
   if (type === 'none' || type === 'ivx_project' || type === 'ivx_investment') {
     return null;
   }
