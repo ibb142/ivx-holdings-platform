@@ -45,7 +45,7 @@ const cf = new CloudFrontClient({ region: 'us-east-1', credentials: { accessKeyI
 
 const LANDING_DIR = '/home/user/rork-app/expo/ivxholding-landing';
 const ASSETS_DIR = '/home/user/rork-app/expo/assets/images';
-const APK_PATH = '/tmp/ivx-holdings-1.10.13.apk';
+const APK_PATH = '/tmp/ivx-holdings-1.10.14.apk';
 
 // Build version for cache-busting
 const BUILD_VER = 'v' + new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -369,8 +369,8 @@ async function deploy() {
   if (existsSync(APK_PATH)) {
     const apkBody = readFileSync(APK_PATH);
     const apkKeys = [
-      { key: 'apk/download', disposition: 'attachment; filename="ivx-holdings-v1.10.13.apk"' },
-      { key: 'apk/ivx-holdings-v1.10.13.apk', disposition: 'attachment; filename="ivx-holdings-v1.10.13.apk"' },
+      { key: 'apk/download', disposition: 'attachment; filename="ivx-holdings-v1.10.14.apk"' },
+      { key: 'apk/ivx-holdings-v1.10.14.apk', disposition: 'attachment; filename="ivx-holdings-v1.10.14.apk"' },
     ];
     for (const a of apkKeys) {
       try {
