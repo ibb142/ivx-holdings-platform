@@ -85,6 +85,10 @@ async function parseBody(req: Request): Promise<ParsedBody> {
         toNumber: typeof data['toNumber'] === 'string' ? data['toNumber'] : undefined,
         smsBody: typeof data['smsBody'] === 'string' ? data['smsBody'] : undefined,
         voiceMessage: typeof data['voiceMessage'] === 'string' ? data['voiceMessage'] : undefined,
+        speechResult: typeof data['speechResult'] === 'string' ? data['speechResult']
+          : typeof data['SpeechResult'] === 'string' ? data['SpeechResult'] as string : undefined,
+        callSid: typeof data['callSid'] === 'string' ? data['callSid']
+          : typeof data['CallSid'] === 'string' ? data['CallSid'] as string : undefined,
       };
     }
     // application/x-www-form-urlencoded (SignalWire webhooks use this)
