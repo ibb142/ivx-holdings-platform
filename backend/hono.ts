@@ -895,6 +895,13 @@ import {
   handleSignalWireVerify,
 } from './api/ivx-signalwire-api';
 import {
+  getVoiceChatStatus,
+  handleVoiceChat,
+  handleVoiceChatTranscribe,
+  handleVoiceChatSpeak,
+  IVX_VOICE_CHAT_API_MARKER,
+} from './api/ivx-voice-chat-api';
+import {
   runDailySelfUpgrade,
   getSelfUpgradeStatus,
   getUpgradeLog,
@@ -4879,6 +4886,15 @@ app.options('/api/ivx/signalwire/verify', (c) => c.body(null, 204));
 app.options('/api/ivx/self-upgrade/status', (c) => c.body(null, 204));
 app.options('/api/ivx/self-upgrade/run', (c) => c.body(null, 204));
 app.options('/api/ivx/self-upgrade/log', (c) => c.body(null, 204));
+// Voice Chat — end-to-end voice messages (audio in → transcribe → AI → TTS → audio out)
+app.get('/api/ivx/voice-chat/status', () => Response.json(getVoiceChatStatus()));
+app.post('/api/ivx/voice-chat', async (c) => handleVoiceChat(c.req.raw));
+app.post('/api/ivx/voice-chat/transcribe', async (c) => handleVoiceChatTranscribe(c.req.raw));
+app.post('/api/ivx/voice-chat/speak', async (c) => handleVoiceChatSpeak(c.req.raw));
+app.options('/api/ivx/voice-chat/status', (c) => c.body(null, 204));
+app.options('/api/ivx/voice-chat', (c) => c.body(null, 204));
+app.options('/api/ivx/voice-chat/transcribe', (c) => c.body(null, 204));
+app.options('/api/ivx/voice-chat/speak', (c) => c.body(null, 204));
 
 // Owner-only Render deploy diagnostic — reads private credentials from process.env
 // or the encrypted Owner Variables runtime bridge, without returning secret values.
