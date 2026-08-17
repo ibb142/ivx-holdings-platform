@@ -8,7 +8,27 @@ LOGCAT_PATH="${4:-android-runtime-logcat.txt}"
 LAUNCH_PATH="${5:-android-launch.txt}"
 VERSION_PATH="${6:-android-package-version.txt}"
 
-adb install -r "$APK_PATH"
+adb wait-for-device
+
+# Emulator package services can become reachable several seconds after ADB.
+# Retry installation after verifying the package manager instead of treating a
+# transient binder "Broken pipe" as an application launch failure.
+install_apk() {
+  local attempt
+  for attempt in 1 2 3; do
+    if adb shell cmd package list packages >/dev/null 2>&1 && adb install -r "$APK_PATH"; then
+      return 0
+    fi
+    echo "APK install attempt $attempt failed; waiting for Android package services" >&2
+    sleep $((attempt * 5))
+    adb reconnect >/dev/null 2>&1 || true
+    adb wait-for-device
+  done
+  echo "APK installation failed after 3 attempts" >&2
+  return 1
+}
+
+install_apk
 adb shell am force-stop "$PACKAGE_NAME"
 adb logcat -c
 
