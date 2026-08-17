@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Feed
 import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Groups
@@ -30,6 +31,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     data object VercelExit : Screen("vercel_exit", "Vercel Exit", Icons.Default.Dashboard)
     data object Agents : Screen("agents", "Agents", Icons.Default.Groups)
     data object AIEngineering : Screen("ai_engineering", "AI Engineering", Icons.Default.TrendingUp)
+    data object AutonomousDashboard : Screen("autonomous_dashboard", "Autonomous", Icons.Default.AutoAwesome)
     data object OwnerDashboard : Screen("owner_dashboard", "Owner Dashboard", Icons.Default.Dashboard)
     data object Investors : Screen("investors", "Investors", Icons.Default.RealEstateAgent)
     data object Buyers : Screen("buyers", "Buyers", Icons.Default.Groups)
