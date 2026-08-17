@@ -893,6 +893,7 @@ import {
   handleSignalWireVoiceRespond,
   handleSignalWireConversationalCall,
   handleSignalWireVerify,
+  handleVoiceBrainStatus,
 } from './api/ivx-signalwire-api';
 import {
   getVoiceChatStatus,
@@ -4859,6 +4860,7 @@ app.get('/api/ivx/signalwire/voice', async (c) => handleSignalWireListCalls(c.re
 app.post('/api/ivx/signalwire/voice/laml', async (c) => handleSignalWireVoiceLaML(c.req.raw));
 app.get('/api/ivx/signalwire/voice/laml', async (c) => handleSignalWireVoiceLaML(c.req.raw));
 app.post('/api/ivx/signalwire/voice/respond', async (c) => handleSignalWireVoiceRespond(c.req.raw));
+app.get('/api/ivx/signalwire/voice/brain', () => handleVoiceBrainStatus());
 app.post('/api/ivx/signalwire/conversational', async (c) => handleSignalWireConversationalCall(c.req.raw));
 app.post('/api/ivx/signalwire/verify', async (c) => handleSignalWireVerify(c.req.raw));
 // Daily autonomous self-upgrade
@@ -4881,6 +4883,7 @@ app.options('/api/ivx/signalwire/sms', (c) => c.body(null, 204));
 app.options('/api/ivx/signalwire/voice', (c) => c.body(null, 204));
 app.options('/api/ivx/signalwire/voice/laml', (c) => c.body(null, 204));
 app.options('/api/ivx/signalwire/voice/respond', (c) => c.body(null, 204));
+app.options('/api/ivx/signalwire/voice/brain', (c) => c.body(null, 204));
 app.options('/api/ivx/signalwire/conversational', (c) => c.body(null, 204));
 app.options('/api/ivx/signalwire/verify', (c) => c.body(null, 204));
 app.options('/api/ivx/self-upgrade/status', (c) => c.body(null, 204));
