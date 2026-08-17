@@ -189,7 +189,7 @@ export function buildAutonomousVoiceLaml(message: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?><Response><Say language="en-US" voice="woman">${safe}</Say><Pause length="1"/><Say language="en-US" voice="woman">Please open the IVX owner dashboard for the exact action and trace ID. Autonomous will resume automatically after verification.</Say><Hangup/></Response>`;
 }
 
-async function appendCallRecord(record: AutonomousVoiceCallRecord): Promise<void> {
+export async function appendAutonomousVoiceCallRecord(record: AutonomousVoiceCallRecord): Promise<void> {
   const existing = await readDurableJson<AutonomousVoiceCallRecord[]>(CALL_LEDGER_PATH, []);
   const next = [record, ...(Array.isArray(existing) ? existing : [])].slice(0, 500);
   await writeDurableJson(CALL_LEDGER_PATH, next);
@@ -237,7 +237,7 @@ export async function placeAutonomousVoiceCall(input: { traceId: string; message
       createdAt,
       callbackAt: null,
     };
-    await appendCallRecord(record).catch(() => undefined);
+    await appendAutonomousVoiceCallRecord(record).catch(() => undefined);
     return record;
   };
 
@@ -295,7 +295,7 @@ export async function placeAutonomousVoiceCall(input: { traceId: string; message
       createdAt,
       callbackAt: null,
     };
-    await appendCallRecord(record).catch(() => undefined);
+    await appendAutonomousVoiceCallRecord(record).catch(() => undefined);
     return record;
   } catch (error) {
     if (twilio) return placeTwilioVoiceCall(twilio, to, input, id, createdAt, fail);
@@ -355,7 +355,7 @@ async function placeTwilioVoiceCall(
       createdAt,
       callbackAt: null,
     };
-    await appendCallRecord(record).catch(() => undefined);
+    await appendAutonomousVoiceCallRecord(record).catch(() => undefined);
     return record;
   } catch (error) {
     return fail(error instanceof Error ? error.message : 'Twilio create call failed');
