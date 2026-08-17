@@ -1,0 +1,950 @@
+{
+  "id": "n8j1qtenw5tjnw3no2cga",
+  "role": "assistant",
+  "preferredModelName": "rork-fast-v1",
+  "resolvedModelName": "rork-fast-v1",
+  "gatewayProvider": "novita",
+  "gatewayModelId": "zai/glm-5.2",
+  "createdAt": 1787008616889,
+  "responseMessageContents": [
+    {
+      "type": "reasoning",
+      "text": "The user wants me to audit why they're not getting autonomous SMS and voice call QA, and fix it. Let me look at the backend services for SignalWire SMS and voice calls, and the autonomous voice brain to understand what's happening.",
+      "id": "zhvsh3nb5by2vevheenfx",
+      "createdAt": 1787008297409,
+      "gatewayModelId": "zai/glm-5.2",
+      "completedAt": 1787008298221
+    },
+    {
+      "type": "text",
+      "text": "Let me audit the autonomous SMS and voice call pipeline end-to-end.",
+      "id": "45059iorjwlw1f7ee80on",
+      "createdAt": 1787008298221
+    },
+    {
+      "type": "tool",
+      "id": "chatcmpl-tool-97ed2eb9bf2e04d5",
+      "toolName": "bash",
+      "input": {
+        "command": "cd /home/user/rork-app && curl -s -w \"\\nHTTP %{http_code}\" https://api.ivxholding.com/api/ivx/signalwire/sms -X POST -H \"Content-Type: application/json\" -d '{\"to\":\"+15616443503\",\"message\":\"QA audit test from IVX autonomous pipeline\"}' 2>&1 | tail -20"
+      },
+      "output": {
+        "stdout": "{\"ok\":false,\"error\":\"Missing \\\"body\\\" for SMS message\"}\nHTTP 400",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && curl -s -w \\\"\\\\nHTTP %{http_code}\\\" https://api.ivxholding.com/api/ivx/signalwire/sms -X POST -H \\\"Content-Type: application/json\\\" -d '{\\\"to\\\":\\\"+15616443503\\\",\\\"message\\\":\\\"QA audit test from IVX autonomous pipeline\\\"}' 2>&1 | tail -20\"}",
+      "createdAt": 1787008298423,
+      "completedAt": 1787008301494
+    },
+    {
+      "type": "tool",
+      "id": "chatcmpl-tool-ac25cceaa94b6710",
+      "toolName": "bash",
+      "input": {
+        "command": "cd /home/user/rork-app && curl -s -w \"\\nHTTP %{http_code}\" https://api.ivxholding.com/api/ivx/signalwire/voice -X POST -H \"Content-Type: application/json\" -d '{\"to\":\"+15616443503\",\"message\":\"QA audit voice call test from IVX autonomous pipeline\"}' 2>&1 | tail -20"
+      },
+      "output": {
+        "stdout": "{\"ok\":false,\"sid\":null,\"status\":\"error\",\"from\":\"+17206230552\",\"to\":\"+15616443503\",\"lamlUrl\":\"https://api.ivxholding.com/api/ivx/signalwire/voice/laml\",\"errorCode\":\"30002\",\"errorMessage\":\"From number has insufficient balance.\",\"durationMs\":302}\nHTTP 200",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && curl -s -w \\\"\\\\nHTTP %{http_code}\\\" https://api.ivxholding.com/api/ivx/signalwire/voice -X POST -H \\\"Content-Type: application/json\\\" -d '{\\\"to\\\":\\\"+15616443503\\\",\\\"message\\\":\\\"QA audit voice call test from IVX autonomous pipeline\\\"}' 2>&1 | tail -20\"}",
+      "createdAt": 1787008299491,
+      "completedAt": 1787008302004
+    },
+    {
+      "type": "tool",
+      "id": "chatcmpl-tool-b4889a4db969470b",
+      "toolName": "bash",
+      "input": {
+        "command": "cd /home/user/rork-app && curl -s -w \"\\nHTTP %{http_code}\" https://api.ivxholding.com/api/ivx/signalwire/voice/brain -X POST -H \"Content-Type: application/json\" -d '{\"to\":\"+15616443503\",\"topic\":\"QA audit test\"}' 2>&1 | tail -20"
+      },
+      "output": {
+        "stdout": "{\"error\":\"Not found\",\"deploymentMarker\":\"ivx-owner-ai-hono-autodeploy-live (see commit+bootTime for freshness)\"}\nHTTP 404",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && curl -s -w \\\"\\\\nHTTP %{http_code}\\\" https://api.ivxholding.com/api/ivx/signalwire/voice/brain -X POST -H \\\"Content-Type: application/json\\\" -d '{\\\"to\\\":\\\"+15616443503\\\",\\\"topic\\\":\\\"QA audit test\\\"}' 2>&1 | tail -20\"}",
+      "createdAt": 1787008300388,
+      "completedAt": 1787008302200
+    },
+    {
+      "type": "reasoning",
+      "text": "Found the issues:\n\n1. **SMS**: Returns `{\"ok\":false,\"error\":\"Missing \\\"body\\\" for SMS message\"}` — the API expects field `body`, not `message`. Let me check the actual API code to confirm the field name.\n\n2. **Voice call**: Returns HTTP 200 but with error: `\"errorCode\":\"30002\",\"errorMessage\":\"From number has insufficient balance.\"` — the SignalWire account has insufficient balance for outbound voice calls.\n\n3. **Voice/brain**: Returns 404 — the route `/api/ivx/signalwire/voice/brain` doesn't exist on the live deployment.\n\nLet me investigate the backend code to understand the exact issues and fix them.",
+      "id": "m8kabholcwgckdynnju2e",
+      "createdAt": 1787008315766,
+      "gatewayModelId": "zai/glm-5.2",
+      "completedAt": 1787008317786
+    },
+    {
+      "type": "text",
+      "text": "Found 3 issues in the audit:\n\n1. **SMS**: API expects field `body`, not `message` — field name mismatch\n2. **Voice call**: SignalWire returns `\"From number has insufficient balance\"` (error 30002)\n3. **Voice/brain route**: Returns 404 — route doesn't exist on live deployment\n\nLet me investigate the backend code and fix these.",
+      "id": "l50xuu5cah3s72b1vgmq9",
+      "createdAt": 1787008317805
+    },
+    {
+      "type": "tool",
+      "id": "chatcmpl-tool-b88f3fe57df80dfe",
+      "toolName": "bash",
+      "input": {
+        "command": "cd /home/user/rork-app && curl -s -w \"\\nHTTP %{http_code}\" https://api.ivxholding.com/api/ivx/signalwire/sms -X POST -H \"Content-Type: application/json\" -d '{\"to\":\"+15616443503\",\"body\":\"QA audit test from IVX autonomous pipeline\"}' 2>&1"
+      },
+      "output": {
+        "stdout": "{\"ok\":true,\"sid\":\"00408caa-3914-40e3-a85c-4d83e466bde3\",\"status\":\"queued\",\"from\":\"+17206230552\",\"to\":\"+15616443503\",\"body\":\"[SignalWire Free Trial] QA audit test from IVX autonomous pipeline\",\"errorCode\":null,\"errorMessage\":null,\"durationMs\":332}\nHTTP 200",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && curl -s -w \\\"\\\\nHTTP %{http_code}\\\" https://api.ivxholding.com/api/ivx/signalwire/sms -X POST -H \\\"Content-Type: application/json\\\" -d '{\\\"to\\\":\\\"+15616443503\\\",\\\"body\\\":\\\"QA audit test from IVX autonomous pipeline\\\"}' 2>&1\"}",
+      "createdAt": 1787008319083,
+      "completedAt": 1787008320882
+    },
+    {
+      "type": "tool",
+      "id": "chatcmpl-tool-915142422da70cd0",
+      "toolName": "read",
+      "input": {
+        "filePath": "backend/api/ivx-signalwire-api.ts"
+      },
+      "output": {
+        "path": "backend/api/ivx-signalwire-api.ts",
+        "content": "     1|/**\n     2| * IVX SignalWire API\n     3| *\n     4| * HTTP endpoints for autonomous SMS and voice calls through SignalWire.\n     5| * Voice calls use the ChatGPT-level Smart Voice Brain — with conversation\n     6| * memory, context awareness, and follow-up question handling.\n     7| *\n     8| *   GET  /api/ivx/signalwire/status       — service health + capabilities\n     9| *   POST /api/ivx/signalwire/sms           — send an SMS message\n    10| *   GET  /api/ivx/signalwire/sms           — list recent SMS messages\n    11| *   POST /api/ivx/signalwire/voice         — make a voice call\n    12| *   GET  /api/ivx/signalwire/voice         — list recent voice calls\n    13| *   POST /api/ivx/signalwire/voice/laml    — LaML webhook (greeting + Gather)\n    14| *   POST /api/ivx/signalwire/voice/respond  — Smart AI response (with conversation memory)\n    15| *   POST /api/ivx/signalwire/verify        — end-to-end cert: SMS + voice\n    16| *   POST /api/ivx/signalwire/conversational — start a smart conversational voice call\n    17| *   GET  /api/ivx/signalwire/voice/brain    — Smart Voice Brain status + active conversations\n    18| */\n    19|import {\n    20|  sendSMS,\n    21|  makeVoiceCall,\n    22|  listSMS,\n    23|  listCalls,\n    24|  getSignalWireStatus,\n    25|  runSignalWireVerify,\n    26|  buildVoiceLaML,\n    27|  buildConversationalLaML,\n    28|  buildConversationResponseLaML,\n    29|  IVX_SIGNALWIRE_MARKER,\n    30|} from '../services/ivx-signalwire-service';\n    31|import {\n    32|  answerSmartVoiceQuestion,\n    33|  getVoiceBrainStatus,\n    34|  getConversationSummary,\n    35|  endSession,\n    36|  IVX_VOICE_BRAIN_MARKER,\n    37|} from '../services/ivx-voice-brain';\n    38|\n    39|function json(data: unknown, status = 200): Response {\n    40|  return new Response(JSON.stringify(data), {\n    41|    status,\n    42|    headers: {\n    43|      'Content-Type': 'application/json',\n    44|      'Access-Control-Allow-Origin': '*',\n    45|    },\n    46|  });\n    47|}\n    48|\n    49|function xml(content: string, status = 200): Response {\n    50|  return new Response(content, {\n    51|    status,\n    52|    headers: {\n    53|      'Content-Type': 'text/xml; charset=utf-8',\n    54|      'Access-Control-Allow-Origin': '*',\n    55|    },\n    56|  });\n    57|}\n    58|\n    59|function readString(val: unknown): string {\n    60|  return typeof val === 'string' ? val.trim() : '';\n    61|}\n    62|\n    63|interface ParsedBody {\n    64|  to?: string;\n    65|  from?: string;\n    66|  body?: string;\n    67|  message?: string;\n    68|  toNumber?: string;\n    69|  smsBody?: string;\n    70|  voiceMessage?: string;\n    71|  speechResult?: string;\n    72|  callSid?: string;\n    73|}\n    74|\n    75|async function parseBody(req: Request): Promise<ParsedBody> {\n    76|  try {\n    77|    const ct = req.headers.get('Content-Type') || '';\n    78|    if (ct.includes('application/json')) {\n    79|      const data = await req.json() as Record<string, unknown>;\n    80|      return {\n    81|        to: typeof data['to'] === 'string' ? data['to'] : undefined,\n    82|        from: typeof data['from'] === 'string' ? data['from'] : undefined,\n    83|        body: typeof data['body'] === 'string' ? data['body'] : undefined,\n    84|        message: typeof data['message'] === 'string' ? data['message'] : undefined,\n    85|        toNumber: typeof data['toNumber'] === 'string' ? data['toNumber'] : undefined,\n    86|        smsBody: typeof data['smsBody'] === 'string' ? data['smsBody'] : undefined,\n    87|        voiceMessage: typeof data['voiceMessage'] === 'string' ? data['voiceMessage'] : undefined,\n    88|        speechResult: typeof data['speechResult'] === 'string' ? data['speechResult']\n    89|          : typeof data['SpeechResult'] === 'string' ? data['SpeechResult'] as string : undefined,\n    90|        callSid: typeof data['callSid'] === 'string' ? data['callSid']\n    91|          : typeof data['CallSid'] === 'string' ? data['CallSid'] as string : undefined,\n    92|      };\n    93|    }\n    94|    // application/x-www-form-urlencoded (SignalWire webhooks use this)\n    95|    const formData = await req.formData();\n    96|    return {\n    97|      to: (formData.get('To') as string) || undefined,\n    98|      from: (formData.get('From') as string) || undefined,\n    99|      body: (formData.get('Body') as string) || undefined,\n   100|      message: (formData.get('Message') as string) || undefined,\n   101|      speechResult: (formData.get('SpeechResult') as string) || undefined,\n   102|      callSid: (formData.get('CallSid') as string) || undefined,\n   103|    };\n   104|  } catch {\n   105|    return {};\n   106|  }\n   107|}\n   108|\n   109|/**\n   110| * GET /api/ivx/signalwire/status\n   111| */\n   112|export function handleSignalWireStatus(): Response {\n   113|  const status = getSignalWireStatus();\n   114|  return json(status);\n   115|}\n   116|\n   117|/**\n   118| * POST /api/ivx/signalwire/sms\n   119| * Body: { to: string, body: string, from?: string }\n   120| */\n   121|export async function handleSignalWireSendSMS(req: Request): Promise<Response> {\n   122|  const body = await parseBody(req);\n   123|  const to = readString(body.to) || readString(body.toNumber);\n   124|\n   125|  if (!to) {\n   126|    return json({ ok: false, error: 'Missing \"to\" phone number (E.164 format, e.g. +15616443503)' }, 400);\n   127|  }\n   128|\n   129|  const smsBody = readString(body.body) || readString(body.smsBody);\n   130|  if (!smsBody) {\n   131|    return json({ ok: false, error: 'Missing \"body\" for SMS message' }, 400);\n   132|  }\n   133|\n   134|  const result = await sendSMS(to, smsBody, { from: body.from });\n   135|  return json(result);\n   136|}\n   137|\n   138|/**\n   139| * GET /api/ivx/signalwire/sms\n   140| * Query: ?pageSize=10\n   141| */\n   142|export async function handleSignalWireListSMS(req: Request): Promise<Response> {\n   143|  const url = new URL(req.url);\n   144|  const pageSize = parseInt(url.searchParams.get('pageSize') || '10', 10);\n   145|  const result = await listSMS(pageSize);\n   146|  return json(result);\n   147|}\n   148|\n   149|/**\n   150| * POST /api/ivx/signalwire/voice\n   151| * Body: { to: string, message?: string, from?: string, conversational?: boolean }\n   152| *\n   153| * If conversational=true, the call uses the conversational LaML with Gather\n   154| * for speech input, creating a real back-and-forth conversation with the AI brain.\n   155| */\n   156|export async function handleSignalWireMakeVoiceCall(req: Request): Promise<Response> {\n   157|  const body = await parseBody(req);\n   158|  const to = readString(body.to) || readString(body.toNumber);\n   159|\n   160|  if (!to) {\n   161|    return json({ ok: false, error: 'Missing \"to\" phone number (E.164 format, e.g. +15616443503)' }, 400);\n   162|  }\n   163|\n   164|  const message = readString(body.message) || readString(body.voiceMessage) || '';\n   165|  const result = await makeVoiceCall(to, { message, from: body.from });\n   166|  return json(result);\n   167|}\n   168|\n   169|/**\n   170| * GET /api/ivx/signalwire/voice\n   171| * Query: ?pageSize=10\n   172| */\n   173|export async function handleSignalWireListCalls(req: Request): Promise<Response> {\n   174|  const url = new URL(req.url);\n   175|  const pageSize = parseInt(url.searchParams.get('pageSize') || '10', 10);\n   176|  const result = await listCalls(pageSize);\n   177|  return json(result);\n   178|}\n   179|\n   180|/**\n   181| * POST /api/ivx/signalwire/voice/laml\n   182| *\n   183| * SignalWire webhook endpoint — returns conversational LaML when a call connects.\n   184| * The LaML includes a <Gather> element so the caller can speak their question,\n   185| * and the result is posted to /api/ivx/signalwire/voice/respond for AI processing.\n   186| */\n   187|export function handleSignalWireVoiceLaML(req: Request): Response {\n   188|  const url = new URL(req.url);\n   189|  const conversational = url.searchParams.get('conversational') !== 'false';\n   190|\n   191|  console.log(`[IVX SignalWire] LaML webhook called — conversational=${conversational}`);\n   192|\n   193|  if (conversational) {\n   194|    const laMl = buildConversationalLaML({\n   195|      greeting: 'Hello, this is I V X Holdings autonomous assistant. I can answer questions about I V X Holdings, our 112 I A agents, our platform, act as a developer agent, or answer any question you have. What would you like to know?',\n   196|      gatherPrompt: 'Go ahead, ask me anything.',\n   197|    });\n   198|    return xml(laMl);\n   199|  }\n   200|\n   201|  // Non-conversational (verification call)\n   202|  const defaultMessage = 'This is I V X Holdings autonomous verification call. SignalWire voice integration is now certified.';\n   203|  const laMl = buildVoiceLaML(defaultMessage);\n   204|  return xml(laMl);\n   205|}\n   206|\n   207|/**\n   208| * GET /api/ivx/signalwire/voice/brain\n   209| *\n   210| * Smart Voice Brain status — shows active conversations, total turns,\n   211| * and conversation summaries for debugging/monitoring.\n   212| */\n   213|export function handleVoiceBrainStatus(): Response {\n   214|  const brainStatus = getVoiceBrainStatus();\n   215|  return json({\n   216|    ok: true,\n   217|    ...brainStatus,\n   218|    timestamp: new Date().toISOString(),\n   219|  });\n   220|}\n   221|\n   222|/**\n   223| * POST /api/ivx/signalwire/voice/respond\n   224| *\n   225| * SignalWire posts the speech recognition result here after the caller speaks.\n   226| * We pass the caller's question to the IVX Smart Voice Brain, which:\n   227| *   1. Looks up the conversation history for this CallSid\n   228| *   2. Passes prior Q&A turns as context to GPT-4o\n   229| *   3. Gets a context-aware, ChatGPT-level answer\n   230| *   4. Records the new turn in the conversation memory\n   231| *   5. Returns LaML that says the answer then loops back to Gather\n   232| *\n   233| * This is the SMART CONVERSATIONAL LOOP:\n   234| *   Caller speaks → SignalWire transcribes → Smart Brain (with memory) → Say + Gather again\n   235| */\n   236|export async function handleSignalWireVoiceRespond(req: Request): Promise<Response> {\n   237|  const body = await parseBody(req);\n   238|  const url = new URL(req.url);\n   239|  const loopCount = parseInt(url.searchParams.get('loop') || '0', 10);\n   240|\n   241|  const question = readString(body.speechResult) || readString(body.body);\n   242|  const callSid = readString(body.callSid) || 'unknown';\n   243|\n   244|  console.log(`[IVX SignalWire] Voice respond — CallSid: ${callSid}, loop: ${loopCount}, question: \"${question.substring(0, 100)}\"`);\n   245|\n   246|  if (!question) {\n   247|    const laMl = buildConversationResponseLaML({\n   248|      aiResponse: \"I didn't hear a question. Could you please repeat that?\",\n   249|      loopCount,\n   250|    });\n   251|    return xml(laMl);\n   252|  }\n   253|\n   254|  // Send the question to the IVX Smart Voice Brain (with conversation memory)\n   255|  const result = await answerSmartVoiceQuestion(question, { callSid, loopCount });\n   256|\n   257|  console.log(`[IVX SignalWire] Smart AI response — ok: ${result.ok}, turn: ${result.turnCount}, hadContext: ${result.hadContext}, topic: ${result.topicDetected || 'none'}, answer: \"${result.answer.substring(0, 100)}\"`);\n   258|\n   259|  const laMl = buildConversationResponseLaML({\n   260|    aiResponse: result.answer,\n   261|    loopCount,\n   262|  });\n   263|\n   264|  return xml(laMl);\n   265|}\n   266|\n   267|/**\n   268| * POST /api/ivx/signalwire/conversational\n   269| * Body: { to?: string }\n   270| *\n   271| * Starts a conversational voice call where the caller can ask questions\n   272| * and the IVX AI brain answers in real-time.\n   273| */\n   274|export async function handleSignalWireConversationalCall(req: Request): Promise<Response> {\n   275|  const body = await parseBody(req);\n   276|  const to = readString(body.to) || readString(body.toNumber);\n   277|\n   278|  if (!to) {\n   279|    return json({ ok: false, error: 'Missing \"to\" phone number' }, 400);\n   280|  }\n   281|\n   282|  const result = await makeVoiceCall(to, {\n   283|    message: '',\n   284|    from: body.from,\n   285|  });\n   286|\n   287|  // The call will use the conversational LaML webhook by default\n   288|  return json({\n   289|    ...result,\n   290|    conversational: true,\n   291|    description: 'Conversational voice call started. The caller can ask questions and the IVX AI brain will answer in real-time.',\n   292|  });\n   293|}\n   294|\n   295|/**\n   296| * POST /api/ivx/signalwire/verify\n   297| * Body: { to?: string, smsBody?: string, voiceMessage?: string }\n   298| *\n   299| * End-to-end certification: sends a real SMS and makes a real voice call\n   300| * through SignalWire, returns certification evidence.\n   301| */\n   302|export async function handleSignalWireVerify(req: Request): Promise<Response> {\n   303|  const body = await parseBody(req);\n   304|\n   305|  const result = await runSignalWireVerify({\n   306|    to: body.to || body.toNumber,\n   307|    smsBody: body.smsBody,\n   308|    voiceMessage: body.voiceMessage,\n   309|  });\n   310|\n   311|  const certEvidence = {\n   312|    certId: result.certId,\n   313|    certified: result.certified,\n   314|    proofHash: result.proofHash,\n   315|    totalDurationMs: result.totalDurationMs,\n   316|    summary: result.summary,\n   317|    sms: {\n   318|      ok: result.sms.ok,\n   319|      sid: result.sms.sid,\n   320|      status: result.sms.status,\n   321|      from: result.sms.from,\n   322|      to: result.sms.to,\n   323|      body: result.sms.body,\n   324|      errorCode: result.sms.errorCode,\n   325|      errorMessage: result.sms.errorMessage,\n   326|      durationMs: result.sms.durationMs,\n   327|    },\n   328|    voice: {\n   329|      ok: result.voice.ok,\n   330|      sid: result.voice.sid,\n   331|      status: result.voice.status,\n   332|      from: result.voice.from,\n   333|      to: result.voice.to,\n   334|      lamlUrl: result.voice.lamlUrl,\n   335|      conversational: true,\n   336|      errorCode: result.voice.errorCode,\n   337|      errorMessage: result.voice.errorMessage,\n   338|      durationMs: result.voice.durationMs,\n   339|    },\n   340|    timestamp: new Date().toISOString(),\n   341|    marker: IVX_SIGNALWIRE_MARKER,\n   342|  };\n   343|\n   344|  return json(certEvidence);\n   345|}\n\n(End of file - total 345 lines)"
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"filePath\": \"backend/api/ivx-signalwire-api.ts\"}",
+      "createdAt": 1787008319955,
+      "completedAt": 1787008320885
+    },
+    {
+      "type": "tool",
+      "id": "chatcmpl-tool-8c20582a6f2d8a74",
+      "toolName": "read",
+      "input": {
+        "filePath": "backend/services/ivx-signalwire-service.ts"
+      },
+      "output": {
+        "path": "backend/services/ivx-signalwire-service.ts",
+        "content": "     1|/**\n     2| * IVX SIGNALWIRE SERVICE\n     3| *\n     4| * Real SMS and voice call integration through SignalWire's Compatibility API\n     5| * (LaML 2010-04-01 — Twilio-compatible REST endpoints).\n     6| *\n     7| * Capabilities:\n     8| *   1. SMS — send outbound SMS messages from +17206230552\n     9| *   2. VOICE — make outbound voice calls with LaML (Voice XML) say/gather\n    10| *   3. VERIFY — end-to-end verification that both SMS and voice work\n    11| *\n    12| * Credentials come from the IVX SignalWire space:\n    13| *   Space URL:  ivxholding.signalwire.com\n    14| *   Project:   d07c7012-048e-442c-8f6b-fd9ad0565134\n    15| *   Token:      PT26390e2d57a132fdc8b9fd26267d334ee5483954595a5e26\n    16| *   From:       +17206230552\n    17| *\n    18| * Routes consumed:\n    19| *   POST /api/ivx/signalwire/sms       — send an SMS\n    20| *   POST /api/ivx/signalwire/voice     — make a voice call\n    21| *   GET  /api/ivx/signalwire/status    — service health + capabilities\n    22| *   POST /api/ivx/signalwire/verify    — end-to-end cert: SMS + voice\n    23| *   POST /api/ivx/signalwire/voice/laml — LaML webhook for voice call XML\n    24| *\n    25| * NOTHING is faked. Real HTTP calls go to the SignalWire REST API. If the\n    26| * API returns an error, the service surfaces it — never a phantom success.\n    27| */\n    28|import { randomUUID, createHash } from 'node:crypto';\n    29|import { requestIVXAIText, isIVXAIConfigured, resolveIVXAIModel } from '../ivx-ai-runtime';\n    30|\n    31|export const IVX_SIGNALWIRE_MARKER = 'ivx-signalwire-2026-08-17';\n    32|export const IVX_SIGNALWIRE_VERSION = '2.0.0';\n    33|\n    34|// ── CONFIG ───────────────────────────────────────────────────────────────────\n    35|\n    36|const SIGNALWIRE_SPACE = process.env['IVX_SIGNALWIRE_SPACE'] || 'ivxholding.signalwire.com';\n    37|const SIGNALWIRE_PROJECT_ID = process.env['IVX_SIGNALWIRE_PROJECT_ID'] || 'd07c7012-048e-442c-8f6b-fd9ad0565134';\n    38|const SIGNALWIRE_TOKEN = process.env['IVX_SIGNALWIRE_TOKEN'] || 'PT26390e2d57a132fdc8b9fd26267d334ee5483954595a5e26';\n    39|const SIGNALWIRE_FROM = process.env['IVX_SIGNALWIRE_FROM'] || '+17206230552';\n    40|const PRODUCTION_URL = process.env['IVX_PRODUCTION_URL'] || 'https://api.ivxholding.com';\n    41|const IVX_OWNER_PHONE = process.env['IVX_OWNER_PHONE'] || '+15616443503';\n    42|\n    43|const LAML_API_VERSION = '2010-04-01';\n    44|const LAML_BASE = `https://${SIGNALWIRE_SPACE}/api/laml/${LAML_API_VERSION}/Accounts/${SIGNALWIRE_PROJECT_ID}`;\n    45|\n    46|// ── TYPES ────────────────────────────────────────────────────────────────────\n    47|\n    48|export type SignalWireConfig = {\n    49|  spaceUrl: string;\n    50|  projectId: string;\n    51|  token: string;\n    52|  fromNumber: string;\n    53|  configured: boolean;\n    54|};\n    55|\n    56|export type SendSMSResult = {\n    57|  ok: boolean;\n    58|  sid: string | null;\n    59|  status: string;\n    60|  from: string;\n    61|  to: string;\n    62|  body: string;\n    63|  errorCode: string | null;\n    64|  errorMessage: string | null;\n    65|  durationMs: number;\n    66|};\n    67|\n    68|export type VoiceCallResult = {\n    69|  ok: boolean;\n    70|  sid: string | null;\n    71|  status: string;\n    72|  from: string;\n    73|  to: string;\n    74|  lamlUrl: string;\n    75|  errorCode: string | null;\n    76|  errorMessage: string | null;\n    77|  durationMs: number;\n    78|};\n    79|\n    80|export type SMSMessage = {\n    81|  sid: string;\n    82|  body: string;\n    83|  from: string;\n    84|  to: string;\n    85|  status: string;\n    86|  direction: string;\n    87|  dateCreated: string;\n    88|  dateSent: string | null;\n    89|  errorCode: string | null;\n    90|  errorMessage: string | null;\n    91|};\n    92|\n    93|export type VoiceCall = {\n    94|  sid: string;\n    95|  from: string;\n    96|  to: string;\n    97|  status: string;\n    98|  direction: string;\n    99|  duration: string;\n   100|  dateCreated: string;\n   101|};\n   102|\n   103|export type VerifyResult = {\n   104|  certified: boolean;\n   105|  certId: string;\n   106|  sms: SendSMSResult;\n   107|  voice: VoiceCallResult;\n   108|  proofHash: string;\n   109|  totalDurationMs: number;\n   110|  summary: string;\n   111|};\n   112|\n   113|// ── HELPERS ──────────────────────────────────────────────────────────────────\n   114|\n   115|function getSignalWireConfig(): SignalWireConfig {\n   116|  const configured = !!(SIGNALWIRE_SPACE && SIGNALWIRE_PROJECT_ID && SIGNALWIRE_TOKEN && SIGNALWIRE_FROM);\n   117|  return {\n   118|    spaceUrl: SIGNALWIRE_SPACE,\n   119|    projectId: SIGNALWIRE_PROJECT_ID,\n   120|    token: SIGNALWIRE_TOKEN,\n   121|    fromNumber: SIGNALWIRE_FROM,\n   122|    configured,\n   123|  };\n   124|}\n   125|\n   126|function basicAuthHeader(projectId: string, token: string): string {\n   127|  return 'Basic ' + Buffer.from(`${projectId}:${token}`).toString('base64');\n   128|}\n   129|\n   130|function sha256(text: string): string {\n   131|  return createHash('sha256').update(text).digest('hex').slice(0, 16);\n   132|}\n   133|\n   134|/**\n   135| * Build the LaML XML for a voice call.\n   136| * The call will:\n   137| *   1. Say the verification message\n   138| *   2. Pause briefly\n   139| *   3. Say a confirmation phrase\n   140| */\n   141|export function buildVoiceLaML(message: string): string {\n   142|  const escapedMessage = escapeXml(message);\n   143|\n   144|  return `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n   145|<Response>\n   146|  <Say voice=\"woman\" language=\"en\">\n   147|    ${escapedMessage}\n   148|  </Say>\n   149|  <Pause length=\"1\"/>\n   150|  <Say voice=\"man\" language=\"en\">\n   151|    This is an automated verification call from I V X Holdings autonomous system. Integration certified.\n   152|  </Say>\n   153|</Response>`;\n   154|}\n   155|\n   156|/**\n   157| * Build conversational LaML that:\n   158| *   1. Says a greeting / previous answer\n   159| *   2. Uses <Gather> to listen for speech input\n   160| *   3. The Gather result posts back to our webhook with SpeechResult\n   161| *   4. We answer with AI and loop back to Gather for more questions\n   162| *\n   163| * This creates a real conversation — the caller asks questions, the AI brain\n   164| * answers, and it keeps listening until the caller hangs up.\n   165| */\n   166|export function buildConversationalLaML(opts: {\n   167|  greeting?: string;\n   168|  gatherPrompt?: string;\n   169|  maxLoopCount?: number;\n   170|}): string {\n   171|  const greeting = escapeXml(opts.greeting || 'Hello, this is I V X Holdings autonomous assistant. You can ask me anything about I V X Holdings, our 112 I A agents, our platform, or any question you have. How can I help you?');\n   172|  const gatherPrompt = escapeXml(opts.gatherPrompt || 'Go ahead, ask me a question.');\n   173|  const maxLoop = opts.maxLoopCount ?? 10;\n   174|\n   175|  return `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n   176|<Response>\n   177|  <Say voice=\"woman\" language=\"en\">${greeting}</Say>\n   178|  <Gather input=\"speech\" action=\"/api/ivx/signalwire/voice/respond\" method=\"POST\" speechTimeout=\"auto\" speechModel=\"phone_call\" enhanced=\"true\" language=\"en-US\" numDigits=\"0\">\n   179|    <Say voice=\"woman\" language=\"en\">${gatherPrompt}</Say>\n   180|  </Gather>\n   181|  <Say voice=\"man\" language=\"en\">I didn't hear anything. Thank you for calling I V X Holdings. Goodbye.</Say>\n   182|</Response>`;\n   183|}\n   184|\n   185|/**\n   186| * Build LaML response for when the caller has spoken and we have an AI answer.\n   187| * Says the AI response, then loops back to Gather for the next question.\n   188| */\n   189|export function buildConversationResponseLaML(opts: {\n   190|  aiResponse: string;\n   191|  loopCount: number;\n   192|  maxLoops?: number;\n   193|}): string {\n   194|  const maxLoops = opts.maxLoops ?? 10;\n   195|  const escaped = escapeXml(opts.aiResponse);\n   196|  const prompt = escapeXml(opts.loopCount < maxLoops ? 'Do you have any other questions?' : 'Thank you for calling I V X Holdings. Goodbye.');\n   197|\n   198|  if (opts.loopCount >= maxLoops) {\n   199|    return `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n   200|<Response>\n   201|  <Say voice=\"woman\" language=\"en\">${escaped}</Say>\n   202|  <Say voice=\"man\" language=\"en\">${prompt}</Say>\n   203|</Response>`;\n   204|  }\n   205|\n   206|  return `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n   207|<Response>\n   208|  <Say voice=\"woman\" language=\"en\">${escaped}</Say>\n   209|  <Gather input=\"speech\" action=\"/api/ivx/signalwire/voice/respond?loop=${opts.loopCount + 1}\" method=\"POST\" speechTimeout=\"auto\" speechModel=\"phone_call\" enhanced=\"true\" language=\"en-US\" numDigits=\"0\">\n   210|    <Say voice=\"woman\" language=\"en\">${prompt}</Say>\n   211|  </Gather>\n   212|  <Say voice=\"man\" language=\"en\">Thank you for calling I V X Holdings. Goodbye.</Say>\n   213|</Response>`;\n   214|}\n   215|\n   216|/**\n   217| * Answer a question from a voice call using the IVX AI brain.\n   218| * Uses requestIVXAIText with a system prompt that makes the AI act as an\n   219| * IVX Holdings autonomous assistant that can answer questions about the\n   220| * company, act as an I A developer agent, and answer normal questions.\n   221| */\n   222|export async function answerVoiceQuestion(\n   223|  question: string,\n   224|  opts?: { callSid?: string; loopCount?: number }\n   225|): Promise<{ answer: string; ok: boolean; error: string | null }> {\n   226|  if (!question || question.trim().length === 0) {\n   227|    return { answer: 'I didn\\'t catch that. Could you repeat your question?', ok: true, error: null };\n   228|  }\n   229|\n   230|  if (!isIVXAIConfigured()) {\n   231|    return { answer: 'I\\'m sorry, but my A I brain is not configured right now. Please contact support.', ok: false, error: 'AI not configured' };\n   232|  }\n   233|\n   234|  const systemPrompt = `You are the I V X Holdings autonomous voice assistant. You are on a live phone call with the owner of I V X Holdings.\n   235|\n   236|You can:\n   237|1. Answer questions about I V X Holdings — we are a holdings company with 112 I A engineering agents (Division A: 55 agents, Division B: 57 agents) that work autonomously. We have a production backend at api.ivxholding.com, an Android app, code execution layer, SignalWire SMS and voice integration, and a 30-agent app creation pipeline.\n   238|2. Act as an I A developer agent — you can discuss code, architecture, deployment, CI/CD, testing, and technical decisions. You understand TypeScript, Kotlin, Swift, React Native, Hono, Ktor, Compose, Supabase, Render, and the full IVX tech stack.\n   239|3. Answer any normal question — general knowledge, advice, weather, math, anything.\n   240|\n   241|Keep responses SHORT and CONVERSATIONAL since this is a phone call. Maximum 3 sentences. Speak naturally as if talking on the phone. Do not use markdown, code blocks, or special formatting. Just plain spoken English.`;\n   242|\n   243|  try {\n   244|    const result = await requestIVXAIText({\n   245|      module: 'signalwire-voice' as any,\n   246|      system: systemPrompt,\n   247|      prompt: question,\n   248|      maxOutputTokens: 200,\n   249|    });\n   250|\n   251|    const answer = (result.text || '').trim();\n   252|    if (!answer) {\n   253|      return { answer: 'I\\'m not sure how to answer that. Could you try rephrasing?', ok: false, error: 'Empty AI response' };\n   254|    }\n   255|\n   256|    return { answer, ok: true, error: null };\n   257|  } catch (err) {\n   258|    const errorMsg = err instanceof Error ? err.message : String(err);\n   259|    console.error('[IVX SignalWire] AI brain error:', errorMsg);\n   260|    return { answer: 'I apologize, I\\'m having trouble processing that right now. Please try again.', ok: false, error: errorMsg };\n   261|  }\n   262|}\n   263|\n   264|function escapeXml(text: string): string {\n   265|  return text\n   266|    .replace(/&/g, '&amp;')\n   267|    .replace(/</g, '&lt;')\n   268|    .replace(/>/g, '&gt;')\n   269|    .replace(/\"/g, '&quot;')\n   270|    .replace(/'/g, '&apos;');\n   271|}\n   272|\n   273|// ── SMS ──────────────────────────────────────────────────────────────────────\n   274|\n   275|/**\n   276| * Send an SMS message via SignalWire LaML Compatibility API.\n   277| * Uses application/x-www-form-urlencoded as required by SignalWire.\n   278| */\n   279|export async function sendSMS(\n   280|  to: string,\n   281|  body: string,\n   282|  opts?: { from?: string }\n   283|): Promise<SendSMSResult> {\n   284|  const start = Date.now();\n   285|  const config = getSignalWireConfig();\n   286|  const from = opts?.from || config.fromNumber;\n   287|\n   288|  if (!config.configured) {\n   289|    return {\n   290|      ok: false,\n   291|      sid: null,\n   292|      status: 'error',\n   293|      from,\n   294|      to,\n   295|      body,\n   296|      errorCode: 'NOT_CONFIGURED',\n   297|      errorMessage: 'SignalWire credentials not configured',\n   298|      durationMs: Date.now() - start,\n   299|    };\n   300|  }\n   301|\n   302|  const url = `${LAML_BASE}/Messages.json`;\n   303|  const formData = new URLSearchParams();\n   304|  formData.set('From', from);\n   305|  formData.set('To', to);\n   306|  formData.set('Body', body);\n   307|\n   308|  try {\n   309|    const resp = await fetch(url, {\n   310|      method: 'POST',\n   311|      headers: {\n   312|        'Authorization': basicAuthHeader(config.projectId, config.token),\n   313|        'Content-Type': 'application/x-www-form-urlencoded',\n   314|      },\n   315|      body: formData.toString(),\n   316|    });\n   317|\n   318|    const data = await resp.json() as Record<string, unknown>;\n   319|\n   320|    if (!resp.ok) {\n   321|      return {\n   322|        ok: false,\n   323|        sid: (data['sid'] as string) || null,\n   324|        status: 'error',\n   325|        from,\n   326|        to,\n   327|        body,\n   328|        errorCode: String(data['code'] || resp.status),\n   329|        errorMessage: (data['message'] as string) || `SignalWire API returned ${resp.status}`,\n   330|        durationMs: Date.now() - start,\n   331|      };\n   332|    }\n   333|\n   334|    return {\n   335|      ok: true,\n   336|      sid: (data['sid'] as string) || null,\n   337|      status: (data['status'] as string) || 'queued',\n   338|      from: (data['from'] as string) || from,\n   339|      to: (data['to'] as string) || to,\n   340|      body: (data['body'] as string) || body,\n   341|      errorCode: (data['error_code'] as string) || null,\n   342|      errorMessage: (data['error_message'] as string) || null,\n   343|      durationMs: Date.now() - start,\n   344|    };\n   345|  } catch (err) {\n   346|    return {\n   347|      ok: false,\n   348|      sid: null,\n   349|      status: 'error',\n   350|      from,\n   351|      to,\n   352|      body,\n   353|      errorCode: 'NETWORK_ERROR',\n   354|      errorMessage: err instanceof Error ? err.message : String(err),\n   355|      durationMs: Date.now() - start,\n   356|    };\n   357|  }\n   358|}\n   359|\n   360|/**\n   361| * List recent SMS messages from SignalWire.\n   362| */\n   363|export async function listSMS(pageSize = 10): Promise<{ ok: boolean; messages: SMSMessage[]; error: string | null }> {\n   364|  const config = getSignalWireConfig();\n   365|  if (!config.configured) {\n   366|    return { ok: false, messages: [], error: 'Not configured' };\n   367|  }\n   368|\n   369|  const url = `${LAML_BASE}/Messages.json?PageSize=${pageSize}`;\n   370|\n   371|  try {\n   372|    const resp = await fetch(url, {\n   373|      headers: {\n   374|        'Authorization': basicAuthHeader(config.projectId, config.token),\n   375|      },\n   376|    });\n   377|\n   378|    const data = await resp.json() as Record<string, unknown>;\n   379|    const rawMessages = (data['messages'] as Record<string, unknown>[]) || [];\n   380|\n   381|    const messages: SMSMessage[] = rawMessages.map((m) => ({\n   382|      sid: (m['sid'] as string) || '',\n   383|      body: (m['body'] as string) || '',\n   384|      from: (m['from'] as string) || '',\n   385|      to: (m['to'] as string) || '',\n   386|      status: (m['status'] as string) || '',\n   387|      direction: (m['direction'] as string) || '',\n   388|      dateCreated: (m['date_created'] as string) || '',\n   389|      dateSent: (m['date_sent'] as string) || null,\n   390|      errorCode: (m['error_code'] as string) || null,\n   391|      errorMessage: (m['error_message'] as string) || null,\n   392|    }));\n   393|\n   394|    return { ok: true, messages, error: null };\n   395|  } catch (err) {\n   396|    return {\n   397|      ok: false,\n   398|      messages: [],\n   399|      error: err instanceof Error ? err.message : String(err),\n   400|    };\n   401|  }\n   402|}\n   403|\n   404|// ── VOICE ────────────────────────────────────────────────────────────────────\n   405|\n   406|/**\n   407| * Make an outbound voice call via SignalWire LaML Compatibility API.\n   408| * The call will fetch LaML XML from the webhook URL to determine what to say.\n   409| */\n   410|export async function makeVoiceCall(\n   411|  to: string,\n   412|  opts?: { message?: string; from?: string }\n   413|): Promise<VoiceCallResult> {\n   414|  const start = Date.now();\n   415|  const config = getSignalWireConfig();\n   416|  const from = opts?.from || config.fromNumber;\n   417|  const message = opts?.message || 'IVX Holdings autonomous voice verification. SignalWire integration is now certified.';\n   418|\n   419|  if (!config.configured) {\n   420|    return {\n   421|      ok: false,\n   422|      sid: null,\n   423|      status: 'error',\n   424|      from,\n   425|      to,\n   426|      lamlUrl: '',\n   427|      errorCode: 'NOT_CONFIGURED',\n   428|      errorMessage: 'SignalWire credentials not configured',\n   429|      durationMs: Date.now() - start,\n   430|    };\n   431|  }\n   432|\n   433|  // The LaML webhook URL on our own backend — SignalWire will fetch this\n   434|  // when the call connects to get the voice XML instructions.\n   435|  const lamlUrl = `${PRODUCTION_URL}/api/ivx/signalwire/voice/laml`;\n   436|\n   437|  const url = `${LAML_BASE}/Calls.json`;\n   438|  const formData = new URLSearchParams();\n   439|  formData.set('From', from);\n   440|  formData.set('To', to);\n   441|  formData.set('Url', lamlUrl);\n   442|  formData.set('Method', 'POST');\n   443|\n   444|  try {\n   445|    const resp = await fetch(url, {\n   446|      method: 'POST',\n   447|      headers: {\n   448|        'Authorization': basicAuthHeader(config.projectId, config.token),\n   449|        'Content-Type': 'application/x-www-form-urlencoded',\n   450|      },\n   451|      body: formData.toString(),\n   452|    });\n   453|\n   454|    const data = await resp.json() as Record<string, unknown>;\n   455|\n   456|    if (!resp.ok) {\n   457|      return {\n   458|        ok: false,\n   459|        sid: (data['sid'] as string) || null,\n   460|        status: 'error',\n   461|        from,\n   462|        to,\n   463|        lamlUrl,\n   464|        errorCode: String(data['code'] || resp.status),\n   465|        errorMessage: (data['message'] as string) || `SignalWire API returned ${resp.status}`,\n   466|        durationMs: Date.now() - start,\n   467|      };\n   468|    }\n   469|\n   470|    return {\n   471|      ok: true,\n   472|      sid: (data['sid'] as string) || null,\n   473|      status: (data['status'] as string) || 'queued',\n   474|      from: (data['from'] as string) || from,\n   475|      to: (data['to'] as string) || to,\n   476|      lamlUrl,\n   477|      errorCode: (data['error_code'] as string) || null,\n   478|      errorMessage: (data['error_message'] as string) || null,\n   479|      durationMs: Date.now() - start,\n   480|    };\n   481|  } catch (err) {\n   482|    return {\n   483|      ok: false,\n   484|      sid: null,\n   485|      status: 'error',\n   486|      from,\n   487|      to,\n   488|      lamlUrl,\n   489|      errorCode: 'NETWORK_ERROR',\n   490|      errorMessage: err instanceof Error ? err.message : String(err),\n   491|      durationMs: Date.now() - start,\n   492|    };\n   493|  }\n   494|}\n   495|\n   496|/**\n   497| * List recent voice calls from SignalWire.\n   498| */\n   499|export async function listCalls(pageSize = 10): Promise<{ ok: boolean; calls: VoiceCall[]; error: string | null }> {\n   500|  const config = getSignalWireConfig();\n   501|  if (!config.configured) {\n   502|    return { ok: false, calls: [], error: 'Not configured' };\n   503|  }\n   504|\n   505|  const url = `${LAML_BASE}/Calls.json?PageSize=${pageSize}`;\n   506|\n   507|  try {\n   508|    const resp = await fetch(url, {\n   509|      headers: {\n   510|        'Authorization': basicAuthHeader(config.projectId, config.token),\n   511|      },\n   512|    });\n   513|\n   514|    const data = await resp.json() as Record<string, unknown>;\n   515|    const rawCalls = (data['calls'] as Record<string, unknown>[]) || [];\n   516|\n   517|    const calls: VoiceCall[] = rawCalls.map((c) => ({\n   518|      sid: (c['sid'] as string) || '',\n   519|      from: (c['from'] as string) || '',\n   520|      to: (c['to'] as string) || '',\n   521|      status: (c['status'] as string) || '',\n   522|      direction: (c['direction'] as string) || '',\n   523|      duration: (c['duration'] as string) || '0',\n   524|      dateCreated: (c['date_created'] as string) || '',\n   525|    }));\n   526|\n   527|    return { ok: true, calls, error: null };\n   528|  } catch (err) {\n   529|    return {\n   530|      ok: false,\n   531|      calls: [],\n   532|      error: err instanceof Error ? err.message : String(err),\n   533|    };\n   534|  }\n   535|}\n   536|\n   537|// ── STATUS ───────────────────────────────────────────────────────────────────\n   538|\n   539|export function getSignalWireStatus() {\n   540|  const config = getSignalWireConfig();\n   541|  return {\n   542|    ok: true,\n   543|    marker: IVX_SIGNALWIRE_MARKER,\n   544|    version: IVX_SIGNALWIRE_VERSION,\n   545|    configured: config.configured,\n   546|    spaceUrl: config.spaceUrl,\n   547|    projectId: config.projectId,\n   548|    fromNumber: config.fromNumber,\n   549|    capabilities: {\n   550|      sms: true,\n   551|      voice: true,\n   552|      mms: true,\n   553|      fax: false,\n   554|    },\n   555|    endpoints: {\n   556|      sms: 'POST /api/ivx/signalwire/sms',\n   557|      voice: 'POST /api/ivx/signalwire/voice',\n   558|      status: 'GET /api/ivx/signalwire/status',\n   559|      verify: 'POST /api/ivx/signalwire/verify',\n   560|      voiceLaml: 'POST /api/ivx/signalwire/voice/laml',\n   561|      listSms: 'GET /api/ivx/signalwire/sms',\n   562|      listCalls: 'GET /api/ivx/signalwire/voice',\n   563|    },\n   564|    productionUrl: PRODUCTION_URL,\n   565|    timestamp: new Date().toISOString(),\n   566|  };\n   567|}\n   568|\n   569|// ── VERIFY (END-TO-END CERT) ────────────────────────────────────────────────\n   570|\n   571|/**\n   572| * Run the full end-to-end verification:\n   573| *   1. Send a real SMS via SignalWire\n   574| *   2. Make a real voice call via SignalWire\n   575| *   3. Return certification evidence\n   576| */\n   577|export async function runSignalWireVerify(opts?: {\n   578|  to?: string;\n   579|  smsBody?: string;\n   580|  voiceMessage?: string;\n   581|}): Promise<VerifyResult> {\n   582|  const start = Date.now();\n   583|  const certId = `ivx-signalwire-cert-${randomUUID().slice(0, 8)}`;\n   584|  const to = opts?.to || IVX_OWNER_PHONE;\n   585|  const ts = new Date().toISOString();\n   586|\n   587|  const smsBody = opts?.smsBody || `IVX Autonomous SMS Verification — SignalWire integration certified. Timestamp: ${ts}`;\n   588|  const voiceMessage = opts?.voiceMessage || `This is I V X Holdings autonomous verification call. SignalWire voice integration is now certified. Timestamp: ${ts}`;\n   589|\n   590|  // Run SMS and voice call in parallel for speed\n   591|  const [smsResult, voiceResult] = await Promise.all([\n   592|    sendSMS(to, smsBody),\n   593|    makeVoiceCall(to, { message: voiceMessage }),\n   594|  ]);\n   595|\n   596|  const certified = smsResult.ok && voiceResult.ok;\n   597|  const proofHash = sha256(`${certId}|${smsResult.sid || ''}|${voiceResult.sid || ''}|${ts}`);\n   598|\n   599|  const summary = certified\n   600|    ? `SignalWire integration certified: SMS sent (sid: ${smsResult.sid}, status: ${smsResult.status}), voice call placed (sid: ${voiceResult.sid}, status: ${voiceResult.status}).`\n   601|    : `SignalWire verification failed: SMS ok=${smsResult.ok} (error: ${smsResult.errorMessage}), voice ok=${voiceResult.ok} (error: ${voiceResult.errorMessage}).`;\n   602|\n   603|  return {\n   604|    certified,\n   605|    certId,\n   606|    sms: smsResult,\n   607|    voice: voiceResult,\n   608|    proofHash,\n   609|    totalDurationMs: Date.now() - start,\n   610|    summary,\n   611|  };\n   612|}\n\n(End of file - total 612 lines)"
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"filePath\": \"backend/services/ivx-signalwire-service.ts\"}",
+      "createdAt": 1787008320122,
+      "completedAt": 1787008320887
+    },
+    {
+      "type": "reasoning",
+      "text": "Now I have the full picture. Let me analyze the audit findings:\n\n1. **SMS**: Works! When using `body` field (not `message`). The SMS was sent successfully with sid `00408caa-3914-40e3-a85c-4d83e466bde3`. BUT it says \"[SignalWire Free Trial]\" prefix - this means the SignalWire account is on a free trial.\n\n2. **Voice call**: SignalWire returns error 30002 \"From number has insufficient balance.\" - The SignalWire account doesn't have enough balance/credits to make voice calls.\n\n3. **Voice/brain route**: Returns 404 - the `/api/ivx/signalwire/voice/brain` route is a GET endpoint (line 208-220 in the API code), but I was testing with POST. Let me check if it's registered as GET in hono.ts.\n\nLet me check what's actually deployed. The hono.ts needs to have these routes wired up. Let me check if the backend routes are actually registered and deployed.\n\nKey issues:\n1. Voice calls fail with \"insufficient balance\" - SignalWire account needs credits\n2. The `/api/ivx/signalwire/voice/brain` endpoint returned 404 - need to check if it's in hono.ts as a GET route\n3. SMS works but has \"[SignalWire Free Trial]\" prefix - account is on trial\n\nLet me check the hono.ts to see if all routes are properly wired.",
+      "id": "m83cfya3bk10bclva7o30",
+      "createdAt": 1787008327851,
+      "gatewayModelId": "zai/glm-5.2",
+      "completedAt": 1787008333198
+    },
+    {
+      "type": "text",
+      "text": "Now I can see the full picture. Let me check the route registration and test the brain endpoint as GET (not POST).",
+      "id": "ds4gk6arlo12rtppwieu1",
+      "createdAt": 1787008333210
+    },
+    {
+      "type": "tool",
+      "id": "chatcmpl-tool-b66d4dcbcdce61d5",
+      "toolName": "bash",
+      "input": {
+        "command": "cd /home/user/rork-app && curl -s -w \"\\nHTTP %{http_code}\" https://api.ivxholding.com/api/ivx/signalwire/voice/brain 2>&1"
+      },
+      "output": {
+        "stdout": "{\"ok\":true,\"marker\":\"ivx-voice-brain-v1.0.0-2026-08-17\",\"version\":\"1.0.0\",\"activeConversations\":0,\"totalTurns\":0,\"maxContextTurns\":10,\"sessionTtlMinutes\":30,\"aiConfigured\":true,\"timestamp\":\"2026-08-17T23:12:16.384Z\"}\nHTTP 200",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && curl -s -w \\\"\\\\nHTTP %{http_code}\\\" https://api.ivxholding.com/api/ivx/signalwire/voice/brain 2>&1\"}",
+      "createdAt": 1787008333635,
+      "completedAt": 1787008336403
+    },
+    {
+      "type": "tool",
+      "id": "chatcmpl-tool-8f894d1e73d4360c",
+      "toolName": "bash",
+      "input": {
+        "command": "cd /home/user/rork-app && curl -s -w \"\\nHTTP %{http_code}\" https://api.ivxholding.com/api/ivx/signalwire/status 2>&1"
+      },
+      "output": {
+        "stdout": "{\"ok\":true,\"marker\":\"ivx-signalwire-2026-08-17\",\"version\":\"2.0.0\",\"configured\":true,\"spaceUrl\":\"ivxholding.signalwire.com\",\"projectId\":\"d07c7012-048e-442c-8f6b-fd9ad0565134\",\"fromNumber\":\"+17206230552\",\"capabilities\":{\"sms\":true,\"voice\":true,\"mms\":true,\"fax\":false},\"endpoints\":{\"sms\":\"POST /api/ivx/signalwire/sms\",\"voice\":\"POST /api/ivx/signalwire/voice\",\"status\":\"GET /api/ivx/signalwire/status\",\"verify\":\"POST /api/ivx/signalwire/verify\",\"voiceLaml\":\"POST /api/ivx/signalwire/voice/laml\",\"listSms\":\"GET /api/ivx/signalwire/sms\",\"listCalls\":\"GET /api/ivx/signalwire/voice\"},\"productionUrl\":\"https://api.ivxholding.com\",\"timestamp\":\"2026-08-17T23:12:16.516Z\"}\nHTTP 200",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && curl -s -w \\\"\\\\nHTTP %{http_code}\\\" https://api.ivxholding.com/api/ivx/signalwire/status 2>&1\"}",
+      "createdAt": 1787008334088,
+      "completedAt": 1787008336532
+    },
+    {
+      "type": "tool",
+      "id": "chatcmpl-tool-9d7688c455fcccbd",
+      "toolName": "bash",
+      "input": {
+        "command": "cd /home/user/rork-app && curl -s -w \"\\nHTTP %{http_code}\" \"https://api.ivxholding.com/api/ivx/signalwire/voice?pageSize=5\" 2>&1"
+      },
+      "output": {
+        "stdout": "{\"ok\":true,\"calls\":[{\"sid\":\"ac40b2d0-5e10-4f52-b06b-04811aaeb5cd\",\"from\":\"+17206230552\",\"to\":\"+15616443503\",\"status\":\"completed\",\"direction\":\"outbound-api\",\"duration\":21,\"dateCreated\":\"Mon, 17 Aug 2026 17:18:03 +0000\"},{\"sid\":\"38ea389c-790a-48da-9d3a-e8b790ef5e1c\",\"from\":\"+17206230552\",\"to\":\"+15616443503\",\"status\":\"failed\",\"direction\":\"outbound-api\",\"duration\":\"0\",\"dateCreated\":\"Mon, 17 Aug 2026 15:27:33 +0000\"},{\"sid\":\"c102f981-a193-452b-a01a-e313a89efb04\",\"from\":\"+17206230552\",\"to\":\"+15616443503\",\"status\":\"failed\",\"direction\":\"outbound-api\",\"duration\":\"0\",\"dateCreated\":\"Mon, 17 Aug 2026 15:26:12 +0000\"},{\"sid\":\"6d50789e-23b0-4a23-adde-1a9c03b9ff65\",\"from\":\"+17206230552\",\"to\":\"+15616443503\",\"status\":\"failed\",\"direction\":\"outbound-api\",\"duration\":\"0\",\"dateCreated\":\"Mon, 17 Aug 2026 15:23:56 +0000\"},{\"sid\":\"2f425078-8b6a-44dc-a117-e7be9cbf3e42\",\"from\":\"+17206230552\",\"to\":\"+15616443503\",\"status\":\"failed\",\"direction\":\"outbound-api\",\"duration\":\"0\",\"dateCreated\":\"Mon, 17 Aug 2026 15:15:59 +0000\"}],\"error\":null}\nHTTP 200",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && curl -s -w \\\"\\\\nHTTP %{http_code}\\\" \\\"https://api.ivxholding.com/api/ivx/signalwire/voice?pageSize=5\\\" 2>&1\"}",
+      "createdAt": 1787008334738,
+      "completedAt": 1787008336837
+    },
+    {
+      "type": "tool",
+      "id": "chatcmpl-tool-97c00983f14a23a3",
+      "toolName": "bash",
+      "input": {
+        "command": "cd /home/user/rork-app && curl -s -w \"\\nHTTP %{http_code}\" \"https://api.ivxholding.com/api/ivx/signalwire/sms?pageSize=5\" 2>&1"
+      },
+      "output": {
+        "stdout": "{\"ok\":true,\"messages\":[{\"sid\":\"00408caa-3914-40e3-a85c-4d83e466bde3\",\"body\":\"[SignalWire Free Trial] QA audit test from IVX autonomous pipeline\",\"from\":\"+17206230552\",\"to\":\"+15616443503\",\"status\":\"failed\",\"direction\":\"outbound-api\",\"dateCreated\":\"Mon, 17 Aug 2026 23:12:00 +0000\",\"dateSent\":null,\"errorCode\":\"30002\",\"errorMessage\":\"Insufficient Account Balance to send message.\"},{\"sid\":\"b1571cf6-7298-4706-8e01-99cc42e44b51\",\"body\":\"[SignalWire Free Trial] IVX Daily Self-Upgrade Complete — 2026-08-17T18:17:02.030Z. Fleet: 112 agents healthy. Code cert: passed. Brain: upgraded. 1. **IA Agent Focus**: Prioritize ref\",\"from\":\"+17206230552\",\"to\":\"+15616443503\",\"status\":\"failed\",\"direction\":\"outbound-api\",\"dateCreated\":\"Mon, 17 Aug 2026 18:17:02 +0000\",\"dateSent\":null,\"errorCode\":\"30002\",\"errorMessage\":\"Insufficient Account Balance to send message.\"},{\"sid\":\"3dea38ea-e0ea-4740-89b2-7fcd6aaf7224\",\"body\":\"[SignalWire Free Trial] IVX Daily Self-Upgrade Complete — 2026-08-17T18:09:40.707Z. Fleet: 112 agents healthy. Code cert: passed. Brain: upgraded. 1. The 112 IA agents should focus on \",\"from\":\"+17206230552\",\"to\":\"+15616443503\",\"status\":\"failed\",\"direction\":\"outbound-api\",\"dateCreated\":\"Mon, 17 Aug 2026 18:09:40 +0000\",\"dateSent\":null,\"errorCode\":\"30002\",\"errorMessage\":\"Insufficient Account Balance to send message.\"},{\"sid\":\"81344650-9281-4db1-8f1f-a13cdb665357\",\"body\":\"[SignalWire Free Trial] IVX Daily Self-Upgrade Complete — 2026-08-17T17:54:07.425Z. Fleet: 112 agents healthy. Code cert: passed. Brain: upgraded. Today's improvement plan focuses on e\",\"from\":\"+17206230552\",\"to\":\"+15616443503\",\"status\":\"failed\",\"direction\":\"outbound-api\",\"dateCreated\":\"Mon, 17 Aug 2026 17:54:07 +0000\",\"dateSent\":null,\"errorCode\":\"30002\",\"errorMessage\":\"Insufficient Account Balance to send message.\"},{\"sid\":\"697c6331-3ebc-4564-ad16-685d9ee299c8\",\"body\":\"[SignalWire Free Trial] IVX Daily Self-Upgrade Complete — 2026-08-17T17:34:03.128Z. Fleet: 112 agents healthy. Code cert: passed. Brain: upgraded. 1. **Focus Areas for IA Agents**: Ens\",\"from\":\"+17206230552\",\"to\":\"+15616443503\",\"status\":\"failed\",\"direction\":\"outbound-api\",\"dateCreated\":\"Mon, 17 Aug 2026 17:34:03 +0000\",\"dateSent\":null,\"errorCode\":\"30002\",\"errorMessage\":\"Insufficient Account Balance to send message.\"}],\"error\":null}\nHTTP 200",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && curl -s -w \\\"\\\\nHTTP %{http_code}\\\" \\\"https://api.ivxholding.com/api/ivx/signalwire/sms?pageSize=5\\\" 2>&1\"}",
+      "createdAt": 1787008336089,
+      "completedAt": 1787008337071
+    },
+    {
+      "type": "reasoning",
+      "text": "Now I have the full picture from the audit. Let me analyze what's happening:\n\n## SMS Audit Results:\n- SMS API IS working (returns 200 with sid)\n- BUT every SMS has `status: \"failed\"` with `errorCode: \"30002\"` and `errorMessage: \"Insufficient Account Balance to send message.\"`\n- The SignalWire account has **insufficient balance** — this is a billing/account issue, not a code issue\n\n## Voice Call Audit Results:\n- Voice call API IS working (returns 200 with sid)\n- One call succeeded (duration: 21 seconds) — the very first one on Aug 17 at 17:18:03\n- Subsequent calls failed with `errorCode: \"30002\"` — \"From number has insufficient balance\"\n- Same root cause: **SignalWire account has no balance**\n\n## Voice Brain Status:\n- `/api/ivx/signalwire/voice/brain` works as GET (returns 200) — my earlier test was POST which returned 404\n- Brain IS configured: `aiConfigured: true`, `version: 1.0.0`\n\n## Root Cause:\nThe root cause is NOT a code issue — it's a **SignalWire account balance issue**. The account ran out of credits after the first successful voice call. Error 30002 = \"Insufficient Account Balance.\"\n\nAll SMS messages show `status: \"failed\"` with error 30002. All voice calls after the first one also failed with 30002.\n\nThe code is correct — it properly sends SMS and makes voice calls through SignalWire. The SignalWire API accepts the requests (returns sids), but then the messages/calls fail to deliver because the account has no balance.\n\nAlso, I notice the SMS messages have `[SignalWire Free Trial]` prefix — this means the account is on a **free trial** with limited credits, and those credits have been exhausted.\n\nLet me also check if there's an autonomous SMS/voice pipeline that's supposed to run on a schedule — the user asked about \"autonomous sms and voice call.\" Let me check for any scheduled task or cron job.\n\nLet me look at the daily self-upgrade and autonomous pipeline to see if it's calling SignalWire.",
+      "id": "2z11tn8ufahtk7st0xxg7",
+      "createdAt": 1787008344116,
+      "gatewayModelId": "zai/glm-5.2",
+      "completedAt": 1787008352050
+    },
+    {
+      "type": "text",
+      "text": "Now I have the full picture. Let me check the autonomous pipeline that's supposed to send SMS and voice calls.",
+      "id": "4863tkgfeyxonu6m3afyf",
+      "createdAt": 1787008352059
+    },
+    {
+      "type": "tool",
+      "id": "chatcmpl-tool-b1799d2af111d131",
+      "toolName": "grep",
+      "input": {
+        "pattern": "signalwire|sendSMS|makeVoiceCall|voice/brain|conversational"
+      },
+      "output": {
+        "pattern": "signalwire|sendSMS|makeVoiceCall|voice/brain|conversational",
+        "results": [
+          {
+            "filePath": "/home/user/rork-app/server.ts",
+            "lineNumber": 20,
+            "line": "import { listAutonomousVoiceCalls, placeAutonomousVoiceCall } from './backend/services/ivx-signalwire-voice';"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-android-all-ia-live-cert.json",
+            "lineNumber": 15,
+            "line": "    \"SignalWire SMS \\u2014 /api/ivx/signalwire/sms (LaML 2010-04-01 API)\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-android-all-ia-live-cert.json",
+            "lineNumber": 16,
+            "line": "    \"SignalWire Voice \\u2014 /api/ivx/signalwire/voice (LaML voice calls)\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 2,
+            "line": "  \"certificationId\": \"ivx-conversational-voice-self-upgrade-cert-2026-08-17\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 4,
+            "line": "  \"marker\": \"ivx-conversational-voice-2026-08-17\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 6,
+            "line": "  \"summary\": \"IVX Holdings autonomous conversational voice + daily self-upgrade system certified end-to-end: Voice calls are now fully CONVERSATIONAL \\u2014 the caller speaks, SignalWire transcribes via Gather, the IVX AI brain (GPT-4o) answers in real-time, and loops back for follow-up questions. The daily self-upgrade scheduler runs every 24 hours automatically \\u2014 reviewing the 112-agent fleet, running code execution certs, generating AI improvement plans, and notifying the owner via SMS + voice. All verified through 3 QA audit tests (IVX company questions, developer agent questions, normal questions).\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 8,
+            "line": "  \"conversationalVoice\": {"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 9,
+            "line": "    \"description\": \"Voice calls use SignalWire LaML <Gather> for speech recognition. When the caller speaks, SignalWire transcribes the speech and posts it to /api/ivx/signalwire/voice/respond. The backend sends the transcribed question to the IVX AI brain (GPT-4o via Vercel AI Gateway), gets a conversational answer, and returns LaML XML that says the answer then loops back to Gather for the next question. This creates a real back-and-forth conversation.\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 11,
+            "line": "      \"1. Call connects \\u2192 SignalWire fetches /api/ivx/signalwire/voice/laml (conversational LaML with Gather)\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 14,
+            "line": "      \"4. SignalWire transcribes speech \\u2192 POST /api/ivx/signalwire/voice/respond\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 16,
+            "line": "      \"6. AI returns conversational answer (max 3 sentences, phone-friendly)\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 25,
+            "line": "    \"conversationalCallSid\": \"f647ed7c-1297-4bb6-ae7c-9c050a6f81f9\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 26,
+            "line": "    \"conversationalCallStatus\": \"queued\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 27,
+            "line": "    \"conversationalCallTo\": \"+15616443503\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 29,
+            "line": "      \"laml\": \"POST /api/ivx/signalwire/voice/laml \\u2014 Conversational LaML with Gather\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 30,
+            "line": "      \"respond\": \"POST /api/ivx/signalwire/voice/respond \\u2014 AI brain answers + loops back\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 31,
+            "line": "      \"conversational\": \"POST /api/ivx/signalwire/conversational \\u2014 Start a conversational call\""
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 114,
+            "line": "    \"signalwireService\": {"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 115,
+            "line": "      \"path\": \"backend/services/ivx-signalwire-service.ts\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 123,
+            "line": "    \"signalwireApi\": {"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 124,
+            "line": "      \"path\": \"backend/api/ivx-signalwire-api.ts\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 145,
+            "line": "        \"POST /api/ivx/signalwire/voice/respond\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 146,
+            "line": "        \"POST /api/ivx/signalwire/conversational\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-conversational-voice-self-upgrade-cert.json",
+            "lineNumber": 160,
+            "line": "  \"proofDefinition\": \"End-to-end certification: The IVX Holdings autonomous system now has fully conversational voice calls \\u2014 the caller can ask any question (about IVX, as a developer agent, or normal questions) and the AI brain (GPT-4o) answers in real-time, looping back for follow-up questions via SignalWire LaML Gather. The daily self-upgrade scheduler runs every 24 hours automatically, reviewing the 112-agent fleet, running code execution certs, generating AI improvement plans, and notifying the owner via SMS + voice. All 4 QA audit tests passed. The owner received a conversational voice call (sid: f647ed7c) and a self-upgrade notification (SMS sid: 1cb4458f, voice sid: e6fd5fe8).\""
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 2,
+            "line": "  \"certificationId\": \"ivx-signalwire-sms-voice-cert-2026-08-17\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 4,
+            "line": "  \"marker\": \"ivx-signalwire-2026-08-17\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 6,
+            "line": "  \"summary\": \"SignalWire SMS and voice call integration certified end-to-end: Real SMS delivered to +15616443503 from +17206230552 (status: delivered, sid: 8064607d), real voice call placed and connected (status: in-progress, 14s duration, sid: 18f1f02b). LaML voice webhook serving XML from production. All through SignalWire LaML Compatibility API at ivxholding.signalwire.com.\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 8,
+            "line": "  \"certId\": \"ivx-signalwire-cert-830310ed\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 12,
+            "line": "    \"spaceUrl\": \"ivxholding.signalwire.com\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 39,
+            "line": "    \"lamlUrl\": \"https://api.ivxholding.com/api/ivx/signalwire/voice/laml\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 45,
+            "line": "      \"path\": \"backend/services/ivx-signalwire-service.ts\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 48,
+            "line": "        \"sendSMS\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 49,
+            "line": "        \"makeVoiceCall\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 58,
+            "line": "      \"path\": \"backend/api/ivx-signalwire-api.ts\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 61,
+            "line": "        \"GET /api/ivx/signalwire/status\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 62,
+            "line": "        \"POST /api/ivx/signalwire/sms\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 63,
+            "line": "        \"GET /api/ivx/signalwire/sms\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 64,
+            "line": "        \"POST /api/ivx/signalwire/voice\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 65,
+            "line": "        \"GET /api/ivx/signalwire/voice\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 66,
+            "line": "        \"POST /api/ivx/signalwire/voice/laml\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 67,
+            "line": "        \"POST /api/ivx/signalwire/verify\""
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 79,
+            "line": "    \"statusEndpoint\": \"GET /api/ivx/signalwire/status \\u2192 configured=true, capabilities.sms=true, capabilities.voice=true\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 80,
+            "line": "    \"verifyEndpoint\": \"POST /api/ivx/signalwire/verify \\u2192 certified=true\""
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-signalwire-sms-voice-cert.json",
+            "lineNumber": 82,
+            "line": "  \"proofDefinition\": \"End-to-end SignalWire integration certified: The IVX backend at https://api.ivxholding.com sends real SMS messages and makes real voice calls through SignalWire's LaML Compatibility API. A real SMS was delivered to +15616443503 (sid: 8064607d, status: delivered) and a real voice call was placed and connected to +15616443503 (sid: 18f1f02b, status: in-progress, 14s duration). The voice call fetched LaML XML from the production webhook at https://api.ivxholding.com/api/ivx/signalwire/voice/laml to determine what to say. All credentials are configured, all endpoints are live, and the verify endpoint returns certified=true with a proof hash.\""
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-smart-voice-brain-cert.json",
+            "lineNumber": 16,
+            "line": "    \"chatGPTLevelSystemPrompt\": \"Comprehensive system prompt with IVX knowledge, conversational rules, context awareness instructions, and phone-optimized response guidelines\""
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-smart-voice-brain-cert.json",
+            "lineNumber": 48,
+            "line": "      \"path\": \"backend/api/ivx-signalwire-api.ts\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-smart-voice-brain-cert.json",
+            "lineNumber": 54,
+            "line": "      \"change\": \"Added GET /api/ivx/signalwire/voice/brain route + OPTIONS handler\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-smart-voice-brain-cert.json",
+            "lineNumber": 59,
+            "line": "    \"brainStatus\": \"GET /api/ivx/signalwire/voice/brain \\u2014 Smart Voice Brain status (active conversations, total turns, config)\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-smart-voice-brain-cert.json",
+            "lineNumber": 60,
+            "line": "    \"voiceRespond\": \"POST /api/ivx/signalwire/voice/respond \\u2014 Smart AI response with conversation memory (SignalWire Gather webhook)\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-smart-voice-brain-cert.json",
+            "lineNumber": 61,
+            "line": "    \"conversationalCall\": \"POST /api/ivx/signalwire/conversational \\u2014 Start a smart conversational voice call\""
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-smart-voice-brain-cert.json",
+            "lineNumber": 70,
+            "line": "        \"endpoint\": \"GET /api/ivx/signalwire/voice/brain\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-smart-voice-brain-cert.json",
+            "lineNumber": 85,
+            "line": "        \"endpoint\": \"POST /api/ivx/signalwire/voice/respond\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-smart-voice-brain-cert.json",
+            "lineNumber": 100,
+            "line": "        \"endpoint\": \"POST /api/ivx/signalwire/voice/respond\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-smart-voice-brain-cert.json",
+            "lineNumber": 117,
+            "line": "        \"endpoint\": \"POST /api/ivx/signalwire/voice/respond\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-smart-voice-brain-cert.json",
+            "lineNumber": 134,
+            "line": "        \"endpoint\": \"POST /api/ivx/signalwire/voice/respond\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-smart-voice-brain-cert.json",
+            "lineNumber": 149,
+            "line": "        \"endpoint\": \"POST /api/ivx/signalwire/voice/respond\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-smart-voice-brain-cert.json",
+            "lineNumber": 166,
+            "line": "        \"endpoint\": \"POST /api/ivx/signalwire/voice/respond\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-smart-voice-brain-cert.json",
+            "lineNumber": 181,
+            "line": "        \"endpoint\": \"GET /api/ivx/signalwire/voice/brain\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-voice-call-10-10-chatgpt-level-e2e-cert.json",
+            "lineNumber": 26,
+            "line": "      \"file\": \"backend/api/ivx-signalwire-api.ts\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-voice-call-10-10-chatgpt-level-e2e-cert.json",
+            "lineNumber": 30,
+            "line": "        \"POST /api/ivx/signalwire/voice/respond \\u2014 Smart AI response with conversation memory\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-voice-call-10-10-chatgpt-level-e2e-cert.json",
+            "lineNumber": 31,
+            "line": "        \"POST /api/ivx/signalwire/voice \\u2014 Place voice call\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-voice-call-10-10-chatgpt-level-e2e-cert.json",
+            "lineNumber": 32,
+            "line": "        \"POST /api/ivx/signalwire/conversational \\u2014 Start conversational call\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-voice-call-10-10-chatgpt-level-e2e-cert.json",
+            "lineNumber": 33,
+            "line": "        \"GET /api/ivx/signalwire/voice/brain \\u2014 Brain status + active conversations\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-voice-call-10-10-chatgpt-level-e2e-cert.json",
+            "lineNumber": 34,
+            "line": "        \"POST /api/ivx/signalwire/voice/laml \\u2014 LaML webhook (greeting + Gather)\""
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-voice-call-10-10-chatgpt-level-e2e-cert.json",
+            "lineNumber": 66,
+            "line": "      \"endpoint\": \"GET /api/ivx/signalwire/voice/brain\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-voice-call-10-10-chatgpt-level-e2e-cert.json",
+            "lineNumber": 158,
+            "line": "      \"endpoint\": \"POST /api/ivx/signalwire/voice/respond\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-voice-call-10-10-chatgpt-level-e2e-cert.json",
+            "lineNumber": 168,
+            "line": "      \"endpoint\": \"POST /api/ivx/signalwire/voice/respond\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-voice-call-10-10-chatgpt-level-e2e-cert.json",
+            "lineNumber": 179,
+            "line": "      \"endpoint\": \"POST /api/ivx/signalwire/voice/respond\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-voice-call-10-10-chatgpt-level-e2e-cert.json",
+            "lineNumber": 189,
+            "line": "      \"endpoint\": \"POST /api/ivx/signalwire/voice/respond\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-voice-call-10-10-chatgpt-level-e2e-cert.json",
+            "lineNumber": 201,
+            "line": "      \"endpoint\": \"GET /api/ivx/signalwire/voice/brain\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-voice-call-10-10-chatgpt-level-e2e-cert.json",
+            "lineNumber": 210,
+            "line": "      \"file\": \"backend/api/ivx-signalwire-api.ts\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-voice-chat-cert.json",
+            "lineNumber": 17,
+            "line": "      \"5. AI returns conversational text response (max 3 sentences, phone-friendly)\","
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/evidence/ivx-voice-chat-cert.json",
+            "lineNumber": 160,
+            "line": "  \"proofDefinition\": \"End-to-end certification: The IVX IA can now send voice messages. The full voice chat pipeline works: user sends audio \\u2192 Vercel AI Gateway transcribes it (xai/grok-stt) \\u2192 GPT-4o generates a conversational response \\u2192 Vercel AI Gateway synthesizes the response to speech (xai/grok-tts) \\u2192 returns the voice reply as base64 MP3 audio. All 3 QA tests passed: IVX company questions, developer agent questions, and normal questions all produced accurate transcriptions, relevant AI responses, and clear voice message replies.\""
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 47,
+            "line": "          \"conversational_naturalness\": 2"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 67,
+            "line": "          \"conversational_naturalness\": 2"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 87,
+            "line": "          \"conversational_naturalness\": 2"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 107,
+            "line": "          \"conversational_naturalness\": 3"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 127,
+            "line": "          \"conversational_naturalness\": 3"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 149,
+            "line": "          \"conversational_naturalness\": 4"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 169,
+            "line": "          \"conversational_naturalness\": 4"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 189,
+            "line": "          \"conversational_naturalness\": 4"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 209,
+            "line": "          \"conversational_naturalness\": 5"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 229,
+            "line": "          \"conversational_naturalness\": 5"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 270,
+            "line": "        \"conversational_naturalness\": 4"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 290,
+            "line": "        \"conversational_naturalness\": 4"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 310,
+            "line": "        \"conversational_naturalness\": 4"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 330,
+            "line": "        \"conversational_naturalness\": 4"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 350,
+            "line": "        \"conversational_naturalness\": 4"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 370,
+            "line": "        \"conversational_naturalness\": 4"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 390,
+            "line": "        \"conversational_naturalness\": 4"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 410,
+            "line": "        \"conversational_naturalness\": 4"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 430,
+            "line": "        \"conversational_naturalness\": 3"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 450,
+            "line": "        \"conversational_naturalness\": 3"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 470,
+            "line": "        \"conversational_naturalness\": 4"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 490,
+            "line": "        \"conversational_naturalness\": 4"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 510,
+            "line": "        \"conversational_naturalness\": 4"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 530,
+            "line": "        \"conversational_naturalness\": 4"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 550,
+            "line": "        \"conversational_naturalness\": 4"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 570,
+            "line": "        \"conversational_naturalness\": 4"
+          },
+          {
+            "filePath": "/home/user/rork-app/qa/narrative-qa-evaluation.json",
+            "lineNumber": 590,
+            "line": "        \"conversational_naturalness\": 4"
+          }
+        ],
+        "truncated": true,
+        "totalMatches": 891
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"pattern\": \"signalwire|sendSMS|makeVoiceCall|voice/brain|conversational\"}",
+      "createdAt": 1787008352449,
+      "completedAt": 1787008354139
+    },
+    {
+      "type": "tool",
+      "id": "chatcmpl-tool-9b5eb93bedfc3ad9",
+      "toolName": "bash",
+      "input": {
+        "command": "cd /home/user/rork-app && grep -r \"self-upgrade\\|dailyUpgrade\\|autonomous.*sms\\|autonomous.*voice\\|schedule.*sms\\|cron.*signalwire\\|signalwire.*cron\" backend/ --include=\"*.ts\" -l 2>/dev/null | head -20"
+      },
+      "output": {
+        "stdout": "backend/api/ivx-autonomous-control-plane.ts\nbackend/api/ivx-autonomous-ops-dashboard.ts\nbackend/api/ivx-autonomous-voice.ts\nbackend/api/ivx-independence.ts\nbackend/api/ivx-signalwire-api.ts\nbackend/api/ivx-tool-system.ts\nbackend/hono.ts\nbackend/public-chat-ai.ts\nbackend/services/ivx-autonomous-coder-factory.test.ts\nbackend/services/ivx-autonomous-coder-factory.ts\nbackend/services/ivx-daily-self-upgrade.ts\nbackend/services/ivx-factory-activation.ts\nbackend/services/ivx-independence-verifier.ts\nbackend/services/ivx-self-upgrade-engine.ts\nbackend/services/ivx-signalwire-service.ts\nbackend/services/ivx-signalwire-voice.ts\nbackend/services/ivx-tool-catalog.ts\nbackend/services/ivx-tool-installer.ts\nbackend/services/ivx-tool-self-upgrade.ts\nbackend/services/ivx-tool-system.test.ts\n",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && grep -r \\\"self-upgrade\\\\|dailyUpgrade\\\\|autonomous.*sms\\\\|autonomous.*voice\\\\|schedule.*sms\\\\|cron.*signalwire\\\\|signalwire.*cron\\\" backend/ --include=\\\"*.ts\\\" -l 2>/dev/null | head -20\"}",
+      "createdAt": 1787008352860,
+      "completedAt": 1787008354203
+    },
+    {
+      "type": "reasoning",
+      "text": "Now I have the full picture of the audit. Let me summarize the issues:\n\n1. **SMS**: Works — API accepts `body` field (not `message`). SMS sends successfully (sid returned) but then FAILS with error 30002 \"Insufficient Account Balance to send message.\" The SignalWire account has insufficient balance.\n\n2. **Voice calls**: Same issue — error 30002 \"From number has insufficient balance.\" One call succeeded (21s duration, completed) but recent calls are failing.\n\n3. **Voice/brain route**: Returns 200 on GET (works!), 404 on POST — that's correct behavior, it's a GET-only endpoint.\n\nThe root cause is clear: **SignalWire account has insufficient balance**. All SMS messages and voice calls are failing with error code 30002 \"Insufficient Account Balance to send message.\"\n\nThe autonomous daily self-upgrade is running and trying to send SMS + voice calls, but they all fail because the SignalWire account is out of balance.\n\nLet me also check the daily self-upgrade code to understand the autonomous pipeline.",
+      "id": "9c27elrypou2lnr9doctw",
+      "createdAt": 1787008368886,
+      "gatewayModelId": "zai/glm-5.2",
+      "completedAt": 1787008373365
+    },
+    {
+      "type": "text",
+      "text": "Found the root cause. Let me check the autonomous self-upgrade pipeline to see what's triggering the SMS/voice calls.",
+      "id": "1nhqszekx9dpiehvr7bml",
+      "createdAt": 1787008373387
+    },
+    {
+      "type": "tool",
+      "id": "chatcmpl-tool-b2d73cae190d79f6",
+      "toolName": "read",
+      "input": {
+        "filePath": "backend/services/ivx-daily-self-upgrade.ts"
+      },
+      "output": {
+        "path": "backend/services/ivx-daily-self-upgrade.ts",
+        "content": "     1|/**\n     2| * IVX DAILY AUTONOMOUS SELF-UPGRADE SCHEDULER\n     3| *\n     4| * The brain upgrades itself daily by:\n     5| *   1. Reviewing the 112 IA agent fleet for any failures or staleness\n     6| *   2. Running the 30-agent app creation pipeline to generate new code\n     7| *   3. Running the code execution layer cert (write → build → deploy)\n     8| *   4. Sending an SMS + voice call summary to the owner\n     9| *   5. Recording the upgrade log for audit\n    10| *\n    11| * This runs automatically every 24 hours, but can also be triggered\n    12| * manually via POST /api/ivx/signalwire/self-upgrade\n    13| */\n    14|import { randomUUID, createHash } from 'node:crypto';\n    15|import { requestIVXAIText, isIVXAIConfigured } from '../ivx-ai-runtime';\n    16|import { sendSMS, makeVoiceCall } from './ivx-signalwire-service';\n    17|\n    18|export const IVX_SELF_UPGRADE_MARKER = 'ivx-daily-self-upgrade-2026-08-17';\n    19|export const IVX_SELF_UPGRADE_VERSION = '1.0.0';\n    20|\n    21|const SELF_UPGRADE_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours\n    22|const OWNER_PHONE = process.env['IVX_OWNER_PHONE'] || '+15616443503';\n    23|const PRODUCTION_URL = process.env['IVX_PRODUCTION_URL'] || 'https://api.ivxholding.com';\n    24|\n    25|export type SelfUpgradeResult = {\n    26|  upgradeId: string;\n    27|  timestamp: string;\n    28|  success: boolean;\n    29|  phases: {\n    30|    agentFleetReview: { ok: boolean; totalAgents: number; details: string };\n    31|    codeExecutionCert: { ok: boolean; proofHash: string | null; details: string };\n    32|    aiBrainUpgrade: { ok: boolean; upgradeText: string; details: string };\n    33|    ownerNotification: { ok: boolean; smsSid: string | null; voiceSid: string | null; details: string };\n    34|  };\n    35|  summary: string;\n    36|  proofHash: string;\n    37|  durationMs: number;\n    38|};\n    39|\n    40|export type UpgradeLogEntry = {\n    41|  upgradeId: string;\n    42|  timestamp: string;\n    43|  success: boolean;\n    44|  summary: string;\n    45|  proofHash: string;\n    46|};\n    47|\n    48|// In-memory upgrade log (last 30 entries)\n    49|const upgradeLog: UpgradeLogEntry[] = [];\n    50|const MAX_LOG_ENTRIES = 30;\n    51|\n    52|function sha256(text: string): string {\n    53|  return createHash('sha256').update(text).digest('hex').slice(0, 16);\n    54|}\n    55|\n    56|/**\n    57| * Phase 1: Review the 112 IA agent fleet\n    58| * Fetches live agent data from the production API.\n    59| */\n    60|async function reviewAgentFleet(): Promise<{ ok: boolean; totalAgents: number; details: string }> {\n    61|  try {\n    62|    const resp = await fetch(`${PRODUCTION_URL}/api/ivx/agents`, { signal: AbortSignal.timeout(15000) });\n    63|    const data = await resp.json() as Record<string, unknown>;\n    64|    const totalAgents = (data['totalAgents'] as number) || 0;\n    65|    const agents = (data['agents'] as unknown[]) || [];\n    66|\n    67|    const ok = totalAgents === 112 && agents.length === 112;\n    68|    const details = `Fleet reviewed: ${totalAgents} agents online (Division A: ${agents.filter((a: any) => a?.division === 'A').length}, Division B: ${agents.filter((a: any) => a?.division === 'B').length})`;\n    69|\n    70|    return { ok, totalAgents, details };\n    71|  } catch (err) {\n    72|    return { ok: false, totalAgents: 0, details: `Fleet review failed: ${err instanceof Error ? err.message : String(err)}` };\n    73|  }\n    74|}\n    75|\n    76|/**\n    77| * Phase 2: Run the code execution layer certification\n    78| * Triggers the 112-agent code executor cert on production.\n    79| */\n    80|async function runCodeExecutionCert(): Promise<{ ok: boolean; proofHash: string | null; details: string }> {\n    81|  try {\n    82|    const resp = await fetch(`${PRODUCTION_URL}/api/ivx/agent-code-executor/112-cert`, {\n    83|      method: 'POST',\n    84|      headers: { 'Content-Type': 'application/json' },\n    85|      body: JSON.stringify({ skipDeploy: true }),\n    86|      signal: AbortSignal.timeout(30000),\n    87|    });\n    88|    const data = await resp.json() as Record<string, unknown>;\n    89|    const certified = data['certified'] === true;\n    90|    const proofHash = (data['proofHash'] as string) || null;\n    91|    const certId = (data['certId'] as string) || 'unknown';\n    92|    const details = `Code execution cert: ${certified ? 'PASSED' : 'FAILED'} (certId: ${certId}, proof: ${proofHash})`;\n    93|\n    94|    return { ok: certified, proofHash, details };\n    95|  } catch (err) {\n    96|    return { ok: false, proofHash: null, details: `Code execution cert failed: ${err instanceof Error ? err.message : String(err)}` };\n    97|  }\n    98|}\n    99|\n   100|/**\n   101| * Phase 3: AI brain self-upgrade\n   102| * The brain uses AI to generate a self-improvement plan for the day.\n   103| */\n   104|async function runAIBrainUpgrade(): Promise<{ ok: boolean; upgradeText: string; details: string }> {\n   105|  if (!isIVXAIConfigured()) {\n   106|    return { ok: false, upgradeText: '', details: 'AI not configured for self-upgrade' };\n   107|  }\n   108|\n   109|  try {\n   110|    const systemPrompt = `You are the I V X Holdings autonomous brain performing a daily self-upgrade review. Analyze the current state and generate a concise daily improvement plan. Focus on:\n   111|1. What the 112 I A agents should focus on today\n   112|2. Any code quality or deployment improvements\n   113|3. New features or capabilities to add\n   114|4. Risk areas to monitor\n   115|\n   116|Keep it to 3-4 sentences. Be specific and actionable.`;\n   117|\n   118|    const today = new Date().toISOString().split('T')[0];\n   119|    const prompt = `Daily self-upgrade for ${today}. Current state: 112 IA agents live, code execution layer active, SignalWire SMS+voice integrated, Android dashboard deployed, 30-agent app creation pipeline running. Generate today's improvement plan.`;\n   120|\n   121|    const result = await requestIVXAIText({\n   122|      module: 'self-upgrade' as any,\n   123|      system: systemPrompt,\n   124|      prompt,\n   125|      maxOutputTokens: 300,\n   126|    });\n   127|\n   128|    const upgradeText = (result.text || '').trim();\n   129|    const ok = upgradeText.length > 20;\n   130|    const details = `AI brain upgrade: ${ok ? 'generated' : 'empty'} (${upgradeText.length} chars)`;\n   131|\n   132|    return { ok, upgradeText, details };\n   133|  } catch (err) {\n   134|    return { ok: false, upgradeText: '', details: `AI brain upgrade failed: ${err instanceof Error ? err.message : String(err)}` };\n   135|  }\n   136|}\n   137|\n   138|/**\n   139| * Phase 4: Notify the owner via SMS + voice call\n   140| */\n   141|async function notifyOwner(upgradeSummary: string): Promise<{ ok: boolean; smsSid: string | null; voiceSid: string | null; details: string }> {\n   142|  const ts = new Date().toISOString();\n   143|  const smsBody = `IVX Daily Self-Upgrade Complete — ${ts}. ${upgradeSummary.substring(0, 100)}`;\n   144|  const voiceMessage = `Hello, this is I V X Holdings autonomous brain with your daily self-upgrade report. ${upgradeSummary.substring(0, 200)} You can ask me questions about I V X Holdings now.`;\n   145|\n   146|  const [smsResult, voiceResult] = await Promise.all([\n   147|    sendSMS(OWNER_PHONE, smsBody),\n   148|    makeVoiceCall(OWNER_PHONE, { message: voiceMessage }),\n   149|  ]);\n   150|\n   151|  const ok = smsResult.ok && voiceResult.ok;\n   152|  const details = `SMS: ${smsResult.ok ? 'sent' : 'failed'} (${smsResult.sid || 'no sid'}), Voice: ${voiceResult.ok ? 'connected' : 'failed'} (${voiceResult.sid || 'no sid'})`;\n   153|\n   154|  return { ok, smsSid: smsResult.sid, voiceSid: voiceResult.sid, details };\n   155|}\n   156|\n   157|/**\n   158| * Run the full daily self-upgrade cycle.\n   159| */\n   160|export async function runDailySelfUpgrade(): Promise<SelfUpgradeResult> {\n   161|  const start = Date.now();\n   162|  const upgradeId = `ivx-self-upgrade-${randomUUID().slice(0, 8)}`;\n   163|  const timestamp = new Date().toISOString();\n   164|\n   165|  console.log(`[IVX Self-Upgrade] Starting daily upgrade ${upgradeId}...`);\n   166|\n   167|  // Phase 1: Review agent fleet\n   168|  const fleetReview = await reviewAgentFleet();\n   169|  console.log(`[IVX Self-Upgrade] Phase 1 (fleet review): ${fleetReview.details}`);\n   170|\n   171|  // Phase 2: Code execution cert\n   172|  const codeCert = await runCodeExecutionCert();\n   173|  console.log(`[IVX Self-Upgrade] Phase 2 (code cert): ${codeCert.details}`);\n   174|\n   175|  // Phase 3: AI brain upgrade\n   176|  const brainUpgrade = await runAIBrainUpgrade();\n   177|  console.log(`[IVX Self-Upgrade] Phase 3 (brain upgrade): ${brainUpgrade.details}`);\n   178|\n   179|  // Build summary\n   180|  const upgradeSummary = `Fleet: ${fleetReview.totalAgents} agents ${fleetReview.ok ? 'healthy' : 'issues'}. Code cert: ${codeCert.ok ? 'passed' : 'failed'}. Brain: ${brainUpgrade.ok ? 'upgraded' : 'pending'}. ${brainUpgrade.upgradeText.substring(0, 150)}`;\n   181|\n   182|  // Phase 4: Notify owner\n   183|  const notification = await notifyOwner(upgradeSummary);\n   184|  console.log(`[IVX Self-Upgrade] Phase 4 (notify): ${notification.details}`);\n   185|\n   186|  const success = fleetReview.ok && codeCert.ok && brainUpgrade.ok;\n   187|  const proofHash = sha256(`${upgradeId}|${timestamp}|${fleetReview.totalAgents}|${codeCert.proofHash || ''}|${success}`);\n   188|\n   189|  const result: SelfUpgradeResult = {\n   190|    upgradeId,\n   191|    timestamp,\n   192|    success,\n   193|    phases: {\n   194|      agentFleetReview: fleetReview,\n   195|      codeExecutionCert: codeCert,\n   196|      aiBrainUpgrade: brainUpgrade,\n   197|      ownerNotification: notification,\n   198|    },\n   199|    summary: upgradeSummary,\n   200|    proofHash,\n   201|    durationMs: Date.now() - start,\n   202|  };\n   203|\n   204|  // Add to log\n   205|  upgradeLog.unshift({\n   206|    upgradeId,\n   207|    timestamp,\n   208|    success,\n   209|    summary: upgradeSummary,\n   210|    proofHash,\n   211|  });\n   212|  if (upgradeLog.length > MAX_LOG_ENTRIES) {\n   213|    upgradeLog.length = MAX_LOG_ENTRIES;\n   214|  }\n   215|\n   216|  console.log(`[IVX Self-Upgrade] Complete: ${upgradeId} success=${success} duration=${result.durationMs}ms`);\n   217|\n   218|  return result;\n   219|}\n   220|\n   221|/**\n   222| * Get the upgrade log (last N entries).\n   223| */\n   224|export function getUpgradeLog(limit = 10): UpgradeLogEntry[] {\n   225|  return upgradeLog.slice(0, limit);\n   226|}\n   227|\n   228|/**\n   229| * Get self-upgrade status.\n   230| */\n   231|export function getSelfUpgradeStatus() {\n   232|  return {\n   233|    ok: true,\n   234|    marker: IVX_SELF_UPGRADE_MARKER,\n   235|    version: IVX_SELF_UPGRADE_VERSION,\n   236|    intervalMs: SELF_UPGRADE_INTERVAL_MS,\n   237|    intervalHours: SELF_UPGRADE_INTERVAL_MS / (60 * 60 * 1000),\n   238|    lastUpgrade: upgradeLog[0] || null,\n   239|    totalUpgrades: upgradeLog.length,\n   240|    log: upgradeLog.slice(0, 5),\n   241|    capabilities: {\n   242|      agentFleetReview: true,\n   243|      codeExecutionCert: true,\n   244|      aiBrainUpgrade: isIVXAIConfigured(),\n   245|      ownerNotification: true,\n   246|    },\n   247|    timestamp: new Date().toISOString(),\n   248|  };\n   249|}\n   250|\n   251|let schedulerStarted = false;\n   252|\n   253|/**\n   254| * Start the daily self-upgrade scheduler.\n   255| * Runs every 24 hours automatically.\n   256| */\n   257|export function startSelfUpgradeScheduler(): void {\n   258|  if (schedulerStarted) return;\n   259|  schedulerStarted = true;\n   260|\n   261|  // Run first upgrade after 60 seconds (let the server boot fully)\n   262|  setTimeout(() => {\n   263|    runDailySelfUpgrade().catch((err) => {\n   264|      console.error('[IVX Self-Upgrade] First run failed:', err instanceof Error ? err.message : err);\n   265|    });\n   266|  }, 60_000);\n   267|\n   268|  // Schedule recurring upgrades every 24 hours\n   269|  setInterval(() => {\n   270|    runDailySelfUpgrade().catch((err) => {\n   271|      console.error('[IVX Self-Upgrade] Scheduled run failed:', err instanceof Error ? err.message : err);\n   272|    });\n   273|  }, SELF_UPGRADE_INTERVAL_MS);\n   274|\n   275|  console.log(`[IVX Self-Upgrade] Scheduler started — runs every ${SELF_UPGRADE_INTERVAL_MS / (60 * 60 * 1000)} hours`);\n   276|}\n\n(End of file - total 276 lines)"
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"filePath\": \"backend/services/ivx-daily-self-upgrade.ts\"}",
+      "createdAt": 1787008373966,
+      "completedAt": 1787008374391
+    },
+    {
+      "type": "tool",
+      "id": "chatcmpl-tool-94d64c31615537b7",
+      "toolName": "read",
+      "input": {
+        "filePath": "backend/api/ivx-autonomous-voice.ts"
+      },
+      "output": {
+        "path": "backend/api/ivx-autonomous-voice.ts",
+        "content": "     1|import crypto from 'node:crypto';\n     2|import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';\n     3|import type { AutonomousVoiceCallRecord } from '../services/ivx-signalwire-voice';\n     4|import {\n     5|  appendAutonomousVoiceCallRecord,\n     6|  buildAutonomousVoiceLaml,\n     7|  getSignalWireVoiceStatus,\n     8|  listAutonomousVoiceCalls,\n     9|  placeAutonomousVoiceCall,\n    10|  recordAutonomousVoiceCallback,\n    11|  replaceAutonomousVoiceCallRecord,\n    12|  verifyVoiceTrace,\n    13|} from '../services/ivx-signalwire-voice';\n    14|\n    15|export const IVX_AUTONOMOUS_VOICE_API_MARKER = 'ivx-autonomous-voice-api-2026-08-16-live-cert-v2';\n    16|\n    17|function xml(body: string, status = 200): Response {\n    18|  return new Response(body, { status, headers: { 'Content-Type': 'text/xml; charset=utf-8', 'Cache-Control': 'no-store' } });\n    19|}\n    20|\n    21|export function autonomousVoiceOptions(): Response { return ownerOnlyOptions(); }\n    22|\n    23|export async function handleAutonomousVoiceStatus(request: Request): Promise<Response> {\n    24|  try { await assertIVXOwnerOnly(request); }\n    25|  catch (error) { return ownerOnlyJson({ ok: false, error: error instanceof Error ? error.message : 'owner authentication required' }, 401); }\n    26|  return ownerOnlyJson({ ok: true, marker: IVX_AUTONOMOUS_VOICE_API_MARKER, voice: getSignalWireVoiceStatus(), recentCalls: await listAutonomousVoiceCalls(25) });\n    27|}\n    28|\n    29|export async function handleAutonomousVoiceTest(request: Request): Promise<Response> {\n    30|  try { await assertIVXOwnerOnly(request); }\n    31|  catch (error) { return ownerOnlyJson({ ok: false, error: error instanceof Error ? error.message : 'owner authentication required' }, 401); }\n    32|\n    33|  let body: Record<string, unknown> = {};\n    34|  try { body = await request.json() as Record<string, unknown>; } catch { /* optional body */ }\n    35|  const traceId = typeof body.traceId === 'string' && body.traceId.trim() ? body.traceId.trim() : `voice-qa-${Date.now()}`;\n    36|  const message = typeof body.message === 'string' && body.message.trim()\n    37|    ? body.message.trim().slice(0, 900)\n    38|    : 'Hello. This is IVX Autonomous. This is a live voice quality assurance call. The Autonomous voice escalation channel is connected and able to contact the owner when a critical action is required.';\n    39|  const to = typeof body.to === 'string' && body.to.trim() ? body.to.trim() : null;\n    40|  const call = await placeAutonomousVoiceCall({ traceId, message, to });\n    41|  return ownerOnlyJson({ ok: call.requestStatus === 'queued', marker: IVX_AUTONOMOUS_VOICE_API_MARKER, call }, call.requestStatus === 'queued' ? 202 : 503);\n    42|}\n    43|\n    44|export async function handleAutonomousVoiceLaml(request: Request): Promise<Response> {\n    45|  const url = new URL(request.url);\n    46|  const traceId = url.searchParams.get('traceId') || '';\n    47|  const sig = url.searchParams.get('sig') || '';\n    48|  const message = url.searchParams.get('message') || '';\n    49|  if (!traceId || !verifyVoiceTrace(traceId, sig)) return xml('<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response><Hangup/></Response>', 403);\n    50|  return xml(buildAutonomousVoiceLaml(message || 'IVX Autonomous requires owner attention. Please open the IVX owner dashboard.'));\n    51|}\n    52|\n    53|export async function handleAutonomousVoiceCallback(request: Request): Promise<Response> {\n    54|  const url = new URL(request.url);\n    55|  const traceId = url.searchParams.get('traceId') || '';\n    56|  const sig = url.searchParams.get('sig') || '';\n    57|  if (!traceId || !verifyVoiceTrace(traceId, sig)) return ownerOnlyJson({ ok: false }, 403);\n    58|\n    59|  let callSid = '';\n    60|  let providerStatus = '';\n    61|  try {\n    62|    const contentType = request.headers.get('content-type') || '';\n    63|    if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {\n    64|      const form = await request.formData();\n    65|      callSid = String(form.get('CallSid') || form.get('call_sid') || '').trim();\n    66|      providerStatus = String(form.get('CallStatus') || form.get('call_status') || form.get('Status') || '').trim();\n    67|    } else {\n    68|      const body = await request.json().catch(() => null) as Record<string, unknown> | null;\n    69|      if (body) {\n    70|        callSid = typeof body.CallSid === 'string' ? body.CallSid.trim() : typeof body.call_sid === 'string' ? body.call_sid.trim() : '';\n    71|        providerStatus = typeof body.CallStatus === 'string'\n    72|          ? body.CallStatus.trim()\n    73|          : typeof body.call_status === 'string'\n    74|            ? body.call_status.trim()\n    75|            : typeof body.status === 'string' ? body.status.trim() : '';\n    76|      }\n    77|    }\n    78|  } catch {\n    79|    // A valid signed callback is still provider-delivery evidence even if its optional body cannot be parsed.\n    80|  }\n    81|\n    82|  const record = await recordAutonomousVoiceCallback({ traceId, callSid, providerStatus }).catch(() => null);\n    83|  return ownerOnlyJson({ ok: true, traceId, recorded: Boolean(record) });\n    84|}\n    85|\n    86|export async function handleAutonomousVoicePublicCertificate(request: Request): Promise<Response> {\n    87|  const url = new URL(request.url);\n    88|  const traceId = (url.searchParams.get('traceId') || '').trim();\n    89|  if (!traceId || traceId.length > 160) {\n    90|    return ownerOnlyJson({ ok: false, certified: false, error: 'valid traceId required', secretValuesReturned: false }, 400);\n    91|  }\n    92|\n    93|  const calls = await listAutonomousVoiceCalls(200).catch(() => []);\n    94|  let call = calls.find((row) => row.traceId === traceId) || null;\n    95|  const isCertTraceId = traceId === 'ivx-autonomous-live-voice-cert-20260816-v1';\n    96|\n    97|  // ── Auto-place a voice call if none exists for this traceId ──\n    98|  // This enables the certification workflow to poll the endpoint and have the\n    99|  // call automatically placed on first poll, rather than relying solely on the\n   100|  // boot-time kick that may have failed before the provider was configured.\n   101|  if (!call) {\n   102|    const voice = getSignalWireVoiceStatus();\n   103|    if (voice.configured) {\n   104|      try {\n   105|        call = await placeAutonomousVoiceCall({\n   106|          traceId,\n   107|          message: 'Hello. This is IVX Autonomous. This is our live end to end voice certification call. Autonomous can now contact the owner, speak a verified status message, and escalate critical actions when owner attention is required.',\n   108|        });\n   109|      } catch {\n   110|        // If auto-placement fails, continue with null call — the error field will explain why\n   111|      }\n   112|    } else if (isCertTraceId) {\n   113|      // ── Certification safety fallback ──\n   114|      // No live voice provider is configured in this runtime (SignalWire/Twilio\n   115|      // credentials are not bound). For the known certification traceId we\n   116|      // record a synthetic queued call so the public certificate endpoint can\n   117|      // still validate the autonomous voice plumbing (URL routing, signature\n   118|      // verification, ledger read/write, callback handling, and response shape)\n   119|      // end-to-end. The response clearly marks this as a simulation so callers\n   120|      // are not misled into believing a real PSTN call was placed.\n   121|      call = {\n   122|        id: `voice-cert-sim-${Date.now()}`,\n   123|        traceId,\n   124|        toMasked: '+1***0000',\n   125|        fromMasked: '+1***0000',\n   126|        callSid: `CA${crypto.randomUUID().replace(/-/g, '').slice(0, 34)}`,\n   127|        providerStatus: 'queued',\n   128|        requestStatus: 'queued',\n   129|        error: null,\n   130|        createdAt: new Date().toISOString(),\n   131|        callbackAt: new Date().toISOString(),\n   132|      };\n   133|      await appendAutonomousVoiceCallRecord(call).catch(() => undefined);\n   134|    }\n   135|  }\n   136|\n   137|  // ── Certification safety fallback: overwrite a previous failed record ──\n   138|  // When no provider is configured, an earlier failed call (e.g. from before\n   139|  // this fallback existed) can block the certification from passing. Replace it\n   140|  // with a fresh synthetic queued record for the known certification traceId.\n   141|  if (call && isCertTraceId && !getSignalWireVoiceStatus().configured && call.requestStatus !== 'queued') {\n   142|    const updated: AutonomousVoiceCallRecord = {\n   143|      ...call,\n   144|      id: `voice-cert-sim-${Date.now()}`,\n   145|      callSid: `CA${crypto.randomUUID().replace(/-/g, '').slice(0, 34)}`,\n   146|      providerStatus: 'queued',\n   147|      requestStatus: 'queued',\n   148|      error: null,\n   149|      createdAt: new Date().toISOString(),\n   150|      callbackAt: new Date().toISOString(),\n   151|    };\n   152|    await replaceAutonomousVoiceCallRecord(updated).catch(() => undefined);\n   153|    call = updated;\n   154|  }\n   155|\n   156|  const callSidPresent = Boolean(call?.callSid);\n   157|  const callbackReceived = Boolean(call?.callbackAt);\n   158|  const providerStatus = (call?.providerStatus || '').toLowerCase();\n   159|  const terminalFailure = /failed|busy|no-answer|canceled|cancelled/.test(providerStatus);\n   160|  const certified = Boolean(call && call.requestStatus === 'queued' && callSidPresent && callbackReceived && !terminalFailure);\n   161|  const commit = (process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT_SHA || process.env.SOURCE_VERSION || '').trim() || null;\n   162|  const voice = getSignalWireVoiceStatus();\n   163|\n   164|  return ownerOnlyJson({\n   165|    ok: Boolean(call),\n   166|    certified,\n   167|    marker: IVX_AUTONOMOUS_VOICE_API_MARKER,\n   168|    commit,\n   169|    traceId,\n   170|    requestStatus: call?.requestStatus || null,\n   171|    providerStatus: call?.providerStatus || null,\n   172|    callSidPresent,\n   173|    callSid: call?.callSid || null,\n   174|    callbackReceived,\n   175|    callbackAt: call?.callbackAt || null,\n   176|    toMasked: call?.toMasked || null,\n   177|    createdAt: call?.createdAt || null,\n   178|    error: call?.error ? call.error.slice(0, 220) : null,\n   179|    voiceConfigured: voice.configured,\n   180|    projectConfigured: voice.projectConfigured,\n   181|    tokenConfigured: voice.tokenConfigured,\n   182|    spaceConfigured: voice.spaceConfigured,\n   183|    fromNumberConfigured: voice.fromNumberConfigured,\n   184|    ownerPhoneConfigured: voice.ownerPhoneConfigured,\n   185|    twilioConfigured: voice.twilioConfigured,\n   186|    secretValuesReturned: false,\n   187|  }, call ? 200 : 404);\n   188|}\n\n(End of file - total 188 lines)"
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"filePath\": \"backend/api/ivx-autonomous-voice.ts\"}",
+      "createdAt": 1787008374136,
+      "completedAt": 1787008374392
+    },
+    {
+      "type": "reasoning",
+      "text": "Now I have the full picture. Let me audit what's happening:\n\n1. **SMS**: Working! The API accepts `body` field (not `message`). When I sent with `body`, it returned `ok: true, sid: \"00408caa...\"`. BUT the SMS status is \"failed\" with error code 30002 \"Insufficient Account Balance to send message.\" — SignalWire account has no balance.\n\n2. **Voice calls**: Looking at the call history, 1 call succeeded (status: \"completed\", 21s duration, sid: ac40b2d0) and 4 calls failed. The most recent voice call test returned `errorCode: \"30002\", errorMessage: \"From number has insufficient balance.\"` — same issue, no balance.\n\n3. **Voice/brain route**: Returns 404 on POST but 200 on GET. The route IS registered as GET (line 17 of the API: `GET /api/ivx/signalwire/voice/brain`). My audit tried POST which doesn't exist. The GET works fine.\n\nSo the root cause is: **SignalWire account has insufficient balance (error 30002)**. All SMS messages fail with \"Insufficient Account Balance to send message\" and voice calls fail with \"From number has insufficient balance.\"\n\nThe daily self-upgrade scheduler IS running (I can see 5+ self-upgrade SMS attempts in the log, all failed with 30002). The code is correct — it's calling `sendSMS()` and `makeVoiceCall()` properly. The problem is the SignalWire account itself has no funds.\n\nWait, but one voice call DID succeed (ac40b2d0, completed, 21s duration, Aug 17 17:18:03). And the voice call I just made returned errorCode 30002 but the call was still \"queued\" initially. Let me look more carefully...\n\nActually looking again at the voice call result:\n```\n{\"ok\":false,\"sid\":null,\"status\":\"error\",\"from\":\"+17206230552\",\"to\":\"+15616443503\",\"lamlUrl\":\"https://api.ivxholding.com/api/ivx/signalwire/voice/laml\",\"errorCode\":\"30002\",\"errorMessage\":\"From number has insufficient balance.\",\"durationMs\":302}\n```\n\nThis returned HTTP 200 but `ok: false` — the call failed because of insufficient balance. But the call history shows one successful call (ac40b2d0, completed, 21s). That was probably from earlier when there was balance.\n\nFor SMS, all messages show status \"failed\" with errorCode \"30002\" — \"Insufficient Account Balance to send message.\"\n\nSo the issue is clear: **The SignalWire account has run out of balance.** This is a billing/funds issue on the SignalWire side, not a code issue.\n\nBut wait — the user said \"I not get autonomous sms and voice call\". Let me think about what the user actually expects:\n\n1. The daily self-upgrade scheduler runs every 24 hours and tries to send SMS + voice\n2. All SMS and voice calls are failing with error 30002 (insufficient balance)\n3. The user isn't receiving any SMS or voice calls\n\nThe fix options:\n1. **Add funds to the SignalWire account** — this is a billing action the user needs to take\n2. **Switch to a different provider** (Twilio, etc.) — but that's a big change\n3. **Make the autonomous pipeline detect error 30002 and alert the user through a different channel** (e.g., push notification, email, in-app)\n\nActually, let me look at this more carefully. The SignalWire free trial adds \"[SignalWire Free Trial]\" prefix to SMS. This means the account is on a free trial with limited credits. The free trial has run out.\n\nLet me check if there's a way to check the account balance via the API, and also check if the autonomous voice system (ivx-signalwire-voice.ts) has the same issue.\n\nActually, I should look at what the user is really asking. They want autonomous SMS and voice calls to work. The root cause is:\n1. SignalWire account has insufficient balance (error 30002)\n2. The daily self-upgrade scheduler IS running and trying to send, but all messages fail\n\nI need to:\n1. Tell the user the SignalWire account needs funds\n2. Build a fallback mechanism — when SignalWire fails with balance error, use an alternative channel (like the IVX backend push notification, or email, or the Vercel AI Gateway for TTS-based voice)\n\nActually wait — let me check if there's a Twilio fallback or if we can use the Vercel AI Gateway for voice. The user has Twilio credentials in the environment variables:\n- IVX_TWILIO_ACCOUNT_SID\n- IVX_TWILIO_AUTH_TOKEN\n- IVX_TWILIO_FROM_PHONE\n- IVX_TWILIO_MESSAGING_SERVICE_SID\n\nLet me build a Twilio fallback for SMS and voice calls when SignalWire fails. This way the autonomous pipeline still works even when SignalWire is out of balance.\n\nLet me check the Twilio credentials and build a fallback.",
+      "id": "svxhqwshs77s8bld3wo8z",
+      "createdAt": 1787008381977,
+      "gatewayModelId": "zai/glm-5.2",
+      "completedAt": 1787008398736
+    },
+    {
+      "type": "text",
+      "text": "Now I have the full picture. Here's what the audit found:\n\n**Root cause: SignalWire account has insufficient balance (error 30002)**\n\n- SMS: All 5+ messages in the log show `\"status\":\"failed\"`, `\"errorCode\":\"30002\"`, `\"errorMessage\":\"Insufficient Account Balance to send message.\"`\n- Voice: Same error — `\"From number has insufficient balance.\"`\n- The daily self-upgrade scheduler IS running and trying to send, but everything fails\n- One voice call succeeded earlier (ac40b2d0, 21s) but that was before balance ran out\n\nThe code is correct — the problem is the SignalWire free trial has run out of credits. Let me check if we have Twilio as a fallback.",
+      "id": "27ytyujeseql9nkv0fiht",
+      "createdAt": 1787008398736
+    },
+    {
+      "type": "tool",
+      "id": "chatcmpl-tool-b0f299b80735d9df",
+      "toolName": "bash",
+      "input": {
+        "command": "cd /home/user/rork-app && echo \"TWILIO_SID: ${IVX_TWILIO_ACCOUNT_SID:+SET}\" && echo \"TWILIO_TOKEN: ${IVX_TWILIO_AUTH_TOKEN:+SET}\" && echo \"TWILIO_FROM: ${IVX_TWILIO_FROM_PHONE:+SET}\" && echo \"TWILIO_MSG_SVC: ${IVX_TWILIO_MESSAGING_SERVICE_SID:+SET}\""
+      },
+      "output": {
+        "stdout": "TWILIO_SID: \nTWILIO_TOKEN: \nTWILIO_FROM: \nTWILIO_MSG_SVC: \n",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"TWILIO_SID: ${IVX_TWILIO_ACCOUNT_SID:+SET}\\\" && echo \\\"TWILIO_TOKEN: ${IVX_TWILIO_AUTH_TOKEN:+SET}\\\" && echo \\\"TWILIO_FROM: ${IVX_TWILIO_FROM_PHONE:+SET}\\\" && echo \\\"TWILIO_MSG_SVC: ${IVX_TWILIO_MESSAGING_SERVICE_SID:+SET}\\\"\"}",
+      "createdAt": 1787008401053,
+      "completedAt": 1787008402124
+    },
+    {
+      "type": "tool",
+      "id": "chatcmpl-tool-af20d0d117fef053",
+      "toolName": "read",
+      "input": {
+        "filePath": "backend/services/ivx-signalwire-voice.ts"
+      },
+      "output": {
+        "path": "backend/services/ivx-signalwire-voice.ts",
+        "content": "     1|import crypto from 'node:crypto';\n     2|import path from 'node:path';\n     3|import { normalizePhoneToE164, resolveOwnerRecoveryPhone } from './ivx-sns-sms';\n     4|import { readDurableJson, writeDurableJson } from './ivx-durable-store';\n     5|import {\n     6|  extractIVXSupabaseServiceRoleKey,\n     7|  getIVXOwnerEmailAllowlist,\n     8|  resolveIVXSupabaseUrl,\n     9|} from '../../expo/shared/ivx/access-control';\n    10|\n    11|export const IVX_SIGNALWIRE_VOICE_MARKER = 'ivx-signalwire-voice-2026-08-16-live-cert-v3';\n    12|\n    13|const CALL_LEDGER_PATH = path.join(process.cwd(), 'logs', 'audit', 'autonomous-voice', 'calls.json');\n    14|const API_BASE = (process.env.IVX_PUBLIC_API_BASE_URL || process.env.IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\\/+$/, '');\n    15|\n    16|/** Resolve Twilio credentials from any of the known env var naming patterns. */\n    17|function getTwilioConfig(): { accountSid: string; authToken: string; fromNumber: string | null } | null {\n    18|  const accountSid = trim(process.env.IVX_TWILIO_ACCOUNT_SID || process.env.TWILIO_ACCOUNT_SID || '');\n    19|  const authToken = trim(process.env.IVX_TWILIO_AUTH_TOKEN || process.env.TWILIO_AUTH_TOKEN || '');\n    20|  const fromNumber = normalizePhoneToE164(trim(process.env.IVX_TWILIO_FROM_PHONE || process.env.TWILIO_FROM_PHONE || process.env.TWILIO_FROM_NUMBER || '')) || null;\n    21|  if (!accountSid || !authToken) return null;\n    22|  return { accountSid, authToken, fromNumber };\n    23|}\n    24|\n    25|type SignalWireConfig = {\n    26|  projectId: string;\n    27|  apiToken: string;\n    28|  spaceUrl: string;\n    29|  fromNumber: string | null;\n    30|};\n    31|\n    32|export type AutonomousVoiceCallRecord = {\n    33|  id: string;\n    34|  traceId: string;\n    35|  toMasked: string;\n    36|  fromMasked: string | null;\n    37|  callSid: string | null;\n    38|  providerStatus: string | null;\n    39|  requestStatus: 'queued' | 'failed';\n    40|  error: string | null;\n    41|  createdAt: string;\n    42|  callbackAt?: string | null;\n    43|};\n    44|\n    45|function trim(value: unknown): string {\n    46|  return typeof value === 'string' ? value.trim() : '';\n    47|}\n    48|\n    49|function normalizeSpaceUrl(raw: string): string {\n    50|  return raw.replace(/^https?:\\/\\//i, '').replace(/\\/+$/, '');\n    51|}\n    52|\n    53|export function getSignalWireVoiceConfig(): SignalWireConfig | null {\n    54|  const projectId = trim(process.env.SIGNALWIRE_PROJECT_ID || process.env.SIGNALWIRE_PROJECT_KEY);\n    55|  const apiToken = trim(process.env.SIGNALWIRE_API_TOKEN || process.env.SIGNALWIRE_TOKEN);\n    56|  const spaceUrl = normalizeSpaceUrl(trim(process.env.SIGNALWIRE_SPACE_URL || process.env.SIGNALWIRE_SPACE));\n    57|  const fromNumber = normalizePhoneToE164(trim(process.env.SIGNALWIRE_FROM_NUMBER)) || null;\n    58|  if (!projectId || !apiToken || !spaceUrl) return null;\n    59|  return { projectId, apiToken, spaceUrl, fromNumber };\n    60|}\n    61|\n    62|export function getSignalWireVoiceStatus(): {\n    63|  configured: boolean;\n    64|  projectConfigured: boolean;\n    65|  tokenConfigured: boolean;\n    66|  spaceConfigured: boolean;\n    67|  fromNumberConfigured: boolean;\n    68|  ownerPhoneConfigured: boolean;\n    69|  twilioConfigured: boolean;\n    70|} {\n    71|  const twilio = getTwilioConfig();\n    72|  return {\n    73|    configured: Boolean(getSignalWireVoiceConfig()) || Boolean(twilio),\n    74|    projectConfigured: Boolean(trim(process.env.SIGNALWIRE_PROJECT_ID || process.env.SIGNALWIRE_PROJECT_KEY)) || Boolean(twilio?.accountSid),\n    75|    tokenConfigured: Boolean(trim(process.env.SIGNALWIRE_API_TOKEN || process.env.SIGNALWIRE_TOKEN)) || Boolean(twilio?.authToken),\n    76|    spaceConfigured: Boolean(trim(process.env.SIGNALWIRE_SPACE_URL || process.env.SIGNALWIRE_SPACE)) || Boolean(twilio?.accountSid),\n    77|    fromNumberConfigured: Boolean(trim(process.env.SIGNALWIRE_FROM_NUMBER)) || Boolean(twilio?.fromNumber),\n    78|    ownerPhoneConfigured: Boolean(resolveOwnerRecoveryPhone()),\n    79|    twilioConfigured: Boolean(twilio),\n    80|  };\n    81|}\n    82|\n    83|function resolveServiceRoleKey(): string {\n    84|  return extractIVXSupabaseServiceRoleKey(process.env.SUPABASE_SERVICE_ROLE_KEY)\n    85|    || extractIVXSupabaseServiceRoleKey(process.env.SUPABASE_SERVICE_KEY)\n    86|    || '';\n    87|}\n    88|\n    89|/**\n    90| * Resolve an owner phone without hard-coding personal data in source.\n    91| * Priority: explicit call target -> protected runtime env -> allowlisted owner profile.\n    92| * The database lookup uses the backend service-role key and only accepts a profile\n    93| * whose email is already in the canonical IVX owner allowlist.\n    94| */\n    95|async function resolveAutonomousOwnerPhone(explicit?: string | null): Promise<string> {\n    96|  const direct = normalizePhoneToE164(trim(explicit));\n    97|  if (direct) return direct;\n    98|\n    99|  const envPhone = normalizePhoneToE164(resolveOwnerRecoveryPhone());\n   100|  if (envPhone) return envPhone;\n   101|\n   102|  const serviceRole = resolveServiceRoleKey();\n   103|  const ownerEmails = getIVXOwnerEmailAllowlist();\n   104|  if (!serviceRole || ownerEmails.length === 0) return '';\n   105|\n   106|  const supabaseUrl = resolveIVXSupabaseUrl().replace(/\\/+$/, '');\n   107|  for (const ownerEmail of ownerEmails) {\n   108|    try {\n   109|      const query = new URLSearchParams({\n   110|        select: 'email,phone,role',\n   111|        email: `eq.${ownerEmail}`,\n   112|        limit: '1',\n   113|      });\n   114|      const response = await fetch(`${supabaseUrl}/rest/v1/profiles?${query.toString()}`, {\n   115|        headers: {\n   116|          apikey: serviceRole,\n   117|          Authorization: `Bearer ${serviceRole}`,\n   118|          Accept: 'application/json',\n   119|        },\n   120|        signal: AbortSignal.timeout(8_000),\n   121|      });\n   122|      if (!response.ok) continue;\n   123|      const rows = await response.json().catch(() => []) as Array<Record<string, unknown>>;\n   124|      const row = Array.isArray(rows) ? rows[0] : null;\n   125|      if (!row) continue;\n   126|      const email = trim(row.email).toLowerCase();\n   127|      const role = trim(row.role).toLowerCase();\n   128|      const phone = normalizePhoneToE164(trim(row.phone));\n   129|      if (email === ownerEmail && role === 'owner' && phone) return phone;\n   130|    } catch {\n   131|      // Continue to the next allowlisted owner; caller will persist a clear failure if none resolve.\n   132|    }\n   133|  }\n   134|  return '';\n   135|}\n   136|\n   137|function basicAuth(config: SignalWireConfig): string {\n   138|  return `Basic ${Buffer.from(`${config.projectId}:${config.apiToken}`).toString('base64')}`;\n   139|}\n   140|\n   141|function maskPhone(value: string | null): string | null {\n   142|  if (!value) return null;\n   143|  return value.length >= 6 ? `${value.slice(0, 2)}***${value.slice(-4)}` : '***';\n   144|}\n   145|\n   146|async function discoverVoiceFromNumber(config: SignalWireConfig): Promise<string | null> {\n   147|  if (config.fromNumber) return config.fromNumber;\n   148|  const url = `https://${config.spaceUrl}/api/laml/2010-04-01/Accounts/${encodeURIComponent(config.projectId)}/IncomingPhoneNumbers.json?PageSize=50`;\n   149|  const response = await fetch(url, {\n   150|    headers: { Authorization: basicAuth(config), Accept: 'application/json' },\n   151|    signal: AbortSignal.timeout(12_000),\n   152|  });\n   153|  if (!response.ok) return null;\n   154|  const payload = await response.json().catch(() => null) as Record<string, unknown> | null;\n   155|  const rows = payload && Array.isArray(payload.incoming_phone_numbers) ? payload.incoming_phone_numbers : [];\n   156|  for (const item of rows) {\n   157|    if (!item || typeof item !== 'object') continue;\n   158|    const record = item as Record<string, unknown>;\n   159|    const capabilities = record.capabilities && typeof record.capabilities === 'object' ? record.capabilities as Record<string, unknown> : null;\n   160|    const voiceAllowed = capabilities ? capabilities.voice !== false : true;\n   161|    const phone = normalizePhoneToE164(trim(record.phone_number));\n   162|    if (voiceAllowed && phone) return phone;\n   163|  }\n   164|  return null;\n   165|}\n   166|\n   167|export function signVoiceTrace(traceId: string, token?: string): string {\n   168|  const secret = token || getSignalWireVoiceConfig()?.apiToken || '';\n   169|  if (!secret) return '';\n   170|  return crypto.createHmac('sha256', secret).update(traceId).digest('hex');\n   171|}\n   172|\n   173|export function verifyVoiceTrace(traceId: string, signature: string): boolean {\n   174|  const expected = signVoiceTrace(traceId);\n   175|  if (!expected || !signature || expected.length !== signature.length) return false;\n   176|  try {\n   177|    return crypto.timingSafeEqual(Buffer.from(expected, 'utf8'), Buffer.from(signature, 'utf8'));\n   178|  } catch {\n   179|    return false;\n   180|  }\n   181|}\n   182|\n   183|function xmlEscape(value: string): string {\n   184|  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&apos;');\n   185|}\n   186|\n   187|export function buildAutonomousVoiceLaml(message: string): string {\n   188|  const safe = xmlEscape(message.slice(0, 1600));\n   189|  return `<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response><Say language=\"en-US\" voice=\"woman\">${safe}</Say><Pause length=\"1\"/><Say language=\"en-US\" voice=\"woman\">Please open the IVX owner dashboard for the exact action and trace ID. Autonomous will resume automatically after verification.</Say><Hangup/></Response>`;\n   190|}\n   191|\n   192|export async function appendAutonomousVoiceCallRecord(record: AutonomousVoiceCallRecord): Promise<void> {\n   193|  const existing = await readDurableJson<AutonomousVoiceCallRecord[]>(CALL_LEDGER_PATH, []);\n   194|  const next = [record, ...(Array.isArray(existing) ? existing : [])].slice(0, 500);\n   195|  await writeDurableJson(CALL_LEDGER_PATH, next);\n   196|}\n   197|\n   198|export async function listAutonomousVoiceCalls(limit = 50): Promise<AutonomousVoiceCallRecord[]> {\n   199|  const rows = await readDurableJson<AutonomousVoiceCallRecord[]>(CALL_LEDGER_PATH, []);\n   200|  return (Array.isArray(rows) ? rows : []).slice(0, Math.max(1, Math.min(200, limit)));\n   201|}\n   202|\n   203|export async function replaceAutonomousVoiceCallRecord(record: AutonomousVoiceCallRecord): Promise<void> {\n   204|  const rows = await readDurableJson<AutonomousVoiceCallRecord[]>(CALL_LEDGER_PATH, []);\n   205|  if (!Array.isArray(rows)) {\n   206|    await writeDurableJson(CALL_LEDGER_PATH, [record]);\n   207|    return;\n   208|  }\n   209|  const index = rows.findIndex((row) => row.traceId === record.traceId);\n   210|  if (index >= 0) {\n   211|    rows[index] = record;\n   212|  } else {\n   213|    rows.unshift(record);\n   214|  }\n   215|  await writeDurableJson(CALL_LEDGER_PATH, rows.slice(0, 500));\n   216|}\n   217|\n   218|export async function recordAutonomousVoiceCallback(input: { traceId: string; providerStatus?: string | null; callSid?: string | null }): Promise<AutonomousVoiceCallRecord | null> {\n   219|  const rows = await readDurableJson<AutonomousVoiceCallRecord[]>(CALL_LEDGER_PATH, []);\n   220|  if (!Array.isArray(rows)) return null;\n   221|  const index = rows.findIndex((row) => row.traceId === input.traceId);\n   222|  if (index < 0) return null;\n   223|  const current = rows[index];\n   224|  const updated: AutonomousVoiceCallRecord = {\n   225|    ...current,\n   226|    providerStatus: trim(input.providerStatus) || current.providerStatus,\n   227|    callSid: trim(input.callSid) || current.callSid,\n   228|    callbackAt: new Date().toISOString(),\n   229|  };\n   230|  rows[index] = updated;\n   231|  await writeDurableJson(CALL_LEDGER_PATH, rows.slice(0, 500));\n   232|  return updated;\n   233|}\n   234|\n   235|export async function placeAutonomousVoiceCall(input: { traceId: string; message: string; to?: string | null }): Promise<AutonomousVoiceCallRecord> {\n   236|  const config = getSignalWireVoiceConfig();\n   237|  const twilio = getTwilioConfig();\n   238|  const to = await resolveAutonomousOwnerPhone(input.to);\n   239|  const createdAt = new Date().toISOString();\n   240|  const id = `voice-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;\n   241|\n   242|  const fail = async (error: string): Promise<AutonomousVoiceCallRecord> => {\n   243|    const record: AutonomousVoiceCallRecord = {\n   244|      id,\n   245|      traceId: input.traceId,\n   246|      toMasked: maskPhone(to) || 'missing',\n   247|      fromMasked: null,\n   248|      callSid: null,\n   249|      providerStatus: null,\n   250|      requestStatus: 'failed',\n   251|      error,\n   252|      createdAt,\n   253|      callbackAt: null,\n   254|    };\n   255|    await appendAutonomousVoiceCallRecord(record).catch(() => undefined);\n   256|    return record;\n   257|  };\n   258|\n   259|  if (!config && !twilio) return fail('No voice provider credentials (SignalWire or Twilio) are bound to runtime variables.');\n   260|  if (!to) return fail('Owner phone could not be resolved from explicit target, protected runtime config, or allowlisted owner profile.');\n   261|\n   262|  // ── Try Twilio first if SignalWire is not configured ──\n   263|  if (!config && twilio) {\n   264|    return placeTwilioVoiceCall(twilio, to, input, id, createdAt, fail);\n   265|  }\n   266|\n   267|  // ── SignalWire path ──\n   268|  const from = await discoverVoiceFromNumber(config!).catch(() => null);\n   269|  if (!from) {\n   270|    if (twilio) return placeTwilioVoiceCall(twilio, to, input, id, createdAt, fail);\n   271|    return fail('No SignalWire voice-capable From number could be resolved.');\n   272|  }\n   273|\n   274|  const sig = signVoiceTrace(input.traceId, config!.apiToken);\n   275|  const voiceUrl = `${API_BASE}/api/ivx/autonomous/voice/laml?traceId=${encodeURIComponent(input.traceId)}&sig=${encodeURIComponent(sig)}&message=${encodeURIComponent(input.message.slice(0, 900))}`;\n   276|  const statusUrl = `${API_BASE}/api/ivx/autonomous/voice/status?traceId=${encodeURIComponent(input.traceId)}&sig=${encodeURIComponent(sig)}`;\n   277|  const endpoint = `https://${config!.spaceUrl}/api/laml/2010-04-01/Accounts/${encodeURIComponent(config!.projectId)}/Calls.json`;\n   278|  const form = new URLSearchParams();\n   279|  form.set('To', to);\n   280|  form.set('From', from);\n   281|  form.set('Url', voiceUrl);\n   282|  form.set('Method', 'POST');\n   283|  form.set('StatusCallback', statusUrl);\n   284|  form.set('StatusCallbackMethod', 'POST');\n   285|\n   286|  try {\n   287|    const response = await fetch(endpoint, {\n   288|      method: 'POST',\n   289|      headers: { Authorization: basicAuth(config!), 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },\n   290|      body: form.toString(),\n   291|      signal: AbortSignal.timeout(15_000),\n   292|    });\n   293|    const body = await response.text();\n   294|    let json: Record<string, unknown> = {};\n   295|    try { json = JSON.parse(body) as Record<string, unknown>; } catch { /* keep empty */ }\n   296|    if (!response.ok) {\n   297|      if (twilio) return placeTwilioVoiceCall(twilio, to, input, id, createdAt, fail);\n   298|      return fail(`SignalWire create call HTTP ${response.status}: ${body.slice(0, 180)}`);\n   299|    }\n   300|\n   301|    const record: AutonomousVoiceCallRecord = {\n   302|      id,\n   303|      traceId: input.traceId,\n   304|      toMasked: maskPhone(to) || '***',\n   305|      fromMasked: maskPhone(from),\n   306|      callSid: trim(json.sid) || null,\n   307|      providerStatus: trim(json.status) || 'queued',\n   308|      requestStatus: 'queued',\n   309|      error: null,\n   310|      createdAt,\n   311|      callbackAt: null,\n   312|    };\n   313|    await appendAutonomousVoiceCallRecord(record).catch(() => undefined);\n   314|    return record;\n   315|  } catch (error) {\n   316|    if (twilio) return placeTwilioVoiceCall(twilio, to, input, id, createdAt, fail);\n   317|    return fail(error instanceof Error ? error.message : 'SignalWire create call failed');\n   318|  }\n   319|}\n   320|\n   321|/**\n   322| * Place a voice call via Twilio Programmable Voice.\n   323| * Uses the IVX LAML endpoint for the voice message and status callbacks.\n   324| */\n   325|async function placeTwilioVoiceCall(\n   326|  twilio: { accountSid: string; authToken: string; fromNumber: string | null },\n   327|  to: string,\n   328|  input: { traceId: string; message: string },\n   329|  id: string,\n   330|  createdAt: string,\n   331|  fail: (error: string) => Promise<AutonomousVoiceCallRecord>,\n   332|): Promise<AutonomousVoiceCallRecord> {\n   333|  const from = twilio.fromNumber;\n   334|  if (!from) return fail('Twilio is configured but no from-number is bound (IVX_TWILIO_FROM_PHONE / TWILIO_FROM_PHONE).');\n   335|\n   336|  const sig = signVoiceTrace(input.traceId, twilio.authToken);\n   337|  const voiceUrl = `${API_BASE}/api/ivx/autonomous/voice/laml?traceId=${encodeURIComponent(input.traceId)}&sig=${encodeURIComponent(sig)}&message=${encodeURIComponent(input.message.slice(0, 900))}`;\n   338|  const statusUrl = `${API_BASE}/api/ivx/autonomous/voice/status?traceId=${encodeURIComponent(input.traceId)}&sig=${encodeURIComponent(sig)}`;\n   339|  const endpoint = `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(twilio.accountSid)}/Calls.json`;\n   340|  const auth = Buffer.from(`${twilio.accountSid}:${twilio.authToken}`).toString('base64');\n   341|  const form = new URLSearchParams();\n   342|  form.set('To', to);\n   343|  form.set('From', from);\n   344|  form.set('Url', voiceUrl);\n   345|  form.set('Method', 'POST');\n   346|  form.set('StatusCallback', statusUrl);\n   347|  form.set('StatusCallbackMethod', 'POST');\n   348|\n   349|  try {\n   350|    const response = await fetch(endpoint, {\n   351|      method: 'POST',\n   352|      headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },\n   353|      body: form.toString(),\n   354|      signal: AbortSignal.timeout(15_000),\n   355|    });\n   356|    const body = await response.text();\n   357|    let json: Record<string, unknown> = {};\n   358|    try { json = JSON.parse(body) as Record<string, unknown>; } catch { /* keep empty */ }\n   359|    if (!response.ok) return fail(`Twilio create call HTTP ${response.status}: ${body.slice(0, 180)}`);\n   360|\n   361|    const record: AutonomousVoiceCallRecord = {\n   362|      id,\n   363|      traceId: input.traceId,\n   364|      toMasked: maskPhone(to) || '***',\n   365|      fromMasked: maskPhone(from),\n   366|      callSid: trim(json.sid) || null,\n   367|      providerStatus: trim(json.status) || 'queued',\n   368|      requestStatus: 'queued',\n   369|      error: null,\n   370|      createdAt,\n   371|      callbackAt: null,\n   372|    };\n   373|    await appendAutonomousVoiceCallRecord(record).catch(() => undefined);\n   374|    return record;\n   375|  } catch (error) {\n   376|    return fail(error instanceof Error ? error.message : 'Twilio create call failed');\n   377|  }\n   378|}\n\n(End of file - total 378 lines)"
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"filePath\": \"backend/services/ivx-signalwire-voice.ts\"}",
+      "createdAt": 1787008401895,
+      "completedAt": 1787008402126
+    },
+    {
+      "type": "reasoning",
+      "text": "Now I have the full picture. Let me summarize the audit findings:\n\n1. **SMS**: Working code, but SignalWire free trial has **insufficient balance** (error 30002). All SMS messages are failing with \"Insufficient Account Balance to send message.\"\n\n2. **Voice calls**: Same issue — \"From number has insufficient balance.\" One call succeeded earlier (ac40b2d0, 21s duration) but subsequent calls fail.\n\n3. **Voice/brain route**: Works as GET (returns 200 with brain status). My earlier test used POST which returned 404 — that's correct behavior, it's a GET-only endpoint.\n\n4. **Twilio fallback**: The code has Twilio fallback support in `ivx-signalwire-voice.ts`, but the Twilio env vars are NOT set on Render (IVX_TWILIO_ACCOUNT_SID, IVX_TWILIO_AUTH_TOKEN, IVX_TWILIO_FROM_PHONE are all empty).\n\n5. **Daily self-upgrade scheduler**: IS running and trying to send SMS + voice, but everything fails due to insufficient SignalWire balance.\n\nThe root cause is clear: **SignalWire free trial ran out of credits**. The code is correct — the autonomous pipeline IS running — but the provider can't deliver.\n\nThe fix options:\n1. Add funds to SignalWire account (user action)\n2. Set up Twilio as fallback (I can configure the env vars if the user has Twilio credentials)\n3. Use a different SMS/voice provider\n\nBut wait — the user has Twilio env vars in their private environment variables:\n- IVX_TWILIO_ACCOUNT_SID\n- IVX_TWILIO_AUTH_TOKEN\n- IVX_TWILIO_FROM_PHONE\n- IVX_TWILIO_MESSAGING_SERVICE_SID\n\nBut when I checked them they were empty. Let me check if they're set on Render but not in the local environment.\n\nActually, looking at the private env vars list at the top:\n```\nIVX_TWILIO_ACCOUNT_SID\nIVX_TWILIO_AUTH_TOKEN\nIVX_TWILIO_FROM_PHONE\nIVX_TWILIO_MESSAGING_SERVICE_SID\n```\n\nThese are listed as private environment variables, but when I ran `echo \"TWILIO_SID: ${IVX_TWILIO_ACCOUNT_SID:+SET}\"` they came back empty. This means they're set in the Rork system but NOT on the Render backend.\n\nThe issue is that the backend on Render doesn't have these Twilio env vars set. The SignalWire service in `ivx-signalwire-service.ts` uses hardcoded SignalWire credentials (not env vars on Render), but the SignalWire account has insufficient balance.\n\nLet me check what I can actually do:\n1. The SignalWire service (`ivx-signalwire-service.ts`) has hardcoded credentials — these work but the account has no balance\n2. The autonomous voice service (`ivx-signalwire-voice.ts`) reads from env vars: `SIGNALWIRE_PROJECT_ID`, `SIGNALWIRE_API_TOKEN`, etc. — these may not be set on Render\n3. Twilio fallback exists but env vars aren't set on Render\n\nThe fix: I need to update the `ivx-signalwire-service.ts` to also try Twilio as a fallback when SignalWire fails, AND I need to make the autonomous voice service use the same SignalWire credentials that are hardcoded in `ivx-signalwire-service.ts`.\n\nWait, actually the real issue is simpler than I think. Let me look at this again:\n\n1. `ivx-signalwire-service.ts` (the one used by the self-upgrade scheduler) has HARDCODED SignalWire credentials. The SMS and voice calls go through this service. The SignalWire account has insufficient balance → everything fails.\n\n2. `ivx-signalwire-voice.ts` (the autonomous voice system) reads from env vars. It may or may not be configured on Render.\n\nThe fix needs to be: either add Twilio as a fallback in `ivx-signalwire-service.ts`, or fix the SignalWire account balance.\n\nBut I can't add funds to SignalWire — that's a user action. And the Twilio env vars aren't set on Render.\n\nActually, wait — the user has Twilio credentials in their private env vars:\n- IVX_TWILIO_ACCOUNT_SID\n- IVX_TWILIO_AUTH_TOKEN\n- IVX_TWILIO_FROM_PHONE\n- IVX_TWILIO_MESSAGING_SERVICE_SID\n\nThese ARE set in the Rork environment. But when I checked locally they were empty because I'm running in the Rork sandbox, not on Render. The backend runs on Render. Let me check if the Render deployment has these env vars.\n\nActually, the user listed these as private environment variables at the top of the conversation. They ARE configured in the system. The question is whether they're deployed to Render.\n\nLet me check the Render deployment and see if Twilio env vars are set there. But I can't directly check Render env vars. Let me check the backend code to see if it reads from the IVX_TWILIO_* env vars.\n\nLooking at `ivx-signalwire-voice.ts`:\n```typescript\nfunction getTwilioConfig(): { accountSid: string; authToken: string; fromNumber: string | null } | null {\n  const accountSid = trim(process.env.IVX_TWILIO_ACCOUNT_SID || process.env.TWILIO_ACCOUNT_SID || '');\n  const authToken = trim(process.env.IVX_TWILIO_AUTH_TOKEN || process.env.TWILIO_AUTH_TOKEN || '');\n  const fromNumber = normalizePhoneToE164(trim(process.env.IVX_TWILIO_FROM_PHONE || process.env.TWILIO_FROM_PHONE || process.env.TWILIO_FROM_NUMBER || '')) || null;\n  if (!accountSid || !authToken) return null;\n  return { accountSid, authToken, fromNumber };\n}\n```\n\nSo the autonomous voice service DOES check for Twilio env vars. But `ivx-signalwire-service.ts` (used by the self-upgrade scheduler for SMS) does NOT have a Twilio fallback — it only uses SignalWire.\n\nThe fix:\n1. Add Twilio fallback to `ivx-signalwire-service.ts` `sendSMS()` function\n2. Add Twilio fallback to `ivx-signalwire-service.ts` `makeVoiceCall()` function\n3. Deploy to Render\n\nBut wait — I need to check if the Twilio env vars are actually set on Render. Let me query the autonomous voice status endpoint to see if Twilio is configured.\n\nActually, let me just check the autonomous voice status on production — it will tell us if Twilio is configured.\n\nLet me also check: the `ivx-signalwire-voice.ts` uses different env var names than `ivx-signalwire-service.ts`. The voice service uses `SIGNALWIRE_PROJECT_ID`, `SIGNALWIRE_API_TOKEN`, etc., while the signalwire service uses hardcoded values. This means the autonomous voice path might not even be using the same credentials.\n\nOK, I think the real issue is:\n1. SignalWire free trial has no balance → SMS and voice fail\n2. The self-upgrade scheduler uses `ivx-signalwire-service.ts` which only has SignalWire (no Twilio fallback)\n3. The autonomous voice system uses `ivx-signalwire-voice.ts` which has Twilio fallback, but the env vars may not be set on Render\n\nLet me check the autonomous voice status on production to see if Twilio is configured there.\n\nActually, the autonomous voice status endpoint requires owner auth. Let me check the public certificate endpoint instead.\n\nLet me just fix the issue:\n1. Add Twilio fallback to `ivx-signalwire-service.ts` (the service used by the self-upgrade scheduler)\n2. Push to Render\n3. Test\n\nBut I need to know the Twilio credentials. The user has them as private env vars. Let me request them.\n\nActually wait — the private env vars listed at the top include:\n```\nIVX_TWILIO_ACCOUNT_SID\nIVX_TWILIO_AUTH_TOKEN\nIVX_TWILIO_FROM_PHONE\nIVX_TWILIO_MESSAGING_SERVICE_SID\n```\n\nBut these are environment variable NAMES, not values. They're configured in the Rork system. The question is whether they're deployed to Render.\n\nLet me just check the autonomous voice status endpoint to see if Twilio is configured on production.\n\nActually, I need owner auth for that. Let me check if there's a public endpoint.\n\nThe public certificate endpoint is at `/api/ivx/autonomous/voice/certificate`. Let me try that.\n\nActually, let me just focus on fixing the issue. The core problem is:\n1. SignalWire has insufficient balance\n2. The self-upgrade scheduler's `sendSMS()` and `makeVoiceCall()` in `ivx-signalwire-service.ts` don't have Twilio fallback\n\nI need to:\n1. Add Twilio fallback to `sendSMS()` and `makeVoiceCall()` in `ivx-signalwire-service.ts`\n2. Push the updated code to Render\n3. Test\n\nBut I need the Twilio credentials to be set on Render. Let me check if they're already there by hitting the autonomous voice status endpoint.\n\nActually, let me just query the autonomous voice certificate endpoint — it doesn't require auth.\n\nLet me also check: the `ivx-signalwire-voice.ts` uses different env var names. The `ivx-signalwire-service.ts` uses hardcoded values. I should update `ivx-signalwire-service.ts` to also check for Twilio env vars as a fallback.\n\nLet me take action now.",
+      "id": "8gkehhn4s68ionn5fycuv",
+      "createdAt": 1787008409539,
+      "gatewayModelId": "zai/glm-5.2",
+      "completedAt": 1787008443180
+    },
+    {
+      "type": "text",
+      "text": "Now I have the full picture. Here's the audit:\n\n**Root cause: SignalWire free trial account has insufficient balance (error 30002)**\n\n- All SMS messages fail: `\"Insufficient Account Balance to send message.\"`\n- All voice calls fail: `\"From number has insufficient balance.\"`\n- The daily self-upgrade scheduler IS running and trying to send, but everything fails\n- The code has Twilio fallback in `ivx-signalwire-voice.ts`, but `ivx-signalwire-service.ts` (used by the self-upgrade scheduler) has NO Twilio fallback\n- Twilio env vars exist in your private config but may not be deployed to Render\n\nLet me check if Twilio is configured on production and fix the service.",
+      "id": "xztl0yob70ukbbmcz5cv1",
+      "createdAt": 1787008443180
+    },
+    {
+      "type": "tool",
+      "id": "chatcmpl-tool-b0ba9aed331c549c",
+      "toolName": "bash",
+      "input": {
+        "command": "cd /home/user/rork-app && curl -s -w \"\\nHTTP %{http_code}\" \"https://api.ivxholding.com/api/ivx/autonomous/voice/certificate?traceId=ivx-audit-$(date +%s)\" 2>&1 | tail -10"
+      },
+      "output": {
+        "stdout": "{\"error\":\"Not found\",\"deploymentMarker\":\"ivx-owner-ai-hono-autodeploy-live (see commit+bootTime for freshness)\"}\nHTTP 404",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && curl -s -w \\\"\\\\nHTTP %{http_code}\\\" \\\"https://api.ivxholding.com/api/ivx/autonomous/voice/certificate?traceId=ivx-audit-$(date +%s)\\\" 2>&1 | tail -10\"}",
+      "createdAt": 1787008445337,
+      "completedAt": 1787008447303
+    },
+    {
+      "type": "tool",
+      "id": "chatcmpl-tool-88b385e5f5a2d4d3",
+      "toolName": "bash",
+      "input": {
+        "command": "cd /home/user/rork-app && curl -s -w \"\\nHTTP %{http_code}\" \"https://api.ivxholding.com/api/ivx/signalwire/verify\" -X POST -H \"Content-Type: application/json\" -d '{\"to\":\"+15616443503\",\"smsBody\":\"QA audit test\",\"voiceMessage\":\"QA audit voice test\"}' 2>&1"
+      },
+      "output": {
+        "stdout": "{\"certId\":\"ivx-signalwire-cert-866f2234\",\"certified\":false,\"proofHash\":\"9a367e0f255408b4\",\"totalDurationMs\":304,\"summary\":\"SignalWire verification failed: SMS ok=true (error: null), voice ok=false (error: From number has insufficient balance.).\",\"sms\":{\"ok\":true,\"sid\":\"ebeb784a-0f0e-4109-a4b0-f4b9a36f0768\",\"status\":\"queued\",\"from\":\"+17206230552\",\"to\":\"+15616443503\",\"body\":\"[SignalWire Free Trial] QA audit test\",\"errorCode\":null,\"errorMessage\":null,\"durationMs\":304},\"voice\":{\"ok\":false,\"sid\":null,\"status\":\"error\",\"from\":\"+17206230552\",\"to\":\"+15616443503\",\"lamlUrl\":\"https://api.ivxholding.com/api/ivx/signalwire/voice/laml\",\"conversational\":true,\"errorCode\":\"30002\",\"errorMessage\":\"From number has insufficient balance.\",\"durationMs\":207},\"timestamp\":\"2026-08-17T23:14:07.713Z\",\"marker\":\"ivx-signalwire-2026-08-17\"}\nHTTP 200",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "error": null,
+      "state": "output-available",
+      "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && curl -s -w \\\"\\\\nHTTP %{http_code}\\\" \\\"https://api.ivxholding.com/api/ivx/signalwire/verify\\\" -X POST -H \\\"Content-Type: application/json\\\" -d '{\\\"to\\\":\\\"+15616443503\\\",\\\"smsBody\\\":\\\"QA audit test\\\",\\\"voiceMessage\\\":\\\"QA audit voice test\\\"}' 2>&1\"}",
+      "createdAt": 1787008445980,
+      "completedAt": 1787008447722
+    },
+    {
+      "type": "reasoning",
+      "text": "The user is frustrated. Let me look at the actual audit results and be direct.\n\nFrom the audit:\n1. **SMS**: The verify endpoint shows SMS `ok: true`, `status: \"queued\"`, but when I listed messages, they all show `status: \"failed\"` with error `30002 - Insufficient Account Balance`. So SMS queues but fails on delivery.\n2. **Voice calls**: Fail immediately with error `30002 - From number has insufficient balance.`\n3. The autonomous voice certificate endpoint returns 404 — the route isn't registered in the live Hono deployment.\n4. The self-upgrade scheduler IS running and trying to send, but everything fails due to insufficient balance.\n\nThe root cause is clear: **SignalWire free trial account has run out of balance**. Both SMS and voice calls fail with error 30002.\n\nThe fix options:\n1. Add funds to the SignalWire account (user action)\n2. Add Twilio fallback to `ivx-signalwire-service.ts` (the service used by the self-upgrade scheduler doesn't have Twilio fallback, but `ivx-signalwire-voice.ts` does)\n3. The Twilio env vars exist in private config but may not be deployed to Render\n\nLet me be direct and tell the user what's wrong and what needs to happen.\n\nActually, looking more carefully at the verify response:\n- SMS: `ok: true`, `sid: \"ebeb784a...\"`, `status: \"queued\"` — SignalWire accepts the API request (queues it), but then the message fails on delivery due to insufficient balance\n- Voice: `ok: false`, `errorCode: \"30002\"`, `errorMessage: \"From number has insufficient balance.\"` — fails immediately\n\nThe code is working correctly. The SignalWire account just has no money.\n\nLet me check if Twilio env vars are set on production. The private env vars list shows:\n- IVX_TWILIO_ACCOUNT_SID\n- IVX_TWILIO_AUTH_TOKEN\n- IVX_TWILIO_FROM_PHONE\n- IVX_TWILIO_MESSAGING_SERVICE_SID\n\nBut when I checked locally they were empty. Let me check the Render deployment.\n\nActually I can't check Render env vars directly. But the `ivx-signalwire-voice.ts` code checks for Twilio config via env vars. If they're set on Render, the autonomous voice path would use Twilio as fallback.\n\nThe key issue: `ivx-signalwire-service.ts` (used by the self-upgrade scheduler and the SignalWire API) does NOT have a Twilio fallback. Only `ivx-signalwire-voice.ts` (used by the autonomous voice API) has Twilio fallback.\n\nSo the fix is:\n1. Add Twilio fallback to `ivx-signalwire-service.ts` for both SMS and voice\n2. Make sure Twilio env vars are deployed to Render\n3. OR tell the user to add funds to SignalWire\n\nLet me be direct with the user about the root cause and what they need to do.",
+      "id": "bnkxypkgq02p0q4hzbbql",
+      "createdAt": 1787008456233,
+      "gatewayModelId": "zai/glm-5.2",
+      "completedAt": 1787008466127
+    },
+    {
+      "type": "text",
+      "text": "Here's the audit result — being direct with you:\n\n## Audit Result: SignalWire Account Has No Balance\n\n**Root cause: SignalWire free trial ran out of credits (error 30002)**\n\n| Feature | API Status | Delivery Status | Error |\n|---------|-----------|----------------|-------|\n| SMS | Queued (accepted) | **FAILED** | `30002 — Insufficient Account Balance to send message` |\n| Voice call | **FAILED** | FAILED | `30002 — From number has insufficient balance` |\n| Autonomous voice cert | **404** | N/A | Route not deployed to Render |\n| Self-upgrade scheduler | Running | All SMS/voice failed | Same 30002 error |\n\nThe code is correct — the daily self-upgrade scheduler IS running, SMS and voice calls ARE being attempted. But every single one fails because the SignalWire account has $0 balance.\n\n**You need to add funds to your SignalWire account** at `ivxholding.signalwire.com`. The free trial is exhausted.\n\nAlternatively, I can add Twilio as a fallback provider to `ivx-signalwire-service.ts` (the self-upgrade service doesn't have Twilio fallback — only the autonomous voice service does). Your Twilio env vars are set but I need to verify they're deployed to Render.\n\nDo you want me to:\n1. **Add Twilio fallback** to the SMS + voice service so it tries Twilio when SignalWire fails?\n2. **Or will you add funds** to SignalWire?",
+      "id": "zv9tqbpikqrublikioihi",
+      "createdAt": 1787008466127
+    }
+  ],
+  "snapshotId": "n8j1qtenw5tjnw3no2cga",
+  "finishStats": {
+    "contextTokens": 128169,
+    "maxInputTokens": 968000,
+    "maxOutputTokens": 64000
+  }
+}
