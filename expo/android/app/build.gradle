@@ -143,9 +143,9 @@ android {
         }
     }
 
-    // After building the release AAB, re-sign with jarsigner to add v1 (JAR)
-    // signatures on all entries. The AGP signs AABs with v2/v3 scheme only;
-    // `jarsigner -verify -strict` requires v1 per-entry signatures to pass.
+    // After building the release AAB, strip existing META-INF signatures
+    // (from AGP v2/v3 block signing) and re-sign with jarsigner v1 (JAR)
+    // so `jarsigner -verify -strict` passes.
     tasks.matching { it.name == 'bundleRelease' }.configureEach {
         doLast {
             def aab = layout.buildDirectory.file("outputs/bundle/release/app-release.aab").get().asFile
@@ -155,7 +155,32 @@ android {
                 def alias = System.getenv('IVX_RELEASE_KEY_ALIAS')
                 def keyPass = System.getenv('IVX_RELEASE_KEY_PASSWORD')
                 if (keystorePath && storePass && alias && keyPass) {
-                    logger.lifecycle("Re-signing AAB with jarsigner for strict verification")
+                    logger.lifecycle("Stripping existing AAB signatures and re-signing with jarsigner")
+                    // Strip existing META-INF signature files to avoid v1/v2/v3 conflicts
+                    def tmpAab = new File(aab.parentFile, "app-release-unsigned.aab")
+                    tmpAab.bytes = aab.bytes
+                    def jarFile = new java.util.jar.JarFile(tmpAab)
+                    def entries = jarFile.entries().findAll { entry ->
+                        def name = entry.getName()
+                        !(name.startsWith('META-INF/') && (name.endsWith('.SF') || name.endsWith('.RSA') || name.endsWith('.EC') || name.endsWith('.DSA') || name == 'META-INF/MANIFEST.MF'))
+                    }
+                    def manifest = new java.util.jar.Manifest()
+                    def outJar = new java.util.jar.JarOutputStream(new java.io.FileOutputStream(aab), manifest)
+                    entries.each { entry ->
+                        def je = new java.util.jar.JarEntry(entry.getName())
+                        je.setTime(entry.getTime())
+                        outJar.putNextEntry(je)
+                        def is = jarFile.getInputStream(entry)
+                        byte[] buf = new byte[4096]
+                        int n
+                        while ((n = is.read(buf)) > 0) outJar.write(buf, 0, n)
+                        is.close()
+                        outJar.closeEntry()
+                    }
+                    outJar.close()
+                    jarFile.close()
+                    tmpAab.delete()
+                    // Now sign fresh with jarsigner
                     exec {
                         commandLine 'jarsigner', '-keystore', keystorePath,
                             '-storepass', storePass,
@@ -165,7 +190,7 @@ android {
                             aab.absolutePath,
                             alias
                     }
-                    logger.lifecycle("AAB re-signed successfully")
+                    logger.lifecycle("AAB re-signed successfully with clean v1 signatures")
                 }
             }
         }
