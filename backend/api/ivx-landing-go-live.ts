@@ -298,8 +298,6 @@ export async function handleLandingEnvDiagnostic(): Promise<Response> {
     'RENDER_SERVICE_ID',
     'IVX_RENDER_API_KEY',
     'IVX_RENDER_SERVICE_ID',
-    'EXPO_PUBLIC_TOOLKIT_URL',
-    'EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY',
     'EXPO_PUBLIC_PROJECT_ID',
     'EXPO_PUBLIC_SUPABASE_URL',
     'SUPABASE_URL',
@@ -323,16 +321,13 @@ export async function handleLandingEnvDiagnostic(): Promise<Response> {
     /^(AWS|S3|CLOUD|RENDER|IVX|EXPO|RORK|SUPABASE|GITHUB)/.test(k)
   );
 
-  // Try Rork toolkit proxy if available
-  const toolkitUrl = readEnv('EXPO_PUBLIC_TOOLKIT_URL');
-  const toolkitKey = readEnv('EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY');
-  const projectId = readEnv('EXPO_PUBLIC_PROJECT_ID');
-
-  let toolkitProxy = {
-    available: !!(toolkitUrl && toolkitKey && projectId),
-    toolkitUrl: toolkitUrl || null,
-    projectId: projectId || null,
-    hasKey: !!toolkitKey,
+  // Rork toolkit proxy removed — IVX is now fully independent
+  const toolkitProxy = {
+    available: false,
+    toolkitUrl: null,
+    projectId: null,
+    hasKey: false,
+    note: 'Rork toolkit proxy removed — IVX is fully independent',
   };
 
   // Audit Owner Variables encrypted store for AWS-related vars
