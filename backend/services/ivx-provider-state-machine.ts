@@ -71,7 +71,10 @@ const RECOVERY_COOLDOWN_MS = (() => {
       : '',
     10,
   );
-  return Number.isFinite(raw) && raw > 0 ? raw : 60_000;
+  // Default 5s (down from 60s) so transient rate-limit errors during batch
+  // certification runs (e.g. 112 AI worker cert) self-heal quickly instead
+  // of latching AI_UNAVAILABLE for the entire run duration.
+  return Number.isFinite(raw) && raw > 0 ? raw : 5_000;
 })();
 
 let cachedAdapterVersion: string | null = null;
