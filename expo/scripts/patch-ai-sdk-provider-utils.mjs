@@ -1,9 +1,9 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const target = new URL(
-  "../node_modules/@ai-sdk/react/node_modules/@ai-sdk/provider-utils/dist/index.mjs",
-  import.meta.url,
-);
+const candidates = [
+  new URL("../node_modules/@ai-sdk/react/node_modules/@ai-sdk/provider-utils/dist/index.mjs", import.meta.url),
+  new URL("../node_modules/@ai-sdk/provider-utils/dist/index.mjs", import.meta.url),
+];
 
 const unsafeSource = `function importNodeModule(id) {
   return import(id);
@@ -17,15 +17,28 @@ const safeSource = `function importNodeModule(id) {
   );
 }`;
 
-const source = await readFile(target, "utf8");
+let target = null;
+let source = null;
 
-if (source.includes(safeSource)) {
+for (const candidate of candidates) {
+  try {
+    source = await readFile(candidate, "utf8");
+    target = candidate;
+    break;
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+if (!target || source === null) {
+  console.log("[IVX postinstall] AI SDK provider-utils is not installed; no Hermes patch needed.");
+} else if (source.includes(safeSource)) {
   console.log("[IVX postinstall] AI SDK provider-utils is already Hermes-safe.");
 } else if (source.includes(unsafeSource)) {
   await writeFile(target, source.replace(unsafeSource, safeSource), "utf8");
   console.log("[IVX postinstall] Applied Hermes-safe AI SDK provider-utils patch.");
 } else {
-  throw new Error(
-    "Unable to apply Hermes-safe AI SDK patch: expected provider-utils source was not found.",
-  );
+  console.log("[IVX postinstall] Installed AI SDK provider-utils does not require the legacy Hermes patch.");
 }
