@@ -79,7 +79,7 @@ function isGatewayTTSAvailable(): boolean {
 
 /** Resolve the TTS model based on provider. */
 function getTTSModel(): string {
-  if (isToolkitTTSAvailable()) {
+  if (isToolkitTTSAvailable() || isGatewayTTSAvailable()) {
     return readTrimmed(process.env.IVX_TTS_MODEL) || 'xai/grok-tts';
   }
   return readTrimmed(process.env.IVX_TTS_MODEL) || 'tts-1';
