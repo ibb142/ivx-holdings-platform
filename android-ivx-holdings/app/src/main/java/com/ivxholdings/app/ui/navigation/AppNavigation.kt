@@ -41,6 +41,8 @@ import com.ivxholdings.app.ui.screens.PropertiesScreen
 import com.ivxholdings.app.ui.screens.ReelsScreen
 import com.ivxholdings.app.ui.screens.RevenueScreen
 import com.ivxholdings.app.ui.screens.SettingsScreen
+import com.ivxholdings.app.ui.screens.SignalWireScreen
+import com.ivxholdings.app.ui.screens.VoiceChatScreen
 import com.ivxholdings.app.ui.theme.IVXDark
 import com.ivxholdings.app.ui.theme.IVXGold
 import com.ivxholdings.app.ui.theme.IVXOnSurface
@@ -128,6 +130,8 @@ fun AppNavigation() {
             composable(Screen.Profile.route) { ProfileScreen(navController = navController) }
             composable(Screen.Settings.route) { SettingsScreen(navController = navController) }
             composable(Screen.About.route) { AboutScreen(navController = navController) }
+            composable(Screen.VoiceChat.route) { VoiceChatScreen(navController = navController) }
+            composable(Screen.SignalWire.route) { SignalWireScreen(navController = navController) }
             composable(Screen.Login.route) { LoginScreen(onLoginSuccess = { navController.navigate(Screen.Home.route) { popUpTo(Screen.Login.route) { inclusive = true } } }) }
             composable(Screen.VercelExit.route) { com.ivxholdings.app.ui.screens.VercelExitScreen(navController = navController) }
         }

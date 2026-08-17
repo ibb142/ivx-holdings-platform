@@ -10,6 +10,8 @@ import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.HealthAndSafety
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RealEstateAgent
@@ -39,4 +41,6 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     data object Analytics : Screen("analytics", "Analytics", Icons.Default.Analytics)
     data object Members : Screen("members", "Members", Icons.Default.Groups)
     data object About : Screen("about", "Health", Icons.Default.HealthAndSafety)
+    data object VoiceChat : Screen("voice_chat", "Voice Chat", Icons.Default.Mic)
+    data object SignalWire : Screen("signalwire", "Comms", Icons.Default.Phone)
 }

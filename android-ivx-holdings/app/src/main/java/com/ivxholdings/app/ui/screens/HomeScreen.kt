@@ -26,7 +26,9 @@ import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.HealthAndSafety
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.RealEstateAgent
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -162,6 +164,16 @@ private fun HomeContent(
                     NavItem("Investors", "Investor CRM", Icons.Default.RealEstateAgent, Screen.Investors.route, Color(0xFF9C6ADE)),
                     NavItem("Feed", "Updates", Icons.AutoMirrored.Filled.Feed, Screen.Feed.route, IVXGold),
                     NavItem("Reels", "Video content", Icons.Default.Videocam, Screen.Reels.route, IVXRed)
+                ),
+                onNavigate = onNavigate
+            )
+        }
+        item { SectionTitle("IA Live Features") }
+        item {
+            NavigationGrid(
+                items = listOf(
+                    NavItem("Voice Chat", "AI voice + TTS", Icons.Default.Mic, Screen.VoiceChat.route, IVXGold),
+                    NavItem("Comms", "SMS + Voice calls", Icons.Default.Phone, Screen.SignalWire.route, IVXGreen)
                 ),
                 onNavigate = onNavigate
             )
