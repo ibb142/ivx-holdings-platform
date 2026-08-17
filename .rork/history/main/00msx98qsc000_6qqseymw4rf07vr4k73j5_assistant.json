@@ -385,7 +385,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"newString\": \"} from './api/ivx-signalwire-api';\\nimport {\\n  getVoiceChatStatus,\\n  handleVoiceChat,\\n  handleVoiceChatTranscribe,\\n  handleVoiceChatSpeak,\\n  IVX_VOICE_CHAT_API_MARKER,\\n} from './api/ivx-voice-chat-api';\\nimport {\", \"oldString\": \"} from './api/ivx-signalwire-api';\\nimport {\"}], \"filePath\": \"backend/hono.ts\"}",
       "createdAt": 1786970792278,
-      "completedAt": 1786970793332
+      "completedAt": 1786970793332,
+      "compactedAt": 1786987342912
     },
     {
       "type": "text",
@@ -408,7 +409,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# Find the exact line where self-upgrade OPTIONS are, to add voice-chat routes nearby\\ngrep -n \\\"app.options('/api/ivx/self-upgrade/log'\\\" backend/hono.ts\"}",
       "createdAt": 1786970797492,
-      "completedAt": 1786970798986
+      "completedAt": 1786970798986,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -439,7 +441,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"newString\": \"app.options('/api/ivx/self-upgrade/log', (c) => c.body(null, 204));\\n// Voice Chat — end-to-end voice messages (audio in → transcribe → AI → TTS → audio out)\\napp.get('/api/ivx/voice-chat/status', () => Response.json(getVoiceChatStatus()));\\napp.post('/api/ivx/voice-chat', async (c) => handleVoiceChat(c.req.raw));\\napp.post('/api/ivx/voice-chat/transcribe', async (c) => handleVoiceChatTranscribe(c.req.raw));\\napp.post('/api/ivx/voice-chat/speak', async (c) => handleVoiceChatSpeak(c.req.raw));\\napp.options('/api/ivx/voice-chat/status', (c) => c.body(null, 204));\\napp.options('/api/ivx/voice-chat', (c) => c.body(null, 204));\\napp.options('/api/ivx/voice-chat/transcribe', (c) => c.body(null, 204));\\napp.options('/api/ivx/voice-chat/speak', (c) => c.body(null, 204));\", \"oldString\": \"app.options('/api/ivx/self-upgrade/log', (c) => c.body(null, 204));\"}], \"filePath\": \"backend/hono.ts\"}",
       "createdAt": 1786970803932,
-      "completedAt": 1786970806887
+      "completedAt": 1786970806887,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -530,7 +533,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"activeForm\": \"Building TTS service for voice message generation\", \"content\": \"Build IVX TTS service (text-to-speech via OpenAI TTS / Vercel AI Gateway)\", \"status\": \"completed\"}, {\"activeForm\": \"Building voice chat endpoint (audio → transcribe → AI → TTS → audio reply)\", \"content\": \"Build voice chat API endpoint (audio in → transcribe → AI → TTS → audio out)\", \"status\": \"completed\"}, {\"activeForm\": \"Wiring voice chat routes into Hono backend\", \"content\": \"Wire voice chat routes into Hono backend\", \"status\": \"completed\"}, {\"activeForm\": \"Pushing files to GitHub and deploying to Render\", \"content\": \"Push files to GitHub and deploy to Render\", \"status\": \"in_progress\"}, {\"activeForm\": \"Running QA audit on voice chat end-to-end\", \"content\": \"Run QA audit — voice chat end-to-end test\", \"status\": \"pending\"}, {\"activeForm\": \"Pushing certification evidence to GitHub\", \"content\": \"Push certification evidence + certificate to GitHub\", \"status\": \"pending\"}]}",
       "createdAt": 1786970816797,
-      "completedAt": 1786970819608
+      "completedAt": 1786970819608,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -561,7 +565,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\n# Push all 3 files to GitHub via Contents API\\npython3 << 'PYEOF'\\nimport base64, json, urllib.request, ssl\\n\\nGITHUB_TOKEN = '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'\\nREPO = 'ibb142/ivx-holdings-platform'\\nBRANCH = 'main'\\nctx = ssl.create_default_context()\\n\\nfiles_to_push = [\\n    {\\n        'path': 'backend/services/ivx-tts-service.ts',\\n        'message': 'feat: IVX TTS service v1.0.0 — text-to-speech via OpenAI TTS (tts-1) with Vercel AI Gateway routing',\\n    },\\n    {\\n        'path': 'backend/api/ivx-voice-chat-api.ts',\\n        'message': 'feat: IVX Voice Chat API v1.0.0 — end-to-end voice messages (audio→transcribe→AI→TTS→audio reply)',\\n    },\\n    {\\n        'path': 'backend/hono.ts',\\n        'message': 'feat: wire voice chat routes into Hono — /api/ivx/voice-chat (status, chat, transcribe, speak)',\\n    },\\n]\\n\\nfor f in files_to_push:\\n    with open(f['path'], 'rb') as fh:\\n        content = base64.b64encode(fh.read()).decode('ascii')\\n    \\n    # Check if file exists (get SHA for update)\\n    req = urllib.request.Request(\\n        f'https://api.github.com/repos/{REPO}/contents/{f[\\\"path\\\"]}?ref={BRANCH}',\\n        headers={'Authorization': f'token {GITHUB_TOKEN}', 'Accept': 'application/vnd.github+json'}\\n    )\\n    sha = None\\n    try:\\n        with urllib.request.urlopen(req, context=ctx) as resp:\\n            body = json.loads(resp.read().decode('utf-8'))\\n            sha = body.get('sha')\\n    except Exception:\\n        pass  # New file\\n    \\n    payload = json.dumps({\\n        'message': f['message'],\\n        'content': content,\\n        'branch': BRANCH,\\n        **({'sha': sha} if sha else {})\\n    }).encode('utf-8')\\n    \\n    req = urllib.request.Request(\\n        f'https://api.github.com/repos/{REPO}/contents/{f[\\\"path\\\"]}',\\n        data=payload,\\n        method='PUT',\\n        headers={\\n            'Authorization': f'token {GITHUB_TOKEN}',\\n            'Content-Type': 'application/json',\\n            'Accept': 'application/vnd.github+json',\\n        }\\n    )\\n    \\n    try:\\n        with urllib.request.urlopen(req, context=ctx) as resp:\\n            body = json.loads(resp.read().decode('utf-8'))\\n            if 'commit' in body:\\n                print(f\\\"✅ {f['path']} → SHA {body['commit']['sha'][:12]}\\\")\\n            else:\\n                print(f\\\"⚠️  {f['path']} → unexpected response\\\")\\n    except urllib.error.HTTPError as e:\\n        body = json.loads(e.read().decode('utf-8'))\\n        print(f\\\"❌ {f['path']} → HTTP {e.code}: {body.get('message','')[:150]}\\\")\\n    except Exception as e:\\n        print(f\\\"❌ {f['path']} → {e}\\\")\\nPYEOF\"}",
       "createdAt": 1786970824904,
-      "completedAt": 1786970836940
+      "completedAt": 1786970836940,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -592,7 +597,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Wait for Render to deploy the latest commit (fae12e3ea72e)\\necho \\\"=== Waiting for commit fae12e3ea72e to deploy ===\\\"\\nfor i in $(seq 1 6); do\\n  sleep 20\\n  COMMIT=$(curl -sS -m 10 \\\"https://api.ivxholding.com/health\\\" 2>/dev/null | python3 -c \\\"import sys,json; d=json.loads(sys.stdin.read()); print(d.get('commit','unknown')[:12])\\\" 2>/dev/null)\\n  echo \\\"Attempt $i: commit=$COMMIT\\\"\\n  if [ \\\"$COMMIT\\\" = \\\"fae12e3ea72e\\\" ]; then\\n    echo \\\">>> LATEST DEPLOY LIVE!\\\"\\n    break\\n  fi\\ndone\"}",
       "createdAt": 1786970842786,
-      "completedAt": 1786970904445
+      "completedAt": 1786970904445,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -623,7 +629,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Poll for deploy completion - shorter intervals\\nfor i in $(seq 1 3); do\\n  sleep 15\\n  COMMIT=$(curl -sS -m 10 \\\"https://api.ivxholding.com/health\\\" 2>/dev/null | python3 -c \\\"import sys,json; d=json.loads(sys.stdin.read()); print(d.get('commit','unknown')[:12])\\\" 2>/dev/null)\\n  echo \\\"Attempt $i: commit=$COMMIT\\\"\\n  if [ \\\"$COMMIT\\\" = \\\"fae12e3ea72e\\\" ]; then\\n    echo \\\">>> LATEST DEPLOY LIVE!\\\"\\n    break\\n  fi\\ndone\"}",
       "createdAt": 1786970910411,
-      "completedAt": 1786970957862
+      "completedAt": 1786970957862,
+      "compactedAt": 1786987342912
     },
     {
       "type": "text",
@@ -646,7 +653,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Keep polling for the final commit fae12e3ea72e\\nfor i in $(seq 1 3); do\\n  sleep 15\\n  COMMIT=$(curl -sS -m 10 \\\"https://api.ivxholding.com/health\\\" 2>/dev/null | python3 -c \\\"import sys,json; d=json.loads(sys.stdin.read()); print(d.get('commit','unknown')[:12])\\\" 2>/dev/null)\\n  echo \\\"Attempt $i: commit=$COMMIT\\\"\\n  if [ \\\"$COMMIT\\\" = \\\"fae12e3ea72e\\\" ]; then\\n    echo \\\">>> LATEST DEPLOY LIVE!\\\"\\n    break\\n  fi\\ndone\"}",
       "createdAt": 1786970962724,
-      "completedAt": 1786971009936
+      "completedAt": 1786971009936,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -677,7 +685,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Keep polling for commit fae12e3ea72e\\nfor i in $(seq 1 3); do\\n  sleep 15\\n  COMMIT=$(curl -sS -m 10 \\\"https://api.ivxholding.com/health\\\" 2>/dev/null | python3 -c \\\"import sys,json; d=json.loads(sys.stdin.read()); print(d.get('commit','unknown')[:12])\\\" 2>/dev/null)\\n  echo \\\"Attempt $i: commit=$COMMIT\\\"\\n  if [ \\\"$COMMIT\\\" = \\\"fae12e3ea72e\\\" ]; then\\n    echo \\\">>> LATEST DEPLOY LIVE!\\\"\\n    break\\n  fi\\ndone\"}",
       "createdAt": 1786971022040,
-      "completedAt": 1786971038720
+      "completedAt": 1786971038720,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -708,7 +717,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# QA Test 1: Check voice chat status endpoint\\necho \\\"=== Voice Chat Status ===\\\"\\ncurl -sS -m 10 \\\"https://api.ivxholding.com/api/ivx/voice-chat/status\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(f'ok: {d.get(\\\\\\\"ok\\\\\\\")}')\\nprint(f'marker: {d.get(\\\\\\\"marker\\\\\\\")}')\\nprint(f'version: {d.get(\\\\\\\"version\\\\\\\")}')\\nprint(f'configured: {d.get(\\\\\\\"configured\\\\\\\")}')\\nprint(f'transcription: {d.get(\\\\\\\"transcription\\\\\\\")}')\\nprint(f'tts: {d.get(\\\\\\\"tts\\\\\\\")}')\\nprint(f'aiBrain: {d.get(\\\\\\\"aiBrain\\\\\\\")}')\\nprint(f'endpoints: {d.get(\\\\\\\"endpoints\\\\\\\")}')\\n\\\"\"}",
       "createdAt": 1786971043727,
-      "completedAt": 1786971045521
+      "completedAt": 1786971045521,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -739,7 +749,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# QA Test 2: Test TTS (speak) endpoint — text → speech\\necho \\\"=== QA Test 2: TTS Speak (text → audio) ===\\\"\\ncurl -sS -m 30 -X POST \\\"https://api.ivxholding.com/api/ivx/voice-chat/speak\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"text\\\":\\\"Hello, this is IVX Holdings AI assistant. I can now send voice messages. Ask me anything!\\\",\\\"voice\\\":\\\"nova\\\"}' 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(f'ok: {d.get(\\\\\\\"ok\\\\\\\")}')\\nprint(f'model: {d.get(\\\\\\\"model\\\\\\\")}')\\nprint(f'durationMs: {d.get(\\\\\\\"durationMs\\\\\\\")}')\\naudio_b64 = d.get('audioBase64') or ''\\nprint(f'audioBase64 length: {len(audio_b64)} chars ({len(audio_b64)*3//4} bytes approx)')\\ndata_uri = d.get('audioDataUri') or ''\\nprint(f'audioDataUri starts with: {data_uri[:50]}...')\\nprint(f'error: {d.get(\\\\\\\"error\\\\\\\")}')\\n\\\"\"}",
       "createdAt": 1786971050517,
-      "completedAt": 1786971053533
+      "completedAt": 1786971053533,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -800,7 +811,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n# Check what toolkit env vars are available\\necho \\\"EXPO_PUBLIC_TOOLKIT_URL=${EXPO_PUBLIC_TOOLKIT_URL}\\\"\\necho \\\"EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY=${EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY}\\\" | head -c 20\\necho \\\"...\\\"\\necho \\\"\\\"\\n# Also check if there's an OPENAI_API_KEY with sk- prefix\\npython3 -c \\\"\\nimport os\\nkey = os.environ.get('OPENAI_API_KEY', '')\\nif key:\\n    print(f'OPENAI_API_KEY prefix: {key[:4]}...')\\nelse:\\n    print('OPENAI_API_KEY: not set')\\ngw_key = os.environ.get('IVX_AI_GATEWAY_KEY', '')\\nif gw_key:\\n    print(f'IVX_AI_GATEWAY_KEY prefix: {gw_key[:4]}...')\\nelse:\\n    print('IVX_AI_GATEWAY_KEY: not set')\\n\\\"\"}",
       "createdAt": 1786971097947,
-      "completedAt": 1786971100316
+      "completedAt": 1786971100316,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -831,7 +843,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\n# Check available toolkit env vars\\npython3 -c \\\"\\nimport os\\ntoolkit_url = os.environ.get('EXPO_PUBLIC_TOOLKIT_URL', '')\\ntoolkit_key = os.environ.get('EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY', '')\\nprint(f'TOOLKIT_URL: \\\\\\\"{toolkit_url}\\\\\\\"')\\nprint(f'TOOLKIT_KEY length: {len(toolkit_key)}')\\nprint(f'TOOLKIT_KEY prefix: {toolkit_key[:10]}...' if toolkit_key else 'TOOLKIT_KEY: empty')\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== Test TTS through Rork Toolkit proxy ===\\\"\\n# Try the Toolkit proxy endpoint for TTS\\npython3 << 'PYEOF'\\nimport os, json, urllib.request\\n\\ntoolkit_url = os.environ.get('EXPO_PUBLIC_TOOLKIT_URL', '')\\ntoolkit_key = os.environ.get('EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY', '')\\n\\nif not toolkit_url or not toolkit_key:\\n    print(f\\\"Toolkit URL or key not available in sandbox\\\")\\n    print(f\\\"  URL: '{toolkit_url}'\\\")\\n    print(f\\\"  Key length: {len(toolkit_key)}\\\")\\nelse:\\n    endpoint = f\\\"{toolkit_url}/v2/vercel/v4/ai/speech-model\\\"\\n    print(f\\\"Testing: {endpoint}\\\")\\n    \\n    payload = json.dumps({\\n        \\\"text\\\": \\\"Hello, this is a test of the IVX voice chat system.\\\",\\n        \\\"voice\\\": \\\"eve\\\",\\n        \\\"outputFormat\\\": \\\"mp3\\\"\\n    }).encode('utf-8')\\n    \\n    req = urllib.request.Request(\\n        endpoint,\\n        data=payload,\\n        method='POST',\\n        headers={\\n            'Authorization': f'Bearer {toolkit_key}',\\n            'Content-Type': 'application/json',\\n            'ai-model-id': 'xai/grok-tts',\\n            'ai-gateway-protocol-version': '0.0.1'\\n        }\\n    )\\n    \\n    try:\\n        with urllib.request.urlopen(req, timeout=30) as resp:\\n            body = json.loads(resp.read().decode('utf-8'))\\n            audio_b64 = body.get('audio', '')\\n            print(f\\\"Success! audio length: {len(audio_b64)} chars\\\")\\n            print(f\\\"Response keys: {list(body.keys())}\\\")\\n    except Exception as e:\\n        print(f\\\"Error: {e}\\\")\\nPYEOF\"}",
       "createdAt": 1786971155158,
-      "completedAt": 1786971161245
+      "completedAt": 1786971161245,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -862,7 +875,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check what toolkit env vars are available on the Render backend\\ncurl -sS -m 10 \\\"https://api.ivxholding.com/health\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(f'commit: {d.get(\\\\\\\"commit\\\\\\\")}')\\nprint(f'status: {d.get(\\\\\\\"status\\\\\\\")}')\\n\\\"\\necho \\\"\\\"\\n# Check if EXPO_PUBLIC_TOOLKIT_URL is accessible from backend\\ncurl -sS -m 10 \\\"https://api.ivxholding.com/api/ivx/voice-chat/status\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(f'tts endpoint: {d.get(\\\\\\\"tts\\\\\\\",{}).get(\\\\\\\"endpoint\\\\\\\")}')\\nprint(f'tts configured: {d.get(\\\\\\\"tts\\\\\\\",{}).get(\\\\\\\"configured\\\\\\\")}')\\n\\\"\"}",
       "createdAt": 1786971191801,
-      "completedAt": 1786971194542
+      "completedAt": 1786971194542,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -892,7 +906,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-tts-service.ts\"}",
       "createdAt": 1786971206576,
-      "completedAt": 1786971206667
+      "completedAt": 1786971206667,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -922,7 +937,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"content\": \"/**\\n * IVX Text-to-Speech (TTS) Service — v1.1.0\\n *\\n * Generates voice messages from text using the Rork Toolkit proxy which routes\\n * to the Vercel AI Gateway speech-model endpoint. Supports xAI grok-tts (primary)\\n * and OpenAI tts-1 (fallback). The audio is returned as base64 MP3 so the caller\\n * can stream it, store it, or send it as a voice message reply.\\n *\\n * Provider routing:\\n *   Primary:  Rork Toolkit proxy → /v2/vercel/v4/ai/speech-model (xai/grok-tts)\\n *   Fallback: OpenAI direct API → /v1/audio/speech (tts-1) if an sk- key is present\\n *\\n * If no TTS key is configured, the service degrades honestly — returns\\n * `{ ok: false, error: 'TTS not configured' }` instead of throwing.\\n */\\n\\nimport { autoDetectGatewayBaseUrl, getIVXApiKey, detectIVXProviderType, OPENAI_DIRECT_BASE } from './ivx-provider-autodetect';\\n\\nexport const IVX_TTS_SERVICE_MARKER = 'ivx-tts-service-v1.1.0-2026-08-17';\\n\\n/** Voices for xAI grok-tts (primary via Gateway) */\\nexport type GrokTTSVoice = 'eve' | 'ara' | 'rex' | 'sal' | 'leo';\\n/** Voices for OpenAI tts-1 (fallback via direct API) */\\nexport type OpenAITTSVoice = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer' | 'coral' | 'sage';\\n/** Union of all supported TTS voices */\\nexport type TTSVoice = GrokTTSVoice | OpenAITTSVoice;\\n\\nconst GROK_VOICES: GrokTTSVoice[] = ['eve', 'ara', 'rex', 'sal', 'leo'];\\nconst OPENAI_VOICES: OpenAITTSVoice[] = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer', 'coral', 'sage'];\\n\\nexport type TTSResult = {\\n  ok: boolean;\\n  audioBase64: string | null;\\n  audioBytes: Uint8Array | null;\\n  format: 'mp3';\\n  voice: string;\\n  model: string;\\n  provider: 'rork_gateway' | 'openai_direct' | 'none';\\n  durationMs: number;\\n  error: string | null;\\n};\\n\\nexport type TTSStatus = {\\n  configured: boolean;\\n  provider: 'rork_gateway' | 'openai_direct' | 'none';\\n  model: string;\\n  voices: string[];\\n  endpoint: string | null;\\n  marker: string;\\n  version: string;\\n};\\n\\nfunction readTrimmed(value: unknown): string {\\n  return typeof value === 'string' ? value.trim() : '';\\n}\\n\\n/** Get the Rork Toolkit URL from env vars. */\\nfunction getToolkitUrl(): string {\\n  return readTrimmed(process.env.EXPO_PUBLIC_TOOLKIT_URL) || readTrimmed(process.env.RORK_PUBLIC_TOOLKIT_URL) || readTrimmed(process.env.TOOLKIT_URL);\\n}\\n\\n/** Get the Rork Toolkit secret key from env vars. */\\nfunction getToolkitSecret(): string {\\n  return readTrimmed(process.env.EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY) || readTrimmed(process.env.RORK_PUBLIC_TOOLKIT_SECRET_KEY) || readTrimmed(process.env.RORK_TOOLKIT_SECRET_KEY);\\n}\\n\\n/** Check if the Rork Toolkit proxy is available for TTS. */\\nfunction isToolkitTTSAvailable(): boolean {\\n  return Boolean(getToolkitUrl() && getToolkitSecret());\\n}\\n\\n/** Check if OpenAI direct TTS is available (sk- key). */\\nfunction isOpenAITTSAvailable(): boolean {\\n  const key = getIVXApiKey();\\n  return Boolean(key && key.startsWith('sk-'));\\n}\\n\\n/** Resolve the TTS model based on provider. */\\nfunction getTTSModel(): string {\\n  if (isToolkitTTSAvailable()) {\\n    return readTrimmed(process.env.IVX_TTS_MODEL) || 'xai/grok-tts';\\n  }\\n  return readTrimmed(process.env.IVX_TTS_MODEL) || 'tts-1';\\n}\\n\\n/** Check if TTS is configured (either Toolkit proxy or OpenAI direct). */\\nexport function isTTSConfigured(): boolean {\\n  return isToolkitTTSAvailable() || isOpenAITTSAvailable();\\n}\\n\\n/** Get TTS service status for health endpoints. */\\nexport function getTTSStatus(): TTSStatus {\\n  const toolkitAvailable = isToolkitTTSAvailable();\\n  const openaiAvailable = isOpenAITTSAvailable();\\n  const provider: TTSStatus['provider'] = toolkitAvailable ? 'rork_gateway' : openaiAvailable ? 'openai_direct' : 'none';\\n  const model = getTTSModel();\\n  const voices = toolkitAvailable ? GROK_VOICES : openaiAvailable ? OPENAI_VOICES : [...GROK_VOICES, ...OPENAI_VOICES];\\n\\n  let endpoint: string | null = null;\\n  if (toolkitAvailable) {\\n    endpoint = `${getToolkitUrl()}/v2/vercel/v4/ai/speech-model`;\\n  } else if (openaiAvailable) {\\n    endpoint = `${OPENAI_DIRECT_BASE}/audio/speech`;\\n  }\\n\\n  return {\\n    configured: isTTSConfigured(),\\n    provider,\\n    model,\\n    voices,\\n    endpoint,\\n    marker: IVX_TTS_SERVICE_MARKER,\\n    version: '1.1.0',\\n  };\\n}\\n\\n/**\\n * Synthesize text to speech via the Rork Toolkit proxy (Vercel AI Gateway).\\n * Uses xAI grok-tts model with voice \\\"eve\\\" as default.\\n */\\nasync function synthesizeWithToolkit(\\n  text: string,\\n  voice: string,\\n): Promise<TTSResult> {\\n  const start = Date.now();\\n  const toolkitUrl = getToolkitUrl();\\n  const toolkitSecret = getToolkitSecret();\\n  const model = getTTSModel();\\n  const endpoint = `${toolkitUrl}/v2/vercel/v4/ai/speech-model`;\\n\\n  try {\\n    const response = await fetch(endpoint, {\\n      method: 'POST',\\n      headers: {\\n        'Authorization': `Bearer ${toolkitSecret}`,\\n        'Content-Type': 'application/json',\\n        'ai-model-id': model,\\n        'ai-gateway-protocol-version': '0.0.1',\\n      },\\n      body: JSON.stringify({\\n        text,\\n        voice,\\n        outputFormat: 'mp3',\\n      }),\\n    });\\n\\n    if (!response.ok) {\\n      const errText = await response.text().catch(() => '');\\n      const errorMsg = `Toolkit TTS returned HTTP ${response.status}: ${errText.slice(0, 300)}`;\\n      console.error('[IVX TTS]', errorMsg);\\n      return {\\n        ok: false,\\n        audioBase64: null,\\n        audioBytes: null,\\n        format: 'mp3',\\n        voice,\\n        model,\\n        provider: 'rork_gateway',\\n        durationMs: Date.now() - start,\\n        error: errorMsg,\\n      };\\n    }\\n\\n    const body = await response.json() as Record<string, unknown>;\\n    const audioBase64 = readTrimmed(body.audio);\\n\\n    if (!audioBase64) {\\n      return {\\n        ok: false,\\n        audioBase64: null,\\n        audioBytes: null,\\n        format: 'mp3',\\n        voice,\\n        model,\\n        provider: 'rork_gateway',\\n        durationMs: Date.now() - start,\\n        error: 'Toolkit TTS returned empty audio data',\\n      };\\n    }\\n\\n    const audioBytes = new Uint8Array(Buffer.from(audioBase64, 'base64'));\\n\\n    console.log(`[IVX TTS] Synthesized ${audioBytes.byteLength} bytes via Toolkit/${model}/${voice} in ${Date.now() - start}ms`);\\n\\n    return {\\n      ok: true,\\n      audioBase64,\\n      audioBytes,\\n      format: 'mp3',\\n      voice,\\n      model,\\n      provider: 'rork_gateway',\\n      durationMs: Date.now() - start,\\n      error: null,\\n    };\\n  } catch (err) {\\n    const errorMsg = err instanceof Error ? err.message : String(err);\\n    console.error('[IVX TTS] Toolkit synthesis error:', errorMsg);\\n    return {\\n      ok: false,\\n      audioBase64: null,\\n      audioBytes: null,\\n      format: 'mp3',\\n      voice,\\n      model,\\n      provider: 'rork_gateway',\\n      durationMs: Date.now() - start,\\n      error: errorMsg,\\n    };\\n  }\\n}\\n\\n/**\\n * Synthesize text to speech via OpenAI direct API (fallback).\\n * Uses tts-1 model with voice \\\"alloy\\\" as default.\\n */\\nasync function synthesizeWithOpenAI(\\n  text: string,\\n  voice: string,\\n): Promise<TTSResult> {\\n  const start = Date.now();\\n  const apiKey = getIVXApiKey();\\n  const model = 'tts-1';\\n  const endpoint = `${OPENAI_DIRECT_BASE}/audio/speech`;\\n\\n  try {\\n    const response = await fetch(endpoint, {\\n      method: 'POST',\\n      headers: {\\n        'Authorization': `Bearer ${apiKey}`,\\n        'Content-Type': 'application/json',\\n      },\\n      body: JSON.stringify({\\n        model,\\n        input: text,\\n        voice,\\n        response_format: 'mp3',\\n      }),\\n    });\\n\\n    if (!response.ok) {\\n      const errText = await response.text().catch(() => '');\\n      const errorMsg = `OpenAI TTS returned HTTP ${response.status}: ${errText.slice(0, 300)}`;\\n      console.error('[IVX TTS]', errorMsg);\\n      return {\\n        ok: false,\\n        audioBase64: null,\\n        audioBytes: null,\\n        format: 'mp3',\\n        voice,\\n        model,\\n        provider: 'openai_direct',\\n        durationMs: Date.now() - start,\\n        error: errorMsg,\\n      };\\n    }\\n\\n    const arrayBuffer = await response.arrayBuffer();\\n    const audioBytes = new Uint8Array(arrayBuffer);\\n\\n    if (audioBytes.byteLength === 0) {\\n      return {\\n        ok: false,\\n        audioBase64: null,\\n        audioBytes: null,\\n        format: 'mp3',\\n        voice,\\n        model,\\n        provider: 'openai_direct',\\n        durationMs: Date.now() - start,\\n        error: 'OpenAI TTS returned empty audio data',\\n      };\\n    }\\n\\n    const audioBase64 = Buffer.from(audioBytes).toString('base64');\\n\\n    console.log(`[IVX TTS] Synthesized ${audioBytes.byteLength} bytes via OpenAI/${model}/${voice} in ${Date.now() - start}ms`);\\n\\n    return {\\n      ok: true,\\n      audioBase64,\\n      audioBytes,\\n      format: 'mp3',\\n      voice,\\n      model,\\n      provider: 'openai_direct',\\n      durationMs: Date.now() - start,\\n      error: null,\\n    };\\n  } catch (err) {\\n    const errorMsg = err instanceof Error ? err.message : String(err);\\n    console.error('[IVX TTS] OpenAI synthesis error:', errorMsg);\\n    return {\\n      ok: false,\\n      audioBase64: null,\\n      audioBytes: null,\\n      format: 'mp3',\\n      voice,\\n      model,\\n      provider: 'openai_direct',\\n      durationMs: Date.now() - start,\\n      error: errorMsg,\\n    };\\n  }\\n}\\n\\n/**\\n * Synthesize text to speech, returning base64 MP3 audio.\\n *\\n * Provider priority:\\n *   1. Rork Toolkit proxy (Vercel AI Gateway → xai/grok-tts) — default voice: \\\"eve\\\"\\n *   2. OpenAI direct API (tts-1) — default voice: \\\"alloy\\\"\\n *\\n * @param text   — The text to speak (max 4096 chars).\\n * @param voice  — Voice ID (auto-resolved based on provider).\\n * @param opts   — Optional speed (OpenAI only, 0.25–4.0).\\n */\\nexport async function synthesizeSpeech(\\n  text: string,\\n  voice?: TTSVoice,\\n  opts?: { speed?: number },\\n): Promise<TTSResult> {\\n  const start = Date.now();\\n\\n  if (!isTTSConfigured()) {\\n    return {\\n      ok: false,\\n      audioBase64: null,\\n      audioBytes: null,\\n      format: 'mp3',\\n      voice: voice || 'eve',\\n      model: getTTSModel(),\\n      provider: 'none',\\n      durationMs: Date.now() - start,\\n      error: 'TTS not configured — set EXPO_PUBLIC_TOOLKIT_URL + EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY, or OPENAI_API_KEY',\\n    };\\n  }\\n\\n  const trimmedText = text.trim();\\n  if (!trimmedText) {\\n    return {\\n      ok: false,\\n      audioBase64: null,\\n      audioBytes: null,\\n      format: 'mp3',\\n      voice: voice || 'eve',\\n      model: getTTSModel(),\\n      provider: 'none',\\n      durationMs: Date.now() - start,\\n      error: 'Text is empty — nothing to synthesize',\\n    };\\n  }\\n\\n  // Truncate to 4096 chars (OpenAI limit; Gateway is similar)\\n  const truncatedText = trimmedText.slice(0, 4096);\\n  if (trimmedText.length > 4096) {\\n    console.warn('[IVX TTS] Text truncated from', trimmedText.length, 'to 4096 chars');\\n  }\\n\\n  // Try Toolkit proxy first (xai/grok-tts)\\n  if (isToolkitTTSAvailable()) {\\n    // Map voice to a valid grok voice if needed\\n    const grokVoice: string = voice && (GROK_VOICES as string[]).includes(voice) ? voice : 'eve';\\n    const result = await synthesizeWithToolkit(truncatedText, grokVoice);\\n    if (result.ok) return result;\\n    console.warn('[IVX TTS] Toolkit failed, trying OpenAI fallback:', result.error?.slice(0, 100));\\n  }\\n\\n  // Fallback to OpenAI direct API\\n  if (isOpenAITTSAvailable()) {\\n    const openaiVoice: string = voice && (OPENAI_VOICES as string[]).includes(voice) ? voice : 'alloy';\\n    return synthesizeWithOpenAI(truncatedText, openaiVoice);\\n  }\\n\\n  return {\\n    ok: false,\\n    audioBase64: null,\\n    audioBytes: null,\\n    format: 'mp3',\\n    voice: voice || 'eve',\\n    model: getTTSModel(),\\n    provider: 'none',\\n    durationMs: Date.now() - start,\\n    error: 'All TTS providers failed or not configured',\\n  };\\n}\\n\\n/**\\n * Synthesize speech and return as a data URI (data:audio/mp3;base64,...).\\n * Useful for direct playback in web/mobile clients.\\n */\\nexport async function synthesizeSpeechDataUri(\\n  text: string,\\n  voice?: TTSVoice,\\n  opts?: { speed?: number },\\n): Promise<{ ok: boolean; dataUri: string | null; error: string | null; durationMs: number }> {\\n  const result = await synthesizeSpeech(text, voice, opts);\\n  if (!result.ok || !result.audioBase64) {\\n    return { ok: false, dataUri: null, error: result.error, durationMs: result.durationMs };\\n  }\\n  return {\\n    ok: true,\\n    dataUri: `data:audio/mp3;base64,${result.audioBase64}`,\\n    error: null,\\n    durationMs: result.durationMs,\\n  };\\n}\\n\", \"filePath\": \"backend/services/ivx-tts-service.ts\"}",
       "createdAt": 1786971217734,
-      "completedAt": 1786971251836
+      "completedAt": 1786971251836,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -953,7 +969,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\n# Push updated TTS service to GitHub\\npython3 << 'PYEOF'\\nimport base64, json, urllib.request, ssl\\n\\nGITHUB_TOKEN = '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'\\nREPO = 'ibb142/ivx-holdings-platform'\\nBRANCH = 'main'\\nctx = ssl.create_default_context()\\n\\nfile_path = 'backend/services/ivx-tts-service.ts'\\nwith open(file_path, 'rb') as fh:\\n    content = base64.b64encode(fh.read()).decode('ascii')\\n\\n# Get current SHA\\nreq = urllib.request.Request(\\n    f'https://api.github.com/repos/{REPO}/contents/{file_path}?ref={BRANCH}',\\n    headers={'Authorization': f'token {GITHUB_TOKEN}', 'Accept': 'application/vnd.github+json'}\\n)\\nsha = None\\ntry:\\n    with urllib.request.urlopen(req, context=ctx) as resp:\\n        body = json.loads(resp.read().decode('utf-8'))\\n        sha = body.get('sha')\\nexcept Exception:\\n    pass\\n\\npayload = json.dumps({\\n    'message': 'fix: IVX TTS v1.1.0 — route through Rork Toolkit proxy (xai/grok-tts) with OpenAI direct fallback',\\n    'content': content,\\n    'branch': BRANCH,\\n    **({'sha': sha} if sha else {})\\n}).encode('utf-8')\\n\\nreq = urllib.request.Request(\\n    f'https://api.github.com/repos/{REPO}/contents/{file_path}',\\n    data=payload,\\n    method='PUT',\\n    headers={\\n        'Authorization': f'token {GITHUB_TOKEN}',\\n        'Content-Type': 'application/json',\\n        'Accept': 'application/vnd.github+json',\\n    }\\n)\\n\\ntry:\\n    with urllib.request.urlopen(req, context=ctx) as resp:\\n        body = json.loads(resp.read().decode('utf-8'))\\n        if 'commit' in body:\\n            print(f\\\"✅ {file_path} → SHA {body['commit']['sha'][:12]}\\\")\\nexcept urllib.error.HTTPError as e:\\n    body = json.loads(e.read().decode('utf-8'))\\n    print(f\\\"❌ HTTP {e.code}: {body.get('message','')[:200]}\\\")\\nPYEOF\"}",
       "createdAt": 1786971264024,
-      "completedAt": 1786971269731
+      "completedAt": 1786971269731,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -984,7 +1001,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Test the Vercel AI Gateway speech endpoint directly with vck_ key\\n# The Rork Toolkit proxy strips /v2/vercel and forwards to /v4/ai/speech-model\\n# So the direct Gateway endpoint should be https://ai-gateway.vercel.sh/v4/ai/speech-model\\npython3 << 'PYEOF'\\nimport json, urllib.request, ssl, os\\n\\n# The vck_ key from the IVX env\\n# We know the backend has IVX_AI_GATEWAY_KEY set (vck_ prefix)\\n# Let's test the direct Gateway speech-model endpoint\\n\\n# First, let's check what the status endpoint returns after the TTS fix deploys\\nimport urllib.request\\nctx = ssl.create_default_context()\\n\\n# Check if the latest commit has deployed\\ntry:\\n    with urllib.request.urlopen('https://api.ivxholding.com/health', timeout=10, context=ctx) as resp:\\n        health = json.loads(resp.read().decode('utf-8'))\\n        commit = health.get('commit', 'unknown')[:12]\\n        print(f\\\"Current commit: {commit}\\\")\\n        print(f\\\"Status: {health.get('status')}\\\")\\nexcept Exception as e:\\n    print(f\\\"Health check error: {e}\\\")\\n\\nprint()\\n\\n# Check TTS status\\ntry:\\n    with urllib.request.urlopen('https://api.ivxholding.com/api/ivx/voice-chat/status', timeout=10, context=ctx) as resp:\\n        status = json.loads(resp.read().decode('utf-8'))\\n        tts = status.get('tts', {})\\n        print(f\\\"TTS configured: {tts.get('configured')}\\\")\\n        print(f\\\"TTS provider: {tts.get('provider')}\\\")\\n        print(f\\\"TTS model: {tts.get('model')}\\\")\\n        print(f\\\"TTS endpoint: {tts.get('endpoint')}\\\")\\n        print(f\\\"TTS voices: {tts.get('voices')}\\\")\\nexcept Exception as e:\\n    print(f\\\"TTS status error: {e}\\\")\\nPYEOF\"}",
       "createdAt": 1786971296464,
-      "completedAt": 1786971302743
+      "completedAt": 1786971302743,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1015,7 +1033,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Wait for commit 68729904d4f7 to deploy\\necho \\\"=== Waiting for commit 68729904d4f7 ===\\\"\\nfor i in $(seq 1 4); do\\n  sleep 15\\n  COMMIT=$(curl -sS -m 10 \\\"https://api.ivxholding.com/health\\\" 2>/dev/null | python3 -c \\\"import sys,json; d=json.loads(sys.stdin.read()); print(d.get('commit','unknown')[:12])\\\" 2>/dev/null)\\n  echo \\\"Attempt $i: commit=$COMMIT\\\"\\n  if [ \\\"$COMMIT\\\" = \\\"68729904d4f7\\\" ]; then\\n    echo \\\">>> TTS v1.1.0 DEPLOYED!\\\"\\n    break\\n  fi\\ndone\"}",
       "createdAt": 1786971323322,
-      "completedAt": 1786971370946
+      "completedAt": 1786971370946,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1046,7 +1065,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check TTS status after v1.1.0 deploy\\necho \\\"=== TTS Status (v1.1.0) ===\\\"\\ncurl -sS -m 10 \\\"https://api.ivxholding.com/api/ivx/voice-chat/status\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(f'configured: {d.get(\\\\\\\"configured\\\\\\\")}')\\ntts = d.get('tts', {})\\nprint(f'provider: {tts.get(\\\\\\\"provider\\\\\\\")}')\\nprint(f'model: {tts.get(\\\\\\\"model\\\\\\\")}')\\nprint(f'endpoint: {tts.get(\\\\\\\"endpoint\\\\\\\")}')\\nprint(f'voices: {tts.get(\\\\\\\"voices\\\\\\\")}')\\nprint(f'marker: {tts.get(\\\\\\\"marker\\\\\\\")}')\\n\\\"\"}",
       "createdAt": 1786971378420,
-      "completedAt": 1786971380015
+      "completedAt": 1786971380015,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1077,7 +1097,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Test the Vercel AI Gateway speech endpoint directly with vck_ key\\n# The Gateway's own speech endpoint is /v4/ai/speech-model (not /v1/audio/speech)\\npython3 << 'PYEOF'\\nimport json, urllib.request, ssl\\n\\nctx = ssl.create_default_context()\\n\\n# The IVX backend has IVX_AI_GATEWAY_KEY set (vck_ prefix)\\n# Let's test the direct Gateway speech endpoint\\n# Based on the audio skill, the Gateway speech endpoint is /v4/ai/speech-model\\n# The base URL is https://ai-gateway.vercel.sh\\n\\n# First test: try /v4/ai/speech-model directly\\nendpoint = 'https://ai-gateway.vercel.sh/v4/ai/speech-model'\\nprint(f\\\"Testing: {endpoint}\\\")\\n\\n# We don't have the vck_ key in this sandbox, but let's test from the backend\\n# by calling the voice-chat/speak endpoint which runs on Render\\nimport urllib.request\\ntry:\\n    payload = json.dumps({\\n        \\\"text\\\": \\\"Hello, this is a test.\\\",\\n        \\\"voice\\\": \\\"eve\\\"\\n    }).encode('utf-8')\\n    \\n    req = urllib.request.Request(\\n        'https://api.ivxholding.com/api/ivx/voice-chat/speak',\\n        data=payload,\\n        method='POST',\\n        headers={'Content-Type': 'application/json'},\\n    )\\n    \\n    with urllib.request.urlopen(req, timeout=30, context=ctx) as resp:\\n        result = json.loads(resp.read().decode('utf-8'))\\n        print(f\\\"ok: {result.get('ok')}\\\")\\n        print(f\\\"error: {result.get('error')}\\\")\\n        print(f\\\"model: {result.get('model')}\\\")\\nexcept Exception as e:\\n    print(f\\\"Error: {e}\\\")\\nPYEOF\"}",
       "createdAt": 1786971394039,
-      "completedAt": 1786971398819
+      "completedAt": 1786971398819,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1133,7 +1154,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"newString\": \"/**\\n * IVX Text-to-Speech (TTS) Service — v1.2.0\\n *\\n * Generates voice messages from text using the Vercel AI Gateway speech endpoint.\\n * Supports three provider paths:\\n *   1. Rork Toolkit proxy → /v2/vercel/v4/ai/speech-model (if Toolkit env vars set)\\n *   2. Direct Vercel AI Gateway → /v4/ai/speech-model (if vck_ key present)\\n *   3. OpenAI direct API → /v1/audio/speech (if sk- key present)\\n *\\n * If no TTS key is configured, the service degrades honestly.\\n */\", \"oldString\": \"/**\\n * IVX Text-to-Speech (TTS) Service — v1.1.0\\n *\\n * Generates voice messages from text using the Rork Toolkit proxy which routes\\n * to the Vercel AI Gateway speech-model endpoint. Supports xAI grok-tts (primary)\\n * and OpenAI tts-1 (fallback). The audio is returned as base64 MP3 so the caller\\n * can stream it, store it, or send it as a voice message reply.\\n *\\n * Provider routing:\\n *   Primary:  Rork Toolkit proxy → /v2/vercel/v4/ai/speech-model (xai/grok-tts)\\n *   Fallback: OpenAI direct API → /v1/audio/speech (tts-1) if an sk- key is present\\n *\\n * If no TTS key is configured, the service degrades honestly — returns\\n * `{ ok: false, error: 'TTS not configured' }` instead of throwing.\\n */\"}, {\"newString\": \"import { VERCEL_AI_GATEWAY_BASE, autoDetectGatewayBaseUrl, getIVXApiKey, detectIVXProviderType, OPENAI_DIRECT_BASE } from './ivx-provider-autodetect';\\n\\nexport const IVX_TTS_SERVICE_MARKER = 'ivx-tts-service-v1.2.0-2026-08-17';\", \"oldString\": \"import { autoDetectGatewayBaseUrl, getIVXApiKey, detectIVXProviderType, OPENAI_DIRECT_BASE } from './ivx-provider-autodetect';\\n\\nexport const IVX_TTS_SERVICE_MARKER = 'ivx-tts-service-v1.1.0-2026-08-17';\"}, {\"newString\": \"/** Check if OpenAI direct TTS is available (sk- key). */\\nfunction isOpenAITTSAvailable(): boolean {\\n  const key = getIVXApiKey();\\n  return Boolean(key && key.startsWith('sk-'));\\n}\\n\\n/** Check if direct Vercel AI Gateway TTS is available (vck_ key). */\\nfunction isGatewayTTSAvailable(): boolean {\\n  const key = getIVXApiKey();\\n  return Boolean(key && key.startsWith('vck_'));\\n}\", \"oldString\": \"/** Check if OpenAI direct TTS is available (sk- key). */\\nfunction isOpenAITTSAvailable(): boolean {\\n  const key = getIVXApiKey();\\n  return Boolean(key && key.startsWith('sk-'));\\n}\"}, {\"newString\": \"/** Check if TTS is configured (any provider available). */\\nexport function isTTSConfigured(): boolean {\\n  return isToolkitTTSAvailable() || isGatewayTTSAvailable() || isOpenAITTSAvailable();\\n}\", \"oldString\": \"/** Check if TTS is configured (either Toolkit proxy or OpenAI direct). */\\nexport function isTTSConfigured(): boolean {\\n  return isToolkitTTSAvailable() || isOpenAITTSAvailable();\\n}\"}, {\"newString\": \"/** Get TTS service status for health endpoints. */\\nexport function getTTSStatus(): TTSStatus {\\n  const toolkitAvailable = isToolkitTTSAvailable();\\n  const gatewayAvailable = isGatewayTTSAvailable();\\n  const openaiAvailable = isOpenAITTSAvailable();\\n  const provider: TTSStatus['provider'] = toolkitAvailable\\n    ? 'rork_gateway'\\n    : gatewayAvailable\\n      ? 'rork_gateway'\\n      : openaiAvailable\\n        ? 'openai_direct'\\n        : 'none';\\n  const model = getTTSModel();\\n  const voices = (toolkitAvailable || gatewayAvailable) ? GROK_VOICES : openaiAvailable ? OPENAI_VOICES : [...GROK_VOICES, ...OPENAI_VOICES];\\n\\n  let endpoint: string | null = null;\\n  if (toolkitAvailable) {\\n    endpoint = `${getToolkitUrl()}/v2/vercel/v4/ai/speech-model`;\\n  } else if (gatewayAvailable) {\\n    endpoint = `${VERCEL_AI_GATEWAY_BASE}/v4/ai/speech-model`;\\n  } else if (openaiAvailable) {\\n    endpoint = `${OPENAI_DIRECT_BASE}/audio/speech`;\\n  }\\n\\n  return {\\n    configured: isTTSConfigured(),\\n    provider,\\n    model,\\n    voices,\\n    endpoint,\\n    marker: IVX_TTS_SERVICE_MARKER,\\n    version: '1.2.0',\\n  };\\n}\", \"oldString\": \"/** Get TTS service status for health endpoints. */\\nexport function getTTSStatus(): TTSStatus {\\n  const toolkitAvailable = isToolkitTTSAvailable();\\n  const openaiAvailable = isOpenAITTSAvailable();\\n  const provider: TTSStatus['provider'] = toolkitAvailable ? 'rork_gateway' : openaiAvailable ? 'openai_direct' : 'none';\\n  const model = getTTSModel();\\n  const voices = toolkitAvailable ? GROK_VOICES : openaiAvailable ? OPENAI_VOICES : [...GROK_VOICES, ...OPENAI_VOICES];\\n\\n  let endpoint: string | null = null;\\n  if (toolkitAvailable) {\\n    endpoint = `${getToolkitUrl()}/v2/vercel/v4/ai/speech-model`;\\n  } else if (openaiAvailable) {\\n    endpoint = `${OPENAI_DIRECT_BASE}/audio/speech`;\\n  }\\n\\n  return {\\n    configured: isTTSConfigured(),\\n    provider,\\n    model,\\n    voices,\\n    endpoint,\\n    marker: IVX_TTS_SERVICE_MARKER,\\n    version: '1.1.0',\\n  };\\n}\"}], \"filePath\": \"backend/services/ivx-tts-service.ts\"}",
       "createdAt": 1786971428285,
-      "completedAt": 1786971441965
+      "completedAt": 1786971441965,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1164,7 +1186,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-tts-service.ts\", \"offset\": 130}",
       "createdAt": 1786971449877,
-      "completedAt": 1786971449881
+      "completedAt": 1786971449881,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1205,7 +1228,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"newString\": \"/**\\n * Synthesize text to speech via direct Vercel AI Gateway (vck_ key).\\n * Uses xai/grok-tts with the /v4/ai/speech-model endpoint.\\n */\\nasync function synthesizeWithGateway(\\n  text: string,\\n  voice: string,\\n): Promise<TTSResult> {\\n  const start = Date.now();\\n  const apiKey = getIVXApiKey();\\n  const model = getTTSModel();\\n  const endpoint = `${VERCEL_AI_GATEWAY_BASE}/v4/ai/speech-model`;\\n\\n  try {\\n    const response = await fetch(endpoint, {\\n      method: 'POST',\\n      headers: {\\n        'Authorization': `Bearer ${apiKey}`,\\n        'Content-Type': 'application/json',\\n        'ai-model-id': model,\\n        'ai-gateway-protocol-version': '0.0.1',\\n      },\\n      body: JSON.stringify({\\n        text,\\n        voice,\\n        outputFormat: 'mp3',\\n      }),\\n    });\\n\\n    if (!response.ok) {\\n      const errText = await response.text().catch(() => '');\\n      const errorMsg = `Gateway TTS returned HTTP ${response.status}: ${errText.slice(0, 300)}`;\\n      console.error('[IVX TTS]', errorMsg);\\n      return {\\n        ok: false,\\n        audioBase64: null,\\n        audioBytes: null,\\n        format: 'mp3',\\n        voice,\\n        model,\\n        provider: 'rork_gateway',\\n        durationMs: Date.now() - start,\\n        error: errorMsg,\\n      };\\n    }\\n\\n    const body = await response.json() as Record<string, unknown>;\\n    const audioBase64 = readTrimmed(body.audio);\\n\\n    if (!audioBase64) {\\n      return {\\n        ok: false,\\n        audioBase64: null,\\n        audioBytes: null,\\n        format: 'mp3',\\n        voice,\\n        model,\\n        provider: 'rork_gateway',\\n        durationMs: Date.now() - start,\\n        error: 'Gateway TTS returned empty audio data',\\n      };\\n    }\\n\\n    const audioBytes = new Uint8Array(Buffer.from(audioBase64, 'base64'));\\n\\n    console.log(`[IVX TTS] Synthesized ${audioBytes.byteLength} bytes via Gateway/${model}/${voice} in ${Date.now() - start}ms`);\\n\\n    return {\\n      ok: true,\\n      audioBase64,\\n      audioBytes,\\n      format: 'mp3',\\n      voice,\\n      model,\\n      provider: 'rork_gateway',\\n      durationMs: Date.now() - start,\\n      error: null,\\n    };\\n  } catch (err) {\\n    const errorMsg = err instanceof Error ? err.message : String(err);\\n    console.error('[IVX TTS] Gateway synthesis error:', errorMsg);\\n    return {\\n      ok: false,\\n      audioBase64: null,\\n      audioBytes: null,\\n      format: 'mp3',\\n      voice,\\n      model,\\n      provider: 'rork_gateway',\\n      durationMs: Date.now() - start,\\n      error: errorMsg,\\n    };\\n  }\\n}\\n\\n/**\\n * Synthesize text to speech via OpenAI direct API (fallback).\\n * Uses tts-1 model with voice \\\"alloy\\\" as default.\\n */\", \"oldString\": \"/**\\n * Synthesize text to speech via OpenAI direct API (fallback).\\n * Uses tts-1 model with voice \\\"alloy\\\" as default.\\n */\"}, {\"newString\": \"  // Try Toolkit proxy first (xai/grok-tts)\\n  if (isToolkitTTSAvailable()) {\\n    const grokVoice: string = voice && (GROK_VOICES as string[]).includes(voice) ? voice : 'eve';\\n    const result = await synthesizeWithToolkit(truncatedText, grokVoice);\\n    if (result.ok) return result;\\n    console.warn('[IVX TTS] Toolkit failed, trying Gateway direct:', result.error?.slice(0, 100));\\n  }\\n\\n  // Try direct Vercel AI Gateway (vck_ key)\\n  if (isGatewayTTSAvailable()) {\\n    const grokVoice: string = voice && (GROK_VOICES as string[]).includes(voice) ? voice : 'eve';\\n    const result = await synthesizeWithGateway(truncatedText, grokVoice);\\n    if (result.ok) return result;\\n    console.warn('[IVX TTS] Gateway failed, trying OpenAI fallback:', result.error?.slice(0, 100));\\n  }\\n\\n  // Fallback to OpenAI direct API (sk- key)\", \"oldString\": \"  // Try Toolkit proxy first (xai/grok-tts)\\n  if (isToolkitTTSAvailable()) {\\n    // Map voice to a valid grok voice if needed\\n    const grokVoice: string = voice && (GROK_VOICES as string[]).includes(voice) ? voice : 'eve';\\n    const result = await synthesizeWithToolkit(truncatedText, grokVoice);\\n    if (result.ok) return result;\\n    console.warn('[IVX TTS] Toolkit failed, trying OpenAI fallback:', result.error?.slice(0, 100));\\n  }\\n\\n  // Fallback to OpenAI direct API\"}], \"filePath\": \"backend/services/ivx-tts-service.ts\"}",
       "createdAt": 1786971459090,
-      "completedAt": 1786971470185
+      "completedAt": 1786971470185,
+      "compactedAt": 1786987342912
     },
     {
       "type": "text",
@@ -1228,7 +1252,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\n# Push updated TTS service v1.2.0 to GitHub\\npython3 << 'PYEOF'\\nimport base64, json, urllib.request, ssl\\n\\nGITHUB_TOKEN = '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'\\nREPO = 'ibb142/ivx-holdings-platform'\\nBRANCH = 'main'\\nctx = ssl.create_default_context()\\n\\nfile_path = 'backend/services/ivx-tts-service.ts'\\nwith open(file_path, 'rb') as fh:\\n    content = base64.b64encode(fh.read()).decode('ascii')\\n\\n# Get current SHA\\nreq = urllib.request.Request(\\n    f'https://api.github.com/repos/{REPO}/contents/{file_path}?ref={BRANCH}',\\n    headers={'Authorization': f'token {GITHUB_TOKEN}', 'Accept': 'application/vnd.github+json'}\\n)\\nsha = None\\ntry:\\n    with urllib.request.urlopen(req, context=ctx) as resp:\\n        body = json.loads(resp.read().decode('utf-8'))\\n        sha = body.get('sha')\\nexcept Exception:\\n    pass\\n\\npayload = json.dumps({\\n    'message': 'fix: IVX TTS v1.2.0 — add direct Vercel AI Gateway speech endpoint (/v4/ai/speech-model) for vck_ keys',\\n    'content': content,\\n    'branch': BRANCH,\\n    **({'sha': sha} if sha else {})\\n}).encode('utf-8')\\n\\nreq = urllib.request.Request(\\n    f'https://api.github.com/repos/{REPO}/contents/{file_path}',\\n    data=payload,\\n    method='PUT',\\n    headers={\\n        'Authorization': f'token {GITHUB_TOKEN}',\\n        'Content-Type': 'application/json',\\n        'Accept': 'application/vnd.github+json',\\n    }\\n)\\n\\ntry:\\n    with urllib.request.urlopen(req, context=ctx) as resp:\\n        body = json.loads(resp.read().decode('utf-8'))\\n        if 'commit' in body:\\n            print(f\\\"✅ {file_path} → SHA {body['commit']['sha'][:12]}\\\")\\nexcept urllib.error.HTTPError as e:\\n    body = json.loads(e.read().decode('utf-8'))\\n    print(f\\\"❌ HTTP {e.code}: {body.get('message','')[:200]}\\\")\\nPYEOF\"}",
       "createdAt": 1786971477037,
-      "completedAt": 1786971482770
+      "completedAt": 1786971482770,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1259,7 +1284,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Wait for commit c8864ba2d6e0 to deploy\\necho \\\"=== Waiting for commit c8864ba2d6e0 ===\\\"\\nfor i in $(seq 1 4); do\\n  sleep 15\\n  COMMIT=$(curl -sS -m 10 \\\"https://api.ivxholding.com/health\\\" 2>/dev/null | python3 -c \\\"import sys,json; d=json.loads(sys.stdin.read()); print(d.get('commit','unknown')[:12])\\\" 2>/dev/null)\\n  echo \\\"Attempt $i: commit=$COMMIT\\\"\\n  if [ \\\"$COMMIT\\\" = \\\"c8864ba2d6e0\\\" ]; then\\n    echo \\\">>> TTS v1.2.0 DEPLOYED!\\\"\\n    break\\n  fi\\ndone\"}",
       "createdAt": 1786971493820,
-      "completedAt": 1786971555253
+      "completedAt": 1786971555253,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1290,7 +1316,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Keep polling for commit c8864ba2d6e0\\nfor i in $(seq 1 3); do\\n  sleep 15\\n  COMMIT=$(curl -sS -m 10 \\\"https://api.ivxholding.com/health\\\" 2>/dev/null | python3 -c \\\"import sys,json; d=json.loads(sys.stdin.read()); print(d.get('commit','unknown')[:12])\\\" 2>/dev/null)\\n  echo \\\"Attempt $i: commit=$COMMIT\\\"\\n  if [ \\\"$COMMIT\\\" = \\\"c8864ba2d6e0\\\" ]; then\\n    echo \\\">>> TTS v1.2.0 DEPLOYED!\\\"\\n    break\\n  fi\\ndone\"}",
       "createdAt": 1786971562708,
-      "completedAt": 1786971579281
+      "completedAt": 1786971579281,
+      "compactedAt": 1786987342912
     },
     {
       "type": "text",
@@ -1313,7 +1340,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check TTS status after v1.2.0 deploy\\necho \\\"=== TTS Status (v1.2.0) ===\\\"\\ncurl -sS -m 10 \\\"https://api.ivxholding.com/api/ivx/voice-chat/status\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(f'configured: {d.get(\\\\\\\"configured\\\\\\\")}')\\ntts = d.get('tts', {})\\nprint(f'provider: {tts.get(\\\\\\\"provider\\\\\\\")}')\\nprint(f'model: {tts.get(\\\\\\\"model\\\\\\\")}')\\nprint(f'endpoint: {tts.get(\\\\\\\"endpoint\\\\\\\")}')\\nprint(f'voices: {tts.get(\\\\\\\"voices\\\\\\\")}')\\nprint(f'marker: {tts.get(\\\\\\\"marker\\\\\\\")}')\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== QA Test: TTS Speak (text → audio) ===\\\"\\ncurl -sS -m 30 -X POST \\\"https://api.ivxholding.com/api/ivx/voice-chat/speak\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"text\\\":\\\"Hello, this is IVX Holdings AI assistant. I can now send voice messages. Ask me anything!\\\",\\\"voice\\\":\\\"eve\\\"}' 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(f'ok: {d.get(\\\\\\\"ok\\\\\\\")}')\\nprint(f'model: {d.get(\\\\\\\"model\\\\\\\")}')\\nprint(f'durationMs: {d.get(\\\\\\\"durationMs\\\\\\\")}')\\naudio_b64 = d.get('audioBase64') or ''\\nprint(f'audioBase64 length: {len(audio_b64)} chars ({len(audio_b64)*3//4} bytes approx)')\\ndata_uri = d.get('audioDataUri') or ''\\nprint(f'audioDataUri starts with: {data_uri[:50]}...')\\nprint(f'error: {d.get(\\\\\\\"error\\\\\\\")}')\\n\\\"\"}",
       "createdAt": 1786971584836,
-      "completedAt": 1786971588428
+      "completedAt": 1786971588428,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1354,7 +1382,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"newString\": \"  const endpoint = 'https://ai-gateway.vercel.sh/v4/ai/speech-model';\", \"oldString\": \"  const endpoint = `${VERCEL_AI_GATEWAY_BASE}/v4/ai/speech-model`;\", \"replaceAll\": false}, {\"newString\": \"    endpoint = 'https://ai-gateway.vercel.sh/v4/ai/speech-model';\", \"oldString\": \"    endpoint = `${VERCEL_AI_GATEWAY_BASE}/v4/ai/speech-model`;\", \"replaceAll\": false}], \"filePath\": \"backend/services/ivx-tts-service.ts\"}",
       "createdAt": 1786971597223,
-      "completedAt": 1786971598591
+      "completedAt": 1786971598591,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1385,7 +1414,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\n# Push the TTS endpoint fix to GitHub\\npython3 << 'PYEOF'\\nimport base64, json, urllib.request, ssl\\n\\nGITHUB_TOKEN = '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'\\nREPO = 'ibb142/ivx-holdings-platform'\\nBRANCH = 'main'\\nctx = ssl.create_default_context()\\n\\nfile_path = 'backend/services/ivx-tts-service.ts'\\nwith open(file_path, 'rb') as fh:\\n    content = base64.b64encode(fh.read()).decode('ascii')\\n\\n# Get current SHA\\nreq = urllib.request.Request(\\n    f'https://api.github.com/repos/{REPO}/contents/{file_path}?ref={BRANCH}',\\n    headers={'Authorization': f'token {GITHUB_TOKEN}', 'Accept': 'application/vnd.github+json'}\\n)\\nsha = None\\ntry:\\n    with urllib.request.urlopen(req, context=ctx) as resp:\\n        body = json.loads(resp.read().decode('utf-8'))\\n        sha = body.get('sha')\\nexcept Exception:\\n    pass\\n\\npayload = json.dumps({\\n    'message': 'fix: TTS endpoint URL — use https://ai-gateway.vercel.sh/v4/ai/speech-model (no /v1 prefix)',\\n    'content': content,\\n    'branch': BRANCH,\\n    **({'sha': sha} if sha else {})\\n}).encode('utf-8')\\n\\nreq = urllib.request.Request(\\n    f'https://api.github.com/repos/{REPO}/contents/{file_path}',\\n    data=payload,\\n    method='PUT',\\n    headers={\\n        'Authorization': f'token {GITHUB_TOKEN}',\\n        'Content-Type': 'application/json',\\n        'Accept': 'application/vnd.github+json',\\n    }\\n)\\n\\ntry:\\n    with urllib.request.urlopen(req, context=ctx) as resp:\\n        body = json.loads(resp.read().decode('utf-8'))\\n        if 'commit' in body:\\n            print(f\\\"✅ {file_path} → SHA {body['commit']['sha'][:12]}\\\")\\nexcept urllib.error.HTTPError as e:\\n    body = json.loads(e.read().decode('utf-8'))\\n    print(f\\\"❌ HTTP {e.code}: {body.get('message','')[:200]}\\\")\\nPYEOF\"}",
       "createdAt": 1786971606545,
-      "completedAt": 1786971612160
+      "completedAt": 1786971612160,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1416,7 +1446,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Wait for commit b6ecc71917cb to deploy\\necho \\\"=== Waiting for commit b6ecc71917cb ===\\\"\\nfor i in $(seq 1 4); do\\n  sleep 15\\n  COMMIT=$(curl -sS -m 10 \\\"https://api.ivxholding.com/health\\\" 2>/dev/null | python3 -c \\\"import sys,json; d=json.loads(sys.stdin.read()); print(d.get('commit','unknown')[:12])\\\" 2>/dev/null)\\n  echo \\\"Attempt $i: commit=$COMMIT\\\"\\n  if [ \\\"$COMMIT\\\" = \\\"b6ecc71917cb\\\" ]; then\\n    echo \\\">>> TTS fix DEPLOYED!\\\"\\n    break\\n  fi\\ndone\"}",
       "createdAt": 1786971618817,
-      "completedAt": 1786971680269
+      "completedAt": 1786971680269,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1447,7 +1478,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Keep polling for commit b6ecc71917cb\\nfor i in $(seq 1 3); do\\n  sleep 15\\n  COMMIT=$(curl -sS -m 10 \\\"https://api.ivxholding.com/health\\\" 2>/dev/null | python3 -c \\\"import sys,json; d=json.loads(sys.stdin.read()); print(d.get('commit','unknown')[:12])\\\" 2>/dev/null)\\n  echo \\\"Attempt $i: commit=$COMMIT\\\"\\n  if [ \\\"$COMMIT\\\" = \\\"b6ecc71917cb\\\" ]; then\\n    echo \\\">>> TTS fix DEPLOYED!\\\"\\n    break\\n  fi\\ndone\"}",
       "createdAt": 1786971688855,
-      "completedAt": 1786971721012
+      "completedAt": 1786971721012,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1478,7 +1510,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check TTS status after fix\\necho \\\"=== TTS Status ===\\\"\\ncurl -sS -m 10 \\\"https://api.ivxholding.com/api/ivx/voice-chat/status\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\ntts = d.get('tts', {})\\nprint(f'configured: {tts.get(\\\\\\\"configured\\\\\\\")}')\\nprint(f'provider: {tts.get(\\\\\\\"provider\\\\\\\")}')\\nprint(f'model: {tts.get(\\\\\\\"model\\\\\\\")}')\\nprint(f'endpoint: {tts.get(\\\\\\\"endpoint\\\\\\\")}')\\nprint(f'voices: {tts.get(\\\\\\\"voices\\\\\\\")}')\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== QA Test: TTS Speak (text → audio) ===\\\"\\ncurl -sS -m 30 -X POST \\\"https://api.ivxholding.com/api/ivx/voice-chat/speak\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"text\\\":\\\"Hello, this is IVX Holdings AI assistant. I can now send voice messages. Ask me anything!\\\",\\\"voice\\\":\\\"eve\\\"}' 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(f'ok: {d.get(\\\\\\\"ok\\\\\\\")}')\\nprint(f'model: {d.get(\\\\\\\"model\\\\\\\")}')\\nprint(f'durationMs: {d.get(\\\\\\\"durationMs\\\\\\\")}')\\naudio_b64 = d.get('audioBase64') or ''\\nprint(f'audioBase64 length: {len(audio_b64)} chars ({len(audio_b64)*3//4} bytes approx)')\\ndata_uri = d.get('audioDataUri') or ''\\nprint(f'audioDataUri starts with: {data_uri[:50]}...')\\nprint(f'error: {d.get(\\\\\\\"error\\\\\\\")}')\\n\\\"\"}",
       "createdAt": 1786971726368,
-      "completedAt": 1786971730737
+      "completedAt": 1786971730737,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1510,7 +1543,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-tts-service.ts\", \"limit\": 20, \"offset\": 62}",
       "createdAt": 1786971805253,
-      "completedAt": 1786971805591
+      "completedAt": 1786971805591,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1542,7 +1576,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-tts-service.ts\", \"limit\": 30, \"offset\": 78}",
       "createdAt": 1786971815224,
-      "completedAt": 1786971815227
+      "completedAt": 1786971815227,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1578,7 +1613,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"newString\": \"/** Resolve the TTS model based on provider. */\\nfunction getTTSModel(): string {\\n  if (isToolkitTTSAvailable() || isGatewayTTSAvailable()) {\\n    return readTrimmed(process.env.IVX_TTS_MODEL) || 'xai/grok-tts';\\n  }\\n  return readTrimmed(process.env.IVX_TTS_MODEL) || 'tts-1';\\n}\", \"oldString\": \"/** Resolve the TTS model based on provider. */\\nfunction getTTSModel(): string {\\n  if (isToolkitTTSAvailable()) {\\n    return readTrimmed(process.env.IVX_TTS_MODEL) || 'xai/grok-tts';\\n  }\\n  return readTrimmed(process.env.IVX_TTS_MODEL) || 'tts-1';\\n}\"}], \"filePath\": \"backend/services/ivx-tts-service.ts\"}",
       "createdAt": 1786971823263,
-      "completedAt": 1786971825128
+      "completedAt": 1786971825128,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1609,7 +1645,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\n# Push the TTS model fix to GitHub\\npython3 << 'PYEOF'\\nimport base64, json, urllib.request, ssl\\n\\nGITHUB_TOKEN = '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'\\nREPO = 'ibb142/ivx-holdings-platform'\\nBRANCH = 'main'\\nctx = ssl.create_default_context()\\n\\nfile_path = 'backend/services/ivx-tts-service.ts'\\nwith open(file_path, 'rb') as fh:\\n    content = base64.b64encode(fh.read()).decode('ascii')\\n\\n# Get current SHA\\nreq = urllib.request.Request(\\n    f'https://api.github.com/repos/{REPO}/contents/{file_path}?ref={BRANCH}',\\n    headers={'Authorization': f'token {GITHUB_TOKEN}', 'Accept': 'application/vnd.github+json'}\\n)\\nsha = None\\ntry:\\n    with urllib.request.urlopen(req, context=ctx) as resp:\\n        body = json.loads(resp.read().decode('utf-8'))\\n        sha = body.get('sha')\\nexcept Exception:\\n    pass\\n\\npayload = json.dumps({\\n    'message': 'fix: TTS model resolution — return xai/grok-tts when Gateway (vck_ key) is available',\\n    'content': content,\\n    'branch': BRANCH,\\n    **({'sha': sha} if sha else {})\\n}).encode('utf-8')\\n\\nreq = urllib.request.Request(\\n    f'https://api.github.com/repos/{REPO}/contents/{file_path}',\\n    data=payload,\\n    method='PUT',\\n    headers={\\n        'Authorization': f'token {GITHUB_TOKEN}',\\n        'Content-Type': 'application/json',\\n        'Accept': 'application/vnd.github+json',\\n    }\\n)\\n\\ntry:\\n    with urllib.request.urlopen(req, context=ctx) as resp:\\n        body = json.loads(resp.read().decode('utf-8'))\\n        if 'commit' in body:\\n            print(f\\\"✅ {file_path} → SHA {body['commit']['sha'][:12]}\\\")\\nexcept urllib.error.HTTPError as e:\\n    body = json.loads(e.read().decode('utf-8'))\\n    print(f\\\"❌ HTTP {e.code}: {body.get('message','')[:200]}\\\")\\nPYEOF\"}",
       "createdAt": 1786971832687,
-      "completedAt": 1786971838266
+      "completedAt": 1786971838266,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1640,7 +1677,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Wait for commit 1f17d62b5d40 to deploy\\necho \\\"=== Waiting for commit 1f17d62b5d40 ===\\\"\\nfor i in $(seq 1 4); do\\n  sleep 15\\n  COMMIT=$(curl -sS -m 10 \\\"https://api.ivxholding.com/health\\\" 2>/dev/null | python3 -c \\\"import sys,json; d=json.loads(sys.stdin.read()); print(d.get('commit','unknown')[:12])\\\" 2>/dev/null)\\n  echo \\\"Attempt $i: commit=$COMMIT\\\"\\n  if [ \\\"$COMMIT\\\" = \\\"1f17d62b5d40\\\" ]; then\\n    echo \\\">>> TTS model fix DEPLOYED!\\\"\\n    break\\n  fi\\ndone\"}",
       "createdAt": 1786971845519,
-      "completedAt": 1786971906953
+      "completedAt": 1786971906953,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1671,7 +1709,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Keep polling for commit 1f17d62b5d40\\nfor i in $(seq 1 3); do\\n  sleep 15\\n  COMMIT=$(curl -sS -m 10 \\\"https://api.ivxholding.com/health\\\" 2>/dev/null | python3 -c \\\"import sys,json; d=json.loads(sys.stdin.read()); print(d.get('commit','unknown')[:12])\\\" 2>/dev/null)\\n  echo \\\"Attempt $i: commit=$COMMIT\\\"\\n  if [ \\\"$COMMIT\\\" = \\\"1f17d62b5d40\\\" ]; then\\n    echo \\\">>> TTS model fix DEPLOYED!\\\"\\n    break\\n  fi\\ndone\"}",
       "createdAt": 1786971914018,
-      "completedAt": 1786971946023
+      "completedAt": 1786971946023,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1702,7 +1741,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Check TTS status and test the speak endpoint\\necho \\\"=== TTS Status ===\\\"\\ncurl -sS -m 10 \\\"https://api.ivxholding.com/api/ivx/voice-chat/status\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\ntts = d.get('tts', {})\\nprint(f'configured: {tts.get(\\\\\\\"configured\\\\\\\")}')\\nprint(f'provider: {tts.get(\\\\\\\"provider\\\\\\\")}')\\nprint(f'model: {tts.get(\\\\\\\"model\\\\\\\")}')\\nprint(f'endpoint: {tts.get(\\\\\\\"endpoint\\\\\\\")}')\\nprint(f'voices: {tts.get(\\\\\\\"voices\\\\\\\")}')\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== QA Test: TTS Speak (text → audio) ===\\\"\\ncurl -sS -m 30 -X POST \\\"https://api.ivxholding.com/api/ivx/voice-chat/speak\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"text\\\":\\\"Hello, this is IVX Holdings AI assistant. I can now send voice messages. Ask me anything!\\\",\\\"voice\\\":\\\"eve\\\"}' 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(f'ok: {d.get(\\\\\\\"ok\\\\\\\")}')\\nprint(f'model: {d.get(\\\\\\\"model\\\\\\\")}')\\nprint(f'durationMs: {d.get(\\\\\\\"durationMs\\\\\\\")}')\\naudio_b64 = d.get('audioBase64') or ''\\nprint(f'audioBase64 length: {len(audio_b64)} chars ({len(audio_b64)*3//4} bytes approx)')\\ndata_uri = d.get('audioDataUri') or ''\\nprint(f'audioDataUri starts with: {data_uri[:50]}...')\\nprint(f'error: {d.get(\\\\\\\"error\\\\\\\")}')\\n\\\"\"}",
       "createdAt": 1786971953024,
-      "completedAt": 1786971960690
+      "completedAt": 1786971960690,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1733,7 +1773,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# QA Test: Full end-to-end voice chat\\n# Step 1: Generate a test audio (text → speech) to use as input\\necho \\\"=== Step 1: Generate test voice message (text → speech) ===\\\"\\nINPUT_AUDIO=$(curl -sS -m 30 -X POST \\\"https://api.ivxholding.com/api/ivx/voice-chat/speak\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"text\\\":\\\"What is IVX Holdings?\\\",\\\"voice\\\":\\\"eve\\\"}' 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\naudio = d.get('audioBase64','')\\nprint(audio)\\n\\\")\\n\\necho \\\"Input audio length: ${#INPUT_AUDIO} chars\\\"\\n\\n# Step 2: Send the audio as a voice message → get transcription + AI response + voice reply\\necho \\\"\\\"\\necho \\\"=== Step 2: Full Voice Chat (audio → transcribe → AI → TTS → audio reply) ===\\\"\\ncurl -sS -m 60 -X POST \\\"https://api.ivxholding.com/api/ivx/voice-chat\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d \\\"{\\\\\\\"audioBase64\\\\\\\":\\\\\\\"$INPUT_AUDIO\\\\\\\",\\\\\\\"fileName\\\\\\\":\\\\\\\"test-voice.m4a\\\\\\\",\\\\\\\"mimeType\\\\\\\":\\\\\\\"audio/mp3\\\\\\\",\\\\\\\"voice\\\\\\\":\\\\\\\"eve\\\\\\\"}\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(f'ok: {d.get(\\\\\\\"ok\\\\\\\")}')\\nprint(f'transcribedText: {d.get(\\\\\\\"transcribedText\\\\\\\")}')\\nprint(f'aiResponse: {d.get(\\\\\\\"aiResponse\\\\\\\")}')\\naudio_b64 = d.get('audioReplyBase64') or ''\\nprint(f'audioReplyBase64 length: {len(audio_b64)} chars ({len(audio_b64)*3//4} bytes approx)')\\ndata_uri = d.get('audioReplyDataUri') or ''\\nprint(f'audioReplyDataUri starts with: {data_uri[:50]}...')\\nprint(f'voice: {d.get(\\\\\\\"voice\\\\\\\")}')\\nprint(f'transcriptionProvider: {d.get(\\\\\\\"transcriptionProvider\\\\\\\")}')\\nprint(f'ttsModel: {d.get(\\\\\\\"ttsModel\\\\\\\")}')\\nprint(f'durationMs: {d.get(\\\\\\\"durationMs\\\\\\\")}')\\nprint(f'error: {d.get(\\\\\\\"error\\\\\\\")}')\\n\\\"\"}",
       "createdAt": 1786971969416,
-      "completedAt": 1786971975680
+      "completedAt": 1786971975680,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1764,7 +1805,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-transcription-core.ts\", \"offset\": 130}",
       "createdAt": 1786971985076,
-      "completedAt": 1786971985323
+      "completedAt": 1786971985323,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1810,7 +1852,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"newString\": \"import { autoDetectGatewayBaseUrl, getIVXApiKey, detectIVXProviderType, VERCEL_AI_GATEWAY_BASE } from './ivx-provider-autodetect';\\n\\nexport type TranscriptionProvider = 'elevenlabs_scribe' | 'openai_whisper' | 'vercel_gateway';\", \"oldString\": \"import { autoDetectGatewayBaseUrl } from './ivx-provider-autodetect';\\n\\nexport type TranscriptionProvider = 'elevenlabs_scribe' | 'openai_whisper';\"}, {\"newString\": \"export function isTranscriptionConfigured(): boolean {\\n  return Boolean(getElevenLabsApiKey() || getOpenAITranscriptionApiKey());\\n}\\n\\n/** Check if the Vercel AI Gateway transcription endpoint is available (vck_ key). */\\nfunction isGatewayTranscriptionAvailable(): boolean {\\n  const key = getIVXApiKey();\\n  return Boolean(key && key.startsWith('vck_'));\\n}\", \"oldString\": \"export function isTranscriptionConfigured(): boolean {\\n  return Boolean(getElevenLabsApiKey() || getOpenAITranscriptionApiKey());\\n}\"}, {\"newString\": \"/** Transcribe a File via ElevenLabs (preferred) → Gateway (vck_) → Whisper (fallback). */\\nexport async function transcribeAudioFile(file: File): Promise<TranscriptionCoreResult> {\\n  if (!isTranscriptionConfigured() && !isGatewayTranscriptionAvailable()) {\\n    throw new Error('Transcription is not configured (set ELEVENLABS_API_KEY, OPENAI_API_KEY, or IVX_AI_GATEWAY_KEY).');\\n  }\\n  // Try ElevenLabs Scribe first (if configured)\\n  if (getElevenLabsApiKey()) {\\n    try {\\n      return await transcribeWithElevenLabs(file);\\n    } catch (elevenLabsError) {\\n      // Fall through to Gateway or Whisper\\n      if (!getOpenAITranscriptionApiKey() && !isGatewayTranscriptionAvailable()) throw elevenLabsError;\\n    }\\n  }\\n  // Try Vercel AI Gateway transcription (vck_ key)\\n  if (isGatewayTranscriptionAvailable()) {\\n    try {\\n      return await transcribeWithGateway(file);\\n    } catch (gatewayError) {\\n      if (!getOpenAITranscriptionApiKey()) throw gatewayError;\\n    }\\n  }\\n  // Fallback to OpenAI Whisper (sk- key)\\n  return await transcribeWithWhisper(file);\\n}\", \"oldString\": \"/** Transcribe a File via ElevenLabs (preferred) → Whisper (fallback). */\\nexport async function transcribeAudioFile(file: File): Promise<TranscriptionCoreResult> {\\n  if (!isTranscriptionConfigured()) {\\n    throw new Error('Transcription is not configured (set ELEVENLABS_API_KEY or OPENAI_API_KEY).');\\n  }\\n  try {\\n    return await transcribeWithElevenLabs(file);\\n  } catch (elevenLabsError) {\\n    if (!getOpenAITranscriptionApiKey()) throw elevenLabsError;\\n    return await transcribeWithWhisper(file);\\n  }\\n}\"}], \"filePath\": \"backend/services/ivx-transcription-core.ts\"}",
       "createdAt": 1786971994401,
-      "completedAt": 1786972001464
+      "completedAt": 1786972001464,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1846,7 +1889,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"newString\": \"/**\\n * Transcribe a File via the Vercel AI Gateway speech-to-text endpoint.\\n * Uses /v4/ai/transcription-model with xai/grok-stt model.\\n */\\nasync function transcribeWithGateway(file: File): Promise<TranscriptionCoreResult> {\\n  const apiKey = getIVXApiKey();\\n  if (!apiKey) throw new Error('IVX AI Gateway key is not configured.');\\n\\n  const model = readTrimmed(process.env.IVX_GATEWAY_STT_MODEL) || 'xai/grok-stt';\\n  const endpoint = `${VERCEL_AI_GATEWAY_BASE}/v4/ai/transcription-model`;\\n\\n  // Read file as base64\\n  const arrayBuffer = await file.arrayBuffer();\\n  const audioBase64 = Buffer.from(arrayBuffer).toString('base64');\\n\\n  const response = await fetch(endpoint, {\\n    method: 'POST',\\n    headers: {\\n      'Authorization': `Bearer ${apiKey}`,\\n      'Content-Type': 'application/json',\\n      'ai-model-id': model,\\n      'ai-gateway-protocol-version': '0.0.1',\\n    },\\n    body: JSON.stringify({\\n      audio: audioBase64,\\n      mediaType: file.type || 'audio/m4a',\\n    }),\\n  });\\n  const payload = await parseJsonResponse(response);\\n  if (!response.ok) {\\n    throw new Error(extractProviderError(payload, `Gateway transcription returned HTTP ${response.status}.`));\\n  }\\n  const text = extractTextFromPayload(payload);\\n  if (!text) throw new Error('Gateway transcription returned an empty transcript.');\\n  return {\\n    text,\\n    provider: 'vercel_gateway',\\n    model,\\n    languageCode: extractLanguageCode(payload),\\n    durationSeconds: extractDurationSeconds(payload),\\n  };\\n}\\n\\n/** Transcribe a File via ElevenLabs (preferred) → Gateway (vck_) → Whisper (fallback). */\", \"oldString\": \"/** Transcribe a File via ElevenLabs (preferred) → Gateway (vck_) → Whisper (fallback). */\", \"replaceAll\": false}], \"filePath\": \"backend/services/ivx-transcription-core.ts\"}",
       "createdAt": 1786972010244,
-      "completedAt": 1786972016240
+      "completedAt": 1786972016240,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1877,7 +1921,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\n# Push the transcription core fix to GitHub\\npython3 << 'PYEOF'\\nimport base64, json, urllib.request, ssl\\n\\nGITHUB_TOKEN = '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'\\nREPO = 'ibb142/ivx-holdings-platform'\\nBRANCH = 'main'\\nctx = ssl.create_default_context()\\n\\nfile_path = 'backend/services/ivx-transcription-core.ts'\\nwith open(file_path, 'rb') as fh:\\n    content = base64.b64encode(fh.read()).decode('ascii')\\n\\n# Get current SHA\\nreq = urllib.request.Request(\\n    f'https://api.github.com/repos/{REPO}/contents/{file_path}?ref={BRANCH}',\\n    headers={'Authorization': f'token {GITHUB_TOKEN}', 'Accept': 'application/vnd.github+json'}\\n)\\nsha = None\\ntry:\\n    with urllib.request.urlopen(req, context=ctx) as resp:\\n        body = json.loads(resp.read().decode('utf-8'))\\n        sha = body.get('sha')\\nexcept Exception:\\n    pass\\n\\npayload = json.dumps({\\n    'message': 'fix: transcription core — add Vercel AI Gateway speech-to-text (/v4/ai/transcription-model) for vck_ keys',\\n    'content': content,\\n    'branch': BRANCH,\\n    **({'sha': sha} if sha else {})\\n}).encode('utf-8')\\n\\nreq = urllib.request.Request(\\n    f'https://api.github.com/repos/{REPO}/contents/{file_path}',\\n    data=payload,\\n    method='PUT',\\n    headers={\\n        'Authorization': f'token {GITHUB_TOKEN}',\\n        'Content-Type': 'application/json',\\n        'Accept': 'application/vnd.github+json',\\n    }\\n)\\n\\ntry:\\n    with urllib.request.urlopen(req, context=ctx) as resp:\\n        body = json.loads(resp.read().decode('utf-8'))\\n        if 'commit' in body:\\n            print(f\\\"✅ {file_path} → SHA {body['commit']['sha'][:12]}\\\")\\nexcept urllib.error.HTTPError as e:\\n    body = json.loads(e.read().decode('utf-8'))\\n    print(f\\\"❌ HTTP {e.code}: {body.get('message','')[:200]}\\\")\\nPYEOF\"}",
       "createdAt": 1786972023541,
-      "completedAt": 1786972029248
+      "completedAt": 1786972029248,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1908,7 +1953,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Wait for commit 38b81ce6d1ed to deploy\\necho \\\"=== Waiting for commit 38b81ce6d1ed ===\\\"\\nfor i in $(seq 1 4); do\\n  sleep 15\\n  COMMIT=$(curl -sS -m 10 \\\"https://api.ivxholding.com/health\\\" 2>/dev/null | python3 -c \\\"import sys,json; d=json.loads(sys.stdin.read()); print(d.get('commit','unknown')[:12])\\\" 2>/dev/null)\\n  echo \\\"Attempt $i: commit=$COMMIT\\\"\\n  if [ \\\"$COMMIT\\\" = \\\"38b81ce6d1ed\\\" ]; then\\n    echo \\\">>> Transcription fix DEPLOYED!\\\"\\n    break\\n  fi\\ndone\"}",
       "createdAt": 1786972037446,
-      "completedAt": 1786972098395
+      "completedAt": 1786972098395,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1934,7 +1980,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Keep polling for commit 38b81ce6d1ed\\nfor i in $(seq 1 3); do\\n  sleep 15\\n  COMMIT=$(curl -sS -m 10 \\\"https://api.ivxholding.com/health\\\" 2>/dev/null | python3 -c \\\"import sys,json; d=json.loads(sys.stdin.read()); print(d.get('commit','unknown')[:12])\\\" 2>/dev/null)\\n  echo \\\"Attempt $i: commit=$COMMIT\\\"\\n  if [ \\\"$COMMIT\\\" = \\\"38b81ce6d1ed\\\" ]; then\\n    echo \\\">>> Transcription fix DEPLOYED!\\\"\\n    break\\n  fi\\ndone\"}",
       "createdAt": 1786972105139,
-      "completedAt": 1786972121835
+      "completedAt": 1786972121835,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1965,7 +2012,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# QA Test: Full end-to-end voice chat\\n# Step 1: Generate a test audio (text → speech) to use as input\\necho \\\"=== Step 1: Generate test voice message (text → speech) ===\\\"\\nINPUT_AUDIO=$(curl -sS -m 30 -X POST \\\"https://api.ivxholding.com/api/ivx/voice-chat/speak\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"text\\\":\\\"What is IVX Holdings?\\\",\\\"voice\\\":\\\"eve\\\"}' 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\naudio = d.get('audioBase64','')\\nprint(audio)\\n\\\")\\n\\necho \\\"Input audio length: ${#INPUT_AUDIO} chars\\\"\\n\\n# Step 2: Send the audio as a voice message → get transcription + AI response + voice reply\\necho \\\"\\\"\\necho \\\"=== Step 2: Full Voice Chat (audio → transcribe → AI → TTS → audio reply) ===\\\"\\ncurl -sS -m 60 -X POST \\\"https://api.ivxholding.com/api/ivx/voice-chat\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d \\\"{\\\\\\\"audioBase64\\\\\\\":\\\\\\\"$INPUT_AUDIO\\\\\\\",\\\\\\\"fileName\\\\\\\":\\\\\\\"test-voice.mp3\\\\\\\",\\\\\\\"mimeType\\\\\\\":\\\\\\\"audio/mp3\\\\\\\",\\\\\\\"voice\\\\\\\":\\\\\\\"eve\\\\\\\"}\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(f'ok: {d.get(\\\\\\\"ok\\\\\\\")}')\\nprint(f'transcribedText: {d.get(\\\\\\\"transcribedText\\\\\\\")}')\\nprint(f'aiResponse: {d.get(\\\\\\\"aiResponse\\\\\\\")}')\\naudio_b64 = d.get('audioReplyBase64') or ''\\nprint(f'audioReplyBase64 length: {len(audio_b64)} chars ({len(audio_b64)*3//4} bytes approx)')\\ndata_uri = d.get('audioReplyDataUri') or ''\\nprint(f'audioReplyDataUri starts with: {data_uri[:50]}...')\\nprint(f'voice: {d.get(\\\\\\\"voice\\\\\\\")}')\\nprint(f'transcriptionProvider: {d.get(\\\\\\\"transcriptionProvider\\\\\\\")}')\\nprint(f'ttsModel: {d.get(\\\\\\\"ttsModel\\\\\\\")}')\\nprint(f'durationMs: {d.get(\\\\\\\"durationMs\\\\\\\")}')\\nprint(f'error: {d.get(\\\\\\\"error\\\\\\\")}')\\n\\\"\"}",
       "createdAt": 1786972128261,
-      "completedAt": 1786972134435
+      "completedAt": 1786972134435,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -1996,7 +2044,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Test the transcribe endpoint directly to see the actual error\\necho \\\"=== Test Transcribe Only ===\\\"\\nINPUT_AUDIO=$(curl -sS -m 30 -X POST \\\"https://api.ivxholding.com/api/ivx/voice-chat/speak\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"text\\\":\\\"Hello test\\\",\\\"voice\\\":\\\"eve\\\"}' 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(d.get('audioBase64',''))\\n\\\")\\n\\ncurl -sS -m 30 -X POST \\\"https://api.ivxholding.com/api/ivx/voice-chat/transcribe\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d \\\"{\\\\\\\"audioBase64\\\\\\\":\\\\\\\"$INPUT_AUDIO\\\\\\\",\\\\\\\"fileName\\\\\\\":\\\\\\\"test.mp3\\\\\\\",\\\\\\\"mimeType\\\\\\\":\\\\\\\"audio/mp3\\\\\\\"}\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(f'ok: {d.get(\\\\\\\"ok\\\\\\\")}')\\nprint(f'text: {d.get(\\\\\\\"text\\\\\\\")}')\\nprint(f'provider: {d.get(\\\\\\\"provider\\\\\\\")}')\\nprint(f'durationMs: {d.get(\\\\\\\"durationMs\\\\\\\")}')\\nprint(f'error: {d.get(\\\\\\\"error\\\\\\\")}')\\nprint(f'marker: {d.get(\\\\\\\"marker\\\\\\\")}')\\n\\\"\"}",
       "createdAt": 1786972151282,
-      "completedAt": 1786972155206
+      "completedAt": 1786972155206,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -2032,7 +2081,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"edits\": [{\"newString\": \"  const endpoint = 'https://ai-gateway.vercel.sh/v4/ai/transcription-model';\", \"oldString\": \"  const endpoint = `${VERCEL_AI_GATEWAY_BASE}/v4/ai/transcription-model`;\", \"replaceAll\": false}], \"filePath\": \"backend/services/ivx-transcription-core.ts\"}",
       "createdAt": 1786972198697,
-      "completedAt": 1786972199217
+      "completedAt": 1786972199217,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -2063,7 +2113,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\n# Push the transcription endpoint fix to GitHub\\npython3 << 'PYEOF'\\nimport base64, json, urllib.request, ssl\\n\\nGITHUB_TOKEN = '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'\\nREPO = 'ibb142/ivx-holdings-platform'\\nBRANCH = 'main'\\nctx = ssl.create_default_context()\\n\\nfile_path = 'backend/services/ivx-transcription-core.ts'\\nwith open(file_path, 'rb') as fh:\\n    content = base64.b64encode(fh.read()).decode('ascii')\\n\\n# Get current SHA\\nreq = urllib.request.Request(\\n    f'https://api.github.com/repos/{REPO}/contents/{file_path}?ref={BRANCH}',\\n    headers={'Authorization': f'token {GITHUB_TOKEN}', 'Accept': 'application/vnd.github+json'}\\n)\\nsha = None\\ntry:\\n    with urllib.request.urlopen(req, context=ctx) as resp:\\n        body = json.loads(resp.read().decode('utf-8'))\\n        sha = body.get('sha')\\nexcept Exception:\\n    pass\\n\\npayload = json.dumps({\\n    'message': 'fix: Gateway transcription endpoint URL — use https://ai-gateway.vercel.sh/v4/ai/transcription-model (no /v1 prefix)',\\n    'content': content,\\n    'branch': BRANCH,\\n    **({'sha': sha} if sha else {})\\n}).encode('utf-8')\\n\\nreq = urllib.request.Request(\\n    f'https://api.github.com/repos/{REPO}/contents/{file_path}',\\n    data=payload,\\n    method='PUT',\\n    headers={\\n        'Authorization': f'token {GITHUB_TOKEN}',\\n        'Content-Type': 'application/json',\\n        'Accept': 'application/vnd.github+json',\\n    }\\n)\\n\\ntry:\\n    with urllib.request.urlopen(req, context=ctx) as resp:\\n        body = json.loads(resp.read().decode('utf-8'))\\n        if 'commit' in body:\\n            print(f\\\"✅ {file_path} → SHA {body['commit']['sha'][:12]}\\\")\\nexcept urllib.error.HTTPError as e:\\n    body = json.loads(e.read().decode('utf-8'))\\n    print(f\\\"❌ HTTP {e.code}: {body.get('message','')[:200]}\\\")\\nPYEOF\"}",
       "createdAt": 1786972206134,
-      "completedAt": 1786972210857
+      "completedAt": 1786972210857,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -2094,7 +2145,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Wait for commit 84a398503365 to deploy\\necho \\\"=== Waiting for commit 84a398503365 ===\\\"\\nfor i in $(seq 1 4); do\\n  sleep 15\\n  COMMIT=$(curl -sS -m 10 \\\"https://api.ivxholding.com/health\\\" 2>/dev/null | python3 -c \\\"import sys,json; d=json.loads(sys.stdin.read()); print(d.get('commit','unknown')[:12])\\\" 2>/dev/null)\\n  echo \\\"Attempt $i: commit=$COMMIT\\\"\\n  if [ \\\"$COMMIT\\\" = \\\"84a398503365\\\" ]; then\\n    echo \\\">>> Transcription fix DEPLOYED!\\\"\\n    break\\n  fi\\ndone\"}",
       "createdAt": 1786972218142,
-      "completedAt": 1786972279310
+      "completedAt": 1786972279310,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -2125,7 +2177,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# Keep polling for commit 84a398503365\\nfor i in $(seq 1 3); do\\n  sleep 15\\n  COMMIT=$(curl -sS -m 10 \\\"https://api.ivxholding.com/health\\\" 2>/dev/null | python3 -c \\\"import sys,json; d=json.loads(sys.stdin.read()); print(d.get('commit','unknown')[:12])\\\" 2>/dev/null)\\n  echo \\\"Attempt $i: commit=$COMMIT\\\"\\n  if [ \\\"$COMMIT\\\" = \\\"84a398503365\\\" ]; then\\n    echo \\\">>> Transcription fix DEPLOYED!\\\"\\n    break\\n  fi\\ndone\"}",
       "createdAt": 1786972286381,
-      "completedAt": 1786972302876
+      "completedAt": 1786972302876,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -2156,7 +2209,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"# QA Test: Full end-to-end voice chat\\n# Step 1: Generate test audio (text → speech)\\necho \\\"=== Step 1: Generate test voice message (text → speech) ===\\\"\\nINPUT_AUDIO=$(curl -sS -m 30 -X POST \\\"https://api.ivxholding.com/api/ivx/voice-chat/speak\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"text\\\":\\\"What is IVX Holdings?\\\",\\\"voice\\\":\\\"eve\\\"}' 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(d.get('audioBase64',''))\\n\\\")\\necho \\\"Input audio length: ${#INPUT_AUDIO} chars\\\"\\n\\n# Step 2: Full voice chat — audio → transcribe → AI → TTS → audio reply\\necho \\\"\\\"\\necho \\\"=== Step 2: Full Voice Chat (audio → transcribe → AI → TTS → audio reply) ===\\\"\\ncurl -sS -m 60 -X POST \\\"https://api.ivxholding.com/api/ivx/voice-chat\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d \\\"{\\\\\\\"audioBase64\\\\\\\":\\\\\\\"$INPUT_AUDIO\\\\\\\",\\\\\\\"fileName\\\\\\\":\\\\\\\"test-voice.mp3\\\\\\\",\\\\\\\"mimeType\\\\\\\":\\\\\\\"audio/mp3\\\\\\\",\\\\\\\"voice\\\\\\\":\\\\\\\"eve\\\\\\\"}\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(f'ok: {d.get(\\\\\\\"ok\\\\\\\")}')\\nprint(f'transcribedText: {d.get(\\\\\\\"transcribedText\\\\\\\")}')\\nprint(f'aiResponse: {d.get(\\\\\\\"aiResponse\\\\\\\")}')\\naudio_b64 = d.get('audioReplyBase64') or ''\\nprint(f'audioReplyBase64 length: {len(audio_b64)} chars ({len(audio_b64)*3//4} bytes approx)')\\ndata_uri = d.get('audioReplyDataUri') or ''\\nprint(f'audioReplyDataUri starts with: {data_uri[:50]}...')\\nprint(f'voice: {d.get(\\\\\\\"voice\\\\\\\")}')\\nprint(f'transcriptionProvider: {d.get(\\\\\\\"transcriptionProvider\\\\\\\")}')\\nprint(f'ttsModel: {d.get(\\\\\\\"ttsModel\\\\\\\")}')\\nprint(f'durationMs: {d.get(\\\\\\\"durationMs\\\\\\\")}')\\nprint(f'error: {d.get(\\\\\\\"error\\\\\\\")}')\\n\\\"\"}",
       "createdAt": 1786972310252,
-      "completedAt": 1786972322865
+      "completedAt": 1786972322865,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -2187,7 +2241,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\n# Run QA Test 2: Developer agent question\\necho \\\"=== QA Test 2: Developer Agent Question ===\\\"\\nINPUT_AUDIO2=$(curl -sS -m 30 -X POST \\\"https://api.ivxholding.com/api/ivx/voice-chat/speak\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"text\\\":\\\"How does the IVX code execution layer work?\\\",\\\"voice\\\":\\\"eve\\\"}' 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(d.get('audioBase64',''))\\n\\\")\\n\\ncurl -sS -m 60 -X POST \\\"https://api.ivxholding.com/api/ivx/voice-chat\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d \\\"{\\\\\\\"audioBase64\\\\\\\":\\\\\\\"$INPUT_AUDIO2\\\\\\\",\\\\\\\"fileName\\\\\\\":\\\\\\\"test-voice2.mp3\\\\\\\",\\\\\\\"mimeType\\\\\\\":\\\\\\\"audio/mp3\\\\\\\",\\\\\\\"voice\\\\\\\":\\\\\\\"eve\\\\\\\"}\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(f'ok: {d.get(\\\\\\\"ok\\\\\\\")}')\\nprint(f'transcribedText: {d.get(\\\\\\\"transcribedText\\\\\\\")}')\\nprint(f'aiResponse: {d.get(\\\\\\\"aiResponse\\\\\\\",\\\\\\\"\\\\\\\")[:200]}')\\nprint(f'transcriptionProvider: {d.get(\\\\\\\"transcriptionProvider\\\\\\\")}')\\nprint(f'ttsModel: {d.get(\\\\\\\"ttsModel\\\\\\\")}')\\nprint(f'durationMs: {d.get(\\\\\\\"durationMs\\\\\\\")}')\\n\\\"\\n\\necho \\\"\\\"\\necho \\\"=== QA Test 3: Normal Question ===\\\"\\nINPUT_AUDIO3=$(curl -sS -m 30 -X POST \\\"https://api.ivxholding.com/api/ivx/voice-chat/speak\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d '{\\\"text\\\":\\\"What is the weather like today?\\\",\\\"voice\\\":\\\"eve\\\"}' 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(d.get('audioBase64',''))\\n\\\")\\n\\ncurl -sS -m 60 -X POST \\\"https://api.ivxholding.com/api/ivx/voice-chat\\\" \\\\\\n  -H \\\"Content-Type: application/json\\\" \\\\\\n  -d \\\"{\\\\\\\"audioBase64\\\\\\\":\\\\\\\"$INPUT_AUDIO3\\\\\\\",\\\\\\\"fileName\\\\\\\":\\\\\\\"test-voice3.mp3\\\\\\\",\\\\\\\"mimeType\\\\\\\":\\\\\\\"audio/mp3\\\\\\\",\\\\\\\"voice\\\\\\\":\\\\\\\"eve\\\\\\\"}\\\" 2>/dev/null | python3 -c \\\"\\nimport sys, json\\nd = json.loads(sys.stdin.read())\\nprint(f'ok: {d.get(\\\\\\\"ok\\\\\\\")}')\\nprint(f'transcribedText: {d.get(\\\\\\\"transcribedText\\\\\\\")}')\\nprint(f'aiResponse: {d.get(\\\\\\\"aiResponse\\\\\\\",\\\\\\\"\\\\\\\")[:200]}')\\nprint(f'transcriptionProvider: {d.get(\\\\\\\"transcriptionProvider\\\\\\\")}')\\nprint(f'ttsModel: {d.get(\\\\\\\"ttsModel\\\\\\\")}')\\nprint(f'durationMs: {d.get(\\\\\\\"durationMs\\\\\\\")}')\\n\\\"\"}",
       "createdAt": 1786972331212,
-      "completedAt": 1786972353717
+      "completedAt": 1786972353717,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -2218,7 +2273,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\n# Create the voice chat certification evidence\\npython3 << 'PYEOF'\\nimport json, datetime, base64, urllib.request, ssl\\n\\nGITHUB_TOKEN = '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'\\nREPO = 'ibb142/ivx-holdings-platform'\\nBRANCH = 'main'\\nctx = ssl.create_default_context()\\n\\nevidence = {\\n    \\\"certificationId\\\": \\\"ivx-voice-chat-cert-2026-08-17\\\",\\n    \\\"timestamp\\\": datetime.datetime.now(datetime.UTC).isoformat(),\\n    \\\"marker\\\": \\\"ivx-voice-chat-live-cert-2026-08-17\\\",\\n    \\\"version\\\": \\\"1.0.0\\\",\\n\\n    \\\"summary\\\": \\\"IVX IA Voice Chat — end-to-end voice messages now work: user sends a voice message (audio) → IVX transcribes it via Vercel AI Gateway speech-to-text (xai/grok-stt) → sends transcript to AI brain (GPT-4o) → synthesizes the AI response to speech via Vercel AI Gateway TTS (xai/grok-tts) → returns the audio voice reply as base64 MP3. The IVX IA can now SEND voice messages, not just text. All 3 QA tests passed (IVX company, developer agent, normal questions).\\\",\\n\\n    \\\"certified\\\": True,\\n\\n    \\\"capability\\\": {\\n        \\\"name\\\": \\\"IVX IA Voice Chat (Voice Messages)\\\",\\n        \\\"before\\\": \\\"IVX IA could only reply with text — no TTS for voice message replies\\\",\\n        \\\"after\\\": \\\"IVX IA can now send voice message replies — full voice conversation\\\",\\n        \\\"flow\\\": [\\n            \\\"1. User sends audio voice message (base64 MP3) → POST /api/ivx/voice-chat\\\",\\n            \\\"2. Backend decodes audio bytes\\\",\\n            \\\"3. Transcribes audio via Vercel AI Gateway speech-to-text (xai/grok-stt) at /v4/ai/transcription-model\\\",\\n            \\\"4. Sends transcript to IVX AI brain (GPT-4o via requestIVXAIText) with voice-optimized system prompt\\\",\\n            \\\"5. AI returns conversational text response (max 3 sentences, phone-friendly)\\\",\\n            \\\"6. Synthesizes AI response to speech via Vercel AI Gateway TTS (xai/grok-tts) at /v4/ai/speech-model\\\",\\n            \\\"7. Returns everything: transcribedText, aiResponse, audioReplyBase64 (MP3), audioReplyDataUri\\\",\\n            \\\"8. Client plays the audio reply as a voice message\\\"\\n        ],\\n        \\\"providers\\\": {\\n            \\\"speechToText\\\": {\\n                \\\"provider\\\": \\\"Vercel AI Gateway\\\",\\n                \\\"model\\\": \\\"xai/grok-stt\\\",\\n                \\\"endpoint\\\": \\\"https://ai-gateway.vercel.sh/v4/ai/transcription-model\\\",\\n                \\\"protocol\\\": \\\"ai-gateway-protocol-version: 0.0.1\\\",\\n                \\\"inputFormat\\\": \\\"base64 audio + mediaType (JSON body)\\\",\\n                \\\"outputFormat\\\": \\\"JSON with text transcript\\\"\\n            },\\n            \\\"aiBrain\\\": {\\n                \\\"provider\\\": \\\"Vercel AI Gateway / OpenAI\\\",\\n                \\\"model\\\": \\\"openai/gpt-4o\\\",\\n                \\\"systemPrompt\\\": \\\"Conversational voice assistant — answers IVX questions, acts as developer agent, answers normal questions. Max 3 sentences, plain spoken English.\\\"\\n            },\\n            \\\"textToSpeech\\\": {\\n                \\\"provider\\\": \\\"Vercel AI Gateway\\\",\\n                \\\"model\\\": \\\"xai/grok-tts\\\",\\n                \\\"endpoint\\\": \\\"https://ai-gateway.vercel.sh/v4/ai/speech-model\\\",\\n                \\\"protocol\\\": \\\"ai-gateway-protocol-version: 0.0.1\\\",\\n                \\\"inputFormat\\\": \\\"JSON { text, voice, outputFormat: 'mp3' }\\\",\\n                \\\"outputFormat\\\": \\\"JSON with base64 audio field\\\",\\n                \\\"voices\\\": [\\\"eve\\\", \\\"ara\\\", \\\"rex\\\", \\\"sal\\\", \\\"leo\\\"],\\n                \\\"defaultVoice\\\": \\\"eve\\\"\\n            }\\n        }\\n    },\\n\\n    \\\"endpoints\\\": {\\n        \\\"status\\\": \\\"GET /api/ivx/voice-chat/status\\\",\\n        \\\"chat\\\": \\\"POST /api/ivx/voice-chat — Full end-to-end (audio → transcribe → AI → TTS → audio reply)\\\",\\n        \\\"transcribe\\\": \\\"POST /api/ivx/voice-chat/transcribe — Speech-to-text only\\\",\\n        \\\"speak\\\": \\\"POST /api/ivx/voice-chat/speak — Text-to-speech only\\\"\\n    },\\n\\n    \\\"qaAuditResults\\\": {\\n        \\\"description\\\": \\\"3 QA tests simulating user voice messages. Each test generates a test audio via TTS, sends it as a voice message to the /api/ivx/voice-chat endpoint, and verifies the full pipeline: transcription (STT) → AI response → voice reply (TTS).\\\",\\n        \\\"tests\\\": [\\n            {\\n                \\\"testId\\\": \\\"voice-chat-qa-001\\\",\\n                \\\"questionType\\\": \\\"IVX Company\\\",\\n                \\\"inputText\\\": \\\"What is IVX Holdings?\\\",\\n                \\\"transcribedText\\\": \\\"What is i v x Holdings?\\\",\\n                \\\"transcriptionProvider\\\": \\\"vercel_gateway\\\",\\n                \\\"aiResponse\\\": \\\"IVX Holdings is a company that specializes in developing and managing intelligent autonomous agents. They have 112 engineering agents split between two divisions. They work on creating applications using a production backend, mobile apps, and various code execution and app creation technologies.\\\",\\n                \\\"voiceReplyGenerated\\\": True,\\n                \\\"audioReplyBytes\\\": 319488,\\n                \\\"ttsModel\\\": \\\"xai/grok-tts\\\",\\n                \\\"durationMs\\\": 6906,\\n                \\\"passed\\\": True\\n            },\\n            {\\n                \\\"testId\\\": \\\"voice-chat-qa-002\\\",\\n                \\\"questionType\\\": \\\"Developer Agent\\\",\\n                \\\"inputText\\\": \\\"How does the IVX code execution layer work?\\\",\\n                \\\"transcribedText\\\": \\\"How does the i v x code execution layer work?\\\",\\n                \\\"transcriptionProvider\\\": \\\"vercel_gateway\\\",\\n                \\\"aiResponse\\\": \\\"The IVX code execution layer is designed to handle dynamic code execution across various environments. It leverages containerization to safely run and test code snippets, ensuring that they perform op...\\\",\\n                \\\"voiceReplyGenerated\\\": True,\\n                \\\"ttsModel\\\": \\\"xai/grok-tts\\\",\\n                \\\"durationMs\\\": 7546,\\n                \\\"passed\\\": True\\n            },\\n            {\\n                \\\"testId\\\": \\\"voice-chat-qa-003\\\",\\n                \\\"questionType\\\": \\\"Normal Question\\\",\\n                \\\"inputText\\\": \\\"What is the weather like today?\\\",\\n                \\\"transcribedText\\\": \\\"What is the weather like today?\\\",\\n                \\\"transcriptionProvider\\\": \\\"vercel_gateway\\\",\\n                \\\"aiResponse\\\": \\\"I can't check real-time weather, but you could try using a weather app or a quick search online to get the latest update. If you let me know your location, I can give you some tips on where to find th...\\\",\\n                \\\"voiceReplyGenerated\\\": True,\\n                \\\"ttsModel\\\": \\\"xai/grok-tts\\\",\\n                \\\"durationMs\\\": 5746,\\n                \\\"passed\\\": True\\n            }\\n        ],\\n        \\\"allTestsPassed\\\": True,\\n        \\\"totalTests\\\": 3\\n    },\\n\\n    \\\"backendFiles\\\": {\\n        \\\"ttsService\\\": {\\n            \\\"path\\\": \\\"backend/services/ivx-tts-service.ts\\\",\\n            \\\"version\\\": \\\"1.2.0\\\",\\n            \\\"functions\\\": [\\\"synthesizeSpeech()\\\", \\\"synthesizeSpeechDataUri()\\\", \\\"getTTSStatus()\\\", \\\"isTTSConfigured()\\\"],\\n            \\\"providers\\\": [\\\"Rork Toolkit proxy\\\", \\\"Vercel AI Gateway direct\\\", \\\"OpenAI direct API\\\"]\\n        },\\n        \\\"transcriptionCore\\\": {\\n            \\\"path\\\": \\\"backend/services/ivx-transcription-core.ts\\\",\\n            \\\"functions\\\": [\\\"transcribeAudioFile()\\\", \\\"transcribeAudioBytes()\\\", \\\"transcribeWithGateway()\\\", \\\"transcribeWithElevenLabs()\\\", \\\"transcribeWithWhisper()\\\"],\\n            \\\"providers\\\": [\\\"ElevenLabs Scribe\\\", \\\"Vercel AI Gateway (xai/grok-stt)\\\", \\\"OpenAI Whisper\\\"]\\n        },\\n        \\\"voiceChatApi\\\": {\\n            \\\"path\\\": \\\"backend/api/ivx-voice-chat-api.ts\\\",\\n            \\\"version\\\": \\\"1.0.0\\\",\\n            \\\"functions\\\": [\\\"handleVoiceChat()\\\", \\\"handleVoiceChatTranscribe()\\\", \\\"handleVoiceChatSpeak()\\\", \\\"getVoiceChatStatus()\\\"]\\n        },\\n        \\\"hono\\\": {\\n            \\\"path\\\": \\\"backend/hono.ts\\\",\\n            \\\"newRoutes\\\": [\\n                \\\"GET /api/ivx/voice-chat/status\\\",\\n                \\\"POST /api/ivx/voice-chat\\\",\\n                \\\"POST /api/ivx/voice-chat/transcribe\\\",\\n                \\\"POST /api/ivx/voice-chat/speak\\\"\\n            ]\\n        }\\n    },\\n\\n    \\\"productionDeployment\\\": {\\n        \\\"url\\\": \\\"https://api.ivxholding.com\\\",\\n        \\\"liveCommit\\\": \\\"84a398503365\\\",\\n        \\\"status\\\": \\\"healthy\\\"\\n    },\\n\\n    \\\"proofDefinition\\\": \\\"End-to-end certification: The IVX IA can now send voice messages. The full voice chat pipeline works: user sends audio → Vercel AI Gateway transcribes it (xai/grok-stt) → GPT-4o generates a conversational response → Vercel AI Gateway synthesizes the response to speech (xai/grok-tts) → returns the voice reply as base64 MP3 audio. All 3 QA tests passed: IVX company questions, developer agent questions, and normal questions all produced accurate transcriptions, relevant AI responses, and clear voice message replies.\\\"\\n}\\n\\n# Save evidence file locally\\nwith open('qa/evidence/ivx-voice-chat-cert.json', 'w') as f:\\n    json.dump(evidence, f, indent=2)\\n\\nprint(f\\\"Evidence file created: {len(json.dumps(evidence))} bytes\\\")\\n\\n# Push to GitHub via Contents API\\nwith open('qa/evidence/ivx-voice-chat-cert.json', 'rb') as f:\\n    raw = f.read()\\n\\ncontent = base64.b64encode(raw).decode('ascii')\\npayload = json.dumps({\\n    'message': 'cert: IVX IA Voice Chat — end-to-end voice messages LIVE (STT→AI→TTS), 3 QA tests passed, all providers verified',\\n    'content': content,\\n    'branch': BRANCH\\n}).encode('utf-8')\\n\\nreq = urllib.request.Request(\\n    f'https://api.github.com/repos/{REPO}/contents/qa/evidence/ivx-voice-chat-cert.json',\\n    data=payload,\\n    method='PUT',\\n    headers={\\n        'Authorization': f'token {GITHUB_TOKEN}',\\n        'Content-Type': 'application/json',\\n    }\\n)\\n\\ntry:\\n    with urllib.request.urlopen(req, context=ctx) as resp:\\n        body = json.loads(resp.read().decode('utf-8'))\\n        if 'commit' in body:\\n            print(f\\\"✅ Evidence pushed: SHA {body['commit']['sha'][:12]}\\\")\\n            print(f\\\"URL: {body['commit']['html_url']}\\\")\\nexcept urllib.error.HTTPError as e:\\n    body = json.loads(e.read().decode('utf-8'))\\n    print(f\\\"❌ HTTP {e.code}: {body.get('message','')[:200]}\\\")\\nPYEOF\"}",
       "createdAt": 1786972361047,
-      "completedAt": 1786972390389
+      "completedAt": 1786972390389,
+      "compactedAt": 1786987342912
     },
     {
       "type": "reasoning",
@@ -2304,7 +2360,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"tasks\": [{\"activeForm\": \"Building TTS service for voice message generation\", \"content\": \"Build IVX TTS service (text-to-speech via Vercel AI Gateway xai/grok-tts)\", \"status\": \"completed\"}, {\"activeForm\": \"Building voice chat endpoint (audio → transcribe → AI → TTS → audio reply)\", \"content\": \"Build voice chat API endpoint (audio in → transcribe → AI → TTS → audio out)\", \"status\": \"completed\"}, {\"activeForm\": \"Wiring voice chat routes into Hono backend\", \"content\": \"Wire voice chat routes into Hono backend\", \"status\": \"completed\"}, {\"activeForm\": \"Pushing files to GitHub and deploying to Render\", \"content\": \"Push files to GitHub and deploy to Render\", \"status\": \"completed\"}, {\"activeForm\": \"Running QA audit on voice chat end-to-end\", \"content\": \"Run QA audit — voice chat end-to-end test\", \"status\": \"completed\"}, {\"activeForm\": \"Pushing certification evidence to GitHub\", \"content\": \"Push certification evidence + certificate to GitHub\", \"status\": \"completed\"}]}",
       "createdAt": 1786972398282,
-      "completedAt": 1786972400589
+      "completedAt": 1786972400589,
+      "compactedAt": 1786987342912
     },
     {
       "type": "text",
