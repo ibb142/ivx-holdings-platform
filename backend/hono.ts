@@ -875,6 +875,14 @@ import { evaluateAndMaybeRollback } from './services/ivx-production-guard';
 import { OPTIONS as agentJobsOptions, handleIVXAgentJobActionRequest, handleIVXAgentJobGetRequest, handleIVXAgentJobsCreateRequest, handleIVXAgentJobsListRequest, handleIVXAgentJobsLiveActivityRequest, handleIVXAgentJobsStatusRequest, handleIVXAgentWorkerRunOnceRequest } from './api/ivx-agent-jobs';
 import { OPTIONS as agentTestTokenOptions, handleIVXAgentTestRunRequest, handleIVXAgentTestTokenMintRequest } from './api/ivx-agent-test-token';
 import { handleAppPipelineStatusRequest, handleAppPipelineAgentsRequest, handleAppPipelineRunRequest } from './api/ivx-app-creation-pipeline';
+import {
+  handleExecutorStatusRequest,
+  handleExecutorWriteRequest,
+  handleExecutorBuildRequest,
+  handleExecutorDeployRequest,
+  handleExecutorFullRequest,
+  handleExecutor112CertRequest,
+} from './api/ivx-agent-code-executor';
 import { OPTIONS as seniorDeveloperOptions, handleIVXSeniorDeveloperCredentialAuditRequest, handleIVXSeniorDeveloperGithubAuditRequest, handleIVXSeniorDeveloperRunRequest, handleIVXSeniorDeveloperStatusRequest } from './api/ivx-senior-developer-runtime';
 import { auditIVXProductionCredentialRuntime, IVX_SENIOR_DEVELOPER_RUNTIME_MARKER, IVX_GITHUB_CANONICAL_PATH, IVX_GITHUB_CANONICAL_PATH_DESCRIPTION } from './services/ivx-senior-developer-runtime';
 import { OPTIONS as seniorDevToolsOptions, handleIVXSeniorDevAuditReportRequest, handleIVXSeniorDevToolsExecuteRequest, handleIVXSeniorDevToolsListRequest } from './api/ivx-senior-dev-tools';
@@ -4808,6 +4816,14 @@ app.post('/api/ivx/agent-jobs/test-run', async (context) => handleIVXAgentTestRu
 app.get('/api/ivx/app-creation-pipeline/status', () => handleAppPipelineStatusRequest());
 app.get('/api/ivx/app-creation-pipeline/agents', () => handleAppPipelineAgentsRequest());
 app.post('/api/ivx/app-creation-pipeline/run', async (context) => handleAppPipelineRunRequest(context.req.raw));
+
+// IVX Agent Code Execution Layer — connects 112 IA agents to real code execution
+app.get('/api/ivx/agent-code-executor/status', () => handleExecutorStatusRequest());
+app.post('/api/ivx/agent-code-executor/write', async (context) => handleExecutorWriteRequest(context.req.raw));
+app.post('/api/ivx/agent-code-executor/build', async (context) => handleExecutorBuildRequest(context.req.raw));
+app.post('/api/ivx/agent-code-executor/deploy', async (context) => handleExecutorDeployRequest(context.req.raw));
+app.post('/api/ivx/agent-code-executor/full', async (context) => handleExecutorFullRequest(context.req.raw));
+app.post('/api/ivx/agent-code-executor/112-cert', async (context) => handleExecutor112CertRequest(context.req.raw));
 
 // Owner-only Render deploy diagnostic — reads private credentials from process.env
 // or the encrypted Owner Variables runtime bridge, without returning secret values.
