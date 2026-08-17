@@ -890,8 +890,17 @@ import {
   handleSignalWireMakeVoiceCall,
   handleSignalWireListCalls,
   handleSignalWireVoiceLaML,
+  handleSignalWireVoiceRespond,
+  handleSignalWireConversationalCall,
   handleSignalWireVerify,
 } from './api/ivx-signalwire-api';
+import {
+  runDailySelfUpgrade,
+  getSelfUpgradeStatus,
+  getUpgradeLog,
+  startSelfUpgradeScheduler,
+  IVX_SELF_UPGRADE_MARKER,
+} from './services/ivx-daily-self-upgrade';
 import { OPTIONS as seniorDeveloperOptions, handleIVXSeniorDeveloperCredentialAuditRequest, handleIVXSeniorDeveloperGithubAuditRequest, handleIVXSeniorDeveloperRunRequest, handleIVXSeniorDeveloperStatusRequest } from './api/ivx-senior-developer-runtime';
 import { auditIVXProductionCredentialRuntime, IVX_SENIOR_DEVELOPER_RUNTIME_MARKER, IVX_GITHUB_CANONICAL_PATH, IVX_GITHUB_CANONICAL_PATH_DESCRIPTION } from './services/ivx-senior-developer-runtime';
 import { OPTIONS as seniorDevToolsOptions, handleIVXSeniorDevAuditReportRequest, handleIVXSeniorDevToolsExecuteRequest, handleIVXSeniorDevToolsListRequest } from './api/ivx-senior-dev-tools';
@@ -4842,12 +4851,34 @@ app.post('/api/ivx/signalwire/voice', async (c) => handleSignalWireMakeVoiceCall
 app.get('/api/ivx/signalwire/voice', async (c) => handleSignalWireListCalls(c.req.raw));
 app.post('/api/ivx/signalwire/voice/laml', async (c) => handleSignalWireVoiceLaML(c.req.raw));
 app.get('/api/ivx/signalwire/voice/laml', async (c) => handleSignalWireVoiceLaML(c.req.raw));
+app.post('/api/ivx/signalwire/voice/respond', async (c) => handleSignalWireVoiceRespond(c.req.raw));
+app.post('/api/ivx/signalwire/conversational', async (c) => handleSignalWireConversationalCall(c.req.raw));
 app.post('/api/ivx/signalwire/verify', async (c) => handleSignalWireVerify(c.req.raw));
+// Daily autonomous self-upgrade
+app.get('/api/ivx/self-upgrade/status', () => {
+  const status = getSelfUpgradeStatus();
+  return new Response(JSON.stringify(status), { headers: { 'Content-Type': 'application/json' } });
+});
+app.post('/api/ivx/self-upgrade/run', async (c) => {
+  const result = await runDailySelfUpgrade();
+  return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+});
+app.get('/api/ivx/self-upgrade/log', (c) => {
+  const url = new URL(c.req.url);
+  const limit = parseInt(url.searchParams.get('limit') || '10', 10);
+  const log = getUpgradeLog(limit);
+  return new Response(JSON.stringify({ ok: true, log, marker: IVX_SELF_UPGRADE_MARKER }), { headers: { 'Content-Type': 'application/json' } });
+});
 app.options('/api/ivx/signalwire/status', (c) => c.body(null, 204));
 app.options('/api/ivx/signalwire/sms', (c) => c.body(null, 204));
 app.options('/api/ivx/signalwire/voice', (c) => c.body(null, 204));
 app.options('/api/ivx/signalwire/voice/laml', (c) => c.body(null, 204));
+app.options('/api/ivx/signalwire/voice/respond', (c) => c.body(null, 204));
+app.options('/api/ivx/signalwire/conversational', (c) => c.body(null, 204));
 app.options('/api/ivx/signalwire/verify', (c) => c.body(null, 204));
+app.options('/api/ivx/self-upgrade/status', (c) => c.body(null, 204));
+app.options('/api/ivx/self-upgrade/run', (c) => c.body(null, 204));
+app.options('/api/ivx/self-upgrade/log', (c) => c.body(null, 204));
 
 // Owner-only Render deploy diagnostic — reads private credentials from process.env
 // or the encrypted Owner Variables runtime bridge, without returning secret values.
@@ -6522,6 +6553,7 @@ try { startLandingSeoAutodeploy(); } catch (err) { console.warn('[IVXOwnerAI-Hon
 try { startAutonomousMonitor(); } catch (err) { console.warn('[IVXOwnerAI-Hono] autonomous deploy monitor failed to start:', err instanceof Error ? err.message : err); }
 try { startEnterpriseReportScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] enterprise 2h report scheduler failed to start:', err instanceof Error ? err.message : err); }
 try { startAIKeyMonitor(); } catch (err) { console.warn('[IVXOwnerAI-Hono] AI key monitor failed to start:', err instanceof Error ? err.message : err); }
+try { startSelfUpgradeScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] daily self-upgrade scheduler failed to start:', err instanceof Error ? err.message : err); }
 
 // ============================================================================
 // IVX Enterprise Time Zone System — register all timezone routes
