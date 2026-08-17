@@ -239,58 +239,7 @@ jobs:
           target: google_apis
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: |
-            echo "=== Emulator booted ==="
-            adb devices
-            EMU_NAME=$(adb shell getprop ro.product.model 2>/dev/null || echo "unknown")
-            ANDROID_VER=$(adb shell getprop ro.build.version.release 2>/dev/null || echo "unknown")
-            echo "name=$EMU_NAME" >> $GITHUB_OUTPUT
-            echo "version=$ANDROID_VER" >> $GITHUB_OUTPUT
-            echo "Emulator: $EMU_NAME (Android $ANDROID_VER)"
-
-            echo "=== Installing APK ==="
-            adb install -r "${{ steps.apk.outputs.path }}" || {
-              echo "::warning::APK install failed — capturing diagnostics"
-              adb logcat -d -t 200 > logcat.txt 2>&1 || true
-              adb exec-out screencap -p > screenshot-01-install-fail.png 2>/dev/null || true
-              exit 1
-            }
-            echo "APK installed successfully"
-
-            echo "=== Launching app ==="
-            adb shell am start -n com.ivxholdings.app.qa/.MainActivity || {
-              echo "::warning::App launch failed — capturing diagnostics"
-              adb logcat -d -t 200 > logcat.txt 2>&1 || true
-              adb exec-out screencap -p > screenshot-02-launch-fail.png 2>/dev/null || true
-              exit 1
-            }
-            sleep 10
-            adb exec-out screencap -p > screenshot-01-launch.png 2>/dev/null || true
-            echo "Launch screenshot saved"
-
-            echo "=== Capturing logcat ==="
-            adb logcat -d -t 500 > logcat.txt 2>&1 || true
-
-            echo "=== Installing Maestro ==="
-            curl -Ls "https://get.maestro.mobile.dev" | bash || {
-              echo "::warning::Maestro install failed — skipping Maestro tests"
-              echo "maestro_result=skipped" >> $GITHUB_OUTPUT
-              adb exec-out screencap -p > screenshot-02-post-test.png 2>/dev/null || true
-              exit 0
-            }
-            echo "$HOME/.maestro/bin" >> $GITHUB_PATH
-            export PATH="$HOME/.maestro/bin:$PATH"
-            maestro --version || echo "Maestro version check failed"
-
-            echo "=== Running Maestro launch test ==="
-            cd "$GITHUB_WORKSPACE/expo"
-            set -o pipefail
-            maestro test .maestro/ivx-android-qa-app-launch.yaml --format junit --output maestro-launch-results.xml 2>&1 | tee maestro-launch.log
-            echo "maestro_result=completed" >> $GITHUB_OUTPUT
-            echo "Maestro launch test completed"
-
-            echo "=== Post-test screenshot ==="
-            adb exec-out screencap -p > screenshot-02-post-test.png 2>/dev/null || true
+          script: bash "$GITHUB_WORKSPACE/expo/scripts/certify-android-launch.sh" "${{ steps.apk.outputs.path }}" com.ivxholdings.app.qa screenshot-01-launch.png logcat.txt android-qa-launch.txt android-qa-package-version.txt
 
       - name: Emulator QA diagnostics
         if: always() && steps.emu.outcome != 'success' && steps.build.outcome == 'success'

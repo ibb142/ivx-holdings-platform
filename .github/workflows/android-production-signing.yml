@@ -92,29 +92,7 @@ jobs:
           target: google_apis
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: |
-            set -eu
-            APK="$GITHUB_WORKSPACE/expo/android/app/build/outputs/apk/release/app-release.apk"
-            PACKAGE=com.ivxholdings.app
-            adb install -r "$APK"
-            adb shell am force-stop "$PACKAGE"
-            adb logcat -c
-            adb shell am start -W -n "$PACKAGE/.MainActivity" | tee android-launch.txt
-            sleep 15
-            adb logcat -d -v threadtime > android-runtime-logcat.txt
-            adb exec-out screencap -p > android-production-launch.png
-            PID="$(adb shell pidof "$PACKAGE" | tr -d '\r')"
-            if [ -z "$PID" ]; then
-              echo "::error::Production app process exited during cold-launch certification"
-              tail -300 android-runtime-logcat.txt
-              exit 1
-            fi
-            if grep -E "FATAL EXCEPTION|Fatal signal|Process ${PACKAGE} .* has died" android-runtime-logcat.txt; then
-              echo "::error::Fatal Android runtime event detected during cold launch"
-              exit 1
-            fi
-            echo "Cold launch survived for 15 seconds with PID=$PID"
-            adb shell dumpsys package "$PACKAGE" | grep -E 'versionName=|versionCode=' | head -2 | tee android-package-version.txt
+          script: bash "$GITHUB_WORKSPACE/expo/scripts/certify-android-launch.sh" "$GITHUB_WORKSPACE/expo/android/app/build/outputs/apk/release/app-release.apk" com.ivxholdings.app android-production-launch.png android-runtime-logcat.txt android-launch.txt android-package-version.txt
 
       - name: Upload production runtime certificate evidence
         if: always()
