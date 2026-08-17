@@ -26,9 +26,10 @@
  * API returns an error, the service surfaces it — never a phantom success.
  */
 import { randomUUID, createHash } from 'node:crypto';
+import { requestIVXAIText, isIVXAIConfigured, resolveIVXAIModel } from '../ivx-ai-runtime';
 
 export const IVX_SIGNALWIRE_MARKER = 'ivx-signalwire-2026-08-17';
-export const IVX_SIGNALWIRE_VERSION = '1.0.0';
+export const IVX_SIGNALWIRE_VERSION = '2.0.0';
 
 // ── CONFIG ───────────────────────────────────────────────────────────────────
 
@@ -138,12 +139,7 @@ function sha256(text: string): string {
  *   3. Say a confirmation phrase
  */
 export function buildVoiceLaML(message: string): string {
-  const escapedMessage = message
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+  const escapedMessage = escapeXml(message);
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -155,6 +151,123 @@ export function buildVoiceLaML(message: string): string {
     This is an automated verification call from I V X Holdings autonomous system. Integration certified.
   </Say>
 </Response>`;
+}
+
+/**
+ * Build conversational LaML that:
+ *   1. Says a greeting / previous answer
+ *   2. Uses <Gather> to listen for speech input
+ *   3. The Gather result posts back to our webhook with SpeechResult
+ *   4. We answer with AI and loop back to Gather for more questions
+ *
+ * This creates a real conversation — the caller asks questions, the AI brain
+ * answers, and it keeps listening until the caller hangs up.
+ */
+export function buildConversationalLaML(opts: {
+  greeting?: string;
+  gatherPrompt?: string;
+  maxLoopCount?: number;
+}): string {
+  const greeting = escapeXml(opts.greeting || 'Hello, this is I V X Holdings autonomous assistant. You can ask me anything about I V X Holdings, our 112 I A agents, our platform, or any question you have. How can I help you?');
+  const gatherPrompt = escapeXml(opts.gatherPrompt || 'Go ahead, ask me a question.');
+  const maxLoop = opts.maxLoopCount ?? 10;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="woman" language="en">${greeting}</Say>
+  <Gather input="speech" action="/api/ivx/signalwire/voice/respond" method="POST" speechTimeout="auto" speechModel="phone_call" enhanced="true" language="en-US" numDigits="0">
+    <Say voice="woman" language="en">${gatherPrompt}</Say>
+  </Gather>
+  <Say voice="man" language="en">I didn't hear anything. Thank you for calling I V X Holdings. Goodbye.</Say>
+</Response>`;
+}
+
+/**
+ * Build LaML response for when the caller has spoken and we have an AI answer.
+ * Says the AI response, then loops back to Gather for the next question.
+ */
+export function buildConversationResponseLaML(opts: {
+  aiResponse: string;
+  loopCount: number;
+  maxLoops?: number;
+}): string {
+  const maxLoops = opts.maxLoops ?? 10;
+  const escaped = escapeXml(opts.aiResponse);
+  const prompt = escapeXml(opts.loopCount < maxLoops ? 'Do you have any other questions?' : 'Thank you for calling I V X Holdings. Goodbye.');
+
+  if (opts.loopCount >= maxLoops) {
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="woman" language="en">${escaped}</Say>
+  <Say voice="man" language="en">${prompt}</Say>
+</Response>`;
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="woman" language="en">${escaped}</Say>
+  <Gather input="speech" action="/api/ivx/signalwire/voice/respond?loop=${opts.loopCount + 1}" method="POST" speechTimeout="auto" speechModel="phone_call" enhanced="true" language="en-US" numDigits="0">
+    <Say voice="woman" language="en">${prompt}</Say>
+  </Gather>
+  <Say voice="man" language="en">Thank you for calling I V X Holdings. Goodbye.</Say>
+</Response>`;
+}
+
+/**
+ * Answer a question from a voice call using the IVX AI brain.
+ * Uses requestIVXAIText with a system prompt that makes the AI act as an
+ * IVX Holdings autonomous assistant that can answer questions about the
+ * company, act as an I A developer agent, and answer normal questions.
+ */
+export async function answerVoiceQuestion(
+  question: string,
+  opts?: { callSid?: string; loopCount?: number }
+): Promise<{ answer: string; ok: boolean; error: string | null }> {
+  if (!question || question.trim().length === 0) {
+    return { answer: 'I didn\'t catch that. Could you repeat your question?', ok: true, error: null };
+  }
+
+  if (!isIVXAIConfigured()) {
+    return { answer: 'I\'m sorry, but my A I brain is not configured right now. Please contact support.', ok: false, error: 'AI not configured' };
+  }
+
+  const systemPrompt = `You are the I V X Holdings autonomous voice assistant. You are on a live phone call with the owner of I V X Holdings.
+
+You can:
+1. Answer questions about I V X Holdings — we are a holdings company with 112 I A engineering agents (Division A: 55 agents, Division B: 57 agents) that work autonomously. We have a production backend at api.ivxholding.com, an Android app, code execution layer, SignalWire SMS and voice integration, and a 30-agent app creation pipeline.
+2. Act as an I A developer agent — you can discuss code, architecture, deployment, CI/CD, testing, and technical decisions. You understand TypeScript, Kotlin, Swift, React Native, Hono, Ktor, Compose, Supabase, Render, and the full IVX tech stack.
+3. Answer any normal question — general knowledge, advice, weather, math, anything.
+
+Keep responses SHORT and CONVERSATIONAL since this is a phone call. Maximum 3 sentences. Speak naturally as if talking on the phone. Do not use markdown, code blocks, or special formatting. Just plain spoken English.`;
+
+  try {
+    const result = await requestIVXAIText({
+      module: 'signalwire-voice' as any,
+      system: systemPrompt,
+      prompt: question,
+      maxOutputTokens: 200,
+    });
+
+    const answer = (result.text || '').trim();
+    if (!answer) {
+      return { answer: 'I\'m not sure how to answer that. Could you try rephrasing?', ok: false, error: 'Empty AI response' };
+    }
+
+    return { answer, ok: true, error: null };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error('[IVX SignalWire] AI brain error:', errorMsg);
+    return { answer: 'I apologize, I\'m having trouble processing that right now. Please try again.', ok: false, error: errorMsg };
+  }
+}
+
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }
 
 // ── SMS ──────────────────────────────────────────────────────────────────────
