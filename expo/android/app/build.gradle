@@ -191,6 +191,38 @@ android {
                             alias
                     }
                     logger.lifecycle("AAB re-signed successfully with clean v1 signatures")
+
+                    // Import the self-signed release cert into the JVM trust store so
+                    // `jarsigner -verify -strict` can build a valid certification path.
+                    // Without this, strict verification fails with PKIX path building
+                    // error on self-signed certs (exit code 4).
+                    def javaHome = System.getenv('JAVA_HOME') ?: System.getProperty('java.home')
+                    def cacerts = new File(javaHome, 'lib/security/cacerts')
+                    if (!cacerts.exists()) {
+                        cacerts = new File(javaHome, 'security/cacerts')
+                    }
+                    if (cacerts.exists()) {
+                        def certFile = new File(aab.parentFile, 'ivx-release.cert')
+                        exec {
+                            commandLine 'keytool', '-exportcert',
+                                '-keystore', keystorePath,
+                                '-storepass', storePass,
+                                '-alias', alias,
+                                '-file', certFile.absolutePath,
+                                '-rfc'
+                        }
+                        exec {
+                            commandLine 'keytool', '-importcert',
+                                '-noprompt',
+                                '-keystore', cacerts.absolutePath,
+                                '-storepass', 'changeit',
+                                '-alias', 'ivx-release-cert',
+                                '-file', certFile.absolutePath
+                            ignoreExitValue = true
+                        }
+                        certFile.delete()
+                        logger.lifecycle("Release cert imported into JVM trust store: ${cacerts.absolutePath}")
+                    }
                 }
             }
         }
