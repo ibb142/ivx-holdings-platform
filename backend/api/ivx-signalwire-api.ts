@@ -2,8 +2,8 @@
  * IVX SignalWire API
  *
  * HTTP endpoints for autonomous SMS and voice calls through SignalWire.
- * Voice calls are fully CONVERSATIONAL — the caller can ask questions and
- * the IVX AI brain answers in real-time, looping until the caller hangs up.
+ * Voice calls use the ChatGPT-level Smart Voice Brain — with conversation
+ * memory, context awareness, and follow-up question handling.
  *
  *   GET  /api/ivx/signalwire/status       — service health + capabilities
  *   POST /api/ivx/signalwire/sms           — send an SMS message
@@ -11,9 +11,10 @@
  *   POST /api/ivx/signalwire/voice         — make a voice call
  *   GET  /api/ivx/signalwire/voice         — list recent voice calls
  *   POST /api/ivx/signalwire/voice/laml    — LaML webhook (greeting + Gather)
- *   POST /api/ivx/signalwire/voice/respond  — Conversational AI response (Gather result)
+ *   POST /api/ivx/signalwire/voice/respond  — Smart AI response (with conversation memory)
  *   POST /api/ivx/signalwire/verify        — end-to-end cert: SMS + voice
- *   POST /api/ivx/signalwire/conversational — start a conversational voice call
+ *   POST /api/ivx/signalwire/conversational — start a smart conversational voice call
+ *   GET  /api/ivx/signalwire/voice/brain    — Smart Voice Brain status + active conversations
  */
 import {
   sendSMS,
@@ -25,9 +26,15 @@ import {
   buildVoiceLaML,
   buildConversationalLaML,
   buildConversationResponseLaML,
-  answerVoiceQuestion,
   IVX_SIGNALWIRE_MARKER,
 } from '../services/ivx-signalwire-service';
+import {
+  answerSmartVoiceQuestion,
+  getVoiceBrainStatus,
+  getConversationSummary,
+  endSession,
+  IVX_VOICE_BRAIN_MARKER,
+} from '../services/ivx-voice-brain';
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -194,14 +201,33 @@ export function handleSignalWireVoiceLaML(req: Request): Response {
 }
 
 /**
+ * GET /api/ivx/signalwire/voice/brain
+ *
+ * Smart Voice Brain status — shows active conversations, total turns,
+ * and conversation summaries for debugging/monitoring.
+ */
+export function handleVoiceBrainStatus(): Response {
+  const brainStatus = getVoiceBrainStatus();
+  return json({
+    ok: true,
+    ...brainStatus,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+/**
  * POST /api/ivx/signalwire/voice/respond
  *
  * SignalWire posts the speech recognition result here after the caller speaks.
- * We pass the caller's question to the IVX AI brain, get an answer, and return
- * LaML that says the answer then loops back to Gather for the next question.
+ * We pass the caller's question to the IVX Smart Voice Brain, which:
+ *   1. Looks up the conversation history for this CallSid
+ *   2. Passes prior Q&A turns as context to GPT-4o
+ *   3. Gets a context-aware, ChatGPT-level answer
+ *   4. Records the new turn in the conversation memory
+ *   5. Returns LaML that says the answer then loops back to Gather
  *
- * This is the CONVERSATIONAL LOOP:
- *   Caller speaks → SignalWire transcribes → AI brain answers → Say + Gather again
+ * This is the SMART CONVERSATIONAL LOOP:
+ *   Caller speaks → SignalWire transcribes → Smart Brain (with memory) → Say + Gather again
  */
 export async function handleSignalWireVoiceRespond(req: Request): Promise<Response> {
   const body = await parseBody(req);
@@ -221,10 +247,10 @@ export async function handleSignalWireVoiceRespond(req: Request): Promise<Respon
     return xml(laMl);
   }
 
-  // Send the question to the IVX AI brain
-  const result = await answerVoiceQuestion(question, { callSid, loopCount });
+  // Send the question to the IVX Smart Voice Brain (with conversation memory)
+  const result = await answerSmartVoiceQuestion(question, { callSid, loopCount });
 
-  console.log(`[IVX SignalWire] AI response — ok: ${result.ok}, answer: "${result.answer.substring(0, 100)}"`);
+  console.log(`[IVX SignalWire] Smart AI response — ok: ${result.ok}, turn: ${result.turnCount}, hadContext: ${result.hadContext}, topic: ${result.topicDetected || 'none'}, answer: "${result.answer.substring(0, 100)}"`);
 
   const laMl = buildConversationResponseLaML({
     aiResponse: result.answer,
