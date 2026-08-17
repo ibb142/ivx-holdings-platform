@@ -175,7 +175,7 @@ async function transcribeWithGateway(file: File): Promise<TranscriptionCoreResul
   if (!apiKey) throw new Error('IVX AI Gateway key is not configured.');
 
   const model = readTrimmed(process.env.IVX_GATEWAY_STT_MODEL) || 'xai/grok-stt';
-  const endpoint = `${VERCEL_AI_GATEWAY_BASE}/v4/ai/transcription-model`;
+  const endpoint = 'https://ai-gateway.vercel.sh/v4/ai/transcription-model';
 
   // Read file as base64
   const arrayBuffer = await file.arrayBuffer();
