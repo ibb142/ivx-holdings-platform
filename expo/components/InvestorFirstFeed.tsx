@@ -4,30 +4,23 @@
  * page and iOS app):
  *
  *   Deal 1 (InvestmentCard) → Deal 2 (InvestmentCard) → Deal 3 (InvestmentCard)
- *   → 1 Featured Project Video (CanonicalInvestmentReelCard) → repeat.
+ *   → 1 Featured Project Video (poster-only preview) → repeat.
  *
  * Deal blocks render as compact InvestmentCard (carousel + metrics + CTAs).
- * Video blocks render as CanonicalInvestmentReelCard (full-bleed reel).
+ * Video blocks render without a native player; tapping opens the Reels route.
  * No deal is ever rendered as a reel — explicit display_type mapping.
  */
 import React, { Component, useCallback, useMemo, type ReactNode } from 'react';
-import {View, Text, StyleSheet, useWindowDimensions } from "react-native";
-import { Share } from 'react-native';
+import { Image, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Landmark, Sparkles, TrendingUp } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import InvestmentCard, { type InvestmentCardData } from '@/components/InvestmentCard';
-import CanonicalInvestmentReelCard, {
-  feedVideoToReelData,
-  homeFeedDealToReelData,
-  parsedDealToReelData,
-  type CanonicalReelData} from '@/components/CanonicalInvestmentReelCard';
-import { fetchHomeFeed, type HomeFeedBlock, type HomeFeedDeal } from '@/lib/video-feed';
-import type { ParsedJVDeal } from '@/lib/parse-deal';
+import { fetchHomeFeed, type HomeFeedBlock, type HomeFeedDeal } from '@/lib/home-feed';
 import type { JVAgreement } from '@/types/jv';
 import { trackProjectShare } from '@/lib/project-engagement';
-import { toggleVideoLike, toggleVideoSave, getViewerId, buildVideoShareUrl } from '@/lib/video-platform';
+import { toggleVideoLike, toggleVideoSave, getViewerId } from '@/lib/video-platform';
 import { resolveDealPhotos } from '@/lib/parse-deal';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
@@ -106,13 +99,7 @@ export default function InvestorFirstFeed({ jvDeals, jvDealsLoading, isXs, cardW
   openQuickBuy: (deal: JVAgreement) => void;
 }) {
   const router = useRouter();
-  const { width: screenWidth } = useWindowDimensions();
-  const [muted, setMuted] = React.useState<boolean>(true);
   const padH = isXs ? 16 : 20;
-  // Owner-approved Home preview card: compact, capped at 520px height.
-  // The full-screen 9:16 experience lives in the Reels module (videos.tsx),
-  // NOT on the Home dashboard.
-  const feedHeight = Math.min(screenWidth - padH * 2, 520);
 
   const homeFeedQuery = useQuery({
     queryKey: ['ivx-home-feed'],
@@ -181,30 +168,6 @@ export default function InvestorFirstFeed({ jvDeals, jvDealsLoading, isXs, cardW
     router.push({ pathname: '/videos', params: { type: 'reel', focus: `deal-${data.dealId}` } } as any);
   }, [router]);
 
-  // ReelCard callbacks
-  const handleReelLike = useCallback(async (data: CanonicalReelData) => {
-    const id = data.dealId ?? data.reelId;
-    const viewerId = await getViewerId().catch(() => null);
-    void toggleVideoLike(id, viewerId).catch(() => {});
-  }, []);
-
-  const handleReelSave = useCallback(async (data: CanonicalReelData) => {
-    const viewerId = await getViewerId().catch(() => null);
-    void toggleVideoSave(data.reelId, viewerId).catch(() => {});
-  }, []);
-
-  const handleReelShare = useCallback(async (data: CanonicalReelData) => {
-    const url = data.dealUrl ?? buildVideoShareUrl(data.reelId);
-    try {
-      await Share.share({ message: `${data.title} — ${url}` });
-      void trackProjectShare(data.reelId, 'social', null);
-    } catch {}
-  }, []);
-
-  const handleReelComment = useCallback((data: CanonicalReelData) => {
-    router.push({ pathname: '/videos', params: { type: 'reel', focus: data.reelId } } as any);
-  }, [router]);
-
   const isLoading = (homeFeedQuery.isLoading && jvDealsLoading) || (homeFeedQuery.isLoading && blocks.length === 0);
 
   return (
@@ -233,28 +196,31 @@ export default function InvestorFirstFeed({ jvDeals, jvDealsLoading, isXs, cardW
         </View>
       ) : (
         <View style={{ paddingHorizontal: padH, gap: 14, alignItems: 'center' }}>
-          {blocks.map((block, idx) => {
-            // VIDEO block → CanonicalInvestmentReelCard (reel)
+          {blocks.map((block) => {
+            // Home must never initialize expo-av/ExoPlayer. On affected Samsung
+            // devices, mounting the native player while the Home route starts can
+            // terminate the activity before a React error boundary can paint.
+            // Render a poster-only preview and initialize video only in /videos.
             if (block.type === 'video') {
-              const reelData = feedVideoToReelData(block.video);
+              const poster = block.video.poster_url ?? block.video.thumbnail_url ?? block.video.cover_url ?? null;
+              const title = block.video.title ?? block.video.deal?.title ?? 'IVX Project Update';
               return (
                 <CardBoundary key={`video-${block.video.id}`}>
-                  <CanonicalInvestmentReelCard
-                    data={reelData}
-                    mode="feed"
-                    isActive={false}
-                    shouldMountVideo={false}
-                    isMuted={muted}
-                    feedHeight={feedHeight}
-                    onToggleMute={() => setMuted(m => !m)}
-                    onLike={handleReelLike}
-                    onComment={handleReelComment}
-                    onSave={handleReelSave}
-                    onShare={handleReelShare}
-                    onOpenDeal={(d) => goToDeal(d.dealId ?? d.reelId)}
-                    onInvest={(d) => goToDeal(d.dealId ?? d.reelId)}
-                    testIDPrefix="home-reel"
-                  />
+                  <TouchableOpacity
+                    style={styles.videoPreview}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open project video: ${title}`}
+                    testID={`home-video-preview-${block.video.id}`}
+                    onPress={() => router.push({ pathname: '/videos', params: { type: 'reel', focus: block.video.id } } as any)}
+                  >
+                    {poster ? <Image source={{ uri: poster }} style={styles.videoPoster} resizeMode="cover" /> : null}
+                    <View style={styles.videoOverlay}>
+                      <View style={styles.playButton}><Text style={styles.playIcon}>▶</Text></View>
+                      <Text style={styles.videoTitle} numberOfLines={2}>{title}</Text>
+                      <Text style={styles.videoHint}>Tap to open Project Reels</Text>
+                    </View>
+                  </TouchableOpacity>
                 </CardBoundary>
               );
             }
@@ -335,5 +301,42 @@ const styles = StyleSheet.create({
     marginTop: 10},
   emptySubtitle: {
     color: Colors.textTertiary,
+    fontSize: 12,
+    marginTop: 4},
+  videoPreview: {
+    width: '100%',
+    minHeight: 220,
+    overflow: 'hidden',
+    borderRadius: 18,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.surfaceBorder},
+  videoPoster: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%'},
+  videoOverlay: {
+    minHeight: 220,
+    justifyContent: 'flex-end',
+    padding: 18,
+    backgroundColor: 'rgba(0,0,0,0.48)'},
+  playButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primary,
+    marginBottom: 12},
+  playIcon: {
+    color: '#000000',
+    fontSize: 18,
+    marginLeft: 2},
+  videoTitle: {
+    color: Colors.text,
+    fontSize: 17,
+    fontWeight: '800' as const},
+  videoHint: {
+    color: Colors.textSecondary,
     fontSize: 12,
     marginTop: 4}});

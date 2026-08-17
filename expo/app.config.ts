@@ -18,13 +18,13 @@ const config: ExpoConfig = {
   name: 'IVX Holdings',
   slug: 'ivx-holdings',
   owner: 'ivx-holdings',
-  version: "1.10.14",
+  version: "1.10.15",
   runtimeVersion: {
     policy: 'appVersion',
   },
   extra: {
-    buildMarker: 'IVX_BUNDLE_2026_08_17_V11014_CHAT_ROUTE_RECOVERY',
-    buildTimestamp: "2026-08-17T13:45:00.000000+00:00",
+    buildMarker: 'IVX_BUNDLE_2026_08_17_V11015_HOME_NATIVE_VIDEO_ISOLATION',
+    buildTimestamp: "2026-08-17T17:20:00.000000+00:00",
     sourceCommitSha: _sourceCommitSha,
     watchdogPatchVersion: 'ai-mutation-watchdog-fix-v12-enterprise-verify',
     frontendDeployMarker: 'ivx-frontend-2026-07-15-enterprise-verification',
@@ -38,10 +38,10 @@ const config: ExpoConfig = {
   scheme: 'ivx-app',
   userInterfaceStyle: 'dark',
   backgroundColor: '#000000',
-  // react-native-maps 1.26.1+ targets Fabric with React Native >=0.81.1.
-  // This project uses RN 0.81.5 / react-native-maps 1.29, so compiling the
-  // generated RNMaps*.mm components under the legacy architecture is invalid.
-  newArchEnabled: true,
+  // Match the committed Android native project. Keeping the legacy architecture
+  // avoids re-enabling Fabric during a future prebuild on devices where native
+  // media startup has been unstable.
+  newArchEnabled: false,
   updates: {
     enabled: false,
     checkAutomatically: 'NEVER',
@@ -63,7 +63,7 @@ const config: ExpoConfig = {
       backgroundColor: '#000000',
     },
     package: 'com.ivxholdings.app',
-    versionCode: 111,
+    versionCode: 112,
     softwareKeyboardLayoutMode: 'resize',
   },
   web: {

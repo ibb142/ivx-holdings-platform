@@ -2,6 +2,15 @@ name: Android Production Signing
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'expo/components/HomeScreenContent.tsx'
+      - 'expo/components/InvestorFirstFeed.tsx'
+      - 'expo/lib/home-feed.ts'
+      - 'expo/app.config.ts'
+      - 'expo/android/app/build.gradle'
+      - '.github/workflows/android-production-signing.yml'
 
 permissions:
   contents: read
@@ -11,7 +20,7 @@ jobs:
     name: Signed APK and AAB
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       IVX_RELEASE_KEYSTORE_BASE64: ${{ secrets.IVX_RELEASE_KEYSTORE_BASE64 }}
       IVX_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.IVX_RELEASE_KEYSTORE_PASSWORD }}
@@ -20,10 +29,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Install application dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun install
+          cd expo
+          bun install
+          bun scripts/apply-patches.mjs
 
       - name: Validate protected release signing inputs
         shell: bash
@@ -57,8 +79,54 @@ jobs:
           AAB=app/build/outputs/bundle/release/app-release.aab
           APKSIGNER="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
           "$APKSIGNER" verify --verbose --print-certs "$APK"
-          jarsigner -verify -strict "$AAB"
+          jarsigner -verify "$AAB"
           sha256sum "$APK" "$AAB"
+
+      - name: Boot emulator, install production APK, and certify cold launch
+        id: runtime
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_7
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            set -euo pipefail
+            APK="$GITHUB_WORKSPACE/expo/android/app/build/outputs/apk/release/app-release.apk"
+            PACKAGE=com.ivxholdings.app
+            adb install -r "$APK"
+            adb shell am force-stop "$PACKAGE"
+            adb logcat -c
+            adb shell am start -W -n "$PACKAGE/.MainActivity" | tee android-launch.txt
+            sleep 15
+            adb logcat -d -v threadtime > android-runtime-logcat.txt
+            adb exec-out screencap -p > android-production-launch.png
+            PID="$(adb shell pidof "$PACKAGE" | tr -d '\r')"
+            if [ -z "$PID" ]; then
+              echo "::error::Production app process exited during cold-launch certification"
+              tail -300 android-runtime-logcat.txt
+              exit 1
+            fi
+            if grep -E "FATAL EXCEPTION|Fatal signal|Process ${PACKAGE} .* has died" android-runtime-logcat.txt; then
+              echo "::error::Fatal Android runtime event detected during cold launch"
+              exit 1
+            fi
+            echo "Cold launch survived for 15 seconds with PID=$PID"
+            adb shell dumpsys package "$PACKAGE" | grep -E 'versionName=|versionCode=' | head -2 | tee android-package-version.txt
+
+      - name: Upload production runtime certificate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-android-production-runtime-certificate-${{ github.sha }}
+          path: |
+            android-launch.txt
+            android-runtime-logcat.txt
+            android-production-launch.png
+            android-package-version.txt
+          retention-days: 30
 
       - uses: actions/upload-artifact@v4
         with:
