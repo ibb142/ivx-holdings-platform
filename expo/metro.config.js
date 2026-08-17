@@ -1,8 +1,6 @@
 const { getDefaultConfig } = require("expo/metro-config");
-const { withRorkMetro } = require("@rork-ai/toolkit-sdk/metro");
 
 let config = getDefaultConfig(__dirname);
-config = withRorkMetro(config);
 
 // Disable Watchman in sandbox/CI — it triggers "priority fatal error"
 // and the bundler falls back to Node fs watching, which is stable here.
