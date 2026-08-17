@@ -143,6 +143,34 @@ android {
         }
     }
 
+    // After building the release AAB, re-sign with jarsigner to add v1 (JAR)
+    // signatures on all entries. The AGP signs AABs with v2/v3 scheme only;
+    // `jarsigner -verify -strict` requires v1 per-entry signatures to pass.
+    tasks.matching { it.name == 'bundleRelease' }.configureEach {
+        doLast {
+            def aab = layout.buildDirectory.file("outputs/bundle/release/app-release.aab").get().asFile
+            if (aab.exists()) {
+                def keystorePath = System.getenv('IVX_RELEASE_KEYSTORE_PATH')
+                def storePass = System.getenv('IVX_RELEASE_KEYSTORE_PASSWORD')
+                def alias = System.getenv('IVX_RELEASE_KEY_ALIAS')
+                def keyPass = System.getenv('IVX_RELEASE_KEY_PASSWORD')
+                if (keystorePath && storePass && alias && keyPass) {
+                    logger.lifecycle("Re-signing AAB with jarsigner for strict verification")
+                    exec {
+                        commandLine 'jarsigner', '-keystore', keystorePath,
+                            '-storepass', storePass,
+                            '-keypass', keyPass,
+                            '-sigalg', 'SHA256withRSA',
+                            '-digestalg', 'SHA-256',
+                            aab.absolutePath,
+                            alias
+                    }
+                    logger.lifecycle("AAB re-signed successfully")
+                }
+            }
+        }
+    }
+
     gradle.taskGraph.whenReady {
         // Inspect requested tasks rather than all resolved tasks: a QA variant initialized
         // from release can resolve release-named helper tasks without producing a release artifact.
