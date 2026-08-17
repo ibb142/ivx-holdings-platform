@@ -5,6 +5,7 @@ import com.ivxholdings.app.data.repository.IVXRepository
 import com.ivxholdings.app.ui.viewmodel.AIEngineeringViewModel
 import com.ivxholdings.app.ui.viewmodel.AgentsViewModel
 import com.ivxholdings.app.ui.viewmodel.AnalyticsViewModel
+import com.ivxholdings.app.ui.viewmodel.AutonomousDashboardViewModel
 import com.ivxholdings.app.ui.viewmodel.AuthViewModel
 import com.ivxholdings.app.ui.viewmodel.BuyersViewModel
 import com.ivxholdings.app.ui.viewmodel.ChatViewModel
@@ -42,4 +43,5 @@ val appModule = module {
     viewModel { ProfileViewModel(get()) }
     viewModel { OwnerDashboardViewModel(get()) }
     viewModel { AIEngineeringViewModel(get()) }
+    viewModel { AutonomousDashboardViewModel() }
 }
