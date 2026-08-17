@@ -8,10 +8,19 @@ import {
   resolveIVXSupabaseUrl,
 } from '../../expo/shared/ivx/access-control';
 
-export const IVX_SIGNALWIRE_VOICE_MARKER = 'ivx-signalwire-voice-2026-08-16-live-cert-v2';
+export const IVX_SIGNALWIRE_VOICE_MARKER = 'ivx-signalwire-voice-2026-08-16-live-cert-v3';
 
 const CALL_LEDGER_PATH = path.join(process.cwd(), 'logs', 'audit', 'autonomous-voice', 'calls.json');
 const API_BASE = (process.env.IVX_PUBLIC_API_BASE_URL || process.env.IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
+
+/** Resolve Twilio credentials from any of the known env var naming patterns. */
+function getTwilioConfig(): { accountSid: string; authToken: string; fromNumber: string | null } | null {
+  const accountSid = trim(process.env.IVX_TWILIO_ACCOUNT_SID || process.env.TWILIO_ACCOUNT_SID || '');
+  const authToken = trim(process.env.IVX_TWILIO_AUTH_TOKEN || process.env.TWILIO_AUTH_TOKEN || '');
+  const fromNumber = normalizePhoneToE164(trim(process.env.IVX_TWILIO_FROM_PHONE || process.env.TWILIO_FROM_PHONE || process.env.TWILIO_FROM_NUMBER || '')) || null;
+  if (!accountSid || !authToken) return null;
+  return { accountSid, authToken, fromNumber };
+}
 
 type SignalWireConfig = {
   projectId: string;
@@ -57,14 +66,17 @@ export function getSignalWireVoiceStatus(): {
   spaceConfigured: boolean;
   fromNumberConfigured: boolean;
   ownerPhoneConfigured: boolean;
+  twilioConfigured: boolean;
 } {
+  const twilio = getTwilioConfig();
   return {
-    configured: Boolean(getSignalWireVoiceConfig()),
-    projectConfigured: Boolean(trim(process.env.SIGNALWIRE_PROJECT_ID || process.env.SIGNALWIRE_PROJECT_KEY)),
-    tokenConfigured: Boolean(trim(process.env.SIGNALWIRE_API_TOKEN || process.env.SIGNALWIRE_TOKEN)),
-    spaceConfigured: Boolean(trim(process.env.SIGNALWIRE_SPACE_URL || process.env.SIGNALWIRE_SPACE)),
-    fromNumberConfigured: Boolean(trim(process.env.SIGNALWIRE_FROM_NUMBER)),
+    configured: Boolean(getSignalWireVoiceConfig()) || Boolean(twilio),
+    projectConfigured: Boolean(trim(process.env.SIGNALWIRE_PROJECT_ID || process.env.SIGNALWIRE_PROJECT_KEY)) || Boolean(twilio?.accountSid),
+    tokenConfigured: Boolean(trim(process.env.SIGNALWIRE_API_TOKEN || process.env.SIGNALWIRE_TOKEN)) || Boolean(twilio?.authToken),
+    spaceConfigured: Boolean(trim(process.env.SIGNALWIRE_SPACE_URL || process.env.SIGNALWIRE_SPACE)) || Boolean(twilio?.accountSid),
+    fromNumberConfigured: Boolean(trim(process.env.SIGNALWIRE_FROM_NUMBER)) || Boolean(twilio?.fromNumber),
     ownerPhoneConfigured: Boolean(resolveOwnerRecoveryPhone()),
+    twilioConfigured: Boolean(twilio),
   };
 }
 
@@ -207,6 +219,7 @@ export async function recordAutonomousVoiceCallback(input: { traceId: string; pr
 
 export async function placeAutonomousVoiceCall(input: { traceId: string; message: string; to?: string | null }): Promise<AutonomousVoiceCallRecord> {
   const config = getSignalWireVoiceConfig();
+  const twilio = getTwilioConfig();
   const to = await resolveAutonomousOwnerPhone(input.to);
   const createdAt = new Date().toISOString();
   const id = `voice-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -228,16 +241,25 @@ export async function placeAutonomousVoiceCall(input: { traceId: string; message
     return record;
   };
 
-  if (!config) return fail('SignalWire voice credentials are not bound to runtime variables.');
+  if (!config && !twilio) return fail('No voice provider credentials (SignalWire or Twilio) are bound to runtime variables.');
   if (!to) return fail('Owner phone could not be resolved from explicit target, protected runtime config, or allowlisted owner profile.');
 
-  const from = await discoverVoiceFromNumber(config).catch(() => null);
-  if (!from) return fail('No SignalWire voice-capable From number could be resolved.');
+  // ── Try Twilio first if SignalWire is not configured ──
+  if (!config && twilio) {
+    return placeTwilioVoiceCall(twilio, to, input, id, createdAt, fail);
+  }
 
-  const sig = signVoiceTrace(input.traceId, config.apiToken);
+  // ── SignalWire path ──
+  const from = await discoverVoiceFromNumber(config!).catch(() => null);
+  if (!from) {
+    if (twilio) return placeTwilioVoiceCall(twilio, to, input, id, createdAt, fail);
+    return fail('No SignalWire voice-capable From number could be resolved.');
+  }
+
+  const sig = signVoiceTrace(input.traceId, config!.apiToken);
   const voiceUrl = `${API_BASE}/api/ivx/autonomous/voice/laml?traceId=${encodeURIComponent(input.traceId)}&sig=${encodeURIComponent(sig)}&message=${encodeURIComponent(input.message.slice(0, 900))}`;
   const statusUrl = `${API_BASE}/api/ivx/autonomous/voice/status?traceId=${encodeURIComponent(input.traceId)}&sig=${encodeURIComponent(sig)}`;
-  const endpoint = `https://${config.spaceUrl}/api/laml/2010-04-01/Accounts/${encodeURIComponent(config.projectId)}/Calls.json`;
+  const endpoint = `https://${config!.spaceUrl}/api/laml/2010-04-01/Accounts/${encodeURIComponent(config!.projectId)}/Calls.json`;
   const form = new URLSearchParams();
   form.set('To', to);
   form.set('From', from);
@@ -249,14 +271,17 @@ export async function placeAutonomousVoiceCall(input: { traceId: string; message
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: { Authorization: basicAuth(config), 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      headers: { Authorization: basicAuth(config!), 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
       body: form.toString(),
       signal: AbortSignal.timeout(15_000),
     });
     const body = await response.text();
     let json: Record<string, unknown> = {};
     try { json = JSON.parse(body) as Record<string, unknown>; } catch { /* keep empty */ }
-    if (!response.ok) return fail(`SignalWire create call HTTP ${response.status}: ${body.slice(0, 180)}`);
+    if (!response.ok) {
+      if (twilio) return placeTwilioVoiceCall(twilio, to, input, id, createdAt, fail);
+      return fail(`SignalWire create call HTTP ${response.status}: ${body.slice(0, 180)}`);
+    }
 
     const record: AutonomousVoiceCallRecord = {
       id,
@@ -273,6 +298,66 @@ export async function placeAutonomousVoiceCall(input: { traceId: string; message
     await appendCallRecord(record).catch(() => undefined);
     return record;
   } catch (error) {
+    if (twilio) return placeTwilioVoiceCall(twilio, to, input, id, createdAt, fail);
     return fail(error instanceof Error ? error.message : 'SignalWire create call failed');
+  }
+}
+
+/**
+ * Place a voice call via Twilio Programmable Voice.
+ * Uses the IVX LAML endpoint for the voice message and status callbacks.
+ */
+async function placeTwilioVoiceCall(
+  twilio: { accountSid: string; authToken: string; fromNumber: string | null },
+  to: string,
+  input: { traceId: string; message: string },
+  id: string,
+  createdAt: string,
+  fail: (error: string) => Promise<AutonomousVoiceCallRecord>,
+): Promise<AutonomousVoiceCallRecord> {
+  const from = twilio.fromNumber;
+  if (!from) return fail('Twilio is configured but no from-number is bound (IVX_TWILIO_FROM_PHONE / TWILIO_FROM_PHONE).');
+
+  const sig = signVoiceTrace(input.traceId, twilio.authToken);
+  const voiceUrl = `${API_BASE}/api/ivx/autonomous/voice/laml?traceId=${encodeURIComponent(input.traceId)}&sig=${encodeURIComponent(sig)}&message=${encodeURIComponent(input.message.slice(0, 900))}`;
+  const statusUrl = `${API_BASE}/api/ivx/autonomous/voice/status?traceId=${encodeURIComponent(input.traceId)}&sig=${encodeURIComponent(sig)}`;
+  const endpoint = `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(twilio.accountSid)}/Calls.json`;
+  const auth = Buffer.from(`${twilio.accountSid}:${twilio.authToken}`).toString('base64');
+  const form = new URLSearchParams();
+  form.set('To', to);
+  form.set('From', from);
+  form.set('Url', voiceUrl);
+  form.set('Method', 'POST');
+  form.set('StatusCallback', statusUrl);
+  form.set('StatusCallbackMethod', 'POST');
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      body: form.toString(),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const body = await response.text();
+    let json: Record<string, unknown> = {};
+    try { json = JSON.parse(body) as Record<string, unknown>; } catch { /* keep empty */ }
+    if (!response.ok) return fail(`Twilio create call HTTP ${response.status}: ${body.slice(0, 180)}`);
+
+    const record: AutonomousVoiceCallRecord = {
+      id,
+      traceId: input.traceId,
+      toMasked: maskPhone(to) || '***',
+      fromMasked: maskPhone(from),
+      callSid: trim(json.sid) || null,
+      providerStatus: trim(json.status) || 'queued',
+      requestStatus: 'queued',
+      error: null,
+      createdAt,
+      callbackAt: null,
+    };
+    await appendCallRecord(record).catch(() => undefined);
+    return record;
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : 'Twilio create call failed');
   }
 }

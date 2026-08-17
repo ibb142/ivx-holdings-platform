@@ -230,6 +230,16 @@ function derivePriority(n: number): OrchestratorPriority {
   return 'medium';
 }
 
+/**
+ * Assign division based on agent role:
+ * - Division A (Core Operations): Executive, Growth, Market, Intelligence, Networks (1-55)
+ * - Division B (Innovation & Expansion): Digital/Tech, Global, New App/Project/Product Dev (56-112)
+ * This produces a 55/57 split — both divisions substantial and balanced.
+ */
+function deriveDivision(agentNumber: number): DivisionId {
+  return agentNumber <= 55 ? 'A' : 'B';
+}
+
 function deriveRiskLevel(def: AgentDef): AgentRiskLevel {
   if (def.n === 11) return 'high';
   if (def.escalates && /capital|legal|regulated|production|financial/i.test(def.escalates)) return 'high';
@@ -244,12 +254,13 @@ function makeAgentFromDef(def: AgentDef): EnterpriseMasterAgent {
   const canModifyIVX = def.n <= 12;
   const buildsNewProducts = def.n >= 63;
   const destructiveActions: string[] = def.escalates ? [def.escalates] : [];
+  const division = deriveDivision(def.n);
   return {
     id: `ivx_holdings_${def.n}`,
     agentNumber: def.n,
     name: def.name,
     role: def.mission,
-    division: 'A' as DivisionId,
+    division,
     company: 'ivx_holdings' as CompanyId,
     responsibilities: [def.inputs, def.actions, def.outputs],
     capabilities: def.actions.split(/,\s*|\s*\/\s*/).filter(Boolean),
