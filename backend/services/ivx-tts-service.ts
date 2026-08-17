@@ -1,22 +1,18 @@
 /**
- * IVX Text-to-Speech (TTS) Service — v1.1.0
+ * IVX Text-to-Speech (TTS) Service — v1.2.0
  *
- * Generates voice messages from text using the Rork Toolkit proxy which routes
- * to the Vercel AI Gateway speech-model endpoint. Supports xAI grok-tts (primary)
- * and OpenAI tts-1 (fallback). The audio is returned as base64 MP3 so the caller
- * can stream it, store it, or send it as a voice message reply.
+ * Generates voice messages from text using the Vercel AI Gateway speech endpoint.
+ * Supports three provider paths:
+ *   1. Rork Toolkit proxy → /v2/vercel/v4/ai/speech-model (if Toolkit env vars set)
+ *   2. Direct Vercel AI Gateway → /v4/ai/speech-model (if vck_ key present)
+ *   3. OpenAI direct API → /v1/audio/speech (if sk- key present)
  *
- * Provider routing:
- *   Primary:  Rork Toolkit proxy → /v2/vercel/v4/ai/speech-model (xai/grok-tts)
- *   Fallback: OpenAI direct API → /v1/audio/speech (tts-1) if an sk- key is present
- *
- * If no TTS key is configured, the service degrades honestly — returns
- * `{ ok: false, error: 'TTS not configured' }` instead of throwing.
+ * If no TTS key is configured, the service degrades honestly.
  */
 
-import { autoDetectGatewayBaseUrl, getIVXApiKey, detectIVXProviderType, OPENAI_DIRECT_BASE } from './ivx-provider-autodetect';
+import { VERCEL_AI_GATEWAY_BASE, autoDetectGatewayBaseUrl, getIVXApiKey, detectIVXProviderType, OPENAI_DIRECT_BASE } from './ivx-provider-autodetect';
 
-export const IVX_TTS_SERVICE_MARKER = 'ivx-tts-service-v1.1.0-2026-08-17';
+export const IVX_TTS_SERVICE_MARKER = 'ivx-tts-service-v1.2.0-2026-08-17';
 
 /** Voices for xAI grok-tts (primary via Gateway) */
 export type GrokTTSVoice = 'eve' | 'ara' | 'rex' | 'sal' | 'leo';
@@ -75,6 +71,12 @@ function isOpenAITTSAvailable(): boolean {
   return Boolean(key && key.startsWith('sk-'));
 }
 
+/** Check if direct Vercel AI Gateway TTS is available (vck_ key). */
+function isGatewayTTSAvailable(): boolean {
+  const key = getIVXApiKey();
+  return Boolean(key && key.startsWith('vck_'));
+}
+
 /** Resolve the TTS model based on provider. */
 function getTTSModel(): string {
   if (isToolkitTTSAvailable()) {
@@ -83,22 +85,31 @@ function getTTSModel(): string {
   return readTrimmed(process.env.IVX_TTS_MODEL) || 'tts-1';
 }
 
-/** Check if TTS is configured (either Toolkit proxy or OpenAI direct). */
+/** Check if TTS is configured (any provider available). */
 export function isTTSConfigured(): boolean {
-  return isToolkitTTSAvailable() || isOpenAITTSAvailable();
+  return isToolkitTTSAvailable() || isGatewayTTSAvailable() || isOpenAITTSAvailable();
 }
 
 /** Get TTS service status for health endpoints. */
 export function getTTSStatus(): TTSStatus {
   const toolkitAvailable = isToolkitTTSAvailable();
+  const gatewayAvailable = isGatewayTTSAvailable();
   const openaiAvailable = isOpenAITTSAvailable();
-  const provider: TTSStatus['provider'] = toolkitAvailable ? 'rork_gateway' : openaiAvailable ? 'openai_direct' : 'none';
+  const provider: TTSStatus['provider'] = toolkitAvailable
+    ? 'rork_gateway'
+    : gatewayAvailable
+      ? 'rork_gateway'
+      : openaiAvailable
+        ? 'openai_direct'
+        : 'none';
   const model = getTTSModel();
-  const voices = toolkitAvailable ? GROK_VOICES : openaiAvailable ? OPENAI_VOICES : [...GROK_VOICES, ...OPENAI_VOICES];
+  const voices = (toolkitAvailable || gatewayAvailable) ? GROK_VOICES : openaiAvailable ? OPENAI_VOICES : [...GROK_VOICES, ...OPENAI_VOICES];
 
   let endpoint: string | null = null;
   if (toolkitAvailable) {
     endpoint = `${getToolkitUrl()}/v2/vercel/v4/ai/speech-model`;
+  } else if (gatewayAvailable) {
+    endpoint = `${VERCEL_AI_GATEWAY_BASE}/v4/ai/speech-model`;
   } else if (openaiAvailable) {
     endpoint = `${OPENAI_DIRECT_BASE}/audio/speech`;
   }
@@ -110,7 +121,7 @@ export function getTTSStatus(): TTSStatus {
     voices,
     endpoint,
     marker: IVX_TTS_SERVICE_MARKER,
-    version: '1.1.0',
+    version: '1.2.0',
   };
 }
 
@@ -196,6 +207,101 @@ async function synthesizeWithToolkit(
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error('[IVX TTS] Toolkit synthesis error:', errorMsg);
+    return {
+      ok: false,
+      audioBase64: null,
+      audioBytes: null,
+      format: 'mp3',
+      voice,
+      model,
+      provider: 'rork_gateway',
+      durationMs: Date.now() - start,
+      error: errorMsg,
+    };
+  }
+}
+
+/**
+ * Synthesize text to speech via direct Vercel AI Gateway (vck_ key).
+ * Uses xai/grok-tts with the /v4/ai/speech-model endpoint.
+ */
+async function synthesizeWithGateway(
+  text: string,
+  voice: string,
+): Promise<TTSResult> {
+  const start = Date.now();
+  const apiKey = getIVXApiKey();
+  const model = getTTSModel();
+  const endpoint = `${VERCEL_AI_GATEWAY_BASE}/v4/ai/speech-model`;
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'ai-model-id': model,
+        'ai-gateway-protocol-version': '0.0.1',
+      },
+      body: JSON.stringify({
+        text,
+        voice,
+        outputFormat: 'mp3',
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      const errorMsg = `Gateway TTS returned HTTP ${response.status}: ${errText.slice(0, 300)}`;
+      console.error('[IVX TTS]', errorMsg);
+      return {
+        ok: false,
+        audioBase64: null,
+        audioBytes: null,
+        format: 'mp3',
+        voice,
+        model,
+        provider: 'rork_gateway',
+        durationMs: Date.now() - start,
+        error: errorMsg,
+      };
+    }
+
+    const body = await response.json() as Record<string, unknown>;
+    const audioBase64 = readTrimmed(body.audio);
+
+    if (!audioBase64) {
+      return {
+        ok: false,
+        audioBase64: null,
+        audioBytes: null,
+        format: 'mp3',
+        voice,
+        model,
+        provider: 'rork_gateway',
+        durationMs: Date.now() - start,
+        error: 'Gateway TTS returned empty audio data',
+      };
+    }
+
+    const audioBytes = new Uint8Array(Buffer.from(audioBase64, 'base64'));
+
+    console.log(`[IVX TTS] Synthesized ${audioBytes.byteLength} bytes via Gateway/${model}/${voice} in ${Date.now() - start}ms`);
+
+    return {
+      ok: true,
+      audioBase64,
+      audioBytes,
+      format: 'mp3',
+      voice,
+      model,
+      provider: 'rork_gateway',
+      durationMs: Date.now() - start,
+      error: null,
+    };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error('[IVX TTS] Gateway synthesis error:', errorMsg);
     return {
       ok: false,
       audioBase64: null,
@@ -359,14 +465,21 @@ export async function synthesizeSpeech(
 
   // Try Toolkit proxy first (xai/grok-tts)
   if (isToolkitTTSAvailable()) {
-    // Map voice to a valid grok voice if needed
     const grokVoice: string = voice && (GROK_VOICES as string[]).includes(voice) ? voice : 'eve';
     const result = await synthesizeWithToolkit(truncatedText, grokVoice);
     if (result.ok) return result;
-    console.warn('[IVX TTS] Toolkit failed, trying OpenAI fallback:', result.error?.slice(0, 100));
+    console.warn('[IVX TTS] Toolkit failed, trying Gateway direct:', result.error?.slice(0, 100));
   }
 
-  // Fallback to OpenAI direct API
+  // Try direct Vercel AI Gateway (vck_ key)
+  if (isGatewayTTSAvailable()) {
+    const grokVoice: string = voice && (GROK_VOICES as string[]).includes(voice) ? voice : 'eve';
+    const result = await synthesizeWithGateway(truncatedText, grokVoice);
+    if (result.ok) return result;
+    console.warn('[IVX TTS] Gateway failed, trying OpenAI fallback:', result.error?.slice(0, 100));
+  }
+
+  // Fallback to OpenAI direct API (sk- key)
   if (isOpenAITTSAvailable()) {
     const openaiVoice: string = voice && (OPENAI_VOICES as string[]).includes(voice) ? voice : 'alloy';
     return synthesizeWithOpenAI(truncatedText, openaiVoice);
