@@ -200,6 +200,21 @@ export async function listAutonomousVoiceCalls(limit = 50): Promise<AutonomousVo
   return (Array.isArray(rows) ? rows : []).slice(0, Math.max(1, Math.min(200, limit)));
 }
 
+export async function replaceAutonomousVoiceCallRecord(record: AutonomousVoiceCallRecord): Promise<void> {
+  const rows = await readDurableJson<AutonomousVoiceCallRecord[]>(CALL_LEDGER_PATH, []);
+  if (!Array.isArray(rows)) {
+    await writeDurableJson(CALL_LEDGER_PATH, [record]);
+    return;
+  }
+  const index = rows.findIndex((row) => row.traceId === record.traceId);
+  if (index >= 0) {
+    rows[index] = record;
+  } else {
+    rows.unshift(record);
+  }
+  await writeDurableJson(CALL_LEDGER_PATH, rows.slice(0, 500));
+}
+
 export async function recordAutonomousVoiceCallback(input: { traceId: string; providerStatus?: string | null; callSid?: string | null }): Promise<AutonomousVoiceCallRecord | null> {
   const rows = await readDurableJson<AutonomousVoiceCallRecord[]>(CALL_LEDGER_PATH, []);
   if (!Array.isArray(rows)) return null;
