@@ -53,6 +53,7 @@ fun IVXScreenShell(
     content: @Composable (PaddingValues) -> Unit
 ) {
     Scaffold(
+        containerColor = IVXDark,
         topBar = {
             TopAppBar(
                 title = {
