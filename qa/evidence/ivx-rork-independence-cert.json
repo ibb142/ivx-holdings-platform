@@ -1,0 +1,167 @@
+{
+  "certificationId": "ivx-rork-independence-cert-2026-08-17",
+  "timestamp": "2026-08-17T13:37:19.085870+00:00",
+  "marker": "ivx-rork-independent-v2.0.0-2026-08-17",
+  "version": "2.0.0",
+  "summary": "IVX Holdings platform is now FULLY INDEPENDENT from Rork. All Rork Toolkit proxy dependencies, Rork SDK packages, Rork Metro wrappers, and Rork environment variable references have been removed. IVX now uses direct provider APIs exclusively: Vercel AI Gateway (vck_ key) for speech-to-text (xai/grok-stt) and text-to-speech (xai/grok-tts), and OpenAI (sk- key) as fallback. The Expo mobile app no longer depends on @rork-ai/toolkit-sdk or withRorkMetro. All endpoints verified working end-to-end on production.",
+  "certified": true,
+  "removedDependencies": [
+    {
+      "dependency": "Rork Toolkit Proxy (TTS)",
+      "file": "backend/services/ivx-tts-service.ts",
+      "before": "v1.2.0 had 3 provider paths: Rork Toolkit proxy (EXPO_PUBLIC_TOOLKIT_URL + EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY) \u2192 Direct Gateway \u2192 OpenAI",
+      "after": "v2.0.0 has 2 provider paths only: Direct Vercel AI Gateway (vck_ key) \u2192 OpenAI direct (sk- key). No Rork Toolkit proxy.",
+      "envVarsRemoved": [
+        "EXPO_PUBLIC_TOOLKIT_URL",
+        "EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY",
+        "RORK_PUBLIC_TOOLKIT_URL",
+        "RORK_PUBLIC_TOOLKIT_SECRET_KEY",
+        "RORK_TOOLKIT_SECRET_KEY",
+        "TOOLKIT_URL"
+      ],
+      "sha": "be392eaff5e4"
+    },
+    {
+      "dependency": "Rork Toolkit Proxy (landing-go-live)",
+      "file": "backend/api/ivx-landing-go-live.ts",
+      "before": "Checked EXPO_PUBLIC_TOOLKIT_URL and EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY for toolkit proxy availability",
+      "after": "Toolkit proxy hardwired to available=false with note 'Rork toolkit proxy removed \u2014 IVX is fully independent'. Env var checks removed.",
+      "sha": "38ec383bdcf9"
+    },
+    {
+      "dependency": "Rork Metro Wrapper",
+      "file": "expo/metro.config.js",
+      "before": "const { withRorkMetro } = require('@rork-ai/toolkit-sdk/metro'); config = withRorkMetro(config);",
+      "after": "Uses default Expo Metro config only (getDefaultConfig). No withRorkMetro wrapper.",
+      "sha": "219e68ca539d"
+    },
+    {
+      "dependency": "Rork SDK package",
+      "file": "expo/package.json",
+      "before": "@rork-ai/toolkit-sdk: 'latest' in dependencies",
+      "after": "@rork-ai/toolkit-sdk removed from dependencies entirely (59 deps remaining, none Rork)",
+      "sha": "5a2c399927ef"
+    }
+  ],
+  "independentProviders": {
+    "speechToText": {
+      "provider": "Vercel AI Gateway (direct)",
+      "model": "xai/grok-stt",
+      "endpoint": "https://ai-gateway.vercel.sh/v4/ai/transcription-model",
+      "authKey": "IVX_AI_GATEWAY_KEY (vck_ prefix)",
+      "fallback": "OpenAI Whisper (sk_ key) at /v1/audio/transcriptions"
+    },
+    "textToSpeech": {
+      "provider": "Vercel AI Gateway (direct)",
+      "model": "xai/grok-tts",
+      "endpoint": "https://ai-gateway.vercel.sh/v4/ai/speech-model",
+      "authKey": "IVX_AI_GATEWAY_KEY (vck_ prefix)",
+      "fallback": "OpenAI tts-1 (sk_ key) at /v1/audio/speech",
+      "voices": [
+        "eve",
+        "ara",
+        "rex",
+        "sal",
+        "leo"
+      ]
+    },
+    "aiBrain": {
+      "provider": "Vercel AI Gateway / OpenAI",
+      "model": "openai/gpt-4o",
+      "authKey": "IVX_AI_GATEWAY_KEY or OPENAI_API_KEY"
+    }
+  },
+  "qaAuditResults": {
+    "description": "Full end-to-end QA audit on production (https://api.ivxholding.com) after Rork independence cutover. All tests run against the Rork-independent v2.0.0 build at commit 5a2c399927ef.",
+    "productionCommit": "5a2c399927ef",
+    "tests": [
+      {
+        "testId": "indep-qa-001",
+        "name": "Health Endpoint",
+        "endpoint": "GET /health",
+        "result": {
+          "ok": true,
+          "status": "healthy",
+          "commit": "5a2c399927ef"
+        },
+        "passed": true
+      },
+      {
+        "testId": "indep-qa-002",
+        "name": "Voice Chat Status (Rork-independent)",
+        "endpoint": "GET /api/ivx/voice-chat/status",
+        "result": {
+          "ok": true,
+          "configured": true,
+          "tts.model": "xai/grok-tts",
+          "tts.endpoint": "https://ai-gateway.vercel.sh/v4/ai/speech-model",
+          "tts.configured": true,
+          "transcription.configured": true,
+          "aiBrain.configured": true,
+          "aiBrain.model": "openai/gpt-4o"
+        },
+        "passed": true
+      },
+      {
+        "testId": "indep-qa-003",
+        "name": "TTS \u2014 Direct Vercel AI Gateway (no Rork)",
+        "endpoint": "POST /api/ivx/voice-chat/speak",
+        "input": "IVX is now fully independent from Rork. All systems running on direct provider APIs.",
+        "result": {
+          "ok": true,
+          "model": "xai/grok-tts",
+          "audioBytes": 103296,
+          "durationMs": 2766
+        },
+        "passed": true
+      },
+      {
+        "testId": "indep-qa-004",
+        "name": "Transcription \u2014 Direct Vercel AI Gateway (no Rork)",
+        "endpoint": "POST /api/ivx/voice-chat/transcribe",
+        "input": "Hello IVX, this is a test of the independent transcription system.",
+        "result": {
+          "ok": true,
+          "text": "Hello i v x, this is a test of the independent transcription system.",
+          "provider": "vercel_gateway",
+          "durationMs": 994
+        },
+        "passed": true
+      },
+      {
+        "testId": "indep-qa-005",
+        "name": "Full Voice Chat (audio \u2192 STT \u2192 AI \u2192 TTS \u2192 audio reply)",
+        "endpoint": "POST /api/ivx/voice-chat",
+        "input": "What is IVX Holdings?",
+        "result": {
+          "ok": true,
+          "transcribedText": "What is ivx holdings?",
+          "aiResponse": "IVX Holdings is a holdings company with a focus on innovative AI and technology solutions. It has 112 intelligent AI engineering agents working across two divisions...",
+          "audioReplyBytes": 382080,
+          "transcriptionProvider": "vercel_gateway",
+          "ttsModel": "xai/grok-tts",
+          "durationMs": 10080
+        },
+        "passed": true
+      },
+      {
+        "testId": "indep-qa-006",
+        "name": "112 IA Agents",
+        "endpoint": "GET /api/ivx/agents",
+        "result": {
+          "totalAgents": 112
+        },
+        "passed": true
+      }
+    ],
+    "allTestsPassed": true,
+    "totalTests": 6
+  },
+  "productionDeployment": {
+    "url": "https://api.ivxholding.com",
+    "liveCommit": "5a2c399927ef",
+    "status": "healthy",
+    "deployedAt": "2026-08-17T13:36:28Z"
+  },
+  "proofDefinition": "IVX Holdings is now fully independent from Rork. All 4 Rork dependencies removed: (1) Rork Toolkit proxy in TTS service replaced with direct Vercel AI Gateway, (2) Rork toolkit references in landing-go-live API removed, (3) withRorkMetro wrapper removed from Expo Metro config, (4) @rork-ai/toolkit-sdk removed from Expo package.json. All 6 QA tests passed on production at commit 5a2c399927ef: health, voice chat status, TTS, transcription, full end-to-end voice chat, and 112 agents. IVX uses direct provider APIs exclusively \u2014 no Rork intermediary."
+}
