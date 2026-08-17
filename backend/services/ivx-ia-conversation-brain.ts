@@ -287,15 +287,9 @@ export function buildIVXConversationAnswer(message: string): string | null {
     }
 
     case 'greeting':
-      return isSpanish ? [
-        '¡Hola! Soy IVX IA, el cerebro de IA de IVXHOLDINGS.',
-        '',
-        'Puedo responder cualquier pregunta que tengas — sobre IVXHOLDINGS, nuestros proyectos, inversiones, rendimientos, la plataforma o cualquier otra cosa. ¿Qué te gustaría saber?',
-      ].join('\n') : [
-        'Hello! I am IVX IA, the AI brain for IVXHOLDINGS.',
-        '',
-        'I can answer any question you have — about IVXHOLDINGS, our projects, investments, returns, the platform, or anything else. What would you like to know?',
-      ].join('\n');
+      // Let greetings flow to the upgraded AI prompt for 10/10 quality.
+      // The deterministic fallback was too robotic and generic.
+      return null;
 
     case 'thanks':
       return isSpanish
@@ -303,27 +297,9 @@ export function buildIVXConversationAnswer(message: string): string | null {
         : "You're welcome! I'm IVX IA — happy to help. Ask me anything else whenever you need.";
 
     case 'capabilities':
-      return isSpanish ? [
-        'Esto es lo que puedo hacer como IVX IA:',
-        '',
-        '- Responder cualquier pregunta sobre IVXHOLDINGS — la empresa, proyectos, inversiones, ROI, riesgos, ofertas JV, prestamistas privados, tokenización, billeteras, retiros y transferencias.',
-        '- Tener una conversación normal y responder preguntas generales (matemáticas, definiciones, consejos).',
-        '- Explicar el proceso de inversión, mínimos, plazos y rendimientos esperados para cualquier proyecto.',
-        '- Operar como Desarrollador Senior (con autorización del dueño) — auditar código, arquitectura, Supabase, GitHub, Render y proponer parches exactos.',
-        '- Ejecutar tareas de desarrollo aprobadas por el dueño que confirman, despliegan y devuelven prueba en vivo.',
-        '',
-        'Nada está prohibido. Solo pregunta.',
-      ].join('\n') : [
-        'Here is what I can do as IVX IA:',
-        '',
-        '- Answer any question about IVXHOLDINGS — the company, projects, investments, ROI, risks, JV deals, private lenders, tokenization, wallets, withdrawals, and wires.',
-        '- Have a regular conversation and answer general questions (math, definitions, how-to, advice).',
-        '- Explain the investment process, minimum buy-ins, timelines, and expected returns for any project.',
-        '- Operate as a Senior Developer (owner-gated) — audit code, architecture, Supabase, GitHub, Render, and propose exact patches.',
-        '- Run owner-approved senior-developer tasks that commit, deploy, and return live proof.',
-        '',
-        'Nothing is off-limits. Just ask.',
-      ].join('\n');
+      // Let capabilities flow to the upgraded AI prompt for 10/10 quality.
+      // The deterministic fallback was too short and generic.
+      return null;
 
     case 'help':
       return isSpanish ? [
