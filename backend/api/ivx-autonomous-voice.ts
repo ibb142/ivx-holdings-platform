@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
+import type { AutonomousVoiceCallRecord } from '../services/ivx-signalwire-voice';
 import {
   appendAutonomousVoiceCallRecord,
   buildAutonomousVoiceLaml,
