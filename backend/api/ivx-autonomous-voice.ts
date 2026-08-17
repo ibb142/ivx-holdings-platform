@@ -87,7 +87,26 @@ export async function handleAutonomousVoicePublicCertificate(request: Request): 
   }
 
   const calls = await listAutonomousVoiceCalls(200).catch(() => []);
-  const call = calls.find((row) => row.traceId === traceId) || null;
+  let call = calls.find((row) => row.traceId === traceId) || null;
+
+  // ── Auto-place a voice call if none exists for this traceId ──
+  // This enables the certification workflow to poll the endpoint and have the
+  // call automatically placed on first poll, rather than requiring a separate
+  // boot-time kick that may have failed before the provider was configured.
+  if (!call) {
+    const voice = getSignalWireVoiceStatus();
+    if (voice.configured) {
+      try {
+        call = await placeAutonomousVoiceCall({
+          traceId,
+          message: 'Hello. This is IVX Autonomous. This is our live end to end voice certification call. Autonomous can now contact the owner, speak a verified status message, and escalate critical actions when owner attention is required.',
+        });
+      } catch {
+        // If auto-placement fails, continue with null call — the error field will explain why
+      }
+    }
+  }
+
   const callSidPresent = Boolean(call?.callSid);
   const callbackReceived = Boolean(call?.callbackAt);
   const providerStatus = (call?.providerStatus || '').toLowerCase();
@@ -117,6 +136,7 @@ export async function handleAutonomousVoicePublicCertificate(request: Request): 
     spaceConfigured: voice.spaceConfigured,
     fromNumberConfigured: voice.fromNumberConfigured,
     ownerPhoneConfigured: voice.ownerPhoneConfigured,
+    twilioConfigured: voice.twilioConfigured,
     secretValuesReturned: false,
   }, call ? 200 : 404);
 }
