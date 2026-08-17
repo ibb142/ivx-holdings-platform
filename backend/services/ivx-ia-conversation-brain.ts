@@ -34,6 +34,18 @@ export function detectIVXConversationQuestion(message: string): IVXConversationT
   const compact = text.replace(/\s+/g, ' ').trim();
   if (!compact) return 'none';
 
+  // TOKEN-RETURN / ACTIVATION CHALLENGE EXEMPTION (must be checked FIRST).
+  // Certification and verification workflows send messages like:
+  //   "Return the exact token IVX-LIVE-123456789-42..."
+  // The token itself contains numeric patterns (e.g. 31988373188-1) that the
+  // math detector below would otherwise parse as an arithmetic expression and
+  // answer with a wrong local fallback. Activation challenges are NOT general
+  // conversation questions; they must be answered by the real model so the
+  // response includes the exact token and is tagged source=chatgpt.
+  if (/\breturn\s+(?:the\s+)?(?:exact\s+)?token\b/i.test(compact) || /\bIVX-LIVE-[0-9]+-\d+\b/i.test(compact)) {
+    return 'none';
+  }
+
   // DEF-IA-05 fix: Explicit "yes or no" prefix must be checked BEFORE math.
   // Otherwise "yes or no, can IVX IA work 24/7" is parsed as 24÷7=3.428571
   // because the sanitizer keeps the '/' character and detectMathQuestion
