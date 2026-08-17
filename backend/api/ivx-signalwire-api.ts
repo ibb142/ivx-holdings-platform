@@ -2,14 +2,18 @@
  * IVX SignalWire API
  *
  * HTTP endpoints for autonomous SMS and voice calls through SignalWire.
+ * Voice calls are fully CONVERSATIONAL — the caller can ask questions and
+ * the IVX AI brain answers in real-time, looping until the caller hangs up.
  *
  *   GET  /api/ivx/signalwire/status       — service health + capabilities
  *   POST /api/ivx/signalwire/sms           — send an SMS message
  *   GET  /api/ivx/signalwire/sms           — list recent SMS messages
  *   POST /api/ivx/signalwire/voice         — make a voice call
  *   GET  /api/ivx/signalwire/voice         — list recent voice calls
- *   POST /api/ivx/signalwire/voice/laml    — LaML webhook for voice call XML
+ *   POST /api/ivx/signalwire/voice/laml    — LaML webhook (greeting + Gather)
+ *   POST /api/ivx/signalwire/voice/respond  — Conversational AI response (Gather result)
  *   POST /api/ivx/signalwire/verify        — end-to-end cert: SMS + voice
+ *   POST /api/ivx/signalwire/conversational — start a conversational voice call
  */
 import {
   sendSMS,
@@ -19,12 +23,11 @@ import {
   getSignalWireStatus,
   runSignalWireVerify,
   buildVoiceLaML,
+  buildConversationalLaML,
+  buildConversationResponseLaML,
+  answerVoiceQuestion,
   IVX_SIGNALWIRE_MARKER,
-  type SendSMSResult,
-  type VoiceCallResult,
-  type VerifyResult,
 } from '../services/ivx-signalwire-service';
-import { randomUUID, createHash } from 'node:crypto';
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -58,6 +61,8 @@ interface ParsedBody {
   toNumber?: string;
   smsBody?: string;
   voiceMessage?: string;
+  speechResult?: string;
+  callSid?: string;
 }
 
 async function parseBody(req: Request): Promise<ParsedBody> {
@@ -82,6 +87,8 @@ async function parseBody(req: Request): Promise<ParsedBody> {
       from: (formData.get('From') as string) || undefined,
       body: (formData.get('Body') as string) || undefined,
       message: (formData.get('Message') as string) || undefined,
+      speechResult: (formData.get('SpeechResult') as string) || undefined,
+      callSid: (formData.get('CallSid') as string) || undefined,
     };
   } catch {
     return {};
@@ -130,7 +137,10 @@ export async function handleSignalWireListSMS(req: Request): Promise<Response> {
 
 /**
  * POST /api/ivx/signalwire/voice
- * Body: { to: string, message?: string, from?: string }
+ * Body: { to: string, message?: string, from?: string, conversational?: boolean }
+ *
+ * If conversational=true, the call uses the conversational LaML with Gather
+ * for speech input, creating a real back-and-forth conversation with the AI brain.
  */
 export async function handleSignalWireMakeVoiceCall(req: Request): Promise<Response> {
   const body = await parseBody(req);
@@ -159,22 +169,97 @@ export async function handleSignalWireListCalls(req: Request): Promise<Response>
 /**
  * POST /api/ivx/signalwire/voice/laml
  *
- * SignalWire webhook endpoint — returns LaML XML when a call connects.
- * SignalWire fetches this URL to determine what to say on the call.
+ * SignalWire webhook endpoint — returns conversational LaML when a call connects.
+ * The LaML includes a <Gather> element so the caller can speak their question,
+ * and the result is posted to /api/ivx/signalwire/voice/respond for AI processing.
  */
-export async function handleSignalWireVoiceLaML(req: Request): Promise<Response> {
+export function handleSignalWireVoiceLaML(req: Request): Response {
+  const url = new URL(req.url);
+  const conversational = url.searchParams.get('conversational') !== 'false';
+
+  console.log(`[IVX SignalWire] LaML webhook called — conversational=${conversational}`);
+
+  if (conversational) {
+    const laMl = buildConversationalLaML({
+      greeting: 'Hello, this is I V X Holdings autonomous assistant. I can answer questions about I V X Holdings, our 112 I A agents, our platform, act as a developer agent, or answer any question you have. What would you like to know?',
+      gatherPrompt: 'Go ahead, ask me anything.',
+    });
+    return xml(laMl);
+  }
+
+  // Non-conversational (verification call)
+  const defaultMessage = 'This is I V X Holdings autonomous verification call. SignalWire voice integration is now certified.';
+  const laMl = buildVoiceLaML(defaultMessage);
+  return xml(laMl);
+}
+
+/**
+ * POST /api/ivx/signalwire/voice/respond
+ *
+ * SignalWire posts the speech recognition result here after the caller speaks.
+ * We pass the caller's question to the IVX AI brain, get an answer, and return
+ * LaML that says the answer then loops back to Gather for the next question.
+ *
+ * This is the CONVERSATIONAL LOOP:
+ *   Caller speaks → SignalWire transcribes → AI brain answers → Say + Gather again
+ */
+export async function handleSignalWireVoiceRespond(req: Request): Promise<Response> {
   const body = await parseBody(req);
+  const url = new URL(req.url);
+  const loopCount = parseInt(url.searchParams.get('loop') || '0', 10);
 
-  // Build a custom message if one was provided, otherwise use default
-  const callSid = body.from || '';
-  const defaultMessage = `This is I V X Holdings autonomous verification call. SignalWire voice integration is now certified. Your call is being monitored for quality assurance.`;
-  const message = readString(body.message) || readString(body.body) || defaultMessage;
+  const question = readString(body.speechResult) || readString(body.body);
+  const callSid = readString(body.callSid) || 'unknown';
 
-  const laMl = buildVoiceLaML(message);
+  console.log(`[IVX SignalWire] Voice respond — CallSid: ${callSid}, loop: ${loopCount}, question: "${question.substring(0, 100)}"`);
 
-  console.log(`[IVX SignalWire] LaML webhook called — CallSid: ${callSid}, message: ${message.substring(0, 60)}...`);
+  if (!question) {
+    const laMl = buildConversationResponseLaML({
+      aiResponse: "I didn't hear a question. Could you please repeat that?",
+      loopCount,
+    });
+    return xml(laMl);
+  }
+
+  // Send the question to the IVX AI brain
+  const result = await answerVoiceQuestion(question, { callSid, loopCount });
+
+  console.log(`[IVX SignalWire] AI response — ok: ${result.ok}, answer: "${result.answer.substring(0, 100)}"`);
+
+  const laMl = buildConversationResponseLaML({
+    aiResponse: result.answer,
+    loopCount,
+  });
 
   return xml(laMl);
+}
+
+/**
+ * POST /api/ivx/signalwire/conversational
+ * Body: { to?: string }
+ *
+ * Starts a conversational voice call where the caller can ask questions
+ * and the IVX AI brain answers in real-time.
+ */
+export async function handleSignalWireConversationalCall(req: Request): Promise<Response> {
+  const body = await parseBody(req);
+  const to = readString(body.to) || readString(body.toNumber);
+
+  if (!to) {
+    return json({ ok: false, error: 'Missing "to" phone number' }, 400);
+  }
+
+  const result = await makeVoiceCall(to, {
+    message: '',
+    from: body.from,
+  });
+
+  // The call will use the conversational LaML webhook by default
+  return json({
+    ...result,
+    conversational: true,
+    description: 'Conversational voice call started. The caller can ask questions and the IVX AI brain will answer in real-time.',
+  });
 }
 
 /**
@@ -217,6 +302,7 @@ export async function handleSignalWireVerify(req: Request): Promise<Response> {
       from: result.voice.from,
       to: result.voice.to,
       lamlUrl: result.voice.lamlUrl,
+      conversational: true,
       errorCode: result.voice.errorCode,
       errorMessage: result.voice.errorMessage,
       durationMs: result.voice.durationMs,
