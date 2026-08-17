@@ -7,9 +7,9 @@
  * caller can surface an exact runtime dependency.
  */
 
-import { autoDetectGatewayBaseUrl } from './ivx-provider-autodetect';
+import { autoDetectGatewayBaseUrl, getIVXApiKey, detectIVXProviderType, VERCEL_AI_GATEWAY_BASE } from './ivx-provider-autodetect';
 
-export type TranscriptionProvider = 'elevenlabs_scribe' | 'openai_whisper';
+export type TranscriptionProvider = 'elevenlabs_scribe' | 'openai_whisper' | 'vercel_gateway';
 
 export type TranscriptionCoreResult = {
   text: string;
@@ -39,6 +39,12 @@ function getOpenAITranscriptionBaseUrl(): string {
 
 export function isTranscriptionConfigured(): boolean {
   return Boolean(getElevenLabsApiKey() || getOpenAITranscriptionApiKey());
+}
+
+/** Check if the Vercel AI Gateway transcription endpoint is available (vck_ key). */
+function isGatewayTranscriptionAvailable(): boolean {
+  const key = getIVXApiKey();
+  return Boolean(key && key.startsWith('vck_'));
 }
 
 function extractTextFromPayload(payload: unknown): string {
@@ -160,17 +166,73 @@ async function transcribeWithWhisper(file: File): Promise<TranscriptionCoreResul
   };
 }
 
-/** Transcribe a File via ElevenLabs (preferred) → Whisper (fallback). */
+/**
+ * Transcribe a File via the Vercel AI Gateway speech-to-text endpoint.
+ * Uses /v4/ai/transcription-model with xai/grok-stt model.
+ */
+async function transcribeWithGateway(file: File): Promise<TranscriptionCoreResult> {
+  const apiKey = getIVXApiKey();
+  if (!apiKey) throw new Error('IVX AI Gateway key is not configured.');
+
+  const model = readTrimmed(process.env.IVX_GATEWAY_STT_MODEL) || 'xai/grok-stt';
+  const endpoint = 'https://ai-gateway.vercel.sh/v4/ai/transcription-model';
+
+  // Read file as base64
+  const arrayBuffer = await file.arrayBuffer();
+  const audioBase64 = Buffer.from(arrayBuffer).toString('base64');
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'ai-model-id': model,
+      'ai-gateway-protocol-version': '0.0.1',
+    },
+    body: JSON.stringify({
+      audio: audioBase64,
+      mediaType: file.type || 'audio/m4a',
+    }),
+  });
+  const payload = await parseJsonResponse(response);
+  if (!response.ok) {
+    throw new Error(extractProviderError(payload, `Gateway transcription returned HTTP ${response.status}.`));
+  }
+  const text = extractTextFromPayload(payload);
+  if (!text) throw new Error('Gateway transcription returned an empty transcript.');
+  return {
+    text,
+    provider: 'vercel_gateway',
+    model,
+    languageCode: extractLanguageCode(payload),
+    durationSeconds: extractDurationSeconds(payload),
+  };
+}
+
+/** Transcribe a File via ElevenLabs (preferred) → Gateway (vck_) → Whisper (fallback). */
 export async function transcribeAudioFile(file: File): Promise<TranscriptionCoreResult> {
-  if (!isTranscriptionConfigured()) {
-    throw new Error('Transcription is not configured (set ELEVENLABS_API_KEY or OPENAI_API_KEY).');
+  if (!isTranscriptionConfigured() && !isGatewayTranscriptionAvailable()) {
+    throw new Error('Transcription is not configured (set ELEVENLABS_API_KEY, OPENAI_API_KEY, or IVX_AI_GATEWAY_KEY).');
   }
-  try {
-    return await transcribeWithElevenLabs(file);
-  } catch (elevenLabsError) {
-    if (!getOpenAITranscriptionApiKey()) throw elevenLabsError;
-    return await transcribeWithWhisper(file);
+  // Try ElevenLabs Scribe first (if configured)
+  if (getElevenLabsApiKey()) {
+    try {
+      return await transcribeWithElevenLabs(file);
+    } catch (elevenLabsError) {
+      // Fall through to Gateway or Whisper
+      if (!getOpenAITranscriptionApiKey() && !isGatewayTranscriptionAvailable()) throw elevenLabsError;
+    }
   }
+  // Try Vercel AI Gateway transcription (vck_ key)
+  if (isGatewayTranscriptionAvailable()) {
+    try {
+      return await transcribeWithGateway(file);
+    } catch (gatewayError) {
+      if (!getOpenAITranscriptionApiKey()) throw gatewayError;
+    }
+  }
+  // Fallback to OpenAI Whisper (sk- key)
+  return await transcribeWithWhisper(file);
 }
 
 /** Transcribe raw audio bytes (used by the video worker after audio extraction). */
