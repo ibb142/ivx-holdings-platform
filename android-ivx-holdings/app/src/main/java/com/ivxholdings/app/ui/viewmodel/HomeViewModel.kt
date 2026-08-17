@@ -42,18 +42,21 @@ class HomeViewModel(
 
                     val health = healthDeferred.await().getOrNull()
                     val agents = agentsDeferred.await().getOrNull()
-                    val deals = dealsDeferred.await().getOrNull()
-                    val properties = propertiesDeferred.await().getOrNull()
-                    val investors = investorsDeferred.await().getOrNull()
+
+                    // These data endpoints may return 404 until backend deploys;
+                    // getOrNull() ensures the home dashboard still renders.
+                    val deals = dealsDeferred.await().getOrNull() ?: emptyList()
+                    val properties = propertiesDeferred.await().getOrNull() ?: emptyList()
+                    val investors = investorsDeferred.await().getOrNull() ?: emptyList()
                     val version = versionDeferred.await().getOrNull() ?: AppConfig.APP_VERSION
 
                     HomeData(
                         status = health?.status ?: "unknown",
                         commitShort = health?.commitShort ?: AppConfig.GIT_SHA,
                         agentsCount = agents?.size ?: 0,
-                        dealsCount = deals?.size ?: 0,
-                        propertiesCount = properties?.size ?: 0,
-                        investorsCount = investors?.size ?: 0,
+                        dealsCount = deals.size,
+                        propertiesCount = properties.size,
+                        investorsCount = investors.size,
                         version = version
                     )
                 }
