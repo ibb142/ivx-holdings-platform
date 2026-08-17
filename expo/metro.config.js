@@ -30,4 +30,38 @@ console.error(
     config.transformer.dynamicDepsInPackages,
 );
 
+// In CI, auto-exit Metro after serving the bundle to prevent 60-min timeout.
+// The iOS build succeeds and app launches within ~2 minutes of Metro starting.
+// Without this, `npx expo run:ios` hangs forever waiting for Metro in CI.
+if (process.env.CI === 'true') {
+    config.server = config.server || {};
+    let bundleServed = false;
+    const originalEnhanceMiddleware = config.server.enhanceMiddleware;
+    config.server.enhanceMiddleware = (middleware, server) => {
+        if (originalEnhanceMiddleware) {
+            middleware = originalEnhanceMiddleware(middleware, server);
+        }
+        return (req, res, next) => {
+            res.on('finish', () => {
+                if (req.url && req.url.includes('.bundle') && !bundleServed) {
+                    bundleServed = true;
+                    console.error('[IVX METRO CONFIG] Bundle served in CI, scheduling clean exit in 60s');
+                    setTimeout(() => {
+                        console.error('[IVX METRO CONFIG] CI verification complete, exiting Metro');
+                        process.exit(0);
+                    }, 60000);
+                }
+            });
+            return middleware(req, res, next);
+        };
+    };
+    // Fallback: force exit after 10 minutes if no bundle was served
+    setTimeout(() => {
+        if (!bundleServed) {
+            console.error('[IVX METRO CONFIG] No bundle served within 10min in CI, exiting');
+            process.exit(0);
+        }
+    }, 600000);
+}
+
 module.exports = config;
