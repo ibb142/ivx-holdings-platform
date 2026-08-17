@@ -35,6 +35,11 @@ jobs:
             process.env.JWT_SECRET,
           ].filter(Boolean);
           if (!base || !serviceKey || encryptionSecrets.length === 0) throw new Error('required GitHub runtime bindings missing');
+          // Bind the same highest-priority secret used by this workflow's
+          // decryption candidate order. The previous implementation referenced
+          // an undefined `encryptionSecret`, so it always failed before the
+          // Render environment could be updated.
+          const encryptionSecret = encryptionSecrets[0];
           const names = ['RENDER_API_KEY','RENDER_SERVICE_ID','IVX_AI_GATEWAY_KEY','AI_GATEWAY_API_KEY'];
           const query = encodeURIComponent(`(${names.join(',')})`);
           const rowsRes = await fetch(`${base}/rest/v1/ivx_owner_variables?select=name,encrypted_value,value_iv,value_tag,value_hash&name=in.${query}`, {
