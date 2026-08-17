@@ -883,6 +883,15 @@ import {
   handleExecutorFullRequest,
   handleExecutor112CertRequest,
 } from './api/ivx-agent-code-executor';
+import {
+  handleSignalWireStatus,
+  handleSignalWireSendSMS,
+  handleSignalWireListSMS,
+  handleSignalWireMakeVoiceCall,
+  handleSignalWireListCalls,
+  handleSignalWireVoiceLaML,
+  handleSignalWireVerify,
+} from './api/ivx-signalwire-api';
 import { OPTIONS as seniorDeveloperOptions, handleIVXSeniorDeveloperCredentialAuditRequest, handleIVXSeniorDeveloperGithubAuditRequest, handleIVXSeniorDeveloperRunRequest, handleIVXSeniorDeveloperStatusRequest } from './api/ivx-senior-developer-runtime';
 import { auditIVXProductionCredentialRuntime, IVX_SENIOR_DEVELOPER_RUNTIME_MARKER, IVX_GITHUB_CANONICAL_PATH, IVX_GITHUB_CANONICAL_PATH_DESCRIPTION } from './services/ivx-senior-developer-runtime';
 import { OPTIONS as seniorDevToolsOptions, handleIVXSeniorDevAuditReportRequest, handleIVXSeniorDevToolsExecuteRequest, handleIVXSeniorDevToolsListRequest } from './api/ivx-senior-dev-tools';
@@ -4824,6 +4833,21 @@ app.post('/api/ivx/agent-code-executor/build', async (context) => handleExecutor
 app.post('/api/ivx/agent-code-executor/deploy', async (context) => handleExecutorDeployRequest(context.req.raw));
 app.post('/api/ivx/agent-code-executor/full', async (context) => handleExecutorFullRequest(context.req.raw));
 app.post('/api/ivx/agent-code-executor/112-cert', async (context) => handleExecutor112CertRequest(context.req.raw));
+
+// ── SignalWire SMS + Voice ───────────────────────────────────────────────────
+app.get('/api/ivx/signalwire/status', () => handleSignalWireStatus());
+app.post('/api/ivx/signalwire/sms', async (c) => handleSignalWireSendSMS(c.req.raw));
+app.get('/api/ivx/signalwire/sms', async (c) => handleSignalWireListSMS(c.req.raw));
+app.post('/api/ivx/signalwire/voice', async (c) => handleSignalWireMakeVoiceCall(c.req.raw));
+app.get('/api/ivx/signalwire/voice', async (c) => handleSignalWireListCalls(c.req.raw));
+app.post('/api/ivx/signalwire/voice/laml', async (c) => handleSignalWireVoiceLaML(c.req.raw));
+app.get('/api/ivx/signalwire/voice/laml', async (c) => handleSignalWireVoiceLaML(c.req.raw));
+app.post('/api/ivx/signalwire/verify', async (c) => handleSignalWireVerify(c.req.raw));
+app.options('/api/ivx/signalwire/status', (c) => c.body(null, 204));
+app.options('/api/ivx/signalwire/sms', (c) => c.body(null, 204));
+app.options('/api/ivx/signalwire/voice', (c) => c.body(null, 204));
+app.options('/api/ivx/signalwire/voice/laml', (c) => c.body(null, 204));
+app.options('/api/ivx/signalwire/verify', (c) => c.body(null, 204));
 
 // Owner-only Render deploy diagnostic — reads private credentials from process.env
 // or the encrypted Owner Variables runtime bridge, without returning secret values.
