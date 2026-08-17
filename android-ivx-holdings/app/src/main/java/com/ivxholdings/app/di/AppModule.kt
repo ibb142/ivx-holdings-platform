@@ -12,6 +12,7 @@ import com.ivxholdings.app.ui.viewmodel.ChatViewModel
 import com.ivxholdings.app.ui.viewmodel.DealsViewModel
 import com.ivxholdings.app.ui.viewmodel.FeedViewModel
 import com.ivxholdings.app.ui.viewmodel.HealthViewModel
+import com.ivxholdings.app.ui.viewmodel.HomeViewModel
 import com.ivxholdings.app.ui.viewmodel.InvestorsViewModel
 import com.ivxholdings.app.ui.viewmodel.MembersViewModel
 import com.ivxholdings.app.ui.viewmodel.OwnerDashboardViewModel
@@ -43,5 +44,6 @@ val appModule = module {
     viewModel { ProfileViewModel(get()) }
     viewModel { OwnerDashboardViewModel(get()) }
     viewModel { AIEngineeringViewModel(get()) }
+    viewModel { HomeViewModel(get()) }
     viewModel { AutonomousDashboardViewModel() }
 }
