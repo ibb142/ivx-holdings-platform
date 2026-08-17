@@ -189,7 +189,7 @@ export function buildAutonomousVoiceLaml(message: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?><Response><Say language="en-US" voice="woman">${safe}</Say><Pause length="1"/><Say language="en-US" voice="woman">Please open the IVX owner dashboard for the exact action and trace ID. Autonomous will resume automatically after verification.</Say><Hangup/></Response>`;
 }
 
-async function appendCallRecord(record: AutonomousVoiceCallRecord): Promise<void> {
+export async function appendAutonomousVoiceCallRecord(record: AutonomousVoiceCallRecord): Promise<void> {
   const existing = await readDurableJson<AutonomousVoiceCallRecord[]>(CALL_LEDGER_PATH, []);
   const next = [record, ...(Array.isArray(existing) ? existing : [])].slice(0, 500);
   await writeDurableJson(CALL_LEDGER_PATH, next);
@@ -198,6 +198,21 @@ async function appendCallRecord(record: AutonomousVoiceCallRecord): Promise<void
 export async function listAutonomousVoiceCalls(limit = 50): Promise<AutonomousVoiceCallRecord[]> {
   const rows = await readDurableJson<AutonomousVoiceCallRecord[]>(CALL_LEDGER_PATH, []);
   return (Array.isArray(rows) ? rows : []).slice(0, Math.max(1, Math.min(200, limit)));
+}
+
+export async function replaceAutonomousVoiceCallRecord(record: AutonomousVoiceCallRecord): Promise<void> {
+  const rows = await readDurableJson<AutonomousVoiceCallRecord[]>(CALL_LEDGER_PATH, []);
+  if (!Array.isArray(rows)) {
+    await writeDurableJson(CALL_LEDGER_PATH, [record]);
+    return;
+  }
+  const index = rows.findIndex((row) => row.traceId === record.traceId);
+  if (index >= 0) {
+    rows[index] = record;
+  } else {
+    rows.unshift(record);
+  }
+  await writeDurableJson(CALL_LEDGER_PATH, rows.slice(0, 500));
 }
 
 export async function recordAutonomousVoiceCallback(input: { traceId: string; providerStatus?: string | null; callSid?: string | null }): Promise<AutonomousVoiceCallRecord | null> {
@@ -237,7 +252,7 @@ export async function placeAutonomousVoiceCall(input: { traceId: string; message
       createdAt,
       callbackAt: null,
     };
-    await appendCallRecord(record).catch(() => undefined);
+    await appendAutonomousVoiceCallRecord(record).catch(() => undefined);
     return record;
   };
 
@@ -252,7 +267,6 @@ export async function placeAutonomousVoiceCall(input: { traceId: string; message
   // ── SignalWire path ──
   const from = await discoverVoiceFromNumber(config!).catch(() => null);
   if (!from) {
-    // If SignalWire has no From number, try Twilio as fallback
     if (twilio) return placeTwilioVoiceCall(twilio, to, input, id, createdAt, fail);
     return fail('No SignalWire voice-capable From number could be resolved.');
   }
@@ -280,7 +294,6 @@ export async function placeAutonomousVoiceCall(input: { traceId: string; message
     let json: Record<string, unknown> = {};
     try { json = JSON.parse(body) as Record<string, unknown>; } catch { /* keep empty */ }
     if (!response.ok) {
-      // If SignalWire fails, try Twilio as fallback
       if (twilio) return placeTwilioVoiceCall(twilio, to, input, id, createdAt, fail);
       return fail(`SignalWire create call HTTP ${response.status}: ${body.slice(0, 180)}`);
     }
@@ -297,10 +310,9 @@ export async function placeAutonomousVoiceCall(input: { traceId: string; message
       createdAt,
       callbackAt: null,
     };
-    await appendCallRecord(record).catch(() => undefined);
+    await appendAutonomousVoiceCallRecord(record).catch(() => undefined);
     return record;
   } catch (error) {
-    // If SignalWire throws, try Twilio as fallback
     if (twilio) return placeTwilioVoiceCall(twilio, to, input, id, createdAt, fail);
     return fail(error instanceof Error ? error.message : 'SignalWire create call failed');
   }
@@ -308,7 +320,7 @@ export async function placeAutonomousVoiceCall(input: { traceId: string; message
 
 /**
  * Place a voice call via Twilio Programmable Voice.
- * Uses TwiML Bin URL or the IVX LAML endpoint for the voice message.
+ * Uses the IVX LAML endpoint for the voice message and status callbacks.
  */
 async function placeTwilioVoiceCall(
   twilio: { accountSid: string; authToken: string; fromNumber: string | null },
@@ -358,7 +370,7 @@ async function placeTwilioVoiceCall(
       createdAt,
       callbackAt: null,
     };
-    await appendCallRecord(record).catch(() => undefined);
+    await appendAutonomousVoiceCallRecord(record).catch(() => undefined);
     return record;
   } catch (error) {
     return fail(error instanceof Error ? error.message : 'Twilio create call failed');

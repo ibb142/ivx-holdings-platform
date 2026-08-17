@@ -337,7 +337,7 @@ function ensureIVXAIGatewayEnvironment(): void {
 const TRANSIENT_RETRY_CLASSES: ReadonlySet<string> = new Set(['network', 'server_error', 'rate_limit']);
 
 /** Max primary attempts per request: 1 initial + 2 exponential-backoff retries. */
-const MAX_PRIMARY_ATTEMPTS = 3;
+const MAX_PRIMARY_ATTEMPTS = 5;
 
 function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

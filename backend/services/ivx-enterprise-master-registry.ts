@@ -230,14 +230,6 @@ function derivePriority(n: number): OrchestratorPriority {
   return 'medium';
 }
 
-function deriveRiskLevel(def: AgentDef): AgentRiskLevel {
-  if (def.n === 11) return 'high';
-  if (def.escalates && /capital|legal|regulated|production|financial/i.test(def.escalates)) return 'high';
-  if (def.n >= 68 && def.n <= 90) return 'medium';
-  if (def.n <= 12) return 'medium';
-  return 'low';
-}
-
 /**
  * Assign division based on agent role:
  * - Division A (Core Operations): Executive, Growth, Market, Intelligence, Networks (1-55)
@@ -246,6 +238,14 @@ function deriveRiskLevel(def: AgentDef): AgentRiskLevel {
  */
 function deriveDivision(agentNumber: number): DivisionId {
   return agentNumber <= 55 ? 'A' : 'B';
+}
+
+function deriveRiskLevel(def: AgentDef): AgentRiskLevel {
+  if (def.n === 11) return 'high';
+  if (def.escalates && /capital|legal|regulated|production|financial/i.test(def.escalates)) return 'high';
+  if (def.n >= 68 && def.n <= 90) return 'medium';
+  if (def.n <= 12) return 'medium';
+  return 'low';
 }
 
 function makeAgentFromDef(def: AgentDef): EnterpriseMasterAgent {

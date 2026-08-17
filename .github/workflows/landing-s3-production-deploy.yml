@@ -21,6 +21,7 @@ on:
       - 'expo/patches/**'
       - 'expo/deploy-web-app.mjs'
       - '.github/workflows/landing-s3-production-deploy.yml'
+      - '.ivx-production-certification-trigger'
 
 permissions:
   contents: read
@@ -66,7 +67,35 @@ jobs:
           sudo ln -s "$GITHUB_WORKSPACE/expo" /home/user/rork-app/expo
       - name: Deploy all landing assets to S3 and invalidate CloudFront
         working-directory: expo
-        run: bun run deploy-s3-direct.mjs
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun run deploy-s3-direct.mjs 2>&1 | tee /tmp/ivx-s3-deploy.log
+          if grep -q 'CloudFront invalidation FAILED' /tmp/ivx-s3-deploy.log; then
+            echo '::error::CloudFront invalidation failed; deployment cannot be certified.'
+            exit 1
+          fi
+          if ! grep -q 'CloudFront invalidated:' /tmp/ivx-s3-deploy.log; then
+            echo '::error::CloudFront invalidation success evidence is missing.'
+            exit 1
+          fi
+      - name: Verify www redirects to apex over HTTPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          headers=$(curl -sSI --max-time 20 https://www.ivxholding.com/ || true)
+          printf '%s\n' "$headers"
+          status=$(printf '%s\n' "$headers" | head -n 1 | awk '{print $2}')
+          location=$(printf '%s\n' "$headers" | grep -i '^location:' | head -n 1 | sed -E 's/^[Ll]ocation:[[:space:]]*//; s/\r$//' || true)
+          case "$status" in
+            301|302|307|308) ;;
+            *) echo "::error::www.ivxholding.com did not return an HTTP redirect (status=${status:-missing})."; exit 1 ;;
+          esac
+          case "$location" in
+            https://ivxholding.com|https://ivxholding.com/|https://ivxholding.com/*) ;;
+            *) echo "::error::www redirect target is not the apex domain (location=${location:-missing})."; exit 1 ;;
+          esac
+          echo "www_redirect=PASS status=$status location=$location"
       - name: Build Expo web app
         if: github.event.inputs.deployWebApp != 'false'
         working-directory: expo

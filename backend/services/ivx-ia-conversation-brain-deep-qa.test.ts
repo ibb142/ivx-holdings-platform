@@ -235,5 +235,13 @@ describe('IVX IA Conversation Brain — Deep QA (2026-07-28)', () => {
       const long = 'what is ' + 'a'.repeat(150);
       expect(detectIVXConversationQuestion(long)).not.toBe('definition');
     });
+
+    test('token-return activation challenge falls through to real AI', () => {
+      const certMessage =
+        'You are IVX live worker activation 1, test agent, role analyst, division A. Return the exact token IVX-LIVE-31988373188-1, then add one short role-specific action you would take next. Do not omit the token.';
+      expect(detectIVXConversationQuestion(certMessage)).toBe('none');
+      expect(buildIVXConversationAnswer(certMessage)).toBeNull();
+      expect(resolveIVXConversationAnswer(certMessage)).toBeNull();
+    });
   });
 });

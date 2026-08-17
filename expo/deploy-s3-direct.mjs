@@ -501,9 +501,13 @@ async function deploy() {
     const wwwBucket = 'www.ivxholding.com';
     try {
       await s3.send(new HeadBucketCommand({ Bucket: wwwBucket }));
-    } catch {
-      console.log('  www bucket does not exist — skipping redirect setup');
-      console.log('  OWNER: Create www.ivxholding.com S3 bucket with website redirect to ivxholding.com');
+      console.log('  www bucket is reachable');
+    } catch (e) {
+      // HeadBucket can return 403 when the deploy identity may configure the
+      // website but cannot list/inspect the bucket. Do not misreport that as a
+      // confirmed missing bucket; PutBucketWebsite below is the real check.
+      console.warn('  www bucket preflight unavailable; attempting redirect configuration directly');
+      if (e?.$metadata) console.warn('   HTTP:', e.$metadata.httpStatusCode, '| Request ID:', e.$metadata.requestId || 'N/A');
     }
     if (true) {
       await s3.send(new PutBucketWebsiteCommand({
