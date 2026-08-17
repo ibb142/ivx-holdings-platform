@@ -109,7 +109,7 @@ export function getTTSStatus(): TTSStatus {
   if (toolkitAvailable) {
     endpoint = `${getToolkitUrl()}/v2/vercel/v4/ai/speech-model`;
   } else if (gatewayAvailable) {
-    endpoint = `${VERCEL_AI_GATEWAY_BASE}/v4/ai/speech-model`;
+    endpoint = 'https://ai-gateway.vercel.sh/v4/ai/speech-model';
   } else if (openaiAvailable) {
     endpoint = `${OPENAI_DIRECT_BASE}/audio/speech`;
   }
@@ -232,7 +232,7 @@ async function synthesizeWithGateway(
   const start = Date.now();
   const apiKey = getIVXApiKey();
   const model = getTTSModel();
-  const endpoint = `${VERCEL_AI_GATEWAY_BASE}/v4/ai/speech-model`;
+  const endpoint = 'https://ai-gateway.vercel.sh/v4/ai/speech-model';
 
   try {
     const response = await fetch(endpoint, {
