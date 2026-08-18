@@ -21,7 +21,7 @@ import { logStartup, logStartupError } from '@/lib/startup-trace';
 const tabColors = {
   active: '#FFD700',
   inactive: '#777777',
-  background: '#000000',
+  background: '#0A0A0F',
   border: '#242424'};
 
 const TABS_LOADING_TIMEOUT_MS = 2000;
