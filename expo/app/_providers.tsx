@@ -122,7 +122,7 @@ function AppStack() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: Colors.background },
+        contentStyle: { backgroundColor: '#0A0A0F' },
       }}
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
