@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 101500)
+Total output lines: 7194
+
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -4261,72 +4264,7 @@ app.get('/api/ivx/live-work/tasks', async (context) => handleLiveWorkTasksReques
 app.options('/api/ivx/live-work/task/:taskId', () => liveWorkOptions());
 app.get('/api/ivx/live-work/task/:taskId', async (context) => handleLiveWorkTaskRequest(context.req.raw, context.req.param('taskId')));
 app.options('/api/ivx/live-work/run', () => liveWorkOptions());
-app.post('/api/ivx/live-work/run', async (context) => handleLiveWorkRunRequest(context.req.raw));
-app.options('/api/ivx/live-work/approve', () => liveWorkOptions());
-app.post('/api/ivx/live-work/approve', async (context) => handleLiveWorkApproveRequest(context.req.raw));
-app.options('/api/ivx/live-work/cancel', () => liveWorkOptions());
-app.post('/api/ivx/live-work/cancel', async (context) => handleLiveWorkCancelRequest(context.req.raw));
-app.options('/api/ivx/execution-trace', () => executionTraceOptions());
-app.get('/api/ivx/execution-trace', async (context) => handleExecutionTraceListRequest(context.req.raw));
-app.options('/api/ivx/execution-trace/:id', () => executionTraceOptions());
-app.get('/api/ivx/execution-trace/:id', async (context) => handleExecutionTraceGetRequest(context.req.raw, context.req.param('id')));
-
-app.options('/api/ivx/autonomous-mode/tools', () => autonomousModeOptions());
-app.get('/api/ivx/autonomous-mode/tools', async (context) => handleAutonomousModeToolsRequest(context.req.raw));
-app.options('/api/ivx/autonomous-mode/run', () => autonomousModeOptions());
-app.post('/api/ivx/autonomous-mode/run', async (context) => handleAutonomousModeRunRequest(context.req.raw));
-app.options('/api/ivx/senior-developer/autonomous-mode/status', () => seniorDevAutonomousOptions());
-app.get('/api/ivx/senior-developer/autonomous-mode/status', async (context) => handleSeniorDevAutonomousStatusRequest(context.req.raw));
-app.options('/api/ivx/senior-developer/autonomous-mode/run', () => seniorDevAutonomousOptions());
-app.post('/api/ivx/senior-developer/autonomous-mode/run', async (context) => handleSeniorDevAutonomousRunRequest(context.req.raw));
-
-app.options('/api/ivx/owner-operations/dashboard', () => ownerOperationsOptions());
-app.get('/api/ivx/owner-operations/dashboard', async (context) => handleOwnerOperationsDashboardRequest(context.req.raw));
-app.options('/api/ivx/owner-operations/connections', () => ownerOperationsOptions());
-app.get('/api/ivx/owner-operations/connections', async (context) => handleOwnerOperationsConnectionsRequest(context.req.raw));
-app.options('/api/ivx/owner-operations/connections/test', () => ownerOperationsOptions());
-app.post('/api/ivx/owner-operations/connections/test', async (context) => handleOwnerOperationsConnectionTestRequest(context.req.raw));
-app.options('/api/ivx/owner-operations/actions', () => ownerOperationsOptions());
-app.get('/api/ivx/owner-operations/actions', async (context) => handleOwnerOperationsActionsRequest(context.req.raw));
-app.options('/api/ivx/owner-operations/removal-preflight', () => ownerOperationsOptions());
-app.get('/api/ivx/owner-operations/removal-preflight', async (context) => handleOwnerOperationsRemovalPreflightRequest(context.req.raw));
-
-app.options('/api/ivx/continuous-improvement/dashboard', () => continuousImprovementOptions());
-app.get('/api/ivx/continuous-improvement/dashboard', async (context) => handleContinuousImprovementDashboardRequest(context.req.raw));
-app.options('/api/ivx/continuous-improvement/self-audit', () => continuousImprovementOptions());
-app.post('/api/ivx/continuous-improvement/self-audit', async (context) => handleContinuousImprovementSelfAuditRequest(context.req.raw));
-app.options('/api/ivx/scheduler', () => schedulerOptions());
-app.get('/api/ivx/scheduler', async (context) => handleSchedulerStatusRequest(context.req.raw));
-app.options('/api/ivx/scheduler/run-now', () => schedulerOptions());
-app.post('/api/ivx/scheduler/run-now', async (context) => handleSchedulerRunNowRequest(context.req.raw));
-app.options('/api/ivx/scheduler/enable', () => schedulerOptions());
-app.post('/api/ivx/scheduler/enable', async (context) => handleSchedulerEnableRequest(context.req.raw));
-app.options('/api/ivx/continuous-improvement/proposals', () => continuousImprovementOptions());
-app.get('/api/ivx/continuous-improvement/proposals', async (context) => handleContinuousImprovementProposalsRequest(context.req.raw));
-app.options('/api/ivx/continuous-improvement/drift', () => continuousImprovementOptions());
-app.get('/api/ivx/continuous-improvement/drift', async (context) => handleContinuousImprovementDriftRequest(context.req.raw));
-app.options('/api/ivx/continuous-improvement/baseline', () => continuousImprovementOptions());
-app.post('/api/ivx/continuous-improvement/baseline', async (context) => handleContinuousImprovementBaselineRequest(context.req.raw));
-app.options('/api/ivx/continuous-improvement/safe-plan', () => continuousImprovementOptions());
-app.get('/api/ivx/continuous-improvement/safe-plan', async (context) => handleContinuousImprovementSafePlanRequest(context.req.raw));
-app.options('/api/ivx/continuous-improvement/safe-fixes', () => continuousImprovementOptions());
-app.get('/api/ivx/continuous-improvement/safe-fixes', async (context) => handleContinuousImprovementSafeFixesRequest(context.req.raw));
-
-app.options('/api/ivx/deliverables', () => deliverablesOptions());
-app.get('/api/ivx/deliverables', async (context) => handleDeliverableListRequest(context.req.raw));
-app.post('/api/ivx/deliverables', async (context) => handleDeliverableCreateRequest(context.req.raw));
-app.options('/api/ivx/deliverables/notifications', () => deliverablesOptions());
-app.get('/api/ivx/deliverables/notifications', async (context) => handleDeliverableNotificationsRequest(context.req.raw));
-app.options('/api/ivx/deliverables/:id', () => deliverablesOptions());
-app.get('/api/ivx/deliverables/:id', async (context) => handleDeliverableGetRequest(context.req.raw, context.req.param('id')));
-app.options('/api/ivx/deliverables/:id/verify', () => deliverablesOptions());
-app.get('/api/ivx/deliverables/:id/verify', async (context) => handleDeliverableVerifyRequest(context.req.raw, context.req.param('id')));
-
-app.options('/api/ivx/metrics', () => metricsOptions());
-app.get('/api/ivx/metrics', async (context) => handleMetricsRequest(context.req.raw));
-
-app.options('/api/ivx/verify/env-status', () => ownerStatusOptions());
-app.get('/api/ivx/verify/env-status', async (context) => {
+ap…1500 tokens truncated…/env-status', async (context) => {
   const authFail = await requireOwnerAuth(context.req.raw);
   if (authFail) return authFail;
   return handleEnvStatusRequest(context.req.raw);
@@ -4917,12 +4855,6 @@ app.options('/api/ivx/voice-chat/status', (c) => c.body(null, 204));
 app.options('/api/ivx/voice-chat', (c) => c.body(null, 204));
 app.options('/api/ivx/voice-chat/transcribe', (c) => c.body(null, 204));
 app.options('/api/ivx/voice-chat/speak', (c) => c.body(null, 204));
-// Realtime Voice — WebSocket streaming voice (ChatGPT-level voice mode)
-// Status endpoint (HTTP); WebSocket upgrade handled in server.ts
-import { getRealtimeVoiceStatus } from './services/ivx-realtime-voice';
-app.get('/api/ivx/realtime-voice/status', (c) => c.json(getRealtimeVoiceStatus()));
-app.options('/api/ivx/realtime-voice/status', (c) => c.body(null, 204));
-
 // Owner-only Render deploy diagnostic — reads private credentials from process.env
 // or the encrypted Owner Variables runtime bridge, without returning secret values.
 app.options('/api/ivx/render-diagnostic', () => renderDiagnosticOptions());
