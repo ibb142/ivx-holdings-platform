@@ -231,6 +231,13 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+      - name: Enable Linux KVM for Android emulator
+        if: steps.build.outcome == 'success'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Boot Emulator + Install APK + Launch + QA
         id: emu
         if: steps.build.outcome == 'success'
