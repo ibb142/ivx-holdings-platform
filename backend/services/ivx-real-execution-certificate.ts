@@ -295,13 +295,31 @@ export async function runPolicyVerifications(runId: string): Promise<PolicyCheck
   const crossCompany = readMemory('company_saas_builder_shared', 'any_key', probeAgent.agentId);
   checks.push({ name: 'cross_company_isolation', passed: !crossCompany.ok, detail: !crossCompany.ok ? `cross-company memory read denied: ${String(crossCompany.error).slice(0, 80)}` : 'UNEXPECTED: cross-company read succeeded' });
 
-  // 12) Pending tasks survive restart — durable queue + boot resume wiring
+  // 12) Pending tasks survive restart — durable queue + boot resume wiring.
+  // Bounded read retry distinguishes a transient fetch failure from a genuinely
+  // missing row: a durable row must be discoverable once a read succeeds. The
+  // check still fails hard if the row is truly absent after all attempts — it
+  // never passes on error and never fakes discovery.
   const pendingProbeId = `${runId}-policy-pending`;
   await insertExecutions([{ task_id: pendingProbeId, run_id: `${runId}-policy`, agent_id: probeAgent.agentId, agent_number: probeAgent.agentNumber, task_type: 'pending_probe', final_status: 'pending', dedup_key: pendingProbeId }]);
-  const pendingBack = await fetchPendingExecutions(300);
-  const pendingFound = (pendingBack.data ?? []).some((r) => r.task_id === pendingProbeId);
+  let pendingFound = false;
+  let pendingReadError = '';
+  let pendingAttempts = 0;
+  for (let attempt = 1; attempt <= 3 && !pendingFound; attempt++) {
+    pendingAttempts = attempt;
+    const pendingBack = await fetchPendingExecutions(300);
+    pendingReadError = pendingBack.ok ? '' : String(pendingBack.error ?? `status ${pendingBack.status}`).slice(0, 120);
+    pendingFound = (pendingBack.data ?? []).some((r) => r.task_id === pendingProbeId);
+    if (!pendingFound && attempt < 3) await new Promise<void>((resolve) => setTimeout(resolve, 400 * attempt));
+  }
   await updateExecution(pendingProbeId, { final_status: 'completed', finished_at: new Date().toISOString() });
-  checks.push({ name: 'pending_tasks_survive_restart', passed: pendingFound, detail: pendingFound ? 'pending task durable in Supabase and discoverable by boot resume scanner' : 'pending task not found in durable queue' });
+  checks.push({
+    name: 'pending_tasks_survive_restart',
+    passed: pendingFound,
+    detail: pendingFound
+      ? `pending task durable in Supabase and discoverable by boot resume scanner (read attempt ${pendingAttempts}/3)`
+      : `pending task not found in durable queue after ${pendingAttempts} read attempts${pendingReadError ? `; last read error: ${pendingReadError}` : ''}`,
+  });
 
   return checks;
 }

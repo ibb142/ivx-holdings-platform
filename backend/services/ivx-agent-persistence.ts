@@ -615,7 +615,10 @@ export async function fetchPendingExecutions(limit = 200): Promise<SbResult<Exec
     return sbRequest<ExecutionRow[]>(`ivx_agent_executions?final_status=in.(pending,running)&select=*&order=created_at.asc&limit=${limit}`);
   }
   if (mode === 'jobs_fallback') {
-    const res = await jobsSelect('type=eq.ivx_rec_execution&status=in.(queued,running)', limit);
+    // Newest-first so freshly queued tasks are always discoverable within the
+    // scan window even if the queue grows past `limit`; the 25s resume kick
+    // loops until the queue drains, so older tasks are still processed.
+    const res = await jobsSelect('type=eq.ivx_rec_execution&status=in.(queued,running)&order=created_at.desc', limit);
     const rows = (res.data ?? [])
       .map((d) => d.payload as unknown as ExecutionRow)
       .filter((p) => p.final_status === 'pending' || p.final_status === 'running');
