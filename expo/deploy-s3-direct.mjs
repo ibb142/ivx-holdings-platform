@@ -160,6 +160,7 @@ const backendHealthHTML = `<!DOCTYPE html>
 </html>`;
 
 async function deploy() {
+  const edgeStatus = { redirectFunction: 'pending', error: null, updatedAt: null };
   console.log('═══════════════════════════════════════════════════');
   console.log('  IVX Holdings — S3/CloudFront Landing Page Deploy');
   console.log('═══════════════════════════════════════════════════');
@@ -553,12 +554,16 @@ async function deploy() {
             IfMatch: currentETag,
           }));
           console.log('  ✅ Attached security headers and www redirect function to distribution');
+          edgeStatus.redirectFunction = 'attached';
         } else {
           console.log('  Security policy and www redirect function already attached');
+          edgeStatus.redirectFunction = 'attached';
         }
       }
     } catch (e) {
       console.warn('  Could not attach policy to distribution:', e?.message || 'Unknown');
+      edgeStatus.redirectFunction = 'failed';
+      edgeStatus.error = `${e?.name || 'Unknown'}: ${e?.message || 'Unknown error'}`;
       if (e?.$metadata) console.warn('   HTTP:', e.$metadata.httpStatusCode, '| Request ID:', e.$metadata.requestId || 'N/A');
     }
   }
@@ -593,6 +598,19 @@ async function deploy() {
   } catch (e) {
     console.error('❌ www redirect setup FAILED:', e?.name || 'Unknown', e?.message || 'Unknown error');
     if (e?.$metadata) console.error('   HTTP:', e.$metadata.httpStatusCode, '| Request ID:', e.$metadata.requestId || 'N/A');
+  }
+
+  edgeStatus.updatedAt = new Date().toISOString();
+  try {
+    await s3.send(new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: 'deployment-edge-status.json',
+      Body: JSON.stringify(edgeStatus, null, 2),
+      ContentType: 'application/json; charset=utf-8',
+      CacheControl: 'no-cache, no-store, must-revalidate',
+    }));
+  } catch (e) {
+    console.warn('  Could not publish edge status:', e?.message || 'Unknown');
   }
 
   // ── CloudFront invalidation ────────────────────────
