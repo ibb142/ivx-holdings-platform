@@ -12,7 +12,7 @@
  * (mobile, web, emails, PDFs) should reference these values.
  */
 
-const primaryBlack = '#000000' as const;
+const primaryBlack = '#0A0A0F' as const;
 const officialGold = '#E6C200' as const;
 const secondaryGold = '#FFD700' as const;
 const goldLight = '#FFF2A3' as const;
@@ -98,14 +98,14 @@ type AppColors = {
 const Colors: AppColors = {
   light: {
     text: textWhite,
-    background: primaryBlack,
+    background: '#0A0A0F',
     tint: tintColorLight,
     tabIconDefault: '#555555',
     tabIconSelected: tintColorLight,
   },
   dark: {
     text: textWhite,
-    background: primaryBlack,
+    background: '#0A0A0F',
     tint: tintColorLight,
     tabIconDefault: '#555555',
     tabIconSelected: tintColorLight,
@@ -115,7 +115,7 @@ const Colors: AppColors = {
   primaryLight: goldLight,
   secondary: surfaceElevated,
   accent: officialGold,
-  background: primaryBlack,
+  background: '#0A0A0F',
   backgroundSecondary: surfaceElevated,
   backgroundTertiary: '#242424',
   surface,
