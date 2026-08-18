@@ -21,7 +21,10 @@
   window._ivxLazyLoad = function(module) {
     if (module === 'portal') {
       if (window.IVXPortal) return Promise.resolve(window.IVXPortal);
-      return loadScript('/ivx-portal.js').then(function() { return window.IVXPortal; });
+      return loadScript('/ivx-portal.js?v=20260817-owner-portal-1').then(function() {
+        if (!window.IVXPortal) throw new Error('Portal module loaded without IVXPortal');
+        return window.IVXPortal;
+      });
     }
     if (module === 'invest') {
       if (window.IVXInvest) return Promise.resolve(window.IVXInvest);
