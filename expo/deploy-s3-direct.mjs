@@ -242,6 +242,7 @@ async function deploy() {
     { path: LANDING_DIR + '/ivx-portal.js', key: 'ivx-portal.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-reels.js', key: 'ivx-reels.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-lazy-bridge.js', key: 'ivx-lazy-bridge.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-lazy-bridge.js', key: 'ivx-lazy-bridge-owner-portal-2.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-ui-utils.js', key: 'ivx-ui-utils.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-web-vitals.js', key: 'ivx-web-vitals.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-wire.js', key: 'ivx-wire.js', type: 'application/javascript; charset=utf-8' },
