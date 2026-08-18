@@ -516,10 +516,18 @@ async function deploy() {
     console.warn('  Could not create/find policy:', e?.message || 'Unknown');
   }
 
-  // Attach security policy and host redirect to the distribution.
-  if (policyId) {
+  // Attach security policy and host redirect to the distribution. The redirect
+  // is independent of the optional response-headers policy.
+  let redirectFunctionArn = '';
+  try {
+    redirectFunctionArn = await ensureWwwRedirectFunction();
+  } catch (e) {
+    edgeStatus.redirectFunction = 'failed';
+    edgeStatus.error = `${e?.name || 'Unknown'}: ${e?.message || 'Unknown error'}`;
+    console.warn('  Could not publish www redirect function:', e?.message || 'Unknown');
+  }
+  if (policyId || redirectFunctionArn) {
     try {
-      const redirectFunctionArn = await ensureWwwRedirectFunction();
       const distRes = await cf.send(new GetDistributionConfigCommand({ Id: DIST_ID }));
       const distConfig = distRes.DistributionConfig;
       const currentETag = distRes.ETag || '';
@@ -536,17 +544,18 @@ async function deploy() {
         }
 
         const currentPolicyId = distConfig.DefaultCacheBehavior.ResponseHeadersPolicyId;
+        const policyChanged = Boolean(policyId && currentPolicyId !== policyId);
         const currentAssociations = distConfig.DefaultCacheBehavior.FunctionAssociations?.Items || [];
         const otherAssociations = currentAssociations.filter((item) => item.EventType !== 'viewer-request');
-        const hasRedirectFunction = currentAssociations.some((item) => item.EventType === 'viewer-request' && item.FunctionARN === redirectFunctionArn);
-        if (!hasRedirectFunction) {
+        const hasRedirectFunction = Boolean(redirectFunctionArn && currentAssociations.some((item) => item.EventType === 'viewer-request' && item.FunctionARN === redirectFunctionArn));
+        if (redirectFunctionArn && !hasRedirectFunction) {
           distConfig.DefaultCacheBehavior.FunctionAssociations = {
             Quantity: otherAssociations.length + 1,
             Items: [...otherAssociations, { EventType: 'viewer-request', FunctionARN: redirectFunctionArn }],
           };
         }
-        if (currentPolicyId !== policyId || !hasRedirectFunction) {
-          distConfig.DefaultCacheBehavior.ResponseHeadersPolicyId = policyId;
+        if (policyChanged || (redirectFunctionArn && !hasRedirectFunction)) {
+          if (policyId) distConfig.DefaultCacheBehavior.ResponseHeadersPolicyId = policyId;
 
           await cf.send(new UpdateDistributionCommand({
             Id: DIST_ID,
