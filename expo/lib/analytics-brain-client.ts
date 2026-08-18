@@ -5,7 +5,7 @@
 
 import { Platform } from 'react-native';
 
-const API_BASE = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://ivx-holdings-platform.onrender.com';
+const API_BASE = 'https://ivx-holdings-platform.onrender.com';
 
 export interface BehaviorEventInput {
   user_id?: string;
