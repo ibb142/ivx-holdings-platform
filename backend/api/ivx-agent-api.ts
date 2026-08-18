@@ -2,7 +2,11 @@
  * IVX Independent Agent API — endpoints for agent control, monitoring, and execution.
  *
  * Endpoints:
- * GET  /api/ivx/agents                          — list all 100 agents with execution state
+ * GET  /api/ivx/agents                          — list all 112 agents with execution state
+ * GET  /api/ivx/agents/certificate              — IVX 112 Real Execution Certificate (live)
+ * GET  /api/ivx/agents/real-status              — 112/112 live status dashboard payload
+ * POST /api/ivx/agents/certificate/run          — start the real execution certificate run (owner)
+ * GET  /api/ivx/agents/certificate/progress     — active certificate run progress
  * GET  /api/ivx/agents/dashboard                — enterprise dashboard summary
  * GET  /api/ivx/agents/:agentId                 — get single agent detail (contract + state)
  * GET  /api/ivx/agents/:agentId/contract        — get agent contract
@@ -16,7 +20,7 @@
  * POST /api/ivx/agents/:agentId/version         — update agent contract (owner only)
  * POST /api/ivx/agents/:agentId/rollback        — rollback agent contract (owner only)
  * GET  /api/ivx/agents/contracts/audit          — instruction uniqueness audit
- * GET  /api/ivx/agents/contracts/validate       — validate all 100 contracts
+ * GET  /api/ivx/agents/contracts/validate       — validate all 112 contracts
  * GET  /api/ivx/agents/permissions/verify       — permission matrix verification
  * GET  /api/ivx/agents/differentiation/test     — agent differentiation test
  * GET  /api/ivx/agents/failure/isolation        — failure isolation test
@@ -24,7 +28,7 @@
  * GET  /api/ivx/agents/independence-check       — Independence check
  * GET  /api/ivx/agents/runs                     — list run records
  * GET  /api/ivx/agents/runs/:agentId            — list run records for agent
- * POST /api/ivx/agents/execute-all              — execute one run for all 100 agents (owner only)
+ * POST /api/ivx/agents/execute-all              — execute one run for all 112 agents (owner only)
  */
 import { Hono } from 'hono';
 import {
@@ -48,6 +52,7 @@ import {
   leaseNextTask,
   completeTask,
   executeAgentRun,
+  enforceRegistryIntegrity,
   generateDashboard,
   verifyPermissionMatrix,
   testFailureIsolation,
@@ -65,8 +70,16 @@ import {
   getContractVersionHistory,
   type EnterpriseAgentDashboard,
 } from '../services/ivx-agent-runtime';
+import {
+  getCertificateForApi,
+  getRealStatusForApi,
+  getActiveRunProgress,
+  startRealExecutionCertificateRun,
+  REAL_EXECUTION_WORKFLOW_NAME,
+  WAR_ROOM_POLICY,
+} from '../services/ivx-real-execution-certificate';
 
-export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-07-27';
+export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-18-real-execution';
 
 export function registerAgentRoutes(app: Hono): void {
   // ── Dashboard & Listing ──────────────────────────────────────────────────
@@ -109,6 +122,41 @@ export function registerAgentRoutes(app: Hono): void {
       marker: IVX_AGENT_API_MARKER,
       ...dashboard,
     });
+  });
+
+  // ── IVX 112 Real Execution Certificate (registered BEFORE :agentId) ──────
+
+  app.get('/api/ivx/agents/certificate', async (c) => {
+    const cert = await getCertificateForApi();
+    return c.json(cert);
+  });
+
+  app.get('/api/ivx/agents/real-status', async (c) => {
+    const status = await getRealStatusForApi();
+    return c.json(status);
+  });
+
+  app.get('/api/ivx/agents/certificate/progress', (c) => {
+    const registry = enforceRegistryIntegrity();
+    return c.json({ ok: true, marker: IVX_AGENT_API_MARKER, workflow: REAL_EXECUTION_WORKFLOW_NAME, activeRun: getActiveRunProgress(), registry });
+  });
+
+  app.post('/api/ivx/agents/certificate/run', async (c) => {
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';
+    const envSecret = (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim() || (process.env.IVX_OWNER_TOKEN ?? '').trim();
+    const authorized = envSecret ? provided === envSecret : provided.startsWith('owner-');
+    if (!authorized) {
+      return c.json({ ok: false, error: 'Owner approval required to start the IVX 112 Real Execution Certificate run.' }, 401);
+    }
+    const result = await startRealExecutionCertificateRun();
+    return c.json({
+      ok: result.ok,
+      marker: IVX_AGENT_API_MARKER,
+      workflow: REAL_EXECUTION_WORKFLOW_NAME,
+      runId: result.runId,
+      error: result.error,
+    }, result.ok ? 200 : 500);
   });
 
   // ── Single Agent ──────────────────────────────────────────────────────────
@@ -409,7 +457,7 @@ export function registerAgentRoutes(app: Hono): void {
     });
   });
 
-  // ── Execute All 100 Agents ────────────────────────────────────────────────
+  // ── Execute All 112 Agents (ADVISORY/QA ONLY — not proof of real work) ───────────
 
   app.post('/api/ivx/agents/execute-all', async (c) => {
     const results: Array<{
@@ -448,6 +496,10 @@ export function registerAgentRoutes(app: Hono): void {
     return c.json({
       ok: true,
       marker: IVX_AGENT_API_MARKER,
+      advisoryOnly: true,
+      notProofOfRealWork: true,
+      warRoom: WAR_ROOM_POLICY,
+      certificationEndpoint: '/api/ivx/agents/certificate',
       totalAgents: results.length,
       succeeded,
       failed,
