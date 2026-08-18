@@ -1188,6 +1188,8 @@
     document.body.style.overflow = '';
   }
   launch.addEventListener('click', openReels);
+  var navLaunch = document.getElementById('navReelsBtn');
+  if (navLaunch) navLaunch.addEventListener('click', openReels);
   window.IVXOpenReels = openReels;
   el('close').addEventListener('click', closeReels);
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && root.classList.contains('open')) closeReels(); });

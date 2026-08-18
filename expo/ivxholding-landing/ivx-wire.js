@@ -5,6 +5,22 @@
  * Authenticated users get full bank details with routing/account numbers.
  */
 (function() {
+  function bindWireCta() {
+    var cta = document.getElementById('wire-cta-btn');
+    if (!cta || cta.dataset.ivxWireBound === 'true') return;
+    cta.dataset.ivxWireBound = 'true';
+    cta.addEventListener('click', function(e) {
+      e.preventDefault();
+      if (typeof window.openPortal === 'function') window.openPortal();
+    });
+  }
+
+  bindWireCta();
+  if (location.pathname === '/wire-transfer' || location.hash === '#wire-transfer') {
+    var wireSection = document.getElementById('wire-transfer');
+    if (wireSection) setTimeout(function() { wireSection.scrollIntoView({ block: 'start' }); }, 0);
+  }
+
   fetch('/api/ivx/wire-instructions').then(function(r) {
     if (!r.ok) {
       // Network/server error — show CTA to get instructions in the app

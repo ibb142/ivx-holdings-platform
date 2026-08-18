@@ -108,6 +108,16 @@
   }
 
   bind(document);
+  document.addEventListener('click', function (event) {
+    var investButton = event.target.closest('.ivx-card-invest-btn,.ivx-hf-invest');
+    if (!investButton) return;
+    event.preventDefault();
+    var card = investButton.closest('.live-deal-card,[data-ivx-home-feed-video]');
+    var panel = card && card.querySelector('[id^="ivx-card-details-"]');
+    var dealId = panel ? panel.id.replace('ivx-card-details-', '') :
+      (card && card.getAttribute('data-ivx-home-feed-video')) || '';
+    if (typeof window.openInvestModal === 'function') window.openInvestModal(dealId);
+  });
   new MutationObserver(function (records) {
     records.forEach(function (record) {
       record.addedNodes.forEach(function (node) { if (node.nodeType === 1) bind(node); });
