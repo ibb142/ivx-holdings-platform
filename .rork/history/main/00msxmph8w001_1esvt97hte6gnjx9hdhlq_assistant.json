@@ -1,11 +1,5 @@
 {
-  "id": "1esvt97hte6gnjx9hdhlq",
   "role": "assistant",
-  "preferredModelName": "rork-fast-v1",
-  "resolvedModelName": "rork-fast-v1",
-  "gatewayProvider": "novita",
-  "gatewayModelId": "zai/glm-5.2",
-  "createdAt": 1786995039632,
   "responseMessageContents": [
     {
       "type": "compaction",
@@ -20,14 +14,13 @@
       "text": "The user wants a direct link to download the APK. I'll ignore the system context misfire — this is the existing IVX Android project, not a new empty project.\n\nThe APK is at `android-ivx-holdings/app/build/outputs/apk/release/app-release.apk` locally. The user wants a direct download link. I should upload it somewhere accessible — either to GitHub as a release asset, or to a file hosting service.\n\nLet me think about options:\n1. GitHub Releases — can create a release and upload the APK as an asset using the Contents API (but Contents API has 100MB limit, and our APK is 15MB so it's fine... actually Contents API doesn't support binary assets well for releases, need the Releases API)\n2. GitHub Releases API — create a release, then upload the APK as a release asset\n3. Transfer.sh or similar file sharing\n\nGitHub Releases API is the best option since we already have the GitHub token. Let me create a release and upload the APK as an asset.\n\nActually, wait — the GitHub token has `repo` scope, which should allow creating releases and uploading assets. Let me do that.",
       "id": "ktfx311qnfu31uhpj9vtw",
       "createdAt": 1786995003148,
-      "gatewayModelId": "zai/glm-5.2",
-      "completedAt": 1786995007705
+      "completedAt": 1786995007705,
+      "gatewayModelId": "zai/glm-5.2"
     },
     {
       "type": "text",
       "text": "I'll upload the APK as a GitHub release so you get a direct download link.",
-      "id": "zu1tmbcq4zi527dlk7zo7",
-      "createdAt": 1786995007706
+      "id": "zu1tmbcq4zi527dlk7zo7"
     },
     {
       "type": "tool",
@@ -45,15 +38,21 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app\\n\\npython3 << 'PYEOF'\\nimport json, base64, urllib.request, ssl, hashlib, os\\n\\nGITHUB_TOKEN = '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'\\nREPO = 'ibb142/ivx-holdings-platform'\\nctx = ssl.create_default_context()\\n\\napk_path = 'android-ivx-holdings/app/build/outputs/apk/release/app-release.apk'\\nwith open(apk_path, 'rb') as f:\\n    apk_bytes = f.read()\\n\\napk_sha256 = hashlib.sha256(apk_bytes).hexdigest()\\n\\n# Step 1: Create a GitHub release\\nrelease_payload = {\\n    \\\"tag_name\\\": \\\"v1.5.0-all-ia-live\\\",\\n    \\\"target_commitish\\\": \\\"main\\\",\\n    \\\"name\\\": \\\"IVX Holdings Android v1.5.0 — All IA Live\\\",\\n    \\\"body\\\": f\\\"\\\"\\\"# IVX Holdings Android v1.5.0 — All IA Live\\n\\n## What's New\\n\\n- **Voice Chat** — AI voice chat with mic input and text-to-speech (STT via Vercel AI Gateway, TTS via grok-tts)\\n- **SignalWire SMS** — Send SMS messages via SignalWire LaML API\\n- **SignalWire Voice** — Place voice calls via SignalWire LaML API\\n- **Auto-Login** — App auto-logs in as owner on startup for instant access to all IA features\\n- **Home Dashboard** — IVX Command Center with live status and IA feature tiles\\n- **Bottom Navigation** — Home, Autonomous, Chat, Profile tabs\\n- **112 IA Agents** — Full agent registry live\\n- **Code Execution Layer** — Live on production\\n- **30-Agent App Creation Pipeline** — IA-63 to IA-92\\n\\n## APK Details\\n\\n- **Size**: {len(apk_bytes):,} bytes ({len(apk_bytes)/1024/1024:.2f} MB)\\n- **SHA256**: `{apk_sha256}`\\n- **Version**: 1.5.0 (versionCode 13)\\n- **Build**: BUILD SUCCESSFUL\\n\\n## QA Certification\\n\\n7/7 tests passed on production — health, agents, code executor, pipeline, voice chat, SignalWire SMS, SignalWire voice.\\n\\\"\\\"\\\",\\n    \\\"draft\\\": False,\\n    \\\"prerelease\\\": False\\n}\\n\\nreq = urllib.request.Request(\\n    f'https://api.github.com/repos/{REPO}/releases',\\n    data=json.dumps(release_payload).encode('utf-8'),\\n    method='POST',\\n    headers={'Authorization': f'token {GITHUB_TOKEN}', 'Content-Type': 'application/json', 'Accept': 'application/vnd.github+json'}\\n)\\n\\ntry:\\n    with urllib.request.urlopen(req, context=ctx) as resp:\\n        release = json.loads(resp.read().decode('utf-8'))\\n        release_id = release['id']\\n        upload_url = release['upload_url'].replace('{?name,label}', '')\\n        html_url = release['html_url']\\n        print(f\\\"✅ Release created: {html_url}\\\")\\n        print(f\\\"   Release ID: {release_id}\\\")\\n        print(f\\\"   Upload URL: {upload_url}\\\")\\nexcept urllib.error.HTTPError as e:\\n    body = e.read().decode('utf-8')\\n    print(f\\\"❌ Release creation failed: HTTP {e.code}\\\")\\n    print(f\\\"   {body[:500]}\\\")\\n    # If release already exists, get it\\n    if e.code == 422:\\n        req2 = urllib.request.Request(\\n            f'https://api.github.com/repos/{REPO}/releases/tags/v1.5.0-all-ia-live',\\n            headers={'Authorization': f'token {GITHUB_TOKEN}', 'Accept': 'application/vnd.github+json'}\\n        )\\n        with urllib.request.urlopen(req2, context=ctx) as resp2:\\n            release = json.loads(resp2.read().decode('utf-8'))\\n            release_id = release['id']\\n            upload_url = release['upload_url'].replace('{?name,label}', '')\\n            html_url = release['html_url']\\n            print(f\\\"✅ Found existing release: {html_url}\\\")\\n\\n# Step 2: Upload APK as release asset\\nprint(f\\\"\\\\nUploading APK ({len(apk_bytes):,} bytes)...\\\")\\n\\nreq = urllib.request.Request(\\n    f'{upload_url}?name=ivx-holdings-v1.5.0-all-ia-live.apk&label=IVX+Holdings+v1.5.0+APK',\\n    data=apk_bytes,\\n    method='POST',\\n    headers={\\n        'Authorization': f'token {GITHUB_TOKEN}',\\n        'Content-Type': 'application/vnd.android.package-archive',\\n        'Accept': 'application/vnd.github+json'\\n    }\\n)\\n\\ntry:\\n    with urllib.request.urlopen(req, context=ctx) as resp:\\n        asset = json.loads(resp.read().decode('utf-8'))\\n        download_url = asset['browser_download_url']\\n        print(f\\\"✅ APK uploaded!\\\")\\n        print(f\\\"   Download URL: {download_url}\\\")\\n        print(f\\\"   Asset ID: {asset['id']}\\\")\\n        print(f\\\"   Size: {asset['size']:,} bytes\\\")\\nexcept urllib.error.HTTPError as e:\\n    body = e.read().decode('utf-8')\\n    print(f\\\"❌ APK upload failed: HTTP {e.code}\\\")\\n    print(f\\\"   {body[:500]}\\\")\\n\\nPYEOF\"}",
       "createdAt": 1786995008052,
-      "completedAt": 1786995024058
+      "completedAt": 1786995024058,
+      "compactedAt": 1787017211696
     },
     {
       "type": "text",
       "text": "Here's your direct download link:\n\n**https://github.com/ibb142/ivx-holdings-platform/releases/download/v1.5.0-all-ia-live/ivx-holdings-v1.5.0-all-ia-live.apk**\n\n- **Size**: 14.82 MB\n- **SHA256**: `68b0129e36bd1b84ad21cd5a530baac2558ef052ab3fb2c6afac4e830b8626fc`\n- **Version**: 1.5.0 (versionCode 13)\n\nThis is the \"All IA Live\" build with voice chat, SignalWire SMS/voice, auto-login, and full bottom navigation.",
-      "id": "8snc0orfotvi643qs38lw",
-      "createdAt": 1786995031347
+      "id": "8snc0orfotvi643qs38lw"
     }
   ],
+  "id": "1esvt97hte6gnjx9hdhlq",
+  "preferredModelName": "rork-fast-v1",
+  "resolvedModelName": "rork-fast-v1",
+  "gatewayProvider": "novita",
+  "gatewayModelId": "zai/glm-5.2",
+  "createdAt": 1786995039632,
   "snapshotId": "1esvt97hte6gnjx9hdhlq",
   "finishStats": {
     "contextTokens": 43116,
