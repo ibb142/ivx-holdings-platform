@@ -248,6 +248,7 @@ async function deploy() {
     { path: LANDING_DIR + '/ivx-csp-actions.js', key: 'ivx-csp-actions-20260818.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-csp-actions.js', key: 'ivx-csp-actions-20260818-2.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-csp-actions.js', key: 'ivx-csp-actions-20260818-3.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-csp-actions.js', key: 'ivx-csp-actions-20260818-4.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-ui-utils.js', key: 'ivx-ui-utils.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-web-vitals.js', key: 'ivx-web-vitals.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-wire.js', key: 'ivx-wire.js', type: 'application/javascript; charset=utf-8' },

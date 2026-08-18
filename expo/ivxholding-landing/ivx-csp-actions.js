@@ -138,6 +138,16 @@
 
   bind(document);
   document.addEventListener('click', function (event) {
+    var detailsButton = event.target.closest('.ivx-card-details-btn');
+    if (!detailsButton) return;
+    event.preventDefault();
+    event.stopPropagation();
+    var panel = detailsButton.nextElementSibling;
+    if (!panel || !panel.classList.contains('ivx-card-details-panel')) return;
+    panel.classList.toggle('open');
+    detailsButton.classList.toggle('open', panel.classList.contains('open'));
+  }, true);
+  document.addEventListener('click', function (event) {
     var investButton = event.target.closest('.ivx-card-invest-btn,.ivx-hf-invest');
     if (!investButton) return;
     event.preventDefault();
