@@ -679,6 +679,8 @@
         + '<button class="ivxr-act cmt"><span class="i">&#128172;</span><span class="c">' + fmtCount(v.comment_count) + '</span></button>'
         + '<button class="ivxr-act sav' + (v.viewer_saved ? ' saved' : '') + '"><span class="i">' + (v.viewer_saved ? '&#128278;' : '&#128279;') + '</span><span class="c">' + fmtCount(v.save_count) + '</span></button>'
         + '<button class="ivxr-act shr"><span class="i">&#10148;</span><span class="c">' + fmtCount(v.share_count) + '</span></button>'
+        + '<button class="ivxr-act ivxr-follow"><span class="i">&#10133;</span><span class="c">Follow</span></button>'
+        + '<button class="ivxr-act rpt"><span class="i">&#9873;</span><span class="c">Report</span></button>'
         + '<button class="ivxr-act mute" data-r="mute"><span class="i">' + (state.muted ? '&#128263;' : '&#128266;') + '</span></button>';
       slide.appendChild(rail);
       wireRail(rail, slide, v, heart);
