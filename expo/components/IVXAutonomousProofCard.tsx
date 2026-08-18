@@ -54,7 +54,7 @@ const Row = ({ icon: Icon, label, value, tone }: { icon: typeof Cpu; label: stri
 
 export function IVXAutonomousProofCard(): React.JSX.Element {
   const buildInfo = getIVXBuildInfo();
-  const apiBase = Constants.expoConfig?.extra?.rorkApiBaseUrl ?? Constants.expoConfig?.extra?.apiBaseUrl ?? 'https://api.ivxholding.com';
+  const apiBase = Constants.expoConfig?.extra?.apiBaseUrl ?? 'https://api.ivxholding.com';
 
   const proofQuery = useQuery<AutonomousProofData>({
     queryKey: ['ivx.autonomousProof'],
