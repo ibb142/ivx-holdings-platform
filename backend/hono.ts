@@ -3437,8 +3437,9 @@ app.get('/api/ivx/version', (context) => {
 // Public by design: only the anon key and public URLs are exposed, never
 // service-role or private credentials.
 const IVX_CANONICAL_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2Y2xjZGptamdobmR4c25nZnpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTQwMjcsImV4cCI6MjA4ODc3MDAyN30.OLDwa21VHQNs151AD-8k--_HigQ2d-N7yJfFn5UeNPk';
+const IVX_CANONICAL_SUPABASE_URL = 'https://kvclcdjmjghndxsngfzb.supabase.co';
 const landingConfigHandler = (context: { json: (body: unknown, status?: 200) => Response }) => {
-  const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
+  const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || IVX_CANONICAL_SUPABASE_URL).trim();
   // CRITICAL SECURITY FIX: Always return the canonical anon key, NEVER the service_role key.
   // The service_role key bypasses RLS and must never be exposed publicly. If the env var
   // contains a service_role key (detected via JWT role claim), fall back to the hardcoded
