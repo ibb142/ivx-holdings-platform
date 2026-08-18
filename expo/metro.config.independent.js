@@ -1,13 +1,6 @@
 // IVX Metro configuration — standard Expo config (owner-controlled).
 // This is now the live config, identical to metro.config.js.
 const { getDefaultConfig } = require("expo/metro-config");
-const { patchAiSdkProviderUtils } = require("./scripts/patch-ai-sdk-provider-utils.cjs");
-
-try {
-  patchAiSdkProviderUtils({ quiet: true });
-} catch (error) {
-  console.warn("[IVX metro] Hermes-safe AI SDK patch failed:", error.message);
-}
 
 const config = getDefaultConfig(__dirname);
 

@@ -1,14 +1,4 @@
 const { getDefaultConfig } = require("expo/metro-config");
-const { patchAiSdkProviderUtils } = require("./scripts/patch-ai-sdk-provider-utils.cjs");
-
-// Hermes/Metro rejects dynamic `import(id)` in @ai-sdk/provider-utils. Patch
-// every installed copy before Metro resolves modules (Rork sandboxes may skip
-// postinstall, so this must run at Metro startup too).
-try {
-  patchAiSdkProviderUtils({ quiet: true });
-} catch (error) {
-  console.warn("[IVX metro] Hermes-safe AI SDK patch failed:", error.message);
-}
 
 const config = getDefaultConfig(__dirname);
 
