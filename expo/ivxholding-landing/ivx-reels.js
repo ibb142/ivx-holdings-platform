@@ -352,7 +352,7 @@
   }
 
   function feedPath() {
-    var u = '/api/ivx/video-platform/feed?limit=6&viewer_id=' + encodeURIComponent(VIEWER);
+    var u = '/api/reels?limit=6&viewer_id=' + encodeURIComponent(VIEWER);
     if (state.channel === '__reels') u += '&type=reel';
     else if (state.channel) u += '&channel=' + encodeURIComponent(state.channel);
     if (state.cursor) u += '&cursor=' + encodeURIComponent(state.cursor);
@@ -426,7 +426,7 @@
         // Fallback: if the dedicated Project Reels rail is empty, serve the unified
         // investor feed so the Reels surface never appears broken to visitors.
         if (state.channel === '__reels' && vids.length === 0 && !state.cursor) {
-          return apiFetchJson('/api/ivx/video-platform/feed?limit=6&viewer_id=' + encodeURIComponent(VIEWER))
+          return apiFetchJson('/api/reels?limit=6&viewer_id=' + encodeURIComponent(VIEWER))
             .then(function (fbData) {
               var fbVids = (fbData && fbData.videos) || [];
               fbVids.forEach(function (v) {
