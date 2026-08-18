@@ -21,7 +21,7 @@ import { logStartup, logStartupError } from '@/lib/startup-trace';
 const tabColors = {
   active: '#FFD700',
   inactive: '#777777',
-  background: '#000000',
+  background: '#0A0A0F',
   border: '#242424'};
 
 const TABS_LOADING_TIMEOUT_MS = 2000;
@@ -149,7 +149,6 @@ export default function TabsLayout() {
         name="(home)"
         options={{
           title: 'Home',
-          href: '/(tabs)/(home)/home' as any,
           tabBarIcon: ({ color, size }) => <Home color={color} size={size} strokeWidth={2.3} />,
           tabBarButtonTestID: 'tab-home'}}
       />
