@@ -43,6 +43,9 @@ env:
   EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
   EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
   EXPO_PUBLIC_QA_BUILD: 'true'
+  # QA-only: enter the native-safe Home route without production credentials
+  # so CI certifies the exact screen that previously went black after mount.
+  EXPO_PUBLIC_IVX_OPEN_ACCESS_MODE: 'true'
   OWNER_EMAIL: iperez4242@gmail.com
 
 permissions:
@@ -239,7 +242,7 @@ jobs:
           target: google_apis
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: bash "$GITHUB_WORKSPACE/expo/scripts/certify-android-launch.sh" "${{ steps.apk.outputs.path }}" com.ivxholdings.app.owner screenshot-01-launch.png logcat.txt android-qa-launch.txt android-qa-package-version.txt
+          script: bash "$GITHUB_WORKSPACE/expo/scripts/certify-android-launch.sh" "${{ steps.apk.outputs.path }}" com.ivxholdings.app.owner screenshot-01-launch.png logcat.txt android-qa-launch.txt android-qa-package-version.txt "Home ready"
 
       - name: Emulator QA diagnostics
         if: always() && steps.emu.outcome != 'success' && steps.build.outcome == 'success'

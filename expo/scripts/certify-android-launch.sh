@@ -7,6 +7,7 @@ SCREENSHOT_PATH="${3:-android-launch.png}"
 LOGCAT_PATH="${4:-android-runtime-logcat.txt}"
 LAUNCH_PATH="${5:-android-launch.txt}"
 VERSION_PATH="${6:-android-package-version.txt}"
+EXPECTED_TEXT="${7:-}"
 
 adb wait-for-device
 
@@ -42,6 +43,17 @@ adb shell am start -W -n "$COMPONENT" | tee "$LAUNCH_PATH"
 sleep 15
 adb logcat -d -v threadtime > "$LOGCAT_PATH"
 adb exec-out screencap -p > "$SCREENSHOT_PATH"
+
+if [[ -n "$EXPECTED_TEXT" ]]; then
+  UI_DUMP_PATH="${LAUNCH_PATH%.txt}-ui.xml"
+  adb shell uiautomator dump /sdcard/ivx-window.xml >/dev/null
+  adb shell cat /sdcard/ivx-window.xml > "$UI_DUMP_PATH"
+  if ! grep -F "$EXPECTED_TEXT" "$UI_DUMP_PATH"; then
+    echo "Expected runtime text was not visible: $EXPECTED_TEXT" >&2
+    exit 1
+  fi
+  echo "Verified visible runtime text: $EXPECTED_TEXT" | tee -a "$LAUNCH_PATH"
+fi
 
 PID="$(adb shell pidof "$PACKAGE_NAME" | tr -d '\r')"
 if [[ -z "$PID" ]]; then
