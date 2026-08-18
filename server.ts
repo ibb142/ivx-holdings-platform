@@ -18,6 +18,8 @@ import { startAutonomousScheduler } from './backend/services/ivx-autonomous-sche
 import { startSmsNotificationScheduler, getSmsNotifierStatus } from './backend/services/ivx-autonomous-sms-notifier';
 import { runCompletionCampaignCycle } from './backend/services/ivx-autonomous-completion-campaign';
 import { getLatestMemberAuthCertification, startMemberAuthCertificationScheduler } from './backend/services/ivx-member-auth-certification';
+import { startAgentHeartbeatLoop } from './backend/services/ivx-agent-persistence';
+import { buildHeartbeatRows, resumePendingCertificateRuns } from './backend/services/ivx-real-execution-certificate';
 import { preloadAIProviderCredentialFromOwnerVariables } from './backend/services/ivx-ai-owner-variable-preload';
 import { mintIVXOutageOwnerSession, verifyIVXOutageOwnerSession } from './backend/services/ivx-outage-owner-session';
 import { listAutonomousVoiceCalls, placeAutonomousVoiceCall } from './backend/services/ivx-signalwire-voice';
@@ -159,6 +161,24 @@ const campaignBootKick = setTimeout(() => { void runCompletionCycleSafely('boot'
 campaignBootKick.unref?.();
 const campaignTimer = setInterval(() => { void runCompletionCycleSafely('interval'); }, COMPLETION_CAMPAIGN_INTERVAL_MS);
 campaignTimer.unref?.();
+
+// IVX 112 Real Execution runtime: durable heartbeats for all 112 agents and
+// automatic resume of pending certificate tasks after restart/redeploy.
+startAgentHeartbeatLoop(buildHeartbeatRows);
+const certResumeKick = setTimeout(() => {
+  void resumePendingCertificateRuns()
+    .then((r) => {
+      if (r.resumed > 0) {
+        console.log('[IVX Server] Real-execution tasks resumed after restart', r);
+      }
+    })
+    .catch((error) => {
+      console.warn('[IVX Server] Real-execution resume failed', {
+        error: error instanceof Error ? error.message.slice(0, 160) : 'unknown',
+      });
+    });
+}, 25_000);
+certResumeKick.unref?.();
 
 startSmsNotificationScheduler();
 const smsStatus = getSmsNotifierStatus();

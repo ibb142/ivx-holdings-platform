@@ -1,11 +1,11 @@
 /**
  * IVX Enterprise Master AI API (owner-only).
  *
- * Exposes the 100-agent enterprise registry, 2-hour reports, and
+ * Exposes the 112-agent enterprise registry, 2-hour reports, and
  * Enterprise Master AI governance endpoints.
  *
  *   GET /api/ivx/enterprise-master             → full enterprise overview
- *   GET /api/ivx/enterprise-master/agents      → all 100 agent summaries
+ *   GET /api/ivx/enterprise-master/agents      → all 112 agent summaries
  *   GET /api/ivx/enterprise-master/agents/:num → single agent detail
  *   GET /api/ivx/enterprise-master/division/:d → agents by division (A or B)
  *   GET /api/ivx/enterprise-master/company/:c  → agents by company
