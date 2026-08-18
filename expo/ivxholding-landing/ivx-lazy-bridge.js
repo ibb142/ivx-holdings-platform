@@ -21,10 +21,7 @@
   window._ivxLazyLoad = function(module) {
     if (module === 'portal') {
       if (window.IVXPortal) return Promise.resolve(window.IVXPortal);
-      return loadScript('/ivx-portal.js?v=20260817-owner-portal-1').then(function() {
-        if (!window.IVXPortal) throw new Error('Portal module loaded without IVXPortal');
-        return window.IVXPortal;
-      });
+      return loadScript('/ivx-portal.js').then(function() { return window.IVXPortal; });
     }
     if (module === 'invest') {
       if (window.IVXInvest) return Promise.resolve(window.IVXInvest);
@@ -50,6 +47,26 @@
     window._ivxLazyLoad('portal').then(function(m) { m.logout(); })
       .catch(function(e) { console.error('[IVX] portal load failed', e); });
   };
+
+  // The landing page CSP intentionally blocks inline event handlers. Bind the
+  // existing portal links from this trusted external script so their legacy
+  // onclick attributes cannot silently fall through to href="#".
+  function bindPortalLinks() {
+    document.querySelectorAll('[onclick*="openPortal"]').forEach(function(link) {
+      if (link.dataset.ivxPortalBound === 'true') return;
+      link.dataset.ivxPortalBound = 'true';
+      link.addEventListener('click', function(event) {
+        event.preventDefault();
+        window.openPortal();
+      });
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindPortalLinks, { once: true });
+  } else {
+    bindPortalLinks();
+  }
 
   // Investment — lazy loaded only when user opens invest flow (item 110)
   window.openInvestModal = function(dealId) {
