@@ -1,0 +1,187 @@
+name: IVX Landing Marketing 10 Fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-landing-marketing-10-fix.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  fix-deploy-certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Apply 10 landing marketing-readiness fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          index = Path('expo/ivxholding-landing/index.html')
+          html = index.read_text()
+
+          # 1) Build marker for deterministic live verification.
+          marker = '<meta name="ivx-marketing-readiness-build" content="2026-08-18-10fix" />'
+          if marker not in html:
+              html = html.replace('<meta name="author" content="IVX Holdings" />', '<meta name="author" content="IVX Holdings" />\n  ' + marker)
+
+          # 2) Remove stale APK version references from landing.
+          html = html.replace('1.10.14', '1.10.22')
+
+          # 3) Do not claim multi-channel capture is live unless independently certified.
+          html = html.replace('Multi-Channel Lead Capture — Live', 'Multi-Channel Lead Capture')
+          html = html.replace('Multi-Channel Lead Capture &mdash; Live', 'Multi-Channel Lead Capture')
+
+          # 4) Make attribution claim conditional on configured production integrations.
+          html = html.replace(
+              'Every visit from Google Ads, Instagram, LinkedIn, or TikTok is tagged at the door (UTM + click IDs) and routed into the CRM with its source attached.',
+              'Campaign visits can be tagged with UTM parameters and supported click IDs, then routed into the CRM when the corresponding production integrations are enabled.'
+          )
+
+          # 5) Avoid absolute treasury claim before live financial-rail certification.
+          html = html.replace(
+              'Every activated investor gets a full treasury account inside IVX — every dollar in, every dollar out, recorded on an immutable ledger.',
+              'Activated investors can access account-level transaction and portfolio records through the IVX member flow as supported by the enabled production services.'
+          )
+
+          # 6) Avoid claiming automatic statement schedules that are not live-certified.
+          html = html.replace(
+              'Automatic daily, weekly, monthly, quarterly, and yearly investor statements with opening balance, ending balance, and tax summary. Export PDF, Excel, CSV.',
+              'Investor reporting supports account statements and transaction history. Available export formats and reporting periods depend on the enabled production services.'
+          )
+
+          # 7) Avoid claiming specific funding rails unless enabled.
+          html = html.replace(
+              'Pending and cleared deposits tracked per account with bank reconciliation across wires, ACH, and checks.',
+              'Pending and cleared deposits are tracked per account for funding methods enabled for that investor and offering.'
+          )
+
+          # 8) Add a clear hero-level marketing disclosure.
+          disclosure = '<p class="hero-marketing-disclosure" style="max-width:760px;margin:14px auto 0;color:#b8b8b8;font-size:13px;line-height:1.55;">Investment minimums, fees, eligibility, projected returns and distribution terms vary by offering. Returns are not guaranteed and capital is at risk.</p>'
+          if 'hero-marketing-disclosure' not in html:
+              needle = '<div class="hero-actions">'
+              html = html.replace(needle, disclosure + '\n    ' + needle, 1)
+
+          # 9) Keep Android claim factual until current APK is live-certified.
+          html = html.replace('Android app live now', 'Android build available')
+          html = html.replace('Android App Live Now', 'Android Build Available')
+
+          # 10) Ensure legal/compliance pages are linked in-page for paid-traffic review.
+          legal_links = '<p class="hero-legal-links" style="max-width:760px;margin:10px auto 0;font-size:12px;"><a href="/disclosures.html">Investment Disclosures</a> · <a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a></p>'
+          if 'hero-legal-links' not in html:
+              html = html.replace(disclosure, disclosure + '\n    ' + legal_links, 1)
+
+          index.write_text(html)
+
+          for p in [Path('expo/deploy-s3-direct.mjs'), Path('expo/scripts/ivx-ci-checks.mjs')]:
+              if p.exists():
+                  text = p.read_text().replace('1.10.14', '1.10.22')
+                  p.write_text(text)
+          PY
+
+      - name: Verify 10 source gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          H='expo/ivxholding-landing/index.html'
+          test -f "$H"
+          grep -Fq 'ivx-marketing-readiness-build' "$H"
+          ! grep -Fq '1.10.14' "$H"
+          grep -Fq 'Multi-Channel Lead Capture' "$H"
+          ! grep -Fq 'Multi-Channel Lead Capture — Live' "$H"
+          grep -Fq 'production integrations are enabled' "$H"
+          grep -Fq 'enabled production services' "$H"
+          grep -Fq 'Investment minimums, fees, eligibility' "$H"
+          grep -Fq 'Returns are not guaranteed and capital is at risk' "$H"
+          grep -Fq '/disclosures.html' "$H"
+          grep -Fq '/privacy.html' "$H"
+
+      - name: Commit 10 fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'ivx-qa-bot'
+          git config user.email 'ivx-qa-bot@users.noreply.github.com'
+          git add expo/ivxholding-landing/index.html expo/deploy-s3-direct.mjs expo/scripts/ivx-ci-checks.mjs
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix(landing): complete 10 paid-marketing readiness fixes'
+            git push origin HEAD:main
+          fi
+
+      - name: Install deploy dependencies
+        working-directory: expo
+        run: bun add @aws-sdk/client-s3 @aws-sdk/client-cloudfront
+
+      - name: Deploy now
+        working-directory: expo
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_IVX_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_IVX_API_BASE_URL }}
+          EXPO_PUBLIC_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_API_BASE_URL }}
+        run: bun deploy-landing.mjs
+
+      - name: Live certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://ivxholding.com'
+          mkdir -p qa/evidence
+          body=$(mktemp)
+          curl -fsSL --retry 5 --retry-delay 3 --max-time 30 "$BASE/" -o "$body"
+          pass=0
+          check() { if eval "$2"; then echo "$1 PASS"; pass=$((pass+1)); else echo "$1 FAIL"; fi; }
+          check 1 "grep -Fq 'ivx-marketing-readiness-build' '$body'"
+          check 2 "! grep -Fq '1.10.14' '$body'"
+          check 3 "! grep -Fq 'Multi-Channel Lead Capture — Live' '$body'"
+          check 4 "grep -Fq 'Investment minimums, fees, eligibility' '$body'"
+          check 5 "grep -Fq 'Returns are not guaranteed and capital is at risk' '$body'"
+          check 6 "curl -fsSI '$BASE/privacy.html' >/dev/null"
+          check 7 "curl -fsSI '$BASE/terms.html' >/dev/null"
+          check 8 "curl -fsSI '$BASE/disclosures.html' >/dev/null"
+          check 9 "curl -fsSI '$BASE/legal.html' >/dev/null"
+          check 10 "curl -fsSI '$BASE/cookie.html' >/dev/null"
+          {
+            echo '# IVX LANDING MARKETING READINESS - 10 ITEM TECHNICAL CERTIFICATE'
+            echo
+            echo "Generated: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "Workflow run: $GITHUB_RUN_ID"
+            echo "Source SHA: $GITHUB_SHA"
+            echo "PASS: $pass/10"
+            echo
+            if [ "$pass" -eq 10 ]; then echo 'FINAL: PASS 10/10'; else echo 'FINAL: FAIL'; fi
+            echo
+            echo 'Scope: technical landing accuracy, deployment and public-page verification. Not legal or securities approval.'
+          } > qa/evidence/landing-marketing-readiness-10-certificate.md
+          cat qa/evidence/landing-marketing-readiness-10-certificate.md
+          test "$pass" -eq 10
+
+      - name: Commit live certificate
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          git config user.name 'ivx-qa-bot'
+          git config user.email 'ivx-qa-bot@users.noreply.github.com'
+          git add qa/evidence/landing-marketing-readiness-10-certificate.md
+          if ! git diff --cached --quiet; then
+            git commit -m 'qa: certify 10 landing marketing-readiness items live'
+            git push origin HEAD:main
+          fi
