@@ -5,6 +5,7 @@
  * CRM, JV deals, property admin, media, instagram cards.
  */
 const DEPLOYMENT_MARKER = 'ivx-public-features-api-v1-2026-07-01';
+const IVX_PUBLIC_SUPABASE_KEY = 'sb_publishable_HD3Xvq5bCQNJLFk1ROH9mQ_Wdb9xdDZ';
 
 // ── Supabase ───────────────────────────────────────────────────────────────
 let _sb: any = null;
@@ -20,7 +21,7 @@ async function getSB() {
 async function getPublicDealsSB() {
   const { createClient } = await import('@supabase/supabase-js');
   const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://kvclcdjmjghndxsngfzb.supabase.co').trim();
-  const publicAnonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJrdmNsY2RqbWpnaG5keHNuZ2Z6YiIsInJlZiI6Imt2Y2xjZGptamdobmR4c25nZnpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTQwMjcsImV4cCI6MjA4ODc3MDAyN30.OLDwa21VHQNs151AD-8k--_HigQ2d-N7yJfFn5UeNPk').trim();
+  const publicAnonKey = (process.env.SUPABASE_PUBLISHABLE_KEY || IVX_PUBLIC_SUPABASE_KEY).trim();
   return createClient(url, publicAnonKey, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
