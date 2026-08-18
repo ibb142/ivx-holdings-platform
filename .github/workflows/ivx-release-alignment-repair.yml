@@ -1,6 +1,8 @@
 name: IVX Release Alignment Repair
 
 on:
+  schedule:
+    - cron: '*/5 * * * *'
   push:
     paths:
       - '.github/workflows/ivx-release-alignment-repair.yml'
@@ -19,7 +21,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Align Android, landing, deploy, and APK certificate
+      - name: Launch-window gate
+        id: window
+        shell: bash
+        run: |
+          set -euo pipefail
+          now=$(date -u +%s)
+          cutoff=$(date -u -d '2026-08-19T04:00:00Z' +%s)
+          if [ "$now" -lt "$cutoff" ]; then
+            echo 'active=true' >> "$GITHUB_OUTPUT"
+            echo 'launch_window=ACTIVE'
+          else
+            echo 'active=false' >> "$GITHUB_OUTPUT"
+            echo 'launch_window=CLOSED'
+          fi
+
+      - name: Align Android, landing, deploy, CI, and APK certificate
+        if: steps.window.outputs.active == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
         shell: bash
         run: |
           set -euo pipefail
@@ -32,15 +50,26 @@ jobs:
                   ('versionName "1.10.21"', 'versionName "1.10.22"'),
               ],
               Path('expo/ivxholding-landing/index.html'): [
+                  ('ivx-holdings-v1.10.13.apk', 'ivx-holdings-v1.10.22.apk'),
                   ('ivx-holdings-v1.10.14.apk', 'ivx-holdings-v1.10.22.apk'),
               ],
               Path('expo/deploy-s3-direct.mjs'): [
+                  ('/tmp/ivx-holdings-1.10.13.apk', '/tmp/ivx-holdings-1.10.22.apk'),
                   ('/tmp/ivx-holdings-1.10.14.apk', '/tmp/ivx-holdings-1.10.22.apk'),
+                  ('ivx-holdings-v1.10.13.apk', 'ivx-holdings-v1.10.22.apk'),
                   ('ivx-holdings-v1.10.14.apk', 'ivx-holdings-v1.10.22.apk'),
+              ],
+              Path('expo/scripts/ivx-ci-checks.mjs'): [
+                  ('ivx-holdings-v1.10.13.apk', 'ivx-holdings-v1.10.22.apk'),
+                  ('ivx-holdings-v1.10.14.apk', 'ivx-holdings-v1.10.22.apk'),
+                  ('versionCode 118', 'versionCode 119'),
+                  ('versionName "1.10.21"', 'versionName "1.10.22"'),
               ],
           }
 
           for path, pairs in replacements.items():
+              if not path.exists():
+                  raise SystemExit(f'Missing required release file: {path}')
               text = path.read_text()
               original = text
               for old, new in pairs:
@@ -68,6 +97,7 @@ jobs:
           PY
 
       - name: Verify release consistency before commit
+        if: steps.window.outputs.active == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
         shell: bash
         run: |
           set -euo pipefail
@@ -76,30 +106,39 @@ jobs:
           grep -Fq 'version: "1.10.22"' expo/app.config.ts
           grep -Fq 'versionCode: 119' expo/app.config.ts
           test "$(grep -o 'ivx-holdings-v1.10.22.apk' expo/ivxholding-landing/index.html | wc -l)" -ge 1
+          ! grep -Fq 'ivx-holdings-v1.10.13.apk' expo/ivxholding-landing/index.html
           ! grep -Fq 'ivx-holdings-v1.10.14.apk' expo/ivxholding-landing/index.html
           grep -Fq '/tmp/ivx-holdings-1.10.22.apk' expo/deploy-s3-direct.mjs
           grep -Fq 'apk/ivx-holdings-v1.10.22.apk' expo/deploy-s3-direct.mjs
+          ! grep -Fq 'ivx-holdings-v1.10.13.apk' expo/deploy-s3-direct.mjs
           ! grep -Fq 'ivx-holdings-v1.10.14.apk' expo/deploy-s3-direct.mjs
+          ! grep -Fq 'ivx-holdings-v1.10.13.apk' expo/scripts/ivx-ci-checks.mjs
+          ! grep -Fq 'ivx-holdings-v1.10.14.apk' expo/scripts/ivx-ci-checks.mjs
           grep -Fq 'apk_manifest_gate=PASS' .github/workflows/ivx-owner-apk-release.yml
           echo 'release_alignment_source_gate=PASS'
 
       - name: Commit repaired release source
         id: commit
+        if: steps.window.outputs.active == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add expo/android/app/build.gradle expo/ivxholding-landing/index.html expo/deploy-s3-direct.mjs .github/workflows/ivx-owner-apk-release.yml
+          git add expo/android/app/build.gradle expo/ivxholding-landing/index.html expo/deploy-s3-direct.mjs expo/scripts/ivx-ci-checks.mjs .github/workflows/ivx-owner-apk-release.yml
+          changed=false
           if git diff --cached --quiet; then
             echo 'No repair changes required.'
           else
-            git commit -m 'fix(release): align v1.10.22 APK and landing distribution'
+            changed=true
+            git commit -m 'fix(release): converge v1.10.22 landing APK and CI'
             git push origin HEAD:main
           fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Dispatch APK build and landing production deploy
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || steps.commit.outputs.changed == 'true') && (steps.window.outputs.active == 'true' || github.event_name != 'schedule')
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -108,5 +147,3 @@ jobs:
           gh workflow run ivx-owner-apk-release.yml --ref main
           gh workflow run landing-s3-production-deploy.yml --ref main
           echo "dispatched_for_sha=${{ steps.commit.outputs.sha }}"
-
-# trigger: 2026-08-18T12:36-04:00
