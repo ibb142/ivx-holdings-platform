@@ -1,0 +1,67 @@
+name: IVX Landing 10of10 Repair
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-landing-10of10-repair.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair-and-trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Align public Android release references with current app version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(node - <<'NODE'
+          const fs = require('fs');
+          const source = fs.readFileSync('expo/app.config.ts', 'utf8');
+          const match = source.match(/version:\s*["']([^"']+)["']/);
+          if (!match) throw new Error('Unable to resolve app version');
+          process.stdout.write(match[1]);
+          NODE
+          )
+          echo "Current IVX version: $VERSION"
+          for file in \
+            expo/ivxholding-landing/index.html \
+            expo/deploy-s3-direct.mjs \
+            expo/scripts/ivx-ci-checks.mjs \
+            .github/workflows/ivx-owner-apk-release.yml; do
+            test -f "$file" || continue
+            sed -i -E "s/1\.10\.14/${VERSION}/g" "$file"
+          done
+          node expo/scripts/verify-apk-release-consistency.mjs
+
+      - name: Verify no stale public APK references remain
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -R -n --fixed-strings 'ivx-holdings-v1.10.14.apk' expo/ivxholding-landing expo/deploy-s3-direct.mjs expo/scripts/ivx-ci-checks.mjs; then
+            echo '::error::Stale v1.10.14 APK reference remains.'
+            exit 1
+          fi
+
+      - name: Commit repair to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'Landing release references already aligned.'
+            exit 0
+          fi
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add expo/ivxholding-landing/index.html expo/deploy-s3-direct.mjs expo/scripts/ivx-ci-checks.mjs .github/workflows/ivx-owner-apk-release.yml
+          git commit -m 'fix(landing): align Android release references with current version'
+          git push origin HEAD:main
