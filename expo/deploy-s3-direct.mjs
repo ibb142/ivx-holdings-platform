@@ -236,6 +236,7 @@ async function deploy() {
   const assetFiles = [
     { path: LANDING_DIR + '/ivx-styles.css', key: 'ivx-styles.css', type: 'text/css; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-app.js', key: 'ivx-app.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-app.js', key: 'ivx-app-landing-e2e-20260818.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-analytics.js', key: 'ivx-analytics.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-home-feed.js', key: 'ivx-home-feed.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-invest.js', key: 'ivx-invest.js', type: 'application/javascript; charset=utf-8' },
