@@ -6,7 +6,8 @@ import {View,
   TouchableOpacity,
   RefreshControl,
   useWindowDimensions,
-  Platform} from "react-native";
+  Platform,
+  ActivityIndicator} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
 import {
@@ -442,8 +443,15 @@ export default function HomeScreen() {
     return role === 'owner' || role === 'admin';
   }, [userRole]);
 
+  const [homeLoadTimeout, setHomeLoadTimeout] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setHomeLoadTimeout(true), 8000);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <View style={styles.container}>
+      <View style={styles.gradientUnderlay} />
       <ModuleErrorBoundary moduleName="Home">
       <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
         <View style={[styles.header, { paddingHorizontal: isXs ? 16 : 16 }]}>
@@ -493,8 +501,16 @@ export default function HomeScreen() {
             />
           }
         >
-          {jvDealsLoading && jvDeals.length === 0 && !refreshing && (
+          {jvDealsLoading && jvDeals.length === 0 && !refreshing && !homeLoadTimeout && (
             <HomeSkeleton />
+          )}
+
+          {jvDealsLoading && jvDeals.length === 0 && homeLoadTimeout && (
+            <View style={styles.timeoutFallback}>
+              <ActivityIndicator size="large" color={Colors.primary} />
+              <Text style={styles.timeoutTitle}>IVX Home is taking longer than usual</Text>
+              <Text style={styles.timeoutSubtitle}>Pull down to retry or continue waiting</Text>
+            </View>
           )}
 
           {(!jvDealsLoading || jvDeals.length > 0) && (
@@ -591,7 +607,14 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background},
+    backgroundColor: '#0A0A0F'},
+  gradientUnderlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#0A0A0F'},
   safeArea: {
     flex: 1},
   header: {
@@ -704,8 +727,24 @@ const styles = StyleSheet.create({
     marginTop: 8},
   bottomPadding: {
     height: 120},
+  timeoutFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 24},
+  timeoutTitle: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: '700' as const,
+    marginTop: 20,
+    textAlign: 'center'},
+  timeoutSubtitle: {
+    color: Colors.textTertiary,
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: 'center'},
   scrollView: {
-    backgroundColor: Colors.background},
+    backgroundColor: 'transparent'},
   scrollViewWeb: {
     // @ts-ignore: web-only CSS property to hide scrollbar
     scrollbarWidth: 'none',
