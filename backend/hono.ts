@@ -4898,6 +4898,11 @@ app.options('/api/ivx/voice-chat/status', (c) => c.body(null, 204));
 app.options('/api/ivx/voice-chat', (c) => c.body(null, 204));
 app.options('/api/ivx/voice-chat/transcribe', (c) => c.body(null, 204));
 app.options('/api/ivx/voice-chat/speak', (c) => c.body(null, 204));
+// Realtime Voice — WebSocket streaming voice (ChatGPT-level voice mode)
+// Status endpoint (HTTP); WebSocket upgrade handled in server.ts
+import { getRealtimeVoiceStatus } from './services/ivx-realtime-voice';
+app.get('/api/ivx/realtime-voice/status', (c) => c.json(getRealtimeVoiceStatus()));
+app.options('/api/ivx/realtime-voice/status', (c) => c.body(null, 204));
 
 // Owner-only Render deploy diagnostic — reads private credentials from process.env
 // or the encrypted Owner Variables runtime bridge, without returning secret values.
