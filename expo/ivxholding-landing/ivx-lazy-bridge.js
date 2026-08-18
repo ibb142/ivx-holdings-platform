@@ -51,6 +51,26 @@
       .catch(function(e) { console.error('[IVX] portal load failed', e); });
   };
 
+  // The landing page CSP intentionally blocks inline event handlers. Bind the
+  // existing portal links from this trusted external script so their legacy
+  // onclick attributes cannot silently fall through to href="#".
+  function bindPortalLinks() {
+    document.querySelectorAll('[onclick*="openPortal"]').forEach(function(link) {
+      if (link.dataset.ivxPortalBound === 'true') return;
+      link.dataset.ivxPortalBound = 'true';
+      link.addEventListener('click', function(event) {
+        event.preventDefault();
+        window.openPortal();
+      });
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindPortalLinks, { once: true });
+  } else {
+    bindPortalLinks();
+  }
+
   // Investment — lazy loaded only when user opens invest flow (item 110)
   window.openInvestModal = function(dealId) {
     window._ivxLazyLoad('invest').then(function(m) { m.open(dealId); })
