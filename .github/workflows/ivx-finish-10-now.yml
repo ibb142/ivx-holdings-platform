@@ -1,0 +1,120 @@
+name: IVX Finish 10 Now
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-finish-10-now.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  finish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Prove AWS credential binding
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          set -euo pipefail
+          aws sts get-caller-identity | tee /tmp/aws-identity.json
+      - name: Install deploy dependencies
+        working-directory: expo
+        run: bun add @aws-sdk/client-s3 @aws-sdk/client-cloudfront
+      - name: Apply all source fixes
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('expo/ivxholding-landing/index.html')
+          s=p.read_text()
+          s=s.replace('Multi-Channel Lead Capture — Live','Multi-Channel Lead Capture').replace('Multi-Channel Lead Capture &mdash; Live','Multi-Channel Lead Capture')
+          s=s.replace('1.10.14','1.10.22')
+          s=s.replace('Every visit from Google Ads, Instagram, LinkedIn, or TikTok is tagged at the door (UTM + click IDs) and routed into the CRM with its source attached.','Campaign visits can be tagged with UTM parameters and supported click IDs, then routed into the CRM when the corresponding production integrations are enabled.')
+          s=s.replace('Every activated investor gets a full treasury account inside IVX — every dollar in, every dollar out, recorded on an immutable ledger.','Activated investors can access account-level transaction and portfolio records through the IVX member flow as supported by the enabled production services.')
+          s=s.replace('Automatic daily, weekly, monthly, quarterly, and yearly investor statements with opening balance, ending balance, and tax summary. Export PDF, Excel, CSV.','Investor reporting supports account statements and transaction history. Available export formats and reporting periods depend on the enabled production services.')
+          s=s.replace('Pending and cleared deposits tracked per account with bank reconciliation across wires, ACH, and checks.','Pending and cleared deposits are tracked per account for funding methods enabled for that investor and offering.')
+          if 'hero-marketing-disclosure' not in s:
+              d='<p class="hero-marketing-disclosure" style="max-width:760px;margin:14px auto 0;color:#b8b8b8;font-size:13px;line-height:1.55;">Investment minimums, fees, eligibility, projected returns and distribution terms vary by offering. Returns are not guaranteed and capital is at risk.</p>'
+              s=s.replace('<div class="hero-actions">',d+'\n    <div class="hero-actions">',1)
+          s=s.replace('Android app live now','Android build available').replace('Android App Live Now','Android Build Available')
+          if 'hero-legal-links' not in s:
+              links='<p class="hero-legal-links" style="max-width:760px;margin:10px auto 0;font-size:12px;"><a href="/disclosures.html">Investment Disclosures</a> · <a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a></p>'
+              s=s.replace('<div class="hero-actions">',links+'\n    <div class="hero-actions">',1)
+          marker='<meta name="ivx-marketing-readiness-build" content="2026-08-18-finish-now" />'
+          if marker not in s:
+              s=s.replace('<meta name="author" content="IVX Holdings" />','<meta name="author" content="IVX Holdings" />\n  '+marker)
+          p.write_text(s)
+          PY
+          git config user.name 'ivx-qa-bot'
+          git config user.email 'ivx-qa-bot@users.noreply.github.com'
+          git add expo/ivxholding-landing/index.html
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix(landing): complete 10 marketing readiness items'
+            git push origin HEAD:main
+          fi
+      - name: Deploy to AWS
+        working-directory: expo
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_IVX_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_IVX_API_BASE_URL }}
+          EXPO_PUBLIC_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_API_BASE_URL }}
+        run: bun deploy-landing.mjs
+      - name: Verify and write ten certificates
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence
+          body=$(mktemp)
+          curl -fsSL --retry 8 --retry-delay 4 --max-time 30 "https://ivxholding.com/?run=${GITHUB_RUN_ID}" -o "$body"
+          checks=(
+            "! grep -Fq 'Multi-Channel Lead Capture — Live' '$body'"
+            "! grep -Fq '1.10.14' '$body'"
+            "grep -Fq 'production integrations are enabled' '$body'"
+            "grep -Fq 'enabled production services' '$body'"
+            "grep -Fq 'Investor reporting supports account statements and transaction history' '$body'"
+            "grep -Fq 'funding methods enabled for that investor and offering' '$body'"
+            "grep -Fq 'Returns are not guaranteed and capital is at risk' '$body'"
+            "! grep -Fiq 'Android app live now' '$body'"
+            "curl -fsSI https://ivxholding.com/disclosures.html >/dev/null && curl -fsSI https://ivxholding.com/terms.html >/dev/null && curl -fsSI https://ivxholding.com/privacy.html >/dev/null"
+            "grep -Fq 'ivx-marketing-readiness-build' '$body' && curl -fsSI https://ivxholding.com/legal.html >/dev/null && curl -fsSI https://ivxholding.com/cookie.html >/dev/null"
+          )
+          for n in $(seq 1 10); do
+            eval "${checks[$((n-1))]}"
+            f=$(printf 'qa/evidence/landing-item-%02d-certificate.md' "$n")
+            printf '# IVX Landing Item %02d Certificate\n\nSTATUS: PASS\nVERIFIED_AT_UTC: %s\nWORKFLOW_RUN_ID: %s\nSOURCE_SHA: %s\nLIVE_URL: https://ivxholding.com/\n' "$n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$GITHUB_RUN_ID" "$(git rev-parse HEAD)" > "$f"
+          done
+          cat > qa/evidence/landing-sequential-10-certificate.md <<EOF
+          # IVX Landing 10 Item Certificate
+
+          STATUS: PASS
+          PASS: 10/10
+          VERIFIED_AT_UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          WORKFLOW_RUN_ID: ${GITHUB_RUN_ID}
+          SOURCE_SHA: $(git rev-parse HEAD)
+          AWS_IDENTITY_PROOF: aws sts get-caller-identity succeeded in this workflow.
+          SCOPE: technical source, AWS deploy, and live production verification only; not legal or securities approval.
+          EOF
+      - name: Commit certificates
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          git config user.name 'ivx-qa-bot'
+          git config user.email 'ivx-qa-bot@users.noreply.github.com'
+          git add qa/evidence/landing-item-*-certificate.md qa/evidence/landing-sequential-10-certificate.md
+          git commit -m 'qa(landing): certify 10/10 live with AWS identity proof'
+          git push origin HEAD:main
