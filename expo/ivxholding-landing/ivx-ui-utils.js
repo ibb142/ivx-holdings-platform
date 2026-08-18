@@ -107,3 +107,41 @@
     }, 10000);
   });
 })();
+
+// ═══ PAID-TRAFFIC APK SAFETY GATE ═══
+// Never send paid landing traffic to a stale Android binary. Until the
+// Home-recovery APK is independently certified and promoted, convert every
+// versioned APK CTA into a non-download status card and hide its QR code.
+(function() {
+  function gateStaleApkLinks() {
+    var links = document.querySelectorAll('a[href*="/apk/ivx-holdings-v1."]');
+    links.forEach(function(link) {
+      link.setAttribute('href', '#app-coming-soon');
+      link.setAttribute('aria-label', 'Android update in progress');
+      link.removeAttribute('download');
+      link.addEventListener('click', function() {
+        var target = document.getElementById('app-coming-soon');
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+      var small = link.querySelector('small');
+      var strong = link.querySelector('strong');
+      if (small) small.textContent = 'Update in progress';
+      if (strong) strong.textContent = 'Android';
+    });
+
+    document.querySelectorAll('img[src*="ivx-holdings-v1."][src*="qrserver.com"]').forEach(function(img) {
+      var wrap = img.closest('.app-store-qr, .app-badge-qr');
+      if (wrap) wrap.style.display = 'none';
+    });
+
+    document.querySelectorAll('.app-download-note, .app-banner-countdown').forEach(function(note) {
+      note.textContent = 'Android update is being certified. Investor intake and web access remain live.';
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', gateStaleApkLinks);
+  } else {
+    gateStaleApkLinks();
+  }
+})();
