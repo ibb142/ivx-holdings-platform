@@ -61,6 +61,35 @@
 
   function callNamed(name, args) {
     var fn = window[name];
+    if (typeof fn !== 'function' && name === 'toggleDealDetails') {
+      fn = function (button, dealId) {
+        var panel = document.getElementById('ivx-card-details-' + dealId);
+        if (!panel) return;
+        panel.classList.toggle('open');
+        button.classList.toggle('open', panel.classList.contains('open'));
+      };
+    }
+    if (typeof fn !== 'function' && (name === 'toggleDealLike' || name === 'toggleDealSave')) {
+      fn = function (button) {
+        var activeClass = name === 'toggleDealLike' ? 'liked' : 'saved';
+        button.classList.toggle(activeClass);
+        var active = button.classList.contains(activeClass);
+        var icon = button.querySelector('.ivx-card-action-icon');
+        var count = button.querySelector('.ivx-card-action-count');
+        if (icon) icon.textContent = name === 'toggleDealLike' ? (active ? '♥' : '♡') : (active ? '🔖' : '🔗');
+        if (count && name === 'toggleDealLike') count.textContent = active ? '1' : '0';
+      };
+    }
+    if (typeof fn !== 'function' && name === 'openDealComments') {
+      fn = function (dealId) { window.location.href = '/?deal=' + encodeURIComponent(dealId) + '#comments'; };
+    }
+    if (typeof fn !== 'function' && name === 'shareDeal') {
+      fn = function (dealId) {
+        var url = 'https://ivxholding.com/?deal=' + encodeURIComponent(dealId);
+        if (navigator.share) navigator.share({ title: 'IVX Investment', url: url }).catch(function () {});
+        else if (navigator.clipboard) navigator.clipboard.writeText(url).catch(function () {});
+      };
+    }
     if (typeof fn !== 'function') {
       console.error('[IVX CSP Actions] Missing action:', name);
       return false;
