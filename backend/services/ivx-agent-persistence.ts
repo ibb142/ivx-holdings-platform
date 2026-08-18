@@ -504,10 +504,22 @@ export async function fetchAgentStates(): Promise<SbResult<AgentStateRow[]>> {
     return sbRequest<AgentStateRow[]>('ivx_agent_states?select=*&order=agent_number.asc&limit=200');
   }
   if (mode === 'jobs_fallback') {
-    const res = await jobsSelect('type=eq.ivx_rec_state', 300);
+    const [res, beatRes] = await Promise.all([
+      jobsSelect('type=eq.ivx_rec_state', 300),
+      jobsSelect('type=eq.ivx_rec_heartbeat', 1),
+    ]);
+    const globalBeat = typeof beatRes.data?.[0]?.payload?.beat_at === 'string' ? String(beatRes.data[0].payload.beat_at) : null;
     const rows = (res.data ?? [])
       .map((d) => d.payload as unknown as AgentStateRow)
       .filter((p) => typeof p.agent_id === 'string')
+      .map((p) => {
+        // Overlay the global heartbeat doc (written race-free, separate from
+        // per-agent run state) when it is fresher than the per-row value.
+        if (globalBeat && (!p.last_heartbeat || globalBeat > p.last_heartbeat)) {
+          return { ...p, last_heartbeat: globalBeat };
+        }
+        return p;
+      })
       .sort((a, b) => a.agent_number - b.agent_number);
     return { ...res, data: rows as AgentStateRow[] };
   }
@@ -758,9 +770,27 @@ export function startAgentHeartbeatLoop(
       if (!ensure.ok) return;
       const now = new Date().toISOString();
       const rows = buildRows().map((r) => ({ ...r, last_heartbeat: now }));
-      const res = await upsertAgentStates(rows);
-      if (!res.ok) {
-        console.error('[IVXAgentPersistence] heartbeat upsert failed', { status: res.status, credentialBinding: res.credentialBinding, error: res.error?.slice(0, 160) });
+      const mode = await resolveStoreMode();
+      if (mode === 'dedicated') {
+        // Column-level upsert only touches provided columns — race-free.
+        const res = await upsertAgentStates(rows);
+        if (!res.ok) {
+          console.error('[IVXAgentPersistence] heartbeat upsert failed', { status: res.status, credentialBinding: res.credentialBinding, error: res.error?.slice(0, 160) });
+        }
+        return;
+      }
+      if (mode === 'jobs_fallback') {
+        // NEVER rewrite existing state payloads from the heartbeat path — a
+        // stale read-merge-write here can erase a concurrent run's health
+        // update. Seed missing rows only (ignore-duplicates), then write a
+        // single global heartbeat doc that fetchAgentStates overlays.
+        const seed = rows.map((r) => jobRow(uuidFromKey(`ivx-state:${r.agent_id}`), 'ivx_rec_state', 'completed', `IVX agent state ${r.agent_id}`, { ...r, updated_at: now }));
+        const seedRes = await sbRequest('ivx_agent_jobs?on_conflict=id', { method: 'POST', body: seed, prefer: 'resolution=ignore-duplicates,return=minimal' });
+        const beatDoc = [jobRow(uuidFromKey('ivx-heartbeat:global'), 'ivx_rec_heartbeat', 'completed', 'IVX 112 global heartbeat', { beat_at: now, agent_count: rows.length, agent_id: 'system' })];
+        const beatWrite = await sbRequest('ivx_agent_jobs?on_conflict=id', { method: 'POST', body: beatDoc, prefer: 'resolution=merge-duplicates,return=minimal' });
+        if (!seedRes.ok || !beatWrite.ok) {
+          console.error('[IVXAgentPersistence] heartbeat write failed', { seed: seedRes.status, beat: beatWrite.status, error: (seedRes.error ?? beatWrite.error ?? '').slice(0, 160) });
+        }
       }
     } catch (err) {
       console.error('[IVXAgentPersistence] heartbeat loop error', err instanceof Error ? err.message.slice(0, 160) : 'unknown');
