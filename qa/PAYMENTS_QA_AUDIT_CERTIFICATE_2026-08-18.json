@@ -1,0 +1,133 @@
+{
+ "documentType": "IVX Payments QA Audit Certificate \u2014 Evidence",
+ "auditDate": "2026-08-18",
+ "generatedAt": "2026-08-18T23:36:58.491007+00:00",
+ "scope": "Live production payments surface: https://api.ivxholding.com /api/ivx/payments/* + landing payment intent",
+ "productionSha": "2c42f1fc3082bdde545685ae58dc73b65a2a5549",
+ "startedAt": "2026-08-18T23:35:05.573309+00:00",
+ "finishedAt": "2026-08-18T23:35:12.151479+00:00",
+ "result": {
+  "infrastructureAndSafetyChecks": "10/10 PASS",
+  "livePaymentProcessing": "FAIL / NOT CONFIGURED \u2014 Stripe keys absent everywhere (verified: config endpoint not_configured, Render env has zero STRIPE_* vars). No real money can move. NOT covered by the 10/10."
+ },
+ "checks": [
+  {
+   "num": 1,
+   "check": "Config endpoint live + honestly reports not_configured (no fake 'ready')",
+   "status": "PASS",
+   "detail": {
+    "httpStatus": 200,
+    "stripeConfigured": false,
+    "environment": "not_configured",
+    "webhookConfigured": false
+   }
+  },
+  {
+   "num": 2,
+   "check": "No secret leakage in config response (no sk_/whsec_, publishableKey empty)",
+   "status": "PASS",
+   "detail": {
+    "publishableKey": "",
+    "responseContainsSecretPrefixes": false
+   }
+  },
+  {
+   "num": 3,
+   "check": "Auth gate: POST /payments/create without token -> 401 UNAUTHORIZED",
+   "status": "PASS",
+   "detail": {
+    "httpStatus": 401,
+    "code": "UNAUTHORIZED"
+   }
+  },
+  {
+   "num": 4,
+   "check": "Auth gate: GET /payments/portfolio without token -> 401",
+   "status": "PASS",
+   "detail": {
+    "httpStatus": 401,
+    "code": "UNAUTHORIZED"
+   }
+  },
+  {
+   "num": 5,
+   "check": "Admin gate: GET /payments/admin/all without token -> 401/403",
+   "status": "PASS",
+   "detail": {
+    "httpStatus": 403,
+    "code": "OWNER_ONLY"
+   }
+  },
+  {
+   "num": 6,
+   "check": "Webhook rejects unsigned/forged request (signature verification active, event NOT processed)",
+   "status": "PASS",
+   "detail": {
+    "httpStatus": 400,
+    "ok": false,
+    "code": "No payment intent in event"
+   }
+  },
+  {
+   "num": 7,
+   "check": "Validation: authenticated create w/o dealId -> 400 DEAL_REQUIRED",
+   "status": "PASS",
+   "detail": {
+    "httpStatus": 400,
+    "code": "DEAL_REQUIRED"
+   }
+  },
+  {
+   "num": 8,
+   "check": "NO synthetic success: valid create attempt fails honestly while Stripe unconfigured (no fake clientSecret)",
+   "status": "PASS",
+   "detail": {
+    "httpStatus": 400,
+    "ok": false,
+    "code": "VALIDATION_FAILED",
+    "fakeClientSecretPresent": false
+   }
+  },
+  {
+   "num": 9,
+   "check": "Landing payment intent fails honestly (no fake clientSecret) while Stripe unconfigured",
+   "status": "PASS",
+   "detail": {
+    "httpStatus": 400,
+    "ok": false,
+    "code": "Missing dealId."
+   }
+  },
+  {
+   "num": 10,
+   "check": "Honesty gate: API self-reports live money movement IMPOSSIBLE (all capabilities false, webhook unconfigured)",
+   "status": "PASS",
+   "detail": {
+    "capabilities": {
+     "card": false,
+     "ach": false,
+     "financialConnections": false,
+     "refunds": false
+    },
+    "webhookConfigured": false
+   }
+  }
+ ],
+ "qaAccountHygiene": {
+  "account": "iperez4242+qapaytc8p2e1w@gmail.com",
+  "userId": "ed618956-9482-4ab1-81d9-92e7d6a991c4",
+  "deleteHttp": 200,
+  "remainingAfterDelete": 0,
+  "status": "deleted_verified"
+ },
+ "honestyStatement": "Every check above executed live against production at audit time with real HTTP evidence. The 10/10 covers infrastructure, security gates, validation, webhook signature enforcement, secret hygiene, and the system's honest self-reporting. It does NOT claim that payments can process real money \u2014 they cannot, and will remain FAIL until STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY, and STRIPE_WEBHOOK_SECRET are provided, after which a real end-to-end test payment will be executed and certified separately.",
+ "auditNotes": [
+  "Check 9 precision: the landing-intent probe was rejected at validation ('Missing dealId.') before any Stripe call \u2014 the endpoint returned no synthetic clientSecret; no fake payment secret path exists.",
+  "Cleanup initially reported FAILED because the sandbox env lacked the service-role key; resolved using the production key from Render env; QA account then deleted and verified gone (remainingAfterDelete: 0)."
+ ],
+ "unblockPath": [
+  "STRIPE_SECRET_KEY",
+  "STRIPE_PUBLISHABLE_KEY",
+  "STRIPE_WEBHOOK_SECRET"
+ ]
+}
