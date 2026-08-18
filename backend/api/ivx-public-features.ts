@@ -17,6 +17,13 @@ async function getSB() {
   return _sb;
 }
 
+async function getPublicDealsSB() {
+  const { createClient } = await import('@supabase/supabase-js');
+  const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://kvclcdjmjghndxsngfzb.supabase.co').trim();
+  const publicAnonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJrdmNsY2RqbWpnaG5keHNuZ2Z6YiIsInJlZiI6Imt2Y2xjZGptamdobmR4c25nZnpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTQwMjcsImV4cCI6MjA4ODc3MDAyN30.OLDwa21VHQNs151AD-8k--_HigQ2d-N7yJfFn5UeNPk').trim();
+  return createClient(url, publicAnonKey, { auth: { autoRefreshToken: false, persistSession: false } });
+}
+
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -133,7 +140,7 @@ export async function handleCRMMain(req: Request): Promise<Response> {
 // ── JV Deals ──────────────────────────────────────────────────────────────
 export async function handleJVDealsList(req: Request): Promise<Response> {
   try {
-    const sb = await getSB();
+    const sb = await getPublicDealsSB();
     // Race against a timeout to prevent Supabase 522 from hanging the request
     const queryPromise = sb.from('jv_deals')
       .select('id,title,project_name,description,property_address,city,state,property_type,total_investment,expected_roi,term_months,status,published,photos,created_at,updated_at', { count: 'exact' })
