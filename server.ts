@@ -9,7 +9,10 @@
  * Port:    PORT env var (default 3000)
  */
 import { serve } from '@hono/node-server';
+import { createServer } from 'node:http';
+import { WebSocketServer } from 'ws';
 import app from './backend/hono-extended';
+import { handleRealtimeVoiceConnection, getRealtimeVoiceStatus } from './backend/services/ivx-realtime-voice';
 import { startSeniorDevWorker } from './backend/services/ivx-senior-dev-worker';
 import { startAutonomousScheduler } from './backend/services/ivx-autonomous-scheduler';
 import { startSmsNotificationScheduler, getSmsNotifierStatus } from './backend/services/ivx-autonomous-sms-notifier';
@@ -236,8 +239,39 @@ const productionFetch: typeof app.fetch = async (request, env, executionCtx) => 
   return app.fetch(request, env, executionCtx);
 };
 
+// ── Realtime Voice status endpoint (HTTP, for health checks) ──
+app.get('/api/ivx/realtime-voice/status', (c) => {
+  const status = getRealtimeVoiceStatus();
+  return c.json(status);
+});
+app.options('/api/ivx/realtime-voice/status', (c) => c.body(null, 204));
+
+// ── Create HTTP server that Hono uses, then attach WebSocket ──
+const httpServer = createServer(productionFetch);
+
+// ── WebSocket server for real-time voice ──
+const wss = new WebSocketServer({ noServer: true });
+
+httpServer.on('upgrade', (request, socket, head) => {
+  const url = new URL(request.url || '', `http://${request.headers.host || 'localhost'}`);
+  if (url.pathname === '/api/ivx/realtime-voice') {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  } else {
+    // Not a WebSocket route — close the socket
+    socket.destroy();
+  }
+});
+
+wss.on('connection', (ws, request) => {
+  void handleRealtimeVoiceConnection(ws as any, request);
+});
+
+console.log('[IVX Server] Realtime Voice WebSocket endpoint: ws://.../api/ivx/realtime-voice');
+
 serve(
-  { fetch: productionFetch, port: PORT, hostname: HOST },
+  { fetch: productionFetch, port: PORT, hostname: HOST, server: httpServer },
   (info) => {
     console.log('[IVX Server] Hono API server online', { host: HOST, port: info.port, family: info.family });
   },
