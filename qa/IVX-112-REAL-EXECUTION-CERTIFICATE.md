@@ -1,9 +1,14 @@
 # IVX 112 Real Execution Certificate — CERTIFIED 112/112
 
-**Certificate ID:** `IVX-112-REAL-EXEC-c1d70d97d79e6a35`
-**Certified (UTC):** 2026-08-18 · **Run:** `rec-1787091955530` · **Runtime:** `3.0.0-real-execution`
-**Production commit (exact):** `5684d3eee580fca1f2bbdbc85d671b252e318f84` — matches GitHub `main` HEAD and `/health` at verification time
+**Final Certificate ID:** `IVX-112-REAL-EXEC-669af32dd16cdb3d`
+**Certified (UTC):** 2026-08-18T22:31:10Z · **Run:** `rec-1787092227000` · **Runtime:** `3.0.0-real-execution`
+**Production commit (exact):** `6174b9e4bd6b` — certificate SHA == runtime SHA == `/health` SHA, `commitMatchesRuntime: true` verified live
 **Live endpoint:** `GET https://api.ivxholding.com/api/ivx/agents/certificate`
+
+Certification history (all 112/112 runs, real tools, zero simulation):
+- `rec-1787091851826` → `IVX-112-REAL-EXEC-e2af84c11b569a1b` (first full PASS, SHA `5684d3eee580`)
+- `rec-1787091955530` → `IVX-112-REAL-EXEC-c1d70d97d79e6a35` (PASS **through a live mid-run restart**)
+- `rec-1787092227000` → `IVX-112-REAL-EXEC-669af32dd16cdb3d` (final recertification on the exact current production SHA)
 
 ## Final result — all hard gates PASS
 
