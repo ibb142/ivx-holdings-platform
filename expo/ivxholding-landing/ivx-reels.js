@@ -452,8 +452,9 @@
         if (!state.cursor) state.done = true;
         finishLoad();
       })
-      .catch(function () {
+      .catch(function (error) {
         removeSpin();
+        console.error('[IVX Reels] Feed load failed:', error && error.message ? error.message : error);
         showFeedError();
         finishLoad();
       });
