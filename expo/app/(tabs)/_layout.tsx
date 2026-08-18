@@ -149,6 +149,7 @@ export default function TabsLayout() {
         name="(home)"
         options={{
           title: 'Home',
+          href: '/(tabs)/(home)/home' as any,
           tabBarIcon: ({ color, size }) => <Home color={color} size={size} strokeWidth={2.3} />,
           tabBarButtonTestID: 'tab-home'}}
       />

@@ -18,11 +18,12 @@ const HOME_INDEX_OPTIONS = {
   headerShown: false} as const;
 
 export const unstable_settings = {
-  initialRouteName: 'home'} as const;
+  initialRouteName: 'index'} as const;
 
 export default function HomeLayout() {
   return (
     <Stack screenOptions={HOME_STACK_SCREEN_OPTIONS}>
+      <Stack.Screen name="index" options={HOME_INDEX_OPTIONS} />
       <Stack.Screen name="home" options={HOME_INDEX_OPTIONS} />
     </Stack>
   );
