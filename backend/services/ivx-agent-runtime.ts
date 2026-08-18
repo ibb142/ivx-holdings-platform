@@ -19,7 +19,10 @@
  * - Agent-specific evidence and memory update after run
  * - Agent-specific permanent run record
  *
- * NO RORK DEPENDENCY. All state is in-memory with optional Supabase persistence.
+ * NO RORK DEPENDENCY. Execution state persists in Supabase (not RAM only):
+ * every run writes a durable execution row (taskId, toolsUsed, evidence,
+ * sourceReference, output, costUsage, finalStatus) plus lastHeartbeat,
+ * lastSuccessfulRun, and lastFailedRun on the durable agent state.
  */
 import {
   ALL_AGENT_CONTRACTS,
@@ -29,8 +32,25 @@ import {
   type AgentStatus,
 } from './ivx-agent-contracts';
 import { type CompanyId, type DivisionId } from './ivx-enterprise-master-registry';
+import {
+  executeRealTool,
+  executeSpecialMission,
+  getCertMission,
+  getPermittedRealTools,
+  SPECIAL_MISSION_AGENTS,
+  type RealToolResult,
+} from './ivx-agent-real-tools';
+import {
+  insertExecutions,
+  updateExecution,
+  upsertAgentStates,
+  insertAlert,
+  computeEvidenceSha,
+  type AgentStateRow,
+} from './ivx-agent-persistence';
 
-export const IVX_AGENT_RUNTIME_MARKER = 'ivx-agent-runtime-2026-07-27';
+export const IVX_AGENT_RUNTIME_MARKER = 'ivx-agent-runtime-2026-08-18-real-execution';
+export const IVX_AGENT_RUNTIME_VERSION = '3.0.0-real-execution';
 
 // ── Memory Layers ───────────────────────────────────────────────────────────
 
@@ -225,7 +245,7 @@ export function clearTaskMemory(agentId: string): { ok: boolean; cleared: number
 }
 
 /**
- * Get memory statistics for all 100 agents.
+ * Get memory statistics for all 112 agents.
  */
 export function getMemoryStats(): {
   agentMemoryNamespaces: number;
@@ -293,9 +313,67 @@ function initializeExecutionState(contract: AgentContract): AgentExecutionState 
   };
 }
 
-// Initialize all 100 execution states
+// Initialize all 112 execution states
 for (const contract of ALL_AGENT_CONTRACTS) {
   executionStates.set(contract.agentId, initializeExecutionState(contract));
+}
+
+/**
+ * Registry integrity enforcement: exactly 112 agents, 112 unique agentNumber
+ * values, 112 unique agentId values, all active. Offline, disabled, paused,
+ * unknown, or unhealthy agents FAIL integrity.
+ */
+export function enforceRegistryIntegrity(): {
+  ok: boolean;
+  totalAgents: number;
+  uniqueAgentNumbers: number;
+  uniqueAgentIds: number;
+  activeAgents: number;
+  issues: string[];
+} {
+  const REQUIRED = 112;
+  const issues: string[] = [];
+  const total = ALL_AGENT_CONTRACTS.length;
+  if (total !== REQUIRED) issues.push(`totalAgents must be exactly ${REQUIRED} — found ${total}`);
+  const numbers = new Set(ALL_AGENT_CONTRACTS.map((c) => c.agentNumber));
+  if (numbers.size !== REQUIRED) issues.push(`expected ${REQUIRED} unique agentNumber values — found ${numbers.size}`);
+  const ids = new Set(ALL_AGENT_CONTRACTS.map((c) => c.agentId));
+  if (ids.size !== REQUIRED) issues.push(`expected ${REQUIRED} unique agentId values — found ${ids.size}`);
+  const active = ALL_AGENT_CONTRACTS.filter((c) => c.status === 'active').length;
+  if (active !== REQUIRED) issues.push(`all ${REQUIRED} agents must be active — found ${active} active`);
+  for (const c of ALL_AGENT_CONTRACTS) {
+    const st = executionStates.get(c.agentId);
+    if (!st) {
+      issues.push(`missing execution state for ${c.agentId}`);
+      continue;
+    }
+    if (st.disabledState || st.pauseState || st.availability === 'offline' || st.availability === 'disabled' || st.availability === 'paused') {
+      issues.push(`${c.agentId} is ${st.availability} — offline/disabled/paused agents fail integrity`);
+    }
+  }
+  return {
+    ok: issues.length === 0,
+    totalAgents: total,
+    uniqueAgentNumbers: numbers.size,
+    uniqueAgentIds: ids.size,
+    activeAgents: active,
+    issues: issues.slice(0, 12),
+  };
+}
+
+/**
+ * Identity rows for the durable heartbeat loop. Health/availability are NOT
+ * included so restarts never overwrite the last persisted run health.
+ */
+export function buildAgentStateRows(): Array<Partial<AgentStateRow> & { agent_id: string; agent_number: number; agent_name: string }> {
+  return ALL_AGENT_CONTRACTS.map((c) => ({
+    agent_id: c.agentId,
+    agent_number: c.agentNumber,
+    agent_name: c.agentName,
+    company: String(c.companyId),
+    division: String(c.divisionId),
+    status: c.status,
+  }));
 }
 
 export function getExecutionState(agentId: string): AgentExecutionState | null {
@@ -558,6 +636,12 @@ export type AgentRunRecord = {
   error: string | null;
   ownerApprovalRecord: { approved: boolean; token: string | null; timestamp: string | null } | null;
   commitSha: string | null;
+  realToolUsed: boolean;
+  sourceReference: string | null;
+  toolResultId: string | null;
+  verifiedOutput: boolean;
+  costUsd: number;
+  simulated: boolean;
 };
 
 const runRecordStore: AgentRunRecord[] = [];
@@ -590,18 +674,23 @@ export type WorkerExecutionResult = {
 };
 
 /**
- * Execute a single agent run with full isolation.
+ * Execute a single agent run with full isolation and REAL tool enforcement.
  *
- * Flow:
- * 1. Load agent identity (verify contract exists)
- * 2. Load agent contract (system instructions, permissions, tools)
- * 3. Load agent memory (previous context)
- * 4. Permission check (verify task type is allowed)
- * 5. Agent-specific tool access (only allowed tools)
- * 6. Execute (simulate or real AI call)
- * 7. Agent-specific evidence (produce findings)
- * 8. Agent-specific memory update (store results)
- * 9. Agent-specific run record (permanent record)
+ * Hard rules:
+ * - A run can NEVER complete using only produceAgentOutput(...) — that output
+ *   is an advisory annotation only.
+ * - When the task requires external data (every certification mission does),
+ *   at least one real permitted tool MUST succeed.
+ * - Required execution fields on every run record: realToolUsed,
+ *   sourceReference, toolResultId, verifiedOutput.
+ * - Any execution with no verifiable source FAILS.
+ * - External tool failure is never replaced with synthetic output; there is
+ *   no fake-success fallback.
+ * - Execution state persists to Supabase: execution row (taskId, toolsUsed,
+ *   evidence, sourceReference, output, costUsage, finalStatus) + agent state
+ *   (lastHeartbeat, lastSuccessfulRun, lastFailedRun).
+ * - Per-contract timeout, retry (stable taskId — retries never duplicate
+ *   tasks), and cost-limit policies are enforced.
  */
 export async function executeAgentRun(
   agentId: string,
@@ -630,14 +719,13 @@ export async function executeAgentRun(
     return { ok: false, runRecord: null, error: `Agent ${agentId} is paused` };
   }
 
-  // Step 2: Load agent contract (already loaded above)
-  // Verify contract version and instruction hash
+  // Step 2: Verify contract integrity
   if (!contract.systemInstructions || contract.systemInstructions.length < 200) {
     return { ok: false, runRecord: null, error: `Agent ${agentId} has invalid system instructions` };
   }
 
-  // Step 3: Load agent memory (read previous context if any)
-  const memResult = readMemory(`${agentId}_memory`, 'last_context', agentId);
+  // Step 3: Load agent memory (previous context, isolation enforced)
+  readMemory(`${agentId}_memory`, 'last_context', agentId);
 
   // Step 4: Permission check — exact word match, not substring
   const isAllowed = contract.allowedTaskTypes.some(
@@ -664,53 +752,248 @@ export async function executeAgentRun(
     approvalRecord = { approved: true, token: ownerApprovalToken, timestamp: new Date().toISOString() };
   }
 
-  // Step 5: Agent-specific tool access — determine which tools will be used
-  const toolsUsed = contract.allowedTools.slice(0, Math.min(3, contract.allowedTools.length));
+  // Durable task identity — retries reuse the same taskId so tasks never duplicate
+  const taskId = typeof payload.__taskId === 'string' && payload.__taskId ? payload.__taskId : `direct-${agentId}-${startTime}`;
+  const runId = typeof payload.__runId === 'string' && payload.__runId ? payload.__runId : 'direct';
+  const workflow = typeof payload.__workflow === 'string' && payload.__workflow ? payload.__workflow : 'direct-run';
 
-  // Step 6: Execute — produce a real output based on the agent's role
-  state.activeTaskId = `direct-${agentId}-${startTime}`;
+  // Persist the execution row FIRST (Supabase, not RAM) — pending → running
+  await insertExecutions([{
+    task_id: taskId,
+    run_id: runId,
+    agent_id: agentId,
+    agent_number: contract.agentNumber,
+    workflow,
+    task_type: taskType,
+    final_status: 'pending',
+    dedup_key: taskId,
+  }]);
+  await updateExecution(taskId, { final_status: 'running', started_at: startISO, retry_count: 0 });
+
+  state.activeTaskId = taskId;
   state.availability = 'busy';
   state.lastHeartbeat = new Date().toISOString();
 
-  const taskId = `direct-${agentId}-${startTime}`;
-  const output = produceAgentOutput(contract, taskType, payload);
+  // Per-agent COST LIMIT enforcement (before any spend)
+  const costLimitUsd = typeof payload.__testCostLimitUsd === 'number' ? payload.__testCostLimitUsd : contract.costLimit.maxCostPerRun;
+  const projectedCostUsd = 0.001;
+  if (!(costLimitUsd > 0) || projectedCostUsd > costLimitUsd) {
+    const endISO = new Date().toISOString();
+    state.activeTaskId = null;
+    state.availability = state.pauseState ? 'paused' : 'available';
+    const costError = `Cost limit exhausted for agent ${agentId}: projected $${projectedCostUsd} exceeds per-run limit $${costLimitUsd}. Execution blocked — no synthetic fallback.`;
+    await updateExecution(taskId, {
+      final_status: 'blocked', error: costError, verified_output: false, real_tool_used: false,
+      cost_usage: { usd: 0, blockedByCostLimit: true }, finished_at: endISO, duration_ms: Date.now() - startTime, simulated: false,
+    });
+    return { ok: false, runRecord: null, error: costError };
+  }
+
+  // Step 5+6: REAL EXECUTION — at least one real permitted tool must succeed.
+  const timeoutMs = Math.min(Math.max(contract.timeoutPolicy.toolCallTimeoutMs || 12_000, 4_000), 20_000);
+  const maxRetries = Math.min(Math.max(contract.retryPolicy.maxRetries ?? 1, 0), 2);
+  const retryDelayMs = Math.min(Math.max(contract.retryPolicy.initialDelayMs || 500, 200), 1_500);
+
+  let toolResults: RealToolResult[] = [];
+  let missionTaskType = taskType;
+  let missionOutput: Record<string, unknown> = {};
+  let attempt = 0;
+
+  for (;;) {
+    if (SPECIAL_MISSION_AGENTS.includes(contract.agentNumber)) {
+      const special = await executeSpecialMission(agentId, contract.agentNumber, taskId, timeoutMs);
+      if (special) {
+        toolResults = special.toolResults;
+        missionTaskType = special.taskType;
+        missionOutput = special.outputData;
+      }
+    } else if (typeof payload.__toolId === 'string' && payload.__toolId) {
+      toolResults = [await executeRealTool(agentId, contract.agentNumber, payload.__toolId, (payload.__toolParams ?? {}) as Record<string, string | number | boolean | null | undefined>, { timeoutMs, ownerApprovalToken })];
+    } else {
+      const mission = getCertMission(contract.agentNumber, contract.agentName, contract.mission);
+      missionTaskType = mission.taskType;
+      const results: RealToolResult[] = [];
+      for (const step of mission.toolPlan) {
+        results.push(await executeRealTool(agentId, contract.agentNumber, step.toolId, step.params, { timeoutMs, ownerApprovalToken }));
+      }
+      toolResults = results;
+    }
+
+    const primaryOk = toolResults.length > 0 && toolResults[0].ok;
+    const anyBlocked = toolResults.some((t) => t.blocked);
+    if (primaryOk || anyBlocked || attempt >= maxRetries) break;
+    attempt++;
+    await updateExecution(taskId, { retry_count: attempt });
+    await new Promise((r) => setTimeout(r, retryDelayMs * attempt));
+  }
 
   const endTime = Date.now();
   const endISO = new Date(endTime).toISOString();
 
-  // Step 7: Agent-specific evidence
+  // Required execution fields — realToolUsed, sourceReference, toolResultId, verifiedOutput
+  const firstOk = toolResults.find((t) => t.ok) ?? null;
+  const realToolUsed = Boolean(firstOk);
+  const sourceReference = firstOk ? firstOk.sourceReference : null;
+  const toolResultId = firstOk ? firstOk.toolResultId : null;
+  const verifiedOutput = Boolean(firstOk && firstOk.sourceReference && firstOk.contentSha256 && firstOk.httpStatus >= 200);
+  const anyBlocked = toolResults.some((t) => t.blocked);
+  const costUsd = Number((0.001 * Math.max(1, toolResults.length)).toFixed(4));
+
+  // FAIL any execution that has no verifiable source. produceAgentOutput alone
+  // can NEVER complete a task — it is an advisory annotation only.
+  let finalStatus: 'completed' | 'failed' | 'blocked';
+  let errorMessage: string | null = null;
+  if (anyBlocked && !realToolUsed) {
+    finalStatus = 'blocked';
+    errorMessage = toolResults.find((t) => t.blocked)?.error ?? 'Blocked by tool policy';
+  } else if (!realToolUsed || !sourceReference || !verifiedOutput) {
+    finalStatus = 'failed';
+    errorMessage = `REAL EXECUTION REQUIRED: ${toolResults[0]?.error ?? 'no real tool succeeded'} — execution FAILED (no verifiable source; synthetic output is never accepted).`;
+  } else {
+    finalStatus = 'completed';
+  }
+
+  const advisory = produceAgentOutput(contract, missionTaskType, payload);
+  const output: Record<string, unknown> = {
+    summary: finalStatus === 'completed'
+      ? `${contract.agentName}: ${firstOk?.summary ?? ''}`
+      : `${contract.agentName}: execution ${finalStatus} — ${errorMessage ?? ''}`,
+    realWork: missionOutput,
+    toolSummaries: toolResults.map((t) => ({ toolId: t.toolId, ok: t.ok, blocked: t.blocked, summary: t.ok ? t.summary : t.error })),
+    advisoryNote: advisory.summary,
+    advisoryOnlyDisclaimer: 'advisoryNote is generated annotation — it can never complete a task by itself',
+  };
+
+  // Evidence — every tool call is a verifiable artifact
   const evidence = [
-    {
-      type: 'run_record',
-      description: `Run executed for agent ${contract.agentNumber} (${contract.agentName}) with task type ${taskType}`,
-      reference: `run-${agentId}-${startTime}`,
-    },
+    ...toolResults.map((t) => ({
+      type: t.ok ? 'real_tool_result' : t.blocked ? 'blocked_tool_attempt' : 'failed_tool_attempt',
+      description: t.ok ? t.summary : (t.error ?? 'tool failed'),
+      reference: t.ok ? `${t.toolResultId} → ${t.sourceReference} (sha256:${t.contentSha256.slice(0, 16)})` : t.toolId,
+    })),
     {
       type: 'contract_loaded',
       description: `Contract v${contract.version} loaded with instruction hash ${contract.instructionHash}`,
       reference: contract.instructionHash,
     },
-    {
-      type: 'tools_authorized',
-      description: `Tools authorized: ${toolsUsed.join(', ')}`,
-      reference: toolsUsed.join(','),
-    },
-    {
-      type: 'output_artifact',
-      description: output.summary,
-      reference: `output-${agentId}-${startTime}`,
-    },
   ];
+
+  const evidenceArtifact: Record<string, unknown> = {
+    workflow,
+    runId,
+    taskId,
+    agentId,
+    agentNumber: contract.agentNumber,
+    agentName: contract.agentName,
+    taskType: missionTaskType,
+    realToolUsed,
+    sourceReference,
+    toolResultId,
+    verifiedOutput,
+    toolResults: toolResults.map((t) => ({
+      toolId: t.toolId,
+      toolResultId: t.toolResultId,
+      ok: t.ok,
+      blocked: t.blocked,
+      sourceReference: t.sourceReference,
+      httpStatus: t.httpStatus,
+      contentSha256: t.contentSha256,
+      durationMs: t.durationMs,
+      credentialBinding: t.credentialBinding,
+      error: t.error,
+    })),
+    outputSummary: output.summary,
+    costUsd,
+    startedAt: startISO,
+    finishedAt: endISO,
+  };
+  const evidenceSha = computeEvidenceSha(evidenceArtifact);
 
   // Step 8: Agent-specific memory update
   writeMemory(
     `${agentId}_memory`,
     'agent',
     'last_context',
-    JSON.stringify({ taskType, output: output.summary, timestamp: endISO }),
-    `run-${agentId}-${startTime}`,
+    JSON.stringify({ taskType: missionTaskType, sourceReference, finalStatus, timestamp: endISO }),
+    sourceReference ?? `run-${agentId}-${startTime}`,
     agentId,
   );
+
+  // Persist the completed/failed/blocked execution (Supabase, not RAM)
+  await updateExecution(taskId, {
+    task_type: missionTaskType,
+    final_status: finalStatus,
+    real_tool_used: realToolUsed,
+    tools_used: toolResults.map((t) => t.toolId),
+    tool_result_id: toolResultId,
+    source_reference: sourceReference,
+    verified_output: verifiedOutput,
+    evidence: evidenceArtifact,
+    evidence_sha256: evidenceSha,
+    output,
+    cost_usage: { usd: costUsd, toolCalls: toolResults.length, limitUsd: costLimitUsd },
+    error: errorMessage,
+    retry_count: attempt,
+    duration_ms: endTime - startTime,
+    simulated: false,
+    finished_at: endISO,
+  });
+
+  // Update in-memory execution state
+  state.activeTaskId = null;
+  state.availability = state.pauseState ? 'paused' : 'available';
+  state.totalRuns++;
+  state.lastHeartbeat = endISO;
+  if (finalStatus === 'completed') {
+    state.successfulRuns++;
+    state.lastSuccessfulRun = endISO;
+    state.health = 'healthy';
+    state.errorState = null;
+    state.retryCount = 0;
+    state.evidenceCount++;
+    state.costUsageToday += costUsd;
+    state.costUsageMonth += costUsd;
+  } else if (finalStatus === 'failed') {
+    state.failedRuns++;
+    state.lastFailedRun = endISO;
+    state.health = 'degraded';
+    state.errorState = errorMessage;
+    state.retryCount = attempt;
+  } else {
+    state.health = 'degraded';
+    state.errorState = errorMessage;
+  }
+
+  // Persist durable agent state — lastHeartbeat, lastSuccessfulRun, lastFailedRun
+  await upsertAgentStates([{
+    agent_id: agentId,
+    agent_number: contract.agentNumber,
+    agent_name: contract.agentName,
+    company: String(contract.companyId),
+    division: String(contract.divisionId),
+    status: contract.status,
+    health: state.health,
+    availability: state.availability,
+    last_heartbeat: endISO,
+    last_successful_run: state.lastSuccessfulRun,
+    last_failed_run: state.lastFailedRun,
+    last_task_id: taskId,
+    last_tool_used: firstOk?.toolId ?? toolResults[0]?.toolId ?? null,
+    last_source_reference: sourceReference,
+    last_evidence_sha: evidenceSha,
+    last_error: state.errorState,
+    last_duration_ms: endTime - startTime,
+    retry_count: attempt,
+    total_cost_usd: Number(state.costUsageMonth.toFixed(4)),
+    total_runs: state.totalRuns,
+    successful_runs: state.successfulRuns,
+    failed_runs: state.failedRuns,
+  }]);
+
+  // Alert guard: output without evidence must never happen silently
+  if (finalStatus === 'completed' && evidence.length === 0) {
+    await insertAlert({ alert_type: 'output_without_evidence', agent_id: agentId, severity: 'critical', detail: `Agent ${agentId} completed with output but produced no evidence` }).catch(() => undefined);
+  }
 
   // Step 9: Agent-specific permanent run record
   const runRecord: AgentRunRecord = {
@@ -719,35 +1002,39 @@ export async function executeAgentRun(
     agentNumber: contract.agentNumber,
     agentName: contract.agentName,
     taskId,
-    taskType,
+    taskType: missionTaskType,
     contractVersion: contract.version,
     instructionHash: contract.instructionHash,
     memoryNamespace: contract.memoryNamespace,
     queueNamespace: contract.queueNamespace,
-    toolsAuthorized: contract.allowedTools,
-    toolsUsed,
+    toolsAuthorized: getPermittedRealTools(contract.agentNumber),
+    toolsUsed: toolResults.map((t) => t.toolId),
     startTime: startISO,
     endTime: endISO,
     durationMs: endTime - startTime,
-    output: { summary: output.summary, details: output.details },
+    output,
     evidence,
-    finalStatus: 'completed',
-    error: null,
+    finalStatus,
+    error: errorMessage,
     ownerApprovalRecord: approvalRecord,
-    commitSha: null,
+    commitSha: (process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT_SHA || '').trim() || null,
+    realToolUsed,
+    sourceReference,
+    toolResultId,
+    verifiedOutput,
+    costUsd,
+    simulated: false,
   };
 
   recordRun(runRecord);
 
-  // Update execution state
-  completeTask(agentId, taskId, { status: 'completed' });
-
-  return { ok: true, runRecord, error: null };
+  return { ok: finalStatus === 'completed', runRecord, error: errorMessage };
 }
 
 /**
- * Produce a real output for an agent based on its contract and task type.
- * This is the agent's "brain" — it generates findings based on the agent's role.
+ * ADVISORY ANNOTATION ONLY. This generated text can NEVER complete a task by
+ * itself — executeAgentRun requires a real permitted tool result with a
+ * verifiable sourceReference before any run may be marked completed.
  */
 function produceAgentOutput(
   contract: AgentContract,
@@ -1022,9 +1309,9 @@ export function testPauseIsolation(): {
   pauseAgent(testAgent.agentId);
   const pausedState = executionStates.get(testAgent.agentId)!;
 
-  // Check that other 99 agents are NOT paused
+  // Check that the other 111 agents are NOT paused
   let othersRunning = true;
-  let reason = `Agent 1 paused, other 99 agents still available`;
+  let reason = `Agent 1 paused, other 111 agents still available`;
   for (const other of ALL_AGENT_CONTRACTS) {
     if (other.agentId === testAgent.agentId) continue;
     const otherState = executionStates.get(other.agentId);
