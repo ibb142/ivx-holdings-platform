@@ -1,0 +1,110 @@
+name: IVX Release Alignment Repair
+
+on:
+  push:
+    paths:
+      - '.github/workflows/ivx-release-alignment-repair.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  repair-release-alignment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Align Android, landing, deploy, and APK certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              Path('expo/android/app/build.gradle'): [
+                  ('versionCode 118', 'versionCode 119'),
+                  ('versionName "1.10.21"', 'versionName "1.10.22"'),
+              ],
+              Path('expo/ivxholding-landing/index.html'): [
+                  ('ivx-holdings-v1.10.14.apk', 'ivx-holdings-v1.10.22.apk'),
+              ],
+              Path('expo/deploy-s3-direct.mjs'): [
+                  ('/tmp/ivx-holdings-1.10.14.apk', '/tmp/ivx-holdings-1.10.22.apk'),
+                  ('ivx-holdings-v1.10.14.apk', 'ivx-holdings-v1.10.22.apk'),
+              ],
+          }
+
+          for path, pairs in replacements.items():
+              text = path.read_text()
+              original = text
+              for old, new in pairs:
+                  text = text.replace(old, new)
+              if text != original:
+                  path.write_text(text)
+                  print(f'updated {path}')
+              else:
+                  print(f'no change needed {path}')
+
+          workflow = Path('.github/workflows/ivx-owner-apk-release.yml')
+          text = workflow.read_text()
+          marker = '          "$APKSIGNER" verify --verbose "$NAME"\n'
+          manifest_gate = '''          "$APKSIGNER" verify --verbose "$NAME"\n          AAPT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/aapt"\n          BADGING=$("$AAPT" dump badging "$NAME" | head -1)\n          echo "$BADGING"\n          printf '%s\\n' "$BADGING" | grep -Fq "versionCode='119'"\n          printf '%s\\n' "$BADGING" | grep -Fq "versionName='1.10.22-owner'"\n          echo "apk_manifest_gate=PASS versionCode=119 versionName=1.10.22-owner"\n'''
+          if 'apk_manifest_gate=PASS' not in text:
+              if marker not in text:
+                  raise SystemExit('Could not find apksigner verification marker in owner APK workflow')
+              text = text.replace(marker, manifest_gate, 1)
+
+          old_json = 'signatureVerified:true,homeRouteGate:true,hermesPatchGate:true,gradleAssembleQa:true'
+          new_json = 'signatureVerified:true,manifestVersionCode:119,manifestVersionName:"1.10.22-owner",homeRouteGate:true,hermesPatchGate:true,gradleAssembleQa:true'
+          text = text.replace(old_json, new_json)
+          workflow.write_text(text)
+          print(f'updated {workflow}')
+          PY
+
+      - name: Verify release consistency before commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'versionCode 119' expo/android/app/build.gradle
+          grep -Fq 'versionName "1.10.22"' expo/android/app/build.gradle
+          grep -Fq 'version: "1.10.22"' expo/app.config.ts
+          grep -Fq 'versionCode: 119' expo/app.config.ts
+          test "$(grep -o 'ivx-holdings-v1.10.22.apk' expo/ivxholding-landing/index.html | wc -l)" -ge 1
+          ! grep -Fq 'ivx-holdings-v1.10.14.apk' expo/ivxholding-landing/index.html
+          grep -Fq '/tmp/ivx-holdings-1.10.22.apk' expo/deploy-s3-direct.mjs
+          grep -Fq 'apk/ivx-holdings-v1.10.22.apk' expo/deploy-s3-direct.mjs
+          ! grep -Fq 'ivx-holdings-v1.10.14.apk' expo/deploy-s3-direct.mjs
+          grep -Fq 'apk_manifest_gate=PASS' .github/workflows/ivx-owner-apk-release.yml
+          echo 'release_alignment_source_gate=PASS'
+
+      - name: Commit repaired release source
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add expo/android/app/build.gradle expo/ivxholding-landing/index.html expo/deploy-s3-direct.mjs .github/workflows/ivx-owner-apk-release.yml
+          if git diff --cached --quiet; then
+            echo 'No repair changes required.'
+          else
+            git commit -m 'fix(release): align v1.10.22 APK and landing distribution'
+            git push origin HEAD:main
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch APK build and landing production deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run ivx-owner-apk-release.yml --ref main
+          gh workflow run landing-s3-production-deploy.yml --ref main
+          echo "dispatched_for_sha=${{ steps.commit.outputs.sha }}"
