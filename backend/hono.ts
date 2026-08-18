@@ -3436,9 +3436,28 @@ app.get('/api/ivx/version', (context) => {
 // Supabase credentials and API base URLs (Priority 1 in its discovery chain).
 // Public by design: only the anon key and public URLs are exposed, never
 // service-role or private credentials.
+const IVX_CANONICAL_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2Y2xjZGptamdobmR4c25nZnpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTQwMjcsImV4cCI6MjA4ODc3MDAyN30.OLDwa21VHQNs151AD-8k--_HigQ2d-N7yJfFn5UeNPk';
 const landingConfigHandler = (context: { json: (body: unknown, status?: 200) => Response }) => {
   const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
-  const supabaseAnonKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
+  // CRITICAL SECURITY FIX: Always return the canonical anon key, NEVER the service_role key.
+  // The service_role key bypasses RLS and must never be exposed publicly. If the env var
+  // contains a service_role key (detected via JWT role claim), fall back to the hardcoded
+  // canonical anon key. This is a defense-in-depth measure — the anon key is public by design.
+  const envKey = (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
+  let supabaseAnonKey = envKey;
+  try {
+    if (envKey && envKey.split('.').length === 3) {
+      const payload = JSON.parse(Buffer.from(envKey.split('.')[1], 'base64').toString('utf-8'));
+      if (payload.role === 'service_role') {
+        supabaseAnonKey = IVX_CANONICAL_ANON_KEY;
+      }
+    }
+  } catch {
+    supabaseAnonKey = IVX_CANONICAL_ANON_KEY;
+  }
+  if (!supabaseAnonKey || supabaseAnonKey.length < 10) {
+    supabaseAnonKey = IVX_CANONICAL_ANON_KEY;
+  }
   // Always return the canonical API URL — never the raw Render URL
   const backendUrl = 'https://api.ivxholding.com';
   return context.json({
@@ -4898,6 +4917,11 @@ app.options('/api/ivx/voice-chat/status', (c) => c.body(null, 204));
 app.options('/api/ivx/voice-chat', (c) => c.body(null, 204));
 app.options('/api/ivx/voice-chat/transcribe', (c) => c.body(null, 204));
 app.options('/api/ivx/voice-chat/speak', (c) => c.body(null, 204));
+// Realtime Voice — WebSocket streaming voice (ChatGPT-level voice mode)
+// Status endpoint (HTTP); WebSocket upgrade handled in server.ts
+import { getRealtimeVoiceStatus } from './services/ivx-realtime-voice';
+app.get('/api/ivx/realtime-voice/status', (c) => c.json(getRealtimeVoiceStatus()));
+app.options('/api/ivx/realtime-voice/status', (c) => c.body(null, 204));
 
 // Owner-only Render deploy diagnostic — reads private credentials from process.env
 // or the encrypted Owner Variables runtime bridge, without returning secret values.
