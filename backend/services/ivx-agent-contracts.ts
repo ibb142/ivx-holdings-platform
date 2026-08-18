@@ -1,5 +1,5 @@
 /**
- * IVX Independent Agent Contract System — 100 individually governed agents.
+ * IVX Independent Agent Contract System — 112 individually governed agents.
  *
  * Each agent has its own stored contract containing:
  * - Unique agent ID, name, role, mission
