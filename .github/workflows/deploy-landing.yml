@@ -33,6 +33,27 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Enforce item 1 source fix
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('ivxholding-landing/index.html')
+          s = p.read_text()
+          s = s.replace('Multi-Channel Lead Capture — Live', 'Multi-Channel Lead Capture')
+          s = s.replace('Multi-Channel Lead Capture &mdash; Live', 'Multi-Channel Lead Capture')
+          p.write_text(s)
+          PY
+          grep -Fq 'Multi-Channel Lead Capture' ivxholding-landing/index.html
+          ! grep -Fq 'Multi-Channel Lead Capture — Live' ivxholding-landing/index.html
+
+      - name: Prove AWS identity
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: aws sts get-caller-identity
+
       - name: Install AWS SDK deploy dependencies
         run: bun add @aws-sdk/client-s3 @aws-sdk/client-cloudfront
 
@@ -48,6 +69,29 @@ jobs:
           EXPO_PUBLIC_IVX_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_IVX_API_BASE_URL }}
           EXPO_PUBLIC_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_API_BASE_URL }}
         run: bun deploy-landing.mjs
+
+      - name: Certify item 1 live
+        run: |
+          set -euo pipefail
+          BASE='https://ivxholding.com'
+          CERT='../qa/evidence/landing-item-01-certificate.md'
+          mkdir -p ../qa/evidence
+          body=$(mktemp)
+          curl -fsSL --retry 8 --retry-delay 4 --max-time 30 "${BASE}/?qa_item=1&run=${GITHUB_RUN_ID}" -o "$body"
+          grep -Fq 'Multi-Channel Lead Capture' "$body"
+          ! grep -Fq 'Multi-Channel Lead Capture — Live' "$body"
+          {
+            echo '# IVX Landing Item 01 Certificate'
+            echo
+            echo 'STATUS: PASS'
+            echo 'ITEM: Remove uncertified Live status from Multi-Channel Lead Capture claim.'
+            echo "VERIFIED_LIVE_URL: ${BASE}/"
+            echo "VERIFIED_AT_UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "WORKFLOW_RUN_ID: ${GITHUB_RUN_ID}"
+            echo "SOURCE_SHA: ${GITHUB_SHA}"
+            echo 'EVIDENCE: live HTML contains Multi-Channel Lead Capture and does not contain Multi-Channel Lead Capture — Live.'
+          } > "$CERT"
+          cat "$CERT"
 
       - name: Certify 10 live technical gates
         id: cert
@@ -99,17 +143,17 @@ jobs:
           cat "$CERT"
           test "$pass" -eq 10
 
-      - name: Commit certificate
+      - name: Commit source fix and certificates
         if: success()
         working-directory: .
         run: |
           set -euo pipefail
           git config user.name 'ivx-qa-bot'
           git config user.email 'ivx-qa-bot@users.noreply.github.com'
-          git add qa/evidence/landing-live-10-gate-certificate.md
+          git add expo/ivxholding-landing/index.html qa/evidence/landing-item-01-certificate.md qa/evidence/landing-live-10-gate-certificate.md
           if git diff --cached --quiet; then
-            echo 'Certificate unchanged.'
+            echo 'No changes to commit.'
           else
-            git commit -m 'qa: certify landing 10 live technical gates'
+            git commit -m 'qa(landing): complete and certify item 1 live'
             git push origin HEAD:main
           fi
