@@ -1,0 +1,115 @@
+name: Deploy ivxholding.com landing page
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'expo/ivxholding-landing/**'
+      - 'expo/deploy-landing.mjs'
+      - 'expo/scripts/landing-*.mjs'
+      - 'expo/assets/images/**'
+      - '.github/workflows/deploy-landing.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-landing-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-and-certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: expo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install AWS SDK deploy dependencies
+        run: bun add @aws-sdk/client-s3 @aws-sdk/client-cloudfront
+
+      - name: Deploy landing to S3 and invalidate CloudFront
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_IVX_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_IVX_API_BASE_URL }}
+          EXPO_PUBLIC_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_API_BASE_URL }}
+        run: bun deploy-landing.mjs
+
+      - name: Certify 10 live technical gates
+        id: cert
+        run: |
+          set -euo pipefail
+          BASE='https://ivxholding.com'
+          CERT='../qa/evidence/landing-live-10-gate-certificate.md'
+          mkdir -p ../qa/evidence
+          : > /tmp/gates.txt
+          pass=0
+          check() {
+            n="$1"; path="$2"; expected="$3"; label="$4"
+            code=$(curl -sS -L --retry 3 --retry-delay 2 --max-time 30 -o /tmp/body -w '%{http_code}' "${BASE}${path}")
+            ct=$(curl -sSI -L --retry 3 --retry-delay 2 --max-time 30 "${BASE}${path}" | tr -d '\r' | awk -F': ' 'tolower($1)=="content-type"{v=tolower($2)} END{print v}')
+            if [ "$code" = '200' ] && [[ "$ct" == *"$expected"* ]]; then
+              echo "$n. PASS - $label - HTTP $code - $ct" >> /tmp/gates.txt
+              pass=$((pass+1))
+            else
+              echo "$n. FAIL - $label - HTTP $code - $ct" >> /tmp/gates.txt
+            fi
+          }
+          check 1 '/' 'text/html' 'Homepage live'
+          check 2 '/capture' 'text/html' 'Capture route live'
+          check 3 '/capture.html' 'text/html' 'Capture HTML live'
+          check 4 '/robots.txt' 'text/plain' 'robots.txt live'
+          check 5 '/sitemap.xml' 'xml' 'sitemap.xml live'
+          check 6 '/privacy.html' 'text/html' 'Privacy Policy live'
+          check 7 '/terms.html' 'text/html' 'Terms live'
+          check 8 '/disclosures.html' 'text/html' 'Investment Disclosures live'
+          check 9 '/legal.html' 'text/html' 'Legal page live'
+          check 10 '/cookie.html' 'text/html' 'Cookie Policy live'
+          {
+            echo '# IVX Landing Live 10-Gate Technical Certificate'
+            echo
+            echo "Generated: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "Commit: ${GITHUB_SHA}"
+            echo "Workflow run: ${GITHUB_RUN_ID}"
+            echo
+            cat /tmp/gates.txt
+            echo
+            if [ "$pass" -eq 10 ]; then
+              echo 'FINAL: PASS 10/10 TECHNICAL LIVE GATES'
+            else
+              echo "FINAL: FAIL ${pass}/10 TECHNICAL LIVE GATES"
+            fi
+            echo
+            echo 'Scope: technical availability/content-type gates only. This certificate is not legal, securities, advertising-platform, payment, or investment-offering approval.'
+          } > "$CERT"
+          cat "$CERT"
+          test "$pass" -eq 10
+
+      - name: Commit certificate
+        if: success()
+        working-directory: .
+        run: |
+          set -euo pipefail
+          git config user.name 'ivx-qa-bot'
+          git config user.email 'ivx-qa-bot@users.noreply.github.com'
+          git add qa/evidence/landing-live-10-gate-certificate.md
+          if git diff --cached --quiet; then
+            echo 'Certificate unchanged.'
+          else
+            git commit -m 'qa: certify landing 10 live technical gates'
+            git push origin HEAD:main
+          fi
