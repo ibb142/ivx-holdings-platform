@@ -244,7 +244,13 @@ jobs:
           # they are stable on this runner and aborts with binder Broken pipe.
           # Keep animations enabled so the IVX certification script can run.
           disable-animations: false
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          # Software-only x86 emulation took >6 minutes to boot and its Android
+          # package service died before installation. Require the KVM path used
+          # by GitHub's Linux runners and keep graphics fully headless.
+          disable-linux-hw-accel: false
+          ram-size: 2048M
+          heap-size: 512M
+          emulator-options: -no-window -gpu off -no-snapshot -noaudio -no-boot-anim
           script: bash "$GITHUB_WORKSPACE/expo/scripts/certify-android-launch.sh" "${{ steps.apk.outputs.path }}" com.ivxholdings.app.owner screenshot-01-launch.png logcat.txt android-qa-launch.txt android-qa-package-version.txt "Home ready"
 
       - name: Emulator QA diagnostics
