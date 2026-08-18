@@ -1,0 +1,64 @@
+name: Landing Launch-Day War Room
+
+on:
+  push:
+    paths:
+      - '.github/workflows/landing-war-room-today.yml'
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: landing-launch-day-war-room
+  cancel-in-progress: false
+
+jobs:
+  ensure-landing-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enforce launch-day window
+        id: window
+        shell: bash
+        run: |
+          set -euo pipefail
+          NOW=$(date -u +%s)
+          CUTOFF=$(date -u -d '2026-08-19 04:00:00' +%s)
+          if [ "$NOW" -ge "$CUTOFF" ]; then
+            echo 'active=false' >> "$GITHUB_OUTPUT"
+            echo 'Launch-day deploy window closed.'
+          else
+            echo 'active=true' >> "$GITHUB_OUTPUT"
+            echo 'Launch-day deploy window active.'
+          fi
+
+      - name: Check for existing landing deploy
+        if: steps.window.outputs.active == 'true'
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUNNING=$(gh run list --workflow landing-s3-production-deploy.yml --status in_progress --limit 1 --json databaseId --jq 'length')
+          QUEUED=$(gh run list --workflow landing-s3-production-deploy.yml --status queued --limit 1 --json databaseId --jq 'length')
+          if [ "$RUNNING" -gt 0 ] || [ "$QUEUED" -gt 0 ]; then
+            echo 'busy=true' >> "$GITHUB_OUTPUT"
+            echo 'Landing deploy already running or queued; skipping duplicate dispatch.'
+          else
+            echo 'busy=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dispatch landing production deploy
+        if: steps.window.outputs.active == 'true' && steps.existing.outputs.busy == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run landing-s3-production-deploy.yml --ref main --field deployWebApp=true
+          echo 'landing_deploy_dispatch=PASS'
