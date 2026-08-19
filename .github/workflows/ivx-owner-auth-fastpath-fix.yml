@@ -1,0 +1,68 @@
+name: IVX Owner Auth Fastpath Fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/ivx-owner-auth-fastpath-fix.mjs'
+      - '.github/workflows/ivx-owner-auth-fastpath-fix.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ivx-owner-auth-fastpath-fix
+  cancel-in-progress: false
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - name: Install
+        run: bun install && cd expo && bun install
+      - name: Apply deterministic fast-path patch
+        run: node scripts/ivx-owner-auth-fastpath-fix.mjs
+      - name: Source invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'IVX_OWNER_POST_LOGIN_FAST_PATH_V1' expo/lib/auth-context.tsx
+          grep -q "if (isOwnerAdminEmail(sessionEmail))" expo/lib/auth-context.tsx
+          grep -q "return { role: 'owner', source: 'fallback' }" expo/lib/auth-context.tsx
+          grep -q 'signInWithPassword' expo/lib/auth-password-sign-in.ts
+          grep -q 'persistSession: true' expo/lib/supabase.ts
+      - name: Auth focused tests
+        working-directory: expo
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun test __tests__/auth-hardening.test.ts __tests__/auth-timeout-fix.test.ts
+      - name: TypeScript focused smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          bunx tsc --noEmit --pretty false > /tmp/tsc.log 2>&1 || true
+          if grep -F 'expo/lib/auth-context.tsx' /tmp/tsc.log; then cat /tmp/tsc.log; exit 1; fi
+          if grep -F 'expo/lib/auth-password-sign-in.ts' /tmp/tsc.log; then cat /tmp/tsc.log; exit 1; fi
+      - name: Persist source fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'IVX Auth QA'
+          git config user.email 'ivx-auth-qa@users.noreply.github.com'
+          git add expo/lib/auth-context.tsx
+          if git diff --cached --quiet; then
+            echo 'No auth source change needed.'
+            exit 0
+          fi
+          git commit -m 'fix(auth): release owner UI after valid Supabase password session [skip ci]'
+          git pull --rebase origin main
+          git push origin HEAD:main
