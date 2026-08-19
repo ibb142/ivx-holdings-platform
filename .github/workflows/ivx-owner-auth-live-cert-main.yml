@@ -1,0 +1,135 @@
+name: IVX Owner Auth Live Certificate Main
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-owner-auth-live-cert-main.yml'
+      - '.ivx-owner-auth-cert-main-trigger'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ivx-owner-auth-live-cert-main
+  cancel-in-progress: true
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OWNER_EMAIL: iperez4242@gmail.com
+      S1: ${{ secrets.OWNER_NEW_PASSWORD }}
+      S2: ${{ secrets.OWNER_PASSWORD }}
+      S3: ${{ secrets.IVX_OWNER_PASSWORD }}
+      S4: ${{ secrets.IVX_OWNER_NEW_PASSWORD }}
+      S5: ${{ secrets.OWNER_LOGIN_PASSWORD }}
+      S6: ${{ secrets.IVX_OWNER_LOGIN_PASSWORD }}
+      SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+      API_BASE: https://api.ivxholding.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Real owner auth E2E and durable certificate
+        shell: bash
+        run: |
+          set -u
+          mkdir -p qa/evidence
+          success=false
+          stage=source_invariants
+          reason=unknown
+          login_ms=0
+          password_http=0
+          user_http=0
+          owner_gate_http=0
+          unauth_gate_http=0
+          user_id=''
+          app_role=''
+          user_role=''
+          binding=none
+          source_sha=$(git rev-parse HEAD)
+
+          if grep -q 'IVX_OWNER_POST_LOGIN_FAST_PATH_V1' expo/lib/auth-context.tsx \
+            && grep -q 'IVX_OWNER_REPAIR_BACKGROUND_V1' expo/lib/auth-context.tsx \
+            && grep -q 'IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1' expo/lib/auth-context.tsx \
+            && grep -q 'signInWithEmailPassword(freshClient, normalizedEmail, password)' expo/lib/auth-context.tsx \
+            && ! grep -q 'await repairOwnerRegistrationAfterLogin(session).catch' expo/lib/auth-context.tsx; then
+            reason=source_ok
+          else
+            reason=source_invariant_failed
+          fi
+
+          owner_password=''
+          if [ "$reason" = source_ok ]; then
+            stage=secret_binding
+            for pair in 'OWNER_NEW_PASSWORD:S1' 'OWNER_PASSWORD:S2' 'IVX_OWNER_PASSWORD:S3' 'IVX_OWNER_NEW_PASSWORD:S4' 'OWNER_LOGIN_PASSWORD:S5' 'IVX_OWNER_LOGIN_PASSWORD:S6'; do
+              name=${pair%%:*}; var=${pair##*:}; value=${!var:-}
+              if [ -n "$value" ]; then owner_password="$value"; binding="$name"; break; fi
+            done
+            if [ -n "$owner_password" ]; then
+              echo "::add-mask::$owner_password"
+              reason=secret_binding_ok
+            else
+              reason=owner_password_binding_missing
+            fi
+          fi
+
+          token=''
+          if [ "$reason" = secret_binding_ok ]; then
+            stage=password_grant
+            if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON_KEY:-}" ]; then
+              reason=supabase_binding_missing
+            else
+              body=$(jq -nc --arg email "$OWNER_EMAIL" --arg password "$owner_password" '{email:$email,password:$password}')
+              curl -sS --max-time 15 -o /tmp/login.json -w '%{http_code} %{time_total}' -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" -H "apikey: ${SUPABASE_ANON_KEY}" -H 'Content-Type: application/json' --data "$body" > /tmp/login.metrics
+              read -r password_http total < /tmp/login.metrics
+              login_ms=$(awk -v t="$total" 'BEGIN { printf "%d", t*1000 }')
+              if [ "$password_http" = 200 ]; then
+                token=$(jq -r '.access_token // empty' /tmp/login.json)
+                user_id=$(jq -r '.user.id // empty' /tmp/login.json)
+                app_role=$(jq -r '.user.app_metadata.role // empty' /tmp/login.json)
+                user_role=$(jq -r '.user.user_metadata.role // empty' /tmp/login.json)
+                case "$app_role:$user_role" in *owner*|*admin*) reason=password_grant_ok ;; *) reason=owner_role_metadata_missing ;; esac
+              else
+                reason=$(jq -r '.error_code // .error // "password_grant_failed"' /tmp/login.json 2>/dev/null || echo password_grant_failed)
+              fi
+            fi
+          fi
+
+          if [ "$reason" = password_grant_ok ]; then
+            stage=supabase_user
+            user_http=$(curl -sS --max-time 15 -o /tmp/user.json -w '%{http_code}' "${SUPABASE_URL%/}/auth/v1/user" -H "apikey: ${SUPABASE_ANON_KEY}" -H "Authorization: Bearer ${token}")
+            if [ "$user_http" = 200 ] && [ "$(jq -r '.id // empty' /tmp/user.json)" = "$user_id" ]; then reason=supabase_user_ok; else reason=supabase_user_failed; fi
+          fi
+
+          if [ "$reason" = supabase_user_ok ]; then
+            stage=owner_gate
+            owner_gate_http=$(curl -sS --max-time 20 -o /tmp/owner.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" -H "Authorization: Bearer ${token}")
+            if [ "$owner_gate_http" = 200 ] && [ "$(jq -r '.ok // false' /tmp/owner.json)" = true ]; then reason=owner_gate_ok; else reason=owner_gate_failed; fi
+          fi
+
+          if [ "$reason" = owner_gate_ok ]; then
+            stage=unauth_gate
+            unauth_gate_http=$(curl -sS --max-time 15 -o /tmp/unauth.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" || true)
+            case "$unauth_gate_http" in 401|403) success=true; reason=pass ;; *) reason=unauthenticated_gate_open ;; esac
+          fi
+
+          verified_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          jq -n --arg sha "$source_sha" --arg verifiedAt "$verified_at" --arg stage "$stage" --arg reason "$reason" --arg binding "$binding" --arg userId "$user_id" --arg appRole "$app_role" --arg userRole "$user_role" --argjson passed "$success" --argjson loginMs "$login_ms" --argjson passwordHttp "${password_http:-0}" --argjson userHttp "${user_http:-0}" --argjson ownerGateHttp "${owner_gate_http:-0}" --argjson unauthGateHttp "${unauth_gate_http:-0}" '{certificate:"IVX-OWNER-AUTH-E2E-LIVE",passed:$passed,sourceSha:$sha,stage:$stage,reason:$reason,credentialBinding:$binding,realPasswordGrant:($passwordHttp==200),passwordGrantHttp:$passwordHttp,loginLatencyMs:$loginMs,supabaseUserEndpointHttp:$userHttp,identityMatch:($userHttp==200),ownerUserId:$userId,appMetadataRole:$appRole,userMetadataRole:$userRole,backendOwnerGateHttp:$ownerGateHttp,unauthenticatedGateHttp:$unauthGateHttp,unauthenticatedGateClosed:($unauthGateHttp==401 or $unauthGateHttp==403),secretValuesReturned:false,fastPathMarker:"IVX_OWNER_POST_LOGIN_FAST_PATH_V1",backgroundRepairMarker:"IVX_OWNER_REPAIR_BACKGROUND_V1",directPasswordMarker:"IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1",verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-auth-e2e-live.json
+          cat qa/evidence/ivx-owner-auth-e2e-live.json
+
+          git config user.name 'IVX Auth Certifier'
+          git config user.email 'ivx-auth-certifier@users.noreply.github.com'
+          git add qa/evidence/ivx-owner-auth-e2e-live.json
+          if ! git diff --cached --quiet; then
+            if [ "$success" = true ]; then msg="cert(auth): owner E2E live ${source_sha:0:12} [skip ci]"; else msg="diag(auth): owner E2E blocked ${reason} [skip ci]"; fi
+            git commit -m "$msg"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+          [ "$success" = true ]
