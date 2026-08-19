@@ -26,6 +26,8 @@ const DEPLOYMENT_MARKER = 'ivx-member-database-v3-login-deadline-fix';
  *  this constant exists to prevent. Guarded by
  *  __tests__/owner-login-timeout-invariant.test.ts. */
 export const MEMBER_LOGIN_INNER_BUDGET_MS = 8_000;
+/** Internal marker for "upstream auth did not answer in time". Must never reach the member. */
+export const SIGN_IN_TIMEOUT_SENTINEL = 'ivx:sign-in-upstream-timeout';
 
 // Production Supabase project constants. The anon key is a PUBLIC client key
 // protected by RLS; embedding it as a fallback is the standard Supabase pattern.
@@ -562,6 +564,12 @@ export interface MemberLoginResult {
   refreshToken?: string;
   expiresAt?: number;
   requiresVerification?: boolean;
+  /** Set when the failure is an INFRASTRUCTURE fault (upstream auth slow/unreachable),
+   *  not a credential rejection. The route maps this to HTTP 503 so a member with a
+   *  CORRECT password is never told "invalid email or password". */
+  errorCode?: 'auth_upstream_timeout';
+  /** True when the caller should simply retry — nothing is wrong with the credentials. */
+  retryable?: boolean;
   deploymentMarker: string;
 }
 
@@ -665,20 +673,45 @@ export async function loginMember(email: string, password: string): Promise<Memb
   }
 
   // 2. Supabase Auth path — use the ANON key client so signInWithPassword returns a real session.
-  //    Hard 10s timeout so a stalled Supabase connection never hangs the login endpoint.
+  //    Bounded by MEMBER_LOGIN_INNER_BUDGET_MS so a stalled Supabase never hangs the endpoint.
+  //
+  //    A timeout here is an INFRASTRUCTURE fault, never a credential verdict. It used to
+  //    reject into the outer catch, which returned success:false with the raw internal
+  //    string "Supabase sign-in timed out after 8000ms" — and the route mapped every
+  //    non-success to HTTP 401. Net effect: a member typing the CORRECT password was told
+  //    their password was wrong whenever upstream auth was slow. That is the lockout bug.
+  //
+  //    Upstream cold starts are also transient, so one retry is attempted before giving up.
   try {
     const anonClient = getSupabaseAnonClient();
-    const signInPromise = anonClient.auth.signInWithPassword({
-      email: normalizedEmail,
-      password,
-    });
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error(`Supabase sign-in timed out after ${MEMBER_LOGIN_INNER_BUDGET_MS}ms`)),
-        MEMBER_LOGIN_INNER_BUDGET_MS,
-      ),
-    );
-    const { data, error } = await Promise.race([signInPromise, timeoutPromise]);
+    const signInOnce = async (): Promise<Awaited<ReturnType<typeof anonClient.auth.signInWithPassword>>> => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(SIGN_IN_TIMEOUT_SENTINEL)),
+          MEMBER_LOGIN_INNER_BUDGET_MS,
+        );
+      });
+      try {
+        return await Promise.race([
+          anonClient.auth.signInWithPassword({ email: normalizedEmail, password }),
+          timeoutPromise,
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    };
+
+    let raced: Awaited<ReturnType<typeof anonClient.auth.signInWithPassword>>;
+    try {
+      raced = await signInOnce();
+    } catch (firstErr) {
+      const isTimeout = firstErr instanceof Error && firstErr.message === SIGN_IN_TIMEOUT_SENTINEL;
+      if (!isTimeout) throw firstErr;
+      console.warn('[MemberDB] Sign-in upstream timed out — retrying once');
+      raced = await signInOnce();
+    }
+    const { data, error } = raced;
     if (error) {
       const errorMessage = (error.message || error.msg || JSON.stringify(error) || 'unknown error').trim();
       const msg = errorMessage.toLowerCase();
@@ -734,6 +767,18 @@ export async function loginMember(email: string, password: string): Promise<Memb
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Login failed due to an internal error.';
+    if (message === SIGN_IN_TIMEOUT_SENTINEL) {
+      // Infrastructure fault, NOT a bad password. Never surface this as 401, and never
+      // leak the internal budget string to the member.
+      console.error('[MemberDB] Sign-in upstream timed out after retry');
+      return {
+        success: false,
+        message: 'Sign-in is taking longer than usual. Please try again in a moment.',
+        errorCode: 'auth_upstream_timeout',
+        retryable: true,
+        deploymentMarker: DEPLOYMENT_MARKER,
+      };
+    }
     console.error('[MemberDB] Login exception:', message);
     return { success: false, message, deploymentMarker: DEPLOYMENT_MARKER };
   }
