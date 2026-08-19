@@ -1,7 +1,4 @@
-/**
- * IVX Live Work API (owner-only).
- * Real-time execution visibility and registered bridge to the enterprise 112 dashboard.
- */
+/** IVX Live Work API (owner-only). */
 import { buildLiveWorkSnapshot } from '../services/ivx-live-work';
 import { runTrackedSupabaseCheck } from '../services/ivx-supabase-check';
 import { listAgentRuns } from '../services/ivx-agent-activity-store';
@@ -17,9 +14,7 @@ import {
 } from '../services/ivx-task-state-store';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 
-function readTrimmed(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
-}
+function readTrimmed(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
 function taskProgressPercent(task: IVXTaskRecord): number {
   if (task.totalBlocks <= 0) return 0;
   return Math.min(100, Math.round((task.completedBlockIds.length / task.totalBlocks) * 100));
@@ -77,13 +72,27 @@ export async function handleLiveWorkFeedRequest(request: Request): Promise<Respo
 
 /**
  * GET /api/ivx/live-work/agents
- * Default: legacy background-agent runs.
- * With ?enterpriseDashboard=1: delegates to the enterprise 112 durable dashboard.
- * This path is already registered in Hono and remains owner-only.
+ * - ?enterpriseDashboard=1 -> enterprise 112 durable dashboard
+ * - ?individualCerts=1     -> 112 role-alignment certificates from durable executions
+ * - default                -> legacy background-agent runs
  */
 export async function handleLiveWorkAgentsRequest(request: Request): Promise<Response> {
   const auth = await requireOwner(request); if (!auth.ok) return auth.response;
   const url = new URL(request.url);
+  if (url.searchParams.get('individualCerts') === '1') {
+    const hoursRaw = Number.parseInt(url.searchParams.get('hours') ?? '24', 10);
+    const hours = Number.isFinite(hoursRaw) ? Math.max(1, Math.min(720, hoursRaw)) : 24;
+    const { buildIndividualRoleCertificates } = await import('../services/ivx-agent-role-certification');
+    const report = await buildIndividualRoleCertificates(hours);
+    const agentRaw = url.searchParams.get('agent');
+    if (agentRaw) {
+      const n = Number.parseInt(agentRaw, 10);
+      const cert = report.certificates.find((c) => c.agentNumber === n || c.agentId === agentRaw);
+      if (!cert) return ownerOnlyJson({ ok: false, error: 'Agent certificate not found.' }, 404);
+      return ownerOnlyJson({ ok: true, marker: report.marker, generatedAt: report.generatedAt, certificate: cert });
+    }
+    return ownerOnlyJson({ ok: true, report });
+  }
   if (url.searchParams.get('enterpriseDashboard') === '1') {
     const { handleAutonomousOpsDashboardRequest } = await import('./ivx-autonomous-ops-dashboard');
     return handleAutonomousOpsDashboardRequest(request);
@@ -105,7 +114,7 @@ export async function handleLiveWorkStatusRequest(request: Request): Promise<Res
     const snapshot = await buildLiveWorkSnapshot(40);
     const current = snapshot.currentTask;
     const passFail = current ? current.status === 'completed' ? 'PASS' : current.status === 'failed' || current.status === 'cancelled' ? 'FAIL' : 'RUNNING' : 'IDLE';
-    return ownerOnlyJson({ ok: true, status: { generatedAt: snapshot.generatedAt, summary: snapshot.summary, currentTask: current, currentModule: current?.currentModule ?? 'Idle', progressPercent: current?.progressPercent ?? 0, passFail, activeAgents: snapshot.activeAgents, proofOutput: snapshot.proofOutput, counts: snapshot.counts, routeStatus: 'GET /api/ivx/live-work/status → 200' } });
+    return ownerOnlyJson({ ok: true, status: { generatedAt: snapshot.generatedAt, summary: snapshot.summary, currentTask: current, currentModule: current?.currentModule ?? 'Idle', progressPercent: current?.progressPercent ?? 0, passFail, activeAgents: snapshot.activeAgents, proofOutput: snapshot.proofOutput, counts: snapshot.counts, routeStatus: 'GET /api/ivx/live-work/status -> 200' } });
   } catch (error) { return ownerOnlyJson({ ok: false, error: error instanceof Error ? error.message : 'Failed to build live-work status.' }, 500); }
 }
 
