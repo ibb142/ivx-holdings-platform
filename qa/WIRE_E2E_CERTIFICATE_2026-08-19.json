@@ -1,0 +1,318 @@
+{
+  "certificateId": "IVX-WIRE-E2E-22471d7683619767",
+  "workflow": "IVX Wire Transaction End-to-End Certificate",
+  "version": 1,
+  "date": "2026-08-19",
+  "score": "10/10",
+  "verdict": "PASS",
+  "executionMode": "live_production_only",
+  "target": {
+    "apiBase": "https://ivx-holdings-platform.onrender.com",
+    "canonicalDomain": "https://api.ivxholding.com",
+    "commitTested": "645f64d6ed78781b1cd3d52ba085e311ec22b86c",
+    "renderDeployId": "dep-da2fcmrtqb8s738n4u0g",
+    "healthVerified": {
+      "commit": "645f64d6ed78781b1cd3d52ba085e311ec22b86c",
+      "status": "healthy",
+      "databaseConfigured": true,
+      "bootTime": "2026-08-19T00:19:47.228Z",
+      "checkedAt": "2026-08-19T00:21:14.534Z"
+    }
+  },
+  "shipped": {
+    "commit": "645f64d6ed78781b1cd3d52ba085e311ec22b86c",
+    "files": [
+      "backend/services/ivx-wire-submission-store.ts (new \u2014 durable Supabase-backed store, marker ivx-wire-submission-store-2026-08-18)",
+      "backend/api/ivx-wire-transfer.ts (recordWireSubmission now persists durably; SMS only on non-duplicate)",
+      "backend/hono.ts (owner routes: GET /api/ivx/wire-submissions, POST /transition, POST /purge-qa; upstream canonical anon-key block preserved)"
+    ],
+    "lifecycle": "submitted -> received -> credited | rejected (terminal)",
+    "duplicateGuard": "referenceCode + amount while non-rejected (idempotent resubmission)",
+    "typecheck": "tsc --noEmit: 0 errors in wire files (3 pre-existing errors in untouched files ivx-voice-chat-api.ts / server.ts, already live on main)"
+  },
+  "evidenceSha256": "22471d7683619767f81b81463066a19f0d42f044b9d5de48f21887165b17ad2d",
+  "liveEvidence": {
+    "base": "https://ivx-holdings-platform.onrender.com",
+    "startedAt": "2026-08-19T00:21:54Z",
+    "checks": [
+      {
+        "num": 1,
+        "name": "Public wire-instructions preview (no auth, no account exposure)",
+        "pass": true,
+        "evidence": {
+          "status": 200,
+          "body": {
+            "ok": true,
+            "authenticated": false,
+            "preview": {
+              "bankName": "IVX Holdings Partner Bank",
+              "message": "Sign in to view full wire instructions including routing and account numbers.",
+              "cta": "Sign in to view wire instructions"
+            },
+            "timestamp": "2026-08-19T00:21:54.509Z"
+          }
+        }
+      },
+      {
+        "num": 2,
+        "name": "Owner-auth wire-instructions (authenticated:true, honest config state)",
+        "pass": true,
+        "evidence": {
+          "status": 200,
+          "configured": false,
+          "body": {
+            "ok": true,
+            "authenticated": true,
+            "error": "Wire instructions not configured",
+            "instructions": null,
+            "timestamp": "2026-08-19T00:21:55.057Z"
+          }
+        }
+      },
+      {
+        "num": 3,
+        "name": "Submission validation rejects missing fields (400)",
+        "pass": true,
+        "evidence": {
+          "status": 400,
+          "body": {
+            "ok": false,
+            "error": "amount, referenceCode, and sentAt are required"
+          }
+        }
+      },
+      {
+        "num": 4,
+        "name": "Wire submission recorded (persisted:true, duplicate:false)",
+        "pass": true,
+        "evidence": {
+          "status": 200,
+          "body": {
+            "ok": true,
+            "id": "wire_mszcjw58_f06038c7fb",
+            "status": "submitted",
+            "persisted": true,
+            "duplicate": false
+          },
+          "request": {
+            "email": "ivx.qa.wire.cert.20260819@ivxholding.com",
+            "name": "IVX QA Wire Cert",
+            "amount": "25000.00",
+            "currency": "USD",
+            "sentAt": "2026-08-19T00:21:55Z",
+            "referenceCode": "IVX-QA-WIRE-CERT-1787098914",
+            "senderBankName": "QA Test Bank",
+            "senderAccountLast4": "4242",
+            "notes": "wire E2E certification run"
+          }
+        }
+      },
+      {
+        "num": 5,
+        "name": "Owner list shows durable record (status=submitted, qa:true, history=1)",
+        "pass": true,
+        "evidence": {
+          "status": 200,
+          "count": 1,
+          "record": {
+            "id": "wire_mszcjw58_f06038c7fb",
+            "qa": true,
+            "name": "IVX QA Wire Cert",
+            "email": "ivx.qa.wire.cert.20260819@ivxholding.com",
+            "notes": "wire E2E certification run",
+            "amount": "25000.00",
+            "sentAt": "2026-08-19T00:21:55Z",
+            "status": "submitted",
+            "history": [
+              {
+                "at": "2026-08-19T00:21:55.196Z",
+                "to": "submitted",
+                "from": null,
+                "reason": "Wire report received from investor."
+              }
+            ],
+            "currency": "USD",
+            "createdAt": "2026-08-19T00:21:55.196Z",
+            "updatedAt": "2026-08-19T00:21:55.196Z",
+            "referenceCode": "IVX-QA-WIRE-CERT-1787098914",
+            "senderBankName": "QA Test Bank",
+            "senderAccountLast4": "4242"
+          }
+        }
+      },
+      {
+        "num": 6,
+        "name": "Duplicate guard idempotent (duplicate:true, same id, still 1 row)",
+        "pass": true,
+        "evidence": {
+          "resubmit": {
+            "status": 200,
+            "body": {
+              "ok": true,
+              "id": "wire_mszcjw58_f06038c7fb",
+              "status": "submitted",
+              "persisted": true,
+              "duplicate": true
+            }
+          },
+          "listCount": 1
+        }
+      },
+      {
+        "num": 7,
+        "name": "Owner transition submitted->received (history appended)",
+        "pass": true,
+        "evidence": {
+          "status": 200,
+          "body": {
+            "ok": true,
+            "submission": {
+              "id": "wire_mszcjw58_f06038c7fb",
+              "qa": true,
+              "name": "IVX QA Wire Cert",
+              "email": "ivx.qa.wire.cert.20260819@ivxholding.com",
+              "notes": "wire E2E certification run",
+              "amount": "25000.00",
+              "sentAt": "2026-08-19T00:21:55Z",
+              "status": "received",
+              "history": [
+                {
+                  "at": "2026-08-19T00:21:55.196Z",
+                  "to": "submitted",
+                  "from": null,
+                  "reason": "Wire report received from investor."
+                },
+                {
+                  "at": "2026-08-19T00:21:55.935Z",
+                  "from": "submitted",
+                  "to": "received",
+                  "by": "iperez4242@gmail.com",
+                  "reason": "QA cert: bank credit confirmed pending"
+                }
+              ],
+              "currency": "USD",
+              "createdAt": "2026-08-19T00:21:55.196Z",
+              "updatedAt": "2026-08-19T00:21:55.935Z",
+              "referenceCode": "IVX-QA-WIRE-CERT-1787098914",
+              "senderBankName": "QA Test Bank",
+              "senderAccountLast4": "4242"
+            },
+            "timestamp": "2026-08-19T00:21:56.000Z"
+          }
+        }
+      },
+      {
+        "num": 8,
+        "name": "Owner transition received->credited (terminal state)",
+        "pass": true,
+        "evidence": {
+          "status": 200,
+          "body": {
+            "ok": true,
+            "submission": {
+              "id": "wire_mszcjw58_f06038c7fb",
+              "qa": true,
+              "name": "IVX QA Wire Cert",
+              "email": "ivx.qa.wire.cert.20260819@ivxholding.com",
+              "notes": "wire E2E certification run",
+              "amount": "25000.00",
+              "sentAt": "2026-08-19T00:21:55Z",
+              "status": "credited",
+              "history": [
+                {
+                  "at": "2026-08-19T00:21:55.196Z",
+                  "to": "submitted",
+                  "from": null,
+                  "reason": "Wire report received from investor."
+                },
+                {
+                  "at": "2026-08-19T00:21:55.935Z",
+                  "by": "iperez4242@gmail.com",
+                  "to": "received",
+                  "from": "submitted",
+                  "reason": "QA cert: bank credit confirmed pending"
+                },
+                {
+                  "at": "2026-08-19T00:21:56.190Z",
+                  "from": "received",
+                  "to": "credited",
+                  "by": "iperez4242@gmail.com",
+                  "reason": "QA cert: funds credited"
+                }
+              ],
+              "currency": "USD",
+              "createdAt": "2026-08-19T00:21:55.196Z",
+              "updatedAt": "2026-08-19T00:21:56.190Z",
+              "referenceCode": "IVX-QA-WIRE-CERT-1787098914",
+              "senderBankName": "QA Test Bank",
+              "senderAccountLast4": "4242"
+            },
+            "timestamp": "2026-08-19T00:21:56.243Z"
+          }
+        }
+      },
+      {
+        "num": 9,
+        "name": "Security: invalid transition 400; unauthenticated list/transition 401",
+        "pass": true,
+        "evidence": {
+          "invalidTransition": {
+            "status": 400,
+            "body": {
+              "ok": false,
+              "error": "Invalid transition credited \u2192 received."
+            }
+          },
+          "unauthList": {
+            "status": 401
+          },
+          "unauthTransition": {
+            "status": 401
+          }
+        }
+      },
+      {
+        "num": 10,
+        "name": "QA purge removes flagged rows; zero QA rows remain",
+        "pass": true,
+        "evidence": {
+          "purge": {
+            "status": 200,
+            "body": {
+              "ok": true,
+              "removed": 1,
+              "remaining": 0,
+              "timestamp": "2026-08-19T00:21:56.690Z"
+            }
+          },
+          "postPurgeQaCount": 0
+        }
+      }
+    ],
+    "finishedAt": "2026-08-19T00:21:56Z",
+    "referenceCode": "IVX-QA-WIRE-CERT-1787098914",
+    "qaEmail": "ivx.qa.wire.cert.20260819@ivxholding.com",
+    "wireId": "wire_mszcjw58_f06038c7fb",
+    "score": "10/10"
+  },
+  "qaHygiene": {
+    "qaEmailPattern": "ivx.qa.wire.cert.20260819@ivxholding.com",
+    "purge": {
+      "removed": 1,
+      "remaining": 0,
+      "postPurgeQaCount": 0,
+      "verifiedAt": "2026-08-19T00:21:56.690Z"
+    },
+    "note": "QA wire record created, exercised through full lifecycle, then purged and verified 0 QA rows remaining. Real investor records untouched."
+  },
+  "honestNotes": [
+    "IVX_WIRE_* bank env vars are NOT configured on Render: owner-auth /api/ivx/wire-instructions correctly returns an explicit not-configured state (no fake bank details served). Public preview serves the branded fallback with sign-in CTA. Owner action required to display real bank details.",
+    "SMS owner alert skipped by design: IVX_OWNER_RECOVERY_PHONE not configured on Render.",
+    "Stripe payments remain honestly not_configured (separate concern, unchanged by this certificate).",
+    "All 10 checks executed against live production over HTTPS at certification time. No cached, mocked, or synthetic output counted as proof."
+  ],
+  "auth": {
+    "ownerEndpointsAuth": "Supabase owner bearer (user 9b280e15-f9fd-459f-bf2d-530b1ed84cb1) via assertIVXOwnerOnly",
+    "negativeChecks": "unauthenticated list/transition rejected 401; invalid lifecycle transition rejected 400"
+  }
+}
