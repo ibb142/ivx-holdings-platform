@@ -1,0 +1,221 @@
+name: IVX 112 24x7 Fleet Watchdog
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-112-24x7-watchdog.yml'
+      - 'qa/autonomous/landing-10of10-mission.json'
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: ivx-112-24x7-fleet-cycle
+  cancel-in-progress: false
+
+env:
+  API_BASE: https://api.ivxholding.com
+  PROGRAM_ID: IVX-LANDING-10OF10-2026-08-19
+  IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+  IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+
+jobs:
+  watchdog-cycle:
+    name: Verify, recover and execute all 112 agents
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve owner/system binding without exposing values
+        shell: bash
+        run: |
+          set -euo pipefail
+          SYSTEM_KEY="${IVX_AI_SYSTEM_SECRET:-${IVX_SYSTEM_SECRET:-}}"
+          test -n "$SYSTEM_KEY"
+          echo "::add-mask::$SYSTEM_KEY"
+          echo "SYSTEM_KEY=$SYSTEM_KEY" >> "$GITHUB_ENV"
+          echo 'system_binding=present'
+
+      - name: Require secured mutating agent API
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          security_http=$(curl -sS -o /tmp/security-probe.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/agents/ivx_holdings_1/pause" || true)
+          if [ "$security_http" != 401 ]; then
+            echo "agent_mutation_guard_not_ready=http_${security_http}"
+            gh workflow run ivx-112-final-live-cert.yml --ref main
+            for i in $(seq 1 120); do
+              sleep 10
+              security_http=$(curl -sS -o /tmp/security-probe.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/agents/ivx_holdings_1/pause" || true)
+              echo "security_poll=$i http=$security_http"
+              if [ "$security_http" = 401 ]; then break; fi
+              if [ "$i" = 120 ]; then
+                echo 'Secured agent mutation API did not become live.'
+                exit 1
+              fi
+            done
+          fi
+          test "$security_http" = 401
+          echo 'agent_mutation_guard=PASS'
+
+      - name: Verify live production and real 112 registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 30 "${API_BASE}/version" -o /tmp/version.json
+          curl -fsS --max-time 30 "${API_BASE}/health" -o /tmp/health.json
+          curl -fsS --max-time 30 "${API_BASE}/api/ivx/agents" -o /tmp/agents-before.json
+          test "$(jq -r '.ok // false' /tmp/agents-before.json)" = true
+          test "$(jq -r '.totalAgents // 0' /tmp/agents-before.json)" = 112
+          test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents-before.json)" = 112
+          LIVE_SHA=$(jq -r '.commit // empty' /tmp/version.json)
+          test -n "$LIVE_SHA"
+          echo "LIVE_SHA=$LIVE_SHA" >> "$GITHUB_ENV"
+          jq -r '.agents[] | [.agentNumber,.agentId,.name,(.paused|tostring),(.disabled|tostring)] | @tsv' /tmp/agents-before.json > /tmp/agents.tsv
+          echo "registry=112/112 live_sha=$LIVE_SHA"
+
+      - name: Recover paused or disabled agents with owner authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          recovered=0
+          while IFS=$'\t' read -r number agent_id name paused disabled; do
+            if [ "$disabled" = true ]; then
+              code=$(curl -sS -o "/tmp/enable-${number}.json" -w '%{http_code}' -X POST "${API_BASE}/api/ivx/agents/${agent_id}/enable" -H "x-ivx-owner-key: ${SYSTEM_KEY}" || true)
+              test "$code" = 200
+              test "$(jq -r '.ok // false' "/tmp/enable-${number}.json")" = true
+              recovered=$((recovered+1))
+            fi
+            if [ "$paused" = true ]; then
+              code=$(curl -sS -o "/tmp/resume-${number}.json" -w '%{http_code}' -X POST "${API_BASE}/api/ivx/agents/${agent_id}/resume" -H "x-ivx-owner-key: ${SYSTEM_KEY}" || true)
+              test "$code" = 200
+              test "$(jq -r '.ok // false' "/tmp/resume-${number}.json")" = true
+              recovered=$((recovered+1))
+            fi
+          done < /tmp/agents.tsv
+          echo "RECOVERED=$recovered" >> "$GITHUB_ENV"
+          curl -fsS --max-time 30 "${API_BASE}/api/ivx/agents" -o /tmp/agents-recovered.json
+          test "$(jq '[.agents[] | select(.paused == true or .disabled == true)] | length' /tmp/agents-recovered.json)" = 0
+          echo "fleet_recovery=PASS recovered=$recovered"
+
+      - name: Execute evidence-bearing cycle for all 112 agents
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ivx112-cycle
+          export API_BASE SYSTEM_KEY PROGRAM_ID LIVE_SHA GITHUB_RUN_ID GITHUB_RUN_ATTEMPT
+          run_one() {
+            number="$1"
+            agent_id="$2"
+            gap=$(( ((number - 1) % 40) + 1 ))
+            contract_code=$(curl -sS --max-time 25 -o "/tmp/ivx112-cycle/contract-${number}.json" -w '%{http_code}' "${API_BASE}/api/ivx/agents/${agent_id}/contract" || true)
+            if [ "$contract_code" != 200 ]; then
+              jq -n --argjson n "$number" --arg id "$agent_id" --argjson gap "$gap" --arg error "contract_http_${contract_code}" '{agentNumber:$n,agentId:$id,gapId:$gap,ok:false,error:$error}' > "/tmp/ivx112-cycle/${number}.json"
+              return 0
+            fi
+            task_type=$(jq -r '.contract.allowedTaskTypes[0] // "audit"' "/tmp/ivx112-cycle/contract-${number}.json")
+            task_id="landing10-24x7-gap-$(printf '%02d' "$gap")-agent-$(printf '%03d' "$number")-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            body=$(jq -nc \
+              --arg taskType "$task_type" \
+              --arg token "$SYSTEM_KEY" \
+              --arg programId "$PROGRAM_ID" \
+              --argjson gapId "$gap" \
+              --arg sourceSha "$LIVE_SHA" \
+              --arg taskId "$task_id" \
+              --arg runId "landing10-24x7-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+              '{taskType:$taskType,ownerApprovalToken:$token,payload:{programId:$programId,gapId:$gapId,sourceSha:$sourceSha,__taskId:$taskId,__runId:$runId,__workflow:"IVX 112 24x7 Fleet Watchdog",realExecutionOnly:true,simulatedSuccessAllowed:false}}')
+            code=$(curl -sS --retry 1 --retry-delay 1 --max-time 50 -o "/tmp/ivx112-cycle/run-${number}.json" -w '%{http_code}' \
+              -X POST "${API_BASE}/api/ivx/agents/${agent_id}/run" \
+              -H 'Content-Type: application/json' \
+              -H "x-ivx-owner-key: ${SYSTEM_KEY}" \
+              --data "$body" || true)
+            ok=false
+            if [ "$code" = 200 ]; then ok=$(jq -r '.ok // false' "/tmp/ivx112-cycle/run-${number}.json"); fi
+            jq -n \
+              --argjson n "$number" --arg id "$agent_id" --argjson gap "$gap" --arg taskType "$task_type" --arg taskId "$task_id" --arg http "$code" --argjson ok "$ok" \
+              --arg finalStatus "$(jq -r '.runRecord.finalStatus // "request_failed"' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" \
+              --arg sourceReference "$(jq -r '.runRecord.sourceReference // empty' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" \
+              --arg toolResultId "$(jq -r '.runRecord.toolResultId // empty' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" \
+              --arg commitSha "$(jq -r '.runRecord.commitSha // empty' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" \
+              --arg error "$(jq -r '.error // .runRecord.error // empty' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" \
+              '{agentNumber:$n,agentId:$id,gapId:$gap,taskType:$taskType,taskId:$taskId,httpStatus:$http,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,commitSha:$commitSha,error:$error}' \
+              > "/tmp/ivx112-cycle/${number}.json"
+          }
+          export -f run_one
+          while IFS=$'\t' read -r number agent_id name paused disabled; do printf '%s\t%s\n' "$number" "$agent_id"; done < /tmp/agents.tsv \
+            | xargs -P 16 -n 2 bash -c 'run_one "$0" "$1"'
+          jq -s 'sort_by(.agentNumber)' /tmp/ivx112-cycle/[0-9]*.json > /tmp/ivx112-cycle/all.json
+          total=$(jq 'length' /tmp/ivx112-cycle/all.json)
+          success=$(jq '[.[] | select(.ok == true)] | length' /tmp/ivx112-cycle/all.json)
+          failed=$(jq '[.[] | select(.ok != true)] | length' /tmp/ivx112-cycle/all.json)
+          evidence=$(jq '[.[] | select((.sourceReference // "") != "" and (.toolResultId // "") != "")] | length' /tmp/ivx112-cycle/all.json)
+          test "$total" = 112
+          echo "CYCLE_SUCCESS=$success" >> "$GITHUB_ENV"
+          echo "CYCLE_FAILED=$failed" >> "$GITHUB_ENV"
+          echo "CYCLE_EVIDENCE=$evidence" >> "$GITHUB_ENV"
+          echo "cycle_total=112 success=$success failed=$failed evidence=$evidence"
+
+      - name: Verify 112 heartbeat refresh and no paused/disabled agents
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 30 "${API_BASE}/api/ivx/agents" -o /tmp/agents-after.json
+          test "$(jq -r '.totalAgents // 0' /tmp/agents-after.json)" = 112
+          test "$(jq '[.agents[] | select(.paused == true or .disabled == true)] | length' /tmp/agents-after.json)" = 0
+          now=$(date -u +%s)
+          stale=$(jq --argjson now "$now" '[.agents[] | select(.lastHeartbeat == null or (($now - (.lastHeartbeat | fromdateiso8601)) > 1800))] | length' /tmp/agents-after.json)
+          echo "STALE=$stale" >> "$GITHUB_ENV"
+          test "$stale" = 0
+          echo 'heartbeat_sla=PASS all_112_within_30m'
+
+      - name: Write 24x7 proof certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence/autonomous
+          jq -n \
+            --arg certificate 'IVX-112-24X7-FLEET-CYCLE' \
+            --arg programId "$PROGRAM_ID" \
+            --arg liveSha "$LIVE_SHA" \
+            --argjson registry 112 \
+            --argjson recovered "${RECOVERED:-0}" \
+            --argjson succeeded "$CYCLE_SUCCESS" \
+            --argjson failed "$CYCLE_FAILED" \
+            --argjson evidence "$CYCLE_EVIDENCE" \
+            --argjson stale "${STALE:-0}" \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{ok:true,certificate:$certificate,programId:$programId,productionSha:$liveSha,registryCount:$registry,pausedOrDisabledAfterRecovery:0,recoveryActions:$recovered,workerRunsAttempted:112,workerRunsSucceeded:$succeeded,workerRunsFailed:$failed,workerRunsWithEvidence:$evidence,heartbeatStaleOver30m:$stale,simulatedSuccessAllowed:false,realFundsMoved:false,scheduleMinutes:15,githubRunId:$runId,verifiedAt:$verifiedAt,truthNote:"This certificate proves one real 112-agent cycle, heartbeat SLA and fleet availability. It does not claim every product gap is fixed; product-specific gates remain authoritative."}' \
+            > qa/evidence/autonomous/ivx-112-24x7-latest.json
+          cp /tmp/ivx112-cycle/all.json qa/evidence/autonomous/ivx-112-24x7-agent-results.json
+          cat qa/evidence/autonomous/ivx-112-24x7-latest.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ivx-112-24x7-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            qa/evidence/autonomous/ivx-112-24x7-latest.json
+            qa/evidence/autonomous/ivx-112-24x7-agent-results.json
+          if-no-files-found: error
+
+      - name: Persist latest proof to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'IVX 112 24x7 Watchdog'
+          git config user.email 'ivx-112-watchdog@users.noreply.github.com'
+          git add qa/evidence/autonomous/ivx-112-24x7-latest.json qa/evidence/autonomous/ivx-112-24x7-agent-results.json
+          git diff --cached --quiet && exit 0
+          git commit -m "ops(112): persist 24x7 fleet cycle proof [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
