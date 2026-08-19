@@ -10,6 +10,8 @@
  */
 
 import { sendSnsSms } from '../services/ivx-sns-sms';
+import { saveWireSubmission } from '../services/ivx-wire-submission-store';
+import type { WireSubmissionStatus } from '../services/ivx-wire-submission-store';
 
 export type WireInstructions = {
   bankName: string;
@@ -40,6 +42,9 @@ export type WireSubmissionInput = {
 export type WireSubmissionResult = {
   ok: boolean;
   id?: string;
+  status?: WireSubmissionStatus;
+  persisted?: boolean;
+  duplicate?: boolean;
   error?: string;
 };
 
@@ -82,21 +87,23 @@ export function generateWireReferenceCode(userId: string): string {
 
 export async function recordWireSubmission(input: WireSubmissionInput): Promise<WireSubmissionResult> {
   try {
-    const id = `wire_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    // Durable persistence (Supabase-backed document store, survives restarts/deploys).
+    const { record, duplicate, persisted } = await saveWireSubmission(input);
+    const id = record.id;
 
-    // TODO: persist to Supabase/DB here once schema is created.
-    // For now, log a sanitized record and alert the owner via SMS.
-    console.log('[IVXWireTransfer] submission received', {
+    console.log('[IVXWireTransfer] submission recorded', {
       id,
       email: input.email,
       amount: input.amount,
       currency: input.currency,
       sentAt: input.sentAt,
       referenceCode: input.referenceCode,
+      duplicate,
+      persisted,
     });
 
     const ownerPhone = readTrimmed(process.env.IVX_OWNER_RECOVERY_PHONE);
-    if (ownerPhone) {
+    if (ownerPhone && !duplicate) {
       const message = [
         'IVX WIRE ALERT:',
         `${input.name || 'Investor'} ${input.email ? `(${input.email})` : ''}`,
@@ -107,7 +114,7 @@ export async function recordWireSubmission(input: WireSubmissionInput): Promise<
       await sendSnsSms({ to: ownerPhone, message, senderId: 'IVX' }).catch(() => {});
     }
 
-    return { ok: true, id };
+    return { ok: true, id, status: record.status, persisted, duplicate };
   } catch (error) {
     console.error('[IVXWireTransfer] recordWireSubmission failed', error instanceof Error ? error.message : error);
     return { ok: false, error: 'Failed to record wire submission' };
