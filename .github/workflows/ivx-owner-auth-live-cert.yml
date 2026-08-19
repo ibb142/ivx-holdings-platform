@@ -30,7 +30,7 @@ jobs:
     timeout-minutes: 20
     env:
       OWNER_EMAIL: iperez4242@gmail.com
-      SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      SUPABASE_URL: https://kvclcdjmjghndxsngfzb.supabase.co
       SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       IVX_OWNER_VARIABLES_ENCRYPTION_KEY: ${{ secrets.IVX_OWNER_VARIABLES_ENCRYPTION_KEY }}
@@ -59,7 +59,6 @@ jobs:
           grep -q 'signInWithEmailPassword(freshClient, normalizedEmail, password)' expo/lib/auth-context.tsx
           if grep -q 'await repairOwnerRegistrationAfterLogin(session).catch' expo/lib/auth-context.tsx; then exit 1; fi
           grep -q 'persistSession: true' expo/lib/supabase.ts
-          test -n "$SUPABASE_URL"
           test -n "$SUPABASE_ANON_KEY"
           test -n "$SUPABASE_SERVICE_ROLE_KEY" || { echo 'service_role_binding=missing'; exit 1; }
           echo 'source_invariants=PASS'
@@ -71,29 +70,24 @@ jobs:
           node --input-type=module <<'NODE'
           import crypto from 'node:crypto';
           import fs from 'node:fs';
-
-          const url = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
+          const url = process.env.SUPABASE_URL.replace(/\/+$/, '');
           const service = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-          if (!url || !service) throw new Error('Supabase backend binding unavailable');
-
           const endpoint = `${url}/rest/v1/ivx_owner_variables?name=eq.OWNER_NEW_PASSWORD&select=name,encrypted_value,value_iv,value_tag`;
-          const res = await fetch(endpoint, {
-            headers: {
-              apikey: service,
-              Authorization: `Bearer ${service}`,
-              Accept: 'application/json',
-            },
-          });
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 15000);
+          let res;
+          try {
+            res = await fetch(endpoint, { signal: controller.signal, headers: { apikey: service, Authorization: `Bearer ${service}`, Accept: 'application/json' } });
+          } finally { clearTimeout(timer); }
           if (!res.ok) throw new Error(`owner variable read HTTP ${res.status}`);
           const rows = await res.json();
           const row = Array.isArray(rows) ? rows[0] : null;
           if (!row?.encrypted_value) throw new Error('OWNER_NEW_PASSWORD encrypted row missing');
-
           const sources = [
             process.env.IVX_OWNER_VARIABLES_ENCRYPTION_KEY || '',
             process.env.APP_SECRET || '',
             process.env.JWT_SECRET || '',
-            (url && service) ? crypto.createHash('sha256').update(`${url}:${service}`, 'utf8').digest('hex') : '',
+            crypto.createHash('sha256').update(`${url}:${service}`, 'utf8').digest('hex'),
           ].filter(Boolean);
           const unique = [...new Set(sources)];
           const aad = Buffer.from('ivx_owner_variables:v1', 'utf8');
@@ -106,8 +100,7 @@ jobs:
             try {
               const key = crypto.createHash('sha256').update(unique[i], 'utf8').digest();
               const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-              decipher.setAAD(aad);
-              decipher.setAuthTag(tag);
+              decipher.setAAD(aad); decipher.setAuthTag(tag);
               password = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8').trim();
               if (password) { keyIndex = i; break; }
             } catch {}
@@ -115,8 +108,7 @@ jobs:
           if (!password) throw new Error('OWNER_NEW_PASSWORD could not be decrypted with available backend keys');
           console.log(`::add-mask::${password}`);
           fs.appendFileSync(process.env.GITHUB_ENV, `OWNER_PASSWORD=${password}\n`);
-          fs.appendFileSync(process.env.GITHUB_ENV, `OWNER_PASSWORD_KEY_INDEX=${keyIndex}\n`);
-          console.log(`owner_password_binding=PASS source=encrypted_owner_variables key_candidate=${keyIndex} secretValuesReturned=false`);
+          console.log(`owner_password_binding=PASS key_candidate=${keyIndex} secretValuesReturned=false`);
           NODE
 
       - name: Real Supabase password grant and latency
@@ -124,24 +116,18 @@ jobs:
         run: |
           set -euo pipefail
           body=$(jq -nc --arg email "$OWNER_EMAIL" --arg password "$OWNER_PASSWORD" '{email:$email,password:$password}')
-          curl -sS --connect-timeout 10 --max-time 20 -o /tmp/login.json -w '%{http_code} %{time_total}\n' \
-            -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" \
-            -H "apikey: ${SUPABASE_ANON_KEY}" \
-            -H 'Content-Type: application/json' \
-            --data "$body" > /tmp/login.metrics
+          curl -sS --connect-timeout 10 --max-time 20 -o /tmp/login.json -w '%{http_code} %{time_total}\n' -X POST "${SUPABASE_URL}/auth/v1/token?grant_type=password" -H "apikey: ${SUPABASE_ANON_KEY}" -H 'Content-Type: application/json' --data "$body" > /tmp/login.metrics
           read -r code total < /tmp/login.metrics
           echo "password_grant_http=$code time_total=$total"
-          if [ "$code" != 200 ]; then
-            jq '{error,error_code,msg,message}' /tmp/login.json 2>/dev/null || true
-            exit 1
-          fi
+          if [ "$code" != 200 ]; then jq '{error,error_code,msg,message}' /tmp/login.json 2>/dev/null || true; exit 1; fi
           token=$(jq -r '.access_token // empty' /tmp/login.json)
           refresh=$(jq -r '.refresh_token // empty' /tmp/login.json)
           user_id=$(jq -r '.user.id // empty' /tmp/login.json)
           app_role=$(jq -r '.user.app_metadata.role // empty' /tmp/login.json)
           user_role=$(jq -r '.user.user_metadata.role // empty' /tmp/login.json)
           test -n "$token"; test -n "$refresh"; test -n "$user_id"
-          case "$app_role:$user_role" in *owner*|*admin*) ;; *) echo 'owner metadata missing'; exit 1;; esac
+          test "$user_id" = '9b280e15-f9fd-459f-bf2d-530b1ed84cb1'
+          case "$app_role:$user_role" in *owner*|*admin*) ;; *) exit 1;; esac
           login_ms=$(awk -v t="$total" 'BEGIN { printf "%d", t*1000 }')
           echo "LOGIN_MS=$login_ms" >> "$GITHUB_ENV"
           echo "OWNER_USER_ID=$user_id" >> "$GITHUB_ENV"
@@ -154,10 +140,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl -sS --max-time 15 -o /tmp/user.json -w '%{http_code}' \
-            "${SUPABASE_URL%/}/auth/v1/user" \
-            -H "apikey: ${SUPABASE_ANON_KEY}" \
-            -H "Authorization: Bearer ${OWNER_TOKEN}")
+          code=$(curl -sS --max-time 15 -o /tmp/user.json -w '%{http_code}' "${SUPABASE_URL}/auth/v1/user" -H "apikey: ${SUPABASE_ANON_KEY}" -H "Authorization: Bearer ${OWNER_TOKEN}")
           echo "supabase_user_http=$code"
           test "$code" = 200
           test "$(jq -r '.id // empty' /tmp/user.json)" = "$OWNER_USER_ID"
@@ -167,9 +150,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl -sS --max-time 20 -o /tmp/owner-gate.json -w '%{http_code}' \
-            "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" \
-            -H "Authorization: Bearer ${OWNER_TOKEN}")
+          code=$(curl -sS --max-time 20 -o /tmp/owner-gate.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" -H "Authorization: Bearer ${OWNER_TOKEN}")
           echo "owner_gate_http=$code"
           test "$code" = 200 || { jq '{ok,error,message}' /tmp/owner-gate.json 2>/dev/null || true; exit 1; }
           test "$(jq -r '.ok // false' /tmp/owner-gate.json)" = true
@@ -179,8 +160,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl -sS --max-time 15 -o /tmp/unauth.json -w '%{http_code}' \
-            "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" || true)
+          code=$(curl -sS --max-time 15 -o /tmp/unauth.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" || true)
           echo "unauth_owner_gate_http=$code"
           case "$code" in 401|403) ;; *) exit 1;; esac
           echo 'unauthenticated_gate_closed=PASS'
@@ -190,14 +170,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p qa/evidence
-          jq -n \
-            --arg sha "$SOURCE_SHA" \
-            --arg userId "$OWNER_USER_ID" \
-            --arg appRole "$OWNER_APP_ROLE" \
-            --arg userRole "$OWNER_USER_ROLE" \
-            --argjson loginMs "$LOGIN_MS" \
-            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{certificate:"IVX-OWNER-AUTH-E2E-LIVE",passed:true,sourceSha:$sha,realPasswordGrant:true,passwordGrantMethod:"direct_supabase_password_grant",credentialBinding:"encrypted_owner_variables_in_memory",loginLatencyMs:$loginMs,supabaseUserEndpointHttp:200,identityMatch:true,ownerUserId:$userId,appMetadataRole:$appRole,userMetadataRole:$userRole,backendOwnerGateHttp:200,unauthenticatedGateClosed:true,secretValuesReturned:false,fastPathMarker:"IVX_OWNER_POST_LOGIN_FAST_PATH_V1",backgroundRepairMarker:"IVX_OWNER_REPAIR_BACKGROUND_V1",directPasswordMarker:"IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1",verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-auth-e2e-live.json
+          jq -n --arg sha "$SOURCE_SHA" --arg userId "$OWNER_USER_ID" --arg appRole "$OWNER_APP_ROLE" --arg userRole "$OWNER_USER_ROLE" --argjson loginMs "$LOGIN_MS" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{certificate:"IVX-OWNER-AUTH-E2E-LIVE",passed:true,sourceSha:$sha,realPasswordGrant:true,passwordGrantMethod:"direct_supabase_password_grant",credentialBinding:"encrypted_owner_variables_in_memory",loginLatencyMs:$loginMs,supabaseUserEndpointHttp:200,identityMatch:true,ownerUserId:$userId,appMetadataRole:$appRole,userMetadataRole:$userRole,backendOwnerGateHttp:200,unauthenticatedGateClosed:true,secretValuesReturned:false,fastPathMarker:"IVX_OWNER_POST_LOGIN_FAST_PATH_V1",backgroundRepairMarker:"IVX_OWNER_REPAIR_BACKGROUND_V1",directPasswordMarker:"IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1",verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-auth-e2e-live.json
           cat qa/evidence/ivx-owner-auth-e2e-live.json
 
       - uses: actions/upload-artifact@v4
@@ -215,9 +188,4 @@ jobs:
           git add qa/evidence/ivx-owner-auth-e2e-live.json
           git diff --cached --quiet && exit 0
           git commit -m "cert(auth): owner E2E live ${SOURCE_SHA:0:12} [skip ci]"
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git push origin HEAD:${{ github.event.pull_request.head.ref }}
-          else
-            git pull --rebase origin main
-            git push origin HEAD:main
-          fi
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
