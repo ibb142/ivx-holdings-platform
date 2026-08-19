@@ -63,10 +63,18 @@ function logHideSplash() {
 // -------------------------------------------------------------------
 // Error screen shown when provider import fails or times out.
 // -------------------------------------------------------------------
-function ImportCrashScreen({ error, onRetry }: { error: Error; onRetry: () => void }) {
+function ImportCrashScreen({
+  error,
+  onRetry,
+  title = 'IVX Startup Error',
+}: {
+  error: Error;
+  onRetry: () => void;
+  title?: string;
+}) {
   return (
     <View style={crashStyles.container}>
-      <Text style={crashStyles.title}>IVX Startup Error</Text>
+      <Text style={crashStyles.title}>{title}</Text>
       <Text style={crashStyles.message}>{error.message}</Text>
       {error.stack ? (
         <Text style={crashStyles.stack}>{error.stack.slice(0, 1500)}</Text>
@@ -79,6 +87,67 @@ function ImportCrashScreen({ error, onRetry }: { error: Error; onRetry: () => vo
       </Text>
     </View>
   );
+}
+
+// -------------------------------------------------------------------
+// Last-resort render boundary.
+//
+// THIS IS THE BLACK SCREEN FIX.
+//
+// When a render error is not caught by ANY error boundary, React 18 does not
+// leave the last good UI on screen — it unmounts the entire tree. In a release
+// APK there is no red box, so the result is an empty root view: a totally black
+// screen with no text, no error, no tab bar, and no way back.
+//
+// Every other safety net in this app (DiagnosticErrorBoundary, ProviderBoundary,
+// ModuleErrorBoundary, CardBoundary) lives INSIDE <AppProviders />. So anything
+// that throws while rendering AppProviders itself — or any provider above those
+// inner boundaries — had nothing above it to catch the error and took the whole
+// app down to black, destroying the very nets meant to report it.
+//
+// This boundary sits ABOVE AppProviders, using only the primitives this minimal
+// root layout already imports, so a crash always renders a readable message and
+// a Retry button instead of silence.
+// -------------------------------------------------------------------
+interface RootBoundaryProps {
+  children: React.ReactNode;
+  onReset: () => void;
+}
+
+interface RootBoundaryState {
+  error: Error | null;
+}
+
+class RootErrorBoundary extends React.Component<RootBoundaryProps, RootBoundaryState> {
+  state: RootBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: unknown): RootBoundaryState {
+    return { error: error instanceof Error ? error : new Error(String(error)) };
+  }
+
+  componentDidCatch(error: unknown, info: { componentStack?: string | null }): void {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error('[IVX] Root render crash:', err.message, err.stack, info?.componentStack);
+    // The splash may still be up if the crash happened before first paint.
+    logHideSplash();
+  }
+
+  render(): React.ReactNode {
+    const { error } = this.state;
+    if (error) {
+      return (
+        <ImportCrashScreen
+          title="IVX Render Error"
+          error={error}
+          onRetry={() => {
+            this.setState({ error: null });
+            this.props.onReset();
+          }}
+        />
+      );
+    }
+    return <>{this.props.children}</>;
+  }
 }
 
 // -------------------------------------------------------------------
@@ -158,8 +227,14 @@ function RootLayout(): React.ReactElement {
   }
 
   // Phase 3: providers loaded successfully — render the full app.
+  // Wrapped so an uncaught render error shows a readable screen instead of
+  // unmounting the tree to a silent black screen.
   const { AppProviders } = providersModule!;
-  return <AppProviders />;
+  return (
+    <RootErrorBoundary key={attempt} onReset={() => setAttempt((a) => a + 1)}>
+      <AppProviders />
+    </RootErrorBoundary>
+  );
 }
 
 // Keep the default export separate from the function declaration. The managed

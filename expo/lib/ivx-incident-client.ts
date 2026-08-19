@@ -116,7 +116,7 @@ async function pollRepairJobProgress(url: string, jobId: string, incidentId: str
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
-      const res = await fetch(`${url}/api/ivx/repair-jobs/${jobId}`, { signal: controller.signal });
+      const res = await reporterFetch(`${url}/api/ivx/repair-jobs/${jobId}`, { signal: controller.signal });
       clearTimeout(timer);
       if (!res.ok) continue;
       const data = (await res.json().catch(() => null)) as { ok?: boolean; job?: { stage?: string } } | null;
@@ -139,7 +139,7 @@ async function startRepairJob(url: string, incidentId: string): Promise<void> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
-    const res = await fetch(`${url}/api/ivx/repair-jobs`, {
+    const res = await reporterFetch(`${url}/api/ivx/repair-jobs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ incidentId }),
@@ -163,6 +163,27 @@ async function startRepairJob(url: string, incidentId: string): Promise<void> {
   }
 }
 
+/**
+ * The reporter must NEVER use the instrumented global fetch.
+ *
+ * installFetchWrapper() replaces globalThis.fetch and reports any 401/403/5xx
+ * response as an incident. The reporter itself posts over fetch, so using the
+ * global one makes it observe its own traffic: a failing incidents endpoint
+ * reports its own failure, which posts again, and so on. Holding the original
+ * unwrapped fetch keeps reporting strictly one-way.
+ */
+let uninstrumentedFetch: typeof globalThis.fetch | null = null;
+
+function reporterFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const impl = uninstrumentedFetch ?? globalThis.fetch;
+  return impl(input as RequestInfo, init);
+}
+
+/** Reporter endpoints are never themselves instrumented. */
+function isReporterUrl(url: string): boolean {
+  return url.includes('/api/ivx/incidents') || url.includes('/api/ivx/repair-jobs');
+}
+
 async function postIncident(payload: IngestPayload): Promise<void> {
   const url = resolveBaseUrl();
   if (!url) return;
@@ -171,7 +192,7 @@ async function postIncident(payload: IngestPayload): Promise<void> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
   try {
-    const res = await fetch(`${url}/api/ivx/incidents`, {
+    const res = await reporterFetch(`${url}/api/ivx/incidents`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -211,9 +232,14 @@ function previewBody(input: unknown): string | null {
 function installFetchWrapper(): void {
   if (typeof globalThis.fetch !== 'function') return;
   const original = globalThis.fetch.bind(globalThis);
+  uninstrumentedFetch = original;
   const ivxIncidentFetch = async function ivxIncidentFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     const method = (init?.method ?? 'GET').toUpperCase();
+    // Never observe the reporter's own traffic.
+    if (isReporterUrl(url)) {
+      return original(input as RequestInfo, init);
+    }
     try {
       const response = await original(input as RequestInfo, init);
       if (!response.ok && response.status >= 500) {
