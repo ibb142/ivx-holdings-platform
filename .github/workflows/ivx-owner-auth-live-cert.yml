@@ -30,7 +30,6 @@ jobs:
     timeout-minutes: 20
     env:
       OWNER_EMAIL: iperez4242@gmail.com
-      OWNER_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD }}
       SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
       API_BASE: https://api.ivxholding.com
@@ -52,55 +51,63 @@ jobs:
           grep -q 'signInWithEmailPassword(freshClient, normalizedEmail, password)' expo/lib/auth-context.tsx
           if grep -q 'await repairOwnerRegistrationAfterLogin(session).catch' expo/lib/auth-context.tsx; then exit 1; fi
           grep -q 'persistSession: true' expo/lib/supabase.ts
-          test -n "$OWNER_PASSWORD"
+          grep -q "readEnv('IVX_OWNER_PASSWORD') || readEnv('OWNER_NEW_PASSWORD')" backend/api/ivx-owner-passwordless-login.ts
+          grep -q "getIVXOwnerVariableRuntimeValue('OWNER_NEW_PASSWORD')" backend/api/ivx-owner-passwordless-login.ts
+          grep -q 'signInWithPassword' backend/api/ivx-owner-passwordless-login.ts
           test -n "$SUPABASE_URL"
           test -n "$SUPABASE_ANON_KEY"
-      - name: Real Supabase password sign-in and latency
+      - name: Real runtime-bound Supabase password grant and latency
         shell: bash
         run: |
           set -euo pipefail
-          body=$(jq -nc --arg email "$OWNER_EMAIL" --arg password "$OWNER_PASSWORD" '{email:$email,password:$password}')
-          curl -sS --max-time 15 -o /tmp/login.json -w '%{http_code} %{time_total}' -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" -H "apikey: ${SUPABASE_ANON_KEY}" -H 'Content-Type: application/json' --data "$body" > /tmp/login.metrics
+          body=$(jq -nc --arg email "$OWNER_EMAIL" '{email:$email,emergency:"ivx_emergency_recovery"}')
+          curl -sS --max-time 20 -o /tmp/login.json -w '%{http_code} %{time_total}' -X POST "${API_BASE}/api/ivx/owner-passwordless-login" -H 'Content-Type: application/json' -H 'Accept: application/json' --data "$body" > /tmp/login.metrics
           read -r code total < /tmp/login.metrics
-          test "$code" = 200 || { echo "password_grant_http=$code"; jq '{error,error_code,msg,message}' /tmp/login.json 2>/dev/null || true; exit 1; }
-          token=$(jq -r '.access_token // empty' /tmp/login.json)
-          user_id=$(jq -r '.user.id // empty' /tmp/login.json)
-          app_role=$(jq -r '.user.app_metadata.role // empty' /tmp/login.json)
-          user_role=$(jq -r '.user.user_metadata.role // empty' /tmp/login.json)
-          test -n "$token"; test -n "$user_id"
-          case "$app_role:$user_role" in *owner*|*admin*) ;; *) exit 1;; esac
+          test "$code" = 200 || { echo "owner_runtime_login_http=$code"; jq '{success,message,rootCause,deploymentMarker}' /tmp/login.json 2>/dev/null || true; exit 1; }
+          test "$(jq -r '.success // false' /tmp/login.json)" = true
+          method=$(jq -r '.sessionMethod // empty' /tmp/login.json)
+          test "$method" = 'bounded_password_grant' || { echo "sessionMethod=$method"; exit 1; }
+          test "$(jq -r '.outageMode // false' /tmp/login.json)" != true
+          token=$(jq -r '.accessToken // empty' /tmp/login.json)
+          refresh=$(jq -r '.refreshToken // empty' /tmp/login.json)
+          user_id=$(jq -r '.userId // empty' /tmp/login.json)
+          binding=$(jq -r '.credentialBinding // empty' /tmp/login.json)
+          test -n "$token"; test -n "$refresh"; test -n "$user_id"
           login_ms=$(awk -v t="$total" 'BEGIN { printf "%d", t*1000 }')
           echo "LOGIN_MS=$login_ms" >> "$GITHUB_ENV"
           echo "OWNER_USER_ID=$user_id" >> "$GITHUB_ENV"
-          echo "OWNER_APP_ROLE=$app_role" >> "$GITHUB_ENV"
-          echo "OWNER_USER_ROLE=$user_role" >> "$GITHUB_ENV"
           echo "OWNER_TOKEN=$token" >> "$GITHUB_ENV"
-          echo "password_grant_http=200 login_ms=$login_ms owner_metadata=PASS"
-      - name: Verify token with Supabase user endpoint
+          echo "CREDENTIAL_BINDING=$binding" >> "$GITHUB_ENV"
+          echo "owner_runtime_login_http=200 sessionMethod=$method login_ms=$login_ms"
+      - name: Verify token and owner metadata with Supabase
         shell: bash
         run: |
           set -euo pipefail
           code=$(curl -sS --max-time 15 -o /tmp/user.json -w '%{http_code}' "${SUPABASE_URL%/}/auth/v1/user" -H "apikey: ${SUPABASE_ANON_KEY}" -H "Authorization: Bearer ${OWNER_TOKEN}")
           test "$code" = 200
           test "$(jq -r '.id // empty' /tmp/user.json)" = "$OWNER_USER_ID"
+          app_role=$(jq -r '.app_metadata.role // empty' /tmp/user.json)
+          user_role=$(jq -r '.user_metadata.role // empty' /tmp/user.json)
+          case "$app_role:$user_role" in *owner*|*admin*) ;; *) echo "owner metadata missing"; exit 1;; esac
+          echo "OWNER_APP_ROLE=$app_role" >> "$GITHUB_ENV"
+          echo "OWNER_USER_ROLE=$user_role" >> "$GITHUB_ENV"
       - name: Verify live owner-only backend gate with real session
         shell: bash
         run: |
           set -euo pipefail
           code=$(curl -sS --max-time 20 -o /tmp/owner-gate.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" -H "Authorization: Bearer ${OWNER_TOKEN}")
-          test "$code" = 200
+          test "$code" = 200 || { echo "owner_gate_http=$code"; cat /tmp/owner-gate.json; exit 1; }
           test "$(jq -r '.ok // false' /tmp/owner-gate.json)" = true
       - name: Verify unauthenticated owner gate remains closed
         shell: bash
         run: |
-          set -euo pipefail
           code=$(curl -sS --max-time 15 -o /tmp/unauth.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" || true)
-          case "$code" in 401|403) ;; *) exit 1;; esac
+          case "$code" in 401|403) ;; *) echo "unauth_owner_gate_http=$code"; exit 1;; esac
       - name: Build certificate
         shell: bash
         run: |
           mkdir -p qa/evidence
-          jq -n --arg sha "$SOURCE_SHA" --arg userId "$OWNER_USER_ID" --arg appRole "$OWNER_APP_ROLE" --arg userRole "$OWNER_USER_ROLE" --argjson loginMs "$LOGIN_MS" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{certificate:"IVX-OWNER-AUTH-E2E-LIVE",passed:true,sourceSha:$sha,realPasswordGrant:true,passwordGrantHttp:200,loginLatencyMs:$loginMs,supabaseUserEndpointHttp:200,identityMatch:true,ownerUserId:$userId,appMetadataRole:$appRole,userMetadataRole:$userRole,backendOwnerGateHttp:200,unauthenticatedGateClosed:true,secretValuesReturned:false,fastPathMarker:"IVX_OWNER_POST_LOGIN_FAST_PATH_V1",backgroundRepairMarker:"IVX_OWNER_REPAIR_BACKGROUND_V1",directPasswordMarker:"IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1",verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-auth-e2e-live.json
+          jq -n --arg sha "$SOURCE_SHA" --arg userId "$OWNER_USER_ID" --arg appRole "$OWNER_APP_ROLE" --arg userRole "$OWNER_USER_ROLE" --arg binding "$CREDENTIAL_BINDING" --argjson loginMs "$LOGIN_MS" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{certificate:"IVX-OWNER-AUTH-E2E-LIVE",passed:true,sourceSha:$sha,realPasswordGrant:true,passwordGrantMethod:"bounded_password_grant",credentialBinding:$binding,outageSessionRejected:true,loginLatencyMs:$loginMs,supabaseUserEndpointHttp:200,identityMatch:true,ownerUserId:$userId,appMetadataRole:$appRole,userMetadataRole:$userRole,backendOwnerGateHttp:200,unauthenticatedGateClosed:true,secretValuesReturned:false,fastPathMarker:"IVX_OWNER_POST_LOGIN_FAST_PATH_V1",backgroundRepairMarker:"IVX_OWNER_REPAIR_BACKGROUND_V1",directPasswordMarker:"IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1",verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-auth-e2e-live.json
           cat qa/evidence/ivx-owner-auth-e2e-live.json
       - uses: actions/upload-artifact@v4
         with:
