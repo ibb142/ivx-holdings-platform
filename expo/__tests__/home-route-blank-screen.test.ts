@@ -241,3 +241,102 @@ describe('Defect 3 — the watchdog must never accuse a screen that painted', ()
     expect(code).toContain('dismissedRouteRef.current = null');
   });
 });
+
+/**
+ * Defect 4 (v1.10.25) — THE BLACK SCREEN ITSELF.
+ *
+ * Route `/` was listed in INSTRUMENTED_ROUTES, so the watchdog was allowed to
+ * judge it, but NO screen in the app ever called `markScreenPainted('/')` —
+ * only `/home` and `/login` reported. `/` could therefore never satisfy the
+ * paint check: landing on it for 8 seconds ALWAYS produced an accusation, by
+ * construction.
+ *
+ * Worse, `app/index.tsx` returned a bare `<Redirect />` on every branch, and
+ * `<Redirect />` renders null. Route `/` painted ZERO pixels until the router
+ * committed the destination — and if it never committed, that empty container
+ * stayed forever, silently. The recording measured 14 seconds of #0A0A0F.
+ *
+ * And v1.10.24's recovery button navigated the user directly onto `/`.
+ */
+describe('Defect 4: the root route was an unpaintable empty container', () => {
+  /**
+   * THE INVARIANT THAT WOULD HAVE CAUGHT THIS BEFORE IT SHIPPED.
+   * Every route the watchdog may judge must have a screen that reports a paint
+   * for that exact key, otherwise the accusation is guaranteed and false.
+   */
+  it('every instrumented route has a screen that reports a paint for it', () => {
+    const watchdog = read('lib/screen-paint-watchdog.ts');
+    const declared = watchdog.match(/INSTRUMENTED_ROUTES = new Set<string>\(\[([^\]]+)\]/);
+    expect(declared).not.toBeNull();
+
+    const routes = (declared as RegExpMatchArray)[1]
+      .split(',')
+      .map((r) => r.trim().replace(/^'|'$/g, ''))
+      .filter((r) => r.length > 0);
+    expect(routes.length).toBeGreaterThan(0);
+
+    // Strip comments first. Scanning raw text let a DOC COMMENT that merely
+    // mentioned a call satisfy the invariant — a false pass that would have let
+    // this exact defect through a second time.
+    const stripComments = (src: string): string =>
+      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+
+    const screenSources = ['app/index.tsx', 'app/(tabs)/home.tsx', 'app/login.tsx']
+      .map((f) => stripComments(read(f)))
+      .join('\n');
+
+    for (const route of routes) {
+      expect({ route, reported: screenSources.includes(`markScreenPainted('${route}')`) })
+        .toEqual({ route, reported: true });
+      expect({ route, released: screenSources.includes(`markScreenUnmounted('${route}')`) })
+        .toEqual({ route, released: true });
+    }
+  });
+
+  it('the root route renders visible content on EVERY branch, never a bare redirect', () => {
+    const index = read('app/index.tsx');
+    // A bare `return <Redirect .../>` paints nothing. It must not exist.
+    expect(index).not.toMatch(/return\s+<Redirect/);
+    expect(index).toContain('testID="index-route"');
+  });
+
+  it('the root route reports and releases its paint', () => {
+    const index = read('app/index.tsx');
+    expect(index).toContain("markScreenPainted('/')");
+    expect(index).toContain("markScreenUnmounted('/')");
+  });
+
+  it('the watchdog recovery target is a route that can actually paint', () => {
+    const watchdogCode = read('components/BlankScreenWatchdog.tsx');
+    const target = watchdogCode.match(/const ROOT_ROUTE = '([^']+)'/);
+    expect(target).not.toBeNull();
+    const route = (target as RegExpMatchArray)[1];
+
+    // Recovery lands on this route. If it is judged, it MUST be able to report
+    // a paint — otherwise recovery loops straight back into the accusation.
+    expect(isRouteInstrumented(route)).toBe(true);
+    expect(read('app/index.tsx')).toContain("markScreenPainted('/')");
+    expect(route).toBe('/');
+  });
+
+  it('runtime: the root route is not accused once it reports its paint', () => {
+    resetPaintTracking();
+    expect(isRouteInstrumented('/')).toBe(true);
+    // Before paint (screen not yet mounted) it is correctly judged blank.
+    expect(hasRouteFailedToPaint('/')).toBe(true);
+    // After the screen mounts and paints, it must never be accused.
+    markScreenPainted('/');
+    expect(hasRouteFailedToPaint('/')).toBe(false);
+    // And it is released on unmount so a genuinely blank re-entry is caught.
+    markScreenUnmounted('/');
+    expect(hasRouteFailedToPaint('/')).toBe(true);
+  });
+
+  it('recovery from Home lands on a route that paints, breaking the loop', () => {
+    resetPaintTracking();
+    markScreenPainted('/home');
+    markScreenUnmounted('/home'); // Home unmounts as recovery navigates away
+    markScreenPainted('/'); // root route paints immediately on mount
+    expect(hasRouteFailedToPaint('/')).toBe(false);
+  });
+});

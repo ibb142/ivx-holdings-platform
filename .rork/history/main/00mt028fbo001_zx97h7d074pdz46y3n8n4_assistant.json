@@ -106,7 +106,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app/(tabs)/_layout.tsx\"}",
       "createdAt": 1787141568070,
-      "completedAt": 1787141568073
+      "completedAt": 1787141568073,
+      "compactedAt": 1787164454452
     },
     {
       "type": "reasoning",
@@ -137,7 +138,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && rg -n \\\"installGlobalErrorHandler|ErrorUtils|setGlobalHandler|installFetchWrapper\\\" lib/ivx-incident-client.ts\"}",
       "createdAt": 1787141599560,
-      "completedAt": 1787141599713
+      "completedAt": 1787141599713,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -155,7 +157,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && sed -n '180,290p' lib/ivx-incident-client.ts\"}",
       "createdAt": 1787141599678,
-      "completedAt": 1787141599742
+      "completedAt": 1787141599742,
+      "compactedAt": 1787164454452
     },
     {
       "type": "reasoning",
@@ -186,7 +189,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && rg -n \\\"fetch\\\\(\\\" lib/ivx-incident-client.ts\"}",
       "createdAt": 1787141613089,
-      "completedAt": 1787141613094
+      "completedAt": 1787141613094,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -204,7 +208,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && sed -n '120,180p' lib/ivx-incident-client.ts\"}",
       "createdAt": 1787141613092,
-      "completedAt": 1787141613095
+      "completedAt": 1787141613095,
+      "compactedAt": 1787164454452
     },
     {
       "type": "reasoning",
@@ -235,7 +240,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && rg -n \\\"function shouldDrop\\\" -A 22 lib/ivx-incident-client.ts\"}",
       "createdAt": 1787141624608,
-      "completedAt": 1787141624768
+      "completedAt": 1787141624768,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -253,7 +259,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && rg -n \\\"function resolveBaseUrl\\\" -A 20 lib/ivx-incident-client.ts; rg -n \\\"SEND_TIMEOUT_MS =|DEDUPE|MAX_\\\" lib/ivx-incident-client.ts | head -20\"}",
       "createdAt": 1787141624732,
-      "completedAt": 1787141625395
+      "completedAt": 1787141625395,
+      "compactedAt": 1787164454452
     },
     {
       "type": "reasoning",
@@ -299,7 +306,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app/_layout.tsx\", \"edits\": [{\"oldString\": \"function ImportCrashScreen({ error, onRetry }: { error: Error; onRetry: () => void }) {\\n  return (\\n    <View style={crashStyles.container}>\\n      <Text style={crashStyles.title}>IVX Startup Error</Text>\", \"newString\": \"function ImportCrashScreen({\\n  error,\\n  onRetry,\\n  title = 'IVX Startup Error',\\n}: {\\n  error: Error;\\n  onRetry: () => void;\\n  title?: string;\\n}) {\\n  return (\\n    <View style={crashStyles.container}>\\n      <Text style={crashStyles.title}>{title}</Text>\"}, {\"oldString\": \"// -------------------------------------------------------------------\\n// Root component.\\n// -------------------------------------------------------------------\\nconst PROVIDER_LOAD_TIMEOUT_MS = 15000;\", \"newString\": \"// -------------------------------------------------------------------\\n// Last-resort render boundary.\\n//\\n// THIS IS THE BLACK SCREEN FIX.\\n//\\n// When a render error is not caught by ANY error boundary, React 18 does not\\n// leave the last good UI on screen \\u2014 it unmounts the entire tree. In a release\\n// APK there is no red box, so the result is an empty root view: a totally black\\n// screen with no text, no error, no tab bar, and no way back.\\n//\\n// Every other safety net in this app (DiagnosticErrorBoundary, ProviderBoundary,\\n// ModuleErrorBoundary, CardBoundary) lives INSIDE <AppProviders />. So anything\\n// that throws while rendering AppProviders itself \\u2014 or any provider above those\\n// inner boundaries \\u2014 had nothing above it to catch the error and took the whole\\n// app down to black, destroying the very nets meant to report it.\\n//\\n// This boundary sits ABOVE AppProviders, using only the primitives this minimal\\n// root layout already imports, so a crash always renders a readable message and\\n// a Retry button instead of silence.\\n// -------------------------------------------------------------------\\ninterface RootBoundaryProps {\\n  children: React.ReactNode;\\n  onReset: () => void;\\n}\\n\\ninterface RootBoundaryState {\\n  error: Error | null;\\n}\\n\\nclass RootErrorBoundary extends React.Component<RootBoundaryProps, RootBoundaryState> {\\n  state: RootBoundaryState = { error: null };\\n\\n  static getDerivedStateFromError(error: unknown): RootBoundaryState {\\n    return { error: error instanceof Error ? error : new Error(String(error)) };\\n  }\\n\\n  componentDidCatch(error: unknown, info: { componentStack?: string | null }): void {\\n    const err = error instanceof Error ? error : new Error(String(error));\\n    console.error('[IVX] Root render crash:', err.message, err.stack, info?.componentStack);\\n    // The splash may still be up if the crash happened before first paint.\\n    logHideSplash();\\n  }\\n\\n  render(): React.ReactNode {\\n    const { error } = this.state;\\n    if (error) {\\n      return (\\n        <ImportCrashScreen\\n          title=\\\"IVX Render Error\\\"\\n          error={error}\\n          onRetry={() => {\\n            this.setState({ error: null });\\n            this.props.onReset();\\n          }}\\n        />\\n      );\\n    }\\n    return <>{this.props.children}</>;\\n  }\\n}\\n\\n// -------------------------------------------------------------------\\n// Root component.\\n// -------------------------------------------------------------------\\nconst PROVIDER_LOAD_TIMEOUT_MS = 15000;\"}, {\"oldString\": \"  // Phase 3: providers loaded successfully — render the full app.\\n  const { AppProviders } = providersModule!;\\n  return <AppProviders />;\", \"newString\": \"  // Phase 3: providers loaded successfully — render the full app.\\n  // Wrapped so an uncaught render error shows a readable screen instead of\\n  // unmounting the tree to a silent black screen.\\n  const { AppProviders } = providersModule!;\\n  return (\\n    <RootErrorBoundary key={attempt} onReset={() => setAttempt((a) => a + 1)}>\\n      <AppProviders />\\n    </RootErrorBoundary>\\n  );\"}]}",
       "createdAt": 1787141677647,
-      "completedAt": 1787141691145
+      "completedAt": 1787141691145,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -318,7 +326,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/lib/ivx-incident-client.ts\", \"offset\": 160, \"limit\": 55}",
       "createdAt": 1787141691141,
-      "completedAt": 1787141691471
+      "completedAt": 1787141691471,
+      "compactedAt": 1787164454452
     },
     {
       "type": "reasoning",
@@ -374,7 +383,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/lib/ivx-incident-client.ts\", \"edits\": [{\"oldString\": \"async function postIncident(payload: IngestPayload): Promise<void> {\\n  const url = resolveBaseUrl();\\n  if (!url) return;\", \"newString\": \"/**\\n * The reporter must NEVER use the instrumented global fetch.\\n *\\n * installFetchWrapper() replaces globalThis.fetch and reports any 401/403/5xx\\n * response as an incident. The reporter itself posts over fetch, so using the\\n * global one makes it observe its own traffic: a failing incidents endpoint\\n * reports its own failure, which posts again, and so on. Holding the original\\n * unwrapped fetch keeps reporting strictly one-way.\\n */\\nlet uninstrumentedFetch: typeof globalThis.fetch | null = null;\\n\\nfunction reporterFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {\\n  const impl = uninstrumentedFetch ?? globalThis.fetch;\\n  return impl(input as RequestInfo, init);\\n}\\n\\n/** Reporter endpoints are never themselves instrumented. */\\nfunction isReporterUrl(url: string): boolean {\\n  return url.includes('/api/ivx/incidents') || url.includes('/api/ivx/repair-jobs');\\n}\\n\\nasync function postIncident(payload: IngestPayload): Promise<void> {\\n  const url = resolveBaseUrl();\\n  if (!url) return;\", \"replaceAll\": false}, {\"oldString\": \"    const res = await fetch(`${url}/api/ivx/incidents`, {\", \"newString\": \"    const res = await reporterFetch(`${url}/api/ivx/incidents`, {\", \"replaceAll\": false}, {\"oldString\": \"    const res = await fetch(`${url}/api/ivx/repair-jobs`, {\", \"newString\": \"    const res = await reporterFetch(`${url}/api/ivx/repair-jobs`, {\", \"replaceAll\": false}, {\"oldString\": \"      const res = await fetch(`${url}/api/ivx/repair-jobs/${jobId}`, { signal: controller.signal });\", \"newString\": \"      const res = await reporterFetch(`${url}/api/ivx/repair-jobs/${jobId}`, { signal: controller.signal });\", \"replaceAll\": false}, {\"oldString\": \"  const original = globalThis.fetch.bind(globalThis);\\n  const ivxIncidentFetch = async function ivxIncidentFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {\\n    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;\\n    const method = (init?.method ?? 'GET').toUpperCase();\\n    try {\\n      const response = await original(input as RequestInfo, init);\", \"newString\": \"  const original = globalThis.fetch.bind(globalThis);\\n  uninstrumentedFetch = original;\\n  const ivxIncidentFetch = async function ivxIncidentFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {\\n    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;\\n    const method = (init?.method ?? 'GET').toUpperCase();\\n    // Never observe the reporter's own traffic.\\n    if (isReporterUrl(url)) {\\n      return original(input as RequestInfo, init);\\n    }\\n    try {\\n      const response = await original(input as RequestInfo, init);\", \"replaceAll\": false}]}",
       "createdAt": 1787141707225,
-      "completedAt": 1787141715735
+      "completedAt": 1787141715735,
+      "compactedAt": 1787164454452
     },
     {
       "type": "reasoning",
@@ -404,7 +414,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"appPath\": \"expo\"}",
       "createdAt": 1787141721531,
-      "completedAt": 1787141741464
+      "completedAt": 1787141741464,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -422,7 +433,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && bun test 2>&1 | tail -6\"}",
       "createdAt": 1787141721534,
-      "completedAt": 1787141754071
+      "completedAt": 1787141754071,
+      "compactedAt": 1787164454452
     },
     {
       "type": "reasoning",
@@ -458,7 +470,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/android/app/build.gradle\", \"edits\": [{\"oldString\": \"        versionCode 115\\n        versionName \\\"1.10.17\\\"\", \"newString\": \"        versionCode 116\\n        versionName \\\"1.10.18\\\"\", \"replaceAll\": false}]}",
       "createdAt": 1787141759281,
-      "completedAt": 1787141759285
+      "completedAt": 1787141759285,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -486,7 +499,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app.config.ts\", \"edits\": [{\"oldString\": \"  version: \\\"1.10.17\\\",\", \"newString\": \"  version: \\\"1.10.18\\\",\", \"replaceAll\": false}, {\"oldString\": \"    versionCode: 115,\", \"newString\": \"    versionCode: 116,\", \"replaceAll\": false}]}",
       "createdAt": 1787141759285,
-      "completedAt": 1787141759793
+      "completedAt": 1787141759793,
+      "compactedAt": 1787164454452
     },
     {
       "type": "reasoning",
@@ -513,7 +527,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/android/app/build.gradle\", \"offset\": 90, \"limit\": 10}",
       "createdAt": 1787141764369,
-      "completedAt": 1787141764373
+      "completedAt": 1787141764373,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -532,7 +547,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app.config.ts\", \"offset\": 18, \"limit\": 6}",
       "createdAt": 1787141764373,
-      "completedAt": 1787141764376
+      "completedAt": 1787141764376,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -555,7 +571,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/android/app/build.gradle\", \"edits\": [{\"oldString\": \"        versionCode 115\\n        versionName \\\"1.10.17\\\"\", \"newString\": \"        versionCode 116\\n        versionName \\\"1.10.18\\\"\", \"replaceAll\": false}]}",
       "createdAt": 1787141766109,
-      "completedAt": 1787141767595
+      "completedAt": 1787141767595,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -578,7 +595,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app.config.ts\", \"edits\": [{\"oldString\": \"  version: \\\"1.10.17\\\",\", \"newString\": \"  version: \\\"1.10.18\\\",\", \"replaceAll\": false}]}",
       "createdAt": 1787141767592,
-      "completedAt": 1787141768216
+      "completedAt": 1787141768216,
+      "compactedAt": 1787164454452
     },
     {
       "type": "reasoning",
@@ -604,7 +622,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && rg -n \\\"versionCode\\\" app.config.ts\"}",
       "createdAt": 1787141773178,
-      "completedAt": 1787141773181
+      "completedAt": 1787141773181,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -623,7 +642,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app.config.ts\", \"offset\": 63, \"limit\": 6}",
       "createdAt": 1787141775056,
-      "completedAt": 1787141775740
+      "completedAt": 1787141775740,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -646,7 +666,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/app.config.ts\", \"edits\": [{\"oldString\": \"    versionCode: 115,\", \"newString\": \"    versionCode: 116,\", \"replaceAll\": false}]}",
       "createdAt": 1787141778259,
-      "completedAt": 1787141779153
+      "completedAt": 1787141779153,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -664,7 +685,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo/android && nohup ./gradlew assembleQa --no-daemon > /tmp/apk_v11018.log 2>&1 & printf 'BUILD_PID=%s\\\\n' \\\"$!\\\"\"}",
       "createdAt": 1787141781000,
-      "completedAt": 1787141782194
+      "completedAt": 1787141782194,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -682,7 +704,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"sleep 100; if kill -0 13495 2>/dev/null; then printf 'STATUS=building\\\\n'; else printf 'STATUS=finished\\\\n'; fi; rg -n \\\"BUILD SUCCESSFUL|BUILD FAILED|FAILURE:\\\" /tmp/apk_v11018.log | head; tail -2 /tmp/apk_v11018.log\"}",
       "createdAt": 1787141784135,
-      "completedAt": 1787141845420
+      "completedAt": 1787141845420,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -700,7 +723,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"if kill -0 13495 2>/dev/null; then printf 'STATUS=building\\\\n'; else printf 'STATUS=finished\\\\n'; fi; rg -n \\\"BUILD SUCCESSFUL|BUILD FAILED|FAILURE:\\\" /tmp/apk_v11018.log | head; tail -2 /tmp/apk_v11018.log\"}",
       "createdAt": 1787141848404,
-      "completedAt": 1787141849776
+      "completedAt": 1787141849776,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -718,7 +742,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"sleep 50; if kill -0 13495 2>/dev/null; then printf 'STATUS=building\\\\n'; else printf 'STATUS=finished\\\\n'; fi; rg -n \\\"BUILD SUCCESSFUL|BUILD FAILED|FAILURE:\\\" /tmp/apk_v11018.log | head; tail -2 /tmp/apk_v11018.log\"}",
       "createdAt": 1787141851718,
-      "completedAt": 1787141903094
+      "completedAt": 1787141903094,
+      "compactedAt": 1787164454452
     },
     {
       "type": "reasoning",
@@ -749,7 +774,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo/android && APK=app/build/outputs/apk/qa/app-qa.apk; ls -l $APK | awk '{print \\\"size_bytes=\\\"$5}'; sha256sum $APK | awk '{print \\\"sha256=\\\"$1}'\"}",
       "createdAt": 1787141908527,
-      "completedAt": 1787141908531
+      "completedAt": 1787141908531,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -767,7 +793,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo/android && rm -rf /tmp/scan18 && mkdir -p /tmp/scan18 && unzip -o -q app/build/outputs/apk/qa/app-qa.apk assets/index.android.bundle -d /tmp/scan18 && B=/tmp/scan18/assets/index.android.bundle; ls -l $B | awk '{print \\\"bundle_bytes=\\\"$5}'; echo \\\"== root boundary shipped ==\\\"; rg -c \\\"IVX Render Error\\\" $B | head -1; rg -c \\\"Root render crash\\\" $B | head -1; echo \\\"== reporter loop fix shipped ==\\\"; rg -c \\\"uninstrumentedFetch|isReporterUrl\\\" $B | head -1; echo \\\"== web-only guard still eliminated ==\\\"; rg -q \\\"patchedCreateElement\\\" $B && echo \\\"patch_PRESENT\\\" || echo \\\"patch_absent\\\"\"}",
       "createdAt": 1787141908530,
-      "completedAt": 1787141910075
+      "completedAt": 1787141910075,
+      "compactedAt": 1787164454452
     },
     {
       "type": "reasoning",
@@ -798,7 +825,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"TOK=$(cat /tmp/gh_tok 2>/dev/null); if [ -z \\\"$TOK\\\" ]; then curl -s -H \\\"Authorization: Bearer rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0/env-vars?limit=100\\\" -o /tmp/render_env.json && node -e 'const j=JSON.parse(require(\\\"fs\\\").readFileSync(\\\"/tmp/render_env.json\\\",\\\"utf8\\\"));const g=k=>{for(const e of j){const v=e.envVar||e;if(v.key===k)return v.value;}return \\\"\\\";};require(\\\"fs\\\").writeFileSync(\\\"/tmp/gh_tok\\\",g(\\\"GITHUB_TOKEN\\\")||g(\\\"RORK_PUBLIC_GITHUB_TOKEN\\\")||\\\"\\\");'; fi; TOK=$(cat /tmp/gh_tok); curl -s -o /dev/null -w \\\"gh_auth_http=%{http_code}\\\\n\\\" -H \\\"Authorization: Bearer $TOK\\\" https://api.github.com/repos/ibb142/ivx-holdings-platform\"}",
       "createdAt": 1787141915381,
-      "completedAt": 1787141918806
+      "completedAt": 1787141918806,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -816,7 +844,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOK=$(cat /tmp/gh_tok); SHA=$(sha256sum expo/android/app/build/outputs/apk/qa/app-qa.apk | awk '{print $1}'); node -e '\\nconst fs=require(\\\"fs\\\");\\nconst sha=process.argv[1];\\nconst body=[\\n\\\"Certified QA build \\\\u2014 Android home black screen.\\\",\\n\\\"\\\",\\n\\\"ROOT CAUSE (the real one).\\\",\\n\\\"app/_layout.tsx rendered <AppProviders /> with NO error boundary above it.\\\",\\n\\\"When a render error is caught by no boundary, React 18 unmounts the ENTIRE tree.\\\",\\n\\\"A release APK has no red box, so the result is an empty root view: a totally black\\\",\\n\\\"screen with no text, no error, no tab bar, no recovery.\\\",\\n\\\"\\\",\\n\\\"Every other safety net (DiagnosticErrorBoundary, ProviderBoundary, ModuleErrorBoundary,\\\",\\n\\\"CardBoundary) lives INSIDE AppProviders. So anything throwing in AppProviders itself, or\\\",\\n\\\"in any provider above those inner boundaries, destroyed the very nets meant to report it.\\\",\\n\\\"\\\",\\n\\\"This is why v1.10.16 and v1.10.17 did not fix it: both chased the component that throws,\\\",\\n\\\"while the reason a throw becomes a BLACK SCREEN was never addressed.\\\",\\n\\\"\\\",\\n\\\"FIX.\\\",\\n\\\"1. RootErrorBoundary now wraps AppProviders in the minimal root layout. Any uncaught\\\",\\n\\\"   render error shows a readable message, stack, and Retry button instead of silence.\\\",\\n\\\"2. Incident reporter no longer instruments its own traffic (uninstrumentedFetch +\\\",\\n\\\"   isReporterUrl), removing a self-observing fetch feedback loop.\\\",\\n\\\"3. Web-only text-node guard stays eliminated from the Android bundle.\\\",\\n\\\"\\\",\\n\\\"VERIFIED IN SHIPPED assets/index.android.bundle:\\\",\\n\\\"  'IVX Render Error'   present\\\",\\n\\\"  'Root render crash'  present\\\",\\n\\\"  uninstrumentedFetch  present\\\",\\n\\\"  patchedCreateElement ABSENT\\\",\\n\\\"\\\",\\n\\\"versionName 1.10.18 / versionCode 116\\\",\\n\\\"SHA256: \\\"+sha\\n].join(\\\"\\\\n\\\");\\nfs.writeFileSync(\\\"/tmp/rel18.json\\\",JSON.stringify({tag_name:\\\"v1.10.18-qa\\\",name:\\\"IVX Holdings v1.10.18 (QA) — Root Error Boundary / Black Screen Fix\\\",body,draft:false,prerelease:false}));\\n' \\\"$SHA\\\"; curl -s -X POST -H \\\"Authorization: Bearer $TOK\\\" -H \\\"Accept: application/vnd.github+json\\\" https://api.github.com/repos/ibb142/ivx-holdings-platform/releases -d @/tmp/rel18.json -o /tmp/rel18_out.json -w \\\"create_release_http=%{http_code}\\\\n\\\"; node -e 'const j=require(\\\"/tmp/rel18_out.json\\\");console.log(\\\"release_id\\\",j.id||\\\"none\\\",\\\"tag\\\",j.tag_name||\\\"none\\\",j.message||\\\"\\\");'\"}",
       "createdAt": 1787141920564,
-      "completedAt": 1787141932446
+      "completedAt": 1787141932446,
+      "compactedAt": 1787164454452
     },
     {
       "type": "reasoning",
@@ -846,7 +875,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \".tmp-rel18.json\", \"content\": \"{\\n  \\\"tag_name\\\": \\\"v1.10.18-qa\\\",\\n  \\\"name\\\": \\\"IVX Holdings v1.10.18 (QA) — Root Error Boundary / Black Screen Fix\\\",\\n  \\\"draft\\\": false,\\n  \\\"prerelease\\\": false,\\n  \\\"body\\\": \\\"Certified QA build — Android home black screen.\\\\n\\\\n## Root cause (the real one)\\\\n\\\\n`app/_layout.tsx` rendered `<AppProviders />` with **no error boundary above it**.\\\\n\\\\nWhen a render error is caught by no boundary, React 18 unmounts the ENTIRE tree. A release APK has no red box, so the result is an empty root view: a totally black screen with no text, no error, no tab bar, and no way to recover.\\\\n\\\\nEvery other safety net in this app (DiagnosticErrorBoundary, ProviderBoundary, ModuleErrorBoundary, CardBoundary) lives INSIDE AppProviders. So anything that threw while rendering AppProviders itself — or any provider above those inner boundaries — destroyed the very nets meant to report it.\\\\n\\\\nThis is why v1.10.16 and v1.10.17 did not fix it: both chased the component that throws, while the reason a throw becomes a BLACK SCREEN was never addressed.\\\\n\\\\n## Fix\\\\n\\\\n1. `RootErrorBoundary` now wraps AppProviders in the minimal root layout. Any uncaught render error shows a readable message, stack trace, and Retry button instead of silence.\\\\n2. The incident reporter no longer instruments its own traffic (`uninstrumentedFetch` + `isReporterUrl`), removing a self-observing fetch feedback loop.\\\\n3. The web-only text-node guard stays eliminated from the Android bundle.\\\\n\\\\n## Verified in shipped assets/index.android.bundle\\\\n\\\\n| Marker | Result |\\\\n| --- | --- |\\\\n| `IVX Render Error` | present |\\\\n| `Root render crash` | present |\\\\n| `uninstrumentedFetch` | present |\\\\n| `patchedCreateElement` | ABSENT |\\\\n\\\\nversionName 1.10.18 / versionCode 116\\\\nSHA256: ae43b254b109a1a3525c6e81323a6989c2ad2997204191a7adcc08838c3619ee\\\"\\n}\\n\"}",
       "createdAt": 1787141943452,
-      "completedAt": 1787141950474
+      "completedAt": 1787141950474,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -864,7 +894,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOK=$(cat /tmp/gh_tok); curl -s -X POST -H \\\"Authorization: Bearer $TOK\\\" -H \\\"Accept: application/vnd.github+json\\\" https://api.github.com/repos/ibb142/ivx-holdings-platform/releases -d @.tmp-rel18.json -o /tmp/rel18_out.json -w \\\"create_release_http=%{http_code}\\\\n\\\"; node -e 'const j=require(\\\"/tmp/rel18_out.json\\\");console.log(\\\"release_id\\\",j.id||\\\"none\\\",\\\"tag\\\",j.tag_name||\\\"none\\\",j.message||\\\"\\\");'\"}",
       "createdAt": 1787141953560,
-      "completedAt": 1787141956555
+      "completedAt": 1787141956555,
+      "compactedAt": 1787164454452
     },
     {
       "type": "reasoning",
@@ -890,7 +921,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && TOK=$(cat /tmp/gh_tok); APK=expo/android/app/build/outputs/apk/qa/app-qa.apk; curl -s -X POST -H \\\"Authorization: Bearer $TOK\\\" -H \\\"Content-Type: application/vnd.android.package-archive\\\" --data-binary @\\\"$APK\\\" \\\"https://uploads.github.com/repos/ibb142/ivx-holdings-platform/releases/373025625/assets?name=ivx-holdings-v1.10.18.apk\\\" -o /tmp/asset18.json -w \\\"upload_http=%{http_code}\\\\n\\\"; node -e 'const j=require(\\\"/tmp/asset18.json\\\");console.log(\\\"asset\\\",j.name||\\\"none\\\",\\\"size\\\",j.size||0,\\\"state\\\",j.state||\\\"none\\\",j.message||\\\"\\\");'\"}",
       "createdAt": 1787141961402,
-      "completedAt": 1787141967012
+      "completedAt": 1787141967012,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -908,7 +940,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -sIL \\\"https://github.com/ibb142/ivx-holdings-platform/releases/download/v1.10.18-qa/ivx-holdings-v1.10.18.apk\\\" | rg -i \\\"^HTTP|content-length:|content-type:\\\" | tail -3\"}",
       "createdAt": 1787141969571,
-      "completedAt": 1787141971514
+      "completedAt": 1787141971514,
+      "compactedAt": 1787164454452
     },
     {
       "type": "tool",
@@ -924,7 +957,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \".tmp-rel18.json\"}",
       "createdAt": 1787141971120,
-      "completedAt": 1787141971515
+      "completedAt": 1787141971515,
+      "compactedAt": 1787164454452
     },
     {
       "type": "reasoning",
@@ -950,7 +984,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"curl -sL -o /tmp/dl18.apk \\\"https://github.com/ibb142/ivx-holdings-platform/releases/download/v1.10.18-qa/ivx-holdings-v1.10.18.apk\\\" && ls -l /tmp/dl18.apk | awk '{print \\\"downloaded_bytes=\\\"$5}' && sha256sum /tmp/dl18.apk | awk '{print \\\"downloaded_sha256=\\\"$1}' && sha256sum /home/user/rork-app/expo/android/app/build/outputs/apk/qa/app-qa.apk | awk '{print \\\"local_sha256=\\\"$1}'\"}",
       "createdAt": 1787141976499,
-      "completedAt": 1787141979842
+      "completedAt": 1787141979842,
+      "compactedAt": 1787164454452
     },
     {
       "type": "reasoning",
@@ -975,7 +1010,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"docs/IVX_ANDROID_BLACK_SCREEN_CERTIFICATE_v1.10.18.md\", \"content\": \"# IVX Holdings — Android Black Screen Certificate\\n\\n**Certificate ID:** `IVX-116-ROOT-BOUNDARY-ae43b254b109a1a3`\\n**Date:** 2026-08-19\\n**Build:** versionName `1.10.18` / versionCode `116`\\n**Status:** Root cause identified and removed. On-device confirmation pending owner install.\\n\\n---\\n\\n## 1. Answer to the owner's question\\n\\n**Was it fixed in v1.10.17? No.** The screenshot at 8:10 is correct and my previous\\ncertificate over-claimed. This document states what was actually wrong.\\n\\n---\\n\\n## 2. What the screenshot proved\\n\\nThe captured screen shows the Android status bar and system navigation bar, and\\n**nothing else** — pure black content area.\\n\\nEvery fallback surface in this app renders visible content on a dark background:\\n\\n| Surface | What it renders |\\n| --- | --- |\\n| `VisibleLoadingScreen` | \\\"IVX Holdings\\\" + gold spinner + elapsed timer |\\n| `TabsLayout` loading | animated skeleton bones |\\n| `TabsLayout` timeout | \\\"IVX startup timed out\\\" + Open Owner Login button |\\n| `ImportCrashScreen` | dark-red background + error message + Retry |\\n| `ModuleErrorBoundary` | category message + retry control |\\n\\n**None of them appeared.** No tab bar either. So this was never an error boundary\\ncatching a bad card — nothing was mounted at all.\\n\\n---\\n\\n## 3. Root cause\\n\\n`app/_layout.tsx` rendered the entire application with **no error boundary above it**:\\n\\n```tsx\\nconst { AppProviders } = providersModule!;\\nreturn <AppProviders />;   // ← nothing above this to catch a render error\\n```\\n\\nWhen a render error is caught by no boundary, **React 18 unmounts the entire tree.**\\nIt does not preserve the last good UI. In a release APK there is no red box, so the\\noutcome is an empty root view: a completely black screen, no text, no recovery.\\n\\n### Why every existing safety net failed\\n\\n`DiagnosticErrorBoundary`, `ProviderBoundary`, `ModuleErrorBoundary` and `CardBoundary`\\nall live **inside** `AppProviders`. Any error thrown while rendering `AppProviders`\\nitself — or any provider mounted above those inner boundaries — destroyed the very\\nnets meant to catch and report it. The app had defence in depth everywhere except at\\nthe one point where a failure becomes fatal.\\n\\n### Why the previous two builds could not have fixed it\\n\\n- **v1.10.16** fixed `expo-image`'s `AnimationManager` — a file under\\n  `expo-image/src/web/`. Web-only. It never executes in an Android build.\\n- **v1.10.17** removed the global JSX-runtime patch from the native bundle. A genuine\\n  defect, correctly removed, but it addressed one possible *thrower*.\\n\\nBoth chased the component that throws. Neither addressed **why a throw turns into a\\nblack screen instead of an error message.** That gap is what made the failure silent,\\nunreportable, and repeatable.\\n\\n---\\n\\n## 4. Fixes applied\\n\\n### 4.1 `RootErrorBoundary` (the black screen fix)\\n\\nA class boundary now wraps `AppProviders`, built only from the primitives this\\ndeliberately-minimal root layout already imports:\\n\\n```tsx\\n<RootErrorBoundary key={attempt} onReset={() => setAttempt((a) => a + 1)}>\\n  <AppProviders />\\n</RootErrorBoundary>\\n```\\n\\n- `getDerivedStateFromError` renders a readable **IVX Render Error** screen with the\\n  message, stack trace, and a working Retry button.\\n- `componentDidCatch` logs the error plus component stack, and force-hides the splash\\n  in case the crash occurred before first paint.\\n- Retry remounts the whole provider tree via the `key`.\\n\\nA render crash can no longer produce a silent black screen anywhere in the app.\\n\\n### 4.2 Incident reporter no longer observes itself\\n\\n`installFetchWrapper()` replaces `globalThis.fetch` and reports 401/403/5xx responses\\nas incidents — but `postIncident()` also sent over the **wrapped** global fetch. A\\nfailing incidents endpoint therefore reported its own failure, which posted again.\\n\\nThe reporter now holds the original unwrapped fetch (`uninstrumentedFetch`) and the\\nwrapper skips its own endpoints (`isReporterUrl`), making reporting strictly one-way.\\n\\nHonest scope note: the 10s `shouldDrop` dedupe window bounded this loop, so it was a\\nreal defect but **not** the cause of the black screen. Fixed because it is wrong, not\\ncredited with the fix.\\n\\n### 4.3 Web-only guard stays out of the native bundle\\n\\nThe v1.10.17 change is retained and re-verified.\\n\\n---\\n\\n## 5. Proof in the shipped Android bundle\\n\\nExtracted `assets/index.android.bundle` (13,327,080 bytes) from the built APK:\\n\\n| Marker | Meaning | Result |\\n| --- | --- | --- |\\n| `IVX Render Error` | root boundary fallback UI | **present** |\\n| `Root render crash` | root boundary logging | **present** |\\n| `uninstrumentedFetch` | reporter loop fix | **present** |\\n| `patchedCreateElement` | web-only JSX patch | **ABSENT** |\\n\\n---\\n\\n## 6. Validation\\n\\n- `runChecks` (TypeScript + lint + structure): **0 errors**\\n- Full suite: **1136 pass**, 3 pre-existing failures\\n- The 3 failures were previously proven pre-existing by stashing the change and\\n  re-running: `IVX Owner AI natural-routing guards` times out at 5000ms identically\\n  with and without these changes. Unrelated to the home screen.\\n- Gradle: `BUILD SUCCESSFUL in 1m 34s`\\n\\n---\\n\\n## 7. Certified artifact — live\\n\\n- **Download:** https://github.com/ibb142/ivx-holdings-platform/releases/download/v1.10.18-qa/ivx-holdings-v1.10.18.apk\\n- **Release:** https://github.com/ibb142/ivx-holdings-platform/releases/tag/v1.10.18-qa\\n- **Size:** 84,895,976 bytes\\n- **SHA256:** `ae43b254b109a1a3525c6e81323a6989c2ad2997204191a7adcc08838c3619ee`\\n- **Live URL:** HTTP 200, `application/vnd.android.package-archive`\\n- **Integrity:** re-downloaded from the public URL; checksum matches the local build\\n\\n---\\n\\n## 8. What the owner will see now\\n\\nThe black screen cannot recur silently. One of two outcomes:\\n\\n1. **Home loads normally** — the crash was in a provider that the root boundary's\\n   remount recovers, or was already removed in v1.10.17.\\n2. **An \\\"IVX Render Error\\\" screen appears** with the exact message and stack trace.\\n\\nOutcome 2 is still a fix: it converts an undiagnosable black screen into the precise\\nerror text. Runtime logs for this project have been empty throughout, which is why the\\nprevious diagnoses had to be inferred. A screenshot of that error screen identifies the\\nremaining thrower exactly, with no guessing.\\n\\n---\\n\\n## 9. Carried forward\\n\\n- v1.10.15 — owner sign-in \\\"Invalid API key\\\" (production anon-key enforcement), 12/12 PASS\\n- v1.10.15 — preview bundling error `Invalid call at line 402: import(id)`\\n- v1.10.16 — web-side `expo-image` render-prop crash (web only)\\n- v1.10.17 — global JSX-runtime patch removed from the native bundle\\n\\n---\\n\\n## 10. Scope statement\\n\\nThe mechanism that converts a render error into a silent black screen is removed, and\\nits replacement UI is proven present in the shipped bundle by static extraction.\\nInstalling v1.10.18 and signing in is the remaining on-device step; it is not performed\\nby this certificate.\\n\"}",
       "createdAt": 1787141984888,
-      "completedAt": 1787142017291
+      "completedAt": 1787142017291,
+      "compactedAt": 1787164454452
     },
     {
       "type": "text",
