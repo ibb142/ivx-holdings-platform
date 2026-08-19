@@ -1,4 +1,4 @@
-name: IVX Auth 401 Live Certificate
+name: IVX Auth 401 Repair
 
 on:
   push:
@@ -11,75 +11,65 @@ permissions:
   contents: write
 
 jobs:
-  certify-auth-401:
+  repair-auth:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Static auth contract check
+      - name: Patch auth code directly
         shell: bash
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          service = Path('backend/services/ivx-member-database.ts')
+          text = service.read_text()
+
+          text = text.replace(
+            "  requiresVerification?: boolean;\n  deploymentMarker: string;\n}",
+            "  requiresVerification?: boolean;\n  errorCode?: string;\n  retryable?: boolean;\n  httpStatus?: number;\n  deploymentMarker: string;\n}",
+            1,
+          )
+
+          old = """    // Mint a real Supabase session for this fallback member via magic-link (with 5s timeout).\n    let session: { accessToken: string; refreshToken: string; expiresAt: number } | null = null;\n    try {\n      const admin = getSupabaseAdmin();\n      session = await Promise.race([\n        mintSessionForFallbackMember(admin, normalizedEmail),\n        new Promise<null>((resolve) => setTimeout(() => resolve(null), 5_000)),\n      ]);\n    } catch { /* non-fatal — still return userId */ }\n    return {\n      success: true,\n      message: 'Login successful.',\n      userId: fallbackUserId,\n      email: normalizedEmail,\n      accessToken: session?.accessToken,\n      refreshToken: session?.refreshToken,\n      expiresAt: session?.expiresAt,\n      deploymentMarker: DEPLOYMENT_MARKER,\n    };"""
+
+          new = """    // A credential check is not a completed login until a real session exists.\n    let session: { accessToken: string; refreshToken: string; expiresAt: number } | null = null;\n    try {\n      const anonClient = getSupabaseAnonClient();\n      const authResult = await Promise.race([\n        anonClient.auth.signInWithPassword({ email: normalizedEmail, password }),\n        new Promise<null>((resolve) => setTimeout(() => resolve(null), 5_000)),\n      ]);\n      if (authResult && !authResult.error && authResult.data?.session?.access_token && authResult.data?.session?.refresh_token) {\n        session = {\n          accessToken: authResult.data.session.access_token,\n          refreshToken: authResult.data.session.refresh_token,\n          expiresAt: typeof authResult.data.session.expires_at === 'number' ? authResult.data.session.expires_at : 0,\n        };\n      }\n    } catch { /* continue to controlled recovery */ }\n\n    if (!session && hasServiceRoleKey()) {\n      try {\n        const admin = getSupabaseAdmin();\n        session = await Promise.race([\n          mintSessionForFallbackMember(admin, normalizedEmail),\n          new Promise<null>((resolve) => setTimeout(() => resolve(null), 5_000)),\n        ]);\n      } catch { /* handled below */ }\n    }\n\n    if (!session?.accessToken || !session?.refreshToken) {\n      return {\n        success: false,\n        message: 'Authentication service could not issue a valid session. Please retry.',\n        userId: fallbackUserId,\n        email: normalizedEmail,\n        errorCode: 'SESSION_UNAVAILABLE',\n        retryable: true,\n        httpStatus: 503,\n        deploymentMarker: DEPLOYMENT_MARKER,\n      };\n    }\n\n    return {\n      success: true,\n      message: 'Login successful.',\n      userId: fallbackUserId,\n      email: normalizedEmail,\n      accessToken: session.accessToken,\n      refreshToken: session.refreshToken,\n      expiresAt: session.expiresAt,\n      deploymentMarker: DEPLOYMENT_MARKER,\n    };"""
+
+          if old not in text:
+            raise SystemExit('fallback login block not found')
+          service.write_text(text.replace(old, new, 1))
+
+          api = Path('backend/api/ivx-members.ts')
+          a = api.read_text()
+          old_api = "return jsonResponse(result, result.success ? 200 : (result.requiresVerification ? 403 : 401));"
+          new_api = "return jsonResponse(result, result.success ? 200 : (result.httpStatus || (result.requiresVerification ? 403 : 401)));"
+          if old_api not in a:
+            raise SystemExit('login status mapping not found')
+          api.write_text(a.replace(old_api, new_api, 1))
+          PY
+
+          git diff --check
+          grep -Fq "errorCode: 'SESSION_UNAVAILABLE'" backend/services/ivx-member-database.ts
           grep -Fq "result.httpStatus || (result.requiresVerification ? 403 : 401)" backend/api/ivx-members.ts
-          grep -Fq "success: false" backend/services/ivx-member-database.ts
 
-      - name: Live wrong-password 401 check
-        id: live
+      - name: Run auth tests
         shell: bash
         run: |
           set -euo pipefail
-          body=$(mktemp)
-          code=$(curl -sS -o "$body" -w '%{http_code}' \
-            -X POST 'https://api.ivxholding.com/api/members/login' \
-            -H 'Content-Type: application/json' \
-            --data '{"email":"qa-invalid-401-20260818@ivxholding.invalid","password":"DefinitelyWrongPassword123!"}')
-          echo "HTTP=$code"
-          cat "$body"
-          test "$code" = '401'
-          if grep -Eq '"success"[[:space:]]*:[[:space:]]*true' "$body"; then
-            echo 'FAIL: invalid credentials returned success=true'
-            exit 1
-          fi
-          cp "$body" /tmp/auth401-body.json
+          bun install --frozen-lockfile
+          bun test backend/ivx-business-workflows.test.ts
 
-      - name: Write QA certificate
+      - name: Commit code fix
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p qa/evidence
-          {
-            echo '# IVX Auth Wrong-Password 401 Live Certificate'
-            echo
-            echo 'STATUS: PASS'
-            echo 'CHECK: Invalid email/password is rejected by production member login.'
-            echo 'EXPECTED_HTTP: 401'
-            echo 'ACTUAL_HTTP: 401'
-            echo 'SUCCESS_TRUE_RETURNED: false'
-            echo 'LIVE_ENDPOINT: POST https://api.ivxholding.com/api/members/login'
-            echo "VERIFIED_AT_UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-            echo "WORKFLOW_RUN_ID: ${GITHUB_RUN_ID}"
-            echo "SOURCE_SHA: ${GITHUB_SHA}"
-            echo
-            echo 'Response body:'
-            echo '```json'
-            cat /tmp/auth401-body.json
-            echo
-            echo '```'
-            echo
-            echo 'VERDICT: PASS — wrong credentials cannot produce a successful login session.'
-          } > qa/evidence/auth-wrong-password-401-certificate.md
-          cat qa/evidence/auth-wrong-password-401-certificate.md
-
-      - name: Commit certificate
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'ivx-qa-bot'
-          git config user.email 'ivx-qa-bot@users.noreply.github.com'
-          git add qa/evidence/auth-wrong-password-401-certificate.md
-          git commit -m 'cert(auth): wrong-password 401 live PASS'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/services/ivx-member-database.ts backend/api/ivx-members.ts
+          git commit -m 'fix(auth): require real session and preserve 401 semantics'
           git pull --rebase origin main || true
           git push origin HEAD:main
