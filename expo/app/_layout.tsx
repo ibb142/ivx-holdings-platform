@@ -20,7 +20,9 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 
 /** Visible build stamp so the installed binary can be identified on-device. */
-export const BUILD_STAMP = '1.10.20 (118)';
+import { BUILD_STAMP } from '@/constants/build-stamp';
+
+export { BUILD_STAMP };
 
 // Prevent native splash from auto-hiding.
 SplashScreen.preventAutoHideAsync().catch(() => {});

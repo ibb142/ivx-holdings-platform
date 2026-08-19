@@ -19,6 +19,8 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { DiagnosticErrorBoundary } from '@/components/DiagnosticErrorBoundary';
+import { BlankScreenWatchdog } from '@/components/BlankScreenWatchdog';
+import { BUILD_STAMP } from '@/constants/build-stamp';
 import { injectWebKeyboardCSS } from '@/hooks/useWebKeyboard';
 import { checkForUpdates } from '@/lib/app-update-checker';
 import { logStartup, logStartupError } from '@/lib/startup-trace';
@@ -208,6 +210,7 @@ export function AppProviders() {
                                         <NetworkProvider>
                                           <StatusBar style="light" />
                                           <AppStack />
+                                          <BlankScreenWatchdog build={BUILD_STAMP} />
                                         </NetworkProvider>
                                       </ProviderBoundary>
                                     </EmailProvider>

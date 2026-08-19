@@ -20,6 +20,7 @@ import Colors from '@/constants/colors';
 import { useAuth } from '@/lib/auth-context';
 import { checkAuthRateLimit, recordAuthAttempt, getRateLimitMessage, clearAuthAttempts } from '@/lib/auth-rate-limiter';
 import { validateEmail, sanitizeEmail } from '@/lib/auth-helpers';
+import { markScreenPainted } from '@/lib/screen-paint-watchdog';
 import { getPasswordResetRedirectUrl, inspectPasswordResetRedirect } from '@/lib/auth-password-recovery';
 import {
   buildRepairIssueItems,
@@ -2235,6 +2236,9 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
 }
 
 export default function LoginScreen() {
+  useEffect(() => {
+    markScreenPainted('login');
+  }, []);
   return <LoginScreenContent />;
 }
 

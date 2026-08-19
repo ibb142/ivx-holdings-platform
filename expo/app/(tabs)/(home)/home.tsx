@@ -43,6 +43,7 @@ import { isOpenAccessModeEnabled } from '@/lib/open-access';
 import QuickBuyModal from '@/components/QuickBuyModal';
 import InvestorFirstFeed from '@/components/InvestorFirstFeed';
 import type { JVAgreement } from '@/types/jv';
+import { markScreenPainted } from '@/lib/screen-paint-watchdog';
 
 function getPrimaryDealPhoto(deal: JVAgreement): string | undefined {
   const primaryPhoto = resolvePrimaryDealPhoto({
@@ -318,6 +319,12 @@ export default function HomeScreen() {
   useEffect(() => {
     analytics?.trackScreen?.('Home');
   }, [analytics]);
+
+  // Report that Home actually rendered. If this never fires the route tree
+  // resolved to nothing and the blank-screen watchdog takes over.
+  useEffect(() => {
+    markScreenPainted('(tabs)/(home)/home');
+  }, []);
 
   const isScreenFocused = useScreenFocusState(true);
   const publishedJV = usePublishedJVDeals({ refetchIntervalMs: isScreenFocused ? 1000 * 90 : false });

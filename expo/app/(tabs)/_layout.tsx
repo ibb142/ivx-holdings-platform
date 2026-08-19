@@ -26,6 +26,14 @@ const tabColors = {
 
 const TABS_LOADING_TIMEOUT_MS = 2000;
 
+// Expo Router v6 resolves a layout's default child from `unstable_settings.anchor`.
+// The `initialRouteName` prop passed to <Tabs> below is a React Navigation prop and
+// is NOT how expo-router picks the group's entry route — relying on it alone left
+// `/(tabs)` with no resolved screen, which renders a black frame with no error.
+export const unstable_settings = {
+  anchor: '(home)',
+  initialRouteName: '(home)'} as const;
+
 export default function TabsLayout() {
   logStartup('ROUTER_READY');
   logStartup('INITIAL_ROUTE_SELECTED', 'tabs');

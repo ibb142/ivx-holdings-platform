@@ -17,7 +17,12 @@ const HOME_STACK_SCREEN_OPTIONS = {
 const HOME_INDEX_OPTIONS = {
   headerShown: false} as const;
 
+// Expo Router v6 renamed `initialRouteName` to `anchor`. Both are declared so
+// the anchor resolves correctly on v6 and stays correct if the app is ever
+// pinned back to a v5 router. Without a honoured anchor AND without an index
+// route, this group resolved to no screen at all — a silent black screen.
 export const unstable_settings = {
+  anchor: 'home',
   initialRouteName: 'home'} as const;
 
 export default function HomeLayout() {
