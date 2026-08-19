@@ -1,22 +1,29 @@
-/**
- * IVX Metro configuration — owner-controlled, fully independent.
- *
- * INDEPENDENCE RULE:
- *   This bundler config contains NO third-party build wrapper of any kind.
- *   It previously required a vendor toolkit package at module scope and
- *   exported that vendor's wrapper as the Metro config, which meant every
- *   APK, AAB and web bundle could only be produced on a machine that had the
- *   vendor package installed. That is vendor lock-in at the build layer.
- *
- *   IVX now builds with stock Expo Metro only. No vendor package is required,
- *   imported, or referenced to produce a shippable artifact.
- */
+// IVX Metro configuration — plain Expo config, owner-controlled.
+//
+// This file previously required a vendor toolkit wrapper and exported the
+// wrapped config. That made the vendor package a HARD build dependency: no
+// APK, AAB or web bundle could be produced on any machine without it. It is
+// stock Expo now, so the build runs anywhere.
+//
+// Do not reintroduce a vendor wrapper here. The zero-vendor runtime audit in
+// `scripts/` fails the build if this file stops being a self-contained Expo config.
 const { getDefaultConfig } = require("expo/metro-config");
+const path = require("path");
 
 const config = getDefaultConfig(__dirname);
 
-// Watchman is disabled because the Linux build sandbox runs at a low nice value
-// that watchman refuses to start under, which hangs the bundle step.
+// Bundle-time patch for the Metro-incompatible dynamic `import(id)` helper
+// inside @ai-sdk/provider-utils. The postinstall patch fixes node_modules on
+// install, but installs that skip lifecycle scripts restore pristine copies;
+// this runs on every bundle, so the build stays green either way.
+config.transformer = config.transformer || {};
+config.transformer.babelTransformerPath = path.resolve(
+  __dirname,
+  "scripts/ivx-metro-transformer.js",
+);
+
+// Watchman is disabled: the Linux build sandbox runs at a low nice value that
+// watchman refuses to start under, which hangs the bundle step.
 config.watcher = config.watcher || {};
 config.watcher.watchman = false;
 config.resolver = config.resolver || {};
