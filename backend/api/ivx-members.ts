@@ -80,10 +80,12 @@ async function requireAuthenticatedMember(request: Request): Promise<string | nu
   }
 }
 
+// Validate email format
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+// Validate date of birth: required, ISO YYYY-MM-DD, real calendar date, age 18-120
 function validateDateOfBirth(dateOfBirth: string): { valid: boolean; reason?: string } {
   if (!dateOfBirth) return { valid: false, reason: 'Date of birth is required.' };
   const match = dateOfBirth.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -106,6 +108,7 @@ function validateDateOfBirth(dateOfBirth: string): { valid: boolean; reason?: st
 
 const VALID_GENDERS = new Set(['male', 'female', 'prefer_not_to_say']);
 
+// Validate gender: required, must be one of the allowed values
 function validateGender(gender: string): { valid: boolean; reason?: string } {
   if (!gender) return { valid: true };
   if (!VALID_GENDERS.has(gender)) {
@@ -114,6 +117,7 @@ function validateGender(gender: string): { valid: boolean; reason?: string } {
   return { valid: true };
 }
 
+// Validate password strength
 function validatePassword(password: string): { valid: boolean; reason?: string } {
   if (password.length < 8) return { valid: false, reason: 'Password must be at least 8 characters.' };
   if (!/[A-Z]/.test(password)) return { valid: false, reason: 'Password must contain at least 1 uppercase letter.' };
@@ -125,6 +129,9 @@ export function membersOptions(): Response {
   return jsonResponse({ deploymentMarker: DEPLOYMENT_MARKER }, 204);
 }
 
+// POST /api/members/register
+// Phase 2 reliability: accepts `registrationRequestId` for idempotency + resume.
+// Returns the normalized { ok, code, message, traceId, stage, retryable, ... } contract.
 export async function handleMemberRegister(request: Request): Promise<Response> {
   const body = await parseBody(request);
   const email = asString(body.email).toLowerCase();
@@ -150,6 +157,8 @@ export async function handleMemberRegister(request: Request): Promise<Response> 
   const amount = typeof body.amount === 'number' ? body.amount : undefined;
   const investmentType = asString(body.investmentType) || undefined;
 
+  // Validation — returns the normalized error contract (no raw strings).
+  // These are pre-orchestrator checks that never touch the network.
   if (!firstName || !lastName) {
     return normalizedError('INVALID_EMAIL', 'VALIDATING', { message: 'First name and last name are required.' });
   }
@@ -181,6 +190,7 @@ export async function handleMemberRegister(request: Request): Promise<Response> 
     return normalizedError('UNKNOWN_ERROR', 'VALIDATING', { message: 'Please select at least one role to continue.' });
   }
 
+  // Delegate to the idempotent orchestrator (Auth + profile + fanout + persistence).
   const input: RegistrationRequestInput = {
     email,
     password,
@@ -204,6 +214,8 @@ export async function handleMemberRegister(request: Request): Promise<Response> 
   return normalizedResponse(result);
 }
 
+// --- Normalized response helpers (Phase 2 contract) ---
+
 function normalizedError(code: RegistrationErrorCode, stage: RegistrationStage, overrides?: { message?: string; retryable?: boolean; registrationRequestId?: string }): Response {
   const traceId = 'ivx-reg-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 10);
   const body = {
@@ -222,6 +234,7 @@ function normalizedError(code: RegistrationErrorCode, stage: RegistrationStage, 
 
 function normalizedResponse(result: NormalizedRegistrationResult): Response {
   if (result.ok) {
+    // Fire-and-forget verification codes + onboarding fanout (kept identical to prior behavior).
     storeVerificationCode({ userId: result.authUserId, type: 'email' }).catch(() => {});
     storeVerificationCode({ userId: result.authUserId, type: 'phone' }).catch(() => {});
     return jsonResponse({ ...result, deploymentMarker: DEPLOYMENT_MARKER }, 200);
@@ -230,6 +243,7 @@ function normalizedResponse(result: NormalizedRegistrationResult): Response {
   return jsonResponse({ ...result, deploymentMarker: DEPLOYMENT_MARKER }, status);
 }
 
+// GET /api/ivx/registration/status?id=<registrationRequestId>
 export async function handleRegistrationStatusRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const id = url.searchParams.get('id') || '';
@@ -240,6 +254,7 @@ export async function handleRegistrationStatusRequest(request: Request): Promise
   if (!found || !state) {
     return jsonResponse({ ok: false, found: false, message: 'No registration found for that ID.', traceId: 'ivx-reg-status-' + Date.now().toString(36), deploymentMarker: DEPLOYMENT_MARKER }, 404);
   }
+  // Never expose the email hash or auth user ID directly — only stage + status.
   return jsonResponse({
     ok: true,
     found: true,
@@ -253,6 +268,7 @@ export async function handleRegistrationStatusRequest(request: Request): Promise
   }, 200);
 }
 
+// GET /api/ivx/registration/health — owner-only, validates real Supabase JWT
 export async function handleRegistrationHealthRequest(request: Request): Promise<Response> {
   try {
     await assertIVXOwnerOnly(request);
@@ -263,6 +279,7 @@ export async function handleRegistrationHealthRequest(request: Request): Promise
   return jsonResponse(health, health.status === 'healthy' ? 200 : 503);
 }
 
+// GET /api/ivx/registration/metrics — owner-only, validates real Supabase JWT
 export async function handleRegistrationMetricsRequest(request: Request): Promise<Response> {
   try {
     await assertIVXOwnerOnly(request);
@@ -273,6 +290,7 @@ export async function handleRegistrationMetricsRequest(request: Request): Promis
   return jsonResponse({ ok: true, ...metrics }, 200);
 }
 
+// POST /api/members/send-email-code
 export async function handleSendEmailCode(request: Request): Promise<Response> {
   const userId = await requireAuthenticatedMember(request);
   if (!userId) {
@@ -287,6 +305,7 @@ export async function handleSendEmailCode(request: Request): Promise<Response> {
   });
 }
 
+// POST /api/members/verify-email
 export async function handleVerifyEmail(request: Request): Promise<Response> {
   const body = await parseBody(request);
   const userId = await requireAuthenticatedMember(request);
@@ -314,6 +333,7 @@ export async function handleVerifyEmail(request: Request): Promise<Response> {
   return jsonResponse(result);
 }
 
+// POST /api/members/send-phone-code
 export async function handleSendPhoneCode(request: Request): Promise<Response> {
   const userId = await requireAuthenticatedMember(request);
   if (!userId) {
@@ -328,6 +348,7 @@ export async function handleSendPhoneCode(request: Request): Promise<Response> {
   });
 }
 
+// POST /api/members/verify-phone
 export async function handleVerifyPhone(request: Request): Promise<Response> {
   const body = await parseBody(request);
   const userId = await requireAuthenticatedMember(request);
@@ -355,6 +376,7 @@ export async function handleVerifyPhone(request: Request): Promise<Response> {
   return jsonResponse(result);
 }
 
+// GET /api/members/me
 export async function handleGetMemberProfile(request: Request): Promise<Response> {
   const userId = await requireAuthenticatedMember(request);
 
@@ -380,6 +402,7 @@ export async function handleGetMemberProfile(request: Request): Promise<Response
   });
 }
 
+// POST /api/members/start-kyc
 export async function handleStartKYC(request: Request): Promise<Response> {
   const userId = await requireAuthenticatedMember(request);
 
@@ -387,6 +410,7 @@ export async function handleStartKYC(request: Request): Promise<Response> {
     return jsonResponse({ success: false, message: 'Authentication required.', deploymentMarker: DEPLOYMENT_MARKER }, 401);
   }
 
+  // Check verification status first
   const verification = await checkVerificationStatus(userId);
   if (!verification.emailVerified || !verification.phoneVerified) {
     return jsonResponse({
@@ -410,6 +434,7 @@ export async function handleStartKYC(request: Request): Promise<Response> {
   });
 }
 
+// GET /api/members/verification-status
 export async function handleVerificationStatus(request: Request): Promise<Response> {
   const userId = await requireAuthenticatedMember(request);
 
@@ -428,6 +453,11 @@ export async function handleVerificationStatus(request: Request): Promise<Respon
   });
 }
 
+// ---------------------------------------------------------------------------
+// Member login, password reset, profile update (BLOCK: IVX business workflows)
+// ---------------------------------------------------------------------------
+
+// POST /api/members/login
 export async function handleMemberLogin(request: Request): Promise<Response> {
   const body = await parseBody(request);
   const email = asString(body.email).toLowerCase();
@@ -435,26 +465,17 @@ export async function handleMemberLogin(request: Request): Promise<Response> {
   if (!email || !password) {
     return jsonResponse({ success: false, message: 'Email and password are required.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
   }
-
   const result = await loginMember(email, password);
-
-  if (!result.success) {
-    return jsonResponse(result, result.requiresVerification ? 403 : 401);
-  }
-
-  if (!result.accessToken || !result.refreshToken) {
-    return jsonResponse({
-      success: false,
-      message: 'Authentication service could not issue a valid session. Please retry.',
-      errorCode: 'SESSION_UNAVAILABLE',
-      retryable: true,
-      deploymentMarker: result.deploymentMarker,
-    }, 503);
-  }
-
-  return jsonResponse(result, 200);
+  if (result.success) return jsonResponse(result, 200);
+  if (result.requiresVerification) return jsonResponse(result, 403);
+  // An upstream auth timeout is an infrastructure fault, not a bad password.
+  // Returning 401 here is what told members with CORRECT credentials that their
+  // password was wrong (and latched the app's auth-error state). 503 = retry.
+  if (result.errorCode === 'auth_upstream_timeout') return jsonResponse(result, 503);
+  return jsonResponse(result, 401);
 }
 
+// POST /api/members/forgot-password
 export async function handleMemberForgotPassword(request: Request): Promise<Response> {
   const body = await parseBody(request);
   const email = asString(body.email).toLowerCase();
@@ -465,6 +486,7 @@ export async function handleMemberForgotPassword(request: Request): Promise<Resp
   return jsonResponse(result, result.success ? 200 : 400);
 }
 
+// POST /api/members/reset-password
 export async function handleMemberResetPassword(request: Request): Promise<Response> {
   const body = await parseBody(request);
   const email = asString(body.email).toLowerCase();
@@ -477,6 +499,7 @@ export async function handleMemberResetPassword(request: Request): Promise<Respo
   return jsonResponse(result, result.success ? 200 : 400);
 }
 
+// PUT /api/members/me  (profile update — never deletes fields the caller omits)
 export async function handleUpdateMemberProfile(request: Request): Promise<Response> {
   const body = await parseBody(request);
   const userId = await requireAuthenticatedMember(request);
