@@ -42,17 +42,18 @@ jobs:
           cd expo
           bun install
           bun scripts/apply-patches.mjs
-      - name: Verify Home black-screen recovery source
+      - name: Verify owner sign-in and Home recovery source
         shell: bash
         run: |
           set -euo pipefail
+          grep -Fq "return PRODUCTION_SUPABASE_ANON_KEY" expo/lib/supabase-env.ts
           grep -Fq "export { default } from './home';" 'expo/app/(tabs)/(home)/index.tsx'
           grep -Fq 'testID="owner-home-ready"' 'expo/app/(tabs)/(home)/home.tsx'
           grep -Fq 'testID="home-runtime-ready"' 'expo/app/(tabs)/(home)/home.tsx'
           grep -Fq "version: \"1.10.22\"" expo/app.config.ts
           grep -Fq 'versionCode: 119' expo/app.config.ts
           node expo/scripts/patch-ai-sdk-provider-utils.mjs
-          echo "home_source_gate=PASS version=1.10.22 versionCode=119"
+          echo "owner_signin_source_gate=PASS version=1.10.22 versionCode=119"
       - name: Prepare disposable QA signing key
         shell: bash
         run: |
@@ -75,23 +76,23 @@ jobs:
           APK=$(find expo/android/app/build/outputs/apk/qa -name '*.apk' -type f | head -1)
           test -n "$APK"
           SHORT_SHA="${GITHUB_SHA:0:12}"
-          NAME="ivx-holdings-v1.10.22-home-fix-${SHORT_SHA}.apk"
+          NAME="ivx-holdings-v1.10.22-owner-signin-${SHORT_SHA}.apk"
           cp "$APK" "$NAME"
           APKSIGNER="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
           "$APKSIGNER" verify --verbose "$NAME"
           APK_SHA256=$(sha256sum "$NAME" | awk '{print $1}')
           mkdir -p qa/evidence
           jq -n \
-            --arg marker "ivx-android-home-black-screen-recovery-v1.10.22" \
+            --arg marker "ivx-owner-signin-v1.10.22" \
             --arg sourceSha "$GITHUB_SHA" \
             --arg version "1.10.22" \
             --argjson versionCode 119 \
             --arg apk "$NAME" \
             --arg sha256 "$APK_SHA256" \
             --arg certifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{marker:$marker,sourceSha:$sourceSha,version:$version,versionCode:$versionCode,apk:$apk,sha256:$sha256,signatureVerified:true,homeRouteGate:true,hermesPatchGate:true,gradleAssembleQa:true,certifiedAt:$certifiedAt,certificateScope:"Build/signature/source gates for the Home black-screen recovery APK. Physical-device login-to-Home validation remains a separate runtime check."}' \
-            > qa/evidence/ivx-android-home-black-screen-recovery-cert.json
-          cat qa/evidence/ivx-android-home-black-screen-recovery-cert.json
+            '{marker:$marker,sourceSha:$sourceSha,version:$version,versionCode:$versionCode,apk:$apk,sha256:$sha256,signatureVerified:true,ownerSigninSourceGate:true,homeRouteGate:true,hermesPatchGate:true,gradleAssembleQa:true,certifiedAt:$certifiedAt,certificateScope:"Build/signature/source gates for fixed owner sign-in and Home recovery APK. Physical-device sign-in remains a separate runtime check."}' \
+            > qa/evidence/ivx-owner-signin-release-cert.json
+          cat qa/evidence/ivx-owner-signin-release-cert.json
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "sha256=$APK_SHA256" >> "$GITHUB_OUTPUT"
       - name: Publish APK release
@@ -101,21 +102,14 @@ jobs:
         run: |
           set -euo pipefail
           SHORT_SHA="${GITHUB_SHA:0:12}"
-          TAG="ivx-home-fix-v1.10.22-${SHORT_SHA}"
-          gh release create "$TAG" "${{ steps.apk.outputs.name }}" qa/evidence/ivx-android-home-black-screen-recovery-cert.json --target "$GITHUB_SHA" --title "IVX Android v1.10.22 Home Recovery ${SHORT_SHA}" --notes "QA-signed Android APK for the post-login Home black-screen recovery. Includes concrete Home index routing, native-safe Home rendering, and the Hermes/Metro provider-utils dynamic-import patch. Source SHA: ${GITHUB_SHA}. APK SHA-256: ${{ steps.apk.outputs.sha256 }}. This release certificate covers build/signature/source gates; physical-device login-to-Home runtime validation must still be confirmed on-device."
+          TAG="ivx-owner-signin-v1.10.22-${SHORT_SHA}"
+          gh release create "$TAG" "${{ steps.apk.outputs.name }}" qa/evidence/ivx-owner-signin-release-cert.json --target "$GITHUB_SHA" --title "IVX Android v1.10.22 Owner Sign-In ${SHORT_SHA}" --notes "QA-signed Android APK with the fixed production Supabase owner sign-in path and Home recovery. Source SHA: ${GITHUB_SHA}. APK SHA-256: ${{ steps.apk.outputs.sha256 }}."
       - uses: actions/upload-artifact@v4
         with:
-          name: ivx-home-fix-v1.10.22-${{ github.sha }}
+          name: ivx-owner-signin-v1.10.22-${{ github.sha }}
           path: |
             ${{ steps.apk.outputs.name }}
-            qa/evidence/ivx-android-home-black-screen-recovery-cert.json
+            qa/evidence/ivx-owner-signin-release-cert.json
           retention-days: 30
 
-# Build request: owner-signin-certified-2026-08-17
-# Build request: owner-signin-recovery-live-verified-2026-08-17
-# Build request: chat-route-recovery-v1.10.14-2026-08-17T13:47:35.948Z
-# Build retry: chat-route-recovery-v1.10.14-postinstall-2026-08-17T13:50:13.871Z
-# Build request: owner-home-black-screen-fix-2026-08-17T14:38:07.928Z
-# Build request: owner-home-black-screen-fix-v1.10.22-2026-08-18T14:44:00Z
-# Final certified build request: home-black-screen-recovery-v1.10.22-2026-08-18T14:46:00Z
-# Fresh build request: 2026-08-18T20:04:00Z
+# Release request: owner-signin-live-fix-2026-08-18T20:45:00-04:00
