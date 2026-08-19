@@ -61,12 +61,21 @@ jobs:
       - name: Real runtime-bound Supabase password grant and latency
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           body=$(jq -nc --arg email "$OWNER_EMAIL" '{email:$email,emergency:"ivx_emergency_recovery"}')
-          curl -sS --max-time 20 -o /tmp/login.json -w '%{http_code} %{time_total}' -X POST "${API_BASE}/api/ivx/owner-passwordless-login" -H 'Content-Type: application/json' -H 'Accept: application/json' --data "$body" > /tmp/login.metrics
+          rm -f /tmp/login.json /tmp/login.metrics /tmp/curl.err
+          curl -sS --connect-timeout 10 --max-time 30 -o /tmp/login.json -w '%{http_code} %{time_total}' -X POST "${API_BASE}/api/ivx/owner-passwordless-login" -H 'Content-Type: application/json' -H 'Accept: application/json' --data "$body" > /tmp/login.metrics 2>/tmp/curl.err
+          curl_rc=$?
+          echo "curl_exit_code=$curl_rc"
+          if [ -s /tmp/curl.err ]; then sed -n '1,5p' /tmp/curl.err; fi
+          if [ "$curl_rc" -ne 0 ]; then exit 1; fi
           read -r code total < /tmp/login.metrics
-          echo "owner_runtime_login_http=$code"
-          jq '{success,sessionMethod,credentialBinding,outageMode,hasAccessToken:((.accessToken // "")|length>0),hasRefreshToken:((.refreshToken // "")|length>0),userId,rootCause,message,deploymentMarker}' /tmp/login.json || true
+          echo "owner_runtime_login_http=$code time_total=$total"
+          if [ -s /tmp/login.json ]; then
+            jq '{success,sessionMethod,credentialBinding,outageMode,hasAccessToken:((.accessToken // "")|length>0),hasRefreshToken:((.refreshToken // "")|length>0),userId,rootCause,message,deploymentMarker}' /tmp/login.json || { echo 'response_not_json'; head -c 500 /tmp/login.json; echo; }
+          else
+            echo 'response_body_empty'
+          fi
           test "$code" = 200 || exit 1
           test "$(jq -r '.success // false' /tmp/login.json)" = true
           method=$(jq -r '.sessionMethod // empty' /tmp/login.json)
