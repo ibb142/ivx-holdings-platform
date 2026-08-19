@@ -1,0 +1,49 @@
+name: IVX Owner Auth Source Fix NOW
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.ivx-owner-auth-source-fix-trigger'
+      - 'scripts/ivx-owner-auth-fastpath-fix.mjs'
+      - '.github/workflows/ivx-owner-auth-source-fix-now.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ivx-owner-auth-source-fix-now
+  cancel-in-progress: false
+
+jobs:
+  apply-source-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply source fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/ivx-owner-auth-fastpath-fix.mjs
+          grep -q 'IVX_OWNER_POST_LOGIN_FAST_PATH_V1' expo/lib/auth-context.tsx
+          grep -q 'IVX_OWNER_REPAIR_BACKGROUND_V1' expo/lib/auth-context.tsx
+          grep -q 'IVX_OWNER_SUPABASE_FIRST_V1' expo/lib/auth-context.tsx
+          ! grep -q 'await repairOwnerRegistrationAfterLogin(session).catch' expo/lib/auth-context.tsx
+      - name: Commit exact source fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'IVX Auth Source Fix'
+          git config user.email 'ivx-auth-source-fix@users.noreply.github.com'
+          git add expo/lib/auth-context.tsx
+          if git diff --cached --quiet; then
+            echo 'SOURCE_FIX_ALREADY_APPLIED=PASS'
+            exit 0
+          fi
+          git commit -m 'fix(auth): apply owner Supabase-first fast login source [skip ci]'
+          git pull --rebase origin main
+          git push origin HEAD:main
