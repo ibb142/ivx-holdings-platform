@@ -2,7 +2,7 @@
 
 **Scope:** landing page · member registration · member sign-in · bank/wire payments
 **Target:** `https://api.ivxholding.com` + `https://ivxholding.com` (live production)
-**Verdict: NOT CERTIFIED — 21 of 27 gates passed, 6 failed.**
+**Verdict: NOT CERTIFIED — 21 of 27 QA gates passed; owner certification 4 of 8.**
 
 This document does not say "done". It says exactly what works, exactly what does
 not, and how you confirm both yourself without trusting anyone's word.
@@ -17,9 +17,9 @@ node scripts/ivx-live-qa.mjs --json   # machine-readable
 ```
 
 It hits live production over the public internet, creates one throwaway QA
-account, and exits `0` only if every gate passes. Nothing in it is hard-coded —
-every PASS is computed from a live HTTP response in that run. If it disagrees
-with this document, believe the script.
+account, and exits `0` only if every gate passes. Nothing is hard-coded — every
+PASS is computed from a live HTTP response in that run. If it disagrees with this
+document, believe the script.
 
 ---
 
@@ -47,129 +47,126 @@ forged bearer token cannot unlock instructions -> no banking digits returned
 Anonymous callers get a bank *name* and a sign-in prompt. Routing and account
 numbers are never in the payload, and a forged token does not change that.
 
-### Member registration — 4/5 PASS, 1 FAIL
+### Member registration — 4/5 PASS · Member sign-in — 4/8 PASS
 
 ```
-PASS  rejects invalid input with 4xx
-PASS  always answers (never hangs)        <- was broken, now fixed
-PASS  answers within 35s
-PASS  timeout is retryable, not a hard error
-FAIL  creates the account (2xx)  -> http=503 after 30s
-```
+PASS  register  rejects invalid input with 4xx
+PASS  register  always answers (never hangs)      <- was broken, now fixed
+PASS  register  answers within 35s
+PASS  register  timeout is retryable, not a hard error
+FAIL  register  creates the account (2xx)         -> http=503
 
-### Member sign-in — 4/8 PASS, 4 FAIL
-
-```
-PASS  wrong password answers
-PASS  no internal timeout string leaked to the member
-PASS  401 is a real credential verdict, not a disguised timeout   <- was broken, now fixed
-FAIL  wrong password is 401 (not 5xx)      -> http=503
-FAIL  newly registered member can sign in  -> http=503 (16.1s)
-FAIL  sign-in returns a session token      -> no accessToken
-FAIL  auth is stable across repeats        -> 503, 401, 502
-FAIL  never returns 503 under normal load  -> 503, 401, 502
+PASS  signin    wrong password answers
+PASS  signin    no internal timeout string leaked to the member
+PASS  signin    401 is a real credential verdict  <- was broken, now fixed
+FAIL  signin    wrong password is 401 (not 5xx)   -> http=503
+FAIL  signin    newly registered member can sign in
+FAIL  signin    sign-in returns a session token
+FAIL  signin    auth is stable across repeats     -> 503, 401, 503
+FAIL  signin    never returns 503 under normal load
 ```
 
 ---
 
-## WHAT WAS BROKEN, AND WHAT I FIXED
+## WHAT WAS BROKEN, AND WHAT WAS FIXED
 
 ### FAULT 1 — members with the CORRECT password were told it was wrong (FIXED)
-
-Measured live before the fix:
 
 ```
 POST /api/members/login  ->  http=401  t=14.2s
 message: "Supabase sign-in timed out after 8000ms"
 ```
 
-The inner 8s timeout **rejected** into the function's outer catch, which returned
-`success:false`, and the route mapped *every* non-success to HTTP 401. So a slow
-upstream produced a **credential rejection**. A member typing the right password
-was told it was wrong, and the app latched that into an auth-error state.
-
-Fixed: the timeout is now an internal sentinel that returns
-`errorCode: 'auth_upstream_timeout'`, `retryable: true`, mapped to **503**, with a
-human message. One retry absorbs transient stalls. A real bad password is still a
-401. Verified live: `401 "Invalid email or password." t=3.1s`.
+The inner 8s timeout **rejected** into the outer catch, and the route mapped every
+non-success to HTTP 401. A slow upstream produced a **credential rejection** — a
+member typing the right password was told it was wrong. Now it returns a retryable
+503 (`auth_upstream_timeout`); a real bad password is still 401. Verified live:
+`401 "Invalid email or password." t=3.1s`.
 
 ### FAULT 2 — registration hung forever (FIXED)
 
-Measured live before the fix: **no response after 180 seconds**. The route had rate
-limiting but **no deadline**, and every Supabase call inside `registerMember` was
-unbounded — so the sign-up form simply never came back.
+Measured live: **no response after 180 seconds**. The route had rate limiting but
+no deadline. Now a 30s hard deadline returns a retryable 503. Registration always
+answers.
 
-Fixed: a 30s hard deadline returning a retryable 503. Verified live: registration
-now always answers (`http=503 30.0s` instead of hanging).
-
-### FAULT 3 — the anon key could never complete a password sign-in (FIXED, ROOT CAUSE)
-
-Isolated from the public internet, independent of Render:
+### FAULT 3 — the anon key could never complete a password sign-in (FIXED)
 
 ```
-POST /auth/v1/token?grant_type=password
-  apikey=garbage                 -> http=401  0.07s   "Invalid API key"   (endpoint alive)
-  apikey=sb_publishable_HD3X...  -> http=000  25.0s   NO RESPONSE EVER
-  apikey=<legacy JWT anon>       -> http=400  1.76s   "Invalid login credentials"
-
-GET /auth/v1/settings
-  apikey=sb_publishable_HD3X...  -> http=200  1.6s    (key is VALID)
+apikey=garbage                 -> 401 0.07s  "Invalid API key"  (endpoint alive)
+apikey=sb_publishable_HD3X...  -> 000 25.0s  NO RESPONSE EVER
+apikey=<legacy JWT anon>       -> 400 1.76s  "Invalid login credentials"
+GET /auth/v1/settings with sb_publishable_ -> 200 (key is VALID)
 ```
 
-Production was configured with a **new-format `sb_publishable_` key**. It is a valid
-key — `/auth/v1/settings` accepts it — but `grant_type=password` with it **never
-returns**. That single fact explains the login timeouts, the registration hang, and
-`members: 0` in production.
+Production used a new-format `sb_publishable_` key: valid for settings, but
+`grant_type=password` with it never returns. Swapped `SUPABASE_ANON_KEY` and
+`EXPO_PUBLIC_SUPABASE_ANON_KEY` to the legacy JWT anon key
+(`ref=kvclcdjmjghndxsngfzb`, matching the service-role key's ref).
 
-Fixed: `SUPABASE_ANON_KEY` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` on Render swapped to
-the legacy JWT anon key for the same project (`ref=kvclcdjmjghndxsngfzb`, verified
-matching the service-role key's ref).
+### FAULT 4 — `IVX_OWNER_PASSWORD` was missing (FIXED)
+
+Set in Render (verified `http=200`, length 21, exact match) and deployed at
+`23:32:12`. The runtime reads it at `ivx-member-auth-certification.ts:62`, where
+the dashboard value wins over any stored value.
+
+Result — the binding check flipped:
+
+```
+BEFORE: ownerEmail=true ownerPasswordBinding=false   runtimeConfig FAIL
+AFTER:  ownerEmail=true ownerPasswordBinding=true    runtimeConfig PASS
+```
+
+Owner certification went from 3/8 to 4/8. The remaining 4 failures are not
+configuration — they are the upstream, below.
 
 ---
 
-## WHY IT IS STILL NOT CERTIFIED
+## WHY IT IS STILL NOT CERTIFIED — ROOT CAUSE ISOLATED
 
-The three code/config faults above are fixed and deployed. Sign-in improved from
-"always fails" to *sometimes* correct (`401 in 3.1s`), but it still flaps:
+All four faults above are fixed and deployed. What remains is **not application
+code and not configuration**. Supabase auth on project `kvclcdjmjghndxsngfzb` is
+failing at the infrastructure level:
 
 ```
-three identical calls -> 503, 401, 502
+GET  /auth/v1/health                  -> 200  0.81s   (auth service is UP)
+GET  /rest/v1/                        -> 401  0.07s   (data layer is INSTANT)
+GET  /auth/v1/settings                -> 000  15.0s   (timeout)
+POST /auth/v1/token?grant_type=password -> 400  9.75s  (works, but ~10s)
+POST /auth/v1/token?grant_type=password -> 504 "upstream request timeout" x3
 ```
 
-A 502 means the upstream dropped the connection outright. Auth on the Supabase
-project `kvclcdjmjghndxsngfzb` is **slow and unreliable**, not merely misconfigured:
-even the working legacy key took 9.1s on a cold call and 1.76s warm. Until that
-upstream answers consistently, registration cannot complete and sign-in cannot be
-trusted — so the honest verdict is NOT CERTIFIED.
+The database answers in 70 milliseconds. Auth health answers in under a second.
+But **the password-grant endpoint returns 504 from Supabase's own edge** — their
+gateway giving up on their own auth service. When it does answer, it takes ~10s.
 
-This is an infrastructure fault in the Supabase project itself. It cannot be fixed
-from application code, and I will not paper over it with a retry loop that hides a
-broken dependency.
+That is why registration cannot complete and sign-in flaps 503/401/502. It cannot
+be fixed from application code, and it will not be papered over with a retry loop
+that hides a broken dependency.
 
-### Also outstanding
+### Owner password validity: UNDETERMINED
 
-- `IVX_OWNER_PASSWORD` is **absent** from the Render environment. The platform's own
-  certification runner reports `ownerPasswordBinding=false`, which is why
-  `/api/ivx/certification/member-auth-public` returns `certified: false` with 5 of 8
-  checks failing (`ownerLogin`, `memberRegistration`, `memberLogin`,
-  `memberPersistence`, `runtimeConfig`).
-- Two Supabase project refs appear in the repo (`kvclcdjmjghndxsngfzb` and
-  `biikwnqdhsdzyxecekht`). Production consistently uses the former; the latter should
-  be removed to prevent a future mismatch.
+The password is correctly stored and bound. Whether it is the *right* password for
+`iperez4242@gmail.com` could **not** be established — 3 attempts at a 90s timeout
+all returned `504 upstream request timeout`, so Supabase never rendered a verdict.
+This must be re-checked once auth is healthy. It is not claimed as passing here.
 
 ---
 
 ## WHAT WOULD MAKE IT 100%
 
-1. Restore healthy auth on the Supabase project (check its status/quota/plan — the
-   password grant is the failing operation, `/auth/v1/settings` is fine).
-2. Set `IVX_OWNER_PASSWORD` in Render so owner certification can bind.
-3. Re-run `node scripts/ivx-live-qa.mjs` — it must exit `0` with 27/27.
-4. Re-run `/api/ivx/certification/member-auth-public` — it must return
-   `certified: true`.
+1. **Fix Supabase auth on `kvclcdjmjghndxsngfzb`** — open the dashboard and check
+   project status, plan/quota, and whether the instance is paused, throttled, or
+   needs a restart. The failing operation is the password grant specifically;
+   `/auth/v1/health` and the REST layer are fine, so this is isolated to GoTrue.
+2. Re-run `node scripts/ivx-live-qa.mjs` — must exit `0` with 27/27.
+3. Re-run `/api/ivx/certification/member-auth-public` — must return
+   `certified: true` with 8/8, which also confirms the owner password.
 
-When those four are green, this document gets replaced by a passing certificate —
-not before.
+### Also outstanding
+
+- Two Supabase project refs appear in the repo (`kvclcdjmjghndxsngfzb` and
+  `biikwnqdhsdzyxecekht`). Production consistently uses the former; the latter
+  should be removed to prevent a future mismatch.
 
 ---
 
@@ -178,11 +175,12 @@ not before.
 ```
 runChecks (TypeScript + lint + structure):  PASSED, 0 errors
 regression tests (auth failure mapping):    14 pass, 0 fail
-supabase env guard tests:                   18 pass, 0 fail (combined run)
+supabase env guard tests:                   18 pass, 0 fail
 ```
 
-Deployed commits: `ff13d3f9` (auth mapping), `f1961f3b` (route status),
-`f6ee27eb` (registration deadline), `6d9fc8e5` (QA harness), `eb5734f8` (tests).
+Deployed: `ff13d3f9` (auth mapping), `f1961f3b` (route status), `f6ee27eb`
+(registration deadline), `6d9fc8e5` (QA harness), `eb5734f8` (tests),
+`a4275960` (first certificate).
 
 Regression locks live in `backend/ivx-member-auth-failure-mapping.test.ts`, so a
 timeout can never again be returned as "invalid password" and registration can
