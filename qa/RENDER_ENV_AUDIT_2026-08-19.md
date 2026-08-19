@@ -100,3 +100,26 @@ Additional actions:
 Post-restore deploy health, AI health, negative/positive system-key auth tests, and the rule-10
 recertification (112 live checks) for the final commit SHA are recorded in the live certificate store
 (`ivx_agent_certificates`) and summarized in the accompanying JSON evidence file.
+
+## 9. ADDENDUM — culprit caught in the act (2026-08-19, ~01:10–01:35 UTC)
+
+During this audit's verification phase the wipe mechanism FIRED AGAIN, live, and was captured with
+exact numbers — closing the "who/why" question definitively:
+
+1. After restoration the service held **32 variables**.
+2. The AI-key recovery workflow (`ivx-recover-render-ai-from-history.yml`) was dispatched to fix the
+   dead AI gateway key. It succeeded at that — but its env read (`GET /env-vars` with **no `limit`
+   parameter**) received only Render's **default first page (20 items)**. It merged its 3 keys into
+   those 20 and PUT the result back — the replace-all endpoint then **wiped the 10 variables beyond
+   page 1**, including ALL Supabase database credentials (32 → 23), briefly taking the database
+   offline until this audit re-restored them (33 variables, service redeployed).
+3. **Root cause (proven):** every env writer in this repo that does GET → merge → replace-all PUT
+   read the variable list WITHOUT pagination. Any run against a service holding more than 20
+   variables silently truncates the set. This is the mechanism class behind the original wipe.
+4. **Fix shipped in this commit:** `?limit=100` added to the env reads in
+   `backend/services/ivx-render-env-merge.ts`, `.github/workflows/ivx-recover-render-ai-from-history.yml`,
+   `.github/workflows/ivx-sync-ai-render-from-owner-store.yml`, and `expo/scripts/update-render-env.mjs`.
+5. Conclusion: **no human deleted the credentials.** The project's own credential-sync automations,
+   run repeatedly over time (each push triggers several), truncated the env set whenever it exceeded
+   20 variables. The "5 Supabase survivors" state the owner discovered was the end result of such
+   truncating rewrites.
