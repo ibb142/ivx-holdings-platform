@@ -1,23 +1,23 @@
 /**
  * IVX Metro babel transformer.
  *
- * Delegates to the Rork toolkit transformer (which wraps Expo's default
- * transformer) and, at bundle time, neutralizes the Metro-incompatible
- * non-static dynamic `import(id)` helper shipped inside
+ * Delegates to Expo's own babel transformer and, at bundle time, neutralizes
+ * the Metro-incompatible non-static dynamic `import(id)` helper shipped inside
  * `@ai-sdk/provider-utils` dist bundles.
  *
- * Why this exists: the postinstall patch (`scripts/patch-ai-sdk-provider-utils.mjs`)
+ * This used to try a vendor toolkit transformer first and fall back to Expo's.
+ * The fallback made the vendor look optional while it silently stayed on the
+ * bundling hot path whenever it happened to be installed — two different
+ * transformers could process the same source depending on the machine. It is
+ * Expo's transformer only now, so every machine bundles identically.
+ *
+ * Why this file exists: the postinstall patch (`scripts/patch-ai-sdk-provider-utils.mjs`)
  * fixes node_modules on install, but installs that skip lifecycle scripts can
  * restore pristine copies and break the build. This transformer runs on every
  * bundle, so the build stays green regardless of how node_modules was produced.
  * It is version-agnostic and a no-op for all other files.
  */
-let upstream;
-try {
-  upstream = require("@rork-ai/toolkit-sdk/metro-transformer");
-} catch {
-  upstream = require("@expo/metro-config/babel-transformer");
-}
+const upstream = require("@expo/metro-config/babel-transformer");
 
 const UNSAFE_IMPORT_PATTERN =
   /function\s+importNodeModule\s*\(\s*id\s*\)\s*\{\s*return\s+import\s*\(\s*id\s*\)\s*;?\s*\}/g;

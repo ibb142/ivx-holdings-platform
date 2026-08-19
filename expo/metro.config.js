@@ -6,7 +6,8 @@
 // stock Expo now, so the build runs anywhere.
 //
 // Do not reintroduce a vendor wrapper here. The zero-vendor runtime audit in
-// `scripts/` fails the build if this file stops being a self-contained Expo config.
+// `scripts/` and the `ivx-independence-gate` workflow both fail the build if
+// this stops being a self-contained Expo config.
 const { getDefaultConfig } = require("expo/metro-config");
 const path = require("path");
 

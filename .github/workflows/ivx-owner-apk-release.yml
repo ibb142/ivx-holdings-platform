@@ -34,7 +34,7 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006 cmake;3.22.1'
           log-accepted-android-sdk-licenses: false
-      - name: Install dependencies and apply Rork Metro compatibility patches
+      - name: Install dependencies and apply Metro compatibility patches
         shell: bash
         run: |
           set -euo pipefail
@@ -42,6 +42,23 @@ jobs:
           cd expo
           bun install
           bun scripts/apply-patches.mjs
+      - name: Independence gate — the vendor toolkit must not be required to build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd expo
+          node -e '
+            const pkg = require("./package.json");
+            const hits = [];
+            for (const s of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]) {
+              for (const n of Object.keys(pkg[s] || {})) if (n.toLowerCase().includes("rork")) hits.push(s + ":" + n);
+            }
+            if (hits.length) { console.error("FAIL - vendor package present: " + hits.join(", ")); process.exit(1); }
+          '
+          grep -qi "rork" metro.config.js && { echo "FAIL - metro.config.js requires the vendor"; exit 1; } || true
+          test ! -d node_modules/@rork-ai
+          node scripts/verify-zero-rork-runtime.mjs
+          echo "PASS - this APK is built with no vendor package present"
       - name: Prepare disposable QA signing key
         shell: bash
         run: |
@@ -78,7 +95,7 @@ jobs:
           set -euo pipefail
           SHORT_SHA="${GITHUB_SHA:0:12}"
           TAG="ivx-owner-apk-${SHORT_SHA}"
-          gh release create "$TAG" "${{ steps.apk.outputs.name }}" --target "$GITHUB_SHA" --title "IVX Owner APK ${SHORT_SHA}" --notes "Installable QA-signed Android APK containing the current owner sign-in fix. Source SHA: ${GITHUB_SHA}. Not Play Store production-signed."
+          gh release create "$TAG" "${{ steps.apk.outputs.name }}" --target "$GITHUB_SHA" --title "IVX Owner APK ${SHORT_SHA}" --notes "Installable QA-signed Android APK, built on GitHub-hosted runners with the vendor toolkit absent (independence gate enforced in this workflow). Source SHA: ${GITHUB_SHA}. Not Play Store production-signed."
       - uses: actions/upload-artifact@v4
         with:
           name: ivx-owner-apk-${{ github.sha }}
