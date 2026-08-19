@@ -20,7 +20,7 @@ try {
 }
 
 const UNSAFE_IMPORT_PATTERN =
-  /function importNodeModule\(id\) \{\s*return import\(id\);\s*\}/g;
+  /function\s+importNodeModule\s*\(\s*id\s*\)\s*\{\s*return\s+import\s*\(\s*id\s*\)\s*;?\s*\}/g;
 
 const SAFE_IMPORT_SOURCE = [
   "function importNodeModule(id) {",
@@ -30,24 +30,28 @@ const SAFE_IMPORT_SOURCE = [
   "}",
 ].join("\n");
 
-function transform(args) {
+function patchMetroUnsafeImports(filename, source) {
   if (
-    args &&
-    typeof args.src === "string" &&
-    typeof args.filename === "string" &&
-    args.filename.includes("@ai-sdk") &&
-    args.src.includes("return import(id)")
+    typeof filename !== "string" ||
+    typeof source !== "string" ||
+    !filename.includes("@ai-sdk") ||
+    !source.includes("import")
   ) {
-    UNSAFE_IMPORT_PATTERN.lastIndex = 0;
-    args = {
-      ...args,
-      src: args.src.replace(UNSAFE_IMPORT_PATTERN, SAFE_IMPORT_SOURCE),
-    };
+    return source;
   }
-  return upstream.transform(args);
+
+  UNSAFE_IMPORT_PATTERN.lastIndex = 0;
+  return source.replace(UNSAFE_IMPORT_PATTERN, SAFE_IMPORT_SOURCE);
+}
+
+function transform(args) {
+  const source = patchMetroUnsafeImports(args?.filename, args?.src);
+  const transformedArgs = source === args?.src ? args : { ...args, src: source };
+  return upstream.transform(transformedArgs);
 }
 
 module.exports = {
   ...upstream,
+  patchMetroUnsafeImports,
   transform,
 };
