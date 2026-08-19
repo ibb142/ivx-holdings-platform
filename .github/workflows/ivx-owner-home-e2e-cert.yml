@@ -72,7 +72,7 @@ jobs:
         run: |
           set -euo pipefail
           body=$(jq -nc --arg email "$OWNER_EMAIL" --arg password "$OWNER_PASSWORD" '{email:$email,password:$password}')
-          curl -sS --max-time 20 -o /tmp/login.json -w '%{http_code} %{time_total}' \
+          curl -sS --retry 1 --retry-delay 1 --retry-all-errors --max-time 20 -o /tmp/login.json -w '%{http_code} %{time_total}' \
             -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" \
             -H "apikey: ${SUPABASE_KEY}" \
             -H 'Content-Type: application/json' \
@@ -93,12 +93,12 @@ jobs:
       - name: Verify authenticated and unauthenticated owner gates
         run: |
           set -euo pipefail
-          auth_code=$(curl -sS --max-time 20 -o /tmp/owner.json -w '%{http_code}' \
+          auth_code=$(curl -sS --retry 1 --retry-delay 1 --retry-all-errors --max-time 20 -o /tmp/owner.json -w '%{http_code}' \
             "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" \
             -H "Authorization: Bearer ${OWNER_TOKEN}")
           test "$auth_code" = 200
           test "$(jq -r '.ok // false' /tmp/owner.json)" = true
-          unauth_code=$(curl -sS --max-time 20 -o /tmp/unauth.json -w '%{http_code}' \
+          unauth_code=$(curl -sS --retry 1 --retry-delay 1 --retry-all-errors --max-time 20 -o /tmp/unauth.json -w '%{http_code}' \
             "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" || true)
           case "$unauth_code" in 401|403) ;; *) echo "unauthenticated_gate_http=$unauth_code"; exit 1;; esac
       - name: Build owner sign-in certificate
