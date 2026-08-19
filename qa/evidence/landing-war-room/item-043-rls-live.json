@@ -2,14 +2,19 @@
   "item": 43,
   "title": "Supabase anon usage depends on RLS",
   "status": "PASS_WITH_MIGRATION_RUNNER_INCIDENT",
-  "verifiedAt": "2026-08-19T02:33:00Z",
+  "verifiedAt": "2026-08-19T02:36:00Z",
   "projectRef": "kvclcdjmjghndxsngfzb",
   "liveVerification": {
     "jv_deals": {
-      "publicRead": "published=true and deleted_at empty",
+      "anonRead": "published=true and deleted_at empty",
+      "authenticatedRead": "published=true and deleted_at empty",
       "ownerWrite": "ivx_is_owner()",
       "broadPublicSelectRemoved": true,
       "broadAuthenticatedWriteRemoved": true
+    },
+    "legacy_JV_Deals": {
+      "ownerOnly": "ivx_is_owner()",
+      "broadAuthenticatedAllRemoved": true
     },
     "landing_deals": {
       "publicRead": "published=true",
@@ -23,9 +28,14 @@
       "broadAuthenticatedReadRemoved": true
     },
     "landing_investments": {
-      "selfPoliciesRetained": true,
+      "selfReadUpdateDeleteRetained": true,
       "ownerAll": "ivx_is_owner()",
       "broadAuthenticatedAllRemoved": true
+    },
+    "waitlist": {
+      "anonInsert": true,
+      "ownerReadManage": "ivx_is_owner()",
+      "broadAuthenticatedReadUpdateRemoved": true
     },
     "waitlist_entries": {
       "anonInsert": true,
@@ -36,6 +46,16 @@
       "anonInsert": true,
       "ownerReadManage": "ivx_is_owner()",
       "broadAuthenticatedReadRemoved": true
+    },
+    "landing_analytics": {
+      "anonInsert": true,
+      "authenticatedInsert": true,
+      "ownerReadManage": "ivx_is_owner()",
+      "broadAuthenticatedReadUpdateDeleteRemoved": true
+    },
+    "property_submissions": {
+      "authenticatedAccess": "user_id=auth.uid() OR ivx_is_owner()",
+      "broadAuthenticatedAllRemoved": true
     },
     "landing_page_config": { "ownerOnly": "ivx_is_owner()" },
     "landing_deployments": { "ownerOnly": "ivx_is_owner()" },
@@ -48,8 +68,8 @@
     "applyMigrationSucceeded": false,
     "errorClass": "schema_migrations checksum not-null constraint",
     "rollbackVerified": true,
-    "remediation": "same idempotent DDL applied in one explicit SQL transaction and then policy state re-read",
+    "remediation": "idempotent DDL applied through explicit SQL transactions, then every affected policy group was re-read from pg_policies",
     "sourceMigration": "supabase/migrations/202608190232_harden_landing_public_rls_item_043.sql"
   },
-  "evidenceRule": "PASS is based on live post-change pg_policies state, not on migration-runner success."
+  "evidenceRule": "PASS is based on verified live post-change pg_policies state. The migration-runner failure itself is not represented as success."
 }
