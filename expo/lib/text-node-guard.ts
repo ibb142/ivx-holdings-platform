@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, TextInput } from 'react-native';
+import { Platform, Text, TextInput } from 'react-native';
 
 /**
  * Global guard against the React Native (Web) runtime error:
@@ -254,9 +254,32 @@ function runSelfTest(): void {
 
 /**
  * Install the global text-node guard. Safe to call multiple times.
+ *
+ * WEB ONLY — deliberately a no-op on iOS/Android.
+ *
+ * The only thing this guard suppresses is react-native-web's
+ * "Unexpected text node: ... A text node cannot be a child of a <View>"
+ * console.error, which is emitted from
+ * `react-native-web/dist/exports/View/index.js`. That module does not exist in
+ * a native build, so on iOS/Android the guard has ZERO benefit.
+ *
+ * What it costs on native is severe: it rewrites `react/jsx-runtime`,
+ * `react/jsx-dev-runtime` and `React.createElement` for EVERY element the app
+ * renders, and routes their children through `React.Children.map`. That call
+ * cannot round-trip non-node children (functions are silently dropped, variadic
+ * children get collapsed into an array), so any component using a render-prop
+ * or tuple children shape gets corrupted and throws mid-render — which takes
+ * the whole screen down to black.
+ *
+ * Trading a cosmetic web-only console warning for an app-wide crash risk on the
+ * shipped mobile app is never correct, so native simply does not install it.
  */
 export function installTextNodeGuard(): void {
   if (installed) {
+    return;
+  }
+  if (Platform.OS !== 'web') {
+    installed = true;
     return;
   }
   installed = true;

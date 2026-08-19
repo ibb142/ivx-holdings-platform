@@ -20,8 +20,47 @@ import React from 'react';
 import {
   __sanitizeChildrenForTest,
   containsFunctionChild,
+  installTextNodeGuard,
   shouldSanitizeType,
 } from '../lib/text-node-guard';
+
+/**
+ * The Android black screen: this guard exists ONLY to silence a
+ * react-native-web console.error. That module does not exist in a native build,
+ * so on iOS/Android the guard has zero benefit — while globally rewriting
+ * React.createElement and the JSX runtime for every element the app renders.
+ * It must never install on native.
+ */
+describe('text-node-guard is never installed on native', () => {
+  // The shared react-native mock reports Platform.OS === 'ios'.
+  test('installTextNodeGuard leaves the React runtime untouched on native', () => {
+    const originalCreateElement = React.createElement;
+
+    installTextNodeGuard();
+
+    expect(React.createElement).toBe(originalCreateElement);
+  });
+
+  test('a render-prop tuple survives createElement on native', () => {
+    const renderFunction = () => () => null;
+    const tuple: [string, typeof renderFunction] = ['key-native', renderFunction];
+
+    installTextNodeGuard();
+
+    const element = React.createElement(
+      function Host() {
+        return null;
+      },
+      null,
+      tuple,
+    );
+    const children = (element.props as { children?: unknown }).children as typeof tuple;
+
+    expect(children[0]).toBe('key-native');
+    expect(children[1]).toBe(renderFunction);
+    expect(typeof children[1]).toBe('function');
+  });
+});
 
 describe('text-node-guard render-prop safety', () => {
   test('detects the expo-image [key, renderFunction] tuple', () => {
