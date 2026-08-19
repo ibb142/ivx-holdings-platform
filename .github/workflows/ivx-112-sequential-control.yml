@@ -1,0 +1,196 @@
+name: IVX 112 Sequential Control
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-112-sequential-control.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+env:
+  API_BASE: https://api.ivxholding.com
+  PROGRAM_ID: IVX-LANDING-10OF10-2026-08-19
+  IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+  IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+
+concurrency:
+  group: ivx-112-sequential-control
+  cancel-in-progress: false
+
+jobs:
+  sequential-control:
+    name: Start and finish agents 1 through 112 sequentially
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve authorization and verify live fleet
+        shell: bash
+        run: |
+          set -euo pipefail
+          SYSTEM_KEY="${IVX_AI_SYSTEM_SECRET:-${IVX_SYSTEM_SECRET:-}}"
+          test -n "$SYSTEM_KEY"
+          echo "::add-mask::$SYSTEM_KEY"
+          echo "SYSTEM_KEY=$SYSTEM_KEY" >> "$GITHUB_ENV"
+          curl -fsS --max-time 30 "${API_BASE}/version" -o /tmp/version.json
+          curl -fsS --max-time 30 "${API_BASE}/health" -o /tmp/health.json
+          curl -fsS --max-time 30 "${API_BASE}/api/ivx/agents" -o /tmp/agents.json
+          test "$(jq -r '.ok // false' /tmp/agents.json)" = true
+          test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
+          test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)" = 112
+          LIVE_SHA=$(jq -r '.commit // empty' /tmp/version.json)
+          test -n "$LIVE_SHA"
+          echo "LIVE_SHA=$LIVE_SHA" >> "$GITHUB_ENV"
+          jq -r '.agents | sort_by(.agentNumber)[] | [.agentNumber,.agentId,.name] | @tsv' /tmp/agents.json > /tmp/agents.tsv
+          echo "fleet_verified=112 live_sha=$LIVE_SHA"
+
+      - name: Execute agents strictly one by one and record start finish evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ivx112-sequential
+          : > /tmp/ivx112-sequential/events.jsonl
+          overall_started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          while IFS=$'\t' read -r number agent_id name; do
+            started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            gap=$(( ((number - 1) % 40) + 1 ))
+            gap_title=$(jq -r --argjson id "$gap" '.gaps[] | select(.id == $id) | .title' qa/autonomous/landing-10of10-mission.json)
+            echo "AGENT_START number=$number id=$agent_id gap=$gap startedAt=$started_at"
+
+            contract_file="/tmp/ivx112-sequential/contract-${number}.json"
+            run_file="/tmp/ivx112-sequential/run-${number}.json"
+            result_file="/tmp/ivx112-sequential/result-${number}.json"
+
+            contract_http=$(curl -sS --max-time 25 -o "$contract_file" -w '%{http_code}' "${API_BASE}/api/ivx/agents/${agent_id}/contract" || true)
+            if [ "$contract_http" = 200 ]; then
+              task_type=$(jq -r '.contract.allowedTaskTypes[0] // "audit"' "$contract_file")
+              task_id="landing10-seq-gap-$(printf '%02d' "$gap")-agent-$(printf '%03d' "$number")-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+              body=$(jq -nc \
+                --arg taskType "$task_type" \
+                --arg token "$SYSTEM_KEY" \
+                --arg programId "$PROGRAM_ID" \
+                --argjson gapId "$gap" \
+                --arg gapTitle "$gap_title" \
+                --arg sourceSha "$LIVE_SHA" \
+                --arg taskId "$task_id" \
+                --arg runId "landing10-sequential-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+                '{taskType:$taskType,ownerApprovalToken:$token,payload:{programId:$programId,gapId:$gapId,gapTitle:$gapTitle,sourceSha:$sourceSha,__taskId:$taskId,__runId:$runId,__workflow:"IVX 112 Sequential Control",sequentialExecution:true,realExecutionOnly:true,simulatedSuccessAllowed:false,realFundsAllowed:false}}')
+              run_http=$(curl -sS --retry 1 --retry-delay 1 --max-time 60 -o "$run_file" -w '%{http_code}' \
+                -X POST "${API_BASE}/api/ivx/agents/${agent_id}/run" \
+                -H 'Content-Type: application/json' \
+                -H "x-ivx-owner-key: ${SYSTEM_KEY}" \
+                --data "$body" || true)
+              ok=false
+              if [ "$run_http" = 200 ]; then ok=$(jq -r '.ok // false' "$run_file" 2>/dev/null || echo false); fi
+              final_status=$(jq -r '.runRecord.finalStatus // "request_failed"' "$run_file" 2>/dev/null || echo request_failed)
+              source_reference=$(jq -r '.runRecord.sourceReference // empty' "$run_file" 2>/dev/null || true)
+              tool_result_id=$(jq -r '.runRecord.toolResultId // empty' "$run_file" 2>/dev/null || true)
+              commit_sha=$(jq -r '.runRecord.commitSha // empty' "$run_file" 2>/dev/null || true)
+              error=$(jq -r '.error // .runRecord.error // empty' "$run_file" 2>/dev/null || true)
+            else
+              task_type=""
+              task_id=""
+              run_http="0"
+              ok=false
+              final_status="contract_failed"
+              source_reference=""
+              tool_result_id=""
+              commit_sha=""
+              error="contract_http_${contract_http}"
+            fi
+
+            finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            jq -n \
+              --argjson agentNumber "$number" \
+              --arg agentId "$agent_id" \
+              --arg name "$name" \
+              --argjson gapId "$gap" \
+              --arg gapTitle "$gap_title" \
+              --arg taskType "$task_type" \
+              --arg taskId "$task_id" \
+              --arg startedAt "$started_at" \
+              --arg finishedAt "$finished_at" \
+              --arg contractHttp "$contract_http" \
+              --arg runHttp "$run_http" \
+              --argjson ok "$ok" \
+              --arg finalStatus "$final_status" \
+              --arg sourceReference "$source_reference" \
+              --arg toolResultId "$tool_result_id" \
+              --arg commitSha "$commit_sha" \
+              --arg error "$error" \
+              '{agentNumber:$agentNumber,agentId:$agentId,name:$name,gapId:$gapId,gapTitle:$gapTitle,taskType:$taskType,taskId:$taskId,startedAt:$startedAt,finishedAt:$finishedAt,contractHttp:$contractHttp,runHttp:$runHttp,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,commitSha:$commitSha,error:$error}' \
+              > "$result_file"
+            cat "$result_file" >> /tmp/ivx112-sequential/events.jsonl
+            echo "AGENT_FINISH number=$number id=$agent_id gap=$gap ok=$ok status=$final_status finishedAt=$finished_at"
+          done < /tmp/agents.tsv
+          overall_finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          jq -s 'sort_by(.agentNumber)' /tmp/ivx112-sequential/result-*.json > /tmp/ivx112-sequential/all.json
+          total=$(jq 'length' /tmp/ivx112-sequential/all.json)
+          succeeded=$(jq '[.[] | select(.ok == true)] | length' /tmp/ivx112-sequential/all.json)
+          failed=$(jq '[.[] | select(.ok != true)] | length' /tmp/ivx112-sequential/all.json)
+          evidence=$(jq '[.[] | select((.sourceReference // "") != "" and (.toolResultId // "") != "")] | length' /tmp/ivx112-sequential/all.json)
+          test "$total" = 112
+          echo "SEQ_STARTED=$overall_started" >> "$GITHUB_ENV"
+          echo "SEQ_FINISHED=$overall_finished" >> "$GITHUB_ENV"
+          echo "SEQ_TOTAL=$total" >> "$GITHUB_ENV"
+          echo "SEQ_SUCCEEDED=$succeeded" >> "$GITHUB_ENV"
+          echo "SEQ_FAILED=$failed" >> "$GITHUB_ENV"
+          echo "SEQ_EVIDENCE=$evidence" >> "$GITHUB_ENV"
+          echo "sequential_total=$total succeeded=$succeeded failed=$failed evidence=$evidence"
+
+      - name: Persist sequential control evidence and certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence/autonomous
+          cp /tmp/ivx112-sequential/all.json qa/evidence/autonomous/ivx-112-sequential-agent-results.json
+          jq -n \
+            --arg certificate 'IVX-112-SEQUENTIAL-END-TO-END-CONTROL' \
+            --arg programId "$PROGRAM_ID" \
+            --arg liveSha "$LIVE_SHA" \
+            --arg githubSha "$GITHUB_SHA" \
+            --arg githubRunId "$GITHUB_RUN_ID" \
+            --arg startedAt "$SEQ_STARTED" \
+            --arg finishedAt "$SEQ_FINISHED" \
+            --argjson attempted "$SEQ_TOTAL" \
+            --argjson succeeded "$SEQ_SUCCEEDED" \
+            --argjson failed "$SEQ_FAILED" \
+            --argjson evidence "$SEQ_EVIDENCE" \
+            '{ok:($attempted == 112 and $failed == 0 and $evidence == 112),certificate:$certificate,programId:$programId,productionSha:$liveSha,controllerSha:$githubSha,githubRunId:$githubRunId,executionMode:"strict-sequential-1-through-112",startedAt:$startedAt,finishedAt:$finishedAt,workerRunsAttempted:$attempted,workerRunsSucceeded:$succeeded,workerRunsFailed:$failed,workerRunsWithEvidence:$evidence,simulatedSuccessAllowed:false,realFundsAllowed:false,truthNote:"Each agent is recorded with explicit startedAt and finishedAt. Certificate ok=true only when all 112 runs succeed and all 112 contain sourceReference plus toolResultId."}' \
+            > qa/evidence/autonomous/ivx-112-sequential-certificate.json
+          cat qa/evidence/autonomous/ivx-112-sequential-certificate.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ivx-112-sequential-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            qa/evidence/autonomous/ivx-112-sequential-certificate.json
+            qa/evidence/autonomous/ivx-112-sequential-agent-results.json
+          if-no-files-found: error
+
+      - name: Commit evidence to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'IVX 112 Sequential Controller'
+          git config user.email 'ivx-112-sequential@users.noreply.github.com'
+          git add qa/evidence/autonomous/ivx-112-sequential-certificate.json qa/evidence/autonomous/ivx-112-sequential-agent-results.json
+          git diff --cached --quiet && exit 0
+          git commit -m "ops(112): persist sequential end-to-end agent proof [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Enforce full end-to-end completion
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$SEQ_TOTAL" = 112
+          test "$SEQ_FAILED" = 0
+          test "$SEQ_EVIDENCE" = 112
+          echo 'IVX_112_SEQUENTIAL_END_TO_END=PASS'
