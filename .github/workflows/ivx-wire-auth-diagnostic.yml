@@ -1,0 +1,59 @@
+name: IVX Wire Auth Diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-wire-auth-diagnostic.yml'
+      - 'expo/app/wire-transfer.tsx'
+      - 'backend/api/ivx-wire-transfer.ts'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  API_BASE: https://api.ivxholding.com
+  OWNER_EMAIL: iperez4242@gmail.com
+  OWNER_PASSWORD_A: ${{ secrets.OWNER_NEW_PASSWORD }}
+  OWNER_PASSWORD_B: ${{ secrets.IVX_OWNER_PASSWORD }}
+  OWNER_PASSWORD_C: ${{ secrets.OWNER_PASSWORD }}
+  SUPABASE_URL_A: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+  SUPABASE_URL_B: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_ANON_A: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+  SUPABASE_ANON_B: ${{ secrets.SUPABASE_ANON_KEY }}
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Acquire real owner token
+        run: |
+          set -euo pipefail
+          OWNER_PASSWORD="${OWNER_PASSWORD_A:-${OWNER_PASSWORD_B:-${OWNER_PASSWORD_C:-}}}"
+          SUPABASE_URL="${SUPABASE_URL_A:-${SUPABASE_URL_B:-}}"
+          SUPABASE_ANON="${SUPABASE_ANON_A:-${SUPABASE_ANON_B:-}}"
+          test -n "$OWNER_PASSWORD"; test -n "$SUPABASE_URL"; test -n "$SUPABASE_ANON"
+          body=$(jq -nc --arg email "$OWNER_EMAIL" --arg password "$OWNER_PASSWORD" '{email:$email,password:$password}')
+          code=$(curl -sS --retry 1 --retry-all-errors --max-time 20 -o /tmp/login.json -w '%{http_code}' -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" -H "apikey: $SUPABASE_ANON" -H 'Content-Type: application/json' --data "$body")
+          test "$code" = 200
+          token=$(jq -r '.access_token // empty' /tmp/login.json); test -n "$token"
+          echo "OWNER_TOKEN=$token" >> "$GITHUB_ENV"
+      - name: Compare public and owner wire responses without bank values
+        run: |
+          set -euo pipefail
+          public_code=$(curl -sS --retry 1 --retry-all-errors --max-time 20 -o /tmp/public.json -w '%{http_code}' "$API_BASE/api/ivx/wire-instructions")
+          owner_code=$(curl -sS --retry 1 --retry-all-errors --max-time 20 -o /tmp/owner.json -w '%{http_code}' "$API_BASE/api/ivx/wire-instructions" -H "Authorization: Bearer $OWNER_TOKEN")
+          echo "wire_public_http=$public_code"
+          jq -c '{ok,authenticated,error,hasPreview:(.preview!=null),hasInstructions:(.instructions!=null)}' /tmp/public.json
+          echo "wire_owner_http=$owner_code"
+          jq -c '{ok,authenticated,error,hasPreview:(.preview!=null),hasInstructions:(.instructions!=null),instructionFields:(.instructions|if type=="object" then keys else [] end)}' /tmp/owner.json
+      - name: Check native app bearer propagation
+        run: |
+          if grep -q "supabase.auth.getSession\|Authorization.*Bearer\|getAuthHeaders" expo/app/wire-transfer.tsx; then
+            echo 'native_wire_bearer_session=present'
+          else
+            echo 'native_wire_bearer_session=MISSING'
+          fi
