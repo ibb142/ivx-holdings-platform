@@ -22,6 +22,11 @@ drop policy if exists "landing_deals_owner_write" on public.landing_deals;
 create policy landing_deals_public_read_published on public.landing_deals for select to public using (published = true);
 create policy landing_deals_owner_write on public.landing_deals for all to authenticated using (ivx_is_owner()) with check (ivx_is_owner());
 
+-- Legacy JV table: no broad authenticated access.
+drop policy if exists "JV Deals_all" on public."JV Deals";
+drop policy if exists "JV Deals_owner_all" on public."JV Deals";
+create policy "JV Deals_owner_all" on public."JV Deals" for all to authenticated using (ivx_is_owner()) with check (ivx_is_owner());
+
 -- Sensitive landing records: public insert where required, owner-only read/manage.
 drop policy if exists "landing_submissions_all" on public.landing_submissions;
 drop policy if exists "landing_submissions_auth_select" on public.landing_submissions;
@@ -33,6 +38,11 @@ drop policy if exists "Admin can read all investments" on public.landing_investm
 drop policy if exists "landing_investments_owner_all" on public.landing_investments;
 create policy landing_investments_owner_all on public.landing_investments for all to authenticated using (ivx_is_owner()) with check (ivx_is_owner());
 
+drop policy if exists "waitlist_auth_select" on public.waitlist;
+drop policy if exists "waitlist_auth_update" on public.waitlist;
+drop policy if exists "waitlist_owner_all" on public.waitlist;
+create policy waitlist_owner_all on public.waitlist for all to authenticated using (ivx_is_owner()) with check (ivx_is_owner());
+
 drop policy if exists "waitlist_entries_all" on public.waitlist_entries;
 drop policy if exists "waitlist_entries_auth_select" on public.waitlist_entries;
 drop policy if exists "waitlist_entries_auth_update" on public.waitlist_entries;
@@ -43,6 +53,26 @@ drop policy if exists "waitlist_otp_events_all" on public.waitlist_otp_events;
 drop policy if exists "otp_events_auth_select" on public.waitlist_otp_events;
 drop policy if exists "waitlist_otp_events_owner_all" on public.waitlist_otp_events;
 create policy waitlist_otp_events_owner_all on public.waitlist_otp_events for all to authenticated using (ivx_is_owner()) with check (ivx_is_owner());
+
+-- Analytics: anonymous/authenticated clients may submit events; only owner can read/manage stored analytics.
+drop policy if exists "Allow authenticated delete" on public.landing_analytics;
+drop policy if exists "Allow authenticated insert" on public.landing_analytics;
+drop policy if exists "Allow authenticated select" on public.landing_analytics;
+drop policy if exists "Allow authenticated update" on public.landing_analytics;
+drop policy if exists "landing_analytics_auth_select" on public.landing_analytics;
+drop policy if exists "landing_analytics_owner_all" on public.landing_analytics;
+create policy landing_analytics_owner_all on public.landing_analytics for all to authenticated using (ivx_is_owner()) with check (ivx_is_owner());
+
+-- Property submissions: authenticated users are confined to their own rows; owner has full access.
+drop policy if exists "property_submissions_all" on public.property_submissions;
+drop policy if exists "property_submissions_own_select" on public.property_submissions;
+drop policy if exists "property_submissions_own_insert" on public.property_submissions;
+drop policy if exists "property_submissions_own_update" on public.property_submissions;
+drop policy if exists "property_submissions_own_delete" on public.property_submissions;
+create policy property_submissions_own_select on public.property_submissions for select to authenticated using (user_id = auth.uid() or ivx_is_owner());
+create policy property_submissions_own_insert on public.property_submissions for insert to authenticated with check (user_id = auth.uid() or ivx_is_owner());
+create policy property_submissions_own_update on public.property_submissions for update to authenticated using (user_id = auth.uid() or ivx_is_owner()) with check (user_id = auth.uid() or ivx_is_owner());
+create policy property_submissions_own_delete on public.property_submissions for delete to authenticated using (user_id = auth.uid() or ivx_is_owner());
 
 -- Internal config/deployment data: owner-only.
 drop policy if exists "landing_page_config_all" on public.landing_page_config;
