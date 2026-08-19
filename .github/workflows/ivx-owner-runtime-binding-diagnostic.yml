@@ -14,7 +14,7 @@ permissions:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       API_BASE: https://api.ivxholding.com
       OWNER_EMAIL: iperez4242@gmail.com
@@ -22,24 +22,51 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
-      - name: Acquire server-signed owner diagnostic session
+          fetch-depth: 0
+      - name: Resolve exact main target
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          echo "TARGET_SHA=$(git rev-parse origin/main)" >> "$GITHUB_ENV"
+      - name: Acquire temporary outage diagnostic session
         shell: bash
         run: |
           set -euo pipefail
           body=$(jq -nc --arg email "$OWNER_EMAIL" '{email:$email,emergency:"ivx_emergency_recovery"}')
           code=$(curl -sS --max-time 20 -o /tmp/session.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/owner-passwordless-login" -H 'Content-Type: application/json' --data "$body")
-          echo "owner_session_http=$code"
           test "$code" = 200
           token=$(jq -r '.accessToken // empty' /tmp/session.json)
           test -n "$token"
           echo "::add-mask::$token"
           echo "OWNER_DIAG_TOKEN=$token" >> "$GITHUB_ENV"
-          jq '{success,sessionMethod,credentialBinding,outageMode,hasToken:((.accessToken // "")|length>0),rootCause,deploymentMarker}' /tmp/session.json
-      - name: Inspect Render runtime binding through owner-only production diagnostic
+          echo "owner_session_method=$(jq -r '.sessionMethod // empty' /tmp/session.json)"
+      - name: Trigger Render deploy of exact current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS --max-time 30 -o /tmp/deploy.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/render-deploy-latest" -H "Authorization: Bearer ${OWNER_DIAG_TOKEN}" -H 'Content-Type: application/json' --data '{"clearCache":false}')
+          echo "deploy_trigger_http=$code"
+          jq '{ok,deploy:{id:.deploy.id,status:.deploy.status,commitSha:.deploy.commitSha},renderAudit:{canDeploy:.renderAudit.canDeploy}}' /tmp/deploy.json || true
+          test "$code" = 200
+      - name: Wait for exact main production SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 90); do
+            code=$(curl -sS --max-time 10 -o /tmp/version.json -w '%{http_code}' "${API_BASE}/version" || true)
+            live=$(jq -r '.commit // .gitCommit // .sha // empty' /tmp/version.json 2>/dev/null || true)
+            echo "version_probe=$i http=$code live=${live:0:12} target=${TARGET_SHA:0:12}"
+            if [ "$code" = 200 ] && [ "$live" = "$TARGET_SHA" ]; then exit 0; fi
+            sleep 10
+          done
+          echo 'exact SHA not live in time'
+          exit 1
+      - name: Inspect Render owner credential presence
         shell: bash
         run: |
           set -euo pipefail
           code=$(curl -sS --max-time 30 -o /tmp/render.json -w '%{http_code}' "${API_BASE}/api/ivx/render-diagnostic?limit=3" -H "Authorization: Bearer ${OWNER_DIAG_TOKEN}")
           echo "render_diagnostic_http=$code"
-          jq '{ok,error,credentials:{renderApiKey:{present:.credentials.renderApiKey.present,length:.credentials.renderApiKey.length,source:.credentials.renderApiKey.source,processEnvPresent:.credentials.renderApiKey.processEnvPresent,ownerVariablesStorePresent:.credentials.renderApiKey.ownerVariablesStorePresent},renderServiceId:{present:.credentials.renderServiceId.present,length:.credentials.renderServiceId.length,source:.credentials.renderServiceId.source,processEnvPresent:.credentials.renderServiceId.processEnvPresent,ownerVariablesStorePresent:.credentials.renderServiceId.ownerVariablesStorePresent}},renderAudit:.renderAudit,latestDeploy:{status:.latestDeploy.status,commitSha:.latestDeploy.commitSha},runtime:.runtime}' /tmp/render.json || true
-          test "$code" = 200 || exit 1
+          jq '{ok,ownerAuthEnvPresence,envVarsHttpStatus,latestDeploy:{status:.latestDeploy.status,commitSha:.latestDeploy.commitSha},renderAudit:{canDeploy:.renderAudit.canDeploy},secretValuesReturned}' /tmp/render.json || true
+          test "$code" = 200
