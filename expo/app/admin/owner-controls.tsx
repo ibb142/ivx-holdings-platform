@@ -1523,7 +1523,7 @@ export default function OwnerControlsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace('/(tabs)/(home)/home' as any)} style={styles.backBtn} testID="owner-back-home">
+        <TouchableOpacity onPress={() => router.replace('/(tabs)/home' as any)} style={styles.backBtn} testID="owner-back-home">
           <ArrowLeft size={22} color={Colors.text} />
         </TouchableOpacity>
         <View style={[styles.headerLeft, { flex: 1 }]}>
@@ -1542,7 +1542,7 @@ export default function OwnerControlsScreen() {
         contentContainerStyle={styles.quickNavContent}
       >
         {[
-          { key: 'home', label: 'Home', icon: HomeIcon, route: '/(tabs)/(home)/home' },
+          { key: 'home', label: 'Home', icon: HomeIcon, route: '/(tabs)/home' },
           { key: 'invest', label: 'Invest', icon: TrendingUp, route: '/(tabs)/invest' },
           { key: 'market', label: 'Market', icon: BarChart3, route: '/(tabs)/market' },
           { key: 'portfolio', label: 'Portfolio', icon: Briefcase, route: '/(tabs)/portfolio' },

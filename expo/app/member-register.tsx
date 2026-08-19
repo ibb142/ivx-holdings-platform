@@ -1123,7 +1123,7 @@ function MemberDashboardContent({
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.skipButton}
-          onPress={() => router.replace('/(tabs)/(home)' as Href)}
+          onPress={() => router.replace('/(tabs)/home' as Href)}
         >
           <Text style={styles.skipButtonText}>Explore App First</Text>
         </TouchableOpacity>

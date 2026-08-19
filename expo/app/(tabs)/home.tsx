@@ -322,8 +322,13 @@ export default function HomeScreen() {
 
   // Report that Home actually rendered. If this never fires the route tree
   // resolved to nothing and the blank-screen watchdog takes over.
+  //
+  // The value MUST be the router pathname ('/home'), not the file path. Route
+  // groups like `(tabs)` carry no path segment, so `usePathname()` inside the
+  // watchdog reports '/home'. Reporting '(tabs)/home' here would never match the
+  // route being judged and the watchdog would accuse a perfectly good screen.
   useEffect(() => {
-    markScreenPainted('(tabs)/(home)/home');
+    markScreenPainted('/home');
   }, []);
 
   const isScreenFocused = useScreenFocusState(true);

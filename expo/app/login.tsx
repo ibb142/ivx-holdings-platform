@@ -524,7 +524,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
     }
 
     openAccessRedirectedRef.current = true;
-    router.replace('/(tabs)/(home)/home' as any);
+    router.replace('/(tabs)/home' as any);
   }, [openAccessMode, router, effectiveOwnerMode]);
 
   // Auto-redirect authenticated owners/admins away from the login screen.
@@ -544,7 +544,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
     // Owner/admin login lands on the real app Home (/(tabs)) so the operator sees
     // their actual IVX HOLDINGS app first. Owner Controls remains reachable from
     // Profile → Owner Controls / Admin entry, never as a forced redirect.
-    const target = '/(tabs)/(home)/home';
+    const target = '/(tabs)/home';
     postLoginNavigationDoneRef.current = true;
     pushTelemetry('9. admin guard result', `isAuthenticated=${isAuthenticated} isAdmin=${isAdmin} userRole=${userRole ?? 'null'} → ${target}`);
     postLoginNavigationTimerRef.current = setTimeout(() => {
@@ -636,7 +636,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
 
     postLoginNavigationDoneRef.current = true;
     // Always land owner + non-owner users on Home. Owner Controls is opt-in from Profile/Admin entry.
-    const target = '/(tabs)/(home)/home';
+    const target = '/(tabs)/home';
     postLoginNavigationTimerRef.current = setTimeout(() => {
       postLoginNavigationTimerRef.current = null;
       pushTelemetry('8. router.replace(/(tabs)) called', `target=${target}`);
@@ -729,7 +729,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
                 return;
               }
               ownerTrustedRestoreNavigationDoneRef.current = true;
-              router.replace('/(tabs)/(home)/home' as any);
+              router.replace('/(tabs)/home' as any);
             }},
         ]);
         return;
@@ -1607,7 +1607,7 @@ export function LoginScreenContent({ ownerMode = false }: LoginScreenContentProp
               <Text style={styles.subtitle}>{openAccessMessage}</Text>
               <TouchableOpacity
                 style={styles.signInBtn}
-                onPress={() => router.replace('/(tabs)/(home)/home' as any)}
+                onPress={() => router.replace('/(tabs)/home' as any)}
                 activeOpacity={0.85}
                 testID="login-open-app-direct"
               >

@@ -820,7 +820,7 @@ export default function InvestorPitchScreen() {
           <Animated.View style={[s.closingActions, { opacity: subtitleO }]}>
             <TouchableOpacity
               style={[s.closingCta, { backgroundColor: slide.accent }]}
-              onPress={() => router.push('/(tabs)/(home)' as any)}
+              onPress={() => router.push('/(tabs)/home' as any)}
               activeOpacity={0.85}
             >
               <Text style={s.closingCtaText}>Explore the Platform</Text>

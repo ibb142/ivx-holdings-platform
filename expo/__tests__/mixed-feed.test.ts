@@ -247,7 +247,7 @@ describe('Mixed Feed Card Routing', () => {
     });
 
     it('Home (home.tsx) imports InvestorFirstFeed', () => {
-      const content = readFile('app/(tabs)/(home)/home.tsx');
+      const content = readFile('app/(tabs)/home.tsx');
       expect(content).toContain('InvestorFirstFeed');
     });
 

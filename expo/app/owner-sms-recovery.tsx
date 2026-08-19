@@ -109,7 +109,7 @@ export default function OwnerSmsRecoveryScreen() {
         setTimeout(() => {
           void login(normalized, newPassword).then((loginResult) => {
             if (loginResult.success) {
-              router.replace('/(tabs)/(home)/home' as any);
+              router.replace('/(tabs)/home' as any);
             } else {
               Alert.alert('Auto sign-in failed', `${loginResult.message}\n\nPlease return to the login screen and sign in manually with the new password.`);
             }

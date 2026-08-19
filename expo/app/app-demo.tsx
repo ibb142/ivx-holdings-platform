@@ -521,7 +521,7 @@ export default function AppDemoScreen() {
         {isFinished && (
           <TouchableOpacity
             style={[styles.ctaButton, { backgroundColor: slide.accentColor }]}
-            onPress={() => router.push('/(tabs)/(home)' as any)}
+            onPress={() => router.push('/(tabs)/home' as any)}
             activeOpacity={0.8}
           >
             <Text style={styles.ctaText}>Start Exploring the App</Text>

@@ -948,7 +948,7 @@ export default function LandingScreen() {
       }
       const result = await ownerDirectAccess();
       if (result.success) {
-        router.replace('/(tabs)/(home)/home' as any);
+        router.replace('/(tabs)/home' as any);
         return;
       }
       await refreshOwnerAccessAudit();
@@ -1065,7 +1065,7 @@ export default function LandingScreen() {
                       style={styles.loginLink}
                       onPress={() => {
                         try { landingTracker.trackCtaClick('open_app'); } catch {}
-                        router.push('/(tabs)/(home)/home' as any);
+                        router.push('/(tabs)/home' as any);
                       }}
                       activeOpacity={0.7}
                       testID="landing-login"
@@ -1248,7 +1248,7 @@ export default function LandingScreen() {
               style={styles.secondaryBtn}
               onPress={() => {
                 try { landingTracker.trackCtaClick(openAccessMode ? 'open_workspace' : 'sign_in_approved'); } catch {}
-                router.push((openAccessMode ? '/(tabs)/(home)/home' : '/login') as any);
+                router.push((openAccessMode ? '/(tabs)/home' : '/login') as any);
               }}
               activeOpacity={0.8}
               testID="landing-sign-in"
@@ -1616,7 +1616,7 @@ export default function LandingScreen() {
                   <View style={cardStyles.actions}>
                     <TouchableOpacity
                       style={cardStyles.primaryBtn}
-                      onPress={() => router.push('/(tabs)/(home)/home' as any)}
+                      onPress={() => router.push('/(tabs)/home' as any)}
                       activeOpacity={0.85}
                       testID="card-open-ivx"
                     >

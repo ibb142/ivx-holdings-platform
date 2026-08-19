@@ -24,7 +24,7 @@ const PUBLIC_TOP_LEVEL_SEGMENTS = new Set<string>([
   'waitlist',
 ]);
 
-const AUTH_HOME_ROUTE: Href = '/(tabs)/(home)/home' as Href;
+const AUTH_HOME_ROUTE: Href = '/(tabs)/home' as Href;
 const PUBLIC_LANDING_ROUTE: Href = '/landing' as Href;
 
 function isPublicSegment(rootSegment: string | undefined): boolean {

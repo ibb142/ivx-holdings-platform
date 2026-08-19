@@ -549,7 +549,7 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
           {
             text: 'Continue',
             // Land on Home so the owner sees the real app first; Owner Controls is reachable from Profile/Admin.
-            onPress: () => router.replace('/(tabs)/(home)/home' as Href)},
+            onPress: () => router.replace('/(tabs)/home' as Href)},
         ]
       );
       return;
@@ -564,7 +564,7 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
         {
           text: 'Later',
           style: 'cancel',
-          onPress: () => router.replace('/(tabs)/(home)' as Href)},
+          onPress: () => router.replace('/(tabs)/home' as Href)},
       ]
     );
   };
@@ -966,7 +966,7 @@ export function SignUpScreenContent({ forcedAccountType }: SignUpScreenContentPr
 
       <TouchableOpacity
         style={styles.secondaryButton}
-        onPress={() => router.replace('/(tabs)/(home)' as Href)}
+        onPress={() => router.replace('/(tabs)/home' as Href)}
       >
         <Text style={styles.secondaryButtonText}>Do This Later</Text>
       </TouchableOpacity>

@@ -190,7 +190,7 @@ export default function OwnerAccessScreen() {
 
     openAccessRedirectedRef.current = true;
     console.log('[OwnerAccessHub] Open access mode active — bypassing owner access screen');
-    router.replace('/(tabs)/(home)/home' as any);
+    router.replace('/(tabs)/home' as any);
   }, [openAccessMode, router]);
 
   // Owner must never get stuck on this hub. If we already have an authenticated
@@ -216,7 +216,7 @@ export default function OwnerAccessScreen() {
       isOwnerIPAccess: auth.isOwnerIPAccess,
       userRole: auth.userRole,
       email: auth.user?.email ?? null});
-    router.replace('/(tabs)/(home)/home' as any);
+    router.replace('/(tabs)/home' as any);
   }, [
     auth.isAuthenticated,
     auth.isAdmin,
@@ -258,7 +258,7 @@ export default function OwnerAccessScreen() {
       if (result.success) {
         void ownerAuditQuery.refetch();
         void ownerIdentityAuditQuery.refetch();
-        router.replace('/(tabs)/(home)/home' as any);
+        router.replace('/(tabs)/home' as any);
         return;
       }
       Alert.alert('Trusted Access Blocked', result.message);
@@ -301,7 +301,7 @@ export default function OwnerAccessScreen() {
       Alert.alert(
         'Trusted Device Verified',
         result.message + '\n\nThis device is now registered for trusted owner recovery.',
-        [{ text: 'Open Full App', onPress: () => router.replace('/(tabs)/(home)/home' as any) }]
+        [{ text: 'Open Full App', onPress: () => router.replace('/(tabs)/home' as any) }]
       );
     },
     onError: (error: Error) => {
@@ -491,7 +491,7 @@ export default function OwnerAccessScreen() {
     console.log('[OwnerAccessHub] Route requested:', mode, 'auth:', auth.isAuthenticated, 'role:', auth.userRole);
     if (mode === 'signin') {
       if (auth.isAuthenticated) {
-        router.replace('/(tabs)/(home)/home' as any);
+        router.replace('/(tabs)/home' as any);
         return;
       }
       router.push(buildOwnerLoginRoute(effectiveOwnerEmail) as any);
@@ -575,7 +575,7 @@ export default function OwnerAccessScreen() {
         subtitle: 'Dashboard, deals, members, and live modules',
         accent: Colors.primary,
         icon: LayoutGrid,
-        onPress: () => router.replace('/(tabs)/(home)/home' as any),
+        onPress: () => router.replace('/(tabs)/home' as any),
         testID: 'owner-access-open-full-app'},
       {
         id: 'admin-hq',
@@ -944,7 +944,7 @@ export default function OwnerAccessScreen() {
           <TouchableOpacity
             style={styles.primarySigninCard}
             activeOpacity={0.84}
-            onPress={() => router.replace('/(tabs)/(home)/home' as any)}
+            onPress={() => router.replace('/(tabs)/home' as any)}
             testID="owner-access-open-app-direct"
           >
             <View style={styles.primarySigninIconWrap}>

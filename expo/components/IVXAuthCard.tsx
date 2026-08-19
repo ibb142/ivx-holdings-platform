@@ -299,7 +299,7 @@ export function IVXAuthCard({
   // --- Redirect if already authenticated ---
   useEffect(() => {
     if (isAuthenticated) {
-      router.replace('/(tabs)/(home)/home' as Href);
+      router.replace('/(tabs)/home' as Href);
     }
   }, [isAuthenticated, router]);
 
@@ -763,7 +763,7 @@ export function IVXAuthCard({
 
   // --- Complete Handler ---
   const handleComplete = useCallback(() => {
-    router.replace('/(tabs)/(home)/home' as Href);
+    router.replace('/(tabs)/home' as Href);
   }, [router]);
 
   // --- Navigate to other auth screens ---

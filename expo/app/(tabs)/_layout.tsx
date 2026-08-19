@@ -30,9 +30,17 @@ const TABS_LOADING_TIMEOUT_MS = 2000;
 // The `initialRouteName` prop passed to <Tabs> below is a React Navigation prop and
 // is NOT how expo-router picks the group's entry route — relying on it alone left
 // `/(tabs)` with no resolved screen, which renders a black frame with no error.
+//
+// The anchor now points at a LEAF screen file (`home.tsx`), not at a nested route
+// group. A group has no path segment of its own, so `(tabs)/(home)` could never
+// host an `index.tsx` (it would collide with `app/index.tsx` on `/`). That left the
+// home tab as the only route in the app whose entry screen had to be resolved
+// purely from an anchor string — and when that resolution failed there was no
+// screen to render and no error to throw: a silent black frame. A leaf screen has
+// nothing to resolve and cannot fail this way.
 export const unstable_settings = {
-  anchor: '(home)',
-  initialRouteName: '(home)'} as const;
+  anchor: 'home',
+  initialRouteName: 'home'} as const;
 
 export default function TabsLayout() {
   logStartup('ROUTER_READY');
@@ -142,7 +150,7 @@ export default function TabsLayout() {
   return (
     <View style={styles.root}>
     <Tabs
-      initialRouteName="(home)"
+      initialRouteName="home"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: tabColors.active,
@@ -154,7 +162,7 @@ export default function TabsLayout() {
         tabBarIconStyle: styles.tabBarIcon}}
     >
       <Tabs.Screen
-        name="(home)"
+        name="home"
         options={{
           title: 'Home',
           tabBarIcon: ({ color, size }) => <Home color={color} size={size} strokeWidth={2.3} />,

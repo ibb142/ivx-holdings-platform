@@ -8,11 +8,27 @@
  *
  * This exists because a "renders nothing" failure throws no error: boundaries,
  * the global fatal shield and the crash log are all silent by design.
+ *
+ * DEFECT THIS FIXES — the watchdog could not fire after login.
+ *
+ * The previous version armed on `hasNeverPainted()`, a single process-wide flag.
+ * The login screen reports a paint, so that flag was already false by the time
+ * the owner signed in. Every navigation after login was therefore invisible to
+ * this watchdog: a blank Home screen could persist forever with no diagnostic and
+ * no recovery button, which is exactly what was recorded on device — 15 seconds
+ * of black with no overlay.
+ *
+ * It now re-arms on every route change and asks whether THIS route painted since
+ * it was entered.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
-import { getLastPaintedScreen, hasNeverPainted } from '@/lib/screen-paint-watchdog';
+import {
+  getLastPaintedScreen,
+  hasRouteFailedToPaint,
+  isRouteInstrumented,
+} from '@/lib/screen-paint-watchdog';
 
 const BLANK_SCREEN_TIMEOUT_MS = 8000;
 
@@ -20,11 +36,27 @@ export function BlankScreenWatchdog({ build }: { build: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isBlank, setIsBlank] = useState(false);
+  const dismissedRouteRef = useRef<string | null>(null);
 
   useEffect(() => {
+    // A route the user already dismissed must not re-accuse itself in a loop.
+    if (dismissedRouteRef.current === pathname) return;
+    // Only judge routes that actually report paint. Accusing an uninstrumented
+    // screen of being blank would cover working UI with an error overlay.
+    if (!isRouteInstrumented(pathname)) {
+      setIsBlank(false);
+      return;
+    }
+
+    const enteredAt = Date.now();
+    setIsBlank(false);
+
     const timer = setTimeout(() => {
-      if (hasNeverPainted()) {
-        console.warn('[IVX] Blank screen watchdog fired — no screen painted', { pathname });
+      if (hasRouteFailedToPaint(pathname, enteredAt)) {
+        console.warn('[IVX] Blank screen watchdog fired — route painted nothing', {
+          pathname,
+          lastPainted: getLastPaintedScreen(),
+        });
         setIsBlank(true);
       }
     }, BLANK_SCREEN_TIMEOUT_MS);
@@ -32,22 +64,24 @@ export function BlankScreenWatchdog({ build }: { build: string }) {
   }, [pathname]);
 
   const goHome = useCallback(() => {
+    dismissedRouteRef.current = pathname;
     setIsBlank(false);
     try {
-      router.replace('/(tabs)/(home)/home');
+      router.replace('/(tabs)/home');
     } catch (err) {
       console.warn('[IVX] Watchdog home recovery failed', err);
     }
-  }, [router]);
+  }, [router, pathname]);
 
   const goLogin = useCallback(() => {
+    dismissedRouteRef.current = pathname;
     setIsBlank(false);
     try {
       router.replace('/login');
     } catch (err) {
       console.warn('[IVX] Watchdog login recovery failed', err);
     }
-  }, [router]);
+  }, [router, pathname]);
 
   if (!isBlank) return null;
 

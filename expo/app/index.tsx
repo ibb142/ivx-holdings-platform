@@ -52,7 +52,7 @@ export default function IndexScreen() {
 
   // Open access mode bypasses login (dev only — disabled in production).
   if (isOpenAccessModeEnabled()) {
-    return <Redirect href="/(tabs)/(home)/home" />;
+    return <Redirect href="/(tabs)/home" />;
   }
 
   // Cold launch: always go to login. The auth context has already
@@ -62,7 +62,7 @@ export default function IndexScreen() {
   }
 
   // Already authenticated (e.g. hot reload): go to the app.
-  return <Redirect href="/(tabs)/(home)/home" />;
+  return <Redirect href="/(tabs)/home" />;
 }
 
 const styles = StyleSheet.create({

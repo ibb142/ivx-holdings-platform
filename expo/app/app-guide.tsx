@@ -431,7 +431,7 @@ const ARCH_SECTIONS: ArchSection[] = [
     color: '#F59E0B',
     subtitle: 'Every file in app/ is a route — registered in app/_layout.tsx',
     items: [
-      { label: '/(tabs)/(home)/index', value: 'HOME TAB — property discovery, search, featured listings' },
+      { label: '/(tabs)/home/index', value: 'HOME TAB — property discovery, search, featured listings' },
       { label: '/(tabs)/portfolio', value: 'PORTFOLIO TAB — holdings, P&L chart, wallet, activity history' },
       { label: '/(tabs)/market', value: 'MARKET TAB — live prices, OHLCV charts, buy/sell TradingModal' },
       { label: '/(tabs)/invest', value: 'INVEST TAB — IVXHOLDINGS properties, submit property, land partners' },

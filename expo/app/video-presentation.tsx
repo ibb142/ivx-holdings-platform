@@ -1202,7 +1202,7 @@ export default function VideoPresentationScreen() {
           </TouchableOpacity>
         </View>
         {isFinished && (
-          <TouchableOpacity style={[styles.ctaButton, { backgroundColor: slide.accentColor }]} onPress={() => { exitPresentation(); router.push('/(tabs)/(home)' as any); }} activeOpacity={0.8}>
+          <TouchableOpacity style={[styles.ctaButton, { backgroundColor: slide.accentColor }]} onPress={() => { exitPresentation(); router.push('/(tabs)/home' as any); }} activeOpacity={0.8}>
             <Text style={styles.ctaText}>Start Exploring</Text>
             <ChevronRight size={18} color="#000" />
           </TouchableOpacity>

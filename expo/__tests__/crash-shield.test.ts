@@ -183,8 +183,10 @@ describe('IVX Crash Shield — undefined JSX sweep (Mail-class bug guard)', () =
 describe('IVX Crash Shield — route error-boundary coverage', () => {
   const SEGMENT_LAYOUTS = [
     'app/_layout.tsx',
+    // The home tab is a leaf screen (app/(tabs)/home.tsx), not a nested group, so
+    // it has no layout of its own. Its crash coverage comes from the (tabs)
+    // segment boundary above it plus the ModuleErrorBoundary inside the screen.
     'app/(tabs)/_layout.tsx',
-    'app/(tabs)/(home)/_layout.tsx',
     'app/(tabs)/invest/_layout.tsx',
     'app/admin/_layout.tsx',
     'app/ivx/_layout.tsx',
