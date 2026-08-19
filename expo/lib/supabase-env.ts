@@ -20,6 +20,11 @@ export const PRODUCTION_SUPABASE_ANON_KEY =
 
 const PRODUCTION_SUPABASE_PROJECT_REF = 'kvclcdjmjghndxsngfzb';
 
+/** Issuers used by local/demo Supabase stacks. Their anon keys are signed with a
+ * public sample secret and are always rejected by the hosted project with
+ * HTTP 401 "Invalid API key". */
+const NON_PRODUCTION_JWT_ISSUERS = new Set(['supabase-demo']);
+
 const HOSTED_SUPABASE_URL_PATTERN = /https:\/\/[a-z0-9-]+\.supabase\.co\b/i;
 const JWT_PATTERN = /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g;
 
@@ -51,6 +56,29 @@ function extractSupabaseProjectRef(url: string): string | null {
 function extractSupabaseJwtRef(token: string): string | null {
   const payload = decodeJwtPayload(token);
   return typeof payload?.ref === 'string' ? payload.ref : null;
+}
+
+/**
+ * Decide whether an anon JWT really belongs to the production Supabase project.
+ *
+ * Checking only for a mismatched `ref` is not enough: the Supabase local-dev
+ * demo key carries `iss: "supabase-demo"` and NO `ref` claim at all, so a
+ * ref-only check accepts it and every sign-in fails with HTTP 401
+ * "Invalid API key". A hosted project key always identifies its own project,
+ * so a key without a matching `ref` is treated as foreign.
+ */
+export function isProductionSupabaseAnonKey(token: string): boolean {
+  const payload = decodeJwtPayload(token);
+  if (!payload) return false;
+
+  const issuer = typeof payload.iss === 'string' ? payload.iss : '';
+  if (NON_PRODUCTION_JWT_ISSUERS.has(issuer)) return false;
+
+  if (payload.role !== 'anon') return false;
+
+  if (typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now()) return false;
+
+  return payload.ref === PRODUCTION_SUPABASE_PROJECT_REF;
 }
 
 /**
@@ -129,23 +157,24 @@ export function resolveSupabaseUrl(): string {
 /** Sanitized Supabase anon key with production fallback — always a valid JWT shape. */
 export function resolveSupabaseAnonKey(): string {
   const envKey = extractSupabaseAnonKey(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
-  const envRef = envKey ? extractSupabaseJwtRef(envKey) : null;
-  // An anon key belonging to a different hosted project is never safe to use,
-  // even in __DEV__ / Expo Go, because it mismatches the resolved Supabase URL
-  // and produces the "Invalid API key" auth error.
-  if (envKey && envRef && envRef !== PRODUCTION_SUPABASE_PROJECT_REF) {
+  if (!envKey) {
+    return PRODUCTION_SUPABASE_ANON_KEY;
+  }
+
+  // Any anon key that does not positively identify the production project is
+  // unsafe to use, even in __DEV__ / Expo Go: it mismatches the resolved
+  // Supabase URL and produces the "Invalid API key" auth error on sign-in.
+  if (!isProductionSupabaseAnonKey(envKey)) {
     console.warn(
-      '[SupabaseEnv] Ignoring EXPO_PUBLIC_SUPABASE_ANON_KEY because it belongs to a different project:',
-      envRef,
+      '[SupabaseEnv] Ignoring EXPO_PUBLIC_SUPABASE_ANON_KEY because it does not belong to the production project. Found ref:',
+      extractSupabaseJwtRef(envKey) ?? 'none',
       'Expected ref:',
       PRODUCTION_SUPABASE_PROJECT_REF,
     );
     return PRODUCTION_SUPABASE_ANON_KEY;
   }
-  if (envKey) {
-    return envKey;
-  }
-  return PRODUCTION_SUPABASE_ANON_KEY;
+
+  return envKey;
 }
 
 /** True when either env value was polluted/unusable and a fallback or extraction was applied. */

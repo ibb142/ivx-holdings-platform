@@ -526,7 +526,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \".github/workflows/ivx-sync-ai-render-from-owner-store.yml\"}",
       "createdAt": 1787103221241,
-      "completedAt": 1787103222328
+      "completedAt": 1787103222328,
+      "compactedAt": 1787135121538
     },
     {
       "type": "reasoning",
@@ -553,7 +554,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-investor-protection.ts\", \"offset\": 280, \"limit\": 120}",
       "createdAt": 1787103274794,
-      "completedAt": 1787103274798
+      "completedAt": 1787103274798,
+      "compactedAt": 1787135121538
     },
     {
       "type": "tool",
@@ -571,7 +573,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"python3 << 'EOF'\\nimport json, urllib.request\\n\\n# 1) get service role key from Render main service env (values are returned by API)\\nRH = {'Accept':'application/json','Authorization':'Bearer rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs'}\\nreq = urllib.request.Request('https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0/env-vars?limit=100', headers=RH)\\nwith urllib.request.urlopen(req, timeout=20) as r:\\n    env = {e['envVar']['key']: e['envVar']['value'] for e in json.loads(r.read())}\\nsrk = env.get('SUPABASE_SERVICE_ROLE_KEY','')\\nsb = env.get('SUPABASE_URL','https://kvclcdjmjghndxsngfzb.supabase.co').rstrip('/')\\nprint('service role key present:', bool(srk), '| supabase:', sb)\\n\\nSH = {'apikey': srk, 'Authorization': f'Bearer {srk}', 'Accept':'application/json'}\\ndef q(path):\\n    try:\\n        req = urllib.request.Request(f'{sb}{path}', headers=SH)\\n        with urllib.request.urlopen(req, timeout=20) as r:\\n            return json.loads(r.read())\\n    except Exception as e:\\n        return f'ERR {str(e)[:80]}'\\n\\n# 2) ivx_wires — encrypted owner bank details entered via the app\\nwires = q('/rest/v1/ivx_wires?select=id,user_id,status,bank_name,account_holder,account_last4,routing_last4,amount,currency,memo,created_at&order=created_at.desc&limit=20')\\nif isinstance(wires, list):\\n    print(f'ivx_wires rows: {len(wires)}')\\n    for w in wires:\\n        print(' ', json.dumps({k: w.get(k) for k in ('id','status','bank_name','account_holder','account_last4','routing_last4','amount','currency','memo','created_at')}, default=str)[:220])\\nelse:\\n    print('ivx_wires:', wires)\\n\\n# 3) owner variables store — full name list (names only)\\nnames = q('/rest/v1/ivx_owner_variables?select=name&order=name')\\nprint('owner_variables names:', [n['name'] for n in names] if isinstance(names, list) else names)\\n\\n# 4) durable documents — wire-related keys\\ndocs = q('/rest/v1/ivx_durable_documents?select=doc_key,updated_at&doc_key=ilike.*wire*&limit=20')\\nprint('durable wire docs:', [d['doc_key'] for d in docs] if isinstance(docs, list) else docs)\\nEOF\"}",
       "createdAt": 1787103274797,
-      "completedAt": 1787103285285
+      "completedAt": 1787103285285,
+      "compactedAt": 1787135121538
     },
     {
       "type": "tool",
@@ -589,7 +592,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"python3 << 'EOF'\\nimport json, urllib.request\\ntok = open('/tmp/gh_tok').read().strip()\\nH = {'Authorization': f'Bearer {tok}', 'Accept':'application/vnd.github+json'}\\nfor kind in ('secrets','variables'):\\n    req = urllib.request.Request(f'https://api.github.com/repos/ibb142/ivx-holdings-platform/actions/{kind}?per_page=100', headers=H)\\n    with urllib.request.urlopen(req, timeout=20) as r:\\n        d = json.loads(r.read())\\n    items = d.get(kind, [])\\n    wire = [i['name'] for i in items if 'WIRE' in i['name'].upper() or 'BANK' in i['name'].upper()]\\n    print(f'GH {kind}: {len(items)} total, wire/bank: {wire}')\\nEOF\"}",
       "createdAt": 1787103284476,
-      "completedAt": 1787103287933
+      "completedAt": 1787103287933,
+      "compactedAt": 1787135121538
     },
     {
       "type": "tool",
@@ -609,7 +613,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"ivx_wires|createWire|wire-payout|owner.*wire|wire.*instructions.*(post|set|save)\", \"include\": \"backend/hono.ts\"}",
       "createdAt": 1787103287302,
-      "completedAt": 1787103287943
+      "completedAt": 1787103287943,
+      "compactedAt": 1787135121538
     },
     {
       "type": "reasoning",
@@ -635,7 +640,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cat > /tmp/decrypt_wires.mjs << 'EOF'\\nimport crypto from 'node:crypto';\\n\\nconst RH = { Accept: 'application/json', Authorization: 'Bearer rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs' };\\nconst envRes = await fetch('https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0/env-vars?limit=100', { headers: RH });\\nconst env = Object.fromEntries((await envRes.json()).map(e => [e.envVar.key, e.envVar.value]));\\nconst srk = (env.SUPABASE_SERVICE_ROLE_KEY || '').trim();\\nconst sb = (env.SUPABASE_URL || '').replace(/\\\\/+$/, '');\\nconst wireKeyRaw = (env.IVX_WIRE_ENCRYPTION_KEY || '').trim();\\nconsole.log('IVX_WIRE_ENCRYPTION_KEY set on Render:', Boolean(wireKeyRaw));\\n\\nconst keyCandidates = [...new Set([wireKeyRaw, srk].filter(Boolean))].map(s => crypto.createHash('sha256').update(s, 'utf8').digest());\\nconst SH = { apikey: srk, Authorization: `Bearer ${srk}`, Accept: 'application/json' };\\n\\nfunction dec(encoded) {\\n  if (!encoded) return '';\\n  for (const key of keyCandidates) {\\n    try {\\n      const p = JSON.parse(encoded);\\n      const d = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(p.iv, 'base64'));\\n      d.setAuthTag(Buffer.from(p.tag, 'base64'));\\n      return Buffer.concat([d.update(Buffer.from(p.ct, 'base64')), d.final()]).toString('utf8');\\n    } catch { /* try next key */ }\\n  }\\n  return '<DECRYPT_FAILED>';\\n}\\nconst mask = (v) => !v ? '(empty)' : v === '<DECRYPT_FAILED>' ? v : v.length <= 4 ? '****' : `****${v.slice(-4)}`;\\n\\nasync function getDoc(key) {\\n  const r = await fetch(`${sb}/rest/v1/ivx_durable_documents?doc_key=eq.${encodeURIComponent(key)}&select=*`, { headers: SH });\\n  if (!r.ok) { console.log(key, 'HTTP', r.status); return null; }\\n  const rows = await r.json();\\n  if (!rows.length) { console.log(key, ': no row'); return null; }\\n  const row = rows[0];\\n  const payload = row.content ?? row.doc ?? row.data ?? row.value ?? row.json;\\n  return typeof payload === 'string' ? JSON.parse(payload) : payload;\\n}\\n\\nconst wires = await getDoc('investor-protection/wires.json');\\nif (wires) {\\n  const list = Array.isArray(wires) ? wires : (wires.wires ?? Object.values(wires));\\n  console.log(`\\\\ninvestor-protection wires: ${list.length} record(s)`);\\n  for (const w of list) {\\n    console.log(JSON.stringify({\\n      id: w.id, status: w.status, direction: w.direction ?? w.type,\\n      bankName: dec(w.bankNameEncrypted),\\n      accountHolder: dec(w.accountHolderEncrypted),\\n      routing: mask(dec(w.routingEncrypted)),\\n      accountNumber: mask(dec(w.accountNumberEncrypted)),\\n      swift: dec(w.swiftEncrypted) ? mask(dec(w.swiftEncrypted)) : '(none)',\\n      iban: w.ibanEncrypted ? mask(dec(w.ibanEncrypted)) : '(none)',\\n      amount: w.amount, currency: w.currency, qa: w.qa ?? w.isQa ?? false,\\n      memo: (w.memo ?? '').slice(0, 60), createdAt: w.createdAt,\\n    }));\\n  }\\n}\\nconst subs = await getDoc('wire-transfers/submissions.json');\\nif (subs) {\\n  const list = Array.isArray(subs) ? subs : (subs.submissions ?? Object.values(subs));\\n  console.log(`\\\\nwire submissions: ${list.length} record(s)`);\\n  for (const s of list) {\\n    console.log(JSON.stringify({ id: s.id, status: s.status, email: s.email, senderBankName: s.senderBankName, amount: s.amount, qa: s.qa, createdAt: s.createdAt }));\\n  }\\n}\\nEOF\\nnode /tmp/decrypt_wires.mjs 2>&1 || bun /tmp/decrypt_wires.mjs 2>&1\"}",
       "createdAt": 1787103342159,
-      "completedAt": 1787103357014
+      "completedAt": 1787103357014,
+      "compactedAt": 1787135121538
     },
     {
       "type": "tool",
@@ -661,7 +667,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"pattern\": \"(suite|ave|avenue|street|blvd|floor|miami|new york|,\\\\s*(FL|NY|TX|CA)\\\\s)\", \"include\": \"STORE_METADATA.md\"}",
       "createdAt": 1787103356594,
-      "completedAt": 1787103357508
+      "completedAt": 1787103357508,
+      "compactedAt": 1787135121538
     },
     {
       "type": "reasoning",
@@ -774,7 +781,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"reason\": \"Your company's receiving bank details for investor wire instructions — verified missing from every store just now (server env, GitHub, encrypted vault, app database). Entered once here, they are bound to the server and the encrypted vault permanently — never asked again.\", \"envs\": [{\"name\":\"IVX_WIRE_BANK_NAME\",\"description\":\"Receiving bank's name (e.g. JPMorgan Chase Bank, N.A.)\",\"placeholder\":\"JPMorgan Chase Bank, N.A.\",\"isPublic\":false},{\"name\":\"IVX_WIRE_ROUTING_NUMBER\",\"description\":\"9-digit ABA wire routing number of the receiving bank\",\"placeholder\":\"021000021\",\"isPublic\":false},{\"name\":\"IVX_WIRE_ACCOUNT_NUMBER\",\"description\":\"Receiving account number for incoming investor wires\",\"placeholder\":\"1234567890\",\"isPublic\":false},{\"name\":\"IVX_WIRE_ACCOUNT_NAME\",\"description\":\"Account holder / beneficiary name exactly as the bank has it\",\"placeholder\":\"IVX Holdings LLC\",\"isPublic\":false},{\"name\":\"IVX_WIRE_BANK_ADDRESS\",\"description\":\"Bank branch street address (shown on wire instructions)\",\"placeholder\":\"270 Park Ave, New York, NY 10017\",\"isPublic\":false},{\"name\":\"IVX_WIRE_BENEFICIARY_ADDRESS\",\"description\":\"Your company's (beneficiary) address for wire instructions\",\"placeholder\":\"123 Main St, Suite 100, Miami, FL 33101\",\"isPublic\":false},{\"name\":\"IVX_WIRE_SWIFT_CODE\",\"description\":\"SWIFT/BIC for international wires — enter NONE if domestic-only\",\"placeholder\":\"CHASUS33\",\"isPublic\":false}]}",
       "createdAt": 1787103430365,
-      "completedAt": 1787103432860
+      "completedAt": 1787103432860,
+      "compactedAt": 1787135121538
     },
     {
       "type": "meta",
