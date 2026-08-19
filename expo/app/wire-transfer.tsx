@@ -28,6 +28,7 @@ import {
 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { supabase } from '@/lib/supabase';
 
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 
@@ -42,6 +43,15 @@ type WireInstructions = {
   referenceCode?: string;
   note?: string;
 };
+
+async function getWireAuthHeaders(): Promise<Record<string, string> | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) return null;
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${session.access_token}`,
+  };
+}
 
 export default function WireTransferScreen(): React.ReactElement {
   const router = useRouter();
@@ -61,10 +71,20 @@ export default function WireTransferScreen(): React.ReactElement {
   const fetchInstructions = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/ivx/wire-instructions`);
+      const headers = await getWireAuthHeaders();
+      if (!headers) {
+        setInstructions(null);
+        router.replace('/login');
+        return;
+      }
+
+      const res = await fetch(`${API_BASE}/api/ivx/wire-instructions`, { headers });
       const json = await res.json();
-      if (json.ok && json.instructions) {
+      if (res.ok && json.ok && json.authenticated === true && json.instructions) {
         setInstructions(json.instructions);
+      } else if (json.authenticated === false || res.status === 401 || res.status === 403) {
+        setInstructions(null);
+        router.replace('/login');
       } else {
         Alert.alert('Wire instructions unavailable', json.error || 'Please try again later.');
       }
@@ -74,7 +94,7 @@ export default function WireTransferScreen(): React.ReactElement {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     void fetchInstructions();
@@ -114,17 +134,25 @@ export default function WireTransferScreen(): React.ReactElement {
     }
     setSubmitting(true);
     try {
+      const headers = await getWireAuthHeaders();
+      if (!headers) {
+        router.replace('/login');
+        return;
+      }
+
       const res = await fetch(`${API_BASE}/api/ivx/wire-submission`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           ...form,
           referenceCode: instructions.referenceCode,
         }),
       });
       const json = await res.json();
-      if (json.ok) {
+      if (res.ok && json.ok) {
         Alert.alert('Wire reported', 'Thank you. Investor relations will verify and credit your account.');
+      } else if (res.status === 401 || res.status === 403) {
+        router.replace('/login');
       } else {
         Alert.alert('Failed to report wire', json.error || 'Please try again.');
       }
