@@ -1,0 +1,79 @@
+{
+  "auditId": "render-env-audit-2026-08-19",
+  "generatedAt": "2026-08-19T01:10:00Z",
+  "service": { "name": "ivx-holdings-platform", "id": "srv-d7t9ivreo5us73ftose0", "url": "https://api.ivxholding.com" },
+  "question": "Who deleted all variables/credentials on Render, and why?",
+  "stateAtDiscovery": {
+    "envVarCount": 5,
+    "surviving": ["EXPO_PUBLIC_SUPABASE_ANON_KEY", "EXPO_PUBLIC_SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_URL"],
+    "anomalousSecretFile": { "namePrefix": "vck_", "content": "empty", "matchesLiveAiKey": false },
+    "impact": {
+      "healthAiLive": "HTTP 503 — No AI gateway key configured",
+      "systemKeyAuth": "degraded to owner- prefix fallback (IVX_AI_SYSTEM_SECRET absent)",
+      "githubRenderAutomation": "broken (GITHUB_TOKEN / RENDER_API_KEY absent)",
+      "twilioSms": "off",
+      "awsS3Cloudfront": "broken",
+      "notAffected": ["Supabase database", "owner login", "wire compliance flow (DB-backed)"]
+    }
+  },
+  "verdict": {
+    "namedActorProvable": false,
+    "namedActorLocation": "Render Dashboard -> Workspace Settings -> Audit Log (not exposed via public API)",
+    "mechanism": "Render PUT /v1/services/{id}/env-vars REPLACES the entire variable set; a writer sending only its own list wipes all others",
+    "mechanismDocumentedInRepo": "backend/services/ivx-render-env-merge.ts (Phase 1 - 2026-07-16)",
+    "fingerprint": "5 survivors are exactly a Supabase credential re-bind set — signature of a non-merged replace-all write",
+    "repeatIncidentEvidence": [
+      "backend/services/ivx-render-env-merge.ts created 2026-07-16 to stop naive wipes",
+      ".github/workflows/ivx-recover-render-ai-from-history.yml exists to recover the AI key after a prior wipe"
+    ],
+    "timelineBounds": {
+      "wipeProvenPresentBy": "2026-08-19T00:27:00Z (runtime accepted owner- fallback => system secrets absent)",
+      "lastHumanDashboardAction": { "type": "server_restarted", "at": "2026-08-18T22:26:11Z", "renderUser": "usr-d7plj9beo5us73ch3um0" }
+    },
+    "rorkQaEnvWritesBeforeRestoration": 0,
+    "sabotageEvidence": "none found; consistent with automation/dashboard replace-all without safe merge"
+  },
+  "actorsWithWritePower": [
+    "Render dashboard workspace members",
+    ".github/workflows/ivx-sync-ai-render-from-owner-store.yml",
+    ".github/workflows/ivx-recover-render-ai-from-history.yml",
+    "backend: ivx-variables-tool, ivx-runtime-variables, ivx-developer-deploy-control, ivx-deployment-tools/credential-sync, ivx-enterprise-deployment-engine, ivx-autonomous-scale-loop, ivx-autonomous-coder",
+    "ivx-senior-dev-01 worker (holds RENDER_API_KEY; not wiped)",
+    "anyone with repo read access (Render API key recoverable from git history)"
+  ],
+  "restoration": {
+    "method": "per-key upserts (PUT /env-vars/{key}) — merge-safe; 5 survivors untouched",
+    "envVarCountBefore": 5,
+    "envVarCountAfter": 32,
+    "fromWorkerService": ["IVX_AI_SYSTEM_SECRET", "AI_GATEWAY_API_KEY", "IVX_AI_GATEWAY_KEY", "GITHUB_REPO_URL", "RENDER_API_KEY", "RENDER_SERVICE_ID", "GITHUB_REPO"],
+    "fromVerifiedPat": ["GITHUB_TOKEN (worker's stored token was invalid — 401)"],
+    "fromRepoEnvFile": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION", "S3_BUCKET_NAME", "CLOUDFRONT_DISTRIBUTION_ID", "SUPABASE_ACCESS_TOKEN", "SUPABASE_DB_URL", "IVX_OWNER_TOKEN", "IVX_OWNER_EMAIL", "IVX_OWNER_REGISTRATION_EMAILS", "IVX_TWILIO_ACCOUNT_SID", "IVX_TWILIO_AUTH_TOKEN", "IVX_TWILIO_FROM_PHONE", "IVX_TWILIO_MESSAGING_SERVICE_SID", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_PHONE", "TWILIO_FROM_NUMBER"],
+    "canonical": ["SUPABASE_PUBLISHABLE_KEY"],
+    "systemSecretAlignedToWorker": true,
+    "dispatchedWorkflow": "ivx-sync-ai-render-from-owner-store (restores IVX_OWNER_VARIABLES_ENCRYPTION_KEY from GitHub secrets, merge-safe, triggers redeploy)"
+  },
+  "notRestorable": [
+    { "name": "IVX_OWNER_RECOVERY_PHONE", "reason": "value recorded nowhere accessible; owner must re-enter" },
+    { "name": "JWT_SECRET / APP_SECRET / OWNER_NEW_PASSWORD", "reason": "exist only as GitHub Actions secrets (values unreadable); runtime operates without them" },
+    { "name": "STRIPE_API_KEY", "reason": "never present on this service — pre-existing gap, not part of the wipe" },
+    { "name": "IVX_WIRE_BENEFICIARY_* / USDT wallet", "reason": "never existed on Render, Supabase vault, or GitHub secrets — not deleted, never configured; awaiting owner input" }
+  ],
+  "securityRecommendations": [
+    "Rotate the Render API key (exposed in git history)",
+    "Rotate the GitHub PAT (recoverable from git history)",
+    "Remove the empty vck_-named secret file; rotate that key if live anywhere",
+    "Enforce safeMergeRenderEnvVars for every environment writer",
+    "Check Render Dashboard Audit Log for the named actor"
+  ],
+  "verification": "post-restore deploy health, AI health, auth negative/positive tests, and rule-10 recertification recorded in ivx_agent_certificates for the final SHA",
+  "addendumCaughtInTheAct": {
+    "window": "2026-08-19T01:10-01:35Z",
+    "observed": "env vars 32 -> 23 during verification; the 10 dropped included ALL Supabase database credentials",
+    "actor": "ivx-recover-render-ai-from-history.yml (dispatched to fix the dead AI key; succeeded at that, truncated everything else)",
+    "rootCause": "GET /env-vars without limit param returns only Render's default first page (20 items); merge + replace-all PUT then wipes every variable beyond page 1",
+    "proof": "23 = 20 (first page: the 20 most recently updated keys) + 3 workflow additions; dropped set exactly matches page-2 keys",
+    "remediation": "10 vars re-restored (33 total), service redeployed; ?limit=100 fix shipped to ivx-render-env-merge.ts, ivx-recover-render-ai-from-history.yml, ivx-sync-ai-render-from-owner-store.yml, expo/scripts/update-render-env.mjs",
+    "finalVerdict": "No human deleted the credentials. The project's own credential-sync automations truncated the env set whenever it exceeded 20 variables. The 5-variable state the owner discovered was the end result of repeated truncating rewrites."
+  },
+  "secretValuesIncluded": false
+}

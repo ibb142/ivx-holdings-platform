@@ -83,7 +83,10 @@ export async function readRenderEnvVars(
   apiKey: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<Map<string, string>> {
-  const url = `${RENDER_API_BASE_URL}/services/${encodeURIComponent(serviceId)}/env-vars`;
+  // limit=100 is REQUIRED: without it Render returns only the first page (20
+  // items) and a subsequent replace-all PUT silently wipes every variable
+  // beyond page 1. Confirmed live on 2026-08-19 (32 vars truncated to 23).
+  const url = `${RENDER_API_BASE_URL}/services/${encodeURIComponent(serviceId)}/env-vars?limit=100`;
   const response = await fetchImpl(url, {
     method: 'GET',
     headers: renderHeaders(apiKey),
