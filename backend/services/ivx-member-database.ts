@@ -15,7 +15,17 @@ import {
   writeDurableJson,
 } from './ivx-durable-store';
 
-const DEPLOYMENT_MARKER = 'ivx-member-database-v2-ratelimit-fallback';
+const DEPLOYMENT_MARKER = 'ivx-member-database-v3-login-deadline-fix';
+
+/** Internal budget for the Supabase sign-in call inside loginMember().
+ *
+ *  INVARIANT: must stay strictly BELOW the route deadline
+ *  (LOGIN_HARD_TIMEOUT_MS in hono.ts, currently 20s). If the inner budget is
+ *  ever raised above the outer deadline, correct passwords start failing as
+ *  "Login service temporarily unavailable" — the exact owner sign-in outage
+ *  this constant exists to prevent. Guarded by
+ *  __tests__/owner-login-timeout-invariant.test.ts. */
+export const MEMBER_LOGIN_INNER_BUDGET_MS = 8_000;
 
 // Production Supabase project constants. The anon key is a PUBLIC client key
 // protected by RLS; embedding it as a fallback is the standard Supabase pattern.
@@ -663,7 +673,10 @@ export async function loginMember(email: string, password: string): Promise<Memb
       password,
     });
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Supabase sign-in timed out after 10s')), 10_000),
+      setTimeout(
+        () => reject(new Error(`Supabase sign-in timed out after ${MEMBER_LOGIN_INNER_BUDGET_MS}ms`)),
+        MEMBER_LOGIN_INNER_BUDGET_MS,
+      ),
     );
     const { data, error } = await Promise.race([signInPromise, timeoutPromise]);
     if (error) {
@@ -687,10 +700,13 @@ export async function loginMember(email: string, password: string): Promise<Memb
     const accessToken = data.session?.access_token || '';
     const refreshToken = data.session?.refresh_token || '';
     const expiresAt = typeof data.session?.expires_at === 'number' ? data.session.expires_at : 0;
-    await Promise.race([
-      updateMemberLastLogin(userId),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('updateMemberLastLogin timed out')), 3_000)),
-    ]);
+    // Bookkeeping only. This MUST NOT be awaited: the password is already
+    // verified and a session already exists at this point. It used to be
+    // awaited against a 3s reject, so a slow `profiles` write threw and the
+    // catch below converted a SUCCESSFUL owner login into an HTTP 401 with a
+    // raw internal message. Never let a non-critical write fail an
+    // authenticated login.
+    void updateMemberLastLogin(userId).catch(() => {});
     // Best-effort audit log (does not block login).
     void (async () => {
       try {
