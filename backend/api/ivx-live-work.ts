@@ -141,7 +141,20 @@ function readJsonBody(request: Request): Promise<Record<string, unknown>> {
 
 export async function handleLiveWorkRunRequest(request: Request): Promise<Response> {
   const auth = await requireOwner(request); if (!auth.ok) return auth.response;
-  const body = await readJsonBody(request); const command = readTrimmed(body.task) || readTrimmed(body.prompt) || readTrimmed(body.message);
+  const body = await readJsonBody(request);
+  const action = readTrimmed(body.action);
+  if (action === 'prepare_investor_outreach') {
+    const limitRaw = typeof body.limit === 'number' ? body.limit : Number.parseInt(readTrimmed(body.limit) || '50', 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, Math.floor(limitRaw))) : 50;
+    try {
+      const { prepareQualifiedInvestorOutreach } = await import('../services/ivx-investor-outreach-orchestrator');
+      const result = await prepareQualifiedInvestorOutreach(limit);
+      return ownerOnlyJson({ ok: true, action, result });
+    } catch (error) {
+      return ownerOnlyJson({ ok: false, action, error: error instanceof Error ? error.message : 'Investor outreach preparation failed.' }, 500);
+    }
+  }
+  const command = readTrimmed(body.task) || readTrimmed(body.prompt) || readTrimmed(body.message);
   if (!command) return ownerOnlyJson({ ok: false, error: 'task is required.' }, 400);
   const autoStart = body.autoStart !== false;
   try { const { task, blocks } = await startTask(command, { autoStart }); return ownerOnlyJson({ ok: true, task: serializeLiveWorkTask(task, blocks), blocks, autoStarted: autoStart }); }
