@@ -1,19 +1,52 @@
 /** IVX Autonomous Operations Dashboard client (owner-only). */
 import { getDirectApiBaseUrl } from '@/lib/api-base';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
+
 export type AgentStatus='ACTIVE'|'IDLE'|'RUNNING'|'TESTING'|'DEPLOYING'|'VERIFYING'|'RETRYING'|'BLOCKED'|'OWNER_ACTION_REQUIRED'|'FAILED'|'COMPLETED';
 export type ActivityCategory='DEVELOPMENT'|'INVESTORS'|'BUYERS'|'LEADS_CRM'|'PROPERTIES_DEALS'|'MARKETING'|'FINANCIAL'|'AUTONOMOUS_SYSTEM';
-export type UnifiedAgent={agentNumber:number;agentId:string;name:string;department:string;primaryResponsibility:string;status:AgentStatus;currentTask:string|null;tasksStartedToday:number;tasksCompletedToday:number;tasksFailedToday:number;tasksBlockedToday:number;lastActivityTime:string|null;totalExecutionTimeMs:number|null;successRate:number|null;evidenceLink:string|null;traceId:string|null};
-export type ActivityItem={itemNumber:number;agent:string;department:string;category:ActivityCategory;task:string;actionExecuted:string;result:string;status:AgentStatus;startTime:string|null;endTime:string|null;durationMs:number|null;repository:string|null;branch:string|null;commitSha:string|null;deploymentId:string|null;productionUrl:string|null;investorId:string|null;propertyId:string|null;leadId:string|null;error:string|null;retryCount:number;evidence:string;traceId:string|null;actor?:'AUTONOMOUS'|'CI'|'HUMAN'|'UNKNOWN'};
+export type UnifiedAgent={
+  agentNumber:number;agentId:string;name:string;department:string;primaryResponsibility:string;status:AgentStatus;
+  currentTask:string|null;tasksStartedToday:number;tasksCompletedToday:number;tasksFailedToday:number;tasksBlockedToday:number;
+  lastActivityTime:string|null;totalExecutionTimeMs:number|null;successRate:number|null;evidenceLink:string|null;traceId:string|null;
+  lastToolUsed?:string|null;lastSourceReference?:string|null;lastEvidenceSha?:string|null;health?:string;availability?:string;
+};
+export type ActivityItem={
+  itemNumber:number;agent:string;department:string;category:ActivityCategory;task:string;actionExecuted:string;result:string;status:AgentStatus;
+  startTime:string|null;endTime:string|null;durationMs:number|null;repository:string|null;branch:string|null;commitSha:string|null;
+  deploymentId:string|null;productionUrl:string|null;investorId:string|null;propertyId:string|null;leadId:string|null;error:string|null;
+  retryCount:number;evidence:string;traceId:string|null;actor?:'AUTONOMOUS'|'CI'|'HUMAN'|'UNKNOWN';
+};
 export type CategorySummary={category:ActivityCategory;total:number;completed:number;failed:number;blocked:number;items:ActivityItem[]};
-export type DailySummary={reportDate:string;totalTasksStarted:number;totalTasksCompleted:number;totalTasksFailed:number;totalTasksBlocked:number;totalRetries:number;totalDeployments:number;totalCodeCommits:number;totalBugsFixed:number;totalInvestorsProcessed:number;totalBuyersProcessed:number;totalLeadsGenerated:number;totalPropertiesUpdated:number;totalMessagesSent:number;totalRevenueOpportunities:number;totalOwnerActionsRequired:number;agentUtilization:Array<{agentId:string;name:string;tasksToday:number;utilization:number}>;topCompletedWork:string[];topFailures:string[];businessRisks:string[];next24HourPlan:string[]};
-export type LiveFeedEntry={time:string;agent:string;department:string;currentAction:string;status:AgentStatus;progressPercent:number;traceId:string|null;taskId:string|null};
+export type DailySummary={
+  reportDate:string;totalTasksStarted:number;totalTasksCompleted:number;totalTasksFailed:number;totalTasksBlocked:number;totalRetries:number;
+  totalDeployments:number;totalCodeCommits:number;totalBugsFixed:number;totalInvestorsProcessed:number;totalBuyersProcessed:number;
+  totalLeadsGenerated:number;totalPropertiesUpdated:number;totalMessagesSent:number;totalRevenueOpportunities:number;totalOwnerActionsRequired:number;
+  agentUtilization:Array<{agentId:string;name:string;tasksToday:number;utilization:number}>;topCompletedWork:string[];topFailures:string[];
+  businessRisks:string[];next24HourPlan:string[];
+};
+export type LiveFeedEntry={time:string;agent:string;department:string;currentAction:string;status:AgentStatus;progressPercent:number|null;traceId:string|null;taskId:string|null};
 export type OwnerActionEntry={traceId:string;title:string;status:string;createdAt:string;blocker:string|null};
 export type Rolling24h={windowStart:string;windowEnd:string;tasksStarted:number;tasksCompleted:number;tasksFailed:number;tasksRunning:number;activeTimeMs:number;idleTimeMs:number;autonomousAttributed:number;unknownAttributed:number;proofEntries:number;ownerActionsRequired:number};
-export type SpecialistGate={registered:boolean;invoked:boolean;real_task:boolean;tools:boolean;io_contract:boolean;persistence:boolean;retry_handling:boolean;observability:boolean;integration:boolean;production_proof:boolean};
-export type SpecialistCertification={agents:Array<{agentId:string;name:string;score:number;total:number;certified:boolean;gates:SpecialistGate}>;passedGates:number;totalGates:number;certified:boolean};
-export type AutonomousOpsDashboard={marker:string;generatedAt:string;backendCommitSha:string|null;backendBootTime:string|null;backendRouteCount:number;githubHeadSha:string|null;commitMatch:boolean;dateRange:{start:string;end:string;label:string};agents:UnifiedAgent[];activityItems:ActivityItem[];categoryBreakdown:CategorySummary[];dailySummary:DailySummary|null;liveActivityFeed:LiveFeedEntry[];ownerActionRequests:OwnerActionEntry[];deploymentStatus:{renderDeployId:string|null;renderDeployStatus:string|null;renderCommitSha:string|null;productionHealthy:boolean};realAgentCount:number;placeholderAgentCount:number;rolling24h?:Rolling24h;specialistCertification?:SpecialistCertification;smsConversation?:{enabled:boolean;reminderMinutes:number;phoneConfigured:boolean;phoneMasked:string|null;pendingTracked:number};disclaimer:string};
+export type Enterprise112Status={registryCount:number;durableStateCount:number;durableExecutionCount:number;storeMode:string;ledgerOk:boolean;ledgerError:string|null};
+export type AutonomousOpsDashboard={
+  marker:string;ledgerMarker?:string;generatedAt:string;backendCommitSha:string|null;backendBootTime:string|null;backendRouteCount:number;
+  githubHeadSha:string|null;commitMatch:boolean;dateRange:{start:string;end:string;label:string};agents:UnifiedAgent[];activityItems:ActivityItem[];
+  categoryBreakdown:CategorySummary[];dailySummary:DailySummary|null;liveActivityFeed:LiveFeedEntry[];ownerActionRequests:OwnerActionEntry[];
+  deploymentStatus:{renderDeployId:string|null;renderDeployStatus:string|null;renderCommitSha:string|null;productionHealthy:boolean};
+  realAgentCount:number;placeholderAgentCount:number;rolling24h?:Rolling24h;enterprise112?:Enterprise112Status;
+  smsConversation?:{enabled:boolean;reminderMinutes:number;phoneConfigured:boolean;phoneMasked:string|null;pendingTracked:number};disclaimer:string;
+};
 export type DateRange='24h'|'today'|'yesterday'|'7d'|'30d';
+
 function record(v:unknown):Record<string,unknown>{return v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};}
-async function ownerFetch(path:string):Promise<unknown>{const token=await getIVXAccessToken();const res=await fetch(`${getDirectApiBaseUrl()}${path}`,{headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})}});if(!res.ok){const b=await res.text().catch(()=>'');throw new Error(`IVX autonomous-ops request failed: HTTP ${res.status}${b?` — ${b.slice(0,200)}`:''}`);}return res.json();}
-export async function getAutonomousOpsDashboard(opts?:{range?:DateRange;agent?:string|null;category?:string|null}):Promise<AutonomousOpsDashboard>{const p=new URLSearchParams();if(opts?.range)p.set('range',opts.range);if(opts?.agent)p.set('agent',opts.agent);if(opts?.category)p.set('category',opts.category);const payload=record(await ownerFetch(`/api/ivx/autonomous-ops/dashboard${p.toString()?`?${p}`:''}`));return record(payload.dashboard) as unknown as AutonomousOpsDashboard;}
+async function ownerFetch(path:string):Promise<unknown>{
+  const token=await getIVXAccessToken();
+  const res=await fetch(`${getDirectApiBaseUrl()}${path}`,{headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})}});
+  if(!res.ok){const b=await res.text().catch(()=>'');throw new Error(`IVX autonomous-ops request failed: HTTP ${res.status}${b?` — ${b.slice(0,200)}`:''}`);}
+  return res.json();
+}
+export async function getAutonomousOpsDashboard(opts?:{range?:DateRange;agent?:string|null;category?:string|null}):Promise<AutonomousOpsDashboard>{
+  const p=new URLSearchParams();if(opts?.range)p.set('range',opts.range);if(opts?.agent)p.set('agent',opts.agent);if(opts?.category)p.set('category',opts.category);
+  const payload=record(await ownerFetch(`/api/ivx/autonomous-ops/dashboard${p.toString()?`?${p}`:''}`));
+  return record(payload.dashboard) as unknown as AutonomousOpsDashboard;
+}
