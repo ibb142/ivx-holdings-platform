@@ -41,7 +41,7 @@ async function renderFetch(path, init = {}) {
 
 // List existing env vars to find IDs for update
 async function listEnvVars() {
-  const result = await renderFetch(`/services/${SERVICE_ID}/env-vars`);
+  const result = await renderFetch(`/services/${SERVICE_ID}/env-vars?limit=100`);
   if (!result.ok) {
     console.error('Failed to list env vars:', result.status, result.text.slice(0, 200));
     return [];
