@@ -38,9 +38,11 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
           fetch-depth: 0
-      - name: Resolve source SHA
+      - name: Resolve auth source SHA
         shell: bash
-        run: echo "SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+        run: |
+          git fetch origin main
+          echo "SOURCE_SHA=$(git log -1 --format=%H origin/main -- expo/lib/auth-context.tsx)" >> "$GITHUB_ENV"
       - name: Verify complete owner-login latency fix
         shell: bash
         run: |
@@ -63,7 +65,9 @@ jobs:
           body=$(jq -nc --arg email "$OWNER_EMAIL" '{email:$email,emergency:"ivx_emergency_recovery"}')
           curl -sS --max-time 20 -o /tmp/login.json -w '%{http_code} %{time_total}' -X POST "${API_BASE}/api/ivx/owner-passwordless-login" -H 'Content-Type: application/json' -H 'Accept: application/json' --data "$body" > /tmp/login.metrics
           read -r code total < /tmp/login.metrics
-          test "$code" = 200 || { echo "owner_runtime_login_http=$code"; jq '{success,message,rootCause,deploymentMarker}' /tmp/login.json 2>/dev/null || true; exit 1; }
+          echo "owner_runtime_login_http=$code"
+          jq '{success,sessionMethod,credentialBinding,outageMode,hasAccessToken:((.accessToken // "")|length>0),hasRefreshToken:((.refreshToken // "")|length>0),userId,rootCause,message,deploymentMarker}' /tmp/login.json || true
+          test "$code" = 200 || exit 1
           test "$(jq -r '.success // false' /tmp/login.json)" = true
           method=$(jq -r '.sessionMethod // empty' /tmp/login.json)
           test "$method" = 'bounded_password_grant' || { echo "sessionMethod=$method"; exit 1; }
@@ -78,12 +82,13 @@ jobs:
           echo "OWNER_USER_ID=$user_id" >> "$GITHUB_ENV"
           echo "OWNER_TOKEN=$token" >> "$GITHUB_ENV"
           echo "CREDENTIAL_BINDING=$binding" >> "$GITHUB_ENV"
-          echo "owner_runtime_login_http=200 sessionMethod=$method login_ms=$login_ms"
+          echo "owner_runtime_login=PASS sessionMethod=$method login_ms=$login_ms"
       - name: Verify token and owner metadata with Supabase
         shell: bash
         run: |
           set -euo pipefail
           code=$(curl -sS --max-time 15 -o /tmp/user.json -w '%{http_code}' "${SUPABASE_URL%/}/auth/v1/user" -H "apikey: ${SUPABASE_ANON_KEY}" -H "Authorization: Bearer ${OWNER_TOKEN}")
+          echo "supabase_user_http=$code"
           test "$code" = 200
           test "$(jq -r '.id // empty' /tmp/user.json)" = "$OWNER_USER_ID"
           app_role=$(jq -r '.app_metadata.role // empty' /tmp/user.json)
@@ -96,13 +101,15 @@ jobs:
         run: |
           set -euo pipefail
           code=$(curl -sS --max-time 20 -o /tmp/owner-gate.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" -H "Authorization: Bearer ${OWNER_TOKEN}")
-          test "$code" = 200 || { echo "owner_gate_http=$code"; cat /tmp/owner-gate.json; exit 1; }
+          echo "owner_gate_http=$code"
+          test "$code" = 200 || { jq '{ok,error,message}' /tmp/owner-gate.json 2>/dev/null || true; exit 1; }
           test "$(jq -r '.ok // false' /tmp/owner-gate.json)" = true
       - name: Verify unauthenticated owner gate remains closed
         shell: bash
         run: |
           code=$(curl -sS --max-time 15 -o /tmp/unauth.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" || true)
-          case "$code" in 401|403) ;; *) echo "unauth_owner_gate_http=$code"; exit 1;; esac
+          echo "unauth_owner_gate_http=$code"
+          case "$code" in 401|403) ;; *) exit 1;; esac
       - name: Build certificate
         shell: bash
         run: |
