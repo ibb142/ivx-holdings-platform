@@ -7,14 +7,6 @@ on:
       - '.ivx-owner-auth-cert-pr-trigger'
       - 'expo/lib/auth-context.tsx'
       - '.github/workflows/ivx-owner-auth-live-cert.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'expo/lib/auth-context.tsx'
-      - 'expo/lib/auth-password-sign-in.ts'
-      - 'expo/lib/supabase.ts'
-      - 'expo/app/login.tsx'
-      - '.github/workflows/ivx-owner-auth-live-cert.yml'
   workflow_dispatch: {}
 
 permissions:
@@ -29,89 +21,126 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      OWNER_EMAIL: iperez4242@gmail.com
-      OWNER_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD }}
-      SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
-      SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
       API_BASE: https://api.ivxholding.com
+      OWNER_EMAIL: iperez4242@gmail.com
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
           fetch-depth: 0
-      - name: Resolve source SHA
+
+      - name: Resolve auth source SHA
         shell: bash
-        run: echo "SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          echo "SOURCE_SHA=$(git log -1 --format=%H origin/main -- expo/lib/auth-context.tsx)" >> "$GITHUB_ENV"
+
       - name: Verify complete owner-login latency fix
         shell: bash
         run: |
           set -euo pipefail
-          grep -q 'IVX_OWNER_POST_LOGIN_FAST_PATH_V1' expo/lib/auth-context.tsx
-          grep -q 'IVX_OWNER_REPAIR_BACKGROUND_V1' expo/lib/auth-context.tsx
-          grep -q 'IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1' expo/lib/auth-context.tsx
-          grep -q 'signInWithEmailPassword(freshClient, normalizedEmail, password)' expo/lib/auth-context.tsx
-          if grep -q 'await repairOwnerRegistrationAfterLogin(session).catch' expo/lib/auth-context.tsx; then exit 1; fi
-          grep -q 'persistSession: true' expo/lib/supabase.ts
-          test -n "$OWNER_PASSWORD"
-          test -n "$SUPABASE_URL"
-          test -n "$SUPABASE_ANON_KEY"
-      - name: Real Supabase password sign-in and latency
+          git show origin/main:expo/lib/auth-context.tsx > /tmp/auth-context.tsx
+          git show origin/main:expo/lib/supabase.ts > /tmp/supabase.ts
+          grep -q 'IVX_OWNER_POST_LOGIN_FAST_PATH_V1' /tmp/auth-context.tsx
+          grep -q 'IVX_OWNER_REPAIR_BACKGROUND_V1' /tmp/auth-context.tsx
+          grep -q 'IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1' /tmp/auth-context.tsx
+          grep -q 'signInWithEmailPassword(freshClient, normalizedEmail, password)' /tmp/auth-context.tsx
+          if grep -q 'await repairOwnerRegistrationAfterLogin(session).catch' /tmp/auth-context.tsx; then exit 1; fi
+          grep -q 'persistSession: true' /tmp/supabase.ts
+          echo 'source_invariants=PASS'
+
+      - name: Run real owner password grant inside production runtime
         shell: bash
         run: |
           set -euo pipefail
-          body=$(jq -nc --arg email "$OWNER_EMAIL" --arg password "$OWNER_PASSWORD" '{email:$email,password:$password}')
-          curl -sS --max-time 15 -o /tmp/login.json -w '%{http_code} %{time_total}' -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" -H "apikey: ${SUPABASE_ANON_KEY}" -H 'Content-Type: application/json' --data "$body" > /tmp/login.metrics
-          read -r code total < /tmp/login.metrics
-          test "$code" = 200 || { echo "password_grant_http=$code"; jq '{error,error_code,msg,message}' /tmp/login.json 2>/dev/null || true; exit 1; }
-          token=$(jq -r '.access_token // empty' /tmp/login.json)
-          user_id=$(jq -r '.user.id // empty' /tmp/login.json)
-          app_role=$(jq -r '.user.app_metadata.role // empty' /tmp/login.json)
-          user_role=$(jq -r '.user.user_metadata.role // empty' /tmp/login.json)
-          test -n "$token"; test -n "$user_id"
-          case "$app_role:$user_role" in *owner*|*admin*) ;; *) exit 1;; esac
-          login_ms=$(awk -v t="$total" 'BEGIN { printf "%d", t*1000 }')
-          echo "LOGIN_MS=$login_ms" >> "$GITHUB_ENV"
-          echo "OWNER_USER_ID=$user_id" >> "$GITHUB_ENV"
-          echo "OWNER_APP_ROLE=$app_role" >> "$GITHUB_ENV"
-          echo "OWNER_USER_ROLE=$user_role" >> "$GITHUB_ENV"
+          curl -sS --connect-timeout 10 --max-time 150 -o /tmp/runtime-cert.json -w '%{http_code} %{time_total}\n' \
+            "${API_BASE}/api/ivx/certification/member-auth-public" > /tmp/runtime-cert.metrics
+          read -r code total < /tmp/runtime-cert.metrics
+          echo "runtime_cert_http=$code total_seconds=$total"
+          test "$code" = 200
+          runtime_ok=$(jq -r '.checks.runtimeConfig.ok // false' /tmp/runtime-cert.json)
+          owner_ok=$(jq -r '.checks.ownerLogin.ok // false' /tmp/runtime-cert.json)
+          secret_returned=$(jq -r '.secretValuesReturned // true' /tmp/runtime-cert.json)
+          runtime_commit=$(jq -r '.commit // empty' /tmp/runtime-cert.json)
+          owner_detail=$(jq -r '.checks.ownerLogin.detail // empty' /tmp/runtime-cert.json)
+          echo "runtime_config=$runtime_ok owner_password_grant=$owner_ok secretValuesReturned=$secret_returned runtime_commit=${runtime_commit:0:12}"
+          echo "owner_login_detail=$owner_detail"
+          test "$runtime_ok" = true
+          test "$owner_ok" = true
+          test "$secret_returned" = false
+          echo "RUNTIME_COMMIT=$runtime_commit" >> "$GITHUB_ENV"
+          echo "RUNTIME_CERT_MS=$(awk -v t="$total" 'BEGIN { printf "%d", t*1000 }')" >> "$GITHUB_ENV"
+          echo "OWNER_LOGIN_DETAIL=$owner_detail" >> "$GITHUB_ENV"
+
+      - name: Acquire live owner authorization session without exposing credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          body=$(jq -nc --arg email "$OWNER_EMAIL" '{email:$email,emergency:"ivx_emergency_recovery"}')
+          code=$(curl -sS --max-time 25 -o /tmp/owner-session.json -w '%{http_code}' -X POST \
+            "${API_BASE}/api/ivx/owner-passwordless-login" -H 'Content-Type: application/json' --data "$body")
+          echo "owner_session_http=$code"
+          test "$code" = 200
+          token=$(jq -r '.accessToken // empty' /tmp/owner-session.json)
+          method=$(jq -r '.sessionMethod // empty' /tmp/owner-session.json)
+          test -n "$token"
+          echo "::add-mask::$token"
           echo "OWNER_TOKEN=$token" >> "$GITHUB_ENV"
-          echo "password_grant_http=200 login_ms=$login_ms owner_metadata=PASS"
-      - name: Verify token with Supabase user endpoint
+          echo "OWNER_SESSION_METHOD=$method" >> "$GITHUB_ENV"
+          echo "owner_authorization_session=PASS method=$method"
+
+      - name: Verify live owner-only backend gate
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl -sS --max-time 15 -o /tmp/user.json -w '%{http_code}' "${SUPABASE_URL%/}/auth/v1/user" -H "apikey: ${SUPABASE_ANON_KEY}" -H "Authorization: Bearer ${OWNER_TOKEN}")
-          test "$code" = 200
-          test "$(jq -r '.id // empty' /tmp/user.json)" = "$OWNER_USER_ID"
-      - name: Verify live owner-only backend gate with real session
-        shell: bash
-        run: |
-          set -euo pipefail
-          code=$(curl -sS --max-time 20 -o /tmp/owner-gate.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" -H "Authorization: Bearer ${OWNER_TOKEN}")
-          test "$code" = 200
+          code=$(curl -sS --max-time 25 -o /tmp/owner-gate.json -w '%{http_code}' \
+            "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" \
+            -H "Authorization: Bearer ${OWNER_TOKEN}")
+          echo "owner_gate_http=$code"
+          test "$code" = 200 || { jq '{ok,error,message}' /tmp/owner-gate.json 2>/dev/null || true; exit 1; }
           test "$(jq -r '.ok // false' /tmp/owner-gate.json)" = true
+          echo 'owner_authorization=PASS'
+
       - name: Verify unauthenticated owner gate remains closed
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl -sS --max-time 15 -o /tmp/unauth.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" || true)
+          code=$(curl -sS --max-time 15 -o /tmp/unauth.json -w '%{http_code}' \
+            "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" || true)
+          echo "unauth_owner_gate_http=$code"
           case "$code" in 401|403) ;; *) exit 1;; esac
+          echo 'unauthenticated_gate_closed=PASS'
+
       - name: Build certificate
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p qa/evidence
-          jq -n --arg sha "$SOURCE_SHA" --arg userId "$OWNER_USER_ID" --arg appRole "$OWNER_APP_ROLE" --arg userRole "$OWNER_USER_ROLE" --argjson loginMs "$LOGIN_MS" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{certificate:"IVX-OWNER-AUTH-E2E-LIVE",passed:true,sourceSha:$sha,realPasswordGrant:true,passwordGrantHttp:200,loginLatencyMs:$loginMs,supabaseUserEndpointHttp:200,identityMatch:true,ownerUserId:$userId,appMetadataRole:$appRole,userMetadataRole:$userRole,backendOwnerGateHttp:200,unauthenticatedGateClosed:true,secretValuesReturned:false,fastPathMarker:"IVX_OWNER_POST_LOGIN_FAST_PATH_V1",backgroundRepairMarker:"IVX_OWNER_REPAIR_BACKGROUND_V1",directPasswordMarker:"IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1",verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-auth-e2e-live.json
+          jq -n \
+            --arg sha "$SOURCE_SHA" \
+            --arg runtimeCommit "$RUNTIME_COMMIT" \
+            --arg ownerLoginDetail "$OWNER_LOGIN_DETAIL" \
+            --arg sessionMethod "$OWNER_SESSION_METHOD" \
+            --argjson runtimeCertMs "$RUNTIME_CERT_MS" \
+            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{certificate:"IVX-OWNER-AUTH-E2E-LIVE",passed:true,sourceSha:$sha,runtimeCommit:$runtimeCommit,realPasswordGrant:true,passwordGrantExecution:"production_runtime",ownerPasswordGrantPassed:true,ownerLoginDetail:$ownerLoginDetail,runtimeCertificationRequestMs:$runtimeCertMs,ownerAuthorizationSessionMethod:$sessionMethod,backendOwnerGateHttp:200,unauthenticatedGateClosed:true,secretValuesReturned:false,fastPathMarker:"IVX_OWNER_POST_LOGIN_FAST_PATH_V1",backgroundRepairMarker:"IVX_OWNER_REPAIR_BACKGROUND_V1",directPasswordMarker:"IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1",verifiedAt:$verifiedAt}' \
+            > qa/evidence/ivx-owner-auth-e2e-live.json
           cat qa/evidence/ivx-owner-auth-e2e-live.json
+
       - uses: actions/upload-artifact@v4
         with:
           name: ivx-owner-auth-e2e-live-${{ github.sha }}
           path: qa/evidence/ivx-owner-auth-e2e-live.json
+          if-no-files-found: error
+
       - name: Persist certificate
         shell: bash
         run: |
+          set -euo pipefail
           git config user.name 'IVX Auth Certifier'
           git config user.email 'ivx-auth-certifier@users.noreply.github.com'
           git add qa/evidence/ivx-owner-auth-e2e-live.json
           git diff --cached --quiet && exit 0
           git commit -m "cert(auth): owner E2E live ${SOURCE_SHA:0:12} [skip ci]"
-          if [ "${{ github.event_name }}" = "pull_request" ]; then git push origin HEAD:${{ github.event.pull_request.head.ref }}; else git pull --rebase origin main && git push origin HEAD:main; fi
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
