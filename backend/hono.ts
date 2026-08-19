@@ -1515,6 +1515,12 @@ const SB_HARD_TIMEOUT_MS = 6_000;
  *  `__tests__/owner-login-timeout-invariant.test.ts` fails the build if the
  *  outer deadline is ever set below the inner budget again. */
 const LOGIN_HARD_TIMEOUT_MS = 20_000;
+// Registration had NO deadline at all: withRateLimit but no withTimeout, and every
+// Supabase call inside registerMember was unbounded. When upstream auth was slow the
+// request hung with no response (measured >180s live), so the sign-up form simply
+// never came back. Registration writes several records, so it gets a longer budget
+// than login — but it must always answer.
+const REGISTER_HARD_TIMEOUT_MS = 30_000;
 
 async function withTimeout<T extends Response>(
   handler: () => Promise<T>,
@@ -5577,7 +5583,18 @@ app.options('/api/members/forgot-password', () => membersOptions());
 app.options('/api/members/reset-password', () => membersOptions());
 app.options('/api/members/profile', () => membersOptions());
 
-app.post('/api/members/register', async (c) => withRateLimit(c.req.raw, 'member-register', 5, 0.3, () => handleMemberRegister(c.req.raw)) as Promise<Response>);
+app.post('/api/members/register', async (c) => withRateLimit(c.req.raw, 'member-register', 5, 0.3, () => withTimeout(
+  () => handleMemberRegister(c.req.raw),
+  () => Response.json({
+    ok: false,
+    code: 'REGISTRATION_TIMEOUT',
+    message: 'Registration is taking longer than usual. Please try again in a moment.',
+    stage: 'CREATING_ACCOUNT',
+    retryable: true,
+    deploymentMarker: DEPLOYMENT_MARKER,
+  }, { status: 503 }),
+  REGISTER_HARD_TIMEOUT_MS,
+)) as Promise<Response>);
 app.post('/api/members/send-email-code', async (c) => handleSendEmailCode(c.req.raw));
 app.post('/api/members/verify-email', async (c) => handleVerifyEmail(c.req.raw));
 app.post('/api/members/send-phone-code', async (c) => handleSendPhoneCode(c.req.raw));
