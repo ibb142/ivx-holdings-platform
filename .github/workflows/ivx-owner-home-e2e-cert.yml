@@ -1,0 +1,203 @@
+name: IVX Owner Sign-In + Home Black Screen E2E Certificate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'expo/app/(tabs)/_layout.tsx'
+      - 'expo/app/(tabs)/(home)/**'
+      - 'expo/app/login.tsx'
+      - 'expo/lib/auth-context.tsx'
+      - 'expo/lib/auth-password-sign-in.ts'
+      - 'expo/lib/supabase.ts'
+      - 'expo/lib/supabase-env.ts'
+      - 'expo/scripts/certify-android-launch.sh'
+      - '.github/workflows/ivx-owner-home-e2e-cert.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  OWNER_EMAIL: iperez4242@gmail.com
+  API_BASE: https://api.ivxholding.com
+
+jobs:
+  owner-sign-in-live:
+    name: Owner sign-in live — HARD GATE
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OWNER_PASSWORD_A: ${{ secrets.OWNER_NEW_PASSWORD }}
+      OWNER_PASSWORD_B: ${{ secrets.IVX_OWNER_PASSWORD }}
+      OWNER_PASSWORD_C: ${{ secrets.OWNER_PASSWORD }}
+      SUPABASE_URL_A: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      SUPABASE_URL_B: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY_A: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_KEY_B: ${{ secrets.SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify patched owner sign-in source
+        run: |
+          set -euo pipefail
+          grep -q 'TRANSIENT_RETRY_DELAY_MS = 700' expo/lib/auth-password-sign-in.ts
+          grep -q 'Retrying transient password sign-in transport once' expo/lib/auth-password-sign-in.ts
+          grep -q 'signInWithEmailPassword' expo/lib/auth-context.tsx
+      - name: Resolve credential bindings without exposing values
+        run: |
+          set -euo pipefail
+          OWNER_PASSWORD="${OWNER_PASSWORD_A:-${OWNER_PASSWORD_B:-${OWNER_PASSWORD_C:-}}}"
+          SUPABASE_URL="${SUPABASE_URL_A:-${SUPABASE_URL_B:-}}"
+          SUPABASE_KEY="${SUPABASE_KEY_A:-${SUPABASE_KEY_B:-}}"
+          test -n "$OWNER_PASSWORD"
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_KEY"
+          printf 'OWNER_PASSWORD=%s\n' "$OWNER_PASSWORD" >> "$GITHUB_ENV"
+          printf 'SUPABASE_URL=%s\n' "$SUPABASE_URL" >> "$GITHUB_ENV"
+          printf 'SUPABASE_KEY=%s\n' "$SUPABASE_KEY" >> "$GITHUB_ENV"
+          echo "credential_binding=PASS password_present=yes url_present=yes key_present=yes"
+      - name: Real Supabase owner password grant
+        run: |
+          set -euo pipefail
+          body=$(jq -nc --arg email "$OWNER_EMAIL" --arg password "$OWNER_PASSWORD" '{email:$email,password:$password}')
+          curl -sS --max-time 20 -o /tmp/login.json -w '%{http_code} %{time_total}' \
+            -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" \
+            -H "apikey: ${SUPABASE_KEY}" \
+            -H 'Content-Type: application/json' \
+            --data "$body" > /tmp/login.metrics
+          read -r code total < /tmp/login.metrics
+          test "$code" = 200 || { echo "password_grant_http=$code"; jq '{error,error_code,msg,message}' /tmp/login.json 2>/dev/null || true; exit 1; }
+          token=$(jq -r '.access_token // empty' /tmp/login.json)
+          user_id=$(jq -r '.user.id // empty' /tmp/login.json)
+          app_role=$(jq -r '.user.app_metadata.role // empty' /tmp/login.json)
+          user_role=$(jq -r '.user.user_metadata.role // empty' /tmp/login.json)
+          test -n "$token"
+          test -n "$user_id"
+          case "$app_role:$user_role" in *owner*|*admin*) ;; *) echo "owner_role_check=FAIL"; exit 1;; esac
+          echo "OWNER_TOKEN=$token" >> "$GITHUB_ENV"
+          echo "OWNER_USER_ID=$user_id" >> "$GITHUB_ENV"
+          echo "LOGIN_MS=$(awk -v t="$total" 'BEGIN { printf "%d", t*1000 }')" >> "$GITHUB_ENV"
+          echo "password_grant_http=200 owner_role=PASS"
+      - name: Verify authenticated and unauthenticated owner gates
+        run: |
+          set -euo pipefail
+          auth_code=$(curl -sS --max-time 20 -o /tmp/owner.json -w '%{http_code}' \
+            "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" \
+            -H "Authorization: Bearer ${OWNER_TOKEN}")
+          test "$auth_code" = 200
+          test "$(jq -r '.ok // false' /tmp/owner.json)" = true
+          unauth_code=$(curl -sS --max-time 20 -o /tmp/unauth.json -w '%{http_code}' \
+            "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" || true)
+          case "$unauth_code" in 401|403) ;; *) echo "unauthenticated_gate_http=$unauth_code"; exit 1;; esac
+      - name: Build owner sign-in certificate
+        run: |
+          mkdir -p qa/evidence/focused-e2e
+          jq -n \
+            --arg sha "$GITHUB_SHA" \
+            --arg userId "$OWNER_USER_ID" \
+            --argjson loginMs "$LOGIN_MS" \
+            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{certificate:"IVX-OWNER-SIGNIN-LIVE",passed:true,sourceSha:$sha,realPasswordGrant:true,passwordGrantHttp:200,loginLatencyMs:$loginMs,ownerIdentityVerified:true,ownerUserId:$userId,backendOwnerGateHttp:200,unauthenticatedGateClosed:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' \
+            > qa/evidence/focused-e2e/owner-signin.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ivx-owner-signin-${{ github.sha }}
+          path: qa/evidence/focused-e2e/owner-signin.json
+
+  android-home-black-screen:
+    name: Android Home visible — HARD GATE
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      NODE_ENV: production
+      EXPO_PUBLIC_QA_BUILD: 'true'
+      EXPO_PUBLIC_IVX_OPEN_ACCESS_MODE: 'true'
+      EXPO_PUBLIC_API_BASE_URL: https://api.ivxholding.com
+      EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006 cmake;3.22.1'
+      - name: Verify black-screen guard source
+        run: |
+          set -euo pipefail
+          grep -q 'testID="tabs-auth-transition"' 'expo/app/(tabs)/_layout.tsx'
+          grep -q 'Opening sign in…' 'expo/app/(tabs)/_layout.tsx'
+          grep -q 'sceneStyle: { backgroundColor:' 'expo/app/(tabs)/_layout.tsx'
+          grep -q 'Home ready' 'expo/app/(tabs)/(home)/home.tsx'
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile
+          cd expo
+          bun install
+          bun scripts/apply-patches.mjs
+      - name: Prepare QA signing key
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          rm -f "$HOME/.android/debug.keystore"
+          keytool -genkeypair -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=IVX Focused E2E, OU=QA, O=IVX Holdings, L=Miami, ST=Florida, C=US"
+      - name: Build QA APK
+        working-directory: expo/android
+        env:
+          IVX_QA_KEYSTORE: ${{ runner.home }}/.android/debug.keystore
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew assembleQa --no-daemon -x lint
+          APK=$(find app/build/outputs/apk/qa -name '*.apk' -type f | head -1)
+          test -n "$APK"
+          echo "APK_PATH=$(realpath "$APK")" >> "$GITHUB_ENV"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Boot emulator, install APK, launch Home and prove it is visible
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          profile: pixel_2
+          target: google_apis
+          disable-animations: false
+          disable-linux-hw-accel: false
+          ram-size: 2048M
+          heap-size: 512M
+          emulator-options: -no-window -gpu off -no-snapshot -noaudio -no-boot-anim
+          script: bash "$GITHUB_WORKSPACE/expo/scripts/certify-android-launch.sh" "$APK_PATH" com.ivxholdings.app.owner home-visible.png home-logcat.txt home-launch.txt home-version.txt "Home ready"
+      - name: Build Home certificate
+        run: |
+          mkdir -p qa/evidence/focused-e2e
+          jq -n \
+            --arg sha "$GITHUB_SHA" \
+            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{certificate:"IVX-ANDROID-HOME-NO-BLACK-SCREEN",passed:true,sourceSha:$sha,apkBuilt:true,apkInstalled:true,appLaunched:true,homeReadyVisible:true,coldLaunchSurvived:true,fatalRuntimeEvent:false,verifiedAt:$verifiedAt}' \
+            > qa/evidence/focused-e2e/home-black-screen.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ivx-home-black-screen-${{ github.sha }}
+          path: |
+            qa/evidence/focused-e2e/home-black-screen.json
+            home-visible.png
+            home-logcat.txt
+            home-launch.txt
+            home-launch-ui.xml
+            home-version.txt
