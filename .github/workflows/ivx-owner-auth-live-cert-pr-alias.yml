@@ -1,0 +1,72 @@
+name: IVX Owner Auth Live Certificate PR Alias
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.ivx-owner-auth-cert-pr-trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OWNER_EMAIL: iperez4242@gmail.com
+      S1: ${{ secrets.OWNER_NEW_PASSWORD }}
+      S2: ${{ secrets.OWNER_PASSWORD }}
+      S3: ${{ secrets.IVX_OWNER_PASSWORD }}
+      S4: ${{ secrets.IVX_OWNER_NEW_PASSWORD }}
+      S5: ${{ secrets.OWNER_LOGIN_PASSWORD }}
+      S6: ${{ secrets.IVX_OWNER_LOGIN_PASSWORD }}
+      SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+      API_BASE: https://api.ivxholding.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - name: Certify real owner login
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'IVX_OWNER_POST_LOGIN_FAST_PATH_V1' expo/lib/auth-context.tsx
+          grep -q 'IVX_OWNER_REPAIR_BACKGROUND_V1' expo/lib/auth-context.tsx
+          grep -q 'IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1' expo/lib/auth-context.tsx
+          ! grep -q 'await repairOwnerRegistrationAfterLogin(session).catch' expo/lib/auth-context.tsx
+          owner_password=''; binding=none
+          for pair in 'OWNER_NEW_PASSWORD:S1' 'OWNER_PASSWORD:S2' 'IVX_OWNER_PASSWORD:S3' 'IVX_OWNER_NEW_PASSWORD:S4' 'OWNER_LOGIN_PASSWORD:S5' 'IVX_OWNER_LOGIN_PASSWORD:S6'; do
+            name=${pair%%:*}; var=${pair##*:}; value=${!var:-}
+            if [ -n "$value" ]; then owner_password="$value"; binding="$name"; break; fi
+          done
+          test -n "$owner_password"; test -n "$SUPABASE_URL"; test -n "$SUPABASE_ANON_KEY"
+          echo "::add-mask::$owner_password"
+          source_sha=$(git rev-parse HEAD)
+          body=$(jq -nc --arg email "$OWNER_EMAIL" --arg password "$owner_password" '{email:$email,password:$password}')
+          curl -sS --max-time 15 -o /tmp/login.json -w '%{http_code} %{time_total}' -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" -H "apikey: ${SUPABASE_ANON_KEY}" -H 'Content-Type: application/json' --data "$body" > /tmp/login.metrics
+          read -r password_http total < /tmp/login.metrics
+          test "$password_http" = 200
+          token=$(jq -r '.access_token // empty' /tmp/login.json)
+          user_id=$(jq -r '.user.id // empty' /tmp/login.json)
+          app_role=$(jq -r '.user.app_metadata.role // empty' /tmp/login.json)
+          user_role=$(jq -r '.user.user_metadata.role // empty' /tmp/login.json)
+          test -n "$token"; test -n "$user_id"
+          case "$app_role:$user_role" in *owner*|*admin*) ;; *) exit 1;; esac
+          login_ms=$(awk -v t="$total" 'BEGIN { printf "%d", t*1000 }')
+          user_http=$(curl -sS --max-time 15 -o /tmp/user.json -w '%{http_code}' "${SUPABASE_URL%/}/auth/v1/user" -H "apikey: ${SUPABASE_ANON_KEY}" -H "Authorization: Bearer ${token}")
+          test "$user_http" = 200; test "$(jq -r '.id // empty' /tmp/user.json)" = "$user_id"
+          owner_http=$(curl -sS --max-time 20 -o /tmp/owner.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" -H "Authorization: Bearer ${token}")
+          test "$owner_http" = 200; test "$(jq -r '.ok // false' /tmp/owner.json)" = true
+          unauth_http=$(curl -sS --max-time 15 -o /tmp/unauth.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" || true)
+          case "$unauth_http" in 401|403) ;; *) exit 1;; esac
+          mkdir -p qa/evidence
+          jq -n --arg sha "$source_sha" --arg binding "$binding" --arg userId "$user_id" --arg appRole "$app_role" --arg userRole "$user_role" --argjson loginMs "$login_ms" --argjson unauth "$unauth_http" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{certificate:"IVX-OWNER-AUTH-E2E-LIVE",passed:true,sourceSha:$sha,credentialBinding:$binding,realPasswordGrant:true,passwordGrantHttp:200,loginLatencyMs:$loginMs,supabaseUserEndpointHttp:200,identityMatch:true,ownerUserId:$userId,appMetadataRole:$appRole,userMetadataRole:$userRole,backendOwnerGateHttp:200,unauthenticatedGateHttp:$unauth,unauthenticatedGateClosed:true,secretValuesReturned:false,fastPathMarker:"IVX_OWNER_POST_LOGIN_FAST_PATH_V1",backgroundRepairMarker:"IVX_OWNER_REPAIR_BACKGROUND_V1",directPasswordMarker:"IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1",verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-auth-e2e-live.json
+          cat qa/evidence/ivx-owner-auth-e2e-live.json
+          git config user.name 'IVX Auth Certifier'
+          git config user.email 'ivx-auth-certifier@users.noreply.github.com'
+          git add qa/evidence/ivx-owner-auth-e2e-live.json
+          git diff --cached --quiet || git commit -m "cert(auth): owner E2E live ${source_sha:0:12} [skip ci]"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
