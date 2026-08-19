@@ -24,7 +24,10 @@ const tabColors = {
   background: '#0A0A0F',
   border: '#242424'};
 
-const TABS_LOADING_TIMEOUT_MS = 2000;
+// 2000ms was far too aggressive. On a real device over mobile data, the Supabase
+// session call routinely takes longer than two seconds, so this fired on a
+// perfectly healthy launch.
+const TABS_LOADING_TIMEOUT_MS = 12000;
 
 // Expo Router v6 resolves a layout's default child from `unstable_settings.anchor`.
 // The `initialRouteName` prop passed to <Tabs> below is a React Navigation prop and
@@ -57,6 +60,16 @@ export default function TabsLayout() {
   useEffect(() => {
     if (!isLoading) {
       setLoadingTimedOut(false);
+      // THE HOME BLACK SCREEN.
+      //
+      // This line did not exist. `authInitError` was set once the timeout fired
+      // and was then NEVER cleared — resolving auth only reset `loadingTimedOut`.
+      // Because the `if (authInitError)` branch below returns BEFORE <Tabs> is
+      // rendered, a single slow launch permanently replaced the entire tab tree,
+      // Home included, for the whole session. Auth succeeding did not bring Home
+      // back, navigating did not bring Home back, and nothing threw, so no
+      // boundary, no crash log and no error screen ever reported it.
+      setAuthInitError(null);
       return;
     }
     const timer = setTimeout(() => {
@@ -104,6 +117,7 @@ export default function TabsLayout() {
           <Skeleton width="90%" height={14} />
           <Skeleton width="70%" height={14} />
         </View>
+        <Text style={styles.stageLabel}>STAGE 3 · SIGNING IN</Text>
       </View>
     );
   }
@@ -228,12 +242,22 @@ export default function TabsLayout() {
 const styles = StyleSheet.create({
   root: {
     flex: 1},
+  // Every waiting state in this app used to be #0A0A0F. Four different screens,
+  // one identical near-black — so a screenshot of a stuck app could not tell us
+  // WHICH stage was stuck. Each stage now owns a distinct colour and prints its
+  // own name, so one screenshot names the culprit.
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#0A0A0F',
+    backgroundColor: '#141007',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24},
+  stageLabel: {
+    color: '#6E5A1E',
+    fontSize: 11,
+    letterSpacing: 2,
+    marginTop: 18,
+    fontWeight: '700' as const},
   loadingText: {
     color: '#FFD700',
     fontSize: 14,

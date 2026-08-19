@@ -45,6 +45,10 @@ function read(relativePath: string): string {
   return readFileSync(join(import.meta.dir, '..', relativePath), 'utf8');
 }
 
+function exists(relativePath: string): boolean {
+  return existsSync(join(import.meta.dir, '..', relativePath));
+}
+
 describe('Defect 1 — home tab must resolve to a leaf screen, not a group anchor', () => {
   it('the nested (home) route group no longer exists', () => {
     expect(existsSync(join(TABS_DIR, '(home)'))).toBe(false);
@@ -127,12 +131,9 @@ describe('Defect 2 — the watchdog must detect a blank screen AFTER login', () 
     expect(home).not.toContain("markScreenPainted('(tabs)/home')");
   });
 
-  it('the watchdog no longer arms on the process-wide hasNeverPainted flag', () => {
-    const watchdog = read('components/BlankScreenWatchdog.tsx');
-    // Ignore the explanatory header comment; assert on the executable source only.
-    const code = watchdog.slice(watchdog.indexOf('import React'));
-    expect(code).not.toContain('hasNeverPainted');
-    expect(code).toContain('hasRouteFailedToPaint(pathname)');
+  it('the overlay that could paint the whole screen black is gone', () => {
+    expect(exists('components/BlankScreenWatchdog.tsx')).toBe(false);
+    expect(read('app/_providers.tsx')).not.toContain('BlankScreenWatchdog');
   });
 
   /** THE REGRESSION: login painted, so home could never be judged blank. */
@@ -228,17 +229,13 @@ describe('Defect 3 — the watchdog must never accuse a screen that painted', ()
     expect(login).not.toContain("markScreenPainted('login')");
   });
 
-  /** Recovery replaced /home with /home — a no-op that left the same empty view. */
-  it('recovery never navigates the accused route onto itself', () => {
-    const code = read('components/BlankScreenWatchdog.tsx');
-    expect(code).toContain('alreadyHome');
-    expect(code).toContain('ROOT_ROUTE');
-  });
-
-  /** One tap used to make Home unjudgeable for the rest of the process. */
-  it('a dismissal is cleared once the user leaves that route', () => {
-    const code = read('components/BlankScreenWatchdog.tsx');
-    expect(code).toContain('dismissedRouteRef.current = null');
+  /**
+   * Both of these defects were properties of the overlay itself. Deleting the
+   * overlay removes the entire class of failure — there is no accused route, no
+   * recovery navigation and no dismissal state left to get wrong.
+   */
+  it('no component can accuse a route or navigate a recovery bounce', () => {
+    expect(exists('components/BlankScreenWatchdog.tsx')).toBe(false);
   });
 });
 
@@ -306,17 +303,11 @@ describe('Defect 4: the root route was an unpaintable empty container', () => {
     expect(index).toContain("markScreenUnmounted('/')");
   });
 
-  it('the watchdog recovery target is a route that can actually paint', () => {
-    const watchdogCode = read('components/BlankScreenWatchdog.tsx');
-    const target = watchdogCode.match(/const ROOT_ROUTE = '([^']+)'/);
-    expect(target).not.toBeNull();
-    const route = (target as RegExpMatchArray)[1];
-
-    // Recovery lands on this route. If it is judged, it MUST be able to report
-    // a paint — otherwise recovery loops straight back into the accusation.
-    expect(isRouteInstrumented(route)).toBe(true);
+  it('the root route still paints even with the watchdog gone', () => {
+    // The overlay is deleted, but `/` must still render real content on every
+    // branch — that was a genuine defect independent of the watchdog.
+    expect(isRouteInstrumented('/')).toBe(true);
     expect(read('app/index.tsx')).toContain("markScreenPainted('/')");
-    expect(route).toBe('/');
   });
 
   it('runtime: the root route is not accused once it reports its paint', () => {

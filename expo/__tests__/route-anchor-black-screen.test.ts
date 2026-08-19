@@ -84,10 +84,24 @@ describe('post-login navigation target', () => {
   });
 });
 
-describe('blank screen watchdog wiring', () => {
-  test('watchdog is mounted inside the provider tree', () => {
+describe('blank screen watchdog removal', () => {
+  /**
+   * The watchdog mounted a full-screen OPAQUE #0A0A0F overlay at zIndex 9999
+   * directly above the whole app. It never caught a real defect, it twice
+   * accused working screens, and its recovery button navigated into a route
+   * that rendered nothing. A diagnostic that can paint the entire screen
+   * near-black is not a safety net — it is another way to get a black screen.
+   */
+  test('the watchdog is no longer mounted above the app', () => {
     const src = read('_providers.tsx');
-    expect(src).toContain('BlankScreenWatchdog');
+    expect(src).not.toContain('<BlankScreenWatchdog');
+    expect(src).not.toContain("from '@/components/BlankScreenWatchdog'");
+  });
+
+  test('no full-screen opaque overlay is mounted above the router', () => {
+    const src = read('_providers.tsx');
+    expect(src).not.toContain('absoluteFillObject');
+    expect(src).not.toContain('zIndex: 9999');
   });
 
   test('home and login report a successful paint', () => {

@@ -19,7 +19,6 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { DiagnosticErrorBoundary } from '@/components/DiagnosticErrorBoundary';
-import { BlankScreenWatchdog } from '@/components/BlankScreenWatchdog';
 import { BUILD_STAMP } from '@/constants/build-stamp';
 import { injectWebKeyboardCSS } from '@/hooks/useWebKeyboard';
 import { checkForUpdates } from '@/lib/app-update-checker';
@@ -208,9 +207,24 @@ export function AppProviders() {
                                     <EmailProvider>
                                       <ProviderBoundary name="Network">
                                         <NetworkProvider>
+                                          {/*
+                                            The blank-screen overlay diagnostic was
+                                            REMOVED from this position.
+
+                                            It mounted a full-screen opaque #0A0A0F
+                                            layer at zIndex 9999 directly above the
+                                            entire app. It never once caught a real
+                                            defect; it produced two false accusations
+                                            against working screens, and its own
+                                            recovery button navigated into a route that
+                                            rendered nothing. A diagnostic that can
+                                            paint the whole screen near-black is not a
+                                            safety net — it is another way to get a
+                                            black screen. Nothing opaque is ever
+                                            mounted above the router again.
+                                          */}
                                           <StatusBar style="light" />
                                           <AppStack />
-                                          <BlankScreenWatchdog build={BUILD_STAMP} />
                                         </NetworkProvider>
                                       </ProviderBoundary>
                                     </EmailProvider>

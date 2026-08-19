@@ -86,6 +86,7 @@ export default function IndexScreen() {
       <Text style={styles.status}>
         {destination === null ? 'Preparing your account…' : 'Opening IVX Holdings…'}
       </Text>
+      <Text style={styles.stageLabel}>STAGE 2 · ROUTING</Text>
       {destination !== null ? <Redirect href={destination as never} /> : null}
     </View>
   );
@@ -94,10 +95,18 @@ export default function IndexScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0A0F',
+    // Deliberately NOT #0A0A0F. Each waiting stage owns a distinct colour so a
+    // single screenshot of a stuck app identifies which stage is stuck.
+    backgroundColor: '#0B1220',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 18,
+  },
+  stageLabel: {
+    color: '#2E4468',
+    fontSize: 11,
+    letterSpacing: 2,
+    fontWeight: '700' as const,
   },
   brand: {
     color: '#FFD700',

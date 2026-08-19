@@ -135,6 +135,7 @@ function VisibleLoadingScreen({ elapsedMs }: { elapsedMs: number }) {
       <Text style={loadingStyles.subtitle}>Loading secure session…</Text>
       <Text style={loadingStyles.elapsed}>{`Elapsed: ${(elapsedMs / 1000).toFixed(1)}s`}</Text>
       <Text style={loadingStyles.elapsed}>{`Build ${BUILD_STAMP}`}</Text>
+      <Text style={loadingStyles.stage}>STAGE 1 - STARTING</Text>
     </View>
   );
 }
@@ -451,6 +452,13 @@ const loadingStyles = StyleSheet.create({
     color: '#555555',
     fontSize: 11,
     marginTop: 8,
+  },
+  stage: {
+    color: '#3A3A3A',
+    fontSize: 11,
+    letterSpacing: 2,
+    marginTop: 18,
+    fontWeight: '700' as const,
   },
 });
 
