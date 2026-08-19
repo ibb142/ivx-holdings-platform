@@ -616,6 +616,128 @@ async function fetchWithOwnerRegistrationTimeout(url: string, init: RequestInit)
   }
 }
 
+/** Server login attempt outcome, classified by REAL HTTP status.
+ *
+ *  Before this existed, every non-success response from /api/members/login was
+ *  reported to the user as `service_unavailable` with a hardcoded status 504 —
+ *  including a plain HTTP 401 wrong password. That single misclassification is
+ *  why the owner sign-in defect stayed unexplained across many builds: the
+ *  screen said "temporarily unavailable" for a wrong password, for a rate
+ *  limit, for an unconfirmed email, and for a genuine outage. The message
+ *  carried no diagnostic signal at all. */
+type ServerLoginOutcome =
+  | {
+      kind: 'success';
+      userId: string;
+      email: string;
+      accessToken: string;
+      refreshToken: string;
+      expiresAt: number;
+    }
+  | {
+      kind: 'failure';
+      message: string;
+      failureReason: LoginFailureReason;
+      status: number;
+      errorCode: string;
+      requiresVerification: boolean;
+      retryable: boolean;
+    };
+
+/** Map a real HTTP status from the login endpoint to an honest failure reason. */
+export function classifyServerLoginStatus(
+  status: number,
+  message: string,
+): { failureReason: LoginFailureReason; retryable: boolean } {
+  if (status === 401) return { failureReason: 'invalid_credentials', retryable: false };
+  if (status === 403) return { failureReason: 'verification_required', retryable: false };
+  if (status === 429) return { failureReason: 'rate_limited', retryable: false };
+  if (status === 400) {
+    const lower = message.toLowerCase();
+    if (lower.includes('password') || lower.includes('email')) {
+      return { failureReason: 'invalid_credentials', retryable: false };
+    }
+    return { failureReason: 'unknown', retryable: false };
+  }
+  // 0 = transport failure (abort/DNS/offline), 5xx = server side. Both retryable.
+  if (status === 0 || status >= 500) return { failureReason: 'service_unavailable', retryable: true };
+  return { failureReason: 'unknown', retryable: false };
+}
+
+const LOGIN_RETRY_BACKOFF_MS = 1_200;
+
+/** POST the credentials once and classify the result honestly. */
+async function postMemberLoginOnce(
+  endpoint: string,
+  email: string,
+  password: string,
+): Promise<ServerLoginOutcome> {
+  let status = 0;
+  try {
+    const response = await fetchWithOwnerRegistrationTimeout(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    status = response.status;
+    const text = await response.text();
+    let parsed: Record<string, unknown> = {};
+    try { parsed = text ? (JSON.parse(text) as Record<string, unknown>) : {}; } catch {}
+
+    if (response.ok && parsed.success === true) {
+      return {
+        kind: 'success',
+        userId: typeof parsed.userId === 'string' ? parsed.userId : '',
+        email: typeof parsed.email === 'string' ? parsed.email : email,
+        accessToken: typeof parsed.accessToken === 'string' ? parsed.accessToken : '',
+        refreshToken: typeof parsed.refreshToken === 'string' ? parsed.refreshToken : '',
+        expiresAt: typeof parsed.expiresAt === 'number' ? parsed.expiresAt : 0,
+      };
+    }
+
+    const serverMessage = typeof parsed.message === 'string' && parsed.message.length > 0
+      ? parsed.message
+      : `Server login failed (HTTP ${status}).`;
+    const classification = classifyServerLoginStatus(status, serverMessage);
+    return {
+      kind: 'failure',
+      message: serverMessage,
+      failureReason: classification.failureReason,
+      status,
+      errorCode: typeof parsed.errorCode === 'string' ? parsed.errorCode : `http_${status}`,
+      requiresVerification: parsed.requiresVerification === true,
+      retryable: classification.retryable,
+    };
+  } catch (transportError) {
+    const message = transportError instanceof Error ? transportError.message : 'Login endpoint failed.';
+    return {
+      kind: 'failure',
+      message,
+      failureReason: 'service_unavailable',
+      status: 0,
+      errorCode: 'transport_error',
+      requiresVerification: false,
+      retryable: true,
+    };
+  }
+}
+
+/** POST the credentials, retrying ONCE on a retryable (5xx / transport) failure.
+ *  A single transient gateway timeout used to end the whole sign-in attempt. */
+async function postMemberLoginWithRetry(
+  endpoint: string,
+  email: string,
+  password: string,
+): Promise<ServerLoginOutcome> {
+  const first = await postMemberLoginOnce(endpoint, email, password);
+  if (first.kind === 'success' || !first.retryable) {
+    return first;
+  }
+  console.log('[Auth] Login retryable failure, retrying once:', first.errorCode, first.status);
+  await new Promise<void>((resolve) => setTimeout(resolve, LOGIN_RETRY_BACKOFF_MS));
+  return await postMemberLoginOnce(endpoint, email, password);
+}
+
 function isOwnerRegistrationLookupSignIn(status: OwnerEmailLookupStatus | null | undefined): boolean {
   return status?.authUserExists === true || status?.action === 'sign_in';
 }
@@ -1849,49 +1971,58 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         requiresVerification?: boolean;
       } | null = null;
 
+      let lastFailure: Extract<ServerLoginOutcome, { kind: 'failure' }> | null = null;
+
       for (const baseUrl of apiBaseUrls) {
         const endpoint = `${baseUrl}/api/members/login`;
-        try {
-          const response = await fetchWithOwnerRegistrationTimeout(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({ email: normalizedEmail, password }),
-          });
-          const text = await response.text();
-          let parsed: Record<string, unknown> = {};
-          try { parsed = text ? (JSON.parse(text) as Record<string, unknown>) : {}; } catch {}
-          if (response.ok && parsed.success === true) {
-            serverResult = {
-              success: true,
-              userId: typeof parsed.userId === 'string' ? parsed.userId : '',
-              email: typeof parsed.email === 'string' ? parsed.email : normalizedEmail,
-              accessToken: typeof parsed.accessToken === 'string' ? parsed.accessToken : '',
-              refreshToken: typeof parsed.refreshToken === 'string' ? parsed.refreshToken : '',
-              expiresAt: typeof parsed.expiresAt === 'number' ? parsed.expiresAt : 0,
-            };
-            lastError = null;
-            break;
-          }
-          lastError = typeof parsed.message === 'string' ? parsed.message : `Server login failed (HTTP ${response.status}).`;
-          if (parsed.requiresVerification === true) {
-            return { success: false, message: lastError, requiresVerification: true, failureReason: 'verification_required' };
-          }
-        } catch (endpointError) {
-          lastError = endpointError instanceof Error ? endpointError.message : 'Login endpoint failed.';
+        const outcome = await postMemberLoginWithRetry(endpoint, normalizedEmail, password);
+
+        if (outcome.kind === 'success') {
+          serverResult = {
+            success: true,
+            userId: outcome.userId,
+            email: outcome.email,
+            accessToken: outcome.accessToken,
+            refreshToken: outcome.refreshToken,
+            expiresAt: outcome.expiresAt,
+          };
+          lastError = null;
+          lastFailure = null;
+          break;
+        }
+
+        lastFailure = outcome;
+        lastError = outcome.message;
+
+        if (outcome.requiresVerification) {
+          return { success: false, message: outcome.message, requiresVerification: true, failureReason: 'verification_required' };
+        }
+
+        // A definitive answer from the server (wrong password, locked, rate
+        // limited) must NOT be retried against the next base URL — the answer
+        // will not change, and retrying burns the rate-limit budget.
+        if (!outcome.retryable) {
+          break;
         }
       }
 
       if (!serverResult?.success || !serverResult.accessToken || !serverResult.refreshToken) {
-        const displayMessage = lastError || 'Server login did not return a valid session. Please try again.';
-        trace.checkpoint('FAILED', { stage: 'auth', errorCode: 'server_login_failed', errorMessage: displayMessage });
+        const displayMessage = lastFailure?.message
+          || lastError
+          || 'Server login did not return a valid session. Please try again.';
+        const failureReason: LoginFailureReason = lastFailure?.failureReason ?? 'service_unavailable';
+        const errorCode = lastFailure?.errorCode ?? 'server_login_failed';
+        const httpStatus = lastFailure?.status ?? 0;
+        trace.checkpoint('FAILED', { stage: 'auth', errorCode, errorMessage: displayMessage });
+        console.log('[Auth] Login failed:', { failureReason, errorCode, httpStatus });
         return {
           success: false,
           message: displayMessage,
-          failureReason: 'service_unavailable',
+          failureReason,
           supabaseErrorMessage: displayMessage,
-          supabaseErrorCode: 'server_login_failed',
+          supabaseErrorCode: errorCode,
           supabaseErrorName: 'AuthError',
-          supabaseErrorStatus: 504,
+          supabaseErrorStatus: httpStatus,
         };
       }
 

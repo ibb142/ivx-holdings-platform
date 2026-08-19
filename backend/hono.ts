@@ -1498,10 +1498,32 @@ const app = new Hono();
  *  in time, returns empty JSON so the frontend gets a fast 200 instead of
  *  a 15+ second hang when Supabase is unreachable. */
 const SB_HARD_TIMEOUT_MS = 6_000;
-async function withTimeout<T extends Response>(handler: () => Promise<T>, fallback: () => Response): Promise<Response> {
+
+/** Deadline for POST /api/members/login.
+ *
+ *  INVARIANT: this MUST stay strictly greater than the login handler's own
+ *  internal budget (MEMBER_LOGIN_INNER_BUDGET_MS in
+ *  services/ivx-member-database.ts, currently 8s for the Supabase sign-in).
+ *
+ *  Violating that invariant caused the long-running owner sign-in outage:
+ *  this wrapper aborted at 6s while the inner Supabase sign-in was allowed
+ *  10s, so any sign-in that needed 6-10s could NEVER succeed. The owner
+ *  always saw "Login service temporarily unavailable" even with a correct
+ *  password, and no error was logged because the inner call was still
+ *  running happily when the outer response was already sent.
+ *
+ *  `__tests__/owner-login-timeout-invariant.test.ts` fails the build if the
+ *  outer deadline is ever set below the inner budget again. */
+const LOGIN_HARD_TIMEOUT_MS = 20_000;
+
+async function withTimeout<T extends Response>(
+  handler: () => Promise<T>,
+  fallback: () => Response,
+  timeoutMs: number = SB_HARD_TIMEOUT_MS,
+): Promise<Response> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<Response>((resolve) => {
-    timer = setTimeout(() => resolve(fallback()), SB_HARD_TIMEOUT_MS);
+    timer = setTimeout(() => resolve(fallback()), timeoutMs);
   });
   try {
     return await Promise.race([handler(), timeoutPromise]);
@@ -5563,7 +5585,19 @@ app.post('/api/members/verify-phone', async (c) => handleVerifyPhone(c.req.raw))
 app.get('/api/members/me', async (c) => handleGetMemberProfile(c.req.raw));
 app.post('/api/members/start-kyc', async (c) => handleStartKYC(c.req.raw));
 app.get('/api/members/verification-status', async (c) => handleVerificationStatus(c.req.raw));
-app.post('/api/members/login', async (c) => withRateLimit(c.req.raw, 'member-login', 5, 0.5, () => withTimeout(() => handleMemberLogin(c.req.raw), () => Response.json({ success: false, message: 'Login service temporarily unavailable. Please try again.', deploymentMarker: DEPLOYMENT_MARKER }, { status: 503 }))) as Promise<Response>);
+// Login uses LOGIN_HARD_TIMEOUT_MS (20s), NOT the generic 6s deadline. The 6s
+// deadline was shorter than the handler's own Supabase budget, which made a
+// correct owner password fail as "temporarily unavailable". See the constant.
+app.post('/api/members/login', async (c) => withRateLimit(c.req.raw, 'member-login', 5, 0.5, () => withTimeout(
+  () => handleMemberLogin(c.req.raw),
+  () => Response.json({
+    success: false,
+    message: 'Login service temporarily unavailable. Please try again.',
+    errorCode: 'login_gateway_timeout',
+    deploymentMarker: DEPLOYMENT_MARKER,
+  }, { status: 503 }),
+  LOGIN_HARD_TIMEOUT_MS,
+)) as Promise<Response>);
 app.post('/api/ivx/owner/authorize', async (c) => handleOwnerAuthorize(c.req.raw));
 app.post('/api/members/forgot-password', async (c) => withRateLimit(c.req.raw, 'member-forgot', 3, 0.1, () => handleMemberForgotPassword(c.req.raw)) as Promise<Response>);
 app.post('/api/members/reset-password', async (c) => handleMemberResetPassword(c.req.raw));
