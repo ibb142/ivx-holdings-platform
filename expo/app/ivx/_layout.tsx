@@ -43,6 +43,7 @@ const IVX_GITHUB_SYNC_OPTIONS = { title: 'Sync to GitHub' } as const;
 const IVX_CAMPAIGN_OPTIONS = { title: 'Campaign Report' } as const;
 const IVX_AUTONOMOUS_OPS_OPTIONS = { title: 'Autonomous Operations' } as const;
 const IVX_AGENT_GPS_OPTIONS = { title: 'IA GPS • 112' } as const;
+const IVX_LANDING_10OF10_OPTIONS = { title: 'Landing 10/10 • 112 IA' } as const;
 const IVX_LANDING_WAR_ROOM_MAP_OPTIONS = { title: 'Landing War Room Map' } as const;
 const IVX_AGENT_COMMAND_CENTER_OPTIONS = { title: 'AI Engineering Command Center' } as const;
 
@@ -107,6 +108,7 @@ export default function IVXOwnerLayout() {
       <Stack.Screen name="campaign" options={IVX_CAMPAIGN_OPTIONS} />
       <Stack.Screen name="autonomous-ops" options={IVX_AUTONOMOUS_OPS_OPTIONS} />
       <Stack.Screen name="agent-gps" options={IVX_AGENT_GPS_OPTIONS} />
+      <Stack.Screen name="landing-10of10" options={IVX_LANDING_10OF10_OPTIONS} />
       <Stack.Screen name="landing-war-room-map" options={IVX_LANDING_WAR_ROOM_MAP_OPTIONS} />
       <Stack.Screen name="agent-command-center" options={IVX_AGENT_COMMAND_CENTER_OPTIONS} />
     </Stack>
