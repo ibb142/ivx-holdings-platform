@@ -1,6 +1,12 @@
 name: IVX Owner Auth Fastpath Fix
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.ivx-owner-auth-fix-pr-trigger'
+      - 'scripts/ivx-owner-auth-fastpath-fix.mjs'
+      - '.github/workflows/ivx-owner-auth-fastpath-fix.yml'
   push:
     branches: [main]
     paths:
@@ -12,7 +18,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: ivx-owner-auth-fastpath-fix
+  group: ivx-owner-auth-fastpath-fix-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -22,6 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
           fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
@@ -36,6 +43,7 @@ jobs:
           set -euo pipefail
           grep -q 'IVX_OWNER_POST_LOGIN_FAST_PATH_V1' expo/lib/auth-context.tsx
           grep -q 'IVX_OWNER_REPAIR_BACKGROUND_V1' expo/lib/auth-context.tsx
+          grep -q 'IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1' expo/lib/auth-context.tsx
           grep -q "if (isOwnerAdminEmail(sessionEmail))" expo/lib/auth-context.tsx
           grep -q "return { role: 'owner', source: 'fallback' }" expo/lib/auth-context.tsx
           if grep -q 'await repairOwnerRegistrationAfterLogin(session).catch' expo/lib/auth-context.tsx; then
@@ -69,5 +77,9 @@ jobs:
             exit 0
           fi
           git commit -m 'fix(auth): release owner UI after valid Supabase password session [skip ci]'
-          git pull --rebase origin main
-          git push origin HEAD:main
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          else
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
