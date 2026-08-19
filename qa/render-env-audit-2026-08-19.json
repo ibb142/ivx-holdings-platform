@@ -66,5 +66,14 @@
     "Check Render Dashboard Audit Log for the named actor"
   ],
   "verification": "post-restore deploy health, AI health, auth negative/positive tests, and rule-10 recertification recorded in ivx_agent_certificates for the final SHA",
+  "addendumCaughtInTheAct": {
+    "window": "2026-08-19T01:10-01:35Z",
+    "observed": "env vars 32 -> 23 during verification; the 10 dropped included ALL Supabase database credentials",
+    "actor": "ivx-recover-render-ai-from-history.yml (dispatched to fix the dead AI key; succeeded at that, truncated everything else)",
+    "rootCause": "GET /env-vars without limit param returns only Render's default first page (20 items); merge + replace-all PUT then wipes every variable beyond page 1",
+    "proof": "23 = 20 (first page: the 20 most recently updated keys) + 3 workflow additions; dropped set exactly matches page-2 keys",
+    "remediation": "10 vars re-restored (33 total), service redeployed; ?limit=100 fix shipped to ivx-render-env-merge.ts, ivx-recover-render-ai-from-history.yml, ivx-sync-ai-render-from-owner-store.yml, expo/scripts/update-render-env.mjs",
+    "finalVerdict": "No human deleted the credentials. The project's own credential-sync automations truncated the env set whenever it exceeded 20 variables. The 5-variable state the owner discovered was the end result of repeated truncating rewrites."
+  },
   "secretValuesIncluded": false
 }
