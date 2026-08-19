@@ -9,17 +9,27 @@
  * This exists because a "renders nothing" failure throws no error: boundaries,
  * the global fatal shield and the crash log are all silent by design.
  *
- * DEFECT THIS FIXES — the watchdog could not fire after login.
+ * DEFECT 1 THIS FIXES — the watchdog accused a screen that had painted.
  *
- * The previous version armed on `hasNeverPainted()`, a single process-wide flag.
- * The login screen reports a paint, so that flag was already false by the time
- * the owner signed in. Every navigation after login was therefore invisible to
- * this watchdog: a blank Home screen could persist forever with no diagnostic and
- * no recovery button, which is exactly what was recorded on device — 15 seconds
- * of black with no overlay.
+ * v1.10.23 asked `paintedAt < enteredAt`. Expo Router keeps tab screens mounted,
+ * so Home reports its paint once and never again, while this component re-armed
+ * `enteredAt` on every pathname change. Any return to Home therefore compared an
+ * old paint against a new entry stamp and declared a fully rendered screen blank.
+ * The device recording caught the contradiction in the overlay's own text:
+ * `Route: /home` above `Last painted: /home`.
  *
- * It now re-arms on every route change and asks whether THIS route painted since
- * it was entered.
+ * It now asks whether the route holds a LIVE paint record — a mounted screen that
+ * rendered content — which cannot be defeated by timestamp ordering.
+ *
+ * DEFECT 2 THIS FIXES — recovery landed on the same empty container and then
+ * permanently blinded the watchdog.
+ *
+ * `goHome` replaced the current route with Home while the user was ALREADY on
+ * Home: a no-op navigation that left the identical empty view on screen. It also
+ * pinned `dismissedRouteRef` to that path forever, so Home could never be judged
+ * again for the rest of the process. Recovery now bounces through the root route
+ * so the tab tree genuinely re-resolves, and a dismissal only suppresses the
+ * current stay on that route.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
@@ -30,6 +40,9 @@ import {
   isRouteInstrumented,
 } from '@/lib/screen-paint-watchdog';
 
+/** Root route, used to force a genuine re-resolve of the tab tree. */
+const ROOT_ROUTE = '/';
+
 const BLANK_SCREEN_TIMEOUT_MS = 8000;
 
 export function BlankScreenWatchdog({ build }: { build: string }) {
@@ -39,7 +52,12 @@ export function BlankScreenWatchdog({ build }: { build: string }) {
   const dismissedRouteRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // A route the user already dismissed must not re-accuse itself in a loop.
+    // A dismissal suppresses only the current stay on that route. Leaving it
+    // re-arms the watchdog — v1.10.23 pinned this forever, so one tap on the
+    // recovery button made Home permanently unjudgeable.
+    if (dismissedRouteRef.current !== null && dismissedRouteRef.current !== pathname) {
+      dismissedRouteRef.current = null;
+    }
     if (dismissedRouteRef.current === pathname) return;
     // Only judge routes that actually report paint. Accusing an uninstrumented
     // screen of being blank would cover working UI with an error overlay.
@@ -48,11 +66,12 @@ export function BlankScreenWatchdog({ build }: { build: string }) {
       return;
     }
 
-    const enteredAt = Date.now();
     setIsBlank(false);
 
     const timer = setTimeout(() => {
-      if (hasRouteFailedToPaint(pathname, enteredAt)) {
+      // Liveness, not freshness: a mounted screen that painted is never accused,
+      // however long ago it painted.
+      if (hasRouteFailedToPaint(pathname)) {
         console.warn('[IVX] Blank screen watchdog fired — route painted nothing', {
           pathname,
           lastPainted: getLastPaintedScreen(),
@@ -67,7 +86,12 @@ export function BlankScreenWatchdog({ build }: { build: string }) {
     dismissedRouteRef.current = pathname;
     setIsBlank(false);
     try {
-      router.replace('/(tabs)/home');
+      // Replacing the accused route with itself is a no-op that leaves the same
+      // empty container on screen — recorded on device as 14 seconds of #0A0A0F
+      // after tapping this button. Bounce through the root so the tab tree is
+      // genuinely re-resolved and the screen actually remounts.
+      const alreadyHome = pathname === '/home' || pathname === '/(tabs)/home';
+      router.replace(alreadyHome ? ROOT_ROUTE : '/(tabs)/home');
     } catch (err) {
       console.warn('[IVX] Watchdog home recovery failed', err);
     }

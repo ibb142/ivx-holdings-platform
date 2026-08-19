@@ -43,7 +43,7 @@ import { isOpenAccessModeEnabled } from '@/lib/open-access';
 import QuickBuyModal from '@/components/QuickBuyModal';
 import InvestorFirstFeed from '@/components/InvestorFirstFeed';
 import type { JVAgreement } from '@/types/jv';
-import { markScreenPainted } from '@/lib/screen-paint-watchdog';
+import { markScreenPainted, markScreenUnmounted } from '@/lib/screen-paint-watchdog';
 
 function getPrimaryDealPhoto(deal: JVAgreement): string | undefined {
   const primaryPhoto = resolvePrimaryDealPhoto({
@@ -327,8 +327,14 @@ export default function HomeScreen() {
   // groups like `(tabs)` carry no path segment, so `usePathname()` inside the
   // watchdog reports '/home'. Reporting '(tabs)/home' here would never match the
   // route being judged and the watchdog would accuse a perfectly good screen.
+  //
+  // The cleanup is what makes the record LIVENESS rather than history. Expo
+  // Router keeps tab screens mounted, so this effect fires once and never again;
+  // without deregistering on unmount the watchdog had to guess from timestamps,
+  // and it guessed wrong on a fully rendered Home.
   useEffect(() => {
     markScreenPainted('/home');
+    return () => markScreenUnmounted('/home');
   }, []);
 
   const isScreenFocused = useScreenFocusState(true);

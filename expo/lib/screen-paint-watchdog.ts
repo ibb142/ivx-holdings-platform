@@ -7,37 +7,55 @@
  * root view's dark background.
  *
  * Errors are loud and already handled. "Rendered nothing" is silent, and that is
- * the failure mode this module makes impossible to ship undetected: screens
- * report that they painted, and if nothing reports within a bounded window the
- * app shows a diagnostic with real recovery actions instead of a black frame.
+ * the failure mode this module makes impossible to ship undetected.
  *
- * IMPORTANT — why paint is tracked PER ROUTE.
+ * IMPORTANT — paint is LIVENESS, not a timestamp.
  *
- * The first version of this module exposed only `hasNeverPainted()`, a single
- * global flag. The login screen calls `markScreenPainted('login')`, so that flag
- * flipped false during sign-in and stayed false for the rest of the process
- * lifetime. Every navigation AFTER login was therefore structurally invisible to
- * the watchdog: the owner could sit on a blank Home screen indefinitely and no
- * recovery UI could ever appear, because "something painted once" was being used
- * to mean "the current screen is fine".
+ * v1.10.23 tracked paint per route as a timestamp and asked
+ * `paintedAt < enteredAt` — "did this route paint since we navigated to it".
+ * That question is unanswerable in a tab navigator, and it produced a
+ * DETERMINISTIC FALSE POSITIVE that covered a working Home screen:
  *
- * Paint is now recorded per route path and compared against the moment that
- * route was entered, so a blank screen is detected on EVERY navigation, not only
- * on cold launch.
+ *   1. Expo Router keeps tab screens MOUNTED. `app/(tabs)/home.tsx` reports its
+ *      paint from a `useEffect(..., [])`, so it fires exactly ONCE per mount.
+ *   2. The watchdog re-armed `enteredAt = Date.now()` on EVERY pathname change.
+ *   3. Returning to an already-mounted Home therefore compared an old paint
+ *      against a new entry stamp — `paintedAt < enteredAt` — and concluded the
+ *      screen was blank while it was fully rendered and visible.
+ *
+ * The device recording proved it: the overlay printed `Route: /home` and
+ * `Last painted: /home` on the same screen — the app accusing a route it
+ * simultaneously reported as the last thing that painted.
+ *
+ * React effect ordering makes this worse: child effects run BEFORE parent
+ * effects, so a screen's paint stamp is ALWAYS <= the watchdog's entry stamp.
+ * The comparison could only ever produce false accusations.
+ *
+ * Paint is now a liveness record: a screen registers when it paints and
+ * deregisters when it unmounts. A route is judged blank only when it holds NO
+ * live paint record at all. A mounted, painted screen is never accused, and a
+ * re-entry that renders nothing has no record (the previous visit cleared it on
+ * unmount) so it is still caught.
  */
 
 let lastPaintedScreen: string | null = null;
 let lastPaintedAt: number | null = null;
 
-/** Most recent paint timestamp for each route that has reported one. */
+/**
+ * Live paint records, keyed by normalised route.
+ *
+ * An entry exists for exactly as long as that screen is mounted. Presence means
+ * "this route currently has a screen that rendered content".
+ */
 const paintedRoutes = new Map<string, number>();
 
 /**
  * Routes that are instrumented with `markScreenPainted`.
  *
  * The watchdog only arms for these paths. A screen that never reports a paint
- * must never be accused of being blank — a false "Screen failed to load" overlay
- * on a working screen would be a worse defect than the one being guarded against.
+ * must never be accused of being blank — a false "Screen failed to load"
+ * overlay on a working screen is a worse defect than the one being guarded
+ * against, and is exactly what shipped in v1.10.23.
  */
 const INSTRUMENTED_ROUTES = new Set<string>(['/', '/home', '/login']);
 
@@ -63,6 +81,21 @@ export function markScreenPainted(screen: string): void {
   paintedRoutes.set(normalizeRoute(screen), now);
 }
 
+/**
+ * Called from the screen's effect cleanup when it unmounts.
+ *
+ * This is what keeps liveness honest: without it a route that painted once
+ * would look alive forever, and a genuinely blank re-entry would be masked.
+ */
+export function markScreenUnmounted(screen: string): void {
+  paintedRoutes.delete(normalizeRoute(screen));
+}
+
+/** True when this route currently has a mounted screen that painted content. */
+export function isRoutePainted(route: string): boolean {
+  return paintedRoutes.has(normalizeRoute(route));
+}
+
 /** Name of the most recent screen that reported a successful paint. */
 export function getLastPaintedScreen(): string | null {
   return lastPaintedScreen;
@@ -71,11 +104,6 @@ export function getLastPaintedScreen(): string | null {
 /** Timestamp (ms) of the most recent successful paint, or null if none. */
 export function getLastPaintedAt(): number | null {
   return lastPaintedAt;
-}
-
-/** True when no screen has ever reported painting content. */
-export function hasNeverPainted(): boolean {
-  return lastPaintedAt === null;
 }
 
 /** Milliseconds since the last successful paint, or null if none. */
@@ -89,23 +117,22 @@ export function isRouteInstrumented(route: string): boolean {
   return INSTRUMENTED_ROUTES.has(normalizeRoute(route));
 }
 
-/** Timestamp of the last paint reported by a specific route, or null. */
+/** Timestamp of the live paint held by a route, or null when it holds none. */
 export function getRoutePaintedAt(route: string): number | null {
   return paintedRoutes.get(normalizeRoute(route)) ?? null;
 }
 
 /**
- * True when an instrumented route was entered and never reported a paint.
+ * True when an instrumented route is showing no painted screen.
  *
- * This is the check that makes a blank screen detectable after login, not just
- * on cold launch: it asks "did THIS route paint since we navigated to it",
- * never "has anything ever painted".
+ * Deliberately NOT time-based. A live paint record means a screen is mounted
+ * and has rendered content, which is conclusive regardless of when it happened
+ * — comparing paint age against entry age is what falsely accused a working
+ * Home screen in v1.10.23.
  */
-export function hasRouteFailedToPaint(route: string, enteredAt: number): boolean {
+export function hasRouteFailedToPaint(route: string): boolean {
   if (!isRouteInstrumented(route)) return false;
-  const paintedAt = getRoutePaintedAt(route);
-  if (paintedAt === null) return true;
-  return paintedAt < enteredAt;
+  return !isRoutePainted(route);
 }
 
 /** Test-only reset. */

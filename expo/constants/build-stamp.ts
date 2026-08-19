@@ -5,4 +5,4 @@
  * and the blank-screen watchdog so any support screenshot immediately proves
  * which build is installed.
  */
-export const BUILD_STAMP = '1.10.23 (121)';
+export const BUILD_STAMP = '1.10.24 (122)';

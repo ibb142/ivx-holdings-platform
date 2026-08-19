@@ -10,12 +10,19 @@
  *     and when that resolution produced nothing there was no screen to render
  *     and no error to throw: a silent dark frame.
  *
- *  2. The blank-screen watchdog armed on `hasNeverPainted()`, a process-wide
- *     flag. The login screen reports a paint, so the flag was already false by
- *     the time the owner signed in — every post-login navigation was invisible
- *     to the watchdog.
+ *  2. The blank-screen watchdog armed on a process-wide "has anything ever
+ *     painted" flag. The login screen reports a paint, so the flag was already
+ *     false by the time the owner signed in — every post-login navigation was
+ *     invisible to the watchdog.
  *
- * These tests fail the build if either regression returns.
+ * v1.10.24 adds the inverse defect, recorded on device: the watchdog FIRED on a
+ * fully rendered Home. It compared a paint timestamp against an entry timestamp,
+ * but Expo Router keeps tab screens MOUNTED, so Home reports its paint once and
+ * never again while the watchdog re-armed its entry stamp on every pathname
+ * change. The overlay printed the contradiction itself — `Route: /home` above
+ * `Last painted: /home`. Paint is now liveness (mounted + painted), not freshness.
+ *
+ * These tests fail the build if any of these regressions return.
  */
 import { describe, expect, it, beforeEach } from 'bun:test';
 import { existsSync, readFileSync, readdirSync } from 'fs';
@@ -23,7 +30,9 @@ import { join } from 'path';
 
 import {
   markScreenPainted,
+  markScreenUnmounted,
   hasRouteFailedToPaint,
+  isRoutePainted,
   isRouteInstrumented,
   getRoutePaintedAt,
   resetPaintTracking,
@@ -123,31 +132,29 @@ describe('Defect 2 — the watchdog must detect a blank screen AFTER login', () 
     // Ignore the explanatory header comment; assert on the executable source only.
     const code = watchdog.slice(watchdog.indexOf('import React'));
     expect(code).not.toContain('hasNeverPainted');
-    expect(code).toContain('hasRouteFailedToPaint(pathname, enteredAt)');
+    expect(code).toContain('hasRouteFailedToPaint(pathname)');
   });
 
   /** THE REGRESSION: login painted, so home could never be judged blank. */
   it('a blank home is detected even though login already painted', () => {
     markScreenPainted('/login');
-    const enteredHomeAt = Date.now();
-    expect(hasRouteFailedToPaint('/home', enteredHomeAt)).toBe(true);
+    expect(hasRouteFailedToPaint('/home')).toBe(true);
   });
 
-  it('a home that paints after entry is not flagged', () => {
-    const enteredHomeAt = Date.now() - 10;
+  it('a home that paints is not flagged', () => {
     markScreenPainted('/home');
-    expect(hasRouteFailedToPaint('/home', enteredHomeAt)).toBe(false);
+    expect(hasRouteFailedToPaint('/home')).toBe(false);
   });
 
-  it('a stale paint from a PREVIOUS visit does not mask a blank re-entry', () => {
+  it('a blank re-entry is caught because the previous visit deregistered', () => {
     markScreenPainted('/home');
-    const reEnteredAt = Date.now() + 1000;
-    expect(hasRouteFailedToPaint('/home', reEnteredAt)).toBe(true);
+    markScreenUnmounted('/home');
+    expect(hasRouteFailedToPaint('/home')).toBe(true);
   });
 
   it('uninstrumented routes are never accused of being blank', () => {
     expect(isRouteInstrumented('/market')).toBe(false);
-    expect(hasRouteFailedToPaint('/market', Date.now())).toBe(false);
+    expect(hasRouteFailedToPaint('/market')).toBe(false);
   });
 
   it('home and login are instrumented', () => {
@@ -165,5 +172,72 @@ describe('Defect 2 — the watchdog must detect a blank screen AFTER login', () 
     markScreenPainted('/login');
     expect(getRoutePaintedAt('/login')).not.toBeNull();
     expect(getRoutePaintedAt('/home')).toBeNull();
+  });
+});
+
+/**
+ * v1.10.24 — the watchdog fired on a WORKING Home screen.
+ *
+ * Recorded on device: the overlay rendered `Route: /home` directly above
+ * `Last painted: /home`, covering a Home screen whose content was visible in the
+ * frames immediately before and after. A false "Screen failed to load" over
+ * working UI is a worse defect than the blank screen it guards against.
+ */
+describe('Defect 3 — the watchdog must never accuse a screen that painted', () => {
+  beforeEach(() => {
+    resetPaintTracking();
+  });
+
+  /**
+   * THE REGRESSION, exactly as recorded.
+   *
+   * Expo Router keeps tab screens mounted, so Home's `useEffect(..., [])` fires
+   * once. Time then passes — the user reads the screen, switches tabs, returns.
+   * The old check compared that one old paint against a fresh entry stamp and
+   * declared the visible screen blank.
+   */
+  it('a mounted home that painted long ago is never flagged, however long ago', () => {
+    markScreenPainted('/home');
+    expect(hasRouteFailedToPaint('/home')).toBe(false);
+    expect(isRoutePainted('/home')).toBe(true);
+  });
+
+  /** The self-contradiction the overlay printed must be unrepresentable. */
+  it('a route reported as last-painted can never simultaneously be accused', () => {
+    markScreenPainted('/home');
+    const accused = hasRouteFailedToPaint('/home');
+    const isLastPainted = isRoutePainted('/home');
+    expect(accused && isLastPainted).toBe(false);
+  });
+
+  it('the blank check does not depend on any entry timestamp', () => {
+    const src = read('lib/screen-paint-watchdog.ts');
+    const code = src.slice(src.indexOf('let lastPaintedScreen'));
+    expect(code).toContain('export function hasRouteFailedToPaint(route: string)');
+    expect(code).not.toContain('enteredAt');
+  });
+
+  it('screens deregister their paint on unmount so liveness stays honest', () => {
+    expect(read('app/(tabs)/home.tsx')).toContain("markScreenUnmounted('/home')");
+    expect(read('app/login.tsx')).toContain("markScreenUnmounted('/login')");
+  });
+
+  it('login reports the router pathname so its route key matches', () => {
+    const login = read('app/login.tsx');
+    expect(login).toContain("markScreenPainted('/login')");
+    expect(login).not.toContain("markScreenPainted('login')");
+  });
+
+  /** Recovery replaced /home with /home — a no-op that left the same empty view. */
+  it('recovery never navigates the accused route onto itself', () => {
+    const code = read('components/BlankScreenWatchdog.tsx');
+    expect(code).toContain('alreadyHome');
+    expect(code).toContain('ROOT_ROUTE');
+  });
+
+  /** One tap used to make Home unjudgeable for the rest of the process. */
+  it('a dismissal is cleared once the user leaves that route', () => {
+    const code = read('components/BlankScreenWatchdog.tsx');
+    expect(code).toContain('dismissedRouteRef.current = null');
   });
 });
