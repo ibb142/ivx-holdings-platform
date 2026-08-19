@@ -18,8 +18,75 @@ concurrency:
 jobs:
   patch-and-qa:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch
+          fetch-depth: 0
+
+      - name: Patch owner authorization on all mutating agent endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('backend/api/ivx-agent-api.ts')
+          s=p.read_text()
+          marker="export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-18-real-execution';"
+          helper="""export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-19-owner-auth-guard';\n\nfunction ownerAuthorized(c: any, body: Record<string, unknown> = {}): boolean {\n  const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';\n  const envSecret = (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim() || (process.env.IVX_OWNER_TOKEN ?? '').trim();\n  return Boolean(envSecret) && provided === envSecret;\n}\n\nfunction requireOwner(c: any, body: Record<string, unknown> = {}) {\n  return ownerAuthorized(c, body) ? null : c.json({ ok: false, error: 'Owner authorization required.' }, 401);\n}\n"""
+          if marker in s:
+            s=s.replace(marker, helper)
+          s=s.replace("const authorized = envSecret ? provided === envSecret : provided.startsWith('owner-');", "const authorized = Boolean(envSecret) && provided === envSecret;")
+          targets=[
+            "app.post('/api/ivx/agents/:agentId/pause', (c) => {",
+            "app.post('/api/ivx/agents/:agentId/resume', (c) => {",
+            "app.post('/api/ivx/agents/:agentId/disable', (c) => {",
+            "app.post('/api/ivx/agents/:agentId/enable', (c) => {",
+            "app.post('/api/ivx/agents/:agentId/clear-memory', (c) => {",
+            "app.post('/api/ivx/agents/execute-all', async (c) => {",
+          ]
+          for t in targets:
+            if t in s and "const denied = requireOwner(c);" not in s[s.index(t):s.index(t)+180]:
+              s=s.replace(t, t+"\n    const denied = requireOwner(c);\n    if (denied) return denied;", 1)
+          t="app.post('/api/ivx/agents/:agentId/run', async (c) => {"
+          if t in s:
+            old="""    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({}));\n    const taskType = body.taskType || 'audit';"""
+            new="""    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));\n    const denied = requireOwner(c, body as Record<string, unknown>);\n    if (denied) return denied;\n    const taskType = (body as any).taskType || 'audit';"""
+            s=s.replace(old,new)
+            s=s.replace("    const payload = body.payload || {};\n    const ownerApprovalToken = body.ownerApprovalToken || null;", "    const payload = (body as any).payload || {};\n    const ownerApprovalToken = (body as any).ownerApprovalToken || null;",1)
+          t="app.post('/api/ivx/agents/:agentId/version', async (c) => {"
+          if t in s:
+            old="""    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({}));\n    const result = updateAgentContract(agentId, body.updates || {}, body.ownerApproval === true);"""
+            new="""    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));\n    const denied = requireOwner(c, body as Record<string, unknown>);\n    if (denied) return denied;\n    const result = updateAgentContract(agentId, (body as any).updates || {}, (body as any).ownerApproval === true);"""
+            s=s.replace(old,new)
+          t="app.post('/api/ivx/agents/:agentId/rollback', async (c) => {"
+          if t in s:
+            old="""    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({}));\n    const targetVersion = body.targetVersion;"""
+            new="""    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));\n    const denied = requireOwner(c, body as Record<string, unknown>);\n    if (denied) return denied;\n    const targetVersion = (body as any).targetVersion;"""
+            s=s.replace(old,new)
+          p.write_text(s)
+          PY
+
+      - name: Source QA guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "return Boolean(envSecret) && provided === envSecret" backend/api/ivx-agent-api.ts
+          ! grep -q "provided.startsWith('owner-')" backend/api/ivx-agent-api.ts
+          test "$(grep -c "const denied = requireOwner" backend/api/ivx-agent-api.ts)" -ge 9
+          echo 'agent_api_owner_auth_source=PASS'
+
+      - name: Commit root fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'ivx-qa-bot'
+          git config user.email 'ivx-qa-bot@users.noreply.github.com'
+          git add backend/api/ivx-agent-api.ts
+          if git diff --cached --quiet; then
+            echo 'No source patch required.'
+            exit 0
+          fi
+          git commit -m 'security(agents): require real owner secret on all mutating endpoints'
+          git pull --rebase origin main
+          git push origin HEAD:main
