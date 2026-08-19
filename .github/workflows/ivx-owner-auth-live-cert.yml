@@ -33,11 +33,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify source fast path and auth invariants
+      - name: Verify complete owner-login latency fix
         shell: bash
         run: |
           set -euo pipefail
           grep -q 'IVX_OWNER_POST_LOGIN_FAST_PATH_V1' expo/lib/auth-context.tsx
+          grep -q 'IVX_OWNER_REPAIR_BACKGROUND_V1' expo/lib/auth-context.tsx
+          grep -q 'IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1' expo/lib/auth-context.tsx
+          grep -q 'signInWithEmailPassword(freshClient, normalizedEmail, password)' expo/lib/auth-context.tsx
+          if grep -q 'await repairOwnerRegistrationAfterLogin(session).catch' expo/lib/auth-context.tsx; then
+            echo 'Blocking owner repair remains in login critical path.'
+            exit 1
+          fi
           grep -q 'signInWithPassword' expo/lib/auth-password-sign-in.ts
           grep -q 'persistSession: true' expo/lib/supabase.ts
           test -n "$OWNER_PASSWORD" || { echo 'OWNER_NEW_PASSWORD secret is unavailable'; exit 1; }
@@ -65,10 +72,7 @@ jobs:
           user_role=$(jq -r '.user.user_metadata.role // empty' /tmp/login.json)
           test -n "$token" || { echo 'access_token missing'; exit 1; }
           test -n "$user_id" || { echo 'user_id missing'; exit 1; }
-          case "$app_role:$user_role" in
-            *owner*|*admin*) ;;
-            *) echo "owner metadata missing app_role=$app_role user_role=$user_role"; exit 1 ;;
-          esac
+          case "$app_role:$user_role" in *owner*|*admin*) ;; *) echo "owner metadata missing app_role=$app_role user_role=$user_role"; exit 1;; esac
           login_ms=$(awk -v t="$total" 'BEGIN { printf "%d", t*1000 }')
           echo "LOGIN_MS=$login_ms" >> "$GITHUB_ENV"
           echo "OWNER_USER_ID=$user_id" >> "$GITHUB_ENV"
@@ -85,7 +89,7 @@ jobs:
             "${SUPABASE_URL%/}/auth/v1/user" \
             -H "apikey: ${SUPABASE_ANON_KEY}" \
             -H "Authorization: Bearer ${OWNER_TOKEN}")
-          test "$code" = 200 || { echo "supabase_user_http=$code"; exit 1; }
+          test "$code" = 200
           got_id=$(jq -r '.id // empty' /tmp/user.json)
           test "$got_id" = "$OWNER_USER_ID"
           echo 'supabase_user_http=200 identity_match=PASS'
@@ -123,24 +127,7 @@ jobs:
             --arg userRole "$OWNER_USER_ROLE" \
             --argjson loginMs "$LOGIN_MS" \
             --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{
-              certificate:"IVX-OWNER-AUTH-E2E-LIVE",
-              passed:true,
-              sourceSha:$sha,
-              realPasswordGrant:true,
-              passwordGrantHttp:200,
-              loginLatencyMs:$loginMs,
-              supabaseUserEndpointHttp:200,
-              identityMatch:true,
-              ownerUserId:$userId,
-              appMetadataRole:$appRole,
-              userMetadataRole:$userRole,
-              backendOwnerGateHttp:200,
-              unauthenticatedGateClosed:true,
-              secretValuesReturned:false,
-              fastPathMarker:"IVX_OWNER_POST_LOGIN_FAST_PATH_V1",
-              verifiedAt:$verifiedAt
-            }' > qa/evidence/ivx-owner-auth-e2e-live.json
+            '{certificate:"IVX-OWNER-AUTH-E2E-LIVE",passed:true,sourceSha:$sha,realPasswordGrant:true,passwordGrantHttp:200,loginLatencyMs:$loginMs,supabaseUserEndpointHttp:200,identityMatch:true,ownerUserId:$userId,appMetadataRole:$appRole,userMetadataRole:$userRole,backendOwnerGateHttp:200,unauthenticatedGateClosed:true,secretValuesReturned:false,fastPathMarker:"IVX_OWNER_POST_LOGIN_FAST_PATH_V1",backgroundRepairMarker:"IVX_OWNER_REPAIR_BACKGROUND_V1",directPasswordMarker:"IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1",verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-auth-e2e-live.json
           cat qa/evidence/ivx-owner-auth-e2e-live.json
 
       - uses: actions/upload-artifact@v4
