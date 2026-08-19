@@ -35,8 +35,13 @@ jobs:
         run: |
           set -euo pipefail
           grep -q 'IVX_OWNER_POST_LOGIN_FAST_PATH_V1' expo/lib/auth-context.tsx
+          grep -q 'IVX_OWNER_REPAIR_BACKGROUND_V1' expo/lib/auth-context.tsx
           grep -q "if (isOwnerAdminEmail(sessionEmail))" expo/lib/auth-context.tsx
           grep -q "return { role: 'owner', source: 'fallback' }" expo/lib/auth-context.tsx
+          if grep -q 'await repairOwnerRegistrationAfterLogin(session).catch' expo/lib/auth-context.tsx; then
+            echo 'Blocking owner repair is still present.'
+            exit 1
+          fi
           grep -q 'signInWithPassword' expo/lib/auth-password-sign-in.ts
           grep -q 'persistSession: true' expo/lib/supabase.ts
       - name: Auth focused tests
