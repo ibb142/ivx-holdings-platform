@@ -8,8 +8,6 @@ import { isAdminRole } from '@/lib/auth-helpers';
 import { isOpenAccessModeEnabled } from '@/lib/open-access';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
-// IVX Crash Shield: route-level error boundary for every ivx screen
-// (chat / cto-dashboard / diagnostics / incidents / deploy / etc.).
 export { ErrorBoundary } from 'expo-router';
 
 const IVX_STACK_SCREEN_OPTIONS = {
@@ -44,14 +42,14 @@ const IVX_DAILY_REPORT_OPTIONS = { title: 'Daily Report' } as const;
 const IVX_GITHUB_SYNC_OPTIONS = { title: 'Sync to GitHub' } as const;
 const IVX_CAMPAIGN_OPTIONS = { title: 'Campaign Report' } as const;
 const IVX_AUTONOMOUS_OPS_OPTIONS = { title: 'Autonomous Operations' } as const;
+const IVX_AGENT_GPS_OPTIONS = { title: 'IA GPS • 112' } as const;
 const IVX_AGENT_COMMAND_CENTER_OPTIONS = { title: 'AI Engineering Command Center' } as const;
+
 export default function IVXOwnerLayout() {
   const router = useRouter();
   const { isAuthenticated, isLoading, userRole } = useAuth();
   const redirectAttemptedRef = useRef(false);
 
-  // Auth guard: redirect to /login when unauthenticated.
-  // Prevents non-owner/non-admin users from accessing IVX owner screens.
   useEffect(() => {
     if (isLoading || isOpenAccessModeEnabled()) return;
     if (!isAuthenticated && !redirectAttemptedRef.current) {
@@ -63,7 +61,6 @@ export default function IVXOwnerLayout() {
     }
   }, [isAuthenticated, isLoading, router]);
 
-  // Show loading while auth state is being resolved
   if (isLoading) {
     return (
       <View style={ivxStyles.loading}>
@@ -73,7 +70,6 @@ export default function IVXOwnerLayout() {
     );
   }
 
-  // Block non-admin users from accessing IVX owner screens
   if (!isAuthenticated || !isAdminRole(userRole)) {
     return (
       <View style={ivxStyles.loading}>
@@ -109,6 +105,7 @@ export default function IVXOwnerLayout() {
       <Stack.Screen name="github-sync" options={IVX_GITHUB_SYNC_OPTIONS} />
       <Stack.Screen name="campaign" options={IVX_CAMPAIGN_OPTIONS} />
       <Stack.Screen name="autonomous-ops" options={IVX_AUTONOMOUS_OPS_OPTIONS} />
+      <Stack.Screen name="agent-gps" options={IVX_AGENT_GPS_OPTIONS} />
       <Stack.Screen name="agent-command-center" options={IVX_AGENT_COMMAND_CENTER_OPTIONS} />
     </Stack>
   );
