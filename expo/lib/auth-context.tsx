@@ -5,6 +5,7 @@ import { supabase, ensureSupabaseClient, getSupabaseConfigAudit, SUPABASE_NOT_CO
 import { persistAuth, loadStoredAuth, clearStoredAuth, setAuthCredentials } from './auth-store';
 import { clearOwnerResilientSession } from './owner-session-resilience';
 import { LoginTrace } from './login-trace';
+import { signInWithEmailPassword } from './auth-password-sign-in';
 import { canonicalizeRole, isAdminRole, normalizeRole, sanitizeEmail } from './auth-helpers';
 
 import { extractChallengeId, extractFirstVerifiedMfaFactor, getMfaChallengeRequirement, type ParsedMfaFactor } from './auth-mfa';
@@ -19,7 +20,7 @@ import {
   syncMemberRegistryFromSupabase,
   upsertStoredMemberRegistryRecord,
 } from './member-registry';
-import type { Session, SupabaseClient } from '@supabase/supabase-js';
+import type { AuthError, Session, SupabaseClient } from '@supabase/supabase-js';
 import { fetchPublicIpAddress } from './public-geo';
 import { autoDetectAndSaveTimezone, saveTimezoneProfile, loadTimezoneProfile, type TimezoneProfile } from './time-service';
 import {
@@ -662,6 +663,26 @@ export function classifyServerLoginStatus(
   // 0 = transport failure (abort/DNS/offline), 5xx = server side. Both retryable.
   if (status === 0 || status >= 500) return { failureReason: 'service_unavailable', retryable: true };
   return { failureReason: 'unknown', retryable: false };
+}
+
+/** Decide whether to bypass the login gateway and authenticate straight against
+ *  Supabase.
+ *
+ *  The /api/members/login route is only a convenience wrapper around the SAME
+ *  Supabase project this app already talks to directly. Treating it as the ONLY
+ *  way in made a single server-side outage equal to a total sign-in outage: when
+ *  that route answered HTTP 503, the owner was locked out of a healthy account
+ *  with a healthy password on a healthy Supabase project.
+ *
+ *  Only transport failures (status 0) and server faults (5xx) qualify. A 400,
+ *  401, 403 or 429 is a real, definitive answer about the credentials and MUST
+ *  be surfaced honestly - never retried through another door. */
+export function shouldFallBackToDirectSupabase(
+  failure: { failureReason: LoginFailureReason; status: number } | null,
+): boolean {
+  if (!failure) return true;
+  if (failure.failureReason !== 'service_unavailable') return false;
+  return failure.status === 0 || failure.status >= 500;
 }
 
 const LOGIN_RETRY_BACKOFF_MS = 1_200;
@@ -2006,7 +2027,76 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         }
       }
 
-      if (!serverResult?.success || !serverResult.accessToken || !serverResult.refreshToken) {
+      const serverAccessToken = serverResult?.accessToken ?? '';
+      const serverRefreshToken = serverResult?.refreshToken ?? '';
+      const serverSessionUsable = serverResult?.success === true
+        && serverAccessToken.length > 0
+        && serverRefreshToken.length > 0;
+
+      let resolvedSession: Session | null = null;
+
+      if (serverSessionUsable) {
+        trace.checkpoint('BACKEND_RESPONSE_RECEIVED', { success: true });
+        trace.checkpoint('SESSION_CREATED');
+        trace.checkpoint('SESSION_PERSIST_STARTED');
+
+        const { data: sessionData, error: sessionError } = await freshClient.auth.setSession({
+          access_token: serverAccessToken,
+          refresh_token: serverRefreshToken,
+        });
+        if (sessionError) {
+          manualOwnerLoginRef.current = false;
+          trace.checkpoint('FAILED', { stage: 'auth', errorCode: sessionError.code, errorMessage: sessionError.message });
+          return {
+            success: false,
+            message: sessionError.message || 'Session could not be installed on the device.',
+            failureReason: 'service_unavailable',
+            supabaseErrorMessage: sessionError.message,
+            supabaseErrorCode: sessionError.code,
+            supabaseErrorName: 'AuthError',
+          };
+        }
+        resolvedSession = sessionData.session;
+      } else if (shouldFallBackToDirectSupabase(lastFailure)) {
+        // The login gateway is down or unreachable. Supabase is the auth authority
+        // that gateway would have called anyway, so go straight to it instead of
+        // telling the owner their own service is "temporarily unavailable".
+        trace.checkpoint('SUPABASE_REQUEST_STARTED', {
+          stage: 'auth',
+          errorCode: lastFailure?.errorCode ?? 'no_server_answer',
+          httpStatus: lastFailure?.status ?? 0,
+        });
+        console.log('[Auth] Login gateway unavailable, signing in directly against Supabase:', {
+          gatewayStatus: lastFailure?.status ?? 0,
+          gatewayCode: lastFailure?.errorCode ?? 'no_server_answer',
+        });
+
+        const direct = await signInWithEmailPassword(freshClient, normalizedEmail, password);
+        trace.checkpoint('SUPABASE_RESPONSE_RECEIVED', { success: direct.ok });
+        if (!direct.ok) {
+          manualOwnerLoginRef.current = false;
+          const directError = direct.error as AuthError & { status?: number; code?: string };
+          const normalizedDirect = normalizeLoginFailureMessage(directError.message);
+          trace.checkpoint('FAILED', {
+            stage: 'auth',
+            errorCode: directError.code ?? 'direct_signin_failed',
+            errorMessage: normalizedDirect.message,
+          });
+          return {
+            success: false,
+            message: normalizedDirect.message,
+            failureReason: normalizedDirect.failureReason,
+            supabaseErrorMessage: directError.message,
+            supabaseErrorName: 'AuthError',
+            ...(directError.code ? { supabaseErrorCode: directError.code } : {}),
+            ...(typeof directError.status === 'number' ? { supabaseErrorStatus: directError.status } : {}),
+          };
+        }
+
+        trace.checkpoint('SESSION_CREATED');
+        trace.checkpoint('SESSION_PERSIST_STARTED');
+        resolvedSession = direct.session;
+      } else {
         const displayMessage = lastFailure?.message
           || lastError
           || 'Server login did not return a valid session. Please try again.';
@@ -2025,28 +2115,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           supabaseErrorStatus: httpStatus,
         };
       }
-
-      trace.checkpoint('BACKEND_RESPONSE_RECEIVED', { success: true });
-      trace.checkpoint('SESSION_CREATED');
-      trace.checkpoint('SESSION_PERSIST_STARTED');
-
-      const { data: sessionData, error: sessionError } = await freshClient.auth.setSession({
-        access_token: serverResult.accessToken,
-        refresh_token: serverResult.refreshToken,
-      });
-      if (sessionError) {
-        manualOwnerLoginRef.current = false;
-        trace.checkpoint('FAILED', { stage: 'auth', errorCode: sessionError.code, errorMessage: sessionError.message });
-        return {
-          success: false,
-          message: sessionError.message || 'Session could not be installed on the device.',
-          failureReason: 'service_unavailable',
-          supabaseErrorMessage: sessionError.message,
-          supabaseErrorCode: sessionError.code,
-          supabaseErrorName: 'AuthError',
-        };
-      }
-      const resolvedSession = sessionData.session;
       if (!resolvedSession) {
         manualOwnerLoginRef.current = false;
         trace.checkpoint('FAILED', { stage: 'auth', errorCode: 'session_missing', errorMessage: 'No session returned from setSession' });
