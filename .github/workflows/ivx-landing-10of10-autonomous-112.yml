@@ -1,0 +1,234 @@
+name: IVX Landing 10of10 Autonomous 112
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'qa/autonomous/landing-10of10-mission.json'
+      - 'expo/app/ivx/landing-10of10.tsx'
+      - 'expo/app/ivx/_layout.tsx'
+      - '.github/workflows/ivx-landing-10of10-autonomous-112.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  actions: write
+
+env:
+  API_BASE: https://api.ivxholding.com
+  RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+  RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+  IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+  IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+  DEFAULT_RENDER_SERVICE_ID: srv-d7t9ivreo5us73ftose0
+  PROGRAM_ID: IVX-LANDING-10OF10-2026-08-19
+
+concurrency:
+  group: ivx-landing-10of10-autonomous-112
+  cancel-in-progress: false
+
+jobs:
+  launch-program:
+    name: Deploy controller and assign 112 real workers
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate program definition
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(jq -r '.programId' qa/autonomous/landing-10of10-mission.json)" = "$PROGRAM_ID"
+          test "$(jq '.gaps | length' qa/autonomous/landing-10of10-mission.json)" = 40
+          test "$(jq -r '.executionPolicy.workers' qa/autonomous/landing-10of10-mission.json)" = 112
+          test "$(jq -r '.executionPolicy.simulatedSuccessAllowed' qa/autonomous/landing-10of10-mission.json)" = false
+          test "$(jq '.finalGates | length' qa/autonomous/landing-10of10-mission.json)" -ge 30
+          grep -q "POLL_MS = 10000" expo/app/ivx/landing-10of10.tsx
+          grep -q 'landing-10of10' expo/app/ivx/_layout.tsx
+          echo 'landing_10of10_program_definition=PASS'
+
+      - name: Resolve exact-SHA deployment binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE_ID="${RENDER_SERVICE_ID:-$DEFAULT_RENDER_SERVICE_ID}"
+          SYSTEM_KEY="${IVX_AI_SYSTEM_SECRET:-${IVX_SYSTEM_SECRET:-}}"
+          test -n "$SERVICE_ID"
+          test -n "$SYSTEM_KEY"
+          echo "::add-mask::$SYSTEM_KEY"
+          echo "SERVICE_ID=$SERVICE_ID" >> "$GITHUB_ENV"
+          echo "SYSTEM_KEY=$SYSTEM_KEY" >> "$GITHUB_ENV"
+
+      - name: Deploy program SHA to Render
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${RENDER_API_KEY:-}" ]; then
+            response=$(curl -fsS -X POST "https://api.render.com/v1/services/${SERVICE_ID}/deploys" \
+              -H "Authorization: Bearer ${RENDER_API_KEY}" \
+              -H 'Accept: application/json' \
+              -H 'Content-Type: application/json' \
+              --data "{\"clearCache\":\"do_not_clear\",\"commitId\":\"${GITHUB_SHA}\"}")
+            deploy_id=$(printf '%s' "$response" | jq -r '.id // .deploy.id // empty')
+            test -n "$deploy_id"
+            echo "DEPLOY_ID=$deploy_id" >> "$GITHUB_ENV"
+          else
+            code=$(curl -sS -m 40 -o /tmp/deploy.json -w '%{http_code}' \
+              -X POST "${API_BASE}/api/ivx/developer-deploy/action" \
+              -H 'Content-Type: application/json' \
+              -H "X-IVX-System-Key: ${SYSTEM_KEY}" \
+              --data "{\"action\":\"render_trigger_deploy\",\"input\":{\"serviceId\":\"${SERVICE_ID}\",\"commitId\":\"${GITHUB_SHA}\"},\"confirm\":true,\"confirmText\":\"CONFIRM_IVX_RENDER_DEPLOY\",\"reason\":\"Landing 10of10 autonomous 112 controller\"}" || true)
+            case "$code" in 200|201|202) ;; *) cat /tmp/deploy.json || true; exit 1;; esac
+          fi
+
+      - name: Wait for exact production SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 120); do
+            code=$(curl -sS -m 20 -o /tmp/version.json -w '%{http_code}' "${API_BASE}/version" || true)
+            if [ "$code" = 200 ]; then
+              live=$(jq -r '.commit // empty' /tmp/version.json)
+              ok=$(jq -r '.ok // false' /tmp/version.json)
+              echo "poll=$i live=${live:-missing} expected=$GITHUB_SHA"
+              if [ "$ok" = true ] && [ "$live" = "$GITHUB_SHA" ]; then break; fi
+            fi
+            if [ "$i" = 120 ]; then echo 'Exact SHA did not become live'; exit 1; fi
+            sleep 10
+          done
+
+      - name: Verify real 112 registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 30 "${API_BASE}/api/ivx/agents" -o /tmp/agents.json
+          test "$(jq -r '.ok' /tmp/agents.json)" = true
+          test "$(jq -r '.totalAgents' /tmp/agents.json)" = 112
+          test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)" = 112
+          jq -r '.agents[] | [.agentNumber,.agentId,.name] | @tsv' /tmp/agents.json > /tmp/agents.tsv
+          echo 'registry=112/112'
+
+      - name: Assign and execute 112 evidence-bearing program runs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/landing10-results
+          export API_BASE SYSTEM_KEY PROGRAM_ID GITHUB_SHA
+          run_one() {
+            number="$1"
+            agent_id="$2"
+            gap=$(( ((number - 1) % 40) + 1 ))
+            gap_json=$(jq -c --argjson id "$gap" '.gaps[] | select(.id == $id)' qa/autonomous/landing-10of10-mission.json)
+            title=$(printf '%s' "$gap_json" | jq -r '.title')
+            priority=$(printf '%s' "$gap_json" | jq -r '.priority')
+            contract_code=$(curl -sS --max-time 25 -o "/tmp/landing10-results/contract-${number}.json" -w '%{http_code}' "${API_BASE}/api/ivx/agents/${agent_id}/contract" || true)
+            if [ "$contract_code" != 200 ]; then
+              jq -n --argjson n "$number" --arg id "$agent_id" --argjson gap "$gap" --arg error "contract_http_${contract_code}" '{agentNumber:$n,agentId:$id,gapId:$gap,ok:false,error:$error}' > "/tmp/landing10-results/${number}.json"
+              return 0
+            fi
+            task_type=$(jq -r '.contract.allowedTaskTypes[0] // "audit"' "/tmp/landing10-results/contract-${number}.json")
+            task_id="landing10-gap-$(printf '%02d' "$gap")-agent-$(printf '%03d' "$number")-${GITHUB_RUN_ID}"
+            body=$(jq -nc \
+              --arg taskType "$task_type" \
+              --arg token "$SYSTEM_KEY" \
+              --arg programId "$PROGRAM_ID" \
+              --argjson gapId "$gap" \
+              --arg gapTitle "$title" \
+              --arg priority "$priority" \
+              --arg sourceSha "$GITHUB_SHA" \
+              --arg taskId "$task_id" \
+              --arg runId "landing10-${GITHUB_RUN_ID}" \
+              '{taskType:$taskType,ownerApprovalToken:$token,payload:{programId:$programId,gapId:$gapId,gapTitle:$gapTitle,priority:$priority,sourceSha:$sourceSha,__taskId:$taskId,__runId:$runId,__workflow:"IVX Landing 10of10 Autonomous 112",realExecutionOnly:true,simulatedSuccessAllowed:false}}')
+            code=$(curl -sS --retry 1 --retry-delay 1 --max-time 45 -o "/tmp/landing10-results/run-${number}.json" -w '%{http_code}' \
+              -X POST "${API_BASE}/api/ivx/agents/${agent_id}/run" \
+              -H 'Content-Type: application/json' \
+              -H "x-ivx-owner-key: ${SYSTEM_KEY}" \
+              --data "$body" || true)
+            ok=false
+            if [ "$code" = 200 ]; then ok=$(jq -r '.ok // false' "/tmp/landing10-results/run-${number}.json"); fi
+            jq -n \
+              --argjson n "$number" --arg id "$agent_id" --argjson gap "$gap" --arg title "$title" --arg priority "$priority" \
+              --arg taskType "$task_type" --arg taskId "$task_id" --arg http "$code" --argjson ok "$ok" \
+              --arg runId "$(jq -r '.runRecord.runId // empty' "/tmp/landing10-results/run-${number}.json" 2>/dev/null || true)" \
+              --arg status "$(jq -r '.runRecord.finalStatus // "request_failed"' "/tmp/landing10-results/run-${number}.json" 2>/dev/null || true)" \
+              --arg source "$(jq -r '.runRecord.sourceReference // empty' "/tmp/landing10-results/run-${number}.json" 2>/dev/null || true)" \
+              --arg error "$(jq -r '.error // .runRecord.error // empty' "/tmp/landing10-results/run-${number}.json" 2>/dev/null || true)" \
+              '{agentNumber:$n,agentId:$id,gapId:$gap,gapTitle:$title,priority:$priority,taskType:$taskType,taskId:$taskId,httpStatus:$http,ok:$ok,runId:$runId,finalStatus:$status,sourceReference:$source,error:$error}' \
+              > "/tmp/landing10-results/${number}.json"
+          }
+          export -f run_one
+          while IFS=$'\t' read -r number agent_id name; do printf '%s\t%s\n' "$number" "$agent_id"; done < /tmp/agents.tsv \
+            | xargs -P 16 -n 2 bash -c 'run_one "$0" "$1"'
+          jq -s 'sort_by(.agentNumber)' /tmp/landing10-results/[0-9]*.json > /tmp/landing10-results/all.json
+          total=$(jq 'length' /tmp/landing10-results/all.json)
+          succeeded=$(jq '[.[] | select(.ok == true)] | length' /tmp/landing10-results/all.json)
+          failed=$(jq '[.[] | select(.ok != true)] | length' /tmp/landing10-results/all.json)
+          evidence=$(jq '[.[] | select((.sourceReference // "") != "")] | length' /tmp/landing10-results/all.json)
+          test "$total" = 112
+          echo "PROGRAM_SUCCEEDED=$succeeded" >> "$GITHUB_ENV"
+          echo "PROGRAM_FAILED=$failed" >> "$GITHUB_ENV"
+          echo "PROGRAM_EVIDENCE=$evidence" >> "$GITHUB_ENV"
+          echo "assigned=112 succeeded=$succeeded failed=$failed evidence=$evidence"
+
+      - name: Dispatch autonomous repair and certification lanes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for workflow in \
+            ivx-home-black-screen-final-repair.yml \
+            ivx-landing-war-room-deep-qa-live.yml \
+            ivx-autonomous-dashboard-enterprise-live.yml \
+            ivx-112-final-live-cert.yml; do
+            if gh workflow view "$workflow" >/dev/null 2>&1; then
+              gh workflow run "$workflow" --ref main
+              echo "dispatched=$workflow"
+            else
+              echo "workflow_unavailable=$workflow"
+            fi
+          done
+
+      - name: Write autonomous program launch certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence/autonomous
+          jq -n \
+            --arg programId "$PROGRAM_ID" \
+            --arg sourceSha "$GITHUB_SHA" \
+            --argjson assigned 112 \
+            --argjson gaps 40 \
+            --argjson succeeded "$PROGRAM_SUCCEEDED" \
+            --argjson failed "$PROGRAM_FAILED" \
+            --argjson evidence "$PROGRAM_EVIDENCE" \
+            --arg dashboardRoute '/ivx/landing-10of10' \
+            --arg existingDashboard '/ivx/autonomous-ops' \
+            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{ok:true,certificate:"IVX-LANDING-10OF10-AUTONOMOUS-112-LAUNCH",programId:$programId,sourceSha:$sourceSha,productionExactShaAtLaunch:true,workersAssigned:$assigned,gaps:$gaps,workerRunsSucceeded:$succeeded,workerRunsFailed:$failed,workerRunsWithEvidence:$evidence,simulatedSuccessAllowed:false,realFundsMoved:false,dashboardRoute:$dashboardRoute,enterpriseDashboardRoute:$existingDashboard,dashboardRefreshSeconds:10,final10of10Certified:false,truthNote:"Launch certificate proves orchestration and real execution attempts only. Individual gap completion and final 10/10 require their product-specific hard gates.",verifiedAt:$verifiedAt}' \
+            > qa/evidence/autonomous/landing-10of10-autonomous-112-launch.json
+          cp /tmp/landing10-results/all.json qa/evidence/autonomous/landing-10of10-agent-results.json
+          cat qa/evidence/autonomous/landing-10of10-autonomous-112-launch.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: landing-10of10-autonomous-112-${{ github.sha }}
+          path: |
+            qa/evidence/autonomous/landing-10of10-autonomous-112-launch.json
+            qa/evidence/autonomous/landing-10of10-agent-results.json
+          if-no-files-found: error
+
+      - name: Persist launch evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'IVX Autonomous 112 Controller'
+          git config user.email 'ivx-autonomous-112@users.noreply.github.com'
+          git add qa/evidence/autonomous/landing-10of10-autonomous-112-launch.json qa/evidence/autonomous/landing-10of10-agent-results.json
+          git diff --cached --quiet && exit 0
+          git commit -m "ops(112): persist Landing 10of10 autonomous launch evidence [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
