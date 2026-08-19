@@ -20,7 +20,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 
 /** Visible build stamp so the installed binary can be identified on-device. */
-export const BUILD_STAMP = '1.10.19 (117)';
+export const BUILD_STAMP = '1.10.20 (118)';
 
 // Prevent native splash from auto-hiding.
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -59,6 +59,22 @@ export { ErrorBoundary } from 'expo-router';
 // -------------------------------------------------------------------
 type FatalListener = (error: Error) => void;
 
+/**
+ * Persist the fatal error to device storage immediately.
+ *
+ * Loaded lazily to keep this module's synchronous import surface minimal. If a
+ * future failure still manages to blank the screen, the NEXT launch reads this
+ * record and displays it — the failure can no longer erase its own evidence.
+ */
+function persistCrash(err: Error, isFatal: boolean): void {
+  try {
+    const { recordCrash } = require('@/lib/crash-log') as typeof import('@/lib/crash-log');
+    recordCrash({ message: err.message, stack: err.stack ?? null, isFatal, build: BUILD_STAMP });
+  } catch {
+    // never cascade from an error handler
+  }
+}
+
 let fatalListener: FatalListener | null = null;
 let pendingFatal: Error | null = null;
 
@@ -84,6 +100,7 @@ function installFatalShield(): void {
 
     // The splash may still be covering the screen at this point.
     SplashScreen.hideAsync().catch(() => {});
+    persistCrash(err, Boolean(isFatal));
     publishFatal(err);
 
     // NEVER forward isFatal=true. Doing so lets the default handler destroy the
@@ -158,6 +175,37 @@ function ImportCrashScreen({
 }
 
 // -------------------------------------------------------------------
+// Screen shown when a PREVIOUS launch recorded a crash.
+// -------------------------------------------------------------------
+interface PriorCrash {
+  message: string;
+  stack: string | null;
+  isFatal: boolean;
+  build: string;
+  at: string;
+}
+
+function PriorCrashScreen({ record, onDismiss }: { record: PriorCrash; onDismiss: () => void }) {
+  useEffect(() => {
+    logHideSplash();
+  }, []);
+  return (
+    <View style={crashStyles.container}>
+      <Text style={crashStyles.title}>Previous Crash Detected</Text>
+      <Text style={crashStyles.message}>{record.message}</Text>
+      {record.stack ? <Text style={crashStyles.stack}>{record.stack.slice(0, 1200)}</Text> : null}
+      <Text style={crashStyles.hint}>
+        {`Build ${record.build} · fatal=${record.isFatal} · ${record.at}`}
+      </Text>
+      <TouchableOpacity style={crashStyles.button} onPress={onDismiss}>
+        <Text style={crashStyles.buttonText}>Continue to app</Text>
+      </TouchableOpacity>
+      <Text style={crashStyles.hint}>Screenshot this screen — it names the exact defect.</Text>
+    </View>
+  );
+}
+
+// -------------------------------------------------------------------
 // Last-resort render boundary.
 //
 // THIS IS THE BLACK SCREEN FIX.
@@ -196,6 +244,7 @@ class RootErrorBoundary extends React.Component<RootBoundaryProps, RootBoundaryS
   componentDidCatch(error: unknown, info: { componentStack?: string | null }): void {
     const err = error instanceof Error ? error : new Error(String(error));
     console.error('[IVX] Root render crash:', err.message, err.stack, info?.componentStack);
+    persistCrash(err, false);
     // The splash may still be up if the crash happened before first paint.
     logHideSplash();
   }
@@ -230,6 +279,28 @@ function RootLayout(): React.ReactElement {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const [fatalError, setFatalError] = useState<Error | null>(pendingFatal);
+  const [priorCrash, setPriorCrash] = useState<PriorCrash | null>(null);
+  const [priorCrashChecked, setPriorCrashChecked] = useState(false);
+
+  // Read any crash recorded by a PREVIOUS launch. This is what surfaces the
+  // error when a failure blanked the screen before it could be displayed.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { readLastCrash } = await import('@/lib/crash-log');
+        const record = await readLastCrash();
+        if (!cancelled && record) setPriorCrash(record);
+      } catch {
+        // never block startup on diagnostics
+      } finally {
+        if (!cancelled) setPriorCrashChecked(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Subscribe to fatal runtime errors captured by the module-scope shield,
   // including any that fired before this component mounted.
@@ -290,7 +361,23 @@ function RootLayout(): React.ReactElement {
     };
   }, [attempt]);
 
-  // Phase 0: a fatal runtime error was intercepted. Show it instead of letting
+  // Phase 0a: a previous launch crashed. Show that recorded error once, so a
+  // failure that blanked the screen still gets reported.
+  if (priorCrashChecked && priorCrash) {
+    return (
+      <PriorCrashScreen
+        record={priorCrash}
+        onDismiss={() => {
+          void import('@/lib/crash-log')
+            .then((m) => m.clearLastCrash())
+            .catch(() => {});
+          setPriorCrash(null);
+        }}
+      />
+    );
+  }
+
+  // Phase 0b: a fatal runtime error was intercepted. Show it instead of letting
   // the JS context die to a black screen.
   if (fatalError) {
     return (

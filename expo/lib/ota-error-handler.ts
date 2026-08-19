@@ -95,17 +95,26 @@ export async function safelyCheckForUpdates(): Promise<UpdateDiagnostics> {
     // @ts-ignore — module is optional at runtime
     const updates = await import('expo-updates');
 
-    // Only proceed if updates are available in this build
-    if (!updates.useUpdates) {
-      return { ...baseDiagnostics, error: 'expo-updates API not available' };
+    // Only proceed if updates are actually enabled in this build.
+    // `updates.enabled` is false in app.config.ts, so this returns early on
+    // every production launch and no update code runs at all.
+    if (typeof updates.checkForUpdateAsync !== 'function' || (updates as { isEnabled?: boolean }).isEnabled === false) {
+      return { ...baseDiagnostics, error: 'expo-updates disabled in this build' };
     }
 
-    // Get current update info for diagnostics
-    const currentUpdate = updates.useUpdates?.()?.currentlyRunning;
-    const channel = currentUpdate?.channel ?? null;
-    const runtimeVersion = currentUpdate?.runtimeVersion ?? null;
-    const updateId = currentUpdate?.updateId ?? null;
-    const manifestCreatedAt = (currentUpdate?.manifest as Record<string, unknown> | undefined)?.createdAt as string | null ?? null;
+    // Read update info from the MODULE constants, never from useUpdates().
+    //
+    // useUpdates() is a React hook. This function is async and runs from an
+    // effect continuation, so React's hook dispatcher is not installed: calling
+    // it throws on every single launch. Worse, if the awaited import resolves
+    // while React happens to be rendering, the hook registers into whatever
+    // component is mid-render and permanently corrupts its hook order.
+    // expo-updates exposes the same values as plain module constants.
+    const channel = (updates as { channel?: string | null }).channel ?? null;
+    const runtimeVersion = (updates as { runtimeVersion?: string | null }).runtimeVersion ?? null;
+    const updateId = (updates as { updateId?: string | null }).updateId ?? null;
+    const manifestCreatedAt =
+      ((updates as { manifest?: Record<string, unknown> }).manifest?.createdAt as string | undefined) ?? null;
 
     const diagnostics: UpdateDiagnostics = {
       ...baseDiagnostics,
