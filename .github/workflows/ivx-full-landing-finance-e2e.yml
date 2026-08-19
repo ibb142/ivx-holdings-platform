@@ -1,0 +1,255 @@
+name: IVX Full Landing + Finance E2E Certificate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-full-landing-finance-e2e.yml'
+      - 'expo/ivxholding-landing/**'
+      - 'expo/app/wire-transfer.tsx'
+      - 'expo/lib/payment-api-client.ts'
+      - 'backend/api/ivx-members.ts'
+      - 'backend/api/ivx-payment-api.ts'
+      - 'backend/api/ivx-wire-transfer.ts'
+      - 'backend/services/ivx-wire-submission-store.ts'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  LANDING: https://www.ivxholding.com
+  API_BASE: https://api.ivxholding.com
+  OWNER_EMAIL: iperez4242@gmail.com
+
+jobs:
+  audit:
+    name: Landing/Auth/Registration/Payments/Wire — HARD GATE
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OWNER_PASSWORD_A: ${{ secrets.OWNER_NEW_PASSWORD }}
+      OWNER_PASSWORD_B: ${{ secrets.IVX_OWNER_PASSWORD }}
+      OWNER_PASSWORD_C: ${{ secrets.OWNER_PASSWORD }}
+      SUPABASE_URL_A: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      SUPABASE_URL_B: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_A: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_ANON_B: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_A: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_SERVICE_B: ${{ secrets.SUPABASE_SERVICE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve stored credential bindings without values
+        shell: bash
+        run: |
+          set -euo pipefail
+          OWNER_PASSWORD="${OWNER_PASSWORD_A:-${OWNER_PASSWORD_B:-${OWNER_PASSWORD_C:-}}}"
+          SUPABASE_URL="${SUPABASE_URL_A:-${SUPABASE_URL_B:-}}"
+          SUPABASE_ANON="${SUPABASE_ANON_A:-${SUPABASE_ANON_B:-}}"
+          SUPABASE_SERVICE="${SUPABASE_SERVICE_A:-${SUPABASE_SERVICE_B:-}}"
+          test -n "$OWNER_PASSWORD"
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_ANON"
+          test -n "$SUPABASE_SERVICE"
+          printf 'OWNER_PASSWORD=%s\nSUPABASE_URL=%s\nSUPABASE_ANON=%s\nSUPABASE_SERVICE=%s\n' \
+            "$OWNER_PASSWORD" "$SUPABASE_URL" "$SUPABASE_ANON" "$SUPABASE_SERVICE" >> "$GITHUB_ENV"
+          echo 'credential_bindings=PASS owner_password=yes supabase_url=yes anon_key=yes service_role=yes'
+
+      - name: Audit landing entry points
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS --retry 2 --retry-all-errors --max-time 20 -o /tmp/landing.html -w '%{http_code}' "$LANDING/")
+          test "$code" = 200
+          grep -Eqi 'sign in|log in' /tmp/landing.html
+          grep -Eqi 'register|create account|join' /tmp/landing.html
+          grep -Eqi 'wire transfer|wire' /tmp/landing.html
+          grep -Eqi 'bank transfer|ACH|payment' /tmp/landing.html
+          test -s expo/ivxholding-landing/ivx-invest.js
+          test -s expo/ivxholding-landing/ivx-wire.js
+          echo 'LANDING_PASS=true' >> "$GITHUB_ENV"
+          echo 'landing_entry_points=PASS'
+
+      - name: Real owner password sign-in
+        shell: bash
+        run: |
+          set -euo pipefail
+          body=$(jq -nc --arg email "$OWNER_EMAIL" --arg password "$OWNER_PASSWORD" '{email:$email,password:$password}')
+          curl -sS --retry 1 --retry-delay 1 --retry-all-errors --max-time 20 \
+            -o /tmp/owner-login.json -w '%{http_code} %{time_total}\n' \
+            -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" \
+            -H "apikey: ${SUPABASE_ANON}" -H 'Content-Type: application/json' --data "$body" > /tmp/owner.metrics
+          read -r code total < /tmp/owner.metrics
+          test "$code" = 200 || { echo "owner_password_http=$code"; jq '{error,error_code,msg,message}' /tmp/owner-login.json || true; exit 1; }
+          token=$(jq -r '.access_token // empty' /tmp/owner-login.json)
+          uid=$(jq -r '.user.id // empty' /tmp/owner-login.json)
+          app_role=$(jq -r '.user.app_metadata.role // empty' /tmp/owner-login.json)
+          user_role=$(jq -r '.user.user_metadata.role // empty' /tmp/owner-login.json)
+          test -n "$token"; test -n "$uid"
+          case "$app_role:$user_role" in *owner*|*admin*) ;; *) echo 'owner_role=FAIL'; exit 1;; esac
+          user_code=$(curl -sS --retry 1 --retry-all-errors --max-time 20 -o /tmp/owner-user.json -w '%{http_code}' \
+            "${SUPABASE_URL%/}/auth/v1/user" -H "apikey: ${SUPABASE_ANON}" -H "Authorization: Bearer $token")
+          test "$user_code" = 200
+          test "$(jq -r '.id // empty' /tmp/owner-user.json)" = "$uid"
+          printf 'OWNER_TOKEN=%s\nOWNER_USER_ID=%s\nOWNER_LOGIN_MS=%s\n' "$token" "$uid" "$(awk -v t="$total" 'BEGIN{printf "%d",t*1000}')" >> "$GITHUB_ENV"
+          echo 'OWNER_LOGIN_PASS=true' >> "$GITHUB_ENV"
+          echo "owner_login=PASS http=200 latency_ms=$(awk -v t="$total" 'BEGIN{printf "%d",t*1000}')"
+
+      - name: Create real QA member through production registration API
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp=$(date +%s)
+          email="ivx.qa.e2e.${stamp}@example.com"
+          password="IvxQa${stamp}A1!"
+          rid="ivx-e2e-${GITHUB_RUN_ID}-${stamp}"
+          body=$(jq -nc \
+            --arg email "$email" --arg password "$password" --arg rid "$rid" \
+            '{firstName:"IVX",lastName:"QA",email:$email,password:$password,confirmPassword:$password,phone:"+15555550199",country:"US",zipCode:"33331",roles:["investor"],acceptTerms:true,dateOfBirth:"1990-01-01",gender:"prefer_not_to_say",registrationRequestId:$rid}')
+          code=$(curl -sS --retry 1 --retry-all-errors --max-time 30 -o /tmp/member-register.json -w '%{http_code}' \
+            -X POST "$API_BASE/api/members/register" -H 'Content-Type: application/json' --data "$body")
+          test "$code" = 200 || { echo "member_register_http=$code"; jq . /tmp/member-register.json || true; exit 1; }
+          test "$(jq -r '.ok // false' /tmp/member-register.json)" = true
+          uid=$(jq -r '.authUserId // .userId // empty' /tmp/member-register.json)
+          test -n "$uid"
+          printf 'QA_EMAIL=%s\nQA_PASSWORD=%s\nQA_USER_ID=%s\n' "$email" "$password" "$uid" >> "$GITHUB_ENV"
+          echo 'MEMBER_REGISTER_PASS=true' >> "$GITHUB_ENV"
+          echo "member_registration=PASS user_id=$uid"
+
+      - name: Sign in newly registered member and verify session
+        shell: bash
+        run: |
+          set -euo pipefail
+          body=$(jq -nc --arg email "$QA_EMAIL" --arg password "$QA_PASSWORD" '{email:$email,password:$password}')
+          code=$(curl -sS --retry 1 --retry-all-errors --max-time 20 -o /tmp/member-login.json -w '%{http_code}' \
+            -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" \
+            -H "apikey: ${SUPABASE_ANON}" -H 'Content-Type: application/json' --data "$body")
+          test "$code" = 200 || { echo "member_login_http=$code"; jq '{error,error_code,msg,message}' /tmp/member-login.json || true; exit 1; }
+          token=$(jq -r '.access_token // empty' /tmp/member-login.json)
+          uid=$(jq -r '.user.id // empty' /tmp/member-login.json)
+          test -n "$token"; test "$uid" = "$QA_USER_ID"
+          printf 'MEMBER_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          echo 'MEMBER_SIGNIN_PASS=true' >> "$GITHUB_ENV"
+          echo 'member_immediate_signin=PASS session_token=yes'
+
+      - name: Audit payment APIs without moving funds
+        shell: bash
+        run: |
+          set -euo pipefail
+          cfg_code=$(curl -sS --retry 1 --retry-all-errors --max-time 20 -o /tmp/pay-config.json -w '%{http_code}' "$API_BASE/api/ivx/payments/config")
+          test "$cfg_code" = 200
+          test "$(jq -r '.ok // false' /tmp/pay-config.json)" = true
+          provider=$(jq -r '.config.provider // empty' /tmp/pay-config.json)
+          envname=$(jq -r '.config.environment // "unknown"' /tmp/pay-config.json)
+          configured=$(jq -r '.config.stripeConfigured // false' /tmp/pay-config.json)
+          webhook=$(jq -r '.config.webhookConfigured // false' /tmp/pay-config.json)
+          test "$provider" = stripe
+
+          unauth=$(curl -sS --retry 1 --retry-all-errors --max-time 20 -o /tmp/pay-unauth.json -w '%{http_code}' \
+            -X POST "$API_BASE/api/ivx/payments/create" -H 'Content-Type: application/json' --data '{}')
+          test "$unauth" = 401
+
+          tx_code=$(curl -sS --retry 1 --retry-all-errors --max-time 20 -o /tmp/pay-tx.json -w '%{http_code}' \
+            "$API_BASE/api/ivx/payments/transactions" -H "Authorization: Bearer $MEMBER_TOKEN")
+          portfolio_code=$(curl -sS --retry 1 --retry-all-errors --max-time 20 -o /tmp/pay-portfolio.json -w '%{http_code}' \
+            "$API_BASE/api/ivx/payments/portfolio" -H "Authorization: Bearer $MEMBER_TOKEN")
+          test "$tx_code" = 200
+          test "$portfolio_code" = 200
+          test "$(jq -r '.ok // false' /tmp/pay-tx.json)" = true
+          test "$(jq -r '.ok // false' /tmp/pay-portfolio.json)" = true
+          echo 'PAYMENT_API_PASS=true' >> "$GITHUB_ENV"
+          if [ "$configured" = true ] && [ "$webhook" = true ] && [ "$envname" != not_configured ]; then
+            echo 'PAYMENT_PROCESSOR_READY=true' >> "$GITHUB_ENV"
+            echo "payment_processor_readiness=PASS environment=$envname"
+          else
+            echo 'PAYMENT_PROCESSOR_READY=false' >> "$GITHUB_ENV"
+            echo "payment_processor_readiness=FAIL environment=$envname stripeConfigured=$configured webhookConfigured=$webhook"
+          fi
+
+      - name: Audit wire landing/backend security and authenticated instructions
+        shell: bash
+        run: |
+          set -euo pipefail
+          public_code=$(curl -sS --retry 1 --retry-all-errors --max-time 20 -o /tmp/wire-public.json -w '%{http_code}' "$API_BASE/api/ivx/wire-instructions")
+          test "$public_code" = 200
+          test "$(jq -r '.ok // false' /tmp/wire-public.json)" = true
+          test "$(jq -r '.authenticated // true' /tmp/wire-public.json)" = false
+          test "$(jq -r '.preview.bankName // empty' /tmp/wire-public.json)" != ''
+          test "$(jq -r '.instructions.routingNumber // empty' /tmp/wire-public.json)" = ''
+          test "$(jq -r '.instructions.accountNumber // empty' /tmp/wire-public.json)" = ''
+
+          owner_code=$(curl -sS --retry 1 --retry-all-errors --max-time 20 -o /tmp/wire-owner.json -w '%{http_code}' \
+            "$API_BASE/api/ivx/wire-instructions" -H "Authorization: Bearer $OWNER_TOKEN")
+          test "$owner_code" = 200
+          test "$(jq -r '.ok // false' /tmp/wire-owner.json)" = true
+          test "$(jq -r '.authenticated // false' /tmp/wire-owner.json)" = true
+          for f in bankName routingNumber accountNumber accountName bankAddress beneficiaryAddress referenceCode; do
+            test "$(jq -r --arg f "$f" '.instructions[$f] // empty' /tmp/wire-owner.json)" != '' || { echo "wire_missing_field=$f"; exit 1; }
+          done
+          echo 'WIRE_BACKEND_PASS=true' >> "$GITHUB_ENV"
+          echo 'wire_backend=PASS public_redaction=yes authenticated_instructions=yes'
+
+      - name: Audit native app payment/wire session propagation
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "supabase.auth.getSession" expo/lib/payment-api-client.ts
+          grep -q "Authorization.*Bearer" expo/lib/payment-api-client.ts
+          echo 'PAYMENT_APP_AUTH_PASS=true' >> "$GITHUB_ENV"
+
+          if grep -q "Authorization.*Bearer" expo/app/wire-transfer.tsx || grep -q "getAuthHeaders" expo/app/wire-transfer.tsx || grep -q "supabase.auth.getSession" expo/app/wire-transfer.tsx; then
+            echo 'WIRE_APP_AUTH_PASS=true' >> "$GITHUB_ENV"
+            echo 'wire_app_session_propagation=PASS'
+          else
+            echo 'WIRE_APP_AUTH_PASS=false' >> "$GITHUB_ENV"
+            echo 'wire_app_session_propagation=FAIL no Bearer session sent by native wire screen'
+          fi
+
+      - name: Build current-SHA audit certificate
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p qa/evidence/full-landing-finance
+          jq -n \
+            --arg sha "$GITHUB_SHA" \
+            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg paymentEnvironment "${PAYMENT_ENVIRONMENT:-unknown}" \
+            --argjson landing "${LANDING_PASS:-false}" \
+            --argjson ownerLogin "${OWNER_LOGIN_PASS:-false}" \
+            --argjson memberRegistration "${MEMBER_REGISTER_PASS:-false}" \
+            --argjson memberSignin "${MEMBER_SIGNIN_PASS:-false}" \
+            --argjson paymentApi "${PAYMENT_API_PASS:-false}" \
+            --argjson paymentProcessorReady "${PAYMENT_PROCESSOR_READY:-false}" \
+            --argjson paymentAppAuth "${PAYMENT_APP_AUTH_PASS:-false}" \
+            --argjson wireBackend "${WIRE_BACKEND_PASS:-false}" \
+            --argjson wireAppAuth "${WIRE_APP_AUTH_PASS:-false}" \
+            '{certificate:"IVX-FULL-LANDING-FINANCE-E2E",sourceSha:$sha,verifiedAt:$verifiedAt,noRealFundsMoved:true,landingEntryPoints:$landing,ownerLogin:$ownerLogin,memberRegistration:$memberRegistration,memberImmediateSignin:$memberSignin,paymentApiAuthenticated:$paymentApi,paymentProcessorReady:$paymentProcessorReady,paymentAppSessionPropagation:$paymentAppAuth,wireBackendSecurityAndInstructions:$wireBackend,wireAppSessionPropagation:$wireAppAuth,passed:($landing and $ownerLogin and $memberRegistration and $memberSignin and $paymentApi and $paymentProcessorReady and $paymentAppAuth and $wireBackend and $wireAppAuth)}' \
+            > qa/evidence/full-landing-finance/certificate.json
+          cat qa/evidence/full-landing-finance/certificate.json
+
+      - name: Clean up QA member
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${QA_USER_ID:-}" ] && [ -n "${SUPABASE_SERVICE:-}" ]; then
+            code=$(curl -sS --retry 1 --retry-all-errors --max-time 20 -o /tmp/member-delete.json -w '%{http_code}' \
+              -X DELETE "${SUPABASE_URL%/}/auth/v1/admin/users/${QA_USER_ID}" \
+              -H "apikey: ${SUPABASE_SERVICE}" -H "Authorization: Bearer ${SUPABASE_SERVICE}")
+            case "$code" in 200|204) echo "qa_member_cleanup=PASS" ;; *) echo "qa_member_cleanup=FAIL http=$code"; exit 1;; esac
+          else
+            echo 'qa_member_cleanup=SKIP no QA user created'
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ivx-full-landing-finance-e2e-${{ github.sha }}
+          path: qa/evidence/full-landing-finance/certificate.json
+
+      - name: Enforce full certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f qa/evidence/full-landing-finance/certificate.json
+          test "$(jq -r '.passed' qa/evidence/full-landing-finance/certificate.json)" = true
