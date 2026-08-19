@@ -1,6 +1,13 @@
 /**
  * Supabase env sanitizer for the auth/sign-in path.
- * Supports both modern sb_publishable_ keys and legacy anon JWT keys.
+ * Supports modern sb_publishable_ keys and legacy anon JWT keys.
+ *
+ * IMPORTANT FOR MOBILE OWNER SIGN-IN:
+ * The current login preflight validates a JWT-shaped anon key before sending
+ * credentials. Supabase still reports the production legacy anon key as active,
+ * so this resolver intentionally returns that active JWT to the mobile client
+ * until the login preflight is migrated to accept sb_publishable_ directly.
+ * Backend owner authorization may use either key format.
  */
 
 export const PRODUCTION_SUPABASE_URL = 'https://kvclcdjmjghndxsngfzb.supabase.co';
@@ -80,24 +87,41 @@ export function resolveSupabaseUrl(): string {
 }
 
 /**
- * Resolve the low-privilege client API key.
- * Preference: modern publishable env -> legacy anon env -> known active publishable key.
+ * Resolve the mobile client auth key.
+ *
+ * A valid legacy anon JWT for this production project is preferred because the
+ * current owner-login preflight explicitly validates JWT shape. If the runtime
+ * only supplies an sb_publishable_ key, use the known-active production anon
+ * JWT instead of failing preflight with a false "invalid API key" condition.
  */
 export function resolveSupabaseAnonKey(): string {
-  const raw =
+  const legacyRaw =
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    '';
+  const legacyCandidate = extractSupabaseAnonKey(legacyRaw);
+  if (legacyCandidate?.startsWith('eyJ')) {
+    const ref = extractSupabaseJwtRef(legacyCandidate);
+    if (!ref || ref === PRODUCTION_SUPABASE_PROJECT_REF) {
+      return legacyCandidate;
+    }
+    console.warn('[SupabaseEnv] Ignoring legacy anon key from wrong project:', ref);
+  }
+
+  // A publishable key may be present and is valid for Supabase, but the current
+  // mobile login preflight is JWT-only. Return the active production anon JWT
+  // so owner sign-in remains operational while preserving the publishable key
+  // for backend/auth paths that already support it.
+  const publishableRaw =
     process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.SUPABASE_PUBLISHABLE_KEY ||
-    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.SUPABASE_ANON_KEY;
-  const envKey = extractSupabaseAnonKey(raw);
-  if (envKey?.startsWith('sb_publishable_')) return envKey;
-
-  const envRef = envKey ? extractSupabaseJwtRef(envKey) : null;
-  if (envKey && envRef && envRef !== PRODUCTION_SUPABASE_PROJECT_REF) {
-    console.warn('[SupabaseEnv] Ignoring legacy anon key from wrong project:', envRef);
-    return PRODUCTION_SUPABASE_PUBLISHABLE_KEY;
+    '';
+  const publishableCandidate = extractSupabaseAnonKey(publishableRaw);
+  if (publishableCandidate?.startsWith('sb_publishable_')) {
+    return PRODUCTION_SUPABASE_ANON_KEY;
   }
-  return envKey || PRODUCTION_SUPABASE_PUBLISHABLE_KEY;
+
+  return PRODUCTION_SUPABASE_ANON_KEY;
 }
 
 export function getSupabaseEnvSanitizationReport(): {
@@ -108,10 +132,10 @@ export function getSupabaseEnvSanitizationReport(): {
 } {
   const rawUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? '').trim();
   const rawKey = (
-    process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-    process.env.SUPABASE_PUBLISHABLE_KEY ??
     process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
     process.env.SUPABASE_ANON_KEY ??
+    process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+    process.env.SUPABASE_PUBLISHABLE_KEY ??
     ''
   ).trim();
   return {
