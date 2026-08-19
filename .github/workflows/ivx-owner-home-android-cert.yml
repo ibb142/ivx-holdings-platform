@@ -24,7 +24,12 @@ env:
   EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
   EXPO_PUBLIC_IVX_OPEN_ACCESS_MODE: 'false'
   OWNER_EMAIL: iperez4242@gmail.com
-  OWNER_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD }}
+  OWNER_PASSWORD_S1: ${{ secrets.OWNER_NEW_PASSWORD }}
+  OWNER_PASSWORD_S2: ${{ secrets.OWNER_PASSWORD }}
+  OWNER_PASSWORD_S3: ${{ secrets.IVX_OWNER_PASSWORD }}
+  OWNER_PASSWORD_S4: ${{ secrets.IVX_OWNER_NEW_PASSWORD }}
+  OWNER_PASSWORD_S5: ${{ secrets.OWNER_LOGIN_PASSWORD }}
+  OWNER_PASSWORD_S6: ${{ secrets.IVX_OWNER_LOGIN_PASSWORD }}
 
 jobs:
   certify-owner-home:
@@ -51,14 +56,40 @@ jobs:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006 cmake;3.22.1'
           log-accepted-android-sdk-licenses: false
 
-      - name: Require real owner credentials
+      - name: Resolve real owner credential binding
         shell: bash
         run: |
           set -euo pipefail
           test -n "$OWNER_EMAIL"
-          test -n "$OWNER_PASSWORD"
           test -n "$EXPO_PUBLIC_SUPABASE_URL"
           test -n "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
+          owner_password=''
+          binding='none'
+          for pair in \
+            'OWNER_NEW_PASSWORD:OWNER_PASSWORD_S1' \
+            'OWNER_PASSWORD:OWNER_PASSWORD_S2' \
+            'IVX_OWNER_PASSWORD:OWNER_PASSWORD_S3' \
+            'IVX_OWNER_NEW_PASSWORD:OWNER_PASSWORD_S4' \
+            'OWNER_LOGIN_PASSWORD:OWNER_PASSWORD_S5' \
+            'IVX_OWNER_LOGIN_PASSWORD:OWNER_PASSWORD_S6'; do
+            name=${pair%%:*}
+            var=${pair##*:}
+            value=${!var:-}
+            if [ -n "$value" ]; then
+              owner_password="$value"
+              binding="$name"
+              break
+            fi
+          done
+          test -n "$owner_password"
+          echo "::add-mask::$owner_password"
+          {
+            echo 'OWNER_PASSWORD_EFFECTIVE<<IVX_EOF'
+            echo "$owner_password"
+            echo 'IVX_EOF'
+            echo "OWNER_PASSWORD_BINDING=$binding"
+          } >> "$GITHUB_ENV"
+          echo "owner_password_binding=$binding"
 
       - name: Install dependencies for native certification
         shell: bash
@@ -113,7 +144,7 @@ jobs:
             adb install -r "$APK_PATH"
             curl -Ls https://get.maestro.mobile.dev | bash
             export PATH="$HOME/.maestro/bin:$PATH"
-            maestro test expo/.maestro/ivx-owner-home-certificate.yaml --env OWNER_EMAIL="$OWNER_EMAIL" --env OWNER_PASSWORD="$OWNER_PASSWORD" --format junit --output owner-home-maestro.xml
+            maestro test expo/.maestro/ivx-owner-home-certificate.yaml --env OWNER_EMAIL="$OWNER_EMAIL" --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" --format junit --output owner-home-maestro.xml
             adb exec-out screencap -p > owner-home-final.png
 
       - name: Build durable certificate
@@ -121,7 +152,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p qa/evidence
-          jq -n --arg sha "${{ github.event.pull_request.head.sha || github.sha }}" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{certificate:"IVX-OWNER-SIGNIN-HOME-ANDROID-E2E",passed:true,sourceSha:$sha,realOwnerPasswordEntry:true,homeReadyMarker:true,homeTabRetap:true,blackScreenObserved:false,signInFailureDialogObserved:false,verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-home-android-e2e.json
+          jq -n --arg sha "${{ github.event.pull_request.head.sha || github.sha }}" --arg binding "$OWNER_PASSWORD_BINDING" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{certificate:"IVX-OWNER-SIGNIN-HOME-ANDROID-E2E",passed:true,sourceSha:$sha,credentialBinding:$binding,realOwnerPasswordEntry:true,homeReadyMarker:true,homeTabRetap:true,blackScreenObserved:false,signInFailureDialogObserved:false,secretValuesReturned:false,verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-home-android-e2e.json
           cat qa/evidence/ivx-owner-home-android-e2e.json
 
       - uses: actions/upload-artifact@v4
