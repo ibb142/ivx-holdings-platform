@@ -1,0 +1,44 @@
+name: IVX Owner Auth Apply Now
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.ivx-owner-auth-apply-now'
+      - '.github/workflows/ivx-owner-auth-apply-now.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply deterministic owner auth fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/ivx-owner-auth-fastpath-fix.mjs
+          grep -q 'IVX_OWNER_POST_LOGIN_FAST_PATH_V1' expo/lib/auth-context.tsx
+          grep -q 'IVX_OWNER_REPAIR_BACKGROUND_V1' expo/lib/auth-context.tsx
+          grep -q 'IVX_OWNER_SUPABASE_DIRECT_V1' expo/lib/auth-context.tsx
+          ! grep -q 'await repairOwnerRegistrationAfterLogin(session).catch' expo/lib/auth-context.tsx
+      - name: Commit source fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'IVX Owner Auth Apply'
+          git config user.email 'ivx-owner-auth-apply@users.noreply.github.com'
+          git add expo/lib/auth-context.tsx
+          if git diff --cached --quiet; then
+            echo 'Source already fixed.'
+            exit 0
+          fi
+          git commit -m 'fix(auth): apply owner fast login source patch [skip ci]'
+          git pull --rebase origin main
+          git push origin HEAD:main
