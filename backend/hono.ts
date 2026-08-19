@@ -3010,6 +3010,13 @@ app.get('/health/ai/monitor', () => {
 
 import { getWireInstructions, generateWireReferenceCode, recordWireSubmission } from './api/ivx-wire-transfer';
 import {
+  listWireSubmissions,
+  transitionWireSubmission,
+  purgeQaWireSubmissions,
+  VALID_WIRE_SUBMISSION_STATUSES,
+  type WireSubmissionStatus,
+} from './services/ivx-wire-submission-store';
+import {
   handleRESearchProperties,
   handleREPropertyDetails,
   handleRECreateOffer,
@@ -3146,6 +3153,66 @@ app.post('/api/ivx/wire-submission', async (context) => {
   } catch (error) {
     console.error('[IVXWireTransfer] POST error', error instanceof Error ? error.message : error);
     return Response.json({ ok: false, error: 'Invalid request body' }, { status: 400 });
+  }
+});
+
+// Owner: list reported wire submissions (durable store). Filters: ?status=&qa=&referenceCode=
+app.get('/api/ivx/wire-submissions', async (context) => {
+  const authFail = await requireOwnerAuth(context.req.raw);
+  if (authFail) return authFail;
+  try {
+    const url = new URL(context.req.url);
+    const statusParam = url.searchParams.get('status') ?? undefined;
+    const qaParam = url.searchParams.get('qa');
+    const referenceCode = url.searchParams.get('referenceCode') ?? undefined;
+    const status = statusParam && VALID_WIRE_SUBMISSION_STATUSES.has(statusParam as WireSubmissionStatus)
+      ? statusParam as WireSubmissionStatus
+      : undefined;
+    const submissions = await listWireSubmissions({
+      status,
+      qa: qaParam === 'true' ? true : qaParam === 'false' ? false : undefined,
+      referenceCode,
+    });
+    return Response.json({ ok: true, submissions, count: submissions.length, timestamp: new Date().toISOString() });
+  } catch (error) {
+    return Response.json({ ok: false, error: error instanceof Error ? error.message : 'List wire submissions failed' }, { status: 500 });
+  }
+});
+
+// Owner: transition a wire submission (submitted → received → credited | rejected)
+app.post('/api/ivx/wire-submissions/transition', async (context) => {
+  const authFail = await requireOwnerAuth(context.req.raw);
+  if (authFail) return authFail;
+  try {
+    const body = await context.req.json() as { id?: string; toStatus?: string; reason?: string; operatorEmail?: string };
+    const id = typeof body.id === 'string' ? body.id.trim() : '';
+    const toStatusRaw = typeof body.toStatus === 'string' ? body.toStatus.trim() : '';
+    if (!id || !VALID_WIRE_SUBMISSION_STATUSES.has(toStatusRaw as WireSubmissionStatus)) {
+      return Response.json({ ok: false, error: 'id and a valid toStatus (received|credited|rejected) are required' }, { status: 400 });
+    }
+    const record = await transitionWireSubmission({
+      id,
+      toStatus: toStatusRaw as WireSubmissionStatus,
+      reason: body.reason,
+      operatorEmail: body.operatorEmail,
+    });
+    return Response.json({ ok: true, submission: record, timestamp: new Date().toISOString() });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Wire submission transition failed';
+    const isClientError = message.includes('Invalid transition') || message.includes('not found') || message.includes('Invalid toStatus');
+    return Response.json({ ok: false, error: message }, { status: isClientError ? 400 : 500 });
+  }
+});
+
+// Owner: purge QA-flagged wire submissions (test hygiene; real records untouched)
+app.post('/api/ivx/wire-submissions/purge-qa', async (context) => {
+  const authFail = await requireOwnerAuth(context.req.raw);
+  if (authFail) return authFail;
+  try {
+    const result = await purgeQaWireSubmissions();
+    return Response.json({ ok: true, ...result, timestamp: new Date().toISOString() });
+  } catch (error) {
+    return Response.json({ ok: false, error: error instanceof Error ? error.message : 'QA purge failed' }, { status: 500 });
   }
 });
 
