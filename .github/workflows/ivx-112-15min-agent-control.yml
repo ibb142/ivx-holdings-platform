@@ -18,4 +18,144 @@ env:
   IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
   IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
 
-concurrency
+concurrency:
+  group: ivx-112-15min-agent-control
+  cancel-in-progress: false
+
+jobs:
+  audit-112:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve system binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          SYSTEM_KEY="${IVX_AI_SYSTEM_SECRET:-${IVX_SYSTEM_SECRET:-}}"
+          test -n "$SYSTEM_KEY"
+          echo "::add-mask::$SYSTEM_KEY"
+          echo "SYSTEM_KEY=$SYSTEM_KEY" >> "$GITHUB_ENV"
+
+      - name: Verify production and 112-agent registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          CHECKPOINT_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "CHECKPOINT_AT=$CHECKPOINT_AT" >> "$GITHUB_ENV"
+
+          curl -fsS --max-time 30 "$API_BASE/health" -o /tmp/health.json
+          curl -fsS --max-time 30 "$API_BASE/version" -o /tmp/version.json
+          curl -fsS --max-time 30 "$API_BASE/api/ivx/agents" -o /tmp/agents.json
+
+          test "$(jq -r '.ok // false' /tmp/health.json)" = true
+          test "$(jq -r '.ok // false' /tmp/agents.json)" = true
+          test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
+          test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)" = 112
+
+          LIVE_SHA=$(jq -r '.commit // .version.commit // empty' /tmp/version.json)
+          test -n "$LIVE_SHA"
+          echo "LIVE_SHA=$LIVE_SHA" >> "$GITHUB_ENV"
+
+      - name: Audit each agent one by one
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence/autonomous /tmp/ivx112
+
+          PREV='qa/evidence/autonomous/ivx-112-15min-latest.json'
+          jq -c '.agents | sort_by(.agentNumber // 999999, .agentId)[]' /tmp/agents.json > /tmp/ivx112/agents.ndjson
+
+          : > /tmp/ivx112/records.ndjson
+          number=0
+          while IFS= read -r agent; do
+            number=$((number + 1))
+            agent_id=$(jq -r '.agentId' <<<"$agent")
+            name=$(jq -r '.name // ""' <<<"$agent")
+            status=$(jq -r '.status // .state // "UNKNOWN"' <<<"$agent")
+            paused=$(jq -r '.paused // false' <<<"$agent")
+            disabled=$(jq -r '.disabled // false' <<<"$agent")
+            current_task=$(jq -c '.currentTask // .task // .activeTask // null' <<<"$agent")
+            last_heartbeat=$(jq -r '.lastHeartbeatAt // .heartbeatAt // .lastSeenAt // ""' <<<"$agent")
+
+            first_seen="$CHECKPOINT_AT"
+            if [ -f "$PREV" ]; then
+              old=$(jq -r --arg id "$agent_id" '.agents[]? | select(.agentId==$id) | .firstObservedAt // empty' "$PREV" | head -n1)
+              if [ -n "$old" ]; then first_seen="$old"; fi
+            fi
+
+            task_report_available=false
+            if [ "$current_task" != "null" ]; then task_report_available=true; fi
+
+            jq -n \
+              --argjson sequence "$number" \
+              --arg agentId "$agent_id" \
+              --arg name "$name" \
+              --arg status "$status" \
+              --arg firstObservedAt "$first_seen" \
+              --arg checkpointAt "$CHECKPOINT_AT" \
+              --arg lastHeartbeatAt "$last_heartbeat" \
+              --argjson paused "$paused" \
+              --argjson disabled "$disabled" \
+              --argjson currentTask "$current_task" \
+              --argjson taskReportAvailable "$task_report_available" \
+              --argjson registrySnapshot "$agent" \
+              '{sequence:$sequence,agentId:$agentId,name:$name,status:$status,firstObservedAt:$firstObservedAt,checkpointAt:$checkpointAt,lastHeartbeatAt:$lastHeartbeatAt,paused:$paused,disabled:$disabled,currentTask:$currentTask,taskReportAvailable:$taskReportAvailable,registrySnapshot:$registrySnapshot}' \
+              >> /tmp/ivx112/records.ndjson
+          done < /tmp/ivx112/agents.ndjson
+
+          jq -s '.' /tmp/ivx112/records.ndjson > /tmp/ivx112/records.json
+          test "$(jq 'length' /tmp/ivx112/records.json)" = 112
+
+      - name: Build 15-minute checkpoint certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          active=$(jq '[.[] | select(.disabled==false and .paused==false)] | length' /tmp/ivx112/records.json)
+          paused=$(jq '[.[] | select(.paused==true)] | length' /tmp/ivx112/records.json)
+          disabled=$(jq '[.[] | select(.disabled==true)] | length' /tmp/ivx112/records.json)
+          task_reports=$(jq '[.[] | select(.taskReportAvailable==true)] | length' /tmp/ivx112/records.json)
+
+          jq -n \
+            --arg certificate 'IVX-112-15MIN-AGENT-CONTROL' \
+            --arg programId "$PROGRAM_ID" \
+            --arg checkpointAt "$CHECKPOINT_AT" \
+            --arg productionSha "$LIVE_SHA" \
+            --arg controllerSha "$GITHUB_SHA" \
+            --arg githubRunId "$GITHUB_RUN_ID" \
+            --argjson total 112 \
+            --argjson active "$active" \
+            --argjson paused "$paused" \
+            --argjson disabled "$disabled" \
+            --argjson taskReports "$task_reports" \
+            --slurpfile agents /tmp/ivx112/records.json \
+            '{ok:($total==112 and $paused==0 and $disabled==0),certificate:$certificate,programId:$programId,checkpointAt:$checkpointAt,productionSha:$productionSha,controllerSha:$controllerSha,githubRunId:$githubRunId,totalAgents:$total,activeAgents:$active,pausedAgents:$paused,disabledAgents:$disabled,agentsExposingCurrentTask:$taskReports,agents:$agents[0],truthNote:"A 15-minute observation checkpoint. An agent is not counted as having reported task progress unless its live registry record exposes a current task. Presence in the registry alone is not proof of productive work."}' \
+            > qa/evidence/autonomous/ivx-112-15min-latest.json
+
+          jq -c '{checkpointAt,productionSha,controllerSha,githubRunId,totalAgents,activeAgents,pausedAgents,disabledAgents,agentsExposingCurrentTask,ok}' qa/evidence/autonomous/ivx-112-15min-latest.json \
+            >> qa/evidence/autonomous/ivx-112-15min-history.ndjson
+
+          cat qa/evidence/autonomous/ivx-112-15min-latest.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ivx-112-15min-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            qa/evidence/autonomous/ivx-112-15min-latest.json
+            qa/evidence/autonomous/ivx-112-15min-history.ndjson
+          if-no-files-found: error
+
+      - name: Persist checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'IVX 112 Control Auditor'
+          git config user.email 'ivx-112-control@users.noreply.github.com'
+          git add qa/evidence/autonomous/ivx-112-15min-latest.json qa/evidence/autonomous/ivx-112-15min-history.ndjson
+          git diff --cached --quiet && exit 0
+          git commit -m 'ops(112): persist 15-minute agent checkpoint [skip ci]'
+          git pull --rebase origin main
+          git push origin HEAD:main
