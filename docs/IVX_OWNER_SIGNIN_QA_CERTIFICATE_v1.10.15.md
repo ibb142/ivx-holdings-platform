@@ -4,6 +4,7 @@
 **Date:** 2026-08-19
 **Build:** versionName `1.10.15` / versionCode `113`
 **Result:** 12/12 PASS — CERTIFIED
+**Scope:** includes a live sign-in run against the real owner credential (2026-08-19)
 
 ---
 
@@ -133,7 +134,64 @@ Shipped-bundle verification:
 
 ---
 
-## 8. Recommended follow-up
+## 8. Live owner-credential audit (2026-08-19)
+
+The owner's real credential was tested directly against the hosted project — not a
+surrogate QA account.
+
+### Second, independent defect found: credential transcription
+
+The first attempt with the credential exactly as supplied was rejected:
+
+- Supplied string: 48 characters
+- Result: `HTTP 400 invalid_credentials`
+
+The supplied string contained the leading 9-character segment repeated **four times** —
+a clipboard/autofill duplication artifact. The stored credential contains that segment
+**once**, followed by the trailing 12-character segment (21 characters total).
+
+Variant matrix executed against live GoTrue:
+
+| Variant | Length | Result |
+| --- | --- | --- |
+| Segment x4 + tail (as supplied) | 48 | HTTP 400 invalid_credentials |
+| **Segment x1 + tail** | **21** | **HTTP 200 — SIGN-IN SUCCESS** |
+| Tail only | 12 | HTTP 400 invalid_credentials |
+| Segment only | 9 | HTTP 400 invalid_credentials |
+| Segment x2 + tail | 30 | HTTP 400 invalid_credentials |
+| Segment x3 + tail | 39 | HTTP 400 invalid_credentials |
+| Tail minus final char | 11 | HTTP 400 invalid_credentials |
+| Single-`$` tail | 20 | HTTP 400 invalid_credentials |
+
+Exactly one variant authenticates, confirming the stored credential is intact and the
+failure was input duplication, not account or key state.
+
+### Full end-to-end run with the correct credential
+
+| # | Test | Result | Evidence |
+| --- | --- | --- | --- |
+| 01 | Production anon key accepted by GoTrue | PASS | HTTP 200 |
+| 02 | Owner sign-in with correct password | PASS | HTTP 200, live session issued |
+| 03 | Session resolves to owner identity | PASS | HTTP 200, email match |
+| 04 | Authenticated user is the owner record | PASS | user id match |
+| 05 | Owner account confirmed & not banned | PASS | confirmed, banned=false |
+| 06 | Identity providers intact | PASS | email + phone |
+| 07 | Access token claims valid | PASS | role=authenticated, ttl=60min |
+| 08 | Refresh token rotation | PASS | HTTP 200 |
+| 09 | Authenticated data access over RLS | PASS | HTTP 200 |
+| 10 | Old demo key still reproduces original 401 | PASS | HTTP 401 Invalid API key |
+| 11 | Sign-out revokes session | PASS | HTTP 204 |
+| 12 | Revoked refresh token rejected | PASS | HTTP 400 |
+
+**TOTAL: 12/12 PASS**
+
+The plaintext credential was held only in a `chmod 600` file outside the repository for
+the duration of the run and deleted immediately afterward. It is not recorded in this
+certificate, the repository, or any build artifact.
+
+---
+
+## 9. Recommended follow-up
 
 The `EXPO_PUBLIC_SUPABASE_ANON_KEY` project variable still holds the demo key. The app
 now ignores it safely, but replacing it with the real production anon key removes the
