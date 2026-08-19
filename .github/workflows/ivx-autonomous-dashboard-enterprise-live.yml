@@ -1,0 +1,165 @@
+name: IVX Autonomous Dashboard Enterprise Live
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/api/ivx-autonomous-ops-dashboard.ts'
+      - 'backend/api/ivx-live-work.ts'
+      - 'backend/services/ivx-agent-dashboard-ledger.ts'
+      - 'expo/app/ivx/autonomous-ops.tsx'
+      - 'expo/src/modules/ivx-owner-ai/services/ivxAutonomousOpsService.ts'
+      - '.github/workflows/ivx-autonomous-dashboard-enterprise-live.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ivx-autonomous-dashboard-enterprise-live
+  cancel-in-progress: true
+
+jobs:
+  verify-deploy-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      API_BASE: https://api.ivxholding.com
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+      IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+      DEFAULT_RENDER_SERVICE_ID: srv-d7t9ivreo5us73ftose0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Enterprise 112 source invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "ALL_AGENT_CONTRACTS.map" backend/api/ivx-autonomous-ops-dashboard.ts
+          grep -q "readAgentDashboardLedger(2000)" backend/api/ivx-autonomous-ops-dashboard.ts
+          grep -q "enterpriseDashboard=1" expo/src/modules/ivx-owner-ai/services/ivxAutonomousOpsService.ts
+          grep -q "enterpriseDashboard') === '1'" backend/api/ivx-live-work.ts
+          grep -q "fetchAgentStates" backend/services/ivx-agent-dashboard-ledger.ts
+          grep -q "ivx_agent_executions" backend/services/ivx-agent-dashboard-ledger.ts
+          grep -q "Registry {enterprise.registryCount}/112" expo/app/ivx/autonomous-ops.tsx
+          python3 - <<'PY'
+          import re
+          s=open('backend/services/ivx-enterprise-master-registry.ts').read()
+          nums=[int(x) for x in re.findall(r"\{ n: (\d+), name: 'IA-",s)]
+          assert nums==list(range(1,113)), (len(nums), nums[:3], nums[-3:])
+          print('MASTER_REGISTRY=112/112')
+          PY
+
+      - name: TypeScript smoke for dashboard files
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile || bun install
+          bunx tsc --noEmit --pretty false > /tmp/tsc.log 2>&1 || true
+          bad=0
+          for f in \
+            backend/api/ivx-autonomous-ops-dashboard.ts \
+            backend/api/ivx-live-work.ts \
+            backend/services/ivx-agent-dashboard-ledger.ts \
+            expo/app/ivx/autonomous-ops.tsx \
+            expo/src/modules/ivx-owner-ai/services/ivxAutonomousOpsService.ts; do
+            if grep -F "$f" /tmp/tsc.log; then bad=1; fi
+          done
+          if [ "$bad" = 1 ]; then
+            echo 'Dashboard TypeScript smoke failed.'
+            exit 1
+          fi
+          echo 'DASHBOARD_TYPESCRIPT=PASS'
+
+      - name: Resolve deploy binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE_ID="${RENDER_SERVICE_ID:-$DEFAULT_RENDER_SERVICE_ID}"
+          SYSTEM_KEY="${IVX_AI_SYSTEM_SECRET:-${IVX_SYSTEM_SECRET:-}}"
+          echo "SERVICE_ID=$SERVICE_ID" >> "$GITHUB_ENV"
+          echo "SYSTEM_KEY=$SYSTEM_KEY" >> "$GITHUB_ENV"
+          if [ -n "${RENDER_API_KEY:-}" ]; then
+            echo 'DEPLOY_MODE=render_api' >> "$GITHUB_ENV"
+          elif [ -n "$SYSTEM_KEY" ]; then
+            echo 'DEPLOY_MODE=runtime_bridge' >> "$GITHUB_ENV"
+          else
+            echo 'No deploy credential is bound.'
+            exit 1
+          fi
+
+      - name: Trigger exact-SHA Render deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$DEPLOY_MODE" = render_api ]; then
+            response=$(curl -fsS -X POST "https://api.render.com/v1/services/${SERVICE_ID}/deploys" \
+              -H "Authorization: Bearer ${RENDER_API_KEY}" \
+              -H 'Accept: application/json' -H 'Content-Type: application/json' \
+              --data '{"clearCache":"do_not_clear"}')
+            deploy_id=$(printf '%s' "$response" | jq -r '.id // .deploy.id // empty')
+            test -n "$deploy_id"
+            echo "DEPLOY_ID=$deploy_id" >> "$GITHUB_ENV"
+          else
+            code=$(curl -sS -m 40 -o /tmp/deploy.json -w '%{http_code}' \
+              -X POST "${API_BASE}/api/ivx/developer-deploy/action" \
+              -H 'Content-Type: application/json' -H "X-IVX-System-Key: ${SYSTEM_KEY}" \
+              --data "{\"action\":\"render_trigger_deploy\",\"input\":{\"serviceId\":\"${SERVICE_ID}\",\"commitId\":\"${GITHUB_SHA}\"},\"confirm\":true,\"confirmText\":\"CONFIRM_IVX_RENDER_DEPLOY\",\"reason\":\"Enterprise 112 autonomous dashboard exact-SHA release\"}" || true)
+            case "$code" in 200|201|202) ;; *) cat /tmp/deploy.json || true; exit 1;; esac
+          fi
+
+      - name: Wait for production exact SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 120); do
+            code=$(curl -sS -m 20 -o /tmp/version.json -w '%{http_code}' "${API_BASE}/version" || true)
+            if [ "$code" = 200 ]; then
+              live=$(jq -r '.commit // empty' /tmp/version.json)
+              ok=$(jq -r '.ok // false' /tmp/version.json)
+              echo "poll=$i live=${live:-missing} expected=$GITHUB_SHA"
+              if [ "$ok" = true ] && [ "$live" = "$GITHUB_SHA" ]; then
+                break
+              fi
+            fi
+            if [ "$i" = 120 ]; then exit 1; fi
+            sleep 10
+          done
+
+      - name: Live route and owner gate evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          health=$(curl -sS -m 20 -o /tmp/health.json -w '%{http_code}' "${API_BASE}/health" || true)
+          test "$health" = 200
+          gate=$(curl -sS -m 20 -o /tmp/dashboard-unauth.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" || true)
+          case "$gate" in 401|403) ;; *) echo "owner_gate_http=$gate"; cat /tmp/dashboard-unauth.json || true; exit 1;; esac
+          mkdir -p qa/evidence
+          cat > qa/evidence/autonomous-dashboard-enterprise-live.json <<EOF
+          {
+            "ok": true,
+            "githubSha": "${GITHUB_SHA}",
+            "productionExactSha": true,
+            "registry": "112/112",
+            "durableLedger": "Supabase agent states + executions",
+            "registeredRoute": "/api/ivx/live-work/agents?enterpriseDashboard=1",
+            "ownerGateHttp": ${gate},
+            "healthHttp": ${health},
+            "verifiedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          cat qa/evidence/autonomous-dashboard-enterprise-live.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: autonomous-dashboard-enterprise-live-${{ github.sha }}
+          path: qa/evidence/autonomous-dashboard-enterprise-live.json
+          if-no-files-found: error
