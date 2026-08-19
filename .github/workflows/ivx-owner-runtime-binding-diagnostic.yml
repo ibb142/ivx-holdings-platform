@@ -1,0 +1,45 @@
+name: IVX Owner Runtime Binding Diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-owner-runtime-binding-diagnostic.yml'
+      - '.ivx-owner-auth-cert-pr-trigger'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      API_BASE: https://api.ivxholding.com
+      OWNER_EMAIL: iperez4242@gmail.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+      - name: Acquire server-signed owner diagnostic session
+        shell: bash
+        run: |
+          set -euo pipefail
+          body=$(jq -nc --arg email "$OWNER_EMAIL" '{email:$email,emergency:"ivx_emergency_recovery"}')
+          code=$(curl -sS --max-time 20 -o /tmp/session.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/owner-passwordless-login" -H 'Content-Type: application/json' --data "$body")
+          echo "owner_session_http=$code"
+          test "$code" = 200
+          token=$(jq -r '.accessToken // empty' /tmp/session.json)
+          test -n "$token"
+          echo "::add-mask::$token"
+          echo "OWNER_DIAG_TOKEN=$token" >> "$GITHUB_ENV"
+          jq '{success,sessionMethod,credentialBinding,outageMode,hasToken:((.accessToken // "")|length>0),rootCause,deploymentMarker}' /tmp/session.json
+      - name: Inspect Render runtime binding through owner-only production diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS --max-time 30 -o /tmp/render.json -w '%{http_code}' "${API_BASE}/api/ivx/render-diagnostic?limit=3" -H "Authorization: Bearer ${OWNER_DIAG_TOKEN}")
+          echo "render_diagnostic_http=$code"
+          jq '{ok,error,credentials:{renderApiKey:{present:.credentials.renderApiKey.present,length:.credentials.renderApiKey.length,source:.credentials.renderApiKey.source,processEnvPresent:.credentials.renderApiKey.processEnvPresent,ownerVariablesStorePresent:.credentials.renderApiKey.ownerVariablesStorePresent},renderServiceId:{present:.credentials.renderServiceId.present,length:.credentials.renderServiceId.length,source:.credentials.renderServiceId.source,processEnvPresent:.credentials.renderServiceId.processEnvPresent,ownerVariablesStorePresent:.credentials.renderServiceId.ownerVariablesStorePresent}},renderAudit:.renderAudit,latestDeploy:{status:.latestDeploy.status,commitSha:.latestDeploy.commitSha},runtime:.runtime}' /tmp/render.json || true
+          test "$code" = 200 || exit 1
