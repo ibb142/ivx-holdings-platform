@@ -19,6 +19,9 @@ import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity } from 'rea
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 
+/** Visible build stamp so the installed binary can be identified on-device. */
+export const BUILD_STAMP = '1.10.19 (117)';
+
 // Prevent native splash from auto-hiding.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -31,6 +34,70 @@ let splashFallbackTimer: ReturnType<typeof setTimeout> | null = setTimeout(() =>
 
 // Re-export expo-router's ErrorBoundary for route-level catches.
 export { ErrorBoundary } from 'expo-router';
+
+// -------------------------------------------------------------------
+// FATAL ERROR SHIELD — THIS IS THE BLACK SCREEN FIX.
+//
+// React error boundaries only catch errors thrown during RENDER. An error
+// thrown from a timer, an event handler, a native callback or any async
+// continuation never reaches them.
+//
+// React Native routes those to ErrorUtils' global handler. When it is invoked
+// with isFatal=true, the DEFAULT handler tears down the JS context. The Android
+// Activity stays alive, so the system status bar and navigation bar keep
+// drawing — but the React root view is emptied. The result is a black content
+// area with system bars still visible, no crash dialog, no error text, and no
+// log, because the JS that would report it is already dead.
+//
+// That is exactly the failure being seen. It is not a render error, which is
+// why RootErrorBoundary (correct, and kept) could never catch it.
+//
+// This shield installs at MODULE SCOPE — before any provider, timer or feature
+// code can run — and refuses to forward isFatal onward. The error is surfaced
+// as React state and rendered as a readable screen instead of destroying the
+// runtime.
+// -------------------------------------------------------------------
+type FatalListener = (error: Error) => void;
+
+let fatalListener: FatalListener | null = null;
+let pendingFatal: Error | null = null;
+
+function publishFatal(error: Error): void {
+  pendingFatal = error;
+  if (fatalListener) fatalListener(error);
+}
+
+function installFatalShield(): void {
+  const errorUtils = (globalThis as unknown as {
+    ErrorUtils?: {
+      setGlobalHandler?: (cb: (error: Error, isFatal?: boolean) => void) => void;
+      getGlobalHandler?: () => ((error: Error, isFatal?: boolean) => void) | undefined;
+    };
+  }).ErrorUtils;
+
+  if (!errorUtils?.setGlobalHandler) return;
+  const previous = errorUtils.getGlobalHandler?.();
+
+  errorUtils.setGlobalHandler((error: unknown, isFatal?: boolean) => {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error('[IVX] Global JS error', { isFatal: Boolean(isFatal), message: err.message, stack: err.stack });
+
+    // The splash may still be covering the screen at this point.
+    SplashScreen.hideAsync().catch(() => {});
+    publishFatal(err);
+
+    // NEVER forward isFatal=true. Doing so lets the default handler destroy the
+    // JS context, which blanks the root view to black. Downgrading to
+    // non-fatal keeps React alive so the error screen above can render.
+    try {
+      previous?.(err, false);
+    } catch {
+      // a failing downstream handler must never re-enter this path
+    }
+  });
+}
+
+installFatalShield();
 
 // -------------------------------------------------------------------
 // Visible loading screen — always renders on first paint.
@@ -48,6 +115,7 @@ function VisibleLoadingScreen({ elapsedMs }: { elapsedMs: number }) {
       <ActivityIndicator size="large" color="#E6C200" style={{ marginTop: 24 }} />
       <Text style={loadingStyles.subtitle}>Loading secure session…</Text>
       <Text style={loadingStyles.elapsed}>{`Elapsed: ${(elapsedMs / 1000).toFixed(1)}s`}</Text>
+      <Text style={loadingStyles.elapsed}>{`Build ${BUILD_STAMP}`}</Text>
     </View>
   );
 }
@@ -83,7 +151,7 @@ function ImportCrashScreen({
         <Text style={crashStyles.buttonText}>Retry</Text>
       </TouchableOpacity>
       <Text style={crashStyles.hint}>
-        If this persists, clear app data or reinstall.
+        {`Build ${BUILD_STAMP} — screenshot this screen.`}
       </Text>
     </View>
   );
@@ -161,6 +229,17 @@ function RootLayout(): React.ReactElement {
   const [startTime] = useState(() => Date.now());
   const [elapsedMs, setElapsedMs] = useState(0);
   const [attempt, setAttempt] = useState(0);
+  const [fatalError, setFatalError] = useState<Error | null>(pendingFatal);
+
+  // Subscribe to fatal runtime errors captured by the module-scope shield,
+  // including any that fired before this component mounted.
+  useEffect(() => {
+    fatalListener = (err: Error) => setFatalError(err);
+    if (pendingFatal) setFatalError(pendingFatal);
+    return () => {
+      fatalListener = null;
+    };
+  }, []);
 
   useEffect(() => {
     const elapsedTimer = setInterval(() => {
@@ -210,6 +289,22 @@ function RootLayout(): React.ReactElement {
       clearTimeout(timer);
     };
   }, [attempt]);
+
+  // Phase 0: a fatal runtime error was intercepted. Show it instead of letting
+  // the JS context die to a black screen.
+  if (fatalError) {
+    return (
+      <ImportCrashScreen
+        title="IVX Runtime Error"
+        error={fatalError}
+        onRetry={() => {
+          pendingFatal = null;
+          setFatalError(null);
+          setAttempt((a) => a + 1);
+        }}
+      />
+    );
+  }
 
   // Phase 1: show visible loading screen (no providers, no Stack).
   if (!providersModule && !importError) {
