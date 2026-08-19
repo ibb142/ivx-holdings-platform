@@ -113,6 +113,37 @@ export function shouldSanitizeType(type: unknown): boolean {
   return !isTextAcceptingType(type);
 }
 
+/**
+ * Whether `children` carries a function anywhere at the top level.
+ *
+ * Some libraries pass children as a render-prop tuple rather than as renderable
+ * nodes. expo-image's `AnimationManager` is the canonical case: it receives
+ * `[animationKey: string, renderFunction: (cb) => (className, style) => Element]`
+ * and later reads `children[1]` expecting a function.
+ *
+ * `React.Children.map` cannot round-trip that shape: it wraps the string element
+ * in <Text> AND silently DROPS the function element (a function is not a valid
+ * React child, so React never invokes the map callback for it). The tuple comes
+ * back as `[<Text>, undefined]`, and the consumer throws
+ * "renderFunction[1] is not a function", taking the whole screen down.
+ *
+ * A raw string inside such a tuple is never rendered as a text node, so there is
+ * nothing to guard against here — skipping these children is always correct.
+ */
+export function containsFunctionChild(children: React.ReactNode): boolean {
+  if (typeof children === 'function') {
+    return true;
+  }
+  if (Array.isArray(children)) {
+    return children.some(
+      (child) =>
+        typeof child === 'function' ||
+        (Array.isArray(child) && child.some((inner) => typeof inner === 'function')),
+    );
+  }
+  return false;
+}
+
 function reportStrayChild(text: string): void {
   const stack = new Error('text-node-guard').stack ?? '';
   const key = `${text.slice(0, 24)}::${stack.split('\n').slice(3, 5).join('|')}`;
@@ -128,6 +159,11 @@ function reportStrayChild(text: string): void {
 
 /** Returns sanitized children, or the original reference if nothing changed. */
 function sanitizeChildren(children: React.ReactNode): { value: React.ReactNode; mutated: boolean } {
+  // Never touch render-prop tuples — React.Children.map would destroy them.
+  if (containsFunctionChild(children)) {
+    return { value: children, mutated: false };
+  }
+
   let mutated = false;
   const mapped = React.Children.map(children, (child) => {
     if (typeof child === 'string') {
