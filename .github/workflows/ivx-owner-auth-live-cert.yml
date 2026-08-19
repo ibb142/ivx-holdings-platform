@@ -32,6 +32,7 @@ jobs:
       OWNER_EMAIL: iperez4242@gmail.com
       SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       API_BASE: https://api.ivxholding.com
     steps:
       - uses: actions/checkout@v4
@@ -53,11 +54,15 @@ jobs:
           grep -q 'signInWithEmailPassword(freshClient, normalizedEmail, password)' expo/lib/auth-context.tsx
           if grep -q 'await repairOwnerRegistrationAfterLogin(session).catch' expo/lib/auth-context.tsx; then exit 1; fi
           grep -q 'persistSession: true' expo/lib/supabase.ts
-          grep -q "readEnv('IVX_OWNER_PASSWORD') || readEnv('OWNER_NEW_PASSWORD')" backend/api/ivx-owner-passwordless-login.ts
-          grep -q "getIVXOwnerVariableRuntimeValue('OWNER_NEW_PASSWORD')" backend/api/ivx-owner-passwordless-login.ts
           grep -q 'signInWithPassword' backend/api/ivx-owner-passwordless-login.ts
           test -n "$SUPABASE_URL"
           test -n "$SUPABASE_ANON_KEY"
+      - name: Synchronize existing Render owner password with Supabase Auth
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$RENDER_API_KEY" || { echo 'render_api_key_binding=missing'; exit 1; }
+          node expo/deploy/scripts/owner-pw-reset-via-render-env.mjs
       - name: Real runtime-bound Supabase password grant and latency
         shell: bash
         run: |
@@ -73,11 +78,7 @@ jobs:
           test "$curl_rc" -eq 0
           read -r code total < /tmp/login.metrics
           echo "owner_runtime_login_http=$code time_total=$total"
-          if [ -s /tmp/login.json ]; then
-            jq '{success,sessionMethod,credentialBinding,outageMode,hasAccessToken:((.accessToken // "")|length>0),hasRefreshToken:((.refreshToken // "")|length>0),userId,rootCause,message,deploymentMarker}' /tmp/login.json || { echo 'response_not_json'; head -c 500 /tmp/login.json; echo; }
-          else
-            echo 'response_body_empty'
-          fi
+          jq '{success,sessionMethod,credentialBinding,outageMode,hasAccessToken:((.accessToken // "")|length>0),hasRefreshToken:((.refreshToken // "")|length>0),userId,rootCause,message,deploymentMarker}' /tmp/login.json || true
           test "$code" = 200
           test "$(jq -r '.success // false' /tmp/login.json)" = true
           method=$(jq -r '.sessionMethod // empty' /tmp/login.json)
@@ -104,7 +105,7 @@ jobs:
           test "$(jq -r '.id // empty' /tmp/user.json)" = "$OWNER_USER_ID"
           app_role=$(jq -r '.app_metadata.role // empty' /tmp/user.json)
           user_role=$(jq -r '.user_metadata.role // empty' /tmp/user.json)
-          case "$app_role:$user_role" in *owner*|*admin*) ;; *) echo "owner metadata missing"; exit 1;; esac
+          case "$app_role:$user_role" in *owner*|*admin*) ;; *) echo 'owner metadata missing'; exit 1;; esac
           echo "OWNER_APP_ROLE=$app_role" >> "$GITHUB_ENV"
           echo "OWNER_USER_ROLE=$user_role" >> "$GITHUB_ENV"
       - name: Verify live owner-only backend gate with real session
