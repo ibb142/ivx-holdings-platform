@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
@@ -16,6 +17,13 @@ type IVXMetroTransformer = {
 };
 
 describe('AI SDK Metro compatibility', () => {
+  test('keeps the root layout outside the managed provider-injection signature', () => {
+    const rootLayout = readFileSync(join(projectRoot, 'app/_layout.tsx'), 'utf8');
+
+    expect(rootLayout).not.toMatch(/export\s+default\s+function\s+\w+/);
+    expect(rootLayout).toContain('export default RootLayout;');
+  });
+
   test('uses the IVX transformer after applying the Rork Metro wrapper', () => {
     const config = require(join(projectRoot, 'metro.config.js')) as MetroConfig;
 

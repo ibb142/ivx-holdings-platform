@@ -86,7 +86,7 @@ function ImportCrashScreen({ error, onRetry }: { error: Error; onRetry: () => vo
 // -------------------------------------------------------------------
 const PROVIDER_LOAD_TIMEOUT_MS = 15000;
 
-export default function RootLayout() {
+function RootLayout(): React.ReactElement {
   const [providersModule, setProvidersModule] = useState<{ AppProviders: React.ComponentType } | null>(null);
   const [importError, setImportError] = useState<Error | null>(null);
   const [startTime] = useState(() => Date.now());
@@ -161,6 +161,11 @@ export default function RootLayout() {
   const { AppProviders } = providersModule!;
   return <AppProviders />;
 }
+
+// Keep the default export separate from the function declaration. The managed
+// preview transformer otherwise injects its full developer SDK into this file,
+// which pulls Node-only AI SDK helpers into Metro's mobile and web bundles.
+export default RootLayout;
 
 // -------------------------------------------------------------------
 // Styles
