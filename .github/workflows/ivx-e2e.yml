@@ -49,6 +49,23 @@ jobs:
           cd expo && bun run lint
           echo 'lint=PASS'
 
+  live-landing-critical:
+    name: Landing register/sign-in/wire live — HARD GATE
+    runs-on: ubuntu-latest
+    needs: [typecheck]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Live landing + member auth + wire — HARD GATE
+        run: |
+          set -euo pipefail
+          node scripts/ivx-live-qa.mjs --json | tee live-landing-qa.json
+          node -e "const f=require('fs');const r=JSON.parse(f.readFileSync('live-landing-qa.json','utf8'));if(r.certified!==true||r.failed!==0)process.exit(1);console.log('landing_live_critical=PASS total='+r.total)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-landing-qa
+          path: live-landing-qa.json
+
   e2e-playwright:
     name: Playwright E2E (web surface) — HARD GATE
     runs-on: ubuntu-latest
