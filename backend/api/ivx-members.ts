@@ -437,7 +437,6 @@ export async function handleStartKYC(request: Request): Promise<Response> {
 // GET /api/members/verification-status
 export async function handleVerificationStatus(request: Request): Promise<Response> {
   const userId = await requireAuthenticatedMember(request);
-
   if (!userId) {
     return jsonResponse({ success: false, message: 'Authentication required.', deploymentMarker: DEPLOYMENT_MARKER }, 401);
   }
@@ -482,8 +481,18 @@ export async function handleMemberForgotPassword(request: Request): Promise<Resp
   if (!email) {
     return jsonResponse({ success: false, message: 'Email is required.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
   }
-  const result = await requestMemberPasswordReset(email);
-  return jsonResponse(result, result.success ? 200 : 400);
+
+  // Execute the real recovery request, but never expose transport details or
+  // fallback-store reset tokens through this unauthenticated endpoint. Returning
+  // different channels/tokens would disclose account state and, for fallback
+  // members, could let a caller take over the account. The public contract is
+  // intentionally identical for every syntactically valid email.
+  await requestMemberPasswordReset(email);
+  return jsonResponse({
+    success: true,
+    message: 'If an account exists for that email, a reset link has been sent.',
+    deploymentMarker: DEPLOYMENT_MARKER,
+  }, 200);
 }
 
 // POST /api/members/reset-password
