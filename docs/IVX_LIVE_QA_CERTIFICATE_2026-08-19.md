@@ -2,8 +2,9 @@
 
 **Scope:** landing page · member registration · member sign-in · bank/wire payments
 **Target:** `https://api.ivxholding.com` + `https://ivxholding.com` (live production)
-**Verdict: CERTIFIED — 26 of 26 live QA gates passed (`exit 0`) at 2026-08-20T00:16:51Z.**
+**Verdict: CERTIFIED — 26 of 26 live QA gates passed (`exit 0`) at 2026-08-20T01:27:27Z.**
 Owner certification endpoint: 5 of 8 (3 known non-blocking failures, detailed below).
+Compute upgraded Nano → Micro on 2026-08-20; root cause now removed, not just recovered.
 
 This document does not say "done" where it is not. It says exactly what works,
 exactly what does not, and how you confirm both yourself without trusting anyone's
@@ -79,6 +80,87 @@ The `/api/ivx/certification/member-auth-public` runner reports 5/8:
   Housekeeping only.
 
 These are recorded as open, not hidden, and not counted as passing.
+
+### COMPUTE UPGRADE — Nano → Micro (2026-08-20T01:2x UTC)
+
+The root cause (undersized compute) is now **removed**, not merely recovered from.
+Applied via the Supabase Management API rather than the dashboard:
+
+```
+PATCH /v1/projects/kvclcdjmjghndxsngfzb/billing/addons
+  {"addon_type":"compute_instance","addon_variant":"ci_micro"}
+  -> HTTP 200
+
+verified selected_addons:
+  compute_instance -> ci_micro | Micro
+  RAM 1 GB | 2 CPU cores
+  baseline disk IO 87 MB/s (max 2085)
+  direct connections 60 | pooler 200
+  price $0.01344/hour (~$10/month)
+```
+
+**Cost impact: $0.** The Pro plan includes $10/month of compute credits, which
+cover exactly one Micro instance. Plan stays at $25/month. No plan change was
+needed or made — Team ($599/mo) sells SOC2/HIPAA/SSO, not memory, and would not
+have fixed this.
+
+Two corrections to earlier claims in this file's history, recorded rather than
+quietly dropped:
+
+1. The spend cap was **not** blocking the compute upgrade. Supabase docs are
+   explicit that Compute Hours are not covered by the Spend Cap; the cap in the
+   dashboard limited **disk** to 8 GB. Advice to disable the spend cap was wrong
+   and was withdrawn. The cap remains enabled.
+2. `SUPABASE_ACCESS_TOKEN` in the Render environment is a **placeholder label**
+   (60 chars, begins `Supabase`, contains spaces), not a credential. The
+   Management API rejects it with HTTP 401. Any component relying on that
+   variable being a real token is silently non-functional. Open item.
+
+### Resize transition (measured, not assumed)
+
+The project went `ACTIVE_HEALTHY → RESIZING → ACTIVE_HEALTHY`, and auth came back
+in stages. Captured live rather than waiting and declaring success:
+
+```
+01:24:34  rest=401/0.041s   authHealth=000  (auth container down)
+01:25:18  rest=401/0.054s   authHealth=000
+01:26:25  authHealth=521                    (origin answering)
+01:26:35  authHealth=200/0.101s             *** AUTH BACK ***
+01:26:53  health=200  passwordGrant=400/0.285s  *** DECISIONS WORKING ***
+```
+
+Auth was briefly unavailable during the resize. This is expected for a compute
+change and is disclosed here for completeness.
+
+### Post-upgrade verification
+
+The bcrypt password grant — the exact operation that previously returned 504 —
+now answers consistently in well under a tenth of a second:
+
+```
+400 t=0.098s   400 t=0.066s   400 t=0.066s   400 t=0.069s   400 t=0.067s
+400 t=0.082s   400 t=0.080s   400 t=0.060s   400 t=0.056s   400 t=0.082s
+```
+
+Ten consecutive decisions, zero timeouts, zero flapping. Before the fix this same
+call returned 504 or hung past 19 seconds.
+
+Owner sign-in through the application:
+
+```
+POST /api/members/login -> 200 0.411s token: true
+POST /api/members/login -> 200 0.283s token: true
+POST /api/members/login -> 200 0.269s token: true
+```
+
+Full harness re-run after the upgrade:
+
+```
+26/26 passed  ALL PASS
+certified: YES
+ran at 2026-08-20T01:27:27.685Z against https://api.ivxholding.com
+EXIT=0
+```
 
 ### Deploy note
 
