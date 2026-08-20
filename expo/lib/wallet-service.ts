@@ -222,77 +222,39 @@ export async function creditWallet(
   referenceType?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // --- TRY ATOMIC RPC FIRST ---
-    try {
-      console.log('[WalletService] Attempting atomic RPC credit...');
-      const rpcResult = await rpcAtomicWalletOp({
-        p_user_id: userId,
-        p_amount: amount,
-        p_operation: 'credit',
-        p_reason: reason,
-        p_description: description,
-        p_reference_id: referenceId,
-        p_reference_type: referenceType,
-      });
-      if (rpcResult.success) {
-        console.log('[WalletService] Atomic RPC credit SUCCESS:', amount, reason);
-        return { success: true };
-      }
-      if (rpcResult.message && !rpcResult.message.includes('does not exist')) {
-        console.log('[WalletService] Atomic RPC credit business error:', rpcResult.message);
-        return { success: false, error: rpcResult.message };
-      }
-      console.log('[WalletService] Atomic RPC not available, falling back');
-    } catch (rpcErr) {
-      console.log('[WalletService] Atomic RPC credit exception, falling back:', (rpcErr as Error)?.message);
-    }
-
-    // --- FALLBACK: Client-side logic ---
-    const { data: currentWallet, error: fetchErr } = await supabase
-      .from('wallets')
-      .select('available, invested, total, updated_at')
-      .eq('user_id', userId)
-      .single();
-
-    if (fetchErr || !currentWallet) {
-      await ensureWallet(userId);
-      return creditWallet(userId, amount, reason, description, referenceId, referenceType);
-    }
-
-    const typed = currentWallet as unknown as WalletRow;
-    const newAvailable = (typed.available ?? 0) + amount;
-    const newTotal = (typed.total ?? 0) + amount;
-
-    const { error: updateErr } = await supabase
-      .from('wallets')
-      .update({
-        available: newAvailable,
-        total: newTotal,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', userId);
-
-    if (updateErr) {
-      console.log('[WalletService] creditWallet update failed:', updateErr?.message);
-      return { success: false, error: updateErr.message };
-    }
-
-    await recordWalletTransaction({
-      user_id: userId,
-      type: reason,
-      amount,
-      direction: 'credit',
-      status: 'completed',
-      reference_id: referenceId,
-      reference_type: referenceType,
-      description,
+    // Wallet credit is a SETTLEMENT operation. It runs exclusively through the
+    // server-side atomic RPC, which is executable by service_role only.
+    //
+    // There is deliberately NO client-side fallback here. A previous revision fell
+    // back to writing `wallets.available` / `wallets.total` directly from the client
+    // whenever the RPC was unavailable — which is a member self-credit path: any
+    // client able to reach the table could mint balance without a verified deposit.
+    // Hardening the database (revoking EXECUTE from anon/authenticated) makes the RPC
+    // refuse, and the old code treated that refusal as a reason to do the write
+    // client-side anyway, defeating the hardening. It now FAILS CLOSED.
+    const rpcResult = await rpcAtomicWalletOp({
+      p_user_id: userId,
+      p_amount: amount,
+      p_operation: 'credit',
+      p_reason: reason,
+      p_description: description,
+      p_reference_id: referenceId,
+      p_reference_type: referenceType,
     });
 
-    console.log('[WalletService] Wallet credited:', amount, reason, '| method: client_fallback');
-    return { success: true };
+    if (rpcResult.success) {
+      console.log('[WalletService] Atomic settlement credit applied:', amount, reason);
+      return { success: true };
+    }
+
+    console.log('[WalletService] Atomic settlement credit refused:', rpcResult.message);
+    return {
+      success: false,
+      error: rpcResult.message || 'Wallet credit requires verified server-side settlement.',
+    };
   } catch (err) {
     console.log('[WalletService] creditWallet error:', (err as Error)?.message);
-    return { success: false, error: (err as Error)?.message };
+    return { success: false, error: 'Wallet credit requires verified server-side settlement.' };
   }
 }
 
@@ -305,85 +267,34 @@ export async function debitWallet(
   referenceType?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // --- TRY ATOMIC RPC FIRST ---
-    try {
-      console.log('[WalletService] Attempting atomic RPC debit...');
-      const rpcResult = await rpcAtomicWalletOp({
-        p_user_id: userId,
-        p_amount: amount,
-        p_operation: 'debit',
-        p_reason: reason,
-        p_description: description,
-        p_reference_id: referenceId,
-        p_reference_type: referenceType,
-      });
-      if (rpcResult.success) {
-        console.log('[WalletService] Atomic RPC debit SUCCESS:', amount, reason);
-        return { success: true };
-      }
-      if (rpcResult.message && !rpcResult.message.includes('does not exist')) {
-        console.log('[WalletService] Atomic RPC debit business error:', rpcResult.message);
-        return { success: false, error: rpcResult.message };
-      }
-      console.log('[WalletService] Atomic RPC not available, falling back');
-    } catch (rpcErr) {
-      console.log('[WalletService] Atomic RPC debit exception, falling back:', (rpcErr as Error)?.message);
-    }
-
-    // --- FALLBACK: Client-side logic ---
-    const { data: currentWallet, error: fetchErr } = await supabase
-      .from('wallets')
-      .select('available, invested, total, updated_at')
-      .eq('user_id', userId)
-      .single();
-
-    if (fetchErr || !currentWallet) {
-      return { success: false, error: 'Wallet not found' };
-    }
-
-    const typed = currentWallet as unknown as WalletRow;
-    if ((typed.available ?? 0) < amount) {
-      return {
-        success: false,
-        error: `Insufficient balance: ${(typed.available ?? 0).toFixed(2)} available, ${amount.toFixed(2)} required`,
-      };
-    }
-
-    const newAvailable = Math.max(0, (typed.available ?? 0) - amount);
-    const isInvestment = reason === 'investment' || reason === 'resale_purchase';
-    const newInvested = isInvestment ? (typed.invested ?? 0) + amount : (typed.invested ?? 0);
-
-    const { error: updateErr } = await supabase
-      .from('wallets')
-      .update({
-        available: newAvailable,
-        invested: newInvested,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', userId)
-      .eq('available', typed.available);
-
-    if (updateErr) {
-      console.log('[WalletService] debitWallet atomic update failed:', updateErr?.message);
-      return { success: false, error: 'Wallet update failed — possible concurrent modification. Please retry.' };
-    }
-
-    await recordWalletTransaction({
-      user_id: userId,
-      type: reason,
-      amount,
-      direction: 'debit',
-      status: 'completed',
-      reference_id: referenceId,
-      reference_type: referenceType,
-      description,
+    // Wallet debit is also a LEDGER WRITE and runs exclusively through the
+    // server-side atomic RPC. The removed client-side fallback recomputed the
+    // balance in the client and wrote it back, so a tampered client could set an
+    // arbitrary `available` value. Balance arithmetic must never be client-authored.
+    // FAILS CLOSED.
+    const rpcResult = await rpcAtomicWalletOp({
+      p_user_id: userId,
+      p_amount: amount,
+      p_operation: 'debit',
+      p_reason: reason,
+      p_description: description,
+      p_reference_id: referenceId,
+      p_reference_type: referenceType,
     });
 
-    console.log('[WalletService] Wallet debited:', amount, reason, '| new available:', newAvailable, '| method: client_fallback');
-    return { success: true };
+    if (rpcResult.success) {
+      console.log('[WalletService] Atomic settlement debit applied:', amount, reason);
+      return { success: true };
+    }
+
+    console.log('[WalletService] Atomic settlement debit refused:', rpcResult.message);
+    return {
+      success: false,
+      error: rpcResult.message || 'Wallet debit requires verified server-side settlement.',
+    };
   } catch (err) {
     console.log('[WalletService] debitWallet error:', (err as Error)?.message);
-    return { success: false, error: (err as Error)?.message };
+    return { success: false, error: 'Wallet debit requires verified server-side settlement.' };
   }
 }
 
@@ -411,50 +322,35 @@ export async function processSaleCredit(
   propertyId: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { data: currentWallet, error: fetchErr } = await supabase
-      .from('wallets')
-      .select('available, invested, total, updated_at')
-      .eq('user_id', userId)
-      .single();
-
-    if (fetchErr || !currentWallet) {
-      return { success: false, error: 'Wallet not found' };
-    }
-
-    const typed = currentWallet as unknown as WalletRow;
-    const newAvailable = (typed.available ?? 0) + netProceeds;
-    const newInvested = Math.max(0, (typed.invested ?? 0) - investedReduction);
-
-    const { error: updateErr } = await supabase
-      .from('wallets')
-      .update({
-        available: newAvailable,
-        invested: newInvested,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', userId);
-
-    if (updateErr) {
-      console.log('[WalletService] processSaleCredit update failed:', updateErr?.message);
-      return { success: false, error: updateErr.message };
-    }
-
-    await recordWalletTransaction({
-      user_id: userId,
-      type: 'sale_proceeds',
-      amount: netProceeds,
-      direction: 'credit',
-      status: 'completed',
-      reference_id: propertyId,
-      reference_type: 'property',
-      description: `Sale proceeds from ${propertyName}`,
+    // Sale proceeds are a CREDIT plus an invested-balance reduction. Both are ledger
+    // arithmetic and are performed server-side by the atomic settlement function,
+    // which derives the invested adjustment from the reason code. The previous
+    // client-side read-modify-write let a tampered client choose its own
+    // `available` / `invested` values. FAILS CLOSED.
+    void investedReduction;
+    const rpcResult = await rpcAtomicWalletOp({
+      p_user_id: userId,
+      p_amount: netProceeds,
+      p_operation: 'credit',
+      p_reason: 'sale_proceeds',
+      p_description: `Sale proceeds from ${propertyName}`,
+      p_reference_id: propertyId,
+      p_reference_type: 'property',
     });
 
-    console.log('[WalletService] Sale credit processed:', netProceeds, '| invested reduced by:', investedReduction);
-    return { success: true };
+    if (rpcResult.success) {
+      console.log('[WalletService] Sale credit settled server-side:', netProceeds);
+      return { success: true };
+    }
+
+    console.log('[WalletService] Sale credit refused:', rpcResult.message);
+    return {
+      success: false,
+      error: rpcResult.message || 'Sale proceeds require verified server-side settlement.',
+    };
   } catch (err) {
     console.log('[WalletService] processSaleCredit error:', (err as Error)?.message);
-    return { success: false, error: (err as Error)?.message };
+    return { success: false, error: 'Sale proceeds require verified server-side settlement.' };
   }
 }
 
@@ -506,56 +402,34 @@ export async function processWithdrawalDebit(
   withdrawMethod: string,
   withdrawalId: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const totalDebit = amount;
   try {
-    const { data: currentWallet, error: fetchErr } = await supabase
-      .from('wallets')
-      .select('available, invested, total, updated_at')
-      .eq('user_id', userId)
-      .single();
-
-    if (fetchErr || !currentWallet) {
-      return { success: false, error: 'Wallet not found' };
-    }
-
-    const typed = currentWallet as unknown as WalletRow;
-    if ((typed.available ?? 0) < totalDebit) {
-      return { success: false, error: 'Insufficient balance for withdrawal' };
-    }
-
-    const newAvailable = Math.max(0, (typed.available ?? 0) - totalDebit);
-
-    const { error: updateErr } = await supabase
-      .from('wallets')
-      .update({
-        available: newAvailable,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', userId)
-      .eq('available', typed.available);
-
-    if (updateErr) {
-      return { success: false, error: 'Wallet update failed. Please retry.' };
-    }
-
-    await recordWalletTransaction({
-      user_id: userId,
-      type: 'withdrawal',
-      amount,
-      direction: 'debit',
-      status: 'completed',
-      reference_id: withdrawalId,
-      reference_type: 'withdrawal',
-      description: `Withdrawal via ${withdrawMethod}`,
-      fee,
-      net_amount: amount - fee,
-      payment_method: withdrawMethod,
+    // Withdrawal is a ledger DEBIT. The sufficient-funds check and the balance
+    // arithmetic both run server-side inside the atomic settlement function: a
+    // client-side balance check is advisory only and trivially bypassed. The
+    // previous read-modify-write is removed. FAILS CLOSED.
+    const rpcResult = await rpcAtomicWalletOp({
+      p_user_id: userId,
+      p_amount: amount,
+      p_operation: 'debit',
+      p_reason: 'withdrawal',
+      p_description: `Withdrawal via ${withdrawMethod}`,
+      p_reference_id: withdrawalId,
+      p_reference_type: 'withdrawal',
+      p_fee: fee,
     });
 
-    console.log('[WalletService] Withdrawal processed:', amount, '| fee:', fee, '| method:', withdrawMethod);
-    return { success: true };
+    if (rpcResult.success) {
+      console.log('[WalletService] Withdrawal settled server-side:', amount, '| method:', withdrawMethod);
+      return { success: true };
+    }
+
+    console.log('[WalletService] Withdrawal refused:', rpcResult.message);
+    return {
+      success: false,
+      error: rpcResult.message || 'Withdrawal requires verified server-side settlement.',
+    };
   } catch (err) {
     console.log('[WalletService] processWithdrawalDebit error:', (err as Error)?.message);
-    return { success: false, error: (err as Error)?.message };
+    return { success: false, error: 'Withdrawal requires verified server-side settlement.' };
   }
 }
