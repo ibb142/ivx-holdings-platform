@@ -18,6 +18,52 @@
     });
   }
 
+  function ensureInvestForgotPasswordLink() {
+    var form = document.getElementById('invest-auth-form');
+    var loginTab = document.getElementById('invest-tab-login');
+    if (!form || !loginTab) return;
+
+    var existing = document.getElementById('invest-forgot-password-link');
+    if (!existing) {
+      var link = document.createElement('a');
+      link.id = 'invest-forgot-password-link';
+      link.href = '/forgot-password.html';
+      link.textContent = 'Forgot password?';
+      link.setAttribute('aria-label', 'Reset your IVX password');
+      link.style.display = 'none';
+      link.style.marginTop = '10px';
+      link.style.marginBottom = '2px';
+      link.style.textAlign = 'right';
+      link.style.color = '#FFD700';
+      link.style.fontSize = '13px';
+      link.style.fontWeight = '700';
+      link.style.textDecoration = 'none';
+      link.addEventListener('click', function(event) {
+        event.preventDefault();
+        var emailInput = document.getElementById('invest-email');
+        var email = emailInput && emailInput.value ? String(emailInput.value).trim() : '';
+        window.location.href = '/forgot-password.html' + (email ? '?email=' + encodeURIComponent(email) : '');
+      });
+      form.appendChild(link);
+      existing = link;
+    }
+
+    existing.style.display = loginTab.classList.contains('active') ? 'block' : 'none';
+  }
+
+  function bindInvestRecovery() {
+    ensureInvestForgotPasswordLink();
+    var loginTab = document.getElementById('invest-tab-login');
+    var signupTab = document.getElementById('invest-tab-signup');
+    [loginTab, signupTab].forEach(function(tab) {
+      if (!tab || tab.dataset.ivxForgotBound === 'true') return;
+      tab.dataset.ivxForgotBound = 'true';
+      tab.addEventListener('click', function() {
+        setTimeout(ensureInvestForgotPasswordLink, 0);
+      });
+    });
+  }
+
   window._ivxLazyLoad = function(module) {
     if (module === 'portal') {
       if (window.IVXPortal) return Promise.resolve(window.IVXPortal);
@@ -27,8 +73,14 @@
       });
     }
     if (module === 'invest') {
-      if (window.IVXInvest) return Promise.resolve(window.IVXInvest);
-      return loadScript('/ivx-invest.js').then(function() { return window.IVXInvest; });
+      if (window.IVXInvest) {
+        setTimeout(bindInvestRecovery, 0);
+        return Promise.resolve(window.IVXInvest);
+      }
+      return loadScript('/ivx-invest.js').then(function() {
+        setTimeout(bindInvestRecovery, 0);
+        return window.IVXInvest;
+      });
     }
     return Promise.reject(new Error('Unknown module: ' + module));
   };
@@ -66,15 +118,21 @@
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bindPortalLinks, { once: true });
+    document.addEventListener('DOMContentLoaded', function() {
+      bindPortalLinks();
+      bindInvestRecovery();
+    }, { once: true });
   } else {
     bindPortalLinks();
+    bindInvestRecovery();
   }
 
   // Investment — lazy loaded only when user opens invest flow (item 110)
   window.openInvestModal = function(dealId) {
-    window._ivxLazyLoad('invest').then(function(m) { m.open(dealId); })
-      .catch(function(e) { console.error('[IVX] invest load failed', e); });
+    window._ivxLazyLoad('invest').then(function(m) {
+      m.open(dealId);
+      setTimeout(bindInvestRecovery, 0);
+    }).catch(function(e) { console.error('[IVX] invest load failed', e); });
   };
   window.closeInvestModal = function() {
     window._ivxLazyLoad('invest').then(function(m) { m.close(); })
@@ -93,12 +151,16 @@
       .catch(function(e) { console.error('[IVX] invest load failed', e); });
   };
   window.goInvestStep = function(step) {
-    window._ivxLazyLoad('invest').then(function(m) { m.goStep(step); })
-      .catch(function(e) { console.error('[IVX] invest load failed', e); });
+    window._ivxLazyLoad('invest').then(function(m) {
+      m.goStep(step);
+      if (step === 3) setTimeout(bindInvestRecovery, 0);
+    }).catch(function(e) { console.error('[IVX] invest load failed', e); });
   };
   window.switchInvestAuthTab = function(tab) {
-    window._ivxLazyLoad('invest').then(function(m) { m.switchAuthTab(tab); })
-      .catch(function(e) { console.error('[IVX] invest load failed', e); });
+    window._ivxLazyLoad('invest').then(function(m) {
+      m.switchAuthTab(tab);
+      setTimeout(bindInvestRecovery, 0);
+    }).catch(function(e) { console.error('[IVX] invest load failed', e); });
   };
   window.handleInvestAuth = function(e) {
     window._ivxLazyLoad('invest').then(function(m) { m.handleAuth(e); })
