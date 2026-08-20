@@ -1,14 +1,11 @@
 /**
  * IVX Autonomous Mode API (owner-only).
  *
- * The single entry point that runs the full 12-step autonomous lifecycle for an
- * owner task — with the six human-approval safety gates enforced server-side:
- *   POST /api/ivx/autonomous-mode/run    { task, conversationId? } → full proof report
- *   GET  /api/ivx/autonomous-mode/tools  → live tool/access availability report
- *
- * Owner-gated via the same guard as the rest of the IVX developer surface.
+ * Owner-triggered runs use the intelligent wrapper: the builder performs the
+ * lifecycle, while an independent quality controller decides whether the
+ * evidence is strong enough to remain VERIFIED.
  */
-import { runAutonomousMode } from '../services/ivx-autonomous-mode';
+import { runIntelligentAutonomousMode } from '../services/ivx-autonomous-intelligent-mode';
 import { checkToolAvailability } from '../services/ivx-tool-availability';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 
@@ -40,7 +37,7 @@ export async function handleAutonomousModeToolsRequest(request: Request): Promis
   }
 }
 
-/** POST /api/ivx/autonomous-mode/run — run the full autonomous lifecycle for a task. */
+/** POST /api/ivx/autonomous-mode/run — run and independently certify the autonomous lifecycle. */
 export async function handleAutonomousModeRunRequest(request: Request): Promise<Response> {
   const auth = await requireOwner(request);
   if (!auth.ok) return auth.response;
@@ -58,11 +55,10 @@ export async function handleAutonomousModeRunRequest(request: Request): Promise<
   }
 
   try {
-    const report = await runAutonomousMode(task, {
+    const report = await runIntelligentAutonomousMode(task, {
       conversationId: typeof body.conversationId === 'string' ? body.conversationId : null,
       approverEmail: typeof body.approverEmail === 'string' ? body.approverEmail : undefined,
     });
-    // HTTP stays 200 — the lifecycle ran; the truthful outcome lives in finalStatus.
     return ownerOnlyJson({ ok: true, report });
   } catch (error) {
     return ownerOnlyJson({ ok: false, error: error instanceof Error ? error.message : 'Autonomous mode run failed.' }, 500);
