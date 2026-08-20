@@ -2,9 +2,11 @@ name: IVX 112 Sequential Control
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'fix/**']
     paths:
       - '.github/workflows/ivx-112-sequential-control.yml'
+      - 'scripts/ivx-senior-quality-gate.mjs'
+      - 'scripts/__tests__/ivx-senior-quality-gate.test.mjs'
   workflow_dispatch: {}
 
 permissions:
@@ -17,18 +19,21 @@ env:
   IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
 
 concurrency:
-  group: ivx-112-sequential-control
+  group: ivx-112-sequential-control-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   sequential-control:
-    name: Start and finish agents 1 through 112 sequentially
+    name: Start, finish and certify agents 1 through 112 sequentially
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Prove senior gate regression tests
+        run: node --test scripts/__tests__/ivx-senior-quality-gate.test.mjs
 
       - name: Resolve authorization and verify live fleet
         shell: bash
@@ -41,22 +46,23 @@ jobs:
           curl -fsS --max-time 30 "${API_BASE}/version" -o /tmp/version.json
           curl -fsS --max-time 30 "${API_BASE}/health" -o /tmp/health.json
           curl -fsS --max-time 30 "${API_BASE}/api/ivx/agents" -o /tmp/agents.json
+          test "$(jq -r '.ok // false' /tmp/health.json)" = true
           test "$(jq -r '.ok // false' /tmp/agents.json)" = true
           test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
           test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)" = 112
-          LIVE_SHA=$(jq -r '.commit // empty' /tmp/version.json)
+          LIVE_SHA=$(jq -r '.commit // .version.commit // empty' /tmp/version.json)
           test -n "$LIVE_SHA"
           echo "LIVE_SHA=$LIVE_SHA" >> "$GITHUB_ENV"
           jq -r '.agents | sort_by(.agentNumber)[] | [.agentNumber,.agentId,.name] | @tsv' /tmp/agents.json > /tmp/agents.tsv
           echo "fleet_verified=112 live_sha=$LIVE_SHA"
 
-      - name: Execute agents strictly one by one and record start finish evidence
+      - name: Execute agents strictly one by one and record evidence
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/ivx112-sequential
-          : > /tmp/ivx112-sequential/events.jsonl
           overall_started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
           while IFS=$'\t' read -r number agent_id name; do
             started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             gap=$(( ((number - 1) % 40) + 1 ))
@@ -68,6 +74,10 @@ jobs:
             result_file="/tmp/ivx112-sequential/result-${number}.json"
 
             contract_http=$(curl -sS --max-time 25 -o "$contract_file" -w '%{http_code}' "${API_BASE}/api/ivx/agents/${agent_id}/contract" || true)
+            task_type="audit"
+            task_id=""
+            run_http="0"
+
             if [ "$contract_http" = 200 ]; then
               task_type=$(jq -r '.contract.allowedTaskTypes[0] // "audit"' "$contract_file")
               task_id="landing10-seq-gap-$(printf '%02d' "$gap")-agent-$(printf '%03d' "$number")-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -81,28 +91,13 @@ jobs:
                 --arg taskId "$task_id" \
                 --arg runId "landing10-sequential-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
                 '{taskType:$taskType,ownerApprovalToken:$token,payload:{programId:$programId,gapId:$gapId,gapTitle:$gapTitle,sourceSha:$sourceSha,__taskId:$taskId,__runId:$runId,__workflow:"IVX 112 Sequential Control",sequentialExecution:true,realExecutionOnly:true,simulatedSuccessAllowed:false,realFundsAllowed:false}}')
-              run_http=$(curl -sS --retry 1 --retry-delay 1 --max-time 60 -o "$run_file" -w '%{http_code}' \
+              run_http=$(curl -sS --retry 1 --retry-delay 1 --max-time 75 -o "$run_file" -w '%{http_code}' \
                 -X POST "${API_BASE}/api/ivx/agents/${agent_id}/run" \
                 -H 'Content-Type: application/json' \
                 -H "x-ivx-owner-key: ${SYSTEM_KEY}" \
                 --data "$body" || true)
-              ok=false
-              if [ "$run_http" = 200 ]; then ok=$(jq -r '.ok // false' "$run_file" 2>/dev/null || echo false); fi
-              final_status=$(jq -r '.runRecord.finalStatus // "request_failed"' "$run_file" 2>/dev/null || echo request_failed)
-              source_reference=$(jq -r '.runRecord.sourceReference // empty' "$run_file" 2>/dev/null || true)
-              tool_result_id=$(jq -r '.runRecord.toolResultId // empty' "$run_file" 2>/dev/null || true)
-              commit_sha=$(jq -r '.runRecord.commitSha // empty' "$run_file" 2>/dev/null || true)
-              error=$(jq -r '.error // .runRecord.error // empty' "$run_file" 2>/dev/null || true)
             else
-              task_type=""
-              task_id=""
-              run_http="0"
-              ok=false
-              final_status="contract_failed"
-              source_reference=""
-              tool_result_id=""
-              commit_sha=""
-              error="contract_http_${contract_http}"
+              printf '%s\n' '{}' > "$run_file"
             fi
 
             finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -116,53 +111,123 @@ jobs:
               --arg taskId "$task_id" \
               --arg startedAt "$started_at" \
               --arg finishedAt "$finished_at" \
-              --arg contractHttp "$contract_http" \
-              --arg runHttp "$run_http" \
-              --argjson ok "$ok" \
-              --arg finalStatus "$final_status" \
-              --arg sourceReference "$source_reference" \
-              --arg toolResultId "$tool_result_id" \
-              --arg commitSha "$commit_sha" \
-              --arg error "$error" \
-              '{agentNumber:$agentNumber,agentId:$agentId,name:$name,gapId:$gapId,gapTitle:$gapTitle,taskType:$taskType,taskId:$taskId,startedAt:$startedAt,finishedAt:$finishedAt,contractHttp:$contractHttp,runHttp:$runHttp,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,commitSha:$commitSha,error:$error}' \
-              > "$result_file"
-            cat "$result_file" >> /tmp/ivx112-sequential/events.jsonl
-            echo "AGENT_FINISH number=$number id=$agent_id gap=$gap ok=$ok status=$final_status finishedAt=$finished_at"
+              --argjson contractHttp "${contract_http:-0}" \
+              --argjson runHttp "${run_http:-0}" \
+              --slurpfile response "$run_file" \
+              '($response[0] // {}) as $r |
+               ($r.runRecord // {}) as $rr |
+               ($rr.simulated // true) as $simulated |
+               ($rr.realToolUsed // false) as $realToolUsed |
+               ($rr.verifiedOutput // false) as $verifiedOutput |
+               {
+                 agentNumber:$agentNumber,agentId:$agentId,name:$name,gapId:$gapId,gapTitle:$gapTitle,
+                 taskType:$taskType,taskId:$taskId,startedAt:$startedAt,finishedAt:$finishedAt,
+                 contractHttp:$contractHttp,runHttp:$runHttp,
+                 ok:($r.ok // false),finalStatus:($rr.finalStatus // (if $contractHttp != 200 then "contract_failed" else "request_failed" end)),
+                 sourceReference:($rr.sourceReference // ""),toolResultId:($rr.toolResultId // ""),
+                 runtimeSha:($rr.runtimeSha // $rr.commitSha // ""),commitSha:($rr.agentCommitSha // $rr.codeCommitSha // ""),
+                 changedFiles:($rr.changedFiles // []),codeChanged:($rr.codeChanged // false),
+                 simulated:$simulated,realToolUsed:$realToolUsed,verifiedOutput:$verifiedOutput,
+                 fakeSuccess:((($simulated == false) and ($realToolUsed == true) and ($verifiedOutput == true)) | not),
+                 tests:($rr.tests // null),typecheck:($rr.typecheck // null),lint:($rr.lint // null),
+                 securityRelevant:($rr.securityRelevant // false),securityReview:($rr.securityReview // null),
+                 negativeAuthTestsPassed:($rr.negativeAuthTestsPassed // false),secretExposure:($rr.secretExposure // null),authorizationRegression:($rr.authorizationRegression // null),
+                 uiChanged:($rr.uiChanged // false),accessibilityReview:($rr.accessibilityReview // $rr.accessibility // null),
+                 mobileSmokeTestPassed:($rr.mobileSmokeTestPassed // false),blackScreen:($rr.blackScreen // null),brokenNavigation:($rr.brokenNavigation // null),statesVerified:($rr.statesVerified // false),
+                 performanceSensitive:($rr.performanceSensitive // false),performanceReview:($rr.performanceReview // null),performanceRegression:($rr.performanceRegression // null),
+                 deploymentEvidence:($rr.deploymentEvidence // null),error:($r.error // $rr.error // "")
+               }' > "$result_file"
+
+            echo "AGENT_FINISH number=$number id=$agent_id status=$(jq -r '.finalStatus' "$result_file") finishedAt=$finished_at"
           done < /tmp/agents.tsv
+
           overall_finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          jq -s 'sort_by(.agentNumber)' /tmp/ivx112-sequential/result-*.json > /tmp/ivx112-sequential/all.json
-          total=$(jq 'length' /tmp/ivx112-sequential/all.json)
-          succeeded=$(jq '[.[] | select(.ok == true)] | length' /tmp/ivx112-sequential/all.json)
-          failed=$(jq '[.[] | select(.ok != true)] | length' /tmp/ivx112-sequential/all.json)
-          evidence=$(jq '[.[] | select((.sourceReference // "") != "" and (.toolResultId // "") != "")] | length' /tmp/ivx112-sequential/all.json)
-          test "$total" = 112
+          jq -s 'sort_by(.agentNumber)' /tmp/ivx112-sequential/result-*.json > /tmp/ivx112-sequential/results-raw.json
+          test "$(jq 'length' /tmp/ivx112-sequential/results-raw.json)" = 112
           echo "SEQ_STARTED=$overall_started" >> "$GITHUB_ENV"
           echo "SEQ_FINISHED=$overall_finished" >> "$GITHUB_ENV"
-          echo "SEQ_TOTAL=$total" >> "$GITHUB_ENV"
-          echo "SEQ_SUCCEEDED=$succeeded" >> "$GITHUB_ENV"
-          echo "SEQ_FAILED=$failed" >> "$GITHUB_ENV"
-          echo "SEQ_EVIDENCE=$evidence" >> "$GITHUB_ENV"
-          echo "sequential_total=$total succeeded=$succeeded failed=$failed evidence=$evidence"
 
-      - name: Persist sequential control evidence and certificate
+      - name: Apply Senior Developer Quality Gate one by one
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p qa/evidence/autonomous
-          cp /tmp/ivx112-sequential/all.json qa/evidence/autonomous/ivx-112-sequential-agent-results.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { evaluateSeniorGate, summarizeFleet } from './scripts/ivx-senior-quality-gate.mjs';
+
+          const raw = JSON.parse(fs.readFileSync('/tmp/ivx112-sequential/results-raw.json', 'utf8'));
+          const evaluated = raw.map((record) => ({ ...record, ...evaluateSeniorGate(record) }));
+          const summary = summarizeFleet(raw, 112);
+          fs.writeFileSync('/tmp/ivx112-sequential/results.json', JSON.stringify(evaluated, null, 2));
+          fs.writeFileSync('/tmp/ivx112-sequential/summary.json', JSON.stringify(summary, null, 2));
+
+          fs.mkdirSync('/tmp/ivx112-sequential/agent-certificates', { recursive: true });
+          for (const record of evaluated) {
+            const n = String(record.agentNumber).padStart(3, '0');
+            const certificate = {
+              ok: record.acceptedBySeniorGate === true,
+              certificate: `IVX-112-SEQUENTIAL-AGENT-${n}`,
+              agentNumber: record.agentNumber,
+              agentId: record.agentId,
+              name: record.name,
+              status: record.status,
+              rejectionReasons: record.rejectionReasons,
+              startedAt: record.startedAt,
+              finishedAt: record.finishedAt,
+              sourceReference: record.sourceReference,
+              toolResultId: record.toolResultId,
+              productionSha: process.env.LIVE_SHA,
+              controllerSha: process.env.GITHUB_SHA,
+              githubRunId: process.env.GITHUB_RUN_ID,
+              simulatedSuccessAllowed: false,
+              certificationRule: 'PASS only when evaluateSeniorGate(record).acceptedBySeniorGate === true',
+            };
+            fs.writeFileSync(`/tmp/ivx112-sequential/agent-certificates/agent-${n}-certificate.json`, JSON.stringify(certificate, null, 2));
+            console.log(`AGENT_CERT agent=${n} status=${record.status} ok=${certificate.ok}`);
+          }
+
+          console.log(JSON.stringify({
+            total: summary.totalAgents,
+            accepted: summary.acceptedBySeniorGate,
+            failed: summary.failed,
+            blocked: summary.blocked,
+            unverified: summary.unverified,
+            ok: summary.ok,
+          }));
+          NODE
+
+      - name: Persist sequential evidence and fleet certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence/autonomous/ivx-112-sequential-agents
+          cp /tmp/ivx112-sequential/results.json qa/evidence/autonomous/ivx-112-sequential-agent-results.json
+          cp /tmp/ivx112-sequential/agent-certificates/*.json qa/evidence/autonomous/ivx-112-sequential-agents/
+
+          accepted=$(jq '.acceptedBySeniorGate' /tmp/ivx112-sequential/summary.json)
+          failed=$(jq '.failed' /tmp/ivx112-sequential/summary.json)
+          blocked=$(jq '.blocked' /tmp/ivx112-sequential/summary.json)
+          unverified=$(jq '.unverified' /tmp/ivx112-sequential/summary.json)
+          source_refs=$(jq '.agentsWithSourceReference' /tmp/ivx112-sequential/summary.json)
+          tool_refs=$(jq '.agentsWithToolResultId' /tmp/ivx112-sequential/summary.json)
+          fleet_ok=$(jq '.ok' /tmp/ivx112-sequential/summary.json)
+
           jq -n \
-            --arg certificate 'IVX-112-SEQUENTIAL-END-TO-END-CONTROL' \
+            --arg certificate 'IVX-112-SEQUENTIAL-SENIOR-QUALITY-CONTROL' \
             --arg programId "$PROGRAM_ID" \
-            --arg liveSha "$LIVE_SHA" \
-            --arg githubSha "$GITHUB_SHA" \
+            --arg productionSha "$LIVE_SHA" \
+            --arg controllerSha "$GITHUB_SHA" \
             --arg githubRunId "$GITHUB_RUN_ID" \
             --arg startedAt "$SEQ_STARTED" \
             --arg finishedAt "$SEQ_FINISHED" \
-            --argjson attempted "$SEQ_TOTAL" \
-            --argjson succeeded "$SEQ_SUCCEEDED" \
-            --argjson failed "$SEQ_FAILED" \
-            --argjson evidence "$SEQ_EVIDENCE" \
-            '{ok:($attempted == 112 and $failed == 0 and $evidence == 112),certificate:$certificate,programId:$programId,productionSha:$liveSha,controllerSha:$githubSha,githubRunId:$githubRunId,executionMode:"strict-sequential-1-through-112",startedAt:$startedAt,finishedAt:$finishedAt,workerRunsAttempted:$attempted,workerRunsSucceeded:$succeeded,workerRunsFailed:$failed,workerRunsWithEvidence:$evidence,simulatedSuccessAllowed:false,realFundsAllowed:false,truthNote:"Each agent is recorded with explicit startedAt and finishedAt. Certificate ok=true only when all 112 runs succeed and all 112 contain sourceReference plus toolResultId."}' \
+            --argjson accepted "$accepted" \
+            --argjson failed "$failed" \
+            --argjson blocked "$blocked" \
+            --argjson unverified "$unverified" \
+            --argjson sourceRefs "$source_refs" \
+            --argjson toolRefs "$tool_refs" \
+            --argjson fleetOk "$fleet_ok" \
+            '{ok:$fleetOk,certificate:$certificate,programId:$programId,productionSha:$productionSha,controllerSha:$controllerSha,githubRunId:$githubRunId,executionMode:"strict-sequential-1-through-112",startedAt:$startedAt,finishedAt:$finishedAt,agentsAttempted:112,agentsAcceptedBySeniorGate:$accepted,agentsFailed:$failed,agentsBlocked:$blocked,agentsUnverified:$unverified,agentsWithSourceReference:$sourceRefs,agentsWithToolResultId:$toolRefs,individualCertificates:112,simulatedSuccessAllowed:false,truthNote:"Each IA is executed one-by-one and receives an individual fail-closed Senior Developer Quality Gate certificate. Fleet ok=true only when all 112 individually pass."}' \
             > qa/evidence/autonomous/ivx-112-sequential-certificate.json
           cat qa/evidence/autonomous/ivx-112-sequential-certificate.json
 
@@ -172,17 +237,20 @@ jobs:
           path: |
             qa/evidence/autonomous/ivx-112-sequential-certificate.json
             qa/evidence/autonomous/ivx-112-sequential-agent-results.json
+            qa/evidence/autonomous/ivx-112-sequential-agents/*.json
           if-no-files-found: error
 
-      - name: Commit evidence to main
+      - name: Persist certified proof on main only
+        if: github.ref == 'refs/heads/main'
         shell: bash
         run: |
           set -euo pipefail
+          test "$(jq -r '.ok' qa/evidence/autonomous/ivx-112-sequential-certificate.json)" = true
           git config user.name 'IVX 112 Sequential Controller'
           git config user.email 'ivx-112-sequential@users.noreply.github.com'
-          git add qa/evidence/autonomous/ivx-112-sequential-certificate.json qa/evidence/autonomous/ivx-112-sequential-agent-results.json
+          git add qa/evidence/autonomous/ivx-112-sequential-certificate.json qa/evidence/autonomous/ivx-112-sequential-agent-results.json qa/evidence/autonomous/ivx-112-sequential-agents
           git diff --cached --quiet && exit 0
-          git commit -m "ops(112): persist sequential end-to-end agent proof [skip ci]"
+          git commit -m "ops(112): persist sequential senior-gate proof [skip ci]"
           git pull --rebase origin main
           git push origin HEAD:main
 
@@ -190,7 +258,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$SEQ_TOTAL" = 112
-          test "$SEQ_FAILED" = 0
-          test "$SEQ_EVIDENCE" = 112
+          test "$(jq '.totalAgents' /tmp/ivx112-sequential/summary.json)" = 112
+          test "$(jq '.acceptedBySeniorGate' /tmp/ivx112-sequential/summary.json)" = 112
+          test "$(jq '.failed' /tmp/ivx112-sequential/summary.json)" = 0
+          test "$(jq '.blocked' /tmp/ivx112-sequential/summary.json)" = 0
+          test "$(jq '.unverified' /tmp/ivx112-sequential/summary.json)" = 0
+          test "$(jq '.agentsWithSourceReference' /tmp/ivx112-sequential/summary.json)" = 112
+          test "$(jq '.agentsWithToolResultId' /tmp/ivx112-sequential/summary.json)" = 112
+          test "$(jq -r '.ok' /tmp/ivx112-sequential/summary.json)" = true
           echo 'IVX_112_SEQUENTIAL_END_TO_END=PASS'
