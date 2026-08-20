@@ -32,6 +32,7 @@ jobs:
     env:
       NODE_ENV: test
       IVX_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      GIT_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -63,26 +64,29 @@ jobs:
           bun test backend/__tests__/ivx-agent-least-privilege.test.ts --reporter=dots
           echo 'phase3_phase2_regression=PASS'
 
-      - name: Real execution + negative controls — HARD GATE
+      - name: Full runtime execution + negative controls — HARD GATE
         run: |
           set -euo pipefail
           bun backend/scripts/ivx-phase3-execution-cert.ts
-          jq -e '.ok == true' qa/evidence/autonomous/phase3-autonomous-execution-ci.json >/dev/null
-          jq -e '.representativeExecutions == .representativeExecutionPass' qa/evidence/autonomous/phase3-autonomous-execution-ci.json >/dev/null
-          jq -e '.negativeControls == .negativeControlsPass' qa/evidence/autonomous/phase3-autonomous-execution-ci.json >/dev/null
-          jq -e '.staticAuditChecks == .staticAuditPass' qa/evidence/autonomous/phase3-autonomous-execution-ci.json >/dev/null
-          jq -e '.simulatedRuns == 0 and .realFundsMoved == false' qa/evidence/autonomous/phase3-autonomous-execution-ci.json >/dev/null
-          echo 'phase3_real_execution=PASS'
+          cert='qa/evidence/autonomous/phase3-autonomous-execution-ci.json'
+          jq -e '.ok == true' "$cert" >/dev/null
+          jq -e '.runtimePath == "executeAgentRun"' "$cert" >/dev/null
+          jq -e '.representativeExecutions == .representativeExecutionPass' "$cert" >/dev/null
+          jq -e '.negativeControls == .negativeControlsPass' "$cert" >/dev/null
+          jq -e '.staticAuditChecks == .staticAuditPass' "$cert" >/dev/null
+          jq -e '.simulatedRuns == 0 and .realFundsMoved == false' "$cert" >/dev/null
+          echo 'phase3_full_runtime_execution=PASS'
 
-      - name: Fail-closed evidence contract — HARD GATE
+      - name: Fail-closed provenance contract — HARD GATE
         run: |
           set -euo pipefail
           cert='qa/evidence/autonomous/phase3-autonomous-execution-ci.json'
           jq -e '[.positiveExecutions[] | select(.finalStatus != "SUCCESS")] | length == 0' "$cert" >/dev/null
-          jq -e '[.positiveExecutions[] | select((.toolResultId == null) or (.sourceReference == null) or (.evidenceSha256 == null))] | length == 0' "$cert" >/dev/null
+          jq -e '[.positiveExecutions[] | select((.runRecordId == null) or (.toolResultId == null) or (.sourceReference == null) or (.evidenceSha256 == null))] | length == 0' "$cert" >/dev/null
+          jq -e '[.positiveExecutions[] | select(.runtimeCommitSha != .sourceSha)] | length == 0' "$cert" >/dev/null
           jq -e '[.positiveExecutions[] | select(.simulated != false)] | length == 0' "$cert" >/dev/null
           jq -e '[.negativeTests[] | select(.passed != true)] | length == 0' "$cert" >/dev/null
-          echo 'phase3_fail_closed_evidence=PASS'
+          echo 'phase3_fail_closed_provenance=PASS'
 
       - name: Upload Phase 3 certificate evidence
         uses: actions/upload-artifact@v4
