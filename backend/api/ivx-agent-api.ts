@@ -79,7 +79,18 @@ import {
   WAR_ROOM_POLICY,
 } from '../services/ivx-real-execution-certificate';
 
-export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-18-real-execution';
+export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-20-owner-auth-guard';
+
+function ownerAuthorized(c: any, body: Record<string, unknown> = {}): boolean {
+  const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';
+  const envSecret = (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim() || (process.env.IVX_OWNER_TOKEN ?? '').trim();
+  return Boolean(envSecret) && provided === envSecret;
+}
+
+function requireOwner(c: any, body: Record<string, unknown> = {}) {
+  return ownerAuthorized(c, body) ? null : c.json({ ok: false, error: 'Owner authorization required.' }, 401);
+}
+
 
 export function registerAgentRoutes(app: Hono): void {
   // ── Dashboard & Listing ──────────────────────────────────────────────────
@@ -145,7 +156,7 @@ export function registerAgentRoutes(app: Hono): void {
     const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
     const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';
     const envSecret = (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim() || (process.env.IVX_OWNER_TOKEN ?? '').trim();
-    const authorized = envSecret ? provided === envSecret : provided.startsWith('owner-');
+    const authorized = Boolean(envSecret) && provided === envSecret;
     if (!authorized) {
       return c.json({ ok: false, error: 'Owner approval required to start the IVX 112 Real Execution Certificate run.' }, 401);
     }
@@ -267,30 +278,40 @@ export function registerAgentRoutes(app: Hono): void {
   // ── Agent Control ─────────────────────────────────────────────────────────
 
   app.post('/api/ivx/agents/:agentId/pause', (c) => {
+    const denied = requireOwner(c);
+    if (denied) return denied;
     const agentId = c.req.param('agentId');
     const result = pauseAgent(agentId);
     return c.json({ ok: result.ok, agentId, action: 'pause', error: result.error });
   });
 
   app.post('/api/ivx/agents/:agentId/resume', (c) => {
+    const denied = requireOwner(c);
+    if (denied) return denied;
     const agentId = c.req.param('agentId');
     const result = resumeAgent(agentId);
     return c.json({ ok: result.ok, agentId, action: 'resume', error: result.error });
   });
 
   app.post('/api/ivx/agents/:agentId/disable', (c) => {
+    const denied = requireOwner(c);
+    if (denied) return denied;
     const agentId = c.req.param('agentId');
     const result = disableAgent(agentId);
     return c.json({ ok: result.ok, agentId, action: 'disable', error: result.error });
   });
 
   app.post('/api/ivx/agents/:agentId/enable', (c) => {
+    const denied = requireOwner(c);
+    if (denied) return denied;
     const agentId = c.req.param('agentId');
     const result = enableAgent(agentId);
     return c.json({ ok: result.ok, agentId, action: 'enable', error: result.error });
   });
 
   app.post('/api/ivx/agents/:agentId/clear-memory', (c) => {
+    const denied = requireOwner(c);
+    if (denied) return denied;
     const agentId = c.req.param('agentId');
     const result = clearTaskMemory(agentId);
     return c.json({ ok: result.ok, agentId, action: 'clear_task_memory', cleared: result.cleared });
@@ -300,10 +321,12 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post('/api/ivx/agents/:agentId/run', async (c) => {
     const agentId = c.req.param('agentId');
-    const body = await c.req.json().catch(() => ({}));
-    const taskType = body.taskType || 'audit';
-    const payload = body.payload || {};
-    const ownerApprovalToken = body.ownerApprovalToken || null;
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const denied = requireOwner(c, body as Record<string, unknown>);
+    if (denied) return denied;
+    const taskType = (body as any).taskType || 'audit';
+    const payload = (body as any).payload || {};
+    const ownerApprovalToken = (body as any).ownerApprovalToken || null;
 
     const result = await executeAgentRun(agentId, taskType, payload, ownerApprovalToken);
     return c.json({
@@ -318,8 +341,10 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post('/api/ivx/agents/:agentId/version', async (c) => {
     const agentId = c.req.param('agentId');
-    const body = await c.req.json().catch(() => ({}));
-    const result = updateAgentContract(agentId, body.updates || {}, body.ownerApproval === true);
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const denied = requireOwner(c, body as Record<string, unknown>);
+    if (denied) return denied;
+    const result = updateAgentContract(agentId, (body as any).updates || {}, (body as any).ownerApproval === true);
     return c.json({
       ok: result.ok,
       agentId,
@@ -330,8 +355,10 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post('/api/ivx/agents/:agentId/rollback', async (c) => {
     const agentId = c.req.param('agentId');
-    const body = await c.req.json().catch(() => ({}));
-    const targetVersion = body.targetVersion;
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const denied = requireOwner(c, body as Record<string, unknown>);
+    if (denied) return denied;
+    const targetVersion = (body as any).targetVersion;
     if (typeof targetVersion !== 'number') {
       return c.json({ ok: false, error: 'targetVersion (number) required' }, 400);
     }
@@ -460,6 +487,8 @@ export function registerAgentRoutes(app: Hono): void {
   // ── Execute All 112 Agents (ADVISORY/QA ONLY — not proof of real work) ───────────
 
   app.post('/api/ivx/agents/execute-all', async (c) => {
+    const denied = requireOwner(c);
+    if (denied) return denied;
     const results: Array<{
       agentId: string;
       agentNumber: number;
