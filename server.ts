@@ -30,6 +30,10 @@ import {
   handleWireOptions,
 } from './backend/api/ivx-wire-transfer';
 import {
+  handleSecureWalletDebit,
+  handleSecureWalletOptions,
+} from './backend/api/ivx-secure-wallet';
+import {
   autonomousVoiceOptions,
   handleAutonomousVoiceCallback,
   handleAutonomousVoiceLaml,
@@ -244,6 +248,11 @@ const productionFetch: typeof app.fetch = async (request, env, executionCtx) => 
   if (url.pathname === '/api/ivx/wire-submission') {
     if (request.method === 'OPTIONS') return handleWireOptions();
     return handleSecureWireSubmission(request);
+  }
+
+  if (url.pathname === '/api/ivx/wallet/debit') {
+    if (request.method === 'OPTIONS') return handleSecureWalletOptions();
+    return handleSecureWalletDebit(request);
   }
 
   const type = (url.searchParams.get('type') || '').trim().toLowerCase();
