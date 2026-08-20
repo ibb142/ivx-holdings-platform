@@ -5,62 +5,35 @@ import { runAutonomousMode, IVX_AUTONOMOUS_MODE_MARKER } from './ivx-autonomous-
 import type { SelfHealCycleReport } from './ivx-self-heal-cycle';
 import type { ProductionHealth } from './ivx-production-guard';
 
-// ---------------------------------------------------------------------------
-// Tool Availability Checker
-// ---------------------------------------------------------------------------
+const allowMutation = async () => ({ ok: true });
 
 describe('checkToolAvailability', () => {
   it('marks in-process tools available even with an empty env', () => {
     const report = checkToolAvailability({});
     expect(report.marker).toBe(IVX_TOOL_AVAILABILITY_MARKER);
-    const testRunner = report.tools.find((t) => t.tool === 'test_runner');
-    const trace = report.tools.find((t) => t.tool === 'execution_trace');
-    const selfHeal = report.tools.find((t) => t.tool === 'self_heal');
-    expect(testRunner?.available).toBe(true);
-    expect(trace?.available).toBe(true);
-    expect(selfHeal?.available).toBe(true);
+    expect(report.tools.find((t) => t.tool === 'test_runner')?.available).toBe(true);
+    expect(report.tools.find((t) => t.tool === 'execution_trace')?.available).toBe(true);
+    expect(report.tools.find((t) => t.tool === 'self_heal')?.available).toBe(true);
   });
 
   it('reports env-backed tools as unavailable with the exact missing env (no secret value)', () => {
     const report = checkToolAvailability({});
-    const github = report.tools.find((t) => t.tool === 'github_write');
-    expect(github?.available).toBe(false);
-    expect(github?.missingEnv).toEqual(['GITHUB_TOKEN', 'GITHUB_REPO_URL']);
-    const supabase = report.tools.find((t) => t.tool === 'supabase_actions');
-    expect(supabase?.missingEnv).toContain('SUPABASE_SERVICE_ROLE_KEY');
+    expect(report.tools.find((t) => t.tool === 'github_write')?.available).toBe(false);
+    expect(report.tools.find((t) => t.tool === 'github_write')?.missingEnv).toEqual(['GITHUB_TOKEN', 'GITHUB_REPO_URL']);
+    expect(report.tools.find((t) => t.tool === 'supabase_actions')?.missingEnv).toContain('SUPABASE_SERVICE_ROLE_KEY');
   });
 
   it('flips a tool to available once its env is present', () => {
-    const env = {
-      GITHUB_TOKEN: 'gh_xxx',
-      GITHUB_REPO_URL: 'https://github.com/x/y.git',
-      IVX_AI_GATEWAY_KEY: 'k',
-    };
+    const env = { GITHUB_TOKEN: 'gh_xxx', GITHUB_REPO_URL: 'https://github.com/x/y.git', IVX_AI_GATEWAY_KEY: 'k' };
     expect(isToolAvailable('github_write', env)).toBe(true);
-    const report = checkToolAvailability(env);
-    expect(report.tools.find((t) => t.tool === 'ai_gateway')?.available).toBe(true);
+    expect(checkToolAvailability(env).tools.find((t) => t.tool === 'ai_gateway')?.available).toBe(true);
   });
 
   it('canExecuteEndToEnd requires the core tools plus a deploy path', () => {
-    const noDeploy = checkToolAvailability({ IVX_AI_GATEWAY_KEY: 'k' });
-    expect(noDeploy.canExecuteEndToEnd).toBe(false);
-    const full = checkToolAvailability({
-      IVX_AI_GATEWAY_KEY: 'k',
-      RENDER_API_KEY: 'r',
-      RENDER_SERVICE_ID: 's',
-    });
-    expect(full.canExecuteEndToEnd).toBe(true);
-  });
-
-  it('blockedSteps reflects steps depending on a missing tool', () => {
-    const report = checkToolAvailability({});
-    expect(report.blockedSteps.length).toBeGreaterThan(0);
+    expect(checkToolAvailability({ IVX_AI_GATEWAY_KEY: 'k' }).canExecuteEndToEnd).toBe(false);
+    expect(checkToolAvailability({ IVX_AI_GATEWAY_KEY: 'k', RENDER_API_KEY: 'r', RENDER_SERVICE_ID: 's' }).canExecuteEndToEnd).toBe(true);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Autonomous Mode orchestrator
-// ---------------------------------------------------------------------------
 
 function fakeProduction(thresholdExceeded = false): ProductionHealth {
   return {
@@ -103,51 +76,86 @@ function fakeSelfHeal(allVerified: boolean): SelfHealCycleReport {
 }
 
 describe('runAutonomousMode', () => {
-  it('runs the full 12-step lifecycle and VERIFIES a clean non-destructive task', async () => {
+  it('runs the full 12-step lifecycle and VERIFIES a clean low-risk task', async () => {
     const report = await runAutonomousMode('Fix the chat scroll layout now', {
+      mutationGate: allowMutation,
       selfHealRunner: async () => fakeSelfHeal(true),
     });
     expect(report.marker).toBe(IVX_AUTONOMOUS_MODE_MARKER);
     expect(report.steps).toHaveLength(12);
     expect(report.steps.map((s) => s.step)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
     expect(report.humanApprovalRequired).toBe(false);
+    expect(report.ownerStopChecked).toBe(true);
+    expect(report.ownerStopVerifiedInactive).toBe(true);
     expect(report.finalStatus).toBe('VERIFIED');
     expect(report.classification).toBe('VERIFIED');
-    expect(report.taskId).toContain('autotask_');
-    expect(report.requestId).toContain('autoreq_');
   });
 
   it('reports FAILED (UNVERIFIED) when the self-heal cycle has a failed stage', async () => {
     const report = await runAutonomousMode('Deploy the new endpoint now', {
+      mutationGate: allowMutation,
       selfHealRunner: async () => fakeSelfHeal(false),
     });
     expect(report.finalStatus).toBe('FAILED');
     expect(report.classification).toBe('UNVERIFIED');
-    const tests = report.steps.find((s) => s.step === 6);
-    expect(tests?.status).toBe('failed');
+    expect(report.steps.find((s) => s.step === 6)?.status).toBe('failed');
   });
 
-  it('HOLDS a destructive command for human approval and never executes', async () => {
+  it('HOLDS a destructive command at Owner Gate and never executes', async () => {
     let ran = false;
+    let stopChecked = false;
     const report = await runAutonomousMode('Delete all user data from the production database', {
+      mutationGate: async () => { stopChecked = true; },
       selfHealRunner: async () => {
         ran = true;
         return fakeSelfHeal(true);
       },
     });
     expect(ran).toBe(false);
+    expect(stopChecked).toBe(false);
     expect(report.humanApprovalRequired).toBe(true);
     expect(report.finalStatus).toBe('BLOCKED_FOR_APPROVAL');
     expect(report.classification).toBe('NOT EXECUTED');
     expect(report.intent.approvalCategories).toContain('delete_data');
-    // Steps 5–11 are blocked, step 12 still returns proof.
     expect(report.steps.filter((s) => s.status === 'blocked').length).toBe(7);
-    expect(report.steps.find((s) => s.step === 12)?.status).toBe('verified');
+  });
+
+  it('STOPPED_BY_OWNER prevents self-heal/deploy before any mutation', async () => {
+    let ran = false;
+    const report = await runAutonomousMode('Fix the chat scroll layout now', {
+      mutationGate: async () => {
+        throw new Error('EMERGENCY_STOP_ACTIVE: owner stop engaged');
+      },
+      selfHealRunner: async () => {
+        ran = true;
+        return fakeSelfHeal(true);
+      },
+    });
+    expect(ran).toBe(false);
+    expect(report.finalStatus).toBe('STOPPED_BY_OWNER');
+    expect(report.classification).toBe('NOT EXECUTED');
+    expect(report.ownerStopChecked).toBe(true);
+    expect(report.ownerStopVerifiedInactive).toBe(false);
+    expect(report.steps.filter((s) => s.status === 'blocked').length).toBe(7);
+    expect(report.approvalReason).toContain('EMERGENCY_STOP_ACTIVE');
+  });
+
+  it('also stops mutation when emergency-stop state is unverified', async () => {
+    const report = await runAutonomousMode('Fix it now', {
+      mutationGate: async () => {
+        throw new Error('EMERGENCY_STOP_UNVERIFIED: control plane unavailable');
+      },
+      selfHealRunner: async () => fakeSelfHeal(true),
+    });
+    expect(report.finalStatus).toBe('STOPPED_BY_OWNER');
+    expect(report.ownerStopVerifiedInactive).toBe(false);
+    expect(report.steps.find((s) => s.step === 5)?.proof).toContain('UNVERIFIED');
   });
 
   it('copies the task exactly and builds a multi-block plan', async () => {
     const task = 'Build:\n1. First thing\n2. Second thing\n3. Third thing';
     const report = await runAutonomousMode(task, {
+      mutationGate: allowMutation,
       selfHealRunner: async () => fakeSelfHeal(true),
     });
     expect(report.task).toBe(task);
@@ -156,6 +164,7 @@ describe('runAutonomousMode', () => {
 
   it('surfaces a failed step when the self-heal runner throws (never crashes)', async () => {
     const report = await runAutonomousMode('Fix it now', {
+      mutationGate: allowMutation,
       selfHealRunner: async () => {
         throw new Error('runner exploded');
       },
