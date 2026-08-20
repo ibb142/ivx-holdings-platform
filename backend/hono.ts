@@ -3037,6 +3037,7 @@ app.get('/health/ai/monitor', () => {
 });
 
 import { getWireInstructions, generateWireReferenceCode, recordWireSubmission } from './api/ivx-wire-transfer';
+import { resolveAuthenticatedMember } from './api/ivx-member-auth';
 import {
   listWireSubmissions,
   transitionWireSubmission,
@@ -3127,10 +3128,12 @@ app.get('/api/ivx/wire-instructions', async (context) => {
     return Response.json({ ok: true, authenticated: true, error: 'Wire instructions not configured', instructions: null, timestamp: new Date().toISOString() });
   }
 
-  const authHeader = context.req.header('authorization') || '';
-  const userId = authHeader.startsWith('Bearer ')
-    ? authHeader.slice(7).slice(0, 16).replace(/[^a-zA-Z0-9]/g, '') || 'anon'
-    : 'anon';
+  // The reference code must identify the MEMBER so an inbound wire can be reconciled.
+  // This previously sliced the raw Authorization header, which is the JWT *header*
+  // segment ('eyJhbGciOiJIUzI1...') - byte-identical for every user. That produced the
+  // same reference prefix for everyone and embedded token material in the code.
+  const requester = await resolveAuthenticatedMember(context.req.raw);
+  const userId = requester?.id ?? 'anon';
   const referenceCode = generateWireReferenceCode(userId + Date.now().toString());
 
   console.log('[IVXWire] Instructions requested by', userId.slice(0, 4) + '****');
@@ -3140,6 +3143,17 @@ app.get('/api/ivx/wire-instructions', async (context) => {
 
 app.post('/api/ivx/wire-submission', async (context) => {
   try {
+    // A wire submission writes a financial audit record and pages the owner by SMS.
+    // It must never be reachable anonymously, and the reporting member's identity must
+    // come from a verified token rather than the request body, which anyone can forge.
+    const member = await resolveAuthenticatedMember(context.req.raw);
+    if (!member) {
+      return Response.json(
+        { ok: false, error: 'Authentication required to report a wire transfer.' },
+        { status: 401 },
+      );
+    }
+
     const body = await context.req.json() as {
       userId?: string;
       email?: string;
@@ -3164,8 +3178,8 @@ app.post('/api/ivx/wire-submission', async (context) => {
     }
 
     const result = await recordWireSubmission({
-      userId: body.userId,
-      email: body.email,
+      userId: member.id,
+      email: member.email || body.email,
       name: body.name,
       amount,
       currency,

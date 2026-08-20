@@ -306,3 +306,105 @@ describe('approval gating', () => {
     }
   });
 });
+
+describe('wire submission authentication', () => {
+  // Regression for a live finding: POST /api/ivx/wire-submission accepted
+  // UNAUTHENTICATED requests in production. Anyone on the internet could inject wire
+  // notification records into the financial audit trail and page the owner by SMS.
+  const wireRoute = (): string => {
+    const body = read('backend/hono.ts');
+    const start = body.indexOf("app.post('/api/ivx/wire-submission'");
+    return start === -1 ? '' : body.slice(start, start + 2200);
+  };
+
+  test('the wire submission route exists and requires an authenticated member', () => {
+    const route = wireRoute();
+    expect(route.length).toBeGreaterThan(0);
+    expect(route).toContain('resolveAuthenticatedMember');
+    // Must fail closed with 401 when the caller cannot be resolved.
+    expect(route).toMatch(/if\s*\(!member\)/);
+    expect(route).toContain('401');
+  });
+
+  test('the reporting member identity comes from the token, never the request body', () => {
+    const route = wireRoute();
+    // A body-supplied userId can be forged to file a wire report as another member.
+    expect(route).toMatch(/userId:\s*member\.id/);
+    expect(route).not.toMatch(/userId:\s*body\.userId/);
+  });
+
+  test('the member auth helper fails closed', () => {
+    const helper = read('backend/api/ivx-member-auth.ts');
+    expect(helper.length).toBeGreaterThan(0);
+    // Every failure path must return null so callers deny rather than admit.
+    expect(helper).toContain('getUser(token)');
+    expect(helper).toMatch(/catch\s*\{\s*return null;\s*\}/);
+  });
+
+  test('the wire reference code is not derived from the Authorization header', () => {
+    // The old code sliced the raw header, which is the JWT *header* segment and is
+    // byte-identical for every user - so every member got the same reference prefix
+    // and the code could not be reconciled back to a member.
+    const body = read('backend/hono.ts');
+    expect(body).not.toMatch(/authHeader\.slice\(7\)\.slice\(0,\s*16\)/);
+  });
+});
+
+describe('live database hardening is persisted in version control', () => {
+  // Production must never depend on manual SQL run by hand against the live project.
+  const migration = (): string => read('supabase/migrations/20260820_ivx_bank_grade_privilege_hardening.sql');
+
+  test('the privilege hardening migration is committed', () => {
+    expect(migration().length).toBeGreaterThan(0);
+  });
+
+  test('privileged money and identity functions are revoked from client roles', () => {
+    const sql = migration().toLowerCase();
+    for (const fn of ['ivx_query_auth_user_by_email', 'ivx_exec_sql', 'atomic_wallet_operation']) {
+      expect(sql).toContain(fn);
+    }
+    expect(sql).toMatch(/revoke\s+(execute|all)\s+on\s+function/);
+    expect(sql).toContain('from anon, authenticated');
+  });
+
+  test('landing analytics is gated so ordinary members cannot read lead PII', () => {
+    // get_landing_analytics is SECURITY DEFINER and returns 100 leads including email,
+    // phone and full name. EXECUTE cannot be revoked (the owner console calls it as an
+    // ordinary authenticated JWT), so the owner check must live INSIDE the body.
+    const sql = migration();
+    expect(sql).toContain('create or replace function public.get_landing_analytics()');
+    expect(sql).toMatch(/if\s+not\s+public\.ivx_is_owner\(\)\s+then/);
+    expect(sql).toContain('insufficient_privilege');
+  });
+
+  test('RLS-critical helpers are NOT revoked (revoking them breaks every member query)', () => {
+    // is_owner() and ivx_is_owner() are referenced by 83 live RLS policies. Revoking
+    // EXECUTE from authenticated would make member queries fail with permission denied.
+    const sql = migration();
+    expect(sql).not.toMatch(/revoke\s+execute\s+on\s+function\s+public\.is_owner\(\)/i);
+    expect(sql).not.toMatch(/revoke\s+execute\s+on\s+function\s+public\.ivx_is_owner\(\)/i);
+  });
+
+  test('every SECURITY DEFINER function created here pins an explicit search_path', () => {
+    // Inspect real CREATE FUNCTION bodies only. Counting the bare phrase would also
+    // match the explanatory comments at the top of the migration and give a false
+    // failure, so split on the actual definitions instead.
+    const sql = migration();
+    const definitions = sql
+      .split(/create\s+or\s+replace\s+function/i)
+      .slice(1)
+      .map((chunk) => chunk.slice(0, chunk.search(/\$function\$/i) + 1 || chunk.length));
+
+    expect(definitions.length).toBeGreaterThan(0);
+    for (const def of definitions) {
+      if (/security\s+definer/i.test(def)) {
+        // A mutable search_path lets a caller shadow a referenced object and run code
+        // with the definer's privileges.
+        expect(def).toMatch(/set\s+search_path/i);
+      }
+    }
+
+    // And the ALTER path for the pre-existing trigger function.
+    expect(sql).toMatch(/alter function .*trigger_set_timestamp\(\) set search_path/i);
+  });
+});
