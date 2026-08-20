@@ -1,8 +1,9 @@
 import type { EnterpriseMasterAgent } from './ivx-enterprise-master-registry';
 
-export const IVX_PHASE2_LEAST_PRIVILEGE_MARKER = 'ivx-phase2-least-privilege-2026-08-20-v1';
+export const IVX_PHASE2_LEAST_PRIVILEGE_MARKER = 'ivx-phase2-least-privilege-2026-08-20-v2';
 
 export type AgentRealToolId =
+  | 'ivx_public_landing'
   | 'sec_edgar_fulltext'
   | 'sec_edgar_submissions'
   | 'wikipedia_search'
@@ -14,21 +15,21 @@ export type AgentRealToolId =
 
 const set = (values: number[]) => new Set(values);
 
-// IVX production code is intentionally narrow. Executive, finance, legal,
-// marketing, research, and product-planning agents never receive IVX code write.
+// IVX code drafting is intentionally narrow. Executive finance/legal/research
+// agents do not receive code-write entitlement merely because they are senior.
 export const IVX_CODE_DRAFT_AGENT_NUMBERS = set([10, 11, 40]);
 
-// Division-B/new-product engineering may write only to isolated product sandboxes,
-// never to IVX production repositories or production data.
+// New-product engineering is isolated from the IVX production repository/data.
 export const PRODUCT_SANDBOX_CODE_AGENT_NUMBERS = set([
   68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86,
   87, 88, 89, 90, 91, 99, 100, 103, 104, 105, 106, 107, 108, 110, 111, 112,
 ]);
 
+// CRM is not a baseline tool. Only roles whose actual mission requires pipeline
+// data receive it. Create and update capabilities are separated.
 export const CRM_READ_AGENT_NUMBERS = set([
-  2, 7, 17, 18, 19, 20, 21, 27, 28, 29, 30, 31, 32, 46, 47, 48, 49, 50, 51, 53, 54, 55,
+  7, 17, 18, 19, 20, 21, 27, 28, 29, 30, 31, 32, 46, 47, 48, 53, 54, 55,
 ]);
-
 export const CRM_WRITE_AGENT_NUMBERS = set([17, 19, 27, 28, 31, 32]);
 export const CRM_UPDATE_AGENT_NUMBERS = set([20, 21]);
 
@@ -64,7 +65,9 @@ export function canWriteProductSandbox(agentNumber: number): boolean {
 }
 
 export function getAgentRealToolEntitlements(agentNumber: number): AgentRealToolId[] {
-  const tools: AgentRealToolId[] = [];
+  // Every agent can prove a real run against a harmless public IVX source. No
+  // private data entitlement is needed just to satisfy an evidence gate.
+  const tools: AgentRealToolId[] = ['ivx_public_landing'];
   if (PUBLIC_RESEARCH_AGENT_NUMBERS.has(agentNumber)) tools.push('wikipedia_search');
   if (WORLD_BANK_AGENT_NUMBERS.has(agentNumber)) tools.push('worldbank_indicator');
   if (FX_AGENT_NUMBERS.has(agentNumber)) tools.push('frankfurter_fx');
@@ -86,7 +89,7 @@ export function getLeastPrivilegePermissions(agent: EnterpriseMasterAgent): {
     `registry:agent:${agent.id}:read`,
   ];
   const write = [`memory:${agent.id}:write`];
-  const external: string[] = [];
+  const external: string[] = ['ivx_public:read'];
 
   if (agent.division === 'A') {
     if (CRM_READ_AGENT_NUMBERS.has(agent.agentNumber)) read.push('ivx:crm:read');
@@ -104,7 +107,7 @@ export function getLeastPrivilegePermissions(agent: EnterpriseMasterAgent): {
       external.push('github:read:ivx-holdings-platform');
     }
   } else {
-    // Division B gets registry metadata, not IVX production data.
+    // Division B may read only non-production registry metadata from IVX.
     read.push('ivx:enterprise_registry:read');
     if (canWriteProductSandbox(agent.agentNumber)) {
       write.push(`product_sandbox:${agent.id}:code:write`);
@@ -138,5 +141,6 @@ export function auditLeastPrivilegeAgent(agent: EnterpriseMasterAgent): string[]
   if (!CRM_WRITE_AGENT_NUMBERS.has(agent.agentNumber) && realTools.includes('crm_write')) issues.push('crm_write_overgrant');
   if (!CRM_UPDATE_AGENT_NUMBERS.has(agent.agentNumber) && realTools.includes('crm_update')) issues.push('crm_update_overgrant');
   if (!canDraftIVXCode(agent.agentNumber) && p.write.includes('ivx:code:draft')) issues.push('ivx_code_overgrant');
+  if (realTools.length === 0) issues.push('no_verifiable_real_tool');
   return issues;
 }
