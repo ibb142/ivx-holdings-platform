@@ -28,7 +28,7 @@ try {
       await expect(page.getByText('Sign in to invest', { exact: false }).first()).toBeAttached();
     });
 
-    test('anonymous landing wire preview never exposes routing or account digits', async ({ page }) => {
+    test('anonymous landing wire surface keeps bank details behind authenticated app access', async ({ page }) => {
       const response = await page.goto(LANDING_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
       expect(response?.ok()).toBe(true);
 
@@ -40,8 +40,9 @@ try {
       expect(wireStart).toBeGreaterThanOrEqual(0);
       const wireSlice = bodyText.slice(wireStart, wireStart + 1_500);
 
-      expect(wireSlice).toContain('Sign in to view bank details');
-      expect(wireSlice).toContain('Sign in to view account details');
+      expect(wireSlice).toContain('Get wire instructions in the app');
+      expect(wireSlice).toContain('Bank details are sensitive');
+      expect(wireSlice).toContain('full account number is available only in the authenticated app or via investor relations');
       expect(wireSlice.match(/\b\d{7,17}\b/g) ?? []).toHaveLength(0);
       expect(wireSlice.match(/\b\d{9}\b/g) ?? []).toHaveLength(0);
     });
