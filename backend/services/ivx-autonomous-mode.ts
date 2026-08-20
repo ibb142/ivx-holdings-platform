@@ -1,54 +1,32 @@
 /**
- * IVX Autonomous Mode — the single 12-step lifecycle that lets IVX operate
- * without human babysitting, behind one entry point, composing the subsystems
- * that already exist:
+ * IVX Autonomous Mode — single end-to-end lifecycle for unattended operation.
  *
- *   1  receive task           — copy the owner task EXACTLY
- *   2  classify intent        — ivx-owner-execution-mode (+ the 6 safety gates)
- *   3  verify tools/access    — ivx-tool-availability
- *   4  create execution plan  — ivx-task-block-splitter
- *   5  execute                — ivx-self-heal-cycle (fix-and-verify loop)
- *   6  run tests              — self-heal test stage
- *   7  deploy if allowed      — derived from production verification + tools
- *   8  verify production      — ivx-production-guard (getProductionHealth)
- *   9  detect failure         — derived from steps 5–8
- *   10 retry or self-heal     — self-heal fix stage
- *   11 roll back if needed    — ivx-production-guard (triggerProductionRollback via self-heal)
- *   12 return proof           — ivx-execution-trace-store + evidence classification
- *
- * SAFETY GATES (human required) — a task is HELD for approval, never executed,
- * when its intent matches one of the six guarded categories:
- *   delete data · modify production schema · expose secrets · change billing /
- *   payment · disable security · grant external access.
- * (These map to the owner's list: destructive action / payment / credential
- * change / delete data / legal-compliance risk / production-rollback approval.)
- *
- * The heavy self-heal runner is INJECTABLE so this orchestrator is unit-testable
- * without the AI gateway / git / network. It never throws — every failure surfaces
- * as a failed step so the returned proof is always honest and complete.
+ * LOW-RISK work may flow through execution, testing, deploy and verification.
+ * Dangerous work is held at the Owner Gate. Before any mutating lifecycle begins,
+ * the owner emergency-stop state must be verifiably inactive; uncertainty fails
+ * closed for mutation while read/monitoring surfaces can remain available.
  */
 import { classifyOwnerExecutionCommand, type IVXOwnerExecutionDecision } from './ivx-owner-execution-mode';
 import { checkToolAvailability, type ToolAvailabilityReport } from './ivx-tool-availability';
 import { splitTaskIntoBlocks, type IVXPlannedBlock } from './ivx-task-block-splitter';
 import type { SelfHealCycleReport } from './ivx-self-heal-cycle';
-import { getProductionHealth, type ProductionHealth } from './ivx-production-guard';
+import { type ProductionHealth } from './ivx-production-guard';
 import { recordExecutionTrace } from './ivx-execution-trace-store';
 import { EVIDENCE_CLASSIFICATION, type EvidenceClassification } from './ivx-evidence-gate';
+import { assertAutonomousMutationAllowed } from './ivx-emergency-stop-gate';
 
-export const IVX_AUTONOMOUS_MODE_MARKER = 'ivx-autonomous-mode-2026-06-01';
+export const IVX_AUTONOMOUS_MODE_MARKER = 'ivx-autonomous-mode-2026-08-20-owner-controlled';
 
 export type AutonomousStepStatus = 'verified' | 'failed' | 'skipped' | 'blocked' | 'unverified';
 
 export type AutonomousLifecycleStep = {
-  /** Ordinal 1..12 — matches the owner's requested lifecycle. */
   step: number;
   name: string;
   status: AutonomousStepStatus;
-  /** Honest proof string for this step. */
   proof: string;
 };
 
-export type AutonomousFinalStatus = 'VERIFIED' | 'FAILED' | 'BLOCKED_FOR_APPROVAL';
+export type AutonomousFinalStatus = 'VERIFIED' | 'FAILED' | 'BLOCKED_FOR_APPROVAL' | 'STOPPED_BY_OWNER';
 
 export type AutonomousModeReport = {
   marker: string;
@@ -57,9 +35,7 @@ export type AutonomousModeReport = {
   startedAt: string;
   finishedAt: string;
   durationMs: number;
-  /** The owner task, copied exactly. */
   task: string;
-  /** Step 2 — intent + safety-gate decision. */
   intent: {
     isOwnerExecutionCommand: boolean;
     autoExecute: boolean;
@@ -68,34 +44,27 @@ export type AutonomousModeReport = {
     safeCategories: string[];
     reason: string;
   };
-  /** Step 3 — tool/access availability. */
   toolAvailability: ToolAvailabilityReport;
-  /** Step 4 — execution plan. */
   plan: { blockCount: number; blocks: { title: string }[] };
-  /** Steps 5–11 — the self-heal cycle result (null when blocked/skipped). */
   selfHeal: SelfHealCycleReport | null;
-  /** Step 8 — production verification (null when not reached). */
   production: ProductionHealth | null;
-  /** True when a human approval gate stopped execution. */
   humanApprovalRequired: boolean;
-  /** Why a human is required (null when none). */
   approvalReason: string | null;
-  /** The full ordered lifecycle ledger. */
+  ownerStopChecked: boolean;
+  ownerStopVerifiedInactive: boolean;
   steps: AutonomousLifecycleStep[];
-  /** Step 12 — owner-facing evidence classification. */
   classification: EvidenceClassification;
   finalStatus: AutonomousFinalStatus;
-  /** Step 12 — the durable execution-trace id linking this run's proof. */
   executionTraceId: string | null;
 };
 
 export type RunAutonomousModeOptions = {
   conversationId?: string | null;
   approverEmail?: string;
-  /** Test suites the self-heal cycle should run (defaults to typecheck + lint). */
   suites?: SelfHealCycleReport['tests'][number]['suite'][];
-  /** Injectable self-heal runner (defaults to the real cycle) — for testing. */
   selfHealRunner?: (options: { approverEmail?: string }) => Promise<SelfHealCycleReport>;
+  /** Injectable mutation gate for deterministic tests. Defaults to the real owner emergency-stop gate. */
+  mutationGate?: (context: string) => Promise<unknown>;
 };
 
 function nowIso(): string {
@@ -120,10 +89,6 @@ function step(n: number, name: string, status: AutonomousStepStatus, proof: stri
   return { step: n, name, status, proof };
 }
 
-/**
- * Run the full autonomous lifecycle for a single owner task.
- * Never throws — failures surface as failed steps and a FAILED final status.
- */
 export async function runAutonomousMode(
   task: string,
   options: RunAutonomousModeOptions = {},
@@ -135,7 +100,6 @@ export async function runAutonomousMode(
   const steps: AutonomousLifecycleStep[] = [];
   const exactTask = typeof task === 'string' ? task : String(task ?? '');
 
-  // ---- Step 1: receive task (copy exactly) ----
   steps.push(step(
     1,
     'receive task',
@@ -145,18 +109,16 @@ export async function runAutonomousMode(
       : 'Empty task — nothing to execute.',
   ));
 
-  // ---- Step 2: classify intent (+ safety gates) ----
   const decision: IVXOwnerExecutionDecision = classifyOwnerExecutionCommand(exactTask);
   steps.push(step(
     2,
     'classify intent',
     'verified',
     decision.requiresApproval
-      ? `Guarded intent: ${decision.approvalCategories.join(', ')} — human approval required.`
-      : `Intent: ${decision.isOwnerExecutionCommand ? 'execution command' : 'non-command'}; autoExecute=${decision.autoExecute}. ${decision.reason}`,
+      ? `Guarded intent: ${decision.approvalCategories.join(', ')} — explicit owner approval required.`
+      : `Intent classified for autonomous safe lane. autoExecute=${decision.autoExecute}. ${decision.reason}`,
   ));
 
-  // ---- Step 3: verify required tools/access ----
   const toolAvailability = checkToolAvailability();
   steps.push(step(
     3,
@@ -167,7 +129,6 @@ export async function runAutonomousMode(
     }.`,
   ));
 
-  // ---- Step 4: create execution plan ----
   const blocks: IVXPlannedBlock[] = splitTaskIntoBlocks(exactTask);
   steps.push(step(
     4,
@@ -176,9 +137,9 @@ export async function runAutonomousMode(
     `Plan: ${blocks.length} block(s) — ${blocks.slice(0, 5).map((b) => b.title).join(' · ')}${blocks.length > 5 ? ' …' : ''}.`,
   ));
 
-  // ---- SAFETY GATE: human required for the six guarded categories ----
+  // Owner Gate always takes precedence over autonomous execution.
   if (decision.requiresApproval) {
-    const approvalReason = `Human approval required: ${decision.approvalCategories.join(', ')}. ${decision.reason}`;
+    const approvalReason = `OWNER_GATE_REQUIRED: ${decision.approvalCategories.join(', ')}. ${decision.reason}`;
     for (const [n, name] of [
       [5, 'execute'],
       [6, 'run tests'],
@@ -195,27 +156,61 @@ export async function runAutonomousMode(
       requestId,
       conversationId: options.conversationId ?? null,
       toolName: 'ivx-autonomous-mode',
-      rawOutput: { decision, blocks: blocks.map((b) => b.title) },
-      linkedClaim: `Autonomous task HELD for human approval (${decision.approvalCategories.join(', ')}).`,
+      rawOutput: { decision, blocks: blocks.map((b) => b.title), ownerStopChecked: false },
+      linkedClaim: `Autonomous task HELD for explicit owner approval (${decision.approvalCategories.join(', ')}).`,
     });
-    steps.push(step(12, 'return proof', 'verified', `Held for approval; trace=${traceId ?? 'n/a'}.`));
+    steps.push(step(12, 'return proof', 'verified', `Held for owner approval; trace=${traceId ?? 'n/a'}.`));
     return finalize({
       taskId, requestId, startedAt, startMs, task: exactTask, decision, toolAvailability,
       blocks, selfHeal: null, production: null, steps,
       classification: EVIDENCE_CLASSIFICATION.NOT_EXECUTED,
       finalStatus: 'BLOCKED_FOR_APPROVAL',
       humanApprovalRequired: true, approvalReason, executionTraceId: traceId,
+      ownerStopChecked: false, ownerStopVerifiedInactive: false,
     });
   }
 
-  // ---- Steps 5–11: execute → test → deploy → verify → detect → retry → rollback ----
-  // Delegated to the self-heal cycle (find blocker → fix safely → test → verify
-  // production → rollback if needed → resume), which encodes exactly this loop.
+  // Kill switch / control-plane gate. This is deliberately immediately before
+  // the mutating lifecycle. The real gate fails closed when its control state
+  // cannot be verified, so Autonomous cannot patch/deploy through uncertainty.
+  const mutationGate = options.mutationGate ?? assertAutonomousMutationAllowed;
+  try {
+    await mutationGate(`autonomous lifecycle ${taskId}`);
+  } catch (error) {
+    const stopReason = error instanceof Error ? error.message : String(error);
+    for (const [n, name] of [
+      [5, 'execute'],
+      [6, 'run tests'],
+      [7, 'deploy if allowed'],
+      [8, 'verify production'],
+      [9, 'detect failure'],
+      [10, 'retry or self-heal'],
+      [11, 'roll back if needed'],
+    ] as const) {
+      steps.push(step(n, name, 'blocked', `Owner control stopped mutation — ${stopReason}`));
+    }
+    const traceId = await safeTrace({
+      taskId,
+      requestId,
+      conversationId: options.conversationId ?? null,
+      toolName: 'ivx-autonomous-mode',
+      rawOutput: { decision, blocks: blocks.map((b) => b.title), ownerStopChecked: true, ownerStopVerifiedInactive: false, stopReason },
+      linkedClaim: `Autonomous mutation STOPPED by owner control plane: ${stopReason}`,
+    });
+    steps.push(step(12, 'return proof', 'verified', `Stopped before mutation; trace=${traceId ?? 'n/a'}.`));
+    return finalize({
+      taskId, requestId, startedAt, startMs, task: exactTask, decision, toolAvailability,
+      blocks, selfHeal: null, production: null, steps,
+      classification: EVIDENCE_CLASSIFICATION.NOT_EXECUTED,
+      finalStatus: 'STOPPED_BY_OWNER',
+      humanApprovalRequired: false, approvalReason: stopReason, executionTraceId: traceId,
+      ownerStopChecked: true, ownerStopVerifiedInactive: false,
+    });
+  }
+
   let selfHeal: SelfHealCycleReport | null = null;
   let production: ProductionHealth | null = null;
   try {
-    // Lazy-import the heavy self-heal cycle (pulls the AI runtime) only when the
-    // default runner is actually used, so injected-runner callers/tests stay light.
     const runner = options.selfHealRunner ?? (async (opts) => {
       const { runSelfHealCycle } = await import('./ivx-self-heal-cycle');
       return runSelfHealCycle({ approverEmail: opts.approverEmail, suites: options.suites });
@@ -234,19 +229,17 @@ export async function runAutonomousMode(
       testStages.map((s) => s.proof).join(' | ') || 'No test suites run.'));
     const directDeployAvailable = toolAvailability.tools.some((t) => (t.tool === 'render_deploy' || t.tool === 'github_write') && t.available);
     steps.push(step(7, 'deploy if allowed',
-      // Direct API deploy → verified; otherwise SKIPPED, not failed: push-to-main
-      // auto-deploy (render.yaml autoDeployTrigger: commit) is still a valid path.
       directDeployAvailable ? 'verified' : 'skipped',
       directDeployAvailable
-        ? 'Deploy path available (direct GitHub/Render API control).'
-        : 'Direct deploy API not configured — ships via push-to-main auto-deploy (render.yaml autoDeployTrigger: commit).'));
+        ? 'Deploy path available under autonomous safe-lane controls.'
+        : 'Direct deploy API not configured; no direct deploy proof available from this lifecycle.'));
     steps.push(step(8, 'verify production', verifyStage ? mapStatus(verifyStage.status) : 'skipped', verifyStage?.proof ?? 'No production verification stage.'));
 
     const anyFailure = selfHeal.stages.some((s) => s.status === 'failed') || !testsPassed || (production?.thresholdExceeded ?? false);
     steps.push(step(9, 'detect failure', 'verified',
       anyFailure ? 'Failure detected — see failed test/verify stages and production health.' : 'No failure detected across execute/test/verify.'));
     steps.push(step(10, 'retry or self-heal', fixStage ? 'verified' : 'skipped',
-      fixStage ? `Self-heal repair proposal: ${fixStage.proof}` : 'No blocker required a fix proposal.'));
+      fixStage ? `Self-heal repair evidence: ${fixStage.proof}` : 'No blocker required a fix proposal.'));
     steps.push(step(11, 'roll back if needed', rollbackStage ? mapStatus(rollbackStage.status) : 'skipped', rollbackStage?.proof ?? 'No rollback stage.'));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -258,12 +251,6 @@ export async function runAutonomousMode(
     }
   }
 
-  // ---- Step 12: return proof (durable execution trace + classification) ----
-  // NOTE: A production with total=0 events and 0 failures is HEALTHY (not a
-  // failure). The previous `production.total > 0` guard caused the lifecycle
-  // to report FAILED whenever no health events had been recorded — even when
-  // every stage was verified. The correct check is: production exists, has
-  // zero failures, and is not over threshold. An empty event window is fine.
   const executed = selfHeal !== null;
   const allOk = executed
     && steps.filter((s) => s.step >= 5 && s.step <= 11).every((s) => s.status === 'verified' || s.status === 'skipped')
@@ -284,6 +271,8 @@ export async function runAutonomousMode(
     toolName: 'ivx-autonomous-mode',
     rawOutput: {
       decision,
+      ownerStopChecked: true,
+      ownerStopVerifiedInactive: true,
       toolAvailability: { available: toolAvailability.available, total: toolAvailability.total, canExecuteEndToEnd: toolAvailability.canExecuteEndToEnd },
       selfHealCycleId: selfHeal?.cycleId ?? null,
       steps,
@@ -292,12 +281,13 @@ export async function runAutonomousMode(
     linkedClaim: `Autonomous task ${finalStatus} (${classification}).`,
   });
   steps.push(step(12, 'return proof', 'verified',
-    `classification=${classification}; trace=${traceId ?? 'n/a'}; selfHealCycle=${selfHeal?.cycleId ?? 'n/a'}.`));
+    `classification=${classification}; ownerStopVerifiedInactive=true; trace=${traceId ?? 'n/a'}; selfHealCycle=${selfHeal?.cycleId ?? 'n/a'}.`));
 
   return finalize({
     taskId, requestId, startedAt, startMs, task: exactTask, decision, toolAvailability,
     blocks, selfHeal, production, steps, classification, finalStatus,
     humanApprovalRequired: false, approvalReason: null, executionTraceId: traceId,
+    ownerStopChecked: true, ownerStopVerifiedInactive: true,
   });
 }
 
@@ -333,6 +323,8 @@ function finalize(input: {
   humanApprovalRequired: boolean;
   approvalReason: string | null;
   executionTraceId: string | null;
+  ownerStopChecked: boolean;
+  ownerStopVerifiedInactive: boolean;
 }): AutonomousModeReport {
   return {
     marker: IVX_AUTONOMOUS_MODE_MARKER,
@@ -356,6 +348,8 @@ function finalize(input: {
     production: input.production,
     humanApprovalRequired: input.humanApprovalRequired,
     approvalReason: input.approvalReason,
+    ownerStopChecked: input.ownerStopChecked,
+    ownerStopVerifiedInactive: input.ownerStopVerifiedInactive,
     steps: input.steps,
     classification: input.classification,
     finalStatus: input.finalStatus,
