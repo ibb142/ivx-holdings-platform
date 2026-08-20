@@ -131,11 +131,12 @@ function mintRefreshToken(jwt: typeof import('jsonwebtoken'), user: AuthUserRow,
 }
 
 // The lookup must remain service-role only because its return payload contains the
-// password hash needed for the emergency bcrypt verification path. CREATE OR REPLACE
-// preserves grants in PostgreSQL, but we still re-assert grants after bootstrap so a
-// fresh database can never expose the function through PostgREST to anon/authenticated.
+// password hash needed for the emergency bcrypt verification path.
 const CREATE_FUNCTION_SQL = `CREATE OR REPLACE FUNCTION public.ivx_query_auth_user_by_email(user_email TEXT) RETURNS JSON AS $fn$ BEGIN RETURN (SELECT json_build_object('id', u.id::text, 'email', u.email, 'encrypted_password', u.encrypted_password, 'email_confirmed_at', u.email_confirmed_at, 'raw_user_meta_data', u.raw_user_meta_data, 'raw_app_meta_data', u.raw_app_meta_data, 'aud', u.aud, 'role', u.role, 'created_at', u.created_at::text, 'updated_at', u.updated_at::text) FROM auth.users u WHERE u.email = user_email LIMIT 1); END; $fn$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp`;
-const HARDEN_FUNCTION_SQL = `REVOKE ALL ON FUNCTION public.ivx_query_auth_user_by_email(text) FROM PUBLIC; REVOKE ALL ON FUNCTION public.ivx_query_auth_user_by_email(text) FROM anon; REVOKE ALL ON FUNCTION public.ivx_query_auth_user_by_email(text) FROM authenticated; GRANT EXECUTE ON FUNCTION public.ivx_query_auth_user_by_email(text) TO service_role`;
+
+// ivx_exec_sql executes one dynamic SQL command per call. A DO block keeps the
+// privilege hardening one command while still applying all REVOKE/GRANT steps.
+const HARDEN_FUNCTION_SQL = `DO $ivx_privacy$ BEGIN EXECUTE 'REVOKE ALL ON FUNCTION public.ivx_query_auth_user_by_email(text) FROM PUBLIC'; EXECUTE 'REVOKE ALL ON FUNCTION public.ivx_query_auth_user_by_email(text) FROM anon'; EXECUTE 'REVOKE ALL ON FUNCTION public.ivx_query_auth_user_by_email(text) FROM authenticated'; EXECUTE 'GRANT EXECUTE ON FUNCTION public.ivx_query_auth_user_by_email(text) TO service_role'; END $ivx_privacy$`;
 
 let _functionDeployed = false;
 
@@ -153,7 +154,6 @@ async function executeServiceRoleSql(sqlText: string, signal: AbortSignal): Prom
   }
 }
 
-/** Deploy and lock down the auth lookup. Both calls use service-role credentials. */
 async function ensureQueryFunction(): Promise<void> {
   if (_functionDeployed) return;
   const controller = new AbortController();
