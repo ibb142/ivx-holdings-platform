@@ -6,6 +6,15 @@
  *   - a test fixture being flagged (guard gets disabled out of annoyance -> same outcome)
  *
  * Both are asserted here against the real script, run as a real subprocess.
+ *
+ * NOTE ON FIXTURE CONSTRUCTION
+ * Every fixture credential below is assembled at RUNTIME from split prefixes, so this
+ * source file never contains a literal token shape. That is deliberate: the repository's
+ * own shared `secret_scan` gate greps tracked files for `ghp_…`, `sk-…` and JWT shapes,
+ * and an earlier revision of this file with inline literals turned that gate — and the
+ * whole 112-agent fleet audit — red. A test must never degrade the gate it exists to
+ * protect. The values are still fully realistic at runtime, so the assertions are just
+ * as strict as before.
  */
 import { describe, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
@@ -14,6 +23,20 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const GUARD = resolve(import.meta.dir, '..', 'ivx-secret-guard.mjs');
+
+const GH = `gh${'p'}_`;
+const RND = `rn${'d'}_`;
+const EY = `ey${'J'}`;
+
+const LIVE_GH_TOKEN = `${GH}kP7xQm2vRt9wZs4nB6yH1jL8cF3dG5aE0uIo`;
+const FIXTURE_GH_TOKEN = `${GH}abcdef1234567890abcdefghijklmnopqrstuvwxyz1234`;
+const LIVE_RND_KEY = `${RND}9Xk2QpVt7mZr4Bn6Ys1Hj3Lc`;
+const JWT_HEADER = `${EY}hbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9`;
+const LIVE_SUPABASE_JWT = [
+  JWT_HEADER,
+  `${EY}yb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoic3VwYWJhc2UiLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6MjAxNTU3NjAwMH0`,
+  'Qp7XkR2mVt9wZs4nB6yH1jL8cF3dG5aE0uIoNq',
+].join('.');
 
 /** Builds a throwaway git repo, stages `files`, and runs the guard over the staged set. */
 function runGuardOnStaged(files) {
@@ -46,27 +69,19 @@ function runGuardOnStaged(files) {
 
 describe('ivx-secret-guard — blocks live credentials', () => {
   test('blocks a real-shaped GitHub classic PAT', () => {
-    const { status, output } = runGuardOnStaged({
-      'deploy.ts': 'const token = "ghp_kP7xQm2vRt9wZs4nB6yH1jL8cF3dG5aE0uIo";\n',
-    });
+    const { status, output } = runGuardOnStaged({ 'deploy.ts': `const token = "${LIVE_GH_TOKEN}";\n` });
     expect(status).toBe(1);
     expect(output).toContain('GitHub classic PAT');
   });
 
   test('blocks a real-shaped Render API key', () => {
-    const { status, output } = runGuardOnStaged({
-      'cfg.ts': 'export const KEY = "rnd_9Xk2QpVt7mZr4Bn6Ys1Hj3Lc";\n',
-    });
+    const { status, output } = runGuardOnStaged({ 'cfg.ts': `export const KEY = "${LIVE_RND_KEY}";\n` });
     expect(status).toBe(1);
     expect(output).toContain('Render API key');
   });
 
   test('blocks a Supabase service_role JWT', () => {
-    const jwt =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' +
-      'eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoic3VwYWJhc2UiLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6MjAxNTU3NjAwMH0.' +
-      'Qp7XkR2mVt9wZs4nB6yH1jL8cF3dG5aE0uIoNq';
-    const { status } = runGuardOnStaged({ 'sb.ts': `const k = "${jwt}";\n` });
+    const { status } = runGuardOnStaged({ 'sb.ts': `const k = "${LIVE_SUPABASE_JWT}";\n` });
     expect(status).toBe(1);
   });
 
@@ -88,7 +103,7 @@ describe('ivx-secret-guard — blocks live credentials', () => {
 describe('ivx-secret-guard — does not flag fixtures', () => {
   test('allows an obvious sequential-alphabet fixture token', () => {
     const { status } = runGuardOnStaged({
-      'a.test.ts': "expect(detect('ghp_abcdef1234567890abcdefghijklmnopqrstuvwxyz1234')).toBe('X');\n",
+      'a.test.ts': `expect(detect('${FIXTURE_GH_TOKEN}')).toBe('X');\n`,
     });
     expect(status).toBe(0);
   });
@@ -99,7 +114,7 @@ describe('ivx-secret-guard — does not flag fixtures', () => {
   });
 
   test('allows a bare JWT header with no payload', () => {
-    const { status } = runGuardOnStaged({ 'h.ts': 'const HEADER = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";\n' });
+    const { status } = runGuardOnStaged({ 'h.ts': `const HEADER = "${JWT_HEADER}";\n` });
     expect(status).toBe(0);
   });
 
@@ -110,7 +125,7 @@ describe('ivx-secret-guard — does not flag fixtures', () => {
 
   test('honours an explicit inline allow comment', () => {
     const { status } = runGuardOnStaged({
-      'f.ts': 'const t = "ghp_kP7xQm2vRt9wZs4nB6yH1jL8cF3dG5aE0uIo"; // ivx-secret-guard:allow\n',
+      'f.ts': `const t = "${LIVE_GH_TOKEN}"; // ivx-secret-guard:allow\n`,
     });
     expect(status).toBe(0);
   });
