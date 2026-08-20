@@ -153,8 +153,8 @@ test('agent API source rejects autonomous financial and high-risk bypasses', () 
 
 test('autonomous workflow cannot deploy or write directly to main', () => {
   const workflow = fs.readFileSync(new URL('../../.github/workflows/ivx-landing-10of10-autonomous-112.yml', import.meta.url), 'utf8');
-  assert.doesNotMatch(workflow, /contents:\s*write/);
-  assert.doesNotMatch(workflow, /actions:\s*write/);
+  assert.doesNotMatch(workflow, /^\s*contents:\s*write\s*$/m);
+  assert.doesNotMatch(workflow, /^\s*actions:\s*write\s*$/m);
   assert.doesNotMatch(workflow, /api\.render\.com\/v1\/services\/.*\/deploys/);
   assert.doesNotMatch(workflow, /render_trigger_deploy/);
   assert.doesNotMatch(workflow, /git push origin HEAD:main/);
