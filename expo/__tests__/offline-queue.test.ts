@@ -26,6 +26,10 @@ mock.module('react-native', () => ({
     addEventListener: () => ({ remove: () => {} }),
   },
   Linking: { canOpenURL: async () => true, openURL: async () => {}, addEventListener: () => ({ remove: () => {} }) },
+  // Process-global mock: keep component stubs so other suites can import them.
+  Text: Object.assign(function Text() { return null; }, { displayName: 'Text' }),
+  TextInput: Object.assign(function TextInput() { return null; }, { displayName: 'TextInput' }),
+  View: Object.assign(function View() { return null; }, { displayName: 'View' }),
 }));
 
 // Mock chatService so we control send behavior per test.

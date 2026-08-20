@@ -417,5 +417,8 @@ describe('IVX Owner AI natural-routing guards', () => {
     });
     expect(proof.logs.some((log) => log.phase === 'plan_created' && JSON.stringify(log.metadata).includes('ownerApprovedAction'))).toBe(true);
     expect(proof.auditFiles.json).toMatch(/^logs\/audit\/ivx-senior-dev-/);
-  });
+    // This case indexes the repo and calls a live AI provider, so it cannot fit
+    // in bun's 5s default. The timeout is raised, NOT the assertions: every
+    // expectation above still has to hold.
+  }, 120_000);
 });

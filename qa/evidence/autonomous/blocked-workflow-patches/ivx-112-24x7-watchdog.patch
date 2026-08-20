@@ -1,0 +1,33 @@
+diff --git a/.github/workflows/ivx-112-24x7-watchdog.yml b/.github/workflows/ivx-112-24x7-watchdog.yml
+index b492170..5edcc4f 100644
+--- a/.github/workflows/ivx-112-24x7-watchdog.yml
++++ b/.github/workflows/ivx-112-24x7-watchdog.yml
+@@ -193,13 +193,27 @@ jobs:
+             --argjson failed "$CYCLE_FAILED" \
+             --argjson evidence "$CYCLE_EVIDENCE" \
+             --argjson stale "${STALE:-0}" \
++            --argjson attempted 112 \
++            --argjson pausedAfter 0 \
+             --arg runId "$GITHUB_RUN_ID" \
+             --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+-            '{ok:true,certificate:$certificate,programId:$programId,productionSha:$liveSha,registryCount:$registry,pausedOrDisabledAfterRecovery:0,recoveryActions:$recovered,workerRunsAttempted:112,workerRunsSucceeded:$succeeded,workerRunsFailed:$failed,workerRunsWithEvidence:$evidence,heartbeatStaleOver30m:$stale,simulatedSuccessAllowed:false,realFundsMoved:false,scheduleMinutes:15,githubRunId:$runId,verifiedAt:$verifiedAt,truthNote:"This certificate proves one real 112-agent cycle, heartbeat SLA and fleet availability. It does not claim every product gap is fixed; product-specific gates remain authoritative."}' \
++            '{ok:($succeeded==112 and $failed==0 and $evidence==112 and $stale==0 and $attempted==112 and $pausedAfter==0),certificate:$certificate,programId:$programId,productionSha:$liveSha,registryCount:$registry,pausedOrDisabledAfterRecovery:$pausedAfter,recoveryActions:$recovered,workerRunsAttempted:$attempted,workerRunsSucceeded:$succeeded,workerRunsFailed:$failed,workerRunsWithEvidence:$evidence,heartbeatStaleOver30m:$stale,simulatedSuccessAllowed:false,realFundsMoved:false,scheduleMinutes:15,githubRunId:$runId,verifiedAt:$verifiedAt,truthNote:"This certificate proves one real 112-agent cycle, heartbeat SLA and fleet availability. It does not claim every product gap is fixed; product-specific gates remain authoritative."}' \
+             > qa/evidence/autonomous/ivx-112-24x7-latest.json
+           cp /tmp/ivx112-cycle/all.json qa/evidence/autonomous/ivx-112-24x7-agent-results.json
+           cat qa/evidence/autonomous/ivx-112-24x7-latest.json
+ 
++          # HARD GATE: the workflow must fail if the certificate is not ok.
++          # A certificate that says ok=false must never leave a green check behind.
++          actual_ok=$(jq -r '.ok' qa/evidence/autonomous/ivx-112-24x7-latest.json)
++          if [ "$actual_ok" != true ]; then
++            echo "::error::24x7 certificate ok=$actual_ok - fleet cycle did NOT meet the bar"
++            jq -r '{workerRunsAttempted,workerRunsSucceeded,workerRunsFailed,workerRunsWithEvidence,heartbeatStaleOver30m}' \
++              qa/evidence/autonomous/ivx-112-24x7-latest.json
++            exit 1
++          fi
++          test "$(jq -r '.ok' qa/evidence/autonomous/ivx-112-24x7-latest.json)" = true
++          echo "24x7_certificate=ok"
++
+       - uses: actions/upload-artifact@v4
+         with:
+           name: ivx-112-24x7-${{ github.run_id }}-${{ github.run_attempt }}

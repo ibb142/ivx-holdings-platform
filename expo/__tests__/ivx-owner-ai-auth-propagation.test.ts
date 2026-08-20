@@ -9,6 +9,10 @@ mock.module('react-native', () => ({
   TurboModuleRegistry: { get: () => ({}) },
   NativeModules: {},
   NativeEventEmitter: class { addListener() { return { remove: () => {} }; } removeAllListeners() {} },
+  // Process-global mock: keep component stubs so other suites can import them.
+  Text: Object.assign(function Text() { return null; }, { displayName: 'Text' }),
+  TextInput: Object.assign(function TextInput() { return null; }, { displayName: 'TextInput' }),
+  View: Object.assign(function View() { return null; }, { displayName: 'View' }),
 }));
 
 // Mock @supabase/supabase-js before any transitive import
