@@ -10,6 +10,18 @@
 
   var _portalState = { userId: '', email: '', token: '', firstName: '', lastName: '', sb: null };
 
+  function syncSecureWireSurface() {
+    if (typeof window.IVXReloadWireInstructions === 'function') {
+      void window.IVXReloadWireInstructions();
+    }
+  }
+
+  function scrubSecureWireSurface() {
+    if (typeof window.IVXScrubWireInstructions === 'function') {
+      window.IVXScrubWireInstructions();
+    }
+  }
+
   function openPortal() {
     document.getElementById('portal-overlay').classList.add('open');
     document.body.style.overflow = 'hidden';
@@ -22,7 +34,9 @@
       _portalState.firstName = saved.firstName || '';
       _portalState.lastName = saved.lastName || '';
       showPortalDashboard();
+      syncSecureWireSurface();
     } else {
+      scrubSecureWireSurface();
       document.getElementById('portal-login-view').style.display = 'block';
       document.getElementById('portal-dashboard').classList.remove('active');
     }
@@ -60,9 +74,19 @@
       _portalState.firstName = (user && user.user_metadata && user.user_metadata.first_name) || email.split('@')[0];
       _portalState.lastName = (user && user.user_metadata && user.user_metadata.last_name) || '';
       _portalState.sb = portalSb;
-      try { localStorage.setItem('ivx_portal_session', JSON.stringify({ userId: _portalState.userId, email: _portalState.email, token: _portalState.token, firstName: _portalState.firstName, lastName: _portalState.lastName, ts: Date.now() })); } catch(e) {}
+      try {
+        localStorage.setItem('ivx_portal_session', JSON.stringify({
+          userId: _portalState.userId,
+          email: _portalState.email,
+          token: _portalState.token,
+          firstName: _portalState.firstName,
+          lastName: _portalState.lastName,
+          ts: Date.now()
+        }));
+      } catch(e) {}
       if (window.createInvestorProfile) window.createInvestorProfile(_portalState.userId, _portalState.email, _portalState.token, _portalState.firstName, _portalState.lastName);
       showPortalDashboard();
+      syncSecureWireSurface();
     } catch(err) {
       console.error('[IVX Portal] Login error:', err.message);
       errEl.textContent = err.message || 'Login failed. Please try again.';
@@ -153,9 +177,11 @@
   function portalLogout() {
     _portalState = { userId: '', email: '', token: '', firstName: '', lastName: '', sb: null };
     try { localStorage.removeItem('ivx_portal_session'); } catch(e) {}
+    scrubSecureWireSurface();
     document.getElementById('portal-login-view').style.display = 'block';
     document.getElementById('portal-dashboard').classList.remove('active');
     document.getElementById('portal-login-form').reset();
+    syncSecureWireSurface();
   }
 
   window.IVXPortal = {
