@@ -1,0 +1,69 @@
+name: IVX Autonomous Governance CI
+
+on:
+  push:
+    branches: [main, 'fix/**']
+    paths:
+      - 'scripts/ivx-autonomous-governance.mjs'
+      - 'scripts/__tests__/ivx-autonomous-governance.test.mjs'
+      - '.github/workflows/ivx-autonomous-governance-ci.yml'
+      - '.github/workflows/ivx-landing-10of10-autonomous-112.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/ivx-autonomous-governance.mjs'
+      - 'scripts/__tests__/ivx-autonomous-governance.test.mjs'
+      - '.github/workflows/ivx-autonomous-governance-ci.yml'
+      - '.github/workflows/ivx-landing-10of10-autonomous-112.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  phase1-governance:
+    name: Phase 1 Autonomous Governance — HARD GATE
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Syntax
+        run: |
+          node --check scripts/ivx-autonomous-governance.mjs
+          node --check scripts/__tests__/ivx-autonomous-governance.test.mjs
+
+      - name: Governance negative tests — HARD GATE
+        run: node --test scripts/__tests__/ivx-autonomous-governance.test.mjs
+
+      - name: Legacy autonomous workflow bypass scan — HARD GATE
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow='.github/workflows/ivx-landing-10of10-autonomous-112.yml'
+          ! grep -q 'contents: write' "$workflow"
+          ! grep -q 'actions: write' "$workflow"
+          ! grep -q 'api.render.com/v1/services/.*/deploys' "$workflow"
+          ! grep -q 'render_trigger_deploy' "$workflow"
+          ! grep -q 'git push origin HEAD:main' "$workflow"
+          ! grep -q '{ok:true,certificate:' "$workflow"
+          grep -q 'realFundsAllowed:false' "$workflow"
+          grep -q 'simulatedSuccessAllowed:false' "$workflow"
+          grep -q 'exactSourceShaRequired:true' "$workflow"
+          echo 'phase1_static_bypass_scan=PASS'
+
+      - name: Phase 1 certificate eligibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence/autonomous
+          jq -n --arg sha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{ok:true,certificate:"IVX-AUTONOMOUS-GOVERNANCE-PHASE1-CI",sourceSha:$sha,githubRunId:$runId,negativeTestsPassed:true,staticBypassScanPassed:true,productionMutationFromAutonomousWorkflow:false,realFundsAllowed:false,simulatedSuccessAllowed:false,verifiedAt:$verifiedAt}' > qa/evidence/autonomous/phase1-autonomous-governance-ci.json
+          cat qa/evidence/autonomous/phase1-autonomous-governance-ci.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase1-autonomous-governance-ci-${{ github.sha }}
+          path: qa/evidence/autonomous/phase1-autonomous-governance-ci.json
+          if-no-files-found: error
