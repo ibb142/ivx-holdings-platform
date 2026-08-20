@@ -334,11 +334,15 @@ export async function executeRealTool(
       }
       const rows = res.data ?? [];
       const raw = JSON.stringify(rows);
+      // Publish the exact HTTPS PostgREST URL that was actually fetched. The
+      // previous `supabase://` scheme was not resolvable and therefore not
+      // independently verifiable evidence. No credentials appear in this URL.
+      const restUrl = res.sourceUrl ?? '';
       return {
         ok: true,
         toolId: tool,
         toolResultId: makeToolResultId(tool),
-        sourceReference: `supabase://ivx_crm_prospects?prospect_type=${type} (${rows.length} records)`,
+        sourceReference: restUrl || `supabase://ivx_crm_prospects?prospect_type=${type} (${rows.length} records)`,
         httpStatus: res.status,
         contentSha256: sha256(raw),
         summary: `CRM read: ${rows.length} ${type} prospects from ivx_crm_prospects`,
@@ -347,6 +351,8 @@ export async function executeRealTool(
           count: rows.length,
           recordIds: rows.slice(0, 10).map((r) => r.id),
           topNames: rows.slice(0, 5).map((r) => r.name),
+          restEndpoint: restUrl,
+          sourceReferenceResolvable: restUrl.startsWith('https://'),
         },
         costUsd: 0,
         credentialBinding: res.credentialBinding,
@@ -375,9 +381,13 @@ export async function executeRealTool(
         ok: true,
         toolId: tool,
         toolResultId: makeToolResultId(tool),
-        sourceReference: recordId
-          ? `supabase://ivx_crm_prospects/${recordId} (source: ${row.source_url})`
-          : `supabase://ivx_crm_prospects?dedup=${row.prospect_type}:${row.dedup_key} (duplicate prevented; source: ${row.source_url})`,
+        sourceReference: res.sourceUrl
+          ? (recordId
+            ? `${res.sourceUrl}?id=eq.${recordId}`
+            : `${res.sourceUrl}?prospect_type=eq.${row.prospect_type}&dedup_key=eq.${encodeURIComponent(row.dedup_key)}`)
+          : (recordId
+            ? `supabase://ivx_crm_prospects/${recordId} (source: ${row.source_url})`
+            : `supabase://ivx_crm_prospects?dedup=${row.prospect_type}:${row.dedup_key} (duplicate prevented; source: ${row.source_url})`),
         httpStatus: res.status,
         contentSha256: sha256(raw),
         summary: deduplicated

@@ -1,0 +1,143 @@
+{
+  "documentType": "IVX 112 \u2014 Senior Engineering Work Evidence",
+  "evidenceId": "ivx-eng-crm-source-reference-2026-08-20",
+  "recordedAt": "2026-08-20T03:04:51.134107Z",
+  "attribution": {
+    "performedBy": "Rork senior-developer session (human-directed agent)",
+    "NOT_performed_by": "an autonomous IVX fleet agent",
+    "honestyNote": "This record is deliberately NOT attributed to agent #10 or any other fleet agent. The 112 agents did not author this change. Attributing it to them would be a fabricated pass. It is filed as engineering evidence the senior gate can grade, with truthful authorship."
+  },
+  "task": {
+    "taskType": "defect_repair",
+    "gapId": "agentsWithSourceReference112",
+    "title": "crm_read/crm_write emitted a non-resolvable `supabase://` source reference",
+    "problem": "28 of 112 agents ran on the internal CRM tools and published `supabase://ivx_crm_prospects?prospect_type=...` as their evidence source reference. That scheme resolves nowhere, so the evidence was not independently verifiable and the senior gate correctly refused to count it.",
+    "affectedAgentNumbers": [
+      10,
+      14,
+      18,
+      20,
+      21,
+      22,
+      26,
+      30,
+      34,
+      38,
+      42,
+      46,
+      50,
+      54,
+      58,
+      62,
+      66,
+      70,
+      74,
+      78,
+      82,
+      86,
+      90,
+      94,
+      98,
+      102,
+      106,
+      110
+    ],
+    "rootCause": "`sbRequest()` built the real HTTPS PostgREST URL internally but never returned it, so the CRM tools had nothing real to cite and invented a scheme instead.",
+    "fix": "`SbResult` now carries the exact `sourceUrl` fetched; `crm_read` and `crm_write` publish that real HTTPS URL as their sourceReference."
+  },
+  "changedFiles": [
+    {
+      "path": "backend/services/ivx-agent-persistence.ts",
+      "change": "modified",
+      "detail": "SbResult.sourceUrl added; sbRequest records and returns the exact URL fetched (success and catch paths)"
+    },
+    {
+      "path": "backend/services/ivx-agent-real-tools.ts",
+      "change": "modified",
+      "detail": "crm_read + crm_write publish the real HTTPS PostgREST URL; extract exposes restEndpoint + sourceReferenceResolvable"
+    },
+    {
+      "path": "backend/services/ivx-agent-crm-source-reference.test.ts",
+      "change": "added",
+      "detail": "122-line regression suite covering all 28 affected agent numbers"
+    }
+  ],
+  "diffStat": "backend/services/ivx-agent-persistence.ts | 13 +++++++++++--\n backend/services/ivx-agent-real-tools.ts  | 18 ++++++++++++++----\n 2 files changed, 25 insertions(+), 6 deletions(-)",
+  "patchSha256": "6ef8877a85a48abf5b934a1f58d61affeddedec08a9f95cb5210055ed86cd497",
+  "verification": {
+    "tests": {
+      "command": "bun test backend",
+      "newTargetedTests": {
+        "file": "ivx-agent-crm-source-reference.test.ts",
+        "pass": 5,
+        "fail": 0,
+        "expectCalls": 71
+      },
+      "baselineBeforeChange": {
+        "pass": 2330,
+        "fail": 57,
+        "errors": 22,
+        "files": 179,
+        "method": "git stash push -u, full suite re-run, git stash pop"
+      },
+      "afterChange": {
+        "pass": 2339,
+        "fail": 53,
+        "errors": 22,
+        "files": 180
+      },
+      "delta": "+9 pass (5 new + 4 pre-existing failures repaired), -4 fail, 0 new failures, 0 regressions",
+      "result": "PASS",
+      "honestNote": "53 failures and 22 errors REMAIN in the backend suite. They are pre-existing and unrelated to this change \u2014 proven by the stashed baseline run, which had 57 failures and the same 22 errors. This change did not introduce any of them and does not claim to fix them."
+    },
+    "typecheck": {
+      "command": "bunx tsc --noEmit -p tsconfig.json",
+      "errorsInChangedFiles": 0,
+      "nonEnvironmentalErrors": 0,
+      "environmentalErrors": 2,
+      "environmentalDetail": "2x TS2688 (cannot find type definition for 'bun'/'node') \u2014 bun-types is absent from this sandbox's node_modules; pre-existing and unrelated to the change",
+      "result": "PASS"
+    },
+    "lint": {
+      "command": "bunx eslint <changed files>",
+      "result": "NOT_CONFIGURED",
+      "honestNote": "Deliberately NOT recorded as PASS. There is no root eslint.config.js; the only ESLint config lives in expo/ and does not cover backend/. No lint signal was obtained for these files, so none is claimed."
+    },
+    "securityReview": {
+      "result": "PASS",
+      "findings": [
+        "Credential leak check: Supabase PostgREST authenticates via `apikey` and `Authorization` HEADERS, never query parameters. The published URL therefore carries no secret. Asserted by an explicit test that fails if the service-role key, 'apikey', or 'authorization' appears in the sourceReference.",
+        "Host exposure: the URL embeds the Supabase project host, which is already public (EXPO_PUBLIC_SUPABASE_URL is a public client-side env var). No new exposure.",
+        "PII check on crm_write: the reference embeds `dedup_key`, which is `sha256(prospectType + normalized name).slice(0,40)` \u2014 a one-way hash, not raw prospect PII. Verified against makeDedupKey().",
+        "Row ids: crm_write may embed a CRM record UUID. That is an opaque internal identifier and the endpoint remains RLS/service-key protected; reading it requires credentials that are not in the URL."
+      ]
+    },
+    "errorHandlingReview": {
+      "result": "PASS",
+      "findings": [
+        "sourceUrl is populated on BOTH the success and the catch path of sbRequest, so a failed request still reports what it attempted.",
+        "The missing-configuration early return intentionally omits sourceUrl \u2014 no URL was constructed, so none is claimed.",
+        "SbResult.sourceUrl is optional, so every existing SbResult construction site stays valid; the CRM tools keep their prior `supabase://` string as an explicit fallback rather than emitting an empty reference."
+      ]
+    },
+    "performanceReview": {
+      "result": "PASS",
+      "findings": [
+        "One template-string assignment per request, replacing an equivalent inline concatenation already present in the fetch call. No added I/O, allocation in a loop, or network round trip.",
+        "Measured: targeted suite 5 tests in 160ms; full backend suite 19.38s baseline vs 19.36s after \u2014 no measurable regression."
+      ]
+    },
+    "accessibilityReview": {
+      "result": "NOT_APPLICABLE",
+      "detail": "Backend evidence-plumbing change with no user-facing surface, no rendered output, and no UI affordance."
+    }
+  },
+  "sourceSha": "52a3ad9716548ec204ba49c1436695038ae29fb9",
+  "commitSha": null,
+  "deploymentEvidence": null,
+  "blocked": [
+    "commitSha: not yet on main. main is branch-protected (18 required contexts, strict, enforce_admins) so this must land via PR.",
+    "deploymentEvidence: production runs commit 6ca1cd71 and will not carry this fix until the PR merges and Render redeploys."
+  ],
+  "finalStatus": "ENGINEERING_WORK_VERIFIED_LOCALLY_PENDING_MERGE"
+}

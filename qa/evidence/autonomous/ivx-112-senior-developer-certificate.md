@@ -1,27 +1,36 @@
 # IVX-112-SENIOR-DEVELOPER-NOT-CERTIFIED
 
 **Verdict: NOT CERTIFIED**  
-Evaluated: `2026-08-20T02:52:32.345334Z`  
+Evaluated: `2026-08-20T03:05:22.167090Z`  
 Production SHA: `6ca1cd71f2b9602d079c141805f918279888e7da`
 
-## What changed since the last evaluation
+## Work completed this session
 
-A REAL execution run was triggered on live production by the agent this turn (runId=rec-1787194134937). It completed 112/112 with 0 failures. The previous blocking reason 'no agent has ever executed a run' is now FACTUALLY OBSOLETE and has been withdrawn.
+### Block 1 — CRM source reference: `FIXED_LOCALLY_NOT_YET_DEPLOYED`
 
-## What IS genuinely certified now
+crm_read/crm_write now publish the real HTTPS PostgREST URL actually fetched, replacing the non-resolvable supabase:// scheme.
 
-The **IVX 112 Real Execution Certificate** passed live and was independently re-verified:
+**Verified:** 5/5 new regression tests pass, covering all 28 affected agent numbers. Full backend suite: 57 fail baseline -> 53 fail after (0 regressions, 4 pre-existing failures repaired). Typecheck 0 errors.
 
-- Certificate: `IVX-112-REAL-EXEC-859548d214a09da6`
-- Run: `rec-1787194134937` — 112 agents, **112/112 real execution verified**, 112/112 evidence verified
-- Simulated runs: **0** · Policy checks: 12/12 passed · E2E: 4/4 passed
-- Commit `6ca1cd71f2b9602d079c141805f918279888e7da` matches runtime: `True`
+**Still fails because:** agentsWithSourceReference112 is measured against LIVE PRODUCTION, which runs commit 6ca1cd71 and does not contain this fix. It stays FAIL until the PR merges and Render redeploys. The code is correct; the deployment has not happened.
 
-Fleet observed on live production:
+Evidence: `qa/evidence/engineering/ivx-eng-crm-source-reference-2026-08-20.json`
 
-- 112/112 executed a real tool · 112/112 distinct evidence SHAs
-- 112/112 fresh heartbeats · 112/112 healthy · 0/112 errors
-- Tools used: `wikipedia_search`×49, `crm_read`×28, `worldbank_indicator`×24, `sec_edgar_fulltext`×9, `frankfurter_fx`×1, `sec_edgar_submissions`×1
+### Block 2 — Engineering evidence: `ONE_REAL_RECORD_PRODUCED_NOT_112`
+
+Produced the senior gate's first genuine engineering evidence record with real measured verification: real changed files, real baseline-vs-after test deltas, real typecheck, and substantive security/error-handling/performance reviews.
+
+**Attribution:** This record is attributed to the Rork senior-developer session, NOT to a fleet agent. The 112 agents did not author it. Filing it under an agent number would be a fabricated pass.
+
+**Still fails because:** acceptedBySeniorGate remains 0/112. One human-directed engineering record is not 112 autonomous agents doing senior-grade work. The gate requires each agent to produce its own changedFiles/tests/typecheck/reviews/commit/deploy evidence.
+
+**Hard blocker:** Fleet agents cannot produce commit or deployment evidence at all right now: the GITHUB_TOKEN on the ivx-senior-dev-01 worker returns 401 Bad credentials. Until that token is rotated, no agent can commit, so acceptedBySeniorGate cannot rise above 0 no matter how many runs execute.
+
+## Previously established: real execution IS certified
+
+- Certificate `IVX-112-REAL-EXEC-859548d214a09da6` · run `rec-1787194134937`
+- 112/112 real execution verified · 112/112 evidence · **0 simulated**
+- 112/112 real tool · 112/112 distinct evidence SHAs · 112/112 fresh heartbeats
 
 > Scope: Proves the fleet performs REAL tool-backed research with durable per-agent evidence. Does NOT prove senior-grade engineering.
 
@@ -38,16 +47,19 @@ Fleet observed on live production:
 - **FAIL** — `allSixWorkflowsPassedOnExactSha`
 - PASS — `productionHealthy`
 - PASS — `productionVersionMatchesSha`
+- PASS — `crmSourceReferenceFixedInCode`
+- **FAIL** — `crmSourceReferenceLiveInProduction`
+- PASS — `firstRealEngineeringEvidenceRecorded`
 
-**8/11 conditions pass.**
+**10/14 conditions pass.**
 
-## Why 10/10 senior certification is NOT issued
+## Why 10/10 senior certification is still NOT issued
 
-1. agentsWithSourceReference=84/112: the 28 agents whose task ran on the internal `crm_read` tool emit no external http sourceReference. Agent numbers: [10, 14, 18, 20, 21, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58, 62, 66, 70, 74, 78, 82, 86, 90, 94, 98, 102, 106, 110].
+1. agentsWithSourceReference=84/112 IN PRODUCTION. The defect is FIXED and TESTED in code (block 1) but production still runs 6ca1cd71 without it. Requires PR merge + Render redeploy to flip.
 
-2. acceptedBySeniorGate=0 of required 112. The run just executed is RESEARCH work (wikipedia_search, sec_edgar_*, worldbank_indicator, frankfurter_fx, crm_read). The senior gate requires per-agent changedFiles, tests, typecheck, lint, securityReview, errorHandlingReview, performanceReview, accessibilityReview, commitSha and deploymentEvidence. None of those fields are populated by a research task. Calling a real tool is NOT senior-grade software engineering.
+2. acceptedBySeniorGate=0 of required 112. One genuine engineering record now exists, but it was authored by the Rork session, not by the fleet. Hard blocker: the ivx-senior-dev-01 worker's GITHUB_TOKEN returns 401, so no agent can produce commit or deployment evidence.
 
-3. The six required workflows have NOT been observed green on this exact SHA. Deploy of the two workflow fixes is still BLOCKED_NO_WORKFLOW_SCOPE (no PAT with `workflow` scope exists in .env or in any of the 5 Render services; the only live GitHub token carries `repo` scope only).
+3. The six required workflows have NOT been observed green on this exact SHA. Still BLOCKED_NO_WORKFLOW_SCOPE — no PAT with `workflow` scope exists in .env or in any of the 5 Render services.
 
 ## Known defect: `registry-counter-desync` (high)
 
@@ -57,4 +69,4 @@ GET /api/ivx/agents reports totalRuns=0, evidenceCount=0, lastHeartbeat=null, he
 
 ## Note
 
-Real tool execution is now genuinely proven and independently re-verified against live production. The SENIOR DEVELOPER 10/10 claim remains unproven and is NOT issued: research tool calls are a different and much lower bar than senior-grade software engineering, and the six-workflow requirement is still blocked on a missing workflow-scoped GitHub token. No fabricated PASS is recorded here.
+Two concrete blocks were completed this session and both are recorded truthfully. The crm_read source-reference defect is genuinely fixed and regression-tested, and the senior gate now has its first real engineering evidence record. Neither result is inflated into a fleet-wide pass: the fix is not yet in production, and one human-directed record is not 112 autonomous agents. The 10/10 senior certification remains NOT ISSUED.

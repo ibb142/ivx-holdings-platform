@@ -84,6 +84,13 @@ export type SbResult<T> = {
   data: T | null;
   error: string | null;
   credentialBinding: string;
+  /**
+   * The exact HTTPS PostgREST URL this request fetched. Contains no secrets —
+   * apikey/Authorization travel as headers, never in the URL. Emitted so
+   * callers can publish a real, resolvable source reference as verifiable
+   * evidence instead of an invented non-resolvable scheme.
+   */
+  sourceUrl?: string;
 };
 
 async function sbRequest<T>(
@@ -96,8 +103,9 @@ async function sbRequest<T>(
   if (binding.missing.length > 0) {
     return { ok: false, status: 0, data: null, error: `Supabase not configured: missing ${binding.missing.join(', ')}`, credentialBinding };
   }
+  const sourceUrl = `${binding.url}/rest/v1/${path}`;
   try {
-    const res = await fetch(`${binding.url}/rest/v1/${path}`, {
+    const res = await fetch(sourceUrl, {
       method: init.method ?? (init.body !== undefined ? 'POST' : 'GET'),
       headers: {
         apikey: binding.key,
@@ -128,9 +136,10 @@ async function sbRequest<T>(
       data,
       error: res.ok ? null : `HTTP ${res.status}: ${text.slice(0, 240)}`,
       credentialBinding,
+      sourceUrl,
     };
   } catch (err) {
-    return { ok: false, status: 0, data: null, error: err instanceof Error ? err.message : String(err), credentialBinding };
+    return { ok: false, status: 0, data: null, error: err instanceof Error ? err.message : String(err), credentialBinding, sourceUrl };
   }
 }
 
