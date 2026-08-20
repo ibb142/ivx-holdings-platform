@@ -2,8 +2,8 @@
   "certificate": "IVX-112-SENIOR-DEVELOPER-NOT-CERTIFIED",
   "ok": false,
   "verdict": "NOT CERTIFIED",
-  "supersedes": "2026-08-20T02:20:54.172Z",
-  "evaluatedAt": "2026-08-20T03:05:22.167090Z",
+  "supersedes": "2026-08-20T03:05:22.167090Z",
+  "evaluatedAt": "2026-08-20T10:05:00Z",
   "productionSha": "6ca1cd71f2b9602d079c141805f918279888e7da",
   "whatChangedSinceLastEvaluation": "A REAL execution run was triggered on live production by the agent this turn (runId=rec-1787194134937). It completed 112/112 with 0 failures. The previous blocking reason 'no agent has ever executed a run' is now FACTUALLY OBSOLETE and has been withdrawn.",
   "realExecutionCertificate": {
@@ -62,18 +62,21 @@
     "firstRealEngineeringEvidenceRecorded": true
   },
   "blockingReasons": [
-    "agentsWithSourceReference=84/112 IN PRODUCTION. The defect is FIXED and TESTED in code (block 1) but production still runs 6ca1cd71 without it. Requires PR merge + Render redeploy to flip.",
-    "acceptedBySeniorGate=0 of required 112. One genuine engineering record now exists, but it was authored by the Rork session, not by the fleet. Hard blocker: the ivx-senior-dev-01 worker's GITHUB_TOKEN returns 401, so no agent can produce commit or deployment evidence.",
-    "The six required workflows have NOT been observed green on this exact SHA. Still BLOCKED_NO_WORKFLOW_SCOPE \u2014 no PAT with `workflow` scope exists in .env or in any of the 5 Render services."
+    "acceptedBySeniorGate = 0 de 112 requeridos. Agentes que fallan: TODOS, del 1 al 112. Motivo identico en los 112: ningun agente aporta changedFiles, tests, typecheck, lint, securityReview ni deploymentEvidence. Confirmado contra real-status, no contra el endpoint defectuoso.",
+    "Bloqueador duro: el GITHUB_TOKEN del worker ivx-senior-dev-01 devuelve 401. Sin commit no hay evidencia de ingenieria posible, por muchas corridas que se ejecuten. acceptedBySeniorGate no puede pasar de 0 hasta rotar ese token.",
+    "Los 6 workflows requeridos NO se observaron verdes en 6ca1cd71: la API de Actions responde 401. Evidencia ausente = FAIL.",
+    "agentsWithSourceReference = 84/112 en produccion. El fix existe y esta testeado en local, pero produccion sigue en 6ca1cd71 sin el.",
+    "40 alertas abiertas en la flota, sin triage."
   ],
-  "note": "Two concrete blocks were completed this session and both are recorded truthfully. The crm_read source-reference defect is genuinely fixed and regression-tested, and the senior gate now has its first real engineering evidence record. Neither result is inflated into a fleet-wide pass: the fix is not yet in production, and one human-directed record is not 112 autonomous agents. The 10/10 senior certification remains NOT ISSUED.",
+  "note": "La flota SI ejecuto trabajo real y eso queda reconocido. Pero investigar con herramientas no es ingenieria senior, y los 9 campos de ingenieria salen 0/112 incluso en el endpoint bueno. El certificado IVX-112-SENIOR-DEVELOPER-10OF10-CERTIFIED NO se emite.",
   "workCompletedThisSession": {
     "block1_crmSourceReference": {
       "status": "FIXED_LOCALLY_NOT_YET_DEPLOYED",
       "what": "crm_read/crm_write now publish the real HTTPS PostgREST URL actually fetched, replacing the non-resolvable supabase:// scheme.",
-      "verified": "5/5 new regression tests pass, covering all 28 affected agent numbers. Full backend suite: 57 fail baseline -> 53 fail after (0 regressions, 4 pre-existing failures repaired). Typecheck 0 errors.",
+      "verified": "5/5 tests de regresion nuevos pasan, cubriendo los 28 numeros de agente afectados. Suite backend: 57 fail antes y 57 fail despues (0 regresiones, 0 reparados). Typecheck 0 errores.",
       "whyConditionStillFails": "agentsWithSourceReference112 is measured against LIVE PRODUCTION, which runs commit 6ca1cd71 and does not contain this fix. It stays FAIL until the PR merges and Render redeploys. The code is correct; the deployment has not happened.",
-      "evidence": "qa/evidence/engineering/ivx-eng-crm-source-reference-2026-08-20.json"
+      "evidence": "qa/evidence/engineering/ivx-eng-crm-source-reference-2026-08-20.json",
+      "CORRECTION": "RETRACTADO: este campo decia '57 fail baseline -> 53 fail after (4 pre-existing failures repaired)'. Esa cifra no se reproduce. Re-medida dos veces: 57 antes y 57 despues. El cambio suma 5 tests que pasan y no repara ninguno."
     },
     "block2_engineeringEvidence": {
       "status": "ONE_REAL_RECORD_PRODUCED_NOT_112",
@@ -82,5 +85,42 @@
       "whyConditionStillFails": "acceptedBySeniorGate remains 0/112. One human-directed engineering record is not 112 autonomous agents doing senior-grade work. The gate requires each agent to produce its own changedFiles/tests/typecheck/reviews/commit/deploy evidence.",
       "hardBlocker": "Fleet agents cannot produce commit or deployment evidence at all right now: the GITHUB_TOKEN on the ivx-senior-dev-01 worker returns 401 Bad credentials. Until that token is rotated, no agent can commit, so acceptedBySeniorGate cannot rise above 0 no matter how many runs execute."
     }
+  },
+  "ownerClaimUnderReview": {
+    "claim": "The 112 IA are complete 10/10 as senior developer audit and QA now",
+    "verdict": "PARTIALLY TRUE \u2014 REJECTED as a 10/10 senior certification",
+    "whatIsTrue": "112/112 agentes SI completaron una corrida real (rec-1787194134937): herramientas reales, 112 evidence SHAs distintos, heartbeats frescos, 0 fallidos, 0 simulados, coste 0.124 USD. Ese trabajo es genuino.",
+    "whatIsFalse": "'10/10 senior developer audit and QA' NO se sostiene. Cero agentes tienen evidencia de ingenieria. Medido sobre /api/ivx/agents/real-status, el endpoint NO afectado por el defecto de desincronizacion: changedFiles 0/112, tests 0/112, typecheck 0/112, lint 0/112, commitSha 0/112, deploymentEvidence 0/112, securityReview 0/112, finalStatus 0/112, acceptedBySeniorGate 0/112.",
+    "whyThisIsNotTheKnownDefect": "Importante: esta medicion NO esta contaminada por 'registry-counter-desync'. Ese defecto afecta a /api/ivx/agents (contadores en cero). Se re-midio contra real-status, que SI reporta 112/112 completados con heartbeats reales \u2014 y aun asi los 9 campos de ingenieria salen 0/112. Los campos no existen; no es un problema de lectura.",
+    "theDistinction": "Investigar con herramientas reales != ingenieria senior. El propio Real Execution Certificate lo delimita: 'Does NOT prove senior-grade engineering'. La flota hizo busquedas (wikipedia 49, crm_read 28, worldbank 24, sec_edgar 10, fx 1). Ningun agente escribio codigo, corrio un test ni desplego nada."
+  },
+  "reVerification2026_08_20": {
+    "agentSnapshotFiles": {
+      "path": "qa/evidence/autonomous/agents/agent-001..112.json",
+      "acceptedBySeniorGate_true": 0,
+      "acceptedBySeniorGate_false": 112,
+      "status_UNVERIFIED": 112,
+      "rejectionReason": "no_run_result_recorded (112/112)",
+      "emptyEvidenceFields": "tests, typecheck, lint, securityReview, errorHandlingReview, performanceReview, accessibilityReview, deploymentEvidence, finalStatus, sourceReference, commitSha, changedFiles \u2014 los 12 vacios en 112/112",
+      "CONTAMINATION_NOTE": "Estos 112 archivos se capturaron desde 'GET /api/ivx/agents', el endpoint con el defecto registry-counter-desync. Sus totalRuns=0/evidenceCount=0 SUBESTIMAN la realidad: las corridas si ocurrieron. No deben citarse como prueba de que la flota no ejecuto nada."
+    },
+    "liveRealStatus": {
+      "endpoint": "GET /api/ivx/agents/real-status",
+      "http": 200,
+      "totalAgents": 112,
+      "completed": 112,
+      "failed": 0,
+      "blocked": 0,
+      "staleHeartbeats": 0,
+      "engineeringFieldsPresent": "0/112 en los 9 campos",
+      "openAlerts": 40
+    },
+    "sixWorkflowsOnExactSha": {
+      "result": "NO VERIFICABLE",
+      "http": 401,
+      "detail": "El GITHUB_TOKEN de expo/.env devuelve 401. Sin lectura de Actions no hay prueba de los 6 workflows en 6ca1cd71.",
+      "ruleApplied": "Evidencia ausente = FAIL. 'No reportado' no es PASS."
+    },
+    "productionSha": "6ca1cd71f2b9602d079c141805f918279888e7da (health ok, crm fix NO desplegado)"
   }
 }
