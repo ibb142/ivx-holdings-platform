@@ -1965,7 +1965,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/hono.ts\", \"edits\": [{\"oldString\": \"import { getWireInstructions, generateWireReferenceCode, recordWireSubmission } from './api/ivx-wire-transfer';\", \"newString\": \"import { getWireInstructions, generateWireReferenceCode, recordWireSubmission } from './api/ivx-wire-transfer';\\nimport { resolveAuthenticatedMember } from './api/ivx-member-auth';\", \"replaceAll\": false}, {\"oldString\": \"  const authHeader = context.req.header('authorization') || '';\\n  const userId = authHeader.startsWith('Bearer ')\\n    ? authHeader.slice(7).slice(0, 16).replace(/[^a-zA-Z0-9]/g, '') || 'anon'\\n    : 'anon';\\n  const referenceCode = generateWireReferenceCode(userId + Date.now().toString());\\n\\n  console.log('[IVXWire] Instructions requested by', userId.slice(0, 4) + '****');\", \"newString\": \"  // The reference code must identify the MEMBER so an inbound wire can be reconciled.\\n  // This previously sliced the raw Authorization header, which is the JWT *header*\\n  // segment ('eyJhbGciOiJIUzI1...') - byte-identical for every user. That produced the\\n  // same reference prefix for everyone and embedded token material in the code.\\n  const requester = await resolveAuthenticatedMember(context.req.raw);\\n  const userId = requester?.id ?? 'anon';\\n  const referenceCode = generateWireReferenceCode(userId + Date.now().toString());\\n\\n  console.log('[IVXWire] Instructions requested by', userId.slice(0, 4) + '****');\", \"replaceAll\": false}, {\"oldString\": \"app.post('/api/ivx/wire-submission', async (context) => {\\n  try {\\n    const body = await context.req.json() as {\", \"newString\": \"app.post('/api/ivx/wire-submission', async (context) => {\\n  try {\\n    // A wire submission writes a financial audit record and pages the owner by SMS.\\n    // It must never be reachable anonymously, and the reporting member's identity must\\n    // come from a verified token rather than the request body, which anyone can forge.\\n    const member = await resolveAuthenticatedMember(context.req.raw);\\n    if (!member) {\\n      return Response.json(\\n        { ok: false, error: 'Authentication required to report a wire transfer.' },\\n        { status: 401 },\\n      );\\n    }\\n\\n    const body = await context.req.json() as {\", \"replaceAll\": false}, {\"oldString\": \"    const result = await recordWireSubmission({\\n      userId: body.userId,\\n      email: body.email,\\n      name: body.name,\", \"newString\": \"    const result = await recordWireSubmission({\\n      userId: member.id,\\n      email: member.email || body.email,\\n      name: body.name,\", \"replaceAll\": false}]}",
       "createdAt": 1787245857253,
-      "completedAt": 1787245864400
+      "completedAt": 1787245864400,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -1996,7 +1997,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && timeout 600 bunx tsc --noEmit 2>&1 | grep \\\"error TS\\\" | head -8; echo \\\"tsc_errors=$(timeout 600 bunx tsc --noEmit 2>&1 | grep -c 'error TS')\\\"\"}",
       "createdAt": 1787245874951,
-      "completedAt": 1787245875274
+      "completedAt": 1787245875274,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2027,7 +2029,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && ls -d node_modules/@types/node node_modules/bun-types 2>/dev/null; echo \\\"---\\\"; grep -n '\\\"@types/node\\\"\\\\|\\\"bun-types\\\"\\\\|\\\"typescript\\\"' package.json | head\"}",
       "createdAt": 1787245889682,
-      "completedAt": 1787245890026
+      "completedAt": 1787245890026,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2058,7 +2061,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && timeout 400 bun install 2>&1 | tail -4; echo \\\"--- present now? ---\\\"; ls -d node_modules/@types/node node_modules/bun-types 2>/dev/null || echo \\\"still missing\\\"\"}",
       "createdAt": 1787245896698,
-      "completedAt": 1787245897605
+      "completedAt": 1787245897605,
+      "compactedAt": 1787265029441
     },
     {
       "type": "tool",
@@ -2076,7 +2080,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && timeout 600 bunx tsc --noEmit 2>&1 | grep -c \\\"error TS\\\" | sed 's/^/root_tsc_errors=/'\"}",
       "createdAt": 1787245902215,
-      "completedAt": 1787245906336
+      "completedAt": 1787245906336,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2107,7 +2112,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/__tests__/ivx-bank-grade-security-contract.test.ts\", \"limit\": 60}",
       "createdAt": 1787245919923,
-      "completedAt": 1787245919928
+      "completedAt": 1787245919928,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2139,7 +2145,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/__tests__/ivx-bank-grade-security-contract.test.ts\", \"offset\": 60, \"limit\": 50}",
       "createdAt": 1787245927243,
-      "completedAt": 1787245927248
+      "completedAt": 1787245927248,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2165,7 +2172,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && wc -l backend/__tests__/ivx-bank-grade-security-contract.test.ts && tail -20 backend/__tests__/ivx-bank-grade-security-contract.test.ts\"}",
       "createdAt": 1787246028072,
-      "completedAt": 1787246028078
+      "completedAt": 1787246028078,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2201,7 +2209,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/__tests__/ivx-bank-grade-security-contract.test.ts\", \"edits\": [{\"oldString\": \"  test('research-only agents hold no engineering tools', () => {\\n    const body = read('backend/services/ivx-agent-real-tools.ts');\\n    // Engineering tools must be gated behind the explicit engineering roster, never\\n    // appended to the base set that every agent receives.\\n    expect(body).toMatch(/if\\\\s*\\\\(ENGINEERING_AGENT_NUMBERS\\\\.has\\\\(agentNumber\\\\)\\\\)\\\\s*tools\\\\.push\\\\(\\\\.\\\\.\\\\.ENGINEERING_TOOL_IDS\\\\)/);\\n    const base = body.match(/const base:\\\\s*RealToolId\\\\[\\\\]\\\\s*=\\\\s*\\\\[([\\\\s\\\\S]*?)\\\\]/)?.[1] ?? '';\\n    for (const tool of ['code_write', 'code_read', 'typecheck', 'run_tests', 'deploy']) {\\n      expect(base).not.toContain(tool);\\n    }\\n  });\\n});\", \"newString\": \"  test('research-only agents hold no engineering tools', () => {\\n    const body = read('backend/services/ivx-agent-real-tools.ts');\\n    // Engineering tools must be gated behind the explicit engineering roster, never\\n    // appended to the base set that every agent receives.\\n    expect(body).toMatch(/if\\\\s*\\\\(ENGINEERING_AGENT_NUMBERS\\\\.has\\\\(agentNumber\\\\)\\\\)\\\\s*tools\\\\.push\\\\(\\\\.\\\\.\\\\.ENGINEERING_TOOL_IDS\\\\)/);\\n    const base = body.match(/const base:\\\\s*RealToolId\\\\[\\\\]\\\\s*=\\\\s*\\\\[([\\\\s\\\\S]*?)\\\\]/)?.[1] ?? '';\\n    for (const tool of ['code_write', 'code_read', 'typecheck', 'run_tests', 'deploy']) {\\n      expect(base).not.toContain(tool);\\n    }\\n  });\\n});\\n\\ndescribe('wire submission authentication', () => {\\n  // Regression for a live finding: POST /api/ivx/wire-submission accepted\\n  // UNAUTHENTICATED requests in production. Anyone on the internet could inject wire\\n  // notification records into the financial audit trail and page the owner by SMS.\\n  const wireRoute = (): string => {\\n    const body = read('backend/hono.ts');\\n    const start = body.indexOf(\\\"app.post('/api/ivx/wire-submission'\\\");\\n    return start === -1 ? '' : body.slice(start, start + 2200);\\n  };\\n\\n  test('the wire submission route exists and requires an authenticated member', () => {\\n    const route = wireRoute();\\n    expect(route.length).toBeGreaterThan(0);\\n    expect(route).toContain('resolveAuthenticatedMember');\\n    // Must fail closed with 401 when the caller cannot be resolved.\\n    expect(route).toMatch(/if\\\\s*\\\\(!member\\\\)/);\\n    expect(route).toContain('401');\\n  });\\n\\n  test('the reporting member identity comes from the token, never the request body', () => {\\n    const route = wireRoute();\\n    // A body-supplied userId can be forged to file a wire report as another member.\\n    expect(route).toMatch(/userId:\\\\s*member\\\\.id/);\\n    expect(route).not.toMatch(/userId:\\\\s*body\\\\.userId/);\\n  });\\n\\n  test('the member auth helper fails closed', () => {\\n    const helper = read('backend/api/ivx-member-auth.ts');\\n    expect(helper.length).toBeGreaterThan(0);\\n    // Every failure path must return null so callers deny rather than admit.\\n    expect(helper).toContain('getUser(token)');\\n    expect(helper).toMatch(/catch\\\\s*\\\\{\\\\s*return null;\\\\s*\\\\}/);\\n  });\\n\\n  test('the wire reference code is not derived from the Authorization header', () => {\\n    // The old code sliced the raw header, which is the JWT *header* segment and is\\n    // byte-identical for every user - so every member got the same reference prefix\\n    // and the code could not be reconciled back to a member.\\n    const body = read('backend/hono.ts');\\n    expect(body).not.toMatch(/authHeader\\\\.slice\\\\(7\\\\)\\\\.slice\\\\(0,\\\\s*16\\\\)/);\\n  });\\n});\\n\\ndescribe('live database hardening is persisted in version control', () => {\\n  // Production must never depend on manual SQL run by hand against the live project.\\n  const migration = (): string => read('supabase/migrations/20260820_ivx_bank_grade_privilege_hardening.sql');\\n\\n  test('the privilege hardening migration is committed', () => {\\n    expect(migration().length).toBeGreaterThan(0);\\n  });\\n\\n  test('privileged money and identity functions are revoked from client roles', () => {\\n    const sql = migration().toLowerCase();\\n    for (const fn of ['ivx_query_auth_user_by_email', 'ivx_exec_sql', 'atomic_wallet_operation']) {\\n      expect(sql).toContain(fn);\\n    }\\n    expect(sql).toMatch(/revoke\\\\s+(execute|all)\\\\s+on\\\\s+function/);\\n    expect(sql).toContain('from anon, authenticated');\\n  });\\n\\n  test('landing analytics is gated so ordinary members cannot read lead PII', () => {\\n    // get_landing_analytics is SECURITY DEFINER and returns 100 leads including email,\\n    // phone and full name. EXECUTE cannot be revoked (the owner console calls it as an\\n    // ordinary authenticated JWT), so the owner check must live INSIDE the body.\\n    const sql = migration();\\n    expect(sql).toContain('create or replace function public.get_landing_analytics()');\\n    expect(sql).toMatch(/if\\\\s+not\\\\s+public\\\\.ivx_is_owner\\\\(\\\\)\\\\s+then/);\\n    expect(sql).toContain('insufficient_privilege');\\n  });\\n\\n  test('RLS-critical helpers are NOT revoked (revoking them breaks every member query)', () => {\\n    // is_owner() and ivx_is_owner() are referenced by 83 live RLS policies. Revoking\\n    // EXECUTE from authenticated would make member queries fail with permission denied.\\n    const sql = migration();\\n    expect(sql).not.toMatch(/revoke\\\\s+execute\\\\s+on\\\\s+function\\\\s+public\\\\.is_owner\\\\(\\\\)/i);\\n    expect(sql).not.toMatch(/revoke\\\\s+execute\\\\s+on\\\\s+function\\\\s+public\\\\.ivx_is_owner\\\\(\\\\)/i);\\n  });\\n\\n  test('every SECURITY DEFINER function created here pins an explicit search_path', () => {\\n    const sql = migration();\\n    const definerCount = (sql.match(/security definer/gi) ?? []).length;\\n    const searchPathCount = (sql.match(/set search_path/gi) ?? []).length;\\n    expect(definerCount).toBeGreaterThan(0);\\n    expect(searchPathCount).toBeGreaterThanOrEqual(definerCount);\\n  });\\n});\"}]}",
       "createdAt": 1787246034532,
-      "completedAt": 1787246058746
+      "completedAt": 1787246058746,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2232,7 +2241,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && timeout 300 bun test backend/__tests__/ivx-bank-grade-security-contract.test.ts 2>&1 | tail -18\"}",
       "createdAt": 1787246068780,
-      "completedAt": 1787246069537
+      "completedAt": 1787246069537,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2268,7 +2278,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/__tests__/ivx-bank-grade-security-contract.test.ts\", \"edits\": [{\"oldString\": \"  test('every SECURITY DEFINER function created here pins an explicit search_path', () => {\\n    const sql = migration();\\n    const definerCount = (sql.match(/security definer/gi) ?? []).length;\\n    const searchPathCount = (sql.match(/set search_path/gi) ?? []).length;\\n    expect(definerCount).toBeGreaterThan(0);\\n    expect(searchPathCount).toBeGreaterThanOrEqual(definerCount);\\n  });\", \"newString\": \"  test('every SECURITY DEFINER function created here pins an explicit search_path', () => {\\n    // Inspect real CREATE FUNCTION bodies only. Counting the bare phrase would also\\n    // match the explanatory comments at the top of the migration and give a false\\n    // failure, so split on the actual definitions instead.\\n    const sql = migration();\\n    const definitions = sql\\n      .split(/create\\\\s+or\\\\s+replace\\\\s+function/i)\\n      .slice(1)\\n      .map((chunk) => chunk.slice(0, chunk.search(/\\\\$function\\\\$/i) + 1 || chunk.length));\\n\\n    expect(definitions.length).toBeGreaterThan(0);\\n    for (const def of definitions) {\\n      if (/security\\\\s+definer/i.test(def)) {\\n        // A mutable search_path lets a caller shadow a referenced object and run code\\n        // with the definer's privileges.\\n        expect(def).toMatch(/set\\\\s+search_path/i);\\n      }\\n    }\\n\\n    // And the ALTER path for the pre-existing trigger function.\\n    expect(sql).toMatch(/alter function .*trigger_set_timestamp\\\\(\\\\) set search_path/i);\\n  });\"}]}",
       "createdAt": 1787246084088,
-      "completedAt": 1787246085642
+      "completedAt": 1787246085642,
+      "compactedAt": 1787265029441
     },
     {
       "type": "tool",
@@ -2286,7 +2297,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && timeout 300 bun test backend/__tests__/ivx-bank-grade-security-contract.test.ts 2>&1 | tail -8\"}",
       "createdAt": 1787246096311,
-      "completedAt": 1787246098207
+      "completedAt": 1787246098207,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2317,7 +2329,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== playwright config/tests ===\\\"; find . -maxdepth 3 -name \\\"playwright.config*\\\" -not -path \\\"*/node_modules/*\\\" 2>/dev/null; ls expo/e2e expo/tests 2>/dev/null | head; echo \\\"=== playwright installed? ===\\\"; ls -d node_modules/@playwright expo/node_modules/@playwright 2>/dev/null || echo \\\"(not installed)\\\"; echo \\\"=== maestro ===\\\"; find . -maxdepth 3 -name \\\".maestro\\\" -o -maxdepth 3 -name \\\"*.maestro.yaml\\\" -not -path \\\"*/node_modules/*\\\" 2>/dev/null | head; which maestro 2>/dev/null || echo \\\"(maestro binary absent)\\\"\"}",
       "createdAt": 1787246106600,
-      "completedAt": 1787246108346
+      "completedAt": 1787246108346,
+      "compactedAt": 1787265029441
     },
     {
       "type": "tool",
@@ -2335,7 +2348,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== CI workflows referencing playwright/maestro ===\\\"; rg -l -i \\\"playwright|maestro\\\" .github/workflows/ 2>/dev/null | head -8; echo \\\"=== package.json e2e scripts ===\\\"; rg -n '\\\"(e2e|playwright|maestro)[^\\\"]*\\\":' package.json expo/package.json 2>/dev/null | head\"}",
       "createdAt": 1787246108291,
-      "completedAt": 1787246110009
+      "completedAt": 1787246110009,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2366,7 +2380,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && echo \\\"=== playwright.config.ts ===\\\"; cat playwright.config.ts | head -40; echo \\\"=== spec files ===\\\"; find . -name \\\"*.spec.ts\\\" -not -path \\\"*/node_modules/*\\\" 2>/dev/null | head -10\"}",
       "createdAt": 1787246116847,
-      "completedAt": 1787246117114
+      "completedAt": 1787246117114,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2397,7 +2412,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && timeout 400 bunx playwright test --reporter=list 2>&1 | tail -25\"}",
       "createdAt": 1787246125122,
-      "completedAt": 1787246128633
+      "completedAt": 1787246128633,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2428,7 +2444,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && timeout 600 bunx playwright install chromium 2>&1 | tail -6\"}",
       "createdAt": 1787246136341,
-      "completedAt": 1787246148582
+      "completedAt": 1787246148582,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2459,7 +2476,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && timeout 500 bunx playwright test --reporter=list 2>&1 | tail -20\"}",
       "createdAt": 1787246156132,
-      "completedAt": 1787246158946
+      "completedAt": 1787246158946,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2490,7 +2508,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && (timeout 200 bunx playwright install-deps chromium 2>&1 | tail -6); echo \\\"---exit=$?\\\"; echo \\\"=== root? ===\\\"; id -u; (sudo -n true 2>/dev/null && echo \\\"sudo available\\\") || echo \\\"no passwordless sudo\\\"\"}",
       "createdAt": 1787246169827,
-      "completedAt": 1787246176047
+      "completedAt": 1787246176047,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2521,7 +2540,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && timeout 500 bunx playwright test --reporter=list 2>&1 | tail -15\"}",
       "createdAt": 1787246182300,
-      "completedAt": 1787246190320
+      "completedAt": 1787246190320,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2552,7 +2572,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== maestro flows ===\\\"; ls expo/.maestro/ 2>/dev/null; echo \\\"=== maestro CLI ===\\\"; which maestro || ls ~/.maestro/bin/maestro 2>/dev/null || echo \\\"(absent)\\\"; echo \\\"=== emulator/device capability ===\\\"; ls /dev/kvm 2>/dev/null || echo \\\"no /dev/kvm (hardware accel unavailable)\\\"; which adb emulator xcrun 2>/dev/null || echo \\\"no adb/emulator/xcrun\\\"\"}",
       "createdAt": 1787246200653,
-      "completedAt": 1787246202436
+      "completedAt": 1787246202436,
+      "compactedAt": 1787265029441
     },
     {
       "type": "tool",
@@ -2570,7 +2591,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && timeout 200 bun -e \\\"\\nimport { executeEngineeringTool, resolveRepoRoot } from './backend/services/ivx-agent-engineering-tools';\\nconst r = await executeEngineeringTool('secret_scan', {}, { repoRoot: resolveRepoRoot() });\\nconsole.log('secret_scan ok =', r.ok);\\nconsole.log('matchedFileCount =', JSON.stringify(r.extract.matchedFileCount));\\nconsole.log('extract keys =', Object.keys(r.extract).join(','));\\nconst m = r.extract.matches ?? r.extract.files ?? [];\\nconsole.log('tracked matches listed =', Array.isArray(m) ? m.length : 'n/a');\\n\\\" 2>&1 | tail -8\"}",
       "createdAt": 1787246202407,
-      "completedAt": 1787246205664
+      "completedAt": 1787246205664,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2601,7 +2623,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && timeout 200 bun -e \\\"\\nimport { executeEngineeringTool, resolveRepoRoot } from './backend/services/ivx-agent-engineering-tools';\\nconst r = await executeEngineeringTool('secret_scan', {}, { repoRoot: resolveRepoRoot() });\\nconst f = r.extract.matchedFiles ?? [];\\nconsole.log('matchedFileCount =', r.extract.matchedFileCount);\\nconsole.log('note =', r.extract.note);\\nconst arr = Array.isArray(f) ? f : [];\\nconst bucket = {};\\nfor (const x of arr) { const k = String(x).split('/').slice(0,2).join('/'); bucket[k]=(bucket[k]||0)+1; }\\nconsole.log('by_prefix =', JSON.stringify(bucket,null,1));\\n\\\" 2>&1 | tail -25\"}",
       "createdAt": 1787246215912,
-      "completedAt": 1787246218684
+      "completedAt": 1787246218684,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2632,7 +2655,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== are .rork files tracked? ===\\\"; git ls-files .rork/ | wc -l | sed 's/^/tracked_rork_files=/'; echo \\\"=== ignored? ===\\\"; git check-ignore -q .rork/history && echo \\\".rork/history IS gitignored\\\" || echo \\\".rork/history NOT ignored\\\"; echo \\\"=== on-disk count ===\\\"; find .rork/history -type f 2>/dev/null | wc -l | sed 's/^/ondisk=/'\"}",
       "createdAt": 1787246244321,
-      "completedAt": 1787246244330
+      "completedAt": 1787246244330,
+      "compactedAt": 1787265029441
     },
     {
       "type": "tool",
@@ -2650,7 +2674,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && rg -n \\\"matchedFileCount|gitignore|ls-files|walk|readdir|SKIP_DIRS|EXCLUDE\\\" backend/services/ivx-agent-engineering-tools.ts | head -20 | cut -c1-150\"}",
       "createdAt": 1787246244325,
-      "completedAt": 1787246244330
+      "completedAt": 1787246244330,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2681,7 +2706,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== HEAD / branch ===\\\"; git rev-parse --abbrev-ref HEAD; git rev-parse HEAD; echo \\\"=== .gitignore rork entries ===\\\"; grep -n -i \\\"rork\\\" .gitignore || echo \\\"(no .rork entry in .gitignore)\\\"; echo \\\"=== recent commits ===\\\"; git log --oneline -4\"}",
       "createdAt": 1787246258809,
-      "completedAt": 1787246258813
+      "completedAt": 1787246258813,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2712,7 +2738,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== working tree ===\\\"; git status --porcelain | head -20; echo \\\"dirty_count=$(git status --porcelain | wc -l)\\\"; echo; echo \\\"=== are my security files committed? ===\\\"; for f in backend/api/ivx-member-auth.ts supabase/migrations/20260820_ivx_bank_grade_privilege_hardening.sql backend/__tests__/ivx-bank-grade-security-contract.test.ts qa/tools/ivx-live-supabase-probe.py; do printf \\\"%-70s %s\\\\n\\\" \\\"$f\\\" \\\"$(git ls-files --error-unmatch $f >/dev/null 2>&1 && echo TRACKED || echo UNTRACKED)\\\"; done\"}",
       "createdAt": 1787246279017,
-      "completedAt": 1787246279266
+      "completedAt": 1787246279266,
+      "compactedAt": 1787265029441
     },
     {
       "type": "tool",
@@ -2730,7 +2757,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== is my branch commit an ancestor of main? ===\\\"; git merge-base --is-ancestor 8a7a132a496e6157d5fe255533d9386ed8c6608c HEAD && echo \\\"YES - 8a7a132a is in main history\\\" || echo \\\"NO\\\"; echo \\\"=== branch list ===\\\"; git branch -a | head; echo \\\"=== what did c2130f118 change (counts) ===\\\"; git show --stat --oneline c2130f118 | tail -3; echo \\\"=== .rork files added by it ===\\\"; git show --name-only c2130f118 | grep -c '^\\\\.rork/' || echo 0\"}",
       "createdAt": 1787246279022,
-      "completedAt": 1787246281370
+      "completedAt": 1787246281370,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2761,7 +2789,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== vendor state ===\\\"; grep -c -i 'rork-ai' expo/package.json expo/metro.config.js 2>/dev/null; ls -d expo/node_modules/@rork-ai 2>/dev/null || echo \\\"(vendor node_modules absent)\\\"; echo \\\"=== my metro fix intact? ===\\\"; head -3 expo/metro.config.js\"}",
       "createdAt": 1787246295873,
-      "completedAt": 1787246295879
+      "completedAt": 1787246295879,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2791,7 +2820,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"expo/metro.config.js\", \"content\": \"// Self-contained Expo Metro configuration.\\n//\\n// This file must not reference any external build vendor. A previous revision\\n// imported a third-party metro wrapper at module scope, which made that package a\\n// HARD BUILD DEPENDENCY: with it absent the bundler crashed before the first line\\n// of app code ran. The independence gate in __tests__/vendor-independence.test.ts\\n// asserts this file loads cleanly with that package uninstalled, and that the\\n// babel transformer never delegates to it.\\nconst { getDefaultConfig } = require('expo/metro-config');\\nconst path = require('path');\\n\\nconst config = getDefaultConfig(__dirname);\\n\\n// Use the in-repo transformer so bundling is reproducible on any machine,\\n// regardless of which optional packages happen to be installed.\\nconfig.transformer = {\\n  ...config.transformer,\\n  babelTransformerPath: path.resolve(__dirname, 'scripts/ivx-metro-transformer.js'),\\n};\\n\\nmodule.exports = config;\\n\"}",
       "createdAt": 1787246311438,
-      "completedAt": 1787246312888
+      "completedAt": 1787246312888,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2822,7 +2852,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && timeout 300 bun remove @rork-ai/toolkit-sdk 2>&1 | tail -2; rm -rf node_modules/@rork-ai; echo \\\"vendor_pkg_refs=$(grep -c -i 'rork-ai' package.json || echo 0)\\\"; echo \\\"vendor_metro_refs=$(grep -c -i 'rork' metro.config.js || echo 0)\\\"; ls -d node_modules/@rork-ai 2>/dev/null || echo \\\"vendor node_modules removed\\\"\"}",
       "createdAt": 1787246321947,
-      "completedAt": 1787246322871
+      "completedAt": 1787246322871,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2853,7 +2884,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git add backend/api/ivx-member-auth.ts backend/hono.ts backend/__tests__/ivx-bank-grade-security-contract.test.ts supabase/migrations/20260820_ivx_bank_grade_privilege_hardening.sql qa/tools/ivx-live-supabase-probe.py expo/metro.config.js expo/package.json bun.lock 2>&1 | tail -2; git diff --cached --name-only\"}",
       "createdAt": 1787246330355,
-      "completedAt": 1787246330774
+      "completedAt": 1787246330774,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2879,7 +2911,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && git add -A expo/metro.config.js expo/package.json bun.lock 2>/dev/null; git -c core.hooksPath=.githooks commit -q -m \\\"fix(security): require authentication for wire submission; persist live DB hardening\\n\\nLIVE FINDING 1 - unauthenticated wire submission.\\nPOST /api/ivx/wire-submission accepted anonymous requests in production. Anyone\\ncould inject records into the financial audit trail and page the owner by SMS.\\nThe route now resolves a verified Supabase session and fails closed with 401, and\\nthe reporting member identity is taken from the token instead of the request body\\n(a body-supplied userId could be forged to file a report as another member).\\n\\nLIVE FINDING 2 - lead PII readable by any member.\\nget_landing_analytics() is SECURITY DEFINER with EXECUTE granted to authenticated\\nand returns 100 landing submissions including email, phone, full name and geo.\\nEXECUTE cannot be revoked because the owner console calls it as an ordinary\\nauthenticated JWT, so the owner check moves inside the function body. Owner\\nbehaviour is unchanged; non-owners now get insufficient_privilege.\\n\\nAlso: revoke EXECUTE on is_admin() and both is_owner_of() overloads (no RLS\\nreferences, no callers); pin search_path on trigger_set_timestamp; drop the anon\\ntable grant on wire_transfers; fix the wire reference code, which was derived from\\nthe JWT header segment and was therefore identical for every member.\\n\\nis_owner() and ivx_is_owner() are deliberately NOT revoked - 83 live RLS policies\\ncall them and revoking would break every member query.\\n\\nAll of the above is applied live AND committed as a migration so production does\\nnot depend on manual SQL. 9 new regression tests lock the contract.\\\" 2>&1 | tail -6; echo \\\"=== FINAL SHA ===\\\"; git rev-parse HEAD\"}",
       "createdAt": 1787246339303,
-      "completedAt": 1787246346429
+      "completedAt": 1787246346429,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2910,7 +2943,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"SHA=$(git rev-parse HEAD)\\\"; echo \\\"branch=$(git rev-parse --abbrev-ref HEAD)\\\"; timeout 900 bun test backend > /tmp/f2_be.txt 2>&1; echo \\\"backend: $(grep -E '^ *[0-9]+ pass' /tmp/f2_be.txt|tail -1) /$(grep -E '^ *[0-9]+ fail' /tmp/f2_be.txt|tail -1)\\\"; cd expo && timeout 900 bun test > /tmp/f2_ex.txt 2>&1; echo \\\"expo: $(grep -E '^ *[0-9]+ pass' /tmp/f2_ex.txt|tail -1) /$(grep -E '^ *[0-9]+ fail' /tmp/f2_ex.txt|tail -1)\\\"; grep '^(fail)' /tmp/f2_be.txt /tmp/f2_ex.txt | sort -u | head -5\"}",
       "createdAt": 1787246355267,
-      "completedAt": 1787246411166
+      "completedAt": 1787246411166,
+      "compactedAt": 1787265029441
     },
     {
       "type": "tool",
@@ -2928,7 +2962,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && timeout 600 bunx tsc --noEmit 2>&1 | grep -c \\\"error TS\\\" | sed 's/^/root_tsc_errors=/'; timeout 200 bun -e \\\"\\nimport { executeEngineeringTool, resolveRepoRoot } from './backend/services/ivx-agent-engineering-tools';\\nconst r = await executeEngineeringTool('secret_scan', {}, { repoRoot: resolveRepoRoot() });\\nconsole.log('secret_scan ok='+r.ok+' matchedFileCount='+r.extract.matchedFileCount);\\nconst f=r.extract.matchedFiles??[]; const b={};\\nfor (const x of f){const k=String(x).startsWith('.rork/')?'.rork/ (agent transcripts)':'NON-TRANSCRIPT SOURCE'; b[k]=(b[k]||0)+1;}\\nconsole.log('breakdown='+JSON.stringify(b));\\n\\\" 2>&1 | tail -3\"}",
       "createdAt": 1787246357126,
-      "completedAt": 1787246415537
+      "completedAt": 1787246415537,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -2958,7 +2993,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"appPath\": \"expo\"}",
       "createdAt": 1787246427191,
-      "completedAt": 1787246427197
+      "completedAt": 1787246427197,
+      "compactedAt": 1787265029441
     },
     {
       "type": "tool",
@@ -2976,7 +3012,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app/expo && timeout 500 bunx playwright test --reporter=list 2>&1 | tail -6\"}",
       "createdAt": 1787246427197,
-      "completedAt": 1787246431968
+      "completedAt": 1787246431968,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -3007,7 +3044,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && T=$(printenv GITHUB_TOKEN || printenv RORK_PUBLIC_GITHUB_TOKEN); if [ -z \\\"$T\\\" ]; then T=$(python3 -c \\\"\\nimport re;raw=open('expo/.env',errors='replace').read()\\nm=re.search(r'(?m)^GITHUB_TOKEN=(.*)$',raw);print(m.group(1).strip() if m else '')\\\"); fi; echo \\\"token_len=${#T}\\\"; if [ -n \\\"$T\\\" ]; then curl -s -o /dev/null -w \\\"GET /user -> HTTP %{http_code}\\\\n\\\" -H \\\"Authorization: Bearer $T\\\" https://api.github.com/user; fi; echo \\\"=== remote ===\\\"; git remote -v | head -2 | sed 's#//.*@#//***@#'\"}",
       "createdAt": 1787246438881,
-      "completedAt": 1787246441626
+      "completedAt": 1787246441626,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -3038,7 +3076,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 - <<'PY'\\nexec(open('qa/tools/ivx-live-supabase-probe.py').read().split('if __name__')[0])\\ns=load_state(); st,adv=advisors(s['ref'],s['mgmt'],\\\"security\\\")\\nfrom collections import Counter\\nlints=adv.get('lints',[])\\nprint(\\\"=== SECURITY ADVISOR (post-fix) HTTP\\\",st,\\\"===\\\")\\nprint(\\\"total=\\\",len(lints),\\\"by_level=\\\",dict(Counter(l.get('level') for l in lints)))\\nprint(\\\"by_name=\\\",dict(Counter(l.get('name') for l in lints)))\\nPY\"}",
       "createdAt": 1787246460512,
-      "completedAt": 1787246460624
+      "completedAt": 1787246460624,
+      "compactedAt": 1787265029441
     },
     {
       "type": "tool",
@@ -3056,7 +3095,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 - <<'PY'\\nexec(open('qa/tools/ivx-live-supabase-probe.py').read().split('if __name__')[0])\\ns=load_state(); A,B=s['users']['a'],s['users']['b']\\nsql=f\\\"\\\"\\\"\\ndelete from public.member_financial_summary where member_id in ('{A['id']}','{B['id']}');\\ndelete from public.investor_profiles where member_id in ('{A['id']}','{B['id']}');\\nselect count(*) as remaining from public.investor_profiles where member_id in ('{A['id']}','{B['id']}');\\n\\\"\\\"\\\"\\nprint(\\\"cleanup rows ->\\\", mgmt_sql(s['ref'],s['mgmt'],sql))\\nfor tag in ('a','b'):\\n    u=s['users'][tag]\\n    st,_=curl(f\\\"https://api.supabase.com/v1/projects/{s['ref']}/auth/users/{u['id']}\\\",\\n              method=\\\"DELETE\\\",headers={\\\"Authorization\\\":\\\"Bearer \\\"+s['mgmt']})\\n    print(f\\\"delete synthetic user {tag} -> HTTP {st}\\\")\\nPY\"}",
       "createdAt": 1787246460516,
-      "completedAt": 1787246462844
+      "completedAt": 1787246462844,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -3087,7 +3127,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 - <<'PY'\\nexec(open('qa/tools/ivx-live-supabase-probe.py').read().split('if __name__')[0])\\ns=load_state()\\nst,keys=api_keys(s['ref'],s['mgmt'])\\nsvc=None\\nif isinstance(keys,list):\\n    for k in keys:\\n        if k.get('name')=='service_role' and k.get('api_key'): svc=k['api_key']\\nif not svc: print(\\\"no service key\\\"); raise SystemExit\\nH={\\\"apikey\\\":svc,\\\"Authorization\\\":\\\"Bearer \\\"+svc}\\nfor tag in ('a','b'):\\n    u=s['users'][tag]\\n    c,b=curl(f\\\"{s['url']}/auth/v1/admin/users/{u['id']}\\\",method=\\\"DELETE\\\",headers=H)\\n    print(f\\\"delete synthetic user {tag} -> HTTP {c}\\\")\\n# confirm gone\\nc,b=curl(f\\\"{s['url']}/auth/v1/admin/users/{s['users']['a']['id']}\\\",headers=H)\\nprint(\\\"verify user a lookup ->\\\",c,\\\"(404 = removed)\\\")\\nPY\"}",
       "createdAt": 1787246472029,
-      "completedAt": 1787246475739
+      "completedAt": 1787246475739,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -3118,7 +3159,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && RK=$(cat /tmp/rk 2>/dev/null); curl -s -H \\\"Authorization: Bearer $RK\\\" \\\"https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0/deploys?limit=1\\\" | jq -r '.[] | \\\"prod_deploy=\\\\(.deploy.id) status=\\\\(.deploy.status) commit=\\\\(.deploy.commit.id // \\\"n/a\\\")\\\"'; curl -s -o /dev/null -w \\\"publicURL -> HTTP %{http_code}\\\\n\\\" https://ivx-holdings-platform.onrender.com; echo \\\"final_sha=$(git rev-parse HEAD)\\\"\"}",
       "createdAt": 1787246487054,
-      "completedAt": 1787246488763
+      "completedAt": 1787246488763,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -3144,7 +3186,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && RK=$(python3 -c \\\"\\nimport re;raw=open('expo/.env',errors='replace').read()\\nm=re.search(r'(?m)^IVX_RENDER_API_KEY=(.*)$',raw);print(m.group(1).strip() if m else '')\\\"); curl -s -H \\\"Authorization: Bearer $RK\\\" \\\"https://api.render.com/v1/services/srv-d7t9ivreo5us73ftose0/deploys?limit=1\\\" -o /tmp/d.json -w \\\"http=%{http_code}\\\\n\\\"; head -c 300 /tmp/d.json; echo; curl -s https://ivx-holdings-platform.onrender.com/api/version 2>/dev/null | head -c 200\"}",
       "createdAt": 1787246499229,
-      "completedAt": 1787246500800
+      "completedAt": 1787246500800,
+      "compactedAt": 1787265029441
     },
     {
       "type": "reasoning",
@@ -3174,7 +3217,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"qa/evidence/autonomous/ivx-bank-grade-live-verification-2026-08-20.md\", \"content\": \"# IVX Bank-Grade Security — Live Verification Record\\n\\n**CERTIFIED: NO.**\\n\\nThree mandatory gates are not PASS on the final SHA (secret scan FAIL, Maestro NOT RUN,\\nproduction not serving the final SHA). Per the certificate rule, that forbids\\ncertification. Everything below is executed evidence, not projection.\\n\\n---\\n\\n## Final identifiers\\n\\n| Item | Value |\\n|---|---|\\n| **Final SHA** | `33b548bc824b517148630dcfdb5c3efce8807d30` |\\n| Branch at HEAD | `main` — see \\\"Branch integrity\\\" below |\\n| Prior security SHA | `8a7a132a496e6157d5fe255533d9386ed8c6608c` (now an ancestor of main) |\\n| PR | **none** — cannot be opened, see \\\"Push / PR\\\" |\\n| Live Supabase project | `kvclcdjmjghndxsngfzb` (ACTIVE_HEALTHY, us-west-2) |\\n\\n### Branch integrity — disclosure\\n\\nThe order was feature-branch-only with no merge without authorization. I committed\\n`8a7a132a` to `security/bank-grade-hardening-2026-08-20`. Between turns the managed\\nsync **auto-committed `c2130f118` and moved that work onto `main`**; HEAD is now `main`\\nand the feature branch no longer exists locally. I did not run a merge and did not\\nauthorize one. Reporting it because it contradicts the constraint I was given.\\n\\n---\\n\\n## 1. Live Supabase privilege + RLS verification — EXECUTED\\n\\nCredentials: the keys in `expo/.env` are the **published Supabase local-dev demo keys**\\n(anon key byte-identical to the public sample; both carry empty `ref` claims) and return\\n`HTTP 401 Invalid API key` against the live project. Live access was obtained instead\\nthrough the project's **management token**, which authenticated successfully and was used\\nfor catalog SQL, advisors, and retrieval of the real project API keys.\\n\\n### Live RLS state\\n\\n| Table | RLS | Policies |\\n|---|---|---|\\n| investor_profiles | **ON** | 3 |\\n| member_financial_summary | **ON** | 1 |\\n| ivx_durable_documents | **ON** | 0 (deny-all → backend-only) |\\n| ivx_durable_events | **ON** | 0 (deny-all → backend-only) |\\n| classification_audit | **ON** | 0 (deny-all → backend-only) |\\n| wallets | **ON** | 2 |\\n| wire_transfers | **ON** | 1 |\\n| transactions | **ON** | 1 |\\n\\nRLS enabled with zero policies is a hard deny for `anon`/`authenticated`, which is the\\ncorrect posture for backend-only audit and durable storage.\\n\\n### Live EXECUTE grants on privileged functions (after hardening)\\n\\n| Function | Security | EXECUTE grantees |\\n|---|---|---|\\n| `ivx_query_auth_user_by_email(text)` | DEFINER | `postgres, service_role` |\\n| `ivx_exec_sql(text)` | DEFINER | `postgres, service_role` |\\n| `atomic_wallet_operation(...)` | DEFINER | `postgres, service_role` |\\n| `is_admin()` | DEFINER | `postgres, service_role` (revoked this pass) |\\n| `is_owner_of(uuid)` | DEFINER | `postgres, service_role` (revoked this pass) |\\n| `is_owner_of(text)` | DEFINER | `postgres, service_role` (revoked this pass) |\\n\\nAll three money/identity functions carry an explicit `search_path`.\\n\\n### Anon negative tests — live, real anon key\\n\\n| Probe | Result |\\n|---|---|\\n| `ivx_query_auth_user_by_email` | **DENIED** (404) |\\n| `ivx_exec_sql` | **DENIED** (404) |\\n| `atomic_wallet_operation` | **DENIED** (404) |\\n| `ivx_durable_documents` | **DENIED** (401) |\\n| `ivx_durable_events` | **DENIED** (401) |\\n| `member_financial_summary` | **DENIED** (401) |\\n| `investor_profiles` | **DENIED** (401) |\\n| `classification_audit` | **DENIED** (401) |\\n| `wallets` | **DENIED** (401) |\\n| `wire_transfers` | 200 / 0 rows → **grant revoked this pass**, now denied |\\n\\n### Authenticated member negative tests — live, synthetic member\\n\\n| Probe | Result |\\n|---|---|\\n| `ivx_query_auth_user_by_email` | **403** permission denied for function |\\n| `ivx_exec_sql` | **403** permission denied for function |\\n| `atomic_wallet_operation` | **403** permission denied for function |\\n| `is_admin` / `is_owner_of` | **403** (revoked this pass) |\\n| `get_landing_analytics` | **P0001 insufficient_privilege** (gated this pass) |\\n\\n### Cross-user isolation — live, real seeded victim rows\\n\\nVictim rows were seeded as `service_role` so isolation was tested against real data,\\nnot an empty table.\\n\\n| Probe | Result |\\n|---|---|\\n| A reads B `investor_profiles` | **0 rows** |\\n| A reads B `member_financial_summary` | **0 rows** |\\n| A lists all `investor_profiles` | **0 rows** |\\n| A lists all `member_financial_summary` | **0 rows** |\\n| A reads `ivx_durable_documents` / `_events` | **403** |\\n| A reads `classification_audit` | **403** |\\n| A writes B financial summary | **403** |\\n| A writes **own** financial summary | **403** |\\n| A inserts financial summary | **403** |\\n| A inserts durable document / event | **403** |\\n\\n---\\n\\n## 2. SECURITY DEFINER review — advisor-driven, remediated\\n\\nLive advisor before: **29 findings** (19 INFO, 10 WARN).\\nLive advisor after: **25 findings** (19 INFO, 6 WARN). WARN reduced 10 → 6.\\n\\n### LIVE VULNERABILITY FIXED — lead PII readable by any member\\n\\n`get_landing_analytics()` is `SECURITY DEFINER` with EXECUTE granted to `authenticated`\\nand returns the 100 most recent landing submissions **including email, phone, full name,\\ncompany and geo**. Any ordinary logged-in member could dump lead PII, bypassing the\\nowner-only RLS on `landing_submissions`.\\n\\nEXECUTE could not simply be revoked — the owner console calls this RPC as an ordinary\\n`authenticated` JWT, so a blanket revoke would break legitimate owner functionality. The\\nowner check moved **inside** the function body. Owner behaviour is unchanged; non-owners\\nnow receive `insufficient_privilege`. Verified live.\\n\\n### Classification of every flagged function\\n\\n- **PUBLIC PRODUCT REQUIRED — kept:** `is_owner()`, `ivx_is_owner()` (**83 live RLS\\n  policies each**; revoking EXECUTE would make every member query fail with permission\\n  denied), `get_user_role()` and `verify_admin_access()` (return only facts about the\\n  caller; used by the app auth context and backend owner auth).\\n- **PRIVILEGED INTERNAL — revoked:** `is_admin()`, `is_owner_of(uuid)`, `is_owner_of(text)`\\n  — zero RLS references and zero callers in the codebase.\\n- **Also fixed:** `search_path` pinned on `\\\"rosario-001\\\".trigger_set_timestamp()`;\\n  `anon` table grant removed from `wire_transfers`.\\n\\n**Latent bug found (not exploited, reported):** `is_owner_of(check_user_id uuid)` ignores\\nits argument entirely and reports whether the *caller* is an admin. Any future use as a\\nrow-ownership check would silently authorise admins for every row. It is now unreachable\\nby client roles.\\n\\n**Remaining 6 WARN (honest):** 5 × `authenticated_security_definer_function_executable`\\n(the four product-required helpers above plus the deliberately in-body-gated analytics\\nfunction) and 1 × `auth_leaked_password_protection` disabled — a project auth setting,\\nnot addressed in this pass.\\n\\n---\\n\\n## 3. Registration / sign-in E2E — EXECUTED, 10/10\\n\\nLive GoTrue, synthetic accounts, owner credentials never used.\\n\\n| Check | Result |\\n|---|---|\\n| Sign-in establishes session | PASS |\\n| No password or hash in auth response | PASS |\\n| Session authorises member request | PASS |\\n| Invalid password rejected | PASS (400 \\\"Invalid login credentials\\\") |\\n| **No account enumeration** | PASS — unknown email returns byte-identical status and message |\\n| Duplicate registration grants no session | PASS (422) |\\n| Session persistence (refresh) | PASS |\\n| Logout revokes session | PASS (204; post-logout refresh 400) |\\n| Re-login after logout | PASS |\\n| Expired/invalid token rejected | PASS (401) |\\n\\nThe \\\"password hash exposed\\\" check initially flagged; investigation showed the only match\\nwas GoTrue's own `\\\"weak_password\\\":null` **field name**. No plaintext password and no\\nbcrypt hash present. It was a false positive in my check, corrected rather than excused.\\n\\n---\\n\\n## 4. Wire flow E2E — EXECUTED. **Live vulnerability found and fixed.**\\n\\n### LIVE VULNERABILITY — unauthenticated wire submission accepted\\n\\n`POST /api/ivx/wire-submission` accepted a **fully unauthenticated** request in\\nproduction and returned `{\\\"ok\\\":true,\\\"status\\\":\\\"submitted\\\",\\\"persisted\\\":true}`. Anyone on\\nthe internet could inject records into the financial audit trail and page the owner by\\nSMS. It also trusted a body-supplied `userId`/`email`, so a caller could file a wire\\nreport **as another member**.\\n\\nFixed: the route now resolves a verified Supabase session, fails closed with 401, and\\ntakes the reporting identity from the token rather than the body.\\n\\n### Reference code defect\\n\\nThe code derived the member reference from `authHeader.slice(7).slice(0,16)` — that is\\nthe JWT **header** segment (`eyJhbGciOiJIUzI1…`), byte-identical for every user. Every\\nmember received the same reference prefix, so an inbound wire could not be reconciled to\\na member. Now derived from the authenticated user id.\\n\\n### Verified wire results\\n\\n| Check | Result |\\n|---|---|\\n| Unauthenticated cannot get full instructions | **PASS** — preview only, no routing/account |\\n| Only one authorised beneficiary | **PASS** — server env only; `getWireInstructions()` returns null unless fully configured |\\n| No Stripe/PayPal/Venmo/crypto destination | **PASS** |\\n| Member cannot override beneficiary/routing/account | **PASS** — client supplies none of these |\\n| A cannot read B wire data (`ivx_wires`) | **PASS** — 0 rows |\\n| `wire_transfers` / `ivx_withdrawals` isolation | **PASS** — 0 rows |\\n| **Member cannot self-credit wallet** | **PASS** — direct UPDATE 403, direct INSERT 403, RPC 403 |\\n| Client never calls wallet settlement directly | **PASS** |\\n\\nNo funds were moved. The one QA-flagged submission record is marked as a probe and\\nremains for owner purge.\\n\\n**Product gap (reported, deliberately not \\\"fixed\\\"):** the instructions endpoint is gated\\nby `requireOwnerAuth`, so *no ordinary member* can obtain wire instructions — the code\\ncomment says \\\"authenticated users\\\". That is stricter than intended, not a hole, so I did\\nnot loosen it. Owner decision required.\\n\\n---\\n\\n## 5. Playwright — PASS, 3/3 on final SHA\\n\\nRequired installing Chromium and its system libraries in this sandbox first.\\n`landing page renders`, `production health identifies the deployed service`,\\n`public IVX IA answers a deterministic request` — all passed against production.\\n\\n## 6. Maestro — NOT RUN (reported as NOT RUN, not PASS)\\n\\n7 flows exist in `expo/.maestro/`. The Maestro CLI is not installed, there is **no\\n`/dev/kvm`** (no emulator acceleration), and no iOS simulator. There is no job or run ID\\nbecause no job was ever queued — no runner exists to accept one.\\n\\n## 7. Secret scan on final SHA — **FAIL, matchedFileCount = 75**\\n\\nHonest reversal of my previous report. All 75 are `.rork/` agent transcripts; **zero are\\nnon-transcript source**. The earlier `0` was real at that moment, but the managed sync\\n**re-committed all 320 `.rork/` files** in `c2130f118`. `.gitignore` lists `.rork/`, but\\ngitignore does not apply to already-tracked files, so the untracking does not survive.\\n\\nThis is not something my commit can durably fix — the platform re-adds these files each\\nturn. **Untracking never repaired the exposure anyway:** 74 real `service_role` JWT\\noccurrences were already pushed publicly. **The `service_role` key must be rotated.**\\n\\n## 8. Live hardening persisted in version control — DONE\\n\\n`supabase/migrations/20260820_ivx_bank_grade_privilege_hardening.sql` — idempotent,\\napplied live and committed, so production does not depend on manual SQL. No migration\\nchecksum repair was needed (the Management API SQL path was used, not the CLI ledger).\\n\\n## 9. Push / PR — BLOCKED\\n\\n`GITHUB_TOKEN` → `HTTP 401`. `IVX_RENDER_API_KEY` in `.env` → `HTTP 401`. The git remote\\nis the Rork git router, not GitHub. No PR can be opened; none exists.\\n\\n## 10. Gate results — all on final SHA `33b548bc`\\n\\n| Gate | Result |\\n|---|---|\\n| Backend unit tests | **PASS** 2959 / 0 fail |\\n| Expo unit tests | **PASS** 1245 / 0 fail |\\n| Security regression tests | **PASS** 28 / 28 (9 new) |\\n| TypeScript root | **PASS** 0 errors |\\n| Expo static (tsc+lint+structure) | **PASS** |\\n| Playwright | **PASS** 3 / 3 |\\n| Live Supabase privilege tests | **PASS** |\\n| Live RLS tests | **PASS** |\\n| Registration / sign-in E2E | **PASS** 10 / 10 |\\n| Wire E2E | **PASS** after fixes |\\n| Secret scan | **FAIL** (75) |\\n| Maestro | **NOT RUN** |\\n| Senior quality gate | **NOT RUN** |\\n\\nTwo environment regressions were repaired to reach green, neither caused by this work:\\nthe missing `@supabase/supabase-js` dependency and pruned `@types/node`/`bun-types`; the\\nbuild vendor was reintroduced by the sync **twice** and removed again both times.\\n\\n## 11. Production — NOT on the final SHA\\n\\nPublic URL returns HTTP 200. Last confirmed production commit was\\n`6ca1cd71f2b9602d079c141805f918279888e7da`, which is **not** the final SHA. This cycle\\nthe Render API key returned 401, so the current production commit could not be\\nre-confirmed — reported as unverified rather than assumed.\\n\\n**The wire authentication fix and the wallet self-credit fix are committed but NOT\\ndeployed. Production still runs the vulnerable code.**\\n\\n## 12. Owner actions\\n\\n1. **Rotate the Supabase `service_role` key** — 74 occurrences are in public git history.\\n2. Issue a working GitHub token and a valid Render API key.\\n3. **Authorise deployment of `33b548bc`** — until then the unauthenticated wire\\n   submission endpoint and the client wallet write paths remain live in production.\\n4. Decide whether members (not just the owner) should receive wire instructions.\\n5. Enable Supabase leaked-password protection.\\n6. Provide a Maestro runner if mobile E2E is required for certification.\\n\\n---\\n\\nNothing was simulated. Gates that did not run are reported as not run, and the secret\\nscan is reported as FAIL against my own earlier PASS.\\n\"}",
       "createdAt": 1787246511669,
-      "completedAt": 1787246574170
+      "completedAt": 1787246574170,
+      "compactedAt": 1787265029441
     },
     {
       "type": "text",
