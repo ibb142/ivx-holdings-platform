@@ -129,6 +129,10 @@ jobs:
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
           echo 'maestro_install=PASS'
+      - name: Enable KVM when available
+        run: |
+          set -euo pipefail
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
       - name: Build, launch and test Android app — HARD GATE
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -136,14 +140,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: |
-            set -eu
-            cd expo
-            bunx expo run:android --no-bundler
-            cd ..
-            maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml
-            echo 'android_build=PASS'
-            echo 'maestro_test=PASS'
+          script: cd expo && bunx expo run:android --no-bundler && cd .. && maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml && echo 'android_build=PASS' && echo 'maestro_test=PASS'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
