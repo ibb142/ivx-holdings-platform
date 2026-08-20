@@ -9,7 +9,6 @@
  * Port:    PORT env var (default 3000)
  */
 import { serve } from '@hono/node-server';
-import { createServer } from 'node:http';
 import { WebSocketServer } from 'ws';
 import app from './backend/hono-extended';
 import { handleRealtimeVoiceConnection, getRealtimeVoiceStatus } from './backend/services/ivx-realtime-voice';
@@ -266,11 +265,23 @@ app.get('/api/ivx/realtime-voice/status', (c) => {
 });
 app.options('/api/ivx/realtime-voice/status', (c) => c.body(null, 204));
 
-// ── Create HTTP server that Hono uses, then attach WebSocket ──
-const httpServer = createServer(productionFetch);
-
 // ── WebSocket server for real-time voice ──
 const wss = new WebSocketServer({ noServer: true });
+
+wss.on('connection', (ws, request) => {
+  void handleRealtimeVoiceConnection(ws as any, request);
+});
+
+// @hono/node-server owns the Node HTTP server lifecycle and returns the actual
+// server instance. Attach the custom realtime-voice upgrade handler to that
+// server instead of constructing a second server with an incompatible Fetch
+// callback signature.
+const httpServer = serve(
+  { fetch: productionFetch, port: PORT, hostname: HOST },
+  (info) => {
+    console.log('[IVX Server] Hono API server online', { host: HOST, port: info.port, family: info.family });
+  },
+);
 
 httpServer.on('upgrade', (request, socket, head) => {
   const url = new URL(request.url || '', `http://${request.headers.host || 'localhost'}`);
@@ -279,20 +290,9 @@ httpServer.on('upgrade', (request, socket, head) => {
       wss.emit('connection', ws, request);
     });
   } else {
-    // Not a WebSocket route — close the socket
+    // Not a WebSocket route — close the socket.
     socket.destroy();
   }
 });
 
-wss.on('connection', (ws, request) => {
-  void handleRealtimeVoiceConnection(ws as any, request);
-});
-
 console.log('[IVX Server] Realtime Voice WebSocket endpoint: ws://.../api/ivx/realtime-voice');
-
-serve(
-  { fetch: productionFetch, port: PORT, hostname: HOST, server: httpServer },
-  (info) => {
-    console.log('[IVX Server] Hono API server online', { host: HOST, port: info.port, family: info.family });
-  },
-);
