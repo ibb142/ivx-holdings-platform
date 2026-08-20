@@ -6,8 +6,10 @@ describe('IVXOwnerAITaskQueue self-bootstrap DDL', () => {
 
   function setBootstrapEnv(): void {
     process.env.SUPABASE_ACCESS_TOKEN = 'sbp_test_management_token_for_retry_tests';
-    process.env.SUPABASE_URL = 'https://kvclcdjmjghndxsngfzb.supabase.co';
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2Y2xjZGptamdobmR4c25nZnpiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzE5NDAyNywiZXhwIjoyMDg4NzcwMDI3fQ.TaTRyViK-8sv3R_g1Me08sEjnyMskGXKF0u-I-PTaQ8';
+    process.env.SUPABASE_URL = 'https://localtest.supabase.co';
+    // Opaque non-JWT placeholder. Never put a real credential here: this file is
+    // tracked in git, and the secret_scan gate flags any service_role JWT on sight.
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key-not-a-real-credential';
   }
 
   function restoreEnv(): void {

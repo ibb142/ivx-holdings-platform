@@ -86,6 +86,61 @@ function sha256(input: string): string {
   return createHash('sha256').update(input).digest('hex');
 }
 
+/**
+ * Decide whether a secret-pattern match is a real credential.
+ *
+ * Classification is by the nature of the credential, NOT by file location, so a
+ * live credential committed into a test file is still reported. Two exemptions
+ * apply, and neither can ever exempt a `service_role` JWT or a private key:
+ *
+ * 1. Supabase `anon` JWTs are public by design (RLS-protected, shipped in client
+ *    bundles), so embedding them as a fallback is the documented Supabase pattern.
+ * 2. Inert fixtures inside test/mock/example files — strings used to exercise the
+ *    project's own masking and redaction helpers.
+ */
+export function fileHasUnexemptedSecret(relPath: string, body: string): boolean {
+  const isFixtureFile = /(__tests__|__fixtures__|\.test\.ts$|\.spec\.ts$|\.example$|\.sample$|\/mocks\/)/.test(relPath);
+
+  // A real private key carries base64 body after the marker. A bare BEGIN marker
+  // with no key material is an inert string, not a credential.
+  if (/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\\n"']*[A-Za-z0-9+/=]{40,}/.test(body)) return true;
+
+  // The lookbehind anchors the match to the START of the token. Without it the
+  // regex can latch onto the payload segment, so split('.')[1] would decode the
+  // signature as garbage and misclassify a real credential.
+  const jwtPattern = /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}(?:\.[A-Za-z0-9_-]+)?/g;
+  for (const token of body.match(jwtPattern) ?? []) {
+    let role: string | undefined;
+    let iss: string | undefined;
+    try {
+      const claims = JSON.parse(Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8')) as {
+        role?: string;
+        iss?: string;
+      };
+      role = claims.role;
+      iss = claims.iss;
+    } catch {
+      // Undecodable payload: an inert placeholder in a fixture file, otherwise a finding.
+      if (!isFixtureFile) return true;
+      continue;
+    }
+    // A service_role JWT bypasses RLS. Never exempt, in any file.
+    if (role === 'service_role') return true;
+    // Supabase anon keys are public by design.
+    if (role === 'anon' && iss === 'supabase') continue;
+    // No role claim means this is not a Supabase credential. Treated like an
+    // undecodable placeholder: inert inside a fixture file, a finding in source.
+    if (role === undefined && isFixtureFile) continue;
+    return true;
+  }
+
+  if (/(sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|vck_[A-Za-z0-9]{16,})/.test(body) && !isFixtureFile) {
+    return true;
+  }
+
+  return false;
+}
+
 /** Resolve the repository root by walking up for a `.git` directory. */
 export function resolveRepoRoot(startDir: string = process.cwd()): string {
   let dir = path.resolve(startDir);
@@ -373,17 +428,28 @@ export async function executeEngineeringTool(
       case 'secret_scan': {
         // Prints FILE NAMES ONLY. A secret must never be echoed into a log or
         // persisted into agent evidence.
-        const patterns = 'sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|vck_[A-Za-z0-9]{16,}|eyJ[A-Za-z0-9_-]{20,}\\.[A-Za-z0-9_-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----';
+        //
+        // Candidate files are located with grep (names only), then classified in
+        // process so that no secret VALUE is ever written to stdout or evidence.
+        const patterns = 'sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|vck_[A-Za-z0-9]{16,}|eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----';
         const res = await runProcess(
           'bash',
-          [
-            '-lc',
-            `git ls-files -z | xargs -0 grep -lIE '${patterns}' 2>/dev/null | grep -vE '(__tests__|__fixtures__|\\.example$|\\.sample$|/mocks/)' || true`,
-          ],
+          ['-lc', `git ls-files -z | xargs -0 grep -lIE '${patterns}' 2>/dev/null || true`],
           repoRoot,
           Math.min(timeoutMs, 120_000),
         );
-        const files = res.stdout.split('\n').map((s) => s.trim()).filter(Boolean);
+        const candidates = res.stdout.split('\n').map((s) => s.trim()).filter(Boolean);
+        const files: string[] = [];
+        for (const rel of candidates) {
+          let body = '';
+          try {
+            body = await readFile(path.join(repoRoot, rel), 'utf8');
+          } catch {
+            files.push(rel);
+            continue;
+          }
+          if (fileHasUnexemptedSecret(rel, body)) files.push(rel);
+        }
         const digest = sha256(files.join('\n'));
         return {
           ok: true,
