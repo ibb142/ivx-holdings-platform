@@ -98,21 +98,29 @@ jobs:
         run: bun install
       - name: Scan for leaked secrets
         run: |
-          # Check for common secret patterns in source files (not .env.example)
+          # Scans EVERY git-tracked file, whatever its extension.
+          #
+          # The previous version only looked at *.ts/*.tsx/*.js/*.mjs. A live
+          # GitHub token sat in 55 tracked .json files under .rork/history/ and
+          # this job still reported green, because .json was never scanned. Any
+          # extension filter here is a hole -- enumerate from git instead.
+          #
+          # Only file NAMES are printed. Echoing the match would republish the
+          # secret into a public CI log.
           EXIT_CODE=0
-          for pattern in 'ghp_[A-Za-z0-9]{36}' 'github_pat_[A-Za-z0-9_]{82}' 'sk-[A-Za-z0-9]{48}' 'rnd_[A-Za-z0-9]{24}' 'sbp_[a-z0-9]{40}'; do
-            FOUND=$(grep -r --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
-              --exclude-dir=node_modules --exclude-dir=.git --exclude='*.test.ts' \
-              --exclude='.env.example' --exclude='.env.production.template' \
-              -E "$pattern" . 2>/dev/null || true)
+          SKIP='(^|/)__tests__/|\.test\.ts$|\.spec\.ts$|^\.env\.example$|\.env\.production\.template$'
+          for pattern in 'ghp_[A-Za-z0-9]{36}' 'github_pat_[A-Za-z0-9_]{82}' 'sk-[A-Za-z0-9]{48}' 'rnd_[A-Za-z0-9]{24}' 'sbp_[a-z0-9]{40}' 'vck_[A-Za-z0-9]{40}'; do
+            FOUND=$(git ls-files -z \
+              | xargs -0 grep -lIE "$pattern" 2>/dev/null \
+              | grep -vE "$SKIP" || true)
             if [ -n "$FOUND" ]; then
-              echo "SECRET LEAK DETECTED (pattern: $pattern):"
+              echo "SECRET LEAK DETECTED (pattern: $pattern) in these files:"
               echo "$FOUND"
               EXIT_CODE=1
             fi
           done
           if [ $EXIT_CODE -eq 0 ]; then
-            echo "No secrets detected in source files."
+            echo "No secrets detected in any tracked file."
           fi
           exit $EXIT_CODE
 
