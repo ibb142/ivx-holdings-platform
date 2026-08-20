@@ -1,61 +1,70 @@
 /**
- * IVX Wire Instructions (item 104 — extracted from inline <script>)
- * Fetches wire transfer instructions from the API and renders them.
- * Unauthenticated users see a 200 with preview (bank name + sign-in CTA).
- * Authenticated users get full bank details with routing/account numbers.
+ * IVX Wire Instructions — bank privacy contract.
+ *
+ * Full wire details are fetched only with the existing authenticated portal
+ * session. Sensitive bank/account values are never written to localStorage.
+ * When the session is absent, expired or rejected, the DOM is scrubbed and a
+ * sign-in CTA is shown.
  */
 (function() {
+  'use strict';
+
+  var SENSITIVE_IDS = [
+    'wire-bank-name',
+    'wire-routing',
+    'wire-swift',
+    'wire-bank-address',
+    'wire-account-name',
+    'wire-account-number',
+    'wire-beneficiary-address',
+    'wire-ref-code'
+  ];
+
+  function readPortalToken() {
+    try {
+      var saved = JSON.parse(localStorage.getItem('ivx_portal_session') || 'null');
+      if (!saved || !saved.token || !saved.ts) return '';
+      // The portal session itself is one hour; fail closed slightly before expiry.
+      if ((Date.now() - Number(saved.ts)) >= 55 * 60 * 1000) return '';
+      return String(saved.token);
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function scrubWireDetails() {
+    SENSITIVE_IDS.forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = '\u2014';
+    });
+    var grid = document.getElementById('wire-instructions-grid');
+    if (grid) grid.style.display = 'none';
+  }
+
+  function showSignInCta(message) {
+    scrubWireDetails();
+    var cta = document.getElementById('wire-cta-btn');
+    if (!cta) return;
+    cta.textContent = message || 'Sign in to view secure wire instructions';
+    cta.href = '#wire-transfer';
+    cta.style.display = 'inline-flex';
+  }
+
   function bindWireCta() {
     var cta = document.getElementById('wire-cta-btn');
     if (!cta || cta.dataset.ivxWireBound === 'true') return;
     cta.dataset.ivxWireBound = 'true';
     cta.addEventListener('click', function(e) {
       e.preventDefault();
-      if (typeof window.openPortal === 'function') window.openPortal();
+      if (typeof window.openPortal === 'function') {
+        window.openPortal();
+      } else if (window.IVXPortal && typeof window.IVXPortal.open === 'function') {
+        window.IVXPortal.open();
+      }
     });
   }
 
-  bindWireCta();
-  if (location.pathname === '/wire-transfer' || location.hash === '#wire-transfer') {
-    var wireSection = document.getElementById('wire-transfer');
-    if (wireSection) setTimeout(function() { wireSection.scrollIntoView({ block: 'start' }); }, 0);
-  }
-
-  fetch('/api/ivx/wire-instructions').then(function(r) {
-    if (!r.ok) {
-      // Network/server error — show CTA to get instructions in the app
-      var cta = document.getElementById('wire-cta-btn');
-      if (cta) {
-        cta.textContent = 'Get wire instructions in the app';
-      }
-      return null;
-    }
-    return r.json();
-  }).then(function(j) {
-    if (!j || !j.ok) return;
-
-    // Unauthenticated: show bank name + sign-in CTA
-    if (j.authenticated === false && j.preview) {
-      var set0 = function(id, val) {
-        var el = document.getElementById(id);
-        if (el) el.textContent = val || '\u2014';
-      };
-      set0('wire-bank-name', j.preview.bankName);
-      var ctaBtn = document.getElementById('wire-cta-btn');
-      if (ctaBtn) {
-        ctaBtn.textContent = j.preview.cta || 'Sign in to view wire instructions';
-        ctaBtn.href = '/wire-transfer';
-        ctaBtn.style.display = 'inline-flex';
-      }
-      // Show grid with just the bank name visible
-      var grid0 = document.getElementById('wire-instructions-grid');
-      if (grid0) grid0.style.display = 'grid';
-      return;
-    }
-
-    // Authenticated: show full bank details
-    if (!j.instructions) return;
-    var i = j.instructions;
+  function renderInstructions(i) {
     var set = function(id, val) {
       var el = document.getElementById(id);
       if (el) el.textContent = val || '\u2014';
@@ -70,10 +79,56 @@
     set('wire-ref-code', i.referenceCode);
     var grid = document.getElementById('wire-instructions-grid');
     if (grid) grid.style.display = 'grid';
-  }).catch(function() {
     var cta = document.getElementById('wire-cta-btn');
-    if (cta) {
-      cta.textContent = 'Get wire instructions in the app';
+    if (cta) cta.style.display = 'none';
+  }
+
+  async function loadWireInstructions() {
+    bindWireCta();
+    var token = readPortalToken();
+    if (!token) {
+      showSignInCta();
+      return false;
     }
-  });
+
+    try {
+      var r = await fetch('/api/ivx/wire-instructions', {
+        method: 'GET',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Accept': 'application/json'
+        }
+      });
+
+      var j = null;
+      try { j = await r.json(); } catch (e) {}
+      if (r.status === 401 || r.status === 403 || !j || j.authenticated === false) {
+        showSignInCta('Session expired — sign in again');
+        return false;
+      }
+      if (!r.ok || !j.ok || !j.instructions) {
+        showSignInCta('Wire instructions temporarily unavailable');
+        return false;
+      }
+
+      renderInstructions(j.instructions);
+      return true;
+    } catch (e) {
+      showSignInCta('Wire instructions temporarily unavailable');
+      return false;
+    }
+  }
+
+  bindWireCta();
+  scrubWireDetails();
+  if (location.pathname === '/wire-transfer' || location.hash === '#wire-transfer') {
+    var wireSection = document.getElementById('wire-transfer');
+    if (wireSection) setTimeout(function() { wireSection.scrollIntoView({ block: 'start' }); }, 0);
+  }
+
+  window.IVXReloadWireInstructions = loadWireInstructions;
+  window.IVXScrubWireInstructions = scrubWireDetails;
+  void loadWireInstructions();
 })();
