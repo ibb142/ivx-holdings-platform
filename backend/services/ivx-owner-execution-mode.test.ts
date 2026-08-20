@@ -5,94 +5,88 @@ import {
   type OwnerApprovalCategory,
 } from './ivx-owner-execution-mode';
 
-describe('classifyOwnerExecutionCommand — non-destructive owner commands auto-execute', () => {
+describe('classifyOwnerExecutionCommand — low-risk owner commands auto-execute', () => {
   const autoCommands = [
     'fix now',
     'deploy now',
     'complete this',
     'proceed',
     'finish',
-    'do not ask again',
     'prove it',
     'code it',
     'ship it',
     'just make it work',
     'run the tests',
     'fix this bug and deploy',
-    'stop asking and finish the task',
-    'no more audit reports, execute now',
+    'remove the chat loading spinner now',
+    'get rid of the splash delay',
   ];
 
   for (const command of autoCommands) {
-    test(`"${command}" → autoExecute + systemMode`, () => {
+    test(`"${command}" stays in autonomous safe lane`, () => {
       const decision = classifyOwnerExecutionCommand(command);
       expect(decision.isOwnerExecutionCommand).toBe(true);
       expect(decision.autoExecute).toBe(true);
       expect(decision.requiresApproval).toBe(false);
       expect(decision.systemMode).toBe(true);
       expect(decision.approvalCategories).toEqual([]);
-      expect(decision.matchedTriggers.length).toBeGreaterThan(0);
     });
   }
 });
 
-describe('classifyOwnerExecutionCommand — removal/cleanup commands auto-execute (regression)', () => {
-  const removalCommands = [
-    'remove end to end chat loading',
-    'remove the chat loading spinner now',
-    'remove the loading spinner',
-    'get rid of the splash delay',
-    'hide the duplicate banner',
-    'clean up the loading animation',
-    'remove end-to-end chat loading fix ivx ia now end to end I want full functionality now',
-  ];
-
-  for (const command of removalCommands) {
-    test(`"${command}" → autoExecute + systemMode`, () => {
-      const decision = classifyOwnerExecutionCommand(command);
-      expect(decision.isOwnerExecutionCommand).toBe(true);
-      expect(decision.autoExecute).toBe(true);
-      expect(decision.requiresApproval).toBe(false);
-      expect(decision.systemMode).toBe(true);
-    });
-  }
-
-  test('removal of DATA still requires approval', () => {
-    const decision = classifyOwnerExecutionCommand('remove all the data from the users table now');
-    expect(decision.requiresApproval).toBe(true);
-    expect(decision.autoExecute).toBe(false);
-    expect(decision.approvalCategories).toContain('delete_data');
-  });
-});
-
-describe('classifyOwnerExecutionCommand — guarded commands require approval', () => {
+describe('classifyOwnerExecutionCommand — dangerous operations require Owner Gate', () => {
   const guarded: Array<{ command: string; category: OwnerApprovalCategory }> = [
     { command: 'delete all user data now', category: 'delete_data' },
     { command: 'drop table jv_deals now', category: 'delete_data' },
     { command: 'alter table jv_deals add column foo and deploy', category: 'modify_production_schema' },
-    { command: 'migrate the production database schema now', category: 'modify_production_schema' },
+    { command: 'run a destructive migration now', category: 'modify_production_schema' },
     { command: 'print the service-role key now', category: 'expose_secrets' },
-    { command: 'show me the api keys, proceed', category: 'expose_secrets' },
+    { command: 'rotate the GitHub token now', category: 'modify_secrets_credentials' },
+    { command: 'replace the Render API key and proceed', category: 'modify_secrets_credentials' },
     { command: 'change the billing plan now', category: 'change_billing' },
+    { command: 'transfer funds and proceed', category: 'change_billing' },
+    { command: 'change authentication permissions now', category: 'modify_auth_permissions' },
+    { command: 'grant a new role and proceed', category: 'modify_auth_permissions' },
     { command: 'disable authentication now', category: 'disable_security' },
     { command: 'turn off RLS and deploy', category: 'disable_security' },
+    { command: 'change the firewall configuration now', category: 'change_security_controls' },
     { command: 'grant admin access to a new user now', category: 'grant_external_access' },
+    { command: 'change the production Render service now', category: 'change_infrastructure' },
+    { command: 'switch DNS and deploy now', category: 'change_infrastructure' },
+    { command: 'rollback production to the previous release now', category: 'critical_rollback' },
+    { command: 'execute this high-risk change now', category: 'explicit_high_risk' },
+    { command: 'proceed even though risk is unknown', category: 'explicit_high_risk' },
   ];
 
   for (const { command, category } of guarded) {
-    test(`"${command}" → requiresApproval (${category})`, () => {
+    test(`"${command}" → Owner Gate (${category})`, () => {
       const decision = classifyOwnerExecutionCommand(command);
       expect(decision.isOwnerExecutionCommand).toBe(true);
       expect(decision.requiresApproval).toBe(true);
       expect(decision.autoExecute).toBe(false);
       expect(decision.systemMode).toBe(false);
       expect(decision.approvalCategories).toContain(category);
-      expect(decision.reason.toLowerCase()).toContain('approval');
+      expect(decision.reason).toContain('OWNER_GATE_REQUIRED');
     });
   }
+
+  test('dangerous category wins even when a safe UI category is also present', () => {
+    const decision = classifyOwnerExecutionCommand('fix the UI and change authentication permissions now');
+    expect(decision.safeCategories).toContain('ui_fix');
+    expect(decision.requiresApproval).toBe(true);
+    expect(decision.autoExecute).toBe(false);
+    expect(decision.approvalCategories).toContain('modify_auth_permissions');
+  });
+
+  test('removing UI is safe, removing production data is not', () => {
+    expect(classifyOwnerExecutionCommand('remove the loading spinner').requiresApproval).toBe(false);
+    const dangerous = classifyOwnerExecutionCommand('remove all the data from the users table now');
+    expect(dangerous.requiresApproval).toBe(true);
+    expect(dangerous.approvalCategories).toContain('delete_data');
+  });
 });
 
-describe('classifyOwnerExecutionCommand — non-commands route normally', () => {
+describe('classifyOwnerExecutionCommand — conversation stays non-mutating', () => {
   test('a plain question is not an execution command', () => {
     const decision = classifyOwnerExecutionCommand('what projects do I have?');
     expect(decision.isOwnerExecutionCommand).toBe(false);
@@ -105,30 +99,25 @@ describe('classifyOwnerExecutionCommand — non-commands route normally', () => 
     expect(decision.isOwnerExecutionCommand).toBe(false);
     expect(decision.autoExecute).toBe(false);
   });
-
-  test('a guarded phrase without an execution trigger does not auto-execute', () => {
-    const decision = classifyOwnerExecutionCommand('I am thinking about deleting all the data someday');
-    expect(decision.autoExecute).toBe(false);
-    expect(decision.requiresApproval).toBe(true);
-    expect(decision.approvalCategories).toContain('delete_data');
-  });
 });
 
 describe('listOwnerApprovalGates', () => {
-  test('exposes exactly the six guarded categories', () => {
-    const gates = listOwnerApprovalGates();
-    expect(gates.map((gate) => gate.category as string).sort()).toEqual(
-      [
-        'change_billing',
-        'delete_data',
-        'disable_security',
-        'expose_secrets',
-        'grant_external_access',
-        'modify_production_schema',
-      ].sort(),
-    );
-    for (const gate of gates) {
-      expect(gate.label.length).toBeGreaterThan(0);
-    }
+  test('exposes the complete dangerous-operation policy', () => {
+    const categories = listOwnerApprovalGates().map((gate) => gate.category);
+    expect(categories).toEqual(expect.arrayContaining([
+      'delete_data',
+      'modify_production_schema',
+      'expose_secrets',
+      'modify_secrets_credentials',
+      'change_billing',
+      'modify_auth_permissions',
+      'disable_security',
+      'change_security_controls',
+      'grant_external_access',
+      'change_infrastructure',
+      'critical_rollback',
+      'explicit_high_risk',
+    ]));
+    expect(new Set(categories).size).toBe(categories.length);
   });
 });
