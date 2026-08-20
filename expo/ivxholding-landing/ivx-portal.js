@@ -158,11 +158,74 @@
     document.getElementById('portal-login-form').reset();
   }
 
+  /** Toggle between the login form and the forgot-password view. */
+  function toggleForgotPassword() {
+    var forgotView = document.getElementById('portal-forgot-view');
+    if (!forgotView) return;
+    var showingForgot = forgotView.style.display === 'none';
+    forgotView.style.display = showingForgot ? 'block' : 'none';
+    var loginForm = document.getElementById('portal-login-form');
+    var forgotLine = document.getElementById('portal-forgot-link-line');
+    var signupLine = document.getElementById('portal-signup-line');
+    if (loginForm) loginForm.style.display = showingForgot ? 'none' : 'block';
+    if (forgotLine) forgotLine.style.display = showingForgot ? 'none' : 'block';
+    if (signupLine) signupLine.style.display = showingForgot ? 'none' : 'block';
+    if (showingForgot) {
+      var loginEmail = document.getElementById('portal-email');
+      var forgotEmail = document.getElementById('portal-forgot-email');
+      if (forgotEmail && loginEmail && loginEmail.value) forgotEmail.value = loginEmail.value;
+      var errEl = document.getElementById('portal-forgot-error');
+      var okEl = document.getElementById('portal-forgot-success');
+      if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+      if (okEl) okEl.style.display = 'none';
+    }
+  }
+
+  /** Send the password reset email via Supabase (anti-enumeration: generic response). */
+  async function handleForgotPasswordSubmit(e) {
+    e.preventDefault();
+    var SUPABASE_URL = window.IVX_SUPABASE_URL || window.SUPABASE_URL || '';
+    var SUPABASE_ANON_KEY = window.IVX_SUPABASE_ANON_KEY || window.SUPABASE_ANON_KEY || '';
+    var errEl = document.getElementById('portal-forgot-error');
+    var okEl = document.getElementById('portal-forgot-success');
+    var btn = document.getElementById('portal-forgot-btn');
+    var emailEl = document.getElementById('portal-forgot-email');
+    var email = (emailEl && emailEl.value ? emailEl.value : '').trim().toLowerCase();
+    if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+    if (okEl) okEl.style.display = 'none';
+    if (!email || email.indexOf('@') === -1) {
+      if (errEl) { errEl.textContent = 'Enter a valid email'; errEl.style.display = 'block'; }
+      return;
+    }
+    btn.textContent = 'Sending...'; btn.disabled = true;
+    try {
+      if (isPlaceholder(SUPABASE_URL) || isPlaceholder(SUPABASE_ANON_KEY) || !window.supabase) {
+        throw new Error('Service temporarily unavailable — please try again.');
+      }
+      var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      var redirectUrl = (window.location.origin && window.location.origin.indexOf('ivxholding.com') > -1)
+        ? window.location.origin + '/reset-password.html'
+        : 'https://ivxholding.com/reset-password.html';
+      var res = await sb.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl });
+      // Anti-enumeration: unknown accounts and rate limits still show the generic success line.
+      var errMsg = (res && res.error && res.error.message) || '';
+      var suppress = /rate limit|user not found|does not exist|email not confirmed/i.test(errMsg);
+      if (res && res.error && !suppress) throw new Error(errMsg || 'Could not send reset link.');
+      if (okEl) okEl.style.display = 'block';
+    } catch (err) {
+      console.error('[IVX Portal] Forgot password error:', err.message);
+      if (errEl) { errEl.textContent = err.message || 'Could not send reset link. Please try again.'; errEl.style.display = 'block'; }
+    }
+    btn.textContent = 'Send Reset Link \u2192'; btn.disabled = false;
+  }
+
   window.IVXPortal = {
     open: openPortal,
     close: closePortal,
     handleLogin: handlePortalLogin,
     logout: portalLogout,
-    showDashboard: showPortalDashboard
+    showDashboard: showPortalDashboard,
+    toggleForgot: toggleForgotPassword,
+    forgotSubmit: handleForgotPasswordSubmit
   };
 })(window);

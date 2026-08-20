@@ -21,7 +21,7 @@
   window._ivxLazyLoad = function(module) {
     if (module === 'portal') {
       if (window.IVXPortal) return Promise.resolve(window.IVXPortal);
-      return loadScript('/ivx-portal.js').then(function() { return window.IVXPortal; });
+      return loadScript('/ivx-portal.js?v20260820').then(function() { return window.IVXPortal; });
     }
     if (module === 'invest') {
       if (window.IVXInvest) return Promise.resolve(window.IVXInvest);
@@ -45,6 +45,14 @@
   };
   window.portalLogout = function() {
     window._ivxLazyLoad('portal').then(function(m) { m.logout(); })
+      .catch(function(e) { console.error('[IVX] portal load failed', e); });
+  };
+  window.toggleForgotPassword = function() {
+    window._ivxLazyLoad('portal').then(function(m) { m.toggleForgot(); })
+      .catch(function(e) { console.error('[IVX] portal load failed', e); });
+  };
+  window.handleForgotPasswordSubmit = function(e) {
+    window._ivxLazyLoad('portal').then(function(m) { m.forgotSubmit(e); })
       .catch(function(e) { console.error('[IVX] portal load failed', e); });
   };
 
