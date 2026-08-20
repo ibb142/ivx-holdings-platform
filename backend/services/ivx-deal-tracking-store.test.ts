@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
+import { auditDir } from './ivx-data-root';
 
 // Force filesystem mode — prevents Supabase state pollution between test files
 mock.module('./ivx-durable-store', () => ({
@@ -33,7 +34,10 @@ import {
   type CreateDealInput,
 } from './ivx-deal-tracking-store';
 
-const ROOT = path.join(process.env.IVX_DATA_DIR?.trim() || process.cwd(), 'logs', 'audit', 'deal-tracking');
+// Resolved through the SAME resolver the stores use — see the note in
+// ivx-treasury-system.test.ts. Hand-computing this from IVX_DATA_DIR made
+// clean() wipe a different directory than the store wrote to during full runs.
+const ROOT = auditDir('deal-tracking');
 
 async function clean(): Promise<void> {
   await rm(ROOT, { recursive: true, force: true });

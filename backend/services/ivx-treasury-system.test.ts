@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
+import { auditDir } from './ivx-data-root';
 
 // Force filesystem mode — prevents Supabase state pollution between test files
 mock.module('./ivx-durable-store', () => ({
@@ -49,7 +50,13 @@ import {
   getAIFinanceMonitor,
 } from './ivx-treasury-finance';
 
-const ROOT = path.join(process.env.IVX_DATA_DIR?.trim() || process.cwd(), 'logs', 'audit', 'treasury');
+// Resolved through the SAME resolver the stores use. Recomputing this path from
+// IVX_DATA_DIR by hand desynced the cleanup from where the stores actually
+// write: ivx-data-root caches its root on first resolve, and another test file
+// (ivx-reels.test.ts) reassigns IVX_DATA_DIR at load time. In a full suite run
+// clean() then wiped an unrelated directory, so ledger rows from earlier tests
+// survived and the hash chain no longer started at 'genesis'.
+const ROOT = auditDir('treasury');
 
 async function clean(): Promise<void> {
   await rm(ROOT, { recursive: true, force: true });

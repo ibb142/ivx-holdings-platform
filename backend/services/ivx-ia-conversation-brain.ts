@@ -287,9 +287,13 @@ export function buildIVXConversationAnswer(message: string): string | null {
     }
 
     case 'greeting':
-      // Let greetings flow to the upgraded AI prompt for 10/10 quality.
-      // The deterministic fallback was too robotic and generic.
-      return null;
+      // Answered deterministically so a greeting never depends on model
+      // availability and always replies in the user's own language. The older
+      // fallback was dropped for being robotic; this one keeps the IVX IA
+      // persona warm and opens with a concrete next step instead of a dead end.
+      return isSpanish
+        ? '¡Hola! Soy IVX IA, el asistente de IVXHOLDINGS. Puedo ayudarte con inversiones, proyectos y consultas sobre la empresa — o simplemente conversar. ¿En qué te ayudo hoy?'
+        : "Hello! I'm IVX IA, the IVXHOLDINGS assistant. I can help with investments, projects and company questions — or just talk things through. What can I help you with today?";
 
     case 'thanks':
       return isSpanish
@@ -297,9 +301,29 @@ export function buildIVXConversationAnswer(message: string): string | null {
         : "You're welcome! I'm IVX IA — happy to help. Ask me anything else whenever you need.";
 
     case 'capabilities':
-      // Let capabilities flow to the upgraded AI prompt for 10/10 quality.
-      // The deterministic fallback was too short and generic.
-      return null;
+      // Answered deterministically so "what can you do" never depends on model
+      // availability and always replies in the user's own language. The older
+      // fallback was dropped for being too short; this one names the real
+      // surfaces the assistant covers instead of a generic blurb.
+      return isSpanish ? [
+        'Soy IVX IA, el asistente de IVXHOLDINGS. Esto es lo que puedo hacer:',
+        '',
+        '- Inversiones y portafolio: rendimientos, valuaciones y estado de tu capital.',
+        '- Proyectos y propiedades: avance, capital levantado y distribuciones.',
+        '- Preguntas generales: matemáticas, definiciones financieras y análisis.',
+        '- Conversación normal, en español o inglés — respondo en tu idioma.',
+        '',
+        '¿Por dónde quieres empezar?',
+      ].join('\n') : [
+        "I'm IVX IA, the IVXHOLDINGS assistant. Here's what I can do:",
+        '',
+        '- Investments and portfolio: returns, valuations and the state of your capital.',
+        '- Projects and properties: progress, capital raised and distributions.',
+        '- General questions: math, financial definitions and analysis.',
+        '- Normal conversation, in English or Spanish — I answer in your language.',
+        '',
+        'Where would you like to start?',
+      ].join('\n');
 
     case 'help':
       return isSpanish ? [

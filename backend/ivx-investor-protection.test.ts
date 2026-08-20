@@ -73,6 +73,15 @@ import {
 
 const PROTECTION_DIR = auditDir('investor-protection');
 
+// Wire instructions are encrypted at rest with AES-256-GCM, which requires a
+// key. This file previously relied on SUPABASE_SERVICE_ROLE_KEY leaking in from
+// a sibling test file during parallel execution (see the header note) — so the
+// wire tests passed or failed depending on file ordering. Setting a dedicated
+// test key makes encryption run for real, deterministically, in every run.
+// This is an inert test-only value, never a real credential.
+process.env.IVX_WIRE_ENCRYPTION_KEY =
+  process.env.IVX_WIRE_ENCRYPTION_KEY ?? 'ivx-test-only-wire-encryption-key-not-a-real-credential';
+
 async function resetProtectionStore(): Promise<void> {
   try {
     await rm(PROTECTION_DIR, { recursive: true, force: true });

@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { rm, mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { auditDir } from './services/ivx-data-root';
 import {
   createDeal,
   joinDeal,
@@ -37,7 +38,11 @@ import {
 
 const TEST_EMAIL = `wf-test-${Date.now()}@ivx-test.local`;
 const TEST_PASSWORD = 'TestPass123';
-const TEST_DATA_ROOT = path.join(process.env.IVX_DATA_DIR?.trim() || process.cwd(), 'logs', 'audit', 'deal-tracking');
+// Resolved through the SAME resolver the stores use — see the note in
+// services/ivx-treasury-system.test.ts. Hand-computing this from IVX_DATA_DIR
+// made the reset wipe a different directory than the store wrote to during
+// full-suite runs, leaving deals behind between test files.
+const TEST_DATA_ROOT = auditDir('deal-tracking');
 
 async function resetDealStore(): Promise<void> {
   try {
