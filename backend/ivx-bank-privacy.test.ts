@@ -6,12 +6,15 @@ import {
   handleSecureWireSubmission,
   isWireReferenceForMember,
 } from './api/ivx-wire-transfer';
+import { handleSecureWalletDebit } from './api/ivx-secure-wallet';
 
 const ROOT = join(import.meta.dir, '..');
 const read = (path: string) => readFileSync(join(ROOT, path), 'utf8');
 
 const server = read('server.ts');
 const wireSource = read('backend/api/ivx-wire-transfer.ts');
+const walletApi = read('backend/api/ivx-secure-wallet.ts');
+const walletClient = read('expo/lib/wallet-service.ts');
 const directAuth = read('backend/api/ivx-direct-auth.ts');
 const migration = read('backend/supabase/migrations/20260820143000_bank_privacy_hardening.sql');
 const landingWire = read('expo/ivxholding-landing/ivx-wire.js');
@@ -67,28 +70,61 @@ describe('IVX bank privacy hard gate', () => {
     expect(wireSource).not.toContain('name: body.name');
   });
 
-  it('intercepts wire routes before the legacy Hono router in production', () => {
+  it('intercepts protected financial routes before the legacy Hono router', () => {
     const instructionsGuard = server.indexOf("url.pathname === '/api/ivx/wire-instructions'");
     const submissionGuard = server.indexOf("url.pathname === '/api/ivx/wire-submission'");
+    const walletGuard = server.indexOf("url.pathname === '/api/ivx/wallet/debit'");
     const fallback = server.indexOf('return app.fetch(request, env, executionCtx)');
     expect(instructionsGuard).toBeGreaterThan(0);
     expect(submissionGuard).toBeGreaterThan(0);
+    expect(walletGuard).toBeGreaterThan(0);
     expect(fallback).toBeGreaterThan(instructionsGuard);
     expect(fallback).toBeGreaterThan(submissionGuard);
-    expect(server).toContain('handleSecureWireInstructions(request)');
-    expect(server).toContain('handleSecureWireSubmission(request)');
+    expect(fallback).toBeGreaterThan(walletGuard);
   });
 
-  it('keeps direct-auth password-hash lookup service-role only', () => {
+  it('rejects wallet mutation without a verified member JWT', async () => {
+    const response = await handleSecureWalletDebit(new Request('https://api.ivxholding.com/api/ivx/wallet/debit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: 100, reason: 'investment', description: 'test' }),
+    }));
+    expect(response.status).toBe(401);
+    expect(await response.text()).toContain('Authentication required');
+  });
+
+  it('keeps browser/mobile wallet code read-only and routes permitted debits through backend', () => {
+    expect(walletClient).toContain('/api/ivx/wallet/debit');
+    expect(walletClient).toContain('Credit requires verified server-side settlement.');
+    expect(walletClient).toContain('Sale proceeds are credited after server-side settlement verification.');
+    expect(walletClient).toContain('Deposit credit requires verified settlement confirmation.');
+    expect(walletClient).not.toMatch(/\.from\(['"]wallets['"]\)[\s\S]{0,300}?\.(?:insert|update|delete)\(/);
+    expect(walletClient).not.toMatch(/\.from\(['"]wallet_transactions['"]\)[\s\S]{0,300}?\.insert\(/);
+    expect(walletClient).not.toContain("supabase.rpc('atomic_wallet_operation'");
+
+    expect(walletApi).toContain("const ALLOWED_REASONS = new Set(['investment', 'resale_purchase', 'withdrawal'])");
+    expect(walletApi).toContain('SUPABASE_SERVICE_ROLE_KEY');
+    expect(walletApi).toContain("p_operation: 'debit'");
+    expect(walletApi).not.toContain("p_operation: 'credit'");
+  });
+
+  it('keeps sensitive database functions service-role only', () => {
     expect(directAuth).toContain('SET search_path = public, auth, pg_temp');
     expect(directAuth).toContain('REVOKE ALL ON FUNCTION public.ivx_query_auth_user_by_email(text) FROM PUBLIC');
     expect(directAuth).toContain('FROM anon');
     expect(directAuth).toContain('FROM authenticated');
     expect(directAuth).toContain('TO service_role');
     expect(directAuth).not.toContain("'Access-Control-Allow-Origin': '*'");
+
+    expect(migration).toContain("IF v_role <> 'service_role'");
+    expect(migration).toContain('service-role settlement required');
+    expect(migration).toContain('REVOKE ALL ON FUNCTION public.atomic_wallet_operation');
+    expect(migration).toContain('FROM authenticated');
+    expect(migration).toContain('TO service_role');
+    expect(migration).toContain('REVOKE ALL ON FUNCTION public.ivx_exec_sql(text) FROM PUBLIC');
   });
 
-  it('persists service-role-only access for canonical member and financial stores', () => {
+  it('persists backend-only writes for canonical and financial stores', () => {
     for (const table of [
       'public.members',
       'public.investor_profiles',
@@ -101,9 +137,12 @@ describe('IVX bank privacy hard gate', () => {
       expect(migration).toContain(`REVOKE ALL ON TABLE ${table} FROM authenticated`);
       expect(migration).toContain(`GRANT ALL ON TABLE ${table} TO service_role`);
     }
-    expect(migration).toContain("v_role <> 'service_role'");
-    expect(migration).toContain('v_uid IS DISTINCT FROM p_user_id');
-    expect(migration).toContain('REVOKE ALL ON FUNCTION public.ivx_exec_sql(text) FROM PUBLIC');
+
+    expect(migration).toContain('REVOKE INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER ON TABLE public.profiles FROM authenticated');
+    expect(migration).toContain('REVOKE INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER ON TABLE public.wallets FROM authenticated');
+    expect(migration).toContain('REVOKE INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER ON TABLE public.wallet_transactions FROM authenticated');
+    expect(migration).toContain('REVOKE INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER ON TABLE public.transactions FROM authenticated');
+    expect(migration).toContain("status = 'pending_payment'");
   });
 
   it('keeps landing auth tab-scoped and scrubs wire details on auth loss', () => {
