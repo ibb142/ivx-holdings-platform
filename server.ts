@@ -25,6 +25,11 @@ import { listAutonomousVoiceCalls, placeAutonomousVoiceCall } from './backend/se
 import { getIVXOwnerEmailAllowlist } from './expo/shared/ivx/access-control';
 import { handleCanonicalReelsFeed } from './backend/api/ivx-canonical-reels-feed';
 import {
+  handleSecureWireInstructions,
+  handleSecureWireSubmission,
+  handleWireOptions,
+} from './backend/api/ivx-wire-transfer';
+import {
   autonomousVoiceOptions,
   handleAutonomousVoiceCallback,
   handleAutonomousVoiceLaml,
@@ -45,17 +50,12 @@ console.log('[IVX Server] Starting Hono API server...', {
   nodeEnv: process.env.NODE_ENV || 'development',
 });
 
-// Repair stale host bindings from the existing encrypted Owner Variables store.
-// No secret is logged or returned; the AI runtime reads these aliases lazily.
 void preloadAIProviderCredentialFromOwnerVariables().catch((error) => {
   console.warn('[IVX Server] AI owner-variable preload unavailable', {
     error: error instanceof Error ? error.message.slice(0, 160) : 'unknown',
   });
 });
 
-// Non-secret owner-login proof. This validates the same server-signed outage
-// session used by emergency owner login and is intentionally independent from
-// Supabase availability. It never returns the generated token or signing key.
 app.get('/api/ivx/certification/owner-login-public', (c) => {
   try {
     const ownerEmail = (getIVXOwnerEmailAllowlist()[0] || '').trim().toLowerCase();
@@ -95,9 +95,6 @@ app.get('/api/ivx/certification/owner-login-public', (c) => {
   }
 });
 
-// Non-secret machine-readable proof produced by the production certification
-// scheduler. It intentionally exposes only boolean checks and deployment IDs —
-// never credentials, user records, tokens, or diagnostic details.
 app.get('/api/ivx/certification/member-auth-public', async (c) => {
   try {
     const certificate = await getLatestMemberAuthCertification();
@@ -128,9 +125,6 @@ app.get('/api/ivx/certification/member-auth-public', async (c) => {
   }
 });
 
-// Autonomous Voice Escalation routes. Status/test are owner-only. LaML and
-// provider callback use a trace signature and never expose secrets. The public
-// certificate route is read-only and returns only non-secret delivery proof.
 app.options('/api/ivx/autonomous/voice', () => autonomousVoiceOptions());
 app.get('/api/ivx/autonomous/voice', async (c) => handleAutonomousVoiceStatus(c.req.raw));
 app.options('/api/ivx/autonomous/voice/test', () => autonomousVoiceOptions());
@@ -161,8 +155,6 @@ campaignBootKick.unref?.();
 const campaignTimer = setInterval(() => { void runCompletionCycleSafely('interval'); }, COMPLETION_CAMPAIGN_INTERVAL_MS);
 campaignTimer.unref?.();
 
-// IVX 112 Real Execution runtime: durable heartbeats for all 112 agents and
-// automatic resume of pending certificate tasks after restart/redeploy.
 startAgentHeartbeatLoop(buildHeartbeatRows);
 const certResumeKick = setTimeout(() => {
   void resumePendingCertificateRuns()
@@ -190,10 +182,6 @@ console.log('[IVX Server] Autonomous owner communications initialized', {
   voiceDailyCap: smsStatus.voice.dailyCap,
 });
 
-// Owner-approved one-time live voice certificate. The fixed trace ID and durable
-// call ledger prevent duplicate calls after a successful queue. A failed prior
-// attempt may retry on a later deployment so a repaired runtime binding can be
-// certified without weakening owner authentication or exposing credentials.
 const liveVoiceCertKick = setTimeout(() => {
   void (async () => {
     try {
@@ -230,11 +218,6 @@ const liveVoiceCertKick = setTimeout(() => {
 }, 60_000);
 liveVoiceCertKick.unref?.();
 
-// Production member/auth certificate runner. It performs a real synthetic
-// registration + member sign-in, verifies owner password grant, executes the
-// authoritative REGULAR/VIP classification logic, removes the synthetic user,
-// and persists only non-secret proof. Boot run starts after the API is online;
-// subsequent audits run every six hours.
 startMemberAuthCertificationScheduler();
 
 if (process.env.IVX_SENIOR_DEV_WORKER_ENABLED === 'true') {
@@ -245,8 +228,24 @@ if (process.env.IVX_SENIOR_DEV_WORKER_ENABLED === 'true') {
   });
 }
 
+/**
+ * Production edge guard.
+ * Financial routes are intercepted before the legacy Hono router so stale
+ * public-preview/body-trust handlers cannot execute in production.
+ */
 const productionFetch: typeof app.fetch = async (request, env, executionCtx) => {
   const url = new URL(request.url);
+
+  if (url.pathname === '/api/ivx/wire-instructions') {
+    if (request.method === 'OPTIONS') return handleWireOptions();
+    return handleSecureWireInstructions(request);
+  }
+
+  if (url.pathname === '/api/ivx/wire-submission') {
+    if (request.method === 'OPTIONS') return handleWireOptions();
+    return handleSecureWireSubmission(request);
+  }
+
   const type = (url.searchParams.get('type') || '').trim().toLowerCase();
   if (
     request.method === 'GET'
@@ -258,24 +257,18 @@ const productionFetch: typeof app.fetch = async (request, env, executionCtx) => 
   return app.fetch(request, env, executionCtx);
 };
 
-// ── Realtime Voice status endpoint (HTTP, for health checks) ──
 app.get('/api/ivx/realtime-voice/status', (c) => {
   const status = getRealtimeVoiceStatus();
   return c.json(status);
 });
 app.options('/api/ivx/realtime-voice/status', (c) => c.body(null, 204));
 
-// ── WebSocket server for real-time voice ──
 const wss = new WebSocketServer({ noServer: true });
 
 wss.on('connection', (ws, request) => {
   void handleRealtimeVoiceConnection(ws as any, request);
 });
 
-// @hono/node-server owns the Node HTTP server lifecycle and returns the actual
-// server instance. Attach the custom realtime-voice upgrade handler to that
-// server instead of constructing a second server with an incompatible Fetch
-// callback signature.
 const httpServer = serve(
   { fetch: productionFetch, port: PORT, hostname: HOST },
   (info) => {
@@ -290,7 +283,6 @@ httpServer.on('upgrade', (request, socket, head) => {
       wss.emit('connection', ws, request);
     });
   } else {
-    // Not a WebSocket route — close the socket.
     socket.destroy();
   }
 });
