@@ -1,0 +1,92 @@
+name: IVX Autonomous Phase 3 Execution QA CI
+
+on:
+  push:
+    branches: [main, 'fix/**']
+    paths:
+      - 'backend/scripts/ivx-phase3-execution-cert.ts'
+      - 'backend/services/ivx-agent-runtime.ts'
+      - 'backend/services/ivx-agent-real-tools.ts'
+      - 'backend/services/ivx-agent-persistence.ts'
+      - 'backend/services/ivx-agent-least-privilege.ts'
+      - '.github/workflows/ivx-autonomous-phase3-execution-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/scripts/ivx-phase3-execution-cert.ts'
+      - 'backend/services/ivx-agent-runtime.ts'
+      - 'backend/services/ivx-agent-real-tools.ts'
+      - 'backend/services/ivx-agent-persistence.ts'
+      - 'backend/services/ivx-agent-least-privilege.ts'
+      - '.github/workflows/ivx-autonomous-phase3-execution-ci.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  phase3-execution-qa:
+    name: Phase 3 Autonomous Execution + QA Engine — HARD GATE
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NODE_ENV: test
+      IVX_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: TypeScript — HARD GATE
+        run: |
+          set -euo pipefail
+          cd backend
+          bunx tsc --noEmit
+          echo 'phase3_typescript=PASS'
+
+      - name: Phase 1 governance regression — HARD GATE
+        run: |
+          set -euo pipefail
+          node --test scripts/__tests__/ivx-autonomous-governance.test.mjs
+          echo 'phase3_phase1_regression=PASS'
+
+      - name: Phase 2 least-privilege regression — HARD GATE
+        run: |
+          set -euo pipefail
+          bun test backend/__tests__/ivx-agent-least-privilege.test.ts --reporter=dots
+          echo 'phase3_phase2_regression=PASS'
+
+      - name: Real execution + negative controls — HARD GATE
+        run: |
+          set -euo pipefail
+          bun backend/scripts/ivx-phase3-execution-cert.ts
+          jq -e '.ok == true' qa/evidence/autonomous/phase3-autonomous-execution-ci.json >/dev/null
+          jq -e '.representativeExecutions == .representativeExecutionPass' qa/evidence/autonomous/phase3-autonomous-execution-ci.json >/dev/null
+          jq -e '.negativeControls == .negativeControlsPass' qa/evidence/autonomous/phase3-autonomous-execution-ci.json >/dev/null
+          jq -e '.staticAuditChecks == .staticAuditPass' qa/evidence/autonomous/phase3-autonomous-execution-ci.json >/dev/null
+          jq -e '.simulatedRuns == 0 and .realFundsMoved == false' qa/evidence/autonomous/phase3-autonomous-execution-ci.json >/dev/null
+          echo 'phase3_real_execution=PASS'
+
+      - name: Fail-closed evidence contract — HARD GATE
+        run: |
+          set -euo pipefail
+          cert='qa/evidence/autonomous/phase3-autonomous-execution-ci.json'
+          jq -e '[.positiveExecutions[] | select(.finalStatus != "SUCCESS")] | length == 0' "$cert" >/dev/null
+          jq -e '[.positiveExecutions[] | select((.toolResultId == null) or (.sourceReference == null) or (.evidenceSha256 == null))] | length == 0' "$cert" >/dev/null
+          jq -e '[.positiveExecutions[] | select(.simulated != false)] | length == 0' "$cert" >/dev/null
+          jq -e '[.negativeTests[] | select(.passed != true)] | length == 0' "$cert" >/dev/null
+          echo 'phase3_fail_closed_evidence=PASS'
+
+      - name: Upload Phase 3 certificate evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase3-autonomous-execution-ci-${{ github.event.pull_request.head.sha || github.sha }}
+          path: qa/evidence/autonomous/phase3-autonomous-execution-ci.json
+          if-no-files-found: error
