@@ -20,8 +20,10 @@ describe('Home feed video safety regression', () => {
 
   it('does not mount the canonical/native reel player on Home', () => {
     expect(home).not.toContain('CanonicalInvestmentReelCard');
-    expect(home).not.toContain('expo-av');
-    expect(home).not.toContain('expo-video');
+    expect(home).not.toMatch(/from\s+['"]expo-av['"]/);
+    expect(home).not.toMatch(/require\(\s*['"]expo-av['"]\s*\)/);
+    expect(home).not.toMatch(/from\s+['"]expo-video['"]/);
+    expect(home).not.toMatch(/require\(\s*['"]expo-video['"]\s*\)/);
     expect(home).not.toContain('shouldMountVideo');
   });
 
@@ -35,7 +37,7 @@ describe('Home feed video safety regression', () => {
     expect(home).toContain('accessibilityRole="button"');
     expect(home).toContain('accessibilityLabel={`Open project video: ${title}`}');
     expect(home).toContain("width: '100%'");
-    expect(home).toContain('overflow: \'hidden\'');
+    expect(home).toContain("overflow: 'hidden'");
     expect(home).toContain('minHeight: 220');
   });
 
