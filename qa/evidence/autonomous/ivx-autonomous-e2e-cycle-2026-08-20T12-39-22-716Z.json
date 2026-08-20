@@ -1,0 +1,197 @@
+{
+  "cycleId": "ivx-autonomous-e2e-2026-08-20T12:39:22.716Z",
+  "startedAt": "2026-08-20T12:39:22.716Z",
+  "finishedAt": "2026-08-20T12:39:23.141Z",
+  "repoSha": "f6acf9d9401c74486c63e362fb0f300301a95607",
+  "pipeline": "code_write → code_patch_proposal → verification_gate → git_commit → git_push → deploy_check",
+  "totalSteps": 11,
+  "passedSteps": 11,
+  "allPassed": true,
+  "commitSha": "6949ccb164cb1c2b78180e28a3b6f61801635267",
+  "pushedBranch": "ivx/autonomous-cycle",
+  "remoteConfirmed": true,
+  "deployCredentialConfigured": false,
+  "note": "Executed against a throwaway repository with a real bare git remote. The commit and push are real git operations with verifiable SHAs. The deploy step performs a real Render API call only when RENDER_API_KEY/RENDER_SERVICE_ID are present in the environment.",
+  "steps": [
+    {
+      "step": "1_blocked_without_approval",
+      "expectation": "a mutating tool with no owner token is blocked",
+      "passed": true,
+      "detail": "Tool \"code_write\" requires owner approval — missing_owner_approval_token.",
+      "evidence": {
+        "ok": false,
+        "blocked": true,
+        "error": "Tool \"code_write\" requires owner approval — missing_owner_approval_token."
+      }
+    },
+    {
+      "step": "2_blocked_with_wrong_token",
+      "expectation": "a truthy but incorrect owner token is rejected",
+      "passed": true,
+      "detail": "Tool \"code_write\" requires owner approval — invalid_owner_approval_token.",
+      "evidence": {
+        "ok": false,
+        "blocked": true,
+        "error": "Tool \"code_write\" requires owner approval — invalid_owner_approval_token."
+      }
+    },
+    {
+      "step": "3_owner_approval_verified",
+      "expectation": "the configured owner token verifies",
+      "passed": true,
+      "detail": "owner_approval_verified",
+      "evidence": {
+        "binding": "env:IVX_OWNER_TOKEN#sha256:2b60d4fffdfb"
+      }
+    },
+    {
+      "step": "4_code_write",
+      "expectation": "a real file is written and re-read to confirm",
+      "passed": true,
+      "detail": "Created src/feature.ts — 89 bytes",
+      "evidence": {
+        "ok": true,
+        "sourceReference": "file://src/feature.ts@sha256:340bfc3a026031e1",
+        "contentSha256": "340bfc3a026031e12f246f221b22176dc78cb8f7c2d5a7a8a51511251036cc70",
+        "approvalVerified": true,
+        "error": null,
+        "extract": {
+          "relPath": "src/feature.ts",
+          "created": true,
+          "bytes": 89,
+          "previousSha256": null,
+          "newSha256": "340bfc3a026031e12f246f221b22176dc78cb8f7c2d5a7a8a51511251036cc70"
+        }
+      }
+    },
+    {
+      "step": "5_code_patch_proposal",
+      "expectation": "a real unified diff is produced without applying anything",
+      "passed": true,
+      "detail": "Patch proposal — 1 file(s) changed, 9 diff lines",
+      "evidence": {
+        "ok": true,
+        "sourceReference": "local-exec://git-diff@sha256:0925352aba17d84a",
+        "contentSha256": "0925352aba17d84a0f2ffb8ab09e01b8b5477f64a22c4cb33f918b299394d6f4",
+        "approvalVerified": true,
+        "error": null,
+        "extract": {
+          "changedFiles": [
+            "src/feature.ts"
+          ],
+          "diffPreview": "diff --git a/src/feature.ts b/src/feature.ts\nnew file mode 100644\nindex 0000000..2401a42\n--- /dev/null\n+++ b/src/feature.ts\n@@ -0,0 +1,2 @@\n+export const feature: string = \"autonomous-cycle\";\n+export const enabled: boolean = true;\n",
+          "applied": false
+        }
+      }
+    },
+    {
+      "step": "6_red_gate_blocks_commit",
+      "expectation": "a tree that does not typecheck cannot be committed",
+      "passed": true,
+      "detail": "verification gate RED — refusing to commit. verification RED — 1 type error(s), 0 failing test name(s)",
+      "evidence": {
+        "error": "verification gate RED — refusing to commit. verification RED — 1 type error(s), 0 failing test name(s)",
+        "extract": {
+          "verification": {
+            "passed": false,
+            "typecheckErrors": 1,
+            "testsPass": 1,
+            "failingTestNames": [],
+            "detail": "verification RED — 1 type error(s), 0 failing test name(s)",
+            "evidenceSha256": "033d14d6ad637591ef8ce45dc34973d0a2981d1e2bba52a214d8efe5d4f32156"
+          },
+          "policy": "commit_blocked_by_verification_gate"
+        },
+        "gitLog": [
+          "c94e8fb seed"
+        ]
+      }
+    },
+    {
+      "step": "7_verification_gate_green",
+      "expectation": "typecheck and tests both pass on the tree to be committed",
+      "passed": true,
+      "detail": "verification GREEN — 0 type errors, 1 tests passing, 0 failing",
+      "evidence": {
+        "typecheckErrors": 0,
+        "testsPass": 1,
+        "failingTestNames": [],
+        "evidenceSha256": "21195a24aae3582b706363c019a60e67625cf32a73c20bf9a82d440a7faba823"
+      }
+    },
+    {
+      "step": "8_git_commit",
+      "expectation": "a real commit SHA is produced",
+      "passed": true,
+      "detail": "Committed 1 file(s) as 6949ccb164cb — verification green",
+      "evidence": {
+        "ok": true,
+        "sourceReference": "git://commit/6949ccb164cb1c2b78180e28a3b6f61801635267",
+        "contentSha256": "e7c13897fa890ec5a772ebc601f716b4aa84c5d97049798bcd347ebabf1ad596",
+        "approvalVerified": true,
+        "error": null,
+        "extract": {
+          "commitSha": "6949ccb164cb1c2b78180e28a3b6f61801635267",
+          "message": "feat: autonomous agent cycle proof",
+          "committedFiles": [
+            "src/feature.ts"
+          ],
+          "verification": {
+            "passed": true,
+            "typecheckErrors": 0,
+            "testsPass": 1,
+            "evidenceSha256": "21195a24aae3582b706363c019a60e67625cf32a73c20bf9a82d440a7faba823"
+          },
+          "approvalBinding": "env:IVX_OWNER_TOKEN#sha256:2b60d4fffdfb"
+        }
+      }
+    },
+    {
+      "step": "9_git_push_confirmed",
+      "expectation": "the remote ref really advanced to the new commit",
+      "passed": true,
+      "detail": "Pushed 6949ccb164cb to origin/ivx/autonomous-cycle — remote ref confirmed",
+      "evidence": {
+        "ok": true,
+        "sourceReference": "git://push/ivx/autonomous-cycle@6949ccb164cb1c2b78180e28a3b6f61801635267",
+        "contentSha256": "7b625787e0a80a6284b54b4bbeeec8e9624eaca6c8299eb4851a53d15c4af5db",
+        "approvalVerified": true,
+        "error": null,
+        "extract": {
+          "remote": "origin",
+          "branch": "ivx/autonomous-cycle",
+          "localSha": "6949ccb164cb1c2b78180e28a3b6f61801635267",
+          "remoteSha": "6949ccb164cb1c2b78180e28a3b6f61801635267",
+          "remoteConfirmed": true,
+          "transcript": "\nTo /tmp/ivx-e2e-j1gumg/remote.git\n * [new branch]      HEAD -> ivx/autonomous-cycle\n",
+          "approvalBinding": "env:IVX_OWNER_TOKEN#sha256:2b60d4fffdfb"
+        },
+        "independentLsRemote": "6949ccb164cb1c2b78180e28a3b6f61801635267\trefs/heads/ivx/autonomous-cycle"
+      }
+    },
+    {
+      "step": "10_no_credential_leak_in_evidence",
+      "expectation": "no credential appears anywhere in the recorded evidence",
+      "passed": true,
+      "detail": "evidence is clean",
+      "evidence": {
+        "patternsChecked": 2
+      }
+    },
+    {
+      "step": "11_deploy_target_check",
+      "expectation": "the deploy tool reaches a real Render API result, or reports honestly that no credential is configured",
+      "passed": true,
+      "detail": "render_api_key_not_configured: RENDER_API_KEY is unset",
+      "evidence": {
+        "ok": false,
+        "sourceReference": "",
+        "contentSha256": "",
+        "approvalVerified": true,
+        "error": "render_api_key_not_configured: RENDER_API_KEY is unset",
+        "extract": {},
+        "credentialConfiguredInThisEnvironment": false
+      }
+    }
+  ]
+}

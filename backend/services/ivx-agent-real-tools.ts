@@ -37,6 +37,12 @@ import {
   OWNER_APPROVAL_ENGINEERING_TOOLS,
   type EngineeringToolId,
 } from './ivx-agent-engineering-tools';
+import {
+  executeMutationTool,
+  isMutationTool,
+  verifyOwnerApproval,
+  type MutationToolResult,
+} from './ivx-agent-mutation-tools';
 
 export const IVX_REAL_TOOLS_MARKER = 'ivx-agent-real-tools-2026-08-18';
 
@@ -220,18 +226,38 @@ export async function executeRealTool(
     return toolFailure(toolId, `Tool "${toolId}" is permanently prohibited for all agents.`, 0, true);
   }
 
-  // 2) Approval-gated tools — production deploy, external outreach
+  // 2) Approval-gated tools — code writes, commits, pushes, deploys, outreach.
   if ((APPROVAL_GATED_TOOL_IDS as readonly string[]).includes(toolId)) {
-    if (!options.ownerApprovalToken) {
+    // The token must be VERIFIED against the configured owner token. Presence
+    // alone is not authorization: the previous gate accepted any truthy string.
+    const approval = verifyOwnerApproval(options.ownerApprovalToken);
+    if (!approval.approved) {
       await insertAlert({
         alert_type: 'prohibited_tool_attempt',
         agent_id: agentId,
         severity: 'warning',
-        detail: `Agent ${agentId} (#${agentNumber}) attempted approval-gated tool "${toolId}" without owner approval — blocked pending approval/compliance gate.`,
+        detail: `Agent ${agentId} (#${agentNumber}) attempted approval-gated tool "${toolId}" without valid owner approval (${approval.reason}) — blocked pending approval/compliance gate.`,
       }).catch(() => undefined);
-      return toolFailure(toolId, `Tool "${toolId}" requires owner approval — blocked by compliance gate.`, 0, true);
+      return toolFailure(toolId, `Tool "${toolId}" requires owner approval — ${approval.reason}.`, 0, true);
     }
-    return toolFailure(toolId, `Tool "${toolId}" approval recorded but execution is intentionally not implemented in the research runtime.`, 0, true);
+
+    // Approved AND implemented: run the real mutation pipeline.
+    if (isMutationTool(toolId)) {
+      const mutated = await executeMutationTool(toolId, params as Record<string, unknown>, {
+        ownerApprovalToken: options.ownerApprovalToken,
+        timeoutMs: options.timeoutMs,
+      });
+      return mutationToEvidence(mutated, approval.binding);
+    }
+
+    // `external_outreach` remains policy-blocked: it is a compliance decision,
+    // not a missing implementation.
+    return toolFailure(
+      toolId,
+      `Tool "${toolId}" is owner-approved but remains blocked by the outreach compliance policy.`,
+      0,
+      true,
+    );
   }
 
   // 3) Per-agent permission matrix
@@ -476,6 +502,37 @@ function engineeringToEvidence(res: Awaited<ReturnType<typeof executeEngineering
     extract: { ...res.extract, exitCode: res.exitCode },
     costUsd: 0,
     credentialBinding: 'none(local_exec)',
+    durationMs: res.durationMs,
+    error: null,
+    blocked: false,
+  };
+}
+
+/**
+ * Adapt a real mutation-tool execution into the shared evidence envelope.
+ *
+ * A refusal by the verification gate is a REAL result and is surfaced as a
+ * failure with its evidence intact — never as a silent success.
+ */
+function mutationToEvidence(res: MutationToolResult, credentialBinding: string): RealToolResult {
+  if (!res.ok) {
+    return {
+      ...toolFailure(res.toolId, res.error ?? 'mutation tool failed', 0, false, credentialBinding),
+      extract: res.extract,
+      durationMs: res.durationMs,
+    };
+  }
+  return {
+    ok: true,
+    toolId: res.toolId,
+    toolResultId: makeToolResultId(res.toolId),
+    sourceReference: res.sourceReference,
+    httpStatus: 200,
+    contentSha256: res.contentSha256,
+    summary: res.summary,
+    extract: { ...res.extract, exitCode: res.exitCode, approvalVerified: res.approvalVerified },
+    costUsd: 0,
+    credentialBinding,
     durationMs: res.durationMs,
     error: null,
     blocked: false,
