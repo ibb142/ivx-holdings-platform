@@ -30,6 +30,13 @@ import {
   insertAlert,
   type ProspectRow,
 } from './ivx-agent-persistence';
+import {
+  executeEngineeringTool,
+  isEngineeringTool,
+  ENGINEERING_TOOL_IDS,
+  OWNER_APPROVAL_ENGINEERING_TOOLS,
+  type EngineeringToolId,
+} from './ivx-agent-engineering-tools';
 
 export const IVX_REAL_TOOLS_MARKER = 'ivx-agent-real-tools-2026-08-18';
 
@@ -44,10 +51,20 @@ export type RealToolId =
   | 'worldbank_indicator'
   | 'frankfurter_fx'
   | 'crm_read'
-  | 'crm_write';
+  | 'crm_write'
+  | EngineeringToolId;
 
 export const PROHIBITED_TOOL_IDS = ['money_movement', 'trade_execution', 'legal_execution'] as const;
-export const APPROVAL_GATED_TOOL_IDS = ['production_deploy', 'external_outreach'] as const;
+/**
+ * Tools requiring an explicit owner approval token. Everything that WRITES —
+ * source files, commits, pushes, deploys — lives here by design: the owner
+ * requires authorization before any code is modified on their behalf.
+ */
+export const APPROVAL_GATED_TOOL_IDS = [
+  'production_deploy',
+  'external_outreach',
+  ...OWNER_APPROVAL_ENGINEERING_TOOLS,
+] as const;
 
 export type RealToolResult = {
   ok: boolean;
@@ -107,7 +124,23 @@ export function getPermittedRealTools(agentNumber: number): RealToolId[] {
   const tools: RealToolId[] = [...base];
   if (edgarAgents.has(agentNumber)) tools.push(...edgar);
   if (crmWriteAgents.has(agentNumber)) tools.push('crm_write');
+  if (ENGINEERING_AGENT_NUMBERS.has(agentNumber)) tools.push(...ENGINEERING_TOOL_IDS);
   return tools;
+}
+
+/**
+ * Agents holding an engineering remit (build, QA, security, release, data,
+ * platform). Only these may run the real read-only engineering tools; the rest
+ * of the fleet keeps a research-only surface.
+ */
+export const ENGINEERING_AGENT_NUMBERS: ReadonlySet<number> = new Set([
+  1, 4, 5, 9, 10, 13, 14, 15, 16, 23, 35, 36, 37, 38, 39, 40, 42, 43, 44, 45,
+  51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70,
+  71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
+]);
+
+export function isEngineeringAgent(agentNumber: number): boolean {
+  return ENGINEERING_AGENT_NUMBERS.has(agentNumber);
 }
 
 export function isToolPermitted(agentNumber: number, toolId: string): boolean {
@@ -210,6 +243,12 @@ export async function executeRealTool(
       detail: `Agent ${agentId} (#${agentNumber}) attempted tool "${toolId}" outside its permitted set [${getPermittedRealTools(agentNumber).join(', ')}] — blocked.`,
     }).catch(() => undefined);
     return toolFailure(toolId, `Tool "${toolId}" is not in agent #${agentNumber}'s permitted tool set.`, 0, true);
+  }
+
+  // 4) Real engineering tools — executed locally, read-only, verifiable.
+  if (isEngineeringTool(toolId)) {
+    const engineered = await executeEngineeringTool(toolId, params, { timeoutMs: options.timeoutMs });
+    return engineeringToEvidence(engineered);
   }
 
   const tool = toolId as RealToolId;
@@ -402,9 +441,45 @@ export async function executeRealTool(
       };
     }
 
+    case 'code_read':
+    case 'code_search':
+    case 'typecheck':
+    case 'run_tests':
+    case 'lint':
+    case 'secret_scan':
+      // Handled by the engineering branch above; unreachable.
+      return toolFailure(toolId, `Engineering tool "${toolId}" was not routed to the engineering executor.`);
+
     default:
       return toolFailure(toolId, `Unknown real tool: ${toolId}`);
   }
+}
+
+/**
+ * Adapt a real engineering-tool execution into the shared evidence envelope.
+ * `httpStatus` 200 denotes a completed local execution — NOT a passing result.
+ * A red typecheck or a failing test suite is a successful tool call whose
+ * evidence records the failure; correctness is read from `extract.passed`.
+ */
+function engineeringToEvidence(res: Awaited<ReturnType<typeof executeEngineeringTool>>): RealToolResult {
+  if (!res.ok) {
+    return { ...toolFailure(res.toolId, res.error ?? 'engineering tool failed', 0, false, 'none(local_exec)'), durationMs: res.durationMs };
+  }
+  return {
+    ok: true,
+    toolId: res.toolId,
+    toolResultId: makeToolResultId(res.toolId),
+    sourceReference: res.sourceReference,
+    httpStatus: 200,
+    contentSha256: res.contentSha256,
+    summary: res.summary,
+    extract: { ...res.extract, exitCode: res.exitCode },
+    costUsd: 0,
+    credentialBinding: 'none(local_exec)',
+    durationMs: res.durationMs,
+    error: null,
+    blocked: false,
+  };
 }
 
 // ── Objective prospect scoring (deterministic, real-data based) ──────────────
