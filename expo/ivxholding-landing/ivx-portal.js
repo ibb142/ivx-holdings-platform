@@ -2,6 +2,10 @@
  * IVX Investor Portal — lazy-loaded module for the public landing page.
  * Loaded on demand when the user clicks "My Portal" or opens the invest funnel.
  * Keeps the public landing bundle free of admin/portal runtime code.
+ *
+ * Bank privacy: the access token is tab-scoped only. It is never persisted in
+ * localStorage and the Supabase client is configured not to persist/refresh a
+ * browser session behind the explicit IVX portal session lifecycle.
  */
 (function(window) {
   'use strict';
@@ -22,12 +26,18 @@
     }
   }
 
+  function clearPortalSession() {
+    try { sessionStorage.removeItem('ivx_portal_session'); } catch(e) {}
+    // Defense in depth: remove any legacy token copy left by an older build.
+    try { localStorage.removeItem('ivx_portal_session'); } catch(e) {}
+  }
+
   function openPortal() {
     document.getElementById('portal-overlay').classList.add('open');
     document.body.style.overflow = 'hidden';
     var saved = null;
-    try { saved = JSON.parse(localStorage.getItem('ivx_portal_session') || 'null'); } catch(e) {}
-    if (saved && saved.token && saved.email && (Date.now() - saved.ts) < 3600000) {
+    try { saved = JSON.parse(sessionStorage.getItem('ivx_portal_session') || 'null'); } catch(e) {}
+    if (saved && saved.token && saved.email && (Date.now() - Number(saved.ts)) < 55 * 60 * 1000) {
       _portalState.userId = saved.userId;
       _portalState.email = saved.email;
       _portalState.token = saved.token;
@@ -36,6 +46,7 @@
       showPortalDashboard();
       syncSecureWireSurface();
     } else {
+      clearPortalSession();
       scrubSecureWireSurface();
       document.getElementById('portal-login-view').style.display = 'block';
       document.getElementById('portal-dashboard').classList.remove('active');
@@ -63,19 +74,27 @@
       if (isPlaceholder(SUPABASE_URL) || isPlaceholder(SUPABASE_ANON_KEY) || !window.supabase) {
         throw new Error('Service temporarily unavailable');
       }
-      var portalSb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      var portalSb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false
+        }
+      });
       var authResult = await portalSb.auth.signInWithPassword({ email: email.toLowerCase(), password: password });
       if (authResult.error) throw new Error(authResult.error.message || 'Login failed');
       var session = authResult.data && authResult.data.session;
       var user = authResult.data && authResult.data.user;
-      _portalState.userId = (user && user.id) || '';
-      _portalState.email = (user && user.email) || email;
-      _portalState.token = (session && session.access_token) || '';
-      _portalState.firstName = (user && user.user_metadata && user.user_metadata.first_name) || email.split('@')[0];
-      _portalState.lastName = (user && user.user_metadata && user.user_metadata.last_name) || '';
+      if (!session || !session.access_token || !user || !user.id) throw new Error('Secure session was not created');
+      _portalState.userId = user.id;
+      _portalState.email = user.email || email;
+      _portalState.token = session.access_token;
+      _portalState.firstName = (user.user_metadata && user.user_metadata.first_name) || email.split('@')[0];
+      _portalState.lastName = (user.user_metadata && user.user_metadata.last_name) || '';
       _portalState.sb = portalSb;
+      clearPortalSession();
       try {
-        localStorage.setItem('ivx_portal_session', JSON.stringify({
+        sessionStorage.setItem('ivx_portal_session', JSON.stringify({
           userId: _portalState.userId,
           email: _portalState.email,
           token: _portalState.token,
@@ -88,8 +107,10 @@
       showPortalDashboard();
       syncSecureWireSurface();
     } catch(err) {
-      console.error('[IVX Portal] Login error:', err.message);
-      errEl.textContent = err.message || 'Login failed. Please try again.';
+      clearPortalSession();
+      scrubSecureWireSurface();
+      console.error('[IVX Portal] Login error:', err && err.message ? err.message : 'login failed');
+      errEl.textContent = (err && err.message) || 'Login failed. Please try again.';
       errEl.style.display = 'block';
     }
     btn.textContent = 'Sign In \u2192'; btn.disabled = false;
@@ -113,8 +134,8 @@
     var SUPABASE_ANON_KEY = window.IVX_SUPABASE_ANON_KEY || window.SUPABASE_ANON_KEY || '';
     if (!_portalState.token || isPlaceholder(SUPABASE_URL)) return;
     try {
-      var restUrl = SUPABASE_URL.replace(/\/+$/, '') + '/rest/v1/profiles?id=eq.' + _portalState.userId + '&select=*';
-      var resp = await fetch(restUrl, { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + _portalState.token } });
+      var restUrl = SUPABASE_URL.replace(/\/+$/, '') + '/rest/v1/profiles?id=eq.' + encodeURIComponent(_portalState.userId) + '&select=*';
+      var resp = await fetch(restUrl, { cache: 'no-store', headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + _portalState.token } });
       if (!resp.ok) { console.warn('[IVX Portal] Profile fetch failed:', resp.status); return; }
       var profiles = await resp.json();
       if (profiles && profiles.length > 0) {
@@ -141,7 +162,7 @@
           document.getElementById('portal-avatar').textContent = initials2;
         }
       }
-    } catch(err) { console.warn('[IVX Portal] Profile load error:', err.message); }
+    } catch(err) { console.warn('[IVX Portal] Profile load error:', err && err.message ? err.message : 'profile load failed'); }
   }
 
   async function loadPortalInvestments() {
@@ -149,8 +170,8 @@
     var SUPABASE_ANON_KEY = window.IVX_SUPABASE_ANON_KEY || window.SUPABASE_ANON_KEY || '';
     if (!_portalState.token || isPlaceholder(SUPABASE_URL)) return;
     try {
-      var restUrl = SUPABASE_URL.replace(/\/+$/, '') + '/rest/v1/landing_investments?investor_id=eq.' + _portalState.userId + '&select=*&order=created_at.desc';
-      var resp = await fetch(restUrl, { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + _portalState.token } });
+      var restUrl = SUPABASE_URL.replace(/\/+$/, '') + '/rest/v1/landing_investments?investor_id=eq.' + encodeURIComponent(_portalState.userId) + '&select=*&order=created_at.desc';
+      var resp = await fetch(restUrl, { cache: 'no-store', headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + _portalState.token } });
       if (!resp.ok) { console.warn('[IVX Portal] Investments fetch failed:', resp.status); return; }
       var investments = await resp.json();
       var listEl = document.getElementById('portal-investments-list');
@@ -171,13 +192,17 @@
           '</div>';
       });
       listEl.innerHTML = invHtml;
-    } catch(err) { console.warn('[IVX Portal] Investments load error:', err.message); }
+    } catch(err) { console.warn('[IVX Portal] Investments load error:', err && err.message ? err.message : 'investment load failed'); }
   }
 
   function portalLogout() {
+    var sb = _portalState.sb;
     _portalState = { userId: '', email: '', token: '', firstName: '', lastName: '', sb: null };
-    try { localStorage.removeItem('ivx_portal_session'); } catch(e) {}
+    clearPortalSession();
     scrubSecureWireSurface();
+    if (sb && sb.auth && typeof sb.auth.signOut === 'function') {
+      void sb.auth.signOut().catch(function() {});
+    }
     document.getElementById('portal-login-view').style.display = 'block';
     document.getElementById('portal-dashboard').classList.remove('active');
     document.getElementById('portal-login-form').reset();
