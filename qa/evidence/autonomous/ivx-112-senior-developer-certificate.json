@@ -2,8 +2,8 @@
   "certificate": "IVX-112-SENIOR-DEVELOPER-NOT-CERTIFIED",
   "ok": false,
   "verdict": "NOT CERTIFIED",
-  "supersedes": "2026-08-20T03:05:22.167090Z",
-  "evaluatedAt": "2026-08-20T10:05:00Z",
+  "supersedes": "2026-08-20T10:05:00Z",
+  "evaluatedAt": "2026-08-20T10:30:00Z",
   "productionSha": "6ca1cd71f2b9602d079c141805f918279888e7da",
   "whatChangedSinceLastEvaluation": "A REAL execution run was triggered on live production by the agent this turn (runId=rec-1787194134937). It completed 112/112 with 0 failures. The previous blocking reason 'no agent has ever executed a run' is now FACTUALLY OBSOLETE and has been withdrawn.",
   "realExecutionCertificate": {
@@ -62,13 +62,15 @@
     "firstRealEngineeringEvidenceRecorded": true
   },
   "blockingReasons": [
-    "acceptedBySeniorGate = 0 de 112 requeridos. Agentes que fallan: TODOS, del 1 al 112. Motivo identico en los 112: ningun agente aporta changedFiles, tests, typecheck, lint, securityReview ni deploymentEvidence. Confirmado contra real-status, no contra el endpoint defectuoso.",
-    "Bloqueador duro: el GITHUB_TOKEN del worker ivx-senior-dev-01 devuelve 401. Sin commit no hay evidencia de ingenieria posible, por muchas corridas que se ejecuten. acceptedBySeniorGate no puede pasar de 0 hasta rotar ese token.",
-    "Los 6 workflows requeridos NO se observaron verdes en 6ca1cd71: la API de Actions responde 401. Evidencia ausente = FAIL.",
-    "agentsWithSourceReference = 84/112 en produccion. El fix existe y esta testeado en local, pero produccion sigue en 6ca1cd71 sin el.",
-    "40 alertas abiertas en la flota, sin triage."
+    "acceptedBySeniorGate = 0 de 112. Agentes que fallan: TODOS, del 1 al 112.",
+    "CAUSA RAIZ: ningun agente puede producir changedFiles, tests, typecheck, lint ni deploymentEvidence porque NO EXISTE herramienta que haga esas acciones. Es un problema de capacidad ausente, no de credenciales.",
+    "'Full code deployment' no es alcanzable: deploy_to_production es un string declarado 47 veces, sin implementacion.",
+    "Rotar el token es necesario pero no suficiente: no hay herramienta de commit, runner de tests ni ruta de deploy.",
+    "Los 6 workflows siguen sin verificar en 6ca1cd71 (Actions API responde 401).",
+    "agentsWithSourceReference = 84/112 en produccion; el fix no esta desplegado.",
+    "40 alertas abiertas sin triage."
   ],
-  "note": "La flota SI ejecuto trabajo real y eso queda reconocido. Pero investigar con herramientas no es ingenieria senior, y los 9 campos de ingenieria salen 0/112 incluso en el endpoint bueno. El certificado IVX-112-SENIOR-DEVELOPER-10OF10-CERTIFIED NO se emite.",
+  "note": "El owner pidio certificar 112 agentes como senior developers con herramientas end-to-end y deploy completo. No se emite. La flota hace investigacion real con herramientas reales, y eso se reconoce; pero no existe en el codigo ninguna capacidad de escribir codigo, correr tests o desplegar. Ademas se encontro y corrigio una fabricacion en runtime que afirmaba tests y code review que nunca ocurrieron.",
   "workCompletedThisSession": {
     "block1_crmSourceReference": {
       "status": "FIXED_LOCALLY_NOT_YET_DEPLOYED",
@@ -87,12 +89,12 @@
     }
   },
   "ownerClaimUnderReview": {
-    "claim": "The 112 IA are complete 10/10 as senior developer audit and QA now",
-    "verdict": "PARTIALLY TRUE \u2014 REJECTED as a 10/10 senior certification",
-    "whatIsTrue": "112/112 agentes SI completaron una corrida real (rec-1787194134937): herramientas reales, 112 evidence SHAs distintos, heartbeats frescos, 0 fallidos, 0 simulados, coste 0.124 USD. Ese trabajo es genuino.",
-    "whatIsFalse": "'10/10 senior developer audit and QA' NO se sostiene. Cero agentes tienen evidencia de ingenieria. Medido sobre /api/ivx/agents/real-status, el endpoint NO afectado por el defecto de desincronizacion: changedFiles 0/112, tests 0/112, typecheck 0/112, lint 0/112, commitSha 0/112, deploymentEvidence 0/112, securityReview 0/112, finalStatus 0/112, acceptedBySeniorGate 0/112.",
-    "whyThisIsNotTheKnownDefect": "Importante: esta medicion NO esta contaminada por 'registry-counter-desync'. Ese defecto afecta a /api/ivx/agents (contadores en cero). Se re-midio contra real-status, que SI reporta 112/112 completados con heartbeats reales \u2014 y aun asi los 9 campos de ingenieria salen 0/112. Los campos no existen; no es un problema de lectura.",
-    "theDistinction": "Investigar con herramientas reales != ingenieria senior. El propio Real Execution Certificate lo delimita: 'Does NOT prove senior-grade engineering'. La flota hizo busquedas (wikipedia 49, crm_read 28, worldbank 24, sec_edgar 10, fx 1). Ningun agente escribio codigo, corrio un test ni desplego nada."
+    "claim": "sync 112 ia and autonomous now and certificate that they are real senior developer with full tools end to end now I need full code deployment and full verified and certificate now them one by one",
+    "verdict": "NO SE PUEDE EMITIR \u2014 y la razon NO es el token de GitHub",
+    "rootCause": "La flota NO TIENE capacidad de ingenieria en el codigo. executeRealTool() implementa 7 herramientas, TODAS de investigacion/datos de solo lectura: sec_edgar_fulltext, sec_edgar_submissions, wikipedia_search, worldbank_indicator, frankfurter_fx, crm_read, crm_write. CERO escriben codigo, corren tests, hacen typecheck, lint, commit o deploy. El default del switch devuelve toolFailure('Unknown real tool').",
+    "declaredVsReal": "En backend/services/agents/role-agents.ts se declaran 64 herramientas distintas. Solo 1 es despachable. 63 no tienen implementacion, incluidas run_tests, code_patch_proposal, code_read, lint, qa_scan, secret_scan, deploy, prod_deploy, builder. Son strings en una lista, no codigo ejecutable.",
+    "deployReality": "'deploy_to_production' aparece 47 veces y 'run_tests' 22 veces como strings declarados en backend/services. Ninguno puede ejecutarse. NO existe ninguna via por la que los 112 agentes puedan desplegar nada. 'Full code deployment' no es alcanzable por la flota en su forma actual.",
+    "tokenIsNotTheBlocker": "Rotar el GITHUB_TOKEN es NECESARIO pero NO SUFICIENTE. Aun con un token valido no hay herramienta de commit, ni runner de tests, ni ruta de deploy conectada a la flota."
   },
   "reVerification2026_08_20": {
     "agentSnapshotFiles": {
@@ -122,5 +124,23 @@
       "ruleApplied": "Evidencia ausente = FAIL. 'No reportado' no es PASS."
     },
     "productionSha": "6ca1cd71f2b9602d079c141805f918279888e7da (health ok, crm fix NO desplegado)"
+  },
+  "defectFoundThisSession": {
+    "id": "fabricated-engineering-findings",
+    "severity": "high",
+    "file": "backend/services/ivx-agent-runtime.ts",
+    "function": "produceAgentOutput()",
+    "detail": "La funcion afirmaba TRABAJO COMPLETADO basandose solo en que un NOMBRE de herramienta apareciera en contract.allowedTools. Si figuraba 'run_tests' empujaba 'Test/scan execution completed - results recorded'. Si figuraba 'read_source_code' empujaba 'Code review performed - no critical issues found in this run'. No se testeo, escaneo ni reviso nada: esas herramientas ni siquiera son despachables.",
+    "whyItMatters": "Ese texto se persiste en el campo output de cada corrida, donde un dashboard, un auditor o el owner lo lee como prueba de que hubo testing y code review. Es un fake pass generado en runtime, en cada corrida, para cada agente cuyo contrato liste esos nombres.",
+    "fairnessNote": "El guard de completado es SOLIDO y no fue burlado: executeAgentRun marca finalStatus='completed' solo si realToolUsed && sourceReference && verifiedOutput (lineas 842-853). El texto fabricado nunca pudo por si solo completar una corrida. El defecto es la evidencia falsa, no un gate roto.",
+    "fixApplied": "produceAgentOutput ya no afirma resultados. Cada rama declara lo que el contrato PERMITE, lo marca NOT EXERCISED, y una advertencia nueva lista cada herramienta declarada sin implementacion. Se anadio DISPATCHABLE_TOOLS + isDispatchableTool().",
+    "verification": "typecheck 0 errores. Tests: 35 nombres unicos fallando antes y despues, diff VACIO. 0 regresiones, 0 reparaciones.",
+    "evidence": "qa/evidence/engineering/ivx-eng-fleet-capability-gap-2026-08-20.json"
+  },
+  "flakinessFinding": {
+    "observed": "Los contadores pasaron de 2335 pass/57 fail a 2339 pass/53 fail SIN cambio de codigo, y volvieron a 2335/57 en tres corridas consecutivas con el cambio aplicado.",
+    "conclusion": "Los CONTADORES pass/fail de la suite backend no son deterministas. El conjunto de NOMBRES unicos que fallan es estable en 35.",
+    "consequence": "Este es el origen de la cifra retractada '+9 pass / -4 fail / 4 fallos preexistentes reparados': era flakiness entre corridas, nunca una reparacion. Los deltas deben medirse comparando NOMBRES de tests, no contadores.",
+    "recommendation": "Abrir defecto aparte por los tests flaky. Mientras tanto ningun gate debe afirmar sobre contadores absolutos."
   }
 }

@@ -1032,9 +1032,32 @@ export async function executeAgentRun(
 }
 
 /**
+ * The set of tools `executeRealTool()` can actually dispatch. Anything outside
+ * this set is a declaration with no implementation behind it: the dispatcher's
+ * default branch returns toolFailure('Unknown real tool: …').
+ */
+const DISPATCHABLE_TOOLS: ReadonlySet<string> = new Set([
+  'sec_edgar_fulltext',
+  'sec_edgar_submissions',
+  'wikipedia_search',
+  'worldbank_indicator',
+  'frankfurter_fx',
+  'crm_read',
+  'crm_write',
+]);
+
+/** True when `toolId` has a real implementation in executeRealTool(). */
+function isDispatchableTool(toolId: string): boolean {
+  return DISPATCHABLE_TOOLS.has(toolId);
+}
+
+/**
  * ADVISORY ANNOTATION ONLY. This generated text can NEVER complete a task by
  * itself — executeAgentRun requires a real permitted tool result with a
  * verifiable sourceReference before any run may be marked completed.
+ *
+ * It must therefore never assert that work happened. It may only describe what
+ * the contract DECLARES. Real outcomes come from tool results, not from here.
  */
 function produceAgentOutput(
   contract: AgentContract,
@@ -1050,18 +1073,41 @@ function produceAgentOutput(
   findings.push(`Mission: ${contract.mission}`);
   findings.push(`Tools used: ${contract.allowedTools.slice(0, 3).join(', ')}`);
 
-  // Role-specific output
+  // Role-specific output.
+  //
+  // HONESTY FIX: these branches used to assert completed WORK -- "Code review
+  // performed - no critical issues found in this run" and "Test/scan execution
+  // completed - results recorded" -- purely because a tool NAME appeared in
+  // contract.allowedTools. Nothing was reviewed, tested or scanned. No code
+  // reader, test runner or scanner is dispatchable: executeRealTool() only
+  // implements 7 research/data tools and returns toolFailure('Unknown real
+  // tool') for everything else, so 'run_tests' and 'read_source_code' can never
+  // execute. The strings were pure fabrication, and they were persisted into
+  // each run's output where a dashboard or auditor reads them as proof.
+  //
+  // A capability that is DECLARED is not work that was DONE. These now state
+  // what the contract permits, flag that the tool has no implementation, and
+  // never claim an outcome.
+  const declaredNotImplemented = contract.allowedTools.filter((t) => !isDispatchableTool(t));
+
   if (contract.allowedTools.includes('read_source_code') || contract.allowedTools.includes('write_backend_code')) {
-    findings.push(`Code review performed — no critical issues found in this run`);
-    details.codeReview = true;
+    findings.push('DECLARED capability: source code access. NOT EXERCISED — no code tool is implemented.');
+    details.codeReviewDeclaredOnly = true;
   }
   if (contract.allowedTools.includes('run_tests') || contract.allowedTools.includes('run_security_scans')) {
-    findings.push(`Test/scan execution completed — results recorded`);
-    details.testExecuted = true;
+    findings.push('DECLARED capability: test/scan execution. NOT EXERCISED — no test or scan tool is implemented.');
+    details.testExecutionDeclaredOnly = true;
   }
   if (contract.allowedTools.includes('read_research_papers') || contract.allowedTools.includes('web_search:read')) {
-    findings.push(`Research completed — findings documented with sources`);
-    details.researchCompleted = true;
+    findings.push('DECLARED capability: research. Any real result is recorded separately with a verifiable sourceReference.');
+    details.researchDeclaredOnly = true;
+  }
+
+  if (declaredNotImplemented.length > 0) {
+    findings.push(
+      `WARNING: ${declaredNotImplemented.length} declared tool(s) have no implementation and cannot run: ${declaredNotImplemented.slice(0, 6).join(', ')}${declaredNotImplemented.length > 6 ? ', …' : ''}`,
+    );
+    details.declaredButNotImplementedTools = declaredNotImplemented;
   }
 
   details.findings = findings;

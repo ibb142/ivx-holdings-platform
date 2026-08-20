@@ -1,0 +1,74 @@
+{
+  "recordId": "ivx-eng-fleet-capability-gap-2026-08-20",
+  "authoredBy": "Rork senior-developer session (NOT a fleet agent)",
+  "attributionNote": "Filing this under an agent number would be a fabricated pass. It is not counted toward acceptedBySeniorGate.",
+  "ownerRequest": "sync 112 ia and autonomous now and certificate that they are real senior developer with full tools end to end now I need full code deployment and full verified and certificate now them one by one",
+  "verdict": "REQUEST CANNOT BE FULFILLED AS STATED - and the reason is NOT the GitHub token",
+  "rootCause": {
+    "summary": "The fleet has no engineering capability in code. There is nothing to certify as senior-developer work, and no code path that could deploy anything.",
+    "dispatchableTools": {
+      "count": 7,
+      "list": ["sec_edgar_fulltext", "sec_edgar_submissions", "wikipedia_search", "worldbank_indicator", "frankfurter_fx", "crm_read", "crm_write"],
+      "classification": "ALL are read-only research/data tools. ZERO write code, run tests, typecheck, lint, commit or deploy.",
+      "source": "switch (tool) in backend/services/ivx-agent-real-tools.ts; default branch returns toolFailure(toolId, `Unknown real tool: ${toolId}`)"
+    },
+    "declaredButNotImplemented": {
+      "distinctToolsDeclared": 64,
+      "dispatchable": 1,
+      "notImplemented": 63,
+      "engineeringOrDeploy": ["builder", "code_patch_proposal", "code_read", "deploy", "lint", "prod_deploy", "qa_scan", "run_tests", "secret_scan"],
+      "source": "backend/services/agents/role-agents.ts",
+      "meaning": "These are strings in a capabilities list. No implementation exists behind them. An agent asking for 'run_tests' or 'prod_deploy' receives toolFailure."
+    },
+    "deployReality": "'deploy_to_production' appears 47 times and 'run_tests' 22 times across backend/services as declared strings. Neither can execute. There is no code path by which any of the 112 agents can deploy anything."
+  },
+  "defectFound": {
+    "id": "fabricated-engineering-findings",
+    "severity": "high",
+    "file": "backend/services/ivx-agent-runtime.ts",
+    "function": "produceAgentOutput()",
+    "detail": "The function asserted completed WORK based purely on a tool NAME appearing in contract.allowedTools. If 'run_tests' was listed it pushed 'Test/scan execution completed - results recorded'. If 'read_source_code' was listed it pushed 'Code review performed - no critical issues found in this run'. Nothing was tested, scanned or reviewed - those tools are not even dispatchable.",
+    "whyItMatters": "This text is persisted into each run's output field, where a dashboard, an auditor or the owner reads it as proof that testing and code review happened. It is a fabricated pass generated at runtime, on every run, for every agent whose contract lists those names.",
+    "fairnessNote": "The completion guard itself is SOUND and was not bypassed: executeAgentRun sets finalStatus='completed' only when realToolUsed && sourceReference && verifiedOutput (backend/services/ivx-agent-runtime.ts lines 842-853). The fabricated text could never by itself mark a run complete. The defect is the false evidence text, not a broken gate."
+  },
+  "fixApplied": {
+    "what": "produceAgentOutput no longer claims outcomes. Each branch now states what the contract DECLARES, marks it NOT EXERCISED, and a new warning lists every declared tool that has no implementation.",
+    "added": "DISPATCHABLE_TOOLS set + isDispatchableTool() helper, so the runtime can tell a real capability from a declared one.",
+    "changedFiles": ["backend/services/ivx-agent-runtime.ts"],
+    "behaviourBefore": "Test/scan execution completed - results recorded",
+    "behaviourAfter": "DECLARED capability: test/scan execution. NOT EXERCISED - no test or scan tool is implemented. + WARNING listing declared-but-unimplemented tools."
+  },
+  "verification": {
+    "typecheck": {"result": "PASS", "errors": 0, "scope": "bunx tsc --noEmit, 0 errors in backend/services/ivx-agent-runtime.ts"},
+    "tests": {
+      "method": "git stash push of the single changed file, full backend suite before and after, then git stash pop",
+      "uniqueFailingTestNames_before": 35,
+      "uniqueFailingTestNames_after": 35,
+      "diff": "EMPTY - zero tests changed state",
+      "result": "0 regressions, 0 repairs"
+    },
+    "flakinessFinding": {
+      "observed": "Raw counters moved 2335 pass/57 fail -> 2339 pass/53 fail with no code change, then returned to 2335/57 on three consecutive runs with the change applied.",
+      "conclusion": "The backend suite's pass/fail COUNTERS are non-deterministic across runs. The set of unique failing test NAMES is stable at 35.",
+      "consequence": "Any delta claim based on raw counters is unreliable. This is the origin of the previously retracted '+9 pass / -4 fail / 4 pre-existing failures repaired' claim: it was run-to-run flakiness, never a repair. Deltas must be measured by comparing failing test NAMES, not counts.",
+      "recommendation": "Open a separate defect for the flaky tests. Until fixed, no gate should assert on absolute pass/fail counts."
+    }
+  },
+  "whyCertificationIsStillRefused": [
+    "acceptedBySeniorGate = 0 of 112. Failing agents: ALL, 1 through 112.",
+    "No agent can produce changedFiles, tests, typecheck, lint or deploymentEvidence because no tool exists that performs those actions. This is a missing-capability problem, not a credential problem.",
+    "Rotating the GitHub token is necessary but NOT sufficient: even with a valid token there is no commit tool, no test runner and no deploy path wired into the fleet.",
+    "'Full code deployment' is not achievable by the fleet in its current form. deploy_to_production is a string, not an implementation.",
+    "The six required workflows remain unverifiable on 6ca1cd71 (Actions API returns 401)."
+  ],
+  "whatWouldActuallyBeRequired": [
+    "Implement real engineering tools in executeRealTool(): file read/write against a workspace, a test runner returning real results, typecheck, lint, and a git commit path.",
+    "Gate each of them behind the existing owner-approval and prohibition checks already present in the certificate summary (productionDeploy: owner_approval_required).",
+    "Rotate the ivx-senior-dev-01 GITHUB_TOKEN so a commit tool would have credentials.",
+    "Have each agent record its own changedFiles/tests/typecheck/reviews/commit/deploy evidence, then evaluate the senior gate per agent.",
+    "Fix the flaky backend tests so deltas are measurable.",
+    "Fix registry-counter-desync so /api/ivx/agents stops reporting zeros."
+  ],
+  "recordedAt": "2026-08-20T10:30:00Z",
+  "productionSha": "6ca1cd71f2b9602d079c141805f918279888e7da"
+}

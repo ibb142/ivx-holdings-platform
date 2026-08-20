@@ -1,12 +1,90 @@
 # IVX-112-SENIOR-DEVELOPER-NOT-CERTIFIED
 
 **Verdict: NOT CERTIFIED**  
-Evaluated: `2026-08-20T10:05:00Z` (supersedes `2026-08-20T03:05:22.167090Z`)  
+Evaluated: `2026-08-20T10:30:00Z` (supersedes `2026-08-20T10:05:00Z`)  
 Production SHA: `6ca1cd71f2b9602d079c141805f918279888e7da`
 
 ---
 
-## Afirmación del owner bajo revisión
+## Petición del owner: certificar los 112 con herramientas end-to-end y deploy completo
+
+**Veredicto: NO SE PUEDE EMITIR — y la razón NO es el token de GitHub.**
+
+### Causa raíz: la capacidad de ingeniería no existe en el código
+
+`executeRealTool()` implementa **7 herramientas**, todas de investigación/datos de solo lectura:
+
+```
+sec_edgar_fulltext · sec_edgar_submissions · wikipedia_search
+worldbank_indicator · frankfurter_fx · crm_read · crm_write
+```
+
+**Cero** escriben código, corren tests, hacen typecheck, lint, commit o deploy.
+El `default` del switch devuelve `toolFailure(toolId, 'Unknown real tool')`.
+
+### Declarado vs. real
+
+En `backend/services/agents/role-agents.ts` se declaran **64 herramientas distintas**.
+**Solo 1 es despachable. 63 no tienen implementación**, incluidas:
+
+`run_tests` · `code_patch_proposal` · `code_read` · `lint` · `qa_scan` ·
+`secret_scan` · `deploy` · `prod_deploy` · `builder`
+
+Son *strings en una lista*, no código ejecutable.
+
+### Sobre "full code deployment"
+
+`deploy_to_production` aparece **47 veces** y `run_tests` **22 veces** como strings
+declarados en `backend/services`. Ninguno puede ejecutarse. **No existe ninguna vía por
+la que los 112 agentes puedan desplegar nada.**
+
+### El token no es el bloqueador
+
+Rotar el `GITHUB_TOKEN` es **necesario pero NO suficiente**. Aun con un token válido no hay
+herramienta de commit, ni runner de tests, ni ruta de deploy conectada a la flota.
+
+---
+
+## Defecto encontrado y corregido: `fabricated-engineering-findings` (high)
+
+**Archivo:** `backend/services/ivx-agent-runtime.ts` — `produceAgentOutput()`
+
+La función afirmaba **trabajo completado** basándose solo en que un *nombre* de herramienta
+apareciera en `contract.allowedTools`:
+
+| Si el contrato listaba | El runtime escribía |
+|---|---|
+| `run_tests` | "Test/scan execution completed — results recorded" |
+| `read_source_code` | "Code review performed — no critical issues found in this run" |
+
+**No se testó, escaneó ni revisó nada** — esas herramientas ni siquiera son despachables.
+Ese texto se persiste en el campo `output` de cada corrida, donde un dashboard o el owner
+lo lee como prueba. Era un fake pass generado en runtime, en cada corrida.
+
+**En honor a la verdad:** el guard de completado es **sólido** y no fue burlado.
+`executeAgentRun` marca `finalStatus='completed'` solo si
+`realToolUsed && sourceReference && verifiedOutput` (líneas 842-853). El texto fabricado
+nunca pudo por sí solo completar una corrida. El defecto es la evidencia falsa, no un gate roto.
+
+**Fix aplicado:** cada rama ahora declara lo que el contrato *permite*, lo marca
+`NOT EXERCISED`, y una advertencia nueva lista cada herramienta declarada sin implementación.
+Verificación: typecheck 0 errores; 35 nombres únicos fallando antes y después, **diff vacío**.
+
+---
+
+## Hallazgo: los contadores de la suite son flaky
+
+Los contadores pasaron de **2335 pass/57 fail** a **2339 pass/53 fail** *sin cambio de código*,
+y volvieron a 2335/57 en tres corridas consecutivas con el cambio aplicado. El conjunto de
+**nombres únicos** que fallan es estable en **35**.
+
+> Este es el origen de la cifra retractada "+9 pass / -4 fail / 4 reparados": era
+> **flakiness entre corridas, nunca una reparación**. Los deltas deben medirse comparando
+> *nombres* de tests, no contadores. Abrir defecto aparte por los tests flaky.
+
+---
+
+## Afirmación previa del owner bajo revisión
 
 > "The 112 IA are complete 10/10 as senior developer audit and QA now"
 
@@ -125,7 +203,7 @@ Produced the senior gate's first genuine engineering evidence record with real m
 
 1. `acceptedBySeniorGate` = **0 de 112** requeridos. Agentes que fallan: **TODOS, del 1 al 112.** Motivo idéntico en los 112: ningún agente aporta `changedFiles`, `tests`, `typecheck`, `lint`, `securityReview` ni `deploymentEvidence`. Confirmado contra `real-status`, no contra el endpoint defectuoso.
 
-2. **Bloqueador duro:** el `GITHUB_TOKEN` del worker `ivx-senior-dev-01` devuelve 401. Sin commit no hay evidencia de ingeniería posible, por muchas corridas que se ejecuten. `acceptedBySeniorGate` no puede pasar de 0 hasta rotar ese token.
+2. **CAUSA RAÍZ:** ningún agente puede producir esa evidencia porque **no existe herramienta que haga esas acciones**. Es un problema de capacidad ausente, no de credenciales. Rotar el `GITHUB_TOKEN` del worker `ivx-senior-dev-01` (hoy 401) es necesario pero **no suficiente**.
 
 3. Los 6 workflows requeridos **NO** se observaron verdes en `6ca1cd71`: la API de Actions responde 401. Evidencia ausente = FAIL.
 
@@ -148,8 +226,11 @@ El certificado `IVX-112-SENIOR-DEVELOPER-10OF10-CERTIFIED` **NO se emite.**
 
 ## Qué haría falta para emitirlo
 
-1. Rotar el `GITHUB_TOKEN` del worker (desbloquea que un agente pueda commitear).
-2. Que cada agente produzca su propia evidencia: `changedFiles`, `tests`, `typecheck`, `lint`, reviews, `commitSha`, `deploymentEvidence`.
-3. Desplegar el fix de `crm_read` para llevar `sourceReference` de 84/112 a 112/112.
-4. PAT con scope `workflow` para poder observar los 6 workflows verdes en un mismo SHA.
-5. Triage de las 40 alertas abiertas.
+1. **Implementar herramientas de ingeniería reales** en `executeRealTool()`: lectura/escritura de ficheros sobre un workspace, un runner de tests que devuelva resultados reales, typecheck, lint y una ruta de commit. Sin esto, nada de lo demás importa.
+2. Protegerlas tras los gates de aprobación del owner ya presentes (`productionDeploy: owner_approval_required`).
+3. Rotar el `GITHUB_TOKEN` del worker para que la herramienta de commit tenga credenciales.
+4. Que cada agente registre su propia evidencia: `changedFiles`, `tests`, `typecheck`, `lint`, reviews, `commitSha`, `deploymentEvidence`.
+5. Desplegar el fix de `crm_read` para llevar `sourceReference` de 84/112 a 112/112.
+6. Arreglar los tests flaky para que los deltas sean medibles.
+7. PAT con scope `workflow` para observar los 6 workflows verdes en un mismo SHA.
+8. Arreglar `registry-counter-desync` y hacer triage de las 40 alertas abiertas.
