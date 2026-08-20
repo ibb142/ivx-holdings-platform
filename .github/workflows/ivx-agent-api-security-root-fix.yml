@@ -2,7 +2,7 @@ name: IVX Agent API Security Root Fix
 
 on:
   push:
-    branches: [main]
+    branches: ['fix/**']
     paths:
       - '.github/workflows/ivx-agent-api-security-root-fix.yml'
       - 'backend/api/ivx-agent-api.ts'
@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: ivx-agent-api-security-root-fix
+  group: ivx-agent-api-security-root-fix-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -23,6 +23,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.ref_name }}
 
       - name: Patch owner authorization on all mutating agent endpoints
         shell: bash
@@ -33,7 +34,7 @@ jobs:
           p=Path('backend/api/ivx-agent-api.ts')
           s=p.read_text()
           marker="export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-18-real-execution';"
-          helper="""export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-19-owner-auth-guard';\n\nfunction ownerAuthorized(c: any, body: Record<string, unknown> = {}): boolean {\n  const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';\n  const envSecret = (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim() || (process.env.IVX_OWNER_TOKEN ?? '').trim();\n  return Boolean(envSecret) && provided === envSecret;\n}\n\nfunction requireOwner(c: any, body: Record<string, unknown> = {}) {\n  return ownerAuthorized(c, body) ? null : c.json({ ok: false, error: 'Owner authorization required.' }, 401);\n}\n"""
+          helper="""export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-20-owner-auth-guard';\n\nfunction ownerAuthorized(c: any, body: Record<string, unknown> = {}): boolean {\n  const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';\n  const envSecret = (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim() || (process.env.IVX_OWNER_TOKEN ?? '').trim();\n  return Boolean(envSecret) && provided === envSecret;\n}\n\nfunction requireOwner(c: any, body: Record<string, unknown> = {}) {\n  return ownerAuthorized(c, body) ? null : c.json({ ok: false, error: 'Owner authorization required.' }, 401);\n}\n"""
           if marker in s:
             s=s.replace(marker, helper)
           s=s.replace("const authorized = envSecret ? provided === envSecret : provided.startsWith('owner-');", "const authorized = Boolean(envSecret) && provided === envSecret;")
@@ -46,7 +47,8 @@ jobs:
             "app.post('/api/ivx/agents/execute-all', async (c) => {",
           ]
           for t in targets:
-            if t in s and "const denied = requireOwner(c);" not in s[s.index(t):s.index(t)+180]:
+            pos=s.find(t)
+            if pos >= 0 and "const denied = requireOwner(c);" not in s[pos:pos+220]:
               s=s.replace(t, t+"\n    const denied = requireOwner(c);\n    if (denied) return denied;", 1)
           t="app.post('/api/ivx/agents/:agentId/run', async (c) => {"
           if t in s:
@@ -67,7 +69,7 @@ jobs:
           p.write_text(s)
           PY
 
-      - name: Source QA guards
+      - name: Source QA guards — HARD GATE
         shell: bash
         run: |
           set -euo pipefail
@@ -76,17 +78,17 @@ jobs:
           test "$(grep -c "const denied = requireOwner" backend/api/ivx-agent-api.ts)" -ge 9
           echo 'agent_api_owner_auth_source=PASS'
 
-      - name: Commit root fix
+      - name: Commit source hardening to current feature branch
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'ivx-qa-bot'
-          git config user.email 'ivx-qa-bot@users.noreply.github.com'
-          git add backend/api/ivx-agent-api.ts
+          git config user.name 'ivx-security-bot'
+          git config user.email 'ivx-security-bot@users.noreply.github.com'
+          git add -- backend/api/ivx-agent-api.ts
           if git diff --cached --quiet; then
             echo 'No source patch required.'
             exit 0
           fi
-          git commit -m 'security(agents): require real owner secret on all mutating endpoints'
-          git pull --rebase origin main
-          git push origin HEAD:main
+          git commit -m 'security(agents): require owner secret on mutating endpoints [skip ci]'
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"
