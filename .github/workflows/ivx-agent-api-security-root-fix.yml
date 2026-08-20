@@ -25,7 +25,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.ref_name }}
 
-      - name: Patch owner authorization on all mutating agent endpoints
+      - name: Patch owner authorization and autonomous governance
         shell: bash
         run: |
           set -euo pipefail
@@ -34,10 +34,16 @@ jobs:
           p=Path('backend/api/ivx-agent-api.ts')
           s=p.read_text()
           marker="export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-18-real-execution';"
-          helper="""export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-20-owner-auth-guard';\n\nfunction ownerAuthorized(c: any, body: Record<string, unknown> = {}): boolean {\n  const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';\n  const envSecret = (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim() || (process.env.IVX_OWNER_TOKEN ?? '').trim();\n  return Boolean(envSecret) && provided === envSecret;\n}\n\nfunction requireOwner(c: any, body: Record<string, unknown> = {}) {\n  return ownerAuthorized(c, body) ? null : c.json({ ok: false, error: 'Owner authorization required.' }, 401);\n}\n"""
+          helper="""export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-20-owner-auth-governance';\n\nfunction ownerAuthorized(c: any, body: Record<string, unknown> = {}): boolean {\n  const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';\n  const envSecret = (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim() || (process.env.IVX_OWNER_TOKEN ?? '').trim();\n  return Boolean(envSecret) && provided === envSecret;\n}\n\nfunction requireOwner(c: any, body: Record<string, unknown> = {}) {\n  return ownerAuthorized(c, body) ? null : c.json({ ok: false, error: 'Owner authorization required.' }, 401);\n}\n"""
           if marker in s:
             s=s.replace(marker, helper)
           s=s.replace("const authorized = envSecret ? provided === envSecret : provided.startsWith('owner-');", "const authorized = Boolean(envSecret) && provided === envSecret;")
+
+          if 'function validateAutonomousRunPayload' not in s:
+            anchor='export function registerAgentRoutes(app: Hono): void {'
+            governance="""function validateAutonomousRunPayload(payload: Record<string, unknown>): string | null {\n  if (payload.__autonomous !== true) return null;\n  const actions = Array.isArray(payload.actions) ? payload.actions.map((value) => String(value || '').trim()).filter(Boolean) : [];\n  const sourceSha = typeof payload.sourceSha === 'string' ? payload.sourceSha.trim() : '';\n  const taskId = typeof payload.__taskId === 'string' ? payload.__taskId.trim() : '';\n  if (!taskId) return 'AUTONOMOUS_TASK_BLOCKED: taskId_missing';\n  if (!/^[0-9a-f]{40}$/i.test(sourceSha)) return 'AUTONOMOUS_TASK_BLOCKED: sourceSha_invalid_or_missing';\n  if (payload.realExecutionOnly !== true) return 'AUTONOMOUS_TASK_BLOCKED: realExecutionOnly_not_true';\n  if (payload.simulatedSuccessAllowed !== false) return 'AUTONOMOUS_TASK_BLOCKED: simulatedSuccessAllowed_not_false';\n  if (payload.evidenceRequired !== true) return 'AUTONOMOUS_TASK_BLOCKED: evidenceRequired_not_true';\n  if (payload.exactSourceShaRequired !== true) return 'AUTONOMOUS_TASK_BLOCKED: exactSourceShaRequired_not_true';\n  if (payload.realFundsAllowed === true) return 'AUTONOMOUS_TASK_BLOCKED: real_funds_forbidden';\n  if (actions.length === 0) return 'AUTONOMOUS_TASK_BLOCKED: actions_missing';\n  const normalized = actions.join(' ').toLowerCase();\n  const financial = /(^|[_\\s])(move|credit|debit|settle|settlement|transfer|trade|purchase|sell|withdraw|payout|disburse)([_\\s]|$)/i.test(normalized);\n  const forbidden = /(approve_kyc|approve_aml|disable_security_gate|disable_rls|weaken_secret_scanner|fabricate_certificate)/i.test(normalized);\n  const highRisk = /(deploy|merge|rotate|revoke|delete|drop|truncate|production|privileged|grant|secret|credential|beneficiary|routing|swift|bic)/i.test(normalized);\n  if (financial || forbidden) return 'AUTONOMOUS_TASK_BLOCKED: financial_or_never_autonomous_action';\n  if (highRisk) return 'AUTONOMOUS_TASK_BLOCKED: high_risk_requires_non_autonomous_owner_flow';\n  return null;\n}\n\n"""
+            s=s.replace(anchor, governance+anchor, 1)
+
           targets=[
             "app.post('/api/ivx/agents/:agentId/pause', (c) => {",
             "app.post('/api/ivx/agents/:agentId/resume', (c) => {",
@@ -50,17 +56,25 @@ jobs:
             pos=s.find(t)
             if pos >= 0 and "const denied = requireOwner(c);" not in s[pos:pos+220]:
               s=s.replace(t, t+"\n    const denied = requireOwner(c);\n    if (denied) return denied;", 1)
+
           t="app.post('/api/ivx/agents/:agentId/run', async (c) => {"
           if t in s:
             old="""    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({}));\n    const taskType = body.taskType || 'audit';"""
             new="""    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));\n    const denied = requireOwner(c, body as Record<string, unknown>);\n    if (denied) return denied;\n    const taskType = (body as any).taskType || 'audit';"""
             s=s.replace(old,new)
             s=s.replace("    const payload = body.payload || {};\n    const ownerApprovalToken = body.ownerApprovalToken || null;", "    const payload = (body as any).payload || {};\n    const ownerApprovalToken = (body as any).ownerApprovalToken || null;",1)
+            route_guard="""    const autonomousBlocker = validateAutonomousRunPayload(payload as Record<string, unknown>);\n    if (autonomousBlocker) {\n      return c.json({ ok: false, marker: IVX_AGENT_API_MARKER, error: autonomousBlocker }, 403);\n    }\n"""
+            needle="    const ownerApprovalToken = (body as any).ownerApprovalToken || null;\n"
+            pos=s.find(needle, s.find(t))
+            if pos >= 0 and 'validateAutonomousRunPayload(payload' not in s[pos:pos+420]:
+              s=s[:pos+len(needle)] + route_guard + s[pos+len(needle):]
+
           t="app.post('/api/ivx/agents/:agentId/version', async (c) => {"
           if t in s:
             old="""    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({}));\n    const result = updateAgentContract(agentId, body.updates || {}, body.ownerApproval === true);"""
             new="""    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));\n    const denied = requireOwner(c, body as Record<string, unknown>);\n    if (denied) return denied;\n    const result = updateAgentContract(agentId, (body as any).updates || {}, (body as any).ownerApproval === true);"""
             s=s.replace(old,new)
+
           t="app.post('/api/ivx/agents/:agentId/rollback', async (c) => {"
           if t in s:
             old="""    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({}));\n    const targetVersion = body.targetVersion;"""
@@ -76,7 +90,11 @@ jobs:
           grep -q "return Boolean(envSecret) && provided === envSecret" backend/api/ivx-agent-api.ts
           ! grep -q "provided.startsWith('owner-')" backend/api/ivx-agent-api.ts
           test "$(grep -c "const denied = requireOwner" backend/api/ivx-agent-api.ts)" -ge 9
-          echo 'agent_api_owner_auth_source=PASS'
+          grep -q 'function validateAutonomousRunPayload' backend/api/ivx-agent-api.ts
+          grep -q 'financial_or_never_autonomous_action' backend/api/ivx-agent-api.ts
+          grep -q 'high_risk_requires_non_autonomous_owner_flow' backend/api/ivx-agent-api.ts
+          grep -q 'const autonomousBlocker = validateAutonomousRunPayload' backend/api/ivx-agent-api.ts
+          echo 'agent_api_owner_auth_and_governance_source=PASS'
 
       - name: Commit source hardening to current feature branch
         shell: bash
@@ -89,6 +107,6 @@ jobs:
             echo 'No source patch required.'
             exit 0
           fi
-          git commit -m 'security(agents): require owner secret on mutating endpoints [skip ci]'
+          git commit -m 'security(agents): enforce owner auth and autonomous governance [skip ci]'
           git pull --rebase origin "$GITHUB_REF_NAME"
           git push origin "HEAD:$GITHUB_REF_NAME"
