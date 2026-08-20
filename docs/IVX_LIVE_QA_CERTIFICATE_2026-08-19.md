@@ -143,12 +143,63 @@ That is why registration cannot complete and sign-in flaps 503/401/502. It canno
 be fixed from application code, and it will not be papered over with a retry loop
 that hides a broken dependency.
 
-### Owner password validity: UNDETERMINED
+### Owner password validity: STILL UNDETERMINED (re-run)
 
 The password is correctly stored and bound. Whether it is the *right* password for
-`iperez4242@gmail.com` could **not** be established — 3 attempts at a 90s timeout
-all returned `504 upstream request timeout`, so Supabase never rendered a verdict.
-This must be re-checked once auth is healthy. It is not claimed as passing here.
+`iperez4242@gmail.com` could **not** be established. Re-run with 60s timeouts:
+
+```
+A1 real-password  http=504 upstream request timeout
+A2 real-password  http=504 upstream request timeout
+A3 real-password  http=000 (no response)
+A4 real-password  http=504 upstream request timeout
+A5 real-password  http=504 upstream request timeout
+```
+
+Five attempts, zero verdicts. The paired control test (same email, deliberately
+wrong password) never got to run — it only fires once the real attempt returns a
+decisive code. Supabase never verified the password either way, so it is NOT
+claimed as passing.
+
+Through the app, production behaves correctly under the same conditions:
+
+```
+POST /api/members/login -> 503 16.7s "Sign-in is taking longer than usual."
+POST /api/members/login -> 503 20.2s "Login service temporarily unavailable."
+```
+
+No false "wrong password", no hang, no leaked internals — the honest retryable
+error the fixed code is supposed to produce.
+
+### The decisive measurement — same host, same second
+
+```
+rest/v1/  (database)   -> 401 in 0.056s / 0.081s   INSTANT
+auth/v1/health         -> 200 in 0.30s / 3.48s     variable
+auth/v1/token (login)  -> 504 / 000 / 30s timeout  FAILING
+```
+
+Same project, same domain, same TLS, same network path, seconds apart, issued by
+`curl` with no IVX code in the path at all. The database answers in 56
+milliseconds while the login endpoint 504s from Supabase's own edge. That isolates
+the remaining failure to Supabase auth, not to this application.
+
+### Honest split of responsibility
+
+This project had **two** distinct problems, and they are not the same thing:
+
+- **Application code (4 faults, all fixed):** a timeout mapped to HTTP 401,
+  registration with no deadline, a `sb_publishable_` anon key that cannot complete
+  a password grant, and a missing `IVX_OWNER_PASSWORD`. These were real defects.
+  Fault 1 in particular *lied to members* — correct password, "invalid password".
+- **Supabase infrastructure (1 fault, unfixed, not fixable from code):** the
+  password-grant endpoint 504s from Supabase's own edge.
+
+Supabase was the **trigger**; the code was the **amplifier**. A slow dependency
+should degrade into "please try again" — instead the code converted it into a
+false credential rejection and an infinite hang, which is why the app felt
+totally broken rather than merely slow. Fixing the code was necessary but not
+sufficient: with auth 504ing, nobody can log in regardless of code quality.
 
 ---
 
