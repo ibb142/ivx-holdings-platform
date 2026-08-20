@@ -32,6 +32,7 @@ export interface LoginTraceEvent {
   elapsedMs: number;
   success: boolean;
   stage?: 'auth' | 'authorization' | 'storage' | 'navigation';
+  path?: string;
   httpStatus?: number;
   errorCode?: string;
   errorMessage?: string;
@@ -59,6 +60,8 @@ export class LoginTrace {
     options: {
       success?: boolean;
       stage?: 'auth' | 'authorization' | 'storage' | 'navigation';
+      path?: string;
+      elapsedMs?: number;
       httpStatus?: number;
       errorCode?: string;
       errorMessage?: string;
