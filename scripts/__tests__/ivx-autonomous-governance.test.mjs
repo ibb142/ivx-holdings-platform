@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   AUTONOMOUS_RISK,
   classifyAutonomousRisk,
@@ -130,4 +131,34 @@ test('assertAutonomousTask throws fail-closed decision on blocked tasks', () => 
     () => assertAutonomousTask({ ...base, actions: ['debit_wallet'] }),
     (error) => error?.code === 'AUTONOMOUS_TASK_BLOCKED' && error?.decision?.ok === false,
   );
+});
+
+test('agent API source enforces owner authorization on mutations', () => {
+  const source = fs.readFileSync(new URL('../../backend/api/ivx-agent-api.ts', import.meta.url), 'utf8');
+  assert.match(source, /return Boolean\(envSecret\) && provided === envSecret/);
+  assert.doesNotMatch(source, /provided\.startsWith\(['"]owner-/);
+  const ownerGuards = source.match(/const denied = requireOwner/g) ?? [];
+  assert.ok(ownerGuards.length >= 9, `expected >=9 owner guards, found ${ownerGuards.length}`);
+});
+
+test('agent API source rejects autonomous financial and high-risk bypasses', () => {
+  const source = fs.readFileSync(new URL('../../backend/api/ivx-agent-api.ts', import.meta.url), 'utf8');
+  assert.match(source, /function validateAutonomousRunPayload/);
+  assert.match(source, /financial_or_never_autonomous_action/);
+  assert.match(source, /high_risk_requires_non_autonomous_owner_flow/);
+  assert.match(source, /sourceSha_invalid_or_missing/);
+  assert.match(source, /real_funds_forbidden/);
+  assert.match(source, /const autonomousBlocker = validateAutonomousRunPayload/);
+});
+
+test('autonomous workflow cannot deploy or write directly to main', () => {
+  const workflow = fs.readFileSync(new URL('../../.github/workflows/ivx-landing-10of10-autonomous-112.yml', import.meta.url), 'utf8');
+  assert.doesNotMatch(workflow, /contents:\s*write/);
+  assert.doesNotMatch(workflow, /actions:\s*write/);
+  assert.doesNotMatch(workflow, /api\.render\.com\/v1\/services\/.*\/deploys/);
+  assert.doesNotMatch(workflow, /render_trigger_deploy/);
+  assert.doesNotMatch(workflow, /git push origin HEAD:main/);
+  assert.match(workflow, /realFundsAllowed:false/);
+  assert.match(workflow, /simulatedSuccessAllowed:false/);
+  assert.match(workflow, /exactSourceShaRequired:true/);
 });
