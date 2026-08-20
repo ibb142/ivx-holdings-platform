@@ -2,9 +2,8 @@
  * IVX Wire Instructions — bank privacy contract.
  *
  * Full wire details are fetched only with the existing authenticated portal
- * session. Sensitive bank/account values are never written to localStorage.
- * When the session is absent, expired or rejected, the DOM is scrubbed and a
- * sign-in CTA is shown.
+ * session. Sensitive bank/account values are never persisted in browser storage.
+ * The portal JWT is tab-scoped in sessionStorage, never localStorage.
  */
 (function() {
   'use strict';
@@ -22,9 +21,8 @@
 
   function readPortalToken() {
     try {
-      var saved = JSON.parse(localStorage.getItem('ivx_portal_session') || 'null');
+      var saved = JSON.parse(sessionStorage.getItem('ivx_portal_session') || 'null');
       if (!saved || !saved.token || !saved.ts) return '';
-      // The portal session itself is one hour; fail closed slightly before expiry.
       if ((Date.now() - Number(saved.ts)) >= 55 * 60 * 1000) return '';
       return String(saved.token);
     } catch (e) {
