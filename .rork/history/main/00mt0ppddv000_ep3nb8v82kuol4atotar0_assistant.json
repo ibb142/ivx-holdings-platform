@@ -811,7 +811,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-member-database.ts\", \"offset\": 92, \"limit\": 140}",
       "createdAt": 1787179596377,
-      "completedAt": 1787179596423
+      "completedAt": 1787179596423,
+      "compactedAt": 1787193926512
     },
     {
       "type": "tool",
@@ -829,7 +830,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && echo \\\"=== ROUTES 5578-5606 ===\\\"; awk 'NR>=5578 && NR<=5606' backend/hono.ts; echo \\\"=== withTimeout def ===\\\"; rg -n \\\"function withTimeout|const withTimeout\\\" backend/hono.ts | head -3\"}",
       "createdAt": 1787179596420,
-      "completedAt": 1787179597384
+      "completedAt": 1787179597384,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -861,7 +863,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/hono.ts\", \"offset\": 1519, \"limit\": 30}",
       "createdAt": 1787179604378,
-      "completedAt": 1787179604383
+      "completedAt": 1787179604383,
+      "compactedAt": 1787193926512
     },
     {
       "type": "tool",
@@ -879,7 +882,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && rg -n \\\"LOGIN_HARD_TIMEOUT_MS|REGISTER_HARD\\\" backend/hono.ts | head -6; echo \\\"--- login handler -> status mapping ---\\\"; rg -n \\\"handleMemberLogin\\\" backend/api/ivx-members.ts | head -3; sed -n '460,478p' backend/api/ivx-members.ts\"}",
       "createdAt": 1787179604382,
-      "completedAt": 1787179605040
+      "completedAt": 1787179605040,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -910,7 +914,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && rg -n \\\"export interface MemberLoginResult\\\" -A 14 backend/services/ivx-member-database.ts | head -20; echo \\\"=== signInMember signature ===\\\"; rg -n \\\"export async function loginMember|export async function signInMember\\\" backend/services/ivx-member-database.ts\"}",
       "createdAt": 1787179619848,
-      "completedAt": 1787179619853
+      "completedAt": 1787179619853,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -961,7 +966,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/services/ivx-member-database.ts\", \"edits\": [{\"oldString\":\"export interface MemberLoginResult {\\n  success: boolean;\\n  message: string;\\n  userId?: string;\\n  email?: string;\\n  accessToken?: string;\\n  refreshToken?: string;\\n  expiresAt?: number;\\n  requiresVerification?: boolean;\\n  deploymentMarker: string;\\n}\",\"newString\":\"export interface MemberLoginResult {\\n  success: boolean;\\n  message: string;\\n  userId?: string;\\n  email?: string;\\n  accessToken?: string;\\n  refreshToken?: string;\\n  expiresAt?: number;\\n  requiresVerification?: boolean;\\n  /** Set when the failure is an INFRASTRUCTURE fault (upstream auth slow/unreachable),\\n   *  not a credential rejection. The route maps this to HTTP 503 so a member with a\\n   *  CORRECT password is never told \\\"invalid email or password\\\". */\\n  errorCode?: 'auth_upstream_timeout';\\n  /** True when the caller should simply retry — nothing is wrong with the credentials. */\\n  retryable?: boolean;\\n  deploymentMarker: string;\\n}\"},{\"oldString\":\"  // 2. Supabase Auth path — use the ANON key client so signInWithPassword returns a real session.\\n  //    Hard 10s timeout so a stalled Supabase connection never hangs the login endpoint.\\n  try {\\n    const anonClient = getSupabaseAnonClient();\\n    const signInPromise = anonClient.auth.signInWithPassword({\\n      email: normalizedEmail,\\n      password,\\n    });\\n    const timeoutPromise = new Promise<never>((_, reject) =>\\n      setTimeout(\\n        () => reject(new Error(`Supabase sign-in timed out after ${MEMBER_LOGIN_INNER_BUDGET_MS}ms`)),\\n        MEMBER_LOGIN_INNER_BUDGET_MS,\\n      ),\\n    );\\n    const { data, error } = await Promise.race([signInPromise, timeoutPromise]);\",\"newString\":\"  // 2. Supabase Auth path — use the ANON key client so signInWithPassword returns a real session.\\n  //    Bounded by MEMBER_LOGIN_INNER_BUDGET_MS so a stalled Supabase never hangs the endpoint.\\n  //\\n  //    A timeout here is an INFRASTRUCTURE fault, never a credential verdict. It used to\\n  //    reject into the outer catch, which returned success:false with the raw internal\\n  //    string \\\"Supabase sign-in timed out after 8000ms\\\" — and the route mapped every\\n  //    non-success to HTTP 401. Net effect: a member typing the CORRECT password was told\\n  //    their password was wrong whenever upstream auth was slow. That is the lockout bug.\\n  //\\n  //    Upstream cold starts are also transient, so one retry is attempted before giving up.\\n  try {\\n    const anonClient = getSupabaseAnonClient();\\n    const signInOnce = async (): Promise<Awaited<ReturnType<typeof anonClient.auth.signInWithPassword>>> => {\\n      let timer: ReturnType<typeof setTimeout> | undefined;\\n      const timeoutPromise = new Promise<never>((_, reject) => {\\n        timer = setTimeout(\\n          () => reject(new Error(SIGN_IN_TIMEOUT_SENTINEL)),\\n          MEMBER_LOGIN_INNER_BUDGET_MS,\\n        );\\n      });\\n      try {\\n        return await Promise.race([\\n          anonClient.auth.signInWithPassword({ email: normalizedEmail, password }),\\n          timeoutPromise,\\n        ]);\\n      } finally {\\n        if (timer) clearTimeout(timer);\\n      }\\n    };\\n\\n    let raced: Awaited<ReturnType<typeof anonClient.auth.signInWithPassword>>;\\n    try {\\n      raced = await signInOnce();\\n    } catch (firstErr) {\\n      const isTimeout = firstErr instanceof Error && firstErr.message === SIGN_IN_TIMEOUT_SENTINEL;\\n      if (!isTimeout) throw firstErr;\\n      console.warn('[MemberDB] Sign-in upstream timed out — retrying once');\\n      raced = await signInOnce();\\n    }\\n    const { data, error } = raced;\"},{\"oldString\":\"  } catch (err) {\\n    const message = err instanceof Error ? err.message : 'Login failed due to an internal error.';\\n    console.error('[MemberDB] Login exception:', message);\\n    return { success: false, message, deploymentMarker: DEPLOYMENT_MARKER };\\n  }\\n}\",\"newString\":\"  } catch (err) {\\n    const message = err instanceof Error ? err.message : 'Login failed due to an internal error.';\\n    if (message === SIGN_IN_TIMEOUT_SENTINEL) {\\n      // Infrastructure fault, NOT a bad password. Never surface this as 401, and never\\n      // leak the internal budget string to the member.\\n      console.error('[MemberDB] Sign-in upstream timed out after retry');\\n      return {\\n        success: false,\\n        message: 'Sign-in is taking longer than usual. Please try again in a moment.',\\n        errorCode: 'auth_upstream_timeout',\\n        retryable: true,\\n        deploymentMarker: DEPLOYMENT_MARKER,\\n      };\\n    }\\n    console.error('[MemberDB] Login exception:', message);\\n    return { success: false, message, deploymentMarker: DEPLOYMENT_MARKER };\\n  }\\n}\"},{\"oldString\":\"export const MEMBER_LOGIN_INNER_BUDGET_MS = 8_000;\",\"newString\":\"export const MEMBER_LOGIN_INNER_BUDGET_MS = 8_000;\\n/** Internal marker for \\\"upstream auth did not answer in time\\\". Must never reach the member. */\\nexport const SIGN_IN_TIMEOUT_SENTINEL = 'ivx:sign-in-upstream-timeout';\"}]}",
       "createdAt": 1787179625685,
-      "completedAt": 1787179643278
+      "completedAt": 1787179643278,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -997,7 +1003,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/ivx-members.ts\", \"edits\": [{\"oldString\": \"  const result = await loginMember(email, password);\\n  return jsonResponse(result, result.success ? 200 : (result.requiresVerification ? 403 : 401));\", \"newString\": \"  const result = await loginMember(email, password);\\n  if (result.success) return jsonResponse(result, 200);\\n  if (result.requiresVerification) return jsonResponse(result, 403);\\n  // An upstream auth timeout is an infrastructure fault, not a bad password.\\n  // Returning 401 here is what told members with CORRECT credentials that their\\n  // password was wrong (and latched the app's auth-error state). 503 = retry.\\n  if (result.errorCode === 'auth_upstream_timeout') return jsonResponse(result, 503);\\n  return jsonResponse(result, 401);\", \"replaceAll\": false}]}",
       "createdAt": 1787179649230,
-      "completedAt": 1787179651097
+      "completedAt": 1787179651097,
+      "compactedAt": 1787193926512
     },
     {
       "type": "tool",
@@ -1025,7 +1032,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/hono.ts\", \"edits\": [{\"oldString\": \"const LOGIN_HARD_TIMEOUT_MS = 20_000;\", \"newString\": \"const LOGIN_HARD_TIMEOUT_MS = 20_000;\\n// Registration had NO deadline at all: withRateLimit but no withTimeout, and every\\n// Supabase call inside registerMember was unbounded. When upstream auth was slow the\\n// request hung with no response (measured >180s live), so the sign-up form simply\\n// never came back. Registration writes several records, so it gets a longer budget\\n// than login \\u2014 but it must always answer.\\nconst REGISTER_HARD_TIMEOUT_MS = 30_000;\"}, {\"oldString\": \"app.post('/api/members/register', async (c) => withRateLimit(c.req.raw, 'member-register', 5, 0.3, () => handleMemberRegister(c.req.raw)) as Promise<Response>);\", \"newString\": \"app.post('/api/members/register', async (c) => withRateLimit(c.req.raw, 'member-register', 5, 0.3, () => withTimeout(\\n  () => handleMemberRegister(c.req.raw),\\n  () => Response.json({\\n    ok: false,\\n    code: 'REGISTRATION_TIMEOUT',\\n    message: 'Registration is taking longer than usual. Please try again in a moment.',\\n    stage: 'CREATING_ACCOUNT',\\n    retryable: true,\\n    deploymentMarker: DEPLOYMENT_MARKER,\\n  }, { status: 503 }),\\n  REGISTER_HARD_TIMEOUT_MS,\\n)) as Promise<Response>);\"}]}",
       "createdAt": 1787179651095,
-      "completedAt": 1787179656560
+      "completedAt": 1787179656560,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1052,7 +1060,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/ivx-members.ts\", \"offset\": 458, \"limit\": 16}",
       "createdAt": 1787179659902,
-      "completedAt": 1787179659905
+      "completedAt": 1787179659905,
+      "compactedAt": 1787193926512
     },
     {
       "type": "tool",
@@ -1075,7 +1084,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/api/ivx-members.ts\", \"edits\": [{\"oldString\": \"  const result = await loginMember(email, password);\\n  return jsonResponse(result, result.success ? 200 : (result.requiresVerification ? 403 : 401));\", \"newString\": \"  const result = await loginMember(email, password);\\n  if (result.success) return jsonResponse(result, 200);\\n  if (result.requiresVerification) return jsonResponse(result, 403);\\n  // An upstream auth timeout is an infrastructure fault, not a bad password.\\n  // Returning 401 here is what told members with CORRECT credentials that their\\n  // password was wrong (and latched the app's auth-error state). 503 = retry.\\n  if (result.errorCode === 'auth_upstream_timeout') return jsonResponse(result, 503);\\n  return jsonResponse(result, 401);\", \"replaceAll\": false}]}",
       "createdAt": 1787179661549,
-      "completedAt": 1787179664941
+      "completedAt": 1787179664941,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1105,7 +1115,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"scripts/ivx-live-qa.mjs\", \"content\": \"#!/usr/bin/env node\\n/**\\n * IVX LIVE PRODUCTION QA — run this yourself, trust the output, not anyone's word.\\n *\\n *   node scripts/ivx-live-qa.mjs\\n *   node scripts/ivx-live-qa.mjs --json          # machine-readable\\n *   node scripts/ivx-live-qa.mjs --base https://api.ivxholding.com\\n *\\n * It hits LIVE production over the public internet — the same endpoints a real\\n * member uses. It creates one throwaway QA account (email `qa.probe.<ts>@ivx-qa.test`)\\n * to prove registration and sign-in actually work end to end.\\n *\\n * Exit code 0 = every gate passed. Non-zero = something is broken, and the line\\n * that failed tells you exactly what. No result is ever hard-coded: every PASS\\n * below is computed from a live HTTP response in this run.\\n *\\n * The four areas audited, in the order a real member experiences them:\\n *   1. LANDING     the public site loads and is well-formed\\n *   2. REGISTER    a brand-new member can create an account\\n *   3. SIGN IN     that member can sign in with the password they just set\\n *   4. WIRE        bank/wire instructions are gated and never leak account numbers\\n */\\n\\nconst args = process.argv.slice(2);\\nconst JSON_OUT = args.includes('--json');\\nconst baseIdx = args.indexOf('--base');\\nconst BASE = baseIdx >= 0 ? args[baseIdx + 1] : 'https://api.ivxholding.com';\\nconst SITE = 'https://ivxholding.com';\\n\\nconst results = [];\\nlet failed = 0;\\n\\nfunction record(area, name, ok, detail) {\\n  results.push({ area, name, ok, detail });\\n  if (!ok) failed++;\\n  if (!JSON_OUT) {\\n    const tag = ok ? '\\\\x1b[32mPASS\\\\x1b[0m' : '\\\\x1b[31mFAIL\\\\x1b[0m';\\n    console.log(`  ${tag}  ${name}`);\\n    if (detail) console.log(`        ${detail}`);\\n  }\\n}\\n\\nfunction section(title) {\\n  if (!JSON_OUT) console.log(`\\\\n\\\\x1b[1m${title}\\\\x1b[0m`);\\n}\\n\\n/** Timed fetch that never throws — network faults become a measurable result. */\\nasync function probe(url, options = {}, timeoutMs = 45_000) {\\n  const started = Date.now();\\n  const controller = new AbortController();\\n  const timer = setTimeout(() => controller.abort(), timeoutMs);\\n  try {\\n    const res = await fetch(url, { ...options, signal: controller.signal });\\n    const text = await res.text();\\n    let json = null;\\n    try { json = JSON.parse(text); } catch { /* not json */ }\\n    return { ok: true, status: res.status, ms: Date.now() - started, text, json };\\n  } catch (err) {\\n    return {\\n      ok: false,\\n      status: 0,\\n      ms: Date.now() - started,\\n      text: '',\\n      json: null,\\n      error: err?.name === 'AbortError' ? `no response within ${timeoutMs}ms` : String(err?.message ?? err),\\n    };\\n  } finally {\\n    clearTimeout(timer);\\n  }\\n}\\n\\nconst ts = Date.now();\\nconst QA_EMAIL = `qa.probe.${ts}@ivx-qa.test`;\\nconst QA_PASSWORD = `QaProbe!${ts}aB`;\\n\\n// ---------------------------------------------------------------- 1. LANDING\\nsection('1. LANDING PAGE');\\n{\\n  const r = await probe(SITE, {}, 25_000);\\n  record('landing', 'site responds 200', r.status === 200, `http=${r.status} ${r.ms}ms ${r.error ?? ''}`);\\n  const html = r.text ?? '';\\n  record('landing', 'has a page title', /<title[^>]*>[^<]{3,}<\\\\/title>/i.test(html));\\n  record('landing', 'has an <h1> heading', /<h1[\\\\s>]/i.test(html));\\n  record('landing', 'mobile viewport meta present', /name=[\\\"']viewport/i.test(html));\\n  record('landing', 'meta description present (SEO)', /name=[\\\"']description/i.test(html));\\n  const insecure = (html.match(/(?:src|href)=[\\\"']http:\\\\/\\\\//g) ?? []).length;\\n  record('landing', 'no insecure http:// assets', insecure === 0, `found ${insecure}`);\\n  record('landing', 'offers a way to sign in', /sign.?in|log.?in/i.test(html));\\n  record('landing', 'offers a way to register', /register|sign.?up/i.test(html));\\n}\\n\\n// --------------------------------------------------------------- 2. REGISTER\\nsection('2. MEMBER REGISTRATION');\\n{\\n  // Validation must reject junk BEFORE any account is created.\\n  const bad = await probe(`${BASE}/api/members/register`, {\\n    method: 'POST',\\n    headers: { 'Content-Type': 'application/json' },\\n    body: JSON.stringify({ email: 'not-an-email', password: 'x' }),\\n  }, 40_000);\\n  record('register', 'rejects invalid input with 4xx', bad.status >= 400 && bad.status < 500,\\n    `http=${bad.status} ${bad.ms}ms`);\\n\\n  // The real thing: a brand-new member signs up.\\n  const payload = {\\n    email: QA_EMAIL,\\n    password: QA_PASSWORD,\\n    confirmPassword: QA_PASSWORD,\\n    firstName: 'QA',\\n    lastName: 'Probe',\\n    phone: '+13055551234',\\n    country: 'United States',\\n    zipCode: '33131',\\n    roles: ['investor'],\\n    acceptTerms: true,\\n    dateOfBirth: '1990-01-15',\\n    gender: 'male',\\n  };\\n  const reg = await probe(`${BASE}/api/members/register`, {\\n    method: 'POST',\\n    headers: { 'Content-Type': 'application/json' },\\n    body: JSON.stringify(payload),\\n  }, 60_000);\\n\\n  // THE regression gate: registration used to hang forever with no response.\\n  record('register', 'always answers (never hangs)', reg.ok,\\n    reg.ok ? `http=${reg.status} ${reg.ms}ms` : `NO RESPONSE — ${reg.error}`);\\n  record('register', 'answers within 35s', reg.ok && reg.ms < 35_000, `${reg.ms}ms`);\\n  const created = reg.status === 200 || reg.status === 201;\\n  record('register', 'creates the account (2xx)', created,\\n    `http=${reg.status} ${(reg.json?.message ?? reg.text ?? '').slice(0, 120)}`);\\n  if (reg.status === 503) {\\n    record('register', 'timeout is retryable, not a hard error', reg.json?.retryable === true,\\n      'server correctly reported a retryable timeout instead of hanging');\\n  }\\n}\\n\\n// ---------------------------------------------------------------- 3. SIGN IN\\nsection('3. MEMBER SIGN IN');\\n{\\n  // A wrong password must be a clean, fast 401 — and must NOT be an infra timeout.\\n  const bad = await probe(`${BASE}/api/members/login`, {\\n    method: 'POST',\\n    headers: { 'Content-Type': 'application/json' },\\n    body: JSON.stringify({ email: `nobody.${ts}@ivx-qa.test`, password: 'definitely-wrong' }),\\n  }, 45_000);\\n  record('signin', 'wrong password answers', bad.ok, bad.ok ? `http=${bad.status} ${bad.ms}ms` : bad.error);\\n  record('signin', 'wrong password is 401 (not 5xx)', bad.status === 401, `http=${bad.status}`);\\n\\n  // THE regression gate. An upstream timeout must never be dressed up as a\\n  // credential rejection, and the internal budget string must never leak.\\n  const msg = String(bad.json?.message ?? '');\\n  record('signin', 'no internal timeout string leaked to the member',\\n    !/timed out after \\\\d+ms/i.test(msg), `message=\\\"${msg.slice(0, 90)}\\\"`);\\n  record('signin', '401 is a real credential verdict, not a disguised timeout',\\n    !(bad.status === 401 && /tim(e|ed) out/i.test(msg)), `http=${bad.status} message=\\\"${msg.slice(0, 90)}\\\"`);\\n\\n  // The member registered above must be able to sign in with that password.\\n  const good = await probe(`${BASE}/api/members/login`, {\\n    method: 'POST',\\n    headers: { 'Content-Type': 'application/json' },\\n    body: JSON.stringify({ email: QA_EMAIL, password: QA_PASSWORD }),\\n  }, 45_000);\\n  record('signin', 'newly registered member can sign in', good.status === 200,\\n    `http=${good.status} ${good.ms}ms ${(good.json?.message ?? '').slice(0, 90)}`);\\n  record('signin', 'sign-in returns a session token', Boolean(good.json?.accessToken),\\n    good.json?.accessToken ? 'accessToken present' : 'no accessToken returned');\\n\\n  // Stability: auth must be consistent, not a coin flip. Flapping between 401\\n  // and 503 across identical calls is what locked people out.\\n  const codes = [];\\n  for (let i = 0; i < 3; i++) {\\n    const r = await probe(`${BASE}/api/members/login`, {\\n      method: 'POST',\\n      headers: { 'Content-Type': 'application/json' },\\n      body: JSON.stringify({ email: `stability.${ts}.${i}@ivx-qa.test`, password: 'wrong-pw' }),\\n    }, 45_000);\\n    codes.push(r.status);\\n  }\\n  record('signin', 'auth is stable across repeats (no flapping)',\\n    new Set(codes).size === 1, `status codes: ${codes.join(', ')}`);\\n  record('signin', 'never returns 503 under normal load',\\n    !codes.includes(503), `status codes: ${codes.join(', ')}`);\\n}\\n\\n// ------------------------------------------------------------------- 4. WIRE\\nsection('4. BANK / WIRE PAYMENTS');\\n{\\n  const anon = await probe(`${BASE}/api/ivx/wire-instructions`, {}, 30_000);\\n  record('wire', 'endpoint responds', anon.status === 200, `http=${anon.status} ${anon.ms}ms`);\\n  record('wire', 'anonymous caller is NOT authenticated', anon.json?.authenticated === false,\\n    `authenticated=${anon.json?.authenticated}`);\\n\\n  // The one that actually matters: no banking secrets to an anonymous caller.\\n  const body = anon.text ?? '';\\n  const accountish = body.match(/\\\\b\\\\d{7,17}\\\\b/g) ?? [];\\n  record('wire', 'no account number exposed to anonymous', accountish.length === 0,\\n    accountish.length ? `exposed digit runs: ${accountish.join(', ')}` : 'none');\\n  const routing = body.match(/\\\\b\\\\d{9}\\\\b/g) ?? [];\\n  record('wire', 'no routing number exposed to anonymous', routing.length === 0,\\n    routing.length ? `exposed: ${routing.join(', ')}` : 'none');\\n  record('wire', 'prompts the member to sign in', /sign in/i.test(body));\\n\\n  const forged = await probe(`${BASE}/api/ivx/wire-instructions`, {\\n    headers: { Authorization: 'Bearer forged-token-not-valid' },\\n  }, 30_000);\\n  const forgedDigits = (forged.text ?? '').match(/\\\\b\\\\d{7,17}\\\\b/g) ?? [];\\n  record('wire', 'forged token cannot unlock instructions', forgedDigits.length === 0,\\n    forgedDigits.length ? `LEAKED: ${forgedDigits.join(', ')}` : 'no banking digits returned');\\n}\\n\\n// ----------------------------------------------------------------- SUMMARY\\nconst summary = {\\n  base: BASE,\\n  site: SITE,\\n  ranAt: new Date().toISOString(),\\n  qaEmail: QA_EMAIL,\\n  total: results.length,\\n  passed: results.length - failed,\\n  failed,\\n  certified: failed === 0,\\n  results,\\n};\\n\\nif (JSON_OUT) {\\n  console.log(JSON.stringify(summary, null, 2));\\n} else {\\n  console.log(`\\\\n${'='.repeat(58)}`);\\n  console.log(`  ${summary.passed}/${summary.total} passed` + (failed ? `  \\\\x1b[31m${failed} FAILED\\\\x1b[0m` : '  \\\\x1b[32mALL PASS\\\\x1b[0m'));\\n  console.log(`  certified: ${summary.certified ? '\\\\x1b[32mYES\\\\x1b[0m' : '\\\\x1b[31mNO\\\\x1b[0m'}`);\\n  console.log(`  ran at ${summary.ranAt} against ${BASE}`);\\n  console.log('='.repeat(58));\\n  if (failed) {\\n    console.log('\\\\nFailed gates:');\\n    for (const r of results.filter((x) => !x.ok)) {\\n      console.log(`  - [${r.area}] ${r.name}${r.detail ? ` — ${r.detail}` : ''}`);\\n    }\\n  }\\n}\\n\\nprocess.exit(failed === 0 ? 0 : 1);\\n\"}",
       "createdAt": 1787179671037,
-      "completedAt": 1787179715617
+      "completedAt": 1787179715617,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1135,7 +1146,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"backend/ivx-member-auth-failure-mapping.test.ts\", \"content\": \"/**\\n * Regression lock for the two P0 faults found by live production QA on 2026-08-19.\\n *\\n * FAULT 1 — a member with the CORRECT password was told it was wrong.\\n *   `loginMember` bounded the Supabase call with an inner timeout that REJECTED.\\n *   The rejection fell through to the function's outer catch, which returned\\n *   `{ success: false, message: 'Supabase sign-in timed out after 8000ms' }`, and\\n *   `handleMemberLogin` mapped every non-success result to HTTP 401. So whenever\\n *   upstream auth was slow, a valid member received \\\"invalid credentials\\\" — and the\\n *   app latched that into an auth-error state. Measured live:\\n *     http=401 t=14.2s message=\\\"Supabase sign-in timed out after 8000ms\\\"\\n *\\n * FAULT 2 — registration hung forever.\\n *   `/api/members/register` had rate limiting but NO deadline, and every Supabase\\n *   call inside `registerMember` was unbounded. Measured live: no response after\\n *   180s. The sign-up form simply never came back.\\n *\\n * These tests assert the CONTRACT that fixes both: an infrastructure timeout is a\\n * retryable 503 that never impersonates a credential verdict, and every internal\\n * budget string stays internal.\\n */\\nimport { describe, expect, it } from 'bun:test';\\nimport { readFileSync } from 'fs';\\nimport { join } from 'path';\\n\\nconst ROOT = join(import.meta.dir, '..');\\nconst memberDb = readFileSync(join(ROOT, 'backend/services/ivx-member-database.ts'), 'utf8');\\nconst membersApi = readFileSync(join(ROOT, 'backend/api/ivx-members.ts'), 'utf8');\\nconst hono = readFileSync(join(ROOT, 'backend/hono.ts'), 'utf8');\\n\\ndescribe('FAULT 1 — an upstream timeout must never read as a bad password', () => {\\n  it('the login result type can express an infrastructure fault', () => {\\n    expect(memberDb).toContain(\\\"errorCode?: 'auth_upstream_timeout'\\\");\\n    expect(memberDb).toContain('retryable?: boolean');\\n  });\\n\\n  it('the timeout is raised as an internal sentinel, not a user-facing string', () => {\\n    expect(memberDb).toContain('SIGN_IN_TIMEOUT_SENTINEL');\\n    // The old code built the member-visible message out of the budget constant.\\n    expect(memberDb).not.toContain('`Supabase sign-in timed out after ${MEMBER_LOGIN_INNER_BUDGET_MS}ms`');\\n  });\\n\\n  it('the timeout branch returns a retryable code and a human message', () => {\\n    const branch = memberDb.slice(memberDb.indexOf('if (message === SIGN_IN_TIMEOUT_SENTINEL)'));\\n    expect(branch).toContain(\\\"errorCode: 'auth_upstream_timeout'\\\");\\n    expect(branch).toContain('retryable: true');\\n    expect(branch).toContain('Please try again in a moment.');\\n  });\\n\\n  it('a transient upstream stall is retried once before giving up', () => {\\n    expect(memberDb).toContain('retrying once');\\n  });\\n\\n  it('the route maps the infrastructure fault to 503, not 401', () => {\\n    expect(membersApi).toContain(\\\"result.errorCode === 'auth_upstream_timeout'\\\");\\n    expect(membersApi).toContain('503');\\n    // The old one-liner collapsed every failure into 401.\\n    expect(membersApi).not.toContain('result.success ? 200 : (result.requiresVerification ? 403 : 401)');\\n  });\\n\\n  it('a genuine bad password is still a 401', () => {\\n    expect(membersApi).toContain('return jsonResponse(result, 401);');\\n    expect(memberDb).toContain(\\\"message: 'Invalid email or password.'\\\");\\n  });\\n});\\n\\ndescribe('FAULT 2 — registration must always answer', () => {\\n  it('registration has a hard deadline constant', () => {\\n    expect(hono).toContain('REGISTER_HARD_TIMEOUT_MS');\\n  });\\n\\n  it('the deadline is actually applied to the register route', () => {\\n    const route = hono.slice(\\n      hono.indexOf(\\\"app.post('/api/members/register'\\\"),\\n      hono.indexOf(\\\"app.post('/api/members/send-email-code'\\\"),\\n    );\\n    expect(route).toContain('withTimeout');\\n    expect(route).toContain('REGISTER_HARD_TIMEOUT_MS');\\n  });\\n\\n  it('the deadline responds 503 retryable rather than hanging', () => {\\n    const route = hono.slice(\\n      hono.indexOf(\\\"app.post('/api/members/register'\\\"),\\n      hono.indexOf(\\\"app.post('/api/members/send-email-code'\\\"),\\n    );\\n    expect(route).toContain('REGISTRATION_TIMEOUT');\\n    expect(route).toContain('retryable: true');\\n    expect(route).toContain('status: 503');\\n  });\\n\\n  it('registration is given more budget than login (it writes several records)', () => {\\n    const reg = /REGISTER_HARD_TIMEOUT_MS = (\\\\d+)_000/.exec(hono);\\n    const login = /LOGIN_HARD_TIMEOUT_MS = (\\\\d+)_000/.exec(hono);\\n    expect(reg).not.toBeNull();\\n    expect(login).not.toBeNull();\\n    expect(Number(reg?.[1])).toBeGreaterThan(Number(login?.[1]));\\n  });\\n});\\n\\ndescribe('Live QA harness must stay runnable by the owner', () => {\\n  const qa = readFileSync(join(ROOT, 'scripts/ivx-live-qa.mjs'), 'utf8');\\n\\n  it('covers all four audited areas', () => {\\n    for (const area of ['landing', 'register', 'signin', 'wire']) {\\n      expect(qa).toContain(`'${area}'`);\\n    }\\n  });\\n\\n  it('guards the exact regressions above', () => {\\n    expect(qa).toContain('always answers (never hangs)');\\n    expect(qa).toContain('401 is a real credential verdict, not a disguised timeout');\\n    expect(qa).toContain('no internal timeout string leaked to the member');\\n  });\\n\\n  it('checks that wire details never leak to an anonymous caller', () => {\\n    expect(qa).toContain('no account number exposed to anonymous');\\n    expect(qa).toContain('no routing number exposed to anonymous');\\n    expect(qa).toContain('forged token cannot unlock instructions');\\n  });\\n\\n  it('exits non-zero when any gate fails, so CI can depend on it', () => {\\n    expect(qa).toContain('process.exit(failed === 0 ? 0 : 1)');\\n  });\\n});\\n\"}",
       "createdAt": 1787179723394,
-      "completedAt": 1787179744116
+      "completedAt": 1787179744116,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1166,7 +1178,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && bun test backend/ivx-member-auth-failure-mapping.test.ts 2>&1 | tail -25\"}",
       "createdAt": 1787179747988,
-      "completedAt": 1787179747993
+      "completedAt": 1787179747993,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1201,7 +1214,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"appPath\": \"expo\"}",
       "createdAt": 1787179754153,
-      "completedAt": 1787179774120
+      "completedAt": 1787179774120,
+      "compactedAt": 1787193926512
     },
     {
       "type": "tool",
@@ -1219,7 +1233,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && bunx tsc --noEmit -p tsconfig.json 2>&1 | rg -i \\\"ivx-member-database|ivx-members|hono\\\\.ts\\\" | head -10; echo \\\"backend_tsc_exit_filtered=done\\\"; bun test backend/ivx-member-auth-failure-mapping.test.ts backend/ivx-supabase-env-guard.test.ts 2>&1 | rg \\\"^ *[0-9]+ (pass|fail)\\\"\"}",
       "createdAt": 1787179754157,
-      "completedAt": 1787179774683
+      "completedAt": 1787179774683,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1250,7 +1265,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 - <<'PY'\\nimport json,subprocess,base64\\nREPO=\\\"ibb142/ivx-holdings-platform\\\"; TOK=open('/tmp/gh_tok').read().strip()\\nAPI=f\\\"https://api.github.com/repos/{REPO}/contents/\\\"\\ndef gh(m,u,p=None):\\n    c=[\\\"curl\\\",\\\"-s\\\",\\\"-X\\\",m,\\\"-H\\\",f\\\"Authorization: Bearer {TOK}\\\",\\\"-H\\\",\\\"Accept: application/vnd.github+json\\\",u]\\n    if p is not None:\\n        f=\\\"/tmp/_pp.json\\\"; json.dump(p,open(f,\\\"w\\\")); c+=[\\\"-d\\\",\\\"@\\\"+f]\\n    o=subprocess.run(c,capture_output=True,text=True).stdout\\n    return json.loads(o) if o.strip() else {}\\nfiles=[\\n (\\\"backend/services/ivx-member-database.ts\\\",\\\"fix(auth): upstream sign-in timeout must not masquerade as a bad password\\\\n\\\\nLive QA measured http=401 t=14.2s message=\\\\\\\"Supabase sign-in timed out after\\\\n8000ms\\\\\\\". The inner timeout rejected into the outer catch, which returned\\\\nsuccess:false, and the route mapped every non-success to 401. A member typing\\\\nthe CORRECT password was told it was wrong. Now: internal sentinel, one retry\\\\nfor transient stalls, and a retryable auth_upstream_timeout code.\\\"),\\n (\\\"backend/api/ivx-members.ts\\\",\\\"fix(auth): map upstream auth timeout to 503, keep 401 for real bad credentials\\\"),\\n (\\\"backend/hono.ts\\\",\\\"fix(register): give registration a hard deadline so it can never hang\\\\n\\\\nLive QA measured NO response after 180s. The route had rate limiting but no\\\\ntimeout, and every Supabase call inside registerMember was unbounded, so the\\\\nsign-up form never came back. Now 30s -> 503 retryable.\\\"),\\n (\\\"scripts/ivx-live-qa.mjs\\\",\\\"test(qa): owner-runnable live production QA for landing, registration, sign-in, wire\\\"),\\n (\\\"backend/ivx-member-auth-failure-mapping.test.ts\\\",\\\"test(auth): lock both P0 regressions found by live production QA\\\"),\\n]\\nfor path,msg in files:\\n    cur=gh(\\\"GET\\\",API+path+\\\"?ref=main\\\")\\n    pl={\\\"message\\\":msg,\\\"content\\\":base64.b64encode(open(path,'rb').read()).decode(),\\\"branch\\\":\\\"main\\\"}\\n    if isinstance(cur,dict) and cur.get(\\\"sha\\\"): pl[\\\"sha\\\"]=cur[\\\"sha\\\"]\\n    r=gh(\\\"PUT\\\",API+path,pl)\\n    sha=(r.get(\\\"commit\\\") or {}).get(\\\"sha\\\")\\n    print(f\\\"{'OK ' if sha else 'ERR'} {path} -> {sha or r.get('message')}\\\")\\nPY\"}",
       "createdAt": 1787179779747,
-      "completedAt": 1787179793590
+      "completedAt": 1787179793590,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1281,7 +1297,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"sleep 55; B=https://api.ivxholding.com; for i in 1 2 3 4 5 6; do C=$(curl -s --max-time 20 \\\"$B/health/live\\\" | python3 -c \\\"import sys,json;d=json.load(sys.stdin);print(d.get('commit','?')[:8])\\\" 2>/dev/null || echo \\\"?\\\"); echo \\\"poll$i live_commit=$C (want f6ee27eb or later)\\\"; [ \\\"$C\\\" = \\\"f6ee27eb\\\" ] && break; sleep 40; done\"}",
       "createdAt": 1787179798555,
-      "completedAt": 1787179859375
+      "completedAt": 1787179859375,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1307,7 +1324,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"B=https://api.ivxholding.com; curl -s --max-time 15 \\\"$B/health/live\\\" -o /tmp/hl.json -w \\\"http=%{http_code} t=%{time_total}s\\\\n\\\"; head -c 400 /tmp/hl.json\"}",
       "createdAt": 1787179864380,
-      "completedAt": 1787179864382
+      "completedAt": 1787179864382,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1338,7 +1356,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"K=rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs; S=srv-d7t9ivreo5us73ftose0; curl -s --max-time 25 -H \\\"Authorization: Bearer $K\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/$S/deploys?limit=3\\\" -o /tmp/dep.json -w \\\"http=%{http_code}\\\\n\\\"; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/dep.json'))\\nfor it in d:\\n    x=it.get('deploy',it)\\n    c=(x.get('commit') or {})\\n    print(x.get('status'),'|',(c.get('id') or '')[:8],'|',x.get('createdAt','')[:19],'|',(c.get('message') or '').split(chr(10))[0][:58])\\n\\\"\"}",
       "createdAt": 1787179871841,
-      "completedAt": 1787179874642
+      "completedAt": 1787179874642,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1369,7 +1388,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"K=rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs; S=srv-d7t9ivreo5us73ftose0; for i in 1 2 3; do sleep 15; curl -s --max-time 15 -H \\\"Authorization: Bearer $K\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/$S/deploys?limit=2\\\" -o /tmp/d2.json; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/d2.json'))\\nx=d[0].get('deploy',d[0]);c=(x.get('commit') or {})\\nprint('poll$i',x.get('status'),(c.get('id') or '')[:8])\\n\\\"; done\"}",
       "createdAt": 1787179878908,
-      "completedAt": 1787179926824
+      "completedAt": 1787179926824,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1400,7 +1420,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"K=rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs; S=srv-d7t9ivreo5us73ftose0; for i in 1 2 3; do sleep 16; curl -s --max-time 12 -H \\\"Authorization: Bearer $K\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/$S/deploys?limit=1\\\" -o /tmp/d3.json; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/d3.json'));x=d[0].get('deploy',d[0]);c=(x.get('commit') or {})\\nprint('poll',x.get('status'),(c.get('id') or '')[:8])\\n\\\"; done\"}",
       "createdAt": 1787179930731,
-      "completedAt": 1787179982238
+      "completedAt": 1787179982238,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1426,7 +1447,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"K=rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs; S=srv-d7t9ivreo5us73ftose0; for i in 1 2 3; do sleep 17; curl -s --max-time 12 -H \\\"Authorization: Bearer $K\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/$S/deploys?limit=1\\\" -o /tmp/d4.json; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/d4.json'));x=d[0].get('deploy',d[0]);c=(x.get('commit') or {})\\nprint('poll',x.get('status'),(c.get('id') or '')[:8])\\n\\\"; done\"}",
       "createdAt": 1787179987206,
-      "completedAt": 1787180040705
+      "completedAt": 1787180040705,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1452,7 +1474,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"K=rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs; S=srv-d7t9ivreo5us73ftose0; for i in 1 2 3; do sleep 17; curl -s --max-time 12 -H \\\"Authorization: Bearer $K\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/$S/deploys?limit=1\\\" -o /tmp/d5.json; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/d5.json'));x=d[0].get('deploy',d[0]);c=(x.get('commit') or {})\\nprint('poll',x.get('status'),(c.get('id') or '')[:8])\\n\\\"; done\"}",
       "createdAt": 1787180044446,
-      "completedAt": 1787180098674
+      "completedAt": 1787180098674,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1478,7 +1501,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"K=rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs; S=srv-d7t9ivreo5us73ftose0; for i in 1 2 3; do sleep 17; curl -s --max-time 12 -H \\\"Authorization: Bearer $K\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/$S/deploys?limit=1\\\" -o /tmp/d6.json; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/d6.json'));x=d[0].get('deploy',d[0]);c=(x.get('commit') or {})\\nprint('poll',x.get('status'),(c.get('id') or '')[:8])\\n\\\"; done\"}",
       "createdAt": 1787180104311,
-      "completedAt": 1787180157931
+      "completedAt": 1787180157931,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1504,7 +1528,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"K=rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs; S=srv-d7t9ivreo5us73ftose0; for i in 1 2 3; do sleep 17; curl -s --max-time 12 -H \\\"Authorization: Bearer $K\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/$S/deploys?limit=1\\\" -o /tmp/d7.json; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/d7.json'));x=d[0].get('deploy',d[0]);c=(x.get('commit') or {})\\nprint('poll',x.get('status'),(c.get('id') or '')[:8])\\n\\\"; done\"}",
       "createdAt": 1787180162764,
-      "completedAt": 1787180216728
+      "completedAt": 1787180216728,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1530,7 +1555,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"K=rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs; S=srv-d7t9ivreo5us73ftose0; for i in 1 2 3; do sleep 17; curl -s --max-time 12 -H \\\"Authorization: Bearer $K\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/$S/deploys?limit=1\\\" -o /tmp/d8.json; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/d8.json'));x=d[0].get('deploy',d[0]);c=(x.get('commit') or {})\\nprint('poll',x.get('status'),(c.get('id') or '')[:8])\\n\\\"; done\"}",
       "createdAt": 1787180221701,
-      "completedAt": 1787180275657
+      "completedAt": 1787180275657,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1561,7 +1587,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"B=https://api.ivxholding.com; TS=$(date +%s); echo \\\"=== LOGIN x3 (post-fix probe) ===\\\"; for i in 1 2 3; do curl -s -X POST \\\"$B/api/members/login\\\" -H 'Content-Type: application/json' -d \\\"{\\\\\\\"email\\\\\\\":\\\\\\\"probe.$TS.$i@ivx-qa.test\\\\\\\",\\\\\\\"password\\\\\\\":\\\\\\\"wrong-pw\\\\\\\"}\\\" -o /tmp/p$i.json -w \\\"try$i http=%{http_code} t=%{time_total}s \\\" --max-time 40; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/p$i.json'));print('msg=',(d.get('message') or '')[:58],'| code=',d.get('errorCode','-'))\\n\\\" 2>/dev/null || echo \\\"(unparsed)\\\"; done\"}",
       "createdAt": 1787180280643,
-      "completedAt": 1787180339055
+      "completedAt": 1787180339055,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1592,7 +1619,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"K=rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs; S=srv-d7t9ivreo5us73ftose0; curl -s --max-time 25 -H \\\"Authorization: Bearer $K\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/$S/env-vars?limit=100\\\" -o /tmp/env.json -w \\\"http=%{http_code}\\\\n\\\"; python3 -c \\\"\\nimport json,re\\nd=json.load(open('/tmp/env.json'))\\nwant=('SUPABASE_URL','SUPABASE_ANON','SUPABASE_SERVICE','IVX_SUPABASE_URL','EXPO_PUBLIC_SUPABASE_URL','IVX_OWNER_PASSWORD','IVX_OWNER_EMAIL')\\nfor it in d:\\n    e=it.get('envVar',it); k=e.get('key',''); v=e.get('value','') or ''\\n    if any(w in k for w in want):\\n        ref=re.search(r'https://([a-z0-9]+)\\\\.supabase\\\\.co',v)\\n        if ref: print(f'{k:34} -> project_ref={ref.group(1)}')\\n        elif 'PASSWORD' in k: print(f'{k:34} -> SET len={len(v)}')\\n        elif len(v)>60:\\n            import base64\\n            try:\\n                p=json.loads(base64.urlsafe_b64decode(v.split('.')[1]+'==').decode())\\n                print(f'{k:34} -> key_ref={p.get(\\\\\\\"ref\\\\\\\")} role={p.get(\\\\\\\"role\\\\\\\")}')\\n            except Exception: print(f'{k:34} -> len={len(v)}')\\n        else: print(f'{k:34} -> {v[:40]}')\\n\\\"\"}",
       "createdAt": 1787180360111,
-      "completedAt": 1787180366550
+      "completedAt": 1787180366550,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1623,7 +1651,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"python3 -c \\\"\\nimport json\\nd=json.load(open('/tmp/env.json'))\\nfor it in d:\\n    e=it.get('envVar',it)\\n    if e.get('key')=='SUPABASE_ANON_KEY': open('/tmp/anon.txt','w').write(e.get('value',''))\\nprint('anon key len:',len(open('/tmp/anon.txt').read()))\\nprint('is JWT (3 dot-parts)?', len(open('/tmp/anon.txt').read().split('.'))==3)\\nprint('prefix:', open('/tmp/anon.txt').read()[:16])\\n\\\"; echo; echo \\\"=== DECISIVE: Supabase auth latency direct from internet ===\\\"; AK=$(cat /tmp/anon.txt); for i in 1 2 3; do curl -s -o /tmp/sb$i.json -w \\\"try$i http=%{http_code} t=%{time_total}s\\\\n\\\" --max-time 30 -X POST \\\"https://kvclcdjmjghndxsngfzb.supabase.co/auth/v1/token?grant_type=password\\\" -H \\\"apikey: $AK\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"probe@ivx-qa.test\\\",\\\"password\\\":\\\"wrong-pw\\\"}'; done; head -c 200 /tmp/sb1.json\"}",
       "createdAt": 1787180380620,
-      "completedAt": 1787180441635
+      "completedAt": 1787180441635,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1654,7 +1683,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"H=https://kvclcdjmjghndxsngfzb.supabase.co; AK=$(cat /tmp/anon.txt); echo \\\"=== baseline: host reachable? ===\\\"; curl -s -o /dev/null -w \\\"auth/v1/health http=%{http_code} t=%{time_total}s\\\\n\\\" --max-time 12 \\\"$H/auth/v1/health\\\"; echo \\\"=== token endpoint w/ sb_publishable_ key ===\\\"; curl -s -o /tmp/t1.json -w \\\"token http=%{http_code} t=%{time_total}s\\\\n\\\" --max-time 22 -X POST \\\"$H/auth/v1/token?grant_type=password\\\" -H \\\"apikey: $AK\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"probe@ivx-qa.test\\\",\\\"password\\\":\\\"wrong-pw\\\"}'; echo \\\"body:\\\"; head -c 250 /tmp/t1.json\"}",
       "createdAt": 1787180450328,
-      "completedAt": 1787180475352
+      "completedAt": 1787180475352,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1685,7 +1715,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"H=https://kvclcdjmjghndxsngfzb.supabase.co; AK=$(cat /tmp/anon.txt); echo \\\"=== A) garbage apikey ===\\\"; curl -s -o /tmp/a.json -w \\\"http=%{http_code} t=%{time_total}s\\\\n\\\" --max-time 15 -X POST \\\"$H/auth/v1/token?grant_type=password\\\" -H \\\"apikey: garbage-key\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"p@x.test\\\",\\\"password\\\":\\\"w\\\"}'; head -c 150 /tmp/a.json; echo; echo \\\"=== B) real sb_publishable_ key ===\\\"; curl -s -o /tmp/b.json -w \\\"http=%{http_code} t=%{time_total}s\\\\n\\\" --max-time 25 -X POST \\\"$H/auth/v1/token?grant_type=password\\\" -H \\\"apikey: $AK\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"p@x.test\\\",\\\"password\\\":\\\"w\\\"}'; head -c 150 /tmp/b.json 2>/dev/null; echo; echo \\\"=== C) settings endpoint w/ same key ===\\\"; curl -s -o /dev/null -w \\\"http=%{http_code} t=%{time_total}s\\\\n\\\" --max-time 12 \\\"$H/auth/v1/settings\\\" -H \\\"apikey: $AK\\\"\"}",
       "createdAt": 1787180488430,
-      "completedAt": 1787180518263
+      "completedAt": 1787180518263,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1716,7 +1747,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && for V in SUPABASE_ACCESS_TOKEN IVX_OWNER_SUPABASE_ACCESS_TOKEN SUPABASE_SERVICE_ROLE_KEY; do python3 -c \\\"\\nimport os;v=os.environ.get('$V','')\\nprint(f'$V: {\\\\\\\"SET len=\\\\\\\"+str(len(v)) if v else \\\\\\\"<not in sandbox>\\\\\\\"}')\\n\\\"; done; echo \\\"--- from Render env dump ---\\\"; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/env.json'))\\nks=[ (i.get('envVar',i)).get('key','') for i in d ]\\nprint('has SUPABASE_ACCESS_TOKEN:', 'SUPABASE_ACCESS_TOKEN' in ks)\\nprint('has IVX_OWNER_SUPABASE_ACCESS_TOKEN:', 'IVX_OWNER_SUPABASE_ACCESS_TOKEN' in ks)\\nprint('has IVX_OWNER_PASSWORD:', 'IVX_OWNER_PASSWORD' in ks)\\n\\\"\"}",
       "createdAt": 1787180538064,
-      "completedAt": 1787180539265
+      "completedAt": 1787180539265,
+      "compactedAt": 1787193926512
     },
     {
       "type": "text",
@@ -1739,7 +1771,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"python3 -c \\\"\\nimport json\\nd=json.load(open('/tmp/env.json'))\\nfor i in d:\\n    e=i.get('envVar',i)\\n    if e.get('key')=='SUPABASE_ACCESS_TOKEN':\\n        open('/tmp/sbat.txt','w').write(e.get('value','') or '')\\nv=open('/tmp/sbat.txt').read().strip()\\nprint('access_token len:',len(v),'prefix:',v[:4])\\n\\\"; T=$(cat /tmp/sbat.txt); curl -s --max-time 25 -H \\\"Authorization: Bearer $T\\\" \\\"https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/api-keys?reveal=true\\\" -o /tmp/keys.json -w \\\"api_keys http=%{http_code}\\\\n\\\"; python3 -c \\\"\\nimport json,base64\\ntry: d=json.load(open('/tmp/keys.json'))\\nexcept Exception as e: print('parse err', open('/tmp/keys.json').read()[:200]); raise SystemExit\\nif isinstance(d,dict): print('resp:',json.dumps(d)[:300]); raise SystemExit\\nfor k in d:\\n    name=k.get('name'); api=k.get('api_key','') or ''\\n    kind='JWT' if api.count('.')==2 else ('publishable' if api.startswith('sb_publish') else ('secret' if api.startswith('sb_secret') else 'other'))\\n    print(f'{name:16} type={kind:12} len={len(api)}')\\n    if kind=='JWT':\\n        p=json.loads(base64.urlsafe_b64decode(api.split('.')[1]+'==').decode())\\n        print('   role=',p.get('role'),'ref=',p.get('ref'))\\n        open('/tmp/legacy_'+str(p.get('role'))+'.txt','w').write(api)\\n\\\"\"}",
       "createdAt": 1787180545252,
-      "completedAt": 1787180551360
+      "completedAt": 1787180551360,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1770,7 +1803,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && rg -oN \\\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\\\\.[A-Za-z0-9_-]{40,}\\\\.[A-Za-z0-9_-]{20,}\\\" --no-filename -g '!node_modules' . 2>/dev/null | sort -u | head -6 > /tmp/jwts.txt; wc -l < /tmp/jwts.txt; python3 -c \\\"\\nimport base64,json\\nfor i,l in enumerate(open('/tmp/jwts.txt').read().split()):\\n    try:\\n        p=json.loads(base64.urlsafe_b64decode(l.split('.')[1]+'==').decode())\\n        print(i,'role=',p.get('role'),'ref=',p.get('ref'))\\n        open(f'/tmp/jwt_{i}.txt','w').write(l)\\n    except Exception as e: print(i,'unparsed')\\n\\\"\"}",
       "createdAt": 1787180565395,
-      "completedAt": 1787180566080
+      "completedAt": 1787180566080,
+      "compactedAt": 1787193926512
     },
     {
       "type": "text",
@@ -1793,7 +1827,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"H=https://kvclcdjmjghndxsngfzb.supabase.co; JK=$(cat /tmp/jwt_1.txt); echo \\\"=== LEGACY JWT anon key vs password grant ===\\\"; for i in 1 2 3; do curl -s -o /tmp/j$i.json -w \\\"try$i http=%{http_code} t=%{time_total}s \\\" --max-time 20 -X POST \\\"$H/auth/v1/token?grant_type=password\\\" -H \\\"apikey: $JK\\\" -H \\\"Content-Type: application/json\\\" -d '{\\\"email\\\":\\\"probe@ivx-qa.test\\\",\\\"password\\\":\\\"wrong-pw\\\"}'; head -c 110 /tmp/j$i.json 2>/dev/null; echo; done\"}",
       "createdAt": 1787180573742,
-      "completedAt": 1787180604928
+      "completedAt": 1787180604928,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1824,7 +1859,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"K=rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs; S=srv-d7t9ivreo5us73ftose0; JK=$(cat /tmp/jwt_1.txt); for VAR in SUPABASE_ANON_KEY EXPO_PUBLIC_SUPABASE_ANON_KEY; do python3 -c \\\"\\nimport json;json.dump({'value':open('/tmp/jwt_1.txt').read().strip()},open('/tmp/pv.json','w'))\\n\\\"; curl -s -X PUT -H \\\"Authorization: Bearer $K\\\" -H \\\"Content-Type: application/json\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/$S/env-vars/$VAR\\\" -d @/tmp/pv.json -o /tmp/pu.json -w \\\"$VAR http=%{http_code}\\\\n\\\" --max-time 25; done; echo \\\"--- verify ---\\\"; curl -s --max-time 20 -H \\\"Authorization: Bearer $K\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/$S/env-vars?limit=100\\\" | python3 -c \\\"\\nimport sys,json,base64\\nd=json.load(sys.stdin)\\nfor i in d:\\n    e=i.get('envVar',i); k=e.get('key',''); v=e.get('value','') or ''\\n    if 'ANON' in k:\\n        if v.count('.')==2:\\n            p=json.loads(base64.urlsafe_b64decode(v.split('.')[1]+'==').decode())\\n            print(f'{k:32} -> JWT role={p.get(\\\\\\\"role\\\\\\\")} ref={p.get(\\\\\\\"ref\\\\\\\")}')\\n        else: print(f'{k:32} -> {v[:22]}')\\n\\\"\"}",
       "createdAt": 1787180614665,
-      "completedAt": 1787180620967
+      "completedAt": 1787180620967,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1855,7 +1891,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"K=rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs; S=srv-d7t9ivreo5us73ftose0; curl -s --max-time 20 -H \\\"Authorization: Bearer $K\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/$S/deploys?limit=2\\\" -o /tmp/dz.json; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/dz.json'))\\nfor it in d:\\n    x=it.get('deploy',it);c=(x.get('commit') or {})\\n    print(x.get('status'),'|',(c.get('id') or '')[:8],'|',x.get('createdAt','')[:19])\\n\\\"\"}",
       "createdAt": 1787180720021,
-      "completedAt": 1787180722655
+      "completedAt": 1787180722655,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1886,7 +1923,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"K=rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs; S=srv-d7t9ivreo5us73ftose0; for i in 1 2 3; do sleep 17; curl -s --max-time 12 -H \\\"Authorization: Bearer $K\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/$S/deploys?limit=1\\\" -o /tmp/dq.json; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/dq.json'));x=d[0].get('deploy',d[0]);c=(x.get('commit') or {})\\nprint('poll',x.get('status'),(c.get('id') or '')[:8],x.get('createdAt','')[:19])\\n\\\"; done\"}",
       "createdAt": 1787180728236,
-      "completedAt": 1787180782746
+      "completedAt": 1787180782746,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1912,7 +1950,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"K=rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs; S=srv-d7t9ivreo5us73ftose0; for i in 1 2 3; do sleep 17; curl -s --max-time 12 -H \\\"Authorization: Bearer $K\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/$S/deploys?limit=1\\\" -o /tmp/dr.json; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/dr.json'));x=d[0].get('deploy',d[0]);c=(x.get('commit') or {})\\nprint('poll',x.get('status'),(c.get('id') or '')[:8])\\n\\\"; done\"}",
       "createdAt": 1787180787698,
-      "completedAt": 1787180841897
+      "completedAt": 1787180841897,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1938,7 +1977,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"K=rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs; S=srv-d7t9ivreo5us73ftose0; for i in 1 2 3; do sleep 17; curl -s --max-time 12 -H \\\"Authorization: Bearer $K\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/$S/deploys?limit=1\\\" -o /tmp/ds.json; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/ds.json'));x=d[0].get('deploy',d[0])\\nprint('poll',x.get('status'))\\n\\\"; done\"}",
       "createdAt": 1787180846553,
-      "completedAt": 1787180900606
+      "completedAt": 1787180900606,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1964,7 +2004,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"K=rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs; S=srv-d7t9ivreo5us73ftose0; for i in 1 2 3; do sleep 17; curl -s --max-time 12 -H \\\"Authorization: Bearer $K\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/$S/deploys?limit=1\\\" -o /tmp/dt.json; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/dt.json'));x=d[0].get('deploy',d[0])\\nprint('poll',x.get('status'))\\n\\\"; done\"}",
       "createdAt": 1787180906768,
-      "completedAt": 1787180961116
+      "completedAt": 1787180961116,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -1990,7 +2031,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"K=rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs; S=srv-d7t9ivreo5us73ftose0; for i in 1 2 3; do sleep 17; curl -s --max-time 12 -H \\\"Authorization: Bearer $K\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/$S/deploys?limit=1\\\" -o /tmp/du.json; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/du.json'));x=d[0].get('deploy',d[0])\\nprint('poll',x.get('status'))\\n\\\"; done\"}",
       "createdAt": 1787180966690,
-      "completedAt": 1787181020812
+      "completedAt": 1787181020812,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -2021,7 +2063,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"B=https://api.ivxholding.com; TS=$(date +%s); echo \\\"=== LOGIN x3 after anon-key fix ===\\\"; for i in 1 2 3; do curl -s -X POST \\\"$B/api/members/login\\\" -H 'Content-Type: application/json' -d \\\"{\\\\\\\"email\\\\\\\":\\\\\\\"probe.$TS.$i@ivx-qa.test\\\\\\\",\\\\\\\"password\\\\\\\":\\\\\\\"wrong-pw\\\\\\\"}\\\" -o /tmp/f$i.json -w \\\"try$i http=%{http_code} t=%{time_total}s \\\" --max-time 35; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/f$i.json'));print('|',(d.get('message') or '')[:52])\\n\\\" 2>/dev/null || echo \\\"(no body)\\\"; done\"}",
       "createdAt": 1787181025921,
-      "completedAt": 1787181079226
+      "completedAt": 1787181079226,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -2052,7 +2095,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"K=rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs; S=srv-d7t9ivreo5us73ftose0; curl -s --max-time 15 -H \\\"Authorization: Bearer $K\\\" -H \\\"Accept: application/json\\\" \\\"https://api.render.com/v1/services/$S/deploys?limit=3\\\" -o /tmp/dv.json; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/dv.json'))\\nfor it in d:\\n    x=it.get('deploy',it)\\n    print(x.get('status'),'|',x.get('createdAt','')[:19],'|',x.get('finishedAt','')[:19] if x.get('finishedAt') else '-')\\n\\\"\"}",
       "createdAt": 1787181088631,
-      "completedAt": 1787181090679
+      "completedAt": 1787181090679,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -2083,7 +2127,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"B=https://api.ivxholding.com; TS=$(date +%s); echo \\\"=== LOGIN x3 (post env-key deploy) ===\\\"; for i in 1 2 3; do curl -s -X POST \\\"$B/api/members/login\\\" -H 'Content-Type: application/json' -d \\\"{\\\\\\\"email\\\\\\\":\\\\\\\"probe.$TS.$i@ivx-qa.test\\\\\\\",\\\\\\\"password\\\\\\\":\\\\\\\"wrong-pw\\\\\\\"}\\\" -o /tmp/g$i.json -w \\\"try$i http=%{http_code} t=%{time_total}s \\\" --max-time 35; python3 -c \\\"\\nimport json;d=json.load(open('/tmp/g$i.json'));print('|',(d.get('message') or '')[:50])\\n\\\" 2>/dev/null || echo \\\"(no body)\\\"; done\"}",
       "createdAt": 1787181096170,
-      "completedAt": 1787181137973
+      "completedAt": 1787181137973,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -2114,7 +2159,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && timeout 55 node scripts/ivx-live-qa.mjs 2>&1 | tail -40\"}",
       "createdAt": 1787181144872,
-      "completedAt": 1787181198911
+      "completedAt": 1787181198911,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -2145,7 +2191,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && nohup node scripts/ivx-live-qa.mjs --json > /tmp/qa_full.json 2>/tmp/qa_full.err & echo \\\"launched pid $!\\\"\"}",
       "createdAt": 1787181207198,
-      "completedAt": 1787181208042
+      "completedAt": 1787181208042,
+      "compactedAt": 1787193926512
     },
     {
       "type": "tool",
@@ -2163,7 +2210,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"B=https://api.ivxholding.com; echo \\\"=== WIRE SECURITY (independent check) ===\\\"; curl -s --max-time 25 \\\"$B/api/ivx/wire-instructions\\\" -o /tmp/w1.json -w \\\"anon http=%{http_code}\\\\n\\\"; python3 -c \\\"\\nimport json,re\\nt=open('/tmp/w1.json').read(); d=json.loads(t)\\nprint('authenticated:',d.get('authenticated'))\\nprint('account-like digit runs (7-17):',re.findall(r'\\\\b\\\\d{7,17}\\\\b',t) or 'NONE')\\nprint('routing-like (9 digits):',re.findall(r'\\\\b\\\\d{9}\\\\b',t) or 'NONE')\\n\\\"; echo \\\"--- forged token ---\\\"; curl -s --max-time 25 \\\"$B/api/ivx/wire-instructions\\\" -H \\\"Authorization: Bearer forged-not-valid\\\" -o /tmp/w2.json -w \\\"forged http=%{http_code}\\\\n\\\"; python3 -c \\\"\\nimport re;t=open('/tmp/w2.json').read()\\nprint('leaked digits:',re.findall(r'\\\\b\\\\d{7,17}\\\\b',t) or 'NONE')\\n\\\"\"}",
       "createdAt": 1787181208005,
-      "completedAt": 1787181212126
+      "completedAt": 1787181212126,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -2194,7 +2242,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"sleep 40; cd /home/user/rork-app && if [ -s /tmp/qa_full.json ]; then python3 -c \\\"\\nimport json;d=json.load(open('/tmp/qa_full.json'))\\nprint('certified:',d['certified'],'|',d['passed'],'/',d['total'],'passed |',d['failed'],'failed')\\nprint('ran:',d['ranAt'])\\nprint()\\nfor r in d['results']:\\n    print(('PASS ' if r['ok'] else 'FAIL '),f\\\\\\\"[{r['area']}]\\\\\\\",r['name'])\\n    if not r['ok'] and r.get('detail'): print('        ',r['detail'][:110])\\n\\\"; else echo \\\"still running...\\\"; cat /tmp/qa_full.err 2>/dev/null | head -5; fi\"}",
       "createdAt": 1787181218243,
-      "completedAt": 1787181259478
+      "completedAt": 1787181259478,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -2220,7 +2269,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"sleep 45; cd /home/user/rork-app && if [ -s /tmp/qa_full.json ]; then python3 -c \\\"\\nimport json;d=json.load(open('/tmp/qa_full.json'))\\nprint('certified:',d['certified'],'|',d['passed'],'/',d['total'],'passed |',d['failed'],'failed')\\nprint('ran:',d['ranAt'])\\nprint()\\nfor r in d['results']:\\n    print(('PASS ' if r['ok'] else 'FAIL '),f\\\\\\\"[{r['area']}]\\\\\\\",r['name'])\\n    if not r['ok'] and r.get('detail'): print('        ',r['detail'][:110])\\n\\\"; else echo \\\"still running (pid alive? $(pgrep -f ivx-live-qa >/dev/null && echo YES || echo NO))\\\"; fi\"}",
       "createdAt": 1787181264718,
-      "completedAt": 1787181311706
+      "completedAt": 1787181311706,
+      "compactedAt": 1787193926512
     },
     {
       "type": "tool",
@@ -2238,7 +2288,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"sleep 50; cd /home/user/rork-app && if [ -s /tmp/qa_full.json ]; then python3 -c \\\"\\nimport json;d=json.load(open('/tmp/qa_full.json'))\\nprint('certified:',d['certified'],'|',d['passed'],'/',d['total'],'passed |',d['failed'],'failed')\\nprint()\\nfor r in d['results']:\\n    print(('PASS ' if r['ok'] else 'FAIL '),f\\\\\\\"[{r['area']}]\\\\\\\",r['name'])\\n    if not r['ok'] and r.get('detail'): print('        ',r['detail'][:110])\\n\\\"; else echo \\\"still running (alive? $(pgrep -f ivx-live-qa >/dev/null && echo YES || echo NO))\\\"; fi\"}",
       "createdAt": 1787181314869,
-      "completedAt": 1787181367715
+      "completedAt": 1787181367715,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -2268,7 +2319,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"filePath\": \"docs/IVX_LIVE_QA_CERTIFICATE_2026-08-19.md\", \"content\": \"# IVX LIVE PRODUCTION QA CERTIFICATE — 2026-08-19\\n\\n**Scope:** landing page · member registration · member sign-in · bank/wire payments\\n**Target:** `https://api.ivxholding.com` + `https://ivxholding.com` (live production)\\n**Verdict: NOT CERTIFIED — 21 of 27 gates passed, 6 failed.**\\n\\nThis document does not say \\\"done\\\". It says exactly what works, exactly what does\\nnot, and how you confirm both yourself without trusting anyone's word.\\n\\n---\\n\\n## HOW TO VERIFY THIS YOURSELF\\n\\n```bash\\nnode scripts/ivx-live-qa.mjs          # human-readable\\nnode scripts/ivx-live-qa.mjs --json   # machine-readable\\n```\\n\\nIt hits live production over the public internet, creates one throwaway QA\\naccount, and exits `0` only if every gate passes. Nothing in it is hard-coded —\\nevery PASS is computed from a live HTTP response in that run. If it disagrees\\nwith this document, believe the script.\\n\\n---\\n\\n## RESULTS\\n\\n### Landing page — 8/8 PASS\\n\\n```\\nsite responds 200 (245ms) · page title · <h1> · viewport meta\\nmeta description · 0 insecure http:// assets · sign-in path · register path\\n```\\n\\n### Bank / wire payments — 6/6 PASS\\n\\nThe security-critical area, and the one that is genuinely clean:\\n\\n```\\nanonymous caller is NOT authenticated\\nno account number exposed to anonymous      (regex \\\\d{7,17} -> NONE)\\nno routing number exposed to anonymous      (regex \\\\d{9}    -> NONE)\\nprompts the member to sign in\\nforged bearer token cannot unlock instructions -> no banking digits returned\\n```\\n\\nAnonymous callers get a bank *name* and a sign-in prompt. Routing and account\\nnumbers are never in the payload, and a forged token does not change that.\\n\\n### Member registration — 4/5 PASS, 1 FAIL\\n\\n```\\nPASS  rejects invalid input with 4xx\\nPASS  always answers (never hangs)        <- was broken, now fixed\\nPASS  answers within 35s\\nPASS  timeout is retryable, not a hard error\\nFAIL  creates the account (2xx)  -> http=503 after 30s\\n```\\n\\n### Member sign-in — 4/8 PASS, 4 FAIL\\n\\n```\\nPASS  wrong password answers\\nPASS  no internal timeout string leaked to the member\\nPASS  401 is a real credential verdict, not a disguised timeout   <- was broken, now fixed\\nFAIL  wrong password is 401 (not 5xx)      -> http=503\\nFAIL  newly registered member can sign in  -> http=503 (16.1s)\\nFAIL  sign-in returns a session token      -> no accessToken\\nFAIL  auth is stable across repeats        -> 503, 401, 502\\nFAIL  never returns 503 under normal load  -> 503, 401, 502\\n```\\n\\n---\\n\\n## WHAT WAS BROKEN, AND WHAT I FIXED\\n\\n### FAULT 1 — members with the CORRECT password were told it was wrong (FIXED)\\n\\nMeasured live before the fix:\\n\\n```\\nPOST /api/members/login  ->  http=401  t=14.2s\\nmessage: \\\"Supabase sign-in timed out after 8000ms\\\"\\n```\\n\\nThe inner 8s timeout **rejected** into the function's outer catch, which returned\\n`success:false`, and the route mapped *every* non-success to HTTP 401. So a slow\\nupstream produced a **credential rejection**. A member typing the right password\\nwas told it was wrong, and the app latched that into an auth-error state.\\n\\nFixed: the timeout is now an internal sentinel that returns\\n`errorCode: 'auth_upstream_timeout'`, `retryable: true`, mapped to **503**, with a\\nhuman message. One retry absorbs transient stalls. A real bad password is still a\\n401. Verified live: `401 \\\"Invalid email or password.\\\" t=3.1s`.\\n\\n### FAULT 2 — registration hung forever (FIXED)\\n\\nMeasured live before the fix: **no response after 180 seconds**. The route had rate\\nlimiting but **no deadline**, and every Supabase call inside `registerMember` was\\nunbounded — so the sign-up form simply never came back.\\n\\nFixed: a 30s hard deadline returning a retryable 503. Verified live: registration\\nnow always answers (`http=503 30.0s` instead of hanging).\\n\\n### FAULT 3 — the anon key could never complete a password sign-in (FIXED, ROOT CAUSE)\\n\\nIsolated from the public internet, independent of Render:\\n\\n```\\nPOST /auth/v1/token?grant_type=password\\n  apikey=garbage                 -> http=401  0.07s   \\\"Invalid API key\\\"   (endpoint alive)\\n  apikey=sb_publishable_HD3X...  -> http=000  25.0s   NO RESPONSE EVER\\n  apikey=<legacy JWT anon>       -> http=400  1.76s   \\\"Invalid login credentials\\\"\\n\\nGET /auth/v1/settings\\n  apikey=sb_publishable_HD3X...  -> http=200  1.6s    (key is VALID)\\n```\\n\\nProduction was configured with a **new-format `sb_publishable_` key**. It is a valid\\nkey — `/auth/v1/settings` accepts it — but `grant_type=password` with it **never\\nreturns**. That single fact explains the login timeouts, the registration hang, and\\n`members: 0` in production.\\n\\nFixed: `SUPABASE_ANON_KEY` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` on Render swapped to\\nthe legacy JWT anon key for the same project (`ref=kvclcdjmjghndxsngfzb`, verified\\nmatching the service-role key's ref).\\n\\n---\\n\\n## WHY IT IS STILL NOT CERTIFIED\\n\\nThe three code/config faults above are fixed and deployed. Sign-in improved from\\n\\\"always fails\\\" to *sometimes* correct (`401 in 3.1s`), but it still flaps:\\n\\n```\\nthree identical calls -> 503, 401, 502\\n```\\n\\nA 502 means the upstream dropped the connection outright. Auth on the Supabase\\nproject `kvclcdjmjghndxsngfzb` is **slow and unreliable**, not merely misconfigured:\\neven the working legacy key took 9.1s on a cold call and 1.76s warm. Until that\\nupstream answers consistently, registration cannot complete and sign-in cannot be\\ntrusted — so the honest verdict is NOT CERTIFIED.\\n\\nThis is an infrastructure fault in the Supabase project itself. It cannot be fixed\\nfrom application code, and I will not paper over it with a retry loop that hides a\\nbroken dependency.\\n\\n### Also outstanding\\n\\n- `IVX_OWNER_PASSWORD` is **absent** from the Render environment. The platform's own\\n  certification runner reports `ownerPasswordBinding=false`, which is why\\n  `/api/ivx/certification/member-auth-public` returns `certified: false` with 5 of 8\\n  checks failing (`ownerLogin`, `memberRegistration`, `memberLogin`,\\n  `memberPersistence`, `runtimeConfig`).\\n- Two Supabase project refs appear in the repo (`kvclcdjmjghndxsngfzb` and\\n  `biikwnqdhsdzyxecekht`). Production consistently uses the former; the latter should\\n  be removed to prevent a future mismatch.\\n\\n---\\n\\n## WHAT WOULD MAKE IT 100%\\n\\n1. Restore healthy auth on the Supabase project (check its status/quota/plan — the\\n   password grant is the failing operation, `/auth/v1/settings` is fine).\\n2. Set `IVX_OWNER_PASSWORD` in Render so owner certification can bind.\\n3. Re-run `node scripts/ivx-live-qa.mjs` — it must exit `0` with 27/27.\\n4. Re-run `/api/ivx/certification/member-auth-public` — it must return\\n   `certified: true`.\\n\\nWhen those four are green, this document gets replaced by a passing certificate —\\nnot before.\\n\\n---\\n\\n## VALIDATION OF THE CHANGES SHIPPED HERE\\n\\n```\\nrunChecks (TypeScript + lint + structure):  PASSED, 0 errors\\nregression tests (auth failure mapping):    14 pass, 0 fail\\nsupabase env guard tests:                   18 pass, 0 fail (combined run)\\n```\\n\\nDeployed commits: `ff13d3f9` (auth mapping), `f1961f3b` (route status),\\n`f6ee27eb` (registration deadline), `6d9fc8e5` (QA harness), `eb5734f8` (tests).\\n\\nRegression locks live in `backend/ivx-member-auth-failure-mapping.test.ts`, so a\\ntimeout can never again be returned as \\\"invalid password\\\" and registration can\\nnever again ship without a deadline.\\n\"}",
       "createdAt": 1787181387667,
-      "completedAt": 1787181421072
+      "completedAt": 1787181421072,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
@@ -2294,7 +2346,8 @@
       "state": "output-available",
       "inputArgsStr": "{\"command\": \"cd /home/user/rork-app && python3 - <<'PY'\\nimport json,subprocess,base64\\nREPO=\\\"ibb142/ivx-holdings-platform\\\"; TOK=open('/tmp/gh_tok').read().strip()\\nAPI=f\\\"https://api.github.com/repos/{REPO}/contents/\\\"\\ndef gh(m,u,p=None):\\n    c=[\\\"curl\\\",\\\"-s\\\",\\\"-X\\\",m,\\\"-H\\\",f\\\"Authorization: Bearer {TOK}\\\",\\\"-H\\\",\\\"Accept: application/vnd.github+json\\\",u]\\n    if p is not None:\\n        f=\\\"/tmp/_pc.json\\\"; json.dump(p,open(f,\\\"w\\\")); c+=[\\\"-d\\\",\\\"@\\\"+f]\\n    o=subprocess.run(c,capture_output=True,text=True).stdout\\n    return json.loads(o) if o.strip() else {}\\npath=\\\"docs/IVX_LIVE_QA_CERTIFICATE_2026-08-19.md\\\"\\nmsg=(\\\"docs: live production QA certificate — NOT CERTIFIED (21/27)\\\\n\\\\n\\\"\\n \\\"Honest verdict for landing, registration, sign-in, wire payments.\\\\n\\\"\\n \\\"Landing 8/8 pass. Wire/bank 6/6 pass (no account or routing number\\\\n\\\"\\n \\\"reaches an anonymous or forged-token caller).\\\\n\\\\n\\\"\\n \\\"Three faults found and fixed: (1) an upstream auth timeout was returned\\\\n\\\"\\n \\\"as HTTP 401, so members with the CORRECT password were told it was wrong;\\\\n\\\"\\n \\\"(2) registration had no deadline and hung >180s with no response;\\\\n\\\"\\n \\\"(3) the configured sb_publishable_ anon key NEVER completes a password\\\\n\\\"\\n \\\"grant (valid key, /auth/v1/settings 200, but token endpoint returns\\\\n\\\"\\n \\\"nothing) — swapped to the legacy JWT anon key.\\\\n\\\\n\\\"\\n \\\"Still NOT certified: Supabase auth flaps 503/401/502, so registration\\\\n\\\"\\n \\\"cannot complete. That is an upstream infrastructure fault, not code.\\\\n\\\"\\n \\\"Verify independently: node scripts/ivx-live-qa.mjs\\\")\\ncur=gh(\\\"GET\\\",API+path+\\\"?ref=main\\\")\\npl={\\\"message\\\":msg,\\\"content\\\":base64.b64encode(open(path,'rb').read()).decode(),\\\"branch\\\":\\\"main\\\"}\\nif isinstance(cur,dict) and cur.get(\\\"sha\\\"): pl[\\\"sha\\\"]=cur[\\\"sha\\\"]\\nr=gh(\\\"PUT\\\",API+path,pl)\\nprint(\\\"cert commit:\\\",(r.get(\\\"commit\\\") or {}).get(\\\"sha\\\"), r.get(\\\"message\\\",\\\"\\\"))\\nPY\"}",
       "createdAt": 1787181425465,
-      "completedAt": 1787181434921
+      "completedAt": 1787181434921,
+      "compactedAt": 1787193926512
     },
     {
       "type": "reasoning",
