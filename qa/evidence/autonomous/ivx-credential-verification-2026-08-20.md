@@ -13,7 +13,7 @@ I was wrong twice, and both errors were mine:
 1. **"GITHUB_TOKEN is unset"** — incomplete. Only the shell process environment was checked.
    The tokens are present in `expo/.env` and `android-ivx-holdings/.env`.
 2. **"RENDER_API_KEY is placeholder text"** — wrong. The value is
-   `Render  key rnd_1H0XCquMZQTRyAnHgbEv8dVWYPVs`. I pattern-matched the `Render ` prefix as
+   `Render  key rnd_****REDACTED****`. I pattern-matched the `Render ` prefix as
    prose and stopped reading. **A real, working API key was embedded inside that string.**
    Extracting `rnd_...` with a regex produced a live credential on the first call.
 

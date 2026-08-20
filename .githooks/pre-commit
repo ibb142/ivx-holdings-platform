@@ -1,0 +1,16 @@
+#!/bin/sh
+# IVX pre-commit hook — blocks credentials from entering the public repo.
+# Installed by: scripts/ivx-protect-secrets.sh  (sets core.hooksPath=.githooks)
+#
+# Bypass in a genuine emergency with:  git commit --no-verify
+# (Do not bypass to commit a real token. GitHub will revoke it within minutes.)
+
+if command -v node >/dev/null 2>&1; then
+  node "$(git rev-parse --show-toplevel)/scripts/ivx-secret-guard.mjs" --staged || exit 1
+elif command -v bun >/dev/null 2>&1; then
+  bun "$(git rev-parse --show-toplevel)/scripts/ivx-secret-guard.mjs" --staged || exit 1
+else
+  echo "[ivx-secret-guard] WARNING: no node/bun found — secret scan SKIPPED" >&2
+fi
+
+exit 0
