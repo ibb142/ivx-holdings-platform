@@ -9,7 +9,6 @@
  * Port:    PORT env var (default 3000)
  */
 import { serve } from '@hono/node-server';
-import { createServer } from 'node:http';
 import { WebSocketServer } from 'ws';
 import app from './backend/hono-extended';
 import { handleRealtimeVoiceConnection, getRealtimeVoiceStatus } from './backend/services/ivx-realtime-voice';
@@ -266,11 +265,25 @@ app.get('/api/ivx/realtime-voice/status', (c) => {
 });
 app.options('/api/ivx/realtime-voice/status', (c) => c.body(null, 204));
 
-// ── Create HTTP server that Hono uses, then attach WebSocket ──
-const httpServer = createServer(productionFetch);
-
 // ── WebSocket server for real-time voice ──
 const wss = new WebSocketServer({ noServer: true });
+
+wss.on('connection', (ws, request) => {
+  void handleRealtimeVoiceConnection(ws as any, request);
+});
+
+/**
+ * `serve()` owns the listening socket. The WebSocket upgrade handler MUST be
+ * attached to the server instance it returns — a separately constructed
+ * `createServer()` never listens, which silently kills the realtime voice
+ * endpoint while still looking correct.
+ */
+const httpServer = serve(
+  { fetch: productionFetch, port: PORT, hostname: HOST },
+  (info) => {
+    console.log('[IVX Server] Hono API server online', { host: HOST, port: info.port, family: info.family });
+  },
+);
 
 httpServer.on('upgrade', (request, socket, head) => {
   const url = new URL(request.url || '', `http://${request.headers.host || 'localhost'}`);
@@ -284,15 +297,4 @@ httpServer.on('upgrade', (request, socket, head) => {
   }
 });
 
-wss.on('connection', (ws, request) => {
-  void handleRealtimeVoiceConnection(ws as any, request);
-});
-
 console.log('[IVX Server] Realtime Voice WebSocket endpoint: ws://.../api/ivx/realtime-voice');
-
-serve(
-  { fetch: productionFetch, port: PORT, hostname: HOST, server: httpServer },
-  (info) => {
-    console.log('[IVX Server] Hono API server online', { host: HOST, port: info.port, family: info.family });
-  },
-);
