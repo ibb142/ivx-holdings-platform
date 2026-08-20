@@ -34,6 +34,7 @@ import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
 
 import Colors from '@/constants/colors';
+import { Image as ExpoImage } from 'expo-image';
 import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { fetchVideoFeed, type FeedVideo } from '@/lib/video-feed';
 import {
@@ -68,6 +69,55 @@ const CHANNELS: { id: ReelChannel; label: string }[] = [
   { id: 'buyer', label: 'Buyers' },
   { id: 'seller', label: 'Sellers' },
 ];
+
+/** Instagram-style full-screen skeleton for the reels initial load — poster block,
+ * caption lines, and the side action rail, all shimmering. No spinner icons. */
+function ReelsScreenSkeleton({ topInset }: { topInset: number }) {
+  return (
+    <View style={reelSkeletonStyles.container}>
+      <View style={[reelSkeletonStyles.media, { marginTop: topInset + 52 }]}>
+        <ShimmerIndicator size="large" color="#ffffff26" />
+      </View>
+      <View style={reelSkeletonStyles.rail}>
+        {[56, 56, 56, 56, 72].map((size, i) => (
+          <View key={i} style={[reelSkeletonStyles.railBone, { width: size, height: size, borderRadius: size / 2 }]} />
+        ))}
+      </View>
+      <View style={reelSkeletonStyles.caption}>
+        <View style={[reelSkeletonStyles.line, { width: 150, height: 14 }]} />
+        <View style={[reelSkeletonStyles.line, { width: 220, height: 11 }]} />
+        <View style={[reelSkeletonStyles.line, { width: 180, height: 11 }]} />
+      </View>
+    </View>
+  );
+}
+
+const reelSkeletonStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0A0A0F'},
+  media: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#141420',
+    alignItems: 'center',
+    justifyContent: 'center'},
+  rail: {
+    position: 'absolute',
+    right: 10,
+    bottom: 140,
+    alignItems: 'center',
+    gap: 18},
+  railBone: {
+    backgroundColor: '#1d1d2b'},
+  caption: {
+    position: 'absolute',
+    left: 16,
+    right: 80,
+    bottom: 32,
+    gap: 8},
+  line: {
+    backgroundColor: '#1d1d2b',
+    borderRadius: 4}});
 
 export default function VideosScreen() {
   const router = useRouter();
@@ -122,6 +172,12 @@ export default function VideosScreen() {
     offsetRef.current = deduped.length;
     setHasMore(deduped.length >= PAGE_SIZE);
     setAllVideos(deduped);
+    // Instagram-style warm-up: prefetch the first posters so the first swipe
+    // paints instantly instead of showing a blank frame.
+    deduped.slice(0, 6).forEach((v) => {
+      const poster = v.poster_url ?? v.thumbnail_url;
+      if (poster) void ExpoImage.prefetch(poster).catch(() => {});
+    });
   }, [queryData, feedQuery.isLoading]);
 
   const loadMore = useCallback(() => {
@@ -136,6 +192,11 @@ export default function VideosScreen() {
         } else {
           for (const v of newItems) loadedIds.current.add(v.id);
           offsetRef.current = currentOffset + newItems.length;
+          // Prefetch the next page's posters as it arrives.
+          newItems.slice(0, 4).forEach((v) => {
+            const poster = v.poster_url ?? v.thumbnail_url;
+            if (poster) void ExpoImage.prefetch(poster).catch(() => {});
+          });
           setAllVideos((prev) => {
             // Deduplicate by ID in the combined array
             const combined = [...prev];
@@ -423,9 +484,7 @@ export default function VideosScreen() {
       </View>
 
       {feedQuery.isLoading ? (
-        <View style={styles.loading}>
-          <ShimmerIndicator size="large" color={GOLD} />
-        </View>
+        <ReelsScreenSkeleton topInset={insets.top} />
       ) : filteredVideos.length === 0 ? (
         <View style={styles.loading}>
           <Text style={styles.emptyText}>No videos available</Text>

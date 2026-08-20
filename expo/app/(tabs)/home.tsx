@@ -6,8 +6,7 @@ import {View,
   TouchableOpacity,
   RefreshControl,
   useWindowDimensions,
-  Platform,
-  ActivityIndicator} from "react-native";
+  Platform} from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ModuleErrorBoundary } from '@/components/ModuleErrorBoundary';
 import {
@@ -524,12 +523,22 @@ export default function HomeScreen() {
           )}
 
           {jvDealsLoading && jvDeals.length === 0 && homeLoadTimeout && (
-            <View style={styles.timeoutFallback}>
-              <ActivityIndicator size="large" color={Colors.primary} />
-              <Text style={styles.timeoutTitle}>IVX Home is taking longer than usual</Text>
-              <Text style={styles.timeoutSubtitle}>Pull down to retry or continue waiting</Text>
-            </View>
-          )}
+            <>
+              <HomeSkeleton />
+              <View style={styles.timeoutFallback}>
+                <Text style={styles.timeoutTitle}>Still loading — pull down to retry</Text>
+                <TouchableOpacity
+                  style={styles.retryPill}
+                  activeOpacity={0.8}
+                  onPress={onRefresh}
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry loading home feed"
+                >
+                  <Text style={styles.retryPillText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+            )}
 
           {(!jvDealsLoading || jvDeals.length > 0) && (
             <>
@@ -748,8 +757,18 @@ const styles = StyleSheet.create({
   timeoutFallback: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    paddingVertical: 24,
     paddingHorizontal: 24},
+  retryPill: {
+    marginTop: 12,
+    backgroundColor: Colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 28,
+    borderRadius: 999},
+  retryPillText: {
+    color: '#000',
+    fontSize: 14,
+    fontWeight: '700' as const},
   timeoutTitle: {
     color: Colors.text,
     fontSize: 15,
