@@ -1,0 +1,93 @@
+diff --git a/.github/workflows/ivx-112-hourly-quality-audit.yml b/.github/workflows/ivx-112-hourly-quality-audit.yml
+index f3827c8..4736575 100644
+--- a/.github/workflows/ivx-112-hourly-quality-audit.yml
++++ b/.github/workflows/ivx-112-hourly-quality-audit.yml
+@@ -125,8 +125,9 @@ jobs:
+ 
+             evidence_ok=false
+             if [ -n "$source_reference" ] && [ -n "$tool_result_id" ]; then evidence_ok=true; fi
+-            quality_ok=false
+-            if [ "$ok" = true ] && [ "$evidence_ok" = true ]; then quality_ok=true; fi
++            # NOTE: evidence_ok alone is NOT acceptance. The senior gate below is
++            # authoritative and is applied in the "Apply senior developer gate" step
++            # by scripts/ivx-senior-quality-gate.mjs, which is unit tested.
+             finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+ 
+             jq -n \
+@@ -134,14 +135,39 @@ jobs:
+               --arg taskType "$task_type" --arg taskId "$task_id" --arg startedAt "$started_at" --arg finishedAt "$finished_at" \
+               --arg contractHttp "$contract_http" --arg runHttp "$run_http" --argjson ok "$ok" --arg finalStatus "$final_status" \
+               --arg sourceReference "$source_reference" --arg toolResultId "$tool_result_id" --arg commitSha "$commit_sha" --arg error "$error" \
+-              --argjson evidenceOk "$evidence_ok" --argjson qualityOk "$quality_ok" \
+-              '{agentNumber:$agentNumber,agentId:$agentId,gapId:$gapId,taskType:$taskType,taskId:$taskId,startedAt:$startedAt,finishedAt:$finishedAt,contractHttp:$contractHttp,runHttp:$runHttp,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,commitSha:$commitSha,error:$error,evidenceOk:$evidenceOk,qualityOk:$qualityOk}' > "$result"
++              --argjson evidenceOk "$evidence_ok" \
++              --argjson raw "$(cat "$output" 2>/dev/null || echo '{}')" \
++              '{agentNumber:$agentNumber,agentId:$agentId,gapId:$gapId,taskType:$taskType,taskId:$taskId,startedAt:$startedAt,finishedAt:$finishedAt,contractHttp:($contractHttp|tonumber? // 0),runHttp:($runHttp|tonumber? // 0),ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,commitSha:$commitSha,error:$error,evidenceOk:$evidenceOk}
++               + ((($raw.runRecord) // {}) | {changedFiles,tests,typecheck,lint,securityReview,errorHandlingReview,performanceReview,accessibilityReview,deploymentEvidence,simulated,fakeSuccess,negativeAuthTestsPassed,secretExposure,authorizationRegression,mobileSmokeTestPassed,blackScreen,brokenNavigation,statesVerified,performanceRegression,codeChanged,uiChanged,securityRelevant,performanceSensitive})
++               | with_entries(select(.value != null))' > "$result"
+           }
+           export -f run_agent
+           export API_BASE PROGRAM_ID SYSTEM_KEY LIVE_SHA GITHUB_RUN_ID GITHUB_RUN_ATTEMPT
+           cat /tmp/agents.tsv | xargs -n2 -P16 bash -c 'run_agent "$0" "$1"'
+           jq -s 'sort_by(.agentNumber)' /tmp/ivx112-quality/result-*.json > /tmp/ivx112-quality/results.json
+ 
++      - name: Apply senior developer gate
++        shell: bash
++        run: |
++          set -euo pipefail
++          # Authoritative acceptance. Unit tested in
++          # scripts/__tests__/ivx-senior-quality-gate.test.mjs
++          node --test scripts/__tests__/ivx-senior-quality-gate.test.mjs
++          node -e '
++            const fs = require("fs");
++            import("./scripts/ivx-senior-quality-gate.mjs").then(({ summarizeFleet }) => {
++              const raw = JSON.parse(fs.readFileSync("/tmp/ivx112-quality/results.json", "utf8"));
++              const s = summarizeFleet(raw, 112);
++              fs.writeFileSync("/tmp/ivx112-quality/senior-gate.json", JSON.stringify(s, null, 2));
++              fs.writeFileSync("/tmp/ivx112-quality/results.json", JSON.stringify(s.evaluated, null, 2));
++              console.log("accepted=" + s.acceptedBySeniorGate + " failed=" + s.failed +
++                          " blocked=" + s.blocked + " unverified=" + s.unverified);
++              for (const f of s.failures.slice(0, 25)) {
++                console.log("  agent " + f.agentNumber + " " + f.status + " :: " + f.rejectionReasons.join(","));
++              }
++            }).catch((e) => { console.error(e); process.exit(1); });
++          '
++
+       - name: Build quality certificate
+         shell: bash
+         run: |
+@@ -152,7 +178,9 @@ jobs:
+           attempted=$(jq 'length' /tmp/ivx112-quality/results.json)
+           succeeded=$(jq '[.[] | select(.ok == true)] | length' /tmp/ivx112-quality/results.json)
+           evidence=$(jq '[.[] | select(.evidenceOk == true)] | length' /tmp/ivx112-quality/results.json)
+-          quality=$(jq '[.[] | select(.qualityOk == true)] | length' /tmp/ivx112-quality/results.json)
++          quality=$(jq '[.[] | select(.acceptedBySeniorGate == true)] | length' /tmp/ivx112-quality/results.json)
++          gate_ok=$(jq -r '.ok' /tmp/ivx112-quality/senior-gate.json)
++          cp /tmp/ivx112-quality/senior-gate.json qa/evidence/autonomous/ivx-112-senior-gate-summary.json
+           failed=$((attempted - succeeded))
+ 
+           jq -n \
+@@ -164,12 +192,23 @@ jobs:
+             '{ok:($attempted==112 and $failed==0 and $evidence==112 and $quality==112),certificate:$certificate,programId:$programId,productionSha:$productionSha,controllerSha:$controllerSha,githubRunId:$githubRunId,verifiedAt:$verifiedAt,agentsAttempted:$attempted,agentsSucceeded:$succeeded,agentsFailed:$failed,agentsWithEvidence:$evidence,agentsMeetingQualityGate:$quality,qualityPolicy:{productionGrade:true,testsRequiredForCodeChanges:true,securityReviewRequired:true,errorHandlingRequired:true,performanceRegressionReviewRequired:true,accessibilityReviewRequiredForUI:true,noHardcodedSecrets:true,simulatedSuccessAllowed:false},truthNote:"This certificate proves the hourly fleet execution/evidence quality gate only. It does not by itself certify the entire IVX product 10/10."}' > qa/evidence/autonomous/ivx-112-hourly-quality-certificate.json
+           cat qa/evidence/autonomous/ivx-112-hourly-quality-certificate.json
+ 
++          # HARD GATE: never leave a green check on a failing audit.
++          actual_ok=$(jq -r '.ok' qa/evidence/autonomous/ivx-112-hourly-quality-certificate.json)
++          if [ "$actual_ok" != true ]; then
++            echo "::error::hourly quality certificate ok=$actual_ok (accepted=$quality/112)"
++            jq -r '.failures[]? | "  agent \(.agentNumber) \(.status) :: \(.rejectionReasons | join(","))"' \
++              qa/evidence/autonomous/ivx-112-senior-gate-summary.json | head -30
++            exit 1
++          fi
++          echo "hourly_quality_certificate=ok"
++
+       - uses: actions/upload-artifact@v4
+         with:
+           name: ivx-112-hourly-quality-${{ github.run_id }}-${{ github.run_attempt }}
+           path: |
+             qa/evidence/autonomous/ivx-112-hourly-quality-certificate.json
+             qa/evidence/autonomous/ivx-112-hourly-quality-agent-results.json
++            qa/evidence/autonomous/ivx-112-senior-gate-summary.json
+           if-no-files-found: error
+ 
+       - name: Persist audit proof

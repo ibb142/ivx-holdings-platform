@@ -1,4 +1,8 @@
 import { describe, it, expect, mock } from 'bun:test';
+// Imported for its REAL exports before the mock below replaces the module.
+// Static imports are evaluated before the module body, so this namespace still
+// holds the genuine implementations.
+import * as realOwnerMemoryService from '@/src/modules/ivx-owner-ai/services/ivxOwnerMemoryService';
 
 // Mock React Native before any imports.
 mock.module('react-native', () => ({
@@ -9,6 +13,10 @@ mock.module('react-native', () => ({
   NativeModules: {},
   NativeEventEmitter: class { addListener() { return { remove: () => {} }; } removeAllListeners() {} },
   StyleSheet: { create: (s: Record<string, unknown>) => s, flatten: (s: Record<string, unknown>) => s },
+  // Process-global mock: keep component stubs so other suites can import them.
+  Text: Object.assign(function Text() { return null; }, { displayName: 'Text' }),
+  TextInput: Object.assign(function TextInput() { return null; }, { displayName: 'TextInput' }),
+  View: Object.assign(function View() { return null; }, { displayName: 'View' }),
 }));
 
 mock.module('@react-native-async-storage/async-storage', () => ({
@@ -48,7 +56,13 @@ mock.module('@/lib/ivx-supabase-client', () => ({
   },
 }));
 
+// Spread the real module first: mock.module is process-global, so replacing it
+// with only these two exports also stripped createIVXOwnerMultiFileUnderstandingPrompt
+// from ivx-multimodal-upload.test.ts, which then died at link time. Spreading
+// keeps that suite testing the REAL implementation instead of a stub, while the
+// two overrides below still apply here.
 mock.module('@/src/modules/ivx-owner-ai/services/ivxOwnerMemoryService', () => ({
+  ...realOwnerMemoryService,
   buildIVXOwnerMemoryPromptBlock: () => '',
   ivxOwnerMemoryService: {
     recordConversationTurn: async () => {},

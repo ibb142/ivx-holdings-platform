@@ -39,7 +39,12 @@ export type TTSStatus = {
   configured: boolean;
   provider: 'vercel_gateway' | 'openai_direct' | 'none';
   model: string;
-  voices: string[];
+  /**
+   * Voices actually offered by the resolved provider. Typed as `TTSVoice[]`
+   * rather than `string[]` so callers can pass these straight into
+   * `synthesizeSpeech` without an unchecked cast.
+   */
+  voices: TTSVoice[];
   endpoint: string | null;
   marker: string;
   version: string;

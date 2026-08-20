@@ -25,6 +25,10 @@ mock.module('react-native', () => ({
   NativeModules: {},
   NativeEventEmitter: class { addListener() { return { remove: () => {} }; } removeAllListeners() {} },
   StyleSheet: { create: (s: Record<string, unknown>) => s, flatten: (s: Record<string, unknown>) => s },
+  // Process-global mock: keep component stubs so other suites can import them.
+  Text: Object.assign(function Text() { return null; }, { displayName: 'Text' }),
+  TextInput: Object.assign(function TextInput() { return null; }, { displayName: 'TextInput' }),
+  View: Object.assign(function View() { return null; }, { displayName: 'View' }),
 }));
 
 mock.module('@react-native-async-storage/async-storage', () => ({
