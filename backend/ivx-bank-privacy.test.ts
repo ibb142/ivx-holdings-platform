@@ -106,13 +106,22 @@ describe('IVX bank privacy hard gate', () => {
     expect(migration).toContain('REVOKE ALL ON FUNCTION public.ivx_exec_sql(text) FROM PUBLIC');
   });
 
-  it('requires the existing portal JWT on landing and scrubs details on auth loss', () => {
-    expect(landingWire).toContain("localStorage.getItem('ivx_portal_session')");
+  it('keeps landing auth tab-scoped and scrubs wire details on auth loss', () => {
+    expect(landingWire).toContain("sessionStorage.getItem('ivx_portal_session')");
+    expect(landingWire).not.toContain("localStorage.getItem('ivx_portal_session')");
     expect(landingWire).toContain("'Authorization': 'Bearer ' + token");
     expect(landingWire).toContain('scrubWireDetails');
     expect(landingWire).toContain("grid.style.display = 'none'");
     expect(landingWire).not.toContain('j.preview.bankName');
-    expect(landingWire).not.toContain("localStorage.setItem('wire");
+
+    expect(landingPortal).toContain("sessionStorage.getItem('ivx_portal_session')");
+    expect(landingPortal).toContain("sessionStorage.setItem('ivx_portal_session'");
+    expect(landingPortal).toContain("sessionStorage.removeItem('ivx_portal_session')");
+    expect(landingPortal).toContain('persistSession: false');
+    expect(landingPortal).toContain('autoRefreshToken: false');
+    expect(landingPortal).toContain('detectSessionInUrl: false');
+    expect(landingPortal).not.toContain("localStorage.setItem('ivx_portal_session'");
+    expect(landingPortal).not.toContain("localStorage.getItem('ivx_portal_session'");
     expect(landingPortal).toContain('syncSecureWireSurface()');
     expect(landingPortal).toContain('scrubSecureWireSurface()');
   });
