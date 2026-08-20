@@ -1,12 +1,14 @@
 /**
  * IVX Wire Transfer API
  *
- * Serves wire instructions securely from environment variables (never from
- * frontend code or GitHub) and records incoming wire notifications from
- * investors and app users. Sends an SMS to the owner when a new wire is
- * reported so funds can be matched and credited.
+ * Bank-grade contract:
+ * - bank/routing/account details are never public and never stored in source
+ * - every full instruction request requires a verified Supabase member JWT
+ * - wire submission identity is derived from the verified JWT, never the body
+ * - reference codes are bound to the authenticated member
+ * - durable storage remains backend service-role only
  *
- * Marker: ivx-wire-transfer-2026-08-20-bank-privacy
+ * Marker: ivx-wire-transfer-2026-08-20-bank-privacy-v2
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -57,6 +59,27 @@ export type WireAuthenticatedMember = {
 
 function readTrimmed(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function wireHeaders(): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store, private',
+    'Pragma': 'no-cache',
+    'X-Content-Type-Options': 'nosniff',
+    'Access-Control-Allow-Origin': 'https://ivxholding.com',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Vary': 'Origin, Authorization',
+  };
+}
+
+function wireJson(payload: Record<string, unknown>, status = 200): Response {
+  return new Response(JSON.stringify(payload), { status, headers: wireHeaders() });
+}
+
+export function handleWireOptions(): Response {
+  return new Response(null, { status: 204, headers: wireHeaders() });
 }
 
 function getSupabaseAuthConfig(): { url: string; anonKey: string } | null {
@@ -122,19 +145,135 @@ export function getWireInstructions(): WireInstructions | null {
   };
 }
 
+function memberReferencePrefix(userId: string): string {
+  return userId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase() || 'IVX';
+}
+
 export function generateWireReferenceCode(userId: string): string {
-  const base = userId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase() || 'IVX';
+  const base = memberReferencePrefix(userId);
   const random = Math.floor(1000 + Math.random() * 8999);
   return `IVX-${base}-${random}`;
 }
 
+export function isWireReferenceForMember(referenceCode: string, userId: string): boolean {
+  const expectedPrefix = `IVX-${memberReferencePrefix(userId)}-`;
+  return referenceCode.startsWith(expectedPrefix) && /^IVX-[A-Z0-9]{1,8}-\d{4}$/.test(referenceCode);
+}
+
+function validWireAmount(value: string): boolean {
+  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(value)) return false;
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount > 0;
+}
+
+function validIsoDate(value: string): boolean {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) return false;
+  const tomorrow = new Date();
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  return date.getTime() <= tomorrow.getTime();
+}
+
+export async function handleSecureWireInstructions(request: Request): Promise<Response> {
+  if (request.method === 'OPTIONS') return handleWireOptions();
+  if (request.method !== 'GET') return wireJson({ ok: false, error: 'Method not allowed' }, 405);
+
+  const member = await resolveWireAuthenticatedMember(request);
+  if (!member) {
+    return wireJson({
+      ok: false,
+      authenticated: false,
+      error: 'Authentication required to view wire instructions.',
+      cta: 'Sign in to view secure wire instructions',
+    }, 401);
+  }
+
+  const instructions = getWireInstructions();
+  if (!instructions) {
+    return wireJson({
+      ok: false,
+      authenticated: true,
+      error: 'Wire instructions are temporarily unavailable.',
+    }, 503);
+  }
+
+  const referenceCode = generateWireReferenceCode(member.userId);
+  console.log('[IVXWire] Secure instructions requested', { userIdPrefix: `${member.userId.slice(0, 6)}***` });
+  return wireJson({
+    ok: true,
+    authenticated: true,
+    instructions: { ...instructions, referenceCode },
+    timestamp: new Date().toISOString(),
+  });
+}
+
+export async function handleSecureWireSubmission(request: Request): Promise<Response> {
+  if (request.method === 'OPTIONS') return handleWireOptions();
+  if (request.method !== 'POST') return wireJson({ ok: false, error: 'Method not allowed' }, 405);
+
+  const member = await resolveWireAuthenticatedMember(request);
+  if (!member) {
+    return wireJson({ ok: false, authenticated: false, error: 'Authentication required.' }, 401);
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json() as Record<string, unknown>;
+  } catch {
+    return wireJson({ ok: false, error: 'Invalid request body.' }, 400);
+  }
+
+  const amount = readTrimmed(body.amount);
+  const referenceCode = readTrimmed(body.referenceCode).toUpperCase();
+  const sentAt = readTrimmed(body.sentAt);
+  const currency = (readTrimmed(body.currency) || 'USD').toUpperCase();
+  const senderBankName = readTrimmed(body.senderBankName).slice(0, 120) || undefined;
+  const senderAccountLast4Raw = readTrimmed(body.senderAccountLast4);
+  const senderAccountLast4 = senderAccountLast4Raw || undefined;
+  const receiptUrl = readTrimmed(body.receiptUrl).slice(0, 1000) || undefined;
+  const notes = readTrimmed(body.notes).slice(0, 1000) || undefined;
+
+  if (!validWireAmount(amount)) {
+    return wireJson({ ok: false, error: 'A valid positive wire amount is required.' }, 400);
+  }
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    return wireJson({ ok: false, error: 'Currency must be a 3-letter ISO code.' }, 400);
+  }
+  if (!validIsoDate(sentAt)) {
+    return wireJson({ ok: false, error: 'sentAt must be a valid YYYY-MM-DD date and cannot be in the future.' }, 400);
+  }
+  if (!isWireReferenceForMember(referenceCode, member.userId)) {
+    return wireJson({ ok: false, error: 'Wire reference code does not belong to the authenticated member.' }, 403);
+  }
+  if (senderAccountLast4 && !/^\d{4}$/.test(senderAccountLast4)) {
+    return wireJson({ ok: false, error: 'Sender account last four must contain exactly 4 digits.' }, 400);
+  }
+
+  const result = await recordWireSubmission({
+    userId: member.userId,
+    email: member.email,
+    name: member.name,
+    amount,
+    currency,
+    sentAt,
+    referenceCode,
+    senderBankName,
+    senderAccountLast4,
+    receiptUrl,
+    notes,
+  });
+
+  return wireJson({ ...result, authenticated: true }, result.ok ? 200 : 500);
+}
+
 export async function recordWireSubmission(input: WireSubmissionInput): Promise<WireSubmissionResult> {
   try {
-    // Durable persistence (Supabase-backed document store, survives restarts/deploys).
     const { record, duplicate, persisted } = await saveWireSubmission(input);
     const id = record.id;
 
-    // Do not log investor email, bank name, account suffix or notes.
+    // Never log email, full user ID, sender bank, account suffix, receipt URL or notes.
     console.log('[IVXWireTransfer] submission recorded', {
       id,
       userIdPrefix: input.userId ? `${input.userId.slice(0, 6)}***` : undefined,
