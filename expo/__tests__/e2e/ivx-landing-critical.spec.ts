@@ -40,7 +40,7 @@ try {
       expect(wireStart).toBeGreaterThanOrEqual(0);
       const wireSlice = bodyText.slice(wireStart, wireStart + 1_500);
 
-      expect(wireSlice).toContain('Get wire instructions in the app');
+      expect(wireSlice).toContain('Get Wire Instructions in App');
       expect(wireSlice).toContain('Bank details are sensitive');
       expect(wireSlice).toContain('full account number is available only in the authenticated app or via investor relations');
       expect(wireSlice.match(/\b\d{7,17}\b/g) ?? []).toHaveLength(0);
