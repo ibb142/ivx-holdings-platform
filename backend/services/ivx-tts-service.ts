@@ -39,7 +39,7 @@ export type TTSStatus = {
   configured: boolean;
   provider: 'vercel_gateway' | 'openai_direct' | 'none';
   model: string;
-  voices: string[];
+  voices: TTSVoice[];
   endpoint: string | null;
   marker: string;
   version: string;
