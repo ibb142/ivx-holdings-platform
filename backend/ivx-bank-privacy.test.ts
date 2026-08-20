@@ -101,7 +101,8 @@ describe('IVX bank privacy hard gate', () => {
       expect(migration).toContain(`REVOKE ALL ON TABLE ${table} FROM authenticated`);
       expect(migration).toContain(`GRANT ALL ON TABLE ${table} TO service_role`);
     }
-    expect(migration).toContain('auth.uid() IS DISTINCT FROM p_user_id');
+    expect(migration).toContain("v_role <> 'service_role'");
+    expect(migration).toContain('v_uid IS DISTINCT FROM p_user_id');
     expect(migration).toContain('REVOKE ALL ON FUNCTION public.ivx_exec_sql(text) FROM PUBLIC');
   });
 
