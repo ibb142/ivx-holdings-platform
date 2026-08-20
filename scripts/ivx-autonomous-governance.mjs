@@ -38,7 +38,7 @@ const RISK_ORDER = Object.freeze({ LOW: 1, MEDIUM: 2, HIGH: 3, FINANCIAL: 4 });
 const FINANCIAL_MUTATION = /(^|_)(move|credit|debit|settle|settlement|transfer|trade|purchase|sell|withdraw|payout|disburse)(_|$)/i;
 const BANK_DESTINATION_MUTATION = /(^|_)(change|replace|update|set)(_|.*_)(bank|beneficiary|routing|account|swift|bic)(_|$)/i;
 const HIGH_RISK_MUTATION = /(^|_)(deploy|merge|rotate|revoke|delete|drop|truncate|production|privileged|grant|secret|credential)(_|$)/i;
-const MEDIUM_ENGINEERING = /(^|_)(write|edit|modify|implement|develop|code|commit|push|migration|refactor|repair|fix)(_|$)/i;
+const MEDIUM_ENGINEERING = /(^|_)(write|edit|modify|implement|develop|commit|push|migration|refactor|repair|fix)(_|$)/i;
 const GIT_SHA_40 = /^[0-9a-f]{40}$/i;
 
 function normalizeActions(actions) {
