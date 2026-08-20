@@ -2,41 +2,29 @@
  * IVX Emergency-Stop Gate — runtime enforcement of the owner's emergency-stop
  * control (`ivx_agent_controls.control_name = 'emergency_stop'`).
  *
- * FINAL MANDATE Phase 1 wiring (2026-07-18): every agent task runner MUST call
- * `checkEmergencyStop()` before starting work and refuse to run when the flag
- * is active. The flag is stored in Supabase so the owner can halt all agents
- * from any surface (dashboard, SQL, chat command) without a redeploy.
+ * Owner control hierarchy:
+ *   - active=true: no new agent task may start.
+ *   - read/monitoring callers may tolerate a transient control-store outage.
+ *   - MUTATION callers must FAIL CLOSED when the stop state cannot be verified.
  *
- * Behavior:
- *   - `active: true`  → agents must NOT start new tasks (enqueue refused,
- *     queued jobs marked blocked).
- *   - Read errors fail OPEN (agents keep working) so a transient Supabase
- *     outage cannot silently freeze production work; every failed read is
- *     logged for audit.
- *   - Results are cached for a short window to avoid hammering Supabase from
- *     hot loops.
+ * This split keeps IVX observable during an outage while ensuring patch, commit,
+ * push, merge, migration, deploy, rollback and other state-changing autonomous
+ * operations never continue when IVX cannot prove the owner has not stopped them.
  */
 
 const CONTROL_TABLE = 'ivx_agent_controls';
 const CONTROL_NAME = 'emergency_stop';
 const CACHE_TTL_MS = 15_000;
 
-export const IVX_EMERGENCY_STOP_GATE_MARKER = 'ivx-emergency-stop-gate-2026-07-18';
+export const IVX_EMERGENCY_STOP_GATE_MARKER = 'ivx-emergency-stop-gate-2026-08-20-owner-mutation-fail-closed';
 
 export type EmergencyStopStatus = {
-  /** True when the owner has engaged the emergency stop. */
   active: boolean;
-  /** Owner-provided reason recorded on the control row, when present. */
   reason: string | null;
-  /** Who last updated the control row. */
   updatedBy: string | null;
-  /** When the control row was last updated. */
   updatedAt: string | null;
-  /** When this status was read. */
   checkedAt: string;
-  /** Where the answer came from. `unavailable` = read failed, gate failed open. */
   source: 'supabase' | 'cache' | 'unavailable';
-  /** Read error detail when source === 'unavailable'. Never contains secrets. */
   error: string | null;
 };
 
@@ -75,16 +63,15 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-/** Test-only escape hatch so unit tests can reset the cache between cases. */
 export function resetEmergencyStopCacheForTests(): void {
   cached = null;
   cachedAtMs = 0;
 }
 
 /**
- * Read the emergency-stop control. Cached for CACHE_TTL_MS. Fails OPEN
- * (active:false, source:'unavailable') when Supabase is unreachable or not
- * configured, and logs the failure for audit.
+ * Read the owner stop flag. This low-level read remains observation-friendly:
+ * callers decide whether an unavailable control store is acceptable. Mutation
+ * callers MUST use `assertAutonomousMutationAllowed` below.
  */
 export async function checkEmergencyStop(): Promise<EmergencyStopStatus> {
   const now = Date.now();
@@ -102,9 +89,9 @@ export async function checkEmergencyStop(): Promise<EmergencyStopStatus> {
       updatedAt: null,
       checkedAt: nowIso(),
       source: 'unavailable',
-      error: 'Supabase URL or service key not configured; emergency-stop gate failed open.',
+      error: 'Supabase URL or service key not configured; emergency-stop state is unverified.',
     };
-    console.warn('[EmergencyStopGate] not configured — failing open');
+    console.warn('[EmergencyStopGate] not configured — stop state unavailable');
     return status;
   }
 
@@ -115,9 +102,8 @@ export async function checkEmergencyStop(): Promise<EmergencyStopStatus> {
       headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' },
       signal: AbortSignal.timeout(8_000),
     });
-    if (!response.ok) {
-      throw new Error(`Supabase read failed with HTTP ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`Supabase read failed with HTTP ${response.status}`);
+
     const rows = (await response.json()) as ControlRow[];
     const row = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
     const status: EmergencyStopStatus = {
@@ -137,7 +123,7 @@ export async function checkEmergencyStop(): Promise<EmergencyStopStatus> {
     return status;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown read error';
-    console.error(`[EmergencyStopGate] read failed — failing open: ${message}`);
+    console.error(`[EmergencyStopGate] read failed — stop state unavailable: ${message}`);
     return {
       active: false,
       reason: null,
@@ -151,14 +137,35 @@ export async function checkEmergencyStop(): Promise<EmergencyStopStatus> {
 }
 
 /**
- * Convenience guard: throws when the emergency stop is active. Use at task
- * enqueue/start boundaries.
+ * General task-start guard. Preserves existing behavior for non-mutating work:
+ * an explicitly active stop blocks; unavailable state does not automatically
+ * freeze read-only monitoring/analysis.
  */
 export async function assertEmergencyStopInactive(context: string): Promise<EmergencyStopStatus> {
   const status = await checkEmergencyStop();
   if (status.active) {
     throw new Error(
       `EMERGENCY_STOP_ACTIVE: owner emergency stop is engaged (${status.reason ?? 'no reason recorded'}); refused: ${context}`,
+    );
+  }
+  return status;
+}
+
+/**
+ * Mandatory guard for autonomous mutations. FAIL CLOSED when the owner stop
+ * control cannot be verified. Use before patch/commit/push/merge/migration/
+ * deploy/rollback or any equivalent state-changing action.
+ */
+export async function assertAutonomousMutationAllowed(context: string): Promise<EmergencyStopStatus> {
+  const status = await checkEmergencyStop();
+  if (status.active) {
+    throw new Error(
+      `EMERGENCY_STOP_ACTIVE: owner emergency stop is engaged (${status.reason ?? 'no reason recorded'}); mutation refused: ${context}`,
+    );
+  }
+  if (status.source === 'unavailable') {
+    throw new Error(
+      `EMERGENCY_STOP_UNVERIFIED: owner stop state could not be verified; autonomous mutation fails closed: ${context}`,
     );
   }
   return status;
