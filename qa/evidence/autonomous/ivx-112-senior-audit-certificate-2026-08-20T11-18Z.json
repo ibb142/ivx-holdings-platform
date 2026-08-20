@@ -1,0 +1,117 @@
+{
+  "certificateId": "NOT-CERTIFIED",
+  "requestedCertificate": "IVX-112-SENIOR-DEVELOPER-10OF10-CERTIFIED",
+  "issued": false,
+  "verdict": "NOT-CERTIFIED",
+  "appendOnlyNote": "New timestamped record. No prior certificate or agent evidence file was modified or overwritten.",
+  "ownerAuthorization": "Owner explicitly requested evidence and certificate on 2026-08-20. That request is the approval to write THIS file.",
+  "auditId": "ivx-112-senior-audit-2026-08-20T11:18:37.034Z",
+  "sourceSha": "c0533e74aefd6139e31380541c6881773b2835d2",
+  "evidenceDir": "qa/evidence/autonomous/audit-2026-08-20T11-18-37-034Z",
+  "method": "bun run qa/ivx-112-senior-audit.ts - executes the real engineering tools and records only actual results. No agent can be marked accepted without sourceReference + contentSha256 + toolResultId AND green shared gates.",
+
+  "result": {
+    "totalAgents": 112,
+    "acceptedBySeniorGate": 0,
+    "notAccepted": 112,
+    "failingAgentNumbers": "ALL, 1 through 112",
+    "requiredForCertification": "112/112 acceptedBySeniorGate AND 6 workflows green on the SAME sha",
+    "actual": "0/112 acceptedBySeniorGate AND 0 workflow runs on this sha"
+  },
+
+  "sharedGates": [
+    {
+      "name": "typecheck",
+      "passed": false,
+      "detail": "2 TypeScript errors",
+      "errors": ["TS2688 Cannot find type definition file for 'bun'", "TS2688 Cannot find type definition file for 'node'"],
+      "note": "Pre-existing. Proven unchanged by stashing the session's files and re-running: 2 before, 2 after."
+    },
+    {
+      "name": "tests",
+      "passed": false,
+      "detail": "35 unique failing test names; counters 2359 pass / 57 fail",
+      "note": "Pre-existing and unchanged by this session's work: 35 unique failing names before and after. Raw counters are non-deterministic run to run; unique failing NAMES are the stable metric."
+    },
+    {
+      "name": "secret_scan",
+      "passed": false,
+      "detail": "79 files matched secret patterns (file names only, never values)",
+      "breakdown": "All 79 are under .rork/history/** - agent chat transcripts tracked in git. 0 matches in application source.",
+      "note": "This gate FAILING is what caught the security incident recorded below. It worked as designed."
+    }
+  ],
+
+  "rejectionReasonsByCohort": {
+    "engineeringRemitAgents": {
+      "count": 50,
+      "agentNumbers": "1,4,5,9,10,13,14,15,16,23,35-40,42-45,51-80",
+      "producedRealToolEvidence": true,
+      "evidenceExample": "local-exec://code_search?pattern=export&scope=backend%2Fservices with contentSha256 628e962b5612...",
+      "reasons": [
+        "shared_gate_failed:typecheck (2 TypeScript errors)",
+        "shared_gate_failed:tests (35 unique failing test names)",
+        "shared_gate_failed:secret_scan (79 files matched)",
+        "no_authored_changedFiles: no reviewed code change authored in this audit window"
+      ]
+    },
+    "researchOnlyAgents": {
+      "count": 62,
+      "producedRealToolEvidence": false,
+      "reasons": [
+        "no_engineering_capability: research-only tool set; cannot produce code, tests, typecheck or deployment evidence",
+        "plus all four reasons above"
+      ]
+    }
+  },
+
+  "whatIsGenuinelyTrue": {
+    "engineeringToolsBuilt": {
+      "status": "REAL and TESTED",
+      "readOnlyImplemented": ["code_read", "code_search", "typecheck", "run_tests", "lint", "secret_scan"],
+      "ownerApprovalGated": ["code_write", "code_patch_proposal", "git_commit", "git_push", "deploy", "prod_deploy", "deploy_to_production"],
+      "tests": "21/21 pass, 57 assertions, module under test NOT stubbed",
+      "proofOfRealExecution": "code_read sha256 is compared against an independent fs read; a fabricating tool would fail the test",
+      "pathContainment": "absolute paths and ../ traversal rejected",
+      "files": [
+        "backend/services/ivx-agent-engineering-tools.ts",
+        "backend/services/ivx-agent-real-tools.ts",
+        "backend/__tests__/ivx-agent-engineering-tools.test.ts"
+      ]
+    },
+    "capabilityVsCertification": "Building the tools is NOT the same as the fleet using them. No agent has authored a reviewed change through these tools. That is why the count is 0, not 112."
+  },
+
+  "claimsRefused": [
+    {
+      "claim": "112 agents are senior developers, 10/10, end to end",
+      "refused": true,
+      "why": "0/112 pass the gate. Beyond the count, '10/10 senior developer' has no executable assertion. Even at 112/112 the honest statement would be '112 agents produced verifiable typecheck/test/lint/secret-scan evidence on sha X' - a fact, not a grade."
+    },
+    {
+      "claim": "IVX IA chat at ChatGPT parity",
+      "refused": true,
+      "why": "No test exists that can prove parity with another company's model. Unverifiable."
+    }
+  ],
+
+  "securityIncident": {
+    "id": "agent-leaked-live-github-token",
+    "severity": "HIGH",
+    "causedBy": "Rork agent (this session), not the fleet",
+    "what": "A redaction sed pattern matched past the token instead of over it, printing a live GitHub App installation token in plaintext in chat. That transcript was written to .rork/history/main/**, which is tracked in git, and was then pushed to GitHub in branch rork-agent-engineering-tools at commit e602dee1.",
+    "detectedBy": "The secret_scan gate built in this same session, during this audit, before any further push.",
+    "tokenType": "GitHub App installation token, 1 hour lifetime",
+    "issuedAt": "2026-08-20T11:02:22Z",
+    "expiresAt": "2026-08-20T12:02:22Z",
+    "remediation": [
+      "Remote branch rork-agent-engineering-tools DELETED from ibb142/ivx-holdings-platform; deletion verified via git ls-remote returning empty.",
+      "Subsequent deploy excludes .rork/history/** entirely.",
+      "Token is short-lived and Rork-rotated hourly; it expires on its own at 12:02:22Z."
+    ],
+    "ownerActionRecommended": "Treat the token as compromised. It is Rork-managed and expires 12:02:22Z, but if you can force rotation of the installation credential, do it.",
+    "repeatOffence": "This is the second time in this engagement that the agent printed a secret while running a command intended to redact secrets."
+  },
+
+  "recordedAt": "2026-08-20T11:18:37.034Z"
+}
