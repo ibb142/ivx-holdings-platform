@@ -92,6 +92,28 @@ function requireOwner(c: any, body: Record<string, unknown> = {}) {
 }
 
 
+function validateAutonomousRunPayload(payload: Record<string, unknown>): string | null {
+  if (payload.__autonomous !== true) return null;
+  const actions = Array.isArray(payload.actions) ? payload.actions.map((value) => String(value || '').trim()).filter(Boolean) : [];
+  const sourceSha = typeof payload.sourceSha === 'string' ? payload.sourceSha.trim() : '';
+  const taskId = typeof payload.__taskId === 'string' ? payload.__taskId.trim() : '';
+  if (!taskId) return 'AUTONOMOUS_TASK_BLOCKED: taskId_missing';
+  if (!/^[0-9a-f]{40}$/i.test(sourceSha)) return 'AUTONOMOUS_TASK_BLOCKED: sourceSha_invalid_or_missing';
+  if (payload.realExecutionOnly !== true) return 'AUTONOMOUS_TASK_BLOCKED: realExecutionOnly_not_true';
+  if (payload.simulatedSuccessAllowed !== false) return 'AUTONOMOUS_TASK_BLOCKED: simulatedSuccessAllowed_not_false';
+  if (payload.evidenceRequired !== true) return 'AUTONOMOUS_TASK_BLOCKED: evidenceRequired_not_true';
+  if (payload.exactSourceShaRequired !== true) return 'AUTONOMOUS_TASK_BLOCKED: exactSourceShaRequired_not_true';
+  if (payload.realFundsAllowed === true) return 'AUTONOMOUS_TASK_BLOCKED: real_funds_forbidden';
+  if (actions.length === 0) return 'AUTONOMOUS_TASK_BLOCKED: actions_missing';
+  const normalized = actions.join(' ').toLowerCase();
+  const financial = /(^|[_\s])(move|credit|debit|settle|settlement|transfer|trade|purchase|sell|withdraw|payout|disburse)([_\s]|$)/i.test(normalized);
+  const forbidden = /(approve_kyc|approve_aml|disable_security_gate|disable_rls|weaken_secret_scanner|fabricate_certificate)/i.test(normalized);
+  const highRisk = /(deploy|merge|rotate|revoke|delete|drop|truncate|production|privileged|grant|secret|credential|beneficiary|routing|swift|bic)/i.test(normalized);
+  if (financial || forbidden) return 'AUTONOMOUS_TASK_BLOCKED: financial_or_never_autonomous_action';
+  if (highRisk) return 'AUTONOMOUS_TASK_BLOCKED: high_risk_requires_non_autonomous_owner_flow';
+  return null;
+}
+
 export function registerAgentRoutes(app: Hono): void {
   // ── Dashboard & Listing ──────────────────────────────────────────────────
 
@@ -327,6 +349,10 @@ export function registerAgentRoutes(app: Hono): void {
     const taskType = (body as any).taskType || 'audit';
     const payload = (body as any).payload || {};
     const ownerApprovalToken = (body as any).ownerApprovalToken || null;
+    const autonomousBlocker = validateAutonomousRunPayload(payload as Record<string, unknown>);
+    if (autonomousBlocker) {
+      return c.json({ ok: false, marker: IVX_AGENT_API_MARKER, error: autonomousBlocker }, 403);
+    }
 
     const result = await executeAgentRun(agentId, taskType, payload, ownerApprovalToken);
     return c.json({
