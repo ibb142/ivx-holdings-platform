@@ -33,6 +33,7 @@ export interface LoginTraceEvent {
   success: boolean;
   stage?: 'auth' | 'authorization' | 'storage' | 'navigation';
   path?: string;
+  operationElapsedMs?: number;
   httpStatus?: number;
   errorCode?: string;
   errorMessage?: string;
@@ -73,13 +74,15 @@ export class LoginTrace {
     const elapsedMs = now - this.startTime;
     const checkpointElapsedMs = now - this.lastCheckpoint;
     this.lastCheckpoint = now;
+    const { elapsedMs: operationElapsedMs, ...metadata } = options;
     const event: LoginTraceEvent = {
       traceId: this.traceId,
       checkpoint: name,
       timestamp: now,
       elapsedMs,
       success: options.success ?? true,
-      ...options,
+      ...metadata,
+      ...(operationElapsedMs !== undefined ? { operationElapsedMs } : {}),
     };
     console.log(`[LoginTrace] ${this.traceId} ${name} +${checkpointElapsedMs}ms total=${elapsedMs}ms${event.httpStatus ? ` http=${event.httpStatus}` : ''}${event.errorCode ? ` code=${event.errorCode}` : ''}${event.errorMessage ? ` msg=${event.errorMessage}` : ''}`);
     return event;
