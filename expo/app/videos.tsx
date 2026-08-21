@@ -63,6 +63,21 @@ const GOLD = Colors.primary;
 
 type ReelChannel = 'all' | 'investment' | 'buyer' | 'seller';
 
+/**
+ * Resolve the reels index for a deep-link focus param.
+ * Accepts a video id (`<uuid>`) or a deal reference (`deal-<dealId>`).
+ * Returns -1 when the focused video is not in the loaded pages yet.
+ */
+export function resolveReelFocusIndex(videos: FeedVideo[], focus: string): number {
+  const direct = videos.findIndex((v) => v.id === focus);
+  if (direct >= 0) return direct;
+  if (focus.startsWith('deal-')) {
+    const dealId = focus.slice('deal-'.length);
+    return videos.findIndex((v) => v.deal?.id === dealId);
+  }
+  return -1;
+}
+
 const CHANNELS: { id: ReelChannel; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'investment', label: 'Investments' },
@@ -123,8 +138,10 @@ export default function VideosScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  const params = useLocalSearchParams<{ type?: string }>();
-  void params;
+  const params = useLocalSearchParams<{ type?: string; focus?: string }>();
+  const focusParam = typeof params.focus === 'string' ? params.focus : null;
+  const listRef = useRef<FlatList<FeedVideo>>(null);
+  const focusAppliedRef = useRef<string | null>(null);
   const [muted, setMuted] = useState<boolean>(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [viewerId, setViewerId] = useState<string | null>(null);
@@ -292,6 +309,22 @@ export default function VideosScreen() {
     if (!activeVideo) return;
     handleView(activeVideo);
   }, [playback.activeIndex, filteredVideos, handleView]);
+
+  // Deep-link focus: when arriving from Home/DealVideoCard with ?focus=<videoId|deal-<dealId>,
+  // scroll the reels feed to that exact video (loading more pages until it is found).
+  useEffect(() => {
+    if (!focusParam || focusAppliedRef.current === focusParam) return;
+    const index = resolveReelFocusIndex(allVideos, focusParam);
+    if (index >= 0) {
+      focusAppliedRef.current = focusParam;
+      playback.setActiveIndex(index);
+      // scrollToIndex can fail if the row is not yet measured — retry once laid out.
+      listRef.current?.scrollToIndex({ index, animated: false, viewPosition: 0 });
+    } else if (hasMore && !isFetchingMore && !feedQuery.isLoading) {
+      // Focused video is further down the feed — fetch the next page and re-check.
+      loadMore();
+    }
+  }, [focusParam, allVideos, hasMore, isFetchingMore, feedQuery.isLoading, playback, loadMore]);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -492,6 +525,12 @@ export default function VideosScreen() {
       ) : (
         <ModuleErrorBoundary moduleName="Reels">
         <FlatList
+          ref={listRef}
+          onScrollToIndexFailed={(info) => {
+            setTimeout(() => {
+              listRef.current?.scrollToIndex({ index: info.index, animated: false, viewPosition: 0 });
+            }, 100);
+          }}
           data={filteredVideos}
           keyExtractor={(v) => v.id}
           renderItem={renderItem}
