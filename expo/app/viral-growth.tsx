@@ -51,7 +51,10 @@ import {
   globalReachStats,
   competitorComparison} from '@/mocks/viral-growth';
 
-const REFERRAL_CODE = 'IVXHOLDINGS-INVITE';
+// Shared community invite code — NOT a personal referral code. Personal codes
+// are issued per member from the backend (see the Referrals screen); this
+// shared code must never be presented as user-specific referral data.
+const COMMUNITY_INVITE_CODE = 'IVXHOLDINGS-INVITE';
 
 function PulsingDot({ color, size = 8 }: { color: string; size?: number }) {
   const pulse = useRef(new Animated.Value(1)).current;
@@ -421,9 +424,10 @@ function GlobalReach() {
 function ReferralCodeCard({ onCopy, onShare }: { onCopy: () => void; onShare: () => void }) {
   return (
     <View style={s.codeCard}>
-      <Text style={s.codeLabel}>IVX Community Invite Code</Text>
+      <Text style={s.codeLabel}>Shared Community Invite Code</Text>
+      <Text style={s.codeLabelSub}>Shared code — your personal referral code is issued after registration (see Referrals)</Text>
       <View style={s.codeRow}>
-        <Text style={s.codeText}>{REFERRAL_CODE}</Text>
+        <Text style={s.codeText}>{COMMUNITY_INVITE_CODE}</Text>
         <TouchableOpacity style={s.codeCopyBtn} onPress={onCopy}>
           <Copy size={16} color={Colors.primary} />
         </TouchableOpacity>
@@ -453,7 +457,7 @@ export default function ViralGrowthScreen() {
 
   const handleCopyCode = useCallback(async () => {
     try {
-      await Clipboard.setStringAsync(REFERRAL_CODE);
+      await Clipboard.setStringAsync(COMMUNITY_INVITE_CODE);
       if (Platform.OS !== 'web') void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       console.log('[ViralGrowth] Referral code copied');
     } catch (e) {
@@ -588,7 +592,8 @@ const s = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.primary + '30'},
-  codeLabel: { color: Colors.textSecondary, fontSize: 11, fontWeight: '600' as const, marginBottom: 8 },
+  codeLabel: { color: Colors.textSecondary, fontSize: 11, fontWeight: '600' as const, marginBottom: 4 },
+  codeLabelSub: { color: Colors.textTertiary, fontSize: 10, marginBottom: 8 },
   codeRow: {
     flexDirection: 'row',
     alignItems: 'center',

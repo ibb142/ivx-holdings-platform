@@ -78,47 +78,71 @@ jobs:
     name: Maestro E2E (mobile surface) — HARD GATE
     runs-on: macos-latest
     needs: [typecheck]
+    env:
+      # Root-cause fix: open-access mode defaults ON in development runtime
+      # (shared/ivx/access-control.ts DEFAULT_OPEN_ACCESS_MODE_ENABLED = true),
+      # which routes the app straight to /(tabs)/home so the login screen never
+      # renders and the "Sign In" assertion can never pass. Pin it OFF for the
+      # E2E gate regardless of build configuration.
+      EXPO_PUBLIC_IVX_OPEN_ACCESS_MODE: 'false'
+      EXPO_PUBLIC_IVX_TEST_MODE: 'false'
+      CI: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.9
       - run: cd expo && bun install --frozen-lockfile
-      - name: Start the Expo development server
-        working-directory: expo
-        env:
-          CI: '1'
-        run: |
-          set -euo pipefail
-          nohup bunx expo start --dev-client --port 8081 > "$RUNNER_TEMP/expo-metro.log" 2>&1 &
-          for attempt in {1..30}; do
-            if curl --silent --fail http://127.0.0.1:8081/status | grep -q 'packager-status:running'; then
-              exit 0
-            fi
-            sleep 2
-          done
-          cat "$RUNNER_TEMP/expo-metro.log"
-          echo 'Expo dev server failed to start'
-          exit 1
-      - name: Build and launch the iOS simulator app — HARD GATE
+      # Release configuration embeds the JS bundle into the app at build time:
+      # no Metro at runtime, no Expo dev launcher (expo-dev-client is not
+      # installed), no bundle-URL resolution. __DEV__ is false in Release, so
+      # the app runs in production runtime and shows the real cold-launch
+      # login path the flow asserts against.
+      - name: Build standalone iOS simulator app (Release, embedded bundle) — HARD GATE
         working-directory: expo
         timeout-minutes: 45
         run: |
-          set -euo pipefail
-          bunx expo run:ios --configuration debug --no-bundler
+          set -o pipefail
+          bunx expo run:ios --configuration Release --no-bundler 2>&1 | tee maestro-metro.log
           echo 'ios_build=PASS'
       - name: Install Maestro
         run: |
           set -euo pipefail
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo 'maestro_install=PASS'
+      - name: Capture pre-test diagnostics
+        run: |
+          xcrun simctl io booted screenshot screenshot-01-pre-test.png || true
+          xcrun simctl spawn booted log show --last 5m > maestro-logcat.txt 2>&1 || true
+          echo "=== Installed app ==="
+          xcrun simctl listapps booted | grep -A1 ivxholdings || true
       - name: Run Maestro launch smoke test — HARD GATE
         run: |
-          set -euo pipefail
-          ~/.maestro/bin/maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml
+          set -o pipefail
+          ~/.maestro/bin/maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml 2>&1 | tee maestro-test.log
+          MAESTRO_EXIT=${PIPESTATUS[0]}
+          echo "=== Maestro exit code: $MAESTRO_EXIT ==="
+          if [ "$MAESTRO_EXIT" -ne 0 ]; then
+            echo '::error::Maestro flow failed'
+            exit 1
+          fi
+          if grep -q '<failure' maestro-report.xml 2>/dev/null; then
+            echo '::error::Maestro JUnit report contains failures'
+            exit 1
+          fi
           echo 'maestro_test=PASS'
+      - name: Capture post-test diagnostics
+        if: always()
+        run: |
+          xcrun simctl io booted screenshot screenshot-02-post-test.png || true
+          xcrun simctl spawn booted log show --last 5m > maestro-logcat.txt 2>&1 || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: maestro-report
-          path: maestro-report.xml
+          path: |
+            maestro-report.xml
+            maestro-test.log
+            maestro-metro.log
+            maestro-logcat.txt
+            screenshot-*.png
