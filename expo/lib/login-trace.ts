@@ -37,6 +37,7 @@ export interface LoginTraceEvent {
   errorMessage?: string;
   networkError?: string;
   timeoutSource?: string;
+  path?: string;
 }
 
 export function generateLoginTraceId(): string {
@@ -64,21 +65,24 @@ export class LoginTrace {
       errorMessage?: string;
       networkError?: string;
       timeoutSource?: string;
+      path?: string;
+      elapsedMs?: number;
     } = {},
   ): LoginTraceEvent {
     const now = Date.now();
-    const elapsedMs = now - this.startTime;
+    const totalElapsedMs = now - this.startTime;
     const checkpointElapsedMs = now - this.lastCheckpoint;
     this.lastCheckpoint = now;
+    const { elapsedMs: suppliedElapsedMs, ...metadata } = options;
     const event: LoginTraceEvent = {
       traceId: this.traceId,
       checkpoint: name,
       timestamp: now,
-      elapsedMs,
+      elapsedMs: suppliedElapsedMs ?? totalElapsedMs,
       success: options.success ?? true,
-      ...options,
+      ...metadata,
     };
-    console.log(`[LoginTrace] ${this.traceId} ${name} +${checkpointElapsedMs}ms total=${elapsedMs}ms${event.httpStatus ? ` http=${event.httpStatus}` : ''}${event.errorCode ? ` code=${event.errorCode}` : ''}${event.errorMessage ? ` msg=${event.errorMessage}` : ''}`);
+    console.log(`[LoginTrace] ${this.traceId} ${name} +${checkpointElapsedMs}ms total=${totalElapsedMs}ms${event.httpStatus ? ` http=${event.httpStatus}` : ''}${event.errorCode ? ` code=${event.errorCode}` : ''}${event.errorMessage ? ` msg=${event.errorMessage}` : ''}`);
     return event;
   }
 }
