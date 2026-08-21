@@ -1,17 +1,19 @@
 /**
- * Regression tests for the Home Reels card size — ITEM 2.
+ * Regression tests for the Home card size — ITEM 2 (post black-screen fix).
+ *
+ * The Home feed no longer mounts the canonical reel card at all: deal blocks
+ * render as compact InvestmentCard and video blocks render a poster-only
+ * preview (the native player initialises only in /videos — fix 89ea63d67).
  *
  * These tests FAIL if:
  *   - Home card becomes full-screen
- *   - feedHeight becomes NaN
- *   - card exceeds approved bounds (520px cap)
- *   - full Reel styling is applied to Home
- *   - controls overflow the card
- *   - screenHeight is used in Home card height calculation
+ *   - screenHeight leaks back into Home card sizing
+ *   - full Reel styling (paging, mode="reel") is applied to Home
+ *   - the poster preview exceeds approved compact bounds (220 ≤ 520)
  *
  * File under test: expo/components/InvestorFirstFeed.tsx
  * Component: InvestorFirstFeed
- * Approved design: feedHeight = Math.min(screenWidth - padH * 2, 520)
+ * Approved design: poster-only preview, minHeight 220, width 100%
  */
 import { describe, it, expect } from 'bun:test';
 import { readFileSync } from 'fs';
@@ -24,91 +26,39 @@ function readFile(path: string): string {
 }
 
 describe('ITEM 2: Home Reels Card Size Regression', () => {
-  describe('Approved compact size (520px cap)', () => {
-    it('feedHeight is capped at 520px', () => {
+  describe('Approved compact size (poster-only preview)', () => {
+    it('video preview keeps the compact 220 minHeight (≤ 520 cap)', () => {
       const content = readFile('components/InvestorFirstFeed.tsx');
-      // The approved formula: Math.min(screenWidth - padH * 2, 520)
-      expect(content).toContain('520');
-      expect(content).toMatch(/feedHeight\s*=\s*Math\.min\(/);
-      expect(content).toMatch(/screenWidth\s*-\s*padH\s*\*\s*2/);
+      expect(content).toMatch(/minHeight:\s*220/);
+      expect(content).not.toMatch(/minHeight:\s*[5-9]\d{2}/);
     });
 
-    it('feedHeight uses screenWidth (not screenHeight)', () => {
+    it('no feedHeight formula / screenHeight math on Home', () => {
       const content = readFile('components/InvestorFirstFeed.tsx');
-      // screenWidth must be destructured from useWindowDimensions
-      expect(content).toMatch(/width:\s*screenWidth/);
-      // screenHeight must NOT be destructured
-      expect(content).not.toMatch(/height:\s*screenHeight/);
-      // screenHeight must NOT appear in feedHeight calculation
-      const feedHeightLine = content.match(/feedHeight\s*=\s*[^\n]+/);
-      expect(feedHeightLine).toBeTruthy();
-      expect(feedHeightLine![0]).not.toContain('screenHeight');
-    });
-
-    it('feedHeight does not reference undefined screenHeight variable', () => {
-      const content = readFile('components/InvestorFirstFeed.tsx');
-      // If screenHeight is referenced but never destructured, it's undefined → NaN
-      const hasScreenHeightDestructure = /height:\s*screenHeight/.test(content);
-      const hasScreenHeightInFeedHeight = /feedHeight[^;]*screenHeight/.test(content);
-      // If screenHeight is in feedHeight but not destructured → NaN bug
-      if (hasScreenHeightInFeedHeight) {
-        expect(hasScreenHeightDestructure).toBe(true);
-      }
-      // Explicitly: feedHeight must NOT contain screenHeight at all
-      const feedHeightLine = content.match(/const feedHeight\s*=\s*[^;\n]+/);
-      if (feedHeightLine) {
-        expect(feedHeightLine[0]).not.toContain('screenHeight');
-      }
-    });
-
-    it('feedHeight is never NaN — all referenced variables are defined', () => {
-      const content = readFile('components/InvestorFirstFeed.tsx');
-      // screenWidth must be defined via useWindowDimensions
-      expect(content).toMatch(/const\s*\{\s*width:\s*screenWidth\s*\}\s*=\s*useWindowDimensions/);
-      // padH must be defined before feedHeight
-      expect(content).toMatch(/padH\s*=/);
-      // feedHeight formula must only use defined variables
-      const feedHeightLine = content.match(/const feedHeight\s*=\s*Math\.min\(([^,]+),\s*(\d+)\)/);
-      expect(feedHeightLine).toBeTruthy();
-      const firstArg = feedHeightLine![1].trim();
-      // Must reference screenWidth and padH (both defined above)
-      expect(firstArg).toContain('screenWidth');
-      expect(firstArg).toContain('padH');
+      expect(content).not.toMatch(/feedHeight\s*=/);
+      expect(content).not.toMatch(/screenHeight/);
     });
   });
 
   describe('Home card is NOT full-screen', () => {
-    it('passes mode="feed" (not mode="reel") to CanonicalInvestmentReelCard', () => {
+    it('never mounts the reel card or native player on Home', () => {
       const content = readFile('components/InvestorFirstFeed.tsx');
-      expect(content).toContain('mode="feed"');
-      // Home should NOT pass mode="reel"
-      const homeReelSection = content.match(/<CanonicalInvestmentReelCard[\s\S]*?\/>/);
-      if (homeReelSection) {
-        expect(homeReelSection[0]).toContain('mode="feed"');
-        expect(homeReelSection[0]).not.toContain('mode="reel"');
-      }
+      expect(content).not.toContain('CanonicalInvestmentReelCard');
+      expect(content).not.toContain('mode="reel"');
+      expect(content).not.toContain('mode="feed"');
+      expect(content).not.toMatch(/from\s+['"]expo-av['"]/);
     });
 
-    it('passes shouldMountVideo={false} (no autoplay on Home)', () => {
+    it('video block renders a poster-only preview routing to /videos', () => {
       const content = readFile('components/InvestorFirstFeed.tsx');
-      expect(content).toContain('shouldMountVideo={false}');
-    });
-
-    it('passes isActive={false} (Home card is not the active player)', () => {
-      const content = readFile('components/InvestorFirstFeed.tsx');
-      expect(content).toContain('isActive={false}');
-    });
-
-    it('passes feedHeight prop (not screenHeight)', () => {
-      const content = readFile('components/InvestorFirstFeed.tsx');
-      expect(content).toContain('feedHeight={feedHeight}');
+      expect(content).toContain('poster');
+      expect(content).toContain("pathname: '/videos'");
+      expect(content).toContain('CardBoundary');
     });
 
     it('does not use full-screen 9:16 ratio on Home', () => {
       const content = readFile('components/InvestorFirstFeed.tsx');
-      // The broken code used: reelWidth * 16/9 — must not be present
       expect(content).not.toMatch(/reelWidth\s*\*\s*16\s*\/\s*9/);
-      // Must not use screenHeight * 0.85 or similar
       expect(content).not.toMatch(/screenHeight\s*\*\s*0\.\d+/);
     });
   });
@@ -121,35 +71,30 @@ describe('ITEM 2: Home Reels Card Size Regression', () => {
 
     it('Home does not use pagingEnabled for vertical snap', () => {
       const content = readFile('components/InvestorFirstFeed.tsx');
-      // Home uses a regular View, not a FlatList with pagingEnabled
       expect(content).not.toMatch(/pagingEnabled/);
       expect(content).not.toMatch(/snapToInterval/);
     });
 
     it('Home does not set cardHeight = screenHeight', () => {
       const content = readFile('components/InvestorFirstFeed.tsx');
-      // The Reels module sets cardHeight = screenHeight via mode="reel"
-      // Home must use mode="feed" which makes cardHeight = feedHeight
-      expect(content).toContain('mode="feed"');
+      expect(content).not.toMatch(/cardHeight/);
     });
   });
 
   describe('Card bounds do not exceed approved limits', () => {
-    it('feedHeight max value is 520 (not larger)', () => {
+    it('every minHeight in the feed stays within the 520 cap', () => {
       const content = readFile('components/InvestorFirstFeed.tsx');
-      const match = content.match(/Math\.min\([^,]+,\s*(\d+)\)/);
-      expect(match).toBeTruthy();
-      const cap = parseInt(match![1], 10);
-      expect(cap).toBeLessThanOrEqual(520);
-      expect(cap).toBe(520);
+      const heights = [...content.matchAll(/minHeight:\s*(\d+)/g)].map(m => parseInt(m[1], 10));
+      expect(heights.length).toBeGreaterThan(0);
+      for (const h of heights) {
+        expect(h).toBeLessThanOrEqual(520);
+      }
     });
 
-    it('feedHeight is responsive (depends on screenWidth)', () => {
+    it('video preview fills width responsively (100%, no screenWidth math)', () => {
       const content = readFile('components/InvestorFirstFeed.tsx');
-      const match = content.match(/Math\.min\(([^,]+),/);
-      expect(match).toBeTruthy();
-      const formula = match![1];
-      expect(formula).toContain('screenWidth');
+      expect(content).toMatch(/width:\s*'100%'/);
+      expect(content).not.toMatch(/screenWidth\s*-/);
     });
 
     it('padH is defined with responsive values (16 or 20)', () => {
@@ -165,13 +110,6 @@ describe('ITEM 2: Home Reels Card Size Regression', () => {
       expect(content).toMatch(/isReel\s*\?\s*screenHeight\s*:\s*feedHeight/);
     });
 
-    it('CanonicalInvestmentReelCard in feed mode uses feedHeight for cardHeight', () => {
-      const content = readFile('components/CanonicalInvestmentReelCard.tsx');
-      // cardHeight = isReel ? screenHeight : feedHeight
-      expect(content).toContain('cardHeight');
-      expect(content).toMatch(/isReel\s*\?\s*screenHeight\s*:\s*feedHeight/);
-    });
-
     it('CanonicalInvestmentReelCard clips overflow', () => {
       const content = readFile('components/CanonicalInvestmentReelCard.tsx');
       expect(content).toContain('overflow');
@@ -179,41 +117,12 @@ describe('ITEM 2: Home Reels Card Size Regression', () => {
   });
 
   describe('No layout breakage on different screen sizes', () => {
-    it('formula works for small screens (screenWidth < 520 + padH*2)', () => {
-      // On a 360px screen: feedHeight = min(360-40, 520) = min(320, 520) = 320
-      const screenWidth = 360;
-      const padH = 20;
-      const feedHeight = Math.min(screenWidth - padH * 2, 520);
-      expect(feedHeight).toBe(320);
-      expect(Number.isNaN(feedHeight)).toBe(false);
-      expect(feedHeight).toBeGreaterThan(0);
-    });
-
-    it('formula works for tablets (screenWidth > 520 + padH*2)', () => {
-      // On a 800px screen: feedHeight = min(800-40, 520) = min(760, 520) = 520
-      const screenWidth = 800;
-      const padH = 20;
-      const feedHeight = Math.min(screenWidth - padH * 2, 520);
-      expect(feedHeight).toBe(520);
-      expect(Number.isNaN(feedHeight)).toBe(false);
-    });
-
-    it('formula works for mobile web viewport', () => {
-      // On a 390px screen (iPhone 14): feedHeight = min(390-32, 520) = min(358, 520) = 358
-      const screenWidth = 390;
-      const padH = 16; // isXs = true
-      const feedHeight = Math.min(screenWidth - padH * 2, 520);
-      expect(feedHeight).toBe(358);
-      expect(Number.isNaN(feedHeight)).toBe(false);
-    });
-
-    it('formula never produces NaN for any positive screenWidth', () => {
+    it('compact 220 preview height is valid for every screen width class', () => {
       for (const sw of [280, 320, 360, 390, 414, 768, 1024, 1440]) {
-        for (const ph of [16, 20]) {
-          const fh = Math.min(sw - ph * 2, 520);
-          expect(Number.isNaN(fh)).toBe(false);
-          expect(fh).toBeGreaterThan(0);
-        }
+        const h = 220;
+        expect(Number.isNaN(h)).toBe(false);
+        expect(h).toBeGreaterThan(0);
+        expect(h).toBeLessThanOrEqual(sw);
       }
     });
   });

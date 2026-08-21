@@ -170,9 +170,9 @@ describe('Mixed Feed Card Routing', () => {
       expect(content).toContain("from '@/components/InvestmentCard'");
     });
 
-    it('imports CanonicalInvestmentReelCard for video blocks', () => {
+    it('never imports the reel card for video blocks (poster-only on Home)', () => {
       const content = readFile('components/InvestorFirstFeed.tsx');
-      expect(content).toContain("CanonicalInvestmentReelCard");
+      expect(content).not.toContain('CanonicalInvestmentReelCard');
     });
 
     it('deal blocks render InvestmentCard (not reel)', () => {
@@ -181,9 +181,11 @@ describe('Mixed Feed Card Routing', () => {
       expect(content).toContain('<InvestmentCard');
     });
 
-    it('video blocks render CanonicalInvestmentReelCard', () => {
+    it('video blocks render a poster-only preview (native player stays in /videos)', () => {
       const content = readFile('components/InvestorFirstFeed.tsx');
-      expect(content).toContain('<CanonicalInvestmentReelCard');
+      expect(content).toContain("block.type === 'video'");
+      expect(content).toContain('videoPreview');
+      expect(content).toContain("pathname: '/videos'");
     });
 
     it('does not render all blocks as reels', () => {

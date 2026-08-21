@@ -1,10 +1,11 @@
 /**
- * Regression tests for the canonical reel card migration.
+ * Regression tests for the canonical card migration.
  *
  * Verifies:
- *   - Main/Home uses CanonicalInvestmentReelCard (not old cards)
+ *   - Main/Home renders compact InvestmentCard + poster-only video previews
+ *     (no native player init on Home — black-screen fix 89ea63d67)
  *   - Reels uses CanonicalInvestmentReelCard (not old cards)
- *   - Landing uses CanonicalInvestmentReelCard (not old cards)
+ *   - Landing uses InvestmentCard for deal parity
  *   - Old reel card has zero production imports
  *   - Deal ID is preserved through mapping (route contract)
  */
@@ -57,9 +58,22 @@ describe('Canonical Reel Card Migration', () => {
   });
 
   describe('Canonical card adoption', () => {
-    it('InvestorFirstFeed imports CanonicalInvestmentReelCard', () => {
+    it('InvestorFirstFeed imports InvestmentCard for deal blocks', () => {
       const content = readFile('components/InvestorFirstFeed.tsx');
-      expect(content).toContain("CanonicalInvestmentReelCard");
+      expect(content).toContain('import InvestmentCard');
+    });
+
+    it('InvestorFirstFeed never mounts a native video player (black-screen guard)', () => {
+      const content = readFile('components/InvestorFirstFeed.tsx');
+      expect(content).not.toContain('CanonicalInvestmentReelCard');
+      expect(content).not.toMatch(/from\s+['"]expo-av['"]/);
+      expect(content).not.toContain('shouldMountVideo');
+    });
+
+    it('InvestorFirstFeed renders video blocks as poster-only previews', () => {
+      const content = readFile('components/InvestorFirstFeed.tsx');
+      expect(content).toContain('poster');
+      expect(content).toContain("pathname: '/videos'");
     });
 
     it('Reels (videos.tsx) imports CanonicalInvestmentReelCard', () => {
