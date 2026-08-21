@@ -158,9 +158,24 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: cd expo && bunx expo run:android --no-bundler && cd .. && maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml && echo 'android_build=PASS' && echo 'maestro_test=PASS'
+          script: |
+            set -euo pipefail
+            trap 'cp "$RUNNER_TEMP/expo-metro.log" maestro-metro.log 2>/dev/null || true; adb logcat -d > maestro-logcat.txt 2>/dev/null || true' EXIT
+            cd expo
+            bunx expo run:android --no-bundler
+            cd ..
+            adb reverse tcp:8081 tcp:8081
+            adb shell am force-stop com.ivxholdings.app
+            adb shell am start -W -a android.intent.action.VIEW -d "ivx-app://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081" -p com.ivxholdings.app
+            sleep 8
+            maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml
+            echo 'android_build=PASS'
+            echo 'maestro_test=PASS'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: maestro-report
-          path: maestro-report.xml
+          path: |
+            maestro-report.xml
+            maestro-metro.log
+            maestro-logcat.txt
