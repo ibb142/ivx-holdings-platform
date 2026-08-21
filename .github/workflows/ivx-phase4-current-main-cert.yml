@@ -1,0 +1,62 @@
+name: IVX Phase 4 Autonomous Current-Main Certification
+
+on:
+  push:
+    branches: ['fix/autonomous-phase4-current-main']
+    paths:
+      - '.github/workflows/ivx-phase4-current-main-cert.yml'
+      - 'scripts/ivx-senior-quality-gate.mjs'
+      - 'scripts/__tests__/ivx-senior-quality-gate.test.mjs'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  API_BASE: https://api.ivxholding.com
+
+jobs:
+  phase4-preflight:
+    name: Phase 4 fail-closed preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Senior gate regression tests
+        run: node --test scripts/__tests__/ivx-senior-quality-gate.test.mjs
+      - name: Backend typecheck
+        run: bunx tsc --noEmit -p tsconfig.json
+      - name: Verify live autonomous fleet and production SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 30 "$API_BASE/health" -o health.json
+          curl -fsS --max-time 30 "$API_BASE/version" -o version.json
+          curl -fsS --max-time 30 "$API_BASE/api/ivx/agents" -o agents.json
+          test "$(jq -r '.ok // false' health.json)" = true
+          test "$(jq -r '.ok // false' agents.json)" = true
+          test "$(jq -r '.totalAgents // 0' agents.json)" = 112
+          test "$(jq '[.agents[].agentId] | unique | length' agents.json)" = 112
+          LIVE_SHA=$(jq -r '.commit // .version.commit // empty' version.json)
+          test -n "$LIVE_SHA"
+          echo "controller_sha=$GITHUB_SHA"
+          echo "production_sha=$LIVE_SHA"
+          echo "fleet=112"
+      - name: Phase 4 preflight certificate
+        run: |
+          mkdir -p qa/evidence/autonomous
+          jq -n --arg sha "$GITHUB_SHA" --arg run "$GITHUB_RUN_ID" '{ok:true,certificate:"IVX-PHASE4-CURRENT-MAIN-PREFLIGHT",controllerSha:$sha,githubRunId:$run,seniorGateRegression:true,backendTypecheck:true,expectedAgents:112,netlifyRequired:false,productionStack:["GitHub","Render","Supabase","AWS"],truthNote:"Preflight only. Final Phase 4 certification additionally requires the 112/112 sequential Senior Gate and exact production SHA parity."}' > qa/evidence/autonomous/phase4-current-main-preflight.json
+          cat qa/evidence/autonomous/phase4-current-main-preflight.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase4-current-main-preflight-${{ github.sha }}
+          path: |
+            qa/evidence/autonomous/phase4-current-main-preflight.json
+            health.json
+            version.json
+            agents.json
