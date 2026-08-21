@@ -2319,11 +2319,11 @@
         '<div class="ivx-card-timeline">' +
           '<div class="ivx-card-timeline-header"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Project Timeline</div>' +
           '<div class="ivx-card-timeline-row">' +
-            '<div class="ivx-card-timeline-item"><div class="ivx-card-timeline-label">Current Stage</div><div class="ivx-card-timeline-value">Pending</div></div>' +
-            '<div class="ivx-card-timeline-item"><div class="ivx-card-timeline-label">Progress</div><div class="ivx-card-timeline-value">0%</div></div>' +
+            '<div class="ivx-card-timeline-item"><div class="ivx-card-timeline-label">Current Stage</div><div class="ivx-card-timeline-value">Not reported</div></div>' +
+            '<div class="ivx-card-timeline-item"><div class="ivx-card-timeline-label">Progress</div><div class="ivx-card-timeline-value">Not reported</div></div>' +
             '<div class="ivx-card-timeline-item"><div class="ivx-card-timeline-label">Est. Completion</div><div class="ivx-card-timeline-value">Not available</div></div>' +
           '</div>' +
-          '<div class="ivx-card-progress-bar"><div class="ivx-card-progress-fill" style="width:0%"></div></div>' +
+          '' +
         '</div>' +
         '<div class="ivx-card-min-row">' +
           '<div class="ivx-card-min-item">' +

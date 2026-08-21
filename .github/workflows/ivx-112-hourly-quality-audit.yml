@@ -1,0 +1,185 @@
+name: IVX 112 Hourly Quality Audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-112-hourly-quality-audit.yml'
+  schedule:
+    - cron: '10 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+env:
+  API_BASE: https://api.ivxholding.com
+  PROGRAM_ID: IVX-LANDING-10OF10-2026-08-19
+  IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+  IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+
+concurrency:
+  group: ivx-112-hourly-quality-audit
+  cancel-in-progress: false
+
+jobs:
+  sync-and-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve owner binding and verify production
+        shell: bash
+        run: |
+          set -euo pipefail
+          SYSTEM_KEY="${IVX_AI_SYSTEM_SECRET:-${IVX_SYSTEM_SECRET:-}}"
+          test -n "$SYSTEM_KEY"
+          echo "::add-mask::$SYSTEM_KEY"
+          echo "SYSTEM_KEY=$SYSTEM_KEY" >> "$GITHUB_ENV"
+
+          curl -fsS --max-time 30 "$API_BASE/health" -o /tmp/health.json
+          curl -fsS --max-time 30 "$API_BASE/version" -o /tmp/version.json
+          curl -fsS --max-time 30 "$API_BASE/api/ivx/agents" -o /tmp/agents-before.json
+
+          test "$(jq -r '.ok // false' /tmp/health.json)" = true
+          test "$(jq -r '.ok // false' /tmp/agents-before.json)" = true
+          test "$(jq -r '.totalAgents // 0' /tmp/agents-before.json)" = 112
+          test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents-before.json)" = 112
+
+          LIVE_SHA=$(jq -r '.commit // .version.commit // empty' /tmp/version.json)
+          test -n "$LIVE_SHA"
+          echo "LIVE_SHA=$LIVE_SHA" >> "$GITHUB_ENV"
+
+      - name: Synchronize all 112 agents
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -c '.agents[]' /tmp/agents-before.json | while read -r row; do
+            id=$(jq -r '.agentId' <<<"$row")
+            paused=$(jq -r '.paused // false' <<<"$row")
+            disabled=$(jq -r '.disabled // false' <<<"$row")
+            if [ "$disabled" = true ]; then
+              curl -fsS --max-time 20 -X POST "$API_BASE/api/ivx/agents/$id/enable" -H "x-ivx-owner-key: $SYSTEM_KEY" >/dev/null
+            fi
+            if [ "$paused" = true ]; then
+              curl -fsS --max-time 20 -X POST "$API_BASE/api/ivx/agents/$id/resume" -H "x-ivx-owner-key: $SYSTEM_KEY" >/dev/null
+            fi
+          done
+          curl -fsS --max-time 30 "$API_BASE/api/ivx/agents" -o /tmp/agents-after.json
+          test "$(jq '[.agents[] | select((.paused // false) == true or (.disabled // false) == true)] | length' /tmp/agents-after.json)" = 0
+
+      - name: Execute 112-agent quality cycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ivx112-quality
+          jq -r '.agents | sort_by(.agentNumber)[] | [.agentNumber,.agentId] | @tsv' /tmp/agents-after.json > /tmp/agents.tsv
+
+          run_agent() {
+            number="$1"; agent_id="$2"
+            started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            gap=$(( ((number - 1) % 40) + 1 ))
+            contract="/tmp/ivx112-quality/contract-$number.json"
+            output="/tmp/ivx112-quality/run-$number.json"
+            result="/tmp/ivx112-quality/result-$number.json"
+
+            contract_http=$(curl -sS --max-time 25 -o "$contract" -w '%{http_code}' "$API_BASE/api/ivx/agents/$agent_id/contract" || true)
+            task_type="audit"
+            if [ "$contract_http" = 200 ]; then
+              task_type=$(jq -r '.contract.allowedTaskTypes[0] // "audit"' "$contract")
+            fi
+
+            task_id="quality-hourly-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${number}"
+            body=$(jq -nc \
+              --arg taskType "$task_type" \
+              --arg token "$SYSTEM_KEY" \
+              --arg programId "$PROGRAM_ID" \
+              --arg sourceSha "$LIVE_SHA" \
+              --arg taskId "$task_id" \
+              --argjson gapId "$gap" \
+              '{taskType:$taskType,ownerApprovalToken:$token,payload:{programId:$programId,sourceSha:$sourceSha,gapId:$gapId,__taskId:$taskId,__workflow:"IVX 112 Hourly Quality Audit",realExecutionOnly:true,simulatedSuccessAllowed:false,realFundsAllowed:false,qualityStandard:{productionGrade:true,noFakeSuccess:true,noUnverifiedClaims:true,backwardCompatibilityRequired:true,securityReviewRequired:true,errorHandlingRequired:true,testsRequiredForCodeChanges:true,lintTypecheckRequiredForCodeChanges:true,performanceRegressionReviewRequired:true,accessibilityReviewRequiredForUI:true,noHardcodedSecrets:true,evidenceRequired:true,sourceReferenceRequired:true,toolResultIdRequired:true,commitShaRequiredWhenCodeChanged:true}}}')
+
+            run_http=$(curl -sS --retry 1 --retry-delay 1 --max-time 75 -o "$output" -w '%{http_code}' \
+              -X POST "$API_BASE/api/ivx/agents/$agent_id/run" \
+              -H 'Content-Type: application/json' \
+              -H "x-ivx-owner-key: $SYSTEM_KEY" \
+              --data "$body" || true)
+
+            ok=false
+            final_status=request_failed
+            source_reference=""
+            tool_result_id=""
+            commit_sha=""
+            error=""
+            if [ -s "$output" ]; then
+              ok=$(jq -r '.ok // false' "$output" 2>/dev/null || echo false)
+              final_status=$(jq -r '.runRecord.finalStatus // "request_failed"' "$output" 2>/dev/null || echo request_failed)
+              source_reference=$(jq -r '.runRecord.sourceReference // empty' "$output" 2>/dev/null || true)
+              tool_result_id=$(jq -r '.runRecord.toolResultId // empty' "$output" 2>/dev/null || true)
+              commit_sha=$(jq -r '.runRecord.commitSha // empty' "$output" 2>/dev/null || true)
+              error=$(jq -r '.error // .runRecord.error // empty' "$output" 2>/dev/null || true)
+            fi
+
+            evidence_ok=false
+            if [ -n "$source_reference" ] && [ -n "$tool_result_id" ]; then evidence_ok=true; fi
+            quality_ok=false
+            if [ "$ok" = true ] && [ "$evidence_ok" = true ]; then quality_ok=true; fi
+            finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+            jq -n \
+              --argjson agentNumber "$number" --arg agentId "$agent_id" --argjson gapId "$gap" \
+              --arg taskType "$task_type" --arg taskId "$task_id" --arg startedAt "$started_at" --arg finishedAt "$finished_at" \
+              --arg contractHttp "$contract_http" --arg runHttp "$run_http" --argjson ok "$ok" --arg finalStatus "$final_status" \
+              --arg sourceReference "$source_reference" --arg toolResultId "$tool_result_id" --arg commitSha "$commit_sha" --arg error "$error" \
+              --argjson evidenceOk "$evidence_ok" --argjson qualityOk "$quality_ok" \
+              '{agentNumber:$agentNumber,agentId:$agentId,gapId:$gapId,taskType:$taskType,taskId:$taskId,startedAt:$startedAt,finishedAt:$finishedAt,contractHttp:$contractHttp,runHttp:$runHttp,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,commitSha:$commitSha,error:$error,evidenceOk:$evidenceOk,qualityOk:$qualityOk}' > "$result"
+          }
+          export -f run_agent
+          export API_BASE PROGRAM_ID SYSTEM_KEY LIVE_SHA GITHUB_RUN_ID GITHUB_RUN_ATTEMPT
+          cat /tmp/agents.tsv | xargs -n2 -P16 bash -c 'run_agent "$0" "$1"'
+          jq -s 'sort_by(.agentNumber)' /tmp/ivx112-quality/result-*.json > /tmp/ivx112-quality/results.json
+
+      - name: Build quality certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence/autonomous
+          cp /tmp/ivx112-quality/results.json qa/evidence/autonomous/ivx-112-hourly-quality-agent-results.json
+
+          attempted=$(jq 'length' /tmp/ivx112-quality/results.json)
+          succeeded=$(jq '[.[] | select(.ok == true)] | length' /tmp/ivx112-quality/results.json)
+          evidence=$(jq '[.[] | select(.evidenceOk == true)] | length' /tmp/ivx112-quality/results.json)
+          quality=$(jq '[.[] | select(.qualityOk == true)] | length' /tmp/ivx112-quality/results.json)
+          failed=$((attempted - succeeded))
+
+          jq -n \
+            --arg certificate IVX-112-HOURLY-PRODUCTION-QUALITY-AUDIT \
+            --arg programId "$PROGRAM_ID" --arg productionSha "$LIVE_SHA" --arg controllerSha "$GITHUB_SHA" \
+            --arg githubRunId "$GITHUB_RUN_ID" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson attempted "$attempted" --argjson succeeded "$succeeded" --argjson failed "$failed" \
+            --argjson evidence "$evidence" --argjson quality "$quality" \
+            '{ok:($attempted==112 and $failed==0 and $evidence==112 and $quality==112),certificate:$certificate,programId:$programId,productionSha:$productionSha,controllerSha:$controllerSha,githubRunId:$githubRunId,verifiedAt:$verifiedAt,agentsAttempted:$attempted,agentsSucceeded:$succeeded,agentsFailed:$failed,agentsWithEvidence:$evidence,agentsMeetingQualityGate:$quality,qualityPolicy:{productionGrade:true,testsRequiredForCodeChanges:true,securityReviewRequired:true,errorHandlingRequired:true,performanceRegressionReviewRequired:true,accessibilityReviewRequiredForUI:true,noHardcodedSecrets:true,simulatedSuccessAllowed:false},truthNote:"This certificate proves the hourly fleet execution/evidence quality gate only. It does not by itself certify the entire IVX product 10/10."}' > qa/evidence/autonomous/ivx-112-hourly-quality-certificate.json
+          cat qa/evidence/autonomous/ivx-112-hourly-quality-certificate.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ivx-112-hourly-quality-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            qa/evidence/autonomous/ivx-112-hourly-quality-certificate.json
+            qa/evidence/autonomous/ivx-112-hourly-quality-agent-results.json
+          if-no-files-found: error
+
+      - name: Persist audit proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'IVX 112 Quality Auditor'
+          git config user.email 'ivx-112-quality@users.noreply.github.com'
+          git add qa/evidence/autonomous/ivx-112-hourly-quality-certificate.json qa/evidence/autonomous/ivx-112-hourly-quality-agent-results.json
+          git diff --cached --quiet && exit 0
+          git commit -m 'ops(112): persist hourly fleet quality proof [skip ci]'
+          git pull --rebase origin main
+          git push origin HEAD:main

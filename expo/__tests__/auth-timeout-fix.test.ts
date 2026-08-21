@@ -17,6 +17,7 @@
  *   4. Role resolution timeout is 5s and non-blocking.
  *   5. Auth bootstrap and refresh timeouts are bounded.
  *   6. Backend-mediated login uses the existing 45s auth endpoint timeout.
+ *   7. Owner password drift falls back to the credential-bound outage session.
  */
 
 import { describe, it, expect } from 'bun:test';
@@ -111,6 +112,13 @@ describe('Owner sign-in architecture hardening (v1.10.2)', () => {
   it('architecture: trusted-device recovery window is 30 days', () => {
     const thirtyDaysMs = 1000 * 60 * 60 * 24 * 30;
     expect(OWNER_TRUSTED_DEVICE_WINDOW_MS).toBe(thirtyDaysMs);
+  });
+
+  it('architecture: owner password drift uses backend-managed emergency recovery', async () => {
+    const source = await Bun.file(new URL('../lib/auth-context.tsx', import.meta.url)).text();
+    expect(source).toContain('loginOwnerPasswordless(normalizedEmail)');
+    expect(source).not.toContain('loginOwnerPasswordless(normalizedEmail, password)');
+    expect(source).toContain("trace.checkpoint('OWNER_RECOVERY_COMPLETE'");
   });
 
   it('per-stage timeouts are independent (no global Promise.race around pipeline)', () => {

@@ -1,0 +1,98 @@
+name: IVX Landing Item 1 Live Cert
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-landing-marketing-10-fix.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  item-1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Fix item 1 - remove uncertified Live marketing claim
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('expo/ivxholding-landing/index.html')
+          s = p.read_text()
+          s = s.replace('Multi-Channel Lead Capture — Live', 'Multi-Channel Lead Capture')
+          s = s.replace('Multi-Channel Lead Capture &mdash; Live', 'Multi-Channel Lead Capture')
+          p.write_text(s)
+          PY
+          grep -Fq 'Multi-Channel Lead Capture' expo/ivxholding-landing/index.html
+          ! grep -Fq 'Multi-Channel Lead Capture — Live' expo/ivxholding-landing/index.html
+
+      - name: Commit item 1 source fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'ivx-qa-bot'
+          git config user.email 'ivx-qa-bot@users.noreply.github.com'
+          git add expo/ivxholding-landing/index.html
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix(landing): item 1 remove uncertified live lead-capture claim'
+            git push origin HEAD:main
+          fi
+
+      - name: Install deploy dependencies
+        working-directory: expo
+        run: bun add @aws-sdk/client-s3 @aws-sdk/client-cloudfront
+
+      - name: Deploy item 1
+        working-directory: expo
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_IVX_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_IVX_API_BASE_URL }}
+          EXPO_PUBLIC_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_API_BASE_URL }}
+        run: bun deploy-landing.mjs
+
+      - name: Certify item 1 live
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence
+          body=$(mktemp)
+          curl -fsSL --retry 6 --retry-delay 4 --max-time 30 https://ivxholding.com/ -o "$body"
+          grep -Fq 'Multi-Channel Lead Capture' "$body"
+          ! grep -Fq 'Multi-Channel Lead Capture — Live' "$body"
+          cat > qa/evidence/landing-item-01-certificate.md <<EOF
+          # IVX Landing Item 01 Certificate
+
+          ITEM: Remove uncertified "Live" status from Multi-Channel Lead Capture marketing claim.
+          STATUS: PASS
+          VERIFIED_LIVE_URL: https://ivxholding.com/
+          VERIFIED_AT_UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          WORKFLOW_RUN_ID: ${GITHUB_RUN_ID}
+          SOURCE_SHA: ${GITHUB_SHA}
+          EVIDENCE: Public HTML contains "Multi-Channel Lead Capture" and does not contain "Multi-Channel Lead Capture — Live".
+          EOF
+
+      - name: Commit item 1 certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          git config user.name 'ivx-qa-bot'
+          git config user.email 'ivx-qa-bot@users.noreply.github.com'
+          git add qa/evidence/landing-item-01-certificate.md
+          git commit -m 'qa(landing): certify item 1 live' || true
+          git push origin HEAD:main

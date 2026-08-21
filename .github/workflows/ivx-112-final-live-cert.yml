@@ -1,0 +1,236 @@
+name: IVX 112 Final Live Certificate
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: ivx-112-final-live-cert
+  cancel-in-progress: true
+
+jobs:
+  audit-fix-deploy-certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      API_BASE: https://api.ivxholding.com
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+      IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+      DEFAULT_RENDER_SERVICE_ID: srv-d7t9ivreo5us73ftose0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Root security audit and repair
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('backend/api/ivx-agent-api.ts')
+          s=p.read_text()
+          original=s
+          marker="export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-18-real-execution';"
+          helper="""export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-19-owner-auth-guard';\n\nfunction ownerAuthorized(c: any, body: Record<string, unknown> = {}): boolean {\n  const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';\n  const envSecret = (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim() || (process.env.IVX_OWNER_TOKEN ?? '').trim();\n  return Boolean(envSecret) && provided === envSecret;\n}\n\nfunction requireOwner(c: any, body: Record<string, unknown> = {}) {\n  return ownerAuthorized(c, body) ? null : c.json({ ok: false, error: 'Owner authorization required.' }, 401);\n}\n"""
+          if marker in s:
+              s=s.replace(marker,helper)
+          s=s.replace("const authorized = envSecret ? provided === envSecret : provided.startsWith('owner-');","const authorized = Boolean(envSecret) && provided === envSecret;")
+          simple=[
+            "app.post('/api/ivx/agents/:agentId/pause', (c) => {",
+            "app.post('/api/ivx/agents/:agentId/resume', (c) => {",
+            "app.post('/api/ivx/agents/:agentId/disable', (c) => {",
+            "app.post('/api/ivx/agents/:agentId/enable', (c) => {",
+            "app.post('/api/ivx/agents/:agentId/clear-memory', (c) => {",
+            "app.post('/api/ivx/agents/execute-all', async (c) => {",
+          ]
+          for t in simple:
+              pos=s.find(t)
+              if pos>=0 and 'const denied = requireOwner(c);' not in s[pos:pos+220]:
+                  s=s.replace(t,t+"\n    const denied = requireOwner(c);\n    if (denied) return denied;",1)
+          replacements=[
+          ("""    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({}));\n    const taskType = body.taskType || 'audit';\n    const payload = body.payload || {};\n    const ownerApprovalToken = body.ownerApprovalToken || null;""",
+           """    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));\n    const denied = requireOwner(c, body as Record<string, unknown>);\n    if (denied) return denied;\n    const taskType = (body as any).taskType || 'audit';\n    const payload = (body as any).payload || {};\n    const ownerApprovalToken = (body as any).ownerApprovalToken || null;"""),
+          ("""    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({}));\n    const result = updateAgentContract(agentId, body.updates || {}, body.ownerApproval === true);""",
+           """    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));\n    const denied = requireOwner(c, body as Record<string, unknown>);\n    if (denied) return denied;\n    const result = updateAgentContract(agentId, (body as any).updates || {}, (body as any).ownerApproval === true);"""),
+          ("""    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({}));\n    const targetVersion = body.targetVersion;""",
+           """    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));\n    const denied = requireOwner(c, body as Record<string, unknown>);\n    if (denied) return denied;\n    const targetVersion = (body as any).targetVersion;"""),
+          ]
+          for a,b in replacements:
+              if a in s: s=s.replace(a,b,1)
+          if s != original:
+              p.write_text(s)
+              Path('/tmp/ivx-patched').write_text('1')
+          PY
+          if [ -f /tmp/ivx-patched ]; then
+            git config user.name 'ivx-qa-bot'
+            git config user.email 'ivx-qa-bot@users.noreply.github.com'
+            git add backend/api/ivx-agent-api.ts
+            git commit -m 'security(agents): require real owner auth on every mutating agent endpoint'
+            git pull --rebase origin main
+            git push origin HEAD:main
+            echo 'patched=true' >> "$GITHUB_OUTPUT"
+            echo 'Root fix pushed; new SHA will run the complete certification.'
+          else
+            echo 'patched=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Source QA for 112-agent root invariants
+        if: steps.patch.outputs.patched != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "TOTAL_AGENTS_REQUIRED = 112" backend/services/ivx-real-execution-certificate.ts
+          grep -q "simulatedRuns" backend/services/ivx-real-execution-certificate.ts
+          grep -q "return Boolean(envSecret) && provided === envSecret" backend/api/ivx-agent-api.ts
+          ! grep -q "provided.startsWith('owner-')" backend/api/ivx-agent-api.ts
+          test "$(grep -c 'const denied = requireOwner' backend/api/ivx-agent-api.ts)" -ge 9
+          echo 'source_112_root_invariants=PASS'
+
+      - name: Resolve deploy credential
+        if: steps.patch.outputs.patched != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE_ID="${RENDER_SERVICE_ID:-$DEFAULT_RENDER_SERVICE_ID}"
+          SYSTEM_KEY="${IVX_AI_SYSTEM_SECRET:-${IVX_SYSTEM_SECRET:-}}"
+          echo "SERVICE_ID=$SERVICE_ID" >> "$GITHUB_ENV"
+          echo "SYSTEM_KEY=$SYSTEM_KEY" >> "$GITHUB_ENV"
+          if [ -z "${RENDER_API_KEY:-}" ] && [ -z "$SYSTEM_KEY" ]; then
+            echo 'No Render API key or IVX system secret is bound in this workflow.'
+            exit 1
+          fi
+
+      - name: Deploy exact GitHub SHA to Render
+        if: steps.patch.outputs.patched != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${RENDER_API_KEY:-}" ]; then
+            RESPONSE=$(curl -fsS -X POST "https://api.render.com/v1/services/${SERVICE_ID}/deploys" \
+              -H "Authorization: Bearer ${RENDER_API_KEY}" \
+              -H 'Accept: application/json' -H 'Content-Type: application/json' \
+              --data '{"clearCache":"do_not_clear"}')
+            DEPLOY_ID=$(printf '%s' "$RESPONSE" | jq -r '.id // .deploy.id // empty')
+            test -n "$DEPLOY_ID"
+            echo "DEPLOY_ID=$DEPLOY_ID" >> "$GITHUB_ENV"
+          else
+            HTTP=$(curl -sS -m 40 -o /tmp/bridge.json -w '%{http_code}' \
+              -X POST "${API_BASE}/api/ivx/developer-deploy/action" \
+              -H 'Content-Type: application/json' -H "X-IVX-System-Key: ${SYSTEM_KEY}" \
+              --data "{\"action\":\"render_trigger_deploy\",\"input\":{\"serviceId\":\"${SERVICE_ID}\",\"commitId\":\"${GITHUB_SHA}\"},\"confirm\":true,\"confirmText\":\"CONFIRM_IVX_RENDER_DEPLOY\",\"reason\":\"112 final exact-SHA certification\"}" || true)
+            case "$HTTP" in 200|201|202) ;; *) cat /tmp/bridge.json || true; exit 1;; esac
+          fi
+
+      - name: Wait for exact production SHA
+        if: steps.patch.outputs.patched != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 120); do
+            code=$(curl -sS -m 20 -o /tmp/version.json -w '%{http_code}' "${API_BASE}/version" || true)
+            if [ "$code" = 200 ]; then
+              ok=$(jq -r '.ok // false' /tmp/version.json)
+              live=$(jq -r '.commit // empty' /tmp/version.json)
+              echo "poll=$i live=${live:-missing} expected=$GITHUB_SHA"
+              if [ "$ok" = true ] && [ "$live" = "$GITHUB_SHA" ]; then exit 0; fi
+            fi
+            sleep 10
+          done
+          echo 'Exact production SHA never became live.'
+          exit 1
+
+      - name: Audit all 112 live contracts and runtime guards
+        if: steps.patch.outputs.patched != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS "${API_BASE}/api/ivx/agents" -o /tmp/agents.json
+          test "$(jq -r '.ok' /tmp/agents.json)" = true
+          test "$(jq -r '.totalAgents' /tmp/agents.json)" = 112
+          test "$(jq '[.agents[].agentId]|unique|length' /tmp/agents.json)" = 112
+          test "$(jq '[.agents[].agentNumber]|unique|length' /tmp/agents.json)" = 112
+          test "$(jq '[.agents[]|select(.paused==true or .disabled==true)]|length' /tmp/agents.json)" = 0
+          for path in contracts/validate permissions/verify independence-check; do
+            curl -fsS "${API_BASE}/api/ivx/agents/${path}" -o "/tmp/${path//\//-}.json"
+            test "$(jq -r '.ok // false' "/tmp/${path//\//-}.json")" = true
+          done
+          unauth=$(curl -sS -o /tmp/unauth.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/agents/ivx_holdings_1/pause")
+          test "$unauth" = 401
+          echo 'live_112_registry_and_security=PASS'
+
+      - name: Start real 112-agent certificate
+        if: steps.patch.outputs.patched != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SYSTEM_KEY:-}"
+          HTTP=$(curl -sS -m 30 -o /tmp/start.json -w '%{http_code}' \
+            -X POST "${API_BASE}/api/ivx/agents/certificate/run" \
+            -H 'Content-Type: application/json' \
+            -H "x-ivx-owner-key: ${SYSTEM_KEY}" \
+            --data '{}')
+          test "$HTTP" = 200
+          test "$(jq -r '.ok // false' /tmp/start.json)" = true
+          RUN_ID=$(jq -r '.runId // empty' /tmp/start.json)
+          test -n "$RUN_ID"
+          echo "RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+          echo "certificate_run=$RUN_ID"
+
+      - name: Wait for 112 of 112 real completion
+        if: steps.patch.outputs.patched != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 240); do
+            curl -fsS "${API_BASE}/api/ivx/agents/certificate/progress" -o /tmp/progress.json
+            status=$(jq -r '.activeRun.status // "none"' /tmp/progress.json)
+            processed=$(jq -r '.activeRun.processed // 0' /tmp/progress.json)
+            failed=$(jq -r '.activeRun.failed // 0' /tmp/progress.json)
+            run=$(jq -r '.activeRun.runId // empty' /tmp/progress.json)
+            echo "poll=$i run=${run:-none} status=$status processed=$processed failed=$failed"
+            if [ "$run" = "$RUN_ID" ] && [ "$status" = failed ]; then exit 1; fi
+            curl -fsS "${API_BASE}/api/ivx/agents/certificate" -o /tmp/cert.json
+            cert_run=$(jq -r '.runId // .certificate.runId // empty' /tmp/cert.json)
+            certified=$(jq -r '.certified // .certificate.certified // false' /tmp/cert.json)
+            if [ "$cert_run" = "$RUN_ID" ] && [ "$certified" = true ]; then break; fi
+            sleep 10
+          done
+          curl -fsS "${API_BASE}/api/ivx/agents/certificate" -o /tmp/cert.json
+          test "$(jq -r '.certified // .certificate.certified // false' /tmp/cert.json)" = true
+          test "$(jq -r '.runId // .certificate.runId // empty' /tmp/cert.json)" = "$RUN_ID"
+          test "$(jq -r '.total // .certificate.total // 0' /tmp/cert.json)" = 112
+          test "$(jq -r '.healthy // .certificate.healthy // 0' /tmp/cert.json)" = 112
+          test "$(jq -r '.realExecutionVerified // .certificate.realExecutionVerified // 0' /tmp/cert.json)" = 112
+          test "$(jq -r '.evidenceVerified // .certificate.evidenceVerified // 0' /tmp/cert.json)" = 112
+          test "$(jq -r '.simulatedRuns // .certificate.simulatedRuns // -1' /tmp/cert.json)" = 0
+          cert_sha=$(jq -r '.commitSha // .certificate.commitSha // empty' /tmp/cert.json)
+          test "$cert_sha" = "$GITHUB_SHA"
+          echo 'final_112_real_certificate=PASS'
+
+      - name: Write final GitHub certificate artifact
+        if: steps.patch.outputs.patched != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence
+          jq --arg githubSha "$GITHUB_SHA" --arg runId "$RUN_ID" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '. + {githubFinalCertificate:true, githubSha:$githubSha, requestedRunId:$runId, verifiedAt:$verifiedAt, verdict:"112/112 PASS — exact deployed SHA — 0 simulated"}' \
+            /tmp/cert.json > qa/evidence/IVX-112-FINAL-LIVE-CERTIFICATE.json
+          cat qa/evidence/IVX-112-FINAL-LIVE-CERTIFICATE.json
+
+      - name: Upload final 112 certificate
+        if: steps.patch.outputs.patched != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: IVX-112-FINAL-LIVE-CERTIFICATE-${{ github.sha }}
+          path: qa/evidence/IVX-112-FINAL-LIVE-CERTIFICATE.json
+          if-no-files-found: error

@@ -1,0 +1,153 @@
+name: Landing 112-Agent Autonomous QA War Room
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/landing-112-agent-autonomous-qa.yml'
+      - 'qa/landing-112-agent-war-room.md'
+  schedule:
+    - cron: '15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      active: ${{ steps.window.outputs.active }}
+      matrix: ${{ steps.registry.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Launch-window gate
+        id: window
+        shell: bash
+        run: |
+          set -euo pipefail
+          now=$(date -u +%s)
+          cutoff=$(date -u -d '2026-08-19T04:00:00Z' +%s)
+          if [ "$now" -lt "$cutoff" ]; then
+            echo 'active=true' >> "$GITHUB_OUTPUT"
+            echo 'launch_window=ACTIVE'
+          else
+            echo 'active=false' >> "$GITHUB_OUTPUT"
+            echo 'launch_window=CLOSED'
+          fi
+
+      - name: Load exact 112-agent registry
+        id: registry
+        if: steps.window.outputs.active == 'true'
+        shell: bash
+        env:
+          API_BASE: https://api.ivxholding.com
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 4 --retry-delay 2 "$API_BASE/api/ivx/agents" -o /tmp/agents.json
+          test "$(jq -r '.ok // false' /tmp/agents.json)" = 'true'
+          test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = '112'
+          test "$(jq '[.agents[].agentNumber] | unique | length' /tmp/agents.json)" = '112'
+          matrix=$(jq -c '{include:[.agents[] | {agentNumber:.agentNumber,agentId:.agentId,name:.name,role:.role,division:.division}]}' /tmp/agents.json)
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo 'registry_112=PASS'
+
+  activate-112:
+    needs: prepare
+    if: needs.prepare.outputs.active == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    env:
+      API_BASE: https://api.ivxholding.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve exact assignment
+        id: assignment
+        shell: bash
+        env:
+          AGENT_NUMBER: ${{ matrix.agentNumber }}
+        run: |
+          set -euo pipefail
+          n=$(printf '%03d' "$AGENT_NUMBER")
+          line=$(grep -E "^${n} — " qa/landing-112-agent-war-room.md | head -1 || true)
+          test -n "$line" || { echo "Missing assignment for agent $n"; exit 1; }
+          task=${line#* — }
+          echo "task<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$task" >> "$GITHUB_OUTPUT"
+          echo 'EOF' >> "$GITHUB_OUTPUT"
+          echo "agent=$n task=$task"
+
+      - name: Execute independent AI work packet
+        id: ai
+        shell: bash
+        env:
+          AGENT_NUMBER: ${{ matrix.agentNumber }}
+          AGENT_ID: ${{ matrix.agentId }}
+          AGENT_NAME: ${{ matrix.name }}
+          AGENT_ROLE: ${{ matrix.role }}
+          AGENT_DIVISION: ${{ matrix.division }}
+          TASK: ${{ steps.assignment.outputs.task }}
+        run: |
+          set -euo pipefail
+          token="IVX-LANDING-${GITHUB_RUN_ID}-${AGENT_NUMBER}"
+          requestId="landing-war-room-${GITHUB_RUN_ID}-${AGENT_NUMBER}"
+          prompt=$(cat <<EOF
+          You are IVX registered agent ${AGENT_NUMBER}, ${AGENT_NAME}. Role: ${AGENT_ROLE}. Division: ${AGENT_DIVISION}.
+          Launch-war-room assignment: ${TASK}
+          Return the exact token ${token} first. Then provide a concise work packet with: severity hypothesis (P0/P1/P2), what evidence must be checked, likely files/endpoints, safest fix if the gap is confirmed, and exact verification gate. Do not claim you executed tools or verified production unless the request itself gives you evidence. Do not invent PASS results.
+          EOF
+          )
+          payload=$(jq -cn --arg message "$prompt" --arg sessionId "landing-war-room-${GITHUB_RUN_ID}" --arg requestId "$requestId" '{message:$message,sessionId:$sessionId,requestId:$requestId,history:[]}')
+          http=$(curl -sS --retry 4 --retry-delay 2 -m 75 -o /tmp/response.json -w '%{http_code}' -X POST "$API_BASE/api/public/chat" -H 'Content-Type: application/json' -H "x-ivx-client-id: landing-agent-${AGENT_NUMBER}" --data "$payload" || true)
+          answer=$(jq -r '.answer // .text // empty' /tmp/response.json 2>/dev/null || true)
+          source=$(jq -r '.source // empty' /tmp/response.json 2>/dev/null || true)
+          endpoint=$(jq -r '.endpoint // empty' /tmp/response.json 2>/dev/null || true)
+          tokenSeen=false
+          if printf '%s' "$answer" | grep -Fq "$token"; then tokenSeen=true; fi
+          passed=false
+          if [ "$http" = '200' ] && [ -n "$answer" ] && [ "$tokenSeen" = 'true' ]; then passed=true; fi
+          mkdir -p evidence
+          jq -n \
+            --argjson agentNumber "$AGENT_NUMBER" \
+            --arg agentId "$AGENT_ID" \
+            --arg name "$AGENT_NAME" \
+            --arg role "$AGENT_ROLE" \
+            --arg division "$AGENT_DIVISION" \
+            --arg task "$TASK" \
+            --arg requestId "$requestId" \
+            --arg source "$source" \
+            --arg endpoint "$endpoint" \
+            --arg answer "$answer" \
+            --argjson http "${http:-0}" \
+            --argjson passed "$passed" \
+            '{agentNumber:$agentNumber,agentId:$agentId,name:$name,role:$role,division:$division,task:$task,requestId:$requestId,http:$http,source:$source,endpoint:$endpoint,passed:$passed,workPacket:$answer}' \
+            > "evidence/agent-${AGENT_NUMBER}.json"
+          test "$passed" = 'true'
+
+      - name: Upload agent work packet
+        uses: actions/upload-artifact@v4
+        with:
+          name: landing-agent-${{ matrix.agentNumber }}-${{ github.run_id }}
+          path: evidence/agent-${{ matrix.agentNumber }}.json
+          if-no-files-found: error
+          retention-days: 3
+
+  summary:
+    needs: [prepare, activate-112]
+    if: always() && needs.prepare.outputs.active == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: War-room status
+        shell: bash
+        run: |
+          echo '112-agent landing work-packet cycle completed or attempted.'
+          echo 'Artifacts are advisory work packets, not production PASS evidence.'
+          echo 'Production GO still requires deterministic/public verification gates.'

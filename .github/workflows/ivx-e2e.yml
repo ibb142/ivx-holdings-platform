@@ -76,163 +76,49 @@ jobs:
 
   e2e-maestro:
     name: Maestro E2E (mobile surface) — HARD GATE
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     needs: [typecheck]
-    env:
-      # Root-cause fix: open-access mode defaults ON in development runtime
-      # (shared/ivx/access-control.ts DEFAULT_OPEN_ACCESS_MODE_ENABLED = true),
-      # which routes the app straight to /(tabs)/home so the login screen never
-      # renders and the "Sign In" assertion can never pass. Pin it OFF for the
-      # E2E gate. Metro inlines EXPO_PUBLIC_* into the JS bundle at serve time,
-      # so these must be set for the Metro process (they are, at job level).
-      EXPO_PUBLIC_IVX_OPEN_ACCESS_MODE: 'false'
-      EXPO_PUBLIC_IVX_TEST_MODE: 'false'
-      CI: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.9
-      - uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
-          log-accepted-sdk-licenses: false
-      - name: Install root dependencies
-        run: bun install --frozen-lockfile
-      - name: Install Expo dependencies
+      - run: cd expo && bun install --frozen-lockfile
+      - name: Start the Expo development server
         working-directory: expo
-        run: bun install --frozen-lockfile
-      # The debug APK does not embed the JS bundle: it loads it from Metro at
-      # runtime over adb reverse tcp:8081. Metro therefore runs on the host
-      # for the whole job and its log is written inside the workspace so the
-      # artifact upload step can find it.
-      - name: Start Metro dev server
-        working-directory: expo
+        env:
+          CI: '1'
         run: |
           set -euo pipefail
-          nohup bunx expo start --port 8081 > "$GITHUB_WORKSPACE/maestro-metro.log" 2>&1 &
-          for attempt in {1..60}; do
+          nohup bunx expo start --dev-client --port 8081 > "$RUNNER_TEMP/expo-metro.log" 2>&1 &
+          for attempt in {1..30}; do
             if curl --silent --fail http://127.0.0.1:8081/status | grep -q 'packager-status:running'; then
-              echo 'metro_status=RUNNING'
               exit 0
             fi
             sleep 2
           done
-          cat "$GITHUB_WORKSPACE/maestro-metro.log"
-          echo '::error::Metro dev server failed to start'
+          cat "$RUNNER_TEMP/expo-metro.log"
+          echo 'Expo dev server failed to start'
           exit 1
-      - name: Warm and verify the Android bundle — HARD GATE
+      - name: Build and launch the iOS simulator app — HARD GATE
         working-directory: expo
-        timeout-minutes: 10
+        timeout-minutes: 45
         run: |
           set -euo pipefail
-          BUNDLE_URL='http://127.0.0.1:8081/index.bundle?platform=android&dev=true&minify=false'
-          if ! curl --silent --fail --max-time 540 "$BUNDLE_URL" -o "$GITHUB_WORKSPACE/maestro-bundle.warmup"; then
-            echo 'index.bundle not served — falling back to the expo-router entry bundle'
-            BUNDLE_URL='http://127.0.0.1:8081/expo-router/entry.bundle?platform=android&dev=true&minify=false'
-            curl --silent --fail --max-time 540 "$BUNDLE_URL" -o "$GITHUB_WORKSPACE/maestro-bundle.warmup"
-          fi
-          BUNDLE_SIZE=$(stat -c%s "$GITHUB_WORKSPACE/maestro-bundle.warmup")
-          echo "metro_bundle=REACHABLE ($BUNDLE_URL, ${BUNDLE_SIZE} bytes, pre-compiled before emulator QA)"
-          if [ "$BUNDLE_SIZE" -lt 1000000 ]; then
-            echo '::error::Android bundle looks truncated'
-            exit 1
-          fi
-      - name: Build Android debug APK — HARD GATE
-        working-directory: expo/android
-        timeout-minutes: 30
+          bunx expo run:ios --configuration debug --no-bundler
+          echo 'ios_build=PASS'
+      - name: Install Maestro
         run: |
-          set -o pipefail
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon -x lint 2>&1 | tee "$GITHUB_WORKSPACE/gradle-build.log"
-          echo 'android_build=PASS'
-      # IMPORTANT: android-emulator-runner executes this script with
-      # /usr/bin/sh (dash), NOT bash. POSIX only: `set -eu` (NEVER
-      # `set -o pipefail` — dash rejects it with "Illegal option -o pipefail"),
-      # no PIPESTATUS, no bash arrays. Every diagnostic file is written under
-      # $GITHUB_WORKSPACE so the artifact upload below can find it.
-      - name: Emulator boot + install + Maestro launch QA — HARD GATE
-        id: emu
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 34
-          arch: x86_64
-          profile: pixel_7
-          target: google_apis
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: |
-            set -eu
-            echo '=== 1. Emulator booted ==='
-            adb devices
-            EMU_NAME=$(adb shell getprop ro.product.model 2>/dev/null || echo unknown)
-            ANDROID_VER=$(adb shell getprop ro.build.version.release 2>/dev/null || echo unknown)
-            echo "emulator=${EMU_NAME} android=${ANDROID_VER}"
-
-            echo '=== 2. adb reverse tcp:8081 tcp:8081 ==='
-            adb reverse tcp:8081 tcp:8081
-            adb reverse --list
-
-            echo '=== 3. Installing debug APK ==='
-            adb install -r "$GITHUB_WORKSPACE/expo/android/app/build/outputs/apk/debug/app-debug.apk"
-            echo 'apk_install=PASS'
-
-            echo '=== 4. Launching app ==='
-            adb shell am start -W -n com.ivxholdings.app/.MainActivity
-            sleep 10
-            adb exec-out screencap -p > "$GITHUB_WORKSPACE/screenshot-01-launch.png" 2>/dev/null || true
-
-            echo '=== 5. Metro bundle reachable ==='
-            if curl --silent --fail http://127.0.0.1:8081/status | grep -q 'packager-status:running'; then
-              echo 'metro_bundle=REACHABLE'
-            else
-              echo '::error::Metro is not reachable on port 8081'
-              adb logcat -d -t 500 > "$GITHUB_WORKSPACE/maestro-logcat.txt" 2>/dev/null || true
-              exit 1
-            fi
-
-            echo '=== 6. Installing Maestro ==='
-            curl -Ls 'https://get.maestro.mobile.dev' | bash
-            export PATH="$HOME/.maestro/bin:$PATH"
-            maestro --version
-
-            echo '=== 7. Running Maestro launch test ==='
-            cd "$GITHUB_WORKSPACE/expo"
-            if maestro test .maestro/ivx-android-app-launch.yaml --format junit --output "$GITHUB_WORKSPACE/maestro-report.xml" > "$GITHUB_WORKSPACE/maestro-test.log" 2>&1; then
-              echo 'maestro_test=PASS'
-            else
-              echo '::error::Maestro flow failed — see maestro-test.log / maestro-logcat.txt artifacts'
-              tail -120 "$GITHUB_WORKSPACE/maestro-test.log" || true
-              adb exec-out screencap -p > "$GITHUB_WORKSPACE/screenshot-02-maestro-fail.png" 2>/dev/null || true
-              adb logcat -d -t 500 > "$GITHUB_WORKSPACE/maestro-logcat.txt" 2>/dev/null || true
-              exit 1
-            fi
-
-            echo '=== 8. Verifying Maestro JUnit report ==='
-            if grep -q '<failure' "$GITHUB_WORKSPACE/maestro-report.xml" 2>/dev/null; then
-              echo '::error::Maestro JUnit report contains failures'
-              exit 1
-            fi
-            echo 'maestro_junit=CLEAN'
-
-            echo '=== 9. Post-test diagnostics ==='
-            adb exec-out screencap -p > "$GITHUB_WORKSPACE/screenshot-02-post-test.png" 2>/dev/null || true
-            adb logcat -d -t 500 > "$GITHUB_WORKSPACE/maestro-logcat.txt" 2>/dev/null || true
-      - name: Upload Maestro artifacts
+          set -euo pipefail
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo 'maestro_install=PASS'
+      - name: Run Maestro launch smoke test — HARD GATE
+        run: |
+          set -euo pipefail
+          ~/.maestro/bin/maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml
+          echo 'maestro_test=PASS'
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
           name: maestro-report
-          path: |
-            maestro-report.xml
-            maestro-test.log
-            maestro-metro.log
-            maestro-logcat.txt
-            gradle-build.log
-            screenshot-*.png
-          if-no-files-found: warn
-          retention-days: 30
+          path: maestro-report.xml

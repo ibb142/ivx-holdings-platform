@@ -5,6 +5,7 @@
  * CRM, JV deals, property admin, media, instagram cards.
  */
 const DEPLOYMENT_MARKER = 'ivx-public-features-api-v1-2026-07-01';
+const IVX_PUBLIC_SUPABASE_KEY = 'sb_publishable_HD3Xvq5bCQNJLFk1ROH9mQ_Wdb9xdDZ';
 
 // ── Supabase ───────────────────────────────────────────────────────────────
 let _sb: any = null;
@@ -15,6 +16,13 @@ async function getSB() {
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
   _sb = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
   return _sb;
+}
+
+async function getPublicDealsSB() {
+  const { createClient } = await import('@supabase/supabase-js');
+  const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://kvclcdjmjghndxsngfzb.supabase.co').trim();
+  const publicAnonKey = (process.env.SUPABASE_PUBLISHABLE_KEY || IVX_PUBLIC_SUPABASE_KEY).trim();
+  return createClient(url, publicAnonKey, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
 function json(data: unknown, status = 200): Response {
@@ -133,7 +141,7 @@ export async function handleCRMMain(req: Request): Promise<Response> {
 // ── JV Deals ──────────────────────────────────────────────────────────────
 export async function handleJVDealsList(req: Request): Promise<Response> {
   try {
-    const sb = await getSB();
+    const sb = await getPublicDealsSB();
     // Race against a timeout to prevent Supabase 522 from hanging the request
     const queryPromise = sb.from('jv_deals')
       .select('id,title,project_name,description,property_address,city,state,property_type,total_investment,expected_roi,term_months,status,published,photos,created_at,updated_at', { count: 'exact' })

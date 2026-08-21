@@ -86,6 +86,21 @@ async function callRender(path: string, apiKey: string): Promise<{ ok: boolean; 
   }
 }
 
+function readRenderEnvPresence(body: unknown): Record<string, { present: boolean; length: number }> {
+  const wanted = ['OWNER_NEW_PASSWORD', 'IVX_OWNER_PASSWORD', 'JWT_SECRET', 'APP_SECRET', 'IVX_OWNER_VARIABLES_ENCRYPTION_KEY'];
+  const result = Object.fromEntries(wanted.map((key) => [key, { present: false, length: 0 }])) as Record<string, { present: boolean; length: number }>;
+  if (!Array.isArray(body)) return result;
+  for (const raw of body) {
+    const wrapper = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+    const entry = wrapper.envVar && typeof wrapper.envVar === 'object' ? wrapper.envVar as Record<string, unknown> : wrapper;
+    const key = typeof entry.key === 'string' ? entry.key : '';
+    if (!(key in result)) continue;
+    const value = typeof entry.value === 'string' ? entry.value : '';
+    result[key] = { present: value.length > 0, length: value.length };
+  }
+  return result;
+}
+
 export async function handleIVXRenderDiagnosticRequest(request: Request): Promise<Response> {
   try {
     await assertIVXOwnerOnly(request);
@@ -133,27 +148,20 @@ export async function handleIVXRenderDiagnosticRequest(request: Request): Promis
 
   const url = new URL(request.url);
   const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '5', 10) || 5, 1), 20);
-
-  const [servicePath, deploysPath] = [
-    `/services/${encodeURIComponent(serviceId)}`,
-    `/services/${encodeURIComponent(serviceId)}/deploys?limit=${limit}`,
-  ];
-
-  const [serviceResult, deploysResult] = await Promise.all([
-    callRender(servicePath, apiKey),
-    callRender(deploysPath, apiKey),
+  const [serviceResult, deploysResult, envVarsResult] = await Promise.all([
+    callRender(`/services/${encodeURIComponent(serviceId)}`, apiKey),
+    callRender(`/services/${encodeURIComponent(serviceId)}/deploys?limit=${limit}`, apiKey),
+    callRender(`/services/${encodeURIComponent(serviceId)}/env-vars`, apiKey),
   ]);
 
   const deploysArray: unknown[] = Array.isArray(deploysResult.body) ? deploysResult.body : [];
   const deploys = deploysArray.map(normalizeDeploy);
   const latest = deploys[0];
+  const envPresence = readRenderEnvPresence(envVarsResult.body);
 
   let latestEvents: unknown = null;
   if (latest?.id) {
-    const eventsResult = await callRender(
-      `/services/${encodeURIComponent(serviceId)}/deploys/${encodeURIComponent(latest.id)}/events?limit=20`,
-      apiKey,
-    );
+    const eventsResult = await callRender(`/services/${encodeURIComponent(serviceId)}/deploys/${encodeURIComponent(latest.id)}/events?limit=20`, apiKey);
     latestEvents = eventsResult.ok ? eventsResult.body : { error: `events_http_${eventsResult.status}` };
   }
 
@@ -162,9 +170,11 @@ export async function handleIVXRenderDiagnosticRequest(request: Request): Promis
     : null;
 
   return ownerOnlyJson({
-    ok: deploysResult.ok,
+    ok: deploysResult.ok && envVarsResult.ok,
     credentials: credentialReport,
     renderAudit,
+    ownerAuthEnvPresence: envPresence,
+    envVarsHttpStatus: envVarsResult.status,
     service: serviceInfo ? {
       id: serviceInfo.id,
       name: serviceInfo.name,
@@ -173,38 +183,22 @@ export async function handleIVXRenderDiagnosticRequest(request: Request): Promis
       repo: (serviceInfo as { repo?: string }).repo ?? null,
       autoDeploy: (serviceInfo as { autoDeploy?: string }).autoDeploy ?? null,
       suspended: (serviceInfo as { suspended?: string }).suspended ?? null,
-      serviceDetails: (serviceInfo as { serviceDetails?: unknown }).serviceDetails ?? null,
-    } : { error: `service_http_${serviceResult.status}`, body: serviceResult.body },
+    } : { error: `service_http_${serviceResult.status}` },
     latestDeploy: latest ? {
       id: latest.id,
       status: latest.status,
       trigger: latest.trigger,
       commitSha: latest.commitSha,
       commitMessage: latest.commitMessage,
-      commitCreatedAt: latest.commitCreatedAt,
       finishedAt: latest.finishedAt,
       createdAt: latest.createdAt,
       updatedAt: latest.updatedAt,
       failureReason: latest.failureReason,
-      image: latest.image,
     } : null,
-    recentDeploys: deploys.map((d) => ({
-      id: d.id,
-      status: d.status,
-      trigger: d.trigger,
-      commitSha: d.commitSha,
-      commitMessage: d.commitMessage,
-      finishedAt: d.finishedAt,
-      createdAt: d.createdAt,
-      failureReason: d.failureReason,
-    })),
+    recentDeploys: deploys.map((d) => ({ id: d.id, status: d.status, trigger: d.trigger, commitSha: d.commitSha, commitMessage: d.commitMessage, finishedAt: d.finishedAt, createdAt: d.createdAt, failureReason: d.failureReason })),
     latestDeployEvents: latestEvents,
     deploysHttpStatus: deploysResult.status,
-    runtime: {
-      node: process.version,
-      platform: process.platform,
-      timestamp: new Date().toISOString(),
-      deploymentMarker: process.env.DEPLOYMENT_MARKER ?? null,
-    },
+    runtime: { node: process.version, platform: process.platform, timestamp: new Date().toISOString(), deploymentMarker: process.env.DEPLOYMENT_MARKER ?? null },
+    secretValuesReturned: false,
   });
 }

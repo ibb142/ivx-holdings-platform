@@ -25,6 +25,7 @@ on:
       - 'expo/.maestro/**'
       - 'expo/eas.json'
       - 'expo/app.config.ts'
+      - 'expo/lib/open-access.ts'
       - 'expo/package.json'
       - 'expo/assets/images/**'
       - 'expo/plugins/**'
@@ -43,6 +44,9 @@ env:
   EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
   EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
   EXPO_PUBLIC_QA_BUILD: 'true'
+  # QA-only: certify the deployed native-safe Home route without production credentials
+  # so CI certifies the exact screen that previously went black after mount.
+  EXPO_PUBLIC_IVX_OPEN_ACCESS_MODE: 'true'
   OWNER_EMAIL: iperez4242@gmail.com
 
 permissions:
@@ -91,7 +95,9 @@ jobs:
 
       - name: Install Expo dependencies
         working-directory: expo
-        run: bun install --frozen-lockfile
+        run: |
+          bun install
+          bun scripts/apply-patches.mjs
 
       - name: Verify tooling
         working-directory: expo
@@ -226,69 +232,34 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+      - name: Enable Linux KVM for Android emulator
+        if: steps.build.outcome == 'success'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Boot Emulator + Install APK + Launch + QA
         id: emu
         if: steps.build.outcome == 'success'
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          api-level: 30
           arch: x86_64
-          profile: pixel_7
+          profile: pixel_2
           target: google_apis
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: |
-            echo "=== Emulator booted ==="
-            adb devices
-            EMU_NAME=$(adb shell getprop ro.product.model 2>/dev/null || echo "unknown")
-            ANDROID_VER=$(adb shell getprop ro.build.version.release 2>/dev/null || echo "unknown")
-            echo "name=$EMU_NAME" >> $GITHUB_OUTPUT
-            echo "version=$ANDROID_VER" >> $GITHUB_OUTPUT
-            echo "Emulator: $EMU_NAME (Android $ANDROID_VER)"
-
-            echo "=== Installing APK ==="
-            adb install -r "${{ steps.apk.outputs.path }}" || {
-              echo "::warning::APK install failed — capturing diagnostics"
-              adb logcat -d -t 200 > logcat.txt 2>&1 || true
-              adb exec-out screencap -p > screenshot-01-install-fail.png 2>/dev/null || true
-              exit 1
-            }
-            echo "APK installed successfully"
-
-            echo "=== Launching app ==="
-            adb shell am start -n com.ivxholdings.app.qa/.MainActivity || {
-              echo "::warning::App launch failed — capturing diagnostics"
-              adb logcat -d -t 200 > logcat.txt 2>&1 || true
-              adb exec-out screencap -p > screenshot-02-launch-fail.png 2>/dev/null || true
-              exit 1
-            }
-            sleep 10
-            adb exec-out screencap -p > screenshot-01-launch.png 2>/dev/null || true
-            echo "Launch screenshot saved"
-
-            echo "=== Capturing logcat ==="
-            adb logcat -d -t 500 > logcat.txt 2>&1 || true
-
-            echo "=== Installing Maestro ==="
-            curl -Ls "https://get.maestro.mobile.dev" | bash || {
-              echo "::warning::Maestro install failed — skipping Maestro tests"
-              echo "maestro_result=skipped" >> $GITHUB_OUTPUT
-              adb exec-out screencap -p > screenshot-02-post-test.png 2>/dev/null || true
-              exit 0
-            }
-            echo "$HOME/.maestro/bin" >> $GITHUB_PATH
-            export PATH="$HOME/.maestro/bin:$PATH"
-            maestro --version || echo "Maestro version check failed"
-
-            echo "=== Running Maestro launch test ==="
-            cd "$GITHUB_WORKSPACE/expo"
-            set -o pipefail
-            maestro test .maestro/ivx-android-qa-app-launch.yaml --format junit --output maestro-launch-results.xml 2>&1 | tee maestro-launch.log
-            echo "maestro_result=completed" >> $GITHUB_OUTPUT
-            echo "Maestro launch test completed"
-
-            echo "=== Post-test screenshot ==="
-            adb exec-out screencap -p > screenshot-02-post-test.png 2>/dev/null || true
+          # The action's animation setup calls Android settings services before
+          # they are stable on this runner and aborts with binder Broken pipe.
+          # Keep animations enabled so the IVX certification script can run.
+          disable-animations: false
+          # Software-only x86 emulation took >6 minutes to boot and its Android
+          # package service died before installation. Require the KVM path used
+          # by GitHub's Linux runners and keep graphics fully headless.
+          disable-linux-hw-accel: false
+          ram-size: 2048M
+          heap-size: 512M
+          emulator-options: -no-window -gpu off -no-snapshot -noaudio -no-boot-anim
+          script: bash "$GITHUB_WORKSPACE/expo/scripts/certify-android-launch.sh" "${{ steps.apk.outputs.path }}" com.ivxholdings.app.owner screenshot-01-launch.png logcat.txt android-qa-launch.txt android-qa-package-version.txt "Home ready"
 
       - name: Emulator QA diagnostics
         if: always() && steps.emu.outcome != 'success' && steps.build.outcome == 'success'

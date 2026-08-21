@@ -1,0 +1,101 @@
+name: IVX AWS Diagnostic
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-aws-diagnostic.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Capture AWS identity
+        id: aws
+        continue-on-error: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          set +e
+          aws sts get-caller-identity > /tmp/aws_identity.txt 2>&1
+          echo $? > /tmp/aws_identity_code.txt
+          cat /tmp/aws_identity.txt
+
+      - name: Capture deploy result
+        id: deploy
+        continue-on-error: true
+        working-directory: expo
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_IVX_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_IVX_API_BASE_URL }}
+          EXPO_PUBLIC_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_API_BASE_URL }}
+        run: |
+          set +e
+          bun add @aws-sdk/client-s3 @aws-sdk/client-cloudfront >/tmp/deps.txt 2>&1
+          bun deploy-landing.mjs >/tmp/deploy.txt 2>&1
+          echo $? > /tmp/deploy_code.txt
+          tail -n 120 /tmp/deploy.txt
+
+      - name: Capture live state
+        continue-on-error: true
+        run: |
+          set +e
+          curl -fsSL --max-time 30 'https://ivxholding.com/?diag=1' >/tmp/live.html 2>/tmp/live_err.txt
+          echo $? >/tmp/live_code.txt
+          grep -F 'Multi-Channel Lead Capture' /tmp/live.html | head -n 3 >/tmp/live_claim.txt || true
+
+      - name: Commit diagnostic report
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence
+          {
+            echo '# IVX AWS Runner Diagnostic'
+            echo
+            echo "GENERATED_AT_UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "WORKFLOW_RUN_ID: ${GITHUB_RUN_ID}"
+            echo "SOURCE_SHA: ${GITHUB_SHA}"
+            echo
+            echo '## AWS identity'
+            echo "EXIT_CODE: $(cat /tmp/aws_identity_code.txt 2>/dev/null || echo missing)"
+            echo '```'
+            cat /tmp/aws_identity.txt 2>/dev/null || true
+            echo '```'
+            echo
+            echo '## Deploy'
+            echo "EXIT_CODE: $(cat /tmp/deploy_code.txt 2>/dev/null || echo missing)"
+            echo '```'
+            tail -n 120 /tmp/deploy.txt 2>/dev/null || true
+            echo '```'
+            echo
+            echo '## Live'
+            echo "EXIT_CODE: $(cat /tmp/live_code.txt 2>/dev/null || echo missing)"
+            echo '```'
+            cat /tmp/live_claim.txt 2>/dev/null || true
+            cat /tmp/live_err.txt 2>/dev/null || true
+            echo '```'
+          } > qa/evidence/aws-runner-diagnostic.md
+          git config user.name 'ivx-qa-bot'
+          git config user.email 'ivx-qa-bot@users.noreply.github.com'
+          git add qa/evidence/aws-runner-diagnostic.md
+          git commit -m 'ops: record AWS runner diagnostic' || true
+          git pull --rebase origin main || true
+          git push origin HEAD:main

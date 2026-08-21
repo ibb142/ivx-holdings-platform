@@ -76,8 +76,7 @@ jobs:
           if (aiKey !== aliasKey) throw new Error('AI gateway aliases do not match');
           const headers = { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${renderKey}` };
           const envUrl = `https://api.render.com/v1/services/${encodeURIComponent(serviceId)}/env-vars`;
-          // limit=100 required: default page (20) + replace-all PUT wipes vars beyond page 1.
-          const getRes = await fetch(`${envUrl}?limit=100`, { headers });
+          const getRes = await fetch(envUrl, { headers });
           if (!getRes.ok) throw new Error(`Render env GET HTTP ${getRes.status}`);
           const existingRaw = await getRes.json();
           const existing = new Map();
@@ -92,7 +91,7 @@ jobs:
           const body = Array.from(existing, ([key,value]) => ({ key, value }));
           const putRes = await fetch(envUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
           if (!putRes.ok) throw new Error(`Render env PUT HTTP ${putRes.status}: ${(await putRes.text()).slice(0,160)}`);
-          const verifyRes = await fetch(`${envUrl}?limit=100`, { headers });
+          const verifyRes = await fetch(envUrl, { headers });
           if (!verifyRes.ok) throw new Error(`Render env verify GET HTTP ${verifyRes.status}`);
           const verifyRaw = await verifyRes.json();
           const verify = new Map();

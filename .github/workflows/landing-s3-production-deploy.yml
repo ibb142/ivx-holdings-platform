@@ -1,6 +1,8 @@
 name: Landing S3 Production Deploy
 
 on:
+  schedule:
+    - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
       deployWebApp:
@@ -15,16 +17,20 @@ on:
       - 'expo/assets/images/**'
       - 'expo/deploy-s3-direct.mjs'
       - 'expo/app/**'
+      - 'expo/lib/auth-context.tsx'
+      - 'expo/lib/auth-password-sign-in.ts'
+      - 'expo/lib/supabase.ts'
       - 'expo/app.config.ts'
       - 'expo/metro.config.js'
       - 'expo/scripts/apply-patches.mjs'
       - 'expo/patches/**'
       - 'expo/deploy-web-app.mjs'
+      - 'scripts/ivx-landing-deep-qa-fix.mjs'
       - '.github/workflows/landing-s3-production-deploy.yml'
       - '.ivx-production-certification-trigger'
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -42,10 +48,40 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
+
+      - name: Apply landing Deep-QA truthfulness remediation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/ivx-landing-deep-qa-fix.mjs
+          ! grep -q '"foundingDate": "2024"' expo/ivxholding-landing/index.html
+          ! grep -q 'https://twitter.com/ivxholdings' expo/ivxholding-landing/index.html
+          ! grep -q 'https://linkedin.com/company/ivxholdings' expo/ivxholding-landing/index.html
+          ! grep -q 'https://instagram.com/ivxholdings' expo/ivxholding-landing/index.html
+          ! grep -q '"price": "0.00"' expo/ivxholding-landing/index.html
+          ! grep -q 'All properties are title-verified and insured' expo/ivxholding-landing/index.html
+          grep -q 'Deal structures and protections vary by opportunity' expo/ivxholding-landing/index.html
+
+      - name: Persist Deep-QA landing fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'IVX Landing Production QA'
+          git config user.email 'ivx-landing-qa@users.noreply.github.com'
+          if ! git diff --quiet -- expo/ivxholding-landing/index.html; then
+            git add expo/ivxholding-landing/index.html
+            git commit -m 'fix(landing): enforce truthful public claims [skip ci]'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+          echo "LANDING_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
       - name: Validate required deployment configuration
         shell: bash
         run: |
@@ -54,17 +90,21 @@ jobs:
           test -n "$AWS_SECRET_ACCESS_KEY" || { echo 'AWS_SECRET_ACCESS_KEY missing'; exit 1; }
           test "$CLOUDFRONT_DISTRIBUTION_ID" = 'E1C0DEI0VKCUYN' || { echo 'CloudFront distribution mismatch'; exit 1; }
           test "$S3_BUCKET_NAME" = 'ivxholding.com' || { echo 'S3 bucket mismatch'; exit 1; }
+
       - name: Install Expo deployment dependencies
         working-directory: expo
         run: bun install --frozen-lockfile
+
       - name: Apply node_modules patches (Watchman + ai-sdk web fixes)
         working-directory: expo
         run: bun scripts/apply-patches.mjs
+
       - name: Prepare deployment script runtime path
         shell: bash
         run: |
           sudo mkdir -p /home/user/rork-app
-          sudo ln -s "$GITHUB_WORKSPACE/expo" /home/user/rork-app/expo
+          sudo ln -sfn "$GITHUB_WORKSPACE/expo" /home/user/rork-app/expo
+
       - name: Deploy all landing assets to S3 and invalidate CloudFront
         working-directory: expo
         shell: bash
@@ -79,6 +119,17 @@ jobs:
             echo '::error::CloudFront invalidation success evidence is missing.'
             exit 1
           fi
+
+      - name: Verify public landing contains Deep-QA fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 30 "https://ivxholding.com/?qa=${LANDING_SOURCE_SHA}" -o /tmp/live-landing.html
+          grep -q 'Deal structures and protections vary by opportunity' /tmp/live-landing.html
+          ! grep -q '"foundingDate": "2024"' /tmp/live-landing.html
+          ! grep -q 'All properties are title-verified and insured' /tmp/live-landing.html
+          echo "LANDING_DEEP_QA_LIVE=PASS sha=${LANDING_SOURCE_SHA}"
+
       - name: Verify www redirects to apex over HTTPS
         shell: bash
         run: |
@@ -87,19 +138,15 @@ jobs:
           printf '%s\n' "$headers"
           status=$(printf '%s\n' "$headers" | head -n 1 | awk '{print $2}')
           location=$(printf '%s\n' "$headers" | grep -i '^location:' | head -n 1 | sed -E 's/^[Ll]ocation:[[:space:]]*//; s/\r$//' || true)
-          case "$status" in
-            301|302|307|308) ;;
-            *) echo "::error::www.ivxholding.com did not return an HTTP redirect (status=${status:-missing})."; exit 1 ;;
-          esac
-          case "$location" in
-            https://ivxholding.com|https://ivxholding.com/|https://ivxholding.com/*) ;;
-            *) echo "::error::www redirect target is not the apex domain (location=${location:-missing})."; exit 1 ;;
-          esac
+          case "$status" in 301|302|307|308) ;; *) echo "::error::www redirect failed status=${status:-missing}"; exit 1;; esac
+          case "$location" in https://ivxholding.com|https://ivxholding.com/|https://ivxholding.com/*) ;; *) echo "::error::bad redirect location=${location:-missing}"; exit 1;; esac
           echo "www_redirect=PASS status=$status location=$location"
+
       - name: Build Expo web app
         if: github.event.inputs.deployWebApp != 'false'
         working-directory: expo
         run: bun x expo export --platform web
+
       - name: Deploy Expo web app to /app/
         if: github.event.inputs.deployWebApp != 'false'
         working-directory: expo

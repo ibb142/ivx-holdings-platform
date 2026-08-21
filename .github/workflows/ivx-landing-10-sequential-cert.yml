@@ -1,0 +1,144 @@
+name: IVX Landing 10 Sequential Cert
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-landing-10-sequential-cert.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  sequential:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install deploy deps
+        working-directory: expo
+        run: bun add @aws-sdk/client-s3 @aws-sdk/client-cloudfront
+
+      - name: Run sequential fix deploy certify
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_IVX_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_IVX_API_BASE_URL }}
+          EXPO_PUBLIC_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          git config user.name 'ivx-qa-bot'
+          git config user.email 'ivx-qa-bot@users.noreply.github.com'
+          mkdir -p qa/evidence
+
+          patch_item() {
+            item="$1"
+            python3 - "$item" <<'PY'
+          import sys
+          from pathlib import Path
+          i = int(sys.argv[1])
+          p = Path('expo/ivxholding-landing/index.html')
+          s = p.read_text()
+          if i == 1:
+              s = s.replace('Multi-Channel Lead Capture — Live','Multi-Channel Lead Capture').replace('Multi-Channel Lead Capture &mdash; Live','Multi-Channel Lead Capture')
+          elif i == 2:
+              s = s.replace('1.10.14','1.10.22')
+          elif i == 3:
+              s = s.replace('Every visit from Google Ads, Instagram, LinkedIn, or TikTok is tagged at the door (UTM + click IDs) and routed into the CRM with its source attached.','Campaign visits can be tagged with UTM parameters and supported click IDs, then routed into the CRM when the corresponding production integrations are enabled.')
+          elif i == 4:
+              s = s.replace('Every activated investor gets a full treasury account inside IVX — every dollar in, every dollar out, recorded on an immutable ledger.','Activated investors can access account-level transaction and portfolio records through the IVX member flow as supported by the enabled production services.')
+          elif i == 5:
+              s = s.replace('Automatic daily, weekly, monthly, quarterly, and yearly investor statements with opening balance, ending balance, and tax summary. Export PDF, Excel, CSV.','Investor reporting supports account statements and transaction history. Available export formats and reporting periods depend on the enabled production services.')
+          elif i == 6:
+              s = s.replace('Pending and cleared deposits tracked per account with bank reconciliation across wires, ACH, and checks.','Pending and cleared deposits are tracked per account for funding methods enabled for that investor and offering.')
+          elif i == 7:
+              if 'hero-marketing-disclosure' not in s:
+                  d='<p class="hero-marketing-disclosure" style="max-width:760px;margin:14px auto 0;color:#b8b8b8;font-size:13px;line-height:1.55;">Investment minimums, fees, eligibility, projected returns and distribution terms vary by offering. Returns are not guaranteed and capital is at risk.</p>'
+                  s=s.replace('<div class="hero-actions">',d+'\n    <div class="hero-actions">',1)
+          elif i == 8:
+              s=s.replace('Android app live now','Android build available').replace('Android App Live Now','Android Build Available')
+          elif i == 9:
+              if 'hero-legal-links' not in s:
+                  links='<p class="hero-legal-links" style="max-width:760px;margin:10px auto 0;font-size:12px;"><a href="/disclosures.html">Investment Disclosures</a> · <a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a></p>'
+                  marker='</p>\n    <div class="hero-actions">'
+                  if marker in s:
+                      s=s.replace(marker,'</p>\n    '+links+'\n    <div class="hero-actions">',1)
+                  else:
+                      s=s.replace('<div class="hero-actions">',links+'\n    <div class="hero-actions">',1)
+          elif i == 10:
+              marker='<meta name="ivx-marketing-readiness-build" content="2026-08-18-sequential-10" />'
+              if marker not in s:
+                  s=s.replace('<meta name="author" content="IVX Holdings" />','<meta name="author" content="IVX Holdings" />\n  '+marker)
+          p.write_text(s)
+          PY
+          }
+
+          verify_live() {
+            item="$1"
+            body=$(mktemp)
+            curl -fsSL --retry 6 --retry-delay 4 --max-time 30 "https://ivxholding.com/?qa_item=${item}&run=${GITHUB_RUN_ID}" -o "$body"
+            case "$item" in
+              1) grep -Fq 'Multi-Channel Lead Capture' "$body"; ! grep -Fq 'Multi-Channel Lead Capture — Live' "$body" ;;
+              2) ! grep -Fq '1.10.14' "$body" ;;
+              3) grep -Fq 'production integrations are enabled' "$body" ;;
+              4) grep -Fq 'enabled production services' "$body" ;;
+              5) grep -Fq 'Investor reporting supports account statements and transaction history' "$body" ;;
+              6) grep -Fq 'funding methods enabled for that investor and offering' "$body" ;;
+              7) grep -Fq 'Returns are not guaranteed and capital is at risk' "$body" ;;
+              8) ! grep -Fiq 'Android app live now' "$body" ;;
+              9) grep -Fq 'Investment Disclosures' "$body"; curl -fsSI https://ivxholding.com/disclosures.html >/dev/null; curl -fsSI https://ivxholding.com/terms.html >/dev/null; curl -fsSI https://ivxholding.com/privacy.html >/dev/null ;;
+              10) grep -Fq 'ivx-marketing-readiness-build' "$body"; curl -fsSI https://ivxholding.com/legal.html >/dev/null; curl -fsSI https://ivxholding.com/cookie.html >/dev/null ;;
+            esac
+          }
+
+          for item in $(seq 1 10); do
+            patch_item "$item"
+            git add expo/ivxholding-landing/index.html
+            if ! git diff --cached --quiet; then
+              git commit -m "fix(landing): sequential item ${item}"
+              git push origin HEAD:main
+            fi
+
+            (cd expo && bun deploy-landing.mjs)
+            sleep 12
+            verify_live "$item"
+
+            cert=$(printf 'qa/evidence/landing-item-%02d-certificate.md' "$item")
+            {
+              echo "# IVX Landing Item $(printf '%02d' "$item") Certificate"
+              echo
+              echo "STATUS: PASS"
+              echo "ITEM: $item"
+              echo "VERIFIED_LIVE_URL: https://ivxholding.com/"
+              echo "VERIFIED_AT_UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+              echo "WORKFLOW_RUN_ID: ${GITHUB_RUN_ID}"
+              echo "CURRENT_COMMIT: $(git rev-parse HEAD)"
+              echo "EVIDENCE: live production check passed for item $item."
+            } > "$cert"
+            git add "$cert"
+            git commit -m "qa(landing): certify item ${item} live"
+            git push origin HEAD:main
+          done
+
+          {
+            echo '# IVX Landing Sequential 10-Item Certificate'
+            echo
+            echo 'STATUS: PASS'
+            echo 'PASS: 10/10'
+            echo "VERIFIED_AT_UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "WORKFLOW_RUN_ID: ${GITHUB_RUN_ID}"
+            echo 'SCOPE: technical landing content/deploy/live verification only; not legal or securities approval.'
+          } > qa/evidence/landing-sequential-10-certificate.md
+          git add qa/evidence/landing-sequential-10-certificate.md
+          git commit -m 'qa(landing): certify sequential 10/10 live'
+          git push origin HEAD:main

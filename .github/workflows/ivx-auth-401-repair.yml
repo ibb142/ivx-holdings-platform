@@ -1,0 +1,75 @@
+name: IVX Auth 401 Repair
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-auth-401-repair.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair-auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch auth code directly
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          service = Path('backend/services/ivx-member-database.ts')
+          text = service.read_text()
+
+          text = text.replace(
+            "  requiresVerification?: boolean;\n  deploymentMarker: string;\n}",
+            "  requiresVerification?: boolean;\n  errorCode?: string;\n  retryable?: boolean;\n  httpStatus?: number;\n  deploymentMarker: string;\n}",
+            1,
+          )
+
+          old = """    // Mint a real Supabase session for this fallback member via magic-link (with 5s timeout).\n    let session: { accessToken: string; refreshToken: string; expiresAt: number } | null = null;\n    try {\n      const admin = getSupabaseAdmin();\n      session = await Promise.race([\n        mintSessionForFallbackMember(admin, normalizedEmail),\n        new Promise<null>((resolve) => setTimeout(() => resolve(null), 5_000)),\n      ]);\n    } catch { /* non-fatal — still return userId */ }\n    return {\n      success: true,\n      message: 'Login successful.',\n      userId: fallbackUserId,\n      email: normalizedEmail,\n      accessToken: session?.accessToken,\n      refreshToken: session?.refreshToken,\n      expiresAt: session?.expiresAt,\n      deploymentMarker: DEPLOYMENT_MARKER,\n    };"""
+
+          new = """    // A credential check is not a completed login until a real session exists.\n    let session: { accessToken: string; refreshToken: string; expiresAt: number } | null = null;\n    try {\n      const anonClient = getSupabaseAnonClient();\n      const authResult = await Promise.race([\n        anonClient.auth.signInWithPassword({ email: normalizedEmail, password }),\n        new Promise<null>((resolve) => setTimeout(() => resolve(null), 5_000)),\n      ]);\n      if (authResult && !authResult.error && authResult.data?.session?.access_token && authResult.data?.session?.refresh_token) {\n        session = {\n          accessToken: authResult.data.session.access_token,\n          refreshToken: authResult.data.session.refresh_token,\n          expiresAt: typeof authResult.data.session.expires_at === 'number' ? authResult.data.session.expires_at : 0,\n        };\n      }\n    } catch { /* continue to controlled recovery */ }\n\n    if (!session && hasServiceRoleKey()) {\n      try {\n        const admin = getSupabaseAdmin();\n        session = await Promise.race([\n          mintSessionForFallbackMember(admin, normalizedEmail),\n          new Promise<null>((resolve) => setTimeout(() => resolve(null), 5_000)),\n        ]);\n      } catch { /* handled below */ }\n    }\n\n    if (!session?.accessToken || !session?.refreshToken) {\n      return {\n        success: false,\n        message: 'Authentication service could not issue a valid session. Please retry.',\n        userId: fallbackUserId,\n        email: normalizedEmail,\n        errorCode: 'SESSION_UNAVAILABLE',\n        retryable: true,\n        httpStatus: 503,\n        deploymentMarker: DEPLOYMENT_MARKER,\n      };\n    }\n\n    return {\n      success: true,\n      message: 'Login successful.',\n      userId: fallbackUserId,\n      email: normalizedEmail,\n      accessToken: session.accessToken,\n      refreshToken: session.refreshToken,\n      expiresAt: session.expiresAt,\n      deploymentMarker: DEPLOYMENT_MARKER,\n    };"""
+
+          if old not in text:
+            raise SystemExit('fallback login block not found')
+          service.write_text(text.replace(old, new, 1))
+
+          api = Path('backend/api/ivx-members.ts')
+          a = api.read_text()
+          old_api = "return jsonResponse(result, result.success ? 200 : (result.requiresVerification ? 403 : 401));"
+          new_api = "return jsonResponse(result, result.success ? 200 : (result.httpStatus || (result.requiresVerification ? 403 : 401)));"
+          if old_api not in a:
+            raise SystemExit('login status mapping not found')
+          api.write_text(a.replace(old_api, new_api, 1))
+          PY
+
+          git diff --check
+          grep -Fq "errorCode: 'SESSION_UNAVAILABLE'" backend/services/ivx-member-database.ts
+          grep -Fq "result.httpStatus || (result.requiresVerification ? 403 : 401)" backend/api/ivx-members.ts
+
+      - name: Run auth tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile
+          bun test backend/ivx-business-workflows.test.ts
+
+      - name: Commit code fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/services/ivx-member-database.ts backend/api/ivx-members.ts
+          git commit -m 'fix(auth): require real session and preserve 401 semantics'
+          git pull --rebase origin main || true
+          git push origin HEAD:main

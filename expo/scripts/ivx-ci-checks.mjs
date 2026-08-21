@@ -13,7 +13,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
 const LANDING_DIR = '/home/user/rork-app/expo/ivxholding-landing';
-const APK_PATH = '/tmp/ivx-holdings-1.10.13.apk';
+const APK_PATH = '/tmp/ivx-holdings-1.10.14.apk';
 
 let errors = 0;
 let warnings = 0;
@@ -109,7 +109,7 @@ function checkAPK() {
 
   // Write checksum file
   const checksumPath = APK_PATH + '.sha256';
-  writeFileSync(checksumPath, `${hash}  ivx-holdings-v1.10.13.apk\n`);
+  writeFileSync(checksumPath, `${hash}  ivx-holdings-v1.10.14.apk\n`);
   pass(`Checksum written: ${checksumPath}`);
 
   // Verify size is reasonable (debug APK should be 80-200MB)

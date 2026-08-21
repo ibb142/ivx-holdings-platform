@@ -15,9 +15,13 @@
 import { S3Client, PutObjectCommand, HeadBucketCommand, PutBucketWebsiteCommand } from '@aws-sdk/client-s3';
 import {
   CloudFrontClient,
+  CreateFunctionCommand,
   CreateInvalidationCommand,
   GetDistributionConfigCommand,
+  DescribeFunctionCommand,
+  PublishFunctionCommand,
   UpdateDistributionCommand,
+  UpdateFunctionCommand,
   ListResponseHeadersPoliciesCommand,
   CreateResponseHeadersPolicyCommand,
   GetResponseHeadersPolicyCommand,
@@ -30,6 +34,7 @@ const SECRET_KEY = process.env.AWS_SECRET_ACCESS_KEY || process.env.IVX_AWS_SECR
 const REGION = process.env.AWS_REGION || 'us-east-1';
 const DIST_ID = process.env.CLOUDFRONT_DISTRIBUTION_ID || '';
 const BUCKET = process.env.S3_BUCKET_NAME || 'ivxholding.com';
+const IVX_PUBLIC_SUPABASE_KEY = 'sb_publishable_HD3Xvq5bCQNJLFk1ROH9mQ_Wdb9xdDZ';
 
 if (!ACCESS_KEY || !SECRET_KEY) {
   console.error('❌ AWS credentials not set. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY env vars.');
@@ -43,9 +48,54 @@ if (!DIST_ID) {
 const s3 = new S3Client({ region: REGION, credentials: { accessKeyId: ACCESS_KEY, secretAccessKey: SECRET_KEY } });
 const cf = new CloudFrontClient({ region: 'us-east-1', credentials: { accessKeyId: ACCESS_KEY, secretAccessKey: SECRET_KEY } });
 
+async function ensureWwwRedirectFunction() {
+  const name = 'ivx-www-to-apex';
+  const code = `function handler(event) {
+  var request = event.request;
+  var host = request.headers.host && request.headers.host.value;
+  if (host && host.toLowerCase() === 'www.ivxholding.com') {
+    return {
+      statusCode: 301,
+      statusDescription: 'Moved Permanently',
+      headers: {
+        location: { value: 'https://ivxholding.com' + request.uri },
+        'cache-control': { value: 'public, max-age=3600' }
+      }
+    };
+  }
+  return request;
+}`;
+  let etag = '';
+  let functionArn = '';
+  try {
+    const current = await cf.send(new DescribeFunctionCommand({ Name: name, Stage: 'DEVELOPMENT' }));
+    etag = current.ETag || '';
+    functionArn = current.FunctionSummary?.FunctionMetadata?.FunctionARN || '';
+    const updated = await cf.send(new UpdateFunctionCommand({
+      Name: name,
+      IfMatch: etag,
+      FunctionConfig: { Comment: 'Redirect www.ivxholding.com to apex', Runtime: 'cloudfront-js-2.0' },
+      FunctionCode: Buffer.from(code, 'utf-8'),
+    }));
+    etag = updated.ETag || '';
+    functionArn = updated.FunctionSummary?.FunctionMetadata?.FunctionARN || functionArn;
+  } catch (error) {
+    if (error?.name !== 'NoSuchFunction') throw error;
+    const created = await cf.send(new CreateFunctionCommand({
+      Name: name,
+      FunctionConfig: { Comment: 'Redirect www.ivxholding.com to apex', Runtime: 'cloudfront-js-2.0' },
+      FunctionCode: Buffer.from(code, 'utf-8'),
+    }));
+    etag = created.ETag || '';
+    functionArn = created.FunctionSummary?.FunctionMetadata?.FunctionARN || '';
+  }
+  const published = await cf.send(new PublishFunctionCommand({ Name: name, IfMatch: etag }));
+  return published.FunctionSummary?.FunctionMetadata?.FunctionARN || functionArn;
+}
+
 const LANDING_DIR = '/home/user/rork-app/expo/ivxholding-landing';
 const ASSETS_DIR = '/home/user/rork-app/expo/assets/images';
-const APK_PATH = '/tmp/ivx-holdings-1.10.13.apk';
+const APK_PATH = '/tmp/ivx-holdings-1.10.14.apk';
 
 // Build version for cache-busting
 const BUILD_VER = 'v' + new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -53,7 +103,7 @@ const BUILD_VER = 'v' + new Date().toISOString().slice(0, 10).replace(/-/g, '');
 // ── Config injection ──────────────────────────────────
 function injectConfig(html) {
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-  const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+  const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY || IVX_PUBLIC_SUPABASE_KEY;
   const apiUrl = 'https://api.ivxholding.com';
   html = html.replace(/__IVX_API_BASE_URL__/g, apiUrl);
   html = html.replace(/__IVX_SUPABASE_URL__/g, supabaseUrl);
@@ -110,6 +160,7 @@ const backendHealthHTML = `<!DOCTYPE html>
 </html>`;
 
 async function deploy() {
+  const edgeStatus = { redirectFunction: 'pending', error: null, updatedAt: null };
   console.log('═══════════════════════════════════════════════════');
   console.log('  IVX Holdings — S3/CloudFront Landing Page Deploy');
   console.log('═══════════════════════════════════════════════════');
@@ -236,15 +287,26 @@ async function deploy() {
   const assetFiles = [
     { path: LANDING_DIR + '/ivx-styles.css', key: 'ivx-styles.css', type: 'text/css; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-app.js', key: 'ivx-app.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-app.js', key: 'ivx-app-landing-e2e-20260818.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-analytics.js', key: 'ivx-analytics.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-home-feed.js', key: 'ivx-home-feed.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-invest.js', key: 'ivx-invest.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-portal.js', key: 'ivx-portal.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-reels.js', key: 'ivx-reels.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-reels.js', key: 'ivx-reels-landing-e2e-20260818.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-reels.js', key: 'ivx-reels-landing-e2e-20260818-2.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-reels.js', key: 'ivx-reels-landing-e2e-20260818-3.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-reels.js', key: 'ivx-reels-landing-e2e-20260818-4.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-lazy-bridge.js', key: 'ivx-lazy-bridge.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-lazy-bridge.js', key: 'ivx-lazy-bridge-owner-portal-2.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-csp-actions.js', key: 'ivx-csp-actions-20260818.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-csp-actions.js', key: 'ivx-csp-actions-20260818-2.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-csp-actions.js', key: 'ivx-csp-actions-20260818-3.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-csp-actions.js', key: 'ivx-csp-actions-20260818-4.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-ui-utils.js', key: 'ivx-ui-utils.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-web-vitals.js', key: 'ivx-web-vitals.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-wire.js', key: 'ivx-wire.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-wire.js', key: 'ivx-wire-landing-e2e-20260818.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/landing-support-chat.js', key: 'landing-support-chat.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/landing-support-chat.css', key: 'landing-support-chat.css', type: 'text/css; charset=utf-8' },
   ];
@@ -339,7 +401,7 @@ async function deploy() {
     gitSha: process.env.GIT_SHA || 'local-build',
     builtAt: new Date().toISOString(),
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL || '',
-    supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+    supabaseAnonKey: process.env.SUPABASE_PUBLISHABLE_KEY || IVX_PUBLIC_SUPABASE_KEY,
     apiBaseUrl: 'https://api.ivxholding.com',
     backendUrl: 'https://api.ivxholding.com',
     analytics: {
@@ -369,8 +431,8 @@ async function deploy() {
   if (existsSync(APK_PATH)) {
     const apkBody = readFileSync(APK_PATH);
     const apkKeys = [
-      { key: 'apk/download', disposition: 'attachment; filename="ivx-holdings-v1.10.13.apk"' },
-      { key: 'apk/ivx-holdings-v1.10.13.apk', disposition: 'attachment; filename="ivx-holdings-v1.10.13.apk"' },
+      { key: 'apk/download', disposition: 'attachment; filename="ivx-holdings-v1.10.14.apk"' },
+      { key: 'apk/ivx-holdings-v1.10.14.apk', disposition: 'attachment; filename="ivx-holdings-v1.10.14.apk"' },
     ];
     for (const a of apkKeys) {
       try {
@@ -456,8 +518,17 @@ async function deploy() {
     console.warn('  Could not create/find policy:', e?.message || 'Unknown');
   }
 
-  // Attach policy to distribution if we have one
-  if (policyId) {
+  // Attach security policy and host redirect to the distribution. The redirect
+  // is independent of the optional response-headers policy.
+  let redirectFunctionArn = '';
+  try {
+    redirectFunctionArn = await ensureWwwRedirectFunction();
+  } catch (e) {
+    edgeStatus.redirectFunction = 'failed';
+    edgeStatus.error = `${e?.name || 'Unknown'}: ${e?.message || 'Unknown error'}`;
+    console.warn('  Could not publish www redirect function:', e?.message || 'Unknown');
+  }
+  if (policyId || redirectFunctionArn) {
     try {
       const distRes = await cf.send(new GetDistributionConfigCommand({ Id: DIST_ID }));
       const distConfig = distRes.DistributionConfig;
@@ -475,21 +546,35 @@ async function deploy() {
         }
 
         const currentPolicyId = distConfig.DefaultCacheBehavior.ResponseHeadersPolicyId;
-        if (currentPolicyId !== policyId) {
-          distConfig.DefaultCacheBehavior.ResponseHeadersPolicyId = policyId;
+        const policyChanged = Boolean(policyId && currentPolicyId !== policyId);
+        const currentAssociations = distConfig.DefaultCacheBehavior.FunctionAssociations?.Items || [];
+        const otherAssociations = currentAssociations.filter((item) => item.EventType !== 'viewer-request');
+        const hasRedirectFunction = Boolean(redirectFunctionArn && currentAssociations.some((item) => item.EventType === 'viewer-request' && item.FunctionARN === redirectFunctionArn));
+        if (redirectFunctionArn && !hasRedirectFunction) {
+          distConfig.DefaultCacheBehavior.FunctionAssociations = {
+            Quantity: otherAssociations.length + 1,
+            Items: [...otherAssociations, { EventType: 'viewer-request', FunctionARN: redirectFunctionArn }],
+          };
+        }
+        if (policyChanged || (redirectFunctionArn && !hasRedirectFunction)) {
+          if (policyId) distConfig.DefaultCacheBehavior.ResponseHeadersPolicyId = policyId;
 
           await cf.send(new UpdateDistributionCommand({
             Id: DIST_ID,
             DistributionConfig: distConfig,
             IfMatch: currentETag,
           }));
-          console.log('  ✅ Attached security headers policy to distribution');
+          console.log('  ✅ Attached security headers and www redirect function to distribution');
+          edgeStatus.redirectFunction = 'attached';
         } else {
-          console.log('  Policy already attached to distribution');
+          console.log('  Security policy and www redirect function already attached');
+          edgeStatus.redirectFunction = 'attached';
         }
       }
     } catch (e) {
       console.warn('  Could not attach policy to distribution:', e?.message || 'Unknown');
+      edgeStatus.redirectFunction = 'failed';
+      edgeStatus.error = `${e?.name || 'Unknown'}: ${e?.message || 'Unknown error'}`;
       if (e?.$metadata) console.warn('   HTTP:', e.$metadata.httpStatusCode, '| Request ID:', e.$metadata.requestId || 'N/A');
     }
   }
@@ -524,6 +609,19 @@ async function deploy() {
   } catch (e) {
     console.error('❌ www redirect setup FAILED:', e?.name || 'Unknown', e?.message || 'Unknown error');
     if (e?.$metadata) console.error('   HTTP:', e.$metadata.httpStatusCode, '| Request ID:', e.$metadata.requestId || 'N/A');
+  }
+
+  edgeStatus.updatedAt = new Date().toISOString();
+  try {
+    await s3.send(new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: 'deployment-edge-status.json',
+      Body: JSON.stringify(edgeStatus, null, 2),
+      ContentType: 'application/json; charset=utf-8',
+      CacheControl: 'no-cache, no-store, must-revalidate',
+    }));
+  } catch (e) {
+    console.warn('  Could not publish edge status:', e?.message || 'Unknown');
   }
 
   // ── CloudFront invalidation ────────────────────────

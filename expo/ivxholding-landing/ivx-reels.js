@@ -352,7 +352,7 @@
   }
 
   function feedPath() {
-    var u = '/api/ivx/video-platform/feed?limit=6&viewer_id=' + encodeURIComponent(VIEWER);
+    var u = '/api/reels?limit=6&viewer_id=' + encodeURIComponent(VIEWER);
     if (state.channel === '__reels') u += '&type=reel';
     else if (state.channel) u += '&channel=' + encodeURIComponent(state.channel);
     if (state.cursor) u += '&cursor=' + encodeURIComponent(state.cursor);
@@ -426,7 +426,7 @@
         // Fallback: if the dedicated Project Reels rail is empty, serve the unified
         // investor feed so the Reels surface never appears broken to visitors.
         if (state.channel === '__reels' && vids.length === 0 && !state.cursor) {
-          return apiFetchJson('/api/ivx/video-platform/feed?limit=6&viewer_id=' + encodeURIComponent(VIEWER))
+          return apiFetchJson('/api/reels?limit=6&viewer_id=' + encodeURIComponent(VIEWER))
             .then(function (fbData) {
               var fbVids = (fbData && fbData.videos) || [];
               fbVids.forEach(function (v) {
@@ -452,8 +452,9 @@
         if (!state.cursor) state.done = true;
         finishLoad();
       })
-      .catch(function () {
+      .catch(function (error) {
         removeSpin();
+        console.error('[IVX Reels] Feed load failed:', error && error.message ? error.message : error);
         showFeedError();
         finishLoad();
       });
@@ -678,6 +679,8 @@
         + '<button class="ivxr-act cmt"><span class="i">&#128172;</span><span class="c">' + fmtCount(v.comment_count) + '</span></button>'
         + '<button class="ivxr-act sav' + (v.viewer_saved ? ' saved' : '') + '"><span class="i">' + (v.viewer_saved ? '&#128278;' : '&#128279;') + '</span><span class="c">' + fmtCount(v.save_count) + '</span></button>'
         + '<button class="ivxr-act shr"><span class="i">&#10148;</span><span class="c">' + fmtCount(v.share_count) + '</span></button>'
+        + '<button class="ivxr-act ivxr-follow"><span class="i">&#10133;</span><span class="c">Follow</span></button>'
+        + '<button class="ivxr-act rpt"><span class="i">&#9873;</span><span class="c">Report</span></button>'
         + '<button class="ivxr-act mute" data-r="mute"><span class="i">' + (state.muted ? '&#128263;' : '&#128266;') + '</span></button>';
       slide.appendChild(rail);
       wireRail(rail, slide, v, heart);
@@ -1188,6 +1191,8 @@
     document.body.style.overflow = '';
   }
   launch.addEventListener('click', openReels);
+  var navLaunch = document.getElementById('navReelsBtn');
+  if (navLaunch) navLaunch.addEventListener('click', openReels);
   window.IVXOpenReels = openReels;
   el('close').addEventListener('click', closeReels);
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && root.classList.contains('open')) closeReels(); });

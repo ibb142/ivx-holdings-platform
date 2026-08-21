@@ -9,7 +9,9 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const DEPLOYMENT_MARKER = 'ivx-owner-auth-v1';
+const DEPLOYMENT_MARKER = 'ivx-owner-auth-v2-publishable-key-safe';
+const PRODUCTION_SUPABASE_URL = 'https://kvclcdjmjghndxsngfzb.supabase.co';
+const PRODUCTION_SUPABASE_PUBLIC_KEY = 'sb_publishable_HD3Xvq5bCQNJLFk1ROH9mQ_Wdb9xdDZ';
 const ADMIN_ROLES = ['owner', 'admin', 'ceo', 'staff', 'manager', 'analyst', 'support'] as const;
 const ROLE_ALIASES: Record<string, string> = {
   super_admin: 'admin',
@@ -49,39 +51,50 @@ function isAdminRole(role: string | null | undefined): boolean {
   return normalizeRole(role) !== 'investor';
 }
 
-type OwnerAuthorizationResult = {
-  success: true;
-  authorized: true;
-  userId: string;
-  email: string;
-  role: string;
-  roleSource: 'profiles' | 'rpc_verify_admin_access' | 'email_not_owner';
-  expiresAt: number;
-  deploymentMarker: string;
-} | {
-  success: false;
-  authorized: false;
-  reason: 'missing_token' | 'invalid_token' | 'token_expired' | 'supabase_unavailable' | 'not_owner' | 'backend_error';
-  message: string;
-  deploymentMarker: string;
-};
-
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': 'https://ivxholding.com',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-ivx-trace-id',
     },
   });
 }
 
-function getSupabaseConfig(): { url: string; anonKey: string } | null {
-  const url = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-  if (!url || !anonKey) return null;
-  return { url, anonKey };
+function normalizeUrl(raw: string): string {
+  const value = raw.trim().replace(/\/$/, '');
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') return value;
+  } catch {}
+  return '';
+}
+
+function isUsablePublicKey(value: string): boolean {
+  const key = value.trim();
+  return key.startsWith('sb_publishable_') || key.startsWith('eyJ');
+}
+
+function getSupabaseConfig(): { url: string; publicKey: string; source: 'env' | 'production_fallback' } {
+  const envUrl = normalizeUrl(process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '');
+  const candidates = [
+    process.env.SUPABASE_PUBLISHABLE_KEY,
+    process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    process.env.SUPABASE_ANON_KEY,
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+  ].map((v) => (v || '').trim()).filter(Boolean);
+  const envKey = candidates.find(isUsablePublicKey) || '';
+
+  if (envUrl && envUrl.includes('kvclcdjmjghndxsngfzb.supabase.co') && envKey) {
+    return { url: envUrl, publicKey: envKey, source: 'env' };
+  }
+
+  return {
+    url: PRODUCTION_SUPABASE_URL,
+    publicKey: PRODUCTION_SUPABASE_PUBLIC_KEY,
+    source: 'production_fallback',
+  };
 }
 
 export async function handleOwnerAuthorize(request: Request): Promise<Response> {
@@ -100,28 +113,17 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
   }
 
   const config = getSupabaseConfig();
-  if (!config) {
-    console.error(`[OwnerAuth] ${traceId} Supabase not configured`);
-    return jsonResponse({
-      success: false,
-      authorized: false,
-      reason: 'backend_error',
-      message: 'IVX authorization service is not configured.',
-      deploymentMarker: DEPLOYMENT_MARKER,
-    }, 500);
-  }
 
   try {
-    const client = createClient(config.url, config.anonKey, {
+    const client = createClient(config.url, config.publicKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
     const { data: userData, error: userError } = await client.auth.getUser(token);
     if (userError || !userData.user) {
-      const reason = userError?.message?.toLowerCase().includes('expired')
-        ? 'token_expired'
-        : 'invalid_token';
-      console.log(`[OwnerAuth] ${traceId} token rejected: ${userError?.message ?? 'no user'} elapsed=${Date.now() - startedAt}ms`);
+      const lower = (userError?.message || '').toLowerCase();
+      const reason = lower.includes('expired') ? 'token_expired' : 'invalid_token';
+      console.log(`[OwnerAuth] ${traceId} token rejected source=${config.source}: ${userError?.message ?? 'no user'} elapsed=${Date.now() - startedAt}ms`);
       return jsonResponse({
         success: false,
         authorized: false,
@@ -136,7 +138,7 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
     const email = user.email ?? '';
 
     let role: string | null = null;
-    let roleSource: 'profiles' | 'rpc_verify_admin_access' | 'email_not_owner' = 'profiles';
+    let roleSource: 'profiles' | 'rpc_verify_admin_access' = 'profiles';
 
     try {
       const { data: profile, error: profileError } = await client
@@ -165,7 +167,7 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
 
     const normalizedRole = normalizeRole(role);
     if (!isAdminRole(normalizedRole)) {
-      console.log(`[OwnerAuth] ${traceId} user authenticated but not owner: userId=${userId} role=${normalizedRole} elapsed=${Date.now() - startedAt}ms`);
+      console.log(`[OwnerAuth] ${traceId} authenticated but unauthorized: userId=${userId} role=${normalizedRole} elapsed=${Date.now() - startedAt}ms`);
       return jsonResponse({
         success: false,
         authorized: false,
@@ -175,9 +177,7 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
       }, 403);
     }
 
-    const userWithExpiry = user as { expires_at?: number };
-    const expiresAt = typeof userWithExpiry.expires_at === 'number' ? userWithExpiry.expires_at : Math.floor(Date.now() / 1000) + 3600;
-    console.log(`[OwnerAuth] ${traceId} authorized owner: userId=${userId} role=${normalizedRole} source=${roleSource} elapsed=${Date.now() - startedAt}ms`);
+    console.log(`[OwnerAuth] ${traceId} authorized owner: userId=${userId} role=${normalizedRole} source=${roleSource} keySource=${config.source} elapsed=${Date.now() - startedAt}ms`);
     return jsonResponse({
       success: true,
       authorized: true,
@@ -185,7 +185,7 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
       email,
       role: normalizedRole,
       roleSource,
-      expiresAt,
+      keySource: config.source,
       deploymentMarker: DEPLOYMENT_MARKER,
     }, 200);
   } catch (error) {

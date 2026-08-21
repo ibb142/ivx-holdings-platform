@@ -188,7 +188,7 @@ async function getSB() {
   if (_sb) return _sb;
   const { createClient } = await import('@supabase/supabase-js');
   const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
-  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_HD3Xvq5bCQNJLFk1ROH9mQ_Wdb9xdDZ').trim();
   const timeoutFetch = (input: any, init?: any) => {
     const controller = new AbortController();
     const tid = setTimeout(() => controller.abort(), SB_TIMEOUT_MS);
@@ -341,7 +341,7 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
     const sb = await getSB();
     let query = sb
       .from('project_videos')
-      .select('id,project_id,media_id,title,video_url,thumbnail_url,cover_url,duration_sec,width,height,orientation,is_pinned,is_approved,view_count,created_at')
+      .select('id,project_id,media_id,title,video_url,thumbnail_url,cover_url,duration_sec,width,height,orientation,video_type,is_pinned,is_approved,view_count,created_at')
       .eq('is_approved', true)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false })
@@ -392,6 +392,7 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
 
     const rankable: (RankableVideo & { row: any; display_order: number | null; meta: VideoMeta })[] = filtered.map((v) => {
       const m = metaFor(String(v.id));
+      if (!metaDoc[String(v.id)] && v.video_type === 'reel') m.video_type = 'reel';
       return {
         id: String(v.id),
         created_at: String(v.created_at),
@@ -1348,6 +1349,7 @@ export async function handlePlatformAdminAddReel(req: Request): Promise<Response
       width,
       height,
       orientation,
+      video_type: videoType,
       is_approved: true,
     };
     const { data, error } = await sb.from('project_videos').upsert(row, { onConflict: 'id' }).select('id').maybeSingle();

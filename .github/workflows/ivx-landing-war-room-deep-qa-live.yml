@@ -1,0 +1,247 @@
+name: IVX Landing War Room Deep QA Live
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/ivx-landing-deep-qa-fix.mjs'
+      - 'qa/landing-112-enterprise-remediation-router.md'
+      - 'qa/evidence/landing-war-room/**'
+      - 'supabase/migrations/202608190232_harden_landing_public_rls_item_043.sql'
+      - 'expo/app/ivx/landing-war-room-map.tsx'
+      - 'expo/app/ivx/_layout.tsx'
+      - 'backend/services/ivx-agent-role-certification.ts'
+      - 'backend/api/ivx-live-work.ts'
+      - '.github/workflows/ivx-landing-war-room-deep-qa-live.yml'
+      - '.ivx-production-certification-trigger'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ivx-landing-war-room-deep-qa-live
+  cancel-in-progress: true
+
+env:
+  API_BASE: https://api.ivxholding.com
+  SITE_BASE: https://ivxholding.com
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  CLOUDFRONT_DISTRIBUTION_ID: E1C0DEI0VKCUYN
+  S3_BUCKET_NAME: ivxholding.com
+  EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+  EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+  EXPO_PUBLIC_GOOGLE_ADS_KEY: ${{ secrets.EXPO_PUBLIC_GOOGLE_ADS_KEY }}
+  EXPO_PUBLIC_META_PIXEL_ID: ${{ secrets.EXPO_PUBLIC_META_PIXEL_ID }}
+  EXPO_PUBLIC_TIKTOK_PIXEL_ID: ${{ secrets.EXPO_PUBLIC_TIKTOK_PIXEL_ID }}
+  EXPO_PUBLIC_LINKEDIN_PARTNER_ID: ${{ secrets.EXPO_PUBLIC_LINKEDIN_PARTNER_ID }}
+  RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+  RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+  DEFAULT_RENDER_SERVICE_ID: srv-d7t9ivreo5us73ftose0
+
+jobs:
+  fix-deploy-certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Apply deterministic landing deep-QA fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/ivx-landing-deep-qa-fix.mjs
+
+      - name: Persist landing remediation commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'IVX Landing Deep QA'
+          git config user.email 'ivx-deep-qa@users.noreply.github.com'
+          if ! git diff --quiet -- expo/ivxholding-landing/index.html; then
+            git add expo/ivxholding-landing/index.html
+            git commit -m 'fix(landing): remove unsupported claims and structured-data assertions [skip ci]'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+          TARGET_SHA=$(git rev-parse HEAD)
+          echo "TARGET_SHA=$TARGET_SHA" >> "$GITHUB_ENV"
+          echo "target_sha=$TARGET_SHA"
+
+      - name: Verify 112 war-room source invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f qa/landing-112-agent-war-room.md
+          test -f qa/landing-112-enterprise-remediation-router.md
+          test -f expo/app/ivx/landing-war-room-map.tsx
+          test -f backend/services/ivx-agent-role-certification.ts
+          test -f qa/evidence/landing-war-room/item-043-rls-live.json
+          grep -q '112 Landing War Room' expo/app/ivx/landing-war-room-map.tsx
+          grep -q 'Landing War Room • 2D' expo/app/ivx/_layout.tsx
+          grep -q 'individualCerts' backend/api/ivx-live-work.ts
+          grep -q 'PASS_WITH_MIGRATION_RUNNER_INCIDENT' qa/evidence/landing-war-room/item-043-rls-live.json
+          python3 - <<'PY'
+          import re
+          s=open('backend/services/ivx-enterprise-master-registry.ts').read()
+          nums=[int(x) for x in re.findall(r"\{ n: (\d+), name: 'IA-",s)]
+          assert nums == list(range(1,113)), (len(nums), nums[:3], nums[-3:])
+          print('MASTER_REGISTRY=112/112')
+          PY
+          ! grep -q '"foundingDate": "2024"' expo/ivxholding-landing/index.html
+          ! grep -q 'https://twitter.com/ivxholdings' expo/ivxholding-landing/index.html
+          ! grep -q 'https://linkedin.com/company/ivxholdings' expo/ivxholding-landing/index.html
+          ! grep -q 'https://instagram.com/ivxholdings' expo/ivxholding-landing/index.html
+          ! grep -q '"price": "0.00"' expo/ivxholding-landing/index.html
+          ! grep -q 'All properties are title-verified and insured' expo/ivxholding-landing/index.html
+          grep -q 'Deal structures and protections vary by opportunity' expo/ivxholding-landing/index.html
+          echo 'WAR_ROOM_SOURCE_GATES=PASS'
+
+      - name: Validate AWS deployment binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$AWS_ACCESS_KEY_ID"
+          test -n "$AWS_SECRET_ACCESS_KEY"
+          test "$CLOUDFRONT_DISTRIBUTION_ID" = 'E1C0DEI0VKCUYN'
+          test "$S3_BUCKET_NAME" = 'ivxholding.com'
+
+      - name: Install Expo deployment dependencies
+        working-directory: expo
+        run: bun install --frozen-lockfile
+
+      - name: Apply Expo patches
+        working-directory: expo
+        run: bun scripts/apply-patches.mjs
+
+      - name: Prepare landing deploy runtime path
+        shell: bash
+        run: |
+          sudo mkdir -p /home/user/rork-app
+          sudo ln -sfn "$GITHUB_WORKSPACE/expo" /home/user/rork-app/expo
+
+      - name: Deploy landing to S3 and invalidate CloudFront
+        working-directory: expo
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun run deploy-s3-direct.mjs 2>&1 | tee /tmp/ivx-s3-deploy.log
+          grep -q 'CloudFront invalidated:' /tmp/ivx-s3-deploy.log
+          ! grep -q 'CloudFront invalidation FAILED' /tmp/ivx-s3-deploy.log
+
+      - name: Build and deploy Expo web app
+        working-directory: expo
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun x expo export --platform web
+          bun run deploy-web-app.mjs
+
+      - name: Trigger exact-SHA Render backend deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE_ID="${RENDER_SERVICE_ID:-$DEFAULT_RENDER_SERVICE_ID}"
+          test -n "${RENDER_API_KEY:-}" || { echo 'RENDER_API_KEY missing'; exit 1; }
+          response=$(curl -fsS -X POST "https://api.render.com/v1/services/${SERVICE_ID}/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H 'Accept: application/json' \
+            -H 'Content-Type: application/json' \
+            --data "{\"clearCache\":\"do_not_clear\",\"commitId\":\"${TARGET_SHA}\"}")
+          deploy_id=$(printf '%s' "$response" | jq -r '.id // .deploy.id // empty')
+          test -n "$deploy_id"
+          echo "RENDER_DEPLOY_ID=$deploy_id" >> "$GITHUB_ENV"
+
+      - name: Wait for backend exact SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          matched=false
+          for i in $(seq 1 150); do
+            code=$(curl -sS -m 20 -o /tmp/version.json -w '%{http_code}' "${API_BASE}/version" || true)
+            if [ "$code" = 200 ]; then
+              live=$(jq -r '.commit // empty' /tmp/version.json)
+              echo "poll=$i live=${live:-missing} expected=$TARGET_SHA"
+              if [ "$live" = "$TARGET_SHA" ]; then matched=true; break; fi
+            fi
+            sleep 10
+          done
+          test "$matched" = true
+
+      - name: Verify public landing truthfulness fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 30 "${SITE_BASE}/?qa=${TARGET_SHA}" -o /tmp/live-landing.html
+          grep -q 'Deal structures and protections vary by opportunity' /tmp/live-landing.html
+          ! grep -q '"foundingDate": "2024"' /tmp/live-landing.html
+          ! grep -q 'All properties are title-verified and insured' /tmp/live-landing.html
+          ! grep -q 'https://twitter.com/ivxholdings' /tmp/live-landing.html
+          echo 'LIVE_LANDING_TRUTHFULNESS=PASS'
+
+      - name: Verify production health and owner gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          health=$(curl -sS -m 20 -o /tmp/health.json -w '%{http_code}' "${API_BASE}/health" || true)
+          test "$health" = 200
+          cert_gate=$(curl -sS -m 20 -o /tmp/cert-gate.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?individualCerts=1&hours=24" || true)
+          case "$cert_gate" in 401|403) ;; *) echo "individual_cert_owner_gate=$cert_gate"; exit 1;; esac
+          dashboard_gate=$(curl -sS -m 20 -o /tmp/dashboard-gate.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" || true)
+          case "$dashboard_gate" in 401|403) ;; *) echo "dashboard_owner_gate=$dashboard_gate"; exit 1;; esac
+          echo "HEALTH_HTTP=$health" >> "$GITHUB_ENV"
+          echo "CERT_GATE_HTTP=$cert_gate" >> "$GITHUB_ENV"
+          echo "DASHBOARD_GATE_HTTP=$dashboard_gate" >> "$GITHUB_ENV"
+
+      - name: Create exact-SHA landing war-room certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence/landing-war-room
+          cat > qa/evidence/landing-war-room/deep-qa-live.json <<EOF
+          {
+            "ok": true,
+            "certificateId": "IVX-LANDING-WAR-ROOM-DEEP-QA-${TARGET_SHA:0:16}",
+            "certifiedSha": "${TARGET_SHA}",
+            "renderDeployId": "${RENDER_DEPLOY_ID}",
+            "backendExactSha": true,
+            "landingCloudFrontDeploy": true,
+            "landingTruthfulnessLive": true,
+            "item043RlsEvidence": "qa/evidence/landing-war-room/item-043-rls-live.json",
+            "roleAlignedRouter": "qa/landing-112-enterprise-remediation-router.md",
+            "map2D": "expo/app/ivx/landing-war-room-map.tsx",
+            "individualAgentCertEndpointOwnerGated": ${CERT_GATE_HTTP},
+            "dashboardEndpointOwnerGated": ${DASHBOARD_GATE_HTTP},
+            "healthHttp": ${HEALTH_HTTP},
+            "runtime112CertificateScope": "separate: runtime execution certificate does not certify landing items",
+            "landingWarRoomScope": "source/deploy/live truthfulness + item 043 + routing infrastructure; remaining 111 checklist items require their own domain evidence before overall GO",
+            "verifiedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          cat qa/evidence/landing-war-room/deep-qa-live.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: landing-war-room-deep-qa-${{ github.run_id }}
+          path: qa/evidence/landing-war-room/deep-qa-live.json
+          if-no-files-found: error
+
+      - name: Persist certificate without changing certified SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'IVX Landing Certifier'
+          git config user.email 'ivx-landing-certifier@users.noreply.github.com'
+          git add qa/evidence/landing-war-room/deep-qa-live.json
+          git diff --cached --quiet && exit 0
+          git commit -m "cert(landing): deep-QA live ${TARGET_SHA:0:12} [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main

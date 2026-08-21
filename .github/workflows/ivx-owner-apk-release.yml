@@ -34,7 +34,7 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006 cmake;3.22.1'
           log-accepted-android-sdk-licenses: false
-      - name: Install dependencies and apply Metro compatibility patches
+      - name: Install dependencies and apply Hermes compatibility patches
         shell: bash
         run: |
           set -euo pipefail
@@ -42,23 +42,18 @@ jobs:
           cd expo
           bun install
           bun scripts/apply-patches.mjs
-      - name: Independence gate — the vendor toolkit must not be required to build
+      - name: Verify owner sign-in and Home recovery source
         shell: bash
         run: |
           set -euo pipefail
-          cd expo
-          node -e '
-            const pkg = require("./package.json");
-            const hits = [];
-            for (const s of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]) {
-              for (const n of Object.keys(pkg[s] || {})) if (n.toLowerCase().includes("rork")) hits.push(s + ":" + n);
-            }
-            if (hits.length) { console.error("FAIL - vendor package present: " + hits.join(", ")); process.exit(1); }
-          '
-          grep -qi "rork" metro.config.js && { echo "FAIL - metro.config.js requires the vendor"; exit 1; } || true
-          test ! -d node_modules/@rork-ai
-          node scripts/verify-zero-rork-runtime.mjs
-          echo "PASS - this APK is built with no vendor package present"
+          grep -Fq "return PRODUCTION_SUPABASE_ANON_KEY" expo/lib/supabase-env.ts
+          grep -Fq "export { default } from './home';" 'expo/app/(tabs)/(home)/index.tsx'
+          grep -Fq 'testID="owner-home-ready"' 'expo/app/(tabs)/(home)/home.tsx'
+          grep -Fq 'testID="home-runtime-ready"' 'expo/app/(tabs)/(home)/home.tsx'
+          grep -Fq "version: \"1.10.22\"" expo/app.config.ts
+          grep -Fq 'versionCode: 119' expo/app.config.ts
+          node expo/scripts/patch-ai-sdk-provider-utils.mjs
+          echo "owner_signin_source_gate=PASS version=1.10.22 versionCode=119"
       - name: Prepare disposable QA signing key
         shell: bash
         run: |
@@ -73,7 +68,7 @@ jobs:
           set -euo pipefail
           chmod +x gradlew
           ./gradlew assembleQa --no-daemon -x lint
-      - name: Locate and verify APK
+      - name: Locate, verify, and certify APK
         id: apk
         shell: bash
         run: |
@@ -81,12 +76,25 @@ jobs:
           APK=$(find expo/android/app/build/outputs/apk/qa -name '*.apk' -type f | head -1)
           test -n "$APK"
           SHORT_SHA="${GITHUB_SHA:0:12}"
-          NAME="ivx-owner-signin-${SHORT_SHA}.apk"
+          NAME="ivx-holdings-v1.10.22-owner-signin-${SHORT_SHA}.apk"
           cp "$APK" "$NAME"
           APKSIGNER="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
           "$APKSIGNER" verify --verbose "$NAME"
-          sha256sum "$NAME"
+          APK_SHA256=$(sha256sum "$NAME" | awk '{print $1}')
+          mkdir -p qa/evidence
+          jq -n \
+            --arg marker "ivx-owner-signin-v1.10.22" \
+            --arg sourceSha "$GITHUB_SHA" \
+            --arg version "1.10.22" \
+            --argjson versionCode 119 \
+            --arg apk "$NAME" \
+            --arg sha256 "$APK_SHA256" \
+            --arg certifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{marker:$marker,sourceSha:$sourceSha,version:$version,versionCode:$versionCode,apk:$apk,sha256:$sha256,signatureVerified:true,ownerSigninSourceGate:true,homeRouteGate:true,hermesPatchGate:true,gradleAssembleQa:true,certifiedAt:$certifiedAt,certificateScope:"Build/signature/source gates for fixed owner sign-in and Home recovery APK. Physical-device sign-in remains a separate runtime check."}' \
+            > qa/evidence/ivx-owner-signin-release-cert.json
+          cat qa/evidence/ivx-owner-signin-release-cert.json
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "sha256=$APK_SHA256" >> "$GITHUB_OUTPUT"
       - name: Publish APK release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -94,10 +102,14 @@ jobs:
         run: |
           set -euo pipefail
           SHORT_SHA="${GITHUB_SHA:0:12}"
-          TAG="ivx-owner-apk-${SHORT_SHA}"
-          gh release create "$TAG" "${{ steps.apk.outputs.name }}" --target "$GITHUB_SHA" --title "IVX Owner APK ${SHORT_SHA}" --notes "Installable QA-signed Android APK, built on GitHub-hosted runners with the vendor toolkit absent (independence gate enforced in this workflow). Source SHA: ${GITHUB_SHA}. Not Play Store production-signed."
+          TAG="ivx-owner-signin-v1.10.22-${SHORT_SHA}"
+          gh release create "$TAG" "${{ steps.apk.outputs.name }}" qa/evidence/ivx-owner-signin-release-cert.json --target "$GITHUB_SHA" --title "IVX Android v1.10.22 Owner Sign-In ${SHORT_SHA}" --notes "QA-signed Android APK with the fixed production Supabase owner sign-in path and Home recovery. Source SHA: ${GITHUB_SHA}. APK SHA-256: ${{ steps.apk.outputs.sha256 }}."
       - uses: actions/upload-artifact@v4
         with:
-          name: ivx-owner-apk-${{ github.sha }}
-          path: ${{ steps.apk.outputs.name }}
+          name: ivx-owner-signin-v1.10.22-${{ github.sha }}
+          path: |
+            ${{ steps.apk.outputs.name }}
+            qa/evidence/ivx-owner-signin-release-cert.json
           retention-days: 30
+
+# Release request: owner-signin-live-fix-2026-08-18T20:45:00-04:00

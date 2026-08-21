@@ -1,0 +1,142 @@
+name: Deploy ivxholding.com landing page
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'expo/ivxholding-landing/**'
+      - 'expo/deploy-landing.mjs'
+      - 'expo/scripts/landing-*.mjs'
+      - 'expo/assets/images/**'
+      - '.github/workflows/deploy-landing.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-landing-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-and-certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+        working-directory: expo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Apply 10 landing readiness fixes
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('ivxholding-landing/index.html')
+          s = p.read_text()
+          replacements = [
+            ('Multi-Channel Lead Capture — Live', 'Multi-Channel Lead Capture'),
+            ('Multi-Channel Lead Capture &mdash; Live', 'Multi-Channel Lead Capture'),
+            ('1.10.14', '1.10.22'),
+            ('Every visit from Google Ads, Instagram, LinkedIn, or TikTok is tagged at the door (UTM + click IDs) and routed into the CRM with its source attached.', 'Campaign visits can be tagged with UTM parameters and supported click IDs, then routed into the CRM when the corresponding production integrations are enabled.'),
+            ('Every activated investor gets a full treasury account inside IVX — every dollar in, every dollar out, recorded on an immutable ledger.', 'Activated investors can access account-level transaction and portfolio records through the IVX member flow as supported by enabled production services.'),
+            ('Automatic daily, weekly, monthly, quarterly, and yearly investor statements with opening balance, ending balance, and tax summary. Export PDF, Excel, CSV.', 'Investor reporting supports account statements and transaction history. Available export formats and reporting periods depend on enabled production services.'),
+            ('Pending and cleared deposits tracked per account with bank reconciliation across wires, ACH, and checks.', 'Pending and cleared deposits are tracked per account for funding methods enabled for that investor and offering.'),
+            ('Android app live now', 'Android build available'),
+            ('Android App Live Now', 'Android Build Available'),
+          ]
+          for a,b in replacements:
+            s=s.replace(a,b)
+          if 'ivx-marketing-readiness-build' not in s:
+            s=s.replace('<meta name="author" content="IVX Holdings" />','<meta name="author" content="IVX Holdings" />\n  <meta name="ivx-marketing-readiness-build" content="2026-08-18-10of10" />')
+          risk='Investment minimums, fees, eligibility, projected returns and distribution terms vary by offering. Returns are not guaranteed and capital is at risk.'
+          if risk not in s:
+            block='<p class="hero-marketing-disclosure" style="max-width:760px;margin:14px auto 0;color:#b8b8b8;font-size:13px;line-height:1.55;">'+risk+'</p>\n    '
+            s=s.replace('<div class="hero-actions">', block+'<div class="hero-actions">', 1)
+          if 'class="hero-legal-links"' not in s:
+            links='<p class="hero-legal-links" style="max-width:760px;margin:10px auto 0;font-size:12px;"><a href="/disclosures.html">Investment Disclosures</a> · <a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a></p>\n    '
+            s=s.replace('<div class="hero-actions">', links+'<div class="hero-actions">', 1)
+          p.write_text(s)
+          PY
+
+      - name: Prove AWS identity
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          set -euo pipefail
+          aws sts get-caller-identity | tee /tmp/aws-identity.json
+
+      - name: Install AWS SDK deploy dependencies
+        run: bun add @aws-sdk/client-s3 @aws-sdk/client-cloudfront
+
+      - name: Deploy landing to S3 and invalidate CloudFront
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_IVX_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_IVX_API_BASE_URL }}
+          EXPO_PUBLIC_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_API_BASE_URL }}
+        run: bun deploy-landing.mjs
+
+      - name: Verify 10 landing readiness items live
+        run: |
+          set -euo pipefail
+          mkdir -p ../qa/evidence
+          body=$(mktemp)
+          curl -fsSL --retry 10 --retry-delay 5 --max-time 30 "https://ivxholding.com/?qa10=${GITHUB_RUN_ID}" -o "$body"
+          pass=0
+          check(){ n="$1"; shift; label="$1"; shift; if "$@"; then echo "$n. PASS - $label" | tee -a /tmp/qa10.txt; pass=$((pass+1)); else echo "$n. FAIL - $label" | tee -a /tmp/qa10.txt; fi; }
+          : > /tmp/qa10.txt
+          check 1 'Uncertified Live label removed' bash -c "! grep -Fq 'Multi-Channel Lead Capture — Live' '$body'"
+          check 2 'Stale APK 1.10.14 removed' bash -c "! grep -Fq '1.10.14' '$body'"
+          check 3 'Attribution claim conditionalized' grep -Fq 'production integrations are enabled' "$body"
+          check 4 'Treasury claim conditionalized' grep -Fq 'enabled production services' "$body"
+          check 5 'Statement schedule claim conditionalized' grep -Fq 'Investor reporting supports account statements and transaction history' "$body"
+          check 6 'Funding rail claim conditionalized' grep -Fq 'funding methods enabled for that investor and offering' "$body"
+          check 7 'Hero risk disclosure visible' grep -Fq 'Returns are not guaranteed and capital is at risk' "$body"
+          check 8 'Android live-now claim removed' bash -c "! grep -Fiq 'Android app live now' '$body'"
+          check 9 'Legal pages live' bash -c "curl -fsSI https://ivxholding.com/disclosures.html >/dev/null && curl -fsSI https://ivxholding.com/terms.html >/dev/null && curl -fsSI https://ivxholding.com/privacy.html >/dev/null"
+          check 10 'Build marker + legal/cookie live' bash -c "grep -Fq 'ivx-marketing-readiness-build' '$body' && curl -fsSI https://ivxholding.com/legal.html >/dev/null && curl -fsSI https://ivxholding.com/cookie.html >/dev/null"
+          {
+            echo '# IVX Landing 10-Item Live Readiness Certificate'
+            echo
+            echo "STATUS: $([ "$pass" -eq 10 ] && echo PASS || echo FAIL)"
+            echo "PASS: ${pass}/10"
+            echo "VERIFIED_AT_UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "WORKFLOW_RUN_ID: ${GITHUB_RUN_ID}"
+            echo "TRIGGER_SHA: ${GITHUB_SHA}"
+            echo 'LIVE_URL: https://ivxholding.com/'
+            echo
+            cat /tmp/qa10.txt
+            echo
+            echo 'AWS identity proof:'
+            cat /tmp/aws-identity.json
+            echo
+            echo 'Scope: landing content/deploy QA only. This is not legal, securities, advertising-platform, or investment-offering approval.'
+          } > ../qa/evidence/landing-readiness-10-certificate.md
+          cat ../qa/evidence/landing-readiness-10-certificate.md
+          test "$pass" -eq 10
+
+      - name: Commit source and certificate
+        if: success()
+        working-directory: .
+        run: |
+          set -euo pipefail
+          git config user.name 'ivx-qa-bot'
+          git config user.email 'ivx-qa-bot@users.noreply.github.com'
+          git add expo/ivxholding-landing/index.html qa/evidence/landing-readiness-10-certificate.md
+          git commit -m 'cert(landing): deploy and verify 10/10 readiness items live' || true
+          git pull --rebase origin main || true
+          git push origin HEAD:main

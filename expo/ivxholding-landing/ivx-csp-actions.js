@@ -1,0 +1,165 @@
+/**
+ * CSP-safe compatibility layer for legacy landing action attributes.
+ *
+ * The production policy intentionally excludes unsafe-inline, so browsers
+ * refuse onclick/onsubmit attributes. This bridge removes those attributes and
+ * invokes only named functions with simple literal arguments. It never evals
+ * page text and supports dynamically rendered deal/video controls.
+ */
+(function () {
+  'use strict';
+
+  function splitStatements(source) {
+    var out = [], current = '', quote = '', depth = 0;
+    for (var i = 0; i < source.length; i++) {
+      var ch = source[i];
+      if (quote) {
+        current += ch;
+        if (ch === quote && source[i - 1] !== '\\') quote = '';
+        continue;
+      }
+      if (ch === "'" || ch === '"') { quote = ch; current += ch; continue; }
+      if (ch === '(') depth++;
+      if (ch === ')') depth--;
+      if (ch === ';' && depth === 0) { if (current.trim()) out.push(current.trim()); current = ''; }
+      else current += ch;
+    }
+    if (current.trim()) out.push(current.trim());
+    return out;
+  }
+
+  function parseArgs(source, event, element) {
+    if (!source.trim()) return [];
+    var args = [], current = '', quote = '', depth = 0;
+    function push(value) {
+      value = value.trim();
+      if (value === 'event') args.push(event);
+      else if (value === 'this') args.push(element);
+      else if (/^-?\d+(?:\.\d+)?$/.test(value)) args.push(Number(value));
+      else if (value === 'true') args.push(true);
+      else if (value === 'false') args.push(false);
+      else if ((value[0] === "'" && value[value.length - 1] === "'") || (value[0] === '"' && value[value.length - 1] === '"')) {
+        args.push(value.slice(1, -1).replace(/\\(['"\\])/g, '$1'));
+      } else args.push(value);
+    }
+    for (var i = 0; i < source.length; i++) {
+      var ch = source[i];
+      if (quote) {
+        current += ch;
+        if (ch === quote && source[i - 1] !== '\\') quote = '';
+        continue;
+      }
+      if (ch === "'" || ch === '"') { quote = ch; current += ch; continue; }
+      if (ch === '(') depth++;
+      if (ch === ')') depth--;
+      if (ch === ',' && depth === 0) { push(current); current = ''; }
+      else current += ch;
+    }
+    if (current.trim()) push(current);
+    return args;
+  }
+
+  function callNamed(name, args) {
+    var fn = window[name];
+    if (typeof fn !== 'function' && name === 'toggleDealDetails') {
+      fn = function (button, dealId) {
+        var panel = document.getElementById('ivx-card-details-' + dealId);
+        if (!panel) return;
+        panel.classList.toggle('open');
+        button.classList.toggle('open', panel.classList.contains('open'));
+      };
+    }
+    if (typeof fn !== 'function' && (name === 'toggleDealLike' || name === 'toggleDealSave')) {
+      fn = function (button) {
+        var activeClass = name === 'toggleDealLike' ? 'liked' : 'saved';
+        button.classList.toggle(activeClass);
+        var active = button.classList.contains(activeClass);
+        var icon = button.querySelector('.ivx-card-action-icon');
+        var count = button.querySelector('.ivx-card-action-count');
+        if (icon) icon.textContent = name === 'toggleDealLike' ? (active ? '♥' : '♡') : (active ? '🔖' : '🔗');
+        if (count && name === 'toggleDealLike') count.textContent = active ? '1' : '0';
+      };
+    }
+    if (typeof fn !== 'function' && name === 'openDealComments') {
+      fn = function (dealId) { window.location.href = '/?deal=' + encodeURIComponent(dealId) + '#comments'; };
+    }
+    if (typeof fn !== 'function' && name === 'shareDeal') {
+      fn = function (dealId) {
+        var url = 'https://ivxholding.com/?deal=' + encodeURIComponent(dealId);
+        if (navigator.share) navigator.share({ title: 'IVX Investment', url: url }).catch(function () {});
+        else if (navigator.clipboard) navigator.clipboard.writeText(url).catch(function () {});
+      };
+    }
+    if (typeof fn !== 'function') {
+      console.error('[IVX CSP Actions] Missing action:', name);
+      return false;
+    }
+    fn.apply(window, args);
+    return true;
+  }
+
+  function run(source, event, element) {
+    if (!source) return;
+    if (/event\.target\s*===\s*this/.test(source) && event.target !== element) return;
+    if (source.indexOf('IVXOpenReels') !== -1) {
+      event.preventDefault();
+      if (typeof window.IVXOpenReels === 'function') window.IVXOpenReels();
+      return;
+    }
+    if (source.indexOf("window.location.href='#properties'") !== -1) {
+      event.preventDefault();
+      window.location.hash = 'properties';
+    }
+    splitStatements(source).forEach(function (statement) {
+      if (statement === 'return false') { event.preventDefault(); return; }
+      if (statement.indexOf('document.') !== -1 || statement.indexOf('this.') !== -1 || statement.indexOf('window.location') !== -1) return;
+      statement = statement.replace(/^return\s+/, '').replace(/^if\s*\([^)]*\)\s*/, '').trim();
+      var match = statement.match(/^(?:window\.)?([A-Za-z_$][\w$]*)\s*\((.*)\)$/);
+      if (!match) return;
+      event.preventDefault();
+      callNamed(match[1], parseArgs(match[2], event, element));
+    });
+  }
+
+  function bind(root) {
+    var nodes = [];
+    if (root.nodeType === 1 && root.matches('[onclick],[onsubmit],[onchange]')) nodes.push(root);
+    if (root.querySelectorAll) nodes = nodes.concat([].slice.call(root.querySelectorAll('[onclick],[onsubmit],[onchange]')));
+    nodes.forEach(function (element) {
+      ['click', 'submit', 'change'].forEach(function (type) {
+        var attr = type === 'click' ? 'onclick' : type === 'submit' ? 'onsubmit' : 'onchange';
+        var source = element.getAttribute(attr);
+        if (!source) return;
+        element.removeAttribute(attr);
+        element.addEventListener(type, function (event) { run(source, event, element); });
+      });
+    });
+  }
+
+  bind(document);
+  document.addEventListener('click', function (event) {
+    var detailsButton = event.target.closest('.ivx-card-details-btn');
+    if (!detailsButton) return;
+    event.preventDefault();
+    event.stopPropagation();
+    var panel = detailsButton.nextElementSibling;
+    if (!panel || !panel.classList.contains('ivx-card-details-panel')) return;
+    panel.classList.toggle('open');
+    detailsButton.classList.toggle('open', panel.classList.contains('open'));
+  }, true);
+  document.addEventListener('click', function (event) {
+    var investButton = event.target.closest('.ivx-card-invest-btn,.ivx-hf-invest');
+    if (!investButton) return;
+    event.preventDefault();
+    var card = investButton.closest('.live-deal-card,[data-ivx-home-feed-video]');
+    var panel = card && card.querySelector('[id^="ivx-card-details-"]');
+    var dealId = panel ? panel.id.replace('ivx-card-details-', '') :
+      (card && card.getAttribute('data-ivx-home-feed-video')) || '';
+    if (typeof window.openInvestModal === 'function') window.openInvestModal(dealId);
+  });
+  new MutationObserver(function (records) {
+    records.forEach(function (record) {
+      record.addedNodes.forEach(function (node) { if (node.nodeType === 1) bind(node); });
+    });
+  }).observe(document.documentElement, { childList: true, subtree: true });
+})();
