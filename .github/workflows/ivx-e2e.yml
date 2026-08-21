@@ -78,47 +78,54 @@ jobs:
     name: Maestro E2E (mobile surface) — HARD GATE
     runs-on: macos-latest
     needs: [typecheck]
+    env:
+      EXPO_PUBLIC_IVX_OPEN_ACCESS_MODE: 'false'
+      EXPO_PUBLIC_IVX_TEST_MODE: 'false'
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.9
       - run: cd expo && bun install --frozen-lockfile
-      - name: Start the Expo development server
-        working-directory: expo
-        env:
-          CI: '1'
-        run: |
-          set -euo pipefail
-          nohup bunx expo start --dev-client --port 8081 > "$RUNNER_TEMP/expo-metro.log" 2>&1 &
-          for attempt in {1..30}; do
-            if curl --silent --fail http://127.0.0.1:8081/status | grep -q 'packager-status:running'; then
-              exit 0
-            fi
-            sleep 2
-          done
-          cat "$RUNNER_TEMP/expo-metro.log"
-          echo 'Expo dev server failed to start'
-          exit 1
-      - name: Build and launch the iOS simulator app — HARD GATE
+      - name: Build and launch deterministic iOS Release app — HARD GATE
         working-directory: expo
         timeout-minutes: 45
         run: |
           set -euo pipefail
-          bunx expo run:ios --configuration debug --no-bundler
+          bunx expo run:ios --configuration Release --no-bundler 2>&1 | tee "$RUNNER_TEMP/maestro-metro.log"
           echo 'ios_build=PASS'
       - name: Install Maestro
         run: |
           set -euo pipefail
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo 'maestro_install=PASS'
+      - name: Capture pre-test evidence
+        if: always()
+        run: |
+          xcrun simctl io booted screenshot screenshot-01-pre-test.png || true
+          xcrun simctl spawn booted log show --last 10m > maestro-logcat.txt 2>&1 || true
       - name: Run Maestro launch smoke test — HARD GATE
         run: |
           set -euo pipefail
-          ~/.maestro/bin/maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml
+          ~/.maestro/bin/maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml 2>&1 | tee maestro-test.log
+          if grep -q '<failure' maestro-report.xml; then
+            echo 'Maestro JUnit contains a failure'
+            exit 1
+          fi
           echo 'maestro_test=PASS'
+      - name: Capture post-test evidence
+        if: always()
+        run: |
+          xcrun simctl io booted screenshot screenshot-02-post-test.png || true
+          xcrun simctl spawn booted log show --last 10m > maestro-logcat.txt 2>&1 || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: maestro-report
-          path: maestro-report.xml
+          name: maestro-evidence
+          path: |
+            maestro-report.xml
+            maestro-test.log
+            maestro-logcat.txt
+            screenshot-01-pre-test.png
+            screenshot-02-post-test.png
+            ${{ runner.temp }}/maestro-metro.log
