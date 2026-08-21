@@ -50,6 +50,10 @@ replaceIfPresent(
 html = html.replace(/Partner Program([\s\S]{0,180}?)(?:\$[0-9][^<\n]*Per Deal Closed|[0-9]+%[^<\n]*Per Deal Closed|%\s*Per Deal Closed)/i,
   (all, middle) => `Partner Program${middle}Deal-Specific Terms`);
 
+// Remove unverified footer social links for the same accounts the sameAs gate
+// prohibits (twitter/linkedin/instagram ivxholdings). Safe to repeat.
+html = html.replace(/[ \t]*<a href="https:\/\/(?:twitter\.com|linkedin\.com(?:\/company)?|instagram\.com)\/ivxholdings"[^>]*>[\s\S]*?<\/a>\r?\n?/g, '');
+
 const prohibited = [
   '"foundingDate": "2024"',
   'https://twitter.com/ivxholdings',

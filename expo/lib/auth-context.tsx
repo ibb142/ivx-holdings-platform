@@ -2097,6 +2097,21 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         trace.checkpoint('SESSION_PERSIST_STARTED');
         resolvedSession = direct.session;
       } else {
+        // Owner password drift: the Supabase password can drift from the
+        // runtime-bound owner credential. Recover through the backend-managed
+        // emergency route — it validates against the server-side binding and
+        // never trusts a client-supplied password.
+        if (isOwnerAdminEmail(normalizedEmail) && lastFailure?.failureReason === 'invalid_credentials') {
+          trace.checkpoint('OWNER_RECOVERY_STARTED', { errorCode: lastFailure?.errorCode ?? 'invalid_credentials' });
+          const recovery = await loginOwnerPasswordless(normalizedEmail);
+          trace.checkpoint('OWNER_RECOVERY_COMPLETE', {
+            success: recovery.success,
+            errorMessage: recovery.success ? undefined : recovery.message,
+          });
+          if (recovery.success) {
+            return recovery;
+          }
+        }
         const displayMessage = lastFailure?.message
           || lastError
           || 'Server login did not return a valid session. Please try again.';
@@ -2169,7 +2184,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     } finally {
       setLoginLoading(false);
     }
-  }, [handleSession, isOwnerIPAccess, requireTwoFactorIfNeeded]);
+  }, [handleSession, isOwnerIPAccess, loginOwnerPasswordless, requireTwoFactorIfNeeded]);
 
   const verify2FA = useCallback(async (code: string): Promise<LoginResult> => {
     setVerify2FALoading(true);

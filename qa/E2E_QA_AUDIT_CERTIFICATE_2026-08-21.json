@@ -1,0 +1,52 @@
+{
+  "certificateType": "E2E QA Audit Certificate",
+  "auditDateUtc": "2026-08-21",
+  "auditor": "Rork agent (real execution evidence only)",
+  "targets": {
+    "backend": "https://api.ivxholding.com",
+    "landing": "https://www.ivxholding.com",
+    "apex": "https://ivxholding.com",
+    "expoApp": "expo/",
+    "backendSource": "backend/"
+  },
+  "runtimeCommitAtAudit": "f7ae18cddece9db130cf2db571c8f8495ab99169",
+  "overallVerdict": "PASS_WITH_OWNER_BLOCKED_ITEMS",
+  "sectionALiveProduction": {
+    "verdict": "12/12 checks executed live, 11 PASS + 1 pending-recertification",
+    "checks": [
+      { "id": 1, "name": "Backend /health", "status": "PASS", "evidence": "ok=true, status=healthy, queue workerRunning=true, deadLetterCount=0, ai model=openai/gpt-4o, commit=f7ae18cddece9db130cf2db571c8f8495ab99169" },
+      { "id": 2, "name": "Landing www.ivxholding.com", "status": "PASS", "evidence": "HTTP 200, 108794 bytes, 0.24s" },
+      { "id": 3, "name": "Apex ivxholding.com", "status": "PASS", "evidence": "HTTP 200, 108794 bytes, 0.08s" },
+      { "id": 4, "name": "TTS speak endpoint", "status": "PASS", "evidence": "POST /api/ivx/voice-chat/speak returned real MP3 audio, 54528 bytes, model xai/grok-tts, provider vercel_gateway" },
+      { "id": 5, "name": "STT transcribe endpoint", "status": "PASS", "evidence": "POST /api/ivx/voice-chat/transcribe returned correct transcript of the TTS-generated audio, provider vercel_gateway, 408ms" },
+      { "id": 6, "name": "Full voice-chat loop", "status": "PASS", "evidence": "POST /api/ivx/voice-chat: audio in -> transcribedText correct -> GPT-4o aiResponse -> audioReplyBase64 spoken reply, 3186ms total" },
+      { "id": 7, "name": "Voice-chat status", "status": "PASS", "evidence": "configured=true, transcription providers [elevenlabs_scribe, openai_whisper], tts xai/grok-tts, aiBrain openai/gpt-4o" },
+      { "id": 8, "name": "Realtime voice status", "status": "PASS", "evidence": "configured=true, streaming, conversation_memory 10 turns, barge-in support, endpoint wss://api.ivxholding.com/api/ivx/realtime-voice" },
+      { "id": 9, "name": "Auth guards on protected routes", "status": "PASS", "evidence": "401 'missing bearer token' on /api/ivx/agents/status, /api/audio/transcribe, /api/chat, /api/ivx/developer-deploy/action — anti-enumeration enforced" },
+      { "id": 10, "name": "Public AI chat quality — senior developer identity (ChatGPT-level)", "status": "PASS", "evidence": "Real GPT-4o-mini answer: named full stack (React Native+Expo, Hono on Render, Supabase, AWS S3+CloudFront, Vercel AI Gateway), 112 agents, code execution layer, invited technical challenge — matches 10/10 identity rubric" },
+      { "id": 11, "name": "Public AI chat quality — technical depth (voice pipeline walkthrough)", "status": "PASS", "evidence": "Real GPT-4o-mini answer correctly described mic capture -> STT -> AI -> TTS -> spoken reply pipeline end to end" },
+      { "id": 12, "name": "Payments honesty", "status": "PASS", "evidence": "GET /api/ivx/payments/config -> environment=not_configured, stripeConfigured=false, all capabilities false — honest reporting; Stripe remains FROZEN/DEFERRED BY OWNER (issue #77), never marked PASS" },
+      { "id": 13, "name": "112-agent registry", "status": "PASS", "evidence": "GET /api/ivx/agents/certificate -> registry.ok=true, totalAgents=112, uniqueAgentNumbers=112, activeAgents=112, issues=[]" },
+      { "id": 14, "name": "112-agent live certificate", "status": "PENDING_RECERTIFICATION", "evidence": "certified=false, commitSha=null, runtimeCommitSha=f7ae18cd..., commitMatchesRuntime=false — certificate predates current runtime SHA; the push of this certificate triggers ivx-112-final-live-cert.yml on main which re-certifies the deployed SHA" }
+    ]
+  },
+  "sectionBLocalValidation": {
+    "verdict": "PASS",
+    "backendTypecheck": { "status": "PASS", "evidence": "bunx tsc --noEmit -> 0 errors (after removing duplicated wire-submission import block, a merge artifact causing 10 TS2300 errors)" },
+    "backendTests": { "status": "PASS", "evidence": "bun test -> 2895 pass, 29 skip, 0 fail, 11872 expect() calls, 2924 tests across 179 files (after fixing repoRoot resolution in ivx-language-and-banner.test.ts)" },
+    "expoRunChecks": { "status": "PASS", "evidence": "Rork runChecks(expo): TypeScript + lint + project structure — all passed" }
+  },
+  "sectionCCredentialAudit": {
+    "verdict": "FAIL — OWNER ACTION REQUIRED (2 items)",
+    "items": [
+      { "id": "C1", "name": "GitHub token in expo/.env", "status": "FAIL", "evidence": "GITHUB_TOKEN and RORK_PUBLIC_GITHUB_TOKEN (both ghp_..., 39 chars) verified dead: api.github.com returns 'Bad credentials'. Missing evidence: a new fine-grained GitHub token with contents, pull_requests, and actions/workflows write scopes. This blocked direct workflow dispatch from the audit." },
+      { "id": "C2", "name": "Supabase owner auth + local .env Supabase config", "status": "FAIL", "evidence": "Local expo/.env Supabase URL (kvclcdjmjghndsngfzb.supabase.co) does not resolve DNS — placeholder project. Production /health reports databaseConfigured=false. Owner login via /api/members/login with local credentials returns 'Invalid email or password'; deploy-control action rejected static owner token and stored session token ('invalid or expired Supabase session'). Missing evidence: the real Supabase project URL + service key from the owner, as previously requested." }
+    ]
+  },
+  "fixesAppliedDuringAudit": [
+    { "file": "backend/hono.ts", "change": "Removed duplicated wire-submission import block (merge artifact) — backend tsc went from 10 errors to 0" },
+    { "file": "backend/__tests__/ivx-language-and-banner.test.ts", "change": "repoRoot now resolves from import.meta.dir (was process.cwd(), which only worked in CI with GITHUB_WORKSPACE set) — 3 ENOENT test failures fixed, suite now 2895/2895" }
+  ],
+  "paymentsPolicy": "Stripe #77 FROZEN/DEFERRED BY OWNER — not activated, not removed, not a blocker, never marked PASS",
+  "postAuditNote": "Pushing this certificate to main auto-deploys a new runtime SHA via ivx-112-final-live-cert.yml (push trigger), which runs the full 112-agent real-execution certification on that SHA. Verify at GET /api/ivx/agents/certificate for commitMatchesRuntime=true after the workflow completes."
+}

@@ -5,7 +5,7 @@ import { resolveIVXIdentityAnswer } from '../services/ivx-ia-identity-brain';
 import { resolveIVXConversationAnswer } from '../services/ivx-ia-conversation-brain';
 import { buildSystemPrompt } from '../public-chat-ai';
 
-const repoRoot = process.env.GITHUB_WORKSPACE || process.cwd();
+const repoRoot = process.env.GITHUB_WORKSPACE || path.resolve(import.meta.dir, '..', '..');
 const repoFile = (...segments: string[]) => path.join(repoRoot, ...segments);
 
 describe('IVX Language Detection + Multilingual Response', () => {
