@@ -21,7 +21,7 @@
   window._ivxLazyLoad = function(module) {
     if (module === 'portal') {
       if (window.IVXPortal) return Promise.resolve(window.IVXPortal);
-      return loadScript('/ivx-portal.js?v20260820').then(function() { return window.IVXPortal; });
+      return loadScript('/ivx-portal.js?v20260821-fp2').then(function() { return window.IVXPortal; });
     }
     if (module === 'invest') {
       if (window.IVXInvest) return Promise.resolve(window.IVXInvest);
@@ -29,6 +29,29 @@
     }
     return Promise.reject(new Error('Unknown module: ' + module));
   };
+
+  function toggleForgotDom() {
+    var forgotView = document.getElementById('portal-forgot-view');
+    if (!forgotView) return false;
+    var loginForm = document.getElementById('portal-login-form');
+    var forgotLine = document.getElementById('portal-forgot-link-line');
+    var signupLine = document.getElementById('portal-signup-line');
+    var showingForgot = window.getComputedStyle(forgotView).display === 'none';
+    forgotView.style.display = showingForgot ? 'block' : 'none';
+    if (loginForm) loginForm.style.display = showingForgot ? 'none' : 'block';
+    if (forgotLine) forgotLine.style.display = showingForgot ? 'none' : 'block';
+    if (signupLine) signupLine.style.display = showingForgot ? 'none' : 'block';
+    if (showingForgot) {
+      var loginEmail = document.getElementById('portal-email');
+      var forgotEmail = document.getElementById('portal-forgot-email');
+      if (forgotEmail && loginEmail && loginEmail.value) forgotEmail.value = loginEmail.value;
+      var errEl = document.getElementById('portal-forgot-error');
+      var okEl = document.getElementById('portal-forgot-success');
+      if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+      if (okEl) okEl.style.display = 'none';
+    }
+    return true;
+  }
 
   // Portal — lazy loaded only when user opens portal (item 109)
   window.openPortal = function() {
@@ -48,13 +71,37 @@
       .catch(function(e) { console.error('[IVX] portal load failed', e); });
   };
   window.toggleForgotPassword = function() {
+    // Toggle synchronously so CSP / async lazy-loading cannot leave the UI hidden.
+    if (toggleForgotDom()) return;
     window._ivxLazyLoad('portal').then(function(m) { m.toggleForgot(); })
       .catch(function(e) { console.error('[IVX] portal load failed', e); });
   };
   window.handleForgotPasswordSubmit = function(e) {
-    window._ivxLazyLoad('portal').then(function(m) { m.forgotSubmit(e); })
-      .catch(function(e) { console.error('[IVX] portal load failed', e); });
+    if (e && e.preventDefault) e.preventDefault();
+    window._ivxLazyLoad('portal').then(function(m) { m.forgotSubmit(e || { preventDefault: function() {} }); })
+      .catch(function(err) { console.error('[IVX] portal load failed', err); });
   };
+
+  // CSP-safe listeners for the forgot-password controls. The page historically
+  // used inline onclick handlers; these delegated listeners make the flow work
+  // even when the production CSP blocks inline event handlers.
+  document.addEventListener('click', function(e) {
+    var target = e.target;
+    if (!target || !target.closest) return;
+    var forgotLink = target.closest('#portal-forgot-link-line a');
+    var backLink = target.closest('#portal-forgot-view a');
+    if (forgotLink || backLink) {
+      e.preventDefault();
+      toggleForgotDom();
+    }
+  });
+  document.addEventListener('submit', function(e) {
+    var form = e.target;
+    if (form && form.id === 'portal-forgot-form') {
+      e.preventDefault();
+      window.handleForgotPasswordSubmit(e);
+    }
+  });
 
   // Investment — lazy loaded only when user opens invest flow (item 110)
   window.openInvestModal = function(dealId) {
