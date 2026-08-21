@@ -135,15 +135,16 @@ export function getPermittedRealTools(agentNumber: number): RealToolId[] {
 }
 
 /**
- * Agents holding an engineering remit (build, QA, security, release, data,
- * platform). Only these may run the real read-only engineering tools; the rest
- * of the fleet keeps a research-only surface.
+ * Owner directive 2026-08-21: the ENTIRE 112-agent fleet holds the real
+ * read-only engineering toolset (code_read, code_search, typecheck, run_tests,
+ * lint, secret_scan) so every agent can ground its work in the actual
+ * codebase. Every MUTATING capability (code_write, git_commit, git_push,
+ * deploy, …) stays behind the owner approval gate — nothing in this set can
+ * modify the repository.
  */
-export const ENGINEERING_AGENT_NUMBERS: ReadonlySet<number> = new Set([
-  1, 4, 5, 9, 10, 13, 14, 15, 16, 23, 35, 36, 37, 38, 39, 40, 42, 43, 44, 45,
-  51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70,
-  71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
-]);
+export const ENGINEERING_AGENT_NUMBERS: ReadonlySet<number> = new Set(
+  Array.from({ length: 112 }, (_, i) => i + 1),
+);
 
 export function isEngineeringAgent(agentNumber: number): boolean {
   return ENGINEERING_AGENT_NUMBERS.has(agentNumber);

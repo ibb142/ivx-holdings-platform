@@ -142,12 +142,17 @@ async function loadReadPool(): Promise<string[]> {
   return files;
 }
 
-/** A tool that is definitively NOT in this agent's permitted set — used as a negative control. */
+/** A tool that is definitively NOT in this agent's permitted set — used as a negative control.
+ * With the full 112-agent engineering grant (owner directive 2026-08-21) some
+ * agents hold the entire permitted surface (research + EDGAR + CRM write +
+ * engineering). For those, the only tools outside the permitted set are the
+ * owner-approval-gated ones (git_commit, deploy, …) — which are refused at the
+ * permission boundary for every agent, making them a valid negative probe. */
 function unpermittedToolFor(agentNumber: number): RealToolId {
   const permitted = new Set<string>(getPermittedRealTools(agentNumber));
-  const candidates: RealToolId[] = ['crm_write', 'typecheck', 'run_tests', 'code_read', 'sec_edgar_fulltext'];
+  const candidates: RealToolId[] = ['crm_write', 'typecheck', 'run_tests', 'code_read', 'sec_edgar_fulltext', 'git_commit', 'deploy', 'external_outreach'];
   const found = candidates.find((t) => !permitted.has(t));
-  return found ?? 'crm_write';
+  return found ?? 'git_commit';
 }
 
 type AgentOutcome = {

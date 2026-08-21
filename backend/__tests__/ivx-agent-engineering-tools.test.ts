@@ -144,13 +144,15 @@ describe('permissions and approval gating', () => {
     expect(isEngineeringTool('wikipedia_search')).toBe(false);
   });
 
-  it('grants engineering tools only to engineering agents', () => {
-    const engineeringAgent = 1;
-    const researchAgent = 2;
-    expect(isEngineeringAgent(engineeringAgent)).toBe(true);
-    expect(isEngineeringAgent(researchAgent)).toBe(false);
-    expect(getPermittedRealTools(engineeringAgent)).toContain('run_tests');
-    expect(getPermittedRealTools(researchAgent)).not.toContain('run_tests');
+  it('grants the read-only engineering toolset to the ENTIRE 112-agent fleet (owner directive 2026-08-21)', () => {
+    for (let n = 1; n <= 112; n++) {
+      expect(isEngineeringAgent(n)).toBe(true);
+      expect(getPermittedRealTools(n)).toContain('run_tests');
+      expect(getPermittedRealTools(n)).toContain('code_read');
+    }
+    // Outside the 112-agent registry there is no engineering grant.
+    expect(isEngineeringAgent(113)).toBe(false);
+    expect(isEngineeringAgent(0)).toBe(false);
   });
 
   it('keeps EVERY mutating capability behind owner approval', () => {
@@ -172,11 +174,11 @@ describe('permissions and approval gating', () => {
     expect(res.blocked).toBe(true);
   });
 
-  it('blocks an engineering tool for a research-only agent', async () => {
-    const res = await executeRealTool('ivx-agent-002', 2, 'run_tests', { scope: 'backend' });
+  it('blocks a tool outside the permitted set (agent #1 has no crm_write)', async () => {
+    const res = await executeRealTool('ivx-agent-001', 1, 'crm_write', { prospect: {} });
     expect(res.ok).toBe(false);
     expect(res.blocked).toBe(true);
-    expect(res.error).toMatch(/not in agent #2's permitted tool set/);
+    expect(res.error).toMatch(/not in agent #1's permitted tool set/);
   });
 });
 

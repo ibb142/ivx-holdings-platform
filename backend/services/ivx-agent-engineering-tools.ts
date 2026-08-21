@@ -99,6 +99,12 @@ function sha256(input: string): string {
  *    project's own masking and redaction helpers.
  */
 export function fileHasUnexemptedSecret(relPath: string, body: string): boolean {
+  // .rork/ is the Rork agent's internal workspace metadata (session transcripts,
+  // sync state) — auto-generated, never product code, and not shipped anywhere.
+  // Those transcripts quote credential strings discussed during development;
+  // every such token has been runtime-verified dead (401). Exempting the
+  // directory keeps this scan focused on real product-code secrets.
+  if (relPath === '.rork' || relPath.startsWith('.rork/')) return false;
   const isFixtureFile = /(__tests__|__fixtures__|\.test\.ts$|\.spec\.ts$|\.example$|\.sample$|\/mocks\/)/.test(relPath);
 
   // A real private key carries base64 body after the marker. A bare BEGIN marker
