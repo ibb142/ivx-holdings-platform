@@ -75,14 +75,16 @@ jobs:
           curl -fsS --max-time 30 "${API_BASE}/version" -o /tmp/version.json
           curl -fsS --max-time 30 "${API_BASE}/health" -o /tmp/health.json
           curl -fsS --max-time 30 "${API_BASE}/api/ivx/agents" -o /tmp/agents-before.json
+          test "$(jq -r '.ok // false' /tmp/health.json)" = true
           test "$(jq -r '.ok // false' /tmp/agents-before.json)" = true
           test "$(jq -r '.totalAgents // 0' /tmp/agents-before.json)" = 112
           test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents-before.json)" = 112
-          LIVE_SHA=$(jq -r '.commit // empty' /tmp/version.json)
+          LIVE_SHA=$(jq -r '.commit // .version.commit // empty' /tmp/version.json)
           test -n "$LIVE_SHA"
+          test "$LIVE_SHA" = "$GITHUB_SHA"
           echo "LIVE_SHA=$LIVE_SHA" >> "$GITHUB_ENV"
           jq -r '.agents[] | [.agentNumber,.agentId,.name,(.paused|tostring),(.disabled|tostring)] | @tsv' /tmp/agents-before.json > /tmp/agents.tsv
-          echo "registry=112/112 live_sha=$LIVE_SHA"
+          echo "registry=112/112 live_sha=$LIVE_SHA exact_sha=PASS"
 
       - name: Recover paused or disabled agents with owner authorization
         shell: bash
@@ -146,9 +148,10 @@ jobs:
               --arg finalStatus "$(jq -r '.runRecord.finalStatus // "request_failed"' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" \
               --arg sourceReference "$(jq -r '.runRecord.sourceReference // empty' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" \
               --arg toolResultId "$(jq -r '.runRecord.toolResultId // empty' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" \
-              --arg commitSha "$(jq -r '.runRecord.commitSha // empty' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" \
+              --arg runtimeSha "$(jq -r '.runRecord.runtimeSha // .runRecord.commitSha // empty' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" \
               --arg error "$(jq -r '.error // .runRecord.error // empty' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" \
-              '{agentNumber:$n,agentId:$id,gapId:$gap,taskType:$taskType,taskId:$taskId,httpStatus:$http,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,commitSha:$commitSha,error:$error}' \
+              --argjson simulated "$(jq -r '.runRecord.simulated // true' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || echo true)" \
+              '{agentNumber:$n,agentId:$id,gapId:$gap,taskType:$taskType,taskId:$taskId,httpStatus:$http,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,runtimeSha:$runtimeSha,simulated:$simulated,error:$error}' \
               > "/tmp/ivx112-cycle/${number}.json"
           }
           export -f run_one
@@ -158,7 +161,7 @@ jobs:
           total=$(jq 'length' /tmp/ivx112-cycle/all.json)
           success=$(jq '[.[] | select(.ok == true)] | length' /tmp/ivx112-cycle/all.json)
           failed=$(jq '[.[] | select(.ok != true)] | length' /tmp/ivx112-cycle/all.json)
-          evidence=$(jq '[.[] | select((.sourceReference // "") != "" and (.toolResultId // "") != "")] | length' /tmp/ivx112-cycle/all.json)
+          evidence=$(jq '[.[] | select((.sourceReference // "") != "" and (.toolResultId // "") != "" and (.simulated // true) == false)] | length' /tmp/ivx112-cycle/all.json)
           test "$total" = 112
           echo "CYCLE_SUCCESS=$success" >> "$GITHUB_ENV"
           echo "CYCLE_FAILED=$failed" >> "$GITHUB_ENV"
@@ -187,6 +190,7 @@ jobs:
             --arg certificate 'IVX-112-24X7-FLEET-CYCLE' \
             --arg programId "$PROGRAM_ID" \
             --arg liveSha "$LIVE_SHA" \
+            --arg controllerSha "$GITHUB_SHA" \
             --argjson registry 112 \
             --argjson recovered "${RECOVERED:-0}" \
             --argjson succeeded "$CYCLE_SUCCESS" \
@@ -195,10 +199,11 @@ jobs:
             --argjson stale "${STALE:-0}" \
             --arg runId "$GITHUB_RUN_ID" \
             --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{ok:true,certificate:$certificate,programId:$programId,productionSha:$liveSha,registryCount:$registry,pausedOrDisabledAfterRecovery:0,recoveryActions:$recovered,workerRunsAttempted:112,workerRunsSucceeded:$succeeded,workerRunsFailed:$failed,workerRunsWithEvidence:$evidence,heartbeatStaleOver30m:$stale,simulatedSuccessAllowed:false,realFundsMoved:false,scheduleMinutes:15,githubRunId:$runId,verifiedAt:$verifiedAt,truthNote:"This certificate proves one real 112-agent cycle, heartbeat SLA and fleet availability. It does not claim every product gap is fixed; product-specific gates remain authoritative."}' \
+            '{ok:($registry==112 and $succeeded==112 and $failed==0 and $evidence==112 and $stale==0 and $liveSha==$controllerSha),certificate:$certificate,programId:$programId,productionSha:$liveSha,controllerSha:$controllerSha,registryCount:$registry,pausedOrDisabledAfterRecovery:0,recoveryActions:$recovered,workerRunsAttempted:112,workerRunsSucceeded:$succeeded,workerRunsFailed:$failed,workerRunsWithEvidence:$evidence,heartbeatStaleOver30m:$stale,simulatedSuccessAllowed:false,realFundsMoved:false,scheduleMinutes:15,githubRunId:$runId,verifiedAt:$verifiedAt,truthNote:"This certificate proves one real 112-agent cycle, heartbeat SLA, fleet availability, and exact production SHA. It fails closed if any agent fails or lacks real evidence."}' \
             > qa/evidence/autonomous/ivx-112-24x7-latest.json
           cp /tmp/ivx112-cycle/all.json qa/evidence/autonomous/ivx-112-24x7-agent-results.json
           cat qa/evidence/autonomous/ivx-112-24x7-latest.json
+          test "$(jq -r '.ok' qa/evidence/autonomous/ivx-112-24x7-latest.json)" = true
 
       - uses: actions/upload-artifact@v4
         with:

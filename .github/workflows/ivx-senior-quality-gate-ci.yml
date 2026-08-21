@@ -1,0 +1,41 @@
+name: IVX Senior Quality Gate CI
+
+on:
+  push:
+    branches: [main, 'fix/**']
+    paths:
+      - 'scripts/ivx-senior-quality-gate.mjs'
+      - 'scripts/__tests__/ivx-senior-quality-gate.test.mjs'
+      - '.github/workflows/ivx-senior-quality-gate-ci.yml'
+      - '.github/workflows/ivx-112-hourly-quality-audit.yml'
+      - '.github/workflows/ivx-112-24x7-watchdog.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/ivx-senior-quality-gate.mjs'
+      - 'scripts/__tests__/ivx-senior-quality-gate.test.mjs'
+      - '.github/workflows/ivx-senior-quality-gate-ci.yml'
+      - '.github/workflows/ivx-112-hourly-quality-audit.yml'
+      - '.github/workflows/ivx-112-24x7-watchdog.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  senior-quality-gate:
+    name: Senior quality gate regression suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Runtime versions
+        run: |
+          node --version
+          npm --version
+      - name: Run fail-closed senior gate tests
+        run: node --test scripts/__tests__/ivx-senior-quality-gate.test.mjs
+      - name: Static syntax verification
+        run: |
+          node --check scripts/ivx-senior-quality-gate.mjs
+          node --check scripts/__tests__/ivx-senior-quality-gate.test.mjs

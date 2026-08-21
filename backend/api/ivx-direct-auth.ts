@@ -14,9 +14,7 @@
  */
 import { ownerOnlyOptions } from './owner-only';
 
-const DEPLOYMENT_MARKER = 'ivx-direct-auth-gotrue-bypass-2026-08-05';
-
-// ── Env resolution ──────────────────────────────────────────────────────────
+const DEPLOYMENT_MARKER = 'ivx-direct-auth-gotrue-bypass-bank-privacy-2026-08-20';
 
 const SERVICE_ROLE_NAMES = ['SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY'] as const;
 const SUPABASE_URL_NAMES = ['EXPO_PUBLIC_SUPABASE_URL', 'SUPABASE_URL'] as const;
@@ -66,8 +64,6 @@ function buildHeaders(): Record<string, string> {
   };
 }
 
-// ── Lazy module loading ─────────────────────────────────────────────────────
-
 let _bcryptModule: typeof import('bcryptjs') | null = null;
 async function getBcryptModule(): Promise<typeof import('bcryptjs')> {
   if (_bcryptModule) return _bcryptModule;
@@ -82,8 +78,6 @@ async function getJwtModule(): Promise<typeof import('jsonwebtoken')> {
   return _jwtModule;
 }
 
-// ── Types ───────────────────────────────────────────────────────────────────
-
 interface AuthUserRow {
   id: string;
   email: string;
@@ -97,13 +91,10 @@ interface AuthUserRow {
   updated_at: string;
 }
 
-// ── JWT minting ─────────────────────────────────────────────────────────────
-
 function mintAccessToken(jwt: typeof import('jsonwebtoken'), user: AuthUserRow, jwtSecret: string): string {
   const now = Math.floor(Date.now() / 1000);
   const expiresIn = 3600;
   const projectRef = getSupabaseProjectRef();
-
   const payload = {
     iss: `https://${projectRef}.supabase.co/auth/v1/`,
     sub: user.id,
@@ -120,7 +111,6 @@ function mintAccessToken(jwt: typeof import('jsonwebtoken'), user: AuthUserRow, 
     session_id: crypto.randomUUID(),
     is_anonymous: false,
   };
-
   return jwt.sign(payload, jwtSecret, { algorithm: 'HS256', header: { alg: 'HS256', typ: 'JWT' } });
 }
 
@@ -128,7 +118,6 @@ function mintRefreshToken(jwt: typeof import('jsonwebtoken'), user: AuthUserRow,
   const now = Math.floor(Date.now() / 1000);
   const expiresIn = 86400 * 30;
   const projectRef = getSupabaseProjectRef();
-
   const payload = {
     iss: `https://${projectRef}.supabase.co/auth/v1/`,
     sub: user.id,
@@ -138,60 +127,50 @@ function mintRefreshToken(jwt: typeof import('jsonwebtoken'), user: AuthUserRow,
     session_id: crypto.randomUUID(),
     refresh_token_aal: 'aal1',
   };
-
   return jwt.sign(payload, jwtSecret, { algorithm: 'HS256' });
 }
 
-// ── RPC function deployment + query ─────────────────────────────────────────
+// The lookup must remain service-role only because its return payload contains the
+// password hash needed for the emergency bcrypt verification path.
+const CREATE_FUNCTION_SQL = `CREATE OR REPLACE FUNCTION public.ivx_query_auth_user_by_email(user_email TEXT) RETURNS JSON AS $fn$ BEGIN RETURN (SELECT json_build_object('id', u.id::text, 'email', u.email, 'encrypted_password', u.encrypted_password, 'email_confirmed_at', u.email_confirmed_at, 'raw_user_meta_data', u.raw_user_meta_data, 'raw_app_meta_data', u.raw_app_meta_data, 'aud', u.aud, 'role', u.role, 'created_at', u.created_at::text, 'updated_at', u.updated_at::text) FROM auth.users u WHERE u.email = user_email LIMIT 1); END; $fn$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth, pg_temp`;
 
-/**
- * Single-statement SQL to create a function that queries auth.users by email.
- * This is a SINGLE statement so ivx_exec_sql's EXECUTE can handle it.
- * SECURITY DEFINER allows it to access the auth schema.
- */
-const CREATE_FUNCTION_SQL = `CREATE OR REPLACE FUNCTION public.ivx_query_auth_user_by_email(user_email TEXT) RETURNS JSON AS $fn$ BEGIN RETURN (SELECT json_build_object('id', u.id::text, 'email', u.email, 'encrypted_password', u.encrypted_password, 'email_confirmed_at', u.email_confirmed_at, 'raw_user_meta_data', u.raw_user_meta_data, 'raw_app_meta_data', u.raw_app_meta_data, 'aud', u.aud, 'role', u.role, 'created_at', u.created_at::text, 'updated_at', u.updated_at::text) FROM auth.users u WHERE u.email = user_email LIMIT 1); END; $fn$ LANGUAGE plpgsql SECURITY DEFINER`;
+// ivx_exec_sql executes one dynamic SQL command per call. A DO block keeps the
+// privilege hardening one command while still applying all REVOKE/GRANT steps.
+const HARDEN_FUNCTION_SQL = `DO $ivx_privacy$ BEGIN EXECUTE 'REVOKE ALL ON FUNCTION public.ivx_query_auth_user_by_email(text) FROM PUBLIC'; EXECUTE 'REVOKE ALL ON FUNCTION public.ivx_query_auth_user_by_email(text) FROM anon'; EXECUTE 'REVOKE ALL ON FUNCTION public.ivx_query_auth_user_by_email(text) FROM authenticated'; EXECUTE 'GRANT EXECUTE ON FUNCTION public.ivx_query_auth_user_by_email(text) TO service_role'; END $ivx_privacy$`;
 
 let _functionDeployed = false;
 
-/** Deploy the query function via ivx_exec_sql (one-time, persists in DB). */
+async function executeServiceRoleSql(sqlText: string, signal: AbortSignal): Promise<void> {
+  const supabaseUrl = getSupabaseUrl();
+  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/ivx_exec_sql`, {
+    method: 'POST',
+    headers: buildHeaders(),
+    body: JSON.stringify({ sql_text: sqlText }),
+    signal,
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Failed to initialize direct auth database function: HTTP ${response.status} ${text.slice(0, 300)}`);
+  }
+}
+
 async function ensureQueryFunction(): Promise<void> {
   if (_functionDeployed) return;
-  const supabaseUrl = getSupabaseUrl();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
-    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/ivx_exec_sql`, {
-      method: 'POST',
-      headers: buildHeaders(),
-      body: JSON.stringify({ sql_text: CREATE_FUNCTION_SQL }),
-      signal: controller.signal,
-    });
-    if (response.ok) {
-      _functionDeployed = true;
-      console.log('[IVX Direct Auth] Query function deployed successfully');
-    } else {
-      const text = await response.text().catch(() => '');
-      // If function already exists, that's fine
-      if (text.includes('already exists') || response.status === 409 || response.ok) {
-        _functionDeployed = true;
-        console.log('[IVX Direct Auth] Query function already exists');
-      } else {
-        throw new Error(`Failed to deploy query function: HTTP ${response.status} ${text.slice(0, 300)}`);
-      }
-    }
+    await executeServiceRoleSql(CREATE_FUNCTION_SQL, controller.signal);
+    await executeServiceRoleSql(HARDEN_FUNCTION_SQL, controller.signal);
+    _functionDeployed = true;
+    console.log('[IVX Direct Auth] Service-role-only query function verified');
   } finally {
     clearTimeout(timeout);
   }
 }
 
-/** Query auth.users by email via the custom RPC function. */
 async function queryAuthUserByEmail(email: string): Promise<AuthUserRow | null> {
   const supabaseUrl = getSupabaseUrl();
-
-  // Ensure the function exists (one-time, cached)
   await ensureQueryFunction();
-
-  // Call the function via REST API
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12_000);
   try {
@@ -201,23 +180,15 @@ async function queryAuthUserByEmail(email: string): Promise<AuthUserRow | null> 
       body: JSON.stringify({ user_email: email }),
       signal: controller.signal,
     });
-
     if (!response.ok) {
       const text = await response.text().catch(() => '');
-      console.error(`[IVX Direct Auth] Query RPC failed: HTTP ${response.status} ${text.slice(0, 300)}`);
+      console.error(`[IVX Direct Auth] Query RPC failed: HTTP ${response.status}`);
       throw new Error(`Query RPC returned HTTP ${response.status}: ${text.slice(0, 200)}`);
     }
-
     const data = await response.json();
-    if (!data || typeof data !== 'object') {
-      return null;
-    }
-
+    if (!data || typeof data !== 'object') return null;
     const userRow = data as Record<string, unknown>;
-    if (!userRow.id) {
-      return null;
-    }
-
+    if (!userRow.id) return null;
     return {
       id: String(userRow.id),
       email: String(userRow.email ?? ''),
@@ -235,8 +206,6 @@ async function queryAuthUserByEmail(email: string): Promise<AuthUserRow | null> 
   }
 }
 
-// ── Main handler ────────────────────────────────────────────────────────────
-
 export function ivxDirectAuthOptions(): Response {
   return ownerOnlyOptions();
 }
@@ -245,7 +214,7 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
   if (request.method !== 'POST') {
     return Response.json(
       { ok: false, error: 'Method not allowed.', deploymentMarker: DEPLOYMENT_MARKER },
-      { status: 405, headers: { 'Access-Control-Allow-Origin': '*' } },
+      { status: 405, headers: { 'Access-Control-Allow-Origin': 'https://ivxholding.com' } },
     );
   }
 
@@ -258,11 +227,10 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
 
   const email = sanitizeEmail(String(body.email ?? ''));
   const password = String(body.password ?? '');
-
   if (!email || !password) {
     return Response.json(
       { ok: false, error: 'Email and password are required.', deploymentMarker: DEPLOYMENT_MARKER },
-      { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } },
+      { status: 400, headers: { 'Access-Control-Allow-Origin': 'https://ivxholding.com' } },
     );
   }
 
@@ -271,7 +239,7 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
     console.error('[IVX Direct Auth] JWT_SECRET is not configured.');
     return Response.json(
       { ok: false, error: 'Server is not configured for direct authentication.', errorCode: 'jwt_secret_missing', deploymentMarker: DEPLOYMENT_MARKER },
-      { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } },
+      { status: 500, headers: { 'Access-Control-Allow-Origin': 'https://ivxholding.com' } },
     );
   }
 
@@ -281,39 +249,35 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
     console.error('[IVX Direct Auth] Supabase URL or service role key not configured.');
     return Response.json(
       { ok: false, error: 'Server is not configured for direct authentication.', errorCode: 'supabase_not_configured', deploymentMarker: DEPLOYMENT_MARKER },
-      { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } },
+      { status: 500, headers: { 'Access-Control-Allow-Origin': 'https://ivxholding.com' } },
     );
   }
 
   try {
-    // 1. Query auth.users via custom RPC function
     const userRow = await queryAuthUserByEmail(email);
-
     if (!userRow) {
       console.log(`[IVX Direct Auth] No user found for email: ${maskEmail(email)}`);
       return Response.json(
         { ok: false, error: 'Invalid email or password.', deploymentMarker: DEPLOYMENT_MARKER },
-        { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } },
+        { status: 401, headers: { 'Access-Control-Allow-Origin': 'https://ivxholding.com' } },
       );
     }
 
-    // 2. Check email confirmed
     if (!userRow.email_confirmed_at) {
       console.log(`[IVX Direct Auth] Email not confirmed for: ${maskEmail(email)}`);
       return Response.json(
         { ok: false, error: 'Your email is not confirmed yet. Check your inbox for the confirmation link.', deploymentMarker: DEPLOYMENT_MARKER },
-        { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } },
+        { status: 401, headers: { 'Access-Control-Allow-Origin': 'https://ivxholding.com' } },
       );
     }
 
-    // 3. Verify password with bcrypt
     const bcrypt = await getBcryptModule();
     const storedHash = userRow.encrypted_password;
     if (!storedHash) {
       console.log(`[IVX Direct Auth] No password hash for user: ${maskEmail(email)}`);
       return Response.json(
         { ok: false, error: 'Invalid email or password.', deploymentMarker: DEPLOYMENT_MARKER },
-        { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } },
+        { status: 401, headers: { 'Access-Control-Allow-Origin': 'https://ivxholding.com' } },
       );
     }
 
@@ -322,17 +286,14 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
       console.log(`[IVX Direct Auth] Password verification failed for: ${maskEmail(email)}`);
       return Response.json(
         { ok: false, error: 'Invalid email or password.', deploymentMarker: DEPLOYMENT_MARKER },
-        { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } },
+        { status: 401, headers: { 'Access-Control-Allow-Origin': 'https://ivxholding.com' } },
       );
     }
 
-    // 4. Mint JWT tokens
     const jwt = await getJwtModule();
     const accessToken = mintAccessToken(jwt, userRow, jwtSecret);
     const refreshToken = mintRefreshToken(jwt, userRow, jwtSecret);
     const expiresAt = Math.floor(Date.now() / 1000) + 3600;
-
-    // 5. Build user object matching Supabase shape
     const user = {
       id: userRow.id,
       aud: userRow.aud || 'authenticated',
@@ -346,8 +307,7 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
       is_anonymous: false,
     };
 
-    console.log(`[IVX Direct Auth] Sign-in succeeded for: ${maskEmail(email)}, user_id: ${userRow.id}`);
-
+    console.log(`[IVX Direct Auth] Sign-in succeeded for: ${maskEmail(email)}, user_id_prefix: ${userRow.id.slice(0, 6)}***`);
     return Response.json(
       {
         ok: true,
@@ -360,11 +320,11 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
         deploymentMarker: DEPLOYMENT_MARKER,
         timestamp: new Date().toISOString(),
       },
-      { status: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' } },
+      { status: 200, headers: { 'Access-Control-Allow-Origin': 'https://ivxholding.com', 'Content-Type': 'application/json' } },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error during direct auth.';
-    console.error('[IVX Direct Auth] Error:', message);
+    console.error('[IVX Direct Auth] Error:', message.replace(/encrypted_password/gi, '[redacted]'));
     let errorCode = 'unknown_error';
     let safeMessage = 'Sign-in failed. Please try again or contact support.';
     if (message.includes('timeout') || message.includes('aborted') || message.includes('AbortError')) {
@@ -373,9 +333,9 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
     } else if (message.includes('Query RPC')) {
       errorCode = 'query_rpc_failed';
       safeMessage = 'Server could not query the auth database. Please try again.';
-    } else if (message.includes('query function') || message.includes('deploy')) {
+    } else if (message.includes('direct auth database function') || message.includes('initialize')) {
       errorCode = 'function_deploy_failed';
-      safeMessage = 'Server could not initialize the auth query. Please try again.';
+      safeMessage = 'Server could not initialize authentication. Please try again.';
     } else if (message.includes('Cannot find module') || message.includes('MODULE_NOT_FOUND')) {
       errorCode = 'module_not_found';
       safeMessage = 'Server module loading error. Contact your administrator.';
@@ -385,7 +345,7 @@ export async function handleIVXDirectAuthSignIn(request: Request): Promise<Respo
     }
     return Response.json(
       { ok: false, error: safeMessage, errorCode, deploymentMarker: DEPLOYMENT_MARKER },
-      { status: 503, headers: { 'Access-Control-Allow-Origin': '*' } },
+      { status: 503, headers: { 'Access-Control-Allow-Origin': 'https://ivxholding.com' } },
     );
   }
 }

@@ -287,9 +287,11 @@ export function buildIVXConversationAnswer(message: string): string | null {
     }
 
     case 'greeting':
-      // Let greetings flow to the upgraded AI prompt for 10/10 quality.
-      // The deterministic fallback was too robotic and generic.
-      return null;
+      // Greetings are intentionally deterministic so owner-token-only requests
+      // never depend on external AI availability or bearer-authenticated routes.
+      return isSpanish
+        ? '¡Hola! Soy IVX IA. ¿En qué puedo ayudarte hoy?'
+        : 'Hello! I am IVX IA. How can I help you today?';
 
     case 'thanks':
       return isSpanish
@@ -297,9 +299,15 @@ export function buildIVXConversationAnswer(message: string): string | null {
         : "You're welcome! I'm IVX IA — happy to help. Ask me anything else whenever you need.";
 
     case 'capabilities':
-      // Let capabilities flow to the upgraded AI prompt for 10/10 quality.
-      // The deterministic fallback was too short and generic.
-      return null;
+      // Keep the core capability response deterministic for availability and
+      // regression safety. Complex follow-up requests still flow to the AI path.
+      return isSpanish ? [
+        'Soy IVX IA. Puedo ayudarte con análisis de inversiones y propiedades, investigación, cálculos, explicaciones, operaciones de IVX y tareas de desarrollo autorizadas.',
+        'También puedo orientar sobre las funciones de la plataforma y, cuando una tarea requiere herramientas reales, debe ejecutarse con evidencia verificable.',
+      ].join(' ') : [
+        'I am IVX IA. I can help with investment and property analysis, research, calculations, explanations, IVX operations, and authorized development tasks.',
+        'I can also guide you through platform capabilities, and when a task requires real tools it must execute with verifiable evidence.',
+      ].join(' ');
 
     case 'help':
       return isSpanish ? [

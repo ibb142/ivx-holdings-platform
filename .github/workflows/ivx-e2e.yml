@@ -49,6 +49,23 @@ jobs:
           cd expo && bun run lint
           echo 'lint=PASS'
 
+  live-landing-critical:
+    name: Landing register/sign-in/wire live — HARD GATE
+    runs-on: ubuntu-latest
+    needs: [typecheck]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Live landing + member auth + wire — HARD GATE
+        run: |
+          set -euo pipefail
+          node scripts/ivx-live-qa.mjs --json | tee live-landing-qa.json
+          node -e "const f=require('fs');const r=JSON.parse(f.readFileSync('live-landing-qa.json','utf8'));if(r.certified!==true||r.failed!==0)process.exit(1);console.log('landing_live_critical=PASS total='+r.total)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-landing-qa
+          path: live-landing-qa.json
+
   e2e-playwright:
     name: Playwright E2E (web surface) — HARD GATE
     runs-on: ubuntu-latest
@@ -76,13 +93,18 @@ jobs:
 
   e2e-maestro:
     name: Maestro E2E (mobile surface) — HARD GATE
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     needs: [typecheck]
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.9
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
       - run: cd expo && bun install --frozen-lockfile
       - name: Start the Expo development server
         working-directory: expo
@@ -93,6 +115,7 @@ jobs:
           nohup bunx expo start --dev-client --port 8081 > "$RUNNER_TEMP/expo-metro.log" 2>&1 &
           for attempt in {1..30}; do
             if curl --silent --fail http://127.0.0.1:8081/status | grep -q 'packager-status:running'; then
+              echo 'metro=PASS'
               exit 0
             fi
             sleep 2
@@ -100,25 +123,59 @@ jobs:
           cat "$RUNNER_TEMP/expo-metro.log"
           echo 'Expo dev server failed to start'
           exit 1
-      - name: Build and launch the iOS simulator app — HARD GATE
-        working-directory: expo
-        timeout-minutes: 45
-        run: |
-          set -euo pipefail
-          bunx expo run:ios --configuration debug --no-bundler
-          echo 'ios_build=PASS'
       - name: Install Maestro
         run: |
           set -euo pipefail
           curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
           echo 'maestro_install=PASS'
-      - name: Run Maestro launch smoke test — HARD GATE
+      - name: Provision Android debug signing key
         run: |
           set -euo pipefail
-          ~/.maestro/bin/maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml
-          echo 'maestro_test=PASS'
+          mkdir -p "$HOME/.android"
+          if [ ! -s "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000
+          fi
+          test -s "$HOME/.android/debug.keystore"
+          keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey >/dev/null
+          echo 'android_debug_signing=PASS'
+      - name: Enable KVM when available
+        run: |
+          set -euo pipefail
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Build, launch and test Android app — HARD GATE
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            set -eu
+            trap 'cp "$RUNNER_TEMP/expo-metro.log" maestro-metro.log 2>/dev/null || true; adb logcat -d > maestro-logcat.txt 2>/dev/null || true' EXIT
+            cd expo
+            bunx expo run:android --no-bundler
+            cd ..
+            adb reverse tcp:8081 tcp:8081
+            adb shell am force-stop com.ivxholdings.app
+            adb shell am start -W -a android.intent.action.VIEW -d "ivx-app://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081" -p com.ivxholdings.app
+            sleep 8
+            maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml
+            echo 'android_build=PASS'
+            echo 'maestro_test=PASS'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: maestro-report
-          path: maestro-report.xml
+          path: |
+            maestro-report.xml
+            maestro-metro.log
+            maestro-logcat.txt

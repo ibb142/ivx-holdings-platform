@@ -79,7 +79,40 @@ import {
   WAR_ROOM_POLICY,
 } from '../services/ivx-real-execution-certificate';
 
-export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-18-real-execution';
+export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-20-owner-auth-guard';
+
+function ownerAuthorized(c: any, body: Record<string, unknown> = {}): boolean {
+  const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';
+  const envSecret = (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim() || (process.env.IVX_OWNER_TOKEN ?? '').trim();
+  return Boolean(envSecret) && provided === envSecret;
+}
+
+function requireOwner(c: any, body: Record<string, unknown> = {}) {
+  return ownerAuthorized(c, body) ? null : c.json({ ok: false, error: 'Owner authorization required.' }, 401);
+}
+
+
+function validateAutonomousRunPayload(payload: Record<string, unknown>): string | null {
+  if (payload.__autonomous !== true) return null;
+  const actions = Array.isArray(payload.actions) ? payload.actions.map((value) => String(value || '').trim()).filter(Boolean) : [];
+  const sourceSha = typeof payload.sourceSha === 'string' ? payload.sourceSha.trim() : '';
+  const taskId = typeof payload.__taskId === 'string' ? payload.__taskId.trim() : '';
+  if (!taskId) return 'AUTONOMOUS_TASK_BLOCKED: taskId_missing';
+  if (!/^[0-9a-f]{40}$/i.test(sourceSha)) return 'AUTONOMOUS_TASK_BLOCKED: sourceSha_invalid_or_missing';
+  if (payload.realExecutionOnly !== true) return 'AUTONOMOUS_TASK_BLOCKED: realExecutionOnly_not_true';
+  if (payload.simulatedSuccessAllowed !== false) return 'AUTONOMOUS_TASK_BLOCKED: simulatedSuccessAllowed_not_false';
+  if (payload.evidenceRequired !== true) return 'AUTONOMOUS_TASK_BLOCKED: evidenceRequired_not_true';
+  if (payload.exactSourceShaRequired !== true) return 'AUTONOMOUS_TASK_BLOCKED: exactSourceShaRequired_not_true';
+  if (payload.realFundsAllowed === true) return 'AUTONOMOUS_TASK_BLOCKED: real_funds_forbidden';
+  if (actions.length === 0) return 'AUTONOMOUS_TASK_BLOCKED: actions_missing';
+  const normalized = actions.join(' ').toLowerCase();
+  const financial = /(^|[_\s])(move|credit|debit|settle|settlement|transfer|trade|purchase|sell|withdraw|payout|disburse)([_\s]|$)/i.test(normalized);
+  const forbidden = /(approve_kyc|approve_aml|disable_security_gate|disable_rls|weaken_secret_scanner|fabricate_certificate)/i.test(normalized);
+  const highRisk = /(deploy|merge|rotate|revoke|delete|drop|truncate|production|privileged|grant|secret|credential|beneficiary|routing|swift|bic)/i.test(normalized);
+  if (financial || forbidden) return 'AUTONOMOUS_TASK_BLOCKED: financial_or_never_autonomous_action';
+  if (highRisk) return 'AUTONOMOUS_TASK_BLOCKED: high_risk_requires_non_autonomous_owner_flow';
+  return null;
+}
 
 export function registerAgentRoutes(app: Hono): void {
   // ── Dashboard & Listing ──────────────────────────────────────────────────
@@ -145,7 +178,7 @@ export function registerAgentRoutes(app: Hono): void {
     const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
     const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';
     const envSecret = (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim() || (process.env.IVX_OWNER_TOKEN ?? '').trim();
-    const authorized = envSecret ? provided === envSecret : provided.startsWith('owner-');
+    const authorized = Boolean(envSecret) && provided === envSecret;
     if (!authorized) {
       return c.json({ ok: false, error: 'Owner approval required to start the IVX 112 Real Execution Certificate run.' }, 401);
     }
@@ -267,30 +300,40 @@ export function registerAgentRoutes(app: Hono): void {
   // ── Agent Control ─────────────────────────────────────────────────────────
 
   app.post('/api/ivx/agents/:agentId/pause', (c) => {
+    const denied = requireOwner(c);
+    if (denied) return denied;
     const agentId = c.req.param('agentId');
     const result = pauseAgent(agentId);
     return c.json({ ok: result.ok, agentId, action: 'pause', error: result.error });
   });
 
   app.post('/api/ivx/agents/:agentId/resume', (c) => {
+    const denied = requireOwner(c);
+    if (denied) return denied;
     const agentId = c.req.param('agentId');
     const result = resumeAgent(agentId);
     return c.json({ ok: result.ok, agentId, action: 'resume', error: result.error });
   });
 
   app.post('/api/ivx/agents/:agentId/disable', (c) => {
+    const denied = requireOwner(c);
+    if (denied) return denied;
     const agentId = c.req.param('agentId');
     const result = disableAgent(agentId);
     return c.json({ ok: result.ok, agentId, action: 'disable', error: result.error });
   });
 
   app.post('/api/ivx/agents/:agentId/enable', (c) => {
+    const denied = requireOwner(c);
+    if (denied) return denied;
     const agentId = c.req.param('agentId');
     const result = enableAgent(agentId);
     return c.json({ ok: result.ok, agentId, action: 'enable', error: result.error });
   });
 
   app.post('/api/ivx/agents/:agentId/clear-memory', (c) => {
+    const denied = requireOwner(c);
+    if (denied) return denied;
     const agentId = c.req.param('agentId');
     const result = clearTaskMemory(agentId);
     return c.json({ ok: result.ok, agentId, action: 'clear_task_memory', cleared: result.cleared });
@@ -300,10 +343,16 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post('/api/ivx/agents/:agentId/run', async (c) => {
     const agentId = c.req.param('agentId');
-    const body = await c.req.json().catch(() => ({}));
-    const taskType = body.taskType || 'audit';
-    const payload = body.payload || {};
-    const ownerApprovalToken = body.ownerApprovalToken || null;
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const denied = requireOwner(c, body as Record<string, unknown>);
+    if (denied) return denied;
+    const taskType = (body as any).taskType || 'audit';
+    const payload = (body as any).payload || {};
+    const ownerApprovalToken = (body as any).ownerApprovalToken || null;
+    const autonomousBlocker = validateAutonomousRunPayload(payload as Record<string, unknown>);
+    if (autonomousBlocker) {
+      return c.json({ ok: false, marker: IVX_AGENT_API_MARKER, error: autonomousBlocker }, 403);
+    }
 
     const result = await executeAgentRun(agentId, taskType, payload, ownerApprovalToken);
     return c.json({
@@ -318,8 +367,10 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post('/api/ivx/agents/:agentId/version', async (c) => {
     const agentId = c.req.param('agentId');
-    const body = await c.req.json().catch(() => ({}));
-    const result = updateAgentContract(agentId, body.updates || {}, body.ownerApproval === true);
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const denied = requireOwner(c, body as Record<string, unknown>);
+    if (denied) return denied;
+    const result = updateAgentContract(agentId, (body as any).updates || {}, (body as any).ownerApproval === true);
     return c.json({
       ok: result.ok,
       agentId,
@@ -330,8 +381,10 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post('/api/ivx/agents/:agentId/rollback', async (c) => {
     const agentId = c.req.param('agentId');
-    const body = await c.req.json().catch(() => ({}));
-    const targetVersion = body.targetVersion;
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const denied = requireOwner(c, body as Record<string, unknown>);
+    if (denied) return denied;
+    const targetVersion = (body as any).targetVersion;
     if (typeof targetVersion !== 'number') {
       return c.json({ ok: false, error: 'targetVersion (number) required' }, 400);
     }
@@ -460,6 +513,8 @@ export function registerAgentRoutes(app: Hono): void {
   // ── Execute All 112 Agents (ADVISORY/QA ONLY — not proof of real work) ───────────
 
   app.post('/api/ivx/agents/execute-all', async (c) => {
+    const denied = requireOwner(c);
+    if (denied) return denied;
     const results: Array<{
       agentId: string;
       agentNumber: number;
