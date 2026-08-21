@@ -1,5 +1,6 @@
 package com.ivxholdings.app.data.model
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -243,19 +244,21 @@ data class DealsResponse(
 @Serializable
 data class Reel(
     val id: String,
-    val title: String,
-    val thumbnailUrl: String? = null,
-    val videoUrl: String? = null,
-    val durationSeconds: Int = 0,
-    val creatorName: String,
-    val views: Int = 0,
-    val likes: Int = 0
+    val title: String? = null,
+    @SerialName("thumbnail_url") val thumbnailUrl: String? = null,
+    @SerialName("poster_url") val posterUrl: String? = null,
+    @SerialName("cover_url") val coverUrl: String? = null,
+    @SerialName("video_url") val videoUrl: String? = null,
+    @SerialName("duration_sec") val durationSeconds: Int = 0,
+    @SerialName("like_count") val likeCount: Int = 0,
+    @SerialName("comment_count") val commentCount: Int = 0,
+    @SerialName("share_count") val shareCount: Int = 0
 )
 
 @Serializable
 data class ReelsResponse(
-    val reels: List<Reel> = emptyList(),
-    val totalCount: Int = 0
+    val videos: List<Reel> = emptyList(),
+    val count: Int = 0
 )
 
 @Serializable

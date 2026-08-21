@@ -84,7 +84,7 @@ class IVXRepository(private val apiService: IVXApiService) {
     }
 
     suspend fun fetchReels(): Result<List<Reel>> = withContext(Dispatchers.IO) {
-        apiService.fetchReels().map { it.reels }
+        apiService.fetchReels().map { it.videos }
     }
 
     suspend fun fetchInvestors(): Result<List<Investor>> = withContext(Dispatchers.IO) {
