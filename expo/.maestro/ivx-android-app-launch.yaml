@@ -1,0 +1,21 @@
+# IVX Android App Launch QA — No auth required
+# Cold-launch smoke test for the debug APK + Metro (adb reverse tcp:8081).
+# Open-access mode is pinned OFF in CI (EXPO_PUBLIC_IVX_OPEN_ACCESS_MODE=false),
+# so the app must land on the canonical login screen. The IVX brand on login is
+# an image, so assert the guaranteed visible text heading instead.
+appId: com.ivxholdings.app
+name: IVX Android App Launch QA
+tags:
+  - android-qa
+  - launch
+  - no-auth
+---
+- launchApp:
+    clearState: true
+# Extended wait is justified (not masking a failure): the root cause is fixed
+# (open-access mode pinned OFF in CI), so Sign In WILL render; the generous
+# ceiling only absorbs CI-runner variance in emulator boot, first JS bundle
+# load from Metro, and the auth bootstrap (index.tsx hard-timeout is 4s).
+- extendedWaitUntil:
+    visible: "Sign In"
+    timeout: 60000
