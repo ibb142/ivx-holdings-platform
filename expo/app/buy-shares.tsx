@@ -23,7 +23,6 @@ import {
   TrendingUp,
   Info,
   CheckCircle,
-  CreditCard,
   Wallet,
   Lock,
   Clock,
@@ -41,16 +40,15 @@ import InvestorDisclosure from '@/components/InvestorDisclosure';
 import { useWalletBalance } from '@/lib/data-hooks';
 import { useProperty } from '@/lib/data-hooks';
 import { purchaseShares } from '@/lib/investment-service';
-import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
-import { supabase } from '@/lib/supabase';
 import * as Clipboard from 'expo-clipboard';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import { IVXImage } from '@/components/ivx';
 import { RefreshControl } from 'react-native';
 import { EmptyState } from '@/components/ivx';
 
-type PaymentMethod = 'wire' | 'wallet' | 'card';
+type PaymentMethod = 'wire' | 'wallet';
 
 const WIRE_TRANSFER_DETAILS = {
   bankName: '[PENDING CONFIGURATION - Contact admin@ivxholdings.com]',
@@ -76,28 +74,6 @@ export default function BuySharesScreen() {
   const { balance } = useWalletBalance();
   const walletBalance = balance?.available ?? 0;
 
-  const adminCardEnabled = useQuery({
-    queryKey: ['admin-card-enabled'],
-    queryFn: async () => {
-      try {
-        const { data } = await supabase
-          .from('app_settings')
-          .select('value')
-          .eq('key', 'card_payment_enabled')
-          .single();
-        if (data) {
-          return (data as any).value === 'true' || (data as any).value === true;
-        }
-        return false;
-      } catch {
-        console.log('[BuyShares] Card setting not found, defaulting to disabled');
-        return false;
-      }
-    },
-    staleTime: 30000});
-
-  const isCardEnabled = adminCardEnabled.data === true;
-
   const [sharesInput, setSharesInput] = useState('10');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('wire');
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -113,9 +89,8 @@ export default function BuySharesScreen() {
   const pricePerShare = property?.pricePerShare ?? 0;
   const subtotal = shares * pricePerShare;
   const platformFee = subtotal * 0.01;
-  const cardFee = paymentMethod === 'card' ? subtotal * 0.025 : 0;
   const wireFee = 0;
-  const totalCost = subtotal + platformFee + cardFee + wireFee;
+  const totalCost = subtotal + platformFee + wireFee;
   const estimatedYield = property ? (subtotal * property.yield) / 100 : 0;
   const canAfford = paymentMethod === 'wallet' ? walletBalance >= totalCost : true;
 
@@ -163,7 +138,7 @@ export default function BuySharesScreen() {
       return;
     }
     if (!canAfford && paymentMethod === 'wallet') {
-      Alert.alert('Insufficient Funds', 'Your wallet balance is not enough. Try bank transfer or card.');
+      Alert.alert('Insufficient Funds', 'Your wallet balance is not enough. Try bank transfer instead.');
       return;
     }
     if (!property) return;
@@ -182,7 +157,7 @@ export default function BuySharesScreen() {
         pricePerShare,
         subtotal,
         platformFee,
-        paymentFee: cardFee,
+        paymentFee: 0,
         totalCost,
         paymentMethod,
         investmentType: 'property_shares'});
@@ -217,7 +192,7 @@ export default function BuySharesScreen() {
     } finally {
       setIsProcessing(false);
     }
-  }, [canInvest, checkAndProceed, canAfford, paymentMethod, property, shares, pricePerShare, subtotal, platformFee, cardFee, totalCost, successAnim, checkScale, queryClient]);
+  }, [canInvest, checkAndProceed, canAfford, paymentMethod, property, shares, pricePerShare, subtotal, platformFee, totalCost, successAnim, checkScale, queryClient]);
 
   if (!property) {
     return (
@@ -455,23 +430,6 @@ export default function BuySharesScreen() {
                     </View>
                   </TouchableOpacity>
 
-                  {isCardEnabled && (
-                    <TouchableOpacity
-                      style={[styles.paymentOption, paymentMethod === 'card' && styles.paymentOptionActive, styles.paymentOptionCard]}
-                      onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setPaymentMethod('card'); }}
-                    >
-                      <View style={[styles.paymentIconWrap, paymentMethod === 'card' && styles.paymentIconWrapActive]}>
-                        <CreditCard size={20} color={paymentMethod === 'card' ? Colors.primary : Colors.textSecondary} />
-                      </View>
-                      <View style={styles.paymentInfo}>
-                        <Text style={[styles.paymentLabel, paymentMethod === 'card' && styles.paymentLabelActive]}>Debit/Credit Card</Text>
-                        <Text style={styles.paymentDesc}>2.5% processing fee • Instant</Text>
-                      </View>
-                      <View style={[styles.paymentRadio, paymentMethod === 'card' && styles.paymentRadioActive]}>
-                        {paymentMethod === 'card' && <View style={styles.paymentRadioDot} />}
-                      </View>
-                    </TouchableOpacity>
-                  )}
                 </View>
 
                 {paymentMethod === 'wire' && (
@@ -564,12 +522,6 @@ export default function BuySharesScreen() {
                       <Text style={styles.orderLabel}>Platform Fee (1%)</Text>
                       <Text style={styles.orderValue}>{formatCurrencyWithDecimals(platformFee)}</Text>
                     </View>
-                    {cardFee > 0 && (
-                      <View style={styles.orderRow}>
-                        <Text style={styles.orderLabel}>Card Fee (2.5%)</Text>
-                        <Text style={styles.orderValue}>{formatCurrencyWithDecimals(cardFee)}</Text>
-                      </View>
-                    )}
                     {paymentMethod === 'wire' && (
                       <View style={styles.orderRow}>
                         <Text style={[styles.orderLabel, { color: Colors.success }]}>Wire/ACH Fee</Text>
@@ -1092,8 +1044,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.success + '40',
     backgroundColor: Colors.success + '08'},
-  paymentOptionCard: {
-    opacity: 0.85},
   paymentLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',

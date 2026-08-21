@@ -4,12 +4,9 @@
  * Route: /admin/payments
  *
  * Owner-only page showing:
- * - Stripe connection status + environment
- * - Webhook status
- * - Card/ACH/Financial Connections capabilities
- * - Payment pause toggle (owner-controlled)
+ * - Payment statistics by state and pathway
  * - Recent transactions
- * - Payment statistics
+ * - Admin quick actions
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
@@ -25,38 +22,13 @@ import { useRouter, Stack } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import {
   ArrowLeft,
-  CreditCard,
   Building2,
-  Shield,
-  CheckCircle2,
-  XCircle,
-  AlertCircle,
-  TrendingUp,
-  DollarSign,
   Receipt,
   RefreshCw,
-  Zap,
   Banknote} from 'lucide-react-native';
 import Colors from '@/constants/colors';
-import { useAuth } from '@/lib/auth-context';
 import { DIRECT_API_BASE_URL } from '@/lib/public-api';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
-import { EmptyState } from '@/components/ivx';
-
-interface PaymentConfig {
-  provider: string;
-  environment: string;
-  stripeConfigured: boolean;
-  testMode: boolean;
-  webhookConfigured: boolean;
-  publishableKey: string;
-  capabilities: {
-    card: boolean;
-    ach: boolean;
-    financialConnections: boolean;
-    refunds: boolean;
-  };
-}
 
 interface PaymentStats {
   byState: Record<string, { count: number; totalCents: number }>;
@@ -69,8 +41,6 @@ export default function AdminPaymentSettings() {
   // Realtime: auto-invalidate on DB changes
   useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
-  const { user } = useAuth();
-  const [config, setConfig] = useState<PaymentConfig | null>(null);
   const [stats, setStats] = useState<PaymentStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -87,13 +57,8 @@ export default function AdminPaymentSettings() {
     }
 
     try {
-      const [configRes, statsRes] = await Promise.all([
-        fetch(`${base}/api/ivx/payments/config`),
-        fetch(`${base}/api/ivx/payments/admin/stats`, { headers }),
-      ]);
-      const configData = await configRes.json();
+      const statsRes = await fetch(`${base}/api/ivx/payments/admin/stats`, { headers });
       const statsData = await statsRes.json();
-      if (configData.ok) setConfig(configData.config);
       if (statsData.ok) setStats(statsData.stats);
     } catch (err) {
       console.error('[AdminPayments] Fetch error:', err);
@@ -120,9 +85,6 @@ export default function AdminPaymentSettings() {
     );
   }
 
-  const environmentColor = config?.environment === 'live' ? Colors.success : config?.environment === 'test' ? Colors.warning : Colors.error;
-  const environmentLabel = config?.environment === 'live' ? 'LIVE MODE' : config?.environment === 'test' ? 'TEST MODE' : 'NOT CONFIGURED';
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -139,31 +101,6 @@ export default function AdminPaymentSettings() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
         showsVerticalScrollIndicator={false}
       >
-        {/* Environment status */}
-        <View style={styles.statusCard}>
-          <View style={styles.statusHeader}>
-            <Shield color={environmentColor} size={24} />
-            <Text style={styles.statusTitle}>Stripe Payment System</Text>
-          </View>
-          <View style={[styles.envBadge, { backgroundColor: `${environmentColor}20`, borderColor: `${environmentColor}40` }]}>
-            <Text style={[styles.envText, { color: environmentColor }]}>{environmentLabel}</Text>
-          </View>
-          <View style={styles.statusGrid}>
-            <StatusRow label="Stripe Connected" value={config?.stripeConfigured ? 'YES' : 'NO'} ok={config?.stripeConfigured ?? false} />
-            <StatusRow label="Webhook Secret" value={config?.webhookConfigured ? 'CONFIGURED' : 'MISSING'} ok={config?.webhookConfigured ?? false} />
-            <StatusRow label="Publishable Key" value={config?.publishableKey ? 'SET' : 'MISSING'} ok={!!config?.publishableKey} />
-          </View>
-        </View>
-
-        {/* Capabilities */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Capabilities</Text>
-          <CapabilityRow icon="card" label="Card Payments" enabled={config?.capabilities.card ?? false} />
-          <CapabilityRow icon="bank" label="ACH Direct Debit" enabled={config?.capabilities.ach ?? false} />
-          <CapabilityRow icon="link" label="Financial Connections" enabled={config?.capabilities.financialConnections ?? false} />
-          <CapabilityRow icon="refund" label="Refunds" enabled={config?.capabilities.refunds ?? false} />
-        </View>
-
         {/* Statistics */}
         {stats && (
           <View style={styles.sectionCard}>
@@ -192,24 +129,6 @@ export default function AdminPaymentSettings() {
                 </Text>
               </View>
             ))}
-          </View>
-        )}
-
-        {/* Missing configuration warning */}
-        {config?.environment === 'not_configured' && (
-          <View style={styles.warningCard}>
-            <AlertCircle color={Colors.warning} size={20} />
-            <Text style={styles.warningTitle}>Stripe Not Configured</Text>
-            <Text style={styles.warningText}>
-              Set these environment variables on Render to enable payments:
-            </Text>
-            <Text style={styles.warningCode}>STRIPE_SECRET_KEY</Text>
-            <Text style={styles.warningCode}>STRIPE_WEBHOOK_SECRET</Text>
-            <Text style={styles.warningCode}>EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY</Text>
-            <Text style={styles.warningHint}>
-              Use test keys (sk_test_...) for test mode. Live keys (sk_live_...) require owner approval:
-              CONFIRM_IVX_STRIPE_LIVE_MODE
-            </Text>
           </View>
         )}
 
@@ -248,42 +167,11 @@ export default function AdminPaymentSettings() {
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            Payment infrastructure v1.0 · Stripe-primary · Idempotent webhooks · RLS-protected
+            Payment infrastructure v1.0 · Bank wire & ACH rails · RLS-protected
           </Text>
         </View>
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-function StatusRow({ label, value, ok }: { label: string; value: string; ok: boolean }) {
-  return (
-    <View style={styles.statusRow}>
-      <Text style={styles.statusRowLabel}>{label}</Text>
-      <View style={styles.statusRowValue}>
-        {ok ? <CheckCircle2 color={Colors.success} size={14} /> : <XCircle color={Colors.error} size={14} />}
-        <Text style={[styles.statusRowText, { color: ok ? Colors.success : Colors.error }]}>{value}</Text>
-      </View>
-    </View>
-  );
-}
-
-function CapabilityRow({ icon, label, enabled }: { icon: string; label: string; enabled: boolean }) {
-  const getIcon = () => {
-    switch (icon) {
-      case 'card': return <CreditCard color={enabled ? Colors.success : Colors.textTertiary} size={20} />;
-      case 'bank': return <Building2 color={enabled ? Colors.success : Colors.textTertiary} size={20} />;
-      case 'link': return <Zap color={enabled ? Colors.success : Colors.textTertiary} size={20} />;
-      case 'refund': return <RefreshCw color={enabled ? Colors.success : Colors.textTertiary} size={20} />;
-      default: return <CreditCard color={Colors.textTertiary} size={20} />;
-    }
-  };
-  return (
-    <View style={styles.capRow}>
-      {getIcon()}
-      <Text style={[styles.capLabel, !enabled && styles.capLabelDisabled]}>{label}</Text>
-      {enabled ? <CheckCircle2 color={Colors.success} size={16} /> : <XCircle color={Colors.error} size={16} />}
-    </View>
   );
 }
 

@@ -8,7 +8,7 @@
  * - $50 default share price (server-side)
  * - Share count selector (server-calculated max)
  * - Total amount (server-calculated: shares × price)
- * - Card + ACH payment options
+ * - ACH bank debit payment
  * - Agreement acceptance
  * - Payment processing screen
  * - Receipt + portfolio result
@@ -33,7 +33,6 @@ import {
   ArrowLeft,
   Minus,
   Plus,
-  CreditCard,
   Building2,
   Shield,
   CheckCircle2,
@@ -91,7 +90,7 @@ export default function TokenizedParticipationPage() {
   const { width: screenWidth } = useWindowDimensions();
 
   const [shareCount, setShareCount] = useState<number>(1);
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'ach_debit'>('card');
+  const [paymentMethod, setPaymentMethod] = useState<'ach_debit'>('ach_debit');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [step, setStep] = useState<PaymentStep>('select');
   const [paymentId, setPaymentId] = useState<string | null>(null);
@@ -338,7 +337,7 @@ export default function TokenizedParticipationPage() {
             </View>
             <View style={styles.processingRow}>
               <Text style={styles.processingLabel}>Method</Text>
-              <Text style={styles.processingValue}>{paymentMethod === 'card' ? 'Card' : 'ACH Bank Debit'}</Text>
+              <Text style={styles.processingValue}>ACH Bank Debit</Text>
             </View>
           </View>
           {paymentConfig?.config.testMode && (
@@ -493,18 +492,6 @@ export default function TokenizedParticipationPage() {
         {/* Payment method */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Payment Method</Text>
-
-          <TouchableOpacity
-            style={[styles.methodButton, paymentMethod === 'card' && styles.methodActive]}
-            onPress={() => { setPaymentMethod('card'); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-          >
-            <CreditCard color={paymentMethod === 'card' ? Colors.primary : Colors.textSecondary} size={24} />
-            <View style={styles.methodInfo}>
-              <Text style={[styles.methodTitle, paymentMethod === 'card' && styles.methodTitleActive]}>Credit / Debit Card</Text>
-              <Text style={styles.methodSubtitle}>Instant · 2.9% fee</Text>
-            </View>
-            {paymentMethod === 'card' && <CheckCircle2 color={Colors.primary} size={20} />}
-          </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.methodButton, paymentMethod === 'ach_debit' && styles.methodActive]}

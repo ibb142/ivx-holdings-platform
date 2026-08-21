@@ -17,9 +17,7 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   X,
-  CreditCard,
   Building,
-  Smartphone,
   Check,
   AlertCircle,
   CheckCircle,
@@ -42,7 +40,6 @@ import Colors from '@/constants/colors';
 import { useWallet } from '@/lib/wallet-context';
 import { formatNumber, formatCurrencyWithDecimals, formatAmountInput, parseAmountInput } from '@/lib/formatters';
 import { paymentService, PaymentMethodType, PaymentResult, WithdrawalResult } from '@/lib/payment-service';
-import CardInputForm, { CardData } from '@/components/CardInputForm';
 import BankLinkForm, { BankData } from '@/components/BankLinkForm';
 import WireTransferForm, { WireInstructionsDisplay } from '@/components/WireTransferForm';
 import { useEarn } from '@/lib/earn-context';
@@ -105,7 +102,6 @@ export default function WalletScreen() {
   const [withdrawResult, setWithdrawResult] = useState<WithdrawalResult | null>(null);
   const [showWithdrawResult, setShowWithdrawResult] = useState(false);
   const [paymentStep, setPaymentStep] = useState<'select' | 'input' | 'confirm'>('select');
-  const [cardData, setCardData] = useState<CardData | null>(null);
   const [linkedBank, setLinkedBank] = useState<BankData | null>(null);
   const [wireType, setWireType] = useState<'domestic' | 'international'>('domestic');
 
@@ -120,9 +116,6 @@ export default function WalletScreen() {
       case 'usdc': return CircleDollarSign;
       case 'bank_transfer':
       case 'bank_account': return Building;
-      case 'card': return CreditCard;
-      case 'apple_pay': return Smartphone;
-      case 'google_pay': return Smartphone;
       case 'wire': return Banknote;
       case 'paypal': return Globe;
       default: return Wallet;
@@ -134,7 +127,6 @@ export default function WalletScreen() {
       case 'fednow': return { label: 'FedNow', color: '#00B4D8' };
       case 'rtp_network': return { label: 'RTP', color: '#00B4D8' };
       case 'circle': return { label: 'Circle', color: '#4A90D9' };
-      case 'stripe': return { label: 'Stripe', color: '#635BFF' };
       case 'plaid': return { label: 'Plaid', color: '#00D09C' };
       case 'paypal': return { label: 'PayPal', color: '#003087' };
       case 'manual': return { label: 'Manual', color: '#FF9500' };
@@ -157,9 +149,6 @@ export default function WalletScreen() {
       case 'same_day_ach': return ['Same Day', 'FREE'];
       case 'usdc': return ['~30 sec', '$0.01'];
       case 'bank_transfer': return ['FREE', '1-2 Days'];
-      case 'card': return ['Instant', '2.9% fee'];
-      case 'apple_pay': return ['Instant', '1.5% fee'];
-      case 'google_pay': return ['Instant', '1.5% fee'];
       case 'wire': return ['Same Day', '$25 fee'];
       case 'paypal': return ['Instant', '3.49% fee'];
       default: return [];
@@ -267,7 +256,6 @@ export default function WalletScreen() {
     setPaymentResult(null);
     setShowResult(false);
     setPaymentStep('select');
-    setCardData(null);
     setLinkedBank(null);
     setWireType('domestic');
   };
@@ -275,9 +263,7 @@ export default function WalletScreen() {
   const handleSelectPaymentMethod = (method: PaymentMethodType) => {
     setSelectedPaymentMethod(method);
     void Haptics.selectionAsync();
-    if (method === 'card') {
-      setPaymentStep('input');
-    } else if (method === 'bank_transfer' || method === 'same_day_ach') {
+    if (method === 'bank_transfer' || method === 'same_day_ach') {
       setPaymentStep('input');
     } else {
       setPaymentStep('confirm');
@@ -288,15 +274,13 @@ export default function WalletScreen() {
     if (!fundAmount || parseFloat(fundAmount) <= 0) return false;
     if (!selectedPaymentMethod) return false;
     switch (selectedPaymentMethod) {
-      case 'card':
-        return cardData?.isValid || false;
       case 'bank_transfer':
       case 'same_day_ach':
         return linkedBank?.isLinked || false;
       default:
         return true;
     }
-  }, [fundAmount, selectedPaymentMethod, cardData, linkedBank]);
+  }, [fundAmount, selectedPaymentMethod, linkedBank]);
 
   const handleWithdraw = async () => {
     const amount = parseFloat(withdrawAmount);
@@ -762,27 +746,6 @@ export default function WalletScreen() {
                   </View>
                 )}
 
-                {paymentStep === 'input' && selectedPaymentMethod === 'card' && (
-                  <View style={styles.paymentInputSection}>
-                    <TouchableOpacity
-                      style={styles.backButton}
-                      onPress={() => { setPaymentStep('select'); setSelectedPaymentMethod(null); setCardData(null); }}
-                    >
-                      <Text style={styles.backButtonText}>← Back to methods</Text>
-                    </TouchableOpacity>
-                    <View style={styles.selectedMethodHeader}>
-                      <View style={styles.selectedMethodIcon}>
-                        <CreditCard size={24} color={Colors.primary} />
-                      </View>
-                      <View>
-                        <Text style={styles.selectedMethodTitle}>Credit/Debit Card</Text>
-                        <Text style={styles.selectedMethodSubtitle}>Powered by Stripe • 2.9% fee</Text>
-                      </View>
-                    </View>
-                    <CardInputForm onCardChange={setCardData} disabled={isProcessing} />
-                  </View>
-                )}
-
                 {paymentStep === 'input' && (selectedPaymentMethod === 'bank_transfer' || selectedPaymentMethod === 'same_day_ach') && (
                   <View style={styles.paymentInputSection}>
                     <TouchableOpacity
@@ -842,8 +805,6 @@ export default function WalletScreen() {
                         {selectedPaymentMethod === 'fednow' && 'Funds transfer instantly via Federal Reserve FedNow network. Zero fees.'}
                         {selectedPaymentMethod === 'rtp' && 'Real-Time Payments network. Funds arrive in seconds. Just $0.25 flat.'}
                         {selectedPaymentMethod === 'usdc' && 'Transfer USDC stablecoin. Near-instant on-chain settlement. $0.01 gas.'}
-                        {selectedPaymentMethod === 'apple_pay' && 'You will be redirected to Apple Pay to complete payment'}
-                        {selectedPaymentMethod === 'google_pay' && 'You will be redirected to Google Pay to complete payment'}
                         {selectedPaymentMethod === 'paypal' && 'You will be redirected to PayPal to complete payment'}
                       </Text>
                     </View>
@@ -912,9 +873,7 @@ export default function WalletScreen() {
                       </View>
                     ) : (
                       <Text style={styles.confirmButtonText}>
-                        {selectedPaymentMethod === 'apple_pay' ? 'Pay with Apple Pay' :
-                         selectedPaymentMethod === 'google_pay' ? 'Pay with Google Pay' :
-                         selectedPaymentMethod === 'paypal' ? 'Continue to PayPal' :
+                        {selectedPaymentMethod === 'paypal' ? 'Continue to PayPal' :
                          selectedPaymentMethod === 'wire' ? 'Get Wire Instructions' :
                          `Add ${fundAmount ? formatCurrencyWithDecimals(parseFloat(fundAmount)) : '$0.00'}`}
                       </Text>
