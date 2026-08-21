@@ -1,0 +1,94 @@
+name: IVX 112 Full App 4-Phase Mission
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - 'qa/autonomous/ivx-full-app-4phase-112-mission.json'
+      - '.github/workflows/ivx-112-full-app-4phase.yml'
+
+permissions:
+  contents: write
+
+env:
+  API_BASE: https://api.ivxholding.com
+  MISSION_FILE: qa/autonomous/ivx-full-app-4phase-112-mission.json
+  IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+  IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+
+concurrency:
+  group: ivx-112-full-app-4phase
+  cancel-in-progress: false
+
+jobs:
+  execute:
+    name: Execute 112 real app audit tasks across 4 phases
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify mission and live fleet
+        shell: bash
+        run: |
+          set -euo pipefail
+          SYSTEM_KEY="${IVX_AI_SYSTEM_SECRET:-${IVX_SYSTEM_SECRET:-}}"
+          test -n "$SYSTEM_KEY"
+          echo "::add-mask::$SYSTEM_KEY"
+          echo "SYSTEM_KEY=$SYSTEM_KEY" >> "$GITHUB_ENV"
+          test "$(jq '.agentCount' "$MISSION_FILE")" = 112
+          test "$(jq '.phaseCount' "$MISSION_FILE")" = 4
+          test "$(jq '.tasks | length' "$MISSION_FILE")" = 112
+          curl -fsS --max-time 30 "${API_BASE}/version" -o /tmp/version.json
+          curl -fsS --max-time 30 "${API_BASE}/api/ivx/agents" -o /tmp/agents.json
+          test "$(jq -r '.ok // false' /tmp/agents.json)" = true
+          test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
+          test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)" = 112
+          jq -r '.agents | sort_by(.agentNumber)[] | [.agentNumber,.agentId,.name] | @tsv' /tmp/agents.json > /tmp/agents.tsv
+          jq -r '.commit // empty' /tmp/version.json > /tmp/live-sha
+          test -s /tmp/live-sha
+          echo "LIVE_SHA=$(cat /tmp/live-sha)" >> "$GITHUB_ENV"
+          echo 'fleet_sync_verified=112 mission_tasks=112 phases=4'
+
+      - name: Run phase 1 agents 1-28
+        env: { PHASE: '1' }
+        run: bash .github/scripts/ivx-run-4phase-mission.sh
+      - name: Run phase 2 agents 29-56
+        env: { PHASE: '2' }
+        run: bash .github/scripts/ivx-run-4phase-mission.sh
+      - name: Run phase 3 agents 57-84
+        env: { PHASE: '3' }
+        run: bash .github/scripts/ivx-run-4phase-mission.sh
+      - name: Run phase 4 agents 85-112
+        env: { PHASE: '4' }
+        run: bash .github/scripts/ivx-run-4phase-mission.sh
+
+      - name: Build mission certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence/autonomous
+          jq -s 'add | sort_by(.agentNumber)' /tmp/ivx-4phase/phase-*.json > qa/evidence/autonomous/ivx-112-full-app-4phase-results.json
+          total=$(jq 'length' qa/evidence/autonomous/ivx-112-full-app-4phase-results.json)
+          passed=$(jq '[.[] | select(.ok == true)] | length' qa/evidence/autonomous/ivx-112-full-app-4phase-results.json)
+          failed=$((total-passed))
+          evidence=$(jq '[.[] | select((.sourceReference // "") != "" and (.toolResultId // "") != "")] | length' qa/evidence/autonomous/ivx-112-full-app-4phase-results.json)
+          jq -n --arg mission 'IVX-FULL-APP-4PHASE-112-2026-08-21' --arg liveSha "$LIVE_SHA" --arg controllerSha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --argjson total "$total" --argjson passed "$passed" --argjson failed "$failed" --argjson evidence "$evidence" '{mission:$mission,liveSha:$liveSha,controllerSha:$controllerSha,githubRunId:$runId,total:$total,passed:$passed,failed:$failed,evidence:$evidence,ok:($total==112 and $failed==0 and $evidence==112),certificateRule:"112/112 runs must succeed and each must contain sourceReference + toolResultId"}' > qa/evidence/autonomous/ivx-112-full-app-4phase-certificate.json
+          cat qa/evidence/autonomous/ivx-112-full-app-4phase-certificate.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ivx-112-full-app-4phase-${{ github.run_id }}
+          path: |
+            qa/evidence/autonomous/ivx-112-full-app-4phase-results.json
+            qa/evidence/autonomous/ivx-112-full-app-4phase-certificate.json
+          if-no-files-found: error
+
+      - name: Enforce truth gate
+        run: |
+          set -euo pipefail
+          test "$(jq -r '.ok' qa/evidence/autonomous/ivx-112-full-app-4phase-certificate.json)" = true
+          echo 'IVX_112_FULL_APP_4PHASE=PASS'
