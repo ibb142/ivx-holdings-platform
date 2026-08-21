@@ -421,7 +421,7 @@ function GlobalReach() {
 function ReferralCodeCard({ onCopy, onShare }: { onCopy: () => void; onShare: () => void }) {
   return (
     <View style={s.codeCard}>
-      <Text style={s.codeLabel}>Your Referral Code</Text>
+      <Text style={s.codeLabel}>IVX Community Invite Code</Text>
       <View style={s.codeRow}>
         <Text style={s.codeText}>{REFERRAL_CODE}</Text>
         <TouchableOpacity style={s.codeCopyBtn} onPress={onCopy}>
@@ -465,8 +465,8 @@ export default function ViralGrowthScreen() {
     try {
       if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       await Share.share({
-        title: 'Join IVX Holdings — Get $25 Free',
-        message: `I'm investing in tokenized real estate on IVX Holdings and earning 14.5% annually. Join with my code ${REFERRAL_CODE} and get $25 in free shares!\n\nhttps://ivxholding.com/invite/${REFERRAL_CODE}`});
+        title: 'IVX Holdings — Real-Estate Investing',
+        message: `I'm exploring real-estate investing with IVX Holdings. Review the live deals and disclosures: https://ivxholding.com`});
       console.log('[ViralGrowth] Share dialog opened');
     } catch (e) {
       console.log('[ViralGrowth] Share failed:', e);

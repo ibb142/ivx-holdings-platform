@@ -498,6 +498,28 @@
   }
 
   async function requestAiResponse(userText) {
+    // 1) Live backend AI chat (/api/public/chat) — the production AI gateway.
+    try {
+      var backend = getBackendUrl();
+      if (backend) {
+        var chatRes = await fetch(backend.replace(/\/+$/, '') + '/api/public/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: userText })
+        });
+        if (chatRes.ok) {
+          var chatData = await chatRes.json();
+          if (chatData && chatData.answer) {
+            console.log('[IVX Landing Chat] AI response from live gateway');
+            return chatData.answer;
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[IVX Landing Chat] Live gateway request failed:', error && error.message ? error.message : error);
+    }
+
+    // 2) Supabase edge function fallback.
     var client = getClient();
 
     if (client && client.functions && typeof client.functions.invoke === 'function') {

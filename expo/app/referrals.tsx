@@ -40,49 +40,9 @@ import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import { EmptyState } from '@/components/ivx';
 
-const mockUserReferrals: Referral[] = [
-  {
-    id: 'ref-1',
-    referrerId: 'current-user',
-    referrerName: 'You',
-    referrerEmail: 'you@email.com',
-    referredEmail: 'mike.johnson@email.com',
-    referredName: 'Mike Johnson',
-    referredId: 'user-045',
-    status: 'invested',
-    referralCode: 'IVXHOLDINGS-INVITE',
-    reward: 25,
-    rewardPaid: true,
-    signedUpAt: '2025-01-10T14:00:00Z',
-    investedAt: '2025-01-15T10:00:00Z',
-    investmentAmount: 2500,
-    createdAt: '2025-01-08T09:00:00Z'},
-  {
-    id: 'ref-2',
-    referrerId: 'current-user',
-    referrerName: 'You',
-    referrerEmail: 'you@email.com',
-    referredEmail: 'sarah.williams@email.com',
-    referredName: 'Sarah Williams',
-    referredId: 'user-052',
-    status: 'signed_up',
-    referralCode: 'IVXHOLDINGS-INVITE',
-    reward: 25,
-    rewardPaid: false,
-    signedUpAt: '2025-01-20T16:00:00Z',
-    createdAt: '2025-01-18T11:00:00Z'},
-  {
-    id: 'ref-3',
-    referrerId: 'current-user',
-    referrerName: 'You',
-    referrerEmail: 'you@email.com',
-    referredEmail: 'tom.brown@email.com',
-    status: 'pending',
-    referralCode: 'IVXHOLDINGS-INVITE',
-    reward: 25,
-    rewardPaid: false,
-    createdAt: '2025-01-24T08:00:00Z'},
-];
+// Production shows ONLY real referral data from the database.
+// No mock referrals, no fallback invite code — an honest empty state is
+// rendered when the authenticated member has no referral record yet.
 
 export default function ReferralsScreen() {
   // Realtime: invalidate on DB changes
@@ -110,12 +70,12 @@ export default function ReferralsScreen() {
       return { success: true };
     }});
 
-  const referrals = (referralsQuery.data?.referrals as Referral[] | undefined) ?? mockUserReferrals;
+  const referrals = (referralsQuery.data?.referrals as Referral[] | undefined) ?? [];
   const [inviteEmail, setInviteEmail] = useState('');
   const [isSending, setIsSending] = useState(false);
   
-  const referralCode = referralsQuery.data?.code ?? 'IVXHOLDINGS-INVITE';
-  const referralLink = `https://ivxholding.com/join?ref=${referralCode}`;
+  const referralCode = referralsQuery.data?.code ?? null;
+  const referralLink = referralCode ? `https://ivxholding.com/join?ref=${referralCode}` : null;
   
   const appLinks = {
     appStore: 'https://apps.apple.com/app/ipx-holding',
@@ -134,7 +94,9 @@ export default function ReferralsScreen() {
       year: 'numeric'});
   };
 
-  const shareMessage = `🏠 I'm investing in real estate with IVX HOLDINGS and you should too! Start with just $100 and earn passive income from premium properties.\n\n🎁 Sign up with my code and we BOTH get $25 in FREE project shares!\n\nUse my code ${referralCode} to get started: ${referralLink}\n\n📲 Download IVXHOLDINGS App:\n🍎 iOS: ${appLinks.appStore}\n🤖 Android: ${appLinks.playStore}\n🌐 Web: ${appLinks.website}`;
+  const shareMessage = referralCode && referralLink
+    ? `I'm exploring real-estate investing with IVX Holdings. Sign up and review the live deals: ${referralLink}\n\nApp: ${appLinks.playStore} \u00b7 Web: ${appLinks.website}`
+    : `I'm exploring real-estate investing with IVX Holdings. Review the live deals: ${appLinks.website}`;
 
   const shareViaWhatsApp = useCallback(async () => {
     const encodedMessage = encodeURIComponent(shareMessage);
@@ -185,7 +147,7 @@ export default function ReferralsScreen() {
   }, [shareMessage]);
 
   const shareViaFacebook = useCallback(async () => {
-    const encodedLink = encodeURIComponent(referralLink);
+    const encodedLink = encodeURIComponent(referralLink ?? appLinks.website);
     const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodedLink}&quote=${encodeURIComponent(shareMessage)}`;
     
     try {
@@ -194,14 +156,22 @@ export default function ReferralsScreen() {
       console.error('Error opening Facebook:', error);
       Alert.alert('Error', 'Could not open Facebook.');
     }
-  }, [shareMessage, referralLink]);
+  }, [shareMessage, referralLink, appLinks.website]);
 
   const copyCode = useCallback(async () => {
+    if (!referralCode) {
+      Alert.alert('No referral code yet', 'Your referral code will appear here once it is assigned to your account.');
+      return;
+    }
     await Clipboard.setStringAsync(referralCode);
     Alert.alert('Copied!', `Referral code "${referralCode}" copied to clipboard`);
   }, [referralCode]);
 
   const copyLink = useCallback(async () => {
+    if (!referralLink) {
+      Alert.alert('No referral link yet', 'Your referral link will appear here once it is assigned to your account.');
+      return;
+    }
     await Clipboard.setStringAsync(referralLink);
     Alert.alert('Copied!', 'Referral link copied to clipboard');
   }, [referralLink]);

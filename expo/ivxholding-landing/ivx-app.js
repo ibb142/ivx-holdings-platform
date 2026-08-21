@@ -1225,18 +1225,24 @@
   // ══════════════════════════════════════════════════════════════════════════════
   // LIVE ACTIVITY TICKER
   // ══════════════════════════════════════════════════════════════════════════════
-  var LIVE_ACTIVITY = [
-    { name: 'Investor', action: 'requested intake review', location: 'New York', time: '2m ago' },
-    { name: 'Investor', action: 'reviewed a live deal summary', location: 'London', time: '5m ago' },
-    { name: 'Investor', action: 'booked a diligence follow-up', location: 'Miami', time: '8m ago' },
-    { name: 'Investor', action: 'completed phone verification', location: 'Dubai', time: '12m ago' },
-    { name: 'Investor', action: 'requested allocation details', location: 'Singapore', time: '15m ago' },
-    { name: 'Investor', action: 'submitted tax residency details', location: 'Madrid', time: '18m ago' },
-    { name: 'Investor', action: 'requested management contact', location: 'Toronto', time: '22m ago' },
-    { name: 'Investor', action: 'reviewed the trust disclosures', location: 'Sydney', time: '25m ago' },
-    { name: 'Investor', action: 'opened the member access overview', location: 'Riyadh', time: '28m ago' },
-    { name: 'Investor', action: 'started the full investor intake', location: 'Berlin', time: '31m ago' },
-  ];
+  // Ticker entries are populated ONLY from real, live deal data (see
+  // setTickerFromDeals, called from renderDeals). No canned activity items.
+  var LIVE_ACTIVITY = [];
+  function setTickerFromDeals(deals) {
+    if (!Array.isArray(deals)) return;
+    LIVE_ACTIVITY = deals.filter(function (d) { return d && (d.title || d.project_name); }).map(function (d) {
+      var roi = Number(d.expected_roi || d.expectedROI || 0);
+      var loc = [d.city, d.state].filter(Boolean).join(', ');
+      return {
+        name: String(d.title || d.project_name),
+        action: roi > 0 ? 'live deal \u00b7 ' + roi + '% projected ROI' : 'live deal',
+        location: loc || 'IVX Holdings',
+        time: String(d.status || 'open')
+      };
+    });
+    tickerIndex = 0;
+    updateTicker();
+  }
   var tickerIndex = 0;
   function updateTicker() {
     var tickerEl = document.getElementById('live-ticker');
@@ -1287,6 +1293,9 @@
         if (el) el.textContent = data.total.toLocaleString();
         var mc = document.getElementById('funnel-member-count');
         if (mc) mc.textContent = data.total.toLocaleString() + '+';
+        // Hero stat: real intake count from the same live source.
+        var statInv = document.getElementById('stat-investors');
+        if (statInv) statInv.textContent = data.total.toLocaleString() + '+';
       }
     } catch(e) {}
   }
@@ -2120,11 +2129,14 @@
     }
 
     function getDealMinInvestment(deal, trustInfo) {
+      // Only a real per-deal minimum may render. No default: a missing
+      // minimum shows the honest "Not available" state instead of a
+      // fabricated figure.
       var minInvestment = Number(
         deal.minInvestment || deal.min_investment || deal.minimum_investment ||
-        trustInfo.minInvestment || trustInfo.min_investment || 50
+        trustInfo.minInvestment || trustInfo.min_investment || 0
       );
-      return !isNaN(minInvestment) && minInvestment > 0 ? minInvestment : 50;
+      return !isNaN(minInvestment) && minInvestment > 0 ? minInvestment : 0;
     }
 
     function getDealFractionalSharePrice(deal, trustInfo, minInvestment) {
@@ -2553,9 +2565,9 @@
         propertyValue: 2500000,
         sale_price: 2500000,
         expectedROI: 25,
-        min_investment: 50,
-        fractional_share_price: 50,
-        ownership_text: '0.0020% minimum ownership',
+        min_investment: 0,
+        fractional_share_price: 0,
+        ownership_text: '',
         distributionFrequency: 'Monthly',
         photos: PEREZ_RESIDENCE_FALLBACK_PHOTOS,
         published: true,
@@ -2566,7 +2578,7 @@
           insuranceCoverage: true,
           escrowProtected: true,
           permitStatus: 'approved',
-          ownershipLabel: '0.0020% minimum ownership'
+          ownershipLabel: ''
         }
       },
       {
@@ -2580,9 +2592,9 @@
         propertyValue: 1400000,
         sale_price: 1400000,
         expectedROI: 30,
-        min_investment: 50,
-        fractional_share_price: 50,
-        ownership_text: '0.0036% minimum ownership',
+        min_investment: 0,
+        fractional_share_price: 0,
+        ownership_text: '',
         distributionFrequency: 'Monthly',
         photos: CASA_ROSARIO_FALLBACK_PHOTOS,
         published: true,
@@ -2593,7 +2605,7 @@
           insuranceCoverage: true,
           escrowProtected: true,
           permitStatus: 'approved',
-          ownershipLabel: '0.0036% minimum ownership'
+          ownershipLabel: ''
         }
       },
       {
@@ -2607,9 +2619,9 @@
         propertyValue: 400000,
         sale_price: 400000,
         expectedROI: 9.5,
-        min_investment: 50,
-        fractional_share_price: 50,
-        ownership_text: '0.0125% minimum ownership',
+        min_investment: 0,
+        fractional_share_price: 0,
+        ownership_text: '',
         distributionFrequency: 'Monthly',
         photos: JACKSONVILLE_PRIME_FALLBACK_PHOTOS,
         published: true,
@@ -2619,7 +2631,7 @@
           titleVerified: true,
           insuranceCoverage: true,
           escrowProtected: true,
-          ownershipLabel: '0.0125% minimum ownership'
+          ownershipLabel: ''
         }
       }
     ];
@@ -2885,6 +2897,11 @@
       try {
         var grid = document.getElementById('properties-grid');
         var countEl = document.getElementById('properties-live-count');
+        // Real published-deal count feeds the hero stat (no hard-coded number).
+        var statAum = document.getElementById('stat-aum');
+        if (statAum && Array.isArray(deals)) statAum.textContent = String(deals.length);
+        // Ticker content comes from the same real deal data.
+        setTickerFromDeals(deals);
         if (!grid) {
           console.warn('[IVX Deals] properties-grid missing — skipping render');
           return;
