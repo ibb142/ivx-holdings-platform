@@ -8,7 +8,6 @@ import { buildSeniorDeveloperNarrative } from './ivx-senior-developer-narrative'
 import { createExecutionRecord } from './ivx-execution-record';
 
 describe('IVX Response Control — 6 Tests', () => {
-  // TEST 1: Ask for a feature fix but make no code changes.
   test('TEST 1: feature fix with no code change must NOT report VERIFIED', () => {
     const taskType = classifyTaskType('Fix chat loading scroll to latest');
     expect(['CODE_FIX', 'UI_FIX']).toContain(taskType);
@@ -39,7 +38,6 @@ describe('IVX Response Control — 6 Tests', () => {
     expect(['DEPLOYED_ONLY', 'NOT_COMPLETED']).toContain(result.verdict);
   });
 
-  // TEST 2: Deploy unchanged code.
   test('TEST 2: deploy unchanged code may report DEPLOYED_ONLY, not FIXED or VERIFIED', () => {
     const result = validateCompletion({
       taskType: 'CODE_FIX',
@@ -65,13 +63,11 @@ describe('IVX Response Control — 6 Tests', () => {
       verifiedAt: null,
     });
     expect(result.verdict).toBe('DEPLOYED_ONLY');
-    // Narrative must say NOT implemented.
     const record = createExecutionRecord({ task_id: 't', task_type: 'CODE_FIX', user_request: 'Fix chat' });
     const narrative = buildSeniorDeveloperNarrative({ record, verdict: result.verdict, verdictReason: result.reasons.join('; ') });
     expect(narrative.text).toContain('NOT implemented');
   });
 
-  // TEST 3: Run /health successfully while the requested UI defect remains.
   test('TEST 3: health passed but feature verification failed — must state feature verification failed', () => {
     const result = validateCompletion({
       taskType: 'UI_FIX',
@@ -96,15 +92,13 @@ describe('IVX Response Control — 6 Tests', () => {
       completedAt: '',
       verifiedAt: null,
     });
-    // UI_FIX with no code change → DEPLOYED_ONLY or NOT_COMPLETED (not VERIFIED).
     expect(result.verdict).not.toBe('VERIFIED');
     const record = createExecutionRecord({ task_id: 't', task_type: 'UI_FIX', user_request: 'Fix scroll' });
     const narrative = buildSeniorDeveloperNarrative({ record, verdict: result.verdict, verdictReason: result.reasons.join('; ') });
     expect(narrative.text.toLowerCase()).toMatch(/not implemented|not completed|feature verification/);
   });
 
-  // TEST 4: Make a real code change and fail device QA.
-  test('TEST 4: real code change but device QA failed — must report PARTIAL/NOT_COMPLETED, not complete', () => {
+  test('TEST 4: real code change but device QA failed — must report NOT_COMPLETED, not complete', () => {
     const result = validateCompletion({
       taskType: 'CODE_FIX',
       requestedOutcome: 'Fix chat',
@@ -122,24 +116,17 @@ describe('IVX Response Control — 6 Tests', () => {
       deployId: 'dep-1',
       productionHealthOk: true,
       commitMatch: true,
-      featureVerificationOk: false, // device QA failed
+      featureVerificationOk: false,
       error: null,
       startedAt: '',
       completedAt: '',
       verifiedAt: null,
     });
-    // Files changed + tests + deploy + health, but feature verification failed.
-    // The validator's general path returns VERIFIED if all gates pass, but the
-    // featureVerificationOk=false must prevent VERIFIED in the state machine.
-    // The validator does not check featureVerificationOk on the general path,
-    // so this test documents the contract: the state machine guards VERIFIED.
-    // The validator returns VERIFIED here, but assertCanTransition would reject
-    // the transition to VERIFIED because featureVerificationOk=false.
-    expect(result.ok).toBe(true); // validator says evidence is sufficient
-    // But the state machine would block VERIFIED — documented.
+    expect(result.ok).toBe(false);
+    expect(result.verdict).toBe('NOT_COMPLETED');
+    expect(result.reasons.join(' ')).toMatch(/behavior failed|feature verification/i);
   });
 
-  // TEST 5: Complete code, tests, deployment, and production QA.
   test('TEST 5: complete evidence → VERIFIED with exact evidence', () => {
     const result = validateCompletion({
       taskType: 'CODE_FIX',
@@ -168,7 +155,6 @@ describe('IVX Response Control — 6 Tests', () => {
     expect(result.ok).toBe(true);
   });
 
-  // TEST 6: Ask for a technical explanation.
   test('TEST 6: technical explanation → INVESTIGATION, no fabricated execution', () => {
     const taskType = classifyTaskType('Explain why the chat opens on old messages');
     expect(taskType).toBe('INVESTIGATION');
@@ -176,7 +162,6 @@ describe('IVX Response Control — 6 Tests', () => {
     record.status = 'VERIFIED';
     record.root_cause = 'The DB query loaded the full history ascending with no limit, so the FlatList had to lay out hundreds of items before scroll-to-latest could anchor.';
     const narrative = buildSeniorDeveloperNarrative({ record, verdict: 'VERIFIED', verdictReason: 'investigation complete' });
-    // Must not claim fixed.
     expect(narrative.inventedActionsDetected).toEqual([]);
     expect(narrative.text).toContain('Investigation tasks do not require a code change');
   });
