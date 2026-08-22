@@ -44,11 +44,11 @@ async function makeIsolatedRepo(label: string): Promise<{
 describe('IVX Autonomous Coder — pilot sentinel', () => {
   it('exposes the pilot label and target', () => {
     const sentinel = describePilotSentinel();
-    expect(sentinel.label).toBe('AUTONOMOUS-CODER-PILOT-1');
-    expect(sentinel.target).toBe('AUTONOMOUS-CODER-PILOT-2');
+    expect(sentinel.label).toBe('AUTONOMOUS-CODER-PILOT-2');
+    expect(sentinel.target).toBe('AUTONOMOUS-CODER-PILOT-3');
     expect(sentinel.file).toBe('backend/services/ivx-autonomous-coder-pilot.ts');
-    expect(PILOT_LABEL).toBe('AUTONOMOUS-CODER-PILOT-1');
-    expect(PILOT_LABEL_TARGET).toBe('AUTONOMOUS-CODER-PILOT-2');
+    expect(PILOT_LABEL).toBe('AUTONOMOUS-CODER-PILOT-2');
+    expect(PILOT_LABEL_TARGET).toBe('AUTONOMOUS-CODER-PILOT-3');
   });
 });
 
