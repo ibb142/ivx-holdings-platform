@@ -1902,9 +1902,20 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
   const busyOwners = new Set<string>();
   const nowMs = Date.now();
   for (const j of queue.jobs) {
+    if (claimedJobIds.has(j.jobId)) {
+      // Claimed jobs are executing (even before their status flips) — block
+      // their owner so concurrent drains never double-start one owner.
+      busyOwners.add(j.ownerId);
+      continue;
+    }
+    // Unclaimed QUEUED jobs are NOT executing: they must never mark their own
+    // owner busy. Previously a fresh queued job (age < STALE_JOB_TIMEOUT_MS)
+    // dead-locked itself and every job sat at QUEUED for a full stale window
+    // (~30 min) before the drain could claim it.
+    if (j.status === 'queued') continue;
     if (!ACTIVE_STATUSES.has(j.status)) continue;
     const heartbeatAge = nowMs - Date.parse(j.lastHeartbeatAt ?? j.createdAt);
-    if (claimedJobIds.has(j.jobId) || (Number.isFinite(heartbeatAge) && heartbeatAge < STALE_JOB_TIMEOUT_MS)) {
+    if (Number.isFinite(heartbeatAge) && heartbeatAge < STALE_JOB_TIMEOUT_MS) {
       busyOwners.add(j.ownerId);
     }
   }
