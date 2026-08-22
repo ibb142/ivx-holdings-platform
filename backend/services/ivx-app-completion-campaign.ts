@@ -66,7 +66,9 @@ export const APP_COMPLETION_AUDIT_ITEMS: readonly AuditItem[] = [
     problem: 'All 112 watchdog agent runs rejected (cycle_total=112 success=0 failed=112). The CI secret IVX_AI_SYSTEM_SECRET does not match the runtime owner key, so POST /api/ivx/agents/:id/run returns 401 and no execution is persisted.',
     expectedResult: 'Watchdog cycle reaches 112/112 ok=true with persisted execution evidence.',
     evidence: 'CI run 32537173864 (Fleet Watchdog): cycle_total=112 success=0 failed=112 evidence=0; live /api/ivx/agents/real-status shows failed=0 — watchdog runs never reached persistence.',
-    ownerGate: true,
+    // Owner gate lifted 2026-08-22: explicit owner approval recorded in session
+    // ("I APPROVE owner gates #57 agent-cycle-401 and #58 owner-binding-15min").
+    ownerGate: false,
     priority: 'P0',
   },
   {
@@ -77,7 +79,8 @@ export const APP_COMPLETION_AUDIT_ITEMS: readonly AuditItem[] = [
     problem: '15-Minute Agent Control workflow fails at "Resolve owner/system binding" — same CI/runtime owner-key mismatch root cause as the watchdog.',
     expectedResult: 'Owner binding resolves and the 15-minute control cycle succeeds.',
     evidence: 'CI run 32537686027 failure at step "Resolve owner/system binding without exposing values".',
-    ownerGate: true,
+    // Owner gate lifted 2026-08-22: same explicit owner approval as #57.
+    ownerGate: false,
     priority: 'P0',
   },
   {
