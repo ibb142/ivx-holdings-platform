@@ -31,11 +31,16 @@ describe('watchdog green runtime invariants', () => {
 
   test('security middleware keeps anonymous 100/min limit and adds owner-key bypass', async () => {
     const src = await Bun.file(new URL('../services/ivx-security-middleware.ts', import.meta.url)).text();
-    // Anonymous traffic keeps the exact same limit.
-    expect(src).toContain('checkRateLimit(ipRateStore, ip, 60 * 1000, 100)');
+    // Anonymous (non-read-probe) traffic keeps the exact same 100/min limit.
+    expect(src).toContain('isCheapReadProbe ? 600 : 100');
+    expect(src).toContain('checkRateLimit(rateStore, ip, 60 * 1000, rateMax)');
     // Trusted fleet traffic is authenticated against the active system secret.
     expect(src).toContain('isTrustedOwnerKeyRequest');
     expect(src).toContain('resolveActiveIVXSystemSecret');
     expect(src).toContain("c.req.header('x-ivx-owner-key')");
+    // Cheap public read probes get a dedicated 600/min bucket (fleet cycles make
+    // 112 contract GETs + verify probes from one runner IP).
+    expect(src).toContain('readProbeRateStore');
+    expect(src).toContain('isCheapReadProbe ? 600 : 100');
   });
 });

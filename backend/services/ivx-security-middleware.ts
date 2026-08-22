@@ -31,6 +31,7 @@ interface RateEntry {
 }
 
 const ipRateStore = new Map<string, RateEntry>();
+const readProbeRateStore = new Map<string, RateEntry>();
 const userRateStore = new Map<string, RateEntry>();
 const violationStore = new Map<string, { count: number; lastViolation: number }>();
 
@@ -57,6 +58,11 @@ function cleanupStores(): void {
   for (const [key, v] of violationStore) {
     if (now - v.lastViolation > 60 * 60 * 1000) {
       violationStore.delete(key);
+    }
+  }
+  for (const [key, entry] of readProbeRateStore) {
+    if (now - entry.firstRequest > 60 * 60 * 1000 && !entry.blocked) {
+      readProbeRateStore.delete(key);
     }
   }
 }
@@ -264,8 +270,15 @@ export async function securityMiddleware(c: Context, next: Next): Promise<Respon
     });
   }
 
-  // General rate limit: 100 requests per minute per IP
-  const rateCheck = checkRateLimit(ipRateStore, ip, 60 * 1000, 100);
+  // Cheap public read probes (agent registry/contract reads, health, version)
+  // use a dedicated 600/min bucket so 112-agent CI fleet cycles from a single
+  // runner IP are never throttled. All other traffic keeps 100/min.
+  const isCheapReadProbe = method === 'GET' && (
+    path === '/health' || path === '/version' || path.startsWith('/api/ivx/agents')
+  );
+  const rateStore = isCheapReadProbe ? readProbeRateStore : ipRateStore;
+  const rateMax = isCheapReadProbe ? 600 : 100;
+  const rateCheck = checkRateLimit(rateStore, ip, 60 * 1000, rateMax);
   if (!rateCheck.allowed) {
     recordViolation(ip, 'rate_limit_exceeded');
     await logSecurityEvent({
