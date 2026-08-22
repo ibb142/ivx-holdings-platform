@@ -1,6 +1,7 @@
 import { randomBytes, createCipheriv, createDecipheriv, createHash } from 'node:crypto';
 import { Buffer } from 'node:buffer';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions, type IVXOwnerRequestContext } from './owner-only';
+import { invalidateIVXSystemSecretCache } from '../services/ivx-system-secret';
 
 const DEPLOYMENT_MARKER = 'ivx-owner-variables-2026-05-08t2305z-rest-storage';
 const RENDER_API_BASE_URL = 'https://api.render.com/v1';
@@ -29,6 +30,7 @@ const OWNER_VARIABLES = [
   { name: 'IVX_RENDER_API_KEY', provider: 'render', required: false, secret: true, description: 'Alternative Render API key alias (checked when RENDER_API_KEY is absent).' },
   { name: 'AI_GATEWAY_API_KEY', provider: 'ai', required: false, secret: true, description: 'Alternative AI gateway key alias (checked when IVX_AI_GATEWAY_KEY is absent).' },
   { name: 'SUPABASE_ACCESS_TOKEN', provider: 'supabase', required: false, secret: true, description: 'Supabase Management API token for database migrations.' },
+  { name: 'IVX_AI_SYSTEM_SECRET', provider: 'security', required: false, secret: true, description: 'IVX AI system owner key authorizing agent fleet control. Owner-saved value takes priority over the environment.' },
 ] as const;
 
 type OwnerVariableMetadata = typeof OWNER_VARIABLES[number];
@@ -1413,6 +1415,9 @@ export async function handleIVXOwnerVariablesSaveRequest(request: Request): Prom
     const metadata = variableMetadataByName.get(name);
     if (!metadata) throw new Error(`Unsupported variable name: ${name}.`);
     const row = await saveStoredVariable(ownerContext, name, value);
+    if (name === 'IVX_AI_SYSTEM_SECRET') {
+      invalidateIVXSystemSecretCache();
+    }
     await auditOwnerVariableAction({ ownerContext, variableName: name, provider: metadata.provider, action: 'save', result: 'saved', details: { status: 'saved' } });
     return ownerOnlyJson({
       ok: true,
