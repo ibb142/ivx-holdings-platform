@@ -14,6 +14,7 @@ jobs:
       RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
       IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
       IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+      IVX_OWNER_TOKEN: ${{ secrets.IVX_OWNER_TOKEN }}
       DEFAULT_RENDER_SERVICE_ID: srv-d7t9ivreo5us73ftose0
       API_BASE: https://api.ivxholding.com
     steps:
@@ -62,10 +63,15 @@ jobs:
         run: |
           set -euo pipefail
           SYSTEM_KEY="${IVX_AI_SYSTEM_SECRET:-${IVX_SYSTEM_SECRET:-}}"
+          AUTH_ARGS=()
+          if [ -n "${IVX_OWNER_TOKEN:-}" ]; then
+            AUTH_ARGS=(-H "Authorization: Bearer ${IVX_OWNER_TOKEN}")
+          fi
           HTTP=$(curl -sS -m 40 -o /tmp/ivx-render-bridge.json -w '%{http_code}' \
             -X POST "${API_BASE}/api/ivx/developer-deploy/action" \
             -H "Content-Type: application/json" \
             -H "X-IVX-System-Key: ${SYSTEM_KEY}" \
+            "${AUTH_ARGS[@]}" \
             --data "{\"action\":\"render_trigger_deploy\",\"input\":{\"serviceId\":\"${SERVICE_ID}\",\"commitId\":\"${GITHUB_SHA}\"},\"confirm\":true,\"confirmText\":\"CONFIRM_IVX_RENDER_DEPLOY\",\"reason\":\"GitHub exact-head production certification\"}" || true)
           case "$HTTP" in
             200|201|202) ;;
