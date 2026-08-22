@@ -84,6 +84,19 @@ export function buildFreshCompletionCampaignState(): CompletionCampaignState {
   if (ALL_ENTERPRISE_AGENTS.length !== 112) {
     throw new Error(`Expected 112 agents, found ${ALL_ENTERPRISE_AGENTS.length}.`);
   }
+  // 12-specialist invariant: the specialist tier (agents 1-12) must present 12
+  // DISTINCT roles — one per specialist. Losing this invariant would let the
+  // campaign run with duplicated or missing specialist roles (CI hard gate:
+  // ivx-autonomy-rork-guard).
+  const roles = ALL_ENTERPRISE_AGENTS
+    .filter((a) => a.agentNumber >= 1 && a.agentNumber <= 12)
+    .map((a) => a.role);
+  if (roles.length !== 12) {
+    throw new Error(`Expected 12 specialist agents, found ${roles.length}.`);
+  }
+  if (new Set(roles).size !== 12) {
+    throw new Error('Specialist invariant violated: agents 1-12 must have 12 distinct roles.');
+  }
   const startedAt = nowIso();
   return {
     marker: IVX_COMPLETION_CAMPAIGN_MARKER,
