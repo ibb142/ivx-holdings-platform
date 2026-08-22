@@ -1,3 +1,4 @@
+// p3-watchdog-ip-throttle: owner-key fleet cycles must bypass per-IP rate limits (PR #220).
 /**
  * IVX Specialist Agent Router — Phase 7
  *
