@@ -738,7 +738,6 @@ export function resetCampaignBootRecoveryForTests(): void {
 
 export function startCampaignDispatcher(): void {
   if (tickTimer) return;
-  void runCampaignBootRecovery().catch(() => {});
   tickTimer = setInterval(() => {
     void tickCampaignDispatcher().catch(() => {});
   }, TICK_INTERVAL_MS);
