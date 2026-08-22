@@ -10,7 +10,7 @@
  *
  * This is intentionally a tiny, side-effect-free module so the pilot is safe.
  */
-export const PILOT_LABEL = 'AUTONOMOUS-CODER-PILOT-1';
+export const PILOT_LABEL = 'AUTONOMOUS-CODER-PILOT-2';
 export const PILOT_LABEL_TARGET = 'AUTONOMOUS-CODER-PILOT-2';
 
 export type PilotSentinel = {
