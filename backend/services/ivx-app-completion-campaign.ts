@@ -19,6 +19,8 @@ import {
   writeDurableJson,
   appendDurableEvent,
 } from './ivx-durable-store';
+import type { CampaignJobRecord, DispatcherAssignmentInput } from './ivx-campaign-dispatcher';
+import { ensureCampaignAssignment } from './ivx-campaign-dispatcher';
 
 export const IVX_APP_COMPLETION_MARKER = 'ivx-app-completion-campaign-2026-08-21';
 
@@ -36,6 +38,7 @@ export type ItemStatus =
   | 'DEPLOYING'
   | 'VERIFYING'
   | 'COMPLETED'
+  | 'BLOCKED'
   | 'FAILED';
 
 /** A real, evidence-backed pending app item from the 2026-08-21 audit. */
@@ -78,17 +81,6 @@ export const APP_COMPLETION_AUDIT_ITEMS: readonly AuditItem[] = [
     priority: 'P0',
   },
   {
-    id: 'p4-cloudfront-invalidation',
-    phase: 'PHASE_4_PRODUCTION',
-    module: 'Landing deploy / AWS',
-    fileOrRoute: '.github/workflows/landing-s3-production-deploy.yml',
-    problem: 'Landing S3 production deploy fails: IAM user Rork1 is not authorized for cloudfront:CreateInvalidation on distribution E1C0DEI0VKCUYN, so deployments cannot be certified.',
-    expectedResult: 'CloudFront invalidation succeeds and the landing deploy workflow passes.',
-    evidence: 'CI run 32537438005: "CloudFront invalidation FAILED: AccessDenied ... no identity-based policy allows the cloudfront:CreateInvalidation action".',
-    ownerGate: true,
-    priority: 'P0',
-  },
-  {
     id: 'p4-apk-artifact-drift',
     phase: 'PHASE_4_PRODUCTION',
     module: 'Android release',
@@ -97,17 +89,6 @@ export const APP_COMPLETION_AUDIT_ITEMS: readonly AuditItem[] = [
     expectedResult: 'Workflow locates the current release APK (version-synced path) and uploads it.',
     evidence: 'CI run 32537438005: "APK not found at /tmp/ivx-holdings-1.10.14.apk — skipping APK upload".',
     ownerGate: false,
-    priority: 'P1',
-  },
-  {
-    id: 'p4-s3-headbucket',
-    phase: 'PHASE_4_PRODUCTION',
-    module: 'Landing deploy / AWS S3',
-    fileOrRoute: '.github/workflows/landing-s3-production-deploy.yml',
-    problem: 'HeadBucket check fails with Unknown UnknownError — S3 credential/region binding issue in the deploy workflow.',
-    expectedResult: 'HeadBucket check passes against the production bucket.',
-    evidence: 'CI run 32537438005: "HeadBucket check failed: Unknown UnknownError".',
-    ownerGate: true,
     priority: 'P1',
   },
   {
@@ -207,11 +188,33 @@ export type AgentAssignment = {
   ownerGate: boolean;
   /** Independent QA agent for IMPLEMENT roles — never the implementing agent itself. */
   qaAgentNumber: number | null;
+  /** For QA roles: the implementing agent this QA waits on. */
+  implementerAgentNumber: number | null;
   status: ItemStatus;
   progress: number;
   currentStep: string;
   lastActivity: string | null;
   evidenceSource: string;
+  // ── Real dispatcher/worker execution state (null when no real job exists) ──
+  workerJobId: string | null;
+  workerStatus: string | null;
+  executionMode: string | null;
+  attempts: number;
+  retryCount: number;
+  startedAt: string | null;
+  lastHeartbeatAt: string | null;
+  finishedAt: string | null;
+  changedFiles: string[];
+  testsRun: boolean;
+  testsPassed: boolean;
+  typecheckPassed: boolean;
+  commitSha: string | null;
+  prNumber: number | null;
+  prUrl: string | null;
+  deployId: string | null;
+  healthOk: boolean | null;
+  error: string | null;
+  blocker: string | null;
 };
 
 export type CampaignControlState = {
@@ -302,6 +305,60 @@ function deriveStatus(
 
 let cachedControl: CampaignControlState | null = null;
 
+/** Default worker/dispatcher fields when no real worker job exists for an assignment. */
+const NO_WORKER_JOB = {
+  workerJobId: null as string | null,
+  workerStatus: null as string | null,
+  executionMode: null as string | null,
+  attempts: 0,
+  retryCount: 0,
+  startedAt: null as string | null,
+  lastHeartbeatAt: null as string | null,
+  finishedAt: null as string | null,
+  changedFiles: [] as string[],
+  testsRun: false,
+  testsPassed: false,
+  typecheckPassed: false,
+  commitSha: null as string | null,
+  prNumber: null as number | null,
+  prUrl: null as string | null,
+  deployId: null as string | null,
+  healthOk: null as boolean | null,
+  error: null as string | null,
+  blocker: null as string | null,
+};
+
+/**
+ * Map a REAL dispatcher job record to the campaign item status.
+ * Every non-QUEUED value is backed by actual worker execution evidence.
+ */
+function statusFromDispatcherRecord(record: CampaignJobRecord): { status: ItemStatus; progress: number; currentStep: string } {
+  switch (record.status) {
+    case 'PENDING_OWNER':
+      return { status: 'PENDING_OWNER', progress: 0, currentStep: record.stage };
+    case 'AWAITING_IMPLEMENT':
+    case 'QUEUED':
+      return { status: 'QUEUED', progress: record.progress, currentStep: record.stage };
+    case 'COMPLETED':
+      return { status: 'COMPLETED', progress: 100, currentStep: record.stage };
+    case 'FAILED':
+      return { status: 'FAILED', progress: 0, currentStep: record.stage };
+    case 'BLOCKED':
+    case 'CANCELLED':
+      return { status: 'BLOCKED', progress: 0, currentStep: record.stage };
+    case 'RUNNING': {
+      const ws = record.workerStatus;
+      if (ws === 'testing') return { status: 'TESTING', progress: record.progress, currentStep: record.stage };
+      if (ws === 'patching') return { status: 'FIXING', progress: record.progress, currentStep: record.stage };
+      if (ws === 'deploying') return { status: 'DEPLOYING', progress: record.progress, currentStep: record.stage };
+      if (ws === 'verifying') return { status: 'VERIFYING', progress: record.progress, currentStep: record.stage };
+      return { status: 'RUNNING', progress: record.progress, currentStep: record.stage };
+    }
+    default:
+      return { status: 'QUEUED', progress: record.progress, currentStep: record.stage };
+  }
+}
+
 const DEFAULT_CONTROL: CampaignControlState = { paused: false, stopped: false, pausedAgents: [], stoppedAgents: [] };
 
 export async function loadControlState(): Promise<CampaignControlState> {
@@ -368,7 +425,53 @@ export async function updateControlState(
  * Per phase: item k → agent (phaseStart + k) IMPLEMENT, agent (phaseStart + itemCount + k) QA,
  * remaining agents get verification duties round-robin. No agent is left without a real duty.
  */
-export function buildAppCompletionCampaign(control?: CampaignControlState): AppCompletionCampaign {
+/**
+ * Build the dispatcher assignment inputs for the whole 112-agent campaign.
+ * IMPLEMENT → code_change on the item's file lane; QA → qa_only gated on the
+ * implement record; VERIFY → read_only verification runs.
+ */
+export function buildDispatcherAssignmentInputs(campaign: AppCompletionCampaign): DispatcherAssignmentInput[] {
+  const inputs: DispatcherAssignmentInput[] = [];
+  for (const a of campaign.assignments) {
+    const waitFor = a.role === 'QA' && a.implementerAgentNumber !== null
+      ? `${a.implementerAgentNumber}:IMPLEMENT:${a.dutyId}`
+      : null;
+    inputs.push({
+      agentNumber: a.agentNumber,
+      agentId: a.agentId,
+      role: a.role,
+      dutyId: a.dutyId,
+      phase: a.phase,
+      module: a.module,
+      laneKey: a.role === 'IMPLEMENT' ? a.fileOrRoute : `${a.role.toLowerCase()}:${a.dutyId}`,
+      executionMode: a.role === 'IMPLEMENT' ? 'code_change' : a.role === 'QA' ? 'qa_only' : 'read_only',
+      ownerGate: a.ownerGate && a.role === 'IMPLEMENT',
+      waitFor,
+      goal: a.assignedTask,
+    });
+  }
+  return inputs;
+}
+
+/**
+ * Idempotently ensure every campaign assignment has a dispatcher record.
+ * Returns the number of assignments synced (records are keyed — no duplicates).
+ */
+export async function syncCampaignAssignmentsToDispatcher(): Promise<number> {
+  await loadControlState();
+  const campaign = buildAppCompletionCampaign();
+  let synced = 0;
+  for (const input of buildDispatcherAssignmentInputs(campaign)) {
+    await ensureCampaignAssignment(input);
+    synced += 1;
+  }
+  return synced;
+}
+
+export function buildAppCompletionCampaign(
+  control?: CampaignControlState,
+  dispatcherRecords?: CampaignJobRecord[],
+): AppCompletionCampaign {
   const ctl = control ?? cachedControl ?? { ...DEFAULT_CONTROL };
   const liveStates = new Map(getAllExecutionStates().map((s) => [s.agentNumber, s]));
   const assignments: AgentAssignment[] = [];
@@ -413,11 +516,13 @@ export function buildAppCompletionCampaign(control?: CampaignControlState): AppC
           expectedResult: item.expectedResult,
           ownerGate: item.ownerGate,
           qaAgentNumber: qaAgent,
+          implementerAgentNumber: null,
           status: s.status,
           progress: s.progress,
           currentStep: s.currentStep,
           lastActivity: liveState.lastSuccessfulRun,
           evidenceSource: item.evidence,
+          ...NO_WORKER_JOB,
         });
       } else if (qaIdx >= 0 && items[qaIdx]) {
         const item = items[qaIdx];
@@ -437,11 +542,13 @@ export function buildAppCompletionCampaign(control?: CampaignControlState): AppC
           expectedResult: `QA PASS only when: ${item.expectedResult}`,
           ownerGate: false,
           qaAgentNumber: null,
+          implementerAgentNumber: implementer,
           status: s.status,
           progress: s.progress,
           currentStep: s.currentStep,
           lastActivity: liveState.lastSuccessfulRun,
           evidenceSource: item.evidence,
+          ...NO_WORKER_JOB,
         });
       } else {
         const duty = duties.length > 0
@@ -463,14 +570,50 @@ export function buildAppCompletionCampaign(control?: CampaignControlState): AppC
           expectedResult: duty.check,
           ownerGate: false,
           qaAgentNumber: null,
+          implementerAgentNumber: null,
           status: s.status,
           progress: s.progress,
           currentStep: s.currentStep,
           lastActivity: liveState.lastSuccessfulRun,
           evidenceSource: 'Live agent runtime execution state (getAllExecutionStates).',
+          ...NO_WORKER_JOB,
         });
       }
     }
+  }
+
+  // ── MERGE REAL DISPATCHER STATE ──────────────────────────────────────────
+  // Every status below comes from an actual dispatcher/worker job record —
+  // no synthetic values. Assignments without a record keep their honest
+  // QUEUED/PENDING_OWNER defaults.
+  const recordsByKey = new Map((dispatcherRecords ?? []).map((r) => [r.key, r]));
+  for (const a of assignments) {
+    const record = recordsByKey.get(`${a.agentNumber}:${a.role}:${a.dutyId}`);
+    if (!record) continue;
+    const mapped = statusFromDispatcherRecord(record);
+    a.status = mapped.status;
+    a.progress = mapped.progress;
+    a.currentStep = mapped.currentStep;
+    a.workerJobId = record.workerJobId;
+    a.workerStatus = record.workerStatus;
+    a.executionMode = record.executionMode;
+    a.attempts = record.attempts;
+    a.retryCount = record.retryCount;
+    a.startedAt = record.startedAt;
+    a.lastHeartbeatAt = record.lastHeartbeatAt;
+    a.finishedAt = record.finishedAt;
+    a.changedFiles = record.changedFiles;
+    a.testsRun = record.testsRun;
+    a.testsPassed = record.testsPassed;
+    a.typecheckPassed = record.typecheckPassed;
+    a.commitSha = record.commitSha;
+    a.prNumber = record.prNumber;
+    a.prUrl = record.prUrl;
+    a.deployId = record.deployId;
+    a.healthOk = record.healthOk;
+    a.error = record.error;
+    a.blocker = record.blocker;
+    if (record.lastHeartbeatAt) a.lastActivity = record.lastHeartbeatAt;
   }
 
   const counts = assignments.reduce<Record<ItemStatus, number>>((acc, a) => {
@@ -478,7 +621,7 @@ export function buildAppCompletionCampaign(control?: CampaignControlState): AppC
     return acc;
   }, {
     QUEUED: 0, PENDING_OWNER: 0, RUNNING: 0, FIXING: 0, TESTING: 0,
-    DEPLOYING: 0, VERIFYING: 0, COMPLETED: 0, FAILED: 0,
+    DEPLOYING: 0, VERIFYING: 0, COMPLETED: 0, BLOCKED: 0, FAILED: 0,
   });
 
   return {
@@ -491,7 +634,9 @@ export function buildAppCompletionCampaign(control?: CampaignControlState): AppC
       agentsAssigned: assignments.length,
       auditItems: APP_COMPLETION_AUDIT_ITEMS.length,
       verificationDuties: VERIFICATION_DUTIES.length,
-      idleAgents: 0,
+      // Execution truth: an agent is idle only when NO real worker job has
+      // ever been dispatched for its assignment (workerJobId null, 0 attempts).
+      idleAgents: assignments.filter((a) => a.workerJobId === null && a.attempts === 0).length,
     },
     counts,
     pendingAppItems: APP_COMPLETION_AUDIT_ITEMS.length,
