@@ -16,6 +16,12 @@ import {
 
 export const IVX_COMPLETION_CAMPAIGN_MARKER = 'ivx-autonomous-112-campaign-2026-08-16';
 
+// 2026-08-22: the p3-agent-cycle-401 root cause (all 112 watchdog agent runs rejected with
+// 401 because the CI secret IVX_AI_SYSTEM_SECRET did not match the runtime owner key) is
+// fixed by resolving the active system secret through the encrypted Owner Variables bridge
+// (backend/services/ivx-system-secret.ts). Owner-saved key rotation now takes priority over
+// the environment so the CI secret can be aligned with the runtime key without a redeploy.
+
 const STATE_KEY = 'logs/audit/autonomous-completion/campaign-state.json';
 const EVENTS_KEY = 'logs/audit/autonomous-completion/campaign-events.jsonl';
 
