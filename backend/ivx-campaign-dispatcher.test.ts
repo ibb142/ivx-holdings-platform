@@ -467,19 +467,16 @@ describe('IVX campaign dispatcher — evidence, deploy mutex & owner gates (scen
   });
 
   it('22. owner-gated dangerous items never dispatch without owner approval', async () => {
-    // Use a REAL owner-gated campaign item so the merged campaign reflects it.
-    const campaign = buildAppCompletionCampaign();
-    const inputs = buildDispatcherAssignmentInputs(campaign);
-    const gatedInput = inputs.find((i) => i.ownerGate)!;
+    // Campaign gates #57/#58 were lifted by recorded owner approval (2026-08-22),
+    // so the campaign contains no gated items — exercise the gate mechanism
+    // with a synthetic gated assignment instead.
+    const gatedInput = assignment({ ownerGate: true, dutyId: 't-synthetic-owner-gate' });
     await ensureCampaignAssignment(gatedInput);
     await tickCampaignDispatcher();
     expect(fake.enqueued.length).toBe(0);
     const rec = await findRecord(`${gatedInput.agentNumber}:IMPLEMENT:${gatedInput.dutyId}`);
     expect(rec?.status).toBe('PENDING_OWNER');
     expect(rec?.blocker).toContain('OWNER_GATE');
-    const merged = buildAppCompletionCampaign(undefined, await records());
-    const a = merged.assignments.find((x) => x.agentNumber === gatedInput.agentNumber && x.role === 'IMPLEMENT');
-    expect(a?.status).toBe('PENDING_OWNER');
   });
 });
 
@@ -500,9 +497,9 @@ describe('IVX campaign dispatcher — full campaign mapping (scenarios 23-24)', 
     for (const qa of qaWaits) {
       expect(all.some((r) => r.key === qa.waitForKey && r.role === 'IMPLEMENT')).toBe(true);
     }
+    // All campaign owner gates were lifted by recorded owner approval (2026-08-22).
     const gated = all.filter((r) => r.status === 'PENDING_OWNER');
-    expect(gated.length).toBeGreaterThan(0);
-    expect(gated.every((r) => r.role === 'IMPLEMENT')).toBe(true);
+    expect(gated.length).toBe(0);
   });
 
   it('24. dashboard counts equal the persisted runtime state', async () => {
