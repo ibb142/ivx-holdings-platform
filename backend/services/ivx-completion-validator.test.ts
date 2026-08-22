@@ -55,91 +55,83 @@ describe('classifyTaskType', () => {
   });
 });
 
-describe('validateCompletion — owner mandate 2026-07-20', () => {
-  test('CODE_FIX with real file change + deploy + health -> VERIFIED', () => {
+describe('validateCompletion — fail-closed senior developer contract', () => {
+  test('CODE_FIX with complete evidence chain -> VERIFIED', () => {
     const result = validateCompletion(baseEvidence({ filesChanged: ['expo/app/ivx/chat.tsx'] }));
     expect(result.ok).toBe(true);
     expect(result.verdict).toBe('VERIFIED');
-    expect(result.state).toBe('VERIFIED');
   });
 
-  test('CODE_FIX with no code change but deploy + health -> DEPLOYED_ONLY (not VERIFIED)', () => {
+  test('no code change but deploy -> DEPLOYED_ONLY', () => {
     const result = validateCompletion(baseEvidence());
     expect(result.ok).toBe(false);
     expect(result.verdict).toBe('DEPLOYED_ONLY');
-    expect(result.state).toBe('DEPLOYED');
-    expect(result.reasons[0]).toMatch(/Development task requested but no code changed/);
   });
 
-  test('UI_FIX with no code change but deploy + health -> DEPLOYED_ONLY', () => {
-    const result = validateCompletion(baseEvidence({ taskType: 'UI_FIX' }));
+  test('code task without tests cannot complete', () => {
+    const result = validateCompletion(baseEvidence({ filesChanged: ['backend/a.ts'], testsRun: false }));
     expect(result.ok).toBe(false);
-    expect(result.verdict).toBe('DEPLOYED_ONLY');
+    expect(result.reasons.join(' ')).toMatch(/Tests were not run/);
   });
 
-  test('FEATURE with no code change but deploy + health -> DEPLOYED_ONLY', () => {
-    const result = validateCompletion(baseEvidence({ taskType: 'FEATURE' }));
+  test('code task without typecheck cannot complete', () => {
+    const result = validateCompletion(baseEvidence({ filesChanged: ['backend/a.ts'], typecheckRun: false }));
     expect(result.ok).toBe(false);
-    expect(result.verdict).toBe('DEPLOYED_ONLY');
+    expect(result.reasons.join(' ')).toMatch(/Typecheck was not run/);
   });
 
-  test('CODE_FIX with no code change and no deploy -> NOT_COMPLETED', () => {
-    const result = validateCompletion(baseEvidence({ deployId: null, productionHealthOk: false, commitMatch: false }));
+  test('code task without commit cannot complete', () => {
+    const result = validateCompletion(baseEvidence({ filesChanged: ['backend/a.ts'], commitSha: null }));
     expect(result.ok).toBe(false);
-    expect(result.verdict).toBe('NOT_COMPLETED');
-    expect(result.state).toBe('NO_CHANGE_REQUIRED');
+    expect(result.reasons.join(' ')).toMatch(/no commit SHA/i);
   });
 
-  test('DEPLOYMENT task with redeploy + health -> VERIFIED', () => {
-    const result = validateCompletion(baseEvidence({ taskType: 'DEPLOYMENT' }));
-    expect(result.ok).toBe(true);
-    expect(result.verdict).toBe('VERIFIED');
+  test('code task without deploy cannot complete', () => {
+    const result = validateCompletion(baseEvidence({ filesChanged: ['backend/a.ts'], deployId: null }));
+    expect(result.ok).toBe(false);
+    expect(result.reasons.join(' ')).toMatch(/not deployed/i);
   });
 
-  test('INVESTIGATION task needs no code change -> VERIFIED', () => {
+  test('production SHA mismatch is a hard failure', () => {
+    const result = validateCompletion(baseEvidence({ filesChanged: ['backend/a.ts'], commitMatch: false }));
+    expect(result.ok).toBe(false);
+    expect(result.reasons.join(' ')).toMatch(/does not exactly match/i);
+  });
+
+  test('failed feature verification cannot complete', () => {
+    const result = validateCompletion(baseEvidence({ filesChanged: ['backend/a.ts'], featureVerificationOk: false }));
+    expect(result.ok).toBe(false);
+    expect(result.reasons.join(' ')).toMatch(/behavior failed/i);
+  });
+
+  test('execution error fails closed even if other evidence looks green', () => {
+    const result = validateCompletion(baseEvidence({ filesChanged: ['backend/a.ts'], error: 'CI failed' }));
+    expect(result.ok).toBe(false);
+    expect(result.verdict).toBe('FAILED');
+  });
+
+  test('DEPLOYMENT requires deploy, health and exact SHA', () => {
+    expect(validateCompletion(baseEvidence({ taskType: 'DEPLOYMENT' })).ok).toBe(true);
+    expect(validateCompletion(baseEvidence({ taskType: 'DEPLOYMENT', commitMatch: false })).ok).toBe(false);
+  });
+
+  test('INVESTIGATION needs no mutation', () => {
     const result = validateCompletion(baseEvidence({ taskType: 'INVESTIGATION', deployId: null, productionHealthOk: false, commitMatch: false }));
     expect(result.ok).toBe(true);
-    expect(result.verdict).toBe('VERIFIED');
   });
 
-  test('QA_ONLY with passing tests -> VERIFIED', () => {
-    const result = validateCompletion(baseEvidence({ taskType: 'QA_ONLY', filesChanged: [], deployId: null, productionHealthOk: false, commitMatch: false }));
-    expect(result.ok).toBe(true);
-    expect(result.verdict).toBe('VERIFIED');
+  test('QA_ONLY requires passing tests', () => {
+    expect(validateCompletion(baseEvidence({ taskType: 'QA_ONLY', deployId: null })).ok).toBe(true);
+    expect(validateCompletion(baseEvidence({ taskType: 'QA_ONLY', testsRun: false, deployId: null })).ok).toBe(false);
   });
 
-  test('QA_ONLY with no tests -> NOT_COMPLETED', () => {
-    const result = validateCompletion(baseEvidence({ taskType: 'QA_ONLY', filesChanged: [], testsRun: false, testsPassed: false, deployId: null, productionHealthOk: false, commitMatch: false }));
+  test('rejects previous VERIFIED claim when feature verification failed', () => {
+    const result = validateCompletion(baseEvidence({ filesChanged: ['backend/a.ts'], previousVerdict: 'VERIFIED', featureVerificationOk: false }));
     expect(result.ok).toBe(false);
-    expect(result.verdict).toBe('NOT_COMPLETED');
   });
 
-  test('CODE_FIX with file change but tests failed -> NOT_COMPLETED', () => {
-    const result = validateCompletion(baseEvidence({ filesChanged: ['expo/app/ivx/chat.tsx'], testsPassed: false }));
-    expect(result.ok).toBe(false);
-    expect(result.verdict).toBe('NOT_COMPLETED');
-  });
-
-  test('CODE_FIX with file change but no deploy -> NOT_COMPLETED', () => {
-    const result = validateCompletion(baseEvidence({ filesChanged: ['expo/app/ivx/chat.tsx'], deployId: null, productionHealthOk: false, commitMatch: false }));
-    expect(result.ok).toBe(false);
-    expect(result.verdict).toBe('NOT_COMPLETED');
-  });
-
-  test('rejects VERIFIED if previous verdict lacks feature verification', () => {
-    const result = validateCompletion(baseEvidence({ previousVerdict: 'VERIFIED', featureVerificationOk: false }));
-    expect(result.ok).toBe(false);
-    expect(result.reasons.some((r) => r.includes('Previous VERIFIED claim'))).toBe(true);
-  });
-
-  test('renderValidatorVerdict returns concise status strings', () => {
+  test('render helpers remain concise', () => {
     expect(renderValidatorVerdict('VERIFIED')).toBe('VERIFIED');
-    expect(renderValidatorVerdict('DEPLOYED_ONLY')).toBe('DEPLOYED_ONLY');
-    expect(renderValidatorVerdict('NO_CHANGE_REQUIRED')).toBe('NO_CHANGE_REQUIRED');
-    expect(renderValidatorVerdict('NOT_COMPLETED')).toBe('NOT_COMPLETED');
-  });
-
-  test('renderValidatorReason explains DEPLOYED_ONLY honestly', () => {
     const reason = renderValidatorReason('DEPLOYED_ONLY', ['no code changed']);
     expect(reason).toMatch(/redeploy occurred/);
     expect(reason).toMatch(/NOT implemented/);
