@@ -371,6 +371,20 @@ let draining = false;
 /** Active job callbacks for cancel signaling. */
 const activeJobControllers = new Map<string, { cancelled: boolean }>();
 
+/**
+ * Bounded-concurrent drain support (2026-08-22): in-process claim registry so
+ * parallel `processNextSeniorDeveloperJob()` calls never double-execute the
+ * same queued job. Released when the job reaches a terminal status via
+ * updateJob, or when expireStaleJobs removes/requeues it.
+ */
+const claimedJobIds = new Set<string>();
+
+/** Max concurrent senior-developer job executions (configurable, bounded). */
+export function getWorkerMaxConcurrency(): number {
+  const raw = Number.parseInt(process.env.IVX_WORKER_MAX_CONCURRENCY ?? '', 10);
+  return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 16) : 4;
+}
+
 async function loadQueue(): Promise<QueueDoc> {
   const durable = isDurableStoreConfigured();
   if (!durable) {
@@ -1576,6 +1590,11 @@ async function updateJob(jobId: string, patch: Partial<IVXWorkerJob>): Promise<v
     lastHeartbeatAt: patch.lastHeartbeatAt ?? (isActive ? nowIso() : existing.lastHeartbeatAt),
   };
   await saveQueue(queue);
+  // Concurrent-drain claim release: once a job reaches a terminal status its
+  // in-process claim is no longer needed, so a future retry may claim it again.
+  if (patch.status && !ACTIVE_STATUSES.has(patch.status) && patch.status !== 'queued') {
+    claimedJobIds.delete(jobId);
+  }
 }
 
 /**
@@ -1871,8 +1890,23 @@ function phaseToStage(phase: string): { stage: IVXWorkerJobStage; detail: string
  */
 export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResult | null> {
   const queue = await loadQueue();
-  const job = queue.jobs.find((j) => j.status === 'queued');
+  // Bounded-concurrent claim: skip jobs already claimed in-process and jobs
+  // whose owner already has an actively-heartbeating job (per-owner
+  // single-flight is preserved under concurrent drain).
+  const busyOwners = new Set<string>();
+  const nowMs = Date.now();
+  for (const j of queue.jobs) {
+    if (!ACTIVE_STATUSES.has(j.status)) continue;
+    const heartbeatAge = nowMs - Date.parse(j.lastHeartbeatAt ?? j.createdAt);
+    if (claimedJobIds.has(j.jobId) || (Number.isFinite(heartbeatAge) && heartbeatAge < STALE_JOB_TIMEOUT_MS)) {
+      busyOwners.add(j.ownerId);
+    }
+  }
+  const job = queue.jobs.find(
+    (j) => j.status === 'queued' && !claimedJobIds.has(j.jobId) && !busyOwners.has(j.ownerId),
+  );
   if (!job) return null;
+  claimedJobIds.add(job.jobId);
 
   // FINAL MANDATE Phase 1: owner emergency stop halts queued jobs before execution.
   const emergencyStop = await checkEmergencyStop();
@@ -2483,9 +2517,12 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
 }
 
 /**
- * Single-flight queue drain: processes queued jobs sequentially until none
- * remain. Safe to call repeatedly — re-entrancy is guarded so only one drain
- * runs at a time. Expires stale jobs before draining.
+ * Bounded-concurrent queue drain: processes queued jobs up to
+ * IVX_WORKER_MAX_CONCURRENCY at a time. Re-entrancy is guarded so only one
+ * drain runs at a time. Expires stale jobs before draining. Each job is
+ * claimed race-safely inside processNextSeniorDeveloperJob, so batch
+ * parallelism never double-executes a job, and per-owner single-flight is
+ * enforced at claim time.
  */
 export async function drainSeniorDeveloperQueue(): Promise<void> {
   if (draining) return;
@@ -2494,10 +2531,14 @@ export async function drainSeniorDeveloperQueue(): Promise<void> {
     // Expire stale jobs before processing.
     await expireStaleJobs();
 
-    // Bounded loop so a persistently-failing job cannot spin forever.
-    for (let processed = 0; processed < MAX_QUEUE_RETAINED; processed += 1) {
-      const result = await processNextSeniorDeveloperJob();
-      if (!result) break;
+    const maxConcurrent = getWorkerMaxConcurrency();
+    for (let processed = 0; processed < MAX_QUEUE_RETAINED; processed += maxConcurrent) {
+      const batch: Array<Promise<IVXWorkerJobResult | null>> = [];
+      for (let i = 0; i < maxConcurrent; i += 1) {
+        batch.push(processNextSeniorDeveloperJob());
+      }
+      const results = await Promise.all(batch);
+      if (results.every((r) => r === null)) break;
     }
   } finally {
     draining = false;

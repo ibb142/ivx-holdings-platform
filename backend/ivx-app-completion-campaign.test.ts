@@ -6,6 +6,7 @@
  * every audit item is backed by evidence, and no status is fabricated.
  */
 import { describe, expect, it } from 'bun:test';
+import type { CampaignJobRecord } from './services/ivx-campaign-dispatcher';
 import {
   APP_COMPLETION_AUDIT_ITEMS,
   VERIFICATION_DUTIES,
@@ -16,10 +17,12 @@ import {
 describe('IVX app completion campaign', () => {
   const campaign = buildAppCompletionCampaign();
 
-  it('assigns a real duty to all 112 agents with zero idle', () => {
+  it('assigns a real duty to all 112 agents and reports honest idle counts', () => {
     expect(campaign.totals.agentsTotal).toBe(112);
     expect(campaign.totals.agentsAssigned).toBe(112);
-    expect(campaign.totals.idleAgents).toBe(0);
+    // Execution truth: before any real worker job is dispatched, all 112 are
+    // idle — '0 idle' is never fabricated from assignments alone.
+    expect(campaign.totals.idleAgents).toBe(112);
     expect(campaign.assignments.length).toBe(112);
     const numbers = campaign.assignments.map((a) => a.agentNumber).sort((a, b) => a - b);
     expect(numbers).toEqual(Array.from({ length: 112 }, (_, i) => i + 1));
@@ -28,6 +31,26 @@ describe('IVX app completion campaign', () => {
       expect(a.module.length).toBeGreaterThan(0);
       expect(a.currentStep.length).toBeGreaterThan(0);
     }
+    // Once a real dispatcher record with a worker job exists, idle drops truthfully.
+    const target = campaign.assignments.find((a) => a.role === 'IMPLEMENT' && !a.ownerGate)!;
+    const now = new Date().toISOString();
+    const rec = {
+      key: `${target.agentNumber}:IMPLEMENT:${target.dutyId}`,
+      agentNumber: target.agentNumber, agentId: target.agentId, role: 'IMPLEMENT' as const,
+      dutyId: target.dutyId, phase: target.phase, module: target.module, laneKey: 'lane',
+      status: 'RUNNING' as const, executionMode: 'code_change' as const, workerStatus: 'running',
+      waitForKey: null, workerJobId: 'job-1', stage: 'WORKER JOB RUNNING', progress: 30,
+      attempts: 1, retryCount: 0, createdAt: now, startedAt: now,
+      lastHeartbeatAt: now, finishedAt: null,
+      changedFiles: [], testsRun: false, testsPassed: false, typecheckPassed: false,
+      commitSha: null, prNumber: null, prUrl: null, deployId: null, healthOk: null,
+      error: null, blocker: null, lastTickAt: null,
+    } as CampaignJobRecord;
+    const merged = buildAppCompletionCampaign(undefined, [rec]);
+    expect(merged.totals.idleAgents).toBe(111);
+    const mergedAgent = merged.assignments.find((a) => a.agentNumber === target.agentNumber && a.role === 'IMPLEMENT');
+    expect(mergedAgent?.status).toBe('RUNNING');
+    expect(mergedAgent?.workerJobId).toBe('job-1');
   });
 
   it('has only evidence-backed audit items — no invented items', () => {

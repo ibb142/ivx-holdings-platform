@@ -87,7 +87,14 @@ import {
   buildAppCompletionCampaign,
   loadControlState,
   updateControlState,
+  syncCampaignAssignmentsToDispatcher,
 } from '../services/ivx-app-completion-campaign';
+import {
+  campaignDispatcherControl,
+  getCampaignDispatcherSnapshot,
+  listCampaignDispatcherRecords,
+  startCampaignDispatcher,
+} from '../services/ivx-campaign-dispatcher';
 
 function ownerAuthorized(c: any, body: Record<string, unknown> = {}): boolean {
   const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';
@@ -136,8 +143,14 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.get('/api/ivx/agents/app-completion/dashboard', async (c) => {
     await loadControlState();
-    const campaign = buildAppCompletionCampaign();
-    return c.json({ ok: true, marker: IVX_AGENT_API_MARKER, campaign });
+    // Ensure every assignment has a dispatcher record (idempotent) and keep
+    // the bounded-concurrent dispatcher loop running.
+    startCampaignDispatcher();
+    await syncCampaignAssignmentsToDispatcher().catch(() => 0);
+    const records = await listCampaignDispatcherRecords();
+    const campaign = buildAppCompletionCampaign(undefined, records);
+    const dispatcher = await getCampaignDispatcherSnapshot();
+    return c.json({ ok: true, marker: IVX_AGENT_API_MARKER, campaign, dispatcher });
   });
 
   app.post('/api/ivx/agents/app-completion/control', async (c) => {
@@ -152,7 +165,13 @@ export function registerAgentRoutes(app: Hono): void {
     const rawAgent = (body as Record<string, unknown>).agentNumber;
     const agentNumber = typeof rawAgent === 'number' ? rawAgent : undefined;
     const control = await updateControlState(action as Parameters<typeof updateControlState>[0], agentNumber);
-    const campaign = buildAppCompletionCampaign(control);
+    // Owner controls also operate on the REAL dispatcher workers (pause stops
+    // new dispatches; stop cancels active worker jobs; retry requeues).
+    if (action !== 'reassign') {
+      await campaignDispatcherControl(action as 'pause_all' | 'resume_all' | 'stop_all' | 'stop_agent' | 'retry_agent', agentNumber);
+    }
+    const records = await listCampaignDispatcherRecords();
+    const campaign = buildAppCompletionCampaign(control, records);
     return c.json({ ok: true, marker: IVX_AGENT_API_MARKER, control, counts: campaign.counts });
   });
 
