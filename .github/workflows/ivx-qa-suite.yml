@@ -31,7 +31,13 @@ jobs:
           cd backend && bunx tsc --noEmit
           echo 'backend_typecheck=PASS'
 
-      - name: '2. Backend unit tests — process isolated — HARD GATE'
+      - name: '2. Senior Developer Quality Gate — HARD GATE'
+        run: |
+          set -euo pipefail
+          node --test scripts/__tests__/ivx-senior-quality-gate.test.mjs
+          echo 'senior_quality_gate=PASS'
+
+      - name: '3. Backend unit tests — process isolated — HARD GATE'
         shell: bash
         run: |
           set -euo pipefail
@@ -63,7 +69,7 @@ jobs:
           fi
           echo 'backend_tests=PASS'
 
-      - name: '3. Expo unit tests — process isolated — HARD GATE'
+      - name: '4. Expo unit tests — process isolated — HARD GATE'
         shell: bash
         run: |
           set -euo pipefail
@@ -91,13 +97,13 @@ jobs:
           fi
           echo 'expo_tests=PASS'
 
-      - name: '4. Critical file protection test — HARD GATE'
+      - name: '5. Critical file protection test — HARD GATE'
         run: |
           set -euo pipefail
           bun test qa/ivx-critical-file-protection.test.ts --reporter=dots
           echo 'critical_files=PASS'
 
-      - name: '5. QA matrix (production)'
+      - name: '6. QA matrix (production)'
         if: github.ref == 'refs/heads/main'
         run: |
           set -euo pipefail
@@ -107,14 +113,14 @@ jobs:
           IVX_COMMIT_SHA: ${{ github.sha }}
           NODE_ENV: ci
 
-      - name: '6. Evidence generation'
+      - name: '7. Evidence generation'
         if: github.ref == 'refs/heads/main'
         run: |
           set -euo pipefail
           bun run qa/ivx-evidence-generator.ts 2>&1 | tee evidence-results.txt
           echo 'evidence_generation=PASS'
 
-      - name: '7. Upload QA results'
+      - name: '8. Upload QA results'
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -127,7 +133,7 @@ jobs:
             qa/latest-run.json
             qa/evidence/latest.json
 
-      - name: '8. Critical files final check — HARD GATE'
+      - name: '9. Critical files final check — HARD GATE'
         run: |
           set -euo pipefail
           bun test qa/ivx-critical-file-protection.test.ts --reporter=dots
