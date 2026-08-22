@@ -17,6 +17,7 @@
  */
 
 import type { Context, Next } from 'hono';
+import { resolveActiveIVXSystemSecret } from './ivx-system-secret';
 
 // ============================================================================
 // IN-MEMORY RATE LIMITER (sliding window)
@@ -201,11 +202,41 @@ export function detectOfferFraud(userId: string): { isFraudulent: boolean; reaso
 // MIDDLEWARE
 // ============================================================================
 
+/**
+ * Trusted fleet-control check: a request bearing the active IVX system owner
+ * key is authenticated by the route guards themselves (owner-only bridge), so
+ * the per-IP limiter must not throttle 112-agent CI cycles from one runner IP.
+ */
+async function isTrustedOwnerKeyRequest(c: Context): Promise<boolean> {
+  const ownerKey = (c.req.header('x-ivx-owner-key') ?? '').trim();
+  if (!ownerKey) return false;
+  try {
+    const active = await resolveActiveIVXSystemSecret();
+    return Boolean(active) && ownerKey === active;
+  } catch {
+    return false;
+  }
+}
+
+function applySecurityHeaders(c: Context): void {
+  c.header('X-Content-Type-Options', 'nosniff');
+  c.header('X-Frame-Options', 'DENY');
+  c.header('X-XSS-Protection', '1; mode=block');
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+}
+
 export async function securityMiddleware(c: Context, next: Next): Promise<Response | void> {
   cleanupStores();
   const ip = getClientIp(c);
   const path = c.req.path;
   const method = c.req.method;
+
+  if (await isTrustedOwnerKeyRequest(c)) {
+    applySecurityHeaders(c);
+    await next();
+    return;
+  }
 
   // Check if IP is blocked
   const ipEntry = ipRateStore.get(ip);
@@ -261,11 +292,7 @@ export async function securityMiddleware(c: Context, next: Next): Promise<Respon
   }
 
   // Add security headers
-  c.header('X-Content-Type-Options', 'nosniff');
-  c.header('X-Frame-Options', 'DENY');
-  c.header('X-XSS-Protection', '1; mode=block');
-  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
-  c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  applySecurityHeaders(c);
 
   await next();
 }
