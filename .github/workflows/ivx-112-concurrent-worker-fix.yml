@@ -64,20 +64,16 @@ jobs:
               raise SystemExit('STATUS_SURFACE_ANCHOR_MISSING')
           path.write_text(text)
 
-      - name: Repair forgot-password toggle root cause
+      - name: Verify forgot-password source repair
         shell: python
         run: |
           from pathlib import Path
           path = Path('expo/ivxholding-landing/ivx-portal.js')
           text = path.read_text()
-          old = "var showingForgot = forgotView.style.display === 'none';"
-          new = "var showingForgot = window.getComputedStyle(forgotView).display === 'none';"
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif new not in text:
-              raise SystemExit('FORGOT_PASSWORD_TOGGLE_ANCHOR_MISSING')
-          path.write_text(text)
-          print('FORGOT_PASSWORD_TOGGLE_REPAIRED')
+          good = "var showingForgot = window.getComputedStyle(forgotView).display === 'none';"
+          if good not in text:
+              raise SystemExit('FORGOT_PASSWORD_SOURCE_FIX_MISSING')
+          print('FORGOT_PASSWORD_SOURCE_FIX_PRESENT')
 
       - name: Static assertions
         run: |
@@ -86,7 +82,6 @@ jobs:
           grep -q "const results = await Promise.all(batch)" backend/services/ivx-senior-developer-worker.ts
           grep -q "globalExecutionSlots: getWorkerMaxConcurrency()" backend/services/ivx-senior-developer-worker.ts
           grep -q "window.getComputedStyle(forgotView).display === 'none'" expo/ivxholding-landing/ivx-portal.js
-          ! grep -q "var showingForgot = forgotView.style.display === 'none'" expo/ivxholding-landing/ivx-portal.js
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -114,19 +109,36 @@ jobs:
       - name: Install Playwright Chromium
         run: cd expo && bunx playwright install --with-deps chromium
 
-      - name: Forgot-password Playwright QA
-        run: cd expo && bunx playwright test __tests__/e2e/ivx-forgot-password.spec.ts --config=playwright.config.ts
-
-      - name: Commit QA-verified repairs
+      - name: Start branch-local landing server
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- backend/services/ivx-senior-developer-worker.ts expo/ivxholding-landing/ivx-portal.js; then
-            echo "No source repair required."
+          python3 -m http.server 4173 --directory expo/ivxholding-landing > /tmp/ivx-landing.log 2>&1 &
+          echo $! > /tmp/ivx-landing.pid
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/ivx-landing.log || true
+          exit 1
+
+      - name: Forgot-password Playwright QA against branch-local code
+        env:
+          E2E_BASE_URL: http://127.0.0.1:4173
+        run: cd expo && bunx playwright test __tests__/e2e/ivx-forgot-password.spec.ts --config=playwright.config.ts
+
+      - name: Commit QA-verified worker status repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- backend/services/ivx-senior-developer-worker.ts; then
+            echo "No worker source repair required."
             exit 0
           fi
           git config user.name "ivx-ci-worker"
           git config user.email "ivx-ci-worker@users.noreply.github.com"
-          git add backend/services/ivx-senior-developer-worker.ts expo/ivxholding-landing/ivx-portal.js
-          git commit -m "fix: certify bounded worker and forgot-password flow"
+          git add backend/services/ivx-senior-developer-worker.ts
+          git commit -m "fix: expose real bounded worker concurrency"
           git push origin HEAD:fix/112-campaign-real-worker-dispatch
