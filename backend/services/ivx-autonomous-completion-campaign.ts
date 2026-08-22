@@ -1,3 +1,4 @@
+// p3-watchdog-ip-throttle: CI fleet cycles are owner-key authenticated; IP rate limits must not block them.
 import {
   ALL_ENTERPRISE_AGENTS,
   validateEnterpriseMasterRegistry,

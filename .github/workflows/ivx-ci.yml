@@ -46,6 +46,11 @@ jobs:
             echo "Running targeted tests: $TARGET"
             bun test $TARGET
           fi
+      - name: Senior Developer Quality Gate — HARD GATE
+        run: |
+          set -euo pipefail
+          node --test scripts/__tests__/ivx-senior-quality-gate.test.mjs
+          echo 'senior_quality_gate=PASS'
 
   chat-tests:
     name: Chat + intent + performance tests
@@ -97,24 +102,37 @@ jobs:
       - name: Install dependencies
         run: bun install
       - name: Scan for leaked secrets
+        shell: bash
         run: |
-          # Check for common secret patterns in source files (not .env.example)
+          set -euo pipefail
           EXIT_CODE=0
-          for pattern in 'ghp_[A-Za-z0-9]{36}' 'github_pat_[A-Za-z0-9_]{82}' 'sk-[A-Za-z0-9]{48}' 'rnd_[A-Za-z0-9]{24}' 'sbp_[a-z0-9]{40}'; do
-            FOUND=$(grep -r --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
-              --exclude-dir=node_modules --exclude-dir=.git --exclude='*.test.ts' \
+          patterns=(
+            'ghp_[A-Za-z0-9]{36}'
+            'github_pat_[A-Za-z0-9_]{40,}'
+            'sk-[A-Za-z0-9]{32,}'
+            'rnd_[A-Za-z0-9]{20,}'
+            'sbp_[A-Za-z0-9_-]{30,}'
+            'vck_[A-Za-z0-9_-]{20,}'
+          )
+          includes=(
+            '--include=*.ts' '--include=*.tsx' '--include=*.js' '--include=*.mjs'
+            '--include=*.json' '--include=*.yml' '--include=*.yaml'
+          )
+          for pattern in "${patterns[@]}"; do
+            FOUND=$(grep -r "${includes[@]}" \
+              --exclude-dir=node_modules --exclude-dir=.git \
               --exclude='.env.example' --exclude='.env.production.template' \
               -E "$pattern" . 2>/dev/null || true)
             if [ -n "$FOUND" ]; then
-              echo "SECRET LEAK DETECTED (pattern: $pattern):"
-              echo "$FOUND"
+              echo "SECRET LEAK DETECTED (pattern: $pattern)"
+              printf '%s\n' "$FOUND" | sed -E 's/(ghp_|github_pat_|sk-|rnd_|sbp_|vck_)[A-Za-z0-9_-]+/\1[REDACTED]/g'
               EXIT_CODE=1
             fi
           done
-          if [ $EXIT_CODE -eq 0 ]; then
-            echo "No secrets detected in source files."
+          if [ "$EXIT_CODE" -eq 0 ]; then
+            echo "No tracked secrets detected."
           fi
-          exit $EXIT_CODE
+          exit "$EXIT_CODE"
 
   android-apk:
     name: Android release APK
