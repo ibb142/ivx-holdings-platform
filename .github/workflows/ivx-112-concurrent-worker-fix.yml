@@ -27,7 +27,7 @@ jobs:
           ref: fix/112-campaign-real-worker-dispatch
           fetch-depth: 0
 
-      - name: Apply bounded concurrent dispatcher patch
+      - name: Verify bounded concurrency implementation and repair status surface
         shell: python
         run: |
           from pathlib import Path
@@ -35,172 +35,47 @@ jobs:
           path = Path('backend/services/ivx-senior-developer-worker.ts')
           text = path.read_text()
 
-          old_state = """let memoryQueue: QueueDoc | null = null;
-let memoryLedger: LedgerDoc | null = null;
-let draining = false;
-"""
-          new_state = """let memoryQueue: QueueDoc | null = null;
-let memoryLedger: LedgerDoc | null = null;
-let draining = false;
-
-/**
- * Bounded concurrency for independent worker jobs. Defaults to 8 lanes and is
- * capped at 32 so a bad environment value cannot fan out unbounded work.
- * Production deploy jobs remain serialized by claimNextQueuedJob().
- */
-const WORKER_MAX_CONCURRENCY: number = (() => {
-  const raw = Number.parseInt(process.env.IVX_WORKER_MAX_CONCURRENCY ?? '8', 10);
-  if (!Number.isFinite(raw) || raw < 1) return 8;
-  return Math.min(raw, 32);
-})();
-
-/** In-process claim mutex: only the short queue lease step is serialized. */
-let claimLock: Promise<void> = Promise.resolve();
-
-async function withClaimLock<T>(fn: () => Promise<T>): Promise<T> {
-  const previous = claimLock;
-  let release!: () => void;
-  claimLock = new Promise<void>((resolve) => { release = resolve; });
-  await previous;
-  try {
-    return await fn();
-  } finally {
-    release();
-  }
-}
-
-/**
- * Atomically lease one queued job before an execution lane starts. Multiple
- * lanes can therefore call processNextSeniorDeveloperJob() without selecting
- * the same queued record. Deploy jobs are serialized to protect main/Render.
- */
-async function claimNextQueuedJob(): Promise<IVXWorkerJob | null> {
-  return withClaimLock(async () => {
-    const queue = await loadQueue();
-    const deployActive = queue.jobs.some((candidate) =>
-      candidate.status !== 'queued' &&
-      ACTIVE_STATUSES.has(candidate.status) &&
-      (candidate.input.executionMode === 'deploy' || candidate.input.approveGitDeploy));
-
-    const job = queue.jobs.find((candidate) =>
-      candidate.status === 'queued' &&
-      (!candidate.input.approveGitDeploy && candidate.input.executionMode !== 'deploy' || !deployActive));
-    if (!job) return null;
-
-    const claimedAt = nowIso();
-    job.status = 'running';
-    job.stage = 'RUNNING';
-    job.progressPercent = STAGE_PROGRESS.RUNNING;
-    job.stageDetail = 'Job claimed by bounded concurrent worker lane.';
-    job.startedAt = claimedAt;
-    job.lastHeartbeatAt = claimedAt;
-    job.attempts += 1;
-    await saveQueue(queue);
-    return { ...job, input: { ...job.input } };
-  });
-}
-"""
-          if 'const WORKER_MAX_CONCURRENCY:' not in text:
-              if old_state not in text:
-                  raise SystemExit('PATCH_FAILED: worker state anchor not found')
-              text = text.replace(old_state, new_state, 1)
-
-          old_claim = """export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResult | null> {
-  const queue = await loadQueue();
-  const job = queue.jobs.find((j) => j.status === 'queued');
-  if (!job) return null;
-"""
-          new_claim = """export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResult | null> {
-  const job = await claimNextQueuedJob();
-  if (!job) return null;
-"""
-          if old_claim in text:
-              text = text.replace(old_claim, new_claim, 1)
-          elif new_claim not in text:
-              raise SystemExit('PATCH_FAILED: processNext claim anchor not found')
-
-          old_attempt = """    attempts: job.attempts + 1,
-"""
-          new_attempt = """    attempts: job.attempts,
-"""
-          if old_attempt in text:
-              text = text.replace(old_attempt, new_attempt, 1)
-
-          old_drain = """/**
- * Single-flight queue drain: processes queued jobs sequentially until none
- * remain. Safe to call repeatedly — re-entrancy is guarded so only one drain
- * runs at a time. Expires stale jobs before draining.
- */
-export async function drainSeniorDeveloperQueue(): Promise<void> {
-  if (draining) return;
-  draining = true;
-  try {
-    // Expire stale jobs before processing.
-    await expireStaleJobs();
-
-    // Bounded loop so a persistently-failing job cannot spin forever.
-    for (let processed = 0; processed < MAX_QUEUE_RETAINED; processed += 1) {
-      const result = await processNextSeniorDeveloperJob();
-      if (!result) break;
-    }
-  } finally {
-    draining = false;
-  }
-}
-"""
-          new_drain = """/**
- * Bounded concurrent queue drain. The drain itself is single-instance, while
- * each batch may execute up to WORKER_MAX_CONCURRENCY independently leased
- * jobs in parallel. Deploy jobs are serialized by claimNextQueuedJob().
- */
-export async function drainSeniorDeveloperQueue(): Promise<void> {
-  if (draining) return;
-  draining = true;
-  try {
-    await expireStaleJobs();
-
-    for (let processed = 0; processed < MAX_QUEUE_RETAINED; processed += WORKER_MAX_CONCURRENCY) {
-      const batchSize = Math.min(WORKER_MAX_CONCURRENCY, MAX_QUEUE_RETAINED - processed);
-      const results = await Promise.all(
-        Array.from({ length: batchSize }, () => processNextSeniorDeveloperJob()),
-      );
-      if (results.every((result) => result === null)) break;
-    }
-  } finally {
-    draining = false;
-  }
-}
-"""
-          if old_drain in text:
-              text = text.replace(old_drain, new_drain, 1)
-          elif new_drain not in text:
-              raise SystemExit('PATCH_FAILED: drain anchor not found')
-
-          text = text.replace("perOwnerSingleFlight: true,\n    uptimeSeconds", "perOwnerSingleFlight: true,\n    uptimeSeconds", 1)
-          text = text.replace("globalExecutionSlots: 1,\n      independentRuntimeCount: 0,\n      classification: 'SHARED_WORKER_WITH_ROLE',\n      note: 'The current worker is intentionally single-flight until isolated runtime leases are deployed and evidenced.'",
-                              "globalExecutionSlots: WORKER_MAX_CONCURRENCY,\n      independentRuntimeCount: WORKER_MAX_CONCURRENCY,\n      classification: 'BOUNDED_CONCURRENT_WORKER_LANES',\n      note: 'Independent jobs use atomic queue leases; deploy jobs are serialized to protect main/Render.'", 1)
-
-          required = [
-              'const WORKER_MAX_CONCURRENCY:',
-              'async function claimNextQueuedJob()',
-              'const job = await claimNextQueuedJob();',
-              'Promise.all(',
-              'globalExecutionSlots: WORKER_MAX_CONCURRENCY',
+          required_existing = [
+              'export function getWorkerMaxConcurrency(): number',
+              'const claimedJobIds = new Set<string>()',
+              'claimedJobIds.add(job.jobId)',
+              'const maxConcurrent = getWorkerMaxConcurrency()',
+              'const results = await Promise.all(batch)',
           ]
-          missing = [marker for marker in required if marker not in text]
+          missing = [marker for marker in required_existing if marker not in text]
           if missing:
-              raise SystemExit(f'PATCH_FAILED: missing markers {missing}')
+              raise SystemExit(f'CONCURRENCY_IMPLEMENTATION_MISSING: {missing}')
+
+          old_status = """    concurrency: {
+      globalExecutionSlots: 1,
+      independentRuntimeCount: 0,
+      classification: 'SHARED_WORKER_WITH_ROLE',
+      note: 'The current worker is intentionally single-flight until isolated runtime leases are deployed and evidenced.',
+    },
+"""
+          new_status = """    concurrency: {
+      globalExecutionSlots: getWorkerMaxConcurrency(),
+      independentRuntimeCount: getWorkerMaxConcurrency(),
+      classification: 'BOUNDED_CONCURRENT_WORKER_LANES',
+      note: 'Queued jobs use in-process claim isolation and per-owner single-flight; concurrency is bounded by IVX_WORKER_MAX_CONCURRENCY.',
+    },
+"""
+          if old_status in text:
+              text = text.replace(old_status, new_status, 1)
+          elif new_status not in text:
+              raise SystemExit('STATUS_SURFACE_ANCHOR_MISSING')
 
           path.write_text(text)
-          print('PATCH_OK')
+          print('CURRENT_CONCURRENCY_VERIFIED_AND_STATUS_REPAIRED')
 
-      - name: Static concurrency assertions
+      - name: Static worker assertions
         run: |
           set -euo pipefail
-          grep -q "const WORKER_MAX_CONCURRENCY" backend/services/ivx-senior-developer-worker.ts
-          grep -q "claimNextQueuedJob" backend/services/ivx-senior-developer-worker.ts
-          grep -q "Promise.all" backend/services/ivx-senior-developer-worker.ts
-          grep -q "globalExecutionSlots: WORKER_MAX_CONCURRENCY" backend/services/ivx-senior-developer-worker.ts
+          grep -q "export function getWorkerMaxConcurrency" backend/services/ivx-senior-developer-worker.ts
+          grep -q "const claimedJobIds = new Set<string>()" backend/services/ivx-senior-developer-worker.ts
+          grep -q "claimedJobIds.add(job.jobId)" backend/services/ivx-senior-developer-worker.ts
+          grep -q "const results = await Promise.all(batch)" backend/services/ivx-senior-developer-worker.ts
+          grep -q "globalExecutionSlots: getWorkerMaxConcurrency()" backend/services/ivx-senior-developer-worker.ts
           ! grep -q "intentionally single-flight until isolated runtime leases" backend/services/ivx-senior-developer-worker.ts
 
       - name: Setup Bun
@@ -214,7 +89,7 @@ export async function drainSeniorDeveloperQueue(): Promise<void> {
       - name: Backend TypeScript QA
         run: bunx tsc -p backend/tsconfig.json --noEmit
 
-      - name: Focused worker tests
+      - name: Focused worker and campaign tests
         shell: bash
         run: |
           set -euo pipefail
@@ -222,19 +97,19 @@ export async function drainSeniorDeveloperQueue(): Promise<void> {
           if [ "${#files[@]}" -gt 0 ]; then
             bun test "${files[@]}"
           else
-            echo "No focused worker test files found; static assertions + backend typecheck are the applicable gates."
+            echo "No focused worker/campaign test files found."
           fi
 
-      - name: Commit verified patch to repair branch
+      - name: Commit QA-verified source repair
         shell: bash
         run: |
           set -euo pipefail
           if git diff --quiet -- backend/services/ivx-senior-developer-worker.ts; then
-            echo "Worker already contains verified patch; nothing to commit."
+            echo "No source repair required."
             exit 0
           fi
           git config user.name "ivx-ci-worker"
           git config user.email "ivx-ci-worker@users.noreply.github.com"
           git add backend/services/ivx-senior-developer-worker.ts
-          git commit -m "fix: bounded concurrent senior developer worker dispatch"
+          git commit -m "fix: expose real bounded worker concurrency"
           git push origin HEAD:fix/112-campaign-real-worker-dispatch
