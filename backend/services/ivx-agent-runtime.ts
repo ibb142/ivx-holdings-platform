@@ -32,6 +32,11 @@ import {
   type AgentStatus,
 } from './ivx-agent-contracts';
 import { type CompanyId, type DivisionId } from './ivx-enterprise-master-registry';
+/** ISO-8601 UTC timestamp with second precision (jq `fromdateiso8601` compatible). */
+function isoSecondPrecision(date: Date = new Date()): string {
+  return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
 import {
   executeRealTool,
   executeSpecialMission,
@@ -388,7 +393,7 @@ export function updateExecutionState(agentId: string, updates: Partial<AgentExec
   const state = executionStates.get(agentId);
   if (!state) return { ok: false, error: `Unknown agent: ${agentId}` };
   Object.assign(state, updates);
-  state.lastHeartbeat = new Date().toISOString();
+  state.lastHeartbeat = isoSecondPrecision();
   return { ok: true, error: null };
 }
 
@@ -772,13 +777,13 @@ export async function executeAgentRun(
 
   state.activeTaskId = taskId;
   state.availability = 'busy';
-  state.lastHeartbeat = new Date().toISOString();
+  state.lastHeartbeat = isoSecondPrecision();
 
   // Per-agent COST LIMIT enforcement (before any spend)
   const costLimitUsd = typeof payload.__testCostLimitUsd === 'number' ? payload.__testCostLimitUsd : contract.costLimit.maxCostPerRun;
   const projectedCostUsd = 0.001;
   if (!(costLimitUsd > 0) || projectedCostUsd > costLimitUsd) {
-    const endISO = new Date().toISOString();
+    const endISO = isoSecondPrecision();
     state.activeTaskId = null;
     state.availability = state.pauseState ? 'paused' : 'available';
     const costError = `Cost limit exhausted for agent ${agentId}: projected $${projectedCostUsd} exceeds per-run limit $${costLimitUsd}. Execution blocked — no synthetic fallback.`;
@@ -828,7 +833,7 @@ export async function executeAgentRun(
   }
 
   const endTime = Date.now();
-  const endISO = new Date(endTime).toISOString();
+  const endISO = isoSecondPrecision(new Date(endTime));
 
   // Required execution fields — realToolUsed, sourceReference, toolResultId, verifiedOutput
   const firstOk = toolResults.find((t) => t.ok) ?? null;
