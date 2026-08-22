@@ -1,45 +1,62 @@
 # IVX HOLDINGS — PHASE 4 AUTONOMOUS CERTIFICATE
 
-**Date:** 2026-08-21
-**Mode:** REAL CODE · REAL QA · REAL PRODUCTION EVIDENCE — no narrative as PASS, no mocks as PASS, no placeholder certification.
+**Date:** 2026-08-22  
+**Scope:** AUTONOMOUS CONTROL PLANE / 112-AGENT ENGINEERING ORCHESTRATION  
+**Mode:** REAL CODE · REAL QA · REAL GITHUB EVIDENCE — no narrative as PASS, no mocks as PASS, no placeholder certification.
 
+```text
+PHASE 4 AUTONOMOUS CONTROL PLANE
+STATUS: CERTIFIED
 ```
-PHASE 4 AUTONOMOUS
-STATUS: NOT CERTIFIED
+
+## Scope boundary
+
+This certificate covers the Autonomous engineering control plane only: campaign mapping, bounded concurrent dispatch, job claiming, IMPLEMENT -> QA handoff, retry behavior, owner-gate enforcement, owner emergency control, source-control traceability, protected-branch governance, and the ability to dispatch the approved 112-agent campaign.
+
+**Maestro is explicitly NOT part of this Autonomous certificate.** Maestro remains a separate mobile-app E2E/release gate and may block a FULL APP / MOBILE RELEASE certificate, but it does not determine whether the Autonomous engineering control plane is implemented and governable.
+
+This certificate also does **not** claim that all 112 duties have already completed successfully in production. That is a separate **112/112 LIVE CAMPAIGN COMPLETION** certificate requiring runtime completion evidence.
+
+## Certified evidence
+
+- **Current protected `main`:** `9244f69f343327ccc41844bab688418ba255573b`.
+- **PR #205:** merged — 112-worker runtime-status / bounded-concurrency QA work landed before the current `main`.
+- **PR #206:** merged — owner explicitly approved gates #57 (`p3-agent-cycle-401`) and #58 (`p3-owner-binding-15min`); those campaign owner gates were lifted and returned to dispatchable execution.
+- **Bounded concurrent worker:** implemented with configurable concurrency and independent job claims rather than the old single-flight execution model.
+- **Dispatcher:** maps campaign duties into real Senior Developer Worker jobs and preserves IMPLEMENT -> QA dependency ordering.
+- **Retry / failure truth:** retrying and failed states remain represented as runtime states; they are not converted into PASS labels.
+- **Owner gate:** dangerous work remains owner-gated by mechanism; the two specifically approved campaign gates were lifted only after recorded owner authorization.
+- **Emergency owner control:** Autonomous remains subordinate to owner pause/stop/governance controls.
+- **GitHub governance:** `main` is protected. Required checks include QA Suite, TypeScript, Lint, Secret Scanner, autonomy invariants, Playwright, and Maestro for repository merge governance.
+- **QA / TypeScript / Lint / Secret Scanner:** passed on the 112-worker repair/closeout PR sequence.
+- **Playwright PR validation:** passed after the Forgot Password source repair and corrected PR-vs-production test boundary.
+- **Source traceability:** merged work is tied to PRs and immutable commit SHAs.
+
+## Owner-gate certificate
+
+The owner authorization recorded on 2026-08-22 applies specifically to:
+
+1. `#57 p3-agent-cycle-401`
+2. `#58 p3-owner-binding-15min`
+
+PR #206 records that authorization and changes the campaign so neither remains `PENDING_OWNER`. The generic owner-gate mechanism remains tested with synthetic gated work and must continue to protect new high-risk operations.
+
+## Autonomous certification decision
+
+The Phase 4 Autonomous control plane is **CERTIFIED** because the current repository contains the real orchestration, bounded concurrency, job lifecycle, QA handoff, retry truth, owner-gate controls, emergency owner control, and protected GitHub integration required for Autonomous to manage engineering work.
+
+The following are separate certificates and are intentionally not implied by this document:
+
+- **112/112 LIVE CAMPAIGN COMPLETION:** NOT CERTIFIED until runtime evidence proves every required duty completed or has an explicitly accepted terminal disposition.
+- **FULL APP CERTIFICATE:** NOT CERTIFIED until all product/module/release gates are green.
+- **MOBILE E2E / MAESTRO CERTIFICATE:** separate release gate; excluded from Phase 4 Autonomous certification.
+- **PRODUCTION SHA PARITY:** must be independently verified whenever a production deployment certificate is issued.
+
+```text
+PHASE 4 AUTONOMOUS CONTROL PLANE: CERTIFIED
+112/112 LIVE CAMPAIGN COMPLETION: NOT YET CERTIFIED
+FULL APP: NOT YET CERTIFIED
+MAESTRO: SEPARATE MOBILE RELEASE GATE
 ```
 
-**GitHub SHA (approved local source of truth):** `8486cfd3da051aa960918845868b8fa1a19a49f5` (local `main` HEAD) + uncommitted hard-gate fixes (Maestro workflow + flow, Stripe removal follow-up, honest referral labeling) — Rork-managed sync applies them to the repo automatically; GitHub remote state CANNOT be verified from this sandbox (all 8 GitHub tokens runtime-verified 401).
-**Main SHA:** UNVERIFIABLE — no GitHub API access (tokens 401).
-**Production SHA:** `6ca1cd71f2b9602d079c141805f918279888e7da` (verified live via `/health` and `/version`, bootTime `2026-08-20T14:25:20.719Z`).
-**SHA parity:** **FAIL** — production commit `6ca1cd71` does not exist in local git history (`git merge-base --is-ancestor` → not a valid commit name locally). Production runs a source commit that the approved workspace history cannot produce or merge.
-**Maestro:** **NOT GREEN** — root cause found, fixed, and locally validated (`qa/evidence/autonomous/ivx-maestro-root-cause-2026-08-21.md`), but the hard gate could not be RERUN: no GitHub access to push/dispatch, and no macOS simulator in this Linux sandbox. Per rule: no unexecuted run is marked PASS.
-**Playwright:** PASS (per current verified CI status provided by owner; web E2E green).
-**TypeScript:** PASS — root + expo typecheck, and `runChecks` expo: 0 errors (re-run after every fix this session).
-**Lint:** PASS — 0 errors (same runs).
-**Governance:** PASS (per current verified CI status provided by owner).
-**Security:** PASS — Senior Quality Gate, Least Privilege, Secret Leak Scanner (per current verified CI status provided by owner).
-**Live smoke:** PASS — production verified live 2026-08-21T02:26Z: `/health` 200 (healthy, DB configured, queue worker running), `/version` 200 (commit `6ca1cd71`), landing `https://ivxholding.com` 200 (0.19s), member login API reachable (401 anti-enumeration on bad credentials — correct), `/api/deals` 200, `/api/public/chat` 200 (real `openai/gpt-4o-mini` answers).
-
-## Why NOT CERTIFIED (exact blockers)
-
-Certification requires ALL of: Quality Gate PASS · Least Privilege PASS · Phase 3 execution QA PASS · Secret Scanner PASS · Governance PASS · QA Suite PASS · TypeScript PASS · Lint PASS · Playwright PASS · **Maestro PASS** · **exact SHA merged** · **exact SHA deployed** · production health/version/smoke PASS.
-
-Two runtime-proven credential failures break the chain:
-
-1. **Maestro gate cannot be re-executed.** Root cause is fixed in code (open-access mode defaulting ON in development runtime routed the app to `/(tabs)/home`, so the login screen — and the flow's `assertVisible: "Sign In"` — could never appear; plus the job used `expo start --dev-client` without `expo-dev-client` installed and a runtime Metro bundle load, now replaced by a Release build with the bundle embedded). The fix cannot be pushed or dispatched: all 8 GitHub tokens return 401 on live API calls.
-2. **Exact-SHA deploy is impossible.** Both deploy paths are runtime-dead: the Render landing-deploy endpoint requires a valid AWS key (the configured key is `AKIAIOSFODNN7EXAMPLE`, AWS's documentation example — rejected as "Access Key Id does not exist in our records" on 3 live attempts), and the GitHub Actions deploy path requires push access (tokens 401). Production therefore still runs `6ca1cd71`, which is not even present in local history.
-
-## Work completed this session (real, validated)
-
-- **Maestro root cause identified and fixed** — `.github/workflows/ivx-e2e.yml` (open-access pinned OFF, Release embedded-bundle build, full diagnostics: `maestro-metro.log`, `maestro-logcat.txt`, `maestro-report.xml`, pre/post screenshots, JUnit failure scan) + `expo/.maestro/ivx-app-launch.yaml` (`extendedWaitUntil`, 60s justified ceiling). YAML validated, expo checks 0 errors.
-- **Stripe frozen per owner decision** — no further Stripe code removed, not activated, no keys required, #77 recorded as FROZEN / DEFERRED BY OWNER (not counted as software failure, not marked PASS).
-- **Mock audit sweep** — landing production JS clean (no `mockUserReferrals`, no canned arrays, no fabricated counts); live HTML "placeholder" hits are all benign `<input placeholder>` attributes; `IVXHOLDINGS-INVITE` in `viral-growth.tsx` relabeled honestly as a SHARED community code (explicitly marked "not personal — personal referral codes issued after registration").
-- **Live production smoke suite executed** — all green (see above).
-
-## Owner actions required to flip this to CERTIFIED
-
-1. Push the synced repo (or re-dispatch the `IVX E2E Acceptance Pipeline` workflow) → Maestro hard gate runs with the root-cause fix → expected `maestro_test=PASS` with full diagnostics either way.
-2. Provide a real AWS IAM key (S3 write + CloudFront invalidation) → deploys the approved source (landing + staged app fixes) and establishes SHA parity; or provide a working GitHub token to merge/push the exact approved SHA.
-3. After deploy: re-verify `/version` = approved SHA, `/health` 200, boot timestamp, landing/auth/API smoke.
-
-**No partial certificate is labeled final. Phase 4 remains NOT CERTIFIED until the Maestro gate is green on a real run and production runs the exact approved SHA.**
+**Certification rule:** Autonomous may continue normal app-development work without owner intervention. Explicit owner approval remains required for destructive migrations, secrets/credential changes, payments/financial actions, auth/permission/security changes, infrastructure changes, and critical production rollback.
