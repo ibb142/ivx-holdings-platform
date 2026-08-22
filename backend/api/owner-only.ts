@@ -8,6 +8,7 @@ import {
 } from '../../expo/shared/ivx';
 import { timingSafeEqual } from 'node:crypto';
 import { verifyIVXOutageOwnerSession } from '../services/ivx-outage-owner-session';
+import { resolveActiveIVXSystemSecret } from '../services/ivx-system-secret';
 
 export type IVXOwnerRequestContext = IVXAuthenticatedRequestContext;
 
@@ -138,7 +139,7 @@ export function ownerOnlyOptions(): Response {
 }
 
 export async function assertIVXOwnerOnly(request: Request): Promise<IVXOwnerRequestContext> {
-  if (checkIVXAISystemKey(request)) {
+  if (await checkIVXAISystemKey(request)) {
     return makeSystemOwnerRequestContext();
   }
   const outageSession = verifyIVXOutageOwnerSession(extractIVXBearerToken(request));
@@ -280,7 +281,7 @@ function makeSystemOwnerRequestContext(): IVXOwnerRequestContext {
   } as unknown as IVXOwnerRequestContext;
 }
 
-const IVX_AI_SYSTEM_SECRET = process.env.IVX_AI_SYSTEM_SECRET?.trim() ?? '';
+const IVX_AI_SYSTEM_SECRET_ENV = () => (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim();
 
 /** Constant-time string comparison to prevent timing attacks on system key auth. */
 function constantTimeEquals(a: string, b: string): boolean {
@@ -292,9 +293,13 @@ function constantTimeEquals(a: string, b: string): boolean {
   }
 }
 
-function checkIVXAISystemKey(request: Request): boolean {
+async function checkIVXAISystemKey(request: Request): Promise<boolean> {
   const systemKey = request.headers.get('X-IVX-System-Key')?.trim() ?? '';
-  return IVX_AI_SYSTEM_SECRET.length > 0 && constantTimeEquals(systemKey, IVX_AI_SYSTEM_SECRET);
+  const activeSecret = await resolveActiveIVXSystemSecret();
+  if (!activeSecret) {
+    return IVX_AI_SYSTEM_SECRET_ENV().length > 0 && constantTimeEquals(systemKey, IVX_AI_SYSTEM_SECRET_ENV());
+  }
+  return constantTimeEquals(systemKey, activeSecret);
 }
 
 function makeSystemMutationApprovalProof(action: string): IVXOwnerMutationApprovalProof {
@@ -318,7 +323,7 @@ export async function assertIVXRegisteredOwnerBearer(
   request: Request,
   action: string,
 ): Promise<{ context: IVXOwnerRequestContext; approval: IVXOwnerMutationApprovalProof }> {
-  if (checkIVXAISystemKey(request)) {
+  if (await checkIVXAISystemKey(request)) {
     return {
       context: makeSystemOwnerRequestContext(),
       approval: makeSystemMutationApprovalProof(action),

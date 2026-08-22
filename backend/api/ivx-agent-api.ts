@@ -97,14 +97,16 @@ import {
   startCampaignDispatcher,
 } from '../services/ivx-campaign-dispatcher';
 
-function ownerAuthorized(c: any, body: Record<string, unknown> = {}): boolean {
+import { resolveActiveIVXSystemSecret } from '../services/ivx-system-secret';
+
+async function ownerAuthorized(c: any, body: Record<string, unknown> = {}): Promise<boolean> {
   const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';
-  const envSecret = (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim() || (process.env.IVX_OWNER_TOKEN ?? '').trim();
+  const envSecret = await resolveActiveIVXSystemSecret();
   return Boolean(envSecret) && provided === envSecret;
 }
 
-function requireOwner(c: any, body: Record<string, unknown> = {}) {
-  return ownerAuthorized(c, body) ? null : c.json({ ok: false, error: 'Owner authorization required.' }, 401);
+async function requireOwner(c: any, body: Record<string, unknown> = {}) {
+  return (await ownerAuthorized(c, body)) ? null : c.json({ ok: false, error: 'Owner authorization required.' }, 401);
 }
 
 
@@ -160,7 +162,7 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post('/api/ivx/agents/app-completion/control', async (c) => {
     const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
-    const denied = requireOwner(c, body as Record<string, unknown>);
+    const denied = await requireOwner(c, body as Record<string, unknown>);
     if (denied) return denied;
     const action = String((body as Record<string, unknown>).action ?? '');
     const allowed = ['pause_all', 'resume_all', 'stop_all', 'stop_agent', 'retry_agent', 'reassign'];
@@ -209,7 +211,7 @@ export function registerAgentRoutes(app: Hono): void {
   app.post('/api/ivx/agents/certificate/run', async (c) => {
     const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
     const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';
-    const envSecret = (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim() || (process.env.IVX_OWNER_TOKEN ?? '').trim();
+    const envSecret = await resolveActiveIVXSystemSecret();
     const authorized = Boolean(envSecret) && provided === envSecret;
     if (!authorized) {
       return c.json({ ok: false, error: 'Owner approval required to start the IVX 112 Real Execution Certificate run.' }, 401);
@@ -331,40 +333,40 @@ export function registerAgentRoutes(app: Hono): void {
 
   // ── Agent Control ─────────────────────────────────────────────────────────
 
-  app.post('/api/ivx/agents/:agentId/pause', (c) => {
-    const denied = requireOwner(c);
+  app.post('/api/ivx/agents/:agentId/pause', async (c) => {
+    const denied = await requireOwner(c);
     if (denied) return denied;
     const agentId = c.req.param('agentId');
     const result = pauseAgent(agentId);
     return c.json({ ok: result.ok, agentId, action: 'pause', error: result.error });
   });
 
-  app.post('/api/ivx/agents/:agentId/resume', (c) => {
-    const denied = requireOwner(c);
+  app.post('/api/ivx/agents/:agentId/resume', async (c) => {
+    const denied = await requireOwner(c);
     if (denied) return denied;
     const agentId = c.req.param('agentId');
     const result = resumeAgent(agentId);
     return c.json({ ok: result.ok, agentId, action: 'resume', error: result.error });
   });
 
-  app.post('/api/ivx/agents/:agentId/disable', (c) => {
-    const denied = requireOwner(c);
+  app.post('/api/ivx/agents/:agentId/disable', async (c) => {
+    const denied = await requireOwner(c);
     if (denied) return denied;
     const agentId = c.req.param('agentId');
     const result = disableAgent(agentId);
     return c.json({ ok: result.ok, agentId, action: 'disable', error: result.error });
   });
 
-  app.post('/api/ivx/agents/:agentId/enable', (c) => {
-    const denied = requireOwner(c);
+  app.post('/api/ivx/agents/:agentId/enable', async (c) => {
+    const denied = await requireOwner(c);
     if (denied) return denied;
     const agentId = c.req.param('agentId');
     const result = enableAgent(agentId);
     return c.json({ ok: result.ok, agentId, action: 'enable', error: result.error });
   });
 
-  app.post('/api/ivx/agents/:agentId/clear-memory', (c) => {
-    const denied = requireOwner(c);
+  app.post('/api/ivx/agents/:agentId/clear-memory', async (c) => {
+    const denied = await requireOwner(c);
     if (denied) return denied;
     const agentId = c.req.param('agentId');
     const result = clearTaskMemory(agentId);
@@ -376,7 +378,7 @@ export function registerAgentRoutes(app: Hono): void {
   app.post('/api/ivx/agents/:agentId/run', async (c) => {
     const agentId = c.req.param('agentId');
     const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
-    const denied = requireOwner(c, body as Record<string, unknown>);
+    const denied = await requireOwner(c, body as Record<string, unknown>);
     if (denied) return denied;
     const taskType = (body as any).taskType || 'audit';
     const payload = (body as any).payload || {};
@@ -396,7 +398,7 @@ export function registerAgentRoutes(app: Hono): void {
   app.post('/api/ivx/agents/:agentId/version', async (c) => {
     const agentId = c.req.param('agentId');
     const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
-    const denied = requireOwner(c, body as Record<string, unknown>);
+    const denied = await requireOwner(c, body as Record<string, unknown>);
     if (denied) return denied;
     const result = updateAgentContract(agentId, (body as any).updates || {}, (body as any).ownerApproval === true);
     return c.json({
@@ -410,7 +412,7 @@ export function registerAgentRoutes(app: Hono): void {
   app.post('/api/ivx/agents/:agentId/rollback', async (c) => {
     const agentId = c.req.param('agentId');
     const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
-    const denied = requireOwner(c, body as Record<string, unknown>);
+    const denied = await requireOwner(c, body as Record<string, unknown>);
     if (denied) return denied;
     const targetVersion = (body as any).targetVersion;
     if (typeof targetVersion !== 'number') {
@@ -541,7 +543,7 @@ export function registerAgentRoutes(app: Hono): void {
   // ── Execute All 112 Agents (ADVISORY/QA ONLY — not proof of real work) ───────────
 
   app.post('/api/ivx/agents/execute-all', async (c) => {
-    const denied = requireOwner(c);
+    const denied = await requireOwner(c);
     if (denied) return denied;
     const results: Array<{
       agentId: string;
