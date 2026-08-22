@@ -162,7 +162,7 @@
   function toggleForgotPassword() {
     var forgotView = document.getElementById('portal-forgot-view');
     if (!forgotView) return;
-    var showingForgot = forgotView.style.display === 'none';
+    var showingForgot = window.getComputedStyle(forgotView).display === 'none';
     forgotView.style.display = showingForgot ? 'block' : 'none';
     var loginForm = document.getElementById('portal-login-form');
     var forgotLine = document.getElementById('portal-forgot-link-line');
@@ -207,7 +207,6 @@
         ? window.location.origin + '/reset-password.html'
         : 'https://ivxholding.com/reset-password.html';
       var res = await sb.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl });
-      // Anti-enumeration: unknown accounts and rate limits still show the generic success line.
       var errMsg = (res && res.error && res.error.message) || '';
       var suppress = /rate limit|user not found|does not exist|email not confirmed/i.test(errMsg);
       if (res && res.error && !suppress) throw new Error(errMsg || 'Could not send reset link.');

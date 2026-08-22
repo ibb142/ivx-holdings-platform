@@ -62,12 +62,46 @@ jobs:
       - name: Install Playwright browsers
         working-directory: expo
         run: bunx playwright install --with-deps chromium
-      - name: Run Playwright tests — HARD GATE
+      - name: Start branch-local landing for PR validation
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4173 --directory expo/ivxholding-landing > "$RUNNER_TEMP/ivx-landing.log" 2>&1 &
+          for attempt in {1..20}; do
+            if curl --silent --fail http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/ivx-landing.log" || true
+          exit 1
+      - name: Validate changed landing flow against PR code — HARD GATE
+        if: github.event_name == 'pull_request'
         working-directory: expo
+        env:
+          E2E_BASE_URL: http://127.0.0.1:4173
+        run: |
+          set -euo pipefail
+          bunx playwright test __tests__/e2e/ivx-forgot-password.spec.ts --config=playwright.config.ts
+          echo 'playwright_pr_changed_surface=PASS'
+      - name: Keep production public smoke green on PR — HARD GATE
+        if: github.event_name == 'pull_request'
+        working-directory: expo
+        env:
+          E2E_BASE_URL: https://ivxholding.com
+        run: |
+          set -euo pipefail
+          bunx playwright test __tests__/e2e/ivx-owner-ai-smoke.spec.ts --config=playwright.config.ts
+          echo 'playwright_pr_production_smoke=PASS'
+      - name: Run full Playwright against production after merge — HARD GATE
+        if: github.event_name != 'pull_request'
+        working-directory: expo
+        env:
+          E2E_BASE_URL: https://ivxholding.com
         run: |
           set -euo pipefail
           bunx playwright test --config=playwright.config.ts
-          echo 'playwright=PASS'
+          echo 'playwright_production=PASS'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
