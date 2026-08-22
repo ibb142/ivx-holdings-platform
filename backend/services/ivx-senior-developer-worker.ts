@@ -1582,20 +1582,37 @@ export async function getSeniorDeveloperLastProof(): Promise<IVXWorkerLastProof>
 // QUEUE PROCESSING
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Serializes all load-modify-save cycles on the queue document. Without this,
+ * the fire-and-forget phase updates (void updateJobStage(...)) race the final
+ * awaited updateJob(...) and the LAST writer wins — the phase update's save
+ * landed after the final write and clobbered result/finishedAt/error, so every
+ * job (completed or failed) lost its final evidence. All updateJob writes now
+ * run through this chain so no write is lost.
+ */
+let queueWriteChain: Promise<unknown> = Promise.resolve();
+function withQueueWrite<T>(fn: () => Promise<T>): Promise<T> {
+  const run = queueWriteChain.then(fn, fn);
+  queueWriteChain = run.catch(() => undefined);
+  return run;
+}
+
 async function updateJob(jobId: string, patch: Partial<IVXWorkerJob>): Promise<void> {
-  const queue = await loadQueue();
-  const idx = queue.jobs.findIndex((j) => j.jobId === jobId);
-  if (idx < 0) return;
-  const existing = queue.jobs[idx];
-  const isActive = ACTIVE_STATUSES.has(patch.status ?? existing.status);
-  queue.jobs[idx] = {
-    ...existing,
-    ...patch,
-    // Every active write is evidence that the worker is alive. Terminal jobs
-    // retain their final heartbeat as the last observed execution signal.
-    lastHeartbeatAt: patch.lastHeartbeatAt ?? (isActive ? nowIso() : existing.lastHeartbeatAt),
-  };
-  await saveQueue(queue);
+  await withQueueWrite(async () => {
+    const queue = await loadQueue();
+    const idx = queue.jobs.findIndex((j) => j.jobId === jobId);
+    if (idx < 0) return;
+    const existing = queue.jobs[idx];
+    const isActive = ACTIVE_STATUSES.has(patch.status ?? existing.status);
+    queue.jobs[idx] = {
+      ...existing,
+      ...patch,
+      // Every active write is evidence that the worker is alive. Terminal jobs
+      // retain their final heartbeat as the last observed execution signal.
+      lastHeartbeatAt: patch.lastHeartbeatAt ?? (isActive ? nowIso() : existing.lastHeartbeatAt),
+    };
+    await saveQueue(queue);
+  });
   // Concurrent-drain claim release: once a job reaches a terminal status its
   // in-process claim is no longer needed, so a future retry may claim it again.
   if (patch.status && !ACTIVE_STATUSES.has(patch.status) && patch.status !== 'queued') {
@@ -1978,7 +1995,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         onPhase: (phase: IVXReadOnlyInspectionPhase, detail: string) => {
           if (controller.cancelled) return;
           const { stage, detail: mappedDetail } = phaseToStage(phase);
-          void updateJobStage(job.jobId, stage, mappedDetail || detail);
+          void updateJobStage(job.jobId, stage, detail || mappedDetail);
         },
       });
 
@@ -2029,7 +2046,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         onPhase: (phase: IVXQAOnlyPhase, detail: string) => {
           if (controller.cancelled) return;
           const { stage, detail: mappedDetail } = qaPhaseToStage(phase);
-          void updateJobStage(job.jobId, stage, mappedDetail || detail);
+          void updateJobStage(job.jobId, stage, detail || mappedDetail);
         },
       });
 
@@ -2191,7 +2208,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         onPhase: (phase: IVXAutonomousCoderPhase, detail: string) => {
           if (controller.cancelled) return;
           const { stage, detail: mappedDetail } = autonomousCoderPhaseToStage(phase);
-          void updateJobStage(job.jobId, stage, mappedDetail || detail);
+          void updateJobStage(job.jobId, stage, detail || mappedDetail);
         },
         // RESILIENCE: persist the commit SHA + branch to the job record the
         // instant the GitHub commit lands — BEFORE proof construction, deploy,
