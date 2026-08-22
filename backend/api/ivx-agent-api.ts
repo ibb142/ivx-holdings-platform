@@ -81,6 +81,14 @@ import {
 
 export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-19-owner-auth-guard';
 
+// App completion campaign (registered before :agentId routes so static paths win)
+// eslint-disable-next-line
+import {
+  buildAppCompletionCampaign,
+  loadControlState,
+  updateControlState,
+} from '../services/ivx-app-completion-campaign';
+
 function ownerAuthorized(c: any, body: Record<string, unknown> = {}): boolean {
   const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';
   const envSecret = (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim() || (process.env.IVX_OWNER_TOKEN ?? '').trim();
@@ -124,6 +132,28 @@ export function registerAgentRoutes(app: Hono): void {
       marker: IVX_AGENT_API_MARKER,
       agents,
     });
+  });
+
+  app.get('/api/ivx/agents/app-completion/dashboard', async (c) => {
+    await loadControlState();
+    const campaign = buildAppCompletionCampaign();
+    return c.json({ ok: true, marker: IVX_AGENT_API_MARKER, campaign });
+  });
+
+  app.post('/api/ivx/agents/app-completion/control', async (c) => {
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const denied = requireOwner(c, body as Record<string, unknown>);
+    if (denied) return denied;
+    const action = String((body as Record<string, unknown>).action ?? '');
+    const allowed = ['pause_all', 'resume_all', 'stop_all', 'stop_agent', 'retry_agent', 'reassign'];
+    if (!allowed.includes(action)) {
+      return c.json({ ok: false, error: `action must be one of: ${allowed.join(', ')}` }, 400);
+    }
+    const rawAgent = (body as Record<string, unknown>).agentNumber;
+    const agentNumber = typeof rawAgent === 'number' ? rawAgent : undefined;
+    const control = await updateControlState(action as Parameters<typeof updateControlState>[0], agentNumber);
+    const campaign = buildAppCompletionCampaign(control);
+    return c.json({ ok: true, marker: IVX_AGENT_API_MARKER, control, counts: campaign.counts });
   });
 
   app.get('/api/ivx/agents/dashboard', (c) => {
