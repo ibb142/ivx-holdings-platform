@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/ivx-112-concurrent-worker-fix.yml'
       - 'backend/services/ivx-senior-developer-worker.ts'
+      - 'expo/ivxholding-landing/ivx-portal.js'
   workflow_dispatch:
 
 permissions:
@@ -19,7 +20,7 @@ concurrency:
 jobs:
   patch-and-qa:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - name: Checkout repair branch
         uses: actions/checkout@v4
@@ -27,64 +28,76 @@ jobs:
           ref: fix/112-campaign-real-worker-dispatch
           fetch-depth: 0
 
-      - name: Verify bounded concurrency implementation and repair status surface
+      - name: Verify bounded worker and repair stale status surface
         shell: python
         run: |
           from pathlib import Path
-
           path = Path('backend/services/ivx-senior-developer-worker.ts')
           text = path.read_text()
-
-          required_existing = [
+          required = [
               'export function getWorkerMaxConcurrency(): number',
               'const claimedJobIds = new Set<string>()',
               'claimedJobIds.add(job.jobId)',
               'const maxConcurrent = getWorkerMaxConcurrency()',
               'const results = await Promise.all(batch)',
           ]
-          missing = [marker for marker in required_existing if marker not in text]
+          missing = [m for m in required if m not in text]
           if missing:
               raise SystemExit(f'CONCURRENCY_IMPLEMENTATION_MISSING: {missing}')
-
-          old_status = """    concurrency: {
+          old = """    concurrency: {
       globalExecutionSlots: 1,
       independentRuntimeCount: 0,
       classification: 'SHARED_WORKER_WITH_ROLE',
       note: 'The current worker is intentionally single-flight until isolated runtime leases are deployed and evidenced.',
     },
 """
-          new_status = """    concurrency: {
+          new = """    concurrency: {
       globalExecutionSlots: getWorkerMaxConcurrency(),
       independentRuntimeCount: getWorkerMaxConcurrency(),
       classification: 'BOUNDED_CONCURRENT_WORKER_LANES',
       note: 'Queued jobs use in-process claim isolation and per-owner single-flight; concurrency is bounded by IVX_WORKER_MAX_CONCURRENCY.',
     },
 """
-          if old_status in text:
-              text = text.replace(old_status, new_status, 1)
-          elif new_status not in text:
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif new not in text:
               raise SystemExit('STATUS_SURFACE_ANCHOR_MISSING')
-
           path.write_text(text)
-          print('CURRENT_CONCURRENCY_VERIFIED_AND_STATUS_REPAIRED')
 
-      - name: Static worker assertions
+      - name: Repair forgot-password toggle root cause
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('expo/ivxholding-landing/ivx-portal.js')
+          text = path.read_text()
+          old = "var showingForgot = forgotView.style.display === 'none';"
+          new = "var showingForgot = window.getComputedStyle(forgotView).display === 'none';"
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif new not in text:
+              raise SystemExit('FORGOT_PASSWORD_TOGGLE_ANCHOR_MISSING')
+          path.write_text(text)
+          print('FORGOT_PASSWORD_TOGGLE_REPAIRED')
+
+      - name: Static assertions
         run: |
           set -euo pipefail
           grep -q "export function getWorkerMaxConcurrency" backend/services/ivx-senior-developer-worker.ts
-          grep -q "const claimedJobIds = new Set<string>()" backend/services/ivx-senior-developer-worker.ts
-          grep -q "claimedJobIds.add(job.jobId)" backend/services/ivx-senior-developer-worker.ts
           grep -q "const results = await Promise.all(batch)" backend/services/ivx-senior-developer-worker.ts
           grep -q "globalExecutionSlots: getWorkerMaxConcurrency()" backend/services/ivx-senior-developer-worker.ts
-          ! grep -q "intentionally single-flight until isolated runtime leases" backend/services/ivx-senior-developer-worker.ts
+          grep -q "window.getComputedStyle(forgotView).display === 'none'" expo/ivxholding-landing/ivx-portal.js
+          ! grep -q "var showingForgot = forgotView.style.display === 'none'" expo/ivxholding-landing/ivx-portal.js
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.4
+          bun-version: 1.3.9
 
-      - name: Install dependencies
+      - name: Install root dependencies
         run: bun install --frozen-lockfile
+
+      - name: Install Expo dependencies
+        run: cd expo && bun install --frozen-lockfile
 
       - name: Backend TypeScript QA
         run: bunx tsc -p backend/tsconfig.json --noEmit
@@ -96,20 +109,24 @@ jobs:
           mapfile -t files < <(find backend -type f \( -name '*senior-developer-worker*.test.ts' -o -name '*senior-developer-worker*.spec.ts' -o -name '*app-completion-campaign*.test.ts' -o -name '*app-completion-campaign*.spec.ts' \) -print)
           if [ "${#files[@]}" -gt 0 ]; then
             bun test "${files[@]}"
-          else
-            echo "No focused worker/campaign test files found."
           fi
 
-      - name: Commit QA-verified source repair
+      - name: Install Playwright Chromium
+        run: cd expo && bunx playwright install --with-deps chromium
+
+      - name: Forgot-password Playwright QA
+        run: cd expo && bunx playwright test __tests__/e2e/ivx-forgot-password.spec.ts --config=playwright.config.ts
+
+      - name: Commit QA-verified repairs
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- backend/services/ivx-senior-developer-worker.ts; then
+          if git diff --quiet -- backend/services/ivx-senior-developer-worker.ts expo/ivxholding-landing/ivx-portal.js; then
             echo "No source repair required."
             exit 0
           fi
           git config user.name "ivx-ci-worker"
           git config user.email "ivx-ci-worker@users.noreply.github.com"
-          git add backend/services/ivx-senior-developer-worker.ts
-          git commit -m "fix: expose real bounded worker concurrency"
+          git add backend/services/ivx-senior-developer-worker.ts expo/ivxholding-landing/ivx-portal.js
+          git commit -m "fix: certify bounded worker and forgot-password flow"
           git push origin HEAD:fix/112-campaign-real-worker-dispatch
