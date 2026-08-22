@@ -19,7 +19,9 @@ import {
   ensureCampaignAssignment,
   getCampaignDispatcherSnapshot,
   listCampaignDispatcherRecords,
+  resetCampaignBootRecoveryForTests,
   resetCampaignDispatcherForTests,
+  runCampaignBootRecovery,
   setCampaignWorkerBridgeForTests,
   setEmergencyStopSourceForTests,
   tickCampaignDispatcher,
@@ -525,5 +527,32 @@ describe('IVX campaign dispatcher — full campaign mapping (scenarios 23-24)', 
       + merged.counts.TESTING + merged.counts.DEPLOYING + merged.counts.VERIFYING;
     expect(runningInCampaign).toBeGreaterThanOrEqual(runningInRecords);
     expect(snapshot.totals.running).toBe(runningInRecords);
+  });
+});
+
+describe('IVX campaign dispatcher — boot recovery', () => {
+  it('25. boot recovery requeues FAILED records once per boot with a reset retry budget', async () => {
+    await ensureCampaignAssignment(assignment({ agentNumber: 1, dutyId: 'd-boot' }));
+    for (let i = 0; i < MAX_CAMPAIGN_RETRIES + 2; i += 1) {
+      await tickCampaignDispatcher();
+      const rec = await findRecord('1:IMPLEMENT:d-boot');
+      if (rec?.workerJobId) fake.failJob(rec.workerJobId);
+    }
+    const failed = await findRecord('1:IMPLEMENT:d-boot');
+    expect(failed?.status).toBe('FAILED');
+    expect(failed?.retryCount).toBe(MAX_CAMPAIGN_RETRIES);
+
+    resetCampaignBootRecoveryForTests();
+    const recovered = await runCampaignBootRecovery();
+    expect(recovered).toBe(1);
+    const after = await findRecord('1:IMPLEMENT:d-boot');
+    expect(after?.status).toBe('QUEUED');
+    expect(after?.stage).toContain('BOOT RECOVERY');
+    expect(after?.retryCount).toBe(0);
+    expect(after?.error).toBeNull();
+
+    // Idempotent within the same boot — a second call recovers nothing.
+    const again = await runCampaignBootRecovery();
+    expect(again).toBe(0);
   });
 });
