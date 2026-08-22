@@ -21,7 +21,7 @@
   window._ivxLazyLoad = function(module) {
     if (module === 'portal') {
       if (window.IVXPortal) return Promise.resolve(window.IVXPortal);
-      return loadScript('/ivx-portal.js?v20260820').then(function() { return window.IVXPortal; });
+      return loadScript('/ivx-portal-20260822.js').then(function() { return window.IVXPortal; });
     }
     if (module === 'invest') {
       if (window.IVXInvest) return Promise.resolve(window.IVXInvest);
