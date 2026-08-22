@@ -702,8 +702,43 @@ export async function listCampaignDispatcherRecords(): Promise<CampaignJobRecord
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 const TICK_INTERVAL_MS = 10_000;
 
+let bootRecoveryDone = false;
+
+/**
+ * Boot recovery: once per process boot, requeue FAILED records with a reset
+ * retry budget so exhausted duties get exactly one more round after each
+ * deploy. Bounded by the per-boot flag — it can never loop.
+ */
+export async function runCampaignBootRecovery(): Promise<number> {
+  if (bootRecoveryDone) return 0;
+  bootRecoveryDone = true;
+  const state = await loadState();
+  let recovered = 0;
+  for (const record of state.records) {
+    if (record.status !== 'FAILED') continue;
+    record.status = record.role === 'QA' ? 'AWAITING_IMPLEMENT' : 'QUEUED';
+    record.stage = 'BOOT RECOVERY — RETRY AFTER DEPLOY';
+    record.retryCount = 0;
+    record.workerJobId = null;
+    record.error = null;
+    record.blocker = null;
+    record.finishedAt = null;
+    recovered += 1;
+  }
+  if (recovered > 0) {
+    await saveState(state);
+    await logEvent('control', { action: 'boot_recovery_requeue', recovered });
+  }
+  return recovered;
+}
+
+export function resetCampaignBootRecoveryForTests(): void {
+  bootRecoveryDone = false;
+}
+
 export function startCampaignDispatcher(): void {
   if (tickTimer) return;
+  void runCampaignBootRecovery().catch(() => {});
   tickTimer = setInterval(() => {
     void tickCampaignDispatcher().catch(() => {});
   }, TICK_INTERVAL_MS);
