@@ -93,6 +93,7 @@ import {
   campaignDispatcherControl,
   getCampaignDispatcherSnapshot,
   listCampaignDispatcherRecords,
+  runCampaignBootRecovery,
   startCampaignDispatcher,
 } from '../services/ivx-campaign-dispatcher';
 
@@ -143,6 +144,10 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.get('/api/ivx/agents/app-completion/dashboard', async (c) => {
     await loadControlState();
+    // Boot recovery first (awaited, serialized): requeues exhausted FAILED
+    // records once per process boot BEFORE any concurrent sync/tick can
+    // clobber the recovery save.
+    await runCampaignBootRecovery().catch(() => 0);
     // Ensure every assignment has a dispatcher record (idempotent) and keep
     // the bounded-concurrent dispatcher loop running.
     startCampaignDispatcher();
