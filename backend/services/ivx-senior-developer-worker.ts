@@ -105,6 +105,13 @@ import {
 
 export const IVX_SENIOR_DEV_WORKER_MARKER = 'ivx-senior-developer-worker-2026-07-17';
 
+/**
+ * LIVE PILOT CERTIFICATION NOTE (2026-08-22): the full owner-chat loop
+ * (chat -> worker -> patch -> tests -> typecheck -> commit -> PR) was proven
+ * live in production by the autonomous coder pilot run (job
+ * ivx-worker-f4a8b092, commit b1f467a290e3, PR #216).
+ */
+
 /** Repo-relative keys so the durable store derives stable doc keys. */
 const QUEUE_FILE = 'logs/audit/senior-developer-worker/queue.json';
 const LEDGER_FILE = 'logs/audit/senior-developer-worker/proof-ledger.json';
