@@ -100,6 +100,7 @@ import {
   fingerprintEvidence,
   checkDuplicateEvidence,
   normalizeGoalForRetry,
+  isSameTaskScope,
 } from './ivx-duplicate-worker-prevention';
 
 export const IVX_SENIOR_DEV_WORKER_MARKER = 'ivx-senior-developer-worker-2026-07-17';
@@ -1383,10 +1384,15 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
 
   // Check for an existing active job for this owner (also expires stale jobs).
   const activeJob = await getActiveJobForOwner(ownerId);
-  if (activeJob) {
-    // ATTACH: return the existing running job. The request is NOT discarded.
+  if (activeJob && isSameTaskScope(goal, activeJob.input.goal)) {
+    // ATTACH (same task scope only): the new command is a retry/follow-up of
+    // the running job. Reuse it so duplicate work is not enqueued.
+    appendDurableEvent(QUEUE_FILE, { type: 'job_attached', jobId: activeJob.jobId, ownerId, reason: 'same_task_scope' }).catch(() => {});
     return { job: activeJob, attached: true, activeJobId: activeJob.jobId };
   }
+  // DIFFERENT task scope: fall through and enqueue a separate job so the
+  // command is never lost and never mis-attributed to the active job's
+  // evidence. The queue serializes per-owner work safely.
 
   // Phase 12: compute idempotency key and check for a prior completed job with
   // the same key + identical evidence fingerprint. A duplicate redeploy (same

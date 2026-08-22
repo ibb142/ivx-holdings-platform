@@ -204,3 +204,80 @@ export function normalizeGoalForRetry(goal: string): string {
     .trim()
     .toLowerCase();
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PER-OWNER TASK SCOPE MATCHING (single-flight attach safety)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Chat handoffs append attachment metadata to worker goals. Strip it before
+ * comparing task scope so a re-sent command with the same screenshot still
+ * matches its own running job.
+ */
+const ATTACHMENT_CONTEXT_MARKER = 'OWNER ATTACHMENTS FOR THIS ENGINEERING TASK:';
+
+/** Words that carry no task identity. */
+const SCOPE_STOPWORDS = new Set([
+  'the', 'a', 'an', 'this', 'that', 'these', 'those', 'it', 'its', 'is', 'are',
+  'was', 'were', 'and', 'or', 'to', 'for', 'of', 'in', 'on', 'at', 'now',
+  'please', 'i', 'you', 'my', 'our', 'me', 'do', 'can', 'could', 'will',
+  'would', 'should', 'with', 'end', 'end-to-end', 'e2e',
+]);
+
+/**
+ * Words that can only form a follow-up/confirmation command (never a new
+ * task on their own). A goal made exclusively of these words attaches.
+ */
+const FOLLOW_UP_WORDS = new Set([
+  'yes', 'ok', 'okay', 'go', 'ahead', 'proceed', 'continue', 'do', 'it', 'run',
+  'keep', 'going', 'again', 'repeat', 'retry', 'resume', 'confirm', 'now',
+  'please', 'task', 'job',
+]);
+
+function isFollowUpCommand(normalizedGoal: string): boolean {
+  const plain = normalizedGoal
+    .replace(/[^a-z0-9\s/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!plain) return false;
+  if (plain.startsWith('/confirm')) return true;
+  const words = plain.split(' ').filter(Boolean);
+  return words.length > 0 && words.every((word) => FOLLOW_UP_WORDS.has(word));
+}
+
+function scopeTokens(goal: string): Set<string> {
+  return new Set(
+    goal
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((token) => token.length > 1 && !SCOPE_STOPWORDS.has(token)),
+  );
+}
+
+/**
+ * Decide whether a new owner command belongs to the owner's currently active
+ * job (attach/reuse) or is a DIFFERENT task that must be enqueued separately.
+ *
+ * Rules:
+ *   - identical normalized goals (attachment context stripped) → same task
+ *   - short follow-up/confirmation commands → same task
+ *   - token-set Jaccard similarity >= 0.5 → same task
+ *   - anything else → different task (never attach, never lose the command)
+ */
+export function isSameTaskScope(newGoal: string, activeGoal: string): boolean {
+  const stripContext = (goal: string): string => goal.split(ATTACHMENT_CONTEXT_MARKER)[0];
+  const a = normalizeGoalForRetry(stripContext(newGoal ?? ''));
+  const b = normalizeGoalForRetry(stripContext(activeGoal ?? ''));
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (isFollowUpCommand(a)) return true;
+
+  const tokensA = scopeTokens(a);
+  const tokensB = scopeTokens(b);
+  if (tokensA.size === 0 || tokensB.size === 0) return false;
+  let intersection = 0;
+  for (const token of tokensA) if (tokensB.has(token)) intersection += 1;
+  const union = new Set([...tokensA, ...tokensB]).size;
+  return intersection / union >= 0.5;
+}

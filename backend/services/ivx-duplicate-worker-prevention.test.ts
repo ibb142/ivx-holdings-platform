@@ -6,6 +6,7 @@ import {
   checkDuplicateEvidence,
   computeIdempotencyKey,
   fingerprintEvidence,
+  isSameTaskScope,
   normalizeGoalForRetry,
 } from './ivx-duplicate-worker-prevention';
 
@@ -65,5 +66,40 @@ describe('IVX Duplicate Worker Prevention', () => {
     const result = checkDuplicateEvidence(newFp, [{ jobId: 'job-A', fingerprint: priorFp }]);
     expect(result.isDuplicate).toBe(true);
     expect(result.reason).toContain('not a new completed development task');
+  });
+});
+
+describe('isSameTaskScope — per-owner single-flight attach safety', () => {
+  test('same task re-sent attaches (retry)', () => {
+    expect(isSameTaskScope('Fix the reels crash', 'Fix the reels crash')).toBe(true);
+  });
+
+  test('same task with extra wording attaches', () => {
+    expect(isSameTaskScope('Fix the owner login crash now', 'Fix the owner login crash')).toBe(true);
+  });
+
+  test('UNRELATED second command does NOT attach (wrong-attribution guard)', () => {
+    expect(isSameTaskScope('Fix owner login', 'Fix reels crash')).toBe(false);
+  });
+
+  test('different task with a shared word still does NOT attach', () => {
+    expect(isSameTaskScope('Patch this app issue', 'Fix the app crash')).toBe(false);
+  });
+
+  test('short follow-up commands attach to the active task', () => {
+    expect(isSameTaskScope('continue', 'Fix the reels crash')).toBe(true);
+    expect(isSameTaskScope('yes, go ahead', 'Fix the reels crash')).toBe(true);
+    expect(isSameTaskScope('/confirm', 'Fix the reels crash')).toBe(true);
+  });
+
+  test('attachment context alone does not break scope matching', () => {
+    const goalWithAttachment = 'Fix this screen now\n\nOWNER ATTACHMENTS FOR THIS ENGINEERING TASK:\nIMAGE_1: https://cdn.example/shot.png (image/png)';
+    const plainGoal = 'Fix this screen now\n\nOWNER ATTACHMENTS FOR THIS ENGINEERING TASK:\nIMAGE_1: https://cdn.example/shot-2.png (image/png)';
+    expect(isSameTaskScope(goalWithAttachment, plainGoal)).toBe(true);
+  });
+
+  test('empty goals never attach', () => {
+    expect(isSameTaskScope('', 'Fix the reels crash')).toBe(false);
+    expect(isSameTaskScope('Fix the reels crash', '')).toBe(false);
   });
 });
