@@ -1,25 +1,8 @@
 /**
- * IVX Chat → Autonomous Developer Handoff
+ * IVX Chat -> Autonomous Developer Handoff
  *
- * When an authenticated owner sends an execution command in IVX IA Chat
- * ("fix this bug", "deploy this", "implement this feature"), the chat backend
- * must route the request to the REAL Senior Developer Worker instead of
- * generating LLM narrative text.
- *
- * This module is the bridge: it detects execution intent, creates a real
- * worker job via enqueueOrAttachSeniorDeveloperJob, and returns the real
- * job ID + status. No LLM-generated task IDs, no simulated progress.
- *
- * Flow:
- *   owner chat message
- *   → detectAutonomousExecutionIntent(message)
- *   → createAutonomousJobFromChat(message, ownerId, conversationId)
- *   → enqueueOrAttachSeniorDeveloperJob()
- *   → real IVXWorkerJob with real jobId, status, stage
- *   → SSE response with autonomous_task event
- *
- * The chat UI then polls GET /api/ivx/senior-developer/worker/jobs/:jobId
- * for real progress — never LLM-invented status.
+ * Owner execution commands are routed to the real Senior Developer Worker.
+ * This module must never invent task IDs or progress.
  */
 import { classifyOwnerExecutionCommand, type IVXOwnerExecutionDecision } from './ivx-owner-execution-mode';
 import {
@@ -32,17 +15,6 @@ import {
 } from './ivx-senior-developer-worker';
 import { recordOwnerAuthorization, isOwnerAuthorized, getOwnerAuthorization } from './ivx-owner-authorization-store';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Intent detection
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Build/development intent patterns — same set as the frontend
- * seniorDeveloperBuildIntent.ts. A match routes the message to the worker
- * instead of the conversational LLM. Patterns are deliberately flexible to
- * catch natural phrasing like "implement this API endpoint", "build a new
- * module", "audit the codebase".
- */
 const BUILD_INTENT_PATTERNS: RegExp[] = [
   /\bbuild (?:an? )?(?:new )?(?:app|module|feature|endpoint|screen|page|service|api|component|integration)\b/i,
   /\bcreate (?:an? )?(?:new )?(?:app|module|feature|endpoint|screen|page|service|api|component|integration|function)\b/i,
@@ -52,9 +24,9 @@ const BUILD_INTENT_PATTERNS: RegExp[] = [
   /\bedit (?:the )?(?:code|file|files)\b/i,
   /\bwrite (?:the )?code\b/i,
   /\brefactor\b/i,
-  /\bfix (?:the |this |a |an )?(?:bug|issue|error|crash|defect|regression)\b/i,
+  /\bfix (?:the |this |a |an )?(?:bug|issue|error|crash|defect|regression|code|app|module|screen|page)\b/i,
   /\b(?:bug ?fix|hotfix)\b/i,
-  /\b(?:patch|repair) (?:the |this )?(?:bug|issue|error|crash|code|feature|app|module)\b/i,
+  /\b(?:patch|repair) (?:the |this )?(?:bug|issue|error|crash|code|feature|app|module|screen|page)\b/i,
   /\brun (?:the )?senior developer\b/i,
   /\bstart (?:a |the )?(?:module|app|feature) from scratch\b/i,
   /\bdeploy (?:this|it|to production|the app|the build)\b/i,
@@ -64,7 +36,6 @@ const BUILD_INTENT_PATTERNS: RegExp[] = [
   /\binspect (?:the )?(?:codebase|code|source|repo|repository|files)\b/i,
 ];
 
-/** Conversational patterns that should NOT trigger handoff. */
 const CONVERSATION_OVERRIDE: RegExp[] = [
   /\bwhat (?:is|are|was|were|do|does|did|can|could|should|would)\b/i,
   /\bexplain\b/i,
@@ -87,97 +58,59 @@ export type AutonomousExecutionIntent = {
   matchedBuildIntent: boolean;
   matchedTrigger: string[];
   reason: string;
-  /** Suggested worker execution mode. */
   executionMode: 'read_only' | 'code_change' | 'deploy';
-  /** Suggested template mode for the worker. */
   templateMode: string;
 };
 
+function noExecution(reason: string): AutonomousExecutionIntent {
+  return {
+    isExecutionCommand: false,
+    requiresApproval: false,
+    approvalCategories: [],
+    autoExecute: false,
+    matchedBuildIntent: false,
+    matchedTrigger: [],
+    reason,
+    executionMode: 'read_only',
+    templateMode: 'NEW_FEATURE',
+  };
+}
+
 /**
- * Detect whether a chat message is an autonomous execution command.
- * Combines the owner-execution-mode classifier with build-intent patterns.
- * Conversational questions are never misrouted to the worker.
+ * Execution intent has precedence over conversational wording.
+ * Example: "explain the crash and fix the bug" MUST execute because it contains
+ * an explicit mutation command. Pure questions remain conversational.
  */
 export function detectAutonomousExecutionIntent(message: string): AutonomousExecutionIntent {
   const trimmed = message.trim();
-  if (!trimmed) {
-    return {
-      isExecutionCommand: false,
-      requiresApproval: false,
-      approvalCategories: [],
-      autoExecute: false,
-      matchedBuildIntent: false,
-      matchedTrigger: [],
-      reason: 'Empty message.',
-      executionMode: 'read_only',
-      templateMode: 'NEW_FEATURE',
-    };
-  }
+  if (!trimmed) return noExecution('Empty message.');
 
-  // Conversational override — questions and explanations stay in chat.
-  for (const pattern of CONVERSATION_OVERRIDE) {
-    if (pattern.test(trimmed)) {
-      return {
-        isExecutionCommand: false,
-        requiresApproval: false,
-        approvalCategories: [],
-        autoExecute: false,
-        matchedBuildIntent: false,
-        matchedTrigger: [],
-        reason: 'Conversational question — stays in LLM chat.',
-        executionMode: 'read_only',
-        templateMode: 'NEW_FEATURE',
-      };
-    }
-  }
-
-  // Owner execution command classification
   const decision: IVXOwnerExecutionDecision = classifyOwnerExecutionCommand(trimmed);
+  const matchedBuildIntent = BUILD_INTENT_PATTERNS.some((pattern) => pattern.test(trimmed));
+  const explicitExecution = decision.isOwnerExecutionCommand || matchedBuildIntent;
 
-  // Build intent patterns
-  let matchedBuildIntent = false;
-  for (const pattern of BUILD_INTENT_PATTERNS) {
-    if (pattern.test(trimmed)) {
-      matchedBuildIntent = true;
-      break;
-    }
+  // Only apply conversational overrides when there is NO explicit execution
+  // signal. This prevents "explain ... and fix ..." from becoming narrative.
+  if (!explicitExecution && CONVERSATION_OVERRIDE.some((pattern) => pattern.test(trimmed))) {
+    return noExecution('Conversational question - stays in LLM chat.');
   }
+  if (!explicitExecution) return noExecution('Not an execution command - normal chat.');
 
-  const isExecutionCommand = decision.isOwnerExecutionCommand || matchedBuildIntent;
-  if (!isExecutionCommand) {
-    return {
-      isExecutionCommand: false,
-      requiresApproval: false,
-      approvalCategories: [],
-      autoExecute: false,
-      matchedBuildIntent: false,
-      matchedTrigger: [],
-      reason: 'Not an execution command — normal chat.',
-      executionMode: 'read_only',
-      templateMode: 'NEW_FEATURE',
-    };
-  }
-
-  // Determine execution mode
   const lowerMsg = trimmed.toLowerCase();
   let executionMode: 'read_only' | 'code_change' | 'deploy' = 'code_change';
-  if (/\bdeploy\b/i.test(lowerMsg) || /\bship\b/i.test(lowerMsg) || /\bto production\b/i.test(lowerMsg) || /\bto live\b/i.test(lowerMsg)) {
+  if (/\bdeploy\b|\bship\b|\bto production\b|\bto live\b/i.test(lowerMsg)) {
     executionMode = 'deploy';
-  } else if (/\baudit\b/i.test(lowerMsg) || /\binspect\b/i.test(lowerMsg) || /\breview\b/i.test(lowerMsg) || /\bdiagnos/i.test(lowerMsg)) {
+  } else if (/\baudit\b|\binspect\b|\breview\b|\bdiagnos/i.test(lowerMsg)
+    && !/\bfix\b|\brepair\b|\bpatch\b|\bimplement\b|\bmodify\b|\bchange\b|\bedit\b|\bdeploy\b|\bship\b/i.test(lowerMsg)) {
+    // Audit+fix must be code_change, not read_only.
     executionMode = 'read_only';
   }
 
-  // Determine template mode
   let templateMode = 'NEW_FEATURE';
-  if (/\bfix\b/i.test(lowerMsg) || /\bbug\b/i.test(lowerMsg) || /\brepair\b/i.test(lowerMsg)) {
-    templateMode = 'BUG_FIX';
-  } else if (/\brefactor\b/i.test(lowerMsg)) {
-    templateMode = 'REFACTOR';
-  } else if (/\bapp\b/i.test(lowerMsg) && /\bfrom scratch\b/i.test(lowerMsg)) {
-    templateMode = 'NEW_APP_FROM_SCRATCH';
-  } else if (/\bmodule\b/i.test(lowerMsg) && /\bfrom scratch\b/i.test(lowerMsg)) {
-    templateMode = 'NEW_MODULE_FROM_SCRATCH';
-  }
+  if (/\bfix\b|\bbug\b|\brepair\b|\bcrash\b|\bregression\b/i.test(lowerMsg)) templateMode = 'BUG_FIX';
+  else if (/\brefactor\b/i.test(lowerMsg)) templateMode = 'REFACTOR';
+  else if (/\bapp\b/i.test(lowerMsg) && /\bfrom scratch\b/i.test(lowerMsg)) templateMode = 'NEW_APP_FROM_SCRATCH';
+  else if (/\bmodule\b/i.test(lowerMsg) && /\bfrom scratch\b/i.test(lowerMsg)) templateMode = 'NEW_MODULE_FROM_SCRATCH';
 
   return {
     isExecutionCommand: true,
@@ -192,10 +125,6 @@ export function detectAutonomousExecutionIntent(message: string): AutonomousExec
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Job creation
-// ─────────────────────────────────────────────────────────────────────────────
-
 export type AutonomousHandoffResult = {
   ok: boolean;
   jobId: string | null;
@@ -204,18 +133,9 @@ export type AutonomousHandoffResult = {
   progressPercent: number | null;
   attached: boolean;
   error: string | null;
-  /** The intent that triggered the handoff. */
   intent: AutonomousExecutionIntent;
 };
 
-/**
- * Create a real autonomous worker job from a chat message.
- * The caller MUST have already verified owner authentication.
- *
- * For safe (auto-execute) commands, the job is created with ownerApproved=true.
- * For risky commands (requires approval), the job is NOT created — instead
- * a "requires approval" result is returned so the chat can ask the owner.
- */
 export async function createAutonomousJobFromChat(
   message: string,
   ownerId: string,
@@ -224,60 +144,38 @@ export async function createAutonomousJobFromChat(
 ): Promise<AutonomousHandoffResult> {
   const intent = detectAutonomousExecutionIntent(message);
 
-  // Owner mandate 2026-08-23 (dashboard provenance): every chat → worker job
+  // Owner mandate 2026-08-23 (dashboard provenance): every chat -> worker job
   // carries the ID of the source chat message that created it. When the
   // caller has no message ID, a deterministic one is generated so the chain
   // is never UNKNOWN.
   const provenanceChatMessageId = sourceChatMessageId
     ?? `chatmsg-${Date.now()}-${Math.abs(message.length * 31 + (conversationId ? conversationId.length * 7 : 0))}`;
-
   if (!intent.isExecutionCommand) {
-    return {
-      ok: false,
-      jobId: null,
-      status: null,
-      stage: null,
-      progressPercent: null,
-      attached: false,
-      error: 'Not an execution command.',
-      intent,
-    };
+    return { ok: false, jobId: null, status: null, stage: null, progressPercent: null, attached: false, error: 'Not an execution command.', intent };
   }
 
-  // P0 FIX (owner mandate 2026-08-10): Authorization persistence.
-  // If the owner already authorized this task scope, reuse the authorization.
-  // Do NOT re-ask for the same task unless scope materially changes.
   const alreadyAuthorized = isOwnerAuthorized(ownerId, message);
-
-  // Risky commands require explicit owner approval — but if the owner already
-  // authorized the same scope, skip the approval gate and proceed.
   if (intent.requiresApproval && !alreadyAuthorized) {
     return {
-      ok: false,
-      jobId: null,
-      status: null,
-      stage: null,
-      progressPercent: null,
-      attached: false,
-      error: `Owner approval required for: ${intent.approvalCategories.join(', ')}. Reply with /confirm to approve.`,
-      intent,
+      ok: false, jobId: null, status: null, stage: null, progressPercent: null, attached: false,
+      error: `Owner approval required for: ${intent.approvalCategories.join(', ')}. Reply with /confirm to approve.`, intent,
     };
   }
 
-  // Record the authorization so retries/recovery don't re-ask.
-  if (!alreadyAuthorized) {
+  // Safe work is recorded for auditability. Risky work reaches this point only
+  // after a matching owner authorization already exists.
+  if (!alreadyAuthorized && !intent.requiresApproval) {
     recordOwnerAuthorization({
       taskId: `chat-${Date.now()}`,
       ownerId,
       goal: message.trim(),
-      approvalPhrase: 'auto_execute',
+      approvalPhrase: 'auto_execute_safe_scope',
     });
-  } else {
+  } else if (alreadyAuthorized) {
     const existingAuth = getOwnerAuthorization(ownerId, message);
-    console.log(`[IVXChatHandoff] authorization_reused: taskId=${existingAuth?.taskId} owner=${ownerId} — no re-ask for same scope`);
+    console.log(`[IVXChatHandoff] authorization_reused: taskId=${existingAuth?.taskId} owner=${ownerId}`);
   }
 
-  // Create the real worker job
   const jobInput: IVXWorkerJobInput = {
     goal: message.trim(),
     ownerApproved: true,
@@ -307,50 +205,22 @@ export async function createAutonomousJobFromChat(
       intent,
     };
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : 'Failed to create autonomous job.';
     return {
-      ok: false,
-      jobId: null,
-      status: null,
-      stage: null,
-      progressPercent: null,
-      attached: false,
-      error: errorMsg,
-      intent,
+      ok: false, jobId: null, status: null, stage: null, progressPercent: null, attached: false,
+      error: error instanceof Error ? error.message : 'Failed to create autonomous job.', intent,
     };
   }
 }
 
-/**
- * Get the current status of an autonomous job by ID.
- * Used by the chat to poll for real progress.
- */
 export async function getAutonomousJobStatus(jobId: string): Promise<IVXWorkerJob | null> {
-  try {
-    return await getSeniorDeveloperJob(jobId);
-  } catch {
-    return null;
-  }
+  try { return await getSeniorDeveloperJob(jobId); } catch { return null; }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SSE response formatting
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Format the autonomous task creation as an SSE-compatible payload.
- * This is sent as a `response.autonomous_task` event in the chat stream.
- */
 export function formatAutonomousTaskSsePayload(result: AutonomousHandoffResult): Record<string, unknown> {
   return {
-    type: 'response.autonomous_task',
-    ok: result.ok,
-    jobId: result.jobId,
-    status: result.status,
-    stage: result.stage,
-    progressPercent: result.progressPercent,
-    attached: result.attached,
-    error: result.error,
+    type: 'response.autonomous_task', ok: result.ok, jobId: result.jobId,
+    status: result.status, stage: result.stage, progressPercent: result.progressPercent,
+    attached: result.attached, error: result.error,
     intent: {
       isExecutionCommand: result.intent.isExecutionCommand,
       requiresApproval: result.intent.requiresApproval,
@@ -362,11 +232,6 @@ export function formatAutonomousTaskSsePayload(result: AutonomousHandoffResult):
   };
 }
 
-/**
- * Format a human-readable summary of the autonomous task for the chat UI.
- * This is NOT LLM-generated — it is a deterministic string built from real
- * job state.
- */
 export function formatAutonomousTaskMessage(result: AutonomousHandoffResult): string {
   if (!result.ok) {
     if (result.intent.requiresApproval) {
@@ -377,55 +242,29 @@ export function formatAutonomousTaskMessage(result: AutonomousHandoffResult): st
         '',
         'Reply with /confirm to approve and start the real autonomous job.',
         'The job will execute through the real Senior Developer Worker pipeline:',
-        'inspect → patch → test → commit → push → deploy → verify',
+        'inspect -> patch -> test -> commit -> push -> deploy -> verify',
       ].join('\n');
     }
     return `AUTONOMOUS TASK: BLOCKED\nReason: ${result.error}`;
   }
-
   const lines = [
-    'AUTONOMOUS TASK CREATED',
-    `JOB_ID: ${result.jobId}`,
-    `STATUS: ${result.status}`,
-    `STAGE: ${result.stage}`,
-    `PROGRESS: ${result.progressPercent}%`,
+    'AUTONOMOUS TASK CREATED', `JOB_ID: ${result.jobId}`, `STATUS: ${result.status}`,
+    `STAGE: ${result.stage}`, `PROGRESS: ${result.progressPercent}%`,
   ];
-
-  if (result.attached) {
-    lines.push('NOTE: Attached to an existing active job for this owner.');
-  }
-
-  lines.push(
-    '',
-    'The Senior Developer Worker is now executing this task.',
-    'Real progress will be tracked from the worker queue.',
-    `Poll: GET /api/ivx/senior-developer/worker/jobs/${result.jobId}`,
-  );
-
+  if (result.attached) lines.push('NOTE: Attached to an existing active job for this owner.');
+  lines.push('', 'The Senior Developer Worker is now executing this task.', 'Real progress will be tracked from the worker queue.', `Poll: GET /api/ivx/senior-developer/worker/jobs/${result.jobId}`);
   return lines.join('\n');
 }
 
-/**
- * Format a job status update as a chat-readable message.
- * Used when polling returns an updated status.
- */
 export function formatJobStatusMessage(job: IVXWorkerJob): string {
   const lines = [
-    `JOB_ID: ${job.jobId}`,
-    `STATUS: ${job.status}`,
-    `STAGE: ${job.stage}`,
+    `JOB_ID: ${job.jobId}`, `STATUS: ${job.status}`, `STAGE: ${job.stage}`,
     `PROGRESS: ${job.progressPercent}%`,
   ];
-
-  if (job.stageDetail) {
-    lines.push(`DETAIL: ${job.stageDetail}`);
-  }
-
+  if (job.stageDetail) lines.push(`DETAIL: ${job.stageDetail}`);
   if (job.result) {
     const r = job.result;
-    lines.push(
-      '',
-      '--- RESULT ---',
+    lines.push('', '--- RESULT ---',
       `COMMIT_SHA: ${r.commitSha ?? 'none'}`,
       `DEPLOY_ID: ${r.deployId ?? 'none'}`,
       `HEALTH_STATUS: ${r.healthStatus ?? 'none'}`,
@@ -434,10 +273,6 @@ export function formatJobStatusMessage(job: IVXWorkerJob): string {
       `FINAL_STATUS: ${r.finalStatus}`,
     );
   }
-
-  if (job.error) {
-    lines.push(`ERROR: ${job.error}`);
-  }
-
+  if (job.error) lines.push(`ERROR: ${job.error}`);
   return lines.join('\n');
 }
