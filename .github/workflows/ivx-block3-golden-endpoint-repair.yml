@@ -1,0 +1,66 @@
+name: IVX Block 3 Golden Endpoint Repair
+on:
+  push:
+    branches: [fix/block3-4-golden-role-cert-20260823]
+permissions:
+  contents: write
+jobs:
+  wire-and-test:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/block3-4-golden-role-cert-20260823
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - run: bun install --frozen-lockfile
+      - name: Wire read-only golden behavior endpoint
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('backend/hono-extended.ts')
+          s=p.read_text()
+          imp="import { handleGoldenCertGet } from './api/ivx-golden-cert';\n"
+          route="\n// Public, read-only behavior proof for the Autonomous golden chain.\napp.get('/api/ivx/certification/golden', () => handleGoldenCertGet());\n"
+          if imp not in s:
+              anchor="import app from './hono';\n"
+              if anchor not in s: raise SystemExit('hono import anchor missing')
+              s=s.replace(anchor, anchor+imp, 1)
+          if route.strip() not in s:
+              anchor="app.options('/api/ivx/autonomous/control-plane', () => autonomousControlPlaneOptions());"
+              if anchor not in s: raise SystemExit('route anchor missing')
+              s=s.replace(anchor, route+"\n"+anchor, 1)
+          p.write_text(s)
+          t=Path('backend/api/ivx-golden-cert.test.ts')
+          t.write_text("""import { describe, expect, test } from 'bun:test';
+import { handleGoldenCertGet } from './ivx-golden-cert';
+
+describe('golden production behavior proof', () => {
+  test('returns the exact golden marker without secrets', async () => {
+    process.env.RENDER_GIT_COMMIT = 'test-sha';
+    const response = handleGoldenCertGet();
+    expect(response.status).toBe(200);
+    const body = await response.json() as any;
+    expect(body.ok).toBe(true);
+    expect(body.marker).toBe('IVX-GOLDEN-CERT-V7-2026-08-23');
+    expect(body.commit).toBe('test-sha');
+    expect(body.verification).toBe('live-production-behavior');
+    expect(body.secretValuesReturned).toBe(false);
+  });
+});
+""")
+      - name: Targeted test
+        run: bun test backend/api/ivx-golden-cert.test.ts
+      - name: Typecheck
+        run: cd backend && bunx tsc --noEmit
+      - name: Commit verified repair
+        run: |
+          rm .github/workflows/ivx-block3-golden-endpoint-repair.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/api/ivx-golden-cert.ts backend/api/ivx-golden-cert.test.ts backend/hono-extended.ts .github/workflows/ivx-block3-golden-endpoint-repair.yml
+          git commit -m "feat(cert): expose live golden behavior proof"
+          git push origin HEAD:fix/block3-4-golden-role-cert-20260823
