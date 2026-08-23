@@ -38,6 +38,7 @@ import {
   parseTscOutput,
   type EngineeringToolResult,
 } from './ivx-agent-engineering-tools';
+import { extractRenderApiKey, extractRenderServiceId } from './ivx-render-credentials';
 
 export const IVX_MUTATION_TOOLS_MARKER = 'ivx-agent-mutation-tools-2026-08-20';
 
@@ -581,8 +582,11 @@ async function doDeploy(
   startedAt: number,
   options: MutationToolOptions,
 ): Promise<MutationToolResult> {
-  const apiKey = (process.env.RENDER_API_KEY ?? process.env.IVX_RENDER_API_KEY ?? '').trim();
-  const serviceId = String(params.serviceId ?? process.env.RENDER_SERVICE_ID ?? '').trim();
+  // FINAL CLOSEOUT 2026-08-23: normalize raw values through the credential
+  // extractors — env values may carry annotation labels around the real
+  // `rnd_…` key / `srv-…` id, which produced Render 401s.
+  const apiKey = extractRenderApiKey(process.env.RENDER_API_KEY ?? process.env.IVX_RENDER_API_KEY);
+  const serviceId = extractRenderServiceId(String(params.serviceId ?? process.env.RENDER_SERVICE_ID ?? ''));
   const mode = String(params.mode ?? 'verify');
 
   if (!apiKey) {
