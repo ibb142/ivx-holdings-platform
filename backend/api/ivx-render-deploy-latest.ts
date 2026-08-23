@@ -6,6 +6,7 @@
  * returned to the client.
  */
 import { auditIVXRenderRuntimeAccess } from '../services/ivx-senior-developer-runtime';
+import { extractRenderApiKey, extractRenderServiceId } from '../services/ivx-render-credentials';
 import { getIVXOwnerVariableRuntimeValue, inspectIVXOwnerVariableRuntimeReadiness } from './ivx-owner-variables';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 
@@ -22,8 +23,13 @@ function maskSecret(value: string | undefined): string {
 }
 
 async function readRenderRuntimeCredentials(): Promise<{ apiKey: string; serviceId: string }> {
-  const apiKey = (process.env.RENDER_API_KEY ?? '').trim() || await getIVXOwnerVariableRuntimeValue('RENDER_API_KEY');
-  const serviceId = (process.env.RENDER_SERVICE_ID ?? '').trim() || await getIVXOwnerVariableRuntimeValue('RENDER_SERVICE_ID');
+  // FINAL CLOSEOUT 2026-08-23: normalize raw values through the credential
+  // extractors — env/owner-variable values may carry annotation labels around
+  // the real `rnd_…` key / `srv-…` id, which produced Render 401s.
+  const envKey = extractRenderApiKey(process.env.RENDER_API_KEY);
+  const apiKey = envKey || extractRenderApiKey(await getIVXOwnerVariableRuntimeValue('RENDER_API_KEY'));
+  const envService = extractRenderServiceId(process.env.RENDER_SERVICE_ID);
+  const serviceId = envService || extractRenderServiceId(await getIVXOwnerVariableRuntimeValue('RENDER_SERVICE_ID'));
   return { apiKey, serviceId };
 }
 

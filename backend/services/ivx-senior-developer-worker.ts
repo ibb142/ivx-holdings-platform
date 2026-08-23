@@ -66,6 +66,7 @@ import {
 import {
   IVX_AUTONOMOUS_CODER_MARKER,
   runIVXAutonomousCoder,
+  resumeIVXAutonomousCoderFromCiWait,
   buildAutonomousCoderAnswer,
   type IVXAutonomousCoderProof,
   type IVXAutonomousCoderExecutionMode as IVXAutonomousCoderMode,
@@ -310,6 +311,21 @@ export type IVXWorkerJobResult = {
   ciChecksGreen?: boolean | null;
   /** Per-required-check evidence captured during the CI wait. */
   ciCheckEvidence?: IVXCiCheckEvidence[] | null;
+  /** FINAL CLOSEOUT 2026-08-23 (restart/CI-wait resume): resume state persisted
+   *  the instant the PR is created — BEFORE the CI wait begins — so a worker
+   *  restart mid-wait resumes the merge chain with the same jobId instead of
+   *  being orphaned for the stale sweep to expire. */
+  ciResumeState?: {
+    jobId: string;
+    taskId: string;
+    phase: 'CI_WAIT';
+    commitSha: string;
+    prNumber: number;
+    prUrl: string;
+    branch: string;
+    mergeTarget: string;
+    persistedAt: string;
+  } | null;
   /** Owner mandate 2026-08-23: owner approval for a deploy was verified. */
   deployApproved?: boolean;
   deployId: string | null;
@@ -999,6 +1015,10 @@ export async function expireStaleJobs(): Promise<string[]> {
 
   for (const job of queue.jobs) {
     if (!ACTIVE_STATUSES.has(job.status)) continue;
+    // FINAL CLOSEOUT 2026-08-23: a job whose CI-wait resume is actively running
+    // in this process is alive — its heartbeat is refreshed by the resume's
+    // onPhase callbacks. Never expire it out from under the resume.
+    if (activeCiResumeJobIds.has(job.jobId)) continue;
     const activityAt = job.lastHeartbeatAt ?? job.startedAt;
     if (!activityAt) continue;
     const activityAtMs = new Date(activityAt).getTime();
@@ -1041,6 +1061,18 @@ export async function expireStaleJobs(): Promise<string[]> {
     // Recovery must never break the stale sweep.
   }
 
+  // RESILIENCE LAYER 5 (FINAL CLOSEOUT 2026-08-23): resume jobs whose worker
+  // process was restarted while waiting for the PR's required CI checks. The
+  // onPrCreated callback persisted the full resume state (commitSha, prNumber,
+  // prUrl, branch) BEFORE the CI wait began; on boot or periodic sweep this
+  // re-queries the PR + required checks and continues the merge chain with the
+  // SAME jobId (never a duplicate, never a false COMPLETED).
+  try {
+    await recoverStuckCiWaitJobs(queue as QueueDoc);
+  } catch {
+    // Recovery must never break the stale sweep.
+  }
+
   return expired;
 }
 
@@ -1048,6 +1080,103 @@ export async function expireStaleJobs(): Promise<string[]> {
  *  Shorter than STALE_JOB_TIMEOUT_MS so we recover before the stale sweep marks
  *  the job FAILED (which would lose the real commit evidence). */
 const COMMITTING_RECOVERY_THRESHOLD_MS = 2 * 60 * 1000; // 2 min
+
+/** FINAL CLOSEOUT 2026-08-23 (restart/CI-wait resume): jobIds with a CI-wait
+ *  resume actively running in this process. Guards both the stale sweep (never
+ *  expire a resuming job) and the resume sweep (never spawn a duplicate
+ *  resume for the same job). */
+const activeCiResumeJobIds = new Set<string>();
+
+/** How long a job may sit in the CI-wait state (commit landed + PR open,
+ *  unmerged) before the resume sweep takes over (ms). Shorter than
+ *  STALE_JOB_TIMEOUT_MS so the resume wins before the stale sweep expires the
+ *  job — that expiry was the original gap (in-flight CI waits never resumed). */
+const CI_WAIT_RESUME_THRESHOLD_MS = 90 * 1000; // 90s
+
+/**
+ * Resume code-change jobs whose worker process was killed while waiting for
+ * the PR's required CI checks (FINAL CLOSEOUT 2026-08-23).
+ *
+ * Candidates: jobs at status 'committing' whose persisted result carries a
+ * prNumber + commitSha with prMerged=false — exactly the state persisted by
+ * the coder's onPrCreated callback right before the CI wait began. For each,
+ * ONE background resume is spawned (guarded by activeCiResumeJobIds) that
+ * re-queries the PR and required checks and continues the chain:
+ *   checks running → keep waiting · checks green → merge · checks red → BLOCKED
+ *   already merged → reconcile merge SHA → COMPLETED.
+ *
+ * The resume reuses the ORIGINAL jobId and taskId — no duplicate job is ever
+ * created, and the job never falsely completes without a merged PR + green CI.
+ */
+async function recoverStuckCiWaitJobs(queue: QueueDoc): Promise<void> {
+  const candidates = queue.jobs.filter((j) =>
+    j.status === 'committing'
+    && j.result?.prNumber != null
+    && j.result?.commitSha
+    && j.result?.prMerged !== true
+    && !activeCiResumeJobIds.has(j.jobId));
+  if (candidates.length === 0) return;
+  for (const job of candidates) {
+    // Only resume jobs that have actually been waiting (not jobs whose PR was
+    // just created milliseconds ago by a live coder run in THIS process).
+    const activityAt = job.lastHeartbeatAt ?? job.startedAt;
+    if (!activityAt) continue;
+    if (Date.now() - new Date(activityAt).getTime() < CI_WAIT_RESUME_THRESHOLD_MS) continue;
+    activeCiResumeJobIds.add(job.jobId);
+    void resumeCiWaitJob(job.jobId).finally(() => {
+      activeCiResumeJobIds.delete(job.jobId);
+    });
+  }
+}
+
+/** Background resume for a single CI-wait job. Runs the resumable coder entry
+ *  point with the persisted state and finalizes the job exactly like the
+ *  normal autonomous-coder path (COMPLETED only on a confirmed merge). */
+async function resumeCiWaitJob(jobId: string): Promise<void> {
+  const job = await getSeniorDeveloperJob(jobId);
+  if (!job || !ACTIVE_STATUSES.has(job.status)) return;
+  const prNumber = job.result?.prNumber;
+  const commitSha = job.result?.commitSha;
+  if (prNumber == null || !commitSha) return;
+  const resumeStartedAt = nowIso();
+  await updateJobStage(jobId, 'COMMITTING', `Worker restart detected — resuming CI wait for PR #${prNumber} (commit ${commitSha.slice(0, 12)}) with the original taskId. No duplicate job created.`);
+  const proof = await resumeIVXAutonomousCoderFromCiWait({
+    taskId: job.jobId,
+    goal: job.input.goal,
+    ownerId: job.ownerId,
+    commitSha,
+    prNumber,
+    prUrl: job.result?.prUrl ?? null,
+    branch: job.result?.branch ?? '',
+    testsPassed: job.result?.testsPassed !== false,
+    typecheckPassed: job.result?.typecheckPassed !== false,
+    filesChanged: [],
+    onPhase: (phase, detail) => {
+      const { stage, detail: mappedDetail } = autonomousCoderPhaseToStage(phase);
+      void updateJobStage(jobId, stage, detail || mappedDetail);
+    },
+  });
+  const result = summarizeAutonomousCoderProof(jobId, proof);
+  const finalized = finalizeResultWithStateRecord(job, result);
+  const status: IVXWorkerJobStatus = finalized.finalStatus === 'COMPLETE'
+    ? 'completed'
+    : finalized.finalStatus === 'BLOCKED'
+      ? 'blocked'
+      : 'failed';
+  const finalStage: IVXWorkerJobStage = status === 'completed' ? 'COMPLETED' : 'FAILED';
+  await updateJob(jobId, {
+    status,
+    stage: finalStage,
+    progressPercent: STAGE_PROGRESS[finalStage],
+    stageDetail: status === 'completed'
+      ? `Restart resume COMPLETED: PR #${prNumber} merged after CI green (merge commit ${proof.prMergeCommitSha ?? 'none'}). Same jobId resumed — no duplicate job created. Resume started ${resumeStartedAt}.`
+      : (finalized.error ?? `Restart resume of PR #${prNumber} did not complete.`),
+    finishedAt: nowIso(),
+    result: finalized,
+    error: finalized.error,
+  });
+  await appendLedger(finalized);
+}
 
 /** Window after startedAt within which a recovered commit must have been
  *  authored. Guards against picking up an unrelated prior commit. */
@@ -1070,9 +1199,13 @@ async function recoverStuckCommittingJobs(queue: QueueDoc): Promise<void> {
   const now = Date.now();
 
   // Find jobs stuck at COMMITTING past the threshold.
+  // FINAL CLOSEOUT 2026-08-23: jobs with a persisted PR (result.prNumber) are
+  // CI-wait jobs — they are owned by the Layer 5 CI-wait resume, never by this
+  // commit-landed recovery (which would wrongly COMPLETE an unmerged PR job).
   const stuckJobs = queue.jobs.filter((j) =>
     j.status === 'committing' &&
     j.stage === 'COMMITTING' &&
+    j.result?.prNumber == null &&
     j.startedAt &&
     now - new Date(j.startedAt).getTime() > COMMITTING_RECOVERY_THRESHOLD_MS);
   if (stuckJobs.length === 0) return;
@@ -2307,6 +2440,50 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
               taskType: classifyTaskType(job.input.goal),
             },
           });
+        },
+        // FINAL CLOSEOUT 2026-08-23 (restart/CI-wait resume): persist the full
+        // resume state the instant the PR exists — BEFORE the CI wait begins —
+        // so a worker restart mid-wait resumes the merge chain with the SAME
+        // jobId instead of being orphaned for the stale sweep to expire.
+        onPrCreated: ({ commitSha, prNumber, prUrl, branch }) => {
+          void (async () => {
+            try {
+              const current = await getSeniorDeveloperJob(job.jobId);
+              const prior = current?.result ?? null;
+              // onCommitLanded always persists the full result BEFORE the PR is
+              // created; if it is somehow missing, keep the last known-good
+              // result untouched rather than writing a partial one.
+              if (!prior) return;
+              await updateJob(job.jobId, {
+                stage: 'COMMITTING',
+                status: 'committing',
+                progressPercent: STAGE_PROGRESS['COMMITTING'],
+                stageDetail: `Pull request #${prNumber} created — CI-wait resume state persisted (commit ${commitSha.slice(0, 12)}, branch ${branch}).`,
+                result: {
+                  ...prior,
+                  prNumber,
+                  prUrl,
+                  prMerged: false,
+                  prMergeCommitSha: null,
+                  commitSha,
+                  branch,
+                  ciResumeState: {
+                    jobId: job.jobId,
+                    taskId: job.jobId,
+                    phase: 'CI_WAIT',
+                    commitSha,
+                    prNumber,
+                    prUrl,
+                    branch,
+                    mergeTarget: 'main',
+                    persistedAt: nowIso(),
+                  },
+                },
+              });
+            } catch {
+              // Resilience callback must never break the run.
+            }
+          })();
         },
       });
 

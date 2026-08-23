@@ -714,6 +714,7 @@ import { OPTIONS as aiBrainToolsOptions, handleIVXAIBrainToolExecuteRequest, han
 import { OPTIONS as controlRoomStatusOptions, handleIVXControlRoomStatusRequest } from './api/ivx-control-room-status';
 import { OPTIONS as developerDeployOptions, handleIVXDeveloperDeployActionRequest, handleIVXDeveloperDeployStatusRequest } from './api/ivx-developer-deploy-control';
 import { ivxIaDeveloperProofOptions, handleIVXIaDeveloperProofRequest } from './api/ivx-ia-developer-proof';
+import { handleIVXGoldenCertRequest } from './api/ivx-golden-cert';
 import {
   developerProofOptions,
   handleDeveloperProofLatest,
@@ -3505,6 +3506,18 @@ app.get('/api/ivx/ia-developer-proof', () =>
 );
 app.get('/ivx/ia-developer-proof', () =>
   handleIVXIaDeveloperProofRequest(LIVE_COMMIT_SHA, LIVE_COMMIT_SHORT, SERVER_BOOT_TIME, DEPLOYMENT_MARKER),
+);
+
+// IVX GOLDEN CERT — behavior-specific production verification of the
+// autonomous golden chain (owner mandate 2026-08-23 final closeout).
+// GET /api/ivx/golden-cert returns HTTP 200 with the golden marker and the
+// exact deployed production SHA — deterministic live behavior, NOT source-code
+// inspection. Before the golden code change this route returned 404.
+app.get('/api/ivx/golden-cert', () =>
+  handleIVXGoldenCertRequest(LIVE_COMMIT_SHA, SERVER_BOOT_TIME),
+);
+app.get('/ivx/golden-cert', () =>
+  handleIVXGoldenCertRequest(LIVE_COMMIT_SHA, SERVER_BOOT_TIME),
 );
 
 // IVX IA Developer Proof Standard — permanent proof ledger.
