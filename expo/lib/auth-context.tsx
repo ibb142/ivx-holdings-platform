@@ -1993,11 +1993,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         const directStartedAt = Date.now();
         const directResult = await signInWithEmailPassword(freshClient, normalizedEmail, password);
         if (directResult.ok) {
-          trace.checkpoint('BACKEND_RESPONSE_RECEIVED', { success: true, path: 'supabase_direct_owner' });
+          trace.checkpoint('BACKEND_RESPONSE_RECEIVED', { success: true });
           trace.checkpoint('SESSION_CREATED');
           trace.checkpoint('SESSION_PERSIST_STARTED');
           const directSession = directResult.session;
-          trace.checkpoint('SESSION_PERSIST_COMPLETE', { elapsedMs: Date.now() - directStartedAt });
+          trace.checkpoint('SESSION_PERSIST_COMPLETE');
+          console.log('[Auth] Direct owner Supabase session established in', Date.now() - directStartedAt, 'ms');
           const challengeRequired = await requireTwoFactorIfNeeded(directSession, 'direct owner password sign-in');
           if (challengeRequired) {
             return { success: false, requiresTwoFactor: true, message: 'Enter the 6-digit code from your authenticator app to finish signing in.' };
@@ -2008,7 +2009,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           if (!handledDirectSession.accepted) {
             return { success: false, message: handledDirectSession.blockedReason ?? getAdminAccessLockMessage(), failureReason: 'admin_access_locked' };
           }
-          trace.checkpoint('APP_SESSION_READY', { path: 'supabase_direct_owner', elapsedMs: Date.now() - directStartedAt });
+          trace.checkpoint('APP_SESSION_READY');
           return { success: true, message: 'Login successful', traceId: trace.traceId };
         }
 
