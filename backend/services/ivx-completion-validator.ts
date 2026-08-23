@@ -8,9 +8,7 @@
  */
 
 export const IVX_COMPLETION_VALIDATOR_MARKER =
-  'ivx-completion-validator-2026-07-22';
-
-// --- Task type classifier ---
+  'ivx-completion-validator-2026-08-22-fail-closed';
 
 export type IVXTaskType =
   | 'CODE_FIX'
@@ -21,8 +19,6 @@ export type IVXTaskType =
   | 'QA_ONLY'
   | 'CONFIGURATION_FIX'
   | 'INFRASTRUCTURE_FIX';
-
-// --- Evidence shape used by answer-format module + tests ---
 
 export type IVXCompletionEvidence = {
   taskType: string;
@@ -48,8 +44,6 @@ export type IVXCompletionEvidence = {
   verifiedAt: string | null;
 };
 
-// --- Legacy input type (kept for backwards compat, not used by callers) ---
-
 export type IVXCompletionValidatorInput = {
   userRequest: string;
   acceptanceCriteria: string[];
@@ -70,8 +64,6 @@ export type IVXCompletionValidatorInput = {
   requestedBehaviorTested: boolean;
 };
 
-// --- Verdict + result types ---
-
 export type IVXValidationVerdict =
   | 'VERIFIED'
   | 'DEPLOYED_ONLY'
@@ -90,8 +82,6 @@ export type IVXCompletionValidatorResult = {
   remainingWork: string[];
 };
 
-// --- Task classifier ---
-
 export function classifyTaskType(prompt: string): IVXTaskType {
   const lower = prompt.toLowerCase();
   const requestsImplementation = /\b(fix|repair|resolve|patch|change|update|add|create|build|implement)\b/.test(lower);
@@ -108,8 +98,6 @@ export function classifyTaskType(prompt: string): IVXTaskType {
   if (lower.includes('chat') || lower.includes('scroll') || lower.includes('keyboard') || lower.includes('loading') || lower.includes('ui')) return 'UI_FIX';
   return 'CODE_FIX';
 }
-
-// --- Verdict rendering helpers ---
 
 export function renderValidatorVerdict(verdict: string): string {
   return verdict;
@@ -128,11 +116,22 @@ export function renderValidatorReason(verdict: string, reasons: string[]): strin
   return `Verdict: ${verdict}. Reasons: ${reasons.join('; ')}.`;
 }
 
-// --- Main validator ---
+function fail(reason: string, remaining: string): IVXCompletionValidatorResult {
+  return {
+    verdict: 'NOT_COMPLETED',
+    ok: false,
+    state: 'NOT_COMPLETED',
+    reasons: [reason],
+    remainingWork: [remaining],
+  };
+}
 
 /**
- * Validate whether a task can honestly claim completion.
- * Accepts IVXCompletionEvidence (the shape used by the answer-format module and tests).
+ * Fail-closed completion contract for IVX development work.
+ * A code task is VERIFIED only when the evidence proves the complete chain:
+ * code changed -> tests -> typecheck -> commit -> deploy -> production health
+ * -> exact production commit parity -> requested behavior verification (when
+ * a behavior verifier has supplied a value).
  */
 export function validateCompletion(
   input: IVXCompletionEvidence,
@@ -145,14 +144,20 @@ export function validateCompletion(
     input.taskType === 'FEATURE' ||
     input.taskType === 'UI_FIX';
 
-  // Check previous VERIFIED claim without feature verification
+  if (input.error) {
+    return {
+      verdict: 'FAILED', ok: false, state: 'FAILED',
+      reasons: [`Execution recorded an error: ${input.error}`],
+      remainingWork: ['Resolve the execution error and rerun the task from a clean evidence chain.'],
+    };
+  }
+
   if (input.previousVerdict === 'VERIFIED' && input.featureVerificationOk === false) {
     reasons.push('Previous VERIFIED claim lacked feature verification — cannot re-verify without it.');
     remainingWork.push('Perform feature verification on the requested behavior.');
   }
 
   if (isCodeTask) {
-    // Code task with no files changed
     if (input.filesChanged.length === 0) {
       if (input.deployId) {
         reasons.push('Development task requested but no code changed — this is a redeploy, not a fix.');
@@ -166,59 +171,50 @@ export function validateCompletion(
       };
     }
 
-    // Code task with files changed but tests not run
-    if (!input.testsRun) {
+    if (!input.testsRun) return fail('Tests were not run for a code task.', 'Run the relevant regression tests.');
+    if (!input.testsPassed) return fail('Tests failed for a code task.', 'Fix the failing tests and rerun them.');
+
+    if (!input.typecheckRun) return fail('Typecheck was not run for a code task.', 'Run TypeScript typecheck for the changed code.');
+    if (!input.typecheckPassed) return fail('Typecheck failed for a code task.', 'Resolve the type errors and rerun typecheck.');
+
+    if (!input.commitSha) return fail('Code changed and passed local validation but no commit SHA exists.', 'Create a traceable commit before claiming completion.');
+
+    if (!input.deployId) return fail('Code was changed and committed but not deployed.', 'Deploy the merged change and capture the deployment ID.');
+
+    if (!input.productionHealthOk) {
       return {
-        verdict: 'NOT_COMPLETED', ok: false, state: 'NOT_COMPLETED',
-        reasons: ['Tests were not run for a code task.'],
-        remainingWork: ['Run the test suite.'],
+        verdict: 'PARTIAL', ok: false, state: 'PARTIAL',
+        reasons: ['Code changed and deployed but production health is not confirmed.'],
+        remainingWork: ['Verify production /health successfully.'],
       };
     }
 
-    // Code task with files changed but tests failed
-    if (!input.testsPassed) {
-      return {
-        verdict: 'NOT_COMPLETED', ok: false, state: 'NOT_COMPLETED',
-        reasons: ['Tests failed for a code task.'],
-        remainingWork: ['Fix the failing tests.'],
-      };
+    if (!input.commitMatch) {
+      return fail(
+        'Production commit does not exactly match the certified code commit.',
+        'Wait for or redeploy the exact certified SHA, then verify /version parity.',
+      );
     }
 
-    // Code task with files changed but not deployed
-    if (!input.deployId) {
-      return {
-        verdict: 'NOT_COMPLETED', ok: false, state: 'NOT_COMPLETED',
-        reasons: ['Code was changed but not deployed.'],
-        remainingWork: ['Deploy the change.'],
-      };
+    if (input.featureVerificationOk === false) {
+      return fail(
+        'The requested behavior failed production feature verification.',
+        'Fix the behavior and rerun the end-to-end verification.',
+      );
     }
 
-    // Code task with files + tests pass + deployed + health ok → VERIFIED
-    if (input.testsPassed && input.deployId && input.productionHealthOk) {
-      if (reasons.length > 0) {
-        return { verdict: 'NOT_COMPLETED', ok: false, state: 'NOT_COMPLETED', reasons, remainingWork };
-      }
-      return { verdict: 'VERIFIED', ok: true, state: 'VERIFIED', reasons: [], remainingWork: [] };
+    if (reasons.length > 0) {
+      return { verdict: 'NOT_COMPLETED', ok: false, state: 'NOT_COMPLETED', reasons, remainingWork };
     }
 
-    // Code task with files + tests pass + deployed but health not checked
-    return {
-      verdict: 'PARTIAL', ok: false, state: 'PARTIAL',
-      reasons: ['Code changed and deployed but production health not confirmed.'],
-      remainingWork: ['Verify production health.'],
-    };
+    return { verdict: 'VERIFIED', ok: true, state: 'VERIFIED', reasons: [], remainingWork: [] };
   }
 
-  // Non-code tasks
   if (input.taskType === 'DEPLOYMENT') {
-    if (input.deployId && input.productionHealthOk) {
-      return { verdict: 'VERIFIED', ok: true, state: 'VERIFIED', reasons: [], remainingWork: [] };
-    }
-    return {
-      verdict: 'NOT_COMPLETED', ok: false, state: 'NOT_COMPLETED',
-      reasons: ['Deployment task not completed.'],
-      remainingWork: ['Deploy and verify health.'],
-    };
+    if (!input.deployId) return fail('Deployment task has no deployment ID.', 'Trigger the deployment and capture its deployment ID.');
+    if (!input.productionHealthOk) return fail('Deployment is not production-healthy.', 'Verify production /health.');
+    if (!input.commitMatch) return fail('Deployment SHA does not match the expected commit.', 'Verify exact /version SHA parity.');
+    return { verdict: 'VERIFIED', ok: true, state: 'VERIFIED', reasons: [], remainingWork: [] };
   }
 
   if (input.taskType === 'INVESTIGATION') {
@@ -229,28 +225,26 @@ export function validateCompletion(
     if (input.testsRun && input.testsPassed) {
       return { verdict: 'VERIFIED', ok: true, state: 'VERIFIED', reasons: [], remainingWork: [] };
     }
-    return {
-      verdict: 'NOT_COMPLETED', ok: false, state: 'NOT_COMPLETED',
-      reasons: ['QA tests not run or not passing.'],
-      remainingWork: ['Run the QA tests.'],
-    };
+    return fail('QA tests not run or not passing.', 'Run the QA tests and preserve the evidence.');
   }
 
-  // Default for config/infrastructure or unknown
-  if (input.filesChanged.length > 0 && input.deployId && input.productionHealthOk) {
+  if (
+    input.filesChanged.length > 0 &&
+    input.commitSha &&
+    input.deployId &&
+    input.productionHealthOk &&
+    input.commitMatch
+  ) {
     return { verdict: 'VERIFIED', ok: true, state: 'VERIFIED', reasons: [], remainingWork: [] };
   }
 
   return {
     verdict: 'NOT_COMPLETED', ok: false, state: 'NOT_COMPLETED',
     reasons: ['Task not completed.'],
-    remainingWork: ['Perform the requested work.'],
+    remainingWork: ['Perform the requested work and provide complete execution evidence.'],
   };
 }
 
-/**
- * Build the "STATUS: NOT COMPLETED" message when validation fails.
- */
 export function buildNotCompletedMessage(
   result: IVXCompletionValidatorResult,
 ): string {
@@ -258,13 +252,9 @@ export function buildNotCompletedMessage(
   lines.push(`STATUS: NOT COMPLETED`);
   lines.push('');
   lines.push('REASONS:');
-  for (const reason of result.reasons) {
-    lines.push(` - ${reason}`);
-  }
+  for (const reason of result.reasons) lines.push(` - ${reason}`);
   lines.push('');
   lines.push('REMAINING WORK:');
-  for (const work of result.remainingWork) {
-    lines.push(` - ${work}`);
-  }
+  for (const work of result.remainingWork) lines.push(` - ${work}`);
   return lines.join('\n');
 }
