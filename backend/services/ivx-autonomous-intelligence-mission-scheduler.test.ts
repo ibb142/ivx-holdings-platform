@@ -85,7 +85,7 @@ describe('ivx-autonomous-intelligence-mission-scheduler', () => {
     expect(job!.input.ownerApproved).toBe(true);
     expect(job!.input.executionMode).toBe('code_change');
     expect(job!.input.goal).toContain(IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER);
-    expect(job!.input.goal).toContain('qa/evidence/autonomous/ivx-autonomous-intelligence-mission-scheduler-cert.json');
+    expect(job!.input.goal).toContain('expo/evidence/autonomous/ivx-autonomous-intelligence-mission-scheduler-cert.json');
   });
 
   it('does not create duplicate jobs when already active', async () => {

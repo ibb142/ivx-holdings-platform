@@ -35,7 +35,7 @@ export const IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER =
   'ivx-autonomous-intelligence-mission-scheduler-2026-08-23';
 
 const MISSION_GOAL_TEMPLATE = `Create a durable autonomous intelligence mission scheduler live evidence file at:
-qa/evidence/autonomous/ivx-autonomous-intelligence-mission-scheduler-cert.json
+expo/evidence/autonomous/ivx-autonomous-intelligence-mission-scheduler-cert.json
 
 The file must contain exactly these fields:
 - "marker": "${IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER}"
@@ -231,7 +231,9 @@ function mergeJobIntoState(state: MissionSchedulerState, job: IVXWorkerJob): Mis
     liveCommit: result?.liveCommit ?? state.liveCommit,
     healthOk: result?.healthOk ?? state.healthOk,
     completedAt: job.status === 'completed' ? (result?.generatedAt ?? nowIso()) : state.completedAt,
-    error: job.error ?? state.error,
+    error:
+      job.error ??
+      (job.status === 'failed' || job.status === 'blocked' ? state.error : null),
     updatedAt: nowIso(),
   };
 }
@@ -318,7 +320,7 @@ export async function startAutonomousIntelligenceMissionScheduler(): Promise<voi
         systemMode: true,
         ownerApprovedAction: {
           proposedPlan: goal,
-          filesAffected: ['qa/evidence/autonomous/ivx-autonomous-intelligence-mission-scheduler-cert.json'],
+          filesAffected: ['expo/evidence/autonomous/ivx-autonomous-intelligence-mission-scheduler-cert.json'],
           riskLevel: 'low',
           rollbackOption: 'Delete the evidence file and revert the autonomous commit.',
           rollbackAvailable: true,
