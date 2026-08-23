@@ -14,6 +14,7 @@ import app from './backend/hono-extended';
 import { handleRealtimeVoiceConnection, getRealtimeVoiceStatus } from './backend/services/ivx-realtime-voice';
 import { startSeniorDevWorker } from './backend/services/ivx-senior-dev-worker';
 import { startAutonomousScheduler } from './backend/services/ivx-autonomous-scheduler';
+import { startAutonomousIntelligenceMissionScheduler } from './backend/services/ivx-autonomous-intelligence-mission-scheduler';
 import { startSmsNotificationScheduler, getSmsNotifierStatus } from './backend/services/ivx-autonomous-sms-notifier';
 import { runCompletionCampaignCycle } from './backend/services/ivx-autonomous-completion-campaign';
 import { getLatestMemberAuthCertification, startMemberAuthCertificationScheduler } from './backend/services/ivx-member-auth-certification';
@@ -140,6 +141,7 @@ app.all('/api/ivx/autonomous/voice/status', async (c) => handleAutonomousVoiceCa
 app.get('/api/ivx/certification/autonomous-voice-public', async (c) => handleAutonomousVoicePublicCertificate(c.req.raw));
 
 startAutonomousScheduler();
+startAutonomousIntelligenceMissionScheduler();
 
 const runCompletionCycleSafely = async (reason: string): Promise<void> => {
   try {
