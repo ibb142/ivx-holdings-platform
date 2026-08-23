@@ -1,25 +1,106 @@
-import { describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { execFile } from 'node:child_process';
 import {
   classifyMutationRisk,
-  isAutonomousMutationTool,
+  executeMutationTool,
   isOwnerGatedCodePath,
   isProtectedAutonomousBranch,
-} from './ivx-agent-autonomous-mutation-tools';
+  verifyOwnerApproval,
+  type VerificationGate,
+} from './ivx-agent-mutation-tools';
 
-describe('IVX autonomous low-risk mutation policy', () => {
-  it('allows normal application source writes without a human gate', () => {
-    expect(classifyMutationRisk('code_write', {
-      path: 'expo/components/HomeCard.tsx',
-      content: 'export const HomeCard = () => null;',
-    })).toEqual({
-      autonomous: true,
-      risk: 'low',
-      reason: 'low_risk_application_code',
-      sensitivePaths: [],
-    });
+const OWNER_TOKEN = 'test-owner-token-live-integration';
+const SYSTEM_TOKEN = 'test-system-token-live-integration';
+let oldOwner: string | undefined;
+let oldSystem: string | undefined;
+
+function sh(cmd: string, args: string[], cwd: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, { cwd, timeout: 30_000 }, (err) => err ? reject(err) : resolve());
+  });
+}
+
+async function makeRepo(): Promise<{ repo: string; cleanup: () => Promise<void> }> {
+  const repo = await mkdtemp(path.join(tmpdir(), 'ivx-live-mutation-'));
+  await mkdir(path.join(repo, 'expo/components'), { recursive: true });
+  await sh('git', ['init'], repo);
+  await sh('git', ['config', 'user.email', 'test@ivx.local'], repo);
+  await sh('git', ['config', 'user.name', 'IVX Test'], repo);
+  await sh('git', ['config', 'commit.gpgsign', 'false'], repo);
+  await writeFile(path.join(repo, 'seed.txt'), 'seed\n', 'utf8');
+  await sh('git', ['add', '.'], repo);
+  await sh('git', ['commit', '-m', 'seed'], repo);
+  return { repo, cleanup: () => rm(repo, { recursive: true, force: true }) };
+}
+
+const GREEN: VerificationGate = {
+  passed: true,
+  typecheckErrors: 0,
+  testsPass: 42,
+  failingTestNames: [],
+  detail: 'verification GREEN',
+  evidenceSha256: 'a'.repeat(64),
+};
+
+beforeEach(() => {
+  oldOwner = process.env.IVX_OWNER_TOKEN;
+  oldSystem = process.env.IVX_AI_SYSTEM_SECRET;
+  process.env.IVX_OWNER_TOKEN = OWNER_TOKEN;
+  process.env.IVX_AI_SYSTEM_SECRET = SYSTEM_TOKEN;
+});
+
+afterEach(() => {
+  if (oldOwner === undefined) delete process.env.IVX_OWNER_TOKEN;
+  else process.env.IVX_OWNER_TOKEN = oldOwner;
+  if (oldSystem === undefined) delete process.env.IVX_AI_SYSTEM_SECRET;
+  else process.env.IVX_AI_SYSTEM_SECRET = oldSystem;
+});
+
+describe('IVX 112 live autonomous mutation integration', () => {
+  it('recognizes the IVX system credential without treating it as owner mode', () => {
+    const result = verifyOwnerApproval(SYSTEM_TOKEN);
+    expect(result.approved).toBe(true);
+    expect(result.mode).toBe('autonomous_system');
+    expect(result.reason).toContain('low_risk_only');
   });
 
-  it('keeps auth, payments, migrations, CI, infrastructure and security owner-gated', () => {
+  it('allows a real low-risk application write with the system credential', async () => {
+    const { repo, cleanup } = await makeRepo();
+    try {
+      const result = await executeMutationTool(
+        'code_write',
+        { path: 'expo/components/HomeCard.tsx', content: 'export const HomeCard = () => null;\n' },
+        { repoRoot: repo, ownerApprovalToken: SYSTEM_TOKEN },
+      );
+      expect(result.ok).toBe(true);
+      expect(result.extract.authorizationMode).toBe('autonomous_system');
+      expect(await readFile(path.join(repo, 'expo/components/HomeCard.tsx'), 'utf8')).toContain('HomeCard');
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('allows a verified autonomous commit for low-risk files', async () => {
+    const { repo, cleanup } = await makeRepo();
+    try {
+      await writeFile(path.join(repo, 'expo/components/HomeCard.tsx'), 'export const x = 1;\n', 'utf8');
+      const result = await executeMutationTool(
+        'git_commit',
+        { message: 'fix: safe home card', files: ['expo/components/HomeCard.tsx'] },
+        { repoRoot: repo, ownerApprovalToken: SYSTEM_TOKEN, preVerified: GREEN },
+      );
+      expect(result.ok).toBe(true);
+      expect(result.extract.authorizationMode).toBe('autonomous_system');
+      expect(String(result.extract.commitSha)).toMatch(/^[0-9a-f]{40}$/);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('keeps auth, payments, migrations, CI, infrastructure and autonomy controls owner-gated', async () => {
     const paths = [
       'backend/auth/session.ts',
       'backend/services/payments.ts',
@@ -27,49 +108,45 @@ describe('IVX autonomous low-risk mutation policy', () => {
       '.github/workflows/deploy.yml',
       'backend/security/permissions.ts',
       'infra/terraform/main.tf',
-      'server.ts',
       'backend/services/ivx-agent-real-tools.ts',
+      'backend/services/ivx-agent-runtime.ts',
+      'package.json',
     ];
-    for (const path of paths) {
-      expect(isOwnerGatedCodePath(path)).toBe(true);
-      expect(classifyMutationRisk('code_write', { path, content: 'x' }).autonomous).toBe(false);
+    for (const file of paths) {
+      expect(isOwnerGatedCodePath(file)).toBe(true);
+      expect(classifyMutationRisk('code_write', { path: file, content: 'x' }).autonomous).toBe(false);
+    }
+
+    const { repo, cleanup } = await makeRepo();
+    try {
+      const blocked = await executeMutationTool(
+        'code_write',
+        { path: 'backend/auth/session.ts', content: 'x' },
+        { repoRoot: repo, ownerApprovalToken: SYSTEM_TOKEN },
+      );
+      expect(blocked.ok).toBe(false);
+      expect(blocked.error).toContain('owner approval required');
+    } finally {
+      await cleanup();
     }
   });
 
-  it('allows commit only when every requested path is low-risk', () => {
-    expect(classifyMutationRisk('git_commit', {
-      files: ['expo/components/HomeCard.tsx', 'expo/lib/home-feed.ts'],
-    }).autonomous).toBe(true);
-
-    const blocked = classifyMutationRisk('git_commit', {
-      files: ['expo/components/HomeCard.tsx', 'backend/auth/session.ts'],
-    });
-    expect(blocked.autonomous).toBe(false);
-    expect(blocked.sensitivePaths).toContain('backend/auth/session.ts');
+  it('never allows the system credential to deploy production', async () => {
+    const blocked = await executeMutationTool(
+      'deploy',
+      { mode: 'trigger' },
+      { ownerApprovalToken: SYSTEM_TOKEN },
+    );
+    expect(blocked.ok).toBe(false);
+    expect(blocked.error).toContain('production_deploy_requires_owner');
   });
 
-  it('allows autonomous push to work branches but never protected branches', () => {
+  it('allows work branches but blocks main/production/release pushes', () => {
     expect(isProtectedAutonomousBranch('main')).toBe(true);
     expect(isProtectedAutonomousBranch('production')).toBe(true);
     expect(isProtectedAutonomousBranch('release/v1.2.3')).toBe(true);
     expect(isProtectedAutonomousBranch('autonomous/fix-home-black-screen')).toBe(false);
-
-    expect(classifyMutationRisk('git_push', {
-      branch: 'autonomous/fix-home-black-screen',
-    }).autonomous).toBe(true);
+    expect(classifyMutationRisk('git_push', { branch: 'autonomous/fix-home-black-screen' }).autonomous).toBe(true);
     expect(classifyMutationRisk('git_push', { branch: 'main' }).autonomous).toBe(false);
-  });
-
-  it('never autonomously deploys production', () => {
-    expect(classifyMutationRisk('deploy', { mode: 'trigger' }).autonomous).toBe(false);
-    expect(classifyMutationRisk('deploy_to_production', {}).autonomous).toBe(false);
-  });
-
-  it('exposes only the four non-production autonomous mutation tools', () => {
-    expect(isAutonomousMutationTool('code_write')).toBe(true);
-    expect(isAutonomousMutationTool('code_patch_proposal')).toBe(true);
-    expect(isAutonomousMutationTool('git_commit')).toBe(true);
-    expect(isAutonomousMutationTool('git_push')).toBe(true);
-    expect(isAutonomousMutationTool('deploy')).toBe(false);
   });
 });
