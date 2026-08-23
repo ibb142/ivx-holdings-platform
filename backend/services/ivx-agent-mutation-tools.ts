@@ -126,12 +126,12 @@ export function redactSecrets(text: string): string {
 
 // ── Authorization ────────────────────────────────────────────────────────────
 
-export type ApprovalMode = 'owner' | 'autonomous_system';
+export type ApprovalMode = 'owner' | 'autonomous_system' | 'none';
 export type ApprovalOutcome = {
   approved: boolean;
   reason: string;
   binding: string;
-  mode: ApprovalMode | 'none';
+  mode: ApprovalMode;
 };
 
 function tokenMatches(expected: string, provided: string): boolean {
@@ -375,8 +375,6 @@ export async function executeMutationTool(
 
   const repoRoot = options.repoRoot ?? resolveRepoRoot();
 
-  // For an autonomous push, independently inspect the actual commit delta.
-  // Branch-name policy alone is not enough: HEAD could contain a sensitive file.
   if (approval.mode === 'autonomous_system' && normalized === 'git_push') {
     const branch = String(params.branch ?? '').trim();
     if (isProtectedAutonomousBranch(branch)) {
@@ -492,8 +490,6 @@ async function doCodeWrite(
   }, startedAt);
 }
 
-// ── code_patch_proposal ──────────────────────────────────────────────────────
-
 async function doPatchProposal(
   params: MutationToolParams,
   repoRoot: string,
@@ -518,19 +514,10 @@ async function doPatchProposal(
     sourceReference: `local-exec://git-diff${scope ? `?scope=${encodeURIComponent(scope)}` : ''}@sha256:${digest.slice(0, 16)}`,
     contentSha256: digest,
     summary: `Patch proposal — ${changedFiles.length} file(s) changed, ${diff.split('\n').length} diff lines`,
-    extract: {
-      changedFiles,
-      diffPreview: diff.slice(0, 4000),
-      applied: false,
-      authorizationMode: mode,
-      approvalBinding: binding,
-      riskDecision: risk,
-    },
+    extract: { changedFiles, diffPreview: diff.slice(0, 4000), applied: false, authorizationMode: mode, approvalBinding: binding, riskDecision: risk },
     exitCode: res.exitCode,
   }, startedAt);
 }
-
-// ── git_commit ───────────────────────────────────────────────────────────────
 
 const AGENT_COMMIT_NAME = 'IVX Autonomous Agent';
 const AGENT_COMMIT_EMAIL = 'agents@ivxholdings.local';
@@ -600,24 +587,9 @@ async function doGitCommit(
     sourceReference: `git://commit/${commitSha}`,
     contentSha256: digest,
     summary: `Committed ${stagedFiles.length} file(s) as ${commitSha.slice(0, 12)} — verification green (${mode})`,
-    extract: {
-      commitSha,
-      message,
-      committedFiles: stagedFiles,
-      verification: {
-        passed: gate.passed,
-        typecheckErrors: gate.typecheckErrors,
-        testsPass: gate.testsPass,
-        evidenceSha256: gate.evidenceSha256,
-      },
-      authorizationMode: mode,
-      approvalBinding: binding,
-      riskDecision: risk,
-    },
+    extract: { commitSha, message, committedFiles: stagedFiles, verification: { passed: gate.passed, typecheckErrors: gate.typecheckErrors, testsPass: gate.testsPass, evidenceSha256: gate.evidenceSha256 }, authorizationMode: mode, approvalBinding: binding, riskDecision: risk },
   }, startedAt);
 }
-
-// ── git_push ─────────────────────────────────────────────────────────────────
 
 async function doGitPush(
   params: MutationToolParams,
@@ -633,51 +605,27 @@ async function doGitPush(
   if (!branch) return failed('git_push', 'branch param required', startedAt, { approvalVerified: true });
   if (!/^[A-Za-z0-9._\-\/]+$/.test(branch)) return failed('git_push', `invalid branch name: ${branch}`, startedAt, { approvalVerified: true });
   if (!/^[A-Za-z0-9._\-]+$/.test(remote)) return failed('git_push', `invalid remote name: ${remote}`, startedAt, { approvalVerified: true });
-  if (mode === 'autonomous_system' && isProtectedAutonomousBranch(branch)) {
-    return failed('git_push', `owner approval required for protected branch: ${branch}`, startedAt, { approvalVerified: true });
-  }
+  if (mode === 'autonomous_system' && isProtectedAutonomousBranch(branch)) return failed('git_push', `owner approval required for protected branch: ${branch}`, startedAt, { approvalVerified: true });
 
   const before = await runProcess('git', ['rev-parse', 'HEAD'], repoRoot, 30_000);
   const localSha = before.stdout.trim();
   const push = await runProcess('git', ['push', remote, `HEAD:refs/heads/${branch}`], repoRoot, Math.min(options.timeoutMs ?? 180_000, 300_000));
   const transcript = redactSecrets(`${push.stdout}\n${push.stderr}`);
-  if (push.exitCode !== 0) {
-    return failed('git_push', `git push failed (exit ${push.exitCode}): ${transcript.slice(0, 400)}`, startedAt, {
-      approvalVerified: true,
-      extract: { remote, branch, transcript: transcript.slice(0, 2000), authorizationMode: mode },
-    });
-  }
+  if (push.exitCode !== 0) return failed('git_push', `git push failed (exit ${push.exitCode}): ${transcript.slice(0, 400)}`, startedAt, { approvalVerified: true, extract: { remote, branch, transcript: transcript.slice(0, 2000), authorizationMode: mode } });
 
   const lsRemote = await runProcess('git', ['ls-remote', remote, `refs/heads/${branch}`], repoRoot, 60_000);
   const remoteSha = lsRemote.stdout.trim().split(/\s+/)[0] ?? '';
   const confirmed = remoteSha === localSha;
   const digest = sha256(`${localSha}${remoteSha}${branch}`);
-  if (!confirmed) {
-    return failed('git_push', `push reported success but remote ref does not match local HEAD (local=${localSha.slice(0, 12)} remote=${remoteSha.slice(0, 12) || 'none'})`, startedAt, {
-      approvalVerified: true,
-      extract: { localSha, remoteSha, branch, authorizationMode: mode },
-    });
-  }
+  if (!confirmed) return failed('git_push', `push reported success but remote ref does not match local HEAD (local=${localSha.slice(0, 12)} remote=${remoteSha.slice(0, 12) || 'none'})`, startedAt, { approvalVerified: true, extract: { localSha, remoteSha, branch, authorizationMode: mode } });
 
   return ok('git_push', {
     sourceReference: `git://push/${branch}@${remoteSha}`,
     contentSha256: digest,
     summary: `Pushed ${localSha.slice(0, 12)} to ${remote}/${branch} — remote ref confirmed (${mode})`,
-    extract: {
-      remote,
-      branch,
-      localSha,
-      remoteSha,
-      remoteConfirmed: confirmed,
-      transcript: transcript.slice(0, 2000),
-      authorizationMode: mode,
-      approvalBinding: binding,
-      riskDecision: risk,
-    },
+    extract: { remote, branch, localSha, remoteSha, remoteConfirmed: confirmed, transcript: transcript.slice(0, 2000), authorizationMode: mode, approvalBinding: binding, riskDecision: risk },
   }, startedAt);
 }
-
-// ── deploy ───────────────────────────────────────────────────────────────────
 
 async function doDeploy(
   params: MutationToolParams,
@@ -687,8 +635,6 @@ async function doDeploy(
   mode: ApprovalMode,
   risk: MutationRiskDecision,
 ): Promise<MutationToolResult> {
-  // This function is reachable for explicit owner approval only. The autonomous
-  // system credential is rejected by executeMutationTool before this point.
   const apiKey = extractRenderApiKey(process.env.RENDER_API_KEY ?? process.env.IVX_RENDER_API_KEY);
   const serviceId = extractRenderServiceId(String(params.serviceId ?? process.env.RENDER_SERVICE_ID ?? ''));
   const deployMode = String(params.mode ?? 'verify');
@@ -698,11 +644,7 @@ async function doDeploy(
   if (deployMode !== 'verify' && deployMode !== 'trigger') return failed('deploy', `invalid mode "${deployMode}" (expected "verify" or "trigger")`, startedAt, { approvalVerified: true });
 
   const base = `https://api.render.com/v1/services/${encodeURIComponent(serviceId)}`;
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${apiKey}`,
-    Accept: 'application/json',
-    'Content-Type': 'application/json',
-  };
+  const headers: Record<string, string> = { Authorization: `Bearer ${apiKey}`, Accept: 'application/json', 'Content-Type': 'application/json' };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Math.min(options.timeoutMs ?? 60_000, 120_000));
 
@@ -711,59 +653,26 @@ async function doDeploy(
       const res = await fetch(base, { headers, signal: controller.signal });
       const raw = await res.text();
       const digest = sha256(raw);
-      if (!res.ok) return failed('deploy', `render service check failed (HTTP ${res.status})`, startedAt, {
-        approvalVerified: true,
-        extract: { httpStatus: res.status, mode: deployMode, serviceId },
-      });
+      if (!res.ok) return failed('deploy', `render service check failed (HTTP ${res.status})`, startedAt, { approvalVerified: true, extract: { httpStatus: res.status, mode: deployMode, serviceId } });
       const parsed = JSON.parse(raw) as { id?: string; name?: string; type?: string; suspended?: string };
       return ok('deploy', {
         sourceReference: `https://api.render.com/v1/services/${serviceId}@sha256:${digest.slice(0, 16)}`,
         contentSha256: digest,
         summary: `Deploy target VERIFIED — service "${parsed.name ?? serviceId}" reachable with live credential (no rollout triggered)`,
-        extract: {
-          mode: deployMode,
-          httpStatus: res.status,
-          serviceId: parsed.id ?? serviceId,
-          serviceName: parsed.name ?? null,
-          serviceType: parsed.type ?? null,
-          suspended: parsed.suspended ?? null,
-          rolloutTriggered: false,
-          authorizationMode: mode,
-          approvalBinding: binding,
-          riskDecision: risk,
-        },
+        extract: { mode: deployMode, httpStatus: res.status, serviceId: parsed.id ?? serviceId, serviceName: parsed.name ?? null, serviceType: parsed.type ?? null, suspended: parsed.suspended ?? null, rolloutTriggered: false, authorizationMode: mode, approvalBinding: binding, riskDecision: risk },
       }, startedAt);
     }
 
-    const res = await fetch(`${base}/deploys`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ clearCache: 'do_not_clear' }),
-      signal: controller.signal,
-    });
+    const res = await fetch(`${base}/deploys`, { method: 'POST', headers, body: JSON.stringify({ clearCache: 'do_not_clear' }), signal: controller.signal });
     const raw = await res.text();
     const digest = sha256(raw);
-    if (!res.ok) return failed('deploy', `render deploy trigger failed (HTTP ${res.status}): ${redactSecrets(raw).slice(0, 300)}`, startedAt, {
-      approvalVerified: true,
-      extract: { httpStatus: res.status, mode: deployMode, serviceId },
-    });
+    if (!res.ok) return failed('deploy', `render deploy trigger failed (HTTP ${res.status}): ${redactSecrets(raw).slice(0, 300)}`, startedAt, { approvalVerified: true, extract: { httpStatus: res.status, mode: deployMode, serviceId } });
     const parsed = JSON.parse(raw) as { id?: string; status?: string; commit?: { id?: string } };
     return ok('deploy', {
       sourceReference: `https://api.render.com/v1/services/${serviceId}/deploys/${parsed.id ?? 'unknown'}@sha256:${digest.slice(0, 16)}`,
       contentSha256: digest,
       summary: `Deploy TRIGGERED — deploy ${parsed.id ?? 'unknown'} status=${parsed.status ?? 'unknown'}`,
-      extract: {
-        mode: deployMode,
-        httpStatus: res.status,
-        serviceId,
-        deployId: parsed.id ?? null,
-        status: parsed.status ?? null,
-        commitSha: parsed.commit?.id ?? null,
-        rolloutTriggered: true,
-        authorizationMode: mode,
-        approvalBinding: binding,
-        riskDecision: risk,
-      },
+      extract: { mode: deployMode, httpStatus: res.status, serviceId, deployId: parsed.id ?? null, status: parsed.status ?? null, commitSha: parsed.commit?.id ?? null, rolloutTriggered: true, authorizationMode: mode, approvalBinding: binding, riskDecision: risk },
     }, startedAt);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
