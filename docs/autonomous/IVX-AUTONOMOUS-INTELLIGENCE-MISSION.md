@@ -3,6 +3,7 @@
 Status: OWNER-APPROVED PROGRAM OF WORK
 Synced: 2026-08-23
 Execution policy: safe work may execute autonomously; dangerous actions remain Owner-gated.
+CI retrigger marker: owner-sync-2026-08-23T10:46-04:00
 
 ## Mission
 Transform IVX Autonomous from a task-execution worker into a high-reasoning, self-auditing, self-correcting autonomous software engineering system.
