@@ -8,6 +8,10 @@ on:
       - 'qa/autonomous/landing-10of10-mission.json'
   schedule:
     - cron: '*/15 * * * *'
+  workflow_run:
+    workflows:
+      - 'IVX Owner Sign In + Home Android Certificate'
+    types: [completed]
   workflow_dispatch: {}
 
 permissions:
@@ -20,13 +24,14 @@ concurrency:
 
 env:
   API_BASE: https://api.ivxholding.com
-  PROGRAM_ID: IVX-LANDING-10OF10-2026-08-19
+  PROGRAM_ID: IVX-INTELLIGENT-112-2026-08-23
   IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
   IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+  GH_TOKEN: ${{ github.token }}
 
 jobs:
   watchdog-cycle:
-    name: Verify, recover and execute all 112 agents
+    name: Detect P0, route by role, execute all 112 agents
     runs-on: ubuntu-latest
     timeout-minutes: 55
     steps:
@@ -41,6 +46,58 @@ jobs:
           echo "::add-mask::$SYSTEM_KEY"
           echo "SYSTEM_KEY=$SYSTEM_KEY" >> "$GITHUB_ENV"
           echo 'system_binding=present'
+
+      - name: Detect unresolved production P0 incident fail-closed
+        id: incident
+        shell: bash
+        run: |
+          set -euo pipefail
+          incident_active=false
+          incident_workflow=''
+          incident_run_id=''
+          incident_url=''
+          incident_sha=''
+          incident_conclusion=''
+
+          if [ "${{ github.event_name }}" = 'workflow_run' ]; then
+            conclusion='${{ github.event.workflow_run.conclusion }}'
+            if [ "$conclusion" != 'success' ]; then
+              incident_active=true
+              incident_workflow='${{ github.event.workflow_run.name }}'
+              incident_run_id='${{ github.event.workflow_run.id }}'
+              incident_url='${{ github.event.workflow_run.html_url }}'
+              incident_sha='${{ github.event.workflow_run.head_sha }}'
+              incident_conclusion="$conclusion"
+            fi
+          fi
+
+          if [ "$incident_active" != true ]; then
+            curl -fsS --max-time 30 \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H 'Accept: application/vnd.github+json' \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/ivx-owner-home-android-cert.yml/runs?per_page=20" \
+              -o /tmp/owner-home-runs.json
+            latest=$(jq -c '[.workflow_runs[] | select(.status == "completed")][0] // {}' /tmp/owner-home-runs.json)
+            conclusion=$(jq -r '.conclusion // "unknown"' <<<"$latest")
+            if [ "$conclusion" != 'success' ] && [ "$conclusion" != 'unknown' ]; then
+              incident_active=true
+              incident_workflow=$(jq -r '.name // "IVX Owner Sign In + Home Android Certificate"' <<<"$latest")
+              incident_run_id=$(jq -r '.id // empty' <<<"$latest")
+              incident_url=$(jq -r '.html_url // empty' <<<"$latest")
+              incident_sha=$(jq -r '.head_sha // empty' <<<"$latest")
+              incident_conclusion="$conclusion"
+            fi
+          fi
+
+          {
+            echo "INCIDENT_ACTIVE=$incident_active"
+            echo "INCIDENT_WORKFLOW=$incident_workflow"
+            echo "INCIDENT_RUN_ID=$incident_run_id"
+            echo "INCIDENT_URL=$incident_url"
+            echo "INCIDENT_SHA=$incident_sha"
+            echo "INCIDENT_CONCLUSION=$incident_conclusion"
+          } >> "$GITHUB_ENV"
+          echo "incident_active=$incident_active workflow=$incident_workflow run=$incident_run_id conclusion=$incident_conclusion"
 
       - name: Require secured mutating agent API
         shell: bash
@@ -91,42 +148,159 @@ jobs:
           test "$(jq '[.agents[] | select(.paused == true or .disabled == true)] | length' /tmp/agents-recovered.json)" = 0
           echo "fleet_recovery=PASS recovered=$recovered"
 
-      - name: Execute evidence-bearing cycle for all 112 agents
+      - name: Execute intelligent evidence-bearing cycle for all 112 agents
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/ivx112-cycle
           export API_BASE SYSTEM_KEY PROGRAM_ID LIVE_SHA GITHUB_RUN_ID GITHUB_RUN_ATTEMPT
+          export INCIDENT_ACTIVE INCIDENT_WORKFLOW INCIDENT_RUN_ID INCIDENT_URL INCIDENT_SHA INCIDENT_CONCLUSION
+
+          choose_plan() {
+            number="$1"; role="$2"; mission="$3"
+            text=$(printf '%s %s' "$role" "$mission" | tr '[:upper:]' '[:lower:]')
+            tool='wikipedia_search'
+            params='{"query":"IVX Holdings operational verification"}'
+            reason='role_research_fallback'
+            p0=false
+
+            if [ "$INCIDENT_ACTIVE" = true ]; then
+              case "$number" in
+                10)
+                  tool='code_search'; params='{"pattern":"owner-home-ready","scope":"expo"}'; reason='p0_platform_home_runtime'; p0=true ;;
+                11)
+                  tool='code_read'; params='{"path":".github/workflows/ivx-owner-home-android-cert.yml"}'; reason='p0_qa_certificate_gate'; p0=true ;;
+                74)
+                  tool='code_search'; params='{"pattern":"SIGNED_OUT","scope":"expo"}'; reason='p0_auth_session_transition'; p0=true ;;
+                79)
+                  tool='code_search'; params='{"pattern":"home-runtime-ready","scope":"expo"}'; reason='p0_android_home_runtime'; p0=true ;;
+                87)
+                  tool='code_read'; params='{"path":"expo/.maestro/ivx-owner-home-certificate.yaml"}'; reason='p0_functional_test_flow'; p0=true ;;
+                88)
+                  tool='code_read'; params='{"path":"expo/app/(tabs)/home.tsx"}'; reason='p0_qa_rendered_home_surface'; p0=true ;;
+              esac
+            fi
+
+            if [ "$p0" != true ]; then
+              case "$text" in
+                *security*|*secret*|*vulnerab*)
+                  tool='secret_scan'; params='{}'; reason='role_security_scan' ;;
+                *qa*|*testing*|*test*|*certification*)
+                  tool='code_search'; params='{"pattern":"assertVisible","scope":"expo/.maestro"}'; reason='role_qa_real_test_surface' ;;
+                *android*|*mobile*|*authentication*|*technology*|*platform*|*frontend*)
+                  tool='code_search'; params='{"pattern":"owner-home-ready","scope":"expo"}'; reason='role_mobile_platform_code' ;;
+                *backend*|*api*|*orchestrator*|*autonomous*|*scheduler*)
+                  tool='code_search'; params='{"pattern":"executeAgentRun","scope":"backend"}'; reason='role_backend_runtime_code' ;;
+                *devops*|*deployment*|*ci/cd*|*cloud*)
+                  tool='code_search'; params='{"pattern":"workflow_dispatch","scope":".github/workflows"}'; reason='role_delivery_pipeline_code' ;;
+                *investor*|*buyer*|*crm*|*sales*)
+                  tool='crm_read'; params='{"prospectType":"buyer","limit":10}'; reason='role_crm_live_data' ;;
+                *finance*|*market*|*analytics*|*economic*)
+                  tool='worldbank_indicator'; params='{"country":"USA","indicator":"NY.GDP.MKTP.CD"}'; reason='role_market_live_data' ;;
+                *compliance*|*legal*|*acquisition*)
+                  tool='sec_edgar_fulltext'; params='{"query":"real estate investment"}'; reason='role_compliance_sec_source' ;;
+                *)
+                  query=$(printf '%s' "$mission" | cut -c1-100 | sed 's/"/ /g')
+                  [ -n "$query" ] || query='IVX Holdings operational verification'
+                  params=$(jq -nc --arg query "$query" '{query:$query}')
+                  reason='role_mission_public_source' ;;
+              esac
+            fi
+
+            jq -nc --arg tool "$tool" --argjson params "$params" --arg reason "$reason" --argjson p0 "$p0" '{tool:$tool,params:$params,reason:$reason,p0:$p0}'
+          }
+          export -f choose_plan
+
           run_one() {
             number="$1"; agent_id="$2"
-            gap=$(( ((number - 1) % 40) + 1 ))
             contract_code=$(curl -sS --max-time 25 -o "/tmp/ivx112-cycle/contract-${number}.json" -w '%{http_code}' "${API_BASE}/api/ivx/agents/${agent_id}/contract" || true)
             if [ "$contract_code" != 200 ]; then
-              jq -n --argjson n "$number" --arg id "$agent_id" --argjson gap "$gap" --arg error "contract_http_${contract_code}" '{agentNumber:$n,agentId:$id,gapId:$gap,ok:false,error:$error}' > "/tmp/ivx112-cycle/${number}.json"
+              jq -n --argjson n "$number" --arg id "$agent_id" --arg error "contract_http_${contract_code}" '{agentNumber:$n,agentId:$id,ok:false,error:$error}' > "/tmp/ivx112-cycle/${number}.json"
               return 0
             fi
+
+            role=$(jq -r '.contract.roleName // .contract.agentName // "unknown"' "/tmp/ivx112-cycle/contract-${number}.json")
+            mission=$(jq -r '.contract.mission // ""' "/tmp/ivx112-cycle/contract-${number}.json")
             task_type=$(jq -r '.contract.allowedTaskTypes[0] // "audit"' "/tmp/ivx112-cycle/contract-${number}.json")
-            task_id="landing10-24x7-gap-$(printf '%02d' "$gap")-agent-$(printf '%03d' "$number")-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-            body=$(jq -nc --arg taskType "$task_type" --arg token "$SYSTEM_KEY" --arg programId "$PROGRAM_ID" --argjson gapId "$gap" --arg sourceSha "$LIVE_SHA" --arg taskId "$task_id" --arg runId "landing10-24x7-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" '{taskType:$taskType,ownerApprovalToken:$token,payload:{programId:$programId,gapId:$gapId,sourceSha:$sourceSha,__taskId:$taskId,__runId:$runId,__workflow:"IVX 112 24x7 Fleet Watchdog",realExecutionOnly:true,simulatedSuccessAllowed:false}}')
-            code=$(curl -sS --retry 1 --retry-delay 1 --max-time 50 -o "/tmp/ivx112-cycle/run-${number}.json" -w '%{http_code}' -X POST "${API_BASE}/api/ivx/agents/${agent_id}/run" -H 'Content-Type: application/json' -H "x-ivx-owner-key: ${SYSTEM_KEY}" --data "$body" || true)
+            plan=$(choose_plan "$number" "$role" "$mission")
+            tool=$(jq -r '.tool' <<<"$plan")
+            tool_params=$(jq -c '.params' <<<"$plan")
+            reason=$(jq -r '.reason' <<<"$plan")
+            p0=$(jq -r '.p0' <<<"$plan")
+
+            task_id="intelligent-agent-$(printf '%03d' "$number")-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            body=$(jq -nc \
+              --arg taskType "$task_type" \
+              --arg token "$SYSTEM_KEY" \
+              --arg programId "$PROGRAM_ID" \
+              --arg sourceSha "$LIVE_SHA" \
+              --arg taskId "$task_id" \
+              --arg runId "intelligent112-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+              --arg tool "$tool" \
+              --argjson toolParams "$tool_params" \
+              --arg routingReason "$reason" \
+              --argjson p0 "$p0" \
+              --arg incidentWorkflow "$INCIDENT_WORKFLOW" \
+              --arg incidentRunId "$INCIDENT_RUN_ID" \
+              --arg incidentUrl "$INCIDENT_URL" \
+              --arg incidentSha "$INCIDENT_SHA" \
+              --arg incidentConclusion "$INCIDENT_CONCLUSION" \
+              '{taskType:$taskType,ownerApprovalToken:$token,payload:{programId:$programId,sourceSha:$sourceSha,__taskId:$taskId,__runId:$runId,__workflow:"IVX 112 24x7 Fleet Watchdog",__toolId:$tool,__toolParams:$toolParams,realExecutionOnly:true,simulatedSuccessAllowed:false,routing:{strategy:"role_and_incident_context_v2",reason:$routingReason,p0Assigned:$p0},incident:{active:$p0,severity:(if $p0 then "P0" else "none" end),workflow:$incidentWorkflow,runId:$incidentRunId,url:$incidentUrl,headSha:$incidentSha,conclusion:$incidentConclusion,symptom:(if $p0 then "Owner login -> Home critical runtime failure" else "" end)}}}')
+
+            code=$(curl -sS --retry 1 --retry-delay 1 --max-time 90 -o "/tmp/ivx112-cycle/run-${number}.json" -w '%{http_code}' -X POST "${API_BASE}/api/ivx/agents/${agent_id}/run" -H 'Content-Type: application/json' -H "x-ivx-owner-key: ${SYSTEM_KEY}" --data "$body" || true)
             ok=false
             if [ "$code" = 200 ]; then ok=$(jq -r '.ok // false' "/tmp/ivx112-cycle/run-${number}.json"); fi
-            jq -n --argjson n "$number" --arg id "$agent_id" --argjson gap "$gap" --arg taskType "$task_type" --arg taskId "$task_id" --arg http "$code" --argjson ok "$ok" --arg finalStatus "$(jq -r '.runRecord.finalStatus // "request_failed"' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" --arg sourceReference "$(jq -r '.runRecord.sourceReference // empty' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" --arg toolResultId "$(jq -r '.runRecord.toolResultId // empty' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" --arg commitSha "$(jq -r '.runRecord.commitSha // empty' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" --arg error "$(jq -r '.error // .runRecord.error // empty' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" '{agentNumber:$n,agentId:$id,gapId:$gap,taskType:$taskType,taskId:$taskId,httpStatus:$http,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,commitSha:$commitSha,error:$error}' > "/tmp/ivx112-cycle/${number}.json"
+
+            jq -n \
+              --argjson n "$number" \
+              --arg id "$agent_id" \
+              --arg role "$role" \
+              --arg taskType "$task_type" \
+              --arg taskId "$task_id" \
+              --arg selectedTool "$tool" \
+              --arg routingReason "$reason" \
+              --argjson incidentAssigned "$p0" \
+              --arg http "$code" \
+              --argjson ok "$ok" \
+              --arg finalStatus "$(jq -r '.runRecord.finalStatus // "request_failed"' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" \
+              --arg sourceReference "$(jq -r '.runRecord.sourceReference // empty' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" \
+              --arg toolResultId "$(jq -r '.runRecord.toolResultId // empty' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" \
+              --arg actualTool "$(jq -r '.runRecord.toolsUsed[0] // empty' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" \
+              --arg error "$(jq -r '.error // .runRecord.error // empty' "/tmp/ivx112-cycle/run-${number}.json" 2>/dev/null || true)" \
+              '{agentNumber:$n,agentId:$id,role:$role,taskType:$taskType,taskId:$taskId,selectedTool:$selectedTool,actualTool:$actualTool,routingReason:$routingReason,incidentAssigned:$incidentAssigned,httpStatus:$http,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,error:$error}' \
+              > "/tmp/ivx112-cycle/${number}.json"
           }
           export -f run_one
+
           while IFS=$'\t' read -r number agent_id name paused disabled; do printf '%s\t%s\n' "$number" "$agent_id"; done < /tmp/agents.tsv | xargs -P 16 -n 2 bash -c 'run_one "$0" "$1"'
+
           jq -s 'sort_by(.agentNumber)' /tmp/ivx112-cycle/[0-9]*.json > /tmp/ivx112-cycle/all.json
           total=$(jq 'length' /tmp/ivx112-cycle/all.json)
           success=$(jq '[.[] | select(.ok == true)] | length' /tmp/ivx112-cycle/all.json)
           failed=$(jq '[.[] | select(.ok != true)] | length' /tmp/ivx112-cycle/all.json)
           evidence=$(jq '[.[] | select((.sourceReference // "") != "" and (.toolResultId // "") != "")] | length' /tmp/ivx112-cycle/all.json)
-          test "$total" = 112
-          echo "CYCLE_SUCCESS=$success" >> "$GITHUB_ENV"
-          echo "CYCLE_FAILED=$failed" >> "$GITHUB_ENV"
-          echo "CYCLE_EVIDENCE=$evidence" >> "$GITHUB_ENV"
-          echo "cycle_total=112 success=$success failed=$failed evidence=$evidence"
+          tool_match=$(jq '[.[] | select(.selectedTool == .actualTool)] | length' /tmp/ivx112-cycle/all.json)
+          p0_assigned=$(jq '[.[] | select(.incidentAssigned == true)] | length' /tmp/ivx112-cycle/all.json)
+          p0_success=$(jq '[.[] | select(.incidentAssigned == true and .ok == true and .selectedTool == .actualTool)] | length' /tmp/ivx112-cycle/all.json)
 
-      - name: Verify 112 heartbeat refresh and no paused/disabled agents
+          test "$total" = 112
+          test "$tool_match" = 112
+          if [ "$INCIDENT_ACTIVE" = true ]; then
+            test "$p0_assigned" = 6
+            test "$p0_success" = 6
+          fi
+
+          {
+            echo "CYCLE_SUCCESS=$success"
+            echo "CYCLE_FAILED=$failed"
+            echo "CYCLE_EVIDENCE=$evidence"
+            echo "TOOL_MATCH=$tool_match"
+            echo "P0_ASSIGNED=$p0_assigned"
+            echo "P0_SUCCESS=$p0_success"
+          } >> "$GITHUB_ENV"
+          echo "cycle_total=112 success=$success failed=$failed evidence=$evidence tool_match=$tool_match p0_assigned=$p0_assigned p0_success=$p0_success"
+
+      - name: Verify 112 heartbeat refresh and no paused or disabled agents
         shell: bash
         run: |
           set -euo pipefail
@@ -141,14 +315,42 @@ jobs:
           test "$stale" = 0
           echo 'heartbeat_sla=PASS all_112_within_30m'
 
-      - name: Write truth-preserving 24x7 proof certificate — HARD GATE
+      - name: Write truth-preserving intelligent fleet certificate
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p qa/evidence/autonomous
           CERT_OK=false
-          if [ "$CYCLE_SUCCESS" = 112 ] && [ "$CYCLE_FAILED" = 0 ] && [ "$CYCLE_EVIDENCE" = 112 ] && [ "${STALE:-999}" = 0 ] && [ "${PAUSED_DISABLED:-999}" = 0 ]; then CERT_OK=true; fi
-          jq -n --argjson ok "$CERT_OK" --arg certificate 'IVX-112-24X7-FLEET-CYCLE' --arg programId "$PROGRAM_ID" --arg liveSha "$LIVE_SHA" --argjson registry 112 --argjson recovered "${RECOVERED:-0}" --argjson succeeded "$CYCLE_SUCCESS" --argjson failed "$CYCLE_FAILED" --argjson evidence "$CYCLE_EVIDENCE" --argjson stale "${STALE:-0}" --argjson pausedDisabled "${PAUSED_DISABLED:-0}" --arg runId "$GITHUB_RUN_ID" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{ok:$ok,certificate:$certificate,programId:$programId,productionSha:$liveSha,registryCount:$registry,pausedOrDisabledAfterRecovery:$pausedDisabled,recoveryActions:$recovered,workerRunsAttempted:112,workerRunsSucceeded:$succeeded,workerRunsFailed:$failed,workerRunsWithEvidence:$evidence,heartbeatStaleOver30m:$stale,simulatedSuccessAllowed:false,realFundsMoved:false,scheduleMinutes:15,githubRunId:$runId,verifiedAt:$verifiedAt,truthNote:"PASS requires 112 attempted, 112 succeeded, 0 failed, 112 evidence records, 0 stale heartbeats, and 0 paused/disabled agents."}' > qa/evidence/autonomous/ivx-112-24x7-latest.json
+          p0_gate=true
+          if [ "$INCIDENT_ACTIVE" = true ] && { [ "${P0_ASSIGNED:-0}" != 6 ] || [ "${P0_SUCCESS:-0}" != 6 ]; }; then p0_gate=false; fi
+          if [ "$CYCLE_SUCCESS" = 112 ] && [ "$CYCLE_FAILED" = 0 ] && [ "$CYCLE_EVIDENCE" = 112 ] && [ "$TOOL_MATCH" = 112 ] && [ "${STALE:-999}" = 0 ] && [ "${PAUSED_DISABLED:-999}" = 0 ] && [ "$p0_gate" = true ]; then CERT_OK=true; fi
+
+          jq -n \
+            --argjson ok "$CERT_OK" \
+            --arg certificate 'IVX-112-24X7-INTELLIGENT-FLEET-CYCLE' \
+            --arg programId "$PROGRAM_ID" \
+            --arg liveSha "$LIVE_SHA" \
+            --argjson registry 112 \
+            --argjson recovered "${RECOVERED:-0}" \
+            --argjson succeeded "$CYCLE_SUCCESS" \
+            --argjson failed "$CYCLE_FAILED" \
+            --argjson evidence "$CYCLE_EVIDENCE" \
+            --argjson toolMatch "$TOOL_MATCH" \
+            --argjson incidentActive "$INCIDENT_ACTIVE" \
+            --arg incidentWorkflow "$INCIDENT_WORKFLOW" \
+            --arg incidentRunId "$INCIDENT_RUN_ID" \
+            --arg incidentUrl "$INCIDENT_URL" \
+            --arg incidentSha "$INCIDENT_SHA" \
+            --arg incidentConclusion "$INCIDENT_CONCLUSION" \
+            --argjson p0Assigned "${P0_ASSIGNED:-0}" \
+            --argjson p0Success "${P0_SUCCESS:-0}" \
+            --argjson stale "${STALE:-0}" \
+            --argjson pausedDisabled "${PAUSED_DISABLED:-0}" \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{ok:$ok,certificate:$certificate,programId:$programId,productionSha:$liveSha,registryCount:$registry,routingStrategy:"role_and_incident_context_v2",genericModuloRoutingRemoved:true,workerRunsAttempted:112,workerRunsSucceeded:$succeeded,workerRunsFailed:$failed,workerRunsWithEvidence:$evidence,selectedToolMatchedActualTool:$toolMatch,incident:{active:$incidentActive,severity:(if $incidentActive then "P0" else "none" end),workflow:$incidentWorkflow,runId:$incidentRunId,url:$incidentUrl,headSha:$incidentSha,conclusion:$incidentConclusion,assignedAgents:[10,11,74,79,87,88],assignedCount:$p0Assigned,successfulCount:$p0Success},pausedOrDisabledAfterRecovery:$pausedDisabled,recoveryActions:$recovered,heartbeatStaleOver30m:$stale,simulatedSuccessAllowed:false,realFundsMoved:false,scheduleMinutes:15,githubRunId:$runId,verifiedAt:$verifiedAt,truthNote:"PASS requires all 112 real runs, selected tools actually executed, verifiable evidence for every run, no stale/paused agents, and when Owner->Home is red the six P0 technical agents must all execute role-specific engineering evidence."}' \
+            > qa/evidence/autonomous/ivx-112-24x7-latest.json
+
           cp /tmp/ivx112-cycle/all.json qa/evidence/autonomous/ivx-112-24x7-agent-results.json
           cat qa/evidence/autonomous/ivx-112-24x7-latest.json
           test "$(jq -r '.ok' qa/evidence/autonomous/ivx-112-24x7-latest.json)" = true
@@ -156,7 +358,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ivx-112-24x7-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ivx-112-intelligent-24x7-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             qa/evidence/autonomous/ivx-112-24x7-latest.json
             qa/evidence/autonomous/ivx-112-24x7-agent-results.json
