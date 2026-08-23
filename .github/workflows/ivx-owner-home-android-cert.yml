@@ -6,10 +6,12 @@ on:
     paths:
       - 'expo/app/(tabs)/_layout.tsx'
       - 'expo/app/(tabs)/(home)/**'
+      - 'expo/app/(tabs)/home.tsx'
       - 'expo/app/login.tsx'
       - 'expo/lib/auth-context.tsx'
       - 'expo/lib/auth-password-sign-in.ts'
       - 'expo/lib/supabase.ts'
+      - 'expo/lib/screen-paint-watchdog.ts'
       - 'expo/.maestro/ivx-owner-home-certificate.yaml'
       - '.github/workflows/ivx-owner-home-android-cert.yml'
   workflow_dispatch: {}
@@ -143,9 +145,18 @@ jobs:
             set -eu
             adb install -r "$APK_PATH"
             curl -Ls https://get.maestro.mobile.dev | bash
-            export PATH="$HOME/.maestro/bin:$PATH"
-            maestro test expo/.maestro/ivx-owner-home-certificate.yaml --env OWNER_EMAIL="$OWNER_EMAIL" --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" --format junit --output owner-home-maestro.xml
+            test -x "$HOME/.maestro/bin/maestro"
+            "$HOME/.maestro/bin/maestro" --version
+            "$HOME/.maestro/bin/maestro" test expo/.maestro/ivx-owner-home-certificate.yaml --env OWNER_EMAIL="$OWNER_EMAIL" --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" --format junit --output owner-home-maestro.xml
             adb exec-out screencap -p > owner-home-final.png
+
+      - name: Capture failure diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          adb devices || true
+          adb logcat -d > owner-home-failure-logcat.txt 2>&1 || true
+          adb exec-out screencap -p > owner-home-failure.png 2>/dev/null || true
 
       - name: Build durable certificate
         if: success()
@@ -162,5 +173,7 @@ jobs:
           path: |
             owner-home-maestro.xml
             owner-home-final.png
+            owner-home-failure.png
+            owner-home-failure-logcat.txt
             qa/evidence/ivx-owner-home-android-e2e.json
           if-no-files-found: warn
