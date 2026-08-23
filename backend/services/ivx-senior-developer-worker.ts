@@ -855,7 +855,11 @@ function qaPhaseToStage(phase: IVXQAOnlyPhase): { stage: IVXWorkerJobStage; deta
 function autonomousCoderMutationProofError(proof: IVXAutonomousCoderProof): string | null {
   const isMutation = proof.executionMode === 'code_change' || proof.executionMode === 'deploy';
   if (!isMutation || proof.finalStatus !== 'COMPLETED') return null;
-  if (proof.filesChanged.length === 0) return 'Code-change job produced no changed files; stale evidence is not accepted.';
+  // A resumed job may find the PR already merged; the original files were
+  // captured in the first run and are now in main, so an empty filesChanged
+  // list is acceptable as long as the merge itself is confirmed.
+  const resumeMerged = proof.resumedFromRestart && proof.prMerged;
+  if (proof.filesChanged.length === 0 && !resumeMerged) return 'Code-change job produced no changed files; stale evidence is not accepted.';
   if (!proof.commitSha) return 'Code-change job produced no commit SHA; stale evidence is not accepted.';
   if (proof.startingSha && proof.commitSha === proof.startingSha) return 'Code-change job reused its starting commit SHA; stale evidence is not accepted.';
   if (proof.executionMode === 'deploy') {
@@ -1150,7 +1154,7 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     branch: job.result?.branch ?? '',
     testsPassed: job.result?.testsPassed !== false,
     typecheckPassed: job.result?.typecheckPassed !== false,
-    filesChanged: [],
+    filesChanged: job.result?.changedFiles ?? [],
     onPhase: (phase, detail) => {
       const { stage, detail: mappedDetail } = autonomousCoderPhaseToStage(phase);
       void updateJobStage(jobId, stage, detail || mappedDetail);

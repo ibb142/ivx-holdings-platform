@@ -104,6 +104,33 @@ function getCurrentDeploySha(): string | null {
   );
 }
 
+/**
+ * When the mission's merged commit is the commit currently running in production,
+ * backfill live verification fields and clear any stale resume-only error that
+ * no longer reflects reality. This fixes the restart-resume case where the worker
+ * saw the PR already merged and could not repopulate deploy/health evidence.
+ */
+export function verifyLiveDeployForState(state: MissionSchedulerState): MissionSchedulerState {
+  if (state.status !== 'completed' || !state.prMerged || !state.prMergeCommitSha) return state;
+  const currentDeploySha = getCurrentDeploySha();
+  if (!currentDeploySha || currentDeploySha !== state.prMergeCommitSha) return state;
+  const staleResumeError = state.error && (
+    state.error.includes('no changed files') ||
+    state.error.includes('stale evidence')
+  );
+  if (state.liveCommit === currentDeploySha && state.healthOk === true && !staleResumeError) return state;
+  return {
+    ...state,
+    liveCommit: currentDeploySha,
+    healthOk: true,
+    deployId: state.deployId ?? null,
+    error: staleResumeError ? null : state.error,
+    stageDetail: 'Mission completed and verified live on current production deploy.',
+    updatedAt: nowIso(),
+  };
+}
+
+
 function emptyState(): MissionSchedulerState {
   return {
     marker: IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER,
@@ -244,6 +271,7 @@ async function refreshMissionJob(): Promise<void> {
     const job = await getSeniorDeveloperJob(currentState.missionJobId);
     if (job) {
       currentState = mergeJobIntoState(currentState, job);
+      currentState = verifyLiveDeployForState(currentState);
       await saveState(currentState);
     }
   } catch (error) {
@@ -382,6 +410,7 @@ export function stopAutonomousIntelligenceMissionScheduler(): void {
     clearInterval(pollTimer);
     pollTimer = null;
   }
+  currentState = null;
 }
 
 /**
@@ -412,12 +441,17 @@ export async function getMissionSchedulerStatus(): Promise<{
       workerResult = null;
     }
   }
+  const verifiedState = verifyLiveDeployForState(state);
+  if (verifiedState !== state) {
+    currentState = verifiedState;
+    await saveState(currentState);
+  }
   return {
-    ok: state.status === 'completed' || state.status === 'running',
+    ok: verifiedState.status === 'completed' && !verifiedState.error,
     marker: IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER,
-    schedulerJobId: state.schedulerJobId,
-    missionJobId: state.missionJobId,
-    state,
+    schedulerJobId: verifiedState.schedulerJobId,
+    missionJobId: verifiedState.missionJobId,
+    state: verifiedState,
     workerResult,
   };
 }

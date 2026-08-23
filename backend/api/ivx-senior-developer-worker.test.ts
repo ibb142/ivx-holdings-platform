@@ -86,6 +86,27 @@ describe('summarizeAutonomousCoderProof', () => {
     expect(result.error).toContain('produced no changed files');
   });
 
+  test('accepts a resumed code_change proof already merged to main even when filesChanged was lost on restart', () => {
+    const result = summarizeAutonomousCoderProof('job-resume-merged', autonomousProof({
+      executionMode: 'code_change',
+      filesChanged: [],
+      prMerged: true,
+      prMergeCommitSha: 'after-sha',
+      resumedFromRestart: true,
+      deployApproved: false,
+      deployRequested: false,
+      deployId: null,
+      deployStatus: null,
+      productionVerified: false,
+      healthOk: false,
+      healthResponse: null,
+      versionResponse: null,
+    }));
+    expect(result.finalStatus).toBe('COMPLETE');
+    expect(result.ok).toBe(true);
+    expect(result.error).toBeNull();
+  });
+
   test('accepts only fresh deploy proof on main with a live Render deployment and new live commit parity', () => {
     const result = summarizeAutonomousCoderProof('job-fresh', autonomousProof());
     expect(result.finalStatus).toBe('COMPLETE');
