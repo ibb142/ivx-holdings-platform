@@ -6,10 +6,12 @@ on:
     paths:
       - 'expo/app/(tabs)/_layout.tsx'
       - 'expo/app/(tabs)/(home)/**'
+      - 'expo/app/(tabs)/home.tsx'
       - 'expo/app/login.tsx'
       - 'expo/lib/auth-context.tsx'
       - 'expo/lib/auth-password-sign-in.ts'
       - 'expo/lib/supabase.ts'
+      - 'expo/lib/screen-paint-watchdog.ts'
       - 'expo/.maestro/ivx-owner-home-certificate.yaml'
       - '.github/workflows/ivx-owner-home-android-cert.yml'
   workflow_dispatch: {}
@@ -140,19 +142,47 @@ jobs:
           heap-size: 512M
           emulator-options: -no-window -gpu off -no-snapshot -noaudio -no-boot-anim
           script: |
-            set -eu
+            set -u
             adb install -r "$APK_PATH"
+            timeout 30s adb wait-for-device
             curl -Ls https://get.maestro.mobile.dev | bash
-            export PATH="$HOME/.maestro/bin:$PATH"
-            maestro test expo/.maestro/ivx-owner-home-certificate.yaml --env OWNER_EMAIL="$OWNER_EMAIL" --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" --format junit --output owner-home-maestro.xml
-            adb exec-out screencap -p > owner-home-final.png
+            test -x "$HOME/.maestro/bin/maestro"
+            "$HOME/.maestro/bin/maestro" --version
+
+            set +e
+            timeout 240s "$HOME/.maestro/bin/maestro" test expo/.maestro/ivx-owner-home-certificate.yaml --env OWNER_EMAIL="$OWNER_EMAIL" --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" --format junit --output owner-home-maestro.xml
+            rc=$?
+
+            timeout 10s adb wait-for-device || true
+            timeout 20s adb shell uiautomator dump /sdcard/owner-home-after-maestro.xml >/dev/null 2>&1 || true
+            timeout 20s adb pull /sdcard/owner-home-after-maestro.xml owner-home-after-maestro.xml >/dev/null 2>&1 || true
+            timeout 15s adb exec-out screencap -p > owner-home-after-maestro.png 2>/dev/null || true
+            timeout 20s adb logcat -d > owner-home-runtime-logcat.txt 2>&1 || true
+
+            if [ "$rc" -eq 0 ]; then
+              sleep 8
+              if ! timeout 10s adb shell pidof com.ivxholdings.app.owner > owner-home-pid.txt 2>&1; then
+                rc=91
+              fi
+              if ! timeout 20s adb shell uiautomator dump /sdcard/owner-home-after-8s.xml >/dev/null 2>&1; then
+                rc=92
+              fi
+              timeout 20s adb pull /sdcard/owner-home-after-8s.xml owner-home-after-8s.xml >/dev/null 2>&1 || true
+              timeout 15s adb exec-out screencap -p > owner-home-after-8s.png 2>/dev/null || true
+              if ! grep -q 'Home ready' owner-home-after-8s.xml 2>/dev/null; then
+                rc=93
+              fi
+              timeout 20s adb logcat -d > owner-home-after-8s-logcat.txt 2>&1 || true
+            fi
+            set -e
+            exit "$rc"
 
       - name: Build durable certificate
         if: success()
         shell: bash
         run: |
           mkdir -p qa/evidence
-          jq -n --arg sha "${{ github.event.pull_request.head.sha || github.sha }}" --arg binding "$OWNER_PASSWORD_BINDING" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{certificate:"IVX-OWNER-SIGNIN-HOME-ANDROID-E2E",passed:true,sourceSha:$sha,credentialBinding:$binding,realOwnerPasswordEntry:true,homeReadyMarker:true,homeTabRetap:true,blackScreenObserved:false,signInFailureDialogObserved:false,secretValuesReturned:false,verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-home-android-e2e.json
+          jq -n --arg sha "${{ github.event.pull_request.head.sha || github.sha }}" --arg binding "$OWNER_PASSWORD_BINDING" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{certificate:"IVX-OWNER-SIGNIN-HOME-ANDROID-E2E",passed:true,sourceSha:$sha,credentialBinding:$binding,realOwnerPasswordEntry:true,homeReadyMarker:true,homeVisibleAfter8Seconds:true,homeTabRetap:true,blackScreenObserved:false,signInFailureDialogObserved:false,secretValuesReturned:false,verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-home-android-e2e.json
           cat qa/evidence/ivx-owner-home-android-e2e.json
 
       - uses: actions/upload-artifact@v4
@@ -161,6 +191,12 @@ jobs:
           name: ivx-owner-home-android-e2e-${{ github.sha }}
           path: |
             owner-home-maestro.xml
-            owner-home-final.png
+            owner-home-after-maestro.xml
+            owner-home-after-maestro.png
+            owner-home-runtime-logcat.txt
+            owner-home-after-8s.xml
+            owner-home-after-8s.png
+            owner-home-after-8s-logcat.txt
+            owner-home-pid.txt
             qa/evidence/ivx-owner-home-android-e2e.json
           if-no-files-found: warn
