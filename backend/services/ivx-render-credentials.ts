@@ -16,9 +16,12 @@ const RENDER_SERVICE_ID_PATTERN = /srv-[a-z0-9]+/g;
 /** All pattern matches in the value, longest first (annotation notes may
  *  contain short decoy tokens like "srv-a"; real Render ids are ~22 chars). */
 function longestMatch(value: string, pattern: RegExp): string {
-  const matches = value.match(pattern) ?? [];
-  if (matches.length === 0) return '';
-  return matches.reduce((best, current) => (current.length > best.length ? current : best), matches[0]);
+  const matches: string[] = value.match(pattern) ?? [];
+  let best = '';
+  for (const match of matches) {
+    if (match.length > best.length) best = match;
+  }
+  return best;
 }
 
 /**
