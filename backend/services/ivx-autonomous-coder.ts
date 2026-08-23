@@ -168,6 +168,19 @@ const REQUIRED_CI_CHECK_CONTEXTS: readonly string[] = [
  *  E2E acceptance pipeline routinely takes 35–50 minutes. */
 const DEFAULT_CI_WAIT_TIMEOUT_MS = 50 * 60 * 1000;
 const DEFAULT_CI_POLL_INTERVAL_MS = 60 * 1000;
+/** Grace period before a NEVER-REPORTED required check is treated as
+ *  NOT_APPLICABLE (its workflow is path-filtered and legitimately does not
+ *  run for this diff). Check-runs for triggered workflows appear within a
+ *  couple of minutes of PR creation, so a context still unreported after this
+ *  grace period — while every REPORTED check is green — is filtered, not
+ *  late. It is recorded as NOT_APPLICABLE in the evidence, never as green. */
+const DEFAULT_CI_NA_GRACE_MS = 10 * 60 * 1000;
+
+/** Sanitize a taskId into a safe git branch suffix. */
+function sanitizeBranchSuffix(taskId: string): string {
+  const s = taskId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return s.slice(0, 24) || 'task';
+}
 
 export type IVXAutonomousCoderProof = {
   marker: typeof IVX_AUTONOMOUS_CODER_MARKER;
@@ -309,6 +322,9 @@ export type IVXAutonomousCoderInput = {
   ciWaitTimeoutMs?: number;
   /** Poll interval for the CI wait (ms). Default 60s; tests pass 0. */
   ciPollIntervalMs?: number;
+  /** Grace period before a never-reported required check is treated as
+   *  NOT_APPLICABLE when every reported check is green (ms). Default 10 min. */
+  ciNaGraceMs?: number;
   /** When true, automatically merge the PR after creating it (code_change mode).
    *  Owner approval is still required — set by the worker based on job input. */
   autoMergePr?: boolean;
@@ -1531,6 +1547,7 @@ async function waitForRequiredChecksGreen(
   const startedAt = Date.now();
   const timeoutMs = input.ciWaitTimeoutMs ?? DEFAULT_CI_WAIT_TIMEOUT_MS;
   const intervalMs = input.ciPollIntervalMs ?? DEFAULT_CI_POLL_INTERVAL_MS;
+  const graceMs = input.ciNaGraceMs ?? DEFAULT_CI_NA_GRACE_MS;
   let last: IVXCiCheckEvidence[] = [];
   for (;;) {
     const evidence = input.requiredChecksFn
@@ -1543,6 +1560,26 @@ async function waitForRequiredChecksGreen(
     const failed = requiredChecksDefinitivelyFailed(evidence);
     if (failed.length > 0) {
       return { green: false, evidence, timedOut: false, waitMs: Date.now() - startedAt };
+    }
+    // Path-filtered N/A handling (owner mandate 2026-08-23): a required check
+    // whose workflow never reports for this diff is NOT_APPLICABLE after the
+    // grace period — but ONLY when every REPORTED required check is green and
+    // at least four hard gates actually ran. The skipped context is recorded
+    // as NOT_APPLICABLE in the evidence; it is never counted as green.
+    const successCount = evidence.filter((e) => e.matched && e.status === 'completed' && e.conclusion === 'success').length;
+    const unmatched = evidence.filter((e) => !e.matched);
+    if (
+      unmatched.length > 0
+      && successCount + unmatched.length === evidence.length
+      && successCount >= 4
+      && Date.now() - startedAt >= graceMs
+    ) {
+      return {
+        green: true,
+        evidence: evidence.map((e) => e.matched ? e : { ...e, status: 'not_applicable', conclusion: 'not_applicable' }),
+        timedOut: false,
+        waitMs: Date.now() - startedAt,
+      };
     }
     if (Date.now() - startedAt >= timeoutMs) {
       return { green: false, evidence, timedOut: true, waitMs: Date.now() - startedAt };
@@ -2809,7 +2846,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         const approvedProductionBranch = (await readOwnerRuntimeVariable('GITHUB_DEFAULT_BRANCH')) || GITHUB_DEFAULT_BRANCH;
         const branchName = input.executionMode === 'deploy'
           ? approvedProductionBranch
-          : AUTONOMOUS_CODER_BRANCH;
+          : `${AUTONOMOUS_CODER_BRANCH}-${sanitizeBranchSuffix(input.taskId)}`;
         const commitResult = input.commitFn
           ? await input.commitFn(filesChanged, branchName)
           : await commitFilesViaGitDataApi(filesChanged, branchName);

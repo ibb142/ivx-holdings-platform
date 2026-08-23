@@ -133,7 +133,7 @@ describe('IVX Autonomous Coder — E2E Integration', () => {
     // ── Assert: commit was created ─────────────────────────────────────────
     expect(proof.commitSha).toBe('abc123def456789012345678901234567890abcd');
     expect(proof.commitUrl).toContain('github.com/ibb142/ivx-holdings-platform');
-    expect(proof.branch).toBe('ivx-autonomous');
+    expect(proof.branch).toBe('ivx-autonomous-e2e-test-001');
 
     // ── Assert: PR was created and merged after CI ────────────────────────
     expect(proof.prNumber).toBe(42);
@@ -443,5 +443,65 @@ describe('IVX Autonomous Coder — False-Completion Regression (2026-08-23)', ()
     expect(proof.prMerged).toBe(false);
     expect(proof.finalStatus).toBe('BLOCKED');
     expect(proof.error).toContain('NOT merged');
+  });
+
+  it('path-filtered required check never reported → NOT_APPLICABLE after grace, merge allowed (never counted as green)', async () => {
+    const m = baseMocks();
+    const prFn = async (): Promise<{ prNumber: number; prUrl: string; merged: boolean; mergeCommitSha: string | null }> => ({
+      prNumber: 47, prUrl: 'https://github.com/ibb142/ivx-holdings-platform/pull/47', merged: false, mergeCommitSha: null,
+    });
+    let mergeAttempted = false;
+    const mergeFn = async (): Promise<{ merged: boolean; mergeCommitSha: string | null }> => {
+      mergeAttempted = true;
+      return { merged: true, mergeCommitSha: 'dddd111122223333444455556666777788889999' };
+    };
+    // Six gates report green; the path-filtered 'Senior Developer' guard never reports.
+    const requiredChecksFn = async (_sha: string): Promise<IVXCiCheckEvidence[]> =>
+      ciEvidence('success').map((e) => e.context === 'Senior Developer + 12 IA autonomy invariants'
+        ? { ...e, checkRunName: null, status: 'not_reported', conclusion: null, detailsUrl: null, matched: false }
+        : e);
+    const proof: IVXAutonomousCoderProof = await runIVXAutonomousCoder({
+      taskId: 'fc-ci-na-001', goal: 'Bump sentinel', executionMode: 'code_change',
+      ownerId: 'test-owner', approvalPolicy: 'owner_gated',
+      llmCaller: m.llmCaller, testRunner: m.testRunner, commitFn: m.commitFn, prFn, mergeFn, requiredChecksFn,
+      autoMergePr: true,
+      ciWaitTimeoutMs: 5000, ciPollIntervalMs: 0, ciNaGraceMs: 0,
+      fileWriter: m.fileWriter, fileReader: m.fileReader,
+      onPhase: (() => {}) as never, sleepFn: async (): Promise<void> => {},
+    });
+    expect(mergeAttempted).toBe(true);
+    expect(proof.finalStatus).toBe('COMPLETED');
+    expect(proof.ciChecksGreen).toBe(true);
+    const na = (proof.ciCheckEvidence ?? []).find((e) => e.context === 'Senior Developer + 12 IA autonomy invariants');
+    expect(na?.status).toBe('not_applicable');
+    expect(na?.conclusion).toBe('not_applicable');
+    expect((proof.ciCheckEvidence ?? []).every((e) => e.conclusion === 'success' || e.conclusion === 'not_applicable')).toBe(true);
+    expect(proof.prMerged).toBe(true);
+  });
+
+  it('per-job branch: code_change commits land on a task-scoped branch, not the shared one', async () => {
+    const m = baseMocks();
+    let committedBranch = '';
+    const commitFn = async (_f: string[], branch: string): Promise<{ commitSha: string; commitUrl: string; branch: string }> => {
+      committedBranch = branch;
+      return { commitSha: 'eeee111122223333444455556666777788889999', commitUrl: 'url', branch };
+    };
+    const prFn = async (): Promise<{ prNumber: number; prUrl: string; merged: boolean; mergeCommitSha: string | null }> => ({
+      prNumber: 48, prUrl: 'https://github.com/ibb142/ivx-holdings-platform/pull/48', merged: false, mergeCommitSha: null,
+    });
+    const requiredChecksFn = async (_sha: string): Promise<IVXCiCheckEvidence[]> => ciEvidence('success');
+    const mergeFn = async (): Promise<{ merged: boolean; mergeCommitSha: string | null }> => ({ merged: true, mergeCommitSha: 'ffff111122223333444455556666777788889999' });
+    const proof: IVXAutonomousCoderProof = await runIVXAutonomousCoder({
+      taskId: 'ivx-branch-test-001', goal: 'Bump sentinel', executionMode: 'code_change',
+      ownerId: 'test-owner', approvalPolicy: 'owner_gated',
+      llmCaller: m.llmCaller, testRunner: m.testRunner, commitFn, prFn, mergeFn, requiredChecksFn,
+      autoMergePr: true,
+      ciWaitTimeoutMs: 5000, ciPollIntervalMs: 0,
+      fileWriter: m.fileWriter, fileReader: m.fileReader,
+      onPhase: (() => {}) as never, sleepFn: async (): Promise<void> => {},
+    });
+    expect(committedBranch).toBe('ivx-autonomous-ivx-branch-test-001');
+    expect(proof.branch).toBe('ivx-autonomous-ivx-branch-test-001');
+    expect(proof.finalStatus).toBe('COMPLETED');
   });
 });
