@@ -34,6 +34,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { requestIVXAIText } from '../ivx-ai-runtime';
 import { resolveRuntimeCommand } from './ivx-runtime-resolver';
+import { extractRenderApiKey, extractRenderServiceId } from './ivx-render-credentials';
 import { verifyLiveCommitMatch, IVX_GIT_DEPLOY_CONFIRM_TEXT } from './ivx-senior-developer-runtime';
 
 const execFileAsync = promisify(execFile);
@@ -257,6 +258,12 @@ export type IVXAutonomousCoderProof = {
   /** V6.19: Task plan from the split planning stage (target files, changes
    * required, risks). null when planning was skipped or failed. */
   taskPlan: IVXTaskPlan | null;
+  /** FINAL CLOSEOUT 2026-08-23: true when this proof was produced by
+   * resumeIVXAutonomousCoderFromCiWait — the job's merge chain was resumed
+   *  after a worker restart instead of being orphaned by the stale sweep. */
+  resumedFromRestart?: boolean;
+  /** Wall-clock ms the resume spent waiting for CI checks after restart. */
+  resumeCiWaitMs?: number | null;
 };
 
 export type IVXAutonomousCoderInput = {
@@ -334,6 +341,13 @@ export type IVXAutonomousCoderInput = {
    *  not orphan the job at COMMITTING with an empty commitSha. Must never throw.
    *  If it throws, the error is swallowed and the engine continues. */
   onCommitLanded?: (info: { commitSha: string; commitUrl: string; branch: string }) => void,
+  /** FINAL CLOSEOUT 2026-08-23 (restart/CI-wait resume): fired IMMEDIATELY after
+   *  the pull request is created and BEFORE the CI wait begins. Lets the caller
+   *  persist the full resume state (commitSha, prNumber, prUrl, branch) so a
+   *  worker restart during the CI wait can resume the merge chain instead of
+   *  orphaning the job for the stale sweep to expire. Must never throw; errors
+   *  are swallowed. */
+  onPrCreated?: (info: { commitSha: string; prNumber: number; prUrl: string; branch: string }) => void,
 };
 
 export type IVXAutonomousCoderPhase =
@@ -1857,8 +1871,12 @@ async function mergePullRequest(
 
 async function triggerRenderDeploy(commitSha: string): Promise<{ deployId: string | null; deployStatus: string | null }> {
   // CRITICAL FIX: Use readOwnerRuntimeVariable for the same reason as commitFilesViaGitDataApi.
-  const apiKey = await readOwnerRuntimeVariable('RENDER_API_KEY');
-  const serviceId = await readOwnerRuntimeVariable('RENDER_SERVICE_ID');
+  // FINAL CLOSEOUT 2026-08-23: normalize raw values through the credential
+  // extractors — runtime values may carry annotation labels around the real
+  // `rnd_…` key / `srv-…` id, which previously produced Render 401s and
+  // blocked deploy-ID evidence.
+  const apiKey = extractRenderApiKey(await readOwnerRuntimeVariable('RENDER_API_KEY'));
+  const serviceId = extractRenderServiceId(await readOwnerRuntimeVariable('RENDER_SERVICE_ID'));
   if (!apiKey || !serviceId) {
     throw new Error('RENDER_API_KEY or RENDER_SERVICE_ID is missing (checked process.env and owner variables store).');
   }
@@ -2901,6 +2919,12 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         prNumber = prResult.prNumber;
         prUrl = prResult.prUrl;
         prCreated = true;
+        // FINAL CLOSEOUT 2026-08-23: persist PR state the instant the PR exists,
+        // BEFORE the CI wait, so a worker restart mid-wait can resume the chain
+        // (see resumeIVXAutonomousCoderFromCiWait). Never throws into the run.
+        try {
+          input.onPrCreated?.({ commitSha, prNumber: prResult.prNumber, prUrl: prResult.prUrl, branch });
+        } catch { /* resilience callback must never break the run */ }
         onPhase?.('committing', `Pull request created: #${prNumber} — ${prUrl}`);
 
         // Auto-merge when owner-approved via autoMergePr flag. Owner mandate
@@ -3134,6 +3158,216 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
   if (finalStatus === 'COMPLETED') {
     onPhase?.('completed', `Autonomous coder job completed. Commit: ${commitSha ?? 'none'}`);
   }
+  return proof;
+}
+
+// ── RESTART / CI-WAIT RESUME (FINAL CLOSEOUT 2026-08-23) ─────────────────────
+
+/** Live PR state from the GitHub API. */
+async function fetchPullRequestState(prNumber: number): Promise<{
+  state: 'open' | 'closed' | 'unknown';
+  merged: boolean;
+  mergeCommitSha: string | null;
+}> {
+  const token = await readOwnerRuntimeVariable('GITHUB_TOKEN');
+  const repoUrl = await readOwnerRuntimeVariable('GITHUB_REPO_URL');
+  const repoInfo = parseGithubRepoUrl(repoUrl);
+  if (!token || !repoInfo) {
+    throw new Error('GITHUB_TOKEN or GITHUB_REPO_URL is missing — cannot inspect PR state for restart resume.');
+  }
+  const res = await fetch(
+    `${GITHUB_API_BASE_URL}/repos/${repoInfo.owner}/${repoInfo.repo}/pulls/${prNumber}`,
+    { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(15000) },
+  );
+  if (!res.ok) {
+    throw new Error(`GitHub PR fetch failed: ${res.status}`);
+  }
+  const data = await res.json() as { state?: string; merged?: boolean; merge_commit_sha?: string | null };
+  return {
+    state: data.state === 'open' || data.state === 'closed' ? data.state : 'unknown',
+    merged: Boolean(data.merged),
+    mergeCommitSha: typeof data.merge_commit_sha === 'string' ? data.merge_commit_sha : null,
+  };
+}
+
+export type IVXAutonomousCoderResumeInput = {
+  taskId: string;
+  goal: string;
+  ownerId: string;
+  /** Persisted head SHA of the PR branch (captured by onPrCreated). */
+  commitSha: string;
+  prNumber: number;
+  prUrl?: string | null;
+  branch: string;
+  /** Pre-restart evidence — tests/typecheck already ran before the restart.
+   *  The resume NEVER re-runs them; it passes the persisted results through. */
+  testsPassed: boolean;
+  typecheckPassed: boolean;
+  filesChanged?: string[];
+  onPhase?: (phase: IVXAutonomousCoderPhase, detail: string) => void;
+  requiredChecksFn?: (commitSha: string) => Promise<IVXCiCheckEvidence[]>;
+  mergeFn?: (prNumber: number, commitMessage: string) => Promise<{ merged: boolean; mergeCommitSha: string | null }>;
+  ciWaitTimeoutMs?: number;
+  ciPollIntervalMs?: number;
+  ciNaGraceMs?: number;
+  sleepFn?: (ms: number) => Promise<void>;
+  /** Injectable PR-state fetcher for testing. When omitted, the real GitHub
+   *  API is used. */
+  prStateFn?: (prNumber: number) => Promise<{ state: 'open' | 'closed' | 'unknown'; merged: boolean; mergeCommitSha: string | null }>;
+};
+
+/**
+ * Resume a code-change job whose worker process was restarted while it was
+ * waiting for the PR's required CI checks (owner mandate 2026-08-23 final
+ * closeout). The full resume state (taskId, commitSha, prNumber, branch)
+ * must have been persisted by the worker BEFORE the restart via onPrCreated.
+ *
+ * Recovery matrix (fail-closed, never a false COMPLETED):
+ *  - PR already merged              → reconcile the merge SHA → COMPLETED
+ *  - PR open + checks still running → resume waiting (heartbeat via onPhase)
+ *  - PR open + checks all green     → merge → COMPLETED (merge SHA required)
+ *  - PR open + checks failed/timed out → BLOCKED with exact per-check evidence
+ *  - PR closed unmerged             → BLOCKED
+ *
+ * The original taskId is preserved — no duplicate job is ever created.
+ */
+export async function resumeIVXAutonomousCoderFromCiWait(
+  input: IVXAutonomousCoderResumeInput,
+): Promise<IVXAutonomousCoderProof> {
+  const startedAt = Date.now();
+  const onPhase = input.onPhase;
+  let prMerged = false;
+  let prMergeCommitSha: string | null = null;
+  let ciChecksGreen: boolean | null = null;
+  let ciCheckEvidence: IVXCiCheckEvidence[] | null = null;
+  let ciWaitMs: number | null = null;
+  let finalStatus: 'COMPLETED' | 'BLOCKED' | 'FAILED' = 'BLOCKED';
+  let error: string | null = null;
+
+  onPhase?.('committing', `Restart resume: re-querying PR #${input.prNumber} state and required CI checks for ${input.commitSha.slice(0, 12)}.`);
+
+  try {
+    const prState = input.prStateFn
+      ? await input.prStateFn(input.prNumber)
+      : await fetchPullRequestState(input.prNumber);
+    if (prState.merged) {
+      prMerged = true;
+      prMergeCommitSha = prState.mergeCommitSha;
+      finalStatus = prMergeCommitSha ? 'COMPLETED' : 'BLOCKED';
+      error = prMergeCommitSha
+        ? null
+        : `PR #${input.prNumber} is merged but GitHub returned no merge commit SHA — cannot confirm the merge; task BLOCKED, never COMPLETED.`;
+      onPhase?.(prMergeCommitSha ? 'completed' : 'blocked',
+        `Restart resume: PR #${input.prNumber} already merged${prMergeCommitSha ? ` (merge commit ${prMergeCommitSha.slice(0, 12)})` : ' — merge SHA missing'}.`);
+    } else if (prState.state === 'closed') {
+      finalStatus = 'BLOCKED';
+      error = `Restart resume: PR #${input.prNumber} is CLOSED without merging. Task BLOCKED, never COMPLETED.`;
+      onPhase?.('blocked', error);
+    } else {
+      // PR open — resume the CI-before-merge wait with the same fail-closed
+      // rules as the original run (never merge on red/unknown checks).
+      onPhase?.('committing', `Restart resume: PR #${input.prNumber} open — resuming required CI wait for ${input.commitSha.slice(0, 12)}.`);
+      const ci = await waitForRequiredChecksGreen(input.commitSha, {
+        taskId: input.taskId,
+        goal: input.goal,
+        executionMode: 'code_change',
+        ownerId: input.ownerId,
+        approvalPolicy: 'owner_gated',
+        requiredChecksFn: input.requiredChecksFn,
+        ciWaitTimeoutMs: input.ciWaitTimeoutMs,
+        ciPollIntervalMs: input.ciPollIntervalMs,
+        ciNaGraceMs: input.ciNaGraceMs,
+        sleepFn: input.sleepFn,
+      }, onPhase);
+      ciChecksGreen = ci.green;
+      ciCheckEvidence = ci.evidence;
+      ciWaitMs = ci.waitMs;
+      if (!ci.green) {
+        const failing = ci.evidence
+          .filter((e) => !(e.matched && e.status === 'completed' && e.conclusion === 'success'))
+          .map((e) => `${e.context}=${e.matched ? `${e.status}/${e.conclusion ?? 'none'}` : 'NOT_REPORTED'}`)
+          .join('; ');
+        error = `${ci.timedOut ? 'Required CI checks TIMED OUT' : 'Required CI checks FAILED'} (restart resume) on ${input.commitSha.slice(0, 12)} — merge NOT attempted. Task BLOCKED, never COMPLETED. Checks: ${failing}.`;
+        onPhase?.('blocked', error);
+      } else {
+        onPhase?.('committing', `Restart resume: all required CI checks GREEN on ${input.commitSha.slice(0, 12)} — merging PR #${input.prNumber}.`);
+        const mergeResult = input.mergeFn
+          ? await input.mergeFn(input.prNumber, `Merge PR #${input.prNumber}: ${input.goal.slice(0, 60)}`)
+          : await mergePullRequest(input.prNumber, `Merge PR #${input.prNumber}: ${input.goal.slice(0, 60)}`);
+        prMerged = mergeResult.merged;
+        prMergeCommitSha = mergeResult.mergeCommitSha;
+        if (prMerged && prMergeCommitSha) {
+          finalStatus = 'COMPLETED';
+          onPhase?.('completed', `Restart resume: PR #${input.prNumber} merged. Merge commit: ${prMergeCommitSha.slice(0, 12)}.`);
+        } else {
+          error = `Restart resume: merge of PR #${input.prNumber} attempted but NOT confirmed (merged=${prMerged}, mergeSha=${prMergeCommitSha ?? 'none'}). Task BLOCKED, never COMPLETED.`;
+          onPhase?.('blocked', error);
+        }
+      }
+    }
+  } catch (err) {
+    finalStatus = 'FAILED';
+    error = `Restart resume failed: ${safeErrorMessage(err)}`;
+    onPhase?.('failed', error);
+  }
+
+  const proof: IVXAutonomousCoderProof = {
+    marker: IVX_AUTONOMOUS_CODER_MARKER,
+    taskId: input.taskId,
+    goal: input.goal,
+    executionMode: 'code_change',
+    approvalPolicy: 'owner_gated',
+    ownerId: input.ownerId,
+    startingSha: null,
+    filesInspected: [],
+    rootCause: '',
+    technicalPlan: '',
+    iterations: [],
+    finalPatch: [],
+    filesChanged: input.filesChanged ?? [],
+    commandsRun: [],
+    testsPassed: input.testsPassed,
+    typecheckPassed: input.typecheckPassed,
+    buildRun: false,
+    commitSha: input.commitSha,
+    commitUrl: `https://github.com/ibb142/ivx-holdings-platform/commit/${input.commitSha}`,
+    branch: input.branch,
+    prNumber: input.prNumber,
+    prUrl: input.prUrl ?? null,
+    prMerged,
+    prMergeCommitSha,
+    prCreated: true,
+    ciChecksWaited: true,
+    ciChecksGreen,
+    ciCheckEvidence,
+    ciWaitMs,
+    deployApproved: false,
+    deployRequested: false,
+    deployId: null,
+    deployStatus: null,
+    productionVerified: false,
+    liveCommit: null,
+    healthOk: false,
+    healthResponse: null,
+    versionResponse: null,
+    iterationCount: 0,
+    durationMs: Date.now() - startedAt,
+    finalStatus,
+    error,
+    generatedAt: nowIso(),
+    secretValuesReturned: false,
+    patchAuthoredBy: null,
+    llmCallCount: 0,
+    estimatedTokensUsed: 0,
+    tokenBudgetExceeded: false,
+    rollbackTriggered: false,
+    rollbackCommitSha: null,
+    rollbackError: null,
+    stageTrace: null,
+    taskPlan: null,
+    resumedFromRestart: true,
+    resumeCiWaitMs: ciWaitMs,
+  };
   return proof;
 }
 
