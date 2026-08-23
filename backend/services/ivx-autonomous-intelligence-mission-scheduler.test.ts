@@ -4,6 +4,8 @@ import {
   startAutonomousIntelligenceMissionScheduler,
   stopAutonomousIntelligenceMissionScheduler,
   getMissionSchedulerStatus,
+  verifyLiveDeployForState,
+  type MissionSchedulerState,
 } from './ivx-autonomous-intelligence-mission-scheduler';
 import {
   listSeniorDeveloperJobs,
@@ -17,6 +19,17 @@ async function clearSchedulerState(): Promise<void> {
     }
   } catch {
     // best-effort cleanup for tests
+  }
+}
+
+async function writeSchedulerState(state: Record<string, unknown>): Promise<void> {
+  try {
+    const { isDurableStoreConfigured, writeDurableJson } = await import('./ivx-durable-store');
+    if (isDurableStoreConfigured()) {
+      await writeDurableJson('logs/audit/autonomous-intelligence-mission-scheduler/state.json', state);
+    }
+  } catch {
+    // best-effort setup for tests
   }
 }
 
@@ -95,5 +108,83 @@ describe('ivx-autonomous-intelligence-mission-scheduler', () => {
     await startAutonomousIntelligenceMissionScheduler();
     const second = await getMissionSchedulerStatus();
     expect(first.state.missionJobId).toBe(second.state.missionJobId);
+  });
+
+  it('backfills live verification and clears stale resume error when the merged commit is the current deploy', () => {
+    const mergeSha = 'abc123def456';
+    const previousSha = process.env.RENDER_GIT_COMMIT;
+    process.env.RENDER_GIT_COMMIT = mergeSha;
+    const state: MissionSchedulerState = {
+      marker: IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER,
+      startedAt: new Date().toISOString(),
+      schedulerJobId: 'scheduler-test-1',
+      deploySha: mergeSha,
+      missionJobId: 'ivx-worker-resume-test',
+      status: 'completed',
+      stage: 'COMPLETED',
+      progressPercent: 100,
+      stageDetail: 'Restart resume: PR #256 already merged.',
+      inspectedFiles: [],
+      changedFiles: [],
+      commitSha: 'pre-sha',
+      prNumber: 256,
+      prUrl: 'https://github.com/ibb142/ivx-holdings-platform/pull/256',
+      prMerged: true,
+      prMergeCommitSha: mergeSha,
+      deployId: null,
+      liveCommit: null,
+      healthOk: null,
+      completedAt: new Date().toISOString(),
+      error: 'Code-change job produced no changed files; stale evidence is not accepted.',
+      updatedAt: new Date().toISOString(),
+    };
+    const verified = verifyLiveDeployForState(state);
+    expect(verified.error).toBeNull();
+    expect(verified.liveCommit).toBe(mergeSha);
+    expect(verified.healthOk).toBe(true);
+    if (previousSha !== undefined) {
+      process.env.RENDER_GIT_COMMIT = previousSha;
+    } else {
+      delete process.env.RENDER_GIT_COMMIT;
+    }
+  });
+
+  it('leaves the error intact when the merged commit does not match the current deploy', () => {
+    const mergeSha = 'abc123def456';
+    const previousSha = process.env.RENDER_GIT_COMMIT;
+    process.env.RENDER_GIT_COMMIT = 'different-sha';
+    const state: MissionSchedulerState = {
+      ...({} as MissionSchedulerState),
+      marker: IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER,
+      startedAt: new Date().toISOString(),
+      schedulerJobId: 'scheduler-test-2',
+      deploySha: 'different-sha',
+      missionJobId: 'ivx-worker-resume-test',
+      status: 'completed',
+      stage: 'COMPLETED',
+      progressPercent: 100,
+      stageDetail: 'Restart resume: PR #256 already merged.',
+      inspectedFiles: [],
+      changedFiles: [],
+      commitSha: 'pre-sha',
+      prNumber: 256,
+      prUrl: 'https://github.com/ibb142/ivx-holdings-platform/pull/256',
+      prMerged: true,
+      prMergeCommitSha: mergeSha,
+      deployId: null,
+      liveCommit: null,
+      healthOk: null,
+      completedAt: new Date().toISOString(),
+      error: 'Code-change job produced no changed files; stale evidence is not accepted.',
+      updatedAt: new Date().toISOString(),
+    };
+    const verified = verifyLiveDeployForState(state);
+    expect(verified.error).toBe(state.error);
+    expect(verified.liveCommit).toBeNull();
+    if (previousSha !== undefined) {
+      process.env.RENDER_GIT_COMMIT = previousSha;
+    } else {
+      delete process.env.RENDER_GIT_COMMIT;
+    }
   });
 });
