@@ -30,7 +30,12 @@ jobs:
     timeout-minutes: 20
     env:
       OWNER_EMAIL: iperez4242@gmail.com
-      OWNER_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD }}
+      OWNER_PASSWORD_S1: ${{ secrets.OWNER_NEW_PASSWORD }}
+      OWNER_PASSWORD_S2: ${{ secrets.OWNER_PASSWORD }}
+      OWNER_PASSWORD_S3: ${{ secrets.IVX_OWNER_PASSWORD }}
+      OWNER_PASSWORD_S4: ${{ secrets.IVX_OWNER_NEW_PASSWORD }}
+      OWNER_PASSWORD_S5: ${{ secrets.OWNER_LOGIN_PASSWORD }}
+      OWNER_PASSWORD_S6: ${{ secrets.IVX_OWNER_LOGIN_PASSWORD }}
       SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
       API_BASE: https://api.ivxholding.com
@@ -39,9 +44,39 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
           fetch-depth: 0
+
       - name: Resolve source SHA
         shell: bash
         run: echo "SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Resolve real owner credential binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner_password=''
+          binding='none'
+          for pair in \
+            'OWNER_NEW_PASSWORD:OWNER_PASSWORD_S1' \
+            'OWNER_PASSWORD:OWNER_PASSWORD_S2' \
+            'IVX_OWNER_PASSWORD:OWNER_PASSWORD_S3' \
+            'IVX_OWNER_NEW_PASSWORD:OWNER_PASSWORD_S4' \
+            'OWNER_LOGIN_PASSWORD:OWNER_PASSWORD_S5' \
+            'IVX_OWNER_LOGIN_PASSWORD:OWNER_PASSWORD_S6'; do
+            name=${pair%%:*}
+            var=${pair##*:}
+            value=${!var:-}
+            if [ -n "$value" ]; then owner_password="$value"; binding="$name"; break; fi
+          done
+          test -n "$owner_password"
+          echo "::add-mask::$owner_password"
+          {
+            echo 'OWNER_PASSWORD<<IVX_EOF'
+            echo "$owner_password"
+            echo 'IVX_EOF'
+            echo "OWNER_PASSWORD_BINDING=$binding"
+          } >> "$GITHUB_ENV"
+          echo "owner_password_binding=$binding"
+
       - name: Verify complete owner-login latency fix
         shell: bash
         run: |
@@ -55,6 +90,7 @@ jobs:
           test -n "$OWNER_PASSWORD"
           test -n "$SUPABASE_URL"
           test -n "$SUPABASE_ANON_KEY"
+
       - name: Real Supabase password sign-in and latency
         shell: bash
         run: |
@@ -76,6 +112,7 @@ jobs:
           echo "OWNER_USER_ROLE=$user_role" >> "$GITHUB_ENV"
           echo "OWNER_TOKEN=$token" >> "$GITHUB_ENV"
           echo "password_grant_http=200 login_ms=$login_ms owner_metadata=PASS"
+
       - name: Verify token with Supabase user endpoint
         shell: bash
         run: |
@@ -83,6 +120,7 @@ jobs:
           code=$(curl -sS --max-time 15 -o /tmp/user.json -w '%{http_code}' "${SUPABASE_URL%/}/auth/v1/user" -H "apikey: ${SUPABASE_ANON_KEY}" -H "Authorization: Bearer ${OWNER_TOKEN}")
           test "$code" = 200
           test "$(jq -r '.id // empty' /tmp/user.json)" = "$OWNER_USER_ID"
+
       - name: Verify live owner-only backend gate with real session
         shell: bash
         run: |
@@ -90,22 +128,26 @@ jobs:
           code=$(curl -sS --max-time 20 -o /tmp/owner-gate.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" -H "Authorization: Bearer ${OWNER_TOKEN}")
           test "$code" = 200
           test "$(jq -r '.ok // false' /tmp/owner-gate.json)" = true
+
       - name: Verify unauthenticated owner gate remains closed
         shell: bash
         run: |
           set -euo pipefail
           code=$(curl -sS --max-time 15 -o /tmp/unauth.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" || true)
           case "$code" in 401|403) ;; *) exit 1;; esac
+
       - name: Build certificate
         shell: bash
         run: |
           mkdir -p qa/evidence
-          jq -n --arg sha "$SOURCE_SHA" --arg userId "$OWNER_USER_ID" --arg appRole "$OWNER_APP_ROLE" --arg userRole "$OWNER_USER_ROLE" --argjson loginMs "$LOGIN_MS" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{certificate:"IVX-OWNER-AUTH-E2E-LIVE",passed:true,sourceSha:$sha,realPasswordGrant:true,passwordGrantHttp:200,loginLatencyMs:$loginMs,supabaseUserEndpointHttp:200,identityMatch:true,ownerUserId:$userId,appMetadataRole:$appRole,userMetadataRole:$userRole,backendOwnerGateHttp:200,unauthenticatedGateClosed:true,secretValuesReturned:false,fastPathMarker:"IVX_OWNER_POST_LOGIN_FAST_PATH_V1",backgroundRepairMarker:"IVX_OWNER_REPAIR_BACKGROUND_V1",directPasswordMarker:"IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1",verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-auth-e2e-live.json
+          jq -n --arg sha "$SOURCE_SHA" --arg binding "$OWNER_PASSWORD_BINDING" --arg userId "$OWNER_USER_ID" --arg appRole "$OWNER_APP_ROLE" --arg userRole "$OWNER_USER_ROLE" --argjson loginMs "$LOGIN_MS" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{certificate:"IVX-OWNER-AUTH-E2E-LIVE",passed:true,sourceSha:$sha,credentialBinding:$binding,realPasswordGrant:true,passwordGrantHttp:200,loginLatencyMs:$loginMs,supabaseUserEndpointHttp:200,identityMatch:true,ownerUserId:$userId,appMetadataRole:$appRole,userMetadataRole:$userRole,backendOwnerGateHttp:200,unauthenticatedGateClosed:true,secretValuesReturned:false,fastPathMarker:"IVX_OWNER_POST_LOGIN_FAST_PATH_V1",backgroundRepairMarker:"IVX_OWNER_REPAIR_BACKGROUND_V1",directPasswordMarker:"IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1",verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-auth-e2e-live.json
           cat qa/evidence/ivx-owner-auth-e2e-live.json
+
       - uses: actions/upload-artifact@v4
         with:
           name: ivx-owner-auth-e2e-live-${{ github.sha }}
           path: qa/evidence/ivx-owner-auth-e2e-live.json
+
       - name: Persist certificate
         shell: bash
         run: |
