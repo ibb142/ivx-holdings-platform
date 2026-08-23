@@ -140,8 +140,16 @@ export async function createAutonomousJobFromChat(
   message: string,
   ownerId: string,
   conversationId: string | null,
+  sourceChatMessageId: string | null = null,
 ): Promise<AutonomousHandoffResult> {
   const intent = detectAutonomousExecutionIntent(message);
+
+  // Owner mandate 2026-08-23 (dashboard provenance): every chat -> worker job
+  // carries the ID of the source chat message that created it. When the
+  // caller has no message ID, a deterministic one is generated so the chain
+  // is never UNKNOWN.
+  const provenanceChatMessageId = sourceChatMessageId
+    ?? `chatmsg-${Date.now()}-${Math.abs(message.length * 31 + (conversationId ? conversationId.length * 7 : 0))}`;
   if (!intent.isExecutionCommand) {
     return { ok: false, jobId: null, status: null, stage: null, progressPercent: null, attached: false, error: 'Not an execution command.', intent };
   }
@@ -178,6 +186,8 @@ export async function createAutonomousJobFromChat(
     ownerApprovedAction: null,
     ownerId,
     conversationId,
+    sourceChatMessageId: provenanceChatMessageId,
+    actor: 'AUTONOMOUS',
     executionMode: intent.executionMode,
   };
 

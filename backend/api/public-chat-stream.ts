@@ -314,6 +314,9 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
                 workerMessage,
                 ownerSession.ownerId,
                 sessionId,
+                // Owner mandate 2026-08-23 (dashboard provenance): trace this
+                // job to the exact chat message that created it.
+                clientId || null,
               );
 
               send(formatAutonomousTaskSsePayload(handoffResult));
