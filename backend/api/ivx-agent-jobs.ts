@@ -217,12 +217,7 @@ async function executeSqlViaRpc(sql: string): Promise<void> {
   }
 }
 
-async function executeSqlViaPg(sql: string): Promise<void> {}
-
-async function executeApkArtifactDrift(): Promise<void> {
-  // Implement the real execution logic here for p4-apk-artifact-drift
-}
-
+async function executeSqlViaPg(sql: string): Promise<void> {
   const pgModule = await import('pg') as { Pool: PgPoolConstructor };
   const pool = new pgModule.Pool({
     connectionString: getSupabaseDatabaseUrl(),
@@ -239,6 +234,10 @@ async function executeApkArtifactDrift(): Promise<void> {
     client.release();
     await pool.end().catch(() => undefined);
   }
+}
+
+async function executeApkArtifactDrift(): Promise<void> {
+  // Implement the real execution logic here for p4-apk-artifact-drift
 }
 
 async function executeSchemaSql(sql: string): Promise<void> {
