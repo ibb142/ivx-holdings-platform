@@ -85,12 +85,14 @@ jobs:
         id: build
         working-directory: expo/android
         env:
-          IVX_RELEASE_KEYSTORE_PATH: ${{ runner.home }}/.android/debug.keystore
           IVX_RELEASE_KEYSTORE_PASSWORD: android
           IVX_RELEASE_KEY_ALIAS: androiddebugkey
           IVX_RELEASE_KEY_PASSWORD: android
         run: |
           set -euo pipefail
+          export IVX_RELEASE_KEYSTORE_PATH="$HOME/.android/debug.keystore"
+          test -f "$IVX_RELEASE_KEYSTORE_PATH"
+          keytool -list -keystore "$IVX_RELEASE_KEYSTORE_PATH" -storepass "$IVX_RELEASE_KEYSTORE_PASSWORD" -alias "$IVX_RELEASE_KEY_ALIAS" >/dev/null
           chmod +x gradlew
           ./gradlew assembleQa --no-daemon -x lint 2>&1 | tee gradle-v11029-qa.log
 
