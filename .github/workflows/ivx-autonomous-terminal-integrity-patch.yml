@@ -1,0 +1,151 @@
+name: IVX Autonomous Terminal Integrity Patch
+
+on:
+  push:
+    branches:
+      - fix/autonomous-terminal-integrity-20260822
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[terminal-integrity-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/autonomous-terminal-integrity-20260822
+          fetch-depth: 0
+      - name: Apply fail-closed terminal-state repairs
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('backend/services/ivx-autonomous-coder.ts')
+          s = p.read_text()
+
+          old = """      } catch (prErr) {
+        // PR creation failure is not fatal — the commit is still on the branch.
+        // Record the error in the proof but keep the job COMPLETED.
+        onPhase?.('committing', `Pull request creation failed (non-fatal): ${safeErrorMessage(prErr)}`);
+      }
+"""
+          new = """      } catch (prErr) {
+        // Fail closed: a code-change task is not complete until its PR exists
+        // and reaches the protected production branch through the normal gates.
+        finalStatus = 'BLOCKED';
+        error = `Pull request creation/merge failed: ${safeErrorMessage(prErr)}`;
+        onPhase?.('blocked', error);
+      }
+"""
+          assert old in s, 'PR failure block not found'
+          s = s.replace(old, new, 1)
+
+          old = """    if (input.executionMode === 'code_change' && prMerged && prMergeCommitSha) {
+      finalStatus = 'COMPLETED';
+      deployStatus = 'auto_deploy_triggered';
+      onPhase?.('completed', `PR merged to main (${prMergeCommitSha.slice(0, 12)}). Render auto-deploy will pick up the merge commit. Job marked COMPLETED.`);
+    } else if (input.executionMode === 'code_change' && commitSha && !prMerged) {
+      // PR was created but not merged (autoMergePr=false or merge failed).
+      // The commit is on the ivx-autonomous branch — mark COMPLETED with info.
+      finalStatus = 'COMPLETED';
+      const prInfo = `Commit created (${commitSha.slice(0, 12)}) on branch ${branch}. PR ${prUrl ? `created: ${prUrl}` : 'creation failed'}. Manual merge may be needed.`;
+      onPhase?.('completed', prInfo);
+    } else if (commitSha || input.executionMode === 'read_only') {
+      finalStatus = 'COMPLETED';
+    }
+"""
+          new = """    if (input.executionMode === 'code_change' && prMerged && prMergeCommitSha) {
+      // A merge is a source-control milestone, not production completion.
+      // Render may still be deploying this SHA, so report BLOCKED/pending until
+      // a separate deploy verification proves /health + /version exact parity.
+      finalStatus = 'BLOCKED';
+      deployStatus = 'auto_deploy_triggered';
+      error = `PR merged to main (${prMergeCommitSha.slice(0, 12)}); production verification is still required before completion.`;
+      onPhase?.('blocked', error);
+    } else if (input.executionMode === 'code_change' && commitSha && !prMerged) {
+      finalStatus = 'BLOCKED';
+      error = `Commit created (${commitSha.slice(0, 12)}) on branch ${branch}, but PR is not merged. ${prUrl ? `PR: ${prUrl}` : 'PR creation was not confirmed.'}`;
+      onPhase?.('blocked', error);
+    } else if (input.executionMode === 'read_only') {
+      finalStatus = 'COMPLETED';
+    }
+"""
+          assert old in s, 'code_change terminal block not found'
+          s = s.replace(old, new, 1)
+
+          old = """      } else {
+        onPhase?.('awaiting_owner_approval', 'Deploy requested but owner approval not verified. Blocking deploy.');
+        finalStatus = 'COMPLETED';
+        error = `Commit created. Deploy BLOCKED: owner approval required (confirm=true, confirmText=\"CONFIRM_IVX_RENDER_DEPLOY\" or \"${IVX_GIT_DEPLOY_CONFIRM_TEXT}\").`;
+      }
+"""
+          new = """      } else {
+        onPhase?.('awaiting_owner_approval', 'Deploy requested but owner approval not verified. Blocking deploy.');
+        finalStatus = 'BLOCKED';
+        error = `Commit created. Deploy BLOCKED: owner approval required (confirm=true, confirmText=\"CONFIRM_IVX_RENDER_DEPLOY\" or \"${IVX_GIT_DEPLOY_CONFIRM_TEXT}\").`;
+      }
+"""
+          assert old in s, 'deploy approval block not found'
+          s = s.replace(old, new, 1)
+
+          # Never remove branch protection to force an Autonomous merge. Required
+          # checks/branch protection are hard gates. A protected merge failure
+          # remains BLOCKED and is retried only after GitHub reports it mergeable.
+          start = s.index('async function temporarilyRemoveBranchProtection(')
+          end = s.index('// ── RENDER DEPLOY', start)
+          replacement = """async function mergePullRequest(
+  prNumber: number,
+  commitMessage: string,
+): Promise<{ merged: boolean; mergeCommitSha: string | null }> {
+  const token = await readOwnerRuntimeVariable('GITHUB_TOKEN');
+  const repoUrl = await readOwnerRuntimeVariable('GITHUB_REPO_URL');
+  const repoInfo = parseGithubRepoUrl(repoUrl);
+  if (!token || !repoInfo) throw new Error('GITHUB_TOKEN or GITHUB_REPO_URL is missing — cannot merge pull request.');
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'Content-Type': 'application/json',
+  };
+  const res = await fetch(
+    `${GITHUB_API_BASE_URL}/repos/${repoInfo.owner}/${repoInfo.repo}/pulls/${prNumber}/merge`,
+    {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ commit_title: commitMessage, merge_method: 'squash' }),
+      signal: AbortSignal.timeout(15000),
+    },
+  );
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`GitHub protected PR merge not ready: ${res.status} ${body.slice(0, 300)}`);
+  }
+  const data = await res.json() as { sha: string | null; merged: boolean };
+  return { merged: data.merged, mergeCommitSha: data.sha };
+}
+
+"""
+          s = s[:start] + replacement + s[end:]
+          p.write_text(s)
+
+          t = Path('backend/services/ivx-autonomous-e2e.test.ts')
+          x = t.read_text()
+          x = x.replace("expect(proof.finalStatus).toBe('COMPLETED');\n    expect(proof.error).toBeNull();", "expect(proof.finalStatus).toBe('BLOCKED');\n    expect(proof.error).toMatch(/PR is not merged|production verification/i);", 1)
+          marker = "expect(proof.deployId).toBeNull();\n    expect(proof.productionVerified).toBe(false);"
+          assert marker in x, 'deploy blocked assertions not found'
+          x = x.replace(marker, marker + "\n    expect(proof.finalStatus).toBe('BLOCKED');\n    expect(proof.error).toMatch(/Deploy BLOCKED/);", 1)
+          t.write_text(x)
+      - name: Verify targeted integrity assertions
+        run: |
+          grep -q "finalStatus = 'BLOCKED'" backend/services/ivx-autonomous-coder.ts
+          grep -q "production verification is still required" backend/services/ivx-autonomous-coder.ts
+          grep -q "GitHub protected PR merge not ready" backend/services/ivx-autonomous-coder.ts
+          ! grep -q "temporarilyRemoveBranchProtection" backend/services/ivx-autonomous-coder.ts
+          ! grep -q "restoreBranchProtection" backend/services/ivx-autonomous-coder.ts
+      - name: Commit patch
+        run: |
+          git config user.name "IVX Autonomous Integrity Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add backend/services/ivx-autonomous-coder.ts backend/services/ivx-autonomous-e2e.test.ts
+          git commit -m "fix(autonomous): fail closed terminal states [terminal-integrity-applied]"
+          git push origin HEAD:fix/autonomous-terminal-integrity-20260822
