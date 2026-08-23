@@ -20,7 +20,7 @@
  * to avoid circular dependencies.
  */
 
-export const IVX_TASK_STATE_MACHINE_MARKER = 'ivx-task-state-machine-2026-07-21';
+export const IVX_TASK_STATE_MACHINE_MARKER = 'ivx-task-state-machine-2026-08-23';
 
 export type IVXTaskState =
   | 'RECEIVED'
@@ -38,6 +38,7 @@ export type IVXTaskState =
   | 'PRODUCTION_VERIFYING'
   | 'VERIFIED'
   | 'COMPLETED'
+  | 'NOT_COMPLETED'
   | 'BLOCKED'
   | 'FAILED'
   | 'NO_CHANGE_REQUIRED';
@@ -58,6 +59,7 @@ export const ALL_TASK_STATES: readonly IVXTaskState[] = [
   'PRODUCTION_VERIFYING',
   'VERIFIED',
   'COMPLETED',
+  'NOT_COMPLETED',
   'BLOCKED',
   'FAILED',
   'NO_CHANGE_REQUIRED',
@@ -66,10 +68,18 @@ export const ALL_TASK_STATES: readonly IVXTaskState[] = [
 export const TERMINAL_TASK_STATES: ReadonlySet<IVXTaskState> = new Set([
   'VERIFIED',
   'COMPLETED',
+  'NOT_COMPLETED',
   'BLOCKED',
   'FAILED',
   'NO_CHANGE_REQUIRED',
 ]);
+
+/**
+ * Owner mandate 2026-08-23 (false-completion closeout): NOT_COMPLETED is the
+ * honest terminal for a task whose requested gates were SKIPPED (e.g. tests or
+ * typecheck skipped for a code task). It is NEVER a substitute for FAILED
+ * (a gate ran and failed) or BLOCKED (an external prerequisite is missing).
+ */
 
 /**
  * Task types that drive the terminal-state completion rules. The guard uses
@@ -98,21 +108,22 @@ export type IVXGuardTaskType =
  * DEPLOYED or VERIFIED — it must walk the senior-developer loop.
  */
 const LEGAL_TRANSITIONS: ReadonlyMap<IVXTaskState, ReadonlySet<IVXTaskState>> = new Map([
-  ['RECEIVED', new Set(['ANALYZING', 'COMPLETED', 'BLOCKED', 'FAILED', 'NO_CHANGE_REQUIRED'])],
-  ['ANALYZING', new Set(['REPRODUCING', 'ROOT_CAUSE_IDENTIFIED', 'COMPLETED', 'BLOCKED', 'FAILED', 'NO_CHANGE_REQUIRED'])],
+  ['RECEIVED', new Set(['ANALYZING', 'COMPLETED', 'NOT_COMPLETED', 'BLOCKED', 'FAILED', 'NO_CHANGE_REQUIRED'])],
+  ['ANALYZING', new Set(['REPRODUCING', 'ROOT_CAUSE_IDENTIFIED', 'COMPLETED', 'NOT_COMPLETED', 'BLOCKED', 'FAILED', 'NO_CHANGE_REQUIRED'])],
   ['REPRODUCING', new Set(['ROOT_CAUSE_IDENTIFIED', 'BLOCKED', 'FAILED', 'NO_CHANGE_REQUIRED'])],
   ['ROOT_CAUSE_IDENTIFIED', new Set(['IMPLEMENTING', 'BLOCKED', 'FAILED', 'NO_CHANGE_REQUIRED'])],
   ['IMPLEMENTING', new Set(['CODE_CHANGED', 'BLOCKED', 'FAILED', 'NO_CHANGE_REQUIRED'])],
-  ['CODE_CHANGED', new Set(['TESTING', 'COMPLETED', 'BLOCKED', 'FAILED'])],
-  ['TESTING', new Set(['QA_REQUIRED', 'READY_TO_DEPLOY', 'COMPLETED', 'BLOCKED', 'FAILED'])],
+  ['CODE_CHANGED', new Set(['TESTING', 'COMPLETED', 'NOT_COMPLETED', 'BLOCKED', 'FAILED'])],
+  ['TESTING', new Set(['QA_REQUIRED', 'READY_TO_DEPLOY', 'COMPLETED', 'NOT_COMPLETED', 'BLOCKED', 'FAILED'])],
   ['QA_REQUIRED', new Set(['QA_IN_PROGRESS', 'BLOCKED', 'FAILED'])],
-  ['QA_IN_PROGRESS', new Set(['READY_TO_DEPLOY', 'COMPLETED', 'BLOCKED', 'FAILED'])],
-  ['READY_TO_DEPLOY', new Set(['DEPLOYING', 'COMPLETED', 'BLOCKED', 'FAILED'])],
+  ['QA_IN_PROGRESS', new Set(['READY_TO_DEPLOY', 'COMPLETED', 'NOT_COMPLETED', 'BLOCKED', 'FAILED'])],
+  ['READY_TO_DEPLOY', new Set(['DEPLOYING', 'COMPLETED', 'NOT_COMPLETED', 'BLOCKED', 'FAILED'])],
   ['DEPLOYING', new Set(['DEPLOYED', 'BLOCKED', 'FAILED'])],
-  ['DEPLOYED', new Set(['PRODUCTION_VERIFYING', 'COMPLETED', 'BLOCKED', 'FAILED'])],
-  ['PRODUCTION_VERIFYING', new Set(['VERIFIED', 'COMPLETED', 'BLOCKED', 'FAILED'])],
+  ['DEPLOYED', new Set(['PRODUCTION_VERIFYING', 'COMPLETED', 'NOT_COMPLETED', 'BLOCKED', 'FAILED'])],
+  ['PRODUCTION_VERIFYING', new Set(['VERIFIED', 'COMPLETED', 'NOT_COMPLETED', 'BLOCKED', 'FAILED'])],
   ['VERIFIED', new Set()],
   ['COMPLETED', new Set()],
+  ['NOT_COMPLETED', new Set()],
   ['BLOCKED', new Set()],
   ['FAILED', new Set()],
   ['NO_CHANGE_REQUIRED', new Set()],
@@ -153,7 +164,51 @@ export type IVXTransitionGuardInput = {
   /** Task type used to decide which gates apply for COMPLETED. Falls back to
    *  isDevelopmentTask for legacy callers. */
   taskType?: IVXGuardTaskType;
+  /** Owner mandate 2026-08-23 (false-completion closeout): a pull request was
+   *  created for the commit. Required for COMPLETED on code tasks. */
+  prCreated?: boolean | null;
+  /** PR number of the created pull request. */
+  prNumber?: number | null;
+  /** ALL required GitHub checks on the PR head SHA reported success. Required
+   *  for COMPLETED on code tasks (CI-before-merge mandate). */
+  requiredChecksGreen?: boolean | null;
+  /** The PR merge was confirmed by GitHub (merged=true). Required for COMPLETED
+   *  on code tasks — commit exists + PR not merged = BLOCKED, never COMPLETED. */
+  prMerged?: boolean | null;
+  /** Merge commit SHA returned by GitHub on merge confirmation. Required when
+   *  prMerged is true — merge attempted but not confirmed = BLOCKED. */
+  mergeSha?: string | null;
+  /** Owner approval for the deploy was verified (deploy mode). When deploy was
+   *  requested and this is false, the task is BLOCKED, never COMPLETED. */
+  deployApproved?: boolean | null;
+  /** The deploy attempt failed after approval → FAILED. */
+  deployFailed?: boolean | null;
+  /** Production /version SHA matches the expected (merge) SHA. Mismatch →
+   *  FAILED/BLOCKED, never COMPLETED. */
+  productionShaMatches?: boolean | null;
+  /** Tests were skipped under a formally allowed task type (recorded
+   *  justification). When false/absent, skipped tests refuse COMPLETED. */
+  testsSkipJustified?: boolean;
 };
+
+/**
+ * Owner mandate 2026-08-23 (false-completion closeout): compute the honest
+ * terminal state when the state machine refused a success terminal
+ * (COMPLETED/VERIFIED). Category → state mapping is fail-closed:
+ *   - skipped gates (tests/typecheck)           → NOT_COMPLETED
+ *   - deploy failed / production SHA mismatch    → FAILED
+ *   - missing external prerequisite (PR, CI,
+ *     approval, merge confirmation, credentials) → BLOCKED
+ *   - anything unrecognized                       → FAILED (never COMPLETED)
+ */
+export function terminalStateForRefusedCompletion(reasons: readonly string[]): IVXTaskState {
+  const text = reasons.join('; ');
+  if (/tests were skipped|typecheck was skipped|typecheck was not run/i.test(text)) return 'NOT_COMPLETED';
+  if (/deploy failed|sha mismatch|production .{0,24}mismatch|rollback/i.test(text)) return 'FAILED';
+  if (/pull request|pr |ci check|required check|approval|not merged|not confirmed|merge was not|token|credential|missing/i.test(text)) return 'BLOCKED';
+  if (/tests failed|typecheck failed|failed/i.test(text)) return 'FAILED';
+  return 'FAILED';
+}
 
 export type IVXTransitionGuardResult = {
   ok: boolean;
@@ -204,21 +259,43 @@ export function assertCanTransition(input: IVXTransitionGuardInput): IVXTransiti
         reasons.push('A development task cannot become COMPLETED with an empty diff.');
         return { ok: false, legal: true, reasons, from, to };
       }
-      // Tests gate: when tests were run, they must pass. When tests were
-      // NOT run (no test file exists for the changed files), this is an
-      // honest skip — typecheck + content-change verification are the gates.
-      // Blocking COMPLETED because no test file exists would make every
-      // new-file creation BLOCK forever, which is a false gate.
+      // Tests gate: owner mandate 2026-08-23 — tests SKIPPED on a code task
+      // refuse COMPLETED (NOT_COMPLETED) unless the skip is formally justified
+      // by an allowed task type. When tests ran, they must pass.
+      if (!input.testsRun && input.testsSkipJustified !== true) {
+        reasons.push('Tests were skipped for a code task without a formally allowed justification — NOT_COMPLETED.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
       if (input.testsRun && !input.testsPassed) {
         reasons.push('Files changed but tests failed — cannot become COMPLETED.');
         return { ok: false, legal: true, reasons, from, to };
       }
-      if (input.typecheckPassed === false) {
-        reasons.push('Typecheck was run and failed — cannot become COMPLETED.');
+      if (input.typecheckPassed !== true) {
+        reasons.push('Typecheck was skipped or failed for a code task — NOT_COMPLETED (typecheck is a hard gate).');
         return { ok: false, legal: true, reasons, from, to };
       }
       if (!input.commitVerified) {
         reasons.push('Commit was not created / verified — cannot become COMPLETED for a development task.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+      // Owner mandate 2026-08-23 (false-completion closeout): a code task may
+      // only become COMPLETED when its commit reached main through a PULL
+      // REQUEST whose required CI checks were GREEN and whose merge was
+      // CONFIRMED by GitHub. Commit exists + PR not merged = BLOCKED.
+      if (input.prCreated !== true) {
+        reasons.push('Pull request was not created for the commit — BLOCKED, never COMPLETED.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+      if (input.requiredChecksGreen !== true) {
+        reasons.push('Required CI checks on the PR head SHA are not all green (CI-before-merge mandate) — BLOCKED, never COMPLETED.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+      if (input.prMerged !== true) {
+        reasons.push('Commit exists but the pull request was not merged — BLOCKED, never COMPLETED.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+      if (!input.mergeSha) {
+        reasons.push('Merge was attempted but not confirmed (no merge commit SHA from GitHub) — BLOCKED, never COMPLETED.');
         return { ok: false, legal: true, reasons, from, to };
       }
       // Deploy + production health + feature verification are NOT required
@@ -241,8 +318,20 @@ export function assertCanTransition(input: IVXTransitionGuardInput): IVXTransiti
         reasons.push('A deploy-only task cannot become COMPLETED without a verified commit.');
         return { ok: false, legal: true, reasons, from, to };
       }
+      if (input.deployApproved !== true) {
+        reasons.push('A deploy-only task cannot become COMPLETED without verified owner approval for the deploy — BLOCKED, never COMPLETED.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+      if (input.deployFailed === true) {
+        reasons.push('Deploy failed — FAILED, never COMPLETED.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
       if (!input.deployId) {
         reasons.push('A deploy-only task cannot become COMPLETED without a deployId.');
+        return { ok: false, legal: true, reasons, from, to };
+      }
+      if (input.productionShaMatches === false) {
+        reasons.push('Production SHA mismatch after deploy — FAILED/BLOCKED, never COMPLETED.');
         return { ok: false, legal: true, reasons, from, to };
       }
       if (!input.productionHealthOk) {
@@ -265,6 +354,19 @@ export function assertCanTransition(input: IVXTransitionGuardInput): IVXTransiti
 
   // Enforce completion rules on entry to VERIFIED.
   if (to === 'VERIFIED') {
+    // Owner mandate 2026-08-23 (false-completion closeout): deploy gates.
+    if (input.deployApproved !== true) {
+      reasons.push('Deploy requested without verified owner approval — BLOCKED, never VERIFIED.');
+      return { ok: false, legal: true, reasons, from, to };
+    }
+    if (input.deployFailed === true) {
+      reasons.push('Deploy failed — FAILED, never VERIFIED.');
+      return { ok: false, legal: true, reasons, from, to };
+    }
+    if (input.productionShaMatches === false) {
+      reasons.push('Production SHA mismatch — FAILED/BLOCKED, never VERIFIED.');
+      return { ok: false, legal: true, reasons, from, to };
+    }
     if (input.isDevelopmentTask) {
       if (input.filesChangedCount === 0 && !input.externalCauseProven) {
         reasons.push(
@@ -287,6 +389,12 @@ export function assertCanTransition(input: IVXTransitionGuardInput): IVXTransiti
         }
         if (!input.deployId) {
           reasons.push('Files changed but no deployment occurred — cannot become VERIFIED.');
+          return { ok: false, legal: true, reasons, from, to };
+        }
+        // The code must reach main through a merged PR before a deploy VERIFIED
+        // terminal (owner mandate 2026-08-23).
+        if (input.prMerged !== true) {
+          reasons.push('Files changed but the pull request was not merged before deploy — BLOCKED, never VERIFIED.');
           return { ok: false, legal: true, reasons, from, to };
         }
         if (!input.productionHealthOk) {
@@ -390,7 +498,8 @@ export function stageToTaskState(stage: string | null | undefined): IVXTaskState
   if (s.includes('DEPLOYING') || s.includes('DEPLOY_IN_PROGRESS')) return 'DEPLOYING';
   if (s.includes('DEPLOYED') && !s.includes('VERIFY')) return 'DEPLOYED';
   if (s.includes('PRODUCTION_VERIFY') || s.includes('VERIFYING') || s.includes('VERIFY')) return 'PRODUCTION_VERIFYING';
-  if (s.includes('COMPLETED') && !s.includes('NOT_COMPLETED')) return 'COMPLETED';
+  if (s.includes('NOT_COMPLETED')) return 'NOT_COMPLETED';
+  if (s.includes('COMPLETED')) return 'COMPLETED';
   if (s.includes('VERIFIED') || s.includes('COMPLETE')) return 'VERIFIED';
   if (s.includes('BLOCKED')) return 'BLOCKED';
   if (s.includes('FAILED') || s.includes('ERROR')) return 'FAILED';

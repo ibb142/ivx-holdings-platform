@@ -132,6 +132,43 @@ export type IVXDeploymentEndpointEvidence = {
   ok: boolean;
 };
 
+/** Owner mandate 2026-08-23 (CI-before-merge): per-required-check evidence
+ *  captured while waiting for GitHub CI on the PR head SHA. */
+export type IVXCiCheckEvidence = {
+  /** Required context name (branch-protection / owner-configured). */
+  context: string;
+  /** Matching GitHub check-run name (null when no check-run reported it). */
+  checkRunName: string | null;
+  /** Check-run status: queued | in_progress | completed | not_reported. */
+  status: string;
+  /** Check-run conclusion when completed (success | failure | skipped | ...). */
+  conclusion: string | null;
+  detailsUrl: string | null;
+  matched: boolean;
+};
+
+/**
+ * The required CI check contexts for the protected main branch. Fetched
+ * check-runs are matched against these names; ONLY these decide green —
+ * unrelated non-required checks (e.g. experimental workflows) cannot block
+ * or approve a merge. Owner-configurable via the IVX_REQUIRED_CI_CHECKS
+ * runtime variable (comma-separated).
+ */
+const REQUIRED_CI_CHECK_CONTEXTS: readonly string[] = [
+  'qa-suite',
+  'TypeScript typecheck — HARD GATE',
+  'Lint — HARD GATE',
+  'scan-secrets',
+  'Senior Developer + 12 IA autonomy invariants',
+  'Playwright E2E (web surface) — HARD GATE',
+  'Maestro E2E (mobile surface) — HARD GATE',
+];
+
+/** Default wall-clock budget for the CI-before-merge wait. The full 7-check
+ *  E2E acceptance pipeline routinely takes 35–50 minutes. */
+const DEFAULT_CI_WAIT_TIMEOUT_MS = 50 * 60 * 1000;
+const DEFAULT_CI_POLL_INTERVAL_MS = 60 * 1000;
+
 export type IVXAutonomousCoderProof = {
   marker: typeof IVX_AUTONOMOUS_CODER_MARKER;
   taskId: string;
@@ -158,6 +195,17 @@ export type IVXAutonomousCoderProof = {
   prUrl: string | null;
   prMerged: boolean;
   prMergeCommitSha: string | null;
+  /** Owner mandate 2026-08-23: PR creation was confirmed for the commit. */
+  prCreated?: boolean;
+  /** Owner mandate 2026-08-23 (CI-before-merge): the engine waited for the
+   *  required GitHub checks on the PR head SHA before merging. */
+  ciChecksWaited?: boolean;
+  /** ALL required CI checks on the PR head SHA reported success. */
+  ciChecksGreen?: boolean | null;
+  /** Per-check evidence captured during the CI wait. */
+  ciCheckEvidence?: IVXCiCheckEvidence[] | null;
+  /** Wall-clock ms spent waiting for required CI checks. */
+  ciWaitMs?: number | null;
   deployApproved: boolean;
   /** Owner mandate 2026-07-21: true when the chat prompt explicitly requested
    *  a deploy (executionMode === 'deploy'). Drives whether the worker's
@@ -252,6 +300,15 @@ export type IVXAutonomousCoderInput = {
   rollbackFn?: (commitSha: string, branch: string) => Promise<{ reverted: boolean; revertCommitSha: string | null; error: string | null }>,
   /** Injectable PR creation function for testing. When omitted, the real GitHub API is used. */
   prFn?: (branch: string, title: string, body: string) => Promise<{ prNumber: number; prUrl: string; merged: boolean; mergeCommitSha: string | null }>;
+  /** Injectable merge function for testing. When omitted, the real GitHub API is used. */
+  mergeFn?: (prNumber: number, commitMessage: string) => Promise<{ merged: boolean; mergeCommitSha: string | null }>;
+  /** Injectable required-checks fetcher for testing: returns current per-check
+   *  evidence for a head SHA without hitting the GitHub API. */
+  requiredChecksFn?: (commitSha: string) => Promise<IVXCiCheckEvidence[]>;
+  /** Max wall-clock to wait for required CI checks before merge (ms). Default 50 minutes. */
+  ciWaitTimeoutMs?: number;
+  /** Poll interval for the CI wait (ms). Default 60s; tests pass 0. */
+  ciPollIntervalMs?: number;
   /** When true, automatically merge the PR after creating it (code_change mode).
    *  Owner approval is still required — set by the worker based on job input. */
   autoMergePr?: boolean;
@@ -1398,6 +1455,108 @@ async function commitFilesViaGitDataApi(
  * via the GitHub REST API. Returns the PR number, URL, and merge state.
  * Uses owner-controlled GITHUB_TOKEN (readOwnerRuntimeVariable).
  */
+/**
+ * Owner mandate 2026-08-23 (CI-before-merge): fetch the current state of the
+ * REQUIRED CI checks for a commit SHA from the GitHub check-runs API. Only
+ * the required contexts (REQUIRED_CI_CHECK_CONTEXTS or the owner-configured
+ * IVX_REQUIRED_CI_CHECKS variable) are considered; unrelated checks cannot
+ * block or approve a merge.
+ */
+async function fetchRequiredChecksForCommit(commitSha: string): Promise<IVXCiCheckEvidence[]> {
+  const token = await readOwnerRuntimeVariable('GITHUB_TOKEN');
+  const repoUrl = await readOwnerRuntimeVariable('GITHUB_REPO_URL');
+  const repoInfo = parseGithubRepoUrl(repoUrl);
+  if (!token || !repoInfo) {
+    throw new Error('GITHUB_TOKEN or GITHUB_REPO_URL is missing — cannot verify required CI checks before merge.');
+  }
+  const contextsRaw = await readOwnerRuntimeVariable('IVX_REQUIRED_CI_CHECKS');
+  const contexts = contextsRaw && contextsRaw.trim().length > 0
+    ? contextsRaw.split(',').map((s) => s.trim()).filter(Boolean)
+    : [...REQUIRED_CI_CHECK_CONTEXTS];
+  const res = await fetch(
+    `${GITHUB_API_BASE_URL}/repos/${repoInfo.owner}/${repoInfo.repo}/commits/${commitSha}/check-runs`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+      },
+      signal: AbortSignal.timeout(15000),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`GitHub check-runs fetch failed: ${res.status}`);
+  }
+  const data = await res.json() as {
+    check_runs?: Array<{ name: string; status: string; conclusion: string | null; details_url: string | null }>;
+  };
+  const runs = data.check_runs ?? [];
+  return contexts.map((context) => {
+    const run = runs.find((r) => r.name === context)
+      ?? runs.find((r) => r.name.startsWith(context))
+      ?? runs.find((r) => context.startsWith(r.name) && r.name.length > 3)
+      ?? null;
+    return {
+      context,
+      checkRunName: run?.name ?? null,
+      status: run?.status ?? 'not_reported',
+      conclusion: run?.conclusion ?? null,
+      detailsUrl: run?.details_url ?? null,
+      matched: run !== null,
+    };
+  });
+}
+
+/** Green requires EVERY required context to be matched, completed, and successful. */
+function requiredChecksAllGreen(evidence: IVXCiCheckEvidence[]): boolean {
+  return evidence.length > 0
+    && evidence.every((e) => e.matched && e.status === 'completed' && e.conclusion === 'success');
+}
+
+/** A definitive failure is any matched required check that completed with a
+ *  non-success conclusion (failure, cancelled, skipped, stale, timed_out). */
+function requiredChecksDefinitivelyFailed(evidence: IVXCiCheckEvidence[]): IVXCiCheckEvidence[] {
+  return evidence.filter((e) => e.matched && e.status === 'completed' && e.conclusion !== 'success');
+}
+
+/**
+ * Owner mandate 2026-08-23 (CI-before-merge): poll the required CI checks on
+ * the PR head SHA until ALL are green, one fails definitively, or the budget
+ * expires. NEVER merges on red or unknown checks.
+ */
+async function waitForRequiredChecksGreen(
+  commitSha: string,
+  input: IVXAutonomousCoderInput,
+  onPhase?: (phase: IVXAutonomousCoderPhase, detail: string) => void,
+): Promise<{ green: boolean; evidence: IVXCiCheckEvidence[]; timedOut: boolean; waitMs: number }> {
+  const startedAt = Date.now();
+  const timeoutMs = input.ciWaitTimeoutMs ?? DEFAULT_CI_WAIT_TIMEOUT_MS;
+  const intervalMs = input.ciPollIntervalMs ?? DEFAULT_CI_POLL_INTERVAL_MS;
+  let last: IVXCiCheckEvidence[] = [];
+  for (;;) {
+    const evidence = input.requiredChecksFn
+      ? await input.requiredChecksFn(commitSha)
+      : await fetchRequiredChecksForCommit(commitSha);
+    last = evidence;
+    if (requiredChecksAllGreen(evidence)) {
+      return { green: true, evidence, timedOut: false, waitMs: Date.now() - startedAt };
+    }
+    const failed = requiredChecksDefinitivelyFailed(evidence);
+    if (failed.length > 0) {
+      return { green: false, evidence, timedOut: false, waitMs: Date.now() - startedAt };
+    }
+    if (Date.now() - startedAt >= timeoutMs) {
+      return { green: false, evidence, timedOut: true, waitMs: Date.now() - startedAt };
+    }
+    const greenCount = evidence.filter((e) => e.matched && e.status === 'completed' && e.conclusion === 'success').length;
+    onPhase?.('committing', `Required CI checks on ${commitSha.slice(0, 12)}: ${greenCount}/${evidence.length} green — waiting before any merge.`);
+    if (input.sleepFn) {
+      await input.sleepFn(intervalMs);
+    } else {
+      await new Promise<void>((resolve) => { setTimeout(resolve, intervalMs); });
+    }
+  }
+}
+
 async function createPullRequestForBranch(
   headBranch: string,
   baseBranch: string,
@@ -2623,6 +2782,11 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
   let prUrl: string | null = null;
   let prMerged = false;
   let prMergeCommitSha: string | null = null;
+  let prCreated = false;
+  let ciChecksWaited = false;
+  let ciChecksGreen: boolean | null = null;
+  let ciCheckEvidence: IVXCiCheckEvidence[] | null = null;
+  let ciWaitMs: number | null = null;
   let deployId: string | null = null;
   let deployStatus: string | null = null;
   let productionVerified = false;
@@ -2699,27 +2863,54 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           : await createPullRequestForBranch(branch, 'main', prTitle, prBody);
         prNumber = prResult.prNumber;
         prUrl = prResult.prUrl;
+        prCreated = true;
         onPhase?.('committing', `Pull request created: #${prNumber} — ${prUrl}`);
 
-        // Auto-merge when owner-approved via autoMergePr flag
+        // Auto-merge when owner-approved via autoMergePr flag. Owner mandate
+        // 2026-08-23 (CI-before-merge): the merge API is NEVER called until
+        // every required GitHub check on the head SHA is GREEN.
         if (input.autoMergePr && !prResult.merged) {
-          onPhase?.('committing', `Auto-merging PR #${prNumber} (owner approved).`);
-          const mergeResult = await mergePullRequest(prNumber, prTitle);
-          prMerged = mergeResult.merged;
-          prMergeCommitSha = mergeResult.mergeCommitSha;
-          if (prMerged) {
-            onPhase?.('committing', `PR #${prNumber} merged. Merge commit: ${prMergeCommitSha}`);
+          onPhase?.('committing', `Waiting for required CI checks on ${commitSha.slice(0, 12)} before merging PR #${prNumber} (CI-before-merge).`);
+          const ci = await waitForRequiredChecksGreen(commitSha, input, onPhase);
+          ciChecksWaited = true;
+          ciChecksGreen = ci.green;
+          ciCheckEvidence = ci.evidence;
+          ciWaitMs = ci.waitMs;
+          if (!ci.green) {
+            // Required check failed or timed out: preserve the exact failing
+            // check evidence, do NOT merge, and NEVER label the task COMPLETED.
+            finalStatus = 'BLOCKED';
+            const failing = ci.evidence
+              .filter((e) => !(e.matched && e.status === 'completed' && e.conclusion === 'success'))
+              .map((e) => `${e.context}=${e.matched ? `${e.status}/${e.conclusion ?? 'none'}` : 'NOT_REPORTED'}`)
+              .join('; ');
+            error = `${ci.timedOut ? 'Required CI checks TIMED OUT' : 'Required CI checks FAILED'} on ${commitSha.slice(0, 12)} — merge NOT attempted. Task BLOCKED, never COMPLETED. Checks: ${failing}. Autonomous may repair and open another PR.`;
+            onPhase?.('blocked', error);
           } else {
-            onPhase?.('committing', `PR #${prNumber} merge attempted but not confirmed.`);
+            onPhase?.('committing', `All required CI checks GREEN. Auto-merging PR #${prNumber} (owner approved).`);
+            const mergeResult = input.mergeFn
+              ? await input.mergeFn(prNumber, prTitle)
+              : await mergePullRequest(prNumber, prTitle);
+            prMerged = mergeResult.merged;
+            prMergeCommitSha = mergeResult.mergeCommitSha;
+            if (prMerged && prMergeCommitSha) {
+              onPhase?.('committing', `PR #${prNumber} merged. Merge commit: ${prMergeCommitSha}`);
+            } else {
+              // Merge attempted but not confirmed — BLOCKED, never COMPLETED.
+              onPhase?.('committing', `PR #${prNumber} merge attempted but NOT confirmed (merged=${prMerged}, mergeSha=${prMergeCommitSha ?? 'none'}).`);
+            }
           }
         } else if (prResult.merged) {
           prMerged = true;
           prMergeCommitSha = prResult.mergeCommitSha;
         }
       } catch (prErr) {
-        // PR creation failure is not fatal — the commit is still on the branch.
-        // Record the error in the proof but keep the job COMPLETED.
-        onPhase?.('committing', `Pull request creation failed (non-fatal): ${safeErrorMessage(prErr)}`);
+        // Owner mandate 2026-08-23: PR creation/merge failure is NEVER
+        // non-fatal for a code task. A commit that cannot reach main through
+        // a PR is BLOCKED — never COMPLETED.
+        finalStatus = 'BLOCKED';
+        error = `Pull request creation/merge failed — BLOCKED, never COMPLETED: ${safeErrorMessage(prErr)}`;
+        onPhase?.('blocked', error);
       }
     }
 
@@ -2732,13 +2923,19 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     if (input.executionMode === 'code_change' && prMerged && prMergeCommitSha) {
       finalStatus = 'COMPLETED';
       deployStatus = 'auto_deploy_triggered';
-      onPhase?.('completed', `PR merged to main (${prMergeCommitSha.slice(0, 12)}). Render auto-deploy will pick up the merge commit. Job marked COMPLETED.`);
-    } else if (input.executionMode === 'code_change' && commitSha && !prMerged) {
-      // PR was created but not merged (autoMergePr=false or merge failed).
-      // The commit is on the ivx-autonomous branch — mark COMPLETED with info.
-      finalStatus = 'COMPLETED';
-      const prInfo = `Commit created (${commitSha.slice(0, 12)}) on branch ${branch}. PR ${prUrl ? `created: ${prUrl}` : 'creation failed'}. Manual merge may be needed.`;
-      onPhase?.('completed', prInfo);
+      onPhase?.('completed', `PR merged to main (${prMergeCommitSha.slice(0, 12)}) after all required CI checks GREEN. Render auto-deploy will pick up the merge commit. Job marked COMPLETED.`);
+    } else if (input.executionMode === 'code_change' && commitSha && (!prMerged || !prMergeCommitSha)) {
+      // Owner mandate 2026-08-23: commit exists + PR not merged (or merge not
+      // confirmed with a SHA) = BLOCKED, NEVER COMPLETED. The commit is on
+      // the ivx-autonomous branch; the task is only honestly finished once
+      // the PR is merged after all required CI checks pass.
+      finalStatus = 'BLOCKED';
+      if (!error) {
+        error = prMerged && !prMergeCommitSha
+          ? `Merge of PR ${prUrl ?? `#${prNumber ?? '?'}`} was attempted but NOT confirmed (no merge commit SHA from GitHub). Task BLOCKED, never COMPLETED.`
+          : `Commit created (${commitSha.slice(0, 12)}) on branch ${branch}${prUrl ? ` with PR ${prUrl}` : ' but no pull request'} — the pull request was NOT merged. Task BLOCKED, never COMPLETED, until the PR merges after all required CI checks pass.`;
+      }
+      onPhase?.('blocked', error);
     } else if (commitSha || input.executionMode === 'read_only') {
       finalStatus = 'COMPLETED';
     }
@@ -2816,9 +3013,11 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           onPhase?.('failed', error);
         }
       } else {
+        // Owner mandate 2026-08-23: deploy requested without verified owner
+        // approval = BLOCKED, NEVER COMPLETED.
         onPhase?.('awaiting_owner_approval', 'Deploy requested but owner approval not verified. Blocking deploy.');
-        finalStatus = 'COMPLETED';
-        error = `Commit created. Deploy BLOCKED: owner approval required (confirm=true, confirmText="CONFIRM_IVX_RENDER_DEPLOY" or "${IVX_GIT_DEPLOY_CONFIRM_TEXT}").`;
+        finalStatus = 'BLOCKED';
+        error = `Commit created. Deploy BLOCKED: owner approval required (confirm=true, confirmText="CONFIRM_IVX_RENDER_DEPLOY" or "${IVX_GIT_DEPLOY_CONFIRM_TEXT}"). Task BLOCKED, never COMPLETED, until the deploy is owner-approved and verified.`;
       }
     }
   } else if (!anyPatchApplied && !anyPatchGenerated) {
@@ -2864,6 +3063,11 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     prUrl,
     prMerged,
     prMergeCommitSha,
+    prCreated,
+    ciChecksWaited,
+    ciChecksGreen,
+    ciCheckEvidence,
+    ciWaitMs,
     deployApproved: Boolean(input.deployApproved && (input.deployConfirmationText === 'CONFIRM_IVX_RENDER_DEPLOY' || input.deployConfirmationText === IVX_GIT_DEPLOY_CONFIRM_TEXT)),
     deployRequested: input.executionMode === 'deploy',
     deployId,
@@ -2932,6 +3136,7 @@ export function buildAutonomousCoderAnswer(proof: IVXAutonomousCoderProof): stri
     `COMMIT SHA:\n${proof.commitSha ?? 'NONE'}`,
     `COMMIT URL:\n${proof.commitUrl ?? 'NONE'}`,
     `PULL REQUEST:\n${proof.prUrl ? `#${proof.prNumber} — ${proof.prUrl} (merged: ${proof.prMerged})` : 'NONE'}`,
+    `REQUIRED CI CHECKS:\n${proof.ciCheckEvidence && proof.ciCheckEvidence.length > 0 ? proof.ciCheckEvidence.map((e) => `${e.context}: ${e.matched ? `${e.status}/${e.conclusion ?? 'none'}` : 'NOT_REPORTED'}`).join('\n') : 'NOT WAITED'}\n(all green: ${proof.ciChecksGreen ?? false}; waited: ${proof.ciChecksWaited ?? false}${proof.ciWaitMs != null ? `; waitMs: ${proof.ciWaitMs}` : ''})`,
     `DEPLOYMENT:\n${proof.deployId ? `deployId=${proof.deployId} status=${proof.deployStatus}` : 'NOT REQUESTED'}`,
     `PRODUCTION VERIFICATION:\n${proof.productionVerified ? 'VERIFIED' : 'NOT VERIFIED'}`,
     `ITERATION COUNT:\n${proof.iterationCount}`,

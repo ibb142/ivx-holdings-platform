@@ -15,7 +15,28 @@ import {
   runIVXAutonomousCoder,
   IVX_AUTONOMOUS_CODER_MARKER,
   type IVXAutonomousCoderProof,
+  type IVXCiCheckEvidence,
 } from './ivx-autonomous-coder';
+
+/** Build required-check evidence for the 7 protected-main contexts. */
+function ciEvidence(conclusion: string): IVXCiCheckEvidence[] {
+  return [
+    'qa-suite',
+    'TypeScript typecheck — HARD GATE',
+    'Lint — HARD GATE',
+    'scan-secrets',
+    'Senior Developer + 12 IA autonomy invariants',
+    'Playwright E2E (web surface) — HARD GATE',
+    'Maestro E2E (mobile surface) — HARD GATE',
+  ].map((context) => ({
+    context,
+    checkRunName: context,
+    status: 'completed',
+    conclusion,
+    detailsUrl: `https://github.com/ibb142/ivx-holdings-platform/checks/${encodeURIComponent(context)}`,
+    matched: true,
+  }));
+}
 
 describe('IVX Autonomous Coder — E2E Integration', () => {
   it('completes a full code_change cycle: inspect → plan → patch → test → commit → PR → merge', async () => {
@@ -70,6 +91,14 @@ describe('IVX Autonomous Coder — E2E Integration', () => {
       merged: false, mergeCommitSha: null,
     });
 
+    // ── Mock required CI checks: ALL GREEN ─────────────────────────────────
+    const requiredChecksFn = async (_sha: string): Promise<IVXCiCheckEvidence[]> => ciEvidence('success');
+
+    // ── Mock merge function: merge confirmed with SHA ────────────────────────
+    const mergeFn = async (_pr: number, _msg: string): Promise<{ merged: boolean; mergeCommitSha: string | null }> => ({
+      merged: true, mergeCommitSha: 'fedcba0987654321fedcba0987654321fedcba09',
+    });
+
     // ── Track phases ───────────────────────────────────────────────────────
     const phases: Array<{ phase: string; detail: string }> = [];
     const onPhase = (phase: string, detail: string): void => {
@@ -83,8 +112,10 @@ describe('IVX Autonomous Coder — E2E Integration', () => {
       executionMode: 'code_change',
       ownerId: 'test-owner',
       approvalPolicy: 'owner_gated',
-      llmCaller, testRunner, commitFn, prFn,
+      llmCaller, testRunner, commitFn, prFn, mergeFn, requiredChecksFn,
       autoMergePr: true,
+      ciWaitTimeoutMs: 5000,
+      ciPollIntervalMs: 0,
       fileWriter, fileReader,
       onPhase: onPhase as never,
       sleepFn: async (): Promise<void> => {},
@@ -104,9 +135,15 @@ describe('IVX Autonomous Coder — E2E Integration', () => {
     expect(proof.commitUrl).toContain('github.com/ibb142/ivx-holdings-platform');
     expect(proof.branch).toBe('ivx-autonomous');
 
-    // ── Assert: PR was created ─────────────────────────────────────────────
+    // ── Assert: PR was created and merged after CI ────────────────────────
     expect(proof.prNumber).toBe(42);
     expect(proof.prUrl).toBe('https://github.com/ibb142/ivx-holdings-platform/pull/42');
+    expect(proof.prCreated).toBe(true);
+    expect(proof.ciChecksWaited).toBe(true);
+    expect(proof.ciChecksGreen).toBe(true);
+    expect(proof.ciCheckEvidence?.length).toBe(7);
+    expect(proof.prMerged).toBe(true);
+    expect(proof.prMergeCommitSha).toBe('fedcba0987654321fedcba0987654321fedcba09');
 
     // ── Assert: final status is COMPLETED ──────────────────────────────────
     expect(proof.finalStatus).toBe('COMPLETED');
@@ -242,10 +279,169 @@ describe('IVX Autonomous Coder — E2E Integration', () => {
       sleepFn: async (): Promise<void> => {},
     });
 
-    // Commit created but deploy BLOCKED
+    // Commit created but deploy BLOCKED — never COMPLETED (owner mandate 2026-08-23)
     expect(proof.commitSha).toBe('blocked1234567890abcdef1234567890abcdef1234');
     expect(proof.deployApproved).toBe(false);
     expect(proof.deployId).toBeNull();
     expect(proof.productionVerified).toBe(false);
+    expect(proof.finalStatus).toBe('BLOCKED');
+    expect(proof.error).toContain('owner approval required');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Owner mandate 2026-08-23: FALSE-COMPLETION REGRESSION TESTS.
+// PR creation failure, unmerged PRs, red CI, and unconfirmed merges must
+// NEVER end COMPLETED.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('IVX Autonomous Coder — False-Completion Regression (2026-08-23)', () => {
+  const baseMocks = () => {
+    let currentContent = 'export const SENTINEL = "v6.12";\n';
+    const fileWriter = async (_r: string, content: string): Promise<void> => { currentContent = content; };
+    const fileReader = async (_r: string): Promise<string> => currentContent;
+    const llmCaller = async (_s: string, _u: string): Promise<string> => JSON.stringify({
+      rootCause: 'Sentinel out of date',
+      technicalPlan: 'Bump sentinel',
+      operations: [{
+        path: 'backend/services/ivx-autonomous-coder-pilot.ts', kind: 'replace_exact',
+        oldText: 'export const SENTINEL = "v6.12";', newText: 'export const SENTINEL = "v6.13";',
+        reason: 'Bump sentinel',
+      }],
+    });
+    const testRunner = async (_cwd: string, command: string): Promise<{
+      command: string; ok: boolean; exitCode: number | null;
+      stdoutTail: string; stderrTail: string; durationMs: number;
+    }> => ({ command, ok: true, exitCode: 0, stdoutTail: 'PASS', stderrTail: '', durationMs: 5 });
+    const commitFn = async (_f: string[], branch: string): Promise<{
+      commitSha: string; commitUrl: string; branch: string;
+    }> => ({
+      commitSha: 'aaaa111122223333444455556666777788889999',
+      commitUrl: 'https://github.com/ibb142/ivx-holdings-platform/commit/aaaa111122223333444455556666777788889999',
+      branch,
+    });
+    return { fileWriter, fileReader, llmCaller, testRunner, commitFn };
+  };
+
+  it('PR creation failure → BLOCKED, never COMPLETED', async () => {
+    const m = baseMocks();
+    const prFn = async (): Promise<{ prNumber: number; prUrl: string; merged: boolean; mergeCommitSha: string | null }> => {
+      throw new Error('GitHub PR creation failed: 403');
+    };
+    const proof: IVXAutonomousCoderProof = await runIVXAutonomousCoder({
+      taskId: 'fc-pr-fail-001', goal: 'Bump sentinel', executionMode: 'code_change',
+      ownerId: 'test-owner', approvalPolicy: 'owner_gated',
+      llmCaller: m.llmCaller, testRunner: m.testRunner, commitFn: m.commitFn, prFn,
+      autoMergePr: true,
+      fileWriter: m.fileWriter, fileReader: m.fileReader,
+      onPhase: (() => {}) as never, sleepFn: async (): Promise<void> => {},
+    });
+    expect(proof.commitSha).toBe('aaaa111122223333444455556666777788889999');
+    expect(proof.finalStatus).toBe('BLOCKED');
+    expect(proof.error).toContain('Pull request creation/merge failed');
+  });
+
+  it('required CI checks RED → merge NOT attempted, BLOCKED with check evidence', async () => {
+    const m = baseMocks();
+    const prFn = async (): Promise<{ prNumber: number; prUrl: string; merged: boolean; mergeCommitSha: string | null }> => ({
+      prNumber: 43, prUrl: 'https://github.com/ibb142/ivx-holdings-platform/pull/43', merged: false, mergeCommitSha: null,
+    });
+    let mergeAttempted = false;
+    const mergeFn = async (): Promise<{ merged: boolean; mergeCommitSha: string | null }> => {
+      mergeAttempted = true;
+      return { merged: true, mergeCommitSha: 'bbbb111122223333444455556666777788889999' };
+    };
+    const requiredChecksFn = async (_sha: string): Promise<IVXCiCheckEvidence[]> => ciEvidence('failure');
+    const proof: IVXAutonomousCoderProof = await runIVXAutonomousCoder({
+      taskId: 'fc-ci-red-001', goal: 'Bump sentinel', executionMode: 'code_change',
+      ownerId: 'test-owner', approvalPolicy: 'owner_gated',
+      llmCaller: m.llmCaller, testRunner: m.testRunner, commitFn: m.commitFn, prFn, mergeFn, requiredChecksFn,
+      autoMergePr: true,
+      ciWaitTimeoutMs: 5000, ciPollIntervalMs: 0,
+      fileWriter: m.fileWriter, fileReader: m.fileReader,
+      onPhase: (() => {}) as never, sleepFn: async (): Promise<void> => {},
+    });
+    expect(mergeAttempted).toBe(false);
+    expect(proof.prNumber).toBe(43);
+    expect(proof.prMerged).toBe(false);
+    expect(proof.finalStatus).toBe('BLOCKED');
+    expect(proof.ciChecksGreen).toBe(false);
+    expect(proof.ciCheckEvidence?.some((e) => e.conclusion === 'failure')).toBe(true);
+    expect(proof.error).toContain('Required CI checks FAILED');
+  });
+
+  it('required CI checks time out → merge NOT attempted, BLOCKED', async () => {
+    const m = baseMocks();
+    const prFn = async (): Promise<{ prNumber: number; prUrl: string; merged: boolean; mergeCommitSha: string | null }> => ({
+      prNumber: 44, prUrl: 'https://github.com/ibb142/ivx-holdings-platform/pull/44', merged: false, mergeCommitSha: null,
+    });
+    let mergeAttempted = false;
+    const mergeFn = async (): Promise<{ merged: boolean; mergeCommitSha: string | null }> => {
+      mergeAttempted = true;
+      return { merged: true, mergeCommitSha: 'cccc111122223333444455556666777788889999' };
+    };
+    let polls = 0;
+    const requiredChecksFn = async (_sha: string): Promise<IVXCiCheckEvidence[]> => {
+      polls += 1;
+      return ciEvidence(polls < 3 ? 'in_progress_pending' : 'success').map((e) => ({
+        ...e,
+        status: polls < 3 ? 'in_progress' : 'completed',
+      }));
+    };
+    const proof: IVXAutonomousCoderProof = await runIVXAutonomousCoder({
+      taskId: 'fc-ci-timeout-001', goal: 'Bump sentinel', executionMode: 'code_change',
+      ownerId: 'test-owner', approvalPolicy: 'owner_gated',
+      llmCaller: m.llmCaller, testRunner: m.testRunner, commitFn: m.commitFn, prFn, mergeFn, requiredChecksFn,
+      autoMergePr: true,
+      ciWaitTimeoutMs: 0, ciPollIntervalMs: 0,
+      fileWriter: m.fileWriter, fileReader: m.fileReader,
+      onPhase: (() => {}) as never, sleepFn: async (): Promise<void> => {},
+    });
+    expect(mergeAttempted).toBe(false);
+    expect(proof.finalStatus).toBe('BLOCKED');
+    expect(proof.error).toContain('Required CI checks TIMED OUT');
+  });
+
+  it('merge attempted but not confirmed (merged=true, no SHA) → BLOCKED, never COMPLETED', async () => {
+    const m = baseMocks();
+    const prFn = async (): Promise<{ prNumber: number; prUrl: string; merged: boolean; mergeCommitSha: string | null }> => ({
+      prNumber: 45, prUrl: 'https://github.com/ibb142/ivx-holdings-platform/pull/45', merged: false, mergeCommitSha: null,
+    });
+    const mergeFn = async (): Promise<{ merged: boolean; mergeCommitSha: string | null }> => ({
+      merged: true, mergeCommitSha: null,
+    });
+    const requiredChecksFn = async (_sha: string): Promise<IVXCiCheckEvidence[]> => ciEvidence('success');
+    const proof: IVXAutonomousCoderProof = await runIVXAutonomousCoder({
+      taskId: 'fc-merge-unconfirmed-001', goal: 'Bump sentinel', executionMode: 'code_change',
+      ownerId: 'test-owner', approvalPolicy: 'owner_gated',
+      llmCaller: m.llmCaller, testRunner: m.testRunner, commitFn: m.commitFn, prFn, mergeFn, requiredChecksFn,
+      autoMergePr: true,
+      ciWaitTimeoutMs: 5000, ciPollIntervalMs: 0,
+      fileWriter: m.fileWriter, fileReader: m.fileReader,
+      onPhase: (() => {}) as never, sleepFn: async (): Promise<void> => {},
+    });
+    expect(proof.prMerged).toBe(true);
+    expect(proof.prMergeCommitSha).toBeNull();
+    expect(proof.finalStatus).toBe('BLOCKED');
+    expect(proof.error).toContain('NOT confirmed');
+  });
+
+  it('commit created but PR not merged (autoMergePr=false) → BLOCKED, never COMPLETED', async () => {
+    const m = baseMocks();
+    const prFn = async (): Promise<{ prNumber: number; prUrl: string; merged: boolean; mergeCommitSha: string | null }> => ({
+      prNumber: 46, prUrl: 'https://github.com/ibb142/ivx-holdings-platform/pull/46', merged: false, mergeCommitSha: null,
+    });
+    const proof: IVXAutonomousCoderProof = await runIVXAutonomousCoder({
+      taskId: 'fc-no-merge-001', goal: 'Bump sentinel', executionMode: 'code_change',
+      ownerId: 'test-owner', approvalPolicy: 'owner_gated',
+      llmCaller: m.llmCaller, testRunner: m.testRunner, commitFn: m.commitFn, prFn,
+      autoMergePr: false,
+      fileWriter: m.fileWriter, fileReader: m.fileReader,
+      onPhase: (() => {}) as never, sleepFn: async (): Promise<void> => {},
+    });
+    expect(proof.commitSha).toBe('aaaa111122223333444455556666777788889999');
+    expect(proof.prNumber).toBe(46);
+    expect(proof.prMerged).toBe(false);
+    expect(proof.finalStatus).toBe('BLOCKED');
+    expect(proof.error).toContain('NOT merged');
   });
 });
