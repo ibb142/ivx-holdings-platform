@@ -11,6 +11,8 @@ import {
   verifyOwnerApproval,
   type VerificationGate,
 } from './ivx-agent-mutation-tools';
+import { executeRealTool } from './ivx-agent-real-tools';
+import { resolveRepoRoot } from './ivx-agent-engineering-tools';
 
 const OWNER_TOKEN = 'test-owner-token-live-integration';
 const SYSTEM_TOKEN = 'test-system-token-live-integration';
@@ -83,6 +85,54 @@ describe('IVX 112 live autonomous mutation integration', () => {
     }
   });
 
+  it('routes a real low-risk write through executeRealTool, the dispatcher used by agent runs', async () => {
+    const repoRoot = resolveRepoRoot();
+    const rel = `qa/evidence/autonomous/.tmp-dispatch-write-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`;
+    const abs = path.join(repoRoot, rel);
+    try {
+      const result = await executeRealTool(
+        'ivx_holdings_112',
+        112,
+        'code_write',
+        { path: rel, content: 'dispatcher mutation path verified\n' },
+        { ownerApprovalToken: SYSTEM_TOKEN, timeoutMs: 20_000 },
+      );
+      expect(result.ok).toBe(true);
+      expect(result.blocked).toBe(false);
+      expect(result.extract.authorizationMode).toBe('autonomous_system');
+      expect(result.sourceReference).toContain(rel);
+      expect(await readFile(abs, 'utf8')).toBe('dispatcher mutation path verified\n');
+    } finally {
+      await rm(abs, { force: true });
+    }
+  });
+
+  it('exposes the safe mutation dispatcher path to all 112 agent identities', async () => {
+    const agentNumbers = Array.from({ length: 112 }, (_, i) => i + 1);
+    const failures: Array<{ agentNumber: number; error: string | null }> = [];
+
+    for (let offset = 0; offset < agentNumbers.length; offset += 16) {
+      const batch = agentNumbers.slice(offset, offset + 16);
+      const results = await Promise.all(batch.map(async (agentNumber) => ({
+        agentNumber,
+        result: await executeRealTool(
+          `ivx_holdings_${agentNumber}`,
+          agentNumber,
+          'code_patch_proposal',
+          { scope: 'backend/services/ivx-agent-mutation-tools.ts' },
+          { ownerApprovalToken: SYSTEM_TOKEN, timeoutMs: 20_000 },
+        ),
+      })));
+      for (const { agentNumber, result } of results) {
+        if (!result.ok || result.blocked || result.extract.authorizationMode !== 'autonomous_system') {
+          failures.push({ agentNumber, error: result.error });
+        }
+      }
+    }
+
+    expect(failures).toEqual([]);
+  }, 120_000);
+
   it('allows a verified autonomous commit for low-risk files', async () => {
     const { repo, cleanup } = await makeRepo();
     try {
@@ -129,6 +179,18 @@ describe('IVX 112 live autonomous mutation integration', () => {
     } finally {
       await cleanup();
     }
+  });
+
+  it('keeps high-risk dispatcher writes blocked for all agents even with the system credential', async () => {
+    const blocked = await executeRealTool(
+      'ivx_holdings_1',
+      1,
+      'code_write',
+      { path: 'backend/auth/session.ts', content: 'x' },
+      { ownerApprovalToken: SYSTEM_TOKEN, timeoutMs: 20_000 },
+    );
+    expect(blocked.ok).toBe(false);
+    expect(blocked.error).toContain('owner approval required');
   });
 
   it('never allows the system credential to deploy production', async () => {
