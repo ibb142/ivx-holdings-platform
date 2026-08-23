@@ -5,12 +5,14 @@ on:
     branches: [main]
     paths:
       - 'expo/app/(tabs)/_layout.tsx'
-      - 'expo/app/(tabs)/(home)/**'
+      - 'expo/app/(tabs)/home.tsx'
       - 'expo/app/login.tsx'
       - 'expo/lib/auth-context.tsx'
       - 'expo/lib/auth-password-sign-in.ts'
       - 'expo/lib/supabase.ts'
+      - 'expo/lib/screen-paint-watchdog.ts'
       - 'expo/.maestro/ivx-owner-home-certificate.yaml'
+      - 'expo/__tests__/owner-home-session-race.test.ts'
       - '.github/workflows/ivx-owner-home-android-cert.yml'
   workflow_dispatch: {}
 
@@ -75,11 +77,7 @@ jobs:
             name=${pair%%:*}
             var=${pair##*:}
             value=${!var:-}
-            if [ -n "$value" ]; then
-              owner_password="$value"
-              binding="$name"
-              break
-            fi
+            if [ -n "$value" ]; then owner_password="$value"; binding="$name"; break; fi
           done
           test -n "$owner_password"
           echo "::add-mask::$owner_password"
@@ -91,7 +89,7 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "owner_password_binding=$binding"
 
-      - name: Install dependencies for native certification
+      - name: Install dependencies
         shell: bash
         run: |
           set -euo pipefail
@@ -99,6 +97,18 @@ jobs:
           cd expo
           bun install
           bun scripts/apply-patches.mjs
+
+      - name: Source and regression gates
+        working-directory: expo
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'IVX_STARTUP_SIGNOUT_SERIALIZED_V1' lib/auth-context.tsx
+          grep -q 'IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1' lib/auth-context.tsx
+          grep -q 'IVX_OWNER_POST_LOGIN_FAST_PATH_V1' lib/auth-context.tsx
+          grep -q 'IVX_OWNER_REPAIR_BACKGROUND_V1' lib/auth-context.tsx
+          if grep -q 'router unlocked before signOut' lib/auth-context.tsx; then exit 1; fi
+          bun test __tests__/owner-home-session-race.test.ts __tests__/home-route-blank-screen.test.ts __tests__/android-auth-route-black-screen.test.ts
 
       - name: Prepare disposable QA signer
         shell: bash
@@ -120,6 +130,13 @@ jobs:
           APK=$(find app/build/outputs/apk/qa -name '*.apk' -type f | head -1)
           test -n "$APK"
           echo "APK_PATH=$(realpath "$APK")" >> "$GITHUB_ENV"
+          cp "$APK" "$GITHUB_WORKSPACE/IVX-Owner-Home-QA.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ivx-owner-home-qa-apk-${{ github.event.pull_request.head.sha || github.sha }}
+          path: IVX-Owner-Home-QA.apk
+          if-no-files-found: error
 
       - name: Enable KVM
         run: |
@@ -127,7 +144,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Run real owner sign-in and Home black-screen regression
+      - name: Run real Owner Login to Home and delayed black-screen checks
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
@@ -140,27 +157,58 @@ jobs:
           heap-size: 512M
           emulator-options: -no-window -gpu off -no-snapshot -noaudio -no-boot-anim
           script: |
-            set -eu
+            set -u
             adb install -r "$APK_PATH"
+            timeout 30s adb wait-for-device
             curl -Ls https://get.maestro.mobile.dev | bash
-            export PATH="$HOME/.maestro/bin:$PATH"
-            maestro test expo/.maestro/ivx-owner-home-certificate.yaml --env OWNER_EMAIL="$OWNER_EMAIL" --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" --format junit --output owner-home-maestro.xml
-            adb exec-out screencap -p > owner-home-final.png
+            MAESTRO="$HOME/.maestro/bin/maestro"
+            test -x "$MAESTRO"
+            "$MAESTRO" --version
+
+            set +e
+            timeout 240s "$MAESTRO" test expo/.maestro/ivx-owner-home-certificate.yaml --env OWNER_EMAIL="$OWNER_EMAIL" --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" --format junit --output owner-home-maestro.xml
+            rc=$?
+
+            checkpoint() {
+              label="$1"
+              timeout 10s adb wait-for-device || { rc=90; return; }
+              timeout 10s adb shell pidof com.ivxholdings.app.owner > "owner-home-${label}-pid.txt" 2>&1 || rc=91
+              timeout 20s adb shell uiautomator dump "/sdcard/owner-home-${label}.xml" >/dev/null 2>&1 || rc=92
+              timeout 20s adb pull "/sdcard/owner-home-${label}.xml" "owner-home-${label}.xml" >/dev/null 2>&1 || true
+              timeout 15s adb exec-out screencap -p > "owner-home-${label}.png" 2>/dev/null || true
+              timeout 20s adb logcat -d > "owner-home-${label}-logcat.txt" 2>&1 || true
+              grep -q 'Home ready' "owner-home-${label}.xml" 2>/dev/null || rc=93
+            }
+
+            checkpoint immediate
+            if [ "$rc" -eq 0 ]; then sleep 2; checkpoint 2s; fi
+            if [ "$rc" -eq 0 ]; then sleep 3; checkpoint 5s; fi
+            if [ "$rc" -eq 0 ]; then sleep 5; checkpoint 10s; fi
+            if [ "$rc" -eq 0 ]; then sleep 10; checkpoint 20s; fi
+            set -e
+            exit "$rc"
 
       - name: Build durable certificate
         if: success()
         shell: bash
         run: |
           mkdir -p qa/evidence
-          jq -n --arg sha "${{ github.event.pull_request.head.sha || github.sha }}" --arg binding "$OWNER_PASSWORD_BINDING" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{certificate:"IVX-OWNER-SIGNIN-HOME-ANDROID-E2E",passed:true,sourceSha:$sha,credentialBinding:$binding,realOwnerPasswordEntry:true,homeReadyMarker:true,homeTabRetap:true,blackScreenObserved:false,signInFailureDialogObserved:false,secretValuesReturned:false,verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-home-android-e2e.json
+          jq -n \
+            --arg sha "${{ github.event.pull_request.head.sha || github.sha }}" \
+            --arg binding "$OWNER_PASSWORD_BINDING" \
+            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{certificate:"IVX-OWNER-SIGNIN-HOME-ANDROID-E2E",passed:true,sourceSha:$sha,credentialBinding:$binding,realOwnerPasswordEntry:true,homeReadyMarker:true,homeTabRetap:true,homeVisibleImmediate:true,homeVisibleAfter2Seconds:true,homeVisibleAfter5Seconds:true,homeVisibleAfter10Seconds:true,homeVisibleAfter20Seconds:true,blackScreenObserved:false,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-home-android-e2e.json
           cat qa/evidence/ivx-owner-home-android-e2e.json
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ivx-owner-home-android-e2e-${{ github.sha }}
+          name: ivx-owner-home-android-e2e-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             owner-home-maestro.xml
-            owner-home-final.png
+            owner-home-*.xml
+            owner-home-*.png
+            owner-home-*-pid.txt
+            owner-home-*-logcat.txt
             qa/evidence/ivx-owner-home-android-e2e.json
           if-no-files-found: warn
