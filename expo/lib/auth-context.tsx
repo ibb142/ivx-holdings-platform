@@ -1054,6 +1054,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     const startTime = Date.now();
     console.log(`[Auth] OWNER_PROFILE_QUERY_STARTED traceId=${traceId} userId=${userId} email=${sessionEmail ? sanitizeEmail(sessionEmail) : 'none'}`);
 
+    // IVX_OWNER_POST_LOGIN_FAST_PATH_V1
+    // Authentication has already succeeded before this role bootstrap runs.
+    // The configured owner identity is already enforced by IVX owner policy, so
+    // do not block navigation on extra profile/RPC round trips.
+    if (isOwnerAdminEmail(sessionEmail)) {
+      console.log(`[Auth] OWNER_AUTHORIZED traceId=${traceId} source=owner_email_fast_path role=owner elapsed=${Date.now() - startTime}ms`);
+      return { role: 'owner', source: 'fallback' };
+    }
+
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -1444,7 +1453,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       const repairKey = `${supaUser.id}:${supaUser.updated_at ?? supaUser.email ?? 'owner'}`;
       if (ownerRepairKeyRef.current !== repairKey) {
         ownerRepairKeyRef.current = repairKey;
-        await repairOwnerRegistrationAfterLogin(session).catch((error: unknown) => {
+        // IVX_OWNER_REPAIR_BACKGROUND_V1
+        // Profile/wallet repair is maintenance work and must never block a valid owner login.
+        void repairOwnerRegistrationAfterLogin(session).catch((error: unknown) => {
           console.log('[Auth] Owner post-login repair note:', error instanceof Error ? error.message : 'unknown');
           return null;
         });
@@ -1700,27 +1711,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       logStartup('AUTH_INITIALIZATION_STARTED');
       logStartup('AUTH_INIT_STARTED');
       try {
-        // Cold launch: sign out any persisted Supabase session so the owner
-        // (and all users) must enter credentials manually every time.
-        // This prevents automatic owner sign-in from AsyncStorage.
-        //
-        // CRITICAL: The router must render BEFORE this signOut completes.
-        // We set isLoading=false immediately in a microtask so TabsLayout can
-        // redirect to /login, then run the background signOut in a fire-and-forget
-        // promise. If signOut hangs or is slow, the UI is never blocked.
-        Promise.resolve().then(() => {
-          if (!cancelled) {
-            manualOwnerLoginRef.current = false;
-            setIsLoading(false);
-            logStartup('AUTH_INITIALIZATION_COMPLETED', 'router unlocked before signOut');
-            logStartup('AUTH_INIT_COMPLETED', 'router unlocked before signOut');
-          }
-        });
-
-        // Background signOut with a strict timeout. This never blocks render.
-        withTimeout(
+        // IVX_STARTUP_SIGNOUT_SERIALIZED_V1
+        // Never allow the cold-start sign-out to overlap a new manual login.
+        // The previous fire-and-forget signOut could finish after a valid owner
+        // session was created, emit SIGNED_OUT, clear isAuthenticated, and leave
+        // the active Home tab with only its dark navigator surface.
+        manualOwnerLoginRef.current = false;
+        await withTimeout(
           () => supabase.auth.signOut({ scope: 'local' }).then(() => {
-            console.log('[Auth] Cold-launch signOut completed');
+            console.log('[Auth] Cold-launch signOut completed before manual login is enabled');
           }),
           AUTH_BOOTSTRAP_TIMEOUT_MS,
           'initAuth.signOut',
@@ -1728,6 +1727,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         ).catch((e: unknown) => {
           console.log('[Auth] Cold-launch signOut note:', (e as Error)?.message ?? 'unknown');
         });
+
+        if (!cancelled) {
+          setIsLoading(false);
+          logStartup('AUTH_INITIALIZATION_COMPLETED', 'router unlocked after startup signOut');
+          logStartup('AUTH_INIT_COMPLETED', 'router unlocked after startup signOut');
+        }
       } catch (e) {
         logStartupError('AUTH_INITIALIZATION_FAILED', e);
         logStartupError('AUTH_INIT_FAILED', e);
@@ -1819,7 +1824,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         logStartup('AUTH_HARD_UNLOCK');
         setIsLoading(false);
       }
-    }, 3000);
+    }, AUTH_BOOTSTRAP_TIMEOUT_MS + 1000);
     return () => clearTimeout(timer);
   }, [isLoading]);
 
@@ -1979,6 +1984,55 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
       trace.checkpoint('BACKEND_REQUEST_STARTED');
       manualOwnerLoginRef.current = true;
+
+      // IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1
+      // Owner password validation should not depend on Render cold-start latency.
+      // Supabase remains the credential authority. Backend login is retained below
+      // only as a transport/service fallback when direct Auth is unavailable.
+      if (isOwnerAdminEmail(normalizedEmail)) {
+        const directStartedAt = Date.now();
+        const directResult = await signInWithEmailPassword(freshClient, normalizedEmail, password);
+        if (directResult.ok) {
+          trace.checkpoint('BACKEND_RESPONSE_RECEIVED', { success: true, path: 'supabase_direct_owner' });
+          trace.checkpoint('SESSION_CREATED');
+          trace.checkpoint('SESSION_PERSIST_STARTED');
+          const directSession = directResult.session;
+          trace.checkpoint('SESSION_PERSIST_COMPLETE', { elapsedMs: Date.now() - directStartedAt });
+          const challengeRequired = await requireTwoFactorIfNeeded(directSession, 'direct owner password sign-in');
+          if (challengeRequired) {
+            return { success: false, requiresTwoFactor: true, message: 'Enter the 6-digit code from your authenticator app to finish signing in.' };
+          }
+          trace.checkpoint('OWNER_LOOKUP_STARTED');
+          const handledDirectSession = await handleSession(directSession);
+          trace.checkpoint('OWNER_LOOKUP_COMPLETE', { success: handledDirectSession.accepted, errorMessage: handledDirectSession.blockedReason ?? undefined });
+          if (!handledDirectSession.accepted) {
+            return { success: false, message: handledDirectSession.blockedReason ?? getAdminAccessLockMessage(), failureReason: 'admin_access_locked' };
+          }
+          trace.checkpoint('APP_SESSION_READY', { path: 'supabase_direct_owner', elapsedMs: Date.now() - directStartedAt });
+          return { success: true, message: 'Login successful', traceId: trace.traceId };
+        }
+
+        const directCode = String((directResult.error as { code?: string })?.code ?? '').toLowerCase();
+        const directMessage = String(directResult.error?.message ?? '').toLowerCase();
+        const invalidCredentials = directCode.includes('invalid_credentials')
+          || directMessage.includes('invalid login credentials')
+          || directMessage.includes('invalid email or password');
+        if (invalidCredentials) {
+          manualOwnerLoginRef.current = false;
+          trace.checkpoint('FAILED', { stage: 'auth', errorCode: directCode || 'invalid_credentials', errorMessage: directResult.error.message });
+          return {
+            success: false,
+            message: 'Invalid email or password.',
+            failureReason: 'invalid_credentials',
+            supabaseErrorMessage: directResult.error.message,
+            supabaseErrorCode: directCode || 'invalid_credentials',
+            supabaseErrorStatus: Number((directResult.error as { status?: number })?.status ?? 400),
+            supabaseErrorName: directResult.error.name || 'AuthError',
+          };
+        }
+        console.log('[Auth] Direct owner Supabase sign-in unavailable; trying existing backend fallback:', directResult.error.message);
+      }
+
       const apiBaseUrls = getOwnerRegistrationApiBaseUrls();
       let lastError: string | null = null;
       let serverResult: {
