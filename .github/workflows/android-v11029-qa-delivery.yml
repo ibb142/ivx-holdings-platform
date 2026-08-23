@@ -1,0 +1,162 @@
+name: Android v1.10.29 QA Delivery
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/android-v11029-qa-delivery.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  build-qa-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      EXPO_PUBLIC_API_BASE_URL: https://api.ivxholding.com
+      NODE_ENV: production
+      EXPO_PUBLIC_QA_BUILD: 'true'
+      EXPO_PUBLIC_IVX_OPEN_ACCESS_MODE: 'true'
+      EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish run locator
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "APK QA RUN v1.10.29 - ${GITHUB_RUN_ID}" \
+            --body "Run ID: ${GITHUB_RUN_ID}\nSource SHA: ${GITHUB_SHA}\nVersion: 1.10.29\nVersion code: 127\nArtifact target: IVX-Holdings-v1.10.29-QA-${GITHUB_SHA}\nStatus: STARTED" || true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006 cmake;3.22.1'
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          bun install
+          cd expo
+          bun install
+          bun scripts/apply-patches.mjs
+
+      - name: Prepare disposable QA signer
+        run: |
+          set -euo pipefail
+          QA_KEYSTORE="$HOME/.android/debug.keystore"
+          mkdir -p "$(dirname "$QA_KEYSTORE")"
+          rm -f "$QA_KEYSTORE"
+          keytool -genkeypair -v \
+            -keystore "$QA_KEYSTORE" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=IVX CI QA, OU=Engineering, O=IVX Holdings, L=Miami, ST=Florida, C=US"
+          keytool -list -keystore "$QA_KEYSTORE" -storepass android -alias androiddebugkey >/dev/null
+
+      - name: Pin native QA APK version
+        working-directory: expo
+        run: |
+          set -euo pipefail
+          sed -i 's/versionCode 126/versionCode 127/' android/app/build.gradle
+          sed -i 's/versionName "1.10.28"/versionName "1.10.29"/' android/app/build.gradle
+          grep -nE 'versionCode|versionName' android/app/build.gradle | head
+
+      - name: Build QA APK
+        id: build
+        working-directory: expo/android
+        env:
+          IVX_RELEASE_KEYSTORE_PATH: ${{ runner.home }}/.android/debug.keystore
+          IVX_RELEASE_KEYSTORE_PASSWORD: android
+          IVX_RELEASE_KEY_ALIAS: androiddebugkey
+          IVX_RELEASE_KEY_PASSWORD: android
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew assembleQa --no-daemon -x lint 2>&1 | tee gradle-v11029-qa.log
+
+      - name: Prepare APK delivery
+        id: apk
+        working-directory: expo/android
+        run: |
+          set -euo pipefail
+          APK=$(find app/build/outputs/apk/qa -name '*.apk' -type f | head -1)
+          test -n "$APK"
+          HASH=$(sha256sum "$APK" | awk '{print $1}')
+          SIZE=$(stat -c%s "$APK")
+          cp "$APK" "$GITHUB_WORKSPACE/IVX-Holdings-v1.10.29-QA.apk"
+          echo "$HASH  IVX-Holdings-v1.10.29-QA.apk" > "$GITHUB_WORKSPACE/IVX-Holdings-v1.10.29-QA.sha256"
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload QA APK immediately
+        uses: actions/upload-artifact@v4
+        with:
+          name: IVX-Holdings-v1.10.29-QA-${{ github.sha }}
+          path: |
+            IVX-Holdings-v1.10.29-QA.apk
+            IVX-Holdings-v1.10.29-QA.sha256
+            expo/android/gradle-v11029-qa.log
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Enable Linux KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Cold-launch QA APK
+        id: runtime
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          profile: pixel_2
+          target: google_apis
+          disable-animations: false
+          disable-linux-hw-accel: false
+          ram-size: 2048M
+          heap-size: 512M
+          emulator-options: -no-window -gpu off -no-snapshot -noaudio -no-boot-anim
+          script: bash "$GITHUB_WORKSPACE/expo/scripts/certify-android-launch.sh" "$GITHUB_WORKSPACE/IVX-Holdings-v1.10.29-QA.apk" com.ivxholdings.app.owner android-v11029-qa-launch.png android-v11029-qa-logcat.txt android-v11029-qa-launch.txt android-v11029-qa-package-version.txt "Home ready"
+
+      - name: Upload runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: IVX-Holdings-v1.10.29-QA-runtime-${{ github.sha }}
+          path: |
+            android-v11029-qa-launch.png
+            android-v11029-qa-logcat.txt
+            android-v11029-qa-launch.txt
+            android-v11029-qa-package-version.txt
+          retention-days: 30
+
+      - name: Publish final QA locator
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "APK QA RESULT v1.10.29 - ${GITHUB_RUN_ID} - ${{ job.status }}" \
+            --body "Run ID: ${GITHUB_RUN_ID}\nSource SHA: ${GITHUB_SHA}\nVersion: 1.10.29\nVersion code: 127\nJob status: ${{ job.status }}\nAPK SHA-256: ${{ steps.apk.outputs.hash }}\nAPK size: ${{ steps.apk.outputs.size }}\nArtifact: IVX-Holdings-v1.10.29-QA-${GITHUB_SHA}\nRuntime artifact: IVX-Holdings-v1.10.29-QA-runtime-${GITHUB_SHA}" || true
