@@ -1,3 +1,4 @@
+// 2026-08-23: per-agent 112 senior certification evidence published in PR #232 (112/112 PASS on runtime 874157b); typecheck repair in PR #234.
 // 2026-08-23: typecheck repair — autonomous commit broke executeSqlViaPg (TS1128) and duplicated owner-auth catch lines (TS2451); fixed in PR #234.
 // p3-watchdog-ip-throttle: CI fleet cycles are owner-key authenticated; IP rate limits must not block them.
 // p3-watchdog-read-probe: cheap read probes get a 600/min bucket so CI cycles never trip the 100/min IP limit (PR #223).
