@@ -9,7 +9,7 @@ describe('Owner Home session race regression', () => {
   it('serializes startup sign-out before the login UI is unlocked', () => {
     expect(auth).toContain('IVX_STARTUP_SIGNOUT_SERIALIZED_V1');
     expect(auth).toContain("await withTimeout(\n          () => supabase.auth.signOut({ scope: 'local' })");
-    expect(auth).toContain("router unlocked after startup signOut");
+    expect(auth).toContain('router unlocked after startup signOut');
     expect(auth).not.toContain('router unlocked before signOut');
   });
 
@@ -24,6 +24,12 @@ describe('Owner Home session race regression', () => {
     expect(direct).toBeGreaterThan(-1);
     expect(backendLoop).toBeGreaterThan(direct);
     expect(auth.slice(direct, backendLoop)).toContain('signInWithEmailPassword(freshClient, normalizedEmail, password)');
+  });
+
+  it('keeps LoginTrace metadata type-safe on the direct owner path', () => {
+    expect(auth).not.toContain("path: 'supabase_direct_owner'");
+    expect(auth).not.toContain('elapsedMs: Date.now() - directStartedAt');
+    expect(auth).toContain("console.log('[Auth] Direct owner Supabase session established in'");
   });
 
   it('does not block Home on owner role/profile maintenance', () => {
