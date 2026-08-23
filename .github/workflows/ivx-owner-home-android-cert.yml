@@ -13,6 +13,21 @@ on:
       - 'expo/lib/screen-paint-watchdog.ts'
       - 'expo/.maestro/ivx-owner-home-certificate.yaml'
       - 'expo/__tests__/owner-home-session-race.test.ts'
+      - 'scripts/ivx-owner-home-android-e2e.sh'
+      - '.github/workflows/ivx-owner-home-android-cert.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'expo/app/(tabs)/_layout.tsx'
+      - 'expo/app/(tabs)/home.tsx'
+      - 'expo/app/login.tsx'
+      - 'expo/lib/auth-context.tsx'
+      - 'expo/lib/auth-password-sign-in.ts'
+      - 'expo/lib/supabase.ts'
+      - 'expo/lib/screen-paint-watchdog.ts'
+      - 'expo/.maestro/ivx-owner-home-certificate.yaml'
+      - 'expo/__tests__/owner-home-session-race.test.ts'
+      - 'scripts/ivx-owner-home-android-e2e.sh'
       - '.github/workflows/ivx-owner-home-android-cert.yml'
   workflow_dispatch: {}
 
@@ -156,37 +171,7 @@ jobs:
           ram-size: 2048M
           heap-size: 512M
           emulator-options: -no-window -gpu off -no-snapshot -noaudio -no-boot-anim
-          script: |
-            set -u
-            adb install -r "$APK_PATH"
-            timeout 30s adb wait-for-device
-            curl -Ls https://get.maestro.mobile.dev | bash
-            MAESTRO="$HOME/.maestro/bin/maestro"
-            test -x "$MAESTRO"
-            "$MAESTRO" --version
-
-            set +e
-            timeout 240s "$MAESTRO" test expo/.maestro/ivx-owner-home-certificate.yaml --env OWNER_EMAIL="$OWNER_EMAIL" --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" --format junit --output owner-home-maestro.xml
-            rc=$?
-
-            checkpoint() {
-              label="$1"
-              timeout 10s adb wait-for-device || { rc=90; return; }
-              timeout 10s adb shell pidof com.ivxholdings.app.owner > "owner-home-${label}-pid.txt" 2>&1 || rc=91
-              timeout 20s adb shell uiautomator dump "/sdcard/owner-home-${label}.xml" >/dev/null 2>&1 || rc=92
-              timeout 20s adb pull "/sdcard/owner-home-${label}.xml" "owner-home-${label}.xml" >/dev/null 2>&1 || true
-              timeout 15s adb exec-out screencap -p > "owner-home-${label}.png" 2>/dev/null || true
-              timeout 20s adb logcat -d > "owner-home-${label}-logcat.txt" 2>&1 || true
-              grep -q 'Home ready' "owner-home-${label}.xml" 2>/dev/null || rc=93
-            }
-
-            checkpoint immediate
-            if [ "$rc" -eq 0 ]; then sleep 2; checkpoint 2s; fi
-            if [ "$rc" -eq 0 ]; then sleep 3; checkpoint 5s; fi
-            if [ "$rc" -eq 0 ]; then sleep 5; checkpoint 10s; fi
-            if [ "$rc" -eq 0 ]; then sleep 10; checkpoint 20s; fi
-            set -e
-            exit "$rc"
+          script: bash scripts/ivx-owner-home-android-e2e.sh
 
       - name: Build durable certificate
         if: success()
