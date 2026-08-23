@@ -16,6 +16,7 @@ import { OPTIONS as failureRecoveryOptions, handleRecoveryStatusRequest, handleR
 import { reelsOptions, handleReelsStatus, handleReelsPublish, handleReelsFeed, handleReelsMedia, handleReelsView, handleReelsLike } from './api/ivx-reels';
 import { ivxDirectAuthOptions, handleIVXDirectAuthSignIn } from './api/ivx-direct-auth';
 import { ivxSupabaseRestartOptions, handleIVXSupabaseRestart } from './api/ivx-supabase-restart';
+import { autonomousIntelligenceMissionSchedulerOptions, handleAutonomousIntelligenceMissionSchedulerGet } from './api/ivx-autonomous-intelligence-mission-scheduler';
 
 app.options('/api/ivx/autonomous/control-plane', () => autonomousControlPlaneOptions());
 app.get('/api/ivx/autonomous/control-plane', async (c) => handleAutonomousControlPlaneGet(c.req.raw));
@@ -47,6 +48,9 @@ app.options('/api/ivx/autonomous/runs', () => autonomousRunsOptions());
 app.get('/api/ivx/autonomous/runs', async (c) => handleAutonomousRunsGet(c.req.raw));
 app.options('/api/ivx/autonomous/runs/summary', () => autonomousRunsOptions());
 app.get('/api/ivx/autonomous/runs/summary', async (c) => handleAutonomousRunsSummaryGet(c.req.raw));
+
+app.options('/api/ivx/autonomous/intelligence-mission', () => autonomousIntelligenceMissionSchedulerOptions());
+app.get('/api/ivx/autonomous/intelligence-mission', async (c) => handleAutonomousIntelligenceMissionSchedulerGet(c.req.raw));
 
 app.options('/api/ivx/certification/member-auth', () => ownerOnlyOptions());
 app.get('/api/ivx/certification/member-auth', async (c) => {
