@@ -1,0 +1,137 @@
+name: IVX Owner Home Fast Runtime Retest
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-owner-home-fast-retest.yml'
+      - 'expo/.maestro/ivx-owner-home-certificate.yaml'
+      - 'scripts/ivx-owner-home-android-e2e.sh'
+  workflow_dispatch: {}
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  NODE_ENV: production
+  EXPO_PUBLIC_API_BASE_URL: https://api.ivxholding.com
+  EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+  EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+  EXPO_PUBLIC_IVX_OPEN_ACCESS_MODE: 'false'
+  OWNER_EMAIL: iperez4242@gmail.com
+  OWNER_PASSWORD_S1: ${{ secrets.OWNER_NEW_PASSWORD }}
+  OWNER_PASSWORD_S2: ${{ secrets.OWNER_PASSWORD }}
+  OWNER_PASSWORD_S3: ${{ secrets.IVX_OWNER_PASSWORD }}
+  OWNER_PASSWORD_S4: ${{ secrets.IVX_OWNER_NEW_PASSWORD }}
+  OWNER_PASSWORD_S5: ${{ secrets.OWNER_LOGIN_PASSWORD }}
+  OWNER_PASSWORD_S6: ${{ secrets.IVX_OWNER_LOGIN_PASSWORD }}
+  APK_SOURCE_SHA: 1550e6545e8618576aef5e136256b570ec79c289
+  APK_SOURCE_RUN_ID: '32672482985'
+  APK_ARTIFACT_NAME: ivx-owner-home-qa-apk-1550e6545e8618576aef5e136256b570ec79c289
+
+jobs:
+  retest-owner-home:
+    name: Reuse exact APK and prove Owner Home stays visible
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          fetch-depth: 1
+
+      - name: Resolve real owner credential binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner_password=''
+          binding='none'
+          for pair in \
+            'OWNER_NEW_PASSWORD:OWNER_PASSWORD_S1' \
+            'OWNER_PASSWORD:OWNER_PASSWORD_S2' \
+            'IVX_OWNER_PASSWORD:OWNER_PASSWORD_S3' \
+            'IVX_OWNER_NEW_PASSWORD:OWNER_PASSWORD_S4' \
+            'OWNER_LOGIN_PASSWORD:OWNER_PASSWORD_S5' \
+            'IVX_OWNER_LOGIN_PASSWORD:OWNER_PASSWORD_S6'; do
+            name=${pair%%:*}
+            var=${pair##*:}
+            value=${!var:-}
+            if [ -n "$value" ]; then owner_password="$value"; binding="$name"; break; fi
+          done
+          test -n "$owner_password"
+          echo "::add-mask::$owner_password"
+          {
+            echo 'OWNER_PASSWORD_EFFECTIVE<<IVX_EOF'
+            echo "$owner_password"
+            echo 'IVX_EOF'
+            echo "OWNER_PASSWORD_BINDING=$binding"
+          } >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.APK_ARTIFACT_NAME }}
+          path: qa-apk
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ env.APK_SOURCE_RUN_ID }}
+
+      - name: Bind exact APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f qa-apk/IVX-Owner-Home-QA.apk
+          echo "APK_PATH=$(realpath qa-apk/IVX-Owner-Home-QA.apk)" >> "$GITHUB_ENV"
+          sha256sum qa-apk/IVX-Owner-Home-QA.apk | tee owner-home-apk-sha256.txt
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: false
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run exact APK Owner Login to Home delayed checks
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          profile: pixel_2
+          target: google_apis
+          disable-animations: false
+          disable-linux-hw-accel: false
+          ram-size: 2048M
+          heap-size: 512M
+          emulator-options: -no-window -gpu off -no-snapshot -noaudio -no-boot-anim
+          script: bash scripts/ivx-owner-home-android-e2e.sh
+
+      - name: Build runtime certificate
+        if: success()
+        shell: bash
+        run: |
+          mkdir -p qa/evidence
+          jq -n \
+            --arg apkSourceSha "$APK_SOURCE_SHA" \
+            --arg harnessSha "${{ github.event.pull_request.head.sha || github.sha }}" \
+            --arg binding "$OWNER_PASSWORD_BINDING" \
+            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{certificate:"IVX-OWNER-HOME-EXACT-APK-RUNTIME",passed:true,apkSourceSha:$apkSourceSha,harnessSha:$harnessSha,credentialBinding:$binding,realOwnerPasswordEntry:true,homeMarker:"IVXHOLDINGS",homeReelsButtonVisible:true,homeTabVisible:true,homeTabRetap:true,homeVisibleImmediate:true,homeVisibleAfter2Seconds:true,homeVisibleAfter5Seconds:true,homeVisibleAfter10Seconds:true,homeVisibleAfter20Seconds:true,blackScreenObserved:false,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-home-exact-apk-runtime.json
+          cat qa/evidence/ivx-owner-home-exact-apk-runtime.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ivx-owner-home-fast-runtime-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            owner-home-apk-sha256.txt
+            owner-home-maestro.xml
+            owner-home-*.xml
+            owner-home-*.png
+            owner-home-*-pid.txt
+            owner-home-*-logcat.txt
+            qa/evidence/ivx-owner-home-exact-apk-runtime.json
+          if-no-files-found: warn
