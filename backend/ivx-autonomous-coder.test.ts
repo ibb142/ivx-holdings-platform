@@ -52,6 +52,39 @@ describe('IVX Autonomous Coder — pilot sentinel', () => {
   });
 });
 
+/**
+ * Owner mandate 2026-08-23 (CI-before-merge): golden-path mocks for the
+ * PR + required-CI-checks gates. A code_change task only reaches COMPLETED
+ * when its PR merges after ALL required checks report success.
+ */
+function prAndCiMocks(prNumber = 99): Pick<IVXAutonomousCoderInput, 'prFn' | 'mergeFn' | 'requiredChecksFn'> {
+  return {
+    prFn: async () => ({
+      prNumber,
+      prUrl: `https://github.com/ibb142/ivx-holdings-platform/pull/${prNumber}`,
+      merged: false,
+      mergeCommitSha: null,
+    }),
+    mergeFn: async () => ({ merged: true, mergeCommitSha: `merge-sha-${prNumber}` }),
+    requiredChecksFn: async () => [
+      'qa-suite',
+      'TypeScript typecheck — HARD GATE',
+      'Lint — HARD GATE',
+      'scan-secrets',
+      'Senior Developer + 12 IA autonomy invariants',
+      'Playwright E2E (web surface) — HARD GATE',
+      'Maestro E2E (mobile surface) — HARD GATE',
+    ].map((context) => ({
+      context,
+      checkRunName: context,
+      status: 'completed',
+      conclusion: 'success',
+      detailsUrl: null,
+      matched: true,
+    })),
+  };
+}
+
 describe('IVX Autonomous Coder — engine loop', () => {
   it('runs the full INSPECT→PLAN→PATCH→TEST→COMMIT loop with injected LLM + test runner + commit fn', async () => {
     const repo = await makeIsolatedRepo('test-001');
@@ -92,6 +125,10 @@ describe('IVX Autonomous Coder — engine loop', () => {
       llmCaller,
       testRunner,
       commitFn,
+      ...prAndCiMocks(),
+      autoMergePr: true,
+      ciWaitTimeoutMs: 5000,
+      ciPollIntervalMs: 0,
     };
 
     const proof = await runIVXAutonomousCoder(input);
@@ -114,6 +151,12 @@ describe('IVX Autonomous Coder — engine loop', () => {
     expect(proof.commitUrl).toContain('fake-commit-sha-abc123');
     expect(proof.branch).toBe('main');
     expect(proof.deployId).toBeNull();
+    // Owner mandate 2026-08-23: COMPLETED only after PR + green CI + confirmed merge.
+    expect(proof.prCreated).toBe(true);
+    expect(proof.ciChecksWaited).toBe(true);
+    expect(proof.ciChecksGreen).toBe(true);
+    expect(proof.prMerged).toBe(true);
+    expect(proof.prMergeCommitSha).toBe('merge-sha-99');
     expect(proof.finalStatus).toBe('COMPLETED');
     expect(proof.error).toBeNull();
     expect(proof.secretValuesReturned).toBe(false);
@@ -217,6 +260,10 @@ describe('IVX Autonomous Coder — engine loop', () => {
       llmCaller,
       testRunner,
       commitFn: async () => ({ commitSha: 'rev-sha', commitUrl: 'url', branch: 'main' }),
+      ...prAndCiMocks(98),
+      autoMergePr: true,
+      ciWaitTimeoutMs: 5000,
+      ciPollIntervalMs: 0,
     };
 
     const proof = await runIVXAutonomousCoder(input);
@@ -328,7 +375,9 @@ describe('IVX Autonomous Coder — engine loop', () => {
     expect(proof.commitSha).toBe('commit-005');
     expect(proof.deployId).toBeNull();
     expect(proof.deployApproved).toBe(false);
-    expect(proof.finalStatus).toBe('COMPLETED');
+    // Owner mandate 2026-08-23: deploy without verified owner approval =
+    // BLOCKED, never COMPLETED.
+    expect(proof.finalStatus).toBe('BLOCKED');
     expect(proof.error).toContain('Deploy BLOCKED');
     expect(proof.error).toContain('CONFIRM_IVX_RENDER_DEPLOY');
   });
@@ -596,6 +645,10 @@ describe('IVX Autonomous Coder — deterministic pilot fallback (Phase 3)', () =
       // No llmCaller — the fallback path must run without it.
       testRunner,
       commitFn,
+      ...prAndCiMocks(97),
+      autoMergePr: true,
+      ciWaitTimeoutMs: 5000,
+      ciPollIntervalMs: 0,
     };
     const proof = await runIVXAutonomousCoder(input);
     expect(proof.marker).toBe(IVX_AUTONOMOUS_CODER_MARKER);
@@ -802,6 +855,10 @@ describe('IVX Autonomous Coder — hardening (Phase 12 + 16 + 17)', () => {
       llmCaller,
       testRunner,
       commitFn: async () => ({ commitSha: 'g17-sha', commitUrl: 'url', branch: 'main' }),
+      ...prAndCiMocks(96),
+      autoMergePr: true,
+      ciWaitTimeoutMs: 5000,
+      ciPollIntervalMs: 0,
     };
     const proof = await runIVXAutonomousCoder(input);
     expect(proof.finalStatus).toBe('COMPLETED');
@@ -1067,6 +1124,10 @@ describe('IVX Autonomous Coder — hardening (Phase 12 + 16 + 17)', () => {
       llmCaller,
       testRunner,
       commitFn: async () => ({ commitSha: 'g24-sha', commitUrl: 'url', branch: 'main' }),
+      ...prAndCiMocks(95),
+      autoMergePr: true,
+      ciWaitTimeoutMs: 5000,
+      ciPollIntervalMs: 0,
       heartbeat: (info) => beats.push({ phase: info.phase, iteration: info.iteration, elapsedMs: info.elapsedMs }),
     };
     const proof = await runIVXAutonomousCoder(input);

@@ -12,14 +12,15 @@ import {
   isTerminalTaskState,
   stageToTaskState,
   terminalStateForNoWork,
+  terminalStateForRefusedCompletion,
   ALL_TASK_STATES,
   TERMINAL_TASK_STATES,
 } from './ivx-task-state-machine';
 import { createInMemoryLeaseStore } from './ivx-duplicate-worker-prevention';
 
 describe('IVX Task State Machine', () => {
-  test('has exactly 18 states', () => {
-    expect(ALL_TASK_STATES.length).toBe(18);
+  test('has exactly 19 states', () => {
+    expect(ALL_TASK_STATES.length).toBe(19);
   });
 
   test('RECEIVED cannot skip to DEPLOYED', () => {
@@ -51,6 +52,7 @@ describe('IVX Task State Machine', () => {
       isDevelopmentTask: true, filesChangedCount: 2,
       testsRun: true, testsPassed: true, deployId: 'dep-1',
       productionHealthOk: true, featureVerificationOk: null, externalCauseProven: false,
+      deployApproved: true, prMerged: true, mergeSha: 'mergeabc',
     });
     expect(r.ok).toBe(false);
     expect(r.reasons[0]).toContain('Feature verification was not performed');
@@ -62,6 +64,7 @@ describe('IVX Task State Machine', () => {
       isDevelopmentTask: true, filesChangedCount: 2,
       testsRun: true, testsPassed: true, deployId: 'dep-1',
       productionHealthOk: true, featureVerificationOk: false, externalCauseProven: false,
+      deployApproved: true, prMerged: true, mergeSha: 'mergeabc',
     });
     expect(r.ok).toBe(false);
     expect(r.reasons[0]).toContain('Feature verification failed');
@@ -73,6 +76,7 @@ describe('IVX Task State Machine', () => {
       isDevelopmentTask: true, filesChangedCount: 0,
       testsRun: false, testsPassed: false, deployId: 'dep-1',
       productionHealthOk: true, featureVerificationOk: true, externalCauseProven: false,
+      deployApproved: true,
     });
     expect(r.ok).toBe(false);
     expect(r.reasons[0]).toContain('no code changed unless an external cause');
@@ -84,6 +88,7 @@ describe('IVX Task State Machine', () => {
       isDevelopmentTask: true, filesChangedCount: 2,
       testsRun: true, testsPassed: true, deployId: 'dep-1',
       productionHealthOk: true, featureVerificationOk: true, externalCauseProven: false,
+      deployApproved: true, prMerged: true, mergeSha: 'mergeabc',
     });
     expect(r.ok).toBe(true);
   });
@@ -94,6 +99,7 @@ describe('IVX Task State Machine', () => {
       isDevelopmentTask: true, filesChangedCount: 0,
       testsRun: false, testsPassed: false, deployId: 'dep-1',
       productionHealthOk: true, featureVerificationOk: true, externalCauseProven: true,
+      deployApproved: true,
     });
     expect(r.ok).toBe(true);
   });
@@ -112,11 +118,12 @@ describe('IVX Task State Machine', () => {
   test('terminal states are terminal', () => {
     expect(isTerminalTaskState('VERIFIED')).toBe(true);
     expect(isTerminalTaskState('COMPLETED')).toBe(true);
+    expect(isTerminalTaskState('NOT_COMPLETED')).toBe(true);
     expect(isTerminalTaskState('BLOCKED')).toBe(true);
     expect(isTerminalTaskState('FAILED')).toBe(true);
     expect(isTerminalTaskState('NO_CHANGE_REQUIRED')).toBe(true);
     expect(isTerminalTaskState('DEPLOYED')).toBe(false);
-    expect(TERMINAL_TASK_STATES.size).toBe(5);
+    expect(TERMINAL_TASK_STATES.size).toBe(6);
   });
 
   test('terminalStateForNoWork returns BLOCKED for auth errors', () => {
@@ -135,6 +142,7 @@ describe('IVX Task State Machine', () => {
     expect(stageToTaskState('VERIFYING')).toBe('PRODUCTION_VERIFYING');
     expect(stageToTaskState('DEPLOYED')).toBe('DEPLOYED');
     expect(stageToTaskState('COMPLETED')).toBe('COMPLETED');
+    expect(stageToTaskState('NOT_COMPLETED')).toBe('NOT_COMPLETED');
     expect(stageToTaskState('BLOCKED')).toBe('BLOCKED');
     expect(stageToTaskState('FAILED')).toBe('FAILED');
     expect(stageToTaskState('')).toBe('RECEIVED');
@@ -166,13 +174,14 @@ describe('IVX Task State Machine', () => {
 // DEPLOY_ONLY:              VERIFIED COMMIT + DEPLOY + HEALTH = COMPLETED
 // ─────────────────────────────────────────────────────────────────────────────
 describe('IVX Terminal State Completion Rules (owner mandate 2026-07-21)', () => {
-  test('1. Commit requested, deploy not requested → COMPLETED after commit verification', () => {
+  test('1. Commit requested, deploy not requested → COMPLETED after PR merge verification', () => {
     const r = assertCanTransition({
       from: 'READY_TO_DEPLOY', to: 'COMPLETED',
       isDevelopmentTask: true, filesChangedCount: 2,
       testsRun: true, testsPassed: true, deployId: null,
       productionHealthOk: false, featureVerificationOk: null, externalCauseProven: false,
       deployRequested: false, typecheckPassed: true, commitVerified: true, taskType: 'CODE_FIX',
+      prCreated: true, prNumber: 42, requiredChecksGreen: true, prMerged: true, mergeSha: 'mergeabc123',
     });
     expect(r.ok).toBe(true);
     expect(r.reasons).toEqual([]);
@@ -235,13 +244,14 @@ describe('IVX Terminal State Completion Rules (owner mandate 2026-07-21)', () =>
     expect(r.reasons[0]).toContain('tests failed');
   });
 
-  test('6. Commit succeeds and GitHub verification passes → COMPLETED', () => {
+  test('6. Commit + PR + green CI + confirmed merge → COMPLETED', () => {
     const r = assertCanTransition({
       from: 'READY_TO_DEPLOY', to: 'COMPLETED',
       isDevelopmentTask: true, filesChangedCount: 1,
       testsRun: true, testsPassed: true, deployId: null,
       productionHealthOk: false, featureVerificationOk: null, externalCauseProven: false,
       deployRequested: false, typecheckPassed: true, commitVerified: true, taskType: 'CODE_FIX',
+      prCreated: true, prNumber: 42, requiredChecksGreen: true, prMerged: true, mergeSha: 'mergeabc123',
     });
     expect(r.ok).toBe(true);
     expect(r.reasons).toEqual([]);
@@ -256,18 +266,20 @@ describe('IVX Terminal State Completion Rules (owner mandate 2026-07-21)', () =>
       testsRun: true, testsPassed: true, deployId: null,
       productionHealthOk: false, featureVerificationOk: null, externalCauseProven: false,
       deployRequested: false, typecheckPassed: true, commitVerified: true, taskType: 'CODE_FIX',
+      prCreated: true, prNumber: 42, requiredChecksGreen: true, prMerged: true, mergeSha: 'mergeabc123',
     });
     expect(r.ok).toBe(true);
     expect(r.reasons).toEqual([]);
   });
 
-  test('DEPLOY_ONLY → COMPLETED requires verified commit + deployId + health', () => {
+  test('DEPLOY_ONLY → COMPLETED requires verified commit + owner-approved deploy + deployId + health', () => {
     const r = assertCanTransition({
       from: 'PRODUCTION_VERIFYING', to: 'COMPLETED',
       isDevelopmentTask: false, filesChangedCount: 0,
       testsRun: false, testsPassed: false, deployId: 'dep-1',
       productionHealthOk: true, featureVerificationOk: null, externalCauseProven: false,
       deployRequested: true, typecheckPassed: false, commitVerified: true, taskType: 'DEPLOY_ONLY',
+      deployApproved: true,
     });
     expect(r.ok).toBe(true);
   });
@@ -279,6 +291,7 @@ describe('IVX Terminal State Completion Rules (owner mandate 2026-07-21)', () =>
       testsRun: false, testsPassed: false, deployId: null,
       productionHealthOk: false, featureVerificationOk: null, externalCauseProven: false,
       deployRequested: true, typecheckPassed: false, commitVerified: true, taskType: 'DEPLOY_ONLY',
+      deployApproved: true,
     });
     expect(r.ok).toBe(false);
     expect(r.reasons[0]).toContain('deployId');
@@ -302,5 +315,178 @@ describe('IVX Terminal State Completion Rules (owner mandate 2026-07-21)', () =>
     expect(canTransition('QA_IN_PROGRESS', 'COMPLETED')).toBe(true);
     expect(canTransition('ANALYZING', 'COMPLETED')).toBe(true);
     expect(canTransition('RECEIVED', 'COMPLETED')).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Owner mandate 2026-08-23: FALSE-COMPLETION REGRESSION SUITE.
+// Every case below MUST refuse COMPLETED/VERIFIED. A commit without a merged
+// PR is BLOCKED; skipped tests/typecheck are NOT_COMPLETED; unapproved deploys
+// are BLOCKED; failed deploys and SHA mismatches are FAILED.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('IVX False-Completion Regression Suite (owner mandate 2026-08-23)', () => {
+  const goldenCodeTask = {
+    from: 'READY_TO_DEPLOY' as const,
+    to: 'COMPLETED' as const,
+    isDevelopmentTask: true,
+    filesChangedCount: 2,
+    testsRun: true,
+    testsPassed: true,
+    deployId: null,
+    productionHealthOk: false,
+    featureVerificationOk: null,
+    externalCauseProven: false,
+    deployRequested: false,
+    typecheckPassed: true,
+    commitVerified: true,
+    taskType: 'CODE_FIX' as const,
+    prCreated: true,
+    prNumber: 42,
+    requiredChecksGreen: true,
+    prMerged: true,
+    mergeSha: 'mergeabc123',
+  };
+
+  test('FC1. commit exists + PR not merged → BLOCKED, never COMPLETED', () => {
+    const r = assertCanTransition({ ...goldenCodeTask, prMerged: false });
+    expect(r.ok).toBe(false);
+    expect(r.reasons[0]).toContain('not merged');
+    expect(terminalStateForRefusedCompletion(r.reasons)).toBe('BLOCKED');
+  });
+
+  test('FC2. PR creation failure (prCreated=false) → BLOCKED, never COMPLETED', () => {
+    const r = assertCanTransition({ ...goldenCodeTask, prCreated: false, prNumber: null, prMerged: false, mergeSha: null });
+    expect(r.ok).toBe(false);
+    expect(r.reasons[0]).toContain('Pull request was not created');
+    expect(terminalStateForRefusedCompletion(r.reasons)).toBe('BLOCKED');
+  });
+
+  test('FC3. merge attempted but not confirmed (no merge SHA) → BLOCKED, never COMPLETED', () => {
+    const r = assertCanTransition({ ...goldenCodeTask, mergeSha: null });
+    expect(r.ok).toBe(false);
+    expect(r.reasons[0]).toContain('not confirmed');
+    expect(terminalStateForRefusedCompletion(r.reasons)).toBe('BLOCKED');
+  });
+
+  test('FC4. deploy requested without verified owner approval → BLOCKED, never VERIFIED', () => {
+    const r = assertCanTransition({
+      ...goldenCodeTask,
+      to: 'VERIFIED',
+      from: 'PRODUCTION_VERIFYING',
+      deployRequested: true,
+      deployId: 'dep-1',
+      productionHealthOk: true,
+      featureVerificationOk: true,
+      deployApproved: false,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.reasons[0]).toContain('owner approval');
+    expect(terminalStateForRefusedCompletion(r.reasons)).toBe('BLOCKED');
+  });
+
+  test('FC5. deploy failed → FAILED, never VERIFIED', () => {
+    const r = assertCanTransition({
+      ...goldenCodeTask,
+      to: 'VERIFIED',
+      from: 'PRODUCTION_VERIFYING',
+      deployRequested: true,
+      deployId: 'dep-1',
+      productionHealthOk: true,
+      featureVerificationOk: true,
+      deployApproved: true,
+      deployFailed: true,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.reasons[0]).toContain('Deploy failed');
+    expect(terminalStateForRefusedCompletion(r.reasons)).toBe('FAILED');
+  });
+
+  test('FC6. production SHA mismatch → FAILED/BLOCKED, never VERIFIED', () => {
+    const r = assertCanTransition({
+      ...goldenCodeTask,
+      to: 'VERIFIED',
+      from: 'PRODUCTION_VERIFYING',
+      deployRequested: true,
+      deployId: 'dep-1',
+      productionHealthOk: true,
+      featureVerificationOk: true,
+      deployApproved: true,
+      productionShaMatches: false,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.reasons[0]).toContain('SHA mismatch');
+    expect(terminalStateForRefusedCompletion(r.reasons)).toBe('FAILED');
+  });
+
+  test('FC7. feature verification failed → never VERIFIED', () => {
+    const r = assertCanTransition({
+      ...goldenCodeTask,
+      to: 'VERIFIED',
+      from: 'PRODUCTION_VERIFYING',
+      deployRequested: true,
+      deployId: 'dep-1',
+      productionHealthOk: true,
+      featureVerificationOk: false,
+      deployApproved: true,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.reasons[0]).toContain('Feature verification failed');
+  });
+
+  test('FC8. tests skipped for a code task → NOT_COMPLETED, never COMPLETED', () => {
+    const r = assertCanTransition({ ...goldenCodeTask, testsRun: false });
+    expect(r.ok).toBe(false);
+    expect(r.reasons[0]).toContain('Tests were skipped');
+    expect(terminalStateForRefusedCompletion(r.reasons)).toBe('NOT_COMPLETED');
+  });
+
+  test('FC8b. tests skipped but formally justified → COMPLETED allowed', () => {
+    const r = assertCanTransition({ ...goldenCodeTask, testsRun: false, testsSkipJustified: true });
+    expect(r.ok).toBe(true);
+  });
+
+  test('FC9. typecheck skipped (undefined) for a code task → NOT_COMPLETED, never COMPLETED', () => {
+    const r = assertCanTransition({ ...goldenCodeTask, typecheckPassed: undefined });
+    expect(r.ok).toBe(false);
+    expect(r.reasons[0]).toContain('Typecheck was skipped or failed');
+    expect(terminalStateForRefusedCompletion(r.reasons)).toBe('NOT_COMPLETED');
+  });
+
+  test('FC10. required CI checks not green → BLOCKED, never COMPLETED', () => {
+    const r = assertCanTransition({ ...goldenCodeTask, requiredChecksGreen: false, prMerged: false });
+    expect(r.ok).toBe(false);
+    expect(r.reasons[0]).toContain('Required CI checks');
+    expect(terminalStateForRefusedCompletion(r.reasons)).toBe('BLOCKED');
+  });
+
+  test('FC11. DEPLOY_ONLY without owner approval → BLOCKED, never COMPLETED', () => {
+    const r = assertCanTransition({
+      from: 'PRODUCTION_VERIFYING', to: 'COMPLETED',
+      isDevelopmentTask: false, filesChangedCount: 0,
+      testsRun: false, testsPassed: false, deployId: 'dep-1',
+      productionHealthOk: true, featureVerificationOk: null, externalCauseProven: false,
+      deployRequested: true, typecheckPassed: false, commitVerified: true, taskType: 'DEPLOY_ONLY',
+      deployApproved: false,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.reasons[0]).toContain('owner approval');
+    expect(terminalStateForRefusedCompletion(r.reasons)).toBe('BLOCKED');
+  });
+
+  test('FC12. legacy result with no PR evidence → refused (fail-closed), BLOCKED', () => {
+    const r = assertCanTransition({ ...goldenCodeTask, prCreated: undefined, prNumber: undefined, requiredChecksGreen: undefined, prMerged: undefined, mergeSha: undefined });
+    expect(r.ok).toBe(false);
+    expect(terminalStateForRefusedCompletion(r.reasons)).toBe('BLOCKED');
+  });
+
+  test('FC13. terminalStateForRefusedCompletion category mapping', () => {
+    expect(terminalStateForRefusedCompletion(['Tests were skipped for a code task'])).toBe('NOT_COMPLETED');
+    expect(terminalStateForRefusedCompletion(['Typecheck was skipped or failed'])).toBe('NOT_COMPLETED');
+    expect(terminalStateForRefusedCompletion(['Commit exists but the pull request was not merged — BLOCKED, never COMPLETED.'])).toBe('BLOCKED');
+    expect(terminalStateForRefusedCompletion(['Required CI checks on the PR head SHA are not all green (CI-before-merge mandate) — BLOCKED, never COMPLETED.'])).toBe('BLOCKED');
+    expect(terminalStateForRefusedCompletion(['Deploy requested without verified owner approval — BLOCKED, never VERIFIED.'])).toBe('BLOCKED');
+    expect(terminalStateForRefusedCompletion(['Deploy failed — FAILED, never VERIFIED.'])).toBe('FAILED');
+    expect(terminalStateForRefusedCompletion(['Production SHA mismatch — FAILED/BLOCKED, never VERIFIED.'])).toBe('FAILED');
+    expect(terminalStateForRefusedCompletion(['something unrecognized went wrong'])).toBe('FAILED');
   });
 });

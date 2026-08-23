@@ -70,6 +70,7 @@ import {
   type IVXAutonomousCoderProof,
   type IVXAutonomousCoderExecutionMode as IVXAutonomousCoderMode,
   type IVXAutonomousCoderPhase,
+  type IVXCiCheckEvidence,
 } from './ivx-autonomous-coder';
 import {
   IVX_FACTORY_ENGINE_MARKER,
@@ -84,6 +85,7 @@ import {
   assertCanTransition,
   stageToTaskState,
   terminalStateForNoWork,
+  terminalStateForRefusedCompletion,
   type IVXTaskState,
 } from './ivx-task-state-machine';
 import {
@@ -287,6 +289,14 @@ export type IVXWorkerJobResult = {
   prUrl: string | null;
   prMerged: boolean;
   prMergeCommitSha: string | null;
+  /** Owner mandate 2026-08-23 (CI-before-merge): all required GitHub checks
+   *  on the PR head SHA were green before the merge. null = not measured
+   *  (legacy) — the terminal-state guard fails closed on null for code tasks. */
+  ciChecksGreen?: boolean | null;
+  /** Per-required-check evidence captured during the CI wait. */
+  ciCheckEvidence?: IVXCiCheckEvidence[] | null;
+  /** Owner mandate 2026-08-23: owner approval for a deploy was verified. */
+  deployApproved?: boolean;
   deployId: string | null;
   deployStatus: string | null;
   deployVerified: boolean;
@@ -859,6 +869,9 @@ export function summarizeAutonomousCoderProof(
     prUrl: proof.prUrl ?? null,
     prMerged: proof.prMerged ?? false,
     prMergeCommitSha: proof.prMergeCommitSha ?? null,
+    ciChecksGreen: proof.ciChecksGreen ?? null,
+    ciCheckEvidence: proof.ciCheckEvidence ?? null,
+    deployApproved: proof.deployApproved,
     deployId: proof.deployId,
     deployStatus: proof.deployStatus,
     deployVerified: completed && proof.productionVerified,
@@ -1758,6 +1771,14 @@ function finalizeResultWithStateRecord(
     typecheckPassed: result.typecheckPassed,
     commitVerified: Boolean(result.commitSha),
     taskType: guardTaskType,
+    // Owner mandate 2026-08-23 (false-completion closeout): PR + CI gates.
+    prCreated: result.prMerged === true || result.prNumber != null,
+    prNumber: result.prNumber,
+    requiredChecksGreen: result.ciChecksGreen ?? undefined,
+    prMerged: result.prMerged === true,
+    mergeSha: result.prMergeCommitSha,
+    deployApproved: deployRequested ? result.deployApproved === true : undefined,
+    productionShaMatches: deployRequested ? (result.commitMatch || null) : undefined,
   });
 
   let finalTaskState: IVXTaskState = terminalTarget;
@@ -1777,9 +1798,11 @@ function finalizeResultWithStateRecord(
       result.ok = true;
       result.endToEndProductionComplete = false; // deploy was not requested
     } else {
-      finalTaskState = terminalStateForNoWork(result.deployId, result.healthOk, reasonsText);
+      // Owner mandate 2026-08-23: map each refused reason category to its
+      // honest terminal (NOT_COMPLETED / BLOCKED / FAILED) — never COMPLETED.
+      finalTaskState = terminalStateForRefusedCompletion(guard.reasons);
       honestError = `State machine refused ${terminalTarget}: ${reasonsText}. Downgraded to ${finalTaskState}.`;
-      result.finalStatus = finalTaskState === 'BLOCKED' ? 'BLOCKED' : finalTaskState === 'FAILED' ? 'FAILED' : 'LOCAL_ONLY';
+      result.finalStatus = finalTaskState === 'NOT_COMPLETED' || finalTaskState === 'BLOCKED' ? 'BLOCKED' : finalTaskState === 'FAILED' ? 'FAILED' : 'LOCAL_ONLY';
       result.endToEndProductionComplete = false;
       result.ok = false;
     }
