@@ -200,10 +200,12 @@ function checkDeterministicBrains(
   message: string,
   sessionId: string,
 ): DeterministicResult {
+  // Identity brain
   const identityAnswer = resolveIVXIdentityAnswer(message);
   if (identityAnswer) {
     return { answer: identityAnswer, model: 'ivx-ia-identity-brain', source: 'fallback' };
   }
+  // Conversation brain
   const conversationAnswer = resolveIVXConversationAnswer(message);
   if (conversationAnswer) {
     return { answer: conversationAnswer, model: 'ivx-ia-conversation-brain', source: 'fallback' };
@@ -211,30 +213,12 @@ function checkDeterministicBrains(
   return null;
 }
 
-function buildDeveloperAttachmentContext(
-  images: ReturnType<typeof extractPublicChatImages>,
-  documents: ReturnType<typeof extractDealDocuments>,
-): string {
-  const lines: string[] = [];
-  images.forEach((image, index) => {
-    lines.push(`IMAGE_${index + 1}: ${image.url}${image.mimeType ? ` (${image.mimeType})` : ''}`);
-  });
-  documents.forEach((document, index) => {
-    lines.push(`DOCUMENT_${index + 1}: ${document.name ?? 'unnamed'} [${document.kind}] ${document.url}`);
-  });
-  if (lines.length === 0) return '';
-  return [
-    'OWNER ATTACHMENTS FOR THIS ENGINEERING TASK:',
-    ...lines,
-    'Inspect these attachments as evidence for the requested fix. Do not ignore them.',
-  ].join('\n');
-}
-
 // ── Main streaming handler ──────────────────────────────────────────────────
 
 export async function handlePublicChatStreamPost(request: Request): Promise<Response> {
   const encoder = new TextEncoder();
 
+  // OPTIONS preflight
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: SSE_HEADERS });
   }
@@ -258,10 +242,6 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
   const history = sanitizeHistory(body.history);
   const images = extractPublicChatImages(body);
   const documents = extractDealDocuments(body);
-  const developerAttachmentContext = buildDeveloperAttachmentContext(images, documents);
-  const workerMessage = developerAttachmentContext
-    ? `${message}\n\n${developerAttachmentContext}`.trim()
-    : message;
 
   if (!message && images.length === 0 && documents.length === 0) {
     return new Response(
@@ -282,6 +262,7 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
       };
 
       try {
+        // ── response.started ──────────────────────────────────────────────
         send({
           type: 'response.started',
           requestId,
@@ -289,6 +270,7 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
           timestamp: new Date().toISOString(),
         });
 
+        // ── Persist user message (fire-and-forget) ────────────────────────
         void persistPublicTurn({
           sessionId,
           clientId,
@@ -301,24 +283,33 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
           model: null,
         }).catch(() => undefined);
 
-        // Authenticated owner execution commands route to the real worker even
-        // when screenshots/images/documents are attached. Attachment URLs and
-        // metadata are appended to the worker goal so the developer can inspect
-        // the evidence instead of falling back to narrative chat.
-        if (message) {
+        // ── Autonomous handoff: if the request is from an authenticated owner
+        //    AND the message is an execution command, route to the real worker
+        //    instead of the LLM. This is the critical chat→autonomous bridge.
+        //    Non-owner (public) requests always go through normal chat. ─────
+        if (message && images.length === 0 && documents.length === 0) {
           const ownerSession = await detectOwnerSession(request);
           if (ownerSession.isOwner && ownerSession.ownerId) {
             const intent = detectAutonomousExecutionIntent(message);
             if (intent.isExecutionCommand) {
+              // Create a real autonomous worker job. The client message ID is
+              // passed as provenance so the dashboard can trace the exact
+              // chat message that spawned this job (owner mandate 2026-08-23).
               const handoffResult = await createAutonomousJobFromChat(
-                workerMessage,
+                message,
                 ownerSession.ownerId,
                 sessionId,
+                clientId || null,
               );
 
+              // Send the autonomous task event so the frontend can track real progress
               send(formatAutonomousTaskSsePayload(handoffResult));
+
+              // Send a human-readable summary as a delta
               const summary = formatAutonomousTaskMessage(handoffResult);
               send({ type: 'response.delta', delta: summary, requestId });
+
+              // Mark the response as completed with the autonomous source
               send({
                 type: 'response.completed',
                 text: summary,
@@ -329,9 +320,9 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
                 jobId: handoffResult.jobId,
                 jobStatus: handoffResult.status,
                 jobStage: handoffResult.stage,
-                attachmentCount: images.length + documents.length,
               });
 
+              // Persist the autonomous task message
               void persistPublicTurn({
                 sessionId, clientId, role: 'assistant',
                 content: summary, source: 'autonomous', model: 'ivx-autonomous-worker',
@@ -343,6 +334,7 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
           }
         }
 
+        // ── Pre-execution gate ────────────────────────────────────────────
         try {
           const gate = await checkPreExecutionGate(request, {
             prompt: message,
@@ -372,6 +364,7 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
           // non-blocking
         }
 
+        // ── Deployment command routing ────────────────────────────────────
         if (message && isDeploymentCommand(message)) {
           const brainResult = await routeDeploymentCommand(message);
           if (brainResult) {
@@ -393,8 +386,10 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
           }
         }
 
+        // ── Deterministic brains (identity / conversation) ────────────────
         const deterministic = checkDeterministicBrains(message, sessionId);
         if (deterministic) {
+          // Emit as a single delta so the frontend contract is uniform
           send({ type: 'response.delta', delta: deterministic.answer, requestId });
           send({
             type: 'response.completed',
@@ -412,6 +407,7 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
           return;
         }
 
+        // ── Authoritative intent router ───────────────────────────────────
         const authoritativeDecision = classifyIntent({
           message,
           isOwner: false,
@@ -443,6 +439,7 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
           return;
         }
 
+        // Legacy router (audit only)
         const routeDecision = routeIVXChatIntent(message, images.length > 0);
         void branchLabel;
         const authoritativeApproved = authoritativeDecision.selectedRoute === 'PUBLIC_LLM_RESPONSE'
@@ -466,6 +463,7 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
           return;
         }
 
+        // ── Check if AI is configured ─────────────────────────────────────
         if (!isPublicChatAIConfigured()) {
           const fallbackAnswer = buildFallbackAnswer(message);
           send({ type: 'response.delta', delta: fallbackAnswer, requestId });
@@ -485,6 +483,7 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
           return;
         }
 
+        // ── Build system prompt + user prompt (same as requestIVXAIAnswer) ──
         const model = resolveIVXAIModel('gpt-4o');
         const endpoint = getIVXAIEndpoint(model);
         if (!endpoint) {
@@ -502,6 +501,10 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
           return;
         }
 
+        // Image attachments require multimodal messages which streamIVXAIText
+        // does not support yet. For image requests, fall back to the
+        // non-streaming requestIVXAIText path and emit the full answer as a
+        // single delta. Text-only requests get real token streaming.
         if (images.length > 0) {
           const { requestIVXAIText } = await import('../ivx-ai-runtime');
           const { buildBusinessContextBlock, loadBusinessContext } = await import('../services/ivx-business-context');
@@ -573,6 +576,7 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
           return;
         }
 
+        // ── Text-only: real streaming from the AI gateway ─────────────────
         const promptParts = [
           'Recent public chat transcript:',
           buildTranscript(history),
@@ -606,6 +610,7 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
               accumulated += chunk.delta;
               send({ type: 'response.delta', delta: chunk.delta, requestId });
             } else if (chunk.type === 'done') {
+              // Use accumulated text (may include partial if error occurred)
               const finalText = chunk.text || accumulated;
               const finalModel = chunk.providerMetadata?.model || model;
               send({
@@ -618,6 +623,7 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
                 sessionId,
                 ...(chunk.error ? { error: chunk.error } : {}),
               });
+              // Persist the completed assistant message
               void persistPublicTurn({
                 sessionId, clientId, role: 'assistant',
                 content: finalText, source: 'chatgpt', model: finalModel,
@@ -627,9 +633,12 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
             }
           }
 
+          // If stream produced an error but no done event, emit error
           if (streamError && accumulated.length === 0) {
+            // Check if this is an auth failure — be honest about it
             const isAuthError = /status=401|status=403|unauthor|forbidden|authentication/i.test(streamError);
             if (isAuthError) {
+              // Auth failure: tell the user the AI key is expired, don't hide behind a fallback
               const honestError = 'The AI service key is expired or invalid. The owner needs to update the Vercel AI Gateway key on Render. Visit https://vercel.com/~/ai-gateway/api-keys to generate a new key, then set IVX_AI_GATEWAY_KEY on Render.';
               send({ type: 'response.error', error: honestError, requestId, sessionId, errorType: 'auth_expired' });
               send({
@@ -646,6 +655,7 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
                 content: honestError, source: 'error', model: 'none',
               }).catch(() => undefined);
             } else {
+              // Non-auth error: try fallback as before
               const fallbackAnswer = buildFallbackAnswer(message);
               send({ type: 'response.delta', delta: fallbackAnswer, requestId });
               send({
@@ -662,6 +672,7 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
               }).catch(() => undefined);
             }
           } else if (streamError && accumulated.length > 0) {
+            // Partial response was streamed — emit completed with partial text
             send({
               type: 'response.completed',
               text: accumulated,
@@ -679,6 +690,7 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
         } catch (streamErr) {
           const errMsg = sanitizeErrorMessage(streamErr, 'AI streaming failed');
           if (accumulated.length > 0) {
+            // Partial response was streamed — preserve it
             send({
               type: 'response.completed',
               text: accumulated,
@@ -693,6 +705,7 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
               content: accumulated, source: 'chatgpt', model,
             }).catch(() => undefined);
           } else {
+            // No text was streamed — send error event
             const isAuthError = /status=401|status=403|unauthor|forbidden|authentication/i.test(errMsg);
             if (isAuthError) {
               const honestError = 'The AI service key is expired or invalid. The owner needs to update the Vercel AI Gateway key on Render. Visit https://vercel.com/~/ai-gateway/api-keys to generate a new key, then set IVX_AI_GATEWAY_KEY on Render.';
@@ -712,6 +725,7 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
               }).catch(() => undefined);
             } else {
               send({ type: 'response.error', error: errMsg, requestId, sessionId });
+              // Also try a fallback answer so the user sees something
               const fallbackAnswer = buildFallbackAnswer(message);
               send({ type: 'response.delta', delta: fallbackAnswer, requestId });
               send({
