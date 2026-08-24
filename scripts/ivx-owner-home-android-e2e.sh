@@ -22,10 +22,26 @@ test -x "$MAESTRO"
 # source SHA runs in the fresh-APK "IVX Owner Sign In + Home/Profile Android
 # Certificate" workflow, which builds the APK from the same commit.
 PROFILE_CERT_CAPABLE=0
-if command -v unzip >/dev/null 2>&1 \
-  && unzip -p "$APK_PATH" assets/index.android.bundle 2>/dev/null | grep -q "IVX_PROFILE_FULL_FAILSAFE_MARKER"; then
-  PROFILE_CERT_CAPABLE=1
+command -v unzip >/dev/null 2>&1 || {
+  echo "::error::unzip is required for Profile certification capability detection"
+  exit 120
+}
+# NOTE: do NOT pipe `unzip -p` into `grep -q` here. Under `set -o pipefail` the
+# early-exiting grep gets unzip killed by SIGPIPE (exit 141), which flips the
+# guard to 0 even when the fail-safe marker IS present — that false skip once
+# produced a green Android certificate run without certifying Profile. Dump to
+# a temp file and grep the file instead. Any bundle read failure fails closed.
+PROFILE_BUNDLE_DUMP="$(mktemp)"
+if unzip -p "$APK_PATH" assets/index.android.bundle > "$PROFILE_BUNDLE_DUMP" 2>/dev/null; then
+  if grep -q "IVX_PROFILE_FULL_FAILSAFE_MARKER" "$PROFILE_BUNDLE_DUMP"; then
+    PROFILE_CERT_CAPABLE=1
+  fi
+else
+  rm -f "$PROFILE_BUNDLE_DUMP"
+  echo "::error::cannot read assets/index.android.bundle from $APK_PATH — Profile certification capability is undecidable"
+  exit 121
 fi
+rm -f "$PROFILE_BUNDLE_DUMP"
 echo "profile_certification_capable=$PROFILE_CERT_CAPABLE"
 
 set +e
