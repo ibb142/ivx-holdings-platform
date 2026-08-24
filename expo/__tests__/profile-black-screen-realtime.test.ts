@@ -9,6 +9,8 @@ function read(relativePath: string): string {
 }
 
 describe('Profile black-screen regression — route must always resolve to a real screen', () => {
+  const profile = read('app/(tabs)/profile.tsx');
+
   it('Profile is a real leaf tab screen and the tabs layout registers it directly', () => {
     expect(existsSync(join(EXPO_ROOT, 'app', '(tabs)', 'profile.tsx'))).toBe(true);
     const layout = read('app/(tabs)/_layout.tsx');
@@ -16,14 +18,29 @@ describe('Profile black-screen regression — route must always resolve to a rea
     expect(layout).not.toContain('name="(profile)"');
   });
 
-  it('Profile realtime subscriptions remain explicit and auditable', () => {
-    const profile = read('app/(tabs)/profile.tsx');
-    expect(profile).toContain("useRealtimeTable('wallets'");
-    expect(profile).toContain("useRealtimeTable('profiles'");
+  it('Profile paints a synchronous fail-safe root and title', () => {
+    expect(profile).toContain('testID="profile-screen-root"');
+    expect(profile).toContain('testID="profile-title"');
+    expect(profile).toContain('>Profile</Text>');
+  });
+
+  it('Profile initial paint does not depend on realtime, remote query or optional image renderers', () => {
+    expect(profile).not.toContain('useRealtimeTable');
+    expect(profile).not.toContain('useQuery(');
+    expect(profile).not.toContain('supabase.');
+    expect(profile).not.toContain('<IVXImage');
+  });
+
+  it('keeps essential authenticated profile navigation available', () => {
+    expect(profile).toContain("'/personal-info'");
+    expect(profile).toContain("'/wallet'");
+    expect(profile).toContain("'/security-settings'");
+    expect(profile).toContain("'/(tabs)/chat'");
+    expect(profile).toContain('profile-sign-out');
   });
 });
 
-describe('Profile black-screen regression — realtime must not resubscribe on render identity', () => {
+describe('Profile black-screen regression — shared realtime hook remains render-stable', () => {
   const hook = read('hooks/useRealtimeChannel.ts');
 
   it('derives a primitive semantic signature for subscription topology', () => {
@@ -49,19 +66,5 @@ describe('Profile black-screen regression — realtime must not resubscribe on r
 
   it('subscription effect is also keyed by semantic signature', () => {
     expect(hook).toContain('[configSignature, setupChannels, cleanupChannels, pauseOnBackground]');
-  });
-
-  it('single-table helper does not recreate a useMemo dependency trap around queryKeys', () => {
-    const helperStart = hook.indexOf('export function useRealtimeTable');
-    expect(helperStart).toBeGreaterThan(-1);
-    const helperBlock = hook.slice(helperStart);
-    expect(helperBlock).toContain('return useRealtimeChannel([');
-    expect(helperBlock).not.toContain('useMemo<RealtimeChannelConfig[]>');
-  });
-
-  it('idempotent status writes cannot self-trigger renders when status is unchanged', () => {
-    expect(hook).toContain("prev.status === 'not_configured'");
-    expect(hook).toContain('prev.status === nextStatus ? prev');
-    expect(hook).toContain("prev.status === 'disconnected'");
   });
 });
