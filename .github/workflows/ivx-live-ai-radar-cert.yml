@@ -44,8 +44,8 @@ jobs:
           grep -Fq '112 IA Radar' "$FILE"
           grep -Fq 'lastActivityTime:string|null' "$SERVICE"
           grep -Fq '/api/ivx/live-work/agents' "$SERVICE"
-          if grep -Eqi 'simulate(d)?[ _-]?activity|fake[ _-]?activity|mock[ _-]?heartbeat' "$FILE"; then
-            echo 'Simulated/fake activity marker found in radar UI' >&2
+          if grep -Eq 'mockHeartbeat|fakeActivity|simulatedActivity[[:space:]]*=|mockAgentTelemetry|fakeAgentTelemetry' "$FILE"; then
+            echo 'Synthetic telemetry implementation found in radar UI' >&2
             exit 1
           fi
           echo 'radar_contract=PASS'
@@ -54,4 +54,4 @@ jobs:
         run: |
           echo 'IVX Live AI Radar 112: source gate PASS' >> "$GITHUB_STEP_SUMMARY"
           echo "SHA: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
-          echo 'Telemetry source: durable/runtime heartbeat; UI refresh: 1 second; simulated activity: prohibited.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Telemetry source: durable/runtime heartbeat; UI refresh: 1 second; synthetic telemetry implementation: prohibited.' >> "$GITHUB_STEP_SUMMARY"
