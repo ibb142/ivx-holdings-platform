@@ -1,0 +1,72 @@
+name: IVX Render Live Status Proof
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  prove-live-exact-sha:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      API_BASE: https://api.ivxholding.com
+    steps:
+      - name: Publish pending exact-SHA status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -d "{\"state\":\"pending\",\"context\":\"ivx/render-live-exact-sha\",\"description\":\"Waiting for Render exact-SHA production parity\"}"
+
+      - name: Wait for health and version exact SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 90); do
+            health_code=$(curl -sS -m 20 -o /tmp/health.json -w '%{http_code}' "${API_BASE}/health" || true)
+            version_code=$(curl -sS -m 20 -o /tmp/version.json -w '%{http_code}' "${API_BASE}/version" || true)
+            health_commit=$(jq -r '.commit // .sha // .gitCommit // .git_commit // empty' /tmp/health.json 2>/dev/null || true)
+            health_ok=$(jq -r '.ok // false' /tmp/health.json 2>/dev/null || echo false)
+            version_commit=$(jq -r '.commit // empty' /tmp/version.json 2>/dev/null || true)
+            version_ok=$(jq -r '.ok // false' /tmp/version.json 2>/dev/null || echo false)
+            echo "poll=$i health_http=$health_code health_ok=$health_ok health_sha=${health_commit:-missing} version_http=$version_code version_ok=$version_ok version_sha=${version_commit:-missing} expected=$GITHUB_SHA"
+            if [ "$health_code" = "200" ] && [ "$version_code" = "200" ] && [ "$health_ok" = "true" ] && [ "$version_ok" = "true" ] && [ "$health_commit" = "$GITHUB_SHA" ] && [ "$version_commit" = "$GITHUB_SHA" ]; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Production did not reach exact SHA ${GITHUB_SHA}" >&2
+          exit 1
+
+      - name: Publish success exact-SHA status
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -d "{\"state\":\"success\",\"context\":\"ivx/render-live-exact-sha\",\"description\":\"Render /health + /version match exact main SHA\"}"
+
+      - name: Publish failure exact-SHA status
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -d "{\"state\":\"failure\",\"context\":\"ivx/render-live-exact-sha\",\"description\":\"Render exact-SHA production parity failed\"}"
