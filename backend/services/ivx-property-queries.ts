@@ -28,11 +28,24 @@ type PropertyQueryResult = {
   executed: boolean;
 };
 
+/**
+ * Resolve Supabase for server-side owner-AI tools.
+ *
+ * Production runtimes should not be forced to define an Expo-prefixed variable.
+ * Accept canonical server-side aliases first, retain the public Expo alias for
+ * backwards compatibility, and finally use the known public IVX project URL.
+ * The service-role key is still required and is never exposed to the client.
+ */
 function resolveConfig(): { url: string; key: string; missing: string[]; client: SupabaseClient | null } {
-  const url = readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL).replace(/\/+$/, '');
+  const url = (
+    readTrimmed(process.env.SUPABASE_URL)
+    || readTrimmed(process.env.IVX_SUPABASE_URL)
+    || readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL)
+    || 'https://kvclcdjmjghndxsngfzb.supabase.co'
+  ).replace(/\/+$/, '');
   const key = readTrimmed(process.env.SUPABASE_SERVICE_ROLE_KEY) || readTrimmed(process.env.SUPABASE_SERVICE_KEY);
   const missing: string[] = [];
-  if (!url) missing.push('EXPO_PUBLIC_SUPABASE_URL');
+  if (!url) missing.push('SUPABASE_URL');
   if (!key) missing.push('SUPABASE_SERVICE_ROLE_KEY');
   let client: SupabaseClient | null = null;
   if (url && key) {
@@ -46,14 +59,13 @@ function resolveConfig(): { url: string; key: string; missing: string[]; client:
 }
 
 const PROPERTY_TABLES = ['jv_deals', 'properties', 'deals', 'projects', 'listings'];
-
 const ACTIVE_COLUMN_CANDIDATES = ['status', 'active', 'is_active', 'is_active_listing', 'published', 'is_published', 'state', 'listing_status'];
 const ACTIVE_VALUES = ['active', 'published', 'available', 'for_sale', 'for rent', 'for_rent', 'live', 'listed', 'true', '1', 'yes'];
 
 async function findExistingTable(client: SupabaseClient, tables: string[]): Promise<{ table: string; exists: boolean }> {
   for (const table of tables) {
     try {
-      const { data, error, status } = await client.from(table).select('id', { count: 'exact', head: true }).limit(1);
+      const { error, status } = await client.from(table).select('id', { count: 'exact', head: true }).limit(1);
       if (!error || status === 200 || status === 204) {
         return { table, exists: true };
       }
@@ -68,8 +80,7 @@ async function findExistingTable(client: SupabaseClient, tables: string[]): Prom
 async function findActiveColumn(client: SupabaseClient, table: string): Promise<{ column: string | null; values: string[] }> {
   for (const column of ACTIVE_COLUMN_CANDIDATES) {
     try {
-      // Try a filtered count with the first active value.
-      const { count, error, status } = await client
+      const { error, status } = await client
         .from(table)
         .select('id', { count: 'exact', head: true })
         .eq(column, ACTIVE_VALUES[0])
@@ -85,7 +96,7 @@ async function findActiveColumn(client: SupabaseClient, table: string): Promise<
 }
 
 export async function countActiveProperties(): Promise<PropertyQueryResult> {
-  const { url, key, missing, client } = resolveConfig();
+  const { missing, client } = resolveConfig();
   const queriedAt = nowIso();
   if (missing.length > 0 || !client) {
     return {
@@ -104,6 +115,7 @@ export async function countActiveProperties(): Promise<PropertyQueryResult> {
         queriedAt, executed: true,
       };
     }
+
     const { column, values } = await findActiveColumn(client, table);
     if (!column) {
       return {
@@ -112,12 +124,15 @@ export async function countActiveProperties(): Promise<PropertyQueryResult> {
         queriedAt, executed: true,
       };
     }
-    // Build a filter that matches any of the active values.
-    let query = client.from(table).select('id', { count: 'exact', head: true });
-    for (const value of values) {
-      query = query.or(`${column}.eq.${value}`);
-    }
-    const { count, error, status } = await query.limit(1);
+
+    // One OR expression. Repeated .or() calls can accidentally compose as ANDs.
+    const orFilter = values.map((value) => `${column}.eq.${value}`).join(',');
+    const { count, error, status } = await client
+      .from(table)
+      .select('id', { count: 'exact', head: true })
+      .or(orFilter)
+      .limit(1);
+
     if (error) {
       return {
         ok: false, count: null, rows: [], table, filter: `${column} in (${values.join(', ')})`, httpStatus: status ?? 500,
@@ -125,8 +140,9 @@ export async function countActiveProperties(): Promise<PropertyQueryResult> {
         queriedAt, executed: true,
       };
     }
+
     return {
-      ok: true, count: count ?? null, rows: [], table, filter: `${column} in (${values.join(', ')})`, httpStatus: status ?? 200,
+      ok: true, count: count ?? 0, rows: [], table, filter: `${column} in (${values.join(', ')})`, httpStatus: status ?? 200,
       reason: 'ok', detail: `Active property count on ${table}.${column} = ${count ?? 0}.`,
       queriedAt, executed: true,
     };
@@ -141,7 +157,7 @@ export async function countActiveProperties(): Promise<PropertyQueryResult> {
 }
 
 export async function listLatestProperties(limit: number = 5): Promise<PropertyQueryResult> {
-  const { url, key, missing, client } = resolveConfig();
+  const { missing, client } = resolveConfig();
   const queriedAt = nowIso();
   if (missing.length > 0 || !client) {
     return {
@@ -160,15 +176,16 @@ export async function listLatestProperties(limit: number = 5): Promise<PropertyQ
         queriedAt, executed: true,
       };
     }
-    // Prefer created_at, fallback to id desc.
+
+    const boundedLimit = Math.min(Math.max(limit, 1), 100);
     const { data, error, status } = await client
       .from(table)
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(Math.min(Math.max(limit, 1), 100));
+      .limit(boundedLimit);
+
     if (error) {
-      // Try ordering by id if created_at is missing.
-      const fallback = await client.from(table).select('*').order('id', { ascending: false }).limit(Math.min(Math.max(limit, 1), 100));
+      const fallback = await client.from(table).select('*').order('id', { ascending: false }).limit(boundedLimit);
       if (fallback.error) {
         return {
           ok: false, count: null, rows: [], table, filter: null, httpStatus: status ?? 500,
@@ -182,6 +199,7 @@ export async function listLatestProperties(limit: number = 5): Promise<PropertyQ
         queriedAt, executed: true,
       };
     }
+
     return {
       ok: true, count: (data ?? []).length, rows: (data ?? []) as Record<string, unknown>[], table, filter: null, httpStatus: 200,
       reason: 'ok', detail: `Latest ${(data ?? []).length} properties from ${table} (ordered by created_at desc).`,
