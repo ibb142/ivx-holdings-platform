@@ -1,20 +1,9 @@
 /**
  * IVX Autonomous Intelligence Mission Scheduler (AIMS).
  *
- * A dedicated, fail-closed scheduler that starts when the production server
- * boots and immediately submits ONE real owner-approved task to the IVX
- * self-hosted Senior Developer Worker. It is designed to be auditable:
- * every state change (jobId, taskId, stage, inspected files, commit, PR,
- * merge, deploy, live verification) is persisted and exposed through a
- * public read-only endpoint so external QA can verify that the autonomous
- * pipeline is actually running, not just "scheduled".
- *
- * HARD RULES:
- *   - The scheduler NEVER fabricates completion. It reports the exact
- *     worker stage and fails closed if the job is blocked/failed/expired.
- *   - Only ONE active mission scheduler job is enqueued per boot. If a job
- *     for the same mission is already active, it attaches and reports it.
- *   - No secret values are stored or returned.
+ * Starts one real low-risk Senior Developer mission, persists its full state,
+ * and never re-runs an already-satisfied mission merely because production
+ * received a newer deploy. A new mission requires a new marker/version.
  */
 import { randomUUID } from 'node:crypto';
 import {
@@ -34,8 +23,9 @@ import {
 export const IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER =
   'ivx-autonomous-intelligence-mission-scheduler-2026-08-23';
 
+const EVIDENCE_PATH = 'expo/evidence/autonomous/ivx-autonomous-intelligence-mission-scheduler-cert.json';
 const MISSION_GOAL_TEMPLATE = `Create a durable autonomous intelligence mission scheduler live evidence file at:
-expo/evidence/autonomous/ivx-autonomous-intelligence-mission-scheduler-cert.json
+${EVIDENCE_PATH}
 
 The file must contain exactly these fields:
 - "marker": "${IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER}"
@@ -48,6 +38,7 @@ No other functional code changes. Inspect the existing mission scheduler and wor
 const OWNER_ID = 'ivx-autonomous-intelligence-mission-scheduler';
 const POLL_INTERVAL_MS = 15_000;
 const STATE_PATH = 'logs/audit/autonomous-intelligence-mission-scheduler/state.json';
+const EVENTS_PATH = 'logs/audit/autonomous-intelligence-mission-scheduler/events.jsonl';
 
 export type MissionSchedulerJobStatus =
   | 'queued'
@@ -85,6 +76,8 @@ export type MissionSchedulerState = {
   healthOk: boolean | null;
   completedAt: string | null;
   error: string | null;
+  duplicateSuppressed?: boolean;
+  duplicateSuppressedAt?: string | null;
   updatedAt: string;
 };
 
@@ -104,12 +97,18 @@ function getCurrentDeploySha(): string | null {
   );
 }
 
-/**
- * When the mission's merged commit is the commit currently running in production,
- * backfill live verification fields and clear any stale resume-only error that
- * no longer reflects reality. This fixes the restart-resume case where the worker
- * saw the PR already merged and could not repopulate deploy/health evidence.
- */
+export function isMissionAlreadySatisfied(state: MissionSchedulerState): boolean {
+  return Boolean(
+    state.marker === IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER
+      && state.status === 'completed'
+      && state.prMerged === true
+      && state.prNumber
+      && state.commitSha
+      && state.changedFiles.includes(EVIDENCE_PATH)
+      && !state.error,
+  );
+}
+
 export function verifyLiveDeployForState(state: MissionSchedulerState): MissionSchedulerState {
   if (state.status !== 'completed' || !state.prMerged || !state.prMergeCommitSha) return state;
   const currentDeploySha = getCurrentDeploySha();
@@ -129,7 +128,6 @@ export function verifyLiveDeployForState(state: MissionSchedulerState): MissionS
     updatedAt: nowIso(),
   };
 }
-
 
 function emptyState(): MissionSchedulerState {
   return {
@@ -154,6 +152,8 @@ function emptyState(): MissionSchedulerState {
     healthOk: null,
     completedAt: null,
     error: null,
+    duplicateSuppressed: false,
+    duplicateSuppressedAt: null,
     updatedAt: nowIso(),
   };
 }
@@ -164,13 +164,19 @@ async function loadState(): Promise<MissionSchedulerState> {
     try {
       const parsed = await readDurableJson<MissionSchedulerState | null>(STATE_PATH, null);
       if (parsed && parsed.marker === IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER) {
-        // Reset the mission on every new deploy so the scheduler always enqueues
-        // a fresh real job for the current production SHA. This prevents a stale
-        // completed/blocked state from a previous deploy from hiding the live
-        // autonomous behavior from QA.
         if (currentDeploySha && parsed.deploySha !== currentDeploySha) {
+          if (isMissionAlreadySatisfied(parsed)) {
+            return {
+              ...parsed,
+              deploySha: currentDeploySha,
+              duplicateSuppressed: true,
+              duplicateSuppressedAt: nowIso(),
+              stageDetail: 'Mission already satisfied on an ancestor main commit; duplicate evidence run suppressed.',
+              updatedAt: nowIso(),
+            };
+          }
           const fresh = emptyState();
-          console.log('[IVX AIMS] New deploy detected; resetting mission state', {
+          console.log('[IVX AIMS] New deploy detected; resetting incomplete mission state', {
             previousDeploySha: parsed.deploySha,
             currentDeploySha,
             previousJobId: parsed.missionJobId,
@@ -180,7 +186,8 @@ async function loadState(): Promise<MissionSchedulerState> {
         return parsed;
       }
     } catch {
-      // fall through
+      // fall through to a fresh state; execution still fails closed later if
+      // durable persistence cannot be written.
     }
   }
   return emptyState();
@@ -192,47 +199,45 @@ async function saveState(state: MissionSchedulerState): Promise<void> {
   if (isDurableStoreConfigured()) {
     try {
       await writeDurableJson(STATE_PATH, next);
-      await appendDurableEvent(STATE_PATH.replace(/state\.json$/, 'events.jsonl'), {
+      await appendDurableEvent(EVENTS_PATH, {
         type: 'mission_scheduler_state',
+        marker: next.marker,
+        schedulerJobId: next.schedulerJobId,
         missionJobId: next.missionJobId,
         status: next.status,
         stage: next.stage,
         progressPercent: next.progressPercent,
         stageDetail: next.stageDetail,
+        commitSha: next.commitSha,
+        prNumber: next.prNumber,
+        prMerged: next.prMerged,
+        deployId: next.deployId,
+        liveCommit: next.liveCommit,
+        healthOk: next.healthOk,
+        duplicateSuppressed: next.duplicateSuppressed === true,
         updatedAt: next.updatedAt,
       });
     } catch {
-      // durable store best-effort; in-memory state is authoritative for this process
+      // The caller still has currentState, but production certification must use
+      // the durable store rather than treating an in-memory update as proof.
     }
   }
 }
 
 function mapJobStatus(job: IVXWorkerJob): MissionSchedulerJobStatus {
   switch (job.status) {
-    case 'queued':
-      return 'queued';
-    case 'running':
-      return 'running';
-    case 'patching':
-      return 'patching';
-    case 'testing':
-      return 'testing';
-    case 'committing':
-      return 'committing';
-    case 'deploying':
-      return 'deploying';
-    case 'verifying':
-      return 'verifying';
-    case 'completed':
-      return 'completed';
-    case 'failed':
-      return 'failed';
-    case 'blocked':
-      return 'blocked';
-    case 'cancelled':
-      return 'cancelled';
-    default:
-      return 'unknown';
+    case 'queued': return 'queued';
+    case 'running': return 'running';
+    case 'patching': return 'patching';
+    case 'testing': return 'testing';
+    case 'committing': return 'committing';
+    case 'deploying': return 'deploying';
+    case 'verifying': return 'verifying';
+    case 'completed': return 'completed';
+    case 'failed': return 'failed';
+    case 'blocked': return 'blocked';
+    case 'cancelled': return 'cancelled';
+    default: return 'unknown';
   }
 }
 
@@ -258,9 +263,9 @@ function mergeJobIntoState(state: MissionSchedulerState, job: IVXWorkerJob): Mis
     liveCommit: result?.liveCommit ?? state.liveCommit,
     healthOk: result?.healthOk ?? state.healthOk,
     completedAt: job.status === 'completed' ? (result?.generatedAt ?? nowIso()) : state.completedAt,
-    error:
-      job.error ??
-      (job.status === 'failed' || job.status === 'blocked' ? state.error : null),
+    error: job.error ?? (job.status === 'failed' || job.status === 'blocked' ? state.error : null),
+    duplicateSuppressed: false,
+    duplicateSuppressedAt: null,
     updatedAt: nowIso(),
   };
 }
@@ -280,22 +285,11 @@ async function refreshMissionJob(): Promise<void> {
   }
 }
 
-/**
- * Start the Autonomous Intelligence Mission Scheduler.
- *
- * On first boot it immediately submits a real, owner-approved Senior Developer
- * Worker task. The job is tracked by the scheduler's own durable state, and a
- * public endpoint surfaces the live stage so QA can verify autonomous work
- * without relying on logs or narrative claims.
- */
 export async function startAutonomousIntelligenceMissionScheduler(): Promise<void> {
   console.log('[IVX AIMS] Starting autonomous intelligence mission scheduler...');
   const state = await loadState();
   currentState = state;
 
-  // Diagnostic: always surface the deploy SHA and worker availability. If the
-  // worker is not enabled, the scheduler fails closed immediately so QA can see
-  // the exact reason rather than a silent no-op.
   const deploySha = getCurrentDeploySha();
   const workerEnabled = process.env.IVX_SENIOR_DEV_WORKER_ENABLED === 'true';
   console.log('[IVX AIMS] Scheduler boot diagnostics', {
@@ -304,7 +298,9 @@ export async function startAutonomousIntelligenceMissionScheduler(): Promise<voi
     durableStore: isDurableStoreConfigured(),
     existingMissionJobId: state.missionJobId,
     existingStatus: state.status,
+    alreadySatisfied: isMissionAlreadySatisfied(state),
   });
+
   if (!workerEnabled) {
     currentState = {
       ...currentState,
@@ -318,8 +314,24 @@ export async function startAutonomousIntelligenceMissionScheduler(): Promise<voi
     return;
   }
 
-  // If a previous mission job is still active, attach to it instead of creating
-  // a duplicate. Otherwise enqueue a fresh real job.
+  if (isMissionAlreadySatisfied(state)) {
+    currentState = {
+      ...state,
+      deploySha: deploySha ?? state.deploySha,
+      duplicateSuppressed: true,
+      duplicateSuppressedAt: nowIso(),
+      stageDetail: 'Mission already satisfied; duplicate evidence/code-change job suppressed.',
+      updatedAt: nowIso(),
+    };
+    await saveState(currentState);
+    console.log('[IVX AIMS] Duplicate mission suppressed', {
+      missionJobId: state.missionJobId,
+      commitSha: state.commitSha,
+      prNumber: state.prNumber,
+    });
+    return;
+  }
+
   let jobId = state.missionJobId;
   if (jobId) {
     try {
@@ -348,7 +360,7 @@ export async function startAutonomousIntelligenceMissionScheduler(): Promise<voi
         systemMode: true,
         ownerApprovedAction: {
           proposedPlan: goal,
-          filesAffected: ['expo/evidence/autonomous/ivx-autonomous-intelligence-mission-scheduler-cert.json'],
+          filesAffected: [EVIDENCE_PATH],
           riskLevel: 'low',
           rollbackOption: 'Delete the evidence file and revert the autonomous commit.',
           rollbackAvailable: true,
@@ -371,6 +383,8 @@ export async function startAutonomousIntelligenceMissionScheduler(): Promise<voi
         stage: enqueued.job.stage,
         progressPercent: enqueued.job.progressPercent,
         stageDetail: enqueued.job.stageDetail,
+        duplicateSuppressed: false,
+        duplicateSuppressedAt: null,
         updatedAt: nowIso(),
       };
       await saveState(currentState);
@@ -395,16 +409,12 @@ export async function startAutonomousIntelligenceMissionScheduler(): Promise<voi
     }
   }
 
-  // Initial refresh and then poll every 15s for live stage updates.
   await refreshMissionJob();
-  if (pollTimer) {
-    clearInterval(pollTimer);
-  }
+  if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(() => { void refreshMissionJob(); }, POLL_INTERVAL_MS);
   pollTimer.unref?.();
 }
 
-/** Stop the scheduler polling (used in tests and graceful shutdown). */
 export function stopAutonomousIntelligenceMissionScheduler(): void {
   if (pollTimer) {
     clearInterval(pollTimer);
@@ -413,11 +423,6 @@ export function stopAutonomousIntelligenceMissionScheduler(): void {
   currentState = null;
 }
 
-/**
- * Return the latest mission scheduler state plus the most recent worker ledger
- * entry for the mission job, so the public certification endpoint can prove both
- * the scheduler's intent and the worker's actual execution evidence.
- */
 export async function getMissionSchedulerStatus(): Promise<{
   ok: boolean;
   marker: string;
