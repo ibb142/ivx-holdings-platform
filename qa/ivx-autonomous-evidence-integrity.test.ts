@@ -7,10 +7,10 @@ const EVIDENCE_PATH = resolve(
   'expo/evidence/autonomous/ivx-autonomous-intelligence-mission-scheduler-cert.json',
 );
 
-const EXPECTED_MARKER = 'ivx-autonomous-intelligence-mission-scheduler-2026-08-23';
+const EXPECTED_MARKER = 'ivx-autonomous-intelligence-mission-scheduler-v2-2026-08-24';
 const EXPECTED_MISSION = 'autonomous intelligence mission scheduler live';
 const EXPECTED_CREATOR = 'ivx-senior-developer-worker';
-const MIN_CERT_TIME_MS = Date.parse('2026-08-23T00:00:00.000Z');
+const MIN_CERT_TIME_MS = Date.parse('2026-08-24T00:00:00.000Z');
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
 const FORBIDDEN_TIMESTAMP_TOKENS = [
   'CURRENT_TIMESTAMP',
@@ -45,7 +45,6 @@ export function validateAutonomousEvidenceCreatedAt(value: unknown, nowMs = Date
     return { ok: false, reason: `createdAt contains forbidden placeholder token: ${normalized}` };
   }
 
-  // Require an explicit UTC ISO-8601 value so evidence is comparable across CI/Render.
   const isoUtcPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
   if (!isoUtcPattern.test(normalized)) {
     return { ok: false, reason: `createdAt is not canonical UTC ISO-8601: ${normalized}` };
@@ -56,7 +55,7 @@ export function validateAutonomousEvidenceCreatedAt(value: unknown, nowMs = Date
     return { ok: false, reason: `createdAt is not parseable: ${normalized}` };
   }
   if (timestampMs < MIN_CERT_TIME_MS) {
-    return { ok: false, reason: `createdAt predates the 2026-08-23 mission: ${normalized}` };
+    return { ok: false, reason: `createdAt predates the v2 mission: ${normalized}` };
   }
   if (timestampMs > nowMs + MAX_FUTURE_SKEW_MS) {
     return { ok: false, reason: `createdAt is implausibly in the future: ${normalized}` };
@@ -75,18 +74,19 @@ describe('IVX Autonomous mission evidence integrity — HARD GATE', () => {
   });
 
   it('rejects stale, placeholder, malformed and future timestamps', () => {
-    const now = Date.parse('2026-08-24T01:00:00.000Z');
+    const now = Date.parse('2026-08-24T01:10:00.000Z');
     expect(validateAutonomousEvidenceCreatedAt('2023-10-04T12:00:00Z', now).ok).toBe(false);
+    expect(validateAutonomousEvidenceCreatedAt('2026-08-23T23:59:59.000Z', now).ok).toBe(false);
     expect(validateAutonomousEvidenceCreatedAt('CURRENT_TIMESTAMP', now).ok).toBe(false);
     expect(validateAutonomousEvidenceCreatedAt('{{CURRENT_TIMESTAMP}}', now).ok).toBe(false);
     expect(validateAutonomousEvidenceCreatedAt('PLACEHOLDER_TIMESTAMP', now).ok).toBe(false);
     expect(validateAutonomousEvidenceCreatedAt('<timestamp>', now).ok).toBe(false);
     expect(validateAutonomousEvidenceCreatedAt('not-a-date', now).ok).toBe(false);
-    expect(validateAutonomousEvidenceCreatedAt('2026-08-24T01:06:00.000Z', now).ok).toBe(false);
-    expect(validateAutonomousEvidenceCreatedAt('2026-08-23T23:59:59.000Z', now).ok).toBe(true);
+    expect(validateAutonomousEvidenceCreatedAt('2026-08-24T01:16:00.000Z', now).ok).toBe(false);
+    expect(validateAutonomousEvidenceCreatedAt('2026-08-24T00:58:16.000Z', now).ok).toBe(true);
   });
 
-  it('the committed certificate has a valid mission-era timestamp', () => {
+  it('the committed certificate has a valid v2 timestamp', () => {
     const evidence = readEvidence();
     const result = validateAutonomousEvidenceCreatedAt(evidence.createdAt);
     expect(result.reason).toBeNull();
