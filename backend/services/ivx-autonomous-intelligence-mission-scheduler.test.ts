@@ -5,11 +5,14 @@ import {
   stopAutonomousIntelligenceMissionScheduler,
   getMissionSchedulerStatus,
   verifyLiveDeployForState,
+  isMissionAlreadySatisfied,
   type MissionSchedulerState,
 } from './ivx-autonomous-intelligence-mission-scheduler';
 import {
   listSeniorDeveloperJobs,
 } from './ivx-senior-developer-worker';
+
+const EVIDENCE_PATH = 'expo/evidence/autonomous/ivx-autonomous-intelligence-mission-scheduler-cert.json';
 
 async function clearSchedulerState(): Promise<void> {
   try {
@@ -19,17 +22,6 @@ async function clearSchedulerState(): Promise<void> {
     }
   } catch {
     // best-effort cleanup for tests
-  }
-}
-
-async function writeSchedulerState(state: Record<string, unknown>): Promise<void> {
-  try {
-    const { isDurableStoreConfigured, writeDurableJson } = await import('./ivx-durable-store');
-    if (isDurableStoreConfigured()) {
-      await writeDurableJson('logs/audit/autonomous-intelligence-mission-scheduler/state.json', state);
-    }
-  } catch {
-    // best-effort setup for tests
   }
 }
 
@@ -48,6 +40,36 @@ async function clearMissionJobs(): Promise<void> {
   );
 }
 
+function completedMissionState(overrides: Partial<MissionSchedulerState> = {}): MissionSchedulerState {
+  return {
+    marker: IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER,
+    startedAt: new Date().toISOString(),
+    schedulerJobId: 'scheduler-complete-test',
+    deploySha: 'merge-sha',
+    missionJobId: 'ivx-worker-complete-test',
+    status: 'completed',
+    stage: 'COMPLETED',
+    progressPercent: 100,
+    stageDetail: 'complete',
+    inspectedFiles: ['backend/services/ivx-autonomous-intelligence-mission-scheduler.ts'],
+    changedFiles: [EVIDENCE_PATH],
+    commitSha: 'abcdef123456',
+    prNumber: 288,
+    prUrl: 'https://github.com/ibb142/ivx-holdings-platform/pull/288',
+    prMerged: true,
+    prMergeCommitSha: 'merge-sha',
+    deployId: null,
+    liveCommit: 'merge-sha',
+    healthOk: true,
+    completedAt: new Date().toISOString(),
+    error: null,
+    duplicateSuppressed: false,
+    duplicateSuppressedAt: null,
+    updatedAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
 describe('ivx-autonomous-intelligence-mission-scheduler', () => {
   beforeEach(async () => {
     stopAutonomousIntelligenceMissionScheduler();
@@ -62,6 +84,13 @@ describe('ivx-autonomous-intelligence-mission-scheduler', () => {
   it('exports a stable marker', () => {
     expect(IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER).toContain('ivx-autonomous-intelligence-mission-scheduler');
     expect(IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER).toContain('2026-08-23');
+  });
+
+  it('recognizes a completed merged evidence mission as already satisfied', () => {
+    expect(isMissionAlreadySatisfied(completedMissionState())).toBe(true);
+    expect(isMissionAlreadySatisfied(completedMissionState({ prMerged: false }))).toBe(false);
+    expect(isMissionAlreadySatisfied(completedMissionState({ changedFiles: [] }))).toBe(false);
+    expect(isMissionAlreadySatisfied(completedMissionState({ error: 'failed proof' }))).toBe(false);
   });
 
   it('fails closed when the senior developer worker is not enabled', async () => {
@@ -98,7 +127,7 @@ describe('ivx-autonomous-intelligence-mission-scheduler', () => {
     expect(job!.input.ownerApproved).toBe(true);
     expect(job!.input.executionMode).toBe('code_change');
     expect(job!.input.goal).toContain(IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER);
-    expect(job!.input.goal).toContain('expo/evidence/autonomous/ivx-autonomous-intelligence-mission-scheduler-cert.json');
+    expect(job!.input.goal).toContain(EVIDENCE_PATH);
   });
 
   it('does not create duplicate jobs when already active', async () => {
@@ -115,28 +144,20 @@ describe('ivx-autonomous-intelligence-mission-scheduler', () => {
     const previousSha = process.env.RENDER_GIT_COMMIT;
     process.env.RENDER_GIT_COMMIT = mergeSha;
     const state: MissionSchedulerState = {
-      marker: IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER,
-      startedAt: new Date().toISOString(),
-      schedulerJobId: 'scheduler-test-1',
-      deploySha: mergeSha,
-      missionJobId: 'ivx-worker-resume-test',
-      status: 'completed',
-      stage: 'COMPLETED',
-      progressPercent: 100,
-      stageDetail: 'Restart resume: PR #256 already merged.',
-      inspectedFiles: [],
+      ...completedMissionState({
+        schedulerJobId: 'scheduler-test-1',
+        missionJobId: 'ivx-worker-resume-test',
+        deploySha: mergeSha,
+        commitSha: 'pre-sha',
+        prNumber: 256,
+        prUrl: 'https://github.com/ibb142/ivx-holdings-platform/pull/256',
+        prMergeCommitSha: mergeSha,
+        liveCommit: null,
+        healthOk: null,
+        error: 'Code-change job produced no changed files; stale evidence is not accepted.',
+        stageDetail: 'Restart resume: PR #256 already merged.',
+      }),
       changedFiles: [],
-      commitSha: 'pre-sha',
-      prNumber: 256,
-      prUrl: 'https://github.com/ibb142/ivx-holdings-platform/pull/256',
-      prMerged: true,
-      prMergeCommitSha: mergeSha,
-      deployId: null,
-      liveCommit: null,
-      healthOk: null,
-      completedAt: new Date().toISOString(),
-      error: 'Code-change job produced no changed files; stale evidence is not accepted.',
-      updatedAt: new Date().toISOString(),
     };
     const verified = verifyLiveDeployForState(state);
     expect(verified.error).toBeNull();
@@ -154,29 +175,20 @@ describe('ivx-autonomous-intelligence-mission-scheduler', () => {
     const previousSha = process.env.RENDER_GIT_COMMIT;
     process.env.RENDER_GIT_COMMIT = 'different-sha';
     const state: MissionSchedulerState = {
-      ...({} as MissionSchedulerState),
-      marker: IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER,
-      startedAt: new Date().toISOString(),
-      schedulerJobId: 'scheduler-test-2',
-      deploySha: 'different-sha',
-      missionJobId: 'ivx-worker-resume-test',
-      status: 'completed',
-      stage: 'COMPLETED',
-      progressPercent: 100,
-      stageDetail: 'Restart resume: PR #256 already merged.',
-      inspectedFiles: [],
+      ...completedMissionState({
+        schedulerJobId: 'scheduler-test-2',
+        missionJobId: 'ivx-worker-resume-test',
+        deploySha: 'different-sha',
+        commitSha: 'pre-sha',
+        prNumber: 256,
+        prUrl: 'https://github.com/ibb142/ivx-holdings-platform/pull/256',
+        prMergeCommitSha: mergeSha,
+        liveCommit: null,
+        healthOk: null,
+        error: 'Code-change job produced no changed files; stale evidence is not accepted.',
+        stageDetail: 'Restart resume: PR #256 already merged.',
+      }),
       changedFiles: [],
-      commitSha: 'pre-sha',
-      prNumber: 256,
-      prUrl: 'https://github.com/ibb142/ivx-holdings-platform/pull/256',
-      prMerged: true,
-      prMergeCommitSha: mergeSha,
-      deployId: null,
-      liveCommit: null,
-      healthOk: null,
-      completedAt: new Date().toISOString(),
-      error: 'Code-change job produced no changed files; stale evidence is not accepted.',
-      updatedAt: new Date().toISOString(),
     };
     const verified = verifyLiveDeployForState(state);
     expect(verified.error).toBe(state.error);
