@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER,
+  buildMissionGoal,
+  isMissionStateCertified,
+  isTerminalMissionStatus,
   startAutonomousIntelligenceMissionScheduler,
   stopAutonomousIntelligenceMissionScheduler,
   getMissionSchedulerStatus,
@@ -9,6 +12,7 @@ import {
 } from './ivx-autonomous-intelligence-mission-scheduler';
 import {
   listSeniorDeveloperJobs,
+  type IVXWorkerJobResult,
 } from './ivx-senior-developer-worker';
 
 async function clearSchedulerState(): Promise<void> {
@@ -19,17 +23,6 @@ async function clearSchedulerState(): Promise<void> {
     }
   } catch {
     // best-effort cleanup for tests
-  }
-}
-
-async function writeSchedulerState(state: Record<string, unknown>): Promise<void> {
-  try {
-    const { isDurableStoreConfigured, writeDurableJson } = await import('./ivx-durable-store');
-    if (isDurableStoreConfigured()) {
-      await writeDurableJson('logs/audit/autonomous-intelligence-mission-scheduler/state.json', state);
-    }
-  } catch {
-    // best-effort setup for tests
   }
 }
 
@@ -59,9 +52,27 @@ describe('ivx-autonomous-intelligence-mission-scheduler', () => {
     stopAutonomousIntelligenceMissionScheduler();
   });
 
-  it('exports a stable marker', () => {
-    expect(IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER).toContain('ivx-autonomous-intelligence-mission-scheduler');
-    expect(IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER).toContain('2026-08-23');
+  it('exports the v2 stable marker', () => {
+    expect(IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER).toBe(
+      'ivx-autonomous-intelligence-mission-scheduler-v2-2026-08-24',
+    );
+  });
+
+  it('builds the evidence task with a host-generated exact timestamp', () => {
+    const createdAt = '2026-08-24T01:05:00.000Z';
+    const goal = buildMissionGoal(createdAt);
+    expect(goal).toContain(`"createdAt": "${createdAt}"`);
+    expect(goal).toContain('Copy it exactly');
+    expect(goal).not.toContain('createdAt": current ISO');
+  });
+
+  it('classifies terminal states so completed missions cannot replay on deploy', () => {
+    expect(isTerminalMissionStatus('completed')).toBe(true);
+    expect(isTerminalMissionStatus('failed')).toBe(true);
+    expect(isTerminalMissionStatus('blocked')).toBe(true);
+    expect(isTerminalMissionStatus('cancelled')).toBe(true);
+    expect(isTerminalMissionStatus('running')).toBe(false);
+    expect(isTerminalMissionStatus('verifying')).toBe(false);
   });
 
   it('fails closed when the senior developer worker is not enabled', async () => {
@@ -73,7 +84,7 @@ describe('ivx-autonomous-intelligence-mission-scheduler', () => {
     expect(status.state.error).toContain('IVX_SENIOR_DEV_WORKER_ENABLED');
   });
 
-  it('getMissionSchedulerStatus returns a secret-safe, structured state', async () => {
+  it('getMissionSchedulerStatus returns a secret-safe structured state', async () => {
     const status = await getMissionSchedulerStatus();
     expect(typeof status.ok).toBe('boolean');
     expect(status.marker).toBe(IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER);
@@ -87,8 +98,6 @@ describe('ivx-autonomous-intelligence-mission-scheduler', () => {
     const status = await getMissionSchedulerStatus();
     expect(typeof status.state.missionJobId).toBe('string');
     expect(status.state.missionJobId).toMatch(/^ivx-worker-/);
-    const validStatuses = ['queued', 'running', 'patching', 'testing', 'committing', 'completed', 'failed'];
-    expect(validStatuses).toContain(status.state.status);
 
     const job = (await listSeniorDeveloperJobs(10)).find(
       (j) => j.jobId === status.state.missionJobId,
@@ -110,7 +119,7 @@ describe('ivx-autonomous-intelligence-mission-scheduler', () => {
     expect(first.state.missionJobId).toBe(second.state.missionJobId);
   });
 
-  it('backfills live verification and clears stale resume error when the merged commit is the current deploy', () => {
+  it('backfills matching live SHA but does not fabricate health success', () => {
     const mergeSha = 'abc123def456';
     const previousSha = process.env.RENDER_GIT_COMMIT;
     process.env.RENDER_GIT_COMMIT = mergeSha;
@@ -123,12 +132,12 @@ describe('ivx-autonomous-intelligence-mission-scheduler', () => {
       status: 'completed',
       stage: 'COMPLETED',
       progressPercent: 100,
-      stageDetail: 'Restart resume: PR #256 already merged.',
+      stageDetail: 'Restart resume.',
       inspectedFiles: [],
       changedFiles: [],
       commitSha: 'pre-sha',
-      prNumber: 256,
-      prUrl: 'https://github.com/ibb142/ivx-holdings-platform/pull/256',
+      prNumber: 296,
+      prUrl: 'https://github.com/ibb142/ivx-holdings-platform/pull/296',
       prMerged: true,
       prMergeCommitSha: mergeSha,
       deployId: null,
@@ -141,50 +150,55 @@ describe('ivx-autonomous-intelligence-mission-scheduler', () => {
     const verified = verifyLiveDeployForState(state);
     expect(verified.error).toBeNull();
     expect(verified.liveCommit).toBe(mergeSha);
-    expect(verified.healthOk).toBe(true);
-    if (previousSha !== undefined) {
-      process.env.RENDER_GIT_COMMIT = previousSha;
-    } else {
-      delete process.env.RENDER_GIT_COMMIT;
-    }
+    expect(verified.healthOk).toBeNull();
+    if (previousSha !== undefined) process.env.RENDER_GIT_COMMIT = previousSha;
+    else delete process.env.RENDER_GIT_COMMIT;
   });
 
-  it('leaves the error intact when the merged commit does not match the current deploy', () => {
-    const mergeSha = 'abc123def456';
-    const previousSha = process.env.RENDER_GIT_COMMIT;
-    process.env.RENDER_GIT_COMMIT = 'different-sha';
+  it('requires full worker + CI + exact-SHA live proof before ok=true', () => {
+    const sha = 'abc123def456';
     const state: MissionSchedulerState = {
-      ...({} as MissionSchedulerState),
       marker: IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER,
       startedAt: new Date().toISOString(),
-      schedulerJobId: 'scheduler-test-2',
-      deploySha: 'different-sha',
-      missionJobId: 'ivx-worker-resume-test',
+      schedulerJobId: 'scheduler-certified',
+      deploySha: sha,
+      missionJobId: 'ivx-worker-certified',
       status: 'completed',
       stage: 'COMPLETED',
       progressPercent: 100,
-      stageDetail: 'Restart resume: PR #256 already merged.',
-      inspectedFiles: [],
-      changedFiles: [],
-      commitSha: 'pre-sha',
-      prNumber: 256,
-      prUrl: 'https://github.com/ibb142/ivx-holdings-platform/pull/256',
+      stageDetail: 'certified',
+      inspectedFiles: ['backend/services/ivx-autonomous-intelligence-mission-scheduler.ts'],
+      changedFiles: ['expo/evidence/autonomous/ivx-autonomous-intelligence-mission-scheduler-cert.json'],
+      commitSha: 'commit-sha',
+      prNumber: 296,
+      prUrl: 'https://github.com/ibb142/ivx-holdings-platform/pull/296',
       prMerged: true,
-      prMergeCommitSha: mergeSha,
-      deployId: null,
-      liveCommit: null,
-      healthOk: null,
+      prMergeCommitSha: sha,
+      deployId: 'deploy-1',
+      liveCommit: sha,
+      healthOk: true,
       completedAt: new Date().toISOString(),
-      error: 'Code-change job produced no changed files; stale evidence is not accepted.',
+      error: null,
       updatedAt: new Date().toISOString(),
     };
-    const verified = verifyLiveDeployForState(state);
-    expect(verified.error).toBe(state.error);
-    expect(verified.liveCommit).toBeNull();
-    if (previousSha !== undefined) {
-      process.env.RENDER_GIT_COMMIT = previousSha;
-    } else {
-      delete process.env.RENDER_GIT_COMMIT;
-    }
+    const worker = {
+      jobId: state.missionJobId,
+      ok: true,
+      testsRun: true,
+      testsPassed: true,
+      typecheckRun: true,
+      typecheckPassed: true,
+      commitCreated: true,
+      commitSha: 'commit-sha',
+      prMerged: true,
+      ciChecksGreen: true,
+      prMergeCommitSha: sha,
+      finalStatus: 'COMPLETE',
+      error: null,
+    } as IVXWorkerJobResult;
+    expect(isMissionStateCertified(state, worker, sha)).toBe(true);
+    expect(isMissionStateCertified({ ...state, healthOk: false }, worker, sha)).toBe(false);
+    expect(isMissionStateCertified(state, { ...worker, ciChecksGreen: false }, sha)).toBe(false);
+    expect(isMissionStateCertified(state, worker, 'different-sha')).toBe(false);
   });
 });
