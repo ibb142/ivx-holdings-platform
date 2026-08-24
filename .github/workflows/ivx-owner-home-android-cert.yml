@@ -1,5 +1,5 @@
-# IVX exact-main Owner Home certification trigger 2026-08-23
-name: IVX Owner Sign In + Home Android Certificate
+# IVX exact-main Owner Home + Profile certification trigger 2026-08-23
+name: IVX Owner Sign In + Home/Profile Android Certificate
 
 on:
   pull_request:
@@ -7,13 +7,17 @@ on:
     paths:
       - 'expo/app/(tabs)/_layout.tsx'
       - 'expo/app/(tabs)/home.tsx'
+      - 'expo/app/(tabs)/profile.tsx'
       - 'expo/app/login.tsx'
+      - 'expo/hooks/useRealtimeChannel.ts'
       - 'expo/lib/auth-context.tsx'
       - 'expo/lib/auth-password-sign-in.ts'
       - 'expo/lib/supabase.ts'
       - 'expo/lib/screen-paint-watchdog.ts'
       - 'expo/.maestro/ivx-owner-home-certificate.yaml'
+      - 'expo/.maestro/ivx-owner-profile-certificate.yaml'
       - 'expo/__tests__/owner-home-session-race.test.ts'
+      - 'expo/__tests__/profile-black-screen-realtime.test.ts'
       - 'scripts/ivx-owner-home-android-e2e.sh'
       - '.github/workflows/ivx-owner-home-android-cert.yml'
   push:
@@ -21,13 +25,17 @@ on:
     paths:
       - 'expo/app/(tabs)/_layout.tsx'
       - 'expo/app/(tabs)/home.tsx'
+      - 'expo/app/(tabs)/profile.tsx'
       - 'expo/app/login.tsx'
+      - 'expo/hooks/useRealtimeChannel.ts'
       - 'expo/lib/auth-context.tsx'
       - 'expo/lib/auth-password-sign-in.ts'
       - 'expo/lib/supabase.ts'
       - 'expo/lib/screen-paint-watchdog.ts'
       - 'expo/.maestro/ivx-owner-home-certificate.yaml'
+      - 'expo/.maestro/ivx-owner-profile-certificate.yaml'
       - 'expo/__tests__/owner-home-session-race.test.ts'
+      - 'expo/__tests__/profile-black-screen-realtime.test.ts'
       - 'scripts/ivx-owner-home-android-e2e.sh'
       - '.github/workflows/ivx-owner-home-android-cert.yml'
   workflow_dispatch: {}
@@ -50,8 +58,8 @@ env:
   OWNER_PASSWORD_S6: ${{ secrets.IVX_OWNER_LOGIN_PASSWORD }}
 
 jobs:
-  certify-owner-home:
-    name: Real owner sign-in reaches Home without black screen
+  certify-owner-home-profile:
+    name: Real owner sign-in reaches Home and Profile without black screen
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -124,7 +132,11 @@ jobs:
           grep -q 'IVX_OWNER_POST_LOGIN_FAST_PATH_V1' lib/auth-context.tsx
           grep -q 'IVX_OWNER_REPAIR_BACKGROUND_V1' lib/auth-context.tsx
           if grep -q 'router unlocked before signOut' lib/auth-context.tsx; then exit 1; fi
-          bun test __tests__/owner-home-session-race.test.ts __tests__/home-route-blank-screen.test.ts __tests__/android-auth-route-black-screen.test.ts
+          bun test \
+            __tests__/owner-home-session-race.test.ts \
+            __tests__/home-route-blank-screen.test.ts \
+            __tests__/android-auth-route-black-screen.test.ts \
+            __tests__/profile-black-screen-realtime.test.ts
 
       - name: Prepare disposable QA signer
         shell: bash
@@ -133,7 +145,7 @@ jobs:
           KEYSTORE="$HOME/.android/debug.keystore"
           mkdir -p "$(dirname "$KEYSTORE")"
           rm -f "$KEYSTORE"
-          keytool -genkeypair -v -keystore "$KEYSTORE" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=IVX Owner Home E2E, OU=QA, O=IVX Holdings, L=Miami, ST=Florida, C=US"
+          keytool -genkeypair -v -keystore "$KEYSTORE" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=IVX Owner Home Profile E2E, OU=QA, O=IVX Holdings, L=Miami, ST=Florida, C=US"
 
       - name: Build Android owner QA APK
         working-directory: expo/android
@@ -146,12 +158,12 @@ jobs:
           APK=$(find app/build/outputs/apk/qa -name '*.apk' -type f | head -1)
           test -n "$APK"
           echo "APK_PATH=$(realpath "$APK")" >> "$GITHUB_ENV"
-          cp "$APK" "$GITHUB_WORKSPACE/IVX-Owner-Home-QA.apk"
+          cp "$APK" "$GITHUB_WORKSPACE/IVX-Owner-Home-Profile-QA.apk"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ivx-owner-home-qa-apk-${{ github.event.pull_request.head.sha || github.sha }}
-          path: IVX-Owner-Home-QA.apk
+          name: ivx-owner-home-profile-qa-apk-${{ github.event.pull_request.head.sha || github.sha }}
+          path: IVX-Owner-Home-Profile-QA.apk
           if-no-files-found: error
 
       - name: Enable KVM
@@ -160,7 +172,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Run real Owner Login to Home and delayed black-screen checks
+      - name: Run real Owner Login to Home and Profile delayed black-screen checks
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
@@ -183,18 +195,23 @@ jobs:
             --arg sha "${{ github.event.pull_request.head.sha || github.sha }}" \
             --arg binding "$OWNER_PASSWORD_BINDING" \
             --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{certificate:"IVX-OWNER-SIGNIN-HOME-ANDROID-E2E",passed:true,sourceSha:$sha,credentialBinding:$binding,realOwnerPasswordEntry:true,homeReadyMarker:true,homeTabRetap:true,homeVisibleImmediate:true,homeVisibleAfter2Seconds:true,homeVisibleAfter5Seconds:true,homeVisibleAfter10Seconds:true,homeVisibleAfter20Seconds:true,blackScreenObserved:false,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-home-android-e2e.json
-          cat qa/evidence/ivx-owner-home-android-e2e.json
+            '{certificate:"IVX-OWNER-SIGNIN-HOME-PROFILE-ANDROID-E2E",passed:true,sourceSha:$sha,credentialBinding:$binding,realOwnerPasswordEntry:true,homeReadyMarker:true,homeTabRetap:true,homeVisibleImmediate:true,homeVisibleAfter2Seconds:true,homeVisibleAfter5Seconds:true,homeVisibleAfter10Seconds:true,homeVisibleAfter20Seconds:true,homeBlackScreenObserved:false,profileTabTapped:true,profileVisibleImmediate:true,profileVisibleAfter2Seconds:true,profileVisibleAfter5Seconds:true,profileVisibleAfter10Seconds:true,profileBlackScreenObserved:false,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-home-profile-android-e2e.json
+          cat qa/evidence/ivx-owner-home-profile-android-e2e.json
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ivx-owner-home-android-e2e-${{ github.event.pull_request.head.sha || github.sha }}
+          name: ivx-owner-home-profile-android-e2e-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             owner-home-maestro.xml
             owner-home-*.xml
             owner-home-*.png
             owner-home-*-pid.txt
             owner-home-*-logcat.txt
-            qa/evidence/ivx-owner-home-android-e2e.json
+            owner-profile-maestro.xml
+            owner-profile-*.xml
+            owner-profile-*.png
+            owner-profile-*-pid.txt
+            owner-profile-*-logcat.txt
+            qa/evidence/ivx-owner-home-profile-android-e2e.json
           if-no-files-found: warn
