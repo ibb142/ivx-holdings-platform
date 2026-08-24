@@ -14,6 +14,8 @@
  *     worker stage and fails closed if the job is blocked/failed/expired.
  *   - Only ONE active mission scheduler job is enqueued per boot. If a job
  *     for the same mission is already active, it attaches and reports it.
+ *   - A completed evidence-only mission is reusable across deploys. A deploy
+ *     alone MUST NOT recreate the same evidence file / PR forever.
  *   - No secret values are stored or returned.
  */
 import { randomUUID } from 'node:crypto';
@@ -105,6 +107,21 @@ function getCurrentDeploySha(): string | null {
 }
 
 /**
+ * Evidence-only AIMS work is idempotent. Once this exact scheduler mission has
+ * completed successfully, a Render restart or unrelated deployment must reuse
+ * that proof instead of opening another identical evidence PR.
+ */
+export function isCompletedMissionReusable(state: MissionSchedulerState): boolean {
+  return (
+    state.marker === IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER
+    && state.status === 'completed'
+    && state.error === null
+    && Boolean(state.missionJobId)
+    && state.prMerged === true
+  );
+}
+
+/**
  * When the mission's merged commit is the commit currently running in production,
  * backfill live verification fields and clear any stale resume-only error that
  * no longer reflects reality. This fixes the restart-resume case where the worker
@@ -129,7 +146,6 @@ export function verifyLiveDeployForState(state: MissionSchedulerState): MissionS
     updatedAt: nowIso(),
   };
 }
-
 
 function emptyState(): MissionSchedulerState {
   return {
@@ -164,16 +180,32 @@ async function loadState(): Promise<MissionSchedulerState> {
     try {
       const parsed = await readDurableJson<MissionSchedulerState | null>(STATE_PATH, null);
       if (parsed && parsed.marker === IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER) {
-        // Reset the mission on every new deploy so the scheduler always enqueues
-        // a fresh real job for the current production SHA. This prevents a stale
-        // completed/blocked state from a previous deploy from hiding the live
-        // autonomous behavior from QA.
         if (currentDeploySha && parsed.deploySha !== currentDeploySha) {
+          // Completed evidence-only work is reusable. The previous behavior reset
+          // state on EVERY deployment, which reopened the same evidence mission
+          // again and again. Preserve the completed proof and only refresh the
+          // deployment observation. Failed/incomplete work may still retry.
+          if (isCompletedMissionReusable(parsed)) {
+            console.log('[IVX AIMS] New deploy detected; completed mission reused and duplicate suppressed', {
+              previousDeploySha: parsed.deploySha,
+              currentDeploySha,
+              missionJobId: parsed.missionJobId,
+              prNumber: parsed.prNumber,
+            });
+            return {
+              ...parsed,
+              deploySha: currentDeploySha,
+              stageDetail: 'Completed evidence-only mission retained across deploy; duplicate execution suppressed.',
+              updatedAt: nowIso(),
+            };
+          }
+
           const fresh = emptyState();
-          console.log('[IVX AIMS] New deploy detected; resetting mission state', {
+          console.log('[IVX AIMS] New deploy detected; incomplete mission state reset for retry', {
             previousDeploySha: parsed.deploySha,
             currentDeploySha,
             previousJobId: parsed.missionJobId,
+            previousStatus: parsed.status,
           });
           return fresh;
         }
@@ -194,11 +226,25 @@ async function saveState(state: MissionSchedulerState): Promise<void> {
       await writeDurableJson(STATE_PATH, next);
       await appendDurableEvent(STATE_PATH.replace(/state\.json$/, 'events.jsonl'), {
         type: 'mission_scheduler_state',
+        marker: next.marker,
+        schedulerJobId: next.schedulerJobId,
         missionJobId: next.missionJobId,
+        deploySha: next.deploySha,
         status: next.status,
         stage: next.stage,
         progressPercent: next.progressPercent,
         stageDetail: next.stageDetail,
+        inspectedFiles: next.inspectedFiles,
+        changedFiles: next.changedFiles,
+        commitSha: next.commitSha,
+        prNumber: next.prNumber,
+        prMerged: next.prMerged,
+        prMergeCommitSha: next.prMergeCommitSha,
+        deployId: next.deployId,
+        liveCommit: next.liveCommit,
+        healthOk: next.healthOk,
+        completedAt: next.completedAt,
+        error: next.error,
         updatedAt: next.updatedAt,
       });
     } catch {
@@ -293,9 +339,6 @@ export async function startAutonomousIntelligenceMissionScheduler(): Promise<voi
   const state = await loadState();
   currentState = state;
 
-  // Diagnostic: always surface the deploy SHA and worker availability. If the
-  // worker is not enabled, the scheduler fails closed immediately so QA can see
-  // the exact reason rather than a silent no-op.
   const deploySha = getCurrentDeploySha();
   const workerEnabled = process.env.IVX_SENIOR_DEV_WORKER_ENABLED === 'true';
   console.log('[IVX AIMS] Scheduler boot diagnostics', {
@@ -305,6 +348,28 @@ export async function startAutonomousIntelligenceMissionScheduler(): Promise<voi
     existingMissionJobId: state.missionJobId,
     existingStatus: state.status,
   });
+
+  // Idempotency gate: a successful evidence-only mission is DONE. Do not create
+  // another identical worker job/commit/PR merely because Render restarted or
+  // another unrelated commit deployed.
+  if (isCompletedMissionReusable(state)) {
+    currentState = {
+      ...state,
+      deploySha: deploySha ?? state.deploySha,
+      stageDetail: 'Completed evidence-only mission retained; duplicate worker submission suppressed.',
+      updatedAt: nowIso(),
+    };
+    await saveState(currentState);
+    console.log('[IVX AIMS] Duplicate mission submission suppressed', {
+      missionJobId: state.missionJobId,
+      prNumber: state.prNumber,
+      deploySha,
+    });
+    return;
+  }
+
+  // Diagnostic: if the worker is not enabled, fail closed immediately so QA can
+  // see the exact reason rather than a silent no-op.
   if (!workerEnabled) {
     currentState = {
       ...currentState,
