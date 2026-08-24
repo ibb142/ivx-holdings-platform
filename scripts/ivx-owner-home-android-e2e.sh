@@ -149,7 +149,17 @@ chat_checkpoint() {
   test -s "$xml" || rc=111
   grep -q 'resource-id="ivx-owner-chat-composer-dock"' "$xml" 2>/dev/null || rc=112
   grep -q 'resource-id="ivx-owner-chat-input"' "$xml" 2>/dev/null || rc=113
-  grep -q 'text="QA cert probe chat check"' "$xml" 2>/dev/null || rc=114
+  # A rendered MessageBubble row (chat-message-<id>) must be on screen. The
+  # exact probe text is asserted fail-closed by the Maestro flow itself; do
+  # NOT re-grep it here — the inverted list re-anchors to the newest message
+  # when the AI reply lands, which legitimately scrolls the probe bubble out
+  # of the uiautomator viewport between checkpoints.
+  grep -q 'resource-id="chat-message-' "$xml" 2>/dev/null || rc=114
+  if grep -q 'QA cert probe chat check' "$xml" 2>/dev/null; then
+    echo "probe message still in dump viewport at ${label}" | tee -a owner-chat-launch.txt
+  else
+    echo "probe message above dump viewport at ${label} (thread anchored to newest reply)" | tee -a owner-chat-launch.txt
+  fi
 }
 
 # IVX IA chat certificate — third Maestro flow on the same real owner session.
