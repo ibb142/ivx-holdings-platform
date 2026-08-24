@@ -184,7 +184,8 @@ export default function ProfileScreen() {
           <View>
             <Text style={styles.eyebrow}>IVX HOLDINGS</Text>
             <Text style={styles.title} testID="profile-title">Profile</Text>
-          </View>          <TouchableOpacity
+          </View>
+          <TouchableOpacity
             style={styles.settingsButton}
             onPress={() => router.push('/security-settings' as any)}
             accessibilityRole="button"

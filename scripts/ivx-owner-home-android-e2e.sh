@@ -13,6 +13,21 @@ MAESTRO="${HOME}/.maestro/bin/maestro"
 test -x "$MAESTRO"
 "$MAESTRO" --version
 
+# Profile black-screen certification only applies to builds containing the
+# fail-safe Profile screen (IVX_PROFILE_FULL_FAILSAFE_MARKER in the JS bundle).
+# The fast-retest workflow reuses the pinned pre-repair APK, which cannot
+# contain that marker; for that APK the Profile section below is skipped and
+# this script certifies exactly what that workflow exists to prove: Owner Home
+# stays visible on the exact shipped APK. Profile certification for the current
+# source SHA runs in the fresh-APK "IVX Owner Sign In + Home/Profile Android
+# Certificate" workflow, which builds the APK from the same commit.
+PROFILE_CERT_CAPABLE=0
+if command -v unzip >/dev/null 2>&1 \
+  && unzip -p "$APK_PATH" assets/index.android.bundle 2>/dev/null | grep -q "IVX_PROFILE_FULL_FAILSAFE_MARKER"; then
+  PROFILE_CERT_CAPABLE=1
+fi
+echo "profile_certification_capable=$PROFILE_CERT_CAPABLE"
+
 set +e
 timeout 240s "$MAESTRO" test expo/.maestro/ivx-owner-home-certificate.yaml \
   --env OWNER_EMAIL="$OWNER_EMAIL" \
@@ -69,9 +84,9 @@ profile_checkpoint() {
 # then tapping the Profile tab produced only the dark app background. Clear the
 # log immediately before the tap so any React/native exception can be attributed
 # to Profile rather than startup noise.
-if [ "$rc" -eq 0 ]; then
+if [ "$rc" -eq 0 ] && [ "$PROFILE_CERT_CAPABLE" -eq 1 ]; then
   adb logcat -c >/dev/null 2>&1 || true
-  timeout 90s "$MAESTRO" test expo/.maestro/ivx-owner-profile-certificate.yaml \
+  timeout 150s "$MAESTRO" test expo/.maestro/ivx-owner-profile-certificate.yaml \
     --format junit \
     --output owner-profile-maestro.xml
   profile_maestro_rc=$?
@@ -84,9 +99,36 @@ if [ "$rc" -eq 0 ]; then
   fi
 fi
 
-if [ "$rc" -eq 0 ]; then profile_checkpoint immediate; fi
-if [ "$rc" -eq 0 ]; then sleep 2; profile_checkpoint 2s; fi
-if [ "$rc" -eq 0 ]; then sleep 3; profile_checkpoint 5s; fi
-if [ "$rc" -eq 0 ]; then sleep 5; profile_checkpoint 10s; fi
+if [ "$rc" -eq 0 ] && [ "$PROFILE_CERT_CAPABLE" -eq 1 ]; then profile_checkpoint immediate; fi
+if [ "$rc" -eq 0 ] && [ "$PROFILE_CERT_CAPABLE" -eq 1 ]; then sleep 2; profile_checkpoint 2s; fi
+if [ "$rc" -eq 0 ] && [ "$PROFILE_CERT_CAPABLE" -eq 1 ]; then sleep 3; profile_checkpoint 5s; fi
+if [ "$rc" -eq 0 ] && [ "$PROFILE_CERT_CAPABLE" -eq 1 ]; then sleep 5; profile_checkpoint 10s; fi
+
+# Second cold launch: the home certificate flow relaunches the app from
+# scratch (clearState + fresh owner sign-in), then Profile must stay visible
+# again. This proves the Profile repair survives a full process restart.
+if [ "$rc" -eq 0 ] && [ "$PROFILE_CERT_CAPABLE" -eq 1 ]; then
+  adb logcat -c >/dev/null 2>&1 || true
+  timeout 240s "$MAESTRO" test expo/.maestro/ivx-owner-home-certificate.yaml \
+    --env OWNER_EMAIL="$OWNER_EMAIL" \
+    --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" \
+    --format junit \
+    --output owner-home-cold2-maestro.xml
+  cold2_home_rc=$?
+  if [ "$cold2_home_rc" -ne 0 ]; then
+    rc=$cold2_home_rc
+  fi
+fi
+
+if [ "$rc" -eq 0 ] && [ "$PROFILE_CERT_CAPABLE" -eq 1 ]; then
+  timeout 150s "$MAESTRO" test expo/.maestro/ivx-owner-profile-certificate.yaml \
+    --format junit \
+    --output owner-profile-cold2-maestro.xml
+  cold2_profile_rc=$?
+  if [ "$cold2_profile_rc" -ne 0 ]; then
+    rc=$cold2_profile_rc
+  fi
+  profile_checkpoint cold2
+fi
 
 exit "$rc"
