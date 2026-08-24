@@ -7,6 +7,7 @@ const chatHubSource = readFileSync(resolve(import.meta.dir, '../components/ChatS
 const tabsLayoutSource = readFileSync(resolve(import.meta.dir, '../app/(tabs)/_layout.tsx'), 'utf8');
 const homeSource = readFileSync(resolve(import.meta.dir, '../app/(tabs)/home.tsx'), 'utf8');
 const flowSource = readFileSync(resolve(import.meta.dir, '../.maestro/ivx-owner-chat-certificate.yaml'), 'utf8');
+const transportReliabilitySource = readFileSync(resolve(import.meta.dir, './chat-transport-reliability.test.ts'), 'utf8');
 
 const requiredChatTestIDs = [
   'ivx-owner-chat-composer-dock',
@@ -15,6 +16,9 @@ const requiredChatTestIDs = [
   'ivx-owner-chat-send',
   'ivx-owner-chat-scroll-to-latest',
 ];
+
+const E2E_PROMPT = 'Reply exactly IVX_CHAT_E2E_OK';
+const E2E_REPLY = 'IVX_CHAT_E2E_OK';
 
 describe('IVX IA chat device certificate regression', () => {
   test('keeps every certificate testID rendered by the chat surface', () => {
@@ -36,7 +40,7 @@ describe('IVX IA chat device certificate regression', () => {
     expect(chatHubSource).toContain("router.push('/ivx/chat'");
   });
 
-  test('device certificate flow only references testIDs that exist in source', () => {
+  test('device certificate flow only references stable route/composer testIDs', () => {
     expect(flowSource).toContain('appId: com.ivxholdings.app.owner');
     const flowTestIDs = [...flowSource.matchAll(/id: "([^"]+)"/g)].map((m) => m[1]);
     expect(flowTestIDs.length).toBeGreaterThan(0);
@@ -49,10 +53,35 @@ describe('IVX IA chat device certificate regression', () => {
     }
   });
 
-  test('device certificate flow sends and asserts the probe message exactly once', () => {
-    expect(flowSource).toContain('inputText: "QA cert probe chat check"');
-    expect(flowSource.match(/QA cert probe chat check/g)?.length).toBe(2);
-    expect(flowSource).toContain('ivx-owner-chat-send');
+  test('hard-gates send -> live AI reply -> visible render', () => {
+    expect(flowSource).toContain(`inputText: "${E2E_PROMPT}"`);
+    expect(flowSource).toContain(`visible: "${E2E_PROMPT}"`);
+    expect(flowSource).toContain(`visible: "${E2E_REPLY}"`);
+    expect(flowSource).toContain('timeout: 60000');
+    expect(flowSource).toContain('assertNotVisible: "Not sent"');
+    expect(flowSource).toContain('assertNotVisible: "I was unable to display this reply"');
+  });
+
+  test('hard-gates app restart persistence without clearing state', () => {
+    const stopIndex = flowSource.indexOf('- stopApp');
+    const launchIndex = flowSource.indexOf('- launchApp:');
+    const clearStateIndex = flowSource.indexOf('clearState: false');
+    expect(stopIndex).toBeGreaterThan(-1);
+    expect(launchIndex).toBeGreaterThan(stopIndex);
+    expect(clearStateIndex).toBeGreaterThan(launchIndex);
+
+    const afterRestart = flowSource.slice(clearStateIndex);
+    expect(afterRestart).toContain(`visible: "${E2E_PROMPT}"`);
+    expect(afterRestart).toContain(`visible: "${E2E_REPLY}"`);
+    expect(afterRestart).toContain('id: "ivx-owner-chat-composer-dock"');
+  });
+
+  test('keeps retry behavior hard-gated in the transport reliability suite', () => {
+    expect(transportReliabilitySource).toContain("it('retrySend resets a failed operation back to queued'");
+    expect(transportReliabilitySource).toContain('retrySend(reqId)');
+    expect(transportReliabilitySource).toContain("expect(after.status).toBe('queued')");
+    expect(transportReliabilitySource).toContain('expect(after.attempts).toBe(0)');
+    expect(transportReliabilitySource).toContain('expect(after.lastError).toBeNull()');
   });
 
   test('device certificate flow navigates the hub to the owner AI room before asserting the composer', () => {
