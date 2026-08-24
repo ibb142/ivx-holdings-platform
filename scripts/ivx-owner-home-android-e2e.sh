@@ -60,8 +60,9 @@ profile_checkpoint() {
   capture_profile_diagnostics "$label"
   test -s "owner-profile-${label}-pid.txt" || rc=97
   test -s "$xml" || rc=98
-  grep -q 'text="Profile"' "$xml" 2>/dev/null || rc=99
-  grep -q 'resource-id="tab-profile"' "$xml" 2>/dev/null || rc=100
+  grep -q 'resource-id="profile-screen-root"' "$xml" 2>/dev/null || rc=99
+  grep -q 'text="Profile"' "$xml" 2>/dev/null || rc=100
+  grep -q 'resource-id="tab-profile"' "$xml" 2>/dev/null || rc=101
 }
 
 # Profile regression recorded on a real Android device: Home remained healthy,

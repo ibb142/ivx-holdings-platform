@@ -178,14 +178,13 @@ export default function ProfileScreen() {
   let routeIndex = 0;
 
   return (
-    <View style={styles.root} testID="profile-root" accessibilityLabel="Profile screen">
-      <SafeAreaView edges={['top']} style={styles.safeArea}>
+    <View style={styles.root} testID="profile-screen-root" accessibilityLabel="Profile screen">
+      <SafeAreaView edges={['top']} style={styles.safeArea} testID="profile-root">
         <View style={styles.header}>
           <View>
             <Text style={styles.eyebrow}>IVX HOLDINGS</Text>
             <Text style={styles.title} testID="profile-title">Profile</Text>
-          </View>
-          <TouchableOpacity
+          </View>          <TouchableOpacity
             style={styles.settingsButton}
             onPress={() => router.push('/security-settings' as any)}
             accessibilityRole="button"
