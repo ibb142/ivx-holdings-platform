@@ -507,6 +507,14 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        <View style={styles.readyBanner} testID="home-runtime-ready">
+          <View style={styles.readyDot} />
+          <View style={styles.readyCopy}>
+            <Text style={styles.readyTitle}>Home ready</Text>
+            <Text style={styles.readySubtitle}>Choose a module to continue.</Text>
+          </View>
+        </View>
+
         <ScrollView
           showsVerticalScrollIndicator={false}
           style={[styles.scrollView, Platform.OS === 'web' && styles.scrollViewWeb]}
@@ -661,6 +669,33 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.textSecondary,
     marginTop: 2},
+  readyBanner: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 10,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.surfaceBorder,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 4},
+  readyDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.primary},
+  readyCopy: {
+    flexDirection: 'column' as const,
+    justifyContent: 'center'},
+  readyTitle: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: Colors.text},
+  readySubtitle: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 1},
   headerActions: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
