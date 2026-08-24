@@ -9,20 +9,10 @@
  * - Status surface for debugging
  * - Duplicate channel prevention
  * - Proper cleanup on unmount
- *
- * Usage:
- * ```tsx
- * useRealtimeChannel({
- *   channelName: 'projects-feed',
- *   table: 'properties',
- *   event: '*',
- *   filter: 'status=eq.active',
- *   queryKeys: [['projects']],
- *   onPayload: (payload) => console.log('Realtime event:', payload),
- * });
- * ```
+ * - Semantic config stability so inline query-key arrays/callbacks cannot create
+ *   an effect -> setState -> render -> resubscribe loop.
  */
-import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
@@ -31,30 +21,20 @@ import type {
   RealtimePostgresChangesPayload,
 } from '@supabase/supabase-js';
 
-// ─── Types ───────────────────────────────────────────────────────────
-
 export type RealtimeEvent = 'INSERT' | 'UPDATE' | 'DELETE' | '*';
 
 export interface RealtimeChannelConfig {
-  /** Unique channel name (prevents duplicates). */
   channelName: string;
-  /** Supabase table to watch. */
   table: string;
-  /** Database schema (default: 'public'). */
   schema?: string;
-  /** Event type (default: '*'). */
   event?: RealtimeEvent;
-  /** Optional filter (e.g. 'user_id=eq.123'). */
   filter?: string;
-  /** React Query keys to invalidate on changes. */
   queryKeys?: string[][];
-  /** Optional delta callback — apply changes directly to cache. */
   onDelta?: (
     queryClient: QueryClient,
     event: RealtimeEvent,
     record: Record<string, unknown>,
   ) => void;
-  /** Optional raw payload callback. */
   onPayload?: (
     payload: RealtimePostgresChangesPayload<Record<string, unknown>>,
   ) => void;
@@ -76,16 +56,31 @@ export interface RealtimeChannelState {
   lastError: string | null;
 }
 
-// ─── Constants ───────────────────────────────────────────────────────
-
 const INVALIDATION_THROTTLE_MS = 2_000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const BASE_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
 
-// ─── Throttled invalidation ──────────────────────────────────────────
-
 const _lastInvalidation = new Map<string, number>();
+
+/**
+ * Only subscription topology belongs in the resubscribe identity.
+ * Callback object identity is intentionally excluded: event handlers read the
+ * latest config from configsRef. This means callers can safely pass inline
+ * arrays/functions without re-running the subscription effect on every render.
+ */
+export function buildRealtimeConfigSignature(configs: RealtimeChannelConfig[]): string {
+  return JSON.stringify(
+    configs.map((config) => ({
+      channelName: config.channelName,
+      table: config.table,
+      schema: config.schema ?? 'public',
+      event: config.event ?? '*',
+      filter: config.filter ?? '',
+      queryKeys: config.queryKeys ?? [],
+    })),
+  );
+}
 
 function throttledInvalidate(
   queryClient: QueryClient,
@@ -101,8 +96,6 @@ function throttledInvalidate(
     void queryClient.invalidateQueries({ queryKey: key });
   }
 }
-
-// ─── Default delta applier ───────────────────────────────────────────
 
 function defaultDeltaApplier(
   queryClient: QueryClient,
@@ -150,16 +143,11 @@ function defaultDeltaApplier(
   );
 }
 
-// ─── Hook ────────────────────────────────────────────────────────────
-
 export function useRealtimeChannel(
   configs: RealtimeChannelConfig[],
   options?: {
-    /** Whether to auto-reconnect (default: true). */
     autoReconnect?: boolean;
-    /** Whether to pause on background (default: true). */
     pauseOnBackground?: boolean;
-    /** Whether to apply delta updates to cache (default: true if onDelta or queryKeys present). */
     applyDeltas?: boolean;
   },
 ): RealtimeChannelState {
@@ -169,6 +157,8 @@ export function useRealtimeChannel(
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPausedRef = useRef(false);
+  const configsRef = useRef(configs);
+  configsRef.current = configs;
 
   const [state, setState] = useState<RealtimeChannelState>({
     status: 'idle',
@@ -183,13 +173,10 @@ export function useRealtimeChannel(
     applyDeltas = true,
   } = options ?? {};
 
-  // Stable channel key for cleanup
-  const channelKey = useMemo(
-    () => configs.map((c) => c.channelName).join(','),
-    [configs],
-  );
+  // Recomputed cheaply each render, but primitive equality keeps effects stable
+  // when callers recreate equivalent arrays/objects.
+  const configSignature = buildRealtimeConfigSignature(configs);
 
-  // ─── Cleanup channels ─────────────────────────────────────────────
   const cleanupChannels = useCallback(() => {
     for (const ch of channelsRef.current) {
       try {
@@ -199,59 +186,61 @@ export function useRealtimeChannel(
     channelsRef.current = [];
   }, []);
 
-  // ─── Setup channels ───────────────────────────────────────────────
   const setupChannels = useCallback(() => {
     cleanupChannels();
 
     if (!isSupabaseConfigured()) {
-      setState((prev) => ({ ...prev, status: 'not_configured' }));
+      setState((prev) => prev.status === 'not_configured'
+        ? prev
+        : { ...prev, status: 'not_configured' });
       return;
     }
 
-    if (configs.length === 0) return;
+    const activeConfigs = configsRef.current;
+    if (activeConfigs.length === 0) return;
 
-    setState((prev) => ({
-      ...prev,
-      status: reconnectAttemptRef.current > 0 ? 'reconnecting' : 'connecting',
-    }));
+    const nextStatus: RealtimeStatus = reconnectAttemptRef.current > 0 ? 'reconnecting' : 'connecting';
+    setState((prev) => prev.status === nextStatus ? prev : { ...prev, status: nextStatus });
 
-    for (const config of configs) {
+    for (const initialConfig of activeConfigs) {
       const channel = supabase
-        .channel(config.channelName)
+        .channel(initialConfig.channelName)
         .on(
           'postgres_changes' as any,
           {
-            event: config.event || '*',
-            schema: config.schema || 'public',
-            table: config.table,
-            ...(config.filter ? { filter: config.filter } : {}),
+            event: initialConfig.event || '*',
+            schema: initialConfig.schema || 'public',
+            table: initialConfig.table,
+            ...(initialConfig.filter ? { filter: initialConfig.filter } : {}),
           },
           (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
             if (!activeRef.current || isPausedRef.current) return;
 
+            // Read the latest callback/query-key references without forcing a
+            // resubscribe just because the caller rendered again.
+            const config = configsRef.current.find(
+              (candidate) => candidate.channelName === initialConfig.channelName,
+            ) ?? initialConfig;
+
             const eventType = (payload.eventType as RealtimeEvent) || '*';
             const record = (payload.new ?? payload.old) as Record<string, unknown> | undefined;
 
-            // Update state
             setState((prev) => ({
               ...prev,
               lastEventAt: Date.now(),
               lastError: null,
             }));
 
-            // Throttled cache invalidation
             if (config.queryKeys && config.queryKeys.length > 0) {
               throttledInvalidate(queryClient, config.queryKeys);
             }
 
-            // Delta cache update
             if (applyDeltas && record && config.queryKeys) {
               for (const key of config.queryKeys) {
                 defaultDeltaApplier(queryClient, key, eventType, record);
               }
             }
 
-            // Custom delta handler
             if (config.onDelta && record) {
               try {
                 config.onDelta(queryClient, eventType, record);
@@ -260,7 +249,6 @@ export function useRealtimeChannel(
               }
             }
 
-            // Raw payload callback
             if (config.onPayload) {
               try {
                 config.onPayload(payload);
@@ -273,33 +261,25 @@ export function useRealtimeChannel(
         .subscribe((status: string) => {
           if (status === 'SUBSCRIBED') {
             reconnectAttemptRef.current = 0;
-            setState((prev) => ({
-              ...prev,
-              status: 'connected',
-              reconnectAttempt: 0,
-              lastError: null,
-            }));
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            setState((prev) => ({
-              ...prev,
-              status: 'error',
-              lastError: status,
-            }));
+            setState((prev) => (
+              prev.status === 'connected' && prev.reconnectAttempt === 0 && prev.lastError === null
+                ? prev
+                : { ...prev, status: 'connected', reconnectAttempt: 0, lastError: null }
+            ));
+            return;
+          }
 
-            // Auto-reconnect with exponential backoff
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            setState((prev) => ({ ...prev, status: 'error', lastError: status }));
+
             if (autoReconnect && activeRef.current && reconnectAttemptRef.current < MAX_RECONNECT_ATTEMPTS) {
               const attempt = reconnectAttemptRef.current;
-              const backoff = Math.min(
-                BASE_BACKOFF_MS * Math.pow(2, attempt),
-                MAX_BACKOFF_MS,
-              );
+              const backoff = Math.min(BASE_BACKOFF_MS * Math.pow(2, attempt), MAX_BACKOFF_MS);
               reconnectAttemptRef.current = attempt + 1;
 
               if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
               reconnectTimerRef.current = setTimeout(() => {
-                if (activeRef.current && !isPausedRef.current) {
-                  setupChannels();
-                }
+                if (activeRef.current && !isPausedRef.current) setupChannels();
               }, backoff);
 
               setState((prev) => ({
@@ -308,36 +288,41 @@ export function useRealtimeChannel(
                 reconnectAttempt: reconnectAttemptRef.current,
               }));
             }
-          } else if (status === 'CLOSED') {
-            setState((prev) => ({ ...prev, status: 'disconnected' }));
+            return;
+          }
+
+          if (status === 'CLOSED') {
+            setState((prev) => prev.status === 'disconnected'
+              ? prev
+              : { ...prev, status: 'disconnected' });
           }
         });
 
       channelsRef.current.push(channel);
     }
-  }, [configs, queryClient, cleanupChannels, autoReconnect, applyDeltas]);
+  }, [configSignature, queryClient, cleanupChannels, autoReconnect, applyDeltas]);
 
-  // ─── Setup on mount / config change ───────────────────────────────
   useEffect(() => {
     activeRef.current = true;
     isPausedRef.current = false;
     setupChannels();
 
-    // AppState handling
     const handleAppState = (nextState: AppStateStatus) => {
       if (nextState === 'active') {
         if (pauseOnBackground) {
           isPausedRef.current = false;
-          // Resubscribe if we were paused
-          if (channelsRef.current.length === 0) {
-            setupChannels();
-          }
+          if (channelsRef.current.length === 0) setupChannels();
         }
-      } else if (nextState === 'background' || nextState === 'inactive') {
+        return;
+      }
+
+      if (nextState === 'background' || nextState === 'inactive') {
         if (pauseOnBackground) {
           isPausedRef.current = true;
           cleanupChannels();
-          setState((prev) => ({ ...prev, status: 'disconnected' }));
+          setState((prev) => prev.status === 'disconnected'
+            ? prev
+            : { ...prev, status: 'disconnected' });
         }
       }
     };
@@ -347,17 +332,13 @@ export function useRealtimeChannel(
     return () => {
       activeRef.current = false;
       appStateSub.remove();
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-      }
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       cleanupChannels();
     };
-  }, [channelKey, setupChannels, cleanupChannels, pauseOnBackground]);
+  }, [configSignature, setupChannels, cleanupChannels, pauseOnBackground]);
 
   return state;
 }
-
-// ─── Convenience hook for single table ───────────────────────────────
 
 export function useRealtimeTable(
   table: string,
@@ -375,22 +356,17 @@ export function useRealtimeTable(
     ) => void;
   },
 ): RealtimeChannelState {
-  const configs = useMemo<RealtimeChannelConfig[]>(
-    () => [
-      {
-        channelName: `rt-${table}`,
-        table,
-        event: options?.event || '*',
-        filter: options?.filter,
-        queryKeys,
-        onPayload: options?.onPayload,
-        onDelta: options?.onDelta,
-      },
-    ],
-    [table, options?.event, options?.filter, queryKeys, options?.onPayload, options?.onDelta],
-  );
-
-  return useRealtimeChannel(configs);
+  return useRealtimeChannel([
+    {
+      channelName: `rt-${table}`,
+      table,
+      event: options?.event || '*',
+      filter: options?.filter,
+      queryKeys,
+      onPayload: options?.onPayload,
+      onDelta: options?.onDelta,
+    },
+  ]);
 }
 
 export default useRealtimeChannel;
