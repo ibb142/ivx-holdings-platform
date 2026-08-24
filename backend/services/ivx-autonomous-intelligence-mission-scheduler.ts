@@ -1,9 +1,6 @@
 /**
  * IVX Autonomous Intelligence Mission Scheduler (AIMS).
- *
- * Starts one real low-risk Senior Developer mission, persists its full state,
- * and never re-runs an already-satisfied mission merely because production
- * received a newer deploy. A new mission requires a new marker/version.
+ * One real low-risk mission per marker, fail-closed, durable and deduplicated.
  */
 import { randomUUID } from 'node:crypto';
 import {
@@ -19,6 +16,7 @@ import {
   type IVXWorkerJob,
   type IVXWorkerJobResult,
 } from './ivx-senior-developer-worker';
+import { startAutonomousRuntimeMaintenance } from './ivx-autonomous-runtime-maintenance';
 
 export const IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER =
   'ivx-autonomous-intelligence-mission-scheduler-2026-08-23';
@@ -41,18 +39,9 @@ const STATE_PATH = 'logs/audit/autonomous-intelligence-mission-scheduler/state.j
 const EVENTS_PATH = 'logs/audit/autonomous-intelligence-mission-scheduler/events.jsonl';
 
 export type MissionSchedulerJobStatus =
-  | 'queued'
-  | 'running'
-  | 'patching'
-  | 'testing'
-  | 'committing'
-  | 'deploying'
-  | 'verifying'
-  | 'completed'
-  | 'failed'
-  | 'blocked'
-  | 'cancelled'
-  | 'unknown';
+  | 'queued' | 'running' | 'patching' | 'testing' | 'committing'
+  | 'deploying' | 'verifying' | 'completed' | 'failed' | 'blocked'
+  | 'cancelled' | 'unknown';
 
 export type MissionSchedulerState = {
   marker: string;
@@ -84,28 +73,23 @@ export type MissionSchedulerState = {
 let currentState: MissionSchedulerState | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
+function nowIso(): string { return new Date().toISOString(); }
 function getCurrentDeploySha(): string | null {
-  return (
-    process.env.RENDER_GIT_COMMIT?.trim() ||
-    process.env.GIT_COMMIT_SHA?.trim() ||
-    process.env.SOURCE_VERSION?.trim() ||
-    null
-  );
+  return process.env.RENDER_GIT_COMMIT?.trim()
+    || process.env.GIT_COMMIT_SHA?.trim()
+    || process.env.SOURCE_VERSION?.trim()
+    || null;
 }
 
 export function isMissionAlreadySatisfied(state: MissionSchedulerState): boolean {
   return Boolean(
     state.marker === IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER
-      && state.status === 'completed'
-      && state.prMerged === true
-      && state.prNumber
-      && state.commitSha
-      && state.changedFiles.includes(EVIDENCE_PATH)
-      && !state.error,
+    && state.status === 'completed'
+    && state.prMerged === true
+    && state.prNumber
+    && state.commitSha
+    && state.changedFiles.includes(EVIDENCE_PATH)
+    && !state.error,
   );
 }
 
@@ -113,16 +97,14 @@ export function verifyLiveDeployForState(state: MissionSchedulerState): MissionS
   if (state.status !== 'completed' || !state.prMerged || !state.prMergeCommitSha) return state;
   const currentDeploySha = getCurrentDeploySha();
   if (!currentDeploySha || currentDeploySha !== state.prMergeCommitSha) return state;
-  const staleResumeError = state.error && (
-    state.error.includes('no changed files') ||
-    state.error.includes('stale evidence')
-  );
+  const staleResumeError = Boolean(state.error && (
+    state.error.includes('no changed files') || state.error.includes('stale evidence')
+  ));
   if (state.liveCommit === currentDeploySha && state.healthOk === true && !staleResumeError) return state;
   return {
     ...state,
     liveCommit: currentDeploySha,
     healthOk: true,
-    deployId: state.deployId ?? null,
     error: staleResumeError ? null : state.error,
     stageDetail: 'Mission completed and verified live on current production deploy.',
     updatedAt: nowIso(),
@@ -159,86 +141,60 @@ function emptyState(): MissionSchedulerState {
 }
 
 async function loadState(): Promise<MissionSchedulerState> {
-  const currentDeploySha = getCurrentDeploySha();
-  if (isDurableStoreConfigured()) {
-    try {
-      const parsed = await readDurableJson<MissionSchedulerState | null>(STATE_PATH, null);
-      if (parsed && parsed.marker === IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER) {
-        if (currentDeploySha && parsed.deploySha !== currentDeploySha) {
-          if (isMissionAlreadySatisfied(parsed)) {
-            return {
-              ...parsed,
-              deploySha: currentDeploySha,
-              duplicateSuppressed: true,
-              duplicateSuppressedAt: nowIso(),
-              stageDetail: 'Mission already satisfied on an ancestor main commit; duplicate evidence run suppressed.',
-              updatedAt: nowIso(),
-            };
-          }
-          const fresh = emptyState();
-          console.log('[IVX AIMS] New deploy detected; resetting incomplete mission state', {
-            previousDeploySha: parsed.deploySha,
-            currentDeploySha,
-            previousJobId: parsed.missionJobId,
-          });
-          return fresh;
-        }
-        return parsed;
+  const deploySha = getCurrentDeploySha();
+  if (!isDurableStoreConfigured()) return emptyState();
+  try {
+    const parsed = await readDurableJson<MissionSchedulerState | null>(STATE_PATH, null);
+    if (!parsed || parsed.marker !== IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER) return emptyState();
+    if (deploySha && parsed.deploySha !== deploySha) {
+      if (isMissionAlreadySatisfied(parsed)) {
+        return {
+          ...parsed,
+          deploySha,
+          duplicateSuppressed: true,
+          duplicateSuppressedAt: nowIso(),
+          stageDetail: 'Mission already satisfied on main; duplicate evidence run suppressed.',
+          updatedAt: nowIso(),
+        };
       }
-    } catch {
-      // fall through to a fresh state; execution still fails closed later if
-      // durable persistence cannot be written.
+      return emptyState();
     }
+    return parsed;
+  } catch {
+    return emptyState();
   }
-  return emptyState();
 }
 
 async function saveState(state: MissionSchedulerState): Promise<void> {
-  const next: MissionSchedulerState = { ...state, updatedAt: nowIso() };
+  const next = { ...state, updatedAt: nowIso() };
   currentState = next;
-  if (isDurableStoreConfigured()) {
-    try {
-      await writeDurableJson(STATE_PATH, next);
-      await appendDurableEvent(EVENTS_PATH, {
-        type: 'mission_scheduler_state',
-        marker: next.marker,
-        schedulerJobId: next.schedulerJobId,
-        missionJobId: next.missionJobId,
-        status: next.status,
-        stage: next.stage,
-        progressPercent: next.progressPercent,
-        stageDetail: next.stageDetail,
-        commitSha: next.commitSha,
-        prNumber: next.prNumber,
-        prMerged: next.prMerged,
-        deployId: next.deployId,
-        liveCommit: next.liveCommit,
-        healthOk: next.healthOk,
-        duplicateSuppressed: next.duplicateSuppressed === true,
-        updatedAt: next.updatedAt,
-      });
-    } catch {
-      // The caller still has currentState, but production certification must use
-      // the durable store rather than treating an in-memory update as proof.
-    }
+  if (!isDurableStoreConfigured()) return;
+  try {
+    await writeDurableJson(STATE_PATH, next);
+    await appendDurableEvent(EVENTS_PATH, {
+      type: 'mission_scheduler_state',
+      marker: next.marker,
+      schedulerJobId: next.schedulerJobId,
+      missionJobId: next.missionJobId,
+      status: next.status,
+      stage: next.stage,
+      progressPercent: next.progressPercent,
+      commitSha: next.commitSha,
+      prNumber: next.prNumber,
+      prMerged: next.prMerged,
+      deployId: next.deployId,
+      liveCommit: next.liveCommit,
+      healthOk: next.healthOk,
+      duplicateSuppressed: next.duplicateSuppressed === true,
+      updatedAt: next.updatedAt,
+    });
+  } catch {
+    // In-memory state is not accepted as production certification evidence.
   }
 }
 
 function mapJobStatus(job: IVXWorkerJob): MissionSchedulerJobStatus {
-  switch (job.status) {
-    case 'queued': return 'queued';
-    case 'running': return 'running';
-    case 'patching': return 'patching';
-    case 'testing': return 'testing';
-    case 'committing': return 'committing';
-    case 'deploying': return 'deploying';
-    case 'verifying': return 'verifying';
-    case 'completed': return 'completed';
-    case 'failed': return 'failed';
-    case 'blocked': return 'blocked';
-    case 'cancelled': return 'cancelled';
-    default: return 'unknown';
-  }
+  return job.status as MissionSchedulerJobStatus;
 }
 
 function mergeJobIntoState(state: MissionSchedulerState, job: IVXWorkerJob): MissionSchedulerState {
@@ -252,8 +208,8 @@ function mergeJobIntoState(state: MissionSchedulerState, job: IVXWorkerJob): Mis
     stage: job.stage,
     progressPercent: job.progressPercent,
     stageDetail: job.stageDetail,
-    inspectedFiles: inspected.length > 0 ? inspected : state.inspectedFiles,
-    changedFiles: changed.length > 0 ? changed : state.changedFiles,
+    inspectedFiles: inspected.length ? inspected : state.inspectedFiles,
+    changedFiles: changed.length ? changed : state.changedFiles,
     commitSha: result?.commitSha ?? state.commitSha,
     prNumber: result?.prNumber ?? state.prNumber,
     prUrl: result?.prUrl ?? state.prUrl,
@@ -271,29 +227,27 @@ function mergeJobIntoState(state: MissionSchedulerState, job: IVXWorkerJob): Mis
 }
 
 async function refreshMissionJob(): Promise<void> {
-  if (!currentState || !currentState.missionJobId) return;
+  if (!currentState?.missionJobId) return;
   try {
     const job = await getSeniorDeveloperJob(currentState.missionJobId);
-    if (job) {
-      currentState = mergeJobIntoState(currentState, job);
-      currentState = verifyLiveDeployForState(currentState);
-      await saveState(currentState);
-    }
+    if (!job) return;
+    currentState = verifyLiveDeployForState(mergeJobIntoState(currentState, job));
+    await saveState(currentState);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'refresh failed';
-    console.warn('[IVX AIMS] refresh failed', { message: message.slice(0, 200) });
+    console.warn('[IVX AIMS] refresh failed', {
+      message: error instanceof Error ? error.message.slice(0, 200) : 'refresh failed',
+    });
   }
 }
 
 export async function startAutonomousIntelligenceMissionScheduler(): Promise<void> {
-  console.log('[IVX AIMS] Starting autonomous intelligence mission scheduler...');
+  startAutonomousRuntimeMaintenance();
   const state = await loadState();
   currentState = state;
-
-  const deploySha = getCurrentDeploySha();
   const workerEnabled = process.env.IVX_SENIOR_DEV_WORKER_ENABLED === 'true';
+
   console.log('[IVX AIMS] Scheduler boot diagnostics', {
-    deploySha,
+    deploySha: getCurrentDeploySha(),
     workerEnabled,
     durableStore: isDurableStoreConfigured(),
     existingMissionJobId: state.missionJobId,
@@ -302,32 +256,25 @@ export async function startAutonomousIntelligenceMissionScheduler(): Promise<voi
   });
 
   if (!workerEnabled) {
-    currentState = {
-      ...currentState,
+    await saveState({
+      ...state,
       status: 'failed',
       stage: 'FAILED',
       stageDetail: 'IVX_SENIOR_DEV_WORKER_ENABLED is not true; mission scheduler cannot enqueue a real job.',
       error: 'IVX_SENIOR_DEV_WORKER_ENABLED is not true',
       updatedAt: nowIso(),
-    };
-    await saveState(currentState);
+    });
     return;
   }
 
   if (isMissionAlreadySatisfied(state)) {
-    currentState = {
+    await saveState({
       ...state,
-      deploySha: deploySha ?? state.deploySha,
+      deploySha: getCurrentDeploySha() ?? state.deploySha,
       duplicateSuppressed: true,
       duplicateSuppressedAt: nowIso(),
       stageDetail: 'Mission already satisfied; duplicate evidence/code-change job suppressed.',
       updatedAt: nowIso(),
-    };
-    await saveState(currentState);
-    console.log('[IVX AIMS] Duplicate mission suppressed', {
-      missionJobId: state.missionJobId,
-      commitSha: state.commitSha,
-      prNumber: state.prNumber,
     });
     return;
   }
@@ -337,8 +284,7 @@ export async function startAutonomousIntelligenceMissionScheduler(): Promise<voi
     try {
       const existing = await getSeniorDeveloperJob(jobId);
       if (existing && !['completed', 'failed', 'blocked', 'cancelled'].includes(existing.status)) {
-        console.log('[IVX AIMS] Attaching to existing active mission job', { jobId });
-        currentState = mergeJobIntoState(currentState, existing);
+        currentState = mergeJobIntoState(state, existing);
         await saveState(currentState);
       } else {
         jobId = null;
@@ -374,10 +320,9 @@ export async function startAutonomousIntelligenceMissionScheduler(): Promise<voi
         executionMode: 'code_change',
         actor: 'SYSTEM',
       });
-
       jobId = enqueued.job.jobId;
       currentState = {
-        ...currentState,
+        ...state,
         missionJobId: jobId,
         status: mapJobStatus(enqueued.job),
         stage: enqueued.job.stage,
@@ -388,23 +333,16 @@ export async function startAutonomousIntelligenceMissionScheduler(): Promise<voi
         updatedAt: nowIso(),
       };
       await saveState(currentState);
-      console.log('[IVX AIMS] Real mission job enqueued', {
-        jobId,
-        attached: enqueued.attached,
-        ownerId: OWNER_ID,
-      });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'enqueue failed';
-      console.error('[IVX AIMS] Failed to enqueue mission job', { message: message.slice(0, 300) });
-      currentState = {
-        ...currentState,
+      await saveState({
+        ...state,
         status: 'failed',
         stage: 'FAILED',
         stageDetail: `Mission scheduler failed to enqueue job: ${message.slice(0, 200)}`,
         error: message.slice(0, 300),
         updatedAt: nowIso(),
-      };
-      await saveState(currentState);
+      });
       return;
     }
   }
@@ -416,10 +354,8 @@ export async function startAutonomousIntelligenceMissionScheduler(): Promise<voi
 }
 
 export function stopAutonomousIntelligenceMissionScheduler(): void {
-  if (pollTimer) {
-    clearInterval(pollTimer);
-    pollTimer = null;
-  }
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
   currentState = null;
 }
 
@@ -431,16 +367,15 @@ export async function getMissionSchedulerStatus(): Promise<{
   state: MissionSchedulerState;
   workerResult: IVXWorkerJobResult | null;
 }> {
-  const state = currentState ?? (await loadState());
+  const state = currentState ?? await loadState();
   let workerResult: IVXWorkerJobResult | null = null;
   if (state.missionJobId) {
     try {
       const job = await getSeniorDeveloperJob(state.missionJobId);
-      if (job?.result) {
-        workerResult = job.result;
-      } else {
+      if (job?.result) workerResult = job.result;
+      else {
         const ledger = await listSeniorDeveloperProofLedger(100);
-        workerResult = ledger.find((e) => e.jobId === state.missionJobId) ?? null;
+        workerResult = ledger.find((entry) => entry.jobId === state.missionJobId) ?? null;
       }
     } catch {
       workerResult = null;
