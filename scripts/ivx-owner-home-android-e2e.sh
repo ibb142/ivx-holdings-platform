@@ -31,10 +31,19 @@ command -v unzip >/dev/null 2>&1 || {
 # guard to 0 even when the fail-safe marker IS present — that false skip once
 # produced a green Android certificate run without certifying Profile. Dump to
 # a temp file and grep the file instead. Any bundle read failure fails closed.
+# IVX IA (owner AI) chat certification applies only to builds that carry the
+# chat certificate composer marker (accessibilityLabel on the composer dock).
+# The pinned pre-repair APK of the fast-retest workflow predates that marker,
+# so chat is skipped there exactly like Profile; fresh-APK certificate runs
+# (pull_request + post-merge push on main) always carry it.
+CHAT_CERT_CAPABLE=0
 PROFILE_BUNDLE_DUMP="$(mktemp)"
 if unzip -p "$APK_PATH" assets/index.android.bundle > "$PROFILE_BUNDLE_DUMP" 2>/dev/null; then
   if grep -q "IVX_PROFILE_FULL_FAILSAFE_MARKER" "$PROFILE_BUNDLE_DUMP"; then
     PROFILE_CERT_CAPABLE=1
+  fi
+  if grep -q "IVX owner chat certificate v1" "$PROFILE_BUNDLE_DUMP"; then
+    CHAT_CERT_CAPABLE=1
   fi
 else
   rm -f "$PROFILE_BUNDLE_DUMP"
@@ -43,6 +52,7 @@ else
 fi
 rm -f "$PROFILE_BUNDLE_DUMP"
 echo "profile_certification_capable=$PROFILE_CERT_CAPABLE"
+echo "chat_certification_capable=$CHAT_CERT_CAPABLE"
 
 set +e
 timeout 240s "$MAESTRO" test expo/.maestro/ivx-owner-home-certificate.yaml \
@@ -119,6 +129,51 @@ if [ "$rc" -eq 0 ] && [ "$PROFILE_CERT_CAPABLE" -eq 1 ]; then profile_checkpoint
 if [ "$rc" -eq 0 ] && [ "$PROFILE_CERT_CAPABLE" -eq 1 ]; then sleep 2; profile_checkpoint 2s; fi
 if [ "$rc" -eq 0 ] && [ "$PROFILE_CERT_CAPABLE" -eq 1 ]; then sleep 3; profile_checkpoint 5s; fi
 if [ "$rc" -eq 0 ] && [ "$PROFILE_CERT_CAPABLE" -eq 1 ]; then sleep 5; profile_checkpoint 10s; fi
+
+capture_chat_diagnostics() {
+  local label="$1"
+  local xml="owner-chat-${label}.xml"
+  timeout 10s adb wait-for-device >/dev/null 2>&1 || true
+  timeout 10s adb shell pidof com.ivxholdings.app.owner > "owner-chat-${label}-pid.txt" 2>&1 || true
+  timeout 20s adb shell uiautomator dump "/sdcard/${xml}" >/dev/null 2>&1 || true
+  timeout 20s adb pull "/sdcard/${xml}" "$xml" >/dev/null 2>&1 || true
+  timeout 15s adb exec-out screencap -p > "owner-chat-${label}.png" 2>/dev/null || true
+  timeout 20s adb logcat -d -v threadtime > "owner-chat-${label}-logcat.txt" 2>&1 || true
+}
+
+chat_checkpoint() {
+  local label="$1"
+  local xml="owner-chat-${label}.xml"
+  capture_chat_diagnostics "$label"
+  test -s "owner-chat-${label}-pid.txt" || rc=110
+  test -s "$xml" || rc=111
+  grep -q 'resource-id="ivx-owner-chat-composer-dock"' "$xml" 2>/dev/null || rc=112
+  grep -q 'resource-id="ivx-owner-chat-input"' "$xml" 2>/dev/null || rc=113
+  grep -q 'text="QA cert probe chat check"' "$xml" 2>/dev/null || rc=114
+  grep -q 'resource-id="tab-chat"' "$xml" 2>/dev/null || rc=115
+}
+
+# IVX IA chat certificate — third Maestro flow on the same real owner session.
+# The composer and thread render locally; the sent message must land in the
+# thread exactly once (owner's 20-step contract, steps 3-8). Fail closed.
+if [ "$rc" -eq 0 ] && [ "$CHAT_CERT_CAPABLE" -eq 1 ]; then
+  adb logcat -c >/dev/null 2>&1 || true
+  timeout 150s "$MAESTRO" test expo/.maestro/ivx-owner-chat-certificate.yaml \
+    --format junit \
+    --output owner-chat-maestro.xml
+  chat_maestro_rc=$?
+
+  # Always collect evidence even when the Maestro assertion fails.
+  capture_chat_diagnostics failure-or-pass
+  if [ "$chat_maestro_rc" -ne 0 ]; then
+    rc=$chat_maestro_rc
+  fi
+fi
+
+if [ "$rc" -eq 0 ] && [ "$CHAT_CERT_CAPABLE" -eq 1 ]; then chat_checkpoint immediate; fi
+if [ "$rc" -eq 0 ] && [ "$CHAT_CERT_CAPABLE" -eq 1 ]; then sleep 2; chat_checkpoint 2s; fi
+if [ "$rc" -eq 0 ] && [ "$CHAT_CERT_CAPABLE" -eq 1 ]; then sleep 3; chat_checkpoint 5s; fi
+if [ "$rc" -eq 0 ] && [ "$CHAT_CERT_CAPABLE" -eq 1 ]; then sleep 5; chat_checkpoint 10s; fi
 
 # NOTE: no in-run second cold launch. A fourth consecutive Maestro flow on the
 # software-rendered emulator hangs the device (evidence: run 32737607402 — the

@@ -6730,6 +6730,7 @@ export default function IVXOwnerChatRoute() {
                 transform: [{ translateY: -manualKeyboardLift }]},
             ]}
             testID="ivx-owner-chat-composer-dock"
+            accessibilityLabel="IVX owner chat certificate v1"
           >
 
             <View

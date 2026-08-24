@@ -1,0 +1,48 @@
+appId: com.ivxholdings.app.owner
+name: IVX Owner Chat AI Certificate
+tags:
+  - android-qa
+  - owner-auth
+  - chat
+  - ai
+  - black-screen-regression
+---
+# Device certificate for the IVX IA (owner AI) chat. Runs as the third flow of
+# scripts/ivx-owner-home-android-e2e.sh, directly after the Profile certificate,
+# continuing the same real owner session (no clearState relaunch). The complete
+# 20-step chat lifecycle contract (pagination, background/resume, restart
+# persistence) stays hard-gated at source level by
+# expo/__tests__/chat-certificate-flow-regression.test.ts in the IVX QA Suite;
+# this device flow proves the core AI-chat contract on a real emulator:
+# tab reachable, composer renders, owner can type, send delivers the exact
+# message once into the thread, and the composer survives (no black screen,
+# no crash, no auth fallback).
+- tapOn:
+    id: "tab-chat"
+- extendedWaitUntil:
+    visible:
+      id: "ivx-owner-chat-composer-dock"
+    timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: "ivx-owner-chat-input"
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "ivx-owner-chat-send"
+    timeout: 10000
+- assertNotVisible: "Sign In Failed"
+- assertNotVisible: "Login service temporarily unavailable"
+- tapOn:
+    id: "ivx-owner-chat-input"
+- inputText: "QA cert probe chat check"
+- tapOn:
+    id: "ivx-owner-chat-send"
+- extendedWaitUntil:
+    visible: "QA cert probe chat check"
+    timeout: 20000
+- assertVisible:
+    id: "ivx-owner-chat-composer-dock"
+- assertVisible:
+    id: "ivx-owner-chat-input"
+- assertNotVisible: "Sign In Failed"
