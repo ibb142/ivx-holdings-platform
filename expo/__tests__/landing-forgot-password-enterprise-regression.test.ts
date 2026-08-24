@@ -33,7 +33,9 @@ describe('Landing + Forgot Password enterprise regression gate', () => {
   it('keeps a real reset page with password-update capability and password controls', () => {
     expect(reset).toContain('updateUser');
     expect(reset.toLowerCase()).toContain('password');
-    expect(reset).toContain('https://ivxholding.com');
+    expect(reset).toContain("sb.auth.updateUser({password:p1})");
+    expect(reset).toContain("sb.auth.signOut({scope:'local'})");
+    expect(reset).toContain("location.href='/'");
   });
 
   it('does not expose a service-role key in the public landing recovery runtime', () => {
