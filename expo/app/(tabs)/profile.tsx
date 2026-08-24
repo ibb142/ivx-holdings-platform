@@ -1,402 +1,261 @@
-import React, { useEffect, useMemo } from 'react';
-import { IVX_LOGO_SOURCE } from '@/constants/brand';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  Image,
-  useWindowDimensions} from 'react-native';
+import React, { useMemo } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { IVXImage } from '@/components/ivx';
-import { RefreshControl } from 'react-native';
-import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
-import Constants from 'expo-constants';
-import {
-  User,
-  Wallet,
-  FileText,
-  Bell,
-  Shield,
-  HelpCircle,
-  Settings,
-  LogOut,
-  ChevronRight,
-  BadgeCheck,
-  Globe,
-  LayoutDashboard,
-  Mail,
-  MapPin,
-  Gift,
-  MessageSquare,
-  PieChart,
-  BookOpen,
-  Briefcase,
-  Handshake,
-  RefreshCw,
-  Users,
-  Scale,
-  Brain,
-  Code2,
-  Rocket,
-  BarChart3,
-  CreditCard,
-  Cpu} from 'lucide-react-native';
-import Colors from '@/constants/colors';
-import { ShimmerIndicator } from '@/components/ShimmerIndicator';
-import IVXBrandIcon from '@/components/IVXBrandIcon';
-import { getResponsiveSize, isCompactScreen, isExtraSmallScreen } from '@/lib/responsive';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/lib/auth-context';
-import { useTranslation, useI18n } from '@/lib/i18n-context';
-import { useAnalytics } from '@/lib/analytics-context';
-import { formatDollar } from '@/lib/formatters';
-import { renderSafeViewChildren } from '@/components/SafeViewChildren';
-import { MemberBadge } from '@/components/MemberBadge';
-import { getMyClassification, type MemberTier, type InvestorStatus } from '@/lib/classification-service';
 
-interface MenuItemProps {
-  icon: React.ReactNode;
+export const IVX_PROFILE_FULL_FAILSAFE_MARKER = 'ivx-profile-full-failsafe-2026-08-24';
+
+type RouteItem = {
   title: string;
-  subtitle?: string;
-  onPress: () => void;
-  showBadge?: boolean;
-  badgeColor?: string;
-  isCompact?: boolean;
-  testID?: string;
+  subtitle: string;
+  route: string;
+  ownerOnly?: boolean;
+  memberOnly?: boolean;
+};
+
+type Section = {
+  title: string;
+  items: RouteItem[];
+};
+
+const SECTIONS: Section[] = [
+  {
+    title: 'ACCOUNT',
+    items: [
+      { title: 'Personal Information', subtitle: 'Name, email and phone', route: '/personal-info' },
+      { title: 'Identity Verification', subtitle: 'Optional identity and KYC information', route: '/kyc-verification', memberOnly: true },
+      { title: 'Tax Information', subtitle: 'Country and tax profile', route: '/tax-info' },
+    ],
+  },
+  {
+    title: 'WALLET & PAYMENTS',
+    items: [
+      { title: 'Wallet & Payments', subtitle: 'Balance, funding and transactions', route: '/wallet' },
+    ],
+  },
+  {
+    title: 'DOCUMENTS & REPORTS',
+    items: [
+      { title: 'Analytics Report', subtitle: 'Traffic and investment insights', route: '/analytics-report' },
+      { title: 'SMS Reports', subtitle: 'Messaging delivery reports', route: '/sms-reports' },
+      { title: 'Investor Prospectus', subtitle: 'Investment and profit projections', route: '/investor-prospectus' },
+      { title: 'Statements', subtitle: 'Monthly account statements', route: '/statements' },
+      { title: 'Tax Documents', subtitle: 'Annual tax reports', route: '/tax-documents' },
+      { title: 'Contract Generator', subtitle: 'Create investment contracts', route: '/contract-generator' },
+    ],
+  },
+  {
+    title: 'PREFERENCES',
+    items: [
+      { title: 'Language', subtitle: 'Choose application language', route: '/language' },
+      { title: 'Notifications', subtitle: 'Email, push and SMS preferences', route: '/notification-settings' },
+      { title: 'Security', subtitle: 'Password, biometrics and account protection', route: '/security-settings' },
+    ],
+  },
+  {
+    title: 'INVESTOR TOOLS',
+    items: [
+      { title: 'VIP Tiers', subtitle: 'Membership and investor benefits', route: '/vip-tiers' },
+      { title: 'Gift Shares', subtitle: 'Gift investment shares', route: '/gift-shares' },
+      { title: 'Auto Reinvest', subtitle: 'Automatic reinvestment controls', route: '/auto-reinvest' },
+      { title: 'Top Investors', subtitle: 'Copy investing and investor discovery', route: '/copy-investing' },
+    ],
+  },
+  {
+    title: 'REWARDS & OPPORTUNITIES',
+    items: [
+      { title: 'Viral Growth Engine', subtitle: 'Growth and sharing rewards', route: '/viral-growth' },
+      { title: 'Referrals & Earnings', subtitle: 'Referral activity and rewards', route: '/referrals' },
+      { title: 'Become an Agent', subtitle: 'Agent application', route: '/agent-apply' },
+      { title: 'Become a Broker', subtitle: 'Broker application', route: '/broker-apply' },
+    ],
+  },
+  {
+    title: 'BUSINESS CARD',
+    items: [
+      { title: 'IVX Business Card', subtitle: 'QR card, social links and sharing', route: '/business-card' },
+    ],
+  },
+  {
+    title: 'SUPPORT',
+    items: [
+      { title: 'IVX Agent Hub', subtitle: 'Domain agents and assistance', route: '/agent-hub' },
+      { title: 'Knowledge Base', subtitle: 'Architecture, investing, QA and security', route: '/knowledge-base' },
+      { title: 'App Guide', subtitle: 'Learn how to use IVX Holdings', route: '/app-guide' },
+      { title: 'App Demo', subtitle: 'Interactive product walkthrough', route: '/app-demo' },
+      { title: 'Help & Support', subtitle: 'Open IVX support chat', route: '/(tabs)/chat' },
+      { title: 'Legal', subtitle: 'Terms, policies and legal information', route: '/legal' },
+    ],
+  },
+  {
+    title: 'AI & AUTOMATION',
+    items: [
+      { title: 'AI & Automation Report', subtitle: 'AI modules and automation status', route: '/ai-automation-report' },
+      { title: 'API Integration List', subtitle: 'Connected APIs and integration references', route: '/api-list' },
+    ],
+  },
+  {
+    title: 'ADMINISTRATION',
+    items: [
+      { title: 'Admin Panel', subtitle: 'Administration dashboard', route: '/admin', ownerOnly: true },
+    ],
+  },
+  {
+    title: 'COMPANY',
+    items: [
+      { title: 'IVX Holdings LLC', subtitle: 'Company and contact information', route: '/company-info' },
+    ],
+  },
+];
+
+function safeString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
 }
 
-function MenuItem({ icon, title, subtitle, onPress, showBadge, badgeColor, isCompact = false, testID }: MenuItemProps) {
+function ProfileRow({ item, onPress, index }: { item: RouteItem; onPress: () => void; index: number }) {
   return (
     <TouchableOpacity
-      style={[styles.menuItem, { padding: isCompact ? 12 : 16 }]}
+      style={styles.row}
       onPress={onPress}
-      accessible={true}
+      activeOpacity={0.75}
+      accessible
       accessibilityRole="button"
-      accessibilityLabel={`${title}${subtitle ? `, ${subtitle}` : ''}${showBadge ? ', verified' : ''}`}
-      accessibilityHint={`Opens ${title}`}
-      testID={testID}
+      accessibilityLabel={`${item.title}. ${item.subtitle}`}
+      testID={`profile-route-${index}`}
     >
-      <View style={styles.menuItemLeft}>
-        <View style={[styles.menuItemIcon, { width: isCompact ? 36 : 40, height: isCompact ? 36 : 40 }]}>{renderSafeViewChildren(icon)}</View>
-        <View>
-          <Text style={[styles.menuItemTitle, { fontSize: isCompact ? 13 : 15 }]}>{title}</Text>
-          {subtitle && <Text style={[styles.menuItemSubtitle, { fontSize: isCompact ? 11 : 12 }]}>{subtitle}</Text>}
-        </View>
+      <View style={styles.rowCopy}>
+        <Text style={styles.rowTitle}>{item.title}</Text>
+        <Text style={styles.rowSubtitle}>{item.subtitle}</Text>
       </View>
-      <View style={styles.menuItemRight}>
-        {showBadge && (
-          <View style={[styles.badge, { backgroundColor: badgeColor || Colors.success }]}>
-            <BadgeCheck size={isCompact ? 12 : 14} color={Colors.white} />
-          </View>
-        )}
-        <ChevronRight size={isCompact ? 18 : 20} color={Colors.textTertiary} />
-      </View>
+      <Text style={styles.chevron}>›</Text>
     </TouchableOpacity>
   );
 }
 
 export default function ProfileScreen() {
-  const { width } = useWindowDimensions();
   const router = useRouter();
-  const { logout, profileData } = useAuth();
-  const { t } = useTranslation();
-  const { currentLanguage } = useI18n();
-  const { trackAction } = useAnalytics();
+  const { profileData, logout } = useAuth();
 
-  const screenSize = getResponsiveSize(width);
-  const isCompact = isCompactScreen(screenSize);
-  const isXs = isExtraSmallScreen(screenSize);
-
-  const balanceQuery = useQuery({
-    queryKey: ['wallet-balance', 'profile'],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
-      const { data } = await supabase.from('wallets').select('*').eq('user_id', user.id).single();
-      return data;
-    },
-    staleTime: 1000 * 60 * 2,
-    enabled: !!profileData});
-  const isLoading = false; // IVX: loading state placeholder
-
-  useRealtimeTable('wallets', [['wallet-balance']]);
-  useRealtimeTable('profiles', [['member-classification']]);
-
-  const currentUser = useMemo(() => {
-    const pd = profileData;
-    const role = ((pd as any)?.role ?? '') as string;
-    const isOwnerOrAdmin = role === 'owner' || role === 'admin';
+  const profile = useMemo(() => {
+    const raw = (profileData ?? {}) as Record<string, unknown>;
+    const firstName = safeString(raw.firstName);
+    const lastName = safeString(raw.lastName);
+    const email = safeString(raw.email);
+    const role = safeString(raw.role).toLowerCase();
     return {
-      id: pd?.id ?? '',
-      email: pd?.email ?? '',
-      firstName: pd?.firstName ?? '',
-      lastName: pd?.lastName ?? '',
-      avatar: (pd as any)?.avatar ?? '',
-      phone: (pd as any)?.phone ?? '',
-      country: (pd as any)?.country ?? '',
+      displayName: `${firstName} ${lastName}`.trim() || 'IVX Member',
+      email,
       role,
-      isOwnerOrAdmin,
-      kycStatus: (isOwnerOrAdmin ? 'approved' : (pd?.kycStatus ?? 'pending')) as 'approved' | 'pending' | 'in_review' | 'rejected',
-      walletBalance: balanceQuery.data?.available ?? (pd as any)?.walletBalance ?? 0,
-      totalInvested: balanceQuery.data?.invested ?? (pd as any)?.totalInvested ?? 0,
-      totalReturns: (pd as any)?.totalReturns ?? 0};
-  }, [profileData, balanceQuery.data]);
+    };
+  }, [profileData]);
 
-  const classificationQuery = useQuery({
-    queryKey: ['member-classification', 'profile'],
-    queryFn: async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return null;
-      const result = await getMyClassification(session.access_token);
-      return result.ok ? result.classification ?? null : null;
-    },
-    staleTime: 1000 * 60 * 5,
-    enabled: !!profileData && !currentUser.isOwnerOrAdmin});
+  const isOwner = profile.role === 'owner' || profile.role === 'admin';
 
-  const ownerEmail = (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim().toLowerCase();
-  const isOwnerSession = currentUser.isOwnerOrAdmin
-    || (!!currentUser.email && currentUser.email.trim().toLowerCase() === ownerEmail);
-  const ownerCardTitle = isOwnerSession ? 'Owner Console' : 'Owner Login';
-  const ownerCardSubtitle = isOwnerSession
-    ? 'Signed in — open owner console'
-    : 'Direct approved-owner sign in';
+  const visibleSections = useMemo(
+    () => SECTIONS.map((section) => ({
+      ...section,
+      items: section.items.filter((item) => (!item.ownerOnly || isOwner) && (!item.memberOnly || !isOwner)),
+    })).filter((section) => section.items.length > 0),
+    [isOwner],
+  );
 
-  const avatarUri = typeof currentUser.avatar === 'string' ? currentUser.avatar.trim() : '';
-  const avatarUriValid = avatarUri.length > 0 && avatarUri !== 'null' && avatarUri !== 'undefined';
-
-  const openOwnerLogin = (source: string) => {
-    if (isOwnerSession) {
-      console.log(`[Profile] Owner Console (${source}) tapped -> /admin/ivx-developer-workspace`);
+  const openOwner = () => {
+    if (isOwner) {
       router.push('/admin/ivx-developer-workspace' as any);
       return;
     }
-    console.log(`[Profile] Owner Login (${source}) tapped -> /login?ownerMode=1`);
     router.push({ pathname: '/login', params: { ownerMode: '1' } } as any);
   };
 
-  const appVersion = Constants.expoConfig?.version ?? '?';
-
-  useEffect(() => {
-    console.log('[Profile] Profile screen rendered', { version: appVersion, role: currentUser.role });
-  }, [appVersion, currentUser.role]);
-
   const handleLogout = () => {
-    Alert.alert(
-      t('signOut'),
-      t('signOutConfirm'),
-      [
-        { text: t('cancel'), style: 'cancel' },
-        { text: t('signOut'), style: 'destructive', onPress: () => { trackAction('logout'); void logout(); } },
-      ]
-    );
+    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: () => void logout() },
+    ]);
   };
 
-  const getKYCStatusText = () => {
-    switch (currentUser.kycStatus) {
-      case 'approved': return t('verified');
-      case 'pending': return t('pendingReview');
-      case 'in_review': return t('underReview');
-      case 'rejected': return t('verificationFailed');
-      default: return t('unverified');
-    }
-  };
-
-  const getKYCStatusColor = () => {
-    switch (currentUser.kycStatus) {
-      case 'approved': return Colors.success;
-      case 'pending':
-      case 'in_review': return Colors.warning;
-      case 'rejected': return Colors.error;
-      default: return Colors.textTertiary;
-    }
-  };
+  let routeIndex = 0;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.root} testID="profile-root" accessibilityLabel="Profile screen">
       <SafeAreaView edges={['top']} style={styles.safeArea}>
-        <View style={[styles.header, { paddingHorizontal: isXs ? 16 : 20 }]}>
-          <Text style={[styles.headerTitle, { fontSize: isXs ? 24 : 28 }]}>{t('profile')}</Text>
-          <TouchableOpacity style={styles.settingsButton} onPress={() => router.push('/security-settings' as any)}>
-            <Settings size={isXs ? 22 : 24} color={Colors.text} />
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.eyebrow}>IVX HOLDINGS</Text>
+            <Text style={styles.title} testID="profile-title">Profile</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.settingsButton}
+            onPress={() => router.push('/security-settings' as any)}
+            accessibilityRole="button"
+            accessibilityLabel="Open security settings"
+            testID="profile-settings"
+          >
+            <Text style={styles.settingsText}>Settings</Text>
           </TouchableOpacity>
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          <View style={[styles.profileCard, { marginHorizontal: isXs ? 16 : 20, padding: isXs ? 16 : 20 }]}>
-            {avatarUriValid ? (
-              <IVXImage
-                uri={avatarUri}
-                width={isXs ? 60 : 72}
-                height={isXs ? 60 : 72}
-                style={[styles.avatar, { borderRadius: isXs ? 30 : 36 }]}
-                accessibilityLabel="Profile avatar"
-                testID="profile-avatar"
-                showLoader={false}
-              />
-            ) : (
-              <View style={[styles.avatarPlaceholder, { width: isXs ? 60 : 72, height: isXs ? 60 : 72, borderRadius: isXs ? 30 : 36 }]}>
-                <User size={isXs ? 28 : 34} color={Colors.primary} />
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.identityCard} testID="profile-identity-card">
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{profile.displayName.charAt(0).toUpperCase() || 'I'}</Text>
+            </View>
+            <View style={styles.identityCopy}>
+              <Text style={styles.name} numberOfLines={1}>{profile.displayName}</Text>
+              <Text style={styles.email} numberOfLines={1}>{profile.email || 'Signed in to IVX Holdings'}</Text>
+              <View style={styles.rolePill}>
+                <Text style={styles.roleText}>{isOwner ? 'OWNER' : 'MEMBER'}</Text>
               </View>
-            )}
-            <View style={styles.profileInfo}>
-              <View style={styles.nameRow}>
-                <Text style={[styles.userName, { fontSize: isXs ? 17 : 20 }]}>{currentUser.firstName} {currentUser.lastName}</Text>
-                {currentUser.kycStatus === 'approved' && <BadgeCheck size={isXs ? 18 : 20} color={Colors.success} />}
-              </View>
-              <Text style={[styles.userEmail, { fontSize: isXs ? 12 : 14 }]}>{currentUser.email}</Text>
-              {!currentUser.isOwnerOrAdmin && (
-                <View style={styles.kycBadge}>
-                  <View style={[styles.kycDot, { backgroundColor: getKYCStatusColor() }]} />
-                  <Text style={[styles.kycText, { color: getKYCStatusColor(), fontSize: isXs ? 11 : 12 }]}>{getKYCStatusText()}</Text>
-                </View>
-              )}
-              {!currentUser.isOwnerOrAdmin && classificationQuery.data && (
-                <View style={{ marginTop: 6 }}>
-                  <MemberBadge tier={classificationQuery.data.member_tier} investorStatus={classificationQuery.data.investor_status} size="small" showStatus />
-                </View>
-              )}
             </View>
           </View>
 
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { paddingHorizontal: isXs ? 16 : 20, fontSize: isXs ? 12 : 14 }]}>{t('account')}</Text>
-            <View style={[styles.menuGroup, { marginHorizontal: isXs ? 16 : 20 }]}>
-              <MenuItem icon={<User size={isXs ? 18 : 20} color={Colors.primary} />} title={t('personalInfo')} subtitle={t('nameEmailPhone')} onPress={() => router.push('/personal-info' as any)} isCompact={isCompact} />
-              {currentUser.role !== 'owner' && currentUser.role !== 'admin' && (
-                <MenuItem icon={<Shield size={isXs ? 18 : 20} color={Colors.success} />} title={t('identityVerification')} subtitle={'Optional — Not required to invest'} onPress={() => router.push('/kyc-verification' as any)} showBadge={currentUser.kycStatus === 'approved'} badgeColor={getKYCStatusColor()} isCompact={isCompact} />
-              )}
-              <MenuItem icon={<Globe size={isXs ? 18 : 20} color={Colors.info} />} title={t('taxInfo')} subtitle={currentUser.country} onPress={() => router.push('/tax-info' as any)} isCompact={isCompact} />
+          <TouchableOpacity
+            style={styles.ownerCard}
+            onPress={openOwner}
+            accessibilityRole="button"
+            accessibilityLabel={isOwner ? 'Owner Console' : 'Owner Login'}
+            testID="owner-login-button"
+          >
+            <View style={styles.rowCopy}>
+              <Text style={styles.ownerTitle}>{isOwner ? 'Owner Console' : 'Owner Login'}</Text>
+              <Text style={styles.ownerSubtitle}>
+                {isOwner ? 'Open owner controls and IVX developer workspace' : 'Approved-owner secure sign in'}
+              </Text>
             </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { paddingHorizontal: isXs ? 16 : 20, fontSize: isXs ? 12 : 14 }]}>{t('walletPayments')}</Text>
-            <View style={[styles.menuGroup, { marginHorizontal: isXs ? 16 : 20 }]}>
-              <MenuItem icon={<Wallet size={isXs ? 18 : 20} color={Colors.primary} />} title={t('walletPayments')} subtitle={`Balance: ${formatDollar(currentUser.walletBalance)}`} onPress={() => router.push('/wallet' as any)} isCompact={isCompact} />
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { paddingHorizontal: isXs ? 16 : 20, fontSize: isXs ? 12 : 14 }]}>{t('documentsReports')}</Text>
-            <View style={[styles.menuGroup, { marginHorizontal: isXs ? 16 : 20 }]}>
-              <MenuItem icon={<BarChart3 size={isXs ? 18 : 20} color={'#4A90D9'} />} title="Analytics Report" subtitle="Real-time traffic & insights" onPress={() => router.push('/analytics-report' as any)} isCompact={isCompact} />
-              <MenuItem icon={<MessageSquare size={isXs ? 18 : 20} color={'#00C9A7'} />} title="SMS Reports" subtitle="Deliveries to Kimberly & Sharon" onPress={() => router.push('/sms-reports' as any)} isCompact={isCompact} />
-              <MenuItem icon={<PieChart size={isXs ? 18 : 20} color={Colors.success} />} title={t('investorProspectus')} subtitle={t('profitProjections')} onPress={() => router.push('/investor-prospectus' as any)} isCompact={isCompact} />
-              <MenuItem icon={<FileText size={isXs ? 18 : 20} color={Colors.primary} />} title={t('statements')} subtitle={t('monthlyStatements')} onPress={() => router.push('/statements' as any)} isCompact={isCompact} />
-              <MenuItem icon={<FileText size={isXs ? 18 : 20} color={Colors.info} />} title={t('taxDocuments')} subtitle={t('annualReports')} onPress={() => router.push('/tax-documents' as any)} isCompact={isCompact} />
-              <MenuItem icon={<Scale size={isXs ? 18 : 20} color={'#1a3a5c'} />} title={t('contractGenerator')} subtitle={t('contractGeneratorDesc')} onPress={() => router.push('/contract-generator' as any)} isCompact={isCompact} />
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { paddingHorizontal: isXs ? 16 : 20, fontSize: isXs ? 12 : 14 }]}>{t('preferences')}</Text>
-            <View style={[styles.menuGroup, { marginHorizontal: isXs ? 16 : 20 }]}>
-              <MenuItem icon={<Globe size={isXs ? 18 : 20} color={Colors.primary} />} title={t('language')} subtitle={currentLanguage ? `${currentLanguage.nativeName} (${currentLanguage.name})` : 'English'} onPress={() => router.push('/language' as any)} isCompact={isCompact} />
-              <MenuItem icon={<Bell size={isXs ? 18 : 20} color={Colors.primary} />} title={t('notifications')} subtitle={t('emailPushSms')} onPress={() => router.push('/notification-settings' as any)} isCompact={isCompact} />
-              <MenuItem icon={<Shield size={isXs ? 18 : 20} color={Colors.error} />} title={t('security')} subtitle={t('password2fa')} onPress={() => router.push('/security-settings' as any)} isCompact={isCompact} />
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { paddingHorizontal: isXs ? 16 : 20, fontSize: isXs ? 12 : 14 }]}>{t('investorTools').toUpperCase()}</Text>
-            <View style={[styles.menuGroup, { marginHorizontal: isXs ? 16 : 20 }]}>
-              <MenuItem icon={<IVXBrandIcon size={isXs ? 18 : 20} />} title={t('vipTiers')} subtitle={t('vipTiersDesc')} onPress={() => router.push('/vip-tiers' as any)} isCompact={isCompact} />
-              <MenuItem icon={<Gift size={isXs ? 18 : 20} color={'#FF6B9D'} />} title={t('giftShares')} subtitle={t('giftSharesDesc')} onPress={() => router.push('/gift-shares' as any)} isCompact={isCompact} />
-              <MenuItem icon={<RefreshCw size={isXs ? 18 : 20} color={Colors.success} />} title={t('autoReinvestDrip')} subtitle={t('autoReinvestDesc')} onPress={() => router.push('/auto-reinvest' as any)} isCompact={isCompact} />
-              <MenuItem icon={<Users size={isXs ? 18 : 20} color={Colors.info} />} title={t('topInvestors')} subtitle={t('topInvestorsDesc')} onPress={() => router.push('/copy-investing' as any)} isCompact={isCompact} />
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { paddingHorizontal: isXs ? 16 : 20, fontSize: isXs ? 12 : 14 }]}>{t('rewardsOpportunities')}</Text>
-            <View style={[styles.menuGroup, { marginHorizontal: isXs ? 16 : 20 }]}>
-              <MenuItem icon={<Rocket size={isXs ? 18 : 20} color={'#FF6B6B'} />} title='Viral Growth Engine' subtitle='24/7 growth machine · $25 share rewards' onPress={() => router.push('/viral-growth' as any)} isCompact={isCompact} />
-              <MenuItem icon={<Gift size={isXs ? 18 : 20} color={Colors.positive} />} title={t('referralsEarnings')} subtitle={t('referralsDesc')} onPress={() => router.push('/referrals' as any)} isCompact={isCompact} />
-              <MenuItem icon={<Briefcase size={isXs ? 18 : 20} color={Colors.primary} />} title={t('becomeAgent')} subtitle={t('agentDesc')} onPress={() => router.push('/agent-apply' as any)} isCompact={isCompact} />
-              <MenuItem icon={<Handshake size={isXs ? 18 : 20} color={Colors.info} />} title={t('becomeBroker')} subtitle={t('brokerDesc')} onPress={() => router.push('/broker-apply' as any)} isCompact={isCompact} />
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { paddingHorizontal: isXs ? 16 : 20, fontSize: isXs ? 12 : 14 }]}>BUSINESS CARD</Text>
-            <View style={[styles.menuGroup, { marginHorizontal: isXs ? 16 : 20 }]}>
-              <MenuItem icon={<CreditCard size={isXs ? 18 : 20} color={'#FFD700'} />} title='IVX Business Card' subtitle='QR card · Social links · Share instantly' onPress={() => router.push('/business-card' as any)} isCompact={isCompact} />
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { paddingHorizontal: isXs ? 16 : 20, fontSize: isXs ? 12 : 14 }]}>{t('support')}</Text>
-            <View style={[styles.menuGroup, { marginHorizontal: isXs ? 16 : 20 }]}>
-              <MenuItem icon={<Cpu size={isXs ? 18 : 20} color={Colors.info} />} title={'IVX Agent Hub'} subtitle={'10 domain agents · Member, Investor, Buyer, JV, Reels...'} onPress={() => router.push('/agent-hub' as any)} isCompact={isCompact} testID="agent-hub-entry" />
-              <MenuItem icon={<BookOpen size={isXs ? 18 : 20} color={Colors.gold} />} title={'Knowledge Base'} subtitle={'Arquitectura · Miembros · Inversión · QA · Seguridad'} onPress={() => router.push('/knowledge-base' as any)} isCompact={isCompact} testID="kb-entry" />
-              <MenuItem icon={<BookOpen size={isXs ? 18 : 20} color={Colors.positive} />} title={t('appGuide')} subtitle={t('appGuideDesc')} onPress={() => router.push('/app-guide' as any)} isCompact={isCompact} />
-              <MenuItem icon={<PieChart size={isXs ? 18 : 20} color={Colors.accent} />} title={'App Demo'} subtitle={'Interactive walkthrough'} onPress={() => router.push('/app-demo' as any)} isCompact={isCompact} />
-              <MenuItem icon={<HelpCircle size={isXs ? 18 : 20} color={Colors.primary} />} title={t('helpSupport')} subtitle={t('chatSupport')} onPress={() => router.push('/(tabs)/chat' as any)} isCompact={isCompact} />
-              <MenuItem icon={<FileText size={isXs ? 18 : 20} color={Colors.textSecondary} />} title={t('legal')} subtitle={t('legalDesc')} onPress={() => router.push('/legal' as any)} isCompact={isCompact} />
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { paddingHorizontal: isXs ? 16 : 20, fontSize: isXs ? 12 : 14 }]}>AI & AUTOMATION</Text>
-            <View style={[styles.menuGroup, { marginHorizontal: isXs ? 16 : 20 }]}>
-              <MenuItem icon={<Brain size={isXs ? 18 : 20} color='#A855F7' />} title='AI & Automation Report' subtitle='13 modules · 90+ functions · WhatsApp alerts' onPress={() => router.push('/ai-automation-report' as any)} isCompact={isCompact} />
-              <MenuItem icon={<Code2 size={isXs ? 18 : 20} color='#0EA5E9' />} title='API Integration List' subtitle='All APIs with registration links' onPress={() => router.push('/api-list' as any)} isCompact={isCompact} />
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { paddingHorizontal: isXs ? 16 : 20, fontSize: isXs ? 12 : 14 }]}>{t('administration')}</Text>
-            <TouchableOpacity style={[styles.ownerLoginButton, { marginHorizontal: isXs ? 16 : 20, padding: isXs ? 14 : 16 }]} onPress={() => openOwnerLogin('administration')} activeOpacity={0.8} accessible={true} accessibilityRole="button" accessibilityLabel="Owner Login, direct approved-owner sign in inside the app" testID="owner-login-button">
-              <View style={[styles.ownerLoginIcon, { width: isCompact ? 38 : 44, height: isCompact ? 38 : 44 }]}><Shield size={isXs ? 20 : 24} color={Colors.background} /></View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={[styles.ownerLoginTitle, { fontSize: isXs ? 15 : 17 }]}>{ownerCardTitle}</Text>
-                <Text style={[styles.ownerLoginSubtitle, { fontSize: isXs ? 11 : 12 }]}>{isOwnerSession ? 'Signed in — open owner console inside the app' : 'Direct approved-owner sign in inside the app'}</Text>
-              </View>
-              <ChevronRight size={isCompact ? 20 : 22} color={Colors.background} />
-            </TouchableOpacity>
-            <View style={[styles.menuGroup, { marginHorizontal: isXs ? 16 : 20, marginTop: 12 }]}>
-              <MenuItem icon={<LayoutDashboard size={isXs ? 18 : 20} color={Colors.warning} />} title={t('adminPanel')} subtitle={t('adminDesc')} onPress={() => { console.log('[Profile] Admin Panel tapped -> /admin'); router.push('/admin' as any); }} isCompact={isCompact} testID="admin-panel-button" />
-            </View>
-          </View>
-
-          <TouchableOpacity style={[styles.logoutButton, { marginHorizontal: isXs ? 16 : 20, paddingVertical: isXs ? 14 : 16 }]} onPress={handleLogout}>
-            <LogOut size={isXs ? 18 : 20} color={Colors.error} />
-            <Text style={[styles.logoutText, { fontSize: isXs ? 14 : 15 }]}>{t('signOut')}</Text>
+            <Text style={styles.ownerChevron}>›</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.companySection, { marginHorizontal: isXs ? 16 : 20, padding: isXs ? 16 : 20 }]} onPress={() => router.push('/company-info' as any)} activeOpacity={0.7}>
-            <View style={styles.companyHeader}>
-              <Image source={IVX_LOGO_SOURCE} style={[styles.companyLogo, { width: isXs ? 40 : 48, height: isXs ? 40 : 48 }]} resizeMode="contain" />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.companyName, { fontSize: isXs ? 17 : 20 }]}>IVX HOLDINGS LLC</Text>
-                <Text style={{ fontSize: isXs ? 11 : 12, color: Colors.primary, marginTop: 2 }}>{t('tapToViewContact')}</Text>
+          {visibleSections.map((section) => (
+            <View key={section.title} style={styles.section}>
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+              <View style={styles.group}>
+                {section.items.map((item) => {
+                  const index = routeIndex++;
+                  return (
+                    <ProfileRow
+                      key={item.route}
+                      item={item}
+                      index={index}
+                      onPress={() => router.push(item.route as any)}
+                    />
+                  );
+                })}
               </View>
-              <ChevronRight size={20} color={Colors.textTertiary} />
             </View>
-            <View style={styles.companyDetails}>
-              <View style={styles.companyDetailRow}><MapPin size={isXs ? 14 : 16} color={Colors.textTertiary} /><Text style={[styles.companyDetailText, { fontSize: isXs ? 11 : 13 }]}>1001 Brickell Bay Drive, Suite 2700, Miami, FL 33131</Text></View>
-              <View style={styles.companyDetailRow}><Mail size={isXs ? 14 : 16} color={Colors.textTertiary} /><Text style={[styles.companyDetailText, { fontSize: isXs ? 11 : 13 }]}>support@ivxholding.com</Text></View>
-              <View style={styles.companyDetailRow}><Mail size={isXs ? 14 : 16} color={Colors.primary} /><Text style={[styles.companyDetailText, { fontSize: isXs ? 11 : 13 }]}>ceo@ivxholding.com</Text></View>
-            </View>
-            <Text style={[styles.companyLegal, { fontSize: isXs ? 10 : 11 }]}>© 2026 IVX HOLDINGS LLC. All rights reserved. Licensed and regulated.</Text>
+          ))}
+
+          <TouchableOpacity
+            style={styles.signOutButton}
+            onPress={handleLogout}
+            accessibilityRole="button"
+            accessibilityLabel="Sign Out"
+            testID="profile-sign-out"
+          >
+            <Text style={styles.signOutText}>Sign Out</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.ownerLoginButton, { marginHorizontal: isXs ? 16 : 20, padding: isXs ? 14 : 16, marginBottom: 16 }]} onPress={() => openOwnerLogin('bottom')} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="Owner Login" testID="owner-login-button-bottom">
-            <View style={[styles.ownerLoginIcon, { width: isCompact ? 38 : 44, height: isCompact ? 38 : 44 }]}><Shield size={isXs ? 20 : 24} color={Colors.background} /></View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[styles.ownerLoginTitle, { fontSize: isXs ? 15 : 17 }]}>{ownerCardTitle}</Text>
-              <Text style={[styles.ownerLoginSubtitle, { fontSize: isXs ? 11 : 12 }]}>{ownerCardSubtitle}</Text>
-            </View>
-            <ChevronRight size={isCompact ? 20 : 22} color={Colors.background} />
-          </TouchableOpacity>
-
-          <Text style={styles.versionText}>{t('versionLabel')} {appVersion}</Text>
-          <View style={styles.bottomPadding} />
+          <Text style={styles.footer}>IVX PROFILE FULL SAFE MODE · {IVX_PROFILE_FULL_FAILSAFE_MARKER}</Text>
         </ScrollView>
       </SafeAreaView>
     </View>
@@ -404,47 +263,99 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background},
-  safeArea: { flex: 1},
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12},
-  headerTitle: { fontWeight: '800' as const, color: Colors.text},
-  settingsButton: { padding: 8},
-  profileCard: { backgroundColor: Colors.surface, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 24, borderWidth: 1, borderColor: Colors.surfaceBorder},
-  avatar: { borderWidth: 2, borderColor: Colors.primary},
-  avatarPlaceholder: { borderWidth: 2, borderColor: Colors.primary, backgroundColor: Colors.surfaceElevated, alignItems: 'center' as const, justifyContent: 'center' as const},
-  profileInfo: { flex: 1},
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap'},
-  userName: { fontWeight: '700' as const, color: Colors.text, flexShrink: 1},
-  userEmail: { color: Colors.textSecondary, marginBottom: 6},
-  kycBadge: { flexDirection: 'row', alignItems: 'center', gap: 6},
-  kycDot: { width: 8, height: 8, borderRadius: 4},
-  kycText: { fontSize: 12, fontWeight: '600' as const},
-  section: { marginBottom: 20},
-  sectionTitle: { color: Colors.textTertiary, fontWeight: '700' as const, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, flexShrink: 1},
-  menuGroup: { backgroundColor: Colors.surface, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: Colors.surfaceBorder},
-  ownerLoginButton: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: Colors.primary, borderRadius: 14},
-  ownerLoginIcon: { borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center'},
-  ownerLoginTitle: { color: Colors.background, fontWeight: '800' as const},
-  ownerLoginSubtitle: { color: Colors.background, opacity: 0.85, marginTop: 2},
-  menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: Colors.surfaceBorder},
-  menuItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0},
-  menuItemIcon: { borderRadius: 10, backgroundColor: Colors.surfaceLight, alignItems: 'center', justifyContent: 'center'},
-  menuItemTitle: { color: Colors.text, fontWeight: '600' as const, flexShrink: 1},
-  menuItemSubtitle: { color: Colors.textTertiary, marginTop: 2, flexShrink: 1},
-  menuItemRight: { flexDirection: 'row', alignItems: 'center', gap: 8},
-  badge: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center'},
-  logoutButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.error + '15', borderRadius: 14, marginBottom: 24},
-  logoutText: { color: Colors.error, fontWeight: '700' as const},
-  versionText: { color: Colors.textTertiary, fontSize: 12, textAlign: 'center', marginBottom: 4},
-  companySection: { backgroundColor: Colors.surface, borderRadius: 16, marginBottom: 16, borderWidth: 1, borderColor: Colors.surfaceBorder},
-  companyHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14},
-  companyLogo: { borderRadius: 12},
-  companyName: { fontWeight: '800' as const, color: Colors.text},
-  companyDescription: { color: Colors.textSecondary, fontSize: 13, lineHeight: 18, marginBottom: 12},
-  companyDetails: { gap: 8, marginBottom: 12},
-  companyDetailRow: { flexDirection: 'row', alignItems: 'center', gap: 8},
-  companyDetailText: { color: Colors.textSecondary, flex: 1},
-  companyLegal: { color: Colors.textTertiary, textAlign: 'center', marginTop: 8, borderTopWidth: 1, borderTopColor: Colors.surfaceBorder, paddingTop: 12},
-  bottomPadding: { height: 120},
-  scrollView: { flex: 1, backgroundColor: Colors.background},
-  scrollContent: { paddingTop: 8, paddingBottom: 160, flexGrow: 1}});
+  root: { flex: 1, backgroundColor: '#08090D' },
+  safeArea: { flex: 1, backgroundColor: '#08090D' },
+  header: {
+    minHeight: 82,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#252733',
+  },
+  eyebrow: { color: '#C6A900', fontSize: 10, fontWeight: '800', letterSpacing: 2.1, marginBottom: 3 },
+  title: { color: '#FFFFFF', fontSize: 29, fontWeight: '800' },
+  settingsButton: {
+    minHeight: 42,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: '#171821',
+    borderWidth: 1,
+    borderColor: '#2D2F3B',
+  },
+  settingsText: { color: '#FFD700', fontWeight: '700', fontSize: 13 },
+  scroll: { flex: 1 },
+  content: { padding: 20, paddingBottom: 130 },
+  identityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 18,
+    borderRadius: 18,
+    backgroundColor: '#12131A',
+    borderWidth: 1,
+    borderColor: '#262833',
+    marginBottom: 14,
+  },
+  avatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#26210A',
+    borderWidth: 1,
+    borderColor: '#665600',
+    marginRight: 14,
+  },
+  avatarText: { color: '#FFD700', fontSize: 28, fontWeight: '900' },
+  identityCopy: { flex: 1, minWidth: 0 },
+  name: { color: '#FFFFFF', fontSize: 19, fontWeight: '800', marginBottom: 3 },
+  email: { color: '#9397A6', fontSize: 13, marginBottom: 8 },
+  rolePill: { alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20, backgroundColor: '#2A2407' },
+  roleText: { color: '#FFD700', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  ownerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 17,
+    borderRadius: 16,
+    backgroundColor: '#211D08',
+    borderWidth: 1,
+    borderColor: '#665700',
+    marginBottom: 24,
+  },
+  ownerTitle: { color: '#FFD700', fontSize: 16, fontWeight: '800', marginBottom: 3 },
+  ownerSubtitle: { color: '#B6A85D', fontSize: 12, lineHeight: 17 },
+  ownerChevron: { color: '#FFD700', fontSize: 28, marginLeft: 12 },
+  section: { marginBottom: 20 },
+  sectionTitle: { color: '#727685', fontSize: 11, fontWeight: '800', letterSpacing: 1.4, marginBottom: 9, marginLeft: 2 },
+  group: { borderRadius: 18, overflow: 'hidden', backgroundColor: '#12131A', borderWidth: 1, borderColor: '#262833' },
+  row: {
+    minHeight: 68,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#292B35',
+  },
+  rowCopy: { flex: 1, minWidth: 0 },
+  rowTitle: { color: '#F2F3F5', fontSize: 15, fontWeight: '700', marginBottom: 3 },
+  rowSubtitle: { color: '#858997', fontSize: 12, lineHeight: 17 },
+  chevron: { color: '#777C8A', fontSize: 28, lineHeight: 28, marginLeft: 12 },
+  signOutButton: {
+    minHeight: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#58292E',
+    backgroundColor: '#251316',
+    marginTop: 2,
+  },
+  signOutText: { color: '#FF727D', fontSize: 15, fontWeight: '800' },
+  footer: { color: '#4C4F5B', textAlign: 'center', fontSize: 9, letterSpacing: 0.4, marginTop: 22 },
+});
