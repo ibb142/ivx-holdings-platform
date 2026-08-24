@@ -17,7 +17,7 @@ const requiredChatTestIDs = [
   'ivx-owner-chat-scroll-to-latest',
 ];
 
-const E2E_PROMPT = 'Reply exactly IVX_CHAT_E2E_OK';
+const E2E_PROMPT = 'Return only the result of joining IVX_CHAT_E2E_ and OK.';
 const E2E_REPLY = 'IVX_CHAT_E2E_OK';
 
 describe('IVX IA chat device certificate regression', () => {
@@ -54,6 +54,7 @@ describe('IVX IA chat device certificate regression', () => {
   });
 
   test('hard-gates send -> live AI reply -> visible render', () => {
+    expect(E2E_PROMPT).not.toContain(E2E_REPLY);
     expect(flowSource).toContain(`inputText: "${E2E_PROMPT}"`);
     expect(flowSource).toContain(`visible: "${E2E_PROMPT}"`);
     expect(flowSource).toContain(`visible: "${E2E_REPLY}"`);
