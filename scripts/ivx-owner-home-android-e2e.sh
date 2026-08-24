@@ -43,30 +43,45 @@ if [ "$rc" -eq 0 ]; then sleep 3; home_checkpoint 5s; fi
 if [ "$rc" -eq 0 ]; then sleep 5; home_checkpoint 10s; fi
 if [ "$rc" -eq 0 ]; then sleep 10; home_checkpoint 20s; fi
 
-# Profile regression recorded on a real Android device: Home remained healthy,
-# then tapping the Profile tab produced only the dark app background. Keep the
-# authenticated session from the Home certificate and verify Profile itself.
-if [ "$rc" -eq 0 ]; then
-  timeout 90s "$MAESTRO" test expo/.maestro/ivx-owner-profile-certificate.yaml \
-    --format junit \
-    --output owner-profile-maestro.xml
-  rc=$?
-fi
+capture_profile_diagnostics() {
+  local label="$1"
+  local xml="owner-profile-${label}.xml"
+  timeout 10s adb wait-for-device >/dev/null 2>&1 || true
+  timeout 10s adb shell pidof com.ivxholdings.app.owner > "owner-profile-${label}-pid.txt" 2>&1 || true
+  timeout 20s adb shell uiautomator dump "/sdcard/${xml}" >/dev/null 2>&1 || true
+  timeout 20s adb pull "/sdcard/${xml}" "$xml" >/dev/null 2>&1 || true
+  timeout 15s adb exec-out screencap -p > "owner-profile-${label}.png" 2>/dev/null || true
+  timeout 20s adb logcat -d -v threadtime > "owner-profile-${label}-logcat.txt" 2>&1 || true
+}
 
 profile_checkpoint() {
   local label="$1"
   local xml="owner-profile-${label}.xml"
-
-  timeout 10s adb wait-for-device || { rc=96; return; }
-  timeout 10s adb shell pidof com.ivxholdings.app.owner > "owner-profile-${label}-pid.txt" 2>&1 || rc=97
-  timeout 20s adb shell uiautomator dump "/sdcard/${xml}" >/dev/null 2>&1 || rc=98
-  timeout 20s adb pull "/sdcard/${xml}" "$xml" >/dev/null 2>&1 || true
-  timeout 15s adb exec-out screencap -p > "owner-profile-${label}.png" 2>/dev/null || true
-  timeout 20s adb logcat -d > "owner-profile-${label}-logcat.txt" 2>&1 || true
-
+  capture_profile_diagnostics "$label"
+  test -s "owner-profile-${label}-pid.txt" || rc=97
+  test -s "$xml" || rc=98
   grep -q 'text="Profile"' "$xml" 2>/dev/null || rc=99
   grep -q 'resource-id="tab-profile"' "$xml" 2>/dev/null || rc=100
 }
+
+# Profile regression recorded on a real Android device: Home remained healthy,
+# then tapping the Profile tab produced only the dark app background. Clear the
+# log immediately before the tap so any React/native exception can be attributed
+# to Profile rather than startup noise.
+if [ "$rc" -eq 0 ]; then
+  adb logcat -c >/dev/null 2>&1 || true
+  timeout 90s "$MAESTRO" test expo/.maestro/ivx-owner-profile-certificate.yaml \
+    --format junit \
+    --output owner-profile-maestro.xml
+  profile_maestro_rc=$?
+
+  # Always collect evidence even when the Maestro assertion fails. This is the
+  # fail-closed diagnostic path that catches black screens/crashes.
+  capture_profile_diagnostics failure-or-pass
+  if [ "$profile_maestro_rc" -ne 0 ]; then
+    rc=$profile_maestro_rc
+  fi
+fi
 
 if [ "$rc" -eq 0 ]; then profile_checkpoint immediate; fi
 if [ "$rc" -eq 0 ]; then sleep 2; profile_checkpoint 2s; fi
