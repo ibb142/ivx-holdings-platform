@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const chatSource = readFileSync(resolve(import.meta.dir, '../app/ivx/chat.tsx'), 'utf8');
+const chatHubSource = readFileSync(resolve(import.meta.dir, '../components/ChatScreenContent.tsx'), 'utf8');
 const tabsLayoutSource = readFileSync(resolve(import.meta.dir, '../app/(tabs)/_layout.tsx'), 'utf8');
 const homeSource = readFileSync(resolve(import.meta.dir, '../app/(tabs)/home.tsx'), 'utf8');
 const flowSource = readFileSync(resolve(import.meta.dir, '../.maestro/ivx-owner-chat-certificate.yaml'), 'utf8');
@@ -30,6 +31,11 @@ describe('IVX IA chat device certificate regression', () => {
     expect(tabsLayoutSource).toContain("tabBarButtonTestID: 'tab-chat'");
   });
 
+  test('keeps the owner AI room reachable from the Live Support hub', () => {
+    expect(chatHubSource).toContain('testID="chat-open-message-room"');
+    expect(chatHubSource).toContain("router.push('/ivx/chat'");
+  });
+
   test('device certificate flow only references testIDs that exist in source', () => {
     expect(flowSource).toContain('appId: com.ivxholdings.app.owner');
     const flowTestIDs = [...flowSource.matchAll(/id: "([^"]+)"/g)].map((m) => m[1]);
@@ -37,6 +43,7 @@ describe('IVX IA chat device certificate regression', () => {
     for (const testID of flowTestIDs) {
       const present =
         chatSource.includes(`testID="${testID}"`) ||
+        chatHubSource.includes(`testID="${testID}"`) ||
         tabsLayoutSource.includes(`tabBarButtonTestID: '${testID}'`);
       expect(present).toBe(true);
     }
@@ -46,6 +53,12 @@ describe('IVX IA chat device certificate regression', () => {
     expect(flowSource).toContain('inputText: "QA cert probe chat check"');
     expect(flowSource.match(/QA cert probe chat check/g)?.length).toBe(2);
     expect(flowSource).toContain('ivx-owner-chat-send');
+  });
+
+  test('device certificate flow navigates the hub to the owner AI room before asserting the composer', () => {
+    expect(flowSource.indexOf('id: "chat-open-message-room"')).toBeLessThan(
+      flowSource.indexOf('id: "ivx-owner-chat-composer-dock"'),
+    );
   });
 
   test('Home keeps the visible "Home ready" runtime banner for Android Emulator QA', () => {

@@ -150,12 +150,13 @@ chat_checkpoint() {
   grep -q 'resource-id="ivx-owner-chat-composer-dock"' "$xml" 2>/dev/null || rc=112
   grep -q 'resource-id="ivx-owner-chat-input"' "$xml" 2>/dev/null || rc=113
   grep -q 'text="QA cert probe chat check"' "$xml" 2>/dev/null || rc=114
-  grep -q 'resource-id="tab-chat"' "$xml" 2>/dev/null || rc=115
 }
 
 # IVX IA chat certificate — third Maestro flow on the same real owner session.
-# The composer and thread render locally; the sent message must land in the
-# thread exactly once (owner's 20-step contract, steps 3-8). Fail closed.
+# Navigation contract: tab-chat opens the Live Support hub; chat-open-message-room
+# opens the /ivx/chat owner AI room; the composer and thread render locally; the
+# sent message must land in the thread exactly once (owner's 20-step contract,
+# steps 3-8). Fail closed.
 if [ "$rc" -eq 0 ] && [ "$CHAT_CERT_CAPABLE" -eq 1 ]; then
   adb logcat -c >/dev/null 2>&1 || true
   timeout 150s "$MAESTRO" test expo/.maestro/ivx-owner-chat-certificate.yaml \
