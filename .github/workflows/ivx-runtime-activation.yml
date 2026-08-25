@@ -1,0 +1,98 @@
+name: IVX Runtime Activation (Phase 2+3+4)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'qa/ivx-phase2-mission.ts'
+      - 'qa/ivx-phase3-4-500-mission.ts'
+      - 'qa/ivx-runtime-orchestrator.ts'
+      - 'qa/ivx-runtime-activation.test.ts'
+      - '.github/workflows/ivx-runtime-activation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'qa/ivx-phase2-mission.ts'
+      - 'qa/ivx-phase3-4-500-mission.ts'
+      - 'qa/ivx-runtime-orchestrator.ts'
+      - 'qa/ivx-runtime-activation.test.ts'
+      - '.github/workflows/ivx-runtime-activation.yml'
+
+jobs:
+  activate:
+    name: Activate 112 IVX agents (12 command + 100 workers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact source SHA
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Mission + activation tests
+        run: bun test qa/ivx-runtime-activation.test.ts
+
+      - name: Run runtime orchestrator (Phase 2 + Phase 3 + Phase 4)
+        run: bun run qa/ivx-runtime-orchestrator.ts
+
+      - name: Verify activation proof (fails if incomplete)
+        run: |
+          CERT=$(ls -t qa/evidence/autonomous/runtime-activation/*/runtime-activation-certificate.json | head -1)
+          echo "certificate: $CERT"
+          python3 - "$CERT" <<'EOF'
+          import json, sys
+          with open(sys.argv[1]) as f:
+              cert = json.load(f)
+          required = ["currentMainSha","commandAgentsTotal","commandAgentsActive","workersTotal",
+                      "workersActive","uniqueWorkerIds","phase2Active","phase3Active","phase4Active",
+                      "phase2Counts","phase3Counts","phase4Counts","simulatedRuns","fakeSuccessRuns",
+                      "failedActivationWorkers","artifactCount","workflowRunId"]
+          missing = [k for k in required if k not in cert]
+          assert not missing, f"certificate missing fields: {missing}"
+          failures = []
+          if cert["commandAgentsActive"] != 12: failures.append(f"commandAgentsActive={cert['commandAgentsActive']} != 12")
+          if cert["workersActive"] != 100: failures.append(f"workersActive={cert['workersActive']} != 100")
+          if len(cert["uniqueWorkerIds"]) != 100: failures.append(f"uniqueWorkerIds={len(cert['uniqueWorkerIds'])} != 100")
+          worker_numbers = sorted(int(x.rsplit('_',1)[1]) for x in cert["uniqueWorkerIds"] if x.rsplit('_',1)[-1].isdigit())
+          expected = list(range(13,113))
+          if worker_numbers != expected: failures.append(f"worker IDs not exactly 13..112: got {worker_numbers[:5]}...{worker_numbers[-5:] if worker_numbers else ''}")
+          for p in ("phase2Active","phase3Active","phase4Active"):
+              if not cert[p]: failures.append(f"{p} != true")
+          if cert["simulatedRuns"] != 0: failures.append(f"simulatedRuns={cert['simulatedRuns']} != 0")
+          if cert["fakeSuccessRuns"] != 0: failures.append(f"fakeSuccessRuns={cert['fakeSuccessRuns']} != 0")
+          if cert["artifactCount"] < 100: failures.append(f"artifactCount={cert['artifactCount']} < 100")
+          if not cert["workflowRunId"]: failures.append("workflowRunId missing")
+          print(json.dumps({k: cert[k] for k in ("currentMainSha","commandAgentsActive","workersActive","phase2Active","phase3Active","phase4Active","simulatedRuns","fakeSuccessRuns","artifactCount","workflowRunId")}, indent=2))
+          if failures:
+              print("ACTIVATION INCOMPLETE:")
+              for f_ in failures: print(f"  - {f_}")
+              sys.exit(1)
+          print("ACTIVATION PROOF COMPLETE")
+          EOF
+
+      - name: Upload per-worker + per-item evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-runtime-activation-evidence
+          path: qa/evidence/autonomous/runtime-activation/
+          retention-days: 90
+
+      - name: Upload activation certificate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-runtime-activation-certificate
+          path: qa/evidence/autonomous/runtime-activation/*/runtime-activation-certificate.json
+          retention-days: 90
