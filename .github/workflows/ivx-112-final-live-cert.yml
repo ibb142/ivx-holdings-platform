@@ -23,11 +23,74 @@ jobs:
       RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
       IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
       IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+      IVX_OWNER_VARIABLES_ENCRYPTION_KEY: ${{ secrets.IVX_OWNER_VARIABLES_ENCRYPTION_KEY }}
+      APP_SECRET: ${{ secrets.APP_SECRET }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
       DEFAULT_RENDER_SERVICE_ID: srv-d7t9ivreo5us73ftose0
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
+      - name: Sync GitHub system secret into Render runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto = await import('node:crypto');
+          const base = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/+$/, '');
+          const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+          const systemSecret = (process.env.IVX_AI_SYSTEM_SECRET || process.env.IVX_SYSTEM_SECRET || '').trim();
+          const encryptionSecrets = [process.env.IVX_OWNER_VARIABLES_ENCRYPTION_KEY, process.env.APP_SECRET, process.env.JWT_SECRET].filter(Boolean);
+          if (!base || !serviceKey || !systemSecret || encryptionSecrets.length === 0) throw new Error('required live sync bindings missing');
+          const names = ['RENDER_API_KEY','RENDER_SERVICE_ID'];
+          const query = encodeURIComponent(`(${names.join(',')})`);
+          const rowsRes = await fetch(`${base}/rest/v1/ivx_owner_variables?select=name,encrypted_value,value_iv,value_tag,value_hash&name=in.${query}`, {headers:{apikey:serviceKey,Authorization:`Bearer ${serviceKey}`,Accept:'application/json'}});
+          if (!rowsRes.ok) throw new Error(`owner variable read HTTP ${rowsRes.status}`);
+          const rows = await rowsRes.json();
+          const byName = new Map(rows.map(r => [r.name,r]));
+          const keyCandidates = [...new Set(encryptionSecrets)].map(s => crypto.createHash('sha256').update(s,'utf8').digest());
+          const aad = Buffer.from('ivx_owner_variables:v1','utf8');
+          function decrypt(name){
+            const row=byName.get(name); if(!row) throw new Error(`${name} row missing`);
+            let lastError=null;
+            for(const key of keyCandidates){
+              try{
+                const d=crypto.createDecipheriv('aes-256-gcm',key,Buffer.from(row.value_iv,'base64'));
+                d.setAAD(aad); d.setAuthTag(Buffer.from(row.value_tag,'base64'));
+                const value=Buffer.concat([d.update(Buffer.from(row.encrypted_value,'base64')),d.final()]).toString('utf8').trim();
+                const hash=crypto.createHash('sha256').update(value,'utf8').digest('hex');
+                if(hash!==row.value_hash) throw new Error(`${name} hash verification failed`);
+                return value;
+              }catch(err){lastError=err;}
+            }
+            throw lastError || new Error(`${name} decryption failed`);
+          }
+          const renderKey=decrypt('RENDER_API_KEY');
+          const serviceId=decrypt('RENDER_SERVICE_ID');
+          const headers={Accept:'application/json','Content-Type':'application/json',Authorization:`Bearer ${renderKey}`};
+          const envUrl=`https://api.render.com/v1/services/${encodeURIComponent(serviceId)}/env-vars`;
+          const getRes=await fetch(envUrl,{headers});
+          if(!getRes.ok) throw new Error(`Render env GET HTTP ${getRes.status}`);
+          const existingRaw=await getRes.json();
+          const existing=new Map();
+          for(const item of existingRaw){const ev=item.envVar||item;if(ev&&typeof ev.key==='string') existing.set(ev.key,typeof ev.value==='string'?ev.value:'');}
+          existing.set('IVX_AI_SYSTEM_SECRET',systemSecret);
+          const putRes=await fetch(envUrl,{method:'PUT',headers,body:JSON.stringify(Array.from(existing,([key,value])=>({key,value})))});
+          if(!putRes.ok) throw new Error(`Render env PUT HTTP ${putRes.status}`);
+          const verifyRes=await fetch(envUrl,{headers});
+          if(!verifyRes.ok) throw new Error(`Render env verify GET HTTP ${verifyRes.status}`);
+          const verifyRaw=await verifyRes.json();
+          const verify=new Map();
+          for(const item of verifyRaw){const ev=item.envVar||item;if(ev&&typeof ev.key==='string') verify.set(ev.key,typeof ev.value==='string'?ev.value:'');}
+          if(verify.get('IVX_AI_SYSTEM_SECRET')!==systemSecret) throw new Error('Render IVX_AI_SYSTEM_SECRET mismatch after write');
+          console.log('system_secret_sync=PASS');
+          const deployRes=await fetch(`https://api.render.com/v1/services/${encodeURIComponent(serviceId)}/deploys`,{method:'POST',headers,body:JSON.stringify({clearCache:'do_not_clear'})});
+          if(!deployRes.ok) throw new Error(`Render deploy trigger HTTP ${deployRes.status}`);
+          console.log('render_deploy_trigger=PASS');
+          NODE
 
       - name: Source QA for 112-agent root invariants
         shell: bash
@@ -101,7 +164,6 @@ jobs:
           test "$(jq '[.agents[].agentId]|unique|length' /tmp/agents.json)" = 112
           test "$(jq '[.agents[].agentNumber]|unique|length' /tmp/agents.json)" = 112
           test "$(jq '[.agents[]|select(.paused==true or .disabled==true)]|length' /tmp/agents.json)" = 0
-
           mkdir -p /tmp/ivx-contracts
           jq -r '.agents[].agentId' /tmp/agents.json | while read -r agent_id; do
             code=$(curl -sS -m 20 -o "/tmp/ivx-contracts/${agent_id}.json" -w '%{http_code}' "${API_BASE}/api/ivx/agents/${agent_id}/contract" || true)
@@ -116,7 +178,6 @@ jobs:
           jq -s '[.[].contract.memoryNamespace] | unique | length' /tmp/ivx-contracts/*.json | grep -qx '112'
           jq -s '[.[].contract.queueNamespace] | unique | length' /tmp/ivx-contracts/*.json | grep -qx '112'
           jq -s '[.[].contract.agentId] | unique | length' /tmp/ivx-contracts/*.json | grep -qx '112'
-
           unauth=$(curl -sS -o /tmp/unauth.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/agents/ivx_holdings_1/pause")
           test "$unauth" = 401
           echo 'live_112_registry_contract_isolation_and_security=PASS'
@@ -131,6 +192,7 @@ jobs:
             -H 'Content-Type: application/json' \
             -H "x-ivx-owner-key: ${SYSTEM_KEY}" \
             --data '{}')
+          cat /tmp/start.json | jq '{ok,runId,error,message}' || true
           test "$HTTP" = 200
           test "$(jq -r '.ok // false' /tmp/start.json)" = true
           RUN_ID=$(jq -r '.runId // empty' /tmp/start.json)
