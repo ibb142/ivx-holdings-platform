@@ -20,6 +20,7 @@ jobs:
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
     steps:
       - name: Decrypt owner credentials and safely bind Render runtime
         shell: bash
@@ -29,16 +30,13 @@ jobs:
           const crypto = await import('node:crypto');
           const base = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/+$/, '');
           const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+          const systemSecret = (process.env.IVX_AI_SYSTEM_SECRET || '').trim();
           const encryptionSecrets = [
             process.env.IVX_OWNER_VARIABLES_ENCRYPTION_KEY,
             process.env.APP_SECRET,
             process.env.JWT_SECRET,
           ].filter(Boolean);
-          if (!base || !serviceKey || encryptionSecrets.length === 0) throw new Error('required GitHub runtime bindings missing');
-          // Bind the same highest-priority secret used by this workflow's
-          // decryption candidate order. The previous implementation referenced
-          // an undefined `encryptionSecret`, so it always failed before the
-          // Render environment could be updated.
+          if (!base || !serviceKey || encryptionSecrets.length === 0 || !systemSecret) throw new Error('required GitHub runtime bindings missing');
           const encryptionSecret = encryptionSecrets[0];
           const names = ['RENDER_API_KEY','RENDER_SERVICE_ID','IVX_AI_GATEWAY_KEY','AI_GATEWAY_API_KEY'];
           const query = encodeURIComponent(`(${names.join(',')})`);
@@ -88,6 +86,7 @@ jobs:
           existing.set('IVX_AI_GATEWAY_KEY', aiKey);
           existing.set('AI_GATEWAY_API_KEY', aiKey);
           existing.set('IVX_OWNER_VARIABLES_ENCRYPTION_KEY', encryptionSecret);
+          existing.set('IVX_AI_SYSTEM_SECRET', systemSecret);
           const body = Array.from(existing, ([key,value]) => ({ key, value }));
           const putRes = await fetch(envUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
           if (!putRes.ok) throw new Error(`Render env PUT HTTP ${putRes.status}: ${(await putRes.text()).slice(0,160)}`);
@@ -99,12 +98,13 @@ jobs:
             const ev = item.envVar || item;
             if (ev && typeof ev.key === 'string') verify.set(ev.key, typeof ev.value === 'string' ? ev.value : '');
           }
-          for (const required of ['IVX_AI_GATEWAY_KEY','AI_GATEWAY_API_KEY','IVX_OWNER_VARIABLES_ENCRYPTION_KEY']) {
+          for (const required of ['IVX_AI_GATEWAY_KEY','AI_GATEWAY_API_KEY','IVX_OWNER_VARIABLES_ENCRYPTION_KEY','IVX_AI_SYSTEM_SECRET']) {
             if (!verify.get(required)) throw new Error(`Render post-write validation missing ${required}`);
           }
+          if (verify.get('IVX_AI_SYSTEM_SECRET') !== systemSecret) throw new Error('Render IVX_AI_SYSTEM_SECRET mismatch after write');
           console.log(`owner_store_decrypt=PASS rows=${rows.length}`);
           console.log(`render_env_merge=PASS before=${before} after=${verify.size}`);
-          console.log('ai_runtime_bindings=PASS');
+          console.log('system_secret_sync=PASS');
           const deployRes = await fetch(`https://api.render.com/v1/services/${encodeURIComponent(serviceId)}/deploys`, {
             method: 'POST', headers, body: JSON.stringify({ clearCache: 'do_not_clear' })
           });
