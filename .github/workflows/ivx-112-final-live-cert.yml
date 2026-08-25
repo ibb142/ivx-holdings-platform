@@ -101,13 +101,25 @@ jobs:
           test "$(jq '[.agents[].agentId]|unique|length' /tmp/agents.json)" = 112
           test "$(jq '[.agents[].agentNumber]|unique|length' /tmp/agents.json)" = 112
           test "$(jq '[.agents[]|select(.paused==true or .disabled==true)]|length' /tmp/agents.json)" = 0
-          for path in contracts/validate permissions/verify independence-check; do
-            curl -fsS "${API_BASE}/api/ivx/agents/${path}" -o "/tmp/${path//\//-}.json"
-            test "$(jq -r '.ok // false' "/tmp/${path//\//-}.json")" = true
+
+          mkdir -p /tmp/ivx-contracts
+          jq -r '.agents[].agentId' /tmp/agents.json | while read -r agent_id; do
+            code=$(curl -sS -m 20 -o "/tmp/ivx-contracts/${agent_id}.json" -w '%{http_code}' "${API_BASE}/api/ivx/agents/${agent_id}/contract" || true)
+            echo "contract agent=${agent_id} http=${code}"
+            test "$code" = 200
+            test "$(jq -r '.ok // false' "/tmp/ivx-contracts/${agent_id}.json")" = true
+            test -n "$(jq -r '.contract.memoryNamespace // empty' "/tmp/ivx-contracts/${agent_id}.json")"
+            test -n "$(jq -r '.contract.queueNamespace // empty' "/tmp/ivx-contracts/${agent_id}.json")"
+            test -n "$(jq -r '.contract.instructionHash // empty' "/tmp/ivx-contracts/${agent_id}.json")"
           done
+          test "$(find /tmp/ivx-contracts -name '*.json' | wc -l | tr -d ' ')" = 112
+          jq -s '[.[].contract.memoryNamespace] | unique | length' /tmp/ivx-contracts/*.json | grep -qx '112'
+          jq -s '[.[].contract.queueNamespace] | unique | length' /tmp/ivx-contracts/*.json | grep -qx '112'
+          jq -s '[.[].contract.agentId] | unique | length' /tmp/ivx-contracts/*.json | grep -qx '112'
+
           unauth=$(curl -sS -o /tmp/unauth.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/agents/ivx_holdings_1/pause")
           test "$unauth" = 401
-          echo 'live_112_registry_and_security=PASS'
+          echo 'live_112_registry_contract_isolation_and_security=PASS'
 
       - name: Start real 112-agent certificate
         shell: bash
