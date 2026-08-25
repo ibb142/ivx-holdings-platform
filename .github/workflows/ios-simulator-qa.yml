@@ -1,5 +1,5 @@
-# IVX iOS Simulator QA — GitHub Actions macOS Runner
-# Strict certification: build -> launch -> Maestro. Maestro failures MUST fail the job.
+# IVX iOS Simulator QA — strict finite certification
+# Build -> boot -> install -> launch -> Maestro. No persistent Metro process.
 
 name: iOS Simulator QA
 
@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       run_full_qa:
-        description: 'Run full 20-step chat QA (requires OWNER_PASSWORD secret)'
+        description: 'Run full chat QA'
         required: false
         default: false
         type: boolean
@@ -29,7 +29,6 @@ env:
   EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
   EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
   EXPO_PUBLIC_QA_BUILD: 'true'
-  OWNER_EMAIL: iperez4242@gmail.com
 
 permissions:
   contents: read
@@ -40,38 +39,53 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 60
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
       - name: Install dependencies
         run: |
+          set -euo pipefail
           bun install
           cd expo && bun install
-      - name: Build and launch on iOS Simulator
+      - name: Prebuild iOS
         working-directory: expo
-        timeout-minutes: 45
         env:
           EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.sha }}
         run: |
-          set -o pipefail
-          npx expo run:ios --configuration debug 2>&1 | tee expo-build.log
-      - name: Verify a simulator is booted
+          set -euo pipefail
+          npx expo prebuild --platform ios --clean --no-install
+          cd ios && pod install
+      - name: Boot simulator
+        id: sim
         run: |
           set -euo pipefail
-          for i in {1..30}; do
-            if xcrun simctl list devices booted | grep -q 'iPhone'; then
-              xcrun simctl list devices booted
-              exit 0
-            fi
-            sleep 2
-          done
-          echo '::error::No booted iPhone simulator after build'
-          exit 1
-      - name: Capture launch screenshot
+          SIM_ID=$(xcrun simctl list devices available | grep -m1 'iPhone' | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          test -n "$SIM_ID"
+          xcrun simctl boot "$SIM_ID" 2>/dev/null || true
+          xcrun simctl bootstatus "$SIM_ID" -b
+          echo "id=$SIM_ID" >> "$GITHUB_OUTPUT"
+      - name: Build iOS app without Metro
+        working-directory: expo
+        env:
+          EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.sha }}
         run: |
-          sleep 5
-          xcrun simctl io booted screenshot screenshot-01-launch.png
+          set -euo pipefail
+          WORKSPACE=$(find ios -maxdepth 2 -name '*.xcworkspace' | head -1)
+          test -n "$WORKSPACE"
+          SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list -json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["workspace"]["schemes"][0])')
+          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Debug -sdk iphonesimulator -destination "id=${{ steps.sim.outputs.id }}" -derivedDataPath ios/build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee expo-build.log
+      - name: Install and launch IVX
+        id: app
+        working-directory: expo
+        run: |
+          set -euo pipefail
+          APP=$(find ios/build -type d -name '*.app' -path '*Debug-iphonesimulator*' | head -1)
+          test -n "$APP"
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          test -n "$BUNDLE_ID"
+          xcrun simctl install "${{ steps.sim.outputs.id }}" "$APP"
+          xcrun simctl launch "${{ steps.sim.outputs.id }}" "$BUNDLE_ID"
+          sleep 8
+          xcrun simctl io "${{ steps.sim.outputs.id }}" screenshot screenshot-01-launch.png
       - name: Install Maestro
         run: |
           set -euo pipefail
@@ -90,13 +104,13 @@ jobs:
           OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
         run: |
           set -euo pipefail
-          test -n "$OWNER_PASSWORD" || { echo '::error::OWNER_PASSWORD secret required'; exit 1; }
+          test -n "$OWNER_PASSWORD"
           "$HOME/.maestro/bin/maestro" test .maestro/ivx-chat-full-qa.yaml --format junit --output maestro-chat-results.xml 2>&1 | tee maestro-chat.log
       - name: Capture evidence
         if: always()
         run: |
-          xcrun simctl io booted screenshot screenshot-02-post-test.png 2>/dev/null || true
-          xcrun simctl spawn booted log show --last 5m > simulator-log.txt 2>&1 || true
+          xcrun simctl io "${{ steps.sim.outputs.id }}" screenshot screenshot-02-post-test.png 2>/dev/null || true
+          xcrun simctl spawn "${{ steps.sim.outputs.id }}" log show --last 5m > simulator-log.txt 2>&1 || true
       - name: Upload certification artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -112,13 +126,6 @@ jobs:
             expo/maestro-chat.log
           if-no-files-found: warn
           retention-days: 30
-      - name: Certification summary
-        if: always()
-        run: |
-          echo '## IVX iOS / Maestro Certification' >> "$GITHUB_STEP_SUMMARY"
-          echo "- Commit: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo '- Gate: Build -> Launch -> Maestro' >> "$GITHUB_STEP_SUMMARY"
-          echo '- Maestro is strict: any test failure fails this job.' >> "$GITHUB_STEP_SUMMARY"
       - name: Shutdown simulator
         if: always()
         run: xcrun simctl shutdown all 2>/dev/null || true
