@@ -1,0 +1,129 @@
+name: Landing 100-Worker Live Start
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/landing-100-worker-live-start.yml'
+      - 'qa/landing-112-agent-war-room.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.registry.outputs.matrix }}
+    env:
+      API_BASE: https://api.ivxholding.com
+    steps:
+      - uses: actions/checkout@v4
+      - id: registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 4 --retry-delay 2 "$API_BASE/api/ivx/agents" -o /tmp/agents.json
+          test "$(jq -r '.ok // false' /tmp/agents.json)" = true
+          test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
+          matrix=$(jq -c '{include:[.agents[] | select(.agentNumber >= 13 and .agentNumber <= 112) | {agentNumber:.agentNumber,agentId:.agentId,name:.name}]}' /tmp/agents.json)
+          test "$(echo "$matrix" | jq '.include|length')" = 100
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  run-100:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    env:
+      API_BASE: https://api.ivxholding.com
+      IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+      IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+      IVX_OWNER_TOKEN: ${{ secrets.IVX_OWNER_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Execute assigned landing mission through real agent runtime
+        shell: bash
+        env:
+          AGENT_NUMBER: ${{ matrix.agentNumber }}
+          AGENT_ID: ${{ matrix.agentId }}
+        run: |
+          set -euo pipefail
+          n=$(printf '%03d' "$AGENT_NUMBER")
+          line=$(grep -E "^${n} — " qa/landing-112-agent-war-room.md | head -1 || true)
+          test -n "$line"
+          assignment=${line#* — }
+
+          contract_http=$(curl -sS --max-time 25 -o /tmp/contract.json -w '%{http_code}' "$API_BASE/api/ivx/agents/$AGENT_ID/contract" || true)
+          test "$contract_http" = 200
+          task_type=$(jq -r '[.contract.allowedTaskTypes[]? | select(. == "audit" or . == "analysis" or . == "research")] | .[0] // .contract.allowedTaskTypes[0] // empty' /tmp/contract.json)
+          test -n "$task_type"
+
+          mod=$((AGENT_NUMBER % 6))
+          case "$mod" in
+            0) tool='run_tests'; params='{"target":"backend"}' ;;
+            1) tool='code_search'; params='{"pattern":"landing","scope":"expo/ivxholding-landing"}' ;;
+            2) tool='code_read'; params='{"path":"expo/ivxholding-landing/index.html"}' ;;
+            3) tool='lint'; params='{}' ;;
+            4) tool='typecheck'; params='{}' ;;
+            5) tool='secret_scan'; params='{}' ;;
+          esac
+
+          http=401
+          : > /tmp/run.json
+          for candidate_name in IVX_AI_SYSTEM_SECRET IVX_SYSTEM_SECRET IVX_OWNER_TOKEN; do
+            candidate="${!candidate_name:-}"
+            [ -n "$candidate" ] || continue
+            echo "::add-mask::$candidate"
+            body=$(jq -nc --arg taskType "$task_type" --arg token "$candidate" --arg taskId "landing100-${GITHUB_RUN_ID}-${n}" --arg sourceSha "$GITHUB_SHA" --arg assignment "$assignment" --arg toolId "$tool" --argjson toolParams "$params" '{taskType:$taskType,ownerApprovalToken:$token,payload:{__taskId:$taskId,__workflow:"Landing 100-Worker Live Start",sourceSha:$sourceSha,landingAssignment:$assignment,__toolId:$toolId,__toolParams:$toolParams,realExecutionOnly:true,simulatedSuccessAllowed:false}}')
+            http=$(curl -sS --retry 1 --retry-delay 1 --max-time 180 -o /tmp/run.json -w '%{http_code}' -X POST "$API_BASE/api/ivx/agents/$AGENT_ID/run" -H 'Content-Type: application/json' -H "x-ivx-owner-key: $candidate" --data "$body" || true)
+            [ "$http" = 401 ] || break
+          done
+
+          test "$http" = 200
+          test "$(jq -r '.ok // false' /tmp/run.json)" = true
+          test "$(jq -r '.runRecord.finalStatus // empty' /tmp/run.json)" = completed
+          test "$(jq -r '.runRecord.simulated // true' /tmp/run.json)" = false
+          test -n "$(jq -r '.runRecord.sourceReference // empty' /tmp/run.json)"
+          test -n "$(jq -r '.runRecord.toolResultId // empty' /tmp/run.json)"
+          mkdir -p evidence
+          jq -n --argjson agentNumber "$AGENT_NUMBER" --arg agentId "$AGENT_ID" --arg assignment "$assignment" --arg sourceSha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --arg tool "$tool" --slurpfile runtime /tmp/run.json '{agentNumber:$agentNumber,agentId:$agentId,assignment:$assignment,sourceSha:$sourceSha,runId:$runId,tool:$tool,runtime:$runtime[0],passed:true}' > "evidence/agent-${n}.json"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: landing100-agent-${{ matrix.agentNumber }}-${{ github.run_id }}
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
+  certificate:
+    needs: [prepare, run-100]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: landing100-agent-*-${{ github.run_id }}
+          path: evidence-all
+          merge-multiple: true
+      - shell: bash
+        run: |
+          set -euo pipefail
+          count=$(find evidence-all -type f -name 'agent-*.json' | wc -l | tr -d ' ')
+          test "$count" = 100
+          jq -s '.' evidence-all/agent-*.json > all.json
+          test "$(jq 'length' all.json)" = 100
+          test "$(jq '[.[].agentNumber] | unique | length' all.json)" = 100
+          test "$(jq '[.[] | select(.agentNumber >= 13 and .agentNumber <= 112 and .passed == true)] | length' all.json)" = 100
+          jq -n --arg marker 'IVX-LANDING-100-WORKER-LIVE-CERTIFICATE' --arg sourceSha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --slurpfile agents all.json '{marker:$marker,sourceSha:$sourceSha,runId:$runId,totalWorkers:100,passedWorkers:100,simulatedWorkers:0,status:"PASS",agents:$agents[0]}' > LANDING-100-WORKER-LIVE-CERTIFICATE.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LANDING-100-WORKER-LIVE-CERTIFICATE-${{ github.sha }}
+          path: LANDING-100-WORKER-LIVE-CERTIFICATE.json
+          if-no-files-found: error
