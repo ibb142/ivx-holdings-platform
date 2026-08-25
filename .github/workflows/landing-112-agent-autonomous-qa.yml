@@ -6,6 +6,10 @@ on:
     paths:
       - '.github/workflows/landing-112-agent-autonomous-qa.yml'
       - 'qa/landing-112-agent-war-room.md'
+      - 'backend/api/ivx-agent-api.ts'
+      - 'backend/services/ivx-system-secret.ts'
+      - 'backend/services/ivx-agent-real-tools.ts'
+      - 'backend/services/ivx-agent-engineering-tools.ts'
   schedule:
     - cron: '15 * * * *'
   workflow_dispatch:
@@ -93,8 +97,6 @@ jobs:
           task_type=$(jq -r '[.contract.allowedTaskTypes[]? | select(. == "audit" or . == "analysis" or . == "research")] | .[0] // .contract.allowedTaskTypes[0] // empty' /tmp/contract.json)
           test -n "$task_type"
 
-          # Distribute real engineering tools across all 112 workers. Every agent
-          # has the read-only engineering toolset; no simulated/public-chat packet.
           mod=$((AGENT_NUMBER % 6))
           case "$mod" in
             0) tool='run_tests'; params='{"target":"backend"}' ;;
@@ -127,16 +129,20 @@ jobs:
           source=''
           tool_result=''
           simulated='null'
+          real_tool='null'
+          verified_output='null'
           if [ "$http" = 200 ]; then
             ok=$(jq -r '.ok // false' /tmp/run.json)
             final_status=$(jq -r '.runRecord.finalStatus // "unknown"' /tmp/run.json)
             source=$(jq -r '.runRecord.sourceReference // empty' /tmp/run.json)
             tool_result=$(jq -r '.runRecord.toolResultId // empty' /tmp/run.json)
-            simulated=$(jq -r 'if .runRecord.simulated == null then "null" else (.runRecord.simulated|tostring) end' /tmp/run.json)
+            simulated=$(jq -r 'if .runRecord.simulated != null then (.runRecord.simulated|tostring) elif .simulated != null then (.simulated|tostring) else "null" end' /tmp/run.json)
+            real_tool=$(jq -r 'if .runRecord.realToolUsed != null then (.runRecord.realToolUsed|tostring) elif .realToolUsed != null then (.realToolUsed|tostring) else "null" end' /tmp/run.json)
+            verified_output=$(jq -r 'if .runRecord.verifiedOutput != null then (.runRecord.verifiedOutput|tostring) elif .verifiedOutput != null then (.verifiedOutput|tostring) else "null" end' /tmp/run.json)
           fi
 
           passed=false
-          if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$final_status" = completed ] && [ -n "$source" ] && [ -n "$tool_result" ] && [ "$simulated" = false ]; then
+          if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$final_status" = completed ] && [ -n "$source" ] && [ -n "$tool_result" ] && [ "$simulated" = false ] && [ "$real_tool" = true ] && [ "$verified_output" = true ]; then
             passed=true
           fi
 
@@ -153,9 +159,13 @@ jobs:
             --arg finalStatus "$final_status" \
             --arg sourceReference "$source" \
             --arg toolResultId "$tool_result" \
+            --arg sourceSha "$GITHUB_SHA" \
+            --arg runId "$GITHUB_RUN_ID" \
             --argjson simulated "$simulated" \
+            --argjson realToolUsed "$real_tool" \
+            --argjson verifiedOutput "$verified_output" \
             --argjson passed "$passed" \
-            '{agentNumber:$agentNumber,agentId:$agentId,name:$name,assignment:$assignment,toolId:$toolId,taskType:$taskType,http:$http,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,simulated:$simulated,passed:$passed}' \
+            '{agentNumber:$agentNumber,agentId:$agentId,name:$name,assignment:$assignment,toolId:$toolId,taskType:$taskType,http:$http,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,sourceSha:$sourceSha,runId:$runId,simulated:$simulated,realToolUsed:$realToolUsed,verifiedOutput:$verifiedOutput,passed:$passed}' \
             > "evidence/agent-${AGENT_NUMBER}.json"
 
           cat "evidence/agent-${AGENT_NUMBER}.json"
@@ -170,15 +180,65 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  summary:
+  certificate:
     needs: [prepare, activate-112]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: War-room status
+      - name: Download all 112 evidence artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: landing-agent-*-${{ github.run_id }}
+          path: evidence-all
+          merge-multiple: true
+
+      - name: Build fail-closed 112/112 aggregate certificate
         shell: bash
         run: |
           set -euo pipefail
-          echo 'Landing 112-agent REAL engineering QA cycle completed or attempted.'
-          echo 'Each PASS requires /api/ivx/agents/:id/run + a real engineering tool + sourceReference + toolResultId + simulated=false.'
-          echo 'Production GO still requires deterministic landing hard gates and any discovered P0/P1 fixes.'
+          mkdir -p certificate
+          count=$(find evidence-all -maxdepth 1 -type f -name 'agent-*.json' | wc -l | tr -d ' ')
+          test "$count" = 112
+
+          jq -s '.' evidence-all/agent-*.json > /tmp/all.json
+          test "$(jq 'length' /tmp/all.json)" = 112
+          test "$(jq '[.[].agentNumber] | unique | length' /tmp/all.json)" = 112
+          test "$(jq --arg sha "$GITHUB_SHA" '[.[] | select(.sourceSha == $sha)] | length' /tmp/all.json)" = 112
+          test "$(jq --arg run "$GITHUB_RUN_ID" '[.[] | select(.runId == $run)] | length' /tmp/all.json)" = 112
+          test "$(jq '[.[] | select(.http == "200" and .ok == true and .finalStatus == "completed" and .simulated == false and .realToolUsed == true and .verifiedOutput == true and (.sourceReference|length)>0 and (.toolResultId|length)>0 and .passed == true)] | length' /tmp/all.json)" = 112
+
+          jq -n \
+            --arg marker 'IVX-LANDING-112-REAL-WORK-CERTIFICATE' \
+            --arg sourceSha "$GITHUB_SHA" \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --slurpfile agents /tmp/all.json \
+            '{marker:$marker,sourceSha:$sourceSha,runId:$runId,repository:$repository,generatedAt:$generatedAt,totalAgents:112,uniqueAgents:112,passedAgents:112,simulatedAgents:0,realToolAgents:112,verifiedOutputAgents:112,status:"PASS",agents:$agents[0]}' \
+            > "certificate/LANDING-112-REAL-WORK-CERTIFICATE-${GITHUB_SHA}.json"
+
+          sha256sum "certificate/LANDING-112-REAL-WORK-CERTIFICATE-${GITHUB_SHA}.json" > certificate/SHA256SUMS.txt
+          cat "certificate/LANDING-112-REAL-WORK-CERTIFICATE-${GITHUB_SHA}.json" | jq '{marker,sourceSha,runId,totalAgents,uniqueAgents,passedAgents,simulatedAgents,realToolAgents,verifiedOutputAgents,status}'
+
+      - name: Upload durable 112/112 certificate
+        uses: actions/upload-artifact@v4
+        with:
+          name: LANDING-112-REAL-WORK-CERTIFICATE-${{ github.sha }}
+          path: certificate/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish certificate summary
+        shell: bash
+        run: |
+          {
+            echo '## Landing 112/112 real-work certificate'
+            echo ''
+            echo "- SHA: $GITHUB_SHA"
+            echo "- Run: $GITHUB_RUN_ID"
+            echo '- Agents: 112/112 PASS'
+            echo '- Simulated: 0'
+            echo '- Real tool used: 112/112'
+            echo '- Verified output: 112/112'
+          } >> "$GITHUB_STEP_SUMMARY"
