@@ -71,7 +71,7 @@ jobs:
             "IVX E2E Acceptance Pipeline"
             "IVX Enterprise QA"
             "IVX Render Live Certificate"
-            "IVX 112 Live AI Worker Certificate"
+            "IVX 112 Final Live Certificate V2"
           )
           API="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&per_page=100"
           for poll in $(seq 1 300); do
@@ -182,6 +182,28 @@ jobs:
           fi
           echo "source_verification=PASS api=$API_COUNT routes=$ROUTE_COUNT"
 
+      - name: Write durable 10/10 certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence
+          jq -n \
+            --arg marker "IVX-10OF10-FINAL-CERTIFICATE" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg sha "$GITHUB_SHA" \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{marker:$marker,repository:$repository,sha:$sha,runId:$runId,verifiedAt:$verifiedAt,exactSha:true,ci:"PASS",qa:"PASS",e2e:"PASS",enterpriseQa:"PASS",renderLive:"PASS",final112V2:"PASS",productionHealth:"PASS",productionVersionExactSha:"PASS",moduleRegistry200:"PASS",blockedModules:0,failedModules:0,acceptanceEndpoints:"PASS",sourceVerification:"PASS",overall:"10/10 CERTIFIED"}' \
+            > qa/evidence/IVX-10OF10-FINAL-CERTIFICATE.json
+          sha256sum qa/evidence/IVX-10OF10-FINAL-CERTIFICATE.json
+
+      - name: Upload durable 10/10 certificate
+        uses: actions/upload-artifact@v4
+        with:
+          name: IVX-10OF10-FINAL-CERTIFICATE-${{ github.sha }}
+          path: qa/evidence/IVX-10OF10-FINAL-CERTIFICATE.json
+          if-no-files-found: error
+
       - name: Final 10/10 certification summary
         shell: bash
         run: |
@@ -198,7 +220,7 @@ jobs:
           echo "same_sha_e2e=PASS"
           echo "same_sha_enterprise_qa=PASS"
           echo "same_sha_render_live=PASS"
-          echo "same_sha_112_live_ai_workers=PASS"
+          echo "same_sha_112_final_live_v2=PASS"
           echo "production_health=PASS"
           echo "production_version_exact_sha=PASS"
           echo "module_registry_200=PASS"
