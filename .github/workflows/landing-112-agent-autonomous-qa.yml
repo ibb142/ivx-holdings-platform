@@ -54,17 +54,24 @@ jobs:
       API_BASE: https://api.ivxholding.com
       IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
       IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+      IVX_OWNER_TOKEN: ${{ secrets.IVX_OWNER_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Resolve owner/system binding without exposing values
+      - name: Resolve configured auth candidates without exposing values
         shell: bash
         run: |
           set -euo pipefail
-          SYSTEM_KEY="${IVX_AI_SYSTEM_SECRET:-${IVX_SYSTEM_SECRET:-}}"
-          test -n "$SYSTEM_KEY"
-          echo "::add-mask::$SYSTEM_KEY"
-          echo "SYSTEM_KEY=$SYSTEM_KEY" >> "$GITHUB_ENV"
+          found=0
+          for name in IVX_AI_SYSTEM_SECRET IVX_SYSTEM_SECRET IVX_OWNER_TOKEN; do
+            value="${!name:-}"
+            if [ -n "$value" ]; then
+              echo "::add-mask::$value"
+              found=$((found + 1))
+            fi
+          done
+          test "$found" -gt 0
+          echo "AUTH_CANDIDATE_COUNT=$found" >> "$GITHUB_ENV"
 
       - name: Resolve exact landing assignment
         id: assignment
@@ -108,21 +115,35 @@ jobs:
           esac
 
           task_id="landing112-${GITHUB_RUN_ID}-$(printf '%03d' "$AGENT_NUMBER")"
-          body=$(jq -nc \
-            --arg taskType "$task_type" \
-            --arg token "$SYSTEM_KEY" \
-            --arg taskId "$task_id" \
-            --arg sourceSha "$GITHUB_SHA" \
-            --arg assignment "$TASK" \
-            --arg toolId "$tool" \
-            --argjson toolParams "$params" \
-            '{taskType:$taskType,ownerApprovalToken:$token,payload:{__taskId:$taskId,__runId:("landing112-" + $taskId),__workflow:"Landing 112-Agent Autonomous QA War Room",sourceSha:$sourceSha,landingAssignment:$assignment,__toolId:$toolId,__toolParams:$toolParams,realExecutionOnly:true,simulatedSuccessAllowed:false}}')
+          http='401'
+          auth_source='none'
+          : > /tmp/run.json
 
-          http=$(curl -sS --retry 1 --retry-delay 1 --max-time 180 -o /tmp/run.json -w '%{http_code}' \
-            -X POST "${API_BASE}/api/ivx/agents/${AGENT_ID}/run" \
-            -H 'Content-Type: application/json' \
-            -H "x-ivx-owner-key: ${SYSTEM_KEY}" \
-            --data "$body" || true)
+          for candidate_name in IVX_AI_SYSTEM_SECRET IVX_SYSTEM_SECRET IVX_OWNER_TOKEN; do
+            candidate="${!candidate_name:-}"
+            [ -n "$candidate" ] || continue
+
+            body=$(jq -nc \
+              --arg taskType "$task_type" \
+              --arg token "$candidate" \
+              --arg taskId "$task_id" \
+              --arg sourceSha "$GITHUB_SHA" \
+              --arg assignment "$TASK" \
+              --arg toolId "$tool" \
+              --argjson toolParams "$params" \
+              '{taskType:$taskType,ownerApprovalToken:$token,payload:{__taskId:$taskId,__runId:("landing112-" + $taskId),__workflow:"Landing 112-Agent Autonomous QA War Room",sourceSha:$sourceSha,landingAssignment:$assignment,__toolId:$toolId,__toolParams:$toolParams,realExecutionOnly:true,simulatedSuccessAllowed:false}}')
+
+            http=$(curl -sS --retry 1 --retry-delay 1 --max-time 180 -o /tmp/run.json -w '%{http_code}' \
+              -X POST "${API_BASE}/api/ivx/agents/${AGENT_ID}/run" \
+              -H 'Content-Type: application/json' \
+              -H "x-ivx-owner-key: ${candidate}" \
+              --data "$body" || true)
+
+            if [ "$http" != 401 ]; then
+              auth_source="$candidate_name"
+              break
+            fi
+          done
 
           ok=false
           final_status='request_failed'
@@ -155,6 +176,8 @@ jobs:
             --arg toolId "$tool" \
             --arg taskType "$task_type" \
             --arg http "$http" \
+            --arg authSource "$auth_source" \
+            --argjson authCandidateCount "$AUTH_CANDIDATE_COUNT" \
             --argjson ok "$ok" \
             --arg finalStatus "$final_status" \
             --arg sourceReference "$source" \
@@ -165,7 +188,7 @@ jobs:
             --argjson realToolUsed "$real_tool" \
             --argjson verifiedOutput "$verified_output" \
             --argjson passed "$passed" \
-            '{agentNumber:$agentNumber,agentId:$agentId,name:$name,assignment:$assignment,toolId:$toolId,taskType:$taskType,http:$http,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,sourceSha:$sourceSha,runId:$runId,simulated:$simulated,realToolUsed:$realToolUsed,verifiedOutput:$verifiedOutput,passed:$passed}' \
+            '{agentNumber:$agentNumber,agentId:$agentId,name:$name,assignment:$assignment,toolId:$toolId,taskType:$taskType,http:$http,authSource:$authSource,authCandidateCount:$authCandidateCount,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,sourceSha:$sourceSha,runId:$runId,simulated:$simulated,realToolUsed:$realToolUsed,verifiedOutput:$verifiedOutput,passed:$passed}' \
             > "evidence/agent-${AGENT_NUMBER}.json"
 
           cat "evidence/agent-${AGENT_NUMBER}.json"
