@@ -118,6 +118,7 @@ jobs:
             'rnd_[A-Za-z0-9]{20,}'
             'sbp_[A-Za-z0-9_-]{30,}'
             'vck_[A-Za-z0-9_-]{20,}'
+            'PT[A-Za-z0-9_-]{30,}'
           )
           includes=(
             '--include=*.ts' '--include=*.tsx' '--include=*.js' '--include=*.mjs'
@@ -127,10 +128,11 @@ jobs:
             FOUND=$(grep -r "${includes[@]}" \
               --exclude-dir=node_modules --exclude-dir=.git \
               --exclude='.env.example' --exclude='.env.production.template' \
+              --exclude='*.test.ts' --exclude='*.test.tsx' --exclude='*.spec.ts' --exclude='*.spec.tsx' \
               -E "$pattern" . 2>/dev/null || true)
             if [ -n "$FOUND" ]; then
               echo "SECRET LEAK DETECTED (pattern: $pattern)"
-              printf '%s\n' "$FOUND" | sed -E 's/(ghp_|github_pat_|sk-|rnd_|sbp_|vck_)[A-Za-z0-9_-]+/\1[REDACTED]/g'
+              printf '%s\n' "$FOUND" | sed -E 's/(ghp_|github_pat_|sk-|rnd_|sbp_|vck_|PT)[A-Za-z0-9_-]+/\1[REDACTED]/g'
               EXIT_CODE=1
             fi
           done

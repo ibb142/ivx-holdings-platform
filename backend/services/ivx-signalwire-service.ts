@@ -12,7 +12,7 @@
  * Credentials come from the IVX SignalWire space:
  *   Space URL:  ivxholding.signalwire.com
  *   Project:   d07c7012-048e-442c-8f6b-fd9ad0565134
- *   Token:      PT26390e2d57a132fdc8b9fd26267d334ee5483954595a5e26
+ *   Token:      runtime environment only
  *   From:       +17206230552
  *
  * Routes consumed:
@@ -35,7 +35,7 @@ export const IVX_SIGNALWIRE_VERSION = '2.0.0';
 
 const SIGNALWIRE_SPACE = process.env['IVX_SIGNALWIRE_SPACE'] || 'ivxholding.signalwire.com';
 const SIGNALWIRE_PROJECT_ID = process.env['IVX_SIGNALWIRE_PROJECT_ID'] || 'd07c7012-048e-442c-8f6b-fd9ad0565134';
-const SIGNALWIRE_TOKEN = process.env['IVX_SIGNALWIRE_TOKEN'] || 'PT26390e2d57a132fdc8b9fd26267d334ee5483954595a5e26';
+const SIGNALWIRE_TOKEN = process.env['IVX_SIGNALWIRE_TOKEN'] || '';
 const SIGNALWIRE_FROM = process.env['IVX_SIGNALWIRE_FROM'] || '+17206230552';
 const PRODUCTION_URL = process.env['IVX_PRODUCTION_URL'] || 'https://api.ivxholding.com';
 const IVX_OWNER_PHONE = process.env['IVX_OWNER_PHONE'] || '+15616443503';
