@@ -19,32 +19,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      active: ${{ steps.window.outputs.active }}
       matrix: ${{ steps.registry.outputs.matrix }}
+    env:
+      API_BASE: https://api.ivxholding.com
     steps:
       - uses: actions/checkout@v4
 
-      - name: Launch-window gate
-        id: window
-        shell: bash
-        run: |
-          set -euo pipefail
-          now=$(date -u +%s)
-          cutoff=$(date -u -d '2026-08-19T04:00:00Z' +%s)
-          if [ "$now" -lt "$cutoff" ]; then
-            echo 'active=true' >> "$GITHUB_OUTPUT"
-            echo 'launch_window=ACTIVE'
-          else
-            echo 'active=false' >> "$GITHUB_OUTPUT"
-            echo 'launch_window=CLOSED'
-          fi
-
       - name: Load exact 112-agent registry
         id: registry
-        if: steps.window.outputs.active == 'true'
         shell: bash
-        env:
-          API_BASE: https://api.ivxholding.com
         run: |
           set -euo pipefail
           curl -fsS --retry 4 --retry-delay 2 "$API_BASE/api/ivx/agents" -o /tmp/agents.json
@@ -57,19 +40,29 @@ jobs:
 
   activate-112:
     needs: prepare
-    if: needs.prepare.outputs.active == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       max-parallel: 16
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     env:
       API_BASE: https://api.ivxholding.com
+      IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+      IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Resolve exact assignment
+      - name: Resolve owner/system binding without exposing values
+        shell: bash
+        run: |
+          set -euo pipefail
+          SYSTEM_KEY="${IVX_AI_SYSTEM_SECRET:-${IVX_SYSTEM_SECRET:-}}"
+          test -n "$SYSTEM_KEY"
+          echo "::add-mask::$SYSTEM_KEY"
+          echo "SYSTEM_KEY=$SYSTEM_KEY" >> "$GITHUB_ENV"
+
+      - name: Resolve exact landing assignment
         id: assignment
         shell: bash
         env:
@@ -85,69 +78,107 @@ jobs:
           echo 'EOF' >> "$GITHUB_OUTPUT"
           echo "agent=$n task=$task"
 
-      - name: Execute independent AI work packet
-        id: ai
+      - name: Execute REAL engineering QA tool through agent runtime
+        id: work
         shell: bash
         env:
           AGENT_NUMBER: ${{ matrix.agentNumber }}
           AGENT_ID: ${{ matrix.agentId }}
           AGENT_NAME: ${{ matrix.name }}
-          AGENT_ROLE: ${{ matrix.role }}
-          AGENT_DIVISION: ${{ matrix.division }}
           TASK: ${{ steps.assignment.outputs.task }}
         run: |
           set -euo pipefail
-          token="IVX-LANDING-${GITHUB_RUN_ID}-${AGENT_NUMBER}"
-          requestId="landing-war-room-${GITHUB_RUN_ID}-${AGENT_NUMBER}"
-          prompt=$(cat <<EOF
-          You are IVX registered agent ${AGENT_NUMBER}, ${AGENT_NAME}. Role: ${AGENT_ROLE}. Division: ${AGENT_DIVISION}.
-          Launch-war-room assignment: ${TASK}
-          Return the exact token ${token} first. Then provide a concise work packet with: severity hypothesis (P0/P1/P2), what evidence must be checked, likely files/endpoints, safest fix if the gap is confirmed, and exact verification gate. Do not claim you executed tools or verified production unless the request itself gives you evidence. Do not invent PASS results.
-          EOF
-          )
-          payload=$(jq -cn --arg message "$prompt" --arg sessionId "landing-war-room-${GITHUB_RUN_ID}" --arg requestId "$requestId" '{message:$message,sessionId:$sessionId,requestId:$requestId,history:[]}')
-          http=$(curl -sS --retry 4 --retry-delay 2 -m 75 -o /tmp/response.json -w '%{http_code}' -X POST "$API_BASE/api/public/chat" -H 'Content-Type: application/json' -H "x-ivx-client-id: landing-agent-${AGENT_NUMBER}" --data "$payload" || true)
-          answer=$(jq -r '.answer // .text // empty' /tmp/response.json 2>/dev/null || true)
-          source=$(jq -r '.source // empty' /tmp/response.json 2>/dev/null || true)
-          endpoint=$(jq -r '.endpoint // empty' /tmp/response.json 2>/dev/null || true)
-          tokenSeen=false
-          if printf '%s' "$answer" | grep -Fq "$token"; then tokenSeen=true; fi
+          contract_http=$(curl -sS --max-time 25 -o /tmp/contract.json -w '%{http_code}' "${API_BASE}/api/ivx/agents/${AGENT_ID}/contract" || true)
+          test "$contract_http" = 200
+          task_type=$(jq -r '[.contract.allowedTaskTypes[]? | select(. == "audit" or . == "analysis" or . == "research")] | .[0] // .contract.allowedTaskTypes[0] // empty' /tmp/contract.json)
+          test -n "$task_type"
+
+          # Distribute real engineering tools across all 112 workers. Every agent
+          # has the read-only engineering toolset; no simulated/public-chat packet.
+          mod=$((AGENT_NUMBER % 6))
+          case "$mod" in
+            0) tool='run_tests'; params='{"target":"backend"}' ;;
+            1) tool='code_search'; params='{"pattern":"landing","scope":"expo/ivxholding-landing"}' ;;
+            2) tool='code_read'; params='{"path":"expo/ivxholding-landing/index.html"}' ;;
+            3) tool='lint'; params='{}' ;;
+            4) tool='typecheck'; params='{}' ;;
+            5) tool='secret_scan'; params='{}' ;;
+          esac
+
+          task_id="landing112-${GITHUB_RUN_ID}-$(printf '%03d' "$AGENT_NUMBER")"
+          body=$(jq -nc \
+            --arg taskType "$task_type" \
+            --arg token "$SYSTEM_KEY" \
+            --arg taskId "$task_id" \
+            --arg sourceSha "$GITHUB_SHA" \
+            --arg assignment "$TASK" \
+            --arg toolId "$tool" \
+            --argjson toolParams "$params" \
+            '{taskType:$taskType,ownerApprovalToken:$token,payload:{__taskId:$taskId,__runId:("landing112-" + $taskId),__workflow:"Landing 112-Agent Autonomous QA War Room",sourceSha:$sourceSha,landingAssignment:$assignment,__toolId:$toolId,__toolParams:$toolParams,realExecutionOnly:true,simulatedSuccessAllowed:false}}')
+
+          http=$(curl -sS --retry 1 --retry-delay 1 --max-time 180 -o /tmp/run.json -w '%{http_code}' \
+            -X POST "${API_BASE}/api/ivx/agents/${AGENT_ID}/run" \
+            -H 'Content-Type: application/json' \
+            -H "x-ivx-owner-key: ${SYSTEM_KEY}" \
+            --data "$body" || true)
+
+          ok=false
+          final_status='request_failed'
+          source=''
+          tool_result=''
+          simulated='null'
+          if [ "$http" = 200 ]; then
+            ok=$(jq -r '.ok // false' /tmp/run.json)
+            final_status=$(jq -r '.runRecord.finalStatus // "unknown"' /tmp/run.json)
+            source=$(jq -r '.runRecord.sourceReference // empty' /tmp/run.json)
+            tool_result=$(jq -r '.runRecord.toolResultId // empty' /tmp/run.json)
+            simulated=$(jq -r 'if .runRecord.simulated == null then "null" else (.runRecord.simulated|tostring) end' /tmp/run.json)
+          fi
+
           passed=false
-          if [ "$http" = '200' ] && [ -n "$answer" ] && [ "$tokenSeen" = 'true' ]; then passed=true; fi
+          if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$final_status" = completed ] && [ -n "$source" ] && [ -n "$tool_result" ] && [ "$simulated" = false ]; then
+            passed=true
+          fi
+
           mkdir -p evidence
           jq -n \
             --argjson agentNumber "$AGENT_NUMBER" \
             --arg agentId "$AGENT_ID" \
             --arg name "$AGENT_NAME" \
-            --arg role "$AGENT_ROLE" \
-            --arg division "$AGENT_DIVISION" \
-            --arg task "$TASK" \
-            --arg requestId "$requestId" \
-            --arg source "$source" \
-            --arg endpoint "$endpoint" \
-            --arg answer "$answer" \
-            --argjson http "${http:-0}" \
+            --arg assignment "$TASK" \
+            --arg toolId "$tool" \
+            --arg taskType "$task_type" \
+            --arg http "$http" \
+            --argjson ok "$ok" \
+            --arg finalStatus "$final_status" \
+            --arg sourceReference "$source" \
+            --arg toolResultId "$tool_result" \
+            --argjson simulated "$simulated" \
             --argjson passed "$passed" \
-            '{agentNumber:$agentNumber,agentId:$agentId,name:$name,role:$role,division:$division,task:$task,requestId:$requestId,http:$http,source:$source,endpoint:$endpoint,passed:$passed,workPacket:$answer}' \
+            '{agentNumber:$agentNumber,agentId:$agentId,name:$name,assignment:$assignment,toolId:$toolId,taskType:$taskType,http:$http,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,simulated:$simulated,passed:$passed}' \
             > "evidence/agent-${AGENT_NUMBER}.json"
-          test "$passed" = 'true'
 
-      - name: Upload agent work packet
+          cat "evidence/agent-${AGENT_NUMBER}.json"
+          test "$passed" = true
+
+      - name: Upload real agent QA evidence
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: landing-agent-${{ matrix.agentNumber }}-${{ github.run_id }}
           path: evidence/agent-${{ matrix.agentNumber }}.json
-          if-no-files-found: error
-          retention-days: 3
+          if-no-files-found: warn
+          retention-days: 7
 
   summary:
     needs: [prepare, activate-112]
-    if: always() && needs.prepare.outputs.active == 'true'
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - name: War-room status
         shell: bash
         run: |
-          echo '112-agent landing work-packet cycle completed or attempted.'
-          echo 'Artifacts are advisory work packets, not production PASS evidence.'
-          echo 'Production GO still requires deterministic/public verification gates.'
+          set -euo pipefail
+          echo 'Landing 112-agent REAL engineering QA cycle completed or attempted.'
+          echo 'Each PASS requires /api/ivx/agents/:id/run + a real engineering tool + sourceReference + toolResultId + simulated=false.'
+          echo 'Production GO still requires deterministic landing hard gates and any discovered P0/P1 fixes.'
