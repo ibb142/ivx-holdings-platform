@@ -142,7 +142,7 @@ jobs:
           echo "IVX_SIMULATOR_UDID=$UDID" >> "$GITHUB_ENV"
           xcrun simctl boot "$UDID" 2>/dev/null || true
           for attempt in {1..30}; do
-            STATE=$(xcrun simctl list devices --json | python3 -c 'import json,sys,os; d=json.load(sys.stdin); u=os.environ["UDID"]; print(next((x.get("state","") for xs in d.get("devices",{}).values() for x in xs if x.get("udid")==u), ""))' UDID="$UDID" 2>/dev/null || true)
+            STATE=$(xcrun simctl list devices --json | UDID="$UDID" python3 -c 'import json,sys,os; d=json.load(sys.stdin); u=os.environ["UDID"]; print(next((x.get("state","") for xs in d.get("devices",{}).values() for x in xs if x.get("udid")==u), ""))' 2>/dev/null || true)
             if [ "$STATE" = "Booted" ]; then
               echo "simulator_udid=$UDID state=Booted"
               exit 0
