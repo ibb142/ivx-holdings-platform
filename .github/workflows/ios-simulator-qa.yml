@@ -1,25 +1,5 @@
 # IVX iOS Simulator QA — GitHub Actions macOS Runner
-#
-# Uses `npx expo run:ios` which handles ALL the complexity:
-#   - Expo prebuild (generates native iOS project)
-#   - CocoaPods install
-#   - xcodebuild with CORRECT flags (no manual flag guessing)
-#   - Boots a simulator
-#   - Installs the app
-#   - Launches the app
-#
-# Then we capture screenshots and run Maestro flows.
-#
-# Triggers:
-#   - Push to main (when chat files, Maestro flows, or this workflow change)
-#   - Manual dispatch via GitHub Actions UI
-#
-# Secrets required (already configured in repo):
-#   - EXPO_PUBLIC_SUPABASE_URL
-#   - EXPO_PUBLIC_SUPABASE_ANON_KEY
-#
-# Secret required for full 20-step chat QA (owner must add):
-#   - OWNER_PASSWORD — owner's Supabase password for app login
+# Strict certification: build -> launch -> Maestro. Maestro failures MUST fail the job.
 
 name: iOS Simulator QA
 
@@ -53,276 +33,92 @@ env:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   build-and-test:
     name: iOS Simulator Build + Maestro QA
     runs-on: macos-latest
     timeout-minutes: 60
-    outputs:
-      build_status: ${{ steps.build.outcome }}
-      app_path: ${{ steps.app.outputs.path }}
-      simulator_id: ${{ steps.sim.outputs.sim_id }}
-      simulator_name: ${{ steps.sim.outputs.sim_name }}
-      ios_version: ${{ steps.sim.outputs.ios_version }}
-      maestro_launch_result: ${{ steps.maestro-launch.outcome }}
-      maestro_chat_result: ${{ steps.maestro-chat.outcome }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
-
-      - name: Install root dependencies
-        run: bun install
-
-      - name: Install Expo dependencies
-        working-directory: expo
-        run: bun install
-
-      - name: Verify Expo CLI
-        working-directory: expo
+      - name: Install dependencies
         run: |
-          echo "=== Node version ==="
-          node --version
-          echo "=== Expo CLI version ==="
-          npx expo --version
-          echo "=== Expo package version ==="
-          node -e "console.log('expo:', require('expo/package.json').version)"
-          echo "=== expo-router version ==="
-          node -e "console.log('expo-router:', require('expo-router/package.json').version)" 2>&1 || echo "expo-router NOT FOUND"
-
-      # ============================================================
-      # KEY FIX: Use `npx expo run:ios` instead of manual xcodebuild.
-      # Expo's CLI knows the correct xcodebuild flags, destination,
-      # and build settings. Manual xcodebuild was producing exit 0
-      # with no .app bundle because of incorrect -destination flags.
-      # `expo run:ios` handles: prebuild → pod install → xcodebuild
-      # → boot simulator → install app → launch app — all in one.
-      # ============================================================
-      - name: Build and run on iOS Simulator (expo run:ios)
-        id: build
+          bun install
+          cd expo && bun install
+      - name: Build and launch on iOS Simulator
         working-directory: expo
         timeout-minutes: 45
-        run: |
-          set -o pipefail
-          echo "=== Starting expo run:ios ==="
-          echo "This handles prebuild + pods + xcodebuild + install + launch"
-          npx expo run:ios --configuration debug 2>&1 | tee expo-build.log
-          BUILD_EXIT=${PIPESTATUS[0]}
-          echo "=== expo run:ios exit code: $BUILD_EXIT ==="
-          echo "build_exit=$BUILD_EXIT" >> $GITHUB_OUTPUT
-          if [ "$BUILD_EXIT" -eq 0 ]; then
-            echo "build_status=success" >> $GITHUB_OUTPUT
-            echo "Build + install + launch completed successfully"
-          else
-            echo "build_status=failed" >> $GITHUB_OUTPUT
-            echo "=== BUILD FAILED — last 200 lines ==="
-            tail -200 expo-build.log
-            echo "### Build Failure — Last 200 Lines" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -200 expo-build.log >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          fi
         env:
           EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.sha }}
-
-      - name: Check build result
-        working-directory: expo
-        if: steps.build.outputs.build_status != 'success'
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          echo "::error::expo run:ios failed. Creating diagnostic issue with build log."
-          # Post the full build log as a GitHub issue so we can see
-          # the actual error without admin access to Actions logs.
-          {
-            echo "## iOS Simulator QA Build Diagnostics"
-            echo ""
-            echo "**Commit:** ${GITHUB_SHA}"
-            echo "**Run:** ${GITHUB_RUN_ID}"
-            echo ""
-            echo "### expo run:ios output (last 800 lines)"
-            echo '```'
-            tail -800 expo-build.log 2>/dev/null || echo "not found"
-            echo '```'
-            echo ""
-            echo "### Error lines extracted"
-            echo '```'
-            grep -i -n 'error:\|fatal\|failed\|cannot\|not found\|** build\|consteval\|xcodebuild exited\|CommandError' expo-build.log 2>/dev/null | tail -60 || echo "no error lines found"
-            echo '```'
-          } > diagnostic-body.md
-          gh label create "ios-qa-diagnostic" --color "FBCA04" 2>/dev/null || true
-          gh issue create \
-            --title "iOS QA Build Diagnostics — ${GITHUB_SHA:0:12}" \
-            --body-file diagnostic-body.md \
-            --label "ios-qa-diagnostic" 2>&1 || \
-          gh issue create --title "iOS QA Build Diagnostics — ${GITHUB_SHA:0:12}" --body-file diagnostic-body.md 2>&1 || true
+          set -o pipefail
+          npx expo run:ios --configuration debug 2>&1 | tee expo-build.log
+      - name: Verify a simulator is booted
+        run: |
+          set -euo pipefail
+          for i in {1..30}; do
+            if xcrun simctl list devices booted | grep -q 'iPhone'; then
+              xcrun simctl list devices booted
+              exit 0
+            fi
+            sleep 2
+          done
+          echo '::error::No booted iPhone simulator after build'
           exit 1
-
-      # ============================================================
-      # Find the .app bundle that expo run:ios built.
-      # expo run:ios builds to ios/build/ or ~/Library/Developer/Xcode/DerivedData/
-      # ============================================================
-      - name: Find built .app bundle
-        id: app
-        working-directory: expo
-        run: |
-          echo "=== Searching for .app bundle ==="
-          # Search multiple possible build output locations
-          APP_PATH=$(find ios/build -name "*.app" -type d 2>/dev/null | head -1)
-          if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "*.app" -type d -path "*Debug-iphonesimulator*" 2>/dev/null | head -1)
-          fi
-          if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find /Users/runner/Library/Developer/Xcode/DerivedData -name "*.app" -type d -path "*iphonesimulator*" 2>/dev/null | head -1)
-          fi
-          if [ -z "$APP_PATH" ]; then
-            echo "::error::No .app bundle found anywhere"
-            echo "=== Searching all of DerivedData ==="
-            find ~/Library/Developer/Xcode/DerivedData -name "*.app" -type d 2>/dev/null | head -20
-            find /Users/runner/Library/Developer/Xcode/DerivedData -name "*.app" -type d 2>/dev/null | head -20
-            echo "=== Searching ios/build ==="
-            find ios/build -type d 2>/dev/null | head -20
-            exit 1
-          fi
-          APP_PATH_ABS="$(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")"
-          echo "path=$APP_PATH_ABS" >> $GITHUB_OUTPUT
-          echo "App bundle found: $APP_PATH_ABS"
-
-      - name: Get simulator info
-        id: sim
-        run: |
-          # Get the booted simulator
-          SIM_INFO=$(xcrun simctl list devices booted -j | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          for runtime, devices in data['devices'].items():
-              for d in devices:
-                  if d['state'] == 'Booted' and 'iPhone' in d['name']:
-                      print(json.dumps({'udid': d['udid'], 'name': d['name'], 'runtime': runtime}))
-                      sys.exit(0)
-          # Fallback: any booted device
-          for runtime, devices in data['devices'].items():
-              for d in devices:
-                  if d['state'] == 'Booted':
-                      print(json.dumps({'udid': d['udid'], 'name': d['name'], 'runtime': runtime}))
-                      sys.exit(0)
-          ")
-          if [ -z "$SIM_INFO" ]; then
-            echo "::error::No booted simulator found"
-            xcrun simctl list devices booted
-            exit 1
-          fi
-          SIM_ID=$(echo "$SIM_INFO" | python3 -c "import json,sys; print(json.load(sys.stdin)['udid'])")
-          SIM_NAME=$(echo "$SIM_INFO" | python3 -c "import json,sys; print(json.load(sys.stdin)['name'])")
-          SIM_RUNTIME=$(echo "$SIM_INFO" | python3 -c "import json,sys; print(json.load(sys.stdin)['runtime'])")
-          IOS_VERSION=$(echo "$SIM_RUNTIME" | sed 's/.*iOS-//')
-          echo "sim_id=$SIM_ID" >> $GITHUB_OUTPUT
-          echo "sim_name=$SIM_NAME" >> $GITHUB_OUTPUT
-          echo "ios_version=$IOS_VERSION" >> $GITHUB_OUTPUT
-          echo "Booted simulator: $SIM_NAME (iOS $IOS_VERSION, UDID: $SIM_ID)"
-
       - name: Capture launch screenshot
         run: |
           sleep 5
           xcrun simctl io booted screenshot screenshot-01-launch.png
-          echo "Launch screenshot saved"
-
-      - name: Capture simulator system log
-        run: |
-          xcrun simctl spawn booted log show --last 2m > simulator-log.txt 2>&1 || true
-
       - name: Install Maestro
         run: |
-          curl -Ls "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> $GITHUB_PATH
-          maestro --version
-
-      - name: Run Maestro launch test (no auth required)
-        id: maestro-launch
+          set -euo pipefail
+          curl -Ls 'https://get.maestro.mobile.dev' | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+          "$HOME/.maestro/bin/maestro" --version
+      - name: Maestro launch certification
         working-directory: expo
-        continue-on-error: true
         run: |
-          maestro test .maestro/ivx-app-launch.yaml --format junit --output maestro-launch-results.xml 2>&1 | tee maestro-launch.log
-          echo "Maestro launch test completed"
-
-      - name: Run full 20-step chat QA (requires OWNER_PASSWORD secret)
-        id: maestro-chat
+          set -euo pipefail
+          "$HOME/.maestro/bin/maestro" test .maestro/ivx-app-launch.yaml --format junit --output maestro-launch-results.xml 2>&1 | tee maestro-launch.log
+      - name: Maestro full chat QA
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_full_qa == 'true' }}
         working-directory: expo
         env:
           OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
-        continue-on-error: true
         run: |
-          if [ -z "$OWNER_PASSWORD" ] && [ "${{ github.event.inputs.run_full_qa }}" != "true" ]; then
-            echo "OWNER_PASSWORD secret not set — full 20-step chat QA skipped"
-            echo "To enable: add OWNER_PASSWORD as a GitHub repository secret"
-            echo "result=skipped" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          maestro test .maestro/ivx-chat-full-qa.yaml --format junit --output maestro-chat-results.xml 2>&1 | tee maestro-chat.log
-          echo "result=completed" >> $GITHUB_OUTPUT
-
-      - name: Take post-test screenshot
-        run: |
-          xcrun simctl io booted screenshot screenshot-02-post-test.png || true
-
-      - name: Get simulator runtime info
+          set -euo pipefail
+          test -n "$OWNER_PASSWORD" || { echo '::error::OWNER_PASSWORD secret required'; exit 1; }
+          "$HOME/.maestro/bin/maestro" test .maestro/ivx-chat-full-qa.yaml --format junit --output maestro-chat-results.xml 2>&1 | tee maestro-chat.log
+      - name: Capture evidence
         if: always()
         run: |
-          xcrun simctl list devices -j | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          for runtime, devices in data['devices'].items():
-              for d in devices:
-                  if d['udid'] == '${{ steps.sim.outputs.sim_id }}':
-                      print(f\"Device: {d['name']}\")
-                      print(f\"State: {d['state']}\")
-                      print(f\"Runtime: {runtime}\")
-          " > simulator-info.txt 2>&1 || true
-
-      - name: Shutdown simulator
+          xcrun simctl io booted screenshot screenshot-02-post-test.png 2>/dev/null || true
+          xcrun simctl spawn booted log show --last 5m > simulator-log.txt 2>&1 || true
+      - name: Upload certification artifacts
         if: always()
-        run: |
-          xcrun simctl shutdown all 2>/dev/null || true
-
-      - name: Upload all artifacts
         uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: ios-simulator-qa-${{ github.sha }}
           path: |
             screenshot-*.png
             simulator-log.txt
-            simulator-info.txt
             expo/expo-build.log
             expo/maestro-launch-results.xml
             expo/maestro-launch.log
             expo/maestro-chat-results.xml
             expo/maestro-chat.log
+          if-no-files-found: warn
           retention-days: 30
-
-      - name: Generate QA summary
+      - name: Certification summary
         if: always()
         run: |
-          echo "## iOS Simulator QA Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
-          echo "| Commit SHA | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Simulator | ${{ steps.sim.outputs.sim_name }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| iOS Version | ${{ steps.sim.outputs.ios_version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build Status | \`${{ steps.build.outcome }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Maestro Launch | \`${{ steps.maestro-launch.outcome }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Maestro Chat QA | \`${{ steps.maestro-chat.outcome }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
-          echo "- Screenshots: \`screenshot-01-launch.png\`, \`screenshot-02-post-test.png\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Build log: \`expo/expo-build.log\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Simulator logs: \`simulator-log.txt\`, \`simulator-info.txt\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Maestro results: \`maestro-launch-results.xml\`, \`maestro-chat-results.xml\`" >> $GITHUB_STEP_SUMMARY
+          echo '## IVX iOS / Maestro Certification' >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo '- Gate: Build -> Launch -> Maestro' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Maestro is strict: any test failure fails this job.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Shutdown simulator
+        if: always()
+        run: xcrun simctl shutdown all 2>/dev/null || true
