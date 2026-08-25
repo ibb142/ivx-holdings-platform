@@ -543,8 +543,6 @@ export function registerAgentRoutes(app: Hono): void {
   // ── Execute All 112 Agents (ADVISORY/QA ONLY — not proof of real work) ───────────
 
   app.post('/api/ivx/agents/execute-all', async (c) => {
-    const denied = requireOwner(c);
-    if (denied) return denied;
     const denied = await requireOwner(c);
     if (denied) return denied;
     const results: Array<{
