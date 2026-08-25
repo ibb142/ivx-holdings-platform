@@ -5,16 +5,15 @@
  * (POST /api/ivx/agents/:id/run, pause/resume/enable, certificate runs).
  *
  * Priority:
- *   1. Render/process environment `IVX_AI_SYSTEM_SECRET`
- *   2. Render/process environment `IVX_SYSTEM_SECRET`
- *   3. Encrypted Owner Variables store (`IVX_AI_SYSTEM_SECRET`)
+ *   1. Encrypted Owner Variables store (`IVX_AI_SYSTEM_SECRET`)
+ *   2. Render/process environment `IVX_AI_SYSTEM_SECRET`
+ *   3. Render/process environment `IVX_SYSTEM_SECRET`
  *   4. Legacy `IVX_OWNER_TOKEN` environment fallback
  *
- * Rationale: CI/Autonomous fleet workers must authenticate with the same
- * process-level system credential used by the live runtime. A stale encrypted
- * owner-variable value must not shadow that active system credential and cause
- * a fleet-wide 401. Owner-only/high-risk authorization remains enforced by the
- * downstream mutation risk gates; this resolver only fixes system identity.
+ * The Owner Variables value is authoritative because it is the owner-managed
+ * source of truth. This prevents a stale Render environment value from
+ * shadowing a newly rotated fleet credential. Downstream mutation risk gates
+ * remain unchanged.
  *
  * The resolved value is cached briefly so a 112-agent cycle does not hit the
  * variables store once per request.
@@ -37,20 +36,22 @@ export async function resolveActiveIVXSystemSecret(): Promise<string> {
     return cached.secret;
   }
 
-  let secret = readIVXTrimmedString(process.env.IVX_AI_SYSTEM_SECRET);
+  let secret = '';
 
-  if (!secret) {
-    secret = readIVXTrimmedString(process.env.IVX_SYSTEM_SECRET);
+  try {
+    // Dynamic import avoids a static import cycle with the owner-variables API.
+    const { getIVXOwnerVariableRuntimeValue } = await import('../api/ivx-owner-variables');
+    secret = (await getIVXOwnerVariableRuntimeValue('IVX_AI_SYSTEM_SECRET', { preferStored: true })).trim();
+  } catch {
+    secret = '';
   }
 
   if (!secret) {
-    try {
-      // Dynamic import avoids a static import cycle with the owner-variables API.
-      const { getIVXOwnerVariableRuntimeValue } = await import('../api/ivx-owner-variables');
-      secret = (await getIVXOwnerVariableRuntimeValue('IVX_AI_SYSTEM_SECRET', { preferStored: true })).trim();
-    } catch {
-      secret = '';
-    }
+    secret = readIVXTrimmedString(process.env.IVX_AI_SYSTEM_SECRET);
+  }
+
+  if (!secret) {
+    secret = readIVXTrimmedString(process.env.IVX_SYSTEM_SECRET);
   }
 
   if (!secret) {
