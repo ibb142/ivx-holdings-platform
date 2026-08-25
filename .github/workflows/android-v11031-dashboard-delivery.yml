@@ -1,0 +1,133 @@
+name: Android v1.10.31 Mission Control Delivery
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'expo/app/ivx/landing-workers-live.tsx'
+      - '.github/workflows/android-v11031-dashboard-delivery.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build-certify:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+    env:
+      IVX_RELEASE_KEYSTORE_BASE64: ${{ secrets.IVX_RELEASE_KEYSTORE_BASE64 }}
+      IVX_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.IVX_RELEASE_KEYSTORE_PASSWORD }}
+      IVX_RELEASE_KEY_ALIAS: ${{ secrets.IVX_RELEASE_KEY_ALIAS }}
+      IVX_RELEASE_KEY_PASSWORD: ${{ secrets.IVX_RELEASE_KEY_PASSWORD }}
+      NODE_ENV: production
+      EXPO_PUBLIC_API_BASE_URL: https://api.ivxholding.com
+      EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006 cmake;3.22.1'
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          bun install
+          cd expo
+          bun install
+          bun scripts/apply-patches.mjs
+
+      - name: Dashboard source hard gate
+        run: |
+          set -euo pipefail
+          test -f expo/app/ivx/landing-workers-live.tsx
+          grep -q 'IVX MISSION CONTROL' expo/app/ivx/landing-workers-live.tsx
+          grep -q 'durable agent execution ledger' expo/app/ivx/landing-workers-live.tsx
+          grep -q 'Operational radar visualization only' expo/app/ivx/landing-workers-live.tsx
+          grep -q 'POLL_MS = 5_000' expo/app/ivx/landing-workers-live.tsx
+          cd expo && bunx tsc --noEmit
+
+      - name: Validate production signing
+        run: |
+          set -euo pipefail
+          for variable in IVX_RELEASE_KEYSTORE_BASE64 IVX_RELEASE_KEYSTORE_PASSWORD IVX_RELEASE_KEY_ALIAS IVX_RELEASE_KEY_PASSWORD; do
+            test -n "${!variable}"
+          done
+          umask 077
+          KEYSTORE_PATH="$RUNNER_TEMP/ivx-release.keystore"
+          printf '%s' "$IVX_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          keytool -list -keystore "$KEYSTORE_PATH" -storepass "$IVX_RELEASE_KEYSTORE_PASSWORD" -alias "$IVX_RELEASE_KEY_ALIAS" >/dev/null
+          echo "IVX_RELEASE_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+
+      - name: Pin native APK version to 1.10.31 / 129
+        working-directory: expo
+        run: |
+          set -euo pipefail
+          sed -E -i 's/versionCode [0-9]+/versionCode 129/' android/app/build.gradle
+          sed -E -i 's/versionName "[^"]+"/versionName "1.10.31"/' android/app/build.gradle
+          grep -nE 'versionCode|versionName' android/app/build.gradle | head
+
+      - name: Build signed production APK
+        working-directory: expo/android
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon -x lint 2>&1 | tee "$GITHUB_WORKSPACE/gradle-v11031.log"
+
+      - name: Verify signing and package APK
+        id: apk
+        working-directory: expo/android
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
+          test -f "$APK"
+          APKSIGNER="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee "$GITHUB_WORKSPACE/apksigner-v11031.txt"
+          HASH=$(sha256sum "$APK" | awk '{print $1}')
+          cp "$APK" "$GITHUB_WORKSPACE/IVX-Holdings-v1.10.31-MISSION-CONTROL.apk"
+          echo "$HASH  IVX-Holdings-v1.10.31-MISSION-CONTROL.apk" > "$GITHUB_WORKSPACE/IVX-Holdings-v1.10.31-MISSION-CONTROL.sha256"
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: IVX-Holdings-v1.10.31-MISSION-CONTROL-${{ github.sha }}
+          path: |
+            IVX-Holdings-v1.10.31-MISSION-CONTROL.apk
+            IVX-Holdings-v1.10.31-MISSION-CONTROL.sha256
+            apksigner-v11031.txt
+            gradle-v11031.log
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Write dashboard APK certificate
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence
+          jq -n \
+            --arg marker 'IVX-MISSION-CONTROL-APK-CERTIFICATE' \
+            --arg sourceSha "$GITHUB_SHA" \
+            --arg version '1.10.31' \
+            --argjson versionCode 129 \
+            --arg apkSha256 '${{ steps.apk.outputs.hash }}' \
+            --arg artifact "IVX-Holdings-v1.10.31-MISSION-CONTROL-${GITHUB_SHA}" \
+            '{marker:$marker,sourceSha:$sourceSha,version:$version,versionCode:$versionCode,apkSha256:$apkSha256,artifact:$artifact,signed:true,typecheck:true,dashboardRoute:"/ivx/landing-workers-live",status:"PASS"}' \
+            > qa/evidence/ivx-mission-control-apk-certificate.json
+
+      - name: Upload certificate
+        uses: actions/upload-artifact@v4
+        with:
+          name: IVX-MISSION-CONTROL-APK-CERTIFICATE-${{ github.sha }}
+          path: qa/evidence/ivx-mission-control-apk-certificate.json
+          retention-days: 30
+          if-no-files-found: error
