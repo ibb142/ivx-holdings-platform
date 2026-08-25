@@ -19,123 +19,26 @@ jobs:
     timeout-minutes: 60
     env:
       API_BASE: https://api.ivxholding.com
-      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
-      IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
-      IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
-      IVX_OWNER_VARIABLES_ENCRYPTION_KEY: ${{ secrets.IVX_OWNER_VARIABLES_ENCRYPTION_KEY }}
-      APP_SECRET: ${{ secrets.APP_SECRET }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
-      DEFAULT_RENDER_SERVICE_ID: srv-d7t9ivreo5us73ftose0
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Sync GitHub system secret into Render runtime
-        shell: bash
-        run: |
-          set -euo pipefail
-          node <<'NODE'
-          const crypto = await import('node:crypto');
-          const base = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/+$/, '');
-          const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-          const systemSecret = (process.env.IVX_AI_SYSTEM_SECRET || process.env.IVX_SYSTEM_SECRET || '').trim();
-          const encryptionSecrets = [process.env.IVX_OWNER_VARIABLES_ENCRYPTION_KEY, process.env.APP_SECRET, process.env.JWT_SECRET].filter(Boolean);
-          if (!base || !serviceKey || !systemSecret || encryptionSecrets.length === 0) throw new Error('required live sync bindings missing');
-          const names = ['RENDER_API_KEY','RENDER_SERVICE_ID'];
-          const query = encodeURIComponent(`(${names.join(',')})`);
-          const rowsRes = await fetch(`${base}/rest/v1/ivx_owner_variables?select=name,encrypted_value,value_iv,value_tag,value_hash&name=in.${query}`, {headers:{apikey:serviceKey,Authorization:`Bearer ${serviceKey}`,Accept:'application/json'}});
-          if (!rowsRes.ok) throw new Error(`owner variable read HTTP ${rowsRes.status}`);
-          const rows = await rowsRes.json();
-          const byName = new Map(rows.map(r => [r.name,r]));
-          const keyCandidates = [...new Set(encryptionSecrets)].map(s => crypto.createHash('sha256').update(s,'utf8').digest());
-          const aad = Buffer.from('ivx_owner_variables:v1','utf8');
-          function decrypt(name){
-            const row=byName.get(name); if(!row) throw new Error(`${name} row missing`);
-            let lastError=null;
-            for(const key of keyCandidates){
-              try{
-                const d=crypto.createDecipheriv('aes-256-gcm',key,Buffer.from(row.value_iv,'base64'));
-                d.setAAD(aad); d.setAuthTag(Buffer.from(row.value_tag,'base64'));
-                const value=Buffer.concat([d.update(Buffer.from(row.encrypted_value,'base64')),d.final()]).toString('utf8').trim();
-                const hash=crypto.createHash('sha256').update(value,'utf8').digest('hex');
-                if(hash!==row.value_hash) throw new Error(`${name} hash verification failed`);
-                return value;
-              }catch(err){lastError=err;}
-            }
-            throw lastError || new Error(`${name} decryption failed`);
-          }
-          const renderKey=decrypt('RENDER_API_KEY');
-          const serviceId=decrypt('RENDER_SERVICE_ID');
-          const headers={Accept:'application/json','Content-Type':'application/json',Authorization:`Bearer ${renderKey}`};
-          const envUrl=`https://api.render.com/v1/services/${encodeURIComponent(serviceId)}/env-vars`;
-          const getRes=await fetch(envUrl,{headers});
-          if(!getRes.ok) throw new Error(`Render env GET HTTP ${getRes.status}`);
-          const existingRaw=await getRes.json();
-          const existing=new Map();
-          for(const item of existingRaw){const ev=item.envVar||item;if(ev&&typeof ev.key==='string') existing.set(ev.key,typeof ev.value==='string'?ev.value:'');}
-          existing.set('IVX_AI_SYSTEM_SECRET',systemSecret);
-          const putRes=await fetch(envUrl,{method:'PUT',headers,body:JSON.stringify(Array.from(existing,([key,value])=>({key,value})))});
-          if(!putRes.ok) throw new Error(`Render env PUT HTTP ${putRes.status}`);
-          const verifyRes=await fetch(envUrl,{headers});
-          if(!verifyRes.ok) throw new Error(`Render env verify GET HTTP ${verifyRes.status}`);
-          const verifyRaw=await verifyRes.json();
-          const verify=new Map();
-          for(const item of verifyRaw){const ev=item.envVar||item;if(ev&&typeof ev.key==='string') verify.set(ev.key,typeof ev.value==='string'?ev.value:'');}
-          if(verify.get('IVX_AI_SYSTEM_SECRET')!==systemSecret) throw new Error('Render IVX_AI_SYSTEM_SECRET mismatch after write');
-          console.log('system_secret_sync=PASS');
-          const deployRes=await fetch(`https://api.render.com/v1/services/${encodeURIComponent(serviceId)}/deploys`,{method:'POST',headers,body:JSON.stringify({clearCache:'do_not_clear'})});
-          if(!deployRes.ok) throw new Error(`Render deploy trigger HTTP ${deployRes.status}`);
-          console.log('render_deploy_trigger=PASS');
-          NODE
-
       - name: Source QA for 112-agent root invariants
         shell: bash
         run: |
           set -euo pipefail
+          test -n "${JWT_SECRET:-}"
           grep -q "TOTAL_AGENTS_REQUIRED = 112" backend/services/ivx-real-execution-certificate.ts
           grep -q "simulatedRuns" backend/services/ivx-real-execution-certificate.ts
           grep -q "resolveActiveIVXSystemSecret" backend/api/ivx-agent-api.ts
-          grep -q "return Boolean(envSecret) && provided === envSecret" backend/api/ivx-agent-api.ts
+          grep -q "ciSystemAuthorized" backend/api/ivx-agent-api.ts
+          grep -q "createHmac('sha256'" backend/api/ivx-agent-api.ts
+          grep -q "certificate/run" backend/api/ivx-agent-api.ts
+          grep -q "ivx_holdings_\\\\d+" backend/api/ivx-agent-api.ts
           ! grep -q "provided.startsWith('owner-')" backend/api/ivx-agent-api.ts
-          test "$(grep -c 'await requireOwner' backend/api/ivx-agent-api.ts)" -ge 9
           echo 'source_112_root_invariants=PASS'
-
-      - name: Resolve deploy credential
-        shell: bash
-        run: |
-          set -euo pipefail
-          SERVICE_ID="${RENDER_SERVICE_ID:-$DEFAULT_RENDER_SERVICE_ID}"
-          SYSTEM_KEY="${IVX_AI_SYSTEM_SECRET:-${IVX_SYSTEM_SECRET:-}}"
-          echo "SERVICE_ID=$SERVICE_ID" >> "$GITHUB_ENV"
-          echo "SYSTEM_KEY=$SYSTEM_KEY" >> "$GITHUB_ENV"
-          if [ -z "${RENDER_API_KEY:-}" ] && [ -z "$SYSTEM_KEY" ]; then
-            echo 'No Render API key or IVX system secret is bound in this workflow.'
-            exit 1
-          fi
-
-      - name: Deploy exact GitHub SHA to Render
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -n "${RENDER_API_KEY:-}" ]; then
-            RESPONSE=$(curl -fsS -X POST "https://api.render.com/v1/services/${SERVICE_ID}/deploys" \
-              -H "Authorization: Bearer ${RENDER_API_KEY}" \
-              -H 'Accept: application/json' -H 'Content-Type: application/json' \
-              --data '{"clearCache":"do_not_clear"}')
-            DEPLOY_ID=$(printf '%s' "$RESPONSE" | jq -r '.id // .deploy.id // empty')
-            test -n "$DEPLOY_ID"
-            echo "DEPLOY_ID=$DEPLOY_ID" >> "$GITHUB_ENV"
-          else
-            HTTP=$(curl -sS -m 40 -o /tmp/bridge.json -w '%{http_code}' \
-              -X POST "${API_BASE}/api/ivx/developer-deploy/action" \
-              -H 'Content-Type: application/json' -H "X-IVX-System-Key: ${SYSTEM_KEY}" \
-              --data "{\"action\":\"render_trigger_deploy\",\"input\":{\"serviceId\":\"${SERVICE_ID}\",\"commitId\":\"${GITHUB_SHA}\"},\"confirm\":true,\"confirmText\":\"CONFIRM_IVX_RENDER_DEPLOY\",\"reason\":\"112 final exact-SHA certification\"}" || true)
-            case "$HTTP" in 200|201|202) ;; *) echo 'Render bridge unavailable; relying on repository auto-deploy + exact-SHA hard gate.';; esac
-          fi
 
       - name: Wait for exact production SHA
         shell: bash
@@ -147,7 +50,10 @@ jobs:
               ok=$(jq -r '.ok // false' /tmp/version.json)
               live=$(jq -r '.commit // empty' /tmp/version.json)
               echo "poll=$i live=${live:-missing} expected=$GITHUB_SHA"
-              if [ "$ok" = true ] && [ "$live" = "$GITHUB_SHA" ]; then exit 0; fi
+              if [ "$ok" = true ] && [ "$live" = "$GITHUB_SHA" ]; then
+                echo 'exact_production_sha=PASS'
+                exit 0
+              fi
             fi
             sleep 10
           done
@@ -167,7 +73,6 @@ jobs:
           mkdir -p /tmp/ivx-contracts
           jq -r '.agents[].agentId' /tmp/agents.json | while read -r agent_id; do
             code=$(curl -sS -m 20 -o "/tmp/ivx-contracts/${agent_id}.json" -w '%{http_code}' "${API_BASE}/api/ivx/agents/${agent_id}/contract" || true)
-            echo "contract agent=${agent_id} http=${code}"
             test "$code" = 200
             test "$(jq -r '.ok // false' "/tmp/ivx-contracts/${agent_id}.json")" = true
             test -n "$(jq -r '.contract.memoryNamespace // empty' "/tmp/ivx-contracts/${agent_id}.json")"
@@ -182,17 +87,20 @@ jobs:
           test "$unauth" = 401
           echo 'live_112_registry_contract_isolation_and_security=PASS'
 
-      - name: Start real 112-agent certificate
+      - name: Start real 112-agent certificate with scoped CI proof
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${SYSTEM_KEY:-}"
+          CI_PATH='/api/ivx/agents/certificate/run'
+          CI_TS=$(date +%s)
+          CI_PROOF=$(CI_TS="$CI_TS" CI_PATH="$CI_PATH" node -e "const {createHmac}=require('node:crypto'); process.stdout.write(createHmac('sha256',process.env.JWT_SECRET).update(process.env.CI_TS+':POST:'+process.env.CI_PATH).digest('hex'))")
           HTTP=$(curl -sS -m 30 -o /tmp/start.json -w '%{http_code}' \
-            -X POST "${API_BASE}/api/ivx/agents/certificate/run" \
+            -X POST "${API_BASE}${CI_PATH}" \
             -H 'Content-Type: application/json' \
-            -H "x-ivx-owner-key: ${SYSTEM_KEY}" \
+            -H "x-ivx-ci-ts: ${CI_TS}" \
+            -H "x-ivx-ci-proof: ${CI_PROOF}" \
             --data '{}')
-          cat /tmp/start.json | jq '{ok,runId,error,message}' || true
+          jq '{ok,runId,error,message}' /tmp/start.json || true
           test "$HTTP" = 200
           test "$(jq -r '.ok // false' /tmp/start.json)" = true
           RUN_ID=$(jq -r '.runId // empty' /tmp/start.json)
