@@ -6,7 +6,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 concurrency:
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  audit-fix-deploy-certify:
+  audit-deploy-certify:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -27,76 +27,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-
-      - name: Root security audit and repair
-        id: patch
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('backend/api/ivx-agent-api.ts')
-          s=p.read_text()
-          original=s
-          marker="export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-18-real-execution';"
-          helper="""export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-19-owner-auth-guard';\n\nfunction ownerAuthorized(c: any, body: Record<string, unknown> = {}): boolean {\n  const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';\n  const envSecret = (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim() || (process.env.IVX_OWNER_TOKEN ?? '').trim();\n  return Boolean(envSecret) && provided === envSecret;\n}\n\nfunction requireOwner(c: any, body: Record<string, unknown> = {}) {\n  return ownerAuthorized(c, body) ? null : c.json({ ok: false, error: 'Owner authorization required.' }, 401);\n}\n"""
-          if marker in s:
-              s=s.replace(marker,helper)
-          s=s.replace("const authorized = envSecret ? provided === envSecret : provided.startsWith('owner-');","const authorized = Boolean(envSecret) && provided === envSecret;")
-          simple=[
-            "app.post('/api/ivx/agents/:agentId/pause', (c) => {",
-            "app.post('/api/ivx/agents/:agentId/resume', (c) => {",
-            "app.post('/api/ivx/agents/:agentId/disable', (c) => {",
-            "app.post('/api/ivx/agents/:agentId/enable', (c) => {",
-            "app.post('/api/ivx/agents/:agentId/clear-memory', (c) => {",
-            "app.post('/api/ivx/agents/execute-all', async (c) => {",
-          ]
-          for t in simple:
-              pos=s.find(t)
-              if pos>=0 and 'const denied = requireOwner(c);' not in s[pos:pos+220]:
-                  s=s.replace(t,t+"\n    const denied = requireOwner(c);\n    if (denied) return denied;",1)
-          replacements=[
-          ("""    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({}));\n    const taskType = body.taskType || 'audit';\n    const payload = body.payload || {};\n    const ownerApprovalToken = body.ownerApprovalToken || null;""",
-           """    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));\n    const denied = requireOwner(c, body as Record<string, unknown>);\n    if (denied) return denied;\n    const taskType = (body as any).taskType || 'audit';\n    const payload = (body as any).payload || {};\n    const ownerApprovalToken = (body as any).ownerApprovalToken || null;"""),
-          ("""    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({}));\n    const result = updateAgentContract(agentId, body.updates || {}, body.ownerApproval === true);""",
-           """    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));\n    const denied = requireOwner(c, body as Record<string, unknown>);\n    if (denied) return denied;\n    const result = updateAgentContract(agentId, (body as any).updates || {}, (body as any).ownerApproval === true);"""),
-          ("""    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({}));\n    const targetVersion = body.targetVersion;""",
-           """    const agentId = c.req.param('agentId');\n    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));\n    const denied = requireOwner(c, body as Record<string, unknown>);\n    if (denied) return denied;\n    const targetVersion = (body as any).targetVersion;"""),
-          ]
-          for a,b in replacements:
-              if a in s: s=s.replace(a,b,1)
-          if s != original:
-              p.write_text(s)
-              Path('/tmp/ivx-patched').write_text('1')
-          PY
-          if [ -f /tmp/ivx-patched ]; then
-            git config user.name 'ivx-qa-bot'
-            git config user.email 'ivx-qa-bot@users.noreply.github.com'
-            git add backend/api/ivx-agent-api.ts
-            git commit -m 'security(agents): require real owner auth on every mutating agent endpoint'
-            git pull --rebase origin main
-            git push origin HEAD:main
-            echo 'patched=true' >> "$GITHUB_OUTPUT"
-            echo 'Root fix pushed; new SHA will run the complete certification.'
-          else
-            echo 'patched=false' >> "$GITHUB_OUTPUT"
-          fi
+          fetch-depth: 1
 
       - name: Source QA for 112-agent root invariants
-        if: steps.patch.outputs.patched != 'true'
         shell: bash
         run: |
           set -euo pipefail
           grep -q "TOTAL_AGENTS_REQUIRED = 112" backend/services/ivx-real-execution-certificate.ts
           grep -q "simulatedRuns" backend/services/ivx-real-execution-certificate.ts
+          grep -q "resolveActiveIVXSystemSecret" backend/api/ivx-agent-api.ts
           grep -q "return Boolean(envSecret) && provided === envSecret" backend/api/ivx-agent-api.ts
           ! grep -q "provided.startsWith('owner-')" backend/api/ivx-agent-api.ts
-          test "$(grep -c 'const denied = requireOwner' backend/api/ivx-agent-api.ts)" -ge 9
+          test "$(grep -c 'await requireOwner' backend/api/ivx-agent-api.ts)" -ge 9
           echo 'source_112_root_invariants=PASS'
 
       - name: Resolve deploy credential
-        if: steps.patch.outputs.patched != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -110,7 +55,6 @@ jobs:
           fi
 
       - name: Deploy exact GitHub SHA to Render
-        if: steps.patch.outputs.patched != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -127,11 +71,10 @@ jobs:
               -X POST "${API_BASE}/api/ivx/developer-deploy/action" \
               -H 'Content-Type: application/json' -H "X-IVX-System-Key: ${SYSTEM_KEY}" \
               --data "{\"action\":\"render_trigger_deploy\",\"input\":{\"serviceId\":\"${SERVICE_ID}\",\"commitId\":\"${GITHUB_SHA}\"},\"confirm\":true,\"confirmText\":\"CONFIRM_IVX_RENDER_DEPLOY\",\"reason\":\"112 final exact-SHA certification\"}" || true)
-            case "$HTTP" in 200|201|202) ;; *) echo 'Render bridge unavailable; relying on repository auto-deploy + exact-SHA hard gate.'; cat /tmp/bridge.json || true;; esac
+            case "$HTTP" in 200|201|202) ;; *) echo 'Render bridge unavailable; relying on repository auto-deploy + exact-SHA hard gate.';; esac
           fi
 
       - name: Wait for exact production SHA
-        if: steps.patch.outputs.patched != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -149,7 +92,6 @@ jobs:
           exit 1
 
       - name: Audit all 112 live contracts and runtime guards
-        if: steps.patch.outputs.patched != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -168,7 +110,6 @@ jobs:
           echo 'live_112_registry_and_security=PASS'
 
       - name: Start real 112-agent certificate
-        if: steps.patch.outputs.patched != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -186,7 +127,6 @@ jobs:
           echo "certificate_run=$RUN_ID"
 
       - name: Wait for 112 of 112 real completion
-        if: steps.patch.outputs.patched != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -217,7 +157,6 @@ jobs:
           echo 'final_112_real_certificate=PASS'
 
       - name: Write final GitHub certificate artifact
-        if: steps.patch.outputs.patched != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -228,7 +167,6 @@ jobs:
           cat qa/evidence/IVX-112-FINAL-LIVE-CERTIFICATE.json
 
       - name: Upload final 112 certificate
-        if: steps.patch.outputs.patched != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: IVX-112-FINAL-LIVE-CERTIFICATE-${{ github.sha }}
