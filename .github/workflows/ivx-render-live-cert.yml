@@ -70,9 +70,9 @@ jobs:
           case "$HTTP" in
             200|201|202) ;;
             *)
-              echo "IVX runtime deploy bridge failed with HTTP ${HTTP}."
+              echo "IVX runtime deploy bridge unavailable with HTTP ${HTTP}; continuing with Render repository auto-deploy and exact-SHA hard gates."
               jq '{ok,error,message,action,confirmationRequired}' /tmp/ivx-render-bridge.json 2>/dev/null || true
-              exit 1
+              echo "DEPLOY_MODE=auto_deploy" >> "$GITHUB_ENV"
               ;;
           esac
           DEPLOY_ID=$(jq -r '.result.deployId // .result.id // .deployId // empty' /tmp/ivx-render-bridge.json 2>/dev/null || true)
