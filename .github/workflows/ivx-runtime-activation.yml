@@ -2,6 +2,22 @@ name: IVX Runtime Activation (Phase 2+3+4)
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'qa/ivx-phase2-mission.ts'
+      - 'qa/ivx-phase3-4-500-mission.ts'
+      - 'qa/ivx-runtime-orchestrator.ts'
+      - 'qa/ivx-runtime-activation.test.ts'
+      - '.github/workflows/ivx-runtime-activation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'qa/ivx-phase2-mission.ts'
+      - 'qa/ivx-phase3-4-500-mission.ts'
+      - 'qa/ivx-runtime-orchestrator.ts'
+      - 'qa/ivx-runtime-activation.test.ts'
+      - '.github/workflows/ivx-runtime-activation.yml'
 
 jobs:
   activate:
@@ -11,7 +27,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout exact main SHA
+      - name: Checkout exact source SHA
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
@@ -50,7 +66,7 @@ jobs:
           if len(cert["uniqueWorkerIds"]) != 100: failures.append(f"uniqueWorkerIds={len(cert['uniqueWorkerIds'])} != 100")
           worker_numbers = sorted(int(x.rsplit('_',1)[1]) for x in cert["uniqueWorkerIds"] if x.rsplit('_',1)[-1].isdigit())
           expected = list(range(13,113))
-          if worker_numbers != expected: failures.append(f"worker IDs not exactly IA-013..IA-112: got {worker_numbers[:5]}...{worker_numbers[-5:] if worker_numbers else ''}")
+          if worker_numbers != expected: failures.append(f"worker IDs not exactly 13..112: got {worker_numbers[:5]}...{worker_numbers[-5:] if worker_numbers else ''}")
           for p in ("phase2Active","phase3Active","phase4Active"):
               if not cert[p]: failures.append(f"{p} != true")
           if cert["simulatedRuns"] != 0: failures.append(f"simulatedRuns={cert['simulatedRuns']} != 0")
