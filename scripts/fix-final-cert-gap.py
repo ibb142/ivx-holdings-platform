@@ -78,8 +78,8 @@ s = s.replace(
 p.write_text(s)
 
 # 5) Apply the owner-auth repair that the 112 workflow previously attempted to
-# commit directly to protected main. This makes the workflow audit-only on the
-# merged source instead of trying a forbidden self-write.
+# commit directly to protected main. Keep this transformation idempotent and
+# preserve the existing async system-secret resolver when already present.
 p = Path('backend/api/ivx-agent-api.ts')
 s = p.read_text()
 marker = "export const IVX_AGENT_API_MARKER = 'ivx-agent-api-2026-08-18-real-execution';"
@@ -98,6 +98,15 @@ function requireOwner(c: any, body: Record<string, unknown> = {}) {
 if marker in s:
     s = s.replace(marker, helper)
 s = s.replace("const authorized = envSecret ? provided === envSecret : provided.startsWith('owner-');", "const authorized = Boolean(envSecret) && provided === envSecret;")
+# Remove the one duplicate guard produced by the first repair attempt.
+s = s.replace(
+"""    const denied = requireOwner(c);
+    if (denied) return denied;
+    const denied = await requireOwner(c);
+    if (denied) return denied;""",
+"""    const denied = await requireOwner(c);
+    if (denied) return denied;""",
+)
 for t in [
     "app.post('/api/ivx/agents/:agentId/pause', (c) => {",
     "app.post('/api/ivx/agents/:agentId/resume', (c) => {",
@@ -107,7 +116,7 @@ for t in [
     "app.post('/api/ivx/agents/execute-all', async (c) => {",
 ]:
     pos = s.find(t)
-    if pos >= 0 and 'const denied = requireOwner(c);' not in s[pos:pos+220]:
+    if pos >= 0 and 'requireOwner(c' not in s[pos:pos+220]:
         s = s.replace(t, t + "\n    const denied = requireOwner(c);\n    if (denied) return denied;", 1)
 replacements = [
 ("""    const agentId = c.req.param('agentId');
