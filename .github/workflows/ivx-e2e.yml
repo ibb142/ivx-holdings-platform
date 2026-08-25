@@ -112,6 +112,7 @@ jobs:
     name: Maestro E2E (mobile surface) — HARD GATE
     runs-on: macos-latest
     needs: [typecheck]
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -142,17 +143,31 @@ jobs:
           bunx expo run:ios --configuration debug --no-bundler
           echo 'ios_build=PASS'
       - name: Install Maestro
+        timeout-minutes: 3
         run: |
           set -euo pipefail
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo 'maestro_install=PASS'
       - name: Run Maestro launch smoke test — HARD GATE
+        timeout-minutes: 5
         run: |
           set -euo pipefail
           ~/.maestro/bin/maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml
           echo 'maestro_test=PASS'
+      - name: Capture Maestro diagnostics
+        if: failure()
+        run: |
+          set +e
+          xcrun simctl list devices > maestro-simulators.txt
+          xcrun simctl spawn booted launchctl print system > maestro-launchctl.txt 2>&1
+          cat "$RUNNER_TEMP/expo-metro.log" > maestro-metro.log 2>&1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: maestro-report
-          path: maestro-report.xml
+          path: |
+            maestro-report.xml
+            maestro-simulators.txt
+            maestro-launchctl.txt
+            maestro-metro.log
+          if-no-files-found: warn
