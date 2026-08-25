@@ -1,0 +1,117 @@
+name: IVX Phase 2-3-4 Canonical 112 Runtime
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'qa/ivx-phase2-mission.ts'
+      - 'qa/ivx-phase3-4-500-mission.ts'
+      - 'qa/ivx-phase234-runtime.ts'
+      - '.github/workflows/ivx-phase234-112-runtime.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'qa/ivx-phase2-mission.ts'
+      - 'qa/ivx-phase3-4-500-mission.ts'
+      - 'qa/ivx-phase234-runtime.ts'
+      - '.github/workflows/ivx-phase234-112-runtime.yml'
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      workers: ${{ steps.matrix.outputs.workers }}
+      commands: ${{ steps.matrix.outputs.commands }}
+    steps:
+      - id: matrix
+        run: |
+          echo "workers=$(node -e 'console.log(JSON.stringify(Array.from({length:100},(_,i)=>i+13)))')" >> "$GITHUB_OUTPUT"
+          echo "commands=$(node -e 'console.log(JSON.stringify(Array.from({length:12},(_,i)=>i+1)))')" >> "$GITHUB_OUTPUT"
+
+  workers:
+    name: Worker IA-${{ matrix.worker }} real attempt
+    needs: prepare
+    strategy:
+      fail-fast: false
+      max-parallel: 25
+      matrix:
+        worker: ${{ fromJSON(needs.prepare.outputs.workers) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - name: Execute assigned Phase 2/3/4 task
+        env:
+          IVX_RUNTIME_EVIDENCE_DIR: out
+        run: |
+          set -euo pipefail
+          bun qa/ivx-phase234-runtime.ts worker "${{ matrix.worker }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: worker-${{ matrix.worker }}
+          path: out/*.json
+          if-no-files-found: error
+
+  commands:
+    name: Command IA-${{ matrix.command }} review
+    needs: [prepare, workers]
+    strategy:
+      fail-fast: false
+      matrix:
+        command: ${{ fromJSON(needs.prepare.outputs.commands) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: worker-*
+          path: runtime-input
+          merge-multiple: true
+      - name: Review assigned worker evidence
+        env:
+          IVX_RUNTIME_EVIDENCE_DIR: out
+        run: |
+          set -euo pipefail
+          bun qa/ivx-phase234-runtime.ts command "${{ matrix.command }}" runtime-input
+      - uses: actions/upload-artifact@v4
+        with:
+          name: command-${{ matrix.command }}
+          path: out/*.json
+          if-no-files-found: error
+
+  certify:
+    name: Certify 12 command + 100 worker activation
+    needs: [workers, commands]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: worker-*
+          path: runtime-input
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: command-*
+          path: runtime-input
+          merge-multiple: true
+      - name: Hard activation certificate
+        env:
+          IVX_RUNTIME_EVIDENCE_DIR: out
+        run: |
+          set -euo pipefail
+          bun qa/ivx-phase234-runtime.ts certify runtime-input
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ivx-phase234-activation-certificate-${{ github.sha }}
+          path: out/ivx-phase234-activation-certificate.json
+          if-no-files-found: error
