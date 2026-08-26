@@ -6,6 +6,8 @@ on:
     paths:
       - 'qa/ivx-enterprise-known-gap-repair.mjs'
       - '.github/workflows/ivx-enterprise-known-gap-repair.yml'
+      - 'expo/src/modules/ivx-owner-ai/services/ivxChatQualityFirewall.ts'
+      - 'expo/__tests__/ivx-chat-quality-firewall.test.ts'
   schedule:
     - cron: '12,42 * * * *'
   workflow_dispatch: {}
@@ -53,6 +55,7 @@ jobs:
           bun test \
             backend/api/ivx-senior-developer-worker.test.ts \
             expo/__tests__/ivx-chat-turn-isolation.test.ts \
+            expo/__tests__/ivx-chat-quality-firewall.test.ts \
             expo/__tests__/chat-certificate-flow-regression.test.ts
 
       - name: Open evidence-backed repair PR
@@ -66,6 +69,7 @@ jobs:
           git add \
             backend/services/ivx-owner-conversation-state.ts \
             expo/src/modules/ivx-owner-ai/services/ivxOwnerMemoryService.ts \
+            expo/app/ivx/chat.tsx \
             qa/ivx-qa-runner.ts
           if git diff --cached --quiet; then
             echo 'KNOWN_GAPS_ALREADY_FIXED=true'
@@ -73,11 +77,11 @@ jobs:
           fi
           branch="autonomous/enterprise-quality-repair-${GITHUB_RUN_ID}"
           git checkout -b "$branch"
-          git commit -m 'fix(quality): close stale-state and cross-room memory gaps'
+          git commit -m 'fix(quality): close stale-state, cross-room memory, and chat coherence gaps'
           git push origin "$branch"
           url=$(gh pr create \
             --base main \
             --head "$branch" \
-            --title 'fix(quality): close confirmed enterprise P0/P1 gaps' \
-            --body "Automated enterprise Quality Firewall repair from run ${GITHUB_RUN_ID}. Fixes terminal-action stale pointer, cross-room owner memory contamination, and fail-open QA SKIP behavior. Backend + Expo typecheck and focused chat/worker regressions passed before PR creation.")
+            --title 'fix(quality): close confirmed enterprise chat P0/P1 gaps' \
+            --body "Automated enterprise Quality Firewall repair from run ${GITHUB_RUN_ID}. Fixes terminal-action stale pointer, cross-room owner memory contamination, fail-open QA SKIP behavior, and blocks high-confidence stale/off-topic IVX IA chat replies before render. Backend + Expo typecheck and focused chat/worker regressions passed before PR creation.")
           echo "REPAIR_PR=$url"
