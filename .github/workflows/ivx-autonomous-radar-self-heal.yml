@@ -1,11 +1,14 @@
 name: IVX Autonomous Radar Self-Heal
 
 on:
+  schedule:
+    - cron: '*/5 * * * *'
   workflow_run:
     workflows:
       - Landing 112-Agent Autonomous QA War Room
-    types:
-      - completed
+      - IVX Enterprise Line-by-Line Quality Audit
+      - IVX Enterprise QA
+    types: [completed]
   workflow_dispatch: {}
 
 permissions:
@@ -14,14 +17,13 @@ permissions:
   issues: write
 
 concurrency:
-  group: ivx-autonomous-radar-${{ github.run_id }}
+  group: ivx-autonomous-predictive-radar
   cancel-in-progress: false
 
 jobs:
   radar:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'failure' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 20
     env:
       API_BASE: https://api.ivxholding.com
       SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
@@ -29,86 +31,121 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Radar preflight
+      - name: Predictive five-sample endpoint window
+        id: predictive
         shell: bash
         run: |
           set -euo pipefail
           test -n "${SYSTEM_KEY:-}"
-          curl -fsS --retry 3 --retry-delay 2 "${API_BASE}/health" -o /tmp/health.json
-          jq -e '.ok == true or .healthy == true or .status == "ok"' /tmp/health.json >/dev/null
-          echo 'radar_preflight=PASS'
+          mkdir -p /tmp/ivx-radar
+          : > /tmp/ivx-radar/samples.jsonl
+          for i in 1 2 3 4 5; do
+            started=$(date +%s%3N)
+            code=$(curl -sS --max-time 4 -o /tmp/ivx-radar/body-${i}.txt -D /tmp/ivx-radar/headers-${i}.txt -w '%{http_code}' \
+              -H 'Accept: application/json' -H "X-IVX-System-Key: ${SYSTEM_KEY}" \
+              "${API_BASE}/api/ivx/autonomous/control-plane" || printf '000')
+            ended=$(date +%s%3N)
+            latency=$((ended-started))
+            content_type=$(grep -i '^content-type:' /tmp/ivx-radar/headers-${i}.txt 2>/dev/null | tail -1 | tr -d '\r' | cut -d: -f2- | xargs || true)
+            json_valid=false
+            ok=false
+            if jq -e . /tmp/ivx-radar/body-${i}.txt >/dev/null 2>&1; then json_valid=true; fi
+            if [ "$code" = '200' ] && [ "$json_valid" = true ] && printf '%s' "$content_type" | grep -Eiq 'application/json|\+json'; then ok=true; fi
+            jq -n --argjson sample "$i" --argjson latencyMs "$latency" --arg status "$code" --arg contentType "$content_type" --argjson jsonValid "$json_valid" --argjson ok "$ok" \
+              '{sample:$sample,latencyMs:$latencyMs,status:$status,contentType:$contentType,jsonValid:$jsonValid,ok:$ok}' >> /tmp/ivx-radar/samples.jsonl
+            sleep 2
+          done
+
+          total=$(wc -l < /tmp/ivx-radar/samples.jsonl | tr -d ' ')
+          failures=$(jq -s '[.[] | select(.ok != true)] | length' /tmp/ivx-radar/samples.jsonl)
+          bad_json=$(jq -s '[.[] | select(.jsonValid != true)] | length' /tmp/ivx-radar/samples.jsonl)
+          avg_latency=$(jq -s '([.[].latencyMs] | add) / length | floor' /tmp/ivx-radar/samples.jsonl)
+          first_avg=$(jq -s '([.[0:2][].latencyMs] | add) / 2' /tmp/ivx-radar/samples.jsonl)
+          last_avg=$(jq -s '([.[3:5][].latencyMs] | add) / 2' /tmp/ivx-radar/samples.jsonl)
+          trend=$(awk -v a="$first_avg" -v b="$last_avg" 'BEGIN { if (a<=0) print 1; else printf "%.2f", b/a }')
+
+          level=GREEN
+          action=observe
+          if [ "$failures" -ge 3 ] || [ "$bad_json" -ge 2 ]; then level=CRITICAL; action=self_heal;
+          elif [ "$failures" -ge 1 ] || [ "$avg_latency" -ge 2500 ]; then level=WARNING; action=self_heal;
+          elif [ "$avg_latency" -ge 1200 ] || awk -v t="$trend" 'BEGIN{exit !(t>=1.7)}'; then level=WATCH; action=preflight;
+          fi
+
+          jq -s --arg level "$level" --arg action "$action" --argjson failures "$failures" --argjson badJson "$bad_json" --argjson avgLatencyMs "$avg_latency" --arg trend "$trend" \
+            '{level:$level,action:$action,failures:$failures,badJson:$badJson,avgLatencyMs:$avgLatencyMs,latencyTrend:($trend|tonumber),samples:.}' \
+            /tmp/ivx-radar/samples.jsonl > /tmp/ivx-radar/predictive-assessment.json
+          cat /tmp/ivx-radar/predictive-assessment.json
+          echo "level=$level" >> "$GITHUB_OUTPUT"
+          echo "action=$action" >> "$GITHUB_OUTPUT"
 
       - name: Detect failed source jobs
-        id: detect
+        id: source
+        if: ${{ github.event_name == 'workflow_run' }}
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${GITHUB_EVENT_NAME}" = 'workflow_dispatch' ]; then
-            echo 'failed_count=0' >> "$GITHUB_OUTPUT"
-            echo 'manual_radar_preflight=PASS'
-            exit 0
-          fi
-          test -n "${SOURCE_RUN_ID:-}"
           gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/jobs?per_page=100" \
             --jq '.jobs[] | select(.conclusion == "failure") | {id,name,failedSteps:[.steps[]? | select(.conclusion == "failure") | .name]}' \
-            > /tmp/failed-jobs.jsonl
-          count=$(wc -l < /tmp/failed-jobs.jsonl | tr -d ' ')
+            > /tmp/ivx-radar/failed-jobs.jsonl
+          count=$(wc -l < /tmp/ivx-radar/failed-jobs.jsonl | tr -d ' ')
           echo "failed_count=$count" >> "$GITHUB_OUTPUT"
-          if grep -Eiq 'secret|credential|auth|permission|payment|stripe|migration|database destructive|infrastructure|iam|cloudfront|route53|security policy|rollback' /tmp/failed-jobs.jsonl; then
+          if grep -Eiq 'secret|credential|auth|permission|payment|stripe|migration|database destructive|infrastructure|iam|cloudfront|route53|security policy|rollback' /tmp/ivx-radar/failed-jobs.jsonl; then
             echo 'owner_gate_required=true' >> "$GITHUB_OUTPUT"
           else
             echo 'owner_gate_required=false' >> "$GITHUB_OUTPUT"
           fi
-          cat /tmp/failed-jobs.jsonl || true
 
-      - name: Stop at Owner Gate for high-risk incident
-        if: ${{ steps.detect.outputs.owner_gate_required == 'true' }}
+      - name: Owner Gate for high-risk source failure
+        if: ${{ github.event_name == 'workflow_run' && steps.source.outputs.owner_gate_required == 'true' }}
         run: |
-          echo 'owner_gate_required=true'
+          echo 'OWNER_GATE_REQUIRED: high-risk auth/permissions/security/infrastructure incident.'
           exit 1
 
-      - name: Build repair mission
-        if: ${{ steps.detect.outputs.failed_count != '0' && steps.detect.outputs.owner_gate_required != 'true' }}
-        env:
-          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
-          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          set -euo pipefail
-          summary=$(jq -s -c '.' /tmp/failed-jobs.jsonl)
-          jq -n --arg runId "$SOURCE_RUN_ID" --arg sourceSha "$SOURCE_SHA" --argjson failures "$summary" \
-            '{runId:$runId,sourceSha:$sourceSha,failures:$failures,policy:{maxRepairAttempts:3,failClosed:true,ownerGate:true}}' > /tmp/radar-mission.json
-          cat /tmp/radar-mission.json
-
-      - name: Delegate evidence-backed safe repair
-        if: ${{ steps.detect.outputs.failed_count != '0' && steps.detect.outputs.owner_gate_required != 'true' }}
-        env:
-          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
-          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      - name: Build predictive mission
+        if: ${{ steps.predictive.outputs.action != 'observe' || (github.event_name == 'workflow_run' && steps.source.outputs.failed_count != '0' && steps.source.outputs.owner_gate_required != 'true') }}
         shell: bash
         run: |
           set -euo pipefail
-          mission=$(cat /tmp/radar-mission.json)
-          goal="IVX AUTONOMOUS RADAR SELF-HEAL for War Room run ${SOURCE_RUN_ID}, SHA ${SOURCE_SHA}. Diagnose root cause and perform only safe low-risk repair. Required: evidence, tests, typecheck, commit/PR/CI/merge/live verification. Never weaken 112/112. Stop for secrets/auth/permissions/payments/destructive migrations/infrastructure/security/critical rollback. Mission: ${mission}"
-          payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",systemMode:true,ownerApproved:true,riskLevel:"low",proposedPlan:"Evidence-backed safe autonomous repair; preserve all Owner Gates."}')
-          http=$(curl -sS --max-time 60 -o /tmp/job-start.json -w '%{http_code}' -X POST \
+          assessment=$(cat /tmp/ivx-radar/predictive-assessment.json)
+          source_failures='[]'
+          if [ -s /tmp/ivx-radar/failed-jobs.jsonl ]; then source_failures=$(jq -s -c '.' /tmp/ivx-radar/failed-jobs.jsonl); fi
+          jq -n --arg event "$GITHUB_EVENT_NAME" --argjson assessment "$assessment" --argjson failures "$source_failures" \
+            '{event:$event,predictive:$assessment,sourceFailures:$failures,policy:{failClosed:true,ownerGate:true,maxRepairAttempts:3,neverWeakenQuality:true}}' \
+            > /tmp/ivx-radar/mission.json
+          cat /tmp/ivx-radar/mission.json
+
+      - name: Delegate predictive preflight or safe self-heal
+        if: ${{ steps.predictive.outputs.action != 'observe' || (github.event_name == 'workflow_run' && steps.source.outputs.failed_count != '0' && steps.source.outputs.owner_gate_required != 'true') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mission=$(cat /tmp/ivx-radar/mission.json)
+          if [ "${{ steps.predictive.outputs.action }}" = 'preflight' ]; then
+            execution=qa_only
+            approve_patch=false
+            approve_deploy=false
+          else
+            execution=code_change
+            approve_patch=true
+            approve_deploy=false
+          fi
+          goal="IVX PREDICTIVE NERVOUS EARLY WARNING. Diagnose BEFORE terminal failure. Inspect endpoint latency trend, HTTP, Content-Type, JSON contract, worker heartbeat, queue pressure, auth/permission symptoms and source workflow failures. For low-risk code defects only, repair and test. Never change secrets/IAM/payments/destructive migrations/security policy or production infrastructure without Owner Gate. Evidence required. Mission: ${mission}"
+          payload=$(jq -n --arg goal "$goal" --arg execution "$execution" --argjson approvePatch "$approve_patch" --argjson approveGitDeploy "$approve_deploy" \
+            '{goal:$goal,executionMode:$execution,templateMode:"BUG_FIX",approvePatch:$approvePatch,approveGitDeploy:$approveGitDeploy,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Predictive evidence-backed preflight/self-heal with Owner Gates preserved.",rollbackOption:"Revert autonomous repair PR if any regression appears.",filesAffected:["predictive-diagnosis"]}')
+          http=$(curl -sS --max-time 60 -o /tmp/ivx-radar/job-start.json -w '%{http_code}' -X POST \
             "${API_BASE}/api/ivx/senior-developer/worker/jobs" \
             -H 'Content-Type: application/json' -H "X-IVX-System-Key: ${SYSTEM_KEY}" --data "$payload")
-          case "$http" in 200|202|409) ;; *) cat /tmp/job-start.json; exit 1;; esac
-          job_id=$(jq -r '.jobId // .activeJobId // .job.jobId // empty' /tmp/job-start.json)
-          test -n "$job_id"
-          echo "radar_job_id=$job_id"
+          case "$http" in 200|202|409) ;; *) cat /tmp/ivx-radar/job-start.json; exit 1;; esac
+          jq -e '.jobId // .activeJobId // .job.jobId' /tmp/ivx-radar/job-start.json >/dev/null
 
-      - name: Persist radar evidence
+      - name: Persist predictive radar evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ivx-autonomous-radar-${{ github.run_id }}
-          path: |
-            /tmp/failed-jobs.jsonl
-            /tmp/radar-mission.json
-            /tmp/job-start.json
-          if-no-files-found: ignore
+          name: ivx-predictive-radar-${{ github.run_id }}
+          path: /tmp/ivx-radar
+          if-no-files-found: error
           retention-days: 30
