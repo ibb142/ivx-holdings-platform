@@ -5,11 +5,21 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/ivx-autonomous-apk-mission.yml'
+  workflow_run:
+    workflows:
+      - IVX Autonomous Nervous System
+    types: [completed]
+  schedule:
+    - cron: '3/5 * * * *'
   workflow_dispatch: {}
 
 permissions:
   contents: read
   actions: write
+
+concurrency:
+  group: ivx-autonomous-apk-delivery
+  cancel-in-progress: false
 
 env:
   API_BASE: https://api.ivxholding.com
@@ -23,16 +33,39 @@ jobs:
     timeout-minutes: 80
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
-      - name: Bind exact source SHA
+      - name: Bind exact current main source SHA
         shell: bash
         run: |
           set -euo pipefail
-          echo "TARGET_SHA=$GITHUB_SHA" >> "$GITHUB_ENV"
+          TARGET_SHA=$(git rev-parse HEAD)
+          test -n "$TARGET_SHA"
+          test "$TARGET_SHA" = "$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          echo "TARGET_SHA=$TARGET_SHA" >> "$GITHUB_ENV"
           test -n "${SYSTEM_KEY:-}"
-          echo 'APK_MISSION_SOURCE_SHA='$GITHUB_SHA
+          echo "APK_MISSION_SOURCE_SHA=$TARGET_SHA"
+
+      - name: Skip only when exact-SHA APK artifact already exists
+        id: existing
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${APK_WORKFLOW}/runs?branch=main&per_page=50" > /tmp/existing-apk-runs.json
+          existing_run=$(jq -r --arg sha "$TARGET_SHA" '[.workflow_runs[] | select(.head_sha==$sha and .status=="completed" and .conclusion=="success")][0].id // empty' /tmp/existing-apk-runs.json)
+          found=false
+          if [ -n "$existing_run" ]; then
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${existing_run}/artifacts?per_page=100" > /tmp/existing-apk-artifacts.json
+            if jq -e --arg sha "$TARGET_SHA" '.artifacts[]? | select(.name | startswith("IVX-Holdings-v1.10.32-MISSION-CONTROL-" + $sha))' /tmp/existing-apk-artifacts.json >/dev/null; then
+              found=true
+            fi
+          fi
+          echo "found=$found" >> "$GITHUB_OUTPUT"
+          echo "existing_run=${existing_run}" >> "$GITHUB_OUTPUT"
 
       - name: Delegate mission to IVX Senior Developer Autonomous
+        if: ${{ steps.existing.outputs.found != 'true' }}
         id: delegate
         shell: bash
         run: |
@@ -50,6 +83,7 @@ jobs:
           echo "AUTONOMOUS_APK_TASK=$task_id"
 
       - name: Dispatch signed APK workflow on exact main
+        if: ${{ steps.existing.outputs.found != 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -59,13 +93,14 @@ jobs:
           echo 'APK_BUILD_DISPATCHED=true'
 
       - name: Resolve exact-SHA APK workflow run
+        if: ${{ steps.existing.outputs.found != 'true' }}
         id: resolve
         shell: bash
         run: |
           set -euo pipefail
           run_id=''
           for i in $(seq 1 30); do
-            gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${APK_WORKFLOW}/runs?branch=main&per_page=20" > /tmp/apk-runs.json
+            gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${APK_WORKFLOW}/runs?branch=main&per_page=30" > /tmp/apk-runs.json
             run_id=$(jq -r --arg sha "$TARGET_SHA" '[.workflow_runs[] | select(.head_sha==$sha)][0].id // empty' /tmp/apk-runs.json)
             if [ -n "$run_id" ]; then break; fi
             sleep 5
@@ -75,6 +110,7 @@ jobs:
           echo "APK_RUN_ID=$run_id"
 
       - name: Wait for APK workflow terminal success
+        if: ${{ steps.existing.outputs.found != 'true' }}
         env:
           APK_RUN_ID: ${{ steps.resolve.outputs.run_id }}
         shell: bash
@@ -96,11 +132,15 @@ jobs:
           test "$(jq -r '.head_sha' /tmp/apk-run.json)" = "$TARGET_SHA"
 
       - name: Verify exact-SHA APK artifact exists
-        env:
-          APK_RUN_ID: ${{ steps.resolve.outputs.run_id }}
         shell: bash
         run: |
           set -euo pipefail
+          if [ "${{ steps.existing.outputs.found }}" = true ]; then
+            APK_RUN_ID='${{ steps.existing.outputs.existing_run }}'
+          else
+            APK_RUN_ID='${{ steps.resolve.outputs.run_id }}'
+          fi
+          test -n "$APK_RUN_ID"
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${APK_RUN_ID}/artifacts?per_page=100" > /tmp/apk-artifacts.json
           artifact=$(jq -c --arg sha "$TARGET_SHA" '[.artifacts[] | select(.name | startswith("IVX-Holdings-v1.10.32-MISSION-CONTROL-" + $sha))][0] // empty' /tmp/apk-artifacts.json)
           test -n "$artifact"
@@ -118,6 +158,8 @@ jobs:
           name: IVX-AUTONOMOUS-APK-MISSION-${{ github.sha }}
           path: |
             /tmp/autonomous-apk-task.json
+            /tmp/existing-apk-runs.json
+            /tmp/existing-apk-artifacts.json
             /tmp/apk-runs.json
             /tmp/apk-run.json
             /tmp/apk-artifacts.json
