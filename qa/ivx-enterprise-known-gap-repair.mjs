@@ -9,8 +9,13 @@ function patchFile(rel, transforms) {
   let text = readFileSync(abs, 'utf8');
   let changed = false;
   for (const transform of transforms) {
-    if (text.includes(transform.after)) continue;
+    // Empty-string transforms are removals. text.includes('') is always true,
+    // so never use the idempotency shortcut for an empty replacement.
+    if (transform.after !== '' && text.includes(transform.after)) continue;
     if (!text.includes(transform.before)) {
+      // For removal transforms, absence of the target means the repair is
+      // already applied and is therefore idempotent.
+      if (transform.after === '') continue;
       throw new Error(`${rel}: required repair target not found: ${transform.id}`);
     }
     text = text.replace(transform.before, transform.after);
