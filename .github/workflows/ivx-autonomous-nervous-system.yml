@@ -1,0 +1,234 @@
+name: IVX Autonomous Nervous System
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_run:
+    workflows:
+      - Landing 112-Agent Autonomous QA War Room
+    types: [completed]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: write
+  issues: write
+
+concurrency:
+  group: ivx-autonomous-nervous-system
+  cancel-in-progress: false
+
+env:
+  API_BASE: https://api.ivxholding.com
+  SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  nervous-system:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preflight and exact fleet registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SYSTEM_KEY:-}"
+          curl -fsS --retry 3 --retry-delay 2 "${API_BASE}/health" -o /tmp/api-health.json
+          curl -fsS --retry 3 --retry-delay 2 "${API_BASE}/version" -o /tmp/api-version.json
+          curl -fsS --retry 3 --retry-delay 2 "${API_BASE}/api/ivx/agents" -o /tmp/agents.json
+          test "$(jq -r '.ok // false' /tmp/agents.json)" = true
+          test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
+          test "$(jq '[.agents[].agentNumber] | unique | length' /tmp/agents.json)" = 112
+          echo 'fleet_registry=112/112'
+
+      - name: External production radar
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > /tmp/external.jsonl
+          probe() {
+            name="$1"; url="$2"; expected="$3"
+            code=$(curl -L -sS --max-time 25 -o "/tmp/${name}.body" -w '%{http_code}' "$url" || true)
+            ok=false
+            case "$expected" in
+              2xx) [[ "$code" =~ ^2 ]] && ok=true ;;
+              2xx3xx) [[ "$code" =~ ^[23] ]] && ok=true ;;
+            esac
+            jq -nc --arg name "$name" --arg url "$url" --arg code "$code" --argjson ok "$ok" '{surface:$name,url:$url,http:$code,ok:$ok}' >> /tmp/external.jsonl
+          }
+          probe api_health "${API_BASE}/health" 2xx
+          probe api_version "${API_BASE}/version" 2xx
+          probe landing "https://ivxholding.com" 2xx3xx
+          probe landing_www "https://www.ivxholding.com" 2xx3xx
+          probe owner_chat "https://chat.ivxholding.com" 2xx3xx
+          jq -s '.' /tmp/external.jsonl > /tmp/external.json
+          cat /tmp/external.json
+
+      - name: Internal repository and Actions radar
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          if git grep -n -E '^(<<<<<<<|=======|>>>>>>>)' -- ':!*.lock' > /tmp/conflict-markers.txt; then
+            echo 'merge_conflict_markers_detected=true'
+          else
+            : > /tmp/conflict-markers.txt
+          fi
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs?branch=main&per_page=100" > /tmp/all-runs-pages.json
+          jq '[.workflow_runs[]? | select(.status == "completed")][0:40]' /tmp/all-runs-pages.json > /tmp/recent-runs.json || echo '[]' > /tmp/recent-runs.json
+          jq '[.[] | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral") | {id,name,conclusion,head_sha,html_url,created_at}]' /tmp/recent-runs.json > /tmp/recent-red.json
+          cat /tmp/recent-red.json
+
+      - name: Resolve latest 112 War Room and every agent outcome
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_run=''
+          if [ "${GITHUB_EVENT_NAME}" = workflow_run ]; then
+            source_run='${{ github.event.workflow_run.id }}'
+          fi
+          if [ -z "$source_run" ]; then
+            gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/landing-112-agent-autonomous-qa.yml/runs?branch=main&per_page=10" > /tmp/war-runs.json
+            source_run=$(jq -r '[.workflow_runs[] | select(.status == "completed")][0].id // empty' /tmp/war-runs.json)
+          fi
+          test -n "$source_run"
+          echo "SOURCE_RUN_ID=$source_run" >> "$GITHUB_ENV"
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${source_run}/jobs?per_page=100" > /tmp/source-jobs-pages.json
+          jq '[.jobs[]?]' /tmp/source-jobs-pages.json > /tmp/source-jobs.json || echo '[]' > /tmp/source-jobs.json
+
+          jq -n --slurpfile agents /tmp/agents.json --slurpfile jobs /tmp/source-jobs.json '
+            def outcome($n):
+              [ $jobs[0][] | select(.name | startswith("activate-112 (" + ($n|tostring) + ",")) ][0] // null;
+            [ $agents[0].agents[] |
+              . as $a |
+              (outcome(.agentNumber)) as $j |
+              {
+                agentNumber:.agentNumber,
+                agentId:.agentId,
+                name:.name,
+                role:(.role // .division // "unknown"),
+                paused:(.paused // false),
+                disabled:(.disabled // false),
+                operationalState:{
+                  task:(if $j == null then "No matching latest War Room job" else $j.name end),
+                  observation:(if $j == null then "NO_JOB" else ($j.conclusion // $j.status // "unknown") end),
+                  hypothesis:(if $j == null then "dispatch_or_matrix_gap" elif $j.conclusion == "success" then "healthy_on_latest_evidence" elif $j.conclusion == "failure" then "agent_execution_or_dependency_failure" else "execution_not_green" end),
+                  confidence:(if $j == null then 0.70 else 1.00 end),
+                  evidence:(if $j == null then null else {jobId:$j.id,conclusion:$j.conclusion,startedAt:$j.started_at,completedAt:$j.completed_at} end),
+                  nextAction:(if $j == null then "re-dispatch_and_verify" elif $j.conclusion == "success" then "continue_monitoring" else "diagnose_then_safe_self_heal" end)
+                }
+              }
+            ]' > /tmp/fleet-state.json
+          test "$(jq 'length' /tmp/fleet-state.json)" = 112
+          jq '{total:length,green:[.[]|select(.operationalState.observation=="success")]|length,red:[.[]|select(.operationalState.observation=="failure")]|length,missing:[.[]|select(.operationalState.observation=="NO_JOB")]|length}' /tmp/fleet-state.json
+
+      - name: Build internal plus external diagnosis
+        id: diagnosis
+        shell: bash
+        run: |
+          set -euo pipefail
+          red_agents=$(jq '[.[] | select(.operationalState.observation != "success")] | length' /tmp/fleet-state.json)
+          external_red=$(jq '[.[] | select(.ok != true)] | length' /tmp/external.json)
+          recent_red=$(jq 'length' /tmp/recent-red.json)
+          conflicts=$(wc -l < /tmp/conflict-markers.txt | tr -d ' ')
+          total=$((red_agents + external_red + conflicts))
+          echo "red_agents=$red_agents" >> "$GITHUB_OUTPUT"
+          echo "external_red=$external_red" >> "$GITHUB_OUTPUT"
+          echo "total_incidents=$total" >> "$GITHUB_OUTPUT"
+
+          jq -n \
+            --arg sourceRun "$SOURCE_RUN_ID" \
+            --arg sourceSha "$GITHUB_SHA" \
+            --slurpfile fleet /tmp/fleet-state.json \
+            --slurpfile external /tmp/external.json \
+            --slurpfile actions /tmp/recent-red.json \
+            --rawfile conflicts /tmp/conflict-markers.txt \
+            '{sourceRunId:$sourceRun,sourceSha:$sourceSha,policy:{failClosed:true,ownerGate:true,maxRepairAttempts:3},fleet:$fleet[0],external:$external[0],recentActionFailures:$actions[0],conflictMarkers:$conflicts}' > /tmp/nervous-system-diagnosis.json
+
+          if jq -e '[.fleet[] | select(.operationalState.observation != "success") | (.name + " " + .role + " " + .operationalState.task)] | join(" ") | test("secret|credential|auth|permission|payment|stripe|migration|destructive|infrastructure|iam|cloudfront|route53|security|rollback";"i")' /tmp/nervous-system-diagnosis.json >/dev/null; then
+            gate=true
+          else
+            gate=false
+          fi
+          echo "owner_gate_required=$gate" >> "$GITHUB_OUTPUT"
+          cat /tmp/nervous-system-diagnosis.json
+
+      - name: Stop at Owner Gate for high-risk remedy
+        if: ${{ steps.diagnosis.outputs.total_incidents != '0' && steps.diagnosis.outputs.owner_gate_required == 'true' }}
+        shell: bash
+        run: |
+          echo 'AUTONOMOUS_NERVOUS_SYSTEM=OWNER_GATE_REQUIRED'
+          exit 1
+
+      - name: Prescribe and delegate safe remedy
+        id: remedy
+        if: ${{ steps.diagnosis.outputs.total_incidents != '0' && steps.diagnosis.outputs.owner_gate_required != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          diagnosis=$(jq -c '.' /tmp/nervous-system-diagnosis.json)
+          goal="IVX AUTONOMOUS NERVOUS SYSTEM. Treat this as an aircraft radar plus nervous system. Scan INTERNAL code/runtime/CI evidence and EXTERNAL production surfaces end to end. For each unhealthy IA use its operational state (task, observation, hypothesis, confidence, evidence, nextAction); do not invent hidden chain-of-thought. Find shared root causes before patching symptoms. Repair only safe low-risk code/configuration. Never weaken tests, evidence, Owner Gates or 112/112. Required closed loop: diagnose -> patch -> tests/typecheck -> commit/PR/CI -> merge if allowed -> production exact-SHA proof -> rerun affected verification. Stop for secrets/auth/permissions/payments/destructive migrations/infrastructure/security/critical rollback. Diagnosis: ${diagnosis}"
+          payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",systemMode:true,ownerApproved:true,riskLevel:"low",proposedPlan:"Internal+external evidence-backed remedy with shared-root-cause analysis and closed-loop verification."}')
+          http=$(curl -sS --max-time 60 -o /tmp/remedy-start.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-System-Key: ${SYSTEM_KEY}" --data "$payload" || true)
+          case "$http" in 200|202|409) ;; *) cat /tmp/remedy-start.json; exit 1;; esac
+          task_id=$(jq -r '.task.taskId // .taskId // .jobId // .activeJobId // .job.jobId // empty' /tmp/remedy-start.json)
+          test -n "$task_id"
+          echo "task_id=$task_id" >> "$GITHUB_OUTPUT"
+          echo "AUTONOMOUS_REMEDY_TASK=$task_id"
+
+      - name: Wait for remedy outcome instead of fire-and-forget
+        id: wait
+        if: ${{ steps.remedy.outputs.task_id != '' }}
+        shell: bash
+        env:
+          TASK_ID: ${{ steps.remedy.outputs.task_id }}
+        run: |
+          set -euo pipefail
+          terminal=false
+          for i in $(seq 1 30); do
+            code=$(curl -sS --max-time 30 -o /tmp/remedy-status.json -w '%{http_code}' "${API_BASE}/api/ivx/senior-developer/worker/jobs/${TASK_ID}" -H "X-IVX-System-Key: ${SYSTEM_KEY}" || true)
+            if [ "$code" = 200 ]; then
+              status=$(jq -r '.task.status // .status // "unknown"' /tmp/remedy-status.json)
+              terminal_flag=$(jq -r '.task.terminal // .terminal // false' /tmp/remedy-status.json)
+              echo "remedy_status=$status"
+              if [ "$status" = WAITING_APPROVAL ]; then
+                echo 'owner_gate_required=true' >> "$GITHUB_OUTPUT"
+                exit 1
+              fi
+              if [ "$terminal_flag" = true ]; then terminal=true; break; fi
+            fi
+            sleep 10
+          done
+          test "$terminal" = true
+          status=$(jq -r '.task.status // .status // "unknown"' /tmp/remedy-status.json)
+          echo "terminal_status=$status" >> "$GITHUB_OUTPUT"
+          case "$status" in COMPLETED|SUCCESS|SUCCEEDED) ;; *) cat /tmp/remedy-status.json; exit 1;; esac
+
+      - name: Re-run 112 War Room after a completed safe remedy
+        if: ${{ steps.wait.outputs.terminal_status == 'COMPLETED' || steps.wait.outputs.terminal_status == 'SUCCESS' || steps.wait.outputs.terminal_status == 'SUCCEEDED' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/workflows/landing-112-agent-autonomous-qa.yml/dispatches" -f ref=main
+          echo 'war_room_rerun=DISPATCHED'
+
+      - name: Persist nervous-system evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: IVX-AUTONOMOUS-NERVOUS-SYSTEM-${{ github.run_id }}
+          path: |
+            /tmp/fleet-state.json
+            /tmp/external.json
+            /tmp/recent-red.json
+            /tmp/nervous-system-diagnosis.json
+            /tmp/remedy-start.json
+            /tmp/remedy-status.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Healthy fleet summary
+        if: ${{ steps.diagnosis.outputs.total_incidents == '0' }}
+        run: echo 'AUTONOMOUS_NERVOUS_SYSTEM=GREEN_112_AND_EXTERNAL_SURFACES'

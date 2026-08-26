@@ -1,0 +1,96 @@
+name: IVX 112 Executive Report
+
+on:
+  workflow_run:
+    workflows:
+      - Landing 112-Agent Autonomous QA War Room
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: War Room run ID to report
+        required: true
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Resolve source run
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = workflow_run ]; then
+            run='${{ github.event.workflow_run.id }}'
+            sha='${{ github.event.workflow_run.head_sha }}'
+            conclusion='${{ github.event.workflow_run.conclusion }}'
+          else
+            run='${{ inputs.source_run_id }}'
+            data=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run}")
+            sha=$(jq -r '.head_sha' <<<"$data")
+            conclusion=$(jq -r '.conclusion // .status' <<<"$data")
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "conclusion=$conclusion" >> "$GITHUB_OUTPUT"
+
+      - name: Download agent evidence
+        env:
+          RUN_ID: ${{ steps.source.outputs.run }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern "landing-agent-*-${RUN_ID}" --dir evidence
+          find evidence -type f -name 'agent-*.json' -exec cp {} evidence/ \; 2>/dev/null || true
+
+      - name: Build executive report
+        env:
+          RUN_ID: ${{ steps.source.outputs.run }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          SOURCE_CONCLUSION: ${{ steps.source.outputs.conclusion }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find evidence -maxdepth 1 -type f -name 'agent-*.json' | sort -V)
+          count=${#files[@]}
+          test "$count" -gt 0
+          jq -s 'sort_by(.agentNumber)' "${files[@]}" > /tmp/agents.json
+          passed=$(jq '[.[]|select(.passed==true)]|length' /tmp/agents.json)
+          failed=$(jq '[.[]|select(.passed!=true)]|length' /tmp/agents.json)
+          unique=$(jq '[.[].agentNumber]|unique|length' /tmp/agents.json)
+          certified=false
+          if [ "$count" = 112 ] && [ "$unique" = 112 ] && [ "$passed" = 112 ]; then certified=true; fi
+          mkdir -p report
+          {
+            echo '# IVX 112-Agent Executive Report'
+            echo
+            echo "- Source run: $RUN_ID"
+            echo "- Source SHA: $SOURCE_SHA"
+            echo "- Workflow conclusion: $SOURCE_CONCLUSION"
+            echo "- Evidence files: $count/112"
+            echo "- Unique agents: $unique/112"
+            echo "- PASS: $passed"
+            echo "- FAIL: $failed"
+            echo "- 112/112 certified: $certified"
+            echo
+            echo '| IA | Agent | Assignment | Tool | Status | HTTP | Final | Evidence | SHA |'
+            echo '|---:|---|---|---|---|---:|---|---|---|'
+            jq -r '.[] | "| \(.agentNumber) | \(.name) | \(.assignment|gsub("\\|";"/")) | \(.toolId) | \(if .passed then "PASS" else "FAIL" end) | \(.http) | \(.finalStatus) | \(.toolResultId // "") | \(.sourceSha) |"' /tmp/agents.json
+          } > report/IVX-112-EXECUTIVE-REPORT.md
+          jq -n --arg runId "$RUN_ID" --arg sourceSha "$SOURCE_SHA" --arg sourceConclusion "$SOURCE_CONCLUSION" --argjson evidenceCount "$count" --argjson uniqueAgents "$unique" --argjson passedAgents "$passed" --argjson failedAgents "$failed" --argjson certified "$certified" --slurpfile agents /tmp/agents.json '{runId:$runId,sourceSha:$sourceSha,sourceConclusion:$sourceConclusion,evidenceCount:$evidenceCount,uniqueAgents:$uniqueAgents,passedAgents:$passedAgents,failedAgents:$failedAgents,certified112:$certified,agents:$agents[0]}' > report/IVX-112-EXECUTIVE-REPORT.json
+          cat report/IVX-112-EXECUTIVE-REPORT.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload executive report
+        uses: actions/upload-artifact@v4
+        with:
+          name: IVX-112-EXECUTIVE-REPORT-${{ steps.source.outputs.run }}
+          path: report/
+          retention-days: 30
