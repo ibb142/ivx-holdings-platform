@@ -1,0 +1,117 @@
+name: IVX 112 Exact SHA Auto-Deploy Certificate
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ivx-112-exact-sha-autodeploy-cert
+  cancel-in-progress: true
+
+jobs:
+  exact-sha-and-112:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      API_BASE: https://api.ivxholding.com
+      SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Source audit — authoritative 112 runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "TOTAL_AGENTS_REQUIRED = 112" backend/services/ivx-real-execution-certificate.ts
+          grep -q "simulatedRuns" backend/services/ivx-real-execution-certificate.ts
+          grep -q "resolveActiveIVXSystemSecret" backend/api/ivx-agent-api.ts
+          test "$(grep -c 'await requireOwner' backend/api/ivx-agent-api.ts)" -ge 9
+          echo 'source_112_audit=PASS'
+
+      - name: Wait for repository auto-deploy exact SHA — HARD GATE
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 150); do
+            code=$(curl -sS -m 20 -o /tmp/version.json -w '%{http_code}' "${API_BASE}/version" || true)
+            if [ "$code" = 200 ]; then
+              live=$(jq -r '.commit // empty' /tmp/version.json)
+              ok=$(jq -r '.ok // false' /tmp/version.json)
+              echo "poll=$i live=${live:-missing} expected=$GITHUB_SHA"
+              if [ "$ok" = true ] && [ "$live" = "$GITHUB_SHA" ]; then
+                echo 'exact_sha_live=PASS'
+                exit 0
+              fi
+            fi
+            sleep 8
+          done
+          echo 'FAIL: repository auto-deploy did not publish the exact main SHA.'
+          exit 1
+
+      - name: Audit 112 live agents and contracts — HARD GATE
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS "${API_BASE}/api/ivx/agents" -o /tmp/agents.json
+          test "$(jq -r '.ok // false' /tmp/agents.json)" = true
+          test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
+          test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)" = 112
+          test "$(jq '[.agents[].agentNumber] | unique | length' /tmp/agents.json)" = 112
+          test "$(jq '[.agents[] | select(.paused==true or .disabled==true)] | length' /tmp/agents.json)" = 0
+          mkdir -p /tmp/contracts
+          jq -r '.agents[].agentId' /tmp/agents.json | while read -r id; do
+            curl -fsS "${API_BASE}/api/ivx/agents/${id}/contract" -o "/tmp/contracts/${id}.json"
+            test "$(jq -r '.ok // false' "/tmp/contracts/${id}.json")" = true
+            test -n "$(jq -r '.contract.memoryNamespace // empty' "/tmp/contracts/${id}.json")"
+            test -n "$(jq -r '.contract.queueNamespace // empty' "/tmp/contracts/${id}.json")"
+            test -n "$(jq -r '.contract.instructionHash // empty' "/tmp/contracts/${id}.json")"
+          done
+          test "$(find /tmp/contracts -name '*.json' | wc -l | tr -d ' ')" = 112
+          jq -s '[.[].contract.memoryNamespace] | unique | length' /tmp/contracts/*.json | grep -qx '112'
+          jq -s '[.[].contract.queueNamespace] | unique | length' /tmp/contracts/*.json | grep -qx '112'
+          echo 'live_112_contracts=PASS'
+
+      - name: Start real 112/112 execution certificate — HARD GATE
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SYSTEM_KEY:-}"
+          HTTP=$(curl -sS -m 30 -o /tmp/start.json -w '%{http_code}' \
+            -X POST "${API_BASE}/api/ivx/agents/certificate/run" \
+            -H 'Content-Type: application/json' \
+            -H "x-ivx-owner-key: ${SYSTEM_KEY}" \
+            --data '{}')
+          cat /tmp/start.json | jq '{ok,runId,error,message}' || true
+          test "$HTTP" = 200
+          test "$(jq -r '.ok // false' /tmp/start.json)" = true
+          RUN_ID=$(jq -r '.runId // empty' /tmp/start.json)
+          test -n "$RUN_ID"
+          echo "RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+
+      - name: Wait for real 112/112 completion — HARD GATE
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 240); do
+            curl -fsS "${API_BASE}/api/ivx/agents/certificate" -o /tmp/cert.json
+            run=$(jq -r '.runId // .certificate.runId // empty' /tmp/cert.json)
+            certified=$(jq -r '.certified // .certificate.certified // false' /tmp/cert.json)
+            healthy=$(jq -r '.healthy // .certificate.healthy // 0' /tmp/cert.json)
+            echo "poll=$i run=${run:-none} certified=$certified healthy=$healthy"
+            if [ "$run" = "$RUN_ID" ] && [ "$certified" = true ]; then break; fi
+            sleep 10
+          done
+          curl -fsS "${API_BASE}/api/ivx/agents/certificate" -o /tmp/cert.json
+          test "$(jq -r '.certified // .certificate.certified // false' /tmp/cert.json)" = true
+          test "$(jq -r '.runId // .certificate.runId // empty' /tmp/cert.json)" = "$RUN_ID"
+          test "$(jq -r '.total // .certificate.total // 0' /tmp/cert.json)" = 112
+          test "$(jq -r '.healthy // .certificate.healthy // 0' /tmp/cert.json)" = 112
+          test "$(jq -r '.realExecutionVerified // .certificate.realExecutionVerified // 0' /tmp/cert.json)" = 112
+          test "$(jq -r '.evidenceVerified // .certificate.evidenceVerified // 0' /tmp/cert.json)" = 112
+          test "$(jq -r '.simulatedRuns // .certificate.simulatedRuns // -1' /tmp/cert.json)" = 0
+          test "$(jq -r '.commitSha // .certificate.commitSha // empty' /tmp/cert.json)" = "$GITHUB_SHA"
+          echo '112_112_exact_sha_real_execution=PASS'
