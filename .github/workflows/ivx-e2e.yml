@@ -68,9 +68,7 @@ jobs:
           set -euo pipefail
           python3 -m http.server 4173 --directory expo/ivxholding-landing > "$RUNNER_TEMP/ivx-landing.log" 2>&1 &
           for attempt in {1..20}; do
-            if curl --silent --fail http://127.0.0.1:4173/ >/dev/null; then
-              exit 0
-            fi
+            if curl --silent --fail http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
             sleep 1
           done
           cat "$RUNNER_TEMP/ivx-landing.log" || true
@@ -123,14 +121,14 @@ jobs:
       - run: cd expo && bun install --frozen-lockfile
 
       - name: Select and boot deterministic iOS simulator
-        timeout-minutes: 2
+        timeout-minutes: 3
         run: |
           set -euo pipefail
           xcrun simctl list devices available > "$RUNNER_TEMP/ivx-simulators.txt"
           UDID=$(python3 - <<'PY'
           import json, subprocess
           data = json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','--json'], text=True))
-          for runtime, devices in data.get('devices', {}).items():
+          for devices in data.get('devices', {}).values():
               for d in devices:
                   if d.get('isAvailable') and str(d.get('name','')).startswith('iPhone'):
                       print(d['udid'])
@@ -141,37 +139,14 @@ jobs:
           test -n "$UDID"
           echo "IVX_SIMULATOR_UDID=$UDID" >> "$GITHUB_ENV"
           xcrun simctl boot "$UDID" 2>/dev/null || true
-          for attempt in {1..30}; do
-            STATE=$(xcrun simctl list devices --json | UDID="$UDID" python3 -c 'import json,sys,os; d=json.load(sys.stdin); u=os.environ["UDID"]; print(next((x.get("state","") for xs in d.get("devices",{}).values() for x in xs if x.get("udid")==u), ""))' 2>/dev/null || true)
-            if [ "$STATE" = "Booted" ]; then
-              echo "simulator_udid=$UDID state=Booted"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "Simulator failed to reach Booted state: $UDID"
-          xcrun simctl list devices available
-          exit 1
-
-      - name: Start the Expo development server
-        working-directory: expo
-        timeout-minutes: 2
-        run: |
-          set -euo pipefail
-          nohup bunx expo start --dev-client --port 8081 > "$RUNNER_TEMP/expo-metro.log" 2>&1 &
-          for attempt in {1..30}; do
-            if curl --silent --fail http://127.0.0.1:8081/status | grep -q 'packager-status:running'; then
-              echo 'metro=PASS'
-              exit 0
-            fi
-            sleep 2
-          done
-          cat "$RUNNER_TEMP/expo-metro.log"
-          exit 1
+          xcrun simctl bootstatus "$UDID" -b
+          echo "simulator_udid=$UDID state=Booted"
 
       - name: Generate iOS native project
         working-directory: expo
         timeout-minutes: 8
+        env:
+          EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           rm -rf ios
@@ -180,9 +155,11 @@ jobs:
           pod install --silent
           echo 'ios_prebuild=PASS'
 
-      - name: Build iOS simulator app — HARD GATE
+      - name: Build self-contained iOS simulator app — HARD GATE
         working-directory: expo
         timeout-minutes: 18
+        env:
+          EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           WORKSPACE=$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
@@ -194,14 +171,14 @@ jobs:
           xcodebuild \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
-            -configuration Debug \
+            -configuration Release \
             -sdk iphonesimulator \
             -destination "id=$IVX_SIMULATOR_UDID" \
             -derivedDataPath "$RUNNER_TEMP/ivx-derived" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build | tee "$RUNNER_TEMP/ivx-xcodebuild.log"
-          APP=$(find "$RUNNER_TEMP/ivx-derived/Build/Products/Debug-iphonesimulator" -maxdepth 1 -name '*.app' -print -quit)
+          APP=$(find "$RUNNER_TEMP/ivx-derived/Build/Products/Release-iphonesimulator" -maxdepth 1 -name '*.app' -print -quit)
           test -n "$APP"
           echo "IVX_IOS_APP=$APP" >> "$GITHUB_ENV"
           echo 'ios_build=PASS'
@@ -212,8 +189,8 @@ jobs:
           set -euo pipefail
           xcrun simctl install "$IVX_SIMULATOR_UDID" "$IVX_IOS_APP"
           xcrun simctl launch "$IVX_SIMULATOR_UDID" com.ivxholdings.app
-          sleep 5
-          xcrun simctl spawn "$IVX_SIMULATOR_UDID" launchctl print system > "$RUNNER_TEMP/ivx-launchctl.txt" 2>&1 || true
+          sleep 8
+          xcrun simctl io "$IVX_SIMULATOR_UDID" screenshot maestro-launch.png
           echo 'ios_install_launch=PASS'
 
       - name: Install Maestro
@@ -238,20 +215,17 @@ jobs:
         run: |
           set +e
           cp "$RUNNER_TEMP/ivx-simulators.txt" maestro-simulators.txt 2>/dev/null || xcrun simctl list devices > maestro-simulators.txt
-          cp "$RUNNER_TEMP/ivx-launchctl.txt" maestro-launchctl.txt 2>/dev/null || true
-          cp "$RUNNER_TEMP/expo-metro.log" maestro-metro.log 2>/dev/null || true
           cp "$RUNNER_TEMP/ivx-xcodebuild.log" maestro-xcodebuild.log 2>/dev/null || true
           xcrun simctl io "$IVX_SIMULATOR_UDID" screenshot maestro-failure.png 2>/dev/null || true
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: maestro-report
+          name: maestro-report-${{ github.sha }}
           path: |
             maestro-report.xml
+            maestro-launch.png
             maestro-simulators.txt
-            maestro-launchctl.txt
-            maestro-metro.log
             maestro-xcodebuild.log
             maestro-failure.png
           if-no-files-found: warn
