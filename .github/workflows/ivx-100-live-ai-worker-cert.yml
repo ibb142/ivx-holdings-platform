@@ -108,8 +108,8 @@ jobs:
               final_status=$(jq -r '.runRecord.finalStatus // .finalStatus // "unknown"' "/tmp/ivx112/run-${number}.json")
               source_reference=$(jq -r '.runRecord.sourceReference // .sourceReference // empty' "/tmp/ivx112/run-${number}.json")
               tool_result_id=$(jq -r '.runRecord.toolResultId // .toolResultId // empty' "/tmp/ivx112/run-${number}.json")
-              simulated=$(jq -r 'if (.runRecord.simulated // .simulated) == null then "null" else ((.runRecord.simulated // .simulated) | tostring) end' "/tmp/ivx112/run-${number}.json")
-              raw_fake_success=$(jq -r 'if (.runRecord.fakeSuccess // .fakeSuccess) == null then "null" else ((.runRecord.fakeSuccess // .fakeSuccess) | tostring) end' "/tmp/ivx112/run-${number}.json")
+              simulated=$(jq -r 'if (.runRecord | type == "object") and (.runRecord | has("simulated")) then (.runRecord.simulated | tostring) elif has("simulated") then (.simulated | tostring) else "null" end' "/tmp/ivx112/run-${number}.json")
+              raw_fake_success=$(jq -r 'if (.runRecord | type == "object") and (.runRecord | has("fakeSuccess")) then (.runRecord.fakeSuccess | tostring) elif has("fakeSuccess") then (.fakeSuccess | tostring) else "null" end' "/tmp/ivx112/run-${number}.json")
               if [ "$raw_fake_success" = true ]; then fake_success=true; else fake_success=false; fi
             fi
             passed=false
