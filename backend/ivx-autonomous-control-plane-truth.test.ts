@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
+import { fileURLToPath } from 'node:url';
 
-const SOURCE_PATH = 'backend/api/ivx-autonomous-control-plane.ts';
+const SOURCE_PATH = fileURLToPath(new URL('./api/ivx-autonomous-control-plane.ts', import.meta.url));
 
 async function source(): Promise<string> {
   return Bun.file(SOURCE_PATH).text();
