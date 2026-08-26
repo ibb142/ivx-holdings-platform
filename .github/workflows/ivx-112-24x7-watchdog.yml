@@ -59,8 +59,6 @@ jobs:
           incident_sha=''
           incident_conclusion=''
 
-          # Immediate event-driven detection when the critical Owner -> Home
-          # certificate finishes red. This removes the old 15-minute blind spot.
           if [ "${{ github.event_name }}" = 'workflow_run' ]; then
             conclusion='${{ github.event.workflow_run.conclusion }}'
             if [ "$conclusion" != 'success' ]; then
@@ -73,9 +71,6 @@ jobs:
             fi
           fi
 
-          # Scheduled/manual runs must remember an unresolved red certificate.
-          # Look at the latest COMPLETED Owner -> Home run. If it is red, the
-          # fleet remains in P0 mode until a newer completed run is green.
           if [ "$incident_active" != true ]; then
             curl -fsS --max-time 30 \
               -H "Authorization: Bearer ${GH_TOKEN}" \
@@ -158,7 +153,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/ivx112-cycle
+          mkdir -p /tmp/ivx112-cycle qa/evidence/autonomous
           export API_BASE SYSTEM_KEY PROGRAM_ID LIVE_SHA GITHUB_RUN_ID GITHUB_RUN_ATTEMPT
           export INCIDENT_ACTIVE INCIDENT_WORKFLOW INCIDENT_RUN_ID INCIDENT_URL INCIDENT_SHA INCIDENT_CONCLUSION
 
@@ -170,45 +165,27 @@ jobs:
             reason='role_research_fallback'
             p0=false
 
-            # P0 Owner -> Home incident team. These six agents must STOP generic
-            # research and inspect the actual failing Android/auth/QA surfaces.
             if [ "$INCIDENT_ACTIVE" = true ]; then
               case "$number" in
-                10)
-                  tool='code_search'; params='{"pattern":"owner-home-ready","scope":"expo"}'; reason='p0_platform_home_runtime'; p0=true ;;
-                11)
-                  tool='code_read'; params='{"path":".github/workflows/ivx-owner-home-android-cert.yml"}'; reason='p0_qa_certificate_gate'; p0=true ;;
-                74)
-                  tool='code_search'; params='{"pattern":"SIGNED_OUT","scope":"expo"}'; reason='p0_auth_session_transition'; p0=true ;;
-                79)
-                  tool='code_search'; params='{"pattern":"home-runtime-ready","scope":"expo"}'; reason='p0_android_home_runtime'; p0=true ;;
-                87)
-                  tool='code_read'; params='{"path":"expo/.maestro/ivx-owner-home-certificate.yaml"}'; reason='p0_functional_test_flow'; p0=true ;;
-                88)
-                  tool='code_read'; params='{"path":"expo/lib/screen-paint-watchdog.ts"}'; reason='p0_qa_screen_paint_watchdog'; p0=true ;;
+                10) tool='code_search'; params='{"pattern":"owner-home-ready","scope":"expo"}'; reason='p0_platform_home_runtime'; p0=true ;;
+                11) tool='code_read'; params='{"path":".github/workflows/ivx-owner-home-android-cert.yml"}'; reason='p0_qa_certificate_gate'; p0=true ;;
+                74) tool='code_search'; params='{"pattern":"SIGNED_OUT","scope":"expo"}'; reason='p0_auth_session_transition'; p0=true ;;
+                79) tool='code_search'; params='{"pattern":"home-runtime-ready","scope":"expo"}'; reason='p0_android_home_runtime'; p0=true ;;
+                87) tool='code_read'; params='{"path":"expo/.maestro/ivx-owner-home-certificate.yaml"}'; reason='p0_functional_test_flow'; p0=true ;;
+                88) tool='code_read'; params='{"path":"expo/lib/screen-paint-watchdog.ts"}'; reason='p0_qa_screen_paint_watchdog'; p0=true ;;
               esac
             fi
 
-            # Outside a P0 assignment, route by the agent's actual role/mission.
-            # This replaces the old modulo-based WorldBank/Wikipedia/CRM lottery.
             if [ "$p0" != true ]; then
               case "$text" in
-                *security*|*secret*|*vulnerab*)
-                  tool='secret_scan'; params='{}'; reason='role_security_scan' ;;
-                *qa*|*testing*|*test*|*certification*)
-                  tool='code_search'; params='{"pattern":"assertVisible","scope":"expo/.maestro"}'; reason='role_qa_real_test_surface' ;;
-                *android*|*mobile*|*authentication*|*technology*|*platform*|*frontend*)
-                  tool='code_search'; params='{"pattern":"owner-home-ready","scope":"expo"}'; reason='role_mobile_platform_code' ;;
-                *backend*|*api*|*orchestrator*|*autonomous*|*scheduler*)
-                  tool='code_search'; params='{"pattern":"executeAgentRun","scope":"backend"}'; reason='role_backend_runtime_code' ;;
-                *devops*|*deployment*|*ci/cd*|*cloud*)
-                  tool='code_search'; params='{"pattern":"workflow_dispatch","scope":".github/workflows"}'; reason='role_delivery_pipeline_code' ;;
-                *investor*|*buyer*|*crm*|*sales*)
-                  tool='crm_read'; params='{"prospectType":"buyer","limit":10}'; reason='role_crm_live_data' ;;
-                *finance*|*market*|*analytics*|*economic*)
-                  tool='worldbank_indicator'; params='{"country":"USA","indicator":"NY.GDP.MKTP.CD"}'; reason='role_market_live_data' ;;
-                *compliance*|*legal*|*acquisition*)
-                  tool='wikipedia_search'; params='{"query":"United States real estate regulation"}'; reason='role_compliance_public_source' ;;
+                *security*|*secret*|*vulnerab*) tool='secret_scan'; params='{}'; reason='role_security_scan' ;;
+                *qa*|*testing*|*test*|*certification*) tool='code_search'; params='{"pattern":"assertVisible","scope":"expo/.maestro"}'; reason='role_qa_real_test_surface' ;;
+                *android*|*mobile*|*authentication*|*technology*|*platform*|*frontend*) tool='code_search'; params='{"pattern":"owner-home-ready","scope":"expo"}'; reason='role_mobile_platform_code' ;;
+                *backend*|*api*|*orchestrator*|*autonomous*|*scheduler*) tool='code_search'; params='{"pattern":"executeAgentRun","scope":"backend"}'; reason='role_backend_runtime_code' ;;
+                *devops*|*deployment*|*ci/cd*|*cloud*) tool='code_search'; params='{"pattern":"workflow_dispatch","scope":".github/workflows"}'; reason='role_delivery_pipeline_code' ;;
+                *investor*|*buyer*|*crm*|*sales*) tool='crm_read'; params='{"prospectType":"buyer","limit":10}'; reason='role_crm_live_data' ;;
+                *finance*|*market*|*analytics*|*economic*) tool='worldbank_indicator'; params='{"country":"USA","indicator":"NY.GDP.MKTP.CD"}'; reason='role_market_live_data' ;;
+                *compliance*|*legal*|*acquisition*) tool='wikipedia_search'; params='{"query":"United States real estate regulation"}'; reason='role_compliance_public_source' ;;
                 *)
                   query=$(printf '%s' "$mission" | cut -c1-100 | sed 's/"/ /g')
                   [ -n "$query" ] || query='IVX Holdings operational verification'
@@ -290,12 +267,24 @@ jobs:
           p0_assigned=$(jq '[.[] | select(.incidentAssigned == true)] | length' /tmp/ivx112-cycle/all.json)
           p0_success=$(jq '[.[] | select(.incidentAssigned == true and .ok == true and .selectedTool == .actualTool)] | length' /tmp/ivx112-cycle/all.json)
 
-          test "$total" = 112
-          test "$tool_match" = 112
-          if [ "$INCIDENT_ACTIVE" = true ]; then
-            test "$p0_assigned" = 6
-            test "$p0_success" = 6
-          fi
+          cp /tmp/ivx112-cycle/all.json qa/evidence/autonomous/ivx-112-24x7-agent-results.json
+          jq '[.[] | select(.ok != true or .selectedTool != .actualTool or (.sourceReference // "") == "" or (.toolResultId // "") == "") | {agentNumber,agentId,role,httpStatus,ok,finalStatus,selectedTool,actualTool,sourceReference,toolResultId,error}]' \
+            /tmp/ivx112-cycle/all.json > qa/evidence/autonomous/ivx-112-24x7-failures.json
+          jq -n \
+            --arg productionSha "$LIVE_SHA" \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg runAttempt "$GITHUB_RUN_ATTEMPT" \
+            --argjson total "$total" \
+            --argjson succeeded "$success" \
+            --argjson failed "$failed" \
+            --argjson evidence "$evidence" \
+            --argjson toolMatch "$tool_match" \
+            --argjson p0Assigned "$p0_assigned" \
+            --argjson p0Success "$p0_success" \
+            '{productionSha:$productionSha,githubRunId:$runId,githubRunAttempt:$runAttempt,total:$total,succeeded:$succeeded,failed:$failed,evidence:$evidence,toolMatch:$toolMatch,p0Assigned:$p0Assigned,p0Success:$p0Success,failClosed:true}' \
+            > qa/evidence/autonomous/ivx-112-24x7-cycle-diagnostics.json
+          cat qa/evidence/autonomous/ivx-112-24x7-cycle-diagnostics.json
+          cat qa/evidence/autonomous/ivx-112-24x7-failures.json
 
           {
             echo "CYCLE_SUCCESS=$success"
@@ -305,7 +294,17 @@ jobs:
             echo "P0_ASSIGNED=$p0_assigned"
             echo "P0_SUCCESS=$p0_success"
           } >> "$GITHUB_ENV"
-          echo "cycle_total=112 success=$success failed=$failed evidence=$evidence tool_match=$tool_match p0_assigned=$p0_assigned p0_success=$p0_success"
+          echo "cycle_total=$total success=$success failed=$failed evidence=$evidence tool_match=$tool_match p0_assigned=$p0_assigned p0_success=$p0_success"
+
+          test "$total" = 112
+          test "$success" = 112
+          test "$failed" = 0
+          test "$evidence" = 112
+          test "$tool_match" = 112
+          if [ "$INCIDENT_ACTIVE" = true ]; then
+            test "$p0_assigned" = 6
+            test "$p0_success" = 6
+          fi
 
       - name: Verify 112 heartbeat refresh and no paused or disabled agents
         shell: bash
@@ -369,4 +368,6 @@ jobs:
           path: |
             qa/evidence/autonomous/ivx-112-24x7-latest.json
             qa/evidence/autonomous/ivx-112-24x7-agent-results.json
+            qa/evidence/autonomous/ivx-112-24x7-cycle-diagnostics.json
+            qa/evidence/autonomous/ivx-112-24x7-failures.json
           if-no-files-found: warn
