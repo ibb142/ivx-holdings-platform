@@ -1,0 +1,84 @@
+name: IVX 112 War Room Starter
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-112-war-room-starter.yml'
+      - '.github/workflows/landing-112-agent-autonomous-qa.yml'
+      - '.github/workflows/ivx-autonomous-radar-self-heal.yml'
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: ivx-112-war-room-starter
+  cancel-in-progress: false
+
+jobs:
+  start-war-room:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify target workflow exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/contents/.github/workflows/landing-112-agent-autonomous-qa.yml?ref=main" >/tmp/war-room.json
+          test "$(jq -r '.name // empty' /tmp/war-room.json)" = 'landing-112-agent-autonomous-qa.yml'
+
+      - name: Prevent duplicate active War Room
+        id: active
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/landing-112-agent-autonomous-qa.yml/runs?branch=main&per_page=20")
+          active=$(echo "$runs" | jq '[.workflow_runs[] | select(.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "pending")] | length')
+          echo "active=$active" >> "$GITHUB_OUTPUT"
+          echo "active_war_room_runs=$active"
+
+      - name: Dispatch 112-agent War Room
+        if: steps.active.outputs.active == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method POST \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/landing-112-agent-autonomous-qa.yml/dispatches" \
+            -f ref=main
+          echo 'war_room_dispatch=REQUESTED'
+
+      - name: Verify dispatch materialized
+        if: steps.active.outputs.active == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          found=false
+          for i in $(seq 1 12); do
+            runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/landing-112-agent-autonomous-qa.yml/runs?branch=main&per_page=10")
+            count=$(echo "$runs" | jq '[.workflow_runs[] | select(.event == "workflow_dispatch" and (.status == "queued" or .status == "in_progress" or .status == "completed"))] | length')
+            if [ "$count" -gt 0 ]; then
+              found=true
+              echo "$runs" | jq -r '.workflow_runs[] | select(.event == "workflow_dispatch") | {id,status,conclusion,head_sha,created_at} ' | head -20
+              break
+            fi
+            sleep 5
+          done
+          test "$found" = true
+          echo 'war_room_dispatch=VERIFIED'
+
+      - name: Existing War Room already active
+        if: steps.active.outputs.active != '0'
+        run: echo 'war_room_dispatch=SKIPPED_ALREADY_ACTIVE'
