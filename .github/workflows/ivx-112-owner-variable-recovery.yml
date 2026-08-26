@@ -1,0 +1,130 @@
+name: IVX 112 Owner Variable Recovery
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ivx-112-owner-variable-recovery
+  cancel-in-progress: true
+
+jobs:
+  recover-deploy-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      API_BASE: https://api.ivxholding.com
+      IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+      IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+      IVX_OWNER_VARIABLES_ENCRYPTION_KEY: ${{ secrets.IVX_OWNER_VARIABLES_ENCRYPTION_KEY }}
+      APP_SECRET: ${{ secrets.APP_SECRET }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      DEFAULT_RENDER_SERVICE_ID: srv-d7t9ivreo5us73ftose0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Recover Render owner variables with all backend key candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto = await import('node:crypto');
+          const fs = await import('node:fs');
+          const base = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/+$/, '');
+          const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+          if (!base || !serviceKey) throw new Error('Supabase bindings missing');
+
+          const explicit = [
+            process.env.IVX_OWNER_VARIABLES_ENCRYPTION_KEY,
+            process.env.APP_SECRET,
+            process.env.JWT_SECRET,
+          ].filter(Boolean);
+          const fallback = crypto.createHash('sha256').update(`${base}:${serviceKey}`,'utf8').digest('hex');
+          const secrets = [...new Set([...explicit, fallback])];
+          const keys = secrets.map(s => crypto.createHash('sha256').update(s,'utf8').digest());
+          const aad = Buffer.from('ivx_owner_variables:v1','utf8');
+          const names = ['RENDER_API_KEY','RENDER_SERVICE_ID'];
+          const query = encodeURIComponent(`(${names.join(',')})`);
+          const res = await fetch(`${base}/rest/v1/ivx_owner_variables?select=name,encrypted_value,value_iv,value_tag,value_hash&name=in.${query}`, {
+            headers:{apikey:serviceKey,Authorization:`Bearer ${serviceKey}`,Accept:'application/json'}
+          });
+          if(!res.ok) throw new Error(`owner variable read HTTP ${res.status}`);
+          const rows = await res.json();
+          const byName = new Map(rows.map(r => [r.name,r]));
+
+          function decrypt(name){
+            const row = byName.get(name);
+            if(!row) throw new Error(`${name} row missing`);
+            for(let i=0;i<keys.length;i++){
+              try{
+                const d=crypto.createDecipheriv('aes-256-gcm',keys[i],Buffer.from(row.value_iv,'base64'));
+                d.setAAD(aad);
+                d.setAuthTag(Buffer.from(row.value_tag,'base64'));
+                const value=Buffer.concat([d.update(Buffer.from(row.encrypted_value,'base64')),d.final()]).toString('utf8').trim();
+                const hash=crypto.createHash('sha256').update(value,'utf8').digest('hex');
+                if(hash!==row.value_hash) continue;
+                console.log(`${name}_decrypt_key_index=${i}`);
+                return value;
+              }catch{}
+            }
+            throw new Error(`${name} cannot be decrypted by any backend-compatible key candidate`);
+          }
+
+          const renderKey = decrypt('RENDER_API_KEY');
+          const serviceId = decrypt('RENDER_SERVICE_ID');
+          fs.appendFileSync(process.env.GITHUB_ENV, `RENDER_API_KEY_RECOVERED=${renderKey}\nRENDER_SERVICE_ID_RECOVERED=${serviceId}\n`);
+          console.log('owner_variable_render_recovery=PASS');
+          NODE
+
+      - name: Trigger Render deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${RENDER_API_KEY_RECOVERED:-}"
+          SERVICE_ID="${RENDER_SERVICE_ID_RECOVERED:-$DEFAULT_RENDER_SERVICE_ID}"
+          RESPONSE=$(curl -fsS -X POST "https://api.render.com/v1/services/${SERVICE_ID}/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY_RECOVERED}" \
+            -H 'Accept: application/json' \
+            -H 'Content-Type: application/json' \
+            --data '{"clearCache":"do_not_clear"}')
+          DEPLOY_ID=$(printf '%s' "$RESPONSE" | jq -r '.id // .deploy.id // empty')
+          test -n "$DEPLOY_ID"
+          echo "DEPLOY_ID=$DEPLOY_ID" >> "$GITHUB_ENV"
+          echo "SERVICE_ID=$SERVICE_ID" >> "$GITHUB_ENV"
+          echo 'render_deploy_trigger=PASS'
+
+      - name: Wait for exact production SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 120); do
+            code=$(curl -sS -m 20 -o /tmp/version.json -w '%{http_code}' "${API_BASE}/version" || true)
+            if [ "$code" = 200 ]; then
+              live=$(jq -r '.commit // empty' /tmp/version.json)
+              ok=$(jq -r '.ok // false' /tmp/version.json)
+              echo "poll=$i live=${live:-missing} expected=$GITHUB_SHA"
+              if [ "$ok" = true ] && [ "$live" = "$GITHUB_SHA" ]; then
+                echo 'exact_sha_live=PASS'
+                exit 0
+              fi
+            fi
+            sleep 10
+          done
+          echo 'Exact production SHA never became live.'
+          exit 1
+
+      - name: Verify live 112-agent registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS "${API_BASE}/api/ivx/agents" -o /tmp/agents.json
+          test "$(jq -r '.ok // false' /tmp/agents.json)" = true
+          test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
+          test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)" = 112
+          echo 'live_112_registry=PASS'
