@@ -52,9 +52,9 @@ describe('ivx-autonomous-intelligence-mission-scheduler', () => {
     stopAutonomousIntelligenceMissionScheduler();
   });
 
-  it('exports the v2 stable marker', () => {
+  it('exports the v3 authoritative-runtime marker', () => {
     expect(IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER).toBe(
-      'ivx-autonomous-intelligence-mission-scheduler-v2-2026-08-24',
+      'ivx-autonomous-intelligence-mission-scheduler-v3-2026-08-25',
     );
   });
 
@@ -75,13 +75,12 @@ describe('ivx-autonomous-intelligence-mission-scheduler', () => {
     expect(isTerminalMissionStatus('verifying')).toBe(false);
   });
 
-  it('fails closed when the senior developer worker is not enabled', async () => {
+  it('does not let the legacy senior-dev flag disable the authoritative self-draining runtime', async () => {
     process.env.IVX_SENIOR_DEV_WORKER_ENABLED = 'false';
     await startAutonomousIntelligenceMissionScheduler();
     const status = await getMissionSchedulerStatus();
-    expect(status.ok).toBe(false);
-    expect(status.state.status).toBe('failed');
-    expect(status.state.error).toContain('IVX_SENIOR_DEV_WORKER_ENABLED');
+    expect(status.state.error).not.toContain('IVX_SENIOR_DEV_WORKER_ENABLED');
+    expect(status.state.missionJobId).toMatch(/^ivx-worker-/);
   });
 
   it('getMissionSchedulerStatus returns a secret-safe structured state', async () => {
@@ -93,7 +92,6 @@ describe('ivx-autonomous-intelligence-mission-scheduler', () => {
   });
 
   it('startAutonomousIntelligenceMissionScheduler enqueues a real worker job', async () => {
-    process.env.IVX_SENIOR_DEV_WORKER_ENABLED = 'true';
     await startAutonomousIntelligenceMissionScheduler();
     const status = await getMissionSchedulerStatus();
     expect(typeof status.state.missionJobId).toBe('string');
@@ -111,7 +109,6 @@ describe('ivx-autonomous-intelligence-mission-scheduler', () => {
   });
 
   it('does not create duplicate jobs when already active', async () => {
-    process.env.IVX_SENIOR_DEV_WORKER_ENABLED = 'true';
     await startAutonomousIntelligenceMissionScheduler();
     const first = await getMissionSchedulerStatus();
     await startAutonomousIntelligenceMissionScheduler();
