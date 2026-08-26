@@ -1,11 +1,16 @@
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
-import { getCompletionCampaignState, verifyAllEnterpriseAgents } from '../services/ivx-autonomous-completion-campaign';
+import { verifyAllEnterpriseAgents } from '../services/ivx-autonomous-completion-campaign';
+import {
+  buildAppCompletionCampaign,
+  loadControlState,
+} from '../services/ivx-app-completion-campaign';
+import { listCampaignDispatcherRecords } from '../services/ivx-campaign-dispatcher';
 import { getSmsNotifierStatus } from '../services/ivx-autonomous-sms-notifier';
 import { isDurableStoreConfigured } from '../services/ivx-durable-store';
 import { ALL_ENTERPRISE_AGENTS, getFunctionalGroups, getAgentsByFunctionalGroup } from '../services/ivx-enterprise-master-registry';
 import { getSeniorDeveloperJob } from '../services/ivx-senior-developer-worker';
 
-export const IVX_AUTONOMOUS_CONTROL_PLANE_MARKER = 'ivx-autonomous-control-plane-v4-2026-08-25';
+export const IVX_AUTONOMOUS_CONTROL_PLANE_MARKER = 'ivx-autonomous-control-plane-v5-2026-08-25';
 
 const HEARTBEAT_LIVE_TTL_MS = 120_000;
 const ACTIVE_WORKER_STATUSES = new Set(['running', 'patching', 'testing', 'committing', 'deploying', 'verifying']);
@@ -62,13 +67,14 @@ function inferOperatingRegion(text: string): string {
   return 'GLOBAL / UNASSIGNED';
 }
 
-function presenceFor(status: string, workerStatus: string | null, heartbeat: 'live' | 'stale' | 'none', enabled: boolean): string {
+function presenceFor(workerStatus: string | null, heartbeat: 'live' | 'stale' | 'none', enabled: boolean): string {
   if (!enabled) return 'OFFLINE';
-  const current = (workerStatus || status).toLowerCase();
+  const current = (workerStatus || '').toLowerCase();
   if (['failed', 'blocked', 'cancelled'].includes(current)) return 'ATTENTION';
-  if (current === 'queued' || current === 'pending') return current === 'queued' ? 'QUEUED' : 'IDLE';
+  if (current === 'queued') return 'QUEUED';
   if (ACTIVE_WORKER_STATUSES.has(current)) {
-    return heartbeat === 'stale' ? 'STALE' : 'WORKING';
+    if (heartbeat === 'live') return 'WORKING';
+    return 'STALE';
   }
   return 'IDLE';
 }
@@ -86,7 +92,9 @@ export async function handleAutonomousControlPlaneVerifyAll(request: Request): P
 
   try {
     const result = await verifyAllEnterpriseAgents();
-    const campaign = await getCompletionCampaignState();
+    const control = await loadControlState();
+    const records = await listCampaignDispatcherRecords();
+    const campaign = buildAppCompletionCampaign(control, records);
     return ownerOnlyJson({
       ok: true,
       marker: IVX_AUTONOMOUS_CONTROL_PLANE_MARKER,
@@ -100,12 +108,13 @@ export async function handleAutonomousControlPlaneVerifyAll(request: Request): P
         evidence: result.evidence,
       },
       campaign: {
-        phase: campaign.phase,
-        enabled: campaign.enabled,
-        totals: campaign.totals,
-        registryVerifiedTotal: campaign.totals.verifiedAgents,
+        marker: campaign.marker,
+        enabled: !campaign.control.paused && !campaign.control.stopped,
+        counts: campaign.counts,
+        assignedTotal: campaign.totals.agentsAssigned,
         expectedTotal: 112,
-        note: 'verify_all_agents validates registry/assignment structure only. It is not live-work proof.',
+        dispatcherRecords: records.length,
+        note: 'Registry verification proves structure only. Live-work proof comes only from dispatcher record + matching real worker job + active status + fresh heartbeat.',
       },
     });
   } catch (error) {
@@ -121,26 +130,35 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
   }
 
   try {
-    const campaign = await getCompletionCampaignState();
+    const control = await loadControlState();
+    const dispatcherRecords = await listCampaignDispatcherRecords();
+    const campaign = buildAppCompletionCampaign(control, dispatcherRecords);
     const sms = getSmsNotifierStatus();
-    const agentStatuses = countStatuses(campaign.agents);
-    const verifiedTotal = campaign.totals.verifiedAgents;
-    const total = campaign.agents.length;
-    const blocked = agentStatuses.blocked || 0;
-    const failed = agentStatuses.failed || 0;
-    const running = agentStatuses.running || 0;
-    const queued = agentStatuses.queued || 0;
+    const enabled = !campaign.control.paused && !campaign.control.stopped;
+    const agentStatuses = countStatuses(campaign.assignments);
+    const total = campaign.assignments.length;
+    const blocked = (agentStatuses.BLOCKED || 0) + (agentStatuses.PENDING_OWNER || 0);
+    const failed = agentStatuses.FAILED || 0;
+    const running = (agentStatuses.RUNNING || 0) + (agentStatuses.FIXING || 0) + (agentStatuses.TESTING || 0) + (agentStatuses.DEPLOYING || 0) + (agentStatuses.VERIFYING || 0);
+    const queued = agentStatuses.QUEUED || 0;
 
     const registryByNumber = new Map(ALL_ENTERPRISE_AGENTS.map((agent) => [agent.agentNumber, agent]));
-    const enrichedAgents = await Promise.all(campaign.agents.map(async (item) => {
-      const agentNumber = Number.parseInt(item.id.split(':')[1] || '', 10);
-      const registry = registryByNumber.get(agentNumber);
-      const job = item.jobId ? await getSeniorDeveloperJob(item.jobId) : null;
-      const heartbeat = heartbeatState(job?.lastHeartbeatAt || null);
-      const currentTask = job?.input.goal || null;
-      const operatingRegion = inferOperatingRegion(`${currentTask || ''} ${job?.stageDetail || ''} ${registry?.mission || ''}`);
-      const workerStatus = job?.status || null;
-      const hasRealJob = Boolean(item.jobId && job?.jobId === item.jobId);
+    const enrichedAgents = await Promise.all(campaign.assignments.map(async (item) => {
+      const registry = registryByNumber.get(item.agentNumber);
+      const job = item.workerJobId ? await getSeniorDeveloperJob(item.workerJobId) : null;
+      const heartbeatAt = job?.lastHeartbeatAt || item.lastHeartbeatAt || null;
+      const heartbeat = heartbeatState(heartbeatAt);
+      const currentTask = job?.input.goal || item.assignedTask || null;
+      const operatingRegion = inferOperatingRegion(`${currentTask || ''} ${job?.stageDetail || item.currentStep || ''} ${registry?.mission || ''}`);
+      const workerStatus = job?.status || item.workerStatus || null;
+      const hasRealDispatcherRecord = dispatcherRecords.some(
+        (record) => record.agentNumber === item.agentNumber && record.workerJobId === item.workerJobId && Boolean(record.workerJobId),
+      );
+      const hasRealJob = Boolean(
+        hasRealDispatcherRecord &&
+        item.workerJobId &&
+        job?.jobId === item.workerJobId,
+      );
       const hasLiveWorkEvidence = Boolean(
         hasRealJob &&
         heartbeat === 'live' &&
@@ -160,38 +178,39 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
       );
       return {
         ...item,
-        agentNumber,
-        role: registry?.role || null,
+        role: registry?.role || item.role || null,
         functionalGroup: registry?.functionalGroup || 'UNASSIGNED',
         mission: registry?.mission || null,
         operatingRegion,
-        presence: presenceFor(item.status, workerStatus, heartbeat, campaign.enabled),
+        presence: presenceFor(workerStatus, heartbeat, enabled),
         worker: {
-          registered: true,
+          registered: Boolean(registry),
+          dispatcherRecordPresent: hasRealDispatcherRecord,
           hasRealJob,
           hasLiveWorkEvidence,
           completedWithEvidence,
           heartbeat,
-          lastHeartbeatAt: job?.lastHeartbeatAt || null,
-          stage: job?.stage || null,
-          progressPercent: typeof job?.progressPercent === 'number' ? job.progressPercent : null,
-          stageDetail: job?.stageDetail || null,
+          lastHeartbeatAt: heartbeatAt,
+          stage: job?.stage || item.currentStep || null,
+          progressPercent: typeof job?.progressPercent === 'number' ? job.progressPercent : item.progress,
+          stageDetail: job?.stageDetail || item.currentStep || null,
           currentTask,
-          startedAt: job?.startedAt || null,
-          finishedAt: job?.finishedAt || null,
-          attempts: job?.attempts || 0,
+          startedAt: job?.startedAt || item.startedAt || null,
+          finishedAt: job?.finishedAt || item.finishedAt || null,
+          attempts: job?.attempts || item.attempts || 0,
           workerStatus,
         },
       };
     }));
 
-    const heartbeating = enrichedAgents.filter((agent) => agent.worker.heartbeat === 'live').length;
-    const staleHeartbeats = enrichedAgents.filter((agent) => agent.worker.heartbeat === 'stale').length;
+    const heartbeating = enrichedAgents.filter((agent) => agent.worker.heartbeat === 'live' && agent.worker.hasRealJob).length;
+    const staleHeartbeats = enrichedAgents.filter((agent) => agent.worker.heartbeat === 'stale' && agent.worker.hasRealJob).length;
     const realWorkingAgents = enrichedAgents.filter((agent) => agent.worker.hasLiveWorkEvidence);
     const realWorkingCount = realWorkingAgents.length;
     const completedWithEvidence = enrichedAgents.filter((agent) => agent.worker.completedWithEvidence).length;
-    const activeJobs = enrichedAgents.filter((agent) => agent.presence === 'WORKING' || agent.presence === 'QUEUED' || agent.presence === 'STALE').length;
+    const activeJobs = enrichedAgents.filter((agent) => agent.worker.hasRealJob && ['WORKING', 'QUEUED', 'STALE'].includes(agent.presence)).length;
     const lastHeartbeatAt = enrichedAgents
+      .filter((agent) => agent.worker.hasRealJob)
       .map((agent) => agent.worker.lastHeartbeatAt)
       .filter((value): value is string => Boolean(value))
       .sort()
@@ -205,7 +224,6 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
       return {
         name: group,
         total: items.length,
-        registryVerified: items.filter((agent) => agent.status === 'verified').length,
         realWorking: items.filter((agent) => agent.worker.hasLiveWorkEvidence).length,
         queued: items.filter((agent) => agent.presence === 'QUEUED').length,
         idle: items.filter((agent) => agent.presence === 'IDLE').length,
@@ -214,38 +232,38 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
       };
     });
 
+    const dispatcherCoverage = new Set(dispatcherRecords.map((record) => record.agentNumber)).size;
+
     return ownerOnlyJson({
       ok: true,
       marker: IVX_AUTONOMOUS_CONTROL_PLANE_MARKER,
       generatedAt: new Date().toISOString(),
-      source: 'authoritative_worker_queue_plus_live_telemetry',
+      source: 'app_completion_campaign -> campaign_dispatcher -> ivx_senior_developer_worker -> durable_evidence',
       enterprise: {
         totalAgents: total,
         expectedAgents: 112,
-        registered: enrichedAgents.length,
+        registered: enrichedAgents.filter((agent) => agent.worker.registered).length,
+        dispatcherRecords: dispatcherRecords.length,
+        dispatcherAgentCoverage: dispatcherCoverage,
         heartbeating,
         staleHeartbeats,
         realWorkingAgents: realWorkingCount,
         completedWithEvidence,
         activeJobs,
         lastHeartbeatAt,
-        registryShapeValid: campaign.agents.length === 112,
-        phase: campaign.phase,
-        enabled: campaign.enabled,
-        registryVerificationPercent: total > 0 ? Math.round((verifiedTotal / total) * 100) : 0,
-        registryVerifiedTotal: verifiedTotal,
+        registryShapeValid: total === 112,
+        enabled,
         running,
         queued,
         blocked,
         failed,
         durableState: isDurableStoreConfigured(),
-        productionClaimsRequireProof: campaign.productionClaimsRequireProof,
-        paidSpendRequiresOwnerApproval: campaign.paidSpendRequiresOwnerApproval,
-        destructiveActionsRequireOwnerApproval: campaign.destructiveActionsRequireOwnerApproval,
+        productionClaimsRequireProof: true,
+        paidSpendRequiresOwnerApproval: true,
+        destructiveActionsRequireOwnerApproval: true,
       },
       agents: {
         total: enrichedAgents.length,
-        registryVerified: verifiedTotal,
         statuses: agentStatuses,
         items: enrichedAgents,
       },
@@ -260,13 +278,14 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
         smsDailyCap: sms.smsDailyCap,
       },
       certification: {
-        liveReady: campaign.enabled && isDurableStoreConfigured() && sms.schedulerRunning,
-        registryVerifiedComplete: verifiedTotal === total && total === 112,
+        liveReady: enabled && isDurableStoreConfigured() && dispatcherCoverage === 112,
+        registryVerifiedComplete: enrichedAgents.filter((agent) => agent.worker.registered).length === 112,
+        dispatcherMappedComplete: dispatcherCoverage === 112,
         campaignComplete: completedWithEvidence === 112,
         liveWorkforceObserved: realWorkingCount > 0,
         liveWorkingAgents: realWorkingCount,
         full112RealWorkObserved: realWorkingCount === 112,
-        proofPolicy: 'A live worker requires a real jobId, active worker status, current task, startedAt, and heartbeat <=120s. Registry verification is never counted as live work.',
+        proofPolicy: 'WORKING requires: canonical dispatcher assignment + matching real ivx-senior-developer-worker jobId + active worker status + current task + startedAt + real heartbeat <=120s. Registry-only and synthetic heartbeat rows never count.',
       },
     });
   } catch (error) {
