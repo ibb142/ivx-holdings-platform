@@ -19,9 +19,11 @@ import {
   type IVXWorkerJob,
   type IVXWorkerJobResult,
 } from './ivx-senior-developer-worker';
+import { syncCampaignAssignmentsToDispatcher } from './ivx-app-completion-campaign';
+import { runCampaignBootRecovery, startCampaignDispatcher } from './ivx-campaign-dispatcher';
 
 export const IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER =
-  'ivx-autonomous-intelligence-mission-scheduler-v2-2026-08-24';
+  'ivx-autonomous-intelligence-mission-scheduler-v3-2026-08-25';
 
 const OWNER_ID = 'ivx-autonomous-intelligence-mission-scheduler';
 const POLL_INTERVAL_MS = 15_000;
@@ -371,34 +373,44 @@ export function isMissionStateCertified(
   );
 }
 
-/** Start or attach to the one real mission for this scheduler marker. */
+/**
+ * Start or attach to the one real mission for this scheduler marker.
+ *
+ * IMPORTANT: the authoritative 112-agent runtime is the campaign dispatcher
+ * backed by ivx-senior-developer-worker. That worker is self-draining: enqueue
+ * immediately kicks drainSeniorDeveloperQueue(), so AIMS must NOT depend on the
+ * unrelated legacy IVX_SENIOR_DEV_WORKER_ENABLED flag used by
+ * ivx-senior-dev-worker / ivx_owner_ai_tasks.
+ */
 export async function startAutonomousIntelligenceMissionScheduler(): Promise<void> {
   console.log('[IVX AIMS] Starting autonomous intelligence mission scheduler...');
+
+  try {
+    await syncCampaignAssignmentsToDispatcher();
+    const recovered = await runCampaignBootRecovery();
+    startCampaignDispatcher();
+    console.log('[IVX AIMS] Authoritative 112 runtime bootstrapped', {
+      runtime: 'campaign-dispatcher -> ivx-senior-developer-worker',
+      recovered,
+      legacyWorkerFlagRequired: false,
+    });
+  } catch (error) {
+    console.error('[IVX AIMS] Authoritative 112 runtime bootstrap failed', {
+      error: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
+    });
+  }
+
   const state = await loadState();
   currentState = state;
 
   const deploySha = getCurrentDeploySha();
-  const workerEnabled = process.env.IVX_SENIOR_DEV_WORKER_ENABLED === 'true';
   console.log('[IVX AIMS] Scheduler boot diagnostics', {
     deploySha,
-    workerEnabled,
+    workerRuntime: 'ivx-senior-developer-worker:self-draining',
     durableStore: isDurableStoreConfigured(),
     existingMissionJobId: state.missionJobId,
     existingStatus: state.status,
   });
-
-  if (!workerEnabled) {
-    currentState = {
-      ...currentState,
-      status: 'failed',
-      stage: 'FAILED',
-      stageDetail: 'IVX_SENIOR_DEV_WORKER_ENABLED is not true; mission scheduler cannot enqueue a real job.',
-      error: 'IVX_SENIOR_DEV_WORKER_ENABLED is not true',
-      updatedAt: nowIso(),
-    };
-    await saveState(currentState);
-    return;
-  }
 
   // Terminal jobs are durable. Do not auto-replay them on boot/deploy.
   if (state.missionJobId && isTerminalMissionStatus(state.status)) {
