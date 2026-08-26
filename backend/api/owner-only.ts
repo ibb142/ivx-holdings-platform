@@ -47,10 +47,12 @@ export class IVXOwnerApprovalError extends Error {
 }
 
 const OWNER_ONLY_HEADERS = {
-  'Content-Type': 'application/json',
+  'Content-Type': 'application/json; charset=utf-8',
   'Cache-Control': 'no-store',
+  'X-Content-Type-Options': 'nosniff',
+  'X-IVX-JSON-Contract': 'strict-v1',
   'Access-Control-Allow-Origin': 'https://ivxholding.com',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-IVX-System-Key',
   'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
 } as const;
 
@@ -62,16 +64,18 @@ const OWNER_ONLY_HEADERS = {
  */
 const OWNER_ONLY_MAX_RESPONSE_BYTES = 900_000;
 
+function utf8ByteLength(value: string): number {
+  return Buffer.byteLength(value, 'utf8');
+}
+
 /**
  * Serialize an owner response to JSON that the client can ALWAYS parse.
  *
  * Guarantees, in order:
  *   1. JSON.stringify never throws (circular refs / BigInt / bad getters fall
  *      back to a minimal canonical envelope instead of a 500 / empty body).
- *   2. The body never exceeds OWNER_ONLY_MAX_RESPONSE_BYTES — when it would,
- *      heavy diagnostic-only fields are dropped and the visible `answer` is
- *      safely truncated, preserving the canonical contract
- *      (requestId/conversationId/answer/model/status).
+ *   2. The body never exceeds OWNER_ONLY_MAX_RESPONSE_BYTES measured as actual
+ *      UTF-8 transport bytes, not JavaScript character count.
  */
 function serializeOwnerOnlyPayload(payload: Record<string, unknown>): string {
   let body: string;
@@ -81,24 +85,24 @@ function serializeOwnerOnlyPayload(payload: Record<string, unknown>): string {
     return JSON.stringify(buildMinimalOwnerEnvelope(payload, error));
   }
 
-  if (body.length <= OWNER_ONLY_MAX_RESPONSE_BYTES) {
+  if (utf8ByteLength(body) <= OWNER_ONLY_MAX_RESPONSE_BYTES) {
     return body;
   }
 
-  // Oversized: strip diagnostic-only fields that are never required to render a
-  // reply, then re-serialize. `answer` is preserved (truncated if needed).
   const slim: Record<string, unknown> = { ...payload };
   for (const heavyField of ['toolOutputs', 'toolOutput', 'toolInput', 'runtimeV2', 'routerDebug', 'diagnostics', 'providerError']) {
     delete slim[heavyField];
   }
-  if (typeof slim.answer === 'string' && slim.answer.length > 40_000) {
-    slim.answer = `${slim.answer.slice(0, 40_000)}\n\n…[truncated for transport — full result preserved server-side]`;
+  if (typeof slim.answer === 'string' && utf8ByteLength(slim.answer) > 40_000) {
+    let end = Math.min(slim.answer.length, 40_000);
+    while (end > 0 && utf8ByteLength(slim.answer.slice(0, end)) > 40_000) end -= 256;
+    slim.answer = `${slim.answer.slice(0, Math.max(0, end))}\n\n…[truncated for transport — full result preserved server-side]`;
   }
   slim.responseTruncated = true;
 
   try {
     const slimBody = JSON.stringify(slim);
-    if (slimBody.length <= OWNER_ONLY_MAX_RESPONSE_BYTES) {
+    if (utf8ByteLength(slimBody) <= OWNER_ONLY_MAX_RESPONSE_BYTES) {
       return slimBody;
     }
   } catch {
@@ -125,9 +129,13 @@ function buildMinimalOwnerEnvelope(payload: Record<string, unknown>, error: unkn
 }
 
 export function ownerOnlyJson(payload: Record<string, unknown>, status: number = 200): Response {
-  return new Response(serializeOwnerOnlyPayload(payload), {
+  const body = serializeOwnerOnlyPayload(payload);
+  return new Response(body, {
     status,
-    headers: OWNER_ONLY_HEADERS,
+    headers: {
+      ...OWNER_ONLY_HEADERS,
+      'Content-Length': String(utf8ByteLength(body)),
+    },
   });
 }
 
@@ -194,19 +202,11 @@ function makeOwnerMutationApprovalProof(input: {
   };
 }
 
-/**
- * Requires a real Supabase owner bearer and an email from IVX_OWNER_REGISTRATION_EMAILS.
- * This intentionally rejects the local/test open-access token for production mutations.
- */
 export function evaluateIVXRegisteredOwnerBearerContext(
   context: IVXAuthenticatedRequestContext,
   action: string,
   ownerRegistrationEmailsValue: unknown = process.env.IVX_OWNER_REGISTRATION_EMAILS,
 ): IVXOwnerMutationApprovalEvaluation {
-  // Merge the env-sourced allowlist with the hardcoded baseline owner emails
-  // (IVX_BASELINE_OWNER_EMAILS) so a valid Supabase owner session is always
-  // recognized even when IVX_OWNER_REGISTRATION_EMAILS is missing or empty on
-  // the live Render runtime.
   const envAllowlist = parseOwnerEmailAllowlist(ownerRegistrationEmailsValue);
   const baselineAllowlist = getIVXOwnerEmailAllowlist();
   const allowlist = Array.from(new Set([...envAllowlist, ...baselineAllowlist]));
@@ -256,11 +256,6 @@ export function evaluateIVXRegisteredOwnerBearerContext(
   };
 }
 
-/**
- * Synthetic owner context for the trusted X-IVX-System-Key bypass path. This
- * identity is internal (no Supabase-authenticated user), so it intentionally has
- * no real `client`/`roleAudit`; callers on the system path never touch those.
- */
 function makeOutageOwnerRequestContext(session: { token: string; userId: string; email: string }): IVXOwnerRequestContext {
   return {
     userId: session.userId,
@@ -283,7 +278,6 @@ function makeSystemOwnerRequestContext(): IVXOwnerRequestContext {
 
 const IVX_AI_SYSTEM_SECRET_ENV = () => (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim();
 
-/** Constant-time string comparison to prevent timing attacks on system key auth. */
 function constantTimeEquals(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   try {
