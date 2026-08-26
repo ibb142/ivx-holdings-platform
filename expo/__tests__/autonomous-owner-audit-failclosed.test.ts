@@ -38,7 +38,7 @@ describe('Autonomous Owner Audit fail-closed telemetry', () => {
     expect(screenSource).toContain('TELEMETRY UNAVAILABLE — ZERO VALUES SUPPRESSED');
     expect(screenSource).toContain("telemetryHealthy ? value : '—'");
     expect(screenSource).toContain('UNKNOWN — TELEMETRY FAILED');
-    expect(screenSource).toContain('FALSE ZERO');
+    expect(screenSource).toContain('telemetry failure is NEVER converted into 0 jobs');
     expect(screenSource).not.toContain('await controlResponse.json()');
     expect(screenSource).not.toContain('await jobsResponse.json()');
   });
