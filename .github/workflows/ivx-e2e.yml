@@ -164,7 +164,8 @@ jobs:
           set -euo pipefail
           WORKSPACE=$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
           test -n "$WORKSPACE"
-          SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list -json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["workspace"]["schemes"][0])')
+          SCHEMES_JSON=$(xcodebuild -workspace "$WORKSPACE" -list -json)
+          SCHEME=$(printf '%s' "$SCHEMES_JSON" | python3 -c 'import json,sys,pathlib; d=json.load(sys.stdin); schemes=d["workspace"]["schemes"]; workspace=pathlib.Path(sys.argv[1]).stem; preferred=[workspace,"IVXHoldings"]; print(next((s for s in preferred if s in schemes), next((s for s in schemes if not s.startswith(("Pods-","EX","React","Expo","hermes","RCT","RN","Yoga"))), "")))' "$WORKSPACE")
           test -n "$SCHEME"
           echo "workspace=$WORKSPACE scheme=$SCHEME"
           set -o pipefail
@@ -178,7 +179,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build | tee "$RUNNER_TEMP/ivx-xcodebuild.log"
-          APP=$(find "$RUNNER_TEMP/ivx-derived/Build/Products/Release-iphonesimulator" -maxdepth 1 -name '*.app' -print -quit)
+          APP=$(find "$RUNNER_TEMP/ivx-derived/Build/Products/Release-iphonesimulator" -maxdepth 2 -type d -name '*.app' -print -quit)
           test -n "$APP"
           echo "IVX_IOS_APP=$APP" >> "$GITHUB_ENV"
           echo 'ios_build=PASS'
