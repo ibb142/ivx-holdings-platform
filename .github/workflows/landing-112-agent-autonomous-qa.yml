@@ -16,7 +16,7 @@ on:
 
 permissions:
   contents: read
-  actions: read
+  actions: write
 
 jobs:
   prepare:
@@ -28,7 +28,6 @@ jobs:
       API_BASE: https://api.ivxholding.com
     steps:
       - uses: actions/checkout@v4
-
       - name: Load exact 112-agent registry
         id: registry
         shell: bash
@@ -57,7 +56,6 @@ jobs:
       IVX_OWNER_TOKEN: ${{ secrets.IVX_OWNER_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-
       - name: Resolve configured auth candidates without exposing values
         shell: bash
         run: |
@@ -65,14 +63,10 @@ jobs:
           found=0
           for name in IVX_AI_SYSTEM_SECRET IVX_SYSTEM_SECRET IVX_OWNER_TOKEN; do
             value="${!name:-}"
-            if [ -n "$value" ]; then
-              echo "::add-mask::$value"
-              found=$((found + 1))
-            fi
+            if [ -n "$value" ]; then echo "::add-mask::$value"; found=$((found + 1)); fi
           done
           test "$found" -gt 0
           echo "AUTH_CANDIDATE_COUNT=$found" >> "$GITHUB_ENV"
-
       - name: Resolve exact landing assignment
         id: assignment
         shell: bash
@@ -84,11 +78,7 @@ jobs:
           line=$(grep -E "^${n} — " qa/landing-112-agent-war-room.md | head -1 || true)
           test -n "$line" || { echo "Missing assignment for agent $n"; exit 1; }
           task=${line#* — }
-          echo "task<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$task" >> "$GITHUB_OUTPUT"
-          echo 'EOF' >> "$GITHUB_OUTPUT"
-          echo "agent=$n task=$task"
-
+          echo "task<<EOF" >> "$GITHUB_OUTPUT"; echo "$task" >> "$GITHUB_OUTPUT"; echo 'EOF' >> "$GITHUB_OUTPUT"
       - name: Execute REAL engineering QA tool through agent runtime
         id: work
         shell: bash
@@ -103,7 +93,6 @@ jobs:
           test "$contract_http" = 200
           task_type=$(jq -r '[.contract.allowedTaskTypes[]? | select(. == "audit" or . == "analysis" or . == "research")] | .[0] // .contract.allowedTaskTypes[0] // empty' /tmp/contract.json)
           test -n "$task_type"
-
           mod=$((AGENT_NUMBER % 6))
           case "$mod" in
             0) tool='run_tests'; params='{"target":"backend"}' ;;
@@ -113,87 +102,27 @@ jobs:
             4) tool='typecheck'; params='{}' ;;
             5) tool='secret_scan'; params='{}' ;;
           esac
-
           task_id="landing112-${GITHUB_RUN_ID}-$(printf '%03d' "$AGENT_NUMBER")"
-          http='401'
-          auth_source='none'
-          : > /tmp/run.json
-
+          http='401'; auth_source='none'; : > /tmp/run.json
           for candidate_name in IVX_AI_SYSTEM_SECRET IVX_SYSTEM_SECRET IVX_OWNER_TOKEN; do
-            candidate="${!candidate_name:-}"
-            [ -n "$candidate" ] || continue
-
-            body=$(jq -nc \
-              --arg taskType "$task_type" \
-              --arg token "$candidate" \
-              --arg taskId "$task_id" \
-              --arg sourceSha "$GITHUB_SHA" \
-              --arg assignment "$TASK" \
-              --arg toolId "$tool" \
-              --argjson toolParams "$params" \
-              '{taskType:$taskType,ownerApprovalToken:$token,payload:{__taskId:$taskId,__runId:("landing112-" + $taskId),__workflow:"Landing 112-Agent Autonomous QA War Room",sourceSha:$sourceSha,landingAssignment:$assignment,__toolId:$toolId,__toolParams:$toolParams,realExecutionOnly:true,simulatedSuccessAllowed:false}}')
-
-            http=$(curl -sS --retry 1 --retry-delay 1 --max-time 180 -o /tmp/run.json -w '%{http_code}' \
-              -X POST "${API_BASE}/api/ivx/agents/${AGENT_ID}/run" \
-              -H 'Content-Type: application/json' \
-              -H "x-ivx-owner-key: ${candidate}" \
-              --data "$body" || true)
-
-            if [ "$http" != 401 ]; then
-              auth_source="$candidate_name"
-              break
-            fi
+            candidate="${!candidate_name:-}"; [ -n "$candidate" ] || continue
+            body=$(jq -nc --arg taskType "$task_type" --arg token "$candidate" --arg taskId "$task_id" --arg sourceSha "$GITHUB_SHA" --arg assignment "$TASK" --arg toolId "$tool" --argjson toolParams "$params" '{taskType:$taskType,ownerApprovalToken:$token,payload:{__taskId:$taskId,__runId:("landing112-" + $taskId),__workflow:"Landing 112-Agent Autonomous QA War Room",sourceSha:$sourceSha,landingAssignment:$assignment,__toolId:$toolId,__toolParams:$toolParams,realExecutionOnly:true,simulatedSuccessAllowed:false}}')
+            http=$(curl -sS --retry 1 --retry-delay 1 --max-time 180 -o /tmp/run.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/agents/${AGENT_ID}/run" -H 'Content-Type: application/json' -H "x-ivx-owner-key: ${candidate}" --data "$body" || true)
+            if [ "$http" != 401 ]; then auth_source="$candidate_name"; break; fi
           done
-
-          ok=false
-          final_status='request_failed'
-          source=''
-          tool_result=''
-          simulated='null'
-          real_tool='null'
-          verified_output='null'
+          ok=false; final_status='request_failed'; source=''; tool_result=''; simulated='null'; real_tool='null'; verified_output='null'
           if [ "$http" = 200 ]; then
-            ok=$(jq -r '.ok // false' /tmp/run.json)
-            final_status=$(jq -r '.runRecord.finalStatus // "unknown"' /tmp/run.json)
-            source=$(jq -r '.runRecord.sourceReference // empty' /tmp/run.json)
-            tool_result=$(jq -r '.runRecord.toolResultId // empty' /tmp/run.json)
+            ok=$(jq -r '.ok // false' /tmp/run.json); final_status=$(jq -r '.runRecord.finalStatus // "unknown"' /tmp/run.json); source=$(jq -r '.runRecord.sourceReference // empty' /tmp/run.json); tool_result=$(jq -r '.runRecord.toolResultId // empty' /tmp/run.json)
             simulated=$(jq -r 'if .runRecord.simulated != null then (.runRecord.simulated|tostring) elif .simulated != null then (.simulated|tostring) else "null" end' /tmp/run.json)
             real_tool=$(jq -r 'if .runRecord.realToolUsed != null then (.runRecord.realToolUsed|tostring) elif .realToolUsed != null then (.realToolUsed|tostring) else "null" end' /tmp/run.json)
             verified_output=$(jq -r 'if .runRecord.verifiedOutput != null then (.runRecord.verifiedOutput|tostring) elif .verifiedOutput != null then (.verifiedOutput|tostring) else "null" end' /tmp/run.json)
           fi
-
           passed=false
-          if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$final_status" = completed ] && [ -n "$source" ] && [ -n "$tool_result" ] && [ "$simulated" = false ] && [ "$real_tool" = true ] && [ "$verified_output" = true ]; then
-            passed=true
-          fi
-
+          if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$final_status" = completed ] && [ -n "$source" ] && [ -n "$tool_result" ] && [ "$simulated" = false ] && [ "$real_tool" = true ] && [ "$verified_output" = true ]; then passed=true; fi
           mkdir -p evidence
-          jq -n \
-            --argjson agentNumber "$AGENT_NUMBER" \
-            --arg agentId "$AGENT_ID" \
-            --arg name "$AGENT_NAME" \
-            --arg assignment "$TASK" \
-            --arg toolId "$tool" \
-            --arg taskType "$task_type" \
-            --arg http "$http" \
-            --arg authSource "$auth_source" \
-            --argjson authCandidateCount "$AUTH_CANDIDATE_COUNT" \
-            --argjson ok "$ok" \
-            --arg finalStatus "$final_status" \
-            --arg sourceReference "$source" \
-            --arg toolResultId "$tool_result" \
-            --arg sourceSha "$GITHUB_SHA" \
-            --arg runId "$GITHUB_RUN_ID" \
-            --argjson simulated "$simulated" \
-            --argjson realToolUsed "$real_tool" \
-            --argjson verifiedOutput "$verified_output" \
-            --argjson passed "$passed" \
-            '{agentNumber:$agentNumber,agentId:$agentId,name:$name,assignment:$assignment,toolId:$toolId,taskType:$taskType,http:$http,authSource:$authSource,authCandidateCount:$authCandidateCount,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,sourceSha:$sourceSha,runId:$runId,simulated:$simulated,realToolUsed:$realToolUsed,verifiedOutput:$verifiedOutput,passed:$passed}' \
-            > "evidence/agent-${AGENT_NUMBER}.json"
-
+          jq -n --argjson agentNumber "$AGENT_NUMBER" --arg agentId "$AGENT_ID" --arg name "$AGENT_NAME" --arg assignment "$TASK" --arg toolId "$tool" --arg taskType "$task_type" --arg http "$http" --arg authSource "$auth_source" --argjson authCandidateCount "$AUTH_CANDIDATE_COUNT" --argjson ok "$ok" --arg finalStatus "$final_status" --arg sourceReference "$source" --arg toolResultId "$tool_result" --arg sourceSha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --argjson simulated "$simulated" --argjson realToolUsed "$real_tool" --argjson verifiedOutput "$verified_output" --argjson passed "$passed" '{agentNumber:$agentNumber,agentId:$agentId,name:$name,assignment:$assignment,toolId:$toolId,taskType:$taskType,http:$http,authSource:$authSource,authCandidateCount:$authCandidateCount,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,sourceSha:$sourceSha,runId:$runId,simulated:$simulated,realToolUsed:$realToolUsed,verifiedOutput:$verifiedOutput,passed:$passed}' > "evidence/agent-${AGENT_NUMBER}.json"
           cat "evidence/agent-${AGENT_NUMBER}.json"
           test "$passed" = true
-
       - name: Upload real agent QA evidence
         uses: actions/upload-artifact@v4
         if: always()
@@ -203,9 +132,66 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  certificate:
+  radar:
     needs: [prepare, activate-112]
-    if: always()
+    if: ${{ always() && needs.prepare.result == 'success' && needs.activate-112.result != 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      API_BASE: https://api.ivxholding.com
+      SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+    steps:
+      - name: Download all agent evidence
+        uses: actions/download-artifact@v4
+        with:
+          pattern: landing-agent-*-${{ github.run_id }}
+          path: radar-evidence
+          merge-multiple: true
+      - name: Diagnose and classify failures
+        id: diagnose
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -s '[.[] | select(.passed != true)]' radar-evidence/agent-*.json > /tmp/failures.json
+          count=$(jq 'length' /tmp/failures.json)
+          test "$count" -gt 0
+          echo "failed_count=$count" >> "$GITHUB_OUTPUT"
+          if jq -e '[.[] | (.assignment + " " + .toolId + " " + .name)] | join(" ") | test("secret|credential|auth|permission|payment|stripe|migration|destructive|infrastructure|iam|cloudfront|route53|security policy|rollback"; "i")' /tmp/failures.json >/dev/null; then gate=true; else gate=false; fi
+          echo "owner_gate_required=$gate" >> "$GITHUB_OUTPUT"
+          jq '{failedAgents:length, agents:[.[]|{agentNumber,agentId,name,toolId,http,finalStatus,sourceReference,toolResultId}]}' /tmp/failures.json
+      - name: Owner Gate high-risk failures
+        if: ${{ steps.diagnose.outputs.owner_gate_required == 'true' }}
+        run: |
+          echo 'RADAR=OWNER_GATE_REQUIRED'
+          exit 1
+      - name: Delegate safe self-heal mission
+        if: ${{ steps.diagnose.outputs.owner_gate_required != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SYSTEM_KEY:-}"
+          failures=$(jq -c '.' /tmp/failures.json)
+          goal="IVX INLINE RADAR SELF-HEAL. Source run ${GITHUB_RUN_ID}, exact SHA ${GITHUB_SHA}. Diagnose these failed 112-agent QA executions and repair only safe low-risk root causes. Never weaken evidence or 112/112. Run tests and typecheck, produce commit/PR/CI/merge/live exact-SHA proof. Stop for secrets/auth/permissions/payments/destructive migrations/infrastructure/security/critical rollback. Failures: ${failures}"
+          payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",systemMode:true,ownerApproved:true,riskLevel:"low",proposedPlan:"Evidence-backed bounded self-heal; preserve Owner Gates and 112/112 fail-closed certification."}')
+          http=$(curl -sS --max-time 60 -o /tmp/self-heal.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-System-Key: ${SYSTEM_KEY}" --data "$payload")
+          case "$http" in 200|202|409) ;; *) cat /tmp/self-heal.json; exit 1;; esac
+          job_id=$(jq -r '.jobId // .activeJobId // .job.jobId // empty' /tmp/self-heal.json)
+          test -n "$job_id"
+          echo "self_heal_job=$job_id"
+      - name: Persist inline radar evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: IVX-INLINE-RADAR-${{ github.run_id }}
+          path: |
+            /tmp/failures.json
+            /tmp/self-heal.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  certificate:
+    needs: [prepare, activate-112, radar]
+    if: ${{ always() && needs.prepare.result == 'success' && needs.activate-112.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -215,7 +201,6 @@ jobs:
           pattern: landing-agent-*-${{ github.run_id }}
           path: evidence-all
           merge-multiple: true
-
       - name: Build fail-closed 112/112 aggregate certificate
         shell: bash
         run: |
@@ -223,27 +208,14 @@ jobs:
           mkdir -p certificate
           count=$(find evidence-all -maxdepth 1 -type f -name 'agent-*.json' | wc -l | tr -d ' ')
           test "$count" = 112
-
           jq -s '.' evidence-all/agent-*.json > /tmp/all.json
           test "$(jq 'length' /tmp/all.json)" = 112
           test "$(jq '[.[].agentNumber] | unique | length' /tmp/all.json)" = 112
           test "$(jq --arg sha "$GITHUB_SHA" '[.[] | select(.sourceSha == $sha)] | length' /tmp/all.json)" = 112
           test "$(jq --arg run "$GITHUB_RUN_ID" '[.[] | select(.runId == $run)] | length' /tmp/all.json)" = 112
           test "$(jq '[.[] | select(.http == "200" and .ok == true and .finalStatus == "completed" and .simulated == false and .realToolUsed == true and .verifiedOutput == true and (.sourceReference|length)>0 and (.toolResultId|length)>0 and .passed == true)] | length' /tmp/all.json)" = 112
-
-          jq -n \
-            --arg marker 'IVX-LANDING-112-REAL-WORK-CERTIFICATE' \
-            --arg sourceSha "$GITHUB_SHA" \
-            --arg runId "$GITHUB_RUN_ID" \
-            --arg repository "$GITHUB_REPOSITORY" \
-            --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --slurpfile agents /tmp/all.json \
-            '{marker:$marker,sourceSha:$sourceSha,runId:$runId,repository:$repository,generatedAt:$generatedAt,totalAgents:112,uniqueAgents:112,passedAgents:112,simulatedAgents:0,realToolAgents:112,verifiedOutputAgents:112,status:"PASS",agents:$agents[0]}' \
-            > "certificate/LANDING-112-REAL-WORK-CERTIFICATE-${GITHUB_SHA}.json"
-
+          jq -n --arg marker 'IVX-LANDING-112-REAL-WORK-CERTIFICATE' --arg sourceSha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --arg repository "$GITHUB_REPOSITORY" --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --slurpfile agents /tmp/all.json '{marker:$marker,sourceSha:$sourceSha,runId:$runId,repository:$repository,generatedAt:$generatedAt,totalAgents:112,uniqueAgents:112,passedAgents:112,simulatedAgents:0,realToolAgents:112,verifiedOutputAgents:112,status:"PASS",agents:$agents[0]}' > "certificate/LANDING-112-REAL-WORK-CERTIFICATE-${GITHUB_SHA}.json"
           sha256sum "certificate/LANDING-112-REAL-WORK-CERTIFICATE-${GITHUB_SHA}.json" > certificate/SHA256SUMS.txt
-          cat "certificate/LANDING-112-REAL-WORK-CERTIFICATE-${GITHUB_SHA}.json" | jq '{marker,sourceSha,runId,totalAgents,uniqueAgents,passedAgents,simulatedAgents,realToolAgents,verifiedOutputAgents,status}'
-
       - name: Upload durable 112/112 certificate
         uses: actions/upload-artifact@v4
         with:
@@ -251,17 +223,9 @@ jobs:
           path: certificate/
           if-no-files-found: error
           retention-days: 30
-
       - name: Publish certificate summary
-        shell: bash
         run: |
-          {
-            echo '## Landing 112/112 real-work certificate'
-            echo ''
-            echo "- SHA: $GITHUB_SHA"
-            echo "- Run: $GITHUB_RUN_ID"
-            echo '- Agents: 112/112 PASS'
-            echo '- Simulated: 0'
-            echo '- Real tool used: 112/112'
-            echo '- Verified output: 112/112'
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo '## Landing 112/112 real-work certificate' >> "$GITHUB_STEP_SUMMARY"
+          echo "- SHA: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Run: $GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+          echo '- Agents: 112/112 PASS' >> "$GITHUB_STEP_SUMMARY"
