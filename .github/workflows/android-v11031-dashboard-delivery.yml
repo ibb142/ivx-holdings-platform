@@ -1,4 +1,4 @@
-name: Android v1.10.31 Mission Control Delivery
+name: Android v1.10.32 Mission Control Delivery
 
 on:
   push:
@@ -73,12 +73,12 @@ jobs:
           keytool -list -keystore "$KEYSTORE_PATH" -storepass "$IVX_RELEASE_KEYSTORE_PASSWORD" -alias "$IVX_RELEASE_KEY_ALIAS" >/dev/null
           echo "IVX_RELEASE_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
 
-      - name: Pin native APK version to 1.10.31 / 129
+      - name: Pin native APK version to 1.10.32 / 130
         working-directory: expo
         run: |
           set -euo pipefail
-          sed -E -i 's/versionCode [0-9]+/versionCode 129/' android/app/build.gradle
-          sed -E -i 's/versionName "[^"]+"/versionName "1.10.31"/' android/app/build.gradle
+          sed -E -i 's/versionCode [0-9]+/versionCode 130/' android/app/build.gradle
+          sed -E -i 's/versionName "[^"]+"/versionName "1.10.32"/' android/app/build.gradle
           grep -nE 'versionCode|versionName' android/app/build.gradle | head
 
       - name: Build signed production APK
@@ -86,7 +86,7 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon -x lint 2>&1 | tee "$GITHUB_WORKSPACE/gradle-v11031.log"
+          ./gradlew assembleRelease --no-daemon -x lint 2>&1 | tee "$GITHUB_WORKSPACE/gradle-v11032.log"
 
       - name: Verify signing and package APK
         id: apk
@@ -96,21 +96,21 @@ jobs:
           APK=app/build/outputs/apk/release/app-release.apk
           test -f "$APK"
           APKSIGNER="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
-          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee "$GITHUB_WORKSPACE/apksigner-v11031.txt"
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee "$GITHUB_WORKSPACE/apksigner-v11032.txt"
           HASH=$(sha256sum "$APK" | awk '{print $1}')
-          cp "$APK" "$GITHUB_WORKSPACE/IVX-Holdings-v1.10.31-MISSION-CONTROL.apk"
-          echo "$HASH  IVX-Holdings-v1.10.31-MISSION-CONTROL.apk" > "$GITHUB_WORKSPACE/IVX-Holdings-v1.10.31-MISSION-CONTROL.sha256"
+          cp "$APK" "$GITHUB_WORKSPACE/IVX-Holdings-v1.10.32-MISSION-CONTROL.apk"
+          echo "$HASH  IVX-Holdings-v1.10.32-MISSION-CONTROL.apk" > "$GITHUB_WORKSPACE/IVX-Holdings-v1.10.32-MISSION-CONTROL.sha256"
           echo "hash=$HASH" >> "$GITHUB_OUTPUT"
 
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: IVX-Holdings-v1.10.31-MISSION-CONTROL-${{ github.sha }}
+          name: IVX-Holdings-v1.10.32-MISSION-CONTROL-${{ github.sha }}
           path: |
-            IVX-Holdings-v1.10.31-MISSION-CONTROL.apk
-            IVX-Holdings-v1.10.31-MISSION-CONTROL.sha256
-            apksigner-v11031.txt
-            gradle-v11031.log
+            IVX-Holdings-v1.10.32-MISSION-CONTROL.apk
+            IVX-Holdings-v1.10.32-MISSION-CONTROL.sha256
+            apksigner-v11032.txt
+            gradle-v11032.log
           retention-days: 30
           if-no-files-found: error
 
@@ -121,10 +121,10 @@ jobs:
           jq -n \
             --arg marker 'IVX-MISSION-CONTROL-APK-CERTIFICATE' \
             --arg sourceSha "$GITHUB_SHA" \
-            --arg version '1.10.31' \
-            --argjson versionCode 129 \
+            --arg version '1.10.32' \
+            --argjson versionCode 130 \
             --arg apkSha256 '${{ steps.apk.outputs.hash }}' \
-            --arg artifact "IVX-Holdings-v1.10.31-MISSION-CONTROL-${GITHUB_SHA}" \
+            --arg artifact "IVX-Holdings-v1.10.32-MISSION-CONTROL-${GITHUB_SHA}" \
             '{marker:$marker,sourceSha:$sourceSha,version:$version,versionCode:$versionCode,apkSha256:$apkSha256,artifact:$artifact,signed:true,typecheck:true,dashboardRoute:"/ivx/landing-workers-live",status:"PASS"}' \
             > qa/evidence/ivx-mission-control-apk-certificate.json
 
