@@ -79,7 +79,7 @@ describe('ivx-autonomous-intelligence-mission-scheduler', () => {
     process.env.IVX_SENIOR_DEV_WORKER_ENABLED = 'false';
     await startAutonomousIntelligenceMissionScheduler();
     const status = await getMissionSchedulerStatus();
-    expect(status.state.error).not.toContain('IVX_SENIOR_DEV_WORKER_ENABLED');
+    expect(status.state.error ?? '').not.toContain('IVX_SENIOR_DEV_WORKER_ENABLED');
     expect(status.state.missionJobId).toMatch(/^ivx-worker-/);
   });
 
