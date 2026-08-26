@@ -1,0 +1,202 @@
+name: IVX Autonomous Radar Self-Heal
+
+on:
+  workflow_run:
+    workflows:
+      - Landing 112-Agent Autonomous QA War Room
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+  issues: write
+
+concurrency:
+  group: ivx-autonomous-radar-${{ github.event.workflow_run.id || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  radar:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      API_BASE: https://api.ivxholding.com
+      SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+      MAX_ATTEMPTS: '3'
+    steps:
+      - name: Checkout exact failed SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Radar preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SYSTEM_KEY:-}"
+          curl -fsS --retry 3 --retry-delay 2 "${API_BASE}/health" -o /tmp/health.json
+          curl -fsS --retry 3 --retry-delay 2 "${API_BASE}/version" -o /tmp/version.json
+          jq -e '.ok == true or .healthy == true or .status == "ok"' /tmp/health.json >/dev/null
+          echo 'radar_preflight=PASS'
+
+      - name: Detect and classify failed jobs
+        id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_id="${SOURCE_RUN_ID:-}"
+          if [ -z "$run_id" ]; then
+            echo 'manual dispatch: no source run; nothing to repair'
+            echo 'failed_count=0' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100" \
+            --jq '.jobs[] | select(.conclusion == "failure") | {id,name,failedSteps:[.steps[]? | select(.conclusion == "failure") | .name]}' \
+            > /tmp/failed-jobs.jsonl
+
+          count=$(wc -l < /tmp/failed-jobs.jsonl | tr -d ' ')
+          echo "failed_count=$count" >> "$GITHUB_OUTPUT"
+          echo "failed_count=$count"
+          cat /tmp/failed-jobs.jsonl || true
+
+          # Fail closed on owner-gated classes. The radar may diagnose these, but may not mutate them.
+          if grep -Eiq 'secret|credential|auth|permission|payment|stripe|migration|database destructive|infrastructure|iam|cloudfront|route53|security policy|rollback' /tmp/failed-jobs.jsonl; then
+            echo 'owner_gate_required=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'owner_gate_required=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Stop at Owner Gate for high-risk incident
+        if: steps.detect.outputs.owner_gate_required == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="IVX Autonomous Radar detected a high-risk failed run (${SOURCE_RUN_ID}). Automatic mutation is blocked by Owner Gate because the failure touches auth/secrets/payments/migrations/infrastructure/security/critical rollback. Diagnosis may continue, but code/deploy changes require explicit owner approval."
+          gh api "repos/${GITHUB_REPOSITORY}/issues" -f title="[RADAR] Owner Gate required for run ${SOURCE_RUN_ID}" -f body="$body" -f labels='autonomous,owner-gate' || true
+          exit 1
+
+      - name: Build evidence-backed repair mission
+        if: steps.detect.outputs.failed_count != '0' && steps.detect.outputs.owner_gate_required != 'true'
+        id: mission
+        shell: bash
+        env:
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          summary=$(jq -s -c '.' /tmp/failed-jobs.jsonl)
+          jq -n \
+            --arg runId "$SOURCE_RUN_ID" \
+            --arg sourceSha "$SOURCE_SHA" \
+            --argjson failures "$summary" \
+            '{runId:$runId,sourceSha:$sourceSha,failures:$failures,policy:{maxRepairAttempts:3,failClosed:true,requireRealTests:true,requireTypecheck:true,requireCommitProof:true,requirePrCiMerge:true,requireLiveVerification:true,ownerGateClasses:["secrets","auth","permissions","payments","destructive migrations","infrastructure","security policy","critical rollback"]}}' \
+            > /tmp/radar-mission.json
+          cat /tmp/radar-mission.json
+
+      - name: Diagnose -> reason -> safe repair through Senior Developer
+        if: steps.detect.outputs.failed_count != '0' && steps.detect.outputs.owner_gate_required != 'true'
+        id: repair
+        shell: bash
+        env:
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          failures=$(cat /tmp/radar-mission.json)
+          goal=$(cat <<EOF
+IVX AUTONOMOUS RADAR SELF-HEAL for Landing 112-Agent QA War Room run ${SOURCE_RUN_ID}, source SHA ${SOURCE_SHA}.
+
+Act as an evidence-driven senior developer. Diagnose the failed jobs from the attached mission evidence, identify root cause, falsify competing hypotheses, then implement ONLY a safe low-risk repair if justified. Required loop: DETECT -> DIAGNOSE -> REASON -> PLAN -> FIX -> TEST -> TYPECHECK -> CRITIC VERIFY -> PR -> CI GREEN -> MERGE -> LIVE VERIFY. Never claim success without proof. Never weaken the 112/112 certificate. Never fabricate sourceReference/toolResultId/verifiedOutput. Never bypass Owner Gates. If the fix requires secrets, auth/permissions, payments, destructive migrations, infrastructure, security-policy changes, or critical rollback, stop BLOCKED and request owner approval instead of changing it.
+
+Mission evidence: ${failures}
+EOF
+          )
+
+          payload=$(jq -n \
+            --arg goal "$goal" \
+            '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",systemMode:true,ownerApproved:true,proposedPlan:"Evidence-backed low-risk autonomous radar repair. Preserve fail-closed 112/112 certificate and all Owner Gates.",filesAffected:[".github/workflows/landing-112-agent-autonomous-qa.yml","backend/services/ivx-agent-real-tools.ts","backend/services/ivx-agent-engineering-tools.ts","backend/api/ivx-agent-api.ts","backend/services/ivx-autonomous-completion-campaign.ts"],riskLevel:"low",rollbackOption:"Revert the autonomous repair merge commit; Render auto-deploys the reverted main SHA."}')
+
+          http=$(curl -sS --max-time 60 -o /tmp/job-start.json -w '%{http_code}' \
+            -X POST "${API_BASE}/api/ivx/senior-developer/worker/jobs" \
+            -H 'Content-Type: application/json' \
+            -H "X-IVX-System-Key: ${SYSTEM_KEY}" \
+            --data "$payload")
+          case "$http" in 200|202|409) ;; *) cat /tmp/job-start.json; exit 1;; esac
+          job_id=$(jq -r '.jobId // .activeJobId // .job.jobId // empty' /tmp/job-start.json)
+          test -n "$job_id"
+          echo "job_id=$job_id" >> "$GITHUB_OUTPUT"
+          echo "radar_job_id=$job_id"
+
+          terminal=''
+          for i in $(seq 1 180); do
+            code=$(curl -sS --max-time 30 -o /tmp/job.json -w '%{http_code}' \
+              "${API_BASE}/api/ivx/senior-developer/worker/jobs/${job_id}" \
+              -H "X-IVX-System-Key: ${SYSTEM_KEY}" || true)
+            if [ "$code" = 200 ]; then
+              status=$(jq -r '.job.status // .status // empty' /tmp/job.json)
+              stage=$(jq -r '.job.stage // .stage // empty' /tmp/job.json)
+              echo "poll=$i status=${status:-unknown} stage=${stage:-unknown}"
+              case "$status" in completed|failed|blocked|cancelled) terminal="$status"; break;; esac
+            fi
+            sleep 20
+          done
+
+          test "$terminal" = completed
+          jq -e '.job.result.ok == true' /tmp/job.json >/dev/null
+          jq -e '.job.result.testsRun == true and .job.result.testsPassed == true' /tmp/job.json >/dev/null
+          jq -e '.job.result.typecheckRun == true and .job.result.typecheckPassed == true' /tmp/job.json >/dev/null
+          jq -e '.job.result.commitCreated == true' /tmp/job.json >/dev/null
+          jq -e '.job.result.prMerged == true and .job.result.ciChecksGreen == true' /tmp/job.json >/dev/null
+          jq -e '.job.result.finalStatus == "COMPLETE"' /tmp/job.json >/dev/null
+          merge_sha=$(jq -r '.job.result.prMergeCommitSha // .job.result.liveCommit // empty' /tmp/job.json)
+          test -n "$merge_sha"
+          echo "merge_sha=$merge_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Verify repaired merge is live
+        if: steps.repair.outputs.merge_sha != ''
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ steps.repair.outputs.merge_sha }}
+        run: |
+          set -euo pipefail
+          ok=false
+          for i in $(seq 1 90); do
+            curl -fsS "${API_BASE}/version" -o /tmp/live-version.json || true
+            live=$(jq -r '.commit // .version.commit // empty' /tmp/live-version.json 2>/dev/null || true)
+            echo "live_poll=$i expected=$EXPECTED_SHA live=${live:-missing}"
+            if [ "$live" = "$EXPECTED_SHA" ]; then ok=true; break; fi
+            sleep 10
+          done
+          test "$ok" = true
+
+      - name: Re-run only failed War Room jobs
+        if: steps.repair.outputs.merge_sha != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/rerun-failed-jobs"
+          echo "rerun_failed_jobs=REQUESTED source_run=${SOURCE_RUN_ID}"
+
+      - name: Persist radar incident summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-autonomous-radar-${{ github.run_id }}
+          path: |
+            /tmp/radar-mission.json
+            /tmp/job-start.json
+            /tmp/job.json
+          if-no-files-found: ignore
+          retention-days: 30
