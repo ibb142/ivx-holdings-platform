@@ -17,6 +17,8 @@ import { startAutonomousScheduler } from './backend/services/ivx-autonomous-sche
 import { startAutonomousIntelligenceMissionScheduler } from './backend/services/ivx-autonomous-intelligence-mission-scheduler';
 import { startSmsNotificationScheduler, getSmsNotifierStatus } from './backend/services/ivx-autonomous-sms-notifier';
 import { runCompletionCampaignCycle } from './backend/services/ivx-autonomous-completion-campaign';
+import { syncCampaignAssignmentsToDispatcher } from './backend/services/ivx-app-completion-campaign';
+import { runCampaignBootRecovery, startCampaignDispatcher } from './backend/services/ivx-campaign-dispatcher';
 import { getLatestMemberAuthCertification, startMemberAuthCertificationScheduler } from './backend/services/ivx-member-auth-certification';
 import { startAgentHeartbeatLoop } from './backend/services/ivx-agent-persistence';
 import { buildHeartbeatRows, resumePendingCertificateRuns } from './backend/services/ivx-real-execution-certificate';
@@ -142,6 +144,23 @@ app.get('/api/ivx/certification/autonomous-voice-public', async (c) => handleAut
 
 startAutonomousScheduler();
 startAutonomousIntelligenceMissionScheduler();
+
+// The 112-agent dispatcher must be a true background runtime, not something
+// that only starts after a human opens the app-completion dashboard. Bootstrap
+// durable recovery + assignment sync on every server boot, then keep the real
+// worker dispatcher ticking every 10 seconds independently of the UI.
+void (async () => {
+  try {
+    const recovered = await runCampaignBootRecovery();
+    const assignments = await syncCampaignAssignmentsToDispatcher();
+    startCampaignDispatcher();
+    console.log('[IVX Campaign Dispatcher] bootstrapped', { recovered, assignments });
+  } catch (error) {
+    console.error('[IVX Campaign Dispatcher] bootstrap failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+})();
 
 const runCompletionCycleSafely = async (reason: string): Promise<void> => {
   try {
