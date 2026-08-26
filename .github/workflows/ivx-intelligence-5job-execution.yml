@@ -1,0 +1,179 @@
+name: IVX Intelligence 5-Job Execution
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ivx-intelligence-5job-execution
+  cancel-in-progress: false
+
+jobs:
+  execute-program:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[start-intelligence-5job]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      API_BASE: https://api.ivxholding.com
+      SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+      ISSUE_NUMBER: '252'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preflight owner-approved program
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SYSTEM_KEY:-}"
+          curl -fsS "${API_BASE}/health" -o /tmp/health.json
+          curl -fsS "${API_BASE}/version" -o /tmp/version.json
+          jq -e '.ok == true or .status == "ok" or .healthy == true' /tmp/health.json >/dev/null
+          test -n "$(jq -r '.commit // .version.commit // empty' /tmp/version.json)"
+          echo 'preflight=PASS'
+
+      - name: Record program start on Issue 252
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" \
+            -f body="5-job execution STARTED by ${GITHUB_WORKFLOW} run ${GITHUB_RUN_ID}. Launcher SHA: ${GITHUB_SHA}. This comment is only a start marker; completion requires five terminal worker proofs, five merged PRs, live exact-SHA verification, and final certification."
+
+      - name: Execute five sequential real worker jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ivx-program
+
+          goals=(
+            "JOB 1/5 — Reasoning + evidence + hypothesis + independent critic. Inspect the real IVX codebase and implement a durable reasoning/evidence layer for autonomous engineering decisions. Every proposed fix must persist hypothesis, inspected evidence, falsification checks, and an independent critic verdict before completion. Add targeted tests and typecheck. Use a dedicated branch and PR, require CI green, merge, allow production auto-deploy, and verify live behavior. Do not fabricate evidence. Preserve Owner Gates."
+            "JOB 2/5 — No-fake-fix enforcement + blast radius + bounded self-correction. Inspect the real IVX autonomous engineering runtime and implement fail-closed no-fake-fix enforcement, explicit blast-radius analysis, bounded retry/self-correction limits, and refusal to claim COMPLETE when proof is missing. Add targeted regression tests and typecheck. Use a dedicated branch and PR, require CI green, merge, allow production auto-deploy, and verify live behavior. Preserve Owner Gates and do not weaken auth, secrets, payments, or deployment protections."
+            "JOB 3/5 — Durable engineering memory + code graph + runtime incident correlation. Implement durable engineering memory that links code locations, commits, tests, deployment/runtime incidents, and prior fixes without exposing secrets. Add a useful code-graph/index representation and correlation path from runtime incident to likely files/functions. Add targeted tests and typecheck. Use a dedicated branch and PR, require CI green, merge, allow production auto-deploy, and verify live behavior."
+            "JOB 4/5 — Behavior proof + evidence-derived confidence + specialist routing + multi-agent review. Implement behavior-based proof that derives confidence from real test/runtime evidence instead of narrative, routes work to appropriate specialist agents, and requires multi-agent/critic review for material autonomous changes. Add targeted tests and typecheck. Use a dedicated branch and PR, require CI green, merge, allow production auto-deploy, and verify live behavior. No simulated evidence may satisfy certification."
+            "JOB 5/5 — Owner controls + self-healing + >=100-scenario benchmark + final certification. Complete owner stop/pause/control enforcement for autonomous work, bounded self-healing, and a deterministic benchmark containing at least 100 meaningful scenarios covering success, failure, stale evidence, auth/owner-gate refusal, deployment mismatch, worker recovery, and no-fake-fix behavior. Run the benchmark and targeted tests/typecheck, persist machine-readable final evidence, use a dedicated branch and PR, require CI green, merge, allow production auto-deploy, verify exact live SHA, and only mark the five-job program certified when every hard gate is proven."
+          )
+
+          files=(
+            "backend/services,backend/api,qa,docs/autonomous"
+            "backend/services,backend/api,qa"
+            "backend/services,backend/api,qa,docs/autonomous"
+            "backend/services,backend/api,qa"
+            "backend/services,backend/api,qa,docs/autonomous,expo/evidence/autonomous"
+          )
+
+          for idx in 0 1 2 3 4; do
+            job_no=$((idx + 1))
+            goal="${goals[$idx]}"
+            affected="${files[$idx]}"
+            echo "=== START JOB ${job_no}/5 ==="
+
+            payload=$(jq -n \
+              --arg goal "$goal" \
+              --arg plan "Issue #252 owner-approved Intelligence Upgrade job ${job_no}/5. Inspect real code, implement only evidence-backed changes, run targeted tests and typecheck, open PR, require CI green, merge, production auto-deploy, then verify live behavior before COMPLETE." \
+              --arg affected "$affected" \
+              '{goal:$goal,executionMode:"deploy",templateMode:"NEW_FEATURE",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",proposedPlan:$plan,filesAffected:($affected|split(",")),riskLevel:"medium",rollbackOption:"Revert the job merge commit and let Render auto-deploy the reverted main SHA. Do not perform destructive migrations or secret changes."}')
+
+            http=$(curl -sS -m 60 -o "/tmp/ivx-program/job-${job_no}-start.json" -w '%{http_code}' \
+              -X POST "${API_BASE}/api/ivx/senior-developer/worker/jobs" \
+              -H 'Content-Type: application/json' \
+              -H "X-IVX-System-Key: ${SYSTEM_KEY}" \
+              --data "$payload")
+
+            cat "/tmp/ivx-program/job-${job_no}-start.json" | jq '{ok,jobId,attached,activeJobId,message,error}' || true
+            case "$http" in 200|202|409) ;; *) echo "JOB ${job_no} enqueue HTTP=${http}"; exit 1;; esac
+            job_id=$(jq -r '.jobId // .activeJobId // .job.jobId // empty' "/tmp/ivx-program/job-${job_no}-start.json")
+            test -n "$job_id"
+            echo "$job_id" > "/tmp/ivx-program/job-${job_no}.id"
+
+            terminal=''
+            for poll in $(seq 1 210); do
+              code=$(curl -sS -m 30 -o "/tmp/ivx-program/job-${job_no}-poll.json" -w '%{http_code}' \
+                "${API_BASE}/api/ivx/senior-developer/worker/jobs/${job_id}" \
+                -H "X-IVX-System-Key: ${SYSTEM_KEY}" || true)
+              if [ "$code" = 200 ]; then
+                status=$(jq -r '.job.status // .status // empty' "/tmp/ivx-program/job-${job_no}-poll.json")
+                stage=$(jq -r '.job.stage // .stage // empty' "/tmp/ivx-program/job-${job_no}-poll.json")
+                progress=$(jq -r '.job.progressPercent // .progressPercent // 0' "/tmp/ivx-program/job-${job_no}-poll.json")
+                echo "job=${job_no} id=${job_id} poll=${poll} status=${status:-unknown} stage=${stage:-unknown} progress=${progress}"
+                case "$status" in
+                  completed|failed|blocked|cancelled) terminal="$status"; break ;;
+                esac
+              fi
+              sleep 20
+            done
+
+            test "$terminal" = completed
+            cp "/tmp/ivx-program/job-${job_no}-poll.json" "/tmp/ivx-program/job-${job_no}-final.json"
+
+            jq -e '.job.result.ok == true' "/tmp/ivx-program/job-${job_no}-final.json" >/dev/null
+            jq -e '.job.result.testsRun == true and .job.result.testsPassed == true' "/tmp/ivx-program/job-${job_no}-final.json" >/dev/null
+            jq -e '.job.result.typecheckRun == true and .job.result.typecheckPassed == true' "/tmp/ivx-program/job-${job_no}-final.json" >/dev/null
+            jq -e '.job.result.commitCreated == true' "/tmp/ivx-program/job-${job_no}-final.json" >/dev/null
+            jq -e '.job.result.prMerged == true and .job.result.ciChecksGreen == true' "/tmp/ivx-program/job-${job_no}-final.json" >/dev/null
+            jq -e '.job.result.finalStatus == "COMPLETE"' "/tmp/ivx-program/job-${job_no}-final.json" >/dev/null
+
+            merge_sha=$(jq -r '.job.result.prMergeCommitSha // .job.result.liveCommit // empty' "/tmp/ivx-program/job-${job_no}-final.json")
+            pr=$(jq -r '.job.result.prNumber // empty' "/tmp/ivx-program/job-${job_no}-final.json")
+            test -n "$merge_sha"
+            test -n "$pr"
+
+            live_ok=false
+            for live_poll in $(seq 1 90); do
+              curl -fsS "${API_BASE}/version" -o /tmp/ivx-program/version.json || true
+              live=$(jq -r '.commit // .version.commit // empty' /tmp/ivx-program/version.json 2>/dev/null || true)
+              echo "job=${job_no} live_poll=${live_poll} expected=${merge_sha} live=${live:-missing}"
+              if [ "$live" = "$merge_sha" ]; then live_ok=true; break; fi
+              sleep 10
+            done
+            test "$live_ok" = true
+
+            curl -fsS "${API_BASE}/health" -o /tmp/ivx-program/health.json
+            jq -e '.ok == true or .status == "ok" or .healthy == true' /tmp/ivx-program/health.json >/dev/null
+            echo "JOB ${job_no}/5 PASS jobId=${job_id} PR=${pr} liveSHA=${merge_sha}"
+          done
+
+          echo 'five_job_program=PASS'
+
+      - name: Persist final machine-readable summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p program-evidence
+          printf '{\n  "issue": 252,\n  "launcherSha": "%s",\n  "runId": "%s",\n  "jobs": [\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > program-evidence/summary.json
+          first=true
+          for n in 1 2 3 4 5; do
+            f="/tmp/ivx-program/job-${n}-final.json"
+            [ -f "$f" ] || continue
+            $first || printf ',\n' >> program-evidence/summary.json
+            first=false
+            jq -c --argjson n "$n" '{jobNumber:$n,jobId:(.job.jobId // null),status:(.job.status // null),commitSha:(.job.result.commitSha // null),prNumber:(.job.result.prNumber // null),prUrl:(.job.result.prUrl // null),mergeSha:(.job.result.prMergeCommitSha // null),liveCommit:(.job.result.liveCommit // null),testsPassed:(.job.result.testsPassed // false),typecheckPassed:(.job.result.typecheckPassed // false),ciChecksGreen:(.job.result.ciChecksGreen // false),finalStatus:(.job.result.finalStatus // null),evidenceFingerprint:(.job.result.evidenceFingerprint // null)}' "$f" >> program-evidence/summary.json
+          done
+          printf '\n  ]\n}\n' >> program-evidence/summary.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ivx-intelligence-5job-evidence-${{ github.run_id }}
+          path: program-evidence/summary.json
+          if-no-files-found: warn
+
+      - name: Record final result on Issue 252
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ job.status }}" = success ]; then
+            body="5-job execution PASS. Run ${GITHUB_RUN_ID}. All five sequential real worker jobs completed with tests, typecheck, merged PRs, CI green, production exact-SHA verification, and persisted evidence artifact ivx-intelligence-5job-evidence-${GITHUB_RUN_ID}. Issue #252 may be closed only after this run remains green."
+          else
+            body="5-job execution FAILED/BLOCKED. Run ${GITHUB_RUN_ID}. Do not close Issue #252. Inspect the failed job and hard gate; no completion is claimed."
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" -f body="$body"
