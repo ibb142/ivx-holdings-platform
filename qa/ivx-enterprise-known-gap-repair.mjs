@@ -61,6 +61,19 @@ patchFile('expo/src/modules/ivx-owner-ai/services/ivxOwnerMemoryService.ts', [
   },
 ]);
 
+patchFile('expo/app/ivx/chat.tsx', [
+  {
+    id: 'import-chat-quality-firewall',
+    before: `import { assertCleanOwnerAIResponseText, isIVXServiceUnavailableDiagnostics } from '@/src/modules/ivx-owner-ai/services/ivxAIRequestService';`,
+    after: `import { assertCleanOwnerAIResponseText, isIVXServiceUnavailableDiagnostics } from '@/src/modules/ivx-owner-ai/services/ivxAIRequestService';\nimport { evaluateIVXChatQualityFirewall } from '@/src/modules/ivx-owner-ai/services/ivxChatQualityFirewall';`,
+  },
+  {
+    id: 'fail-closed-before-rendering-stale-chat-answer',
+    before: `        const normalizedAnswer = assertCleanOwnerAIResponseText(aiResult.answer);\n        const responseToolOutputs = aiResult.toolOutputs ?? [];`,
+    after: `        const normalizedAnswer = assertCleanOwnerAIResponseText(aiResult.answer);\n        const previousOwnerText = [...messages].reverse().find((message) => message.senderRole === 'owner')?.body ?? null;\n        const previousAssistantTexts = messages\n          .filter((message) => message.senderRole === 'assistant')\n          .slice(-6)\n          .map((message) => message.body);\n        const chatQualityDecision = evaluateIVXChatQualityFirewall({\n          ownerText: text,\n          assistantText: normalizedAnswer,\n          previousOwnerText,\n          previousAssistantTexts,\n        });\n        if (!chatQualityDecision.allow) {\n          trace?.fail('ASSISTANT_TEXT_PRESENT', \`Chat Quality Firewall blocked ${'${chatQualityDecision.code}'}\`, {\n            qualityScore: chatQualityDecision.score,\n            reasons: chatQualityDecision.reasons,\n            requestId: aiResult.requestId ?? null,\n            conversationId: reliableConversationId,\n          });\n          throw new Error(\`CHAT_QUALITY_FIREWALL_BLOCKED:${'${chatQualityDecision.code}'}\`);\n        }\n        if (chatQualityDecision.severity === 'warning') {\n          console.log('[IVXChatQualityFirewall] warning', {\n            score: chatQualityDecision.score,\n            reasons: chatQualityDecision.reasons,\n            requestId: aiResult.requestId ?? null,\n            conversationId: reliableConversationId,\n          });\n        }\n        const responseToolOutputs = aiResult.toolOutputs ?? [];`,
+  },
+]);
+
 patchFile('qa/ivx-qa-runner.ts', [
   {
     id: 'enterprise-cert-mode',
