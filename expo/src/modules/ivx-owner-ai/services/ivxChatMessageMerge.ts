@@ -41,10 +41,14 @@ export function buildOwnerMessageSignature(message: MergeableOwnerMessage): stri
 }
 
 /**
- * Looser content key (conversation + role + body) used to recognise the SAME
- * logical turn after it has been re-persisted remotely with a fresh server id
- * and timestamp. Returns null for attachment-only messages (no body) so two
- * different uploads are never collapsed.
+ * Looser logical-turn content key. Intentionally DOES NOT include conversationId.
+ * The owner room can adopt a backend canonical id after a reply; a local shadow
+ * row written under the pre-adoption id and the authoritative remote row written
+ * under the canonical id are still the same logical turn. Including room id here
+ * caused stale assistant replies to be re-injected after id rotation.
+ *
+ * Attachment identity is included when present. Returns null for attachment-only
+ * messages with no body so distinct uploads are never collapsed accidentally.
  */
 export function buildOwnerMessageContentKey(message: MergeableOwnerMessage): string | null {
   const body = normalizeMessageComparisonValue(message.body);
@@ -52,9 +56,10 @@ export function buildOwnerMessageContentKey(message: MergeableOwnerMessage): str
     return null;
   }
   return [
-    normalizeMessageComparisonValue(message.conversationId),
     normalizeMessageComparisonValue(message.senderRole),
     body,
+    normalizeMessageComparisonValue(message.attachmentUrl),
+    normalizeMessageComparisonValue(message.attachmentName),
   ].join('::');
 }
 
@@ -81,9 +86,9 @@ function sortByCreatedAtAscending<T extends MergeableOwnerMessage>(messages: T[]
  * Rules:
  * - Remote rows always win.
  * - A local row is dropped if its exact signature already exists remotely
- *   (true duplicate), OR if a remote row shares its content key — i.e. the same
- *   text turn that was successfully re-persisted remotely with a new server
- *   timestamp. This prevents the "message shows twice after reload" artifact.
+ *   (true duplicate), OR if a remote row shares its logical content key — even
+ *   when the canonical conversation id changed between the local and remote
+ *   writes. This prevents stale old answers from reappearing after reload.
  * - Local-only rows (never persisted remotely, e.g. offline/auth-degraded sends)
  *   are preserved so the conversation never loses a turn.
  */
@@ -113,7 +118,6 @@ export function mergeOwnerMessages<T extends MergeableOwnerMessage>(
     }
     const contentKey = buildOwnerMessageContentKey(message);
     if (contentKey && remoteContentKeys.has(contentKey)) {
-      // Stale local copy of a turn that is already persisted remotely.
       continue;
     }
     merged.set(signature, message);
