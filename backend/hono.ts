@@ -1,3 +1,4 @@
+import { handleIVXRadarStatus } from './api/ivx-radar';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -3823,7 +3824,8 @@ app.post('/api/ivx/senior-developer/worker/jobs/:taskId/approve', async (context
 app.get('/api/ivx/owner-ai/public-status', () => handleIVXOwnerAIPublicStatus());
 app.get('/ivx/owner-ai/public-status', () => handleIVXOwnerAIPublicStatus());
 // Secured diagnostic: requires owner auth, returns minimal redacted info only
-app.get('/api/ivx/chat-debug', async (context) => {
+app.get('/api/ivx/radar/status', handleIVXRadarStatus);
+  app.get('/api/ivx/chat-debug', async (context) => {
   const authFail = await requireOwnerAuth(context.req.raw);
   if (authFail) return authFail;
   const health = getProviderHealth();
