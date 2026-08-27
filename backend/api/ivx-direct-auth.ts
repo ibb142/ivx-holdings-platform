@@ -71,7 +71,8 @@ function buildHeaders(): Record<string, string> {
 let _bcryptModule: typeof import('bcryptjs') | null = null;
 async function getBcryptModule(): Promise<typeof import('bcryptjs')> {
   if (_bcryptModule) return _bcryptModule;
-  _bcryptModule = await import('bcryptjs');
+  const mod = await import('bcryptjs') as any;
+  _bcryptModule = (mod?.default ?? mod) as typeof import('bcryptjs');
   return _bcryptModule;
 }
 
