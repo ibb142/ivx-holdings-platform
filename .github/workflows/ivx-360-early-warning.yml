@@ -119,10 +119,18 @@ jobs:
           probe_machine() {
             name="$1"; url="$2"; headers="/tmp/ivx-360/${name}.headers"; body="/tmp/ivx-360/${name}.body"
             code=000; latency=0; attempts_used=0; auth_source=none
-            started=$(date +%s%3N); attempts_used=$((attempts_used + 1))
-            if value=$(curl -sS --max-time 10 -D "$headers" -o "$body" -w '%{http_code}' -H 'Accept: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC_TOKEN}" "$url"); then code="$value"; else code=000; fi
-            ended=$(date +%s%3N); latency=$((ended-started))
-            case "$code" in 200|204) auth_source=GITHUB_OIDC;; *)
+
+            for attempt in 1 2 3; do
+              attempts_used=$((attempts_used + 1)); started=$(date +%s%3N)
+              rm -f "$headers" "$body"
+              if value=$(curl -sS --max-time 20 -D "$headers" -o "$body" -w '%{http_code}' -H 'Accept: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC_TOKEN}" "$url"); then code="$value"; else code=000; fi
+              ended=$(date +%s%3N); latency=$((ended-started))
+              echo "machine_probe auth=GITHUB_OIDC attempt=$attempt http=$code latencyMs=$latency"
+              case "$code" in 200|204) auth_source=GITHUB_OIDC; break;; esac
+              if [ "$attempt" -lt 3 ]; then sleep $((attempt * 2)); fi
+            done
+
+            if [ "$auth_source" != GITHUB_OIDC ]; then
               for candidate_name in IVX_AI_SYSTEM_SECRET IVX_SYSTEM_SECRET IVX_OWNER_TOKEN; do
                 candidate="${!candidate_name:-}"; [ -n "$candidate" ] || continue
                 attempts_used=$((attempts_used + 1)); started=$(date +%s%3N)
@@ -130,7 +138,8 @@ jobs:
                 ended=$(date +%s%3N); latency=$((ended-started))
                 case "$code" in 200|204) auth_source="$candidate_name"; break;; esac
               done
-            esac
+            fi
+
             content_type=$(grep -i '^content-type:' "$headers" 2>/dev/null | tail -1 | tr -d '\r' | cut -d: -f2- | xargs || true)
             ok=false; json_valid=false
             if jq -e . "$body" >/dev/null 2>&1; then json_valid=true; fi
