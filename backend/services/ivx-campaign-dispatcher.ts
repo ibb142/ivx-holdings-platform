@@ -13,7 +13,7 @@
  *   - FAILED QA returns the implementation for repair within retry limits.
  *
  * CONCURRENCY SAFETY:
- *   - Max concurrent jobs: IVX_CAMPAIGN_MAX_CONCURRENCY (default 8).
+ *   - Max concurrent jobs: IVX_CAMPAIGN_MAX_CONCURRENCY (default 112, capped at 112).
  *   - Deploy-mode jobs are serialized to 1 at a time (deploy mutex lane).
  *   - Lane locks: jobs sharing a fileOrRoute/module lane never run concurrently.
  *   - Per-agent worker jobs use unique ownerIds (campaign-agent-NNN) so the
@@ -53,7 +53,7 @@ const STALE_HEARTBEAT_MS = 10 * 60 * 1000;
 /** Configurable concurrency (requirement B). */
 export function getMaxCampaignConcurrency(): number {
   const raw = Number.parseInt(process.env.IVX_CAMPAIGN_MAX_CONCURRENCY ?? '', 10);
-  return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 32) : 8;
+  return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 112) : 112;
 }
 
 export type CampaignJobStatus =
@@ -125,6 +125,7 @@ export type DispatcherSnapshot = {
     blocked: number;
     cancelled: number;
   };
+  utilization24h: { theoreticalAgentHours: number; productiveAgentHours: number; utilizationPercent: number; runningNow: number; queuedNow: number; ownerGateNow: number; };
   activeJobs: Array<Pick<CampaignJobRecord,
     'key' | 'agentNumber' | 'agentId' | 'role' | 'dutyId' | 'module' | 'laneKey'
     | 'status' | 'stage' | 'progress' | 'workerJobId' | 'retryCount' | 'error'>>;
@@ -434,6 +435,26 @@ export async function tickCampaignDispatcher(): Promise<TickResult> {
     }
   }
 
+  // 2b. CONTINUOUS LOW-RISK BACKLOG: verification agents are not allowed to stay idle.
+  // Re-run completed read-only VERIFY duties after a cooldown. Mutation jobs never auto-repeat.
+  const verifyCooldownMs = Math.max(60_000, Number.parseInt(process.env.IVX_VERIFY_REPEAT_MS ?? '', 10) || 15 * 60 * 1000);
+  const verifyNow = Date.now();
+  for (const record of state.records) {
+    if (record.role !== 'VERIFY' || record.executionMode !== 'read_only' || record.status !== 'COMPLETED' || !record.finishedAt) continue;
+    const finishedAt = Date.parse(record.finishedAt);
+    if (!Number.isFinite(finishedAt) || verifyNow - finishedAt < verifyCooldownMs) continue;
+    record.status = 'QUEUED';
+    record.workerJobId = null;
+    record.workerStatus = null;
+    record.stage = 'CONTINUOUS VERIFICATION - REQUEUED AFTER COOLDOWN';
+    record.progress = 0;
+    record.startedAt = null;
+    record.finishedAt = null;
+    record.error = null;
+    record.blocker = null;
+    result.requeued.push(record.key);
+  }
+
   // 3. FAILURE / CANCELLATION transitions.
   for (const record of state.records) {
     if (record.status === 'FAILED' || record.status === 'BLOCKED' || record.status === 'CANCELLED') {
@@ -678,6 +699,30 @@ export async function getCampaignDispatcherSnapshot(): Promise<DispatcherSnapsho
       blocked: count('BLOCKED'),
       cancelled: count('CANCELLED'),
     },
+    utilization24h: (() => {
+      const now = Date.now();
+      const windowStart = now - 24 * 60 * 60 * 1000;
+      let productiveMs = 0;
+      for (const r of state.records) {
+        if (!r.startedAt) continue;
+        const parsedStart = Date.parse(r.startedAt);
+        if (!Number.isFinite(parsedStart)) continue;
+        const start = Math.max(parsedStart, windowStart);
+        const rawEnd = r.finishedAt ? Date.parse(r.finishedAt) : (r.status === 'RUNNING' ? now : start);
+        const end = Math.min(Number.isFinite(rawEnd) ? rawEnd : start, now);
+        if (end > start) productiveMs += end - start;
+      }
+      const theoreticalAgentHours = 112 * 24;
+      const productiveAgentHours = Number((productiveMs / 3_600_000).toFixed(2));
+      return {
+        theoreticalAgentHours,
+        productiveAgentHours,
+        utilizationPercent: Number(((productiveAgentHours / theoreticalAgentHours) * 100).toFixed(2)),
+        runningNow: count('RUNNING'),
+        queuedNow: count('QUEUED') + count('AWAITING_IMPLEMENT'),
+        ownerGateNow: count('PENDING_OWNER'),
+      };
+    })(),
     activeJobs: state.records
       .filter((r) => r.status === 'RUNNING' || r.status === 'QUEUED')
       .map((r) => ({
