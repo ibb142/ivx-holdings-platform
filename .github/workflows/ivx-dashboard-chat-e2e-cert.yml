@@ -1,0 +1,212 @@
+name: IVX Dashboard + IA Chat End-to-End Certificate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'expo/app/admin/dashboard.tsx'
+      - 'expo/app/ivx/chat.tsx'
+      - 'expo/src/modules/chat/**'
+      - 'expo/src/modules/ivx-owner-ai/**'
+      - 'expo/lib/auth-context.tsx'
+      - 'expo/lib/auth-password-sign-in.ts'
+      - 'expo/lib/supabase.ts'
+      - 'expo/.maestro/ivx-owner-home-certificate.yaml'
+      - 'expo/.maestro/ivx-owner-dashboard-certificate.yaml'
+      - 'expo/.maestro/ivx-owner-chat-certificate.yaml'
+      - 'scripts/ivx-dashboard-chat-android-e2e.sh'
+      - '.github/workflows/ivx-dashboard-chat-e2e-cert.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'expo/app/admin/dashboard.tsx'
+      - 'expo/app/ivx/chat.tsx'
+      - 'expo/src/modules/chat/**'
+      - 'expo/src/modules/ivx-owner-ai/**'
+      - 'expo/lib/auth-context.tsx'
+      - 'expo/lib/auth-password-sign-in.ts'
+      - 'expo/lib/supabase.ts'
+      - 'expo/.maestro/ivx-owner-home-certificate.yaml'
+      - 'expo/.maestro/ivx-owner-dashboard-certificate.yaml'
+      - 'expo/.maestro/ivx-owner-chat-certificate.yaml'
+      - 'scripts/ivx-dashboard-chat-android-e2e.sh'
+      - '.github/workflows/ivx-dashboard-chat-e2e-cert.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ivx-dashboard-chat-e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_ENV: production
+  EXPO_PUBLIC_API_BASE_URL: https://api.ivxholding.com
+  EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+  EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+  EXPO_PUBLIC_IVX_OPEN_ACCESS_MODE: 'false'
+  EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  OWNER_EMAIL: iperez4242@gmail.com
+  OWNER_PASSWORD_S1: ${{ secrets.OWNER_NEW_PASSWORD }}
+  OWNER_PASSWORD_S2: ${{ secrets.OWNER_PASSWORD }}
+  OWNER_PASSWORD_S3: ${{ secrets.IVX_OWNER_PASSWORD }}
+  OWNER_PASSWORD_S4: ${{ secrets.IVX_OWNER_NEW_PASSWORD }}
+  OWNER_PASSWORD_S5: ${{ secrets.OWNER_LOGIN_PASSWORD }}
+  OWNER_PASSWORD_S6: ${{ secrets.IVX_OWNER_LOGIN_PASSWORD }}
+
+jobs:
+  certify-dashboard-chat:
+    name: Real Owner Dashboard + IVX IA Chat E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          fetch-depth: 1
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006 cmake;3.22.1'
+          log-accepted-android-sdk-licenses: false
+
+      - name: Resolve real owner credential binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OWNER_EMAIL"
+          test -n "$EXPO_PUBLIC_SUPABASE_URL"
+          test -n "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
+          owner_password=''
+          binding='none'
+          for pair in \
+            'OWNER_NEW_PASSWORD:OWNER_PASSWORD_S1' \
+            'OWNER_PASSWORD:OWNER_PASSWORD_S2' \
+            'IVX_OWNER_PASSWORD:OWNER_PASSWORD_S3' \
+            'IVX_OWNER_NEW_PASSWORD:OWNER_PASSWORD_S4' \
+            'OWNER_LOGIN_PASSWORD:OWNER_PASSWORD_S5' \
+            'IVX_OWNER_LOGIN_PASSWORD:OWNER_PASSWORD_S6'; do
+            name=${pair%%:*}
+            var=${pair##*:}
+            value=${!var:-}
+            if [ -n "$value" ]; then owner_password="$value"; binding="$name"; break; fi
+          done
+          test -n "$owner_password"
+          echo "::add-mask::$owner_password"
+          {
+            echo 'OWNER_PASSWORD_EFFECTIVE<<IVX_EOF'
+            echo "$owner_password"
+            echo 'IVX_EOF'
+            echo "OWNER_PASSWORD_BINDING=$binding"
+          } >> "$GITHUB_ENV"
+          echo "owner_password_binding=$binding"
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile
+          cd expo
+          bun install
+          bun scripts/apply-patches.mjs
+
+      - name: Dashboard and chat source hard gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f expo/app/admin/dashboard.tsx
+          test -f expo/app/ivx/chat.tsx
+          test -f expo/.maestro/ivx-owner-dashboard-certificate.yaml
+          test -f expo/.maestro/ivx-owner-chat-certificate.yaml
+          grep -q '<Text style={styles.title}>Dashboard</Text>' expo/app/admin/dashboard.tsx
+          grep -q "analytics_dashboard" expo/app/admin/dashboard.tsx
+          grep -q 'ivx-owner-chat-composer-dock' expo/.maestro/ivx-owner-chat-certificate.yaml
+          grep -q 'IVX_CHAT_E2E_OK' expo/.maestro/ivx-owner-chat-certificate.yaml
+          grep -q 'clearState: false' expo/.maestro/ivx-owner-chat-certificate.yaml
+          cd expo
+          bunx tsc --noEmit
+          bun test __tests__/chat-certificate-flow-regression.test.ts __tests__/chat-transport-reliability.test.ts
+
+      - name: Wait for exact production SHA on main
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$GITHUB_SHA"
+          ready=false
+          for i in $(seq 1 40); do
+            body=$(curl -fsS --max-time 8 https://api.ivxholding.com/version || true)
+            live=$(printf '%s' "$body" | jq -r '.commit // empty' 2>/dev/null || true)
+            echo "poll=$i live=${live:-missing} expected=$expected"
+            if [ "$live" = "$expected" ]; then ready=true; break; fi
+            sleep 5
+          done
+          test "$ready" = true
+
+      - name: Prepare disposable QA signer
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="$HOME/.android/debug.keystore"
+          mkdir -p "$(dirname "$KEYSTORE")"
+          rm -f "$KEYSTORE"
+          keytool -genkeypair -v -keystore "$KEYSTORE" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=IVX Dashboard Chat E2E, OU=QA, O=IVX Holdings, L=Miami, ST=Florida, C=US"
+
+      - name: Build exact-source Android owner QA APK
+        working-directory: expo/android
+        env:
+          IVX_QA_KEYSTORE: ${{ runner.home }}/.android/debug.keystore
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew assembleQa --no-daemon -x lint
+          APK=$(find app/build/outputs/apk/qa -name '*.apk' -type f | head -1)
+          test -n "$APK"
+          echo "APK_PATH=$(realpath "$APK")" >> "$GITHUB_ENV"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run real Dashboard and IVX IA Chat certificate
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          profile: pixel_2
+          target: google_apis
+          disable-animations: false
+          disable-linux-hw-accel: false
+          ram-size: 2048M
+          heap-size: 512M
+          emulator-options: -no-window -gpu off -no-snapshot -noaudio -no-boot-anim
+          script: bash scripts/ivx-dashboard-chat-android-e2e.sh
+
+      - name: Enforce final certificate identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(jq -r '.passed' qa/evidence/dashboard-chat/certificate.json)" = true
+          test "$(jq -r '.sourceSha' qa/evidence/dashboard-chat/certificate.json)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          test "$(jq -r '.dashboardRendered' qa/evidence/dashboard-chat/certificate.json)" = true
+          test "$(jq -r '.liveAIReply' qa/evidence/dashboard-chat/certificate.json)" = true
+          test "$(jq -r '.chatPersistenceAfterRestart' qa/evidence/dashboard-chat/certificate.json)" = true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ivx-dashboard-chat-e2e-${{ github.event.pull_request.head.sha || github.sha }}
+          path: qa/evidence/dashboard-chat
+          if-no-files-found: warn
+          retention-days: 30
