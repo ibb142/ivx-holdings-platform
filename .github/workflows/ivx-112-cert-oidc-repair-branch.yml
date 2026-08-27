@@ -14,6 +14,7 @@ concurrency:
 
 jobs:
   repair:
+    if: "!contains(github.event.head_commit.message, 'fix(cert): scope 112 certificate endpoint to signed GitHub OIDC')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,16 +24,19 @@ jobs:
           persist-credentials: true
       - name: Apply scoped OIDC repair
         run: python3 scripts/fix-112-cert-oidc.py
-      - name: Keep PR scoped and commit repaired files
+      - name: Commit backend OIDC repair only
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'ivx-cert-repair-bot'
           git config user.email 'ivx-cert-repair-bot@users.noreply.github.com'
           git fetch origin main
+          git checkout origin/main -- .github/workflows/ivx-112-exact-sha-autodeploy-cert.yml
           git checkout origin/main -- .github/workflows/ivx-final-gap-repair-pr.yml
-          git rm -f scripts/fix-112-cert-oidc.py
-          git rm -f .github/workflows/ivx-112-cert-oidc-repair-branch.yml
-          git add backend/api/ivx-agent-api.ts backend/services/ivx-github-actions-oidc.ts backend/services/ivx-github-actions-oidc.test.ts .github/workflows/ivx-112-exact-sha-autodeploy-cert.yml .github/workflows/ivx-final-gap-repair-pr.yml
-          git commit -m 'fix(cert): authorize exact-SHA 112 run with scoped GitHub OIDC'
+          git add backend/api/ivx-agent-api.ts backend/services/ivx-github-actions-oidc.ts backend/services/ivx-github-actions-oidc.test.ts
+          if git diff --cached --quiet; then
+            echo 'No backend OIDC diff required.'
+            exit 0
+          fi
+          git commit -m 'fix(cert): scope 112 certificate endpoint to signed GitHub OIDC'
           git push origin HEAD:fix/ivx-112-certificate-oidc-auth
