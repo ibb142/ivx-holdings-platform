@@ -7,7 +7,7 @@ on:
       - '.github/workflows/landing-112-agent-autonomous-qa.yml'
       - 'qa/landing-112-agent-war-room.md'
       - 'backend/api/ivx-agent-api.ts'
-      - 'backend/services/ivx-system-secret.ts'
+      - 'backend/services/ivx-github-actions-oidc.ts'
       - 'backend/services/ivx-agent-real-tools.ts'
       - 'backend/services/ivx-agent-engineering-tools.ts'
   schedule:
@@ -17,6 +17,7 @@ on:
 permissions:
   contents: read
   actions: write
+  id-token: write
 
 jobs:
   prepare:
@@ -51,22 +52,8 @@ jobs:
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     env:
       API_BASE: https://api.ivxholding.com
-      IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
-      IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
-      IVX_OWNER_TOKEN: ${{ secrets.IVX_OWNER_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - name: Resolve configured auth candidates without exposing values
-        shell: bash
-        run: |
-          set -euo pipefail
-          found=0
-          for name in IVX_AI_SYSTEM_SECRET IVX_SYSTEM_SECRET IVX_OWNER_TOKEN; do
-            value="${!name:-}"
-            if [ -n "$value" ]; then echo "::add-mask::$value"; found=$((found + 1)); fi
-          done
-          test "$found" -gt 0
-          echo "AUTH_CANDIDATE_COUNT=$found" >> "$GITHUB_ENV"
       - name: Resolve exact landing assignment
         id: assignment
         shell: bash
@@ -79,7 +66,7 @@ jobs:
           test -n "$line" || { echo "Missing assignment for agent $n"; exit 1; }
           task=${line#* — }
           echo "task<<EOF" >> "$GITHUB_OUTPUT"; echo "$task" >> "$GITHUB_OUTPUT"; echo 'EOF' >> "$GITHUB_OUTPUT"
-      - name: Execute REAL engineering QA tool through agent runtime
+      - name: Execute REAL engineering QA tool through scoped OIDC
         id: work
         shell: bash
         env:
@@ -103,13 +90,12 @@ jobs:
             5) tool='secret_scan'; params='{}' ;;
           esac
           task_id="landing112-${GITHUB_RUN_ID}-$(printf '%03d' "$AGENT_NUMBER")"
-          http='401'; auth_source='none'; : > /tmp/run.json
-          for candidate_name in IVX_AI_SYSTEM_SECRET IVX_SYSTEM_SECRET IVX_OWNER_TOKEN; do
-            candidate="${!candidate_name:-}"; [ -n "$candidate" ] || continue
-            body=$(jq -nc --arg taskType "$task_type" --arg token "$candidate" --arg taskId "$task_id" --arg sourceSha "$GITHUB_SHA" --arg assignment "$TASK" --arg toolId "$tool" --argjson toolParams "$params" '{taskType:$taskType,ownerApprovalToken:$token,payload:{__taskId:$taskId,__runId:("landing112-" + $taskId),__workflow:"Landing 112-Agent Autonomous QA War Room",sourceSha:$sourceSha,landingAssignment:$assignment,__toolId:$toolId,__toolParams:$toolParams,realExecutionOnly:true,simulatedSuccessAllowed:false}}')
-            http=$(curl -sS --retry 1 --retry-delay 1 --max-time 180 -o /tmp/run.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/agents/${AGENT_ID}/run" -H 'Content-Type: application/json' -H "x-ivx-owner-key: ${candidate}" --data "$body" || true)
-            if [ "$http" != 401 ]; then auth_source="$candidate_name"; break; fi
-          done
+          body=$(jq -nc --arg taskType "$task_type" --arg taskId "$task_id" --arg sourceSha "$GITHUB_SHA" --arg assignment "$TASK" --arg toolId "$tool" --argjson toolParams "$params" '{taskType:$taskType,payload:{__taskId:$taskId,__runId:("landing112-" + $taskId),__workflow:"Landing 112-Agent Autonomous QA War Room",sourceSha:$sourceSha,landingAssignment:$assignment,__toolId:$toolId,__toolParams:$toolParams,realExecutionOnly:true,simulatedSuccessAllowed:false}}')
+          oidc_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-agent-runtime"
+          oidc_token=$(curl -fsS --retry 2 --retry-delay 1 -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$oidc_url" | jq -r '.value // empty')
+          test -n "$oidc_token"
+          echo "::add-mask::$oidc_token"
+          http=$(curl -sS --retry 1 --retry-delay 1 --max-time 180 -o /tmp/run.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/agents/${AGENT_ID}/run" -H 'Content-Type: application/json' -H "Authorization: Bearer ${oidc_token}" --data "$body" || true)
           ok=false; final_status='request_failed'; source=''; tool_result=''; simulated='null'; real_tool='null'; verified_output='null'
           if [ "$http" = 200 ]; then
             ok=$(jq -r '.ok // false' /tmp/run.json); final_status=$(jq -r '.runRecord.finalStatus // "unknown"' /tmp/run.json); source=$(jq -r '.runRecord.sourceReference // empty' /tmp/run.json); tool_result=$(jq -r '.runRecord.toolResultId // empty' /tmp/run.json)
@@ -120,7 +106,7 @@ jobs:
           passed=false
           if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$final_status" = completed ] && [ -n "$source" ] && [ -n "$tool_result" ] && [ "$simulated" = false ] && [ "$real_tool" = true ] && [ "$verified_output" = true ]; then passed=true; fi
           mkdir -p evidence
-          jq -n --argjson agentNumber "$AGENT_NUMBER" --arg agentId "$AGENT_ID" --arg name "$AGENT_NAME" --arg assignment "$TASK" --arg toolId "$tool" --arg taskType "$task_type" --arg http "$http" --arg authSource "$auth_source" --argjson authCandidateCount "$AUTH_CANDIDATE_COUNT" --argjson ok "$ok" --arg finalStatus "$final_status" --arg sourceReference "$source" --arg toolResultId "$tool_result" --arg sourceSha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --argjson simulated "$simulated" --argjson realToolUsed "$real_tool" --argjson verifiedOutput "$verified_output" --argjson passed "$passed" '{agentNumber:$agentNumber,agentId:$agentId,name:$name,assignment:$assignment,toolId:$toolId,taskType:$taskType,http:$http,authSource:$authSource,authCandidateCount:$authCandidateCount,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,sourceSha:$sourceSha,runId:$runId,simulated:$simulated,realToolUsed:$realToolUsed,verifiedOutput:$verifiedOutput,passed:$passed}' > "evidence/agent-${AGENT_NUMBER}.json"
+          jq -n --argjson agentNumber "$AGENT_NUMBER" --arg agentId "$AGENT_ID" --arg name "$AGENT_NAME" --arg assignment "$TASK" --arg toolId "$tool" --arg taskType "$task_type" --arg http "$http" --arg authSource 'github_oidc' --argjson ok "$ok" --arg finalStatus "$final_status" --arg sourceReference "$source" --arg toolResultId "$tool_result" --arg sourceSha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --argjson simulated "$simulated" --argjson realToolUsed "$real_tool" --argjson verifiedOutput "$verified_output" --argjson passed "$passed" '{agentNumber:$agentNumber,agentId:$agentId,name:$name,assignment:$assignment,toolId:$toolId,taskType:$taskType,http:$http,authSource:$authSource,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,sourceSha:$sourceSha,runId:$runId,simulated:$simulated,realToolUsed:$realToolUsed,verifiedOutput:$verifiedOutput,passed:$passed}' > "evidence/agent-${AGENT_NUMBER}.json"
           cat "evidence/agent-${AGENT_NUMBER}.json"
           test "$passed" = true
       - name: Upload real agent QA evidence
