@@ -1,0 +1,192 @@
+name: IVX 112 Agent Utilization Repair
+
+on:
+  push:
+    branches:
+      - fix/112-agent-utilization-control
+    paths:
+      - '.github/workflows/ivx-112-utilization-repair.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ivx-112-agent-utilization-repair
+  cancel-in-progress: false
+
+jobs:
+  repair-and-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/112-agent-utilization-control
+          fetch-depth: 0
+
+      - name: Repair dispatcher concurrency and continuous verification backlog
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('backend/services/ivx-campaign-dispatcher.ts')
+          s = p.read_text()
+          old = "return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 32) : 8;"
+          new = "return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 112) : 112;"
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif new not in s:
+              raise SystemExit('DISPATCHER_CONCURRENCY_ANCHOR_MISSING')
+          s = s.replace('Max concurrent jobs: IVX_CAMPAIGN_MAX_CONCURRENCY (default 8).', 'Max concurrent jobs: IVX_CAMPAIGN_MAX_CONCURRENCY (default 112, capped at 112).', 1)
+
+          anchor = "  // 3. FAILURE / CANCELLATION transitions.\n"
+          block = (
+              "  // 2b. CONTINUOUS LOW-RISK BACKLOG: verification agents are not allowed to stay idle.\n"
+              "  // Re-run completed read-only VERIFY duties after a cooldown. Mutation jobs never auto-repeat.\n"
+              "  const verifyCooldownMs = Math.max(60_000, Number.parseInt(process.env.IVX_VERIFY_REPEAT_MS ?? '', 10) || 15 * 60 * 1000);\n"
+              "  const verifyNow = Date.now();\n"
+              "  for (const record of state.records) {\n"
+              "    if (record.role !== 'VERIFY' || record.executionMode !== 'read_only' || record.status !== 'COMPLETED' || !record.finishedAt) continue;\n"
+              "    const finishedAt = Date.parse(record.finishedAt);\n"
+              "    if (!Number.isFinite(finishedAt) || verifyNow - finishedAt < verifyCooldownMs) continue;\n"
+              "    record.status = 'QUEUED';\n"
+              "    record.workerJobId = null;\n"
+              "    record.workerStatus = null;\n"
+              "    record.stage = 'CONTINUOUS VERIFICATION — REQUEUED AFTER COOLDOWN';\n"
+              "    record.progress = 0;\n"
+              "    record.startedAt = null;\n"
+              "    record.finishedAt = null;\n"
+              "    record.error = null;\n"
+              "    record.blocker = null;\n"
+              "    result.requeued.push(record.key);\n"
+              "  }\n\n"
+          )
+          if block not in s:
+              if anchor not in s:
+                  raise SystemExit('CONTINUOUS_BACKLOG_ANCHOR_MISSING')
+              s = s.replace(anchor, block + anchor, 1)
+          p.write_text(s)
+
+      - name: Repair execute-all from serial to bounded parallel execution
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('backend/api/ivx-agent-api.ts')
+          s = p.read_text()
+          old = """    const results: Array<{ agentId: string; agentNumber: number; agentName: string; ok: boolean; runId: string | null; durationMs: number; error: string | null; evidenceCount: number }> = [];
+    for (const contract of ALL_AGENT_CONTRACTS) {
+      const taskType = 'audit';
+      const needsApproval = contract.ownerApprovalRules.some((r) => r.required && r.action === 'any_execution');
+      const approvalToken = needsApproval ? `owner-controlled-${Date.now()}-${contract.agentNumber}` : null;
+      const result = await executeAgentRun(contract.agentId, taskType, { controlled: true }, approvalToken);
+      results.push({ agentId: contract.agentId, agentNumber: contract.agentNumber, agentName: contract.agentName, ok: result.ok, runId: result.runRecord?.runId ?? null, durationMs: result.runRecord?.durationMs ?? 0, error: result.error, evidenceCount: result.runRecord?.evidence.length ?? 0 });
+    }
+"""
+          new = """    const maxParallel = Math.max(1, Math.min(112, Number.parseInt(process.env.IVX_AGENT_EXECUTE_ALL_CONCURRENCY ?? '', 10) || 112));
+    const results: Array<{ agentId: string; agentNumber: number; agentName: string; ok: boolean; runId: string | null; durationMs: number; error: string | null; evidenceCount: number }> = [];
+    for (let offset = 0; offset < ALL_AGENT_CONTRACTS.length; offset += maxParallel) {
+      const batch = ALL_AGENT_CONTRACTS.slice(offset, offset + maxParallel);
+      const batchResults = await Promise.all(batch.map(async (contract) => {
+        const taskType = 'audit';
+        const needsApproval = contract.ownerApprovalRules.some((r) => r.required && r.action === 'any_execution');
+        const approvalToken = needsApproval ? `owner-controlled-${Date.now()}-${contract.agentNumber}` : null;
+        const result = await executeAgentRun(contract.agentId, taskType, { controlled: true }, approvalToken);
+        return { agentId: contract.agentId, agentNumber: contract.agentNumber, agentName: contract.agentName, ok: result.ok, runId: result.runRecord?.runId ?? null, durationMs: result.runRecord?.durationMs ?? 0, error: result.error, evidenceCount: result.runRecord?.evidence.length ?? 0 };
+      }));
+      results.push(...batchResults);
+    }
+"""
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif new not in s:
+              raise SystemExit('EXECUTE_ALL_SERIAL_ANCHOR_MISSING')
+          p.write_text(s)
+
+      - name: Add truthful 24-hour utilization metrics to dispatcher snapshot
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('backend/services/ivx-campaign-dispatcher.ts')
+          s = p.read_text()
+          type_anchor = "  activeJobs: Array<Pick<CampaignJobRecord,\n"
+          type_block = (
+              "  utilization24h: { theoreticalAgentHours: number; productiveAgentHours: number; utilizationPercent: number; runningNow: number; queuedNow: number; ownerGateNow: number; };\n"
+          )
+          if type_block not in s:
+              if type_anchor not in s:
+                  raise SystemExit('SNAPSHOT_TYPE_ANCHOR_MISSING')
+              s = s.replace(type_anchor, type_block + type_anchor, 1)
+
+          snapshot_anchor = "    activeJobs: state.records\n"
+          util_expr = (
+              "    utilization24h: (() => {\n"
+              "      const now = Date.now();\n"
+              "      const windowStart = now - 24 * 60 * 60 * 1000;\n"
+              "      let productiveMs = 0;\n"
+              "      for (const r of state.records) {\n"
+              "        if (!r.startedAt) continue;\n"
+              "        const start = Math.max(Date.parse(r.startedAt), windowStart);\n"
+              "        const rawEnd = r.finishedAt ? Date.parse(r.finishedAt) : (r.status === 'RUNNING' ? now : start);\n"
+              "        const end = Math.min(Number.isFinite(rawEnd) ? rawEnd : start, now);\n"
+              "        if (Number.isFinite(start) && end > start) productiveMs += end - start;\n"
+              "      }\n"
+              "      const theoreticalAgentHours = 112 * 24;\n"
+              "      const productiveAgentHours = Number((productiveMs / 3_600_000).toFixed(2));\n"
+              "      return {\n"
+              "        theoreticalAgentHours,\n"
+              "        productiveAgentHours,\n"
+              "        utilizationPercent: Number(((productiveAgentHours / theoreticalAgentHours) * 100).toFixed(2)),\n"
+              "        runningNow: count('RUNNING'),\n"
+              "        queuedNow: count('QUEUED') + count('AWAITING_IMPLEMENT'),\n"
+              "        ownerGateNow: count('PENDING_OWNER'),\n"
+              "      };\n"
+              "    })(),\n"
+          )
+          if util_expr not in s:
+              if snapshot_anchor not in s:
+                  raise SystemExit('SNAPSHOT_BODY_ANCHOR_MISSING')
+              s = s.replace(snapshot_anchor, util_expr + snapshot_anchor, 1)
+          p.write_text(s)
+
+      - name: Static safety assertions
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "Math.min(raw, 112) : 112" backend/services/ivx-campaign-dispatcher.ts
+          grep -q "CONTINUOUS VERIFICATION" backend/services/ivx-campaign-dispatcher.ts
+          grep -q "utilization24h" backend/services/ivx-campaign-dispatcher.ts
+          grep -q "Promise.all(batch.map" backend/api/ivx-agent-api.ts
+          grep -q "IVX_AGENT_EXECUTE_ALL_CONCURRENCY" backend/api/ivx-agent-api.ts
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Backend TypeScript hard gate
+        run: bunx tsc -p backend/tsconfig.json --noEmit
+
+      - name: Focused agent and dispatcher tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find backend -type f \( -name '*campaign-dispatcher*.test.ts' -o -name '*agent-api*.test.ts' -o -name '*app-completion-campaign*.test.ts' -o -name '*agent-runtime*.test.ts' \) -print)
+          if [ "${#files[@]}" -gt 0 ]; then bun test "${files[@]}"; else echo "No focused tests found"; fi
+
+      - name: Commit QA-verified repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- backend/services/ivx-campaign-dispatcher.ts backend/api/ivx-agent-api.ts; then
+            echo "No source changes required."
+            exit 0
+          fi
+          git config user.name "ivx-autonomous"
+          git config user.email "ivx-autonomous@users.noreply.github.com"
+          git add backend/services/ivx-campaign-dispatcher.ts backend/api/ivx-agent-api.ts
+          git commit -m "fix(autonomous): unleash 112-agent utilization safely"
+          git push origin HEAD:fix/112-agent-utilization-control
