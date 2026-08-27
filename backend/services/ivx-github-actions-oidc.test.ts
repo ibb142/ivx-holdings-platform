@@ -21,6 +21,13 @@ describe('IVX GitHub Actions OIDC claims', () => {
     expect(validateIVXGitHubOIDCClaims(valid, now)).toBe(true);
   });
 
+  test('accepts exact-SHA 112 certificate workflow identity', () => {
+    expect(validateIVXGitHubOIDCClaims({
+      ...valid,
+      workflow_ref: 'ibb142/ivx-holdings-platform/.github/workflows/ivx-112-exact-sha-autodeploy-cert.yml@refs/heads/main',
+    }, now)).toBe(true);
+  });
+
   test('accepts GitHub immutable owner/repository subject identity', () => {
     expect(validateIVXGitHubOIDCClaims({
       ...valid,
