@@ -9,6 +9,7 @@ import {
 import { timingSafeEqual } from 'node:crypto';
 import { verifyIVXOutageOwnerSession } from '../services/ivx-outage-owner-session';
 import { resolveActiveIVXSystemSecret } from '../services/ivx-system-secret';
+import { verifyIVXGitHubActionsOIDCRequest } from '../services/ivx-github-actions-oidc';
 
 export type IVXOwnerRequestContext = IVXAuthenticatedRequestContext;
 
@@ -52,31 +53,16 @@ const OWNER_ONLY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'X-IVX-JSON-Contract': 'strict-v1',
   'Access-Control-Allow-Origin': 'https://ivxholding.com',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-IVX-System-Key',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-IVX-System-Key, X-IVX-GitHub-OIDC',
   'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
 } as const;
 
-/**
- * Hard ceiling on a single owner-AI JSON response body. The upstream proxy/host
- * truncates very large bodies mid-stream, which produces an invalid-JSON reply
- * the client "cannot read" (the "temporary backend formatting issue" the owner
- * saw). We keep responses safely under that ceiling.
- */
 const OWNER_ONLY_MAX_RESPONSE_BYTES = 900_000;
 
 function utf8ByteLength(value: string): number {
   return Buffer.byteLength(value, 'utf8');
 }
 
-/**
- * Serialize an owner response to JSON that the client can ALWAYS parse.
- *
- * Guarantees, in order:
- *   1. JSON.stringify never throws (circular refs / BigInt / bad getters fall
- *      back to a minimal canonical envelope instead of a 500 / empty body).
- *   2. The body never exceeds OWNER_ONLY_MAX_RESPONSE_BYTES measured as actual
- *      UTF-8 transport bytes, not JavaScript character count.
- */
 function serializeOwnerOnlyPayload(payload: Record<string, unknown>): string {
   let body: string;
   try {
@@ -85,9 +71,7 @@ function serializeOwnerOnlyPayload(payload: Record<string, unknown>): string {
     return JSON.stringify(buildMinimalOwnerEnvelope(payload, error));
   }
 
-  if (utf8ByteLength(body) <= OWNER_ONLY_MAX_RESPONSE_BYTES) {
-    return body;
-  }
+  if (utf8ByteLength(body) <= OWNER_ONLY_MAX_RESPONSE_BYTES) return body;
 
   const slim: Record<string, unknown> = { ...payload };
   for (const heavyField of ['toolOutputs', 'toolOutput', 'toolInput', 'runtimeV2', 'routerDebug', 'diagnostics', 'providerError']) {
@@ -102,11 +86,9 @@ function serializeOwnerOnlyPayload(payload: Record<string, unknown>): string {
 
   try {
     const slimBody = JSON.stringify(slim);
-    if (utf8ByteLength(slimBody) <= OWNER_ONLY_MAX_RESPONSE_BYTES) {
-      return slimBody;
-    }
+    if (utf8ByteLength(slimBody) <= OWNER_ONLY_MAX_RESPONSE_BYTES) return slimBody;
   } catch {
-    // fall through to minimal envelope
+    // fall through
   }
   return JSON.stringify(buildMinimalOwnerEnvelope(payload, null));
 }
@@ -132,28 +114,18 @@ export function ownerOnlyJson(payload: Record<string, unknown>, status: number =
   const body = serializeOwnerOnlyPayload(payload);
   return new Response(body, {
     status,
-    headers: {
-      ...OWNER_ONLY_HEADERS,
-      'Content-Length': String(utf8ByteLength(body)),
-    },
+    headers: { ...OWNER_ONLY_HEADERS, 'Content-Length': String(utf8ByteLength(body)) },
   });
 }
 
 export function ownerOnlyOptions(): Response {
-  return new Response(null, {
-    status: 204,
-    headers: OWNER_ONLY_HEADERS,
-  });
+  return new Response(null, { status: 204, headers: OWNER_ONLY_HEADERS });
 }
 
 export async function assertIVXOwnerOnly(request: Request): Promise<IVXOwnerRequestContext> {
-  if (await checkIVXAISystemKey(request)) {
-    return makeSystemOwnerRequestContext();
-  }
+  if (await checkIVXMachineIdentity(request)) return makeSystemOwnerRequestContext();
   const outageSession = verifyIVXOutageOwnerSession(extractIVXBearerToken(request));
-  if (outageSession) {
-    return makeOutageOwnerRequestContext(outageSession);
-  }
+  if (outageSession) return makeOutageOwnerRequestContext(outageSession);
   return await resolveIVXAuthenticatedRequest(request, '[IVXOwnerOnly]');
 }
 
@@ -220,60 +192,26 @@ export function evaluateIVXRegisteredOwnerBearerContext(
 
   if (!allowlistConfigured) {
     const blocker = 'IVX_OWNER_REGISTRATION_EMAILS is not configured in the backend runtime.';
-    return {
-      approved: false,
-      status: 403,
-      blocker,
-      proof: makeOwnerMutationApprovalProof({ context, action, bearerAccepted, ownerVerified: false, ownerEmailMatched: false, allowlistConfigured, blocker }),
-    };
+    return { approved: false, status: 403, blocker, proof: makeOwnerMutationApprovalProof({ context, action, bearerAccepted, ownerVerified: false, ownerEmailMatched: false, allowlistConfigured, blocker }) };
   }
-
   if (!bearerAccepted) {
     const blocker = 'A real Supabase owner bearer token is required; local/test owner tokens are not accepted for senior-developer mutations.';
-    return {
-      approved: false,
-      status: 401,
-      blocker,
-      proof: makeOwnerMutationApprovalProof({ context, action, bearerAccepted: false, ownerVerified: false, ownerEmailMatched, allowlistConfigured, blocker }),
-    };
+    return { approved: false, status: 401, blocker, proof: makeOwnerMutationApprovalProof({ context, action, bearerAccepted: false, ownerVerified: false, ownerEmailMatched, allowlistConfigured, blocker }) };
   }
-
   if (!ownerEmailMatched) {
     const blocker = 'Authenticated owner email is not listed in IVX_OWNER_REGISTRATION_EMAILS.';
-    return {
-      approved: false,
-      status: 403,
-      blocker,
-      proof: makeOwnerMutationApprovalProof({ context, action, bearerAccepted, ownerVerified: false, ownerEmailMatched: false, allowlistConfigured, blocker }),
-    };
+    return { approved: false, status: 403, blocker, proof: makeOwnerMutationApprovalProof({ context, action, bearerAccepted, ownerVerified: false, ownerEmailMatched: false, allowlistConfigured, blocker }) };
   }
 
-  return {
-    approved: true,
-    status: 200,
-    blocker: null,
-    proof: makeOwnerMutationApprovalProof({ context, action, bearerAccepted, ownerVerified, ownerEmailMatched, allowlistConfigured, blocker: null }),
-  };
+  return { approved: true, status: 200, blocker: null, proof: makeOwnerMutationApprovalProof({ context, action, bearerAccepted, ownerVerified, ownerEmailMatched, allowlistConfigured, blocker: null }) };
 }
 
 function makeOutageOwnerRequestContext(session: { token: string; userId: string; email: string }): IVXOwnerRequestContext {
-  return {
-    userId: session.userId,
-    email: session.email,
-    role: 'owner',
-    accessToken: session.token,
-    guardMode: 'strict',
-  } as unknown as IVXOwnerRequestContext;
+  return { userId: session.userId, email: session.email, role: 'owner', accessToken: session.token, guardMode: 'strict' } as unknown as IVXOwnerRequestContext;
 }
 
 function makeSystemOwnerRequestContext(): IVXOwnerRequestContext {
-  return {
-    userId: 'ivx-ai-system',
-    email: 'system@ivx.ai',
-    role: 'system',
-    accessToken: 'system',
-    guardMode: 'system_bypass',
-  } as unknown as IVXOwnerRequestContext;
+  return { userId: 'ivx-ai-system', email: 'system@ivx.ai', role: 'system', accessToken: 'system', guardMode: 'system_bypass' } as unknown as IVXOwnerRequestContext;
 }
 
 const IVX_AI_SYSTEM_SECRET_ENV = () => (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim();
@@ -290,10 +228,13 @@ function constantTimeEquals(a: string, b: string): boolean {
 async function checkIVXAISystemKey(request: Request): Promise<boolean> {
   const systemKey = request.headers.get('X-IVX-System-Key')?.trim() ?? '';
   const activeSecret = await resolveActiveIVXSystemSecret();
-  if (!activeSecret) {
-    return IVX_AI_SYSTEM_SECRET_ENV().length > 0 && constantTimeEquals(systemKey, IVX_AI_SYSTEM_SECRET_ENV());
-  }
+  if (!activeSecret) return IVX_AI_SYSTEM_SECRET_ENV().length > 0 && constantTimeEquals(systemKey, IVX_AI_SYSTEM_SECRET_ENV());
   return constantTimeEquals(systemKey, activeSecret);
+}
+
+async function checkIVXMachineIdentity(request: Request): Promise<boolean> {
+  if (await verifyIVXGitHubActionsOIDCRequest(request)) return true;
+  return checkIVXAISystemKey(request);
 }
 
 function makeSystemMutationApprovalProof(action: string): IVXOwnerMutationApprovalProof {
@@ -317,11 +258,8 @@ export async function assertIVXRegisteredOwnerBearer(
   request: Request,
   action: string,
 ): Promise<{ context: IVXOwnerRequestContext; approval: IVXOwnerMutationApprovalProof }> {
-  if (await checkIVXAISystemKey(request)) {
-    return {
-      context: makeSystemOwnerRequestContext(),
-      approval: makeSystemMutationApprovalProof(action),
-    };
+  if (await checkIVXMachineIdentity(request)) {
+    return { context: makeSystemOwnerRequestContext(), approval: makeSystemMutationApprovalProof(action) };
   }
 
   let context: IVXOwnerRequestContext;
@@ -341,12 +279,6 @@ export async function assertIVXRegisteredOwnerBearer(
   }
 
   const evaluation = evaluateIVXRegisteredOwnerBearerContext(context, action);
-  if (!evaluation.approved) {
-    throw new IVXOwnerApprovalError(evaluation.blocker ?? 'Owner approval failed.', evaluation.status, evaluation.proof);
-  }
-
-  return {
-    context,
-    approval: evaluation.proof,
-  };
+  if (!evaluation.approved) throw new IVXOwnerApprovalError(evaluation.blocker ?? 'Owner approval failed.', evaluation.status, evaluation.proof);
+  return { context, approval: evaluation.proof };
 }
