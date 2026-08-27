@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: ivx-112-exact-sha-autodeploy-cert
@@ -18,7 +19,6 @@ jobs:
     timeout-minutes: 55
     env:
       API_BASE: https://api.ivxholding.com
-      SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
     steps:
       - uses: actions/checkout@v4
 
@@ -75,15 +75,29 @@ jobs:
           jq -s '[.[].contract.queueNamespace] | unique | length' /tmp/contracts/*.json | grep -qx '112'
           echo 'live_112_contracts=PASS'
 
+      - name: Acquire signed GitHub OIDC certificate identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          response=$(curl -fsS --retry 2 --retry-delay 1 \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery")
+          token=$(printf '%s' "$response" | jq -r '.value // empty')
+          test -n "$token"
+          echo "::add-mask::$token"
+          echo "IVX_CERT_OIDC_TOKEN=$token" >> "$GITHUB_ENV"
+
       - name: Start real 112/112 execution certificate — HARD GATE
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${SYSTEM_KEY:-}"
+          test -n "${IVX_CERT_OIDC_TOKEN:-}"
           HTTP=$(curl -sS -m 30 -o /tmp/start.json -w '%{http_code}' \
             -X POST "${API_BASE}/api/ivx/agents/certificate/run" \
             -H 'Content-Type: application/json' \
-            -H "x-ivx-owner-key: ${SYSTEM_KEY}" \
+            -H "X-IVX-GitHub-OIDC: ${IVX_CERT_OIDC_TOKEN}" \
             --data '{}')
           cat /tmp/start.json | jq '{ok,runId,error,message}' || true
           test "$HTTP" = 200
