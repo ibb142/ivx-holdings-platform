@@ -1,0 +1,34 @@
+appId: com.ivxholdings.app.owner
+name: IVX Owner Dashboard Certificate
+tags:
+  - android-qa
+  - owner-auth
+  - dashboard
+  - critical
+---
+# Runs after the real owner login flow on the same installed QA build.
+# Deep link is valid because Expo config uses scheme: ivx-app.
+- openLink: "ivx-app://admin/dashboard"
+- extendedWaitUntil:
+    visible: "Dashboard"
+    timeout: 20000
+- assertVisible: "Live"
+- assertNotVisible: "Sign In Failed"
+- assertNotVisible: "Login service temporarily unavailable"
+# Core owner dashboard modules must paint instead of a black/blank surface.
+- extendedWaitUntil:
+    visible: "Members"
+    timeout: 15000
+- extendedWaitUntil:
+    visible: "Properties"
+    timeout: 15000
+- extendedWaitUntil:
+    visible: "Transactions"
+    timeout: 15000
+# Exercise the scroll surface to catch delayed render/blank-screen regressions.
+- swipe:
+    start: 50%,80%
+    end: 50%,25%
+    duration: 800
+- assertVisible: "Dashboard"
+- assertNotVisible: "Something went wrong"
