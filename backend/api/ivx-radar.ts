@@ -45,7 +45,7 @@ export async function handleIVXRadarStatus(_context: Context): Promise<Response>
 
   // 1. Database — agents table reachable and non-empty
   try {
-    const r = await jsonFetch(`${supabaseUrl}/rest/v1/ivx_agent_registry?select=agent_id&limit=5`, { headers: authHeaders });
+    const r = await jsonFetch(`${supabaseUrl}/rest/v1/ivx_agent_executions?select=agent_id&limit=5`, { headers: authHeaders });
     const rows: any[] = Array.isArray(r.body) ? r.body : [];
     checks.push({ id: 'database', ok: r.ok && rows.length > 0, detail: r.ok ? `${rows.length}+ registry rows` : `HTTP ${r.status}` });
   } catch (e) {
