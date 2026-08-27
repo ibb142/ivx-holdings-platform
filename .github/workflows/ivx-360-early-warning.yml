@@ -1,0 +1,163 @@
+name: IVX 360 Early Warning & Autonomous Recovery
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ivx-360-early-warning
+  cancel-in-progress: false
+
+jobs:
+  observe-and-route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      API_BASE: https://api.ivxholding.com
+      LANDING_URL: https://ivxholding.com
+      CHAT_URL: https://chat.ivxholding.com
+      SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+    steps:
+      - name: Checkout exact repository SHA
+        uses: actions/checkout@v4
+
+      - name: Probe IVX 360 surfaces
+        id: probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ivx-360
+          : > /tmp/ivx-360/probes.jsonl
+
+          probe() {
+            name="$1"
+            url="$2"
+            auth="${3:-none}"
+            started=$(date +%s%3N)
+            headers="/tmp/ivx-360/${name}.headers"
+            body="/tmp/ivx-360/${name}.body"
+            if [ "$auth" = system ]; then
+              code=$(curl -sS --max-time 8 -D "$headers" -o "$body" -w '%{http_code}' \
+                -H 'Accept: application/json' -H "X-IVX-System-Key: ${SYSTEM_KEY}" "$url" || printf '000')
+            else
+              code=$(curl -sS --max-time 8 -D "$headers" -o "$body" -w '%{http_code}' \
+                -H 'Accept: application/json,text/html;q=0.9,*/*;q=0.8' "$url" || printf '000')
+            fi
+            ended=$(date +%s%3N)
+            latency=$((ended-started))
+            content_type=$(grep -i '^content-type:' "$headers" 2>/dev/null | tail -1 | tr -d '\r' | cut -d: -f2- | xargs || true)
+            ok=false
+            json_valid=false
+            if jq -e . "$body" >/dev/null 2>&1; then json_valid=true; fi
+            case "$code" in
+              200|204|301|302|307|308) ok=true ;;
+            esac
+            jq -n \
+              --arg name "$name" --arg url "$url" --arg status "$code" \
+              --arg contentType "$content_type" --argjson latencyMs "$latency" \
+              --argjson jsonValid "$json_valid" --argjson ok "$ok" \
+              '{name:$name,url:$url,status:$status,latencyMs:$latencyMs,contentType:$contentType,jsonValid:$jsonValid,ok:$ok}' \
+              >> /tmp/ivx-360/probes.jsonl
+          }
+
+          test -n "${SYSTEM_KEY:-}"
+          probe landing "$LANDING_URL"
+          probe chat "$CHAT_URL"
+          probe health "$API_BASE/health"
+          probe version "$API_BASE/version"
+          probe agents "$API_BASE/api/ivx/agents"
+          probe control_plane "$API_BASE/api/ivx/autonomous/control-plane" system
+
+          failures=$(jq -s '[.[] | select(.ok != true)] | length' /tmp/ivx-360/probes.jsonl)
+          rate_limited=$(jq -s '[.[] | select(.status == "429")] | length' /tmp/ivx-360/probes.jsonl)
+          server_errors=$(jq -s '[.[] | select(.status | test("^5"))] | length' /tmp/ivx-360/probes.jsonl)
+          timeouts=$(jq -s '[.[] | select(.status == "000")] | length' /tmp/ivx-360/probes.jsonl)
+          slow=$(jq -s '[.[] | select(.latencyMs >= 2500)] | length' /tmp/ivx-360/probes.jsonl)
+          watch=$(jq -s '[.[] | select(.latencyMs >= 1200 and .latencyMs < 2500)] | length' /tmp/ivx-360/probes.jsonl)
+
+          live_sha=$(jq -r 'select(.commit != null) | .commit' /tmp/ivx-360/version.body 2>/dev/null || true)
+          version_ok=$(jq -r '.ok // false' /tmp/ivx-360/version.body 2>/dev/null || printf 'false')
+          sha_drift=false
+          if [ "$version_ok" = true ] && [ -n "$live_sha" ] && [ "$live_sha" != "$GITHUB_SHA" ]; then sha_drift=true; fi
+
+          agents_ok=false
+          total_agents=0
+          if jq -e . /tmp/ivx-360/agents.body >/dev/null 2>&1; then
+            total_agents=$(jq -r '.totalAgents // 0' /tmp/ivx-360/agents.body)
+            if [ "$total_agents" = 112 ]; then agents_ok=true; fi
+          fi
+
+          level=GREEN
+          action=observe
+          reason=healthy
+          if [ "$server_errors" -gt 0 ] || [ "$timeouts" -gt 0 ] || [ "$failures" -ge 2 ] || [ "$sha_drift" = true ] || [ "$agents_ok" != true ]; then
+            level=CRITICAL; action=self_heal; reason=terminal_risk
+          elif [ "$rate_limited" -gt 0 ] || [ "$slow" -gt 0 ] || [ "$failures" -gt 0 ]; then
+            level=WARNING; action=self_heal; reason=degradation
+          elif [ "$watch" -gt 0 ]; then
+            level=WATCH; action=preflight; reason=early_latency_signal
+          fi
+
+          jq -s \
+            --arg level "$level" --arg action "$action" --arg reason "$reason" \
+            --arg repositorySha "$GITHUB_SHA" --arg liveSha "$live_sha" \
+            --argjson failures "$failures" --argjson rateLimited "$rate_limited" \
+            --argjson serverErrors "$server_errors" --argjson timeouts "$timeouts" \
+            --argjson slow "$slow" --argjson watch "$watch" \
+            --argjson shaDrift "$sha_drift" --argjson agentsOk "$agents_ok" \
+            --argjson totalAgents "$total_agents" \
+            '{level:$level,action:$action,reason:$reason,repositorySha:$repositorySha,liveSha:$liveSha,shaDrift:$shaDrift,agentsOk:$agentsOk,totalAgents:$totalAgents,failures:$failures,rateLimited:$rateLimited,serverErrors:$serverErrors,timeouts:$timeouts,slow:$slow,watch:$watch,probes:.}' \
+            /tmp/ivx-360/probes.jsonl > /tmp/ivx-360/assessment.json
+
+          cat /tmp/ivx-360/assessment.json
+          echo "level=$level" >> "$GITHUB_OUTPUT"
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+
+      - name: Validate 112-agent contract surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '.ok == true' /tmp/ivx-360/agents.body >/dev/null
+          test "$(jq -r '.totalAgents // 0' /tmp/ivx-360/agents.body)" = 112
+          test "$(jq '[.agents[].agentId] | unique | length' /tmp/ivx-360/agents.body)" = 112
+          test "$(jq '[.agents[] | select(.paused==true or .disabled==true)] | length' /tmp/ivx-360/agents.body)" = 0
+
+      - name: Route WATCH to autonomous preflight
+        if: ${{ steps.probe.outputs.action == 'preflight' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          assessment=$(cat /tmp/ivx-360/assessment.json)
+          goal="IVX 360 EARLY WARNING WATCH. Diagnose the pre-failure signal without production mutation. Inspect latency trend, endpoint contracts, queues, worker heartbeat, rate-limit symptoms, auth dependency symptoms, deploy SHA parity, and recent workflow regressions. Evidence required. Assessment: ${assessment}"
+          payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"qa_only",templateMode:"BUG_FIX",approvePatch:false,approveGitDeploy:false,validationMode:"typecheck",riskLevel:"low",proposedPlan:"360-degree predictive preflight only.",rollbackOption:"No production mutation permitted.",filesAffected:["ivx-360-observability"]}')
+          http=$(curl -sS --max-time 60 -o /tmp/ivx-360/worker.json -w '%{http_code}' -X POST \
+            "$API_BASE/api/ivx/senior-developer/worker/jobs" \
+            -H 'Content-Type: application/json' -H "X-IVX-System-Key: ${SYSTEM_KEY}" --data "$payload")
+          case "$http" in 200|202|409) ;; *) cat /tmp/ivx-360/worker.json; exit 1;; esac
+
+      - name: Route WARNING or CRITICAL to safe autonomous repair
+        if: ${{ steps.probe.outputs.action == 'self_heal' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          assessment=$(cat /tmp/ivx-360/assessment.json)
+          goal="IVX 360 EARLY WARNING SELF-HEAL. Diagnose and repair LOW-RISK code defects before user impact. Inspect health/version, public landing/chat reachability, 429/5xx/timeouts, latency, 112-agent availability, queue/worker symptoms and SHA drift. Never change secrets, IAM, auth permissions, payments, destructive migrations, security policy, DNS, CloudFront, Route53 or other production infrastructure without Owner Gate. Never weaken QA. Patch only when evidence identifies a low-risk code defect; test before proposing deploy. Assessment: ${assessment}"
+          payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:false,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Evidence-backed low-risk self-heal; high-risk infrastructure/auth remains Owner-gated.",rollbackOption:"Revert autonomous repair PR on regression.",filesAffected:["ivx-360-diagnosis"]}')
+          http=$(curl -sS --max-time 60 -o /tmp/ivx-360/worker.json -w '%{http_code}' -X POST \
+            "$API_BASE/api/ivx/senior-developer/worker/jobs" \
+            -H 'Content-Type: application/json' -H "X-IVX-System-Key: ${SYSTEM_KEY}" --data "$payload")
+          case "$http" in 200|202|409) ;; *) cat /tmp/ivx-360/worker.json; exit 1;; esac
+
+      - name: Persist immutable 360 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-360-evidence-${{ github.sha }}-${{ github.run_id }}
+          path: /tmp/ivx-360
+          if-no-files-found: error
+          retention-days: 30
