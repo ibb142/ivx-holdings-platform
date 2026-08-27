@@ -79,7 +79,8 @@ async function getBcryptModule(): Promise<typeof import('bcryptjs')> {
 let _jwtModule: typeof import('jsonwebtoken') | null = null;
 async function getJwtModule(): Promise<typeof import('jsonwebtoken')> {
   if (_jwtModule) return _jwtModule;
-  _jwtModule = await import('jsonwebtoken');
+  const jmod = await import('jsonwebtoken') as any;
+  _jwtModule = (jmod?.default ?? jmod) as typeof import('jsonwebtoken');
   return _jwtModule;
 }
 
