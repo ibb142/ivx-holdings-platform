@@ -33,6 +33,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Autonomous route and data-contract patrol
+        id: route_contract
+        shell: bash
+        run: |
+          set +e
+          mkdir -p /tmp/ivx-radar
+          node scripts/autonomous-route-data-contract-audit.mjs
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo 'failed=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'failed=true' >> "$GITHUB_OUTPUT"
+            echo "AUTONOMOUS_CONTRACT_DEFECT: route/data contract patrol returned ${rc}."
+            cat /tmp/ivx-radar/route-data-contract.json
+          fi
+
       - name: Acquire scoped GitHub OIDC machine identity
         id: oidc
         shell: bash
@@ -88,9 +105,13 @@ jobs:
           elif [ "$failures" -ge 1 ] || [ "$avg_latency" -ge 2500 ]; then level=WARNING; action=self_heal;
           elif [ "$avg_latency" -ge 1200 ] || awk -v t="$trend" 'BEGIN{exit !(t>=1.7)}'; then level=WATCH; action=preflight;
           fi
+          if [ "${{ steps.route_contract.outputs.failed }}" = 'true' ]; then
+            level=CRITICAL
+            action=self_heal
+          fi
 
-          jq -s --arg level "$level" --arg action "$action" --argjson failures "$failures" --argjson badJson "$bad_json" --argjson avgLatencyMs "$avg_latency" --arg trend "$trend" \
-            '{level:$level,action:$action,failures:$failures,badJson:$badJson,avgLatencyMs:$avgLatencyMs,latencyTrend:($trend|tonumber),samples:.}' \
+          jq -s --arg level "$level" --arg action "$action" --argjson failures "$failures" --argjson badJson "$bad_json" --argjson avgLatencyMs "$avg_latency" --arg trend "$trend" --arg routeContractFailed "${{ steps.route_contract.outputs.failed }}" \
+            '{level:$level,action:$action,failures:$failures,badJson:$badJson,avgLatencyMs:$avgLatencyMs,latencyTrend:($trend|tonumber),routeDataContractFailed:($routeContractFailed=="true"),samples:.}' \
             /tmp/ivx-radar/samples.jsonl > /tmp/ivx-radar/predictive-assessment.json
           cat /tmp/ivx-radar/predictive-assessment.json
           echo "level=$level" >> "$GITHUB_OUTPUT"
@@ -130,8 +151,10 @@ jobs:
           assessment=$(cat /tmp/ivx-radar/predictive-assessment.json)
           source_failures='[]'
           if [ -s /tmp/ivx-radar/failed-jobs.jsonl ]; then source_failures=$(jq -s -c '.' /tmp/ivx-radar/failed-jobs.jsonl); fi
-          jq -n --arg event "$GITHUB_EVENT_NAME" --argjson assessment "$assessment" --argjson failures "$source_failures" \
-            '{event:$event,predictive:$assessment,sourceFailures:$failures,policy:{failClosed:true,ownerGate:true,maxRepairAttempts:3,neverWeakenQuality:true}}' \
+          route_contract='{}'
+          if [ -s /tmp/ivx-radar/route-data-contract.json ]; then route_contract=$(jq -c '.' /tmp/ivx-radar/route-data-contract.json); fi
+          jq -n --arg event "$GITHUB_EVENT_NAME" --argjson assessment "$assessment" --argjson failures "$source_failures" --argjson routeContract "$route_contract" \
+            '{event:$event,predictive:$assessment,sourceFailures:$failures,routeDataContract:$routeContract,policy:{failClosed:true,ownerGate:true,maxRepairAttempts:3,neverWeakenQuality:true}}' \
             > /tmp/ivx-radar/mission.json
           cat /tmp/ivx-radar/mission.json
 
@@ -152,9 +175,9 @@ jobs:
             approve_patch=true
             approve_deploy=false
           fi
-          goal="IVX PREDICTIVE NERVOUS EARLY WARNING. Diagnose BEFORE terminal failure. Inspect endpoint latency trend, HTTP, Content-Type, JSON contract, worker heartbeat, queue pressure, auth/permission symptoms and source workflow failures. For low-risk code defects only, repair and test. Never change secrets/IAM/payments/destructive migrations/security policy or production infrastructure without Owner Gate. Evidence required. Mission: ${mission}"
+          goal="IVX PREDICTIVE NERVOUS EARLY WARNING. Diagnose BEFORE terminal failure. Inspect endpoint latency trend, HTTP, Content-Type, JSON contract, worker heartbeat, queue pressure, auth/permission symptoms, source workflow failures, AND cross-screen navigation/data contracts. A public entity that renders on Landing/Home must resolve by the same stable ID on its destination route. For low-risk code defects only, repair and test automatically. Never change secrets/IAM/payments/destructive migrations/security policy or production infrastructure without Owner Gate. Evidence required. Mission: ${mission}"
           payload=$(jq -n --arg goal "$goal" --arg execution "$execution" --argjson approvePatch "$approve_patch" --argjson approveGitDeploy "$approve_deploy" \
-            '{goal:$goal,executionMode:$execution,templateMode:"BUG_FIX",approvePatch:$approvePatch,approveGitDeploy:$approveGitDeploy,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Predictive evidence-backed preflight/self-heal with Owner Gates preserved.",rollbackOption:"Revert autonomous repair PR if any regression appears.",filesAffected:["predictive-diagnosis"]}')
+            '{goal:$goal,executionMode:$execution,templateMode:"BUG_FIX",approvePatch:$approvePatch,approveGitDeploy:$approveGitDeploy,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Predictive evidence-backed preflight/self-heal including cross-screen route/data-source parity with Owner Gates preserved.",rollbackOption:"Revert autonomous repair PR if any regression appears.",filesAffected:["predictive-diagnosis","route-data-contract"]}')
           http=$(curl -sS --max-time 60 -o /tmp/ivx-radar/job-start.json -w '%{http_code}' -X POST \
             "${API_BASE}/api/ivx/senior-developer/worker/jobs" \
             -H 'Content-Type: application/json' \
