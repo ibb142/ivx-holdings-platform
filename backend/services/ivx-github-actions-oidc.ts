@@ -7,7 +7,10 @@ const REPOSITORY = 'ibb142/ivx-holdings-platform';
 const OWNER_ID = '74543014';
 const REPOSITORY_ID = '1169662811';
 const REF = 'refs/heads/main';
-const WORKFLOW_SUFFIX = '/.github/workflows/ivx-360-early-warning.yml@refs/heads/main';
+const WORKFLOW_SUFFIXES = [
+  '/.github/workflows/ivx-360-early-warning.yml@refs/heads/main',
+  '/.github/workflows/ivx-112-exact-sha-autodeploy-cert.yml@refs/heads/main',
+] as const;
 const CLOCK_SKEW_SECONDS = 60;
 
 export type IVXGitHubOIDCClaims = {
@@ -101,7 +104,7 @@ export function diagnoseIVXGitHubOIDCClaims(claims: IVXGitHubOIDCClaims, nowSeco
   if (typeof claims.repository_id === 'string' && claims.repository_id !== REPOSITORY_ID) return { ok: false, reason: 'repository_id_mismatch', claimShape: shape };
   if (typeof claims.repository_owner_id === 'string' && claims.repository_owner_id !== OWNER_ID) return { ok: false, reason: 'owner_id_mismatch', claimShape: shape };
   if (claims.ref !== REF) return { ok: false, reason: 'ref_mismatch', claimShape: shape };
-  if (typeof claims.workflow_ref !== 'string' || !claims.workflow_ref.endsWith(WORKFLOW_SUFFIX)) return { ok: false, reason: 'workflow_ref_mismatch', claimShape: shape };
+  if (typeof claims.workflow_ref !== 'string' || !WORKFLOW_SUFFIXES.some((suffix) => claims.workflow_ref!.endsWith(suffix))) return { ok: false, reason: 'workflow_ref_mismatch', claimShape: shape };
   if (claims.event_name !== 'push' && claims.event_name !== 'schedule' && claims.event_name !== 'workflow_dispatch') return { ok: false, reason: 'event_mismatch', claimShape: shape };
   if (typeof claims.exp !== 'number' || claims.exp + CLOCK_SKEW_SECONDS < nowSeconds) return { ok: false, reason: 'expired', claimShape: shape };
   if (typeof claims.nbf === 'number' && claims.nbf - CLOCK_SKEW_SECONDS > nowSeconds) return { ok: false, reason: 'not_yet_valid', claimShape: shape };
@@ -185,5 +188,8 @@ export const IVX_GITHUB_OIDC_CONTRACT = Object.freeze({
   repositoryId: REPOSITORY_ID,
   ownerId: OWNER_ID,
   ref: REF,
-  workflow: '.github/workflows/ivx-360-early-warning.yml',
+  workflows: [
+    '.github/workflows/ivx-360-early-warning.yml',
+    '.github/workflows/ivx-112-exact-sha-autodeploy-cert.yml',
+  ],
 });

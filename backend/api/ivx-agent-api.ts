@@ -98,6 +98,7 @@ import {
 } from '../services/ivx-campaign-dispatcher';
 
 import { resolveActiveIVXSystemSecret } from '../services/ivx-system-secret';
+import { verifyIVXGitHubActionsOIDCRequest } from '../services/ivx-github-actions-oidc';
 
 async function ownerAuthorized(c: any, body: Record<string, unknown> = {}): Promise<boolean> {
   const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';
@@ -210,10 +211,9 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post('/api/ivx/agents/certificate/run', async (c) => {
     const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
-    const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';
-    const envSecret = await resolveActiveIVXSystemSecret();
-    const authorized = Boolean(envSecret) && provided === envSecret;
-    if (!authorized) {
+    const oidcAuthorized = await verifyIVXGitHubActionsOIDCRequest(c.req.raw);
+    const legacyAuthorized = await ownerAuthorized(c, body as Record<string, unknown>);
+    if (!oidcAuthorized && !legacyAuthorized) {
       return c.json({ ok: false, error: 'Owner approval required to start the IVX 112 Real Execution Certificate run.' }, 401);
     }
     const result = await startRealExecutionCertificateRun();
