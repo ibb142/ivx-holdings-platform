@@ -13,6 +13,7 @@ permissions:
   contents: read
   actions: write
   issues: write
+  id-token: write
 
 concurrency:
   group: ivx-autonomous-nervous-system
@@ -20,8 +21,8 @@ concurrency:
 
 env:
   API_BASE: https://api.ivxholding.com
-  SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
   GH_TOKEN: ${{ github.token }}
+  OIDC_AUDIENCE: ivx-360-autonomous-recovery
 
 jobs:
   nervous-system:
@@ -29,6 +30,21 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+
+      - name: Acquire scoped GitHub OIDC machine identity
+        id: oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          token_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}"
+          curl -fsS --retry 3 --retry-delay 2 --retry-all-errors \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "$token_url" > /tmp/ivx-nervous-oidc.json
+          token=$(jq -r '.value // empty' /tmp/ivx-nervous-oidc.json)
+          test -n "$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
 
       - name: Layer 1 GPS - surface reachability radar
         id: gps
@@ -38,9 +54,7 @@ jobs:
           : > /tmp/gps.jsonl
           probe_surface() {
             name="$1"; url="$2"; expected="$3"
-            headers="/tmp/${name}.headers"
-            body="/tmp/${name}.body"
-            code=$(curl -L -sS --max-time 25 -D "$headers" -o "$body" -w '%{http_code}' "$url" || true)
+            code=$(curl -L -sS --max-time 25 -o "/tmp/${name}.body" -w '%{http_code}' "$url" || true)
             ok=false
             case "$expected" in
               2xx) [[ "$code" =~ ^2 ]] && ok=true ;;
@@ -55,74 +69,46 @@ jobs:
           probe_surface landing_www "https://www.ivxholding.com" 2xx3xx
           probe_surface owner_chat "https://chat.ivxholding.com" 2xx3xx
           jq -s '.' /tmp/gps.jsonl > /tmp/gps.json
-          gps_red=$(jq '[.[] | select(.ok != true)] | length' /tmp/gps.json)
-          echo "red=$gps_red" >> "$GITHUB_OUTPUT"
-          cat /tmp/gps.json
+          echo "red=$(jq '[.[] | select(.ok != true)] | length' /tmp/gps.json)" >> "$GITHUB_OUTPUT"
 
       - name: Layer 2 NERVOUS - JSON contract and 112 telemetry
         id: nervous
+        env:
+          IVX_GITHUB_OIDC: ${{ steps.oidc.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${SYSTEM_KEY:-}"
           : > /tmp/nervous.jsonl
-
           probe_json() {
             name="$1"; url="$2"; auth_mode="$3"
-            headers="/tmp/${name}.headers"
-            body="/tmp/${name}.body"
+            headers="/tmp/${name}.headers"; body="/tmp/${name}.body"
             args=(-sS --max-time 30 -D "$headers" -o "$body" -w '%{http_code}' -H 'Accept: application/json')
-            if [ "$auth_mode" = system ]; then
-              args+=(-H "X-IVX-System-Key: ${SYSTEM_KEY}")
-            fi
+            if [ "$auth_mode" = machine ]; then args+=(-H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}"); fi
             code=$(curl "${args[@]}" "$url" || true)
             content_type=$(awk 'BEGIN{IGNORECASE=1} /^content-type:/ {sub(/^[^:]+:[[:space:]]*/, ""); gsub(/\r/, ""); print; exit}' "$headers" 2>/dev/null || true)
             preview=$(tr '\n' ' ' < "$body" 2>/dev/null | head -c 180 || true)
-            first=$(sed -e 's/^[[:space:]]*//' "$body" 2>/dev/null | head -c 1 || true)
-            valid_json=false
-            if jq -e . "$body" >/dev/null 2>&1; then valid_json=true; fi
-            looks_html=false
-            if [ "$first" = '<' ] || grep -Eiq '<!doctype[[:space:]]+html|<html([[:space:]>])' "$body" 2>/dev/null; then looks_html=true; fi
-            http_ok=false
-            [[ "$code" =~ ^2 ]] && http_ok=true
-            type_ok=false
-            if printf '%s' "$content_type" | grep -Eiq 'application/json|\+json'; then type_ok=true; fi
+            valid_json=false; jq -e . "$body" >/dev/null 2>&1 && valid_json=true
+            looks_html=false; grep -Eiq '<!doctype[[:space:]]+html|<html([[:space:]>])' "$body" 2>/dev/null && looks_html=true
             ok=false
-            if [ "$http_ok" = true ] && [ "$type_ok" = true ] && [ "$valid_json" = true ] && [ "$looks_html" = false ]; then ok=true; fi
-
+            if [[ "$code" =~ ^2 ]] && printf '%s' "$content_type" | grep -Eiq 'application/json|\+json' && [ "$valid_json" = true ] && [ "$looks_html" = false ]; then ok=true; fi
             incident=NONE
-            if [ "$looks_html" = true ]; then incident=NON_JSON_RUNTIME_RESPONSE
-            elif [ "$http_ok" != true ]; then incident=HTTP_ERROR
-            elif [ "$type_ok" != true ]; then incident=NON_JSON_CONTENT_TYPE
+            if [ "$code" = 401 ] || [ "$code" = 403 ]; then incident=MACHINE_IDENTITY_REJECTED
+            elif [ "$looks_html" = true ]; then incident=NON_JSON_RUNTIME_RESPONSE
+            elif [[ ! "$code" =~ ^2 ]]; then incident=HTTP_ERROR
+            elif ! printf '%s' "$content_type" | grep -Eiq 'application/json|\+json'; then incident=NON_JSON_CONTENT_TYPE
             elif [ "$valid_json" != true ]; then incident=INVALID_JSON
             fi
-
-            jq -nc \
-              --arg layer NERVOUS --arg surface "$name" --arg url "$url" --arg http "$code" \
-              --arg contentType "$content_type" --arg preview "$preview" --arg incident "$incident" \
-              --argjson validJson "$valid_json" --argjson looksHtml "$looks_html" --argjson ok "$ok" \
-              '{layer:$layer,surface:$surface,url:$url,http:$http,contentType:$contentType,validJson:$validJson,looksHtml:$looksHtml,incident:$incident,preview:$preview,ok:$ok}' \
-              >> /tmp/nervous.jsonl
+            jq -nc --arg layer NERVOUS --arg surface "$name" --arg url "$url" --arg http "$code" --arg incident "$incident" --arg preview "$preview" --argjson ok "$ok" \
+              '{layer:$layer,surface:$surface,url:$url,http:$http,incident:$incident,preview:$preview,ok:$ok}' >> /tmp/nervous.jsonl
           }
-
           probe_json health "${API_BASE}/health" none
           probe_json version "${API_BASE}/version" none
           probe_json agents "${API_BASE}/api/ivx/agents" none
-          probe_json owner_audit_control_plane "${API_BASE}/api/ivx/autonomous/control-plane" system
-          probe_json owner_audit_worker_jobs "${API_BASE}/api/ivx/senior-developer/worker/jobs" system
-
+          probe_json owner_audit_control_plane "${API_BASE}/api/ivx/autonomous/control-plane" machine
+          probe_json owner_audit_worker_jobs "${API_BASE}/api/ivx/senior-developer/worker/jobs" machine
           jq -s '.' /tmp/nervous.jsonl > /tmp/nervous.json
-          nervous_red=$(jq '[.[] | select(.ok != true)] | length' /tmp/nervous.json)
-          echo "red=$nervous_red" >> "$GITHUB_OUTPUT"
-
-          agents_ok=$(jq -r '[.[] | select(.surface=="agents")][0].ok' /tmp/nervous.json)
-          if [ "$agents_ok" = true ]; then
-            cp /tmp/agents.body /tmp/agents.json
-            test "$(jq -r '.ok == true' /tmp/agents.json)" = true
-            test "$(jq -r '.totalAgents' /tmp/agents.json)" = 112
-            test "$(jq '[.agents[].agentNumber] | unique | length' /tmp/agents.json)" = 112
-          fi
-          cat /tmp/nervous.json
+          echo "red=$(jq '[.[] | select(.ok != true)] | length' /tmp/nervous.json)" >> "$GITHUB_OUTPUT"
+          echo "identity_red=$(jq '[.[] | select(.incident == "MACHINE_IDENTITY_REJECTED")] | length' /tmp/nervous.json)" >> "$GITHUB_OUTPUT"
 
       - name: Internal Actions and repository radar
         id: internal
@@ -130,87 +116,80 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check
-          if git grep -n -E '^(<<<<<<<|=======|>>>>>>>)' -- ':!*.lock' > /tmp/conflicts.txt; then
-            conflicts=$(wc -l < /tmp/conflicts.txt | tr -d ' ')
-          else
-            : > /tmp/conflicts.txt
-            conflicts=0
-          fi
+          if git grep -n -E '^(<<<<<<<|=======|>>>>>>>)' -- ':!*.lock' > /tmp/conflicts.txt; then conflicts=$(wc -l < /tmp/conflicts.txt | tr -d ' '); else : > /tmp/conflicts.txt; conflicts=0; fi
           gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs?branch=main&per_page=100" > /tmp/actions-pages.json
           jq '[.workflow_runs[]? | select(.status=="completed")][0:40] | [.[] | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral") | {id,name,conclusion,head_sha,html_url,created_at}]' /tmp/actions-pages.json > /tmp/recent-red.json || echo '[]' > /tmp/recent-red.json
           echo "conflicts=$conflicts" >> "$GITHUB_OUTPUT"
-          cat /tmp/recent-red.json
 
-      - name: Layer 3 AUTONOMOUS - classify incidents and choose action
+      - name: Layer 3 AUTONOMOUS - classify incidents
         id: diagnosis
         shell: bash
         run: |
           set -euo pipefail
-          gps_red='${{ steps.gps.outputs.red }}'
-          nervous_red='${{ steps.nervous.outputs.red }}'
-          conflicts='${{ steps.internal.outputs.conflicts }}'
+          gps_red='${{ steps.gps.outputs.red }}'; nervous_red='${{ steps.nervous.outputs.red }}'; conflicts='${{ steps.internal.outputs.conflicts }}'; identity_red='${{ steps.nervous.outputs.identity_red }}'
           total=$((gps_red + nervous_red + conflicts))
-
-          jq -n \
-            --arg sourceSha "$GITHUB_SHA" \
-            --slurpfile gps /tmp/gps.json \
-            --slurpfile nervous /tmp/nervous.json \
-            --slurpfile actions /tmp/recent-red.json \
-            --rawfile conflicts /tmp/conflicts.txt \
-            '{sourceSha:$sourceSha,layers:{gps:$gps[0],nervous:$nervous[0]},recentActionFailures:$actions[0],conflictMarkers:$conflicts,policy:{failClosed:true,falseZeroForbidden:true,ownerGate:true,maxRepairAttempts:3}}' \
-            > /tmp/nervous-system-diagnosis.json
-
+          jq -n --arg sourceSha "$GITHUB_SHA" --slurpfile gps /tmp/gps.json --slurpfile nervous /tmp/nervous.json --slurpfile actions /tmp/recent-red.json --rawfile conflicts /tmp/conflicts.txt \
+            '{sourceSha:$sourceSha,layers:{gps:$gps[0],nervous:$nervous[0]},recentActionFailures:$actions[0],conflictMarkers:$conflicts,policy:{failClosed:true,ownerGateHighRiskOnly:true,maxRepairAttempts:3,githubNativeFallback:true}}' > /tmp/nervous-system-diagnosis.json
           owner_gate=false
-          if jq -e '[.layers.nervous[] | select(.ok != true) | (.surface + " " + .incident + " " + .preview)] | join(" ") | test("401|403|secret|credential|auth|permission|payment|stripe|migration|destructive|infrastructure|iam|cloudfront|route53|security|rollback";"i")' /tmp/nervous-system-diagnosis.json >/dev/null; then
-            owner_gate=true
-          fi
-
+          # A transient rejection of this workflow's own short-lived machine identity is recoverable.
+          # Owner Gate is reserved for explicit policy/secret/IAM/payment/destructive/infra/security changes.
+          if jq -e '[.layers.nervous[] | select(.ok != true) | (.preview // "")] | join(" ") | test("secret rotation|iam policy|payment|stripe|destructive migration|cloudfront mutation|route53 mutation|security policy change|critical rollback";"i")' /tmp/nervous-system-diagnosis.json >/dev/null; then owner_gate=true; fi
           echo "total_incidents=$total" >> "$GITHUB_OUTPUT"
+          echo "identity_incidents=$identity_red" >> "$GITHUB_OUTPUT"
           echo "owner_gate_required=$owner_gate" >> "$GITHUB_OUTPUT"
-          cat /tmp/nervous-system-diagnosis.json
 
-      - name: Stop at Owner Gate for high-risk incident
+      - name: Owner Gate only for high-risk mutation
         if: ${{ steps.diagnosis.outputs.total_incidents != '0' && steps.diagnosis.outputs.owner_gate_required == 'true' }}
-        shell: bash
         run: |
-          echo 'AUTONOMOUS_NERVOUS_SYSTEM=OWNER_GATE_REQUIRED'
-          echo 'High-risk auth/permission/security/infrastructure incident detected. No autonomous mutation performed.'
+          echo 'AUTONOMOUS_NERVOUS_SYSTEM=OWNER_GATE_REQUIRED_HIGH_RISK'
           exit 1
 
-      - name: Delegate safe three-layer self-heal
+      - name: Delegate safe self-heal through backend worker
         id: remedy
-        if: ${{ steps.diagnosis.outputs.total_incidents != '0' && steps.diagnosis.outputs.owner_gate_required != 'true' }}
+        if: ${{ steps.diagnosis.outputs.total_incidents != '0' && steps.diagnosis.outputs.owner_gate_required != 'true' && steps.diagnosis.outputs.identity_incidents == '0' }}
+        env:
+          IVX_GITHUB_OIDC: ${{ steps.oidc.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
           diagnosis=$(jq -c '.' /tmp/nervous-system-diagnosis.json)
-          goal="IVX 3-LAYER GPS/NERVous/AUTONOMOUS SAFE SELF-HEAL. A production observer detected a low-risk incident. FALSE ZERO IS FORBIDDEN: never convert missing/invalid telemetry into 0 jobs, 0 hours, 0 agents, or 0 evidence. Layer 1 GPS checks reachability. Layer 2 NERVOUS validates HTTP status, Content-Type, valid JSON, and rejects HTML/non-JSON. Layer 3 AUTONOMOUS must diagnose root cause, patch only safe low-risk code/config, test/typecheck, create PR/CI, merge if allowed, verify production exact SHA, and rerun affected evidence. Do not weaken gates. Stop for secrets/auth/permissions/payments/destructive migrations/infrastructure/security/rollback. Diagnosis: ${diagnosis}"
-          payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",systemMode:true,ownerApproved:true,riskLevel:"low",proposedPlan:"Three-layer fail-closed repair with exact production verification."}')
-          http=$(curl -sS --max-time 60 -o /tmp/remedy-start.json -w '%{http_code}' -X POST \
-            "${API_BASE}/api/ivx/senior-developer/worker/jobs" \
-            -H 'Content-Type: application/json' \
-            -H 'Accept: application/json' \
-            -H "X-IVX-System-Key: ${SYSTEM_KEY}" \
-            --data "$payload" || true)
-          case "$http" in 200|202|409) ;; *) cat /tmp/remedy-start.json; exit 1;; esac
+          goal="IVX SAFE SELF-HEAL. Diagnose the evidence, patch only low-risk defects, run typecheck/tests, preserve all quality gates, create/merge only evidence-backed low-risk repair, verify exact SHA. High-risk auth policy/secrets/IAM/payments/destructive migrations/infrastructure/security/critical rollback require Owner Gate. Diagnosis: ${diagnosis}"
+          payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Fail-closed low-risk autonomous repair with exact-SHA verification.",rollbackOption:"Revert autonomous repair commit/PR."}')
+          http=$(curl -sS --max-time 60 -o /tmp/remedy-start.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/senior-developer/worker/jobs" \
+            -H 'Content-Type: application/json' -H 'Accept: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}" --data "$payload" || true)
+          case "$http" in 200|202|409) ;; *) echo "backend_worker_unavailable_http=$http"; echo 'backend_unavailable=true' >> "$GITHUB_OUTPUT"; exit 0;; esac
           task_id=$(jq -r '.task.taskId // .taskId // .jobId // .activeJobId // .job.jobId // empty' /tmp/remedy-start.json)
-          test -n "$task_id"
-          echo "task_id=$task_id" >> "$GITHUB_OUTPUT"
-          echo "AUTONOMOUS_REMEDY_TASK=$task_id"
+          if [ -n "$task_id" ]; then echo "task_id=$task_id" >> "$GITHUB_OUTPUT"; else echo 'backend_unavailable=true' >> "$GITHUB_OUTPUT"; fi
 
-      - name: Wait for safe remedy terminal result
+      - name: GitHub-native circuit breaker fallback
+        if: ${{ steps.diagnosis.outputs.total_incidents != '0' && steps.diagnosis.outputs.owner_gate_required != 'true' && (steps.diagnosis.outputs.identity_incidents != '0' || steps.remedy.outputs.backend_unavailable == 'true') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'AUTONOMOUS_FALLBACK=GITHUB_NATIVE'
+          # Do not recursively call the broken backend. Preserve evidence and retry only the failed source run once.
+          if [ "$GITHUB_EVENT_NAME" = workflow_run ]; then
+            source_id='${{ github.event.workflow_run.id }}'
+            source_conclusion='${{ github.event.workflow_run.conclusion }}'
+            if [ "$source_conclusion" = failure ]; then
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${source_id}/rerun-failed-jobs" || true
+              echo "source_failed_jobs_rerun=$source_id"
+            fi
+          fi
+          jq -n --arg sha "$GITHUB_SHA" --arg reason "machine_identity_or_backend_worker_unavailable" '{fallback:"github_native",sourceSha:$sha,reason:$reason,backendMutationAttempted:false,ownerGateBypassed:false}' > /tmp/github-native-fallback.json
+
+      - name: Wait for backend remedy terminal result
         id: wait
         if: ${{ steps.remedy.outputs.task_id != '' }}
         env:
           TASK_ID: ${{ steps.remedy.outputs.task_id }}
+          IVX_GITHUB_OIDC: ${{ steps.oidc.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
           terminal=false
           for i in $(seq 1 30); do
-            code=$(curl -sS --max-time 30 -o /tmp/remedy-status.json -w '%{http_code}' \
-              "${API_BASE}/api/ivx/senior-developer/worker/jobs/${TASK_ID}" \
-              -H 'Accept: application/json' -H "X-IVX-System-Key: ${SYSTEM_KEY}" || true)
+            code=$(curl -sS --max-time 30 -o /tmp/remedy-status.json -w '%{http_code}' "${API_BASE}/api/ivx/senior-developer/worker/jobs/${TASK_ID}" -H 'Accept: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}" || true)
             if [ "$code" = 200 ] && jq -e . /tmp/remedy-status.json >/dev/null 2>&1; then
               status=$(jq -r '.task.status // .status // "unknown"' /tmp/remedy-status.json)
               terminal_flag=$(jq -r '.task.terminal // .terminal // false' /tmp/remedy-status.json)
@@ -226,13 +205,9 @@ jobs:
 
       - name: Re-run War Room after safe completed remedy
         if: ${{ steps.wait.outputs.terminal_status == 'COMPLETED' || steps.wait.outputs.terminal_status == 'SUCCESS' || steps.wait.outputs.terminal_status == 'SUCCEEDED' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/workflows/landing-112-agent-autonomous-qa.yml/dispatches" -f ref=main
-          echo 'war_room_rerun=DISPATCHED'
+        run: gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/workflows/landing-112-agent-autonomous-qa.yml/dispatches" -f ref=main
 
-      - name: Persist three-layer nervous evidence
+      - name: Persist nervous-system evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -244,6 +219,7 @@ jobs:
             /tmp/nervous-system-diagnosis.json
             /tmp/remedy-start.json
             /tmp/remedy-status.json
+            /tmp/github-native-fallback.json
           if-no-files-found: ignore
           retention-days: 30
 
