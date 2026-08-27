@@ -11,6 +11,7 @@ const WORKFLOW_SUFFIXES = [
   '/.github/workflows/ivx-360-early-warning.yml@refs/heads/main',
   '/.github/workflows/ivx-112-exact-sha-autodeploy-cert.yml@refs/heads/main',
   '/.github/workflows/ivx-autonomous-radar-self-heal.yml@refs/heads/main',
+  '/.github/workflows/ivx-autonomous-nervous-system.yml@refs/heads/main',
 ] as const;
 const CLOCK_SKEW_SECONDS = 60;
 
@@ -194,5 +195,6 @@ export const IVX_GITHUB_OIDC_CONTRACT = Object.freeze({
     '.github/workflows/ivx-360-early-warning.yml',
     '.github/workflows/ivx-112-exact-sha-autodeploy-cert.yml',
     '.github/workflows/ivx-autonomous-radar-self-heal.yml',
+    '.github/workflows/ivx-autonomous-nervous-system.yml',
   ],
 });
