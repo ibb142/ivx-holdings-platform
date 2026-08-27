@@ -4,6 +4,8 @@ const ISSUER = 'https://token.actions.githubusercontent.com';
 const JWKS_URL = `${ISSUER}/.well-known/jwks`;
 const AUDIENCE = 'ivx-360-autonomous-recovery';
 const REPOSITORY = 'ibb142/ivx-holdings-platform';
+const OWNER_ID = '74543014';
+const REPOSITORY_ID = '1169662811';
 const REF = 'refs/heads/main';
 const WORKFLOW_SUFFIX = '/.github/workflows/ivx-360-early-warning.yml@refs/heads/main';
 const CLOCK_SKEW_SECONDS = 60;
@@ -14,6 +16,8 @@ export type IVXGitHubOIDCClaims = {
   exp?: unknown;
   nbf?: unknown;
   repository?: unknown;
+  repository_id?: unknown;
+  repository_owner_id?: unknown;
   ref?: unknown;
   workflow_ref?: unknown;
   event_name?: unknown;
@@ -28,6 +32,8 @@ export type IVXGitHubOIDCReason =
   | 'issuer_mismatch'
   | 'audience_mismatch'
   | 'repository_mismatch'
+  | 'repository_id_mismatch'
+  | 'owner_id_mismatch'
   | 'ref_mismatch'
   | 'workflow_ref_mismatch'
   | 'event_mismatch'
@@ -43,6 +49,8 @@ export type IVXGitHubOIDCDiagnostic = {
   reason: IVXGitHubOIDCReason;
   claimShape?: {
     repository: boolean;
+    repositoryId: boolean;
+    ownerId: boolean;
     ref: boolean;
     workflowRef: boolean;
     eventName: boolean;
@@ -69,6 +77,8 @@ function hasAudience(value: unknown): boolean {
 function claimShape(claims: IVXGitHubOIDCClaims) {
   return {
     repository: typeof claims.repository === 'string',
+    repositoryId: typeof claims.repository_id === 'string',
+    ownerId: typeof claims.repository_owner_id === 'string',
     ref: typeof claims.ref === 'string',
     workflowRef: typeof claims.workflow_ref === 'string',
     eventName: typeof claims.event_name === 'string',
@@ -76,17 +86,26 @@ function claimShape(claims: IVXGitHubOIDCClaims) {
   };
 }
 
+function validSubject(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const legacyPrefix = `repo:${REPOSITORY}:`;
+  const immutablePrefix = `repo:ibb142@${OWNER_ID}/ivx-holdings-platform@${REPOSITORY_ID}:`;
+  return value.startsWith(legacyPrefix) || value.startsWith(immutablePrefix);
+}
+
 export function diagnoseIVXGitHubOIDCClaims(claims: IVXGitHubOIDCClaims, nowSeconds = Math.floor(Date.now() / 1000)): IVXGitHubOIDCDiagnostic {
   const shape = claimShape(claims);
   if (claims.iss !== ISSUER) return { ok: false, reason: 'issuer_mismatch', claimShape: shape };
   if (!hasAudience(claims.aud)) return { ok: false, reason: 'audience_mismatch', claimShape: shape };
   if (claims.repository !== REPOSITORY) return { ok: false, reason: 'repository_mismatch', claimShape: shape };
+  if (typeof claims.repository_id === 'string' && claims.repository_id !== REPOSITORY_ID) return { ok: false, reason: 'repository_id_mismatch', claimShape: shape };
+  if (typeof claims.repository_owner_id === 'string' && claims.repository_owner_id !== OWNER_ID) return { ok: false, reason: 'owner_id_mismatch', claimShape: shape };
   if (claims.ref !== REF) return { ok: false, reason: 'ref_mismatch', claimShape: shape };
   if (typeof claims.workflow_ref !== 'string' || !claims.workflow_ref.endsWith(WORKFLOW_SUFFIX)) return { ok: false, reason: 'workflow_ref_mismatch', claimShape: shape };
   if (claims.event_name !== 'push' && claims.event_name !== 'schedule' && claims.event_name !== 'workflow_dispatch') return { ok: false, reason: 'event_mismatch', claimShape: shape };
   if (typeof claims.exp !== 'number' || claims.exp + CLOCK_SKEW_SECONDS < nowSeconds) return { ok: false, reason: 'expired', claimShape: shape };
   if (typeof claims.nbf === 'number' && claims.nbf - CLOCK_SKEW_SECONDS > nowSeconds) return { ok: false, reason: 'not_yet_valid', claimShape: shape };
-  if (typeof claims.sub !== 'string' || !claims.sub.startsWith(`repo:${REPOSITORY}:`)) return { ok: false, reason: 'subject_mismatch', claimShape: shape };
+  if (!validSubject(claims.sub)) return { ok: false, reason: 'subject_mismatch', claimShape: shape };
   return { ok: true, reason: 'ok', claimShape: shape };
 }
 
@@ -120,9 +139,7 @@ export async function diagnoseIVXGitHubActionsOIDCToken(token: string): Promise<
     return { ok: false, reason: 'malformed_token' };
   }
 
-  if (header.alg !== 'RS256' || typeof header.kid !== 'string' || !header.kid) {
-    return { ok: false, reason: 'invalid_header', claimShape: claimShape(claims) };
-  }
+  if (header.alg !== 'RS256' || typeof header.kid !== 'string' || !header.kid) return { ok: false, reason: 'invalid_header', claimShape: claimShape(claims) };
 
   const claimsDiagnostic = diagnoseIVXGitHubOIDCClaims(claims);
   if (!claimsDiagnostic.ok) return claimsDiagnostic;
@@ -142,9 +159,7 @@ export async function diagnoseIVXGitHubActionsOIDCToken(token: string): Promise<
     const signingInput = Buffer.from(`${parts[0]}.${parts[1]}`, 'utf8');
     const signature = Buffer.from(parts[2], 'base64url');
     const valid = verifySignature('RSA-SHA256', signingInput, publicKey, signature);
-    return valid
-      ? { ok: true, reason: 'ok', claimShape: claimShape(claims) }
-      : { ok: false, reason: 'signature_invalid', claimShape: claimShape(claims) };
+    return valid ? { ok: true, reason: 'ok', claimShape: claimShape(claims) } : { ok: false, reason: 'signature_invalid', claimShape: claimShape(claims) };
   } catch {
     return { ok: false, reason: 'signature_invalid', claimShape: claimShape(claims) };
   }
@@ -167,6 +182,8 @@ export const IVX_GITHUB_OIDC_CONTRACT = Object.freeze({
   issuer: ISSUER,
   audience: AUDIENCE,
   repository: REPOSITORY,
+  repositoryId: REPOSITORY_ID,
+  ownerId: OWNER_ID,
   ref: REF,
   workflow: '.github/workflows/ivx-360-early-warning.yml',
 });
