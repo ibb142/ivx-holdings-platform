@@ -1,0 +1,41 @@
+name: IVX Disaster Early Warning
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  early-warning:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Verify detector tests
+        run: bun test backend/services/ivx-disaster-early-warning.test.ts
+
+      - name: Poll authoritative disaster sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/disaster-early-warning
+          bun -e "import { getDisasterEarlyWarningSnapshot } from './backend/services/ivx-disaster-early-warning.ts'; const s=await getDisasterEarlyWarningSnapshot(); console.log(JSON.stringify(s,null,2)); await Bun.write('evidence/disaster-early-warning/latest.json', JSON.stringify(s,null,2)); if(!s.ok) process.exit(2);"
+
+      - name: Upload immutable warning evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-disaster-early-warning-${{ github.sha }}-${{ github.run_id }}
+          path: evidence/disaster-early-warning/latest.json
+          if-no-files-found: error
+          retention-days: 30
