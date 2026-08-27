@@ -1,0 +1,113 @@
+name: IVX Content Integrity Patrol
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: ivx-content-integrity-patrol
+  cancel-in-progress: false
+
+jobs:
+  content-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      API_BASE: https://api.ivxholding.com
+      LANDING_URL: https://ivxholding.com
+      IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+      IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+      IVX_OWNER_TOKEN: ${{ secrets.IVX_OWNER_TOKEN }}
+    steps:
+      - name: Checkout exact repository SHA
+        uses: actions/checkout@v4
+
+      - name: Acquire autonomous OIDC identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          response=$(curl -fsS --retry 2 --retry-delay 1 \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery")
+          token=$(printf '%s' "$response" | jq -r '.value // empty')
+          test -n "$token"
+          echo "::add-mask::$token"
+          echo "IVX_GITHUB_OIDC_TOKEN=$token" >> "$GITHUB_ENV"
+
+      - name: Patrol published deal and media contracts
+        id: patrol
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ivx-content-integrity
+          : > /tmp/ivx-content-integrity/probes.jsonl
+
+          probe() {
+            name="$1"; url="$2"; body="/tmp/ivx-content-integrity/${name}.body"
+            code=$(curl -sS --max-time 15 -o "$body" -w '%{http_code}' -H 'Accept: application/json' "$url" || printf '000')
+            ok=false; [ "$code" = 200 ] && ok=true
+            jq -n --arg name "$name" --arg url "$url" --arg status "$code" --argjson ok "$ok" \
+              '{name:$name,url:$url,status:$status,ok:$ok}' >> /tmp/ivx-content-integrity/probes.jsonl
+          }
+
+          # Patrol every public deal surface. A healthy HTTP response alone is not sufficient:
+          # the autonomous worker receives the returned payload and must compare media/content contracts.
+          probe deals "$API_BASE/api/jv/deals"
+          probe landing_deals "$API_BASE/api/landing/deals"
+          probe landing_config "$API_BASE/api/landing/config"
+          probe videos "$API_BASE/api/landing/videos"
+
+          failures=$(jq -s '[.[] | select(.ok != true)] | length' /tmp/ivx-content-integrity/probes.jsonl)
+          jq -s --argjson failures "$failures" --arg repositorySha "$GITHUB_SHA" \
+            '{repositorySha:$repositorySha,failures:$failures,probes:.}' /tmp/ivx-content-integrity/probes.jsonl \
+            > /tmp/ivx-content-integrity/assessment.json
+
+          action=deep_audit
+          [ "$failures" -gt 0 ] && action=self_heal
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+          cat /tmp/ivx-content-integrity/assessment.json
+
+      - name: Route every content anomaly to Autonomous
+        shell: bash
+        run: |
+          set -euo pipefail
+          assessment=$(cat /tmp/ivx-content-integrity/assessment.json)
+          goal="IVX 24/7 FULL APPLICATION CONTENT-INTEGRITY PATROL. You are responsible for detecting, diagnosing and repairing LOW-RISK application/code/data regressions before users report them. Audit every published deal returned by the public APIs and compare deal identity, publication state, photo arrays, media rows exposed by APIs, video associations, cover media, ordering, duplicate/missing URLs, broken/empty media, cross-mapped property imagery, landing visibility and mobile/landing contract consistency. Jacksonville JV-202603-5190 previously regressed from 9 stored photos to 8 linked photos; this class of silent partial-loss MUST be detected even when HTTP=200 and some photos remain. Never consider 'at least one image exists' healthy. Detect count drift and identity drift. Expand the same invariant-based patrol to other application modules as evidence exposes contracts. Automatically repair only low-risk reversible code/data linkage defects and validate after repair. Owner Gate remains mandatory for secrets, IAM, auth/permissions, payments, destructive migrations, DNS/CDN/infrastructure, security-policy changes and critical rollback. Never weaken QA to obtain green. Evidence must include affected module, expected vs observed contract, exact SHA, tests, repair action and post-repair verification. Assessment: ${assessment}"
+          payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:false,validationMode:"typecheck",riskLevel:"low",proposedPlan:"24/7 invariant-based full-app patrol; automatically repair low-risk reversible regressions and preserve Owner Gates for dangerous changes.",rollbackOption:"Revert autonomous repair on any regression.",filesAffected:["full-application-content-integrity"]}')
+
+          call_worker() {
+            header_name="$1"; header_value="$2"
+            curl -sS --max-time 45 -o /tmp/ivx-content-integrity/worker.json -w '%{http_code}' -X POST \
+              "$API_BASE/api/ivx/senior-developer/worker/jobs" \
+              -H 'Content-Type: application/json' -H "$header_name: $header_value" --data "$payload" || printf '000'
+          }
+
+          http=$(call_worker X-IVX-GitHub-OIDC "$IVX_GITHUB_OIDC_TOKEN")
+          if ! [[ "$http" =~ ^(200|202|409)$ ]]; then
+            for name in IVX_AI_SYSTEM_SECRET IVX_SYSTEM_SECRET IVX_OWNER_TOKEN; do
+              value="${!name:-}"; [ -n "$value" ] || continue
+              echo "::add-mask::$value"
+              http=$(call_worker X-IVX-System-Key "$value")
+              [[ "$http" =~ ^(200|202|409)$ ]] && break
+            done
+          fi
+          echo "worker_http=$http"
+          cat /tmp/ivx-content-integrity/worker.json 2>/dev/null || true
+          [[ "$http" =~ ^(200|202|409)$ ]]
+
+      - name: Persist patrol evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-content-integrity-${{ github.sha }}-${{ github.run_id }}
+          path: /tmp/ivx-content-integrity
+          if-no-files-found: warn
+          retention-days: 30
