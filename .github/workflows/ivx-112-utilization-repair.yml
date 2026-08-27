@@ -27,7 +27,7 @@ jobs:
           fetch-depth: 0
 
       - name: Repair dispatcher concurrency and continuous verification backlog
-        shell: python
+        shell: python {0}
         run: |
           from pathlib import Path
           p = Path('backend/services/ivx-campaign-dispatcher.ts')
@@ -69,7 +69,7 @@ jobs:
           p.write_text(s)
 
       - name: Repair execute-all from serial to bounded parallel execution
-        shell: python
+        shell: python {0}
         run: |
           from pathlib import Path
           p = Path('backend/api/ivx-agent-api.ts')
@@ -104,15 +104,13 @@ jobs:
           p.write_text(s)
 
       - name: Add truthful 24-hour utilization metrics to dispatcher snapshot
-        shell: python
+        shell: python {0}
         run: |
           from pathlib import Path
           p = Path('backend/services/ivx-campaign-dispatcher.ts')
           s = p.read_text()
           type_anchor = "  activeJobs: Array<Pick<CampaignJobRecord,\n"
-          type_block = (
-              "  utilization24h: { theoreticalAgentHours: number; productiveAgentHours: number; utilizationPercent: number; runningNow: number; queuedNow: number; ownerGateNow: number; };\n"
-          )
+          type_block = "  utilization24h: { theoreticalAgentHours: number; productiveAgentHours: number; utilizationPercent: number; runningNow: number; queuedNow: number; ownerGateNow: number; };\n"
           if type_block not in s:
               if type_anchor not in s:
                   raise SystemExit('SNAPSHOT_TYPE_ANCHOR_MISSING')
