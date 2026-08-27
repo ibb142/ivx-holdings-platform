@@ -8,6 +8,7 @@ const OWNER_ID = '74543014';
 const REPOSITORY_ID = '1169662811';
 const REF = 'refs/heads/main';
 const WORKFLOW_SUFFIXES = [
+  '/.github/workflows/landing-112-agent-autonomous-qa.yml@refs/heads/main',
   '/.github/workflows/ivx-360-early-warning.yml@refs/heads/main',
   '/.github/workflows/ivx-112-exact-sha-autodeploy-cert.yml@refs/heads/main',
   '/.github/workflows/ivx-autonomous-radar-self-heal.yml@refs/heads/main',
@@ -192,6 +193,7 @@ export const IVX_GITHUB_OIDC_CONTRACT = Object.freeze({
   ownerId: OWNER_ID,
   ref: REF,
   workflows: [
+    '.github/workflows/landing-112-agent-autonomous-qa.yml',
     '.github/workflows/ivx-360-early-warning.yml',
     '.github/workflows/ivx-112-exact-sha-autodeploy-cert.yml',
     '.github/workflows/ivx-autonomous-radar-self-heal.yml',
