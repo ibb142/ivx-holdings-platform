@@ -328,13 +328,18 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post('/api/ivx/agents/execute-all', async (c) => {
     const denied = await requireOwner(c); if (denied) return denied;
+    const maxParallel = Math.max(1, Math.min(112, Number.parseInt(process.env.IVX_AGENT_EXECUTE_ALL_CONCURRENCY ?? '', 10) || 112));
     const results: Array<{ agentId: string; agentNumber: number; agentName: string; ok: boolean; runId: string | null; durationMs: number; error: string | null; evidenceCount: number }> = [];
-    for (const contract of ALL_AGENT_CONTRACTS) {
-      const taskType = 'audit';
-      const needsApproval = contract.ownerApprovalRules.some((r) => r.required && r.action === 'any_execution');
-      const approvalToken = needsApproval ? `owner-controlled-${Date.now()}-${contract.agentNumber}` : null;
-      const result = await executeAgentRun(contract.agentId, taskType, { controlled: true }, approvalToken);
-      results.push({ agentId: contract.agentId, agentNumber: contract.agentNumber, agentName: contract.agentName, ok: result.ok, runId: result.runRecord?.runId ?? null, durationMs: result.runRecord?.durationMs ?? 0, error: result.error, evidenceCount: result.runRecord?.evidence.length ?? 0 });
+    for (let offset = 0; offset < ALL_AGENT_CONTRACTS.length; offset += maxParallel) {
+      const batch = ALL_AGENT_CONTRACTS.slice(offset, offset + maxParallel);
+      const batchResults = await Promise.all(batch.map(async (contract) => {
+        const taskType = 'audit';
+        const needsApproval = contract.ownerApprovalRules.some((r) => r.required && r.action === 'any_execution');
+        const approvalToken = needsApproval ? `owner-controlled-${Date.now()}-${contract.agentNumber}` : null;
+        const result = await executeAgentRun(contract.agentId, taskType, { controlled: true }, approvalToken);
+        return { agentId: contract.agentId, agentNumber: contract.agentNumber, agentName: contract.agentName, ok: result.ok, runId: result.runRecord?.runId ?? null, durationMs: result.runRecord?.durationMs ?? 0, error: result.error, evidenceCount: result.runRecord?.evidence.length ?? 0 };
+      }));
+      results.push(...batchResults);
     }
     const succeeded = results.filter((r) => r.ok).length;
     const failed = results.filter((r) => !r.ok).length;
