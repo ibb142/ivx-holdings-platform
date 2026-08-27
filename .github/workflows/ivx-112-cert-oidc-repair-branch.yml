@@ -1,0 +1,38 @@
+name: IVX 112 Certificate OIDC Branch Repair
+
+on:
+  push:
+    branches:
+      - fix/ivx-112-certificate-oidc-auth
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ivx-112-certificate-oidc-branch-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/ivx-112-certificate-oidc-auth
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Apply scoped OIDC repair
+        run: python3 scripts/fix-112-cert-oidc.py
+      - name: Keep PR scoped and commit repaired files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'ivx-cert-repair-bot'
+          git config user.email 'ivx-cert-repair-bot@users.noreply.github.com'
+          git fetch origin main
+          git checkout origin/main -- .github/workflows/ivx-final-gap-repair-pr.yml
+          git rm -f scripts/fix-112-cert-oidc.py
+          git rm -f .github/workflows/ivx-112-cert-oidc-repair-branch.yml
+          git add backend/api/ivx-agent-api.ts backend/services/ivx-github-actions-oidc.ts backend/services/ivx-github-actions-oidc.test.ts .github/workflows/ivx-112-exact-sha-autodeploy-cert.yml .github/workflows/ivx-final-gap-repair-pr.yml
+          git commit -m 'fix(cert): authorize exact-SHA 112 run with scoped GitHub OIDC'
+          git push origin HEAD:fix/ivx-112-certificate-oidc-auth
