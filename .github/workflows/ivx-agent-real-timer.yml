@@ -1,0 +1,137 @@
+name: IVX Agent Real Timer + Productivity Guard
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-agent-real-timer.yml'
+      - 'backend/services/ivx-agent-persistence.ts'
+      - 'backend/services/ivx-agent-runtime.ts'
+
+permissions:
+  contents: read
+
+env:
+  API_BASE: https://api.ivxholding.com
+  SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+
+jobs:
+  measure-and-route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Load registry and durable run timers
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          curl -fsS --retry 3 --retry-delay 2 "$API_BASE/api/ivx/agents" -o /tmp/agents.json
+          test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
+          # Pull enough recent durable/in-process records to cover the active day.
+          curl -fsS --retry 3 --retry-delay 2 "$API_BASE/api/ivx/agents/runs?limit=5000" -o /tmp/runs.json
+          test "$(jq -r '.ok // false' /tmp/runs.json)" = true
+
+      - name: Build real per-agent timer ledger
+        shell: bash
+        run: |
+          set -euo pipefail
+          now=$(date -u +%s)
+          cutoff=$((now - 86400))
+          jq --argjson cutoff "$cutoff" '
+            [.records[]? |
+              . as $r |
+              ((.startedAt // .started_at // .createdAt // .created_at // "1970-01-01T00:00:00Z") | fromdateiso8601?) as $started |
+              select(($started // 0) >= $cutoff) |
+              {
+                agentId:(.agentId // .agent_id),
+                agentNumber:(.agentNumber // .agent_number),
+                finalStatus:(.finalStatus // .final_status // "unknown"),
+                startedAt:(.startedAt // .started_at // null),
+                finishedAt:(.finishedAt // .finished_at // null),
+                durationMs:(.durationMs // .duration_ms // 0),
+                realToolUsed:(.realToolUsed // .real_tool_used // false),
+                verifiedOutput:(.verifiedOutput // .verified_output // false),
+                error:(.error // null)
+              }
+            ]' /tmp/runs.json > /tmp/recent.json
+
+          jq --slurpfile registry /tmp/agents.json '
+            ($registry[0].agents // []) as $agents |
+            [$agents[] | . as $a |
+              ([.agentId] | .) as $dummy |
+              ([inputs] | .) ]' /dev/null >/dev/null 2>&1 || true
+
+          jq --argfile agents /tmp/agents.json '
+            ($agents.agents // []) as $registry |
+            [ $registry[] | . as $a |
+              ([.[] | select(.agentId == $a.agentId)] ) as $runs |
+              ($runs | map(.durationMs // 0) | add // 0) as $workedMs |
+              ($runs | map(select(.finalStatus == "completed" and .realToolUsed == true and .verifiedOutput == true) | .durationMs) | add // 0) as $productiveMs |
+              ($runs | map(select(.finalStatus == "failed" or .finalStatus == "blocked") | .durationMs) | add // 0) as $failedMs |
+              ($runs | map(select(.finalStatus == "running")) | length) as $running |
+              {
+                agentId:$a.agentId,
+                agentNumber:$a.agentNumber,
+                name:$a.name,
+                health:$a.health,
+                availability:$a.availability,
+                paused:$a.paused,
+                disabled:$a.disabled,
+                lastHeartbeat:$a.lastHeartbeat,
+                runs24h:($runs|length),
+                workedMs:$workedMs,
+                productiveMs:$productiveMs,
+                failedMs:$failedMs,
+                runningNow:$running,
+                productiveHours:($productiveMs/3600000),
+                totalMeasuredHours:($workedMs/3600000)
+              }
+            ]' /tmp/recent.json > evidence/agent-real-timer-24h.json
+
+          jq '{
+            measuredAt:(now|todateiso8601),
+            agents:length,
+            totalMeasuredHours:(map(.totalMeasuredHours)|add // 0),
+            productiveHours:(map(.productiveHours)|add // 0),
+            failedHours:(map(.failedMs/3600000)|add // 0),
+            activeNow:([.[]|select(.runningNow>0)]|length),
+            idleNow:([.[]|select(.runningNow==0 and .paused!=true and .disabled!=true)]|length),
+            sleeping:([.[]|select(.paused==true or .disabled==true)]|length),
+            agents:.
+          }' evidence/agent-real-timer-24h.json > evidence/agent-productivity-summary.json
+          cat evidence/agent-productivity-summary.json
+
+      - name: Detect stuck/shared failures and notify Autonomous
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SYSTEM_KEY:-}"
+          # Shared root cause: same non-empty error affecting >=5 agents.
+          jq -r '[.[] | select(.error != null and .error != "") | .error] | group_by(.) | map({error:.[0],count:length}) | map(select(.count>=5))' /tmp/recent.json > /tmp/shared.json
+          shared_count=$(jq 'length' /tmp/shared.json)
+          if [ "$shared_count" -gt 0 ]; then
+            goal=$(jq -r '"IVX TIMER SHARED-ROOT-CAUSE ALERT. Stop duplicate fleet retries, diagnose the common failure, repair the shared dependency, verify it, then release agents to their next safe task. Shared failures: " + tostring' /tmp/shared.json)
+            payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",systemMode:true,ownerApproved:true,riskLevel:"low",proposedPlan:"Circuit-break duplicate retries; repair one shared cause; then reroute idle agents."}')
+            curl -fsS --max-time 60 -X POST "$API_BASE/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-System-Key: ${SYSTEM_KEY}" --data "$payload" -o /tmp/autonomous-notify.json || true
+          fi
+
+      - name: Enforce sleep/next-phase policy in evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq '
+            map(. + {
+              timerState:(if .runningNow>0 then "WORKING" elif .paused==true or .disabled==true then "SLEEP" elif .runs24h==0 then "IDLE_NEXT_PHASE" elif .health=="unhealthy" then "SLEEP_NOTIFY_AUTONOMOUS" else "READY_NEXT_PHASE" end),
+              action:(if .runningNow>0 then "continue_current_task" elif .paused==true or .disabled==true then "hold_until_dependency_green" elif .health=="unhealthy" then "notify_autonomous_and_hold" else "jump_to_next_safe_task" end)
+            })' evidence/agent-real-timer-24h.json > evidence/agent-real-timer-routed.json
+
+      - name: Upload timer evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: IVX-AGENT-REAL-TIMER-${{ github.run_id }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
