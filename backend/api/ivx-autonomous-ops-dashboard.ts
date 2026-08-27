@@ -1,7 +1,8 @@
 /**
  * IVX Autonomous Operations Dashboard API (owner-only).
- * Enterprise proof-first view over the REAL 112-agent master registry plus the
- * durable Supabase execution/state ledger used by the 112-agent runtime.
+ * Proof-first view over the real 112-agent registry and durable execution ledger.
+ * IMPORTANT: work is attributed to AUTONOMOUS only when the ledger contains
+ * strong execution provenance. Missing provenance is UNKNOWN, never inferred.
  */
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 import { ALL_AGENT_CONTRACTS } from '../services/ivx-agent-contracts';
@@ -13,211 +14,51 @@ import { readDurableJson } from '../services/ivx-durable-store';
 import { getSmsNotifierStatus } from '../services/ivx-autonomous-sms-notifier';
 import path from 'node:path';
 
-export const IVX_AUTONOMOUS_OPS_DASHBOARD_MARKER = 'ivx-autonomous-ops-dashboard-2026-08-18-enterprise-112';
+export const IVX_AUTONOMOUS_OPS_DASHBOARD_MARKER = 'ivx-autonomous-ops-dashboard-2026-08-22-provenance-v2';
 export function OPTIONS(): Response { return ownerOnlyOptions(); }
 
-type AgentStatus = 'ACTIVE' | 'IDLE' | 'RUNNING' | 'TESTING' | 'DEPLOYING' | 'VERIFYING' | 'RETRYING' | 'BLOCKED' | 'OWNER_ACTION_REQUIRED' | 'FAILED' | 'COMPLETED';
-type ActivityCategory = 'DEVELOPMENT' | 'INVESTORS' | 'BUYERS' | 'LEADS_CRM' | 'PROPERTIES_DEALS' | 'MARKETING' | 'FINANCIAL' | 'AUTONOMOUS_SYSTEM';
-type UnifiedAgent = {
-  agentNumber:number; agentId:string; name:string; department:string; primaryResponsibility:string; status:AgentStatus;
-  currentTask:string|null; tasksStartedToday:number; tasksCompletedToday:number; tasksFailedToday:number; tasksBlockedToday:number;
-  lastActivityTime:string|null; totalExecutionTimeMs:number|null; successRate:number|null; evidenceLink:string|null; traceId:string|null;
-  lastToolUsed?:string|null; lastSourceReference?:string|null; lastEvidenceSha?:string|null; health?:string; availability?:string;
-};
-type ActivityItem = {
-  itemNumber:number; agent:string; department:string; category:ActivityCategory; task:string; actionExecuted:string; result:string;
-  status:AgentStatus; startTime:string|null; endTime:string|null; durationMs:number|null; repository:string|null; branch:string|null;
-  commitSha:string|null; deploymentId:string|null; productionUrl:string|null; investorId:string|null; propertyId:string|null; leadId:string|null;
-  error:string|null; retryCount:number; evidence:string; traceId:string|null; actor?:'AUTONOMOUS'|'CI'|'HUMAN'|'UNKNOWN';
-};
-type OwnerAction = { traceId:string; title:string; status:string; createdAt:string; blocker:string|null };
+type AgentStatus = 'ACTIVE'|'IDLE'|'RUNNING'|'TESTING'|'DEPLOYING'|'VERIFYING'|'RETRYING'|'BLOCKED'|'OWNER_ACTION_REQUIRED'|'FAILED'|'COMPLETED';
+type ActivityCategory = 'DEVELOPMENT'|'INVESTORS'|'BUYERS'|'LEADS_CRM'|'PROPERTIES_DEALS'|'MARKETING'|'FINANCIAL'|'AUTONOMOUS_SYSTEM';
+type Actor = 'AUTONOMOUS'|'CI'|'HUMAN'|'UNKNOWN';
+type UnifiedAgent = {agentNumber:number;agentId:string;name:string;department:string;primaryResponsibility:string;status:AgentStatus;currentTask:string|null;tasksStartedToday:number;tasksCompletedToday:number;tasksFailedToday:number;tasksBlockedToday:number;lastActivityTime:string|null;totalExecutionTimeMs:number|null;successRate:number|null;evidenceLink:string|null;traceId:string|null;lastToolUsed?:string|null;lastSourceReference?:string|null;lastEvidenceSha?:string|null;health?:string;availability?:string;};
+type ActivityItem = {itemNumber:number;agent:string;department:string;category:ActivityCategory;task:string;actionExecuted:string;result:string;status:AgentStatus;startTime:string|null;endTime:string|null;durationMs:number|null;repository:string|null;branch:string|null;commitSha:string|null;deploymentId:string|null;productionUrl:string|null;investorId:string|null;propertyId:string|null;leadId:string|null;error:string|null;retryCount:number;evidence:string;traceId:string|null;actor:Actor;provenanceVerified:boolean;};
+type OwnerAction = {traceId:string;title:string;status:string;createdAt:string;blocker:string|null};
 
-const CATEGORIES: ActivityCategory[] = ['DEVELOPMENT','INVESTORS','BUYERS','LEADS_CRM','PROPERTIES_DEALS','MARKETING','FINANCIAL','AUTONOMOUS_SYSTEM'];
-
-function nowIso(){ return new Date().toISOString(); }
-function isWithin(iso:string|null|undefined,start:number,end=Date.now()){ if(!iso)return false; const n=Date.parse(iso); return Number.isFinite(n)&&n>=start&&n<=end; }
-function pct(done:number,failed:number){ const n=done+failed; return n?Math.round(done/n*100):null; }
-function executionStatus(s:string):AgentStatus { return s==='running'||s==='pending'?'RUNNING':s==='completed'?'COMPLETED':s==='blocked'?'BLOCKED':s==='failed'?'FAILED':'IDLE'; }
-function department(group:string):string {
-  if(group.includes('App Development')||group.includes('Digital')) return 'Engineering';
-  if(group.includes('Growth')||group.includes('Marketing')) return 'Growth & Marketing';
-  if(group.includes('Capital')) return 'Networks & Capital';
-  if(group.includes('Intelligence')) return 'Intelligence';
-  if(group.includes('Project')) return 'Project Development';
-  if(group.includes('Product')) return 'Product & Innovation';
-  if(group.includes('Global')) return 'Global Expansion';
-  if(group.includes('Market')) return 'Business Development';
-  return group || 'Executive';
+const CATEGORIES:ActivityCategory[]=['DEVELOPMENT','INVESTORS','BUYERS','LEADS_CRM','PROPERTIES_DEALS','MARKETING','FINANCIAL','AUTONOMOUS_SYSTEM'];
+const nowIso=()=>new Date().toISOString();
+function isWithin(iso:string|null|undefined,start:number,end=Date.now()){if(!iso)return false;const n=Date.parse(iso);return Number.isFinite(n)&&n>=start&&n<=end;}
+function pct(done:number,failed:number){const n=done+failed;return n?Math.round(done/n*100):null;}
+function executionStatus(s:string):AgentStatus{return s==='running'||s==='pending'?'RUNNING':s==='completed'?'COMPLETED':s==='blocked'?'BLOCKED':s==='failed'?'FAILED':'IDLE';}
+function department(group:string){if(group.includes('App Development')||group.includes('Digital'))return'Engineering';if(group.includes('Growth')||group.includes('Marketing'))return'Growth & Marketing';if(group.includes('Capital'))return'Networks & Capital';if(group.includes('Intelligence'))return'Intelligence';if(group.includes('Project'))return'Project Development';if(group.includes('Product'))return'Product & Innovation';if(group.includes('Global'))return'Global Expansion';if(group.includes('Market'))return'Business Development';return group||'Executive';}
+function categoryFor(group:string,taskType:string):ActivityCategory{const text=`${group} ${taskType}`.toLowerCase();if(text.includes('investor')||text.includes('capital'))return'INVESTORS';if(text.includes('buyer'))return'BUYERS';if(text.includes('crm')||text.includes('lead'))return'LEADS_CRM';if(text.includes('deal')||text.includes('property')||text.includes('real estate'))return'PROPERTIES_DEALS';if(text.includes('marketing')||text.includes('growth')||text.includes('advert'))return'MARKETING';if(text.includes('finance')||text.includes('account')||text.includes('payment'))return'FINANCIAL';if(text.includes('app')||text.includes('technology')||text.includes('engineering')||text.includes('security')||text.includes('qa')||text.includes('deploy'))return'DEVELOPMENT';return'AUTONOMOUS_SYSTEM';}
+function text(v:unknown){return typeof v==='string'?v.trim():'';}
+function provenanceActor(run:{agent_id:string;run_id:string;real_tool_used:boolean;verified_output:boolean;simulated:boolean;evidence_sha256:string|null;source_reference:string|null;tool_result_id:string|null;evidence:Record<string,unknown>|null}):{actor:Actor;verified:boolean}{
+  const evidence=run.evidence??{};
+  const explicit=[text(evidence.actor),text(evidence.executedBy),text(evidence.executor),text(evidence.patchAuthor),text(evidence.provenance)].join(' ').toLowerCase();
+  if(/\b(human|owner|rork|chatgpt)\b/.test(explicit))return{actor:'HUMAN',verified:true};
+  if(/\b(ci|github-actions|github_actions|workflow)\b/.test(explicit))return{actor:'CI',verified:true};
+  const explicitAutonomous=/\b(autonomous|ivx[_ -]?autonomous|ivx[_ -]?agent|senior[_ -]?developer[_ -]?worker|deterministic[_ -]?fallback)\b/.test(explicit);
+  const strongRuntime=Boolean(run.agent_id&&run.run_id&&run.run_id!=='unknown'&&run.real_tool_used&&run.verified_output&&!run.simulated&&run.evidence_sha256&&(run.source_reference||run.tool_result_id));
+  if(explicitAutonomous&&strongRuntime)return{actor:'AUTONOMOUS',verified:true};
+  if(strongRuntime)return{actor:'AUTONOMOUS',verified:true};
+  return{actor:'UNKNOWN',verified:false};
 }
-function categoryFor(group:string,taskType:string):ActivityCategory {
-  const text=`${group} ${taskType}`.toLowerCase();
-  if(text.includes('investor')||text.includes('capital')) return 'INVESTORS';
-  if(text.includes('buyer')) return 'BUYERS';
-  if(text.includes('crm')||text.includes('lead')) return 'LEADS_CRM';
-  if(text.includes('deal')||text.includes('property')||text.includes('real estate')) return 'PROPERTIES_DEALS';
-  if(text.includes('marketing')||text.includes('growth')||text.includes('advert')) return 'MARKETING';
-  if(text.includes('finance')||text.includes('account')||text.includes('payment')) return 'FINANCIAL';
-  if(text.includes('app')||text.includes('technology')||text.includes('engineering')||text.includes('security')||text.includes('qa')||text.includes('deploy')) return 'DEVELOPMENT';
-  return 'AUTONOMOUS_SYSTEM';
-}
-async function readOwnerActions():Promise<OwnerAction[]> {
-  try {
-    const d=await readDurableJson(path.join(process.cwd(),'logs','audit','owner-action-requests','requests.json'),[]);
-    if(!Array.isArray(d))return[];
-    return d.slice(0,50).map((r:Record<string,unknown>)=>({traceId:String(r.traceId??r.id??''),title:String(r.title??r.taskName??''),status:String(r.status??'pending'),createdAt:String(r.createdAt??''),blocker:r.blocker||r.blockerMessage?String(r.blocker??r.blockerMessage):null}));
-  } catch{return[];}
-}
+async function readOwnerActions():Promise<OwnerAction[]>{try{const d=await readDurableJson(path.join(process.cwd(),'logs','audit','owner-action-requests','requests.json'),[]);if(!Array.isArray(d))return[];return d.slice(0,50).map((r:Record<string,unknown>)=>({traceId:String(r.traceId??r.id??''),title:String(r.title??r.taskName??''),status:String(r.status??'pending'),createdAt:String(r.createdAt??''),blocker:r.blocker||r.blockerMessage?String(r.blocker??r.blockerMessage):null}));}catch{return[];}}
 
 export async function handleAutonomousOpsDashboardRequest(request:Request):Promise<Response>{
   try{await assertIVXOwnerOnly(request);}catch(err){return ownerOnlyJson({ok:false,error:err instanceof Error?err.message:'unauthorized'},401);}
-
-  const url=new URL(request.url);
-  const range=url.searchParams.get('range')??'24h';
-  const agentFilter=(url.searchParams.get('agent')??'').trim();
-  const categoryFilter=(url.searchParams.get('category')??'').trim();
-  const now=Date.now();
-  let start=now-24*60*60*1000,label='Last 24 Hours';
-  if(range==='today'){const d=new Date();d.setUTCHours(0,0,0,0);start=d.getTime();label='Today';}
-  else if(range==='yesterday'){const d=new Date();d.setUTCDate(d.getUTCDate()-1);d.setUTCHours(0,0,0,0);start=d.getTime();label='Yesterday';}
-  else if(range==='7d'){start=now-7*86400000;label='Last 7 days';}
-  else if(range==='30d'){start=now-30*86400000;label='Last 30 days';}
-
+  const url=new URL(request.url);const range=url.searchParams.get('range')??'24h';const agentFilter=(url.searchParams.get('agent')??'').trim();const categoryFilter=(url.searchParams.get('category')??'').trim();const now=Date.now();let start=now-86400000,label='Last 24 Hours';
+  if(range==='today'){const d=new Date();d.setUTCHours(0,0,0,0);start=d.getTime();label='Today';}else if(range==='yesterday'){const d=new Date();d.setUTCDate(d.getUTCDate()-1);d.setUTCHours(0,0,0,0);start=d.getTime();label='Yesterday';}else if(range==='7d'){start=now-7*86400000;label='Last 7 days';}else if(range==='30d'){start=now-30*86400000;label='Last 30 days';}
   const [ledger,latestReport,ownerActions]=await Promise.all([readAgentDashboardLedger(2000),getLatestReport(),readOwnerActions()]);
-  const statesById=new Map(ledger.states.map(s=>[s.agent_id,s]));
-  const runtimeById=new Map(getAllExecutionStates().map(s=>[s.agentId,s]));
-  const executions=ledger.executions.filter(e=>isWithin(e.started_at,start));
-  const executionsByAgent=new Map<string,typeof executions>();
-  for(const e of executions){const arr=executionsByAgent.get(e.agent_id)??[];arr.push(e);executionsByAgent.set(e.agent_id,arr);}
-
-  let agents:UnifiedAgent[]=ALL_AGENT_CONTRACTS.map(contract=>{
-    const meta=getAgentByNumber(contract.agentNumber);
-    const durable=statesById.get(contract.agentId);
-    const runtime=runtimeById.get(contract.agentId);
-    const runs=(executionsByAgent.get(contract.agentId)??[]).sort((a,b)=>(b.started_at??'').localeCompare(a.started_at??''));
-    const latest=runs[0]??null;
-    const running=runs.find(r=>r.final_status==='running'||r.final_status==='pending')??null;
-    const completed=runs.filter(r=>r.final_status==='completed').length;
-    const failed=runs.filter(r=>r.final_status==='failed').length;
-    const blocked=runs.filter(r=>r.final_status==='blocked').length;
-    const duration=runs.reduce((sum,r)=>sum+(Number.isFinite(r.duration_ms)?r.duration_ms:0),0);
-    const status:AgentStatus = runtime?.availability==='busy'||running ? 'RUNNING'
-      : runtime?.availability==='paused'||runtime?.availability==='disabled' ? 'BLOCKED'
-      : durable?.health==='degraded'||durable?.health==='failed' ? 'FAILED'
-      : latest?.final_status==='completed' ? 'COMPLETED' : 'IDLE';
-    const currentTask=running
-      ? `${running.task_type}${running.tools_used.length?` · ${running.tools_used.join(', ')}`:''}`
-      : latest
-        ? `Last: ${latest.task_type}${latest.source_reference?' · evidence recorded':''}`
-        : runtime?.activeTaskId ?? null;
-    return {
-      agentNumber:contract.agentNumber,
-      agentId:contract.agentId,
-      name:contract.agentName,
-      department:department(meta?.functionalGroup??String(contract.divisionId)),
-      primaryResponsibility:meta?.mission??contract.mission,
-      status,currentTask,
-      tasksStartedToday:runs.length,
-      tasksCompletedToday:completed,
-      tasksFailedToday:failed,
-      tasksBlockedToday:blocked,
-      lastActivityTime:durable?.last_heartbeat??latest?.finished_at??latest?.started_at??runtime?.lastHeartbeat??null,
-      totalExecutionTimeMs:runs.length?duration:null,
-      successRate:pct(completed,failed),
-      evidenceLink:`/api/ivx/agents/runs/${contract.agentId}`,
-      traceId:latest?.task_id??runtime?.activeTaskId??null,
-      lastToolUsed:durable?.last_tool_used??latest?.tools_used?.[0]??null,
-      lastSourceReference:durable?.last_source_reference??latest?.source_reference??null,
-      lastEvidenceSha:durable?.last_evidence_sha??latest?.evidence_sha256??null,
-      health:durable?.health??runtime?.health??'unknown',
-      availability:runtime?.availability??durable?.availability??'available',
-    };
-  });
-
-  if(agentFilter) agents=agents.filter(a=>a.agentId===agentFilter||String(a.agentNumber)===agentFilter||a.name.toLowerCase().includes(agentFilter.toLowerCase()));
-
-  let activityItems:ActivityItem[]=executions
-    .sort((a,b)=>(b.started_at??'').localeCompare(a.started_at??''))
-    .map((run,index)=>{
-      const contract=ALL_AGENT_CONTRACTS.find(c=>c.agentId===run.agent_id);
-      const meta=contract?getAgentByNumber(contract.agentNumber):null;
-      const group=meta?.functionalGroup??'Autonomous System';
-      const cat=categoryFor(group,run.task_type);
-      const result=run.final_status==='completed'
-        ? `Verified real execution${run.source_reference?` · ${run.source_reference}`:''}`
-        : run.error??run.final_status;
-      return {
-        itemNumber:index+1,
-        agent:contract?.agentName??run.agent_id,
-        department:department(group),
-        category:cat,
-        task:run.task_type,
-        actionExecuted:run.tools_used.length?`Tools: ${run.tools_used.join(', ')}`:`Workflow: ${run.workflow}`,
-        result,
-        status:executionStatus(run.final_status),
-        startTime:run.started_at,
-        endTime:run.finished_at,
-        durationMs:run.duration_ms||null,
-        repository:'ibb142/ivx-holdings-platform',branch:'main',
-        commitSha:typeof run.evidence?.commitSha==='string'?run.evidence.commitSha:null,
-        deploymentId:null,productionUrl:'https://api.ivxholding.com',investorId:null,propertyId:null,leadId:null,
-        error:run.error,retryCount:run.retry_count,
-        evidence:[run.evidence_sha256?`sha256:${run.evidence_sha256}`:null,run.source_reference,run.tool_result_id].filter(Boolean).join(' · ')||`task:${run.task_id}`,
-        traceId:run.task_id,actor:'AUTONOMOUS' as const,
-      };
-    });
-
-  if(categoryFilter) activityItems=activityItems.filter(i=>i.category===categoryFilter);
-  if(agentFilter) activityItems=activityItems.filter(i=>i.agent.toLowerCase().includes(agentFilter.toLowerCase())||i.traceId?.includes(agentFilter));
-  activityItems=activityItems.map((i,index)=>({...i,itemNumber:index+1}));
-
-  const pendingActions=ownerActions.filter(a=>a.status==='OWNER_ACTION_REQUIRED'||a.status==='pending');
-  const activeMs=executions.reduce((s,r)=>s+(r.duration_ms||0),0);
-  const windowMs=Math.max(0,now-start);
-  const idleMs=Math.max(0,windowMs-Math.min(windowMs,activeMs));
-  const rolling24h={
-    windowStart:new Date(start).toISOString(),windowEnd:new Date(now).toISOString(),
-    tasksStarted:executions.length,
-    tasksCompleted:executions.filter(r=>r.final_status==='completed').length,
-    tasksFailed:executions.filter(r=>r.final_status==='failed').length,
-    tasksRunning:executions.filter(r=>r.final_status==='running'||r.final_status==='pending').length,
-    activeTimeMs:activeMs,idleTimeMs:idleMs,
-    autonomousAttributed:activityItems.length,unknownAttributed:0,
-    proofEntries:executions.filter(r=>Boolean(r.evidence_sha256||r.source_reference)).length,
-    ownerActionsRequired:pendingActions.length,
-  };
-  const categoryBreakdown=CATEGORIES.map(cat=>{const items=activityItems.filter(i=>i.category===cat);return{category:cat,total:items.length,completed:items.filter(i=>i.status==='COMPLETED').length,failed:items.filter(i=>i.status==='FAILED').length,blocked:items.filter(i=>i.status==='BLOCKED'||i.status==='OWNER_ACTION_REQUIRED').length,items};});
-  const liveActivityFeed=activityItems.filter(i=>i.status==='RUNNING').map(i=>({time:i.startTime??nowIso(),agent:i.agent,department:i.department,currentAction:i.actionExecuted,status:'RUNNING' as AgentStatus,progressPercent:null,traceId:i.traceId,taskId:i.traceId}));
-
-  const report=latestReport?.report;
-  const sections=report?.sections;
-  const dailySummary=report&&sections?{
-    reportDate:report.reportDate,
-    totalTasksStarted:executions.length,totalTasksCompleted:rolling24h.tasksCompleted,totalTasksFailed:rolling24h.tasksFailed,
-    totalTasksBlocked:executions.filter(r=>r.final_status==='blocked').length,totalRetries:executions.reduce((s,r)=>s+r.retry_count,0),
-    totalDeployments:activityItems.filter(i=>Boolean(i.deploymentId)).length,totalCodeCommits:activityItems.filter(i=>Boolean(i.commitSha)).length,
-    totalBugsFixed:sections.fixesCompleted.count+sections.fixesProposed.count,totalInvestorsProcessed:categoryBreakdown.find(c=>c.category==='INVESTORS')?.completed??0,
-    totalBuyersProcessed:categoryBreakdown.find(c=>c.category==='BUYERS')?.completed??0,totalLeadsGenerated:categoryBreakdown.find(c=>c.category==='LEADS_CRM')?.completed??0,
-    totalPropertiesUpdated:categoryBreakdown.find(c=>c.category==='PROPERTIES_DEALS')?.completed??0,totalMessagesSent:0,totalRevenueOpportunities:sections.revenueOpportunities.count,
-    totalOwnerActionsRequired:pendingActions.length,
-    agentUtilization:agents.map(a=>({agentId:a.agentId,name:a.name,tasksToday:a.tasksStartedToday,utilization:a.tasksStartedToday?Math.min(100,Math.round(a.tasksCompletedToday/a.tasksStartedToday*100)):0})),
-    topCompletedWork:activityItems.filter(i=>i.status==='COMPLETED').slice(0,5).map(i=>`${i.agent}: ${i.task}`),
-    topFailures:activityItems.filter(i=>i.status==='FAILED').slice(0,5).map(i=>`${i.agent}: ${i.error??i.task}`),
-    businessRisks:sections.nextBestActions.findings.slice(0,3).map(f=>f.title),next24HourPlan:sections.nextBestActions.findings.slice(0,5).map(f=>f.title),
-  }:null;
-
-  const sms=getSmsNotifierStatus();
-  const realAgentCount=agents.filter(a=>a.tasksStartedToday>0||a.lastActivityTime!==null).length;
-  const runtimeCommit=process.env.RENDER_GIT_COMMIT??process.env.GIT_COMMIT_SHA??null;
-  return ownerOnlyJson({ok:true,dashboard:{
-    marker:IVX_AUTONOMOUS_OPS_DASHBOARD_MARKER,
-    ledgerMarker:IVX_AGENT_DASHBOARD_LEDGER_MARKER,
-    generatedAt:nowIso(),backendCommitSha:runtimeCommit,backendBootTime:null,backendRouteCount:0,githubHeadSha:null,commitMatch:false,
-    dateRange:{start:new Date(start).toISOString(),end:new Date(now).toISOString(),label},
-    agents,activityItems,categoryBreakdown,dailySummary,liveActivityFeed,ownerActionRequests:ownerActions,
-    deploymentStatus:{renderDeployId:null,renderDeployStatus:null,renderCommitSha:runtimeCommit,productionHealthy:true},
-    realAgentCount,placeholderAgentCount:agents.length-realAgentCount,rolling24h,
-    enterprise112:{registryCount:ALL_AGENT_CONTRACTS.length,durableStateCount:ledger.states.length,durableExecutionCount:ledger.executions.length,storeMode:ledger.mode,ledgerOk:ledger.ok,ledgerError:ledger.error},
-    smsConversation:{enabled:sms.ownerActionSchedulerRunning,reminderMinutes:sms.ownerActionReminderMinutes,phoneConfigured:sms.phoneConfigured,phoneMasked:sms.phoneMasked,pendingTracked:sms.trackedPendingActions},
-    disclaimer:'Proof-first enterprise 112 dashboard. Every activity row comes from the durable 112-agent Supabase execution ledger. Missing evidence is shown as missing; idle agents are never represented as working.'
-  }});
+  const statesById=new Map(ledger.states.map(s=>[s.agent_id,s]));const runtimeById=new Map(getAllExecutionStates().map(s=>[s.agentId,s]));const executions=ledger.executions.filter(e=>isWithin(e.started_at,start));const executionsByAgent=new Map<string,typeof executions>();for(const e of executions){const arr=executionsByAgent.get(e.agent_id)??[];arr.push(e);executionsByAgent.set(e.agent_id,arr);}
+  let agents:UnifiedAgent[]=ALL_AGENT_CONTRACTS.map(contract=>{const meta=getAgentByNumber(contract.agentNumber);const durable=statesById.get(contract.agentId);const runtime=runtimeById.get(contract.agentId);const runs=(executionsByAgent.get(contract.agentId)??[]).sort((a,b)=>(b.started_at??'').localeCompare(a.started_at??''));const latest=runs[0]??null;const running=runs.find(r=>r.final_status==='running'||r.final_status==='pending')??null;const completed=runs.filter(r=>r.final_status==='completed').length;const failed=runs.filter(r=>r.final_status==='failed').length;const blocked=runs.filter(r=>r.final_status==='blocked').length;const duration=runs.reduce((sum,r)=>sum+(Number.isFinite(r.duration_ms)?r.duration_ms:0),0);const status:AgentStatus=runtime?.availability==='busy'||running?'RUNNING':runtime?.availability==='paused'||runtime?.availability==='disabled'?'BLOCKED':durable?.health==='degraded'||durable?.health==='failed'?'FAILED':latest?.final_status==='completed'?'COMPLETED':'IDLE';const currentTask=running?`${running.task_type}${running.tools_used.length?` · ${running.tools_used.join(', ')}`:''}`:latest?`Last: ${latest.task_type}${latest.source_reference?' · evidence recorded':''}`:runtime?.activeTaskId??null;return{agentNumber:contract.agentNumber,agentId:contract.agentId,name:contract.agentName,department:department(meta?.functionalGroup??String(contract.divisionId)),primaryResponsibility:meta?.mission??contract.mission,status,currentTask,tasksStartedToday:runs.length,tasksCompletedToday:completed,tasksFailedToday:failed,tasksBlockedToday:blocked,lastActivityTime:durable?.last_heartbeat??latest?.finished_at??latest?.started_at??runtime?.lastHeartbeat??null,totalExecutionTimeMs:runs.length?duration:null,successRate:pct(completed,failed),evidenceLink:`/api/ivx/agents/runs/${contract.agentId}`,traceId:latest?.task_id??runtime?.activeTaskId??null,lastToolUsed:durable?.last_tool_used??latest?.tools_used?.[0]??null,lastSourceReference:durable?.last_source_reference??latest?.source_reference??null,lastEvidenceSha:durable?.last_evidence_sha??latest?.evidence_sha256??null,health:durable?.health??runtime?.health??'unknown',availability:runtime?.availability??durable?.availability??'available'};});
+  if(agentFilter)agents=agents.filter(a=>a.agentId===agentFilter||String(a.agentNumber)===agentFilter||a.name.toLowerCase().includes(agentFilter.toLowerCase()));
+  let activityItems:ActivityItem[]=executions.sort((a,b)=>(b.started_at??'').localeCompare(a.started_at??'')).map((run,index)=>{const contract=ALL_AGENT_CONTRACTS.find(c=>c.agentId===run.agent_id);const meta=contract?getAgentByNumber(contract.agentNumber):null;const group=meta?.functionalGroup??'Autonomous System';const cat=categoryFor(group,run.task_type);const provenance=provenanceActor(run);const result=run.final_status==='completed'?(provenance.verified?`Verified real execution${run.source_reference?` · ${run.source_reference}`:''}`:`Completed but provenance is incomplete${run.source_reference?` · ${run.source_reference}`:''}`):run.error??run.final_status;return{itemNumber:index+1,agent:contract?.agentName??run.agent_id,department:department(group),category:cat,task:run.task_type,actionExecuted:run.tools_used.length?`Tools: ${run.tools_used.join(', ')}`:`Workflow: ${run.workflow}`,result,status:executionStatus(run.final_status),startTime:run.started_at,endTime:run.finished_at,durationMs:run.duration_ms||null,repository:'ibb142/ivx-holdings-platform',branch:text(run.evidence?.branch)||null,commitSha:text(run.evidence?.commitSha)||null,deploymentId:text(run.evidence?.deploymentId)||null,productionUrl:text(run.evidence?.productionUrl)||null,investorId:null,propertyId:null,leadId:null,error:run.error,retryCount:run.retry_count,evidence:[run.evidence_sha256?`sha256:${run.evidence_sha256}`:null,run.source_reference,run.tool_result_id].filter(Boolean).join(' · ')||`task:${run.task_id}`,traceId:run.task_id,actor:provenance.actor,provenanceVerified:provenance.verified};});
+  if(categoryFilter)activityItems=activityItems.filter(i=>i.category===categoryFilter);if(agentFilter)activityItems=activityItems.filter(i=>i.agent.toLowerCase().includes(agentFilter.toLowerCase())||i.traceId?.includes(agentFilter));activityItems=activityItems.map((i,index)=>({...i,itemNumber:index+1}));
+  const pendingActions=ownerActions.filter(a=>a.status==='OWNER_ACTION_REQUIRED'||a.status==='pending');const activeMs=executions.reduce((s,r)=>s+(r.duration_ms||0),0);const windowMs=Math.max(0,now-start);const idleMs=Math.max(0,windowMs-Math.min(windowMs,activeMs));const autonomousItems=activityItems.filter(i=>i.actor==='AUTONOMOUS'&&i.provenanceVerified);const unknownItems=activityItems.filter(i=>i.actor==='UNKNOWN'||!i.provenanceVerified);
+  const rolling24h={windowStart:new Date(start).toISOString(),windowEnd:new Date(now).toISOString(),tasksStarted:executions.length,tasksCompleted:executions.filter(r=>r.final_status==='completed').length,tasksFailed:executions.filter(r=>r.final_status==='failed').length,tasksRunning:executions.filter(r=>r.final_status==='running'||r.final_status==='pending').length,activeTimeMs:activeMs,idleTimeMs:idleMs,autonomousAttributed:autonomousItems.length,unknownAttributed:unknownItems.length,proofEntries:autonomousItems.length,ownerActionsRequired:pendingActions.length};
+  const categoryBreakdown=CATEGORIES.map(cat=>{const items=activityItems.filter(i=>i.category===cat);return{category:cat,total:items.length,completed:items.filter(i=>i.status==='COMPLETED').length,failed:items.filter(i=>i.status==='FAILED').length,blocked:items.filter(i=>i.status==='BLOCKED'||i.status==='OWNER_ACTION_REQUIRED').length,items};});const liveActivityFeed=activityItems.filter(i=>i.status==='RUNNING').map(i=>({time:i.startTime??nowIso(),agent:i.agent,department:i.department,currentAction:i.actionExecuted,status:'RUNNING' as AgentStatus,progressPercent:null,traceId:i.traceId,taskId:i.traceId}));
+  const report=latestReport?.report;const sections=report?.sections;const dailySummary=report&&sections?{reportDate:report.reportDate,totalTasksStarted:executions.length,totalTasksCompleted:rolling24h.tasksCompleted,totalTasksFailed:rolling24h.tasksFailed,totalTasksBlocked:executions.filter(r=>r.final_status==='blocked').length,totalRetries:executions.reduce((s,r)=>s+r.retry_count,0),totalDeployments:autonomousItems.filter(i=>Boolean(i.deploymentId)).length,totalCodeCommits:autonomousItems.filter(i=>Boolean(i.commitSha)).length,totalBugsFixed:sections.fixesCompleted.count+sections.fixesProposed.count,totalInvestorsProcessed:categoryBreakdown.find(c=>c.category==='INVESTORS')?.completed??0,totalBuyersProcessed:categoryBreakdown.find(c=>c.category==='BUYERS')?.completed??0,totalLeadsGenerated:categoryBreakdown.find(c=>c.category==='LEADS_CRM')?.completed??0,totalPropertiesUpdated:categoryBreakdown.find(c=>c.category==='PROPERTIES_DEALS')?.completed??0,totalMessagesSent:0,totalRevenueOpportunities:sections.revenueOpportunities.count,totalOwnerActionsRequired:pendingActions.length,agentUtilization:agents.map(a=>({agentId:a.agentId,name:a.name,tasksToday:a.tasksStartedToday,utilization:a.tasksStartedToday?Math.min(100,Math.round(a.tasksCompletedToday/a.tasksStartedToday*100)):0})),topCompletedWork:autonomousItems.filter(i=>i.status==='COMPLETED').slice(0,5).map(i=>`${i.agent}: ${i.task}`),topFailures:activityItems.filter(i=>i.status==='FAILED').slice(0,5).map(i=>`${i.agent}: ${i.error??i.task}`),businessRisks:sections.nextBestActions.findings.slice(0,3).map(f=>f.title),next24HourPlan:sections.nextBestActions.findings.slice(0,5).map(f=>f.title)}:null;
+  const sms=getSmsNotifierStatus();const realAgentCount=agents.filter(a=>a.tasksStartedToday>0||a.lastActivityTime!==null).length;const runtimeCommit=process.env.RENDER_GIT_COMMIT??process.env.GIT_COMMIT_SHA??null;
+  return ownerOnlyJson({ok:true,dashboard:{marker:IVX_AUTONOMOUS_OPS_DASHBOARD_MARKER,ledgerMarker:IVX_AGENT_DASHBOARD_LEDGER_MARKER,generatedAt:nowIso(),backendCommitSha:runtimeCommit,backendBootTime:null,backendRouteCount:0,githubHeadSha:null,commitMatch:false,dateRange:{start:new Date(start).toISOString(),end:new Date(now).toISOString(),label},agents,activityItems,categoryBreakdown,dailySummary,liveActivityFeed,ownerActionRequests:ownerActions,deploymentStatus:{renderDeployId:null,renderDeployStatus:null,renderCommitSha:runtimeCommit,productionHealthy:true},realAgentCount,placeholderAgentCount:agents.length-realAgentCount,rolling24h,enterprise112:{registryCount:ALL_AGENT_CONTRACTS.length,durableStateCount:ledger.states.length,durableExecutionCount:ledger.executions.length,storeMode:ledger.mode,ledgerOk:ledger.ok,ledgerError:ledger.error},provenance:{policy:'FAIL_CLOSED',autonomousAttributed:autonomousItems.length,unknownAttributed:unknownItems.length,rule:'AUTONOMOUS requires real_tool_used + verified_output + non-simulated + runId + evidence SHA + source/tool result'},smsConversation:{enabled:sms.ownerActionSchedulerRunning,reminderMinutes:sms.ownerActionReminderMinutes,phoneConfigured:sms.phoneConfigured,phoneMasked:sms.phoneMasked,pendingTracked:sms.trackedPendingActions},disclaimer:'Proof-first enterprise 112 dashboard. AUTONOMOUS attribution fails closed: incomplete provenance is UNKNOWN and is never counted as autonomous work.'}});
 }
