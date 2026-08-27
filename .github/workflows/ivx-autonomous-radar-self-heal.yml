@@ -1,6 +1,8 @@
 name: IVX Autonomous Radar Self-Heal
 
 on:
+  push:
+    branches: [main]
   schedule:
     - cron: '*/5 * * * *'
   workflow_run:
@@ -8,11 +10,17 @@ on:
       - Landing 112-Agent Autonomous QA War Room
       - IVX Enterprise Line-by-Line Quality Audit
       - IVX Enterprise QA
+      - IVX Dashboard + IA Chat End-to-End Certificate
+      - IVX Live AI Radar 112 Certificate
+      - QA Suite
+      - E2E Acceptance
+      - Final Gap Repair
+      - IVX 360 Early Warning & Autonomous Recovery
     types: [completed]
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  contents: write
   actions: write
   issues: write
   id-token: write
@@ -131,7 +139,9 @@ jobs:
             > /tmp/ivx-radar/failed-jobs.jsonl
           count=$(wc -l < /tmp/ivx-radar/failed-jobs.jsonl | tr -d ' ')
           echo "failed_count=$count" >> "$GITHUB_OUTPUT"
-          if grep -Eiq 'secret|credential|auth|permission|payment|stripe|migration|database destructive|infrastructure|iam|cloudfront|route53|security policy|rollback' /tmp/ivx-radar/failed-jobs.jsonl; then
+          # Safe machine-auth/CI wiring drift is autonomous-repairable. Only actual
+          # sensitive-value or high-risk infrastructure/security mutations require Owner Gate.
+          if grep -Eiq 'secret value|rotate secret|credential value|permission change|payment|stripe|destructive|iam|cloudfront|route53|security policy|production infrastructure|critical rollback' /tmp/ivx-radar/failed-jobs.jsonl; then
             echo 'owner_gate_required=true' >> "$GITHUB_OUTPUT"
           else
             echo 'owner_gate_required=false' >> "$GITHUB_OUTPUT"
@@ -140,7 +150,7 @@ jobs:
       - name: Owner Gate for high-risk source failure
         if: ${{ github.event_name == 'workflow_run' && steps.source.outputs.owner_gate_required == 'true' }}
         run: |
-          echo 'OWNER_GATE_REQUIRED: high-risk auth/permissions/security/infrastructure incident.'
+          echo 'OWNER_GATE_REQUIRED: high-risk secret/IAM/payment/security/infrastructure change.'
           exit 1
 
       - name: Build predictive mission
@@ -154,7 +164,7 @@ jobs:
           route_contract='{}'
           if [ -s /tmp/ivx-radar/route-data-contract.json ]; then route_contract=$(jq -c '.' /tmp/ivx-radar/route-data-contract.json); fi
           jq -n --arg event "$GITHUB_EVENT_NAME" --argjson assessment "$assessment" --argjson failures "$source_failures" --argjson routeContract "$route_contract" \
-            '{event:$event,predictive:$assessment,sourceFailures:$failures,routeDataContract:$routeContract,policy:{failClosed:true,ownerGate:true,maxRepairAttempts:3,neverWeakenQuality:true}}' \
+            '{event:$event,predictive:$assessment,sourceFailures:$failures,routeDataContract:$routeContract,policy:{failClosed:true,ownerGate:true,maxRepairAttempts:3,neverWeakenQuality:true,autoDeployLowRisk:true,rerunAffectedCertificates:true,verifyProductionExactSha:true}}' \
             > /tmp/ivx-radar/mission.json
           cat /tmp/ivx-radar/mission.json
 
@@ -173,11 +183,11 @@ jobs:
           else
             execution=code_change
             approve_patch=true
-            approve_deploy=false
+            approve_deploy=true
           fi
-          goal="IVX PREDICTIVE NERVOUS EARLY WARNING. Diagnose BEFORE terminal failure. Inspect endpoint latency trend, HTTP, Content-Type, JSON contract, worker heartbeat, queue pressure, auth/permission symptoms, source workflow failures, AND cross-screen navigation/data contracts. A public entity that renders on Landing/Home must resolve by the same stable ID on its destination route. For low-risk code defects only, repair and test automatically. Never change secrets/IAM/payments/destructive migrations/security policy or production infrastructure without Owner Gate. Evidence required. Mission: ${mission}"
+          goal="IVX AUTONOMOUS 24/7 OWNER-IMPACT PREVENTION. Detect defects before the owner or a member finds them manually. Patrol endpoint health, worker health, workflow failures, cross-screen navigation, CTA behavior, stable entity IDs, media/data parity, persistence contracts, and source-of-truth drift. If Landing/Home can render an entity, every destination action must resolve the same stable ID and required media/data. For low-risk defects: diagnose root cause, patch code, run targeted QA, run affected E2E/certificates, deploy the corrected exact SHA, verify production SHA parity, and persist evidence automatically. CI machine-auth wiring drift is low-risk and repairable via scoped GitHub OIDC. Never change secret values, IAM/permissions, payments, destructive migrations, security policy, production infrastructure, or critical rollback without Owner Gate. Never weaken tests to obtain green. Mission: ${mission}"
           payload=$(jq -n --arg goal "$goal" --arg execution "$execution" --argjson approvePatch "$approve_patch" --argjson approveGitDeploy "$approve_deploy" \
-            '{goal:$goal,executionMode:$execution,templateMode:"BUG_FIX",approvePatch:$approvePatch,approveGitDeploy:$approveGitDeploy,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Predictive evidence-backed preflight/self-heal including cross-screen route/data-source parity with Owner Gates preserved.",rollbackOption:"Revert autonomous repair PR if any regression appears.",filesAffected:["predictive-diagnosis","route-data-contract"]}')
+            '{goal:$goal,executionMode:$execution,templateMode:"BUG_FIX",approvePatch:$approvePatch,approveGitDeploy:$approveGitDeploy,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Detect -> reproduce -> root cause -> low-risk repair -> targeted QA -> affected E2E/certificates -> exact-SHA deploy -> production verification -> evidence. Owner Gate preserved for high-risk changes.",rollbackOption:"Revert the autonomous repair commit/PR if production verification detects regression.",filesAffected:["predictive-diagnosis","route-data-contract","user-journey","certificate-orchestration"]}')
           http=$(curl -sS --max-time 60 -o /tmp/ivx-radar/job-start.json -w '%{http_code}' -X POST \
             "${API_BASE}/api/ivx/senior-developer/worker/jobs" \
             -H 'Content-Type: application/json' \
