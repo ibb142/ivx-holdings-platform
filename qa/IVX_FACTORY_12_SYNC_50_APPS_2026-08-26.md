@@ -1,49 +1,70 @@
-# IVX Factory 12-Agent Sync — 50 Apps
+# IVX Factory Allocation — Landing + 50 Apps
 
-Status: SYNCED / STAGED
-Date: 2026-08-26
+Status: ACTIVE ALLOCATION
+Updated: 2026-08-27
 
 ## Owner directive
-Prepare the 12-agent Factory Command Division now for a future 50-app production pipeline while preserving the current IVX 112-agent completion mission.
+Run the IVX fleet in two simultaneous divisions now:
 
-## Safety / allocation rule
-- Agents 001-012 remain the active IVX Autonomous Command Tier until IVX reaches the release gates defined in `qa/IVX_12_COMMAND_100_COMPLETION_MISSION_2026-08-25.md`.
-- This document synchronizes the Factory mission and responsibilities now; it does NOT silently remove those 12 agents from IVX production QA.
-- Factory app execution activates after IVX demonstrates stable 112/112 certification and the owner authorizes Factory execution.
-- All destructive migrations, auth/permissions, secrets, payments, infrastructure, security-critical changes and critical rollback remain Owner-Gated.
+- Agents 013-112: 100-agent Landing Page completion mission.
+- Agents 001-012: 12-agent Factory Command Division working on the 50-app factory pipeline.
+
+The 12 Factory agents no longer wait for Landing completion. Factory work may progress now without consuming the 100 Landing agents.
+
+## Division A — Landing Page
+Agents: 013-112 (100 agents)
+Priority: P0 until Landing is complete and certified.
+Mission: audit, repair, QA, performance, media, registration, navigation, accessibility, security, E2E, deploy verification, exact-SHA live proof and Landing certificate.
+
+## Division B — Factory
+Agents: 001-012 (12 agents)
+Priority: P1 while Landing is P0.
+Mission: build and maintain the 50-app portfolio, specifications, reusable architecture, shared components, QA templates, release templates and app-by-app implementation queues.
 
 ## 12 Factory Command roles
-1. Product Commander — intake, app objective, users, acceptance criteria.
-2. Architecture Commander — stack, boundaries, APIs, data model.
-3. UX/UI Commander — navigation, responsive/mobile UX, accessibility.
-4. Frontend Commander — app/web implementation quality and state management.
-5. Backend Commander — APIs, jobs, integrations, idempotency.
-6. Data Commander — Supabase/schema/RLS/data lifecycle.
-7. Security Commander — auth, secrets, abuse controls, privacy and threat checks.
-8. QA Commander — unit/integration/E2E/regression and evidence.
-9. Release Commander — build artifacts, signing, versions, exact-SHA proof.
-10. SRE Commander — deploy, health, observability, rollback readiness.
-11. Radar Commander — internal/external runtime scanning and safe self-heal routing.
-12. Factory Executive Commander — portfolio prioritization, capacity, final GO/NO-GO.
+1. Product Commander — intake, objectives, users, acceptance criteria.
+2. Architecture Commander — stack, APIs and data model.
+3. UX/UI Commander — navigation, mobile UX and accessibility.
+4. Frontend Commander — implementation and state management.
+5. Backend Commander — APIs, jobs and integrations.
+6. Data Commander — Supabase, schema, RLS and lifecycle.
+7. Security Commander — auth, secrets, abuse controls and privacy.
+8. QA Commander — unit, integration, E2E and regression evidence.
+9. Release Commander — builds, signing, versions and exact-SHA proof.
+10. SRE Commander — deployment, health, observability and rollback readiness.
+11. Radar Commander — scanning and safe self-heal routing.
+12. Factory Executive Commander — portfolio priority, capacity and GO/NO-GO.
 
 ## 50-app pipeline
-Each app must pass:
 IDEA -> SPEC -> ARCHITECTURE -> SCAFFOLD -> IMPLEMENT -> SECURITY -> QA -> BUILD -> DEPLOY -> LIVE VERIFY -> CERTIFICATE.
 
-No app counts as completed because code was generated. Completion requires evidence for tests, build, deploy and live verification on the exact release SHA.
+No app counts as complete from generated code alone. Completion requires test, build, deploy and live exact-SHA evidence.
 
-## Parallelization target
-- 50 app slots tracked independently.
-- Command tier assigns implementation to Factory workers/runners rather than requiring one commander to write every file.
-- Shared components and proven remedies should be reused across apps through the IVX Factory Engine/tool registry.
-- A failure in one app must not produce false completion in another.
+## Phase 3 — New 100-agent Factory Worker Fleet
+Trigger: Landing Page reaches completion/certification and the 100 Landing agents are released from P0 Landing duty.
 
-## Activation gates
-Factory production may start when:
-1. IVX current main has stable repeated 112/112 green cycles.
-2. P0 = 0 and blocking P1 = 0.
-3. Autonomous closed-loop repair has demonstrated detect -> diagnose -> safe repair -> test -> deploy -> rerun -> green evidence.
-4. Owner explicitly authorizes Factory production.
+Action:
+- Provision a NEW 100-agent Factory implementation fleet for the 50-app portfolio.
+- Keep the 12 Factory Command agents as commanders/orchestrators.
+- Do not replace or renumber the existing IVX 112 production registry.
+- New Factory workers require unique IDs, contracts, queues, memory namespaces, evidence records and resource limits.
+- Before production use, require registry integrity, isolation tests, permission verification and fail-closed execution evidence.
 
-## First Factory production objective
-On activation, create a 50-app portfolio manifest with app-001 through app-050. Each entry must include owner goal, category, priority, assigned command roles, implementation workers, repository/path, current phase, blockers, test evidence, release SHA, deploy proof and certificate state.
+Phase 3 target:
+- 12 Factory Command agents.
+- 100 new Factory implementation agents.
+- 112 Factory agents total dedicated to the 50-app portfolio.
+- Original IVX production fleet remains separately auditable.
+
+## Priority
+P0: Landing completion/certification by Agents 013-112.
+P1: Factory 50-app work by Agents 001-012.
+P2: Non-blocking cleanup/research.
+Factory work must never delay a Landing P0 repair.
+
+## Owner Gate
+Autonomous may automatically execute routine code repair, QA, tests, safe config, retries, builds and evidence generation.
+Owner approval remains required for destructive production data migrations, secret rotation/exposure, broad IAM/security-policy changes, payment/bank controls, DNS/domain takeover, irreversible infrastructure deletion and critical production rollback.
+
+## Evidence
+Every Factory app must track owner goal, category, priority, assigned command roles, implementation workers, repository/path, phase, blockers, test evidence, release SHA, deploy proof and certificate state.
