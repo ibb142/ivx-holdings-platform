@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import {
   RecordingPresets,
@@ -9,7 +10,7 @@ import {
   useAudioRecorderState,
 } from 'expo-audio';
 import { useMutation } from '@tanstack/react-query';
-import { FileText, ImageIcon, Mic, Send, Square, Video } from 'lucide-react-native';
+import { FileText, ImageIcon, Mic, Radio, Send, Square, Video } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { transcribeAudioRecording } from '@/src/modules/ivx-owner-ai/services/ivxMultimodalService';
 import { useWebKeyboard, scrollInputIntoView } from '@/hooks/useWebKeyboard';
@@ -77,6 +78,7 @@ export function Composer({
   onTyping,
   bottomInset = 16,
 }: ComposerProps) {
+  const router = useRouter();
   const [text, setText] = useState<string>('');
   const textRef = useRef<string>('');
   const inputRef = useRef<TextInput | null>(null);
@@ -242,6 +244,14 @@ export function Composer({
     await startVoiceRecording();
   }, [isRecording, startVoiceRecording, stopVoiceRecording]);
 
+  const handleRealtimeVoice = useCallback(() => {
+    if (isBusy || isRecording) {
+      return;
+    }
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/ivx/realtime-voice' as never);
+  }, [isBusy, isRecording, router]);
+
   return (
     <View style={[styles.container, { paddingBottom: Platform.OS === 'web' ? Math.max(containerPaddingBottom, webKeyboardHeight) : containerPaddingBottom }]} testID="chat-composer">
       <View style={styles.inputShell}>
@@ -310,6 +320,18 @@ export function Composer({
         >
           {isRecording ? <Square size={16} color={Colors.error} /> : <Mic size={16} color={Colors.primary} />}
           <Text style={styles.actionText}>{isRecording ? 'Stop' : isTranscribing ? 'Transcribing…' : 'Voice'}</Text>
+        </Pressable>
+
+        <Pressable
+          style={({ pressed }) => [styles.actionButton, styles.liveVoiceButton, pressed ? styles.pressed : null]}
+          onPress={handleRealtimeVoice}
+          disabled={isBusy || isRecording}
+          testID="chat-composer-live-voice"
+          accessibilityRole="button"
+          accessibilityLabel="Open IVX realtime voice conversation"
+        >
+          <Radio size={16} color={Colors.success} />
+          <Text style={styles.actionText}>Live Voice</Text>
         </Pressable>
 
         <Pressable
@@ -423,6 +445,9 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     paddingHorizontal: 7,
     paddingVertical: 3,
+  },
+  liveVoiceButton: {
+    borderColor: 'rgba(34,197,94,0.55)',
   },
   recordingButton: {
     borderColor: Colors.error,
