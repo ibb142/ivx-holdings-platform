@@ -15,6 +15,7 @@ permissions:
   contents: read
   actions: write
   issues: write
+  id-token: write
 
 concurrency:
   group: ivx-autonomous-predictive-radar
@@ -27,22 +28,40 @@ jobs:
     env:
       API_BASE: https://api.ivxholding.com
       SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+      OIDC_AUDIENCE: ivx-360-autonomous-recovery
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Predictive five-sample endpoint window
-        id: predictive
+      - name: Acquire scoped GitHub OIDC machine identity
+        id: oidc
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${SYSTEM_KEY:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          token_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}"
+          curl -fsS --retry 3 --retry-delay 2 --retry-all-errors \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "$token_url" > /tmp/ivx-oidc.json
+          token=$(jq -r '.value // empty' /tmp/ivx-oidc.json)
+          test -n "$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Predictive five-sample endpoint window
+        id: predictive
+        env:
+          IVX_GITHUB_OIDC: ${{ steps.oidc.outputs.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
           mkdir -p /tmp/ivx-radar
           : > /tmp/ivx-radar/samples.jsonl
           for i in 1 2 3 4 5; do
             started=$(date +%s%3N)
             code=$(curl -sS --max-time 4 -o /tmp/ivx-radar/body-${i}.txt -D /tmp/ivx-radar/headers-${i}.txt -w '%{http_code}' \
-              -H 'Accept: application/json' -H "X-IVX-System-Key: ${SYSTEM_KEY}" \
+              -H 'Accept: application/json' \
+              -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}" \
               "${API_BASE}/api/ivx/autonomous/control-plane" || printf '000')
             ended=$(date +%s%3N)
             latency=$((ended-started))
@@ -56,7 +75,6 @@ jobs:
             sleep 2
           done
 
-          total=$(wc -l < /tmp/ivx-radar/samples.jsonl | tr -d ' ')
           failures=$(jq -s '[.[] | select(.ok != true)] | length' /tmp/ivx-radar/samples.jsonl)
           bad_json=$(jq -s '[.[] | select(.jsonValid != true)] | length' /tmp/ivx-radar/samples.jsonl)
           avg_latency=$(jq -s '([.[].latencyMs] | add) / length | floor' /tmp/ivx-radar/samples.jsonl)
@@ -119,6 +137,8 @@ jobs:
 
       - name: Delegate predictive preflight or safe self-heal
         if: ${{ steps.predictive.outputs.action != 'observe' || (github.event_name == 'workflow_run' && steps.source.outputs.failed_count != '0' && steps.source.outputs.owner_gate_required != 'true') }}
+        env:
+          IVX_GITHUB_OIDC: ${{ steps.oidc.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -137,7 +157,9 @@ jobs:
             '{goal:$goal,executionMode:$execution,templateMode:"BUG_FIX",approvePatch:$approvePatch,approveGitDeploy:$approveGitDeploy,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Predictive evidence-backed preflight/self-heal with Owner Gates preserved.",rollbackOption:"Revert autonomous repair PR if any regression appears.",filesAffected:["predictive-diagnosis"]}')
           http=$(curl -sS --max-time 60 -o /tmp/ivx-radar/job-start.json -w '%{http_code}' -X POST \
             "${API_BASE}/api/ivx/senior-developer/worker/jobs" \
-            -H 'Content-Type: application/json' -H "X-IVX-System-Key: ${SYSTEM_KEY}" --data "$payload")
+            -H 'Content-Type: application/json' \
+            -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}" \
+            --data "$payload")
           case "$http" in 200|202|409) ;; *) cat /tmp/ivx-radar/job-start.json; exit 1;; esac
           jq -e '.jobId // .activeJobId // .job.jobId' /tmp/ivx-radar/job-start.json >/dev/null
 

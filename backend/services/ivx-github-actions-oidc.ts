@@ -10,6 +10,7 @@ const REF = 'refs/heads/main';
 const WORKFLOW_SUFFIXES = [
   '/.github/workflows/ivx-360-early-warning.yml@refs/heads/main',
   '/.github/workflows/ivx-112-exact-sha-autodeploy-cert.yml@refs/heads/main',
+  '/.github/workflows/ivx-autonomous-radar-self-heal.yml@refs/heads/main',
 ] as const;
 const CLOCK_SKEW_SECONDS = 60;
 
@@ -106,7 +107,7 @@ export function diagnoseIVXGitHubOIDCClaims(claims: IVXGitHubOIDCClaims, nowSeco
   if (claims.ref !== REF) return { ok: false, reason: 'ref_mismatch', claimShape: shape };
   const workflowRef = claims.workflow_ref;
   if (typeof workflowRef !== 'string' || !WORKFLOW_SUFFIXES.some((suffix) => workflowRef.endsWith(suffix))) return { ok: false, reason: 'workflow_ref_mismatch', claimShape: shape };
-  if (claims.event_name !== 'push' && claims.event_name !== 'schedule' && claims.event_name !== 'workflow_dispatch') return { ok: false, reason: 'event_mismatch', claimShape: shape };
+  if (claims.event_name !== 'push' && claims.event_name !== 'schedule' && claims.event_name !== 'workflow_dispatch' && claims.event_name !== 'workflow_run') return { ok: false, reason: 'event_mismatch', claimShape: shape };
   if (typeof claims.exp !== 'number' || claims.exp + CLOCK_SKEW_SECONDS < nowSeconds) return { ok: false, reason: 'expired', claimShape: shape };
   if (typeof claims.nbf === 'number' && claims.nbf - CLOCK_SKEW_SECONDS > nowSeconds) return { ok: false, reason: 'not_yet_valid', claimShape: shape };
   if (!validSubject(claims.sub)) return { ok: false, reason: 'subject_mismatch', claimShape: shape };
@@ -192,5 +193,6 @@ export const IVX_GITHUB_OIDC_CONTRACT = Object.freeze({
   workflows: [
     '.github/workflows/ivx-360-early-warning.yml',
     '.github/workflows/ivx-112-exact-sha-autodeploy-cert.yml',
+    '.github/workflows/ivx-autonomous-radar-self-heal.yml',
   ],
 });
