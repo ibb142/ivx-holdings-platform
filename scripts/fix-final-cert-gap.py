@@ -98,7 +98,6 @@ function requireOwner(c: any, body: Record<string, unknown> = {}) {
 if marker in s:
     s = s.replace(marker, helper)
 s = s.replace("const authorized = envSecret ? provided === envSecret : provided.startsWith('owner-');", "const authorized = Boolean(envSecret) && provided === envSecret;")
-# Remove the one duplicate guard produced by the first repair attempt.
 s = s.replace(
 """    const denied = requireOwner(c);
     if (denied) return denied;
@@ -153,14 +152,17 @@ for a, b in replacements:
         s = s.replace(a, b, 1)
 p.write_text(s)
 
-# 6) 112 deploy trigger may fall back to repository auto-deploy; exact-SHA wait
-# still decides success/failure.
+# 6) Retired 112 workflow repair is optional. Its absence must not crash this
+# repair script; exact-SHA certification is handled by the active workflows.
 p = Path('.github/workflows/ivx-112-final-live-cert.yml')
-s = p.read_text()
-s = s.replace(
-    "case \"$HTTP\" in 200|201|202) ;; *) cat /tmp/bridge.json || true; exit 1;; esac",
-    "case \"$HTTP\" in 200|201|202) ;; *) echo 'Render bridge unavailable; relying on repository auto-deploy + exact-SHA hard gate.'; cat /tmp/bridge.json || true;; esac",
-)
-p.write_text(s)
+if p.exists():
+    s = p.read_text()
+    s = s.replace(
+        "case \"$HTTP\" in 200|201|202) ;; *) cat /tmp/bridge.json || true; exit 1;; esac",
+        "case \"$HTTP\" in 200|201|202) ;; *) echo 'Render bridge unavailable; relying on repository auto-deploy + exact-SHA hard gate.'; cat /tmp/bridge.json || true;; esac",
+    )
+    p.write_text(s)
+else:
+    print('Step 6 skipped: retired ivx-112-final-live-cert.yml is not present')
 
 print('final certification gap repair applied')
