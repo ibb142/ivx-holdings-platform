@@ -812,10 +812,19 @@ export async function getIVXOwnerVariableRuntimeValue(
     if (!row) return envValue;
     const decrypted = tryDecryptRowValue(row);
     if (!decrypted) {
+      // FAIL CLOSED: return empty (never a guessed value) and mark the row
+      // invalid so the owner UI stops reporting the stale encrypted record as
+      // 'saved'. The real credential must be re-saved by the owner or provided
+      // via the backend env, which is always authoritative.
       console.log('[IVXOwnerVariables] Runtime value bridge: decryption failed for all key candidates', {
         name,
         maskedPreview: row.masked_preview,
       });
+      try {
+        await updateVariableTestStatusViaSupabaseRest(name, 'invalid', 'Stored value cannot be decrypted with any configured key candidate — stale encrypted record; re-save the variable or set the backend env var.');
+      } catch {
+        // Status flagging is best-effort; the fail-closed empty return above stands.
+      }
       return '';
     }
     // Auto-reencrypt with the primary key if a fallback key was used (key rotation)
