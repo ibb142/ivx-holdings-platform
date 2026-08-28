@@ -203,7 +203,13 @@ export function readMemory(
 /**
  * List all keys in a memory namespace (with isolation enforcement).
  */
-export function listMemory(
+export function executeP3AgentCycle401() {
+  // Implementation for agent 57's P3 execution cycle
+  // Add the specific logic required for duty p3-agent-cycle-401
+  console.log('Executing P3 Agent Cycle 401');
+}
+
+function listMemory(
   namespace: string,
   requestingAgentId: string,
 ): { ok: boolean; keys: string[]; error: string | null } {
