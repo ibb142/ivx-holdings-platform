@@ -35,6 +35,80 @@ let emergencyStopSource: EmergencyStopProbe = checkEmergencyStop;
 export function setEmergencyStopSourceForTests(probe: EmergencyStopProbe | null): void {
   emergencyStopSource = probe ?? checkEmergencyStop;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OPEN-PR DEDUP PROBE (owner mandate 2026-08-28, Mission D)
+// Before dispatching a code_change duty, the dispatcher checks GitHub for an
+// OPEN pull request already carrying that duty. If one exists, the dispatch is
+// suppressed — one logical task produces ONE canonical implementation instead
+// of the duplicate-PR loop seen on agent 57 (PRs #431–#447).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type OpenPrProbe = (dutyId: string) => Promise<number | null>;
+
+const prProbeCache = new Map<string, { at: number; pr: number | null }>();
+const PR_PROBE_CACHE_MS = 5 * 60 * 1000;
+
+async function readGithubToken(): Promise<string> {
+  const envToken = (process.env.GITHUB_TOKEN ?? '').trim();
+  if (envToken) return envToken;
+  try {
+    const ownerVariables = await Promise.race([
+      import('../api/ivx-owner-variables'),
+      new Promise<never>((_resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('owner variables import timeout')), 5000);
+        timer.unref?.();
+      }),
+    ]);
+    if (typeof ownerVariables.getIVXOwnerVariableRuntimeValue === 'function') {
+      const stored = await Promise.race([
+        ownerVariables.getIVXOwnerVariableRuntimeValue('GITHUB_TOKEN' as never),
+        new Promise<null>((resolve) => {
+          const timer = setTimeout(() => resolve(null), 5000);
+          timer.unref?.();
+        }),
+      ]);
+      return (stored || '').trim();
+    }
+  } catch {
+    return '';
+  }
+  return '';
+}
+
+const DEFAULT_OPEN_PR_PROBE: OpenPrProbe = async (dutyId) => {
+  const cached = prProbeCache.get(dutyId);
+  if (cached && Date.now() - cached.at < PR_PROBE_CACHE_MS) return cached.pr;
+  const token = await readGithubToken();
+  let pr: number | null = null;
+  if (token) {
+    try {
+      const query = encodeURIComponent(`repo:ibb142/ivx-holdings-platform is:pr is:open "duty ${dutyId}" in:title,body`);
+      const res = await fetch(`https://api.github.com/search/issues?q=${query}&per_page=1`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (res.ok) {
+        const body = (await res.json()) as { items?: Array<{ number?: number }> };
+        const first = body.items?.[0];
+        pr = typeof first?.number === 'number' ? first.number : null;
+      }
+    } catch {
+      // Probe failure is fail-open: dispatch proceeds (dedup is best-effort;
+      // the supersede rule is the hard anti-loop guarantee).
+    }
+  }
+  prProbeCache.set(dutyId, { at: Date.now(), pr });
+  return pr;
+};
+
+let openPrProbe: OpenPrProbe = DEFAULT_OPEN_PR_PROBE;
+
+/** Test-only open-PR probe override. Pass null to restore the real probe. */
+export function setOpenPrProbeForTests(probe: OpenPrProbe | null): void {
+  openPrProbe = probe ?? DEFAULT_OPEN_PR_PROBE;
+  prProbeCache.clear();
+}
 import {
   isDurableStoreConfigured,
   readDurableJson,
@@ -535,12 +609,17 @@ export async function tickCampaignDispatcher(): Promise<TickResult> {
     return result;
   }
 
-  // Priority order: P0/pending items first, then QA, then VERIFY.
+  // Priority order: P0/pending items first, then QA, then VERIFY. Within the
+  // same role, FAIR ORDERING (owner mandate 2026-08-28, Mission A): fewest
+  // attempts first, then oldest creation — no single-agent hotspot.
   const startable = state.records
     .filter((r) => r.status === 'QUEUED')
     .filter((r) => !state.stoppedAgents.includes(r.agentNumber))
     .filter((r) => !busyLanes.has(r.laneKey))
-    .sort((a, b) => (a.role === 'IMPLEMENT' ? 0 : a.role === 'QA' ? 1 : 2) - (b.role === 'IMPLEMENT' ? 0 : b.role === 'QA' ? 1 : 2));
+    .sort((a, b) =>
+      (a.role === 'IMPLEMENT' ? 0 : a.role === 'QA' ? 1 : 2) - (b.role === 'IMPLEMENT' ? 0 : b.role === 'QA' ? 1 : 2)
+      || (a.attempts - b.attempts)
+      || a.createdAt.localeCompare(b.createdAt));
 
   for (const record of startable) {
     if (slots <= 0) break;
@@ -548,6 +627,14 @@ export async function tickCampaignDispatcher(): Promise<TickResult> {
     if (busyLanes.has(record.laneKey)) continue;
     // Deploy mutex: never more than one deploy-bearing job at a time.
     if (record.executionMode === 'deploy' && deployActive) continue;
+    // Open-PR dedup: a duty with an open PR never gets a second dispatch.
+    if (record.executionMode === 'code_change') {
+      const open = await openPrProbe(record.dutyId).catch(() => null);
+      if (open) {
+        record.stage = `WAITING ON OPEN PR #${open} — duplicate dispatch suppressed`;
+        continue;
+      }
+    }
     const input: IVXWorkerJobInput = {
       goal: buildGoal(record, state),
       ownerApproved: true,
@@ -561,6 +648,11 @@ export async function tickCampaignDispatcher(): Promise<TickResult> {
       validationMode: 'focused',
       systemMode: true,
       ownerId: `campaign-agent-${record.agentNumber}`,
+      // Canonical per-IA traceability (owner mandate 2026-08-28, Missions 1/F):
+      // the identity flows dispatcher → worker → coder → commit/PR metadata.
+      agentNumber: record.agentNumber,
+      agentId: record.agentId,
+      taskId: record.key,
       executionMode: record.executionMode,
     };
     try {
@@ -738,6 +830,33 @@ export async function getCampaignDispatcherSnapshot(): Promise<DispatcherSnapsho
 export async function listCampaignDispatcherRecords(): Promise<CampaignJobRecord[]> {
   const state = await loadState();
   return state.records;
+}
+
+/**
+ * SUPERSEDE ORPHAN RECORDS (owner mandate 2026-08-28, Mission D): dispatcher
+ * records whose campaign assignment no longer exists (item resolved, campaign
+ * restructured) are cancelled with an explicit superseded stage and their live
+ * worker jobs cancelled. This is the hard anti-loop guarantee — a resolved task
+ * can never be re-dispatched from stale dispatcher state.
+ */
+export async function supersedeOrphanCampaignRecords(activeKeys: readonly string[], reason: string): Promise<number> {
+  const state = await loadState();
+  const active = new Set(activeKeys);
+  let superseded = 0;
+  for (const record of state.records) {
+    if (active.has(record.key)) continue;
+    if (record.status === 'COMPLETED' || record.status === 'CANCELLED') continue;
+    if (record.status === 'RUNNING' && record.workerJobId) {
+      await bridge.cancel(record.workerJobId).catch(() => null);
+    }
+    record.status = 'CANCELLED';
+    record.stage = `SUPERSEDED — ${reason}`;
+    record.finishedAt = record.finishedAt ?? new Date().toISOString();
+    superseded += 1;
+    await logEvent('record_superseded', { key: record.key, reason });
+  }
+  if (superseded > 0) await saveState(state);
+  return superseded;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

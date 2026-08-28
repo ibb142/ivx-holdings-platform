@@ -730,6 +730,7 @@ import {
   handleBlockerFixVerifyTables,
 } from './api/ivx-blocker-fix-migration';
 import { handleIVXOwnerAuditOptions, handleIVXOwnerAuditRecentConversationsRequest } from './api/ivx-owner-audit';
+import { agentLedgerOptions, handleAgentLedgerGet, handleAgentLedgerIngest } from './api/ivx-agent-work-ledger-api';
 import {
   analyticsBrainOptions,
   handleAnalyticsEventIngest,
@@ -6807,6 +6808,16 @@ app.post('/api/ivx/autonomous-control-plane/verify-all', async (context) => hand
 // ============================================================================
 app.options('/api/ivx/autonomous/global-certification', () => autonomousGlobalCertificationOptions());
 app.get('/api/ivx/autonomous/global-certification', async (context) => handleAutonomousGlobalCertificationGet(context.req.raw));
+
+// ============================================================================
+// IVX Agent Work Ledger — canonical per-IA dashboard (112 rows) + workflow
+// attribution ingest so GitHub Actions / War Room work is correlated into the
+// canonical per-IA state even when no worker job exists (Mission F/G fix).
+// ============================================================================
+app.options('/api/ivx/autonomous/agent-ledger', () => agentLedgerOptions());
+app.get('/api/ivx/autonomous/agent-ledger', async (context) => handleAgentLedgerGet(context.req.raw));
+app.options('/api/ivx/autonomous/agent-ledger/ingest', () => agentLedgerOptions());
+app.post('/api/ivx/autonomous/agent-ledger/ingest', async (context) => handleAgentLedgerIngest(context.req.raw));
 app.options('/api/ivx/autonomous-proof', () => autonomousProofOptions());
 app.get('/api/ivx/autonomous-proof', async (context) => handleAutonomousProofRequest(context.req.raw));
 

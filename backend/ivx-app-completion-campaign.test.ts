@@ -64,8 +64,10 @@ describe('IVX app completion campaign', () => {
     }
   });
 
-  it('gives every audit item an implementer AND an independent QA agent', () => {
-    for (const item of APP_COMPLETION_AUDIT_ITEMS) {
+  it('gives every OPEN audit item an implementer AND an independent QA agent', () => {
+    const openItems = APP_COMPLETION_AUDIT_ITEMS.filter((i) => !i.resolvedEvidence);
+    expect(openItems.length).toBeGreaterThan(0);
+    for (const item of openItems) {
       const impl = campaign.assignments.filter((a) => a.dutyId === item.id && a.role === 'IMPLEMENT');
       const qa = campaign.assignments.filter((a) => a.dutyId === item.id && a.role === 'QA');
       expect(impl.length).toBe(1);
@@ -73,6 +75,18 @@ describe('IVX app completion campaign', () => {
       expect(impl[0].agentNumber).not.toBe(qa[0].agentNumber);
       expect(impl[0].qaAgentNumber).toBe(qa[0].agentNumber);
     }
+  });
+
+  it('RESOLVED items create no implementer and never re-dispatch (anti-loop rule)', () => {
+    const resolvedItems = APP_COMPLETION_AUDIT_ITEMS.filter((i) => i.resolvedEvidence);
+    expect(resolvedItems.length).toBeGreaterThan(0);
+    for (const item of resolvedItems) {
+      const impl = campaign.assignments.filter((a) => a.dutyId === item.id && a.role === 'IMPLEMENT');
+      expect(impl.length).toBe(0);
+    }
+    // No agent may hold more than one IMPLEMENT assignment (hotspot guard).
+    const implAgents = campaign.assignments.filter((a) => a.role === 'IMPLEMENT').map((a) => a.agentNumber);
+    expect(new Set(implAgents).size).toBe(implAgents.length);
   });
 
   it('never marks a fix item COMPLETED without real execution evidence', () => {
@@ -84,8 +98,8 @@ describe('IVX app completion campaign', () => {
     }
   });
 
-  it('flags owner-gated items as PENDING_OWNER instead of pretending to run', () => {
-    for (const item of APP_COMPLETION_AUDIT_ITEMS) {
+  it('flags owner-gated OPEN items as PENDING_OWNER instead of pretending to run', () => {
+    for (const item of APP_COMPLETION_AUDIT_ITEMS.filter((i) => !i.resolvedEvidence)) {
       const impl = campaign.assignments.find((a) => a.dutyId === item.id && a.role === 'IMPLEMENT');
       expect(impl).toBeDefined();
       if (item.ownerGate) {
@@ -121,8 +135,10 @@ describe('IVX app completion campaign', () => {
   });
 
   it('reports honest pending counts — nothing hidden', () => {
-    expect(campaign.pendingAppItems).toBe(APP_COMPLETION_AUDIT_ITEMS.length);
-    expect(campaign.p0Open).toBe(APP_COMPLETION_AUDIT_ITEMS.filter((i) => i.priority === 'P0').length);
+    const openItems = APP_COMPLETION_AUDIT_ITEMS.filter((i) => !i.resolvedEvidence);
+    expect(campaign.pendingAppItems).toBe(openItems.length);
+    expect(campaign.p0Open).toBe(openItems.filter((i) => i.priority === 'P0').length);
+    expect(campaign.totals.resolvedItems).toBe(APP_COMPLETION_AUDIT_ITEMS.length - openItems.length);
     const total = Object.values(campaign.counts).reduce((s, n) => s + n, 0);
     expect(total).toBe(112);
   });

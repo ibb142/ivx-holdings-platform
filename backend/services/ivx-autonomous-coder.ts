@@ -183,6 +183,29 @@ function sanitizeBranchSuffix(taskId: string): string {
   return s.slice(0, 24) || 'task';
 }
 
+/**
+ * Owner mandate 2026-08-28 (Mission F): durable per-IA commit attribution.
+ * Every autonomous commit/PR carries machine-readable trailers identifying the
+ * originating IA — or an explicit SYSTEM attribution when no IA is involved.
+ * Authorship is never ambiguous.
+ */
+function buildAttributionTrailers(input: {
+  taskId: string;
+  agentNumber?: number | null;
+  agentId?: string | null;
+  workerJobId?: string | null;
+}): string {
+  const hasAgent = typeof input.agentNumber === 'number' && input.agentNumber > 0;
+  const agent = hasAgent ? `IA-${String(input.agentNumber).padStart(3, '0')}` : 'SYSTEM';
+  const agentId = input.agentId?.trim() || (hasAgent ? `ivx_holdings_${input.agentNumber}` : 'system');
+  return [
+    `IVX-Agent: ${agent}`,
+    `IVX-Agent-ID: ${agentId}`,
+    `IVX-Task-ID: ${input.taskId}`,
+    `IVX-Worker-Job: ${input.workerJobId ?? input.taskId}`,
+  ].join('\n');
+}
+
 export type IVXAutonomousCoderProof = {
   marker: typeof IVX_AUTONOMOUS_CODER_MARKER;
   taskId: string;
@@ -269,6 +292,12 @@ export type IVXAutonomousCoderProof = {
 export type IVXAutonomousCoderInput = {
   taskId: string;
   goal: string;
+  /** Owner mandate 2026-08-28 (Mission F): originating IA for commit/PR
+   *  attribution trailers. Absent = SYSTEM attribution (never ambiguous). */
+  agentNumber?: number | null;
+  agentId?: string | null;
+  /** The senior-developer worker job id running this coder task. */
+  workerJobId?: string | null;
   executionMode: IVXAutonomousCoderExecutionMode;
   ownerId: string;
   approvalPolicy: 'owner_gated';
@@ -1391,6 +1420,7 @@ async function ensureBranchExists(
 async function commitFilesViaGitDataApi(
   filePaths: string[],
   branch: string,
+  attributionTrailers?: string,
 ): Promise<{ commitSha: string; commitUrl: string; branch: string }> {
   // CRITICAL FIX: Use readOwnerRuntimeVariable (process.env + owner variables store fallback)
   // instead of bare readEnv. On Render, GITHUB_TOKEN lives in the encrypted owner variables
@@ -1449,7 +1479,9 @@ async function commitFilesViaGitDataApi(
       method: 'POST',
       headers,
       body: JSON.stringify({
-        message: `IVX autonomous coder: ${new Date().toISOString()}`,
+        message: attributionTrailers
+          ? `IVX autonomous coder: ${new Date().toISOString()}\n\n${attributionTrailers}`
+          : `IVX autonomous coder: ${new Date().toISOString()}`,
         tree: newTreeSha,
         parents: [baseCommitSha],
       }),
@@ -2855,8 +2887,32 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
   let error: string | null = null;
 
   if (testsPassed && typecheckPassed && filesChanged.length > 0) {
-    // ── COMMIT ────────────────────────────────────────────────────────────
+    // QUALITY FIREWALL (owner mandate 2026-08-28, Mission J): a patch that is
+    // only a placeholder/stub never reaches a commit or PR — the task fails
+    // with an explicit blocker instead of faking completion (the IA-057 loop
+    // produced exactly this class of stub for PRs #431–#447).
+    let placeholderRejected = false;
     if (input.executionMode === 'code_change' || input.executionMode === 'deploy') {
+      try {
+        for (const relPath of filesChanged) {
+          const content = input.fileReader
+            ? await input.fileReader(relPath)
+            : await readFile(path.join(DEFAULT_PROJECT_ROOT, relPath), 'utf8');
+          if (/Implement the specific logic|placeholder implementation|TODO: implement the specific/i.test(content)) {
+            finalStatus = 'FAILED';
+            error = `PLACEHOLDER_PATCH_REJECTED: ${relPath} contains stub/placeholder code instead of a real repair.`;
+            onPhase?.('failed', error);
+            placeholderRejected = true;
+            break;
+          }
+        }
+      } catch {
+        // Read failure is best-effort — never blocks a real patch.
+      }
+    }
+    if (placeholderRejected) {
+      // Fall through to proof construction below with FAILED status.
+    } else if (input.executionMode === 'code_change' || input.executionMode === 'deploy') {
       onPhase?.('committing', 'Tests + typecheck passed; committing via GitHub Git Data API.');
       try {
         // code_change jobs commit to a non-deploy branch so Render auto-deploy
@@ -2869,7 +2925,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           : `${AUTONOMOUS_CODER_BRANCH}-${sanitizeBranchSuffix(input.taskId)}`;
         const commitResult = input.commitFn
           ? await input.commitFn(filesChanged, branchName)
-          : await commitFilesViaGitDataApi(filesChanged, branchName);
+          : await commitFilesViaGitDataApi(filesChanged, branchName, buildAttributionTrailers(input));
         commitSha = commitResult.commitSha;
         commitUrl = commitResult.commitUrl;
         branch = commitResult.branch;
@@ -2912,6 +2968,8 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           `**Tests passed:** ${testsPassed}`,
           `**Typecheck passed:** ${typecheckPassed}`,
           `**Patch authored by:** ${patchAuthoredBy ?? 'unknown'}`,
+          ``,
+          buildAttributionTrailers(input),
           ``,
           `This PR was created by the IVX Autonomous Coder engine after the patch passed tests and typecheck.`,
         ].join('\n');
