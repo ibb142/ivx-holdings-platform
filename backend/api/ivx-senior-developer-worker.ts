@@ -23,6 +23,7 @@ import {
   IVXOwnerApprovalError,
   assertIVXOwnerOnly,
   assertIVXRegisteredOwnerBearer,
+  checkIVXAISystemKey,
   ownerOnlyJson,
   ownerOnlyOptions,
 } from './owner-only';
@@ -176,8 +177,25 @@ export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request
   try {
     const signedWorkerRequest = request.headers.has('X-IVX-Deploy-Signature');
     const internalAuthorization = signedWorkerRequest ? await authorizeInternalDeploymentRequest(request) : null;
-    const ownerAuthorization = internalAuthorization ? null : await assertIVXRegisteredOwnerBearer(request, 'senior_developer_worker_enqueue');
-    const approval = ownerAuthorization?.approval ?? {
+    // IA Radar machine auth: a valid X-IVX-System-Key authorizes redo-job
+    // enqueue without an interactive owner session (same constant-time secret
+    // comparison as the trusted system bypass in owner-only).
+    const systemKeyAuthorized = !internalAuthorization && (await checkIVXAISystemKey(request));
+    const ownerAuthorization = internalAuthorization || systemKeyAuthorized ? null : await assertIVXRegisteredOwnerBearer(request, 'senior_developer_worker_enqueue');
+    const approval = ownerAuthorization?.approval ?? (systemKeyAuthorized ? {
+      ownerSessionDetected: true,
+      bearerAccepted: false,
+      ownerVerified: true,
+      ownerEmailMatched: true,
+      ownerEmailMasked: 'system@ivx.ai',
+      userId: 'ivx-ai-system',
+      role: 'system' as const,
+      guardMode: 'system_bypass' as const,
+      allowlistConfigured: true,
+      action: 'senior_developer_worker_enqueue',
+      blocker: null,
+      secretValuesReturned: false as const,
+    } : {
       ownerSessionDetected: true,
       bearerAccepted: true,
       ownerVerified: true,
@@ -190,7 +208,7 @@ export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request
       action: 'senior_developer_worker_enqueue',
       blocker: null,
       secretValuesReturned: false as const,
-    };
+    });
     const body = await request.json().catch((): WorkerEnqueueRequest => ({}));
     const goal = readTrimmed(body.goal);
     const templateMode = normalizeTemplateMode(body.templateMode);
