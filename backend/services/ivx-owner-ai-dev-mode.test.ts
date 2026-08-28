@@ -16,13 +16,17 @@ describe('IVX Owner AI Senior Developer Brain', () => {
     expect(detectSeniorDeveloperModeStatusRequest('Switch to developer mode')).toBe(true);
   });
 
-  test('detects senior-developer brain requests', () => {
+  test('detects only senior-developer brain META requests', () => {
     expect(detectSeniorDeveloperBrainRequest('I want my senior developer to have same brain like you')).toBe(true);
-    expect(detectSeniorDeveloperBrainRequest('Answer exactly what I ask like a senior developer')).toBe(true);
-    expect(detectSeniorDeveloperBrainRequest('Act as senior developer')).toBe(true);
-    expect(detectSeniorDeveloperBrainRequest('Audit and fix senior developer')).toBe(true);
+    expect(detectSeniorDeveloperBrainRequest('Is the senior developer ready?')).toBe(true);
     expect(detectSeniorDeveloperBrainRequest('Senior developer is not working')).toBe(true);
-    expect(detectSeniorDeveloperBrainRequest('Real senior developer ready to start work now')).toBe(true);
+  });
+
+  test('substantive engineering prompts are not hijacked by canned persona answers', () => {
+    expect(detectSeniorDeveloperBrainRequest('Answer exactly what I ask like a senior developer: explain this Supabase RLS bug')).toBe(false);
+    expect(detectSeniorDeveloperBrainRequest('Act as senior developer and audit the authentication code')).toBe(false);
+    expect(detectSeniorDeveloperBrainRequest('Behave like a senior developer and diagnose this timeout')).toBe(false);
+    expect(detectSeniorDeveloperBrainRequest('Audit and fix senior developer routing')).toBe(false);
   });
 
   test('does not misclassify normal chat as brain request', () => {
@@ -30,35 +34,35 @@ describe('IVX Owner AI Senior Developer Brain', () => {
     expect(detectSeniorDeveloperBrainRequest('How do I invest?')).toBe(false);
   });
 
-  test('status detector does NOT hijack a create-and-show execution command, even with a senior-developer status phrase', () => {
+  test('status detector does NOT hijack a create-and-show execution command', () => {
     expect(detectSeniorDeveloperModeStatusRequest(SCREENSHOT_PROMPT)).toBe(false);
   });
 
-  test('brain detector does NOT hijack a create-and-show execution command, even with a senior-developer persona phrase', () => {
+  test('brain detector does NOT hijack a create-and-show execution command', () => {
     expect(detectSeniorDeveloperBrainRequest(SCREENSHOT_PROMPT)).toBe(false);
     expect(detectSeniorDeveloperBrainRequest('act as a senior developer and create a chat module and show me')).toBe(false);
   });
 
-  test('status answer describes verified capabilities without a general-equivalence claim', () => {
+  test('static status answer never impersonates runtime certification', () => {
     const answer = buildSeniorDeveloperModeStatusAnswer();
-    expect(answer).toContain('VERIFIED CAPABILITIES');
-    expect(answer).toContain('Run a senior developer task');
-    expect(answer).toContain('same evidence-first engineering conversation pattern');
-    expect(answer).toContain('only VERIFIED after');
+    expect(answer).toContain('RUNTIME STATUS: UNVERIFIED');
+    expect(answer).toContain('not a certificate');
+    expect(answer).toContain('only when runtime evidence');
+    expect(answer).not.toContain('execution mode is live');
+    expect(answer).not.toContain('VERIFIED CAPABILITIES');
   });
 
-  test('brain answer is ready for approved work and describes the evidence-first engineering narrative', () => {
+  test('static brain answer requires runtime evidence and does not claim readiness', () => {
     const answer = buildSeniorDeveloperBrainAnswer();
-    expect(answer).toContain('owner-gated engineering execution mode');
-    expect(answer).toContain('evidence-first engineering narrative');
-    expect(answer).toContain('STATUS: READY FOR OWNER-AUTHORIZED WORK');
-    expect(answer).not.toContain('STATE: BLOCKED');
-    expect(answer).not.toContain('EXACT_ACTION_REQUIRED');
+    expect(answer).toContain('STATIC BRAIN STATUS');
+    expect(answer).toContain('not proof');
+    expect(answer).toContain('VERIFICATION CONTRACT');
+    expect(answer).not.toContain('STATUS: READY FOR OWNER-AUTHORIZED WORK');
+    expect(answer).not.toContain('I can inspect');
   });
 
-  test('enterprise senior developer phrasing is detected', () => {
+  test('enterprise senior developer status phrasing remains detected', () => {
     expect(detectSeniorDeveloperModeStatusRequest('Are you an enterprise senior developer?')).toBe(true);
-    expect(detectSeniorDeveloperBrainRequest('I want you to act as an enterprise senior developer')).toBe(true);
   });
 
   test('developer mode only blocks explicit immediate execution commands', () => {

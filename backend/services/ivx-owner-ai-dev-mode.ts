@@ -8,6 +8,7 @@
  *
  * Rules:
  *   - No fake proof. The chat only reports what the worker returns.
+ *   - Static status/brain answers MUST NOT claim runtime success.
  *   - If the worker returns BLOCKED (missing credentials / owner not signed in),
  *     the chat explains the exact blocker and the required action.
  *   - If the worker succeeds, the chat returns the strict evidence block
@@ -22,9 +23,7 @@ export type IVXOwnerAIDevModeResult =
 export function detectSeniorDeveloperModeStatusRequest(message: string): boolean {
   const text = (message ?? '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
   // A "create and show me" / "build and prove" execution command must NEVER be
-  // hijacked by the static Senior Developer mode status answer, even if the owner
-  // also includes a phrase like "I want to see if you are senior developer". When
-  // both an execution signal and a status phrase are present, execution wins.
+  // hijacked by a static Senior Developer status answer. Execution wins.
   if (asksToCreateAndShowProof(text)) {
     return false;
   }
@@ -49,74 +48,57 @@ export function detectSeniorDeveloperModeStatusRequest(message: string): boolean
 
 export function buildSeniorDeveloperModeStatusAnswer(): string {
   return [
-    'IVX Senior Developer execution mode is live and owner-gated.',
-    'VERIFIED CAPABILITIES: repository inspection, bounded safe patches, evidence-first task contracts, focused validation, GitHub commit/push, Render deploy, and production health verification.',
-    'NARRATIVE: IVX IA uses the same evidence-first engineering conversation pattern: understand the goal, inspect, implement approved work, validate, deploy, and report proof. This describes the IVX workflow, not a claim of product equivalence.',
-    'REQUIRED: owner sign-in and configured GitHub/Render/Supabase credentials.',
-    'TO USE IT: ask “Run a senior developer task: <goal>” or open Admin → IVX Developer Workspace.',
-    'A task is only VERIFIED after its proof contains the applicable test/build results, commit SHA, deploy result, and live verification.',
+    'IVX Senior Developer mode is configured and owner-gated.',
+    'RUNTIME STATUS: UNVERIFIED BY THIS STATIC STATUS CHECK.',
+    'This answer is not a certificate and does not prove that repository access, patching, GitHub push, Render deploy, or production verification succeeded in this session.',
+    'A real task becomes VERIFIED only when runtime evidence contains the applicable files inspected/changed, validation results, commit SHA, deploy result, and live health/version proof.',
+    'TO PROVE IT: run “Run a senior developer task: <exact goal>” and require the returned worker/job evidence.',
   ].join('\n');
 }
 
 /**
- * Direct senior-developer brain request: the owner wants the AI to answer, audit,
- * or reason like a real senior developer (same brain as the IVX agent). This is a
- * CONVERSATIONAL / ADVISORY intent, not an execution command. It must pass through
- * the gates and return a direct, useful answer instead of a BLOCKED proof ledger
- * message. Execution (commit/deploy) still requires the owner-gated worker.
+ * Direct senior-developer brain request: this detector is intentionally narrow.
+ * It handles meta-questions ABOUT the Senior Developer brain itself.
+ *
+ * It must NOT capture substantive engineering prompts merely because the owner
+ * says "act as a senior developer" or "answer like a senior developer". Those
+ * prompts must continue through the normal LLM/intent/worker path so IVX IA can
+ * actually reason about the user's technical request instead of returning a
+ * canned persona answer.
  */
 export function detectSeniorDeveloperBrainRequest(message: string): boolean {
   const text = (message ?? '').toLowerCase();
-  // A "create and show me" / "build and prove" execution command must NEVER be
-  // hijacked by the conversational brain answer, even if the owner also asks the
-  // AI to "act as a senior developer" or "you are a senior developer". Execution
-  // wins over advisory/persona mode.
   if (asksToCreateAndShowProof(text)) {
     return false;
   }
-  const brainPhrases = [
+  const brainMetaPhrases = [
     'same brain like you',
     'same brain as you',
     'brain like you',
     'senior developer brain',
-    'enterprise senior developer',
-    'act as senior developer',
-    'act as a senior developer',
-    'you are senior developer',
-    'you are a senior developer',
-    'behave like a senior developer',
-    'answer like a senior developer',
-    'answer exactly what i ask',
-    'audit and fix senior developer',
-    'audit and fix the senior developer',
-    'fix senior developer',
     'senior developer is not working',
-    'real senior developer ready',
-    'senior developer ready to start',
-    'ready to start work now',
+    'is the senior developer ready',
+    'is senior developer ready',
     'senior developer mode ready',
-    'senior developer answer',
   ];
-  return brainPhrases.some((p) => text.includes(p));
+  return brainMetaPhrases.some((p) => text.includes(p));
 }
 
 export function buildSeniorDeveloperBrainAnswer(): string {
   return [
-    'I am IVX IA’s owner-gated engineering execution mode.',
+    'IVX IA has an owner-gated Senior Developer execution path.',
     '',
-    'I can inspect the IVX codebase and infrastructure, define an evidence-first plan, propose a bounded patch, run applicable validation, and—after the required owner approvals—commit, deploy, and verify production.',
+    'STATIC BRAIN STATUS: this response only describes the configured path. It is not proof that IVX IA inspected code, changed a file, ran tests, committed, deployed, or verified production in this conversation.',
     '',
-    'I use an evidence-first engineering narrative: goal, inspection, implementation, validation, deployment, and live proof. I report the IVX evidence available for the task and identify any stage that did not complete; this is not a product-equivalence claim.',
+    'For real engineering work, ask the technical question directly or run: “Run a senior developer task: <exact goal>”. The response must be grounded in runtime evidence, not this static message.',
     '',
-    'For a real change, ask: “Run a senior developer task: <exact goal>” or “fix X and deploy live with proof.” The result is only complete when the proof records changed files, validation, commit SHA, deployment, and live verification.',
-    '',
-    'STATUS: READY FOR OWNER-AUTHORIZED WORK.',
+    'VERIFICATION CONTRACT: no commit/deploy/10-of-10 claim is valid without the applicable worker/job ID, files inspected or changed, validation results, commit SHA, deploy result, and live verification.',
   ].join('\n');
 }
 
 export function detectDeveloperModeRequest(message: string): boolean {
   const text = (message ?? '').toLowerCase();
-  // Senior-developer mode STATUS and BRAIN questions are handled above, not blocked.
+  // Senior-developer mode STATUS and BRAIN meta-questions are handled above.
   if (detectSeniorDeveloperModeStatusRequest(message) || detectSeniorDeveloperBrainRequest(message)) {
     return false;
   }
