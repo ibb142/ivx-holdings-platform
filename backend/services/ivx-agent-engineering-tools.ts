@@ -320,17 +320,31 @@ export async function executeEngineeringTool(
         if (!pattern) return fail(toolId, 'pattern param required', Date.now() - started);
         const scope = String(params.scope ?? '.');
         const scopeAbs = await containPath(repoRoot, scope);
-        const res = await runProcess(
+        const scopeRel = path.relative(repoRoot, scopeAbs) || '.';
+        let res = await runProcess(
           'grep',
-          ['-rnI', '--exclude-dir=node_modules', '--exclude-dir=.git', '-e', pattern, path.relative(repoRoot, scopeAbs) || '.'],
+          ['-rnI', '--exclude-dir=node_modules', '--exclude-dir=.git', '-e', pattern, scopeRel],
           repoRoot,
           Math.min(timeoutMs, 60_000),
         );
+        if (res.exitCode > 1) {
+          // BusyBox grep (Alpine/Render containers) lacks --exclude-dir (exit 2).
+          // Retry portable: recursive grep + post-filter of vendored/VCS dirs.
+          res = await runProcess(
+            'grep',
+            ['-rnI', '-e', pattern, scopeRel],
+            repoRoot,
+            Math.min(timeoutMs, 60_000),
+          );
+        }
         // grep exit 1 = no matches. That is a real, valid answer.
         if (res.exitCode > 1) {
           return fail(toolId, `grep failed (exit ${res.exitCode}): ${res.stderr.slice(0, 200)}`, Date.now() - started);
         }
-        const matches = res.stdout.split('\n').filter(Boolean);
+        const matches = res.stdout
+          .split('\n')
+          .filter(Boolean)
+          .filter((line) => !line.includes('/node_modules/') && !line.includes('/.git/'));
         const digest = sha256(res.stdout);
         return {
           ok: true,
