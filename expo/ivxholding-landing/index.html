@@ -232,6 +232,38 @@
 </div>
 
 <!-- PROPERTIES — Dynamic from Supabase, with static fallback -->
+<!-- PROJECT REELS — HOME FEED -->
+<section id="home-feed" style="padding:48px 24px 0;">
+  <div class="wrap">
+    <div class="live-deals-header reveal" style="margin-bottom:16px;">
+      <div class="live-deals-title-row">
+        <span style="font-size:22px;">&#127916;</span>
+        <h2 class="live-deals-title">Project Reels</h2>
+      </div>
+      <span class="live-deals-badge">Live construction &amp; drone updates</span>
+    </div>
+    <div class="ivx-home-reel-card" data-ivx-home-feed-video style="max-width:420px;border-radius:16px;overflow:hidden;background:#0b0e14;border:1px solid rgba(255,255,255,.08);">
+      <video id="homeFeedReel" muted autoplay loop playsinline preload="auto" style="width:100%;display:block;background:#000;min-height:220px;"></video>
+    </div>
+  </div>
+</section>
+<script>
+(function(){
+  var v = document.getElementById('homeFeedReel');
+  if (!v) return;
+  fetch('https://api.ivxholding.com/api/reels', {headers:{'Accept':'application/json'}}).then(function(r){return r.json();}).then(function(d){
+    var list = (d && (d.videos || d.reels)) || [];
+    var first = null;
+    for (var i=0;i<list.length;i++){ if (list[i] && list[i].video_url) { first = list[i]; break; } }
+    if (first && first.video_url) {
+      if (first.thumbnail_url) v.setAttribute('poster', first.thumbnail_url);
+      v.src = first.video_url;
+      var p = v.play && v.play(); if (p && p.catch) p.catch(function(){});
+    }
+  }).catch(function(){});
+})();
+</script>
+
 <section id="properties" style="padding:80px 24px 0;">
   <div class="wrap">
     <div class="live-deals-header reveal">
