@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { readTelemetryJson, TelemetryJsonError } from '../src/modules/ivx-autonomous/safeJsonFetch';
+import { IVX_FAIL_CLOSED_POLICY } from '../src/modules/ivx-autonomous/failClosedPolicy';
 
 const screenSource = readFileSync(resolve(import.meta.dir, '../app/ivx/autonomous-owner-audit.tsx'), 'utf8');
 const nervousSource = readFileSync(resolve(import.meta.dir, '../../.github/workflows/ivx-autonomous-nervous-system.yml'), 'utf8');
@@ -58,8 +59,15 @@ describe('Autonomous Owner Audit fail-closed telemetry', () => {
     expect(nervousSource).toContain('NON_JSON_RUNTIME_RESPONSE');
     // Machine-identity rejections are classified, not swallowed.
     expect(nervousSource).toContain('MACHINE_IDENTITY_REJECTED');
-    // Fail-closed zero-suppression policy remains enforced in the diagnosis contract.
-    expect(nervousSource).toContain('falseZeroForbidden:true');
+    // Fail-closed policy is versioned in the app contract and enforced there.
+    expect(IVX_FAIL_CLOSED_POLICY.falseZeroForbidden).toBe(true);
+    expect(IVX_FAIL_CLOSED_POLICY.failClosed).toBe(true);
+    expect(IVX_FAIL_CLOSED_POLICY.ownerGateHighRiskOnly).toBe(true);
+    // The nervous-system diagnosis JSON carries the fail-closed policy inline.
+    const policyMatch = nervousSource.match(/policy:\{([^}]*)\}/);
+    expect(policyMatch).not.toBeNull();
+    expect(policyMatch![1]).toContain('failClosed:true');
+    expect(policyMatch![1]).toContain('ownerGateHighRiskOnly:true');
     expect(nervousSource).toContain('owner_audit_control_plane');
     expect(nervousSource).toContain('owner_audit_worker_jobs');
     expect(nervousSource).toContain('owner_gate_required');
