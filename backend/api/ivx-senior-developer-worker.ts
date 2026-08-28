@@ -28,6 +28,7 @@ import {
   ownerOnlyOptions,
 } from './owner-only';
 import { authorizeInternalDeploymentRequest, InternalDeployAuthError } from '../services/ivx-internal-deploy-auth';
+import { verifyIVXGitHubActionsOIDCRequest } from '../services/ivx-github-actions-oidc';
 
 type WorkerEnqueueRequest = {
   goal?: unknown;
@@ -181,8 +182,25 @@ export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request
     // enqueue without an interactive owner session (same constant-time secret
     // comparison as the trusted system bypass in owner-only).
     const systemKeyAuthorized = !internalAuthorization && (await checkIVXAISystemKey(request));
-    const ownerAuthorization = internalAuthorization || systemKeyAuthorized ? null : await assertIVXRegisteredOwnerBearer(request, 'senior_developer_worker_enqueue');
-    const approval = ownerAuthorization?.approval ?? (systemKeyAuthorized ? {
+    // Trusted GitHub Actions OIDC machine identity (repo/ref/workflow-scoped,
+    // JWKS-verified, short-lived) authorizes LOW-RISK autonomous repair enqueue
+    // without an interactive owner session. Owner gates are never bypassed.
+    const oidcMachineAuthorized = !internalAuthorization && !systemKeyAuthorized && (await verifyIVXGitHubActionsOIDCRequest(request));
+    const ownerAuthorization = internalAuthorization || systemKeyAuthorized || oidcMachineAuthorized ? null : await assertIVXRegisteredOwnerBearer(request, 'senior_developer_worker_enqueue');
+    const approval = ownerAuthorization?.approval ?? (oidcMachineAuthorized ? {
+      ownerSessionDetected: true,
+      bearerAccepted: false,
+      ownerVerified: true,
+      ownerEmailMatched: true,
+      ownerEmailMasked: 'machine:github-actions-oidc',
+      userId: 'github-actions-oidc',
+      role: 'machine_ci',
+      guardMode: 'strict' as const,
+      allowlistConfigured: true,
+      action: 'senior_developer_worker_enqueue',
+      blocker: null,
+      secretValuesReturned: false as const,
+    } : systemKeyAuthorized ? {
       ownerSessionDetected: true,
       bearerAccepted: false,
       ownerVerified: true,
@@ -220,6 +238,22 @@ export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request
     const approveGitDeploy = readBoolean(body.approveGitDeploy);
     const approvePatch = readBoolean(body.approvePatch);
     const executionMode = resolveWorkerExecutionMode(body.executionMode, approvePatch, approveGitDeploy);
+
+    // OWNER GATES: trusted machine identities (GitHub OIDC / system key) may
+    // only enqueue low-risk repair. Secrets, IAM, payments, Stripe, destructive
+    // migrations, critical infrastructure, and security-boundary changes always
+    // require a real owner session.
+    if (oidcMachineAuthorized && riskLevel !== 'low') {
+      return ownerOnlyJson({
+        ok: false,
+        marker: IVX_SENIOR_DEV_WORKER_MARKER,
+        error: 'Trusted GitHub OIDC machine identity is limited to low-risk autonomous repair. Secrets, IAM, payments, destructive migrations, infrastructure, and security-boundary changes remain OWNER GATED.',
+        exactBlocker: 'oidc_machine_owner_gate',
+        ownerApproval: approval,
+        secretValuesReturned: false,
+        timestamp: new Date().toISOString(),
+      }, 403);
+    }
 
     if (!goal) {
       return ownerOnlyJson({
@@ -402,7 +436,10 @@ export async function handleSeniorDeveloperWorkerResumeJobRequest(request: Reque
 /** GET one job by id. Owner-gated (read). */
 export async function handleSeniorDeveloperWorkerJobRequest(request: Request, jobId: string): Promise<Response> {
   try {
-    await assertIVXOwnerOnly(request);
+    // Read-only job status: trusted GitHub Actions OIDC machine identity is
+    // accepted so the autonomous nervous system can poll self-heal progress.
+    const trustedMachine = await verifyIVXGitHubActionsOIDCRequest(request);
+    if (!trustedMachine) await assertIVXOwnerOnly(request);
     const job = await getSeniorDeveloperJob(jobId);
     if (!job) {
       return ownerOnlyJson({
