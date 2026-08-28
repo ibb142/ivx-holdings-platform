@@ -8,6 +8,41 @@ on:
     branches: [main]
 
 jobs:
+  mobile-impact:
+    name: Mobile impact classifier
+    runs-on: ubuntu-latest
+    outputs:
+      mobile: ${{ steps.detect.outputs.mobile }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect mobile-impacting changes
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" != "pull_request" ]; then
+            echo 'mobile=true' >> "$GITHUB_OUTPUT"
+            echo 'MOBILE_IMPACT=FULL_MAIN_GATE'
+            exit 0
+          fi
+          git fetch --no-tags origin "${{ github.base_ref }}" --depth=1
+          base=$(git merge-base HEAD "origin/${{ github.base_ref }}")
+          git diff --name-only "$base"...HEAD > "$RUNNER_TEMP/changed-files.txt"
+          cat "$RUNNER_TEMP/changed-files.txt"
+          mobile=false
+          while IFS= read -r path; do
+            case "$path" in
+              expo/*|package.json|bun.lock|bun.lockb|tsconfig.json)
+                mobile=true
+                break
+                ;;
+            esac
+          done < "$RUNNER_TEMP/changed-files.txt"
+          echo "mobile=$mobile" >> "$GITHUB_OUTPUT"
+          echo "MOBILE_IMPACT=$mobile"
+
   typecheck:
     name: TypeScript typecheck — HARD GATE
     runs-on: ubuntu-latest
@@ -108,8 +143,9 @@ jobs:
 
   e2e-maestro:
     name: Maestro E2E (mobile surface) — HARD GATE
+    if: ${{ github.event_name != 'pull_request' || needs.mobile-impact.outputs.mobile == 'true' }}
     runs-on: macos-latest
-    needs: [typecheck]
+    needs: [typecheck, mobile-impact]
     timeout-minutes: 38
     env:
       CI: '1'
