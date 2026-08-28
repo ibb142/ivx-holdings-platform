@@ -457,10 +457,11 @@ export async function handleSeniorDeveloperWorkerJobRequest(request: Request, jo
   }
 }
 
-/** GET recent jobs. Owner-gated (read). */
+/** GET recent jobs. Owner-gated (read); trusted OIDC machine identity accepted for autonomous polling. */
 export async function handleSeniorDeveloperWorkerJobsRequest(request: Request): Promise<Response> {
   try {
-    await assertIVXOwnerOnly(request);
+    const trustedMachine = await verifyIVXGitHubActionsOIDCRequest(request);
+    if (!trustedMachine) await assertIVXOwnerOnly(request);
     const jobs = await listSeniorDeveloperJobs(25);
     return ownerOnlyJson({ ok: true, ownerOnly: true, marker: IVX_SENIOR_DEV_WORKER_MARKER, jobs, secretValuesReturned: false });
   } catch (error) {

@@ -125,9 +125,27 @@ function buildMinimalOwnerEnvelope(payload: Record<string, unknown>, error: unkn
 }
 
 export function ownerOnlyJson(payload: Record<string, unknown>, status: number = 200): Response {
-  return new Response(serializeOwnerOnlyPayload(payload), {
+  let text = serializeOwnerOnlyPayload(payload);
+  // HARD LIMIT measured in UTF-8 BYTES (not JS chars): multibyte content can
+  // double the transport size and get proxy-truncated mid-stream, producing an
+  // invalid-JSON reply. Fail closed to a small valid envelope instead.
+  if (Buffer.byteLength(text, 'utf8') > OWNER_ONLY_MAX_RESPONSE_BYTES) {
+    text = JSON.stringify({
+      ok: payload.ok === true,
+      responseTruncated: true,
+      serializationFallback: 'strict_transport_byte_limit',
+      answer: 'The IVX Owner AI completed, but its full response exceeded the strict transport byte limit. The result was preserved server-side — please resend or narrow the request.',
+    });
+  }
+  const bytes = Buffer.byteLength(text, 'utf8');
+  return new Response(text, {
     status,
-    headers: OWNER_ONLY_HEADERS,
+    headers: {
+      ...OWNER_ONLY_HEADERS,
+      'X-Content-Type-Options': 'nosniff',
+      'X-IVX-JSON-Contract': 'strict-v1',
+      'Content-Length': String(bytes),
+    },
   });
 }
 
