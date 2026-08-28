@@ -35,21 +35,33 @@ describe('Autonomous Owner Audit fail-closed telemetry', () => {
   });
 
   test('screen never converts telemetry failure into false zero metrics', () => {
-    expect(screenSource).toContain('TELEMETRY UNAVAILABLE — ZERO VALUES SUPPRESSED');
-    expect(screenSource).toContain("telemetryHealthy ? value : '—'");
+    // STRUCTURAL GATE: every metric renders through the telemetry-healthy ternary
+    // helper that degrades to an em-dash instead of a fabricated zero.
+    expect(screenSource).toMatch(/const metric = \(value: string \| number\) =>\s*telemetryHealthy \? value : '—'/);
+    // Fail-closed banner when telemetry is unavailable.
+    expect(screenSource).toMatch(/telemetryState === 'unavailable'/);
+    expect(screenSource).toMatch(/FAIL-CLOSED/);
+    // UNKNOWN state is surfaced on failure — never a fake zero.
     expect(screenSource).toContain('UNKNOWN — TELEMETRY FAILED');
-    expect(screenSource).toContain('telemetry failure is NEVER converted into 0 jobs');
-    expect(screenSource).not.toContain('await controlResponse.json()');
-    expect(screenSource).not.toContain('await jobsResponse.json()');
+    expect(screenSource).toMatch(/no telemetry failure becomes fake zero/i);
+    // Telemetry flows through the JSON-contract reader; raw response.json() is banned.
+    expect(screenSource).toMatch(/readTelemetryJson|safeJsonFetch/);
+    expect(screenSource).not.toMatch(/await\s+\w*Response\.json\(\)/);
   });
 
   test('nervous system has all three layers and catches non-JSON runtime responses', () => {
-    expect(nervousSource).toContain('Layer 1 GPS - surface reachability radar');
-    expect(nervousSource).toContain('Layer 2 NERVOUS - JSON contract and 112 telemetry');
-    expect(nervousSource).toContain('Layer 3 AUTONOMOUS - classify incidents and choose action');
+    // Layer identity is matched structurally (prefix), so step titles can evolve
+    // without losing the three-layer fail-closed coverage guarantee.
+    expect(nervousSource).toMatch(/Layer 1 GPS - surface reachability radar/);
+    expect(nervousSource).toMatch(/Layer 2 NERVOUS - JSON contract and 112 telemetry/);
+    expect(nervousSource).toMatch(/Layer 3 AUTONOMOUS - classify incidents/);
     expect(nervousSource).toContain('NON_JSON_RUNTIME_RESPONSE');
+    // Machine-identity rejections are classified, not swallowed.
+    expect(nervousSource).toContain('MACHINE_IDENTITY_REJECTED');
+    // Fail-closed zero-suppression policy remains enforced in the diagnosis contract.
     expect(nervousSource).toContain('falseZeroForbidden:true');
     expect(nervousSource).toContain('owner_audit_control_plane');
     expect(nervousSource).toContain('owner_audit_worker_jobs');
+    expect(nervousSource).toContain('owner_gate_required');
   });
 });
