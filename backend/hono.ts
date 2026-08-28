@@ -761,6 +761,10 @@ import {
   handleAutonomousControlPlaneGet,
   handleAutonomousControlPlaneVerifyAll,
 } from './api/ivx-autonomous-control-plane';
+import {
+  autonomousGlobalCertificationOptions,
+  handleAutonomousGlobalCertificationGet,
+} from './api/ivx-autonomous-global-certification';
 import { OPTIONS as autonomousProofOptions, handleAutonomousProofRequest } from './api/ivx-autonomous-proof';
 import {
   OPTIONS as agentAuditOptions,
@@ -6794,6 +6798,15 @@ app.options('/api/ivx/autonomous-control-plane', () => autonomousControlPlaneOpt
 app.get('/api/ivx/autonomous-control-plane', async (context) => handleAutonomousControlPlaneGet(context.req.raw));
 app.options('/api/ivx/autonomous-control-plane/verify-all', () => autonomousControlPlaneOptions());
 app.post('/api/ivx/autonomous-control-plane/verify-all', async (context) => handleAutonomousControlPlaneVerifyAll(context.req.raw));
+
+// ============================================================================
+// IVX Global Certification Supervisor — Autonomous is the senior supervisor of
+// the ENTIRE system: every required workflow on the exact MAIN SHA must be
+// GREEN (production SHA parity included) or the global verdict is RED and a
+// real repair mission opens automatically. High-risk ops stay OWNER-GATED.
+// ============================================================================
+app.options('/api/ivx/autonomous/global-certification', () => autonomousGlobalCertificationOptions());
+app.get('/api/ivx/autonomous/global-certification', async (context) => handleAutonomousGlobalCertificationGet(context.req.raw));
 app.options('/api/ivx/autonomous-proof', () => autonomousProofOptions());
 app.get('/api/ivx/autonomous-proof', async (context) => handleAutonomousProofRequest(context.req.raw));
 
