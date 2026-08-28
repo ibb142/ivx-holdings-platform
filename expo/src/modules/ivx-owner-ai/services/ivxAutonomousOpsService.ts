@@ -16,13 +16,62 @@ export type AutonomousOpsDashboard={marker:string;ledgerMarker?:string;generated
 export type DateRange='24h'|'today'|'yesterday'|'7d'|'30d';
 
 function record(v:unknown):Record<string,unknown>{return v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};}
-async function ownerFetch(path:string):Promise<unknown>{const token=await getIVXAccessToken();const res=await fetch(`${getDirectApiBaseUrl()}${path}`,{headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})}});if(!res.ok){const b=await res.text().catch(()=>'');throw new Error(`IVX autonomous-ops request failed: HTTP ${res.status}${b?` — ${b.slice(0,200)}`:''}`);}return res.json();}
+function sameSha(a:string|null|undefined,b:string|null|undefined):boolean{
+  if(!a||!b)return false;
+  return a===b||a.startsWith(b)||b.startsWith(a);
+}
+function normalizeDashboard(raw:AutonomousOpsDashboard):AutonomousOpsDashboard{
+  if(!Array.isArray(raw.agents))throw new Error('Autonomous dashboard telemetry invalid: agents[] missing.');
+  if(raw.agents.length!==112)throw new Error(`Autonomous dashboard fail-closed: expected 112 agents, received ${raw.agents.length}.`);
+  const numbers=raw.agents.map((a)=>a.agentNumber).sort((a,b)=>a-b);
+  for(let i=0;i<112;i+=1){if(numbers[i]!==i+1)throw new Error(`Autonomous dashboard fail-closed: IA registry mismatch at ${i+1}.`);}
+  if(!raw.enterprise112)throw new Error('Autonomous dashboard fail-closed: enterprise ledger status missing.');
+  if(raw.enterprise112.registryCount!==112)throw new Error(`Autonomous dashboard fail-closed: registry ${raw.enterprise112.registryCount}/112.`);
+  if(!raw.enterprise112.ledgerOk)throw new Error(`Autonomous dashboard fail-closed: durable ledger unhealthy${raw.enterprise112.ledgerError?` — ${raw.enterprise112.ledgerError}`:''}.`);
+
+  const backendSha=raw.backendCommitSha??null;
+  const renderSha=raw.deploymentStatus?.renderCommitSha??null;
+  const githubSha=raw.githubHeadSha??null;
+  const backendRenderMatch=sameSha(backendSha,renderSha);
+  const githubMatch=githubSha?sameSha(backendSha,githubSha):false;
+  const productionHealthy=Boolean(backendSha&&renderSha&&backendRenderMatch&&raw.enterprise112.ledgerOk);
+
+  return {
+    ...raw,
+    commitMatch:githubMatch,
+    deploymentStatus:{
+      ...raw.deploymentStatus,
+      productionHealthy,
+    },
+    realAgentCount:raw.agents.filter((a)=>a.tasksStartedToday>0||Boolean(a.lastActivityTime)).length,
+    placeholderAgentCount:raw.agents.filter((a)=>a.tasksStartedToday===0&&!a.lastActivityTime).length,
+  };
+}
+
+async function ownerFetch(path:string):Promise<unknown>{
+  const token=await getIVXAccessToken();
+  if(!token)throw new Error('IVX autonomous dashboard requires an authenticated Owner session.');
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),12000);
+  try{
+    const res=await fetch(`${getDirectApiBaseUrl()}${path}`,{signal:controller.signal,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,'Cache-Control':'no-store'}});
+    if(!res.ok){const b=await res.text().catch(()=>'');throw new Error(`IVX autonomous-ops request failed: HTTP ${res.status}${b?` — ${b.slice(0,200)}`:''}`);}
+    return res.json();
+  }catch(error){
+    if(error instanceof Error&&error.name==='AbortError')throw new Error('IVX autonomous dashboard request timed out after 12s.');
+    throw error;
+  }finally{clearTimeout(timeout);}
+}
+
 export async function getAutonomousOpsDashboard(opts?:{range?:DateRange;agent?:string|null;category?:string|null}):Promise<AutonomousOpsDashboard>{
   const p=new URLSearchParams();
   p.set('enterpriseDashboard','1');
+  p.set('_ts',String(Date.now()));
   if(opts?.range)p.set('range',opts.range);
   if(opts?.agent)p.set('agent',opts.agent);
   if(opts?.category)p.set('category',opts.category);
   const payload=record(await ownerFetch(`/api/ivx/live-work/agents?${p}`));
-  return record(payload.dashboard) as unknown as AutonomousOpsDashboard;
+  if(payload.ok!==true)throw new Error(typeof payload.error==='string'?payload.error:'Autonomous dashboard backend returned ok=false.');
+  const dashboard=record(payload.dashboard) as unknown as AutonomousOpsDashboard;
+  return normalizeDashboard(dashboard);
 }
