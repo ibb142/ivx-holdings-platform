@@ -14,6 +14,7 @@
  *   GET  /api/ivx/autonomous-core/self-heal               → list recent self-heal reports
  */
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
+import { verifyIVXGitHubActionsOIDCRequest } from '../services/ivx-github-actions-oidc';
 import { buildAutonomousDashboard } from '../services/ivx-autonomous-core';
 import { buildHandoffManifest } from '../services/ivx-handoff';
 import { buildPriorityQueue } from '../services/ivx-priority-engine';
@@ -71,6 +72,16 @@ function asNumber(value: unknown): number | null {
 }
 
 async function requireOwner(request: Request): Promise<Response | null> {
+  // Trusted GitHub Actions OIDC machine identity (repo/ref/workflow-scoped,
+  // JWKS-verified, short-lived) authorizes the low-risk autonomous diagnose /
+  // read / self-heal endpoints without an interactive owner session — matching
+  // the senior-developer worker enqueue contract. A correctly verified OIDC
+  // request must never fail with "missing bearer token". High-risk operations
+  // (secrets, IAM, payments, destructive migrations, deploy approval) remain
+  // OWNER GATED in their dedicated endpoints.
+  if (await verifyIVXGitHubActionsOIDCRequest(request)) {
+    return null;
+  }
   try {
     const owner = await assertIVXOwnerOnly(request);
     if (!owner.userId) {
