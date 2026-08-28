@@ -1378,7 +1378,9 @@ async function applyPatchProposal(projectRoot: string, proposal: IVXCodePatchPro
     const fullPath = path.join(projectRoot, operation.path);
     if (operation.kind === 'create_file') {
       if (existsSync(fullPath)) {
-        throw new Error(`Create-file target already exists: ${operation.path}; refusing to overwrite.`);
+        const existing = await readFile(fullPath, 'utf8');
+        if (existing === operation.newText) continue; // Idempotent: file already in desired state (2026-08-28).
+        throw new Error(`Create-file target already exists: ${operation.path} — file exists with different content; re-emit this operation as update (oldText/newText) against the current content instead of create_file.`);
       }
       await mkdir(path.dirname(fullPath), { recursive: true });
       await writeFile(fullPath, operation.newText, 'utf8');
