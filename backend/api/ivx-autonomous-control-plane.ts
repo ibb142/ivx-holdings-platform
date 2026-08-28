@@ -10,6 +10,7 @@ import { getSmsNotifierStatus } from '../services/ivx-autonomous-sms-notifier';
 import { isDurableStoreConfigured } from '../services/ivx-durable-store';
 import { ALL_ENTERPRISE_AGENTS, getFunctionalGroups, getAgentsByFunctionalGroup } from '../services/ivx-enterprise-master-registry';
 import { getSeniorDeveloperJob } from '../services/ivx-senior-developer-worker';
+import { resolveMainSha, runGlobalCertificationSupervision } from '../services/ivx-global-certification-supervisor';
 
 export const IVX_AUTONOMOUS_CONTROL_PLANE_MARKER = 'ivx-autonomous-control-plane-v5-2026-08-25';
 
@@ -146,6 +147,15 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
   }
 
   try {
+    // GLOBAL SUPERVISOR (owner mandate 2026-08-28): Autonomous must never issue
+    // GREEN/CERTIFIED/10/10/HEALTHY/COMPLETE while ANY required workflow on the
+    // same MAIN SHA is RED. The supervision cycle (collect all required
+    // workflows on MAIN_SHA + production SHA parity + auto repair dispatch)
+    // runs in parallel with the campaign read; its verdict gates every
+    // certification claim in this response.
+    const supervisionPromise = resolveMainSha()
+      .then((sha) => (sha ? runGlobalCertificationSupervision(sha) : null))
+      .catch(() => null);
     if (controlPlaneCache && Date.now() - controlPlaneCache.at < CONTROL_PLANE_CACHE_TTL_MS) {
       return new Response(controlPlaneCache.body, {
         status: 200,
@@ -260,6 +270,12 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
 
     const dispatcherCoverage = new Set(dispatcherRecords.map((record) => record.agentNumber)).size;
 
+    const supervision = await supervisionPromise;
+    const globalStatus = supervision?.result.status ?? 'PENDING';
+    const globalCertified = supervision ? supervision.result.certified : false;
+    const failedRequired = supervision?.result.failedRequired ?? [];
+    const repairDispatches = supervision?.dispatches ?? [];
+
     const response = ownerOnlyJson({
       ok: true,
       marker: IVX_AUTONOMOUS_CONTROL_PLANE_MARKER,
@@ -304,10 +320,15 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
         smsDailyCap: sms.smsDailyCap,
       },
       certification: {
-        liveReady: enabled && isDurableStoreConfigured() && dispatcherCoverage === 112,
+        liveReady: enabled && isDurableStoreConfigured() && dispatcherCoverage === 112 && globalCertified,
+        certified: globalCertified,
+        globalStatus,
+        globalSupervisorBlockedBy: failedRequired,
+        globalRepairDispatches: repairDispatches.map((dispatch) => ({ workflow: dispatch.workflow, jobId: dispatch.jobId, dispatched: dispatch.dispatched, detail: dispatch.detail })),
+        certificationPolicy: 'Autonomous may certify ONLY when every required certification workflow is SUCCESS on the exact MAIN SHA and production /health commit == MAIN SHA. Any RED blocks GREEN/CERTIFIED/10/10/HEALTHY/COMPLETE.',
         registryVerifiedComplete: enrichedAgents.filter((agent) => agent.worker.registered).length === 112,
         dispatcherMappedComplete: dispatcherCoverage === 112,
-        campaignComplete: completedWithEvidence === 112,
+        campaignComplete: completedWithEvidence === 112 && globalCertified,
         liveWorkforceObserved: realWorkingCount > 0,
         liveWorkingAgents: realWorkingCount,
         full112RealWorkObserved: realWorkingCount === 112,
