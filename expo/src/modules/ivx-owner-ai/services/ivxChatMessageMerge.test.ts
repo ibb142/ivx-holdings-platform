@@ -75,9 +75,29 @@ describe('buildOwnerMessageContentKey', () => {
     expect(key).toBeNull();
   });
 
-  it('builds a conversation+role+body key for text messages', () => {
+  it('builds a logical content key from sender+body+attachment WITHOUT the conversation id', () => {
     const key = buildOwnerMessageContentKey(makeMessage({ id: 'x', body: 'Hello', senderRole: 'owner', createdAt: '2026-05-31T00:00:01Z' }));
-    expect(key).toBe('ivx-owner-room::owner::hello');
+    expect(key).not.toBeNull();
+    expect(key).not.toContain('ivx-owner-room');
+  });
+
+  it('same logical turn keeps the same content key across canonical room-id rotation', () => {
+    const beforeRotation = buildOwnerMessageContentKey(makeMessage({ id: 'local-1', conversationId: 'ivx-owner-room', body: 'Hello', senderRole: 'owner', createdAt: '2026-05-31T00:00:01Z' }));
+    const afterRotation = buildOwnerMessageContentKey(makeMessage({ id: 'server-uuid', conversationId: 'canonical-uuid-room', body: 'Hello', senderRole: 'owner', createdAt: '2026-05-31T00:00:02Z' }));
+    expect(afterRotation).not.toBeNull();
+    expect(afterRotation).toBe(beforeRotation);
+  });
+
+  it('merge dedupes the same logical turn across canonical room-id rotation (local shadow dropped, remote wins)', () => {
+    const local = [
+      makeMessage({ id: 'ivx-local-1', conversationId: 'ivx-owner-room', senderRole: 'assistant', body: 'Here is your ranking.', createdAt: '2026-05-31T00:00:05Z' }),
+    ];
+    const remote = [
+      makeMessage({ id: 'server-uuid', conversationId: 'canonical-uuid-room', senderRole: 'assistant', body: 'Here is your ranking.', createdAt: '2026-05-31T00:00:06Z' }),
+    ];
+    const merged = mergeOwnerMessages(remote, local);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.id).toBe('server-uuid');
   });
 });
 
