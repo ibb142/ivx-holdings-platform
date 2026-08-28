@@ -339,12 +339,16 @@ function readGithubToken(): string {
 }
 
 async function ghJson<T>(path: string, token: string): Promise<T> {
+  // token may be empty: the IVX repository is publicly readable, so collection
+  // degrades to unauthenticated GitHub API reads (no credential ever needed,
+  // no secret ever injected). Private-repo deployments should set GITHUB_TOKEN.
+  const headers: Record<string, string> = {
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(`${GITHUB_API_BASE}${path}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
+    headers,
     signal: AbortSignal.timeout(COLLECT_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`GitHub ${path} -> HTTP ${response.status}`);
@@ -365,7 +369,6 @@ type GhRun = {
 /** Collect the latest main-branch run for every required workflow + production /health parity. */
 export async function resolveMainSha(): Promise<string | null> {
   const token = readGithubToken();
-  if (!token) return null;
   try {
     const ref = await ghJson<{ object: { sha: string } }>('/repos/' + IVX_GITHUB_REPO + '/git/ref/heads/main', token);
     return ref.object.sha || null;
@@ -395,18 +398,9 @@ export async function collectGlobalCertificationEvidence(mainSha: string): Promi
     collectorError = `production /health probe failed: ${error instanceof Error ? error.message : 'unknown'}`;
   }
 
-  if (!token) {
-    return {
-      input: {
-        mainSha,
-        productionSha,
-        productionHealthy,
-        runs: [],
-        collector: 'unavailable',
-        collectorError: collectorError ?? 'GITHUB_TOKEN missing in backend runtime — GitHub Actions collection disabled (fail-closed PENDING).',
-      },
-    };
-  }
+  // token may be empty — PUBLIC unauthenticated reads are attempted below. If
+  // the repository is private the GitHub calls will 404/401 and the collector
+  // degrades to 'unavailable' (fail-closed PENDING, never GREEN).
 
   try {
     const workflows = await ghJson<{ workflows: GhWorkflow[] }>('/repos/' + IVX_GITHUB_REPO + '/actions/workflows?per_page=100', token);
