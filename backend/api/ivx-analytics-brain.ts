@@ -61,7 +61,7 @@ export async function handleAnalyticsEventIngest(req: Request): Promise<Response
     const result = await ingestBehaviorEvent(body);
     return jsonResponse({ ...result, timestamp: new Date().toISOString() });
   } catch (e) {
-    return errorResponse(`Ingestion failed: ${(e as Error).message}`, 500);
+    return errorResponse(`Ingestion failed: ${(e as Error).message}`, 502);
   }
 }
 
@@ -75,7 +75,7 @@ export async function handleAnalyticsBatchIngest(req: Request): Promise<Response
     const result = await ingestBatchEvents(body.events);
     return jsonResponse({ ...result, timestamp: new Date().toISOString() });
   } catch (e) {
-    return errorResponse(`Batch ingestion failed: ${(e as Error).message}`, 500);
+    return errorResponse(`Batch ingestion failed: ${(e as Error).message}`, 502);
   }
 }
 
@@ -93,7 +93,7 @@ export async function handleAnalyticsMemberAnalyze(req: Request): Promise<Respon
     if (!result) return errorResponse('Member not found', 404);
     return jsonResponse({ ok: true, member: result, timestamp: new Date().toISOString() });
   } catch (e) {
-    return errorResponse(`Analysis failed: ${(e as Error).message}`, 500);
+    return errorResponse(`Analysis failed: ${(e as Error).message}`, 502);
   }
 }
 
