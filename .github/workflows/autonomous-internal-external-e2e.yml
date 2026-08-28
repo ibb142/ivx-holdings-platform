@@ -130,7 +130,6 @@ jobs:
     timeout-minutes: 10
     env:
       API_BASE: https://api.ivxholding.com
-      SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
       INTERNAL_RESULT: ${{ needs.internal-e2e.result }}
       EXTERNAL_RESULT: ${{ needs.external-e2e.result }}
     steps:
@@ -142,14 +141,26 @@ jobs:
           echo "EXTERNAL_RESULT=$EXTERNAL_RESULT"
           test "$INTERNAL_RESULT" = success || echo 'AUTONOMOUS_INTERNAL_FAILURE=DETECTED'
           test "$EXTERNAL_RESULT" = success || echo 'AUTONOMOUS_EXTERNAL_FAILURE=DETECTED'
-      - name: Delegate bounded end-to-end repair mission
+      - name: Acquire scoped GitHub OIDC identity
+        id: oidc
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${SYSTEM_KEY:-}"
+          response=$(curl -fsS --max-time 30 -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery")
+          token=$(printf '%s' "$response" | jq -r '.value // empty')
+          test -n "$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+          echo 'AUTONOMOUS_OIDC=ACQUIRED'
+      - name: Delegate bounded end-to-end repair mission
+        shell: bash
+        env:
+          IVX_GITHUB_OIDC: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          test -n "${IVX_GITHUB_OIDC:-}"
           goal="AUTONOMOUS INTERNAL + EXTERNAL E2E CONTROL TOWER. Exact source SHA ${GITHUB_SHA}. Internal result=${INTERNAL_RESULT}; external result=${EXTERNAL_RESULT}. Inspect failing GitHub Actions jobs and logs, identify exact root cause, repair safe low-risk code/config only, rerun tests/typecheck/lint and live probes, and require exact-SHA parity before certification. Never weaken tests, evidence, 112/112 count, auth, security or owner gates. Stop and require Owner Gate for secrets, IAM, CloudFront/Route53, payments, destructive migrations, security-policy changes, or rollback."
           payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",systemMode:true,ownerApproved:true,riskLevel:"low",proposedPlan:"Inspect internal CI and external production evidence end-to-end; repair only safe low-risk causes; rerun and prove exact SHA."}')
-          http=$(curl -sS --max-time 60 -o /tmp/worker.json -w '%{http_code}' -X POST "$API_BASE/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-System-Key: ${SYSTEM_KEY}" --data "$payload" || true)
+          http=$(curl -sS --max-time 60 -o /tmp/worker.json -w '%{http_code}' -X POST "$API_BASE/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}" --data "$payload" || true)
           case "$http" in 200|202|409) ;; *) cat /tmp/worker.json || true; exit 1;; esac
           cat /tmp/worker.json
 
