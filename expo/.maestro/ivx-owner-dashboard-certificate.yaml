@@ -6,16 +6,23 @@ tags:
   - dashboard
   - critical
 ---
-# Runs after the real owner login flow on the same installed QA build.
-# Deep link is valid because Expo config uses scheme: ivx-app.
-- openLink: "ivx-app://admin/dashboard"
+# Runs immediately after the real Owner login/Home certificate on the same
+# installed process and session. Navigate through the visible in-app Owner tab,
+# not an external URI. This validates the same route transition a real Owner uses
+# and avoids losing/rehydrating auth state through Android intent dispatch.
+- extendedWaitUntil:
+    visible:
+      id: "tab-owner-console"
+    timeout: 15000
+- tapOn:
+    id: "tab-owner-console"
 - extendedWaitUntil:
     visible: "Dashboard"
-    timeout: 20000
+    timeout: 30000
 - assertVisible: "Live"
+- assertNotVisible: "Access denied"
 - assertNotVisible: "Sign In Failed"
 - assertNotVisible: "Login service temporarily unavailable"
-# Core owner dashboard modules must paint instead of a black/blank surface.
 - extendedWaitUntil:
     visible: "Members"
     timeout: 15000
@@ -25,15 +32,15 @@ tags:
 - extendedWaitUntil:
     visible: "Transactions"
     timeout: 15000
-# Exercise the scroll surface to catch delayed render/blank-screen regressions.
 - swipe:
     start: 50%,80%
     end: 50%,25%
     duration: 800
 - assertVisible: "Dashboard"
 - assertNotVisible: "Something went wrong"
-# Return to the authenticated owner shell so the next certificate can open Chat.
-- openLink: "ivx-app://"
+# Return through the native router/tab tree; the next certificate must inherit
+# the exact authenticated session and prove IVX IA Chat live + persistence.
+- back
 - extendedWaitUntil:
     visible:
       id: "tab-chat"
