@@ -29,7 +29,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check whether exact SHA is already live
+        id: live
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -m 20 -o /tmp/version.json -w '%{http_code}' "${API_BASE}/version" || true)
+          live=''
+          ok=false
+          if [ "$code" = 200 ]; then
+            live=$(jq -r '.commit // .version.commit // empty' /tmp/version.json)
+            ok=$(jq -r '.ok // false' /tmp/version.json)
+          fi
+          matched=false
+          if [ "$ok" = true ] && [ "$live" = "$GITHUB_SHA" ]; then matched=true; fi
+          echo "matched=$matched" >> "$GITHUB_OUTPUT"
+          echo "production_sha=${live:-missing} expected=$GITHUB_SHA matched=$matched"
+
       - name: Recover Render owner variables with all backend key candidates
+        if: ${{ steps.live.outputs.matched != 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -83,6 +101,7 @@ jobs:
           NODE
 
       - name: Trigger Render deployment
+        if: ${{ steps.live.outputs.matched != 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -106,7 +125,7 @@ jobs:
           for i in $(seq 1 120); do
             code=$(curl -sS -m 20 -o /tmp/version.json -w '%{http_code}' "${API_BASE}/version" || true)
             if [ "$code" = 200 ]; then
-              live=$(jq -r '.commit // empty' /tmp/version.json)
+              live=$(jq -r '.commit // .version.commit // empty' /tmp/version.json)
               ok=$(jq -r '.ok // false' /tmp/version.json)
               echo "poll=$i live=${live:-missing} expected=$GITHUB_SHA"
               if [ "$ok" = true ] && [ "$live" = "$GITHUB_SHA" ]; then
