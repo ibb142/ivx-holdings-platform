@@ -16,7 +16,7 @@ import type { WorkflowAttribution } from '../services/ivx-agent-work-ledger';
 
 export const IVX_AUTONOMOUS_CONTROL_PLANE_MARKER = 'ivx-autonomous-control-plane-v5-2026-08-25';
 
-const HEARTBEAT_LIVE_TTL_MS = 120_000;
+const HEARTBEAT_LIVE_TTL_MS = 90_000;
 
 /**
  * Short-lived in-memory cache for the control-plane GET telemetry payload.
