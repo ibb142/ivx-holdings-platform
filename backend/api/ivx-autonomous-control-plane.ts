@@ -11,6 +11,8 @@ import { isDurableStoreConfigured } from '../services/ivx-durable-store';
 import { ALL_ENTERPRISE_AGENTS, getFunctionalGroups, getAgentsByFunctionalGroup } from '../services/ivx-enterprise-master-registry';
 import { getSeniorDeveloperJob } from '../services/ivx-senior-developer-worker';
 import { resolveMainSha, runGlobalCertificationSupervision } from '../services/ivx-global-certification-supervisor';
+import { readAllWorkflowAttributions } from '../services/ivx-agent-work-ledger';
+import type { WorkflowAttribution } from '../services/ivx-agent-work-ledger';
 
 export const IVX_AUTONOMOUS_CONTROL_PLANE_MARKER = 'ivx-autonomous-control-plane-v5-2026-08-25';
 
@@ -169,6 +171,15 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
     const control = await loadControlState();
     const dispatcherRecords = await listCampaignDispatcherRecords();
     const campaign = buildAppCompletionCampaign(control, dispatcherRecords);
+    // OWNER MANDATE 2026-08-28 (Mission G fix): GitHub Actions / War Room work
+    // is correlated into the canonical per-IA state via the workflow
+    // attribution ledger, so commits that never flowed through a worker job
+    // still count — the dashboard no longer shows "0 commits".
+    const attributionRecords = await readAllWorkflowAttributions().catch(() => [] as WorkflowAttribution[]);
+    const latestAttributionByAgent = new Map<number, WorkflowAttribution>();
+    for (const attr of attributionRecords) {
+      latestAttributionByAgent.set(attr.agentNumber, attr);
+    }
     const sms = getSmsNotifierStatus();
     const enabled = !campaign.control.paused && !campaign.control.stopped;
     const agentStatuses = countStatuses(campaign.assignments);
@@ -187,6 +198,10 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
       const currentTask = job?.input.goal || item.assignedTask || null;
       const operatingRegion = inferOperatingRegion(`${currentTask || ''} ${job?.stageDetail || item.currentStep || ''} ${registry?.mission || ''}`);
       const workerStatus = job?.status || item.workerStatus || null;
+      const attr = latestAttributionByAgent.get(item.agentNumber) ?? null;
+      // Commit/PR evidence: worker job result FIRST, workflow attribution fallback.
+      const evidenceCommitSha = job?.result?.commitSha ?? attr?.commitSha ?? null;
+      const evidencePrNumber = job?.result?.prNumber ?? attr?.prNumber ?? null;
       const hasRealDispatcherRecord = dispatcherRecords.some(
         (record) => record.agentNumber === item.agentNumber && record.workerJobId === item.workerJobId && Boolean(record.workerJobId),
       );
@@ -235,6 +250,9 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
           finishedAt: job?.finishedAt || item.finishedAt || null,
           attempts: job?.attempts || item.attempts || 0,
           workerStatus,
+          commitSha: evidenceCommitSha,
+          prNumber: evidencePrNumber,
+          workflowAttribution: attr ? { githubRunId: attr.githubRunId, githubJobId: attr.githubJobId, commitSha: attr.commitSha, prNumber: attr.prNumber, branch: attr.branch, source: attr.source, recordedAt: attr.recordedAt } : null,
         },
       };
     }));
@@ -300,6 +318,9 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
         blocked,
         failed,
         durableState: isDurableStoreConfigured(),
+        workflowAttributionRecords: attributionRecords.length,
+        commitsWithEvidence: enrichedAgents.filter((agent) => agent.worker.commitSha).length,
+        prsWithEvidence: enrichedAgents.filter((agent) => agent.worker.prNumber).length,
         productionClaimsRequireProof: true,
         paidSpendRequiresOwnerApproval: true,
         destructiveActionsRequireOwnerApproval: true,
