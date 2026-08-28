@@ -20,7 +20,7 @@ import {
   appendDurableEvent,
 } from './ivx-durable-store';
 import type { CampaignJobRecord, DispatcherAssignmentInput } from './ivx-campaign-dispatcher';
-import { ensureCampaignAssignment } from './ivx-campaign-dispatcher';
+import { ensureCampaignAssignment, supersedeOrphanCampaignRecords } from './ivx-campaign-dispatcher';
 
 export const IVX_APP_COMPLETION_MARKER = 'ivx-app-completion-campaign-2026-08-21';
 
@@ -54,6 +54,11 @@ export type AuditItem = {
   /** Requires explicit owner authorization (secrets, AWS, auth architecture). */
   ownerGate: boolean;
   priority: 'P0' | 'P1' | 'P2';
+  /** Set ONLY when the root cause is verifiably fixed on main with durable
+   *  evidence. Resolved items generate NO implementer assignment and NO new
+   *  dispatcher dispatches — this is the anti-loop rule that stopped the
+   *  IA-057 duplicate-PR cycle (PRs #431–#447) at its source. */
+  resolvedEvidence?: string;
 };
 
 /** Real audit items — every one traceable to CI/production evidence. */
@@ -70,6 +75,13 @@ export const APP_COMPLETION_AUDIT_ITEMS: readonly AuditItem[] = [
     // ("I APPROVE owner gates #57 agent-cycle-401 and #58 owner-binding-15min").
     ownerGate: false,
     priority: 'P0',
+    // RESOLVED 2026-08-28: the 401 root cause (CI IVX_AI_SYSTEM_SECRET vs runtime
+    // owner key mismatch) is fixed on main via the encrypted Owner Variables bridge
+    // (backend/services/ivx-system-secret.ts). Verified live this session: system-key
+    // auth succeeds on production mutating endpoints (self-heal 200 with key, 401
+    // without). Keeping this item open caused the duplicate IA-057 PR loop
+    // (#431–#447) with placeholder coder output — closed here with evidence.
+    resolvedEvidence: 'Root cause fixed on main via ivx-system-secret.ts Owner Variables bridge; production system-key auth verified live 2026-08-28 (self-heal 200/401 fail-closed).',
   },
   {
     id: 'p3-owner-binding-15min',
@@ -113,6 +125,77 @@ export const APP_COMPLETION_AUDIT_ITEMS: readonly AuditItem[] = [
     problem: 'Netlify checks "Redirect rules - ivxholding", "Header rules - ivxholding" and "Pages changed - ivxholding" fail in CI PR context.',
     expectedResult: 'Netlify checks pass or are reconciled with the S3/CloudFront production landing.',
     evidence: 'PR #201 check-runs: three ivxholding Netlify checks completed with failure.',
+    ownerGate: false,
+    priority: 'P2',
+  },
+  // ── VERIFIED FAILING CI BACKLOG (added 2026-08-28) ──
+  // Every item below was verified failing via the GitHub Actions API on ALL
+  // recent SHAs (59e5eabb6, bca4b068) during the credential-cleanup audit.
+  // Each sits on a UNIQUE fileOrRoute lane so implementers work in parallel
+  // without file collisions.
+  {
+    id: 'p3-control-tower-identity-test',
+    phase: 'PHASE_3_BACKEND',
+    module: 'Certification / control tower',
+    fileOrRoute: 'backend/ivx-canonical-identity-model.test.ts',
+    problem: 'Control Tower INTERNAL fails on every recent SHA: backend/ivx-canonical-identity-model.test.ts accesses result.ok as undefined — the assertion reads a field the implementation no longer returns.',
+    expectedResult: 'Control Tower CI job passes with the identity-model test asserting the real current result shape.',
+    evidence: 'Verified via Actions API on SHAs 59e5eabb6 and bca4b068: Control Tower INTERNAL failure traces to backend/ivx-canonical-identity-model.test.ts (result.ok undefined).',
+    ownerGate: false,
+    priority: 'P1',
+  },
+  {
+    id: 'p3-voice-live-cert-workflow',
+    phase: 'PHASE_3_BACKEND',
+    module: 'Voice / live certification',
+    fileOrRoute: '.github/workflows/ivx-autonomous-voice-live-cert.yml',
+    problem: 'IVX Autonomous Voice Live Cert workflow fails on every recent SHA — the certification steps run against live voice endpoints and abort on startup.',
+    expectedResult: 'Voice live certification workflow reaches a deterministic PASS or an explicit, reported owner blocker — no silent startup abort.',
+    evidence: 'Verified via Actions API on SHAs 59e5eabb6 and bca4b068: ivx-autonomous-voice-live-cert.yml conclusion=failure.',
+    ownerGate: false,
+    priority: 'P1',
+  },
+  {
+    id: 'p3-112-worker-cert-workflow',
+    phase: 'PHASE_3_BACKEND',
+    module: '112 worker certification',
+    fileOrRoute: '.github/workflows/ivx-100-live-ai-worker-cert.yml',
+    problem: '112 Live AI Worker Cert workflow fails on every recent SHA — the worker certification pipeline cannot complete its live run.',
+    expectedResult: '112 Live AI Worker Cert passes 112/112 or fails with an explicit, actionable blocker report.',
+    evidence: 'Verified via Actions API on SHAs 59e5eabb6 and bca4b068: ivx-100-live-ai-worker-cert.yml conclusion=failure.',
+    ownerGate: false,
+    priority: 'P1',
+  },
+  {
+    id: 'p3-owner-variable-recovery-workflow',
+    phase: 'PHASE_3_BACKEND',
+    module: 'Owner variables recovery',
+    fileOrRoute: '.github/workflows/ivx-112-owner-variable-recovery.yml',
+    problem: '112 Owner Variable Recovery workflow fails on every recent SHA — recovery cycle cannot verify variable health end to end.',
+    expectedResult: 'Owner variable recovery cycle passes with all tracked variables DECRYPT_OK or reports exact undecryptable keys.',
+    evidence: 'Verified via Actions API on SHAs 59e5eabb6 and bca4b068: ivx-112-owner-variable-recovery.yml conclusion=failure.',
+    ownerGate: false,
+    priority: 'P1',
+  },
+  {
+    id: 'p3-content-integrity-workflow',
+    phase: 'PHASE_3_BACKEND',
+    module: 'Content integrity',
+    fileOrRoute: '.github/workflows/ivx-content-integrity.yml',
+    problem: 'Content Integrity workflow fails on every recent SHA — integrity verification cannot complete.',
+    expectedResult: 'Content integrity verification passes with a durable integrity report or reports exact failing checks.',
+    evidence: 'Verified via Actions API on SHAs 59e5eabb6 and bca4b068: content integrity workflow conclusion=failure.',
+    ownerGate: false,
+    priority: 'P2',
+  },
+  {
+    id: 'p3-line-by-line-audit-workflow',
+    phase: 'PHASE_3_BACKEND',
+    module: 'Line-by-line audit',
+    fileOrRoute: '.github/workflows/ivx-enterprise-line-by-line-audit.yml',
+    problem: 'Enterprise Line-by-Line Audit workflow fails on every recent SHA — the audit pipeline cannot complete its pass.',
+    expectedResult: 'Line-by-line audit completes with a durable report or reports the exact failing segment.',
+    evidence: 'Verified via Actions API on SHAs 59e5eabb6 and bca4b068: line-by-line audit workflow conclusion=failure.',
     ownerGate: false,
     priority: 'P2',
   },
@@ -238,6 +321,8 @@ export type AppCompletionCampaign = {
     auditItems: number;
     verificationDuties: number;
     idleAgents: number;
+    /** Audit items whose root cause is verifiably fixed with durable evidence. */
+    resolvedItems: number;
   };
   counts: Record<ItemStatus, number>;
   pendingAppItems: number;
@@ -463,11 +548,18 @@ export function buildDispatcherAssignmentInputs(campaign: AppCompletionCampaign)
 export async function syncCampaignAssignmentsToDispatcher(): Promise<number> {
   await loadControlState();
   const campaign = buildAppCompletionCampaign();
+  const inputs = buildDispatcherAssignmentInputs(campaign);
   let synced = 0;
-  for (const input of buildDispatcherAssignmentInputs(campaign)) {
+  for (const input of inputs) {
     await ensureCampaignAssignment(input);
     synced += 1;
   }
+  // ANTI-LOOP GUARANTEE (owner mandate 2026-08-28, Mission D): dispatcher
+  // records whose campaign assignment no longer exists (resolved item such as
+  // p3-agent-cycle-401, restructured campaign) are cancelled as SUPERSEDED —
+  // a resolved task can never be re-dispatched from stale dispatcher state.
+  const activeKeys = inputs.map((i) => `${i.agentNumber}:${i.role}:${i.dutyId}`);
+  await supersedeOrphanCampaignRecords(activeKeys, 'campaign assignment removed or audit item resolved with evidence');
   return synced;
 }
 
@@ -483,8 +575,24 @@ export function buildAppCompletionCampaign(
     const [lo] = PHASE_BOUNDS[phase];
     const items = APP_COMPLETION_AUDIT_ITEMS.filter((i) => i.phase === phase);
     const duties = VERIFICATION_DUTIES.filter((d) => d.phase === phase);
-    const implementers = items.map((_, idx) => lo + idx);
-    const qaAgents = items.map((_, idx) => lo + items.length + idx);
+    // FAIR DISTRIBUTION (owner mandate 2026-08-28, Mission A): implementers are
+    // spread across the whole phase band with a stride instead of concentrated
+    // on its first agents (`lo + idx` made agent 57 a permanent hotspot for
+    // p3-agent-cycle-401 — PRs #431–#447). Resolved items (root cause
+    // verifiably fixed with durable evidence) create NO implementer.
+    const openItems = items.filter((i) => !i.resolvedEvidence);
+    const hi = PHASE_BOUNDS[phase][1];
+    const span = Math.max(1, hi - lo);
+    const implementers = openItems.map((_, idx) =>
+      Math.min(hi, lo + Math.round((idx * span) / Math.max(1, openItems.length))),
+    );
+    const usedAgents = new Set<number>(implementers);
+    const qaAgents = openItems.map((_, idx) => {
+      let candidate = implementers[idx] + 1;
+      while (candidate <= hi && usedAgents.has(candidate)) candidate += 1;
+      usedAgents.add(candidate);
+      return candidate;
+    });
 
     let verifyCursor = 0;
     for (const agent of ALL_ENTERPRISE_AGENTS) {
@@ -501,8 +609,8 @@ export function buildAppCompletionCampaign(
       const implIdx = implementers.indexOf(agent.agentNumber);
       const qaIdx = qaAgents.indexOf(agent.agentNumber);
 
-      if (implIdx >= 0 && items[implIdx]) {
-        const item = items[implIdx];
+      if (implIdx >= 0 && openItems[implIdx]) {
+        const item = openItems[implIdx];
         const qaAgent = qaAgents[implIdx] ?? null;
         const s = deriveStatus('IMPLEMENT', item.ownerGate, ctl, agent.agentNumber, liveState);
         assignments.push({
@@ -527,8 +635,8 @@ export function buildAppCompletionCampaign(
           evidenceSource: item.evidence,
           ...NO_WORKER_JOB,
         });
-      } else if (qaIdx >= 0 && items[qaIdx]) {
-        const item = items[qaIdx];
+      } else if (qaIdx >= 0 && openItems[qaIdx]) {
+        const item = openItems[qaIdx];
         const implementer = implementers[qaIdx] ?? null;
         const s = deriveStatus('QA', false, ctl, agent.agentNumber, liveState);
         assignments.push({
@@ -637,13 +745,14 @@ export function buildAppCompletionCampaign(
       agentsAssigned: assignments.length,
       auditItems: APP_COMPLETION_AUDIT_ITEMS.length,
       verificationDuties: VERIFICATION_DUTIES.length,
+      resolvedItems: APP_COMPLETION_AUDIT_ITEMS.filter((i) => i.resolvedEvidence).length,
       // Execution truth: an agent is idle only when NO real worker job has
       // ever been dispatched for its assignment (workerJobId null, 0 attempts).
       idleAgents: assignments.filter((a) => a.workerJobId === null && a.attempts === 0).length,
     },
     counts,
-    pendingAppItems: APP_COMPLETION_AUDIT_ITEMS.length,
-    p0Open: APP_COMPLETION_AUDIT_ITEMS.filter((i) => i.priority === 'P0').length,
+    pendingAppItems: APP_COMPLETION_AUDIT_ITEMS.filter((i) => !i.resolvedEvidence).length,
+    p0Open: APP_COMPLETION_AUDIT_ITEMS.filter((i) => !i.resolvedEvidence && i.priority === 'P0').length,
     assignments,
   };
 }
