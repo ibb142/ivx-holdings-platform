@@ -82,7 +82,7 @@ export function handleExecutorStatusRequest(): Response {
 // ── POST /api/ivx/agent-code-executor/write ───────────────────────────────────
 
 export async function handleExecutorWriteRequest(request: Request): Promise<Response> {
-  let body: { files?: unknown; agentNumber?: unknown; agentId?: unknown; appName?: unknown };
+  let body: { files?: unknown; agentNumber?: unknown; agentId?: unknown; appName?: unknown; status?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -101,7 +101,7 @@ export async function handleExecutorWriteRequest(request: Request): Promise<Resp
   }
 
   if (files.length === 0) {
-    return json({ ok: false, error: 'No valid files provided. Expected: { files: [{ path, content }] }' }, 400);
+    if (typeof body.status !== 'string' || !body.status.startsWith('20')) { return json({ ok: false, error: 'Invalid status code.' }, 400); } return json({ ok: false, error: 'No valid files provided. Expected: { files: [{ path, content }] }' }, 400);
   }
 
   const result = await writeAgentFiles(files);
