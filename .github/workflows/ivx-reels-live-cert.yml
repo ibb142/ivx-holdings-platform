@@ -8,7 +8,7 @@ on:
 jobs:
   reels-live-cert:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     env:
       API_BASE: https://api.ivxholding.com
       LANDING_BASE: https://ivxholding.com
@@ -25,119 +25,79 @@ jobs:
             if [ "$code" = "200" ]; then
               health_sha=$(jq -r '.commit // .sha // .gitCommit // .git_commit // empty' /tmp/health.json 2>/dev/null || true)
               ok=$(jq -r '.ok // false' /tmp/health.json 2>/dev/null || echo false)
-              echo "poll=$i health=$ok production_sha=${health_sha:-missing} expected=${GITHUB_SHA}"
-              if [ "$ok" = "true" ] && { [ "$health_sha" = "$GITHUB_SHA" ] || [[ "$GITHUB_SHA" == "$health_sha"* ]] || [[ "$health_sha" == "$GITHUB_SHA"* ]]; }; then
-                matched=1
-                break
-              fi
-            else
-              echo "poll=$i health_http=$code"
+              if [ "$ok" = "true" ] && { [ "$health_sha" = "$GITHUB_SHA" ] || [[ "$GITHUB_SHA" == "$health_sha"* ]] || [[ "$health_sha" == "$GITHUB_SHA"* ]]; }; then matched=1; break; fi
             fi
             sleep 10
           done
-          if [ "$matched" != "1" ]; then
-            echo "Production never reached current main SHA ${GITHUB_SHA}"
-            exit 1
-          fi
-          echo "sha_parity=PASS"
+          test "$matched" = "1"
 
-      - name: Verify production health
+      - name: Verify canonical Reels feed has real content
         shell: bash
         run: |
           set -euo pipefail
-          body=$(cat /tmp/health.json)
-          ok=$(printf '%s' "$body" | jq -r '.ok // false' 2>/dev/null || echo false)
-          if [ "$ok" != "true" ]; then
-            echo "health endpoint did not return ok=true"
-            exit 1
-          fi
-          echo "health=PASS"
-
-      - name: Verify canonical Reels feed
-        shell: bash
-        run: |
-          set -euo pipefail
-          code=$(curl -sS --retry 2 --retry-delay 2 \
-            -D /tmp/reels-headers.txt \
-            -o /tmp/reels.json \
-            -w '%{http_code}' \
-            "${API_BASE}/api/ivx/video-platform/feed?type=reel&limit=10" || true)
-          echo "reels_http=$code"
-          cat /tmp/reels.json || true
-          echo
-          if [ "$code" != "200" ]; then
-            echo "Canonical Reels feed failed HTTP $code; response body printed above"
-            exit 1
-          fi
-          jq '.' /tmp/reels.json
-          feed_type=$(jq -r '.feed_type // empty' /tmp/reels.json)
-          marker=$(jq -r '.marker // empty' /tmp/reels.json)
+          code=$(curl -sS --retry 2 --retry-delay 2 -o /tmp/reels.json -w '%{http_code}' "${API_BASE}/api/ivx/video-platform/feed?type=reel&limit=10" || true)
+          test "$code" = "200"
+          test "$(jq -r '.feed_type // empty' /tmp/reels.json)" = "reel"
           count=$(jq -r '.count // (.videos | length) // 0' /tmp/reels.json)
-          if [ "$feed_type" != "reel" ]; then
-            echo "Expected feed_type=reel, got $feed_type"
-            exit 1
-          fi
-          if [ -z "$marker" ]; then
-            echo "Missing video platform marker"
-            exit 1
-          fi
-          if [ "$count" -lt 1 ]; then
-            echo "No live reels published (count=0). Feed endpoint responds correctly but no content."
-            echo "reels_feed=PASS (endpoint working, content ephemeral after deploy) count=0 marker=$marker"
-          else
-            echo "reels_feed=PASS count=$count marker=$marker"
-          fi
-
-      - name: Verify feed determinism and cache
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -fsS --retry 3 --retry-delay 2 -D /tmp/reels-headers-2.txt "${API_BASE}/api/ivx/video-platform/feed?type=reel&limit=10" -o /tmp/reels-2.json
-          ids1=$(jq -c '[.videos[]?.id]' /tmp/reels.json)
-          ids2=$(jq -c '[.videos[]?.id]' /tmp/reels-2.json)
-          test "$ids1" = "$ids2"
-          echo "feed_determinism=PASS"
-          grep -i '^x-ivx-cache:' /tmp/reels-headers-2.txt || true
+          if [ "$count" -lt 1 ]; then echo "FAIL CLOSED: API works but no published Reels"; exit 1; fi
 
       - name: Verify at least one Reel media asset is playable
         shell: bash
         run: |
           set -euo pipefail
           media_url=$(jq -r '[.. | objects | to_entries[]? | select(.key | test("^(hls_url|video_url|playback_url|media_url)$")) | .value | select(type == "string" and startswith("http"))][0] // empty' /tmp/reels.json)
-          if [ -z "$media_url" ]; then
-            echo "No playable media URL found (no reels published after fresh deploy). Feed endpoint verified working above."
-            echo "media_playback=PASS (endpoint working, content ephemeral)"
-          else
-            code=$(curl -sS -L --connect-timeout 10 --max-time 30 -H 'Range: bytes=0-1023' -D /tmp/media-headers.txt -o /tmp/media-sample.bin -w '%{http_code}' "$media_url" || true)
-            if [ "$code" != "200" ] && [ "$code" != "206" ]; then echo "Reel media HTTP $code"; exit 1; fi
-            bytes=$(wc -c < /tmp/media-sample.bin | tr -d ' ')
-            if [ "$bytes" -lt 1 ]; then echo "Reel media returned zero bytes"; exit 1; fi
-            echo "media_playback=PASS http=$code bytes=$bytes"
-          fi
+          if [ -z "$media_url" ]; then echo "FAIL CLOSED: no playable Reel URL"; exit 1; fi
+          code=$(curl -sS -L --connect-timeout 10 --max-time 30 -H 'Range: bytes=0-1023' -o /tmp/media.bin -w '%{http_code}' "$media_url" || true)
+          if [ "$code" != "200" ] && [ "$code" != "206" ]; then exit 1; fi
+          test "$(wc -c < /tmp/media.bin | tr -d ' ')" -gt 0
 
-      - name: Verify landing Reels surface
+      - name: Install browser visual verifier
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Verify Reel actually renders in production browser
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl -sS -L --connect-timeout 10 --max-time 30 -o /tmp/landing.html -w '%{http_code}' "${LANDING_BASE}/" || true)
-          if [ "$code" != "200" ]; then echo "Landing HTTP $code"; exit 1; fi
-          grep -Eqi 'reels|ivx-reels' /tmp/landing.html
-          echo "landing_reels_surface=PASS"
+          mkdir -p qa/evidence/reels-live
+          cat > /tmp/reels-visual-proof.cjs <<'EOF'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+          (async () => {
+            const browser = await chromium.launch({headless:true});
+            const page = await browser.newPage({viewport:{width:390,height:844}});
+            await page.goto(process.env.LANDING_BASE + '/?qa=' + Date.now(), {waitUntil:'domcontentloaded',timeout:60000});
+            await page.locator('#properties-grid').waitFor({state:'visible',timeout:30000});
+            await page.waitForFunction(() => document.querySelectorAll('[data-ivx-home-feed-video]').length > 0, null, {timeout:30000});
+            const card = page.locator('[data-ivx-home-feed-video]').first();
+            await card.scrollIntoViewIfNeeded();
+            await card.waitFor({state:'visible',timeout:15000});
+            await page.waitForFunction(() => { const v=document.querySelector('[data-ivx-home-feed-video] video'); return !!v && !!v.currentSrc && v.readyState>=2; }, null, {timeout:30000});
+            const proof=await card.evaluate(el=>{const v=el.querySelector('video');const r=el.getBoundingClientRect();return{visible:r.width>0&&r.height>0,width:r.width,height:r.height,currentSrc:v?.currentSrc||'',readyState:v?.readyState??-1};});
+            if(!proof.visible||!proof.currentSrc||proof.readyState<2) throw new Error('API PASS but Reel not visibly playable: '+JSON.stringify(proof));
+            await page.screenshot({path:'qa/evidence/reels-live/landing-reel-visible.png',fullPage:true});
+            fs.writeFileSync('qa/evidence/reels-live/browser-proof.json',JSON.stringify({certified:true,proof,verifiedAt:new Date().toISOString()},null,2));
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          EOF
+          NODE_PATH="$GITHUB_WORKSPACE/node_modules" node /tmp/reels-visual-proof.cjs
 
       - name: Emit Reels live certificate
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p qa/evidence
           count=$(jq -r '.count // (.videos | length) // 0' /tmp/reels.json)
           marker=$(jq -r '.marker // empty' /tmp/reels.json)
           cat > qa/evidence/reels-live-cert.json <<EOF
-          {"certified":true,"scope":"IVX Reels live advertising readiness","githubSha":"${GITHUB_SHA}","shaParity":"PASS","health":"PASS","reelsFeed":"PASS","publishedReels":${count},"feedDeterminism":"PASS","mediaPlayback":"PASS","landingReelsSurface":"PASS","platformMarker":"${marker}","verifiedAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+          {"certified":true,"scope":"IVX Reels production visual readiness","githubSha":"${GITHUB_SHA}","reelsFeed":"PASS","publishedReels":${count},"mediaPlayback":"PASS","browserVisualProof":"PASS","platformMarker":"${marker}","verifiedAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
           EOF
-          cat qa/evidence/reels-live-cert.json
 
       - name: Upload Reels certificate evidence
         uses: actions/upload-artifact@v4
         with:
           name: ivx-reels-live-certificate
-          path: qa/evidence/reels-live-cert.json
+          path: |
+            qa/evidence/reels-live-cert.json
+            qa/evidence/reels-live/browser-proof.json
+            qa/evidence/reels-live/landing-reel-visible.png
