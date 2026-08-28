@@ -1,15 +1,16 @@
 import { handleReelsFeed } from './ivx-reels';
 
-const CANONICAL_REELS_MARKER = 'ivx-canonical-reels-bridge-v1-2026-08-14';
+const CANONICAL_REELS_MARKER = 'ivx-canonical-reels-bridge-v2-2026-08-28';
 
 function json(payload: Record<string, unknown>, status = 200, cache = 'MISS'): Response {
   return new Response(JSON.stringify(payload), {
     status,
     headers: {
       'Content-Type': 'application/json',
-      'Cache-Control': 'public, max-age=15, stale-while-revalidate=30',
+      'Cache-Control': 'no-store',
       'Access-Control-Allow-Origin': '*',
       'X-IVX-Cache': cache,
+      'X-IVX-Reels-Marker': CANONICAL_REELS_MARKER,
     },
   });
 }
@@ -22,10 +23,10 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 /**
  * Canonical adapter for the IVX-owned Reels registry.
- *
- * The social/reels engine is the durable publishing source for owner-uploaded
- * Reels. This adapter gives every client the video-platform feed contract
- * without creating synthetic rows or substituting deal videos for Reels.
+ * Empty registry is a valid response. server.ts owns the fallback to the
+ * video-platform reel rail so the public landing never depends on stale
+ * registry cache. no-store is intentional: a previously empty response must
+ * not hide newly published reels for visitors.
  */
 export async function handleCanonicalReelsFeed(request: Request): Promise<Response> {
   try {
@@ -40,6 +41,7 @@ export async function handleCanonicalReelsFeed(request: Request): Promise<Respon
         total: 0,
         next_cursor: null,
         source: 'ivx-owned-reels-registry',
+        fallback_required: true,
       }, sourceResponse.status);
     }
 
@@ -74,7 +76,8 @@ export async function handleCanonicalReelsFeed(request: Request): Promise<Respon
 
     return json({
       ok: true,
-      marker: String(source.marker || CANONICAL_REELS_MARKER),
+      marker: CANONICAL_REELS_MARKER,
+      source_marker: String(source.marker || ''),
       feed_type: 'reel',
       videos,
       count: videos.length,
@@ -83,6 +86,7 @@ export async function handleCanonicalReelsFeed(request: Request): Promise<Respon
       ordering: 'published_at-desc',
       personalized: false,
       source: 'ivx-owned-reels-registry',
+      fallback_required: videos.length === 0,
     });
   } catch {
     return json({
@@ -94,6 +98,7 @@ export async function handleCanonicalReelsFeed(request: Request): Promise<Respon
       total: 0,
       next_cursor: null,
       source: 'ivx-owned-reels-registry',
-    });
+      fallback_required: true,
+    }, 503);
   }
 }
