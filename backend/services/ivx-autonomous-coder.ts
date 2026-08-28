@@ -642,7 +642,9 @@ async function applyPatchOperation(
   if (op.kind === 'create_file') {
     const { existsSync } = await import('node:fs');
     if (existsSync(fullPath)) {
-      throw new Error(`Create-file target already exists: ${op.path}`);
+      const existing = await read(op.path);
+      if (existing === op.newText) return; // Idempotent: file already in desired state (2026-08-28).
+      throw new Error(`Create-file target already exists: ${op.path} — file exists with different content; re-emit this operation as update (oldText/newText) against the current content instead of create_file.`);
     }
     await write(op.path, op.newText);
   } else {
