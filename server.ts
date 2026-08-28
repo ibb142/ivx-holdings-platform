@@ -255,7 +255,20 @@ const productionFetch: typeof app.fetch = async (request, env, executionCtx) => 
     && url.pathname === '/api/ivx/video-platform/feed'
     && (type === 'reel' || type === 'reels')
   ) {
-    return handleCanonicalReelsFeed(request);
+    // Registry-first with graceful fallback: when the owned Reels registry has
+    // no published reels yet, serve the video-platform reel rail so the Reels
+    // surface never appears broken to visitors.
+    const canonical = await handleCanonicalReelsFeed(request);
+    try {
+      const payload = await canonical.clone().json() as { count?: number; total?: number; videos?: unknown[] };
+      const reelCount = Array.isArray(payload.videos)
+        ? payload.videos.length
+        : (payload.count ?? payload.total ?? 0);
+      if (reelCount > 0) return canonical;
+    } catch {
+      // Malformed canonical response — fall through to the platform feed.
+    }
+    return app.fetch(request, env, executionCtx);
   }
   return app.fetch(request, env, executionCtx);
 };
