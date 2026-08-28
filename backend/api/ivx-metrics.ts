@@ -37,7 +37,7 @@ export async function handleMetricsRequest(request: Request): Promise<Response> 
     // Crash counts derive from the durable incident store — make sure it's hydrated.
     await ensureIncidentStoreReady();
     const metrics = await buildMetricsSnapshot();
-    return ownerOnlyJson({ ok: true, metrics });
+    return ownerOnlyJson({ ok: true, data: metrics });
   } catch (error) {
     return ownerOnlyJson({ ok: false, error: error instanceof Error ? error.message : 'Failed to build metrics snapshot.' }, 500);
   }
