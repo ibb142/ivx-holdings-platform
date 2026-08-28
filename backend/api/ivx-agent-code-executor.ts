@@ -64,7 +64,7 @@ function parseGithubRepoUrl(repoUrl: string): { owner: string; repo: string } | 
 
 // ── GET /api/ivx/agent-code-executor/status ──────────────────────────────────
 
-export function handleExecutorStatusRequest(): Response {
+export async function handleExecutorStatusRequest(): Promise<Response> {
   const status = getExecutorStatus();
   return json({
     ok: true,
