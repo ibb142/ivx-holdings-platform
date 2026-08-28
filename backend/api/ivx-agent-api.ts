@@ -147,7 +147,7 @@ export function registerAgentRoutes(app: Hono): void {
   });
 
   app.post('/api/ivx/agents/app-completion/control', async (c) => {
-    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const body = await c.req.json().catch(() => null);
     const denied = await requireOwner(c, body as Record<string, unknown>);
     if (denied) return denied;
     const action = String((body as Record<string, unknown>).action ?? '');
@@ -188,7 +188,7 @@ export function registerAgentRoutes(app: Hono): void {
   app.get('/api/ivx/agents/:agentId', (c) => {
     const agentId = c.req.param('agentId');
     const contract = getContractByAgentId(agentId);
-    if (!contract) return c.json({ ok: false, error: `Agent ${agentId} not found`, errorCode: 'AGENT_NOT_FOUND' }, 404);
+    if (!contract) return c.json({ ok: false, error: `Agent ${agentId} not found`, errorCode: 'AGENT_NOT_FOUND' }, 404, { headers: { 'Content-Type': 'application/json' } });
     const state = getExecutionState(agentId);
     return c.json({
       ok: true,
@@ -323,7 +323,7 @@ export function registerAgentRoutes(app: Hono): void {
     const agentId = c.req.param('agentId');
     const limit = parseInt(c.req.query('limit') || '20', 10);
     const records = getRunRecords(agentId, limit);
-    return c.json({ ok: true, agentId, count: records.length, records });
+    return c.json({ ok: true, agentId, count: records.length, records }, 200, { headers: { 'Content-Type': 'application/json' } });
   });
 
   app.post('/api/ivx/agents/execute-all', async (c) => {
