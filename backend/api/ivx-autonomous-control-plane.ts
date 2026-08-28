@@ -14,6 +14,16 @@ import { getSeniorDeveloperJob } from '../services/ivx-senior-developer-worker';
 export const IVX_AUTONOMOUS_CONTROL_PLANE_MARKER = 'ivx-autonomous-control-plane-v5-2026-08-25';
 
 const HEARTBEAT_LIVE_TTL_MS = 120_000;
+
+/**
+ * Short-lived in-memory cache for the control-plane GET telemetry payload.
+ * The endpoint performs many durable-store reads (~5s cold); the radar samples
+ * it with a 4s timeout, so uncached reads always looked like failures. This is
+ * telemetry (not mutation state) — 120s staleness is fail-safe and each miss
+ * refreshes the cache.
+ */
+let controlPlaneCache: { at: number; body: string } | null = null;
+const CONTROL_PLANE_CACHE_TTL_MS = 120_000;
 const ACTIVE_WORKER_STATUSES = new Set(['running', 'patching', 'testing', 'committing', 'deploying', 'verifying']);
 
 function countStatuses<T extends { status: string }>(items: T[]) {
@@ -136,6 +146,16 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
   }
 
   try {
+    if (controlPlaneCache && Date.now() - controlPlaneCache.at < CONTROL_PLANE_CACHE_TTL_MS) {
+      return new Response(controlPlaneCache.body, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+          'X-IVX-Control-Plane-Cache': 'hit',
+        },
+      });
+    }
     const control = await loadControlState();
     const dispatcherRecords = await listCampaignDispatcherRecords();
     const campaign = buildAppCompletionCampaign(control, dispatcherRecords);
@@ -240,7 +260,7 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
 
     const dispatcherCoverage = new Set(dispatcherRecords.map((record) => record.agentNumber)).size;
 
-    return ownerOnlyJson({
+    const response = ownerOnlyJson({
       ok: true,
       marker: IVX_AUTONOMOUS_CONTROL_PLANE_MARKER,
       generatedAt: new Date().toISOString(),
@@ -294,6 +314,8 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
         proofPolicy: 'WORKING requires: canonical dispatcher assignment + matching real ivx-senior-developer-worker jobId + active worker status + current task + startedAt + real heartbeat <=120s. Registry-only and synthetic heartbeat rows never count.',
       },
     });
+    controlPlaneCache = { at: Date.now(), body: await response.clone().text() };
+    return response;
   } catch (error) {
     return ownerOnlyJson({ ok: false, marker: IVX_AUTONOMOUS_CONTROL_PLANE_MARKER, error: error instanceof Error ? error.message : 'Unable to build Autonomous control-plane state.' }, 500);
   }
