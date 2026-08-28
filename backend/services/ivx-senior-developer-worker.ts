@@ -1697,7 +1697,15 @@ export async function resumeSeniorDeveloperJob(jobId: string): Promise<IVXWorker
 /** Read one job by id (newest queue state). */
 export async function getSeniorDeveloperJob(jobId: string): Promise<IVXWorkerJob | null> {
   const queue = await loadQueue();
-  return queue.jobs.find((j) => j.jobId === jobId) ?? null;
+  const found = queue.jobs.find((j) => j.jobId === jobId) ?? null;
+  if (found) return found;
+  // LOST-UPDATE GUARD (2026-08-28): concurrent load-modify-save cycles can
+  // persist a stale durable queue copy that misses a job enqueued moments
+  // earlier. The in-process mirror is authoritative for such races — never
+  // report a live job as missing (the campaign dispatcher treats a null get()
+  // as a hard failure and would fail honest agents with
+  // "Worker job ... no longer found in the queue").
+  return memoryQueue?.jobs.find((j) => j.jobId === jobId) ?? null;
 }
 
 /** List recent jobs (newest first). */
