@@ -1,0 +1,108 @@
+name: IVX 112 Agent 2000h Utilization SLA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/services/ivx-campaign-dispatcher.ts'
+      - 'backend/api/ivx-agent-api.ts'
+      - '.github/workflows/ivx-112-2000h-utilization-sla.yml'
+  schedule:
+    - cron: '25 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ivx-112-2000h-utilization-sla
+  cancel-in-progress: false
+
+jobs:
+  utilization-sla:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      API_BASE: https://api.ivxholding.com
+      MIN_PRODUCTIVE_AGENT_HOURS: '2000'
+      MIN_UTILIZATION_PERCENT: '74.4'
+    steps:
+      - name: Read production 112-agent utilization
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 4 --retry-delay 2 --max-time 30 "$API_BASE/api/ivx/agents/app-completion/dashboard" -o /tmp/dashboard.json
+          test "$(jq -r '.ok // false' /tmp/dashboard.json)" = true
+          max_concurrency=$(jq -r '.dispatcher.maxConcurrency // 0' /tmp/dashboard.json)
+          theoretical=$(jq -r '.dispatcher.utilization24h.theoreticalAgentHours // 0' /tmp/dashboard.json)
+          productive=$(jq -r '.dispatcher.utilization24h.productiveAgentHours // 0' /tmp/dashboard.json)
+          utilization=$(jq -r '.dispatcher.utilization24h.utilizationPercent // 0' /tmp/dashboard.json)
+          running=$(jq -r '.dispatcher.utilization24h.runningNow // 0' /tmp/dashboard.json)
+          queued=$(jq -r '.dispatcher.utilization24h.queuedNow // 0' /tmp/dashboard.json)
+          owner_gate=$(jq -r '.dispatcher.utilization24h.ownerGateNow // 0' /tmp/dashboard.json)
+          printf 'maxConcurrency=%s\ntheoreticalAgentHours=%s\nproductiveAgentHours=%s\nutilizationPercent=%s\nrunningNow=%s\nqueuedNow=%s\nownerGateNow=%s\n' "$max_concurrency" "$theoretical" "$productive" "$utilization" "$running" "$queued" "$owner_gate" | tee /tmp/utilization.txt
+          test "$max_concurrency" -eq 112
+          awk -v v="$theoretical" 'BEGIN { exit !(v >= 2688) }'
+          if awk -v p="$productive" -v m="$MIN_PRODUCTIVE_AGENT_HOURS" -v u="$utilization" -v mu="$MIN_UTILIZATION_PERCENT" 'BEGIN { exit !((p+0) >= (m+0) && (u+0) >= (mu+0)) }'; then
+            echo 'SLA_MET=true' >> "$GITHUB_ENV"
+          else
+            echo 'SLA_MET=false' >> "$GITHUB_ENV"
+          fi
+
+      - name: Obtain IVX GitHub OIDC token for bounded recovery
+        if: env.SLA_MET == 'false'
+        id: oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          token_json=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery")
+          token=$(printf '%s' "$token_json" | jq -r '.value // empty')
+          test -n "$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Resume safe campaign work when below SLA
+        if: env.SLA_MET == 'false'
+        shell: bash
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          code=$(curl -sS --max-time 30 -o /tmp/resume.json -w '%{http_code}' -X POST \
+            -H 'content-type: application/json' \
+            -H "Authorization: Bearer $OIDC_TOKEN" \
+            -d '{"action":"resume_all"}' \
+            "$API_BASE/api/ivx/agents/app-completion/control")
+          echo "resume_http=$code"
+          cat /tmp/resume.json
+          test "$code" = 200
+          test "$(jq -r '.ok // false' /tmp/resume.json)" = true
+
+      - name: Re-read production after recovery trigger
+        if: env.SLA_MET == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 15
+          curl -fsS --retry 4 --retry-delay 2 --max-time 30 "$API_BASE/api/ivx/agents/app-completion/dashboard" -o /tmp/dashboard-after.json
+          test "$(jq -r '.ok // false' /tmp/dashboard-after.json)" = true
+          test "$(jq -r '.dispatcher.maxConcurrency // 0' /tmp/dashboard-after.json)" -eq 112
+          running=$(jq -r '.dispatcher.utilization24h.runningNow // 0' /tmp/dashboard-after.json)
+          queued=$(jq -r '.dispatcher.utilization24h.queuedNow // 0' /tmp/dashboard-after.json)
+          owner_gate=$(jq -r '.dispatcher.utilization24h.ownerGateNow // 0' /tmp/dashboard-after.json)
+          echo "RECOVERY runningNow=$running queuedNow=$queued ownerGateNow=$owner_gate"
+          if [ "$running" -eq 0 ] && [ "$queued" -eq 0 ] && [ "$owner_gate" -eq 0 ]; then
+            echo 'SLA below target but there is no productive backlog available.'
+            exit 1
+          fi
+
+      - name: Enforce rolling 24-hour enterprise SLA
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 4 --retry-delay 2 --max-time 30 "$API_BASE/api/ivx/agents/app-completion/dashboard" -o /tmp/final.json
+          productive=$(jq -r '.dispatcher.utilization24h.productiveAgentHours // 0' /tmp/final.json)
+          utilization=$(jq -r '.dispatcher.utilization24h.utilizationPercent // 0' /tmp/final.json)
+          echo "FINAL productiveAgentHours=$productive utilizationPercent=$utilization targetHours=$MIN_PRODUCTIVE_AGENT_HOURS targetUtilization=$MIN_UTILIZATION_PERCENT"
+          awk -v p="$productive" -v m="$MIN_PRODUCTIVE_AGENT_HOURS" -v u="$utilization" -v mu="$MIN_UTILIZATION_PERCENT" 'BEGIN { exit !((p+0) >= (m+0) && (u+0) >= (mu+0)) }'
+          echo 'IVX_112_2000H_SLA=PASS'
