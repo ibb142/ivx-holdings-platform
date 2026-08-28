@@ -1,0 +1,109 @@
+name: IVX Autonomous Status Gates Repair
+
+on:
+  push:
+    branches:
+      - fix/autonomous-status-gates-20260822
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/autonomous-status-gates-20260822
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Apply fail-closed status repair
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('backend/services/ivx-autonomous-coder.ts')
+          s = p.read_text()
+
+          old_unmerged = """    } else if (input.executionMode === 'code_change' && commitSha && !prMerged) {
+      // PR was created but not merged (autoMergePr=false or merge failed).
+      // The commit is on the ivx-autonomous branch — mark COMPLETED with info.
+      finalStatus = 'COMPLETED';
+      const prInfo = `Commit created (${commitSha.slice(0, 12)}) on branch ${branch}. PR ${prUrl ? `created: ${prUrl}` : 'creation failed'}. Manual merge may be needed.`;
+      onPhase?.('completed', prInfo);
+"""
+          new_unmerged = """    } else if (input.executionMode === 'code_change' && commitSha && !prMerged) {
+      // Fail closed: a branch commit / open PR is NOT a completed code change.
+      // Completion requires merge confirmation so the worker cannot certify
+      // code that has not reached the protected main branch.
+      finalStatus = 'BLOCKED';
+      error = `Commit created (${commitSha.slice(0, 12)}) on branch ${branch}, but PR merge is not confirmed. ${prUrl ? `PR: ${prUrl}` : 'PR creation was not confirmed.'}`;
+      onPhase?.('blocked', error);
+"""
+
+          old_deploy = """      } else {
+        onPhase?.('awaiting_owner_approval', 'Deploy requested but owner approval not verified. Blocking deploy.');
+        finalStatus = 'COMPLETED';
+        error = `Commit created. Deploy BLOCKED: owner approval required (confirm=true, confirmText=\"CONFIRM_IVX_RENDER_DEPLOY\" or \"${IVX_GIT_DEPLOY_CONFIRM_TEXT}\").`;
+      }
+"""
+          new_deploy = """      } else {
+        error = `Commit created. Deploy BLOCKED: owner approval required (confirm=true, confirmText=\"CONFIRM_IVX_RENDER_DEPLOY\" or \"${IVX_GIT_DEPLOY_CONFIRM_TEXT}\").`;
+        finalStatus = 'BLOCKED';
+        onPhase?.('awaiting_owner_approval', error);
+      }
+"""
+
+          if old_unmerged not in s:
+              raise SystemExit('Unmerged-PR completion block not found; refusing unsafe partial repair')
+          if old_deploy not in s:
+              raise SystemExit('Deploy-approval completion block not found; refusing unsafe partial repair')
+
+          s = s.replace(old_unmerged, new_unmerged, 1).replace(old_deploy, new_deploy, 1)
+          p.write_text(s)
+
+          test = Path('backend/services/ivx-autonomous-status-gates.test.ts')
+          test.write_text("""import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
+const source = readFileSync(path.join(import.meta.dir, 'ivx-autonomous-coder.ts'), 'utf8');
+
+describe('IVX autonomous final-status gates', () => {
+  test('unmerged code-change PR cannot be COMPLETED', () => {
+    expect(source).toContain("input.executionMode === 'code_change' && commitSha && !prMerged");
+    expect(source).toContain("finalStatus = 'BLOCKED';\n      error = `Commit created (${commitSha.slice(0, 12)}) on branch ${branch}, but PR merge is not confirmed.");
+    expect(source).not.toContain("// The commit is on the ivx-autonomous branch — mark COMPLETED with info.");
+  });
+
+  test('deploy without owner approval cannot be COMPLETED', () => {
+    expect(source).toContain('Deploy BLOCKED: owner approval required');
+    const approvalBlock = source.slice(source.indexOf("Deploy BLOCKED: owner approval required") - 250, source.indexOf("Deploy BLOCKED: owner approval required") + 500);
+    expect(approvalBlock).toContain("finalStatus = 'BLOCKED'");
+    expect(approvalBlock).not.toContain("finalStatus = 'COMPLETED'");
+  });
+});
+""")
+
+      - name: Targeted test
+        run: bun test backend/services/ivx-autonomous-status-gates.test.ts
+
+      - name: TypeScript hard gate
+        run: cd backend && bunx tsc --noEmit
+
+      - name: Remove one-shot workflow and commit repair
+        run: |
+          rm .github/workflows/ivx-autonomous-status-gates-repair.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/services/ivx-autonomous-coder.ts backend/services/ivx-autonomous-status-gates.test.ts .github/workflows/ivx-autonomous-status-gates-repair.yml
+          git commit -m "fix(autonomous): fail closed on unmerged PR and blocked deploy"
+          git push origin HEAD:fix/autonomous-status-gates-20260822
