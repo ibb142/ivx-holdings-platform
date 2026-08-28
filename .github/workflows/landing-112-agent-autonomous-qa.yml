@@ -48,7 +48,7 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      max-parallel: 16
+      max-parallel: 32
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     env:
       API_BASE: https://api.ivxholding.com
@@ -91,11 +91,11 @@ jobs:
           esac
           task_id="landing112-${GITHUB_RUN_ID}-$(printf '%03d' "$AGENT_NUMBER")"
           body=$(jq -nc --arg taskType "$task_type" --arg taskId "$task_id" --arg sourceSha "$GITHUB_SHA" --arg assignment "$TASK" --arg toolId "$tool" --argjson toolParams "$params" '{taskType:$taskType,payload:{__taskId:$taskId,__runId:("landing112-" + $taskId),__workflow:"Landing 112-Agent Autonomous QA War Room",sourceSha:$sourceSha,landingAssignment:$assignment,__toolId:$toolId,__toolParams:$toolParams,realExecutionOnly:true,simulatedSuccessAllowed:false}}')
-          oidc_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-agent-runtime"
+          oidc_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery"
           oidc_token=$(curl -fsS --retry 2 --retry-delay 1 -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$oidc_url" | jq -r '.value // empty')
           test -n "$oidc_token"
           echo "::add-mask::$oidc_token"
-          http=$(curl -sS --retry 1 --retry-delay 1 --max-time 180 -o /tmp/run.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/agents/${AGENT_ID}/run" -H 'Content-Type: application/json' -H "Authorization: Bearer ${oidc_token}" --data "$body" || true)
+          http=$(curl -sS --retry 1 --retry-delay 1 --max-time 180 -o /tmp/run.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/agents/${AGENT_ID}/run" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: ${oidc_token}" --data "$body" || true)
           ok=false; final_status='request_failed'; source=''; tool_result=''; simulated='null'; real_tool='null'; verified_output='null'
           if [ "$http" = 200 ]; then
             ok=$(jq -r '.ok // false' /tmp/run.json); final_status=$(jq -r '.runRecord.finalStatus // "unknown"' /tmp/run.json); source=$(jq -r '.runRecord.sourceReference // empty' /tmp/run.json); tool_result=$(jq -r '.runRecord.toolResultId // empty' /tmp/run.json)
