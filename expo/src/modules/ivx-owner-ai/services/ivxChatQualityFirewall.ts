@@ -29,6 +29,19 @@ const TECHNICAL_TERMS = [
   'live', 'status', 'telemetry', 'radar', 'memory', 'requestid', 'traceid',
 ] as const;
 
+/**
+ * Strong, unambiguous technical signals used to judge whether an ANSWER is
+ * genuinely technical. Deliberately EXCLUDES weak words ("status", "live",
+ * "chat", "quality") that appear inside business/property replies — e.g.
+ * "I filtered by active status in jv_deals" used to count as technical
+ * evidence and let stale property answers bypass INTENT_TOPIC_MISMATCH.
+ */
+const STRONG_ANSWER_TECHNICAL_TERMS = [
+  'autonomous', 'nervous', 'qa', 'code', 'github', 'render', 'deploy',
+  'deployment', 'apk', 'dashboard', 'telemetry', 'radar', 'worker',
+  'requestid', 'traceid', 'memory', 'pipeline', 'commit',
+] as const;
+
 const PROPERTY_TERMS = [
   'property', 'properties', 'propiedad', 'propiedades', 'deal', 'deals',
   'investment', 'investor', 'real estate', 'house', 'houses', 'residence',
@@ -59,7 +72,7 @@ export function evaluateIVXChatQualityFirewall(input: IVXChatQualityInput): IVXC
   const ownerTechnical = containsAny(owner, TECHNICAL_TERMS);
   const ownerProperty = containsAny(owner, PROPERTY_TERMS);
   const ownerGreeting = GREETING_TERMS.some((term) => owner === term || owner.startsWith(`${term} `));
-  const answerTechnical = containsAny(answer, TECHNICAL_TERMS);
+  const answerTechnical = containsAny(answer, STRONG_ANSWER_TECHNICAL_TERMS);
   const answerProperty = containsAny(answer, PROPERTY_TERMS);
 
   // Known high-risk contamination class: a technical/control-room or greeting
