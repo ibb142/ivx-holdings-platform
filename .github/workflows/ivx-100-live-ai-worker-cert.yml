@@ -117,7 +117,7 @@ jobs:
             jq -n --argjson n "$number" --arg id "$agent_id" --arg name "$name" --arg taskType "$task_type" --arg taskId "$task_id" --arg http "$run_http" --argjson ok "$ok" --arg finalStatus "$final_status" --arg sourceReference "$source_reference" --arg toolResultId "$tool_result_id" --argjson simulated "$simulated" --argjson fakeSuccess "$fake_success" --argjson passed "$passed" '{agentNumber:$n,agentId:$id,name:$name,taskType:$taskType,taskId:$taskId,runHttp:$http,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,simulated:$simulated,fakeSuccess:$fakeSuccess,passed:$passed}' > "/tmp/ivx112/${number}.json"
           }
           export -f run_one
-          cat /tmp/agents.tsv | xargs -P 8 -n 2 bash -c 'run_one "$0" "$1"'
+          cat /tmp/agents.tsv | xargs -P 32 -n 2 bash -c 'run_one "$0" "$1"'
           jq -s 'sort_by(.agentNumber)' /tmp/ivx112/[0-9]*.json > /tmp/ivx112/results.json
           total=$(jq 'length' /tmp/ivx112/results.json)
           passed=$(jq '[.[] | select(.passed == true)] | length' /tmp/ivx112/results.json)
