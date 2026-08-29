@@ -148,11 +148,16 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post('/api/ivx/agents/app-completion/control', async (c) => {
     const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
-    const denied = await requireOwner(c, body as Record<string, unknown>);
-    if (denied) return denied;
     const action = String((body as Record<string, unknown>).action ?? '');
     const allowed = ['pause_all', 'resume_all', 'stop_all', 'stop_agent', 'retry_agent', 'reassign'];
     if (!allowed.includes(action)) return c.json({ ok: false, error: `action must be one of: ${allowed.join(', ')}` }, 400);
+
+    const oidcAuthorized = await verifyIVXGitHubActionsOIDCRequest(c.req.raw);
+    const legacyAuthorized = await ownerAuthorized(c, body as Record<string, unknown>);
+    if (!legacyAuthorized && (!oidcAuthorized || action !== 'resume_all')) {
+      return c.json({ ok: false, error: 'Owner authorization required.' }, 401);
+    }
+
     const rawAgent = (body as Record<string, unknown>).agentNumber;
     const agentNumber = typeof rawAgent === 'number' ? rawAgent : undefined;
     const control = await updateControlState(action as Parameters<typeof updateControlState>[0], agentNumber);
@@ -161,7 +166,7 @@ export function registerAgentRoutes(app: Hono): void {
     }
     const records = await listCampaignDispatcherRecords();
     const campaign = buildAppCompletionCampaign(control, records);
-    return c.json({ ok: true, marker: IVX_AGENT_API_MARKER, control, counts: campaign.counts });
+    return c.json({ ok: true, marker: IVX_AGENT_API_MARKER, control, counts: campaign.counts, authorization: legacyAuthorized ? 'owner' : 'github_oidc_resume_only' });
   });
 
   app.get('/api/ivx/agents/dashboard', (c) => {
