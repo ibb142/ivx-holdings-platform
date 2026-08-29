@@ -75,6 +75,21 @@ type GrowthOverview = {
   outreachDrafts: number;
 };
 
+type AgentBrainDashboard = {
+  totalAgents: number;
+  brain?: {
+    mode: string;
+    escalationEnabled: boolean;
+    quantumDiscoveryEnabled: boolean;
+    continuousImprovement: boolean;
+    liveInferenceRequired: boolean;
+    providerConfigured: boolean;
+    model: string;
+    endpoint: string | null;
+    certificationStatus: string;
+  };
+};
+
 type StagedLead = {
   id: string;
   name: string;
@@ -104,10 +119,10 @@ function resolveBaseUrl(): string {
   return '';
 }
 
-async function authHeaders(): Promise<Record<string, string>> {
+async function authHeaders(): Promise<Array<[string, string]>> {
   const token = await getIVXAccessToken();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  const headers: Array<[string, string]> = [['Content-Type', 'application/json']];
+  if (token) headers.push(['Authorization', `Bearer ${token}`]);
   return headers;
 }
 
@@ -115,6 +130,7 @@ type ActivityData = {
   reports: ReportsResponse | null;
   growth: GrowthOverview | null;
   leads: StagedLead[];
+  agentBrain: AgentBrainDashboard | null;
 };
 
 async function fetchActivity(): Promise<ActivityData> {
@@ -122,10 +138,11 @@ async function fetchActivity(): Promise<ActivityData> {
   if (!base) throw new Error('API base URL is not configured.');
   const headers = await authHeaders();
 
-  const [reportsRes, growthRes, leadsRes] = await Promise.all([
+  const [reportsRes, growthRes, leadsRes, agentBrainRes] = await Promise.all([
     fetch(`${base}/api/ivx/autonomous-scale/reports?limit=50`, { headers }).catch(() => null),
     fetch(`${base}/api/growth/overview`, { headers }).catch(() => null),
     fetch(`${base}/api/growth/leads`, { headers }).catch(() => null),
+    fetch(`${base}/api/ivx/agents/dashboard`, { headers }).catch(() => null),
   ]);
 
   let reports: ReportsResponse | null = null;
@@ -152,11 +169,17 @@ async function fetchActivity(): Promise<ActivityData> {
     if (leadsRes.ok && json.ok !== false && Array.isArray(json.leads)) leads = json.leads;
   }
 
-  if (!reports && !growth && leads.length === 0) {
+  let agentBrain: AgentBrainDashboard | null = null;
+  if (agentBrainRes) {
+    const json = (await agentBrainRes.json().catch(() => ({}))) as AgentBrainDashboard & { ok?: boolean };
+    if (agentBrainRes.ok && json.ok !== false && typeof json.totalAgents === 'number') agentBrain = json;
+  }
+
+  if (!reports && !growth && leads.length === 0 && !agentBrain) {
     throw new Error('Could not reach the autonomous endpoints. Confirm you are signed in as owner.');
   }
 
-  return { reports, growth, leads };
+  return { reports, growth, leads, agentBrain };
 }
 
 function formatTime(value: string | null | undefined): string {
@@ -294,6 +317,18 @@ function AutonomousActivityScreen() {
               <StatCard icon={<Users size={16} color={Colors.info ?? '#38bdf8'} />} label="Investors" value={String(leadsByType.investor)} tone={Colors.info ?? '#38bdf8'} />
               <StatCard icon={<Briefcase size={16} color={Colors.info ?? '#38bdf8'} />} label="Buyers" value={String(leadsByType.buyer)} tone={Colors.info ?? '#38bdf8'} />
               <StatCard icon={<Handshake size={16} color={Colors.info ?? '#38bdf8'} />} label="JV deals" value={String(data?.growth?.jvDeals ?? 0)} tone={Colors.info ?? '#38bdf8'} />
+            </View>
+
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>IA Brain Escalation</Text>
+              <View style={styles.pipeRow}><Text style={styles.pipeLabel}>Registered IA agents</Text><Text style={styles.pipeValue}>{data?.agentBrain?.totalAgents ?? 0}</Text></View>
+              <View style={styles.pipeRow}><Text style={styles.pipeLabel}>Brain mode</Text><Text style={styles.pipeValue}>{data?.agentBrain?.brain?.mode ?? 'not deployed'}</Text></View>
+              <View style={styles.pipeRow}><Text style={styles.pipeLabel}>Live inference required</Text><Text style={styles.pipeValue}>{data?.agentBrain?.brain?.liveInferenceRequired ? 'YES' : 'NO'}</Text></View>
+              <View style={styles.pipeRow}><Text style={styles.pipeLabel}>AI provider configured</Text><Text style={styles.pipeValue}>{data?.agentBrain?.brain?.providerConfigured ? 'YES' : 'NO'}</Text></View>
+              <View style={styles.pipeRow}><Text style={styles.pipeLabel}>Continuous improvement</Text><Text style={styles.pipeValue}>{data?.agentBrain?.brain?.continuousImprovement ? 'ON' : 'OFF'}</Text></View>
+              <View style={styles.pipeRow}><Text style={styles.pipeLabel}>Quantum technology discovery</Text><Text style={styles.pipeValue}>{data?.agentBrain?.brain?.quantumDiscoveryEnabled ? 'ON' : 'OFF'}</Text></View>
+              <View style={styles.pipeRow}><Text style={styles.pipeLabel}>Model</Text><Text style={styles.pipeValue}>{data?.agentBrain?.brain?.model ?? 'unknown'}</Text></View>
+              <Text style={styles.cardBody}>Certificate: {data?.agentBrain?.brain?.certificationStatus ?? 'not deployed'}</Text>
             </View>
 
             <View style={styles.card}>

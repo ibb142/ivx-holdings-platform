@@ -400,7 +400,15 @@ export async function runLiveFeatureTest(taskId: string): Promise<LiveFeatureTes
   const url = `https://api.ivxholding.com/api/ivx/senior-developer/worker/jobs/${encodeURIComponent(taskId)}`;
   const responseTimestamp = new Date().toISOString();
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(LIVE_FEATURE_TEST_TIMEOUT_MS) });
+    // The worker-jobs endpoint is owner-only; the worker authenticates with its
+    // machine system key (X-IVX-System-Key) exactly like every other
+    // worker-to-backend call. Without this header the final live-feature gate
+    // always fails with http_401 "missing bearer token".
+    const systemKey = (process.env.IVX_AI_SYSTEM_SECRET ?? '').trim();
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(LIVE_FEATURE_TEST_TIMEOUT_MS),
+      headers: systemKey ? { 'X-IVX-System-Key': systemKey } : undefined,
+    });
     const httpStatus = res.status;
     if (res.status === 503) {
       return { passed: false, httpStatus, reason: '503 service unavailable', traceId: null, responseTimestamp, contradictoryState: false };
