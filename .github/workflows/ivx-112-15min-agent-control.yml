@@ -5,8 +5,13 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/ivx-112-15min-agent-control.yml'
+      - '.github/workflows/ivx-no-idle-intelligence.yml'
   schedule:
     - cron: '*/15 * * * *'
+  workflow_run:
+    workflows:
+      - 'IVX No Idle Intelligence 1000'
+    types: [completed]
   workflow_dispatch: {}
 
 permissions:
@@ -23,6 +28,7 @@ concurrency:
 
 jobs:
   audit-112:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 14
     steps:
@@ -65,9 +71,6 @@ jobs:
             total_runs=$(jq -r '.totalRuns // .stats.totalRuns // 0' <<<"$agent")
             successful_runs=$(jq -r '.successfulRuns // .stats.successfulRuns // 0' <<<"$agent")
 
-            # GET /api/ivx/agents intentionally returns compact state. Evidence is
-            # persisted in the run-record endpoint, so certification must read it
-            # from there instead of falsely expecting run fields on the registry.
             runs_http=$(curl -sS --retry 2 --retry-delay 1 --max-time 30 -o "/tmp/ivx112/runs-${number}.json" -w '%{http_code}' "$API_BASE/api/ivx/agents/runs/$agent_id" || true)
             source_reference=''
             tool_result_id=''
@@ -109,7 +112,7 @@ jobs:
           CERT_OK=false
           if [ "$active" = 112 ] && [ "$paused" = 0 ] && [ "$disabled" = 0 ] && [ "$fresh" = 112 ] && [ "$productive" = 112 ] && [ "$evidence" = 112 ]; then CERT_OK=true; fi
           mkdir -p qa/evidence/autonomous
-          jq -n --argjson ok "$CERT_OK" --arg certificate 'IVX-112-15MIN-AGENT-CONTROL' --arg programId "$PROGRAM_ID" --arg checkpointAt "$CHECKPOINT_AT" --arg productionSha "$LIVE_SHA" --arg controllerSha "$GITHUB_SHA" --arg githubRunId "$GITHUB_RUN_ID" --argjson total 112 --argjson active "$active" --argjson paused "$paused" --argjson disabled "$disabled" --argjson fresh "$fresh" --argjson productive "$productive" --argjson evidence "$evidence" --slurpfile agents /tmp/ivx112/records.json '{ok:$ok,certificate:$certificate,programId:$programId,checkpointAt:$checkpointAt,productionSha:$productionSha,controllerSha:$controllerSha,githubRunId:$githubRunId,totalAgents:$total,activeAgents:$active,pausedAgents:$paused,disabledAgents:$disabled,freshHeartbeatsWithin30m:$fresh,agentsWithProductiveActivity:$productive,agentsWithEvidence:$evidence,agents:$agents[0],truthNote:"PASS requires all 112 active, no paused/disabled agents, 112 fresh heartbeats, 112 productive activity records and 112 persisted evidence records. Registry presence alone never passes."}' > qa/evidence/autonomous/ivx-112-15min-latest.json
+          jq -n --argjson ok "$CERT_OK" --arg certificate 'IVX-112-15MIN-AGENT-CONTROL' --arg programId "$PROGRAM_ID" --arg checkpointAt "$CHECKPOINT_AT" --arg productionSha "$LIVE_SHA" --arg controllerSha "$GITHUB_SHA" --arg githubRunId "$GITHUB_RUN_ID" --arg trigger "$GITHUB_EVENT_NAME" --argjson total 112 --argjson active "$active" --argjson paused "$paused" --argjson disabled "$disabled" --argjson fresh "$fresh" --argjson productive "$productive" --argjson evidence "$evidence" --slurpfile agents /tmp/ivx112/records.json '{ok:$ok,certificate:$certificate,programId:$programId,checkpointAt:$checkpointAt,productionSha:$productionSha,controllerSha:$controllerSha,githubRunId:$githubRunId,trigger:$trigger,totalAgents:$total,activeAgents:$active,pausedAgents:$paused,disabledAgents:$disabled,freshHeartbeatsWithin30m:$fresh,agentsWithProductiveActivity:$productive,agentsWithEvidence:$evidence,agents:$agents[0],truthNote:"PASS requires all 112 active, no paused/disabled agents, 112 fresh heartbeats, 112 productive activity records and 112 persisted evidence records. The controller is also triggered immediately after a successful No-Idle repair cycle so repaired capacity is certified without waiting for the next cron."}' > qa/evidence/autonomous/ivx-112-15min-latest.json
           cat qa/evidence/autonomous/ivx-112-15min-latest.json
           test "$(jq -r '.ok' qa/evidence/autonomous/ivx-112-15min-latest.json)" = true
 
