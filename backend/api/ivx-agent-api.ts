@@ -132,7 +132,7 @@ export function registerAgentRoutes(app: Hono): void {
         lastHeartbeat: state.lastHeartbeat,
       };
     });
-    return c.json({ ok: true, totalAgents: agents.length, marker: IVX_AGENT_API_MARKER, agents });
+    c.header('Content-Type', 'application/json'); return c.json({ ok: true, totalAgents: agents.length, marker: IVX_AGENT_API_MARKER, agents });
   });
 
   app.get('/api/ivx/agents/app-completion/dashboard', async (c) => {
@@ -166,7 +166,7 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.get('/api/ivx/agents/dashboard', (c) => {
     const dashboard: EnterpriseAgentDashboard = generateDashboard();
-    return c.json({ ok: true, marker: IVX_AGENT_API_MARKER, ...dashboard });
+    c.header('Content-Type', 'application/json'); return c.json({ ok: true, marker: IVX_AGENT_API_MARKER, ...dashboard });
   });
 
   app.get('/api/ivx/agents/certificate', async (c) => c.json(await getCertificateForApi()));
@@ -178,7 +178,7 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post('/api/ivx/agents/certificate/run', async (c) => {
     const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
-    const oidcAuthorized = await verifyIVXGitHubActionsOIDCRequest(c.req.raw);
+    c.header('Content-Type', 'application/json'); const oidcAuthorized = await verifyIVXGitHubActionsOIDCRequest(c.req.raw);
     const legacyAuthorized = await ownerAuthorized(c, body as Record<string, unknown>);
     if (!oidcAuthorized && !legacyAuthorized) return c.json({ ok: false, error: 'Owner approval required to start the IVX 112 Real Execution Certificate run.' }, 401);
     const result = await startRealExecutionCertificateRun();
