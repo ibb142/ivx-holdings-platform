@@ -49,11 +49,13 @@ jobs:
           echo "matched=$matched" >> "$GITHUB_OUTPUT"
           echo "production_sha=${live:-missing} expected=$GITHUB_SHA matched=$matched"
 
-      - name: Recover Render credentials
+      - name: Recover Render credentials as fallback
+        id: recover
         if: ${{ steps.live.outputs.matched != 'true' }}
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
+          set +e
           node <<'NODE'
           const crypto = await import('node:crypto');
           const fs = await import('node:fs');
@@ -91,16 +93,24 @@ jobs:
                 console.log(`${name}_decrypt_key_index=${i}`); return value;
               }catch{}
             }
-            throw new Error(`${name} cannot be decrypted by any backend-compatible key candidate; restore the original encryption secret or set RENDER_API_KEY as a GitHub Actions secret`);
+            throw new Error(`${name} cannot be decrypted by any backend-compatible key candidate`);
           }
           const renderKey = decrypt('RENDER_API_KEY');
           const serviceId = directServiceId || decrypt('RENDER_SERVICE_ID');
           fs.appendFileSync(process.env.GITHUB_ENV, `RENDER_API_KEY_RECOVERED=${renderKey}\nRENDER_SERVICE_ID_RECOVERED=${serviceId}\n`);
           console.log('render_credential_source=owner_variables_store');
           NODE
+          rc=$?
+          if [ "$rc" = 0 ] && [ -n "${RENDER_API_KEY_RECOVERED:-}" ]; then
+            echo 'recovered=true' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo 'recovered=false' >> "$GITHUB_OUTPUT"
+          echo 'render_credential_recovery=UNAVAILABLE; waiting for repository auto-deploy exact SHA instead'
+          exit 0
 
-      - name: Trigger Render deployment
-        if: ${{ steps.live.outputs.matched != 'true' }}
+      - name: Trigger Render deployment when recovery credentials exist
+        if: ${{ steps.live.outputs.matched != 'true' && steps.recover.outputs.recovered == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
