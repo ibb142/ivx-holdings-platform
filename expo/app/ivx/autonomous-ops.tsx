@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { Activity, Bot, CheckCircle2, Clock3, Database, RefreshCw, Search, ShieldCheck, XCircle, Zap } from 'lucide-react-native';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -171,6 +171,7 @@ function AgentCard({ agent, nowMs }: { agent: UnifiedAgent; nowMs: number }) {
 
 function EnterpriseAutonomousDashboard() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [range, setRange] = useState<DateRange>('24h');
   const [search, setSearch] = useState('');
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -243,6 +244,20 @@ function EnterpriseAutonomousDashboard() {
             <Kpi label="Offline" value={heartbeatCounts.OFFLINE} accent={heartbeatCounts.OFFLINE ? Colors.error : undefined} />
           </View>
         </View>
+
+        <Pressable
+          style={styles.ledgerTile}
+          testID="open-112-production-ledger"
+          accessibilityRole="button"
+          accessibilityLabel="Open 112 IA Real Production Ledger"
+          onPress={() => router.push('/ivx/agent-ledger')}
+        >
+          <Database size={20} color={Colors.primary} />
+          <View style={styles.ledgerTileText}>
+            <Text style={styles.ledgerTileTitle}>112 IA Real Production Ledger</Text>
+            <Text style={styles.ledgerTileSubtitle}>IA-by-IA work, productive time, status and proof evidence</Text>
+          </View>
+        </Pressable>
 
         <View style={styles.radarPanel}>
           <View style={styles.sectionTitleRow}>
@@ -330,6 +345,7 @@ const styles = StyleSheet.create({
   livePill:{flexDirection:'row',alignItems:'center',gap:5,borderWidth:1,borderColor:Colors.success,borderRadius:999,paddingHorizontal:8,paddingVertical:5},liveDot:{width:7,height:7,borderRadius:4,backgroundColor:Colors.success},liveText:{fontSize:10,fontWeight:'800',color:Colors.success},
   ledgerBanner:{flexDirection:'row',alignItems:'center',gap:8,padding:10,borderRadius:12,backgroundColor:Colors.background},ledgerText:{flex:1,fontSize:12,color:Colors.textSecondary,lineHeight:17},
   heroMetrics:{flexDirection:'row',flexWrap:'wrap',gap:8},kpi:{minWidth:72,flexGrow:1,backgroundColor:Colors.background,borderRadius:10,padding:9},kpiValue:{fontSize:18,fontWeight:'800',color:Colors.text},kpiLabel:{fontSize:10,color:Colors.textSecondary,marginTop:2},
+  ledgerTile:{flexDirection:'row',alignItems:'center',gap:11,backgroundColor:Colors.surface,borderWidth:1,borderColor:Colors.primary,borderRadius:15,padding:14},ledgerTileText:{flex:1,gap:2},ledgerTileTitle:{fontSize:14,fontWeight:'800',color:Colors.primary},ledgerTileSubtitle:{fontSize:11,color:Colors.textSecondary,lineHeight:15},
   radarPanel:{backgroundColor:Colors.surface,borderRadius:15,padding:12,borderWidth:1,borderColor:Colors.border,gap:10},radarGrid:{flexDirection:'row',flexWrap:'wrap',gap:6},radarCell:{width:'23.5%',minWidth:72,borderWidth:1,borderRadius:10,padding:7,backgroundColor:Colors.background,gap:3},radarTop:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:4},radarNumber:{fontSize:11,fontWeight:'900',color:Colors.text},radarDot:{width:7,height:7,borderRadius:4},radarName:{fontSize:9.5,fontWeight:'700',color:Colors.text},radarState:{fontSize:8.5,fontWeight:'800'},radarTask:{fontSize:8.5,color:Colors.textSecondary,lineHeight:11},
   rangeRow:{flexDirection:'row',gap:7,flexWrap:'wrap'},rangeButton:{paddingHorizontal:12,paddingVertical:8,borderRadius:999,borderWidth:1,borderColor:Colors.border,backgroundColor:Colors.surface},rangeButtonActive:{borderColor:Colors.primary},rangeText:{fontSize:12,color:Colors.textSecondary},rangeTextActive:{color:Colors.primary,fontWeight:'700'},
   summaryCard:{backgroundColor:Colors.surface,borderRadius:15,padding:14,borderWidth:1,borderColor:Colors.border,gap:10},sectionTitleRow:{flexDirection:'row',alignItems:'center',gap:7,marginTop:3},sectionTitle:{fontSize:15,fontWeight:'800',color:Colors.text},metricRow:{flexDirection:'row',flexWrap:'wrap',gap:7},smallText:{fontSize:11,color:Colors.textSecondary,lineHeight:16},
