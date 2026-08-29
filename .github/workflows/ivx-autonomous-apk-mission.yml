@@ -16,6 +16,7 @@ on:
 permissions:
   contents: read
   actions: write
+  id-token: write
 
 concurrency:
   group: ivx-autonomous-apk-delivery
@@ -23,7 +24,6 @@ concurrency:
 
 env:
   API_BASE: https://api.ivxholding.com
-  SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
   GH_TOKEN: ${{ github.token }}
   APK_WORKFLOW: android-v11031-dashboard-delivery.yml
 
@@ -44,7 +44,6 @@ jobs:
           test -n "$TARGET_SHA"
           test "$TARGET_SHA" = "$(git ls-remote origin refs/heads/main | awk '{print $1}')"
           echo "TARGET_SHA=$TARGET_SHA" >> "$GITHUB_ENV"
-          test -n "${SYSTEM_KEY:-}"
           echo "APK_MISSION_SOURCE_SHA=$TARGET_SHA"
 
       - name: Skip only when exact-SHA APK artifact already exists
@@ -57,9 +56,7 @@ jobs:
           found=false
           if [ -n "$existing_run" ]; then
             gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${existing_run}/artifacts?per_page=100" > /tmp/existing-apk-artifacts.json
-            if jq -e --arg sha "$TARGET_SHA" '.artifacts[]? | select(.name | startswith("IVX-Holdings-v1.10.32-MISSION-CONTROL-" + $sha))' /tmp/existing-apk-artifacts.json >/dev/null; then
-              found=true
-            fi
+            if jq -e --arg sha "$TARGET_SHA" '.artifacts[]? | select(.name | startswith("IVX-Holdings-v1.10.32-MISSION-CONTROL-" + $sha))' /tmp/existing-apk-artifacts.json >/dev/null; then found=true; fi
           fi
           echo "found=$found" >> "$GITHUB_OUTPUT"
           echo "existing_run=${existing_run}" >> "$GITHUB_OUTPUT"
@@ -70,12 +67,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          goal="IVX AUTONOMOUS APK DELIVERY MISSION. Deliver a signed Android APK from exact main SHA ${TARGET_SHA}. Required artifact: IVX-Holdings-v1.10.32-MISSION-CONTROL.apk. Required proof: exact source SHA, successful Android workflow run ID, apksigner verification, SHA-256, artifact ID/name. Do not report an older APK. If build fails, inspect evidence and repair only safe low-risk code/workflow issues, rerun, and continue until a valid exact-SHA APK artifact exists. Stop only for Owner-Gate issues involving secrets/permissions/signing credentials/infrastructure/security. Never fabricate success."
+          oidc_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery"
+          OIDC_TOKEN=$(curl -fsS -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$oidc_url" | jq -r '.value')
+          test -n "$OIDC_TOKEN"
+          goal="IVX AUTONOMOUS APK DELIVERY MISSION. Deliver a signed Android APK from exact main SHA ${TARGET_SHA}. Required artifact: IVX-Holdings-v1.10.32-MISSION-CONTROL.apk. Required proof: exact source SHA, successful Android workflow run ID, apksigner verification, SHA-256, artifact ID/name. Never fabricate success."
           payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",systemMode:true,ownerApproved:true,riskLevel:"low",proposedPlan:"Build exact-SHA signed Android APK, verify signing/hash, and produce artifact evidence."}')
-          code=$(curl -sS --max-time 60 -o /tmp/autonomous-apk-task.json -w '%{http_code}' -X POST \
-            "${API_BASE}/api/ivx/senior-developer/worker/jobs" \
-            -H 'Content-Type: application/json' -H 'Accept: application/json' \
-            -H "X-IVX-System-Key: ${SYSTEM_KEY}" --data "$payload" || true)
+          code=$(curl -sS --max-time 60 -o /tmp/autonomous-apk-task.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H 'Accept: application/json' -H "X-IVX-GitHub-OIDC: ${OIDC_TOKEN}" --data "$payload" || true)
           case "$code" in 200|202|409) ;; *) cat /tmp/autonomous-apk-task.json; exit 1;; esac
           task_id=$(jq -r '.task.taskId // .taskId // .jobId // .activeJobId // .job.jobId // empty' /tmp/autonomous-apk-task.json)
           test -n "$task_id"
@@ -87,9 +84,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh api --method POST \
-            "repos/${GITHUB_REPOSITORY}/actions/workflows/${APK_WORKFLOW}/dispatches" \
-            -f ref=main
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/workflows/${APK_WORKFLOW}/dispatches" -f ref=main
           echo 'APK_BUILD_DISPATCHED=true'
 
       - name: Resolve exact-SHA APK workflow run
@@ -118,13 +113,9 @@ jobs:
           set -euo pipefail
           for i in $(seq 1 120); do
             gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${APK_RUN_ID}" > /tmp/apk-run.json
-            status=$(jq -r '.status' /tmp/apk-run.json)
-            conclusion=$(jq -r '.conclusion // empty' /tmp/apk-run.json)
+            status=$(jq -r '.status' /tmp/apk-run.json); conclusion=$(jq -r '.conclusion // empty' /tmp/apk-run.json)
             echo "poll=$i status=$status conclusion=${conclusion:-pending}"
-            if [ "$status" = completed ]; then
-              test "$conclusion" = success
-              break
-            fi
+            if [ "$status" = completed ]; then test "$conclusion" = success; break; fi
             sleep 20
           done
           test "$(jq -r '.status' /tmp/apk-run.json)" = completed
@@ -135,20 +126,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${{ steps.existing.outputs.found }}" = true ]; then
-            APK_RUN_ID='${{ steps.existing.outputs.existing_run }}'
-          else
-            APK_RUN_ID='${{ steps.resolve.outputs.run_id }}'
-          fi
+          if [ "${{ steps.existing.outputs.found }}" = true ]; then APK_RUN_ID='${{ steps.existing.outputs.existing_run }}'; else APK_RUN_ID='${{ steps.resolve.outputs.run_id }}'; fi
           test -n "$APK_RUN_ID"
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${APK_RUN_ID}/artifacts?per_page=100" > /tmp/apk-artifacts.json
           artifact=$(jq -c --arg sha "$TARGET_SHA" '[.artifacts[] | select(.name | startswith("IVX-Holdings-v1.10.32-MISSION-CONTROL-" + $sha))][0] // empty' /tmp/apk-artifacts.json)
           test -n "$artifact"
-          artifact_id=$(jq -r '.id' <<<"$artifact")
-          artifact_name=$(jq -r '.name' <<<"$artifact")
-          jq -n --arg sourceSha "$TARGET_SHA" --arg runId "$APK_RUN_ID" --arg artifactId "$artifact_id" --arg artifactName "$artifact_name" \
-            '{ok:true,mission:"IVX Autonomous APK Delivery",sourceSha:$sourceSha,workflowRunId:$runId,artifactId:$artifactId,artifactName:$artifactName,exactSha:true,olderApkAccepted:false}' \
-            > /tmp/autonomous-apk-certificate.json
+          artifact_id=$(jq -r '.id' <<<"$artifact"); artifact_name=$(jq -r '.name' <<<"$artifact")
+          jq -n --arg sourceSha "$TARGET_SHA" --arg runId "$APK_RUN_ID" --arg artifactId "$artifact_id" --arg artifactName "$artifact_name" '{ok:true,mission:"IVX Autonomous APK Delivery",sourceSha:$sourceSha,workflowRunId:$runId,artifactId:$artifactId,artifactName:$artifactName,exactSha:true,olderApkAccepted:false}' > /tmp/autonomous-apk-certificate.json
           cat /tmp/autonomous-apk-certificate.json
 
       - name: Persist Autonomous APK evidence
