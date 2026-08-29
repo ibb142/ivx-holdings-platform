@@ -45,7 +45,7 @@ jobs:
           test -n "$LIVE_SHA"
           echo "LIVE_SHA=$LIVE_SHA" >> "$GITHUB_ENV"
 
-      - name: Audit each agent one by one
+      - name: Audit each agent with persisted run evidence
         shell: bash
         run: |
           set -euo pipefail
@@ -58,17 +58,31 @@ jobs:
             number=$((number + 1))
             agent_id=$(jq -r '.agentId' <<<"$agent")
             name=$(jq -r '.name // ""' <<<"$agent")
-            status=$(jq -r '.status // .state // "UNKNOWN"' <<<"$agent")
+            status=$(jq -r '.status // .state // .health // "UNKNOWN"' <<<"$agent")
             paused=$(jq -r '.paused // false' <<<"$agent")
             disabled=$(jq -r '.disabled // false' <<<"$agent")
-            current_task=$(jq -c '.currentTask // .task // .activeTask // null' <<<"$agent")
             last_heartbeat=$(jq -r '.lastHeartbeat // .lastHeartbeatAt // .heartbeatAt // .lastSeenAt // ""' <<<"$agent")
-            source_reference=$(jq -r '.lastRun.sourceReference // .lastRunRecord.sourceReference // .sourceReference // ""' <<<"$agent")
-            tool_result_id=$(jq -r '.lastRun.toolResultId // .lastRunRecord.toolResultId // .toolResultId // ""' <<<"$agent")
             total_runs=$(jq -r '.totalRuns // .stats.totalRuns // 0' <<<"$agent")
             successful_runs=$(jq -r '.successfulRuns // .stats.successfulRuns // 0' <<<"$agent")
+
+            # GET /api/ivx/agents intentionally returns compact state. Evidence is
+            # persisted in the run-record endpoint, so certification must read it
+            # from there instead of falsely expecting run fields on the registry.
+            runs_http=$(curl -sS --retry 2 --retry-delay 1 --max-time 30 -o "/tmp/ivx112/runs-${number}.json" -w '%{http_code}' "$API_BASE/api/ivx/agents/runs/$agent_id" || true)
+            source_reference=''
+            tool_result_id=''
+            current_task='null'
+            if [ "$runs_http" = 200 ]; then
+              latest=$(jq -c '(.runs // .records // .runRecords // []) | map(select((.sourceReference // "") != "" and (.toolResultId // "") != "")) | sort_by(.completedAt // .finishedAt // .startedAt // .createdAt // "") | last // null' "/tmp/ivx112/runs-${number}.json")
+              if [ "$latest" != null ]; then
+                source_reference=$(jq -r '.sourceReference // ""' <<<"$latest")
+                tool_result_id=$(jq -r '.toolResultId // ""' <<<"$latest")
+                current_task=$(jq -c '{taskId:(.taskId // .runId // null), taskType:(.taskType // null), finalStatus:(.finalStatus // null), completedAt:(.completedAt // .finishedAt // null)}' <<<"$latest")
+              fi
+            fi
+
             task_report_available=false
-            if [ "$current_task" != "null" ]; then task_report_available=true; fi
+            if [ "$current_task" != null ]; then task_report_available=true; fi
             evidence_available=false
             if [ -n "$source_reference" ] && [ -n "$tool_result_id" ]; then evidence_available=true; fi
             heartbeat_fresh=false
@@ -76,10 +90,11 @@ jobs:
               hb_epoch=$(date -u -d "$last_heartbeat" +%s 2>/dev/null || echo 0)
               if [ "$hb_epoch" -gt 0 ] && [ $((now_epoch-hb_epoch)) -le 1800 ]; then heartbeat_fresh=true; fi
             fi
-            jq -n --argjson sequence "$number" --arg agentId "$agent_id" --arg name "$name" --arg status "$status" --arg checkpointAt "$CHECKPOINT_AT" --arg lastHeartbeatAt "$last_heartbeat" --arg sourceReference "$source_reference" --arg toolResultId "$tool_result_id" --argjson paused "$paused" --argjson disabled "$disabled" --argjson currentTask "$current_task" --argjson taskReportAvailable "$task_report_available" --argjson evidenceAvailable "$evidence_available" --argjson heartbeatFresh "$heartbeat_fresh" --argjson totalRuns "$total_runs" --argjson successfulRuns "$successful_runs" '{sequence:$sequence,agentId:$agentId,name:$name,status:$status,checkpointAt:$checkpointAt,lastHeartbeatAt:$lastHeartbeatAt,paused:$paused,disabled:$disabled,currentTask:$currentTask,taskReportAvailable:$taskReportAvailable,evidenceAvailable:$evidenceAvailable,heartbeatFresh:$heartbeatFresh,totalRuns:$totalRuns,successfulRuns:$successfulRuns,sourceReference:$sourceReference,toolResultId:$toolResultId}' >> /tmp/ivx112/records.ndjson
+            jq -n --argjson sequence "$number" --arg agentId "$agent_id" --arg name "$name" --arg status "$status" --arg checkpointAt "$CHECKPOINT_AT" --arg lastHeartbeatAt "$last_heartbeat" --arg sourceReference "$source_reference" --arg toolResultId "$tool_result_id" --arg runsHttp "$runs_http" --argjson paused "$paused" --argjson disabled "$disabled" --argjson currentTask "$current_task" --argjson taskReportAvailable "$task_report_available" --argjson evidenceAvailable "$evidence_available" --argjson heartbeatFresh "$heartbeat_fresh" --argjson totalRuns "$total_runs" --argjson successfulRuns "$successful_runs" '{sequence:$sequence,agentId:$agentId,name:$name,status:$status,checkpointAt:$checkpointAt,lastHeartbeatAt:$lastHeartbeatAt,paused:$paused,disabled:$disabled,currentTask:$currentTask,taskReportAvailable:$taskReportAvailable,evidenceAvailable:$evidenceAvailable,heartbeatFresh:$heartbeatFresh,totalRuns:$totalRuns,successfulRuns:$successfulRuns,sourceReference:$sourceReference,toolResultId:$toolResultId,runsHttp:$runsHttp}' >> /tmp/ivx112/records.ndjson
           done < /tmp/ivx112/agents.ndjson
           jq -s '.' /tmp/ivx112/records.ndjson > /tmp/ivx112/records.json
           test "$(jq 'length' /tmp/ivx112/records.json)" = 112
+          test "$(jq '[.[] | select(.runsHttp == "200")] | length' /tmp/ivx112/records.json)" = 112
 
       - name: Build truth-preserving 15-minute checkpoint certificate
         shell: bash
@@ -94,7 +109,7 @@ jobs:
           CERT_OK=false
           if [ "$active" = 112 ] && [ "$paused" = 0 ] && [ "$disabled" = 0 ] && [ "$fresh" = 112 ] && [ "$productive" = 112 ] && [ "$evidence" = 112 ]; then CERT_OK=true; fi
           mkdir -p qa/evidence/autonomous
-          jq -n --argjson ok "$CERT_OK" --arg certificate 'IVX-112-15MIN-AGENT-CONTROL' --arg programId "$PROGRAM_ID" --arg checkpointAt "$CHECKPOINT_AT" --arg productionSha "$LIVE_SHA" --arg controllerSha "$GITHUB_SHA" --arg githubRunId "$GITHUB_RUN_ID" --argjson total 112 --argjson active "$active" --argjson paused "$paused" --argjson disabled "$disabled" --argjson fresh "$fresh" --argjson productive "$productive" --argjson evidence "$evidence" --slurpfile agents /tmp/ivx112/records.json '{ok:$ok,certificate:$certificate,programId:$programId,checkpointAt:$checkpointAt,productionSha:$productionSha,controllerSha:$controllerSha,githubRunId:$githubRunId,totalAgents:$total,activeAgents:$active,pausedAgents:$paused,disabledAgents:$disabled,freshHeartbeatsWithin30m:$fresh,agentsWithProductiveActivity:$productive,agentsWithEvidence:$evidence,agents:$agents[0],truthNote:"PASS requires all 112 active, no paused/disabled agents, 112 fresh heartbeats, 112 productive activity records and 112 evidence records. Registry presence alone never passes."}' > qa/evidence/autonomous/ivx-112-15min-latest.json
+          jq -n --argjson ok "$CERT_OK" --arg certificate 'IVX-112-15MIN-AGENT-CONTROL' --arg programId "$PROGRAM_ID" --arg checkpointAt "$CHECKPOINT_AT" --arg productionSha "$LIVE_SHA" --arg controllerSha "$GITHUB_SHA" --arg githubRunId "$GITHUB_RUN_ID" --argjson total 112 --argjson active "$active" --argjson paused "$paused" --argjson disabled "$disabled" --argjson fresh "$fresh" --argjson productive "$productive" --argjson evidence "$evidence" --slurpfile agents /tmp/ivx112/records.json '{ok:$ok,certificate:$certificate,programId:$programId,checkpointAt:$checkpointAt,productionSha:$productionSha,controllerSha:$controllerSha,githubRunId:$githubRunId,totalAgents:$total,activeAgents:$active,pausedAgents:$paused,disabledAgents:$disabled,freshHeartbeatsWithin30m:$fresh,agentsWithProductiveActivity:$productive,agentsWithEvidence:$evidence,agents:$agents[0],truthNote:"PASS requires all 112 active, no paused/disabled agents, 112 fresh heartbeats, 112 productive activity records and 112 persisted evidence records. Registry presence alone never passes."}' > qa/evidence/autonomous/ivx-112-15min-latest.json
           cat qa/evidence/autonomous/ivx-112-15min-latest.json
           test "$(jq -r '.ok' qa/evidence/autonomous/ivx-112-15min-latest.json)" = true
 
