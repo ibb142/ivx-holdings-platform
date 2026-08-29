@@ -30,8 +30,24 @@ jobs:
           mkdir -p evidence
           curl -fsS --retry 3 --retry-delay 2 "$API_BASE/api/ivx/agents" -o /tmp/agents.json
           test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
-          # Pull enough recent durable/in-process records to cover the active day.
-          curl -fsS --retry 3 --retry-delay 2 "$API_BASE/api/ivx/agents/runs?limit=5000" -o /tmp/runs.json
+
+          # /api/ivx/agents/runs is shadowed in production by the earlier
+          # /api/ivx/agents/:agentId route. Pull the non-conflicting
+          # /runs/:agentId endpoint for every registry agent and combine the
+          # durable records. This fails closed if any agent endpoint is broken.
+          printf '[]' > /tmp/all-records.json
+          while IFS= read -r agent_id; do
+            curl -fsS --retry 3 --retry-delay 2 \
+              "$API_BASE/api/ivx/agents/runs/$agent_id?limit=100" \
+              -o /tmp/agent-runs.json
+            test "$(jq -r '.ok // false' /tmp/agent-runs.json)" = true
+            jq -s '.[0] + (.[1].records // [])' \
+              /tmp/all-records.json /tmp/agent-runs.json > /tmp/all-records.next.json
+            mv /tmp/all-records.next.json /tmp/all-records.json
+          done < <(jq -r '.agents[]?.agentId' /tmp/agents.json)
+
+          jq -n --slurpfile records /tmp/all-records.json \
+            '{ok:true, records:$records[0]}' > /tmp/runs.json
           test "$(jq -r '.ok // false' /tmp/runs.json)" = true
 
       - name: Build real per-agent timer ledger
@@ -57,12 +73,6 @@ jobs:
                 error:(.error // null)
               }
             ]' /tmp/runs.json > /tmp/recent.json
-
-          jq --slurpfile registry /tmp/agents.json '
-            ($registry[0].agents // []) as $agents |
-            [$agents[] | . as $a |
-              ([.agentId] | .) as $dummy |
-              ([inputs] | .) ]' /dev/null >/dev/null 2>&1 || true
 
           jq --argfile agents /tmp/agents.json '
             ($agents.agents // []) as $registry |
@@ -109,7 +119,6 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${SYSTEM_KEY:-}"
-          # Shared root cause: same non-empty error affecting >=5 agents.
           jq -r '[.[] | select(.error != null and .error != "") | .error] | group_by(.) | map({error:.[0],count:length}) | map(select(.count>=5))' /tmp/recent.json > /tmp/shared.json
           shared_count=$(jq 'length' /tmp/shared.json)
           if [ "$shared_count" -gt 0 ]; then
