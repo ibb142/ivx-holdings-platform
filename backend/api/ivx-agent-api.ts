@@ -105,7 +105,7 @@ async function ownerAuthorized(c: any, body: Record<string, unknown> = {}): Prom
 }
 
 async function requireOwner(c: any, body: Record<string, unknown> = {}) {
-  return (await ownerAuthorized(c, body)) ? null : c.json({ ok: false, error: 'Owner authorization required.' }, 401);
+  return (await ownerAuthorized(c, body)) ? null : c.json({ ok: false, error: 'Owner authorization required.' }, { status: 401, headers: { 'Content-Type': 'application/json' } });
 }
 
 export function registerAgentRoutes(app: Hono): void {
