@@ -187,7 +187,7 @@ export async function handleAutonomousJobLedgerGet(request: Request): Promise<Re
     await assertIVXOwnerOnly(request);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unauthorized';
-    return ownerOnlyJson({ ok: false, error: message }, 401);
+    return new Response(JSON.stringify({ ok: false, error: message }), { status: 401, headers: { 'Content-Type': 'application/json' } });
   }
 
   const ledger = await loadLedger();
