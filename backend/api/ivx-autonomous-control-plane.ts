@@ -21,7 +21,7 @@ const HEARTBEAT_LIVE_TTL_MS = 120_000;
 /**
  * Short-lived in-memory cache for the control-plane GET telemetry payload.
  * The endpoint performs many durable-store reads (~5s cold); the radar samples
- * it with a 4s timeout, so uncached reads always looked like failures. This is
+ * it with a 15s timeout, so uncached reads always looked like failures. This is
  * telemetry (not mutation state) — 120s staleness is fail-safe and each miss
  * refreshes the cache.
  */
