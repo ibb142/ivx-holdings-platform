@@ -132,6 +132,7 @@ export function registerAgentRoutes(app: Hono): void {
         lastHeartbeat: state.lastHeartbeat,
       };
     });
+    c.header('Content-Type', 'application/json');
     return c.json({ ok: true, totalAgents: agents.length, marker: IVX_AGENT_API_MARKER, agents });
   });
 
@@ -195,7 +196,9 @@ export function registerAgentRoutes(app: Hono): void {
   app.get('/api/ivx/agents/:agentId', (c) => {
     const agentId = c.req.param('agentId');
     const contract = getContractByAgentId(agentId);
-    if (!contract) return c.json({ ok: false, error: `Agent ${agentId} not found`, errorCode: 'AGENT_NOT_FOUND' }, 404);
+    c.header('Content-Type', 'application/json');
+    if (!contract) return c.header('Content-Type', 'application/json');
+    c.json({ ok: false, error: `Agent ${agentId} not found`, errorCode: 'AGENT_NOT_FOUND' }, 404);
     const state = getExecutionState(agentId);
     return c.json({
       ok: true,
