@@ -184,8 +184,10 @@ export function registerAgentRoutes(app: Hono): void {
   app.post('/api/ivx/agents/certificate/run', async (c) => {
     const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
     const oidcAuthorized = await verifyIVXGitHubActionsOIDCRequest(c.req.raw);
-    const legacyAuthorized = await ownerAuthorized(c, body as Record<string, unknown>);
-    if (!oidcAuthorized && !legacyAuthorized) return c.json({ ok: false, error: 'Owner approval required to start the IVX 112 Real Execution Certificate run.' }, 401);
+    if (!oidcAuthorized) {
+      const denied = await requireOwner(c, body as Record<string, unknown>);
+      if (denied) return denied;
+    }
     const result = await startRealExecutionCertificateRun();
     return c.json({ ok: result.ok, marker: IVX_AGENT_API_MARKER, workflow: REAL_EXECUTION_WORKFLOW_NAME, runId: result.runId, error: result.error }, result.ok ? 200 : 500);
   });
