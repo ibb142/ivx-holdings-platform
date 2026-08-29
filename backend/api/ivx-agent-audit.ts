@@ -85,7 +85,8 @@ export async function handleAgentAuditLedger(request: Request): Promise<Response
 export async function handleAgentAuditLedgerCreate(request: Request): Promise<Response> {
   try {
     await assertIVXOwnerOnly(request);
-    const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+    const body = await request.json().catch(() => {});
+    if (typeof body !== 'object' || !body) throw new Error('Invalid JSON body');
 
     const entry = await addTaskLedgerEntry({
       title: String(body.title ?? ''),
