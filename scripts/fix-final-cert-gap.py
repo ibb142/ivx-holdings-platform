@@ -35,7 +35,11 @@ if TEMPLATE.exists() and 'ivx-agent-runtime-2026-08-29-live-brain-v2' not in TAR
     git('add', str(TARGET))
     if subprocess.run(['git', 'diff', '--cached', '--quiet']).returncode != 0:
         git_commit('commit', '-m', 'fix(cert): rebuild live-brain-e2e-builder-v2 workflow YAML and re-anchor live-brain wiring [live-brain-e2e-v2]')
-        git('push', 'origin', 'HEAD')
+        # actions/checkout leaves a detached HEAD for dispatch refs — push the
+        # commit explicitly to the dispatched/PR branch, never bare HEAD.
+        import os
+        branch = (os.environ.get('GITHUB_REF_NAME') or 'fix/cert-20260829-final').strip()
+        git('push', 'origin', f'HEAD:refs/heads/{branch}')
         repaired = True
 print('builder workflow repaired:', repaired)
 
