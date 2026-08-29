@@ -65,8 +65,10 @@ function parseGithubRepoUrl(repoUrl: string): { owner: string; repo: string } | 
 // ── GET /api/ivx/agent-code-executor/status ──────────────────────────────────
 
 export function handleExecutorStatusRequest(): Response {
+  const response = new Response(JSON.stringify({ ok: true, ...status }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  return response;
   const status = getExecutorStatus();
-  return json({
+  return new Response(JSON.stringify({
     ok: true,
     ...status,
     endpoints: {
@@ -84,7 +86,7 @@ export function handleExecutorStatusRequest(): Response {
 export async function handleExecutorWriteRequest(request: Request): Promise<Response> {
   let body: { files?: unknown; agentNumber?: unknown; agentId?: unknown; appName?: unknown };
   try {
-    body = (await request.json()) as typeof body;
+    body = (await request.json().catch(() => null)) as typeof body ?? null; if (!body) { console.error('Invalid JSON body'); return json({ ok: false, error: 'Invalid JSON body.' }, 400); }
   } catch {
     return json({ ok: false, error: 'Invalid JSON body.' }, 400);
   }
