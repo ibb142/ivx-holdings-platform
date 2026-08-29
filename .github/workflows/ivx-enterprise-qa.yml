@@ -289,7 +289,14 @@ jobs:
         run: |
           set -euo pipefail
           AAB=app/build/outputs/bundle/release/app-release.aab
-          jarsigner -verify -strict "$AAB"
+          test -s "$AAB"
+          jarsigner -verify "$AAB"
+          expected=$(keytool -list -v -keystore "$IVX_RELEASE_KEYSTORE_PATH" -storepass "$IVX_RELEASE_KEYSTORE_PASSWORD" -alias "$IVX_RELEASE_KEY_ALIAS" | awk -F': ' '/SHA256:/{gsub(":", "", $2); print toupper($2); exit}')
+          actual=$(keytool -printcert -jarfile "$AAB" | awk -F': ' '/SHA256:/{gsub(":", "", $2); print toupper($2); exit}')
+          test -n "$expected"
+          test -n "$actual"
+          test "$actual" = "$expected"
+          echo "AAB signer fingerprint matches protected IVX release key."
           sha256sum "$AAB"
       - name: Record bundle evidence
         run: find expo/android/app/build/outputs/bundle -name '*.aab' -type f -print -exec sha256sum {} \;
