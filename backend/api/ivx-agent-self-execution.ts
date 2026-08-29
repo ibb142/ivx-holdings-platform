@@ -41,7 +41,8 @@ export async function handleRunSelfExecution(request: Request): Promise<Response
       });
       if (gate.blocked && gate.response) return gate.response;
     } catch (gateError) {
-      console.log('[IVXSelfExecution] Pre-execution gate error (non-blocking):', gateError instanceof Error ? gateError.message : 'unknown');
+      console.log('[IVXSelfExecution] Request latency:', Date.now() - start, 'ms');
+    console.log('[IVXSelfExecution] Pre-execution gate error (non-blocking):', gateError instanceof Error ? gateError.message : 'unknown');
     }
     const result = await runSelfExecutionTest();
     return ownerOnlyJson({
