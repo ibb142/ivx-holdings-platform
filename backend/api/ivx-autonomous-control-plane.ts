@@ -16,7 +16,7 @@ import type { WorkflowAttribution } from '../services/ivx-agent-work-ledger';
 
 export const IVX_AUTONOMOUS_CONTROL_PLANE_MARKER = 'ivx-autonomous-control-plane-v5-2026-08-25';
 
-const HEARTBEAT_LIVE_TTL_MS = 120_000;
+const HEARTBEAT_LIVE_TTL_MS = 60_000;
 
 /**
  * Short-lived in-memory cache for the control-plane GET telemetry payload.
@@ -27,7 +27,7 @@ const HEARTBEAT_LIVE_TTL_MS = 120_000;
  */
 let controlPlaneCache: { at: number; body: string } | null = null;
 const CONTROL_PLANE_CACHE_TTL_MS = 120_000;
-const ACTIVE_WORKER_STATUSES = new Set(['running', 'patching', 'testing', 'committing', 'deploying', 'verifying']);
+const ACTIVE_WORKER_STATUSES = new Set(['running', 'patching', 'testing', 'committing', 'deploying', 'verifying', 'initializing']);
 
 function countStatuses<T extends { status: string }>(items: T[]) {
   return items.reduce<Record<string, number>>((acc, item) => {
