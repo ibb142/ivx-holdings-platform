@@ -531,7 +531,12 @@ export function buildDispatcherAssignmentInputs(campaign: AppCompletionCampaign)
       dutyId: a.dutyId,
       phase: a.phase,
       module: a.module,
-      laneKey: a.role === 'IMPLEMENT' ? a.fileOrRoute : `${a.role.toLowerCase()}:${a.dutyId}`,
+      // VERIFY agents hold registry-unique identities with per-agent assigned tasks:
+      // serialize per agent (not per shared dutyId) so independent verification runs
+      // concurrently. IMPLEMENT/QA keep duty-level serialization (shared output).
+      laneKey: a.role === 'IMPLEMENT' || a.role === 'QA'
+        ? (a.role === 'IMPLEMENT' ? a.fileOrRoute : `${a.role.toLowerCase()}:${a.dutyId}`)
+        : `${a.role.toLowerCase()}:${a.dutyId}:${a.agentNumber}`,
       executionMode: a.role === 'IMPLEMENT' ? 'code_change' : a.role === 'QA' ? 'qa_only' : 'read_only',
       ownerGate: a.ownerGate && a.role === 'IMPLEMENT',
       waitFor,
