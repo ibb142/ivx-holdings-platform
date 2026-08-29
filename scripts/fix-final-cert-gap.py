@@ -38,7 +38,9 @@ if TEMPLATE.exists() and 'ivx-agent-runtime-2026-08-29-live-brain-v2' not in TAR
         # actions/checkout leaves a detached HEAD for dispatch refs — push the
         # commit explicitly to the dispatched/PR branch, never bare HEAD.
         import os
-        branch = (os.environ.get('GITHUB_REF_NAME') or 'fix/cert-20260829-final').strip()
+        # For pull_request events GITHUB_REF_NAME is the PR number — the head
+        # branch only appears in GITHUB_HEAD_REF.
+        branch = (os.environ.get('GITHUB_HEAD_REF') or os.environ.get('GITHUB_REF_NAME') or 'fix/cert-20260829-final').strip()
         git('push', 'origin', f'HEAD:refs/heads/{branch}')
         repaired = True
 print('builder workflow repaired:', repaired)
