@@ -29,20 +29,26 @@ def git_commit(*args: str) -> subprocess.CompletedProcess:
     )
 
 
+import os
+
 repaired = False
 if TEMPLATE.exists() and 'ivx-agent-runtime-2026-08-29-live-brain-v2' not in TARGET.read_text():
+    branch = (os.environ.get('GITHUB_HEAD_REF') or os.environ.get('GITHUB_REF_NAME') or 'fix/cert-20260829-final').strip()
     TARGET.write_text(TEMPLATE.read_text())
     git('add', str(TARGET))
     if subprocess.run(['git', 'diff', '--cached', '--quiet']).returncode != 0:
         git_commit('commit', '-m', 'fix(cert): rebuild live-brain-e2e-builder-v2 workflow YAML and re-anchor live-brain wiring [live-brain-e2e-v2]')
         # actions/checkout leaves a detached HEAD for dispatch refs — push the
         # commit explicitly to the dispatched/PR branch, never bare HEAD.
-        import os
-        # For pull_request events GITHUB_REF_NAME is the PR number — the head
-        # branch only appears in GITHUB_HEAD_REF.
-        branch = (os.environ.get('GITHUB_HEAD_REF') or os.environ.get('GITHUB_REF_NAME') or 'fix/cert-20260829-final').strip()
-        git('push', 'origin', f'HEAD:refs/heads/{branch}')
-        repaired = True
+        push = subprocess.run(['git', 'push', 'origin', f'HEAD:refs/heads/{branch}'], capture_output=True, text=True)
+        if push.returncode == 0:
+            repaired = True
+        else:
+            # GITHUB_TOKEN (and repo-scope PATs) cannot create or update
+            # .github/workflows files — a workflow-scoped credential is required.
+            # The validated rebuild stays in scripts/templates/ for that token.
+            print('workflow-file push refused by GitHub (workflow scope required); template preserved at', TEMPLATE)
+            print((push.stderr or push.stdout or '').strip()[-400:])
 print('builder workflow repaired:', repaired)
 
 import runpy
