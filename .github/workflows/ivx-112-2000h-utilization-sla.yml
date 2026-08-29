@@ -28,6 +28,8 @@ jobs:
       API_BASE: https://api.ivxholding.com
       MIN_PRODUCTIVE_AGENT_HOURS: '2000'
       MIN_UTILIZATION_PERCENT: '74.4'
+      IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+      IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
     steps:
       - name: Read production 112-agent utilization
         shell: bash
@@ -69,11 +71,12 @@ jobs:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: |
           set -euo pipefail
-          code=$(curl -sS --max-time 30 -o /tmp/resume.json -w '%{http_code}' -X POST \
-            -H 'content-type: application/json' \
-            -H "X-IVX-GitHub-OIDC: $OIDC_TOKEN" \
-            -d '{"action":"resume_all"}' \
-            "$API_BASE/api/ivx/agents/app-completion/control")
+          owner_key="${IVX_SYSTEM_SECRET:-${IVX_AI_SYSTEM_SECRET:-}}"
+          args=(-sS --max-time 30 -o /tmp/resume.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: $OIDC_TOKEN")
+          if [ -n "$owner_key" ]; then
+            args+=( -H "x-ivx-owner-key: $owner_key" )
+          fi
+          code=$(curl "${args[@]}" -d '{"action":"resume_all"}' "$API_BASE/api/ivx/agents/app-completion/control")
           echo "resume_http=$code"
           cat /tmp/resume.json
           test "$code" = 200
