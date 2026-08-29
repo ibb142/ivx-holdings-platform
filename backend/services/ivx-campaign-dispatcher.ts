@@ -595,6 +595,16 @@ export async function tickCampaignDispatcher(): Promise<TickResult> {
     }
   }
 
+  // 5b. LANE MIGRATION (per-agent VERIFY): records created before the per-agent
+  // VERIFY lane fix serialized per shared dutyId, capping real concurrency.
+  // Recompute idempotently — spans/history preserved, anti-duplicate guarantees
+  // unchanged (record-key locks + openPrProbe still apply).
+  for (const r of state.records) {
+    if (r.role === 'VERIFY' && !r.laneKey.endsWith(`:${r.agentNumber}`)) {
+      r.laneKey = `verify:${r.dutyId}:${r.agentNumber}`;
+    }
+  }
+
   // 6. START new jobs under bounded concurrency + lane locks + deploy mutex.
   const active = state.records.filter((r) => r.status === 'RUNNING');
   result.activeCount = active.length;
