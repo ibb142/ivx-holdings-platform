@@ -46,6 +46,7 @@ const IVX_AGENT_GPS_OPTIONS = { title: 'IA GPS • 112' } as const;
 const IVX_LANDING_10OF10_OPTIONS = { title: 'Landing 10/10 • 112 IA' } as const;
 const IVX_LANDING_WAR_ROOM_MAP_OPTIONS = { title: 'Landing War Room Map' } as const;
 const IVX_AGENT_COMMAND_CENTER_OPTIONS = { title: 'AI Engineering Command Center' } as const;
+const IVX_AGENT_LEDGER_OPTIONS = { title: '112 IA • Real Production Ledger' } as const;
 
 export default function IVXOwnerLayout() {
   const router = useRouter();
@@ -111,6 +112,7 @@ export default function IVXOwnerLayout() {
       <Stack.Screen name="landing-10of10" options={IVX_LANDING_10OF10_OPTIONS} />
       <Stack.Screen name="landing-war-room-map" options={IVX_LANDING_WAR_ROOM_MAP_OPTIONS} />
       <Stack.Screen name="agent-command-center" options={IVX_AGENT_COMMAND_CENTER_OPTIONS} />
+      <Stack.Screen name="agent-ledger" options={IVX_AGENT_LEDGER_OPTIONS} />
     </Stack>
   );
 }
