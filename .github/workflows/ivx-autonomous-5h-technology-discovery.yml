@@ -1,0 +1,95 @@
+name: IVX Autonomous 5H Technology Discovery
+
+on:
+  schedule:
+    - cron: '0 5,6,7,8,9 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  API_BASE: https://api.ivxholding.com
+  DISCOVERY_PROGRAM: IVX-AUTONOMOUS-TECH-DISCOVERY-5H
+
+concurrency:
+  group: ivx-autonomous-5h-technology-discovery
+  cancel-in-progress: false
+
+jobs:
+  discovery-hour:
+    name: Evidence-backed technology discovery block
+    runs-on: ubuntu-latest
+    timeout-minutes: 58
+    env:
+      IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+      IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve protected machine authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${IVX_SYSTEM_SECRET:-${IVX_AI_SYSTEM_SECRET:-}}"
+          test -n "$key"
+          echo "::add-mask::$key"
+          printf '%s' "$key" > /tmp/ivx-system-key
+          chmod 600 /tmp/ivx-system-key
+
+      - name: Verify production before research
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 3 --retry-delay 2 --max-time 30 "$API_BASE/health" -o /tmp/health.json
+          curl -fsS --retry 3 --retry-delay 2 --max-time 30 "$API_BASE/version" -o /tmp/version.json
+          jq -e '.ok == true or .status == "ok" or .healthy == true' /tmp/health.json >/dev/null
+          LIVE_SHA=$(jq -r '.commit // .version.commit // empty' /tmp/version.json)
+          test -n "$LIVE_SHA"
+          echo "LIVE_SHA=$LIVE_SHA" >> "$GITHUB_ENV"
+
+      - name: Execute real autonomous technology discovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          key=$(cat /tmp/ivx-system-key)
+          hour=$(date -u +%H)
+          task_id="tech-discovery-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          goal="AUTONOMOUS TECHNOLOGY DISCOVERY. Perform one evidence-backed research block for IVX. Discover and evaluate deployable advances in AI agent orchestration, reasoning, engineering memory, software QA, security, observability, databases, mobile/web performance, cloud infrastructure, and quantum or quantum-inspired optimization. Inspect current IVX architecture before recommending adoption. Separate production-ready technology from experimental research. Produce concrete findings, source/evidence references, compatibility/risk assessment, expected measurable benefit, and an adopt/reject/watch verdict. Do not fabricate sources, productive time, implementation, or deployment. Research only; Owner Gates remain required for material production changes. Discovery block UTC hour ${hour}."
+          payload=$(jq -n --arg goal "$goal" --arg taskId "$task_id" --arg sourceSha "$LIVE_SHA" '{goal:$goal,executionMode:"analysis",templateMode:"RESEARCH",approvePatch:false,approveGitDeploy:false,validationMode:"none",proposedPlan:"Research, inspect IVX compatibility, independently critique evidence, persist findings. Do not mutate production.",filesAffected:["backend/services","backend/api","expo",".github/workflows"],riskLevel:"low",rollbackOption:"No production mutation is authorized.",metadata:{taskId:$taskId,sourceSha:$sourceSha,program:"IVX-AUTONOMOUS-TECH-DISCOVERY-5H",requireEvidence:true,allowSyntheticEvidence:false}}')
+          http=$(curl -sS --retry 2 --retry-delay 2 --max-time 60 -o /tmp/start.json -w '%{http_code}' -X POST "$API_BASE/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-System-Key: $key" --data "$payload" || true)
+          case "$http" in 200|202|409) ;; *) cat /tmp/start.json; exit 1;; esac
+          job_id=$(jq -r '.jobId // .activeJobId // .job.jobId // empty' /tmp/start.json)
+          test -n "$job_id"
+          echo "JOB_ID=$job_id" >> "$GITHUB_ENV"
+
+          terminal=''
+          for poll in $(seq 1 150); do
+            code=$(curl -sS --max-time 30 -o /tmp/poll.json -w '%{http_code}' "$API_BASE/api/ivx/senior-developer/worker/jobs/$job_id" -H "X-IVX-System-Key: $key" || true)
+            if [ "$code" = 200 ]; then
+              status=$(jq -r '.job.status // .status // empty' /tmp/poll.json)
+              case "$status" in completed|failed|blocked|cancelled) terminal="$status"; break;; esac
+            fi
+            sleep 20
+          done
+          test "$terminal" = completed
+          jq -e '.job.result.ok == true' /tmp/poll.json >/dev/null
+
+      - name: Persist fail-closed discovery evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          result=$(jq -c '.job.result // {}' /tmp/poll.json)
+          fingerprint=$(jq -r '.job.result.evidenceFingerprint // .job.result.toolResultId // .job.result.sourceReference // empty' /tmp/poll.json)
+          test -n "$fingerprint"
+          jq -n --arg certificate 'IVX-AUTONOMOUS-TECH-DISCOVERY-BLOCK' --arg program "$DISCOVERY_PROGRAM" --arg runId "$GITHUB_RUN_ID" --arg jobId "$JOB_ID" --arg sourceSha "$LIVE_SHA" --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg fingerprint "$fingerprint" --argjson result "$result" '{ok:true,certificate:$certificate,program:$program,githubRunId:$runId,workerJobId:$jobId,productionSha:$sourceSha,generatedAt:$generatedAt,evidenceFingerprint:$fingerprint,result:$result,truthNote:"This certificate proves one completed evidence-bearing discovery block. Five scheduled successful blocks are required each UTC day for the daily 5H discovery SLA; elapsed runner time is never reported as productive research time."}' > evidence/ivx-autonomous-tech-discovery-block.json
+          cat evidence/ivx-autonomous-tech-discovery-block.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ivx-autonomous-tech-discovery-${{ github.run_id }}
+          path: evidence/ivx-autonomous-tech-discovery-block.json
+          if-no-files-found: error
+          retention-days: 90
