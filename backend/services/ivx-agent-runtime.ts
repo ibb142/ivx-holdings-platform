@@ -32,6 +32,7 @@ import {
   type AgentStatus,
 } from './ivx-agent-contracts';
 import { type CompanyId, type DivisionId } from './ivx-enterprise-master-registry';
+import { requestIVXAIText } from '../ivx-ai-runtime';
 /** ISO-8601 UTC timestamp with second precision (jq `fromdateiso8601` compatible). */
 function isoSecondPrecision(date: Date = new Date()): string {
   return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
@@ -54,7 +55,17 @@ import {
   type AgentStateRow,
 } from './ivx-agent-persistence';
 
-export const IVX_AGENT_RUNTIME_MARKER = 'ivx-agent-runtime-2026-08-18-real-execution';
+export const IVX_AGENT_RUNTIME_MARKER = 'ivx-agent-runtime-2026-08-29-live-brain-v2';
+
+// Continuous brain escalation policy: live IVX AI inference is the reasoning engine.
+export const IVX_AGENT_BRAIN_ESCALATION_POLICY = [
+  'Use the live IVX AI runtime for reasoning; deterministic template output is not a brain.',
+  'Preserve agent identity, mission, memory namespace, permissions, tool limits, and owner-approval gates.',
+  'Continuously improve reasoning, memory, tool use, reliability, and evidence without an artificial capability ceiling.',
+  'Evaluate credible quantum computing, quantum-inspired optimization, agent orchestration, memory, and reasoning advances when relevant.',
+  'Separate deployable technology from speculative research. Never represent simulation or fallback text as deployed capability.',
+  'Never claim a tool or external action executed unless durable run evidence proves it.',
+].join(' ');
 export const IVX_AGENT_RUNTIME_VERSION = '3.0.0-real-execution';
 
 // ── Memory Layers ───────────────────────────────────────────────────────────
@@ -859,13 +870,37 @@ export async function executeAgentRun(
   }
 
   const advisory = produceAgentOutput(contract, missionTaskType, payload);
+  let brainNote: string | null = null;
+  let brainMode = 'live_ivx_ai_runtime';
+  try {
+    const brainResult = await requestIVXAIText({
+      module: `enterprise-agent-${contract.agentNumber}`,
+      requestId: `agent-brain-${taskId}`,
+      system: `${contract.systemInstructions}
+
+CONTINUOUS BRAIN ESCALATION POLICY: ${IVX_AGENT_BRAIN_ESCALATION_POLICY}`,
+      prompt: [
+        `Agent: ${contract.agentNumber} ${contract.agentName}`,
+        `Mission: ${contract.mission}`,
+        `Task type: ${missionTaskType}`,
+        `Real tool evidence: ${JSON.stringify(toolResults.map((t) => ({ toolId: t.toolId, ok: t.ok, summary: t.ok ? t.summary : t.error })))}`,
+        'Return concise role-specific reasoning grounded in the real tool evidence above. Never claim a tool ran unless the evidence shows it.',
+      ].join('\n'),
+      maxOutputTokens: 900,
+    });
+    brainNote = brainResult.text.trim() || null;
+  } catch {
+    brainMode = 'live_brain_unavailable';
+  }
   const output: Record<string, unknown> = {
     summary: finalStatus === 'completed'
       ? `${contract.agentName}: ${firstOk?.summary ?? ''}`
       : `${contract.agentName}: execution ${finalStatus} — ${errorMessage ?? ''}`,
     realWork: missionOutput,
     toolSummaries: toolResults.map((t) => ({ toolId: t.toolId, ok: t.ok, blocked: t.blocked, summary: t.ok ? t.summary : t.error })),
-    advisoryNote: advisory.summary,
+    advisoryNote: brainNote ?? advisory.summary,
+    brainMode,
+    escalationPolicy: 'continuous_quantum_and_ai_discovery',
     advisoryOnlyDisclaimer: 'advisoryNote is generated annotation — it can never complete a task by itself',
   };
 
@@ -880,6 +915,11 @@ export async function executeAgentRun(
       type: 'contract_loaded',
       description: `Contract v${contract.version} loaded with instruction hash ${contract.instructionHash}`,
       reference: contract.instructionHash,
+    },
+    {
+      type: 'live_ai_provider',
+      description: `IVX AI runtime brain reasoning (${brainMode}) for agent ${contract.agentNumber}`,
+      reference: `agent-brain-${taskId}`,
     },
   ];
 
