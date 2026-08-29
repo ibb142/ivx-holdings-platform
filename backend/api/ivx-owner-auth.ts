@@ -10,6 +10,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 const DEPLOYMENT_MARKER = 'ivx-owner-auth-v2-publishable-key-safe';
+// Investigate latency issues
+// Possible optimizations: reduce dependency calls, cache responses
 const PRODUCTION_SUPABASE_URL = 'https://kvclcdjmjghndxsngfzb.supabase.co';
 const PRODUCTION_SUPABASE_PUBLIC_KEY = 'sb_publishable_HD3Xvq5bCQNJLFk1ROH9mQ_Wdb9xdDZ';
 const ADMIN_ROLES = ['owner', 'admin', 'ceo', 'staff', 'manager', 'analyst', 'support'] as const;
