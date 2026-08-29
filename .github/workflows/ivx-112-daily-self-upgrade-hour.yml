@@ -1,0 +1,139 @@
+name: IVX 112 Daily Self-Upgrade Research Hour
+
+on:
+  schedule:
+    - cron: '0 12 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  API_BASE: https://api.ivxholding.com
+  PROGRAM_ID: IVX-112-DAILY-SELF-UPGRADE-1H
+
+concurrency:
+  group: ivx-112-daily-self-upgrade-hour
+  cancel-in-progress: false
+
+jobs:
+  research-hour:
+    runs-on: ubuntu-latest
+    timeout-minutes: 59
+    env:
+      IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+      IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Respect Landing exclusive-focus gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mission='qa/autonomous/landing-10of10-mission.json'
+          if [ ! -f "$mission" ]; then
+            echo 'self_upgrade_gate=DEFERRED_NO_LANDING_MISSION'
+            exit 78
+          fi
+          focus=$(jq -r '.executionPolicy.exclusiveFocus // empty' "$mission")
+          if [ -z "$focus" ]; then
+            echo 'self_upgrade_gate=DEFERRED_UNTIL_EXCLUSIVE_FOCUS_CONTRACT_IS_LIVE'
+            exit 78
+          fi
+          if [ "$focus" = 'LANDING_10OF10' ]; then
+            echo 'self_upgrade_gate=DEFERRED_LANDING_P0'
+            exit 78
+          fi
+          echo 'self_upgrade_gate=OPEN'
+
+      - name: Resolve protected authorization and verify production
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${IVX_SYSTEM_SECRET:-${IVX_AI_SYSTEM_SECRET:-}}"
+          test -n "$key"
+          echo "::add-mask::$key"
+          printf '%s' "$key" > /tmp/ivx-owner-key
+          chmod 600 /tmp/ivx-owner-key
+          curl -fsS --retry 3 --retry-delay 2 --max-time 30 "$API_BASE/health" -o /tmp/health.json
+          curl -fsS --retry 3 --retry-delay 2 --max-time 30 "$API_BASE/version" -o /tmp/version.json
+          curl -fsS --retry 3 --retry-delay 2 --max-time 30 "$API_BASE/api/ivx/agents" -o /tmp/agents.json
+          jq -e '.ok == true or .status == "ok" or .healthy == true' /tmp/health.json >/dev/null
+          test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
+          test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)" = 112
+          live_sha=$(jq -r '.commit // .version.commit // empty' /tmp/version.json)
+          test -n "$live_sha"
+          echo "LIVE_SHA=$live_sha" >> "$GITHUB_ENV"
+
+      - name: Run 112-agent evidence-backed self-upgrade window
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence /tmp/ivx-upgrade
+          key=$(cat /tmp/ivx-owner-key)
+          start_epoch=$(date -u +%s)
+          deadline=$((start_epoch + 3000))
+          round=0
+          : > /tmp/ivx-upgrade/all.ndjson
+
+          while [ "$(date -u +%s)" -lt "$deadline" ]; do
+            round=$((round + 1))
+            jq -r '.agents[].agentId' /tmp/agents.json > /tmp/ivx-upgrade/ids.txt
+            export API_BASE key round LIVE_SHA
+            xargs -I{} -P112 bash -c '
+              agent="$1"
+              payload=$(jq -n --arg round "$round" --arg sourceSha "$LIVE_SHA" --arg program "IVX-112-DAILY-SELF-UPGRADE-1H" \
+                "{taskType:\"research\",payload:{program:\$program,round:(\$round|tonumber),sourceSha:\$sourceSha,objective:\"Evidence-backed self-upgrade research for IVX. Inspect current architecture and evaluate advances across AI/agentic systems, reasoning, memory, coding, QA, security, observability, databases, mobile/web, cloud, robotics interfaces, AGI research directions, quantum computing, quantum algorithms and quantum-inspired optimization. Separate deployable technology from experimental/speculative research. Produce evidence references, compatibility, risks, measurable benefit and ADOPT/REJECT/WATCH recommendation. Do not claim AGI capability, quantum hardware access, implementation, productive time or deployment without proof. Do not mutate production. Owner Gates remain required for material changes.\",requireEvidence:true,allowSyntheticEvidence:false,productionMutationAllowed:false}}")
+              code=$(curl -sS --max-time 180 -o "/tmp/ivx-upgrade/${agent}.json" -w "%{http_code}" -X POST "$API_BASE/api/ivx/agents/$agent/run" -H "Content-Type: application/json" -H "X-IVX-Owner-Key: $key" --data "$payload" || true)
+              jq -n --arg agentId "$agent" --arg http "$code" --argjson round "$round" --slurpfile response "/tmp/ivx-upgrade/${agent}.json" \
+                "{agentId:\$agentId,http:\$http,round:\$round,response:(\$response[0] // {})}" >> "/tmp/ivx-upgrade/round-${round}.ndjson"
+            ' _ {}
+            cat "/tmp/ivx-upgrade/round-${round}.ndjson" >> /tmp/ivx-upgrade/all.ndjson
+            sleep 5
+          done
+
+          jq -s '.' /tmp/ivx-upgrade/all.ndjson > /tmp/ivx-upgrade/all.json
+
+      - name: Build fail-closed research ledger
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq '[.[] | {
+            agentId,
+            round,
+            http,
+            ok:(.http == "200" and (.response.ok // false) == true),
+            runId:(.response.runRecord.runId // null),
+            durationMs:(.response.runRecord.durationMs // 0),
+            evidenceCount:((.response.runRecord.evidence // []) | length),
+            sourceReference:(.response.runRecord.sourceReference // null),
+            toolResultId:(.response.runRecord.toolResultId // null),
+            error:(.response.error // null)
+          }]' /tmp/ivx-upgrade/all.json > evidence/ivx-112-self-upgrade-runs.json
+
+          jq '{
+            certificate:"IVX-112-DAILY-SELF-UPGRADE-RESEARCH",
+            program:"IVX-112-DAILY-SELF-UPGRADE-1H",
+            generatedAt:(now|todateiso8601),
+            productionSha:env.LIVE_SHA,
+            totalRunAttempts:length,
+            uniqueAgents:([.[].agentId] | unique | length),
+            successfulEvidenceRuns:([.[] | select(.ok == true and .evidenceCount > 0)] | length),
+            measuredProductiveHours:([.[] | select(.ok == true and .evidenceCount > 0) | .durationMs] | add // 0) / 3600000,
+            researchDomains:["AI","agentic systems","reasoning","memory","coding","QA","security","observability","databases","mobile/web","cloud","robotics interfaces","AGI research","quantum computing","quantum algorithms","quantum-inspired optimization"],
+            truthNote:"This ledger counts only measured successful run duration with evidence. A one-hour scheduled window is not automatically reported as 112 productive agent-hours. Research may recommend upgrades but cannot self-authorize material production changes, claim AGI capability, or claim quantum hardware access without evidence.",
+            runs:.
+          }' evidence/ivx-112-self-upgrade-runs.json > evidence/ivx-112-self-upgrade-summary.json
+
+          test "$(jq '.uniqueAgents' evidence/ivx-112-self-upgrade-summary.json)" = 112
+          test "$(jq '.successfulEvidenceRuns' evidence/ivx-112-self-upgrade-summary.json)" -gt 0
+          cat evidence/ivx-112-self-upgrade-summary.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ivx-112-self-upgrade-${{ github.run_id }}
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 90
