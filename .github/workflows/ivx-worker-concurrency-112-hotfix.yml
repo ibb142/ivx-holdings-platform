@@ -1,0 +1,53 @@
+name: IVX Worker Concurrency 112 Hotfix
+
+on:
+  push:
+    branches:
+      - chatgpt/worker-concurrency-112
+    paths:
+      - .github/workflows/ivx-worker-concurrency-112-hotfix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-worker-capacity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/worker-concurrency-112
+          fetch-depth: 0
+
+      - name: Raise real worker capacity to the 112-agent contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('backend/services/ivx-senior-developer-worker.ts')
+          s = p.read_text()
+          old = "return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 16) : 4;"
+          new = "return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 112) : 112;"
+          if new not in s:
+              if old not in s:
+                  raise SystemExit('WORKER_CONCURRENCY_ANCHOR_MISSING')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+          grep -q "Math.min(raw, 112) : 112" backend/services/ivx-senior-developer-worker.ts
+          git diff --check
+
+      - name: Commit capacity repair to hotfix branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- backend/services/ivx-senior-developer-worker.ts; then
+            echo 'capacity already repaired'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/services/ivx-senior-developer-worker.ts
+          git commit -m 'fix(agents): align worker concurrency with 112-agent SLA'
+          git push origin HEAD:chatgpt/worker-concurrency-112

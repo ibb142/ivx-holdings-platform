@@ -434,7 +434,7 @@ const claimedJobIds = new Set<string>();
 /** Max concurrent senior-developer job executions (configurable, bounded). */
 export function getWorkerMaxConcurrency(): number {
   const raw = Number.parseInt(process.env.IVX_WORKER_MAX_CONCURRENCY ?? '', 10);
-  return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 16) : 4;
+  return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 112) : 112;
 }
 
 async function loadQueue(): Promise<QueueDoc> {
