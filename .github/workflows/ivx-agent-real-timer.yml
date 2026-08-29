@@ -58,7 +58,6 @@ jobs:
           cutoff=$((now - 86400))
           jq --argjson cutoff "$cutoff" '
             [.records[]? |
-              . as $r |
               ((.startedAt // .started_at // .createdAt // .created_at // "1970-01-01T00:00:00Z") | fromdateiso8601?) as $started |
               select(($started // 0) >= $cutoff) |
               {
@@ -74,10 +73,13 @@ jobs:
               }
             ]' /tmp/runs.json > /tmp/recent.json
 
-          jq --argfile agents /tmp/agents.json '
-            ($agents.agents // []) as $registry |
+          # jq 1.8 removed --argfile. --slurpfile is portable across the
+          # GitHub-hosted runner versions and preserves the same fail-closed data model.
+          jq --slurpfile agents /tmp/agents.json '
+            ($agents[0].agents // []) as $registry |
+            . as $recent |
             [ $registry[] | . as $a |
-              ([.[] | select(.agentId == $a.agentId)] ) as $runs |
+              ([$recent[] | select(.agentId == $a.agentId)]) as $runs |
               ($runs | map(.durationMs // 0) | add // 0) as $workedMs |
               ($runs | map(select(.finalStatus == "completed" and .realToolUsed == true and .verifiedOutput == true) | .durationMs) | add // 0) as $productiveMs |
               ($runs | map(select(.finalStatus == "failed" or .finalStatus == "blocked") | .durationMs) | add // 0) as $failedMs |
@@ -101,6 +103,7 @@ jobs:
               }
             ]' /tmp/recent.json > evidence/agent-real-timer-24h.json
 
+          test "$(jq 'length' evidence/agent-real-timer-24h.json)" = 112
           jq '{
             measuredAt:(now|todateiso8601),
             agents:length,
@@ -112,6 +115,7 @@ jobs:
             sleeping:([.[]|select(.paused==true or .disabled==true)]|length),
             agents:.
           }' evidence/agent-real-timer-24h.json > evidence/agent-productivity-summary.json
+          test "$(jq '.agents' evidence/agent-productivity-summary.json)" = 112
           cat evidence/agent-productivity-summary.json
 
       - name: Detect stuck/shared failures and notify Autonomous
@@ -136,6 +140,7 @@ jobs:
               timerState:(if .runningNow>0 then "WORKING" elif .paused==true or .disabled==true then "SLEEP" elif .runs24h==0 then "IDLE_NEXT_PHASE" elif .health=="unhealthy" then "SLEEP_NOTIFY_AUTONOMOUS" else "READY_NEXT_PHASE" end),
               action:(if .runningNow>0 then "continue_current_task" elif .paused==true or .disabled==true then "hold_until_dependency_green" elif .health=="unhealthy" then "notify_autonomous_and_hold" else "jump_to_next_safe_task" end)
             })' evidence/agent-real-timer-24h.json > evidence/agent-real-timer-routed.json
+          test "$(jq 'length' evidence/agent-real-timer-routed.json)" = 112
 
       - name: Upload timer evidence
         uses: actions/upload-artifact@v4
