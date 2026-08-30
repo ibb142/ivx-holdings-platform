@@ -720,6 +720,27 @@ export async function campaignDispatcherControl(
     case 'resume_all':
       state.paused = false;
       state.stopped = false;
+      // A global resume must also release per-agent stop state. CANCELLED
+      // records remain cancelled so a machine resume cannot override an
+      // explicit owner stop; retry_agent is still required for those.
+      state.stoppedAgents = [];
+      // Recycle only bounded, non-owner BLOCKED work. FAILED work is
+      // handled by the scheduler's existing bounded auto-retry path.
+      for (const record of state.records) {
+const ownerBlocked = (record.blocker ?? '').startsWith('OWNER_GATE')
+  || (record.blocker ?? '').startsWith('EMERGENCY_STOP')
+  || record.stage.startsWith('SUPERSEDED');
+if (record.status === 'BLOCKED' && !ownerBlocked && isRetryableFailure(record)) {
+  record.retryCount += 1;
+  record.status = record.role === 'QA' ? 'AWAITING_IMPLEMENT' : 'QUEUED';
+  record.stage = `AUTO-RECOVERY AFTER RESUME (${record.retryCount}/${MAX_CAMPAIGN_RETRIES})`;
+  record.workerJobId = null;
+  record.workerStatus = null;
+  record.error = null;
+  record.blocker = null;
+  record.finishedAt = null;
+}
+      }
       break;
     case 'stop_all':
       state.stopped = true;
@@ -773,6 +794,11 @@ export async function campaignDispatcherControl(
   }
   await saveState(state);
   await logEvent('control', { action, agentNumber: agentNumber ?? null, cancelledWorkerJobs: cancelledWorkerJobs.length });
+  // Do not wait for the 10-second timer after a recovery command. Force a
+  // real scheduler pass now so success means dispatch was attempted.
+  if (action === 'resume_all') {
+await tickCampaignDispatcher();
+  }
   return { action, cancelledWorkerJobs };
 }
 
