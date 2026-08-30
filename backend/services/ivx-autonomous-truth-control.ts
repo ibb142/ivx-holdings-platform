@@ -3,10 +3,12 @@ import { campaignDispatcherControl, getCampaignDispatcherSnapshot, startCampaign
 import { getGitHubActionsExternalSupervisorStatus } from './ivx-github-actions-external-supervisor';
 import { getSchedulerState } from './ivx-autonomous-scheduler';
 
-export const IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER = 'ivx-autonomous-truth-control-2026-08-30-v1';
+export const IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER = 'ivx-autonomous-truth-control-2026-08-30-v2';
 const HEARTBEAT_FRESH_MS = 10 * 60 * 1000;
 
 export type TruthControlAction =
+  | 'start_all'
+  | 'stop_all'
   | 'pause_all'
   | 'resume_all'
   | 'pause_agent'
@@ -71,6 +73,21 @@ export async function getAutonomousTruthSnapshot() {
     && (dispatcher.totals.running > 0 || dispatcher.totals.queued > 0),
   );
 
+  const totalDevelopmentJobs =
+    dispatcher.totals.pendingOwner
+    + dispatcher.totals.awaitingImplement
+    + dispatcher.totals.queued
+    + dispatcher.totals.running
+    + dispatcher.totals.completed
+    + dispatcher.totals.failed
+    + dispatcher.totals.blocked;
+  const completionPercent = totalDevelopmentJobs > 0
+    ? Math.round((dispatcher.totals.completed / totalDevelopmentJobs) * 10000) / 100
+    : 0;
+  const activeAgentPercent = agents.length > 0
+    ? Math.round((counts.working / agents.length) * 10000) / 100
+    : 0;
+
   return {
     ok: agents.length === 112,
     marker: IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER,
@@ -92,6 +109,18 @@ export async function getAutonomousTruthSnapshot() {
       blockedJobs: dispatcher.totals.blocked,
       maxConcurrency: dispatcher.maxConcurrency,
     },
+    developmentProgress: {
+      totalJobs: totalDevelopmentJobs,
+      pendingOwner: dispatcher.totals.pendingOwner,
+      awaitingImplement: dispatcher.totals.awaitingImplement,
+      queued: dispatcher.totals.queued,
+      running: dispatcher.totals.running,
+      completed: dispatcher.totals.completed,
+      failed: dispatcher.totals.failed,
+      blocked: dispatcher.totals.blocked,
+      completionPercent,
+      activeAgentPercent,
+    },
     agents: { counts, rows: agents },
     github: github ? {
       checkedAt: github.checkedAt,
@@ -104,12 +133,16 @@ export async function getAutonomousTruthSnapshot() {
 }
 
 export async function applyTruthControl(action: TruthControlAction, agentId?: string, agentNumber?: number) {
-  if (action === 'pause_all' || action === 'resume_all') {
-    for (const state of getAllExecutionStates()) {
-      if (action === 'pause_all') pauseAgent(state.agentId);
-      else resumeAgent(state.agentId);
-    }
-    await campaignDispatcherControl(action);
+  if (action === 'start_all' || action === 'resume_all') {
+    startCampaignDispatcher();
+    for (const state of getAllExecutionStates()) resumeAgent(state.agentId);
+    await campaignDispatcherControl('resume_all');
+  } else if (action === 'stop_all') {
+    for (const state of getAllExecutionStates()) pauseAgent(state.agentId);
+    await campaignDispatcherControl('stop_all');
+  } else if (action === 'pause_all') {
+    for (const state of getAllExecutionStates()) pauseAgent(state.agentId);
+    await campaignDispatcherControl('pause_all');
   } else {
     if (!agentId && typeof agentNumber !== 'number') throw new Error('agentId or agentNumber required');
     const state = getAllExecutionStates().find((row) => row.agentId === agentId || row.agentNumber === agentNumber);
