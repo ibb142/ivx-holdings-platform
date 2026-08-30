@@ -142,7 +142,15 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
     // JWKS-verified, short-lived) is accepted as READ-ONLY machine auth for the
     // autonomous radar/nervous system. Every other caller still requires the
     // registered owner bearer session. No claims are weakened here.
-    const trustedMachine = await verifyIVXGitHubActionsOIDCRequest(request);
+    const trustedMachine = let trustedMachine = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        trustedMachine = await verifyIVXGitHubActionsOIDCRequest(request);
+        if (trustedMachine) break;
+      } catch {
+        // Retry on error
+      }
+    }
     if (!trustedMachine) await assertIVXOwnerOnly(request);
   } catch (error) {
     return ownerOnlyJson({ ok: false, error: error instanceof Error ? error.message : 'IVX owner authentication required.' }, 401);
@@ -169,7 +177,11 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
       });
     }
     const control = await loadControlState();
-    const dispatcherRecords = await listCampaignDispatcherRecords();
+    let dispatcherRecords = [];
+    for (let i = 0; i < 3; i++) {
+      dispatcherRecords = await listCampaignDispatcherRecords();
+      if (dispatcherRecords.length > 0) break;
+    }
     const campaign = buildAppCompletionCampaign(control, dispatcherRecords);
     // OWNER MANDATE 2026-08-28 (Mission G fix): GitHub Actions / War Room work
     // is correlated into the canonical per-IA state via the workflow
