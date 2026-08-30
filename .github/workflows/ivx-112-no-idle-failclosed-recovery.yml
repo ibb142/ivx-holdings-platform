@@ -24,6 +24,8 @@ jobs:
       API_BASE: https://api.ivxholding.com
       REPO: ibb142/ivx-holdings-platform
       LANDING_112_WORKFLOW: landing-112-agent-autonomous-qa.yml
+      IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+      IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
     steps:
       - name: Read live dispatcher truth
         id: before
@@ -55,6 +57,32 @@ jobs:
           token=$(printf '%s' "$token_json" | jq -r '.value // empty')
           test -n "$token"
           echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Recycle repairable failed blocked cancelled work across all 112 agents
+        if: steps.before.outputs.running == '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner_key="${IVX_SYSTEM_SECRET:-${IVX_AI_SYSTEM_SECRET:-}}"
+          if [ -z "$owner_key" ]; then
+            echo 'No owner secret available for retry_agent recycling; continuing to bounded OIDC resume.'
+            exit 0
+          fi
+          failures=0
+          for agent in $(seq 1 112); do
+            code=$(curl -sS --max-time 20 -o "/tmp/retry-$agent.json" -w '%{http_code}' \
+              -X POST \
+              -H 'content-type: application/json' \
+              -H "x-ivx-owner-key: $owner_key" \
+              -d "{\"action\":\"retry_agent\",\"agentNumber\":$agent}" \
+              "$API_BASE/api/ivx/agents/app-completion/control") || code=000
+            if [ "$code" != 200 ] || [ "$(jq -r '.ok // false' "/tmp/retry-$agent.json" 2>/dev/null || echo false)" != true ]; then
+              echo "retry_agent failed agent=$agent http=$code"
+              failures=$((failures + 1))
+            fi
+          done
+          echo "retry_agent_failures=$failures"
+          test "$failures" -eq 0
 
       - name: Resume Autonomous campaign when idle
         if: steps.before.outputs.running == '0'
