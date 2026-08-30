@@ -1,0 +1,112 @@
+name: IVX 112 Root Resume Hardening
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-112-root-resume-hardening.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  patch-root-resume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch root dispatcher resume path surgically
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('backend/services/ivx-campaign-dispatcher.ts')
+          s = p.read_text()
+          old_resume = """    case 'resume_all':
+                state.paused = false;
+                state.stopped = false;
+                break;"""
+          # Match the canonical source indentation, not rendered spacing.
+          old_resume = "    case 'resume_all':\n      state.paused = false;\n      state.stopped = false;\n      break;"
+          new_resume = """    case 'resume_all':
+                state.paused = false;
+                state.stopped = false;
+                // A global resume must also release per-agent stop state. CANCELLED
+                // records remain cancelled so a machine resume cannot override an
+                // explicit owner stop; retry_agent is still required for those.
+                state.stoppedAgents = [];
+                // Recycle only bounded, non-owner BLOCKED work. FAILED work is
+                // handled by the scheduler's existing bounded auto-retry path.
+                for (const record of state.records) {
+                  const ownerBlocked = (record.blocker ?? '').startsWith('OWNER_GATE')
+                    || (record.blocker ?? '').startsWith('EMERGENCY_STOP')
+                    || record.stage.startsWith('SUPERSEDED');
+                  if (record.status === 'BLOCKED' && !ownerBlocked && isRetryableFailure(record)) {
+                    record.retryCount += 1;
+                    record.status = record.role === 'QA' ? 'AWAITING_IMPLEMENT' : 'QUEUED';
+                    record.stage = `AUTO-RECOVERY AFTER RESUME (${record.retryCount}/${MAX_CAMPAIGN_RETRIES})`;
+                    record.workerJobId = null;
+                    record.workerStatus = null;
+                    record.error = null;
+                    record.blocker = null;
+                    record.finishedAt = null;
+                  }
+                }
+                break;"""
+          # Normalize only the indentation accidentally introduced in this heredoc.
+          new_resume = '\n'.join(line[8:] if line.startswith('        ') else line for line in new_resume.splitlines())
+          old_tail = """  await saveState(state);
+            await logEvent('control', { action, agentNumber: agentNumber ?? null, cancelledWorkerJobs: cancelledWorkerJobs.length });
+            return { action, cancelledWorkerJobs };"""
+          old_tail = "  await saveState(state);\n  await logEvent('control', { action, agentNumber: agentNumber ?? null, cancelledWorkerJobs: cancelledWorkerJobs.length });\n  return { action, cancelledWorkerJobs };"
+          new_tail = """  await saveState(state);
+            await logEvent('control', { action, agentNumber: agentNumber ?? null, cancelledWorkerJobs: cancelledWorkerJobs.length });
+            // Do not wait for the 10-second timer after a recovery command. Force a
+            // real scheduler pass now so success means dispatch was attempted.
+            if (action === 'resume_all') {
+              await tickCampaignDispatcher();
+            }
+            return { action, cancelledWorkerJobs };"""
+          new_tail = '\n'.join(line[4:] if line.startswith('    ') else line for line in new_tail.splitlines())
+          if old_resume not in s:
+              if 'AUTO-RECOVERY AFTER RESUME' in s:
+                  print('already_patched=true')
+                  Path('/tmp/already').write_text('1')
+                  raise SystemExit(0)
+              raise SystemExit('canonical resume_all block not found; refusing unsafe patch')
+          if old_tail not in s:
+              raise SystemExit('canonical control tail not found; refusing unsafe patch')
+          s = s.replace(old_resume, new_resume, 1).replace(old_tail, new_tail, 1)
+          p.write_text(s)
+          print('patched=true')
+          PY
+          if [ -f /tmp/already ]; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+          else
+            git diff --check
+            git diff -- backend/services/ivx-campaign-dispatcher.ts
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create protected-branch PR for root fix
+        if: steps.patch.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch="fix/112-root-resume-runtime-${GITHUB_RUN_ID}"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -b "$branch"
+          git add backend/services/ivx-campaign-dispatcher.ts
+          git commit -m 'fix(autonomous): make resume_all restart real dispatcher work'
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" --title 'fix: harden Autonomous root resume runtime' --body 'Root runtime fix: release per-agent stop state, recycle bounded non-owner BLOCKED work, preserve explicit owner cancellations, and force an immediate real dispatcher tick after resume_all.'
