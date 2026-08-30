@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
   actions: read
+  id-token: write
 
 concurrency:
   group: ivx-no-idle-intelligence-1000
@@ -18,6 +19,7 @@ env:
   TARGET_AGENTS: '112'
   IDLE_AFTER_SECONDS: '300'
   MAX_PARALLEL_FILL: '24'
+  OIDC_AUDIENCE: ivx-360-autonomous-recovery
 
 jobs:
   no-idle-intelligence:
@@ -28,33 +30,51 @@ jobs:
       IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
       IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
     steps:
-      - name: Resolve protected machine authorization
+      - name: Acquire scoped GitHub OIDC machine identity
+        id: oidc
         shell: bash
         run: |
           set -euo pipefail
-          owner_key="${IVX_SYSTEM_SECRET:-${IVX_AI_SYSTEM_SECRET:-}}"
-          test -n "$owner_key"
-          echo "::add-mask::$owner_key"
-          printf '%s' "$owner_key" > /tmp/ivx-owner-key
-          chmod 600 /tmp/ivx-owner-key
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          token_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}"
+          curl -fsS --retry 3 --retry-delay 2 --retry-all-errors \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "$token_url" > /tmp/ivx-oidc.json
+          token=$(jq -r '.value // empty' /tmp/ivx-oidc.json)
+          test -n "$token"
+          echo "::add-mask::$token"
+          printf '%s' "$token" > /tmp/ivx-oidc-token
+          chmod 600 /tmp/ivx-oidc-token
+
+      - name: Resolve protected machine authorization fallback
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner_key="${IVX_AI_SYSTEM_SECRET:-${IVX_SYSTEM_SECRET:-}}"
+          if [ -n "$owner_key" ]; then
+            echo "::add-mask::$owner_key"
+            printf '%s' "$owner_key" > /tmp/ivx-owner-key
+            chmod 600 /tmp/ivx-owner-key
+          fi
 
       - name: Wake dispatcher and synchronize real campaign assignments
         shell: bash
         run: |
           set -euo pipefail
-          owner_key=$(cat /tmp/ivx-owner-key)
+          oidc_token=$(cat /tmp/ivx-oidc-token)
 
           curl -fsS --retry 3 --retry-delay 2 --max-time 45 \
             "$API_BASE/api/ivx/agents/app-completion/dashboard" \
             -o /tmp/dashboard-before.json
           test "$(jq -r '.ok // false' /tmp/dashboard-before.json)" = true
 
-          code=$(curl -sS --retry 2 --retry-delay 2 --max-time 45 \
-            -o /tmp/resume.json -w '%{http_code}' -X POST \
-            -H 'content-type: application/json' \
-            -H "x-ivx-owner-key: $owner_key" \
-            -d '{"action":"resume_all"}' \
-            "$API_BASE/api/ivx/agents/app-completion/control")
+          args=(-sS --retry 2 --retry-delay 2 --max-time 45 -o /tmp/resume.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: $oidc_token")
+          if [ -s /tmp/ivx-owner-key ]; then
+            owner_key=$(cat /tmp/ivx-owner-key)
+            args+=( -H "x-ivx-owner-key: $owner_key" )
+          fi
+          code=$(curl "${args[@]}" -d '{"action":"resume_all"}' "$API_BASE/api/ivx/agents/app-completion/control")
           echo "resume_http=$code"
           cat /tmp/resume.json
           test "$code" = 200
@@ -102,8 +122,10 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          owner_key=$(cat /tmp/ivx-owner-key)
-          export API_BASE SOURCE_SHA RUN_ID owner_key
+          oidc_token=$(cat /tmp/ivx-oidc-token)
+          owner_key=''
+          if [ -s /tmp/ivx-owner-key ]; then owner_key=$(cat /tmp/ivx-owner-key); fi
+          export API_BASE SOURCE_SHA RUN_ID owner_key oidc_token
           mkdir -p /tmp/no-idle-results
 
           cat > /tmp/run-idle-agent.sh <<'SCRIPT'
@@ -130,12 +152,9 @@ jobs:
               }
             }')
 
-          http=$(curl -sS --retry 2 --retry-delay 1 --max-time 90 \
-            -o "/tmp/no-idle-results/${safe_id}.json" -w '%{http_code}' -X POST \
-            -H 'content-type: application/json' \
-            -H "x-ivx-owner-key: $owner_key" \
-            --data "$payload" \
-            "$API_BASE/api/ivx/agents/$agent_id/run" || true)
+          args=(-sS --retry 2 --retry-delay 1 --max-time 90 -o "/tmp/no-idle-results/${safe_id}.json" -w '%{http_code}' -X POST -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: $oidc_token")
+          if [ -n "$owner_key" ]; then args+=( -H "x-ivx-owner-key: $owner_key" ); fi
+          http=$(curl "${args[@]}" --data "$payload" "$API_BASE/api/ivx/agents/$agent_id/run" || true)
 
           jq -n \
             --arg agentId "$agent_id" \
