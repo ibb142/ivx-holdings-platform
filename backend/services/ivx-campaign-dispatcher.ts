@@ -720,6 +720,26 @@ export async function campaignDispatcherControl(
     case 'resume_all':
       state.paused = false;
       state.stopped = false;
+      // Global recovery releases per-agent stop state but never revives
+      // CANCELLED records, preserving explicit owner stop semantics.
+      state.stoppedAgents = [];
+      // Recover only bounded non-owner BLOCKED work. FAILED work is
+      // retried by tickCampaignDispatcher using MAX_CAMPAIGN_RETRIES.
+      for (const record of state.records) {
+        const ownerBlocked = (record.blocker ?? '').startsWith('OWNER_GATE')
+          || (record.blocker ?? '').startsWith('EMERGENCY_STOP')
+          || record.stage.startsWith('SUPERSEDED');
+        if (record.status === 'BLOCKED' && !ownerBlocked && isRetryableFailure(record)) {
+          record.retryCount += 1;
+          record.status = record.role === 'QA' ? 'AWAITING_IMPLEMENT' : 'QUEUED';
+          record.stage = `AUTO-RECOVERY AFTER RESUME (${record.retryCount}/${MAX_CAMPAIGN_RETRIES})`;
+          record.workerJobId = null;
+          record.workerStatus = null;
+          record.error = null;
+          record.blocker = null;
+          record.finishedAt = null;
+        }
+      }
       break;
     case 'stop_all':
       state.stopped = true;
@@ -773,6 +793,11 @@ export async function campaignDispatcherControl(
   }
   await saveState(state);
   await logEvent('control', { action, agentNumber: agentNumber ?? null, cancelledWorkerJobs: cancelledWorkerJobs.length });
+  // Recovery success must include an immediate real scheduler pass; do
+  // not wait for the periodic 10-second timer after resume_all.
+  if (action === 'resume_all') {
+    await tickCampaignDispatcher();
+  }
   return { action, cancelledWorkerJobs };
 }
 
