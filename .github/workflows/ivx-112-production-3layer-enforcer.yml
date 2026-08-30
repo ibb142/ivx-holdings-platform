@@ -60,7 +60,7 @@ jobs:
           echo "utilization=$utilization" >> "$GITHUB_OUTPUT"
 
       - name: Layer 2 - obtain Autonomous OIDC recovery identity
-        if: steps.truth.outputs.running == '0' || steps.truth.outputs.utilization < '74.4'
+        if: steps.truth.outputs.running == '0' || fromJSON(steps.truth.outputs.utilization) < 74.4
         id: oidc
         shell: bash
         run: |
@@ -71,7 +71,7 @@ jobs:
           echo "token=$token" >> "$GITHUB_OUTPUT"
 
       - name: Layer 2 - recycle repairable work across all 112 agents
-        if: steps.truth.outputs.running == '0' || steps.truth.outputs.utilization < '74.4'
+        if: steps.truth.outputs.running == '0' || fromJSON(steps.truth.outputs.utilization) < 74.4
         shell: bash
         run: |
           set -euo pipefail
@@ -92,7 +92,7 @@ jobs:
           test "$failures" -eq 0
 
       - name: Layer 2 - force bounded resume
-        if: steps.truth.outputs.running == '0' || steps.truth.outputs.utilization < '74.4'
+        if: steps.truth.outputs.running == '0' || fromJSON(steps.truth.outputs.utilization) < 74.4
         shell: bash
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
