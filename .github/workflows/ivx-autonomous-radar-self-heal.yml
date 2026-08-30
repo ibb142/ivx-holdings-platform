@@ -8,6 +8,7 @@ on:
       - Landing 112-Agent Autonomous QA War Room
       - IVX Enterprise Line-by-Line Quality Audit
       - IVX Enterprise QA
+      - IVX Dashboard + IA Chat End-to-End Certificate
     types: [completed]
   workflow_dispatch: {}
 
@@ -104,6 +105,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+          SOURCE_WORKFLOW: ${{ github.event.workflow_run.name }}
+          SOURCE_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_URL: ${{ github.event.workflow_run.html_url }}
+          SOURCE_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
         shell: bash
         run: |
           set -euo pipefail
@@ -112,6 +117,15 @@ jobs:
             > /tmp/ivx-radar/failed-jobs.jsonl
           count=$(wc -l < /tmp/ivx-radar/failed-jobs.jsonl | tr -d ' ')
           echo "failed_count=$count" >> "$GITHUB_OUTPUT"
+          jq -n \
+            --arg workflow "$SOURCE_WORKFLOW" \
+            --arg runId "$SOURCE_RUN_ID" \
+            --arg headSha "$SOURCE_HEAD_SHA" \
+            --arg url "$SOURCE_URL" \
+            --arg conclusion "$SOURCE_CONCLUSION" \
+            '{workflow:$workflow,runId:$runId,headSha:$headSha,url:$url,conclusion:$conclusion}' \
+            > /tmp/ivx-radar/source-run.json
+          cat /tmp/ivx-radar/source-run.json
           if grep -Eiq 'secret|credential|auth|permission|payment|stripe|migration|database destructive|infrastructure|iam|cloudfront|route53|security policy|rollback' /tmp/ivx-radar/failed-jobs.jsonl; then
             echo 'owner_gate_required=true' >> "$GITHUB_OUTPUT"
           else
@@ -131,14 +145,16 @@ jobs:
           set -euo pipefail
           assessment=$(cat /tmp/ivx-radar/predictive-assessment.json)
           source_failures='[]'
+          source_run='null'
           if [ -s /tmp/ivx-radar/failed-jobs.jsonl ]; then source_failures=$(jq -s -c '.' /tmp/ivx-radar/failed-jobs.jsonl); fi
-          jq -n --arg event "$GITHUB_EVENT_NAME" --argjson assessment "$assessment" --argjson failures "$source_failures" \
-            '{event:$event,predictive:$assessment,sourceFailures:$failures,policy:{failClosed:true,ownerGate:true,maxRepairAttempts:3,neverWeakenQuality:true}}' \
+          if [ -s /tmp/ivx-radar/source-run.json ]; then source_run=$(jq -c '.' /tmp/ivx-radar/source-run.json); fi
+          jq -n --arg event "$GITHUB_EVENT_NAME" --argjson assessment "$assessment" --argjson failures "$source_failures" --argjson sourceRun "$source_run" \
+            '{event:$event,predictive:$assessment,sourceRun:$sourceRun,sourceFailures:$failures,policy:{failClosed:true,ownerGate:true,maxRepairAttempts:3,neverWeakenQuality:true,rerunAfterRepair:true}}' \
             > /tmp/ivx-radar/mission.json
           cat /tmp/ivx-radar/mission.json
 
       - name: Resume bounded 112-agent campaign when self-heal is required
-        if: ${{ steps.predictive.outputs.action == 'self_heal' && steps.source.outputs.owner_gate_required != 'true' }}
+        if: ${{ steps.source.outputs.owner_gate_required != 'true' && (steps.predictive.outputs.action == 'self_heal' || (github.event_name == 'workflow_run' && steps.source.outputs.failed_count != '0')) }}
         env:
           IVX_GITHUB_OIDC: ${{ steps.oidc.outputs.token }}
         shell: bash
@@ -164,7 +180,7 @@ jobs:
         run: |
           set -euo pipefail
           mission=$(cat /tmp/ivx-radar/mission.json)
-          if [ "${{ steps.predictive.outputs.action }}" = 'preflight' ]; then
+          if [ "${{ steps.predictive.outputs.action }}" = 'preflight' ] && [ "${{ steps.source.outputs.failed_count }}" = '0' ]; then
             execution=qa_only
             approve_patch=false
             approve_deploy=false
@@ -173,9 +189,9 @@ jobs:
             approve_patch=true
             approve_deploy=false
           fi
-          goal="IVX PREDICTIVE NERVOUS EARLY WARNING. Diagnose BEFORE terminal failure. Inspect endpoint latency trend, HTTP, Content-Type, JSON contract, worker heartbeat, queue pressure, auth/permission symptoms and source workflow failures. For low-risk code defects only, repair and test. Never change secrets/IAM/payments/destructive migrations/security policy or production infrastructure without Owner Gate. Evidence required. Mission: ${mission}"
+          goal="IVX AUTONOMOUS CLOSED-LOOP RECOVERY. Treat any subscribed workflow failure as an actionable repair event, not a terminal report. Diagnose exact failed job/step and source SHA. For low-risk code defects, repair the code or test harness, run focused tests, create/update the repair PR, and ensure the original certificate reruns from the repaired source. Never weaken tests or assertions to manufacture green. Never change secrets/IAM/payments/destructive migrations/security policy or production infrastructure without Owner Gate. Evidence required. Mission: ${mission}"
           payload=$(jq -n --arg goal "$goal" --arg execution "$execution" --argjson approvePatch "$approve_patch" --argjson approveGitDeploy "$approve_deploy" \
-            '{goal:$goal,executionMode:$execution,templateMode:"BUG_FIX",approvePatch:$approvePatch,approveGitDeploy:$approveGitDeploy,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Predictive evidence-backed preflight/self-heal with Owner Gates preserved.",rollbackOption:"Revert autonomous repair PR if any regression appears.",filesAffected:["predictive-diagnosis"]}')
+            '{goal:$goal,executionMode:$execution,templateMode:"BUG_FIX",approvePatch:$approvePatch,approveGitDeploy:$approveGitDeploy,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Closed-loop failure diagnosis, safe code repair, focused validation, repair PR, and source certificate rerun with Owner Gates preserved.",rollbackOption:"Revert autonomous repair PR if any regression appears.",filesAffected:["workflow-failure-source","certificate-harness","runtime-code-if-required"]}')
           args=(-sS --max-time 60 -o /tmp/ivx-radar/job-start.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}")
           if [ -n "${SYSTEM_KEY:-}" ]; then
             echo "::add-mask::$SYSTEM_KEY"
@@ -184,6 +200,7 @@ jobs:
           http=$(curl "${args[@]}" --data "$payload")
           case "$http" in 200|202|409) ;; *) cat /tmp/ivx-radar/job-start.json; exit 1;; esac
           jq -e '.jobId // .activeJobId // .job.jobId' /tmp/ivx-radar/job-start.json >/dev/null
+          cat /tmp/ivx-radar/job-start.json
 
       - name: Persist predictive radar evidence
         if: always()
