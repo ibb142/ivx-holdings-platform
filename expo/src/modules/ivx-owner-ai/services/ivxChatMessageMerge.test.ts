@@ -110,10 +110,10 @@ describe('capOwnerMessages', () => {
     expect(capped.map((m) => m.id)).toEqual(['m7', 'm8', 'm9']);
   });
 
-  it('returns everything (sorted) when under the cap', () => {
+  it('returns every renderable message (sorted) when under the cap', () => {
     const messages = [
-      makeMessage({ id: 'b', createdAt: '2026-05-31T00:00:02Z' }),
-      makeMessage({ id: 'a', createdAt: '2026-05-31T00:00:01Z' }),
+      makeMessage({ id: 'b', body: 'second', createdAt: '2026-05-31T00:00:02Z' }),
+      makeMessage({ id: 'a', body: 'first', createdAt: '2026-05-31T00:00:01Z' }),
     ];
     expect(capOwnerMessages(messages, 50).map((m) => m.id)).toEqual(['a', 'b']);
   });
