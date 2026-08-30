@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 concurrency:
   group: deploy-landing-${{ github.ref }}
@@ -65,7 +66,7 @@ jobs:
           p.write_text(s)
           PY
 
-      - name: Prove AWS identity
+      - name: Prove AWS identity and reject legacy Rork1
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -73,6 +74,13 @@ jobs:
         run: |
           set -euo pipefail
           aws sts get-caller-identity | tee /tmp/aws-identity.json
+          ARN="$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('/tmp/aws-identity.json','utf8'));process.stdout.write(j.Arn||'')")"
+          test -n "$ARN" || { echo '::error::AWS caller identity ARN missing'; exit 1; }
+          if [[ "$ARN" == *':user/Rork1' ]]; then
+            echo '::error::LEGACY_AWS_IDENTITY_BLOCKED: production deployment must not run as IAM user Rork1. Rotate GitHub AWS secrets to an IVX-owned deployment role/user with S3 + CloudFront permissions.'
+            exit 1
+          fi
+          echo "AWS_DEPLOY_IDENTITY=$ARN"
 
       - name: Install AWS SDK deploy dependencies
         run: bun add @aws-sdk/client-s3 @aws-sdk/client-cloudfront
