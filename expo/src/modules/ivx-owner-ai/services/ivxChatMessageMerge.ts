@@ -2,14 +2,9 @@
  * Pure, runtime-free helpers for merging the IVX Owner AI conversation from its
  * two durable sources (remote Supabase rows + the local AsyncStorage shadow) and
  * for bounding the local shadow so it never grows without limit.
- *
- * This module deliberately has ZERO runtime imports (only a type-only import that
- * is erased at build time) so the conversation-state logic can be unit-tested
- * without React Native, Supabase, or AsyncStorage in scope. It is the single
- * source of truth for "which message wins" when the same turn exists both
- * locally and remotely — the logic that decides whether the chat survives a
- * reload, route change, logout/login, or a transient remote-read failure.
  */
+
+import { filterRenderableOwnerMessages } from './ivxRenderableMessage';
 
 /** Minimal structural shape needed to merge/dedupe owner-chat messages. */
 export interface MergeableOwnerMessage {
@@ -44,11 +39,7 @@ export function buildOwnerMessageSignature(message: MergeableOwnerMessage): stri
  * Looser logical-turn content key. Intentionally DOES NOT include conversationId.
  * The owner room can adopt a backend canonical id after a reply; a local shadow
  * row written under the pre-adoption id and the authoritative remote row written
- * under the canonical id are still the same logical turn. Including room id here
- * caused stale assistant replies to be re-injected after id rotation.
- *
- * Attachment identity is included when present. Returns null for attachment-only
- * messages with no body so distinct uploads are never collapsed accidentally.
+ * under the canonical id are still the same logical turn.
  */
 export function buildOwnerMessageContentKey(message: MergeableOwnerMessage): string | null {
   const body = normalizeMessageComparisonValue(message.body);
@@ -63,14 +54,6 @@ export function buildOwnerMessageContentKey(message: MergeableOwnerMessage): str
   ].join('::');
 }
 
-/**
- * STABLE ORDERING FIX (owner mandate 2026-07-20 Phase 4D): sort by created_at
- * ascending, breaking ties by message id (stable secondary key). Previously
- * this sorted ONLY by createdAt — equal-timestamp messages (common when the
- * server assigns near-simultaneous timestamps to realtime + optimistic copies)
- * changed order after every realtime sync, producing the flicker/reorder the
- * owner reported. The id tiebreak is deterministic and stable across reloads.
- */
 function sortByCreatedAtAscending<T extends MergeableOwnerMessage>(messages: T[]): T[] {
   return [...messages].sort((left, right) => {
     const ta = new Date(left.createdAt).getTime();
@@ -82,28 +65,24 @@ function sortByCreatedAtAscending<T extends MergeableOwnerMessage>(messages: T[]
 
 /**
  * Merge remote (authoritative) and local (shadow/fallback) owner messages.
- *
- * Rules:
- * - Remote rows always win.
- * - A local row is dropped if its exact signature already exists remotely
- *   (true duplicate), OR if a remote row shares its logical content key — even
- *   when the canonical conversation id changed between the local and remote
- *   writes. This prevents stale old answers from reappearing after reload.
- * - Local-only rows (never persisted remotely, e.g. offline/auth-degraded sends)
- *   are preserved so the conversation never loses a turn.
+ * Structurally empty rows are removed here, before they can ever reach chat.tsx
+ * and be converted into the synthetic failed "unable to display" bubble.
  */
 export function mergeOwnerMessages<T extends MergeableOwnerMessage>(
   remoteMessages: T[],
   localMessages: T[],
 ): T[] {
-  if (localMessages.length === 0) {
-    return sortByCreatedAtAscending(remoteMessages);
+  const renderableRemote = filterRenderableOwnerMessages(remoteMessages);
+  const renderableLocal = filterRenderableOwnerMessages(localMessages);
+
+  if (renderableLocal.length === 0) {
+    return sortByCreatedAtAscending(renderableRemote);
   }
 
   const merged = new Map<string, T>();
   const remoteContentKeys = new Set<string>();
 
-  for (const message of remoteMessages) {
+  for (const message of renderableRemote) {
     merged.set(buildOwnerMessageSignature(message), message);
     const contentKey = buildOwnerMessageContentKey(message);
     if (contentKey) {
@@ -111,7 +90,7 @@ export function mergeOwnerMessages<T extends MergeableOwnerMessage>(
     }
   }
 
-  for (const message of localMessages) {
+  for (const message of renderableLocal) {
     const signature = buildOwnerMessageSignature(message);
     if (merged.has(signature)) {
       continue;
@@ -127,15 +106,16 @@ export function mergeOwnerMessages<T extends MergeableOwnerMessage>(
 }
 
 /**
- * Bound the local shadow to the most recent `maxMessages` turns (chronological)
- * so the durable cache can never grow without limit. Keeps the newest messages.
+ * Bound the local shadow to the most recent `maxMessages` turns and purge
+ * structurally empty rows from the durable mirror as part of every save.
  */
 export function capOwnerMessages<T extends MergeableOwnerMessage>(
   messages: T[],
   maxMessages: number,
 ): T[] {
-  if (maxMessages <= 0 || messages.length <= maxMessages) {
-    return sortByCreatedAtAscending(messages);
+  const renderableMessages = filterRenderableOwnerMessages(messages);
+  if (maxMessages <= 0 || renderableMessages.length <= maxMessages) {
+    return sortByCreatedAtAscending(renderableMessages);
   }
-  return sortByCreatedAtAscending(messages).slice(-maxMessages);
+  return sortByCreatedAtAscending(renderableMessages).slice(-maxMessages);
 }
