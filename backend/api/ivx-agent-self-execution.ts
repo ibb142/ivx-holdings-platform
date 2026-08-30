@@ -32,6 +32,7 @@ export function OPTIONS(): Response { return ownerOnlyOptions(); }
 export async function handleRunSelfExecution(request: Request): Promise<Response> {
   try {
     await assertIVXOwnerOnly(request);
+    if (request.headers.get('Content-Type') !== 'application/json') throw new Error('Invalid Content-Type');
     // Pre-Execution Feasibility Gate (Stage 0)
     try {
       const gate = await checkPreExecutionGate(request, {
