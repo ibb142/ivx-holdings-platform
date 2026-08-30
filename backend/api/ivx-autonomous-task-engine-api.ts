@@ -153,7 +153,9 @@ export async function handleLeaseTask(c: HonoContext): Promise<Response> {
 export async function handleHeartbeat(c: HonoContext): Promise<Response> {
   const taskId = c.req.param('taskId') ?? '';
   const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
-  const result = await heartbeat(taskId, String(body.workerId ?? ''));
+  const workerId = String(body.workerId ?? '');
+  if (!workerId) return c.json({ ok: false, error: 'Worker ID required' }, 400);
+  const result = await heartbeat(taskId, workerId);
   return c.json(result);
 }
 
