@@ -1,6 +1,6 @@
 import { getIVXOwnerVariableRuntimeValue } from '../api/ivx-owner-variables';
 
-export const IVX_TASK_PREFLIGHT_GATE_MARKER = 'ivx-task-preflight-gate-v2-2026-08-30';
+export const IVX_TASK_PREFLIGHT_GATE_MARKER = 'ivx-task-preflight-gate-v3-2026-08-30';
 
 const REPO = process.env.IVX_GITHUB_REPO || 'ibb142/ivx-holdings-platform';
 const GITHUB_API = 'https://api.github.com';
@@ -21,7 +21,16 @@ export type TaskPreflightState = {
   queued: number;
   inProgress: number;
   oldestQueuedAgeMs: number;
+  blockers: string[];
+  warnings: string[];
   reasons: string[];
+};
+
+export type TaskPreflightDecision = {
+  ok: boolean;
+  mode: 'normal' | 'recovery';
+  state: TaskPreflightState;
+  error: string | null;
 };
 
 let state: TaskPreflightState = {
@@ -36,6 +45,8 @@ let state: TaskPreflightState = {
   queued: 0,
   inProgress: 0,
   oldestQueuedAgeMs: 0,
+  blockers: ['preflight_not_initialized'],
+  warnings: [],
   reasons: ['preflight_not_initialized'],
 };
 
@@ -65,14 +76,7 @@ async function gh<T>(path: string, token: string): Promise<T> {
 }
 
 function normalizeProductionSha(payload: any): string | null {
-  const candidates = [
-    payload?.commit,
-    payload?.sha,
-    payload?.version?.commit,
-    payload?.git?.commit,
-    payload?.sourceVersion,
-  ];
-  for (const value of candidates) {
+  for (const value of [payload?.commit, payload?.sha, payload?.version?.commit, payload?.git?.commit, payload?.sourceVersion]) {
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return null;
@@ -83,18 +87,32 @@ function ageMs(createdAt: string): number {
   return Number.isFinite(created) ? Math.max(0, Date.now() - created) : 0;
 }
 
-export function updateTaskPreflightGate(next: Omit<TaskPreflightState, 'marker' | 'checkedAt' | 'open' | 'reasons'> & { reasons?: string[] }): TaskPreflightState {
-  const reasons = [...(next.reasons || [])];
-  if (!next.mainSha) reasons.push('main_sha_unknown');
-  if (!next.productionSha) reasons.push('production_sha_unknown');
-  if (next.mainSha && next.productionSha && next.mainSha !== next.productionSha) reasons.push('production_not_on_main_sha');
-  if (!next.productionHealthy) reasons.push('production_unhealthy');
-  if (!next.queueHealthy) reasons.push('github_queue_unhealthy');
-  if (!next.supervisorHealthy) reasons.push('autonomous_supervisor_unhealthy');
+export function updateTaskPreflightGate(next: {
+  mainSha: string | null;
+  productionSha: string | null;
+  productionHealthy: boolean;
+  queueHealthy: boolean;
+  supervisorHealthy: boolean;
+  queued: number;
+  inProgress: number;
+  oldestQueuedAgeMs: number;
+  blockers?: string[];
+  warnings?: string[];
+}): TaskPreflightState {
+  const blockers = [...(next.blockers || [])];
+  const warnings = [...(next.warnings || [])];
+  if (!next.mainSha) blockers.push('main_sha_unknown');
+  if (!next.productionSha) blockers.push('production_sha_unknown');
+  if (next.mainSha && next.productionSha && next.mainSha !== next.productionSha) blockers.push('production_not_on_main_sha');
+  if (!next.productionHealthy) blockers.push('production_unhealthy');
+  if (!next.supervisorHealthy) blockers.push('autonomous_supervisor_unhealthy');
+  if (!next.queueHealthy) warnings.push('github_queue_unhealthy');
+  const uniqueBlockers = [...new Set(blockers)];
+  const uniqueWarnings = [...new Set(warnings)];
   state = {
     marker: IVX_TASK_PREFLIGHT_GATE_MARKER,
     checkedAt: new Date().toISOString(),
-    open: reasons.length === 0,
+    open: uniqueBlockers.length === 0,
     mainSha: next.mainSha,
     productionSha: next.productionSha,
     productionHealthy: next.productionHealthy,
@@ -103,7 +121,9 @@ export function updateTaskPreflightGate(next: Omit<TaskPreflightState, 'marker' 
     queued: next.queued,
     inProgress: next.inProgress,
     oldestQueuedAgeMs: next.oldestQueuedAgeMs,
-    reasons: [...new Set(reasons)],
+    blockers: uniqueBlockers,
+    warnings: uniqueWarnings,
+    reasons: [...uniqueBlockers, ...uniqueWarnings],
   };
   return state;
 }
@@ -157,7 +177,7 @@ async function refreshNow(): Promise<TaskPreflightState> {
       queued: state.queued,
       inProgress: state.inProgress,
       oldestQueuedAgeMs: state.oldestQueuedAgeMs,
-      reasons: [`preflight_refresh_failed:${error instanceof Error ? error.message : String(error)}`],
+      blockers: [`preflight_refresh_failed:${error instanceof Error ? error.message : String(error)}`],
     });
   }
 }
@@ -174,12 +194,28 @@ export function getTaskPreflightGate(): TaskPreflightState {
   return state;
 }
 
-export async function requireTaskPreflightGate(taskName = 'autonomous_task'): Promise<{ ok: true; state: TaskPreflightState } | { ok: false; state: TaskPreflightState; error: string }> {
+export function isRecoveryTask(taskName: string, workflow = ''): boolean {
+  const value = `${taskName} ${workflow}`.toLowerCase();
+  return /(deploy|repair|recovery|self[- ]heal|queue|certificate|certification|rollback|restore)/.test(value);
+}
+
+export async function requireTaskPreflightGate(taskName = 'autonomous_task', workflow = ''): Promise<TaskPreflightDecision> {
   const current = await refreshTaskPreflightGate();
-  if (current.open) return { ok: true, state: current };
+  const recovery = isRecoveryTask(taskName, workflow);
+
+  if (current.open) return { ok: true, mode: recovery ? 'recovery' : 'normal', state: current, error: null };
+
+  // Recovery work must remain possible when production SHA parity is broken;
+  // otherwise the preflight would deadlock the exact tasks needed to heal it.
+  // It still fails closed when the supervisor itself is unavailable.
+  if (recovery && current.supervisorHealthy) {
+    return { ok: true, mode: 'recovery', state: current, error: null };
+  }
+
   return {
     ok: false,
+    mode: recovery ? 'recovery' : 'normal',
     state: current,
-    error: `${taskName} blocked by IVX P0 preflight: ${current.reasons.join(', ') || 'unknown'}`,
+    error: `${taskName} blocked by IVX P0 preflight: ${current.blockers.join(', ') || 'unknown'}`,
   };
 }
