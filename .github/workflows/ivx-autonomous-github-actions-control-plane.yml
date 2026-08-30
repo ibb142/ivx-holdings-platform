@@ -1,0 +1,91 @@
+name: IVX Autonomous GitHub Actions Control Plane
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: ivx-autonomous-github-actions-control-plane
+  cancel-in-progress: true
+
+env:
+  MAX_QUEUED_RUNS: '12'
+  MAX_QUEUE_AGE_SECONDS: '600'
+  MAX_RUNS_PER_SHA: '18'
+
+jobs:
+  actions-control-plane:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Audit GitHub Actions scheduler health
+        id: audit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence/autonomous-actions
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs?branch=main&per_page=100" > /tmp/pages.jsonl
+          jq -s '{workflow_runs: map(.workflow_runs) | add}' /tmp/pages.jsonl > /tmp/runs.json
+          now=$(date +%s)
+          queued=$(jq '[.workflow_runs[] | select(.status == "queued")] | length' /tmp/runs.json)
+          running=$(jq '[.workflow_runs[] | select(.status == "in_progress")] | length' /tmp/runs.json)
+          oldest=$(jq -r '[.workflow_runs[] | select(.status == "queued") | .created_at] | min // empty' /tmp/runs.json)
+          oldest_age=0
+          if [ -n "$oldest" ]; then oldest_age=$((now-$(date -d "$oldest" +%s))); fi
+          max_sha_fanout=$(jq '[.workflow_runs[] | select(.head_sha != null)] | group_by(.head_sha) | map(length) | max // 0' /tmp/runs.json)
+          storm=false
+          if [ "$queued" -gt "$MAX_QUEUED_RUNS" ] || [ "$oldest_age" -gt "$MAX_QUEUE_AGE_SECONDS" ] || [ "$max_sha_fanout" -gt "$MAX_RUNS_PER_SHA" ]; then storm=true; fi
+          jq -n --argjson queued "$queued" --argjson running "$running" --argjson oldestQueueAgeSeconds "$oldest_age" --argjson maxRunsPerSha "$max_sha_fanout" --argjson storm "$storm" --arg observedAt "$(date -u +%FT%TZ)" '{queued:$queued,running:$running,oldestQueueAgeSeconds:$oldestQueueAgeSeconds,maxRunsPerSha:$maxRunsPerSha,queueStorm:$storm,observedAt:$observedAt}' | tee qa/evidence/autonomous-actions/scheduler-health.json
+          echo "storm=$storm" >> "$GITHUB_OUTPUT"
+
+      - name: Cancel stale expendable queued background runs
+        if: steps.audit.outputs.storm == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          preserve='IVX Dashboard + IA Chat End-to-End Certificate|IVX Owner Sign In + Home Android Certificate|IVX CI|IVX Enterprise QA|IVX Enterprise Line-by-Line Quality Audit'
+          jq -r '.workflow_runs[] | select(.status == "queued") | [.id,.name,.event,.created_at] | @tsv' /tmp/runs.json | while IFS=$'\t' read -r id name event created; do
+            if printf '%s' "$name" | grep -Eq "$preserve"; then
+              echo "PRESERVE critical run=$id name=$name"
+              continue
+            fi
+            age=$(( $(date +%s)-$(date -d "$created" +%s) ))
+            if [ "$event" = 'schedule' ] || [ "$age" -gt "$MAX_QUEUE_AGE_SECONDS" ]; then
+              echo "CANCEL stale/background run=$id age=${age}s name=$name"
+              gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/cancel" >/dev/null || true
+            fi
+          done
+
+      - name: Re-audit and fail closed if scheduler starvation remains
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=main&per_page=100" > /tmp/final.json
+          queued=$(jq '[.workflow_runs[] | select(.status == "queued")] | length' /tmp/final.json)
+          running=$(jq '[.workflow_runs[] | select(.status == "in_progress")] | length' /tmp/final.json)
+          jq -n --argjson queued "$queued" --argjson running "$running" --arg verifiedAt "$(date -u +%FT%TZ)" '{queued:$queued,running:$running,verifiedAt:$verifiedAt}' | tee qa/evidence/autonomous-actions/post-repair.json
+          if [ "$queued" -gt "$MAX_QUEUED_RUNS" ] && [ "$running" -eq 0 ]; then
+            echo 'HARD_FAIL: GitHub Actions scheduler starvation remains after bounded cleanup.'
+            exit 1
+          fi
+
+      - name: Upload scheduler evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-autonomous-actions-control-plane-${{ github.run_id }}
+          path: qa/evidence/autonomous-actions
+          if-no-files-found: error
+          retention-days: 30
