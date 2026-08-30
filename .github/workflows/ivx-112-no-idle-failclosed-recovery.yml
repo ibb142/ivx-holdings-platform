@@ -8,7 +8,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
   actions: write
   id-token: write
 
@@ -27,6 +28,84 @@ jobs:
       IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
       IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
     steps:
+      - name: Checkout current main for root recovery guard
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure root dispatcher resume hardening PR exists
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if grep -q 'AUTO-RECOVERY AFTER RESUME' backend/services/ivx-campaign-dispatcher.ts; then
+            echo 'root_resume_hardening=already_present'
+            exit 0
+          fi
+          open=$(gh pr list --state open --search '"fix: harden Autonomous root resume runtime" in:title' --json number --jq 'length')
+          if [ "$open" -gt 0 ]; then
+            echo 'root_resume_hardening=open_pr_exists'
+            exit 0
+          fi
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('backend/services/ivx-campaign-dispatcher.ts')
+          s = p.read_text()
+          old_resume = "    case 'resume_all':\n      state.paused = false;\n      state.stopped = false;\n      break;"
+          new_resume = "\n".join([
+              "    case 'resume_all':",
+              "      state.paused = false;",
+              "      state.stopped = false;",
+              "      // Global recovery releases per-agent stop state but never revives",
+              "      // CANCELLED records, preserving explicit owner stop semantics.",
+              "      state.stoppedAgents = [];",
+              "      // Recover only bounded non-owner BLOCKED work. FAILED work is",
+              "      // retried by tickCampaignDispatcher using MAX_CAMPAIGN_RETRIES.",
+              "      for (const record of state.records) {",
+              "        const ownerBlocked = (record.blocker ?? '').startsWith('OWNER_GATE')",
+              "          || (record.blocker ?? '').startsWith('EMERGENCY_STOP')",
+              "          || record.stage.startsWith('SUPERSEDED');",
+              "        if (record.status === 'BLOCKED' && !ownerBlocked && isRetryableFailure(record)) {",
+              "          record.retryCount += 1;",
+              "          record.status = record.role === 'QA' ? 'AWAITING_IMPLEMENT' : 'QUEUED';",
+              "          record.stage = `AUTO-RECOVERY AFTER RESUME (${record.retryCount}/${MAX_CAMPAIGN_RETRIES})`;",
+              "          record.workerJobId = null;",
+              "          record.workerStatus = null;",
+              "          record.error = null;",
+              "          record.blocker = null;",
+              "          record.finishedAt = null;",
+              "        }",
+              "      }",
+              "      break;",
+          ])
+          old_tail = "  await saveState(state);\n  await logEvent('control', { action, agentNumber: agentNumber ?? null, cancelledWorkerJobs: cancelledWorkerJobs.length });\n  return { action, cancelledWorkerJobs };"
+          new_tail = "\n".join([
+              "  await saveState(state);",
+              "  await logEvent('control', { action, agentNumber: agentNumber ?? null, cancelledWorkerJobs: cancelledWorkerJobs.length });",
+              "  // Recovery success must include an immediate real scheduler pass; do",
+              "  // not wait for the periodic 10-second timer after resume_all.",
+              "  if (action === 'resume_all') {",
+              "    await tickCampaignDispatcher();",
+              "  }",
+              "  return { action, cancelledWorkerJobs };",
+          ])
+          if old_resume not in s:
+              raise SystemExit('canonical resume_all block not found; refusing unsafe patch')
+          if old_tail not in s:
+              raise SystemExit('canonical control tail not found; refusing unsafe patch')
+          p.write_text(s.replace(old_resume, new_resume, 1).replace(old_tail, new_tail, 1))
+          PY
+          git diff --check
+          branch="autofix/112-root-resume-runtime-${GITHUB_RUN_ID}"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -b "$branch"
+          git add backend/services/ivx-campaign-dispatcher.ts
+          git commit -m 'fix(autonomous): make resume_all restart real dispatcher work'
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" --title 'fix: harden Autonomous root resume runtime' --body 'Root runtime hardening: clear per-agent stop state on global resume, recycle only bounded non-owner BLOCKED work, preserve explicit owner cancellations and owner/emergency gates, and force an immediate dispatcher tick.'
+
       - name: Read live dispatcher truth
         id: before
         shell: bash
@@ -68,19 +147,16 @@ jobs:
             echo 'No owner secret available for retry_agent recycling; continuing to bounded OIDC resume.'
             exit 0
           fi
-          failures=0
-          for agent in $(seq 1 112); do
-            code=$(curl -sS --max-time 20 -o "/tmp/retry-$agent.json" -w '%{http_code}' \
-              -X POST \
-              -H 'content-type: application/json' \
-              -H "x-ivx-owner-key: $owner_key" \
-              -d "{\"action\":\"retry_agent\",\"agentNumber\":$agent}" \
-              "$API_BASE/api/ivx/agents/app-completion/control") || code=000
-            if [ "$code" != 200 ] || [ "$(jq -r '.ok // false' "/tmp/retry-$agent.json" 2>/dev/null || echo false)" != true ]; then
-              echo "retry_agent failed agent=$agent http=$code"
-              failures=$((failures + 1))
+          rm -f /tmp/retry-failures
+          seq 1 112 | xargs -P 112 -I{} bash -c '
+            agent="$1"; key="$2"; api="$3"
+            code=$(curl -sS --max-time 20 -o "/tmp/retry-${agent}.json" -w "%{http_code}" -X POST -H "content-type: application/json" -H "x-ivx-owner-key: ${key}" -d "{\"action\":\"retry_agent\",\"agentNumber\":${agent}}" "${api}/api/ivx/agents/app-completion/control") || code=000
+            if [ "$code" != 200 ] || [ "$(jq -r '.ok // false' "/tmp/retry-${agent}.json" 2>/dev/null || echo false)" != true ]; then
+              echo "$agent" >> /tmp/retry-failures
             fi
-          done
+          ' _ {} "$owner_key" "$API_BASE"
+          failures=0
+          if [ -f /tmp/retry-failures ]; then failures=$(wc -l < /tmp/retry-failures); fi
           echo "retry_agent_failures=$failures"
           test "$failures" -eq 0
 
