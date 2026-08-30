@@ -1,0 +1,116 @@
+name: IVX 112 Per-Agent 20H No-Sleep SLA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-112-per-agent-20h-no-sleep-sla.yml'
+      - 'backend/services/ivx-agent-work-ledger.ts'
+      - 'backend/services/ivx-campaign-dispatcher.ts'
+      - 'backend/services/ivx-github-actions-oidc.ts'
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ivx-112-per-agent-20h-no-sleep-sla
+  cancel-in-progress: false
+
+jobs:
+  enforce-per-agent-sla:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      API_BASE: https://api.ivxholding.com
+      MIN_AGENT_HOURS_24H: '20'
+      TARGET_AGENT_HOURS_24H: '22'
+      IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+      IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+    steps:
+      - name: Obtain bounded Autonomous OIDC token
+        id: oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          token_json=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery")
+          token=$(printf '%s' "$token_json" | jq -r '.value // empty')
+          test -n "$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Read canonical 112-agent work ledger
+        id: before
+        shell: bash
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 4 --retry-delay 2 --max-time 30 -H "X-IVX-GitHub-OIDC: $OIDC_TOKEN" "$API_BASE/api/ivx/autonomous/agent-ledger" -o /tmp/ledger.json
+          test "$(jq -r '.ok // false' /tmp/ledger.json)" = true
+          test "$(jq -r '.rowCount // 0' /tmp/ledger.json)" = 112
+          test "$(jq '.agents | length' /tmp/ledger.json)" = 112
+          test "$(jq '[.agents[].agentNumber] | unique | length' /tmp/ledger.json)" = 112
+          min_ms=$((20*60*60*1000)); target_ms=$((22*60*60*1000))
+          jq --argjson min "$min_ms" --argjson target "$target_ms" '[.agents[] | {agentNumber,agentId,status,currentTask,lastHeartbeatAt,productiveMs24h,idleMs24h,evidenceState,qualityState,belowMinimum:((.productiveMs24h // 0)<$min),belowTarget:((.productiveMs24h // 0)<$target)}]' /tmp/ledger.json > /tmp/per-agent.json
+          below_min=$(jq '[.[] | select(.belowMinimum)] | length' /tmp/per-agent.json)
+          below_target=$(jq '[.[] | select(.belowTarget)] | length' /tmp/per-agent.json)
+          idle=$(jq '[.[] | select(.status == "IDLE")] | length' /tmp/per-agent.json)
+          echo "BEFORE below20h=$below_min below22h=$below_target idle=$idle"
+          echo "below_min=$below_min" >> "$GITHUB_OUTPUT"; echo "below_target=$below_target" >> "$GITHUB_OUTPUT"; echo "idle=$idle" >> "$GITHUB_OUTPUT"
+          cat /tmp/per-agent.json
+
+      - name: Recycle every under-SLA or idle IA
+        if: steps.before.outputs.below_min != '0' || steps.before.outputs.idle != '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner_key="${IVX_SYSTEM_SECRET:-${IVX_AI_SYSTEM_SECRET:-}}"
+          if [ -z "$owner_key" ]; then echo 'Owner secret unavailable; global signed resume will still execute.'; exit 0; fi
+          jq -r '.[] | select(.belowMinimum or .status == "IDLE") | .agentNumber' /tmp/per-agent.json > /tmp/recycle-agents
+          export owner_key API_BASE; rm -f /tmp/recycle-failures
+          cat /tmp/recycle-agents | xargs -r -P 8 -I{} bash -c '
+            agent="$1"; code=$(curl -sS --connect-timeout 3 --max-time 8 -o "/tmp/retry-${agent}.json" -w "%{http_code}" -X POST -H "content-type: application/json" -H "x-ivx-owner-key: ${owner_key}" -d "{\"action\":\"retry_agent\",\"agentNumber\":${agent}}" "${API_BASE}/api/ivx/agents/app-completion/control" 2>/dev/null || printf 000); [ "$code" = 200 ] || printf "%s\n" "$agent" >> /tmp/recycle-failures
+          ' _ {}
+          failures=0; [ -f /tmp/recycle-failures ] && failures=$(wc -l < /tmp/recycle-failures); echo "per_agent_recycle_failures=$failures"
+
+      - name: Signed global resume and dispatcher tick
+        if: steps.before.outputs.below_min != '0' || steps.before.outputs.idle != '0'
+        shell: bash
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          code=$(curl -sS --max-time 45 -o /tmp/resume.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: $OIDC_TOKEN" -d '{"action":"resume_all"}' "$API_BASE/api/ivx/agents/app-completion/control")
+          echo "resume_http=$code"; cat /tmp/resume.json; test "$code" = 200; test "$(jq -r '.ok // false' /tmp/resume.json)" = true
+
+      - name: Verify no silent sleeping IA with executable work
+        shell: bash
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          sleep 15
+          curl -fsS --retry 4 --retry-delay 2 --max-time 30 -H "X-IVX-GitHub-OIDC: $OIDC_TOKEN" "$API_BASE/api/ivx/autonomous/agent-ledger" -o /tmp/after.json
+          test "$(jq -r '.ok // false' /tmp/after.json)" = true; test "$(jq -r '.rowCount // 0' /tmp/after.json)" = 112
+          min_ms=$((20*60*60*1000))
+          idle=$(jq '[.agents[] | select(.status == "IDLE")] | length' /tmp/after.json)
+          below_min=$(jq --argjson min "$min_ms" '[.agents[] | select((.productiveMs24h // 0)<$min)] | length' /tmp/after.json)
+          under_sla_idle=$(jq --argjson min "$min_ms" '[.agents[] | select((.productiveMs24h // 0)<$min and .status == "IDLE")] | length' /tmp/after.json)
+          echo "AFTER idle=$idle below20h=$below_min underSlaIdle=$under_sla_idle"
+          test "$under_sla_idle" -eq 0
+
+      - name: Emit honest per-agent SLA evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence; now=$(date -u +%Y-%m-%dT%H:%M:%SZ); min_ms=$((20*60*60*1000)); target_ms=$((22*60*60*1000))
+          jq --arg at "$now" --argjson min "$min_ms" --argjson target "$target_ms" '{certificate:"IVX 112 Per-Agent 20H No-Sleep SLA",checkedAt:$at,totalAgents:.rowCount,totals:.totals,minProductiveMsPerAgent:$min,targetProductiveMsPerAgent:$target,agents:[.agents[]|{agentNumber,agentId,status,currentTask,lastHeartbeatAt,productiveMs24h,idleMs24h,evidenceState,qualityState,meets20h:((.productiveMs24h//0)>=$min),meets22h:((.productiveMs24h//0)>=$target)}]}' /tmp/after.json > evidence/ivx-112-per-agent-20h-sla.json
+          cat evidence/ivx-112-per-agent-20h-sla.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IVX-112-PER-AGENT-20H-SLA-${{ github.run_id }}
+          path: evidence/ivx-112-per-agent-20h-sla.json
+          retention-days: 30
