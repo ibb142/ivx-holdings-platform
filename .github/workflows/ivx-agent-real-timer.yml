@@ -1,8 +1,9 @@
 name: IVX Agent Real Timer + Productivity Guard
 
+# Continuous 112-agent supervision belongs to the production Autonomous runtime,
+# not the shared GitHub Actions queue. Keep this workflow only for manual audit
+# and source-change verification.
 on:
-  schedule:
-    - cron: '*/15 * * * *'
   workflow_dispatch: {}
   push:
     branches: [main]
@@ -13,6 +14,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ivx-agent-real-timer-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   API_BASE: https://api.ivxholding.com
@@ -30,24 +35,14 @@ jobs:
           mkdir -p evidence
           curl -fsS --retry 3 --retry-delay 2 "$API_BASE/api/ivx/agents" -o /tmp/agents.json
           test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
-
-          # /api/ivx/agents/runs is shadowed in production by the earlier
-          # /api/ivx/agents/:agentId route. Pull the non-conflicting
-          # /runs/:agentId endpoint for every registry agent and combine the
-          # durable records. This fails closed if any agent endpoint is broken.
           printf '[]' > /tmp/all-records.json
           while IFS= read -r agent_id; do
-            curl -fsS --retry 3 --retry-delay 2 \
-              "$API_BASE/api/ivx/agents/runs/$agent_id?limit=100" \
-              -o /tmp/agent-runs.json
+            curl -fsS --retry 3 --retry-delay 2 "$API_BASE/api/ivx/agents/runs/$agent_id?limit=100" -o /tmp/agent-runs.json
             test "$(jq -r '.ok // false' /tmp/agent-runs.json)" = true
-            jq -s '.[0] + (.[1].records // [])' \
-              /tmp/all-records.json /tmp/agent-runs.json > /tmp/all-records.next.json
+            jq -s '.[0] + (.[1].records // [])' /tmp/all-records.json /tmp/agent-runs.json > /tmp/all-records.next.json
             mv /tmp/all-records.next.json /tmp/all-records.json
           done < <(jq -r '.agents[]?.agentId' /tmp/agents.json)
-
-          jq -n --slurpfile records /tmp/all-records.json \
-            '{ok:true, records:$records[0]}' > /tmp/runs.json
+          jq -n --slurpfile records /tmp/all-records.json '{ok:true, records:$records[0]}' > /tmp/runs.json
           test "$(jq -r '.ok // false' /tmp/runs.json)" = true
 
       - name: Build real per-agent timer ledger
@@ -56,65 +51,10 @@ jobs:
           set -euo pipefail
           now=$(date -u +%s)
           cutoff=$((now - 86400))
-          jq --argjson cutoff "$cutoff" '
-            [.records[]? |
-              ((.startedAt // .started_at // .createdAt // .created_at // "1970-01-01T00:00:00Z") | fromdateiso8601?) as $started |
-              select(($started // 0) >= $cutoff) |
-              {
-                agentId:(.agentId // .agent_id),
-                agentNumber:(.agentNumber // .agent_number),
-                finalStatus:(.finalStatus // .final_status // "unknown"),
-                startedAt:(.startedAt // .started_at // null),
-                finishedAt:(.finishedAt // .finished_at // null),
-                durationMs:(.durationMs // .duration_ms // 0),
-                realToolUsed:(.realToolUsed // .real_tool_used // false),
-                verifiedOutput:(.verifiedOutput // .verified_output // false),
-                error:(.error // null)
-              }
-            ]' /tmp/runs.json > /tmp/recent.json
-
-          # jq 1.8 removed --argfile. --slurpfile is portable across the
-          # GitHub-hosted runner versions and preserves the same fail-closed data model.
-          jq --slurpfile agents /tmp/agents.json '
-            ($agents[0].agents // []) as $registry |
-            . as $recent |
-            [ $registry[] | . as $a |
-              ([$recent[] | select(.agentId == $a.agentId)]) as $runs |
-              ($runs | map(.durationMs // 0) | add // 0) as $workedMs |
-              ($runs | map(select(.finalStatus == "completed" and .realToolUsed == true and .verifiedOutput == true) | .durationMs) | add // 0) as $productiveMs |
-              ($runs | map(select(.finalStatus == "failed" or .finalStatus == "blocked") | .durationMs) | add // 0) as $failedMs |
-              ($runs | map(select(.finalStatus == "running")) | length) as $running |
-              {
-                agentId:$a.agentId,
-                agentNumber:$a.agentNumber,
-                name:$a.name,
-                health:$a.health,
-                availability:$a.availability,
-                paused:$a.paused,
-                disabled:$a.disabled,
-                lastHeartbeat:$a.lastHeartbeat,
-                runs24h:($runs|length),
-                workedMs:$workedMs,
-                productiveMs:$productiveMs,
-                failedMs:$failedMs,
-                runningNow:$running,
-                productiveHours:($productiveMs/3600000),
-                totalMeasuredHours:($workedMs/3600000)
-              }
-            ]' /tmp/recent.json > evidence/agent-real-timer-24h.json
-
+          jq --argjson cutoff "$cutoff" '[.records[]? | ((.startedAt // .started_at // .createdAt // .created_at // "1970-01-01T00:00:00Z") | fromdateiso8601?) as $started | select(($started // 0) >= $cutoff) | {agentId:(.agentId // .agent_id),agentNumber:(.agentNumber // .agent_number),finalStatus:(.finalStatus // .final_status // "unknown"),startedAt:(.startedAt // .started_at // null),finishedAt:(.finishedAt // .finished_at // null),durationMs:(.durationMs // .duration_ms // 0),realToolUsed:(.realToolUsed // .real_tool_used // false),verifiedOutput:(.verifiedOutput // .verified_output // false),error:(.error // null)}]' /tmp/runs.json > /tmp/recent.json
+          jq --slurpfile agents /tmp/agents.json '($agents[0].agents // []) as $registry | . as $recent | [ $registry[] | . as $a | ([$recent[] | select(.agentId == $a.agentId)]) as $runs | ($runs | map(.durationMs // 0) | add // 0) as $workedMs | ($runs | map(select(.finalStatus == "completed" and .realToolUsed == true and .verifiedOutput == true) | .durationMs) | add // 0) as $productiveMs | ($runs | map(select(.finalStatus == "failed" or .finalStatus == "blocked") | .durationMs) | add // 0) as $failedMs | ($runs | map(select(.finalStatus == "running")) | length) as $running | {agentId:$a.agentId,agentNumber:$a.agentNumber,name:$a.name,health:$a.health,availability:$a.availability,paused:$a.paused,disabled:$a.disabled,lastHeartbeat:$a.lastHeartbeat,runs24h:($runs|length),workedMs:$workedMs,productiveMs:$productiveMs,failedMs:$failedMs,runningNow:$running,productiveHours:($productiveMs/3600000),totalMeasuredHours:($workedMs/3600000)} ]' /tmp/recent.json > evidence/agent-real-timer-24h.json
           test "$(jq 'length' evidence/agent-real-timer-24h.json)" = 112
-          jq '{
-            measuredAt:(now|todateiso8601),
-            agents:length,
-            totalMeasuredHours:(map(.totalMeasuredHours)|add // 0),
-            productiveHours:(map(.productiveHours)|add // 0),
-            failedHours:(map(.failedMs/3600000)|add // 0),
-            activeNow:([.[]|select(.runningNow>0)]|length),
-            idleNow:([.[]|select(.runningNow==0 and .paused!=true and .disabled!=true)]|length),
-            sleeping:([.[]|select(.paused==true or .disabled==true)]|length),
-            agents:.
-          }' evidence/agent-real-timer-24h.json > evidence/agent-productivity-summary.json
+          jq '{measuredAt:(now|todateiso8601),agents:length,totalMeasuredHours:(map(.totalMeasuredHours)|add // 0),productiveHours:(map(.productiveHours)|add // 0),failedHours:(map(.failedMs/3600000)|add // 0),activeNow:([.[]|select(.runningNow>0)]|length),idleNow:([.[]|select(.runningNow==0 and .paused!=true and .disabled!=true)]|length),sleeping:([.[]|select(.paused==true or .disabled==true)]|length),agents:.}' evidence/agent-real-timer-24h.json > evidence/agent-productivity-summary.json
           test "$(jq '.agents' evidence/agent-productivity-summary.json)" = 112
           cat evidence/agent-productivity-summary.json
 
@@ -135,11 +75,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          jq '
-            map(. + {
-              timerState:(if .runningNow>0 then "WORKING" elif .paused==true or .disabled==true then "SLEEP" elif .runs24h==0 then "IDLE_NEXT_PHASE" elif .health=="unhealthy" then "SLEEP_NOTIFY_AUTONOMOUS" else "READY_NEXT_PHASE" end),
-              action:(if .runningNow>0 then "continue_current_task" elif .paused==true or .disabled==true then "hold_until_dependency_green" elif .health=="unhealthy" then "notify_autonomous_and_hold" else "jump_to_next_safe_task" end)
-            })' evidence/agent-real-timer-24h.json > evidence/agent-real-timer-routed.json
+          jq 'map(. + {timerState:(if .runningNow>0 then "WORKING" elif .paused==true or .disabled==true then "SLEEP" elif .runs24h==0 then "IDLE_NEXT_PHASE" elif .health=="unhealthy" then "SLEEP_NOTIFY_AUTONOMOUS" else "READY_NEXT_PHASE" end),action:(if .runningNow>0 then "continue_current_task" elif .paused==true or .disabled==true then "hold_until_dependency_green" elif .health=="unhealthy" then "notify_autonomous_and_hold" else "jump_to_next_safe_task" end)})' evidence/agent-real-timer-24h.json > evidence/agent-real-timer-routed.json
           test "$(jq 'length' evidence/agent-real-timer-routed.json)" = 112
 
       - name: Upload timer evidence
