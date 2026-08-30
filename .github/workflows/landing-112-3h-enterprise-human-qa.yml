@@ -1,0 +1,216 @@
+name: Landing 112-Agent 3H Enterprise Human-Like QA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/landing-112-3h-enterprise-human-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+  id-token: write
+
+concurrency:
+  group: landing-112-3h-enterprise-human-qa
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.registry.outputs.matrix }}
+    env:
+      API_BASE: https://api.ivxholding.com
+    steps:
+      - uses: actions/checkout@v4
+      - name: Load exact 112-agent production registry
+        id: registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 4 --retry-delay 2 "$API_BASE/api/ivx/agents" -o /tmp/agents.json
+          test "$(jq -r '.ok // false' /tmp/agents.json)" = true
+          test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
+          test "$(jq '[.agents[].agentNumber] | unique | length' /tmp/agents.json)" = 112
+          matrix=$(jq -c '{include:[.agents[] | {agentNumber:.agentNumber,agentId:.agentId,name:.name,role:.role,division:.division}]}' /tmp/agents.json)
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo 'MISSION_REGISTRY=112/112'
+
+  qa-112:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 112
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    env:
+      API_BASE: https://api.ivxholding.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve exact enterprise assignment
+        id: assignment
+        shell: bash
+        env:
+          AGENT_NUMBER: ${{ matrix.agentNumber }}
+        run: |
+          set -euo pipefail
+          n=$(printf '%03d' "$AGENT_NUMBER")
+          line=$(grep -E "^${n} — " qa/landing-112-agent-war-room.md | head -1 || true)
+          test -n "$line"
+          task=${line#* — }
+          echo "task<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$task" >> "$GITHUB_OUTPUT"
+          echo 'EOF' >> "$GITHUB_OUTPUT"
+
+      - name: Build human-like end-to-end QA contract
+        id: contract
+        shell: bash
+        env:
+          TASK: ${{ steps.assignment.outputs.task }}
+          AGENT_NUMBER: ${{ matrix.agentNumber }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/mission.txt <<'EOF'
+          ENTERPRISE HUMAN-LIKE QA MISSION — LANDING PAGE.
+          Work as a senior human QA engineer and developer, not as a shallow checker.
+          Validate the assigned item end-to-end against the real IVX code and production-facing behavior.
+          Mandatory cross-checks where relevant: every screen and route; desktop/mobile/tablet responsive layout; no picture clipped, stretched, blank, stale, overlapped, or loaded outside its container; no horizontal overflow; keyboard must never cover focused inputs, CTA, chat composer, modal controls, or form errors; videos must load, play, pause, resume, fail gracefully, preserve aspect ratio, and not block scrolling; posts/reels/deal cards must scroll vertically and repeatedly like a mature Instagram-style feed without duplicates, dead controls, stuck loading, jumpy layout, broken back/forward, or memory/state corruption; loading/skeleton/error/empty/retry states must be truthful and never freeze the page; navigation, modals, forms, chat, CTA, lead capture, investor intake, deal cards, reels, links, media, consent, analytics, accessibility, keyboard/touch, reload, back-forward, offline/reconnect, timeout, retry, double-tap, duplicate-submit, and malformed input must behave safely; internal API behavior and external/public production behavior must agree; Amazon-style reliability means idempotent actions, deterministic recovery, no false-success state, no silent data loss, and no dead-end conversion path.
+          Evidence required: exact SHA, real tool used, exact files/endpoints checked, verified output, finding severity P0/P1/P2, and a concrete fix/verification instruction for any defect. Never mark PASS from generic code search alone when runtime/test evidence is available. Simulated success is forbidden. Reject mid-quality output and redo until enterprise quality or fail closed.
+          EOF
+          printf '\nPRIMARY ASSIGNMENT: %s\nAGENT: %s\n' "$TASK" "$AGENT_NUMBER" >> /tmp/mission.txt
+          mission=$(cat /tmp/mission.txt)
+          echo "mission<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$mission" >> "$GITHUB_OUTPUT"
+          echo 'EOF' >> "$GITHUB_OUTPUT"
+
+      - name: Execute real agent mission with bounded enterprise redo
+        id: work
+        shell: bash
+        env:
+          AGENT_NUMBER: ${{ matrix.agentNumber }}
+          AGENT_ID: ${{ matrix.agentId }}
+          AGENT_NAME: ${{ matrix.name }}
+          MISSION: ${{ steps.contract.outputs.mission }}
+        run: |
+          set -euo pipefail
+          contract_http=$(curl -sS --max-time 25 -o /tmp/contract.json -w '%{http_code}' "$API_BASE/api/ivx/agents/${AGENT_ID}/contract" || true)
+          test "$contract_http" = 200
+          task_type=$(jq -r '[.contract.allowedTaskTypes[]? | select(. == "audit" or . == "analysis" or . == "research")] | .[0] // .contract.allowedTaskTypes[0] // empty' /tmp/contract.json)
+          test -n "$task_type"
+
+          oidc_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery"
+          oidc_token=$(curl -fsS --retry 2 --retry-delay 1 -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$oidc_url" | jq -r '.value // empty')
+          test -n "$oidc_token"
+          echo "::add-mask::$oidc_token"
+
+          mkdir -p evidence
+          passed=false
+          attempt=1
+          while [ "$attempt" -le 3 ]; do
+            task_id="landing3h-${GITHUB_RUN_ID}-$(printf '%03d' "$AGENT_NUMBER")-${attempt}"
+            body=$(jq -nc --arg taskType "$task_type" --arg taskId "$task_id" --arg sourceSha "$GITHUB_SHA" --arg mission "$MISSION" '{taskType:$taskType,payload:{__taskId:$taskId,__runId:("landing3h-"+$taskId),__workflow:"Landing 112-Agent 3H Enterprise Human-Like QA",sourceSha:$sourceSha,landingAssignment:$mission,__toolId:"run_tests",__toolParams:{target:"backend"},realExecutionOnly:true,simulatedSuccessAllowed:false,qualityPolicy:"enterprise_human_like",rejectMidQuality:true,rejectBadQuality:true,redoUntilEnterprise:true,requiredEvidence:["sourceSha","sourceReference","toolResultId","realToolUsed","verifiedOutput"]}}')
+            http=$(curl -sS --retry 1 --retry-delay 1 --max-time 240 -o /tmp/run.json -w '%{http_code}' -X POST "$API_BASE/api/ivx/agents/${AGENT_ID}/run" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: ${oidc_token}" --data "$body" || true)
+            ok=false; final_status='request_failed'; source=''; tool_result=''; simulated='null'; real_tool='null'; verified='null'
+            if [ "$http" = 200 ]; then
+              ok=$(jq -r '.ok // false' /tmp/run.json)
+              final_status=$(jq -r '.runRecord.finalStatus // "unknown"' /tmp/run.json)
+              source=$(jq -r '.runRecord.sourceReference // empty' /tmp/run.json)
+              tool_result=$(jq -r '.runRecord.toolResultId // empty' /tmp/run.json)
+              simulated=$(jq -r 'if .runRecord.simulated != null then (.runRecord.simulated|tostring) elif .simulated != null then (.simulated|tostring) else "null" end' /tmp/run.json)
+              real_tool=$(jq -r 'if .runRecord.realToolUsed != null then (.runRecord.realToolUsed|tostring) elif .realToolUsed != null then (.realToolUsed|tostring) else "null" end' /tmp/run.json)
+              verified=$(jq -r 'if .runRecord.verifiedOutput != null then (.runRecord.verifiedOutput|tostring) elif .verifiedOutput != null then (.verifiedOutput|tostring) else "null" end' /tmp/run.json)
+            fi
+            if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$final_status" = completed ] && [ -n "$source" ] && [ -n "$tool_result" ] && [ "$simulated" = false ] && [ "$real_tool" = true ] && [ "$verified" = true ]; then
+              passed=true
+              break
+            fi
+            echo "ENTERPRISE_REJECT agent=$AGENT_NUMBER attempt=$attempt status=$final_status"
+            attempt=$((attempt+1))
+            sleep 3
+          done
+
+          quality='REJECTED'
+          [ "$passed" = true ] && quality='ENTERPRISE_PASS'
+          jq -n --argjson agentNumber "$AGENT_NUMBER" --arg agentId "$AGENT_ID" --arg name "$AGENT_NAME" --arg sourceSha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --arg http "$http" --arg finalStatus "$final_status" --arg sourceReference "$source" --arg toolResultId "$tool_result" --argjson passed "$passed" --arg quality "$quality" --argjson attempts "$attempt" '{agentNumber:$agentNumber,agentId:$agentId,name:$name,sourceSha:$sourceSha,runId:$runId,http:$http,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,passed:$passed,quality:$quality,attempts:$attempts}' > "evidence/agent-${AGENT_NUMBER}.json"
+          cat "evidence/agent-${AGENT_NUMBER}.json"
+          test "$passed" = true
+
+      - name: Upload per-agent enterprise evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: landing-3h-agent-${{ matrix.agentNumber }}-${{ github.run_id }}
+          path: evidence/agent-${{ matrix.agentNumber }}.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  autonomous-radar:
+    needs: [prepare, qa-112]
+    if: ${{ always() && needs.prepare.result == 'success' && needs.qa-112.result != 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      API_BASE: https://api.ivxholding.com
+      SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+    steps:
+      - name: Download all available agent evidence
+        uses: actions/download-artifact@v4
+        with:
+          pattern: landing-3h-agent-*-${{ github.run_id }}
+          path: evidence-all
+          merge-multiple: true
+      - name: Autonomous diagnose and self-heal rejected work
+        shell: bash
+        run: |
+          set -euo pipefail
+          find evidence-all -type f -name 'agent-*.json' -print | sort > /tmp/files || true
+          if [ ! -s /tmp/files ]; then echo 'No evidence files available'; exit 1; fi
+          jq -s '[.[] | select(.passed != true or .quality != "ENTERPRISE_PASS")]' $(cat /tmp/files) > /tmp/rejected.json
+          count=$(jq 'length' /tmp/rejected.json)
+          echo "rejected_agents=$count"
+          test "$count" -gt 0
+          test -n "${SYSTEM_KEY:-}"
+          rejected=$(jq -c '.' /tmp/rejected.json)
+          goal="LANDING ENTERPRISE SELF-HEAL. Exact SHA ${GITHUB_SHA}, source run ${GITHUB_RUN_ID}. Diagnose every rejected 3-hour human-like QA assignment, fix safe low-risk code gaps, run relevant tests, and produce PR/CI/merge evidence. Preserve owner gates for secrets, IAM, payments, destructive migrations, security policy, and infrastructure. Rejected evidence: ${rejected}"
+          payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",systemMode:true,ownerApproved:true,riskLevel:"low",proposedPlan:"Fix rejected Landing QA findings end-to-end; never weaken tests or evidence."}')
+          http=$(curl -sS --max-time 60 -o /tmp/heal.json -w '%{http_code}' -X POST "$API_BASE/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-System-Key: ${SYSTEM_KEY}" --data "$payload")
+          case "$http" in 200|202|409) ;; *) cat /tmp/heal.json; exit 1;; esac
+          cat /tmp/heal.json
+
+  certificate:
+    needs: [prepare, qa-112, autonomous-radar]
+    if: ${{ always() && needs.prepare.result == 'success' && needs.qa-112.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download all 112 evidence artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: landing-3h-agent-*-${{ github.run_id }}
+          path: evidence-all
+          merge-multiple: true
+      - name: Fail-closed 112/112 enterprise certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=$(find evidence-all -maxdepth 1 -type f -name 'agent-*.json' | wc -l | tr -d ' ')
+          test "$count" = 112
+          jq -s '.' evidence-all/agent-*.json > /tmp/all.json
+          test "$(jq 'length' /tmp/all.json)" = 112
+          test "$(jq '[.[].agentNumber] | unique | length' /tmp/all.json)" = 112
+          test "$(jq --arg sha "$GITHUB_SHA" '[.[] | select(.sourceSha == $sha)] | length' /tmp/all.json)" = 112
+          test "$(jq '[.[] | select(.passed == true and .quality == "ENTERPRISE_PASS" and .http == "200" and .finalStatus == "completed" and (.sourceReference|length)>0 and (.toolResultId|length)>0)] | length' /tmp/all.json)" = 112
+          mkdir -p certificate
+          jq -n --arg sha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --arg completedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{certificate:"IVX Landing 112-Agent 3H Enterprise Human-Like QA",sourceSha:$sha,runId:$runId,agents:112,enterprisePass:112,simulatedSuccessAllowed:false,quality:"ENTERPRISE",completedAt:$completedAt,status:"PASS"}' > certificate/landing-112-3h-enterprise-certificate.json
+          cat certificate/landing-112-3h-enterprise-certificate.json
+      - name: Upload final certificate
+        uses: actions/upload-artifact@v4
+        with:
+          name: IVX-LANDING-112-3H-ENTERPRISE-CERT-${{ github.run_id }}
+          path: certificate/landing-112-3h-enterprise-certificate.json
+          retention-days: 30
