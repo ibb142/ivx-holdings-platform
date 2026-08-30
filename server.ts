@@ -24,6 +24,7 @@ import { preloadAIProviderCredentialFromOwnerVariables } from './backend/service
 import { mintIVXOutageOwnerSession, verifyIVXOutageOwnerSession } from './backend/services/ivx-outage-owner-session';
 import { listAutonomousVoiceCalls, placeAutonomousVoiceCall } from './backend/services/ivx-signalwire-voice';
 import { startGitHubActionsExternalSupervisor } from './backend/services/ivx-github-actions-external-supervisor';
+import { startAutonomousLiveBootstrap } from './backend/services/ivx-autonomous-live-bootstrap';
 import { getIVXOwnerEmailAllowlist } from './expo/shared/ivx/access-control';
 import { handleCanonicalReelsFeed } from './backend/api/ivx-canonical-reels-feed';
 import {
@@ -86,10 +87,8 @@ app.get('/api/ivx/certification/autonomous-voice-public', async (c) => handleAut
 
 startAutonomousScheduler();
 startAutonomousIntelligenceMissionScheduler();
-// Runs inside the production backend/Render process, not GitHub Actions. This
-// breaks the bootstrap dependency where a blocked Actions queue prevented its
-// own watchdog from running.
 startGitHubActionsExternalSupervisor();
+startAutonomousLiveBootstrap();
 
 const runCompletionCycleSafely = async (reason: string): Promise<void> => {
   try {
