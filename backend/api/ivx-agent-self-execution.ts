@@ -18,7 +18,7 @@ function getStatus(error: unknown): number {
 }
 
 function errorResponse(error: unknown): Response {
-  const msg = error instanceof Error ? error.message : 'IVX self-execution route failed.';
+  const msg = error instanceof Error ? error.message : 'IVX self-execution route failed: review latency logs.';
   return ownerOnlyJson({
     ok: false,
     error: msg.slice(0, 320),
