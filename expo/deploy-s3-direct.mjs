@@ -17,6 +17,7 @@ import {
   CloudFrontClient,
   CreateFunctionCommand,
   CreateInvalidationCommand,
+  GetInvalidationCommand,
   GetDistributionConfigCommand,
   DescribeFunctionCommand,
   PublishFunctionCommand,
@@ -626,9 +627,10 @@ async function deploy() {
     console.warn('  Could not publish edge status:', e?.message || 'Unknown');
   }
 
-  // ── CloudFront invalidation ────────────────────────
+  // ── CloudFront invalidation (create + wait until Completed) ──
   console.log('');
   console.log('CloudFront invalidation...');
+  let invalidationId = '';
   try {
     const inv = await cf.send(new CreateInvalidationCommand({
       DistributionId: DIST_ID,
@@ -637,10 +639,35 @@ async function deploy() {
         Paths: { Quantity: 1, Items: ['/*'] },
       },
     }));
-    console.log('✅ CloudFront invalidated:', inv.Invalidation?.Id || 'unknown');
+    invalidationId = inv.Invalidation?.Id || '';
+    console.log('✅ CloudFront invalidation created:', invalidationId);
   } catch (e) {
     console.error('❌ CloudFront invalidation FAILED:', e?.name || 'Unknown', e?.message || 'Unknown error');
     if (e?.$metadata) console.error('   HTTP:', e.$metadata.httpStatusCode, '| Request ID:', e.$metadata.requestId || 'N/A');
+    process.exit(1);
+  }
+
+  let invalidationStatus = '';
+  if (invalidationId) {
+    const deadline = Date.now() + 8 * 60 * 1000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 15000));
+      try {
+        const gi = await cf.send(new GetInvalidationCommand({ DistributionId: DIST_ID, Id: invalidationId }));
+        invalidationStatus = gi.Invalidation?.Status || '';
+        console.log('  invalidation', invalidationId, 'status:', invalidationStatus, '| progress:', gi.Invalidation?.Progress || 'N/A');
+        if (invalidationStatus === 'Completed') {
+          console.log('✅ CloudFront invalidation COMPLETED:', invalidationId);
+          break;
+        }
+      } catch (e) {
+        console.warn('  GetInvalidation check failed:', e?.name || 'Unknown', e?.message || 'Unknown error');
+      }
+    }
+    if (invalidationStatus !== 'Completed') {
+      console.error('❌ CloudFront invalidation did not reach Completed. Final status:', invalidationStatus || 'unknown', '| ID:', invalidationId);
+      process.exit(1);
+    }
   }
 
   // ── Summary ────────────────────────────────────────
@@ -665,7 +692,7 @@ async function deploy() {
   }
 
   // Write results for verification
-  writeFileSync(LANDING_DIR + '/deploy-results.json', JSON.stringify({ ok, fail, results, buildVer: BUILD_VER, timestamp: new Date().toISOString() }, null, 2));
+  writeFileSync(LANDING_DIR + '/deploy-results.json', JSON.stringify({ ok, fail, results, buildVer: BUILD_VER, invalidationId, invalidationStatus, timestamp: new Date().toISOString() }, null, 2));
 
   return { ok, fail };
 }

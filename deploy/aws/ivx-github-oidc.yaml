@@ -1,0 +1,151 @@
+# IVX Holdings — GitHub OIDC deployment identity for production landing deploys.
+#
+# Creates (optionally) the GitHub OIDC identity provider and an IVX-owned IAM role
+# that GitHub Actions assumes with short-lived credentials. Replaces the Rork1
+# static-key identity in the production deployment path.
+#
+# Trust is restricted to: repo ibb142/ivx-holdings-platform, branch main.
+# Permissions are least-privilege for exactly the operations performed by
+# expo/deploy-s3-direct.mjs and expo/deploy-web-app.mjs.
+#
+# Deploy:
+#   aws cloudformation deploy \
+#     --template-file deploy/aws/ivx-github-oidc.yaml \
+#     --stack-name ivx-github-oidc-deploy-identity \
+#     --capabilities CAPABILITY_NAMED_IAM \
+#     --region us-east-1
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: IVX GitHub Actions OIDC deployment identity (landing S3 + CloudFront, least-privilege)
+
+Parameters:
+  CreateOidcProvider:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+    Description: Set false if token.actions.githubusercontent.com provider already exists in this account.
+  GitHubOrgRepo:
+    Type: String
+    Default: 'ibb142/ivx-holdings-platform'
+  DeployBranch:
+    Type: String
+    Default: 'main'
+  CloudFrontDistributionArn:
+    Type: String
+    Default: 'arn:aws:cloudfront::206818124217:distribution/E1C0DEI0VKCUYN'
+  ApexBucketName:
+    Type: String
+    Default: 'ivxholding.com'
+
+Conditions:
+  ShouldCreateProvider: !Equals [!Ref CreateOidcProvider, 'true']
+
+Resources:
+  GithubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: ShouldCreateProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      Tags:
+        - Key: ivx:owner
+          Value: ivx-platform
+        - Key: ivx:purpose
+          Value: production-landing-deploy
+
+  IvxGithubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ivx-github-landing-deploy
+      Description: IVX-owned GitHub Actions deployment identity (replaces Rork1 static keys). Least-privilege for landing S3 + CloudFront deploys.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub 'arn:aws:iam::206818124217:oidc-provider/token.actions.githubusercontent.com'
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubOrgRepo}:ref:refs/heads/${DeployBranch}'
+      Tags:
+        - Key: ivx:owner
+          Value: ivx-platform
+        - Key: ivx:purpose
+          Value: production-landing-deploy
+      Policies:
+        - PolicyName: ivx-landing-deploy-least-privilege
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # ── S3: upload deploy artifacts + configure www bucket redirect ──
+              - Sid: S3PutDeployArtifacts
+                Effect: Allow
+                Action: s3:PutObject
+                Resource:
+                  - !Sub 'arn:aws:s3:::${ApexBucketName}/*'
+                  - !Sub 'arn:aws:s3:::www.${ApexBucketName}/*'
+              - Sid: S3HeadBucketsPreflight
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::${ApexBucketName}'
+                  - !Sub 'arn:aws:s3:::www.${ApexBucketName}'
+              - Sid: S3ConfigureWwwRedirect
+                Effect: Allow
+                Action: s3:PutBucketWebsite
+                Resource:
+                  - !Sub 'arn:aws:s3:::www.${ApexBucketName}'
+              # ── CloudFront: distribution (invalidations + config for www redirect fn) ──
+              - Sid: CloudFrontDistributionOps
+                Effect: Allow
+                Action:
+                  - cloudfront:CreateInvalidation
+                  - cloudfront:GetInvalidation
+                  - cloudfront:ListInvalidations
+                  - cloudfront:GetDistribution
+                  - cloudfront:GetDistributionConfig
+                  - cloudfront:UpdateDistribution
+                Resource: !Ref CloudFrontDistributionArn
+              # ── CloudFront Function: ivx-www-to-apex (www → apex 301 redirect) ──
+              - Sid: CloudFrontWwwRedirectFunction
+                Effect: Allow
+                Action:
+                  - cloudfront:DescribeFunction
+                  - cloudfront:CreateFunction
+                  - cloudfront:UpdateFunction
+                  - cloudfront:PublishFunction
+                Resource: !Sub 'arn:aws:cloudfront::206818124217:function/ivx-www-to-apex'
+              # ── Response headers policy (security headers). List/Get are account-level reads;
+              #    Create only applies when the IVXSecurityHeaders policy is missing (already exists). ──
+              - Sid: CloudFrontResponseHeadersPolicies
+                Effect: Allow
+                Action:
+                  - cloudfront:ListResponseHeadersPolicies
+                  - cloudfront:GetResponseHeadersPolicy
+                  - cloudfront:CreateResponseHeadersPolicy
+                Resource: '*'
+              # ── Defense in depth: this identity can never delete anything ──
+              - Sid: DenyDestructive
+                Effect: Deny
+                Action:
+                  - s3:DeleteObject
+                  - s3:DeleteBucket
+                  - cloudfront:DeleteDistribution
+                  - cloudfront:DeleteFunction
+                  - cloudfront:DeleteInvalidation
+                  - iam:DeleteRole
+                  - iam:DeleteRolePolicy
+                Resource: '*'
+
+Outputs:
+  RoleArn:
+    Description: ARN to configure in GitHub Actions (role-to-assume)
+    Value: !GetAtt IvxGithubDeployRole.Arn
+  OidcProviderArn:
+    Condition: ShouldCreateProvider
+    Value: !Ref GithubOidcProvider
