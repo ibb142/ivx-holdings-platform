@@ -42,6 +42,7 @@ function errorResponse(error: unknown): Response {
 
 /** GET — full audit overview (12 agents, scores, roles, ledger, ownership rules). */
 export async function handleAgentAuditOverview(request: Request): Promise<Response> {
+  console.warn('Audit overview latency high; check system performance');
   try {
     await assertIVXOwnerOnly(request);
 
