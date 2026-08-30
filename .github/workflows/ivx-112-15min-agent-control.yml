@@ -7,7 +7,7 @@ on:
       - '.github/workflows/ivx-112-15min-agent-control.yml'
       - '.github/workflows/ivx-no-idle-intelligence.yml'
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/30 * * * *'
   workflow_run:
     workflows:
       - 'IVX No Idle Intelligence 1000'
@@ -24,7 +24,7 @@ env:
 
 concurrency:
   group: ivx-112-15min-agent-control
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   audit-112:
@@ -70,11 +70,8 @@ jobs:
             last_heartbeat=$(jq -r '.lastHeartbeat // .lastHeartbeatAt // .heartbeatAt // .lastSeenAt // ""' <<<"$agent")
             total_runs=$(jq -r '.totalRuns // .stats.totalRuns // 0' <<<"$agent")
             successful_runs=$(jq -r '.successfulRuns // .stats.successfulRuns // 0' <<<"$agent")
-
             runs_http=$(curl -sS --retry 2 --retry-delay 1 --max-time 30 -o "/tmp/ivx112/runs-${number}.json" -w '%{http_code}' "$API_BASE/api/ivx/agents/runs/$agent_id" || true)
-            source_reference=''
-            tool_result_id=''
-            current_task='null'
+            source_reference=''; tool_result_id=''; current_task='null'
             if [ "$runs_http" = 200 ]; then
               latest=$(jq -c '(.runs // .records // .runRecords // []) | map(select((.sourceReference // "") != "" and (.toolResultId // "") != "")) | sort_by(.completedAt // .finishedAt // .startedAt // .createdAt // "") | last // null' "/tmp/ivx112/runs-${number}.json")
               if [ "$latest" != null ]; then
@@ -83,16 +80,10 @@ jobs:
                 current_task=$(jq -c '{taskId:(.taskId // .runId // null), taskType:(.taskType // null), finalStatus:(.finalStatus // null), completedAt:(.completedAt // .finishedAt // null)}' <<<"$latest")
               fi
             fi
-
-            task_report_available=false
-            if [ "$current_task" != null ]; then task_report_available=true; fi
-            evidence_available=false
-            if [ -n "$source_reference" ] && [ -n "$tool_result_id" ]; then evidence_available=true; fi
+            task_report_available=false; [ "$current_task" != null ] && task_report_available=true
+            evidence_available=false; [ -n "$source_reference" ] && [ -n "$tool_result_id" ] && evidence_available=true
             heartbeat_fresh=false
-            if [ -n "$last_heartbeat" ]; then
-              hb_epoch=$(date -u -d "$last_heartbeat" +%s 2>/dev/null || echo 0)
-              if [ "$hb_epoch" -gt 0 ] && [ $((now_epoch-hb_epoch)) -le 1800 ]; then heartbeat_fresh=true; fi
-            fi
+            if [ -n "$last_heartbeat" ]; then hb_epoch=$(date -u -d "$last_heartbeat" +%s 2>/dev/null || echo 0); [ "$hb_epoch" -gt 0 ] && [ $((now_epoch-hb_epoch)) -le 1800 ] && heartbeat_fresh=true; fi
             jq -n --argjson sequence "$number" --arg agentId "$agent_id" --arg name "$name" --arg status "$status" --arg checkpointAt "$CHECKPOINT_AT" --arg lastHeartbeatAt "$last_heartbeat" --arg sourceReference "$source_reference" --arg toolResultId "$tool_result_id" --arg runsHttp "$runs_http" --argjson paused "$paused" --argjson disabled "$disabled" --argjson currentTask "$current_task" --argjson taskReportAvailable "$task_report_available" --argjson evidenceAvailable "$evidence_available" --argjson heartbeatFresh "$heartbeat_fresh" --argjson totalRuns "$total_runs" --argjson successfulRuns "$successful_runs" '{sequence:$sequence,agentId:$agentId,name:$name,status:$status,checkpointAt:$checkpointAt,lastHeartbeatAt:$lastHeartbeatAt,paused:$paused,disabled:$disabled,currentTask:$currentTask,taskReportAvailable:$taskReportAvailable,evidenceAvailable:$evidenceAvailable,heartbeatFresh:$heartbeatFresh,totalRuns:$totalRuns,successfulRuns:$successfulRuns,sourceReference:$sourceReference,toolResultId:$toolResultId,runsHttp:$runsHttp}' >> /tmp/ivx112/records.ndjson
           done < /tmp/ivx112/agents.ndjson
           jq -s '.' /tmp/ivx112/records.ndjson > /tmp/ivx112/records.json
@@ -112,7 +103,7 @@ jobs:
           CERT_OK=false
           if [ "$active" = 112 ] && [ "$paused" = 0 ] && [ "$disabled" = 0 ] && [ "$fresh" = 112 ] && [ "$productive" = 112 ] && [ "$evidence" = 112 ]; then CERT_OK=true; fi
           mkdir -p qa/evidence/autonomous
-          jq -n --argjson ok "$CERT_OK" --arg certificate 'IVX-112-15MIN-AGENT-CONTROL' --arg programId "$PROGRAM_ID" --arg checkpointAt "$CHECKPOINT_AT" --arg productionSha "$LIVE_SHA" --arg controllerSha "$GITHUB_SHA" --arg githubRunId "$GITHUB_RUN_ID" --arg trigger "$GITHUB_EVENT_NAME" --argjson total 112 --argjson active "$active" --argjson paused "$paused" --argjson disabled "$disabled" --argjson fresh "$fresh" --argjson productive "$productive" --argjson evidence "$evidence" --slurpfile agents /tmp/ivx112/records.json '{ok:$ok,certificate:$certificate,programId:$programId,checkpointAt:$checkpointAt,productionSha:$productionSha,controllerSha:$controllerSha,githubRunId:$githubRunId,trigger:$trigger,totalAgents:$total,activeAgents:$active,pausedAgents:$paused,disabledAgents:$disabled,freshHeartbeatsWithin30m:$fresh,agentsWithProductiveActivity:$productive,agentsWithEvidence:$evidence,agents:$agents[0],truthNote:"PASS requires all 112 active, no paused/disabled agents, 112 fresh heartbeats, 112 productive activity records and 112 persisted evidence records. The controller is also triggered immediately after a successful No-Idle repair cycle so repaired capacity is certified without waiting for the next cron."}' > qa/evidence/autonomous/ivx-112-15min-latest.json
+          jq -n --argjson ok "$CERT_OK" --arg certificate 'IVX-112-15MIN-AGENT-CONTROL' --arg programId "$PROGRAM_ID" --arg checkpointAt "$CHECKPOINT_AT" --arg productionSha "$LIVE_SHA" --arg controllerSha "$GITHUB_SHA" --arg githubRunId "$GITHUB_RUN_ID" --arg trigger "$GITHUB_EVENT_NAME" --argjson total 112 --argjson active "$active" --argjson paused "$paused" --argjson disabled "$disabled" --argjson fresh "$fresh" --argjson productive "$productive" --argjson evidence "$evidence" --slurpfile agents /tmp/ivx112/records.json '{ok:$ok,certificate:$certificate,programId:$programId,checkpointAt:$checkpointAt,productionSha:$productionSha,controllerSha:$controllerSha,githubRunId:$githubRunId,trigger:$trigger,totalAgents:$total,activeAgents:$active,pausedAgents:$paused,disabledAgents:$disabled,freshHeartbeatsWithin30m:$fresh,agentsWithProductiveActivity:$productive,agentsWithEvidence:$evidence,agents:$agents[0]}' > qa/evidence/autonomous/ivx-112-15min-latest.json
           cat qa/evidence/autonomous/ivx-112-15min-latest.json
           test "$(jq -r '.ok' qa/evidence/autonomous/ivx-112-15min-latest.json)" = true
 
