@@ -1,12 +1,5 @@
 /**
  * IVX Holdings — Production Entry Point
- *
- * Starts the Hono API server (backend/hono.ts via backend/hono-extended.ts,
- * which registers additional owner-only routes on the same app) serving all
- * API routes including engagement APIs, member APIs, deploy tools, and chat.
- *
- * Runtime: Node.js (tsx) on Render (render.yaml dockerCommand override)
- * Port:    PORT env var (default 3000)
  */
 import { serve } from '@hono/node-server';
 import { WebSocketServer } from 'ws';
@@ -25,16 +18,11 @@ import { mintIVXOutageOwnerSession, verifyIVXOutageOwnerSession } from './backen
 import { listAutonomousVoiceCalls, placeAutonomousVoiceCall } from './backend/services/ivx-signalwire-voice';
 import { startGitHubActionsExternalSupervisor } from './backend/services/ivx-github-actions-external-supervisor';
 import { startAutonomousLiveBootstrap } from './backend/services/ivx-autonomous-live-bootstrap';
+import { getAutonomousTruthSnapshot, applyTruthControl, type TruthControlAction } from './backend/services/ivx-autonomous-truth-control';
+import { resolveActiveIVXSystemSecret } from './backend/services/ivx-system-secret';
 import { getIVXOwnerEmailAllowlist } from './expo/shared/ivx/access-control';
 import { handleCanonicalReelsFeed } from './backend/api/ivx-canonical-reels-feed';
-import {
-  autonomousVoiceOptions,
-  handleAutonomousVoiceCallback,
-  handleAutonomousVoiceLaml,
-  handleAutonomousVoicePublicCertificate,
-  handleAutonomousVoiceStatus,
-  handleAutonomousVoiceTest,
-} from './backend/api/ivx-autonomous-voice';
+import { autonomousVoiceOptions, handleAutonomousVoiceCallback, handleAutonomousVoiceLaml, handleAutonomousVoicePublicCertificate, handleAutonomousVoiceStatus, handleAutonomousVoiceTest } from './backend/api/ivx-autonomous-voice';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -42,17 +30,8 @@ const COMPLETION_CAMPAIGN_INTERVAL_MS = 5 * 60 * 1000;
 const OWNER_LOGIN_CERT_MARKER = 'ivx-owner-login-outage-cert-2026-08-15';
 const LIVE_VOICE_CERT_TRACE_ID = 'ivx-autonomous-live-voice-cert-20260816-v1';
 
-console.log('[IVX Server] Starting Hono API server...', {
-  host: HOST,
-  port: PORT,
-  nodeEnv: process.env.NODE_ENV || 'development',
-});
-
-void preloadAIProviderCredentialFromOwnerVariables().catch((error) => {
-  console.warn('[IVX Server] AI owner-variable preload unavailable', {
-    error: error instanceof Error ? error.message.slice(0, 160) : 'unknown',
-  });
-});
+console.log('[IVX Server] Starting Hono API server...', { host: HOST, port: PORT, nodeEnv: process.env.NODE_ENV || 'development' });
+void preloadAIProviderCredentialFromOwnerVariables().catch((error) => console.warn('[IVX Server] AI owner-variable preload unavailable', { error: error instanceof Error ? error.message.slice(0, 160) : 'unknown' }));
 
 app.get('/api/ivx/certification/owner-login-public', (c) => {
   try {
@@ -61,9 +40,7 @@ app.get('/api/ivx/certification/owner-login-public', (c) => {
     const verified = session ? verifyIVXOutageOwnerSession(session.token) : null;
     const certified = Boolean(session && verified && verified.userId === session.userId && verified.email === ownerEmail && verified.role === 'owner' && verified.expiresAt === session.expiresAt);
     return c.json({ ok: certified, certified, marker: OWNER_LOGIN_CERT_MARKER, mode: 'server_signed_owner_outage_session', supabaseIndependent: true, ownerAllowlistBound: Boolean(ownerEmail), tokenMintVerified: certified, secretValuesReturned: false, commit: (process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT_SHA || process.env.SOURCE_VERSION || '').trim() || null, completedAt: new Date().toISOString() }, certified ? 200 : 503);
-  } catch {
-    return c.json({ ok: false, certified: false, marker: OWNER_LOGIN_CERT_MARKER, mode: 'server_signed_owner_outage_session', supabaseIndependent: true, ownerAllowlistBound: false, tokenMintVerified: false, secretValuesReturned: false }, 503);
-  }
+  } catch { return c.json({ ok: false, certified: false, marker: OWNER_LOGIN_CERT_MARKER, secretValuesReturned: false }, 503); }
 });
 
 app.get('/api/ivx/certification/member-auth-public', async (c) => {
@@ -72,9 +49,23 @@ app.get('/api/ivx/certification/member-auth-public', async (c) => {
     if (!certificate) return c.json({ ok: false, certified: false, certificate: null, secretValuesReturned: false }, 503);
     const checks = certificate.checks;
     return c.json({ ok: true, certified: certificate.certified, marker: certificate.marker, commit: certificate.commit, completedAt: certificate.completedAt, checks: { runtimeConfig: checks.runtimeConfig.ok, ownerLogin: checks.ownerLogin.ok, memberRegistration: checks.memberRegistration.ok, memberLogin: checks.memberLogin.ok, memberPersistence: checks.memberPersistence.ok, regularClassification: checks.regularClassification.ok, vipClassification: checks.vipClassification.ok, cleanup: checks.cleanup.ok }, secretValuesReturned: false });
-  } catch {
-    return c.json({ ok: false, certified: false, certificate: null, secretValuesReturned: false }, 503);
-  }
+  } catch { return c.json({ ok: false, certified: false, certificate: null, secretValuesReturned: false }, 503); }
+});
+
+// Authoritative owner runtime control. Status is read-only; mutations require owner secret.
+app.get('/api/ivx/autonomous/truth', async (c) => c.json(await getAutonomousTruthSnapshot()));
+app.post('/api/ivx/autonomous/control', async (c) => {
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const provided = String((body as any).ownerApprovalToken || c.req.header('x-ivx-owner-key') || '');
+  const secret = await resolveActiveIVXSystemSecret();
+  if (!secret || provided !== secret) return c.json({ ok: false, error: 'Owner authorization required.' }, 401);
+  const action = String((body as any).action || '') as TruthControlAction;
+  const allowed: TruthControlAction[] = ['start_all','stop_all','pause_all','resume_all','pause_agent','resume_agent','disable_agent','enable_agent','retry_agent'];
+  if (!allowed.includes(action)) return c.json({ ok: false, error: `action must be one of: ${allowed.join(', ')}` }, 400);
+  try {
+    const snapshot = await applyTruthControl(action, typeof (body as any).agentId === 'string' ? (body as any).agentId : undefined, typeof (body as any).agentNumber === 'number' ? (body as any).agentNumber : undefined);
+    return c.json({ ok: true, action, snapshot });
+  } catch (error) { return c.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, 400); }
 });
 
 app.options('/api/ivx/autonomous/voice', () => autonomousVoiceOptions());
@@ -91,67 +82,35 @@ startGitHubActionsExternalSupervisor();
 startAutonomousLiveBootstrap();
 
 const runCompletionCycleSafely = async (reason: string): Promise<void> => {
-  try {
-    const state = await runCompletionCampaignCycle(4);
-    console.log('[IVX Completion Campaign]', { reason, phase: state.phase, verifiedAgents: state.totals.verifiedAgents });
-  } catch (error) {
-    console.error('[IVX Completion Campaign] cycle failed', { reason, error: error instanceof Error ? error.message : String(error) });
-  }
+  try { const state = await runCompletionCampaignCycle(4); console.log('[IVX Completion Campaign]', { reason, phase: state.phase, verifiedAgents: state.totals.verifiedAgents }); }
+  catch (error) { console.error('[IVX Completion Campaign] cycle failed', { reason, error: error instanceof Error ? error.message : String(error) }); }
 };
-const campaignBootKick = setTimeout(() => { void runCompletionCycleSafely('boot'); }, 20_000);
-campaignBootKick.unref?.();
-const campaignTimer = setInterval(() => { void runCompletionCycleSafely('interval'); }, COMPLETION_CAMPAIGN_INTERVAL_MS);
-campaignTimer.unref?.();
+const campaignBootKick = setTimeout(() => { void runCompletionCycleSafely('boot'); }, 20_000); campaignBootKick.unref?.();
+const campaignTimer = setInterval(() => { void runCompletionCycleSafely('interval'); }, COMPLETION_CAMPAIGN_INTERVAL_MS); campaignTimer.unref?.();
 
 startAgentHeartbeatLoop(buildHeartbeatRows);
-const certResumeKick = setTimeout(() => {
-  void resumePendingCertificateRuns().then((r) => {
-    if (r.resumed > 0) console.log('[IVX Server] Real-execution tasks resumed after restart', r);
-  }).catch((error) => {
-    console.warn('[IVX Server] Real-execution resume failed', { error: error instanceof Error ? error.message.slice(0, 160) : 'unknown' });
-  });
-}, 25_000);
-certResumeKick.unref?.();
+const certResumeKick = setTimeout(() => { void resumePendingCertificateRuns().then((r) => { if (r.resumed > 0) console.log('[IVX Server] Real-execution tasks resumed after restart', r); }).catch((error) => console.warn('[IVX Server] Real-execution resume failed', { error: error instanceof Error ? error.message.slice(0, 160) : 'unknown' })); }, 25_000); certResumeKick.unref?.();
 
 startSmsNotificationScheduler();
 const smsStatus = getSmsNotifierStatus();
 console.log('[IVX Server] Autonomous owner communications initialized', { configured: smsStatus.phoneConfigured, destination: smsStatus.phoneMasked, schedulerRunning: smsStatus.schedulerRunning, smsDailyCap: smsStatus.smsDailyCap, voiceConfigured: smsStatus.voice.configured, voiceDailyCap: smsStatus.voice.dailyCap });
 
-const liveVoiceCertKick = setTimeout(() => {
-  void (async () => {
-    try {
-      const existing = (await listAutonomousVoiceCalls(200)).find((row) => row.traceId === LIVE_VOICE_CERT_TRACE_ID && row.requestStatus === 'queued' && Boolean(row.callSid));
-      if (existing) {
-        console.log('[IVX Voice Cert] Existing queued call proof found', { traceId: LIVE_VOICE_CERT_TRACE_ID, providerStatus: existing.providerStatus, callbackReceived: Boolean(existing.callbackAt) });
-        return;
-      }
-      const call = await placeAutonomousVoiceCall({ traceId: LIVE_VOICE_CERT_TRACE_ID, message: 'Hello. This is IVX Autonomous. This is our live end to end voice certification call. Autonomous can now contact the owner, speak a verified status message, and escalate critical actions when owner attention is required.' });
-      console.log('[IVX Voice Cert] Call attempt completed', { traceId: LIVE_VOICE_CERT_TRACE_ID, requestStatus: call.requestStatus, providerStatus: call.providerStatus, callSidPresent: Boolean(call.callSid), destination: call.toMasked });
-    } catch (error) {
-      console.warn('[IVX Voice Cert] Call attempt failed', { traceId: LIVE_VOICE_CERT_TRACE_ID, error: error instanceof Error ? error.message.slice(0, 180) : 'unknown' });
-    }
-  })();
-}, 60_000);
-liveVoiceCertKick.unref?.();
+const liveVoiceCertKick = setTimeout(() => { void (async () => {
+  try {
+    const existing = (await listAutonomousVoiceCalls(200)).find((row) => row.traceId === LIVE_VOICE_CERT_TRACE_ID && row.requestStatus === 'queued' && Boolean(row.callSid));
+    if (existing) return;
+    await placeAutonomousVoiceCall({ traceId: LIVE_VOICE_CERT_TRACE_ID, message: 'Hello. This is IVX Autonomous. This is our live end to end voice certification call.' });
+  } catch (error) { console.warn('[IVX Voice Cert] Call attempt failed', { traceId: LIVE_VOICE_CERT_TRACE_ID, error: error instanceof Error ? error.message.slice(0, 180) : 'unknown' }); }
+})(); }, 60_000); liveVoiceCertKick.unref?.();
 
 startMemberAuthCertificationScheduler();
-
-if (process.env.IVX_SENIOR_DEV_WORKER_ENABLED === 'true') {
-  startSeniorDevWorker().catch((error) => {
-    console.error('[IVX Server] Senior dev worker failed to start', { error: error instanceof Error ? error.message : String(error) });
-  });
-}
+if (process.env.IVX_SENIOR_DEV_WORKER_ENABLED === 'true') startSeniorDevWorker().catch((error) => console.error('[IVX Server] Senior dev worker failed to start', { error: error instanceof Error ? error.message : String(error) }));
 
 const productionFetch: typeof app.fetch = async (request, env, executionCtx) => {
-  const url = new URL(request.url);
-  const type = (url.searchParams.get('type') || '').trim().toLowerCase();
+  const url = new URL(request.url); const type = (url.searchParams.get('type') || '').trim().toLowerCase();
   if (request.method === 'GET' && url.pathname === '/api/ivx/video-platform/feed' && (type === 'reel' || type === 'reels')) {
     const canonical = await handleCanonicalReelsFeed(request);
-    try {
-      const payload = await canonical.clone().json() as { count?: number; total?: number; videos?: unknown[] };
-      const reelCount = Array.isArray(payload.videos) ? payload.videos.length : (payload.count ?? payload.total ?? 0);
-      if (reelCount > 0) return canonical;
-    } catch {}
+    try { const payload = await canonical.clone().json() as { count?: number; total?: number; videos?: unknown[] }; const reelCount = Array.isArray(payload.videos) ? payload.videos.length : (payload.count ?? payload.total ?? 0); if (reelCount > 0) return canonical; } catch {}
     return app.fetch(request, env, executionCtx);
   }
   return app.fetch(request, env, executionCtx);
@@ -159,21 +118,7 @@ const productionFetch: typeof app.fetch = async (request, env, executionCtx) => 
 
 app.get('/api/ivx/realtime-voice/status', (c) => c.json(getRealtimeVoiceStatus()));
 app.options('/api/ivx/realtime-voice/status', (c) => c.body(null, 204));
-
-const wss = new WebSocketServer({ noServer: true });
-wss.on('connection', (ws, request) => { void handleRealtimeVoiceConnection(ws as any, request); });
-
-const httpServer = serve({ fetch: productionFetch, port: PORT, hostname: HOST }, (info) => {
-  console.log('[IVX Server] Hono API server online', { host: HOST, port: info.port, family: info.family });
-});
-
-httpServer.on('upgrade', (request, socket, head) => {
-  const url = new URL(request.url || '', `http://${request.headers.host || 'localhost'}`);
-  if (url.pathname === '/api/ivx/realtime-voice') {
-    wss.handleUpgrade(request, socket, head, (ws) => { wss.emit('connection', ws, request); });
-  } else {
-    socket.destroy();
-  }
-});
-
+const wss = new WebSocketServer({ noServer: true }); wss.on('connection', (ws, request) => { void handleRealtimeVoiceConnection(ws as any, request); });
+const httpServer = serve({ fetch: productionFetch, port: PORT, hostname: HOST }, (info) => console.log('[IVX Server] Hono API server online', { host: HOST, port: info.port, family: info.family }));
+httpServer.on('upgrade', (request, socket, head) => { const url = new URL(request.url || '', `http://${request.headers.host || 'localhost'}`); if (url.pathname === '/api/ivx/realtime-voice') wss.handleUpgrade(request, socket, head, (ws) => { wss.emit('connection', ws, request); }); else socket.destroy(); });
 console.log('[IVX Server] Realtime Voice WebSocket endpoint: ws://.../api/ivx/realtime-voice');
