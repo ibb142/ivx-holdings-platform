@@ -10,13 +10,7 @@ import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 
 export { ErrorBoundary } from 'expo-router';
 
-const IVX_STACK_SCREEN_OPTIONS = {
-  headerStyle: { backgroundColor: Colors.background },
-  headerTintColor: Colors.text,
-  headerTitleStyle: { fontWeight: '700' as const },
-  contentStyle: { backgroundColor: Colors.background },
-  headerShadowVisible: false} as const;
-
+const IVX_STACK_SCREEN_OPTIONS = { headerStyle: { backgroundColor: Colors.background }, headerTintColor: Colors.text, headerTitleStyle: { fontWeight: '700' as const }, contentStyle: { backgroundColor: Colors.background }, headerShadowVisible: false} as const;
 const IVX_INBOX_OPTIONS = { title: 'IVX Inbox' } as const;
 const IVX_CHAT_OPTIONS = { title: 'IVX Owner AI', headerShown: false } as const;
 const IVX_VARIABLES_OPTIONS = { title: 'Variables / Credentials' } as const;
@@ -42,6 +36,7 @@ const IVX_DAILY_REPORT_OPTIONS = { title: 'Daily Report' } as const;
 const IVX_GITHUB_SYNC_OPTIONS = { title: 'Sync to GitHub' } as const;
 const IVX_CAMPAIGN_OPTIONS = { title: 'Campaign Report' } as const;
 const IVX_AUTONOMOUS_OPS_OPTIONS = { title: 'Autonomous Operations' } as const;
+const IVX_AUTONOMOUS_CONTROL_OPTIONS = { title: 'Autonomous Control · 112 IA' } as const;
 const IVX_AGENT_GPS_OPTIONS = { title: 'IA GPS • 112' } as const;
 const IVX_LANDING_10OF10_OPTIONS = { title: 'Landing 10/10 • 112 IA' } as const;
 const IVX_LANDING_WAR_ROOM_MAP_OPTIONS = { title: 'Landing War Room Map' } as const;
@@ -52,85 +47,17 @@ export default function IVXOwnerLayout() {
   const router = useRouter();
   const { isAuthenticated, isLoading, userRole } = useAuth();
   const redirectAttemptedRef = useRef(false);
-
   useEffect(() => {
     if (isLoading || isOpenAccessModeEnabled()) return;
-    if (!isAuthenticated && !redirectAttemptedRef.current) {
-      redirectAttemptedRef.current = true;
-      console.log('[IVXLayout] Unauthenticated — redirecting to /login');
-      router.replace('/login');
-    } else if (isAuthenticated && redirectAttemptedRef.current) {
-      redirectAttemptedRef.current = false;
-    }
+    if (!isAuthenticated && !redirectAttemptedRef.current) { redirectAttemptedRef.current = true; console.log('[IVXLayout] Unauthenticated — redirecting to /login'); router.replace('/login'); }
+    else if (isAuthenticated && redirectAttemptedRef.current) redirectAttemptedRef.current = false;
   }, [isAuthenticated, isLoading, router]);
-
-  if (isLoading) {
-    return (
-      <View style={ivxStyles.loading}>
-        <ShimmerIndicator size="large" color={Colors.primary} />
-        <Text style={ivxStyles.loadingText}>Loading IVX…</Text>
-      </View>
-    );
-  }
-
-  if (!isAuthenticated || !isAdminRole(userRole)) {
-    return (
-      <View style={ivxStyles.loading}>
-        <Text style={ivxStyles.deniedText}>Access denied. Owner/Admin role required.</Text>
-      </View>
-    );
-  }
-
+  if (isLoading) return <View style={ivxStyles.loading}><ShimmerIndicator size="large" color={Colors.primary} /><Text style={ivxStyles.loadingText}>Loading IVX…</Text></View>;
+  if (!isAuthenticated || !isAdminRole(userRole)) return <View style={ivxStyles.loading}><Text style={ivxStyles.deniedText}>Access denied. Owner/Admin role required.</Text></View>;
   return (
     <Stack screenOptions={IVX_STACK_SCREEN_OPTIONS}>
-      <Stack.Screen name="inbox" options={IVX_INBOX_OPTIONS} />
-      <Stack.Screen name="chat" options={IVX_CHAT_OPTIONS} />
-      <Stack.Screen name="variables" options={IVX_VARIABLES_OPTIONS} />
-      <Stack.Screen name="independence" options={IVX_INDEPENDENCE_OPTIONS} />
-      <Stack.Screen name="files" options={IVX_FILES_OPTIONS} />
-      <Stack.Screen name="diagnostics" options={IVX_DIAGNOSTICS_OPTIONS} />
-      <Stack.Screen name="production-diagnostics" options={IVX_PRODUCTION_DIAGNOSTICS_OPTIONS} />
-      <Stack.Screen name="owner-ai-log" options={IVX_OWNER_AI_LOG_OPTIONS} />
-      <Stack.Screen name="search" options={IVX_SEARCH_OPTIONS} />
-      <Stack.Screen name="cto-dashboard" options={IVX_CTO_DASHBOARD_OPTIONS} />
-      <Stack.Screen name="project-dashboard" options={IVX_PROJECT_DASHBOARD_OPTIONS} />
-      <Stack.Screen name="proof-test" options={IVX_PROOF_TEST_OPTIONS} />
-      <Stack.Screen name="durability-proof" options={IVX_DURABILITY_PROOF_OPTIONS} />
-      <Stack.Screen name="proof-ledger" options={IVX_PROOF_LEDGER_OPTIONS} />
-      <Stack.Screen name="incidents" options={IVX_INCIDENTS_OPTIONS} />
-      <Stack.Screen name="deploy" options={IVX_DEPLOY_OPTIONS} />
-      <Stack.Screen name="contact/[id]" options={IVX_CONTACT_OPTIONS} />
-      <Stack.Screen name="autonomous-scale" options={IVX_AUTONOMOUS_SCALE_OPTIONS} />
-      <Stack.Screen name="autonomous-activity" options={IVX_AUTONOMOUS_ACTIVITY_OPTIONS} />
-      <Stack.Screen name="master-lead-list" options={IVX_MASTER_LEAD_LIST_OPTIONS} />
-      <Stack.Screen name="lead-audit-log" options={IVX_LEAD_AUDIT_LOG_OPTIONS} />
-      <Stack.Screen name="daily-report" options={IVX_DAILY_REPORT_OPTIONS} />
-      <Stack.Screen name="github-sync" options={IVX_GITHUB_SYNC_OPTIONS} />
-      <Stack.Screen name="campaign" options={IVX_CAMPAIGN_OPTIONS} />
-      <Stack.Screen name="autonomous-ops" options={IVX_AUTONOMOUS_OPS_OPTIONS} />
-      <Stack.Screen name="agent-gps" options={IVX_AGENT_GPS_OPTIONS} />
-      <Stack.Screen name="landing-10of10" options={IVX_LANDING_10OF10_OPTIONS} />
-      <Stack.Screen name="landing-war-room-map" options={IVX_LANDING_WAR_ROOM_MAP_OPTIONS} />
-      <Stack.Screen name="agent-command-center" options={IVX_AGENT_COMMAND_CENTER_OPTIONS} />
-      <Stack.Screen name="agent-ledger" options={IVX_AGENT_LEDGER_OPTIONS} />
+      <Stack.Screen name="inbox" options={IVX_INBOX_OPTIONS} /><Stack.Screen name="chat" options={IVX_CHAT_OPTIONS} /><Stack.Screen name="variables" options={IVX_VARIABLES_OPTIONS} /><Stack.Screen name="independence" options={IVX_INDEPENDENCE_OPTIONS} /><Stack.Screen name="files" options={IVX_FILES_OPTIONS} /><Stack.Screen name="diagnostics" options={IVX_DIAGNOSTICS_OPTIONS} /><Stack.Screen name="production-diagnostics" options={IVX_PRODUCTION_DIAGNOSTICS_OPTIONS} /><Stack.Screen name="owner-ai-log" options={IVX_OWNER_AI_LOG_OPTIONS} /><Stack.Screen name="search" options={IVX_SEARCH_OPTIONS} /><Stack.Screen name="cto-dashboard" options={IVX_CTO_DASHBOARD_OPTIONS} /><Stack.Screen name="project-dashboard" options={IVX_PROJECT_DASHBOARD_OPTIONS} /><Stack.Screen name="proof-test" options={IVX_PROOF_TEST_OPTIONS} /><Stack.Screen name="durability-proof" options={IVX_DURABILITY_PROOF_OPTIONS} /><Stack.Screen name="proof-ledger" options={IVX_PROOF_LEDGER_OPTIONS} /><Stack.Screen name="incidents" options={IVX_INCIDENTS_OPTIONS} /><Stack.Screen name="deploy" options={IVX_DEPLOY_OPTIONS} /><Stack.Screen name="contact/[id]" options={IVX_CONTACT_OPTIONS} /><Stack.Screen name="autonomous-scale" options={IVX_AUTONOMOUS_SCALE_OPTIONS} /><Stack.Screen name="autonomous-activity" options={IVX_AUTONOMOUS_ACTIVITY_OPTIONS} /><Stack.Screen name="master-lead-list" options={IVX_MASTER_LEAD_LIST_OPTIONS} /><Stack.Screen name="lead-audit-log" options={IVX_LEAD_AUDIT_LOG_OPTIONS} /><Stack.Screen name="daily-report" options={IVX_DAILY_REPORT_OPTIONS} /><Stack.Screen name="github-sync" options={IVX_GITHUB_SYNC_OPTIONS} /><Stack.Screen name="campaign" options={IVX_CAMPAIGN_OPTIONS} /><Stack.Screen name="autonomous-ops" options={IVX_AUTONOMOUS_OPS_OPTIONS} /><Stack.Screen name="autonomous-control" options={IVX_AUTONOMOUS_CONTROL_OPTIONS} /><Stack.Screen name="agent-gps" options={IVX_AGENT_GPS_OPTIONS} /><Stack.Screen name="landing-10of10" options={IVX_LANDING_10OF10_OPTIONS} /><Stack.Screen name="landing-war-room-map" options={IVX_LANDING_WAR_ROOM_MAP_OPTIONS} /><Stack.Screen name="agent-command-center" options={IVX_AGENT_COMMAND_CENTER_OPTIONS} /><Stack.Screen name="agent-ledger" options={IVX_AGENT_LEDGER_OPTIONS} />
     </Stack>
   );
 }
-
-const ivxStyles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    backgroundColor: Colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24},
-  loadingText: {
-    color: Colors.primary,
-    fontSize: 14,
-    fontWeight: '600' as const,
-    marginTop: 12},
-  deniedText: {
-    color: Colors.error,
-    fontSize: 14,
-    fontWeight: '600' as const,
-    textAlign: 'center' as const}});
+const ivxStyles = StyleSheet.create({ loading: { flex: 1, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center', padding: 24}, loadingText: { color: Colors.primary, fontSize: 14, fontWeight: '600' as const, marginTop: 12}, deniedText: { color: Colors.error, fontSize: 14, fontWeight: '600' as const, textAlign: 'center' as const}});
