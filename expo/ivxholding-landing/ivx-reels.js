@@ -572,7 +572,7 @@
     vid.setAttribute('playsinline', '');
     vid.muted = true;
     vid.loop = !isLive;
-    vid.preload = 'metadata';
+    vid.preload = 'auto';
     if (v.preview_blur_url) {
       slide.style.backgroundImage = 'url(' + v.preview_blur_url + ')';
       slide.style.backgroundSize = 'cover';
@@ -976,7 +976,7 @@
     var count = 0;
     while (next && count < 2) {
       if (next.__attach && next.__vid) {
-        next.__vid.preload = 'metadata';
+        next.__vid.preload = 'auto';
         next.__attach();
       }
       next = next.nextElementSibling;
