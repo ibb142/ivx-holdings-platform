@@ -322,6 +322,39 @@ async function loadFeedDeals(sb: any, candidates: string[], titles: Record<strin
   return out;
 }
 
+const playableUrlCache = new Map<string, { ok: boolean; at: number }>();
+const PLAYABLE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * A client-side upload can fail and leave a video_url that serves the site's
+ * HTML fallback instead of video. A dead lead card breaks the first paint on
+ * every consumer (landing / apps), so the feed HEAD-checks media URLs (5-min
+ * in-memory cache) and drops entries that do not answer with video content.
+ */
+async function isPlayableMediaUrl(url: string | null | undefined): Promise<boolean> {
+  if (!url) return false;
+  const cached = playableUrlCache.get(url);
+  if (cached && Date.now() - cached.at < PLAYABLE_CACHE_TTL_MS) return cached.ok;
+  let ok = false;
+  try {
+    const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(4000) });
+    const ct = String(res.headers.get('content-type') || '');
+    ok = res.ok && (ct.startsWith('video/') || ct.includes('mpegurl') || ct.includes('octet-stream'));
+  } catch {
+    ok = false;
+  }
+  playableUrlCache.set(url, { ok, at: Date.now() });
+  return ok;
+}
+
+async function filterPlayableEntries<T extends { row: { video_url: string | null } }>(items: T[]): Promise<T[]> {
+  const results = await Promise.all(items.map(async (item) => ({
+    item,
+    ok: await isPlayableMediaUrl(item.row?.video_url ?? null),
+  })));
+  return results.filter((r) => r.ok).map((r) => r.item);
+}
+
 export async function handlePlatformFeed(req: Request): Promise<Response> {
   const cacheKey = feedCacheKey(req.url);
   return withFeedCache(cacheKey, async () => {
@@ -415,7 +448,19 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
     // Unified investor-first composition: 3 deal videos → 1 featured investor video → repeat.
     // Fallback: if the dedicated Reels rail is empty, serve the unified investor feed so
     // the Reels surface never appears broken to visitors.
-    const composed = reelsOnly ? (reels.length > 0 ? reels : composeUnifiedFeed(dealVideos, featured)) : composeUnifiedFeed(dealVideos, featured);
+    let composed = reelsOnly ? (reels.length > 0 ? reels : composeUnifiedFeed(dealVideos, featured)) : composeUnifiedFeed(dealVideos, featured);
+
+    // Dead-media guard: never lead the feed with a broken card. When the
+    // composed list has no playable media, fall back to the published reels.
+    {
+      const playable = await filterPlayableEntries(composed);
+      if (playable.length > 0) {
+        composed = playable;
+      } else if (!reelsOnly && reels.length > 0) {
+        const playableReels = await filterPlayableEntries(reels);
+        if (playableReels.length > 0) composed = playableReels;
+      }
+    }
 
     // Viewer state (liked / saved) for the page being returned.
     const page = composed.slice(offset, offset + limit);
