@@ -6604,7 +6604,7 @@ app.get('/media/reels/:id', async (c) => {
   const id = String(c.req.param('id') || '').replace(/[^a-zA-Z0-9_-]/g, '');
   if (!id) return c.json({ ok: false, error: 'invalid id' }, 400);
   try {
-    const buf = await readFile(path.resolve(import.meta.dir, 'assets', 'reels', id + '.webm'));
+    const buf = await readFile(path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'assets', 'reels', id + '.webm'));
     return new Response(buf, { headers: { 'Content-Type': 'video/webm', 'Cache-Control': 'public, max-age=86400', 'Accept-Ranges': 'none' } });
   } catch {
     return c.json({ ok: false, error: 'variant not found' }, 404);
