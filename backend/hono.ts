@@ -6600,6 +6600,17 @@ app.get('/api/ivx/owner-dashboard', async (context) => handleOwnerDashboardReque
 // ── IVX Canonical Reels API — simplified public endpoints for app + landing ──
 // These wrap the video platform feed so external consumers (app, landing, admin)
 // can use /api/reels without knowing the internal video-platform path structure.
+app.get('/media/reels/:id', async (c) => {
+  const id = String(c.req.param('id') || '').replace(/[^a-zA-Z0-9_-]/g, '');
+  if (!id) return c.json({ ok: false, error: 'invalid id' }, 400);
+  try {
+    const buf = await readFile(path.resolve(import.meta.dir, 'assets', 'reels', id + '.webm'));
+    return new Response(buf, { headers: { 'Content-Type': 'video/webm', 'Cache-Control': 'public, max-age=86400', 'Accept-Ranges': 'none' } });
+  } catch {
+    return c.json({ ok: false, error: 'variant not found' }, 404);
+  }
+});
+
 app.get('/api/reels', async (c) => handlePlatformFeed(c.req.raw));
 app.get('/api/reels/:id', async (c) => handleReelById(c.req.param('id')));
 
