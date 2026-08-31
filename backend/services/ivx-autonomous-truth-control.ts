@@ -1,9 +1,16 @@
 import { getAllExecutionStates, pauseAgent, resumeAgent, disableAgent, enableAgent } from './ivx-agent-runtime';
-import { campaignDispatcherControl, getCampaignDispatcherSnapshot, startCampaignDispatcher } from './ivx-campaign-dispatcher';
+import {
+  campaignDispatcherControl,
+  getCampaignDispatcherSnapshot,
+  listCampaignDispatcherRecords,
+  runCampaignBootRecovery,
+  startCampaignDispatcher,
+} from './ivx-campaign-dispatcher';
+import { syncCampaignAssignmentsToDispatcher } from './ivx-app-completion-campaign';
 import { getGitHubActionsExternalSupervisorStatus } from './ivx-github-actions-external-supervisor';
 import { getSchedulerState } from './ivx-autonomous-scheduler';
 
-export const IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER = 'ivx-autonomous-truth-control-2026-08-30-v2';
+export const IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER = 'ivx-autonomous-truth-control-2026-08-30-v3';
 const HEARTBEAT_FRESH_MS = 10 * 60 * 1000;
 
 export type TruthControlAction =
@@ -25,16 +32,25 @@ function heartbeatFresh(value: string | null): boolean {
 
 export async function getAutonomousTruthSnapshot() {
   startCampaignDispatcher();
-  const [dispatcher, scheduler] = await Promise.all([
+  const [dispatcher, scheduler, dispatcherRecords] = await Promise.all([
     getCampaignDispatcherSnapshot(),
     getSchedulerState().catch(() => null),
+    listCampaignDispatcherRecords(),
   ]);
   const github = getGitHubActionsExternalSupervisorStatus();
   const states = getAllExecutionStates();
+  const runningByAgent = new Map<number, typeof dispatcherRecords[number]>();
+  for (const record of dispatcherRecords) {
+    if (record.status === 'RUNNING' && record.workerJobId) runningByAgent.set(record.agentNumber, record);
+  }
 
   const agents = states.map((state) => {
-    const freshHeartbeat = heartbeatFresh(state.lastHeartbeat);
-    const actuallyWorking = state.availability === 'busy' && Boolean(state.activeTaskId) && freshHeartbeat;
+    const runtimeHeartbeatFresh = heartbeatFresh(state.lastHeartbeat);
+    const dispatcherRecord = runningByAgent.get(state.agentNumber);
+    const dispatcherHeartbeatFresh = heartbeatFresh(dispatcherRecord?.lastHeartbeatAt ?? null);
+    const runtimeWorking = state.availability === 'busy' && Boolean(state.activeTaskId) && runtimeHeartbeatFresh;
+    const dispatcherWorking = Boolean(dispatcherRecord?.workerJobId && dispatcherRecord.status === 'RUNNING' && dispatcherHeartbeatFresh);
+    const actuallyWorking = runtimeWorking || dispatcherWorking;
     const blocked = state.pauseState || state.disabledState || state.availability === 'offline' || state.health === 'failed';
     const idle = !actuallyWorking && !blocked && state.availability === 'available';
     return {
@@ -42,14 +58,20 @@ export async function getAutonomousTruthSnapshot() {
       agentNumber: state.agentNumber,
       status: actuallyWorking ? 'WORKING' : blocked ? 'BLOCKED' : idle ? 'IDLE' : 'UNKNOWN',
       actuallyWorking,
-      activeTaskId: state.activeTaskId,
+      proofSource: runtimeWorking ? 'agent_runtime' : dispatcherWorking ? 'campaign_dispatcher' : null,
+      activeTaskId: state.activeTaskId ?? dispatcherRecord?.workerJobId ?? null,
+      dutyId: dispatcherRecord?.dutyId ?? null,
+      module: dispatcherRecord?.module ?? null,
+      workerJobId: dispatcherRecord?.workerJobId ?? null,
+      workerStatus: dispatcherRecord?.workerStatus ?? null,
       availability: state.availability,
       health: state.health,
       queueDepth: state.queueDepth,
       paused: state.pauseState,
       disabled: state.disabledState,
       lastHeartbeat: state.lastHeartbeat,
-      heartbeatFresh: freshHeartbeat,
+      dispatcherHeartbeat: dispatcherRecord?.lastHeartbeatAt ?? null,
+      heartbeatFresh: runtimeHeartbeatFresh || dispatcherHeartbeatFresh,
       totalRuns: state.totalRuns,
       successfulRuns: state.successfulRuns,
       failedRuns: state.failedRuns,
@@ -93,7 +115,10 @@ export async function getAutonomousTruthSnapshot() {
     marker: IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER,
     generatedAt: new Date().toISOString(),
     truthPolicy: {
-      workingRequires: ['availability=busy', 'activeTaskId present', 'heartbeat <=10m'],
+      workingRequiresOneOf: [
+        'agent runtime busy + activeTaskId + heartbeat <=10m',
+        'dispatcher RUNNING + real workerJobId + dispatcher heartbeat <=10m',
+      ],
       noInferenceFromGithubActions: true,
       noSyntheticWorkingStatus: true,
     },
@@ -135,6 +160,8 @@ export async function getAutonomousTruthSnapshot() {
 export async function applyTruthControl(action: TruthControlAction, agentId?: string, agentNumber?: number) {
   if (action === 'start_all' || action === 'resume_all') {
     startCampaignDispatcher();
+    await runCampaignBootRecovery().catch(() => 0);
+    await syncCampaignAssignmentsToDispatcher();
     for (const state of getAllExecutionStates()) resumeAgent(state.agentId);
     await campaignDispatcherControl('resume_all');
   } else if (action === 'stop_all') {
