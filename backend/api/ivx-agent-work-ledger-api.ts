@@ -37,6 +37,30 @@ async function authorize(request: Request): Promise<LedgerAuth> {
   }
 }
 
+function withLiveTimer<T extends {
+  status: string;
+  startedAt: string | null;
+  productiveMs24h: number;
+}>(row: T, now: number) {
+  const active = !['IDLE', 'COMPLETE', 'BLOCKED'].includes(row.status);
+  const parsedStart = row.startedAt ? Date.parse(row.startedAt) : Number.NaN;
+  const running = active && Number.isFinite(parsedStart);
+  const currentTaskElapsedMs = running ? Math.max(0, now - parsedStart) : 0;
+  return {
+    ...row,
+    timer: {
+      running,
+      startedAt: running ? row.startedAt : null,
+      currentTaskElapsedMs,
+      currentTaskElapsedSeconds: Math.floor(currentTaskElapsedMs / 1000),
+      currentTaskElapsedMinutes: Math.floor(currentTaskElapsedMs / 60000),
+      productiveMs24h: row.productiveMs24h,
+      productiveHours24h: Math.round((row.productiveMs24h / 3600000) * 100) / 100,
+      measuredAt: new Date(now).toISOString(),
+    },
+  };
+}
+
 export async function handleAgentLedgerGet(request: Request): Promise<Response> {
   const auth = await authorize(request);
   if (!auth) {
@@ -44,14 +68,18 @@ export async function handleAgentLedgerGet(request: Request): Promise<Response> 
   }
   try {
     const dashboard = await getAgentLedgerDashboard();
+    const now = Date.now();
+    const timedAgents = dashboard.rows.map((row) => withLiveTimer(row, now));
     return ownerOnlyJson({
       ok: true,
       marker: IVX_AGENT_WORK_LEDGER_MARKER,
       auth,
       generatedAt: dashboard.generatedAt,
+      timerMeasuredAt: new Date(now).toISOString(),
       totals: dashboard.totals,
-      agents: dashboard.rows,
-      rowCount: dashboard.rows.length,
+      agents: timedAgents,
+      rowCount: timedAgents.length,
+      timerPolicy: 'Each timer runs only while the canonical real-work state is active and startedAt is present. Productive 24h time comes only from durable real execution spans; no synthetic time is added.',
       policy: 'Canonical per-IA state built only from real dispatcher/worker/workflow evidence. Unmeasured time categories are null — never fabricated.',
     });
   } catch (error) {
