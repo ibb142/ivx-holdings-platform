@@ -19,7 +19,7 @@ import { listAutonomousVoiceCalls, placeAutonomousVoiceCall } from './backend/se
 import { startGitHubActionsExternalSupervisor } from './backend/services/ivx-github-actions-external-supervisor';
 import { startAutonomousLiveBootstrap } from './backend/services/ivx-autonomous-live-bootstrap';
 import { getAutonomousTruthSnapshot, applyTruthControl, type TruthControlAction } from './backend/services/ivx-autonomous-truth-control';
-import { resolveActiveIVXSystemSecret } from './backend/services/ivx-system-secret';
+import { assertIVXRegisteredOwnerBearer } from './backend/api/owner-only';
 import { getIVXOwnerEmailAllowlist } from './expo/shared/ivx/access-control';
 import { handleCanonicalReelsFeed } from './backend/api/ivx-canonical-reels-feed';
 import { autonomousVoiceOptions, handleAutonomousVoiceCallback, handleAutonomousVoiceLaml, handleAutonomousVoicePublicCertificate, handleAutonomousVoiceStatus, handleAutonomousVoiceTest } from './backend/api/ivx-autonomous-voice';
@@ -52,20 +52,21 @@ app.get('/api/ivx/certification/member-auth-public', async (c) => {
   } catch { return c.json({ ok: false, certified: false, certificate: null, secretValuesReturned: false }, 503); }
 });
 
-// Authoritative owner runtime control. Status is read-only; mutations require owner secret.
+// Authoritative owner runtime control. Read is fail-closed truth; mutations require a real registered owner bearer.
 app.get('/api/ivx/autonomous/truth', async (c) => c.json(await getAutonomousTruthSnapshot()));
 app.post('/api/ivx/autonomous/control', async (c) => {
   const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
-  const provided = String((body as any).ownerApprovalToken || c.req.header('x-ivx-owner-key') || '');
-  const secret = await resolveActiveIVXSystemSecret();
-  if (!secret || provided !== secret) return c.json({ ok: false, error: 'Owner authorization required.' }, 401);
   const action = String((body as any).action || '') as TruthControlAction;
   const allowed: TruthControlAction[] = ['start_all','stop_all','pause_all','resume_all','pause_agent','resume_agent','disable_agent','enable_agent','retry_agent'];
   if (!allowed.includes(action)) return c.json({ ok: false, error: `action must be one of: ${allowed.join(', ')}` }, 400);
   try {
+    const auth = await assertIVXRegisteredOwnerBearer(c.req.raw, `autonomous_control:${action}`);
     const snapshot = await applyTruthControl(action, typeof (body as any).agentId === 'string' ? (body as any).agentId : undefined, typeof (body as any).agentNumber === 'number' ? (body as any).agentNumber : undefined);
-    return c.json({ ok: true, action, snapshot });
-  } catch (error) { return c.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, 400); }
+    return c.json({ ok: true, action, authorization: auth.approval, snapshot });
+  } catch (error: any) {
+    const status = typeof error?.status === 'number' ? error.status : 400;
+    return c.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, status);
+  }
 });
 
 app.options('/api/ivx/autonomous/voice', () => autonomousVoiceOptions());
