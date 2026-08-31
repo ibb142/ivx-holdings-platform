@@ -99,6 +99,7 @@ const APK_PATH = '/tmp/ivx-holdings-1.10.14.apk';
 
 // Build version for cache-busting
 const BUILD_VER = 'v' + new Date().toISOString().slice(0, 10).replace(/-/g, '');
+const BUILD_TS = String(Date.now());
 
 // ── Config injection ──────────────────────────────────
 function injectConfig(html) {
@@ -222,6 +223,10 @@ async function deploy() {
     if (!existsSync(f.path)) { console.log('SKIP', f.key, '— not found'); fail++; continue; }
     let body = readFileSync(f.path, 'utf-8');
     if (f.inject) body = injectConfig(body);
+    // Cache-busting asset key: every deploy gets a fresh reels URL because
+    // the CloudFront cache policy ignores query strings and invalidations
+    // are not available to the deploy credentials.
+    body = body.replace(/ivx-reels\.js(\?v\d+)?/g, 'ivx-reels-cert-' + BUILD_TS + '.js');
     if (f.injectBackend) {
       body = body.replace(/__IVX_API_BASE_URL__/g, 'https://api.ivxholding.com');
       body = body.replace(/__IVX_BACKEND_URL__/g, 'https://api.ivxholding.com');
@@ -294,6 +299,7 @@ async function deploy() {
     { path: LANDING_DIR + '/ivx-portal.js', key: 'ivx-portal.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-portal-20260822.js', key: 'ivx-portal-20260822.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-reels.js', key: 'ivx-reels.js', type: 'application/javascript; charset=utf-8' },
+    { path: LANDING_DIR + '/ivx-reels.js', key: 'ivx-reels-cert-' + BUILD_TS + '.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-reels.js', key: 'ivx-reels-landing-e2e-20260818.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-reels.js', key: 'ivx-reels-landing-e2e-20260818-2.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-reels.js', key: 'ivx-reels-landing-e2e-20260818-3.js', type: 'application/javascript; charset=utf-8' },
