@@ -4,6 +4,7 @@ import { isDevTestModeEnabled } from '@/lib/dev-test-mode';
 import {
   getIVXOwnerAIErrorDiagnostics,
   ivxAIRequestService,
+  sanitizeOwnerAIVisibleText,
   type IVXOwnerAIProbeResult,
 } from '@/src/modules/ivx-owner-ai/services/ivxAIRequestService';
 import {
@@ -194,6 +195,11 @@ export async function requestAIReply(
       options,
     );
 
+    const sanitizedAnswer = sanitizeOwnerAIVisibleText(response.answer);
+    if (!sanitizedAnswer) {
+      throw new Error('IVX Owner AI returned no renderable reply text after sanitization.');
+    }
+
     console.log('[AIReplyService] AI reply received:', {
       requestId: response.requestId,
       conversationId: response.conversationId,
@@ -203,14 +209,14 @@ export async function requestAIReply(
       model: response.model,
       selectedTool: response.selectedTool ?? null,
       toolOutputCount: response.toolOutputs?.length ?? 0,
-      answerLength: response.answer.length,
+      answerLength: sanitizedAnswer.length,
     });
 
     cachedAIHealth = response.source === 'remote_api' || response.source === 'local_app_brain' ? 'active' : 'degraded';
     lastProbeTimestamp = Date.now();
 
     return {
-      answer: response.answer,
+      answer: sanitizedAnswer,
       requestId: response.requestId,
       conversationId: response.conversationId,
       model: response.model,
