@@ -583,11 +583,11 @@
 
     /* playback failure → swap in the next playable reel; retry button last */
     vid.addEventListener('error', function () {
-      var list = state.feed || [];
+      var sibs = Array.prototype.slice.call((slide.parentNode || document).children);
       var cur = slide.__video || v;
-      var idx = list.indexOf(cur);
-      for (var s2 = (idx >= 0 ? idx + 1 : 0); s2 < list.length; s2++) {
-        var nv = list[s2];
+      var idx = sibs.indexOf(slide);
+      for (var s2 = (idx >= 0 ? idx + 1 : 0); s2 < sibs.length; s2++) {
+        var nv = sibs[s2] && sibs[s2].__video;
         if (!nv || nv === cur || !nv.video_url || nv.video_url === cur.video_url) continue;
         vid.__ivxAttached = false;
         if (vid.__ivxHls) { try { vid.__ivxHls.destroy(); } catch (err2) {} vid.__ivxHls = null; }
