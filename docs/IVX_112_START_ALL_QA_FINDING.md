@@ -1,0 +1,1 @@
+QA finding 2026-08-31: START ALL must be able to recover a prior STOP ALL. Dispatcher resume previously cleared stopped flags but intentionally left STOPPED-BY-OWNER CANCELLED records cancelled, so those 112 duties could not restart. Owner control state also left stopped=true on resume. Fix requires explicit START ALL recovery semantics plus cleared app-completion stopped state.
