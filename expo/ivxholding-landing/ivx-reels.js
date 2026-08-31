@@ -581,8 +581,22 @@
     if (v.poster_url || v.thumbnail_url || v.preview_blur_url) vid.poster = v.poster_url || v.thumbnail_url || v.preview_blur_url;
     slide.appendChild(vid);
 
-    /* playback failure → visible retry */
+    /* playback failure → swap in the next playable reel; retry button last */
     vid.addEventListener('error', function () {
+      var list = state.feed || [];
+      var cur = slide.__video || v;
+      var idx = list.indexOf(cur);
+      for (var s2 = (idx >= 0 ? idx + 1 : 0); s2 < list.length; s2++) {
+        var nv = list[s2];
+        if (!nv || nv === cur || !nv.video_url || nv.video_url === cur.video_url) continue;
+        vid.__ivxAttached = false;
+        if (vid.__ivxHls) { try { vid.__ivxHls.destroy(); } catch (err2) {} vid.__ivxHls = null; }
+        vid.removeAttribute('src');
+        slide.__video = nv;
+        attachSource(vid, nv.hls_url, nv.video_url);
+        vid.play().catch(function () {});
+        return;
+      }
       if (slide.querySelector('.ivxr-vidretry')) return;
       var rb = document.createElement('button');
       rb.className = 'ivxr-vidretry';
