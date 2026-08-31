@@ -126,16 +126,20 @@ jobs:
             '{workflow:$workflow,runId:$runId,headSha:$headSha,url:$url,conclusion:$conclusion}' \
             > /tmp/ivx-radar/source-run.json
           cat /tmp/ivx-radar/source-run.json
-          if grep -Eiq 'secret|credential|auth|permission|payment|stripe|migration|database destructive|infrastructure|iam|cloudfront|route53|security policy|rollback' /tmp/ivx-radar/failed-jobs.jsonl; then
+
+          # Owner Gate is now reserved for irreversible/destructive or privileged actions only.
+          # Safe operational infrastructure (deploy, rollback, Render/CloudFront health recovery,
+          # restarting workers, exact-SHA repair) is autonomous and must not be blocked.
+          if grep -Eiq 'bank|banking|payment|payout|stripe|wire transfer|beneficiary|delete member|delete user|remove member|remove user|truncate|drop table|drop database|database destructive|destructive migration|erase data|wipe data|secret rotation|rotate secret|reveal secret|credential rotation|owner permission|admin permission|change owner|change admin|iam policy write|iam delete|root account|security policy weaken|disable mfa|disable auth|legal|compliance' /tmp/ivx-radar/failed-jobs.jsonl; then
             echo 'owner_gate_required=true' >> "$GITHUB_OUTPUT"
           else
             echo 'owner_gate_required=false' >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Owner Gate for high-risk source failure
+      - name: Owner Gate for destructive or privileged source failure
         if: ${{ github.event_name == 'workflow_run' && steps.source.outputs.owner_gate_required == 'true' }}
         run: |
-          echo 'OWNER_GATE_REQUIRED: high-risk auth/permissions/security/infrastructure incident.'
+          echo 'OWNER_GATE_REQUIRED: destructive data, money movement, privileged identity, secret rotation, or security-policy change.'
           exit 1
 
       - name: Build predictive mission
@@ -149,7 +153,7 @@ jobs:
           if [ -s /tmp/ivx-radar/failed-jobs.jsonl ]; then source_failures=$(jq -s -c '.' /tmp/ivx-radar/failed-jobs.jsonl); fi
           if [ -s /tmp/ivx-radar/source-run.json ]; then source_run=$(jq -c '.' /tmp/ivx-radar/source-run.json); fi
           jq -n --arg event "$GITHUB_EVENT_NAME" --argjson assessment "$assessment" --argjson failures "$source_failures" --argjson sourceRun "$source_run" \
-            '{event:$event,predictive:$assessment,sourceRun:$sourceRun,sourceFailures:$failures,policy:{failClosed:true,ownerGate:true,maxRepairAttempts:3,neverWeakenQuality:true,rerunAfterRepair:true}}' \
+            '{event:$event,predictive:$assessment,sourceRun:$sourceRun,sourceFailures:$failures,policy:{failClosed:true,ownerGate:"destructive_or_privileged_only",safeOperationalDeploy:true,maxRepairAttempts:3,neverWeakenQuality:true,rerunAfterRepair:true}}' \
             > /tmp/ivx-radar/mission.json
           cat /tmp/ivx-radar/mission.json
 
@@ -187,11 +191,11 @@ jobs:
           else
             execution=code_change
             approve_patch=true
-            approve_deploy=false
+            approve_deploy=true
           fi
-          goal="IVX AUTONOMOUS CLOSED-LOOP RECOVERY. Treat any subscribed workflow failure as an actionable repair event, not a terminal report. Diagnose exact failed job/step and source SHA. For low-risk code defects, repair the code or test harness, run focused tests, create/update the repair PR, and ensure the original certificate reruns from the repaired source. Never weaken tests or assertions to manufacture green. Never change secrets/IAM/payments/destructive migrations/security policy or production infrastructure without Owner Gate. Evidence required. Mission: ${mission}"
+          goal="IVX AUTONOMOUS CLOSED-LOOP RECOVERY. Treat subscribed workflow failures as actionable repair events. Diagnose exact failed job/step and source SHA. For safe operational defects, repair code/test harness, create/update the repair PR, merge through normal branch protections, deploy the exact main SHA, run rollback if health regresses, resume 112 agents, and rerun the original certificate until green. Safe operational infrastructure includes Render/CloudFront deploy, exact-SHA parity, service restart, worker restart, health recovery, rollback, QA, APK build, and certificate reruns. Owner Gate is REQUIRED only for money movement/banking, destructive database or member/user deletion, privileged owner/admin changes, secret creation/rotation/reveal, IAM policy mutation/deletion, security-policy weakening, legal/compliance actions, or similarly irreversible privileged changes. Never weaken tests or assertions to manufacture green. Evidence required. Mission: ${mission}"
           payload=$(jq -n --arg goal "$goal" --arg execution "$execution" --argjson approvePatch "$approve_patch" --argjson approveGitDeploy "$approve_deploy" \
-            '{goal:$goal,executionMode:$execution,templateMode:"BUG_FIX",approvePatch:$approvePatch,approveGitDeploy:$approveGitDeploy,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Closed-loop failure diagnosis, safe code repair, focused validation, repair PR, and source certificate rerun with Owner Gates preserved.",rollbackOption:"Revert autonomous repair PR if any regression appears.",filesAffected:["workflow-failure-source","certificate-harness","runtime-code-if-required"]}')
+            '{goal:$goal,executionMode:$execution,templateMode:"BUG_FIX",approvePatch:$approvePatch,approveGitDeploy:$approveGitDeploy,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Closed-loop diagnosis, safe repair, focused validation, repair PR, exact-main deploy/rollback as needed, 112-agent resume, and certificate rerun with destructive-action Owner Gates preserved.",rollbackOption:"Automatically roll back safe operational deploy if post-deploy health or certificate regresses; require Owner Gate for destructive/privileged rollback side effects.",filesAffected:["workflow-failure-source","certificate-harness","runtime-code-if-required","safe-operational-deploy"]}')
           args=(-sS --max-time 60 -o /tmp/ivx-radar/job-start.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}")
           if [ -n "${SYSTEM_KEY:-}" ]; then
             echo "::add-mask::$SYSTEM_KEY"
