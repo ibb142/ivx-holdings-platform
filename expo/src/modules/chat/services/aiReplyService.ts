@@ -60,6 +60,43 @@ function safeTrimARS(value: unknown): string {
   return safeString(value).trim();
 }
 
+/**
+ * Final client-side rescue for a real Owner AI answer that arrives on the same
+ * line as an internal fallback marker. sanitizeOwnerAIVisibleText intentionally
+ * removes lines containing those markers. Some backend/provider responses put
+ * both the marker and the human answer on ONE line (for example
+ * "provider fallback: Hello Ivan"). Dropping the whole line leaves an empty
+ * answer and the chat renders the synthetic red "unable to display" bubble.
+ *
+ * We only rescue user-facing text after known marker phrases. Structured audit
+ * metadata rows remain dropped, so this does not expose internal diagnostics.
+ */
+function rescueOwnerAIVisibleAnswer(value: unknown): string {
+  const sanitized = sanitizeOwnerAIVisibleText(value);
+  if (sanitized) {
+    return sanitized;
+  }
+
+  const raw = safeTrimARS(value);
+  if (!raw) {
+    return '';
+  }
+
+  const structuredMetadata = /^(?:source:\s*owner_audit_report|detected_intent:|selected_route:|audit_endpoint_called:|audit_failure:)/i;
+  const markerPattern = /\b(?:DEV_TEST_MODE|shared fallback|fallback reply delivered|fallback path answered|provider fallback|degraded fallback mode)\b\s*(?:[:=\-–—]+\s*)?/ig;
+
+  const rescued = raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !structuredMetadata.test(line))
+    .map((line) => line.replace(markerPattern, '').trim())
+    .filter((line) => line.length > 0)
+    .join('\n')
+    .trim();
+
+  return sanitizeOwnerAIVisibleText(rescued) || rescued;
+}
+
 let cachedAIHealth: ServiceRuntimeHealth = 'inactive';
 let lastProbeTimestamp = 0;
 const PROBE_CACHE_TTL_MS = 60000;
@@ -195,9 +232,9 @@ export async function requestAIReply(
       options,
     );
 
-    const sanitizedAnswer = sanitizeOwnerAIVisibleText(response.answer);
+    const sanitizedAnswer = rescueOwnerAIVisibleAnswer(response.answer);
     if (!sanitizedAnswer) {
-      throw new Error('IVX Owner AI returned no renderable reply text after sanitization.');
+      throw new Error('IVX Owner AI returned no renderable reply text after sanitization/rescue.');
     }
 
     console.log('[AIReplyService] AI reply received:', {
