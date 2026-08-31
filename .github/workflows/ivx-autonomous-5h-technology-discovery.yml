@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
   actions: read
+  id-token: write
 
 env:
   API_BASE: https://api.ivxholding.com
@@ -22,9 +23,6 @@ jobs:
     name: Evidence-backed technology discovery block
     runs-on: ubuntu-latest
     timeout-minutes: 58
-    env:
-      IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
-      IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
     steps:
       - uses: actions/checkout@v4
 
@@ -32,11 +30,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          key="${IVX_SYSTEM_SECRET:-${IVX_AI_SYSTEM_SECRET:-}}"
-          test -n "$key"
-          echo "::add-mask::$key"
-          printf '%s' "$key" > /tmp/ivx-system-key
-          chmod 600 /tmp/ivx-system-key
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          oidc_response=$(curl -fsS --max-time 30 \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery")
+          oidc_token=$(printf '%s' "$oidc_response" | jq -r '.value // empty')
+          test -n "$oidc_token"
+          echo "::add-mask::$oidc_token"
+          printf '%s' "$oidc_token" > /tmp/ivx-github-oidc
+          chmod 600 /tmp/ivx-github-oidc
 
       - name: Verify production before research
         shell: bash
@@ -53,12 +56,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          key=$(cat /tmp/ivx-system-key)
+          oidc_token=$(cat /tmp/ivx-github-oidc)
           hour=$(date -u +%H)
           task_id="tech-discovery-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           goal="AUTONOMOUS TECHNOLOGY DISCOVERY. Perform one evidence-backed research block for IVX. Discover and evaluate deployable advances in AI agent orchestration, reasoning, engineering memory, software QA, security, observability, databases, mobile/web performance, cloud infrastructure, and quantum or quantum-inspired optimization. Inspect current IVX architecture before recommending adoption. Separate production-ready technology from experimental research. Produce concrete findings, source/evidence references, compatibility/risk assessment, expected measurable benefit, and an adopt/reject/watch verdict. Do not fabricate sources, productive time, implementation, or deployment. Research only; Owner Gates remain required for material production changes. Discovery block UTC hour ${hour}."
-          payload=$(jq -n --arg goal "$goal" --arg taskId "$task_id" --arg sourceSha "$LIVE_SHA" '{goal:$goal,executionMode:"analysis",templateMode:"RESEARCH",approvePatch:false,approveGitDeploy:false,validationMode:"none",proposedPlan:"Research, inspect IVX compatibility, independently critique evidence, persist findings. Do not mutate production.",filesAffected:["backend/services","backend/api","expo",".github/workflows"],riskLevel:"low",rollbackOption:"No production mutation is authorized.",metadata:{taskId:$taskId,sourceSha:$sourceSha,program:"IVX-AUTONOMOUS-TECH-DISCOVERY-5H",requireEvidence:true,allowSyntheticEvidence:false}}')
-          http=$(curl -sS --retry 2 --retry-delay 2 --max-time 60 -o /tmp/start.json -w '%{http_code}' -X POST "$API_BASE/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-System-Key: $key" --data "$payload" || true)
+          payload=$(jq -n --arg goal "$goal" --arg taskId "$task_id" --arg sourceSha "$LIVE_SHA" '{goal:$goal,executionMode:"read_only",templateMode:"NEW_FEATURE",approvePatch:false,approveGitDeploy:false,validationMode:"focused",proposedPlan:"Research, inspect IVX compatibility, independently critique evidence, persist findings. Do not mutate production.",filesAffected:["backend/services","backend/api","expo",".github/workflows"],riskLevel:"low",rollbackOption:"No production mutation is authorized.",metadata:{taskId:$taskId,sourceSha:$sourceSha,program:"IVX-AUTONOMOUS-TECH-DISCOVERY-5H",requireEvidence:true,allowSyntheticEvidence:false}}')
+          http=$(curl -sS --retry 2 --retry-delay 2 --max-time 60 -o /tmp/start.json -w '%{http_code}' -X POST "$API_BASE/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: $oidc_token" --data "$payload" || true)
           case "$http" in 200|202|409) ;; *) cat /tmp/start.json; exit 1;; esac
           job_id=$(jq -r '.jobId // .activeJobId // .job.jobId // empty' /tmp/start.json)
           test -n "$job_id"
@@ -66,7 +69,7 @@ jobs:
 
           terminal=''
           for poll in $(seq 1 150); do
-            code=$(curl -sS --max-time 30 -o /tmp/poll.json -w '%{http_code}' "$API_BASE/api/ivx/senior-developer/worker/jobs/$job_id" -H "X-IVX-System-Key: $key" || true)
+            code=$(curl -sS --max-time 30 -o /tmp/poll.json -w '%{http_code}' "$API_BASE/api/ivx/senior-developer/worker/jobs/$job_id" -H "X-IVX-GitHub-OIDC: $oidc_token" || true)
             if [ "$code" = 200 ]; then
               status=$(jq -r '.job.status // .status // empty' /tmp/poll.json)
               case "$status" in completed|failed|blocked|cancelled) terminal="$status"; break;; esac
