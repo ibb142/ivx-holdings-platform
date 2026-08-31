@@ -1691,14 +1691,14 @@ const REQUIRED_PRODUCTION_ACCESS_ENV_NAMES = [
   'APP_SECRET',
 ] as const;
 
-const OPTIONAL_PRODUCTION_ACCESS_ENV_NAMES = [
+const PRODUCTION_ACCESS_OPTIONAL_ENV_NAMES = [
   'MINIO_PASSWORD',
   'STRIPE_API_KEY',
 ] as const;
 
 const REQUESTED_PRODUCTION_ACCESS_ENV_NAMES = [
   ...REQUIRED_PRODUCTION_ACCESS_ENV_NAMES,
-  ...OPTIONAL_PRODUCTION_ACCESS_ENV_NAMES,
+  ...PRODUCTION_ACCESS_OPTIONAL_ENV_NAMES,
 ] as const;
 
 const RENDER_API_BASE_URL = 'https://api.render.com/v1';
@@ -1985,7 +1985,7 @@ async function fetchRenderRuntimeStatus(): Promise<{ ok: boolean; status: 'verif
     if (name === 'RENDER_SERVICE_ID') return !serviceId;
     return !readTrimmed(process.env[name]);
   });
-  const optionalRuntimeMissing = getMissingEnvNames(OPTIONAL_PRODUCTION_ACCESS_ENV_NAMES);
+  const optionalRuntimeMissing = getMissingEnvNames(PRODUCTION_ACCESS_OPTIONAL_ENV_NAMES);
   const runtimeMissing = requiredRuntimeMissing;
   const envGroupMarkerPresent = readTrimmed(process.env.IVX_ENV_GROUP_ATTACHED).toLowerCase() === 'true' && readTrimmed(process.env.IVX_ENV_GROUP_NAME) === 'my-env-group';
 
@@ -2086,8 +2086,8 @@ async function fetchRenderRuntimeStatus(): Promise<{ ok: boolean; status: 'verif
     const envGroupExists = envGroupRows.some((item) => readTrimmed(readObject(readObject(item).envGroup ?? item).name) === 'my-env-group');
     const requiredEnvVarsPresentInRender = REQUIRED_PRODUCTION_ACCESS_ENV_NAMES.filter((name) => envVarKeySet.has(name));
     const requiredEnvVarsMissingInRender = REQUIRED_PRODUCTION_ACCESS_ENV_NAMES.filter((name) => !envVarKeySet.has(name));
-    const optionalEnvVarsPresentInRender = OPTIONAL_PRODUCTION_ACCESS_ENV_NAMES.filter((name) => envVarKeySet.has(name));
-    const optionalEnvVarsMissingInRender = OPTIONAL_PRODUCTION_ACCESS_ENV_NAMES.filter((name) => !envVarKeySet.has(name));
+    const optionalEnvVarsPresentInRender = PRODUCTION_ACCESS_OPTIONAL_ENV_NAMES.filter((name) => envVarKeySet.has(name));
+    const optionalEnvVarsMissingInRender = PRODUCTION_ACCESS_OPTIONAL_ENV_NAMES.filter((name) => !envVarKeySet.has(name));
     const renderApiAuthorized = serviceResponse.ok && envVarsResponse.ok;
     const deploysAvailable = deploysHttpOk && deployHistory.length > 0;
 

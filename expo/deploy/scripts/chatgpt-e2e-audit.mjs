@@ -20,7 +20,7 @@ const LOCAL_BASE_URL = `http://127.0.0.1:${LOCAL_PORT}`;
 const PUBLIC_API_BASE_URL = (process.env.CHATGPT_AUDIT_PUBLIC_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 const PUBLIC_CHAT_BASE_URL = (process.env.CHATGPT_AUDIT_PUBLIC_CHAT_BASE_URL || 'https://chat.ivxholding.com').replace(/\/+$/, '');
 const REQUEST_TIMEOUT_MS = Number.parseInt(process.env.CHATGPT_AUDIT_TIMEOUT_MS || '14000', 10);
-const SERVER_START_TIMEOUT_MS = Number.parseInt(process.env.CHATGPT_AUDIT_SERVER_START_TIMEOUT_MS || '30000', 10);
+const SERVER_START_TIMEOUT_MS = Number.parseInt(process.env.CHATGPT_AUDIT_START_TIMEOUT_MS || '30000', 10);
 const LOCAL_DATABASE_PATH = resolve(REPORT_DIR, `${REPORT_BASENAME}.sqlite`);
 const TOKEN = `CHATGPT_AUDIT_${Date.now()}`;
 const ROOM_ID = `chatgpt-audit-${Date.now().toString(36)}`.slice(0, 40);
@@ -457,7 +457,7 @@ function buildMarkdown(report) {
 async function main() {
   await mkdir(REPORT_DIR, { recursive: true });
   const commandsRun = [
-    'CHATGPT_AUDIT_TIMEOUT_MS=8000 CHATGPT_AUDIT_SERVER_START_TIMEOUT_MS=20000 node expo/deploy/scripts/chatgpt-e2e-audit.mjs',
+    'CHATGPT_AUDIT_TIMEOUT_MS=8000 CHATGPT_AUDIT_START_TIMEOUT_MS=20000 node expo/deploy/scripts/chatgpt-e2e-audit.mjs',
     'internal: spawn bunx tsx server.ts with PORT=4392 HOST=127.0.0.1',
     `internal: GET ${LOCAL_BASE_URL}/health`,
     `internal: POST ${LOCAL_BASE_URL}/api/public/send-message`,
