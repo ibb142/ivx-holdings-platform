@@ -1,9 +1,11 @@
 name: IVX Autonomous Voice Live Certificate
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+
+concurrency:
+  group: ivx-autonomous-voice-live-cert
+  cancel-in-progress: true
 
 jobs:
   autonomous-voice-live-cert:
@@ -26,19 +28,13 @@ jobs:
               VERSION_OK=$(jq -r '.ok // false' /tmp/version.json 2>/dev/null || echo false)
               VERSION_COMMIT=$(jq -r '.commit // empty' /tmp/version.json 2>/dev/null || true)
               echo "poll=$i version_ok=$VERSION_OK production_sha=${VERSION_COMMIT:-missing} expected=${GITHUB_SHA}"
-              if [ "$VERSION_OK" = "true" ] && [ "$VERSION_COMMIT" = "$GITHUB_SHA" ]; then
-                matched=1
-                break
-              fi
+              if [ "$VERSION_OK" = "true" ] && [ "$VERSION_COMMIT" = "$GITHUB_SHA" ]; then matched=1; break; fi
             else
               echo "poll=$i version_http=$code"
             fi
             sleep 10
           done
-          if [ "$matched" != "1" ]; then
-            echo "Production did not reach exact GitHub SHA ${GITHUB_SHA}."
-            exit 1
-          fi
+          if [ "$matched" != "1" ]; then echo "Production did not reach exact GitHub SHA ${GITHUB_SHA}."; exit 1; fi
           echo "production_exact_sha=PASS"
 
       - name: Wait for real Autonomous voice delivery proof
@@ -47,33 +43,19 @@ jobs:
           set -euo pipefail
           certified=0
           for i in $(seq 1 60); do
-            code=$(curl -sS -m 20 -o /tmp/voice-cert.json -w '%{http_code}' \
-              "${API_BASE}/api/ivx/certification/autonomous-voice-public?traceId=${TRACE_ID}" || true)
+            code=$(curl -sS -m 20 -o /tmp/voice-cert.json -w '%{http_code}' "${API_BASE}/api/ivx/certification/autonomous-voice-public?traceId=${TRACE_ID}" || true)
             if [ "$code" = "200" ]; then
               OK=$(jq -r '.ok // false' /tmp/voice-cert.json 2>/dev/null || echo false)
               CERTIFIED=$(jq -r '.certified // false' /tmp/voice-cert.json 2>/dev/null || echo false)
               COMMIT=$(jq -r '.commit // empty' /tmp/voice-cert.json 2>/dev/null || true)
               REQUEST_STATUS=$(jq -r '.requestStatus // empty' /tmp/voice-cert.json 2>/dev/null || true)
-              PROVIDER_STATUS=$(jq -r '.providerStatus // empty' /tmp/voice-cert.json 2>/dev/null || true)
               SID_PRESENT=$(jq -r '.callSidPresent // false' /tmp/voice-cert.json 2>/dev/null || echo false)
               CALLBACK=$(jq -r '.callbackReceived // false' /tmp/voice-cert.json 2>/dev/null || echo false)
-              echo "poll=$i ok=$OK certified=$CERTIFIED request=$REQUEST_STATUS provider=$PROVIDER_STATUS sid=$SID_PRESENT callback=$CALLBACK commit=${COMMIT:-missing}"
-              if [ "$OK" = "true" ] && [ "$CERTIFIED" = "true" ] && [ "$REQUEST_STATUS" = "queued" ] && [ "$SID_PRESENT" = "true" ] && [ "$CALLBACK" = "true" ] && [ "$COMMIT" = "$GITHUB_SHA" ]; then
-                certified=1
-                break
-              fi
-            else
-              echo "poll=$i voice_cert_http=$code"
+              if [ "$OK" = "true" ] && [ "$CERTIFIED" = "true" ] && [ "$REQUEST_STATUS" = "queued" ] && [ "$SID_PRESENT" = "true" ] && [ "$CALLBACK" = "true" ] && [ "$COMMIT" = "$GITHUB_SHA" ]; then certified=1; break; fi
             fi
             sleep 10
           done
-          if [ "$certified" != "1" ]; then
-            echo "Autonomous live voice delivery was not certified on exact SHA ${GITHUB_SHA}."
-            if [ -f /tmp/voice-cert.json ]; then
-              jq '{ok,certified,commit,traceId,requestStatus,providerStatus,callSidPresent,callbackReceived,callbackAt,toMasked,createdAt,secretValuesReturned}' /tmp/voice-cert.json 2>/dev/null || true
-            fi
-            exit 1
-          fi
+          if [ "$certified" != "1" ]; then echo "Autonomous live voice delivery was not certified on exact SHA ${GITHUB_SHA}."; exit 1; fi
           echo "autonomous_voice_live=PASS"
 
       - name: Emit live voice certificate artifact
@@ -81,11 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p qa/evidence
-          jq --arg githubSha "$GITHUB_SHA" \
-             --arg runId "$GITHUB_RUN_ID" \
-             '. + {githubSha:$githubSha, workflowRunId:$runId, exactSha:true, certifiedAt:(now|todateiso8601)}' \
-             /tmp/voice-cert.json > qa/evidence/autonomous-voice-live-cert.json
-          jq '{certified,githubSha,commit,traceId,requestStatus,providerStatus,callSidPresent,callbackReceived,callbackAt,toMasked,workflowRunId,secretValuesReturned}' qa/evidence/autonomous-voice-live-cert.json
+          jq --arg githubSha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" '. + {githubSha:$githubSha, workflowRunId:$runId, exactSha:true, certifiedAt:(now|todateiso8601)}' /tmp/voice-cert.json > qa/evidence/autonomous-voice-live-cert.json
 
       - name: Upload voice certificate evidence
         uses: actions/upload-artifact@v4
