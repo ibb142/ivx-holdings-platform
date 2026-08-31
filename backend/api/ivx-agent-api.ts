@@ -161,10 +161,16 @@ export function registerAgentRoutes(app: Hono): void {
     const rawAgent = (body as Record<string, unknown>).agentNumber;
     const agentNumber = typeof rawAgent === 'number' ? rawAgent : undefined;
     const control = await updateControlState(action as Parameters<typeof updateControlState>[0], agentNumber);
+    // Control intent is durable after updateControlState; the dispatcher
+    // application runs in the background so control calls stay inside the
+    // 30s workflow gate even when the durable store is cold or slow.
     if (action !== 'reassign') {
-      await campaignDispatcherControl(action as 'pause_all' | 'resume_all' | 'stop_all' | 'stop_agent' | 'retry_agent', agentNumber);
+      void campaignDispatcherControl(action as 'pause_all' | 'resume_all' | 'stop_all' | 'stop_agent' | 'retry_agent', agentNumber).catch(() => undefined);
     }
-    const records = await listCampaignDispatcherRecords();
+    const records = await Promise.race([
+      listCampaignDispatcherRecords(),
+      new Promise<Awaited<ReturnType<typeof listCampaignDispatcherRecords>>>((resolve) => setTimeout(() => resolve([]), 12_000)),
+    ]);
     const campaign = buildAppCompletionCampaign(control, records);
     return c.json({ ok: true, marker: IVX_AGENT_API_MARKER, control, counts: campaign.counts, authorization: legacyAuthorized ? 'owner' : 'github_oidc_resume_only' });
   });
