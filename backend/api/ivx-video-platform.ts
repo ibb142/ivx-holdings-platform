@@ -487,6 +487,9 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
       savedSet = new Set((sr.data || []).map((r: any) => String(r.project_id)));
     }
 
+    // VP9/webm fallback variants (codec-limited browsers cannot decode H.264).
+    const WEBM_VARIANTS: Record<string, string> = { 'c0725a70-497f-4332-8f9d-03a29036d270': '/media/reels/c0725a70.webm' };
+
     const feed = page.map((p) => {
       const v = p.row;
       const pb = playback[p.id];
@@ -497,6 +500,7 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
         id: p.id,
         project_id: v.project_id ? String(v.project_id) : null,
         video_url: v.video_url,
+        webm_url: WEBM_VARIANTS[String(p.id)] ?? null,
         hls_url: pb?.status === 'ready' ? pb.hls_url : null,
         poster_url: pb?.poster_url ?? null,
         preview_blur_url: (pb as { preview_blur_url?: string | null } | undefined)?.preview_blur_url ?? null,
