@@ -18,6 +18,7 @@ import { mintIVXOutageOwnerSession, verifyIVXOutageOwnerSession } from './backen
 import { listAutonomousVoiceCalls, placeAutonomousVoiceCall } from './backend/services/ivx-signalwire-voice';
 import { startGitHubActionsExternalSupervisor } from './backend/services/ivx-github-actions-external-supervisor';
 import { startAutonomousLiveBootstrap } from './backend/services/ivx-autonomous-live-bootstrap';
+import { startAutonomous112RuntimeEnforcer } from './backend/services/ivx-autonomous-runtime-enforcer';
 import { getAutonomousTruthSnapshot, applyTruthControl, type TruthControlAction } from './backend/services/ivx-autonomous-truth-control';
 import { assertIVXRegisteredOwnerBearer } from './backend/api/owner-only';
 import { getIVXOwnerEmailAllowlist } from './expo/shared/ivx/access-control';
@@ -81,6 +82,7 @@ startAutonomousScheduler();
 startAutonomousIntelligenceMissionScheduler();
 startGitHubActionsExternalSupervisor();
 startAutonomousLiveBootstrap();
+startAutonomous112RuntimeEnforcer();
 
 const runCompletionCycleSafely = async (reason: string): Promise<void> => {
   try { const state = await runCompletionCampaignCycle(4); console.log('[IVX Completion Campaign]', { reason, phase: state.phase, verifiedAgents: state.totals.verifiedAgents }); }
