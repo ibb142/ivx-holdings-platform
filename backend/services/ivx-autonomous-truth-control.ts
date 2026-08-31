@@ -6,11 +6,11 @@ import {
   runCampaignBootRecovery,
   startCampaignDispatcher,
 } from './ivx-campaign-dispatcher';
-import { syncCampaignAssignmentsToDispatcher } from './ivx-app-completion-campaign';
+import { syncCampaignAssignmentsToDispatcher, updateControlState } from './ivx-app-completion-campaign';
 import { getGitHubActionsExternalSupervisorStatus } from './ivx-github-actions-external-supervisor';
 import { getSchedulerState } from './ivx-autonomous-scheduler';
 
-export const IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER = 'ivx-autonomous-truth-control-2026-08-30-v3';
+export const IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER = 'ivx-autonomous-truth-control-2026-08-30-v4';
 const HEARTBEAT_FRESH_MS = 10 * 60 * 1000;
 
 export type TruthControlAction =
@@ -161,14 +161,29 @@ export async function applyTruthControl(action: TruthControlAction, agentId?: st
   if (action === 'start_all' || action === 'resume_all') {
     startCampaignDispatcher();
     await runCampaignBootRecovery().catch(() => 0);
+    // Clear the campaign-level owner stop/pause state first. Without this,
+    // assignments can exist but the owner dashboard still truthfully reports STOPPED.
+    await updateControlState('resume_all');
     await syncCampaignAssignmentsToDispatcher();
     for (const state of getAllExecutionStates()) resumeAgent(state.agentId);
+    if (action === 'start_all') {
+      // STOP ALL converts queued/running dispatcher duties to CANCELLED. A plain
+      // resume intentionally does not revive CANCELLED work, so START ALL must
+      // explicitly re-arm every agent's real duty before the scheduler pass.
+      for (let n = 1; n <= 112; n += 1) {
+        await campaignDispatcherControl('retry_agent', n);
+      }
+    }
+    // resume_all clears dispatcher stop flags and immediately executes a real
+    // scheduler tick, filling all available worker slots up to maxConcurrency.
     await campaignDispatcherControl('resume_all');
   } else if (action === 'stop_all') {
     for (const state of getAllExecutionStates()) pauseAgent(state.agentId);
+    await updateControlState('stop_all');
     await campaignDispatcherControl('stop_all');
   } else if (action === 'pause_all') {
     for (const state of getAllExecutionStates()) pauseAgent(state.agentId);
+    await updateControlState('pause_all');
     await campaignDispatcherControl('pause_all');
   } else {
     if (!agentId && typeof agentNumber !== 'number') throw new Error('agentId or agentNumber required');
