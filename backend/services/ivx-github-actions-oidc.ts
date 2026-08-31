@@ -19,6 +19,7 @@ const WORKFLOW_SUFFIXES = [
   '/.github/workflows/ivx-autonomous-apk-mission.yml@refs/heads/main',
   '/.github/workflows/ivx-100-live-ai-worker-cert.yml@refs/heads/main',
   '/.github/workflows/ivx-no-idle-intelligence.yml@refs/heads/main',
+  '/.github/workflows/ivx-autonomous-5h-technology-discovery.yml@refs/heads/main',
 ] as const;
 const CLOCK_SKEW_SECONDS = 60;
 export type IVXGitHubOIDCClaims = { iss?: unknown; aud?: unknown; exp?: unknown; nbf?: unknown; repository?: unknown; repository_id?: unknown; repository_owner_id?: unknown; ref?: unknown; workflow_ref?: unknown; event_name?: unknown; sub?: unknown; };
@@ -37,4 +38,4 @@ export async function diagnoseIVXGitHubActionsOIDCToken(token:string):Promise<IV
 export async function verifyIVXGitHubActionsOIDCToken(t:string){return(await diagnoseIVXGitHubActionsOIDCToken(t)).ok;}
 export async function diagnoseIVXGitHubActionsOIDCRequest(request:Request){return diagnoseIVXGitHubActionsOIDCToken(request.headers.get('X-IVX-GitHub-OIDC')?.trim()??'');}
 export async function verifyIVXGitHubActionsOIDCRequest(request:Request){return(await diagnoseIVXGitHubActionsOIDCRequest(request)).ok;}
-export const IVX_GITHUB_OIDC_CONTRACT=Object.freeze({issuer:ISSUER,audience:AUDIENCE,repository:REPOSITORY,repositoryId:REPOSITORY_ID,ownerId:OWNER_ID,ref:REF,workflows:['.github/workflows/ivx-360-early-warning.yml','.github/workflows/ivx-112-exact-sha-autodeploy-cert.yml','.github/workflows/ivx-autonomous-radar-self-heal.yml','.github/workflows/ivx-autonomous-nervous-system.yml','.github/workflows/landing-112-agent-autonomous-qa.yml','.github/workflows/autonomous-internal-external-e2e.yml','.github/workflows/ivx-112-2000h-utilization-sla.yml','.github/workflows/ivx-112-per-agent-20h-no-sleep-sla.yml','.github/workflows/ivx-autonomous-apk-mission.yml','.github/workflows/ivx-100-live-ai-worker-cert.yml','.github/workflows/ivx-no-idle-intelligence.yml']});
+export const IVX_GITHUB_OIDC_CONTRACT=Object.freeze({issuer:ISSUER,audience:AUDIENCE,repository:REPOSITORY,repositoryId:REPOSITORY_ID,ownerId:OWNER_ID,ref:REF,workflows:['.github/workflows/ivx-360-early-warning.yml','.github/workflows/ivx-112-exact-sha-autodeploy-cert.yml','.github/workflows/ivx-autonomous-radar-self-heal.yml','.github/workflows/ivx-autonomous-nervous-system.yml','.github/workflows/landing-112-agent-autonomous-qa.yml','.github/workflows/autonomous-internal-external-e2e.yml','.github/workflows/ivx-112-2000h-utilization-sla.yml','.github/workflows/ivx-112-per-agent-20h-no-sleep-sla.yml','.github/workflows/ivx-autonomous-apk-mission.yml','.github/workflows/ivx-100-live-ai-worker-cert.yml','.github/workflows/ivx-no-idle-intelligence.yml','.github/workflows/ivx-autonomous-5h-technology-discovery.yml']});

@@ -112,9 +112,17 @@ describe('capOwnerMessages', () => {
 
   it('returns everything (sorted) when under the cap', () => {
     const messages = [
-      makeMessage({ id: 'b', createdAt: '2026-05-31T00:00:02Z' }),
-      makeMessage({ id: 'a', createdAt: '2026-05-31T00:00:01Z' }),
+      makeMessage({ id: 'b', body: 'second', createdAt: '2026-05-31T00:00:02Z' }),
+      makeMessage({ id: 'a', body: 'first', createdAt: '2026-05-31T00:00:01Z' }),
     ];
     expect(capOwnerMessages(messages, 50).map((m) => m.id)).toEqual(['a', 'b']);
+  });
+
+  it('drops empty rows before capping (renderable filter regression)', () => {
+    const messages = [
+      makeMessage({ id: 'b', body: 'visible', createdAt: '2026-05-31T00:00:02Z' }),
+      makeMessage({ id: 'empty', body: null, createdAt: '2026-05-31T00:00:01Z' }),
+    ];
+    expect(capOwnerMessages(messages, 50).map((m) => m.id)).toEqual(['b']);
   });
 });
