@@ -58,7 +58,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS "${API_BASE}/api/ivx/agents" -o /tmp/agents.json
+          curl -fsS --retry 5 --retry-all-errors --retry-delay 2 "${API_BASE}/api/ivx/agents" -o /tmp/agents.json
           test "$(jq -r '.ok // false' /tmp/agents.json)" = true
           test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
           test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)" = 112
@@ -66,8 +66,13 @@ jobs:
           test "$(jq '[.agents[] | select(.paused==true or .disabled==true)] | length' /tmp/agents.json)" = 0
           mkdir -p /tmp/contracts
           jq -r '.agents[].agentId' /tmp/agents.json | while read -r id; do
-            curl -fsS "${API_BASE}/api/ivx/agents/${id}/contract" -o "/tmp/contracts/${id}.json"
-            test "$(jq -r '.ok // false' "/tmp/contracts/${id}.json")" = true
+            ok=false
+            for attempt in 1 2 3 4 5; do
+              code=$(curl -sS -m 25 -o "/tmp/contracts/${id}.json" -w '%{http_code}' "${API_BASE}/api/ivx/agents/${id}/contract" || true)
+              if [ "$code" = 200 ] && [ "$(jq -r '.ok // false' "/tmp/contracts/${id}.json" 2>/dev/null || echo false)" = true ]; then ok=true; break; fi
+              sleep $((attempt * 2))
+            done
+            test "$ok" = true
             test -n "$(jq -r '.contract.memoryNamespace // empty' "/tmp/contracts/${id}.json")"
             test -n "$(jq -r '.contract.queueNamespace // empty' "/tmp/contracts/${id}.json")"
             test -n "$(jq -r '.contract.instructionHash // empty' "/tmp/contracts/${id}.json")"
@@ -114,7 +119,12 @@ jobs:
           set -euo pipefail
           passed=false
           for i in $(seq 1 240); do
-            curl -fsS "${API_BASE}/api/ivx/agents/certificate" -o /tmp/cert.json
+            code=$(curl -sS -m 25 --retry 2 --retry-all-errors --retry-delay 2 -o /tmp/cert.json -w '%{http_code}' "${API_BASE}/api/ivx/agents/certificate" || true)
+            if [ "$code" != 200 ]; then
+              echo "poll=$i certificate_http=${code:-000} transient; continuing"
+              sleep 10
+              continue
+            fi
             run=$(jq -r '.runId // .certificate.runId // empty' /tmp/cert.json)
             certified=$(jq -r '.certified // .certificate.certified // false' /tmp/cert.json)
             total=$(jq -r '.total // .certificate.total // 0' /tmp/cert.json)
@@ -123,7 +133,7 @@ jobs:
             evidence=$(jq -r '.evidenceVerified // .certificate.evidenceVerified // 0' /tmp/cert.json)
             simulated=$(jq -r '.simulatedRuns // .certificate.simulatedRuns // -1' /tmp/cert.json)
             sha=$(jq -r '.commitSha // .certificate.commitSha // empty' /tmp/cert.json)
-            echo "poll=$i run=${run:-none} certified=$certified total=$total healthy=$healthy real=$real evidence=$evidence simulated=$simulated sha=${sha:-missing}"
+            echo "poll=$i run=${run:-none} expected_run=$RUN_ID certified=$certified total=$total healthy=$healthy real=$real evidence=$evidence simulated=$simulated sha=${sha:-missing}"
             if [ "$run" = "$RUN_ID" ] && [ "$certified" = true ] && [ "$total" = 112 ] && [ "$healthy" = 112 ] && [ "$real" = 112 ] && [ "$evidence" = 112 ] && [ "$simulated" = 0 ] && [ "$sha" = "$GITHUB_SHA" ]; then
               passed=true
               break
