@@ -59,6 +59,17 @@ jobs:
           test "$matched" = "1"
           echo 'exact_sha=PASS'
 
+      - name: Refresh GitHub OIDC immediately before 112 executions
+        shell: bash
+        run: |
+          set -euo pipefail
+          response=$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery")
+          token=$(jq -r '.value // empty' <<<"$response")
+          test -n "$token"
+          echo "::add-mask::$token"
+          echo "IVX_GITHUB_OIDC=$token" >> "$GITHUB_ENV"
+          echo 'github_oidc_refresh=PASS'
+
       - name: Load and validate every registered agent
         shell: bash
         run: |
@@ -108,7 +119,7 @@ jobs:
           jq -s 'sort_by(.agentNumber)' /tmp/ivx112/[0-9]*.json > /tmp/ivx112/results.json
           total=$(jq 'length' /tmp/ivx112/results.json); passed=$(jq '[.[]|select(.passed==true)]|length' /tmp/ivx112/results.json); failed=$(jq '[.[]|select(.passed!=true)]|length' /tmp/ivx112/results.json); evidence=$(jq '[.[]|select((.sourceReference//"")!="" and (.toolResultId//"")!="")]|length' /tmp/ivx112/results.json); unique_agents=$(jq '[.[].agentId]|unique|length' /tmp/ivx112/results.json)
           CERTIFIED=false; if [ "$total" = 112 ] && [ "$passed" = 112 ] && [ "$failed" = 0 ] && [ "$evidence" = 112 ] && [ "$unique_agents" = 112 ]; then CERTIFIED=true; fi
-          jq -n --argjson certified "$CERTIFIED" --arg githubSha "$GITHUB_SHA" --arg workflowRunId "$GITHUB_RUN_ID" --arg certifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson expectedAgents 112 --argjson totalWorkers "$total" --argjson passedWorkers "$passed" --argjson failedWorkers "$failed" --argjson workersWithEvidence "$evidence" --argjson uniqueAgents "$unique_agents" --slurpfile workers /tmp/ivx112/results.json '{marker:"ivx-112-real-agent-runtime-cert-2026-08-29-v6",githubSha:$githubSha,workflowRunId:$workflowRunId,certifiedAt:$certifiedAt,exactSha:true,expectedAgents:$expectedAgents,totalWorkers:$totalWorkers,passedWorkers:$passedWorkers,failedWorkers:$failedWorkers,workersWithEvidence:$workersWithEvidence,uniqueAgents:$uniqueAgents,certified:$certified,workers:$workers[0]}' > qa/evidence/ivx-112-live-ai-worker-cert.json
+          jq -n --argjson certified "$CERTIFIED" --arg githubSha "$GITHUB_SHA" --arg workflowRunId "$GITHUB_RUN_ID" --arg certifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson expectedAgents 112 --argjson totalWorkers "$total" --argjson passedWorkers "$passed" --argjson failedWorkers "$failed" --argjson workersWithEvidence "$evidence" --argjson uniqueAgents "$unique_agents" --slurpfile workers /tmp/ivx112/results.json '{marker:"ivx-112-real-agent-runtime-cert-2026-08-29-v7",githubSha:$githubSha,workflowRunId:$workflowRunId,certifiedAt:$certifiedAt,exactSha:true,expectedAgents:$expectedAgents,totalWorkers:$totalWorkers,passedWorkers:$passedWorkers,failedWorkers:$failedWorkers,workersWithEvidence:$workersWithEvidence,uniqueAgents:$uniqueAgents,certified:$certified,workers:$workers[0]}' > qa/evidence/ivx-112-live-ai-worker-cert.json
           jq '{certified,githubSha,totalWorkers,passedWorkers,failedWorkers,workersWithEvidence,uniqueAgents}' qa/evidence/ivx-112-live-ai-worker-cert.json
           test "$(jq -r '.certified' qa/evidence/ivx-112-live-ai-worker-cert.json)" = true
           echo 'live_112_real_agent_workers=PASS'
