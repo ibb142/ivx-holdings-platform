@@ -9,6 +9,11 @@ on:
       - IVX Enterprise Line-by-Line Quality Audit
       - IVX Enterprise QA
       - IVX Dashboard + IA Chat End-to-End Certificate
+      - IVX Block 1 P0 Certificate
+      - IVX 10/10 Full Certification
+      - IVX Render Live Certificate
+      - IVX 112 Live AI Worker Certificate
+      - E2E Acceptance
     types: [completed]
   workflow_dispatch: {}
 
@@ -35,6 +40,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Acquire scoped GitHub OIDC machine identity
         id: oidc
@@ -99,9 +106,8 @@ jobs:
           echo "level=$level" >> "$GITHUB_OUTPUT"
           echo "action=$action" >> "$GITHUB_OUTPUT"
 
-      - name: Detect failed source jobs
+      - name: Detect failed or stale critical gates on current main
         id: source
-        if: ${{ github.event_name == 'workflow_run' }}
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
@@ -112,53 +118,102 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/jobs?per_page=100" \
-            --jq '.jobs[] | select(.conclusion == "failure") | {id,name,failedSteps:[.steps[]? | select(.conclusion == "failure") | .name]}' \
-            > /tmp/ivx-radar/failed-jobs.jsonl
+          mkdir -p /tmp/ivx-radar
+          : > /tmp/ivx-radar/failed-jobs.jsonl
+          : > /tmp/ivx-radar/critical-gates.jsonl
+          current_sha=$(git rev-parse HEAD)
+          echo "current_sha=$current_sha" >> "$GITHUB_OUTPUT"
+
+          if [ "$GITHUB_EVENT_NAME" = 'workflow_run' ] && [ -n "${SOURCE_RUN_ID:-}" ]; then
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/jobs?per_page=100" \
+              --jq '.jobs[] | select(.conclusion == "failure") | {kind:"source_job_failure",id,name,failedSteps:[.steps[]? | select(.conclusion == "failure") | .name]}' \
+              >> /tmp/ivx-radar/failed-jobs.jsonl
+            jq -n \
+              --arg workflow "${SOURCE_WORKFLOW:-}" \
+              --arg runId "${SOURCE_RUN_ID:-}" \
+              --arg headSha "${SOURCE_HEAD_SHA:-}" \
+              --arg url "${SOURCE_URL:-}" \
+              --arg conclusion "${SOURCE_CONCLUSION:-}" \
+              '{workflow:$workflow,runId:$runId,headSha:$headSha,url:$url,conclusion:$conclusion}' \
+              > /tmp/ivx-radar/source-run.json
+          fi
+
+          critical_workflows=(
+            'Landing 112-Agent Autonomous QA War Room'
+            'IVX Enterprise Line-by-Line Quality Audit'
+            'IVX Enterprise QA'
+            'IVX Dashboard + IA Chat End-to-End Certificate'
+            'IVX Block 1 P0 Certificate'
+            'IVX 10/10 Full Certification'
+            'IVX Render Live Certificate'
+            'IVX 112 Live AI Worker Certificate'
+            'E2E Acceptance'
+          )
+
+          for workflow in "${critical_workflows[@]}"; do
+            run=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=main&head_sha=${current_sha}&per_page=100" \
+              --jq --arg workflow "$workflow" '[.workflow_runs[] | select(.name == $workflow)] | sort_by(.created_at) | reverse | .[0] // empty')
+
+            if [ -z "$run" ]; then
+              jq -n --arg workflow "$workflow" --arg headSha "$current_sha" \
+                '{kind:"missing_current_sha_gate",workflow:$workflow,headSha:$headSha}' >> /tmp/ivx-radar/failed-jobs.jsonl
+              jq -n --arg workflow "$workflow" --arg headSha "$current_sha" \
+                '{workflow:$workflow,headSha:$headSha,status:"missing",conclusion:null}' >> /tmp/ivx-radar/critical-gates.jsonl
+              continue
+            fi
+
+            status=$(printf '%s' "$run" | jq -r '.status // "unknown"')
+            conclusion=$(printf '%s' "$run" | jq -r '.conclusion // ""')
+            run_id=$(printf '%s' "$run" | jq -r '.id')
+            run_url=$(printf '%s' "$run" | jq -r '.html_url')
+            jq -n --arg workflow "$workflow" --arg headSha "$current_sha" --arg status "$status" --arg conclusion "$conclusion" --arg runId "$run_id" --arg url "$run_url" \
+              '{workflow:$workflow,headSha:$headSha,status:$status,conclusion:$conclusion,runId:$runId,url:$url}' >> /tmp/ivx-radar/critical-gates.jsonl
+
+            if [ "$status" != 'completed' ] || [ "$conclusion" != 'success' ]; then
+              jq -n --arg workflow "$workflow" --arg headSha "$current_sha" --arg status "$status" --arg conclusion "$conclusion" --arg runId "$run_id" --arg url "$run_url" \
+                '{kind:"current_sha_gate_not_green",workflow:$workflow,headSha:$headSha,status:$status,conclusion:$conclusion,runId:$runId,url:$url}' >> /tmp/ivx-radar/failed-jobs.jsonl
+            fi
+          done
+
           count=$(wc -l < /tmp/ivx-radar/failed-jobs.jsonl | tr -d ' ')
           echo "failed_count=$count" >> "$GITHUB_OUTPUT"
-          jq -n \
-            --arg workflow "$SOURCE_WORKFLOW" \
-            --arg runId "$SOURCE_RUN_ID" \
-            --arg headSha "$SOURCE_HEAD_SHA" \
-            --arg url "$SOURCE_URL" \
-            --arg conclusion "$SOURCE_CONCLUSION" \
-            '{workflow:$workflow,runId:$runId,headSha:$headSha,url:$url,conclusion:$conclusion}' \
-            > /tmp/ivx-radar/source-run.json
-          cat /tmp/ivx-radar/source-run.json
 
-          # Owner Gate is now reserved for irreversible/destructive or privileged actions only.
-          # Safe operational infrastructure (deploy, rollback, Render/CloudFront health recovery,
-          # restarting workers, exact-SHA repair) is autonomous and must not be blocked.
           if grep -Eiq 'bank|banking|payment|payout|stripe|wire transfer|beneficiary|delete member|delete user|remove member|remove user|truncate|drop table|drop database|database destructive|destructive migration|erase data|wipe data|secret rotation|rotate secret|reveal secret|credential rotation|owner permission|admin permission|change owner|change admin|iam policy write|iam delete|root account|security policy weaken|disable mfa|disable auth|legal|compliance' /tmp/ivx-radar/failed-jobs.jsonl; then
             echo 'owner_gate_required=true' >> "$GITHUB_OUTPUT"
           else
             echo 'owner_gate_required=false' >> "$GITHUB_OUTPUT"
           fi
 
+          jq -s '.' /tmp/ivx-radar/critical-gates.jsonl > /tmp/ivx-radar/critical-gates.json
+          jq -s '.' /tmp/ivx-radar/failed-jobs.jsonl > /tmp/ivx-radar/open-failures.json
+          cat /tmp/ivx-radar/critical-gates.json
+          cat /tmp/ivx-radar/open-failures.json
+
       - name: Owner Gate for destructive or privileged source failure
-        if: ${{ github.event_name == 'workflow_run' && steps.source.outputs.owner_gate_required == 'true' }}
+        if: ${{ steps.source.outputs.owner_gate_required == 'true' }}
         run: |
           echo 'OWNER_GATE_REQUIRED: destructive data, money movement, privileged identity, secret rotation, or security-policy change.'
           exit 1
 
       - name: Build predictive mission
-        if: ${{ steps.predictive.outputs.action != 'observe' || (github.event_name == 'workflow_run' && steps.source.outputs.failed_count != '0' && steps.source.outputs.owner_gate_required != 'true') }}
+        if: ${{ steps.predictive.outputs.action != 'observe' || (steps.source.outputs.failed_count != '0' && steps.source.outputs.owner_gate_required != 'true') }}
         shell: bash
         run: |
           set -euo pipefail
           assessment=$(cat /tmp/ivx-radar/predictive-assessment.json)
           source_failures='[]'
           source_run='null'
-          if [ -s /tmp/ivx-radar/failed-jobs.jsonl ]; then source_failures=$(jq -s -c '.' /tmp/ivx-radar/failed-jobs.jsonl); fi
+          critical_gates='[]'
+          if [ -s /tmp/ivx-radar/open-failures.json ]; then source_failures=$(jq -c '.' /tmp/ivx-radar/open-failures.json); fi
           if [ -s /tmp/ivx-radar/source-run.json ]; then source_run=$(jq -c '.' /tmp/ivx-radar/source-run.json); fi
-          jq -n --arg event "$GITHUB_EVENT_NAME" --argjson assessment "$assessment" --argjson failures "$source_failures" --argjson sourceRun "$source_run" \
-            '{event:$event,predictive:$assessment,sourceRun:$sourceRun,sourceFailures:$failures,policy:{failClosed:true,ownerGate:"destructive_or_privileged_only",safeOperationalDeploy:true,maxRepairAttempts:3,neverWeakenQuality:true,rerunAfterRepair:true}}' \
+          if [ -s /tmp/ivx-radar/critical-gates.json ]; then critical_gates=$(jq -c '.' /tmp/ivx-radar/critical-gates.json); fi
+          jq -n --arg event "$GITHUB_EVENT_NAME" --arg currentSha "${{ steps.source.outputs.current_sha }}" --argjson assessment "$assessment" --argjson failures "$source_failures" --argjson sourceRun "$source_run" --argjson criticalGates "$critical_gates" \
+            '{event:$event,currentSha:$currentSha,predictive:$assessment,sourceRun:$sourceRun,criticalGates:$criticalGates,sourceFailures:$failures,policy:{failClosed:true,ownerGate:"destructive_or_privileged_only",safeOperationalDeploy:true,continuousCurrentShaAudit:true,closeOnlyWhenAllCriticalGatesGreen:true,maxRepairAttemptsPerCycle:3,neverWeakenQuality:true,rerunAfterRepair:true}}' \
             > /tmp/ivx-radar/mission.json
           cat /tmp/ivx-radar/mission.json
 
-      - name: Resume bounded 112-agent campaign when self-heal is required
-        if: ${{ steps.source.outputs.owner_gate_required != 'true' && (steps.predictive.outputs.action == 'self_heal' || (github.event_name == 'workflow_run' && steps.source.outputs.failed_count != '0')) }}
+      - name: Resume bounded 112-agent campaign when recovery is required
+        if: ${{ steps.source.outputs.owner_gate_required != 'true' && (steps.predictive.outputs.action == 'self_heal' || steps.source.outputs.failed_count != '0') }}
         env:
           IVX_GITHUB_OIDC: ${{ steps.oidc.outputs.token }}
         shell: bash
@@ -176,8 +231,8 @@ jobs:
           test "$code" = 200
           test "$(jq -r '.ok // false' /tmp/ivx-radar/resume.json)" = true
 
-      - name: Delegate predictive preflight or safe self-heal
-        if: ${{ steps.predictive.outputs.action != 'observe' || (github.event_name == 'workflow_run' && steps.source.outputs.failed_count != '0' && steps.source.outputs.owner_gate_required != 'true') }}
+      - name: Delegate predictive preflight or closed-loop self-heal
+        if: ${{ steps.predictive.outputs.action != 'observe' || (steps.source.outputs.failed_count != '0' && steps.source.outputs.owner_gate_required != 'true') }}
         env:
           IVX_GITHUB_OIDC: ${{ steps.oidc.outputs.token }}
         shell: bash
@@ -193,9 +248,9 @@ jobs:
             approve_patch=true
             approve_deploy=true
           fi
-          goal="IVX AUTONOMOUS CLOSED-LOOP RECOVERY. Treat subscribed workflow failures as actionable repair events. Diagnose exact failed job/step and source SHA. For safe operational defects, repair code/test harness, create/update the repair PR, merge through normal branch protections, deploy the exact main SHA, run rollback if health regresses, resume 112 agents, and rerun the original certificate until green. Safe operational infrastructure includes Render/CloudFront deploy, exact-SHA parity, service restart, worker restart, health recovery, rollback, QA, APK build, and certificate reruns. Owner Gate is REQUIRED only for money movement/banking, destructive database or member/user deletion, privileged owner/admin changes, secret creation/rotation/reveal, IAM policy mutation/deletion, security-policy weakening, legal/compliance actions, or similarly irreversible privileged changes. Never weaken tests or assertions to manufacture green. Evidence required. Mission: ${mission}"
+          goal="IVX AUTONOMOUS CLOSED-LOOP RECOVERY. Current main SHA is ${{ steps.source.outputs.current_sha }}. Treat every missing, stale, in-progress-too-long, cancelled, skipped, or failed critical gate on the current main SHA as an OPEN mission. Diagnose the exact failed job/step. For safe operational defects, repair code/test harness, create/update the repair PR, merge through normal branch protections, deploy the exact main SHA, roll back if health regresses, resume 112 agents, and rerun every affected certificate. DO NOT close the mission because code was changed, a PR opened, a build started, or a deploy triggered. Close only when all listed critical gates for the current main SHA are completed with conclusion=success and production exact-SHA parity is proven by the certification chain. Safe operational infrastructure includes Render/CloudFront deploy, exact-SHA parity, service restart, worker restart, health recovery, rollback, QA, APK build, and certificate reruns. Owner Gate is REQUIRED only for money movement/banking, destructive database or member/user deletion, privileged owner/admin changes, secret creation/rotation/reveal, IAM policy mutation/deletion, security-policy weakening, legal/compliance actions, or similarly irreversible privileged changes. Never weaken tests or assertions to manufacture green. Evidence required. Mission: ${mission}"
           payload=$(jq -n --arg goal "$goal" --arg execution "$execution" --argjson approvePatch "$approve_patch" --argjson approveGitDeploy "$approve_deploy" \
-            '{goal:$goal,executionMode:$execution,templateMode:"BUG_FIX",approvePatch:$approvePatch,approveGitDeploy:$approveGitDeploy,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Closed-loop diagnosis, safe repair, focused validation, repair PR, exact-main deploy/rollback as needed, 112-agent resume, and certificate rerun with destructive-action Owner Gates preserved.",rollbackOption:"Automatically roll back safe operational deploy if post-deploy health or certificate regresses; require Owner Gate for destructive/privileged rollback side effects.",filesAffected:["workflow-failure-source","certificate-harness","runtime-code-if-required","safe-operational-deploy"]}')
+            '{goal:$goal,executionMode:$execution,templateMode:"BUG_FIX",approvePatch:$approvePatch,approveGitDeploy:$approveGitDeploy,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Closed-loop diagnosis, safe repair, focused validation, repair PR, exact-main deploy/rollback as needed, 112-agent resume, and repeated certificate reruns until every current-main critical gate is green.",rollbackOption:"Automatically roll back safe operational deploy if post-deploy health or certificate regresses; require Owner Gate for destructive/privileged rollback side effects.",filesAffected:["workflow-failure-source","certificate-harness","runtime-code-if-required","safe-operational-deploy","current-main-critical-gates"]}')
           args=(-sS --max-time 60 -o /tmp/ivx-radar/job-start.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}")
           if [ -n "${SYSTEM_KEY:-}" ]; then
             echo "::add-mask::$SYSTEM_KEY"
@@ -205,6 +260,19 @@ jobs:
           case "$http" in 200|202|409) ;; *) cat /tmp/ivx-radar/job-start.json; exit 1;; esac
           jq -e '.jobId // .activeJobId // .job.jobId' /tmp/ivx-radar/job-start.json >/dev/null
           cat /tmp/ivx-radar/job-start.json
+
+      - name: Assert Autonomous does not silently close red current-main gates
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          open_count="${{ steps.source.outputs.failed_count }}"
+          owner_gate="${{ steps.source.outputs.owner_gate_required }}"
+          if [ -z "$open_count" ]; then open_count=0; fi
+          jq -n --arg currentSha "${{ steps.source.outputs.current_sha }}" --argjson openCount "$open_count" --arg ownerGate "$owner_gate" \
+            '{currentSha:$currentSha,openCriticalGates:$openCount,ownerGateRequired:($ownerGate=="true"),missionState:(if $openCount==0 then "green" elif $ownerGate=="true" then "owner_gate" else "recovery_open" end)}' \
+            > /tmp/ivx-radar/closed-loop-state.json
+          cat /tmp/ivx-radar/closed-loop-state.json
 
       - name: Persist predictive radar evidence
         if: always()
