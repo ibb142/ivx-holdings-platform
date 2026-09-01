@@ -17,13 +17,15 @@ jobs:
     timeout-minutes: 45
     env:
       API_BASE: https://api.ivxholding.com
+      SUPABASE_URL: https://kvclcdjmjghndxsngfzb.supabase.co
+      SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2Y2xjZGptamdobmR4c25nZnpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxOTQwMjcsImV4cCI6MjA4ODc3MDAyN30.OLDwa21VHQNs151AD-8k--_HigQ2d-N7yJfFn5UeNPk
+      OWNER_EMAIL: iperez4242@gmail.com
       OWNER_PASSWORD_S1: ${{ secrets.OWNER_NEW_PASSWORD }}
       OWNER_PASSWORD_S2: ${{ secrets.OWNER_PASSWORD }}
       OWNER_PASSWORD_S3: ${{ secrets.IVX_OWNER_PASSWORD }}
       OWNER_PASSWORD_S4: ${{ secrets.IVX_OWNER_NEW_PASSWORD }}
       OWNER_PASSWORD_S5: ${{ secrets.OWNER_LOGIN_PASSWORD }}
       OWNER_PASSWORD_S6: ${{ secrets.IVX_OWNER_LOGIN_PASSWORD }}
-      IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
@@ -44,17 +46,27 @@ jobs:
           echo 'No owner password GitHub secret alias is populated.'
           exit 1
 
+      - name: Authenticate real owner session with Supabase
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload=$(jq -n --arg email "$OWNER_EMAIL" --arg password "$OWNER_PASSWORD_BIND_VALUE" '{email:$email,password:$password}')
+          code=$(curl -sS --max-time 30 -o /tmp/owner-login.json -w '%{http_code}' -X POST "${SUPABASE_URL}/auth/v1/token?grant_type=password" -H "apikey: ${SUPABASE_ANON_KEY}" -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" -H 'content-type: application/json' --data "$payload" || true)
+          echo "owner_supabase_password_grant http=$code"
+          if [ "$code" != 200 ]; then jq '{error,error_description,msg,message}' /tmp/owner-login.json || true; exit 1; fi
+          token=$(jq -r '.access_token // empty' /tmp/owner-login.json)
+          test -n "$token"
+          echo "::add-mask::$token"
+          echo "OWNER_ACCESS_TOKEN=$token" >> "$GITHUB_ENV"
+          echo 'owner_supabase_password_grant=PASS'
+
       - name: Bind owner password through backend Render runtime tool
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${OWNER_PASSWORD_BIND_VALUE:-}"
-          test -n "${IVX_AI_SYSTEM_SECRET:-}"
-          echo "::add-mask::$OWNER_PASSWORD_BIND_VALUE"
-          echo "::add-mask::$IVX_AI_SYSTEM_SECRET"
           for key in OWNER_NEW_PASSWORD IVX_OWNER_PASSWORD; do
             payload=$(jq -n --arg key "$key" --arg value "$OWNER_PASSWORD_BIND_VALUE" '{action:"render_upsert_env_var",input:{key:$key,value:$value},confirm:true,confirmText:"CONFIRM_IVX_RENDER_SERVICE_UPDATE",reason:"Owner-authorized restoration of the existing owner password binding for Block 1 certification."}')
-            code=$(curl -sS --max-time 60 -o "/tmp/${key}.json" -w '%{http_code}' -X POST "${API_BASE}/api/ivx/developer-deploy/action" -H 'content-type: application/json' -H "X-IVX-System-Key: ${IVX_AI_SYSTEM_SECRET}" --data "$payload" || true)
+            code=$(curl -sS --max-time 60 -o "/tmp/${key}.json" -w '%{http_code}' -X POST "${API_BASE}/api/ivx/developer-deploy/action" -H 'content-type: application/json' -H "Authorization: Bearer ${OWNER_ACCESS_TOKEN}" --data "$payload" || true)
             echo "render_upsert_env_var key=$key http=$code"
             jq 'del(.result.value,.value,.input)' "/tmp/${key}.json" || cat "/tmp/${key}.json"
             test "$code" = 200
@@ -67,7 +79,7 @@ jobs:
         run: |
           set -euo pipefail
           payload=$(jq -n '{action:"render_trigger_deploy",input:{clearCache:false},confirm:true,confirmText:"CONFIRM_IVX_RENDER_DEPLOY",reason:"Deploy the owner password binding and recertify current main."}')
-          code=$(curl -sS --max-time 60 -o /tmp/render-deploy.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/developer-deploy/action" -H 'content-type: application/json' -H "X-IVX-System-Key: ${IVX_AI_SYSTEM_SECRET}" --data "$payload" || true)
+          code=$(curl -sS --max-time 60 -o /tmp/render-deploy.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/developer-deploy/action" -H 'content-type: application/json' -H "Authorization: Bearer ${OWNER_ACCESS_TOKEN}" --data "$payload" || true)
           echo "render_trigger_deploy http=$code"
           cat /tmp/render-deploy.json
           test "$code" = 200
