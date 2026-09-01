@@ -83,33 +83,69 @@ function Dashboard(){
 
   useEffect(()=>{
     let cancelled=false;
-    const connect=async()=>{
+    let reconnectAttempt=0;
+
+    function scheduleReconnect(){
+      if(cancelled||reconnectRef.current)return;
+      reconnectAttempt+=1;
+      const delay=Math.min(10000,RECONNECT_MS*Math.max(1,reconnectAttempt));
+      setStreamMeta((m)=>({...m,state:'RECONNECTING'}));
+      reconnectRef.current=setTimeout(()=>{
+        reconnectRef.current=null;
+        void connect();
+      },delay);
+    }
+
+    async function connect(){
       if(cancelled)return;
+      streamCloseRef.current?.();
+      streamCloseRef.current=null;
       setStreamMeta((m)=>({...m,state:m.sequence?'RECONNECTING':'CONNECTING'}));
       try{
         const stream=await openAutonomousDashboardStream({
           range,
-          onSnapshot:(dashboard,meta)=>{if(cancelled)return;setStreamed(dashboard);setStreamMeta(meta);setStreamError(null);},
-          onState:(meta)=>{if(!cancelled)setStreamMeta(meta);},
-          onError:(error)=>{if(!cancelled)setStreamError(error.message);},
+          onSnapshot:(dashboard,meta)=>{
+            if(cancelled)return;
+            reconnectAttempt=0;
+            setStreamed(dashboard);
+            setStreamMeta(meta);
+            setStreamError(null);
+          },
+          onState:(meta)=>{
+            if(cancelled)return;
+            setStreamMeta(meta);
+            if(meta.state==='RECONNECTING'||meta.state==='ERROR')scheduleReconnect();
+          },
+          onError:(error)=>{
+            if(cancelled)return;
+            setStreamError(error.message);
+            scheduleReconnect();
+          },
         });
         streamCloseRef.current=stream.close;
       }catch(error){
         if(cancelled)return;
         setStreamError(error instanceof Error?error.message:String(error));
         setStreamMeta((m)=>({...m,state:'ERROR'}));
-        reconnectRef.current=setTimeout(()=>{void connect();},RECONNECT_MS);
+        scheduleReconnect();
       }
-    };
+    }
+
     void connect();
-    return()=>{cancelled=true;if(reconnectRef.current)clearTimeout(reconnectRef.current);streamCloseRef.current?.();streamCloseRef.current=null;};
+    return()=>{
+      cancelled=true;
+      if(reconnectRef.current)clearTimeout(reconnectRef.current);
+      reconnectRef.current=null;
+      streamCloseRef.current?.();
+      streamCloseRef.current=null;
+    };
   },[range]);
 
   useEffect(()=>{
     if(streamMeta.state!=='RECONNECTING'&&streamMeta.state!=='ERROR')return;
     const t=setTimeout(()=>{void query.refetch();},250);
     return()=>clearTimeout(t);
-  },[streamMeta.state,query]);
+  },[streamMeta.state]);
 
   const data=streamed??query.data??null;
   const agents=useMemo(()=>{const rows=data?.agents??[];const q=search.trim().toLowerCase();return q?rows.filter(a=>String(a.agentNumber)===q||a.agentId.toLowerCase().includes(q)||a.name.toLowerCase().includes(q)||a.department.toLowerCase().includes(q)):rows;},[data?.agents,search]);
