@@ -1,0 +1,23 @@
+name: IVX Autonomous Scheduler Push Kick
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  kick-autonomous-scheduler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch Autonomous regression scheduler on current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run ivx-autonomous-regression-scheduler.yml --repo "$GITHUB_REPOSITORY" --ref main
+          echo "autonomous_scheduler_dispatch=PASS source_sha=$GITHUB_SHA"
