@@ -194,7 +194,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat > /tmp/dashboard-ws-cert.mjs <<'JS'
+          cat > dashboard-ws-cert.mjs <<'JS'
           import WebSocket from 'ws';
           const token=process.env.OWNER_TOKEN, expectedSha=process.env.GITHUB_SHA;
           if(!token) throw new Error('OWNER_TOKEN missing');
@@ -229,7 +229,8 @@ jobs:
           ws.on('close',()=>{if(snapshots.length>=2)process.exit(0)});
           ws.on('error',e=>{console.error(e);process.exit(3)});
           JS
-          node /tmp/dashboard-ws-cert.mjs | tee /tmp/dashboard-ws-proof.json
+          node ./dashboard-ws-cert.mjs | tee /tmp/dashboard-ws-proof.json
+          rm -f dashboard-ws-cert.mjs
           grep -q '"ok": true' /tmp/dashboard-ws-proof.json
           echo 'authenticated_websocket_112_stream=PASS'
 
@@ -237,7 +238,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat > /tmp/dashboard-ws-unauth.mjs <<'JS'
+          cat > dashboard-ws-unauth.mjs <<'JS'
           import WebSocket from 'ws';
           const ws=new WebSocket('wss://api.ivxholding.com/api/ivx/autonomous-dashboard-stream'); let hello=false;
           const timer=setTimeout(()=>{console.error('unauth WS did not close');process.exit(2)},15000);
@@ -245,7 +246,8 @@ jobs:
           ws.on('close',code=>{clearTimeout(timer);if(hello&&code===4401){console.log('unauth_websocket_fail_closed=PASS');process.exit(0)}console.error({hello,code});process.exit(3)});
           ws.on('error',()=>{});
           JS
-          node /tmp/dashboard-ws-unauth.mjs
+          node ./dashboard-ws-unauth.mjs
+          rm -f dashboard-ws-unauth.mjs
 
       - name: Build realtime dashboard exact-SHA certificate
         shell: bash
