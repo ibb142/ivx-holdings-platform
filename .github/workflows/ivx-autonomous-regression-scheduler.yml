@@ -101,7 +101,7 @@ jobs:
           severity=GREEN
           if [ "$regression" = true ]; then
             if [ "$red" -ge 5 ]; then team_size=112; severity=CRITICAL;
-            elif [ "$red" -ge 3 ]; then team_size=48; severity=HIGH;
+            elif [ "$red" -ge 3 ]; then team_size=112; severity=HIGH;
             else team_size=24; severity=REGRESSION;
             fi
           fi
@@ -160,7 +160,7 @@ jobs:
             curl "${args[@]}" --data "$payload" "${API_BASE}/api/ivx/agents/${agent}/run" || true
           }
           while IFS= read -r agent; do
-            payload=$(jq -n --arg sha "$CURRENT_SHA" --arg mission "$(cat /tmp/ivx-regression/mission-calendar.json)" '{taskType:"enterprise_regression_recovery",payload:{surface:"landing",currentSha:$sha,targetScore:"10/10",instruction:"Restore the certified surface to 10/10. Diagnose real current-SHA regressions, implement only evidence-backed safe fixes, validate, deploy exact main SHA, and recertify. Do not close on PR/build/deploy alone.",missionCalendar:($mission|fromjson)}}')
+            payload=$(jq -n --arg sha "$CURRENT_SHA" --arg mission "$(cat /tmp/ivx-regression/mission-calendar.json)" '{taskType:"audit",payload:{missionType:"enterprise_regression_recovery",surface:"landing",currentSha:$sha,targetScore:"10/10",instruction:"Perform your scoped enterprise audit/diagnostic responsibility against the current-SHA Landing regression. Produce real evidence and actionable findings for the Senior Developer repair owner. Do not claim a fix unless verified by your allowed tools and contract.",missionCalendar:($mission|fromjson)}}')
             code=$(run_agent "$agent" "$payload" "${SYSTEM_KEY_PRIMARY:-}")
             if { [ "$code" = 401 ] || [ "$code" = 403 ]; } && [ -n "${SYSTEM_KEY_SECONDARY:-}" ] && [ "${SYSTEM_KEY_SECONDARY}" != "${SYSTEM_KEY_PRIMARY:-}" ]; then
               code=$(run_agent "$agent" "$payload" "$SYSTEM_KEY_SECONDARY")
@@ -169,6 +169,9 @@ jobs:
           done < /tmp/ivx-regression/team.txt
           jq -s '.' /tmp/ivx-regression/team-results.jsonl > /tmp/ivx-regression/team-results.json
           cat /tmp/ivx-regression/team-results.json
+          accepted=$(jq '[.[] | select(.http == "200" and .response.ok == true and .response.runRecord != null)] | length' /tmp/ivx-regression/team-results.json)
+          echo "selected_agents=$selected accepted_agent_runs=$accepted"
+          test "$accepted" -eq "$selected"
 
       - name: Delegate closed-loop repair owner to Senior Developer Worker
         if: ${{ steps.audit.outputs.regression == 'true' }}
@@ -181,8 +184,8 @@ jobs:
           set -euo pipefail
           [ -n "${SYSTEM_KEY_PRIMARY:-}" ] && echo "::add-mask::$SYSTEM_KEY_PRIMARY"
           [ -n "${SYSTEM_KEY_SECONDARY:-}" ] && echo "::add-mask::$SYSTEM_KEY_SECONDARY"
-          goal="ENTERPRISE REGRESSION RECOVERY. Landing has a protected historical 10/10 baseline and current main ${CURRENT_SHA} has one or more non-green certification gates. A ${TEAM_SIZE}-agent recovery team has been scheduled and started. Own the mission end-to-end: diagnose real failures, repair safe code, PR/merge, deploy exact main SHA, rerun affected E2E/certificates, and keep the mission open until Landing is restored to 10/10 on the current SHA. Never manufacture green and never close on PR/build/deploy alone."
-          payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Use the scheduled recovery team and closed-loop Autonomous policy to restore current-main 10/10 certification.",rollbackOption:"Rollback safe operational deploys automatically if health regresses; never perform destructive rollback without Owner Gate.",filesAffected:["landing-regression","current-sha-certification","safe-operational-deploy"]}')
+          goal="ENTERPRISE REGRESSION RECOVERY. Landing has a protected historical 10/10 baseline and current main ${CURRENT_SHA} has one or more non-green certification gates. A ${TEAM_SIZE}-agent recovery audit team has been successfully started with accepted run records. Own the repair mission end-to-end: use their evidence, diagnose real failures, repair safe code, PR/merge, deploy exact main SHA, rerun affected E2E/certificates, and keep the mission open until Landing is restored to 10/10 on the current SHA. Never manufacture green and never close on PR/build/deploy alone."
+          payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Use the scheduled recovery audit team and closed-loop Autonomous policy to restore current-main 10/10 certification.",rollbackOption:"Rollback safe operational deploys automatically if health regresses; never perform destructive rollback without Owner Gate.",filesAffected:["landing-regression","current-sha-certification","safe-operational-deploy"]}')
           call_worker() {
             key="$1"
             args=(-sS --max-time 60 -o /tmp/ivx-regression/senior-worker.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/senior-developer/worker/jobs" -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}")
