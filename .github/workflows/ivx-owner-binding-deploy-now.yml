@@ -17,7 +17,12 @@ jobs:
     timeout-minutes: 45
     env:
       API_BASE: https://api.ivxholding.com
-      OWNER_NEW_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD }}
+      OWNER_PASSWORD_S1: ${{ secrets.OWNER_NEW_PASSWORD }}
+      OWNER_PASSWORD_S2: ${{ secrets.OWNER_PASSWORD }}
+      OWNER_PASSWORD_S3: ${{ secrets.IVX_OWNER_PASSWORD }}
+      OWNER_PASSWORD_S4: ${{ secrets.IVX_OWNER_NEW_PASSWORD }}
+      OWNER_PASSWORD_S5: ${{ secrets.OWNER_LOGIN_PASSWORD }}
+      OWNER_PASSWORD_S6: ${{ secrets.IVX_OWNER_LOGIN_PASSWORD }}
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       IVX_RENDER_API_KEY: ${{ secrets.IVX_RENDER_API_KEY }}
       RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
@@ -30,6 +35,22 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve owner password alias without exposing it
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in OWNER_PASSWORD_S1 OWNER_PASSWORD_S2 OWNER_PASSWORD_S3 OWNER_PASSWORD_S4 OWNER_PASSWORD_S5 OWNER_PASSWORD_S6; do
+            value="${!name:-}"
+            if [ -n "$value" ]; then
+              echo "::add-mask::$value"
+              echo "OWNER_PASSWORD_BIND_VALUE=$value" >> "$GITHUB_ENV"
+              echo "owner_password_secret_source=$name"
+              exit 0
+            fi
+          done
+          echo 'No owner password GitHub secret alias is populated.'
+          exit 1
 
       - name: Resolve Render credentials without exposing them
         shell: bash
@@ -50,7 +71,7 @@ jobs:
           const service = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
           if (!base || !service) throw new Error('Supabase recovery bindings missing');
           const candidates = [process.env.IVX_OWNER_VARIABLES_ENCRYPTION_KEY, process.env.APP_SECRET, process.env.JWT_SECRET].filter(Boolean);
-          if (!candidates.length) throw new Error('Owner variable decrypt key missing');
+          candidates.push(crypto.createHash('sha256').update(`${base}:${service}`,'utf8').digest('hex'));
           const keyCandidates = [...new Set(candidates)].map(s => crypto.createHash('sha256').update(s, 'utf8').digest());
           const aad = Buffer.from('ivx_owner_variables:v1', 'utf8');
           const res = await fetch(`${base}/rest/v1/ivx_owner_variables?select=name,encrypted_value,value_iv,value_tag,value_hash&name=in.%28RENDER_API_KEY%2CRENDER_SERVICE_ID%29`, {headers:{apikey:service,Authorization:`Bearer ${service}`}});
@@ -72,24 +93,24 @@ jobs:
           console.log('render_credential_source=owner_variables_store');
           NODE
 
-      - name: Bind OWNER_NEW_PASSWORD to Render merge-safe
+      - name: Bind owner password to Render merge-safe
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${OWNER_NEW_PASSWORD:-}"
-          echo "::add-mask::$OWNER_NEW_PASSWORD"
+          test -n "${OWNER_PASSWORD_BIND_VALUE:-}"
+          echo "::add-mask::$OWNER_PASSWORD_BIND_VALUE"
           echo "::add-mask::$RENDER_KEY"
           env_url="https://api.render.com/v1/services/${RENDER_SID}/env-vars"
           curl -fsS "$env_url" -H "Authorization: Bearer ${RENDER_KEY}" -H 'Accept: application/json' -o /tmp/render-env.json
-          jq --arg pwd "$OWNER_NEW_PASSWORD" '
+          jq --arg pwd "$OWNER_PASSWORD_BIND_VALUE" '
             map(.envVar // .) |
             map({key:.key,value:(.value // "")}) |
-            (map(select(.key != "OWNER_NEW_PASSWORD")) + [{key:"OWNER_NEW_PASSWORD",value:$pwd}])
+            (map(select(.key != "OWNER_NEW_PASSWORD" and .key != "IVX_OWNER_PASSWORD")) + [{key:"OWNER_NEW_PASSWORD",value:$pwd},{key:"IVX_OWNER_PASSWORD",value:$pwd}])
           ' /tmp/render-env.json > /tmp/render-env-put.json
           curl -fsS -X PUT "$env_url" -H "Authorization: Bearer ${RENDER_KEY}" -H 'Accept: application/json' -H 'Content-Type: application/json' --data-binary @/tmp/render-env-put.json -o /tmp/render-env-put-response.json
           curl -fsS "$env_url" -H "Authorization: Bearer ${RENDER_KEY}" -H 'Accept: application/json' -o /tmp/render-env-verify.json
-          present=$(jq --arg pwd "$OWNER_NEW_PASSWORD" '[.[] | (.envVar // .) | select(.key=="OWNER_NEW_PASSWORD" and .value==$pwd)] | length' /tmp/render-env-verify.json)
-          test "$present" = 1
+          present=$(jq --arg pwd "$OWNER_PASSWORD_BIND_VALUE" '[.[] | (.envVar // .) | select((.key=="OWNER_NEW_PASSWORD" or .key=="IVX_OWNER_PASSWORD") and .value==$pwd)] | length' /tmp/render-env-verify.json)
+          test "$present" -ge 2
           echo 'owner_password_binding_sync=PASS'
 
       - name: Trigger exact-SHA Render deployment
@@ -139,7 +160,8 @@ jobs:
         run: |
           set -euo pipefail
           for i in $(seq 1 120); do
-            run=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=main&head_sha=${GITHUB_SHA}&per_page=100" --jq '[.workflow_runs[] | select(.name=="IVX Block 1 P0 Certificate")] | sort_by(.created_at) | reverse | .[0] // empty')
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=main&head_sha=${GITHUB_SHA}&per_page=100" > /tmp/runs.json
+            run=$(jq -c '[.workflow_runs[] | select(.name=="IVX Block 1 P0 Certificate")] | sort_by(.created_at) | reverse | .[0] // empty' /tmp/runs.json)
             if [ -n "$run" ]; then
               status=$(printf '%s' "$run" | jq -r '.status'); conclusion=$(printf '%s' "$run" | jq -r '.conclusion // ""'); id=$(printf '%s' "$run" | jq -r '.id');
               echo "block1 poll=$i run=$id status=$status conclusion=${conclusion:-pending}"
