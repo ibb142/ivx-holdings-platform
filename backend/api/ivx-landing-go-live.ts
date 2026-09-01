@@ -10,7 +10,15 @@
 import { summarizeAnalytics } from '../services/ivx-platform-modules-store';
 import { getRawOwnerVariableValue, inspectIVXOwnerVariableRuntimeReadiness } from './ivx-owner-variables';
 
-const GO_LIVE_TOKEN = 'IVX_LANDING_GO_LIVE_2026';
+function readEnv(name: string): string {
+  const v = process.env[name];
+  return typeof v === 'string' ? v.trim() : '';
+}
+
+// Fail-closed: the go-live confirmation passphrase is configured via env, never hardcoded.
+function goLiveConfirmToken(): string {
+  return readEnv('IVX_LANDING_GO_LIVE_CONFIRM');
+}
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -23,11 +31,6 @@ function json(data: unknown, status = 200): Response {
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
   });
-}
-
-function readEnv(name: string): string {
-  const v = process.env[name];
-  return typeof v === 'string' ? v.trim() : '';
 }
 
 async function getSB() {
@@ -71,11 +74,19 @@ export async function handleLandingGoLive(request: Request): Promise<Response> {
   } = {};
   try { body = await request.json() as typeof body; } catch { /* allow empty */ }
 
-  if (body.confirm !== GO_LIVE_TOKEN) {
+  const goLiveToken = goLiveConfirmToken();
+  if (!goLiveToken) {
+    return json({
+      ok: false,
+      error: 'Go-live confirmation token not configured — set IVX_LANDING_GO_LIVE_CONFIRM in the environment.',
+      timestamp,
+    }, 503);
+  }
+
+  if (body.confirm !== goLiveToken) {
     return json({
       ok: false,
       error: 'Invalid confirmation token.',
-      expected: 'Use {"confirm":"IVX_LANDING_GO_LIVE_2026"}',
       timestamp,
     }, 400);
   }

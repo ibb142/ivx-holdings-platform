@@ -5,8 +5,13 @@ const SHOTS = 'screenshots/qa-chat-real-proof-2026-07-05';
 fs.mkdirSync(SHOTS, { recursive: true });
 const exec = '/home/user/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome';
 
-const EMAIL = 'iperez4242@gmail.com';
-const PASSWORD = 'X146corp@1x146corp$$1';
+// Credentials come from the environment — never hardcode them (fail closed).
+const EMAIL = process.env.IVX_OWNER_EMAIL?.trim() ?? '';
+const PASSWORD = process.env.IVX_OWNER_PASSWORD?.trim() ?? '';
+if (!EMAIL || !PASSWORD) {
+  console.error('BLOCKED: set IVX_OWNER_EMAIL and IVX_OWNER_PASSWORD in the environment. No hardcoded credentials are allowed in this repository.');
+  process.exit(1);
+}
 
 async function shootChatRoom(name, width, height) {
   const browser = await chromium.launch({

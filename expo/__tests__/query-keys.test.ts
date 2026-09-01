@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, test } from 'bun:test';
 import { queryKeys } from '../lib/query-keys';
 

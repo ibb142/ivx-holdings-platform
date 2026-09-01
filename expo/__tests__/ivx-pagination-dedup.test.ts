@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, test } from 'bun:test';
 
 // Test the progressive list deduplication logic without React/React Query deps

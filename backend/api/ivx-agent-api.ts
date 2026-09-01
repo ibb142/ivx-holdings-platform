@@ -97,6 +97,11 @@ import {
 
 import { resolveActiveIVXSystemSecret } from '../services/ivx-system-secret';
 import { verifyIVXGitHubActionsOIDCRequest } from '../services/ivx-github-actions-oidc';
+import {
+  runRealEngineeringCycle,
+  getFleetEngineeringMetrics,
+  IVX_REAL_ENGINEERING_CYCLE_MARKER,
+} from '../services/ivx-agent-real-engineering-cycle';
 
 async function ownerAuthorized(c: any, body: Record<string, unknown> = {}): Promise<boolean> {
   const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';
@@ -198,6 +203,13 @@ export function registerAgentRoutes(app: Hono): void {
     return c.json({ ok: result.ok, marker: IVX_AGENT_API_MARKER, workflow: REAL_EXECUTION_WORKFLOW_NAME, runId: result.runId, error: result.error }, result.ok ? 200 : 500);
   });
 
+  // REAL-WORK mandate: honest fleet metrics derived from durable task-engine
+  // records only — productive minutes come from real evidence-backed spans.
+  app.get('/api/ivx/agents/engineering-fleet/metrics', async (c) => {
+    const metrics = await getFleetEngineeringMetrics();
+    return c.json({ ok: true, ...metrics });
+  });
+
   app.get('/api/ivx/agents/:agentId', (c) => {
     const agentId = c.req.param('agentId');
     const contract = getContractByAgentId(agentId);
@@ -287,6 +299,26 @@ export function registerAgentRoutes(app: Hono): void {
     const ownerApprovalToken = oidcAuthorized ? 'github-oidc-machine-approved' : ((body as any).ownerApprovalToken || null);
     const result = await executeAgentRun(agentId, taskType, payload, ownerApprovalToken);
     return c.json({ ok: result.ok, marker: IVX_AGENT_API_MARKER, runRecord: result.runRecord, error: result.error });
+  });
+
+  // REAL-WORK mandate: one full real engineering cycle — lease a real task
+  // from the durable queue (seeding one from the real module universe when
+  // empty), analyze with fresh evidence, complete or OWNER_GATE fail-closed.
+  app.post('/api/ivx/agents/:agentId/engineering-cycle', async (c) => {
+    const agentId = c.req.param('agentId');
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const oidcAuthorized = await verifyIVXGitHubActionsOIDCRequest(c.req.raw);
+    const legacyAuthorized = await ownerAuthorized(c, body as Record<string, unknown>);
+    if (!oidcAuthorized && !legacyAuthorized) return c.json({ ok: false, error: 'Owner or approved IVX GitHub machine authorization required.' }, 401);
+    const rawSha = (body as Record<string, unknown>).sourceSha;
+    const sourceSha = typeof rawSha === 'string' && rawSha.length >= 7 ? rawSha : 'unknown-sha';
+    const contract = getContractByAgentId(agentId);
+    const result = await runRealEngineeringCycle({
+      agentId,
+      agentNumber: contract?.agentNumber ?? null,
+      sourceSha,
+    });
+    return c.json({ ok: result.ok, marker: IVX_REAL_ENGINEERING_CYCLE_MARKER, result }, result.ok ? 200 : 500);
   });
 
   app.post('/api/ivx/agents/:agentId/version', async (c) => {

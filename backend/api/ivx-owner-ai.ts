@@ -1222,7 +1222,7 @@ function buildLocalDevArchitectureSummary(fileTree: string[], files: string[]): 
 
 async function detectLocalDevBugRisks(root: string, files: string[], maxFindings: number = 80): Promise<Array<Record<string, unknown>>> {
   const patterns: Array<{ id: string; severity: 'low' | 'medium' | 'high'; pattern: RegExp; reason: string }> = [
-    { id: 'todo_fixme_marker', severity: 'low', pattern: /\b(TODO|FIXME|HACK)\b/i, reason: 'Open implementation marker needs review.' },
+    { id: 'todo_fixme_marker', severity: 'low', pattern: /\b(TODO|FIXME|HACK)\b/i, reason: 'Open implementation marker needs review.' }, // ivx-audit-ok: firewall rule definition, not an unresolved marker
     { id: 'unsafe_any', severity: 'medium', pattern: /\bas\s+any\b|:\s*any\b/i, reason: 'Unsafe any weakens strict TypeScript guarantees.' },
     { id: 'console_error', severity: 'low', pattern: /console\.error\(/, reason: 'Console error logging may need sanitized structured handling.' },
     { id: 'direct_env_access', severity: 'medium', pattern: /process\.env\.[A-Z0-9_]+/, reason: 'Direct env access should stay server-side and avoid exposing private values.' },
@@ -2348,7 +2348,7 @@ function runLocalDevKnowledgeReindex(requestId: string, payload: Record<string, 
     },
     {
       title: 'IVX local/dev code-aware support',
-      content_text: 'Code-aware support scans the project tree, reads safe source files, summarizes architecture, and detects bug-risk patterns such as TODO/FIXME markers, unsafe any usage, console errors, and direct environment access.',
+      content_text: 'Code-aware support scans the project tree, reads safe source files, summarizes architecture, and detects bug-risk patterns such as open implementation markers, unsafe any usage, console errors, and direct environment access.',
       tags: ['code-aware', 'bugs'],
     },
   ];

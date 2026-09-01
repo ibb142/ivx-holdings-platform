@@ -77,13 +77,16 @@ const RECOVERY_COOLDOWN_MS = (() => {
   return Number.isFinite(raw) && raw > 0 ? raw : 5_000;
 })();
 
+import { createRequire } from 'node:module';
+
+const nodeRequire = createRequire(import.meta.url);
+
 let cachedAdapterVersion: string | null = null;
 
 function getAdapterVersion(): string {
   if (cachedAdapterVersion) return cachedAdapterVersion;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pkg = require('@ai-sdk/openai/package.json');
+    const pkg = nodeRequire('@ai-sdk/openai/package.json') as { version?: unknown };
     cachedAdapterVersion = typeof pkg?.version === 'string' ? pkg.version : 'unknown';
   } catch {
     cachedAdapterVersion = 'unknown';

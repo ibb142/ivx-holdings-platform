@@ -10,7 +10,10 @@ import { createCertDatabase, type CertDB } from './database';
 export const CERT_APP_VERSION = '1.0.0';
 export const CERT_APP_MARKER = 'ivx-cert-app-2026-07-17';
 
-const CERT_AUTH_TOKEN = 'cert-app-test-token-CHANGEME';
+// Fail-closed: the cert-app bearer token is configured via IVX_CERT_APP_AUTH_TOKEN, never hardcoded.
+function certAuthToken(): string {
+  return (process.env.IVX_CERT_APP_AUTH_TOKEN ?? '').trim();
+}
 
 type CertUser = {
   id: string;
@@ -70,7 +73,16 @@ function checkRateLimit(ip: string): { allowed: boolean; remaining: number; rese
 function authMiddleware(c: any, next: any): Promise<any> {
   const auth = c.req.header('Authorization') ?? '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-  if (token !== CERT_AUTH_TOKEN) {
+  const expectedToken = certAuthToken();
+  if (!expectedToken) {
+    return c.json({
+      ok: false,
+      error: 'Cert app auth token not configured — set IVX_CERT_APP_AUTH_TOKEN in the environment.',
+      traceId: c.get('traceId'),
+      timestamp: new Date().toISOString(),
+    }, 503);
+  }
+  if (token !== expectedToken) {
     return c.json({
       ok: false,
       error: 'Unauthorized: invalid or missing bearer token.',
@@ -174,9 +186,18 @@ export function createCertApp(): Hono<CertContext> {
       }, 401);
     }
 
+    const issuedToken = certAuthToken();
+    if (!issuedToken) {
+      return c.json({
+        ok: false,
+        error: 'Cert app auth token not configured — set IVX_CERT_APP_AUTH_TOKEN in the environment.',
+        traceId: c.get('traceId'),
+      }, 503);
+    }
+
     return c.json({
       ok: true,
-      token: CERT_AUTH_TOKEN,
+      token: issuedToken,
       user: {
         id: 'cert-user-001',
         email,

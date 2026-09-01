@@ -48,11 +48,7 @@ async function checkProductionAvailability(): Promise<void> {
  */
 function skipIfProductionDown(): { actual: string; status: TestStatus; evidenceRef: string } | null {
   if (!productionAvailable) {
-    return {
-      actual: `Production unavailable (${productionUnavailableReason})`,
-      status: 'SKIP' as TestStatus,
-      evidenceRef: 'production-unavailable',
-    };
+    return { actual: `Production unavailable (${productionUnavailableReason})`, status: 'SKIP' as TestStatus, evidenceRef: 'production-unavailable' };
   }
   return null;
 }

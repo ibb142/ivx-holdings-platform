@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, test } from 'bun:test';
 
 // Test the realtime delta update logic without React/Supabase deps

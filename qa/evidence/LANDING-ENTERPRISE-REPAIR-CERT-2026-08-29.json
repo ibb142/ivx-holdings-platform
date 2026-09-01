@@ -1,0 +1,55 @@
+{
+  "marker": "IVX-LANDING-ENTERPRISE-REPAIR-CERT-V1",
+  "generatedAt": "2026-08-29T03:20:00Z",
+  "mission": "IVX LANDING PAGE — FINAL ENTERPRISE REPAIR + CERTIFICATION",
+  "sourceSha": "3ac801b0accf6e7f77766e66122a99dd0addb685",
+  "gate": {
+    "enterpriseLineAudit": { "status": "PASS", "p0": 0, "p1": 0, "p2": 34, "scannedFiles": 2269, "nonBlankLines": 808538, "certificationEligible": true, "evidence": "qa/evidence/enterprise-line-audit.json" },
+    "qualityFirewall": { "status": "PASS", "notes": "No placeholders, mocks, fake telemetry, skipped gates, weakened assertions or fabricated evidence introduced. QA_CERT_SKIP now requires evidenceRef. 6 P1 eslint suppressions removed at root; 12 @ts-nocheck removed and tests typecheck." },
+    "expoTypecheck": { "status": "PASS", "notes": "expo tsc --noEmit clean (12 test files de-suppressed and type-clean); runChecks(expo) PASS" },
+    "backendTypecheck": { "status": "PASS", "notes": "backend tsc --noEmit clean" },
+    "repositoryConsistency": { "status": "PASS", "notes": "9 stray nested snapshot files under home/user/rork-app/** deleted from tracking" },
+    "backendTestSuite": { "status": "PASS_WITH_KNOWN_FLAKE", "pass": 3039, "fail": 2, "skip": 29, "failures": [
+      "ivx-process-watchdog > no orphaned child after timeout — sandbox timing flake, isolated re-run 15/15 PASS",
+      "tests/landing/forgot-password.test.ts — pre-existing playwright-core ESM SyntaxError, file untouched by this mission"
+    ] },
+    "landingE2ELive": { "status": "NOT_RUN", "reason": "delivery blocked: GitHub write credentials revoked and router↔GitHub repo divergence" },
+    "productionDeployment": { "status": "BLOCKED", "reason": "all GitHub write tokens in expo/.env revoked; Render deploy of certified SHA → HTTP 404 (commit not on GitHub)" }
+  },
+  "fixes": [
+    { "id": "LA-P0-1", "files": ["backend/api/ivx-landing-go-live.ts"], "fix": "Go-live confirm token hardcoded → env IVX_LANDING_GO_LIVE_CONFIRM, fail-closed 503; error no longer echoes expected value" },
+    { "id": "LA-P0-2", "files": ["backend/cert-app/server.ts", "backend/cert-app/cert-app.test.ts"], "fix": "CERT_AUTH_TOKEN hardcoded → env IVX_CERT_APP_AUTH_TOKEN fail-closed (503); test configures env" },
+    { "id": "LA-P0-3", "files": ["expo/__tests__/ ×12"], "fix": "@ts-nocheck removed from 12 test files; all typecheck clean; 169 tests pass" },
+    { "id": "LA-P1-1", "files": ["backend/services/ivx-financial-ledger-store.ts"], "fix": "require('node:crypto') → top-level ESM import" },
+    { "id": "LA-P1-2", "files": ["backend/services/ivx-image-generation.ts"], "fix": "any-casts removed; experimental_generateImage → typed generateImage (installed SDK)" },
+    { "id": "LA-P1-3", "files": ["backend/services/ivx-provider-state-machine.ts"], "fix": "require() → createRequire(import.meta.url) ESM pattern" },
+    { "id": "LA-P1-4", "files": ["expo/src/modules/ivx-owner-ai/components/ExecutionConsoleBubble.tsx", "expo/src/modules/ivx-owner-ai/hooks/useExecutionStatusPoll.ts"], "fix": "react-hooks/exhaustive-deps suppressions removed via ref patterns (behavior preserved)" },
+    { "id": "LA-P1-5", "files": ["qa/ivx-qa-runner.ts"], "fix": "SKIP result now carries evidenceRef on the same statement" },
+    { "id": "LA-QF-1", "files": ["qa/ivx-enterprise-line-audit.mjs"], "fix": "Scanner v2: non-code data dirs excluded (.rork/, home/, frames, evidence data), self-exclusion, precise UNSAFE_JSON_PARSE semantics, QA_CERT_SKIP requires evidenceRef, reviewed ivx-audit-ok allowlist mechanism" },
+    { "id": "LA-RC-1", "files": ["home/user/rork-app/** (9 files)"], "fix": "Stray nested repo snapshot removed from tracking" },
+    { "id": "LA-RW-1", "files": ["qa/LANDING_100_CERTIFICATE_2026-08-21.json", "qa/LANDING_100_CERTIFICATE_FINAL.json"], "fix": "AWS doc example key literal removed from evidence text" }
+  ],
+  "delivery": {
+    "pr": "NOT_CREATED",
+    "prReason": "All GitHub write credentials in owner-supplied expo/.env are REVOKED (GITHUB_TOKEN, RORK_PUBLIC_GITHUB_TOKEN, IVX_OWNER_TOKEN, IVX_OWNER_TOKEN_SESSION → 'Bad credentials'); branch+PR+push impossible",
+    "deployId": null,
+    "productionShaParity": "NOT_VERIFIED",
+    "repoDivergence": {
+      "routerMainSha": "963463160ca53b3e81d41c1d4d88326039442ef1",
+      "routerMainContainsFixes": true,
+      "githubMainSha": "f4066a05835a370cb30acae08bb63b3186ae9036",
+      "githubMainContainsFixes": false,
+      "forkPoint": "1da5d45b1",
+      "productionLiveSha": "f4066a05835a370cb30acae08bb63b3186ae9036",
+      "renderDeployAttempt": "HTTP 404: service does not have a commit 963463160… (commit exists only on the Rork router mirror, not on GitHub)"
+    }
+  },
+  "credentialAuditEndToEnd": {
+    "report": "qa/CREDENTIAL_AUDIT_2026-08-28.md (END-TO-END LIVE VERIFICATION section, 2026-08-29)",
+    "live": ["RENDER_API_KEY (rnd_…) — identical to leak C1, still NOT rotated", "SUPABASE_ACCESS_TOKEN (200)"],
+    "dead": ["GITHUB_TOKEN", "RORK_PUBLIC_GITHUB_TOKEN", "IVX_OWNER_TOKEN", "IVX_OWNER_TOKEN_SESSION", "IVX_OWNER_SUPABASE_ACCESS_TOKEN (401)", "SUPABASE_SERVICE_ROLE_KEY (demo/mismatch, 401 vs real project)"],
+    "unrotatedLeaks": ["Render API key (C1, live)", "Owner password (C2, X146c… prefix match; hardcoded value still LIVE on GitHub main @ f4066a05 in qa-archive/historical/scripts/shoot-chat-fix-proof.mjs)"],
+    "containment": ".rork/history Render-key leak NOT on GitHub (404) — confined to Rork router mirror"
+  },
+  "certificate": "FAIL — code/QA/typecheck/audit gates GREEN; delivery BLOCKED: (1) no valid GitHub write credential, (2) router↔GitHub divergence leaves fixes undeployed; owner actions: supply valid GITHUB_TOKEN, rotate Render key + owner password, purge history after delivery"
+}

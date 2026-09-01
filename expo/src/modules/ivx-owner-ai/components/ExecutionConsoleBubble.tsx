@@ -11,7 +11,7 @@
  * statusUrl via useExecutionStatusPoll so the bubble updates in real time
  * as the worker drains the queue.
  */
-import React, { memo, useCallback, useMemo } from 'react';
+import React, { memo, useCallback, useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   AlertCircle,
@@ -80,18 +80,21 @@ export const ExecutionConsoleBubble = memo(function ExecutionConsoleBubble({
 
   // Notify the parent once when the job reaches a terminal state so the chat
   // can swap the live-progress bubble for the final verified-evidence block.
+  // The callback lives in a ref so identity changes never re-fire the notify.
+  const onTerminalRef = useRef<ExecutionConsoleBubbleProps['onTerminal']>(undefined);
+  onTerminalRef.current = onTerminal;
   React.useEffect(() => {
-    if (status && onTerminal) {
+    const notify = onTerminalRef.current;
+    if (status && notify) {
       const terminal =
         status.status === 'completed' ||
         status.status === 'failed' ||
         status.status === 'blocked' ||
         status.status === 'cancelled';
       if (terminal) {
-        onTerminal(status);
+        notify(status);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status?.status, status?.taskId]);
 
   const evidence = status?.evidence ?? null;

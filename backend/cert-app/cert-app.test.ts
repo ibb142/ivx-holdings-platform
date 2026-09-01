@@ -8,7 +8,9 @@ import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { createCertApp } from './server';
 import { createCertDatabase } from './database';
 
-const AUTH_TOKEN = 'cert-app-test-token-CHANGEME';
+// Token is fail-closed and env-provided; tests configure it at module load.
+process.env.IVX_CERT_APP_AUTH_TOKEN = process.env.IVX_CERT_APP_AUTH_TOKEN ?? 'cert-app-test-token-local';
+const AUTH_TOKEN = process.env.IVX_CERT_APP_AUTH_TOKEN;
 const AUTH_HEADER = { Authorization: `Bearer ${AUTH_TOKEN}` };
 
 async function request(app: ReturnType<typeof createCertApp>, method: string, path: string, opts: { headers?: Record<string, string>; body?: unknown } = {}): Promise<{ status: number; data: any }> {

@@ -21,6 +21,7 @@
  *
  * Runtime-light + deterministic: filesystem I/O only. Fully testable.
  */
+import { createHash } from 'node:crypto';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { auditDir } from './ivx-data-root';
@@ -178,9 +179,6 @@ function normalizeDataOrigin(value: unknown): DataOrigin {
 /** Simple hash-chain audit trace id (deterministic, links to the prior row). */
 function computeAuditTraceId(prev: FinancialTransaction | null, seed: string): string {
   const prevHash = prev?.auditTraceId ?? 'genesis';
-  // node:crypto SHA-256 — available synchronously
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { createHash } = require('node:crypto') as typeof import('node:crypto');
   return createHash('sha256')
     .update(`${prevHash}|${seed}|${Date.now()}`)
     .digest('hex')
