@@ -62,7 +62,6 @@ jobs:
           current_sha=$(git rev-parse HEAD)
           echo "current_sha=$current_sha" >> "$GITHUB_OUTPUT"
 
-          # A historical 10/10 certificate establishes the protected baseline.
           baseline=false
           if [ -f qa/LANDING_COMPLETE_CERTIFICATE_2026-08-18.md ] && grep -Eq '11/11 PASS|100%' qa/LANDING_COMPLETE_CERTIFICATE_2026-08-18.md; then
             baseline=true
@@ -76,15 +75,14 @@ jobs:
             'E2E Acceptance'
           )
 
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=main&head_sha=${current_sha}&per_page=100" > /tmp/ivx-regression/runs.json
           : > /tmp/ivx-regression/gates.jsonl
           red=0
           for workflow in "${critical[@]}"; do
-            run=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=main&head_sha=${current_sha}&per_page=100" \
-              --jq --arg workflow "$workflow" '[.workflow_runs[] | select(.name == $workflow)] | sort_by(.created_at) | reverse | .[0] // empty')
+            run=$(jq -c --arg workflow "$workflow" '[.workflow_runs[] | select(.name == $workflow)] | sort_by(.created_at) | reverse | .[0] // empty' /tmp/ivx-regression/runs.json)
             if [ -z "$run" ]; then
               red=$((red+1))
-              jq -n --arg workflow "$workflow" --arg sha "$current_sha" \
-                '{workflow:$workflow,sha:$sha,status:"missing",conclusion:null,green:false}' >> /tmp/ivx-regression/gates.jsonl
+              jq -n --arg workflow "$workflow" --arg sha "$current_sha" '{workflow:$workflow,sha:$sha,status:"missing",conclusion:null,green:false}' >> /tmp/ivx-regression/gates.jsonl
               continue
             fi
             status=$(printf '%s' "$run" | jq -r '.status // "unknown"')
@@ -93,14 +91,11 @@ jobs:
             url=$(printf '%s' "$run" | jq -r '.html_url')
             green=false
             if [ "$status" = completed ] && [ "$conclusion" = success ]; then green=true; else red=$((red+1)); fi
-            jq -n --arg workflow "$workflow" --arg sha "$current_sha" --arg status "$status" --arg conclusion "$conclusion" --arg runId "$run_id" --arg url "$url" --argjson green "$green" \
-              '{workflow:$workflow,sha:$sha,status:$status,conclusion:$conclusion,runId:$runId,url:$url,green:$green}' >> /tmp/ivx-regression/gates.jsonl
+            jq -n --arg workflow "$workflow" --arg sha "$current_sha" --arg status "$status" --arg conclusion "$conclusion" --arg runId "$run_id" --arg url "$url" --argjson green "$green" '{workflow:$workflow,sha:$sha,status:$status,conclusion:$conclusion,runId:$runId,url:$url,green:$green}' >> /tmp/ivx-regression/gates.jsonl
           done
 
           regression=false
           if [ "$baseline" = true ] && [ "$red" -gt 0 ]; then regression=true; fi
-
-          # Enterprise autoscaling: small regression=24, multi-gate=48, major=112.
           team_size=0
           severity=GREEN
           if [ "$regression" = true ]; then
@@ -111,9 +106,7 @@ jobs:
           fi
 
           scheduled_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          jq -s --arg sha "$current_sha" --argjson baseline "$baseline" --argjson regression "$regression" --argjson red "$red" --argjson teamSize "$team_size" --arg severity "$severity" --arg scheduledAt "$scheduled_at" \
-            '{policy:"certified_10_10_must_self_restore",baseline10of10:$baseline,currentSha:$sha,regressionOpen:$regression,redGateCount:$red,severity:$severity,teamSize:$teamSize,scheduledAt:$scheduledAt,target:"restore_10_10_and_recertify",closeRule:"all current-SHA gates green + production exact-SHA parity + final certificate",gates:.}' \
-            /tmp/ivx-regression/gates.jsonl > /tmp/ivx-regression/mission-calendar.json
+          jq -s --arg sha "$current_sha" --argjson baseline "$baseline" --argjson regression "$regression" --argjson red "$red" --argjson teamSize "$team_size" --arg severity "$severity" --arg scheduledAt "$scheduled_at" '{policy:"certified_10_10_must_self_restore",baseline10of10:$baseline,currentSha:$sha,regressionOpen:$regression,redGateCount:$red,severity:$severity,teamSize:$teamSize,scheduledAt:$scheduledAt,target:"restore_10_10_and_recertify",closeRule:"all current-SHA gates green + production exact-SHA parity + final certificate",gates:.}' /tmp/ivx-regression/gates.jsonl > /tmp/ivx-regression/mission-calendar.json
           cat /tmp/ivx-regression/mission-calendar.json
           echo "regression=$regression" >> "$GITHUB_OUTPUT"
           echo "team_size=$team_size" >> "$GITHUB_OUTPUT"
@@ -126,11 +119,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl -sS --max-time 30 -o /tmp/ivx-regression/resume.json -w '%{http_code}' \
-            -X POST -H 'content-type: application/json' \
-            -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}" \
-            -d '{"action":"resume_all"}' \
-            "${API_BASE}/api/ivx/agents/app-completion/control")
+          code=$(curl -sS --max-time 30 -o /tmp/ivx-regression/resume.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}" -d '{"action":"resume_all"}' "${API_BASE}/api/ivx/agents/app-completion/control")
           cat /tmp/ivx-regression/resume.json
           test "$code" = 200
           test "$(jq -r '.ok // false' /tmp/ivx-regression/resume.json)" = true
@@ -145,20 +134,14 @@ jobs:
         run: |
           set -euo pipefail
           curl -fsS --max-time 20 "${API_BASE}/api/ivx/agents" > /tmp/ivx-regression/agents.json
-          jq -r --argjson n "$TEAM_SIZE" '[.agents[] | select(.disabled != true and .paused != true)] | sort_by(.agentNumber) | .[:$n] | .[].agentId' \
-            /tmp/ivx-regression/agents.json > /tmp/ivx-regression/team.txt
+          jq -r --argjson n "$TEAM_SIZE" '[.agents[] | select(.disabled != true and .paused != true)] | sort_by(.agentNumber) | .[:$n] | .[].agentId' /tmp/ivx-regression/agents.json > /tmp/ivx-regression/team.txt
           selected=$(wc -l < /tmp/ivx-regression/team.txt | tr -d ' ')
           test "$selected" -gt 0
           : > /tmp/ivx-regression/team-results.jsonl
           while IFS= read -r agent; do
-            payload=$(jq -n --arg sha "$CURRENT_SHA" --arg mission "$(cat /tmp/ivx-regression/mission-calendar.json)" \
-              '{taskType:"enterprise_regression_recovery",payload:{surface:"landing",currentSha:$sha,targetScore:"10/10",instruction:"Restore the certified surface to 10/10. Diagnose real current-SHA regressions, implement only evidence-backed safe fixes, validate, deploy exact main SHA, and recertify. Do not close on PR/build/deploy alone.",missionCalendar:($mission|fromjson)}}')
-            code=$(curl -sS --max-time 30 -o /tmp/ivx-regression/agent-run.json -w '%{http_code}' \
-              -X POST -H 'content-type: application/json' \
-              -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}" \
-              --data "$payload" "${API_BASE}/api/ivx/agents/${agent}/run" || true)
-            jq -n --arg agentId "$agent" --arg http "$code" --argjson response "$(cat /tmp/ivx-regression/agent-run.json 2>/dev/null || echo '{}')" \
-              '{agentId:$agentId,http:$http,response:$response}' >> /tmp/ivx-regression/team-results.jsonl
+            payload=$(jq -n --arg sha "$CURRENT_SHA" --arg mission "$(cat /tmp/ivx-regression/mission-calendar.json)" '{taskType:"enterprise_regression_recovery",payload:{surface:"landing",currentSha:$sha,targetScore:"10/10",instruction:"Restore the certified surface to 10/10. Diagnose real current-SHA regressions, implement only evidence-backed safe fixes, validate, deploy exact main SHA, and recertify. Do not close on PR/build/deploy alone.",missionCalendar:($mission|fromjson)}}')
+            code=$(curl -sS --max-time 30 -o /tmp/ivx-regression/agent-run.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}" --data "$payload" "${API_BASE}/api/ivx/agents/${agent}/run" || true)
+            jq -n --arg agentId "$agent" --arg http "$code" --argjson response "$(cat /tmp/ivx-regression/agent-run.json 2>/dev/null || echo '{}')" '{agentId:$agentId,http:$http,response:$response}' >> /tmp/ivx-regression/team-results.jsonl
           done < /tmp/ivx-regression/team.txt
           jq -s '.' /tmp/ivx-regression/team-results.jsonl > /tmp/ivx-regression/team-results.json
           cat /tmp/ivx-regression/team-results.json
@@ -175,10 +158,7 @@ jobs:
           goal="ENTERPRISE REGRESSION RECOVERY. Landing has a protected historical 10/10 baseline and current main ${CURRENT_SHA} has one or more non-green certification gates. A ${TEAM_SIZE}-agent recovery team has been scheduled and started. Own the mission end-to-end: diagnose real failures, repair safe code, PR/merge, deploy exact main SHA, rerun affected E2E/certificates, and keep the mission open until Landing is restored to 10/10 on the current SHA. Never manufacture green and never close on PR/build/deploy alone. Owner Gate remains mandatory for money movement, destructive data/member deletion, secrets, privileged IAM/admin/security changes, and legal/compliance actions."
           payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Use the scheduled recovery team and closed-loop Autonomous policy to restore current-main 10/10 certification.",rollbackOption:"Rollback safe operational deploys automatically if health regresses; never perform destructive rollback without Owner Gate.",filesAffected:["landing-regression","current-sha-certification","safe-operational-deploy"]}')
           args=(-sS --max-time 60 -o /tmp/ivx-regression/senior-worker.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/senior-developer/worker/jobs" -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}")
-          if [ -n "${SYSTEM_KEY:-}" ]; then
-            echo "::add-mask::$SYSTEM_KEY"
-            args+=( -H "X-IVX-System-Key: $SYSTEM_KEY" )
-          fi
+          if [ -n "${SYSTEM_KEY:-}" ]; then echo "::add-mask::$SYSTEM_KEY"; args+=( -H "X-IVX-System-Key: $SYSTEM_KEY" ); fi
           code=$(curl "${args[@]}" --data "$payload")
           cat /tmp/ivx-regression/senior-worker.json
           case "$code" in 200|202|409) ;; *) exit 1;; esac
