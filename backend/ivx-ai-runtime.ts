@@ -520,10 +520,11 @@ export function validateIVXAIStartup(): IVXAIStartupValidation {
   if (rootUrl && isBlockedDomain(rootUrl)) {
     errors.push('AI gateway URL points to a blocked external domain');
   }
-  // Verify the adapter is spec v3 compatible (v4 is rejected by ai@6)
+  // AI SDK 7 requires provider spec v4. Keep this startup guard aligned
+  // with package.json so a provider/runtime major mismatch fails loudly.
   const majorVersion = Number.parseInt(adapterVersion.split('.')[0] ?? '0', 10);
-  if (majorVersion > 3) {
-    errors.push(`@ai-sdk/openai@${adapterVersion} uses spec v4, incompatible with ai@6 — downgrade to @ai-sdk/openai@3.x`);
+  if (majorVersion < 4) {
+    errors.push(`@ai-sdk/openai@${adapterVersion} is incompatible with ai@7 — upgrade to @ai-sdk/openai@4.x or newer`);
   }
   // Warn if key prefix doesn't match any known provider
   if (keyLoaded && providerType === 'unknown') {
