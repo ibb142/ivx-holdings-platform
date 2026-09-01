@@ -10,7 +10,7 @@ on:
       - IVX 10/10 Full Certification
       - IVX Render Live Certificate
       - IVX 112 Live AI Worker Certificate
-      - E2E Acceptance
+      - IVX E2E Acceptance Pipeline
     types: [completed]
   workflow_dispatch: {}
 
@@ -74,7 +74,7 @@ jobs:
             'IVX Block 1 P0 Certificate'
             'IVX 10/10 Full Certification'
             'IVX Render Live Certificate'
-            'E2E Acceptance'
+            'IVX E2E Acceptance Pipeline'
           )
 
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=main&head_sha=${current_sha}&per_page=100" > /tmp/ivx-regression/runs.json
@@ -163,9 +163,6 @@ jobs:
             export IVX_GITHUB_OIDC
           }
 
-          # The 112 calls are intentionally real and sequential. Refresh immediately
-          # before the batch and periodically so a short-lived OIDC token cannot expire
-          # near the tail and falsely block agents 98-112.
           refresh_oidc
           curl -fsS --max-time 20 "${API_BASE}/api/ivx/agents" > /tmp/ivx-regression/agents.json
           jq -r --argjson n "$TEAM_SIZE" '[.agents[] | select(.disabled != true and .paused != true)] | sort_by(.agentNumber) | .[:$n] | .[].agentId' /tmp/ivx-regression/agents.json > /tmp/ivx-regression/team.txt
@@ -188,10 +185,9 @@ jobs:
               echo "oidc_periodic_refresh=PASS before_agent=$index"
             fi
 
-            payload=$(jq -n --arg sha "$CURRENT_SHA" --arg mission "$(cat /tmp/ivx-regression/mission-calendar.json)" '{taskType:"audit",payload:{missionType:"enterprise_regression_recovery",surface:"landing",currentSha:$sha,targetScore:"10/10",instruction:"Perform your scoped enterprise audit/diagnostic responsibility against the current-SHA Landing regression. Produce real evidence and actionable findings for the Senior Developer repair owner. Do not claim a fix unless verified by your allowed tools and contract.",missionCalendar:($mission|fromjson)}}')
+            payload=$(jq -n --arg sha "$CURRENT_SHA" --slurpfile mission /tmp/ivx-regression/mission-calendar.json '{taskType:"audit",payload:{missionType:"enterprise_regression_recovery",surface:"landing",currentSha:$sha,targetScore:"10/10",instruction:"Perform your scoped enterprise audit/diagnostic responsibility against the current-SHA Landing regression. Produce real evidence and actionable findings for the Senior Developer repair owner. Do not claim a fix unless verified by your allowed tools and contract.",missionCalendar:($mission[0] // {})}}')
             code=$(run_agent "$agent" "$payload" "${SYSTEM_KEY_PRIMARY:-}")
 
-            # Auth failures are retried once with a newly minted scoped GitHub token.
             if [ "$code" = 401 ] || [ "$code" = 403 ]; then
               refresh_oidc
               echo "oidc_auth_retry=PASS agent=$agent initial_http=$code"
@@ -201,13 +197,18 @@ jobs:
               code=$(run_agent "$agent" "$payload" "$SYSTEM_KEY_SECONDARY")
             fi
 
-            jq -n --arg agentId "$agent" --arg http "$code" --argjson response "$(cat /tmp/ivx-regression/agent-run.json 2>/dev/null || echo '{}')" '{agentId:$agentId,http:$http,response:$response}' >> /tmp/ivx-regression/team-results.jsonl
+            if jq -e . /tmp/ivx-regression/agent-run.json >/dev/null 2>&1; then
+              jq -n --arg agentId "$agent" --arg http "$code" --slurpfile response /tmp/ivx-regression/agent-run.json '{agentId:$agentId,http:$http,response:($response[0] // {})}' >> /tmp/ivx-regression/team-results.jsonl
+            else
+              jq -n --arg agentId "$agent" --arg http "$code" '{agentId:$agentId,http:$http,response:{ok:false,error:"invalid_or_empty_agent_response"}}' >> /tmp/ivx-regression/team-results.jsonl
+            fi
           done < /tmp/ivx-regression/team.txt
 
           jq -s '.' /tmp/ivx-regression/team-results.jsonl > /tmp/ivx-regression/team-results.json
-          cat /tmp/ivx-regression/team-results.json
           accepted=$(jq '[.[] | select(.http == "200" and .response.ok == true and .response.runRecord != null)] | length' /tmp/ivx-regression/team-results.json)
-          echo "selected_agents=$selected accepted_agent_runs=$accepted"
+          rejected=$((selected-accepted))
+          echo "selected_agents=$selected accepted_agent_runs=$accepted rejected_agent_runs=$rejected"
+          jq -c '.[] | select(.http != "200" or .response.ok != true or .response.runRecord == null) | {agentId,http,error:(.response.error // "unknown")}' /tmp/ivx-regression/team-results.json | sed 's/^/agent_rejected=/' || true
           test "$accepted" -eq "$selected"
 
       - name: Delegate closed-loop repair owner to Senior Developer Worker
@@ -222,8 +223,6 @@ jobs:
           [ -n "${SYSTEM_KEY_PRIMARY:-}" ] && echo "::add-mask::$SYSTEM_KEY_PRIMARY"
           [ -n "${SYSTEM_KEY_SECONDARY:-}" ] && echo "::add-mask::$SYSTEM_KEY_SECONDARY"
 
-          # Assignment can take many minutes. Mint a fresh scoped token for the
-          # Senior Developer delegation instead of reusing the token from job start.
           token_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}"
           response=$(curl -fsS --retry 3 --retry-delay 2 --retry-all-errors \
             -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
