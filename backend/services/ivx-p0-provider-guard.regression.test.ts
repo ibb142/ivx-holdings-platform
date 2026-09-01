@@ -1,11 +1,12 @@
 /**
  * P0 Regression Tests — Provider/Model Adapter Compatibility + Execution Guard
  *
- * These tests reproduce the EXACT production failures reported by the owner:
+ * These tests reproduce production failures reported by the owner and protect
+ * the currently supported AI SDK/provider contract.
  *
- *   FAILURE 1: IVXAIGatewayRequestError — "Unsupported model version v4 for
- *   provider openai.responses" caused by @ai-sdk/openai@4 (spec v4) being
- *   incompatible with ai@6 (supports spec v2/v3 only).
+ *   FAILURE 1: AI SDK/provider major-version mismatch. The repo now uses
+ *   ai@7 with @ai-sdk/openai@4, so provider v4 is the required compatible
+ *   contract and provider v3 is stale/incompatible for this runtime.
  *
  *   FAILURE 2: Execution guard blocked valid developer output because canned
  *   promise-only text paths ("I will inspect...") were routed to the guard
@@ -34,9 +35,9 @@ describe('P0 Regression — Provider/Model Adapter Compatibility', () => {
     expect(validation.provider).toBe('openai');
     expect(validation.model).toBe('gpt-4o');
     expect(validation.adapterVersion).not.toBe('unknown');
-    // Must be spec v3 (3.x), not v4 (4.x)
+    // ai@7 requires the provider-v4 contract.
     const major = Number.parseInt(validation.adapterVersion.split('.')[0] ?? '0', 10);
-    expect(major).toBeLessThanOrEqual(3);
+    expect(major).toBeGreaterThanOrEqual(4);
   });
 
   test('startup validation does NOT expose the API key value', () => {
@@ -48,15 +49,13 @@ describe('P0 Regression — Provider/Model Adapter Compatibility', () => {
     expect(typeof validation.keyLoaded).toBe('boolean');
   });
 
-  test('startup validation fails when adapter is spec v4', () => {
-    // Simulate: the validation function checks adapter version major > 3
-    // This is the exact error the owner saw in production.
+  test('startup validation accepts the provider-v4 contract required by ai@7', () => {
     const validation = validateIVXAIStartup();
     if (validation.adapterVersion !== 'unknown') {
       const major = Number.parseInt(validation.adapterVersion.split('.')[0] ?? '0', 10);
-      if (major > 3) {
-        expect(validation.ok).toBe(false);
-        expect(validation.errors.some((e) => e.includes('spec v4'))).toBe(true);
+      if (major >= 4) {
+        expect(validation.ok).toBe(true);
+        expect(validation.errors.some((e) => e.includes('spec v4'))).toBe(false);
       }
     }
   });
