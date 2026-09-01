@@ -28,6 +28,7 @@ jobs:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       IVX_RENDER_API_KEY: ${{ secrets.IVX_RENDER_API_KEY }}
       RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      OWNER_NEW_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD }}
       DEFAULT_RENDER_SERVICE_ID: srv-d7t9ivreo5us73ftose0
     steps:
       - uses: actions/checkout@v4
@@ -45,7 +46,6 @@ jobs:
           echo "production_sha=${live:-missing} expected=$GITHUB_SHA matched=$matched"
       - name: Recover Render credentials as fallback
         id: recover
-        if: ${{ steps.live.outputs.matched != 'true' }}
         shell: bash
         run: |
           set +e
@@ -70,6 +70,45 @@ jobs:
           rc=$?
           if [ "$rc" != 0 ]; then echo 'recovered=false' >> "$GITHUB_OUTPUT"; echo 'render_credential_recovery=UNAVAILABLE'; fi
           exit 0
+      - name: Bind owner password into Render runtime
+        if: ${{ steps.recover.outputs.recovered == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${OWNER_NEW_PASSWORD:-}"
+          test -n "${RENDER_API_KEY_RECOVERED:-}"
+          SERVICE_ID="${RENDER_SERVICE_ID_RECOVERED:-$DEFAULT_RENDER_SERVICE_ID}"
+          export SERVICE_ID
+          node <<'NODE'
+          const serviceId = process.env.SERVICE_ID;
+          const renderKey = process.env.RENDER_API_KEY_RECOVERED;
+          const ownerPassword = process.env.OWNER_NEW_PASSWORD;
+          if (!serviceId || !renderKey || !ownerPassword) throw new Error('owner password Render binding inputs missing');
+          const headers = { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${renderKey}` };
+          const envUrl = `https://api.render.com/v1/services/${encodeURIComponent(serviceId)}/env-vars`;
+          const current = await fetch(envUrl, { headers });
+          if (!current.ok) throw new Error(`Render env GET HTTP ${current.status}`);
+          const raw = await current.json();
+          const envMap = new Map();
+          for (const item of raw) {
+            const ev = item.envVar || item;
+            if (ev && typeof ev.key === 'string') envMap.set(ev.key, typeof ev.value === 'string' ? ev.value : '');
+          }
+          envMap.set('OWNER_NEW_PASSWORD', ownerPassword);
+          const body = Array.from(envMap, ([key,value]) => ({ key, value }));
+          const put = await fetch(envUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
+          if (!put.ok) throw new Error(`Render env PUT HTTP ${put.status}: ${(await put.text()).slice(0,160)}`);
+          const verifyRes = await fetch(envUrl, { headers });
+          if (!verifyRes.ok) throw new Error(`Render env verify GET HTTP ${verifyRes.status}`);
+          const verifyRaw = await verifyRes.json();
+          const verify = new Map();
+          for (const item of verifyRaw) {
+            const ev = item.envVar || item;
+            if (ev && typeof ev.key === 'string') verify.set(ev.key, typeof ev.value === 'string' ? ev.value : '');
+          }
+          if (verify.get('OWNER_NEW_PASSWORD') !== ownerPassword) throw new Error('Render OWNER_NEW_PASSWORD mismatch after write');
+          console.log('owner_password_binding_sync=PASS');
+          NODE
       - name: Trigger Render deployment when recovery credentials exist
         if: ${{ steps.live.outputs.matched != 'true' && steps.recover.outputs.recovered == 'true' }}
         shell: bash
