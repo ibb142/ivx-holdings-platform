@@ -8,6 +8,7 @@ export const IVX_AUTONOMOUS_DASHBOARD_STREAM_INTERVAL_MS = 1000;
 export const IVX_AUTONOMOUS_DASHBOARD_STREAM_MARKER = 'ivx-autonomous-dashboard-realtime-ws-2026-09-01-v1';
 
 const AUTH_TIMEOUT_MS = 10_000;
+const WS_OPEN = 1;
 const ALLOWED_RANGES = new Set(['24h', 'today', 'yesterday', '7d', '30d']);
 
 type ClientMessage =
@@ -16,7 +17,7 @@ type ClientMessage =
   | { type: 'ping' };
 
 function send(ws: WebSocket, payload: Record<string, unknown>): void {
-  if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(payload));
+  if (ws.readyState === WS_OPEN) ws.send(JSON.stringify(payload));
 }
 
 function safeRange(value: unknown): string {
@@ -59,7 +60,7 @@ export async function handleAutonomousDashboardStreamConnection(ws: WebSocket, r
   authTimer.unref?.();
 
   const pushSnapshot = async () => {
-    if (!authenticated || !token || pushing || ws.readyState !== ws.OPEN) return;
+    if (!authenticated || !token || pushing || ws.readyState !== WS_OPEN) return;
     pushing = true;
     try {
       const response = await handleAutonomousOpsDashboardRequest(ownerRequest(token, range));
