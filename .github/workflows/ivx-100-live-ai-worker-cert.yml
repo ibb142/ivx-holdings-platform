@@ -74,7 +74,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS --retry 3 --retry-delay 2 "${API_BASE}/api/ivx/agents" -o /tmp/agents.json
+          curl -fsS --retry 5 --retry-delay 2 --retry-all-errors "${API_BASE}/api/ivx/agents" -o /tmp/agents.json
           test "$(jq -r '.ok // false' /tmp/agents.json)" = true
           test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = "$EXPECTED_AGENT_COUNT"
           test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)" = "$EXPECTED_AGENT_COUNT"
@@ -82,26 +82,97 @@ jobs:
           jq -r '.agents[] | [.agentNumber,.agentId] | @tsv' /tmp/agents.json > /tmp/agents.tsv
           echo 'registered_agent_registry=PASS count=112'
 
-      - name: Execute all 112 real agent runtimes with read-only tasks
+      - name: Execute all 112 real agent runtimes with resilient tail retries
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/ivx112 qa/evidence
-          export API_BASE IVX_GITHUB_OIDC GITHUB_SHA GITHUB_RUN_ID
+          export API_BASE GITHUB_SHA GITHUB_RUN_ID ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL
+
+          fresh_oidc() {
+            local response token
+            response=$(curl -fsS --retry 3 --retry-delay 1 --retry-all-errors \
+              -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery")
+            token=$(jq -r '.value // empty' <<<"$response")
+            test -n "$token"
+            echo "$token"
+          }
+
+          contract_get() {
+            local number="$1" agent_id="$2" token="$3" attempt code delay
+            for attempt in 1 2 3 4 5; do
+              code=$(curl -sS --max-time 30 -o "/tmp/ivx112/contract-${number}.json" -w '%{http_code}' \
+                -H "X-IVX-GitHub-OIDC: ${token}" \
+                "${API_BASE}/api/ivx/agents/${agent_id}/contract" || true)
+              if [ "$code" = 200 ]; then echo "$code"; return 0; fi
+              if [ "$code" = 429 ] || [ "$code" = 500 ] || [ "$code" = 502 ] || [ "$code" = 503 ] || [ "$code" = 504 ]; then
+                delay=$((attempt * 3))
+                echo "contract_retry agent=${number} http=${code} attempt=${attempt} delay=${delay}s" >&2
+                sleep "$delay"
+                continue
+              fi
+              echo "$code"; return 0
+            done
+            echo "$code"
+          }
+
+          run_post() {
+            local number="$1" agent_id="$2" body="$3" token="$4" attempt code delay
+            for attempt in 1 2 3 4 5; do
+              code=$(curl -sS --max-time 75 -o "/tmp/ivx112/run-${number}.json" -w '%{http_code}' \
+                -X POST "${API_BASE}/api/ivx/agents/${agent_id}/run" \
+                -H 'Content-Type: application/json' \
+                -H "X-IVX-GitHub-OIDC: ${token}" \
+                --data "$body" || true)
+              if [ "$code" = 200 ]; then echo "$code"; return 0; fi
+              if [ "$code" = 401 ] || [ "$code" = 403 ]; then
+                token=$(fresh_oidc)
+                echo "::add-mask::$token"
+                echo "runtime_auth_refresh agent=${number} http=${code} attempt=${attempt}" >&2
+                sleep 1
+                continue
+              fi
+              if [ "$code" = 429 ] || [ "$code" = 500 ] || [ "$code" = 502 ] || [ "$code" = 503 ] || [ "$code" = 504 ]; then
+                delay=$((attempt * 4))
+                echo "runtime_retry agent=${number} http=${code} attempt=${attempt} delay=${delay}s" >&2
+                sleep "$delay"
+                continue
+              fi
+              echo "$code"; return 0
+            done
+            echo "$code"
+          }
+
           run_one() {
-            number="$1"; agent_id="$2"
+            number="$1"; agent_id="$2"; pass_label="${3:-primary}"
             name=$(jq -r --arg id "$agent_id" '.agents[] | select(.agentId == $id) | .name // ""' /tmp/agents.json | head -n1)
-            contract_http=$(curl -sS --max-time 25 -o "/tmp/ivx112/contract-${number}.json" -w '%{http_code}' "${API_BASE}/api/ivx/agents/${agent_id}/contract" || true)
+            token=$(fresh_oidc)
+            echo "::add-mask::$token"
+
+            contract_http=$(contract_get "$number" "$agent_id" "$token")
             if [ "$contract_http" != 200 ]; then
-              jq -n --argjson n "$number" --arg id "$agent_id" --arg name "$name" --arg http "$contract_http" '{agentNumber:$n,agentId:$id,name:$name,passed:false,contractHttp:$http,error:"contract_request_failed"}' > "/tmp/ivx112/${number}.json"; return 0
+              jq -n --argjson n "$number" --arg id "$agent_id" --arg name "$name" --arg http "$contract_http" --arg pass "$pass_label" \
+                '{agentNumber:$n,agentId:$id,name:$name,passed:false,contractHttp:$http,attemptPass:$pass,error:"contract_request_failed"}' > "/tmp/ivx112/${number}.json"
+              return 0
             fi
+
             task_type=$(jq -r '[.contract.allowedTaskTypes[]? | select(. == "audit" or . == "analysis" or . == "research")] | .[0] // empty' "/tmp/ivx112/contract-${number}.json")
-            if [ -z "$task_type" ]; then jq -n --argjson n "$number" --arg id "$agent_id" --arg name "$name" '{agentNumber:$n,agentId:$id,name:$name,passed:false,error:"no_read_only_task_type"}' > "/tmp/ivx112/${number}.json"; return 0; fi
-            task_id="live112-${GITHUB_RUN_ID}-$(printf '%03d' "$number")"
-            body=$(jq -nc --arg taskType "$task_type" --arg taskId "$task_id" --arg sourceSha "$GITHUB_SHA" '{taskType:$taskType,payload:{__taskId:$taskId,__workflow:"IVX 112 Live AI Worker Certificate",sourceSha:$sourceSha,realExecutionOnly:true,simulatedSuccessAllowed:false,readOnlyCertification:true}}')
-            run_http=$(curl -sS --retry 1 --retry-delay 1 --max-time 60 -o "/tmp/ivx112/run-${number}.json" -w '%{http_code}' -X POST "${API_BASE}/api/ivx/agents/${agent_id}/run" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}" --data "$body" || true)
+            if [ -z "$task_type" ]; then
+              jq -n --argjson n "$number" --arg id "$agent_id" --arg name "$name" --arg pass "$pass_label" \
+                '{agentNumber:$n,agentId:$id,name:$name,passed:false,attemptPass:$pass,error:"no_read_only_task_type"}' > "/tmp/ivx112/${number}.json"
+              return 0
+            fi
+
+            task_id="live112-${GITHUB_RUN_ID}-$(printf '%03d' "$number")-${pass_label}"
+            body=$(jq -nc --arg taskType "$task_type" --arg taskId "$task_id" --arg sourceSha "$GITHUB_SHA" \
+              '{taskType:$taskType,payload:{__taskId:$taskId,__workflow:"IVX 112 Live AI Worker Certificate",sourceSha:$sourceSha,realExecutionOnly:true,simulatedSuccessAllowed:false,readOnlyCertification:true}}')
+
+            token=$(fresh_oidc)
+            echo "::add-mask::$token"
+            run_http=$(run_post "$number" "$agent_id" "$body" "$token")
             ok=false; final_status=request_failed; source_reference=''; tool_result_id=''; simulated=null; fake_success=false
-            if [ "$run_http" = 200 ]; then
+            if [ "$run_http" = 200 ] && jq -e . "/tmp/ivx112/run-${number}.json" >/dev/null 2>&1; then
               ok=$(jq -r '.ok // false' "/tmp/ivx112/run-${number}.json")
               final_status=$(jq -r '.runRecord.finalStatus // .finalStatus // "unknown"' "/tmp/ivx112/run-${number}.json")
               source_reference=$(jq -r '.runRecord.sourceReference // .sourceReference // empty' "/tmp/ivx112/run-${number}.json")
@@ -110,17 +181,46 @@ jobs:
               raw_fake_success=$(jq -r 'if (.runRecord|type=="object") and (.runRecord|has("fakeSuccess")) then (.runRecord.fakeSuccess|tostring) elif has("fakeSuccess") then (.fakeSuccess|tostring) else "null" end' "/tmp/ivx112/run-${number}.json")
               [ "$raw_fake_success" = true ] && fake_success=true || true
             fi
+
             passed=false
             if [ "$run_http" = 200 ] && [ "$ok" = true ] && { [ "$final_status" = completed ] || [ "$final_status" = success ] || [ "$final_status" = verified ]; } && [ -n "$source_reference" ] && [ -n "$tool_result_id" ] && [ "$simulated" = false ] && [ "$fake_success" = false ]; then passed=true; fi
-            jq -n --argjson n "$number" --arg id "$agent_id" --arg name "$name" --arg taskType "$task_type" --arg taskId "$task_id" --arg http "$run_http" --argjson ok "$ok" --arg finalStatus "$final_status" --arg sourceReference "$source_reference" --arg toolResultId "$tool_result_id" --argjson simulated "$simulated" --argjson fakeSuccess "$fake_success" --argjson passed "$passed" '{agentNumber:$n,agentId:$id,name:$name,taskType:$taskType,taskId:$taskId,runHttp:$http,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,simulated:$simulated,fakeSuccess:$fakeSuccess,passed:$passed}' > "/tmp/ivx112/${number}.json"
+            jq -n --argjson n "$number" --arg id "$agent_id" --arg name "$name" --arg taskType "$task_type" --arg taskId "$task_id" --arg http "$run_http" --argjson ok "$ok" --arg finalStatus "$final_status" --arg sourceReference "$source_reference" --arg toolResultId "$tool_result_id" --argjson simulated "$simulated" --argjson fakeSuccess "$fake_success" --argjson passed "$passed" --arg pass "$pass_label" \
+              '{agentNumber:$n,agentId:$id,name:$name,taskType:$taskType,taskId:$taskId,runHttp:$http,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,simulated:$simulated,fakeSuccess:$fakeSuccess,passed:$passed,attemptPass:$pass}' > "/tmp/ivx112/${number}.json"
           }
-          export -f run_one
-          xargs -P 32 -n 2 bash -c 'run_one "$0" "$1"' < /tmp/agents.tsv
+
+          export -f fresh_oidc contract_get run_post run_one
+
+          # Keep pressure below the API limiter while still executing all workers promptly.
+          xargs -P 8 -n 2 bash -c 'run_one "$0" "$1" primary' < /tmp/agents.tsv
+
+          # Retry only failed workers sequentially after a cooldown. This prevents a
+          # temporary auth/rate-limit tail from deciding the final certificate.
+          jq -s 'sort_by(.agentNumber)' /tmp/ivx112/[0-9]*.json > /tmp/ivx112/primary-results.json
+          jq -r '.[] | select(.passed != true) | [.agentNumber,.agentId] | @tsv' /tmp/ivx112/primary-results.json > /tmp/failed-agents.tsv
+          failed_primary=$(wc -l < /tmp/failed-agents.tsv | tr -d ' ')
+          echo "primary_failed_workers=$failed_primary"
+          if [ "$failed_primary" -gt 0 ]; then
+            sleep 12
+            while IFS=$'\t' read -r number agent_id; do
+              [ -n "$number" ] || continue
+              run_one "$number" "$agent_id" retry
+              sleep 2
+            done < /tmp/failed-agents.tsv
+          fi
+
           jq -s 'sort_by(.agentNumber)' /tmp/ivx112/[0-9]*.json > /tmp/ivx112/results.json
-          total=$(jq 'length' /tmp/ivx112/results.json); passed=$(jq '[.[]|select(.passed==true)]|length' /tmp/ivx112/results.json); failed=$(jq '[.[]|select(.passed!=true)]|length' /tmp/ivx112/results.json); evidence=$(jq '[.[]|select((.sourceReference//"")!="" and (.toolResultId//"")!="")]|length' /tmp/ivx112/results.json); unique_agents=$(jq '[.[].agentId]|unique|length' /tmp/ivx112/results.json)
-          CERTIFIED=false; if [ "$total" = 112 ] && [ "$passed" = 112 ] && [ "$failed" = 0 ] && [ "$evidence" = 112 ] && [ "$unique_agents" = 112 ]; then CERTIFIED=true; fi
-          jq -n --argjson certified "$CERTIFIED" --arg githubSha "$GITHUB_SHA" --arg workflowRunId "$GITHUB_RUN_ID" --arg certifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson expectedAgents 112 --argjson totalWorkers "$total" --argjson passedWorkers "$passed" --argjson failedWorkers "$failed" --argjson workersWithEvidence "$evidence" --argjson uniqueAgents "$unique_agents" --slurpfile workers /tmp/ivx112/results.json '{marker:"ivx-112-real-agent-runtime-cert-2026-08-29-v7",githubSha:$githubSha,workflowRunId:$workflowRunId,certifiedAt:$certifiedAt,exactSha:true,expectedAgents:$expectedAgents,totalWorkers:$totalWorkers,passedWorkers:$passedWorkers,failedWorkers:$failedWorkers,workersWithEvidence:$workersWithEvidence,uniqueAgents:$uniqueAgents,certified:$certified,workers:$workers[0]}' > qa/evidence/ivx-112-live-ai-worker-cert.json
-          jq '{certified,githubSha,totalWorkers,passedWorkers,failedWorkers,workersWithEvidence,uniqueAgents}' qa/evidence/ivx-112-live-ai-worker-cert.json
+          total=$(jq 'length' /tmp/ivx112/results.json)
+          passed=$(jq '[.[]|select(.passed==true)]|length' /tmp/ivx112/results.json)
+          failed=$(jq '[.[]|select(.passed!=true)]|length' /tmp/ivx112/results.json)
+          evidence=$(jq '[.[]|select((.sourceReference//"")!="" and (.toolResultId//"")!="")]|length' /tmp/ivx112/results.json)
+          unique_agents=$(jq '[.[].agentId]|unique|length' /tmp/ivx112/results.json)
+          jq -r '.[] | select(.passed != true) | "failed_agent=\(.agentNumber) id=\(.agentId) contract=\(.contractHttp // \"n/a\") run=\(.runHttp // \"n/a\") error=\(.error // \"runtime_evidence_gate_failed\")"' /tmp/ivx112/results.json || true
+
+          CERTIFIED=false
+          if [ "$total" = 112 ] && [ "$passed" = 112 ] && [ "$failed" = 0 ] && [ "$evidence" = 112 ] && [ "$unique_agents" = 112 ]; then CERTIFIED=true; fi
+          jq -n --argjson certified "$CERTIFIED" --arg githubSha "$GITHUB_SHA" --arg workflowRunId "$GITHUB_RUN_ID" --arg certifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson expectedAgents 112 --argjson totalWorkers "$total" --argjson passedWorkers "$passed" --argjson failedWorkers "$failed" --argjson workersWithEvidence "$evidence" --argjson uniqueAgents "$unique_agents" --argjson primaryFailed "$failed_primary" --slurpfile workers /tmp/ivx112/results.json \
+            '{marker:"ivx-112-real-agent-runtime-cert-2026-09-01-v8",githubSha:$githubSha,workflowRunId:$workflowRunId,certifiedAt:$certifiedAt,exactSha:true,expectedAgents:$expectedAgents,totalWorkers:$totalWorkers,passedWorkers:$passedWorkers,failedWorkers:$failedWorkers,workersWithEvidence:$workersWithEvidence,uniqueAgents:$uniqueAgents,primaryFailedWorkers:$primaryFailed,certified:$certified,workers:$workers[0]}' > qa/evidence/ivx-112-live-ai-worker-cert.json
+          jq '{certified,githubSha,totalWorkers,passedWorkers,failedWorkers,workersWithEvidence,uniqueAgents,primaryFailedWorkers}' qa/evidence/ivx-112-live-ai-worker-cert.json
           test "$(jq -r '.certified' qa/evidence/ivx-112-live-ai-worker-cert.json)" = true
           echo 'live_112_real_agent_workers=PASS'
 
