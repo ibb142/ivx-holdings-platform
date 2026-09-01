@@ -5,6 +5,7 @@ import { serve } from '@hono/node-server';
 import { WebSocketServer } from 'ws';
 import app from './backend/hono-extended';
 import { handleRealtimeVoiceConnection, getRealtimeVoiceStatus } from './backend/services/ivx-realtime-voice';
+import { handleAutonomousDashboardStreamConnection, IVX_AUTONOMOUS_DASHBOARD_STREAM_PATH } from './backend/services/ivx-autonomous-dashboard-stream';
 import { startSeniorDevWorker } from './backend/services/ivx-senior-dev-worker';
 import { startAutonomousScheduler } from './backend/services/ivx-autonomous-scheduler';
 import { startAutonomousIntelligenceMissionScheduler } from './backend/services/ivx-autonomous-intelligence-mission-scheduler';
@@ -53,7 +54,6 @@ app.get('/api/ivx/certification/member-auth-public', async (c) => {
   } catch { return c.json({ ok: false, certified: false, certificate: null, secretValuesReturned: false }, 503); }
 });
 
-// Authoritative owner runtime control. Read is fail-closed truth; mutations require a real registered owner bearer.
 app.get('/api/ivx/autonomous/truth', async (c) => c.json(await getAutonomousTruthSnapshot()));
 app.post('/api/ivx/autonomous/control', async (c) => {
   const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
@@ -121,7 +121,24 @@ const productionFetch: typeof app.fetch = async (request, env, executionCtx) => 
 
 app.get('/api/ivx/realtime-voice/status', (c) => c.json(getRealtimeVoiceStatus()));
 app.options('/api/ivx/realtime-voice/status', (c) => c.body(null, 204));
-const wss = new WebSocketServer({ noServer: true }); wss.on('connection', (ws, request) => { void handleRealtimeVoiceConnection(ws as any, request); });
+
+const voiceWss = new WebSocketServer({ noServer: true });
+voiceWss.on('connection', (ws, request) => { void handleRealtimeVoiceConnection(ws as any, request); });
+const dashboardWss = new WebSocketServer({ noServer: true });
+dashboardWss.on('connection', (ws, request) => { void handleAutonomousDashboardStreamConnection(ws as any, request); });
+
 const httpServer = serve({ fetch: productionFetch, port: PORT, hostname: HOST }, (info) => console.log('[IVX Server] Hono API server online', { host: HOST, port: info.port, family: info.family }));
-httpServer.on('upgrade', (request, socket, head) => { const url = new URL(request.url || '', `http://${request.headers.host || 'localhost'}`); if (url.pathname === '/api/ivx/realtime-voice') wss.handleUpgrade(request, socket, head, (ws) => { wss.emit('connection', ws, request); }); else socket.destroy(); });
+httpServer.on('upgrade', (request, socket, head) => {
+  const url = new URL(request.url || '', `http://${request.headers.host || 'localhost'}`);
+  if (url.pathname === '/api/ivx/realtime-voice') {
+    voiceWss.handleUpgrade(request, socket, head, (ws) => { voiceWss.emit('connection', ws, request); });
+    return;
+  }
+  if (url.pathname === IVX_AUTONOMOUS_DASHBOARD_STREAM_PATH) {
+    dashboardWss.handleUpgrade(request, socket, head, (ws) => { dashboardWss.emit('connection', ws, request); });
+    return;
+  }
+  socket.destroy();
+});
 console.log('[IVX Server] Realtime Voice WebSocket endpoint: ws://.../api/ivx/realtime-voice');
+console.log('[IVX Server] Autonomous Dashboard WebSocket endpoint:', IVX_AUTONOMOUS_DASHBOARD_STREAM_PATH);

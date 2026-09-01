@@ -14,13 +14,15 @@ export type Rolling24h={windowStart:string;windowEnd:string;tasksStarted:number;
 export type Enterprise112Status={registryCount:number;durableStateCount:number;durableExecutionCount:number;storeMode:string;ledgerOk:boolean;ledgerError:string|null};
 export type AutonomousOpsDashboard={marker:string;ledgerMarker?:string;generatedAt:string;backendCommitSha:string|null;backendBootTime:string|null;backendRouteCount:number;githubHeadSha:string|null;commitMatch:boolean;dateRange:{start:string;end:string;label:string};agents:UnifiedAgent[];activityItems:ActivityItem[];categoryBreakdown:CategorySummary[];dailySummary:DailySummary|null;liveActivityFeed:LiveFeedEntry[];ownerActionRequests:OwnerActionEntry[];deploymentStatus:{renderDeployId:string|null;renderDeployStatus:string|null;renderCommitSha:string|null;productionHealthy:boolean};realAgentCount:number;placeholderAgentCount:number;rolling24h?:Rolling24h;enterprise112?:Enterprise112Status;smsConversation?:{enabled:boolean;reminderMinutes:number;phoneConfigured:boolean;phoneMasked:string|null;pendingTracked:number};disclaimer:string;};
 export type DateRange='24h'|'today'|'yesterday'|'7d'|'30d';
+export type DashboardStreamState='CONNECTING'|'AUTHENTICATING'|'LIVE'|'RECONNECTING'|'CLOSED'|'ERROR';
+export type DashboardStreamMeta={state:DashboardStreamState;sequence:number;serverTime:string|null;intervalMs:number|null;marker:string|null;transport:'websocket'|'rest-fallback';};
 
 function record(v:unknown):Record<string,unknown>{return v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};}
 function sameSha(a:string|null|undefined,b:string|null|undefined):boolean{
   if(!a||!b)return false;
   return a===b||a.startsWith(b)||b.startsWith(a);
 }
-function normalizeDashboard(raw:AutonomousOpsDashboard):AutonomousOpsDashboard{
+export function normalizeAutonomousDashboard(raw:AutonomousOpsDashboard):AutonomousOpsDashboard{
   if(!Array.isArray(raw.agents))throw new Error('Autonomous dashboard telemetry invalid: agents[] missing.');
   if(raw.agents.length!==112)throw new Error(`Autonomous dashboard fail-closed: expected 112 agents, received ${raw.agents.length}.`);
   const numbers=raw.agents.map((a)=>a.agentNumber).sort((a,b)=>a-b);
@@ -28,24 +30,11 @@ function normalizeDashboard(raw:AutonomousOpsDashboard):AutonomousOpsDashboard{
   if(!raw.enterprise112)throw new Error('Autonomous dashboard fail-closed: enterprise ledger status missing.');
   if(raw.enterprise112.registryCount!==112)throw new Error(`Autonomous dashboard fail-closed: registry ${raw.enterprise112.registryCount}/112.`);
   if(!raw.enterprise112.ledgerOk)throw new Error(`Autonomous dashboard fail-closed: durable ledger unhealthy${raw.enterprise112.ledgerError?` — ${raw.enterprise112.ledgerError}`:''}.`);
-
   const backendSha=raw.backendCommitSha??null;
   const renderSha=raw.deploymentStatus?.renderCommitSha??null;
   const githubSha=raw.githubHeadSha??null;
-  const backendRenderMatch=sameSha(backendSha,renderSha);
-  const githubMatch=githubSha?sameSha(backendSha,githubSha):false;
-  const productionHealthy=Boolean(backendSha&&renderSha&&backendRenderMatch&&raw.enterprise112.ledgerOk);
-
-  return {
-    ...raw,
-    commitMatch:githubMatch,
-    deploymentStatus:{
-      ...raw.deploymentStatus,
-      productionHealthy,
-    },
-    realAgentCount:raw.agents.filter((a)=>a.tasksStartedToday>0||Boolean(a.lastActivityTime)).length,
-    placeholderAgentCount:raw.agents.filter((a)=>a.tasksStartedToday===0&&!a.lastActivityTime).length,
-  };
+  const productionHealthy=Boolean(backendSha&&renderSha&&sameSha(backendSha,renderSha)&&raw.enterprise112.ledgerOk);
+  return {...raw,commitMatch:githubSha?sameSha(backendSha,githubSha):false,deploymentStatus:{...raw.deploymentStatus,productionHealthy},realAgentCount:raw.agents.filter((a)=>a.tasksStartedToday>0||Boolean(a.lastActivityTime)).length,placeholderAgentCount:raw.agents.filter((a)=>a.tasksStartedToday===0&&!a.lastActivityTime).length};
 }
 
 async function ownerFetch(path:string):Promise<unknown>{
@@ -72,6 +61,63 @@ export async function getAutonomousOpsDashboard(opts?:{range?:DateRange;agent?:s
   if(opts?.category)p.set('category',opts.category);
   const payload=record(await ownerFetch(`/api/ivx/live-work/agents?${p}`));
   if(payload.ok!==true)throw new Error(typeof payload.error==='string'?payload.error:'Autonomous dashboard backend returned ok=false.');
-  const dashboard=record(payload.dashboard) as unknown as AutonomousOpsDashboard;
-  return normalizeDashboard(dashboard);
+  return normalizeAutonomousDashboard(record(payload.dashboard) as unknown as AutonomousOpsDashboard);
+}
+
+function toWebSocketUrl(base:string):string{
+  const normalized=base.replace(/\/$/,'');
+  if(normalized.startsWith('https://'))return `wss://${normalized.slice(8)}/api/ivx/autonomous-dashboard-stream`;
+  if(normalized.startsWith('http://'))return `ws://${normalized.slice(7)}/api/ivx/autonomous-dashboard-stream`;
+  return `wss://${normalized}/api/ivx/autonomous-dashboard-stream`;
+}
+
+export async function openAutonomousDashboardStream(opts:{
+  range:DateRange;
+  onSnapshot:(dashboard:AutonomousOpsDashboard,meta:DashboardStreamMeta)=>void;
+  onState?:(meta:DashboardStreamMeta)=>void;
+  onError?:(error:Error)=>void;
+}):Promise<{close:()=>void;setRange:(range:DateRange)=>void}> {
+  const token=await getIVXAccessToken();
+  if(!token)throw new Error('IVX autonomous dashboard requires an authenticated Owner session.');
+  let sequence=0;
+  let closed=false;
+  let currentRange=opts.range;
+  let latestMeta:DashboardStreamMeta={state:'CONNECTING',sequence:0,serverTime:null,intervalMs:null,marker:null,transport:'websocket'};
+  const emitState=(patch:Partial<DashboardStreamMeta>)=>{latestMeta={...latestMeta,...patch,sequence};opts.onState?.(latestMeta);};
+  emitState({state:'CONNECTING'});
+  const ws=new WebSocket(toWebSocketUrl(getDirectApiBaseUrl()));
+  ws.onopen=()=>{
+    if(closed)return;
+    emitState({state:'AUTHENTICATING'});
+    ws.send(JSON.stringify({type:'auth',token,range:currentRange}));
+  };
+  ws.onmessage=(event)=>{
+    if(closed)return;
+    try{
+      const message=record(JSON.parse(String(event.data)));
+      const type=typeof message.type==='string'?message.type:'';
+      if(type==='auth_ok'){
+        emitState({state:'LIVE',marker:typeof message.marker==='string'?message.marker:null,intervalMs:typeof message.intervalMs==='number'?message.intervalMs:null});
+        return;
+      }
+      if(type==='snapshot'){
+        sequence=typeof message.sequence==='number'?message.sequence:sequence+1;
+        const dashboard=normalizeAutonomousDashboard(record(message.dashboard) as unknown as AutonomousOpsDashboard);
+        const meta:DashboardStreamMeta={state:'LIVE',sequence,serverTime:typeof message.serverTime==='string'?message.serverTime:null,intervalMs:typeof message.intervalMs==='number'?message.intervalMs:null,marker:typeof message.marker==='string'?message.marker:null,transport:'websocket'};
+        latestMeta=meta;
+        opts.onSnapshot(dashboard,meta);
+        opts.onState?.(meta);
+        return;
+      }
+      if(type==='stream_error'||type==='auth_error'||type==='protocol_error'){
+        opts.onError?.(new Error(typeof message.error==='string'?message.error:`Autonomous dashboard stream ${type}`));
+      }
+    }catch(error){opts.onError?.(error instanceof Error?error:new Error(String(error)));}
+  };
+  ws.onerror=()=>{if(!closed){emitState({state:'ERROR'});opts.onError?.(new Error('Autonomous dashboard WebSocket error.'));}};
+  ws.onclose=()=>{if(!closed)emitState({state:'RECONNECTING'});};
+  return {
+    close:()=>{closed=true;emitState({state:'CLOSED'});try{ws.close();}catch{}},
+    setRange:(range)=>{currentRange=range;if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'set_range',range}));},
+  };
 }

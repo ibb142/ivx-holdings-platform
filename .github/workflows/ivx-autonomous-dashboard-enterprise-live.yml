@@ -4,9 +4,11 @@ on:
   push:
     branches: [main]
     paths:
+      - 'server.ts'
       - 'backend/api/ivx-autonomous-ops-dashboard.ts'
       - 'backend/api/ivx-live-work.ts'
       - 'backend/services/ivx-agent-dashboard-ledger.ts'
+      - 'backend/services/ivx-autonomous-dashboard-stream.ts'
       - 'expo/app/ivx/autonomous-ops.tsx'
       - 'expo/app/ivx/agent-gps.tsx'
       - 'expo/app/ivx/_layout.tsx'
@@ -24,9 +26,13 @@ concurrency:
 jobs:
   verify-deploy-live:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     env:
       API_BASE: https://api.ivxholding.com
+      OWNER_EMAIL: iperez4242@gmail.com
+      OWNER_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD }}
+      SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
       IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
@@ -41,20 +47,25 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Enterprise 112 source invariants
+      - name: Enterprise 112 realtime source invariants
         shell: bash
         run: |
           set -euo pipefail
           grep -q "ALL_AGENT_CONTRACTS.map" backend/api/ivx-autonomous-ops-dashboard.ts
           grep -q "readAgentDashboardLedger(2000)" backend/api/ivx-autonomous-ops-dashboard.ts
+          grep -q "IVX_AUTONOMOUS_DASHBOARD_STREAM_PATH" server.ts
+          grep -q "handleAutonomousDashboardStreamConnection" server.ts
+          grep -q "autonomous-dashboard-realtime-ws-2026-09-01-v1" backend/services/ivx-autonomous-dashboard-stream.ts
+          grep -q "assertIVXRegisteredOwnerBearer" backend/services/ivx-autonomous-dashboard-stream.ts
+          grep -q "IVX_AUTONOMOUS_DASHBOARD_STREAM_INTERVAL_MS = 1000" backend/services/ivx-autonomous-dashboard-stream.ts
+          grep -q "openAutonomousDashboardStream" expo/app/ivx/autonomous-ops.tsx
+          grep -q "authenticated WebSocket live stream" expo/app/ivx/autonomous-ops.tsx
+          grep -q "FALLBACK_POLL_MS = 15000" expo/app/ivx/autonomous-ops.tsx
           grep -q "enterpriseDashboard=1" expo/src/modules/ivx-owner-ai/services/ivxAutonomousOpsService.ts
-          grep -q "enterpriseDashboard') === '1'" backend/api/ivx-live-work.ts
           grep -q "fetchAgentStates" backend/services/ivx-agent-dashboard-ledger.ts
           grep -q "ivx_agent_executions" backend/services/ivx-agent-dashboard-ledger.ts
-          grep -q "Registry {enterprise.registryCount}/112" expo/app/ivx/autonomous-ops.tsx
           grep -q "IA GPS • Real-time Operations" expo/app/ivx/agent-gps.tsx
           grep -q "name=\"agent-gps\"" expo/app/ivx/_layout.tsx
-          grep -q "refetchInterval: 10000" expo/app/ivx/agent-gps.tsx
           grep -q "lastSourceReference" expo/app/ivx/agent-gps.tsx
           grep -q "lastEvidenceSha" expo/app/ivx/agent-gps.tsx
           python3 - <<'PY'
@@ -65,7 +76,7 @@ jobs:
           print('MASTER_REGISTRY=112/112')
           PY
 
-      - name: TypeScript smoke for dashboard and GPS files
+      - name: TypeScript smoke for realtime dashboard files
         shell: bash
         run: |
           set -euo pipefail
@@ -73,9 +84,11 @@ jobs:
           bunx tsc --noEmit --pretty false > /tmp/tsc.log 2>&1 || true
           bad=0
           for f in \
+            server.ts \
             backend/api/ivx-autonomous-ops-dashboard.ts \
             backend/api/ivx-live-work.ts \
             backend/services/ivx-agent-dashboard-ledger.ts \
+            backend/services/ivx-autonomous-dashboard-stream.ts \
             expo/app/ivx/autonomous-ops.tsx \
             expo/app/ivx/agent-gps.tsx \
             expo/app/ivx/_layout.tsx \
@@ -83,10 +96,11 @@ jobs:
             if grep -F "$f" /tmp/tsc.log; then bad=1; fi
           done
           if [ "$bad" = 1 ]; then
-            echo 'Dashboard/GPS TypeScript smoke failed.'
+            echo 'Realtime dashboard TypeScript smoke failed.'
+            cat /tmp/tsc.log | grep -E 'server.ts|ivx-autonomous-dashboard-stream|autonomous-ops.tsx|ivxAutonomousOpsService' || true
             exit 1
           fi
-          echo 'DASHBOARD_GPS_TYPESCRIPT=PASS'
+          echo 'REALTIME_DASHBOARD_TYPESCRIPT=PASS'
 
       - name: Resolve deploy binding
         shell: bash
@@ -121,7 +135,7 @@ jobs:
             code=$(curl -sS -m 40 -o /tmp/deploy.json -w '%{http_code}' \
               -X POST "${API_BASE}/api/ivx/developer-deploy/action" \
               -H 'Content-Type: application/json' -H "X-IVX-System-Key: ${SYSTEM_KEY}" \
-              --data "{\"action\":\"render_trigger_deploy\",\"input\":{\"serviceId\":\"${SERVICE_ID}\",\"commitId\":\"${GITHUB_SHA}\"},\"confirm\":true,\"confirmText\":\"CONFIRM_IVX_RENDER_DEPLOY\",\"reason\":\"Enterprise 112 dashboard + IA GPS exact-SHA release\"}" || true)
+              --data "{\"action\":\"render_trigger_deploy\",\"input\":{\"serviceId\":\"${SERVICE_ID}\",\"commitId\":\"${GITHUB_SHA}\"},\"confirm\":true,\"confirmText\":\"CONFIRM_IVX_RENDER_DEPLOY\",\"reason\":\"Autonomous Dashboard realtime WebSocket exact-SHA release\"}" || true)
             case "$code" in 200|201|202) ;; *) cat /tmp/deploy.json || true; exit 1;; esac
           fi
 
@@ -135,48 +149,128 @@ jobs:
               live=$(jq -r '.commit // empty' /tmp/version.json)
               ok=$(jq -r '.ok // false' /tmp/version.json)
               echo "poll=$i live=${live:-missing} expected=$GITHUB_SHA"
-              if [ "$ok" = true ] && [ "$live" = "$GITHUB_SHA" ]; then
-                break
-              fi
+              if [ "$ok" = true ] && [ "$live" = "$GITHUB_SHA" ]; then break; fi
             fi
             if [ "$i" = 120 ]; then exit 1; fi
             sleep 10
           done
 
-      - name: Live route, health, and owner-gate evidence
+      - name: Real Owner password grant for dashboard stream
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OWNER_PASSWORD"; test -n "$SUPABASE_URL"; test -n "$SUPABASE_ANON_KEY"
+          body=$(jq -nc --arg email "$OWNER_EMAIL" --arg password "$OWNER_PASSWORD" '{email:$email,password:$password}')
+          code=$(curl -sS --max-time 15 -o /tmp/login.json -w '%{http_code}' -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" -H "apikey: ${SUPABASE_ANON_KEY}" -H 'Content-Type: application/json' --data "$body")
+          test "$code" = 200 || { jq '{error,error_code,msg,message}' /tmp/login.json 2>/dev/null || true; exit 1; }
+          token=$(jq -r '.access_token // empty' /tmp/login.json)
+          user_id=$(jq -r '.user.id // empty' /tmp/login.json)
+          app_role=$(jq -r '.user.app_metadata.role // empty' /tmp/login.json)
+          user_role=$(jq -r '.user.user_metadata.role // empty' /tmp/login.json)
+          test -n "$token"; test -n "$user_id"
+          case "$app_role:$user_role" in *owner*|*admin*) ;; *) echo 'Owner metadata missing'; exit 1;; esac
+          echo "::add-mask::$token"
+          echo "OWNER_TOKEN=$token" >> "$GITHUB_ENV"
+          echo "OWNER_USER_ID=$user_id" >> "$GITHUB_ENV"
+          echo 'owner_password_grant=PASS'
+
+      - name: Live REST owner gate and 112 registry
         shell: bash
         run: |
           set -euo pipefail
           health=$(curl -sS -m 20 -o /tmp/health.json -w '%{http_code}' "${API_BASE}/health" || true)
           test "$health" = 200
-          gate=$(curl -sS -m 20 -o /tmp/dashboard-unauth.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" || true)
-          case "$gate" in 401|403) ;; *) echo "owner_gate_http=$gate"; cat /tmp/dashboard-unauth.json || true; exit 1;; esac
+          unauth=$(curl -sS -m 20 -o /tmp/dashboard-unauth.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" || true)
+          case "$unauth" in 401|403) ;; *) echo "owner_gate_http=$unauth"; exit 1;; esac
+          auth=$(curl -sS -m 25 -o /tmp/dashboard-auth.json -w '%{http_code}' "${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h" -H "Authorization: Bearer ${OWNER_TOKEN}" || true)
+          test "$auth" = 200
+          test "$(jq -r '.ok // false' /tmp/dashboard-auth.json)" = true
+          test "$(jq '.dashboard.agents | length' /tmp/dashboard-auth.json)" = 112
+          test "$(jq '[.dashboard.agents[].agentNumber] | unique | length' /tmp/dashboard-auth.json)" = 112
+          echo "HEALTH_HTTP=$health" >> "$GITHUB_ENV"
+          echo "UNAUTH_GATE_HTTP=$unauth" >> "$GITHUB_ENV"
+          echo 'rest_dashboard_112=PASS'
+
+      - name: Authenticate live WebSocket and receive consecutive 112 snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/cert-dashboard-ws.mjs <<'JS'
+          import WebSocket from 'ws';
+          const token=process.env.OWNER_TOKEN;
+          const expectedSha=process.env.GITHUB_SHA;
+          if(!token) throw new Error('OWNER_TOKEN missing');
+          const ws=new WebSocket('wss://api.ivxholding.com/api/ivx/autonomous-dashboard-stream');
+          let hello=false,auth=false;
+          const snapshots=[];
+          const timeout=setTimeout(()=>{console.error('WS timeout',{hello,auth,snapshots:snapshots.length});process.exit(2)},20000);
+          function done(){clearTimeout(timeout);ws.close(1000,'certificate complete');}
+          ws.on('open',()=>ws.send(JSON.stringify({type:'auth',token,range:'24h'})));
+          ws.on('message',(buf)=>{
+            const m=JSON.parse(buf.toString());
+            if(m.type==='hello'){hello=m.authRequired===true&&m.transport==='websocket';return;}
+            if(m.type==='auth_ok'){auth=m.transport==='websocket'&&m.intervalMs===1000;return;}
+            if(m.type==='snapshot'){
+              const d=m.dashboard;
+              if(!d||!Array.isArray(d.agents)||d.agents.length!==112) throw new Error('snapshot registry != 112');
+              const nums=new Set(d.agents.map(a=>a.agentNumber));
+              if(nums.size!==112) throw new Error('snapshot unique registry != 112');
+              if(!d.enterprise112||d.enterprise112.registryCount!==112||d.enterprise112.ledgerOk!==true) throw new Error('enterprise ledger gate failed');
+              if(typeof m.sequence!=='number'||m.intervalMs!==1000) throw new Error('stream cadence/sequence invalid');
+              snapshots.push({sequence:m.sequence,serverTime:m.serverTime,backendCommitSha:d.backendCommitSha,renderCommitSha:d.deploymentStatus?.renderCommitSha,proofEntries:d.rolling24h?.proofEntries??0,running:d.rolling24h?.tasksRunning??0});
+              if(snapshots.length>=2){
+                if(!hello||!auth) throw new Error('hello/auth proof missing');
+                if(snapshots[1].sequence<=snapshots[0].sequence) throw new Error('sequence not increasing');
+                const backend=snapshots[1].backendCommitSha||'';
+                if(!(backend===expectedSha||backend.startsWith(expectedSha)||expectedSha.startsWith(backend))) throw new Error(`backend SHA mismatch ${backend} != ${expectedSha}`);
+                console.log(JSON.stringify({ok:true,hello,auth,snapshots},null,2));
+                done();
+              }
+            }
+            if(m.type==='auth_error'||m.type==='stream_error') throw new Error(JSON.stringify(m));
+          });
+          ws.on('close',()=>{if(snapshots.length>=2)process.exit(0);});
+          ws.on('error',(e)=>{console.error(e);process.exit(3)});
+          JS
+          node /tmp/cert-dashboard-ws.mjs | tee /tmp/dashboard-ws-proof.json
+          grep -q '"ok": true' /tmp/dashboard-ws-proof.json
+          echo 'authenticated_websocket_112_stream=PASS'
+
+      - name: Verify unauthenticated WebSocket fails closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/cert-dashboard-ws-unauth.mjs <<'JS'
+          import WebSocket from 'ws';
+          const ws=new WebSocket('wss://api.ivxholding.com/api/ivx/autonomous-dashboard-stream');
+          let hello=false;
+          const timeout=setTimeout(()=>{console.error('unauth WS did not fail closed');process.exit(2)},15000);
+          ws.on('message',(buf)=>{const m=JSON.parse(buf.toString());if(m.type==='hello'&&m.authRequired===true)hello=true;});
+          ws.on('close',(code)=>{clearTimeout(timeout);if(hello&&code===4401){console.log('unauth_websocket_fail_closed=PASS');process.exit(0);}console.error({hello,code});process.exit(3);});
+          ws.on('error',()=>{});
+          JS
+          node /tmp/cert-dashboard-ws-unauth.mjs
+
+      - name: Build realtime dashboard certificate
+        shell: bash
+        run: |
+          set -euo pipefail
           live=$(jq -r '.commit // empty' /tmp/version.json)
           test "$live" = "$GITHUB_SHA"
           mkdir -p qa/evidence
-          cat > qa/evidence/autonomous-dashboard-enterprise-live.json <<EOF
-          {
-            "ok": true,
-            "certificate": "IVX-ENTERPRISE-112-DASHBOARD-GPS-LIVE",
-            "certifiedSha": "${GITHUB_SHA}",
-            "productionSha": "${live}",
-            "productionExactSha": true,
-            "registry": "112/112",
-            "dashboard": "enterprise durable ledger",
-            "gps": "112-agent operational presence/heartbeat/logical-location",
-            "gpsRefreshSeconds": 10,
-            "durableLedger": "Supabase agent states + executions",
-            "registeredRoute": "/api/ivx/live-work/agents?enterpriseDashboard=1",
-            "ownerGateHttp": ${gate},
-            "healthHttp": ${health},
-            "verifiedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          }
-          EOF
+          jq -n \
+            --arg sha "$GITHUB_SHA" \
+            --arg productionSha "$live" \
+            --arg ownerUserId "$OWNER_USER_ID" \
+            --argjson healthHttp "$HEALTH_HTTP" \
+            --argjson ownerGateHttp "$UNAUTH_GATE_HTTP" \
+            --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{ok:true,certificate:"IVX-ENTERPRISE-112-AUTONOMOUS-DASHBOARD-REALTIME-LIVE",certifiedSha:$sha,productionSha:$productionSha,productionExactSha:true,registry:"112/112",ownerAuthenticatedRest:true,ownerAuthenticatedWebSocket:true,unauthenticatedWebSocketFailClosed:true,webSocketPath:"/api/ivx/autonomous-dashboard-stream",webSocketPushIntervalMs:1000,restFallbackIntervalMs:15000,durableLedger:"Supabase agent states + executions",ownerUserId:$ownerUserId,ownerGateHttp:$ownerGateHttp,healthHttp:$healthHttp,secretValuesReturned:false,verifiedAt:$verifiedAt}' > qa/evidence/autonomous-dashboard-enterprise-live.json
           cat qa/evidence/autonomous-dashboard-enterprise-live.json
 
       - uses: actions/upload-artifact@v4
         with:
-          name: autonomous-dashboard-gps-enterprise-live-${{ github.sha }}
+          name: autonomous-dashboard-realtime-enterprise-live-${{ github.sha }}
           path: qa/evidence/autonomous-dashboard-enterprise-live.json
           if-no-files-found: error
 
@@ -188,6 +282,6 @@ jobs:
           git config user.email 'ivx-certifier@users.noreply.github.com'
           git add qa/evidence/autonomous-dashboard-enterprise-live.json
           git diff --cached --quiet && exit 0
-          git commit -m "cert(autonomous-dashboard): 112/112 GPS live exact-SHA ${GITHUB_SHA:0:12} [skip ci]"
+          git commit -m "cert(autonomous-dashboard): realtime 112/112 live exact-SHA ${GITHUB_SHA:0:12} [skip ci]"
           git pull --rebase origin main
           git push origin HEAD:main
