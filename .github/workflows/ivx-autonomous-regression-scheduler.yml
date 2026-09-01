@@ -208,7 +208,7 @@ jobs:
           accepted=$(jq '[.[] | select(.http == "200" and .response.ok == true and .response.runRecord != null)] | length' /tmp/ivx-regression/team-results.json)
           rejected=$((selected-accepted))
           echo "selected_agents=$selected accepted_agent_runs=$accepted rejected_agent_runs=$rejected"
-          jq -r '.[] | select(.http != "200" or .response.ok != true or .response.runRecord == null) | "agent_rejected=\(.agentId) http=\(.http) error=\(.response.error // \"unknown\")"' /tmp/ivx-regression/team-results.json || true
+          jq -c '.[] | select(.http != "200" or .response.ok != true or .response.runRecord == null) | {agentId,http,error:(.response.error // "unknown")}' /tmp/ivx-regression/team-results.json | sed 's/^/agent_rejected=/' || true
           test "$accepted" -eq "$selected"
 
       - name: Delegate closed-loop repair owner to Senior Developer Worker
