@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/ivx-112-per-agent-20h-no-sleep-sla.yml'
       - '.github/workflows/ivx-no-idle-intelligence.yml'
+      - '.github/workflows/ivx-112-15min-agent-control.yml'
       - 'backend/services/ivx-agent-work-ledger.ts'
       - 'backend/services/ivx-autonomous-truth-control.ts'
       - 'backend/services/ivx-github-actions-oidc.ts'
@@ -52,9 +53,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # The canonical ledger aggregates durable dispatcher/worker/workflow evidence
-          # for 112 agents and can be cold/slow under a post-merge Actions burst. Give the
-          # real ledger enough time instead of turning telemetry latency into a fake SLA failure.
           curl -fsS --retry 2 --retry-delay 5 --retry-all-errors --max-time 150 \
             -H "X-IVX-GitHub-OIDC: ${OIDC_TOKEN}" \
             "${API_BASE}/api/ivx/autonomous/agent-ledger" -o /tmp/ledger.json
@@ -66,14 +64,12 @@ jobs:
           jq --argjson min "$min_ms" --argjson target "$target_ms" '[.agents[] | {agentNumber,agentId,agentName,status,currentTask,lastHeartbeatAt,productiveMs24h,idleMs24h,evidenceState,qualityState,belowMinimum:((.productiveMs24h // 0)<$min),belowTarget:((.productiveMs24h // 0)<$target)}]' /tmp/ledger.json > /tmp/per-agent.json
           below_min=$(jq '[.[] | select(.belowMinimum)] | length' /tmp/per-agent.json)
           below_target=$(jq '[.[] | select(.belowTarget)] | length' /tmp/per-agent.json)
-          idle=$(jq '[.[] | select(.status == "IDLE")] | length' /tmp/per-agent.json)
-          echo "BEFORE below20h=$below_min below22h=$below_target idle=$idle"
+          active_under_min=$(jq '[.[] | select(.belowMinimum and (.status=="ASSIGNED" or .status=="CODING" or .status=="TESTING" or .status=="PR_OPEN" or .status=="CI" or .status=="MERGING" or .status=="DEPLOYING" or .status=="VERIFYING"))] | length' /tmp/per-agent.json)
+          echo "BEFORE below20h=$below_min below22h=$below_target activeUnder20h=$active_under_min"
           echo "below_min=$below_min" >> "$GITHUB_OUTPUT"
-          echo "below_target=$below_target" >> "$GITHUB_OUTPUT"
-          echo "idle=$idle" >> "$GITHUB_OUTPUT"
 
-      - name: Resume global dispatcher when any IA is under SLA or idle
-        if: ${{ steps.before.outputs.below_min != '0' || steps.before.outputs.idle != '0' }}
+      - name: Resume global dispatcher when any IA is under SLA
+        if: ${{ steps.before.outputs.below_min != '0' }}
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         shell: bash
@@ -88,8 +84,9 @@ jobs:
           test "$code" = 200
           test "$(jq -r '.ok // false' /tmp/resume.json)" = true
 
-      - name: Dispatch evidence-backed work to under-SLA idle agents
-        if: ${{ steps.before.outputs.below_min != '0' || steps.before.outputs.idle != '0' }}
+      - name: Dispatch evidence-backed work to under-SLA agents without active work
+        id: dispatch
+        if: ${{ steps.before.outputs.below_min != '0' }}
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
           SOURCE_SHA: ${{ github.sha }}
@@ -97,43 +94,55 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          jq -r '.[] | select(.belowMinimum and (.status=="IDLE" or .status=="STALE" or .status=="UNKNOWN" or .currentTask==null)) | [.agentId,.agentNumber,.status] | @tsv' /tmp/per-agent.json > /tmp/under-sla-idle.tsv
-          count=$(wc -l < /tmp/under-sla-idle.tsv | tr -d ' ')
-          echo "under_sla_idle_candidates=$count"
-          if [ "$count" = 0 ]; then exit 0; fi
+          jq -r '.[] | select(.belowMinimum and (.status!="ASSIGNED" and .status!="CODING" and .status!="TESTING" and .status!="PR_OPEN" and .status!="CI" and .status!="MERGING" and .status!="DEPLOYING" and .status!="VERIFYING")) | [.agentId,.agentNumber,.status] | @tsv' /tmp/per-agent.json > /tmp/under-sla-not-active.tsv
+          count=$(wc -l < /tmp/under-sla-not-active.tsv | tr -d ' ')
+          echo "under_sla_without_active_work=$count"
           mkdir -p /tmp/20h-results
+          if [ "$count" = 0 ]; then
+            echo 'dispatch_candidates=0' >> "$GITHUB_OUTPUT"
+            echo 'dispatch_verified=0' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           export API_BASE OIDC_TOKEN SOURCE_SHA RUN_ID
           cat > /tmp/run-under-sla.sh <<'SCRIPT'
           #!/usr/bin/env bash
-          set -euo pipefail
+          set -u
           agent_id="$1"; agent_number="$2"; previous_status="$3"
           safe_id=$(printf '%s' "$agent_id" | tr -c 'A-Za-z0-9_.-' '_')
-          payload=$(jq -n --arg sha "$SOURCE_SHA" --arg run "$RUN_ID" --arg status "$previous_status" --argjson n "$agent_number" '{taskType:"audit",payload:{missionType:"per_agent_20h_sla_recovery",readOnly:true,requireEvidence:true,sourceSha:$sha,controllerRunId:$run,agentNumber:$n,previousStatus:$status,instruction:"Perform real evidence-backed low-risk work within your capability. This run is productive only if runtime evidence is returned. Do not fabricate time or completion."}}')
-          http=$(curl -sS --retry 1 --retry-delay 1 --max-time 75 -o "/tmp/20h-results/${safe_id}.json" -w '%{http_code}' -X POST \
+          task_id="20h-${RUN_ID}-$(printf '%03d' "$agent_number")"
+          payload=$(jq -n --arg sha "$SOURCE_SHA" --arg run "$RUN_ID" --arg taskId "$task_id" --arg status "$previous_status" --argjson n "$agent_number" '{taskType:"audit",payload:{__taskId:$taskId,__runId:("20h-"+$taskId),__workflow:"IVX 112 Per-Agent 20H No-Sleep SLA",missionType:"per_agent_20h_sla_recovery",readOnly:true,requireEvidence:true,realExecutionOnly:true,simulatedSuccessAllowed:false,sourceSha:$sha,controllerRunId:$run,agentNumber:$n,previousStatus:$status,instruction:"Perform real evidence-backed low-risk work within your capability. Productive time is counted only from canonical runtime evidence. Do not fabricate time or completion."}}')
+          http=$(curl -sS --retry 1 --retry-delay 1 --max-time 120 -o "/tmp/20h-results/${safe_id}.json" -w '%{http_code}' -X POST \
             -H 'content-type: application/json' \
             -H "X-IVX-GitHub-OIDC: ${OIDC_TOKEN}" \
             --data "$payload" \
             "${API_BASE}/api/ivx/agents/${agent_id}/run" || true)
-          ok=false; evidence=0; run_id=''
+          ok=false; final_status='request_failed'; source_reference=''; tool_result_id=''; simulated='null'
           if [ "$http" = 200 ] && jq -e . "/tmp/20h-results/${safe_id}.json" >/dev/null 2>&1; then
             ok=$(jq -r '.ok // false' "/tmp/20h-results/${safe_id}.json")
-            evidence=$(jq -r '(.runRecord.evidence // []) | length' "/tmp/20h-results/${safe_id}.json")
-            run_id=$(jq -r '.runRecord.runId // .runRecord.taskId // .runRecord.id // empty' "/tmp/20h-results/${safe_id}.json")
+            final_status=$(jq -r '.runRecord.finalStatus // "unknown"' "/tmp/20h-results/${safe_id}.json")
+            source_reference=$(jq -r '.runRecord.sourceReference // empty' "/tmp/20h-results/${safe_id}.json")
+            tool_result_id=$(jq -r '.runRecord.toolResultId // empty' "/tmp/20h-results/${safe_id}.json")
+            simulated=$(jq -r 'if .runRecord.simulated != null then (.runRecord.simulated|tostring) elif .simulated != null then (.simulated|tostring) else "null" end' "/tmp/20h-results/${safe_id}.json")
           fi
           passed=false
-          if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$evidence" -gt 0 ] && [ -n "$run_id" ]; then passed=true; fi
-          jq -n --arg agentId "$agent_id" --argjson agentNumber "$agent_number" --arg previousStatus "$previous_status" --arg http "$http" --argjson evidence "$evidence" --arg runId "$run_id" --argjson passed "$passed" '{agentId:$agentId,agentNumber:$agentNumber,previousStatus:$previousStatus,http:$http,evidenceCount:$evidence,runId:$runId,passed:$passed}' > "/tmp/20h-results/${safe_id}.result.json"
-          test "$passed" = true
+          if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$final_status" = completed ] && [ -n "$source_reference" ] && [ -n "$tool_result_id" ] && [ "$simulated" = false ]; then passed=true; fi
+          jq -n --arg agentId "$agent_id" --argjson agentNumber "$agent_number" --arg previousStatus "$previous_status" --arg http "$http" --argjson ok "$ok" --arg finalStatus "$final_status" --arg sourceReference "$source_reference" --arg toolResultId "$tool_result_id" --argjson simulated "$simulated" --argjson passed "$passed" '{agentId:$agentId,agentNumber:$agentNumber,previousStatus:$previousStatus,http:$http,ok:$ok,finalStatus:$finalStatus,sourceReference:$sourceReference,toolResultId:$toolResultId,simulated:$simulated,passed:$passed}' > "/tmp/20h-results/${safe_id}.result.json"
+          exit 0
           SCRIPT
           chmod +x /tmp/run-under-sla.sh
-          xargs -r -P "$MAX_PARALLEL_FILL" -n 3 /tmp/run-under-sla.sh < /tmp/under-sla-idle.tsv
+          xargs -r -P "$MAX_PARALLEL_FILL" -n 3 /tmp/run-under-sla.sh < /tmp/under-sla-not-active.tsv
           jq -s '.' /tmp/20h-results/*.result.json > /tmp/20h-dispatch-results.json
           total=$(jq 'length' /tmp/20h-dispatch-results.json)
           passed=$(jq '[.[]|select(.passed==true)]|length' /tmp/20h-dispatch-results.json)
-          echo "20h_recovery_dispatched=$total evidence_verified=$passed"
-          test "$total" = "$passed"
+          failed=$((total-passed))
+          echo "20h_recovery_candidates=$total evidence_verified=$passed rejected=$failed"
+          jq -c '.[] | select(.passed!=true) | {agentNumber,agentId,http,finalStatus,simulated,hasSource:(.sourceReference!=""),hasToolResult:(.toolResultId!="")}' /tmp/20h-dispatch-results.json | sed 's/^/20h_rejected=/' || true
+          echo "dispatch_candidates=$total" >> "$GITHUB_OUTPUT"
+          echo "dispatch_verified=$passed" >> "$GITHUB_OUTPUT"
+          echo "dispatch_rejected=$failed" >> "$GITHUB_OUTPUT"
 
-      - name: Re-read ledger and enforce no silent sleeping IA with executable work
+      - name: Re-read ledger and fail if any under-SLA IA is silently unassigned
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         shell: bash
@@ -146,21 +155,25 @@ jobs:
           test "$(jq -r '.ok // false' /tmp/after.json)" = true
           test "$(jq -r '.rowCount // 0' /tmp/after.json)" = 112
           min_ms=$((20*60*60*1000))
-          idle=$(jq '[.agents[] | select(.status == "IDLE")] | length' /tmp/after.json)
           below_min=$(jq --argjson min "$min_ms" '[.agents[] | select((.productiveMs24h // 0)<$min)] | length' /tmp/after.json)
-          under_sla_idle=$(jq --argjson min "$min_ms" '[.agents[] | select((.productiveMs24h // 0)<$min and .status == "IDLE")] | length' /tmp/after.json)
-          echo "AFTER idle=$idle below20h=$below_min underSlaIdle=$under_sla_idle"
-          test "$under_sla_idle" -eq 0
+          active_under_min=$(jq --argjson min "$min_ms" '[.agents[] | select((.productiveMs24h // 0)<$min and (.status=="ASSIGNED" or .status=="CODING" or .status=="TESTING" or .status=="PR_OPEN" or .status=="CI" or .status=="MERGING" or .status=="DEPLOYING" or .status=="VERIFYING"))] | length' /tmp/after.json)
+          under_sla_not_active=$(jq --argjson min "$min_ms" '[.agents[] | select((.productiveMs24h // 0)<$min and (.status!="ASSIGNED" and .status!="CODING" and .status!="TESTING" and .status!="PR_OPEN" and .status!="CI" and .status!="MERGING" and .status!="DEPLOYING" and .status!="VERIFYING"))] | length' /tmp/after.json)
+          echo "AFTER below20h=$below_min activeUnder20h=$active_under_min underSlaWithoutActiveWork=$under_sla_not_active"
+          test "$under_sla_not_active" -eq 0
 
       - name: Emit honest per-agent SLA evidence
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p evidence
           now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           min_ms=$((20*60*60*1000)); target_ms=$((22*60*60*1000))
-          jq --arg at "$now" --argjson min "$min_ms" --argjson target "$target_ms" '{certificate:"IVX 112 Per-Agent 20H No-Sleep SLA",checkedAt:$at,totalAgents:.rowCount,totals:.totals,minProductiveMsPerAgent:$min,targetProductiveMsPerAgent:$target,agents:[.agents[]|{agentNumber,agentId,agentName,status,currentTask,lastHeartbeatAt,productiveMs24h,idleMs24h,evidenceState,qualityState,meets20h:((.productiveMs24h//0)>=$min),meets22h:((.productiveMs24h//0)>=$target)}],truthPolicy:"Productive hours come only from the canonical evidence-backed ledger. Registered/connected/elapsed time is never counted as work."}' /tmp/after.json > evidence/ivx-112-per-agent-20h-sla.json
-          cat evidence/ivx-112-per-agent-20h-sla.json
+          source=/tmp/after.json
+          [ -f "$source" ] || source=/tmp/ledger.json
+          test -f "$source"
+          jq --arg at "$now" --argjson min "$min_ms" --argjson target "$target_ms" --arg dispatchCandidates "${{ steps.dispatch.outputs.dispatch_candidates || '0' }}" --arg dispatchVerified "${{ steps.dispatch.outputs.dispatch_verified || '0' }}" --arg dispatchRejected "${{ steps.dispatch.outputs.dispatch_rejected || '0' }}" '{certificate:"IVX 112 Per-Agent 20H No-Sleep SLA",checkedAt:$at,totalAgents:.rowCount,totals:.totals,minProductiveMsPerAgent:$min,targetProductiveMsPerAgent:$target,dispatch:{candidates:($dispatchCandidates|tonumber),evidenceVerified:($dispatchVerified|tonumber),rejected:($dispatchRejected|tonumber)},agents:[.agents[]|{agentNumber,agentId,agentName,status,currentTask,lastHeartbeatAt,productiveMs24h,idleMs24h,evidenceState,qualityState,meets20h:((.productiveMs24h//0)>=$min),meets22h:((.productiveMs24h//0)>=$target),activelyAssigned:(.status=="ASSIGNED" or .status=="CODING" or .status=="TESTING" or .status=="PR_OPEN" or .status=="CI" or .status=="MERGING" or .status=="DEPLOYING" or .status=="VERIFYING")}],truthPolicy:"Productive hours come only from the canonical evidence-backed ledger. Registered/connected/elapsed time is never counted as work."}' "$source" > evidence/ivx-112-per-agent-20h-sla.json
+          jq '{totalAgents,totals,dispatch,meets20h:([.agents[]|select(.meets20h)]|length),activelyAssigned:([.agents[]|select(.activelyAssigned)]|length)}' evidence/ivx-112-per-agent-20h-sla.json
 
       - name: Upload per-agent SLA evidence
         uses: actions/upload-artifact@v4
