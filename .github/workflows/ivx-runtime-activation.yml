@@ -48,7 +48,7 @@ jobs:
       - name: Run runtime orchestrator (Phase 2 + Phase 3 + Phase 4)
         run: bun run qa/ivx-runtime-orchestrator.ts
 
-      - name: Verify activation proof (fails if incomplete)
+      - name: Verify activation proof (fail closed on incomplete or failed work)
         run: |
           CERT=$(ls -t qa/evidence/autonomous/runtime-activation/*/runtime-activation-certificate.json | head -1)
           echo "certificate: $CERT"
@@ -71,16 +71,31 @@ jobs:
           if worker_numbers != expected: failures.append(f"worker IDs not exactly 13..112: got {worker_numbers[:5]}...{worker_numbers[-5:] if worker_numbers else ''}")
           for p in ("phase2Active","phase3Active","phase4Active"):
               if not cert[p]: failures.append(f"{p} != true")
+          # ACTIVE is not enough. Every dispatched mission item must actually PASS.
+          expected_totals = {"phase2Counts": 120, "phase3Counts": 475, "phase4Counts": 25}
+          for key, expected_total in expected_totals.items():
+              counts = cert[key]
+              total = counts.get("total", -1)
+              passed = counts.get("pass", -1)
+              failed = counts.get("fail", -1)
+              blocked = counts.get("blocked", -1)
+              if total != expected_total:
+                  failures.append(f"{key}.total={total} != {expected_total}")
+              if passed != total or failed != 0 or blocked != 0:
+                  failures.append(f"{key} incomplete: pass={passed} total={total} fail={failed} blocked={blocked}")
+          failed_workers = cert.get("failedActivationWorkers", [])
+          if failed_workers:
+              failures.append(f"failedActivationWorkers not empty: {failed_workers}")
           if cert["simulatedRuns"] != 0: failures.append(f"simulatedRuns={cert['simulatedRuns']} != 0")
           if cert["fakeSuccessRuns"] != 0: failures.append(f"fakeSuccessRuns={cert['fakeSuccessRuns']} != 0")
           if cert["artifactCount"] < 100: failures.append(f"artifactCount={cert['artifactCount']} < 100")
           if not cert["workflowRunId"]: failures.append("workflowRunId missing")
-          print(json.dumps({k: cert[k] for k in ("currentMainSha","commandAgentsActive","workersActive","phase2Active","phase3Active","phase4Active","simulatedRuns","fakeSuccessRuns","artifactCount","workflowRunId")}, indent=2))
+          print(json.dumps({k: cert[k] for k in ("currentMainSha","commandAgentsActive","workersActive","phase2Active","phase3Active","phase4Active","phase2Counts","phase3Counts","phase4Counts","failedActivationWorkers","simulatedRuns","fakeSuccessRuns","artifactCount","workflowRunId")}, indent=2))
           if failures:
-              print("ACTIVATION INCOMPLETE:")
+              print("ACTIVATION INCOMPLETE — CERTIFICATION RED:")
               for f_ in failures: print(f"  - {f_}")
               sys.exit(1)
-          print("ACTIVATION PROOF COMPLETE")
+          print("ACTIVATION PROOF COMPLETE — ALL 620 MISSION ITEMS PASS")
           EOF
 
       - name: Upload per-worker + per-item evidence
