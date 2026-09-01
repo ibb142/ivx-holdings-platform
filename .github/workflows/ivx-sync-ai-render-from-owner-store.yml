@@ -1,6 +1,6 @@
 name: IVX Sync AI Render From Owner Store
 
-# Trigger stamp: 2026-08-25 final live secret sync before 112 certification
+# Trigger stamp: 2026-09-01 restore owner auth binding for Block 1 certification
 on:
   push:
     branches: [main]
@@ -22,6 +22,7 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
       IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+      OWNER_NEW_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD }}
     steps:
       - name: Decrypt owner credentials and safely bind Render runtime
         shell: bash
@@ -32,12 +33,15 @@ jobs:
           const base = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/+$/, '');
           const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
           const systemSecret = (process.env.IVX_AI_SYSTEM_SECRET || '').trim();
+          const ownerPassword = (process.env.OWNER_NEW_PASSWORD || '').trim();
           const encryptionSecrets = [
             process.env.IVX_OWNER_VARIABLES_ENCRYPTION_KEY,
             process.env.APP_SECRET,
             process.env.JWT_SECRET,
           ].filter(Boolean);
-          if (!base || !serviceKey || encryptionSecrets.length === 0 || !systemSecret) throw new Error('required GitHub runtime bindings missing');
+          if (!base || !serviceKey || encryptionSecrets.length === 0 || !systemSecret || !ownerPassword) {
+            throw new Error('required GitHub runtime bindings missing, including OWNER_NEW_PASSWORD');
+          }
           const encryptionSecret = encryptionSecrets[0];
           const names = ['RENDER_API_KEY','RENDER_SERVICE_ID','IVX_AI_GATEWAY_KEY','AI_GATEWAY_API_KEY'];
           const query = encodeURIComponent(`(${names.join(',')})`);
@@ -88,6 +92,7 @@ jobs:
           existing.set('AI_GATEWAY_API_KEY', aiKey);
           existing.set('IVX_OWNER_VARIABLES_ENCRYPTION_KEY', encryptionSecret);
           existing.set('IVX_AI_SYSTEM_SECRET', systemSecret);
+          existing.set('OWNER_NEW_PASSWORD', ownerPassword);
           const body = Array.from(existing, ([key,value]) => ({ key, value }));
           const putRes = await fetch(envUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
           if (!putRes.ok) throw new Error(`Render env PUT HTTP ${putRes.status}: ${(await putRes.text()).slice(0,160)}`);
@@ -99,13 +104,15 @@ jobs:
             const ev = item.envVar || item;
             if (ev && typeof ev.key === 'string') verify.set(ev.key, typeof ev.value === 'string' ? ev.value : '');
           }
-          for (const required of ['IVX_AI_GATEWAY_KEY','AI_GATEWAY_API_KEY','IVX_OWNER_VARIABLES_ENCRYPTION_KEY','IVX_AI_SYSTEM_SECRET']) {
+          for (const required of ['IVX_AI_GATEWAY_KEY','AI_GATEWAY_API_KEY','IVX_OWNER_VARIABLES_ENCRYPTION_KEY','IVX_AI_SYSTEM_SECRET','OWNER_NEW_PASSWORD']) {
             if (!verify.get(required)) throw new Error(`Render post-write validation missing ${required}`);
           }
           if (verify.get('IVX_AI_SYSTEM_SECRET') !== systemSecret) throw new Error('Render IVX_AI_SYSTEM_SECRET mismatch after write');
+          if (verify.get('OWNER_NEW_PASSWORD') !== ownerPassword) throw new Error('Render OWNER_NEW_PASSWORD mismatch after write');
           console.log(`owner_store_decrypt=PASS rows=${rows.length}`);
           console.log(`render_env_merge=PASS before=${before} after=${verify.size}`);
           console.log('system_secret_sync=PASS');
+          console.log('owner_password_binding_sync=PASS');
           const deployRes = await fetch(`https://api.render.com/v1/services/${encodeURIComponent(serviceId)}/deploys`, {
             method: 'POST', headers, body: JSON.stringify({ clearCache: 'do_not_clear' })
           });
