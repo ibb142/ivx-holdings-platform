@@ -119,7 +119,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl -sS --max-time 30 -o /tmp/ivx-regression/resume.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}" -d '{"action":"resume_all"}' "${API_BASE}/api/ivx/agents/app-completion/control")
+          args=(-sS --max-time 30 -o /tmp/ivx-regression/resume.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}")
+          if [ -n "${SYSTEM_KEY:-}" ]; then
+            echo "::add-mask::$SYSTEM_KEY"
+            args+=( -H "x-ivx-owner-key: $SYSTEM_KEY" )
+          fi
+          code=$(curl "${args[@]}" -d '{"action":"resume_all"}' "${API_BASE}/api/ivx/agents/app-completion/control")
           cat /tmp/ivx-regression/resume.json
           test "$code" = 200
           test "$(jq -r '.ok // false' /tmp/ivx-regression/resume.json)" = true
@@ -140,7 +145,9 @@ jobs:
           : > /tmp/ivx-regression/team-results.jsonl
           while IFS= read -r agent; do
             payload=$(jq -n --arg sha "$CURRENT_SHA" --arg mission "$(cat /tmp/ivx-regression/mission-calendar.json)" '{taskType:"enterprise_regression_recovery",payload:{surface:"landing",currentSha:$sha,targetScore:"10/10",instruction:"Restore the certified surface to 10/10. Diagnose real current-SHA regressions, implement only evidence-backed safe fixes, validate, deploy exact main SHA, and recertify. Do not close on PR/build/deploy alone.",missionCalendar:($mission|fromjson)}}')
-            code=$(curl -sS --max-time 30 -o /tmp/ivx-regression/agent-run.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}" --data "$payload" "${API_BASE}/api/ivx/agents/${agent}/run" || true)
+            args=(-sS --max-time 30 -o /tmp/ivx-regression/agent-run.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}")
+            if [ -n "${SYSTEM_KEY:-}" ]; then args+=( -H "x-ivx-owner-key: $SYSTEM_KEY" ); fi
+            code=$(curl "${args[@]}" --data "$payload" "${API_BASE}/api/ivx/agents/${agent}/run" || true)
             jq -n --arg agentId "$agent" --arg http "$code" --argjson response "$(cat /tmp/ivx-regression/agent-run.json 2>/dev/null || echo '{}')" '{agentId:$agentId,http:$http,response:$response}' >> /tmp/ivx-regression/team-results.jsonl
           done < /tmp/ivx-regression/team.txt
           jq -s '.' /tmp/ivx-regression/team-results.jsonl > /tmp/ivx-regression/team-results.json
