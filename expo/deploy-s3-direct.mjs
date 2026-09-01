@@ -435,33 +435,75 @@ async function deploy() {
     fail++;
   }
 
-  // ── APK file (if exists) ────────────────────────────
-  if (existsSync(APK_PATH)) {
-    const apkBody = readFileSync(APK_PATH);
-    const apkKeys = [
-      { key: 'apk/download', disposition: 'attachment; filename="ivx-holdings-v1.10.14.apk"' },
-      { key: 'apk/ivx-holdings-v1.10.14.apk', disposition: 'attachment; filename="ivx-holdings-v1.10.14.apk"' },
-    ];
-    for (const a of apkKeys) {
+  // ── APK file (built locally, else latest GitHub release asset) ──
+  // The landing links versioned keys like /apk/ivx-holdings-v1.10.30.apk.
+  // Historically NO APK object was ever uploaded, so those keys fell through
+  // the S3 website fallback and served index.html as text/html — a corrupt
+  // download for every user. Fix: serve every APK key referenced by the
+  // landing HTML plus the stable /apk/download key with a real APK binary.
+  const apkTargets = new Set(['apk/download']);
+  const LANDING_INDEX_PATH = LANDING_DIR + '/index.html';
+  if (existsSync(LANDING_INDEX_PATH)) {
+    const idxHtml = readFileSync(LANDING_INDEX_PATH, 'utf-8');
+    for (const m of idxHtml.matchAll(/apk\/[A-Za-z0-9._-]+\.apk/g)) apkTargets.add(m[0]);
+  }
+  const isApkResponse = async (key) => {
+    try {
+      const h = await fetch('https://ivxholding.com/' + key, { method: 'HEAD' });
+      return h.ok && (h.headers.get('content-type') || '').includes('android');
+    } catch { return false; }
+  };
+  let allApkDeployed = true;
+  for (const key of apkTargets) {
+    if (!(await isApkResponse(key))) { allApkDeployed = false; break; }
+  }
+  if (allApkDeployed) {
+    console.log('✅ APK keys already deployed:', [...apkTargets].join(', '));
+    results.push({ key: 'apk/*', status: 'ok', note: 'already deployed' });
+    ok++;
+  } else {
+    if (!existsSync(APK_PATH)) {
       try {
-        await s3.send(new PutObjectCommand({
-          Bucket: BUCKET, Key: a.key, Body: apkBody,
-          ContentType: 'application/vnd.android.package-archive',
-          ContentDisposition: a.disposition,
-          CacheControl: 'public, max-age=86400',
-        }));
-        console.log('✅ UPLOADED', a.key, '(' + apkBody.length + ' bytes, APK)');
-        results.push({ key: a.key, status: 'ok', size: apkBody.length, type: 'apk' });
-        ok++;
+        const rels = await (await fetch('https://api.github.com/repos/ibb142/ivx-holdings-platform/releases?per_page=10', { headers: { 'User-Agent': 'ivx-s3-deploy' } })).json();
+        outer: for (const r of Array.isArray(rels) ? rels : []) {
+          for (const a of r.assets || []) {
+            if (a.name.endsWith('.apk') && (a.size || 0) > 1024 * 1024) {
+              const bin = Buffer.from(await (await fetch(a.browser_download_url)).arrayBuffer());
+              if (bin.length > 1024 * 1024) {
+                writeFileSync(APK_PATH, bin);
+                console.log('✅ APK fetched from release', r.tag_name, a.name, '(' + bin.length + ' bytes)');
+                break outer;
+              }
+            }
+          }
+        }
       } catch (e) {
-        console.error('❌ FAILED', a.key + ':', e?.name || 'Unknown', e?.message || 'Unknown error');
-        results.push({ key: a.key, status: 'fail', error: e?.message || 'Unknown' });
-        fail++;
+        console.warn('⚠️ release APK fetch failed:', e?.message || e);
       }
     }
-  } else {
-    console.log('⚠️  APK not found at', APK_PATH, '— skipping APK upload');
-    results.push({ key: 'apk/download', status: 'skipped', reason: 'APK not built' });
+    if (existsSync(APK_PATH)) {
+      const apkBody = readFileSync(APK_PATH);
+      for (const key of apkTargets) {
+        try {
+          await s3.send(new PutObjectCommand({
+            Bucket: BUCKET, Key: key, Body: apkBody,
+            ContentType: 'application/vnd.android.package-archive',
+            ContentDisposition: 'attachment; filename="' + key.split('/').pop() + '"',
+            CacheControl: 'public, max-age=86400',
+          }));
+          console.log('✅ UPLOADED', key, '(' + apkBody.length + ' bytes, APK)');
+          results.push({ key, status: 'ok', size: apkBody.length, type: 'apk' });
+          ok++;
+        } catch (e) {
+          console.error('❌ FAILED', key + ':', e?.name || 'Unknown', e?.message || 'Unknown error');
+          results.push({ key, status: 'fail', error: e?.message || 'Unknown' });
+          fail++;
+        }
+      }
+    } else {
+      console.log('⚠️  APK not found at', APK_PATH, 'and no release asset — skipping APK upload');
+      results.push({ key: 'apk/download', status: 'skipped', reason: 'APK not built and no release asset' });
+    }
   }
 
   // ── CloudFront Response Headers Policy (security headers) ───────

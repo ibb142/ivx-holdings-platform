@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync, existsSync } from 'fs';
 import { join } from 'path';

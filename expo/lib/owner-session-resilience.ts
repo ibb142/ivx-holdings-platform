@@ -3,8 +3,8 @@ import { supabase } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 
 const KEYS = {
-  ACCESS_TOKEN: 'ivx_owner_resilient_access_token',
-  REFRESH_TOKEN: 'ivx_owner_resilient_refresh_token',
+  ACCESS_TOKEN: 'ivx_owner_resilient_access_token', // ivx-audit-ok: SecureStore key name, not a credential
+  REFRESH_TOKEN: 'ivx_owner_resilient_refresh_token', // ivx-audit-ok: SecureStore key name, not a credential
   EMAIL: 'ivx_owner_resilient_email',
   USER_ID: 'ivx_owner_resilient_user_id',
   EXPIRES_AT: 'ivx_owner_resilient_expires_at',

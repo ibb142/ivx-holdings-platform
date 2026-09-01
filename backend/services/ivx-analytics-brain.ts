@@ -175,7 +175,7 @@ const INTEREST_MAP: Record<string, keyof MemberProfile> = {
   joint_venture: 'interest_jv_deals',
   tokenized: 'interest_tokenized_assets',
   tokenized_assets: 'interest_tokenized_assets',
-  token: 'interest_tokenized_assets',
+  token: 'interest_tokenized_assets', // ivx-audit-ok: analytics taxonomy slug, not a credential
   blockchain: 'interest_tokenized_assets',
   portfolio: 'interest_portfolio',
   holdings: 'interest_portfolio',

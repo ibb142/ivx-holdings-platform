@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, test, beforeEach, mock } from 'bun:test';
 
 // Mock AsyncStorage before importing the queue module.

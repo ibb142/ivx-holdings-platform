@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
 import {
   STEPS,

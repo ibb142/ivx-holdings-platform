@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, test } from 'bun:test';
 import { isRetryableError, getBackoffDelay } from '../lib/canonical-query-utils';
 

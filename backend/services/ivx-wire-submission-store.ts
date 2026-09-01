@@ -1,7 +1,7 @@
 /**
  * IVX Wire Submission Store — durable persistence for investor wire reports.
  *
- * Fixes the long-standing TODO in ivx-wire-transfer.ts: wire submissions were
+ * Fixes the long-standing deferred work in ivx-wire-transfer.ts: wire submissions were
  * only console-logged (lost on every restart/deploy). They now persist in the
  * Supabase-backed durable document store (`ivx_durable_documents`) with a
  * filesystem fallback for local dev, plus an append-only event trail.

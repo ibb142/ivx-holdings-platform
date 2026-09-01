@@ -678,6 +678,29 @@ export async function handlePublicChatStreamPost(request: Request): Promise<Resp
               sessionId, clientId, role: 'assistant',
               content: accumulated, source: 'chatgpt', model,
             }).catch(() => undefined);
+          } else if (accumulated.length === 0) {
+            // Empty gateway completion (e.g. provider quota/credit exhaustion
+            // returning 200 with no content). Never emit an empty bubble or a
+            // fake chatgpt proof — fall back truthfully and log the anomaly.
+            console.error('[IVXPublicChatStream] Gateway returned an empty completion', {
+              requestId,
+              sessionId,
+              model,
+            });
+            const emptyFallbackAnswer = buildFallbackAnswer(message);
+            send({ type: 'response.delta', delta: emptyFallbackAnswer, requestId });
+            send({
+              type: 'response.completed',
+              text: emptyFallbackAnswer,
+              model: 'ivx-local-fallback',
+              source: 'fallback',
+              requestId,
+              sessionId,
+            });
+            void persistPublicTurn({
+              sessionId, clientId, role: 'assistant',
+              content: emptyFallbackAnswer, source: 'fallback', model: 'ivx-local-fallback',
+            }).catch(() => undefined);
           }
         } catch (streamErr) {
           const errMsg = sanitizeErrorMessage(streamErr, 'AI streaming failed');

@@ -69,8 +69,7 @@ function getGatewayBaseUrl(): string {
  * chat. Lazy-imports `ai` so this module loads without the package present.
  */
 export const defaultGatewayImageGenerator: GatewayImageGenerator = async (input) => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const aiModule: any = await import('ai');
+  const aiModule = await import('ai');
   const { createOpenAI } = await import('@ai-sdk/openai');
   const provider = createOpenAI({ apiKey: input.apiKey, baseURL: input.baseURL });
 
@@ -78,8 +77,7 @@ export const defaultGatewayImageGenerator: GatewayImageGenerator = async (input)
   if (isMultimodalLLM) {
     const result = await aiModule.generateText({
       model: provider.chat(input.modelId),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      providerOptions: { google: { responseModalities: ['TEXT', 'IMAGE'] } } as any,
+      providerOptions: { google: { responseModalities: ['TEXT', 'IMAGE'] } },
       messages: [
         {
           role: 'user',
@@ -96,7 +94,7 @@ export const defaultGatewayImageGenerator: GatewayImageGenerator = async (input)
       .map((file) => ({ base64: file.base64 as string, mediaType: file.mediaType ?? 'image/png' }));
   }
 
-  const result = await aiModule.experimental_generateImage({
+  const result = await aiModule.generateImage({
     model: provider.image(input.modelId.replace(/^openai\//, '')),
     prompt: input.prompt,
   });

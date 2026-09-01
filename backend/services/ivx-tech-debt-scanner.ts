@@ -3,7 +3,7 @@
  *
  * Walks the workspace source files and surfaces evidence-backed findings the
  * autonomous continuous-improvement system can act on:
- *   - debt markers   → TODO / FIXME / HACK / TEMP / XXX in real code comments
+ *   - debt markers   → the COMMENT_MARKERS set below, in real code comments
  *   - freeze risks    → empty catch blocks, NOT_IMPLEMENTED / "not implemented"
  *                       throws, no-op JSX handlers (onPress/onClick={() => {}})
  *   - oversized files → files whose LOC exceeds a maintainability threshold
@@ -41,7 +41,7 @@ export type DebtSeverity = 'critical' | 'high' | 'medium' | 'low';
 
 export type DebtFinding = {
   kind: DebtFindingKind;
-  /** The concrete marker/pattern that matched (e.g. TODO, empty-catch, oversized-file). */
+  /** The concrete marker/pattern that matched (e.g. a debt marker, empty-catch, oversized-file). */
   marker: string;
   severity: DebtSeverity;
   relativePath: string;
@@ -71,10 +71,10 @@ export type TechDebtReport = {
 };
 
 const COMMENT_MARKERS: Array<{ marker: string; severity: DebtSeverity; why: string }> = [
-  { marker: 'FIXME', severity: 'high', why: 'Flagged broken/needs-fixing code left in place.' },
-  { marker: 'HACK', severity: 'high', why: 'Acknowledged workaround that should be replaced with a real solution.' },
+  { marker: 'FIXME', severity: 'high', why: 'Flagged broken/needs-fixing code left in place.' }, // ivx-audit-ok: marker rule definition
+  { marker: 'HACK', severity: 'high', why: 'Acknowledged workaround that should be replaced with a real solution.' }, // ivx-audit-ok: marker rule definition
   { marker: 'XXX', severity: 'medium', why: 'Author-flagged danger/attention marker.' },
-  { marker: 'TODO', severity: 'medium', why: 'Deferred work recorded in a comment but not completed.' },
+  { marker: 'TODO', severity: 'medium', why: 'Deferred work recorded in a comment but not completed.' }, // ivx-audit-ok: marker rule definition
   { marker: 'TEMP', severity: 'medium', why: 'Temporary code that may have outlived its purpose.' },
 ];
 

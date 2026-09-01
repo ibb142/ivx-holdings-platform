@@ -195,22 +195,29 @@ export function useExecutionStatusPoll(
   const stateRef = useRef(state);
   stateRef.current = state;
 
+  // Refs keep the interval restart keyed on taskId + interval only; fresh
+  // status/callback identities never restart an in-flight poll.
+  const initialStatusRef = useRef(initialStatus);
+  initialStatusRef.current = initialStatus;
+  const pollOnceRef = useRef(pollOnce);
+  pollOnceRef.current = pollOnce;
+
   useEffect(() => {
-    if (!initialStatus || isTerminal(initialStatus)) {
+    const current = initialStatusRef.current;
+    if (!current || isTerminal(current)) {
       return;
     }
     stoppedRef.current = false;
     const intervalId = setInterval(() => {
-      void pollOnce();
+      void pollOnceRef.current();
     }, pollIntervalMs);
     // Fire one immediate poll so the bubble advances past "queued" quickly.
-    void pollOnce();
+    void pollOnceRef.current();
     return () => {
       clearInterval(intervalId);
       stoppedRef.current = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialStatus?.taskId, pollIntervalMs]);
+  }, [initialStatus?.taskId, pollIntervalMs, isTerminal]);
 
   // Hard stop after maxAttempts to prevent unbounded polling.
   useEffect(() => {
