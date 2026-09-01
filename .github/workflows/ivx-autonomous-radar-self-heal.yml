@@ -80,28 +80,22 @@ jobs:
             ok=false
             if jq -e . /tmp/ivx-radar/body-${i}.txt >/dev/null 2>&1; then json_valid=true; fi
             if [ "$code" = '200' ] && [ "$json_valid" = true ] && printf '%s' "$content_type" | grep -Eiq 'application/json|\+json'; then ok=true; fi
-            jq -n --argjson sample "$i" --argjson latencyMs "$latency" --arg status "$code" --arg contentType "$content_type" --argjson jsonValid "$json_valid" --argjson ok "$ok" \
-              '{sample:$sample,latencyMs:$latencyMs,status:$status,contentType:$contentType,jsonValid:$jsonValid,ok:$ok}' >> /tmp/ivx-radar/samples.jsonl
+            jq -n --argjson sample "$i" --argjson latencyMs "$latency" --arg status "$code" --arg contentType "$content_type" --argjson jsonValid "$json_valid" --argjson ok "$ok" '{sample:$sample,latencyMs:$latencyMs,status:$status,contentType:$contentType,jsonValid:$jsonValid,ok:$ok}' >> /tmp/ivx-radar/samples.jsonl
             sleep 2
           done
-
           failures=$(jq -s '[.[] | select(.ok != true)] | length' /tmp/ivx-radar/samples.jsonl)
           bad_json=$(jq -s '[.[] | select(.jsonValid != true)] | length' /tmp/ivx-radar/samples.jsonl)
           avg_latency=$(jq -s '([.[].latencyMs] | add) / length | floor' /tmp/ivx-radar/samples.jsonl)
           first_avg=$(jq -s '([.[0:2][].latencyMs] | add) / 2' /tmp/ivx-radar/samples.jsonl)
           last_avg=$(jq -s '([.[3:5][].latencyMs] | add) / 2' /tmp/ivx-radar/samples.jsonl)
           trend=$(awk -v a="$first_avg" -v b="$last_avg" 'BEGIN { if (a<=0) print 1; else printf "%.2f", b/a }')
-
           level=GREEN
           action=observe
           if [ "$failures" -ge 3 ] || [ "$bad_json" -ge 2 ]; then level=CRITICAL; action=self_heal;
           elif [ "$failures" -ge 1 ] || [ "$avg_latency" -ge 2500 ]; then level=WARNING; action=self_heal;
           elif [ "$avg_latency" -ge 1200 ] || awk -v t="$trend" 'BEGIN{exit !(t>=1.7)}'; then level=WATCH; action=preflight;
           fi
-
-          jq -s --arg level "$level" --arg action "$action" --argjson failures "$failures" --argjson badJson "$bad_json" --argjson avgLatencyMs "$avg_latency" --arg trend "$trend" \
-            '{level:$level,action:$action,failures:$failures,badJson:$badJson,avgLatencyMs:$avgLatencyMs,latencyTrend:($trend|tonumber),samples:.}' \
-            /tmp/ivx-radar/samples.jsonl > /tmp/ivx-radar/predictive-assessment.json
+          jq -s --arg level "$level" --arg action "$action" --argjson failures "$failures" --argjson badJson "$bad_json" --argjson avgLatencyMs "$avg_latency" --arg trend "$trend" '{level:$level,action:$action,failures:$failures,badJson:$badJson,avgLatencyMs:$avgLatencyMs,latencyTrend:($trend|tonumber),samples:.}' /tmp/ivx-radar/samples.jsonl > /tmp/ivx-radar/predictive-assessment.json
           cat /tmp/ivx-radar/predictive-assessment.json
           echo "level=$level" >> "$GITHUB_OUTPUT"
           echo "action=$action" >> "$GITHUB_OUTPUT"
@@ -123,21 +117,10 @@ jobs:
           : > /tmp/ivx-radar/critical-gates.jsonl
           current_sha=$(git rev-parse HEAD)
           echo "current_sha=$current_sha" >> "$GITHUB_OUTPUT"
-
           if [ "$GITHUB_EVENT_NAME" = 'workflow_run' ] && [ -n "${SOURCE_RUN_ID:-}" ]; then
-            gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/jobs?per_page=100" \
-              --jq '.jobs[] | select(.conclusion == "failure") | {kind:"source_job_failure",id,name,failedSteps:[.steps[]? | select(.conclusion == "failure") | .name]}' \
-              >> /tmp/ivx-radar/failed-jobs.jsonl
-            jq -n \
-              --arg workflow "${SOURCE_WORKFLOW:-}" \
-              --arg runId "${SOURCE_RUN_ID:-}" \
-              --arg headSha "${SOURCE_HEAD_SHA:-}" \
-              --arg url "${SOURCE_URL:-}" \
-              --arg conclusion "${SOURCE_CONCLUSION:-}" \
-              '{workflow:$workflow,runId:$runId,headSha:$headSha,url:$url,conclusion:$conclusion}' \
-              > /tmp/ivx-radar/source-run.json
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/jobs?per_page=100" --jq '.jobs[] | select(.conclusion == "failure") | {kind:"source_job_failure",id,name,failedSteps:[.steps[]? | select(.conclusion == "failure") | .name]}' >> /tmp/ivx-radar/failed-jobs.jsonl
+            jq -n --arg workflow "${SOURCE_WORKFLOW:-}" --arg runId "${SOURCE_RUN_ID:-}" --arg headSha "${SOURCE_HEAD_SHA:-}" --arg url "${SOURCE_URL:-}" --arg conclusion "${SOURCE_CONCLUSION:-}" '{workflow:$workflow,runId:$runId,headSha:$headSha,url:$url,conclusion:$conclusion}' > /tmp/ivx-radar/source-run.json
           fi
-
           critical_workflows=(
             'Landing 112-Agent Autonomous QA War Room'
             'IVX Enterprise Line-by-Line Quality Audit'
@@ -149,41 +132,30 @@ jobs:
             'IVX 112 Live AI Worker Certificate'
             'E2E Acceptance'
           )
-
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=main&head_sha=${current_sha}&per_page=100" > /tmp/ivx-radar/runs.json
           for workflow in "${critical_workflows[@]}"; do
-            run=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=main&head_sha=${current_sha}&per_page=100" \
-              --jq --arg workflow "$workflow" '[.workflow_runs[] | select(.name == $workflow)] | sort_by(.created_at) | reverse | .[0] // empty')
-
+            run=$(jq -c --arg workflow "$workflow" '[.workflow_runs[] | select(.name == $workflow)] | sort_by(.created_at) | reverse | .[0] // empty' /tmp/ivx-radar/runs.json)
             if [ -z "$run" ]; then
-              jq -n --arg workflow "$workflow" --arg headSha "$current_sha" \
-                '{kind:"missing_current_sha_gate",workflow:$workflow,headSha:$headSha}' >> /tmp/ivx-radar/failed-jobs.jsonl
-              jq -n --arg workflow "$workflow" --arg headSha "$current_sha" \
-                '{workflow:$workflow,headSha:$headSha,status:"missing",conclusion:null}' >> /tmp/ivx-radar/critical-gates.jsonl
+              jq -n --arg workflow "$workflow" --arg headSha "$current_sha" '{kind:"missing_current_sha_gate",workflow:$workflow,headSha:$headSha}' >> /tmp/ivx-radar/failed-jobs.jsonl
+              jq -n --arg workflow "$workflow" --arg headSha "$current_sha" '{workflow:$workflow,headSha:$headSha,status:"missing",conclusion:null}' >> /tmp/ivx-radar/critical-gates.jsonl
               continue
             fi
-
             status=$(printf '%s' "$run" | jq -r '.status // "unknown"')
             conclusion=$(printf '%s' "$run" | jq -r '.conclusion // ""')
             run_id=$(printf '%s' "$run" | jq -r '.id')
             run_url=$(printf '%s' "$run" | jq -r '.html_url')
-            jq -n --arg workflow "$workflow" --arg headSha "$current_sha" --arg status "$status" --arg conclusion "$conclusion" --arg runId "$run_id" --arg url "$run_url" \
-              '{workflow:$workflow,headSha:$headSha,status:$status,conclusion:$conclusion,runId:$runId,url:$url}' >> /tmp/ivx-radar/critical-gates.jsonl
-
+            jq -n --arg workflow "$workflow" --arg headSha "$current_sha" --arg status "$status" --arg conclusion "$conclusion" --arg runId "$run_id" --arg url "$run_url" '{workflow:$workflow,headSha:$headSha,status:$status,conclusion:$conclusion,runId:$runId,url:$url}' >> /tmp/ivx-radar/critical-gates.jsonl
             if [ "$status" != 'completed' ] || [ "$conclusion" != 'success' ]; then
-              jq -n --arg workflow "$workflow" --arg headSha "$current_sha" --arg status "$status" --arg conclusion "$conclusion" --arg runId "$run_id" --arg url "$run_url" \
-                '{kind:"current_sha_gate_not_green",workflow:$workflow,headSha:$headSha,status:$status,conclusion:$conclusion,runId:$runId,url:$url}' >> /tmp/ivx-radar/failed-jobs.jsonl
+              jq -n --arg workflow "$workflow" --arg headSha "$current_sha" --arg status "$status" --arg conclusion "$conclusion" --arg runId "$run_id" --arg url "$run_url" '{kind:"current_sha_gate_not_green",workflow:$workflow,headSha:$headSha,status:$status,conclusion:$conclusion,runId:$runId,url:$url}' >> /tmp/ivx-radar/failed-jobs.jsonl
             fi
           done
-
           count=$(wc -l < /tmp/ivx-radar/failed-jobs.jsonl | tr -d ' ')
           echo "failed_count=$count" >> "$GITHUB_OUTPUT"
-
           if grep -Eiq 'bank|banking|payment|payout|stripe|wire transfer|beneficiary|delete member|delete user|remove member|remove user|truncate|drop table|drop database|database destructive|destructive migration|erase data|wipe data|secret rotation|rotate secret|reveal secret|credential rotation|owner permission|admin permission|change owner|change admin|iam policy write|iam delete|root account|security policy weaken|disable mfa|disable auth|legal|compliance' /tmp/ivx-radar/failed-jobs.jsonl; then
             echo 'owner_gate_required=true' >> "$GITHUB_OUTPUT"
           else
             echo 'owner_gate_required=false' >> "$GITHUB_OUTPUT"
           fi
-
           jq -s '.' /tmp/ivx-radar/critical-gates.jsonl > /tmp/ivx-radar/critical-gates.json
           jq -s '.' /tmp/ivx-radar/failed-jobs.jsonl > /tmp/ivx-radar/open-failures.json
           cat /tmp/ivx-radar/critical-gates.json
@@ -207,9 +179,7 @@ jobs:
           if [ -s /tmp/ivx-radar/open-failures.json ]; then source_failures=$(jq -c '.' /tmp/ivx-radar/open-failures.json); fi
           if [ -s /tmp/ivx-radar/source-run.json ]; then source_run=$(jq -c '.' /tmp/ivx-radar/source-run.json); fi
           if [ -s /tmp/ivx-radar/critical-gates.json ]; then critical_gates=$(jq -c '.' /tmp/ivx-radar/critical-gates.json); fi
-          jq -n --arg event "$GITHUB_EVENT_NAME" --arg currentSha "${{ steps.source.outputs.current_sha }}" --argjson assessment "$assessment" --argjson failures "$source_failures" --argjson sourceRun "$source_run" --argjson criticalGates "$critical_gates" \
-            '{event:$event,currentSha:$currentSha,predictive:$assessment,sourceRun:$sourceRun,criticalGates:$criticalGates,sourceFailures:$failures,policy:{failClosed:true,ownerGate:"destructive_or_privileged_only",safeOperationalDeploy:true,continuousCurrentShaAudit:true,closeOnlyWhenAllCriticalGatesGreen:true,maxRepairAttemptsPerCycle:3,neverWeakenQuality:true,rerunAfterRepair:true}}' \
-            > /tmp/ivx-radar/mission.json
+          jq -n --arg event "$GITHUB_EVENT_NAME" --arg currentSha "${{ steps.source.outputs.current_sha }}" --argjson assessment "$assessment" --argjson failures "$source_failures" --argjson sourceRun "$source_run" --argjson criticalGates "$critical_gates" '{event:$event,currentSha:$currentSha,predictive:$assessment,sourceRun:$sourceRun,criticalGates:$criticalGates,sourceFailures:$failures,policy:{failClosed:true,ownerGate:"destructive_or_privileged_only",safeOperationalDeploy:true,continuousCurrentShaAudit:true,closeOnlyWhenAllCriticalGatesGreen:true,maxRepairAttemptsPerCycle:3,neverWeakenQuality:true,rerunAfterRepair:true}}' > /tmp/ivx-radar/mission.json
           cat /tmp/ivx-radar/mission.json
 
       - name: Resume bounded 112-agent campaign when recovery is required
@@ -221,10 +191,7 @@ jobs:
           set -euo pipefail
           owner_key="${OWNER_KEY:-${SYSTEM_KEY:-${OWNER_TOKEN:-}}}"
           args=(-sS --max-time 30 -o /tmp/ivx-radar/resume.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}")
-          if [ -n "$owner_key" ]; then
-            echo "::add-mask::$owner_key"
-            args+=( -H "x-ivx-owner-key: $owner_key" )
-          fi
+          if [ -n "$owner_key" ]; then echo "::add-mask::$owner_key"; args+=( -H "x-ivx-owner-key: $owner_key" ); fi
           code=$(curl "${args[@]}" -d '{"action":"resume_all"}' "${API_BASE}/api/ivx/agents/app-completion/control")
           echo "autonomous_resume_http=$code"
           cat /tmp/ivx-radar/resume.json
@@ -239,23 +206,11 @@ jobs:
         run: |
           set -euo pipefail
           mission=$(cat /tmp/ivx-radar/mission.json)
-          if [ "${{ steps.predictive.outputs.action }}" = 'preflight' ] && [ "${{ steps.source.outputs.failed_count }}" = '0' ]; then
-            execution=qa_only
-            approve_patch=false
-            approve_deploy=false
-          else
-            execution=code_change
-            approve_patch=true
-            approve_deploy=true
-          fi
+          if [ "${{ steps.predictive.outputs.action }}" = 'preflight' ] && [ "${{ steps.source.outputs.failed_count }}" = '0' ]; then execution=qa_only; approve_patch=false; approve_deploy=false; else execution=code_change; approve_patch=true; approve_deploy=true; fi
           goal="IVX AUTONOMOUS CLOSED-LOOP RECOVERY. Current main SHA is ${{ steps.source.outputs.current_sha }}. Treat every missing, stale, in-progress-too-long, cancelled, skipped, or failed critical gate on the current main SHA as an OPEN mission. Diagnose the exact failed job/step. For safe operational defects, repair code/test harness, create/update the repair PR, merge through normal branch protections, deploy the exact main SHA, roll back if health regresses, resume 112 agents, and rerun every affected certificate. DO NOT close the mission because code was changed, a PR opened, a build started, or a deploy triggered. Close only when all listed critical gates for the current main SHA are completed with conclusion=success and production exact-SHA parity is proven by the certification chain. Safe operational infrastructure includes Render/CloudFront deploy, exact-SHA parity, service restart, worker restart, health recovery, rollback, QA, APK build, and certificate reruns. Owner Gate is REQUIRED only for money movement/banking, destructive database or member/user deletion, privileged owner/admin changes, secret creation/rotation/reveal, IAM policy mutation/deletion, security-policy weakening, legal/compliance actions, or similarly irreversible privileged changes. Never weaken tests or assertions to manufacture green. Evidence required. Mission: ${mission}"
-          payload=$(jq -n --arg goal "$goal" --arg execution "$execution" --argjson approvePatch "$approve_patch" --argjson approveGitDeploy "$approve_deploy" \
-            '{goal:$goal,executionMode:$execution,templateMode:"BUG_FIX",approvePatch:$approvePatch,approveGitDeploy:$approveGitDeploy,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Closed-loop diagnosis, safe repair, focused validation, repair PR, exact-main deploy/rollback as needed, 112-agent resume, and repeated certificate reruns until every current-main critical gate is green.",rollbackOption:"Automatically roll back safe operational deploy if post-deploy health or certificate regresses; require Owner Gate for destructive/privileged rollback side effects.",filesAffected:["workflow-failure-source","certificate-harness","runtime-code-if-required","safe-operational-deploy","current-main-critical-gates"]}')
+          payload=$(jq -n --arg goal "$goal" --arg execution "$execution" --argjson approvePatch "$approve_patch" --argjson approveGitDeploy "$approve_deploy" '{goal:$goal,executionMode:$execution,templateMode:"BUG_FIX",approvePatch:$approvePatch,approveGitDeploy:$approveGitDeploy,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Closed-loop diagnosis, safe repair, focused validation, repair PR, exact-main deploy/rollback as needed, 112-agent resume, and repeated certificate reruns until every current-main critical gate is green.",rollbackOption:"Automatically roll back safe operational deploy if post-deploy health or certificate regresses; require Owner Gate for destructive/privileged rollback side effects.",filesAffected:["workflow-failure-source","certificate-harness","runtime-code-if-required","safe-operational-deploy","current-main-critical-gates"]}')
           args=(-sS --max-time 60 -o /tmp/ivx-radar/job-start.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}")
-          if [ -n "${SYSTEM_KEY:-}" ]; then
-            echo "::add-mask::$SYSTEM_KEY"
-            args+=( -H "X-IVX-System-Key: $SYSTEM_KEY" )
-          fi
+          if [ -n "${SYSTEM_KEY:-}" ]; then echo "::add-mask::$SYSTEM_KEY"; args+=( -H "X-IVX-System-Key: $SYSTEM_KEY" ); fi
           http=$(curl "${args[@]}" --data "$payload")
           case "$http" in 200|202|409) ;; *) cat /tmp/ivx-radar/job-start.json; exit 1;; esac
           jq -e '.jobId // .activeJobId // .job.jobId' /tmp/ivx-radar/job-start.json >/dev/null
@@ -269,9 +224,7 @@ jobs:
           open_count="${{ steps.source.outputs.failed_count }}"
           owner_gate="${{ steps.source.outputs.owner_gate_required }}"
           if [ -z "$open_count" ]; then open_count=0; fi
-          jq -n --arg currentSha "${{ steps.source.outputs.current_sha }}" --argjson openCount "$open_count" --arg ownerGate "$owner_gate" \
-            '{currentSha:$currentSha,openCriticalGates:$openCount,ownerGateRequired:($ownerGate=="true"),missionState:(if $openCount==0 then "green" elif $ownerGate=="true" then "owner_gate" else "recovery_open" end)}' \
-            > /tmp/ivx-radar/closed-loop-state.json
+          jq -n --arg currentSha "${{ steps.source.outputs.current_sha }}" --argjson openCount "$open_count" --arg ownerGate "$owner_gate" '{currentSha:$currentSha,openCriticalGates:$openCount,ownerGateRequired:($ownerGate=="true"),missionState:(if $openCount==0 then "green" elif $ownerGate=="true" then "owner_gate" else "recovery_open" end)}' > /tmp/ivx-radar/closed-loop-state.json
           cat /tmp/ivx-radar/closed-loop-state.json
 
       - name: Persist predictive radar evidence
