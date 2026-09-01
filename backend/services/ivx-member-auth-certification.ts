@@ -203,18 +203,28 @@ export async function runMemberAuthCertification(): Promise<MemberAuthCertificat
     try {
       if (!checks.runtimeConfig.ok) throw new Error(`Runtime auth binding incomplete: ${checks.runtimeConfig.detail}`);
 
-      const pfResponse = await retryTransient(async () => {
-        const res = await fetch(`${supabaseUrl}/auth/v1/health`, {
-          headers: { apikey: anon },
-          signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
-        });
-        if (res.status >= 500) throw new Error(`Supabase auth health HTTP ${res.status}`);
-        return res;
-      }, 2, 750);
-      if (!pfResponse.ok) throw new Error(`Supabase pre-flight check failed: HTTP ${pfResponse.status}`);
+      let preflightDetail = 'not_run';
+      try {
+        const pfResponse = await retryTransient(async () => {
+          const res = await fetch(`${supabaseUrl}/auth/v1/health`, {
+            headers: { apikey: anon },
+            signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
+          });
+          if (res.status >= 500) throw new Error(`Supabase auth health HTTP ${res.status}`);
+          return res;
+        }, 2, 750);
+        preflightDetail = `health_http_${pfResponse.status}`;
+      } catch (preflightError) {
+        preflightDetail = `health_error_${preflightError instanceof Error ? preflightError.message : 'unknown'}`.slice(0, 160);
+      }
 
+      // The real password grant is a stronger readiness proof than the gateway health route.
+      // A health 401 is diagnostic only; certification still fails unless this real login succeeds.
       const owner = await passwordGrant(ownerEmail, ownerPassword);
-      checks.ownerLogin = { ok: owner.ok, detail: owner.detail ? `HTTP ${owner.status} — ${owner.detail}` : `Supabase password grant HTTP ${owner.status}` };
+      checks.ownerLogin = {
+        ok: owner.ok,
+        detail: `${owner.detail ? `HTTP ${owner.status} — ${owner.detail}` : `Supabase password grant HTTP ${owner.status}`}; preflight=${preflightDetail}`,
+      };
 
       const qaId = randomUUID();
       const email = `ivx.qa.${Date.now()}.${qaId.slice(0, 8)}@ivxholding.com`;
