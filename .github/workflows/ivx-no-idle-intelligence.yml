@@ -9,6 +9,7 @@ on:
       - 'backend/services/ivx-agent-runtime.ts'
       - 'backend/services/ivx-autonomous-truth-control.ts'
       - 'backend/services/ivx-github-actions-oidc.ts'
+      - 'backend/api/ivx-autonomous-control-plane.ts'
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch: {}
@@ -63,14 +64,15 @@ jobs:
             -H "X-IVX-GitHub-OIDC: ${OIDC_TOKEN}" \
             "${API_BASE}/api/ivx/autonomous/control-plane" -o /tmp/truth.json
           test "$(jq -r '.ok // false' /tmp/truth.json)" = true
-          test "$(jq -r '.agents.counts.total // 0' /tmp/truth.json)" = "$TARGET_AGENTS"
+          test "$(jq -r '.agents.total // 0' /tmp/truth.json)" = "$TARGET_AGENTS"
+          test "$(jq '[.agents.items[].agentNumber] | unique | length' /tmp/truth.json)" = "$TARGET_AGENTS"
 
       - name: Find genuinely non-working agents
         id: idle
         shell: bash
         run: |
           set -euo pipefail
-          jq -r '.agents.rows[] | select(.paused==false and .disabled==false and (.status=="IDLE" or .status=="STALE" or .status=="UNKNOWN")) | [.agentId,.agentNumber,.status] | @tsv' /tmp/truth.json > /tmp/nonworking.tsv
+          jq -r '.agents.items[] | select(.presence=="IDLE" or .presence=="STALE" or .presence=="ATTENTION") | [.agentId,.agentNumber,.presence] | @tsv' /tmp/truth.json > /tmp/nonworking.tsv
           count=$(wc -l < /tmp/nonworking.tsv | tr -d ' ')
           echo "nonworking_count=$count"
           echo "count=$count" >> "$GITHUB_OUTPUT"
@@ -103,7 +105,7 @@ jobs:
           if [ "$http" = 200 ] && jq -e . "/tmp/no-idle-results/${safe_id}.json" >/dev/null 2>&1; then
             ok=$(jq -r '.ok // false' "/tmp/no-idle-results/${safe_id}.json")
             evidence=$(jq -r '(.runRecord.evidence // []) | length' "/tmp/no-idle-results/${safe_id}.json")
-            run_id=$(jq -r '.runRecord.runId // .runRecord.taskId // empty' "/tmp/no-idle-results/${safe_id}.json")
+            run_id=$(jq -r '.runRecord.runId // .runRecord.taskId // .runRecord.id // empty' "/tmp/no-idle-results/${safe_id}.json")
           fi
           passed=false
           if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$evidence" -gt 0 ] && [ -n "$run_id" ]; then passed=true; fi
@@ -130,13 +132,17 @@ jobs:
           curl -fsS --retry 3 --retry-delay 2 --max-time 30 \
             -H "X-IVX-GitHub-OIDC: ${OIDC_TOKEN}" \
             "${API_BASE}/api/ivx/autonomous/control-plane" -o /tmp/truth-after.json
-          nonworking=$(jq '[.agents.rows[] | select(.paused==false and .disabled==false and (.status=="IDLE" or .status=="STALE" or .status=="UNKNOWN"))] | length' /tmp/truth-after.json)
+          test "$(jq -r '.ok // false' /tmp/truth-after.json)" = true
+          test "$(jq -r '.agents.total // 0' /tmp/truth-after.json)" = "$TARGET_AGENTS"
+          nonworking=$(jq '[.agents.items[] | select(.presence=="IDLE" or .presence=="STALE" or .presence=="ATTENTION")] | length' /tmp/truth-after.json)
+          real_working=$(jq -r '.enterprise.realWorkingAgents // 0' /tmp/truth-after.json)
+          active_jobs=$(jq -r '.enterprise.activeJobs // 0' /tmp/truth-after.json)
           dispatched=0; evidenced=0
           if [ -f /tmp/no-idle-results.json ]; then
             dispatched=$(jq 'length' /tmp/no-idle-results.json)
             evidenced=$(jq '[.[]|select(.passed==true)]|length' /tmp/no-idle-results.json)
           fi
-          jq -n --arg certificate 'IVX-NO-IDLE-INTELLIGENCE-1000' --arg sourceSha "$GITHUB_SHA" --arg githubRunId "$GITHUB_RUN_ID" --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson totalAgents 112 --argjson fallbackAuditsDispatched "$dispatched" --argjson fallbackAuditsWithEvidence "$evidenced" --argjson remainingNonWorking "$nonworking" --slurpfile truth /tmp/truth-after.json '{ok:($totalAgents==112 and $fallbackAuditsDispatched==$fallbackAuditsWithEvidence),certificate:$certificate,sourceSha:$sourceSha,githubRunId:$githubRunId,generatedAt:$generatedAt,totalAgents:$totalAgents,fallbackAuditsDispatched:$fallbackAuditsDispatched,fallbackAuditsWithEvidence:$fallbackAuditsWithEvidence,remainingNonWorking:$remainingNonWorking,truthSnapshot:$truth[0],safeguards:{readOnlyFallback:true,evidenceRequired:true,noSyntheticProductivity:true,ownerStopRespectedByRuntimeEnforcer:true}}' > evidence/ivx-no-idle-intelligence-latest.json
+          jq -n --arg certificate 'IVX-NO-IDLE-INTELLIGENCE-1000' --arg sourceSha "$GITHUB_SHA" --arg githubRunId "$GITHUB_RUN_ID" --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson totalAgents 112 --argjson fallbackAuditsDispatched "$dispatched" --argjson fallbackAuditsWithEvidence "$evidenced" --argjson remainingNonWorking "$nonworking" --argjson realWorkingAgents "$real_working" --argjson activeJobs "$active_jobs" --slurpfile truth /tmp/truth-after.json '{ok:($totalAgents==112 and $fallbackAuditsDispatched==$fallbackAuditsWithEvidence),certificate:$certificate,sourceSha:$sourceSha,githubRunId:$githubRunId,generatedAt:$generatedAt,totalAgents:$totalAgents,fallbackAuditsDispatched:$fallbackAuditsDispatched,fallbackAuditsWithEvidence:$fallbackAuditsWithEvidence,remainingNonWorking:$remainingNonWorking,realWorkingAgents:$realWorkingAgents,activeJobs:$activeJobs,truthSnapshot:$truth[0],safeguards:{readOnlyFallback:true,evidenceRequired:true,noSyntheticProductivity:true,ownerStopRespectedByRuntimeEnforcer:true}}' > evidence/ivx-no-idle-intelligence-latest.json
           cat evidence/ivx-no-idle-intelligence-latest.json
           test "$(jq -r '.ok' evidence/ivx-no-idle-intelligence-latest.json)" = true
 
