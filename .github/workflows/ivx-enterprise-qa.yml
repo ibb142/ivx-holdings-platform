@@ -232,11 +232,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS --retry 3 --retry-delay 2 -X POST "$API_BASE/api/public/chat" -H 'Content-Type: application/json' -H "x-ivx-client-id: enterprise-qa-${GITHUB_RUN_ID}" --data '{"message":"In one sentence, explain why a diversified investment portfolio can reduce concentration risk.","sessionId":"enterprise-qa","requestId":"enterprise-qa-'"$GITHUB_RUN_ID"'","history":[]}' -o /tmp/chat.json
+          TOKEN="IVX-LIVE-${GITHUB_RUN_ID}-2"
+          BODY=$(jq -nc \
+            --arg message "Return the exact token ${TOKEN} and no other text." \
+            --arg sessionId "enterprise-qa" \
+            --arg requestId "enterprise-qa-${GITHUB_RUN_ID}" \
+            '{message:$message,sessionId:$sessionId,requestId:$requestId,history:[]}')
+          curl -fsS --retry 3 --retry-delay 2 -X POST "$API_BASE/api/public/chat" \
+            -H 'Content-Type: application/json' \
+            -H "x-ivx-client-id: enterprise-qa-${GITHUB_RUN_ID}" \
+            --data "$BODY" -o /tmp/chat.json
           jq '.' /tmp/chat.json
-          test -n "$(jq -r '.answer // .text // empty' /tmp/chat.json)"
+          ANSWER=$(jq -r '.answer // .text // empty' /tmp/chat.json)
           test "$(jq -r '.source // empty' /tmp/chat.json)" = "chatgpt"
           test -n "$(jq -r '.endpoint // empty' /tmp/chat.json)"
+          printf '%s' "$ANSWER" | grep -Fq "$TOKEN"
 
   android-build:
     name: Android Release Bundle Compile

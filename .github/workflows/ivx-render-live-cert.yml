@@ -186,17 +186,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          TOKEN="IVX-LIVE-${GITHUB_RUN_ID}-1"
+          BODY=$(jq -nc \
+            --arg message "Return the exact token ${TOKEN} and no other text." \
+            --arg sessionId "github-live-cert" \
+            --arg requestId "github-live-cert-${GITHUB_RUN_ID}" \
+            '{message:$message,sessionId:$sessionId,requestId:$requestId,history:[]}')
           RESPONSE=$(curl -fsS --retry 3 --retry-delay 2 -X POST "${API_BASE}/api/public/chat" \
             -H "Content-Type: application/json" \
             -H "x-ivx-client-id: github-live-cert-${GITHUB_RUN_ID}" \
-            --data '{"message":"In one sentence, explain why a diversified investment portfolio can reduce concentration risk.","sessionId":"github-live-cert","requestId":"github-live-cert-'"${GITHUB_RUN_ID}"'","history":[]}')
+            --data "$BODY")
           SOURCE=$(printf '%s' "$RESPONSE" | jq -r '.source // empty')
           ANSWER=$(printf '%s' "$RESPONSE" | jq -r '.answer // .text // empty')
           ENDPOINT=$(printf '%s' "$RESPONSE" | jq -r '.endpoint // empty')
-          if [ -z "$ANSWER" ]; then
-            echo "No AI answer returned - HARD FAIL"
-            exit 1
-          fi
           if [ "$SOURCE" != "chatgpt" ]; then
             echo "Public chat did not use the certified real-inference source (source=${SOURCE:-missing}) - HARD FAIL"
             exit 1
@@ -205,7 +207,11 @@ jobs:
             echo "Public chat did not report a provider endpoint - HARD FAIL"
             exit 1
           fi
-          echo "live_inference=PASS source=$SOURCE endpoint=$ENDPOINT"
+          if ! printf '%s' "$ANSWER" | grep -Fq "$TOKEN"; then
+            echo "Real inference did not return the exact activation token - HARD FAIL"
+            exit 1
+          fi
+          echo "live_inference=PASS source=$SOURCE endpoint=$ENDPOINT token=$TOKEN"
 
       - name: Emit certificate evidence
         shell: bash
