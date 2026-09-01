@@ -38,7 +38,7 @@ jobs:
             exit 1
           fi
           grep -q 'OWNER_TRUSTED_DEVICE_WINDOW_MS' lib/auth-context.tsx
-          grep -q "router.replace('/(tabs)/(home)/home'" app/login.tsx || grep -q "const target = '/(tabs)/(home)/home'" app/login.tsx
+          grep -q "router.replace('/(tabs)/home'" app/login.tsx || grep -q "const target = '/(tabs)/home'" app/login.tsx
           echo 'owner_login_code_gate=PASS'
 
       - name: 11-20 Wait for production health
@@ -98,7 +98,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Use the public AI status endpoint (no auth required) instead of owner-only chat-debug
           code=$(curl -sS -m 30 -o /tmp/ai-status.json -w '%{http_code}' "${API_BASE}/api/ivx/owner-ai/public-status" || true)
           echo "ai_status_http=$code"
           cat /tmp/ai-status.json || true
