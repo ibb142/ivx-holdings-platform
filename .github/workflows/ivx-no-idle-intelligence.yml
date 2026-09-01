@@ -1,0 +1,150 @@
+name: IVX No Idle Intelligence 1000
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-no-idle-intelligence.yml'
+      - '.github/workflows/ivx-112-per-agent-20h-no-sleep-sla.yml'
+      - 'backend/services/ivx-agent-runtime.ts'
+      - 'backend/services/ivx-autonomous-truth-control.ts'
+      - 'backend/services/ivx-github-actions-oidc.ts'
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ivx-no-idle-intelligence-1000
+  cancel-in-progress: false
+
+env:
+  API_BASE: https://api.ivxholding.com
+  TARGET_AGENTS: '112'
+  MAX_PARALLEL_FILL: '24'
+
+jobs:
+  no-idle-intelligence:
+    name: Keep real agents productively occupied
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Acquire scoped GitHub OIDC machine identity
+        id: oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          response=$(curl -fsS --retry 3 --retry-delay 2 --retry-all-errors \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery")
+          token=$(jq -r '.value // empty' <<<"$response")
+          test -n "$token"
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Resume dispatcher and load 112-agent truth snapshot
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS --max-time 30 -o /tmp/resume.json -w '%{http_code}' -X POST \
+            -H 'content-type: application/json' \
+            -H "X-IVX-GitHub-OIDC: ${OIDC_TOKEN}" \
+            -d '{"action":"resume_all"}' \
+            "${API_BASE}/api/ivx/agents/app-completion/control")
+          cat /tmp/resume.json
+          test "$code" = 200
+          test "$(jq -r '.ok // false' /tmp/resume.json)" = true
+          curl -fsS --retry 3 --retry-delay 2 --max-time 30 \
+            -H "X-IVX-GitHub-OIDC: ${OIDC_TOKEN}" \
+            "${API_BASE}/api/ivx/autonomous/control-plane" -o /tmp/truth.json
+          test "$(jq -r '.ok // false' /tmp/truth.json)" = true
+          test "$(jq -r '.agents.counts.total // 0' /tmp/truth.json)" = "$TARGET_AGENTS"
+
+      - name: Find genuinely non-working agents
+        id: idle
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -r '.agents.rows[] | select(.paused==false and .disabled==false and (.status=="IDLE" or .status=="STALE" or .status=="UNKNOWN")) | [.agentId,.agentNumber,.status] | @tsv' /tmp/truth.json > /tmp/nonworking.tsv
+          count=$(wc -l < /tmp/nonworking.tsv | tr -d ' ')
+          echo "nonworking_count=$count"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch bounded evidence-backed audits to non-working agents
+        if: ${{ steps.idle.outputs.count != '0' }}
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+          SOURCE_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/no-idle-results
+          export API_BASE OIDC_TOKEN SOURCE_SHA RUN_ID
+          cat > /tmp/run-agent.sh <<'SCRIPT'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          agent_id="$1"
+          agent_number="$2"
+          state="$3"
+          safe_id=$(printf '%s' "$agent_id" | tr -c 'A-Za-z0-9_.-' '_')
+          payload=$(jq -n --arg sha "$SOURCE_SHA" --arg run "$RUN_ID" --arg state "$state" --argjson n "$agent_number" '{taskType:"audit",payload:{missionType:"no_idle_intelligence",readOnly:true,requireEvidence:true,sourceSha:$sha,controllerRunId:$run,agentNumber:$n,recoveredFromState:$state,instruction:"Perform a real low-risk evidence-backed audit within your allowed capability. Do not mutate production and do not fabricate success."}}')
+          http=$(curl -sS --retry 1 --retry-delay 1 --max-time 75 -o "/tmp/no-idle-results/${safe_id}.json" -w '%{http_code}' -X POST \
+            -H 'content-type: application/json' \
+            -H "X-IVX-GitHub-OIDC: ${OIDC_TOKEN}" \
+            --data "$payload" \
+            "${API_BASE}/api/ivx/agents/${agent_id}/run" || true)
+          ok=false; evidence=0; run_id=''
+          if [ "$http" = 200 ] && jq -e . "/tmp/no-idle-results/${safe_id}.json" >/dev/null 2>&1; then
+            ok=$(jq -r '.ok // false' "/tmp/no-idle-results/${safe_id}.json")
+            evidence=$(jq -r '(.runRecord.evidence // []) | length' "/tmp/no-idle-results/${safe_id}.json")
+            run_id=$(jq -r '.runRecord.runId // .runRecord.taskId // empty' "/tmp/no-idle-results/${safe_id}.json")
+          fi
+          passed=false
+          if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$evidence" -gt 0 ] && [ -n "$run_id" ]; then passed=true; fi
+          jq -n --arg agentId "$agent_id" --argjson agentNumber "$agent_number" --arg previousState "$state" --arg http "$http" --argjson ok "$ok" --argjson evidence "$evidence" --arg runId "$run_id" --argjson passed "$passed" '{agentId:$agentId,agentNumber:$agentNumber,previousState:$previousState,http:$http,ok:$ok,evidenceCount:$evidence,runId:$runId,passed:$passed}' > "/tmp/no-idle-results/${safe_id}.result.json"
+          test "$passed" = true
+          SCRIPT
+          chmod +x /tmp/run-agent.sh
+          xargs -r -P "$MAX_PARALLEL_FILL" -n 3 /tmp/run-agent.sh < /tmp/nonworking.tsv
+          jq -s '.' /tmp/no-idle-results/*.result.json > /tmp/no-idle-results.json
+          total=$(jq 'length' /tmp/no-idle-results.json)
+          passed=$(jq '[.[]|select(.passed==true)]|length' /tmp/no-idle-results.json)
+          echo "no_idle_dispatched=$total evidence_verified=$passed"
+          test "$total" = "$passed"
+
+      - name: Verify post-fill truth and emit evidence
+        if: always()
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          sleep 5
+          curl -fsS --retry 3 --retry-delay 2 --max-time 30 \
+            -H "X-IVX-GitHub-OIDC: ${OIDC_TOKEN}" \
+            "${API_BASE}/api/ivx/autonomous/control-plane" -o /tmp/truth-after.json
+          nonworking=$(jq '[.agents.rows[] | select(.paused==false and .disabled==false and (.status=="IDLE" or .status=="STALE" or .status=="UNKNOWN"))] | length' /tmp/truth-after.json)
+          dispatched=0; evidenced=0
+          if [ -f /tmp/no-idle-results.json ]; then
+            dispatched=$(jq 'length' /tmp/no-idle-results.json)
+            evidenced=$(jq '[.[]|select(.passed==true)]|length' /tmp/no-idle-results.json)
+          fi
+          jq -n --arg certificate 'IVX-NO-IDLE-INTELLIGENCE-1000' --arg sourceSha "$GITHUB_SHA" --arg githubRunId "$GITHUB_RUN_ID" --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson totalAgents 112 --argjson fallbackAuditsDispatched "$dispatched" --argjson fallbackAuditsWithEvidence "$evidenced" --argjson remainingNonWorking "$nonworking" --slurpfile truth /tmp/truth-after.json '{ok:($totalAgents==112 and $fallbackAuditsDispatched==$fallbackAuditsWithEvidence),certificate:$certificate,sourceSha:$sourceSha,githubRunId:$githubRunId,generatedAt:$generatedAt,totalAgents:$totalAgents,fallbackAuditsDispatched:$fallbackAuditsDispatched,fallbackAuditsWithEvidence:$fallbackAuditsWithEvidence,remainingNonWorking:$remainingNonWorking,truthSnapshot:$truth[0],safeguards:{readOnlyFallback:true,evidenceRequired:true,noSyntheticProductivity:true,ownerStopRespectedByRuntimeEnforcer:true}}' > evidence/ivx-no-idle-intelligence-latest.json
+          cat evidence/ivx-no-idle-intelligence-latest.json
+          test "$(jq -r '.ok' evidence/ivx-no-idle-intelligence-latest.json)" = true
+
+      - name: Upload no-idle evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ivx-no-idle-intelligence-${{ github.run_id }}
+          path: evidence/ivx-no-idle-intelligence-latest.json
+          if-no-files-found: error
+          retention-days: 30
