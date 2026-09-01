@@ -50,6 +50,7 @@ jobs:
             "$token_url" > /tmp/ivx-regression-oidc.json
           token=$(jq -r '.value // empty' /tmp/ivx-regression-oidc.json)
           test -n "$token"
+          echo "::add-mask::$token"
           echo "token=$token" >> "$GITHUB_OUTPUT"
 
       - name: Audit certified-10/10 regression on current main
@@ -148,25 +149,61 @@ jobs:
           set -euo pipefail
           [ -n "${SYSTEM_KEY_PRIMARY:-}" ] && echo "::add-mask::$SYSTEM_KEY_PRIMARY"
           [ -n "${SYSTEM_KEY_SECONDARY:-}" ] && echo "::add-mask::$SYSTEM_KEY_SECONDARY"
+
+          refresh_oidc() {
+            local token_url response token
+            token_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}"
+            response=$(curl -fsS --retry 3 --retry-delay 2 --retry-all-errors \
+              -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "$token_url")
+            token=$(jq -r '.value // empty' <<<"$response")
+            test -n "$token"
+            echo "::add-mask::$token"
+            IVX_GITHUB_OIDC="$token"
+            export IVX_GITHUB_OIDC
+          }
+
+          # The 112 calls are intentionally real and sequential. Refresh immediately
+          # before the batch and periodically so a short-lived OIDC token cannot expire
+          # near the tail and falsely block agents 98-112.
+          refresh_oidc
           curl -fsS --max-time 20 "${API_BASE}/api/ivx/agents" > /tmp/ivx-regression/agents.json
           jq -r --argjson n "$TEAM_SIZE" '[.agents[] | select(.disabled != true and .paused != true)] | sort_by(.agentNumber) | .[:$n] | .[].agentId' /tmp/ivx-regression/agents.json > /tmp/ivx-regression/team.txt
           selected=$(wc -l < /tmp/ivx-regression/team.txt | tr -d ' ')
           test "$selected" -gt 0
           : > /tmp/ivx-regression/team-results.jsonl
+
           run_agent() {
             agent="$1"; payload="$2"; key="$3"
             args=(-sS --max-time 30 -o /tmp/ivx-regression/agent-run.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}")
             [ -n "$key" ] && args+=( -H "X-IVX-System-Key: $key" )
             curl "${args[@]}" --data "$payload" "${API_BASE}/api/ivx/agents/${agent}/run" || true
           }
+
+          index=0
           while IFS= read -r agent; do
+            index=$((index+1))
+            if [ "$index" -gt 1 ] && [ $(((index-1) % 20)) -eq 0 ]; then
+              refresh_oidc
+              echo "oidc_periodic_refresh=PASS before_agent=$index"
+            fi
+
             payload=$(jq -n --arg sha "$CURRENT_SHA" --arg mission "$(cat /tmp/ivx-regression/mission-calendar.json)" '{taskType:"audit",payload:{missionType:"enterprise_regression_recovery",surface:"landing",currentSha:$sha,targetScore:"10/10",instruction:"Perform your scoped enterprise audit/diagnostic responsibility against the current-SHA Landing regression. Produce real evidence and actionable findings for the Senior Developer repair owner. Do not claim a fix unless verified by your allowed tools and contract.",missionCalendar:($mission|fromjson)}}')
             code=$(run_agent "$agent" "$payload" "${SYSTEM_KEY_PRIMARY:-}")
+
+            # Auth failures are retried once with a newly minted scoped GitHub token.
+            if [ "$code" = 401 ] || [ "$code" = 403 ]; then
+              refresh_oidc
+              echo "oidc_auth_retry=PASS agent=$agent initial_http=$code"
+              code=$(run_agent "$agent" "$payload" "${SYSTEM_KEY_PRIMARY:-}")
+            fi
             if { [ "$code" = 401 ] || [ "$code" = 403 ]; } && [ -n "${SYSTEM_KEY_SECONDARY:-}" ] && [ "${SYSTEM_KEY_SECONDARY}" != "${SYSTEM_KEY_PRIMARY:-}" ]; then
               code=$(run_agent "$agent" "$payload" "$SYSTEM_KEY_SECONDARY")
             fi
+
             jq -n --arg agentId "$agent" --arg http "$code" --argjson response "$(cat /tmp/ivx-regression/agent-run.json 2>/dev/null || echo '{}')" '{agentId:$agentId,http:$http,response:$response}' >> /tmp/ivx-regression/team-results.jsonl
           done < /tmp/ivx-regression/team.txt
+
           jq -s '.' /tmp/ivx-regression/team-results.jsonl > /tmp/ivx-regression/team-results.json
           cat /tmp/ivx-regression/team-results.json
           accepted=$(jq '[.[] | select(.http == "200" and .response.ok == true and .response.runRecord != null)] | length' /tmp/ivx-regression/team-results.json)
@@ -184,6 +221,19 @@ jobs:
           set -euo pipefail
           [ -n "${SYSTEM_KEY_PRIMARY:-}" ] && echo "::add-mask::$SYSTEM_KEY_PRIMARY"
           [ -n "${SYSTEM_KEY_SECONDARY:-}" ] && echo "::add-mask::$SYSTEM_KEY_SECONDARY"
+
+          # Assignment can take many minutes. Mint a fresh scoped token for the
+          # Senior Developer delegation instead of reusing the token from job start.
+          token_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}"
+          response=$(curl -fsS --retry 3 --retry-delay 2 --retry-all-errors \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "$token_url")
+          IVX_GITHUB_OIDC=$(jq -r '.value // empty' <<<"$response")
+          test -n "$IVX_GITHUB_OIDC"
+          echo "::add-mask::$IVX_GITHUB_OIDC"
+          export IVX_GITHUB_OIDC
+          echo 'senior_developer_oidc_refresh=PASS'
+
           goal="ENTERPRISE REGRESSION RECOVERY. Landing has a protected historical 10/10 baseline and current main ${CURRENT_SHA} has one or more non-green certification gates. A ${TEAM_SIZE}-agent recovery audit team has been successfully started with accepted run records. Own the repair mission end-to-end: use their evidence, diagnose real failures, repair safe code, PR/merge, deploy exact main SHA, rerun affected E2E/certificates, and keep the mission open until Landing is restored to 10/10 on the current SHA. Never manufacture green and never close on PR/build/deploy alone."
           payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Use the scheduled recovery audit team and closed-loop Autonomous policy to restore current-main 10/10 certification.",rollbackOption:"Rollback safe operational deploys automatically if health regresses; never perform destructive rollback without Owner Gate.",filesAffected:["landing-regression","current-sha-certification","safe-operational-deploy"]}')
           call_worker() {
