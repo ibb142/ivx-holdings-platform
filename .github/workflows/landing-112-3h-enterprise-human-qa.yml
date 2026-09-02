@@ -1,6 +1,10 @@
 name: Landing 112-Agent 3H Enterprise Human-Like QA
 
 on:
+  schedule:
+    # Daily 05:00 America/New_York during daylight time (09:00 UTC).
+    # The push trigger below starts the repaired campaign immediately on merge.
+    - cron: '0 9 * * *'
   push:
     branches: [main]
     paths:
@@ -19,13 +23,30 @@ concurrency:
 jobs:
   prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     outputs:
       matrix: ${{ steps.registry.outputs.matrix }}
     env:
       API_BASE: https://api.ivxholding.com
     steps:
       - uses: actions/checkout@v4
+      - name: Wait for production exact-SHA OIDC contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            if curl -fsS --max-time 20 "$API_BASE/health" -o /tmp/health.json; then
+              live_sha=$(jq -r '.commit // empty' /tmp/health.json)
+              if [ "$live_sha" = "$GITHUB_SHA" ]; then
+                echo "PRODUCTION_SHA_PARITY=PASS sha=$live_sha attempt=$attempt"
+                exit 0
+              fi
+              echo "PRODUCTION_SHA_PARITY=WAIT expected=$GITHUB_SHA actual=${live_sha:-missing} attempt=$attempt"
+            fi
+            sleep 15
+          done
+          echo "PRODUCTION_SHA_PARITY=FAIL expected=$GITHUB_SHA" >&2
+          exit 1
       - name: Load exact 112-agent production registry
         id: registry
         shell: bash
@@ -100,10 +121,16 @@ jobs:
           test "$contract_http" = 200
           task_type=$(jq -r '[.contract.allowedTaskTypes[]? | select(. == "audit" or . == "analysis" or . == "research")] | .[0] // .contract.allowedTaskTypes[0] // empty' /tmp/contract.json)
           test -n "$task_type"
-          oidc_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery"
-          oidc_token=$(curl -fsS --retry 2 --retry-delay 1 -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$oidc_url" | jq -r '.value // empty')
-          test -n "$oidc_token"
-          echo "::add-mask::$oidc_token"
+          oidc_token=''; oidc_refreshed_epoch=0
+          refresh_oidc() {
+            local oidc_url
+            oidc_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery"
+            oidc_token=$(curl -fsS --retry 4 --retry-delay 2 --retry-all-errors -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$oidc_url" | jq -r '.value // empty')
+            test -n "$oidc_token"
+            echo "::add-mask::$oidc_token"
+            oidc_refreshed_epoch=$(date +%s)
+          }
+          refresh_oidc
           mkdir -p evidence/cycles
           campaign_started_epoch=$(date +%s)
           campaign_started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -111,12 +138,18 @@ jobs:
           cycle=0; accepted_cycles=0; rejected_cycles=0; total_request_seconds=0; last_source=''; last_tool_result=''
           while [ "$(date +%s)" -lt "$deadline_epoch" ]; do
             cycle=$((cycle+1)); cycle_passed=false; attempt=1
+            if [ $(( $(date +%s) - oidc_refreshed_epoch )) -ge 240 ]; then refresh_oidc; fi
             while [ "$attempt" -le 3 ]; do
               task_id="landing3h-${GITHUB_RUN_ID}-$(printf '%03d' "$AGENT_NUMBER")-c${cycle}-a${attempt}"
               body=$(jq -nc --arg taskType "$task_type" --arg taskId "$task_id" --arg sourceSha "$GITHUB_SHA" --arg mission "$MISSION" --argjson cycle "$cycle" '{taskType:$taskType,payload:{__taskId:$taskId,__runId:("landing3h-"+$taskId),__workflow:"Landing 112-Agent 3H Enterprise Human-Like QA",sourceSha:$sourceSha,landingAssignment:$mission,cycle:$cycle,__toolId:"run_tests",__toolParams:{target:"backend"},realExecutionOnly:true,simulatedSuccessAllowed:false,qualityPolicy:"enterprise_human_like",requiredEvidence:["sourceSha","sourceReference","toolResultId","realToolUsed","verifiedOutput"]}}')
               req_start=$(date +%s)
               http=$(curl -sS --retry 1 --retry-delay 1 --max-time 240 -o /tmp/run.json -w '%{http_code}' -X POST "$API_BASE/api/ivx/agents/${AGENT_ID}/run" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: ${oidc_token}" --data "$body" || true)
               req_end=$(date +%s); req_seconds=$((req_end-req_start)); total_request_seconds=$((total_request_seconds+req_seconds))
+              if [ "$http" = 401 ] || [ "$http" = 403 ]; then
+                refresh_oidc
+              elif [[ "$http" =~ ^(000|408|425|429|500|502|503|504)$ ]]; then
+                sleep $((attempt * 5))
+              fi
               ok=false; final_status='request_failed'; source=''; tool_result=''; simulated='null'; real_tool='null'; verified='null'
               if [ "$http" = 200 ]; then
                 ok=$(jq -r '.ok // false' /tmp/run.json); final_status=$(jq -r '.runRecord.finalStatus // "unknown"' /tmp/run.json); source=$(jq -r '.runRecord.sourceReference // empty' /tmp/run.json); tool_result=$(jq -r '.runRecord.toolResultId // empty' /tmp/run.json); simulated=$(jq -r 'if .runRecord.simulated != null then (.runRecord.simulated|tostring) elif .simulated != null then (.simulated|tostring) else "null" end' /tmp/run.json); real_tool=$(jq -r 'if .runRecord.realToolUsed != null then (.runRecord.realToolUsed|tostring) elif .realToolUsed != null then (.realToolUsed|tostring) else "null" end' /tmp/run.json); verified=$(jq -r 'if .runRecord.verifiedOutput != null then (.runRecord.verifiedOutput|tostring) elif .verifiedOutput != null then (.verifiedOutput|tostring) else "null" end' /tmp/run.json)
