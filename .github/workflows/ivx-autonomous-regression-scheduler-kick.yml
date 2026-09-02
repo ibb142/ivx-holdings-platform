@@ -1,0 +1,40 @@
+name: IVX Autonomous Regression Scheduler Kick
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: ivx-autonomous-regression-kick-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dispatch-single-regression-lane:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch canonical scheduler once for latest main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="${GITHUB_SHA}"
+          # Only the newest main SHA is eligible to dispatch.
+          latest=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')
+          test "$sha" = "$latest"
+
+          # Avoid duplicate queued/in-progress canonical scheduler runs for this SHA.
+          existing=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ivx-autonomous-regression-scheduler.yml/runs?branch=main&per_page=100" \
+            --jq "[.workflow_runs[] | select(.head_sha == \"$sha\" and (.status == \"queued\" or .status == \"in_progress\" or .status == \"pending\"))] | length")
+          if [ "$existing" -gt 0 ]; then
+            echo "canonical_scheduler_already_active=$existing"
+            exit 0
+          fi
+
+          gh workflow run ivx-autonomous-regression-scheduler.yml --ref main
+          echo "canonical_scheduler_dispatched=PASS sha=$sha"
