@@ -511,24 +511,29 @@ export async function tickCampaignDispatcher(): Promise<TickResult> {
     }
   }
 
-  // 2b. CONTINUOUS LOW-RISK BACKLOG: verification agents are not allowed to stay idle.
-  // Re-run completed read-only VERIFY duties after a cooldown. Mutation jobs never auto-repeat.
-  const verifyCooldownMs = Math.max(60_000, Number.parseInt(process.env.IVX_VERIFY_REPEAT_MS ?? '', 10) || 15 * 60 * 1000);
-  const verifyNow = Date.now();
-  for (const record of state.records) {
-    if (record.role !== 'VERIFY' || record.executionMode !== 'read_only' || record.status !== 'COMPLETED' || !record.finishedAt) continue;
-    const finishedAt = Date.parse(record.finishedAt);
-    if (!Number.isFinite(finishedAt) || verifyNow - finishedAt < verifyCooldownMs) continue;
-    record.status = 'QUEUED';
-    record.workerJobId = null;
-    record.workerStatus = null;
-    record.stage = 'CONTINUOUS VERIFICATION - REQUEUED AFTER COOLDOWN';
-    record.progress = 0;
-    record.startedAt = null;
-    record.finishedAt = null;
-    record.error = null;
-    record.blocker = null;
-    result.requeued.push(record.key);
+  // 2b. COST CONTROL: completed verification is evidence, not an endless job.
+  // Repeat only when the owner explicitly enables patrol mode, and never more
+  // frequently than every six hours. The previous 15-minute default generated
+  // thousands of duplicate attempts without producing code changes.
+  const continuousVerifyEnabled = process.env.IVX_CONTINUOUS_VERIFY_ENABLED === 'true';
+  const verifyCooldownMs = Math.max(6 * 60 * 60 * 1000, Number.parseInt(process.env.IVX_VERIFY_REPEAT_MS ?? '', 10) || 24 * 60 * 60 * 1000);
+  if (continuousVerifyEnabled) {
+    const verifyNow = Date.now();
+    for (const record of state.records) {
+      if (record.role !== 'VERIFY' || record.executionMode !== 'read_only' || record.status !== 'COMPLETED' || !record.finishedAt) continue;
+      const finishedAt = Date.parse(record.finishedAt);
+      if (!Number.isFinite(finishedAt) || verifyNow - finishedAt < verifyCooldownMs) continue;
+      record.status = 'QUEUED';
+      record.workerJobId = null;
+      record.workerStatus = null;
+      record.stage = 'SCHEDULED VERIFICATION PATROL';
+      record.progress = 0;
+      record.startedAt = null;
+      record.finishedAt = null;
+      record.error = null;
+      record.blocker = null;
+      result.requeued.push(record.key);
+    }
   }
 
   // 3. FAILURE / CANCELLATION transitions.
@@ -560,6 +565,9 @@ export async function tickCampaignDispatcher(): Promise<TickResult> {
         record.retryCount += 1;
         record.status = 'QUEUED';
         record.workerJobId = null;
+        record.workerStatus = null;
+        record.error = null;
+        record.finishedAt = null;
         record.stage = `AUTO-RETRY ${record.retryCount}/${MAX_CAMPAIGN_RETRIES}`;
         result.requeued.push(record.key);
       }
@@ -930,11 +938,15 @@ export async function runCampaignBootRecovery(): Promise<number> {
   const state = await loadState();
   let recovered = 0;
   for (const record of state.records) {
-    if (record.status !== 'FAILED') continue;
+    if (record.status !== 'FAILED' || !isRetryableFailure(record)) continue;
+    const infrastructureFailure = (record.error ?? '').startsWith('Worker sync error:')
+      || (record.error ?? '').includes('no longer found in the queue');
+    if (!infrastructureFailure) continue;
     record.status = record.role === 'QA' ? 'AWAITING_IMPLEMENT' : 'QUEUED';
-    record.stage = 'BOOT RECOVERY — RETRY AFTER DEPLOY';
-    record.retryCount = 0;
+    record.retryCount += 1;
+    record.stage = `BOOT RECOVERY — INFRASTRUCTURE RETRY ${record.retryCount}/${MAX_CAMPAIGN_RETRIES}`;
     record.workerJobId = null;
+    record.workerStatus = null;
     record.error = null;
     record.blocker = null;
     record.finishedAt = null;

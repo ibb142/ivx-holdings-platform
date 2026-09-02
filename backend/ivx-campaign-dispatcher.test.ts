@@ -531,7 +531,7 @@ describe('IVX campaign dispatcher — full campaign mapping (scenarios 23-24)', 
 });
 
 describe('IVX campaign dispatcher — boot recovery', () => {
-  it('25. boot recovery requeues FAILED records once per boot with a reset retry budget', async () => {
+  it('25. boot recovery preserves the retry cap for exhausted FAILED records', async () => {
     await ensureCampaignAssignment(assignment({ agentNumber: 1, dutyId: 'd-boot' }));
     for (let i = 0; i < MAX_CAMPAIGN_RETRIES + 2; i += 1) {
       await tickCampaignDispatcher();
@@ -544,14 +544,13 @@ describe('IVX campaign dispatcher — boot recovery', () => {
 
     resetCampaignBootRecoveryForTests();
     const recovered = await runCampaignBootRecovery();
-    expect(recovered).toBe(1);
+    expect(recovered).toBe(0);
     const after = await findRecord('1:IMPLEMENT:d-boot');
-    expect(after?.status).toBe('QUEUED');
-    expect(after?.stage).toContain('BOOT RECOVERY');
-    expect(after?.retryCount).toBe(0);
-    expect(after?.error).toBeNull();
+    expect(after?.status).toBe('FAILED');
+    expect(after?.retryCount).toBe(MAX_CAMPAIGN_RETRIES);
+    expect(after?.error).toBeTruthy();
 
-    // Idempotent within the same boot — a second call recovers nothing.
+    // Idempotent within the same boot — a second call also recovers nothing.
     const again = await runCampaignBootRecovery();
     expect(again).toBe(0);
   });
