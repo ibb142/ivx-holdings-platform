@@ -297,11 +297,11 @@ export async function runPolicyVerifications(runId: string): Promise<PolicyCheck
 
   // 12) Pending tasks survive restart — durable queue + boot resume wiring
   const pendingProbeId = `${runId}-policy-pending`;
-  await insertExecutions([{ task_id: pendingProbeId, run_id: `${runId}-policy`, agent_id: probeAgent.agentId, agent_number: probeAgent.agentNumber, task_type: 'pending_probe', final_status: 'pending', dedup_key: pendingProbeId }]);
+  const ins = await insertExecutions([{ task_id: pendingProbeId, run_id: `${runId}-policy`, agent_id: probeAgent.agentId, agent_number: probeAgent.agentNumber, task_type: 'pending_probe', final_status: 'pending', dedup_key: pendingProbeId }]);
   const pendingBack = await fetchPendingExecutions(300);
   const pendingFound = (pendingBack.data ?? []).some((r) => r.task_id === pendingProbeId);
   await updateExecution(pendingProbeId, { final_status: 'completed', finished_at: new Date().toISOString() });
-  checks.push({ name: 'pending_tasks_survive_restart', passed: pendingFound, detail: pendingFound ? 'pending task durable in Supabase and discoverable by boot resume scanner' : 'pending task not found in durable queue' });
+  checks.push({ name: 'pending_tasks_survive_restart', passed: pendingFound, detail: pendingFound ? 'pending task durable in Supabase and discoverable by boot resume scanner' : `pending task not found in durable queue (fetch status=${pendingBack.status} error=${pendingBack.error ?? 'none'}; insert status=${ins.status} error=${ins.error ?? 'none'})` });
 
   return checks;
 }
