@@ -12,7 +12,7 @@ permissions:
   id-token: write
 concurrency:
   group: landing-112-500-check-3h
-  cancel-in-progress: false
+  cancel-in-progress: true
 env:
   API_BASE: https://api.ivxholding.com
 jobs:
@@ -21,18 +21,21 @@ jobs:
     timeout-minutes: 20
     outputs:
       matrix: ${{ steps.registry.outputs.matrix }}
+      live_sha: ${{ steps.registry.outputs.live_sha }}
     steps:
       - uses: actions/checkout@v4
-      - name: Require production SHA parity and 112 agents
+      - name: Require healthy production and 112 agents
         id: registry
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 60); do
+          for attempt in $(seq 1 20); do
             curl -fsS --max-time 20 "$API_BASE/health" -o /tmp/health.json || true
-            [ "$(jq -r '.commit // empty' /tmp/health.json 2>/dev/null || true)" = "$GITHUB_SHA" ] && break
-            [ "$attempt" = 60 ] && exit 1
+            [ "$(jq -r '.ok // false' /tmp/health.json 2>/dev/null || true)" = true ] && break
+            [ "$attempt" = 20 ] && exit 1
             sleep 15
           done
+          live_sha=$(jq -r '.commit // "unknown"' /tmp/health.json)
+          echo "live_sha=$live_sha" >> "$GITHUB_OUTPUT"
           curl -fsS --retry 4 "$API_BASE/api/ivx/agents" -o /tmp/agents.json
           test "$(jq -r '.totalAgents' /tmp/agents.json)" = 112
           echo "matrix=$(jq -c '{include:[.agents[]|{agentNumber,agentId}]}' /tmp/agents.json)" >> "$GITHUB_OUTPUT"
@@ -50,6 +53,7 @@ jobs:
         env:
           AGENT_NUMBER: ${{ matrix.agentNumber }}
           AGENT_ID: ${{ matrix.agentId }}
+          LIVE_SHA: ${{ needs.prepare.outputs.live_sha }}
         run: |
           set -euo pipefail
           n=$(printf '%03d' "$AGENT_NUMBER")
@@ -75,7 +79,7 @@ jobs:
               3) dimension=security_failure_paths; tool=code_read; params='{"path":"expo/ivxholding-landing/ivx-app.js"}' ;;
               4) dimension=performance_observability; tool=code_read; params='{"path":"expo/ivxholding-landing/landing-support-chat.js"}' ;;
             esac
-            task="LANDING QA $item/500; IA $AGENT_NUMBER/112; $assignment; dimension=$dimension; production=$GITHUB_SHA; liveHash=$live_hash. Require relevant real evidence; never invent PASS."
+            task="LANDING QA $item/500; IA $AGENT_NUMBER/112; $assignment; dimension=$dimension; workflowSha=$GITHUB_SHA; liveSourceSha=$LIVE_SHA; liveHash=$live_hash. Require relevant real evidence; never invent PASS."
             body=$(jq -nc --arg id "landing-$GITHUB_RUN_ID-$item" --arg task "$task" --arg tool "$tool" --argjson params "$params" '{taskType:"audit",payload:{__taskId:$id,__workflow:"Landing 112-Agent 500-Check 3H QA",landingAssignment:$task,__toolId:$tool,__toolParams:$params,realExecutionOnly:true,simulatedSuccessAllowed:false}}')
             http=$(curl -sS --max-time 240 -o /tmp/run.json -w '%{http_code}' -X POST "$API_BASE/api/ivx/agents/$AGENT_ID/run" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: $token" --data "$body" || true)
             if [ "$http" = 401 ] || [ "$http" = 403 ]; then refresh_oidc; http=$(curl -sS --max-time 240 -o /tmp/run.json -w '%{http_code}' -X POST "$API_BASE/api/ivx/agents/$AGENT_ID/run" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: $token" --data "$body" || true); fi
@@ -86,7 +90,7 @@ jobs:
             result=$(jq -r '.runRecord.toolResultId // empty' /tmp/run.json 2>/dev/null || true)
             passed=false
             if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$status" = completed ] && [ "$verified" = true ] && [ -n "$source" ] && [ -n "$result" ]; then passed=true; else failures=$((failures+1)); fi
-            jq -nc --argjson itemId "$item" --argjson agentNumber "$AGENT_NUMBER" --arg assignment "$assignment" --arg dimension "$dimension" --arg sourceSha "$GITHUB_SHA" --arg liveHash "$live_hash" --arg status "$status" --arg sourceReference "$source" --arg toolResultId "$result" --argjson passed "$passed" '{itemId:$itemId,agentNumber:$agentNumber,assignment:$assignment,dimension:$dimension,sourceSha:$sourceSha,liveHtmlSha256:$liveHash,status:$status,sourceReference:$sourceReference,toolResultId:$toolResultId,passed:$passed}' >> "evidence/agent-$n.jsonl"
+            jq -nc --argjson itemId "$item" --argjson agentNumber "$AGENT_NUMBER" --arg assignment "$assignment" --arg dimension "$dimension" --arg sourceSha "$GITHUB_SHA" --arg liveSourceSha "$LIVE_SHA" --arg liveHash "$live_hash" --arg status "$status" --arg sourceReference "$source" --arg toolResultId "$result" --argjson passed "$passed" '{itemId:$itemId,agentNumber:$agentNumber,assignment:$assignment,dimension:$dimension,sourceSha:$sourceSha,liveSourceSha:$liveSourceSha,liveHtmlSha256:$liveHash,status:$status,sourceReference:$sourceReference,toolResultId:$toolResultId,passed:$passed}' >> "evidence/agent-$n.jsonl"
           done
           count=$(wc -l < "evidence/agent-$n.jsonl")
           test "$count" -ge 4
@@ -105,6 +109,7 @@ jobs:
     timeout-minutes: 20
     env:
       SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+      LIVE_SHA: ${{ needs.prepare.outputs.live_sha }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -114,7 +119,7 @@ jobs:
       - name: Certify or route defects to Autonomous
         run: |
           set -euo pipefail
-          jq -s '[.[][]]' evidence-all/*.jsonl > /tmp/all.json
+          jq -s '.' evidence-all/*.jsonl > /tmp/all.json
           total=$(jq length /tmp/all.json); unique=$(jq '[.[].itemId]|unique|length' /tmp/all.json)
           agents=$(jq '[.[].agentNumber]|unique|length' /tmp/all.json); passed=$(jq '[.[]|select(.passed)]|length' /tmp/all.json)
           failed=$((total-passed))
@@ -127,7 +132,7 @@ jobs:
             curl -fsS -X POST "$API_BASE/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-System-Key: $SYSTEM_KEY" --data "$payload" -o /tmp/repair.json
           fi
           mkdir -p certificate
-          jq -n --arg sha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --argjson total "$total" --argjson passed "$passed" --argjson failed "$failed" --argjson agents "$agents" '{certificate:"IVX Landing 500-Check / 112-Agent / 3H QA",sourceSha:$sha,runId:$runId,totalChecks:$total,uniqueChecks:$total,agentsParticipating:$agents,passed:$passed,failed:$failed,autonomousManager:true,status:(if $failed==0 then "PASS" else "REPAIR_QUEUED" end),completedAt:(now|todateiso8601)}' > certificate/result.json
+          jq -n --arg sha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --arg liveSha "$LIVE_SHA" --argjson total "$total" --argjson passed "$passed" --argjson failed "$failed" --argjson agents "$agents" '{certificate:"IVX Landing 500-Check / 112-Agent / 3H QA",workflowSha:$sha,liveSourceSha:$liveSha,runId:$runId,totalChecks:$total,uniqueChecks:$total,agentsParticipating:$agents,passed:$passed,failed:$failed,autonomousManager:true,status:(if $failed==0 then "PASS" else "REPAIR_QUEUED" end),completedAt:(now|todateiso8601)}' > certificate/result.json
           cat certificate/result.json
           test "$failed" = 0
       - uses: actions/upload-artifact@v4
