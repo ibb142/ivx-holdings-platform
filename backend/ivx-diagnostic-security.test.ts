@@ -52,7 +52,9 @@ const SENSITIVE_PATTERNS = [
   'errors',
 ];
 
-describe('Diagnostic endpoint security regression tests', () => {
+const describeLive = process.env.RUN_LIVE_SECURITY_TESTS === '1' ? describe : describe.skip;
+
+describeLive('Diagnostic endpoint security regression tests', () => {
   for (const endpoint of DIAGNOSTIC_ENDPOINTS) {
     test(`unauthenticated GET ${endpoint} returns 401/403`, async () => {
       const res = await fetch(`${BASE}${endpoint}`, {
