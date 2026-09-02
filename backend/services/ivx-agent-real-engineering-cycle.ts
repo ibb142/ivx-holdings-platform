@@ -24,6 +24,7 @@ import {
   heartbeat,
   leaseNextTask,
   releaseLease,
+  TERMINAL_SUCCESS_STATES,
   transitionTaskState,
   type Task,
   type TaskEvidence,
@@ -186,19 +187,27 @@ async function inspectModule(relPath: string): Promise<{ defects: CycleDefect[];
   return { defects, inspected: true, summary: `inspected ${relPath} (${content.split('\n').length} lines, ${defects.length} defect(s))` };
 }
 
-async function seedModuleAuditTask(sourceSha: string): Promise<Task | null> {
+/**
+ * Seed ONE real durable module-audit task OWNED by the requesting agent.
+ *
+ * Deterministic per-agent module assignment: (agentNumber - 1) % modules.length
+ * — no minute-bucket collisions, no cross-agent duplication. The idempotency
+ * key binds sourceSha + agentId + agentNumber + module so a task created for
+ * IA-37 can never be fulfilled by IA-01.
+ */
+export async function seedModuleAuditTask(sourceSha: string, agentId: string, agentNumber: number | null): Promise<Task | null> {
   const modules = await scanModuleUniverse();
   if (modules.length === 0) return null;
-  // Deterministic rotation across the fleet: pick by minute bucket so agents
-  // spread across the universe instead of duplicating the same module.
-  const bucket = Math.floor(Date.now() / 60_000) % modules.length;
-  const rel = modules[bucket];
+  const rel = agentNumber != null
+    ? modules[(agentNumber - 1) % modules.length]
+    : modules[Math.abs([...agentId].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) | 0, 7)) % modules.length];
   const result = await createTask({
     title: `Module audit: ${rel}`,
-    description: `Real engineering audit of module ${rel} against source SHA ${sourceSha}: inspect, secret-scan, import-graph check, hygiene defects; queue repairs for findings.`,
+    description: `Real engineering audit of module ${rel} against source SHA ${sourceSha}: inspect, secret-scan, import-graph check, hygiene defects; queue repairs for findings. Owner: ${agentId} (IA-${agentNumber ?? 'shared'}).`,
     taskType: 'development',
-    idempotencyKey: `module-audit:${sourceSha}:${rel}`,
+    idempotencyKey: `module-audit:${sourceSha}:${agentId}:${agentNumber ?? 'shared'}:${rel}`,
     priority: 'medium',
+    assignedAgentNumber: agentNumber,
   });
   return result.task;
 }
@@ -236,10 +245,22 @@ export async function runRealEngineeringCycle(input: {
   const cycleStart = Date.now();
 
   try {
-    let leased = await leaseNextTask(workerId);
+    let leased = await leaseNextTask(workerId, input.agentNumber);
     if (!leased.ok || !leased.task) {
-      await seedModuleAuditTask(input.sourceSha);
-      leased = await leaseNextTask(workerId);
+      const seeded = await seedModuleAuditTask(input.sourceSha, input.agentId, input.agentNumber);
+      if (seeded && TERMINAL_SUCCESS_STATES.includes(seeded.state)) {
+        // Durable rerun: this agent's owned audit for this exact SHA was already
+        // executed and VERIFIED with fresh evidence — return the real taskId.
+        const relMatch = /module audit: (\S+)/i.exec(seeded.title);
+        return {
+          ...base, ok: true, action: 'TASK_COMPLETED', taskId: seeded.taskId,
+          module: relMatch?.[1] ?? null, startedAt: seeded.startedAt, finishedAt: nowIso(),
+          states: ['ALREADY_VERIFIED'], evidenceIds: seeded.evidence.map((e) => e.evidenceId),
+          filesInspected: relMatch ? [relMatch[1]] : [], productiveMinutes: 0,
+          nextTaskAvailable: false, error: null,
+        };
+      }
+      leased = await leaseNextTask(workerId, input.agentNumber);
     }
     if (!leased.ok || !leased.task) {
       return { ...base, ok: true, action: 'NO_TASK_AVAILABLE', nextTaskAvailable: false, finishedAt: nowIso() };
@@ -279,14 +300,17 @@ export async function runRealEngineeringCycle(input: {
       }
     }
 
-    // Queue real repair tasks for every non-gated defect (idempotent per SHA).
+    // Queue real repair tasks for every non-gated defect. Repairs stay in the
+    // discovering agent's module lane (owner = task.assignedAgentNumber) —
+    // development repair work is never dumped on a single default agent.
     for (const defect of inspection.defects) {
       const repair = await createTask({
         title: `Repair ${defect.kind}: ${relPath ?? task.title}`,
         description: `${defect.detail}. Discovered by real engineering cycle on SHA ${input.sourceSha}.`,
         taskType: defect.kind === 'secret' ? 'security' : 'development',
-        idempotencyKey: `repair:${input.sourceSha}:${relPath ?? task.title}:${defect.kind}`,
+        idempotencyKey: `repair:${input.sourceSha}:${task.assignedAgentNumber ?? 'shared'}:${relPath ?? task.title}:${defect.kind}`,
         priority: defect.severity === 'critical' ? 'critical' : defect.severity === 'high' ? 'high' : 'medium',
+        assignedAgentNumber: task.assignedAgentNumber,
       });
       if (repair.task) base.repairTaskIds.push(repair.task.taskId);
     }
@@ -324,7 +348,9 @@ export async function runRealEngineeringCycle(input: {
       }
     }
 
-    const remaining = await leaseNextTask(`probe:${workerId}:${Date.now()}`);
+    const probeWorker = `probe:${workerId}:${Date.now()}`;
+    const remaining = await leaseNextTask(probeWorker, input.agentNumber);
+    if (remaining.task) await releaseLease(remaining.task.taskId, probeWorker);
     return {
       ...base,
       ok: true,
