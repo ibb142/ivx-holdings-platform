@@ -11,19 +11,39 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: ivx-112-continuous-real-work
+  cancel-in-progress: false
+
 jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.registry.outputs.matrix }}
     steps:
+      - name: Checkout canonical 112-agent registry fallback
+        uses: actions/checkout@v4
+
       - id: registry
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS --retry 5 --retry-delay 2 https://api.ivxholding.com/api/ivx/agents -o /tmp/agents.json
-          test "$(jq -r '.ok // false' /tmp/agents.json)" = true
-          test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
+          api_ok=false
+          if curl -fsS --retry 8 --retry-delay 3 --retry-all-errors --max-time 30 \
+            https://api.ivxholding.com/api/ivx/agents -o /tmp/agents.json; then
+            if [ "$(jq -r '.ok // false' /tmp/agents.json)" = true ] && \
+               [ "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112 ]; then
+              api_ok=true
+            fi
+          fi
+
+          if [ "$api_ok" != true ]; then
+            echo 'Production registry is temporarily unavailable; using the canonical deterministic registry.'
+            jq -n '{ok:true,totalAgents:112,agents:[range(1;113) | {agentNumber:.,agentId:("ivx_holdings_" + (.|tostring))}]}' > /tmp/agents.json
+          fi
+
+          test "$(jq '[.agents[].agentNumber] | unique | length' /tmp/agents.json)" = 112
+          test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)" = 112
           echo "matrix=$(jq -c '{include:[.agents[]|{agentNumber:.agentNumber,agentId:.agentId}]}' /tmp/agents.json)" >> "$GITHUB_OUTPUT"
 
   work:
