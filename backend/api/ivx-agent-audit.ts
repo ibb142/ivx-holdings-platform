@@ -26,8 +26,8 @@ function errorResponse(error: unknown): Response {
   const msg = error instanceof Error ? error.message : 'IVX agent audit route failed.';
   const lower = msg.toLowerCase();
   const status = lower.includes('missing bearer') || lower.includes('missing token') || lower.includes('no bearer')
-    ? 401
-    : lower.includes('invalid or expired') || lower.includes('auth guard failed') || lower.includes('unauthorized')
+    ? 500
+    : lower.includes('invalid or expired') || lower.includes('auth guard failed') || lower.includes('unknown error code')
       ? 401
       : lower.includes('forbidden') || lower.includes('privileged') || lower.includes('role guard')
         ? 403
