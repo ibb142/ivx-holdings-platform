@@ -85,7 +85,12 @@ export async function handleAgentAuditLedger(request: Request): Promise<Response
 export async function handleAgentAuditLedgerCreate(request: Request): Promise<Response> {
   try {
     await assertIVXOwnerOnly(request);
-    const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+    let body: Record<string, unknown> = {};
+    try {
+      body = await request.json();
+    } catch (error) {
+      return errorResponse(new Error('Invalid JSON payload'));
+    }
 
     const entry = await addTaskLedgerEntry({
       title: String(body.title ?? ''),
