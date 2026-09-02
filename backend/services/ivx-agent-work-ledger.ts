@@ -190,7 +190,7 @@ export const EXECUTION_WORKSTREAMS: ReadonlyArray<{ name: string; modules: reado
   { name: 'Render', modules: ['render', 'deploy'] },
   { name: 'Observability', modules: ['observability', 'watchdog', 'health'] },
   { name: 'E2E', modules: ['e2e', 'playwright', 'maestro'] },
-  { name: 'Certification', modules: ['certification', 'certificate', 'control tower', 'audit'] },
+  { name: 'Certification', modules: ['certification', 'certificate', 'control tower', 'audit', 'sha parity'] },
 ];
 
 /** Map a module name to its owning workstream (Mission I partition). */
