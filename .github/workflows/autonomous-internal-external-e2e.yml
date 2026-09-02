@@ -141,6 +141,24 @@ jobs:
           test "$code" = 200
           jq -e '.' /tmp/health.json >/dev/null
           echo 'EXTERNAL_API_HEALTH=PASS'
+      - name: Diagnostic endpoints reject unauthenticated access
+        shell: bash
+        run: |
+          set -euo pipefail
+          endpoints=(
+            /api/tool/render-status /api/tool/github-status /api/ivx/chat-debug
+            /api/ivx/deploy-tools/credentials /api/ivx/deploy-tools/dashboard
+            /api/ivx/deploy-tools/evidence /api/ivx/deploy-tools/brain
+            /api/ivx/deploy-tools/github /api/ivx/deploy-tools/render
+            /api/ivx/deploy-tools/supabase /api/ivx/render-diagnostic
+            /api/ivx/verify/env-status /api/ivx/runtime-variables
+            /api/ivx/runtime-variables/audit
+          )
+          for endpoint in "${endpoints[@]}"; do
+            code=$(curl -sS --retry 4 --retry-all-errors --retry-delay 2 --max-time 30 -o /tmp/diagnostic.json -w "%{http_code}" "$API_BASE$endpoint")
+            case "$code" in 401|403) ;; *) echo "SECURITY_GATE_FAIL endpoint=$endpoint status=$code"; cat /tmp/diagnostic.json; exit 1;; esac
+          done
+          echo 'EXTERNAL_DIAGNOSTIC_AUTH=PASS'
       - name: Live backend must equal exact GitHub SHA
         shell: bash
         run: |
