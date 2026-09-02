@@ -82,15 +82,21 @@ jobs:
             esac
             task="LANDING QA $item/500; IA $AGENT_NUMBER/112; $assignment; dimension=$dimension; workflowSha=$GITHUB_SHA; liveSourceSha=$LIVE_SHA; liveHash=$live_hash. Require relevant real evidence; never invent PASS."
             body=$(jq -nc --arg id "landing-$GITHUB_RUN_ID-$item" --arg task "$task" --arg tool "$tool" --argjson params "$params" '{taskType:"audit",payload:{__taskId:$id,__workflow:"Landing 112-Agent 500-Check 3H QA",landingAssignment:$task,__toolId:$tool,__toolParams:$params,realExecutionOnly:true,simulatedSuccessAllowed:false}}')
-            http=$(curl -sS --max-time 240 -o /tmp/run.json -w '%{http_code}' -X POST "$API_BASE/api/ivx/agents/$AGENT_ID/run" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: $token" --data "$body" || true)
-            if [ "$http" = 401 ] || [ "$http" = 403 ]; then refresh_oidc; http=$(curl -sS --max-time 240 -o /tmp/run.json -w '%{http_code}' -X POST "$API_BASE/api/ivx/agents/$AGENT_ID/run" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: $token" --data "$body" || true); fi
-            ok=$(jq -r '.ok // false' /tmp/run.json 2>/dev/null || echo false)
-            status=$(jq -r '.runRecord.finalStatus // "request_failed"' /tmp/run.json 2>/dev/null || echo request_failed)
-            verified=$(jq -r '.runRecord.verifiedOutput // false' /tmp/run.json 2>/dev/null || echo false)
-            source=$(jq -r '.runRecord.sourceReference // empty' /tmp/run.json 2>/dev/null || true)
-            result=$(jq -r '.runRecord.toolResultId // empty' /tmp/run.json 2>/dev/null || true)
             passed=false
-            if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$status" = completed ] && [ "$verified" = true ] && [ -n "$source" ] && [ -n "$result" ]; then passed=true; else failures=$((failures+1)); fi
+            http=000; ok=false; status=request_failed; verified=false; source=; result=
+            for request_attempt in 1 2 3 4; do
+              : > /tmp/run.json
+              http=$(curl -sS --max-time 240 -o /tmp/run.json -w '%{http_code}' -X POST "$API_BASE/api/ivx/agents/$AGENT_ID/run" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: $token" --data "$body" || true)
+              if [ "$http" = 401 ] || [ "$http" = 403 ]; then refresh_oidc; fi
+              ok=$(jq -r '.ok // false' /tmp/run.json 2>/dev/null || echo false)
+              status=$(jq -r '.runRecord.finalStatus // "request_failed"' /tmp/run.json 2>/dev/null || echo request_failed)
+              verified=$(jq -r '.runRecord.verifiedOutput // false' /tmp/run.json 2>/dev/null || echo false)
+              source=$(jq -r '.runRecord.sourceReference // empty' /tmp/run.json 2>/dev/null || true)
+              result=$(jq -r '.runRecord.toolResultId // empty' /tmp/run.json 2>/dev/null || true)
+              if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$status" = completed ] && [ "$verified" = true ] && [ -n "$source" ] && [ -n "$result" ]; then passed=true; break; fi
+              [ "$request_attempt" = 4 ] || sleep $((request_attempt * 15))
+            done
+            if [ "$passed" != true ]; then failures=$((failures+1)); fi
             jq -nc --argjson itemId "$item" --argjson agentNumber "$AGENT_NUMBER" --arg assignment "$assignment" --arg dimension "$dimension" --arg sourceSha "$GITHUB_SHA" --arg liveSourceSha "$LIVE_SHA" --arg liveHash "$live_hash" --arg status "$status" --arg sourceReference "$source" --arg toolResultId "$result" --argjson passed "$passed" '{itemId:$itemId,agentNumber:$agentNumber,assignment:$assignment,dimension:$dimension,sourceSha:$sourceSha,liveSourceSha:$liveSourceSha,liveHtmlSha256:$liveHash,status:$status,sourceReference:$sourceReference,toolResultId:$toolResultId,passed:$passed}' >> "evidence/agent-$n.jsonl"
           done
           count=$(wc -l < "evidence/agent-$n.jsonl")
