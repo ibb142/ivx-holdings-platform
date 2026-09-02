@@ -31,6 +31,7 @@ import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
 // ── AWS Configuration ─────────────────────────────────
 const ACCESS_KEY = process.env.AWS_ACCESS_KEY_ID || process.env.IVX_AWS_ACCESS_KEY_ID || '';
 const SECRET_KEY = process.env.AWS_SECRET_ACCESS_KEY || process.env.IVX_AWS_SECRET_ACCESS_KEY || '';
+const SESSION_TOKEN = process.env.AWS_SESSION_TOKEN || '';
 const REGION = process.env.AWS_REGION || 'us-east-1';
 const DIST_ID = process.env.CLOUDFRONT_DISTRIBUTION_ID || '';
 const BUCKET = process.env.S3_BUCKET_NAME || 'ivxholding.com';
@@ -45,8 +46,9 @@ if (!DIST_ID) {
   console.error('❌ CLOUDFRONT_DISTRIBUTION_ID not set.');
   process.exit(1);
 }
-const s3 = new S3Client({ region: REGION, credentials: { accessKeyId: ACCESS_KEY, secretAccessKey: SECRET_KEY } });
-const cf = new CloudFrontClient({ region: 'us-east-1', credentials: { accessKeyId: ACCESS_KEY, secretAccessKey: SECRET_KEY } });
+const credentials = { accessKeyId: ACCESS_KEY, secretAccessKey: SECRET_KEY, ...(SESSION_TOKEN ? { sessionToken: SESSION_TOKEN } : {}) };
+const s3 = new S3Client({ region: REGION, credentials });
+const cf = new CloudFrontClient({ region: 'us-east-1', credentials });
 
 async function ensureWwwRedirectFunction() {
   const name = 'ivx-www-to-apex';
@@ -539,6 +541,13 @@ async function deploy() {
       AccessControlAllowMethods: { Quantity: 2, Items: ['GET', 'OPTIONS'] },
       AccessControlAllowCredentials: false,
       OriginOverride: false,
+    },
+    CustomHeadersConfig: {
+      Quantity: 2,
+      Items: [
+        { Header: 'Content-Security-Policy', Value: "upgrade-insecure-requests; default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com https://connect.facebook.net https://snap.licdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' https://api.qrserver.com https://*.supabase.co https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev data:; font-src 'self' https://fonts.gstatic.com; media-src 'self' https://*.supabase.co https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev; connect-src 'self' https://api.ivxholding.com https://*.supabase.co wss://*.supabase.co; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://api.ivxholding.com; frame-ancestors 'none';", Override: true },
+        { Header: 'Permissions-Policy', Value: 'geolocation=(), microphone=(), camera=(), payment=()', Override: true },
+      ],
     },
     SecurityHeadersConfig: {
       StrictTransportSecurity: {
