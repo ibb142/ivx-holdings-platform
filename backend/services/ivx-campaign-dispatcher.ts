@@ -174,6 +174,7 @@ export type CampaignJobRecord = {
   typecheckPassed: boolean;
   commitSha: string | null;
   prNumber: number | null;
+  prMerged: boolean | null;
   prUrl: string | null;
   deployId: string | null;
   healthOk: boolean | null;
@@ -335,6 +336,7 @@ function makeRecord(a: DispatcherAssignmentInput): CampaignJobRecord {
     typecheckPassed: false,
     commitSha: null,
     prNumber: null,
+    prMerged: null,
     prUrl: null,
     deployId: null,
     healthOk: null,
