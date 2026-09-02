@@ -297,11 +297,11 @@ export async function runPolicyVerifications(runId: string): Promise<PolicyCheck
 
   // 12) Pending tasks survive restart — durable queue + boot resume wiring
   const pendingProbeId = `${runId}-policy-pending`;
-  const ins = await insertExecutions([{ task_id: pendingProbeId, run_id: `${runId}-policy`, agent_id: probeAgent.agentId, agent_number: probeAgent.agentNumber, task_type: 'pending_probe', final_status: 'pending', dedup_key: pendingProbeId }]);
+  const pendingInsert = await insertExecutions([{ task_id: pendingProbeId, run_id: `${runId}-policy`, agent_id: probeAgent.agentId, agent_number: probeAgent.agentNumber, task_type: 'pending_probe', final_status: 'pending', dedup_key: pendingProbeId }]);
   const pendingBack = await fetchPendingExecutions(300);
   const pendingFound = (pendingBack.data ?? []).some((r) => r.task_id === pendingProbeId);
   await updateExecution(pendingProbeId, { final_status: 'completed', finished_at: new Date().toISOString() });
-  checks.push({ name: 'pending_tasks_survive_restart', passed: pendingFound, detail: pendingFound ? 'pending task durable in Supabase and discoverable by boot resume scanner' : `pending task not found in durable queue (fetch status=${pendingBack.status} error=${pendingBack.error ?? 'none'}; insert status=${ins.status} error=${ins.error ?? 'none'})` });
+  checks.push({ name: 'pending_tasks_survive_restart', passed: pendingFound, detail: pendingFound ? 'pending task durable in Supabase and discoverable by boot resume scanner' : `pending task not found in durable queue (fetch status=${pendingBack.status} error=${pendingBack.error ?? 'none'}; insert status=${pendingInsert.status} error=${pendingInsert.error ?? 'none'})` });
 
   return checks;
 }
@@ -518,70 +518,3 @@ export async function getRealStatusForApi(): Promise<Record<string, unknown>> {
   const stateByAgent = new Map(states.map((s) => [s.agent_id, s]));
   const agents = ALL_AGENT_CONTRACTS.map((c) => {
     const s = stateByAgent.get(c.agentId) ?? null;
-    const heartbeatAgeMs = s?.last_heartbeat ? now - new Date(s.last_heartbeat).getTime() : null;
-    const stale = heartbeatAgeMs === null || heartbeatAgeMs > HEARTBEAT_STALE_MS;
-    let displayStatus: 'running' | 'blocked' | 'failed' | 'completed' | 'idle' = 'idle';
-    if (s?.availability === 'busy') displayStatus = 'running';
-    else if (s?.availability === 'paused' || s?.availability === 'disabled') displayStatus = 'blocked';
-    else if (s?.last_failed_run && (!s.last_successful_run || s.last_failed_run > s.last_successful_run)) displayStatus = 'failed';
-    else if (s?.last_successful_run) displayStatus = 'completed';
-    return {
-      agentId: c.agentId,
-      agentNumber: c.agentNumber,
-      name: c.agentName,
-      division: c.divisionId,
-      status: displayStatus,
-      health: s?.health ?? 'unknown',
-      lastRealTool: s?.last_tool_used ?? null,
-      lastSource: s?.last_source_reference ?? null,
-      lastEvidenceSha: s?.last_evidence_sha ?? null,
-      lastHeartbeat: s?.last_heartbeat ?? null,
-      heartbeatStale: stale,
-      lastDurationMs: s?.last_duration_ms ?? 0,
-      lastError: s?.last_error ?? null,
-      retryCount: s?.retry_count ?? 0,
-      costUsd: Number(s?.total_cost_usd ?? 0),
-      totalRuns: s?.total_runs ?? 0,
-      successfulRuns: s?.successful_runs ?? 0,
-      failedRuns: s?.failed_runs ?? 0,
-    };
-  });
-
-  // Alert sweeps (persisted, with cooldown)
-  for (const a of agents) {
-    if (a.heartbeatStale && a.lastHeartbeat !== null) {
-      await raiseAlertOnce(`stale:${a.agentId}`, { alert_type: 'stale_heartbeat', agent_id: a.agentId, severity: 'warning', detail: `Heartbeat stale for ${a.name} (#${a.agentNumber})` });
-    }
-    if (a.status === 'running' && a.lastHeartbeat && now - new Date(a.lastHeartbeat).getTime() > 10 * 60_000) {
-      await raiseAlertOnce(`stuck:${a.agentId}`, { alert_type: 'stuck_agent', agent_id: a.agentId, severity: 'critical', detail: `${a.name} appears stuck in running state` });
-    }
-    if (a.successfulRuns > 0 && !a.lastEvidenceSha) {
-      await raiseAlertOnce(`noevidence:${a.agentId}`, { alert_type: 'output_without_evidence', agent_id: a.agentId, severity: 'critical', detail: `${a.name} has output without evidence` });
-    }
-  }
-
-  const alertsRes = await fetchRecentAlerts(40);
-  const cert = await fetchLatestCertificate();
-
-  return {
-    ok: statesRes.ok,
-    marker: REAL_EXECUTION_WORKFLOW_ID,
-    persistence: { configured: persistenceConfigured(), tablesReady: ensure.ok, detail: ensure.detail },
-    totalAgents: agents.length,
-    running: agents.filter((a) => a.status === 'running').length,
-    blocked: agents.filter((a) => a.status === 'blocked').length,
-    failed: agents.filter((a) => a.status === 'failed').length,
-    completed: agents.filter((a) => a.status === 'completed').length,
-    staleHeartbeats: agents.filter((a) => a.heartbeatStale).length,
-    totalCostUsd: agents.reduce((sum, a) => sum + a.costUsd, 0),
-    agents,
-    alerts: alertsRes.data ?? [],
-    latestCertificate: cert.data?.[0] ?? null,
-    activeRun: getActiveRunProgress(),
-    warRoom: WAR_ROOM_POLICY,
-  };
-}
-
-export function buildHeartbeatRows(): ReturnType<typeof buildAgentStateRows> {
-  return buildAgentStateRows();
-}
