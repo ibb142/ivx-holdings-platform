@@ -595,13 +595,16 @@
     }
   })();
 
-  function isValidJwtFormat(key) {
-    return key && typeof key === 'string' && key.indexOf('eyJ') === 0 && key.length > 30;
+  function isValidSupabasePublicKey(key) {
+    if (!key || typeof key !== 'string' || key.length <= 30) return false;
+    // Supabase supports both legacy JWT anon keys and the current publishable
+    // key format. Publishable keys are intentionally safe for browser clients.
+    return key.indexOf('eyJ') === 0 || key.indexOf('sb_publishable_') === 0;
   }
   function checkSupabaseReady() {
-    _supabaseReady = !isPlaceholder(SUPABASE_URL) && !isPlaceholder(SUPABASE_ANON_KEY) && isValidJwtFormat(SUPABASE_ANON_KEY);
-    if (!isPlaceholder(SUPABASE_ANON_KEY) && !isValidJwtFormat(SUPABASE_ANON_KEY)) {
-      console.warn('[IVX] Supabase anon key is NOT a valid JWT (must start with eyJ). Key:', SUPABASE_ANON_KEY.substring(0, 15) + '...');
+    _supabaseReady = !isPlaceholder(SUPABASE_URL) && !isPlaceholder(SUPABASE_ANON_KEY) && isValidSupabasePublicKey(SUPABASE_ANON_KEY);
+    if (!isPlaceholder(SUPABASE_ANON_KEY) && !isValidSupabasePublicKey(SUPABASE_ANON_KEY)) {
+      console.warn('[IVX] Supabase public key has an unsupported format. Key:', SUPABASE_ANON_KEY.substring(0, 15) + '...');
     }
     // Publish globals for lazy-loaded modules (ivx-invest.js, ivx-portal.js)
     // These modules read window.IVX_SUPABASE_URL / window.IVX_SUPABASE_ANON_KEY
@@ -1952,7 +1955,7 @@
     var _configFetchDone = false;
 
     function isValidJwtKey(key) {
-      return isValidJwtFormat(key) && !isPlaceholder(key);
+      return isValidSupabasePublicKey(key) && !isPlaceholder(key);
     }
 
     function initSupabaseClient() {
@@ -3221,7 +3224,7 @@
 
     function fetchDealsViaEdgeFunction(callback) {
       if (!SUPABASE_ANON_KEY || isPlaceholder(SUPABASE_ANON_KEY) || !isValidJwtKey(SUPABASE_ANON_KEY)) {
-        console.log('[IVX Deals] Edge Function: No valid JWT anon key — skipping');
+        console.log('[IVX Deals] Edge Function: No valid Supabase public key — skipping');
         if (callback) callback(false);
         return;
       }
@@ -3266,7 +3269,7 @@
       }
       _supabaseRestAttempted = true;
       if (isPlaceholder(SUPABASE_URL) || isPlaceholder(SUPABASE_ANON_KEY) || !isValidJwtKey(SUPABASE_ANON_KEY)) {
-        console.log('[IVX Deals] Cannot use Supabase REST — credentials not set or key not JWT format');
+        console.log('[IVX Deals] Cannot use Supabase REST — credentials not set or public key format unsupported');
         ensureFallbackVisible();
         return;
       }
@@ -3760,7 +3763,7 @@
       fetch(_HARDCODED_BACKEND_URL + '/health', { mode: 'no-cors' }).catch(function(){});
     }
 
-    console.log('[IVX Deals] Starting deal fetch. Supabase ready:', _supabaseReady, '| JWT key:', isValidJwtKey(SUPABASE_ANON_KEY));
+    console.log('[IVX Deals] Starting deal fetch. Supabase ready:', _supabaseReady, '| public key:', isValidJwtKey(SUPABASE_ANON_KEY));
 
     function aggressiveFetchAll() {
       _dealsLoaded = false;

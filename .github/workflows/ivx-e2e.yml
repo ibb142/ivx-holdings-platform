@@ -37,7 +37,12 @@ jobs:
           cat "$RUNNER_TEMP/changed-files.txt"
           mobile=false
           while IFS= read -r path; do
-            case "$path" in expo/*|package.json|bun.lock|bun.lockb|tsconfig.json) mobile=true; break;; esac
+            case "$path" in
+              # The static public Landing is a web surface. Its own Chromium
+              # gate runs below; it must not boot an unrelated iOS simulator.
+              expo/ivxholding-landing/*|qa/landing-*|.github/workflows/landing-*) ;;
+              expo/*|package.json|bun.lock|bun.lockb|tsconfig.json) mobile=true; break ;;
+            esac
           done < "$RUNNER_TEMP/changed-files.txt"
           echo "mobile=$mobile" >> "$GITHUB_OUTPUT"
           echo "MOBILE_IMPACT=$mobile"
