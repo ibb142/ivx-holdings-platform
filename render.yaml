@@ -18,7 +18,16 @@ services:
       maxInstances: 3
       targetCPUPercent: 70
       targetMemoryPercent: 80
-    autoDeployTrigger: commit
+    # Deploy only after GitHub's required checks pass. Workflow-only and QA
+    # evidence commits do not change the API image and must never recycle the
+    # single disk-backed production instance.
+    autoDeployTrigger: checksPass
+    buildFilter:
+      ignoredPaths:
+        - .github/**
+        - qa/**
+        - docs/**
+        - '**/*.md'
     healthCheckPath: /health
     domains:
       - api.ivxholding.com
@@ -356,16 +365,16 @@ services:
       mountPath: /data
       sizeGB: 10
 
-- type: redis
-  name: ivx-redis
-  plan: starter
-  ipAllowList: []
-  maxmemoryPolicy: allkeys-lru
+  - type: redis
+    name: ivx-redis
+    plan: starter
+    ipAllowList: []
+    maxmemoryPolicy: allkeys-lru
 
-- type: redis
-  name: ivx-redis-staging
-  plan: free
-  ipAllowList: []
+  - type: redis
+    name: ivx-redis-staging
+    plan: free
+    ipAllowList: []
 
 databases:
   - name: mydatabase
