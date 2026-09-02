@@ -621,15 +621,19 @@ export async function fetchExecutionsByRun(runId: string): Promise<SbResult<Exec
 export async function fetchPendingExecutions(limit = 200): Promise<SbResult<ExecutionRow[]>> {
   const mode = await resolveStoreMode();
   if (mode === 'dedicated') {
-    // Newest first: a boot resume scanner must discover newly pending tasks
-    // even when stale pending/running backlog exceeds the limit (oldest-first
-    // ordering starves every new task once backlog > limit). Schema-resilient:
-    // tables created before the created_at column reject created_at ordering,
-    // so fall back to task_id (PK; rec-<epoch-ms> ids sort chronologically).
-    const primary = await sbRequest<ExecutionRow[]>(`ivx_agent_executions?final_status=in.(pending,running)&select=*&order=created_at.desc&limit=${limit}`);
-    if (primary.ok) return primary;
-    console.warn('[IVXAgentPersistence] pending scan created_at order failed — falling back to task_id order', { status: primary.status, error: primary.error?.slice(0, 160) });
-    return sbRequest<ExecutionRow[]>(`ivx_agent_executions?final_status=in.(pending,running)&select=*&order=task_id.desc&limit=${limit}`);
+    // Use the indexed task_id primary key to bound the database read, then
+    // filter pending states in-process. Filtering the entire accumulated table
+    // by final_status caused PostgreSQL 57014 statement timeouts in production
+    // because older installations do not have a final_status index.
+    const scanLimit = Math.max(limit, Math.min(5000, limit * 4));
+    const recent = await sbRequest<ExecutionRow[]>(`ivx_agent_executions?select=*&order=task_id.desc&limit=${scanLimit}`);
+    if (!recent.ok) return recent;
+    return {
+      ...recent,
+      data: (recent.data ?? [])
+        .filter((row) => row.final_status === 'pending' || row.final_status === 'running')
+        .slice(0, limit),
+    };
   }
   if (mode === 'jobs_fallback') {
     const res = await jobsSelect('type=eq.ivx_rec_execution&status=in.(queued,running)', limit);
