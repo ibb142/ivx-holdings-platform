@@ -1,5 +1,4 @@
 import { generateText, streamText } from 'ai';
-import { createOpenAI } from '@ai-sdk/openai';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { acquireAIQueueSlot, classifyRequestLane, type IVXAIQueueLane } from './services/ivx-ai-queue';
 import { estimatePromptTokens, recordProviderTelemetry } from './services/ivx-provider-telemetry';
@@ -741,10 +740,9 @@ async function requestIVXAITextInternal(input: {
 
   // === PROVIDER STATE MACHINE + BOUNDED RETRY ===
   // 2026-07-18 emergency repair:
-  //  - Direct OpenAI-compatible client for BOTH key types. The Vercel AI
-  //    Gateway SDK (createGateway) is removed — it resolved credentials via
-  //    env vars and produced opaque "Unauthenticated" / "Gateway request
-  //    failed" errors. The key is now injected explicitly per request.
+  //  - AI SDK's native string model routes through Vercel AI Gateway using
+  //    the configured AI_GATEWAY_API_KEY. This avoids using the OpenAI-specific
+  //    adapter against the Gateway's OpenAI-compatible endpoint.
   //  - Transient failures (network / 5xx / 429) retry against the SAME
   //    provider with exponential backoff (max 3 attempts). Auth failures
   //    (401/403) never retry the same key — they mark the provider FAILED
@@ -757,7 +755,6 @@ async function requestIVXAITextInternal(input: {
     ensureIVXAIGatewayEnvironment();
     const apiKey = getIVXAIGatewayApiKey();
     const isVercelKey = isVercelGatewayKey(apiKey);
-    const gatewayProvider = createOpenAI({ apiKey, baseURL });
     const callTimeoutMs = adaptiveTimeoutMs;
     for (let attempt = 1; attempt <= MAX_PRIMARY_ATTEMPTS && !result; attempt += 1) {
       try {
@@ -781,7 +778,7 @@ async function requestIVXAITextInternal(input: {
             ? [...baseMessages, multimodalUser]
             : [...messages, multimodalUser];
           result = await runWithHardTimeout('IVX AI direct (multimodal)', generateText({
-            model: gatewayProvider.chat(model),
+            model,
             system: system.length > 0 ? system : undefined,
             maxOutputTokens: input.maxOutputTokens,
             abortSignal: input.abortSignal ?? undefined,
@@ -791,14 +788,14 @@ async function requestIVXAITextInternal(input: {
         } else {
           result = messages.length > 0
             ? await runWithHardTimeout('IVX AI direct (messages)', generateText({
-                model: gatewayProvider.chat(model),
+                model,
                 system: system.length > 0 ? system : undefined,
                 maxOutputTokens: input.maxOutputTokens,
                 abortSignal: input.abortSignal ?? undefined,
                 messages,
               }), callTimeoutMs)
             : await runWithHardTimeout('IVX AI direct (prompt)', generateText({
-                model: gatewayProvider.chat(model),
+                model,
                 system: system.length > 0 ? system : undefined,
                 maxOutputTokens: input.maxOutputTokens,
                 abortSignal: input.abortSignal ?? undefined,
@@ -1087,11 +1084,8 @@ export async function* streamIVXAIText(input: {
   const timer = setTimeout(() => { timedOut = true; }, adaptiveTimeoutMs);
 
   try {
-    const apiKey = getIVXAIGatewayApiKey();
-    // Direct OpenAI-compatible client for both key types (no gateway SDK).
-    const gatewayProvider = createOpenAI({ apiKey, baseURL });
     const streamResult = streamText({
-      model: gatewayProvider.chat(model),
+      model,
       system: system.length > 0 ? system : undefined,
       maxOutputTokens: input.maxOutputTokens,
       abortSignal: input.abortSignal ?? undefined,
