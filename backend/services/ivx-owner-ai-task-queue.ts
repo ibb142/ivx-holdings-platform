@@ -1050,15 +1050,21 @@ export async function probeAIGatewayLive(): Promise<{
     };
   }
 
-  // CREDIT DRAIN FIX (2026-08-16): GET /models instead of POST /chat/completions — zero tokens consumed
-  const url = `${endpoint}/models`;
+  // Manual live probe verifies an actual minimal generation. Authentication-only
+  // GET /models can succeed while billing, model access, or completion routing fails.
+  const url = `${endpoint}/chat/completions`;
 
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
     const res = await fetch(url, {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${apiKey}` },
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: startup.model,
+        messages: [{ role: 'user', content: 'Reply OK' }],
+        max_tokens: 2,
+      }),
       signal: controller.signal,
     });
     clearTimeout(timeout);
@@ -1069,7 +1075,7 @@ export async function probeAIGatewayLive(): Promise<{
       // circuit breaker. Previously this endpoint returned ok=true while the
       // state machine remained AI_UNAVAILABLE, so every worker tick was skipped.
       markProviderReady(startup.provider, startup.model);
-      return { ok: true, status: 200, reason: 'Gateway authenticated (GET /models, zero tokens consumed)', keyPrefix, endpoint, latencyMs, ownerActionRequired: null };
+      return { ok: true, status: 200, reason: 'Gateway generation verified (POST /chat/completions)', keyPrefix, endpoint, latencyMs, ownerActionRequired: null };
     }
 
     const bodyText = await res.text().catch(() => '');
