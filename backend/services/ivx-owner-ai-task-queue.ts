@@ -14,6 +14,7 @@
  */
 
 import { requestIVXAIText, validateIVXAIStartup, getProviderHealth, isIVXAIConfigured } from '../ivx-ai-runtime';
+import { markProviderReady } from './ivx-provider-state-machine';
 
 export type IVXOwnerAITaskStatus =
   | 'RECEIVED'
@@ -1064,6 +1065,10 @@ export async function probeAIGatewayLive(): Promise<{
     const latencyMs = Date.now() - started;
 
     if (res.ok) {
+      // A successful zero-token authentication probe must release the provider
+      // circuit breaker. Previously this endpoint returned ok=true while the
+      // state machine remained AI_UNAVAILABLE, so every worker tick was skipped.
+      markProviderReady(startup.provider, startup.model);
       return { ok: true, status: 200, reason: 'Gateway authenticated (GET /models, zero tokens consumed)', keyPrefix, endpoint, latencyMs, ownerActionRequired: null };
     }
 
