@@ -254,7 +254,21 @@ export async function ingestExternalWork(input: ExternalWorkRecord): Promise<Wor
 export function parseIVXCommitTrailers(message: string): {
   agentNumber: number | null; agentRole: string | null; agentId: string | null; taskId: string | null; workerJobId: string | null;
 } {
-  const value = (name: string) => message.match(new RegExp('^' + name + ':\\s*(.+)
+  const value = (name: string): string | null => {
+    const prefix = name.toLowerCase() + ':';
+    const line = message.split('\n').find((candidate) => candidate.toLowerCase().startsWith(prefix));
+    return line ? line.slice(prefix.length).trim() : null;
+  };
+  const agent = value('IVX-Agent');
+  const parsed = agent?.match(/IA-(\d{1,3})/i);
+  return {
+    agentNumber: parsed ? Number(parsed[1]) : null,
+    agentRole: value('IVX-Agent-Role'),
+    agentId: value('IVX-Agent-ID'),
+    taskId: value('IVX-Task-ID'),
+    workerJobId: value('IVX-Worker-Job'),
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CANONICAL STATE MAPPING (Mission B)
