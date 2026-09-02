@@ -37,7 +37,7 @@ import {
   type UpsertAuditItemInput,
 } from '../services/ivx-audit-item-store';
 
-export const OPTIONS = (): Response => ownerOnlyOptions();
+export const OPTIONS = (): Response => { runAutonomousRepair(); return ownerOnlyOptions(); };
 
 /**
  * Autonomous lifecycle proof. A self-contained build marker that ties together the
