@@ -29,11 +29,11 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/ivx-360-inventory
           find .github/workflows -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) -printf '%P\n' | sort > /tmp/ivx-360-inventory/workflows.txt
-          rg -l 'X-IVX-GitHub-OIDC|ACTIONS_ID_TOKEN_REQUEST_URL' .github/workflows | sort > /tmp/ivx-360-inventory/oidc-users.txt
+          grep -rlE 'X-IVX-GitHub-OIDC|ACTIONS_ID_TOKEN_REQUEST_URL' .github/workflows | sort > /tmp/ivx-360-inventory/oidc-users.txt
           sed -n '/const WORKFLOW_SUFFIXES = \[/,/\] as const/p' backend/services/ivx-github-actions-oidc.ts \
-            | rg -o '\.github/workflows/[^@'"'"']+' | sort -u > /tmp/ivx-360-inventory/oidc-allowlist.txt
+            | grep -oE '\.github/workflows/[^@'"'"']+' | sort -u > /tmp/ivx-360-inventory/oidc-allowlist.txt
           comm -23 /tmp/ivx-360-inventory/oidc-users.txt /tmp/ivx-360-inventory/oidc-allowlist.txt > /tmp/ivx-360-inventory/oidc-missing.txt
-          rg -o "app\.(get|post|put|patch|delete)\('[^']+'" backend/hono.ts | sort -u > /tmp/ivx-360-inventory/backend-routes.txt
+          grep -oE "app\.(get|post|put|patch|delete)\('[^']+'" backend/hono.ts | sort -u > /tmp/ivx-360-inventory/backend-routes.txt
 
           workflow_count=$(wc -l < /tmp/ivx-360-inventory/workflows.txt | tr -d ' ')
           oidc_user_count=$(wc -l < /tmp/ivx-360-inventory/oidc-users.txt | tr -d ' ')
