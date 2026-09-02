@@ -97,11 +97,13 @@ async function resolveAwsCredentials(credsFromRequest?: AwsCredentials): Promise
   // 3. Owner Variables table (encrypted)
   if (!accessKey) {
     accessKey = await getRawOwnerVariableValue('AWS_ACCESS_KEY_ID');
+    if (!accessKey) accessKey = await getRawOwnerVariableValue('IVX_AWS_ACCESS_KEY_ID');
     if (!accessKey) accessKey = await getIVXOwnerVariableRuntimeValue('IVX_AWS_READONLY_ACCESS_KEY_ID');
     if (accessKey) sources.accessKey = 'owner_variables';
   }
   if (!secretKey) {
     secretKey = await getRawOwnerVariableValue('AWS_SECRET_ACCESS_KEY');
+    if (!secretKey) secretKey = await getRawOwnerVariableValue('IVX_AWS_SECRET_ACCESS_KEY');
     if (!secretKey) secretKey = await getIVXOwnerVariableRuntimeValue('IVX_AWS_READONLY_SECRET_ACCESS_KEY');
     if (secretKey) sources.secretKey = 'owner_variables';
   }
@@ -532,6 +534,10 @@ export async function handleLandingFullDeploy(request: Request): Promise<Respons
       paths: invalidationPaths,
       callerReference: `landing-full-deploy-${Date.now()}`,
       distributionId: cloudFrontId,
+      credentials: {
+        accessKeyId: accessKey,
+        secretAccessKey: secretKey,
+      },
     });
     cloudFront = {
       attempted: true,

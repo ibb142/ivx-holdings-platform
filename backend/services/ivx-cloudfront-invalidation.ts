@@ -86,12 +86,17 @@ export async function createCloudFrontInvalidation(input: {
   paths: readonly string[];
   callerReference?: string;
   distributionId?: string;
+  credentials?: {
+    accessKeyId: string;
+    secretAccessKey: string;
+    sessionToken?: string;
+  };
 }): Promise<CloudFrontInvalidationResult> {
   const createdAt = new Date().toISOString();
   const distributionId = (input.distributionId?.trim() || readEnv('CLOUDFRONT_DISTRIBUTION_ID'));
-  const accessKey = readEnv('AWS_ACCESS_KEY_ID');
-  const secretKey = readEnv('AWS_SECRET_ACCESS_KEY');
-  const sessionToken = readEnv('AWS_SESSION_TOKEN');
+  const accessKey = input.credentials?.accessKeyId.trim() || readEnv('AWS_ACCESS_KEY_ID') || readEnv('IVX_AWS_ACCESS_KEY_ID');
+  const secretKey = input.credentials?.secretAccessKey.trim() || readEnv('AWS_SECRET_ACCESS_KEY') || readEnv('IVX_AWS_SECRET_ACCESS_KEY');
+  const sessionToken = input.credentials?.sessionToken?.trim() || readEnv('AWS_SESSION_TOKEN');
   const paths = normalizePaths(input.paths);
 
   const missingEnvNames: string[] = [];
