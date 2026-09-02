@@ -46,39 +46,6 @@ function getSupabaseClient() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-async function processAgentJobs(): Promise<void> {
-  const sb = getSupabaseClient();
-  if (!sb) return;
-
-  try {
-    const { data: pendingJobs, error } = await sb
-      .from('agent_jobs')
-      .select('id, task_type, status, payload')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: true })
-      .limit(5);
-
-    if (error || !pendingJobs || pendingJobs.length === 0) return;
-
-    for (const job of pendingJobs) {
-      try {
-        await sb.from('agent_jobs').update({ status: 'processing', updated_at: new Date().toISOString() }).eq('id', job.id);
-
-        // Mark as completed (placeholder — actual task execution depends on task_type)
-        await sb.from('agent_jobs').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', job.id);
-
-        state.jobsProcessed++;
-        state.lastJobAt = new Date().toISOString();
-      } catch (jobErr) {
-        await sb.from('agent_jobs').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', job.id);
-        state.jobsFailed++;
-      }
-    }
-  } catch {
-    // Non-fatal — will retry on next poll
-  }
-}
-
 async function cleanupOldAuditLogs(): Promise<void> {
   const sb = getSupabaseClient();
   if (!sb) return;
@@ -129,9 +96,8 @@ async function main(): Promise<void> {
       // This dedicated Render worker must drain the same durable Senior
       // Developer queue populated by the API dispatcher. Previously only the
       // web process imported this runtime, so expensive agent execution
-      // saturated /health while this worker merely completed placeholder rows.
+      // saturated /health while this worker did not execute that queue.
       await drainSeniorDeveloperQueue();
-      await processAgentJobs();
 
       healthCounter++;
       if (healthCounter * POLL_INTERVAL_MS >= HEALTH_REPORT_INTERVAL_MS) {
