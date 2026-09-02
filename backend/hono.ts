@@ -7192,9 +7192,43 @@ app.post('/api/ivx/autonomous/tasks/:id/cancel', async (c) => {
 // Autonomous Ops: Dashboard
 app.options('/api/ivx/autonomous/dashboard', () => new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }));
 app.get('/api/ivx/autonomous/dashboard', async (c) => {
-  const { getAutonomousDashboard } = await import('./services/ivx-autonomous-ops');
-  const dashboard = await getAutonomousDashboard();
-  return c.json({ ok: true, dashboard });
+  const [
+    { buildAppCompletionCampaign },
+    { listCampaignDispatcherRecords, getCampaignDispatcherSnapshot },
+  ] = await Promise.all([
+    import('./services/ivx-app-completion-campaign'),
+    import('./services/ivx-campaign-dispatcher'),
+  ]);
+  const records = await listCampaignDispatcherRecords();
+  const campaign = buildAppCompletionCampaign(undefined, records);
+  const dispatcher = await getCampaignDispatcherSnapshot();
+  const counts = campaign.counts;
+  const activeTasks = counts.RUNNING + counts.FIXING + counts.TESTING + counts.DEPLOYING + counts.VERIFYING;
+  return c.json({
+    ok: true,
+    dashboard: {
+      marker: 'ivx-autonomous-dashboard-authoritative-v2-2026-09-02',
+      generatedAt: new Date().toISOString(),
+      source: 'app_completion_campaign_dispatcher',
+      workerStatus: activeTasks > 0 ? 'WORKING' : (counts.QUEUED > 0 ? 'QUEUED' : 'IDLE'),
+      activeTasks,
+      queuedTasks: counts.QUEUED,
+      completedTasks: counts.COMPLETED,
+      failedTasks: counts.FAILED,
+      blockedTasks: counts.BLOCKED + counts.PENDING_OWNER,
+      assignedAgents: campaign.totals.agentsAssigned,
+      totalAgents: campaign.totals.agentsTotal,
+      idleAgents: campaign.totals.idleAgents,
+      counts,
+      dispatcher: {
+        running: dispatcher.running,
+        queued: dispatcher.queued,
+        completed: dispatcher.completed,
+        failed: dispatcher.failed,
+      },
+      nextCheckpoint: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+    },
+  });
 });
 
 // Autonomous Ops: Approval phrases
