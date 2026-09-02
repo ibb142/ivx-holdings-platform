@@ -11,7 +11,8 @@
  * with backup/restore of tasks.json — production durable data is never touched.
  */
 import { describe, expect, it, beforeAll, afterAll } from 'bun:test';
-import { readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import {
   createTask,
@@ -62,6 +63,23 @@ describe('112-agent durable task ownership', () => {
     expect(IVX_REAL_ENGINEERING_CYCLE_MARKER).toContain('ivx-agent-real-engineering-cycle');
     expect(fileStoreActive).toBe(true);
     expect(await ownedTasks()).toEqual([]);
+  });
+
+  it('discovers modules from the Render backend working-directory layout', async () => {
+    const originalCwd = process.cwd();
+    const root = await mkdtemp(path.join(os.tmpdir(), 'ivx-render-layout-'));
+    const backend = path.join(root, 'backend');
+    try {
+      await mkdir(path.join(backend, 'api'), { recursive: true });
+      await mkdir(path.join(backend, 'services'), { recursive: true });
+      await writeFile(path.join(backend, 'api', 'health.ts'), 'export const ok = true;\n', 'utf8');
+      await writeFile(path.join(backend, 'services', 'worker.ts'), 'export const worker = true;\n', 'utf8');
+      process.chdir(backend);
+      expect(await scanModuleUniverse()).toEqual(['api/health.ts', 'services/worker.ts']);
+    } finally {
+      process.chdir(originalCwd);
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('IA-02 cannot lease a task created for IA-01', async () => {
