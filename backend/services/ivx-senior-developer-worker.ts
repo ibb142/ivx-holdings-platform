@@ -437,6 +437,17 @@ export function getWorkerMaxConcurrency(): number {
   return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 112) : 112;
 }
 
+/**
+ * A dedicated Render worker owns durable queue execution in production. The
+ * web process may enqueue/read jobs, but must not also claim them: the claim
+ * registry is process-local and two runtimes could execute the same job.
+ */
+export function shouldExecuteWorkerQueueInThisProcess(): boolean {
+  const dedicatedEnabled = process.env.IVX_DEDICATED_WORKER_ENABLED === 'true';
+  const workerProcess = process.env.IVX_WORKER_MODE === 'true';
+  return !dedicatedEnabled || workerProcess;
+}
+
 async function loadQueue(): Promise<QueueDoc> {
   const durable = isDurableStoreConfigured();
   if (!durable) {
@@ -1628,7 +1639,7 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
   appendDurableEvent(QUEUE_FILE, { type: 'job_enqueued', jobId: job.jobId, goal: goal.slice(0, 200), ownerId }).catch(() => {});
 
   // Kick the worker without blocking the caller.
-  void drainSeniorDeveloperQueue();
+  if (shouldExecuteWorkerQueueInThisProcess()) void drainSeniorDeveloperQueue();
   return { job, attached: false, activeJobId: null };
 }
 
@@ -1689,7 +1700,7 @@ export async function resumeSeniorDeveloperJob(jobId: string): Promise<IVXWorker
   appendDurableEvent(QUEUE_FILE, { type: 'job_resumed', jobId }).catch(() => {});
 
   // Kick the worker.
-  void drainSeniorDeveloperQueue();
+  if (shouldExecuteWorkerQueueInThisProcess()) void drainSeniorDeveloperQueue();
   return job;
 }
 
@@ -2834,6 +2845,7 @@ let staleSweepTimer: ReturnType<typeof setInterval> | null = null;
  * multiple times — only one timer is ever active.
  */
 export function startStaleJobSweep(): void {
+  if (!shouldExecuteWorkerQueueInThisProcess()) return;
   if (staleSweepTimer) return;
   staleSweepTimer = setInterval(() => {
     void expireStaleJobs().catch(() => {});
@@ -2857,6 +2869,7 @@ let queueDrainTimer: ReturnType<typeof setInterval> | null = null;
 const QUEUE_DRAIN_INTERVAL_MS = 15_000;
 
 export function startQueueDrainTimer(): void {
+  if (!shouldExecuteWorkerQueueInThisProcess()) return;
   if (queueDrainTimer) return;
   queueDrainTimer = setInterval(() => {
     void drainSeniorDeveloperQueue().catch(() => {});
