@@ -1,12 +1,12 @@
 import { getIVXOwnerVariableRuntimeValue } from '../api/ivx-owner-variables';
 import { REQUIRED_CERTIFICATION_WORKFLOWS, runGlobalCertificationSupervision } from './ivx-global-certification-supervisor';
 
-export const IVX_GITHUB_ACTIONS_EXTERNAL_SUPERVISOR_MARKER = 'ivx-github-actions-external-supervisor-v5-cancel-safe-2026-08-30';
+export const IVX_GITHUB_ACTIONS_EXTERNAL_SUPERVISOR_MARKER = 'ivx-github-actions-external-supervisor-v6-preserve-fleet-2026-09-02';
 export const IVX_AUTONOMOUS_ORGANISM_MARKER = 'ivx-autonomous-organism-v2-2026-08-30';
 const REPO=process.env.IVX_GITHUB_REPO||'ibb142/ivx-holdings-platform'; const API='https://api.github.com'; const API_BASE=(process.env.IVX_API_BASE||'https://api.ivxholding.com').replace(/\/$/,'');
 const INTERVAL_MS=60_000, QUEUE_STORM_THRESHOLD=12, MAX_QUEUE_AGE_MS=5*60_000, CERT_WINDOW_MS=30*60_000, MAX_PAGES=5, CANCEL_CONCURRENCY=8;
 const EXTERNAL_TARGETS=['https://ivxholding.com','https://www.ivxholding.com','https://chat.ivxholding.com',`${API_BASE}/health`,`${API_BASE}/version`];
-const CRITICAL_WORKFLOWS=new Set<string>([...REQUIRED_CERTIFICATION_WORKFLOWS.map(x=>x.name),'IVX Dashboard + IA Chat End-to-End Certificate','IVX Owner Sign In + Home Android Certificate','IVX 10/10 Full Certification']);
+const CRITICAL_WORKFLOWS=new Set<string>([...REQUIRED_CERTIFICATION_WORKFLOWS.map(x=>x.name),'IVX Dashboard + IA Chat End-to-End Certificate','IVX Owner Sign In + Home Android Certificate','IVX 10/10 Full Certification','Landing 112-Agent 500-Check 3H QA']);
 type WorkflowRun={id:number;name:string;event:string;status:string;conclusion:string|null;head_sha:string;head_branch:string|null;created_at:string;updated_at:string}; type Probe={target:string;ok:boolean;status:number|null;latencyMs:number;error:string|null};
 export type OrganismSnapshot={marker:typeof IVX_AUTONOMOUS_ORGANISM_MARKER;overall:'GREEN'|'YELLOW'|'RED';brain:{ok:boolean;mainSha:string|null;certification:string|null;error:string|null};heart:{ok:boolean;health:Probe;version:Probe};circulation:{ok:boolean;agents:Probe;dashboard:Probe};senses:{ok:boolean;targets:Probe[]};immune:{ok:boolean;queueStorm:boolean;queued:number;inProgress:number;cancelledRunIds:number[];certificationLaneActive:boolean;windowExpired:boolean;error:string|null}};
 export type QueueSnapshot={checkedAt:string;mainSha:string|null;queued:number;inProgress:number;oldestQueuedAgeMs:number;storm:boolean;cancelledRunIds:number[];preservedCriticalRunIds:number[];tokenAvailable:boolean;certificationLaneActive:boolean;certificationWindowStartedAt:string|null;certificationWindowExpired:boolean;error:string|null;organism:OrganismSnapshot|null};
