@@ -143,53 +143,7 @@ jobs:
             echo "Dispatcher cycle $cycle at $(date -u +%FT%TZ)"
             gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" --jq '.artifacts[] | select(.name | startswith("landing-500-agent-")) | [.id,.name] | @tsv' > /tmp/dispatcher/artifacts.tsv
             new_deliveries=0
-            while IFS=    needs: [prepare, qa-112]
-    if: always() && needs.prepare.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
-      LIVE_SHA: ${{ needs.prepare.outputs.live_sha }}
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: landing-500-agent-*-${{ github.run_id }}
-          path: evidence-all
-          merge-multiple: true
-      - name: Certify or route defects to Autonomous
-        run: |
-          set -euo pipefail
-          find evidence-all -name '*.jsonl' -type f -print0 | xargs -0 -r jq -s '.' > /tmp/all.json
-          [ -s /tmp/all.json ] || echo '[]' > /tmp/all.json
-          total=$(jq length /tmp/all.json); unique=$(jq '[.[].itemId]|unique|length' /tmp/all.json)
-          agents=$(jq '[.[].agentNumber]|unique|length' /tmp/all.json); passed=$(jq '[.[]|select(.passed)]|length' /tmp/all.json)
-          failed=$((total-passed))
-          browser_total=$(find evidence-all -path '*/landing-live-e2e/agent-*.json' -type f | wc -l | tr -d ' ')
-          browser_passed=$(find evidence-all -path '*/landing-live-e2e/agent-*.json' -type f -print0 | xargs -0 -r jq -s '[.[]|select(.passed==true)]|length')
-          browser_p0=$(find evidence-all -path '*/landing-live-e2e/agent-*.json' -type f -print0 | xargs -0 -r jq -s '[.[].p0Failures]|add')
-          browser_passed=${browser_passed:-0}
-          browser_p0=${browser_p0:-0}
-          missing_agents=$((112-browser_total))
-          if [ "$failed" -gt 0 ] || [ "$total" -ne 112 ] || [ "$unique" -ne 112 ] || [ "$agents" -ne 112 ] || [ "$browser_passed" -ne 112 ] || [ "$browser_p0" -ne 0 ]; then
-            test -n "$SYSTEM_KEY"
-            browser_failures=$(find evidence-all -path '*/landing-live-e2e/agent-*.json' -type f -print0 | xargs -0 -r jq -s '[.[]|select(.passed!=true)|{agentNumber,group,p0Failures,failures:[.evidence[]|select(.passed!=true)|{name,severity,detail}]}]')
-            browser_failures=${browser_failures:-[]}
-            failures=$(jq -c '[.[]|select(.passed!=true)|{itemId,agentNumber,assignment,dimension,status}]' /tmp/all.json)
-            goal=$(jq -nr --arg bf "$browser_failures" --arg cf "$failures" --arg missing "$missing_agents" '"P0/P1 Landing marketing launch repair. Live-browser failures="+$bf+"; code-audit failures="+$cf+"; missingAgentEvidence="+$missing+". Fix actual source, run browser E2E, open PR, deploy, verify production SHA parity, then rerun the 112-agent gate. Never certify from code-read alone."')
-            payload=$(jq -nc --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",systemMode:true,ownerApproved:true,riskLevel:"low"}')
-            curl -fsS -X POST "$API_BASE/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-System-Key: $SYSTEM_KEY" --data "$payload" -o /tmp/repair.json
-          fi
-          mkdir -p certificate
-          jq -n --arg sha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --arg liveSha "$LIVE_SHA" --argjson total "$total" --argjson passed "$passed" --argjson failed "$failed" --argjson agents "$agents" --argjson browserTotal "$browser_total" --argjson browserPassed "$browser_passed" --argjson browserP0 "$browser_p0" '{certificate:"IVX Landing 112-Agent Live Browser E2E QA",workflowSha:$sha,liveSourceSha:$liveSha,runId:$runId,agentAudits:$total,agentsParticipating:$agents,agentAuditsPassed:$passed,agentAuditsFailed:$failed,browserRuns:$browserTotal,browserRunsPassed:$browserPassed,p0Failures:$browserP0,autonomousManager:true,status:(if $total==112 and $agents==112 and $failed==0 and $browserTotal==112 and $browserPassed==112 and $browserP0==0 and $liveSha==$sha then "PASS" else "REPAIR_REQUIRED" end),completedAt:(now|todateiso8601)}' > certificate/result.json
-          cat certificate/result.json
-          test "$(jq -r '.status' certificate/result.json)" = PASS
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: IVX-LANDING-500-CHECK-CERT-${{ github.run_id }}
-          path: certificate/
-          retention-days: 30
-\t' read -r artifact_id artifact_name; do
+            while IFS=$'\t' read -r artifact_id artifact_name; do
               [ -n "$artifact_id" ] || continue
               grep -qx "$artifact_id" /tmp/dispatcher/seen && continue
               gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" > "/tmp/dispatcher/zips/$artifact_id.zip"
