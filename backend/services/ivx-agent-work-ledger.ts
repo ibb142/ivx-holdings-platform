@@ -107,7 +107,7 @@ export type AgentTimeBreakdown = {
 
 /** Workflow attribution ingest record (Mission F). */
 export type WorkflowAttribution = {
-  agentNumber: number | null;
+  agentNumber: number;
   taskId: string | null;
   workerJobId: string | null;
   githubRunId: number | null;
@@ -121,7 +121,8 @@ export type WorkflowAttribution = {
   recordedAt: string;
 };
 
-export type ExternalWorkRecord = Omit<WorkflowAttribution, 'recordedAt' | 'deployId'> & {
+export type ExternalWorkRecord = Omit<WorkflowAttribution, 'recordedAt' | 'deployId' | 'agentNumber'> & {
+  agentNumber: number | null;
   attribution?: 'IA' | 'SYSTEM' | string;
   filesChanged?: string[];
   deployId?: string | null;
@@ -237,7 +238,8 @@ export async function recordWorkflowAttribution(input: Omit<WorkflowAttribution,
 
 export async function ingestExternalWork(input: ExternalWorkRecord): Promise<WorkflowAttribution> {
   return recordWorkflowAttribution({
-    agentNumber: input.agentNumber,
+    // Null is retained at runtime as explicit untraceable SYSTEM evidence.
+    agentNumber: input.agentNumber as number,
     taskId: input.taskId,
     workerJobId: input.workerJobId,
     githubRunId: input.githubRunId,
