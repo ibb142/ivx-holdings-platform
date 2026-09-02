@@ -623,8 +623,13 @@ export async function fetchPendingExecutions(limit = 200): Promise<SbResult<Exec
   if (mode === 'dedicated') {
     // Newest first: a boot resume scanner must discover newly pending tasks
     // even when stale pending/running backlog exceeds the limit (oldest-first
-    // ordering starves every new task once backlog > limit).
-    return sbRequest<ExecutionRow[]>(`ivx_agent_executions?final_status=in.(pending,running)&select=*&order=created_at.desc&limit=${limit}`);
+    // ordering starves every new task once backlog > limit). Schema-resilient:
+    // tables created before the created_at column reject created_at ordering,
+    // so fall back to task_id (PK; rec-<epoch-ms> ids sort chronologically).
+    const primary = await sbRequest<ExecutionRow[]>(`ivx_agent_executions?final_status=in.(pending,running)&select=*&order=created_at.desc&limit=${limit}`);
+    if (primary.ok) return primary;
+    console.warn('[IVXAgentPersistence] pending scan created_at order failed — falling back to task_id order', { status: primary.status, error: primary.error?.slice(0, 160) });
+    return sbRequest<ExecutionRow[]>(`ivx_agent_executions?final_status=in.(pending,running)&select=*&order=task_id.desc&limit=${limit}`);
   }
   if (mode === 'jobs_fallback') {
     const res = await jobsSelect('type=eq.ivx_rec_execution&status=in.(queued,running)', limit);
