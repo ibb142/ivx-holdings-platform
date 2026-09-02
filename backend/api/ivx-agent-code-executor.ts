@@ -101,7 +101,7 @@ export async function handleExecutorWriteRequest(request: Request): Promise<Resp
   }
 
   if (files.length === 0) {
-    return json({ ok: false, error: 'No valid files provided. Expected: { files: [{ path, content }] }' }, 400);
+    return json({ ok: false, error: 'No valid files provided. Expected: { files: [{ path, content }] }, actionable repair event triggered.' }, 400);
   }
 
   const result = await writeAgentFiles(files);
