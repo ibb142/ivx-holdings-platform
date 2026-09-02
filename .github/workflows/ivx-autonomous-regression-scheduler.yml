@@ -21,7 +21,9 @@ permissions:
 
 concurrency:
   group: ivx-autonomous-enterprise-regression-scheduler
-  cancel-in-progress: false
+  # workflow_run can fan out several completions at once. Keep only the newest
+  # recovery pass so stale runs do not overload the production worker API.
+  cancel-in-progress: true
 
 jobs:
   schedule-regression-recovery:
@@ -172,9 +174,25 @@ jobs:
 
           run_agent() {
             agent="$1"; payload="$2"; key="$3"
-            args=(-sS --max-time 30 -o /tmp/ivx-regression/agent-run.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}")
-            [ -n "$key" ] && args+=( -H "X-IVX-System-Key: $key" )
-            curl "${args[@]}" --data "$payload" "${API_BASE}/api/ivx/agents/${agent}/run" || true
+            local attempt code delay
+            attempt=1
+            while [ "$attempt" -le 4 ]; do
+              args=(-sS --max-time 30 -o /tmp/ivx-regression/agent-run.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}")
+              [ -n "$key" ] && args+=( -H "X-IVX-System-Key: $key" )
+              code=$(curl "${args[@]}" --data "$payload" "${API_BASE}/api/ivx/agents/${agent}/run" || printf '000')
+
+              # Authentication is handled by the caller with a fresh OIDC token.
+              # Retry only transient transport, throttling, and upstream failures.
+              if [[ "$code" =~ ^(000|408|425|429|500|502|503|504)$ ]] && [ "$attempt" -lt 4 ]; then
+                delay=$((attempt * 5))
+                echo "agent_transient_retry agent=$agent http=$code attempt=$attempt delay_seconds=$delay" >&2
+                sleep "$delay"
+                attempt=$((attempt+1))
+                continue
+              fi
+              printf '%s' "$code"
+              return 0
+            done
           }
 
           index=0
@@ -196,6 +214,10 @@ jobs:
             if { [ "$code" = 401 ] || [ "$code" = 403 ]; } && [ -n "${SYSTEM_KEY_SECONDARY:-}" ] && [ "${SYSTEM_KEY_SECONDARY}" != "${SYSTEM_KEY_PRIMARY:-}" ]; then
               code=$(run_agent "$agent" "$payload" "$SYSTEM_KEY_SECONDARY")
             fi
+
+            # Gentle pacing prevents a successful 112-agent dispatch from
+            # exhausting the single production service while runs start.
+            if [ $((index % 10)) -eq 0 ]; then sleep 2; fi
 
             if jq -e . /tmp/ivx-regression/agent-run.json >/dev/null 2>&1; then
               jq -n --arg agentId "$agent" --arg http "$code" --slurpfile response /tmp/ivx-regression/agent-run.json '{agentId:$agentId,http:$http,response:($response[0] // {})}' >> /tmp/ivx-regression/team-results.jsonl
