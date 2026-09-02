@@ -30,6 +30,26 @@ import {
 export const IVX_AGENT_WORK_LEDGER_MARKER = 'ivx-agent-work-ledger-2026-08-28';
 
 const ATTRIBUTION_KEY = 'logs/audit/agent-work-ledger/attribution.json';
+const SAFE_BACKLOG_KEY = 'logs/audit/agent-work-ledger/safe-backlog.json';
+
+export interface LedgerStorage {
+  read<T>(key: string, fallback: T): Promise<T>;
+  write(key: string, value: unknown): Promise<void>;
+  append(key: string, value: unknown): Promise<void>;
+  configured(): boolean;
+}
+
+const defaultLedgerStorage: LedgerStorage = {
+  read: (key, fallback) => readDurableJson(key, fallback),
+  write: (key, value) => writeDurableJson(key, value),
+  append: async () => {},
+  configured: () => isDurableStoreConfigured(),
+};
+let ledgerStorage: LedgerStorage = defaultLedgerStorage;
+
+export function setLedgerStorageForTests(storage: LedgerStorage | null): void {
+  ledgerStorage = storage ?? defaultLedgerStorage;
+}
 
 /** Allowed canonical states (Mission B) — no UNKNOWN fake state. */
 export type AgentCanonicalStatus =
@@ -101,6 +121,13 @@ export type WorkflowAttribution = {
   recordedAt: string;
 };
 
+export type ExternalWorkRecord = Omit<WorkflowAttribution, 'recordedAt' | 'deployId' | 'agentNumber'> & {
+  agentNumber: number | null;
+  attribution?: 'IA' | 'SYSTEM' | string;
+  filesChanged?: string[];
+  deployId?: string | null;
+};
+
 export type AgentLedgerRow = AgentCanonicalState & {
   agentName: string;
   filesChanged: string[];
@@ -110,6 +137,9 @@ export type AgentLedgerRow = AgentCanonicalState & {
   qualityState: 'PASS' | 'FAIL' | 'UNTESTED' | 'NONE';
   evidenceState: 'FULL' | 'PARTIAL' | 'MISSING';
   attributionSources: string[];
+  commits24h: number;
+  prs24h: number;
+  merges24h: number;
 };
 
 export type AgentLedgerDashboard = {
@@ -132,6 +162,7 @@ export type AgentLedgerDashboard = {
     agentHours24h: number;
     idleHours24h: number;
     idleWithSafeBacklog: number;
+    untraceableCommits: number;
   };
   rows: AgentLedgerRow[];
 };
@@ -159,7 +190,7 @@ export const EXECUTION_WORKSTREAMS: ReadonlyArray<{ name: string; modules: reado
   { name: 'Render', modules: ['render', 'deploy'] },
   { name: 'Observability', modules: ['observability', 'watchdog', 'health'] },
   { name: 'E2E', modules: ['e2e', 'playwright', 'maestro'] },
-  { name: 'Certification', modules: ['certification', 'certificate', 'control tower', 'audit'] },
+  { name: 'Certification', modules: ['certification', 'certificate', 'control tower', 'audit', 'sha parity'] },
 ];
 
 /** Map a module name to its owning workstream (Mission I partition). */
@@ -178,8 +209,8 @@ export function workstreamForModule(module: string | null | undefined): string {
 type AttributionStore = { records: WorkflowAttribution[] };
 
 async function readAttributions(): Promise<WorkflowAttribution[]> {
-  if (!isDurableStoreConfigured()) return [];
-  const stored = await readDurableJson<AttributionStore | null>(ATTRIBUTION_KEY, null);
+  if (!ledgerStorage.configured()) return [];
+  const stored = await ledgerStorage.read<AttributionStore | null>(ATTRIBUTION_KEY, null);
   return stored?.records ?? [];
 }
 
@@ -199,10 +230,46 @@ export async function recordWorkflowAttribution(input: Omit<WorkflowAttribution,
   const existing = await readAttributions();
   existing.push(record);
   const trimmed = existing.slice(-5000);
-  if (isDurableStoreConfigured()) {
-    await writeDurableJson(ATTRIBUTION_KEY, { records: trimmed });
+  if (ledgerStorage.configured()) {
+    await ledgerStorage.write(ATTRIBUTION_KEY, { records: trimmed });
   }
   return record;
+}
+
+export async function ingestExternalWork(input: ExternalWorkRecord): Promise<WorkflowAttribution> {
+  return recordWorkflowAttribution({
+    // Null is retained at runtime as explicit untraceable SYSTEM evidence.
+    agentNumber: input.agentNumber as number,
+    taskId: input.taskId,
+    workerJobId: input.workerJobId,
+    githubRunId: input.githubRunId,
+    githubJobId: input.githubJobId,
+    branch: input.branch,
+    prNumber: input.prNumber,
+    commitSha: input.commitSha,
+    deployId: input.deployId ?? null,
+    status: input.status,
+    source: input.source,
+  });
+}
+
+export function parseIVXCommitTrailers(message: string): {
+  agentNumber: number | null; agentRole: string | null; agentId: string | null; taskId: string | null; workerJobId: string | null;
+} {
+  const value = (name: string): string | null => {
+    const prefix = name.toLowerCase() + ':';
+    const line = message.split('\n').find((candidate) => candidate.toLowerCase().startsWith(prefix));
+    return line ? line.slice(prefix.length).trim() : null;
+  };
+  const agent = value('IVX-Agent');
+  const parsed = agent?.match(/IA-(\d{1,3})/i);
+  return {
+    agentNumber: parsed ? Number(parsed[1]) : null,
+    agentRole: value('IVX-Agent-Role'),
+    agentId: value('IVX-Agent-ID'),
+    taskId: value('IVX-Task-ID'),
+    workerJobId: value('IVX-Worker-Job'),
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -304,6 +371,7 @@ export async function getAgentLedgerDashboard(): Promise<AgentLedgerDashboard> {
   }
   const attributionByAgent = new Map<number, WorkflowAttribution[]>();
   for (const a of attributions) {
+    if (a.agentNumber == null) continue;
     const list = attributionByAgent.get(a.agentNumber) ?? [];
     list.push(a);
     attributionByAgent.set(a.agentNumber, list);
@@ -357,6 +425,9 @@ export async function getAgentLedgerDashboard(): Promise<AgentLedgerDashboard> {
       qualityState: quality,
       evidenceState: evidenceFromRow({ workerJobId: latest?.workerJobId ?? null, commitSha, prNumber, filesChanged, githubRunId, deployId }),
       attributionSources: agentAttributions.map((a) => a.source).slice(-5),
+      commits24h: agentAttributions.filter((a) => a.commitSha && Date.parse(a.recordedAt) >= windowStart).length,
+      prs24h: agentAttributions.filter((a) => a.prNumber && Date.parse(a.recordedAt) >= windowStart).length,
+      merges24h: agentAttributions.filter((a) => a.prNumber && a.status === 'SUCCESS' && Date.parse(a.recordedAt) >= windowStart).length,
     };
     rows.push(row);
   }
@@ -388,7 +459,29 @@ export async function getAgentLedgerDashboard(): Promise<AgentLedgerDashboard> {
       idleHours24h: totalIdleHours,
       // Mission C: idle agents with eligible safe work available.
       idleWithSafeBacklog: count('IDLE'),
+      untraceableCommits: attributions.filter((a) => a.agentNumber == null && Boolean(a.commitSha)).length,
     },
     rows,
+  };
+}
+
+/** Backward-compatible names retained for the autonomous acceptance contract. */
+export const buildAgentWorkLedgerDashboard = getAgentLedgerDashboard;
+export const workstreamFor = workstreamForModule;
+
+export async function superviseIdleAgents(): Promise<{
+  backlogSize: number;
+  idleAgents: number[];
+  idleWithSafeBacklog: number[];
+}> {
+  const [dashboard, backlog] = await Promise.all([
+    getAgentLedgerDashboard(),
+    ledgerStorage.read<string[]>(SAFE_BACKLOG_KEY, []),
+  ]);
+  const idleAgents = dashboard.rows.filter((row) => row.status === 'IDLE').map((row) => row.agentNumber);
+  return {
+    backlogSize: backlog.length,
+    idleAgents,
+    idleWithSafeBacklog: backlog.length > 0 ? idleAgents : [],
   };
 }

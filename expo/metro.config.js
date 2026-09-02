@@ -1,6 +1,9 @@
 const { getDefaultConfig } = require("expo/metro-config");
-const { withRorkMetro } = require("@rork-ai/toolkit-sdk/metro");
 
 const config = getDefaultConfig(__dirname);
+config.transformer = {
+  ...config.transformer,
+  babelTransformerPath: require.resolve("./scripts/ivx-metro-transformer"),
+};
 
-module.exports = withRorkMetro(config);
+module.exports = config;

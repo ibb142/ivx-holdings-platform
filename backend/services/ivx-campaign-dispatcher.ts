@@ -174,6 +174,7 @@ export type CampaignJobRecord = {
   typecheckPassed: boolean;
   commitSha: string | null;
   prNumber: number | null;
+  prMerged: boolean | null;
   prUrl: string | null;
   deployId: string | null;
   healthOk: boolean | null;
@@ -335,6 +336,7 @@ function makeRecord(a: DispatcherAssignmentInput): CampaignJobRecord {
     typecheckPassed: false,
     commitSha: null,
     prNumber: null,
+    prMerged: null,
     prUrl: null,
     deployId: null,
     healthOk: null,
@@ -541,6 +543,10 @@ export async function tickCampaignDispatcher(): Promise<TickResult> {
           implement.status = 'QUEUED';
           implement.retryCount += 1;
           implement.workerJobId = null;
+          // A failed QA verdict supersedes the old merged implementation evidence.
+          implement.prNumber = null;
+          implement.prMerged = null;
+          implement.commitSha = null;
           implement.stage = `RETURNED FOR REPAIR — independent QA failed (retry ${implement.retryCount}/${MAX_CAMPAIGN_RETRIES})`;
           record.status = 'AWAITING_IMPLEMENT';
           record.stage = 'WAITING FOR REPAIRED IMPLEMENTATION';
@@ -622,13 +628,17 @@ export async function tickCampaignDispatcher(): Promise<TickResult> {
   // Priority order: P0/pending items first, then QA, then VERIFY. Within the
   // same role, FAIR ORDERING (owner mandate 2026-08-28, Mission A): fewest
   // attempts first, then oldest creation — no single-agent hotspot.
+  const attemptsByAgent = new Map<number, number>();
+  for (const record of state.records) {
+    attemptsByAgent.set(record.agentNumber, (attemptsByAgent.get(record.agentNumber) ?? 0) + record.attempts);
+  }
   const startable = state.records
     .filter((r) => r.status === 'QUEUED')
     .filter((r) => !state.stoppedAgents.includes(r.agentNumber))
     .filter((r) => !busyLanes.has(r.laneKey))
     .sort((a, b) =>
       (a.role === 'IMPLEMENT' ? 0 : a.role === 'QA' ? 1 : 2) - (b.role === 'IMPLEMENT' ? 0 : b.role === 'QA' ? 1 : 2)
-      || (a.attempts - b.attempts)
+      || ((attemptsByAgent.get(a.agentNumber) ?? 0) - (attemptsByAgent.get(b.agentNumber) ?? 0))
       || a.createdAt.localeCompare(b.createdAt));
 
   for (const record of startable) {
@@ -639,6 +649,12 @@ export async function tickCampaignDispatcher(): Promise<TickResult> {
     if (record.executionMode === 'deploy' && deployActive) continue;
     // Open-PR dedup: a duty with an open PR never gets a second dispatch.
     if (record.executionMode === 'code_change') {
+      if (record.prNumber && record.prMerged === false) {
+        record.status = 'BLOCKED';
+        record.blocker = `SUPERSEDE_RULE: open PR #${record.prNumber} already owns this duty`;
+        record.stage = 'BLOCKED BY OPEN PR SUPERSEDE RULE';
+        continue;
+      }
       const open = await openPrProbe(record.dutyId).catch(() => null);
       if (open) {
         record.stage = `WAITING ON OPEN PR #${open} — duplicate dispatch suppressed`;
