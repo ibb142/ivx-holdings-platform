@@ -11,6 +11,11 @@
  * Entry point: node tsx backend/worker.ts
  */
 import { createClient } from '@supabase/supabase-js';
+import {
+  drainSeniorDeveloperQueue,
+  getWorkerMaxConcurrency,
+  listSeniorDeveloperJobs,
+} from './services/ivx-senior-developer-worker';
 
 const WORKER_MARKER = 'ivx-worker-2026-07-14';
 const POLL_INTERVAL_MS = 10_000;
@@ -88,6 +93,7 @@ async function cleanupOldAuditLogs(): Promise<void> {
 
 async function reportHealth(): Promise<void> {
   const memUsage = process.memoryUsage();
+  const seniorJobs = await listSeniorDeveloperJobs(500).catch(() => []);
   console.log('[IVX Worker] Health report', {
     marker: WORKER_MARKER,
     uptime: Math.floor((Date.now() - new Date(state.startedAt).getTime()) / 1000),
@@ -96,6 +102,13 @@ async function reportHealth(): Promise<void> {
     rssMB: Math.round(memUsage.rss / 1024 / 1024),
     heapMB: Math.round(memUsage.heapUsed / 1024 / 1024),
     lastJobAt: state.lastJobAt,
+    seniorDeveloperQueue: {
+      maxConcurrency: getWorkerMaxConcurrency(),
+      queued: seniorJobs.filter((job) => job.status === 'queued').length,
+      running: seniorJobs.filter((job) => job.status === 'running').length,
+      completed: seniorJobs.filter((job) => job.status === 'completed').length,
+      failed: seniorJobs.filter((job) => job.status === 'failed').length,
+    },
   });
   state.lastHealthReport = new Date().toISOString();
 }
@@ -105,6 +118,7 @@ async function main(): Promise<void> {
     marker: WORKER_MARKER,
     env: process.env.IVX_DEPLOYMENT_ENV ?? 'unknown',
     workerMode: process.env.IVX_WORKER_MODE === 'true',
+    seniorDeveloperConcurrency: getWorkerMaxConcurrency(),
   });
 
   let healthCounter = 0;
@@ -112,6 +126,11 @@ async function main(): Promise<void> {
 
   while (state.running) {
     try {
+      // This dedicated Render worker must drain the same durable Senior
+      // Developer queue populated by the API dispatcher. Previously only the
+      // web process imported this runtime, so expensive agent execution
+      // saturated /health while this worker merely completed placeholder rows.
+      await drainSeniorDeveloperQueue();
       await processAgentJobs();
 
       healthCounter++;
