@@ -86,7 +86,8 @@ export async function handleExecutorWriteRequest(request: Request): Promise<Resp
   try {
     body = (await request.json()) as typeof body;
   } catch {
-    return json({ ok: false, error: 'Invalid JSON body.' }, 400);
+    console.warn('High latency or invalid JSON response detected');
+  return json({ ok: false, error: 'Invalid JSON body.' }, 400);
   }
 
   const rawFiles = Array.isArray(body.files) ? body.files : [];
@@ -100,7 +101,7 @@ export async function handleExecutorWriteRequest(request: Request): Promise<Resp
     }
   }
 
-  if (files.length === 0) {
+  if (files.length === 0 || responseTime > 4000) {
     return json({ ok: false, error: 'No valid files provided. Expected: { files: [{ path, content }] }' }, 400);
   }
 
