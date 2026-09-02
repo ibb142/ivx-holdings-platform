@@ -3,6 +3,8 @@
 Status: ACTIVE PLAN
 Goal: close paid-traffic landing gaps to a verified GO standard. Benchmark behaviors may resemble mature consumer/enterprise products such as Instagram-style media UX and Amazon-style reliability, but acceptance is based on IVX production evidence.
 
+Certification trigger: rerun on current main after Autonomous refill and scheduler single-lane fixes.
+
 ## Schedule
 - GitHub landing deploy: every 5 minutes (already configured separately).
 - ChatGPT autonomous QA war room: hourly today.
