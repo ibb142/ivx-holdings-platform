@@ -78,11 +78,18 @@ jobs:
           for cycle in $(seq 1 12); do
             source="${GITHUB_SHA}:${AGENT_ID}:${GITHUB_RUN_ID}:${cycle}"
             body=$(jq -nc --arg sourceSha "$source" '{sourceSha:$sourceSha}')
-            http=$(curl -sS --retry 2 --retry-delay 2 --retry-all-errors --max-time 240 -o /tmp/cycle.json -w '%{http_code}' \
-              -X POST "https://api.ivxholding.com/api/ivx/agents/${AGENT_ID}/engineering-cycle" \
-              -H 'Content-Type: application/json' \
-              -H "X-IVX-GitHub-OIDC: ${oidc}" \
-              --data "$body" || true)
+            http=000
+            for attempt in $(seq 1 12); do
+              http=$(curl -sS --max-time 240 -o /tmp/cycle.json -w '%{http_code}' \
+                -X POST "https://api.ivxholding.com/api/ivx/agents/${AGENT_ID}/engineering-cycle" \
+                -H 'Content-Type: application/json' \
+                -H "X-IVX-GitHub-OIDC: ${oidc}" \
+                --data "$body" || true)
+              if [ "$http" = 200 ]; then break; fi
+              if [[ ! "$http" =~ ^(000|408|425|429|500|502|503|504)$ ]]; then break; fi
+              echo "CYCLE_TRANSIENT_RETRY agent=${AGENT_NUMBER} cycle=${cycle} http=${http} attempt=${attempt}"
+              sleep 10
+            done
             if [ "$http" != 200 ]; then
               cat /tmp/cycle.json 2>/dev/null || true
               echo "CYCLE_HTTP_FAIL agent=${AGENT_NUMBER} http=${http}"
