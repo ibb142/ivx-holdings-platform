@@ -1,4 +1,4 @@
-name: Landing 112-Agent 500-Check 3H QA
+name: Landing 112-Agent Live E2E 3H QA
 # Supervisor v7 protects one current-main fleet run and releases stale-SHA capacity.
 on:
   schedule:
@@ -16,6 +16,7 @@ concurrency:
   cancel-in-progress: true
 env:
   API_BASE: https://api.ivxholding.com
+  LANDING_URL: https://ivxholding.com
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -50,7 +51,15 @@ jobs:
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
-      - name: Execute 4-5 unique checks
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install locked browser QA dependencies
+        run: |
+          set -euo pipefail
+          npm install --ignore-scripts --no-audit --no-fund --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Execute assigned live-browser E2E gate
         env:
           AGENT_NUMBER: ${{ matrix.agentNumber }}
           AGENT_ID: ${{ matrix.agentId }}
@@ -60,28 +69,35 @@ jobs:
           n=$(printf '%03d' "$AGENT_NUMBER")
           assignment=$(grep -E "^$n — " qa/landing-112-agent-war-room.md | head -1 | sed 's/^[0-9][0-9][0-9] — //')
           test -n "$assignment"
-          curl -fsS --max-time 20 https://ivxholding.com -o /tmp/live.html
-          live_hash=$(sha256sum /tmp/live.html | cut -d' ' -f1)
+          node qa/landing-live-e2e-agent.mjs "$AGENT_NUMBER"
+      - name: Execute evidence-backed code audit through assigned IA
+        env:
+          AGENT_NUMBER: ${{ matrix.agentNumber }}
+          AGENT_ID: ${{ matrix.agentId }}
+          LIVE_SHA: ${{ needs.prepare.outputs.live_sha }}
+        run: |
+          set -euo pipefail
+          n=$(printf '%03d' "$AGENT_NUMBER")
+          assignment=$(grep -E "^$n — " qa/landing-112-agent-war-room.md | head -1 | sed 's/^[0-9][0-9][0-9] — //')
+          browser_evidence="evidence/landing-live-e2e/agent-$n.json"
+          test -s "$browser_evidence"
+          browser_hash=$(sha256sum "$browser_evidence" | cut -d' ' -f1)
           refresh_oidc() {
             url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery"
             token=$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$url" | jq -r '.value')
             echo "::add-mask::$token"
           }
           refresh_oidc
-          mkdir -p evidence
           : > "evidence/agent-$n.jsonl"
-          failures=0
-          for item in $(seq "$AGENT_NUMBER" 112 500); do
-            variant=$(( (item - 1) / 112 ))
-            case "$variant" in
-              0) dimension=source_contract; tool=code_search; params='{"pattern":"landing","scope":"expo/ivxholding-landing"}' ;;
-              1) dimension=production_behavior; tool=code_read; params='{"path":"expo/ivxholding-landing/index.html"}' ;;
-              2) dimension=responsive_accessibility; tool=code_read; params='{"path":"expo/ivxholding-landing/ivx-styles.css"}' ;;
-              3) dimension=security_failure_paths; tool=code_read; params='{"path":"expo/ivxholding-landing/ivx-app.js"}' ;;
-              4) dimension=performance_observability; tool=code_read; params='{"path":"expo/ivxholding-landing/landing-support-chat.js"}' ;;
-            esac
-            task="LANDING QA $item/500; IA $AGENT_NUMBER/112; $assignment; dimension=$dimension; workflowSha=$GITHUB_SHA; liveSourceSha=$LIVE_SHA; liveHash=$live_hash. Require relevant real evidence; never invent PASS."
-            body=$(jq -nc --arg id "landing-$GITHUB_RUN_ID-$item" --arg task "$task" --arg tool "$tool" --argjson params "$params" '{taskType:"audit",payload:{__taskId:$id,__workflow:"Landing 112-Agent 500-Check 3H QA",landingAssignment:$task,__toolId:$tool,__toolParams:$params,realExecutionOnly:true,simulatedSuccessAllowed:false}}')
+          item="$AGENT_NUMBER"
+          dimension=$(jq -r '.group' "$browser_evidence")
+          task="LANDING LIVE E2E IA $AGENT_NUMBER/112; $assignment; dimension=$dimension; workflowSha=$GITHUB_SHA; liveSourceSha=$LIVE_SHA; browserEvidenceSha256=$browser_hash. Browser gate passed; now verify the relevant implementation source. Never invent PASS."
+          case "$dimension" in
+            performance|accessibility) tool=code_read; params='{"path":"expo/ivxholding-landing/ivx-styles.css"}' ;;
+            chat) tool=code_read; params='{"path":"expo/ivxholding-landing/landing-support-chat.js"}' ;;
+            *) tool=code_read; params='{"path":"expo/ivxholding-landing/ivx-app.js"}' ;;
+          esac
+          body=$(jq -nc --arg id "landing-live-$GITHUB_RUN_ID-$item" --arg task "$task" --arg tool "$tool" --argjson params "$params" '{taskType:"audit",payload:{__taskId:$id,__workflow:"Landing 112-Agent Live E2E QA",landingAssignment:$task,__toolId:$tool,__toolParams:$params,realExecutionOnly:true,simulatedSuccessAllowed:false}}')
             passed=false
             http=000; ok=false; status=request_failed; verified=false; source=; result=
             for request_attempt in 1 2 3 4; do
@@ -96,18 +112,15 @@ jobs:
               if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$status" = completed ] && [ "$verified" = true ] && [ -n "$source" ] && [ -n "$result" ]; then passed=true; break; fi
               [ "$request_attempt" = 4 ] || sleep $((request_attempt * 15))
             done
-            if [ "$passed" != true ]; then failures=$((failures+1)); fi
-            jq -nc --argjson itemId "$item" --argjson agentNumber "$AGENT_NUMBER" --arg assignment "$assignment" --arg dimension "$dimension" --arg sourceSha "$GITHUB_SHA" --arg liveSourceSha "$LIVE_SHA" --arg liveHash "$live_hash" --arg status "$status" --arg sourceReference "$source" --arg toolResultId "$result" --argjson passed "$passed" '{itemId:$itemId,agentNumber:$agentNumber,assignment:$assignment,dimension:$dimension,sourceSha:$sourceSha,liveSourceSha:$liveSourceSha,liveHtmlSha256:$liveHash,status:$status,sourceReference:$sourceReference,toolResultId:$toolResultId,passed:$passed}' >> "evidence/agent-$n.jsonl"
-          done
-          count=$(wc -l < "evidence/agent-$n.jsonl")
-          test "$count" -ge 4
-          test "$count" -le 5
-          test "$failures" = 0
+          jq -nc --argjson itemId "$item" --argjson agentNumber "$AGENT_NUMBER" --arg assignment "$assignment" --arg dimension "$dimension" --arg sourceSha "$GITHUB_SHA" --arg liveSourceSha "$LIVE_SHA" --arg browserEvidenceSha256 "$browser_hash" --arg status "$status" --arg sourceReference "$source" --arg toolResultId "$result" --argjson passed "$passed" '{itemId:$itemId,agentNumber:$agentNumber,assignment:$assignment,dimension:$dimension,sourceSha:$sourceSha,liveSourceSha:$liveSourceSha,browserEvidenceSha256:$browserEvidenceSha256,status:$status,sourceReference:$sourceReference,toolResultId:$toolResultId,passed:$passed}' >> "evidence/agent-$n.jsonl"
+          test "$passed" = true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: landing-500-agent-${{ matrix.agentNumber }}-${{ github.run_id }}
-          path: evidence/*.jsonl
+          path: |
+            evidence/*.jsonl
+            evidence/landing-live-e2e/*.json
           retention-days: 30
   autonomous-manager:
     needs: [prepare, qa-112]
@@ -126,22 +139,30 @@ jobs:
       - name: Certify or route defects to Autonomous
         run: |
           set -euo pipefail
-          jq -s '.' evidence-all/*.jsonl > /tmp/all.json
+          find evidence-all -name '*.jsonl' -type f -print0 | xargs -0 -r jq -s '.' > /tmp/all.json
+          [ -s /tmp/all.json ] || echo '[]' > /tmp/all.json
           total=$(jq length /tmp/all.json); unique=$(jq '[.[].itemId]|unique|length' /tmp/all.json)
           agents=$(jq '[.[].agentNumber]|unique|length' /tmp/all.json); passed=$(jq '[.[]|select(.passed)]|length' /tmp/all.json)
           failed=$((total-passed))
-          test "$total" = 500; test "$unique" = 500; test "$agents" = 112
-          if [ "$failed" -gt 0 ]; then
+          browser_total=$(find evidence-all -path '*/landing-live-e2e/agent-*.json' -type f | wc -l | tr -d ' ')
+          browser_passed=$(find evidence-all -path '*/landing-live-e2e/agent-*.json' -type f -print0 | xargs -0 -r jq -s '[.[]|select(.passed==true)]|length')
+          browser_p0=$(find evidence-all -path '*/landing-live-e2e/agent-*.json' -type f -print0 | xargs -0 -r jq -s '[.[].p0Failures]|add')
+          browser_passed=${browser_passed:-0}
+          browser_p0=${browser_p0:-0}
+          missing_agents=$((112-browser_total))
+          if [ "$failed" -gt 0 ] || [ "$total" -ne 112 ] || [ "$unique" -ne 112 ] || [ "$agents" -ne 112 ] || [ "$browser_passed" -ne 112 ] || [ "$browser_p0" -ne 0 ]; then
             test -n "$SYSTEM_KEY"
+            browser_failures=$(find evidence-all -path '*/landing-live-e2e/agent-*.json' -type f -print0 | xargs -0 -r jq -s '[.[]|select(.passed!=true)|{agentNumber,group,p0Failures,failures:[.evidence[]|select(.passed!=true)|{name,severity,detail}]}]')
+            browser_failures=${browser_failures:-[]}
             failures=$(jq -c '[.[]|select(.passed!=true)|{itemId,agentNumber,assignment,dimension,status}]' /tmp/all.json)
-            goal=$(jq -nr --arg f "$failures" '"Repair failed Landing QA items, test, open PR, deploy and verify: "+$f')
+            goal=$(jq -nr --arg bf "$browser_failures" --arg cf "$failures" --arg missing "$missing_agents" '"P0/P1 Landing marketing launch repair. Live-browser failures="+$bf+"; code-audit failures="+$cf+"; missingAgentEvidence="+$missing+". Fix actual source, run browser E2E, open PR, deploy, verify production SHA parity, then rerun the 112-agent gate. Never certify from code-read alone."')
             payload=$(jq -nc --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",systemMode:true,ownerApproved:true,riskLevel:"low"}')
             curl -fsS -X POST "$API_BASE/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-System-Key: $SYSTEM_KEY" --data "$payload" -o /tmp/repair.json
           fi
           mkdir -p certificate
-          jq -n --arg sha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --arg liveSha "$LIVE_SHA" --argjson total "$total" --argjson passed "$passed" --argjson failed "$failed" --argjson agents "$agents" '{certificate:"IVX Landing 500-Check / 112-Agent / 3H QA",workflowSha:$sha,liveSourceSha:$liveSha,runId:$runId,totalChecks:$total,uniqueChecks:$total,agentsParticipating:$agents,passed:$passed,failed:$failed,autonomousManager:true,status:(if $failed==0 then "PASS" else "REPAIR_QUEUED" end),completedAt:(now|todateiso8601)}' > certificate/result.json
+          jq -n --arg sha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --arg liveSha "$LIVE_SHA" --argjson total "$total" --argjson passed "$passed" --argjson failed "$failed" --argjson agents "$agents" --argjson browserTotal "$browser_total" --argjson browserPassed "$browser_passed" --argjson browserP0 "$browser_p0" '{certificate:"IVX Landing 112-Agent Live Browser E2E QA",workflowSha:$sha,liveSourceSha:$liveSha,runId:$runId,agentAudits:$total,agentsParticipating:$agents,agentAuditsPassed:$passed,agentAuditsFailed:$failed,browserRuns:$browserTotal,browserRunsPassed:$browserPassed,p0Failures:$browserP0,autonomousManager:true,status:(if $total==112 and $agents==112 and $failed==0 and $browserTotal==112 and $browserPassed==112 and $browserP0==0 and $liveSha==$sha then "PASS" else "REPAIR_REQUIRED" end),completedAt:(now|todateiso8601)}' > certificate/result.json
           cat certificate/result.json
-          test "$failed" = 0
+          test "$(jq -r '.status' certificate/result.json)" = PASS
       - uses: actions/upload-artifact@v4
         if: always()
         with:
