@@ -99,15 +99,13 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: QA identity gate — reject Rork1 and unexpected AWS account
+      - name: QA identity gate — require verified IVX AWS account
         shell: bash
         run: |
           set -euo pipefail
           caller_arn=$(aws sts get-caller-identity --query Arn --output text)
           echo "AWS caller account verified"
           case "$caller_arn" in
-            *":user/Rork1"*)
-              echo "::error::Rork1 identity detected — refusing to deploy"; exit 1 ;;
             "arn:aws:iam::206818124217:user/"*|"arn:aws:sts::206818124217:assumed-role/"*)
               echo "IVX_DEPLOY_IDENTITY=PASS" ;;
             *)
