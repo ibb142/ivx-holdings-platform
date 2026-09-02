@@ -1,22 +1,41 @@
 import { getSchedulerState } from './ivx-autonomous-scheduler';
 import { getGitHubActionsExternalSupervisorStatus } from './ivx-github-actions-external-supervisor';
+import { syncCampaignAssignmentsToDispatcher } from './ivx-app-completion-campaign';
 import { getCampaignDispatcherSnapshot, runCampaignBootRecovery, startCampaignDispatcher } from './ivx-campaign-dispatcher';
 
-export const IVX_AUTONOMOUS_LIVE_BOOTSTRAP_MARKER = 'ivx-autonomous-live-bootstrap-2026-08-30';
+export const IVX_AUTONOMOUS_LIVE_BOOTSTRAP_MARKER = 'ivx-autonomous-live-bootstrap-2026-09-02-auto-feed';
 
+const DISPATCHER_FEED_INTERVAL_MS = 30_000;
 let booted = false;
 let bootAt: string | null = null;
 let bootError: string | null = null;
+let feedTimer: ReturnType<typeof setInterval> | null = null;
+let lastFeedAt: string | null = null;
+let lastFeedError: string | null = null;
+
+async function feedDispatcher(reason: 'boot' | 'interval'): Promise<void> {
+  try {
+    await syncCampaignAssignmentsToDispatcher();
+    await runCampaignBootRecovery();
+    startCampaignDispatcher();
+    lastFeedAt = new Date().toISOString();
+    lastFeedError = null;
+    console.log('[IVX Autonomous Live Bootstrap] dispatcher fed', { reason, lastFeedAt });
+  } catch (error) {
+    lastFeedError = error instanceof Error ? error.message : String(error);
+    if (reason === 'boot') bootError = lastFeedError;
+    console.warn('[IVX Autonomous Live Bootstrap] dispatcher feed failed', { reason, error: lastFeedError });
+  }
+}
 
 export function startAutonomousLiveBootstrap(): void {
   if (booted) return;
   booted = true;
   bootAt = new Date().toISOString();
   startCampaignDispatcher();
-  void runCampaignBootRecovery().catch((error) => {
-    bootError = error instanceof Error ? error.message : String(error);
-    console.warn('[IVX Autonomous Live Bootstrap] campaign recovery failed', { error: bootError });
-  });
+  void feedDispatcher('boot');
+  feedTimer = setInterval(() => { void feedDispatcher('interval'); }, DISPATCHER_FEED_INTERVAL_MS);
+  feedTimer.unref?.();
 }
 
 export async function getAutonomousLiveBootstrapStatus() {
@@ -26,11 +45,17 @@ export async function getAutonomousLiveBootstrapStatus() {
   ]);
   const github = getGitHubActionsExternalSupervisorStatus();
   return {
-    ok: Boolean(booted && scheduler?.enabled && dispatcher),
+    ok: Boolean(booted && scheduler?.enabled && dispatcher && !lastFeedError),
     marker: IVX_AUTONOMOUS_LIVE_BOOTSTRAP_MARKER,
     booted,
     bootAt,
     bootError,
+    dispatcherAutoFeed: {
+      running: Boolean(feedTimer),
+      intervalMs: DISPATCHER_FEED_INTERVAL_MS,
+      lastFeedAt,
+      lastFeedError,
+    },
     totalAgents: 112,
     autonomousScheduler: scheduler ? {
       enabled: scheduler.enabled,
