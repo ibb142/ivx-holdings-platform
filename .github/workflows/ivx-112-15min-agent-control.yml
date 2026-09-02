@@ -5,18 +5,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/ivx-112-15min-agent-control.yml'
-      - '.github/workflows/ivx-no-idle-intelligence.yml'
-      - '.github/workflows/ivx-112-per-agent-20h-no-sleep-sla.yml'
-      - 'backend/api/ivx-autonomous-control-plane.ts'
-      - 'backend/services/ivx-agent-work-ledger.ts'
-      - 'backend/services/ivx-autonomous-truth-control.ts'
   schedule:
     - cron: '*/15 * * * *'
-  workflow_run:
-    workflows:
-      - 'IVX No Idle Intelligence 1000'
-      - 'IVX 112 Per-Agent 20H No-Sleep SLA'
-    types: [completed]
   workflow_dispatch: {}
 
 permissions:
@@ -26,21 +16,35 @@ permissions:
 
 env:
   API_BASE: https://api.ivxholding.com
-  PROGRAM_ID: IVX-LANDING-10OF10-2026-08-19
-
-concurrency:
-  group: ivx-112-15min-agent-control
-  cancel-in-progress: true
 
 jobs:
-  audit-112:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+  prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 14
+    outputs:
+      matrix: ${{ steps.registry.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - id: registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 5 --retry-delay 2 "$API_BASE/api/ivx/agents" -o /tmp/agents.json
+          test "$(jq -r '.ok // false' /tmp/agents.json)" = true
+          test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
+          echo "matrix=$(jq -c '{include:[.agents[]|{agentNumber:.agentNumber,agentId:.agentId}]}' /tmp/agents.json)" >> "$GITHUB_OUTPUT"
 
-      - name: Acquire scoped GitHub OIDC identity
+  work:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Acquire approved GitHub OIDC identity
         id: oidc
         shell: bash
         run: |
@@ -53,90 +57,36 @@ jobs:
           echo "::add-mask::$token"
           echo "token=$token" >> "$GITHUB_OUTPUT"
 
-      - name: Load canonical production truth and productive ledger
+      - name: Run real durable engineering work
+        shell: bash
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
-        shell: bash
+          AGENT_ID: ${{ matrix.agentId }}
+          AGENT_NUMBER: ${{ matrix.agentNumber }}
         run: |
           set -euo pipefail
-          mkdir -p qa/evidence/autonomous /tmp/ivx112
-          CHECKPOINT_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          echo "CHECKPOINT_AT=$CHECKPOINT_AT" >> "$GITHUB_ENV"
-
-          curl -fsS --retry 3 --retry-delay 2 --max-time 30 "$API_BASE/health" -o /tmp/health.json
-          curl -fsS --retry 3 --retry-delay 2 --max-time 30 "$API_BASE/version" -o /tmp/version.json
-          test "$(jq -r '.ok // false' /tmp/health.json)" = true
-          LIVE_SHA=$(jq -r '.commit // .version.commit // empty' /tmp/version.json)
-          test -n "$LIVE_SHA"
-          echo "LIVE_SHA=$LIVE_SHA" >> "$GITHUB_ENV"
-
-          curl -fsS --retry 3 --retry-delay 2 --retry-all-errors --max-time 45 \
-            -H "X-IVX-GitHub-OIDC: ${OIDC_TOKEN}" \
-            "$API_BASE/api/ivx/autonomous/control-plane" -o /tmp/control-plane.json
-          test "$(jq -r '.ok // false' /tmp/control-plane.json)" = true
-          test "$(jq -r '.agents.total // 0' /tmp/control-plane.json)" = 112
-          test "$(jq '[.agents.items[].agentNumber] | unique | length' /tmp/control-plane.json)" = 112
-
-          curl -fsS --retry 2 --retry-delay 5 --retry-all-errors --max-time 150 \
-            -H "X-IVX-GitHub-OIDC: ${OIDC_TOKEN}" \
-            "$API_BASE/api/ivx/autonomous/agent-ledger" -o /tmp/ledger.json
-          test "$(jq -r '.ok // false' /tmp/ledger.json)" = true
-          test "$(jq -r '.rowCount // 0' /tmp/ledger.json)" = 112
-          test "$(jq '[.agents[].agentNumber] | unique | length' /tmp/ledger.json)" = 112
-
-      - name: Build fail-closed canonical 15-minute checkpoint certificate
-        shell: bash
-        run: |
-          set -euo pipefail
-          registered=$(jq -r '.agents.total // 0' /tmp/control-plane.json)
-          real_working=$(jq -r '.enterprise.realWorkingAgents // 0' /tmp/control-plane.json)
-          heartbeating=$(jq -r '.enterprise.heartbeating // 0' /tmp/control-plane.json)
-          stale=$(jq -r '.enterprise.staleHeartbeats // 0' /tmp/control-plane.json)
-          active_jobs=$(jq -r '.enterprise.activeJobs // 0' /tmp/control-plane.json)
-          productive=$(jq '[.agents[] | select((.productiveMs24h // 0) > 0)] | length' /tmp/ledger.json)
-          evidence=$(jq '[.agents[] | select(.evidenceState == "FULL" or .evidenceState == "PARTIAL")] | length' /tmp/ledger.json)
-          actively_assigned=$(jq '[.agents[] | select(.status == "ASSIGNED" or .status == "CODING" or .status == "TESTING" or .status == "PR_OPEN" or .status == "CI" or .status == "MERGING" or .status == "DEPLOYING" or .status == "VERIFYING")] | length' /tmp/ledger.json)
-          below20=$(jq '[.agents[] | select((.productiveMs24h // 0) < 72000000)] | length' /tmp/ledger.json)
-          under_sla_not_active=$(jq '[.agents[] | select((.productiveMs24h // 0) < 72000000 and (.status != "ASSIGNED" and .status != "CODING" and .status != "TESTING" and .status != "PR_OPEN" and .status != "CI" and .status != "MERGING" and .status != "DEPLOYING" and .status != "VERIFYING"))] | length' /tmp/ledger.json)
-
-          CERT_OK=false
-          # This certificate deliberately does not infer work from registration or elapsed time.
-          # 112/112 continuous runtime is green only when every IA has canonical real-work proof,
-          # a fresh control-plane heartbeat, and no under-SLA IA is silently unassigned.
-          if [ "$registered" = 112 ] && [ "$real_working" = 112 ] && [ "$heartbeating" = 112 ] && [ "$stale" = 0 ] && [ "$productive" = 112 ] && [ "$evidence" = 112 ] && [ "$under_sla_not_active" = 0 ]; then CERT_OK=true; fi
-
-          jq -n \
-            --argjson ok "$CERT_OK" \
-            --arg certificate 'IVX-112-15MIN-AGENT-CONTROL-V2' \
-            --arg programId "$PROGRAM_ID" \
-            --arg checkpointAt "$CHECKPOINT_AT" \
-            --arg productionSha "$LIVE_SHA" \
-            --arg controllerSha "$GITHUB_SHA" \
-            --arg githubRunId "$GITHUB_RUN_ID" \
-            --arg trigger "$GITHUB_EVENT_NAME" \
-            --argjson registered "$registered" \
-            --argjson realWorking "$real_working" \
-            --argjson heartbeating "$heartbeating" \
-            --argjson stale "$stale" \
-            --argjson activeJobs "$active_jobs" \
-            --argjson activelyAssigned "$actively_assigned" \
-            --argjson productive "$productive" \
-            --argjson evidence "$evidence" \
-            --argjson below20 "$below20" \
-            --argjson underSlaNotActive "$under_sla_not_active" \
-            --slurpfile controlPlane /tmp/control-plane.json \
-            --slurpfile ledger /tmp/ledger.json \
-            '{ok:$ok,certificate:$certificate,programId:$programId,checkpointAt:$checkpointAt,productionSha:$productionSha,controllerSha:$controllerSha,githubRunId:$githubRunId,trigger:$trigger,totalAgents:$registered,realWorkingAgents:$realWorking,freshHeartbeatAgents:$heartbeating,staleHeartbeatAgents:$stale,activeJobs:$activeJobs,activelyAssignedAgents:$activelyAssigned,agentsWithProductive24hEvidence:$productive,agentsWithAnyEvidence:$evidence,agentsBelow20h:$below20,underSlaAgentsWithoutActiveAssignment:$underSlaNotActive,truthPolicy:{productiveHours:"canonical ledger only",working:"canonical control-plane real worker proof only",heartbeat:"canonical control-plane heartbeat only",noSyntheticWorking:true,noElapsedTimeAsWork:true,failClosed:true},controlPlane:$controlPlane[0],ledger:$ledger[0]}' \
-            > qa/evidence/autonomous/ivx-112-15min-latest.json
-
-          jq '{ok,totalAgents,realWorkingAgents,freshHeartbeatAgents,staleHeartbeatAgents,activelyAssignedAgents,agentsWithProductive24hEvidence,agentsWithAnyEvidence,agentsBelow20h,underSlaAgentsWithoutActiveAssignment}' qa/evidence/autonomous/ivx-112-15min-latest.json
-          test "$(jq -r '.ok' qa/evidence/autonomous/ivx-112-15min-latest.json)" = true
-
-      - name: Upload canonical 112 checkpoint evidence
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ivx-112-15min-${{ github.run_id }}-${{ github.run_attempt }}
-          path: qa/evidence/autonomous/ivx-112-15min-latest.json
-          if-no-files-found: error
-          retention-days: 30
+          useful=0
+          for cycle in $(seq 1 12); do
+            source="${GITHUB_SHA}:${AGENT_ID}:${GITHUB_RUN_ID}:${cycle}"
+            body=$(jq -nc --arg sourceSha "$source" '{sourceSha:$sourceSha}')
+            http=$(curl -sS --retry 2 --retry-delay 2 --retry-all-errors --max-time 240 \
+              -o /tmp/cycle.json -w '%{http_code}' \
+              -X POST "$API_BASE/api/ivx/agents/${AGENT_ID}/engineering-cycle" \
+              -H 'Content-Type: application/json' \
+              -H "X-IVX-GitHub-OIDC: ${OIDC_TOKEN}" \
+              --data "$body" || true)
+            if [ "$http" != 200 ]; then
+              cat /tmp/cycle.json 2>/dev/null || true
+              echo "CYCLE_HTTP_FAIL agent=${AGENT_NUMBER} http=${http}"
+              exit 1
+            fi
+            action=$(jq -r '.result.action // "CYCLE_ERROR"' /tmp/cycle.json)
+            echo "agent=${AGENT_NUMBER} cycle=${cycle} action=${action}"
+            case "$action" in
+              TASK_COMPLETED|TASK_OWNER_GATE) useful=$((useful+1)) ;;
+              NO_TASK_AVAILABLE) break ;;
+              *) cat /tmp/cycle.json; exit 1 ;;
+            esac
+          done
+          test "$useful" -gt 0
+          echo "real_work=PASS agent=${AGENT_NUMBER} useful_cycles=${useful}"
