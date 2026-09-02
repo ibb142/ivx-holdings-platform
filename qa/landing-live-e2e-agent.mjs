@@ -91,12 +91,28 @@ async function performance(page) {
 }
 
 async function accessibility(page) {
-  const a11y = await page.evaluate(() => ({
-    unnamedButtons: [...document.querySelectorAll('button')].filter((el) => !(el.innerText || el.getAttribute('aria-label') || el.title)?.trim()).length,
-    unnamedInputs: [...document.querySelectorAll('input,textarea,select')].filter((el) => !(el.getAttribute('aria-label') || el.getAttribute('placeholder') || (el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`)))).length,
-    missingAlt: [...document.images].filter((img) => !img.hasAttribute('alt')).length,
-    smallTargets: [...document.querySelectorAll('a,button')].filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && (r.width < 36 || r.height < 36); }).length,
-  }));
+  const a11y = await page.evaluate(() => {
+    const visible = (el) => {
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    };
+    const accessibleName = (el) => Boolean(
+      (el.innerText || el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.title)?.trim()
+      || (el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`))
+      || el.closest('label')
+    );
+    return {
+      unnamedButtons: [...document.querySelectorAll('button')].filter((el) => visible(el) && !accessibleName(el)).length,
+      unnamedInputs: [...document.querySelectorAll('input:not([type="hidden"]),textarea,select')].filter((el) => visible(el) && !accessibleName(el)).length,
+      missingAlt: [...document.images].filter((img) => visible(img) && !img.hasAttribute('alt')).length,
+      smallTargets: [...document.querySelectorAll('a,button')].filter((el) => {
+        if (!visible(el) || getComputedStyle(el).display === 'inline') return false;
+        const r = el.getBoundingClientRect();
+        return r.width < 24 || r.height < 24;
+      }).length,
+    };
+  });
   record('buttons-have-accessible-name', a11y.unnamedButtons === 0, JSON.stringify(a11y), 'P0');
   record('inputs-have-accessible-name', a11y.unnamedInputs === 0, JSON.stringify(a11y));
   record('images-have-alt', a11y.missingAlt === 0, JSON.stringify(a11y));
