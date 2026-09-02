@@ -16,7 +16,7 @@
  */
 import { createHash } from 'node:crypto';
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { basename, join } from 'node:path';
 import {
   addTaskEvidence,
   createTask,
@@ -34,7 +34,8 @@ import { containPath, fileHasUnexemptedSecret, resolveRepoRoot } from './ivx-age
 export const IVX_REAL_ENGINEERING_CYCLE_MARKER = 'ivx-agent-real-engineering-cycle-2026-09-01';
 
 /** Real codebase roots scanned for the module universe (real files only). */
-const MODULE_ROOTS = ['backend/api', 'backend/services', 'expo/app', 'expo/src'] as const;
+const REPO_MODULE_ROOTS = ['backend/api', 'backend/services', 'expo/app', 'expo/src'] as const;
+const BACKEND_MODULE_ROOTS = ['api', 'services'] as const;
 const MODULE_EXTENSIONS = new Set(['.ts', '.tsx']);
 const MAX_MODULE_SCAN = 600;
 const MAX_TASK_MINUTES = 30;
@@ -77,6 +78,14 @@ function nowIso(): string {
 /** Enumerate real module files from the actual repo (no synthetic registry). */
 export async function scanModuleUniverse(): Promise<string[]> {
   const repoRoot = resolveRepoRoot();
+  // Render starts the API with `backend/` as cwd and its production bundle may
+  // not contain `.git`. In that layout resolveRepoRoot() correctly falls back
+  // to cwd, so repo-relative `backend/api` would become the nonexistent
+  // `backend/backend/api` and every agent would receive NO_TASK_AVAILABLE.
+  // Keep returned paths relative to the root used later by inspectModule().
+  const moduleRoots = basename(repoRoot) === 'backend'
+    ? BACKEND_MODULE_ROOTS
+    : REPO_MODULE_ROOTS;
   const modules: string[] = [];
   async function walk(dir: string): Promise<void> {
     if (modules.length >= MAX_MODULE_SCAN) return;
@@ -97,7 +106,7 @@ export async function scanModuleUniverse(): Promise<string[]> {
       }
     }
   }
-  for (const root of MODULE_ROOTS) await walk(root);
+  for (const root of moduleRoots) await walk(root);
   return modules;
 }
 
