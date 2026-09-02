@@ -326,10 +326,12 @@ function ensureIVXAIGatewayEnvironment(): void {
       'IVX AI runtime is not configured. Set OPENAI_API_KEY on the backend host.',
     );
   }
-  // 2026-07-18 emergency repair: the Vercel AI Gateway SDK (createGateway) was
-  // removed from this runtime. The API key is now passed EXPLICITLY to a direct
-  // OpenAI-compatible client for every request — no env-var bridging, no hidden
-  // credential resolution, no gateway SDK dependency.
+  // AI SDK's native Gateway model routing resolves this canonical variable.
+  // IVX stores the credential under several owner-controlled aliases, so bridge
+  // the resolved value in-process without logging or exposing it.
+  if (isVercelGatewayKey(apiKey)) {
+    process.env.AI_GATEWAY_API_KEY = apiKey;
+  }
 }
 
 /** Failure classes that are safe to retry against the SAME provider with backoff. */
