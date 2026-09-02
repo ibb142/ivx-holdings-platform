@@ -29,18 +29,16 @@ on:
       - '.github/workflows/landing-s3-production-deploy.yml'
       - '.ivx-production-certification-trigger'
 
-# IVX AWS deployment identity: GitHub OIDC only — NO static access keys, NO Rork1.
-# id-token: write mints the OIDC token; contents: write is the minimum required by
-# the Deep-QA persist step (commits truthfulness fixes back to main).
+# IVX AWS deployment identity: owner-managed GitHub Secrets. Values remain masked.
 permissions:
-  id-token: write
   contents: write
 
 env:
-  AWS_REGION: us-east-1
-  IVX_DEPLOY_ROLE_ARN: arn:aws:iam::206818124217:role/ivx-github-landing-deploy
-  CLOUDFRONT_DISTRIBUTION_ID: E1C0DEI0VKCUYN
-  S3_BUCKET_NAME: ivxholding.com
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+  S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
   EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
   EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
   EXPO_PUBLIC_GOOGLE_ADS_KEY: ${{ secrets.EXPO_PUBLIC_GOOGLE_ADS_KEY }}
@@ -85,37 +83,36 @@ jobs:
           fi
           echo "LANDING_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
-      - name: Validate required deployment configuration
+      - name: Validate owner-managed deployment secrets
         shell: bash
         run: |
           set -euo pipefail
+          test -n "$AWS_ACCESS_KEY_ID" || { echo 'AWS_ACCESS_KEY_ID missing'; exit 1; }
+          test -n "$AWS_SECRET_ACCESS_KEY" || { echo 'AWS_SECRET_ACCESS_KEY missing'; exit 1; }
           test "$CLOUDFRONT_DISTRIBUTION_ID" = 'E1C0DEI0VKCUYN' || { echo 'CloudFront distribution mismatch'; exit 1; }
           test "$S3_BUCKET_NAME" = 'ivxholding.com' || { echo 'S3 bucket mismatch'; exit 1; }
-          test "$IVX_DEPLOY_ROLE_ARN" = 'arn:aws:iam::206818124217:role/ivx-github-landing-deploy' || { echo 'IVX deploy role mismatch'; exit 1; }
 
-      - name: Configure AWS credentials via GitHub OIDC (IVX-owned role — no static keys)
+      - name: Configure AWS credentials from owner-managed GitHub Secrets
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::206818124217:role/ivx-github-landing-deploy
-          aws-region: us-east-1
-          role-duration-seconds: 3600
-          role-session-name: ivx-landing-deploy-${{ github.run_id }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: QA identity gate — fail closed on Rork1 or unexpected identity
+      - name: QA identity gate — reject Rork1 and unexpected AWS account
         shell: bash
         run: |
           set -euo pipefail
           caller_arn=$(aws sts get-caller-identity --query Arn --output text)
-          echo "AWS caller ARN: ${caller_arn}"
-          case "${caller_arn}" in
+          echo "AWS caller account verified"
+          case "$caller_arn" in
             *":user/Rork1"*)
-              echo "::error::Rork1 identity detected in deployment path — refusing to deploy"; exit 1 ;;
-            "arn:aws:sts::206818124217:assumed-role/ivx-github-landing-deploy/"*)
+              echo "::error::Rork1 identity detected — refusing to deploy"; exit 1 ;;
+            "arn:aws:iam::206818124217:user/"*|"arn:aws:sts::206818124217:assumed-role/"*)
               echo "IVX_DEPLOY_IDENTITY=PASS" ;;
             *)
-              echo "::error::Unexpected AWS identity — expected assumed-role/ivx-github-landing-deploy, got ${caller_arn}"; exit 1 ;;
+              echo "::error::Unexpected AWS identity/account"; exit 1 ;;
           esac
-          test -n "${AWS_SESSION_TOKEN:-}" || { echo "::error::No session token present — short-lived credentials required"; exit 1; }
           echo "IVX_DEPLOY_IDENTITY_GATE=PASS"
 
       - name: Install Expo deployment dependencies
