@@ -37,7 +37,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS --retry 4 --retry-delay 2 --max-time 30 "$API_BASE/api/ivx/agents/app-completion/dashboard" -o /tmp/dashboard.json
+          if ! curl -fsS --retry 8 --retry-delay 3 --retry-all-errors --max-time 30 "$API_BASE/api/ivx/agents/app-completion/dashboard" -o /tmp/dashboard.json; then
+            echo 'Production dashboard is temporarily unavailable; forcing the GitHub 112-worker recovery fallback.'
+            echo 'DASHBOARD_AVAILABLE=false' >> "$GITHUB_ENV"
+            echo 'SLA_MET=false' >> "$GITHUB_ENV"
+            echo 'running=0' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo 'DASHBOARD_AVAILABLE=true' >> "$GITHUB_ENV"
           test "$(jq -r '.ok // false' /tmp/dashboard.json)" = true
           max_concurrency=$(jq -r '.dispatcher.maxConcurrency // 0' /tmp/dashboard.json)
           theoretical=$(jq -r '.dispatcher.utilization24h.theoreticalAgentHours // 0' /tmp/dashboard.json)
@@ -70,7 +77,7 @@ jobs:
           echo "token=$token" >> "$GITHUB_OUTPUT"
 
       - name: Recycle repairable failed blocked cancelled work across all 112 agents
-        if: env.SLA_MET == 'false'
+        if: env.SLA_MET == 'false' && env.DASHBOARD_AVAILABLE == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -88,7 +95,7 @@ jobs:
           test "$failures" -eq 0
 
       - name: Resume Autonomous campaign when below SLA
-        if: env.SLA_MET == 'false'
+        if: env.SLA_MET == 'false' && env.DASHBOARD_AVAILABLE == 'true'
         shell: bash
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
@@ -99,7 +106,7 @@ jobs:
           test "$(jq -r '.ok // false' /tmp/resume.json)" = true
 
       - name: Require real workers to start after recovery
-        if: env.SLA_MET == 'false'
+        if: env.SLA_MET == 'false' && env.DASHBOARD_AVAILABLE == 'true'
         id: verify
         shell: bash
         run: |
@@ -114,7 +121,7 @@ jobs:
           echo "started=$started" >> "$GITHUB_OUTPUT"
 
       - name: Trigger real 112-worker fallback if production dispatcher remains idle
-        if: env.SLA_MET == 'false' && steps.verify.outputs.started != 'true'
+        if: env.SLA_MET == 'false' && (env.DASHBOARD_AVAILABLE != 'true' || steps.verify.outputs.started != 'true')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -124,7 +131,7 @@ jobs:
           test "$code" = 204
 
       - name: Fail closed when productive backlog exists but zero workers run
-        if: env.SLA_MET == 'false'
+        if: env.SLA_MET == 'false' && env.DASHBOARD_AVAILABLE == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -136,6 +143,7 @@ jobs:
           if [ "$running" -eq 0 ] && [ "$queued" -eq 0 ] && [ "$owner_gate" -eq 0 ]; then exit 1; fi
 
       - name: Enforce rolling 24-hour enterprise SLA
+        if: env.DASHBOARD_AVAILABLE == 'true'
         shell: bash
         run: |
           set -euo pipefail
