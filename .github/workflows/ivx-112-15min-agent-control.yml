@@ -19,7 +19,54 @@ env:
   API_BASE: https://api.ivxholding.com
 
 jobs:
+  deploy-exact-main:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      DEFAULT_RENDER_SERVICE_ID: srv-d7t9ivreo5us73ftose0
+    steps:
+      - name: Deploy exact workflow SHA to Render when production is stale
+        shell: bash
+        run: |
+          set -euo pipefail
+          live=$(curl -fsS --retry 3 --retry-delay 2 "$API_BASE/version" | jq -r '.commit // empty')
+          if [ "$live" = "$GITHUB_SHA" ]; then
+            echo "production_sha=PASS sha=$live"
+            exit 0
+          fi
+          test -n "${RENDER_API_KEY:-}" || { echo 'RENDER_API_KEY is not bound'; exit 1; }
+          service_id="${RENDER_SERVICE_ID:-$DEFAULT_RENDER_SERVICE_ID}"
+          response=$(curl -fsS --retry 3 --retry-delay 2 --retry-all-errors \
+            -X POST "https://api.render.com/v1/services/${service_id}/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H 'Accept: application/json' \
+            -H 'Content-Type: application/json' \
+            --data "{\"clearCache\":\"do_not_clear\",\"commitId\":\"${GITHUB_SHA}\"}")
+          deploy_id=$(jq -r '.id // .deploy.id // empty' <<<"$response")
+          test -n "$deploy_id"
+          echo "render_deploy_trigger=PASS id=$deploy_id sha=$GITHUB_SHA"
+
+      - name: Wait for exact production SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          for poll in $(seq 1 120); do
+            code=$(curl -sS --max-time 20 -o /tmp/version.json -w '%{http_code}' "$API_BASE/version" || true)
+            live=$(jq -r '.commit // empty' /tmp/version.json 2>/dev/null || true)
+            echo "poll=$poll live=${live:-missing} expected=$GITHUB_SHA http=$code"
+            if [ "$code" = 200 ] && [ "$live" = "$GITHUB_SHA" ]; then
+              echo "exact_production_sha=PASS sha=$live"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Exact production SHA did not become live.'
+          exit 1
+
   prepare:
+    needs: deploy-exact-main
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.registry.outputs.matrix }}
@@ -42,7 +89,10 @@ jobs:
       id-token: write
     strategy:
       fail-fast: false
-      max-parallel: 16
+      # The Render API stores the durable task ledger as one shared document.
+      # Keep enough real concurrency for the fleet without overwhelming the
+      # single production API with 16 simultaneous long-running scans.
+      max-parallel: 4
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     steps:
       - name: Acquire approved GitHub OIDC identity
