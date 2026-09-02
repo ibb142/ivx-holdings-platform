@@ -17,6 +17,45 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  inventory-control:
+    name: INVENTORY - dynamic 360 coverage and OIDC authorization
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Discover every workflow, route, and OIDC control surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ivx-360-inventory
+          find .github/workflows -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) -printf '%P\n' | sort > /tmp/ivx-360-inventory/workflows.txt
+          rg -l 'X-IVX-GitHub-OIDC|ACTIONS_ID_TOKEN_REQUEST_URL' .github/workflows | sort > /tmp/ivx-360-inventory/oidc-users.txt
+          sed -n '/const WORKFLOW_SUFFIXES = \[/,/\] as const/p' backend/services/ivx-github-actions-oidc.ts \
+            | rg -o '\.github/workflows/[^@'"'"']+' | sort -u > /tmp/ivx-360-inventory/oidc-allowlist.txt
+          comm -23 /tmp/ivx-360-inventory/oidc-users.txt /tmp/ivx-360-inventory/oidc-allowlist.txt > /tmp/ivx-360-inventory/oidc-missing.txt
+          rg -o "app\.(get|post|put|patch|delete)\('[^']+'" backend/hono.ts | sort -u > /tmp/ivx-360-inventory/backend-routes.txt
+
+          workflow_count=$(wc -l < /tmp/ivx-360-inventory/workflows.txt | tr -d ' ')
+          oidc_user_count=$(wc -l < /tmp/ivx-360-inventory/oidc-users.txt | tr -d ' ')
+          oidc_allowed_count=$(wc -l < /tmp/ivx-360-inventory/oidc-allowlist.txt | tr -d ' ')
+          oidc_missing_count=$(wc -l < /tmp/ivx-360-inventory/oidc-missing.txt | tr -d ' ')
+          route_count=$(wc -l < /tmp/ivx-360-inventory/backend-routes.txt | tr -d ' ')
+          jq -n --arg sha "$GITHUB_SHA" --argjson workflows "$workflow_count" --argjson oidcUsers "$oidc_user_count" --argjson oidcAllowed "$oidc_allowed_count" --argjson oidcMissing "$oidc_missing_count" --argjson backendRoutes "$route_count" \
+            '{sha:$sha,workflowCount:$workflows,oidcWorkflowCount:$oidcUsers,oidcAllowlistCount:$oidcAllowed,oidcMissingCount:$oidcMissing,backendRouteCount:$backendRoutes,internalCoverage:true,externalCoverage:true,status:(if $oidcMissing==0 and $workflows>=100 and $backendRoutes>=1000 then "PASS" else "FAIL" end)}' \
+            > /tmp/ivx-360-inventory/coverage.json
+          cat /tmp/ivx-360-inventory/coverage.json
+          if [ "$oidc_missing_count" -gt 0 ]; then sed 's/^/UNAUTHORIZED_OIDC_WORKFLOW=/' /tmp/ivx-360-inventory/oidc-missing.txt; fi
+          test "$workflow_count" -ge 100
+          test "$route_count" -ge 1000
+          test "$oidc_missing_count" = 0
+      - name: Persist discovered 360 inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-autonomous-360-inventory-${{ github.run_id }}
+          path: /tmp/ivx-360-inventory
+          retention-days: 30
+
   internal-e2e:
     name: INTERNAL - repo, tests, typecheck, lint, 112 registry
     runs-on: ubuntu-latest
@@ -124,14 +163,15 @@ jobs:
 
   autonomous-radar:
     name: AUTONOMOUS - diagnose internal/external failure and self-heal safely
-    needs: [internal-e2e, external-e2e]
-    if: ${{ always() && (needs.internal-e2e.result != 'success' || needs.external-e2e.result != 'success') }}
+    needs: [inventory-control, internal-e2e, external-e2e]
+    if: ${{ always() && (needs.inventory-control.result != 'success' || needs.internal-e2e.result != 'success' || needs.external-e2e.result != 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       API_BASE: https://api.ivxholding.com
       INTERNAL_RESULT: ${{ needs.internal-e2e.result }}
       EXTERNAL_RESULT: ${{ needs.external-e2e.result }}
+      INVENTORY_RESULT: ${{ needs.inventory-control.result }}
     steps:
       - name: Fail-closed classification
         shell: bash
@@ -139,6 +179,8 @@ jobs:
           set -euo pipefail
           echo "INTERNAL_RESULT=$INTERNAL_RESULT"
           echo "EXTERNAL_RESULT=$EXTERNAL_RESULT"
+          echo "INVENTORY_RESULT=$INVENTORY_RESULT"
+          test "$INVENTORY_RESULT" = success || echo 'AUTONOMOUS_360_INVENTORY_GAP=DETECTED'
           test "$INTERNAL_RESULT" = success || echo 'AUTONOMOUS_INTERNAL_FAILURE=DETECTED'
           test "$EXTERNAL_RESULT" = success || echo 'AUTONOMOUS_EXTERNAL_FAILURE=DETECTED'
       - name: Acquire scoped GitHub OIDC identity
@@ -158,7 +200,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${IVX_GITHUB_OIDC:-}"
-          goal="AUTONOMOUS INTERNAL + EXTERNAL E2E CONTROL TOWER. Exact source SHA ${GITHUB_SHA}. Internal result=${INTERNAL_RESULT}; external result=${EXTERNAL_RESULT}. Inspect failing GitHub Actions jobs and logs, identify exact root cause, repair safe low-risk code/config only, rerun tests/typecheck/lint and live probes, and require exact-SHA parity before certification. Never weaken tests, evidence, 112/112 count, auth, security or owner gates. Stop and require Owner Gate for secrets, IAM, CloudFront/Route53, payments, destructive migrations, security-policy changes, or rollback."
+          goal="AUTONOMOUS INTERNAL + EXTERNAL E2E CONTROL TOWER. Exact source SHA ${GITHUB_SHA}. Inventory result=${INVENTORY_RESULT}; internal result=${INTERNAL_RESULT}; external result=${EXTERNAL_RESULT}. Discover every workflow, backend route, internal test surface, and public production surface. Inspect failing GitHub Actions jobs and logs, identify exact root cause, repair safe low-risk code/config only, rerun tests/typecheck/lint and live probes, and require exact-SHA parity before certification. Never weaken tests, evidence, 112/112 count, auth, security or owner gates. Stop and require Owner Gate for secrets, IAM, CloudFront/Route53, payments, destructive migrations, security-policy changes, or rollback."
           payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",systemMode:true,ownerApproved:true,riskLevel:"low",proposedPlan:"Inspect internal CI and external production evidence end-to-end; repair only safe low-risk causes; rerun and prove exact SHA."}')
           http=$(curl -sS --max-time 60 -o /tmp/worker.json -w '%{http_code}' -X POST "$API_BASE/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}" --data "$payload" || true)
           case "$http" in 200|202|409) ;; *) cat /tmp/worker.json || true; exit 1;; esac
@@ -166,7 +208,7 @@ jobs:
 
   certificate:
     name: CERTIFICATE - internal + external exact-SHA gate
-    needs: [internal-e2e, external-e2e]
+    needs: [inventory-control, internal-e2e, external-e2e]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -175,8 +217,10 @@ jobs:
         env:
           INTERNAL_RESULT: ${{ needs.internal-e2e.result }}
           EXTERNAL_RESULT: ${{ needs.external-e2e.result }}
+          INVENTORY_RESULT: ${{ needs.inventory-control.result }}
         run: |
           set -euo pipefail
+          test "$INVENTORY_RESULT" = success
           test "$INTERNAL_RESULT" = success
           test "$EXTERNAL_RESULT" = success
           echo 'AUTONOMOUS_INTERNAL_EXTERNAL_E2E=PASS'
