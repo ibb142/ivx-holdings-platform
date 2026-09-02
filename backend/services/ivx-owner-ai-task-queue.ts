@@ -1063,7 +1063,7 @@ export async function probeAIGatewayLive(): Promise<{
       body: JSON.stringify({
         model: startup.model,
         messages: [{ role: 'user', content: 'Reply OK' }],
-        max_tokens: 2,
+        max_tokens: 16,
       }),
       signal: controller.signal,
     });
