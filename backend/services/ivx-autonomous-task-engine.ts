@@ -778,9 +778,12 @@ export async function transitionTaskState(
 
 /**
  * Lease the next queued task for a worker. Returns null when no task is available.
- * Enforces: one active lease per task, lease expiration, priority ordering.
+ * Enforces: one active lease per task, lease expiration, priority ordering, and
+ * AGENT OWNERSHIP: when agentNumber is provided, only tasks assigned to that
+ * agent (or explicitly unassigned shared tasks) are leasable — a task created
+ * for IA-37 can never be leased by IA-01.
  */
-export async function leaseNextTask(workerId: string): Promise<{ ok: boolean; task: Task | null; error: string | null }> {
+export async function leaseNextTask(workerId: string, agentNumber?: number | null): Promise<{ ok: boolean; task: Task | null; error: string | null }> {
   const tasks = await readAllTasks();
 
   // Expire stale leases first
@@ -798,11 +801,19 @@ export async function leaseNextTask(workerId: string): Promise<{ ok: boolean; ta
       t.updatedAt = nowIso();
     }
   }
+  // Persist recovery BEFORE candidate selection: transitionTaskState re-reads
+  // from the store, so requeued stale leases must be durable first — otherwise
+  // QUEUED→LEASED is rejected as LEASED→LEASED and recovery silently fails.
+  await writeAllTasks(tasks);
 
   // Find highest-priority queued task whose dependencies are met
   const priorityOrder: Record<Task['priority'], number> = { critical: 0, high: 1, medium: 2, low: 3 };
   const candidates = tasks
     .filter((t) => t.state === 'QUEUED')
+    // Ownership filter: agents lease only their own tasks plus explicitly
+    // unassigned shared tasks. Shared/legacy tasks (assignedAgentNumber null)
+    // remain leasable by anyone so existing backlog never strands.
+    .filter((t) => agentNumber == null || t.assignedAgentNumber == null || t.assignedAgentNumber === agentNumber)
     .filter((t) => t.dependencies.every((depId) => {
       const dep = tasks.find((d) => d.taskId === depId);
       return dep && TERMINAL_SUCCESS_STATES.includes(dep.state);
