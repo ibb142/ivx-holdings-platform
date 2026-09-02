@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['.github/workflows/landing-112-3h-enterprise-human-qa.yml', 'qa/landing-112-agent-war-room.md', 'expo/ivxholding-landing/**']
+    paths: ['.github/workflows/landing-112-3h-enterprise-human-qa.yml', 'qa/landing-live-e2e-agent.mjs', 'qa/landing-112-agent-war-room.md', 'expo/ivxholding-landing/**']
 permissions:
   contents: read
   actions: write
@@ -47,7 +47,10 @@ jobs:
     timeout-minutes: 180
     strategy:
       fail-fast: false
-      max-parallel: 112
+      # Render currently answers production API probes in 7-13 seconds. A
+      # bounded fleet keeps all 112 assignments progressing without creating a
+      # self-inflicted 112-browser request storm that invalidates the evidence.
+      max-parallel: 24
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
