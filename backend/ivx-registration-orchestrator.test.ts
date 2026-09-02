@@ -66,10 +66,6 @@ mock.module('./services/ivx-member-investor-system', () => ({
   onboardNewMember: async () => {},
   VALID_ROLE_INTERESTS: new Set(['investor', 'member']),
 }));
-mock.module('./services/ivx-canonical-members', () => ({
-  upsertCanonicalMember: async () => {},
-  markCanonicalMemberVerified: async () => {},
-}));
 
 // Now import the orchestrator (it will pull all the stubbed dependencies).
 const {
