@@ -1,5 +1,6 @@
 import { enforceAutonomous112RuntimeTruth, IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS } from './ivx-autonomous-truth-control';
-import { executeAgentRun, getAllExecutionStates } from './ivx-agent-runtime';
+import { getAllExecutionStates } from './ivx-agent-runtime';
+import { runRealEngineeringCycle } from './ivx-agent-real-engineering-cycle';
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let startedAt: string | null = null;
@@ -30,37 +31,36 @@ function canRunContinuity(agentId: string): boolean {
     && !state.activeTaskId;
 }
 
+function currentSourceSha(): string {
+  return process.env.RENDER_GIT_COMMIT
+    ?? process.env.GITHUB_SHA
+    ?? process.env.COMMIT_SHA
+    ?? 'runtime-unknown-sha';
+}
+
 function startContinuityRun(agentId: string, agentNumber: number): void {
   if (!canRunContinuity(agentId)) return;
-  const taskId = `continuity-${Date.now()}-${String(agentNumber).padStart(3, '0')}`;
   refillStarted += 1;
   let succeeded = false;
-  const promise = executeAgentRun(agentId, 'audit', {
-    __taskId: taskId,
-    __runId: `ivx-continuity-${new Date().toISOString().slice(0, 10)}`,
-    __workflow: 'ivx-autonomous-runtime-enforcer',
-    missionType: 'continuous_no_idle_sla',
-    readOnly: true,
-    requireEvidence: true,
-    realExecutionOnly: true,
-    simulatedSuccessAllowed: false,
+  const promise = runRealEngineeringCycle({
+    agentId,
     agentNumber,
-    instruction: 'Perform the next real low-risk evidence-backed audit within your allowed capability. Do not mutate production, do not fabricate success, and return a verifiable source/tool result.',
+    sourceSha: currentSourceSha(),
   }).then((result) => {
     succeeded = Boolean(
       result.ok
-      && result.runRecord?.finalStatus === 'completed'
-      && result.runRecord?.simulated === false
-      && result.runRecord?.sourceReference
-      && result.runRecord?.toolResultId,
+      && (result.action === 'TASK_COMPLETED' || result.action === 'TASK_OWNER_GATE')
+      && result.taskId,
     );
     if (succeeded) refillCompleted += 1;
     else {
       refillFailed += 1;
-      console.error('[IVX Autonomous 112 Continuity] real refill failed', {
+      console.error('[IVX Autonomous 112 Continuity] real engineering refill failed', {
         agentNumber,
         agentId,
-        error: result.error ?? result.runRecord?.error ?? 'missing verifiable runtime evidence',
+        action: result.action,
+        taskId: result.taskId,
+        error: result.error ?? 'engineering cycle did not complete durable work',
       });
     }
   }).catch((error) => {
@@ -90,6 +90,15 @@ function refillRecoveredAgents(agentNumbers: number[]): void {
   }
 }
 
+function refillAllAvailableAgents(): void {
+  if (!continuityEnabled) return;
+  for (const state of getAllExecutionStates()) {
+    if (state.agentNumber != null && canRunContinuity(state.agentId)) {
+      startContinuityRun(state.agentId, state.agentNumber);
+    }
+  }
+}
+
 async function run(reason: 'boot' | 'interval'): Promise<void> {
   lastRunAt = new Date().toISOString();
   try {
@@ -103,6 +112,7 @@ async function run(reason: 'boot' | 'interval'): Promise<void> {
       && !result.snapshot.autonomous.emergencyStop,
     );
     refillRecoveredAgents(result.recovered);
+    refillAllAvailableAgents();
     console.log('[IVX Autonomous 112 Runtime Enforcer]', {
       reason,
       ok: result.ok,
@@ -152,6 +162,6 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     refillFailed,
     successfulRefillDelayMs: refillDelayMs(true),
     failedRefillBackoffMs: refillDelayMs(false),
-    truthPolicy: 'Idle/stale/unknown agents receive real read-only executeAgentRun work with durable evidence; owner/system stop, pause, disable and failed-health states are respected.',
+    truthPolicy: 'Idle/stale/unknown and available agents receive real durable engineering-cycle work; owner/system stop, pause, disable and failed-health states are respected.',
   };
 }
