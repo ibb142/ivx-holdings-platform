@@ -10,6 +10,7 @@ on:
       - 'backend/services/ivx-github-actions-oidc.ts'
       - 'backend/services/ivx-agent-real-tools.ts'
       - 'backend/services/ivx-agent-engineering-tools.ts'
+      - 'backend/services/ivx-agent-real-engineering-cycle.ts'
   schedule:
     - cron: '15 * * * *'
   workflow_dispatch:
@@ -48,7 +49,10 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      max-parallel: 32
+      # Serialize the certification calls against the current JSON durable-store
+      # implementation so read-modify-write task updates cannot race and erase
+      # another agent's seed. Runtime dispatcher concurrency remains independent.
+      max-parallel: 1
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     env:
       API_BASE: https://api.ivxholding.com
@@ -78,7 +82,12 @@ jobs:
           # durable task-engine records, never by workflow conclusion.
           while [ "$cycles" -lt 12 ]; do
             cycles=$((cycles + 1))
-            body=$(jq -nc --arg sourceSha "$GITHUB_SHA" '{sourceSha:$sourceSha}')
+            # The task engine currently uses sourceSha as part of its seed
+            # idempotency key. Add the stable agent identity so every one of the
+            # 112 agents receives its own durable audit task while the evidence
+            # certificate below still records the exact unmodified GITHUB_SHA.
+            cycle_source="${GITHUB_SHA}:${AGENT_ID}"
+            body=$(jq -nc --arg sourceSha "$cycle_source" '{sourceSha:$sourceSha}')
             http=$(curl -sS --retry 1 --retry-delay 2 --max-time 240 -o /tmp/cycle.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/agents/${AGENT_ID}/engineering-cycle" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: ${oidc_token}" --data "$body" || true)
             if [ "$http" != 200 ]; then echo "CYCLE_HTTP_FAIL agent=$AGENT_NUMBER http=$http"; failed=$((failed + 1)); break; fi
             action=$(jq -r '.result.action // "CYCLE_ERROR"' /tmp/cycle.json)
@@ -146,7 +155,7 @@ jobs:
           count=$(jq 'length' /tmp/failures.json)
           test "$count" -gt 0
           echo "failed_count=$count" >> "$GITHUB_OUTPUT"
-          if jq -e '[.[] | (.assignment + " " + .toolId + " " + .name)] | join(" ") | test("secret|credential|auth|permission|payment|stripe|migration|destructive|infrastructure|iam|cloudfront|route53|security policy|rollback"; "i")' /tmp/failures.json >/dev/null; then gate=true; else gate=false; fi
+          if jq -e '[.[] | ((.assignment // "") + " " + (.toolId // "") + " " + (.name // ""))] | join(" ") | test("secret|credential|auth|permission|payment|stripe|migration|destructive|infrastructure|iam|cloudfront|route53|security policy|rollback"; "i")' /tmp/failures.json >/dev/null; then gate=true; else gate=false; fi
           echo "owner_gate_required=$gate" >> "$GITHUB_OUTPUT"
           jq '{rejectedAgents:length, agents:[.[]|{agentNumber,agentId,name,assignment,toolId,http,finalStatus,quality,attempts}]}' /tmp/failures.json
       - name: Owner Gate high-risk failures
