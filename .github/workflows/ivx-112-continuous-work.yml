@@ -30,6 +30,9 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       max-parallel: 16
@@ -42,22 +45,40 @@ jobs:
           AGENT_NUMBER: ${{ matrix.agentNumber }}
         run: |
           set -euo pipefail
-          oidc=$(curl -fsS --retry 3 --retry-delay 1 -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery" | jq -r '.value // empty')
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          response=$(curl -fsS --retry 3 --retry-delay 2 --retry-all-errors \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery")
+          oidc=$(jq -r '.value // empty' <<<"$response")
           test -n "$oidc"
           echo "::add-mask::$oidc"
+
           useful=0
           for cycle in $(seq 1 12); do
             source="${GITHUB_SHA}:${AGENT_ID}:${GITHUB_RUN_ID}:${cycle}"
             body=$(jq -nc --arg sourceSha "$source" '{sourceSha:$sourceSha}')
-            http=$(curl -sS --retry 2 --retry-delay 2 --max-time 240 -o /tmp/cycle.json -w '%{http_code}' -X POST "https://api.ivxholding.com/api/ivx/agents/${AGENT_ID}/engineering-cycle" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: ${oidc}" --data "$body" || true)
-            test "$http" = 200
+            http=$(curl -sS --retry 2 --retry-delay 2 --retry-all-errors --max-time 240 -o /tmp/cycle.json -w '%{http_code}' \
+              -X POST "https://api.ivxholding.com/api/ivx/agents/${AGENT_ID}/engineering-cycle" \
+              -H 'Content-Type: application/json' \
+              -H "X-IVX-GitHub-OIDC: ${oidc}" \
+              --data "$body" || true)
+            if [ "$http" != 200 ]; then
+              cat /tmp/cycle.json 2>/dev/null || true
+              echo "CYCLE_HTTP_FAIL agent=${AGENT_NUMBER} http=${http}"
+              exit 1
+            fi
             action=$(jq -r '.result.action // "CYCLE_ERROR"' /tmp/cycle.json)
             echo "agent=${AGENT_NUMBER} cycle=${cycle} action=${action}"
             case "$action" in
               TASK_COMPLETED|TASK_OWNER_GATE) useful=$((useful+1)) ;;
               NO_TASK_AVAILABLE) break ;;
-              *) exit 1 ;;
+              *) cat /tmp/cycle.json; exit 1 ;;
             esac
           done
-          test "$useful" -gt 0
+
+          if [ "$useful" -eq 0 ]; then
+            echo "NO_USEFUL_WORK agent=${AGENT_NUMBER}"
+            exit 1
+          fi
           echo "real_work=PASS agent=${AGENT_NUMBER} useful_cycles=${useful}"
