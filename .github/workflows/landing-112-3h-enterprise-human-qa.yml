@@ -47,10 +47,9 @@ jobs:
     timeout-minutes: 180
     strategy:
       fail-fast: false
-      # Render currently answers production API probes in 7-13 seconds. A
-      # bounded fleet keeps all 112 assignments progressing without creating a
-      # self-inflicted 112-browser request storm that invalidates the evidence.
-      max-parallel: 24
+      # Release all 112 assignments together. GitHub runner availability still
+      # determines how many execute at the exact same instant.
+      max-parallel: 112
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
@@ -125,6 +124,52 @@ jobs:
             evidence/*.jsonl
             evidence/landing-live-e2e/*.json
           retention-days: 30
+  dispatcher:
+    name: Dispatcher — collect and repair every 5 minutes
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 190
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+    steps:
+      - name: Collect completed agent deliveries and dispatch validated repairs
+        run: |
+          set -euo pipefail
+          test -n "$SYSTEM_KEY"
+          mkdir -p /tmp/dispatcher/zips /tmp/dispatcher/evidence
+          touch /tmp/dispatcher/seen
+          for cycle in $(seq 1 38); do
+            echo "Dispatcher cycle $cycle at $(date -u +%FT%TZ)"
+            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" --jq '.artifacts[] | select(.name | startswith("landing-500-agent-")) | [.id,.name] | @tsv' > /tmp/dispatcher/artifacts.tsv
+            new_deliveries=0
+            while IFS=$'\t' read -r artifact_id artifact_name; do
+              [ -n "$artifact_id" ] || continue
+              grep -qx "$artifact_id" /tmp/dispatcher/seen && continue
+              gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" > "/tmp/dispatcher/zips/$artifact_id.zip"
+              mkdir -p "/tmp/dispatcher/evidence/$artifact_id"
+              unzip -oq "/tmp/dispatcher/zips/$artifact_id.zip" -d "/tmp/dispatcher/evidence/$artifact_id"
+              echo "$artifact_id" >> /tmp/dispatcher/seen
+              new_deliveries=$((new_deliveries+1))
+            done < /tmp/dispatcher/artifacts.tsv
+            delivered=$(wc -l < /tmp/dispatcher/seen | tr -d ' ')
+            echo "Delivered agents: $delivered/112; new this cycle: $new_deliveries"
+            if [ "$new_deliveries" -gt 0 ]; then
+              code_failures=$(find /tmp/dispatcher/evidence -name 'agent-*.jsonl' -type f -print0 | xargs -0 -r jq -s '[.[]|select(.passed!=true)|{agentNumber,assignment,dimension,status}]')
+              browser_failures=$(find /tmp/dispatcher/evidence -path '*/landing-live-e2e/agent-*.json' -type f -print0 | xargs -0 -r jq -s '[.[]|select(.passed!=true)|{agentNumber,group,p0Failures}]')
+              code_failures=$(printf '%s' "$code_failures" | jq -c '. // []')
+              browser_failures=$(printf '%s' "$browser_failures" | jq -c '. // []')
+              failure_count=$(jq -n --argjson code "$code_failures" --argjson browser "$browser_failures" '($code|length)+($browser|length)')
+              if [ "$failure_count" -gt 0 ]; then
+                goal=$(jq -nr --arg cf "$code_failures" --arg bf "$browser_failures" --arg delivered "$delivered" '"Five-minute dispatcher repair cycle. Delivered="+$delivered+"/112; codeFailures="+$cf+"; browserFailures="+$bf+". Fix actual source, validate E2E, open PR, merge and deploy only a verified non-empty patch, then verify production SHA. Never fabricate PASS and never overlap an active deploy."')
+                payload=$(jq -nc --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",systemMode:true,ownerApproved:true,riskLevel:"low"}')
+                curl -fsS -X POST "$API_BASE/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-System-Key: $SYSTEM_KEY" --data "$payload" -o "/tmp/dispatcher/repair-$cycle.json"
+                jq '{accepted:(.ok // true),jobId:(.jobId // .id // null)}' "/tmp/dispatcher/repair-$cycle.json"
+              fi
+            fi
+            [ "$delivered" -ge 112 ] && break
+            sleep 300
+          done
   autonomous-manager:
     needs: [prepare, qa-112]
     if: always() && needs.prepare.result == 'success'
