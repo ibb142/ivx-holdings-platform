@@ -846,8 +846,13 @@ async function requestIVXAITextInternal(input: {
         if (!willRetry) {
           break;
         }
-        // Exponential backoff: 600ms, then 1200ms.
-        await sleepMs(600 * 2 ** (attempt - 1));
+        // Exponential backoff: 600ms, then 1200ms. Rate limits (429) wait
+        // longer and capped, with jitter, so a 112-agent fleet does not burn
+        // every retry inside one rate-limit window.
+        const backoffMs = failure.status === 429
+          ? Math.min(30000, 2500 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 1500)
+          : 600 * 2 ** (attempt - 1);
+        await sleepMs(backoffMs);
       }
     }
   } else {
