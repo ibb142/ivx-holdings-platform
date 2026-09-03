@@ -75,9 +75,9 @@ jobs:
           echo "::add-mask::$oidc"
 
           useful=0
+          already_verified=0
           for cycle in $(seq 1 12); do
-            source="${GITHUB_SHA}:${AGENT_ID}:${GITHUB_RUN_ID}:${cycle}"
-            body=$(jq -nc --arg sourceSha "$source" '{sourceSha:$sourceSha}')
+            body=$(jq -nc --arg sourceSha "$GITHUB_SHA" '{sourceSha:$sourceSha}')
             http=000
             for attempt in $(seq 1 12); do
               http=$(curl -sS --max-time 240 -o /tmp/cycle.json -w '%{http_code}' \
@@ -95,17 +95,42 @@ jobs:
               echo "CYCLE_HTTP_FAIL agent=${AGENT_NUMBER} http=${http}"
               exit 1
             fi
+
             action=$(jq -r '.result.action // "CYCLE_ERROR"' /tmp/cycle.json)
-            echo "agent=${AGENT_NUMBER} cycle=${cycle} action=${action}"
+            productive=$(jq -r '.result.productiveMinutes // 0' /tmp/cycle.json)
+            states=$(jq -r '.result.states // [] | join(",")' /tmp/cycle.json)
+            echo "agent=${AGENT_NUMBER} cycle=${cycle} action=${action} productiveMinutes=${productive} states=${states}"
+
             case "$action" in
-              TASK_COMPLETED|TASK_OWNER_GATE) useful=$((useful+1)) ;;
-              NO_TASK_AVAILABLE) break ;;
-              *) cat /tmp/cycle.json; exit 1 ;;
+              TASK_COMPLETED)
+                if [[ ",$states," == *,ALREADY_VERIFIED,* ]] || awk -v p="$productive" 'BEGIN { exit !((p+0) <= 0) }'; then
+                  already_verified=1
+                  echo "NO_PROGRESS_CIRCUIT_BREAKER agent=${AGENT_NUMBER} sha=${GITHUB_SHA} reason=already_verified"
+                  break
+                fi
+                useful=$((useful+1))
+                ;;
+              TASK_OWNER_GATE)
+                cat /tmp/cycle.json
+                echo "OWNER_GATE_IS_NOT_SUCCESS agent=${AGENT_NUMBER} sha=${GITHUB_SHA}"
+                exit 1
+                ;;
+              NO_TASK_AVAILABLE)
+                break
+                ;;
+              *)
+                cat /tmp/cycle.json
+                exit 1
+                ;;
             esac
           done
 
-          if [ "$useful" -eq 0 ]; then
+          if [ "$useful" -eq 0 ] && [ "$already_verified" -eq 0 ]; then
             echo "NO_USEFUL_WORK agent=${AGENT_NUMBER}"
             exit 1
           fi
-          echo "real_work=PASS agent=${AGENT_NUMBER} useful_cycles=${useful}"
+          if [ "$already_verified" -eq 1 ] && [ "$useful" -eq 0 ]; then
+            echo "real_work=NO_NEW_WORK agent=${AGENT_NUMBER} sha=${GITHUB_SHA}"
+            exit 0
+          fi
+          echo "real_work=PASS agent=${AGENT_NUMBER} useful_cycles=${useful} sha=${GITHUB_SHA}"
