@@ -99,7 +99,8 @@ export function autonomousControlPlaneOptions(): Response {
 
 export async function handleAutonomousControlPlaneVerifyAll(request: Request): Promise<Response> {
   try {
-    await assertIVXOwnerOnly(request);
+    const trustedMachine = await verifyIVXGitHubActionsOIDCRequest(request);
+    if (!trustedMachine) await assertIVXOwnerOnly(request);
   } catch (error) {
     return ownerOnlyJson({ ok: false, error: error instanceof Error ? error.message : 'IVX owner authentication required.' }, 401);
   }
