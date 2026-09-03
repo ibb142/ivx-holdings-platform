@@ -80,7 +80,10 @@ jobs:
       id-token: write
     strategy:
       fail-fast: false
-      max-parallel: 16
+      # The engineering endpoint performs durable backend work. Eight concurrent
+      # workers keeps all 112 agents progressing in waves without overwhelming
+      # the production API with long-running POSTs.
+      max-parallel: 8
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     steps:
       - name: Run real durable engineering work
@@ -92,12 +95,16 @@ jobs:
           set -euo pipefail
           test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
           test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
-          response=$(curl -fsS --retry 3 --retry-delay 2 --retry-all-errors \
-            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery")
-          oidc=$(jq -r '.value // empty' <<<"$response")
-          test -n "$oidc"
-          echo "::add-mask::$oidc"
+
+          refresh_oidc() {
+            local response
+            response=$(curl -fsS --retry 3 --retry-delay 2 --retry-all-errors \
+              -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery")
+            oidc=$(jq -r '.value // empty' <<<"$response")
+            test -n "$oidc"
+            echo "::add-mask::$oidc"
+          }
 
           useful=0
           already_verified=0
@@ -105,6 +112,9 @@ jobs:
             body=$(jq -nc --arg sourceSha "$GITHUB_SHA" '{sourceSha:$sourceSha}')
             http=000
             for attempt in $(seq 1 12); do
+              # GitHub OIDC tokens are short-lived. Refresh for every attempt so
+              # a long 5xx/502 recovery loop can never turn into a false 401.
+              refresh_oidc
               http=$(curl -sS --max-time 240 -o /tmp/cycle.json -w '%{http_code}' \
                 -X POST "https://api.ivxholding.com/api/ivx/agents/${AGENT_ID}/engineering-cycle" \
                 -H 'Content-Type: application/json' \
@@ -113,7 +123,9 @@ jobs:
               if [ "$http" = 200 ]; then break; fi
               if [[ ! "$http" =~ ^(000|408|425|429|500|502|503|504)$ ]]; then break; fi
               echo "CYCLE_TRANSIENT_RETRY agent=${AGENT_NUMBER} cycle=${cycle} http=${http} attempt=${attempt}"
-              sleep 10
+              # Back off progressively to protect the production API while
+              # preserving the real-work retry window.
+              sleep $((8 + attempt * 4))
             done
             if [ "$http" != 200 ]; then
               cat /tmp/cycle.json 2>/dev/null || true
