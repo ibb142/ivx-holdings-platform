@@ -2405,7 +2405,7 @@ export default function IVXOwnerChatRoute() {
           void recordIVXOwnerChatAuditEvent({
             action: 'assistant_reply',
             conversationId: reliableConversationId,
-            status: 'failure',
+            status: 'failed',
             summary: `IVX Chat Quality Firewall blocked ${qualityEnforcement.decision.code}.`,
             metadata: {
               requestId: aiResult.requestId,
