@@ -11,6 +11,7 @@ import { join } from 'path';
 
 const REPORTING_COMMIT = process.env.IVX_COMMIT_SHA || 'unknown';
 const ENVIRONMENT = process.env.NODE_ENV || 'development';
+const ENTERPRISE_CERTIFICATION = process.env.IVX_ENTERPRISE_CERTIFICATION === '1';
 
 /**
  * Production availability flag — set once at the start of runFullQAMatrix().
