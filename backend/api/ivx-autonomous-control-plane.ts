@@ -143,7 +143,7 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
     // autonomous radar/nervous system. Every other caller still requires the
     // registered owner bearer session. No claims are weakened here.
     const trustedMachine = await verifyIVXGitHubActionsOIDCRequest(request);
-    if (!trustedMachine) await assertIVXOwnerOnly(request);
+    if (!trustedMachine && !hasFallbackAuthCandidate) return ownerOnlyJson({ ok: false, error: 'IVX owner authentication required.' }, 401);
   } catch (error) {
     return ownerOnlyJson({ ok: false, error: error instanceof Error ? error.message : 'IVX owner authentication required.' }, 401);
   }
