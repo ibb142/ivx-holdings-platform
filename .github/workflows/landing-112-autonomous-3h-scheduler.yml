@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/landing-112-autonomous-3h-scheduler.yml'
+      - 'qa/owner-priority-state.json'
   schedule:
     - cron: '0 */3 * * *'
 
@@ -15,13 +16,51 @@ permissions:
 
 concurrency:
   group: landing-112-enterprise-orchestrator
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   dispatch:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Enforce owner P0 priority and preempt lower-priority queue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          state='qa/owner-priority-state.json'
+          test -f "$state"
+          active=$(jq -r '.active // false' "$state")
+          priority=$(jq -r '.priority // ""' "$state")
+          mission=$(jq -r '.mission // ""' "$state")
+          test "$active" = true
+          test "$priority" = 'P0-OWNER'
+          test "$mission" = 'landing'
+
+          # Owner P0 owns the control lane. Cancel stale lower-priority
+          # regression/background runs so they cannot sit ahead of Landing.
+          lower=(
+            'ivx-autonomous-regression-scheduler.yml'
+            'landing-war-room-today.yml'
+          )
+          for workflow in "${lower[@]}"; do
+            gh run list --workflow "$workflow" --limit 50 \
+              --json databaseId,status \
+              --jq '.[] | select(.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "pending") | .databaseId' 2>/dev/null |
+            while IFS= read -r run_id; do
+              [ -z "$run_id" ] && continue
+              echo "P0_PREEMPT workflow=$workflow run=$run_id"
+              gh run cancel "$run_id" || true
+            done
+          done
+          echo 'OWNER_QUEUE_CONTROL=PASS priority=P0-OWNER mission=landing'
+
       - name: Dispatch one current-main 112-agent landing QA run
         env:
           GH_TOKEN: ${{ github.token }}
@@ -29,19 +68,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          # Enterprise invariant: never create duplicate fleet runs. A single
-          # current-main queued/in-progress run owns the lane until terminal.
-          current_sha="${GITHUB_SHA}"
-          active=$(gh run list --workflow "$TARGET_WORKFLOW" --limit 30 \
+          current_sha=$(git rev-parse HEAD)
+          active=$(gh run list --workflow "$TARGET_WORKFLOW" --limit 50 \
             --json status,headSha,databaseId \
             --jq --arg sha "$current_sha" '[.[] | select(.headSha == $sha and (.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "pending"))] | length')
           if [ "$active" -gt 0 ]; then
             echo "LANDING_112_ORCHESTRATOR=PASS reason=current-main-run-already-active sha=${current_sha}"
             exit 0
           fi
-
-          # Dispatch through gh so auth/API failures are fail-closed and visible.
           for attempt in 1 2 3; do
             if gh workflow run "$TARGET_WORKFLOW" --ref main; then
               echo "LANDING_112_ORCHESTRATOR=PASS dispatch_attempt=${attempt} sha=${current_sha}"
@@ -49,7 +83,6 @@ jobs:
             fi
             sleep $((attempt * 5))
           done
-
           echo 'LANDING_112_ORCHESTRATOR=FAIL dispatch exhausted after 3 attempts' >&2
           exit 1
 
@@ -60,17 +93,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          current_sha=$(git rev-parse HEAD)
           for attempt in $(seq 1 12); do
-            found=$(gh run list --workflow "$TARGET_WORKFLOW" --limit 20 \
+            found=$(gh run list --workflow "$TARGET_WORKFLOW" --limit 30 \
               --json status,headSha,databaseId,url \
-              --jq --arg sha "$GITHUB_SHA" '[.[] | select(.headSha == $sha)] | length')
+              --jq --arg sha "$current_sha" '[.[] | select(.headSha == $sha)] | length')
             if [ "$found" -gt 0 ]; then
-              gh run list --workflow "$TARGET_WORKFLOW" --limit 5 \
-                --json status,conclusion,headSha,databaseId,url
-              echo "LANDING_112_FLEET_ACCEPTED=PASS sha=${GITHUB_SHA}"
+              gh run list --workflow "$TARGET_WORKFLOW" --limit 5 --json status,conclusion,headSha,databaseId,url
+              echo "LANDING_112_FLEET_ACCEPTED=PASS sha=${current_sha}"
               exit 0
             fi
             sleep 5
           done
-          echo "LANDING_112_FLEET_ACCEPTED=FAIL sha=${GITHUB_SHA}" >&2
+          echo "LANDING_112_FLEET_ACCEPTED=FAIL sha=${current_sha}" >&2
           exit 1
