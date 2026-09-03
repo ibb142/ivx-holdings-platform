@@ -131,12 +131,25 @@ jobs:
     timeout-minutes: 190
     env:
       GH_TOKEN: ${{ github.token }}
-      SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
     steps:
-      - name: Collect completed agent deliveries and dispatch validated repairs
+      - name: Acquire dispatcher GitHub OIDC identity
+        id: dispatcher_oidc
+        shell: bash
         run: |
           set -euo pipefail
-          test -n "$SYSTEM_KEY"
+          response=$(curl -fsS --retry 2 --retry-delay 1 \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery")
+          token=$(printf '%s' "$response" | jq -r '.value // empty')
+          test -n "$token"
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+      - name: Collect completed agent deliveries and dispatch validated repairs
+        env:
+          IVX_GITHUB_OIDC: ${{ steps.dispatcher_oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          test -n "$IVX_GITHUB_OIDC"
           mkdir -p /tmp/dispatcher/zips /tmp/dispatcher/evidence
           touch /tmp/dispatcher/seen
           for cycle in $(seq 1 38); do
@@ -163,7 +176,7 @@ jobs:
               if [ "$failure_count" -gt 0 ]; then
                 goal=$(jq -nr --arg cf "$code_failures" --arg bf "$browser_failures" --arg delivered "$delivered" '"Five-minute dispatcher repair cycle. Delivered="+$delivered+"/112; codeFailures="+$cf+"; browserFailures="+$bf+". Fix actual source, validate E2E, open PR, merge and deploy only a verified non-empty patch, then verify production SHA. Never fabricate PASS and never overlap an active deploy."')
                 payload=$(jq -nc --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",systemMode:true,ownerApproved:true,riskLevel:"low"}')
-                curl -fsS -X POST "$API_BASE/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-System-Key: $SYSTEM_KEY" --data "$payload" -o "/tmp/dispatcher/repair-$cycle.json"
+                curl -fsS -X POST "$API_BASE/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: $IVX_GITHUB_OIDC" --data "$payload" -o "/tmp/dispatcher/repair-$cycle.json"
                 jq '{accepted:(.ok // true),jobId:(.jobId // .id // null)}' "/tmp/dispatcher/repair-$cycle.json"
               fi
             fi
@@ -176,7 +189,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
       LIVE_SHA: ${{ needs.prepare.outputs.live_sha }}
     steps:
       - uses: actions/download-artifact@v4
@@ -184,7 +196,21 @@ jobs:
           pattern: landing-500-agent-*-${{ github.run_id }}
           path: evidence-all
           merge-multiple: true
+      - name: Acquire Autonomous manager GitHub OIDC identity
+        id: manager_oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          response=$(curl -fsS --retry 2 --retry-delay 1 \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery")
+          token=$(printf '%s' "$response" | jq -r '.value // empty')
+          test -n "$token"
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
       - name: Certify or route defects to Autonomous
+        env:
+          IVX_GITHUB_OIDC: ${{ steps.manager_oidc.outputs.token }}
         run: |
           set -euo pipefail
           find evidence-all -name '*.jsonl' -type f -print0 | xargs -0 -r jq -s '.' > /tmp/all.json
@@ -199,13 +225,13 @@ jobs:
           browser_p0=${browser_p0:-0}
           missing_agents=$((112-browser_total))
           if [ "$failed" -gt 0 ] || [ "$total" -ne 112 ] || [ "$unique" -ne 112 ] || [ "$agents" -ne 112 ] || [ "$browser_passed" -ne 112 ] || [ "$browser_p0" -ne 0 ]; then
-            test -n "$SYSTEM_KEY"
+            test -n "$IVX_GITHUB_OIDC"
             browser_failures=$(find evidence-all -path '*/landing-live-e2e/agent-*.json' -type f -print0 | xargs -0 -r jq -s '[.[]|select(.passed!=true)|{agentNumber,group,p0Failures,failures:[.evidence[]|select(.passed!=true)|{name,severity,detail}]}]')
             browser_failures=${browser_failures:-[]}
             failures=$(jq -c '[.[]|select(.passed!=true)|{itemId,agentNumber,assignment,dimension,status}]' /tmp/all.json)
             goal=$(jq -nr --arg bf "$browser_failures" --arg cf "$failures" --arg missing "$missing_agents" '"P0/P1 Landing marketing launch repair. Live-browser failures="+$bf+"; code-audit failures="+$cf+"; missingAgentEvidence="+$missing+". Fix actual source, run browser E2E, open PR, deploy, verify production SHA parity, then rerun the 112-agent gate. Never certify from code-read alone."')
             payload=$(jq -nc --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",systemMode:true,ownerApproved:true,riskLevel:"low"}')
-            curl -fsS -X POST "$API_BASE/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-System-Key: $SYSTEM_KEY" --data "$payload" -o /tmp/repair.json
+            curl -fsS -X POST "$API_BASE/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: $IVX_GITHUB_OIDC" --data "$payload" -o /tmp/repair.json
           fi
           mkdir -p certificate
           jq -n --arg sha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --arg liveSha "$LIVE_SHA" --argjson total "$total" --argjson passed "$passed" --argjson failed "$failed" --argjson agents "$agents" --argjson browserTotal "$browser_total" --argjson browserPassed "$browser_passed" --argjson browserP0 "$browser_p0" '{certificate:"IVX Landing 112-Agent Live Browser E2E QA",workflowSha:$sha,liveSourceSha:$liveSha,runId:$runId,agentAudits:$total,agentsParticipating:$agents,agentAuditsPassed:$passed,agentAuditsFailed:$failed,browserRuns:$browserTotal,browserRunsPassed:$browserPassed,p0Failures:$browserP0,autonomousManager:true,status:(if $total==112 and $agents==112 and $failed==0 and $browserTotal==112 and $browserPassed==112 and $browserP0==0 and $liveSha==$sha then "PASS" else "REPAIR_REQUIRED" end),completedAt:(now|todateiso8601)}' > certificate/result.json
