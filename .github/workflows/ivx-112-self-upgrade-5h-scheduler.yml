@@ -1,0 +1,28 @@
+name: IVX 112 Self-Upgrade 5H Scheduler
+
+on:
+  schedule:
+    - cron: '0 12,13,14,15,16 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: ivx-112-self-upgrade-5h-scheduler
+  cancel-in-progress: false
+
+jobs:
+  dispatch-research-hour:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Dispatch canonical 112-agent self-upgrade research hour
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run ivx-112-daily-self-upgrade-hour.yml --ref main
+          echo 'SELF_UPGRADE_5H_DISPATCH=PASS'
