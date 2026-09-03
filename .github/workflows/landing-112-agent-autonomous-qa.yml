@@ -49,10 +49,9 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      # Serialize the certification calls against the current JSON durable-store
-      # implementation so read-modify-write task updates cannot race and erase
-      # another agent's seed. Runtime dispatcher concurrency remains independent.
-      max-parallel: 1
+      # Task-engine mutations are protected by a FIFO mutex; audits can now run
+      # concurrently without lost JSONB updates or false 112/112 evidence.
+      max-parallel: 16
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     env:
       API_BASE: https://api.ivxholding.com
