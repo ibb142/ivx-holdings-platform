@@ -83,7 +83,7 @@ jobs:
             echo
             echo '| IA | Agent | Assignment | Tool | Status | HTTP | Final | Evidence | SHA |'
             echo '|---:|---|---|---|---|---:|---|---|---|'
-            jq -r '.[] | "| \(.agentNumber) | \(.name) | \(.assignment|gsub("\\|";"/")) | \(.toolId) | \(if .passed then "PASS" else "FAIL" end) | \(.http) | \(.finalStatus) | \(.toolResultId // "") | \(.sourceSha) |"' /tmp/agents.json
+            jq -r '.[] | "| \(.agentNumber // "") | \(.name // .agentId // "unknown") | \((.assignment // "")|tostring|gsub("\\|";"/")) | \(.toolId // "") | \(if .passed then "PASS" else "FAIL" end) | \(.http // "") | \(.finalStatus // "") | \(.toolResultId // "") | \(.sourceSha // "") |"' /tmp/agents.json
           } > report/IVX-112-EXECUTIVE-REPORT.md
           jq -n --arg runId "$RUN_ID" --arg sourceSha "$SOURCE_SHA" --arg sourceConclusion "$SOURCE_CONCLUSION" --argjson evidenceCount "$count" --argjson uniqueAgents "$unique" --argjson passedAgents "$passed" --argjson failedAgents "$failed" --argjson certified "$certified" --slurpfile agents /tmp/agents.json '{runId:$runId,sourceSha:$sourceSha,sourceConclusion:$sourceConclusion,evidenceCount:$evidenceCount,uniqueAgents:$uniqueAgents,passedAgents:$passedAgents,failedAgents:$failedAgents,certified112:$certified,agents:$agents[0]}' > report/IVX-112-EXECUTIVE-REPORT.json
           cat report/IVX-112-EXECUTIVE-REPORT.md >> "$GITHUB_STEP_SUMMARY"
