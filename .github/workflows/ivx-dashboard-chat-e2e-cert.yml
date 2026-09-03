@@ -78,9 +78,22 @@ jobs:
           java-version: '17'
 
       - uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006 cmake;3.22.1'
-          log-accepted-android-sdk-licenses: false
+
+      - name: Install Android SDK packages with corruption recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          packages=('platform-tools' 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.1.12297006' 'cmake;3.22.1')
+          for attempt in 1 2 3; do
+            echo "android_sdk_install_attempt=$attempt"
+            if yes | sdkmanager "${packages[@]}"; then
+              sdkmanager --list_installed | grep -E 'platform-tools|android-36|36.0.0|27.1.12297006|3.22.1'
+              exit 0
+            fi
+            sleep $((attempt * 5))
+          done
+          echo 'Android SDK package installation failed after corruption recovery retries.' >&2
+          exit 1
 
       - name: Resolve real owner credential binding
         shell: bash
