@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { evaluateIVXChatQualityFirewall } from '@/src/modules/ivx-owner-ai/services/ivxChatQualityFirewall';
+import {
+  enforceIVXChatQualityFirewall,
+  evaluateIVXChatQualityFirewall,
+  IVX_CHAT_QUALITY_BLOCKED_MESSAGE,
+} from '@/src/modules/ivx-owner-ai/services/ivxChatQualityFirewall';
 
 describe('IVX Chat Quality Firewall', () => {
   test('blocks the exact screenshot class: Autonomous question -> stale property answer', () => {
@@ -39,5 +43,28 @@ describe('IVX Chat Quality Firewall', () => {
       assistantText: 'There are 3 active properties in the current deal inventory.',
     });
     expect(decision.allow).toBe(true);
+  });
+
+  test('render-boundary enforcement replaces a topic mismatch instead of leaking it', () => {
+    const unreliable = 'There are 3 active properties in the current deal inventory.';
+    const result = enforceIVXChatQualityFirewall({
+      ownerText: 'Why did the autonomous worker fail its GitHub QA?',
+      assistantText: unreliable,
+    });
+
+    expect(result.blocked).toBe(true);
+    expect(result.text).toBe(IVX_CHAT_QUALITY_BLOCKED_MESSAGE);
+    expect(result.text).not.toContain('3 active properties');
+  });
+
+  test('render-boundary enforcement preserves a relevant answer verbatim', () => {
+    const relevant = 'The GitHub QA workflow failed during the Android emulator boot.';
+    const result = enforceIVXChatQualityFirewall({
+      ownerText: 'Why did GitHub QA fail?',
+      assistantText: relevant,
+    });
+
+    expect(result.blocked).toBe(false);
+    expect(result.text).toBe(relevant);
   });
 });
