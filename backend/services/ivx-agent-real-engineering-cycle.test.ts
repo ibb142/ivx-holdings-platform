@@ -224,4 +224,22 @@ describe('112-agent durable task ownership', () => {
     const verdict = validateCompletion(task);
     expect(verdict.verdict).not.toBe('VERIFIED');
   });
+
+  it('preserves all task mutations when 112 agents seed concurrently', async () => {
+    const concurrentSha = 'ownership-concurrency-sha-0002';
+    const seeded = await Promise.all(
+      Array.from({ length: 112 }, (_, index) => {
+        const n = index + 1;
+        return seedModuleAuditTask(concurrentSha, `ivx_holdings_${n}`, n);
+      }),
+    );
+    expect(seeded.every(Boolean)).toBe(true);
+    expect(new Set(seeded.map((task) => task!.taskId)).size).toBe(112);
+
+    const persisted = (await ownedTasks()).filter((task) =>
+      task.idempotencyKey.includes(`:${concurrentSha}:`),
+    );
+    expect(persisted.length).toBe(112);
+    expect(new Set(persisted.map((task) => task.assignedAgentNumber)).size).toBe(112);
+  });
 });

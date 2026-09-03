@@ -302,6 +302,30 @@ const TASKS_KEY = 'task-engine/tasks.json';
 const APPROVALS_KEY = 'task-engine/approvals.json';
 const EVENTS_KEY = 'task-engine/events.jsonl';
 
+/**
+ * Serialize read-modify-write mutations of the shared task document.
+ *
+ * The durable store persists the fleet in one JSONB document. Without this
+ * lock, concurrent agent requests can read the same snapshot and the last
+ * writer silently erases the other agent's task/evidence/state update. Render
+ * currently runs this API as one process, so a process-wide FIFO mutex removes
+ * that lost-update window while module inspection remains concurrent outside
+ * these short mutation sections.
+ */
+let taskMutationTail: Promise<void> = Promise.resolve();
+
+async function withTaskMutationLock<T>(mutation: () => Promise<T>): Promise<T> {
+  const previous = taskMutationTail;
+  let release!: () => void;
+  taskMutationTail = new Promise<void>((resolve) => { release = resolve; });
+  await previous;
+  try {
+    return await mutation();
+  } finally {
+    release();
+  }
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -652,7 +676,7 @@ function inferEffort(taskType: Task['taskType']): string {
  * Create a task and add it to the queue. Uses idempotency key to prevent
  * duplicate submissions — duplicate submissions return the existing task.
  */
-export async function createTask(input: {
+async function createTaskUnlocked(input: {
   objectiveId?: string | null;
   parentTaskId?: string | null;
   title: string;
@@ -720,11 +744,15 @@ export async function createTask(input: {
   return { ok: true, task, error: null, duplicate: false };
 }
 
+export async function createTask(input: Parameters<typeof createTaskUnlocked>[0]): ReturnType<typeof createTaskUnlocked> {
+  return withTaskMutationLock(() => createTaskUnlocked(input));
+}
+
 /**
  * Transition a task to a new state. Enforces the 23-state machine.
  * Rejects invalid transitions. Persists state + appends audit event.
  */
-export async function transitionTaskState(
+async function transitionTaskStateUnlocked(
   taskId: string,
   toState: TaskState,
   metadata?: { error?: string; blocker?: string; evidence?: TaskEvidence; filesChanged?: string[]; commitSha?: string; deploymentId?: string; approvalId?: string },
@@ -774,6 +802,14 @@ export async function transitionTaskState(
   return { ok: true, task, error: null };
 }
 
+export async function transitionTaskState(
+  taskId: string,
+  toState: TaskState,
+  metadata?: { error?: string; blocker?: string; evidence?: TaskEvidence; filesChanged?: string[]; commitSha?: string; deploymentId?: string; approvalId?: string },
+): Promise<{ ok: boolean; task: Task | null; error: string | null }> {
+  return withTaskMutationLock(() => transitionTaskStateUnlocked(taskId, toState, metadata));
+}
+
 // ── Phase 8: Leasing ─────────────────────────────────────────────────────────
 
 /**
@@ -783,7 +819,7 @@ export async function transitionTaskState(
  * agent (or explicitly unassigned shared tasks) are leasable — a task created
  * for IA-37 can never be leased by IA-01.
  */
-export async function leaseNextTask(workerId: string, agentNumber?: number | null): Promise<{ ok: boolean; task: Task | null; error: string | null }> {
+async function leaseNextTaskUnlocked(workerId: string, agentNumber?: number | null): Promise<{ ok: boolean; task: Task | null; error: string | null }> {
   const tasks = await readAllTasks();
 
   // Expire stale leases first
@@ -826,7 +862,7 @@ export async function leaseNextTask(workerId: string, agentNumber?: number | nul
   }
 
   const task = candidates[0];
-  const transition = await transitionTaskState(task.taskId, 'LEASED');
+  const transition = await transitionTaskStateUnlocked(task.taskId, 'LEASED');
   if (!transition.ok || !transition.task) {
     return { ok: false, task: null, error: transition.error };
   }
@@ -845,8 +881,12 @@ export async function leaseNextTask(workerId: string, agentNumber?: number | nul
   return { ok: true, task: transition.task, error: null };
 }
 
+export async function leaseNextTask(workerId: string, agentNumber?: number | null): Promise<{ ok: boolean; task: Task | null; error: string | null }> {
+  return withTaskMutationLock(() => leaseNextTaskUnlocked(workerId, agentNumber));
+}
+
 /** Update the heartbeat for a leased/running task. */
-export async function heartbeat(taskId: string, workerId: string): Promise<{ ok: boolean; error: string | null }> {
+async function heartbeatUnlocked(taskId: string, workerId: string): Promise<{ ok: boolean; error: string | null }> {
   const tasks = await readAllTasks();
   const task = tasks.find((t) => t.taskId === taskId);
   if (!task) return { ok: false, error: 'Task not found.' };
@@ -857,8 +897,12 @@ export async function heartbeat(taskId: string, workerId: string): Promise<{ ok:
   return { ok: true, error: null };
 }
 
+export async function heartbeat(taskId: string, workerId: string): Promise<{ ok: boolean; error: string | null }> {
+  return withTaskMutationLock(() => heartbeatUnlocked(taskId, workerId));
+}
+
 /** Release a lease (return task to queue without completing). */
-export async function releaseLease(taskId: string, workerId: string): Promise<{ ok: boolean; error: string | null }> {
+async function releaseLeaseUnlocked(taskId: string, workerId: string): Promise<{ ok: boolean; error: string | null }> {
   const tasks = await readAllTasks();
   const task = tasks.find((t) => t.taskId === taskId);
   if (!task) return { ok: false, error: 'Task not found.' };
@@ -871,6 +915,10 @@ export async function releaseLease(taskId: string, workerId: string): Promise<{ 
   await writeAllTasks(tasks);
   await appendEvent({ type: 'lease_released', taskId, workerId });
   return { ok: true, error: null };
+}
+
+export async function releaseLease(taskId: string, workerId: string): Promise<{ ok: boolean; error: string | null }> {
+  return withTaskMutationLock(() => releaseLeaseUnlocked(taskId, workerId));
 }
 
 // ── Phase 7: Owner approval gate ─────────────────────────────────────────────
@@ -1144,7 +1192,7 @@ export async function getTaskById(taskId: string): Promise<Task | null> {
 }
 
 /** Add evidence to a task. */
-export async function addTaskEvidence(taskId: string, evidence: Omit<TaskEvidence, 'evidenceId' | 'createdAt'>): Promise<{ ok: boolean; error: string | null }> {
+async function addTaskEvidenceUnlocked(taskId: string, evidence: Omit<TaskEvidence, 'evidenceId' | 'createdAt'>): Promise<{ ok: boolean; error: string | null }> {
   const tasks = await readAllTasks();
   const task = tasks.find((t) => t.taskId === taskId);
   if (!task) return { ok: false, error: 'Task not found.' };
@@ -1161,8 +1209,12 @@ export async function addTaskEvidence(taskId: string, evidence: Omit<TaskEvidenc
   return { ok: true, error: null };
 }
 
+export async function addTaskEvidence(taskId: string, evidence: Omit<TaskEvidence, 'evidenceId' | 'createdAt'>): Promise<{ ok: boolean; error: string | null }> {
+  return withTaskMutationLock(() => addTaskEvidenceUnlocked(taskId, evidence));
+}
+
 /** Mark an acceptance criterion as met. */
-export async function markCriterionMet(taskId: string, criterionId: string, evidence: string): Promise<{ ok: boolean; error: string | null }> {
+async function markCriterionMetUnlocked(taskId: string, criterionId: string, evidence: string): Promise<{ ok: boolean; error: string | null }> {
   const tasks = await readAllTasks();
   const task = tasks.find((t) => t.taskId === taskId);
   if (!task) return { ok: false, error: 'Task not found.' };
@@ -1176,6 +1228,10 @@ export async function markCriterionMet(taskId: string, criterionId: string, evid
   await writeAllTasks(tasks);
   await appendEvent({ type: 'criterion_met', taskId, criterionId });
   return { ok: true, error: null };
+}
+
+export async function markCriterionMet(taskId: string, criterionId: string, evidence: string): Promise<{ ok: boolean; error: string | null }> {
+  return withTaskMutationLock(() => markCriterionMetUnlocked(taskId, criterionId, evidence));
 }
 
 // ── Phase 6: Permission matrix ───────────────────────────────────────────────
