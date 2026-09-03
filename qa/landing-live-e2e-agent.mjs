@@ -102,15 +102,27 @@ async function accessibility(page) {
       || (el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`))
       || el.closest('label')
     );
+    const smallTargetElements = [...document.querySelectorAll('a,button')].filter((el) => {
+      if (!visible(el) || getComputedStyle(el).display === 'inline') return false;
+      const r = el.getBoundingClientRect();
+      return r.width < 24 || r.height < 24;
+    });
     return {
       unnamedButtons: [...document.querySelectorAll('button')].filter((el) => visible(el) && !accessibleName(el)).length,
       unnamedInputs: [...document.querySelectorAll('input:not([type="hidden"]),textarea,select')].filter((el) => visible(el) && !accessibleName(el)).length,
       missingAlt: [...document.images].filter((img) => visible(img) && !img.hasAttribute('alt')).length,
-      smallTargets: [...document.querySelectorAll('a,button')].filter((el) => {
-        if (!visible(el) || getComputedStyle(el).display === 'inline') return false;
+      smallTargets: smallTargetElements.length,
+      smallTargetDetails: smallTargetElements.slice(0, 20).map((el) => {
         const r = el.getBoundingClientRect();
-        return r.width < 24 || r.height < 24;
-      }).length,
+        return {
+          tag: el.tagName.toLowerCase(),
+          id: el.id || null,
+          className: typeof el.className === 'string' ? el.className : null,
+          text: (el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 80),
+          width: Math.round(r.width * 10) / 10,
+          height: Math.round(r.height * 10) / 10,
+        };
+      }),
     };
   });
   record('buttons-have-accessible-name', a11y.unnamedButtons === 0, JSON.stringify(a11y), 'P0');
