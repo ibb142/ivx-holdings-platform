@@ -1,0 +1,46 @@
+name: Landing 112/Autonomous 3H Scheduler
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/landing-112-autonomous-3h-scheduler.yml'
+  schedule:
+    # The target workflow already has its native 09:00 UTC run.
+    # Dispatch the remaining 3-hour slots so the effective cadence is every 3 hours.
+    - cron: '0 0,3,6,12,15,18,21 * * *'
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: landing-112-autonomous-3h-scheduler
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch 112-agent live E2E + Dispatcher + Autonomous Manager
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_WORKFLOW: landing-112-3h-enterprise-human-qa.yml
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/${TARGET_WORKFLOW}/dispatches"
+          http=$(curl -sS --retry 3 --retry-delay 2 --retry-all-errors \
+            -o /tmp/dispatch.json -w '%{http_code}' -X POST "$api" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            -d '{"ref":"main"}')
+          if [ "$http" != 204 ]; then
+            cat /tmp/dispatch.json 2>/dev/null || true
+            echo "LANDING_112_AUTONOMOUS_DISPATCH=FAIL http=${http}" >&2
+            exit 1
+          fi
+          echo "LANDING_112_AUTONOMOUS_DISPATCH=PASS target=${TARGET_WORKFLOW} ref=main"
