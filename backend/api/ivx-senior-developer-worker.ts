@@ -230,7 +230,7 @@ export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request
     const body = await request.json().catch((): WorkerEnqueueRequest => ({}));
     const goal = readTrimmed(body.goal);
     const templateMode = normalizeTemplateMode(body.templateMode);
-    const isSystemMode = (approval.role === 'system' && approval.guardMode === 'system_bypass') || internalAuthorization !== null;
+    const isSystemMode = (approval.role === 'system' && approval.guardMode === 'system_bypass') || internalAuthorization !== null || oidcMachineAuthorized;
     const proposedPlan = readTrimmed(body.proposedPlan);
     const filesAffected = readStringArray(body.filesAffected);
     const riskLevel = normalizeRiskLevel(body.riskLevel);
