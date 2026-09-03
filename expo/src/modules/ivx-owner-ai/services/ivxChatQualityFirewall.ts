@@ -15,6 +15,15 @@ export type IVXChatQualityInput = {
   previousAssistantTexts?: string[];
 };
 
+export type IVXChatQualityEnforcement = {
+  text: string;
+  decision: IVXChatQualityDecision;
+  blocked: boolean;
+};
+
+export const IVX_CHAT_QUALITY_BLOCKED_MESSAGE =
+  'I blocked an unreliable response because it did not match your current request. Please send the request again; IVX IA will answer from the current context.';
+
 function normalize(value: unknown): string {
   return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().toLowerCase() : '';
 }
@@ -100,4 +109,20 @@ export function evaluateIVXChatQualityFirewall(input: IVXChatQualityInput): IVXC
   }
 
   return { allow: true, severity: 'pass', code: 'PASS', score, reasons };
+}
+
+/**
+ * The single render-boundary enforcement point. Callers must render `text`,
+ * never the unchecked assistant payload, so a critical decision cannot be
+ * accidentally logged and then ignored.
+ */
+export function enforceIVXChatQualityFirewall(
+  input: IVXChatQualityInput,
+): IVXChatQualityEnforcement {
+  const decision = evaluateIVXChatQualityFirewall(input);
+  return {
+    text: decision.allow ? input.assistantText : IVX_CHAT_QUALITY_BLOCKED_MESSAGE,
+    decision,
+    blocked: !decision.allow,
+  };
 }

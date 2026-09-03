@@ -588,7 +588,8 @@ function getRelevantMemoryState(memory: IVXOwnerMemoryState, conversationId?: st
   const roomMessages = roomId
     ? memory.recentMessages.filter((message) => message.conversationId === roomId)
     : memory.recentMessages;
-  const globalMessages = memory.recentMessages.filter((message) => !roomId || message.conversationId !== roomId).slice(-6);
+  // Enterprise isolation: never inject messages from a different conversation into the active room.
+  const globalMessages: IVXOwnerMemoryMessage[] = [];
   const scoreFile = (file: IVXOwnerFileInsight): number => {
     let score = file.conversationId && roomId && file.conversationId === roomId ? 10 : 0;
     const haystack = `${file.name} ${file.summary} ${file.excerpt ?? ''}`.toLowerCase();
@@ -615,10 +616,7 @@ export function buildIVXOwnerMemoryPromptBlock(memory: IVXOwnerMemoryState, opti
     .filter((message) => !roomId || message.conversationId === roomId)
     .slice(-8)
     .map((message) => `${message.role}: ${promptSafeText(message.text).slice(0, 220)}`);
-  const globalRecent = relevantMemory.recentMessages
-    .filter((message) => roomId && message.conversationId !== roomId)
-    .slice(-3)
-    .map((message) => `${message.role}: ${promptSafeText(message.text).slice(0, 180)}`);
+  const globalRecent: string[] = [];
   const files = relevantMemory.uploadedFiles.slice(-4).map((file) => `${promptSafeText(file.name)}${file.conversationId ? ` [room:${promptSafeText(file.conversationId).slice(0, 24)}]` : ''} — ${promptSafeText(file.summary).slice(0, 220)}`);
   const planTasks = relevantMemory.projectPlan?.tasks.slice(0, 6).map((task) => `${task.status}: ${promptSafeText(task.title)}`) ?? [];
 
@@ -630,7 +628,6 @@ export function buildIVXOwnerMemoryPromptBlock(memory: IVXOwnerMemoryState, opti
     planTasks.length ? `Project plan: ${planTasks.join(' | ')}` : null,
     files.length ? `Relevant files: ${files.join(' | ')}` : null,
     roomRecent.length ? `Recent room turns: ${roomRecent.join(' | ')}` : null,
-    globalRecent.length ? `Other recent context: ${globalRecent.join(' | ')}` : null,
     'Use this room memory quietly for retrieval and continuity. Do not list the memory unless the owner asks.',
   ].filter((line): line is string => typeof line === 'string' && line.trim().length > 0).join('\n');
 }
