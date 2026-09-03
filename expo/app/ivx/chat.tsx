@@ -115,6 +115,7 @@ import {
 import { isIVXLocalFirstChatEnabled } from '@/src/modules/ivx-owner-ai/services/ivxLocalFirstRuntime';
 import type { IVXOwnerFileInsight } from '@/src/modules/ivx-owner-ai/services/ivxOwnerMemoryService';
 import { transcribeAudioRecording } from '@/src/modules/ivx-owner-ai/services/ivxMultimodalService';
+import { enforceIVXChatQualityFirewall } from '@/src/modules/ivx-owner-ai/services/ivxChatQualityFirewall';
 import { executeReliably, type ReliabilityTrace } from '@/src/modules/chat/services/aiReliability';
 import { useChatSendQueue } from '@/src/modules/chat/services/useChatSendQueue';
 import { shouldStartAssistantBeforePersistence } from '@/src/modules/chat/services/ivxSendTriggerPolicy';
@@ -2375,8 +2376,47 @@ export default function IVXOwnerChatRoute() {
           metadata: { attempts: reliabilityTraceAttempts, finalOutcome: reliabilityFinalOutcome, elapsedMs: reliabilityTotalMs, sessionId: ownerSessionIdRef.current }});
         const runtimeProof = getLastIVXOwnerAIRuntimeProof();
         const normalizedSource = normalizeRuntimeSource(runtimeProof?.source ?? aiResult.source);
-        const normalizedAnswer = assertCleanOwnerAIResponseText(aiResult.answer);
-        const responseToolOutputs = aiResult.toolOutputs ?? [];
+        const uncheckedAnswer = assertCleanOwnerAIResponseText(aiResult.answer);
+        const recentConversation = allMessages.slice(-40);
+        const previousOwnerText = [...recentConversation]
+          .reverse()
+          .find((message) => message.senderRole === 'owner' && safeTrim(message.body).toLowerCase() !== safeTrim(text).toLowerCase())
+          ?.body ?? null;
+        const previousAssistantTexts = recentConversation
+          .filter((message) => message.senderRole === 'assistant')
+          .map((message) => safeTrim(message.body))
+          .filter(Boolean)
+          .slice(-10);
+        const qualityEnforcement = enforceIVXChatQualityFirewall({
+          ownerText: text,
+          assistantText: uncheckedAnswer,
+          previousOwnerText,
+          previousAssistantTexts,
+        });
+        const normalizedAnswer = qualityEnforcement.text;
+        if (qualityEnforcement.blocked) {
+          console.error('[IVX_CHAT_QUALITY_FIREWALL] response_blocked', {
+            code: qualityEnforcement.decision.code,
+            severity: qualityEnforcement.decision.severity,
+            score: qualityEnforcement.decision.score,
+            reasons: qualityEnforcement.decision.reasons,
+            requestId: aiResult.requestId,
+          });
+          void recordIVXOwnerChatAuditEvent({
+            action: 'assistant_reply',
+            conversationId: reliableConversationId,
+            status: 'failure',
+            summary: `IVX Chat Quality Firewall blocked ${qualityEnforcement.decision.code}.`,
+            metadata: {
+              requestId: aiResult.requestId,
+              qualityCode: qualityEnforcement.decision.code,
+              qualityScore: qualityEnforcement.decision.score,
+              qualityReasons: qualityEnforcement.decision.reasons,
+              sessionId: ownerSessionIdRef.current,
+            },
+          });
+        }
+        const responseToolOutputs = qualityEnforcement.blocked ? [] : (aiResult.toolOutputs ?? []);
         const routerDebug: IVXOwnerAIRouterDebug | undefined = aiResult.routerDebug;
         setLastToolOutputs(responseToolOutputs);
         // Only surface a "Tool used" badge when a real tool actually executed.
@@ -2399,7 +2439,7 @@ export default function IVXOwnerChatRoute() {
         // running (HTTP 202), the console bubble polls the worker statusUrl and
         // streams live stage/progress until the terminal verified-evidence block
         // arrives. No narrative planning — execution console only.
-        const executionStatusPayload = aiResult.executionStatus ?? null;
+        const executionStatusPayload = qualityEnforcement.blocked ? null : (aiResult.executionStatus ?? null);
         if (executionStatusPayload) {
           const capturedTransientId = transientReplyId;
           setExecutionStatusByMessageId((current) => {
