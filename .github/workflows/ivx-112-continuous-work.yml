@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   id-token: write
 
 concurrency:
@@ -20,9 +21,32 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.registry.outputs.matrix }}
+      skip: ${{ steps.same_sha.outputs.skip }}
     steps:
       - name: Checkout canonical 112-agent registry fallback
         uses: actions/checkout@v4
+
+      - id: same_sha
+        name: No-progress breaker for repeated scheduled SHA
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          skip=false
+          if [ "${GITHUB_EVENT_NAME}" = schedule ]; then
+            api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/ivx-112-continuous-work.yml/runs?branch=main&status=completed&per_page=30"
+            curl -fsS --retry 3 --retry-delay 2 \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H 'Accept: application/vnd.github+json' \
+              "$api" -o /tmp/previous-runs.json
+            previous=$(jq --arg sha "$GITHUB_SHA" --argjson current "$GITHUB_RUN_ID" '[.workflow_runs[] | select(.head_sha==$sha and .id!=$current)] | length' /tmp/previous-runs.json)
+            if [ "$previous" -gt 0 ]; then
+              skip=true
+              echo "NO_PROGRESS_CIRCUIT_BREAKER sha=${GITHUB_SHA} reason=scheduled_same_sha_already_attempted previous_runs=${previous}"
+            fi
+          fi
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
 
       - id: registry
         shell: bash
@@ -48,6 +72,7 @@ jobs:
 
   work:
     needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
