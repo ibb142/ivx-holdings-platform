@@ -36,6 +36,8 @@ const STATE = path.join(ROOT, 'states.json');
 
 type ExecutionState = 'PENDING_APPROVAL' | 'EXECUTING' | 'COMPLETED' | 'FAILED' | 'BLOCKED' | 'CANCELLED';
 
+const TERMINAL_ACTION_STATES = new Set<ExecutionState>(['COMPLETED', 'FAILED', 'BLOCKED', 'CANCELLED']);
+
 export type OwnerActionType =
   | 'database_read'
   | 'database_read_active'
@@ -248,7 +250,25 @@ export async function updateAction(
   const actions = [...state.actions];
   const updated: PendingOwnerAction = { ...actions[actionIndex]!, ...patch, updatedAt: nowIso() };
   actions[actionIndex] = updated;
-  await setOwnerConversationState({ ...state, actions });
+  const terminal = TERMINAL_ACTION_STATES.has(updated.executionState);
+  const wasActive = state.activeActionId === actionId;
+  await setOwnerConversationState({
+    ...state,
+    actions,
+    activeActionId: terminal && wasActive ? null : state.activeActionId,
+    unresolvedQuestion: terminal && wasActive ? null : state.unresolvedQuestion,
+    lastCompletedActionId: updated.executionState === 'COMPLETED' ? actionId : state.lastCompletedActionId,
+  });
+  if (terminal) {
+    await appendStateEvent({
+      type: 'terminal_action_closed',
+      conversationId,
+      ownerId,
+      actionId,
+      executionState: updated.executionState,
+      at: updated.updatedAt,
+    });
+  }
   return updated;
 }
 
@@ -258,7 +278,13 @@ export async function getActiveAction(
 ): Promise<PendingOwnerAction | null> {
   const state = await getOwnerConversationState(conversationId, ownerId);
   if (!state.activeActionId) return null;
-  return state.actions.find((a) => a.actionId === state.activeActionId) ?? null;
+  const active = state.actions.find((a) => a.actionId === state.activeActionId) ?? null;
+  if (!active) return null;
+  if (TERMINAL_ACTION_STATES.has(active.executionState)) {
+    await setOwnerConversationState({ ...state, activeActionId: null, unresolvedQuestion: null });
+    return null;
+  }
+  return active;
 }
 
 export async function resolveActiveAction(
@@ -278,7 +304,12 @@ export async function resolveActiveAction(
     updatedAt: nowIso(),
   };
   actions[actionIndex] = updated;
-  await setOwnerConversationState({ ...state, actions });
+  await setOwnerConversationState({
+    ...state,
+    actions,
+    activeActionId: status === 'denied' ? null : state.activeActionId,
+    unresolvedQuestion: status === 'denied' ? null : state.unresolvedQuestion,
+  });
   return updated;
 }
 
