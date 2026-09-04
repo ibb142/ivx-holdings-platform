@@ -2,12 +2,6 @@ name: IVX Unified Enterprise Release
 
 on:
   workflow_dispatch:
-    inputs:
-      build_apk:
-        description: Build Android APK
-        required: false
-        default: true
-        type: boolean
   push:
     branches: [main]
 
@@ -26,11 +20,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile
       - name: Typecheck
         run: bun run typecheck || bunx tsc --noEmit
-      - name: Static integrity checks
+      - name: Static integrity
         run: |
           git diff --check
           ! grep -R --line-number --exclude-dir=node_modules --exclude-dir=.git -E '^(<<<<<<<|=======|>>>>>>>)' .
@@ -42,15 +35,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-      - name: Backend/API test suite
+      - run: bun install --frozen-lockfile
+      - name: Backend/API suite
         run: bun test backend
 
   gate-3-android-e2e:
-    name: Gate 3 - Android E2E
+    name: Gate 3 - Android Dashboard + Chat E2E
     needs: gate-2-backend-api
-    uses: ./.github/workflows/ivx-dashboard-chat-e2e.yml
+    uses: ./.github/workflows/ivx-dashboard-chat-e2e-cert.yml
     secrets: inherit
 
   gate-4-production-smoke-sha:
@@ -61,8 +53,7 @@ jobs:
       EXPECTED_SHA: ${{ github.sha }}
       API_BASE: https://api.ivxholding.com
     steps:
-      - uses: actions/checkout@v4
-      - name: Production health and SHA parity
+      - name: Health + exact SHA
         shell: bash
         run: |
           set -euo pipefail
@@ -70,51 +61,31 @@ jobs:
           cat /tmp/health.json
           LIVE_SHA=$(python3 - <<'PY'
 import json
-with open('/tmp/health.json') as f:
-    d=json.load(f)
+with open('/tmp/health.json') as f: d=json.load(f)
 for k in ('commit','sha','gitSha','sourceSha','versionSha'):
     v=d.get(k)
     if isinstance(v,str) and v:
-        print(v)
-        break
+        print(v); break
 PY
 )
-          if [ -z "$LIVE_SHA" ]; then
-            echo "Production /health did not expose a commit SHA"
-            exit 1
-          fi
-          case "$EXPECTED_SHA" in
-            "$LIVE_SHA"*) ;;
-            *)
-              case "$LIVE_SHA" in
-                "$EXPECTED_SHA"*) ;;
-                *) echo "SHA parity failed: expected=$EXPECTED_SHA live=$LIVE_SHA"; exit 1 ;;
-              esac
-          esac
+          test -n "$LIVE_SHA"
+          case "$EXPECTED_SHA" in "$LIVE_SHA"*) exit 0;; esac
+          case "$LIVE_SHA" in "$EXPECTED_SHA"*) exit 0;; esac
+          echo "SHA parity failed: expected=$EXPECTED_SHA live=$LIVE_SHA"
+          exit 1
       - name: Critical production smoke
-        shell: bash
         run: |
           set -euo pipefail
           curl -fsS "$API_BASE/health" >/dev/null
-          curl -fsS "$API_BASE/version" >/tmp/version.json || true
-          curl -fsS "$API_BASE/api/ivx/landing-p0/status" >/tmp/landing-status.json || true
 
   gate-5-final-certificate:
-    name: Gate 5 - Final Release Certificate
-    needs:
-      - gate-1-build-static
-      - gate-2-backend-api
-      - gate-3-android-e2e
-      - gate-4-production-smoke-sha
+    name: Gate 5 - Single Final Release Certificate
+    needs: [gate-1-build-static, gate-2-backend-api, gate-3-android-e2e, gate-4-production-smoke-sha]
     if: ${{ always() }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
     steps:
       - uses: actions/checkout@v4
-      - name: Enforce all five release gates
-        shell: bash
+      - name: Enforce gates
         env:
           G1: ${{ needs.gate-1-build-static.result }}
           G2: ${{ needs.gate-2-backend-api.result }}
@@ -122,31 +93,15 @@ PY
           G4: ${{ needs.gate-4-production-smoke-sha.result }}
         run: |
           set -euo pipefail
-          printf 'Gate 1: %s\nGate 2: %s\nGate 3: %s\nGate 4: %s\n' "$G1" "$G2" "$G3" "$G4"
           test "$G1" = success
           test "$G2" = success
           test "$G3" = success
           test "$G4" = success
-      - name: Generate single release certificate
-        shell: bash
+      - name: Generate certificate
         run: |
           mkdir -p qa/evidence/release
           cat > qa/evidence/release/IVX_RELEASE_CERTIFICATE.json <<EOF
-          {
-            "certificate": "IVX-ENTERPRISE-RELEASE",
-            "status": "PASS",
-            "sourceSha": "${GITHUB_SHA}",
-            "workflowRunId": "${GITHUB_RUN_ID}",
-            "repository": "${GITHUB_REPOSITORY}",
-            "gates": {
-              "buildStatic": "PASS",
-              "backendApi": "PASS",
-              "androidE2E": "PASS",
-              "productionSmokeShaParity": "PASS",
-              "finalCertificate": "PASS"
-            },
-            "generatedAtUtc": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          }
+          {"certificate":"IVX-ENTERPRISE-RELEASE","status":"PASS","sourceSha":"${GITHUB_SHA}","workflowRunId":"${GITHUB_RUN_ID}","gates":{"buildStatic":"PASS","backendApi":"PASS","androidDashboardChatE2E":"PASS","productionSmokeShaParity":"PASS","finalCertificate":"PASS"},"generatedAtUtc":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
           EOF
           cat qa/evidence/release/IVX_RELEASE_CERTIFICATE.json
       - uses: actions/upload-artifact@v4
