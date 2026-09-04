@@ -114,14 +114,59 @@ export function assessPredictiveHealth(input: PredictiveSample[]): PredictiveAss
   };
 }
 
-export async function fetchWithDeadline(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = 4500): Promise<{ response: Response; latencyMs: number }> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const started = Date.now();
+/**
+ * Dashboard telemetry can legitimately take ~5s on a cold control-plane read.
+ * The old 4.5s deadline guaranteed false failures and overlapping 5s polls.
+ *
+ * For the two live dashboard telemetry endpoints we:
+ *   - enforce a 12s minimum deadline,
+ *   - dedupe an in-flight request for the same URL,
+ *   - clear the in-flight entry immediately after completion.
+ *
+ * Other callers keep their requested deadline unchanged.
+ */
+const telemetryInFlight = new Map<string, Promise<{ response: Response; latencyMs: number }>>();
+
+function requestKey(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.toString();
+  return input.url;
+}
+
+function isLiveDashboardTelemetry(url: string): boolean {
+  return url.includes('/api/ivx/autonomous/control-plane')
+    || url.includes('/api/ivx/senior-developer/worker/jobs');
+}
+
+export async function fetchWithDeadline(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs = 4500,
+): Promise<{ response: Response; latencyMs: number }> {
+  const key = requestKey(input);
+  const dashboardTelemetry = isLiveDashboardTelemetry(key);
+  const existing = dashboardTelemetry ? telemetryInFlight.get(key) : undefined;
+  if (existing) return existing;
+
+  const effectiveTimeoutMs = dashboardTelemetry ? Math.max(timeoutMs, 12_000) : timeoutMs;
+  const request = (async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), effectiveTimeoutMs);
+    const started = Date.now();
+    try {
+      const response = await fetch(input, { ...init, signal: controller.signal });
+      return { response, latencyMs: Date.now() - started };
+    } finally {
+      clearTimeout(timeout);
+    }
+  })();
+
+  if (dashboardTelemetry) telemetryInFlight.set(key, request);
   try {
-    const response = await fetch(input, { ...init, signal: controller.signal });
-    return { response, latencyMs: Date.now() - started };
+    return await request;
   } finally {
-    clearTimeout(timeout);
+    if (dashboardTelemetry && telemetryInFlight.get(key) === request) {
+      telemetryInFlight.delete(key);
+    }
   }
 }
