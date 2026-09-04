@@ -10,8 +10,9 @@ on:
       - '.github/workflows/ivx-112-24x7-watchdog.yml'
       - 'backend/services/ivx-campaign-dispatcher.ts'
       - 'backend/api/ivx-agent-api.ts'
+      - 'backend/services/ivx-autonomous-runtime-enforcer.ts'
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -47,14 +48,18 @@ jobs:
           owner_gate=$(jq -r '.dispatcher.utilization24h.ownerGateNow // 0' /tmp/truth.json)
           productive=$(jq -r '.dispatcher.utilization24h.productiveAgentHours // 0' /tmp/truth.json)
           test "$max" -eq 112
+          recovery=false
+          if [ "$owner_gate" -eq 0 ] && { [ "$running" -eq 0 ] || { [ "$queued" -gt 0 ] && [ "$running" -lt "$max" ]; }; }; then recovery=true; fi
           echo "running=$running" >> "$GITHUB_OUTPUT"
           echo "queued=$queued" >> "$GITHUB_OUTPUT"
           echo "owner_gate=$owner_gate" >> "$GITHUB_OUTPUT"
           echo "productive=$productive" >> "$GITHUB_OUTPUT"
-          printf 'max=%s running=%s queued=%s ownerGate=%s productive=%s\n' "$max" "$running" "$queued" "$owner_gate" "$productive"
+          echo "max=$max" >> "$GITHUB_OUTPUT"
+          echo "recovery=$recovery" >> "$GITHUB_OUTPUT"
+          printf 'max=%s running=%s queued=%s ownerGate=%s productive=%s recovery=%s\n' "$max" "$running" "$queued" "$owner_gate" "$productive" "$recovery"
 
       - name: Obtain bounded Autonomous recovery identity
-        if: steps.truth.outputs.running == '0'
+        if: steps.truth.outputs.recovery == 'true'
         id: oidc
         shell: bash
         run: |
@@ -64,8 +69,8 @@ jobs:
           test -n "$token"
           echo "token=$token" >> "$GITHUB_OUTPUT"
 
-      - name: Resume workers when executable work exists
-        if: steps.truth.outputs.running == '0'
+      - name: Recover partial or total worker fleet
+        if: steps.truth.outputs.recovery == 'true'
         shell: bash
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
@@ -76,22 +81,23 @@ jobs:
           test "$code" = 200
           test "$(jq -r '.ok // false' /tmp/resume.json)" = true
 
-      - name: Fail closed on silent executable backlog
+      - name: Fail closed on fleet collapse
         shell: bash
         run: |
           set -euo pipefail
           sleep 5
           curl -fsS --retry 2 --retry-delay 1 --max-time 20 "$API_BASE/api/ivx/agents/app-completion/dashboard" -o /tmp/final.json
+          max=$(jq -r '.dispatcher.maxConcurrency // 0' /tmp/final.json)
           running=$(jq -r '.dispatcher.utilization24h.runningNow // 0' /tmp/final.json)
           queued=$(jq -r '.dispatcher.utilization24h.queuedNow // 0' /tmp/final.json)
           owner_gate=$(jq -r '.dispatcher.utilization24h.ownerGateNow // 0' /tmp/final.json)
           productive=$(jq -r '.dispatcher.utilization24h.productiveAgentHours // 0' /tmp/final.json)
-          echo "final running=$running queued=$queued ownerGate=$owner_gate productive=$productive"
-          if [ "$running" -eq 0 ] && [ "$queued" -gt 0 ]; then
-            echo 'HARD_FAIL: executable backlog exists while no workers are running.'
+          echo "final max=$max running=$running queued=$queued ownerGate=$owner_gate productive=$productive"
+          test "$max" -eq 112
+          if [ "$running" -eq 0 ] && [ "$owner_gate" -eq 0 ]; then
+            echo 'HARD_FAIL: 112-agent fleet collapsed to zero without an owner gate.'
             exit 1
           fi
-          if [ "$running" -eq 0 ] && [ "$queued" -eq 0 ] && [ "$owner_gate" -eq 0 ]; then
-            echo 'HARD_FAIL: fleet is idle without an owner gate.'
-            exit 1
+          if [ "$queued" -gt 0 ] && [ "$running" -lt "$max" ] && [ "$owner_gate" -eq 0 ]; then
+            echo 'PARTIAL_FLEET: executable backlog remains below max concurrency; next watchdog tick will recover again.'
           fi
