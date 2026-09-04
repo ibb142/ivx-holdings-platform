@@ -479,8 +479,8 @@ async function runHtmlAsserts(fetchImpl: typeof fetch, asserts: HtmlAssert[], c:
       case 'form-labels': {
         const inputs = tags(html, 'input').filter((i) => !/^(hidden|submit|button|image|reset)$/i.test(i.attrs.type ?? 'text'));
         const labelFor = new Set(tags(html, 'label').map((l) => l.attrs.for).filter(Boolean));
-        const unlabeled = inputs.filter((i) => !(i.attrs.id && labelFor.has(i.attrs.id)) && !i.attrs['aria-label'] && !i.attrs['aria-labelledby'] && !i.attrs.placeholder && !i.attrs.title).length;
-        if (unlabeled > 0) problems.push(`${unlabeled}/${inputs.length} inputs without label/aria-label/placeholder`); else notes.push(`${inputs.length} inputs labeled`);
+        const unlabeled = inputs.filter((i) => !(i.attrs.id && labelFor.has(i.attrs.id)) && !i.attrs['aria-label'] && !i.attrs['aria-labelledby'] && !i.attrs.title).length;
+        if (unlabeled > 0) problems.push(`${unlabeled}/${inputs.length} inputs without <label for>/aria-label/aria-labelledby`); else notes.push(`${inputs.length} inputs labeled`);
         break;
       }
       case 'heading-order': {
