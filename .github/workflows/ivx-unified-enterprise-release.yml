@@ -22,7 +22,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - name: Typecheck
-        run: bun run typecheck || bunx tsc --noEmit
+        run: bun run typecheck
       - name: Static integrity
         run: |
           git diff --check
@@ -42,8 +42,108 @@ jobs:
   gate-3-android-e2e:
     name: Gate 3 - Android Dashboard + Chat E2E
     needs: gate-2-backend-api
-    uses: ./.github/workflows/ivx-dashboard-chat-e2e-cert.yml
-    secrets: inherit
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    env:
+      NODE_ENV: production
+      EXPO_PUBLIC_API_BASE_URL: https://api.ivxholding.com
+      EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+      EXPO_PUBLIC_IVX_OPEN_ACCESS_MODE: 'false'
+      EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.sha }}
+      OWNER_EMAIL: iperez4242@gmail.com
+      OWNER_PASSWORD_S1: ${{ secrets.OWNER_NEW_PASSWORD }}
+      OWNER_PASSWORD_S2: ${{ secrets.OWNER_PASSWORD }}
+      OWNER_PASSWORD_S3: ${{ secrets.IVX_OWNER_PASSWORD }}
+      OWNER_PASSWORD_S4: ${{ secrets.IVX_OWNER_NEW_PASSWORD }}
+      OWNER_PASSWORD_S5: ${{ secrets.OWNER_LOGIN_PASSWORD }}
+      OWNER_PASSWORD_S6: ${{ secrets.IVX_OWNER_LOGIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.1.12297006' 'cmake;3.22.1' </dev/null
+      - name: Resolve owner credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OWNER_EMAIL"
+          test -n "$EXPO_PUBLIC_SUPABASE_URL"
+          test -n "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
+          owner_password=''
+          for var in OWNER_PASSWORD_S1 OWNER_PASSWORD_S2 OWNER_PASSWORD_S3 OWNER_PASSWORD_S4 OWNER_PASSWORD_S5 OWNER_PASSWORD_S6; do
+            value=${!var:-}
+            if [ -n "$value" ]; then owner_password="$value"; break; fi
+          done
+          test -n "$owner_password"
+          echo "::add-mask::$owner_password"
+          { echo 'OWNER_PASSWORD_EFFECTIVE<<IVX_EOF'; echo "$owner_password"; echo 'IVX_EOF'; } >> "$GITHUB_ENV"
+      - name: Install + source hard gates
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile
+          cd expo
+          bun install
+          bun scripts/apply-patches.mjs
+          bunx tsc --noEmit
+          bun test __tests__/chat-certificate-flow-regression.test.ts __tests__/chat-transport-reliability.test.ts
+          test -f .maestro/ivx-owner-dashboard-certificate.yaml
+          test -f .maestro/ivx-owner-chat-certificate.yaml
+      - name: Prepare QA signer
+        run: |
+          KEYSTORE="$HOME/.android/debug.keystore"
+          mkdir -p "$(dirname "$KEYSTORE")"
+          rm -f "$KEYSTORE"
+          keytool -genkeypair -v -keystore "$KEYSTORE" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=IVX Unified E2E, OU=QA, O=IVX Holdings, L=Miami, ST=Florida, C=US"
+      - name: Build exact-source Android QA APK
+        working-directory: expo/android
+        env:
+          IVX_QA_KEYSTORE: ${{ runner.home }}/.android/debug.keystore
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleQa --no-daemon -x lint
+          APK=$(find app/build/outputs/apk/qa -name '*.apk' -type f | head -1)
+          test -n "$APK"
+          echo "APK_PATH=$(realpath "$APK")" >> "$GITHUB_ENV"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Real Dashboard + IVX IA Chat certificate
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          profile: pixel_2
+          target: google_apis
+          disable-animations: false
+          disable-linux-hw-accel: false
+          ram-size: 2048M
+          heap-size: 512M
+          emulator-options: -no-window -gpu off -no-snapshot -noaudio -no-boot-anim
+          script: bash scripts/ivx-dashboard-chat-android-e2e.sh
+      - name: Enforce certificate identity
+        run: |
+          set -euo pipefail
+          test "$(jq -r '.passed' qa/evidence/dashboard-chat/certificate.json)" = true
+          test "$(jq -r '.sourceSha' qa/evidence/dashboard-chat/certificate.json)" = "$GITHUB_SHA"
+          test "$(jq -r '.dashboardRendered' qa/evidence/dashboard-chat/certificate.json)" = true
+          test "$(jq -r '.liveAIReply' qa/evidence/dashboard-chat/certificate.json)" = true
+          test "$(jq -r '.chatPersistenceAfterRestart' qa/evidence/dashboard-chat/certificate.json)" = true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ivx-dashboard-chat-e2e-${{ github.sha }}
+          path: qa/evidence/dashboard-chat
+          if-no-files-found: warn
 
   gate-4-production-smoke-sha:
     name: Gate 4 - Production Smoke + SHA Parity
@@ -53,29 +153,19 @@ jobs:
       EXPECTED_SHA: ${{ github.sha }}
       API_BASE: https://api.ivxholding.com
     steps:
-      - name: Health + exact SHA
+      - name: Wait for production and enforce exact SHA
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS "$API_BASE/health" -o /tmp/health.json
-          cat /tmp/health.json
-          LIVE_SHA=$(python3 - <<'PY'
-import json
-with open('/tmp/health.json') as f: d=json.load(f)
-for k in ('commit','sha','gitSha','sourceSha','versionSha'):
-    v=d.get(k)
-    if isinstance(v,str) and v:
-        print(v); break
-PY
-)
-          test -n "$LIVE_SHA"
-          case "$EXPECTED_SHA" in "$LIVE_SHA"*) exit 0;; esac
-          case "$LIVE_SHA" in "$EXPECTED_SHA"*) exit 0;; esac
-          echo "SHA parity failed: expected=$EXPECTED_SHA live=$LIVE_SHA"
-          exit 1
-      - name: Critical production smoke
-        run: |
-          set -euo pipefail
+          ready=false
+          for i in $(seq 1 60); do
+            body=$(curl -fsS --max-time 8 "$API_BASE/version" || true)
+            live=$(printf '%s' "$body" | jq -r '.commit // .sha // .sourceSha // empty' 2>/dev/null || true)
+            echo "poll=$i live=${live:-missing} expected=$EXPECTED_SHA"
+            if [ "$live" = "$EXPECTED_SHA" ]; then ready=true; break; fi
+            sleep 5
+          done
+          test "$ready" = true
           curl -fsS "$API_BASE/health" >/dev/null
 
   gate-5-final-certificate:
@@ -97,7 +187,7 @@ PY
           test "$G2" = success
           test "$G3" = success
           test "$G4" = success
-      - name: Generate certificate
+      - name: Generate one exact-SHA certificate
         run: |
           mkdir -p qa/evidence/release
           cat > qa/evidence/release/IVX_RELEASE_CERTIFICATE.json <<EOF
