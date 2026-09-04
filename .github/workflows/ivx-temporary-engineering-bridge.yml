@@ -1,0 +1,74 @@
+name: IVX Temporary Engineering Bridge
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  ask-ivx:
+    if: >-
+      github.event.issue.pull_request == null &&
+      github.actor == 'ibb142' &&
+      startsWith(github.event.comment.body, '/ivx-ai ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      IVX_API_BASE: https://api.ivxholding.com
+      BRIDGE_EXPIRES_AT: '2026-09-05T16:00:00Z'
+      IVX_SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Enforce temporary TTL and secret binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$IVX_SYSTEM_KEY"
+          now=$(date -u +%s)
+          expiry=$(date -u -d "$BRIDGE_EXPIRES_AT" +%s)
+          if [ "$now" -ge "$expiry" ]; then
+            echo 'Temporary IVX engineering bridge expired.'
+            exit 78
+          fi
+
+      - name: Send engineering prompt to IVX IA
+        id: ask
+        shell: bash
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          set -euo pipefail
+          prompt=${COMMENT_BODY#'/ivx-ai '}
+          test -n "$prompt"
+          jq -n --arg message "$prompt" '{message:$message, source:"github-engineering-bridge", temporaryAccess:true}' > /tmp/request.json
+          status=$(curl -sS -o /tmp/response.json -w '%{http_code}' \
+            --max-time 180 \
+            -X POST "$IVX_API_BASE/api/ivx/owner-ai" \
+            -H 'Content-Type: application/json' \
+            -H "X-IVX-System-Key: $IVX_SYSTEM_KEY" \
+            --data-binary @/tmp/request.json)
+          echo "http_status=$status" >> "$GITHUB_OUTPUT"
+          cat /tmp/response.json
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            exit 1
+          fi
+
+      - name: Post sanitized IVX IA response back to issue
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          status='${{ steps.ask.outputs.http_status }}'
+          if [ -f /tmp/response.json ]; then
+            reply=$(jq -r '(.answer // .reply // .message // .response // .text // .result // .) | if type=="string" then . else tojson end' /tmp/response.json 2>/dev/null || cat /tmp/response.json)
+          else
+            reply='No response body was produced.'
+          fi
+          reply=$(printf '%s' "$reply" | head -c 6000)
+          body=$(printf '### IVX IA engineering bridge\n\n**HTTP:** `%s`\n**Expires:** `%s`\n\n%s\n' "${status:-unknown}" "$BRIDGE_EXPIRES_AT" "$reply")
+          gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" -f body="$body" >/dev/null
