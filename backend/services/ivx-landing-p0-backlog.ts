@@ -20,6 +20,7 @@
 import {
   createTask,
   getAllTasks,
+  taskProgressRank,
   TERMINAL_SUCCESS_STATES,
   type Task,
   type TaskState,
@@ -553,10 +554,19 @@ export function aggregateLandingStatus(input: {
 }) {
   const { tasks, productionSha, mainSha, registeredAgents, nowMs, mission } = input;
   const dayAgo = nowMs - 24 * 60 * 60 * 1000;
-  const landing = tasks.filter((t) => {
+  const landingRows = tasks.filter((t) => {
     const parsed = parseLandingTaskKey(t.idempotencyKey);
-    return parsed !== null && parsed.sha === productionSha;
+    return parsed !== null && parsed.sha === productionSha && t.state !== 'CANCELLED' && t.state !== 'EXPIRED';
   });
+  // One row per UNIT: a deploy overlap can leave duplicate tasks for the same key;
+  // report the most-progressed one and expose the duplicate count truthfully.
+  const byKey = new Map<string, Task>();
+  for (const row of landingRows) {
+    const current = byKey.get(row.idempotencyKey);
+    if (!current || taskProgressRank(row.state) > taskProgressRank(current.state)) byKey.set(row.idempotencyKey, row);
+  }
+  const landing = [...byKey.values()];
+  const duplicateTasks = landingRows.length - landing.length;
   const audits = landing.filter((t) => !parseLandingTaskKey(t.idempotencyKey)?.repair);
   const repairs = landing.filter((t) => parseLandingTaskKey(t.idempotencyKey)?.repair === true);
 
@@ -696,7 +706,7 @@ export function aggregateLandingStatus(input: {
     qa,
     certificate,
     topBlockers: dedupedBlockers.slice(0, 5),
-    tasks: { ledgerTotal: tasks.length, landingForSha: landing.length },
+    tasks: { ledgerTotal: tasks.length, landingForSha: landing.length, duplicateTasks },
   };
 }
 

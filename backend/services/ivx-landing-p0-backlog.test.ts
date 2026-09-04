@@ -12,6 +12,7 @@ import {
   getTaskById,
   leaseNextTask,
   recoverStrandedTasksInPlace,
+  retireDuplicateTasksInPlace,
   transitionTaskState,
   type Task,
 } from './ivx-autonomous-task-engine';
@@ -197,6 +198,63 @@ describe('Stranded task recovery (redeploy/crash survivors)', () => {
     expect(freshExec.state).toBe('EXECUTION_COMPLETED');
     expect(exhausted.state).toBe('EXPIRED');
     expect(exhaustedExec.state).toBe('FAILED');
+  });
+});
+
+describe('Cross-process duplicate retirement + BLOCKED re-verification', () => {
+  it('keeps the most-progressed task per idempotencyKey and retires the rest (never two executions of one unit)', () => {
+    const now = Date.now();
+    const key = landingTaskKey(SHA, 'deals.order');
+    const queued = makeTask({ taskId: 'dupe-queued', idempotencyKey: key, state: 'QUEUED', createdAt: new Date(now - 5000).toISOString() } as Partial<Task>);
+    const running = makeTask({ taskId: 'dupe-running', idempotencyKey: key, state: 'RUNNING', leaseHolder: 'agent:ivx_holdings_19', createdAt: new Date(now - 4000).toISOString() } as Partial<Task>);
+    const leased = makeTask({ taskId: 'dupe-leased', idempotencyKey: key, state: 'LEASED', leaseHolder: 'agent:ivx_holdings_20', createdAt: new Date(now - 3000).toISOString() } as Partial<Task>);
+    const other = makeTask({ taskId: 'other', idempotencyKey: landingTaskKey(SHA, 'deals.min-count'), state: 'QUEUED' });
+    const retired = retireDuplicateTasksInPlace([queued, running, leased, other], now);
+    expect(retired.sort()).toEqual(['dupe-leased', 'dupe-queued']);
+    expect(running.state).toBe('RUNNING');
+    expect(queued.state).toBe('CANCELLED');
+    expect(leased.state).toBe('EXPIRED');
+    expect(queued.error).toContain('duplicate of dupe-running');
+    expect(other.state).toBe('QUEUED');
+  });
+
+  it('re-queues BLOCKED Landing units after a quoted rate-limit reset or 30 minutes, bounded by maxRetries; never touches module-audit blocks', () => {
+    const now = Date.now();
+    const pastReset = new Date(now - 60_000).toISOString();
+    const futureReset = new Date(now + 20 * 60_000).toISOString();
+    const rateLimited = makeTask({ taskId: 'rl', idempotencyKey: landingTaskKey(SHA, 'auth.login-e2e'), state: 'BLOCKED', blocker: `GitHub API rate-limited for the configured token (resets ${pastReset})`, updatedAt: pastReset } as Partial<Task>);
+    const notYet = makeTask({ taskId: 'ny', idempotencyKey: landingTaskKey(SHA, 'reels.engagement-browser'), state: 'BLOCKED', blocker: `GitHub API rate-limited for the configured token (resets ${futureReset})`, updatedAt: new Date(now).toISOString() } as Partial<Task>);
+    const stale30 = makeTask({ taskId: 's30', idempotencyKey: landingTaskKey(SHA, 'e2e.production-browser-suite'), state: 'BLOCKED', blocker: 'no run exists for production SHA', updatedAt: new Date(now - 31 * 60_000).toISOString() } as Partial<Task>);
+    const exhausted = makeTask({ taskId: 'ex', idempotencyKey: landingTaskKey(SHA, 'a11y.touch-targets-browser'), state: 'BLOCKED', blocker: 'no run', retryCount: 2, maxRetries: 2, updatedAt: new Date(now - 61 * 60_000).toISOString() } as Partial<Task>);
+    const moduleGate = makeTask({ taskId: 'mg', idempotencyKey: `module-audit:${SHA}:ivx_holdings_1:1:backend/api/x.ts`, state: 'BLOCKED', blocker: 'OWNER_GATE: secret detected', updatedAt: new Date(now - 90 * 60_000).toISOString() } as Partial<Task>);
+    const recovery = recoverStrandedTasksInPlace([rateLimited, notYet, stale30, exhausted, moduleGate], now);
+    expect(recovery.blockedRequeued.sort()).toEqual(['rl', 's30']);
+    expect(rateLimited.state).toBe('QUEUED');
+    expect(rateLimited.retryCount).toBe(1);
+    expect(notYet.state).toBe('BLOCKED');
+    expect(stale30.state).toBe('QUEUED');
+    expect(exhausted.state).toBe('BLOCKED');
+    expect(moduleGate.state).toBe('BLOCKED');
+  });
+
+  it('status aggregation reports one row per unit and exposes the duplicate count', () => {
+    const key = landingTaskKey(SHA, 'api.health');
+    const tasks: Task[] = [
+      makeTask({ taskId: 'k1', idempotencyKey: key, state: 'QUEUED' }),
+      makeTask({ taskId: 'k2', idempotencyKey: key, state: 'RUNNING', leaseHolder: 'agent:ivx_holdings_73', lastHeartbeatAt: new Date().toISOString() }),
+      makeTask({ taskId: 'k3', idempotencyKey: key, state: 'CANCELLED' }),
+    ];
+    const status = aggregateLandingStatus({ tasks, productionSha: SHA, mainSha: null, registeredAgents: 112, failedAgents: 0, nowMs: Date.now(), mission: { active: true, priority: 'P0-OWNER', mission: 'landing', source: 'env', fetchedAt: new Date().toISOString() } });
+    expect(status.backlog.total).toBe(1);
+    expect(status.backlog.active).toBe(1);
+    expect(status.tasks.duplicateTasks).toBe(1);
+    expect(status.sha.match).toBeNull();
+  });
+
+  it('secret scan ignores env var NAMES in diagnostics but flags service_role values and Supabase secret keys', () => {
+    expect(scanForSecrets('{"SUPABASE_SERVICE_ROLE_KEY":{"present":true,"length":219},"names":["SUPABASE_SERVICE_ROLE_KEY"]}')).toEqual([]);
+    expect(scanForSecrets('{"role":"service_role","iss":"supabase"}')).toContain('service_role_value');
+    expect(scanForSecrets('key=sb_secret_abcdefghijklmnopqrstuvwxyz')).toContain('supabase_secret_key');
   });
 });
 

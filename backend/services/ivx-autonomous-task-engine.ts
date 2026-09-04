@@ -815,7 +815,55 @@ export async function transitionTaskState(
 /** Mid-completion states that must finish within milliseconds; older than this = process died mid-cycle. */
 const STRANDED_MIDCOMPLETION_MS = 10 * 60 * 1000;
 
-export type StrandedRecovery = { requeued: string[]; expired: string[]; failed: string[] };
+export type StrandedRecovery = { requeued: string[]; expired: string[]; failed: string[]; duplicatesRetired: string[]; blockedRequeued: string[] };
+
+/** BLOCKED Landing units re-verify on this cadence while retries remain (CI evidence appears later). */
+const BLOCKED_REVERIFY_MS = 30 * 60 * 1000;
+const REVERIFY_KEY_PREFIXES = ['landing-p0:', 'landing-p0-repair:'] as const;
+
+/** Progress rank used to pick the survivor among duplicate tasks (higher = further along). */
+export function taskProgressRank(state: TaskState): number {
+  const ranks: Partial<Record<TaskState, number>> = {
+    VERIFIED: 100, NO_ACTION_REQUIRED: 100, PRODUCTION_VERIFYING: 90, DEPLOYED: 90, DEPLOYING: 85, READY_FOR_DEPLOYMENT: 85,
+    QA_IN_PROGRESS: 80, EXECUTION_COMPLETED: 75, RUNNING: 60, LEASED: 50, RETRYING: 40, BLOCKED: 35, QUEUED: 30,
+    WAITING_FOR_APPROVAL: 25, PAUSED: 20, PLANNING: 10, VALIDATING: 10, RECEIVED: 10, QA_FAILED: 8, FAILED: 5, STALE: 5,
+  };
+  return ranks[state] ?? 0;
+}
+
+/**
+ * Two API processes can coexist for ~1 minute during a zero-downtime redeploy;
+ * each has its own mutex, so both may create the same idempotencyKey from stale
+ * snapshots. Keep the most-progressed task per key and retire the rest so a unit
+ * is never executed twice. Mutates in place; returns retired task ids.
+ */
+export function retireDuplicateTasksInPlace(tasks: Task[], nowMs: number): string[] {
+  const retired: string[] = [];
+  const groups = new Map<string, Task[]>();
+  for (const t of tasks) {
+    if (t.state === 'CANCELLED' || t.state === 'EXPIRED') continue;
+    const group = groups.get(t.idempotencyKey);
+    if (group) group.push(t); else groups.set(t.idempotencyKey, [t]);
+  }
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    group.sort((a, b) => taskProgressRank(b.state) - taskProgressRank(a.state) || Date.parse(a.createdAt) - Date.parse(b.createdAt));
+    const survivor = group[0];
+    for (const dupe of group.slice(1)) {
+      if (TERMINAL_SUCCESS_STATES.includes(dupe.state)) continue; // both succeeded; harmless, reports dedupe by key
+      if (dupe.state === 'LEASED') dupe.state = 'EXPIRED';
+      else if (['EXECUTION_COMPLETED', 'QA_IN_PROGRESS', 'DEPLOYING', 'DEPLOYED', 'PRODUCTION_VERIFYING'].includes(dupe.state)) dupe.state = 'FAILED';
+      else if (dupe.state === 'FAILED') continue;
+      else dupe.state = 'CANCELLED';
+      dupe.error = `duplicate of ${survivor.taskId} (cross-process idempotency collision)`;
+      dupe.leaseHolder = null;
+      dupe.leaseExpiresAt = null;
+      dupe.updatedAt = new Date(nowMs).toISOString();
+      retired.push(dupe.taskId);
+    }
+  }
+  return retired;
+}
 
 /**
  * Recover tasks stranded by a process death (redeploy/crash) so the fleet can
@@ -831,7 +879,8 @@ export type StrandedRecovery = { requeued: string[]; expired: string[]; failed: 
  * 18 EXECUTION_COMPLETED + 7 RUNNING stranded tasks with no recovery path.
  */
 export function recoverStrandedTasksInPlace(tasks: Task[], nowMs: number): StrandedRecovery {
-  const recovery: StrandedRecovery = { requeued: [], expired: [], failed: [] };
+  const recovery: StrandedRecovery = { requeued: [], expired: [], failed: [], duplicatesRetired: [], blockedRequeued: [] };
+  recovery.duplicatesRetired = retireDuplicateTasksInPlace(tasks, nowMs);
   const requeue = (t: Task, reason: string) => {
     t.retryCount += 1;
     if (t.retryCount > Math.max(1, t.maxRetries)) {
@@ -860,6 +909,23 @@ export function recoverStrandedTasksInPlace(tasks: Task[], nowMs: number): Stran
     }
     if (t.state === 'RUNNING' && lastTouch > 0 && lastTouch < nowMs - STALE_THRESHOLD_MS) { requeue(t, 'RUNNING without heartbeat'); continue; }
     if (t.state === 'STALE') { requeue(t, 'STALE'); continue; }
+    // BLOCKED Landing units re-verify (bounded by maxRetries): immediately after a
+    // quoted GitHub rate-limit reset, otherwise every 30 minutes. BLOCKED → QUEUED is a
+    // valid transition; module-audit OWNER_GATE blocks are never touched.
+    if (t.state === 'BLOCKED' && REVERIFY_KEY_PREFIXES.some((prefix) => t.idempotencyKey.startsWith(prefix)) && t.retryCount < Math.max(1, t.maxRetries)) {
+      const reset = /resets (\d{4}-\d{2}-\d{2}T[0-9:.]+Z)/.exec(t.blocker ?? '');
+      const due = reset ? Date.parse(reset[1]) + 30_000 : (Date.parse(t.updatedAt) || 0) + BLOCKED_REVERIFY_MS;
+      if (nowMs >= due) {
+        t.retryCount += 1;
+        t.state = 'QUEUED';
+        t.blocker = null;
+        t.leaseHolder = null;
+        t.leaseExpiresAt = null;
+        t.updatedAt = new Date(nowMs).toISOString();
+        recovery.blockedRequeued.push(t.taskId);
+      }
+      continue;
+    }
     if ((t.state === 'EXECUTION_COMPLETED' || t.state === 'QA_IN_PROGRESS') && lastTouch > 0 && lastTouch < nowMs - STRANDED_MIDCOMPLETION_MS) {
       requeue(t, `${t.state} abandoned mid-completion`);
     }
@@ -895,8 +961,8 @@ async function leaseNextTaskUnlocked(workerId: string, agentNumber?: number | nu
   // from the store, so requeued stale leases must be durable first — otherwise
   // QUEUED→LEASED is rejected as LEASED→LEASED and recovery silently fails.
   await writeAllTasks(tasks);
-  if (recovery.requeued.length + recovery.expired.length + recovery.failed.length > 0) {
-    await appendEvent({ type: 'tasks_recovered', workerId, requeued: recovery.requeued.length, expired: recovery.expired.length, failed: recovery.failed.length, sample: recovery.requeued.slice(0, 5) });
+  if (recovery.requeued.length + recovery.expired.length + recovery.failed.length + recovery.duplicatesRetired.length + recovery.blockedRequeued.length > 0) {
+    await appendEvent({ type: 'tasks_recovered', workerId, requeued: recovery.requeued.length, expired: recovery.expired.length, failed: recovery.failed.length, duplicatesRetired: recovery.duplicatesRetired.length, blockedRequeued: recovery.blockedRequeued.length, sample: recovery.requeued.slice(0, 5) });
   }
 
   // Find highest-priority queued task whose dependencies are met
