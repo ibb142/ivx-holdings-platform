@@ -46,6 +46,25 @@ let api = readFileSync(apiPath, 'utf8');
 const oldSerial = `    const results: Array<{ agentId: string; agentNumber: number; agentName: string; ok: boolean; runId: string | null; durationMs: number; error: string | null; evidenceCount: number }> = [];\n    for (const contract of ALL_AGENT_CONTRACTS) {\n      const taskType = 'audit';\n      const needsApproval = contract.ownerApprovalRules.some((r) => r.required && r.action === 'any_execution');\n      const approvalToken = needsApproval ? \`owner-controlled-\${Date.now()}-\${contract.agentNumber}\` : null;\n      const result = await executeAgentRun(contract.agentId, taskType, { controlled: true }, approvalToken);\n      results.push({ agentId: contract.agentId, agentNumber: contract.agentNumber, agentName: contract.agentName, ok: result.ok, runId: result.runRecord?.runId ?? null, durationMs: result.runRecord?.durationMs ?? 0, error: result.error, evidenceCount: result.runRecord?.evidence.length ?? 0 });\n    }\n`;
 const newParallel = `    const maxParallel = Math.max(1, Math.min(112, Number.parseInt(process.env.IVX_AGENT_EXECUTE_ALL_CONCURRENCY ?? '', 10) || 112));\n    const results: Array<{ agentId: string; agentNumber: number; agentName: string; ok: boolean; runId: string | null; durationMs: number; error: string | null; evidenceCount: number }> = [];\n    for (let offset = 0; offset < ALL_AGENT_CONTRACTS.length; offset += maxParallel) {\n      const batch = ALL_AGENT_CONTRACTS.slice(offset, offset + maxParallel);\n      const batchResults = await Promise.all(batch.map(async (contract) => {\n        const taskType = 'audit';\n        const needsApproval = contract.ownerApprovalRules.some((r) => r.required && r.action === 'any_execution');\n        const approvalToken = needsApproval ? \`owner-controlled-\${Date.now()}-\${contract.agentNumber}\` : null;\n        const result = await executeAgentRun(contract.agentId, taskType, { controlled: true }, approvalToken);\n        return { agentId: contract.agentId, agentNumber: contract.agentNumber, agentName: contract.agentName, ok: result.ok, runId: result.runRecord?.runId ?? null, durationMs: result.runRecord?.durationMs ?? 0, error: result.error, evidenceCount: result.runRecord?.evidence.length ?? 0 };\n      }));\n      results.push(...batchResults);\n    }\n`;
 api = replaceOnce(api, oldSerial, newParallel, 'EXECUTE_ALL_SERIAL');
+
+api = replaceOnce(
+  api,
+  "import { verifyIVXGitHubActionsOIDCRequest } from '../services/ivx-github-actions-oidc';\n",
+  "import { verifyIVXGitHubActionsOIDCRequest } from '../services/ivx-github-actions-oidc';\nimport { applyTruthControl } from '../services/ivx-autonomous-truth-control';\n",
+  'TRUTH_CONTROL_IMPORT',
+);
+api = replaceOnce(
+  api,
+  "    const allowed = ['pause_all', 'resume_all', 'stop_all', 'stop_agent', 'retry_agent', 'reassign'];",
+  "    const allowed = ['start_all', 'pause_all', 'resume_all', 'stop_all', 'stop_agent', 'retry_agent', 'reassign'];",
+  'START_ALL_ALLOWED',
+);
+api = replaceOnce(
+  api,
+  "    if (!legacyAuthorized && (!oidcAuthorized || action !== 'resume_all')) {\n      return c.json({ ok: false, error: 'Owner authorization required.' }, 401);\n    }\n\n    const rawAgent = (body as Record<string, unknown>).agentNumber;",
+  "    const oidcMachineAction = action === 'resume_all' || action === 'start_all';\n    if (!legacyAuthorized && (!oidcAuthorized || !oidcMachineAction)) {\n      return c.json({ ok: false, error: 'Owner authorization required.' }, 401);\n    }\n\n    if (action === 'start_all') {\n      const snapshot = await applyTruthControl('start_all');\n      return c.json({ ok: true, marker: IVX_AGENT_API_MARKER, action, snapshot, authorization: legacyAuthorized ? 'owner' : 'github_oidc_hard_start' });\n    }\n\n    const rawAgent = (body as Record<string, unknown>).agentNumber;",
+  'START_ALL_ROUTE',
+);
 writeFileSync(apiPath, api);
 
 console.log('IVX_112_UTILIZATION_REPAIR_APPLIED');
