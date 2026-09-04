@@ -812,52 +812,115 @@ export async function transitionTaskState(
 
 // ── Phase 8: Leasing ─────────────────────────────────────────────────────────
 
+/** Mid-completion states that must finish within milliseconds; older than this = process died mid-cycle. */
+const STRANDED_MIDCOMPLETION_MS = 10 * 60 * 1000;
+
+export type StrandedRecovery = { requeued: string[]; expired: string[]; failed: string[] };
+
+/**
+ * Recover tasks stranded by a process death (redeploy/crash) so the fleet can
+ * re-lease them instead of idling forever. Mutates `tasks` in place; caller persists.
+ *
+ *   LEASED past leaseExpiresAt                 → QUEUED (existing behaviour)
+ *   RUNNING with heartbeat older than 30 min   → QUEUED (+retry) — was STALE dead-end
+ *   STALE                                      → QUEUED (+retry) or EXPIRED past maxRetries
+ *   EXECUTION_COMPLETED / QA_IN_PROGRESS       → QUEUED (+retry) when untouched > 10 min
+ *
+ * Fail-closed: recovered tasks must be re-executed to produce fresh evidence —
+ * nothing is auto-VERIFIED. Root cause on 2026-09-04 production ledger: 101 STALE +
+ * 18 EXECUTION_COMPLETED + 7 RUNNING stranded tasks with no recovery path.
+ */
+export function recoverStrandedTasksInPlace(tasks: Task[], nowMs: number): StrandedRecovery {
+  const recovery: StrandedRecovery = { requeued: [], expired: [], failed: [] };
+  const requeue = (t: Task, reason: string) => {
+    t.retryCount += 1;
+    if (t.retryCount > Math.max(1, t.maxRetries)) {
+      // STALE may expire; mid-completion strandings fail closed.
+      t.state = t.state === 'STALE' ? 'EXPIRED' : 'FAILED';
+      t.error = `stranded (${reason}) ${t.retryCount - 1} times; exceeded maxRetries=${t.maxRetries}`;
+      (t.state === 'EXPIRED' ? recovery.expired : recovery.failed).push(t.taskId);
+    } else {
+      t.state = 'QUEUED';
+      t.error = null;
+      recovery.requeued.push(t.taskId);
+    }
+    t.leaseHolder = null;
+    t.leaseExpiresAt = null;
+    t.updatedAt = new Date(nowMs).toISOString();
+  };
+  for (const t of tasks) {
+    const lastTouch = Date.parse(t.lastHeartbeatAt ?? t.updatedAt ?? t.createdAt ?? '') || 0;
+    if (t.state === 'LEASED' && t.leaseExpiresAt && Date.parse(t.leaseExpiresAt) < nowMs) {
+      t.state = 'QUEUED';
+      t.leaseHolder = null;
+      t.leaseExpiresAt = null;
+      t.updatedAt = new Date(nowMs).toISOString();
+      recovery.requeued.push(t.taskId);
+      continue;
+    }
+    if (t.state === 'RUNNING' && lastTouch > 0 && lastTouch < nowMs - STALE_THRESHOLD_MS) { requeue(t, 'RUNNING without heartbeat'); continue; }
+    if (t.state === 'STALE') { requeue(t, 'STALE'); continue; }
+    if ((t.state === 'EXECUTION_COMPLETED' || t.state === 'QA_IN_PROGRESS') && lastTouch > 0 && lastTouch < nowMs - STRANDED_MIDCOMPLETION_MS) {
+      requeue(t, `${t.state} abandoned mid-completion`);
+    }
+  }
+  return recovery;
+}
+
+export type LeaseOptions = {
+  /**
+   * Work-stealing: when the agent's own lane (own + unassigned tasks) is empty,
+   * allow leasing QUEUED tasks whose idempotencyKey starts with this prefix even
+   * if they are assigned to another agent. Leasing stays atomic under the
+   * mutation lock, so a task is never executed by two agents at once.
+   */
+  stealPrefix?: string | null;
+};
+
 /**
  * Lease the next queued task for a worker. Returns null when no task is available.
  * Enforces: one active lease per task, lease expiration, priority ordering, and
  * AGENT OWNERSHIP: when agentNumber is provided, only tasks assigned to that
  * agent (or explicitly unassigned shared tasks) are leasable — a task created
- * for IA-37 can never be leased by IA-01.
+ * for IA-37 can never be leased by IA-01 — unless `options.stealPrefix` opts a
+ * mission (e.g. `landing-p0:`) into work-stealing after the own lane is drained.
  */
-async function leaseNextTaskUnlocked(workerId: string, agentNumber?: number | null): Promise<{ ok: boolean; task: Task | null; error: string | null }> {
+async function leaseNextTaskUnlocked(workerId: string, agentNumber?: number | null, options: LeaseOptions = {}): Promise<{ ok: boolean; task: Task | null; error: string | null }> {
   const tasks = await readAllTasks();
 
-  // Expire stale leases first
+  // Expire stale leases + recover tasks stranded by a process death first.
   const now = Date.now();
-  for (const t of tasks) {
-    if (t.state === 'LEASED' && t.leaseExpiresAt && Date.parse(t.leaseExpiresAt) < now) {
-      t.state = 'QUEUED';
-      t.leaseHolder = null;
-      t.leaseExpiresAt = null;
-      t.updatedAt = nowIso();
-    }
-    // Mark stale tasks
-    if (t.state === 'RUNNING' && t.lastHeartbeatAt && Date.parse(t.lastHeartbeatAt) < now - STALE_THRESHOLD_MS) {
-      t.state = 'STALE';
-      t.updatedAt = nowIso();
-    }
-  }
+  const recovery = recoverStrandedTasksInPlace(tasks, now);
   // Persist recovery BEFORE candidate selection: transitionTaskState re-reads
   // from the store, so requeued stale leases must be durable first — otherwise
   // QUEUED→LEASED is rejected as LEASED→LEASED and recovery silently fails.
   await writeAllTasks(tasks);
+  if (recovery.requeued.length + recovery.expired.length + recovery.failed.length > 0) {
+    await appendEvent({ type: 'tasks_recovered', workerId, requeued: recovery.requeued.length, expired: recovery.expired.length, failed: recovery.failed.length, sample: recovery.requeued.slice(0, 5) });
+  }
 
   // Find highest-priority queued task whose dependencies are met
   const priorityOrder: Record<Task['priority'], number> = { critical: 0, high: 1, medium: 2, low: 3 };
-  const candidates = tasks
-    .filter((t) => t.state === 'QUEUED')
+  const dependenciesMet = (t: Task): boolean => t.dependencies.every((depId) => {
+    const dep = tasks.find((d) => d.taskId === depId);
+    return dep && TERMINAL_SUCCESS_STATES.includes(dep.state);
+  });
+  const byPriority = (a: Task, b: Task): number => priorityOrder[a.priority] - priorityOrder[b.priority] || a.executionOrder - b.executionOrder;
+  const queued = tasks.filter((t) => t.state === 'QUEUED' && dependenciesMet(t));
+  let candidates = queued
     // Ownership filter: agents lease only their own tasks plus explicitly
     // unassigned shared tasks. Shared/legacy tasks (assignedAgentNumber null)
     // remain leasable by anyone so existing backlog never strands.
     .filter((t) => agentNumber == null || t.assignedAgentNumber == null || t.assignedAgentNumber === agentNumber)
-    .filter((t) => t.dependencies.every((depId) => {
-      const dep = tasks.find((d) => d.taskId === depId);
-      return dep && TERMINAL_SUCCESS_STATES.includes(dep.state);
-    }))
-    .sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority] || a.executionOrder - b.executionOrder);
+    .sort(byPriority);
+  let stolen = false;
+  if (candidates.length === 0 && options.stealPrefix) {
+    const prefix = options.stealPrefix;
+    candidates = queued.filter((t) => t.idempotencyKey.startsWith(prefix)).sort(byPriority);
+    stolen = candidates.length > 0;
+  }
 
   if (candidates.length === 0) {
-    await writeAllTasks(tasks);
     return { ok: true, task: null, error: null };
   }
 
@@ -877,12 +940,12 @@ async function leaseNextTaskUnlocked(workerId: string, agentNumber?: number | nu
     await writeAllTasks(allTasks);
   }
 
-  await appendEvent({ type: 'task_leased', taskId: task.taskId, workerId });
+  await appendEvent({ type: 'task_leased', taskId: task.taskId, workerId, ...(stolen ? { stolenFromAgentNumber: task.assignedAgentNumber, byAgentNumber: agentNumber ?? null } : {}) });
   return { ok: true, task: transition.task, error: null };
 }
 
-export async function leaseNextTask(workerId: string, agentNumber?: number | null): Promise<{ ok: boolean; task: Task | null; error: string | null }> {
-  return withTaskMutationLock(() => leaseNextTaskUnlocked(workerId, agentNumber));
+export async function leaseNextTask(workerId: string, agentNumber?: number | null, options: LeaseOptions = {}): Promise<{ ok: boolean; task: Task | null; error: string | null }> {
+  return withTaskMutationLock(() => leaseNextTaskUnlocked(workerId, agentNumber, options));
 }
 
 /** Update the heartbeat for a leased/running task. */

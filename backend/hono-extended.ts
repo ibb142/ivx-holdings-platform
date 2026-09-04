@@ -17,6 +17,50 @@ import { reelsOptions, handleReelsStatus, handleReelsPublish, handleReelsFeed, h
 import { ivxDirectAuthOptions, handleIVXDirectAuthSignIn } from './api/ivx-direct-auth';
 import { ivxSupabaseRestartOptions, handleIVXSupabaseRestart } from './api/ivx-supabase-restart';
 import { autonomousIntelligenceMissionSchedulerOptions, handleAutonomousIntelligenceMissionSchedulerGet } from './api/ivx-autonomous-intelligence-mission-scheduler';
+import { buildLandingP0Status, LANDING_P0_LANES, LANDING_P0_UNITS } from './services/ivx-landing-p0-backlog';
+import { getAutonomous112RuntimeEnforcerStatus, getContinuityOutcomes } from './services/ivx-autonomous-runtime-enforcer';
+
+const LANDING_P0_PUBLIC_HEADERS = {
+  'Content-Type': 'application/json; charset=utf-8',
+  'Cache-Control': 'no-store',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+} as const;
+
+function landingP0Json(payload: Record<string, unknown>, status: number = 200): Response {
+  return new Response(JSON.stringify(payload), { status, headers: LANDING_P0_PUBLIC_HEADERS });
+}
+
+// Landing P0 fleet status — owner report data source. Public read, fail-closed,
+// derived from the durable task ledger only (no secrets, no simulated agents).
+app.options('/api/ivx/landing-p0/status', () => new Response(null, { status: 204, headers: LANDING_P0_PUBLIC_HEADERS }));
+app.get('/api/ivx/landing-p0/status', async () => {
+  try {
+    const status = await buildLandingP0Status();
+    const enforcer = getAutonomous112RuntimeEnforcerStatus();
+    return landingP0Json({
+      ...status,
+      continuity: {
+        running: enforcer.running,
+        continuityEnabled: enforcer.continuityEnabled,
+        inFlight: enforcer.continuityInFlight,
+        refillStarted: enforcer.refillStarted,
+        refillCompleted: enforcer.refillCompleted,
+        refillBlocked: enforcer.refillBlocked,
+        refillIdle: enforcer.refillIdle,
+        refillFailed: enforcer.refillFailed,
+        agentsByOutcome: enforcer.agentsByOutcome,
+      },
+      lanes: LANDING_P0_LANES,
+      unitsDefined: LANDING_P0_UNITS.length,
+    });
+  } catch (error) {
+    return landingP0Json({ ok: false, error: error instanceof Error ? error.message : 'landing-p0 status unavailable' }, 500);
+  }
+});
+app.options('/api/ivx/landing-p0/agents', () => new Response(null, { status: 204, headers: LANDING_P0_PUBLIC_HEADERS }));
+app.get('/api/ivx/landing-p0/agents', async () => landingP0Json({ ok: true, agents: getContinuityOutcomes() }));
 
 app.options('/api/ivx/autonomous/control-plane', () => autonomousControlPlaneOptions());
 app.get('/api/ivx/autonomous/control-plane', async (c) => handleAutonomousControlPlaneGet(c.req.raw));
