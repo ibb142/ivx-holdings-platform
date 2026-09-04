@@ -1,23 +1,18 @@
 /**
  * Full provider tree — ALL providers imported synchronously.
- *
- * The tree structure NEVER changes between renders. Every provider is
- * wrapped in a ProviderBoundary so a crash in one provider does not
- * kill the entire app. This is the stable approach: no dynamic imports,
- * no staged loading, no tree restructure that unmounts the navigation
- * stack and causes a black screen.
  */
 import React, { Component, type ReactNode } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Stack } from 'expo-router';
+import { Stack, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { DiagnosticErrorBoundary } from '@/components/DiagnosticErrorBoundary';
 import { injectWebKeyboardCSS } from '@/hooks/useWebKeyboard';
 import { checkForUpdates } from '@/lib/app-update-checker';
 import { logStartup } from '@/lib/startup-trace';
+import { supabase } from '@/lib/supabase';
 import Colors from '@/constants/colors';
 
 import { I18nProvider } from '@/lib/i18n-context';
@@ -87,19 +82,64 @@ class ProviderBoundary extends Component<ProviderBoundaryProps, ProviderBoundary
   }
 }
 
+const PUBLIC_PATHS = new Set(['/', '/index', '/login', '/signup', '/landing', '/verify-access']);
+
+function VerificationGate() {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    const enforce = async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (cancelled || !sessionData.session) return;
+
+      const { data, error } = await supabase.rpc('ivx_my_platform_access_status');
+      if (cancelled || error) {
+        if (error) console.warn('[IVX] Platform verification gate lookup failed:', error.message);
+        return;
+      }
+
+      const row = Array.isArray(data) ? data[0] : data;
+      const needsVerification = Boolean(row?.verification_required || (row && row.access_status !== 'active'));
+      if (needsVerification && pathname !== '/verify-access') {
+        router.replace('/verify-access');
+        return;
+      }
+      if (!needsVerification && pathname === '/verify-access') {
+        router.replace('/(tabs)/home');
+      }
+    };
+
+    void enforce();
+    const { data: listener } = supabase.auth.onAuthStateChange(() => { void enforce(); });
+    return () => {
+      cancelled = true;
+      listener.subscription.unsubscribe();
+    };
+  }, [pathname, router]);
+
+  return null;
+}
+
 function AppStack() {
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0A0A0F' } }}>
-      <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen name="login" options={{ headerShown: false }} />
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="admin" options={{ headerShown: false }} />
-      <Stack.Screen name="ivx" options={{ headerShown: false }} />
-      <Stack.Screen name="property/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="landing" options={{ headerShown: false }} />
-      <Stack.Screen name="signup" options={{ headerShown: false }} />
-      <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-    </Stack>
+    <>
+      <VerificationGate />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0A0A0F' } }}>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="admin" options={{ headerShown: false }} />
+        <Stack.Screen name="ivx" options={{ headerShown: false }} />
+        <Stack.Screen name="property/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="landing" options={{ headerShown: false }} />
+        <Stack.Screen name="signup" options={{ headerShown: false }} />
+        <Stack.Screen name="verify-access" options={{ headerShown: false }} />
+        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+      </Stack>
+    </>
   );
 }
 
