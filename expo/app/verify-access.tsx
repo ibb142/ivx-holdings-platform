@@ -22,10 +22,7 @@ async function authenticatedPost(path: string, body: Record<string, unknown>) {
   if (!token) throw new Error('Your secure session expired. Please sign in again.');
   const response = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
   });
   const payload = await response.json().catch(() => ({}));
@@ -53,15 +50,11 @@ export default function VerifyAccessScreen() {
     if (error) throw error;
     const row = (Array.isArray(data) ? data[0] : data) as AccessStatus | null;
     setStatus(row);
-    if (row && row.access_status === 'active') {
-      router.replace('/(tabs)/home');
-    }
+    if (row && row.access_status === 'active') router.replace('/(tabs)/home');
   }, [router]);
 
   useEffect(() => {
-    void refresh()
-      .catch((error) => Alert.alert('Verification status', (error as Error).message))
-      .finally(() => setLoading(false));
+    void refresh().catch((error) => Alert.alert('Verification status', (error as Error).message)).finally(() => setLoading(false));
   }, [refresh]);
 
   const run = useCallback(async (action: () => Promise<unknown>, successMessage: string) => {
@@ -77,52 +70,33 @@ export default function VerifyAccessScreen() {
     }
   }, [refresh]);
 
-  if (loading) {
-    return <SafeAreaView style={styles.container}><ActivityIndicator size="large" color={Colors.primary} /></SafeAreaView>;
-  }
+  if (loading) return <SafeAreaView style={styles.container}><ActivityIndicator size="large" color={Colors.primary} /></SafeAreaView>;
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.card}>
         <Text style={styles.title}>Verify your IVX account</Text>
         <Text style={styles.subtitle}>For account security, email and mobile verification are required before private platform access.</Text>
-
         <View style={styles.section}>
           <Text style={styles.label}>Email</Text>
           <Text style={status?.email_verified ? styles.ok : styles.required}>{status?.email_verified ? 'Verified' : 'Verification required'}</Text>
-          {!status?.email_verified && (
-            <>
-              <TouchableOpacity disabled={busy} style={styles.secondaryButton} onPress={() => void run(() => authenticatedPost('/api/members/send-email-code', {}), 'Email verification code sent.')}>
-                <Text style={styles.secondaryText}>Send email code</Text>
-              </TouchableOpacity>
-              <TextInput value={emailCode} onChangeText={setEmailCode} keyboardType="number-pad" maxLength={6} placeholder="6-digit email code" placeholderTextColor="#777" style={styles.input} />
-              <TouchableOpacity disabled={busy || emailCode.length !== 6} style={styles.primaryButton} onPress={() => void run(() => authenticatedPost('/api/members/verify-email', { code: emailCode }), 'Email verified.')}>
-                <Text style={styles.primaryText}>Verify email</Text>
-              </TouchableOpacity>
-            </>
-          )}
+          {!status?.email_verified && <>
+            <TouchableOpacity disabled={busy} style={styles.secondaryButton} onPress={() => void run(() => authenticatedPost('/api/members/send-email-code', {}), 'Email verification code sent.')}><Text style={styles.secondaryText}>Send email code</Text></TouchableOpacity>
+            <TextInput value={emailCode} onChangeText={setEmailCode} keyboardType="number-pad" maxLength={6} accessibilityLabel="Email verification code" style={styles.input} />
+            <TouchableOpacity disabled={busy || emailCode.length !== 6} style={styles.primaryButton} onPress={() => void run(() => authenticatedPost('/api/members/verify-email', { code: emailCode }), 'Email verified.')}><Text style={styles.primaryText}>Verify email</Text></TouchableOpacity>
+          </>}
         </View>
-
         <View style={styles.section}>
           <Text style={styles.label}>Mobile phone</Text>
           <Text style={status?.phone_verified ? styles.ok : styles.required}>{status?.phone_verified ? 'Verified' : 'Verification required'}</Text>
-          {!status?.phone_verified && (
-            <>
-              <TouchableOpacity disabled={busy} style={styles.secondaryButton} onPress={() => void run(() => authenticatedPost('/api/members/send-phone-code', {}), 'SMS verification code sent.')}>
-                <Text style={styles.secondaryText}>Send SMS code</Text>
-              </TouchableOpacity>
-              <TextInput value={phoneCode} onChangeText={setPhoneCode} keyboardType="number-pad" maxLength={6} placeholder="6-digit SMS code" placeholderTextColor="#777" style={styles.input} />
-              <TouchableOpacity disabled={busy || phoneCode.length !== 6} style={styles.primaryButton} onPress={() => void run(() => authenticatedPost('/api/members/verify-phone', { code: phoneCode }), 'Mobile phone verified.')}>
-                <Text style={styles.primaryText}>Verify mobile</Text>
-              </TouchableOpacity>
-            </>
-          )}
+          {!status?.phone_verified && <>
+            <TouchableOpacity disabled={busy} style={styles.secondaryButton} onPress={() => void run(() => authenticatedPost('/api/members/send-phone-code', {}), 'SMS verification code sent.')}><Text style={styles.secondaryText}>Send SMS code</Text></TouchableOpacity>
+            <TextInput value={phoneCode} onChangeText={setPhoneCode} keyboardType="number-pad" maxLength={6} accessibilityLabel="SMS verification code" style={styles.input} />
+            <TouchableOpacity disabled={busy || phoneCode.length !== 6} style={styles.primaryButton} onPress={() => void run(() => authenticatedPost('/api/members/verify-phone', { code: phoneCode }), 'Mobile phone verified.')}><Text style={styles.primaryText}>Verify mobile</Text></TouchableOpacity>
+          </>}
         </View>
-
         {busy && <ActivityIndicator color={Colors.primary} style={{ marginTop: 16 }} />}
-        <TouchableOpacity style={styles.signOut} onPress={() => void supabase.auth.signOut().then(() => router.replace('/login'))}>
-          <Text style={styles.signOutText}>Sign out</Text>
-        </TouchableOpacity>
+        <TouchableOpacity style={styles.signOut} onPress={() => void supabase.auth.signOut().then(() => router.replace('/login'))}><Text style={styles.signOutText}>Sign out</Text></TouchableOpacity>
       </View>
     </SafeAreaView>
   );
