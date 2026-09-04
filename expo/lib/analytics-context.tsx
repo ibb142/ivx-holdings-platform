@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { InteractionManager } from 'react-native';
 import { analytics } from './analytics';
+import { supabase } from './supabase';
 import { usePathname } from 'expo-router';
 import type { EventCategory } from './analytics';
 import createContextHook from '@nkzw/create-context-hook';
@@ -45,23 +46,15 @@ export const [AnalyticsProvider, useAnalytics] = createContextHook<AnalyticsHook
     let booted = false;
 
     const bootstrapAnalytics = () => {
-      if (cancelled || booted) {
-        return;
-      }
-
+      if (cancelled || booted) return;
       booted = true;
       analytics.revive();
       void analytics.initialize();
-      console.log('[Analytics] Provider mounted — service boot deferred until after first interactions');
       analytics.track('app_open', 'navigation', { timestamp: Date.now() });
     };
 
-    const interactionTask = InteractionManager.runAfterInteractions(() => {
-      bootstrapAnalytics();
-    });
-    const fallbackTimeout = setTimeout(() => {
-      bootstrapAnalytics();
-    }, 900);
+    const interactionTask = InteractionManager.runAfterInteractions(bootstrapAnalytics);
+    const fallbackTimeout = setTimeout(bootstrapAnalytics, 900);
 
     return () => {
       cancelled = true;
@@ -76,37 +69,61 @@ export const [AnalyticsProvider, useAnalytics] = createContextHook<AnalyticsHook
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    let lastBoundUserId: string | null = null;
+
+    const bindIdentity = async (userId?: string | null) => {
+      if (cancelled || !userId || userId === lastBoundUserId) return;
+      const sessionId = analytics.getSessionId();
+      if (!sessionId) return;
+
+      const { error } = await supabase.rpc('ivx_analytics_identify', { p_session_id: sessionId });
+      if (cancelled) return;
+      if (error) {
+        console.log('[Analytics] Identity stitch failed:', error.message);
+        return;
+      }
+
+      lastBoundUserId = userId;
+      analytics.track('analytics_identity_bound', 'engagement', {
+        userId,
+        session_id: sessionId,
+      });
+      await analytics.forceSyncNow();
+    };
+
+    void supabase.auth.getSession()
+      .then(({ data }) => bindIdentity(data.session?.user?.id))
+      .catch((error) => console.log('[Analytics] Initial identity lookup failed:', (error as Error)?.message ?? 'unknown'));
+
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session?.user?.id) {
+        lastBoundUserId = null;
+        return;
+      }
+      void bindIdentity(session.user.id);
+    });
+
+    return () => {
+      cancelled = true;
+      data.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
     if (pathname && pathname !== lastPathnameRef.current) {
       lastPathnameRef.current = pathname;
       const screenName = pathname === '/' ? 'home' : pathname.replace(/^\//, '').replace(/\//g, '_');
       analytics.trackScreenView(screenName, { path: pathname });
-      console.log('[Analytics] Screen view tracked:', screenName);
     }
   }, [pathname]);
 
-  const trackScreen = useCallback((screenName: string, params?: Record<string, unknown>) => {
-    analytics.trackScreenView(screenName, params);
-  }, []);
-
-  const trackAction = useCallback((action: string, details?: Record<string, unknown>) => {
-    analytics.trackUserAction(action, details);
-  }, []);
-
-  const trackTransaction = useCallback((type: 'buy' | 'sell' | 'deposit' | 'withdraw', amount: number, currency: string, details?: Record<string, unknown>) => {
-    analytics.trackTransaction(type, amount, currency, details);
-  }, []);
-
-  const trackConversion = useCallback((conversionType: string, value?: number, details?: Record<string, unknown>) => {
-    analytics.trackConversion(conversionType, value, details);
-  }, []);
-
-  const trackError = useCallback((errorName: string, errorMessage: string, stack?: string, context?: Record<string, unknown>) => {
-    analytics.trackError(errorName, errorMessage, stack, context);
-  }, []);
-
-  const track = useCallback((name: string, category?: EventCategory, properties?: Record<string, unknown>) => {
-    analytics.track(name, category, properties);
-  }, []);
+  const trackScreen = useCallback((screenName: string, params?: Record<string, unknown>) => analytics.trackScreenView(screenName, params), []);
+  const trackAction = useCallback((action: string, details?: Record<string, unknown>) => analytics.trackUserAction(action, details), []);
+  const trackTransaction = useCallback((type: 'buy' | 'sell' | 'deposit' | 'withdraw', amount: number, currency: string, details?: Record<string, unknown>) => analytics.trackTransaction(type, amount, currency, details), []);
+  const trackConversion = useCallback((conversionType: string, value?: number, details?: Record<string, unknown>) => analytics.trackConversion(conversionType, value, details), []);
+  const trackError = useCallback((errorName: string, errorMessage: string, stack?: string, context?: Record<string, unknown>) => analytics.trackError(errorName, errorMessage, stack, context), []);
+  const track = useCallback((name: string, category?: EventCategory, properties?: Record<string, unknown>) => analytics.track(name, category, properties), []);
 
   return useMemo<AnalyticsHook>(() => ({
     trackScreen,
