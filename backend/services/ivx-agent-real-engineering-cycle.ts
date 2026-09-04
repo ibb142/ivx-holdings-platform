@@ -21,6 +21,7 @@ import {
   addTaskEvidence,
   createTask,
   getAllTasks,
+  getTaskById,
   heartbeat,
   leaseNextTask,
   releaseLease,
@@ -30,6 +31,17 @@ import {
   type TaskEvidence,
 } from './ivx-autonomous-task-engine';
 import { containPath, fileHasUnexemptedSecret, resolveRepoRoot } from './ivx-agent-engineering-tools';
+import {
+  encodeLandingResult,
+  ensureLandingP0BacklogSeeded,
+  getLandingUnit,
+  isLandingP0MissionActive,
+  LANDING_P0_PREFIX,
+  landingRepairKey,
+  parseLandingTaskKey,
+  resolveProductionSha,
+} from './ivx-landing-p0-backlog';
+import { executeLandingUnit } from './ivx-landing-p0-executor';
 
 export const IVX_REAL_ENGINEERING_CYCLE_MARKER = 'ivx-agent-real-engineering-cycle-2026-09-01';
 
@@ -51,7 +63,7 @@ export type RealEngineeringCycleResult = {
   ok: boolean;
   marker: string;
   agentId: string;
-  action: 'TASK_COMPLETED' | 'TASK_OWNER_GATE' | 'TASK_FAILED' | 'NO_TASK_AVAILABLE' | 'CYCLE_ERROR';
+  action: 'TASK_COMPLETED' | 'TASK_OWNER_GATE' | 'TASK_BLOCKED' | 'TASK_FAILED' | 'NO_TASK_AVAILABLE' | 'CYCLE_ERROR';
   taskId: string | null;
   module: string | null;
   sourceSha: string;
@@ -254,7 +266,22 @@ export async function runRealEngineeringCycle(input: {
   const cycleStart = Date.now();
 
   try {
-    let leased = await leaseNextTask(workerId, input.agentNumber);
+    // Owner P0 mission (qa/owner-priority-state.json → landing): materialise the
+    // Landing backlog as real ledger tasks and let drained lanes steal Landing work.
+    const landingActive = await isLandingP0MissionActive();
+    const leaseOptions = landingActive ? { stealPrefix: LANDING_P0_PREFIX } : {};
+    if (landingActive) await ensureLandingP0BacklogSeeded(input.sourceSha);
+
+    let leased = await leaseNextTask(workerId, input.agentNumber, leaseOptions);
+    if ((!leased.ok || !leased.task) && landingActive) {
+      // Own lane drained and nothing to steal right now: one more seed pass
+      // (idempotent) covers a SHA change since the cached seeding.
+      await ensureLandingP0BacklogSeeded(input.sourceSha);
+      leased = await leaseNextTask(workerId, input.agentNumber, leaseOptions);
+    }
+    if ((leased.ok && leased.task) && parseLandingTaskKey(leased.task.idempotencyKey)) {
+      return runLandingTask(leased.task, workerId, input, base);
+    }
     if (!leased.ok || !leased.task) {
       const seeded = await seedModuleAuditTask(input.sourceSha, input.agentId, input.agentNumber);
       if (seeded && TERMINAL_SUCCESS_STATES.includes(seeded.state)) {
@@ -269,10 +296,13 @@ export async function runRealEngineeringCycle(input: {
           nextTaskAvailable: false, error: null,
         };
       }
-      leased = await leaseNextTask(workerId, input.agentNumber);
+      leased = await leaseNextTask(workerId, input.agentNumber, leaseOptions);
     }
     if (!leased.ok || !leased.task) {
       return { ...base, ok: true, action: 'NO_TASK_AVAILABLE', nextTaskAvailable: false, finishedAt: nowIso() };
+    }
+    if (parseLandingTaskKey(leased.task.idempotencyKey)) {
+      return runLandingTask(leased.task, workerId, input, base);
     }
     const task = leased.task;
     const startedAt = nowIso();
@@ -458,4 +488,127 @@ export async function getFleetEngineeringMetrics(fleetSize = 112): Promise<Fleet
     modulesCovered,
     note: 'Productive minutes are summed from real, evidence-backed task execution spans only (capped at 30 min/task). Utilization denominator is fleetSize×24h wall-clock.',
   };
+}
+
+// ── Landing P0 execution path ────────────────────────────────────────────────────────
+
+/**
+ * Execute one Landing P0 unit (or repair unit) leased from the durable ledger.
+ *
+ * Lifecycle: LEASED → RUNNING → real executor → evidence persisted →
+ *   PASS/FAIL  : EXECUTION_COMPLETED → QA_IN_PROGRESS → VERIFIED (audit executed with fresh evidence)
+ *   BLOCKED    : BLOCKED with the exact reason (evidence unobtainable — never PASS)
+ *
+ * An audit FAIL queues ONE idempotent repair task per defect in the same lane.
+ * A repair unit re-verifies: PASS = defect no longer reproducible; FAIL = BLOCKED
+ * with the exact remediation (repairs never spawn repairs — no loops).
+ */
+async function runLandingTask(
+  task: Task,
+  workerId: string,
+  input: { agentId: string; agentNumber: number | null; sourceSha: string },
+  base: RealEngineeringCycleResult,
+): Promise<RealEngineeringCycleResult> {
+  const parsed = parseLandingTaskKey(task.idempotencyKey);
+  const unit = parsed ? getLandingUnit(parsed.unitId) : null;
+  const startedAt = nowIso();
+  const states: string[] = ['LEASED'];
+  const repairTaskIds: string[] = [];
+
+  await heartbeat(task.taskId, workerId);
+  const toRunning = await transitionTaskState(task.taskId, 'RUNNING');
+  if (!toRunning.ok) {
+    await releaseLease(task.taskId, workerId);
+    return { ...base, ok: false, action: 'CYCLE_ERROR', taskId: task.taskId, startedAt, states, error: `RUNNING transition refused: ${toRunning.error}` };
+  }
+  states.push('RUNNING');
+
+  if (!parsed || !unit) {
+    await transitionTaskState(task.taskId, 'FAILED', { error: `unknown landing unit in key ${task.idempotencyKey}` });
+    states.push('FAILED');
+    return { ...base, ok: false, action: 'TASK_FAILED', taskId: task.taskId, startedAt, finishedAt: nowIso(), states, error: 'unknown landing unit' };
+  }
+
+  const { record, full } = await executeLandingUnit(unit, {
+    agentId: input.agentId,
+    agentNumber: input.agentNumber,
+    taskId: task.taskId,
+    sourceSha: input.sourceSha,
+    productionSha: resolveProductionSha(),
+    repair: parsed.repair,
+  });
+  const evidenceType: TaskEvidence['evidenceType'] = unit.check.kind === 'ci' ? 'test_result' : 'production_verification';
+  const added = await addTaskEvidence(task.taskId, await makeEvidence(evidenceType, unit.unitId, encodeLandingResult(record)));
+  if (!added.ok) {
+    await transitionTaskState(task.taskId, 'FAILED', { error: `evidence persistence refused: ${added.error}` });
+    states.push('FAILED');
+    return { ...base, ok: false, action: 'TASK_FAILED', taskId: task.taskId, module: unit.unitId, startedAt, finishedAt: nowIso(), states, error: added.error };
+  }
+  const stored = await getTaskById(task.taskId);
+  const evidenceIds = stored?.evidence.map((e) => e.evidenceId) ?? [];
+  const productiveMinutes = Math.round((full.productive_seconds / 60) * 10) / 10;
+  console.log('[IVX Landing P0] unit executed', {
+    agentNumber: input.agentNumber,
+    unit: unit.unitId,
+    repair: parsed.repair,
+    status: full.status,
+    productiveSeconds: full.productive_seconds,
+    apiChecks: full.api_checks.length,
+    bugs: full.bugs_found.length,
+    blocked: full.blocked_reason,
+    detail: full.test_results[0],
+  });
+
+  const done = (action: RealEngineeringCycleResult['action']): RealEngineeringCycleResult => ({
+    ...base, ok: true, action, taskId: task.taskId, module: unit.unitId, startedAt, finishedAt: nowIso(), states, evidenceIds,
+    repairTaskIds, filesInspected: full.files_inspected, productiveMinutes, nextTaskAvailable: true, error: null,
+  });
+
+  if (full.status === 'BLOCKED') {
+    const blockedTransition = await transitionTaskState(task.taskId, 'BLOCKED', { blocker: full.blocked_reason ?? 'evidence unavailable' });
+    states.push(blockedTransition.ok ? 'BLOCKED' : `BLOCKED_REFUSED:${blockedTransition.error ?? 'unknown'}`);
+    return done('TASK_BLOCKED');
+  }
+
+  if (parsed.repair && full.status === 'FAIL') {
+    const defect = full.bugs_found[0];
+    const blockedTransition = await transitionTaskState(task.taskId, 'BLOCKED', {
+      blocker: `DEFECT PERSISTS [${defect?.severity ?? unit.severity}] ${defect?.detail ?? unit.title} → ${defect?.remediation ?? 'investigate'}`,
+    });
+    states.push(blockedTransition.ok ? 'BLOCKED' : `BLOCKED_REFUSED:${blockedTransition.error ?? 'unknown'}`);
+    return done('TASK_BLOCKED');
+  }
+
+  if (!parsed.repair && full.status === 'FAIL') {
+    for (const defect of full.bugs_found) {
+      const repair = await createTask({
+        title: `Landing P0 repair · ${unit.unitId} · ${defect.code}`,
+        description: `[${defect.severity}] ${defect.detail}\nRoot cause: ${defect.root_cause}\nRemediation: ${defect.remediation}\nRe-verify unit ${unit.unitId} against production SHA ${parsed.sha}.`,
+        taskType: 'qa',
+        idempotencyKey: landingRepairKey(parsed.sha, unit.unitId, defect.code),
+        priority: defect.severity === 'P0' ? 'critical' : 'high',
+        assignedAgentNumber: task.assignedAgentNumber,
+        maxRetries: 1,
+      });
+      if (repair.ok && repair.task) repairTaskIds.push(repair.task.taskId);
+    }
+  }
+
+  // Complete fail-closed: EXECUTION_COMPLETED → QA_IN_PROGRESS → VERIFIED.
+  const execDone = await transitionTaskState(task.taskId, 'EXECUTION_COMPLETED');
+  if (!execDone.ok) {
+    await transitionTaskState(task.taskId, 'FAILED', { error: `EXECUTION_COMPLETED refused: ${execDone.error}` });
+    states.push('FAILED');
+    return { ...done('TASK_FAILED'), ok: false, error: execDone.error };
+  }
+  states.push('EXECUTION_COMPLETED');
+  const qa = await transitionTaskState(task.taskId, 'QA_IN_PROGRESS');
+  states.push(qa.ok ? 'QA_IN_PROGRESS' : 'QA_TRANSITION_REFUSED');
+  const verified = await transitionTaskState(task.taskId, 'VERIFIED');
+  if (!verified.ok) {
+    states.push(`VERIFY_REFUSED:${verified.error ?? 'unknown'}`);
+    return { ...done('TASK_FAILED'), ok: false, error: verified.error };
+  }
+  states.push('VERIFIED');
+  return done('TASK_COMPLETED');
 }
