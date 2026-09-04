@@ -1,31 +1,45 @@
-name: IVX 112 Agent Utilization Repair
+name: IVX 112 Agent Utilization & Cascade QA
 
 on:
-  push:
-  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'backend/services/ivx-autonomous-truth-control.ts'
+      - 'backend/services/ivx-campaign-dispatcher.ts'
+      - 'backend/api/ivx-agent-api.ts'
+      - '.github/workflows/ivx-112-utilization-repair.yml'
+  workflow_dispatch: {}
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: ivx-112-agent-utilization-repair
-  cancel-in-progress: false
+  group: ivx-112-agent-utilization-cascade-qa-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  repair-and-qa:
+  verify-cascade-and-utilization:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 20
     steps:
-      - name: Checkout repair branch
+      - name: Checkout current SHA
         uses: actions/checkout@v4
         with:
-          ref: fix/112-agent-utilization-control
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - name: Apply deterministic utilization repair
-        run: node scripts/repair-112-utilization.mjs
+      - name: Verify 10 -> 10 cascade contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=backend/services/ivx-autonomous-truth-control.ts
+          grep -q "IVX_AUTONOMOUS_CASCADE_SEED_SIZE = 10" "$file"
+          grep -q "IVX_AUTONOMOUS_CASCADE_FANOUT = 10" "$file"
+          grep -q "async function cascadeStartAllAgents" "$file"
+          grep -q "if(action==='start_all') await cascadeStartAllAgents()" "$file"
+          grep -q "cascadeActivation:{seedSize:IVX_AUTONOMOUS_CASCADE_SEED_SIZE,fanout:IVX_AUTONOMOUS_CASCADE_FANOUT}" "$file"
+          echo 'cascade_10x10_contract=PASS'
 
-      - name: Static safety assertions
+      - name: Verify 112 utilization invariants
+        shell: bash
         run: |
           set -euo pipefail
           grep -q "Math.min(raw, 112) : 112" backend/services/ivx-campaign-dispatcher.ts
@@ -33,6 +47,7 @@ jobs:
           grep -q "utilization24h" backend/services/ivx-campaign-dispatcher.ts
           grep -q "Promise.all(batch.map" backend/api/ivx-agent-api.ts
           grep -q "IVX_AGENT_EXECUTE_ALL_CONCURRENCY" backend/api/ivx-agent-api.ts
+          echo 'utilization_invariants=PASS'
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -45,21 +60,9 @@ jobs:
       - name: Backend TypeScript hard gate
         run: bunx tsc -p backend/tsconfig.json --noEmit
 
-      - name: Focused agent and dispatcher tests
+      - name: Focused cascade, agent, and dispatcher tests
+        shell: bash
         run: |
           set -euo pipefail
-          mapfile -t files < <(find backend -type f \( -name '*campaign-dispatcher*.test.ts' -o -name '*agent-api*.test.ts' -o -name '*app-completion-campaign*.test.ts' -o -name '*agent-runtime*.test.ts' \) -print)
+          mapfile -t files < <(find backend -type f \( -name '*autonomous-truth-control*.test.ts' -o -name '*campaign-dispatcher*.test.ts' -o -name '*agent-api*.test.ts' -o -name '*agent-runtime*.test.ts' \) -print)
           if [ "${#files[@]}" -gt 0 ]; then bun test "${files[@]}"; else echo "No focused tests found"; fi
-
-      - name: Commit QA-verified source repair
-        run: |
-          set -euo pipefail
-          if git diff --quiet -- backend/services/ivx-campaign-dispatcher.ts backend/api/ivx-agent-api.ts; then
-            echo "No source changes required."
-            exit 0
-          fi
-          git config user.name "ivx-autonomous"
-          git config user.email "ivx-autonomous@users.noreply.github.com"
-          git add backend/services/ivx-campaign-dispatcher.ts backend/api/ivx-agent-api.ts
-          git commit -m "fix(autonomous): unleash 112-agent utilization safely"
-          git push origin HEAD:fix/112-agent-utilization-control
