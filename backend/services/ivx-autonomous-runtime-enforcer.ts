@@ -1,6 +1,7 @@
 import { enforceAutonomous112RuntimeTruth, IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS } from './ivx-autonomous-truth-control';
 import { getAllExecutionStates } from './ivx-agent-runtime';
 import { runRealEngineeringCycle } from './ivx-agent-real-engineering-cycle';
+import { archiveTasksForOtherShas } from './ivx-autonomous-task-engine';
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let startedAt: string | null = null;
@@ -8,7 +9,16 @@ let lastRunAt: string | null = null;
 let lastOk: boolean | null = null;
 let lastRecovered: number[] = [];
 let lastError: string | null = null;
-let continuityEnabled = false;
+/**
+ * Continuity is ON by default (IVX_CONTINUITY_DEFAULT=off to change) and is only
+ * switched off by a SUCCESSFUL truth snapshot that reports dispatcher pause or
+ * emergency stop. A transient exception (Supabase timeout during a redeploy storm)
+ * must never idle 112 agents — on 2026-09-04 it did, for every boot.
+ */
+let continuityEnabled = (process.env.IVX_CONTINUITY_DEFAULT ?? 'on').trim().toLowerCase() !== 'off';
+let lastArchiveAt = 0;
+let lastArchiveResult: { archived: number; shas: string[]; remaining: number; at: string } | null = null;
+const ARCHIVE_THROTTLE_MS = 10 * 60 * 1000;
 let refillStarted = 0;
 let refillCompleted = 0;
 let refillFailed = 0;
@@ -137,10 +147,35 @@ function refillRecoveredAgents(agentNumbers: number[]): void {
 
 function refillAllAvailableAgents(): void {
   if (!continuityEnabled) return;
+  // Stagger the wave (150ms apart → 112 agents over ~17s): every lease is a full
+  // ledger write behind one mutex, so a simultaneous burst at boot only queues on
+  // the lock and saturates the durable store.
+  let index = 0;
   for (const state of getAllExecutionStates()) {
-    if (state.agentNumber != null && canRunContinuity(state.agentId)) {
-      startContinuityRun(state.agentId, state.agentNumber);
-    }
+    if (state.agentNumber == null || !canRunContinuity(state.agentId)) continue;
+    const { agentId, agentNumber } = state;
+    if (continuityRuns.has(agentId)) continue;
+    const kick = setTimeout(() => {
+      if (canRunContinuity(agentId)) startContinuityRun(agentId, agentNumber);
+    }, Math.min(index, 111) * 150);
+    kick.unref?.();
+    index += 1;
+  }
+}
+
+/** Move previous-deploy tasks out of the hot ledger document (throttled; never deletes). */
+async function maybeArchiveObsoleteShaTasks(): Promise<void> {
+  const now = Date.now();
+  if (now - lastArchiveAt < ARCHIVE_THROTTLE_MS) return;
+  lastArchiveAt = now;
+  const sha = currentSourceSha();
+  if (sha === 'runtime-unknown-sha') return;
+  try {
+    const result = await archiveTasksForOtherShas(sha);
+    lastArchiveResult = { ...result, at: new Date().toISOString() };
+    if (result.archived > 0) console.log('[IVX Autonomous 112 Runtime Enforcer] archived obsolete-SHA tasks', lastArchiveResult);
+  } catch (error) {
+    console.error('[IVX Autonomous 112 Runtime Enforcer] archive failed', { error: error instanceof Error ? error.message : String(error) });
   }
 }
 
@@ -163,6 +198,7 @@ async function run(reason: 'boot' | 'interval'): Promise<void> {
 
     refillRecoveredAgents(result.recovered);
     refillAllAvailableAgents();
+    void maybeArchiveObsoleteShaTasks();
     console.log('[IVX Autonomous 112 Runtime Enforcer]', {
       reason,
       ok: result.ok,
@@ -182,11 +218,13 @@ async function run(reason: 'boot' | 'interval'): Promise<void> {
       refillFailed,
     });
   } catch (error) {
-    continuityEnabled = false;
+    // Keep the last-known owner intent; a failed truth read is not a stop order.
     lastOk = false;
     lastRecovered = [];
     lastError = error instanceof Error ? error.message : String(error);
-    console.error('[IVX Autonomous 112 Runtime Enforcer] failed', { reason, error: lastError });
+    console.error('[IVX Autonomous 112 Runtime Enforcer] failed (continuity keeps last-known state)', { reason, error: lastError, continuityEnabled });
+    refillAllAvailableAgents();
+    void maybeArchiveObsoleteShaTasks();
   }
 }
 
@@ -219,6 +257,7 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     idleRefillDelayMs: refillDelayMs('idle'),
     failedRefillBackoffMs: refillDelayMs('failed'),
     agentsByOutcome: getContinuityOutcomeCounts(),
+    lastArchive: lastArchiveResult,
     truthPolicy: 'Idle/stale/unknown and available agents receive real durable engineering-cycle work; completed agents re-lease immediately; idle (no eligible task) and ALREADY_VERIFIED reruns are never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
   };
 }

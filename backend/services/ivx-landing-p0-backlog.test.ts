@@ -8,11 +8,15 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'bun:test'
 import { rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import {
+  archiveTasksForOtherShas,
+  completeTaskChain,
+  createTask,
   getAllTasks,
   getTaskById,
   leaseNextTask,
   recoverStrandedTasksInPlace,
   retireDuplicateTasksInPlace,
+  taskSourceSha,
   transitionTaskState,
   type Task,
 } from './ivx-autonomous-task-engine';
@@ -355,5 +359,68 @@ describe('Executor produces real evidence from live responses (injected fetch)',
     expect(scanForSecrets(`window.__cfg={key:"${anon}"}`)).toEqual([]);
     expect(scanForSecrets(`window.__cfg={key:"${service}"}`)).toContain('service_role_jwt');
     expect(scanForSecrets('AI_GATEWAY_API_KEY=vck_abcdefghijklmnop')).toContain('vercel_gateway_key');
+  });
+});
+
+describe('Ledger write reduction: atomic completion chain + obsolete-SHA archival (isolated file store)', () => {
+  it('single-write lease stamps holder/heartbeat and the completion chain persists evidence + states atomically', async () => {
+    // Agent 200 is outside every lane, so only this task is leasable for it.
+    const created = await createTask({ title: 'chain unit', description: 'chain', taskType: 'qa', idempotencyKey: landingTaskKey('chain-sha-0001', 'api.health'), priority: 'critical', assignedAgentNumber: 200 });
+    expect(created.ok && created.task).toBeTruthy();
+    const leased = await leaseNextTask('agent:ivx_holdings_200', 200);
+    expect(leased.task?.taskId).toBe(created.task!.taskId);
+    expect(leased.task?.leaseHolder).toBe('agent:ivx_holdings_200');
+    expect(leased.task?.lastHeartbeatAt).not.toBeNull();
+    const stored = await getTaskById(created.task!.taskId);
+    expect(stored?.state).toBe('LEASED');
+
+    const running = await transitionTaskState(created.task!.taskId, 'RUNNING');
+    expect(running.ok).toBe(true);
+
+    // Wrong worker is refused and nothing changes.
+    const wrong = await completeTaskChain(created.task!.taskId, 'agent:ivx_holdings_201', ['EXECUTION_COMPLETED', 'QA_IN_PROGRESS', 'VERIFIED']);
+    expect(wrong.ok).toBe(false);
+    expect((await getTaskById(created.task!.taskId))?.state).toBe('RUNNING');
+
+    // Invalid chain is rejected atomically (no partial transition, no evidence).
+    const invalid = await completeTaskChain(created.task!.taskId, 'agent:ivx_holdings_200', ['VERIFIED'], { evidenceType: 'production_verification', source: 'x', contentHash: 'h1', summary: 'should not persist', commitSha: null, deploymentId: null });
+    expect(invalid.ok).toBe(false);
+    const afterInvalid = await getTaskById(created.task!.taskId);
+    expect(afterInvalid?.state).toBe('RUNNING');
+    expect(afterInvalid?.evidence.length).toBe(0);
+
+    const done = await completeTaskChain(created.task!.taskId, 'agent:ivx_holdings_200', ['EXECUTION_COMPLETED', 'QA_IN_PROGRESS', 'VERIFIED'], { evidenceType: 'production_verification', source: 'api.health', contentHash: 'h2', summary: 'LANDING_P0_RESULT {}', commitSha: null, deploymentId: null });
+    expect(done.ok).toBe(true);
+    expect(done.evidenceId).not.toBeNull();
+    const verified = await getTaskById(created.task!.taskId);
+    expect(verified?.state).toBe('VERIFIED');
+    expect(verified?.evidence.length).toBe(1);
+    expect(verified?.evidence[0]?.evidenceId).toBe(done.evidenceId ?? '');
+    expect(verified?.leaseHolder).toBeNull();
+    expect(verified?.completedAt).not.toBeNull();
+  });
+
+  it('archives tasks bound to other SHAs out of the hot document (nothing deleted) and keeps current-SHA + unbound tasks', async () => {
+    expect(taskSourceSha({ idempotencyKey: landingTaskKey('abc1234', 'x') })).toBe('abc1234');
+    expect(taskSourceSha({ idempotencyKey: 'objective:manual:1' })).toBeNull();
+    const current = 'current-sha-000000000000000000000000000001';
+    await createTask({ title: 'current', description: 'c', taskType: 'qa', idempotencyKey: landingTaskKey(current, 'api.health'), priority: 'critical', assignedAgentNumber: 73 });
+    await createTask({ title: 'unbound', description: 'u', taskType: 'qa', idempotencyKey: 'objective:manual:keep-me', priority: 'low' });
+    const before = await getAllTasks();
+    const oldShaTasks = before.filter((t) => { const sha = taskSourceSha(t); return sha !== null && sha !== current; });
+    expect(oldShaTasks.length).toBeGreaterThan(0);
+
+    const result = await archiveTasksForOtherShas(current, -60_000);
+    expect(result.archived).toBe(oldShaTasks.length);
+    const after = await getAllTasks();
+    expect(after.length).toBe(before.length - oldShaTasks.length);
+    expect(after.some((t) => t.idempotencyKey === landingTaskKey(current, 'api.health'))).toBe(true);
+    expect(after.some((t) => t.idempotencyKey === 'objective:manual:keep-me')).toBe(true);
+    expect(after.every((t) => { const sha = taskSourceSha(t); return sha === null || sha === current; })).toBe(true);
+
+    const archiveFile = path.join(process.cwd(), 'logs', 'audit', 'task-engine', `archive-${result.shas[0]}.json`);
+    const archived = JSON.parse(await (await import('node:fs/promises')).readFile(archiveFile, 'utf8')) as Task[];
+    expect(archived.length).toBeGreaterThan(0);
+    for (const sha of result.shas) await rm(path.join(process.cwd(), 'logs', 'audit', 'task-engine', `archive-${sha}.json`), { force: true });
   });
 });

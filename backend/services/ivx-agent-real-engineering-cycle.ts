@@ -19,9 +19,9 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import {
   addTaskEvidence,
+  completeTaskChain,
   createTask,
   getAllTasks,
-  getTaskById,
   heartbeat,
   leaseNextTask,
   releaseLease,
@@ -29,6 +29,7 @@ import {
   transitionTaskState,
   type Task,
   type TaskEvidence,
+  type TaskState,
 } from './ivx-autonomous-task-engine';
 import { containPath, fileHasUnexemptedSecret, resolveRepoRoot } from './ivx-agent-engineering-tools';
 import {
@@ -308,7 +309,7 @@ export async function runRealEngineeringCycle(input: {
     const startedAt = nowIso();
     const states: string[] = ['LEASED'];
 
-    await heartbeat(task.taskId, workerId);
+    // (lease already stamped lastHeartbeatAt/leaseExpiresAt — no extra heartbeat write)
     const toRunning = await transitionTaskState(task.taskId, 'RUNNING');
     if (!toRunning.ok) {
       await releaseLease(task.taskId, workerId);
@@ -515,7 +516,6 @@ async function runLandingTask(
   const states: string[] = ['LEASED'];
   const repairTaskIds: string[] = [];
 
-  await heartbeat(task.taskId, workerId);
   const toRunning = await transitionTaskState(task.taskId, 'RUNNING');
   if (!toRunning.ok) {
     await releaseLease(task.taskId, workerId);
@@ -538,14 +538,8 @@ async function runLandingTask(
     repair: parsed.repair,
   });
   const evidenceType: TaskEvidence['evidenceType'] = unit.check.kind === 'ci' ? 'test_result' : 'production_verification';
-  const added = await addTaskEvidence(task.taskId, await makeEvidence(evidenceType, unit.unitId, encodeLandingResult(record)));
-  if (!added.ok) {
-    await transitionTaskState(task.taskId, 'FAILED', { error: `evidence persistence refused: ${added.error}` });
-    states.push('FAILED');
-    return { ...base, ok: false, action: 'TASK_FAILED', taskId: task.taskId, module: unit.unitId, startedAt, finishedAt: nowIso(), states, error: added.error };
-  }
-  const stored = await getTaskById(task.taskId);
-  const evidenceIds = stored?.evidence.map((e) => e.evidenceId) ?? [];
+  const evidence = await makeEvidence(evidenceType, unit.unitId, encodeLandingResult(record));
+  const evidenceIds: string[] = [];
   const productiveMinutes = Math.round((full.productive_seconds / 60) * 10) / 10;
   console.log('[IVX Landing P0] unit executed', {
     agentNumber: input.agentNumber,
@@ -564,19 +558,22 @@ async function runLandingTask(
     repairTaskIds, filesInspected: full.files_inspected, productiveMinutes, nextTaskAvailable: true, error: null,
   });
 
+  // One atomic ledger write for evidence + the whole completion chain (was 4 full-document writes).
+  let chain: TaskState[];
+  let action: RealEngineeringCycleResult['action'];
+  let metadata: { blocker?: string } = {};
   if (full.status === 'BLOCKED') {
-    const blockedTransition = await transitionTaskState(task.taskId, 'BLOCKED', { blocker: full.blocked_reason ?? 'evidence unavailable' });
-    states.push(blockedTransition.ok ? 'BLOCKED' : `BLOCKED_REFUSED:${blockedTransition.error ?? 'unknown'}`);
-    return done('TASK_BLOCKED');
-  }
-
-  if (parsed.repair && full.status === 'FAIL') {
+    chain = ['BLOCKED'];
+    action = 'TASK_BLOCKED';
+    metadata = { blocker: full.blocked_reason ?? 'evidence unavailable' };
+  } else if (parsed.repair && full.status === 'FAIL') {
     const defect = full.bugs_found[0];
-    const blockedTransition = await transitionTaskState(task.taskId, 'BLOCKED', {
-      blocker: `DEFECT PERSISTS [${defect?.severity ?? unit.severity}] ${defect?.detail ?? unit.title} → ${defect?.remediation ?? 'investigate'}`,
-    });
-    states.push(blockedTransition.ok ? 'BLOCKED' : `BLOCKED_REFUSED:${blockedTransition.error ?? 'unknown'}`);
-    return done('TASK_BLOCKED');
+    chain = ['BLOCKED'];
+    action = 'TASK_BLOCKED';
+    metadata = { blocker: `DEFECT PERSISTS [${defect?.severity ?? unit.severity}] ${defect?.detail ?? unit.title} → ${defect?.remediation ?? 'investigate'}` };
+  } else {
+    chain = ['EXECUTION_COMPLETED', 'QA_IN_PROGRESS', 'VERIFIED'];
+    action = 'TASK_COMPLETED';
   }
 
   if (!parsed.repair && full.status === 'FAIL') {
@@ -594,21 +591,15 @@ async function runLandingTask(
     }
   }
 
-  // Complete fail-closed: EXECUTION_COMPLETED → QA_IN_PROGRESS → VERIFIED.
-  const execDone = await transitionTaskState(task.taskId, 'EXECUTION_COMPLETED');
-  if (!execDone.ok) {
-    await transitionTaskState(task.taskId, 'FAILED', { error: `EXECUTION_COMPLETED refused: ${execDone.error}` });
+  // Complete fail-closed in one write: evidence + RUNNING → (chain). A refused chain
+  // persists nothing and the task fails closed with the exact reason.
+  const completed = await completeTaskChain(task.taskId, workerId, chain, evidence, metadata);
+  if (!completed.ok) {
+    await transitionTaskState(task.taskId, 'FAILED', { error: `completion chain refused: ${completed.error}` });
     states.push('FAILED');
-    return { ...done('TASK_FAILED'), ok: false, error: execDone.error };
+    return { ...done('TASK_FAILED'), ok: false, error: completed.error };
   }
-  states.push('EXECUTION_COMPLETED');
-  const qa = await transitionTaskState(task.taskId, 'QA_IN_PROGRESS');
-  states.push(qa.ok ? 'QA_IN_PROGRESS' : 'QA_TRANSITION_REFUSED');
-  const verified = await transitionTaskState(task.taskId, 'VERIFIED');
-  if (!verified.ok) {
-    states.push(`VERIFY_REFUSED:${verified.error ?? 'unknown'}`);
-    return { ...done('TASK_FAILED'), ok: false, error: verified.error };
-  }
-  states.push('VERIFIED');
-  return done('TASK_COMPLETED');
+  if (completed.evidenceId) evidenceIds.push(completed.evidenceId);
+  states.push(...chain);
+  return done(action);
 }
