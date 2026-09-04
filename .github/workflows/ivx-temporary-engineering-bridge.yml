@@ -3,6 +3,17 @@ name: IVX Temporary Engineering Bridge
 on:
   issue_comment:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: Temporary engineering prompt for IVX IA
+        required: true
+        type: string
+      issue_number:
+        description: Issue to post the response to
+        required: true
+        default: '874'
+        type: string
 
 permissions:
   contents: read
@@ -10,24 +21,24 @@ permissions:
 
 jobs:
   ask-ivx:
-    if: >-
-      github.event.issue.pull_request == null &&
-      github.actor == 'ibb142' &&
-      startsWith(github.event.comment.body, '/ivx-ai ')
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.actor == 'ibb142' && startsWith(github.event.comment.body, '/ivx-ai ')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
       IVX_API_BASE: https://api.ivxholding.com
       BRIDGE_EXPIRES_AT: '2026-09-05T16:00:00Z'
       IVX_SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
-      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
       REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
+      EVENT_NAME: ${{ github.event_name }}
+      COMMENT_BODY: ${{ github.event.comment.body || inputs.prompt }}
     steps:
-      - name: Enforce temporary TTL and secret binding
+      - name: Enforce owner-only temporary TTL and secret binding
         shell: bash
         run: |
           set -euo pipefail
+          test "$GITHUB_ACTOR" = 'ibb142'
           test -n "$IVX_SYSTEM_KEY"
           now=$(date -u +%s)
           expiry=$(date -u -d "$BRIDGE_EXPIRES_AT" +%s)
@@ -39,24 +50,19 @@ jobs:
       - name: Send engineering prompt to IVX IA
         id: ask
         shell: bash
-        env:
-          COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
           set -euo pipefail
-          prompt=${COMMENT_BODY#'/ivx-ai '}
+          if [ "$EVENT_NAME" = 'issue_comment' ]; then
+            prompt=${COMMENT_BODY#'/ivx-ai '}
+          else
+            prompt=$COMMENT_BODY
+          fi
           test -n "$prompt"
           jq -n --arg message "$prompt" '{message:$message, source:"github-engineering-bridge", temporaryAccess:true}' > /tmp/request.json
-          status=$(curl -sS -o /tmp/response.json -w '%{http_code}' \
-            --max-time 180 \
-            -X POST "$IVX_API_BASE/api/ivx/owner-ai" \
-            -H 'Content-Type: application/json' \
-            -H "X-IVX-System-Key: $IVX_SYSTEM_KEY" \
-            --data-binary @/tmp/request.json)
+          status=$(curl -sS -o /tmp/response.json -w '%{http_code}' --max-time 180 -X POST "$IVX_API_BASE/api/ivx/owner-ai" -H 'Content-Type: application/json' -H "X-IVX-System-Key: $IVX_SYSTEM_KEY" --data-binary @/tmp/request.json)
           echo "http_status=$status" >> "$GITHUB_OUTPUT"
           cat /tmp/response.json
-          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
-            exit 1
-          fi
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then exit 1; fi
 
       - name: Post sanitized IVX IA response back to issue
         if: always()
