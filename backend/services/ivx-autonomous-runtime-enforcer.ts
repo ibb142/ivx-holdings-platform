@@ -106,17 +106,23 @@ async function run(reason: 'boot' | 'interval'): Promise<void> {
     lastOk = result.ok;
     lastRecovered = result.recovered;
     lastError = null;
+
+    // Continuity work must not collapse because the higher-level scheduler
+    // reports disabled during a transient/bootstrap mismatch. Explicit owner
+    // safety controls still win: dispatcher pause and emergency stop both
+    // disable all refill activity immediately.
     continuityEnabled = Boolean(
-      result.snapshot.autonomous.schedulerEnabled
-      && !result.snapshot.autonomous.dispatcherPaused
+      !result.snapshot.autonomous.dispatcherPaused
       && !result.snapshot.autonomous.emergencyStop,
     );
+
     refillRecoveredAgents(result.recovered);
     refillAllAvailableAgents();
     console.log('[IVX Autonomous 112 Runtime Enforcer]', {
       reason,
       ok: result.ok,
       action: result.action,
+      schedulerEnabled: result.snapshot.autonomous.schedulerEnabled,
       recovered: result.recovered.length,
       working: result.snapshot.agents.counts.working,
       stale: result.snapshot.agents.counts.stale,
