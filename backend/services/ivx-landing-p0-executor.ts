@@ -85,7 +85,10 @@ const CACHE_60S = 60 * 1000;
 const CACHE_5M = 5 * 60 * 1000;
 
 export const SECRET_PATTERNS: ReadonlyArray<{ code: string; pattern: RegExp }> = [
-  { code: 'service_role_literal', pattern: /service_role/i },
+  // Env var NAMES such as SUPABASE_SERVICE_ROLE_KEY are legitimate in diagnostics;
+  // only a service_role VALUE (JSON role claim or decoded JWT role) is a leak.
+  { code: 'service_role_value', pattern: /"role"\s*:\s*"service_role"/ },
+  { code: 'supabase_secret_key', pattern: /\bsb_secret_[A-Za-z0-9_-]{10,}/ },
   { code: 'openai_key', pattern: /\bsk-[A-Za-z0-9_-]{20,}/ },
   { code: 'vercel_gateway_key', pattern: /\bvck_[A-Za-z0-9_-]{10,}/ },
   { code: 'render_key', pattern: /\brnd_[A-Za-z0-9]{10,}/ },
@@ -913,8 +916,9 @@ async function runSecurity(fetchImpl: typeof fetch, probeName: 'unauth-privilege
     c.api.push(`${method ?? 'GET'} ${path} (no auth) → ${result.status || result.error}`);
     if (result.status === 401 || result.status === 403) return pass(`rejected unauthenticated (${result.status})`);
     if (result.status === 405 || result.status === 404) return fail(`route ${path} responded ${result.status} — cannot confirm guard (route missing/method mismatch)`, 'api', 'mount route or update audit path');
-    if (result.status >= 200 && result.status < 300) return fail(`privileged route ${path} served ${result.status} WITHOUT auth`, 'security', 'add owner auth guard');
-    return fail(`${path} → ${result.status || result.error} without auth`, 'infra', 'return 401 for unauthenticated access');
+    if (result.status >= 200 && result.status < 300) return fail(`privileged route ${path} served ${result.status} WITHOUT auth`, 'security', 'add owner auth guard before any processing');
+    if (result.status === 400 || result.status === 422) return fail(`privileged route ${path} validates the request body before any auth check (HTTP ${result.status} for an unauthenticated ${method ?? 'GET'}) — owner guard missing or misordered`, 'security', 'call the owner guard first; return 401 before reading the body');
+    return fail(`${path} → ${result.status || result.error} without auth (expected 401/403)`, 'infra', 'return 401 for unauthenticated access');
   }
   if (probeName === 'no-secrets-body') {
     const url = path.startsWith('landing:') ? `${LANDING_URL}${path.slice('landing:'.length)}` : `${LANDING_API_URL}${path}`;

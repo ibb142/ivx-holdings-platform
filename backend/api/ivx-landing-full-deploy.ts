@@ -15,6 +15,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { createCloudFrontInvalidation } from '../services/ivx-cloudfront-invalidation';
 import { getIVXOwnerVariableRuntimeValue, getRawOwnerVariableValue } from './ivx-owner-variables';
+import { assertIVXOwnerOnly, ownerOnlyJson } from './owner-only';
 
 const BUCKET_DEFAULT = 'ivxholding.com';
 const WWW_BUCKET_DEFAULT = 'www.ivxholding.com';
@@ -340,6 +341,22 @@ function listLandingFiles(): string[] {
 export async function handleLandingFullDeploy(request: Request): Promise<Response> {
   const timestamp = new Date().toISOString();
   const startMs = Date.now();
+
+  // OWNER-ONLY, BEFORE the body is read: this endpoint pushes production landing
+  // assets to S3 / invalidates CloudFront and may receive AWS credentials. Found by
+  // the Landing P0 fleet (security.landing-deploy-unauth): it previously answered
+  // unauthenticated callers with the confirmation token format. Owner session or
+  // the X-IVX-System-Key machine key (GitHub workflows) are accepted.
+  try {
+    await assertIVXOwnerOnly(request);
+  } catch (error) {
+    return ownerOnlyJson({
+      ok: false,
+      error: 'Owner authorization required for landing deploy.',
+      detail: error instanceof Error ? error.message : 'unauthorized',
+      timestamp,
+    }, 401);
+  }
 
   let body: { confirm?: string; awsCredentials?: AwsCredentials; storeCredentials?: boolean } = {};
   try {
