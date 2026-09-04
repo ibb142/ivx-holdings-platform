@@ -216,51 +216,147 @@ function restHeaders(extra?: Record<string, string>): Record<string, string> {
   };
 }
 
-const SUPABASE_REST_TIMEOUT_MS = 8_000; // ivx-supabase-circuit-breaker-v1
-const SUPABASE_FAILURE_THRESHOLD = 2;
-const SUPABASE_BACKOFF_MS = 30_000;
+export const IVX_SUPABASE_QUEUE_RESILIENCE_MARKER = 'ivx-supabase-rest-resilience-2026-09-04-v2';
+export const SUPABASE_REST_TIMEOUT_MS = Number.parseInt(process.env.IVX_SUPABASE_REST_TIMEOUT_MS ?? '8000', 10) || 8_000;
+export const SUPABASE_REST_RETRY_ATTEMPTS = Math.min(3, Math.max(1, Number.parseInt(process.env.IVX_SUPABASE_REST_RETRY_ATTEMPTS ?? '2', 10) || 2));
+export const SUPABASE_FAILURE_THRESHOLD = Math.max(3, Number.parseInt(process.env.IVX_SUPABASE_FAILURE_THRESHOLD ?? '5', 10) || 5);
+export const SUPABASE_BACKOFF_MS = Math.max(1_000, Number.parseInt(process.env.IVX_SUPABASE_BACKOFF_MS ?? '5000', 10) || 5_000);
+const SUPABASE_RETRY_BASE_MS = 250;
 let consecutiveSupabaseFailures = 0;
 let supabaseBackoffUntil = 0;
 
+export function isTransientSupabaseStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+/**
+ * Only retry operations whose duplicate/ambiguity behavior is provably safe.
+ * GET/HEAD are read-only. The task-table POST is protected by the UNIQUE
+ * idempotency_key and enqueueOwnerAITask resolves a 409 by reading the winner.
+ * Generic PATCH and messages POST are deliberately not retried because a lost
+ * response can make the mutation outcome ambiguous.
+ */
+export function isSafeSupabaseRestRetry(method: string | undefined, path: string): boolean {
+  const normalized = (method ?? 'GET').toUpperCase();
+  if (normalized === 'GET' || normalized === 'HEAD') return true;
+  if (normalized === 'POST' && path.split('?')[0] === TASKS_TABLE) return true;
+  return false;
+}
+
+export function getSupabaseCircuitState(): {
+  marker: string;
+  open: boolean;
+  consecutiveFailures: number;
+  backoffRemainingMs: number;
+  failureThreshold: number;
+  backoffMs: number;
+  timeoutMs: number;
+  retryAttempts: number;
+} {
+  return {
+    marker: IVX_SUPABASE_QUEUE_RESILIENCE_MARKER,
+    open: Date.now() < supabaseBackoffUntil,
+    consecutiveFailures: consecutiveSupabaseFailures,
+    backoffRemainingMs: Math.max(0, supabaseBackoffUntil - Date.now()),
+    failureThreshold: SUPABASE_FAILURE_THRESHOLD,
+    backoffMs: SUPABASE_BACKOFF_MS,
+    timeoutMs: SUPABASE_REST_TIMEOUT_MS,
+    retryAttempts: SUPABASE_REST_RETRY_ATTEMPTS,
+  };
+}
+
 function transientSupabaseResponse(reason: string): Response {
-  return new Response(JSON.stringify({ error: reason }), {
+  return new Response(JSON.stringify({ error: reason, marker: IVX_SUPABASE_QUEUE_RESILIENCE_MARKER }), {
     status: 503,
-    headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },
+    headers: { 'Content-Type': 'application/json', 'Retry-After': String(Math.max(1, Math.ceil(SUPABASE_BACKOFF_MS / 1000))) },
   });
+}
+
+function markSupabaseSuccess(): void {
+  consecutiveSupabaseFailures = 0;
+  supabaseBackoffUntil = 0;
+}
+
+function markSupabaseLogicalFailure(): void {
+  consecutiveSupabaseFailures += 1;
+  if (consecutiveSupabaseFailures >= SUPABASE_FAILURE_THRESHOLD) {
+    supabaseBackoffUntil = Date.now() + SUPABASE_BACKOFF_MS;
+  }
+}
+
+async function boundedSupabaseRetryDelay(response: Response | null, attempt: number): Promise<void> {
+  const retryAfterRaw = response?.headers.get('retry-after') ?? '';
+  const retryAfterSeconds = Number.parseFloat(retryAfterRaw);
+  const headerDelay = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0 ? retryAfterSeconds * 1000 : 0;
+  const exponential = SUPABASE_RETRY_BASE_MS * Math.pow(2, Math.max(0, attempt - 1));
+  const delayMs = Math.min(2_000, Math.max(exponential, headerDelay));
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 async function restFetch(path: string, init: RequestInit): Promise<Response> {
   if (Date.now() < supabaseBackoffUntil) {
     return transientSupabaseResponse('supabase_circuit_open');
   }
+
   const url = `${getSupabaseUrl()}/rest/v1/${path}`;
-  try {
-    const response = await fetch(url, {
-      ...init,
-      signal: init.signal ?? AbortSignal.timeout(SUPABASE_REST_TIMEOUT_MS),
-    });
-    if (response.status >= 500 || response.status === 429 || response.status === 408) {
-      consecutiveSupabaseFailures += 1;
-      if (consecutiveSupabaseFailures >= SUPABASE_FAILURE_THRESHOLD) {
-        supabaseBackoffUntil = Date.now() + SUPABASE_BACKOFF_MS;
+  const retrySafe = isSafeSupabaseRestRetry(init.method, path);
+  const maxAttempts = retrySafe ? SUPABASE_REST_RETRY_ATTEMPTS : 1;
+  let lastResponse: Response | null = null;
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        ...init,
+        signal: init.signal ?? AbortSignal.timeout(SUPABASE_REST_TIMEOUT_MS),
+      });
+      lastResponse = response;
+
+      if (!isTransientSupabaseStatus(response.status)) {
+        markSupabaseSuccess();
+        return response;
       }
-    } else {
-      consecutiveSupabaseFailures = 0;
-      supabaseBackoffUntil = 0;
+
+      if (attempt < maxAttempts) {
+        console.log('[IVXOwnerAITaskQueue] transient Supabase REST response; bounded retry', {
+          path: path.split('?')[0],
+          method: (init.method ?? 'GET').toUpperCase(),
+          status: response.status,
+          attempt,
+          maxAttempts,
+        });
+        await boundedSupabaseRetryDelay(response, attempt);
+      }
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxAttempts) {
+        console.log('[IVXOwnerAITaskQueue] Supabase REST network failure; bounded retry', {
+          path: path.split('?')[0],
+          method: (init.method ?? 'GET').toUpperCase(),
+          attempt,
+          maxAttempts,
+          message: error instanceof Error ? error.message : 'network_error',
+        });
+        await boundedSupabaseRetryDelay(null, attempt);
+      }
     }
-    return response;
-  } catch (error) {
-    consecutiveSupabaseFailures += 1;
-    if (consecutiveSupabaseFailures >= SUPABASE_FAILURE_THRESHOLD) {
-      supabaseBackoffUntil = Date.now() + SUPABASE_BACKOFF_MS;
-    }
-    console.log('[IVXOwnerAITaskQueue] Supabase REST unavailable; backing off', {
-      path: path.split('?')[0],
-      failures: consecutiveSupabaseFailures,
-      message: error instanceof Error ? error.message : 'network_error',
-    });
-    return transientSupabaseResponse('supabase_transient_failure');
   }
+
+  // Count one logical operation failure, not every internal retry. This prevents
+  // a single slow Supabase request from opening a 30-second system-wide circuit.
+  markSupabaseLogicalFailure();
+  console.log('[IVXOwnerAITaskQueue] Supabase REST operation unavailable', {
+    path: path.split('?')[0],
+    method: (init.method ?? 'GET').toUpperCase(),
+    attempts: maxAttempts,
+    failures: consecutiveSupabaseFailures,
+    circuitOpen: Date.now() < supabaseBackoffUntil,
+    backoffMs: SUPABASE_BACKOFF_MS,
+    message: lastError instanceof Error ? lastError.message : (lastResponse ? `HTTP_${lastResponse.status}` : 'network_error'),
+  });
+
+  if (lastResponse) return lastResponse;
+  return transientSupabaseResponse('supabase_transient_failure');
 }
 
 function nowIso(): string {
@@ -756,6 +852,8 @@ CREATE TABLE IF NOT EXISTS ivx_owner_ai_tasks (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_ivx_owner_ai_tasks_status ON ivx_owner_ai_tasks(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_ivx_owner_ai_tasks_claimable ON ivx_owner_ai_tasks(next_retry_at, created_at) WHERE status IN ('QUEUED','RETRYING');
+CREATE INDEX IF NOT EXISTS idx_ivx_owner_ai_tasks_running_heartbeat ON ivx_owner_ai_tasks(heartbeat_at) WHERE status = 'RUNNING';
 ALTER TABLE ivx_owner_ai_tasks ENABLE ROW LEVEL SECURITY;
 `;
 
@@ -917,7 +1015,7 @@ async function probeSupabaseEndpoint(path: string, label: string): Promise<{ ok:
   const started = Date.now();
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3_000);
+    const timeout = setTimeout(() => controller.abort(), 5_000);
     const res = await fetch(url, {
       method: 'GET',
       headers: restHeaders(),
@@ -941,14 +1039,14 @@ async function probeSupabaseEndpoint(path: string, label: string): Promise<{ ok:
       status: 0,
       latencyMs,
       bodyPreview: '',
-      error: isTimeout ? 'Probe timed out after 3s' : (error instanceof Error ? error.message : 'probe failed'),
+      error: isTimeout ? 'Probe timed out after 5s' : (error instanceof Error ? error.message : 'probe failed'),
     };
   }
 }
 
 export async function checkDatabaseHealth(): Promise<HealthCheckResult> {
   if (!isTaskQueueConfigured()) {
-    return { ok: false, detail: { reason: 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing in runtime' } };
+    return { ok: false, detail: { reason: 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing in runtime', circuit: getSupabaseCircuitState() } };
   }
 
   // Probe multiple endpoints to distinguish total outage vs table-specific issue.
@@ -967,6 +1065,7 @@ export async function checkDatabaseHealth(): Promise<HealthCheckResult> {
         httpStatus: tableProbe.status,
         latencyMs: tableProbe.latencyMs,
         table: TASKS_TABLE,
+        circuit: getSupabaseCircuitState(),
         rootProbe: { status: rootProbe.status, latencyMs: rootProbe.latencyMs },
       },
     };
@@ -979,6 +1078,7 @@ export async function checkDatabaseHealth(): Promise<HealthCheckResult> {
         ? `Supabase REST root unreachable: ${rootProbe.error}`
         : `Supabase table probe failed: ${tableProbe.error}`,
       table: TASKS_TABLE,
+      circuit: getSupabaseCircuitState(),
       rootProbe,
       tableProbe,
       urlHost: new URL(getSupabaseUrl()).host,
@@ -1118,13 +1218,14 @@ export async function probeAIGatewayLive(): Promise<{
 
 export async function checkQueueHealth(): Promise<HealthCheckResult> {
   const runtime = getWorkerRuntimeInfo();
-  if (!isTaskQueueConfigured()) return { ok: false, detail: { reason: 'queue persistence not configured', ...runtime } };
+  const circuit = getSupabaseCircuitState();
+  if (!isTaskQueueConfigured()) return { ok: false, detail: { reason: 'queue persistence not configured', circuit, ...runtime } };
   try {
     const res = await restFetch(
       `${TASKS_TABLE}?status=in.(QUEUED,RETRYING,RUNNING)&select=id,status,created_at,dead_letter&order=created_at.asc&limit=200`,
       { method: 'GET', headers: restHeaders() },
     );
-    if (!res.ok) return { ok: false, detail: { reason: `queue read failed HTTP ${res.status}`, ...runtime } };
+    if (!res.ok) return { ok: false, detail: { reason: `queue read failed HTTP ${res.status}`, circuit: getSupabaseCircuitState(), ...runtime } };
     const rows = await res.json().catch(() => []) as { status: string; created_at: string }[];
     const oldest = rows[0]?.created_at ?? null;
     const oldestAgeMinutes = oldest ? Math.round((Date.now() - new Date(oldest).getTime()) / 60_000) : 0;
@@ -1132,10 +1233,12 @@ export async function checkQueueHealth(): Promise<HealthCheckResult> {
     const deadLetters = dlRes.ok ? ((await dlRes.json().catch(() => [])) as unknown[]).length : -1;
     const saturated = rows.length >= 150;
     const stale = oldestAgeMinutes > 15;
+    const finalCircuit = getSupabaseCircuitState();
     return {
-      ok: runtime.running && !saturated && !stale,
+      ok: runtime.running && !saturated && !stale && !finalCircuit.open,
       detail: {
         ...runtime,
+        circuit: finalCircuit,
         depth: rows.length,
         oldestQueuedAgeMinutes: oldestAgeMinutes,
         deadLetterCount: deadLetters,
@@ -1145,7 +1248,7 @@ export async function checkQueueHealth(): Promise<HealthCheckResult> {
       },
     };
   } catch (error) {
-    return { ok: false, detail: { reason: error instanceof Error ? error.message : 'queue probe failed', ...runtime } };
+    return { ok: false, detail: { reason: error instanceof Error ? error.message : 'queue probe failed', circuit: getSupabaseCircuitState(), ...runtime } };
   }
 }
 
