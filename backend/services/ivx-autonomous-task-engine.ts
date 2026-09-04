@@ -957,13 +957,8 @@ async function leaseNextTaskUnlocked(workerId: string, agentNumber?: number | nu
   // Expire stale leases + recover tasks stranded by a process death first.
   const now = Date.now();
   const recovery = recoverStrandedTasksInPlace(tasks, now);
-  // Persist recovery BEFORE candidate selection: transitionTaskState re-reads
-  // from the store, so requeued stale leases must be durable first — otherwise
-  // QUEUED→LEASED is rejected as LEASED→LEASED and recovery silently fails.
-  await writeAllTasks(tasks);
-  if (recovery.requeued.length + recovery.expired.length + recovery.failed.length + recovery.duplicatesRetired.length + recovery.blockedRequeued.length > 0) {
-    await appendEvent({ type: 'tasks_recovered', workerId, requeued: recovery.requeued.length, expired: recovery.expired.length, failed: recovery.failed.length, duplicatesRetired: recovery.duplicatesRetired.length, blockedRequeued: recovery.blockedRequeued.length, sample: recovery.requeued.slice(0, 5) });
-  }
+  const recovered = recovery.requeued.length + recovery.expired.length + recovery.failed.length + recovery.duplicatesRetired.length + recovery.blockedRequeued.length > 0;
+  const recoveryEvent = { type: 'tasks_recovered', workerId, requeued: recovery.requeued.length, expired: recovery.expired.length, failed: recovery.failed.length, duplicatesRetired: recovery.duplicatesRetired.length, blockedRequeued: recovery.blockedRequeued.length, sample: recovery.requeued.slice(0, 5) };
 
   // Find highest-priority queued task whose dependencies are met
   const priorityOrder: Record<Task['priority'], number> = { critical: 0, high: 1, medium: 2, low: 3 };
@@ -987,27 +982,145 @@ async function leaseNextTaskUnlocked(workerId: string, agentNumber?: number | nu
   }
 
   if (candidates.length === 0) {
+    // Persist recovery only when it changed something (one write, not one per probe).
+    if (recovered) {
+      await writeAllTasks(tasks);
+      await appendEvent(recoveryEvent);
+    }
     return { ok: true, task: null, error: null };
   }
 
+  // SINGLE-WRITE LEASE: the candidate is QUEUED (filtered above) so QUEUED→LEASED is
+  // always valid; mutate in place and persist recovery + lease in ONE document write.
+  // The previous shape (transition re-read + write, holder re-read + write) cost 3 reads
+  // and 3 full-document writes per lease — ×112 agents at boot this saturated Supabase
+  // (statement timeouts, pool exhaustion) on 2026-09-04.
   const task = candidates[0];
-  const transition = await transitionTaskStateUnlocked(task.taskId, 'LEASED');
-  if (!transition.ok || !transition.task) {
-    return { ok: false, task: null, error: transition.error };
-  }
-
-  // Set lease holder
-  const allTasks = await readAllTasks();
-  const leased = allTasks.find((t) => t.taskId === task.taskId);
-  if (leased) {
-    leased.leaseHolder = workerId;
-    leased.leaseExpiresAt = new Date(Date.now() + LEASE_DURATION_MS).toISOString();
-    leased.lastHeartbeatAt = nowIso();
-    await writeAllTasks(allTasks);
-  }
-
+  const leaseIso = new Date(now).toISOString();
+  task.state = 'LEASED';
+  task.leaseHolder = workerId;
+  task.leaseExpiresAt = new Date(now + LEASE_DURATION_MS).toISOString();
+  task.lastHeartbeatAt = leaseIso;
+  task.updatedAt = leaseIso;
+  await writeAllTasks(tasks);
+  if (recovered) await appendEvent(recoveryEvent);
+  await appendEvent({ type: 'state_transition', taskId: task.taskId, fromState: 'QUEUED', toState: 'LEASED' });
   await appendEvent({ type: 'task_leased', taskId: task.taskId, workerId, ...(stolen ? { stolenFromAgentNumber: task.assignedAgentNumber, byAgentNumber: agentNumber ?? null } : {}) });
-  return { ok: true, task: transition.task, error: null };
+  return { ok: true, task, error: null };
+}
+
+/**
+ * Apply a chain of state transitions (plus optional evidence / metadata) in ONE
+ * locked read-modify-write. All-or-nothing: an invalid step rejects the whole chain
+ * and nothing is persisted. Replaces 3-4 separate full-document writes per task
+ * completion (evidence, EXECUTION_COMPLETED, QA_IN_PROGRESS, VERIFIED).
+ */
+async function completeTaskChainUnlocked(
+  taskId: string,
+  workerId: string | null,
+  chain: TaskState[],
+  evidence: Omit<TaskEvidence, 'evidenceId' | 'createdAt'> | null,
+  metadata: { error?: string; blocker?: string; filesChanged?: string[] } = {},
+): Promise<{ ok: boolean; task: Task | null; error: string | null; evidenceId: string | null }> {
+  const tasks = await readAllTasks();
+  const task = tasks.find((t) => t.taskId === taskId);
+  if (!task) return { ok: false, task: null, error: `Task not found: ${taskId}`, evidenceId: null };
+  if (workerId && task.leaseHolder && task.leaseHolder !== workerId) {
+    return { ok: false, task, error: `Not the lease holder (held by ${task.leaseHolder}).`, evidenceId: null };
+  }
+  let current = task.state;
+  for (const next of chain) {
+    if (TERMINAL_STATES.includes(current)) return { ok: false, task, error: `Task is in terminal state ${current} — cannot transition to ${next}.`, evidenceId: null };
+    if (!isValidTransition(current, next)) return { ok: false, task, error: `Invalid transition: ${current} → ${next}. Allowed: ${VALID_TRANSITIONS[current].join(', ')}.`, evidenceId: null };
+    current = next;
+  }
+  const stamp = nowIso();
+  let evidenceId: string | null = null;
+  if (evidence) {
+    const full: TaskEvidence = { ...evidence, evidenceId: generateId('evid'), createdAt: stamp };
+    task.evidence.push(full);
+    evidenceId = full.evidenceId;
+  }
+  const fromState = task.state;
+  for (const next of chain) {
+    task.state = next;
+    if (next === 'RUNNING' && !task.startedAt) task.startedAt = stamp;
+    if (TERMINAL_SUCCESS_STATES.includes(next) || next === 'FAILED') task.completedAt = stamp;
+  }
+  if (metadata.error) task.error = metadata.error;
+  if (metadata.blocker) task.blocker = metadata.blocker;
+  if (metadata.filesChanged) task.filesChanged.push(...metadata.filesChanged);
+  if (TERMINAL_STATES.includes(task.state) || task.state === 'BLOCKED') {
+    task.leaseHolder = null;
+    task.leaseExpiresAt = null;
+  }
+  task.updatedAt = stamp;
+  await writeAllTasks(tasks);
+  if (evidenceId && evidence) await appendEvent({ type: 'evidence_added', taskId, evidenceId, evidenceType: evidence.evidenceType });
+  await appendEvent({ type: 'state_transition_chain', taskId, fromState, chain, error: metadata.error, blocker: metadata.blocker });
+  return { ok: true, task, error: null, evidenceId };
+}
+
+export async function completeTaskChain(
+  taskId: string,
+  workerId: string | null,
+  chain: TaskState[],
+  evidence: Omit<TaskEvidence, 'evidenceId' | 'createdAt'> | null = null,
+  metadata: { error?: string; blocker?: string; filesChanged?: string[] } = {},
+): ReturnType<typeof completeTaskChainUnlocked> {
+  return withTaskMutationLock(() => completeTaskChainUnlocked(taskId, workerId, chain, evidence, metadata));
+}
+
+const SHA_BOUND_KEY = /^(module-audit|repair|landing-p0|landing-p0-repair):([A-Za-z0-9._-]{7,64}):/;
+
+export function taskSourceSha(task: Pick<Task, 'idempotencyKey'>): string | null {
+  return SHA_BOUND_KEY.exec(task.idempotencyKey)?.[2] ?? null;
+}
+
+/**
+ * Move tasks bound to a source SHA other than `currentSha` out of the hot document
+ * into `task-engine/archive/<sha>.json` (nothing is deleted — evidence stays readable).
+ * The hot document is rewritten on every mutation, so obsolete-SHA tasks (all of the
+ * previous deploys' audits) are pure write amplification. Only tasks untouched for
+ * `minAgeMs` move, so an in-flight cycle from a deploy overlap is never yanked.
+ */
+async function archiveTasksForOtherShasUnlocked(currentSha: string, minAgeMs: number): Promise<{ archived: number; shas: string[]; remaining: number }> {
+  const tasks = await readAllTasks();
+  const cutoff = Date.now() - minAgeMs;
+  const keep: Task[] = [];
+  const bySha = new Map<string, Task[]>();
+  for (const t of tasks) {
+    const sha = taskSourceSha(t);
+    const touched = Date.parse(t.updatedAt ?? t.createdAt ?? '') || 0;
+    if (sha && sha !== currentSha && !currentSha.startsWith(sha) && touched < cutoff) {
+      const bucket = bySha.get(sha);
+      if (bucket) bucket.push(t); else bySha.set(sha, [t]);
+    } else {
+      keep.push(t);
+    }
+  }
+  if (bySha.size === 0) return { archived: 0, shas: [], remaining: tasks.length };
+  for (const [sha, bucket] of bySha) {
+    const key = `task-engine/archive/${sha}.json`;
+    if (isDurableStoreConfigured()) {
+      const existing = await readDurableJson<Task[]>(key, []);
+      await writeDurableJson(key, [...(Array.isArray(existing) ? existing : []), ...bucket]);
+    } else {
+      await mkdir(STORE_DIR, { recursive: true });
+      const file = path.join(STORE_DIR, `archive-${sha}.json`);
+      let existing: Task[] = [];
+      try { existing = JSON.parse(await import('node:fs/promises').then((fs) => fs.readFile(file, 'utf8'))) as Task[]; } catch { existing = []; }
+      await import('node:fs/promises').then((fs) => fs.writeFile(file, JSON.stringify([...existing, ...bucket], null, 2), 'utf8'));
+    }
+  }
+  await writeAllTasks(keep);
+  const archived = tasks.length - keep.length;
+  await appendEvent({ type: 'tasks_archived', currentSha, archived, shas: [...bySha.keys()], remaining: keep.length });
+  return { archived, shas: [...bySha.keys()], remaining: keep.length };
+}
+
+export async function archiveTasksForOtherShas(currentSha: string, minAgeMs: number = 10 * 60 * 1000): ReturnType<typeof archiveTasksForOtherShasUnlocked> {
+  return withTaskMutationLock(() => archiveTasksForOtherShasUnlocked(currentSha, minAgeMs));
 }
 
 export async function leaseNextTask(workerId: string, agentNumber?: number | null, options: LeaseOptions = {}): Promise<{ ok: boolean; task: Task | null; error: string | null }> {
