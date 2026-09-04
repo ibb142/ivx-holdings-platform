@@ -4,14 +4,63 @@ import { syncCampaignAssignmentsToDispatcher, updateControlState } from './ivx-a
 import { getGitHubActionsExternalSupervisorStatus } from './ivx-github-actions-external-supervisor';
 import { getSchedulerState } from './ivx-autonomous-scheduler';
 
-export const IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER = 'ivx-autonomous-truth-control-2026-08-31-v5';
+export const IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER = 'ivx-autonomous-truth-control-2026-09-04-v6-cascade';
 export const IVX_AUTONOMOUS_TRUTH_HEARTBEAT_FRESH_MS = 60 * 1000;
 export const IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS = 30 * 1000;
+export const IVX_AUTONOMOUS_CASCADE_SEED_SIZE = 10;
+export const IVX_AUTONOMOUS_CASCADE_FANOUT = 10;
 
 export type TruthControlAction = 'start_all'|'stop_all'|'pause_all'|'resume_all'|'pause_agent'|'resume_agent'|'disable_agent'|'enable_agent'|'retry_agent';
 
 function heartbeatAgeMs(value: string | null): number | null { if (!value) return null; const ts=Date.parse(value); return Number.isFinite(ts)?Math.max(0,Date.now()-ts):null; }
 function heartbeatFresh(value: string | null): boolean { const age=heartbeatAgeMs(value); return age!==null&&age<=IVX_AUTONOMOUS_TRUTH_HEARTBEAT_FRESH_MS; }
+
+async function cascadeStartAllAgents(): Promise<{seedAgents:number[]; activated:number[]; waves:number[][]}> {
+  const states = [...getAllExecutionStates()].sort((a,b)=>a.agentNumber-b.agentNumber);
+  const eligible = states.filter((state)=>!state.disabledState);
+  const activated = new Set<number>();
+  const waves: number[][] = [];
+  const seedAgents = eligible.slice(0, IVX_AUTONOMOUS_CASCADE_SEED_SIZE).map((state)=>state.agentNumber);
+  let frontier = [...seedAgents];
+
+  while(frontier.length > 0 && activated.size < eligible.length){
+    const wave: number[] = [];
+    for(const parentNumber of frontier){
+      const parent = eligible.find((state)=>state.agentNumber===parentNumber);
+      if(parent && !activated.has(parentNumber)){
+        resumeAgent(parent.agentId);
+        await campaignDispatcherControl('retry_agent', parentNumber).catch(()=>undefined);
+        activated.add(parentNumber);
+        wave.push(parentNumber);
+      }
+
+      const children = eligible
+        .filter((state)=>!activated.has(state.agentNumber) && !frontier.includes(state.agentNumber))
+        .slice(0, IVX_AUTONOMOUS_CASCADE_FANOUT);
+      for(const child of children){
+        resumeAgent(child.agentId);
+        await campaignDispatcherControl('retry_agent', child.agentNumber).catch(()=>undefined);
+        activated.add(child.agentNumber);
+        wave.push(child.agentNumber);
+      }
+    }
+    if(wave.length===0) break;
+    waves.push(wave);
+    frontier = wave.filter((n)=>!seedAgents.includes(n));
+  }
+
+  for(const state of eligible){
+    if(!activated.has(state.agentNumber)){
+      resumeAgent(state.agentId);
+      await campaignDispatcherControl('retry_agent',state.agentNumber).catch(()=>undefined);
+      activated.add(state.agentNumber);
+      waves.push([state.agentNumber]);
+    }
+  }
+
+  await campaignDispatcherControl('resume_all');
+  return {seedAgents, activated:[...activated].sort((a,b)=>a-b), waves};
+}
 
 export async function getAutonomousTruthSnapshot() {
   startCampaignDispatcher();
@@ -37,7 +86,7 @@ export async function getAutonomousTruthSnapshot() {
   const completionPercent=totalDevelopmentJobs>0?Math.round((dispatcher.totals.completed/totalDevelopmentJobs)*10000)/100:0;
   const activeAgentPercent=agents.length>0?Math.round((counts.working/agents.length)*10000)/100:0;
   const continuousRuntimeCertified=agents.length===112&&counts.working===112&&counts.stale===0&&counts.blocked===0&&counts.unknown===0&&counts.freshHeartbeat===112&&autonomousWorking;
-  return {ok:agents.length===112,marker:IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER,generatedAt:new Date().toISOString(),truthPolicy:{heartbeatFreshMs:IVX_AUTONOMOUS_TRUTH_HEARTBEAT_FRESH_MS,workingRequiresOneOf:['agent runtime busy + activeTaskId + heartbeat <=60s','dispatcher RUNNING + real workerJobId + dispatcher heartbeat <=60s'],noInferenceFromGithubActions:true,noSyntheticWorkingStatus:true,staleFailsClosed:true},certification:{continuousRuntimeCertified,requiredAgents:112,workingAgents:counts.working,freshHeartbeatAgents:counts.freshHeartbeat,reason:continuousRuntimeCertified?'112/112 real workers have fresh <=60s heartbeat evidence and Autonomous is running':'Fail-closed: requires Autonomous running + 112/112 WORKING + 112/112 fresh heartbeats + zero STALE/BLOCKED/UNKNOWN'},autonomous:{working:autonomousWorking,schedulerEnabled:Boolean(scheduler?.enabled),dispatcherPaused:dispatcher.paused,emergencyStop:dispatcher.emergencyStop,runningJobs:dispatcher.totals.running,queuedJobs:dispatcher.totals.queued,completedJobs:dispatcher.totals.completed,failedJobs:dispatcher.totals.failed,blockedJobs:dispatcher.totals.blocked,maxConcurrency:dispatcher.maxConcurrency},developmentProgress:{totalJobs:totalDevelopmentJobs,pendingOwner:dispatcher.totals.pendingOwner,awaitingImplement:dispatcher.totals.awaitingImplement,queued:dispatcher.totals.queued,running:dispatcher.totals.running,completed:dispatcher.totals.completed,failed:dispatcher.totals.failed,blocked:dispatcher.totals.blocked,completionPercent,activeAgentPercent},agents:{counts,rows:agents},github:github?{checkedAt:github.checkedAt,queued:github.queued,inProgress:github.inProgress,storm:github.storm,error:github.error}:null};
+  return {ok:agents.length===112,marker:IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER,generatedAt:new Date().toISOString(),truthPolicy:{heartbeatFreshMs:IVX_AUTONOMOUS_TRUTH_HEARTBEAT_FRESH_MS,workingRequiresOneOf:['agent runtime busy + activeTaskId + heartbeat <=60s','dispatcher RUNNING + real workerJobId + dispatcher heartbeat <=60s'],noInferenceFromGithubActions:true,noSyntheticWorkingStatus:true,staleFailsClosed:true,cascadeActivation:{seedSize:IVX_AUTONOMOUS_CASCADE_SEED_SIZE,fanout:IVX_AUTONOMOUS_CASCADE_FANOUT}},certification:{continuousRuntimeCertified,requiredAgents:112,workingAgents:counts.working,freshHeartbeatAgents:counts.freshHeartbeat,reason:continuousRuntimeCertified?'112/112 real workers have fresh <=60s heartbeat evidence and Autonomous is running':'Fail-closed: requires Autonomous running + 112/112 WORKING + 112/112 fresh heartbeats + zero STALE/BLOCKED/UNKNOWN'},autonomous:{working:autonomousWorking,schedulerEnabled:Boolean(scheduler?.enabled),dispatcherPaused:dispatcher.paused,emergencyStop:dispatcher.emergencyStop,runningJobs:dispatcher.totals.running,queuedJobs:dispatcher.totals.queued,completedJobs:dispatcher.totals.completed,failedJobs:dispatcher.totals.failed,blockedJobs:dispatcher.totals.blocked,maxConcurrency:dispatcher.maxConcurrency},developmentProgress:{totalJobs:totalDevelopmentJobs,pendingOwner:dispatcher.totals.pendingOwner,awaitingImplement:dispatcher.totals.awaitingImplement,queued:dispatcher.totals.queued,running:dispatcher.totals.running,completed:dispatcher.totals.completed,failed:dispatcher.totals.failed,blocked:dispatcher.totals.blocked,completionPercent,activeAgentPercent},agents:{counts,rows:agents},github:github?{checkedAt:github.checkedAt,queued:github.queued,inProgress:github.inProgress,storm:github.storm,error:github.error}:null};
 }
 
 export async function enforceAutonomous112RuntimeTruth(){
@@ -52,7 +101,17 @@ export async function enforceAutonomous112RuntimeTruth(){
 }
 
 export async function applyTruthControl(action:TruthControlAction,agentId?:string,agentNumber?:number){
-  if(action==='start_all'||action==='resume_all'){startCampaignDispatcher();await runCampaignBootRecovery().catch(()=>0);await updateControlState('resume_all');await syncCampaignAssignmentsToDispatcher();for(const state of getAllExecutionStates())resumeAgent(state.agentId);if(action==='start_all')for(let n=1;n<=112;n+=1)await campaignDispatcherControl('retry_agent',n);await campaignDispatcherControl('resume_all');}
+  if(action==='start_all'||action==='resume_all'){
+    startCampaignDispatcher();
+    await runCampaignBootRecovery().catch(()=>0);
+    await updateControlState('resume_all');
+    await syncCampaignAssignmentsToDispatcher();
+    if(action==='start_all') await cascadeStartAllAgents();
+    else {
+      for(const state of getAllExecutionStates()) resumeAgent(state.agentId);
+      await campaignDispatcherControl('resume_all');
+    }
+  }
   else if(action==='stop_all'){for(const state of getAllExecutionStates())pauseAgent(state.agentId);await updateControlState('stop_all');await campaignDispatcherControl('stop_all');}
   else if(action==='pause_all'){for(const state of getAllExecutionStates())pauseAgent(state.agentId);await updateControlState('pause_all');await campaignDispatcherControl('pause_all');}
   else {if(!agentId&&typeof agentNumber!=='number')throw new Error('agentId or agentNumber required');const state=getAllExecutionStates().find(row=>row.agentId===agentId||row.agentNumber===agentNumber);if(!state)throw new Error('agent not found');if(action==='pause_agent')pauseAgent(state.agentId);if(action==='resume_agent')resumeAgent(state.agentId);if(action==='disable_agent')disableAgent(state.agentId);if(action==='enable_agent')enableAgent(state.agentId);if(action==='retry_agent')await campaignDispatcherControl('retry_agent',state.agentNumber);}
