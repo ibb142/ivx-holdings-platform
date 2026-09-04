@@ -10,6 +10,10 @@ import {
   getAgentLedgerDashboard,
   recordWorkflowAttribution,
 } from '../services/ivx-agent-work-ledger';
+import {
+  IVX_112_THREE_LAYER_VERIFY_MARKER,
+  buildThreeLayerVerifiedLedger,
+} from '../services/ivx-agent-productivity-verifier';
 
 export function agentLedgerOptions(): Response { return ownerOnlyOptions(); }
 type LedgerAuth = 'oidc' | 'system_key' | 'owner' | null;
@@ -55,20 +59,24 @@ export async function handleAgentLedgerGet(request: Request): Promise<Response> 
   const auth = await authorize(request);
   if (!auth) return ownerOnlyJson({ ok: false, error: 'IVX owner authentication required.' }, 401);
   try {
-    const dashboard = await getAgentLedgerDashboard();
+    const base = await getAgentLedgerDashboard();
+    const verified = await buildThreeLayerVerifiedLedger(base);
+    const dashboard = verified.dashboard;
     const now = Date.now();
     const timedAgents = dashboard.rows.map((row) => withLiveTimer(row, now));
     return ownerOnlyJson({
       ok: true,
       marker: IVX_AGENT_WORK_LEDGER_MARKER,
+      verificationMarker: IVX_112_THREE_LAYER_VERIFY_MARKER,
       auth,
       generatedAt: dashboard.generatedAt,
       timerMeasuredAt: new Date(now).toISOString(),
       totals: dashboard.totals,
       agents: timedAgents,
       rowCount: timedAgents.length,
-      timerPolicy: 'Per-agent timer uses durable real task startedAt and finishedAt. Running tasks advance against server time; completed tasks freeze at finishedAt. No synthetic time.',
-      policy: 'Canonical per-IA state built only from real dispatcher/worker/workflow evidence. Unmeasured time categories are null — never fabricated.',
+      verificationLayers: verified.verificationLayers,
+      timerPolicy: 'Per-agent timer is derived from real durable execution evidence. Running time advances only with fresh runtime/dispatcher heartbeat; completed time freezes. No synthetic time.',
+      policy: 'Three-layer fail-closed truth: runtime proof, time-integrity reconciliation, then exact-SHA certificate. FAIL/BLOCKED evidence never contributes productive time; ambiguous overlapping sources are never added together.',
     });
   } catch (error) {
     return ownerOnlyJson({ ok: false, marker: IVX_AGENT_WORK_LEDGER_MARKER, error: error instanceof Error ? error.message : 'Unable to build agent ledger.' }, 500);
