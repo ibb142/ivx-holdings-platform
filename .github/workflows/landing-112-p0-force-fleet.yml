@@ -1,0 +1,123 @@
+name: Landing P0 112-Agent Force Fleet
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/landing-112-p0-force-fleet.yml'
+      - 'qa/owner-priority-state.json'
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: landing-p0-112-force-fleet
+  cancel-in-progress: false
+
+env:
+  API_BASE: https://api.ivxholding.com
+  IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+  IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
+  IVX_OWNER_TOKEN: ${{ secrets.IVX_OWNER_TOKEN }}
+
+jobs:
+  force-landing-fleet:
+    name: Put all 112 real agents on Landing P0
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify owner P0 mission is Landing
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f qa/owner-priority-state.json
+          test "$(jq -r '.active // false' qa/owner-priority-state.json)" = true
+          test "$(jq -r '.priority // ""' qa/owner-priority-state.json)" = 'P0-OWNER'
+          test "$(jq -r '.mission // ""' qa/owner-priority-state.json)" = 'landing'
+          echo 'OWNER_P0_LANDING=PASS'
+
+      - name: Resolve live production and 112-agent registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 3 --retry-delay 2 --max-time 20 "$API_BASE/version" -o /tmp/version.json
+          curl -fsS --retry 3 --retry-delay 2 --max-time 20 "$API_BASE/api/ivx/agents" -o /tmp/agents.json
+          LIVE_SHA=$(jq -r '.commit // .version.commit // empty' /tmp/version.json)
+          test -n "$LIVE_SHA"
+          test "$(jq -r '.ok // false' /tmp/agents.json)" = true
+          test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
+          echo "LIVE_SHA=$LIVE_SHA" >> "$GITHUB_ENV"
+          jq -r '.agents[] | [.agentNumber,.agentId] | @tsv' /tmp/agents.json > /tmp/agents.tsv
+
+      - name: Execute Landing P0 across all 112 real agents
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/landing112 qa/evidence/autonomous
+          export API_BASE LIVE_SHA IVX_AI_SYSTEM_SECRET IVX_SYSTEM_SECRET IVX_OWNER_TOKEN
+          run_one() {
+            number="$1"; agent_id="$2"; http=401; ok=false
+            lanes=(
+              'landing-shell-navigation'
+              'landing-owner-signin'
+              'landing-member-registration'
+              'landing-forgot-password'
+              'landing-property-cards'
+              'landing-deal-ordering'
+              'landing-reels-media'
+              'landing-video-playback'
+              'landing-responsive-mobile'
+              'landing-api-contracts'
+              'landing-cloudfront-live'
+              'landing-accessibility'
+              'landing-performance'
+              'landing-console-errors'
+              'landing-form-submission'
+              'landing-auth-session'
+            )
+            idx=$(( (number - 1) % ${#lanes[@]} ))
+            lane="${lanes[$idx]}"
+            task_id="landing-p0-${GITHUB_RUN_ID}-${number}-${lane}"
+            for candidate_name in IVX_AI_SYSTEM_SECRET IVX_SYSTEM_SECRET IVX_OWNER_TOKEN; do
+              candidate="${!candidate_name:-}"; [ -n "$candidate" ] || continue
+              body=$(jq -nc \
+                --arg token "$candidate" \
+                --arg sourceSha "$LIVE_SHA" \
+                --arg taskId "$task_id" \
+                --arg lane "$lane" \
+                --argjson number "$number" \
+                '{taskType:"audit",ownerApprovalToken:$token,payload:{sourceSha:$sourceSha,__taskId:$taskId,__workflow:"Landing P0 112-Agent Force Fleet",__toolId:"code_search",__toolParams:{pattern:$lane,scope:"expo/ivxholding-landing"},mission:"landing",priority:"P0-OWNER",agentNumber:$number,goal:("LANDING 10/10 P0: audit and produce evidence for " + $lane + ". Find the exact defect/blocker on the current landing surface; real execution only; no simulated success."),realExecutionOnly:true,simulatedSuccessAllowed:false}}')
+              http=$(curl -sS --max-time 75 -o "/tmp/landing112/${number}.response.json" -w '%{http_code}' \
+                -X POST "$API_BASE/api/ivx/agents/${agent_id}/run" \
+                -H 'Content-Type: application/json' \
+                -H "x-ivx-owner-key: ${candidate}" \
+                --data "$body" || true)
+              [ "$http" != 401 ] && break
+            done
+            [ "$http" = 200 ] && ok=$(jq -r '.ok // false' "/tmp/landing112/${number}.response.json")
+            jq -n --argjson n "$number" --arg id "$agent_id" --arg lane "$lane" --arg http "$http" --argjson ok "$ok" \
+              '{agentNumber:$n,agentId:$id,lane:$lane,httpStatus:$http,ok:$ok}' > "/tmp/landing112/${number}.json"
+          }
+          export -f run_one
+          while IFS=$'\t' read -r number agent_id; do printf '%s\t%s\n' "$number" "$agent_id"; done < /tmp/agents.tsv \
+            | xargs -P 24 -n 2 bash -c 'run_one "$0" "$1"'
+          jq -s 'sort_by(.agentNumber)' /tmp/landing112/[0-9]*.json > qa/evidence/autonomous/landing-p0-112-force-fleet.json
+          total=$(jq 'length' qa/evidence/autonomous/landing-p0-112-force-fleet.json)
+          success=$(jq '[.[] | select(.ok == true)] | length' qa/evidence/autonomous/landing-p0-112-force-fleet.json)
+          echo "LANDING_112_TOTAL=$total LANDING_112_SUCCESS=$success"
+          test "$total" = 112
+          test "$success" = 112
+
+      - name: Upload exact 112-agent Landing evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: landing-p0-112-force-fleet-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qa/evidence/autonomous/landing-p0-112-force-fleet.json
+          if-no-files-found: warn
