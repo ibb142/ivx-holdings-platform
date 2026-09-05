@@ -1,0 +1,149 @@
+name: IVX Autonomous Out-of-Band Rescue
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_run:
+    workflows:
+      - 'IVX Autonomous Radar Self-Heal'
+      - 'IVX Autonomous Certificate Trust Guard'
+      - 'IVX Autonomous End-to-End Operational Control'
+    types: [completed]
+  workflow_dispatch: {}
+
+permissions:
+  actions: write
+  contents: read
+  id-token: write
+
+env:
+  API_BASE: https://api.ivxholding.com
+  SUPABASE_URL: https://kvclcdjmjghndxsngfzb.supabase.co
+  PROJECT_REF: kvclcdjmjghndxsngfzb
+  REPO: ibb142/ivx-holdings-platform
+  SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+  SYSTEM_KEY: ${{ secrets.IVX_SYSTEM_SECRET }}
+  SYSTEM_KEY_FALLBACK: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+
+jobs:
+  rescue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: ivx-autonomous-out-of-band-rescue
+      cancel-in-progress: false
+    steps:
+      - name: Acquire trusted machine identity
+        id: oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery")
+          token=$(printf '%s' "$raw" | jq -r '.value // empty')
+          test -n "$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Audit data plane without depending on IVX durable store
+        id: audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          unhealthy=false
+          if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+            echo '::error::SUPABASE_SERVICE_ROLE_KEY is not bound; out-of-band recovery cannot verify the data plane.'
+            unhealthy=true
+          else
+            code=$(curl -sS --max-time 20 -o /tmp/rest.json -w '%{http_code}' \
+              -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+              "${SUPABASE_URL}/rest/v1/members?select=id&limit=1" || true)
+            echo "supabase_data_plane_http=$code"
+            [ "$code" = 200 ] || unhealthy=true
+          fi
+          echo "unhealthy=$unhealthy" >> "$GITHUB_OUTPUT"
+
+      - name: Restart Supabase directly when data plane is unhealthy
+        if: steps.audit.outputs.unhealthy == 'true'
+        id: restart
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -n "${SUPABASE_ACCESS_TOKEN:-}" ] || { echo '::error::SUPABASE_ACCESS_TOKEN is not bound'; exit 2; }
+          auth=$(curl -sS --max-time 20 -o /tmp/project.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+            "https://api.supabase.com/v1/projects/${PROJECT_REF}" || true)
+          echo "supabase_management_http=$auth"
+          [ "$auth" = 200 ] || exit 3
+          code=$(curl -sS --max-time 45 -o /tmp/restart.json -w '%{http_code}' \
+            -X POST \
+            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            "https://api.supabase.com/v1/projects/${PROJECT_REF}/restart" || true)
+          echo "supabase_restart_http=$code"
+          case "$code" in 200|201|202) ;; *) cat /tmp/restart.json 2>/dev/null | head -c 500 || true; exit 4 ;; esac
+
+      - name: Wait for Supabase data plane recovery
+        if: steps.audit.outputs.unhealthy == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -n "${SUPABASE_SERVICE_ROLE_KEY:-}" ] || exit 2
+          for i in $(seq 1 60); do
+            code=$(curl -sS --max-time 15 -o /tmp/rest-after.json -w '%{http_code}' \
+              -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+              "${SUPABASE_URL}/rest/v1/members?select=id&limit=1" || true)
+            echo "recovery_poll=$i http=$code"
+            [ "$code" = 200 ] && exit 0
+            sleep 10
+          done
+          exit 5
+
+      - name: Resume 112 IA after infrastructure recovery
+        shell: bash
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          owner_key="${SYSTEM_KEY:-${SYSTEM_KEY_FALLBACK:-}}"
+          args=(-sS --max-time 30 -o /tmp/resume.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: ${OIDC_TOKEN}")
+          if [ -n "$owner_key" ]; then args+=( -H "x-ivx-owner-key: $owner_key" ); fi
+          for i in 1 2 3 4 5 6; do
+            code=$(curl "${args[@]}" -d '{"action":"resume_all"}' "$API_BASE/api/ivx/agents/app-completion/control" || true)
+            echo "resume_attempt=$i http=$code"
+            if [ "$code" = 200 ] && [ "$(jq -r '.ok // false' /tmp/resume.json 2>/dev/null)" = true ]; then exit 0; fi
+            sleep 10
+          done
+          cat /tmp/resume.json 2>/dev/null | head -c 1000 || true
+          exit 6
+
+      - name: Verify worker forward progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -sS --max-time 20 -o /tmp/dashboard.json -w '%{http_code}' "$API_BASE/api/ivx/agents/app-completion/dashboard" || true)
+            if [ "$code" = 200 ]; then
+              running=$(jq -r '.dispatcher.utilization24h.runningNow // 0' /tmp/dashboard.json)
+              queued=$(jq -r '.dispatcher.utilization24h.queuedNow // 0' /tmp/dashboard.json)
+              echo "runningNow=$running queuedNow=$queued"
+              if [ "$running" -gt 0 ] || [ "$queued" -eq 0 ]; then exit 0; fi
+            fi
+            sleep 10
+          done
+          echo '::error::112 IA resume did not produce forward progress.'
+          exit 7
+
+      - name: Re-run failed current-main workflows after rescue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          main_sha=$(gh api "repos/$REPO/git/ref/heads/main" --jq '.object.sha')
+          gh api "repos/$REPO/actions/runs?branch=main&head_sha=$main_sha&per_page=100" > /tmp/runs.json
+          jq -r '.workflow_runs[] | select((.conclusion=="failure" or .conclusion=="cancelled" or .conclusion=="timed_out" or .conclusion=="startup_failure" or .conclusion=="action_required") and .name!="IVX Autonomous Out-of-Band Rescue") | .id' /tmp/runs.json | sort -u | while read -r id; do
+            [ -n "$id" ] || continue
+            gh api -X POST "repos/$REPO/actions/runs/$id/rerun-failed-jobs" >/dev/null 2>&1 || true
+          done
