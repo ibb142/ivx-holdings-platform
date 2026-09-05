@@ -4,7 +4,7 @@ import { syncCampaignAssignmentsToDispatcher } from './ivx-app-completion-campai
 import { getCampaignDispatcherSnapshot, runCampaignBootRecovery, startCampaignDispatcher } from './ivx-campaign-dispatcher';
 import { getAutonomousProviderManagerStatus, runAutonomousProviderManager } from './ivx-autonomous-provider-manager';
 
-export const IVX_AUTONOMOUS_LIVE_BOOTSTRAP_MARKER = 'ivx-autonomous-live-bootstrap-2026-09-05-provider-self-manager-v2';
+export const IVX_AUTONOMOUS_LIVE_BOOTSTRAP_MARKER = 'ivx-autonomous-live-bootstrap-2026-09-05-provider-self-manager-v3';
 
 const DISPATCHER_FEED_INTERVAL_MS = 30_000;
 const PROVIDER_QA_INTERVAL_MS = 60_000;
@@ -73,9 +73,9 @@ export async function getAutonomousLiveBootstrapStatus() {
       lastFeedError,
     },
     providerSelfManager: {
+      ...providerManager,
       running: Boolean(providerTimer),
       intervalMs: PROVIDER_QA_INTERVAL_MS,
-      ...providerManager,
     },
     totalAgents: 112,
     autonomousScheduler: scheduler ? {
