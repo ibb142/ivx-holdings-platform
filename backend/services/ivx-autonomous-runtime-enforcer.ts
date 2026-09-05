@@ -1,6 +1,7 @@
 import { enforceAutonomous112RuntimeTruth, IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS } from './ivx-autonomous-truth-control';
 import { getAllExecutionStates } from './ivx-agent-runtime';
 import { runRealEngineeringCycle } from './ivx-agent-real-engineering-cycle';
+import { getAllTasks, heartbeat as heartbeatTask } from './ivx-autonomous-task-engine';
 import {
   ensureAutonomousManagerBacklog,
   ensureAutonomousWorkBlockForAgent,
@@ -28,24 +29,14 @@ let refillFailed = 0;
 let refillIdle = 0;
 let refillBlocked = 0;
 let lastIdleLogAt = 0;
+let lastHeartbeatRefreshAt: string | null = null;
+let lastHeartbeatRefreshCount = 0;
 const continuityRuns = new Map<string, Promise<void>>();
 
 export type ContinuityOutcome = 'completed' | 'blocked' | 'idle' | 'failed';
 type AgentContinuityRecord = { outcome: ContinuityOutcome; action: string; taskId: string | null; module: string | null; productiveMinutes: number; at: string; error: string | null };
 const lastOutcomeByAgent = new Map<number, AgentContinuityRecord>();
 
-/**
- * Refill cadence (owner invariant: an available IA must not sit idle while
- * eligible backlog exists):
- *   completed/blocked -> immediate re-lease (default 250ms, env >= 100ms)
- *   idle (no eligible task) -> 15s
- *   failed -> 30s backoff
- *
- * Autonomous Manager is the work source. Before every engineering cycle it
- * plans one real work block for that lane. Semantic 360 first checks whether
- * system capabilities are actually connected. Decision Quality then measures
- * outcomes and feeds weak/uncovered dimensions back into the durable queue.
- */
 function refillDelayMs(outcome: ContinuityOutcome): number {
   if (outcome === 'failed') return 30_000;
   if (outcome === 'idle') {
@@ -56,7 +47,6 @@ function refillDelayMs(outcome: ContinuityOutcome): number {
   return Number.isFinite(configured) && configured >= 100 ? Math.min(configured, 30_000) : 250;
 }
 
-/** Classify a cycle result truthfully: only durable work with a real taskId counts. */
 export function classifyContinuityResult(result: { ok: boolean; action: string; taskId: string | null; states: string[] }): ContinuityOutcome {
   if (!result.ok) return 'failed';
   if (result.action === 'NO_TASK_AVAILABLE') return 'idle';
@@ -85,67 +75,81 @@ function currentSourceSha(): string {
     ?? 'runtime-unknown-sha';
 }
 
+/**
+ * Renew only REAL task-engine leases that belong to agents with an actually
+ * executing continuity promise. This is not a synthetic busy signal: a task
+ * must already be in a lease-bearing active state with the real lease holder.
+ * It prevents long inspections/AI/tool calls from becoming falsely STALE simply
+ * because the cycle originally heartbeated only once.
+ */
+async function refreshInFlightTaskHeartbeats(): Promise<number> {
+  if (!continuityEnabled || continuityRuns.size === 0) return 0;
+  const byId = new Map(getAllExecutionStates().map((state) => [state.agentId, state.agentNumber]));
+  const activeAgentNumbers = new Set<number>();
+  for (const agentId of continuityRuns.keys()) {
+    const number = byId.get(agentId);
+    if (typeof number === 'number') activeAgentNumbers.add(number);
+  }
+  const activeStates = new Set(['LEASED', 'RUNNING', 'EXECUTION_COMPLETED', 'QA_IN_PROGRESS', 'READY_FOR_DEPLOYMENT', 'DEPLOYING', 'DEPLOYED', 'PRODUCTION_VERIFYING']);
+  const tasks = await getAllTasks();
+  let refreshed = 0;
+  for (const task of tasks) {
+    if (task.assignedAgentNumber == null || !activeAgentNumbers.has(task.assignedAgentNumber)) continue;
+    if (!activeStates.has(task.state) || !task.leaseHolder) continue;
+    const result = await heartbeatTask(task.taskId, task.leaseHolder).catch(() => ({ ok: false, error: 'heartbeat exception' }));
+    if (result.ok) refreshed += 1;
+  }
+  lastHeartbeatRefreshAt = new Date().toISOString();
+  lastHeartbeatRefreshCount = refreshed;
+  return refreshed;
+}
+
 function startContinuityRun(agentId: string, agentNumber: number): void {
   if (!canRunContinuity(agentId)) return;
   refillStarted += 1;
   let outcome: ContinuityOutcome = 'failed';
   const sourceSha = currentSourceSha();
-  const promise = ensureAutonomousWorkBlockForAgent({
-    agentId,
-    agentNumber,
-    sourceSha,
-  }).then((plan) => {
-    if (!plan.ok) {
-      throw new Error(`Autonomous Manager failed to plan IA-${agentNumber}: ${plan.error ?? 'unknown planning error'}`);
-    }
-    return runRealEngineeringCycle({ agentId, agentNumber, sourceSha });
-  }).then((result) => {
-    outcome = classifyContinuityResult(result);
-    lastOutcomeByAgent.set(agentNumber, {
-      outcome,
-      action: result.action,
-      taskId: result.taskId,
-      module: result.module,
-      productiveMinutes: result.productiveMinutes,
-      at: new Date().toISOString(),
-      error: result.error,
-    });
-    if (outcome === 'completed') refillCompleted += 1;
-    else if (outcome === 'blocked') refillBlocked += 1;
-    else if (outcome === 'idle') {
-      refillIdle += 1;
-      const now = Date.now();
-      if (now - lastIdleLogAt > 60_000) {
-        lastIdleLogAt = now;
-        console.log('[IVX Autonomous 112 Continuity] Autonomous Manager found no eligible real work for some lanes', { sampleAgent: agentNumber, action: result.action, refillIdle });
-      }
-    } else {
-      refillFailed += 1;
-      console.error('[IVX Autonomous 112 Continuity] real engineering refill failed', {
-        agentNumber,
-        agentId,
+  const promise = ensureAutonomousWorkBlockForAgent({ agentId, agentNumber, sourceSha })
+    .then((plan) => {
+      if (!plan.ok) throw new Error(`Autonomous Manager failed to plan IA-${agentNumber}: ${plan.error ?? 'unknown planning error'}`);
+      return runRealEngineeringCycle({ agentId, agentNumber, sourceSha });
+    })
+    .then((result) => {
+      outcome = classifyContinuityResult(result);
+      lastOutcomeByAgent.set(agentNumber, {
+        outcome,
         action: result.action,
         taskId: result.taskId,
-        error: result.error ?? 'engineering cycle did not complete durable work',
+        module: result.module,
+        productiveMinutes: result.productiveMinutes,
+        at: new Date().toISOString(),
+        error: result.error,
       });
-    }
-  }).catch((error) => {
-    outcome = 'failed';
-    refillFailed += 1;
-    lastOutcomeByAgent.set(agentNumber, { outcome: 'failed', action: 'EXCEPTION', taskId: null, module: null, productiveMinutes: 0, at: new Date().toISOString(), error: error instanceof Error ? error.message : String(error) });
-    console.error('[IVX Autonomous 112 Continuity] refill exception', {
-      agentNumber,
-      agentId,
-      error: error instanceof Error ? error.message : String(error),
+      if (outcome === 'completed') refillCompleted += 1;
+      else if (outcome === 'blocked') refillBlocked += 1;
+      else if (outcome === 'idle') {
+        refillIdle += 1;
+        const now = Date.now();
+        if (now - lastIdleLogAt > 60_000) {
+          lastIdleLogAt = now;
+          console.log('[IVX Autonomous 112 Continuity] Autonomous Manager found no eligible real work for some lanes', { sampleAgent: agentNumber, action: result.action, refillIdle });
+        }
+      } else {
+        refillFailed += 1;
+        console.error('[IVX Autonomous 112 Continuity] real engineering refill failed', { agentNumber, agentId, action: result.action, taskId: result.taskId, error: result.error ?? 'engineering cycle did not complete durable work' });
+      }
+    })
+    .catch((error) => {
+      outcome = 'failed';
+      refillFailed += 1;
+      lastOutcomeByAgent.set(agentNumber, { outcome: 'failed', action: 'EXCEPTION', taskId: null, module: null, productiveMinutes: 0, at: new Date().toISOString(), error: error instanceof Error ? error.message : String(error) });
+      console.error('[IVX Autonomous 112 Continuity] refill exception', { agentNumber, agentId, error: error instanceof Error ? error.message : String(error) });
+    })
+    .finally(() => {
+      continuityRuns.delete(agentId);
+      const next = setTimeout(() => { if (canRunContinuity(agentId)) startContinuityRun(agentId, agentNumber); }, refillDelayMs(outcome));
+      next.unref?.();
     });
-  }).finally(() => {
-    continuityRuns.delete(agentId);
-    const delay = refillDelayMs(outcome);
-    const next = setTimeout(() => {
-      if (canRunContinuity(agentId)) startContinuityRun(agentId, agentNumber);
-    }, delay);
-    next.unref?.();
-  });
   continuityRuns.set(agentId, promise);
 }
 
@@ -161,39 +165,31 @@ function refillRecoveredAgents(agentNumbers: number[]): void {
 function refillAllAvailableAgents(): void {
   if (!continuityEnabled) return;
   for (const state of getAllExecutionStates()) {
-    if (state.agentNumber != null && canRunContinuity(state.agentId)) {
-      startContinuityRun(state.agentId, state.agentNumber);
-    }
+    if (state.agentNumber != null && canRunContinuity(state.agentId)) startContinuityRun(state.agentId, state.agentNumber);
   }
 }
 
 async function run(reason: 'boot' | 'interval'): Promise<void> {
   lastRunAt = new Date().toISOString();
   try {
+    // Refresh real leases BEFORE strict truth evaluation so a genuinely active
+    // long cycle is not misclassified stale at the 60-second boundary.
+    await refreshInFlightTaskHeartbeats();
     const result = await enforceAutonomous112RuntimeTruth();
     lastOk = result.ok;
     lastRecovered = result.recovered;
     lastError = null;
 
-    continuityEnabled = Boolean(
-      !result.snapshot.autonomous.dispatcherPaused
-      && !result.snapshot.autonomous.emergencyStop,
-    );
+    continuityEnabled = Boolean(!result.snapshot.autonomous.dispatcherPaused && !result.snapshot.autonomous.emergencyStop);
 
     const sourceSha = currentSourceSha();
     let semantic360 = getAutonomousSemantic360Status();
     let decisionQuality = getAutonomousDecisionQualityStatus();
     if (continuityEnabled) {
-      // SEMANTIC 360: existence/health is not enough. Verify that intelligence,
-      // self-improvement, self-upgrade, radar, nervous, manager and durable queue
-      // are actually connected. Required gaps become bounded real work blocks.
       await runAutonomousSemantic360(sourceSha);
       semantic360 = getAutonomousSemantic360Status();
-
-      // CLOSED BRAIN LOOP: outcome -> measure -> learn -> reprioritize.
       await runAutonomousDecisionQualityLoop(sourceSha);
       decisionQuality = getAutonomousDecisionQualityStatus();
-
       const lanes = getAllExecutionStates()
         .filter((state) => state.agentNumber != null && !state.pauseState && !state.disabledState && state.health !== 'failed')
         .map((state) => ({ agentId: state.agentId, agentNumber: state.agentNumber as number }));
@@ -219,6 +215,7 @@ async function run(reason: 'boot' | 'interval'): Promise<void> {
       refillBlocked,
       refillIdle,
       refillFailed,
+      heartbeatRefreshCount: lastHeartbeatRefreshCount,
       semantic360,
       decisionQuality,
       autonomousManager: getAutonomousWorkManagerStatus(),
@@ -257,6 +254,8 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     refillBlocked,
     refillIdle,
     refillFailed,
+    lastHeartbeatRefreshAt,
+    lastHeartbeatRefreshCount,
     successfulRefillDelayMs: refillDelayMs('completed'),
     idleRefillDelayMs: refillDelayMs('idle'),
     failedRefillBackoffMs: refillDelayMs('failed'),
@@ -264,11 +263,10 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     semantic360: getAutonomousSemantic360Status(),
     decisionQuality: getAutonomousDecisionQualityStatus(),
     autonomousManager: getAutonomousWorkManagerStatus(),
-    truthPolicy: 'Autonomous Manager audits/plans real work blocks. Semantic 360 checks that internal/external capabilities are connected, not merely present. Decision Quality measures durable outcomes and reprioritizes weak/uncovered dimensions into the queue. Existing queue wins, primary repo patrol is next, secondary critical-file list is fallback. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
+    truthPolicy: 'Autonomous Manager audits/plans real work blocks. Semantic 360 verifies runtime-capable connections. Decision Quality measures durable outcomes. Long-running continuity work renews only existing real task-engine leases held by active continuity runs; promise count alone is never proof of work. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
   };
 }
 
-/** Per-agent latest continuity outcome (truthful working/blocked/idle/failed split). */
 export function getContinuityOutcomeCounts(): Record<ContinuityOutcome | 'inFlight' | 'unknown', number> {
   const counts: Record<ContinuityOutcome | 'inFlight' | 'unknown', number> = { completed: 0, blocked: 0, idle: 0, failed: 0, inFlight: continuityRuns.size, unknown: 0 };
   const states = getAllExecutionStates();
