@@ -6,6 +6,14 @@ import {
   ensureAutonomousWorkBlockForAgent,
   getAutonomousWorkManagerStatus,
 } from './ivx-autonomous-work-manager';
+import {
+  getAutonomousDecisionQualityStatus,
+  runAutonomousDecisionQualityLoop,
+} from './ivx-autonomous-decision-quality';
+import {
+  getAutonomousSemantic360Status,
+  runAutonomousSemantic360,
+} from './ivx-autonomous-semantic-360';
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let startedAt: string | null = null;
@@ -29,13 +37,14 @@ const lastOutcomeByAgent = new Map<number, AgentContinuityRecord>();
 /**
  * Refill cadence (owner invariant: an available IA must not sit idle while
  * eligible backlog exists):
- *   completed/blocked → immediate re-lease (default 250ms, env >= 100ms)
- *   idle (no eligible task) → 15s
- *   failed → 30s backoff
+ *   completed/blocked -> immediate re-lease (default 250ms, env >= 100ms)
+ *   idle (no eligible task) -> 15s
+ *   failed -> 30s backoff
  *
- * Autonomous Manager is now the work source. Before every engineering cycle it
- * audits/plans one real work block for that lane. A secondary critical-file list
- * is used only after primary module patrol is exhausted.
+ * Autonomous Manager is the work source. Before every engineering cycle it
+ * plans one real work block for that lane. Semantic 360 first checks whether
+ * system capabilities are actually connected. Decision Quality then measures
+ * outcomes and feeds weak/uncovered dimensions back into the durable queue.
  */
 function refillDelayMs(outcome: ContinuityOutcome): number {
   if (outcome === 'failed') return 30_000;
@@ -171,11 +180,24 @@ async function run(reason: 'boot' | 'interval'): Promise<void> {
       && !result.snapshot.autonomous.emergencyStop,
     );
 
+    const sourceSha = currentSourceSha();
+    let semantic360 = getAutonomousSemantic360Status();
+    let decisionQuality = getAutonomousDecisionQualityStatus();
     if (continuityEnabled) {
+      // SEMANTIC 360: existence/health is not enough. Verify that intelligence,
+      // self-improvement, self-upgrade, radar, nervous, manager and durable queue
+      // are actually connected. Required gaps become bounded real work blocks.
+      await runAutonomousSemantic360(sourceSha);
+      semantic360 = getAutonomousSemantic360Status();
+
+      // CLOSED BRAIN LOOP: outcome -> measure -> learn -> reprioritize.
+      await runAutonomousDecisionQualityLoop(sourceSha);
+      decisionQuality = getAutonomousDecisionQualityStatus();
+
       const lanes = getAllExecutionStates()
         .filter((state) => state.agentNumber != null && !state.pauseState && !state.disabledState && state.health !== 'failed')
         .map((state) => ({ agentId: state.agentId, agentNumber: state.agentNumber as number }));
-      await ensureAutonomousManagerBacklog({ sourceSha: currentSourceSha(), agents: lanes });
+      await ensureAutonomousManagerBacklog({ sourceSha, agents: lanes });
     }
 
     refillRecoveredAgents(result.recovered);
@@ -197,6 +219,8 @@ async function run(reason: 'boot' | 'interval'): Promise<void> {
       refillBlocked,
       refillIdle,
       refillFailed,
+      semantic360,
+      decisionQuality,
       autonomousManager: getAutonomousWorkManagerStatus(),
     });
   } catch (error) {
@@ -237,8 +261,10 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     idleRefillDelayMs: refillDelayMs('idle'),
     failedRefillBackoffMs: refillDelayMs('failed'),
     agentsByOutcome: getContinuityOutcomeCounts(),
+    semantic360: getAutonomousSemantic360Status(),
+    decisionQuality: getAutonomousDecisionQualityStatus(),
     autonomousManager: getAutonomousWorkManagerStatus(),
-    truthPolicy: 'Autonomous Manager audits/plans real work blocks before workers execute them; existing queue wins, primary repo patrol is next, secondary critical-file list is fallback. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
+    truthPolicy: 'Autonomous Manager audits/plans real work blocks. Semantic 360 checks that internal/external capabilities are connected, not merely present. Decision Quality measures durable outcomes and reprioritizes weak/uncovered dimensions into the queue. Existing queue wins, primary repo patrol is next, secondary critical-file list is fallback. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
   };
 }
 
