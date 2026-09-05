@@ -103,6 +103,8 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
   const token = request.headers.get('Authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
 
   if (!token) {
+    const message = error instanceof Error ? error.message : 'Owner authorization failed.';
+    console.error(`[OwnerAuth] ${traceId} exception: ${message} elapsed=${Date.now() - startedAt}ms`);
     return jsonResponse({
       success: false,
       authorized: false,
