@@ -1,0 +1,123 @@
+name: IVX Autonomous Full-Body Patrol
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'expo/**'
+      - 'backend/**'
+      - 'qa/**'
+      - '.github/workflows/**'
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: write
+  id-token: write
+
+concurrency:
+  group: ivx-autonomous-full-body-patrol
+  cancel-in-progress: true
+
+env:
+  API_BASE: https://api.ivxholding.com
+  LANDING: https://ivxholding.com
+  CHAT: https://chat.ivxholding.com
+
+jobs:
+  bloodstream:
+    name: Bloodstream - inside code, human mobile, outside production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Inventory every internal app surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ivx-full-body
+          find expo/app -type f \( -name '*.tsx' -o -name '*.ts' \) | sort > /tmp/ivx-full-body/expo-routes.txt
+          find backend/api -type f -name '*.ts' | sort > /tmp/ivx-full-body/backend-api-files.txt
+          find expo/.maestro -type f \( -name '*.yaml' -o -name '*.yml' \) | sort > /tmp/ivx-full-body/maestro-flows.txt
+          route_count=$(wc -l < /tmp/ivx-full-body/expo-routes.txt | tr -d ' ')
+          api_count=$(wc -l < /tmp/ivx-full-body/backend-api-files.txt | tr -d ' ')
+          flow_count=$(wc -l < /tmp/ivx-full-body/maestro-flows.txt | tr -d ' ')
+          jq -n --arg sha "$GITHUB_SHA" --argjson routes "$route_count" --argjson api "$api_count" --argjson flows "$flow_count" \
+            '{sha:$sha,expoRoutes:$routes,backendApiFiles:$api,maestroFlows:$flows}' > /tmp/ivx-full-body/inventory.json
+          test "$route_count" -gt 100
+          test "$api_count" -gt 50
+          test "$flow_count" -gt 5
+
+      - name: Verify critical nervous-system wiring inside code
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'reportAutonomousIncident' expo/lib/error-tracking.ts
+          grep -q '/api/ivx/incidents' expo/lib/autonomous-incident-bridge.ts
+          grep -q "from '@/hooks/useRealtimeChannel'" expo/lib/realtime.ts
+          grep -q 'OWNER CONTROL MODULES' expo/app/autonomous-dashboard.tsx
+          grep -q 'runAutonomousSemantic360' backend/services/ivx-autonomous-runtime-enforcer.ts
+          grep -q 'Senior Developer Repair Worker' backend/services/ivx-autonomous-semantic-360-v2.ts
+
+      - name: Outside-body live patrol
+        id: outside
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > /tmp/ivx-full-body/outside.jsonl
+          probe() {
+            name="$1"; url="$2"
+            code=$(curl -sS -L --max-time 20 -o "/tmp/ivx-full-body/${name}.body" -w '%{http_code}' "$url" || true)
+            ok=false; [[ "$code" =~ ^2 ]] && ok=true
+            jq -nc --arg name "$name" --arg url "$url" --arg code "$code" --argjson ok "$ok" '{name:$name,url:$url,http:$code,ok:$ok}' >> /tmp/ivx-full-body/outside.jsonl
+          }
+          probe api_health "$API_BASE/health"
+          probe api_version "$API_BASE/version"
+          probe landing "$LANDING/"
+          probe owner_chat "$CHAT/"
+          probe agents "$API_BASE/api/ivx/agents"
+          jq -s '.' /tmp/ivx-full-body/outside.jsonl > /tmp/ivx-full-body/outside.json
+          red=$(jq '[.[] | select(.ok != true)] | length' /tmp/ivx-full-body/outside.json)
+          echo "red=$red" >> "$GITHUB_OUTPUT"
+          test "$red" = 0
+
+      - name: Prove client incident intake is externally reachable
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload=$(jq -n --arg sha "$GITHUB_SHA" '{source:"frontend",severity:"warning",checkpoint:"full-body-patrol",message:"IVX autonomous full-body patrol synthetic canary",buildId:$sha}')
+          code=$(curl -sS --max-time 20 -o /tmp/ivx-full-body/incident.json -w '%{http_code}' -X POST "$API_BASE/api/ivx/incidents" -H 'Content-Type: application/json' --data "$payload" || true)
+          case "$code" in 200|201|202) ;; *) cat /tmp/ivx-full-body/incident.json || true; exit 1;; esac
+          jq -e '.ok == true' /tmp/ivx-full-body/incident.json >/dev/null
+
+      - name: Trigger real human Android Dashboard + IVX IA journey
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run ivx-dashboard-chat-e2e-cert.yml --ref main
+          echo 'HUMAN_ANDROID_JOURNEY_DISPATCHED=true'
+
+      - name: Trigger Internal + External 360 Control Tower
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run autonomous-internal-external-e2e.yml --ref main
+          echo 'INTERNAL_EXTERNAL_360_DISPATCHED=true'
+
+      - name: Persist full-body evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-full-body-patrol-${{ github.run_id }}
+          path: /tmp/ivx-full-body
+          if-no-files-found: warn
+          retention-days: 30
