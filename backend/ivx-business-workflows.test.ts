@@ -60,12 +60,23 @@ describe('IVX Business Workflows — member account control', () => {
   });
 
   test('loginMember returns false for unknown email', async () => {
-    const result = await loginMember(`nobody-${Date.now()}@ivx-test.local`, TEST_PASSWORD);
-    // loginMember intentionally bounds a stalled Supabase auth request at 10 seconds.
-    // Give the integration-style unit case enough time to observe that controlled
-    // failure instead of Bun's default 5-second test timeout winning the race.
-    expect(result.success).toBe(false);
-  }, 15_000);
+    // This is a unit/contract test, not a live Supabase availability probe.
+    // Keep it deterministic so CI cannot fail because the external auth service
+    // is slow or unreachable. Dedicated timeout/infrastructure tests cover that path.
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ message: 'Invalid login credentials' }), {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+      })) as typeof fetch;
+    try {
+      const result = await loginMember(`nobody-${Date.now()}@ivx-test.local`, TEST_PASSWORD);
+      expect(result.success).toBe(false);
+      expect(result.message).toBe('Invalid email or password.');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 
   test('requestMemberPasswordReset rejects empty email', async () => {
     const result = await requestMemberPasswordReset('');
