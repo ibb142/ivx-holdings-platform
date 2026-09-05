@@ -115,17 +115,22 @@ export function assessPredictiveHealth(input: PredictiveSample[]): PredictiveAss
 }
 
 /**
- * Dashboard telemetry can legitimately take ~5s on a cold control-plane read.
- * The old 4.5s deadline guaranteed false failures and overlapping 5s polls.
+ * Dashboard telemetry is backed by durable state and can legitimately exceed
+ * 12s on a cold multi-agent control-plane read. The old deadline still caused
+ * real owner devices to abort before the backend finished, which produced a
+ * false all-red TELEMETRY FAIL-CLOSED screen.
  *
  * For the two live dashboard telemetry endpoints we:
- *   - enforce a 12s minimum deadline,
- *   - dedupe an in-flight request for the same URL,
+ *   - enforce a 35s minimum deadline so it is compatible with the durable
+ *     store's bounded 30s REST window,
+ *   - dedupe an in-flight request for the same URL so the 5s UI poll cannot
+ *     create a thundering herd while one cold read is still running,
  *   - clear the in-flight entry immediately after completion.
  *
  * Other callers keep their requested deadline unchanged.
  */
 const telemetryInFlight = new Map<string, Promise<{ response: Response; latencyMs: number }>>();
+const DASHBOARD_TELEMETRY_MIN_TIMEOUT_MS = 35_000;
 
 function requestKey(input: RequestInfo | URL): string {
   if (typeof input === 'string') return input;
@@ -148,7 +153,7 @@ export async function fetchWithDeadline(
   const existing = dashboardTelemetry ? telemetryInFlight.get(key) : undefined;
   if (existing) return existing;
 
-  const effectiveTimeoutMs = dashboardTelemetry ? Math.max(timeoutMs, 12_000) : timeoutMs;
+  const effectiveTimeoutMs = dashboardTelemetry ? Math.max(timeoutMs, DASHBOARD_TELEMETRY_MIN_TIMEOUT_MS) : timeoutMs;
   const request = (async () => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), effectiveTimeoutMs);
