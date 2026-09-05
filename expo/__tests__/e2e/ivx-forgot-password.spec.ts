@@ -1,13 +1,61 @@
 /**
  * IVX Landing — Forgot Password E2E.
- * Real /recover request is asserted against production Supabase. The reset page
- * also gets a deterministic browser test for a valid recovery session so the
- * change-password path cannot regress silently.
+ *
+ * PR branch-local validation must be deterministic and must not fail because the
+ * external Supabase auth service is degraded. Production runs still exercise the
+ * real Supabase recovery endpoint. The browser wiring and reset-page state machine
+ * are always asserted.
  */
 import { test, expect, type Page } from '@playwright/test';
 
 const BASE = process.env.E2E_BASE_URL ?? 'https://ivxholding.com';
 const QA_EMAIL = `qa-e2e-fp-${Date.now()}@ivxholding.com`;
+const IS_LOCAL = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/i.test(BASE);
+
+async function installLocalAuthStub(page: Page, options: { invalidCode?: boolean } = {}): Promise<void> {
+  if (!IS_LOCAL) return;
+  await page.route('**/supabase.min.js', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/javascript',
+      body: `
+        window.__ivxRecoveryCalls = [];
+        window.supabase = {
+          createClient: function () {
+            return { auth: {
+              resetPasswordForEmail: async function (email, opts) {
+                window.__ivxRecoveryCalls.push(['resetPasswordForEmail', email, opts]);
+                return { data: {}, error: null };
+              },
+              setSession: async function (tokens) { window.__ivxRecoveryCalls.push(['setSession', tokens]); return { data: { session: { user: { email: 'qa-recovery@ivxholding.com' } } }, error: null }; },
+              getUser: async function () { return { data: { user: { email: 'qa-recovery@ivxholding.com' } }, error: null }; },
+              getSession: async function () { return { data: { session: null }, error: null }; },
+              updateUser: async function (attrs) { window.__ivxRecoveryCalls.push(['updateUser', attrs]); return { data: { user: { email: 'qa-recovery@ivxholding.com' } }, error: null }; },
+              signOut: async function (opts) { window.__ivxRecoveryCalls.push(['signOut', opts]); return { error: null }; },
+              verifyOtp: async function () { return { data: {}, error: null }; },
+              exchangeCodeForSession: async function (code) {
+                window.__ivxRecoveryCalls.push(['exchangeCodeForSession', code]);
+                return ${options.invalidCode ? "{ data: null, error: { message: 'Invalid recovery code' } }" : "{ data: {}, error: null }"};
+              }
+            }};
+          }
+        };
+      `,
+    });
+  });
+  await page.route('**/ivx-config.json*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        supabaseUrl: 'https://example.supabase.co',
+        supabaseAnonKey: 'sb_publishable_test',
+        apiBaseUrl: 'https://api.ivxholding.com',
+        backendUrl: 'https://api.ivxholding.com',
+      }),
+    });
+  });
+}
 
 async function openPortalForgotView(page: Page): Promise<void> {
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
@@ -39,16 +87,30 @@ test.describe('Forgot Password — landing portal', () => {
     await expect(page.locator('#portal-forgot-error')).toHaveText(/Enter a valid email/);
   });
 
-  test('real reset request: Supabase /auth/v1/recover 200 + success state', async ({ page }) => {
+  test('reset request reaches auth client and success state', async ({ page }) => {
+    await installLocalAuthStub(page);
     await openPortalForgotView(page);
     await page.locator('#portal-forgot-email').fill(QA_EMAIL);
-    const recoverResponse = page.waitForResponse(
-      (r) => r.url().includes('/auth/v1/recover') && r.request().method() === 'POST',
-      { timeout: 30000 },
-    );
+
+    let recoverResponse: Promise<import('@playwright/test').Response> | null = null;
+    if (!IS_LOCAL) {
+      recoverResponse = page.waitForResponse(
+        (r) => r.url().includes('/auth/v1/recover') && r.request().method() === 'POST',
+        { timeout: 30000 },
+      );
+    }
+
     await page.locator('#portal-forgot-btn').click();
-    const response = await recoverResponse;
-    expect(response.status()).toBe(200);
+
+    if (recoverResponse) {
+      const response = await recoverResponse;
+      expect(response.status()).toBe(200);
+    } else {
+      await expect.poll(async () => page.evaluate(() => (window as any).__ivxRecoveryCalls?.length ?? 0)).toBeGreaterThan(0);
+      const calls = await page.evaluate(() => (window as any).__ivxRecoveryCalls);
+      expect(calls.some((c: any[]) => c[0] === 'resetPasswordForEmail' && c[1] === QA_EMAIL)).toBeTruthy();
+    }
+
     await expect(page.locator('#portal-forgot-success')).toBeVisible({ timeout: 15000 });
     await expect(page.locator('#portal-forgot-success')).toContainText(/reset link has been sent/i);
     await expect(page.locator('#portal-forgot-error')).toBeHidden();
@@ -57,15 +119,17 @@ test.describe('Forgot Password — landing portal', () => {
 
 test.describe('Forgot Password — reset-password.html', () => {
   test('missing recovery params is rejected as incomplete/expired', async ({ page }) => {
+    if (IS_LOCAL) await installLocalAuthStub(page);
     await page.goto(BASE + '/reset-password.html', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.status')).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('.status')).toContainText(/incomplete or expired/i);
+    await expect(page.locator('.status')).toContainText(/incomplete or expired/i, { timeout: 15000 });
   });
 
   test('invalid recovery code is rejected', async ({ page }) => {
+    await installLocalAuthStub(page, { invalidCode: true });
     await page.goto(BASE + '/reset-password.html?code=definitely-invalid-code', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.status')).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('.status')).toContainText(/Could not verify your recovery link/i);
+    await expect(page.locator('.status')).toContainText(/Could not verify your recovery link/i, { timeout: 15000 });
   });
 
   test('valid recovery fragment establishes session, updates password, then signs out', async ({ page }) => {
@@ -91,7 +155,7 @@ test.describe('Forgot Password — reset-password.html', () => {
         `,
       });
     });
-    await page.route('**/ivx-config.json', async (route) => {
+    await page.route('**/ivx-config.json*', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ supabaseUrl: 'https://example.supabase.co', supabaseAnonKey: 'sb_publishable_test' }) });
     });
 
