@@ -17,6 +17,7 @@ import {
 } from './ivx-autonomous-semantic-360';
 
 let timer: ReturnType<typeof setInterval> | null = null;
+let enforcerRunInFlight: Promise<void> | null = null;
 let startedAt: string | null = null;
 let lastRunAt: string | null = null;
 let lastOk: boolean | null = null;
@@ -75,13 +76,6 @@ function currentSourceSha(): string {
     ?? 'runtime-unknown-sha';
 }
 
-/**
- * Renew only REAL task-engine leases that belong to agents with an actually
- * executing continuity promise. This is not a synthetic busy signal: a task
- * must already be in a lease-bearing active state with the real lease holder.
- * It prevents long inspections/AI/tool calls from becoming falsely STALE simply
- * because the cycle originally heartbeated only once.
- */
 async function refreshInFlightTaskHeartbeats(): Promise<number> {
   if (!continuityEnabled || continuityRuns.size === 0) return 0;
   const byId = new Map(getAllExecutionStates().map((state) => [state.agentId, state.agentNumber]));
@@ -169,11 +163,9 @@ function refillAllAvailableAgents(): void {
   }
 }
 
-async function run(reason: 'boot' | 'interval'): Promise<void> {
+async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
   lastRunAt = new Date().toISOString();
   try {
-    // Refresh real leases BEFORE strict truth evaluation so a genuinely active
-    // long cycle is not misclassified stale at the 60-second boundary.
     await refreshInFlightTaskHeartbeats();
     const result = await enforceAutonomous112RuntimeTruth();
     lastOk = result.ok;
@@ -221,12 +213,22 @@ async function run(reason: 'boot' | 'interval'): Promise<void> {
       autonomousManager: getAutonomousWorkManagerStatus(),
     });
   } catch (error) {
-    continuityEnabled = false;
+    // A telemetry/durable-store timeout must not kill already-running real work.
+    // Keep continuity state as-is; fail the supervisory sample closed and retry on
+    // the next serialized interval instead of stopping 112 active workers.
     lastOk = false;
     lastRecovered = [];
     lastError = error instanceof Error ? error.message : String(error);
-    console.error('[IVX Autonomous 112 Runtime Enforcer] failed', { reason, error: lastError });
+    console.error('[IVX Autonomous 112 Runtime Enforcer] failed', { reason, error: lastError, continuityPreserved: continuityEnabled });
   }
+}
+
+function run(reason: 'boot' | 'interval'): Promise<void> {
+  if (enforcerRunInFlight) return enforcerRunInFlight;
+  enforcerRunInFlight = runOnce(reason).finally(() => {
+    enforcerRunInFlight = null;
+  });
+  return enforcerRunInFlight;
 }
 
 export function startAutonomous112RuntimeEnforcer(): void {
@@ -241,6 +243,7 @@ export function startAutonomous112RuntimeEnforcer(): void {
 export function getAutonomous112RuntimeEnforcerStatus() {
   return {
     running: Boolean(timer),
+    supervisoryRunInFlight: Boolean(enforcerRunInFlight),
     startedAt,
     intervalMs: IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS,
     lastRunAt,
@@ -263,7 +266,7 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     semantic360: getAutonomousSemantic360Status(),
     decisionQuality: getAutonomousDecisionQualityStatus(),
     autonomousManager: getAutonomousWorkManagerStatus(),
-    truthPolicy: 'Autonomous Manager audits/plans real work blocks. Semantic 360 verifies runtime-capable connections. Decision Quality measures durable outcomes. Long-running continuity work renews only existing real task-engine leases held by active continuity runs; promise count alone is never proof of work. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
+    truthPolicy: 'Autonomous Manager audits/plans real work blocks. Semantic 360 verifies runtime-capable connections. Decision Quality measures durable outcomes. Supervisory patrols are serialized so a slow durable-store/QA sample cannot overlap the next patrol. A supervisory timeout never stops already-running real continuity work. Long-running continuity work renews only existing real task-engine leases held by active continuity runs; promise count alone is never proof of work. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
   };
 }
 
