@@ -7,6 +7,8 @@ on:
       - 'expo/**'
       - 'backend/**'
       - 'qa/**'
+      - 'scripts/ivx-all-modules-human-depth-e2e.sh'
+      - 'scripts/ivx-dashboard-chat-android-e2e.sh'
       - '.github/workflows/**'
   schedule:
     - cron: '*/15 * * * *'
@@ -28,7 +30,7 @@ env:
 
 jobs:
   bloodstream:
-    name: Bloodstream - inside code, human mobile, outside production
+    name: Bloodstream - inside code, every human mobile module, outside production
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -53,7 +55,7 @@ jobs:
           test "$api_count" -gt 50
           test "$flow_count" -gt 5
 
-      - name: Verify critical nervous-system wiring inside code
+      - name: Verify critical nervous-system and human-depth wiring inside code
         shell: bash
         run: |
           set -euo pipefail
@@ -63,6 +65,8 @@ jobs:
           grep -q 'OWNER CONTROL MODULES' expo/app/autonomous-dashboard.tsx
           grep -q 'runAutonomousSemantic360' backend/services/ivx-autonomous-runtime-enforcer.ts
           grep -q 'Senior Developer Repair Worker' backend/services/ivx-autonomous-semantic-360-v2.ts
+          grep -q 'IVX-ALL-MODULES-HUMAN-DEPTH-E2E' scripts/ivx-all-modules-human-depth-e2e.sh
+          grep -q 'ivx-all-modules-human-depth-e2e.sh' scripts/ivx-dashboard-chat-android-e2e.sh
 
       - name: Outside-body live patrol
         id: outside
@@ -95,14 +99,14 @@ jobs:
           case "$code" in 200|201|202) ;; *) cat /tmp/ivx-full-body/incident.json || true; exit 1;; esac
           jq -e '.ok == true' /tmp/ivx-full-body/incident.json >/dev/null
 
-      - name: Trigger real human Android Dashboard + IVX IA journey
+      - name: Trigger real human Android every-module + Dashboard + IVX IA journey
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           gh workflow run ivx-dashboard-chat-e2e-cert.yml --ref main
-          echo 'HUMAN_ANDROID_JOURNEY_DISPATCHED=true'
+          echo 'HUMAN_ANDROID_ALL_MODULES_JOURNEY_DISPATCHED=true'
 
       - name: Trigger Internal + External 360 Control Tower
         shell: bash
