@@ -6,14 +6,49 @@ on:
       - fix/p0-task-engine-supabase-stability-20260905
     paths:
       - .github/workflows/p0-task-engine-supabase-stability-hotfix.yml
+      - scripts/p0-task-engine-supabase-stability.py
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: p0-task-engine-supabase-stability-hotfix
+  cancel-in-progress: false
+
 jobs:
   patch-and-verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Runner smoke test
-        run: echo P0_WORKFLOW_RUNNER_OK
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/p0-task-engine-supabase-stability-20260905
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Apply deterministic P0 patch
+        run: python scripts/p0-task-engine-supabase-stability.py
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Task-engine regression tests
+        run: bun test backend/services/ivx-autonomous-task-engine.test.ts
+
+      - name: TypeScript
+        run: bunx tsc --noEmit
+
+      - name: Commit verified source fix
+        run: |
+          if git diff --quiet -- backend/services/ivx-autonomous-task-engine.ts backend/services/ivx-autonomous-truth-control.ts; then
+            echo 'Source already patched.'
+            exit 0
+          fi
+          git config user.name 'IVX Autonomous P0 Repair'
+          git config user.email 'actions@users.noreply.github.com'
+          git add backend/services/ivx-autonomous-task-engine.ts backend/services/ivx-autonomous-truth-control.ts
+          git commit -m 'fix(p0): fail closed and reduce Supabase task pressure [p0-stability-applied]'
+          git push origin HEAD:fix/p0-task-engine-supabase-stability-20260905
