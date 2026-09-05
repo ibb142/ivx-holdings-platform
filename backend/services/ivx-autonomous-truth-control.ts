@@ -5,11 +5,12 @@ import { getGitHubActionsExternalSupervisorStatus } from './ivx-github-actions-e
 import { getSchedulerState } from './ivx-autonomous-scheduler';
 import { getAllTasks, type Task } from './ivx-autonomous-task-engine';
 
-export const IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER = 'ivx-autonomous-truth-control-2026-09-04-v8-strict-heartbeat';
+export const IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER = 'ivx-autonomous-truth-control-2026-09-05-v9-bounded-fastpath';
 export const IVX_AUTONOMOUS_TRUTH_HEARTBEAT_FRESH_MS = 60 * 1000;
 export const IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS = 30 * 1000;
 export const IVX_AUTONOMOUS_CASCADE_SEED_SIZE = 10;
 export const IVX_AUTONOMOUS_CASCADE_FANOUT = 10;
+export const IVX_AUTONOMOUS_TRUTH_DEPENDENCY_TIMEOUT_MS = 2_500;
 
 const TASK_ENGINE_ACTIVE_STATES = new Set([
   'LEASED', 'RUNNING', 'EXECUTION_COMPLETED', 'QA_IN_PROGRESS',
@@ -18,9 +19,28 @@ const TASK_ENGINE_ACTIVE_STATES = new Set([
 
 export type TruthControlAction = 'start_all'|'stop_all'|'pause_all'|'resume_all'|'pause_agent'|'resume_agent'|'disable_agent'|'enable_agent'|'retry_agent';
 
+type BoundedDependency<T> = { value: T | null; error: string | null };
+
 function heartbeatAgeMs(value: string | null): number | null { if (!value) return null; const ts=Date.parse(value); return Number.isFinite(ts)?Math.max(0,Date.now()-ts):null; }
 function heartbeatFresh(value: string | null): boolean { const age=heartbeatAgeMs(value); return age!==null&&age<=IVX_AUTONOMOUS_TRUTH_HEARTBEAT_FRESH_MS; }
 function taskHeartbeat(task: Task | undefined): string | null { return task?.lastHeartbeatAt ?? null; }
+
+async function boundedDependency<T>(label: string, task: Promise<T>): Promise<BoundedDependency<T>> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label}_timeout_${IVX_AUTONOMOUS_TRUTH_DEPENDENCY_TIMEOUT_MS}ms`)), IVX_AUTONOMOUS_TRUTH_DEPENDENCY_TIMEOUT_MS);
+    });
+    const value = await Promise.race([task, timeout]);
+    return { value, error: null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn('[IVXAutonomousTruth] dependency degraded:', { label, message: message.slice(0, 220) });
+    return { value: null, error: message.slice(0, 220) };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 async function cascadeStartAllAgents(): Promise<{seedAgents:number[]; activated:number[]; waves:number[][]}> {
   const states = [...getAllExecutionStates()].sort((a,b)=>a.agentNumber-b.agentNumber);
@@ -71,14 +91,32 @@ async function cascadeStartAllAgents(): Promise<{seedAgents:number[]; activated:
 
 export async function getAutonomousTruthSnapshot() {
   startCampaignDispatcher();
-  const [dispatcher,scheduler,dispatcherRecords,tasks]=await Promise.all([
-    getCampaignDispatcherSnapshot(),
-    getSchedulerState().catch(()=>null),
-    listCampaignDispatcherRecords(),
-    getAllTasks(),
+
+  const [dispatcherResult,schedulerResult,dispatcherRecordsResult,tasksResult]=await Promise.all([
+    boundedDependency('dispatcher_snapshot', Promise.resolve(getCampaignDispatcherSnapshot())),
+    boundedDependency('scheduler_state', Promise.resolve(getSchedulerState())),
+    boundedDependency('dispatcher_records', Promise.resolve(listCampaignDispatcherRecords())),
+    boundedDependency('task_engine', Promise.resolve(getAllTasks())),
   ]);
+
+  const dispatcher = dispatcherResult.value ?? {
+    paused: true,
+    emergencyStop: false,
+    totals: { pendingOwner:0, awaitingImplement:0, queued:0, running:0, completed:0, failed:0, blocked:0 },
+    maxConcurrency: 0,
+  };
+  const scheduler=schedulerResult.value;
+  const dispatcherRecords=dispatcherRecordsResult.value ?? [];
+  const tasks=tasksResult.value ?? [];
+  const degradedDependencies = [
+    dispatcherResult.error ? 'dispatcher_snapshot' : null,
+    schedulerResult.error ? 'scheduler_state' : null,
+    dispatcherRecordsResult.error ? 'dispatcher_records' : null,
+    tasksResult.error ? 'task_engine' : null,
+  ].filter((value): value is string => Boolean(value));
+
   const github=getGitHubActionsExternalSupervisorStatus(); const states=getAllExecutionStates();
-  const runningByAgent=new Map<number,typeof dispatcherRecords[number]>();
+  const runningByAgent=new Map<number,(typeof dispatcherRecords)[number]>();
   for(const record of dispatcherRecords) if(record.status==='RUNNING'&&record.workerJobId) runningByAgent.set(record.agentNumber,record);
 
   const activeTaskByAgent=new Map<number,Task>();
@@ -139,13 +177,16 @@ export async function getAutonomousTruthSnapshot() {
   const totalDevelopmentJobs=dispatcher.totals.pendingOwner+dispatcher.totals.awaitingImplement+dispatcher.totals.queued+dispatcher.totals.running+dispatcher.totals.completed+dispatcher.totals.failed+dispatcher.totals.blocked;
   const completionPercent=totalDevelopmentJobs>0?Math.round((dispatcher.totals.completed/totalDevelopmentJobs)*10000)/100:0;
   const activeAgentPercent=agents.length>0?Math.round((counts.working/agents.length)*10000)/100:0;
-  const continuousRuntimeCertified=agents.length===112&&counts.working===112&&counts.stale===0&&counts.blocked===0&&counts.unknown===0&&counts.freshHeartbeat===112&&autonomousWorking;
+  const continuousRuntimeCertified=degradedDependencies.length===0&&agents.length===112&&counts.working===112&&counts.stale===0&&counts.blocked===0&&counts.unknown===0&&counts.freshHeartbeat===112&&autonomousWorking;
   return {
     ok:agents.length===112,
     marker:IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER,
     generatedAt:new Date().toISOString(),
+    degraded:degradedDependencies.length>0,
+    degradedDependencies,
     truthPolicy:{
       heartbeatFreshMs:IVX_AUTONOMOUS_TRUTH_HEARTBEAT_FRESH_MS,
+      dependencyTimeoutMs:IVX_AUTONOMOUS_TRUTH_DEPENDENCY_TIMEOUT_MS,
       workingRequiresOneOf:[
         'agent runtime busy + activeTaskId + heartbeat <=60s',
         'dispatcher RUNNING + real workerJobId + dispatcher heartbeat <=60s',
@@ -156,9 +197,10 @@ export async function getAutonomousTruthSnapshot() {
       noInferenceFromTaskUpdatedAt:true,
       noSyntheticWorkingStatus:true,
       staleFailsClosed:true,
+      dependencyFailureFailsClosedWithoutTurningTruthEndpointIntoA500:true,
       cascadeActivation:{seedSize:IVX_AUTONOMOUS_CASCADE_SEED_SIZE,fanout:IVX_AUTONOMOUS_CASCADE_FANOUT},
     },
-    certification:{continuousRuntimeCertified,requiredAgents:112,workingAgents:counts.working,freshHeartbeatAgents:counts.freshHeartbeat,reason:continuousRuntimeCertified?'112/112 real workers have fresh <=60s heartbeat evidence and Autonomous is running':'Fail-closed: requires Autonomous running + 112/112 WORKING + 112/112 fresh heartbeats + zero STALE/BLOCKED/UNKNOWN'},
+    certification:{continuousRuntimeCertified,requiredAgents:112,workingAgents:counts.working,freshHeartbeatAgents:counts.freshHeartbeat,reason:continuousRuntimeCertified?'112/112 real workers have fresh <=60s heartbeat evidence and Autonomous is running':degradedDependencies.length?`Fail-closed: degraded truth dependencies: ${degradedDependencies.join(',')}`:'Fail-closed: requires Autonomous running + 112/112 WORKING + 112/112 fresh heartbeats + zero STALE/BLOCKED/UNKNOWN'},
     autonomous:{working:autonomousWorking,schedulerEnabled:Boolean(scheduler?.enabled),dispatcherPaused:dispatcher.paused,emergencyStop:dispatcher.emergencyStop,runningJobs:dispatcher.totals.running,queuedJobs:dispatcher.totals.queued,taskEngineRunning,completedJobs:dispatcher.totals.completed,failedJobs:dispatcher.totals.failed,blockedJobs:dispatcher.totals.blocked,maxConcurrency:dispatcher.maxConcurrency},
     developmentProgress:{totalJobs:totalDevelopmentJobs,pendingOwner:dispatcher.totals.pendingOwner,awaitingImplement:dispatcher.totals.awaitingImplement,queued:dispatcher.totals.queued,running:dispatcher.totals.running,taskEngineRunning,completed:dispatcher.totals.completed,failed:dispatcher.totals.failed,blocked:dispatcher.totals.blocked,completionPercent,activeAgentPercent},
     agents:{counts,rows:agents},
