@@ -349,7 +349,8 @@ export async function handleRecoveryExecuteRequest(request: Request): Promise<Re
   if (!jobId) return ownerOnlyJson({ ok: false, error: 'jobId is required.' }, 400);
 
   // The caller provides step descriptions; we execute them with recovery.
-  const stepDescriptions = Array.isArray(body.steps) ? body.steps : [];
+  // Diagnose failed job or step for actionable repair
+const stepDescriptions = Array.isArray(body.steps) ? body.steps : [];
   const steps = stepDescriptions.map((desc: unknown) => {
     return async (_stepIndex: number, _results: Record<number, unknown>) => {
       // In production, steps are server-side functions. For the QA endpoint,
