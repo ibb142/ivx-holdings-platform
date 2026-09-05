@@ -1,14 +1,29 @@
-name: IVX Render Live Certificate
+name: IVX Production Deploy Governor
 
 on:
   push:
     branches: [main]
-  workflow_dispatch:
+    paths:
+      - 'backend/**'
+      - 'server.ts'
+      - 'package.json'
+      - 'bun.lock'
+      - 'render.yaml'
+      - '.github/workflows/ivx-render-live-cert.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+# Enterprise invariant: only one automatic backend deployment decision may execute at a time.
+concurrency:
+  group: ivx-production-deploy-governor
+  cancel-in-progress: false
 
 jobs:
-  render-live-cert:
+  deploy-and-certify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
@@ -18,202 +33,165 @@ jobs:
       API_BASE: https://api.ivxholding.com
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Resolve deploy mode
+      - name: Resolve latest main target and current production truth
+        id: target
         shell: bash
         run: |
           set -euo pipefail
+          git fetch origin main --quiet
+          TARGET_SHA=$(git rev-parse origin/main)
           SERVICE_ID="${RENDER_SERVICE_ID:-$DEFAULT_RENDER_SERVICE_ID}"
-          echo "SERVICE_ID=${SERVICE_ID}" >> "$GITHUB_ENV"
-          if [ -n "${RENDER_API_KEY:-}" ]; then
-            echo "DEPLOY_MODE=render_api" >> "$GITHUB_ENV"
-            echo "Render API secret is bound in GitHub; explicit deploy will be triggered."
-          elif [ -n "${IVX_AI_SYSTEM_SECRET:-${IVX_SYSTEM_SECRET:-}}" ]; then
-            echo "DEPLOY_MODE=ivx_runtime_bridge" >> "$GITHUB_ENV"
-            echo "GitHub Render key is absent; using IVX's protected runtime deploy bridge."
-          else
-            echo "DEPLOY_MODE=auto_deploy" >> "$GITHUB_ENV"
-            echo "No GitHub deploy credential or IVX system-key bridge is bound; falling back to Render repository auto-deploy."
-          fi
+          echo "TARGET_SHA=$TARGET_SHA" >> "$GITHUB_ENV"
+          echo "SERVICE_ID=$SERVICE_ID" >> "$GITHUB_ENV"
+          live=''
+          code=$(curl -sS --max-time 20 -o /tmp/version-before.json -w '%{http_code}' "$API_BASE/version" || true)
+          if [ "$code" = 200 ]; then live=$(jq -r '.commit // empty' /tmp/version-before.json); fi
+          already_live=false
+          if [ "$live" = "$TARGET_SHA" ]; then already_live=true; fi
+          echo "already_live=$already_live" >> "$GITHUB_OUTPUT"
+          echo "governor_target=$TARGET_SHA trigger_sha=$GITHUB_SHA production_sha=${live:-missing} already_live=$already_live"
 
-      - name: Trigger Render deploy when API binding exists
-        id: deploy
-        if: env.DEPLOY_MODE == 'render_api'
+      - name: Reuse an active Render deploy for the same SHA
+        id: active
+        if: steps.target.outputs.already_live != 'true' && env.RENDER_API_KEY != ''
         shell: bash
         run: |
           set -euo pipefail
-          RESPONSE=$(curl -fsS -X POST "https://api.render.com/v1/services/${SERVICE_ID}/deploys" \
-            -H "Authorization: Bearer ${RENDER_API_KEY}" \
-            -H "Accept: application/json" \
-            -H "Content-Type: application/json" \
-            --data '{"clearCache":"do_not_clear"}')
-          DEPLOY_ID=$(printf '%s' "$RESPONSE" | jq -r '.id // .deploy.id // empty')
-          if [ -z "$DEPLOY_ID" ]; then
-            echo "Render did not return a deploy id"
-            exit 1
+          response=$(curl -fsS --max-time 30 "https://api.render.com/v1/services/${SERVICE_ID}/deploys?limit=50" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" -H 'Accept: application/json')
+          active=$(printf '%s' "$response" | jq -c --arg sha "$TARGET_SHA" '
+            [ .[]
+              | select((.status == "created" or .status == "build_in_progress" or .status == "update_in_progress"))
+              | select((.commit.id // .commitId // "") == $sha)
+            ][0] // empty')
+          if [ -n "$active" ]; then
+            deploy_id=$(printf '%s' "$active" | jq -r '.id // empty')
+            test -n "$deploy_id"
+            echo "deploy_id=$deploy_id" >> "$GITHUB_OUTPUT"
+            echo "same_sha_active=true" >> "$GITHUB_OUTPUT"
+            echo "DEPLOY_ID=$deploy_id" >> "$GITHUB_ENV"
+            echo "deploy_governor=REUSE_ACTIVE same_sha=$TARGET_SHA deploy_id=$deploy_id"
+          else
+            echo "same_sha_active=false" >> "$GITHUB_OUTPUT"
+            echo 'deploy_governor=NO_SAME_SHA_ACTIVE'
           fi
-          echo "DEPLOY_ID=$DEPLOY_ID" >> "$GITHUB_ENV"
-          echo "Triggered Render deploy $DEPLOY_ID"
 
-      - name: Trigger Render deploy through IVX runtime bridge
-        id: bridge_deploy
-        if: env.DEPLOY_MODE == 'ivx_runtime_bridge'
+      - name: Wait for any other active Render deploy before creating one
+        if: steps.target.outputs.already_live != 'true' && env.RENDER_API_KEY != '' && steps.active.outputs.same_sha_active != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            response=$(curl -fsS --max-time 30 "https://api.render.com/v1/services/${SERVICE_ID}/deploys?limit=20" \
+              -H "Authorization: Bearer ${RENDER_API_KEY}" -H 'Accept: application/json')
+            active_count=$(printf '%s' "$response" | jq '[.[] | select(.status == "created" or .status == "build_in_progress" or .status == "update_in_progress")] | length')
+            live=$(curl -sS --max-time 20 "$API_BASE/version" 2>/dev/null | jq -r '.commit // empty' || true)
+            echo "serialize_poll=$i active_deploys=$active_count production_sha=${live:-missing} target=$TARGET_SHA"
+            if [ "$live" = "$TARGET_SHA" ]; then
+              echo 'TARGET_BECAME_LIVE=true' >> "$GITHUB_ENV"
+              exit 0
+            fi
+            if [ "$active_count" = 0 ]; then exit 0; fi
+            sleep 10
+          done
+          echo 'Another Render deployment stayed active too long; fail closed instead of creating an overlapping deploy.'
+          exit 1
+
+      - name: Create exactly one Render deploy for target SHA
+        if: steps.target.outputs.already_live != 'true' && env.RENDER_API_KEY != '' && steps.active.outputs.same_sha_active != 'true' && env.TARGET_BECAME_LIVE != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Final race check immediately before POST.
+          response=$(curl -fsS --max-time 30 "https://api.render.com/v1/services/${SERVICE_ID}/deploys?limit=50" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" -H 'Accept: application/json')
+          existing=$(printf '%s' "$response" | jq -r --arg sha "$TARGET_SHA" '
+            [ .[]
+              | select((.status == "created" or .status == "build_in_progress" or .status == "update_in_progress"))
+              | select((.commit.id // .commitId // "") == $sha)
+              | .id
+            ][0] // empty')
+          if [ -n "$existing" ]; then
+            echo "DEPLOY_ID=$existing" >> "$GITHUB_ENV"
+            echo "deploy_governor=RACE_REUSED deploy_id=$existing sha=$TARGET_SHA"
+            exit 0
+          fi
+          create=$(curl -fsS --max-time 40 -X POST "https://api.render.com/v1/services/${SERVICE_ID}/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H 'Accept: application/json' \
+            -H 'Content-Type: application/json' \
+            --data "{\"clearCache\":\"do_not_clear\",\"commitId\":\"${TARGET_SHA}\"}")
+          deploy_id=$(printf '%s' "$create" | jq -r '.id // .deploy.id // empty')
+          test -n "$deploy_id"
+          echo "DEPLOY_ID=$deploy_id" >> "$GITHUB_ENV"
+          echo "deploy_governor=CREATED_ONCE deploy_id=$deploy_id sha=$TARGET_SHA"
+
+      - name: Fallback through protected IVX deploy bridge
+        if: steps.target.outputs.already_live != 'true' && env.RENDER_API_KEY == '' && (env.IVX_AI_SYSTEM_SECRET != '' || env.IVX_SYSTEM_SECRET != '')
         shell: bash
         run: |
           set -euo pipefail
           SYSTEM_KEY="${IVX_AI_SYSTEM_SECRET:-${IVX_SYSTEM_SECRET:-}}"
-          HTTP=$(curl -sS -m 40 -o /tmp/ivx-render-bridge.json -w '%{http_code}' \
-            -X POST "${API_BASE}/api/ivx/developer-deploy/action" \
-            -H "Content-Type: application/json" \
+          http=$(curl -sS --max-time 60 -o /tmp/bridge.json -w '%{http_code}' \
+            -X POST "$API_BASE/api/ivx/developer-deploy/action" \
+            -H 'Content-Type: application/json' \
             -H "X-IVX-System-Key: ${SYSTEM_KEY}" \
             -H "Authorization: Bearer ${SYSTEM_KEY}" \
-            --data "{\"action\":\"render_trigger_deploy\",\"input\":{\"serviceId\":\"${SERVICE_ID}\",\"commitId\":\"${GITHUB_SHA}\"},\"confirm\":true,\"confirmText\":\"CONFIRM_IVX_RENDER_DEPLOY\",\"reason\":\"GitHub exact-head production certification\"}" || true)
-          case "$HTTP" in
-            200|201|202) ;;
-            *)
-              echo "IVX runtime deploy bridge unavailable with HTTP ${HTTP}; continuing with Render repository auto-deploy and exact-SHA hard gates."
-              jq '{ok,error,message,action,confirmationRequired}' /tmp/ivx-render-bridge.json 2>/dev/null || true
-              echo "DEPLOY_MODE=auto_deploy" >> "$GITHUB_ENV"
-              ;;
-          esac
-          DEPLOY_ID=$(jq -r '.result.deployId // .result.id // .deployId // empty' /tmp/ivx-render-bridge.json 2>/dev/null || true)
-          if [ -n "$DEPLOY_ID" ]; then
-            echo "DEPLOY_ID=$DEPLOY_ID" >> "$GITHUB_ENV"
-            echo "IVX runtime bridge triggered Render deploy $DEPLOY_ID"
-          else
-            echo "IVX runtime bridge accepted the deploy request; waiting for exact production SHA parity."
-          fi
+            --data "{\"action\":\"render_trigger_deploy\",\"input\":{\"serviceId\":\"${SERVICE_ID}\",\"commitId\":\"${TARGET_SHA}\"},\"confirm\":true,\"confirmText\":\"CONFIRM_IVX_RENDER_DEPLOY\",\"reason\":\"IVX Production Deploy Governor exact-SHA deployment\"}" || true)
+          case "$http" in 200|201|202) ;; *) cat /tmp/bridge.json || true; exit 1;; esac
+          deploy_id=$(jq -r '.result.deployId // .result.id // .deployId // empty' /tmp/bridge.json 2>/dev/null || true)
+          echo "DEPLOY_ID=${deploy_id:-bridge}" >> "$GITHUB_ENV"
+          echo "deploy_governor=PROTECTED_BRIDGE sha=$TARGET_SHA"
 
-      - name: Wait for explicit Render deploy when API binding exists
-        if: env.DEPLOY_MODE == 'render_api'
+      - name: Wait for exact target SHA in production
         shell: bash
         run: |
           set -euo pipefail
-          for i in $(seq 1 90); do
-            RESPONSE=$(curl -fsS "https://api.render.com/v1/services/${SERVICE_ID}/deploys/${DEPLOY_ID}" \
-              -H "Authorization: Bearer ${RENDER_API_KEY}" \
-              -H "Accept: application/json")
-            STATUS=$(printf '%s' "$RESPONSE" | jq -r '.status // empty')
-            COMMIT=$(printf '%s' "$RESPONSE" | jq -r '.commit.id // .commitId // empty')
-            echo "poll=$i status=$STATUS commit=${COMMIT:0:12}"
-            if [ "$STATUS" = "live" ]; then
-              echo "RENDER_COMMIT=$COMMIT" >> "$GITHUB_ENV"
-              exit 0
+          matched=false
+          for i in $(seq 1 120); do
+            code=$(curl -sS --max-time 20 -o /tmp/version.json -w '%{http_code}' "$API_BASE/version" || true)
+            live=''; ok=false
+            if [ "$code" = 200 ]; then
+              live=$(jq -r '.commit // empty' /tmp/version.json)
+              ok=$(jq -r '.ok // false' /tmp/version.json)
             fi
-            if [ "$STATUS" = "build_failed" ] || [ "$STATUS" = "update_failed" ] || [ "$STATUS" = "canceled" ]; then
-              echo "Render deploy failed with status=$STATUS"
-              exit 1
-            fi
-            sleep 5
-          done
-          echo "Timed out waiting for explicit Render deploy"
-          exit 1
-
-      - name: Wait for production SHA parity
-        shell: bash
-        run: |
-          set -euo pipefail
-          matched=0
-          for i in $(seq 1 72); do
-            code=$(curl -sS -m 20 -o /tmp/health.json -w '%{http_code}' "${API_BASE}/health" || true)
-            if [ "$code" = "200" ]; then
-              HEALTH_COMMIT=$(jq -r '.commit // .sha // .gitCommit // .git_commit // empty' /tmp/health.json 2>/dev/null || true)
-              OK=$(jq -r '.ok // false' /tmp/health.json 2>/dev/null || echo false)
-              echo "poll=$i health=$OK production_sha=${HEALTH_COMMIT:-missing} expected=${GITHUB_SHA}"
-              if [ "$OK" = "true" ] && { [ "$HEALTH_COMMIT" = "$GITHUB_SHA" ] || [[ "$GITHUB_SHA" == "$HEALTH_COMMIT"* ]] || [[ "$HEALTH_COMMIT" == "$GITHUB_SHA"* ]]; }; then
-                matched=1
-                echo "RENDER_COMMIT=$HEALTH_COMMIT" >> "$GITHUB_ENV"
-                break
-              fi
-            else
-              echo "poll=$i health_http=$code"
-            fi
+            echo "production_poll=$i http=$code ok=$ok live=${live:-missing} target=$TARGET_SHA"
+            if [ "$code" = 200 ] && [ "$ok" = true ] && [ "$live" = "$TARGET_SHA" ]; then matched=true; break; fi
             sleep 10
           done
-          if [ "$matched" != "1" ]; then
-            echo "Production never reached current main SHA ${GITHUB_SHA}."
-            exit 1
-          fi
-          echo "sha_parity=PASS"
+          test "$matched" = true
+          echo "RENDER_COMMIT=$TARGET_SHA" >> "$GITHUB_ENV"
+          echo 'exact_sha_parity=PASS'
 
-      - name: Verify production health
+      - name: Verify production health and exact version
         shell: bash
         run: |
           set -euo pipefail
-          HEALTH=$(cat /tmp/health.json)
-          printf '%s\n' "$HEALTH" | jq '.'
-          OK=$(printf '%s' "$HEALTH" | jq -r '.ok // false')
-          if [ "$OK" != "true" ]; then
-            echo "Production /health did not return ok=true"
-            exit 1
-          fi
-          echo "health=PASS"
+          curl -fsS --max-time 20 "$API_BASE/health" -o /tmp/health.json
+          test "$(jq -r '.ok // false' /tmp/health.json)" = true
+          version=$(curl -fsS --max-time 20 "$API_BASE/version")
+          test "$(printf '%s' "$version" | jq -r '.ok // false')" = true
+          test "$(printf '%s' "$version" | jq -r '.commit // empty')" = "$TARGET_SHA"
+          echo 'health_and_version=PASS'
 
-      - name: Verify production version exact SHA - HARD GATE
+      - name: Verify AI provider and real public-chat inference
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl -sS -m 20 -o /tmp/version.json -w '%{http_code}' "${API_BASE}/version" || true)
-          if [ "$code" != "200" ]; then
-            echo "Production /version returned HTTP ${code}"
-            exit 1
-          fi
-          VERSION_OK=$(jq -r '.ok // false' /tmp/version.json 2>/dev/null || echo false)
-          VERSION_COMMIT=$(jq -r '.commit // empty' /tmp/version.json 2>/dev/null || true)
-          echo "version_ok=$VERSION_OK version_commit=${VERSION_COMMIT:-missing} expected=${GITHUB_SHA}"
-          if [ "$VERSION_OK" != "true" ] || [ "$VERSION_COMMIT" != "$GITHUB_SHA" ]; then
-            echo "Production /version exact-SHA parity failed"
-            cat /tmp/version.json || true
-            exit 1
-          fi
-          echo "version_sha_parity=PASS"
+          ai=$(curl -fsS --retry 4 --retry-delay 2 "$API_BASE/health/ai/live")
+          test "$(printf '%s' "$ai" | jq -r '.ok // false')" = true
+          token="IVX-LIVE-${GITHUB_RUN_ID}-1"
+          body=$(jq -nc --arg message "Return the exact token ${token} and no other text." --arg sessionId 'github-live-cert' --arg requestId "github-live-cert-${GITHUB_RUN_ID}" '{message:$message,sessionId:$sessionId,requestId:$requestId,history:[]}')
+          response=$(curl -fsS --retry 3 --retry-delay 2 -X POST "$API_BASE/api/public/chat" -H 'Content-Type: application/json' -H "x-ivx-client-id: github-live-cert-${GITHUB_RUN_ID}" --data "$body")
+          test "$(printf '%s' "$response" | jq -r '.source // empty')" = chatgpt
+          test -n "$(printf '%s' "$response" | jq -r '.endpoint // empty')"
+          printf '%s' "$response" | jq -r '.answer // .text // empty' | grep -Fq "$token"
+          echo 'ai_and_real_inference=PASS'
 
-      - name: Verify AI provider status - HARD GATE
-        shell: bash
-        run: |
-          set -euo pipefail
-          AI_HEALTH=$(curl -sS --retry 4 --retry-delay 2 "${API_BASE}/health/ai/live" || echo '{}')
-          printf '%s\n' "$AI_HEALTH" | jq '.' || true
-          AI_OK=$(printf '%s' "$AI_HEALTH" | jq -r '.ok // false')
-          if [ "$AI_OK" != "true" ]; then
-            REASON=$(printf '%s' "$AI_HEALTH" | jq -r '.reason // .error // "unknown"')
-            echo "AI provider hard gate failed: $REASON"
-            exit 1
-          fi
-          echo "ai_provider=PASS"
-
-      - name: Verify public chat real inference - HARD GATE
-        shell: bash
-        run: |
-          set -euo pipefail
-          TOKEN="IVX-LIVE-${GITHUB_RUN_ID}-1"
-          BODY=$(jq -nc \
-            --arg message "Return the exact token ${TOKEN} and no other text." \
-            --arg sessionId "github-live-cert" \
-            --arg requestId "github-live-cert-${GITHUB_RUN_ID}" \
-            '{message:$message,sessionId:$sessionId,requestId:$requestId,history:[]}')
-          RESPONSE=$(curl -fsS --retry 3 --retry-delay 2 -X POST "${API_BASE}/api/public/chat" \
-            -H "Content-Type: application/json" \
-            -H "x-ivx-client-id: github-live-cert-${GITHUB_RUN_ID}" \
-            --data "$BODY")
-          SOURCE=$(printf '%s' "$RESPONSE" | jq -r '.source // empty')
-          ANSWER=$(printf '%s' "$RESPONSE" | jq -r '.answer // .text // empty')
-          ENDPOINT=$(printf '%s' "$RESPONSE" | jq -r '.endpoint // empty')
-          if [ "$SOURCE" != "chatgpt" ]; then
-            echo "Public chat did not use the certified real-inference source (source=${SOURCE:-missing}) - HARD FAIL"
-            exit 1
-          fi
-          if [ -z "$ENDPOINT" ]; then
-            echo "Public chat did not report a provider endpoint - HARD FAIL"
-            exit 1
-          fi
-          if ! printf '%s' "$ANSWER" | grep -Fq "$TOKEN"; then
-            echo "Real inference did not return the exact activation token - HARD FAIL"
-            exit 1
-          fi
-          echo "live_inference=PASS source=$SOURCE endpoint=$ENDPOINT token=$TOKEN"
-
-      - name: Emit certificate evidence
+      - name: Emit deployment-governor certificate
         shell: bash
         run: |
           set -euo pipefail
@@ -221,22 +199,24 @@ jobs:
           cat > qa/evidence/render-live-cert.json <<EOF
           {
             "certified": true,
-            "githubSha": "${GITHUB_SHA}",
-            "deployMode": "${DEPLOY_MODE}",
-            "renderDeployId": "${DEPLOY_ID:-bridge-or-auto}",
-            "renderCommit": "${RENDER_COMMIT:-}",
+            "authority": "IVX Production Deploy Governor",
+            "triggerSha": "${GITHUB_SHA}",
+            "targetSha": "${TARGET_SHA}",
+            "renderDeployId": "${DEPLOY_ID:-already-live-or-auto}",
+            "renderCommit": "${RENDER_COMMIT:-${TARGET_SHA}}",
+            "singleAutomaticAuthority": true,
+            "sameShaActiveDeployReuse": true,
+            "overlapPrevention": true,
+            "exactShaParity": "PASS",
             "health": "PASS",
-            "versionExactSha": "PASS",
             "aiProvider": "PASS",
             "realInference": "PASS",
-            "shaParity": "PASS",
             "verifiedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           }
           EOF
           cat qa/evidence/render-live-cert.json
 
-      - name: Upload live certificate evidence
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: ivx-render-live-certificate
+          name: ivx-render-live-certificate-${{ github.run_id }}
           path: qa/evidence/render-live-cert.json
