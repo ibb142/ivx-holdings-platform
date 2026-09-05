@@ -1,11 +1,11 @@
 import { getAllExecutionStates, pauseAgent, resumeAgent, disableAgent, enableAgent } from './ivx-agent-runtime';
 import { campaignDispatcherControl, getCampaignDispatcherSnapshot, listCampaignDispatcherRecords, runCampaignBootRecovery, startCampaignDispatcher } from './ivx-campaign-dispatcher';
-import { syncCampaignAssignmentsToDispatcher, updateControlState } from './ivx-app-completion-campaign';
+import { loadControlState, syncCampaignAssignmentsToDispatcher, updateControlState } from './ivx-app-completion-campaign';
 import { getGitHubActionsExternalSupervisorStatus } from './ivx-github-actions-external-supervisor';
-import { getSchedulerState } from './ivx-autonomous-scheduler';
+import { getSchedulerState, setSchedulerEnabled } from './ivx-autonomous-scheduler';
 import { getAllTasks, type Task } from './ivx-autonomous-task-engine';
 
-export const IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER = 'ivx-autonomous-truth-control-2026-09-05-v9-bounded-fastpath';
+export const IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER = 'ivx-autonomous-truth-control-2026-09-05-v10-self-start';
 export const IVX_AUTONOMOUS_TRUTH_HEARTBEAT_FRESH_MS = 60 * 1000;
 export const IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS = 30 * 1000;
 export const IVX_AUTONOMOUS_CASCADE_SEED_SIZE = 10;
@@ -210,17 +210,43 @@ export async function getAutonomousTruthSnapshot() {
 
 export async function enforceAutonomous112RuntimeTruth(){
   const before=await getAutonomousTruthSnapshot();
-  if(!before.autonomous.schedulerEnabled||before.autonomous.dispatcherPaused||before.autonomous.emergencyStop) return {ok:false,action:'owner_or_system_stop_respected',recovered:[],snapshot:before};
-  await runCampaignBootRecovery().catch(()=>0); await syncCampaignAssignmentsToDispatcher();
-  const recoverable=before.agents.rows.filter(a=>!a.paused&&!a.disabled&&['IDLE','STALE','UNKNOWN'].includes(a.status));
-  for(const agent of recoverable){ resumeAgent(agent.agentId); await campaignDispatcherControl('retry_agent',agent.agentNumber).catch(()=>undefined); }
+  const control=await loadControlState().catch(()=>({paused:false,stopped:false,pausedAgents:[],stoppedAgents:[]}));
+  if(control.stopped||control.paused||before.autonomous.emergencyStop){
+    return {ok:false,action:'explicit_owner_or_emergency_stop_respected',recovered:[],snapshot:before};
+  }
+
+  let controlPlaneRecovered=false;
+  if(!before.autonomous.schedulerEnabled||before.autonomous.dispatcherPaused){
+    await setSchedulerEnabled(true);
+    startCampaignDispatcher();
+    await updateControlState('resume_all');
+    await runCampaignBootRecovery().catch(()=>0);
+    await syncCampaignAssignmentsToDispatcher();
+    await campaignDispatcherControl('resume_all');
+    controlPlaneRecovered=true;
+  }
+
+  const current=controlPlaneRecovered?await getAutonomousTruthSnapshot():before;
+  await runCampaignBootRecovery().catch(()=>0);
+  await syncCampaignAssignmentsToDispatcher();
+  const recoverable=current.agents.rows.filter(a=>!a.paused&&!a.disabled&&['IDLE','STALE','UNKNOWN'].includes(a.status));
+  for(const agent of recoverable){
+    resumeAgent(agent.agentId);
+    await campaignDispatcherControl('retry_agent',agent.agentNumber).catch(()=>undefined);
+  }
   if(recoverable.length) await campaignDispatcherControl('resume_all');
   const after=await getAutonomousTruthSnapshot();
-  return {ok:after.certification.continuousRuntimeCertified,action:recoverable.length?'recovered_nonworking_agents':'verified',recovered:recoverable.map(a=>a.agentNumber),snapshot:after};
+  return {
+    ok:after.certification.continuousRuntimeCertified,
+    action:controlPlaneRecovered?(recoverable.length?'recovered_control_plane_and_agents':'recovered_control_plane'):(recoverable.length?'recovered_nonworking_agents':'verified'),
+    recovered:recoverable.map(a=>a.agentNumber),
+    snapshot:after,
+  };
 }
 
 export async function applyTruthControl(action:TruthControlAction,agentId?:string,agentNumber?:number){
   if(action==='start_all'||action==='resume_all'){
+    await setSchedulerEnabled(true);
     startCampaignDispatcher();
     await runCampaignBootRecovery().catch(()=>0);
     await updateControlState('resume_all');
@@ -231,8 +257,26 @@ export async function applyTruthControl(action:TruthControlAction,agentId?:strin
       await campaignDispatcherControl('resume_all');
     }
   }
-  else if(action==='stop_all'){for(const state of getAllExecutionStates())pauseAgent(state.agentId);await updateControlState('stop_all');await campaignDispatcherControl('stop_all');}
-  else if(action==='pause_all'){for(const state of getAllExecutionStates())pauseAgent(state.agentId);await updateControlState('pause_all');await campaignDispatcherControl('pause_all');}
-  else {if(!agentId&&typeof agentNumber!=='number')throw new Error('agentId or agentNumber required');const state=getAllExecutionStates().find(row=>row.agentId===agentId||row.agentNumber===agentNumber);if(!state)throw new Error('agent not found');if(action==='pause_agent')pauseAgent(state.agentId);if(action==='resume_agent')resumeAgent(state.agentId);if(action==='disable_agent')disableAgent(state.agentId);if(action==='enable_agent')enableAgent(state.agentId);if(action==='retry_agent')await campaignDispatcherControl('retry_agent',state.agentNumber);}
+  else if(action==='stop_all'){
+    for(const state of getAllExecutionStates())pauseAgent(state.agentId);
+    await updateControlState('stop_all');
+    await campaignDispatcherControl('stop_all');
+    await setSchedulerEnabled(false);
+  }
+  else if(action==='pause_all'){
+    for(const state of getAllExecutionStates())pauseAgent(state.agentId);
+    await updateControlState('pause_all');
+    await campaignDispatcherControl('pause_all');
+  }
+  else {
+    if(!agentId&&typeof agentNumber!=='number')throw new Error('agentId or agentNumber required');
+    const state=getAllExecutionStates().find(row=>row.agentId===agentId||row.agentNumber===agentNumber);
+    if(!state)throw new Error('agent not found');
+    if(action==='pause_agent')pauseAgent(state.agentId);
+    if(action==='resume_agent')resumeAgent(state.agentId);
+    if(action==='disable_agent')disableAgent(state.agentId);
+    if(action==='enable_agent')enableAgent(state.agentId);
+    if(action==='retry_agent')await campaignDispatcherControl('retry_agent',state.agentNumber);
+  }
   return getAutonomousTruthSnapshot();
 }
