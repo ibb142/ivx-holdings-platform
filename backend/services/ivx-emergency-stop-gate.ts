@@ -10,9 +10,8 @@
  * Behavior:
  *   - `active: true`  → agents must NOT start new tasks (enqueue refused,
  *     queued jobs marked blocked).
- *   - Read errors fail OPEN (agents keep working) so a transient Supabase
- *     outage cannot silently freeze production work; every failed read is
- *     logged for audit.
+ *   - Read errors are reported as `source: unavailable`; execution guards fail
+ *     CLOSED so a control-plane outage can never bypass an owner stop.
  *   - Results are cached for a short window to avoid hammering Supabase from
  *     hot loops.
  */
@@ -21,7 +20,7 @@ const CONTROL_TABLE = 'ivx_agent_controls';
 const CONTROL_NAME = 'emergency_stop';
 const CACHE_TTL_MS = 15_000;
 
-export const IVX_EMERGENCY_STOP_GATE_MARKER = 'ivx-emergency-stop-gate-2026-07-18';
+export const IVX_EMERGENCY_STOP_GATE_MARKER = 'ivx-emergency-stop-gate-2026-09-05-v2-fail-closed';
 
 export type EmergencyStopStatus = {
   /** True when the owner has engaged the emergency stop. */
@@ -34,7 +33,7 @@ export type EmergencyStopStatus = {
   updatedAt: string | null;
   /** When this status was read. */
   checkedAt: string;
-  /** Where the answer came from. `unavailable` = read failed, gate failed open. */
+  /** Where the answer came from. `unavailable` = read failed and execution must fail closed. */
   source: 'supabase' | 'cache' | 'unavailable';
   /** Read error detail when source === 'unavailable'. Never contains secrets. */
   error: string | null;
@@ -75,6 +74,18 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function unavailableStatus(error: string): EmergencyStopStatus {
+  return {
+    active: false,
+    reason: null,
+    updatedBy: null,
+    updatedAt: null,
+    checkedAt: nowIso(),
+    source: 'unavailable',
+    error,
+  };
+}
+
 /** Test-only escape hatch so unit tests can reset the cache between cases. */
 export function resetEmergencyStopCacheForTests(): void {
   cached = null;
@@ -82,9 +93,10 @@ export function resetEmergencyStopCacheForTests(): void {
 }
 
 /**
- * Read the emergency-stop control. Cached for CACHE_TTL_MS. Fails OPEN
- * (active:false, source:'unavailable') when Supabase is unreachable or not
- * configured, and logs the failure for audit.
+ * Read the emergency-stop control. Cached for CACHE_TTL_MS. A failed read does
+ * not fabricate `active:true`; it returns `source:'unavailable'`. Task/start
+ * boundaries MUST use `assertEmergencyStopInactive`, which fails closed for
+ * unavailable state.
  */
 export async function checkEmergencyStop(): Promise<EmergencyStopStatus> {
   const now = Date.now();
@@ -95,16 +107,8 @@ export async function checkEmergencyStop(): Promise<EmergencyStopStatus> {
   const url = getSupabaseUrl();
   const key = getServiceRoleKey();
   if (!url || !key) {
-    const status: EmergencyStopStatus = {
-      active: false,
-      reason: null,
-      updatedBy: null,
-      updatedAt: null,
-      checkedAt: nowIso(),
-      source: 'unavailable',
-      error: 'Supabase URL or service key not configured; emergency-stop gate failed open.',
-    };
-    console.warn('[EmergencyStopGate] not configured — failing open');
+    const status = unavailableStatus('Supabase URL or service key not configured; emergency-stop state cannot be verified.');
+    console.warn('[EmergencyStopGate] not configured — execution guards will fail closed');
     return status;
   }
 
@@ -137,25 +141,22 @@ export async function checkEmergencyStop(): Promise<EmergencyStopStatus> {
     return status;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown read error';
-    console.error(`[EmergencyStopGate] read failed — failing open: ${message}`);
-    return {
-      active: false,
-      reason: null,
-      updatedBy: null,
-      updatedAt: null,
-      checkedAt: nowIso(),
-      source: 'unavailable',
-      error: message,
-    };
+    console.error(`[EmergencyStopGate] read failed — execution guards will fail closed: ${message}`);
+    return unavailableStatus(message);
   }
 }
 
 /**
- * Convenience guard: throws when the emergency stop is active. Use at task
- * enqueue/start boundaries.
+ * Convenience guard: throws when the emergency stop is active OR when the
+ * owner control state cannot be verified. Use at task enqueue/start boundaries.
  */
 export async function assertEmergencyStopInactive(context: string): Promise<EmergencyStopStatus> {
   const status = await checkEmergencyStop();
+  if (status.source === 'unavailable') {
+    throw new Error(
+      `EMERGENCY_STOP_UNAVAILABLE: owner emergency-stop state could not be verified; refused: ${context}`,
+    );
+  }
   if (status.active) {
     throw new Error(
       `EMERGENCY_STOP_ACTIVE: owner emergency stop is engaged (${status.reason ?? 'no reason recorded'}); refused: ${context}`,
