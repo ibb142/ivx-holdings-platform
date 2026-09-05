@@ -13,6 +13,7 @@ import {
   type ReliabilityOptions,
   type ReliabilityTrace,
 } from './aiReliability';
+import { resolveChatAIHealthFromProbe } from './aiProbePolicy';
 import type {
   ChatMessage,
   ChatRoomRuntimeSignals,
@@ -356,9 +357,13 @@ export function getCachedAIHealth(): ServiceRuntimeHealth {
 
 export function buildRuntimeSignalsFromProbe(probe: IVXOwnerAIProbeResult): ChatRoomRuntimeSignals {
   const toHealth = (success: boolean | undefined): ServiceRuntimeHealth => success === true ? 'active' : 'inactive';
+  const aiChatCapability = probe.capabilities?.ai_chat;
 
   return {
-    aiBackendHealth: toHealth(probe.capabilities?.ai_chat) === 'active' ? probe.health : 'inactive',
+    aiBackendHealth: resolveChatAIHealthFromProbe({
+      health: probe.health,
+      aiChatCapability,
+    }),
     aiBackendSource: probe.source,
     knowledgeBackendHealth: toHealth(probe.capabilities?.knowledge_answers),
     ownerCommandAvailability: toHealth(probe.capabilities?.owner_commands),
