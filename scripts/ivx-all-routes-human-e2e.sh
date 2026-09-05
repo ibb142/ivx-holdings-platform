@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${APK_PATH:?APK_PATH is required}"
-: "${OWNER_EMAIL:?OWNER_EMAIL is required}"
-: "${OWNER_PASSWORD_EFFECTIVE:?OWNER_PASSWORD_EFFECTIVE is required}"
-
 APP_ID="com.ivxholdings.app.owner"
 EVIDENCE="qa/evidence/all-routes-human-e2e"
 FLOW_DIR="$EVIDENCE/generated-flows"
@@ -13,37 +9,36 @@ mkdir -p "$FLOW_DIR"
 
 trap 'rc=$?; adb exec-out screencap -p > "$EVIDENCE/failure.png" 2>/dev/null || true; adb logcat -d -v threadtime > "$EVIDENCE/failure-logcat.txt" 2>/dev/null || true; exit $rc' EXIT
 
-timeout 120s adb install -r "$APK_PATH"
-timeout 30s adb wait-for-device
-
-timeout 90s bash -lc 'curl --fail --show-error --location --max-time 60 https://get.maestro.mobile.dev | bash'
 MAESTRO="${HOME}/.maestro/bin/maestro"
-test -x "$MAESTRO"
 
-# Establish a real authenticated owner session first. Every protected route is
-# then exercised in the same installed app/session, like a human owner moving
-# through the product rather than isolated source-only tests.
-timeout 240s "$MAESTRO" test expo/.maestro/ivx-owner-home-certificate.yaml \
-  --env OWNER_EMAIL="$OWNER_EMAIL" \
-  --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" \
-  --format junit \
-  --output "$EVIDENCE/owner-login.xml"
+if [ "${IVX_REUSE_AUTHENTICATED_SESSION:-false}" != "true" ]; then
+  : "${APK_PATH:?APK_PATH is required}"
+  : "${OWNER_EMAIL:?OWNER_EMAIL is required}"
+  : "${OWNER_PASSWORD_EFFECTIVE:?OWNER_PASSWORD_EFFECTIVE is required}"
+  timeout 120s adb install -r "$APK_PATH"
+  timeout 30s adb wait-for-device
+  timeout 90s bash -lc 'curl --fail --show-error --location --max-time 60 https://get.maestro.mobile.dev | bash'
+  test -x "$MAESTRO"
+  timeout 240s "$MAESTRO" test expo/.maestro/ivx-owner-home-certificate.yaml \
+    --env OWNER_EMAIL="$OWNER_EMAIL" \
+    --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" \
+    --format junit \
+    --output "$EVIDENCE/owner-login.xml"
+else
+  test -x "$MAESTRO"
+  timeout 8s adb shell pidof "$APP_ID" >/dev/null
+fi
 
 route_from_file() {
   local file="$1"
   local rel="${file#expo/app/}"
   rel="${rel%.tsx}"; rel="${rel%.ts}"
-  # Framework/support files are not user navigable routes.
   case "$rel" in
     _layout|_providers|+native-intent|+not-found|*/_layout|*/_providers) return 1 ;;
   esac
-  # Remove Expo Router group segments such as (tabs).
   rel=$(printf '%s' "$rel" | sed -E 's#(^|/)\([^/]+\)(/|$)#\1#g; s#//+#/#g; s#^/##; s#/$##')
   rel="${rel%/index}"
   [ "$rel" = "index" ] && rel=""
-  # Supply deterministic fixture values for dynamic route segments so every
-  # route is actually opened. The purpose is render/navigation/runtime depth;
-  # business-record correctness remains covered by module-specific journeys.
   rel=$(printf '%s' "$rel" | sed -E \
     -e 's/\[\.\.\.[^]]+\]/qa/g' \
     -e 's/\[\[[^]]+\]\]/qa/g' \
