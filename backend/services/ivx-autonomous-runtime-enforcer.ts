@@ -1,6 +1,11 @@
 import { enforceAutonomous112RuntimeTruth, IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS } from './ivx-autonomous-truth-control';
 import { getAllExecutionStates } from './ivx-agent-runtime';
 import { runRealEngineeringCycle } from './ivx-agent-real-engineering-cycle';
+import {
+  ensureAutonomousManagerBacklog,
+  ensureAutonomousWorkBlockForAgent,
+  getAutonomousWorkManagerStatus,
+} from './ivx-autonomous-work-manager';
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let startedAt: string | null = null;
@@ -25,8 +30,12 @@ const lastOutcomeByAgent = new Map<number, AgentContinuityRecord>();
  * Refill cadence (owner invariant: an available IA must not sit idle while
  * eligible backlog exists):
  *   completed/blocked → immediate re-lease (default 250ms, env >= 100ms)
- *   idle (no eligible task) → 15s (backlog is re-seeded on SHA change)
+ *   idle (no eligible task) → 15s
  *   failed → 30s backoff
+ *
+ * Autonomous Manager is now the work source. Before every engineering cycle it
+ * audits/plans one real work block for that lane. A secondary critical-file list
+ * is used only after primary module patrol is exhausted.
  */
 function refillDelayMs(outcome: ContinuityOutcome): number {
   if (outcome === 'failed') return 30_000;
@@ -42,7 +51,6 @@ function refillDelayMs(outcome: ContinuityOutcome): number {
 export function classifyContinuityResult(result: { ok: boolean; action: string; taskId: string | null; states: string[] }): ContinuityOutcome {
   if (!result.ok) return 'failed';
   if (result.action === 'NO_TASK_AVAILABLE') return 'idle';
-  // A durable rerun of an already-VERIFIED task is not new work — it is a drained lane.
   if (result.states.includes('ALREADY_VERIFIED')) return 'idle';
   if (!result.taskId) return 'failed';
   if (result.action === 'TASK_BLOCKED') return 'blocked';
@@ -72,10 +80,16 @@ function startContinuityRun(agentId: string, agentNumber: number): void {
   if (!canRunContinuity(agentId)) return;
   refillStarted += 1;
   let outcome: ContinuityOutcome = 'failed';
-  const promise = runRealEngineeringCycle({
+  const sourceSha = currentSourceSha();
+  const promise = ensureAutonomousWorkBlockForAgent({
     agentId,
     agentNumber,
-    sourceSha: currentSourceSha(),
+    sourceSha,
+  }).then((plan) => {
+    if (!plan.ok) {
+      throw new Error(`Autonomous Manager failed to plan IA-${agentNumber}: ${plan.error ?? 'unknown planning error'}`);
+    }
+    return runRealEngineeringCycle({ agentId, agentNumber, sourceSha });
   }).then((result) => {
     outcome = classifyContinuityResult(result);
     lastOutcomeByAgent.set(agentNumber, {
@@ -91,11 +105,10 @@ function startContinuityRun(agentId: string, agentNumber: number): void {
     else if (outcome === 'blocked') refillBlocked += 1;
     else if (outcome === 'idle') {
       refillIdle += 1;
-      // Idle is not a failure: log it once a minute (aggregate), never per agent.
       const now = Date.now();
       if (now - lastIdleLogAt > 60_000) {
         lastIdleLogAt = now;
-        console.log('[IVX Autonomous 112 Continuity] no eligible task for some agents (backlog drained or gated)', { sampleAgent: agentNumber, action: result.action, refillIdle });
+        console.log('[IVX Autonomous 112 Continuity] Autonomous Manager found no eligible real work for some lanes', { sampleAgent: agentNumber, action: result.action, refillIdle });
       }
     } else {
       refillFailed += 1;
@@ -108,6 +121,7 @@ function startContinuityRun(agentId: string, agentNumber: number): void {
       });
     }
   }).catch((error) => {
+    outcome = 'failed';
     refillFailed += 1;
     lastOutcomeByAgent.set(agentNumber, { outcome: 'failed', action: 'EXCEPTION', taskId: null, module: null, productiveMinutes: 0, at: new Date().toISOString(), error: error instanceof Error ? error.message : String(error) });
     console.error('[IVX Autonomous 112 Continuity] refill exception', {
@@ -152,14 +166,17 @@ async function run(reason: 'boot' | 'interval'): Promise<void> {
     lastRecovered = result.recovered;
     lastError = null;
 
-    // Continuity work must not collapse because the higher-level scheduler
-    // reports disabled during a transient/bootstrap mismatch. Explicit owner
-    // safety controls still win: dispatcher pause and emergency stop both
-    // disable all refill activity immediately.
     continuityEnabled = Boolean(
       !result.snapshot.autonomous.dispatcherPaused
       && !result.snapshot.autonomous.emergencyStop,
     );
+
+    if (continuityEnabled) {
+      const lanes = getAllExecutionStates()
+        .filter((state) => state.agentNumber != null && !state.pauseState && !state.disabledState && state.health !== 'failed')
+        .map((state) => ({ agentId: state.agentId, agentNumber: state.agentNumber as number }));
+      await ensureAutonomousManagerBacklog({ sourceSha: currentSourceSha(), agents: lanes });
+    }
 
     refillRecoveredAgents(result.recovered);
     refillAllAvailableAgents();
@@ -180,6 +197,7 @@ async function run(reason: 'boot' | 'interval'): Promise<void> {
       refillBlocked,
       refillIdle,
       refillFailed,
+      autonomousManager: getAutonomousWorkManagerStatus(),
     });
   } catch (error) {
     continuityEnabled = false;
@@ -219,7 +237,8 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     idleRefillDelayMs: refillDelayMs('idle'),
     failedRefillBackoffMs: refillDelayMs('failed'),
     agentsByOutcome: getContinuityOutcomeCounts(),
-    truthPolicy: 'Idle/stale/unknown and available agents receive real durable engineering-cycle work; completed agents re-lease immediately; idle (no eligible task) and ALREADY_VERIFIED reruns are never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
+    autonomousManager: getAutonomousWorkManagerStatus(),
+    truthPolicy: 'Autonomous Manager audits/plans real work blocks before workers execute them; existing queue wins, primary repo patrol is next, secondary critical-file list is fallback. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
   };
 }
 
