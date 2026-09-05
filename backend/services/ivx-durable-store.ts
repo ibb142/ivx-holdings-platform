@@ -23,9 +23,10 @@
  */
 import path from 'node:path';
 
-const SCHEMA_MARKER = 'ivx-durable-store-2026-08-07';
+const SCHEMA_MARKER = 'ivx-durable-store-2026-09-05-pgrst002-lockstorm-guard';
 export const REST_TIMEOUT_MS = 30000;
-const SCHEMA_PROBE_TIMEOUT_MS = 8000; // ivx-durable-probe-before-ddl-v1
+const SCHEMA_PROBE_TIMEOUT_MS = 8000;
+const SCHEMA_RETRY_COOLDOWN_MS = 5000;
 const SERVICE_ROLE_NAMES = ['SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY'] as const;
 const SUPABASE_URL_NAMES = ['EXPO_PUBLIC_SUPABASE_URL', 'SUPABASE_URL'] as const;
 
@@ -68,7 +69,6 @@ export function durableKeyForFile(file: string): string {
   const marker = 'logs/audit/';
   const idx = normalized.indexOf(marker);
   if (idx >= 0) return normalized.slice(idx + marker.length);
-  // Fallback: last two segments keep it readable and unique enough per store.
   const parts = normalized.split('/').filter(Boolean);
   return parts.slice(-2).join('/') || normalized;
 }
@@ -106,6 +106,15 @@ function extractErrorMessage(payload: unknown, fallback: string): string {
   return sanitizeExternalError(fallback);
 }
 
+function isMissingSchemaError(status: number, message: string): boolean {
+  if (message.includes('PGRST205') || message.includes('Could not find the table')) return true;
+  return status === 404 && !message.includes('PGRST002');
+}
+
+function isSchemaServiceUnavailable(message: string): boolean {
+  return message.includes('PGRST002') || message.includes('Could not query the database for the schema cache');
+}
+
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -123,8 +132,7 @@ async function retryWithBackoff<T>(
     } catch (error) {
       lastError = error;
       const msg = error instanceof Error ? error.message : String(error);
-      // Retry on 5xx, 522, timeout, or connection refused — NOT on 4xx auth errors
-      const isTransient = /5\d\d|522|timeout|timed out|ECONNREFUSED|fetch failed|HTTP 000/i.test(msg);
+      const isTransient = /5\d\d|520|522|timeout|timed out|ECONNREFUSED|fetch failed|HTTP 000|PGRST002|schema cache/i.test(msg);
       if (!isTransient || attempt === maxAttempts) throw error;
       const delay = baseDelayMs * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 500);
       console.warn(`[IvxDurableStore] Retry ${attempt}/${maxAttempts} after ${delay}ms: ${msg.slice(0, 120)}`);
@@ -136,6 +144,8 @@ async function retryWithBackoff<T>(
 
 class DurableStore {
   private schemaReady: Promise<void> | null = null;
+  private schemaRetryAfterMs = 0;
+  private readonly writeChains = new Map<string, Promise<void>>();
 
   private restBaseUrl(): string {
     const url = getSupabaseUrl();
@@ -166,17 +176,28 @@ class DurableStore {
   }
 
   private async ensureSchema(): Promise<void> {
+    if (!this.schemaReady && Date.now() < this.schemaRetryAfterMs) {
+      throw new Error('IVX durable store schema probe cooling down after transient Supabase/PostgREST unavailability.');
+    }
     if (!this.schemaReady) {
-      this.schemaReady = this.ensureSchemaInternal().catch((error) => {
-        this.schemaReady = null;
-        throw error;
-      });
+      this.schemaReady = this.ensureSchemaInternal()
+        .then(() => {
+          this.schemaRetryAfterMs = 0;
+        })
+        .catch((error) => {
+          this.schemaReady = null;
+          this.schemaRetryAfterMs = Date.now() + SCHEMA_RETRY_COOLDOWN_MS;
+          throw error;
+        });
     }
     await this.schemaReady;
   }
 
   private async ensureSchemaInternal(): Promise<void> {
-    // ivx-durable-probe-before-ddl-v1: do not amplify a transient outage with DDL retries.
+    // Critical invariant: PGRST002 means PostgREST cannot query the database for
+    // its schema cache. It does NOT mean the durable table is missing. Treating
+    // PGRST002 as missing schema used to launch CREATE/ALTER/COMMENT/NOTIFY from
+    // every fresh Render instance, amplifying an outage into tuple/DDL lock storms.
     const probeResponse = await fetch(`${this.restBaseUrl()}/ivx_durable_documents?select=doc_key&limit=1`, {
       method: 'GET',
       headers: buildHeaders(),
@@ -186,12 +207,14 @@ class DurableStore {
       console.log('[IvxDurableStore] Existing schema reachable; DDL bootstrap skipped');
       return;
     }
+
     const probePayload = await parseResponsePayload(probeResponse);
     const probeMessage = extractErrorMessage(probePayload, `Supabase schema probe returned HTTP ${probeResponse.status}.`);
-    const missingSchema = probeResponse.status === 404
-      || probeMessage.includes('PGRST205')
-      || probeMessage.includes('Could not find the table')
-      || probeMessage.includes('schema cache');
+    if (isSchemaServiceUnavailable(probeMessage)) {
+      throw new Error(`Supabase/PostgREST schema service unavailable; DDL suppressed: ${probeMessage}`);
+    }
+
+    const missingSchema = isMissingSchemaError(probeResponse.status, probeMessage);
     if (!missingSchema) {
       throw new Error(`Supabase schema probe unavailable; DDL suppressed: ${probeMessage}`);
     }
@@ -236,12 +259,10 @@ class DurableStore {
       const payload = await parseResponsePayload(response);
       if (!response.ok) {
         const message = extractErrorMessage(payload, `Supabase REST returned HTTP ${response.status}.`);
-        const schemaCacheMiss = retrySchemaCache
-          && (message.includes('schema cache') || message.includes('PGRST205') || message.includes('Could not find the table'));
+        const schemaCacheMiss = retrySchemaCache && isMissingSchemaError(response.status, message);
         if (schemaCacheMiss) {
           await this.executeSql("select pg_notify('pgrst','reload schema')");
           await sleep(750);
-          // Retry once after schema reload (bypass retryWithBackoff for this specific case)
           const retryResponse = await fetch(`${this.restBaseUrl()}${pathName}`, {
             ...init,
             headers: { ...buildHeaders(prefer), ...(init.headers ?? {}) },
@@ -272,15 +293,30 @@ class DurableStore {
   }
 
   async writeJson(docKey: string, value: unknown): Promise<void> {
-    await this.ensureSchema();
-    await this.restRequest<unknown>(
-      '/ivx_durable_documents?on_conflict=doc_key',
-      {
-        method: 'POST',
-        body: JSON.stringify({ doc_key: docKey, value, updated_at: nowIso() }),
-      },
-      'resolution=merge-duplicates,return=minimal',
-    );
+    // Serialize same-key writes inside a runtime instance. Several autonomous
+    // schedulers update task-engine/tasks.json and queue documents concurrently;
+    // letting those UPSERTs overlap creates tuple lock contention on the single
+    // materialized-state row. Cross-key writes remain fully concurrent.
+    const previous = this.writeChains.get(docKey) ?? Promise.resolve();
+    const current = previous
+      .catch(() => undefined)
+      .then(async () => {
+        await this.ensureSchema();
+        await this.restRequest<unknown>(
+          '/ivx_durable_documents?on_conflict=doc_key',
+          {
+            method: 'POST',
+            body: JSON.stringify({ doc_key: docKey, value, updated_at: nowIso() }),
+          },
+          'resolution=merge-duplicates,return=minimal',
+        );
+      });
+    this.writeChains.set(docKey, current);
+    try {
+      await current;
+    } finally {
+      if (this.writeChains.get(docKey) === current) this.writeChains.delete(docKey);
+    }
   }
 
   async appendEvent(docKey: string, event: Record<string, unknown>): Promise<void> {
