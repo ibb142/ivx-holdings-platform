@@ -1,0 +1,144 @@
+name: IVX Autonomous Enterprise Regression Scheduler
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_run:
+    workflows:
+      - Landing 112-Agent Autonomous QA War Room
+      - IVX Block 1 P0 Certificate
+      - IVX 10/10 Full Certification
+      - IVX Render Live Certificate
+      - IVX 112 Live AI Worker Certificate
+      - IVX E2E Acceptance Pipeline
+      - Landing 112-Agent Live E2E 3H QA
+      - IVX Autonomous Full-Body Patrol
+    types: [completed]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: ivx-autonomous-enterprise-regression-scheduler
+  cancel-in-progress: false
+
+env:
+  API_BASE: https://api.ivxholding.com
+  OIDC_AUDIENCE: ivx-360-autonomous-recovery
+
+jobs:
+  schedule-regression-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      OWNER_KEY_PRIMARY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+      OWNER_KEY_SECONDARY: ${{ secrets.IVX_SYSTEM_SECRET }}
+    steps:
+      - name: Checkout exact current main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Acquire scoped GitHub OIDC identity
+        id: oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          token_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}"
+          curl -fsS --retry 3 --retry-delay 2 --retry-all-errors \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "$token_url" > /tmp/ivx-regression-oidc.json
+          token=$(jq -r '.value // empty' /tmp/ivx-regression-oidc.json)
+          test -n "$token"
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Audit current-main enterprise gates
+        id: audit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ivx-regression
+          current_sha=$(git rev-parse HEAD)
+          echo "current_sha=$current_sha" >> "$GITHUB_OUTPUT"
+          critical=(
+            'Landing 112-Agent Autonomous QA War Room'
+            'IVX Block 1 P0 Certificate'
+            'IVX 10/10 Full Certification'
+            'IVX Render Live Certificate'
+            'IVX E2E Acceptance Pipeline'
+            'Landing 112-Agent Live E2E 3H QA'
+            'IVX Autonomous Full-Body Patrol'
+          )
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=main&head_sha=${current_sha}&per_page=100" > /tmp/ivx-regression/runs.json
+          : > /tmp/ivx-regression/gates.jsonl
+          red=0
+          active=0
+          for workflow in "${critical[@]}"; do
+            run=$(jq -c --arg workflow "$workflow" '[.workflow_runs[] | select(.name == $workflow)] | sort_by(.created_at) | reverse | .[0] // empty' /tmp/ivx-regression/runs.json)
+            if [ -z "$run" ]; then
+              red=$((red+1)); jq -n --arg workflow "$workflow" '{workflow:$workflow,status:"missing",green:false}' >> /tmp/ivx-regression/gates.jsonl; continue
+            fi
+            status=$(jq -r '.status // "unknown"' <<<"$run")
+            conclusion=$(jq -r '.conclusion // ""' <<<"$run")
+            green=false
+            if [ "$status" = completed ] && [ "$conclusion" = success ]; then green=true
+            elif [ "$status" = queued ] || [ "$status" = in_progress ] || [ "$status" = waiting ]; then active=$((active+1))
+            else red=$((red+1)); fi
+            jq -n --arg workflow "$workflow" --arg status "$status" --arg conclusion "$conclusion" --argjson green "$green" '{workflow:$workflow,status:$status,conclusion:$conclusion,green:$green}' >> /tmp/ivx-regression/gates.jsonl
+          done
+          regression=false
+          if [ "$red" -gt 0 ]; then regression=true; fi
+          team_size=0
+          if [ "$red" -ge 3 ]; then team_size=112; elif [ "$red" -gt 0 ]; then team_size=24; fi
+          jq -s --arg sha "$current_sha" --argjson red "$red" --argjson active "$active" --argjson regression "$regression" --argjson teamSize "$team_size" '{currentSha:$sha,redGateCount:$red,activeGateCount:$active,regressionOpen:$regression,teamSize:$teamSize,gates:.}' /tmp/ivx-regression/gates.jsonl > /tmp/ivx-regression/mission.json
+          cat /tmp/ivx-regression/mission.json
+          echo "regression=$regression" >> "$GITHUB_OUTPUT"
+          echo "team_size=$team_size" >> "$GITHUB_OUTPUT"
+
+      - name: Resume 112-agent campaign with canonical owner auth
+        if: ${{ steps.audit.outputs.regression == 'true' }}
+        env:
+          IVX_GITHUB_OIDC: ${{ steps.oidc.outputs.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OWNER_KEY_PRIMARY:-${OWNER_KEY_SECONDARY:-}}"
+          [ -n "$key" ] && echo "::add-mask::$key"
+          args=(-sS --retry 3 --retry-delay 2 --retry-all-errors --max-time 30 -o /tmp/ivx-regression/resume.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}")
+          if [ -n "$key" ]; then args+=( -H "x-ivx-owner-key: $key" ); fi
+          code=$(curl "${args[@]}" -d '{"action":"resume_all"}' "${API_BASE}/api/ivx/agents/app-completion/control" || printf '000')
+          cat /tmp/ivx-regression/resume.json || true
+          echo "resume_all_http=$code"
+          test "$code" = 200
+          test "$(jq -r '.ok // false' /tmp/ivx-regression/resume.json)" = true
+
+      - name: Delegate repair owner if regression remains
+        if: ${{ steps.audit.outputs.regression == 'true' }}
+        env:
+          IVX_GITHUB_OIDC: ${{ steps.oidc.outputs.token }}
+          CURRENT_SHA: ${{ steps.audit.outputs.current_sha }}
+          TEAM_SIZE: ${{ steps.audit.outputs.team_size }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          goal="AUTONOMOUS ENTERPRISE RECOVERY on ${CURRENT_SHA}. Treat full-body patrol, mobile human E2E, internal CI, external production, dashboard/chat, runtime incidents and 112-agent continuity as one body. Inspect evidence, repair only low-risk code/config, rerun exact-SHA gates, and stop for Owner Gate on secrets/IAM/DNS/payments/destructive migrations/security policy/rollback. Team size=${TEAM_SIZE}."
+          payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",systemMode:true,ownerApproved:true,riskLevel:"low",rollbackOption:"Revert autonomous repair commit/PR if verification fails."}')
+          code=$(curl -sS --max-time 60 -o /tmp/ivx-regression/worker.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}" --data "$payload" || printf '000')
+          cat /tmp/ivx-regression/worker.json || true
+          case "$code" in 200|202|409) ;; *) exit 1;; esac
+
+      - name: Persist enterprise regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-enterprise-regression-${{ github.run_id }}
+          path: /tmp/ivx-regression
+          if-no-files-found: warn
+          retention-days: 30
