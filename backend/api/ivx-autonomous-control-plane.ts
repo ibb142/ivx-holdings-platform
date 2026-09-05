@@ -142,8 +142,7 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
     // JWKS-verified, short-lived) is accepted as READ-ONLY machine auth for the
     // autonomous radar/nervous system. Every other caller still requires the
     // registered owner bearer session. No claims are weakened here.
-    const trustedMachine = await verifyIVXGitHubActionsOIDCRequest(request);
-    if (!trustedMachine) await assertIVXOwnerOnly(request);
+    await assertIVXOwnerOnly(request);
   } catch (error) {
     return ownerOnlyJson({ ok: false, error: error instanceof Error ? error.message : 'IVX owner authentication required.' }, 401);
   }
