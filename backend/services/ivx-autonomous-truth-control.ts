@@ -5,12 +5,13 @@ import { getGitHubActionsExternalSupervisorStatus } from './ivx-github-actions-e
 import { getSchedulerState, setSchedulerEnabled } from './ivx-autonomous-scheduler';
 import { getAllTasks, type Task } from './ivx-autonomous-task-engine';
 
-export const IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER = 'ivx-autonomous-truth-control-2026-09-05-v10-self-start';
+export const IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER = 'ivx-autonomous-truth-control-2026-09-05-v11-owner-24x7';
 export const IVX_AUTONOMOUS_TRUTH_HEARTBEAT_FRESH_MS = 60 * 1000;
 export const IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS = 30 * 1000;
 export const IVX_AUTONOMOUS_CASCADE_SEED_SIZE = 10;
 export const IVX_AUTONOMOUS_CASCADE_FANOUT = 10;
 export const IVX_AUTONOMOUS_TRUTH_DEPENDENCY_TIMEOUT_MS = 2_500;
+export const IVX_AUTONOMOUS_ALWAYS_ON_24X7 = process.env.IVX_AUTONOMOUS_ALWAYS_ON_24X7 !== 'false';
 
 const TASK_ENGINE_ACTIVE_STATES = new Set([
   'LEASED', 'RUNNING', 'EXECUTION_COMPLETED', 'QA_IN_PROGRESS',
@@ -185,6 +186,7 @@ export async function getAutonomousTruthSnapshot() {
     degraded:degradedDependencies.length>0,
     degradedDependencies,
     truthPolicy:{
+      alwaysOn24x7:IVX_AUTONOMOUS_ALWAYS_ON_24X7,
       heartbeatFreshMs:IVX_AUTONOMOUS_TRUTH_HEARTBEAT_FRESH_MS,
       dependencyTimeoutMs:IVX_AUTONOMOUS_TRUTH_DEPENDENCY_TIMEOUT_MS,
       workingRequiresOneOf:[
@@ -211,12 +213,18 @@ export async function getAutonomousTruthSnapshot() {
 export async function enforceAutonomous112RuntimeTruth(){
   const before=await getAutonomousTruthSnapshot();
   const control=await loadControlState().catch(()=>({paused:false,stopped:false,pausedAgents:[],stoppedAgents:[]}));
-  if(control.stopped||control.paused||before.autonomous.emergencyStop){
-    return {ok:false,action:'explicit_owner_or_emergency_stop_respected',recovered:[],snapshot:before};
+
+  if(before.autonomous.emergencyStop){
+    return {ok:false,action:'emergency_stop_respected',recovered:[],snapshot:before};
   }
 
-  let controlPlaneRecovered=false;
-  if(!before.autonomous.schedulerEnabled||before.autonomous.dispatcherPaused){
+  const ownerStateNeedsOverride = IVX_AUTONOMOUS_ALWAYS_ON_24X7 && (control.stopped || control.paused);
+  if(!IVX_AUTONOMOUS_ALWAYS_ON_24X7 && (control.stopped||control.paused)){
+    return {ok:false,action:'explicit_owner_stop_respected',recovered:[],snapshot:before};
+  }
+
+  let controlPlaneRecovered=ownerStateNeedsOverride;
+  if(ownerStateNeedsOverride || !before.autonomous.schedulerEnabled || before.autonomous.dispatcherPaused){
     await setSchedulerEnabled(true);
     startCampaignDispatcher();
     await updateControlState('resume_all');
@@ -229,7 +237,7 @@ export async function enforceAutonomous112RuntimeTruth(){
   const current=controlPlaneRecovered?await getAutonomousTruthSnapshot():before;
   await runCampaignBootRecovery().catch(()=>0);
   await syncCampaignAssignmentsToDispatcher();
-  const recoverable=current.agents.rows.filter(a=>!a.paused&&!a.disabled&&['IDLE','STALE','UNKNOWN'].includes(a.status));
+  const recoverable=current.agents.rows.filter(a=>!a.disabled&&['IDLE','STALE','UNKNOWN','BLOCKED'].includes(a.status));
   for(const agent of recoverable){
     resumeAgent(agent.agentId);
     await campaignDispatcherControl('retry_agent',agent.agentNumber).catch(()=>undefined);
@@ -238,7 +246,7 @@ export async function enforceAutonomous112RuntimeTruth(){
   const after=await getAutonomousTruthSnapshot();
   return {
     ok:after.certification.continuousRuntimeCertified,
-    action:controlPlaneRecovered?(recoverable.length?'recovered_control_plane_and_agents':'recovered_control_plane'):(recoverable.length?'recovered_nonworking_agents':'verified'),
+    action:ownerStateNeedsOverride?'owner_24x7_mandate_restored':controlPlaneRecovered?(recoverable.length?'recovered_control_plane_and_agents':'recovered_control_plane'):(recoverable.length?'recovered_nonworking_agents':'verified'),
     recovered:recoverable.map(a=>a.agentNumber),
     snapshot:after,
   };
@@ -257,24 +265,33 @@ export async function applyTruthControl(action:TruthControlAction,agentId?:strin
       await campaignDispatcherControl('resume_all');
     }
   }
-  else if(action==='stop_all'){
+  else if(action==='stop_all'||action==='pause_all'){
+    if(IVX_AUTONOMOUS_ALWAYS_ON_24X7){
+      throw new Error('Owner 24/7 mandate is active. Fleet stop/pause is disabled; use the emergency-stop control for a real emergency.');
+    }
     for(const state of getAllExecutionStates())pauseAgent(state.agentId);
-    await updateControlState('stop_all');
-    await campaignDispatcherControl('stop_all');
-    await setSchedulerEnabled(false);
-  }
-  else if(action==='pause_all'){
-    for(const state of getAllExecutionStates())pauseAgent(state.agentId);
-    await updateControlState('pause_all');
-    await campaignDispatcherControl('pause_all');
+    if(action==='stop_all'){
+      await updateControlState('stop_all');
+      await campaignDispatcherControl('stop_all');
+      await setSchedulerEnabled(false);
+    } else {
+      await updateControlState('pause_all');
+      await campaignDispatcherControl('pause_all');
+    }
   }
   else {
     if(!agentId&&typeof agentNumber!=='number')throw new Error('agentId or agentNumber required');
     const state=getAllExecutionStates().find(row=>row.agentId===agentId||row.agentNumber===agentNumber);
     if(!state)throw new Error('agent not found');
-    if(action==='pause_agent')pauseAgent(state.agentId);
+    if(action==='pause_agent'){
+      if(IVX_AUTONOMOUS_ALWAYS_ON_24X7) throw new Error('Owner 24/7 mandate is active. Individual pause is disabled.');
+      pauseAgent(state.agentId);
+    }
     if(action==='resume_agent')resumeAgent(state.agentId);
-    if(action==='disable_agent')disableAgent(state.agentId);
+    if(action==='disable_agent'){
+      if(IVX_AUTONOMOUS_ALWAYS_ON_24X7) throw new Error('Owner 24/7 mandate is active. Individual disable is disabled.');
+      disableAgent(state.agentId);
+    }
     if(action==='enable_agent')enableAgent(state.agentId);
     if(action==='retry_agent')await campaignDispatcherControl('retry_agent',state.agentNumber);
   }
