@@ -26,7 +26,7 @@ const HEARTBEAT_LIVE_TTL_MS = 120_000;
  * refreshes the cache.
  */
 let controlPlaneCache: { at: number; body: string } | null = null;
-const CONTROL_PLANE_CACHE_TTL_MS = 120_000;
+const CONTROL_PLANE_CACHE_TTL_MS = 300_000;
 const ACTIVE_WORKER_STATUSES = new Set(['running', 'patching', 'testing', 'committing', 'deploying', 'verifying', 'optimizing']);
 
 function countStatuses<T extends { status: string }>(items: T[]) {
