@@ -10,6 +10,7 @@ import { containPath, resolveRepoRoot } from './ivx-agent-engineering-tools';
 
 export const IVX_AUTONOMOUS_WORK_MANAGER_MARKER = 'ivx-autonomous-work-manager-2026-09-05';
 export const IVX_AUTONOMOUS_FLEET_SIZE = 112;
+export const IVX_AUTONOMOUS_TARGET_ACTIVE_DEPTH = 2;
 
 /**
  * Primary source of work is always Autonomous Manager discovery over the real
@@ -57,6 +58,8 @@ export type AutonomousWorkBlockPlan = {
   module: string | null;
   created: boolean;
   primaryExhausted: boolean;
+  activeDepthBefore: number;
+  targetActiveDepth: number;
   error: string | null;
 };
 
@@ -65,6 +68,7 @@ export type AutonomousManagerBacklogResult = {
   marker: string;
   sourceSha: string;
   lanes: number;
+  targetActiveDepth: number;
   existing: number;
   primaryCreated: number;
   secondaryCreated: number;
@@ -168,47 +172,55 @@ async function existingSecondaryPaths(primaryModules: readonly string[]): Promis
   return paths;
 }
 
-function findExistingEligibleTask(tasks: readonly TaskIndexRecord[], agentNumber: number): TaskIndexRecord | null {
-  return tasks.find((task) =>
+export function findExistingEligibleTasks(tasks: readonly TaskIndexRecord[], agentNumber: number): TaskIndexRecord[] {
+  return tasks.filter((task) =>
     task.assignedAgentNumber === agentNumber
     && ACTIVE_WORK_STATES.has(task.state)
     && task.state !== 'WAITING_FOR_APPROVAL'
     && task.state !== 'PAUSED',
-  ) ?? null;
+  );
 }
 
 /**
  * Autonomous Manager owns work discovery and block creation.
  * Priority order:
- *   1) any already-queued eligible real task for this lane;
+ *   1) keep a small real-work buffer for this lane (default depth 1 here);
  *   2) next unseen real code module for this SHA (primary patrol);
  *   3) explicit secondary critical-file list;
  *   4) truthful NONE when there is no real work left.
+ *
+ * The fleet patrol calls this with targetActiveDepth=2 so every IA can finish
+ * one real task and immediately lease the next without 112 simultaneous
+ * re-planning reads against the durable store.
  */
 export async function ensureAutonomousWorkBlockForAgent(input: {
   sourceSha: string;
   agentId: string;
   agentNumber: number;
+  targetActiveDepth?: number;
 }): Promise<AutonomousWorkBlockPlan> {
+  const targetActiveDepth = Math.max(1, Math.min(3, Math.floor(input.targetActiveDepth ?? 1)));
   const base = {
     marker: IVX_AUTONOMOUS_WORK_MANAGER_MARKER,
     sourceSha: input.sourceSha,
     agentId: input.agentId,
     agentNumber: input.agentNumber,
+    targetActiveDepth,
   };
 
   try {
     const tasks = await getAllTasks();
-    const existing = findExistingEligibleTask(tasks, input.agentNumber);
-    if (existing) {
+    const existing = findExistingEligibleTasks(tasks, input.agentNumber);
+    if (existing.length >= targetActiveDepth) {
       return {
         ...base,
         ok: true,
         source: 'existing_queue',
-        taskId: existing.taskId,
+        taskId: existing[0]?.taskId ?? null,
         module: null,
         created: false,
         primaryExhausted: false,
+        activeDepthBefore: existing.length,
         error: null,
       };
     }
@@ -238,6 +250,7 @@ export async function ensureAutonomousWorkBlockForAgent(input: {
         module: nextModule,
         created: Boolean(result.task && !result.duplicate),
         primaryExhausted: false,
+        activeDepthBefore: existing.length,
         error: result.error,
       };
     }
@@ -266,7 +279,22 @@ export async function ensureAutonomousWorkBlockForAgent(input: {
         module: secondary,
         created: Boolean(result.task && !result.duplicate),
         primaryExhausted: true,
+        activeDepthBefore: existing.length,
         error: result.error,
+      };
+    }
+
+    if (existing.length > 0) {
+      return {
+        ...base,
+        ok: true,
+        source: 'existing_queue',
+        taskId: existing[0]?.taskId ?? null,
+        module: null,
+        created: false,
+        primaryExhausted: true,
+        activeDepthBefore: existing.length,
+        error: null,
       };
     }
 
@@ -278,6 +306,7 @@ export async function ensureAutonomousWorkBlockForAgent(input: {
       module: null,
       created: false,
       primaryExhausted: true,
+      activeDepthBefore: 0,
       error: null,
     };
   } catch (error) {
@@ -289,6 +318,7 @@ export async function ensureAutonomousWorkBlockForAgent(input: {
       module: null,
       created: false,
       primaryExhausted: false,
+      activeDepthBefore: 0,
       error: error instanceof Error ? error.message : String(error),
     };
   }
@@ -303,6 +333,7 @@ async function planBacklog(input: {
     marker: IVX_AUTONOMOUS_WORK_MANAGER_MARKER,
     sourceSha: input.sourceSha,
     lanes: input.agents.length,
+    targetActiveDepth: IVX_AUTONOMOUS_TARGET_ACTIVE_DEPTH,
     existing: 0,
     primaryCreated: 0,
     secondaryCreated: 0,
@@ -316,6 +347,7 @@ async function planBacklog(input: {
       sourceSha: input.sourceSha,
       agentId: lane.agentId,
       agentNumber: lane.agentNumber,
+      targetActiveDepth: IVX_AUTONOMOUS_TARGET_ACTIVE_DEPTH,
     });
     if (!plan.ok) result.errors += 1;
     if (plan.source === 'existing_queue') result.existing += 1;
@@ -346,6 +378,7 @@ export function getAutonomousWorkManagerStatus() {
     marker: IVX_AUTONOMOUS_WORK_MANAGER_MARKER,
     role: 'PRIMARY_AUDITOR_PLANNER_DISPATCHER',
     fleetSize: IVX_AUTONOMOUS_FLEET_SIZE,
+    targetActiveDepth: IVX_AUTONOMOUS_TARGET_ACTIVE_DEPTH,
     planning: Boolean(managerPlanInFlight),
     lastPlanAt,
     lastBacklogResult,
@@ -355,6 +388,6 @@ export function getAutonomousWorkManagerStatus() {
       envExtension: 'IVX_AUTONOMOUS_SECONDARY_WORK_LIST',
       defaultEntries: IVX_AUTONOMOUS_SECONDARY_WORK_LIST.length,
     },
-    truthPolicy: 'Autonomous Manager creates real work blocks from real repo surfaces. Existing queue wins, primary module patrol is next, secondary list is fallback only. If both are exhausted the lane reports no work; no fake heartbeat or fabricated busy state is created.',
+    truthPolicy: 'Autonomous Manager keeps a two-deep real-work buffer per IA lane when real modules exist. Existing queue wins, primary module patrol is next, secondary list is fallback only. If all real work is exhausted the lane reports no work; no fake heartbeat or fabricated busy state is created.',
   };
 }
