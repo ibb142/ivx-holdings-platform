@@ -6,6 +6,10 @@ import {
   ensureAutonomousWorkBlockForAgent,
   getAutonomousWorkManagerStatus,
 } from './ivx-autonomous-work-manager';
+import {
+  getAutonomousDecisionQualityStatus,
+  runAutonomousDecisionQualityLoop,
+} from './ivx-autonomous-decision-quality';
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let startedAt: string | null = null;
@@ -33,9 +37,9 @@ const lastOutcomeByAgent = new Map<number, AgentContinuityRecord>();
  *   idle (no eligible task) → 15s
  *   failed → 30s backoff
  *
- * Autonomous Manager is now the work source. Before every engineering cycle it
- * audits/plans one real work block for that lane. A secondary critical-file list
- * is used only after primary module patrol is exhausted.
+ * Autonomous Manager is the work source. Before every engineering cycle it
+ * plans one real work block for that lane. Decision Quality then measures the
+ * results and feeds weak/uncovered dimensions back into the same durable queue.
  */
 function refillDelayMs(outcome: ContinuityOutcome): number {
   if (outcome === 'failed') return 30_000;
@@ -171,11 +175,19 @@ async function run(reason: 'boot' | 'interval'): Promise<void> {
       && !result.snapshot.autonomous.emergencyStop,
     );
 
+    const sourceSha = currentSourceSha();
+    let decisionQuality = getAutonomousDecisionQualityStatus();
     if (continuityEnabled) {
+      // CLOSED BRAIN LOOP: outcome -> measure -> learn -> reprioritize.
+      // This runs before normal lane planning so observed weak dimensions become
+      // real queue work and are available to the same 112-agent dispatcher.
+      await runAutonomousDecisionQualityLoop(sourceSha);
+      decisionQuality = getAutonomousDecisionQualityStatus();
+
       const lanes = getAllExecutionStates()
         .filter((state) => state.agentNumber != null && !state.pauseState && !state.disabledState && state.health !== 'failed')
         .map((state) => ({ agentId: state.agentId, agentNumber: state.agentNumber as number }));
-      await ensureAutonomousManagerBacklog({ sourceSha: currentSourceSha(), agents: lanes });
+      await ensureAutonomousManagerBacklog({ sourceSha, agents: lanes });
     }
 
     refillRecoveredAgents(result.recovered);
@@ -197,6 +209,7 @@ async function run(reason: 'boot' | 'interval'): Promise<void> {
       refillBlocked,
       refillIdle,
       refillFailed,
+      decisionQuality,
       autonomousManager: getAutonomousWorkManagerStatus(),
     });
   } catch (error) {
@@ -237,8 +250,9 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     idleRefillDelayMs: refillDelayMs('idle'),
     failedRefillBackoffMs: refillDelayMs('failed'),
     agentsByOutcome: getContinuityOutcomeCounts(),
+    decisionQuality: getAutonomousDecisionQualityStatus(),
     autonomousManager: getAutonomousWorkManagerStatus(),
-    truthPolicy: 'Autonomous Manager audits/plans real work blocks before workers execute them; existing queue wins, primary repo patrol is next, secondary critical-file list is fallback. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
+    truthPolicy: 'Autonomous Manager audits/plans real work blocks; Decision Quality measures durable outcomes and reprioritizes weak/uncovered dimensions into the queue. Existing queue wins, primary repo patrol is next, secondary critical-file list is fallback. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
   };
 }
 
