@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, isSupabaseConfigured } from './supabase';
+import { reportAutonomousIncident } from './autonomous-incident-bridge';
 
 const ERROR_LOG_KEY = '@ivx_error_log';
 const MAX_ERRORS = 100;
@@ -126,6 +127,19 @@ class ErrorTracker {
     }
 
     console.log(`[ErrorTracker] ${severity.toUpperCase()}: ${err.message}`);
+
+    // Critical missing bridge: client errors must enter the backend incident
+    // queue that Autonomous actually reads. Fatal errors are classified by the
+    // bridge as silent_failure, which activates diagnose -> staging -> replay.
+    void reportAutonomousIncident({
+      message: err.message,
+      stack: err.stack,
+      platform: Platform.OS,
+      severity,
+      metadata,
+      buildId: process.env.EXPO_PUBLIC_IVX_BUILD_ID || null,
+    });
+
     this.scheduleFlush();
   }
 
