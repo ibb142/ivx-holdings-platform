@@ -17,8 +17,10 @@ import {
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let leaseMirrorTimer: ReturnType<typeof setInterval> | null = null;
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let enforcerRunInFlight: Promise<void> | null = null;
 let leaseMirrorInFlight: Promise<void> | null = null;
+let heartbeatRefreshInFlight: Promise<void> | null = null;
 let startedAt: string | null = null;
 let lastRunAt: string | null = null;
 let lastOk: boolean | null = null;
@@ -163,6 +165,17 @@ async function refreshInFlightTaskHeartbeats(): Promise<number> {
   return refreshed;
 }
 
+function runHeartbeatRefresh(): Promise<void> {
+  if (heartbeatRefreshInFlight) return heartbeatRefreshInFlight;
+  heartbeatRefreshInFlight = refreshInFlightTaskHeartbeats()
+    .catch((error) => {
+      console.error('[IVX Autonomous 112 Heartbeat Refresh] failed', { error: error instanceof Error ? error.message : String(error) });
+    })
+    .then(() => undefined)
+    .finally(() => { heartbeatRefreshInFlight = null; });
+  return heartbeatRefreshInFlight;
+}
+
 function startContinuityRun(agentId: string, agentNumber: number): void {
   if (!canRunContinuity(agentId)) return;
   refillStarted += 1;
@@ -290,9 +303,9 @@ async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
       autonomousManager: getAutonomousWorkManagerStatus(),
     });
 
-    // Durable lease renewal is slower than the in-memory truth mirror and is not
-    // placed on the critical startup path. It runs after workers are leased.
-    void refreshInFlightTaskHeartbeats();
+    // Heartbeats are also renewed by a dedicated timer independent of this
+    // heavier supervisor loop. This call provides an extra post-cycle refresh.
+    void runHeartbeatRefresh();
   } catch (error) {
     lastOk = false;
     lastRecovered = [];
@@ -321,6 +334,12 @@ export function startAutonomous112RuntimeEnforcer(): void {
   // It never manufactures work: only real lease-bearing task-engine records are mirrored.
   leaseMirrorTimer = setInterval(() => { void runLeaseMirror(); }, 10_000);
   leaseMirrorTimer.unref?.();
+
+  // Dedicated durable heartbeat renewal is also independent from the slow
+  // semantic/decision/backlog supervisor path. It only renews lease-bearing
+  // tasks owned by currently running continuity lanes and never fabricates work.
+  heartbeatTimer = setInterval(() => { void runHeartbeatRefresh(); }, 20_000);
+  heartbeatTimer.unref?.();
 }
 
 export function getAutonomous112RuntimeEnforcerStatus() {
@@ -329,6 +348,8 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     supervisoryRunInFlight: Boolean(enforcerRunInFlight),
     leaseMirrorRunning: Boolean(leaseMirrorTimer),
     leaseMirrorInFlight: Boolean(leaseMirrorInFlight),
+    heartbeatTimerRunning: Boolean(heartbeatTimer),
+    heartbeatRefreshInFlight: Boolean(heartbeatRefreshInFlight),
     startedAt,
     intervalMs: IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS,
     lastRunAt,
@@ -353,7 +374,7 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     semantic360: getAutonomousSemantic360Status(),
     decisionQuality: getAutonomousDecisionQualityStatus(),
     autonomousManager: getAutonomousWorkManagerStatus(),
-    truthPolicy: 'Autonomous Manager maintains real work blocks. Continuity is lease-first. Only durable active tasks with a real leaseHolder are mirrored into agent-runtime busy/activeTaskId and refreshed every 10 seconds; continuity promise count alone is never proof of work. Semantic 360 and Decision Quality remain fail-closed. Durable task leases are renewed separately. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
+    truthPolicy: 'Autonomous Manager maintains real work blocks. Continuity is lease-first. Only durable active tasks with a real leaseHolder are mirrored into agent-runtime busy/activeTaskId every 10 seconds; continuity promise count alone is never proof of work. Semantic 360 and Decision Quality remain fail-closed. Durable task leases are renewed on an independent 20-second heartbeat timer restricted to currently running continuity lanes. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
   };
 }
 
