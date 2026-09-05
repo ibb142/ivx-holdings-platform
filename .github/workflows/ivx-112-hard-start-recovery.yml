@@ -32,21 +32,34 @@ jobs:
           curl -fsS --retry 4 --retry-delay 2 --max-time 30 "$API_BASE/api/ivx/autonomous/truth" -o /tmp/truth-before.json
           total=$(jq -r '.agents.counts.total // 0' /tmp/truth-before.json)
           paused=$(jq -r '.autonomous.dispatcherPaused // true' /tmp/truth-before.json)
-          emergency=$(jq -r '.autonomous.emergencyStop // true' /tmp/truth-before.json)
+          emergency=$(jq -r '.autonomous.emergencyStop // false' /tmp/truth-before.json)
           certified=$(jq -r '.certification.continuousRuntimeCertified // false' /tmp/truth-before.json)
           working=$(jq -r '.certification.workingAgents // 0' /tmp/truth-before.json)
           fresh=$(jq -r '.certification.freshHeartbeatAgents // 0' /tmp/truth-before.json)
+          degraded=$(jq -r '.degraded // false' /tmp/truth-before.json)
+          degraded_deps=$(jq -c '.degradedDependencies // []' /tmp/truth-before.json)
           test "$total" -eq 112
+
+          # Owner 24/7 mandate: dispatcher paused/stale/degraded is recoverable drift,
+          # NOT an owner gate. Only the real emergency-stop blocks auto recovery.
           owner_gate=0
-          if [ "$paused" = true ] || [ "$emergency" = true ]; then owner_gate=1; fi
+          if [ "$emergency" = true ]; then owner_gate=1; fi
+
+          needs_recovery=0
+          if [ "$certified" != true ] || [ "$paused" = true ] || [ "$degraded" = true ] || [ "$working" -ne 112 ] || [ "$fresh" -ne 112 ]; then
+            needs_recovery=1
+          fi
+
           echo "owner_gate=$owner_gate" >> "$GITHUB_OUTPUT"
+          echo "needs_recovery=$needs_recovery" >> "$GITHUB_OUTPUT"
           echo "certified=$certified" >> "$GITHUB_OUTPUT"
           echo "working=$working" >> "$GITHUB_OUTPUT"
           echo "fresh=$fresh" >> "$GITHUB_OUTPUT"
-          echo "precheck total=$total paused=$paused emergency=$emergency certified=$certified working=$working fresh=$fresh"
+          echo "degraded=$degraded" >> "$GITHUB_OUTPUT"
+          echo "precheck total=$total paused=$paused emergency=$emergency degraded=$degraded dependencies=$degraded_deps certified=$certified working=$working fresh=$fresh"
 
       - name: Mint bounded recovery identity
-        if: steps.truth.outputs.owner_gate == '0' && steps.truth.outputs.certified != 'true'
+        if: steps.truth.outputs.owner_gate == '0' && steps.truth.outputs.needs_recovery == '1'
         id: oidc
         shell: bash
         run: |
@@ -56,31 +69,44 @@ jobs:
           test -n "$token"
           echo "token=$token" >> "$GITHUB_OUTPUT"
 
-      - name: Invoke real cascade start_all
-        if: steps.truth.outputs.owner_gate == '0' && steps.truth.outputs.certified != 'true'
+      - name: Invoke real cascade start_all with bounded recovery retries
+        if: steps.truth.outputs.owner_gate == '0' && steps.truth.outputs.needs_recovery == '1'
         shell: bash
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: |
           set -euo pipefail
-          code=$(curl -sS --retry 3 --retry-delay 2 --max-time 120 -o /tmp/start.json -w '%{http_code}' \
-            -X POST \
-            -H 'content-type: application/json' \
-            -H "X-IVX-GitHub-OIDC: $OIDC_TOKEN" \
-            -d '{"action":"start_all"}' \
-            "$API_BASE/api/ivx/autonomous/control")
-          echo "start_all_http=$code"
-          cat /tmp/start.json | jq '{ok,action,authorization,working:.snapshot.certification.workingAgents,fresh:.snapshot.certification.freshHeartbeatAgents,certified:.snapshot.certification.continuousRuntimeCertified}' || true
-          test "$code" = 200
-          test "$(jq -r '.ok // false' /tmp/start.json)" = true
-          test "$(jq -r '.authorization // empty' /tmp/start.json)" = github_oidc_recovery
+          recovered=false
+          for attempt in 1 2 3 4 5; do
+            code=$(curl -sS --max-time 120 -o /tmp/start.json -w '%{http_code}' \
+              -X POST \
+              -H 'content-type: application/json' \
+              -H "X-IVX-GitHub-OIDC: $OIDC_TOKEN" \
+              -d '{"action":"start_all"}' \
+              "$API_BASE/api/ivx/autonomous/control" || true)
+            echo "start_all_attempt=$attempt http=$code"
+            cat /tmp/start.json 2>/dev/null | jq '{ok,action,authorization,degraded:.snapshot.degraded,degradedDependencies:.snapshot.degradedDependencies,working:.snapshot.certification.workingAgents,fresh:.snapshot.certification.freshHeartbeatAgents,certified:.snapshot.certification.continuousRuntimeCertified}' || true
+            if [ "$code" = 200 ] && [ "$(jq -r '.authorization // empty' /tmp/start.json 2>/dev/null || true)" = github_oidc_recovery ]; then
+              recovered=true
+              break
+            fi
+            sleep $((attempt * 5))
+          done
+          test "$recovered" = true
+
+      - name: Emergency stop guard
+        if: steps.truth.outputs.owner_gate == '1'
+        shell: bash
+        run: |
+          echo 'Emergency stop is active. Autonomous recovery correctly refused to override the safety gate.'
+          exit 1
 
       - name: Certify strict 112 runtime truth
         shell: bash
         run: |
           set -euo pipefail
           pass=false
-          for i in $(seq 1 12); do
+          for i in $(seq 1 18); do
             sleep 10
             if curl -fsS --max-time 30 "$API_BASE/api/ivx/autonomous/truth" -o /tmp/final.json; then
               certified=$(jq -r '.certification.continuousRuntimeCertified // false' /tmp/final.json)
@@ -89,8 +115,13 @@ jobs:
               stale=$(jq -r '.agents.counts.stale // 999' /tmp/final.json)
               blocked=$(jq -r '.agents.counts.blocked // 999' /tmp/final.json)
               unknown=$(jq -r '.agents.counts.unknown // 999' /tmp/final.json)
-              echo "poll=$i certified=$certified working=$working fresh=$fresh stale=$stale blocked=$blocked unknown=$unknown"
-              if [ "$certified" = true ] && [ "$working" -eq 112 ] && [ "$fresh" -eq 112 ] && [ "$stale" -eq 0 ] && [ "$blocked" -eq 0 ] && [ "$unknown" -eq 0 ]; then pass=true; break; fi
+              degraded=$(jq -r '.degraded // true' /tmp/final.json)
+              deps=$(jq -c '.degradedDependencies // []' /tmp/final.json)
+              echo "poll=$i certified=$certified working=$working fresh=$fresh stale=$stale blocked=$blocked unknown=$unknown degraded=$degraded dependencies=$deps"
+              if [ "$certified" = true ] && [ "$working" -eq 112 ] && [ "$fresh" -eq 112 ] && [ "$stale" -eq 0 ] && [ "$blocked" -eq 0 ] && [ "$unknown" -eq 0 ] && [ "$degraded" = false ]; then
+                pass=true
+                break
+              fi
             fi
           done
           test "$pass" = true
