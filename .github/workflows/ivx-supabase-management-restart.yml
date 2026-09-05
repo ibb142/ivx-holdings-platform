@@ -18,14 +18,16 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
     steps:
-      - name: Verify required secret bindings
+      - name: Verify required Supabase secret bindings
         shell: bash
         run: |
           set -euo pipefail
           [ -n "${SUPABASE_ACCESS_TOKEN:-}" ] || { echo "SUPABASE_ACCESS_TOKEN repository secret is not bound"; exit 2; }
           [ -n "${SUPABASE_SERVICE_ROLE_KEY:-}" ] || { echo "SUPABASE_SERVICE_ROLE_KEY repository secret is not bound"; exit 2; }
-          [ -n "${RENDER_API_KEY:-}" ] || { echo "RENDER_API_KEY repository secret is not bound"; exit 2; }
-          echo "required_secret_bindings=present"
+          echo "required_supabase_secret_bindings=present"
+          if [ -z "${RENDER_API_KEY:-}" ]; then
+            echo "::warning::RENDER_API_KEY not bound; Render env sync will be skipped, but Supabase recovery will continue"
+          fi
 
       - name: Verify Supabase Management API token
         shell: bash
@@ -37,7 +39,8 @@ jobs:
           echo "management_status_http=$status"
           [ "$status" = "200" ] || { cat /tmp/project.json 2>/dev/null | head -c 300 || true; echo; exit 3; }
 
-      - name: Sync Supabase credentials into Render runtime
+      - name: Sync Supabase credentials into Render runtime when available
+        if: env.RENDER_API_KEY != ''
         shell: bash
         run: |
           set -euo pipefail
