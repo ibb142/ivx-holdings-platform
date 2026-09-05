@@ -1,0 +1,124 @@
+name: IVX Autonomous Certificate Trust Guard
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+  workflow_run:
+    workflows:
+      - 'IVX CI'
+      - 'IVX QA Suite'
+      - 'IVX Secret Leak Scanner'
+      - 'IVX 112 Agent Utilization Repair'
+      - 'IVX E2E Acceptance Pipeline'
+      - 'IVX Autonomous Radar Self-Heal'
+      - 'IVX Autonomous Nervous System'
+      - 'IVX 112 Exact SHA Auto-Deploy Certificate'
+      - 'IVX Render Live Status Proof'
+      - 'IVX Render Live Certificate'
+      - 'Landing 112-Agent Autonomous QA War Room'
+      - 'IVX 360 Early Warning & Autonomous Recovery'
+      - 'IVX 4-Phase Final Certification'
+      - 'IVX Reels Live Certificate'
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: ivx-autonomous-certificate-trust-guard
+  cancel-in-progress: true
+
+jobs:
+  trust-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      API_BASE: https://api.ivxholding.com
+      SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
+      OIDC_AUDIENCE: ivx-360-autonomous-recovery
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Audit canonical same-SHA certificate chain
+        id: audit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          main_sha=$(git rev-parse HEAD)
+          echo "main_sha=$main_sha" >> "$GITHUB_OUTPUT"
+          workflows=(
+            'IVX CI'
+            'IVX QA Suite'
+            'IVX Secret Leak Scanner'
+            'IVX 112 Agent Utilization Repair'
+            'IVX E2E Acceptance Pipeline'
+            'IVX Autonomous Radar Self-Heal'
+            'IVX Autonomous Nervous System'
+            'IVX 112 Exact SHA Auto-Deploy Certificate'
+            'IVX Render Live Status Proof'
+            'IVX Render Live Certificate'
+            'Landing 112-Agent Autonomous QA War Room'
+            'IVX 360 Early Warning & Autonomous Recovery'
+            'IVX 4-Phase Final Certification'
+            'IVX Reels Live Certificate'
+          )
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs?branch=main&head_sha=${main_sha}&per_page=100" > /tmp/runs.json
+          : > /tmp/gates.jsonl
+          open=0
+          for workflow in "${workflows[@]}"; do
+            run=$(jq -c --arg w "$workflow" '[.workflow_runs[] | select(.name == $w)] | sort_by(.created_at) | reverse | .[0] // empty' /tmp/runs.json)
+            if [ -z "$run" ]; then
+              jq -n --arg workflow "$workflow" --arg sha "$main_sha" '{workflow:$workflow,state:"NOT_RUN",headSha:$sha}' >> /tmp/gates.jsonl
+              open=$((open+1))
+              continue
+            fi
+            status=$(printf '%s' "$run" | jq -r '.status // "unknown"')
+            conclusion=$(printf '%s' "$run" | jq -r '.conclusion // ""')
+            run_id=$(printf '%s' "$run" | jq -r '.id')
+            state=GREEN
+            if [ "$status" != completed ] || [ "$conclusion" != success ]; then state=RED; open=$((open+1)); fi
+            jq -n --arg workflow "$workflow" --arg state "$state" --arg status "$status" --arg conclusion "$conclusion" --arg runId "$run_id" --arg sha "$main_sha" '{workflow:$workflow,state:$state,status:$status,conclusion:$conclusion,runId:$runId,headSha:$sha}' >> /tmp/gates.jsonl
+          done
+          jq -s '.' /tmp/gates.jsonl > /tmp/gates.json
+          cat /tmp/gates.json
+          echo "open=$open" >> "$GITHUB_OUTPUT"
+
+      - name: Acquire machine identity
+        if: ${{ steps.audit.outputs.open != '0' }}
+        id: oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          token_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}"
+          token=$(curl -fsS -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$token_url" | jq -r '.value // empty')
+          test -n "$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Open autonomous repair mission for every non-green canonical gate
+        if: ${{ steps.audit.outputs.open != '0' }}
+        env:
+          IVX_GITHUB_OIDC: ${{ steps.oidc.outputs.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gates=$(cat /tmp/gates.json)
+          goal="AUTONOMOUS CERTIFICATE TRUST REPAIR. MAIN SHA ${{ steps.audit.outputs.main_sha }} has non-green canonical certification gates. Diagnose and repair each listed gate. Do not report GREEN, CERTIFIED, 10/10, HEALTHY, or COMPLETE until every canonical gate is success on this exact MAIN SHA and production exact-SHA parity is proven. Never weaken tests. Evidence: ${gates}"
+          payload=$(jq -n --arg goal "$goal" '{goal:$goal,executionMode:"code_change",templateMode:"BUG_FIX",approvePatch:true,approveGitDeploy:true,validationMode:"typecheck",riskLevel:"low",proposedPlan:"Diagnose current-main certificate failures, patch safe defects, validate, deploy exact main SHA where allowed, and rerun certificates until canonical same-SHA chain is green.",rollbackOption:"Roll back safe operational deploy if health regresses; owner-gate destructive or privileged actions.",filesAffected:["canonical-certificate-chain","failed-workflow","runtime-code-if-required"]}')
+          args=(-fsS --max-time 60 -X POST "${API_BASE}/api/ivx/senior-developer/worker/jobs" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: ${IVX_GITHUB_OIDC}")
+          if [ -n "${SYSTEM_KEY:-}" ]; then args+=( -H "X-IVX-System-Key: $SYSTEM_KEY" ); fi
+          curl "${args[@]}" --data "$payload" | tee /tmp/repair.json
+          jq -e '.jobId // .activeJobId // .job.jobId' /tmp/repair.json >/dev/null
+
+      - name: Fail closed when certificate chain is not green
+        if: ${{ steps.audit.outputs.open != '0' }}
+        run: |
+          echo "CERTIFICATE_TRUST_RED: ${{ steps.audit.outputs.open }} canonical gates are non-green on MAIN ${{ steps.audit.outputs.main_sha }}"
+          exit 1
