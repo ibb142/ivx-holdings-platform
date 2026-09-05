@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/ivx-112-hard-start-recovery.yml'
+      - 'server.ts'
+      - 'backend/services/ivx-github-actions-oidc.ts'
+      - 'backend/services/ivx-autonomous-truth-control.ts'
   workflow_dispatch:
   schedule:
     - cron: '*/5 * * * *'
@@ -26,18 +29,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS --retry 4 --retry-delay 2 --max-time 30 "$API_BASE/api/ivx/agents/app-completion/dashboard" -o /tmp/before.json
-          max=$(jq -r '.dispatcher.maxConcurrency // 0' /tmp/before.json)
-          running=$(jq -r '.dispatcher.utilization24h.runningNow // 0' /tmp/before.json)
-          queued=$(jq -r '.dispatcher.utilization24h.queuedNow // 0' /tmp/before.json)
-          owner_gate=$(jq -r '.dispatcher.utilization24h.ownerGateNow // 0' /tmp/before.json)
+          curl -fsS --retry 4 --retry-delay 2 --max-time 30 "$API_BASE/api/ivx/agents/app-completion/dashboard" -o /tmp/dashboard-before.json
+          curl -fsS --retry 4 --retry-delay 2 --max-time 30 "$API_BASE/api/ivx/autonomous/truth" -o /tmp/truth-before.json
+          max=$(jq -r '.dispatcher.maxConcurrency // 0' /tmp/dashboard-before.json)
+          owner_gate=$(jq -r '.dispatcher.utilization24h.ownerGateNow // 0' /tmp/dashboard-before.json)
+          certified=$(jq -r '.certification.continuousRuntimeCertified // false' /tmp/truth-before.json)
+          working=$(jq -r '.certification.workingAgents // 0' /tmp/truth-before.json)
+          fresh=$(jq -r '.certification.freshHeartbeatAgents // 0' /tmp/truth-before.json)
           test "$max" -eq 112
-          echo "running=$running" >> "$GITHUB_OUTPUT"
-          echo "queued=$queued" >> "$GITHUB_OUTPUT"
           echo "owner_gate=$owner_gate" >> "$GITHUB_OUTPUT"
+          echo "certified=$certified" >> "$GITHUB_OUTPUT"
+          echo "working=$working" >> "$GITHUB_OUTPUT"
+          echo "fresh=$fresh" >> "$GITHUB_OUTPUT"
+          echo "precheck max=$max ownerGate=$owner_gate certified=$certified working=$working fresh=$fresh"
 
       - name: Mint bounded recovery identity
-        if: steps.truth.outputs.owner_gate == '0' && steps.truth.outputs.running != '112'
+        if: steps.truth.outputs.owner_gate == '0' && steps.truth.outputs.certified != 'true'
         id: oidc
         shell: bash
         run: |
@@ -48,30 +55,41 @@ jobs:
           echo "token=$token" >> "$GITHUB_OUTPUT"
 
       - name: Invoke real cascade start_all
-        if: steps.truth.outputs.owner_gate == '0' && steps.truth.outputs.running != '112'
+        if: steps.truth.outputs.owner_gate == '0' && steps.truth.outputs.certified != 'true'
         shell: bash
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: |
           set -euo pipefail
-          code=$(curl -sS --retry 3 --retry-delay 2 --max-time 120 -o /tmp/start.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "X-IVX-GitHub-OIDC: $OIDC_TOKEN" -d '{"action":"start_all"}' "$API_BASE/api/ivx/agents/app-completion/control")
+          code=$(curl -sS --retry 3 --retry-delay 2 --max-time 120 -o /tmp/start.json -w '%{http_code}' \
+            -X POST \
+            -H 'content-type: application/json' \
+            -H "X-IVX-GitHub-OIDC: $OIDC_TOKEN" \
+            -d '{"action":"start_all"}' \
+            "$API_BASE/api/ivx/autonomous/control")
           echo "start_all_http=$code"
+          cat /tmp/start.json | jq '{ok,action,authorization,working:.snapshot.certification.workingAgents,fresh:.snapshot.certification.freshHeartbeatAgents,certified:.snapshot.certification.continuousRuntimeCertified}' || true
           test "$code" = 200
           test "$(jq -r '.ok // false' /tmp/start.json)" = true
+          test "$(jq -r '.authorization // empty' /tmp/start.json)" = github_oidc_recovery
 
-      - name: Certify 112 real workers
+      - name: Certify strict 112 runtime truth
         shell: bash
         run: |
           set -euo pipefail
           pass=false
           for i in $(seq 1 12); do
             sleep 10
-            if curl -fsS --max-time 30 "$API_BASE/api/ivx/agents/app-completion/dashboard" -o /tmp/final.json; then
-              max=$(jq -r '.dispatcher.maxConcurrency // 0' /tmp/final.json)
-              running=$(jq -r '.dispatcher.utilization24h.runningNow // 0' /tmp/final.json)
-              owner_gate=$(jq -r '.dispatcher.utilization24h.ownerGateNow // 0' /tmp/final.json)
-              echo "poll=$i max=$max running=$running ownerGate=$owner_gate"
-              if [ "$max" -eq 112 ] && [ "$running" -eq 112 ] && [ "$owner_gate" -eq 0 ]; then pass=true; break; fi
+            if curl -fsS --max-time 30 "$API_BASE/api/ivx/autonomous/truth" -o /tmp/final.json; then
+              certified=$(jq -r '.certification.continuousRuntimeCertified // false' /tmp/final.json)
+              working=$(jq -r '.certification.workingAgents // 0' /tmp/final.json)
+              fresh=$(jq -r '.certification.freshHeartbeatAgents // 0' /tmp/final.json)
+              stale=$(jq -r '.agents.counts.stale // 999' /tmp/final.json)
+              blocked=$(jq -r '.agents.counts.blocked // 999' /tmp/final.json)
+              unknown=$(jq -r '.agents.counts.unknown // 999' /tmp/final.json)
+              echo "poll=$i certified=$certified working=$working fresh=$fresh stale=$stale blocked=$blocked unknown=$unknown"
+              if [ "$certified" = true ] && [ "$working" -eq 112 ] && [ "$fresh" -eq 112 ] && [ "$stale" -eq 0 ] && [ "$blocked" -eq 0 ] && [ "$unknown" -eq 0 ]; then pass=true; break; fi
             fi
           done
           test "$pass" = true
+          echo 'strict_112_runtime_certificate=PASS'
