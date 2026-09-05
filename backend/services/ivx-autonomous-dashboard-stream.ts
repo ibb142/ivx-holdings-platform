@@ -90,7 +90,8 @@ export async function handleAutonomousDashboardStreamConnection(ws: WebSocket, r
         dashboard: payload.dashboard,
       });
     } catch (error) {
-      send(ws, {
+      console.error('Error pushing snapshot:', error);
+send(ws, {
         type: 'stream_error',
         marker: IVX_AUTONOMOUS_DASHBOARD_STREAM_MARKER,
         error: error instanceof Error ? error.message : String(error),
