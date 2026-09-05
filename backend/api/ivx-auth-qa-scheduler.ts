@@ -40,7 +40,7 @@ import {
 
 const QA_MARKER = 'ivx-auth-qa-scheduler-2026-07-17';
 const QA_STATE_FILE = 'logs/audit/autonomous-qa/state.json';
-const HEALTH_INTERVAL_MS = 5 * 60 * 1000;
+const HEALTH_INTERVAL_MS = 1 * 60 * 1000;
 const AUTH_INTERVAL_MS = 15 * 60 * 1000;
 const MATRIX_INTERVAL_MS = 2 * 60 * 60 * 1000;
 const MAX_RUN_LOG = 60;
