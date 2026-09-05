@@ -2,28 +2,24 @@
  * IVX Enterprise Deployment Engine API Routes
  *
  * Public:  GET  /api/ivx/deploy/status  — deployment state (no secrets)
- * Public:  GET  /api/ivx/deploy/evidence — latest evidence
- * Auth:    POST /api/ivx/deploy/trigger — trigger deploy
+ * Public:  GET  /api/ivx/deploy/evidence — read-only latest evidence
+ * Auth:    POST /api/ivx/deploy/trigger — explicit owner deploy
  * Auth:    POST /api/ivx/deploy/verify  — verify production
- * Auth:    POST /api/ivx/deploy/cycle   — run full deployment cycle
- * Auth:    POST /api/ivx/deploy/monitor/start — start autonomous monitor
- * Auth:    POST /api/ivx/deploy/monitor/stop  — stop autonomous monitor
+ * Auth:    POST /api/ivx/deploy/cycle   — disabled; GitHub governor is automatic authority
+ * Auth:    POST /api/ivx/deploy/monitor/start — disabled; prevents autonomous redeploy loops
+ * Auth:    POST /api/ivx/deploy/monitor/stop  — stop legacy in-process monitor
  */
-import { type IVXOwnerRequestContext } from './owner-only';
-import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
+import { assertIVXOwnerOnly, ownerOnlyJson } from './owner-only';
 import {
+  type DeploymentEvidence,
   getDeploymentState,
   initializeDeploymentEngine,
-  runDeploymentCycle,
   triggerRenderDeploy,
-  getRenderDeployStatus,
   getGitHubHeadSha,
   getProductionHealth,
   verifyCommitMatch,
   discoverCredentials,
-  generateDeploymentEvidence,
   generateEvidenceReport,
-  startAutonomousMonitor,
   stopAutonomousMonitor,
 } from '../services/ivx-enterprise-deployment-engine';
 
@@ -69,19 +65,44 @@ export async function handleDeployStatus(): Promise<Response> {
   });
 }
 
-// ─── PUBLIC: Deployment Evidence ────────────────────────────────────────
+// ─── PUBLIC: Deployment Evidence (STRICTLY READ-ONLY) ──────────────────
 
 export async function handleDeployEvidence(): Promise<Response> {
-  const evidence = await generateDeploymentEvidence();
+  // Never call runDeploymentCycle()/generateDeploymentEvidence() from a GET.
+  // Those legacy helpers can trigger a Render deploy when drift is observed.
+  const [github, prod, match] = await Promise.all([
+    getGitHubHeadSha(),
+    getProductionHealth(),
+    verifyCommitMatch(),
+  ]);
+  const state = getDeploymentState();
+  const latest = state.lastDeploy;
+  const generatedAt = new Date().toISOString();
+  const evidence: DeploymentEvidence = {
+    generatedAt,
+    githubHead: github.sha ? github.sha.slice(0, 8) : null,
+    renderDeployId: latest?.id ?? null,
+    renderDeployStatus: latest?.status ?? null,
+    renderCommitSha: latest?.commitSha ?? null,
+    productionCommitSha: prod.commitShort || (prod.commit ? prod.commit.slice(0, 8) : null),
+    commitMatch: match.match,
+    healthStatus: prod.status,
+    deployDuration: latest?.duration ?? null,
+    errors: [github.error, prod.error, match.error].filter((value): value is string => Boolean(value)),
+    blockers: [],
+    finalStatus: match.match && prod.ok ? 'COMPLETE' : 'UNVERIFIED',
+  };
+
   return publicJson({
     ok: true,
+    readOnly: true,
     evidence,
     report: generateEvidenceReport(evidence),
-    timestamp: new Date().toISOString(),
+    timestamp: generatedAt,
   });
 }
 
-// ─── AUTH: Trigger Deploy ──────────────────────────────────────────────
+// ─── AUTH: Trigger Deploy (EXPLICIT OWNER ACTION ONLY) ─────────────────
 
 export async function handleDeployTrigger(request: Request): Promise<Response> {
   try {
@@ -135,7 +156,7 @@ export async function handleDeployVerify(request: Request): Promise<Response> {
   });
 }
 
-// ─── AUTH: Run Deployment Cycle ─────────────────────────────────────────
+// ─── AUTH: Automatic Cycle Disabled ────────────────────────────────────
 
 export async function handleDeployCycle(request: Request): Promise<Response> {
   try {
@@ -145,17 +166,17 @@ export async function handleDeployCycle(request: Request): Promise<Response> {
     return ownerOnlyJson({ ok: false, error: message }, 401);
   }
 
-  const result = await runDeploymentCycle();
-
+  // Enforce one automatic deployment authority. The GitHub Actions
+  // IVX Production Deploy Governor owns automatic exact-SHA deployment.
+  // A legacy in-process cycle could otherwise see a rolling instance with an
+  // older /health SHA and recursively redeploy the same commit.
+  stopAutonomousMonitor();
   return ownerOnlyJson({
-    ok: true,
-    driftDetected: result.driftDetected,
-    deployTriggered: result.deployTriggered,
-    deployId: result.deployId,
-    evidence: result.evidence,
-    report: generateEvidenceReport(result.evidence),
+    ok: false,
+    deployTriggered: false,
+    error: 'Automatic backend deployment cycle disabled. IVX Production Deploy Governor is the single automatic deployment authority.',
     timestamp: new Date().toISOString(),
-  });
+  }, 409);
 }
 
 // ─── AUTH: Credentials Audit ───────────────────────────────────────────
@@ -197,15 +218,15 @@ export async function handleDeployMonitorStart(request: Request): Promise<Respon
     return ownerOnlyJson({ ok: false, error: message }, 401);
   }
 
-  startAutonomousMonitor();
-  const state = getDeploymentState();
-
+  // Kill any monitor that may already exist in this process and refuse to
+  // recreate it. This closes the verified same-SHA Render redeploy loop.
+  stopAutonomousMonitor();
   return ownerOnlyJson({
-    ok: true,
-    message: 'Autonomous deployment monitor started (5 min interval)',
-    autonomousMode: state.autonomousMode,
+    ok: false,
+    error: 'Legacy in-process autonomous deployment monitor disabled. IVX Production Deploy Governor is the single automatic deployment authority.',
+    autonomousMode: false,
     timestamp: new Date().toISOString(),
-  });
+  }, 409);
 }
 
 export async function handleDeployMonitorStop(request: Request): Promise<Response> {
