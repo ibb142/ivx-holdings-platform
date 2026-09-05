@@ -29,19 +29,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS --retry 4 --retry-delay 2 --max-time 30 "$API_BASE/api/ivx/agents/app-completion/dashboard" -o /tmp/dashboard-before.json
           curl -fsS --retry 4 --retry-delay 2 --max-time 30 "$API_BASE/api/ivx/autonomous/truth" -o /tmp/truth-before.json
-          max=$(jq -r '.dispatcher.maxConcurrency // 0' /tmp/dashboard-before.json)
-          owner_gate=$(jq -r '.dispatcher.utilization24h.ownerGateNow // 0' /tmp/dashboard-before.json)
+          total=$(jq -r '.agents.counts.total // 0' /tmp/truth-before.json)
+          paused=$(jq -r '.autonomous.dispatcherPaused // true' /tmp/truth-before.json)
+          emergency=$(jq -r '.autonomous.emergencyStop // true' /tmp/truth-before.json)
           certified=$(jq -r '.certification.continuousRuntimeCertified // false' /tmp/truth-before.json)
           working=$(jq -r '.certification.workingAgents // 0' /tmp/truth-before.json)
           fresh=$(jq -r '.certification.freshHeartbeatAgents // 0' /tmp/truth-before.json)
-          test "$max" -eq 112
+          test "$total" -eq 112
+          owner_gate=0
+          if [ "$paused" = true ] || [ "$emergency" = true ]; then owner_gate=1; fi
           echo "owner_gate=$owner_gate" >> "$GITHUB_OUTPUT"
           echo "certified=$certified" >> "$GITHUB_OUTPUT"
           echo "working=$working" >> "$GITHUB_OUTPUT"
           echo "fresh=$fresh" >> "$GITHUB_OUTPUT"
-          echo "precheck max=$max ownerGate=$owner_gate certified=$certified working=$working fresh=$fresh"
+          echo "precheck total=$total paused=$paused emergency=$emergency certified=$certified working=$working fresh=$fresh"
 
       - name: Mint bounded recovery identity
         if: steps.truth.outputs.owner_gate == '0' && steps.truth.outputs.certified != 'true'
