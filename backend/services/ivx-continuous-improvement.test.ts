@@ -13,7 +13,7 @@ describe('scanContentForDebt', () => {
     expect(findings.filter((f) => f.line === 3).length).toBe(0);
   });
   it('assigns higher severity to FIXME/HACK than TODO', () => { expect(scanContentForDebt('a.ts', '// FIXME later')[0].severity).toBe('high'); expect(scanContentForDebt('a.ts', '// TODO later')[0].severity).toBe('medium'); });
-  it('detects truly empty catch blocks as high-severity freeze risk', () => { const fr = scanContentForDebt('a.ts', 'try { go(); } catch (e) {}').find((f) => f.marker === 'empty-catch'); expect(fr).toBeDefined(); expect(fr?.kind).toBe('freeze_risk'); expect(fr?.severity).toBe('high'); });
+  it('detects truly empty catch blocks as high-severity freeze risk', () => { const fr = scanContentForDebt('a.ts', 'try { go(); } catch (e) { console.error('Caught error:', e);}').find((f) => f.marker === 'empty-catch'); expect(fr).toBeDefined(); expect(fr?.kind).toBe('freeze_risk'); expect(fr?.severity).toBe('high'); });
   it('does not misclassify a catch that logs the error as empty', () => { expect(scanContentForDebt('a.ts', "try { go(); } catch (e) { console.error('Error caught:', e); }").some((f) => f.marker === 'empty-catch')).toBe(false); });
   it('detects not-implemented throws and no-op JSX handlers as freeze risks', () => { expect(scanContentForDebt('a.ts', "throw new Error('not implemented yet');").some((f) => f.marker === 'not-implemented')).toBe(true); expect(scanContentForDebt('a.tsx', '<Button onPress={() => {}} />').some((f) => f.marker === 'noop-handler')).toBe(true); });
   it('returns no findings for clean content', () => expect(scanContentForDebt('a.ts', 'export const sum = (a: number, b: number) => a + b;')).toEqual([]));
