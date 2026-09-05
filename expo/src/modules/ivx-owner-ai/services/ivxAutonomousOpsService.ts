@@ -19,6 +19,8 @@ export type AutonomousOpsDashboard={marker:string;ledgerMarker?:string;generated
 export type DateRange='24h'|'today'|'yesterday'|'7d'|'30d';
 export type DashboardStreamState='CONNECTING'|'AUTHENTICATING'|'LIVE'|'RECONNECTING'|'CLOSED'|'ERROR';
 export type DashboardStreamMeta={state:DashboardStreamState;sequence:number;serverTime:string|null;intervalMs:number|null;marker:string|null;transport:'websocket'|'rest-fallback';};
+export type AutonomousTruthAgent={agentId:string;agentNumber:number;status:'WORKING'|'BLOCKED'|'STALE'|'IDLE'|'UNKNOWN';actuallyWorking:boolean;proofSource:'agent_runtime'|'campaign_dispatcher'|'autonomous_task_engine'|null;activeTaskId:string|null;heartbeatFresh:boolean;heartbeatAgeMs:number|null;paused:boolean;disabled:boolean;};
+export type AutonomousTruthSnapshot={ok:boolean;generatedAt:string;degraded:boolean;degradedDependencies:string[];certification:{continuousRuntimeCertified:boolean;requiredAgents:number;workingAgents:number;freshHeartbeatAgents:number;reason:string};autonomous:{working:boolean;schedulerEnabled:boolean;dispatcherPaused:boolean;emergencyStop:boolean;runningJobs:number;queuedJobs:number;taskEngineRunning:number};agents:{counts:{total:number;working:number;idle:number;blocked:number;stale:number;unknown:number;freshHeartbeat:number};rows:AutonomousTruthAgent[]};};
 
 function record(v:unknown):Record<string,unknown>{return v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};}
 function sameSha(a:string|null|undefined,b:string|null|undefined):boolean{if(!a||!b)return false;return a===b||a.startsWith(b)||b.startsWith(a);}
@@ -54,6 +56,15 @@ export async function getAutonomousOpsDashboard(opts?:{range?:DateRange;agent?:s
   const payload=record(await ownerFetch(`/api/ivx/live-work/agents?${p}`));
   if(payload.ok!==true)throw new Error(typeof payload.error==='string'?payload.error:'Autonomous dashboard backend returned ok=false.');
   return normalizeAutonomousDashboard(record(payload.dashboard) as unknown as AutonomousOpsDashboard);
+}
+
+export async function getAutonomousTruthSnapshotClient():Promise<AutonomousTruthSnapshot>{
+  const raw=record(await ownerFetch(`/api/ivx/autonomous/truth?_ts=${Date.now()}`));
+  const certification=record(raw.certification);const autonomous=record(raw.autonomous);const agents=record(raw.agents);const counts=record(agents.counts);const rows=Array.isArray(agents.rows)?agents.rows:[];
+  const snapshot={...raw,certification,autonomous,agents:{...agents,counts,rows}} as unknown as AutonomousTruthSnapshot;
+  if(snapshot.certification.requiredAgents!==112)throw new Error(`Autonomous truth fail-closed: expected 112 required agents, received ${snapshot.certification.requiredAgents}.`);
+  if(snapshot.agents.counts.total!==112)throw new Error(`Autonomous truth fail-closed: expected 112 runtime agents, received ${snapshot.agents.counts.total}.`);
+  return snapshot;
 }
 
 function toWebSocketUrl(base:string):string{const normalized=base.replace(/\/$/,'');if(normalized.startsWith('https://'))return `wss://${normalized.slice(8)}/api/ivx/autonomous-dashboard-stream`;if(normalized.startsWith('http://'))return `ws://${normalized.slice(7)}/api/ivx/autonomous-dashboard-stream`;return `wss://${normalized}/api/ivx/autonomous-dashboard-stream`;}
