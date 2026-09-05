@@ -34,7 +34,7 @@ function errorResponse(error: unknown): Response {
         : 500;
   return ownerOnlyJson({
     ok: false,
-    error: msg.slice(0, 320) || 'Missing bearer token',
+    error: 'Actionable repair event - check failed job/step and source SHA',
     marker: IVX_AGENT_AUDIT_MARKER,
     timestamp: new Date().toISOString(),
   }, status);
