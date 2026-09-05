@@ -42,11 +42,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -q "Math.min(raw, 112) : 112" backend/services/ivx-campaign-dispatcher.ts
-          grep -q "CONTINUOUS LOW-RISK BACKLOG" backend/services/ivx-campaign-dispatcher.ts
-          grep -q "utilization24h" backend/services/ivx-campaign-dispatcher.ts
-          grep -q "Promise.all(batch.map" backend/api/ivx-agent-api.ts
-          grep -q "IVX_AGENT_EXECUTE_ALL_CONCURRENCY" backend/api/ivx-agent-api.ts
+          dispatcher=backend/services/ivx-campaign-dispatcher.ts
+          agent_api=backend/api/ivx-agent-api.ts
+
+          # Fleet execution is bounded at 112, utilization is evidence-derived,
+          # stale workers are recovered, and completed VERIFY work only patrols
+          # when explicitly enabled instead of creating synthetic endless work.
+          grep -q "Math.min(raw, 112) : 112" "$dispatcher"
+          grep -q "utilization24h" "$dispatcher"
+          grep -q "STALE-JOB RECOVERY" "$dispatcher"
+          grep -q "IVX_CONTINUOUS_VERIFY_ENABLED" "$dispatcher"
+          grep -q "Promise.all(batch.map" "$agent_api"
+          grep -q "IVX_AGENT_EXECUTE_ALL_CONCURRENCY" "$agent_api"
+          grep -q "Math.max(1, Math.min(112" "$agent_api"
           echo 'utilization_invariants=PASS'
 
       - name: Setup Bun
