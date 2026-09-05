@@ -1,10 +1,9 @@
 import { enforceAutonomous112RuntimeTruth, IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS } from './ivx-autonomous-truth-control';
-import { getAllExecutionStates } from './ivx-agent-runtime';
+import { getAllExecutionStates, updateExecutionState } from './ivx-agent-runtime';
 import { runRealEngineeringCycle } from './ivx-agent-real-engineering-cycle';
 import { getAllTasks, heartbeat as heartbeatTask } from './ivx-autonomous-task-engine';
 import {
   ensureAutonomousManagerBacklog,
-  ensureAutonomousWorkBlockForAgent,
   getAutonomousWorkManagerStatus,
 } from './ivx-autonomous-work-manager';
 import {
@@ -17,7 +16,9 @@ import {
 } from './ivx-autonomous-semantic-360';
 
 let timer: ReturnType<typeof setInterval> | null = null;
+let leaseMirrorTimer: ReturnType<typeof setInterval> | null = null;
 let enforcerRunInFlight: Promise<void> | null = null;
+let leaseMirrorInFlight: Promise<void> | null = null;
 let startedAt: string | null = null;
 let lastRunAt: string | null = null;
 let lastOk: boolean | null = null;
@@ -32,7 +33,15 @@ let refillBlocked = 0;
 let lastIdleLogAt = 0;
 let lastHeartbeatRefreshAt: string | null = null;
 let lastHeartbeatRefreshCount = 0;
+let lastLeaseMirrorAt: string | null = null;
+let lastLeaseMirrorCount = 0;
 const continuityRuns = new Map<string, Promise<void>>();
+const mirroredAgentIds = new Set<string>();
+
+const ACTIVE_TASK_STATES = new Set([
+  'LEASED', 'RUNNING', 'EXECUTION_COMPLETED', 'QA_IN_PROGRESS',
+  'READY_FOR_DEPLOYMENT', 'DEPLOYING', 'DEPLOYED', 'PRODUCTION_VERIFYING',
+]);
 
 export type ContinuityOutcome = 'completed' | 'blocked' | 'idle' | 'failed';
 type AgentContinuityRecord = { outcome: ContinuityOutcome; action: string; taskId: string | null; module: string | null; productiveMinutes: number; at: string; error: string | null };
@@ -76,6 +85,63 @@ function currentSourceSha(): string {
     ?? 'runtime-unknown-sha';
 }
 
+/**
+ * Mirror only REAL lease-bearing task-engine work into the in-memory agent
+ * runtime. This closes the truth bridge without fabricating busy status:
+ * continuity promise count is ignored; an agent becomes busy only when the
+ * durable task engine proves an active task with a real leaseHolder.
+ *
+ * One durable read updates all 112 in-memory heartbeats, avoiding 112 Supabase
+ * writes merely to prove liveness. Durable task heartbeats are still renewed
+ * separately so leases themselves remain valid.
+ */
+async function syncRuntimeWorkingFromTaskLeases(): Promise<number> {
+  if (!continuityEnabled) return 0;
+  const tasks = await getAllTasks();
+  const states = getAllExecutionStates();
+  const stateByNumber = new Map(states.map((state) => [state.agentNumber, state]));
+  const activeByAgent = new Map<number, string>();
+
+  for (const task of tasks) {
+    if (task.assignedAgentNumber == null || !task.leaseHolder || !ACTIVE_TASK_STATES.has(task.state)) continue;
+    if (!activeByAgent.has(task.assignedAgentNumber)) activeByAgent.set(task.assignedAgentNumber, task.taskId);
+  }
+
+  const nowMirrored = new Set<string>();
+  for (const [agentNumber, taskId] of activeByAgent.entries()) {
+    const state = stateByNumber.get(agentNumber);
+    if (!state || state.pauseState || state.disabledState || state.health === 'failed') continue;
+    updateExecutionState(state.agentId, { availability: 'busy', activeTaskId: taskId });
+    nowMirrored.add(state.agentId);
+  }
+
+  for (const agentId of mirroredAgentIds) {
+    if (nowMirrored.has(agentId)) continue;
+    const state = states.find((row) => row.agentId === agentId);
+    if (!state || state.pauseState || state.disabledState) continue;
+    if (state.activeTaskId && ![...activeByAgent.values()].includes(state.activeTaskId)) {
+      updateExecutionState(agentId, { availability: 'available', activeTaskId: null });
+    }
+  }
+
+  mirroredAgentIds.clear();
+  for (const agentId of nowMirrored) mirroredAgentIds.add(agentId);
+  lastLeaseMirrorAt = new Date().toISOString();
+  lastLeaseMirrorCount = nowMirrored.size;
+  return nowMirrored.size;
+}
+
+function runLeaseMirror(): Promise<void> {
+  if (leaseMirrorInFlight) return leaseMirrorInFlight;
+  leaseMirrorInFlight = syncRuntimeWorkingFromTaskLeases()
+    .catch((error) => {
+      console.error('[IVX Autonomous 112 Lease Mirror] failed', { error: error instanceof Error ? error.message : String(error) });
+    })
+    .then(() => undefined)
+    .finally(() => { leaseMirrorInFlight = null; });
+  return leaseMirrorInFlight;
+}
+
 async function refreshInFlightTaskHeartbeats(): Promise<number> {
   if (!continuityEnabled || continuityRuns.size === 0) return 0;
   const byId = new Map(getAllExecutionStates().map((state) => [state.agentId, state.agentNumber]));
@@ -84,12 +150,11 @@ async function refreshInFlightTaskHeartbeats(): Promise<number> {
     const number = byId.get(agentId);
     if (typeof number === 'number') activeAgentNumbers.add(number);
   }
-  const activeStates = new Set(['LEASED', 'RUNNING', 'EXECUTION_COMPLETED', 'QA_IN_PROGRESS', 'READY_FOR_DEPLOYMENT', 'DEPLOYING', 'DEPLOYED', 'PRODUCTION_VERIFYING']);
   const tasks = await getAllTasks();
   let refreshed = 0;
   for (const task of tasks) {
     if (task.assignedAgentNumber == null || !activeAgentNumbers.has(task.assignedAgentNumber)) continue;
-    if (!activeStates.has(task.state) || !task.leaseHolder) continue;
+    if (!ACTIVE_TASK_STATES.has(task.state) || !task.leaseHolder) continue;
     const result = await heartbeatTask(task.taskId, task.leaseHolder).catch(() => ({ ok: false, error: 'heartbeat exception' }));
     if (result.ok) refreshed += 1;
   }
@@ -103,11 +168,10 @@ function startContinuityRun(agentId: string, agentNumber: number): void {
   refillStarted += 1;
   let outcome: ContinuityOutcome = 'failed';
   const sourceSha = currentSourceSha();
-  const promise = ensureAutonomousWorkBlockForAgent({ agentId, agentNumber, sourceSha })
-    .then((plan) => {
-      if (!plan.ok) throw new Error(`Autonomous Manager failed to plan IA-${agentNumber}: ${plan.error ?? 'unknown planning error'}`);
-      return runRealEngineeringCycle({ agentId, agentNumber, sourceSha });
-    })
+
+  // Lease-first: the fleet-level manager already maintains the durable backlog.
+  // Do not make every IA perform another planning/read pass before it can lease.
+  const promise = runRealEngineeringCycle({ agentId, agentNumber, sourceSha })
     .then((result) => {
       outcome = classifyContinuityResult(result);
       lastOutcomeByAgent.set(agentNumber, {
@@ -141,10 +205,16 @@ function startContinuityRun(agentId: string, agentNumber: number): void {
     })
     .finally(() => {
       continuityRuns.delete(agentId);
+      mirroredAgentIds.delete(agentId);
+      const state = getAllExecutionStates().find((row) => row.agentId === agentId);
+      if (state && !state.pauseState && !state.disabledState && state.activeTaskId) {
+        updateExecutionState(agentId, { availability: 'available', activeTaskId: null });
+      }
       const next = setTimeout(() => { if (canRunContinuity(agentId)) startContinuityRun(agentId, agentNumber); }, refillDelayMs(outcome));
       next.unref?.();
     });
   continuityRuns.set(agentId, promise);
+  void runLeaseMirror();
 }
 
 function refillRecoveredAgents(agentNumbers: number[]): void {
@@ -166,13 +236,20 @@ function refillAllAvailableAgents(): void {
 async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
   lastRunAt = new Date().toISOString();
   try {
-    await refreshInFlightTaskHeartbeats();
+    await runLeaseMirror();
     const result = await enforceAutonomous112RuntimeTruth();
     lastOk = result.ok;
     lastRecovered = result.recovered;
     lastError = null;
 
     continuityEnabled = Boolean(!result.snapshot.autonomous.dispatcherPaused && !result.snapshot.autonomous.emergencyStop);
+
+    // Start/recover the 112 real engineering lanes BEFORE heavier semantic,
+    // decision-quality, and backlog planning. Existing queued work can therefore
+    // be leased immediately instead of waiting behind a fleet-wide planning pass.
+    refillRecoveredAgents(result.recovered);
+    refillAllAvailableAgents();
+    void runLeaseMirror();
 
     const sourceSha = currentSourceSha();
     let semantic360 = getAutonomousSemantic360Status();
@@ -188,8 +265,7 @@ async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
       await ensureAutonomousManagerBacklog({ sourceSha, agents: lanes });
     }
 
-    refillRecoveredAgents(result.recovered);
-    refillAllAvailableAgents();
+    await runLeaseMirror();
     console.log('[IVX Autonomous 112 Runtime Enforcer]', {
       reason,
       ok: result.ok,
@@ -207,15 +283,17 @@ async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
       refillBlocked,
       refillIdle,
       refillFailed,
+      leaseMirrorCount: lastLeaseMirrorCount,
       heartbeatRefreshCount: lastHeartbeatRefreshCount,
       semantic360,
       decisionQuality,
       autonomousManager: getAutonomousWorkManagerStatus(),
     });
+
+    // Durable lease renewal is slower than the in-memory truth mirror and is not
+    // placed on the critical startup path. It runs after workers are leased.
+    void refreshInFlightTaskHeartbeats();
   } catch (error) {
-    // A telemetry/durable-store timeout must not kill already-running real work.
-    // Keep continuity state as-is; fail the supervisory sample closed and retry on
-    // the next serialized interval instead of stopping 112 active workers.
     lastOk = false;
     lastRecovered = [];
     lastError = error instanceof Error ? error.message : String(error);
@@ -238,12 +316,19 @@ export function startAutonomous112RuntimeEnforcer(): void {
   bootKick.unref?.();
   timer = setInterval(() => { void run('interval'); }, IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS);
   timer.unref?.();
+
+  // Dedicated 10s mirror is independent from slow semantic/QA supervisor work.
+  // It never manufactures work: only real lease-bearing task-engine records are mirrored.
+  leaseMirrorTimer = setInterval(() => { void runLeaseMirror(); }, 10_000);
+  leaseMirrorTimer.unref?.();
 }
 
 export function getAutonomous112RuntimeEnforcerStatus() {
   return {
     running: Boolean(timer),
     supervisoryRunInFlight: Boolean(enforcerRunInFlight),
+    leaseMirrorRunning: Boolean(leaseMirrorTimer),
+    leaseMirrorInFlight: Boolean(leaseMirrorInFlight),
     startedAt,
     intervalMs: IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS,
     lastRunAt,
@@ -257,6 +342,8 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     refillBlocked,
     refillIdle,
     refillFailed,
+    lastLeaseMirrorAt,
+    lastLeaseMirrorCount,
     lastHeartbeatRefreshAt,
     lastHeartbeatRefreshCount,
     successfulRefillDelayMs: refillDelayMs('completed'),
@@ -266,7 +353,7 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     semantic360: getAutonomousSemantic360Status(),
     decisionQuality: getAutonomousDecisionQualityStatus(),
     autonomousManager: getAutonomousWorkManagerStatus(),
-    truthPolicy: 'Autonomous Manager audits/plans real work blocks. Semantic 360 verifies runtime-capable connections. Decision Quality measures durable outcomes. Supervisory patrols are serialized so a slow durable-store/QA sample cannot overlap the next patrol. A supervisory timeout never stops already-running real continuity work. Long-running continuity work renews only existing real task-engine leases held by active continuity runs; promise count alone is never proof of work. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
+    truthPolicy: 'Autonomous Manager maintains real work blocks. Continuity is lease-first. Only durable active tasks with a real leaseHolder are mirrored into agent-runtime busy/activeTaskId and refreshed every 10 seconds; continuity promise count alone is never proof of work. Semantic 360 and Decision Quality remain fail-closed. Durable task leases are renewed separately. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
   };
 }
 
