@@ -1,1 +1,1 @@
-export { default } from './ivx/autonomous-owner-audit';
+export { default } from './ivx/landing-workers-live';
