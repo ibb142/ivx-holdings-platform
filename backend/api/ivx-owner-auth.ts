@@ -150,7 +150,7 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
         role = typeof profile.role === 'string' ? profile.role : null;
       }
     } catch (profileError) {
-      console.log(`[OwnerAuth] ${traceId} profile lookup note:`, (profileError as Error)?.message ?? 'unknown');
+      console.error(`[OwnerAuth] ${traceId} profile lookup note:`, (profileError as Error)?.message ?? 'unknown');
     }
 
     if (!role) {
@@ -161,7 +161,7 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
           roleSource = 'rpc_verify_admin_access';
         }
       } catch (rpcError) {
-        console.log(`[OwnerAuth] ${traceId} verify_admin_access note:`, (rpcError as Error)?.message ?? 'unknown');
+        console.error(`[OwnerAuth] ${traceId} verify_admin_access note:`, (rpcError as Error)?.message ?? 'unknown');
       }
     }
 
