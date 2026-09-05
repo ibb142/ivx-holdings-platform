@@ -35,17 +35,26 @@ timeout 240s "$MAESTRO" test expo/.maestro/ivx-owner-chat-certificate.yaml \
   --format junit \
   --output qa/evidence/dashboard-chat/chat.xml
 
+# 4) Full app human-depth circulation. This is intentionally fail-closed: every
+# navigable Expo route must be opened on the real Android app, visibly render,
+# survive scroll/back navigation, keep the process alive and show no fatal/error
+# state. Dynamic route parameters receive deterministic QA values and are not skipped.
+timeout 3600s bash scripts/ivx-all-modules-human-depth-e2e.sh
+
 # Fail-closed process/UI evidence after all flows.
 timeout 10s adb shell pidof com.ivxholdings.app.owner > qa/evidence/dashboard-chat/process.txt
 adb exec-out screencap -p > qa/evidence/dashboard-chat/final.png || true
 adb logcat -d -v threadtime > qa/evidence/dashboard-chat/logcat.txt || true
 
 test -s qa/evidence/dashboard-chat/process.txt
+test "$(jq -r '.passed' qa/evidence/all-modules-human-depth/certificate.json)" = true
+test "$(jq -r '.failedRoutes' qa/evidence/all-modules-human-depth/certificate.json)" = 0
 
 jq -n \
   --arg sha "${GITHUB_SHA:-unknown}" \
   --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  '{certificate:"IVX-DASHBOARD-CHAT-E2E",passed:true,sourceSha:$sha,realOwnerLogin:true,dashboardRoute:"/admin/dashboard",dashboardRendered:true,dashboardScrolled:true,chatOpened:true,liveAIReply:true,chatPersistenceAfterRestart:true,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' \
+  --argjson moduleRoutes "$(jq -r '.testedRoutes' qa/evidence/all-modules-human-depth/certificate.json)" \
+  '{certificate:"IVX-DASHBOARD-CHAT-E2E",passed:true,sourceSha:$sha,realOwnerLogin:true,dashboardRoute:"/admin/dashboard",dashboardRendered:true,dashboardScrolled:true,chatOpened:true,liveAIReply:true,chatPersistenceAfterRestart:true,allModulesHumanDepth:true,testedModuleRoutes:$moduleRoutes,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' \
   > qa/evidence/dashboard-chat/certificate.json
 cat qa/evidence/dashboard-chat/certificate.json
 
