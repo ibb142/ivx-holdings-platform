@@ -189,6 +189,7 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
       deploymentMarker: DEPLOYMENT_MARKER,
     }, 200);
   } catch (error) {
+    console.error(`[OwnerAuth] ${traceId} caught error:`, error);
     const message = error instanceof Error ? error.message : 'Owner authorization failed.';
     console.error(`[OwnerAuth] ${traceId} exception: ${message} elapsed=${Date.now() - startedAt}ms`);
     return jsonResponse({
