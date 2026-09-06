@@ -1,26 +1,29 @@
 /**
- * IVX Autonomous Mode API (owner-only).
+ * IVX Autonomous Mode API.
  *
- * The single entry point that runs the full 12-step autonomous lifecycle for an
- * owner task — with the six human-approval safety gates enforced server-side:
- *   POST /api/ivx/autonomous-mode/run    { task, conversationId? } → full proof report
- *   GET  /api/ivx/autonomous-mode/tools  → live tool/access availability report
- *
- * Owner-gated via the same guard as the rest of the IVX developer surface.
+ * Runs the full 12-step autonomous lifecycle for an owner task. Interactive
+ * owner sessions and the repo/ref/workflow-scoped GitHub Actions OIDC machine
+ * identity may invoke the low-risk autonomous loop. Guarded destructive/payment/
+ * credential/security actions remain held by the lifecycle safety gates.
  */
 import { runAutonomousMode } from '../services/ivx-autonomous-mode';
 import { checkToolAvailability } from '../services/ivx-tool-availability';
+import { verifyIVXGitHubActionsOIDCRequest } from '../services/ivx-github-actions-oidc';
+import { buildAutonomousMissionContext, getProjectCompletionMandate } from '../services/ivx-project-vision';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 
 export const OPTIONS = (): Response => ownerOnlyOptions();
 
-async function requireOwner(request: Request): Promise<{ ok: true } | { ok: false; response: Response }> {
+async function requireOwnerOrTrustedAutomation(request: Request): Promise<{ ok: true; source: 'owner' | 'github_oidc' } | { ok: false; response: Response }> {
+  if (await verifyIVXGitHubActionsOIDCRequest(request)) {
+    return { ok: true, source: 'github_oidc' };
+  }
   try {
     const owner = await assertIVXOwnerOnly(request);
     if (!owner.userId) {
       return { ok: false, response: ownerOnlyJson({ ok: false, error: 'IVX owner authentication required.' }, 401) };
     }
-    return { ok: true };
+    return { ok: true, source: 'owner' };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'IVX owner authentication required.';
     const status = message.toLowerCase().includes('missing bearer') ? 401 : 403;
@@ -28,42 +31,51 @@ async function requireOwner(request: Request): Promise<{ ok: true } | { ok: fals
   }
 }
 
-/** GET /api/ivx/autonomous-mode/tools — live tool/access availability. */
+/** GET /api/ivx/autonomous-mode/tools — live tool/access availability + mission mandate. */
 export async function handleAutonomousModeToolsRequest(request: Request): Promise<Response> {
-  const auth = await requireOwner(request);
+  const auth = await requireOwnerOrTrustedAutomation(request);
   if (!auth.ok) return auth.response;
   try {
     const report = checkToolAvailability();
-    return ownerOnlyJson({ ok: true, report });
+    return ownerOnlyJson({ ok: true, authSource: auth.source, report, mission: getProjectCompletionMandate() });
   } catch (error) {
     return ownerOnlyJson({ ok: false, error: error instanceof Error ? error.message : 'Failed to check tool availability.' }, 500);
   }
 }
 
-/** POST /api/ivx/autonomous-mode/run — run the full autonomous lifecycle for a task. */
+/** POST /api/ivx/autonomous-mode/run — run the full autonomous lifecycle with the permanent IVX mission context. */
 export async function handleAutonomousModeRunRequest(request: Request): Promise<Response> {
-  const auth = await requireOwner(request);
+  const auth = await requireOwnerOrTrustedAutomation(request);
   if (!auth.ok) return auth.response;
 
-  let body: { task?: unknown; conversationId?: unknown; approverEmail?: unknown };
+  let body: { task?: unknown; conversationId?: unknown; approverEmail?: unknown; includeMission?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
     return ownerOnlyJson({ ok: false, error: 'Invalid JSON body.' }, 400);
   }
 
-  const task = typeof body.task === 'string' ? body.task.trim() : '';
-  if (!task) {
+  const ownerTask = typeof body.task === 'string' ? body.task.trim() : '';
+  if (!ownerTask) {
     return ownerOnlyJson({ ok: false, error: 'A non-empty "task" string is required.' }, 400);
   }
 
   try {
+    // Mission context is on by default so Autonomous never interprets an empty
+    // known-work queue as "the app is finished". Tests/internal callers can opt
+    // out explicitly when they need exact legacy task text.
+    const task = body.includeMission === false ? ownerTask : buildAutonomousMissionContext(ownerTask);
     const report = await runAutonomousMode(task, {
       conversationId: typeof body.conversationId === 'string' ? body.conversationId : null,
       approverEmail: typeof body.approverEmail === 'string' ? body.approverEmail : undefined,
     });
-    // HTTP stays 200 — the lifecycle ran; the truthful outcome lives in finalStatus.
-    return ownerOnlyJson({ ok: true, report });
+    return ownerOnlyJson({
+      ok: true,
+      authSource: auth.source,
+      ownerTask,
+      mission: getProjectCompletionMandate(),
+      report,
+    });
   } catch (error) {
     return ownerOnlyJson({ ok: false, error: error instanceof Error ? error.message : 'Autonomous mode run failed.' }, 500);
   }
