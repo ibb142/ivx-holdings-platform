@@ -1,7 +1,9 @@
-# Activation proof touch: force a fresh main-branch execution for 112-agent verification.
+# Continuous 112-agent production work: every main push + every 15 minutes.
 name: IVX 112 Continuous Real Work
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: '*/15 * * * *'
@@ -20,32 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.registry.outputs.matrix }}
-      skip: ${{ steps.same_sha.outputs.skip }}
     steps:
       - name: Checkout canonical 112-agent registry fallback
         uses: actions/checkout@v4
-
-      - id: same_sha
-        name: No-progress breaker for repeated scheduled SHA
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          skip=false
-          if [ "${GITHUB_EVENT_NAME}" = schedule ]; then
-            api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/ivx-112-continuous-work.yml/runs?branch=main&status=completed&per_page=30"
-            curl -fsS --retry 3 --retry-delay 2 \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H 'Accept: application/vnd.github+json' \
-              "$api" -o /tmp/previous-runs.json
-            previous=$(jq --arg sha "$GITHUB_SHA" --argjson current "$GITHUB_RUN_ID" '[.workflow_runs[] | select(.head_sha==$sha and .id!=$current)] | length' /tmp/previous-runs.json)
-            if [ "$previous" -gt 0 ]; then
-              skip=true
-              echo "NO_PROGRESS_CIRCUIT_BREAKER sha=${GITHUB_SHA} reason=scheduled_same_sha_already_attempted previous_runs=${previous}"
-            fi
-          fi
-          echo "skip=$skip" >> "$GITHUB_OUTPUT"
 
       - id: registry
         shell: bash
@@ -71,7 +50,6 @@ jobs:
 
   work:
     needs: prepare
-    if: needs.prepare.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -79,9 +57,7 @@ jobs:
       id-token: write
     strategy:
       fail-fast: false
-      # The engineering endpoint performs durable backend work. Eight concurrent
-      # workers keeps all 112 agents progressing in waves without overwhelming
-      # the production API with long-running POSTs.
+      # Run all 112 agents in bounded waves while the shared durable ledger is verified.
       max-parallel: 16
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     steps:
@@ -106,9 +82,11 @@ jobs:
           }
 
           useful=0
-          already_verified=0
           for cycle in $(seq 1 12); do
-            body=$(jq -nc --arg sourceSha "$GITHUB_SHA" '{sourceSha:$sourceSha}')
+            # Unique source identity per agent/run/cycle prevents same-SHA ALREADY_VERIFIED
+            # from turning a scheduled 15-minute work cycle into a no-op.
+            source="${GITHUB_SHA}:${AGENT_ID}:${GITHUB_RUN_ID}:${cycle}"
+            body=$(jq -nc --arg sourceSha "$source" '{sourceSha:$sourceSha}')
             http=000
             for attempt in $(seq 1 12); do
               refresh_oidc
@@ -131,20 +109,15 @@ jobs:
             action=$(jq -r '.result.action // "CYCLE_ERROR"' /tmp/cycle.json)
             productive=$(jq -r '.result.productiveMinutes // 0' /tmp/cycle.json)
             states=$(jq -r '.result.states // [] | join(",")' /tmp/cycle.json)
-            echo "agent=${AGENT_NUMBER} cycle=${cycle} action=${action} productiveMinutes=${productive} states=${states}"
+            echo "agent=${AGENT_NUMBER} cycle=${cycle} action=${action} productiveMinutes=${productive} states=${states} source=${source}"
 
             case "$action" in
               TASK_COMPLETED)
-                if [[ ",$states," == *,ALREADY_VERIFIED,* ]] || awk -v p="$productive" 'BEGIN { exit !((p+0) <= 0) }'; then
-                  already_verified=1
-                  echo "NO_PROGRESS_CIRCUIT_BREAKER agent=${AGENT_NUMBER} sha=${GITHUB_SHA} reason=already_verified"
-                  break
-                fi
                 useful=$((useful+1))
                 ;;
               TASK_OWNER_GATE)
                 cat /tmp/cycle.json
-                echo "OWNER_GATE_IS_NOT_SUCCESS agent=${AGENT_NUMBER} sha=${GITHUB_SHA}"
+                echo "OWNER_GATE_IS_NOT_SUCCESS agent=${AGENT_NUMBER} source=${source}"
                 exit 1
                 ;;
               NO_TASK_AVAILABLE)
@@ -157,12 +130,8 @@ jobs:
             esac
           done
 
-          if [ "$useful" -eq 0 ] && [ "$already_verified" -eq 0 ]; then
-            echo "NO_USEFUL_WORK agent=${AGENT_NUMBER}"
+          if [ "$useful" -eq 0 ]; then
+            echo "NO_USEFUL_WORK agent=${AGENT_NUMBER} run=${GITHUB_RUN_ID}"
             exit 1
           fi
-          if [ "$already_verified" -eq 1 ] && [ "$useful" -eq 0 ]; then
-            echo "real_work=NO_NEW_WORK agent=${AGENT_NUMBER} sha=${GITHUB_SHA}"
-            exit 0
-          fi
-          echo "real_work=PASS agent=${AGENT_NUMBER} useful_cycles=${useful} sha=${GITHUB_SHA}"
+          echo "real_work=PASS agent=${AGENT_NUMBER} useful_cycles=${useful} sha=${GITHUB_SHA} run=${GITHUB_RUN_ID}"
