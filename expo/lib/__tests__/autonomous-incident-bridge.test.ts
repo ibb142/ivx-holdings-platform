@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'bun:test';
 import { buildAutonomousIncidentPayload } from '../autonomous-incident-bridge';
 
 describe('autonomous incident bridge', () => {
