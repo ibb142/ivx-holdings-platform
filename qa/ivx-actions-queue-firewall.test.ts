@@ -18,9 +18,30 @@ describe('GitHub Actions queue firewall', () => {
     }
   });
 
-  test('radar and nervous system do not recursively fan out from workflow completions', () => {
-    expect(workflow('ivx-autonomous-radar-self-heal.yml')).not.toContain('workflow_run:');
-    expect(workflow('ivx-autonomous-nervous-system.yml')).not.toContain('workflow_run:');
+  test('fanout-prone autonomous observers do not recursively trigger from workflow completion', () => {
+    for (const name of [
+      'ivx-autonomous-radar-self-heal.yml',
+      'ivx-autonomous-nervous-system.yml',
+      'ivx-autonomous-regression-scheduler.yml',
+      'ivx-autonomous-certificate-trust-guard.yml',
+      'ivx-autonomous-out-of-band-rescue.yml',
+    ]) {
+      expect(workflow(name)).not.toContain('workflow_run:');
+    }
+  });
+
+  test('autonomous recovery observers are hourly at most and deduplicate active runs', () => {
+    for (const name of [
+      'ivx-autonomous-regression-scheduler.yml',
+      'ivx-autonomous-certificate-trust-guard.yml',
+      'ivx-autonomous-out-of-band-rescue.yml',
+    ]) {
+      const text = workflow(name);
+      expect(text).not.toContain("cron: '*/5 * * * *'");
+      expect(text).not.toContain("cron: '*/15 * * * *'");
+      expect(text).not.toContain("cron: '*/30 * * * *'");
+      expect(text).toContain('cancel-in-progress: true');
+    }
   });
 
   test('expired launch-day war room is manual only', () => {
