@@ -237,7 +237,8 @@ async function executeSqlViaPg(sql: string): Promise<void> {
 }
 
 async function executeApkArtifactDrift(): Promise<void> {
-  // Implement the real execution logic here for p4-apk-artifact-drift
+  const sql = `SELECT check_for_apk_artifact_drift()`;
+  await executeSqlViaPg(sql);
 }
 
 async function executeSchemaSql(sql: string): Promise<void> {
