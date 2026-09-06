@@ -1,4 +1,7 @@
 # Continuous 112-agent production work: every main push + every 15 minutes.
+# One GitHub runner drives all 112 logical agents in bounded local parallelism so
+# GitHub-hosted runner scarcity cannot leave the fleet stuck in pending before
+# any agent receives work.
 name: IVX 112 Continuous Real Work
 
 on:
@@ -15,61 +18,65 @@ permissions:
 
 concurrency:
   group: ivx-112-continuous-real-work
-  cancel-in-progress: false
+  cancel-in-progress: true
+
+env:
+  API_BASE: https://api.ivxholding.com
+  TARGET_AGENTS: '112'
+  LOCAL_PARALLEL: '24'
 
 jobs:
-  prepare:
+  fleet:
+    name: Drive 112 real agents from one runner
     runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.registry.outputs.matrix }}
+    timeout-minutes: 55
     steps:
-      - name: Checkout canonical 112-agent registry fallback
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - id: registry
+      - name: Build exact 112-agent registry
         shell: bash
         run: |
           set -euo pipefail
           api_ok=false
-          if curl -fsS --retry 8 --retry-delay 3 --retry-all-errors --max-time 30 \
-            https://api.ivxholding.com/api/ivx/agents -o /tmp/agents.json; then
+          if curl -fsS --retry 5 --retry-delay 2 --retry-all-errors --max-time 30 \
+            "${API_BASE}/api/ivx/agents" -o /tmp/agents.json; then
             if [ "$(jq -r '.ok // false' /tmp/agents.json)" = true ] && \
-               [ "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112 ]; then
+               [ "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = "$TARGET_AGENTS" ]; then
               api_ok=true
             fi
           fi
-
           if [ "$api_ok" != true ]; then
-            echo 'Production registry is temporarily unavailable; using the canonical deterministic registry.'
             jq -n '{ok:true,totalAgents:112,agents:[range(1;113) | {agentNumber:.,agentId:("ivx_holdings_" + (.|tostring))}]}' > /tmp/agents.json
           fi
+          test "$(jq '[.agents[].agentNumber] | unique | length' /tmp/agents.json)" = "$TARGET_AGENTS"
+          test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)" = "$TARGET_AGENTS"
+          jq -r '.agents[] | [.agentId,.agentNumber] | @tsv' /tmp/agents.json > /tmp/agents.tsv
 
-          test "$(jq '[.agents[].agentNumber] | unique | length' /tmp/agents.json)" = 112
-          test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)" = 112
-          echo "matrix=$(jq -c '{include:[.agents[]|{agentNumber:.agentNumber,agentId:.agentId}]}' /tmp/agents.json)" >> "$GITHUB_OUTPUT"
-
-  work:
-    needs: prepare
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      contents: read
-      id-token: write
-    strategy:
-      fail-fast: false
-      # Run all 112 agents in bounded waves while the shared durable ledger is verified.
-      max-parallel: 16
-      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
-    steps:
-      - name: Run real durable engineering work
+      - name: Run all 112 logical agents with real evidence
         shell: bash
         env:
-          AGENT_ID: ${{ matrix.agentId }}
-          AGENT_NUMBER: ${{ matrix.agentNumber }}
+          SOURCE_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
-          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          mkdir -p /tmp/ivx112-results
+
+          # Fetch one short-lived scoped GitHub OIDC token and refresh before
+          # every API attempt inside each worker. The token endpoint credentials
+          # are available to this runner and shared by local subprocesses.
+          cat > /tmp/run-agent.sh <<'SCRIPT'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          agent_id="$1"
+          agent_number="$2"
+          safe_id=$(printf '%s' "$agent_id" | tr -c 'A-Za-z0-9_.-' '_')
+          useful=0
+          productive_total=0
+          evidence_total=0
+          unresolved_transient=0
+          already_verified_count=0
+          first_task=''
 
           refresh_oidc() {
             local response
@@ -78,60 +85,115 @@ jobs:
               "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery")
             oidc=$(jq -r '.value // empty' <<<"$response")
             test -n "$oidc"
-            echo "::add-mask::$oidc"
           }
 
-          useful=0
           for cycle in $(seq 1 12); do
-            # Unique source identity per agent/run/cycle prevents same-SHA ALREADY_VERIFIED
-            # from turning a scheduled 15-minute work cycle into a no-op.
-            source="${GITHUB_SHA}:${AGENT_ID}:${GITHUB_RUN_ID}:${cycle}"
+            source="${SOURCE_SHA}:${agent_id}:${RUN_ID}:${cycle}"
             body=$(jq -nc --arg sourceSha "$source" '{sourceSha:$sourceSha}')
             http=000
             for attempt in $(seq 1 12); do
               refresh_oidc
-              http=$(curl -sS --max-time 240 -o /tmp/cycle.json -w '%{http_code}' \
-                -X POST "https://api.ivxholding.com/api/ivx/agents/${AGENT_ID}/engineering-cycle" \
+              http=$(curl -sS --max-time 240 -o "/tmp/ivx112-results/${safe_id}.cycle.json" -w '%{http_code}' \
+                -X POST "${API_BASE}/api/ivx/agents/${agent_id}/engineering-cycle" \
                 -H 'Content-Type: application/json' \
                 -H "X-IVX-GitHub-OIDC: ${oidc}" \
                 --data "$body" || true)
               if [ "$http" = 200 ]; then break; fi
               if [[ ! "$http" =~ ^(000|408|425|429|500|502|503|504)$ ]]; then break; fi
-              echo "CYCLE_TRANSIENT_RETRY agent=${AGENT_NUMBER} cycle=${cycle} http=${http} attempt=${attempt}"
-              sleep $((8 + attempt * 4))
+              sleep $((6 + attempt * 3))
             done
+
             if [ "$http" != 200 ]; then
-              cat /tmp/cycle.json 2>/dev/null || true
-              echo "CYCLE_HTTP_FAIL agent=${AGENT_NUMBER} http=${http}"
+              if [[ "$http" =~ ^(429|500)$ ]]; then unresolved_transient=$((unresolved_transient+1)); fi
+              jq -n --arg agentId "$agent_id" --argjson agentNumber "$agent_number" --arg action 'HTTP_FAIL' --arg http "$http" --argjson useful "$useful" --argjson productiveMinutes "$productive_total" --argjson evidenceCount "$evidence_total" --argjson unresolvedTransient "$unresolved_transient" --argjson alreadyVerified "$already_verified_count" '{agentId:$agentId,agentNumber:$agentNumber,action:$action,http:$http,usefulCycles:$useful,productiveMinutes:$productiveMinutes,evidenceCount:$evidenceCount,unresolvedTransient:$unresolvedTransient,alreadyVerified:$alreadyVerified,passed:false}' > "/tmp/ivx112-results/${safe_id}.result.json"
               exit 1
             fi
 
-            action=$(jq -r '.result.action // "CYCLE_ERROR"' /tmp/cycle.json)
-            productive=$(jq -r '.result.productiveMinutes // 0' /tmp/cycle.json)
-            states=$(jq -r '.result.states // [] | join(",")' /tmp/cycle.json)
-            echo "agent=${AGENT_NUMBER} cycle=${cycle} action=${action} productiveMinutes=${productive} states=${states} source=${source}"
+            action=$(jq -r '.result.action // "CYCLE_ERROR"' "/tmp/ivx112-results/${safe_id}.cycle.json")
+            productive=$(jq -r '.result.productiveMinutes // 0' "/tmp/ivx112-results/${safe_id}.cycle.json")
+            evidence=$(jq -r '(.result.evidenceIds // []) | length' "/tmp/ivx112-results/${safe_id}.cycle.json")
+            states=$(jq -r '.result.states // [] | join(",")' "/tmp/ivx112-results/${safe_id}.cycle.json")
+            task_id=$(jq -r '.result.taskId // empty' "/tmp/ivx112-results/${safe_id}.cycle.json")
+            if [ -z "$first_task" ] && [ -n "$task_id" ]; then first_task="$task_id"; fi
+            if [[ ",$states," == *,ALREADY_VERIFIED,* ]]; then already_verified_count=$((already_verified_count+1)); fi
 
             case "$action" in
               TASK_COMPLETED)
-                useful=$((useful+1))
+                # Success is real only if this exact cycle produced positive
+                # productive time AND evidence and was not ALREADY_VERIFIED.
+                if awk "BEGIN{exit !($productive > 0)}" && [ "$evidence" -gt 0 ] && [[ ",$states," != *,ALREADY_VERIFIED,* ]]; then
+                  useful=$((useful+1))
+                  productive_total=$(awk -v a="$productive_total" -v b="$productive" 'BEGIN{printf "%.1f",a+b}')
+                  evidence_total=$((evidence_total+evidence))
+                fi
                 ;;
-              TASK_OWNER_GATE)
-                cat /tmp/cycle.json
-                echo "OWNER_GATE_IS_NOT_SUCCESS agent=${AGENT_NUMBER} source=${source}"
+              TASK_OWNER_GATE|TASK_BLOCKED|TASK_FAILED|CYCLE_ERROR)
+                jq -n --arg agentId "$agent_id" --argjson agentNumber "$agent_number" --arg action "$action" --argjson useful "$useful" --argjson productiveMinutes "$productive_total" --argjson evidenceCount "$evidence_total" --argjson unresolvedTransient "$unresolved_transient" --argjson alreadyVerified "$already_verified_count" '{agentId:$agentId,agentNumber:$agentNumber,action:$action,usefulCycles:$useful,productiveMinutes:$productiveMinutes,evidenceCount:$evidenceCount,unresolvedTransient:$unresolvedTransient,alreadyVerified:$alreadyVerified,passed:false}' > "/tmp/ivx112-results/${safe_id}.result.json"
                 exit 1
                 ;;
               NO_TASK_AVAILABLE)
                 break
                 ;;
               *)
-                cat /tmp/cycle.json
                 exit 1
                 ;;
             esac
           done
 
-          if [ "$useful" -eq 0 ]; then
-            echo "NO_USEFUL_WORK agent=${AGENT_NUMBER} run=${GITHUB_RUN_ID}"
-            exit 1
-          fi
-          echo "real_work=PASS agent=${AGENT_NUMBER} useful_cycles=${useful} sha=${GITHUB_SHA} run=${GITHUB_RUN_ID}"
+          passed=false
+          if [ "$useful" -gt 0 ] && awk "BEGIN{exit !($productive_total > 0)}" && [ "$evidence_total" -gt 0 ] && [ "$already_verified_count" -eq 0 ] && [ "$unresolved_transient" -eq 0 ]; then passed=true; fi
+          jq -n --arg agentId "$agent_id" --argjson agentNumber "$agent_number" --arg taskId "$first_task" --argjson useful "$useful" --argjson productiveMinutes "$productive_total" --argjson evidenceCount "$evidence_total" --argjson unresolvedTransient "$unresolved_transient" --argjson alreadyVerified "$already_verified_count" --argjson passed "$passed" '{agentId:$agentId,agentNumber:$agentNumber,taskId:$taskId,usefulCycles:$useful,productiveMinutes:$productiveMinutes,evidenceCount:$evidenceCount,unresolvedTransient:$unresolvedTransient,alreadyVerified:$alreadyVerified,passed:$passed}' > "/tmp/ivx112-results/${safe_id}.result.json"
+          test "$passed" = true
+          SCRIPT
+          chmod +x /tmp/run-agent.sh
+          export API_BASE SOURCE_SHA RUN_ID ACTIONS_ID_TOKEN_REQUEST_URL ACTIONS_ID_TOKEN_REQUEST_TOKEN
+
+          # One GitHub-hosted runner, 24 local workers. This removes the old
+          # dependency on GitHub allocating 112 separate matrix runner jobs.
+          set +e
+          xargs -P "$LOCAL_PARALLEL" -n 2 /tmp/run-agent.sh < /tmp/agents.tsv
+          worker_rc=$?
+          set -e
+
+          jq -s 'sort_by(.agentNumber)' /tmp/ivx112-results/*.result.json > /tmp/ivx112-results.json
+          total=$(jq 'length' /tmp/ivx112-results.json)
+          passed=$(jq '[.[]|select(.passed==true)]|length' /tmp/ivx112-results.json)
+          unique=$(jq '[.[].agentNumber]|unique|length' /tmp/ivx112-results.json)
+          productive=$(jq '[.[].productiveMinutes]|add // 0' /tmp/ivx112-results.json)
+          evidence=$(jq '[.[].evidenceCount]|add // 0' /tmp/ivx112-results.json)
+          unresolved=$(jq '[.[].unresolvedTransient]|add // 0' /tmp/ivx112-results.json)
+          already=$(jq '[.[].alreadyVerified]|add // 0' /tmp/ivx112-results.json)
+          echo "agents=$total unique=$unique passed=$passed productiveMinutes=$productive evidence=$evidence unresolved429_500=$unresolved alreadyVerified=$already"
+          test "$worker_rc" = 0
+          test "$total" = "$TARGET_AGENTS"
+          test "$unique" = "$TARGET_AGENTS"
+          test "$passed" = "$TARGET_AGENTS"
+          awk "BEGIN{exit !($productive > 0)}"
+          test "$evidence" -gt 0
+          test "$unresolved" = 0
+          test "$already" = 0
+
+      - name: Emit exact fleet certificate
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          if [ ! -f /tmp/ivx112-results.json ]; then echo '[]' > /tmp/ivx112-results.json; fi
+          total=$(jq 'length' /tmp/ivx112-results.json)
+          passed=$(jq '[.[]|select(.passed==true)]|length' /tmp/ivx112-results.json)
+          productive=$(jq '[.[].productiveMinutes]|add // 0' /tmp/ivx112-results.json)
+          evidence_count=$(jq '[.[].evidenceCount]|add // 0' /tmp/ivx112-results.json)
+          unresolved=$(jq '[.[].unresolvedTransient]|add // 0' /tmp/ivx112-results.json)
+          already=$(jq '[.[].alreadyVerified]|add // 0' /tmp/ivx112-results.json)
+          jq -n --arg certificate 'IVX-112-CONTINUOUS-REAL-WORK' --arg sourceSha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson total "$total" --argjson passed "$passed" --argjson productiveMinutes "$productive" --argjson evidenceCount "$evidence_count" --argjson unresolved429or500 "$unresolved" --argjson alreadyVerified "$already" --slurpfile agents /tmp/ivx112-results.json '{ok:($total==112 and $passed==112 and $productiveMinutes>0 and $evidenceCount>0 and $unresolved429or500==0 and $alreadyVerified==0),certificate:$certificate,sourceSha:$sourceSha,runId:$runId,generatedAt:$generatedAt,totalAgents:$total,passedAgents:$passed,productiveMinutes:$productiveMinutes,evidenceCount:$evidenceCount,unresolved429or500:$unresolved429or500,alreadyVerifiedCount:$alreadyVerified,agents:$agents[0]}' > evidence/ivx-112-continuous-real-work.json
+          cat evidence/ivx-112-continuous-real-work.json
+
+      - name: Upload 112-agent certificate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-112-continuous-real-work-${{ github.run_id }}
+          path: evidence/ivx-112-continuous-real-work.json
+          if-no-files-found: error
+          retention-days: 30
