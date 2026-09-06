@@ -5,12 +5,12 @@ import { getGitHubActionsExternalSupervisorStatus } from './ivx-github-actions-e
 import { getSchedulerState, setSchedulerEnabled } from './ivx-autonomous-scheduler';
 import { getAllTasks, type Task } from './ivx-autonomous-task-engine';
 
-export const IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER = 'ivx-autonomous-truth-control-2026-09-05-v11-owner-24x7';
+export const IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER = 'ivx-autonomous-truth-control-2026-09-05-v12-supabase-stability';
 export const IVX_AUTONOMOUS_TRUTH_HEARTBEAT_FRESH_MS = 60 * 1000;
 export const IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS = 30 * 1000;
 export const IVX_AUTONOMOUS_CASCADE_SEED_SIZE = 10;
 export const IVX_AUTONOMOUS_CASCADE_FANOUT = 10;
-export const IVX_AUTONOMOUS_TRUTH_DEPENDENCY_TIMEOUT_MS = 2_500;
+export const IVX_AUTONOMOUS_TRUTH_DEPENDENCY_TIMEOUT_MS = 12_000;
 export const IVX_AUTONOMOUS_ALWAYS_ON_24X7 = process.env.IVX_AUTONOMOUS_ALWAYS_ON_24X7 !== 'false';
 
 const TASK_ENGINE_ACTIVE_STATES = new Set([
