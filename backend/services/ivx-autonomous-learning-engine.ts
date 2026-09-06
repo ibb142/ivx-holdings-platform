@@ -127,14 +127,14 @@ async function compareWithLastKnownGood(baseSha: string, headSha: string) {
 
 function fingerprint(input: LearningObservation): string {
   const parts = [...input.diagnoses].sort();
-  if (input.runtimeError) parts.push(input.runtimeError.replace(/\d+ms/g, '<ms>').slice(0, 160));
+  if (input.runtimeError) parts.push(input.runtimeError.replace(/\d+ms/g, '<duration>').slice(0, 160));
   return parts.join('|') || `working:${input.working}/${input.total}`;
 }
 
 function curriculumDescription(agentNumber: number, sourceSha: string): string {
   return [
     `Mandatory 5-hour Autonomous upgrade curriculum for IA-${agentNumber} at source SHA ${sourceSha}.`,
-    'This is real study + applied engineering work, not a heartbeat placeholder.',
+    'This is measured study plus applied engineering work and must produce verifiable artifacts.',
     'Gate 1 (60 min): AI/AGI architecture, reasoning, agents, memory, tool-use, evaluation, reliability and safety patterns relevant to this IA role.',
     'Gate 2 (60 min): AI/AGI research translated into one concrete IVX improvement hypothesis, with source/evidence notes and measurable acceptance criteria.',
     'Gate 3 (60 min): Quantum technology fundamentals and current practical relevance: algorithms, optimization, simulation, cryptography/post-quantum risk, hybrid classical/quantum workflows; reject hype and label non-production concepts clearly.',
