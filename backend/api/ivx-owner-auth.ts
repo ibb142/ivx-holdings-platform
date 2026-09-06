@@ -155,7 +155,7 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
 
     if (!role) {
       try {
-        const { data: rpcData, error: rpcError } = await client.rpc('verify_admin_access');
+        const { data: rpcData, error: rpcError } = await client.rpc('verify_owner_access_fastpath');
         if (!rpcError && rpcData === true) {
           role = 'admin';
           roleSource = 'rpc_verify_admin_access';
