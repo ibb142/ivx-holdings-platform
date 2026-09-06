@@ -81,6 +81,7 @@ export async function handleCertificationRunRequest(request: Request): Promise<R
     const report = await runDeployCertificationGate({
       triggeredBy: 'manual',
       triggerSource: 'api:/api/ivx/certification/run',
+      tests: ['p3-control-tower-identity-test'],
       apiBase,
       ownerToken,
     });
