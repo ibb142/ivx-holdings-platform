@@ -7,7 +7,7 @@ on:
       - '.github/workflows/landing-112-p0-force-fleet.yml'
       - 'qa/owner-priority-state.json'
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch: {}
 
 permissions:
@@ -16,7 +16,7 @@ permissions:
 
 concurrency:
   group: landing-p0-112-force-fleet
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   API_BASE: https://api.ivxholding.com
@@ -106,7 +106,7 @@ jobs:
           }
           export -f run_one
           while IFS=$'\t' read -r number agent_id; do printf '%s\t%s\n' "$number" "$agent_id"; done < /tmp/agents.tsv \
-            | xargs -P 24 -n 2 bash -c 'run_one "$0" "$1"'
+            | xargs -P 112 -n 2 bash -c 'run_one "$0" "$1"'
           jq -s 'sort_by(.agentNumber)' /tmp/landing112/[0-9]*.json > qa/evidence/autonomous/landing-p0-112-force-fleet.json
           total=$(jq 'length' qa/evidence/autonomous/landing-p0-112-force-fleet.json)
           success=$(jq '[.[] | select(.ok == true)] | length' qa/evidence/autonomous/landing-p0-112-force-fleet.json)
