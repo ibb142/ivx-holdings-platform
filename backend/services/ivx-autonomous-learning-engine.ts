@@ -2,10 +2,14 @@ import path from 'node:path';
 import { createTask, getAllTasks } from './ivx-autonomous-task-engine';
 import { readDurableJson, writeDurableJson } from './ivx-durable-store';
 
-export const IVX_AUTONOMOUS_LEARNING_MARKER = 'ivx-autonomous-learning-v2-2026-09-06';
+export const IVX_AUTONOMOUS_LEARNING_MARKER = 'ivx-autonomous-learning-v3-ai-quantum-112-2026-09-06';
 export const IVX_AUTONOMOUS_DAILY_STUDY_MINUTES = 300;
+export const IVX_AUTONOMOUS_LEARNING_FLEET_SIZE = 112;
+export const IVX_AUTONOMOUS_DAILY_FLEET_STUDY_MINUTES = IVX_AUTONOMOUS_DAILY_STUDY_MINUTES * IVX_AUTONOMOUS_LEARNING_FLEET_SIZE;
+export const IVX_AUTONOMOUS_LEARNING_DOMAINS = ['AI_AGI_TECHNOLOGY', 'QUANTUM_TECHNOLOGY', 'APPLIED_IVX_UPGRADE'] as const;
 const LEARNING_STATE_FILE = path.join(process.cwd(), 'logs/audit/autonomous-learning/state.json');
 const REPO = 'ibb142/ivx-holdings-platform';
+const CURRICULUM_VERSION = 'ai-agi-quantum-v1';
 
 type LearningLesson = {
   fingerprint: string;
@@ -33,8 +37,12 @@ type LearningState = {
     highRiskFiles: string[];
   };
   studyDate: string | null;
-  studyMinutesPlanned: number;
-  studyBlocksCreated: number;
+  studyMinutesPerAgent: number;
+  studyFleetMinutesPlanned: number;
+  studyAgentsPlanned: number;
+  studyTasksCreated: number;
+  studyCurriculumVersion: string;
+  studyDomains: string[];
   lessons: LearningLesson[];
   updatedAt: string;
 };
@@ -60,15 +68,34 @@ function emptyState(): LearningState {
     lastComparedAt: null,
     lastComparison: null,
     studyDate: null,
-    studyMinutesPlanned: 0,
-    studyBlocksCreated: 0,
+    studyMinutesPerAgent: IVX_AUTONOMOUS_DAILY_STUDY_MINUTES,
+    studyFleetMinutesPlanned: IVX_AUTONOMOUS_DAILY_FLEET_STUDY_MINUTES,
+    studyAgentsPlanned: IVX_AUTONOMOUS_LEARNING_FLEET_SIZE,
+    studyTasksCreated: 0,
+    studyCurriculumVersion: CURRICULUM_VERSION,
+    studyDomains: [...IVX_AUTONOMOUS_LEARNING_DOMAINS],
     lessons: [],
     updatedAt: nowIso(),
   };
 }
 
+function normalizeState(value: LearningState): LearningState {
+  const base = emptyState();
+  return {
+    ...base,
+    ...value,
+    marker: IVX_AUTONOMOUS_LEARNING_MARKER,
+    studyMinutesPerAgent: IVX_AUTONOMOUS_DAILY_STUDY_MINUTES,
+    studyFleetMinutesPlanned: IVX_AUTONOMOUS_DAILY_FLEET_STUDY_MINUTES,
+    studyAgentsPlanned: IVX_AUTONOMOUS_LEARNING_FLEET_SIZE,
+    studyCurriculumVersion: CURRICULUM_VERSION,
+    studyDomains: [...IVX_AUTONOMOUS_LEARNING_DOMAINS],
+    lessons: Array.isArray(value?.lessons) ? value.lessons : [],
+  };
+}
+
 async function loadState(): Promise<LearningState> {
-  return readDurableJson<LearningState>(LEARNING_STATE_FILE, emptyState());
+  return normalizeState(await readDurableJson<LearningState>(LEARNING_STATE_FILE, emptyState()));
 }
 
 async function saveState(state: LearningState): Promise<void> {
@@ -104,28 +131,57 @@ function fingerprint(input: LearningObservation): string {
   return parts.join('|') || `working:${input.working}/${input.total}`;
 }
 
+function curriculumDescription(agentNumber: number, sourceSha: string): string {
+  return [
+    `Mandatory 5-hour Autonomous upgrade curriculum for IA-${agentNumber} at source SHA ${sourceSha}.`,
+    'This is real study + applied engineering work, not a heartbeat placeholder.',
+    'Gate 1 (60 min): AI/AGI architecture, reasoning, agents, memory, tool-use, evaluation, reliability and safety patterns relevant to this IA role.',
+    'Gate 2 (60 min): AI/AGI research translated into one concrete IVX improvement hypothesis, with source/evidence notes and measurable acceptance criteria.',
+    'Gate 3 (60 min): Quantum technology fundamentals and current practical relevance: algorithms, optimization, simulation, cryptography/post-quantum risk, hybrid classical/quantum workflows; reject hype and label non-production concepts clearly.',
+    'Gate 4 (60 min): Role-specific application study: determine whether AI/AGI or quantum-derived methods can improve this agent domain; prototype or document a technically testable upgrade when applicable.',
+    'Gate 5 (60 min): Apply/verify: inspect current IVX code or operating evidence, propose or execute the lowest-risk useful upgrade, run QA, attach evidence, and record what should be reused or avoided next time.',
+    'Completion rules: all five gates require fresh evidence; productive minutes must be measured from real work; no fabricated 300-minute completion; no unsupported claim of quantum advantage; production-changing actions remain owner/CI gated.',
+  ].join(' ');
+}
+
 async function ensureDailyStudyQueue(state: LearningState, sourceSha: string): Promise<void> {
   const today = utcDate();
-  if (state.studyDate === today && state.studyBlocksCreated >= 5) return;
   const tasks = await getAllTasks();
   let created = 0;
-  for (let block = 1; block <= 5; block += 1) {
-    const idempotencyKey = `autonomous-learning:${today}:block-${block}`;
-    if (tasks.some((task) => task.idempotencyKey === idempotencyKey)) continue;
-    const lane = 107 + block;
+  let represented = 0;
+
+  for (let agentNumber = 1; agentNumber <= IVX_AUTONOMOUS_LEARNING_FLEET_SIZE; agentNumber += 1) {
+    const idempotencyKey = `autonomous-learning:${CURRICULUM_VERSION}:${today}:ia-${agentNumber}`;
+    const existing = tasks.find((task) => task.idempotencyKey === idempotencyKey);
+    if (existing) {
+      represented += 1;
+      continue;
+    }
     const result = await createTask({
-      title: `Autonomous learning block ${block}/5 — ${today}`,
-      description: `Daily Autonomous learning/upgrade block. Study verified incidents, compare last-known-good SHA against current SHA ${sourceSha}, inspect regressions, convert repeated failures into prevention rules, and attach fresh evidence. This block reserves up to 60 minutes of real engineering/QA work; never fabricate time or mark complete without evidence.`,
+      title: `IA-${agentNumber} daily AI/AGI + Quantum 5h upgrade — ${today}`,
+      description: curriculumDescription(agentNumber, sourceSha),
       taskType: 'qa',
       idempotencyKey,
       priority: 'high',
-      assignedAgentNumber: lane,
+      assignedAgentNumber: agentNumber,
     });
-    if (result.ok && result.task && !result.duplicate) created += 1;
+    if (result.ok && result.task) {
+      represented += 1;
+      if (!result.duplicate) created += 1;
+    }
   }
+
   state.studyDate = today;
-  state.studyMinutesPlanned = IVX_AUTONOMOUS_DAILY_STUDY_MINUTES;
-  state.studyBlocksCreated = Math.min(5, (state.studyDate === today ? state.studyBlocksCreated : 0) + created);
+  state.studyMinutesPerAgent = IVX_AUTONOMOUS_DAILY_STUDY_MINUTES;
+  state.studyFleetMinutesPlanned = IVX_AUTONOMOUS_DAILY_FLEET_STUDY_MINUTES;
+  state.studyAgentsPlanned = IVX_AUTONOMOUS_LEARNING_FLEET_SIZE;
+  state.studyTasksCreated = represented;
+  state.studyCurriculumVersion = CURRICULUM_VERSION;
+  state.studyDomains = [...IVX_AUTONOMOUS_LEARNING_DOMAINS];
+
+  if (represented !== IVX_AUTONOMOUS_LEARNING_FLEET_SIZE) {
+    throw new Error(`autonomous_learning_queue_incomplete:${represented}/${IVX_AUTONOMOUS_LEARNING_FLEET_SIZE}:created=${created}`);
+  }
 }
 
 export async function observeAndLearn(input: LearningObservation): Promise<{ ok: boolean; state: LearningState; action: string }> {
