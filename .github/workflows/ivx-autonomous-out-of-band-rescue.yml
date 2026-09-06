@@ -44,26 +44,30 @@ jobs:
           test -n "$token"
           echo "token=$token" >> "$GITHUB_OUTPUT"
 
-      - name: Audit data plane without depending on IVX durable store
+      - name: Audit canonical durable data plane without IVX backend
         id: audit
         shell: bash
         run: |
           set -euo pipefail
           unhealthy=false
           if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
-            echo '::error::SUPABASE_SERVICE_ROLE_KEY is not bound; out-of-band recovery cannot verify the data plane.'
+            echo '::error::SUPABASE_SERVICE_ROLE_KEY is not bound; out-of-band recovery cannot verify the durable data plane.'
             unhealthy=true
           else
             code=$(curl -sS --max-time 20 -o /tmp/rest.json -w '%{http_code}' \
               -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
               -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
-              "${SUPABASE_URL}/rest/v1/members?select=id&limit=1" || true)
-            echo "supabase_data_plane_http=$code"
-            [ "$code" = 200 ] || unhealthy=true
+              "${SUPABASE_URL}/rest/v1/ivx_durable_documents?select=doc_key&limit=1" || true)
+            echo "supabase_durable_data_plane_http=$code"
+            if [ "$code" != 200 ]; then
+              cat /tmp/rest.json 2>/dev/null | head -c 500 || true
+              echo
+              unhealthy=true
+            fi
           fi
           echo "unhealthy=$unhealthy" >> "$GITHUB_OUTPUT"
 
-      - name: Restart Supabase directly when data plane is unhealthy
+      - name: Restart Supabase directly only when durable data plane is genuinely unhealthy
         if: steps.audit.outputs.unhealthy == 'true'
         id: restart
         shell: bash
@@ -74,7 +78,11 @@ jobs:
             -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
             "https://api.supabase.com/v1/projects/${PROJECT_REF}" || true)
           echo "supabase_management_http=$auth"
-          [ "$auth" = 200 ] || exit 3
+          if [ "$auth" = 401 ]; then
+            echo '::error::SUPABASE_ACCESS_TOKEN_STALE_OR_REVOKED: rotate the GitHub Actions management token. Durable data-plane health is evaluated independently.'
+            exit 3
+          fi
+          [ "$auth" = 200 ] || { cat /tmp/project.json 2>/dev/null | head -c 500 || true; exit 3; }
           code=$(curl -sS --max-time 45 -o /tmp/restart.json -w '%{http_code}' \
             -X POST \
             -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
@@ -83,7 +91,7 @@ jobs:
           echo "supabase_restart_http=$code"
           case "$code" in 200|201|202) ;; *) cat /tmp/restart.json 2>/dev/null | head -c 500 || true; exit 4 ;; esac
 
-      - name: Wait for Supabase data plane recovery
+      - name: Wait for canonical durable data plane recovery
         if: steps.audit.outputs.unhealthy == 'true'
         shell: bash
         run: |
@@ -93,14 +101,15 @@ jobs:
             code=$(curl -sS --max-time 15 -o /tmp/rest-after.json -w '%{http_code}' \
               -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
               -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
-              "${SUPABASE_URL}/rest/v1/members?select=id&limit=1" || true)
+              "${SUPABASE_URL}/rest/v1/ivx_durable_documents?select=doc_key&limit=1" || true)
             echo "recovery_poll=$i http=$code"
             [ "$code" = 200 ] && exit 0
             sleep 10
           done
+          cat /tmp/rest-after.json 2>/dev/null | head -c 500 || true
           exit 5
 
-      - name: Resume 112 IA after infrastructure recovery
+      - name: Resume 112 IA after infrastructure check or recovery
         shell: bash
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
@@ -112,7 +121,10 @@ jobs:
           for i in 1 2 3 4 5 6; do
             code=$(curl "${args[@]}" -d '{"action":"resume_all"}' "$API_BASE/api/ivx/agents/app-completion/control" || true)
             echo "resume_attempt=$i http=$code"
-            if [ "$code" = 200 ] && [ "$(jq -r '.ok // false' /tmp/resume.json 2>/dev/null)" = true ]; then exit 0; fi
+            if [ "$code" = 200 ] && [ "$(jq -r '.ok // false' /tmp/resume.json 2>/dev/null)" = true ]; then
+              cat /tmp/resume.json | jq '{ok,action,dispatcher:(.dispatcher // null)}' || true
+              exit 0
+            fi
             sleep 10
           done
           cat /tmp/resume.json 2>/dev/null | head -c 1000 || true
