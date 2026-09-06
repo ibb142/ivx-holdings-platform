@@ -57,4 +57,25 @@ describe('GitHub Actions queue firewall', () => {
     expect(text).toContain('workflow_dispatch:');
     expect(text).not.toContain('  push:');
   });
+
+  test('landing orchestrator honors its 3h contract and deduplicates overlapping runs', () => {
+    const text = workflow('landing-112-autonomous-3h-scheduler.yml');
+    expect(text).toContain("cron: '0 */3 * * *'");
+    expect(text).toContain('cancel-in-progress: true');
+    expect(text).not.toContain("cron: '*/5 * * * *'");
+  });
+
+  test('only the dedicated force-dispatch recovery loop may remain at five-minute cadence', () => {
+    const forceDispatch = workflow('ivx-112-force-dispatch-now.yml');
+    expect(forceDispatch).toContain("cron: '*/5 * * * *'");
+    expect(forceDispatch).toContain('cancel-in-progress: true');
+
+    for (const name of [
+      'ivx-112-hard-start-recovery.yml',
+      'ivx-112-production-3layer-enforcer.yml',
+      'landing-112-autonomous-3h-scheduler.yml',
+    ]) {
+      expect(workflow(name)).not.toContain("cron: '*/5 * * * *'");
+    }
+  });
 });
