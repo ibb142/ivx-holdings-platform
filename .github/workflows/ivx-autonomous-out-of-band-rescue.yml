@@ -29,7 +29,7 @@ env:
 jobs:
   rescue:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     concurrency:
       group: ivx-autonomous-out-of-band-rescue
       cancel-in-progress: false
@@ -109,6 +109,16 @@ jobs:
           cat /tmp/rest-after.json 2>/dev/null | head -c 500 || true
           exit 5
 
+      - name: Capture 112 IA baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS --max-time 30 -o /tmp/agents-before.json -w '%{http_code}' "$API_BASE/api/ivx/agents" || true)
+          [ "$code" = 200 ] || { echo "::error::agent baseline endpoint http=$code"; exit 6; }
+          total=$(jq -r '.totalAgents // (.agents|length) // 0' /tmp/agents-before.json)
+          echo "baseline_total_agents=$total"
+          [ "$total" -eq 112 ] || { echo "::error::expected 112 registered IA, got $total"; exit 6; }
+
       - name: Resume 112 IA after infrastructure check or recovery
         shell: bash
         env:
@@ -122,30 +132,72 @@ jobs:
             code=$(curl "${args[@]}" -d '{"action":"resume_all"}' "$API_BASE/api/ivx/agents/app-completion/control" || true)
             echo "resume_attempt=$i http=$code"
             if [ "$code" = 200 ] && [ "$(jq -r '.ok // false' /tmp/resume.json 2>/dev/null)" = true ]; then
-              cat /tmp/resume.json | jq '{ok,action,dispatcher:(.dispatcher // null)}' || true
+              jq '{ok,control,counts,authorization}' /tmp/resume.json || true
               exit 0
             fi
             sleep 10
           done
           cat /tmp/resume.json 2>/dev/null | head -c 1000 || true
-          exit 6
+          exit 7
 
-      - name: Verify worker forward progress
+      - name: Force all 112 IA lanes back to runnable work
+        shell: bash
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          owner_key="${SYSTEM_KEY:-${SYSTEM_KEY_FALLBACK:-}}"
+          [ -n "$owner_key" ] || { echo '::error::Owner/system key is required to force per-agent retry.'; exit 8; }
+          export API_BASE owner_key OIDC_TOKEN
+          seq 1 112 | xargs -n1 -P8 -I{} bash -c '
+            n="$1"
+            out="/tmp/retry-${n}.json"
+            code=$(curl -sS --max-time 30 -o "$out" -w "%{http_code}" -X POST \
+              -H "content-type: application/json" \
+              -H "X-IVX-GitHub-OIDC: ${OIDC_TOKEN}" \
+              -H "x-ivx-owner-key: ${owner_key}" \
+              -d "{\"action\":\"retry_agent\",\"agentNumber\":${n}}" \
+              "${API_BASE}/api/ivx/agents/app-completion/control" || true)
+            ok=$(jq -r ".ok // false" "$out" 2>/dev/null || echo false)
+            if [ "$code" != 200 ] || [ "$ok" != true ]; then
+              echo "retry_agent IA-${n} failed http=${code} ok=${ok}" >&2
+              exit 1
+            fi
+            echo "IA-${n}=retry-dispatched"
+          ' _ {}
+          echo 'all_112_retry_dispatches=accepted'
+
+      - name: Verify all 112 IA entered real forward progress
         shell: bash
         run: |
           set -euo pipefail
-          for i in 1 2 3 4 5 6; do
-            code=$(curl -sS --max-time 20 -o /tmp/dashboard.json -w '%{http_code}' "$API_BASE/api/ivx/agents/app-completion/dashboard" || true)
-            if [ "$code" = 200 ]; then
+          for poll in $(seq 1 18); do
+            agents_code=$(curl -sS --max-time 20 -o /tmp/agents-after.json -w '%{http_code}' "$API_BASE/api/ivx/agents" || true)
+            dash_code=$(curl -sS --max-time 20 -o /tmp/dashboard.json -w '%{http_code}' "$API_BASE/api/ivx/agents/app-completion/dashboard" || true)
+            if [ "$agents_code" = 200 ] && [ "$dash_code" = 200 ]; then
+              total=$(jq -r '.totalAgents // (.agents|length) // 0' /tmp/agents-after.json)
+              paused=$(jq '[.agents[] | select(.paused == true)] | length' /tmp/agents-after.json)
+              disabled=$(jq '[.agents[] | select(.disabled == true)] | length' /tmp/agents-after.json)
+              busy=$(jq '[.agents[] | select((.availability // "") == "busy")] | length' /tmp/agents-after.json)
+              progressed=$(jq -n --slurpfile before /tmp/agents-before.json --slurpfile after /tmp/agents-after.json '
+                ($before[0].agents // []) as $b |
+                ($after[0].agents // []) as $a |
+                [ $a[] as $cur |
+                  ($b[] | select(.agentNumber == $cur.agentNumber)) as $old |
+                  select((($cur.availability // "") == "busy") or (($cur.totalRuns // 0) > ($old.totalRuns // 0)))
+                ] | length')
               running=$(jq -r '.dispatcher.utilization24h.runningNow // 0' /tmp/dashboard.json)
               queued=$(jq -r '.dispatcher.utilization24h.queuedNow // 0' /tmp/dashboard.json)
-              echo "runningNow=$running queuedNow=$queued"
-              if [ "$running" -gt 0 ] || [ "$queued" -eq 0 ]; then exit 0; fi
+              echo "poll=$poll total=$total paused=$paused disabled=$disabled busy=$busy progressed=$progressed dispatcher_running=$running dispatcher_queued=$queued"
+              if [ "$total" -eq 112 ] && [ "$paused" -eq 0 ] && [ "$disabled" -eq 0 ] && [ "$progressed" -eq 112 ]; then
+                echo 'AUTONOMOUS_112_FLEET_SATURATED=true'
+                exit 0
+              fi
             fi
             sleep 10
           done
-          echo '::error::112 IA resume did not produce forward progress.'
-          exit 7
+          echo '::error::AUTONOMOUS_112_FLEET_SATURATION_FAILED: GREEN forbidden until every one of 112 IA shows busy state or a fresh run increment after rescue.'
+          exit 9
 
       - name: Re-run failed current-main workflows after rescue
         shell: bash
