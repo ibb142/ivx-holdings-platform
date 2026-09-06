@@ -1,0 +1,131 @@
+name: Landing Exact SHA Production Certificate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'expo/ivxholding-landing/**'
+      - 'expo/deploy-landing.mjs'
+      - 'expo/scripts/landing-*.mjs'
+      - 'expo/assets/images/**'
+      - '.github/workflows/landing-exact-sha-certificate.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: landing-exact-sha-certificate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-certify-landing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+        working-directory: expo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Stamp exact GitHub SHA into landing artifact
+        env:
+          LANDING_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p = Path('ivxholding-landing/index.html')
+          s = p.read_text()
+          sha = os.environ['LANDING_SHA']
+          marker = f'<meta name="ivx-deployment-sha" content="{sha}" />'
+          import re
+          if 'name="ivx-deployment-sha"' in s:
+              s = re.sub(r'<meta name="ivx-deployment-sha" content="[^"]*"\s*/>', marker, s, count=1)
+          elif '</head>' in s:
+              s = s.replace('</head>', f'  {marker}\n</head>', 1)
+          else:
+              raise SystemExit('landing </head> not found')
+          p.write_text(s)
+          print(f'LANDING_EXACT_SHA={sha}')
+          PY
+
+      - name: Prove IVX AWS deploy identity
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          set -euo pipefail
+          normalize(){ printf '%s' "$1" | tr -d '\r\n' | sed -e 's/^[[:space:]"'"'"']*//' -e 's/[[:space:]"'"'"']*$//'; }
+          export AWS_ACCESS_KEY_ID="$(normalize "$AWS_ACCESS_KEY_ID")"
+          export AWS_SECRET_ACCESS_KEY="$(normalize "$AWS_SECRET_ACCESS_KEY")"
+          export AWS_REGION="$(normalize "${AWS_REGION:-us-east-1}")"
+          export AWS_DEFAULT_REGION="$AWS_REGION"
+          export AWS_EC2_METADATA_DISABLED=true
+          unset AWS_SESSION_TOKEN AWS_PROFILE AWS_DEFAULT_PROFILE AWS_CONFIG_FILE AWS_SHARED_CREDENTIALS_FILE
+          test -n "$AWS_ACCESS_KEY_ID"
+          test -n "$AWS_SECRET_ACCESS_KEY"
+          aws sts get-caller-identity --region "$AWS_REGION" | tee /tmp/aws-identity.json
+          ARN="$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('/tmp/aws-identity.json','utf8'));process.stdout.write(j.Arn||'')")"
+          test -n "$ARN"
+          [[ "$ARN" != *':user/Rork1' ]] || { echo '::error::Legacy Rork1 identity forbidden'; exit 1; }
+          [[ "$ARN" == *':user/ivx-deploy' || "$ARN" == *':assumed-role/'* ]] || { echo "::error::Unexpected deploy identity: $ARN"; exit 1; }
+
+      - name: Install landing deploy dependencies
+        run: bun add @aws-sdk/client-s3 @aws-sdk/client-cloudfront
+
+      - name: Deploy exact SHA landing to production
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_IVX_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_IVX_API_BASE_URL }}
+          EXPO_PUBLIC_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          bun deploy-landing.mjs
+
+      - name: Exact-SHA + live landing acceptance gate
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          body="$(mktemp)"
+          for attempt in $(seq 1 15); do
+            if curl -fsSL --max-time 30 -H 'Cache-Control: no-cache' "https://ivxholding.com/?exact_sha=${EXPECTED_SHA}&attempt=${attempt}" -o "$body"; then
+              if grep -Fq "name=\"ivx-deployment-sha\" content=\"${EXPECTED_SHA}\"" "$body"; then
+                break
+              fi
+            fi
+            sleep 5
+          done
+
+          grep -Fq "name=\"ivx-deployment-sha\" content=\"${EXPECTED_SHA}\"" "$body" || { echo '::error::LIVE_SHA_MISMATCH'; exit 1; }
+          curl -fsSI --max-time 30 https://ivxholding.com/ >/dev/null
+          curl -fsSI --max-time 30 https://ivxholding.com/disclosures.html >/dev/null
+          curl -fsSI --max-time 30 https://ivxholding.com/terms.html >/dev/null
+          curl -fsSI --max-time 30 https://ivxholding.com/privacy.html >/dev/null
+          curl -fsSL --max-time 30 https://ivxholding.com/health | grep -q 'status'
+          curl -fsSL --max-time 30 https://ivxholding.com/api/landing-deals | grep -Eq 'deals|\['
+          ! grep -Fiq 'Android app live now' "$body"
+          grep -Fq 'Returns are not guaranteed and capital is at risk' "$body"
+
+          echo "LANDING_CERTIFICATE=PASS"
+          echo "GITHUB_MAIN_SHA=${EXPECTED_SHA}"
+          echo "PRODUCTION_SHA=${EXPECTED_SHA}"
+          echo 'HTTP_ROOT=200'
+          echo 'LEGAL_PAGES=PASS'
+          echo 'HEALTH=PASS'
+          echo 'DEALS=PASS'
+          echo 'SCOPE=LANDING_ONLY'
