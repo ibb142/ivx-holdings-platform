@@ -14,6 +14,7 @@ import {
 } from './ivx-durable-store';
 import {
   enqueueOrAttachSeniorDeveloperJob,
+  getActiveJobForOwner,
   getSeniorDeveloperJob,
   listSeniorDeveloperProofLedger,
   type IVXWorkerJob,
@@ -28,6 +29,7 @@ export const IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER =
 const OWNER_ID = 'ivx-autonomous-intelligence-mission-scheduler';
 const POLL_INTERVAL_MS = 15_000;
 const LIVE_VERIFY_TIMEOUT_MS = 12_000;
+const ENQUEUE_RESERVATION_TTL_MS = 10 * 60_000;
 const STATE_PATH = 'logs/audit/autonomous-intelligence-mission-scheduler/state.json';
 const EVIDENCE_PATH = 'expo/evidence/autonomous/ivx-autonomous-intelligence-mission-scheduler-cert.json';
 const DEFAULT_API_BASE = 'https://api.ivxholding.com';
@@ -141,10 +143,6 @@ export function isTerminalMissionStatus(status: MissionSchedulerJobStatus): bool
   return ['completed', 'failed', 'blocked', 'cancelled'].includes(status);
 }
 
-/**
- * Pure SHA backfill only. This function does NOT fabricate health success.
- * Explicit /health + /version proof is handled by verifyCurrentProduction().
- */
 export function verifyLiveDeployForState(state: MissionSchedulerState): MissionSchedulerState {
   if (state.status !== 'completed' || !state.prMerged || !state.prMergeCommitSha) return state;
   const currentDeploySha = getCurrentDeploySha();
@@ -250,12 +248,15 @@ async function loadState(): Promise<MissionSchedulerState> {
     try {
       const parsed = await readDurableJson<MissionSchedulerState | null>(STATE_PATH, null);
       if (parsed && parsed.marker === IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER) {
-        // Never reset a valid marker simply because a deployment changed.
-        // The old behavior created an evidence->merge->deploy->evidence loop.
         return parsed;
       }
-    } catch {
-      // fall through to a fresh state
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[IVX AIMS] Durable state read failed closed; duplicate mission suppressed', {
+        message: message.slice(0, 240),
+        statePath: STATE_PATH,
+      });
+      throw new Error(`AIMS_DURABLE_STATE_UNAVAILABLE:${message.slice(0, 200)}`);
     }
   }
   return emptyState();
@@ -267,6 +268,16 @@ async function saveState(state: MissionSchedulerState): Promise<void> {
   if (isDurableStoreConfigured()) {
     try {
       await writeDurableJson(STATE_PATH, next);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[IVX AIMS] Durable state write failed closed', {
+        message: message.slice(0, 240),
+        statePath: STATE_PATH,
+        missionJobId: next.missionJobId,
+      });
+      throw new Error(`AIMS_DURABLE_STATE_WRITE_FAILED:${message.slice(0, 200)}`);
+    }
+    try {
       await appendDurableEvent(STATE_PATH.replace(/state\.json$/, 'events.jsonl'), {
         type: 'mission_scheduler_state',
         missionJobId: next.missionJobId,
@@ -276,8 +287,11 @@ async function saveState(state: MissionSchedulerState): Promise<void> {
         stageDetail: next.stageDetail,
         updatedAt: next.updatedAt,
       });
-    } catch {
-      // durable store best-effort; in-memory state remains authoritative for this process
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn('[IVX AIMS] Durable event append failed; state itself is preserved', {
+        message: message.slice(0, 200),
+      });
     }
   }
 }
@@ -373,15 +387,6 @@ export function isMissionStateCertified(
   );
 }
 
-/**
- * Start or attach to the one real mission for this scheduler marker.
- *
- * IMPORTANT: the authoritative 112-agent runtime is the campaign dispatcher
- * backed by ivx-senior-developer-worker. That worker is self-draining: enqueue
- * immediately kicks drainSeniorDeveloperQueue(), so AIMS must NOT depend on the
- * unrelated legacy IVX_SENIOR_DEV_WORKER_ENABLED flag used by
- * ivx-senior-dev-worker / ivx_owner_ai_tasks.
- */
 export async function startAutonomousIntelligenceMissionScheduler(): Promise<void> {
   console.log('[IVX AIMS] Starting autonomous intelligence mission scheduler...');
 
@@ -400,7 +405,15 @@ export async function startAutonomousIntelligenceMissionScheduler(): Promise<voi
     });
   }
 
-  const state = await loadState();
+  let state: MissionSchedulerState;
+  try {
+    state = await loadState();
+  } catch (error) {
+    console.error('[IVX AIMS] Startup aborted fail-closed because durable identity cannot be proven', {
+      error: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
+    });
+    return;
+  }
   currentState = state;
 
   const deploySha = getCurrentDeploySha();
@@ -412,11 +425,10 @@ export async function startAutonomousIntelligenceMissionScheduler(): Promise<voi
     existingStatus: state.status,
   });
 
-  // Terminal jobs are durable. Do not auto-replay them on boot/deploy.
   if (state.missionJobId && isTerminalMissionStatus(state.status)) {
     let terminal = verifyLiveDeployForState(state);
     terminal = await verifyCurrentProduction(terminal);
-    await saveState(terminal);
+    try { await saveState(terminal); } catch {}
     console.log('[IVX AIMS] Preserving terminal mission state; no duplicate mission enqueued', {
       jobId: state.missionJobId,
       status: state.status,
@@ -446,8 +458,40 @@ export async function startAutonomousIntelligenceMissionScheduler(): Promise<voi
       } else {
         jobId = null;
       }
-    } catch {
-      jobId = null;
+    } catch (error) {
+      console.warn('[IVX AIMS] Existing mission lookup failed closed; preserving job identity and suppressing replay', {
+        jobId,
+        error: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
+      });
+      return;
+    }
+  }
+
+  if (!jobId) {
+    try {
+      const active = await getActiveJobForOwner(OWNER_ID);
+      if (active) {
+        jobId = active.jobId;
+        currentState = mergeJobIntoState(currentState, active);
+        await saveState(currentState);
+        console.log('[IVX AIMS] Recovered active mission by stable owner identity', { jobId });
+      }
+    } catch (error) {
+      console.warn('[IVX AIMS] Owner active-job recovery failed closed; duplicate enqueue suppressed', {
+        error: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
+      });
+      return;
+    }
+  }
+
+  if (!jobId && state.stage === 'ENQUEUE_RESERVED') {
+    const reservedAt = Date.parse(state.updatedAt || state.startedAt);
+    const reservationAge = Number.isFinite(reservedAt) ? Date.now() - reservedAt : 0;
+    if (reservationAge < ENQUEUE_RESERVATION_TTL_MS) {
+      console.warn('[IVX AIMS] Recent enqueue reservation found without recoverable active job; suppressing duplicate retry', {
+        reservationAgeMs: reservationAge,
+      });
+      return;
     }
   }
 
@@ -455,6 +499,16 @@ export async function startAutonomousIntelligenceMissionScheduler(): Promise<voi
     try {
       const createdAt = nowIso();
       const goal = buildMissionGoal(createdAt);
+      currentState = {
+        ...currentState,
+        status: 'queued',
+        stage: 'ENQUEUE_RESERVED',
+        stageDetail: 'Durable enqueue reservation acquired; duplicate replay is suppressed until owner-job recovery completes.',
+        error: null,
+        updatedAt: nowIso(),
+      };
+      await saveState(currentState);
+
       const enqueued = await enqueueOrAttachSeniorDeveloperJob({
         goal,
         ownerApproved: true,
@@ -507,7 +561,7 @@ export async function startAutonomousIntelligenceMissionScheduler(): Promise<voi
         error: message.slice(0, 300),
         updatedAt: nowIso(),
       };
-      await saveState(currentState);
+      try { await saveState(currentState); } catch {}
       return;
     }
   }
