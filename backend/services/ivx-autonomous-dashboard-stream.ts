@@ -65,7 +65,8 @@ export async function handleAutonomousDashboardStreamConnection(ws: WebSocket, r
     try {
       const response = await handleAutonomousOpsDashboardRequest(ownerRequest(token, range));
       if (response.status === 401 || response.status === 403) {
-        send(ws, { type: 'auth_error', marker: IVX_AUTONOMOUS_DASHBOARD_STREAM_MARKER, status: response.status });
+        console.error('Error in pushSnapshot:', error);
+send(ws, { type: 'auth_error', marker: IVX_AUTONOMOUS_DASHBOARD_STREAM_MARKER, status: response.status });
         closeWith(4401, 'owner session expired');
         return;
       }
