@@ -1,0 +1,36 @@
+name: IVX Intelligent Duplicate-Work Supervisor
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'audit or apply exact-duplicate closures'
+        required: false
+        default: 'audit'
+        type: choice
+        options:
+          - audit
+          - apply
+  schedule:
+    - cron: '17 * * * *'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ivx-intelligent-dedupe-supervisor
+  cancel-in-progress: false
+
+jobs:
+  dedupe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit autonomous duplicate work
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IVX_DEDUPE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'audit' }}
+        run: node scripts/ivx-intelligent-dedupe-supervisor.mjs
