@@ -73,6 +73,23 @@ jobs:
           AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
           set -euo pipefail
+          normalize_secret() {
+            local value="$1"
+            value="${value//$'\r'/}"
+            value="${value//$'\n'/}"
+            value="${value#\"}"
+            value="${value%\"}"
+            value="${value#\'}"
+            value="${value%\'}"
+            printf '%s' "$value"
+          }
+          export AWS_ACCESS_KEY_ID="$(normalize_secret "$AWS_ACCESS_KEY_ID")"
+          export AWS_SECRET_ACCESS_KEY="$(normalize_secret "$AWS_SECRET_ACCESS_KEY")"
+          export AWS_REGION="$(normalize_secret "${AWS_REGION:-us-east-1}")"
+          test -n "$AWS_ACCESS_KEY_ID" || { echo '::error::AWS_ACCESS_KEY_ID empty after normalization'; exit 1; }
+          test -n "$AWS_SECRET_ACCESS_KEY" || { echo '::error::AWS_SECRET_ACCESS_KEY empty after normalization'; exit 1; }
+          printf 'AWS_ACCESS_KEY_ID length=%s prefix=%s\n' "${#AWS_ACCESS_KEY_ID}" "${AWS_ACCESS_KEY_ID:0:4}"
+          printf 'AWS_SECRET_ACCESS_KEY length=%s\n' "${#AWS_SECRET_ACCESS_KEY}"
           aws sts get-caller-identity | tee /tmp/aws-identity.json
           ARN="$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('/tmp/aws-identity.json','utf8'));process.stdout.write(j.Arn||'')")"
           test -n "$ARN" || { echo '::error::AWS caller identity ARN missing'; exit 1; }
@@ -96,7 +113,24 @@ jobs:
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_IVX_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_IVX_API_BASE_URL }}
           EXPO_PUBLIC_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_API_BASE_URL }}
-        run: bun deploy-landing.mjs
+        run: |
+          set -euo pipefail
+          normalize_secret() {
+            local value="$1"
+            value="${value//$'\r'/}"
+            value="${value//$'\n'/}"
+            value="${value#\"}"
+            value="${value%\"}"
+            value="${value#\'}"
+            value="${value%\'}"
+            printf '%s' "$value"
+          }
+          export AWS_ACCESS_KEY_ID="$(normalize_secret "$AWS_ACCESS_KEY_ID")"
+          export AWS_SECRET_ACCESS_KEY="$(normalize_secret "$AWS_SECRET_ACCESS_KEY")"
+          export AWS_REGION="$(normalize_secret "${AWS_REGION:-us-east-1}")"
+          export S3_BUCKET_NAME="$(normalize_secret "$S3_BUCKET_NAME")"
+          export CLOUDFRONT_DISTRIBUTION_ID="$(normalize_secret "$CLOUDFRONT_DISTRIBUTION_ID")"
+          bun deploy-landing.mjs
 
       - name: Verify 10 landing readiness items live
         run: |
