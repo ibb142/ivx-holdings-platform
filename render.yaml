@@ -49,6 +49,12 @@ services:
         value: "true"
       - key: IVX_DEDICATED_WORKER_ENABLED
         value: "true"
+      - key: IVX_OWNER_FOCUS_QUEUE_MODE
+        value: "off"
+      - key: IVX_PROVIDER_AUTO_REPAIR_ENABLED
+        value: "false"
+      - key: IVX_AUTONOMOUS_DOCTOR_INTERVAL_MS
+        value: "60000"
       - key: IVX_MAX_INSTANCES
         value: "3"
       - key: CHAT_DATABASE_PATH
@@ -200,9 +206,9 @@ services:
 
   - type: worker
     name: ivx-senior-dev-01
-    # Seven identical instances share the durable Redis queue. At 16 jobs per
-    # instance this provides 112 simultaneous execution slots without copying
-    # sync:false secrets into separate services.
+    # Blueprint target: seven instances at 16 slots each. Production must not
+    # claim 112/112 until Render reports all seven instances and the shared
+    # durable lease path proves 112 distinct fresh worker heartbeats.
     numInstances: 7
     maxShutdownDelaySeconds: 300
     repo: https://github.com/ibb142/ivx-holdings-platform.git
@@ -220,6 +226,12 @@ services:
         value: production
       - key: IVX_SENIOR_DEV_WORKER_ENABLED
         value: "true"
+      - key: IVX_WORKER_MODE
+        value: "true"
+      - key: IVX_DEDICATED_WORKER_ENABLED
+        value: "true"
+      - key: IVX_WORKER_MAX_CONCURRENCY
+        value: "16"
       - key: EXPO_PUBLIC_SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY

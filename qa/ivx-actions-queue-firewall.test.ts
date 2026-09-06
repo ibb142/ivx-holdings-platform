@@ -58,6 +58,21 @@ describe('GitHub Actions queue firewall', () => {
     expect(text).not.toContain('  push:');
   });
 
+  test('queue firewall preserves owner repair PR validation while cancelling autonomous branch noise', () => {
+    const supervisor = readFileSync('backend/services/ivx-github-actions-external-supervisor.ts', 'utf8');
+    expect(supervisor).toContain("const PR_VALIDATION_WORKFLOWS=new Set(['IVX QA Suite','IVX E2E Acceptance Pipeline','IVX Secret Leak Scanner'])");
+    expect(supervisor).toContain("run.event==='pull_request'");
+    expect(supervisor).toContain("!run.head_branch?.startsWith('ivx-autonomous-')");
+    expect(supervisor).toContain("process.env.IVX_OWNER_FOCUS_QUEUE_MODE||'off'");
+  });
+
+  test('provider health probes are observe-only unless auto-repair is explicitly enabled', () => {
+    const manager = readFileSync('backend/services/ivx-autonomous-provider-manager.ts', 'utf8');
+    expect(manager).toContain("process.env.IVX_PROVIDER_AUTO_REPAIR_ENABLED === 'true'");
+    expect(manager).toContain('AUTO_REPAIR_ENABLED && !supabaseOk');
+    expect(manager).toContain("'provider-degraded-observe-only'");
+  });
+
   test('landing orchestrator honors its 3h contract and deduplicates overlapping runs', () => {
     const text = workflow('landing-112-autonomous-3h-scheduler.yml');
     expect(text).toContain("cron: '0 */3 * * *'");

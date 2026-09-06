@@ -12,6 +12,7 @@ const DEFAULT_GITHUB_OWNER = 'ibb142';
 const DEFAULT_GITHUB_REPO = 'ivx-holdings-platform';
 const RECOVERY_WORKFLOW = 'ivx-supabase-management-restart.yml';
 const MIN_REPAIR_INTERVAL_MS = 5 * 60_000;
+const AUTO_REPAIR_ENABLED = process.env.IVX_PROVIDER_AUTO_REPAIR_ENABLED === 'true';
 
 let lastRunAt: string | null = null;
 let lastOk: boolean | null = null;
@@ -229,7 +230,7 @@ async function runInternal(reason: 'boot' | 'interval' | 'manual'): Promise<Prov
   }
 
   const recentRepair = lastRepairAt ? Date.now() - Date.parse(lastRepairAt) < MIN_REPAIR_INTERVAL_MS : false;
-  if (!supabaseOk && !recentRepair && managementToken && serviceRoleKey && renderKey) {
+  if (AUTO_REPAIR_ENABLED && !supabaseOk && !recentRepair && managementToken && serviceRoleKey && renderKey) {
     lastRenderHttp = await repairRenderRuntime({ managementToken, serviceRoleKey });
     if ([200, 201, 202].includes(lastRenderHttp)) {
       lastRepairAt = at;
@@ -241,7 +242,7 @@ async function runInternal(reason: 'boot' | 'interval' | 'manual'): Promise<Prov
     }
   }
 
-  if (!supabaseOk && !recentRepair && githubToken) {
+  if (AUTO_REPAIR_ENABLED && !supabaseOk && !recentRepair && githubToken) {
     lastGithubDispatchHttp = await dispatchGithubRecoveryWorkflow(githubToken);
     if (lastGithubDispatchHttp === 204) {
       lastRepairAt = at;
@@ -261,7 +262,7 @@ async function runInternal(reason: 'boot' | 'interval' | 'manual'): Promise<Prov
     dataPlaneHttp === 200 ? null : `supabase_data_http_${dataPlaneHttp}`,
     aws.ok ? null : 'aws_sts_unhealthy',
   ].filter(Boolean);
-  lastAction = recentRepair ? 'provider-degraded-backoff' : 'provider-control-plane-degraded';
+  lastAction = !AUTO_REPAIR_ENABLED ? 'provider-degraded-observe-only' : recentRepair ? 'provider-degraded-backoff' : 'provider-control-plane-degraded';
   lastError = degraded.join(';');
   console.error('[IVX Autonomous Provider Manager]', { reason, action: lastAction, githubHttp, renderControlHttp, managementHttp, dataPlaneHttp, awsOk: aws.ok, secretValuesReturned: false });
   return status(at, false, availability);
@@ -290,6 +291,6 @@ export function getAutonomousProviderManagerStatus() {
     lastAwsOk,
     lastAwsIdentityPresent,
     lastAction,
-    policy: 'Autonomous continuously audits GitHub, Render, Supabase Management API/data plane, and AWS STS. Secrets are read only from backend environment or encrypted Owner Variables. GitHub Actions secrets are intentionally non-exportable; Autonomous may consume them only by dispatching owner-approved recovery workflows. No secret values are logged or returned. Provider mutations are rate-limited.',
+    policy: `Autonomous continuously audits GitHub, Render, Supabase Management API/data plane, and AWS STS. Provider mutation is ${AUTO_REPAIR_ENABLED ? 'enabled and rate-limited' : 'disabled (observe-only)'}; a transient probe failure never causes a deploy or database restart by default. Secrets are read only from backend environment or encrypted Owner Variables. No secret values are logged or returned.`,
   };
 }

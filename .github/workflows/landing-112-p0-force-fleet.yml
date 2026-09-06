@@ -13,6 +13,7 @@ on:
 permissions:
   contents: read
   actions: read
+  id-token: write
 
 concurrency:
   group: landing-p0-112-force-fleet
@@ -20,9 +21,6 @@ concurrency:
 
 env:
   API_BASE: https://api.ivxholding.com
-  IVX_AI_SYSTEM_SECRET: ${{ secrets.IVX_AI_SYSTEM_SECRET }}
-  IVX_SYSTEM_SECRET: ${{ secrets.IVX_SYSTEM_SECRET }}
-  IVX_OWNER_TOKEN: ${{ secrets.IVX_OWNER_TOKEN }}
 
 jobs:
   force-landing-fleet:
@@ -55,14 +53,26 @@ jobs:
           echo "LIVE_SHA=$LIVE_SHA" >> "$GITHUB_ENV"
           jq -r '.agents[] | [.agentNumber,.agentId] | @tsv' /tmp/agents.json > /tmp/agents.tsv
 
+      - name: Mint bounded GitHub recovery identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          token_json=$(curl -fsS --max-time 15 \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery")
+          OIDC_TOKEN=$(printf '%s' "$token_json" | jq -r '.value // empty')
+          test -n "$OIDC_TOKEN"
+          echo "::add-mask::$OIDC_TOKEN"
+          echo "OIDC_TOKEN=$OIDC_TOKEN" >> "$GITHUB_ENV"
+
       - name: Execute Landing P0 across all 112 real agents
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/landing112 qa/evidence/autonomous
-          export API_BASE LIVE_SHA IVX_AI_SYSTEM_SECRET IVX_SYSTEM_SECRET IVX_OWNER_TOKEN
+          export API_BASE LIVE_SHA OIDC_TOKEN
           run_one() {
-            number="$1"; agent_id="$2"; http=401; ok=false
+            number="$1"; agent_id="$2"; http=000; ok=false
             lanes=(
               'landing-shell-navigation'
               'landing-owner-signin'
@@ -84,22 +94,17 @@ jobs:
             idx=$(( (number - 1) % ${#lanes[@]} ))
             lane="${lanes[$idx]}"
             task_id="landing-p0-${GITHUB_RUN_ID}-${number}-${lane}"
-            for candidate_name in IVX_AI_SYSTEM_SECRET IVX_SYSTEM_SECRET IVX_OWNER_TOKEN; do
-              candidate="${!candidate_name:-}"; [ -n "$candidate" ] || continue
-              body=$(jq -nc \
-                --arg token "$candidate" \
+            body=$(jq -nc \
                 --arg sourceSha "$LIVE_SHA" \
                 --arg taskId "$task_id" \
                 --arg lane "$lane" \
                 --argjson number "$number" \
-                '{taskType:"audit",ownerApprovalToken:$token,payload:{sourceSha:$sourceSha,__taskId:$taskId,__workflow:"Landing P0 112-Agent Force Fleet",__toolId:"code_search",__toolParams:{pattern:$lane,scope:"expo/ivxholding-landing"},mission:"landing",priority:"P0-OWNER",agentNumber:$number,goal:("LANDING 10/10 P0: audit and produce evidence for " + $lane + ". Find the exact defect/blocker on the current landing surface; real execution only; no simulated success."),realExecutionOnly:true,simulatedSuccessAllowed:false}}')
-              http=$(curl -sS --max-time 75 -o "/tmp/landing112/${number}.response.json" -w '%{http_code}' \
+                '{taskType:"audit",payload:{sourceSha:$sourceSha,__taskId:$taskId,__workflow:"Landing P0 112-Agent Force Fleet",__toolId:"code_search",__toolParams:{pattern:$lane,scope:"expo/ivxholding-landing"},mission:"landing",priority:"P0-OWNER",agentNumber:$number,goal:("LANDING 10/10 P0: audit and produce evidence for " + $lane + ". Find the exact defect/blocker on the current landing surface; real execution only; no simulated success."),realExecutionOnly:true,simulatedSuccessAllowed:false}}')
+            http=$(curl -sS --max-time 75 -o "/tmp/landing112/${number}.response.json" -w '%{http_code}' \
                 -X POST "$API_BASE/api/ivx/agents/${agent_id}/run" \
                 -H 'Content-Type: application/json' \
-                -H "X-IVX-System-Key: ${candidate}" \
+                -H "X-IVX-GitHub-OIDC: ${OIDC_TOKEN}" \
                 --data "$body" || true)
-              [ "$http" != 401 ] && break
-            done
             [ "$http" = 200 ] && ok=$(jq -r '.ok // false' "/tmp/landing112/${number}.response.json")
             jq -n --argjson n "$number" --arg id "$agent_id" --arg lane "$lane" --arg http "$http" --argjson ok "$ok" \
               '{agentNumber:$n,agentId:$id,lane:$lane,httpStatus:$http,ok:$ok}' > "/tmp/landing112/${number}.json"
