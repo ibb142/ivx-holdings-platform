@@ -314,6 +314,12 @@ const EVENTS_KEY = 'task-engine/events.jsonl';
  */
 let taskMutationTail: Promise<void> = Promise.resolve();
 
+// P0 2026-09-05: collapse concurrent truth/dispatcher reads onto a short-lived
+// process-local snapshot. Writes refresh the cache only after durable persistence
+// succeeds. Supabase failures remain fail-closed; we never manufacture an empty queue.
+const TASK_READ_CACHE_TTL_MS = 1_500;
+let taskReadCache: { value: Task[]; at: number } | null = null;
+
 async function withTaskMutationLock<T>(mutation: () => Promise<T>): Promise<T> {
   const previous = taskMutationTail;
   let release!: () => void;
@@ -354,12 +360,16 @@ function contentHash(input: string): string {
 /** Read all tasks from the durable store. */
 async function readAllTasks(): Promise<Task[]> {
   if (isDurableStoreConfigured()) {
-    try {
-      const data = await readDurableJson<Task[]>(TASKS_KEY, []);
-      return Array.isArray(data) ? data : [];
-    } catch {
-      return [];
+    const now = Date.now();
+    if (taskReadCache && now - taskReadCache.at <= TASK_READ_CACHE_TTL_MS) {
+      return taskReadCache.value;
     }
+    const data = await readDurableJson<Task[]>(TASKS_KEY, []);
+    if (!Array.isArray(data)) {
+      throw new Error('task_engine_durable_payload_not_array');
+    }
+    taskReadCache = { value: data, at: Date.now() };
+    return data;
   }
   try {
     const raw = await import('node:fs/promises').then((fs) => fs.readFile(path.join(STORE_DIR, 'tasks.json'), 'utf8'));
@@ -373,6 +383,7 @@ async function readAllTasks(): Promise<Task[]> {
 async function writeAllTasks(tasks: Task[]): Promise<void> {
   if (isDurableStoreConfigured()) {
     await writeDurableJson(TASKS_KEY, tasks);
+    taskReadCache = { value: tasks, at: Date.now() };
     return;
   }
   await mkdir(STORE_DIR, { recursive: true });
