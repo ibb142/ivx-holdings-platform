@@ -1,5 +1,5 @@
 import { GetCallerIdentityCommand, STSClient } from '@aws-sdk/client-sts';
-import { getIVXOwnerVariableRuntimeValue } from '../api/ivx-owner-variables';
+import { getIVXOwnerVariableRuntimeValue, type OwnerVariableName } from '../api/ivx-owner-variables';
 
 export const IVX_AUTONOMOUS_PROVIDER_MANAGER_MARKER = 'ivx-autonomous-provider-manager-2026-09-06-v3-four-provider-control-plane';
 
@@ -54,7 +54,7 @@ function env(name: string): string {
   return (process.env[name] ?? '').trim();
 }
 
-async function runtimeSecret(name: string): Promise<string> {
+async function runtimeSecret(name: OwnerVariableName): Promise<string> {
   return env(name) || (await getIVXOwnerVariableRuntimeValue(name).catch(() => '')).trim();
 }
 
@@ -186,23 +186,26 @@ async function runInternal(reason: 'boot' | 'interval' | 'manual'): Promise<Prov
   const at = new Date().toISOString();
   lastRunAt = at;
   const supabaseUrl = env('EXPO_PUBLIC_SUPABASE_URL') || env('SUPABASE_URL') || env('IVX_SUPABASE_URL');
-  const [ownerManagementToken, serviceRoleKey, githubToken, renderKey, awsAccessKeyId, awsSecretAccessKey, awsSessionToken] = await Promise.all([
+  const [ownerManagementToken, serviceRoleKey, githubToken, renderKey, awsAccessKeyId, awsSecretAccessKey, awsRegionStored] = await Promise.all([
     getIVXOwnerVariableRuntimeValue('SUPABASE_ACCESS_TOKEN').catch(() => ''),
     runtimeSecret('SUPABASE_SERVICE_ROLE_KEY'),
     runtimeSecret('GITHUB_TOKEN'),
     runtimeSecret('RENDER_API_KEY'),
-    runtimeSecret('AWS_ACCESS_KEY_ID'),
-    runtimeSecret('AWS_SECRET_ACCESS_KEY'),
-    runtimeSecret('AWS_SESSION_TOKEN'),
+    runtimeSecret('IVX_AWS_READONLY_ACCESS_KEY_ID'),
+    runtimeSecret('IVX_AWS_READONLY_SECRET_ACCESS_KEY'),
+    runtimeSecret('AWS_REGION'),
   ]);
   const managementToken = env('SUPABASE_ACCESS_TOKEN') || ownerManagementToken.trim();
-  const awsRegion = env('AWS_REGION') || (await runtimeSecret('AWS_REGION')) || 'us-east-1';
+  const awsAccessKey = env('AWS_ACCESS_KEY_ID') || awsAccessKeyId;
+  const awsSecretKey = env('AWS_SECRET_ACCESS_KEY') || awsSecretAccessKey;
+  const awsSessionToken = env('AWS_SESSION_TOKEN');
+  const awsRegion = env('AWS_REGION') || awsRegionStored || 'us-east-1';
   const availability = {
     github: Boolean(githubToken),
     render: Boolean(renderKey),
     management: Boolean(managementToken),
     serviceRole: Boolean(serviceRoleKey),
-    aws: Boolean(awsAccessKeyId && awsSecretAccessKey),
+    aws: Boolean(awsAccessKey && awsSecretKey),
   };
 
   const [managementHttp, dataPlaneHttp, githubHttp, renderControlHttp, aws] = await Promise.all([
@@ -210,7 +213,7 @@ async function runInternal(reason: 'boot' | 'interval' | 'manual'): Promise<Prov
     verifyDataPlane(supabaseUrl, serviceRoleKey),
     verifyGithub(githubToken),
     verifyRenderControl(renderKey),
-    verifyAwsIdentity(awsAccessKeyId, awsSecretAccessKey, awsSessionToken, awsRegion),
+    verifyAwsIdentity(awsAccessKey, awsSecretKey, awsSessionToken, awsRegion),
   ]);
   lastManagementHttp = managementHttp;
   lastDataPlaneHttp = dataPlaneHttp;
