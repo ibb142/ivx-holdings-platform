@@ -39,6 +39,7 @@ let lastLeaseMirrorAt: string | null = null;
 let lastLeaseMirrorCount = 0;
 const continuityRuns = new Map<string, Promise<void>>();
 const mirroredAgentIds = new Set<string>();
+const DEFAULT_CONTINUITY_MAX_CONCURRENCY = 12;
 
 const ACTIVE_TASK_STATES = new Set([
   'LEASED', 'RUNNING', 'EXECUTION_COMPLETED', 'QA_IN_PROGRESS',
@@ -59,6 +60,12 @@ function refillDelayMs(outcome: ContinuityOutcome): number {
   return Number.isFinite(configured) && configured >= 100 ? Math.min(configured, 30_000) : 250;
 }
 
+export function getContinuityMaxConcurrency(): number {
+  const configured = Number.parseInt(process.env.IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY ?? '', 10);
+  if (!Number.isFinite(configured) || configured < 1) return DEFAULT_CONTINUITY_MAX_CONCURRENCY;
+  return Math.min(configured, 112);
+}
+
 export function classifyContinuityResult(result: { ok: boolean; action: string; taskId: string | null; states: string[] }): ContinuityOutcome {
   if (!result.ok) return 'failed';
   if (result.action === 'NO_TASK_AVAILABLE') return 'idle';
@@ -71,6 +78,7 @@ export function classifyContinuityResult(result: { ok: boolean; action: string; 
 
 function canRunContinuity(agentId: string): boolean {
   if (!continuityEnabled || continuityRuns.has(agentId)) return false;
+  if (continuityRuns.size >= getContinuityMaxConcurrency()) return false;
   const state = getAllExecutionStates().find((row) => row.agentId === agentId);
   if (!state) return false;
   return !state.pauseState
@@ -234,6 +242,7 @@ function refillRecoveredAgents(agentNumbers: number[]): void {
   if (!continuityEnabled || agentNumbers.length === 0) return;
   const byNumber = new Map(getAllExecutionStates().map((state) => [state.agentNumber, state]));
   for (const agentNumber of agentNumbers) {
+    if (continuityRuns.size >= getContinuityMaxConcurrency()) break;
     const state = byNumber.get(agentNumber);
     if (state) startContinuityRun(state.agentId, agentNumber);
   }
@@ -242,6 +251,7 @@ function refillRecoveredAgents(agentNumbers: number[]): void {
 function refillAllAvailableAgents(): void {
   if (!continuityEnabled) return;
   for (const state of getAllExecutionStates()) {
+    if (continuityRuns.size >= getContinuityMaxConcurrency()) break;
     if (state.agentNumber != null && canRunContinuity(state.agentId)) startContinuityRun(state.agentId, state.agentNumber);
   }
 }
@@ -357,6 +367,7 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     lastRecovered,
     lastError,
     continuityEnabled,
+    continuityMaxConcurrency: getContinuityMaxConcurrency(),
     continuityInFlight: continuityRuns.size,
     refillStarted,
     refillCompleted,
@@ -374,7 +385,7 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     semantic360: getAutonomousSemantic360Status(),
     decisionQuality: getAutonomousDecisionQualityStatus(),
     autonomousManager: getAutonomousWorkManagerStatus(),
-    truthPolicy: 'Autonomous Manager maintains real work blocks. Continuity is lease-first. Only durable active tasks with a real leaseHolder are mirrored into agent-runtime busy/activeTaskId every 10 seconds; continuity promise count alone is never proof of work. Semantic 360 and Decision Quality remain fail-closed. Durable task leases are renewed on an independent 20-second heartbeat timer restricted to currently running continuity lanes. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
+    truthPolicy: 'Autonomous Manager maintains real work blocks. Continuity is lease-first and bounded by IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY (default 12, maximum 112). Only durable active tasks with a real leaseHolder are mirrored into agent-runtime busy/activeTaskId every 10 seconds; continuity promise count alone is never proof of work. Semantic 360 and Decision Quality remain fail-closed. Durable task leases are renewed on an independent 20-second heartbeat timer restricted to currently running continuity lanes. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
   };
 }
 
