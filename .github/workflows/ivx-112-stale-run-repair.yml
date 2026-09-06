@@ -1,0 +1,53 @@
+name: IVX 112 Stale Fleet Queue Repair
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-112-stale-run-repair.yml'
+  workflow_dispatch: {}
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: ivx-112-stale-fleet-queue-repair
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    name: Cancel stale 112 fleet runs and dispatch current main
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Cancel stale queued 112 fleet runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          CURRENT_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          runs=$(gh api "repos/$REPO/actions/runs?status=queued&per_page=100")
+          echo "$runs" | jq -c --arg name "IVX 112 IA Continuous 500-Check Fleet" --arg sha "$CURRENT_SHA" '.workflow_runs[] | select(.name == $name and .head_sha != $sha) | {id,head_sha,name}' | tee /tmp/stale.jsonl
+          if [ -s /tmp/stale.jsonl ]; then
+            while IFS= read -r row; do
+              id=$(jq -r '.id' <<<"$row")
+              old_sha=$(jq -r '.head_sha' <<<"$row")
+              echo "CANCEL stale run=$id sha=$old_sha current=$CURRENT_SHA"
+              gh api -X POST "repos/$REPO/actions/runs/$id/cancel"
+            done < /tmp/stale.jsonl
+          else
+            echo "No stale queued 112 fleet runs found"
+          fi
+
+      - name: Dispatch 112 fleet on current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api -X POST "repos/$REPO/actions/workflows/ivx-112-continuous-500-cycle.yml/dispatches" -f ref=main
+          echo "DISPATCHED current main 112 fleet"
