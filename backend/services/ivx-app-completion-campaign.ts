@@ -120,13 +120,14 @@ export const APP_COMPLETION_AUDIT_ITEMS: readonly AuditItem[] = [
   {
     id: 'p4-netlify-rules',
     phase: 'PHASE_4_PRODUCTION',
-    module: 'Landing / Netlify',
-    fileOrRoute: 'Netlify deploy context (redirects, headers, pages-changed)',
-    problem: 'Netlify checks "Redirect rules - ivxholding", "Header rules - ivxholding" and "Pages changed - ivxholding" fail in CI PR context.',
-    expectedResult: 'Netlify checks pass or are reconciled with the S3/CloudFront production landing.',
-    evidence: 'PR #201 check-runs: three ivxholding Netlify checks completed with failure.',
+    module: 'Landing / retired Netlify provider',
+    fileOrRoute: 'RETIRED — historical Netlify deploy context only',
+    problem: 'Historical Netlify checks are no longer part of the IVX production landing architecture.',
+    expectedResult: 'No IVX agent may implement, QA, recreate, or dispatch Netlify work. Landing production remains on S3/CloudFront.',
+    evidence: 'Historical evidence retained for audit only; current architecture retired Netlify and uses S3/CloudFront for the production landing.',
     ownerGate: false,
     priority: 'P2',
+    resolvedEvidence: 'FROZEN 2026-09-06 by owner directive: Netlify is retired/not required. This resolvedEvidence removes p4-netlify-rules from openItems, prevents new IMPLEMENT/QA assignments, and causes stale dispatcher records to be superseded on the next campaign sync.',
   },
   // ── VERIFIED FAILING CI BACKLOG (added 2026-08-28) ──
   // Every item below was verified failing via the GitHub Actions API on ALL
