@@ -9,6 +9,8 @@ on:
       - 'backend/services/ivx-agent-runtime.ts'
       - 'backend/services/ivx-autonomous-truth-control.ts'
       - 'backend/services/ivx-github-actions-oidc.ts'
+      - 'backend/services/ivx-project-vision.ts'
+      - 'backend/api/ivx-autonomous-mode.ts'
       - 'backend/api/ivx-autonomous-control-plane.ts'
   schedule:
     - cron: '*/15 * * * *'
@@ -29,7 +31,7 @@ env:
 
 jobs:
   no-idle-intelligence:
-    name: Keep real agents productively occupied
+    name: Keep real agents productively occupied toward IVX completion
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -45,6 +47,25 @@ jobs:
           test -n "$token"
           echo "::add-mask::$token"
           echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Prime Autonomous with permanent end-to-end project mission
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mission='Continue completing IVX Holdings end to end. Discover unfinished work even when the known queue is empty. Prioritize customer trust, safety, correctness, reliability, performance, clear UX, retention, and global scale. Execute the next highest-value safe engineering gap, verify exact production evidence, learn, then continue discovery. Never count narrative, no-op, workflow existence, or ALREADY_VERIFIED as new work. Financial scale is an ambition, never a fabricated guarantee.'
+          body=$(jq -nc --arg task "$mission" '{task:$task,conversationId:"autonomous-project-vision",includeMission:true}')
+          code=$(curl -sS --max-time 300 -o /tmp/mission.json -w '%{http_code}' -X POST \
+            -H 'content-type: application/json' \
+            -H "X-IVX-GitHub-OIDC: ${OIDC_TOKEN}" \
+            --data "$body" \
+            "${API_BASE}/api/ivx/autonomous-mode/run" || true)
+          cat /tmp/mission.json 2>/dev/null || true
+          test "$code" = 200
+          test "$(jq -r '.ok // false' /tmp/mission.json)" = true
+          test "$(jq -r '.mission.continuousDiscoveryRequired // false' /tmp/mission.json)" = true
+          test "$(jq -r '.mission.emptyQueueMeansDone // true' /tmp/mission.json)" = false
 
       - name: Resume dispatcher and load 112-agent truth snapshot
         env:
@@ -77,7 +98,7 @@ jobs:
           echo "nonworking_count=$count"
           echo "count=$count" >> "$GITHUB_OUTPUT"
 
-      - name: Dispatch bounded evidence-backed audits to non-working agents
+      - name: Dispatch evidence-backed mission work to non-working agents
         if: ${{ steps.idle.outputs.count != '0' }}
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
@@ -95,7 +116,8 @@ jobs:
           agent_number="$2"
           state="$3"
           safe_id=$(printf '%s' "$agent_id" | tr -c 'A-Za-z0-9_.-' '_')
-          payload=$(jq -n --arg sha "$SOURCE_SHA" --arg run "$RUN_ID" --arg state "$state" --argjson n "$agent_number" '{taskType:"audit",payload:{missionType:"no_idle_intelligence",readOnly:true,requireEvidence:true,sourceSha:$sha,controllerRunId:$run,agentNumber:$n,recoveredFromState:$state,instruction:"Perform a real low-risk evidence-backed audit within your allowed capability. Do not mutate production and do not fabricate success."}}')
+          instruction='Advance the permanent IVX completion mission with real evidence-backed engineering. If the known queue is empty, discover a fresh gap across code, UX, APIs, data, security, performance, mobile/web parity, production telemetry, and customer-critical journeys. Prioritize trust/safety/correctness/reliability before cosmetic work. Do not mutate guarded production resources without approval. Do not fabricate success and do not count ALREADY_VERIFIED or no-op activity as new work.'
+          payload=$(jq -n --arg sha "$SOURCE_SHA" --arg run "$RUN_ID" --arg state "$state" --arg instruction "$instruction" --argjson n "$agent_number" '{taskType:"audit",payload:{missionType:"ivx_project_completion",readOnly:true,requireEvidence:true,continuousDiscovery:true,emptyQueueMeansDone:false,sourceSha:$sha,controllerRunId:$run,agentNumber:$n,recoveredFromState:$state,instruction:$instruction}}')
           http=$(curl -sS --retry 1 --retry-delay 1 --max-time 75 -o "/tmp/no-idle-results/${safe_id}.json" -w '%{http_code}' -X POST \
             -H 'content-type: application/json' \
             -H "X-IVX-GitHub-OIDC: ${OIDC_TOKEN}" \
@@ -117,7 +139,7 @@ jobs:
           jq -s '.' /tmp/no-idle-results/*.result.json > /tmp/no-idle-results.json
           total=$(jq 'length' /tmp/no-idle-results.json)
           passed=$(jq '[.[]|select(.passed==true)]|length' /tmp/no-idle-results.json)
-          echo "no_idle_dispatched=$total evidence_verified=$passed"
+          echo "mission_work_dispatched=$total evidence_verified=$passed"
           test "$total" = "$passed"
 
       - name: Verify post-fill truth and emit evidence
@@ -142,7 +164,9 @@ jobs:
             dispatched=$(jq 'length' /tmp/no-idle-results.json)
             evidenced=$(jq '[.[]|select(.passed==true)]|length' /tmp/no-idle-results.json)
           fi
-          jq -n --arg certificate 'IVX-NO-IDLE-INTELLIGENCE-1000' --arg sourceSha "$GITHUB_SHA" --arg githubRunId "$GITHUB_RUN_ID" --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson totalAgents 112 --argjson fallbackAuditsDispatched "$dispatched" --argjson fallbackAuditsWithEvidence "$evidenced" --argjson remainingNonWorking "$nonworking" --argjson realWorkingAgents "$real_working" --argjson activeJobs "$active_jobs" --slurpfile truth /tmp/truth-after.json '{ok:($totalAgents==112 and $fallbackAuditsDispatched==$fallbackAuditsWithEvidence),certificate:$certificate,sourceSha:$sourceSha,githubRunId:$githubRunId,generatedAt:$generatedAt,totalAgents:$totalAgents,fallbackAuditsDispatched:$fallbackAuditsDispatched,fallbackAuditsWithEvidence:$fallbackAuditsWithEvidence,remainingNonWorking:$remainingNonWorking,realWorkingAgents:$realWorkingAgents,activeJobs:$activeJobs,truthSnapshot:$truth[0],safeguards:{readOnlyFallback:true,evidenceRequired:true,noSyntheticProductivity:true,ownerStopRespectedByRuntimeEnforcer:true}}' > evidence/ivx-no-idle-intelligence-latest.json
+          mission_ok=false
+          if [ -f /tmp/mission.json ]; then mission_ok=$(jq -r '.ok // false' /tmp/mission.json); fi
+          jq -n --arg certificate 'IVX-NO-IDLE-INTELLIGENCE-1000' --arg sourceSha "$GITHUB_SHA" --arg githubRunId "$GITHUB_RUN_ID" --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson totalAgents 112 --argjson fallbackAuditsDispatched "$dispatched" --argjson fallbackAuditsWithEvidence "$evidenced" --argjson remainingNonWorking "$nonworking" --argjson realWorkingAgents "$real_working" --argjson activeJobs "$active_jobs" --argjson missionInjected "$mission_ok" --slurpfile truth /tmp/truth-after.json '{ok:($missionInjected and $totalAgents==112 and $fallbackAuditsDispatched==$fallbackAuditsWithEvidence),certificate:$certificate,sourceSha:$sourceSha,githubRunId:$githubRunId,generatedAt:$generatedAt,totalAgents:$totalAgents,missionInjected:$missionInjected,fallbackAuditsDispatched:$fallbackAuditsDispatched,fallbackAuditsWithEvidence:$fallbackAuditsWithEvidence,remainingNonWorking:$remainingNonWorking,realWorkingAgents:$realWorkingAgents,activeJobs:$activeJobs,truthSnapshot:$truth[0],safeguards:{continuousDiscovery:true,emptyQueueMeansDone:false,evidenceRequired:true,noSyntheticProductivity:true,ownerStopRespectedByRuntimeEnforcer:true}}' > evidence/ivx-no-idle-intelligence-latest.json
           cat evidence/ivx-no-idle-intelligence-latest.json
           test "$(jq -r '.ok' evidence/ivx-no-idle-intelligence-latest.json)" = true
 
