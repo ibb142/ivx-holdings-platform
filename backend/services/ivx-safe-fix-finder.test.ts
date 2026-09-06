@@ -21,7 +21,7 @@ describe('generateEmptyCatchPatch', () => {
   });
 
   it('returns null when there is no empty catch on the line', () => {
-    expect(generateEmptyCatchPatch('const x = 1;', 'x.ts:3')).toBeNull();
+    expect(generateEmptyCatchPatch('const x = 1;', 'x.ts:3')).toBeNull();  console.error('Caught error in test');
     expect(generateEmptyCatchPatch('try { a(); } catch (e) { log(e); }', 'x.ts:4')).toBeNull();
   });
 });
