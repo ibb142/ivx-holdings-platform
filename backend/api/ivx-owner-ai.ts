@@ -1013,7 +1013,8 @@ async function readLocalDevJsonlRows(filePath: string, limit: number = 50): Prom
     .map((line) => {
       try {
         return JSON.parse(line) as Record<string, unknown>;
-      } catch {
+      } catch (err) {
+      console.error('Error:', err instanceof Error ? err.message : err);
         return { parse_error: true, raw: line.slice(0, 400) };
       }
     });
