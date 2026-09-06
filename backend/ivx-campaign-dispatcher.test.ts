@@ -260,6 +260,24 @@ describe('IVX campaign dispatcher — failure, retry & repair (scenarios 6-8)', 
 });
 
 describe('IVX campaign dispatcher — owner controls (scenarios 9-13)', () => {
+  it('does not persist repeated retry/resume controls when state is unchanged', async () => {
+    await ensureCampaignAssignment(assignment({ agentNumber: 1, dutyId: 'idempotent-control' }));
+    await tickCampaignDispatcher();
+
+    const retry = await campaignDispatcherControl('retry_agent', 1);
+    expect(retry.changed).toBe(false);
+
+    const pause = await campaignDispatcherControl('pause_all');
+    const duplicatePause = await campaignDispatcherControl('pause_all');
+    expect(pause.changed).toBe(true);
+    expect(duplicatePause.changed).toBe(false);
+
+    const resume = await campaignDispatcherControl('resume_all');
+    const duplicateResume = await campaignDispatcherControl('resume_all');
+    expect(resume.changed).toBe(true);
+    expect(duplicateResume.changed).toBe(false);
+  });
+
   it('9. stop_agent cancels the real worker job for that agent', async () => {
     await ensureCampaignAssignment(assignment({ agentNumber: 5, dutyId: 'd1' }));
     await tickCampaignDispatcher();

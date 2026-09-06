@@ -734,19 +734,20 @@ function buildGoal(record: CampaignJobRecord, state: DispatcherState): string {
 export async function campaignDispatcherControl(
   action: 'pause_all' | 'resume_all' | 'stop_all' | 'stop_agent' | 'retry_agent',
   agentNumber?: number,
-): Promise<{ action: string; cancelledWorkerJobs: string[] }> {
+): Promise<{ action: string; cancelledWorkerJobs: string[]; changed: boolean }> {
   const state = await loadState();
   const cancelledWorkerJobs: string[] = [];
+  let changed = false;
   switch (action) {
     case 'pause_all':
-      state.paused = true; // prevents new job starts; running jobs continue
+      if (!state.paused) { state.paused = true; changed = true; } // prevents new job starts; running jobs continue
       break;
     case 'resume_all':
-      state.paused = false;
-      state.stopped = false;
+      if (state.paused) { state.paused = false; changed = true; }
+      if (state.stopped) { state.stopped = false; changed = true; }
       // Global recovery releases per-agent stop state but never revives
       // CANCELLED records, preserving explicit owner stop semantics.
-      state.stoppedAgents = [];
+      if (state.stoppedAgents.length > 0) { state.stoppedAgents = []; changed = true; }
       // Recover only bounded non-owner BLOCKED work. FAILED work is
       // retried by tickCampaignDispatcher using MAX_CAMPAIGN_RETRIES.
       for (const record of state.records) {
@@ -762,11 +763,12 @@ export async function campaignDispatcherControl(
           record.error = null;
           record.blocker = null;
           record.finishedAt = null;
+          changed = true;
         }
       }
       break;
     case 'stop_all':
-      state.stopped = true;
+      if (!state.stopped) { state.stopped = true; changed = true; }
       for (const record of state.records) {
         if (record.status === 'RUNNING' && record.workerJobId) {
           await bridge.cancel(record.workerJobId).catch(() => null);
@@ -774,16 +776,18 @@ export async function campaignDispatcherControl(
           record.status = 'CANCELLED';
           record.stage = 'STOPPED BY OWNER';
           record.finishedAt = new Date().toISOString();
+          changed = true;
         } else if (record.status === 'QUEUED') {
           record.status = 'CANCELLED';
           record.stage = 'STOPPED BY OWNER (never started)';
           record.finishedAt = new Date().toISOString();
+          changed = true;
         }
       }
       break;
     case 'stop_agent':
       if (typeof agentNumber === 'number') {
-        if (!state.stoppedAgents.includes(agentNumber)) state.stoppedAgents.push(agentNumber);
+        if (!state.stoppedAgents.includes(agentNumber)) { state.stoppedAgents.push(agentNumber); changed = true; }
         for (const record of state.records) {
           if (record.agentNumber !== agentNumber) continue;
           if (record.status === 'RUNNING' && record.workerJobId) {
@@ -794,13 +798,16 @@ export async function campaignDispatcherControl(
             record.status = 'CANCELLED';
             record.stage = 'STOPPED BY OWNER';
             record.finishedAt = new Date().toISOString();
+            changed = true;
           }
         }
       }
       break;
     case 'retry_agent':
       if (typeof agentNumber === 'number') {
+        const stoppedCount = state.stoppedAgents.length;
         state.stoppedAgents = state.stoppedAgents.filter((n) => n !== agentNumber);
+        if (state.stoppedAgents.length !== stoppedCount) changed = true;
         for (const record of state.records) {
           if (record.agentNumber !== agentNumber) continue;
           if (record.status === 'FAILED' || record.status === 'CANCELLED' || record.status === 'BLOCKED') {
@@ -810,19 +817,25 @@ export async function campaignDispatcherControl(
             record.error = null;
             record.blocker = null;
             record.finishedAt = null;
+            changed = true;
           }
         }
       }
       break;
   }
-  await saveState(state);
-  await logEvent('control', { action, agentNumber: agentNumber ?? null, cancelledWorkerJobs: cancelledWorkerJobs.length });
+  // The autonomous doctor may retry every non-working IA each cycle. Persist
+  // only real transitions so a healthy/no-op retry cannot amplify into hundreds
+  // of identical Supabase document writes and forensic events.
+  if (changed) {
+    await saveState(state);
+    await logEvent('control', { action, agentNumber: agentNumber ?? null, cancelledWorkerJobs: cancelledWorkerJobs.length });
+  }
   // Recovery success must include an immediate real scheduler pass; do
   // not wait for the periodic 10-second timer after resume_all.
   if (action === 'resume_all') {
     await tickCampaignDispatcher();
   }
-  return { action, cancelledWorkerJobs };
+  return { action, cancelledWorkerJobs, changed };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
