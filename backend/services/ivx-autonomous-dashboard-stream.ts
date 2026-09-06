@@ -94,6 +94,7 @@ export async function handleAutonomousDashboardStreamConnection(ws: WebSocket, r
         type: 'stream_error',
         marker: IVX_AUTONOMOUS_DASHBOARD_STREAM_MARKER,
         error: error instanceof Error ? error.message : String(error),
+      console.error('Stream error:', error);
         at: new Date().toISOString(),
       });
     } finally {
