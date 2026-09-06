@@ -73,9 +73,9 @@ export async function getAutonomousLiveBootstrapStatus() {
       lastFeedError,
     },
     providerSelfManager: {
+      ...providerManager,
       running: Boolean(providerTimer),
       intervalMs: PROVIDER_QA_INTERVAL_MS,
-      ...providerManager,
     },
     totalAgents: 112,
     autonomousScheduler: scheduler ? {
