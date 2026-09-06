@@ -51,7 +51,8 @@ export async function handleAutonomousDashboardStreamConnection(ws: WebSocket, r
 
   const closeWith = (code: number, reason: string) => {
     stop();
-    try { ws.close(code, reason.slice(0, 120)); } catch {}
+    try { ws.close(code, reason.slice(0, 120)); } catch (error) {
+  console.error('Error in pushSnapshot:', error);}
   };
 
   const authTimer = setTimeout(() => {
