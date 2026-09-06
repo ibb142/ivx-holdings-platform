@@ -1,0 +1,255 @@
+name: IVX 112 IA Continuous 500-Check Fleet
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-112-continuous-500-cycle.yml'
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: ivx-112-continuous-500-cycle
+  cancel-in-progress: false
+
+env:
+  API_BASE: https://api.ivxholding.com
+  TARGET_AGENTS: '112'
+  TARGET_CHECKS: '500'
+  CAMPAIGN_SECONDS: '10200'
+
+jobs:
+  prepare:
+    name: Load exact 112-agent registry
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.registry.outputs.matrix }}
+      live_sha: ${{ steps.registry.outputs.live_sha }}
+    steps:
+      - name: Require healthy production and exact 112 IA
+        id: registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 5 --retry-delay 3 --max-time 30 "$API_BASE/health" -o /tmp/health.json
+          test "$(jq -r '.ok // false' /tmp/health.json)" = true
+          live_sha=$(jq -r '.commit // empty' /tmp/health.json)
+          test -n "$live_sha"
+          echo "live_sha=$live_sha" >> "$GITHUB_OUTPUT"
+
+          curl -fsS --retry 5 --retry-delay 3 --max-time 30 "$API_BASE/api/ivx/agents" -o /tmp/agents.json
+          test "$(jq -r '.ok // false' /tmp/agents.json)" = true
+          test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = "$TARGET_AGENTS"
+          test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)" = "$TARGET_AGENTS"
+          matrix=$(jq -c '{include:[.agents[]|{agentNumber:.agentNumber,agentId:.agentId}]}' /tmp/agents.json)
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "REGISTRY=112/112 LIVE_SHA=$live_sha"
+
+  fleet-112:
+    name: IA ${{ matrix.agentNumber }} continuous engineering
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 178
+    strategy:
+      fail-fast: false
+      max-parallel: 112
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Run Friday 500-check distribution continuously
+        env:
+          AGENT_NUMBER: ${{ matrix.agentNumber }}
+          AGENT_ID: ${{ matrix.agentId }}
+          LIVE_SHA: ${{ needs.prepare.outputs.live_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          n=$(printf '%03d' "$AGENT_NUMBER")
+          evidence="evidence/agent-$n.jsonl"
+          : > "$evidence"
+
+          refresh_oidc() {
+            local url response refreshed
+            url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery"
+            response=$(curl -fsS --retry 4 --retry-delay 2 --retry-all-errors \
+              -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$url")
+            refreshed=$(printf '%s' "$response" | jq -r '.value // empty')
+            test -n "$refreshed"
+            echo "::add-mask::$refreshed"
+            OIDC_TOKEN="$refreshed"
+            OIDC_REFRESHED=$(date +%s)
+          }
+
+          refresh_oidc
+          started=$(date +%s)
+          deadline=$((started + CAMPAIGN_SECONDS))
+          round=0
+          pass_count=0
+          fail_count=0
+
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            round=$((round + 1))
+
+            # Exact proven Friday distribution: 500 unique checks striped over 112 IA.
+            for item in $(seq "$AGENT_NUMBER" 112 "$TARGET_CHECKS"); do
+              [ "$(date +%s)" -lt "$deadline" ] || break
+
+              if [ $(( $(date +%s) - OIDC_REFRESHED )) -ge 240 ]; then
+                refresh_oidc
+              fi
+
+              variant=$(( (item - 1) / 112 ))
+              case "$variant" in
+                0) dimension=source_contract; tool=code_search; params='{"pattern":"landing","scope":"expo/ivxholding-landing"}' ;;
+                1) dimension=production_behavior; tool=code_read; params='{"path":"expo/ivxholding-landing/index.html"}' ;;
+                2) dimension=responsive_accessibility; tool=code_read; params='{"path":"expo/ivxholding-landing/ivx-styles.css"}' ;;
+                3) dimension=security_failure_paths; tool=code_read; params='{"path":"expo/ivxholding-landing/ivx-app.js"}' ;;
+                *) dimension=performance_observability; tool=code_read; params='{"path":"expo/ivxholding-landing/landing-support-chat.js"}' ;;
+              esac
+
+              task_id="continuous500-${GITHUB_RUN_ID}-r${round}-i${item}-a${AGENT_NUMBER}"
+              task="CONTINUOUS IVX ENGINEERING: IA ${AGENT_NUMBER}/112; Friday 500-check pattern; item ${item}/500; round ${round}; dimension=${dimension}; liveSha=${LIVE_SHA}. Audit real implementation and production-facing contract, identify any defect or unfinished work, return evidence, and never invent PASS."
+              body=$(jq -nc \
+                --arg id "$task_id" \
+                --arg task "$task" \
+                --arg tool "$tool" \
+                --argjson params "$params" \
+                --arg sha "$LIVE_SHA" \
+                '{taskType:"audit",payload:{__taskId:$id,__workflow:"IVX 112 IA Continuous 500-Check Fleet",sourceSha:$sha,landingAssignment:$task,__toolId:$tool,__toolParams:$params,realExecutionOnly:true,simulatedSuccessAllowed:false,qualityPolicy:"enterprise_evidence_gated"}}')
+
+              http=000
+              ok=false
+              status=request_failed
+              verified=false
+              source_ref=''
+              tool_result=''
+              for attempt in 1 2 3 4 5 6; do
+                : > /tmp/run.json
+                http=$(curl -sS --max-time 240 -o /tmp/run.json -w '%{http_code}' \
+                  -X POST "$API_BASE/api/ivx/agents/$AGENT_ID/run" \
+                  -H 'Content-Type: application/json' \
+                  -H "X-IVX-GitHub-OIDC: $OIDC_TOKEN" \
+                  --data "$body" || printf '000')
+
+                if [ "$http" = 401 ] || [ "$http" = 403 ]; then
+                  refresh_oidc
+                elif [[ "$http" =~ ^(000|408|425|429|500|502|503|504)$ ]] && [ "$attempt" -lt 6 ]; then
+                  sleep $((attempt * 5))
+                fi
+
+                ok=$(jq -r '.ok // false' /tmp/run.json 2>/dev/null || echo false)
+                status=$(jq -r '.runRecord.finalStatus // "request_failed"' /tmp/run.json 2>/dev/null || echo request_failed)
+                verified=$(jq -r '.runRecord.verifiedOutput // false' /tmp/run.json 2>/dev/null || echo false)
+                source_ref=$(jq -r '.runRecord.sourceReference // empty' /tmp/run.json 2>/dev/null || true)
+                tool_result=$(jq -r '.runRecord.toolResultId // empty' /tmp/run.json 2>/dev/null || true)
+
+                if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$status" = completed ] && [ "$verified" = true ] && [ -n "$source_ref" ] && [ -n "$tool_result" ]; then
+                  break
+                fi
+              done
+
+              passed=false
+              if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$status" = completed ] && [ "$verified" = true ] && [ -n "$source_ref" ] && [ -n "$tool_result" ]; then
+                passed=true
+                pass_count=$((pass_count + 1))
+              else
+                fail_count=$((fail_count + 1))
+              fi
+
+              jq -nc \
+                --argjson agentNumber "$AGENT_NUMBER" \
+                --arg agentId "$AGENT_ID" \
+                --argjson itemId "$item" \
+                --argjson round "$round" \
+                --arg dimension "$dimension" \
+                --arg liveSha "$LIVE_SHA" \
+                --arg taskId "$task_id" \
+                --arg http "$http" \
+                --arg status "$status" \
+                --arg sourceReference "$source_ref" \
+                --arg toolResultId "$tool_result" \
+                --argjson passed "$passed" \
+                '{agentNumber:$agentNumber,agentId:$agentId,itemId:$itemId,round:$round,dimension:$dimension,liveSha:$liveSha,taskId:$taskId,http:$http,status:$status,sourceReference:$sourceReference,toolResultId:$toolResultId,passed:$passed,ts:(now|todateiso8601)}' >> "$evidence"
+
+              # Keep pressure continuous without turning the API into a synthetic hammer.
+              sleep 20
+            done
+          done
+
+          total=$(wc -l < "$evidence" | tr -d ' ')
+          unique_initial=$(jq -s '[.[] | select(.round == 1) | .itemId] | unique | length' "$evidence")
+          echo "IA=$AGENT_NUMBER TOTAL=$total PASS=$pass_count FAIL=$fail_count INITIAL_UNIQUE=$unique_initial"
+          test "$total" -gt 0
+          test "$pass_count" -gt 0
+
+      - name: Upload per-agent evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ivx-continuous500-agent-${{ matrix.agentNumber }}-${{ github.run_id }}
+          path: evidence/agent-*.jsonl
+          if-no-files-found: error
+          retention-days: 30
+
+  certificate:
+    name: Certify 112 IA and Friday 500 pattern
+    needs: [prepare, fleet-112]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ivx-continuous500-agent-*-${{ github.run_id }}
+          path: evidence-all
+          merge-multiple: true
+
+      - name: Build exact fleet certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p certificate
+          find evidence-all -name 'agent-*.jsonl' -type f -print0 | xargs -0 -r cat > /tmp/all.jsonl
+          test -s /tmp/all.jsonl
+
+          agents=$(jq -s '[.[].agentNumber] | unique | length' /tmp/all.jsonl)
+          passed_agents=$(jq -s '[group_by(.agentNumber)[] | select(any(.passed == true)) | .[0].agentNumber] | unique | length' /tmp/all.jsonl)
+          first_round_unique=$(jq -s '[.[] | select(.round == 1) | .itemId] | unique | length' /tmp/all.jsonl)
+          total_runs=$(wc -l < /tmp/all.jsonl | tr -d ' ')
+          passed_runs=$(jq -s '[.[] | select(.passed == true)] | length' /tmp/all.jsonl)
+          failed_runs=$(jq -s '[.[] | select(.passed != true)] | length' /tmp/all.jsonl)
+
+          status=REPAIR_REQUIRED
+          if [ "$agents" = 112 ] && [ "$passed_agents" = 112 ] && [ "$first_round_unique" = 500 ] && [ "$passed_runs" -gt 0 ]; then
+            status=PASS
+          fi
+
+          jq -n \
+            --arg certificate 'IVX-112-CONTINUOUS-500-CYCLE' \
+            --arg sourceSha "$GITHUB_SHA" \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg status "$status" \
+            --argjson agents "$agents" \
+            --argjson passedAgents "$passed_agents" \
+            --argjson firstRoundUnique "$first_round_unique" \
+            --argjson totalRuns "$total_runs" \
+            --argjson passedRuns "$passed_runs" \
+            --argjson failedRuns "$failed_runs" \
+            '{certificate:$certificate,sourceSha:$sourceSha,runId:$runId,status:$status,agentsParticipating:$agents,agentsWithRealPass:$passedAgents,fridayPatternUniqueChecks:$firstRoundUnique,totalRuns:$totalRuns,passedRuns:$passedRuns,failedRuns:$failedRuns,continuousCampaignSeconds:10200,scheduledEveryHours:3,generatedAt:(now|todateiso8601)}' > certificate/result.json
+          cat certificate/result.json
+          test "$status" = PASS
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: IVX-112-CONTINUOUS-500-CERT-${{ github.run_id }}
+          path: certificate/result.json
+          if-no-files-found: error
+          retention-days: 30
