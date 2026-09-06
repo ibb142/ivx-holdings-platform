@@ -1,0 +1,70 @@
+name: IVX Owner Queue Circuit Breaker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-owner-queue-circuit-breaker.yml'
+  workflow_dispatch: {}
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: ivx-owner-queue-circuit-breaker
+  cancel-in-progress: true
+
+jobs:
+  stop-fanout:
+    name: Stop recursive Actions fan-out and drain queued noise
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Disable recursive/high-frequency fan-out workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          noisy=(
+            'ivx-autonomous-regression-scheduler.yml'
+            'ivx-autonomous-certificate-trust-guard.yml'
+            'ivx-autonomous-out-of-band-rescue.yml'
+            'ivx-112-executive-report.yml'
+          )
+          for wf in "${noisy[@]}"; do
+            echo "DISABLE $wf"
+            gh api -X PUT "repos/$REPO/actions/workflows/$wf/disable" >/dev/null
+          done
+
+      - name: Cancel queued non-owner-focus runs only
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$REPO/actions/runs?status=queued&per_page=100" > /tmp/queued-pages.json
+          jq -s '{workflow_runs: [.[].workflow_runs[]]}' /tmp/queued-pages.json > /tmp/queued.json
+
+          allow='["IVX 112 IA Continuous 500-Check Fleet","IVX Dashboard + IA Chat End-to-End Certificate","IVX Autonomous 5H Technology Discovery","IVX Intelligent Duplicate-Work Supervisor","IVX Owner Force 112 Now","IVX 112 Hard Start Recovery","IVX 112 Stale Fleet Queue Repair","IVX Owner Queue Circuit Breaker"]'
+
+          jq -r --argjson allow "$allow" '.workflow_runs[] | select((.name as $n | ($allow | index($n))) == null) | .id' /tmp/queued.json | sort -u > /tmp/cancel.txt
+          total=$(jq '.workflow_runs | length' /tmp/queued.json)
+          cancel_count=$(wc -l < /tmp/cancel.txt | tr -d ' ')
+          echo "QUEUED_TOTAL=$total CANCEL_NON_FOCUS=$cancel_count"
+
+          while IFS= read -r id; do
+            [ -n "$id" ] || continue
+            echo "CANCEL queued run=$id"
+            gh api -X POST "repos/$REPO/actions/runs/$id/cancel" >/dev/null || true
+          done < /tmp/cancel.txt
+
+      - name: Verify queue is bounded to owner focus
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 10
+          gh api "repos/$REPO/actions/runs?status=queued&per_page=100" > /tmp/after.json
+          jq -r '.workflow_runs[] | [.id,.name,.head_sha] | @tsv' /tmp/after.json || true
+          count=$(jq '.total_count' /tmp/after.json)
+          echo "QUEUE_AFTER=$count"
