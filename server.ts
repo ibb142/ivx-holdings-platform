@@ -20,6 +20,7 @@ import { listAutonomousVoiceCalls, placeAutonomousVoiceCall } from './backend/se
 import { startGitHubActionsExternalSupervisor } from './backend/services/ivx-github-actions-external-supervisor';
 import { startAutonomousLiveBootstrap } from './backend/services/ivx-autonomous-live-bootstrap';
 import { startAutonomous112RuntimeEnforcer } from './backend/services/ivx-autonomous-runtime-enforcer';
+import { startAutonomousDoctor, getAutonomousDoctorStatus } from './backend/services/ivx-autonomous-doctor';
 import { getAutonomousTruthSnapshot, applyTruthControl, type TruthControlAction } from './backend/services/ivx-autonomous-truth-control';
 import { verifyIVXGitHubActionsOIDCRequest } from './backend/services/ivx-github-actions-oidc';
 import { assertIVXRegisteredOwnerBearer } from './backend/api/owner-only';
@@ -56,6 +57,7 @@ app.get('/api/ivx/certification/member-auth-public', async (c) => {
 });
 
 app.get('/api/ivx/autonomous/truth', async (c) => c.json(await getAutonomousTruthSnapshot()));
+app.get('/api/ivx/autonomous/doctor', (c) => c.json({ ok: true, doctor: getAutonomousDoctorStatus() }));
 app.post('/api/ivx/autonomous/control', async (c) => {
   const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
   const action = String((body as any).action || '') as TruthControlAction;
@@ -90,6 +92,7 @@ startAutonomousIntelligenceMissionScheduler();
 startGitHubActionsExternalSupervisor();
 startAutonomousLiveBootstrap();
 startAutonomous112RuntimeEnforcer();
+startAutonomousDoctor();
 
 const runCompletionCycleSafely = async (reason: string): Promise<void> => {
   try { const state = await runCompletionCampaignCycle(4); console.log('[IVX Completion Campaign]', { reason, phase: state.phase, verifiedAgents: state.totals.verifiedAgents }); }
