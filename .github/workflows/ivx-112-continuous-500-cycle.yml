@@ -26,11 +26,11 @@ env:
 
 jobs:
   prepare:
-    name: Load exact 112-agent registry
+    name: Load exact 112-agent registry and 10-cell plan
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      matrix: ${{ steps.registry.outputs.matrix }}
+      cells: ${{ steps.registry.outputs.cells }}
       live_sha: ${{ steps.registry.outputs.live_sha }}
     steps:
       - name: Require healthy production and exact 112 IA
@@ -48,170 +48,234 @@ jobs:
           test "$(jq -r '.ok // false' /tmp/agents.json)" = true
           test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = "$TARGET_AGENTS"
           test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)" = "$TARGET_AGENTS"
-          matrix=$(jq -c '{include:[.agents[]|{agentNumber:.agentNumber,agentId:.agentId}]}' /tmp/agents.json)
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-          echo "REGISTRY=112/112 LIVE_SHA=$live_sha"
+          test "$(jq '[.agents[].agentNumber] | unique | length' /tmp/agents.json)" = "$TARGET_AGENTS"
 
-  fleet-112:
-    name: IA ${{ matrix.agentNumber }} continuous engineering
+          # 10 enterprise engineering cells. Cells 1-2 own 12 IA each;
+          # cells 3-10 own 11 IA each. Total = 112. The cells are the staging
+          # boundary: GitHub schedules 10 supervisory runners, while each cell
+          # keeps its assigned IA working concurrently inside the runner.
+          cells='{"include":[{"cellId":1,"start":1,"end":12},{"cellId":2,"start":13,"end":24},{"cellId":3,"start":25,"end":35},{"cellId":4,"start":36,"end":46},{"cellId":5,"start":47,"end":57},{"cellId":6,"start":58,"end":68},{"cellId":7,"start":69,"end":79},{"cellId":8,"start":80,"end":90},{"cellId":9,"start":91,"end":101},{"cellId":10,"start":102,"end":112}]}'
+          echo "cells=$cells" >> "$GITHUB_OUTPUT"
+          echo "REGISTRY=112/112 CELLS=10 LIVE_SHA=$live_sha"
+
+  cells-10:
+    name: Cell ${{ matrix.cellId }} · IA ${{ matrix.start }}-${{ matrix.end }}
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 178
     strategy:
       fail-fast: false
-      max-parallel: 112
-      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+      max-parallel: 10
+      matrix: ${{ fromJson(needs.prepare.outputs.cells) }}
     steps:
-      - name: Run Friday 500-check distribution continuously
+      - name: Run assigned IA concurrently inside isolated engineering cell
         env:
-          AGENT_NUMBER: ${{ matrix.agentNumber }}
-          AGENT_ID: ${{ matrix.agentId }}
+          CELL_ID: ${{ matrix.cellId }}
+          CELL_START: ${{ matrix.start }}
+          CELL_END: ${{ matrix.end }}
           LIVE_SHA: ${{ needs.prepare.outputs.live_sha }}
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p evidence
-          n=$(printf '%03d' "$AGENT_NUMBER")
-          evidence="evidence/agent-$n.jsonl"
-          : > "$evidence"
+          mkdir -p evidence cell
 
-          refresh_oidc() {
-            local url response refreshed
-            url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery"
-            response=$(curl -fsS --retry 4 --retry-delay 2 --retry-all-errors \
-              -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$url")
-            refreshed=$(printf '%s' "$response" | jq -r '.value // empty')
-            test -n "$refreshed"
-            echo "::add-mask::$refreshed"
-            OIDC_TOKEN="$refreshed"
-            OIDC_REFRESHED=$(date +%s)
+          curl -fsS --retry 5 --retry-delay 3 --max-time 30 "$API_BASE/api/ivx/agents" -o /tmp/agents.json
+          test "$(jq -r '.ok // false' /tmp/agents.json)" = true
+          jq -r --argjson s "$CELL_START" --argjson e "$CELL_END" '.agents[] | select(.agentNumber >= $s and .agentNumber <= $e) | [.agentNumber,.agentId] | @tsv' /tmp/agents.json > /tmp/cell-agents.tsv
+          expected=$((CELL_END - CELL_START + 1))
+          actual=$(wc -l < /tmp/cell-agents.tsv | tr -d ' ')
+          test "$actual" = "$expected"
+
+          jq -n --argjson cellId "$CELL_ID" --argjson start "$CELL_START" --argjson end "$CELL_END" --argjson agents "$actual" --arg liveSha "$LIVE_SHA" '{cellId:$cellId,startAgent:$start,endAgent:$end,agentCount:$agents,liveSha:$liveSha,state:"WORKING",qualityGate:"enterprise_evidence_gated",generatedAt:(now|todateiso8601)}' > cell/manifest.json
+
+          run_agent() {
+            local AGENT_NUMBER="$1"
+            local AGENT_ID="$2"
+            local n evidence started deadline round pass_count fail_count OIDC_TOKEN OIDC_REFRESHED
+            n=$(printf '%03d' "$AGENT_NUMBER")
+            evidence="evidence/agent-$n.jsonl"
+            : > "$evidence"
+            OIDC_TOKEN=''
+            OIDC_REFRESHED=0
+
+            refresh_oidc() {
+              local url response refreshed
+              url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery"
+              response=$(curl -fsS --retry 4 --retry-delay 2 --retry-all-errors -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$url")
+              refreshed=$(printf '%s' "$response" | jq -r '.value // empty')
+              test -n "$refreshed"
+              echo "::add-mask::$refreshed"
+              OIDC_TOKEN="$refreshed"
+              OIDC_REFRESHED=$(date +%s)
+            }
+
+            refresh_oidc
+            started=$(date +%s)
+            deadline=$((started + CAMPAIGN_SECONDS))
+            round=0
+            pass_count=0
+            fail_count=0
+
+            while [ "$(date +%s)" -lt "$deadline" ]; do
+              round=$((round + 1))
+              for item in $(seq "$AGENT_NUMBER" 112 "$TARGET_CHECKS"); do
+                [ "$(date +%s)" -lt "$deadline" ] || break
+
+                if [ $(( $(date +%s) - OIDC_REFRESHED )) -ge 240 ]; then
+                  refresh_oidc
+                fi
+
+                variant=$(( (item - 1) / 112 ))
+                case "$variant" in
+                  0) dimension=source_contract; tool=code_search; params='{"pattern":"landing","scope":"expo/ivxholding-landing"}' ;;
+                  1) dimension=production_behavior; tool=code_read; params='{"path":"expo/ivxholding-landing/index.html"}' ;;
+                  2) dimension=responsive_accessibility; tool=code_read; params='{"path":"expo/ivxholding-landing/ivx-styles.css"}' ;;
+                  3) dimension=security_failure_paths; tool=code_read; params='{"path":"expo/ivxholding-landing/ivx-app.js"}' ;;
+                  *) dimension=performance_observability; tool=code_read; params='{"path":"expo/ivxholding-landing/landing-support-chat.js"}' ;;
+                esac
+
+                task_id="cell${CELL_ID}-continuous500-${GITHUB_RUN_ID}-r${round}-i${item}-a${AGENT_NUMBER}"
+                task="IVX ENGINEERING CELL ${CELL_ID}/10: IA ${AGENT_NUMBER}/112; Friday 500-check item ${item}/500; round ${round}; dimension=${dimension}; liveSha=${LIVE_SHA}. Audit real implementation and production-facing contract, identify defects or unfinished work, return evidence, and never invent PASS. Failed inspection must remain failed for repair; do not promote it to READY."
+                body=$(jq -nc --arg id "$task_id" --arg task "$task" --arg tool "$tool" --argjson params "$params" --arg sha "$LIVE_SHA" --argjson cellId "$CELL_ID" '{taskType:"audit",payload:{__taskId:$id,__workflow:"IVX 112 IA Continuous 500-Check Fleet",engineeringCell:$cellId,sourceSha:$sha,landingAssignment:$task,__toolId:$tool,__toolParams:$params,realExecutionOnly:true,simulatedSuccessAllowed:false,qualityPolicy:"enterprise_evidence_gated"}}')
+
+                http=000
+                ok=false
+                status=request_failed
+                verified=false
+                source_ref=''
+                tool_result=''
+                for attempt in 1 2 3 4 5 6; do
+                  : > "/tmp/run-${AGENT_NUMBER}.json"
+                  http=$(curl -sS --max-time 240 -o "/tmp/run-${AGENT_NUMBER}.json" -w '%{http_code}' -X POST "$API_BASE/api/ivx/agents/$AGENT_ID/run" -H 'Content-Type: application/json' -H "X-IVX-GitHub-OIDC: $OIDC_TOKEN" --data "$body" || printf '000')
+
+                  if [ "$http" = 401 ] || [ "$http" = 403 ]; then
+                    refresh_oidc
+                  elif [[ "$http" =~ ^(000|408|425|429|500|502|503|504)$ ]] && [ "$attempt" -lt 6 ]; then
+                    sleep $((attempt * 5))
+                  fi
+
+                  ok=$(jq -r '.ok // false' "/tmp/run-${AGENT_NUMBER}.json" 2>/dev/null || echo false)
+                  status=$(jq -r '.runRecord.finalStatus // "request_failed"' "/tmp/run-${AGENT_NUMBER}.json" 2>/dev/null || echo request_failed)
+                  verified=$(jq -r '.runRecord.verifiedOutput // false' "/tmp/run-${AGENT_NUMBER}.json" 2>/dev/null || echo false)
+                  source_ref=$(jq -r '.runRecord.sourceReference // empty' "/tmp/run-${AGENT_NUMBER}.json" 2>/dev/null || true)
+                  tool_result=$(jq -r '.runRecord.toolResultId // empty' "/tmp/run-${AGENT_NUMBER}.json" 2>/dev/null || true)
+
+                  if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$status" = completed ] && [ "$verified" = true ] && [ -n "$source_ref" ] && [ -n "$tool_result" ]; then
+                    break
+                  fi
+                done
+
+                passed=false
+                quality_state=REPAIR
+                if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$status" = completed ] && [ "$verified" = true ] && [ -n "$source_ref" ] && [ -n "$tool_result" ]; then
+                  passed=true
+                  quality_state=READY
+                  pass_count=$((pass_count + 1))
+                else
+                  fail_count=$((fail_count + 1))
+                fi
+
+                jq -nc --argjson cellId "$CELL_ID" --argjson agentNumber "$AGENT_NUMBER" --arg agentId "$AGENT_ID" --argjson itemId "$item" --argjson round "$round" --arg dimension "$dimension" --arg liveSha "$LIVE_SHA" --arg taskId "$task_id" --arg http "$http" --arg status "$status" --arg qualityState "$quality_state" --arg sourceReference "$source_ref" --arg toolResultId "$tool_result" --argjson passed "$passed" '{cellId:$cellId,agentNumber:$agentNumber,agentId:$agentId,itemId:$itemId,round:$round,dimension:$dimension,liveSha:$liveSha,taskId:$taskId,http:$http,status:$status,qualityState:$qualityState,sourceReference:$sourceReference,toolResultId:$toolResultId,passed:$passed,ts:(now|todateiso8601)}' >> "$evidence"
+
+                sleep 20
+              done
+            done
+
+            total=$(wc -l < "$evidence" | tr -d ' ')
+            unique_initial=$(jq -s '[.[] | select(.round == 1) | .itemId] | unique | length' "$evidence")
+            echo "CELL=$CELL_ID IA=$AGENT_NUMBER TOTAL=$total PASS=$pass_count REPAIR=$fail_count INITIAL_UNIQUE=$unique_initial"
+            test "$total" -gt 0
+            test "$pass_count" -gt 0
           }
 
-          refresh_oidc
-          started=$(date +%s)
-          deadline=$((started + CAMPAIGN_SECONDS))
-          round=0
-          pass_count=0
-          fail_count=0
+          pids=()
+          while IFS=$'\t' read -r agent_number agent_id; do
+            run_agent "$agent_number" "$agent_id" &
+            pids+=("$!")
+          done < /tmp/cell-agents.tsv
 
-          while [ "$(date +%s)" -lt "$deadline" ]; do
-            round=$((round + 1))
-
-            # Exact proven Friday distribution: 500 unique checks striped over 112 IA.
-            for item in $(seq "$AGENT_NUMBER" 112 "$TARGET_CHECKS"); do
-              [ "$(date +%s)" -lt "$deadline" ] || break
-
-              if [ $(( $(date +%s) - OIDC_REFRESHED )) -ge 240 ]; then
-                refresh_oidc
-              fi
-
-              variant=$(( (item - 1) / 112 ))
-              case "$variant" in
-                0) dimension=source_contract; tool=code_search; params='{"pattern":"landing","scope":"expo/ivxholding-landing"}' ;;
-                1) dimension=production_behavior; tool=code_read; params='{"path":"expo/ivxholding-landing/index.html"}' ;;
-                2) dimension=responsive_accessibility; tool=code_read; params='{"path":"expo/ivxholding-landing/ivx-styles.css"}' ;;
-                3) dimension=security_failure_paths; tool=code_read; params='{"path":"expo/ivxholding-landing/ivx-app.js"}' ;;
-                *) dimension=performance_observability; tool=code_read; params='{"path":"expo/ivxholding-landing/landing-support-chat.js"}' ;;
-              esac
-
-              task_id="continuous500-${GITHUB_RUN_ID}-r${round}-i${item}-a${AGENT_NUMBER}"
-              task="CONTINUOUS IVX ENGINEERING: IA ${AGENT_NUMBER}/112; Friday 500-check pattern; item ${item}/500; round ${round}; dimension=${dimension}; liveSha=${LIVE_SHA}. Audit real implementation and production-facing contract, identify any defect or unfinished work, return evidence, and never invent PASS."
-              body=$(jq -nc \
-                --arg id "$task_id" \
-                --arg task "$task" \
-                --arg tool "$tool" \
-                --argjson params "$params" \
-                --arg sha "$LIVE_SHA" \
-                '{taskType:"audit",payload:{__taskId:$id,__workflow:"IVX 112 IA Continuous 500-Check Fleet",sourceSha:$sha,landingAssignment:$task,__toolId:$tool,__toolParams:$params,realExecutionOnly:true,simulatedSuccessAllowed:false,qualityPolicy:"enterprise_evidence_gated"}}')
-
-              http=000
-              ok=false
-              status=request_failed
-              verified=false
-              source_ref=''
-              tool_result=''
-              for attempt in 1 2 3 4 5 6; do
-                : > /tmp/run.json
-                http=$(curl -sS --max-time 240 -o /tmp/run.json -w '%{http_code}' \
-                  -X POST "$API_BASE/api/ivx/agents/$AGENT_ID/run" \
-                  -H 'Content-Type: application/json' \
-                  -H "X-IVX-GitHub-OIDC: $OIDC_TOKEN" \
-                  --data "$body" || printf '000')
-
-                if [ "$http" = 401 ] || [ "$http" = 403 ]; then
-                  refresh_oidc
-                elif [[ "$http" =~ ^(000|408|425|429|500|502|503|504)$ ]] && [ "$attempt" -lt 6 ]; then
-                  sleep $((attempt * 5))
-                fi
-
-                ok=$(jq -r '.ok // false' /tmp/run.json 2>/dev/null || echo false)
-                status=$(jq -r '.runRecord.finalStatus // "request_failed"' /tmp/run.json 2>/dev/null || echo request_failed)
-                verified=$(jq -r '.runRecord.verifiedOutput // false' /tmp/run.json 2>/dev/null || echo false)
-                source_ref=$(jq -r '.runRecord.sourceReference // empty' /tmp/run.json 2>/dev/null || true)
-                tool_result=$(jq -r '.runRecord.toolResultId // empty' /tmp/run.json 2>/dev/null || true)
-
-                if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$status" = completed ] && [ "$verified" = true ] && [ -n "$source_ref" ] && [ -n "$tool_result" ]; then
-                  break
-                fi
-              done
-
-              passed=false
-              if [ "$http" = 200 ] && [ "$ok" = true ] && [ "$status" = completed ] && [ "$verified" = true ] && [ -n "$source_ref" ] && [ -n "$tool_result" ]; then
-                passed=true
-                pass_count=$((pass_count + 1))
-              else
-                fail_count=$((fail_count + 1))
-              fi
-
-              jq -nc \
-                --argjson agentNumber "$AGENT_NUMBER" \
-                --arg agentId "$AGENT_ID" \
-                --argjson itemId "$item" \
-                --argjson round "$round" \
-                --arg dimension "$dimension" \
-                --arg liveSha "$LIVE_SHA" \
-                --arg taskId "$task_id" \
-                --arg http "$http" \
-                --arg status "$status" \
-                --arg sourceReference "$source_ref" \
-                --arg toolResultId "$tool_result" \
-                --argjson passed "$passed" \
-                '{agentNumber:$agentNumber,agentId:$agentId,itemId:$itemId,round:$round,dimension:$dimension,liveSha:$liveSha,taskId:$taskId,http:$http,status:$status,sourceReference:$sourceReference,toolResultId:$toolResultId,passed:$passed,ts:(now|todateiso8601)}' >> "$evidence"
-
-              # Keep pressure continuous without turning the API into a synthetic hammer.
-              sleep 20
-            done
+          failed=0
+          for pid in "${pids[@]}"; do
+            if ! wait "$pid"; then failed=1; fi
           done
 
-          total=$(wc -l < "$evidence" | tr -d ' ')
-          unique_initial=$(jq -s '[.[] | select(.round == 1) | .itemId] | unique | length' "$evidence")
-          echo "IA=$AGENT_NUMBER TOTAL=$total PASS=$pass_count FAIL=$fail_count INITIAL_UNIQUE=$unique_initial"
-          test "$total" -gt 0
-          test "$pass_count" -gt 0
+          ready=$(jq -s '[.[] | select(.qualityState == "READY")] | length' evidence/agent-*.jsonl)
+          repair=$(jq -s '[.[] | select(.qualityState == "REPAIR")] | length' evidence/agent-*.jsonl)
+          jq -n --argjson cellId "$CELL_ID" --argjson ready "$ready" --argjson repair "$repair" --arg state "$([ "$failed" = 0 ] && echo READY || echo REPAIR_REQUIRED)" '{cellId:$cellId,state:$state,readyItems:$ready,repairItems:$repair,generatedAt:(now|todateiso8601)}' > cell/quality.json
+          cat cell/quality.json
+          test "$failed" = 0
 
-      - name: Upload per-agent evidence
+      - name: Archive cell evidence for supervisor quality gate
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ivx-continuous500-agent-${{ matrix.agentNumber }}-${{ github.run_id }}
-          path: evidence/agent-*.jsonl
+          name: ivx-cell-${{ matrix.cellId }}-${{ github.run_id }}
+          path: |
+            evidence/agent-*.jsonl
+            cell/manifest.json
+            cell/quality.json
+          if-no-files-found: error
+          retention-days: 30
+
+  supervisor-qc:
+    name: Supervisor QC · READY vs REPAIR
+    needs: [prepare, cells-10]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      status: ${{ steps.qc.outputs.status }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ivx-cell-*-${{ github.run_id }}
+          path: staging
+          merge-multiple: true
+
+      - name: Inspect all 10 cells and quarantine failed work
+        id: qc
+        shell: bash
+        run: |
+          set -euo pipefail
+          find staging -name 'agent-*.jsonl' -type f -print0 | xargs -0 -r cat > /tmp/all.jsonl
+          test -s /tmp/all.jsonl
+
+          agents=$(jq -s '[.[].agentNumber] | unique | length' /tmp/all.jsonl)
+          cells=$(jq -s '[.[].cellId] | unique | length' /tmp/all.jsonl)
+          ready=$(jq -s '[.[] | select(.qualityState == "READY")] | length' /tmp/all.jsonl)
+          repair=$(jq -s '[.[] | select(.qualityState == "REPAIR")] | length' /tmp/all.jsonl)
+          passed_agents=$(jq -s '[group_by(.agentNumber)[] | select(any(.[]; .qualityState == "READY")) | .[0].agentNumber] | unique | length' /tmp/all.jsonl)
+
+          status=REPAIR_REQUIRED
+          if [ "$agents" = 112 ] && [ "$cells" = 10 ] && [ "$passed_agents" = 112 ]; then status=READY; fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          mkdir -p supervisor
+          jq -n --arg status "$status" --argjson cells "$cells" --argjson agents "$agents" --argjson passedAgents "$passed_agents" --argjson ready "$ready" --argjson repair "$repair" '{supervisor:"IVX Autonomous Engineering Control Plane",status:$status,cells:$cells,agents:$agents,agentsWithReadyEvidence:$passedAgents,readyItems:$ready,repairItems:$repair,policy:"FAIL returns to REPAIR; only READY evidence can reach certification",generatedAt:(now|todateiso8601)}' > supervisor/qc.json
+          cat supervisor/qc.json
+          test "$status" = READY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: IVX-10-CELL-SUPERVISOR-QC-${{ github.run_id }}
+          path: supervisor/qc.json
           if-no-files-found: error
           retention-days: 30
 
   certificate:
-    name: Certify 112 IA and Friday 500 pattern
-    needs: [prepare, fleet-112]
-    if: always() && needs.prepare.result == 'success'
+    name: Certify 112 IA through 10-cell control plane
+    needs: [prepare, cells-10, supervisor-qc]
+    if: always() && needs.prepare.result == 'success' && needs.supervisor-qc.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: ivx-continuous500-agent-*-${{ github.run_id }}
+          pattern: ivx-cell-*-${{ github.run_id }}
           path: evidence-all
           merge-multiple: true
 
-      - name: Build exact fleet certificate
+      - name: Build exact fleet certificate from READY evidence only
         shell: bash
         run: |
           set -euo pipefail
@@ -220,36 +284,26 @@ jobs:
           test -s /tmp/all.jsonl
 
           agents=$(jq -s '[.[].agentNumber] | unique | length' /tmp/all.jsonl)
-          passed_agents=$(jq -s '[group_by(.agentNumber)[] | select(any(.passed == true)) | .[0].agentNumber] | unique | length' /tmp/all.jsonl)
+          cells=$(jq -s '[.[].cellId] | unique | length' /tmp/all.jsonl)
+          passed_agents=$(jq -s '[group_by(.agentNumber)[] | select(any(.[]; .passed == true)) | .[0].agentNumber] | unique | length' /tmp/all.jsonl)
           first_round_unique=$(jq -s '[.[] | select(.round == 1) | .itemId] | unique | length' /tmp/all.jsonl)
           total_runs=$(wc -l < /tmp/all.jsonl | tr -d ' ')
-          passed_runs=$(jq -s '[.[] | select(.passed == true)] | length' /tmp/all.jsonl)
-          failed_runs=$(jq -s '[.[] | select(.passed != true)] | length' /tmp/all.jsonl)
+          passed_runs=$(jq -s '[.[] | select(.qualityState == "READY")] | length' /tmp/all.jsonl)
+          repair_runs=$(jq -s '[.[] | select(.qualityState == "REPAIR")] | length' /tmp/all.jsonl)
 
           status=REPAIR_REQUIRED
-          if [ "$agents" = 112 ] && [ "$passed_agents" = 112 ] && [ "$first_round_unique" = 500 ] && [ "$passed_runs" -gt 0 ]; then
+          if [ "$cells" = 10 ] && [ "$agents" = 112 ] && [ "$passed_agents" = 112 ] && [ "$first_round_unique" = 500 ] && [ "$passed_runs" -gt 0 ]; then
             status=PASS
           fi
 
-          jq -n \
-            --arg certificate 'IVX-112-CONTINUOUS-500-CYCLE' \
-            --arg sourceSha "$GITHUB_SHA" \
-            --arg runId "$GITHUB_RUN_ID" \
-            --arg status "$status" \
-            --argjson agents "$agents" \
-            --argjson passedAgents "$passed_agents" \
-            --argjson firstRoundUnique "$first_round_unique" \
-            --argjson totalRuns "$total_runs" \
-            --argjson passedRuns "$passed_runs" \
-            --argjson failedRuns "$failed_runs" \
-            '{certificate:$certificate,sourceSha:$sourceSha,runId:$runId,status:$status,agentsParticipating:$agents,agentsWithRealPass:$passedAgents,fridayPatternUniqueChecks:$firstRoundUnique,totalRuns:$totalRuns,passedRuns:$passedRuns,failedRuns:$failedRuns,continuousCampaignSeconds:10200,scheduledEveryHours:3,generatedAt:(now|todateiso8601)}' > certificate/result.json
+          jq -n --arg certificate 'IVX-112-TEN-CELL-CONTROL-PLANE' --arg sourceSha "$GITHUB_SHA" --arg runId "$GITHUB_RUN_ID" --arg status "$status" --argjson cells "$cells" --argjson agents "$agents" --argjson passedAgents "$passed_agents" --argjson firstRoundUnique "$first_round_unique" --argjson totalRuns "$total_runs" --argjson passedRuns "$passed_runs" --argjson repairRuns "$repair_runs" '{certificate:$certificate,sourceSha:$sourceSha,runId:$runId,status:$status,engineeringCells:$cells,agentsParticipating:$agents,agentsWithRealPass:$passedAgents,fridayPatternUniqueChecks:$firstRoundUnique,totalRuns:$totalRuns,readyRuns:$passedRuns,repairRuns:$repairRuns,deployPolicy:"No direct agent deploy. Supervisor QC before release authority.",continuousCampaignSeconds:10200,scheduledEveryHours:3,generatedAt:(now|todateiso8601)}' > certificate/result.json
           cat certificate/result.json
           test "$status" = PASS
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: IVX-112-CONTINUOUS-500-CERT-${{ github.run_id }}
+          name: IVX-112-TEN-CELL-CERT-${{ github.run_id }}
           path: certificate/result.json
           if-no-files-found: error
           retention-days: 30
