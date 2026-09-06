@@ -9,8 +9,12 @@
  */
 
 import { startSeniorDevWorker, getSeniorDevWorkerStatus } from '../services/ivx-senior-dev-worker';
+// Importing the campaign worker starts its bounded queue-drain timer. This
+// unifies the live Render worker with the queue populated by Autonomous while
+// retaining the owner AI task processor below.
+import { getWorkerMaxConcurrency } from '../services/ivx-senior-developer-worker';
 
-console.log('[IVX-SENIOR-DEV-01] process entry', { pid: process.pid, at: new Date().toISOString() });
+console.log('[IVX-SENIOR-DEV-01] process entry', { pid: process.pid, at: new Date().toISOString(), campaignConcurrency: getWorkerMaxConcurrency() });
 
 startSeniorDevWorker().then(() => {
   console.log('[IVX-SENIOR-DEV-01] exited normally', getSeniorDevWorkerStatus());
