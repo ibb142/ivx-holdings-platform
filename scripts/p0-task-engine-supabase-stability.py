@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# Validation trigger: rerun the deterministic P0 patch after global TypeScript blockers were repaired.
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
     if old not in text:
