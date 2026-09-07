@@ -24,6 +24,7 @@ import { autonomousRuntimeEnforcerEnabled } from './ivx-autonomous-control-polic
 import {
   postgresAtomicQueueSelected,
   readPostgresFleetLeaseRows,
+  releasePostgresWorkerInstanceTasks,
 } from './ivx-postgres-autonomous-task-store';
 import {
   ensureLandingP0BacklogSeeded,
@@ -41,13 +42,14 @@ import {
   runLandingPatrolSession,
 } from './ivx-landing-continuous-patrol';
 
-export const IVX_AUTONOMOUS_RUNTIME_ENFORCER_MARKER = 'ivx-autonomous-runtime-enforcer-2026-09-07-continuous-refill-v4';
+export const IVX_AUTONOMOUS_RUNTIME_ENFORCER_MARKER = 'ivx-autonomous-runtime-enforcer-2026-09-07-continuous-refill-v5';
 export const IVX_AUTONOMOUS_REFILL_INTERVAL_MS = 5_000;
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let leaseMirrorTimer: ReturnType<typeof setInterval> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let refillTimer: ReturnType<typeof setInterval> | null = null;
+let stopInFlight: Promise<number> | null = null;
 let enforcerRunInFlight: Promise<void> | null = null;
 let leaseMirrorInFlight: Promise<void> | null = null;
 let heartbeatRefreshInFlight: Promise<void> | null = null;
@@ -159,9 +161,14 @@ async function syncRuntimeWorkingFromTaskLeases(): Promise<number> {
   const stateByNumber = new Map(states.map((state) => [state.agentNumber, state]));
   const stateById = new Map(states.map((state) => [state.agentId, state]));
   const activeByAgent = new Map<number, string>();
+  const nowMs = Date.now();
 
   for (const task of tasks) {
     if (!task.leaseHolder || !ACTIVE_TASK_STATES.has(task.state)) continue;
+    const heartbeatMs = Date.parse(task.lastHeartbeatAt ?? '');
+    const expiryMs = Date.parse(task.leaseExpiresAt ?? '');
+    if (!Number.isFinite(heartbeatMs) || heartbeatMs < nowMs - 60_000) continue;
+    if (!Number.isFinite(expiryMs) || expiryMs <= nowMs) continue;
     const leasedAgentId = task.leaseHolder.startsWith('agent:') ? task.leaseHolder.slice('agent:'.length) : null;
     const leasedAgentNumber = leasedAgentId ? stateById.get(leasedAgentId)?.agentNumber ?? null : null;
     const agentNumber = leasedAgentNumber ?? task.assignedAgentNumber;
@@ -492,6 +499,33 @@ export function startAutonomous112RuntimeEnforcer(): boolean {
   }, IVX_AUTONOMOUS_REFILL_INTERVAL_MS);
   refillTimer.unref?.();
   return true;
+}
+
+/** Stop new work and atomically return this Render process's leases to queue. */
+export function stopAutonomous112RuntimeEnforcer(): Promise<number> {
+  if (stopInFlight) return stopInFlight;
+  continuityEnabled = false;
+  landingMissionActive = false;
+  if (timer) clearInterval(timer);
+  if (leaseMirrorTimer) clearInterval(leaseMirrorTimer);
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  if (refillTimer) clearInterval(refillTimer);
+  timer = null;
+  leaseMirrorTimer = null;
+  heartbeatTimer = null;
+  refillTimer = null;
+  stopInFlight = (postgresAtomicQueueSelected()
+    ? releasePostgresWorkerInstanceTasks()
+    : Promise.resolve(0))
+    .catch((error) => {
+      console.error('[IVX Autonomous 112 Shutdown] lease release failed', { error: error instanceof Error ? error.message : String(error) });
+      return 0;
+    })
+    .then((released) => {
+      console.log('[IVX Autonomous 112 Shutdown] capacity returned to queue', { released });
+      return released;
+    });
+  return stopInFlight;
 }
 
 export function getAutonomous112RuntimeEnforcerStatus() {
