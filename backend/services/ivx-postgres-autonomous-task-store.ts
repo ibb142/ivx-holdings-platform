@@ -172,12 +172,23 @@ function invalidateTaskReadCache(): void {
 }
 
 async function fetchAllPostgresTasks(): Promise<Task[]> {
-  const rows = await restRequest<RestTaskRow[]>(
-    'ivx_autonomous_tasks?select=payload&order=created_at.asc&limit=10000',
-    { method: 'GET' },
-  );
-  if (!Array.isArray(rows)) throw new Error('postgres_atomic task response is not an array');
-  return rows.map((row) => structuredClone(row.payload));
+  // PostgREST/Supabase projects commonly cap every response at 1,000 rows,
+  // even when a larger limit is requested. The fleet ledger is intentionally
+  // long-lived and already exceeds that cap, so a single oldest-first request
+  // hid the newest Landing run from status/certificate aggregation.
+  const pageSize = 1_000;
+  const maxRows = 20_000;
+  const all: Task[] = [];
+  for (let offset = 0; offset < maxRows; offset += pageSize) {
+    const rows = await restRequest<RestTaskRow[]>(
+      `ivx_autonomous_tasks?select=payload&order=created_at.asc&offset=${offset}&limit=${pageSize}`,
+      { method: 'GET' },
+    );
+    if (!Array.isArray(rows)) throw new Error('postgres_atomic task response is not an array');
+    all.push(...rows.map((row) => structuredClone(row.payload)));
+    if (rows.length < pageSize) return all;
+  }
+  throw new Error(`postgres_atomic task ledger exceeds safe pagination limit (${maxRows})`);
 }
 
 export async function readPostgresAutonomousTasks(): Promise<Task[]> {

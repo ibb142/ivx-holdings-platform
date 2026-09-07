@@ -38,6 +38,35 @@ async function readBody(req: Request): Promise<Record<string, unknown>> {
 
 function safeStr(v: unknown, fallback = ''): string { return typeof v === 'string' ? v.trim() : fallback; }
 
+const CANONICAL_LANDING_DEAL_ORDER = new Map<string, number>([
+  ['perez-residence-001', 1],
+  ['casa-rosario-001', 2],
+  ['JV-202603-5190', 3],
+]);
+const LEGACY_CASA_PLACEHOLDER_ID = 'ivx-deal-casa-rosario-2026';
+
+/**
+ * Keep the public landing feed deterministic while preserving future published
+ * deals. The August go-live placeholder duplicated the canonical Casa Rosario
+ * row and had no media, so it is hidden only when the canonical row exists.
+ */
+export function normalizePublicLandingDeals(rows: readonly Record<string, any>[]): Record<string, any>[] {
+  const canonicalCasaExists = rows.some((row) => String(row.id ?? '') === 'casa-rosario-001');
+  return rows
+    .filter((row) => !(canonicalCasaExists && String(row.id ?? '') === LEGACY_CASA_PLACEHOLDER_ID))
+    .map((row) => String(row.id ?? '') === 'JV-202603-5190'
+      ? { ...row, title: 'IVX JACKSONVILLE PRIME' }
+      : { ...row })
+    .sort((a, b) => {
+      const aId = String(a.id ?? '');
+      const bId = String(b.id ?? '');
+      const aOrder = CANONICAL_LANDING_DEAL_ORDER.get(aId) ?? Number(a.display_order ?? Number.MAX_SAFE_INTEGER);
+      const bOrder = CANONICAL_LANDING_DEAL_ORDER.get(bId) ?? Number(b.display_order ?? Number.MAX_SAFE_INTEGER);
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return String(b.updated_at ?? b.created_at ?? '').localeCompare(String(a.updated_at ?? a.created_at ?? ''));
+    });
+}
+
 export const publicFeatureOptions = (): Response => {
   return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': 'https://ivxholding.com', 'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS' } });
 };
@@ -144,9 +173,10 @@ export async function handleJVDealsList(req: Request): Promise<Response> {
     const sb = await getPublicDealsSB();
     // Race against a timeout to prevent Supabase 522 from hanging the request
     const queryPromise = sb.from('jv_deals')
-      .select('id,title,project_name,description,property_address,city,state,property_type,total_investment,expected_roi,term_months,status,published,photos,created_at,updated_at', { count: 'exact' })
+      .select('id,title,project_name,description,property_address,city,state,property_type,total_investment,expected_roi,term_months,status,published,photos,display_order,created_at,updated_at', { count: 'exact' })
       .eq('published', true)
-      .order('created_at', { ascending: false })
+      .order('display_order', { ascending: true, nullsFirst: false })
+      .order('updated_at', { ascending: false })
       .limit(50);
     const timeoutPromise = new Promise<{ data: null; error: { message: string }; count: null }>((resolve) =>
       setTimeout(() => resolve({ data: null, error: { message: 'Supabase request timed out' }, count: null }), 8000)
@@ -156,8 +186,8 @@ export async function handleJVDealsList(req: Request): Promise<Response> {
       console.error('[handleJVDealsList] Supabase query error:', error.message);
       return json({ deals: [], count: 0, error: error.message, deploymentMarker: DEPLOYMENT_MARKER });
     }
-    const deals = data || [];
-    return json({ deals, count: count ?? deals.length, deploymentMarker: DEPLOYMENT_MARKER });
+    const deals = normalizePublicLandingDeals(data || []);
+    return json({ deals, count: deals.length, sourceCount: count ?? deals.length, deploymentMarker: DEPLOYMENT_MARKER });
   } catch (err: unknown) {
     const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
     // If Supabase is unreachable, return empty deals instead of hanging or 500
