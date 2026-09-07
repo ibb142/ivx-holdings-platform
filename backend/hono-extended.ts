@@ -20,6 +20,7 @@ import { autonomousIntelligenceMissionSchedulerOptions, handleAutonomousIntellig
 import { buildLandingP0Status, LANDING_P0_LANES, LANDING_P0_UNITS } from './services/ivx-landing-p0-backlog';
 import { getAutonomous112RuntimeEnforcerStatus, getContinuityOutcomes } from './services/ivx-autonomous-runtime-enforcer';
 import { landingFleetFocusEnabled } from './services/ivx-landing-fleet-focus';
+import { buildLandingFleetProof, getLandingPatrolLiveStates } from './services/ivx-landing-continuous-patrol';
 
 const LANDING_P0_PUBLIC_HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
@@ -61,7 +62,20 @@ app.get('/api/ivx/landing-p0/status', async () => {
   }
 });
 app.options('/api/ivx/landing-p0/agents', () => new Response(null, { status: 204, headers: LANDING_P0_PUBLIC_HEADERS }));
-app.get('/api/ivx/landing-p0/agents', async () => landingP0Json({ ok: true, agents: getContinuityOutcomes() }));
+app.get('/api/ivx/landing-p0/agents', async () => {
+  try {
+    const proof = await buildLandingFleetProof();
+    return landingP0Json({
+      ok: true,
+      exact112Working: proof.exact112Working,
+      proof,
+      patrol: getLandingPatrolLiveStates(),
+      completedCycles: getContinuityOutcomes(),
+    });
+  } catch (error) {
+    return landingP0Json({ ok: false, exact112Working: false, error: error instanceof Error ? error.message : 'landing fleet proof unavailable' }, 500);
+  }
+});
 
 app.options('/api/ivx/autonomous/control-plane', () => autonomousControlPlaneOptions());
 app.get('/api/ivx/autonomous/control-plane', async (c) => handleAutonomousControlPlaneGet(c.req.raw));

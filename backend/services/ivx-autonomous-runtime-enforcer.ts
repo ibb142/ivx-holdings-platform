@@ -1,6 +1,6 @@
 import { enforceAutonomous112RuntimeTruth, IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS } from './ivx-autonomous-truth-control';
 import { getAllExecutionStates, updateExecutionState } from './ivx-agent-runtime';
-import { runRealEngineeringCycle } from './ivx-agent-real-engineering-cycle';
+import { runRealEngineeringCycle, type RealEngineeringCycleResult } from './ivx-agent-real-engineering-cycle';
 import {
   getAllTasks,
   heartbeatTasksBatch,
@@ -24,19 +24,32 @@ import { autonomousRuntimeEnforcerEnabled } from './ivx-autonomous-control-polic
 import {
   postgresAtomicQueueSelected,
   readPostgresFleetLeaseRows,
+  releasePostgresWorkerInstanceTasks,
 } from './ivx-postgres-autonomous-task-store';
 import {
   ensureLandingP0BacklogSeeded,
+  ensureLandingP0PatrolSeeded,
+  isLandingPatrolTask,
   isLandingP0MissionActive,
+  LANDING_P0_PATROL_PREFIX,
   LANDING_P0_PREFIX,
   LANDING_P0_REPAIR_PREFIX,
 } from './ivx-landing-p0-backlog';
+import {
+  getLandingPatrolIntervalMs,
+  getLandingPatrolLiveStates,
+  IVX_LANDING_CONTINUOUS_PATROL_MARKER,
+  runLandingPatrolSession,
+} from './ivx-landing-continuous-patrol';
 
-export const IVX_AUTONOMOUS_RUNTIME_ENFORCER_MARKER = 'ivx-autonomous-runtime-enforcer-2026-09-07-fleet-batch-v1';
+export const IVX_AUTONOMOUS_RUNTIME_ENFORCER_MARKER = 'ivx-autonomous-runtime-enforcer-2026-09-07-continuous-refill-v5';
+export const IVX_AUTONOMOUS_REFILL_INTERVAL_MS = 5_000;
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let leaseMirrorTimer: ReturnType<typeof setInterval> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let refillTimer: ReturnType<typeof setInterval> | null = null;
+let stopInFlight: Promise<number> | null = null;
 let enforcerRunInFlight: Promise<void> | null = null;
 let leaseMirrorInFlight: Promise<void> | null = null;
 let heartbeatRefreshInFlight: Promise<void> | null = null;
@@ -90,6 +103,8 @@ export function getContinuityMaxConcurrency(): number {
 export function classifyContinuityResult(result: { ok: boolean; action: string; taskId: string | null; states: string[] }): ContinuityOutcome {
   if (!result.ok) return 'failed';
   if (result.action === 'NO_TASK_AVAILABLE') return 'idle';
+  if (result.action === 'PATROL_SESSION_ENDED') return 'idle';
+  if (result.action === 'PATROL_SESSION_LOST') return 'failed';
   if (result.states.includes('ALREADY_VERIFIED')) return 'idle';
   if (!result.taskId) return 'failed';
   if (result.action === 'TASK_BLOCKED') return 'blocked';
@@ -107,6 +122,17 @@ function canRunContinuity(agentId: string): boolean {
     && state.health !== 'failed'
     && state.availability === 'available'
     && !state.activeTaskId;
+}
+
+function canStartPreparedContinuity(agentId: string, preparedTaskId: string): boolean {
+  if (!continuityEnabled || continuityRuns.has(agentId)) return false;
+  if (continuityRuns.size >= getContinuityMaxConcurrency()) return false;
+  const state = getAllExecutionStates().find((row) => row.agentId === agentId);
+  if (!state) return false;
+  return !state.pauseState
+    && !state.disabledState
+    && state.health !== 'failed'
+    && (!state.activeTaskId || state.activeTaskId === preparedTaskId);
 }
 
 function currentSourceSha(): string {
@@ -135,9 +161,14 @@ async function syncRuntimeWorkingFromTaskLeases(): Promise<number> {
   const stateByNumber = new Map(states.map((state) => [state.agentNumber, state]));
   const stateById = new Map(states.map((state) => [state.agentId, state]));
   const activeByAgent = new Map<number, string>();
+  const nowMs = Date.now();
 
   for (const task of tasks) {
     if (!task.leaseHolder || !ACTIVE_TASK_STATES.has(task.state)) continue;
+    const heartbeatMs = Date.parse(task.lastHeartbeatAt ?? '');
+    const expiryMs = Date.parse(task.leaseExpiresAt ?? '');
+    if (!Number.isFinite(heartbeatMs) || heartbeatMs < nowMs - 60_000) continue;
+    if (!Number.isFinite(expiryMs) || expiryMs <= nowMs) continue;
     const leasedAgentId = task.leaseHolder.startsWith('agent:') ? task.leaseHolder.slice('agent:'.length) : null;
     const leasedAgentNumber = leasedAgentId ? stateById.get(leasedAgentId)?.agentNumber ?? null : null;
     const agentNumber = leasedAgentNumber ?? task.assignedAgentNumber;
@@ -212,14 +243,44 @@ function runHeartbeatRefresh(): Promise<void> {
 }
 
 function startContinuityRun(agentId: string, agentNumber: number, preparedTask: Task): void {
-  if (!canRunContinuity(agentId)) return;
+  // The independent lease mirror may observe this exact PostgreSQL RUNNING row
+  // between startLeasedTasksBatch() and this call. Treat that as confirmation,
+  // while still rejecting a different active task for the same IA.
+  if (!canStartPreparedContinuity(agentId, preparedTask.taskId)) return;
   refillStarted += 1;
   let outcome: ContinuityOutcome = 'failed';
   const sourceSha = currentSourceSha();
 
   // Lease-first: the fleet-level manager already maintains the durable backlog.
   // Do not make every IA perform another planning/read pass before it can lease.
-  const promise = runRealEngineeringCycle({ agentId, agentNumber, sourceSha, preparedTask })
+  const cycle: Promise<RealEngineeringCycleResult> = isLandingPatrolTask(preparedTask)
+    ? runLandingPatrolSession({
+      task: preparedTask,
+      agentId,
+      agentNumber,
+      sourceSha,
+      shouldContinue: () => continuityEnabled && landingMissionActive && currentSourceSha() === sourceSha,
+    }).then((result) => ({
+      ok: result.ok,
+      marker: IVX_LANDING_CONTINUOUS_PATROL_MARKER,
+      agentId,
+      action: result.action,
+      taskId: result.taskId,
+      module: result.module,
+      sourceSha,
+      startedAt: result.startedAt,
+      finishedAt: result.finishedAt,
+      states: ['RUNNING', 'CONTINUOUS_PATROL', result.ok ? 'QUEUED' : 'LEASE_LOST'],
+      evidenceIds: result.evidenceIds,
+      defects: [],
+      repairTaskIds: [],
+      filesInspected: [],
+      productiveMinutes: result.productiveMinutes,
+      nextTaskAvailable: true,
+      error: result.error,
+    }))
+    : runRealEngineeringCycle({ agentId, agentNumber, sourceSha, preparedTask });
+  const promise = cycle
     .then((result) => {
       outcome = classifyContinuityResult(result);
       lastOutcomeByAgent.set(agentNumber, {
@@ -282,18 +343,23 @@ function refillAllAvailableAgents(
     if (requestedLandingMission) {
       const seeded = await ensureLandingP0BacklogSeeded(requestedSourceSha);
       if (seeded.error) throw new Error(`landing_backlog_seed_failed: ${seeded.error}`);
+      const patrol = await ensureLandingP0PatrolSeeded(requestedSourceSha);
+      if (patrol.error) throw new Error(`landing_patrol_seed_failed: ${patrol.error}`);
     }
     const missionScope = {
-      familyPrefixes: [LANDING_P0_PREFIX, LANDING_P0_REPAIR_PREFIX],
+      familyPrefixes: [LANDING_P0_PREFIX, LANDING_P0_REPAIR_PREFIX, LANDING_P0_PATROL_PREFIX],
       activePrefixes: requestedLandingMission
-        ? [`${LANDING_P0_PREFIX}${requestedSourceSha}:`, `${LANDING_P0_REPAIR_PREFIX}${requestedSourceSha}:`]
+        ? [
+          `${LANDING_P0_PREFIX}${requestedSourceSha}:`,
+          `${LANDING_P0_REPAIR_PREFIX}${requestedSourceSha}:`,
+          `${LANDING_P0_PATROL_PREFIX}${requestedSourceSha}:`,
+        ]
         : [],
     };
     const leaseResults = await leaseNextTasksBatch(candidates.map((state) => ({
       workerId: `agent:${state.agentId}`,
       agentNumber: state.agentNumber,
       options: {
-        ...(requestedLandingMission ? { stealPrefix: `${LANDING_P0_PREFIX}${requestedSourceSha}:` } : {}),
         missionScope,
       },
     })));
@@ -424,7 +490,42 @@ export function startAutonomous112RuntimeEnforcer(): boolean {
   // tasks owned by currently running continuity lanes and never fabricates work.
   heartbeatTimer = setInterval(() => { void runHeartbeatRefresh(); }, 20_000);
   heartbeatTimer.unref?.();
+
+  // Keep capacity repair independent from semantic/decision supervisor work.
+  // A long supervisor pass must never prevent a lane whose task completed,
+  // expired, or was finalized by a rolling-deploy predecessor from refilling.
+  refillTimer = setInterval(() => {
+    void runLeaseMirror().finally(() => { void refillAllAvailableAgents(); });
+  }, IVX_AUTONOMOUS_REFILL_INTERVAL_MS);
+  refillTimer.unref?.();
   return true;
+}
+
+/** Stop new work and atomically return this Render process's leases to queue. */
+export function stopAutonomous112RuntimeEnforcer(): Promise<number> {
+  if (stopInFlight) return stopInFlight;
+  continuityEnabled = false;
+  landingMissionActive = false;
+  if (timer) clearInterval(timer);
+  if (leaseMirrorTimer) clearInterval(leaseMirrorTimer);
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  if (refillTimer) clearInterval(refillTimer);
+  timer = null;
+  leaseMirrorTimer = null;
+  heartbeatTimer = null;
+  refillTimer = null;
+  stopInFlight = (postgresAtomicQueueSelected()
+    ? releasePostgresWorkerInstanceTasks()
+    : Promise.resolve(0))
+    .catch((error) => {
+      console.error('[IVX Autonomous 112 Shutdown] lease release failed', { error: error instanceof Error ? error.message : String(error) });
+      return 0;
+    })
+    .then((released) => {
+      console.log('[IVX Autonomous 112 Shutdown] capacity returned to queue', { released });
+      return released;
+    });
+  return stopInFlight;
 }
 
 export function getAutonomous112RuntimeEnforcerStatus() {
@@ -437,6 +538,8 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     leaseMirrorInFlight: Boolean(leaseMirrorInFlight),
     heartbeatTimerRunning: Boolean(heartbeatTimer),
     heartbeatRefreshInFlight: Boolean(heartbeatRefreshInFlight),
+    refillTimerRunning: Boolean(refillTimer),
+    refillIntervalMs: IVX_AUTONOMOUS_REFILL_INTERVAL_MS,
     startedAt,
     intervalMs: IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS,
     lastRunAt,
@@ -457,6 +560,8 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     lastLeaseMirrorCount,
     lastHeartbeatRefreshAt,
     lastHeartbeatRefreshCount,
+    patrolActive: getLandingPatrolLiveStates().length,
+    patrolIntervalMs: getLandingPatrolIntervalMs(),
     successfulRefillDelayMs: refillDelayMs('completed'),
     idleRefillDelayMs: refillDelayMs('idle'),
     failedRefillBackoffMs: refillDelayMs('failed'),
@@ -464,7 +569,7 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     semantic360: getAutonomousSemantic360Status(),
     decisionQuality: getAutonomousDecisionQualityStatus(),
     autonomousManager: getAutonomousWorkManagerStatus(),
-    truthPolicy: 'Autonomous Manager maintains real work blocks. Continuity is lease-first and bounded by IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY (safe code default 12, configured fleet maximum 112). Backlog creation, leasing, RUNNING transitions and 20-second lease heartbeats use bounded fleet batches so 112 logical lanes do not create a Supabase request storm. Only durable active tasks with a real leaseHolder are mirrored into agent-runtime busy/activeTaskId every 10 seconds; promise count alone is never proof. Landing P0 exclusively owns the queue while its owner priority is active. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
+    truthPolicy: 'Autonomous Manager maintains real work blocks. Continuity is lease-first and bounded by IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY (safe code default 12, configured fleet maximum 112). Backlog creation, leasing, RUNNING transitions and 20-second lease heartbeats use bounded fleet batches. Landing P0 creates one reusable, own-agent patrol task per IA after critical audit/repair work; patrols execute live checks on a bounded cadence and cap stored evidence, while waiting time is never reported as productive. Only durable active tasks with a real leaseHolder are mirrored into agent-runtime busy/activeTaskId every 10 seconds; promise count alone is never proof. Work stealing is disabled for the Landing fleet, so holder/assignment equality is required. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
   };
 }
 

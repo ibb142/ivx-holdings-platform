@@ -19,6 +19,7 @@ import type {
 export const IVX_POSTGRES_AUTONOMOUS_TASK_STORE_MARKER = 'ivx-postgres-autonomous-task-store-2026-09-07-v1';
 const DEFAULT_TIMEOUT_MS = 30_000;
 const TRUTH_TIMEOUT_MS = 8_000;
+const DEFAULT_LEASE_SECONDS = 120;
 const TASK_READ_CACHE_TTL_MS = 1_500;
 const BOOT_NONCE = randomUUID().slice(0, 12);
 let taskReadCache: { value: Task[]; at: number } | null = null;
@@ -31,6 +32,7 @@ type RestTaskRow = { payload: Task };
 
 export type AtomicFleetLeaseRow = {
   taskId: string;
+  idempotencyKey: string;
   state: TaskState;
   assignedAgentNumber: number | null;
   leaseHolder: string;
@@ -72,6 +74,12 @@ export function autonomousWorkerInstanceId(env: NodeJS.ProcessEnv = process.env)
   const service = trimmed(env.RENDER_SERVICE_ID || env.RENDER_SERVICE_NAME) || 'local';
   const instance = trimmed(env.RENDER_INSTANCE_ID || env.HOSTNAME) || hostname() || 'unknown-host';
   return `${service}:${instance}:${process.pid}:${BOOT_NONCE}`.slice(0, 240);
+}
+
+function autonomousLeaseSeconds(env: NodeJS.ProcessEnv = process.env): number {
+  const configured = Number.parseInt(env.IVX_AUTONOMOUS_LEASE_SECONDS ?? '', 10);
+  if (!Number.isFinite(configured)) return DEFAULT_LEASE_SECONDS;
+  return Math.max(60, Math.min(300, configured));
 }
 
 function headers(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
@@ -217,7 +225,7 @@ export async function claimPostgresAutonomousTasks(requests: readonly FleetLease
   const results = await rpc<FleetLeaseResult[]>('ivx_autonomous_tasks_claim_batch', {
     p_requests: requests,
     p_worker_instance_id: autonomousWorkerInstanceId(),
-    p_lease_seconds: 300,
+    p_lease_seconds: autonomousLeaseSeconds(),
   });
   if (!Array.isArray(results) || results.length !== requests.length) {
     throw new Error(`postgres_atomic claim returned ${Array.isArray(results) ? results.length : 'invalid'} results for ${requests.length} lanes`);
@@ -231,7 +239,7 @@ export async function startPostgresAutonomousTasks(leases: readonly FleetTaskLea
   const results = await rpc<FleetTaskMutationResult[]>('ivx_autonomous_tasks_start_batch', {
     p_leases: leases,
     p_worker_instance_id: autonomousWorkerInstanceId(),
-    p_lease_seconds: 300,
+    p_lease_seconds: autonomousLeaseSeconds(),
   });
   if (!Array.isArray(results) || results.length !== leases.length) {
     throw new Error(`postgres_atomic start returned ${Array.isArray(results) ? results.length : 'invalid'} results for ${leases.length} leases`);
@@ -248,7 +256,7 @@ export async function heartbeatPostgresAutonomousTasks(leases: readonly FleetTas
   if (leases.length === 0) return { ok: true, refreshed: 0, rejected: [] };
   const result = await rpc<{ ok: boolean; refreshed: number; rejected: Array<{ taskId: string; error: string }>; at?: string }>(
     'ivx_autonomous_tasks_heartbeat_batch',
-    { p_leases: leases, p_worker_instance_id: autonomousWorkerInstanceId(), p_lease_seconds: 300 },
+    { p_leases: leases, p_worker_instance_id: autonomousWorkerInstanceId(), p_lease_seconds: autonomousLeaseSeconds() },
   );
   if (!result || typeof result.refreshed !== 'number' || !Array.isArray(result.rejected)) {
     throw new Error('postgres_atomic heartbeat returned an invalid response');
@@ -257,7 +265,7 @@ export async function heartbeatPostgresAutonomousTasks(leases: readonly FleetTas
     const rejected = new Set(result.rejected.map((entry) => entry.taskId));
     const atMs = Date.parse(result.at);
     const at = Number.isFinite(atMs) ? new Date(atMs).toISOString() : new Date().toISOString();
-    const expiresAt = new Date((Number.isFinite(atMs) ? atMs : Date.now()) + 300_000).toISOString();
+    const expiresAt = new Date((Number.isFinite(atMs) ? atMs : Date.now()) + autonomousLeaseSeconds() * 1000).toISOString();
     const leaseIds = new Set(leases.filter((lease) => !rejected.has(lease.taskId)).map((lease) => lease.taskId));
     const next = cloneTasks(taskReadCache.value);
     for (const task of next) {
@@ -272,6 +280,20 @@ export async function heartbeatPostgresAutonomousTasks(leases: readonly FleetTas
     taskMutationRevision += 1;
   }
   return { ok: Boolean(result.ok), refreshed: result.refreshed, rejected: result.rejected };
+}
+
+/** Release every active lease owned by this exact physical worker process. */
+export async function releasePostgresWorkerInstanceTasks(): Promise<number> {
+  const result = await rpc<{ ok: boolean; released: number; workerInstanceId: string }>(
+    'ivx_autonomous_tasks_release_worker',
+    { p_worker_instance_id: autonomousWorkerInstanceId() },
+    10_000,
+  );
+  if (!result || result.ok !== true || !Number.isFinite(result.released) || result.released < 0) {
+    throw new Error('postgres_atomic worker lease release returned an invalid response');
+  }
+  if (result.released > 0) invalidateTaskReadCache();
+  return result.released;
 }
 
 export async function compareAndSetPostgresAutonomousTask(input: {
@@ -307,6 +329,7 @@ export async function readPostgresFleetLeaseRows(): Promise<AtomicFleetLeaseRow[
   const activeStates = '(LEASED,RUNNING,EXECUTION_COMPLETED,QA_IN_PROGRESS,READY_FOR_DEPLOYMENT,DEPLOYING,DEPLOYED,PRODUCTION_VERIFYING)';
   const rows = await restRequest<Array<{
     task_id: string;
+    idempotency_key: string;
     state: TaskState;
     assigned_agent_number: number | null;
     lease_holder: string | null;
@@ -314,7 +337,7 @@ export async function readPostgresFleetLeaseRows(): Promise<AtomicFleetLeaseRow[
     last_heartbeat_at: string | null;
     lease_expires_at: string | null;
   }>>(
-    `ivx_autonomous_tasks?select=task_id,state,assigned_agent_number,lease_holder,worker_instance_id,last_heartbeat_at,lease_expires_at&state=in.${activeStates}&lease_holder=not.is.null&limit=1000`,
+    `ivx_autonomous_tasks?select=task_id,idempotency_key,state,assigned_agent_number,lease_holder,worker_instance_id,last_heartbeat_at,lease_expires_at&state=in.${activeStates}&lease_holder=not.is.null&limit=1000`,
     { method: 'GET' },
     { timeoutMs: TRUTH_TIMEOUT_MS, attempts: 2 },
   );
@@ -324,6 +347,7 @@ export async function readPostgresFleetLeaseRows(): Promise<AtomicFleetLeaseRow[
       Boolean(row.task_id && row.lease_holder && row.last_heartbeat_at))
     .map((row) => ({
       taskId: row.task_id,
+      idempotencyKey: row.idempotency_key,
       state: row.state,
       assignedAgentNumber: row.assigned_agent_number,
       leaseHolder: row.lease_holder,

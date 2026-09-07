@@ -317,7 +317,7 @@ export function routeTaskToAgent(taskType: Task['taskType']): { agentNumber: num
 
 // ── Phase 8: Queue + leasing ─────────────────────────────────────────────────
 
-const LEASE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+const LEASE_DURATION_MS = 2 * 60 * 1000; // 20-second fleet heartbeat; bounded failover after a dead process
 const APPROVAL_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -1876,6 +1876,65 @@ export async function addTaskEvidence(taskId: string, evidence: Omit<TaskEvidenc
     });
   }
   return withTaskMutationLock(() => addTaskEvidenceUnlocked(taskId, evidence));
+}
+
+export type RecordLeasedTaskEvidenceResult = {
+  ok: boolean;
+  task: Task | null;
+  evidenceId: string | null;
+  error: string | null;
+};
+
+/**
+ * Persist one observation on a long-running leased task without completing it.
+ * Patrol evidence is intentionally bounded, while recordsChanged remains the
+ * monotonic execution count. The lease holder and RUNNING state are checked on
+ * every write so a superseded Render process cannot manufacture fresh proof.
+ */
+export async function recordLeasedTaskEvidence(input: {
+  task: Task;
+  workerId: string;
+  evidence: Omit<TaskEvidence, 'evidenceId' | 'createdAt'>;
+  maxRetainedEvidence?: number;
+}): Promise<RecordLeasedTaskEvidenceResult> {
+  const applyObservation = (task: Task): { task: Task; evidenceId: string } => {
+    const at = nowIso();
+    const evidenceId = generateId('evid');
+    const fullEvidence: TaskEvidence = { ...input.evidence, evidenceId, createdAt: at };
+    const maxRetained = Math.max(1, Math.min(100, Math.floor(input.maxRetainedEvidence ?? 24)));
+    task.evidence = [...task.evidence, fullEvidence].slice(-maxRetained);
+    task.recordsChanged = Math.max(0, task.recordsChanged ?? 0) + 1;
+    task.updatedAt = at;
+    task.lastHeartbeatAt = at;
+    task.leaseExpiresAt = new Date(Date.now() + LEASE_DURATION_MS).toISOString();
+    return { task, evidenceId };
+  };
+
+  if (postgresAtomicQueueSelected()) {
+    const task = structuredClone(input.task) as Task;
+    if (task.state !== 'RUNNING') return { ok: false, task, evidenceId: null, error: `Cannot record leased evidence in state ${task.state}.` };
+    if (task.leaseHolder !== input.workerId) return { ok: false, task, evidenceId: null, error: 'Not the lease holder.' };
+    const observed = applyObservation(task);
+    const result = await compareAndSetPostgresAutonomousTask({
+      task: observed.task,
+      expectedStates: ['RUNNING'],
+      leaseHolder: input.workerId,
+      eventType: 'leased_evidence_recorded',
+    });
+    return { ok: result.ok, task: result.task, evidenceId: result.ok ? observed.evidenceId : null, error: result.error };
+  }
+
+  return withTaskMutationLock(async () => {
+    const tasks = await readAllTasks();
+    const task = tasks.find((candidate) => candidate.taskId === input.task.taskId) ?? null;
+    if (!task) return { ok: false, task: null, evidenceId: null, error: 'Task not found.' };
+    if (task.state !== 'RUNNING') return { ok: false, task, evidenceId: null, error: `Cannot record leased evidence in state ${task.state}.` };
+    if (task.leaseHolder !== input.workerId) return { ok: false, task, evidenceId: null, error: 'Not the lease holder.' };
+    const observed = applyObservation(task);
+    await writeAllTasks(tasks);
+    await appendEvent({ type: 'leased_evidence_recorded', taskId: task.taskId, workerId: input.workerId, evidenceId: observed.evidenceId });
+    return { ok: true, task, evidenceId: observed.evidenceId, error: null };
+  });
 }
 
 export type FinalizeEvidenceTaskInput = {

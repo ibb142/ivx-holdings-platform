@@ -22,6 +22,7 @@ import {
   createTask,
   finalizeEvidenceTask,
   getAllTasks,
+  getTaskById,
   heartbeat,
   leaseNextTask,
   releaseLease,
@@ -64,7 +65,7 @@ export type RealEngineeringCycleResult = {
   ok: boolean;
   marker: string;
   agentId: string;
-  action: 'TASK_COMPLETED' | 'TASK_OWNER_GATE' | 'TASK_BLOCKED' | 'TASK_FAILED' | 'NO_TASK_AVAILABLE' | 'CYCLE_ERROR';
+  action: 'TASK_COMPLETED' | 'TASK_OWNER_GATE' | 'TASK_BLOCKED' | 'TASK_FAILED' | 'NO_TASK_AVAILABLE' | 'CYCLE_ERROR' | 'PATROL_SESSION_ENDED' | 'PATROL_SESSION_LOST';
   taskId: string | null;
   module: string | null;
   sourceSha: string;
@@ -267,6 +268,7 @@ export async function runRealEngineeringCycle(input: {
     error: null,
   };
   const cycleStart = Date.now();
+  let activeTask: Task | null = input.preparedTask ?? null;
 
   try {
     // Owner P0 mission (qa/owner-priority-state.json → landing): materialise the
@@ -291,11 +293,13 @@ export async function runRealEngineeringCycle(input: {
     let leased = prepared
       ? { ok: prepared.state === 'RUNNING', task: prepared, error: prepared.state === 'RUNNING' ? null : `Prepared task is ${prepared.state}, expected RUNNING.` }
       : await leaseNextTask(workerId, input.agentNumber, leaseOptions);
+    activeTask = leased.task;
     if ((!leased.ok || !leased.task) && landingActive) {
       // Own lane drained and nothing to steal right now: one more seed pass
       // (idempotent) covers a SHA change since the cached seeding.
       await ensureLandingP0BacklogSeeded(input.sourceSha);
       leased = await leaseNextTask(workerId, input.agentNumber, leaseOptions);
+      activeTask = leased.task;
     }
     if ((leased.ok && leased.task) && parseLandingTaskKey(leased.task.idempotencyKey)) {
       return runLandingTask(leased.task, workerId, input, base, Boolean(prepared));
@@ -315,6 +319,7 @@ export async function runRealEngineeringCycle(input: {
         };
       }
       leased = await leaseNextTask(workerId, input.agentNumber, leaseOptions);
+      activeTask = leased.task;
     }
     if (!leased.ok || !leased.task) {
       return { ...base, ok: true, action: 'NO_TASK_AVAILABLE', nextTaskAvailable: false, finishedAt: nowIso() };
@@ -426,7 +431,31 @@ export async function runRealEngineeringCycle(input: {
       error: null,
     };
   } catch (error) {
-    return { ...base, ok: false, action: 'CYCLE_ERROR', error: error instanceof Error ? error.message : 'cycle failed' };
+    const message = error instanceof Error ? error.message : 'cycle failed';
+    const cleanupStates = ['EXCEPTION'];
+    if (activeTask) {
+      try {
+        const latest = await getTaskById(activeTask.taskId);
+        if (latest?.state === 'LEASED' || latest?.state === 'RUNNING') {
+          const released = await releaseLease(activeTask.taskId, workerId);
+          cleanupStates.push(released.ok ? 'LEASE_RELEASED' : `LEASE_RELEASE_REFUSED:${released.error ?? 'unknown'}`);
+        } else if (latest?.state === 'EXECUTION_COMPLETED' || latest?.state === 'QA_IN_PROGRESS') {
+          const failed = await transitionTaskState(activeTask.taskId, 'FAILED', { error: `cycle exception after execution: ${message}` });
+          cleanupStates.push(failed.ok ? 'FAILED' : `FAIL_TRANSITION_REFUSED:${failed.error ?? 'unknown'}`);
+        }
+      } catch (cleanupError) {
+        cleanupStates.push(`CLEANUP_ERROR:${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
+      }
+    }
+    return {
+      ...base,
+      ok: false,
+      action: 'CYCLE_ERROR',
+      taskId: activeTask?.taskId ?? null,
+      states: cleanupStates,
+      finishedAt: nowIso(),
+      error: message,
+    };
   }
 }
 

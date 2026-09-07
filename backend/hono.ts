@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { landingFleetFocusEnabled } from './services/ivx-landing-fleet-focus';
+import { stopAutonomous112RuntimeEnforcer } from './services/ivx-autonomous-runtime-enforcer';
 import {
   IVX_ENTERPRISE_MIDDLEWARE_MARKER,
   observabilityMiddleware,
@@ -6775,8 +6776,12 @@ if (!landingFleetFocus) {
 // Graceful shutdown: stop the queue worker on SIGTERM/SIGINT so Render
 // doesn't kill tasks mid-execution. The worker waits up to
 // IVX_QUEUE_SHUTDOWN_GRACE_MS for active tasks to complete.
-process.on('SIGTERM', () => { void stopOwnerAITaskWorker().then(() => process.exit(0)); });
-process.on('SIGINT', () => { void stopOwnerAITaskWorker().then(() => process.exit(0)); });
+const stopRuntimeWorkers = () => Promise.allSettled([
+  stopOwnerAITaskWorker(),
+  stopAutonomous112RuntimeEnforcer(),
+]).then(() => process.exit(0));
+process.on('SIGTERM', () => { void stopRuntimeWorkers(); });
+process.on('SIGINT', () => { void stopRuntimeWorkers(); });
 if (!landingFleetFocus) {
   try { startLandingSeoAutodeploy(); } catch (err) { console.warn('[IVXOwnerAI-Hono] landing SEO autodeploy failed to start:', err instanceof Error ? err.message : err); }
   try { startAutonomousMonitor(); } catch (err) { console.warn('[IVXOwnerAI-Hono] autonomous deploy monitor failed to start:', err instanceof Error ? err.message : err); }
