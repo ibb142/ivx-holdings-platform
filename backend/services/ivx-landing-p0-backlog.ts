@@ -19,6 +19,7 @@
  */
 import {
   createTask,
+  createTasksBatch,
   getAllTasks,
   taskProgressRank,
   TERMINAL_SUCCESS_STATES,
@@ -362,6 +363,7 @@ export type OwnerPriorityState = {
 
 const PRIORITY_CACHE_MS = 5 * 60 * 1000;
 let priorityCache: { state: OwnerPriorityState; expiresAt: number } | null = null;
+let priorityReadInFlight: Promise<OwnerPriorityState> | null = null;
 
 /**
  * Landing P0 mission activation.
@@ -382,28 +384,37 @@ export async function readOwnerPriority(fetchImpl: typeof fetch = fetch): Promis
   if (priorityCache && priorityCache.expiresAt > now) {
     return { ...priorityCache.state, source: 'cache' };
   }
+  if (priorityReadInFlight) return priorityReadInFlight;
+  const pending = (async (): Promise<OwnerPriorityState> => {
+    try {
+      const response = await fetchImpl(`https://raw.githubusercontent.com/${LANDING_REPO}/main/qa/owner-priority-state.json`, {
+        headers: { accept: 'application/json', 'cache-control': 'no-cache' },
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!response.ok) throw new Error(`owner-priority-state HTTP ${response.status}`);
+      const body = (await response.json()) as Record<string, unknown>;
+      const state: OwnerPriorityState = {
+        active: body.active === true && body.mission === 'landing',
+        priority: typeof body.priority === 'string' ? body.priority : null,
+        mission: typeof body.mission === 'string' ? body.mission : null,
+        source: 'github-main',
+        fetchedAt: new Date(now).toISOString(),
+      };
+      priorityCache = { state, expiresAt: now + PRIORITY_CACHE_MS };
+      return state;
+    } catch (error) {
+      // Fail-closed for reporting, but keep the last known state so a transient
+      // GitHub blip does not idle the fleet.
+      if (priorityCache) return { ...priorityCache.state, source: 'cache' };
+      console.warn('[IVX Landing P0] owner priority unavailable', { error: error instanceof Error ? error.message : String(error) });
+      return { active: false, priority: null, mission: null, source: 'default-off', fetchedAt: new Date(now).toISOString() };
+    }
+  })();
+  priorityReadInFlight = pending;
   try {
-    const response = await fetchImpl(`https://raw.githubusercontent.com/${LANDING_REPO}/main/qa/owner-priority-state.json`, {
-      headers: { accept: 'application/json', 'cache-control': 'no-cache' },
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!response.ok) throw new Error(`owner-priority-state HTTP ${response.status}`);
-    const body = (await response.json()) as Record<string, unknown>;
-    const state: OwnerPriorityState = {
-      active: body.active === true && body.mission === 'landing',
-      priority: typeof body.priority === 'string' ? body.priority : null,
-      mission: typeof body.mission === 'string' ? body.mission : null,
-      source: 'github-main',
-      fetchedAt: new Date(now).toISOString(),
-    };
-    priorityCache = { state, expiresAt: now + PRIORITY_CACHE_MS };
-    return state;
-  } catch (error) {
-    // Fail-closed for reporting, but keep the last known state so a transient
-    // GitHub blip does not idle the fleet.
-    if (priorityCache) return { ...priorityCache.state, source: 'cache' };
-    console.warn('[IVX Landing P0] owner priority unavailable', { error: error instanceof Error ? error.message : String(error) });
-    return { active: false, priority: null, mission: null, source: 'default-off', fetchedAt: new Date(now).toISOString() };
+    return await pending;
+  } finally {
+    if (priorityReadInFlight === pending) priorityReadInFlight = null;
   }
 }
 
@@ -442,8 +453,9 @@ export async function seedLandingP0Backlog(sha: string): Promise<SeedResult> {
     const nonCertificateIds: string[] = [];
     const certificate = LANDING_P0_UNITS.find((unit) => unit.check.kind === 'certificate') ?? null;
 
-    for (const unit of LANDING_P0_UNITS) {
-      if (unit.check.kind === 'certificate') continue;
+    const nonCertificateUnits = LANDING_P0_UNITS.filter((unit) => unit.check.kind !== 'certificate');
+    const missingUnits = [] as LandingUnit[];
+    for (const unit of nonCertificateUnits) {
       const key = landingTaskKey(sha, unit.unitId);
       const existing = byKey.get(key);
       if (existing) {
@@ -451,21 +463,27 @@ export async function seedLandingP0Backlog(sha: string): Promise<SeedResult> {
         nonCertificateIds.push(existing.taskId);
         continue;
       }
-      const created = await createTask({
+      missingUnits.push(unit);
+    }
+
+    const createdBatch = await createTasksBatch(missingUnits.map((unit) => ({
         title: `Landing P0 · ${unit.workstream} · ${unit.title}`,
         description: `Landing 10/10 P0 audit unit ${unit.unitId} against production SHA ${sha}. Real execution only (HTTP/API/HTML/CI evidence); no simulated success. Lane: ${laneFor(unit.lane).label}.`,
         taskType: 'qa',
-        idempotencyKey: key,
+        idempotencyKey: landingTaskKey(sha, unit.unitId),
         priority: 'critical',
         assignedAgentNumber: assignAgentForUnit(unit),
         maxRetries: 2,
-      });
+    })));
+    for (let index = 0; index < createdBatch.length; index += 1) {
+      const created = createdBatch[index];
+      const unit = missingUnits[index];
       if (created.ok && created.task) {
         result.created += created.duplicate ? 0 : 1;
         if (created.duplicate) result.existing += 1;
         nonCertificateIds.push(created.task.taskId);
       } else {
-        result.error = created.error ?? `createTask failed for ${unit.unitId}`;
+        result.error = created.error ?? `createTasksBatch failed for ${unit.unitId}`;
       }
     }
 

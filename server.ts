@@ -27,6 +27,7 @@ import { assertIVXRegisteredOwnerBearer } from './backend/api/owner-only';
 import { getIVXOwnerEmailAllowlist } from './expo/shared/ivx/access-control';
 import { handleCanonicalReelsFeed } from './backend/api/ivx-canonical-reels-feed';
 import { autonomousVoiceOptions, handleAutonomousVoiceCallback, handleAutonomousVoiceLaml, handleAutonomousVoicePublicCertificate, handleAutonomousVoiceStatus, handleAutonomousVoiceTest } from './backend/api/ivx-autonomous-voice';
+import { landingFleetFocusEnabled } from './backend/services/ivx-landing-fleet-focus';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -35,7 +36,10 @@ const OWNER_LOGIN_CERT_MARKER = 'ivx-owner-login-outage-cert-2026-08-15';
 const LIVE_VOICE_CERT_TRACE_ID = 'ivx-autonomous-live-voice-cert-20260816-v1';
 
 console.log('[IVX Server] Starting Hono API server...', { host: HOST, port: PORT, nodeEnv: process.env.NODE_ENV || 'development' });
-void preloadAIProviderCredentialFromOwnerVariables().catch((error) => console.warn('[IVX Server] AI owner-variable preload unavailable', { error: error instanceof Error ? error.message.slice(0, 160) : 'unknown' }));
+const landingFleetFocus = landingFleetFocusEnabled();
+if (!landingFleetFocus) {
+  void preloadAIProviderCredentialFromOwnerVariables().catch((error) => console.warn('[IVX Server] AI owner-variable preload unavailable', { error: error instanceof Error ? error.message.slice(0, 160) : 'unknown' }));
+}
 
 app.get('/api/ivx/certification/owner-login-public', (c) => {
   try {
@@ -87,37 +91,45 @@ app.all('/api/ivx/autonomous/voice/laml', async (c) => handleAutonomousVoiceLaml
 app.all('/api/ivx/autonomous/voice/status', async (c) => handleAutonomousVoiceCallback(c.req.raw));
 app.get('/api/ivx/certification/autonomous-voice-public', async (c) => handleAutonomousVoicePublicCertificate(c.req.raw));
 
-startAutonomousScheduler();
-startAutonomousIntelligenceMissionScheduler();
-startGitHubActionsExternalSupervisor();
-startAutonomousLiveBootstrap();
 startAutonomous112RuntimeEnforcer();
-startAutonomousDoctor();
+if (!landingFleetFocus) {
+  startAutonomousScheduler();
+  startAutonomousIntelligenceMissionScheduler();
+  startGitHubActionsExternalSupervisor();
+  startAutonomousLiveBootstrap();
+  startAutonomousDoctor();
+} else {
+  console.log('[IVX Landing Fleet Focus] exclusive 112-lane runtime active; unrelated server schedulers suppressed');
+}
 
 const runCompletionCycleSafely = async (reason: string): Promise<void> => {
   try { const state = await runCompletionCampaignCycle(4); console.log('[IVX Completion Campaign]', { reason, phase: state.phase, verifiedAgents: state.totals.verifiedAgents }); }
   catch (error) { console.error('[IVX Completion Campaign] cycle failed', { reason, error: error instanceof Error ? error.message : String(error) }); }
 };
-const campaignBootKick = setTimeout(() => { void runCompletionCycleSafely('boot'); }, 20_000); campaignBootKick.unref?.();
-const campaignTimer = setInterval(() => { void runCompletionCycleSafely('interval'); }, COMPLETION_CAMPAIGN_INTERVAL_MS); campaignTimer.unref?.();
+if (!landingFleetFocus) {
+  const campaignBootKick = setTimeout(() => { void runCompletionCycleSafely('boot'); }, 20_000); campaignBootKick.unref?.();
+  const campaignTimer = setInterval(() => { void runCompletionCycleSafely('interval'); }, COMPLETION_CAMPAIGN_INTERVAL_MS); campaignTimer.unref?.();
+}
 
 startAgentHeartbeatLoop(buildHeartbeatRows);
-const certResumeKick = setTimeout(() => { void resumePendingCertificateRuns().then((r) => { if (r.resumed > 0) console.log('[IVX Server] Real-execution tasks resumed after restart', r); }).catch((error) => console.warn('[IVX Server] Real-execution resume failed', { error: error instanceof Error ? error.message.slice(0, 160) : 'unknown' })); }, 25_000); certResumeKick.unref?.();
+if (!landingFleetFocus) {
+  const certResumeKick = setTimeout(() => { void resumePendingCertificateRuns().then((r) => { if (r.resumed > 0) console.log('[IVX Server] Real-execution tasks resumed after restart', r); }).catch((error) => console.warn('[IVX Server] Real-execution resume failed', { error: error instanceof Error ? error.message.slice(0, 160) : 'unknown' })); }, 25_000); certResumeKick.unref?.();
 
-startSmsNotificationScheduler();
-const smsStatus = getSmsNotifierStatus();
-console.log('[IVX Server] Autonomous owner communications initialized', { configured: smsStatus.phoneConfigured, destination: smsStatus.phoneMasked, schedulerRunning: smsStatus.schedulerRunning, smsDailyCap: smsStatus.smsDailyCap, voiceConfigured: smsStatus.voice.configured, voiceDailyCap: smsStatus.voice.dailyCap });
+  startSmsNotificationScheduler();
+  const smsStatus = getSmsNotifierStatus();
+  console.log('[IVX Server] Autonomous owner communications initialized', { configured: smsStatus.phoneConfigured, destination: smsStatus.phoneMasked, schedulerRunning: smsStatus.schedulerRunning, smsDailyCap: smsStatus.smsDailyCap, voiceConfigured: smsStatus.voice.configured, voiceDailyCap: smsStatus.voice.dailyCap });
 
-const liveVoiceCertKick = setTimeout(() => { void (async () => {
-  try {
-    const existing = (await listAutonomousVoiceCalls(200)).find((row) => row.traceId === LIVE_VOICE_CERT_TRACE_ID && row.requestStatus === 'queued' && Boolean(row.callSid));
-    if (existing) return;
-    await placeAutonomousVoiceCall({ traceId: LIVE_VOICE_CERT_TRACE_ID, message: 'Hello. This is IVX Autonomous. This is our live end to end voice certification call.' });
-  } catch (error) { console.warn('[IVX Voice Cert] Call attempt failed', { traceId: LIVE_VOICE_CERT_TRACE_ID, error: error instanceof Error ? error.message.slice(0, 180) : 'unknown' }); }
-})(); }, 60_000); liveVoiceCertKick.unref?.();
+  const liveVoiceCertKick = setTimeout(() => { void (async () => {
+    try {
+      const existing = (await listAutonomousVoiceCalls(200)).find((row) => row.traceId === LIVE_VOICE_CERT_TRACE_ID && row.requestStatus === 'queued' && Boolean(row.callSid));
+      if (existing) return;
+      await placeAutonomousVoiceCall({ traceId: LIVE_VOICE_CERT_TRACE_ID, message: 'Hello. This is IVX Autonomous. This is our live end to end voice certification call.' });
+    } catch (error) { console.warn('[IVX Voice Cert] Call attempt failed', { traceId: LIVE_VOICE_CERT_TRACE_ID, error: error instanceof Error ? error.message.slice(0, 180) : 'unknown' }); }
+  })(); }, 60_000); liveVoiceCertKick.unref?.();
 
-startMemberAuthCertificationScheduler();
-if (process.env.IVX_SENIOR_DEV_WORKER_ENABLED === 'true') startSeniorDevWorker().catch((error) => console.error('[IVX Server] Senior dev worker failed to start', { error: error instanceof Error ? error.message : String(error) }));
+  startMemberAuthCertificationScheduler();
+  if (process.env.IVX_SENIOR_DEV_WORKER_ENABLED === 'true') startSeniorDevWorker().catch((error) => console.error('[IVX Server] Senior dev worker failed to start', { error: error instanceof Error ? error.message : String(error) }));
+}
 
 const productionFetch: typeof app.fetch = async (request, env, executionCtx) => {
   const url = new URL(request.url); const type = (url.searchParams.get('type') || '').trim().toLowerCase();

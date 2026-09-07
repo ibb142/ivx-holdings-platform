@@ -2,12 +2,22 @@ import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Activity, Bot, ClipboardList, Gauge, MessageCircle, RadioTower, Settings2 } from 'lucide-react-native';
-import { AUTONOMOUS_CONTROL_ROUTES as CONTROL_ROUTE_DEFINITIONS } from '@/constants/autonomous-control-routes';
+import {
+  AUTONOMOUS_CONTROL_ROUTES,
+  type AutonomousControlIconKey,
+} from './autonomousDashboardControlRoutes';
 
-const CONTROL_ICONS = { Activity, Bot, ClipboardList, Gauge, MessageCircle, RadioTower, Settings2 };
-export const AUTONOMOUS_CONTROL_ROUTES = CONTROL_ROUTE_DEFINITIONS.map((item) => ({
-  ...item, icon: CONTROL_ICONS[item.icon],
-}));
+export { AUTONOMOUS_CONTROL_ROUTES } from './autonomousDashboardControlRoutes';
+
+const AUTONOMOUS_CONTROL_ICONS: Record<AutonomousControlIconKey, typeof MessageCircle> = {
+  message: MessageCircle,
+  bot: Bot,
+  settings: Settings2,
+  radio: RadioTower,
+  activity: Activity,
+  clipboard: ClipboardList,
+  gauge: Gauge,
+};
 
 export default function AutonomousDashboardControlStrip() {
   const router = useRouter();
@@ -19,18 +29,21 @@ export default function AutonomousDashboardControlStrip() {
         <Text style={styles.count}>{AUTONOMOUS_CONTROL_ROUTES.length} ONLINE ROUTES</Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        {AUTONOMOUS_CONTROL_ROUTES.map(({ label, route, icon: Icon }) => (
-          <TouchableOpacity
-            key={route}
-            testID={`autonomous-control-${label.toLowerCase()}`}
-            style={styles.button}
-            activeOpacity={0.75}
-            onPress={() => router.push(route as never)}
-          >
-            <Icon size={16} color="#FBBF24" />
-            <Text style={styles.buttonText}>{label}</Text>
-          </TouchableOpacity>
-        ))}
+        {AUTONOMOUS_CONTROL_ROUTES.map(({ label, route, icon }) => {
+          const Icon = AUTONOMOUS_CONTROL_ICONS[icon];
+          return (
+            <TouchableOpacity
+              key={route}
+              testID={`autonomous-control-${label.toLowerCase()}`}
+              style={styles.button}
+              activeOpacity={0.75}
+              onPress={() => router.push(route as never)}
+            >
+              <Icon size={16} color="#FBBF24" />
+              <Text style={styles.buttonText}>{label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
     </View>
   );

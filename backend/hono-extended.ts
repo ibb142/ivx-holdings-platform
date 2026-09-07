@@ -19,6 +19,7 @@ import { ivxSupabaseRestartOptions, handleIVXSupabaseRestart } from './api/ivx-s
 import { autonomousIntelligenceMissionSchedulerOptions, handleAutonomousIntelligenceMissionSchedulerGet } from './api/ivx-autonomous-intelligence-mission-scheduler';
 import { buildLandingP0Status, LANDING_P0_LANES, LANDING_P0_UNITS } from './services/ivx-landing-p0-backlog';
 import { getAutonomous112RuntimeEnforcerStatus, getContinuityOutcomes } from './services/ivx-autonomous-runtime-enforcer';
+import { landingFleetFocusEnabled } from './services/ivx-landing-fleet-focus';
 
 const LANDING_P0_PUBLIC_HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
@@ -212,5 +213,5 @@ app.post('/api/ivx/auth/direct-sign-in', async (c) => handleIVXDirectAuthSignIn(
 app.options('/api/ivx/auth/restart-supabase', () => ivxSupabaseRestartOptions());
 app.post('/api/ivx/auth/restart-supabase', async (c) => handleIVXSupabaseRestart(c.req.raw));
 
-startAutonomousQAScheduler();
+if (!landingFleetFocusEnabled()) startAutonomousQAScheduler();
 export default app;
