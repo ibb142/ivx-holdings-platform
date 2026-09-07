@@ -805,7 +805,7 @@ export async function executeAgentRun(
   const costLimitUsd = typeof payload.__testCostLimitUsd === 'number' ? payload.__testCostLimitUsd : contract.costLimit.maxCostPerRun;
   const projectedCostUsd = 0.001;
   if (!(costLimitUsd > 0) || projectedCostUsd > costLimitUsd) {
-    const endISO = isoSecondPrecision();
+    const endISO = new Date().toISOString();
     state.activeTaskId = null;
     state.availability = state.pauseState ? 'paused' : 'available';
     const costError = `Cost limit exhausted for agent ${agentId}: projected $${projectedCostUsd} exceeds per-run limit $${costLimitUsd}. Execution blocked — no synthetic fallback.`;
@@ -855,7 +855,7 @@ export async function executeAgentRun(
   }
 
   const endTime = Date.now();
-  const endISO = isoSecondPrecision(new Date(endTime));
+  const endISO = new Date(endTime).toISOString();
 
   // Required execution fields — realToolUsed, sourceReference, toolResultId, verifiedOutput
   const firstOk = toolResults.find((t) => t.ok) ?? null;
