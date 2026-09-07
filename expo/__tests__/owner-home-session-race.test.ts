@@ -4,6 +4,7 @@ import { join } from 'path';
 
 const ROOT = join(import.meta.dir, '..');
 const auth = readFileSync(join(ROOT, 'lib/auth-context.tsx'), 'utf8');
+const supabase = readFileSync(join(ROOT, 'lib/supabase.ts'), 'utf8');
 
 describe('Owner Home session race regression', () => {
   it('serializes startup sign-out before the login UI is unlocked', () => {
@@ -30,6 +31,12 @@ describe('Owner Home session race regression', () => {
     expect(auth).not.toContain("path: 'supabase_direct_owner'");
     expect(auth).not.toContain('elapsedMs: Date.now() - directStartedAt');
     expect(auth).toContain("console.log('[Auth] Direct owner Supabase session established in'");
+  });
+
+  it('keeps hosted Auth validation bounded above the observed production response window', () => {
+    expect(supabase).toContain('export const HOSTED_AUTH_REQUEST_TIMEOUT_MS = 12_000;');
+    expect(supabase).toContain('isAuthRequest ? HOSTED_AUTH_REQUEST_TIMEOUT_MS');
+    expect(supabase).not.toContain('isAuthRequest ? 8000');
   });
 
   it('does not block Home on owner role/profile maintenance', () => {
