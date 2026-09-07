@@ -282,6 +282,20 @@ export async function heartbeatPostgresAutonomousTasks(leases: readonly FleetTas
   return { ok: Boolean(result.ok), refreshed: result.refreshed, rejected: result.rejected };
 }
 
+/** Release every active lease owned by this exact physical worker process. */
+export async function releasePostgresWorkerInstanceTasks(): Promise<number> {
+  const result = await rpc<{ ok: boolean; released: number; workerInstanceId: string }>(
+    'ivx_autonomous_tasks_release_worker',
+    { p_worker_instance_id: autonomousWorkerInstanceId() },
+    10_000,
+  );
+  if (!result || result.ok !== true || !Number.isFinite(result.released) || result.released < 0) {
+    throw new Error('postgres_atomic worker lease release returned an invalid response');
+  }
+  if (result.released > 0) invalidateTaskReadCache();
+  return result.released;
+}
+
 export async function compareAndSetPostgresAutonomousTask(input: {
   task: Task;
   expectedStates: readonly TaskState[];
