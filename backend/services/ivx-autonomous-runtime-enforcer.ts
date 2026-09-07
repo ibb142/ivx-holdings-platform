@@ -41,11 +41,13 @@ import {
   runLandingPatrolSession,
 } from './ivx-landing-continuous-patrol';
 
-export const IVX_AUTONOMOUS_RUNTIME_ENFORCER_MARKER = 'ivx-autonomous-runtime-enforcer-2026-09-07-continuous-patrol-v2';
+export const IVX_AUTONOMOUS_RUNTIME_ENFORCER_MARKER = 'ivx-autonomous-runtime-enforcer-2026-09-07-continuous-refill-v3';
+export const IVX_AUTONOMOUS_REFILL_INTERVAL_MS = 5_000;
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let leaseMirrorTimer: ReturnType<typeof setInterval> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let refillTimer: ReturnType<typeof setInterval> | null = null;
 let enforcerRunInFlight: Promise<void> | null = null;
 let leaseMirrorInFlight: Promise<void> | null = null;
 let heartbeatRefreshInFlight: Promise<void> | null = null;
@@ -467,6 +469,14 @@ export function startAutonomous112RuntimeEnforcer(): boolean {
   // tasks owned by currently running continuity lanes and never fabricates work.
   heartbeatTimer = setInterval(() => { void runHeartbeatRefresh(); }, 20_000);
   heartbeatTimer.unref?.();
+
+  // Keep capacity repair independent from semantic/decision supervisor work.
+  // A long supervisor pass must never prevent a lane whose task completed,
+  // expired, or was finalized by a rolling-deploy predecessor from refilling.
+  refillTimer = setInterval(() => {
+    void runLeaseMirror().finally(() => { void refillAllAvailableAgents(); });
+  }, IVX_AUTONOMOUS_REFILL_INTERVAL_MS);
+  refillTimer.unref?.();
   return true;
 }
 
@@ -480,6 +490,8 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     leaseMirrorInFlight: Boolean(leaseMirrorInFlight),
     heartbeatTimerRunning: Boolean(heartbeatTimer),
     heartbeatRefreshInFlight: Boolean(heartbeatRefreshInFlight),
+    refillTimerRunning: Boolean(refillTimer),
+    refillIntervalMs: IVX_AUTONOMOUS_REFILL_INTERVAL_MS,
     startedAt,
     intervalMs: IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS,
     lastRunAt,
