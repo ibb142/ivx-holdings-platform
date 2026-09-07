@@ -37,6 +37,13 @@ describe('classifyBackendPostFailureReason', () => {
     expect(classifyBackendPostFailureReason({ statusCode: null, reason: 'Owner AI request timed out after 12000ms', backendResponse: null })).toBe('timeout');
     expect(classifyBackendPostFailureReason({ statusCode: 408, reason: null, backendResponse: null })).toBe('timeout');
     expect(classifyBackendPostFailureReason({ statusCode: null, reason: 'Timed out after 90000ms — no progress past BACKEND_POST_STARTED.', backendResponse: null })).toBe('timeout');
+    expect(
+      classifyBackendPostFailureReason({
+        statusCode: 503,
+        reason: 'IVX auth guard failed: Supabase session lookup timed out.',
+        backendResponse: null,
+      }),
+    ).toBe('timeout');
   });
 
   it('classifies 5xx and service-unavailable HTML as backend_exception', () => {
