@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
+const REPO_ROOT = process.env.GITHUB_WORKSPACE || path.resolve(import.meta.dir, '../..');
+
 const MANUAL_ONLY_FLEET_CONTROLLERS = [
   'ivx-112-15min-agent-control.yml',
   'ivx-112-2000h-utilization-sla.yml',
@@ -37,7 +39,7 @@ function triggerBlock(source: string): string {
 
 describe('IVX fleet control authority workflows', () => {
   test('legacy fleet controllers are manual break-glass tools only', async () => {
-    const workflowRoot = path.join(process.cwd(), '.github/workflows');
+    const workflowRoot = path.join(REPO_ROOT, '.github/workflows');
     for (const workflow of MANUAL_ONLY_FLEET_CONTROLLERS) {
       const source = await readFile(path.join(workflowRoot, workflow), 'utf8');
       const triggers = triggerBlock(source);
@@ -49,8 +51,8 @@ describe('IVX fleet control authority workflows', () => {
   });
 
   test('read-only deployment evidence cannot request a deploy', async () => {
-    const engine = await readFile(path.join(process.cwd(), 'backend/services/ivx-enterprise-deployment-engine.ts'), 'utf8');
-    const api = await readFile(path.join(process.cwd(), 'backend/api/ivx-deployment-tools.ts'), 'utf8');
+    const engine = await readFile(path.join(REPO_ROOT, 'backend/services/ivx-enterprise-deployment-engine.ts'), 'utf8');
+    const api = await readFile(path.join(REPO_ROOT, 'backend/api/ivx-deployment-tools.ts'), 'utf8');
     expect(engine).toContain('runDeploymentCycle({ allowDeploy: false })');
     expect(engine).toContain('runDeploymentCycle({ allowDeploy: true })');
     expect(api).toContain('runDeploymentCycle({ allowDeploy: true })');
