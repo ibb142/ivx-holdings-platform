@@ -1,0 +1,35 @@
+name: IVX Landing 112 Read-Only Evidence Snapshot
+on:
+  push:
+    branches: [ops/landing112-owner-kickoff-20260907]
+    paths:
+      - '.github/workflows/ivx-owner-landing112-observe.yml'
+      - 'scripts/ops/landing112_observe.py'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: ivx-landing112-read-only-observation
+  cancel-in-progress: false
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Test truthful counting and proof validation
+        run: python3 scripts/ops/landing112_observe.py --self-test
+      - name: Collect every fleet job and available hashed artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ops/landing112_observe.py
+      - name: Upload actual observed fleet evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: landing112-snapshot-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/landing112-observed/snapshot.json
+          retention-days: 14
+          if-no-files-found: warn
