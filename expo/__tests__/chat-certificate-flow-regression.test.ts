@@ -17,8 +17,8 @@ const requiredChatTestIDs = [
   'ivx-owner-chat-scroll-to-latest',
 ];
 
-const E2E_PROMPT = 'Return only the result of joining IVX_CHAT_E2E_ and OK.';
-const E2E_REPLY = 'IVX_CHAT_E2E_OK';
+const E2E_PROMPT = 'Return only the result of joining IVX_CHAT_E2E_ and OK_${IVX_CHAT_E2E_NONCE}.';
+const E2E_REPLY = 'IVX_CHAT_E2E_OK_${IVX_CHAT_E2E_NONCE}';
 
 describe('IVX IA chat device certificate regression', () => {
   test('keeps every certificate testID rendered by the chat surface', () => {
