@@ -69,7 +69,9 @@ describe('IVX IA chat device certificate regression', () => {
   });
 
   test('hard-gates send -> live AI reply -> visible render', () => {
-    expect(E2E_PROMPT).not.toContain(E2E_REPLY);\n    expect(E2E_PROMPT).not.toContain('Reply exactly:');\n    expect(E2E_PROMPT).not.toContain('joining');
+    expect(E2E_PROMPT).not.toContain(E2E_REPLY);
+    expect(E2E_PROMPT).not.toContain('Reply exactly:');
+    expect(E2E_PROMPT).not.toContain('joining');
     expect(flowSource).toContain(`inputText: "${E2E_PROMPT}"`);
     expect(flowSource).toContain(`visible: "${E2E_PROMPT}"`);
     expect(flowSource).toContain(`visible: "${E2E_REPLY}"`);
