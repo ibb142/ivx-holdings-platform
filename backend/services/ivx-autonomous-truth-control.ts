@@ -3,6 +3,7 @@ import { campaignDispatcherControl, getCampaignDispatcherSnapshot, listCampaignD
 import { loadControlState, syncCampaignAssignmentsToDispatcher, updateControlState } from './ivx-app-completion-campaign';
 import { getGitHubActionsExternalSupervisorStatus } from './ivx-github-actions-external-supervisor';
 import { getSchedulerState, setSchedulerEnabled } from './ivx-autonomous-scheduler';
+import { autonomousRepairCapacity } from './ivx-autonomous-control-policy';
 
 export const IVX_AUTONOMOUS_TRUTH_CONTROL_MARKER = 'ivx-autonomous-truth-control-2026-09-05-v12-no-durable-hotpath';
 export const IVX_AUTONOMOUS_TRUTH_HEARTBEAT_FRESH_MS = 60 * 1000;
@@ -11,6 +12,7 @@ export const IVX_AUTONOMOUS_CASCADE_SEED_SIZE = 10;
 export const IVX_AUTONOMOUS_CASCADE_FANOUT = 10;
 export const IVX_AUTONOMOUS_TRUTH_DEPENDENCY_TIMEOUT_MS = 2_500;
 export const IVX_AUTONOMOUS_ALWAYS_ON_24X7 = process.env.IVX_AUTONOMOUS_ALWAYS_ON_24X7 !== 'false';
+let recoveryCursor = 0;
 
 export type TruthControlAction = 'start_all'|'stop_all'|'pause_all'|'resume_all'|'pause_agent'|'resume_agent'|'disable_agent'|'enable_agent'|'retry_agent';
 type BoundedDependency<T> = { value: T | null; error: string | null };
@@ -99,11 +101,14 @@ export async function enforceAutonomous112RuntimeTruth(){
   if(ownerStateNeedsOverride||!before.autonomous.schedulerEnabled||before.autonomous.dispatcherPaused){await setSchedulerEnabled(true);startCampaignDispatcher();await updateControlState('resume_all');await runCampaignBootRecovery().catch(()=>0);await syncCampaignAssignmentsToDispatcher();await campaignDispatcherControl('resume_all');controlPlaneRecovered=true;}
   const current=controlPlaneRecovered?await getAutonomousTruthSnapshot():before;
   await runCampaignBootRecovery().catch(()=>0); await syncCampaignAssignmentsToDispatcher();
-  const recoverable=current.agents.rows.filter(a=>!a.disabled&&['IDLE','STALE','UNKNOWN','BLOCKED'].includes(a.status));
+  const allRecoverable=current.agents.rows.filter(a=>!a.disabled&&['IDLE','STALE','UNKNOWN','BLOCKED'].includes(a.status));
+  const recoveryLimit=Math.min(autonomousRepairCapacity(),allRecoverable.length);
+  const recoverable=Array.from({length:recoveryLimit},(_,index)=>allRecoverable[(recoveryCursor+index)%allRecoverable.length]);
+  if(allRecoverable.length>0)recoveryCursor=(recoveryCursor+recoveryLimit)%allRecoverable.length;
   for(const agent of recoverable){resumeAgent(agent.agentId);await campaignDispatcherControl('retry_agent',agent.agentNumber).catch(()=>undefined);}
   if(recoverable.length)await campaignDispatcherControl('resume_all');
   const after=await getAutonomousTruthSnapshot();
-  return {ok:after.certification.continuousRuntimeCertified,action:ownerStateNeedsOverride?'owner_24x7_mandate_restored':controlPlaneRecovered?(recoverable.length?'recovered_control_plane_and_agents':'recovered_control_plane'):(recoverable.length?'recovered_nonworking_agents':'verified'),recovered:recoverable.map(a=>a.agentNumber),snapshot:after};
+  return {ok:after.certification.continuousRuntimeCertified,action:ownerStateNeedsOverride?'owner_24x7_mandate_restored':controlPlaneRecovered?(recoverable.length?'recovered_control_plane_and_agents':'recovered_control_plane'):(recoverable.length?'recovered_nonworking_agents':'verified'),recovered:recoverable.map(a=>a.agentNumber),recoverableTotal:allRecoverable.length,recoveryCapacity:autonomousRepairCapacity(),snapshot:after};
 }
 
 export async function applyTruthControl(action:TruthControlAction,agentId?:string,agentNumber?:number){

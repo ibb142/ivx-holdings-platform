@@ -16,6 +16,8 @@
  *   - Self-repair (retry on failure)
  */
 
+import { deploymentAutoRepairEnabled } from './ivx-autonomous-control-policy';
+
 const GITHUB_API = 'https://api.github.com';
 const RENDER_API = 'https://api.render.com/v1';
 const PRODUCTION_URL = 'https://api.ivxholding.com';
@@ -482,7 +484,7 @@ export async function initializeDeploymentEngine(): Promise<DeploymentState> {
   return deploymentState;
 }
 
-export async function runDeploymentCycle(): Promise<{
+export async function runDeploymentCycle(options: { allowDeploy?: boolean } = {}): Promise<{
   driftDetected: boolean;
   deployTriggered: boolean;
   deployId: string | null;
@@ -557,9 +559,10 @@ export async function runDeploymentCycle(): Promise<{
   let deployTriggered = false;
   let deployId: string | null = null;
 
-  // 7. Auto-deploy if drift detected and autonomous mode is on
-  //    Also allow manual trigger
-  if (driftDetected && github.sha && !evidence.errors.length) {
+  // 7. Mutations are opt-in. A health/evidence read must never trigger a
+  //    deploy; only an explicitly authorized caller or the explicitly enabled
+  //    repair monitor may pass allowDeploy=true.
+  if (options.allowDeploy === true && driftDetected && github.sha && !evidence.errors.length) {
     // Don't auto-trigger if a deploy is already in progress
     const inProgress = ['triggered', 'building'].includes(evidence.renderDeployStatus ?? '');
     if (!inProgress) {
@@ -596,14 +599,20 @@ export async function runDeploymentCycle(): Promise<{
 
 let monitorInterval: ReturnType<typeof setInterval> | null = null;
 
-export function startAutonomousMonitor(intervalMs: number = 5 * 60 * 1000): void {
-  if (monitorInterval) return;
+export function startAutonomousMonitor(intervalMs: number = 5 * 60 * 1000): boolean {
+  if (monitorInterval) return true;
+
+  if (!deploymentAutoRepairEnabled()) {
+    deploymentState.autonomousMode = false;
+    console.log('[IVX Deploy Engine] auto-repair disabled; deployment monitor not armed');
+    return false;
+  }
 
   deploymentState.autonomousMode = true;
 
   const tick = async () => {
     try {
-      const result = await runDeploymentCycle();
+      const result = await runDeploymentCycle({ allowDeploy: true });
       if (result.driftDetected && result.deployTriggered) {
         console.log(`[IVX Deploy Engine] Drift detected — triggered deploy ${result.deployId}`);
       } else if (result.evidence.commitMatch) {
@@ -619,6 +628,8 @@ export function startAutonomousMonitor(intervalMs: number = 5 * 60 * 1000): void
   // Run immediately
   tick();
   monitorInterval = setInterval(tick, intervalMs);
+  monitorInterval.unref?.();
+  return true;
 }
 
 export function stopAutonomousMonitor(): void {
@@ -632,7 +643,7 @@ export function stopAutonomousMonitor(): void {
 // ─── Evidence Generation ───────────────────────────────────────────────
 
 export async function generateDeploymentEvidence(): Promise<DeploymentEvidence> {
-  const result = await runDeploymentCycle();
+  const result = await runDeploymentCycle({ allowDeploy: false });
   return result.evidence;
 }
 

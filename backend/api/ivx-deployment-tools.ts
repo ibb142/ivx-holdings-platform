@@ -372,7 +372,7 @@ export async function handleInvoke(request: Request): Promise<Response> {
         // Full deployment cycle: assess → trigger if drift → wait → verify
         if (action === 'cycle' || action === 'full') {
           const { runDeploymentCycle } = await import('../services/ivx-enterprise-deployment-engine');
-          const result = await runDeploymentCycle();
+          const result = await runDeploymentCycle({ allowDeploy: true });
           return publicJson({ ok: true, tool: 'deploy', action, result });
         }
         if (action === 'trigger') {
