@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { AUTONOMOUS_CONTROL_ROUTES } from '@/components/AutonomousDashboardControlStrip';
+import { AUTONOMOUS_CONTROL_ROUTES } from '@/components/autonomousDashboardControlRoutes';
 
 describe('Autonomous dashboard owner controls', () => {
   it('exposes the critical owner modules', () => {
