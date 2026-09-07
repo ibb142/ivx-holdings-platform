@@ -45,6 +45,13 @@ export type AutonomousProductivity24h = {
   verifiedCommits: number;
   utilizationPercent: number;
   netOutputsPerVerifiedHour: number;
+  timingIntegrity: {
+    invalidTimestampRows: number;
+    reportedDurationMismatchRows: number;
+    overlappingRows: number;
+    overlapMsExcluded: number;
+    policy: string;
+  };
   noProgressLoops: NoProgressLoop[];
   circuitBreakerTriggered: boolean;
   perAgent: AgentProductivity24h[];
@@ -135,6 +142,38 @@ function isLandingRun(run: ExecutionRow): boolean {
   return haystack.includes('landing') || haystack.includes('ivxholding-landing');
 }
 
+const DURATION_TOLERANCE_MS = 2_000;
+
+type TimedExecution = {
+  run: ExecutionRow;
+  startMs: number;
+  endMs: number;
+  reconciledMs: number;
+  durationMismatch: boolean;
+};
+
+/**
+ * Timestamps are the canonical clock. A caller-supplied duration can diagnose
+ * drift, but can never create productive time. Open/malformed/future spans are
+ * fail-closed and receive zero measured milliseconds.
+ */
+function reconcileExecutionTime(run: ExecutionRow, now: number, windowStartMs: number): TimedExecution | null {
+  const startMs = run.started_at ? Date.parse(run.started_at) : Number.NaN;
+  const endMs = run.finished_at ? Date.parse(run.finished_at) : Number.NaN;
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs || startMs > now || endMs > now + DURATION_TOLERANCE_MS) return null;
+  const clippedStart = Math.max(startMs, windowStartMs);
+  const clippedEnd = Math.min(endMs, now);
+  const reconciledMs = Math.max(0, clippedEnd - clippedStart);
+  const reportedMs = Number.isFinite(run.duration_ms) ? Math.max(0, run.duration_ms) : 0;
+  return {
+    run,
+    startMs: clippedStart,
+    endMs: clippedEnd,
+    reconciledMs,
+    durationMismatch: Math.abs(reportedMs - (endMs - startMs)) > DURATION_TOLERANCE_MS,
+  };
+}
+
 export function buildAutonomousProductivity24h(
   executions: ExecutionRow[],
   opts: { now?: number; fleetSize?: number; landingBudgetHours?: number } = {},
@@ -143,10 +182,19 @@ export function buildAutonomousProductivity24h(
   const fleetSize = Math.max(1, opts.fleetSize ?? 112);
   const windowStartMs = now - 24 * 60 * 60 * 1000;
   const landingBudgetHours = Math.max(1, opts.landingBudgetHours ?? 120);
-  const rows = executions.filter((run) => {
+  const candidateRows = executions.filter((run) => {
     const started = run.started_at ? Date.parse(run.started_at) : NaN;
-    return Number.isFinite(started) && started >= windowStartMs && started <= now;
+    return Number.isFinite(started) && started <= now && (run.finished_at ? Date.parse(run.finished_at) >= windowStartMs : started >= windowStartMs);
   });
+  const timedRows = candidateRows
+    .map((run) => reconcileExecutionTime(run, now, windowStartMs))
+    .filter((row): row is TimedExecution => row !== null)
+    .sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs || a.run.task_id.localeCompare(b.run.task_id));
+  const invalidTimestampRows = candidateRows.length - timedRows.length;
+  const reportedDurationMismatchRows = timedRows.filter((row) => row.durationMismatch).length;
+  const lastEndByAgent = new Map<string, number>();
+  let overlappingRows = 0;
+  let overlapMsExcluded = 0;
 
   const seenResults = new Set<string>();
   const byAgent = new Map<string, AgentProductivity24h>();
@@ -165,14 +213,22 @@ export function buildAutonomousProductivity24h(
   let landingWasteMs = 0;
   let landingVerifiedOutputs = 0;
 
-  for (const run of rows) {
-    const durationMs = Math.max(0, Number.isFinite(run.duration_ms) ? run.duration_ms : 0);
+  for (const timed of timedRows) {
+    const run = timed.run;
+    const previousEnd = lastEndByAgent.get(run.agent_id) ?? Number.NEGATIVE_INFINITY;
+    const creditedStart = Math.max(timed.startMs, previousEnd);
+    const durationMs = Math.max(0, timed.endMs - creditedStart);
+    if (creditedStart > timed.startMs) {
+      overlappingRows += 1;
+      overlapMsExcluded += Math.min(timed.endMs, creditedStart) - timed.startMs;
+    }
+    lastEndByAgent.set(run.agent_id, Math.max(previousEnd, timed.endMs));
     recordedMs += durationMs;
     const landing = isLandingRun(run);
     if (landing) landingRecordedMs += durationMs;
 
     let cause: ProductivityCause;
-    const verified = isVerifiedNetExecution(run);
+    const verified = durationMs > 0 && !timed.durationMismatch && isVerifiedNetExecution(run);
     const fingerprint = verified ? resultFingerprint(run) : null;
     if (verified && fingerprint && seenResults.has(fingerprint)) {
       cause = 'DUPLICATE';
@@ -285,6 +341,13 @@ export function buildAutonomousProductivity24h(
     verifiedCommits: verifiedCommits.size,
     utilizationPercent: round2((verifiedHours / (fleetSize * 24)) * 100),
     netOutputsPerVerifiedHour: verifiedHours > 0 ? round2(verifiedOutputs / verifiedHours) : 0,
+    timingIntegrity: {
+      invalidTimestampRows,
+      reportedDurationMismatchRows,
+      overlappingRows,
+      overlapMsExcluded,
+      policy: 'timestamps_canonical_fail_closed_per_agent_no_overlap',
+    },
     noProgressLoops,
     circuitBreakerTriggered: noProgressLoops.length > 0,
     perAgent,
