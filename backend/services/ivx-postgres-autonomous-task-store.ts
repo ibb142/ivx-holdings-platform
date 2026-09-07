@@ -1,0 +1,334 @@
+/**
+ * PostgreSQL row store for the 112-agent autonomous queue.
+ *
+ * Every mutating operation is performed by a database RPC. The claim RPC uses
+ * FOR UPDATE SKIP LOCKED, so overlapping Render processes cannot lease the same
+ * task. The public Data API surface is service-role only (enforced by migration).
+ */
+import { hostname } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import type {
+  FleetLeaseRequest,
+  FleetLeaseResult,
+  FleetTaskLeaseIdentity,
+  FleetTaskMutationResult,
+  Task,
+  TaskState,
+} from './ivx-autonomous-task-engine';
+
+export const IVX_POSTGRES_AUTONOMOUS_TASK_STORE_MARKER = 'ivx-postgres-autonomous-task-store-2026-09-07-v1';
+const DEFAULT_TIMEOUT_MS = 30_000;
+const TRUTH_TIMEOUT_MS = 2_200;
+const TASK_READ_CACHE_TTL_MS = 1_500;
+const BOOT_NONCE = randomUUID().slice(0, 12);
+let taskReadCache: { value: Task[]; at: number } | null = null;
+let taskReadInFlight: Promise<Task[]> | null = null;
+let taskMutationRevision = 0;
+
+type AtomicCreateResult = { ok: boolean; task: Task | null; duplicate: boolean; error: string | null };
+type AtomicCasResult = { ok: boolean; task: Task | null; error: string | null };
+type RestTaskRow = { payload: Task };
+
+export type AtomicFleetLeaseRow = {
+  taskId: string;
+  state: TaskState;
+  assignedAgentNumber: number | null;
+  leaseHolder: string;
+  workerInstanceId: string | null;
+  lastHeartbeatAt: string;
+  leaseExpiresAt: string | null;
+};
+
+/** Test isolation for the module-level request coalescer. */
+export function resetPostgresAutonomousTaskStoreForTests(): void {
+  taskReadCache = null;
+  taskReadInFlight = null;
+  taskMutationRevision = 0;
+}
+
+function trimmed(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function supabaseUrl(env: NodeJS.ProcessEnv = process.env): string {
+  return trimmed(env.EXPO_PUBLIC_SUPABASE_URL || env.SUPABASE_URL).replace(/\/+$/, '');
+}
+
+function serviceRoleKey(env: NodeJS.ProcessEnv = process.env): string {
+  return trimmed(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_KEY);
+}
+
+export function postgresAtomicQueueSelected(env: NodeJS.ProcessEnv = process.env): boolean {
+  return trimmed(env.IVX_AUTONOMOUS_QUEUE_BACKEND).toLowerCase() === 'postgres_atomic';
+}
+
+export function postgresAtomicQueueConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+  return postgresAtomicQueueSelected(env) && Boolean(supabaseUrl(env) && serviceRoleKey(env));
+}
+
+export function autonomousWorkerInstanceId(env: NodeJS.ProcessEnv = process.env): string {
+  const explicit = trimmed(env.IVX_AUTONOMOUS_WORKER_INSTANCE_ID || env.IVX_INTERNAL_WORKER_ID);
+  if (explicit) return explicit.slice(0, 240);
+  const service = trimmed(env.RENDER_SERVICE_ID || env.RENDER_SERVICE_NAME) || 'local';
+  const instance = trimmed(env.RENDER_INSTANCE_ID || env.HOSTNAME) || hostname() || 'unknown-host';
+  return `${service}:${instance}:${process.pid}:${BOOT_NONCE}`.slice(0, 240);
+}
+
+function headers(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const key = serviceRoleKey(env);
+  if (!key || !supabaseUrl(env)) throw new Error('postgres_atomic queue is missing Supabase URL or service-role credentials');
+  return {
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  };
+}
+
+function externalError(payload: unknown, fallback: string): string {
+  if (payload && typeof payload === 'object') {
+    const record = payload as Record<string, unknown>;
+    const candidate = record.message ?? record.error ?? record.details;
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim().slice(0, 320);
+  }
+  return fallback;
+}
+
+async function parsePayload(response: Response): Promise<unknown> {
+  const text = await response.text().catch(() => '');
+  if (!text) return null;
+  try { return JSON.parse(text) as unknown; } catch { return { message: text.slice(0, 320) }; }
+}
+
+async function restRequest<T>(
+  path: string,
+  init: RequestInit,
+  options: { timeoutMs?: number; attempts?: number; env?: NodeJS.ProcessEnv } = {},
+): Promise<T> {
+  const env = options.env ?? process.env;
+  const attempts = Math.max(1, Math.min(options.attempts ?? 2, 3));
+  let finalError: unknown = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(`${supabaseUrl(env)}/rest/v1/${path}`, {
+        ...init,
+        headers: { ...headers(env), ...(init.headers ?? {}) },
+        signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+      });
+      const payload = await parsePayload(response);
+      if (!response.ok) {
+        throw new Error(externalError(payload, `postgres_atomic REST returned HTTP ${response.status}`));
+      }
+      return payload as T;
+    } catch (error) {
+      finalError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      const transient = /timeout|timed out|aborted|fetch failed|ECONN|HTTP 5\d\d|HTTP 429/i.test(message);
+      if (!transient || attempt === attempts) break;
+      await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+    }
+  }
+  throw finalError instanceof Error ? finalError : new Error('postgres_atomic request failed');
+}
+
+async function rpc<T>(name: string, body: Record<string, unknown>, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
+  return restRequest<T>(`rpc/${name}`, { method: 'POST', body: JSON.stringify(body) }, { timeoutMs });
+}
+
+function cloneTasks(tasks: readonly Task[]): Task[] {
+  return structuredClone(tasks) as Task[];
+}
+
+function mergeTaskResultsIntoCache(tasks: readonly (Task | null | undefined)[]): void {
+  taskMutationRevision += 1;
+  if (!taskReadCache) return;
+  const next = cloneTasks(taskReadCache.value);
+  const indexById = new Map(next.map((task, index) => [task.taskId, index]));
+  for (const task of tasks) {
+    if (!task) continue;
+    const copy = structuredClone(task) as Task;
+    const index = indexById.get(copy.taskId);
+    if (index === undefined) {
+      indexById.set(copy.taskId, next.length);
+      next.push(copy);
+    } else {
+      next[index] = copy;
+    }
+  }
+  taskReadCache = { value: next, at: Date.now() };
+}
+
+function invalidateTaskReadCache(): void {
+  taskMutationRevision += 1;
+  taskReadCache = null;
+}
+
+async function fetchAllPostgresTasks(): Promise<Task[]> {
+  const rows = await restRequest<RestTaskRow[]>(
+    'ivx_autonomous_tasks?select=payload&order=created_at.asc&limit=10000',
+    { method: 'GET' },
+  );
+  if (!Array.isArray(rows)) throw new Error('postgres_atomic task response is not an array');
+  return rows.map((row) => structuredClone(row.payload));
+}
+
+export async function readPostgresAutonomousTasks(): Promise<Task[]> {
+  const now = Date.now();
+  if (taskReadCache && now - taskReadCache.at <= TASK_READ_CACHE_TTL_MS) {
+    return cloneTasks(taskReadCache.value);
+  }
+  if (taskReadInFlight) return cloneTasks(await taskReadInFlight);
+  const pending = (async () => {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const readRevision = taskMutationRevision;
+      const tasks = await fetchAllPostgresTasks();
+      if (taskMutationRevision === readRevision) {
+        taskReadCache = { value: cloneTasks(tasks), at: Date.now() };
+        return tasks;
+      }
+      // A claim/CAS completed while this request was in flight. Prefer the
+      // mutation-updated cache; if none existed, retry once rather than expose
+      // the old task state.
+      const updatedCache = taskReadCache as { value: Task[]; at: number } | null;
+      if (updatedCache) return cloneTasks(updatedCache.value);
+    }
+    throw new Error('postgres_atomic task queue changed repeatedly during read');
+  })();
+  taskReadInFlight = pending;
+  try {
+    return cloneTasks(await pending);
+  } finally {
+    if (taskReadInFlight === pending) taskReadInFlight = null;
+  }
+}
+
+export async function createPostgresAutonomousTasks(tasks: readonly Task[]): Promise<AtomicCreateResult[]> {
+  if (tasks.length === 0) return [];
+  const results = await rpc<AtomicCreateResult[]>('ivx_autonomous_tasks_create_batch', { p_tasks: tasks });
+  if (!Array.isArray(results) || results.length !== tasks.length) {
+    throw new Error(`postgres_atomic create returned ${Array.isArray(results) ? results.length : 'invalid'} results for ${tasks.length} tasks`);
+  }
+  mergeTaskResultsIntoCache(results.map((result) => result.task));
+  return results;
+}
+
+export async function claimPostgresAutonomousTasks(requests: readonly FleetLeaseRequest[]): Promise<FleetLeaseResult[]> {
+  if (requests.length === 0) return [];
+  const results = await rpc<FleetLeaseResult[]>('ivx_autonomous_tasks_claim_batch', {
+    p_requests: requests,
+    p_worker_instance_id: autonomousWorkerInstanceId(),
+    p_lease_seconds: 300,
+  });
+  if (!Array.isArray(results) || results.length !== requests.length) {
+    throw new Error(`postgres_atomic claim returned ${Array.isArray(results) ? results.length : 'invalid'} results for ${requests.length} lanes`);
+  }
+  mergeTaskResultsIntoCache(results.map((result) => result.task));
+  return results;
+}
+
+export async function startPostgresAutonomousTasks(leases: readonly FleetTaskLeaseIdentity[]): Promise<FleetTaskMutationResult[]> {
+  if (leases.length === 0) return [];
+  const results = await rpc<FleetTaskMutationResult[]>('ivx_autonomous_tasks_start_batch', {
+    p_leases: leases,
+    p_worker_instance_id: autonomousWorkerInstanceId(),
+    p_lease_seconds: 300,
+  });
+  if (!Array.isArray(results) || results.length !== leases.length) {
+    throw new Error(`postgres_atomic start returned ${Array.isArray(results) ? results.length : 'invalid'} results for ${leases.length} leases`);
+  }
+  mergeTaskResultsIntoCache(results.map((result) => result.task));
+  return results;
+}
+
+export async function heartbeatPostgresAutonomousTasks(leases: readonly FleetTaskLeaseIdentity[]): Promise<{
+  ok: boolean;
+  refreshed: number;
+  rejected: Array<{ taskId: string; error: string }>;
+}> {
+  if (leases.length === 0) return { ok: true, refreshed: 0, rejected: [] };
+  const result = await rpc<{ ok: boolean; refreshed: number; rejected: Array<{ taskId: string; error: string }>; at?: string }>(
+    'ivx_autonomous_tasks_heartbeat_batch',
+    { p_leases: leases, p_worker_instance_id: autonomousWorkerInstanceId(), p_lease_seconds: 300 },
+  );
+  if (!result || typeof result.refreshed !== 'number' || !Array.isArray(result.rejected)) {
+    throw new Error('postgres_atomic heartbeat returned an invalid response');
+  }
+  if (result.refreshed > 0 && taskReadCache && result.at) {
+    const rejected = new Set(result.rejected.map((entry) => entry.taskId));
+    const atMs = Date.parse(result.at);
+    const at = Number.isFinite(atMs) ? new Date(atMs).toISOString() : new Date().toISOString();
+    const expiresAt = new Date((Number.isFinite(atMs) ? atMs : Date.now()) + 300_000).toISOString();
+    const leaseIds = new Set(leases.filter((lease) => !rejected.has(lease.taskId)).map((lease) => lease.taskId));
+    const next = cloneTasks(taskReadCache.value);
+    for (const task of next) {
+      if (!leaseIds.has(task.taskId)) continue;
+      task.lastHeartbeatAt = at;
+      task.leaseExpiresAt = expiresAt;
+      task.updatedAt = at;
+    }
+    taskMutationRevision += 1;
+    taskReadCache = { value: next, at: Date.now() };
+  } else if (result.refreshed > 0) {
+    taskMutationRevision += 1;
+  }
+  return { ok: Boolean(result.ok), refreshed: result.refreshed, rejected: result.rejected };
+}
+
+export async function compareAndSetPostgresAutonomousTask(input: {
+  task: Task;
+  expectedStates: readonly TaskState[];
+  leaseHolder?: string | null;
+  eventType: string;
+}): Promise<AtomicCasResult> {
+  const result = await rpc<AtomicCasResult>('ivx_autonomous_task_compare_and_set', {
+    p_task: input.task,
+    p_expected_states: input.expectedStates,
+    p_lease_holder: input.leaseHolder ?? null,
+    p_worker_instance_id: input.leaseHolder ? autonomousWorkerInstanceId() : null,
+    p_event_type: input.eventType,
+  });
+  if (!result || typeof result.ok !== 'boolean') throw new Error('postgres_atomic compare-and-set returned an invalid response');
+  if (result.ok) mergeTaskResultsIntoCache([result.task]);
+  return result;
+}
+
+export async function linkPostgresAutonomousOrphans(objectiveId: string): Promise<number> {
+  const result = await rpc<number>('ivx_autonomous_tasks_link_objective', { p_objective_id: objectiveId });
+  if (!Number.isFinite(result) || result < 0) throw new Error('postgres_atomic orphan link returned an invalid count');
+  if (result > 0) invalidateTaskReadCache();
+  return result;
+}
+
+/**
+ * Read only lease-bearing rows. This is the canonical current-work evidence:
+ * task id + logical holder + physical process identity + task heartbeat.
+ */
+export async function readPostgresFleetLeaseRows(): Promise<AtomicFleetLeaseRow[]> {
+  const activeStates = '(LEASED,RUNNING,EXECUTION_COMPLETED,QA_IN_PROGRESS,READY_FOR_DEPLOYMENT,DEPLOYING,DEPLOYED,PRODUCTION_VERIFYING)';
+  const rows = await restRequest<Array<{
+    task_id: string;
+    state: TaskState;
+    assigned_agent_number: number | null;
+    lease_holder: string | null;
+    worker_instance_id: string | null;
+    last_heartbeat_at: string | null;
+    lease_expires_at: string | null;
+  }>>(
+    `ivx_autonomous_tasks?select=task_id,state,assigned_agent_number,lease_holder,worker_instance_id,last_heartbeat_at,lease_expires_at&state=in.${activeStates}&lease_holder=not.is.null&limit=1000`,
+    { method: 'GET' },
+    { timeoutMs: TRUTH_TIMEOUT_MS, attempts: 1 },
+  );
+  if (!Array.isArray(rows)) throw new Error('postgres_atomic fleet truth response is not an array');
+  return rows
+    .filter((row): row is typeof row & { lease_holder: string; last_heartbeat_at: string } =>
+      Boolean(row.task_id && row.lease_holder && row.last_heartbeat_at))
+    .map((row) => ({
+      taskId: row.task_id,
+      state: row.state,
+      assignedAgentNumber: row.assigned_agent_number,
+      leaseHolder: row.lease_holder,
+      workerInstanceId: row.worker_instance_id,
+      lastHeartbeatAt: row.last_heartbeat_at,
+      leaseExpiresAt: row.lease_expires_at,
+    }));
+}

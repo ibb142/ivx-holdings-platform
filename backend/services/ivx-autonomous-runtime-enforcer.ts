@@ -1,7 +1,13 @@
 import { enforceAutonomous112RuntimeTruth, IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS } from './ivx-autonomous-truth-control';
 import { getAllExecutionStates, updateExecutionState } from './ivx-agent-runtime';
 import { runRealEngineeringCycle } from './ivx-agent-real-engineering-cycle';
-import { getAllTasks, heartbeat as heartbeatTask } from './ivx-autonomous-task-engine';
+import {
+  getAllTasks,
+  heartbeatTasksBatch,
+  leaseNextTasksBatch,
+  startLeasedTasksBatch,
+  type Task,
+} from './ivx-autonomous-task-engine';
 import {
   ensureAutonomousManagerBacklog,
   getAutonomousWorkManagerStatus,
@@ -15,6 +21,14 @@ import {
   runAutonomousSemantic360,
 } from './ivx-autonomous-semantic-360';
 import { autonomousRuntimeEnforcerEnabled } from './ivx-autonomous-control-policy';
+import {
+  ensureLandingP0BacklogSeeded,
+  isLandingP0MissionActive,
+  LANDING_P0_PREFIX,
+  LANDING_P0_REPAIR_PREFIX,
+} from './ivx-landing-p0-backlog';
+
+export const IVX_AUTONOMOUS_RUNTIME_ENFORCER_MARKER = 'ivx-autonomous-runtime-enforcer-2026-09-07-fleet-batch-v1';
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let leaseMirrorTimer: ReturnType<typeof setInterval> | null = null;
@@ -22,12 +36,14 @@ let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let enforcerRunInFlight: Promise<void> | null = null;
 let leaseMirrorInFlight: Promise<void> | null = null;
 let heartbeatRefreshInFlight: Promise<void> | null = null;
+let refillInFlight: Promise<void> | null = null;
 let startedAt: string | null = null;
 let lastRunAt: string | null = null;
 let lastOk: boolean | null = null;
 let lastRecovered: number[] = [];
 let lastError: string | null = null;
 let continuityEnabled = false;
+let landingMissionActive = false;
 let refillStarted = 0;
 let refillCompleted = 0;
 let refillFailed = 0;
@@ -111,11 +127,16 @@ async function syncRuntimeWorkingFromTaskLeases(): Promise<number> {
   const tasks = await getAllTasks();
   const states = getAllExecutionStates();
   const stateByNumber = new Map(states.map((state) => [state.agentNumber, state]));
+  const stateById = new Map(states.map((state) => [state.agentId, state]));
   const activeByAgent = new Map<number, string>();
 
   for (const task of tasks) {
-    if (task.assignedAgentNumber == null || !task.leaseHolder || !ACTIVE_TASK_STATES.has(task.state)) continue;
-    if (!activeByAgent.has(task.assignedAgentNumber)) activeByAgent.set(task.assignedAgentNumber, task.taskId);
+    if (!task.leaseHolder || !ACTIVE_TASK_STATES.has(task.state)) continue;
+    const leasedAgentId = task.leaseHolder.startsWith('agent:') ? task.leaseHolder.slice('agent:'.length) : null;
+    const leasedAgentNumber = leasedAgentId ? stateById.get(leasedAgentId)?.agentNumber ?? null : null;
+    const agentNumber = leasedAgentNumber ?? task.assignedAgentNumber;
+    if (agentNumber == null) continue;
+    if (!activeByAgent.has(agentNumber)) activeByAgent.set(agentNumber, task.taskId);
   }
 
   const nowMirrored = new Set<string>();
@@ -155,23 +176,18 @@ function runLeaseMirror(): Promise<void> {
 
 async function refreshInFlightTaskHeartbeats(): Promise<number> {
   if (!continuityEnabled || continuityRuns.size === 0) return 0;
-  const byId = new Map(getAllExecutionStates().map((state) => [state.agentId, state.agentNumber]));
-  const activeAgentNumbers = new Set<number>();
-  for (const agentId of continuityRuns.keys()) {
-    const number = byId.get(agentId);
-    if (typeof number === 'number') activeAgentNumbers.add(number);
-  }
+  const activeWorkerIds = new Set([...continuityRuns.keys()].map((agentId) => `agent:${agentId}`));
   const tasks = await getAllTasks();
-  let refreshed = 0;
+  const leases: Array<{ taskId: string; workerId: string }> = [];
   for (const task of tasks) {
-    if (task.assignedAgentNumber == null || !activeAgentNumbers.has(task.assignedAgentNumber)) continue;
+    if (!task.leaseHolder || !activeWorkerIds.has(task.leaseHolder)) continue;
     if (!ACTIVE_TASK_STATES.has(task.state) || !task.leaseHolder) continue;
-    const result = await heartbeatTask(task.taskId, task.leaseHolder).catch(() => ({ ok: false, error: 'heartbeat exception' }));
-    if (result.ok) refreshed += 1;
+    leases.push({ taskId: task.taskId, workerId: task.leaseHolder });
   }
+  const batch = await heartbeatTasksBatch(leases);
   lastHeartbeatRefreshAt = new Date().toISOString();
-  lastHeartbeatRefreshCount = refreshed;
-  return refreshed;
+  lastHeartbeatRefreshCount = batch.refreshed;
+  return batch.refreshed;
 }
 
 function runHeartbeatRefresh(): Promise<void> {
@@ -185,7 +201,7 @@ function runHeartbeatRefresh(): Promise<void> {
   return heartbeatRefreshInFlight;
 }
 
-function startContinuityRun(agentId: string, agentNumber: number): void {
+function startContinuityRun(agentId: string, agentNumber: number, preparedTask: Task): void {
   if (!canRunContinuity(agentId)) return;
   refillStarted += 1;
   let outcome: ContinuityOutcome = 'failed';
@@ -193,7 +209,7 @@ function startContinuityRun(agentId: string, agentNumber: number): void {
 
   // Lease-first: the fleet-level manager already maintains the durable backlog.
   // Do not make every IA perform another planning/read pass before it can lease.
-  const promise = runRealEngineeringCycle({ agentId, agentNumber, sourceSha })
+  const promise = runRealEngineeringCycle({ agentId, agentNumber, sourceSha, preparedTask })
     .then((result) => {
       outcome = classifyContinuityResult(result);
       lastOutcomeByAgent.set(agentNumber, {
@@ -232,29 +248,65 @@ function startContinuityRun(agentId: string, agentNumber: number): void {
       if (state && !state.pauseState && !state.disabledState && state.activeTaskId) {
         updateExecutionState(agentId, { availability: 'available', activeTaskId: null });
       }
-      const next = setTimeout(() => { if (canRunContinuity(agentId)) startContinuityRun(agentId, agentNumber); }, refillDelayMs(outcome));
+      const next = setTimeout(() => { void refillAllAvailableAgents(); }, refillDelayMs(outcome));
       next.unref?.();
     });
   continuityRuns.set(agentId, promise);
   void runLeaseMirror();
 }
 
-function refillRecoveredAgents(agentNumbers: number[]): void {
-  if (!continuityEnabled || agentNumbers.length === 0) return;
-  const byNumber = new Map(getAllExecutionStates().map((state) => [state.agentNumber, state]));
-  for (const agentNumber of agentNumbers) {
-    if (continuityRuns.size >= getContinuityMaxConcurrency()) break;
-    const state = byNumber.get(agentNumber);
-    if (state) startContinuityRun(state.agentId, agentNumber);
-  }
-}
+function refillAllAvailableAgents(
+  requestedSourceSha = currentSourceSha(),
+  requestedLandingMission = landingMissionActive,
+): Promise<void> {
+  if (refillInFlight) return refillInFlight;
+  refillInFlight = (async () => {
+    if (!continuityEnabled) return;
+    const remainingCapacity = getContinuityMaxConcurrency() - continuityRuns.size;
+    if (remainingCapacity <= 0) return;
+    const candidates = getAllExecutionStates()
+      .filter((state) => state.agentNumber != null && canRunContinuity(state.agentId))
+      .slice(0, remainingCapacity);
+    if (candidates.length === 0) return;
 
-function refillAllAvailableAgents(): void {
-  if (!continuityEnabled) return;
-  for (const state of getAllExecutionStates()) {
-    if (continuityRuns.size >= getContinuityMaxConcurrency()) break;
-    if (state.agentNumber != null && canRunContinuity(state.agentId)) startContinuityRun(state.agentId, state.agentNumber);
-  }
+    if (requestedLandingMission) {
+      const seeded = await ensureLandingP0BacklogSeeded(requestedSourceSha);
+      if (seeded.error) throw new Error(`landing_backlog_seed_failed: ${seeded.error}`);
+    }
+    const missionScope = {
+      familyPrefixes: [LANDING_P0_PREFIX, LANDING_P0_REPAIR_PREFIX],
+      activePrefixes: requestedLandingMission
+        ? [`${LANDING_P0_PREFIX}${requestedSourceSha}:`, `${LANDING_P0_REPAIR_PREFIX}${requestedSourceSha}:`]
+        : [],
+    };
+    const leaseResults = await leaseNextTasksBatch(candidates.map((state) => ({
+      workerId: `agent:${state.agentId}`,
+      agentNumber: state.agentNumber,
+      options: {
+        ...(requestedLandingMission ? { stealPrefix: `${LANDING_P0_PREFIX}${requestedSourceSha}:` } : {}),
+        missionScope,
+      },
+    })));
+    const leased = leaseResults.filter((result) => result.ok && result.task !== null);
+    if (leased.length === 0) return;
+    const started = await startLeasedTasksBatch(leased.map((result) => ({
+      taskId: result.task!.taskId,
+      workerId: result.workerId,
+    })));
+    const stateByWorker = new Map(candidates.map((state) => [`agent:${state.agentId}`, state]));
+    for (const result of started) {
+      if (!result.ok || !result.task) continue;
+      const state = stateByWorker.get(result.workerId);
+      if (!state || state.agentNumber == null) continue;
+      startContinuityRun(state.agentId, state.agentNumber, result.task);
+    }
+    void runLeaseMirror();
+  })().catch((error) => {
+    console.error('[IVX Autonomous 112 Batch Refill] failed', { error: error instanceof Error ? error.message : String(error) });
+  }).finally(() => {
+    refillInFlight = null;
+  });
+  return refillInFlight;
 }
 
 async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
@@ -267,15 +319,15 @@ async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
     lastError = null;
 
     continuityEnabled = Boolean(!result.snapshot.autonomous.dispatcherPaused && !result.snapshot.autonomous.emergencyStop);
+    const sourceSha = currentSourceSha();
+    landingMissionActive = continuityEnabled && await isLandingP0MissionActive();
 
-    // Start/recover the 112 real engineering lanes BEFORE heavier semantic,
-    // decision-quality, and backlog planning. Existing queued work can therefore
-    // be leased immediately instead of waiting behind a fleet-wide planning pass.
-    refillRecoveredAgents(result.recovered);
-    refillAllAvailableAgents();
+    // Seed, lease and start the fleet in three durable batch writes. This makes
+    // 112 distinct leases observable before execution while avoiding hundreds
+    // of full-document writes at the same start boundary.
+    await refillAllAvailableAgents(sourceSha, landingMissionActive);
     void runLeaseMirror();
 
-    const sourceSha = currentSourceSha();
     let semantic360 = getAutonomousSemantic360Status();
     let decisionQuality = getAutonomousDecisionQualityStatus();
     if (continuityEnabled) {
@@ -283,10 +335,15 @@ async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
       semantic360 = getAutonomousSemantic360Status();
       await runAutonomousDecisionQualityLoop(sourceSha);
       decisionQuality = getAutonomousDecisionQualityStatus();
-      const lanes = getAllExecutionStates()
-        .filter((state) => state.agentNumber != null && !state.pauseState && !state.disabledState && state.health !== 'failed')
-        .map((state) => ({ agentId: state.agentId, agentNumber: state.agentNumber as number }));
-      await ensureAutonomousManagerBacklog({ sourceSha, agents: lanes });
+      // Owner Landing P0 is the only queue while active. General module patrol
+      // resumes automatically when the owner priority file releases the mission.
+      if (!landingMissionActive) {
+        const lanes = getAllExecutionStates()
+          .filter((state) => state.agentNumber != null && !state.pauseState && !state.disabledState && state.health !== 'failed')
+          .map((state) => ({ agentId: state.agentId, agentNumber: state.agentNumber as number }));
+        await ensureAutonomousManagerBacklog({ sourceSha, agents: lanes });
+        await refillAllAvailableAgents(sourceSha, false);
+      }
     }
 
     await runLeaseMirror();
@@ -301,6 +358,7 @@ async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
       blocked: result.snapshot.agents.counts.blocked,
       unknown: result.snapshot.agents.counts.unknown,
       continuityEnabled,
+      landingMissionActive,
       continuityInFlight: continuityRuns.size,
       refillStarted,
       refillCompleted,
@@ -361,6 +419,7 @@ export function startAutonomous112RuntimeEnforcer(): boolean {
 
 export function getAutonomous112RuntimeEnforcerStatus() {
   return {
+    marker: IVX_AUTONOMOUS_RUNTIME_ENFORCER_MARKER,
     running: Boolean(timer),
     enabledByPolicy: autonomousRuntimeEnforcerEnabled(),
     supervisoryRunInFlight: Boolean(enforcerRunInFlight),
@@ -375,6 +434,8 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     lastRecovered,
     lastError,
     continuityEnabled,
+    landingMissionActive,
+    refillInFlight: Boolean(refillInFlight),
     continuityMaxConcurrency: getContinuityMaxConcurrency(),
     continuityInFlight: continuityRuns.size,
     refillStarted,
@@ -393,7 +454,7 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     semantic360: getAutonomousSemantic360Status(),
     decisionQuality: getAutonomousDecisionQualityStatus(),
     autonomousManager: getAutonomousWorkManagerStatus(),
-    truthPolicy: 'Autonomous Manager maintains real work blocks. Continuity is lease-first and bounded by IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY (default 12, maximum 112). Only durable active tasks with a real leaseHolder are mirrored into agent-runtime busy/activeTaskId every 10 seconds; continuity promise count alone is never proof of work. Semantic 360 and Decision Quality remain fail-closed. Durable task leases are renewed on an independent 20-second heartbeat timer restricted to currently running continuity lanes. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
+    truthPolicy: 'Autonomous Manager maintains real work blocks. Continuity is lease-first and bounded by IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY (safe code default 12, configured fleet maximum 112). Backlog creation, leasing, RUNNING transitions and 20-second lease heartbeats use bounded fleet batches so 112 logical lanes do not create a Supabase request storm. Only durable active tasks with a real leaseHolder are mirrored into agent-runtime busy/activeTaskId every 10 seconds; promise count alone is never proof. Landing P0 exclusively owns the queue while its owner priority is active. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
   };
 }
 

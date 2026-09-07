@@ -20,8 +20,8 @@ import { basename, join } from 'node:path';
 import {
   addTaskEvidence,
   createTask,
+  finalizeEvidenceTask,
   getAllTasks,
-  getTaskById,
   heartbeat,
   leaseNextTask,
   releaseLease,
@@ -243,6 +243,8 @@ export async function runRealEngineeringCycle(input: {
   agentId: string;
   agentNumber: number | null;
   sourceSha: string;
+  /** Task atomically leased + moved to RUNNING by the fleet batch starter. */
+  preparedTask?: Task | null;
 }): Promise<RealEngineeringCycleResult> {
   const workerId = `agent:${input.agentId}`;
   const base: RealEngineeringCycleResult = {
@@ -269,7 +271,10 @@ export async function runRealEngineeringCycle(input: {
   try {
     // Owner P0 mission (qa/owner-priority-state.json → landing): materialise the
     // Landing backlog as real ledger tasks and let drained lanes steal Landing work.
-    const landingActive = await isLandingP0MissionActive();
+    const prepared = input.preparedTask ?? null;
+    const landingActive = prepared
+      ? parseLandingTaskKey(prepared.idempotencyKey) !== null
+      : await isLandingP0MissionActive();
     const activeLandingPrefixes = [
       `${LANDING_P0_PREFIX}${input.sourceSha}:`,
       `${LANDING_P0_REPAIR_PREFIX}${input.sourceSha}:`,
@@ -281,9 +286,11 @@ export async function runRealEngineeringCycle(input: {
         activePrefixes: landingActive ? activeLandingPrefixes : [],
       },
     };
-    if (landingActive) await ensureLandingP0BacklogSeeded(input.sourceSha);
+    if (!prepared && landingActive) await ensureLandingP0BacklogSeeded(input.sourceSha);
 
-    let leased = await leaseNextTask(workerId, input.agentNumber, leaseOptions);
+    let leased = prepared
+      ? { ok: prepared.state === 'RUNNING', task: prepared, error: prepared.state === 'RUNNING' ? null : `Prepared task is ${prepared.state}, expected RUNNING.` }
+      : await leaseNextTask(workerId, input.agentNumber, leaseOptions);
     if ((!leased.ok || !leased.task) && landingActive) {
       // Own lane drained and nothing to steal right now: one more seed pass
       // (idempotent) covers a SHA change since the cached seeding.
@@ -291,7 +298,7 @@ export async function runRealEngineeringCycle(input: {
       leased = await leaseNextTask(workerId, input.agentNumber, leaseOptions);
     }
     if ((leased.ok && leased.task) && parseLandingTaskKey(leased.task.idempotencyKey)) {
-      return runLandingTask(leased.task, workerId, input, base);
+      return runLandingTask(leased.task, workerId, input, base, Boolean(prepared));
     }
     if (!leased.ok || !leased.task) {
       const seeded = await seedModuleAuditTask(input.sourceSha, input.agentId, input.agentNumber);
@@ -313,19 +320,21 @@ export async function runRealEngineeringCycle(input: {
       return { ...base, ok: true, action: 'NO_TASK_AVAILABLE', nextTaskAvailable: false, finishedAt: nowIso() };
     }
     if (parseLandingTaskKey(leased.task.idempotencyKey)) {
-      return runLandingTask(leased.task, workerId, input, base);
+      return runLandingTask(leased.task, workerId, input, base, Boolean(prepared));
     }
     const task = leased.task;
     const startedAt = nowIso();
-    const states: string[] = ['LEASED'];
+    const states: string[] = prepared ? ['LEASED', 'RUNNING'] : ['LEASED'];
 
-    await heartbeat(task.taskId, workerId);
-    const toRunning = await transitionTaskState(task.taskId, 'RUNNING');
-    if (!toRunning.ok) {
-      await releaseLease(task.taskId, workerId);
-      return { ...base, ok: false, action: 'CYCLE_ERROR', taskId: task.taskId, error: `RUNNING transition refused: ${toRunning.error}` };
+    if (!prepared) {
+      await heartbeat(task.taskId, workerId);
+      const toRunning = await transitionTaskState(task.taskId, 'RUNNING');
+      if (!toRunning.ok) {
+        await releaseLease(task.taskId, workerId);
+        return { ...base, ok: false, action: 'CYCLE_ERROR', taskId: task.taskId, error: `RUNNING transition refused: ${toRunning.error}` };
+      }
+      states.push('RUNNING');
     }
-    states.push('RUNNING');
 
     // ANALYZING — real inspection of the task's module (from title or description path).
     const moduleMatch = /module audit: (\S+)|module (\S+)/i.exec(`${task.title} ${task.description}`);
@@ -519,20 +528,23 @@ async function runLandingTask(
   workerId: string,
   input: { agentId: string; agentNumber: number | null; sourceSha: string },
   base: RealEngineeringCycleResult,
+  alreadyRunning = false,
 ): Promise<RealEngineeringCycleResult> {
   const parsed = parseLandingTaskKey(task.idempotencyKey);
   const unit = parsed ? getLandingUnit(parsed.unitId) : null;
-  const startedAt = nowIso();
-  const states: string[] = ['LEASED'];
+  const startedAt = task.startedAt ?? nowIso();
+  const states: string[] = alreadyRunning ? ['LEASED', 'RUNNING'] : ['LEASED'];
   const repairTaskIds: string[] = [];
 
-  await heartbeat(task.taskId, workerId);
-  const toRunning = await transitionTaskState(task.taskId, 'RUNNING');
-  if (!toRunning.ok) {
-    await releaseLease(task.taskId, workerId);
-    return { ...base, ok: false, action: 'CYCLE_ERROR', taskId: task.taskId, startedAt, states, error: `RUNNING transition refused: ${toRunning.error}` };
+  if (!alreadyRunning) {
+    await heartbeat(task.taskId, workerId);
+    const toRunning = await transitionTaskState(task.taskId, 'RUNNING');
+    if (!toRunning.ok) {
+      await releaseLease(task.taskId, workerId);
+      return { ...base, ok: false, action: 'CYCLE_ERROR', taskId: task.taskId, startedAt, states, error: `RUNNING transition refused: ${toRunning.error}` };
+    }
+    states.push('RUNNING');
   }
-  states.push('RUNNING');
 
   if (!parsed || !unit) {
     await transitionTaskState(task.taskId, 'FAILED', { error: `unknown landing unit in key ${task.idempotencyKey}` });
@@ -549,14 +561,7 @@ async function runLandingTask(
     repair: parsed.repair,
   });
   const evidenceType: TaskEvidence['evidenceType'] = unit.check.kind === 'ci' ? 'test_result' : 'production_verification';
-  const added = await addTaskEvidence(task.taskId, await makeEvidence(evidenceType, unit.unitId, encodeLandingResult(record)));
-  if (!added.ok) {
-    await transitionTaskState(task.taskId, 'FAILED', { error: `evidence persistence refused: ${added.error}` });
-    states.push('FAILED');
-    return { ...base, ok: false, action: 'TASK_FAILED', taskId: task.taskId, module: unit.unitId, startedAt, finishedAt: nowIso(), states, error: added.error };
-  }
-  const stored = await getTaskById(task.taskId);
-  const evidenceIds = stored?.evidence.map((e) => e.evidenceId) ?? [];
+  const evidence = await makeEvidence(evidenceType, unit.unitId, encodeLandingResult(record));
   const productiveMinutes = Math.round((full.productive_seconds / 60) * 10) / 10;
   console.log('[IVX Landing P0] unit executed', {
     agentNumber: input.agentNumber,
@@ -570,24 +575,60 @@ async function runLandingTask(
     detail: full.test_results[0],
   });
 
-  const done = (action: RealEngineeringCycleResult['action']): RealEngineeringCycleResult => ({
-    ...base, ok: true, action, taskId: task.taskId, module: unit.unitId, startedAt, finishedAt: nowIso(), states, evidenceIds,
-    repairTaskIds, filesInspected: full.files_inspected, productiveMinutes, nextTaskAvailable: true, error: null,
-  });
+  const finish = async (
+    outcome: 'VERIFIED' | 'BLOCKED',
+    action: RealEngineeringCycleResult['action'],
+    blocker?: string,
+  ): Promise<RealEngineeringCycleResult> => {
+    const finalized = await finalizeEvidenceTask({ taskId: task.taskId, workerId, evidence, outcome, blocker });
+    if (!finalized.ok) {
+      return {
+        ...base,
+        ok: false,
+        action: 'TASK_FAILED',
+        taskId: task.taskId,
+        module: unit.unitId,
+        startedAt,
+        finishedAt: nowIso(),
+        states,
+        evidenceIds: [],
+        repairTaskIds,
+        filesInspected: full.files_inspected,
+        productiveMinutes,
+        nextTaskAvailable: true,
+        error: finalized.error,
+      };
+    }
+    states.push(...finalized.states);
+    return {
+      ...base,
+      ok: true,
+      action,
+      taskId: task.taskId,
+      module: unit.unitId,
+      startedAt,
+      finishedAt: nowIso(),
+      states,
+      evidenceIds: finalized.evidenceId ? [finalized.evidenceId] : [],
+      repairTaskIds,
+      filesInspected: full.files_inspected,
+      productiveMinutes,
+      nextTaskAvailable: true,
+      error: null,
+    };
+  };
 
   if (full.status === 'BLOCKED') {
-    const blockedTransition = await transitionTaskState(task.taskId, 'BLOCKED', { blocker: full.blocked_reason ?? 'evidence unavailable' });
-    states.push(blockedTransition.ok ? 'BLOCKED' : `BLOCKED_REFUSED:${blockedTransition.error ?? 'unknown'}`);
-    return done('TASK_BLOCKED');
+    return finish('BLOCKED', 'TASK_BLOCKED', full.blocked_reason ?? 'evidence unavailable');
   }
 
   if (parsed.repair && full.status === 'FAIL') {
     const defect = full.bugs_found[0];
-    const blockedTransition = await transitionTaskState(task.taskId, 'BLOCKED', {
-      blocker: `DEFECT PERSISTS [${defect?.severity ?? unit.severity}] ${defect?.detail ?? unit.title} → ${defect?.remediation ?? 'investigate'}`,
-    });
-    states.push(blockedTransition.ok ? 'BLOCKED' : `BLOCKED_REFUSED:${blockedTransition.error ?? 'unknown'}`);
-    return done('TASK_BLOCKED');
+    return finish(
+      'BLOCKED',
+      'TASK_BLOCKED',
+      `DEFECT PERSISTS [${defect?.severity ?? unit.severity}] ${defect?.detail ?? unit.title} → ${defect?.remediation ?? 'investigate'}`,
+    );
   }
 
   if (!parsed.repair && full.status === 'FAIL') {
@@ -605,21 +646,5 @@ async function runLandingTask(
     }
   }
 
-  // Complete fail-closed: EXECUTION_COMPLETED → QA_IN_PROGRESS → VERIFIED.
-  const execDone = await transitionTaskState(task.taskId, 'EXECUTION_COMPLETED');
-  if (!execDone.ok) {
-    await transitionTaskState(task.taskId, 'FAILED', { error: `EXECUTION_COMPLETED refused: ${execDone.error}` });
-    states.push('FAILED');
-    return { ...done('TASK_FAILED'), ok: false, error: execDone.error };
-  }
-  states.push('EXECUTION_COMPLETED');
-  const qa = await transitionTaskState(task.taskId, 'QA_IN_PROGRESS');
-  states.push(qa.ok ? 'QA_IN_PROGRESS' : 'QA_TRANSITION_REFUSED');
-  const verified = await transitionTaskState(task.taskId, 'VERIFIED');
-  if (!verified.ok) {
-    states.push(`VERIFY_REFUSED:${verified.error ?? 'unknown'}`);
-    return { ...done('TASK_FAILED'), ok: false, error: verified.error };
-  }
-  states.push('VERIFIED');
-  return done('TASK_COMPLETED');
+  return finish('VERIFIED', 'TASK_COMPLETED');
 }
