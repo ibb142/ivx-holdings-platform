@@ -14,10 +14,13 @@ describe('real execution certificate boot recovery', () => {
 
     const service = readFileSync(join(import.meta.dir, 'services/ivx-real-execution-certificate.ts'), 'utf8');
     expect(service).toContain('await Promise.all(processing)');
+    expect(service).toContain("r.task_type === 'real_execution_certification'");
+    expect(service).toContain('/^rec-\\d+$/.test(r.run_id)');
 
     const server = readFileSync(join(import.meta.dir, '../server.ts'), 'utf8');
     expect(server).toContain("import app, { certificateBootRecovery } from './backend/hono-extended';");
     expect(server.indexOf('void certificateBootRecovery.finally')).toBeLessThan(server.indexOf('startAutonomous112RuntimeEnforcer()'));
+    expect(server).not.toContain('certResumeKick');
 
     const runtime = readFileSync(join(import.meta.dir, 'services/ivx-agent-runtime.ts'), 'utf8');
     expect(runtime).toContain('const endISO = new Date(endTime).toISOString();');
