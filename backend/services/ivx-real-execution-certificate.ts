@@ -194,12 +194,27 @@ async function processCertificateRun(runId: string): Promise<void> {
     await Promise.all(batch.map(async (row, i) => {
       await new Promise((r) => setTimeout(r, i * 350)); // stagger for external API politeness
       if (activeRun?.runId === runId) activeRun.currentAgent = row.agent_id;
-      await executeAgentRun(row.agent_id, 'audit', {
+      const result = await executeAgentRun(row.agent_id, 'audit', {
         __taskId: row.task_id,
         __runId: runId,
         __workflow: REAL_EXECUTION_WORKFLOW_ID,
         certificateRun: true,
       }, `owner-cert-${runId}`);
+      // Fail closed instead of leaving a rejected row pending forever. The
+      // certificate must finish with visible BLOCKED evidence and can then be
+      // retried; it may never spin on the same three rows indefinitely.
+      if (!result.ok && !result.runRecord) {
+        const at = new Date().toISOString();
+        await updateExecution(row.task_id, {
+          final_status: 'blocked',
+          started_at: at,
+          finished_at: at,
+          duration_ms: 0,
+          verified_output: false,
+          real_tool_used: false,
+          error: `CERTIFICATE_DISPATCH_BLOCKED: ${result.error ?? 'agent execution rejected before start'}`,
+        });
+      }
     }));
   }
 
