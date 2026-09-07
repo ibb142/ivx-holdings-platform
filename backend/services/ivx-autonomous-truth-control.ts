@@ -304,7 +304,7 @@ export async function getAutonomousTruthSnapshot() {
       noSyntheticWorkingStatus: true,
       staleFailsClosed: true,
       dependencyFailureFailsClosedWithoutTurningTruthEndpointIntoA500: true,
-      cascadeActivation: { seedSize: IVX_AUTONOMOUS_CASCADE_SEED_SIZE, fanout: IVX_AUTONOMOUS_CASCADE_FANOUT },
+      cascadeActivation:{seedSize:IVX_AUTONOMOUS_CASCADE_SEED_SIZE,fanout:IVX_AUTONOMOUS_CASCADE_FANOUT},
     },
     certification: {
       continuousRuntimeCertified,
@@ -408,7 +408,7 @@ export async function applyTruthControl(action: TruthControlAction, agentId?: st
     await runCampaignBootRecovery().catch(() => 0);
     await updateControlState('resume_all');
     await syncCampaignAssignmentsToDispatcher();
-    if (action === 'start_all') await cascadeStartAllAgents();
+    if(action==='start_all') await cascadeStartAllAgents();
     else {
       for (const state of getAllExecutionStates()) resumeAgent(state.agentId);
       await campaignDispatcherControl('resume_all');
