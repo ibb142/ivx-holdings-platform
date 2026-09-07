@@ -22,5 +22,10 @@ describe('real execution certificate boot recovery', () => {
     const runtime = readFileSync(join(import.meta.dir, 'services/ivx-agent-runtime.ts'), 'utf8');
     expect(runtime).toContain('const endISO = new Date(endTime).toISOString();');
     expect(runtime).not.toContain('const endISO = isoSecondPrecision(new Date(endTime));');
+
+    const tools = readFileSync(join(import.meta.dir, 'services/ivx-agent-real-tools.ts'), 'utf8');
+    expect(tools).toContain('const publicResearchFallback = async');
+    expect(tools).toContain('syntheticFallback: false');
+    expect(tools).toContain("{ toolId: 'sec_edgar_submissions', params: { cik: '320193' } }, { toolId: 'wikipedia_search'");
   });
 });
