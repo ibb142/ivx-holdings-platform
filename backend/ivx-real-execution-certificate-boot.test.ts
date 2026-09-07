@@ -18,5 +18,9 @@ describe('real execution certificate boot recovery', () => {
     const server = readFileSync(join(import.meta.dir, '../server.ts'), 'utf8');
     expect(server).toContain("import app, { certificateBootRecovery } from './backend/hono-extended';");
     expect(server.indexOf('void certificateBootRecovery.finally')).toBeLessThan(server.indexOf('startAutonomous112RuntimeEnforcer()'));
+
+    const runtime = readFileSync(join(import.meta.dir, 'services/ivx-agent-runtime.ts'), 'utf8');
+    expect(runtime).toContain('const endISO = new Date(endTime).toISOString();');
+    expect(runtime).not.toContain('const endISO = isoSecondPrecision(new Date(endTime));');
   });
 });
