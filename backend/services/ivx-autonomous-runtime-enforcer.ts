@@ -41,7 +41,7 @@ import {
   runLandingPatrolSession,
 } from './ivx-landing-continuous-patrol';
 
-export const IVX_AUTONOMOUS_RUNTIME_ENFORCER_MARKER = 'ivx-autonomous-runtime-enforcer-2026-09-07-continuous-refill-v3';
+export const IVX_AUTONOMOUS_RUNTIME_ENFORCER_MARKER = 'ivx-autonomous-runtime-enforcer-2026-09-07-continuous-refill-v4';
 export const IVX_AUTONOMOUS_REFILL_INTERVAL_MS = 5_000;
 
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -120,6 +120,17 @@ function canRunContinuity(agentId: string): boolean {
     && state.health !== 'failed'
     && state.availability === 'available'
     && !state.activeTaskId;
+}
+
+function canStartPreparedContinuity(agentId: string, preparedTaskId: string): boolean {
+  if (!continuityEnabled || continuityRuns.has(agentId)) return false;
+  if (continuityRuns.size >= getContinuityMaxConcurrency()) return false;
+  const state = getAllExecutionStates().find((row) => row.agentId === agentId);
+  if (!state) return false;
+  return !state.pauseState
+    && !state.disabledState
+    && state.health !== 'failed'
+    && (!state.activeTaskId || state.activeTaskId === preparedTaskId);
 }
 
 function currentSourceSha(): string {
@@ -225,7 +236,10 @@ function runHeartbeatRefresh(): Promise<void> {
 }
 
 function startContinuityRun(agentId: string, agentNumber: number, preparedTask: Task): void {
-  if (!canRunContinuity(agentId)) return;
+  // The independent lease mirror may observe this exact PostgreSQL RUNNING row
+  // between startLeasedTasksBatch() and this call. Treat that as confirmation,
+  // while still rejecting a different active task for the same IA.
+  if (!canStartPreparedContinuity(agentId, preparedTask.taskId)) return;
   refillStarted += 1;
   let outcome: ContinuityOutcome = 'failed';
   const sourceSha = currentSourceSha();
