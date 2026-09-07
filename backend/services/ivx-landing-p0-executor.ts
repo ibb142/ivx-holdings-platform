@@ -340,6 +340,16 @@ function dealId(deal: DealRecord): string {
   return '';
 }
 
+export function productionSupabaseConfigured(diagnostic: Record<string, unknown> | undefined): boolean {
+  if (!diagnostic) return false;
+  const store = diagnostic.supabaseRestStoreDiagnostic as Record<string, unknown> | undefined;
+  if (store?.canUseSupabaseRestStore === true && store.supabaseAnonKeyPresent === true) return true;
+  const present = diagnostic.present as Record<string, { present?: boolean } | undefined> | undefined;
+  const hasUrl = present?.EXPO_PUBLIC_SUPABASE_URL?.present === true || present?.SUPABASE_URL?.present === true;
+  const hasClientKey = present?.EXPO_PUBLIC_SUPABASE_ANON_KEY?.present === true || present?.SUPABASE_ANON_KEY?.present === true;
+  return hasUrl && hasClientKey;
+}
+
 function collectUrls(value: unknown, keyHint: string, depth: number, out: { images: Set<string>; videos: Set<string> }): void {
   if (depth > 4 || value == null) return;
   if (typeof value === 'string') {
@@ -901,9 +911,9 @@ async function runContract(fetchImpl: typeof fetch, probeName: string, c: Collec
       const leaks = scanForSecrets(result.text);
       if (leaks.length > 0) return fail(`env diagnostic leaks secret patterns: ${leaks.join(', ')}`, 'security', 'report booleans only, never values');
       const json = parseJson(result.text) as Record<string, unknown> | undefined;
-      const flattened = JSON.stringify(json ?? {});
-      const supabaseMissing = /"[^"]*supabase[^"]*"\s*:\s*(false|"missing"|"not[_ -]?configured"|null)/i.test(flattened);
-      return supabaseMissing ? fail('diagnostic reports Supabase auth not configured', 'auth', 'configure production Supabase env on API host') : pass('production auth env reported configured; no secret values exposed');
+      return productionSupabaseConfigured(json)
+        ? pass('production auth env reported configured; no secret values exposed')
+        : fail('diagnostic reports Supabase auth not configured', 'auth', 'configure production Supabase URL + client key on API host');
     }
     default: return blocked(`unknown contract probe ${probeName}`);
   }
