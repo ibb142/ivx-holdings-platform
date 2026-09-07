@@ -1,7 +1,6 @@
 /**
  * IVX Landing — Forgot Password E2E.
- * The branch-local suite verifies the /recover wire contract deterministically.
- * Production availability and delivery remain separate deployment gates. The reset page
+ * Real /recover request is asserted against production Supabase. The reset page
  * also gets a deterministic browser test for a valid recovery session so the
  * change-password path cannot regress silently.
  */
@@ -40,65 +39,19 @@ test.describe('Forgot Password — landing portal', () => {
     await expect(page.locator('#portal-forgot-error')).toHaveText(/Enter a valid email/);
   });
 
-  test('reset request posts the Supabase recover contract and reaches success state', async ({ page }) => {
-    await page.route('**/supabase.min.js', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/javascript',
-        body: `
-          window.supabase = {
-            createClient: function (url) {
-              return { auth: {
-                resetPasswordForEmail: async function (email, options) {
-                  var response = await fetch(
-                    url + '/auth/v1/recover?redirect_to=' + encodeURIComponent(options.redirectTo),
-                    {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ email: email })
-                    }
-                  );
-                  return { data: {}, error: response.ok ? null : new Error('recover failed') };
-                }
-              }};
-            }
-          };
-        `,
-      });
-    });
-
-    let recoverPost: { method: string; body: string | null } | null = null;
-    await page.route('**/auth/v1/recover**', async (route) => {
-      const request = route.request();
-      if (request.method() === 'OPTIONS') {
-        await route.fulfill({
-          status: 204,
-          headers: {
-            'access-control-allow-origin': '*',
-            'access-control-allow-methods': 'POST, OPTIONS',
-            'access-control-allow-headers': 'content-type',
-          },
-        });
-        return;
-      }
-      recoverPost = { method: request.method(), body: request.postData() };
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        headers: { 'access-control-allow-origin': '*' },
-        body: '{}',
-      });
-    });
-
+  test('real reset request: Supabase /auth/v1/recover 200 + success state', async ({ page }) => {
     await openPortalForgotView(page);
     await page.locator('#portal-forgot-email').fill(QA_EMAIL);
+    const recoverResponse = page.waitForResponse(
+      (r) => r.url().includes('/auth/v1/recover') && r.request().method() === 'POST',
+      { timeout: 30000 },
+    );
     await page.locator('#portal-forgot-btn').click();
+    const response = await recoverResponse;
+    expect(response.status()).toBe(200);
     await expect(page.locator('#portal-forgot-success')).toBeVisible({ timeout: 15000 });
     await expect(page.locator('#portal-forgot-success')).toContainText(/reset link has been sent/i);
     await expect(page.locator('#portal-forgot-error')).toBeHidden();
-    expect(recoverPost).not.toBeNull();
-    expect(recoverPost?.method).toBe('POST');
-    expect(JSON.parse(recoverPost?.body ?? '{}').email).toBe(QA_EMAIL);
   });
 });
 
@@ -110,23 +63,6 @@ test.describe('Forgot Password — reset-password.html', () => {
   });
 
   test('invalid recovery code is rejected', async ({ page }) => {
-    await page.route('**/supabase.min.js', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/javascript',
-        body: `
-          window.supabase = {
-            createClient: function () {
-              return { auth: {
-                exchangeCodeForSession: async function () {
-                  return { data: {}, error: new Error('invalid recovery code') };
-                }
-              }};
-            }
-          };
-        `,
-      });
-    });
     await page.goto(BASE + '/reset-password.html?code=definitely-invalid-code', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.status')).toBeVisible({ timeout: 15000 });
     await expect(page.locator('.status')).toContainText(/Could not verify your recovery link/i);
