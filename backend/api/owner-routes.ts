@@ -66,6 +66,9 @@ async function getOwnerRoomContext(client: DBClient): Promise<OwnerRoomContext> 
 
 function getErrorStatus(error: unknown): number {
   const message = error instanceof Error ? error.message.toLowerCase() : '';
+  if (message.includes('timed out') || message.includes('temporarily unavailable')) {
+    return 503;
+  }
   if (message.includes('missing bearer token') || message.includes('invalid or expired')) {
     return 401;
   }
