@@ -109,14 +109,14 @@ function bodyToUpdateInput(body: Record<string, unknown>): UpdateDealInput {
   return patch;
 }
 
-export async function handleDealTrackingListRequest(request: Request): Promise<Response> {
+export async function handleIVXDealTrackingListRequest(request: Request): Promise<Response> {
   const denied = await requireOwner(request);
   if (denied) return denied;
   const [deals, metrics] = await Promise.all([listDeals(), summarizeDeals()]);
   return ownerOnlyJson({ ok: true, deals, metrics });
 }
 
-export async function handleDealTrackingCreateRequest(request: Request): Promise<Response> {
+export async function handleIVXDealTrackingCreateRequest(request: Request): Promise<Response> {
   const denied = await requireOwner(request);
   if (denied) return denied;
   const body = await readJsonBody(request);
@@ -145,7 +145,7 @@ export async function handleDealTrackingCreateRequest(request: Request): Promise
   return ownerOnlyJson({ ok: true, deal: result.deal }, 201);
 }
 
-export async function handleDealTrackingGetRequest(request: Request, dealId: string): Promise<Response> {
+export async function handleIVXDealTrackingGetRequest(request: Request, dealId: string): Promise<Response> {
   const denied = await requireOwner(request);
   if (denied) return denied;
   const deal = await getDeal(dealId);
@@ -153,7 +153,7 @@ export async function handleDealTrackingGetRequest(request: Request, dealId: str
   return ownerOnlyJson({ ok: true, deal });
 }
 
-export async function handleDealTrackingUpdateRequest(request: Request, dealId: string): Promise<Response> {
+export async function handleIVXDealTrackingUpdateRequest(request: Request, dealId: string): Promise<Response> {
   const denied = await requireOwner(request);
   if (denied) return denied;
   const body = await readJsonBody(request);
