@@ -100,7 +100,8 @@ jq -n \
   --arg sha "$(git rev-parse HEAD)" \
   --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --argjson total "$total" --argjson passed "$passed" --argjson failed "$failed" \
-  '{certificate:"IVX-ALL-EXPO-ROUTES-ANDROID-SMOKE",sourceSha:$sha,totalRoutes:$total,passedRoutes:$passed,failedRoutes:$failed,coveragePercent:(if $total>0 then (($passed*10000/$total)|floor/100) else 0 end),passed:($total>0 and $failed==0 and $passed==$total),realOwnerLogin:true,automated:true,physicalAndroidEmulator:true,everyRouteOpened:true,everyRouteScrolled:true,processSurvivalChecked:true,verifiedAt:$verifiedAt}' \
+  --argjson exitCode "$route_exit" \
+  '{certificate:"IVX-ALL-EXPO-ROUTES-ANDROID-SMOKE",sourceSha:$sha,totalRoutes:$total,passedRoutes:$passed,failedRoutes:$failed,exitCode:$exitCode,coveragePercent:(if $total>0 then (($passed*10000/$total)|floor/100) else 0 end),passed:($exitCode==0 and $total>100 and $failed==0 and $passed==$total),realOwnerLogin:true,automated:true,physicalAndroidEmulator:true,everyRouteOpened:($failed==0 and $passed==$total),everyRouteScrolled:($failed==0 and $passed==$total),processSurvivalChecked:true,verifiedAt:$verifiedAt}' \
   > "$EVIDENCE/certificate.json"
 cat "$EVIDENCE/certificate.json"
 
