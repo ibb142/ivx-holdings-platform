@@ -10,7 +10,7 @@
  *   POST /api/ivx/agent-code-executor/build      — run build loop with AI error feedback
  *   POST /api/ivx/agent-code-executor/deploy     — commit + deploy to production
  *   POST /api/ivx/agent-code-executor/full        — full pipeline: write → build → deploy
- *   POST /api/ivx/agent-code-executor/112-cert    — certify all 112 agents can write+build+deploy
+ *   POST /api/ivx/agent-code-executor/112-cert    — run one execution-layer sample; 112 certification remains fail-closed
  */
 import {
   writeAgentFiles,
@@ -218,14 +218,16 @@ export async function handleExecutorFullRequest(request: Request): Promise<Respo
 // ── POST /api/ivx/agent-code-executor/112-cert ────────────────────────────────
 
 /**
- * Certify that all 112 IA agents can write code, build, and deploy.
+ * Exercise the shared code execution layer with one sample agent.
  *
  * This endpoint runs a real proof: it generates a unique code file via AI
  * for a sample agent, writes it, builds it, and (optionally) deploys it.
  * The proof is that the agent produced REAL code that compiles and deploys.
  *
- * For certification, we generate a small TypeScript module for each agent
- * that proves the code execution layer works end-to-end.
+ * Historical versions incorrectly called this a 112-agent certificate even
+ * though only IA-1 generated one file. The compatibility endpoint remains, but
+ * `certified` and `certified112` stay false until 112 distinct agent outcomes,
+ * leases, heartbeats and exact production evidence are supplied.
  */
 export async function handleExecutor112CertRequest(request: Request): Promise<Response> {
   const startedAt = Date.now();
@@ -318,16 +320,22 @@ export async function handleExecutor112CertRequest(request: Request): Promise<Re
   const totalDurationMs = Date.now() - startedAt;
   const proofHash = sha256(JSON.stringify(executionResult) + certId);
 
-  // Build the certification result
+  // Build an honest sample result. One shared-layer run is not 112-agent proof.
+  const sampledAgents = 1;
+  const certified112 = false;
   const certResult = {
     ok: executionResult.ok,
-    certified: executionResult.ok,
+    certified: certified112,
+    certified112,
+    layerSampleVerified: executionResult.ok,
+    sampledAgents,
+    requiredAgents: 112,
     certId,
     marker: IVX_AGENT_CODE_EXECUTOR_MARKER,
     timestamp,
     proofHash,
     summary: executionResult.ok
-      ? `Code execution layer certified: AI generated code, wrote it to disk, build passed, ${skipDeploy ? 'deploy skipped' : 'deployed to production'}.`
+      ? `Execution-layer sample verified for ${sampledAgents}/112 agents: AI generated code, wrote it to disk and the build passed; fleet certification remains NOT VERIFIED${skipDeploy ? ' and deployment was skipped' : ''}.`
       : `Code execution layer BLOCKED: ${executionResult.error}`,
     aiConfigured,
     aiModel,
@@ -352,10 +360,14 @@ export async function handleExecutor112CertRequest(request: Request): Promise<Re
       commitSha: skipDeploy ? null : (executionResult.deployResult?.commitSha ?? null),
       commitUrl: skipDeploy ? null : (executionResult.deployResult?.commitUrl ?? null),
     },
+    certificationBlockers: [
+      `DISTINCT_AGENT_EXECUTION_EVIDENCE:${sampledAgents}/112`,
+      'DISTINCT_ACTIVE_LEASES:required_112',
+      'FRESH_HEARTBEATS:required_112',
+      'EXACT_PRODUCTION_EVIDENCE:required_per_agent',
+    ],
     proofDefinition:
-      'All 112 IA agents now have a code execution layer. An agent generates code via AI, ' +
-      'the executor writes it to real files, runs a build loop with AI error feedback, and ' +
-      'deploys to production via GitHub. This certifies the layer works end-to-end.',
+      'This result proves only the sampled shared execution path. Exact 112/112 certification requires distinct evidence for every agent plus the fail-closed fleet truth gate; registry membership or one sample cannot certify the fleet.',
   };
 
   return json(certResult, executionResult.ok ? 200 : 500);

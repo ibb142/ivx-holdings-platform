@@ -155,6 +155,32 @@ describe('Autonomous decision quality closed loop', () => {
     expect(snapshot.recommendations.length).toBeGreaterThan(0);
   });
 
+  it('accepts test and production proof only when it belongs to the exact source SHA', () => {
+    const exact = task({
+      taskId: 'exact-sha',
+      title: 'Backend deployment exact SHA',
+      idempotencyKey: 'deploy:exact-sha',
+      taskType: 'development',
+      filesChanged: ['backend/server.ts'],
+      commitSha: SHA,
+      deploymentId: 'dep-test',
+      evidence: [evidence('test_result', 'backend-tests'), evidence('production_verification', 'render-live')],
+    });
+    const mismatch = {
+      ...exact,
+      taskId: 'mismatched-sha',
+      idempotencyKey: 'deploy:mismatched-sha',
+      commitSha: 'different-sha',
+    };
+
+    const exactSnapshot = computeDecisionQualitySnapshot([exact], SHA, NOW);
+    const mismatchSnapshot = computeDecisionQualitySnapshot([mismatch], SHA, NOW);
+    expect(exactSnapshot.testEvidenceRate.rate).toBe(1);
+    expect(exactSnapshot.productionVerificationRate.rate).toBe(1);
+    expect(mismatchSnapshot.testEvidenceRate.rate).toBe(0);
+    expect(mismatchSnapshot.productionVerificationRate.rate).toBe(0);
+  });
+
   it('scores agents from actual durable outcomes rather than registry presence', () => {
     const tasks = [
       task({ taskId: 'a1-ok', title: 'Backend QA', idempotencyKey: 'a1:ok', assignedAgentNumber: 1 }),

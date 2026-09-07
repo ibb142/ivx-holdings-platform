@@ -24,6 +24,7 @@
  *   GET    /api/ivx/autonomous-task-engine/states               — 23-state machine
  */
 import type { Context as HonoContext } from 'hono';
+import { withIVXOwnerOnly } from './ivx-owner-route';
 import {
   createObjective,
   createTask,
@@ -53,6 +54,21 @@ import {
   type ProtectedAction,
 } from '../services/ivx-autonomous-task-engine.js';
 
+type AutonomousTaskEngineHandler = (c: HonoContext) => Promise<Response>;
+
+/**
+ * Security boundary for the complete task-engine surface.
+ *
+ * The previous route comment said these endpoints were owner-only, but the
+ * global middleware only applied rate limits and security headers. Keeping the
+ * guard as a route decorator makes it impossible for an unauthenticated caller
+ * to read objectives/tasks/approvals or mutate task state. The canonical owner
+ * guard also accepts the active IVX system key used by trusted fleet workers.
+ */
+export function withAutonomousTaskEngineOwner(handler: AutonomousTaskEngineHandler): AutonomousTaskEngineHandler {
+  return withIVXOwnerOnly(handler);
+}
+
 export async function handleAutonomousTaskEngine(c: HonoContext): Promise<Response> {
   const summary = await getTaskEngineSummary();
   return c.json({ ok: true, marker: summary.marker, summary });
@@ -74,6 +90,10 @@ export async function handleCreateObjective(c: HonoContext): Promise<Response> {
     exclusions: Array.isArray(body.exclusions) ? body.exclusions.map(String) : undefined,
     riskClassification: body.riskClassification as 'low' | 'medium' | 'high' | 'critical' | undefined,
     priority: body.priority as 'critical' | 'high' | 'medium' | 'low' | undefined,
+    ownerRole: body.ownerRole ? String(body.ownerRole) : null,
+    targetDate: body.targetDate ? String(body.targetDate) : null,
+    successMetrics: Array.isArray(body.successMetrics) ? body.successMetrics.map(String) : undefined,
+    idempotencyKey: body.idempotencyKey ? String(body.idempotencyKey) : null,
     ownerEmail: ownerEmail ?? 'owner@ivxholding.com',
   });
   return c.json(result);
@@ -96,6 +116,11 @@ export async function handleCreateTask(c: HonoContext): Promise<Response> {
     assignedAgentNumber: body.assignedAgentNumber ? Number(body.assignedAgentNumber) : null,
     assignedEngine: body.assignedEngine ? String(body.assignedEngine) : null,
     priority: body.priority as 'critical' | 'high' | 'medium' | 'low' | undefined,
+    businessValue: body.businessValue == null ? undefined : Number(body.businessValue),
+    estimatedMinutes: body.estimatedMinutes == null ? null : Number(body.estimatedMinutes),
+    milestone: body.milestone ? String(body.milestone) : null,
+    ownerRole: body.ownerRole ? String(body.ownerRole) : null,
+    dueAt: body.dueAt ? String(body.dueAt) : null,
     executionOrder: body.executionOrder ? Number(body.executionOrder) : undefined,
     maxRetries: body.maxRetries ? Number(body.maxRetries) : undefined,
   });

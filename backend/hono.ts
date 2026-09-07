@@ -87,6 +87,7 @@ import {
   OPTIONS as autonomousCoreOptions,
   handleLifecycleProofRequest,
   handleAutonomousDashboardRequest,
+  handleAutonomousProjectManagerRequest,
   handleHandoffReadinessRequest,
   handlePriorityQueueRequest,
   handleCodeIndexRequest,
@@ -916,6 +917,7 @@ import {
   startSelfUpgradeScheduler,
   IVX_SELF_UPGRADE_MARKER,
 } from './services/ivx-daily-self-upgrade';
+import { withIVXOwnerOnly } from './api/ivx-owner-route';
 import { OPTIONS as seniorDeveloperOptions, handleIVXSeniorDeveloperCredentialAuditRequest, handleIVXSeniorDeveloperGithubAuditRequest, handleIVXSeniorDeveloperRunRequest, handleIVXSeniorDeveloperStatusRequest } from './api/ivx-senior-developer-runtime';
 import { auditIVXProductionCredentialRuntime, IVX_SENIOR_DEVELOPER_RUNTIME_MARKER, IVX_GITHUB_CANONICAL_PATH, IVX_GITHUB_CANONICAL_PATH_DESCRIPTION } from './services/ivx-senior-developer-runtime';
 import { OPTIONS as seniorDevToolsOptions, handleIVXSeniorDevAuditReportRequest, handleIVXSeniorDevToolsExecuteRequest, handleIVXSeniorDevToolsListRequest } from './api/ivx-senior-dev-tools';
@@ -1170,6 +1172,7 @@ import {
   handleValidateCompletion,
   handlePermissionMatrix,
   handleTaskStates,
+  withAutonomousTaskEngineOwner,
 } from './api/ivx-autonomous-task-engine-api';
 import {
   enterpriseRegistrationOptions,
@@ -3971,6 +3974,8 @@ app.options('/api/ivx/autonomous-core/lifecycle-proof', () => autonomousCoreOpti
 app.get('/api/ivx/autonomous-core/lifecycle-proof', async (context) => handleLifecycleProofRequest(context.req.raw));
 app.options('/api/ivx/autonomous-core/dashboard', () => autonomousCoreOptions());
 app.get('/api/ivx/autonomous-core/dashboard', async (context) => handleAutonomousDashboardRequest(context.req.raw));
+app.options('/api/ivx/autonomous-core/project-manager', () => autonomousCoreOptions());
+app.get('/api/ivx/autonomous-core/project-manager', async (context) => handleAutonomousProjectManagerRequest(context.req.raw));
 app.options('/api/ivx/handoff/readiness', () => autonomousCoreOptions());
 app.get('/api/ivx/handoff/readiness', async (context) => handleHandoffReadinessRequest(context.req.raw));
 app.options('/api/ivx/capabilities', () => capabilitiesOptions());
@@ -4994,11 +4999,11 @@ app.post('/api/ivx/app-creation-pipeline/run', async (context) => handleAppPipel
 
 // IVX Agent Code Execution Layer — connects 112 IA agents to real code execution
 app.get('/api/ivx/agent-code-executor/status', () => handleExecutorStatusRequest());
-app.post('/api/ivx/agent-code-executor/write', async (context) => handleExecutorWriteRequest(context.req.raw));
-app.post('/api/ivx/agent-code-executor/build', async (context) => handleExecutorBuildRequest(context.req.raw));
-app.post('/api/ivx/agent-code-executor/deploy', async (context) => handleExecutorDeployRequest(context.req.raw));
-app.post('/api/ivx/agent-code-executor/full', async (context) => handleExecutorFullRequest(context.req.raw));
-app.post('/api/ivx/agent-code-executor/112-cert', async (context) => handleExecutor112CertRequest(context.req.raw));
+app.post('/api/ivx/agent-code-executor/write', withIVXOwnerOnly(async (context) => handleExecutorWriteRequest(context.req.raw)));
+app.post('/api/ivx/agent-code-executor/build', withIVXOwnerOnly(async (context) => handleExecutorBuildRequest(context.req.raw)));
+app.post('/api/ivx/agent-code-executor/deploy', withIVXOwnerOnly(async (context) => handleExecutorDeployRequest(context.req.raw)));
+app.post('/api/ivx/agent-code-executor/full', withIVXOwnerOnly(async (context) => handleExecutorFullRequest(context.req.raw)));
+app.post('/api/ivx/agent-code-executor/112-cert', withIVXOwnerOnly(async (context) => handleExecutor112CertRequest(context.req.raw)));
 
 // ── SignalWire SMS + Voice ───────────────────────────────────────────────────
 app.get('/api/ivx/signalwire/status', () => handleSignalWireStatus());
@@ -5013,20 +5018,20 @@ app.get('/api/ivx/signalwire/voice/brain', () => handleVoiceBrainStatus());
 app.post('/api/ivx/signalwire/conversational', async (c) => handleSignalWireConversationalCall(c.req.raw));
 app.post('/api/ivx/signalwire/verify', async (c) => handleSignalWireVerify(c.req.raw));
 // Daily autonomous self-upgrade
-app.get('/api/ivx/self-upgrade/status', () => {
+app.get('/api/ivx/self-upgrade/status', withIVXOwnerOnly(async () => {
   const status = getSelfUpgradeStatus();
   return new Response(JSON.stringify(status), { headers: { 'Content-Type': 'application/json' } });
-});
-app.post('/api/ivx/self-upgrade/run', async (c) => {
+}));
+app.post('/api/ivx/self-upgrade/run', withIVXOwnerOnly(async () => {
   const result = await runDailySelfUpgrade();
   return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
-});
-app.get('/api/ivx/self-upgrade/log', (c) => {
+}));
+app.get('/api/ivx/self-upgrade/log', withIVXOwnerOnly(async (c) => {
   const url = new URL(c.req.url);
   const limit = parseInt(url.searchParams.get('limit') || '10', 10);
   const log = getUpgradeLog(limit);
   return new Response(JSON.stringify({ ok: true, log, marker: IVX_SELF_UPGRADE_MARKER }), { headers: { 'Content-Type': 'application/json' } });
-});
+}));
 app.options('/api/ivx/signalwire/status', (c) => c.body(null, 204));
 app.options('/api/ivx/signalwire/sms', (c) => c.body(null, 204));
 app.options('/api/ivx/signalwire/voice', (c) => c.body(null, 204));
@@ -5931,25 +5936,26 @@ app.get('/api/ivx/enterprise-master/*', async (c) => handleEnterpriseMasterReque
 app.post('/api/ivx/enterprise-master/*', async (c) => handleEnterpriseMasterRequest(c.req.raw));
 
 // ── Autonomous Task Engine — 23-state machine, objective planning, approval gate ─
-// All routes are owner-only (enforced by the existing owner-auth middleware).
-app.get('/api/ivx/autonomous-task-engine', async (c) => handleAutonomousTaskEngine(c));
-app.get('/api/ivx/autonomous-task-engine/states', async (c) => handleTaskStates(c));
-app.get('/api/ivx/autonomous-task-engine/permission-matrix', async (c) => handlePermissionMatrix(c));
-app.get('/api/ivx/autonomous-task-engine/objectives', async (c) => handleListObjectives(c));
-app.post('/api/ivx/autonomous-task-engine/objectives', async (c) => handleCreateObjective(c));
-app.get('/api/ivx/autonomous-task-engine/tasks', async (c) => handleListTasks(c));
-app.post('/api/ivx/autonomous-task-engine/tasks', async (c) => handleCreateTask(c));
-app.get('/api/ivx/autonomous-task-engine/tasks/:taskId', async (c) => handleGetTask(c));
-app.post('/api/ivx/autonomous-task-engine/tasks/:taskId/transition', async (c) => handleTransitionTask(c));
-app.post('/api/ivx/autonomous-task-engine/tasks/:taskId/evidence', async (c) => handleAddEvidence(c));
-app.post('/api/ivx/autonomous-task-engine/tasks/:taskId/criterion', async (c) => handleMarkCriterion(c));
-app.post('/api/ivx/autonomous-task-engine/lease', async (c) => handleLeaseTask(c));
-app.post('/api/ivx/autonomous-task-engine/lease/:taskId/heartbeat', async (c) => handleHeartbeat(c));
-app.post('/api/ivx/autonomous-task-engine/lease/:taskId/release', async (c) => handleReleaseLease(c));
-app.get('/api/ivx/autonomous-task-engine/approvals', async (c) => handleListApprovals(c));
-app.post('/api/ivx/autonomous-task-engine/approvals', async (c) => handleCreateApproval(c));
-app.post('/api/ivx/autonomous-task-engine/approvals/consume', async (c) => handleConsumeApproval(c));
-app.get('/api/ivx/autonomous-task-engine/validate/:taskId', async (c) => handleValidateCompletion(c));
+// Every route is wrapped by the explicit canonical owner/system guard. The
+// global security middleware is deliberately not treated as authentication.
+app.get('/api/ivx/autonomous-task-engine', withAutonomousTaskEngineOwner(handleAutonomousTaskEngine));
+app.get('/api/ivx/autonomous-task-engine/states', withAutonomousTaskEngineOwner(handleTaskStates));
+app.get('/api/ivx/autonomous-task-engine/permission-matrix', withAutonomousTaskEngineOwner(handlePermissionMatrix));
+app.get('/api/ivx/autonomous-task-engine/objectives', withAutonomousTaskEngineOwner(handleListObjectives));
+app.post('/api/ivx/autonomous-task-engine/objectives', withAutonomousTaskEngineOwner(handleCreateObjective));
+app.get('/api/ivx/autonomous-task-engine/tasks', withAutonomousTaskEngineOwner(handleListTasks));
+app.post('/api/ivx/autonomous-task-engine/tasks', withAutonomousTaskEngineOwner(handleCreateTask));
+app.get('/api/ivx/autonomous-task-engine/tasks/:taskId', withAutonomousTaskEngineOwner(handleGetTask));
+app.post('/api/ivx/autonomous-task-engine/tasks/:taskId/transition', withAutonomousTaskEngineOwner(handleTransitionTask));
+app.post('/api/ivx/autonomous-task-engine/tasks/:taskId/evidence', withAutonomousTaskEngineOwner(handleAddEvidence));
+app.post('/api/ivx/autonomous-task-engine/tasks/:taskId/criterion', withAutonomousTaskEngineOwner(handleMarkCriterion));
+app.post('/api/ivx/autonomous-task-engine/lease', withAutonomousTaskEngineOwner(handleLeaseTask));
+app.post('/api/ivx/autonomous-task-engine/lease/:taskId/heartbeat', withAutonomousTaskEngineOwner(handleHeartbeat));
+app.post('/api/ivx/autonomous-task-engine/lease/:taskId/release', withAutonomousTaskEngineOwner(handleReleaseLease));
+app.get('/api/ivx/autonomous-task-engine/approvals', withAutonomousTaskEngineOwner(handleListApprovals));
+app.post('/api/ivx/autonomous-task-engine/approvals', withAutonomousTaskEngineOwner(handleCreateApproval));
+app.post('/api/ivx/autonomous-task-engine/approvals/consume', withAutonomousTaskEngineOwner(handleConsumeApproval));
+app.get('/api/ivx/autonomous-task-engine/validate/:taskId', withAutonomousTaskEngineOwner(handleValidateCompletion));
 
 // ── Enterprise Registration ───────────────────────────────────────────
 app.options('/api/ivx/enterprise-registration/register', () => enterpriseRegistrationOptions());

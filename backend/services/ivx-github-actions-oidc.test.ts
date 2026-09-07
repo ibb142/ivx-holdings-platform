@@ -62,6 +62,14 @@ describe('IVX GitHub Actions OIDC claims', () => {
     }, now)).toBe(true);
   });
 
+  test('accepts the continuous 500-check fleet workflow that drives the agent run endpoint', () => {
+    expect(validateIVXGitHubOIDCClaims({
+      ...valid,
+      workflow_ref: 'ibb142/ivx-holdings-platform/.github/workflows/ivx-112-continuous-500-cycle.yml@refs/heads/main',
+      event_name: 'workflow_dispatch',
+    }, now)).toBe(true);
+  });
+
   test('rejects wrong audience, repository ids, and expired tokens', () => {
     expect(validateIVXGitHubOIDCClaims({ ...valid, aud: 'other-audience' }, now)).toBe(false);
     expect(validateIVXGitHubOIDCClaims({ ...valid, repository_id: '999' }, now)).toBe(false);

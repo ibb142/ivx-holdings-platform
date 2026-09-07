@@ -10,6 +10,7 @@ import path from 'node:path';
 import {
   getAllTasks,
   getTaskById,
+  isTaskWithinMissionScope,
   leaseNextTask,
   recoverStrandedTasksInPlace,
   retireDuplicateTasksInPlace,
@@ -23,6 +24,7 @@ import {
   encodeLandingResult,
   LANDING_P0_LANES,
   LANDING_P0_PREFIX,
+  LANDING_P0_REPAIR_PREFIX,
   LANDING_P0_UNITS,
   laneFor,
   landingRepairKey,
@@ -117,7 +119,19 @@ describe('Landing P0 partition (owner-mandated lanes)', () => {
   it('task keys bind SHA + unit and round-trip (audit + repair)', () => {
     expect(parseLandingTaskKey(landingTaskKey(SHA, 'deals.order'))).toEqual({ sha: SHA, unitId: 'deals.order', repair: false, defectCode: null });
     expect(parseLandingTaskKey(landingRepairKey(SHA, 'deals.order', 'deals.order'))).toEqual({ sha: SHA, unitId: 'deals.order', repair: true, defectCode: 'deals.order' });
+    expect(parseLandingTaskKey(`${LANDING_P0_PREFIX}${SHA}:ivx_holdings_54:structure.nav`)).toEqual({ sha: SHA, unitId: 'structure.nav', repair: false, defectCode: null });
+    expect(parseLandingTaskKey(`${LANDING_P0_REPAIR_PREFIX}${SHA}:ivx_holdings_54:structure.nav:NAV-001`)).toEqual({ sha: SHA, unitId: 'structure.nav', repair: true, defectCode: 'NAV-001' });
     expect(parseLandingTaskKey(`module-audit:${SHA}:ivx_holdings_1:1:backend/api/x.ts`)).toBeNull();
+  });
+
+  it('leases only the active Landing SHA while leaving non-mission work eligible', () => {
+    const scope = {
+      familyPrefixes: [LANDING_P0_PREFIX, LANDING_P0_REPAIR_PREFIX],
+      activePrefixes: [`${LANDING_P0_PREFIX}${SHA}:`, `${LANDING_P0_REPAIR_PREFIX}${SHA}:`],
+    };
+    expect(isTaskWithinMissionScope(makeTask({ idempotencyKey: `${LANDING_P0_PREFIX}${SHA}:structure.nav` }), scope)).toBe(true);
+    expect(isTaskWithinMissionScope(makeTask({ idempotencyKey: `${LANDING_P0_PREFIX}old-sha:ivx_holdings_54:structure.nav` }), scope)).toBe(false);
+    expect(isTaskWithinMissionScope(makeTask({ idempotencyKey: `module-audit:${SHA}:ivx_holdings_1:1:backend/api/x.ts` }), scope)).toBe(true);
   });
 
   it('mission is OFF in tests unless forced on via env (no network)', async () => {
