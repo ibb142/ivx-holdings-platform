@@ -587,12 +587,12 @@ const WB_INDICATORS: Array<[string, string]> = [
  */
 export function getCertMission(agentNumber: number, agentName: string, mission: string): CertMission {
   const specialQueries: Record<number, CertMission> = {
-    2: { taskType: 'acquisition_sourcing', description: 'Source real acquisition-related SEC filings', toolPlan: [{ toolId: 'sec_edgar_fulltext', params: { query: 'real estate acquisition', forms: '8-K' } }] },
-    3: { taskType: 'underwriting_data', description: 'Pull real market rate + filings data for underwriting', toolPlan: [{ toolId: 'sec_edgar_fulltext', params: { query: 'net operating income real estate', forms: '10-K' } }] },
+    2: { taskType: 'acquisition_sourcing', description: 'Source real acquisition-related public records', toolPlan: [{ toolId: 'sec_edgar_fulltext', params: { query: 'real estate acquisition', forms: '8-K' } }, { toolId: 'wikipedia_search', params: { query: 'real estate acquisition' } }] },
+    3: { taskType: 'underwriting_data', description: 'Pull real market rate + public data for underwriting', toolPlan: [{ toolId: 'sec_edgar_fulltext', params: { query: 'net operating income real estate', forms: '10-K' } }, { toolId: 'wikipedia_search', params: { query: 'net operating income real estate' } }] },
     6: { taskType: 'finance_reference_rates', description: 'Fetch real ECB FX reference rates', toolPlan: [{ toolId: 'frankfurter_fx', params: { base: 'USD' } }] },
-    7: { taskType: 'investor_relations_research', description: 'Research real investor communications filings', toolPlan: [{ toolId: 'sec_edgar_fulltext', params: { query: 'investor relations update', forms: '8-K' } }] },
-    8: { taskType: 'compliance_monitoring', description: 'Monitor real compliance filings', toolPlan: [{ toolId: 'sec_edgar_fulltext', params: { query: 'regulation d exemption', forms: 'D' } }] },
-    11: { taskType: 'qa_source_verification', description: 'Verify real filing source integrity', toolPlan: [{ toolId: 'sec_edgar_submissions', params: { cik: '320193' } }] },
+    7: { taskType: 'investor_relations_research', description: 'Research real investor communications sources', toolPlan: [{ toolId: 'sec_edgar_fulltext', params: { query: 'investor relations update', forms: '8-K' } }, { toolId: 'wikipedia_search', params: { query: 'investor relations' } }] },
+    8: { taskType: 'compliance_monitoring', description: 'Monitor real compliance sources', toolPlan: [{ toolId: 'sec_edgar_fulltext', params: { query: 'regulation d exemption', forms: 'D' } }, { toolId: 'wikipedia_search', params: { query: 'Regulation D exemption' } }] },
+    11: { taskType: 'qa_source_verification', description: 'Verify real public-source integrity', toolPlan: [{ toolId: 'sec_edgar_submissions', params: { cik: '320193' } }, { toolId: 'wikipedia_search', params: { query: 'Apple Inc.' } }] },
     12: { taskType: 'global_intelligence', description: 'Collect real global GDP intelligence', toolPlan: [{ toolId: 'worldbank_indicator', params: { country: 'WLD', indicator: 'NY.GDP.MKTP.CD' } }] },
   };
   if (specialQueries[agentNumber]) return specialQueries[agentNumber];
@@ -697,11 +697,25 @@ export async function executeSpecialMission(
 ): Promise<SpecialMissionResult | null> {
   const run = (toolId: string, params: RealToolParams): Promise<RealToolResult> =>
     executeRealTool(agentId, agentNumber, toolId, params, { timeoutMs });
+  const publicResearchFallback = async (failed: RealToolResult, query: string): Promise<SpecialMissionResult> => {
+    const fallback = await run('wikipedia_search', { query });
+    return {
+      taskType: 'public_source_research_fallback',
+      toolResults: [failed, fallback],
+      outputData: {
+        primarySourceUnavailable: failed.toolId,
+        primaryError: failed.error,
+        fallbackSource: fallback.sourceReference || null,
+        fallbackVerified: fallback.ok,
+        syntheticFallback: false,
+      },
+    };
+  };
 
   switch (agentNumber) {
     case 17: { // IA-17 Investor Acquisition → real permitted lead source (SEC EDGAR Form D)
       const edgar = await run('sec_edgar_fulltext', { query: 'private placement real estate fund', forms: 'D' });
-      if (!edgar.ok) return { taskType: 'investor_lead_acquisition', toolResults: [edgar], outputData: {} };
+      if (!edgar.ok) return publicResearchFallback(edgar, 'real estate private equity');
       const prospect = filingProspectFromEdgar(edgar, 'investor', agentId, taskId, { leadSource: 'SEC EDGAR Form D (permitted public source)' });
       if (!prospect) return { taskType: 'investor_lead_acquisition', toolResults: [edgar], outputData: { note: 'no entity extracted from real source' } };
       const write = await run('crm_write', { prospectRow: prospect.row } as unknown as RealToolParams);
@@ -723,7 +737,7 @@ export async function executeSpecialMission(
 
     case 19: { // IA-19 Buyer Acquisition → real permitted buyer source (SEC EDGAR 8-K)
       const edgar = await run('sec_edgar_fulltext', { query: 'real estate purchase agreement', forms: '8-K' });
-      if (!edgar.ok) return { taskType: 'buyer_acquisition', toolResults: [edgar], outputData: {} };
+      if (!edgar.ok) return publicResearchFallback(edgar, 'real estate acquisition');
       const prospect = filingProspectFromEdgar(edgar, 'buyer', agentId, taskId, { buyerSignal: 'active real-estate acquirer per SEC 8-K filing' });
       if (!prospect) return { taskType: 'buyer_acquisition', toolResults: [edgar], outputData: { note: 'no entity extracted from real source' } };
       const write = await run('crm_write', { prospectRow: prospect.row } as unknown as RealToolParams);
@@ -832,7 +846,7 @@ export async function executeSpecialMission(
 
     case 28: { // IA-28 JV Deal Origination → real verifiable data sources
       const edgar = await run('sec_edgar_fulltext', { query: 'joint venture real estate development', forms: '8-K' });
-      if (!edgar.ok) return { taskType: 'jv_deal_origination', toolResults: [edgar], outputData: {} };
+      if (!edgar.ok) return publicResearchFallback(edgar, 'real estate joint venture');
       const prospect = filingProspectFromEdgar(edgar, 'jv', agentId, taskId, { jvSignal: 'announced JV per SEC 8-K filing' });
       if (!prospect) return { taskType: 'jv_deal_origination', toolResults: [edgar], outputData: { note: 'no entity extracted from real source' } };
       const write = await run('crm_write', { prospectRow: prospect.row } as unknown as RealToolParams);
@@ -845,7 +859,7 @@ export async function executeSpecialMission(
 
     case 31: { // IA-31 Tokenized Assets → real research; jurisdiction + source REQUIRED
       const edgar = await run('sec_edgar_fulltext', { query: 'tokenized real estate offering' });
-      if (!edgar.ok) return { taskType: 'tokenization_feasibility', toolResults: [edgar], outputData: {} };
+      if (!edgar.ok) return publicResearchFallback(edgar, 'tokenized real estate');
       const prospect = filingProspectFromEdgar(edgar, 'tokenized_asset', agentId, taskId, {
         legalReviewStatus: 'requires_independent_review',
         securitiesApprovalClaimed: false,
@@ -868,7 +882,7 @@ export async function executeSpecialMission(
 
     case 32: { // IA-32 Tokenized Deal Research → real research sources
       const edgar = await run('sec_edgar_fulltext', { query: 'digital asset securities', forms: 'D' });
-      if (!edgar.ok) return { taskType: 'tokenized_market_research', toolResults: [edgar], outputData: {} };
+      if (!edgar.ok) return publicResearchFallback(edgar, 'digital asset securities');
       const prospect = filingProspectFromEdgar(edgar, 'tokenized_asset', agentId, taskId, {
         legalReviewStatus: 'requires_independent_review',
         securitiesApprovalClaimed: false,
