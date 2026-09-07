@@ -622,7 +622,10 @@ export async function resolveIVXAuthenticatedRequest(
       roleAudit: null,
       detail: msg,
     });
-    throw new Error(msg.includes('timed out') ? 'IVX auth guard failed: invalid or expired Supabase session.' : msg);
+    // A dependency timeout is not evidence that the presented JWT is invalid or
+    // expired. Preserve the fail-closed timeout so callers can return a retryable
+    // service response without weakening authentication.
+    throw new Error(msg);
   }
 
   if (userResult.error || !userResult.data.user) {
