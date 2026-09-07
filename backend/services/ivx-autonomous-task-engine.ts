@@ -336,6 +336,8 @@ let taskMutationTail: Promise<void> = Promise.resolve();
 // succeeds. Supabase failures remain fail-closed; we never manufacture an empty queue.
 const TASK_READ_CACHE_TTL_MS = 1_500;
 let taskReadCache: { value: Task[]; at: number } | null = null;
+let taskReadInFlight: Promise<Task[]> | null = null;
+let taskWriteRevision = 0;
 
 async function withTaskMutationLock<T>(mutation: () => Promise<T>): Promise<T> {
   const previous = taskMutationTail;
@@ -381,12 +383,30 @@ async function readAllTasks(): Promise<Task[]> {
     if (taskReadCache && now - taskReadCache.at <= TASK_READ_CACHE_TTL_MS) {
       return taskReadCache.value;
     }
-    const data = await readDurableJson<Task[]>(TASKS_KEY, []);
-    if (!Array.isArray(data)) {
-      throw new Error('task_engine_durable_payload_not_array');
+    // The TTL alone does not collapse a cold-cache burst: all 112 callers can
+    // miss it before the first Supabase read finishes. Share that read, including
+    // its failure, instead of issuing another request for each agent/dashboard.
+    if (taskReadInFlight) return taskReadInFlight;
+    const readRevision = taskWriteRevision;
+    const pending = (async () => {
+      const data = await readDurableJson<Task[]>(TASKS_KEY, []);
+      if (!Array.isArray(data)) {
+        throw new Error('task_engine_durable_payload_not_array');
+      }
+      // A slow read started before a successful mutation must not replace its
+      // newer persisted snapshot (or return the older task state to a caller).
+      if (taskWriteRevision !== readRevision && taskReadCache) {
+        return taskReadCache.value;
+      }
+      taskReadCache = { value: data, at: Date.now() };
+      return data;
+    })();
+    taskReadInFlight = pending;
+    try {
+      return await pending;
+    } finally {
+      if (taskReadInFlight === pending) taskReadInFlight = null;
     }
-    taskReadCache = { value: data, at: Date.now() };
-    return data;
   }
   try {
     const raw = await import('node:fs/promises').then((fs) => fs.readFile(path.join(STORE_DIR, 'tasks.json'), 'utf8'));
@@ -400,6 +420,7 @@ async function readAllTasks(): Promise<Task[]> {
 async function writeAllTasks(tasks: Task[]): Promise<void> {
   if (isDurableStoreConfigured()) {
     await writeDurableJson(TASKS_KEY, tasks);
+    taskWriteRevision += 1;
     taskReadCache = { value: tasks, at: Date.now() };
     return;
   }

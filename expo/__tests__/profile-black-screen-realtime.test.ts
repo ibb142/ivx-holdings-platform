@@ -67,7 +67,7 @@ describe('Profile black-screen regression — shared realtime hook remains rende
     const dependencyList = setupBlock.match(/\},\s*\[([^\]]*)\]\);\s*$/)?.[1];
     expect(dependencyList).toBeDefined();
     const dependencies = dependencyList!.split(',').map((item) => item.trim()).sort();
-    expect(dependencies).toEqual(['applyDeltas', 'autoReconnect', 'cleanupChannels', 'queryClient']);
+    expect(dependencies).toEqual(['applyDeltas', 'autoReconnect', 'cleanupChannels', 'configSignature', 'queryClient']);
   });
 
   it('subscription effect is also keyed by semantic signature', () => {

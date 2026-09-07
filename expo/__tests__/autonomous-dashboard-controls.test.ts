@@ -1,9 +1,20 @@
 import { describe, expect, it } from 'bun:test';
 import { AUTONOMOUS_CONTROL_ROUTES } from '@/constants/autonomous-control-routes';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+// This is a source-contract test. Importing the React Native component pulls
+// expo-router's CommonJS bundle into Bun's isolated runner, which can fail in
+// Bun internals before any IVX assertion executes.
+const component = readFileSync(
+  join(import.meta.dir, '..', 'components', 'AutonomousDashboardControlStrip.tsx'),
+  'utf8',
+);
+const routes = AUTONOMOUS_CONTROL_ROUTES.map((item) => item.route);
 
 describe('Autonomous dashboard owner controls', () => {
-  it('exposes the critical owner modules', () => {
-    const routes = AUTONOMOUS_CONTROL_ROUTES.map((item) => item.route);
+  it('exports and exposes the critical owner modules', () => {
+    expect(component).toContain('export const AUTONOMOUS_CONTROL_ROUTES');
     expect(routes).toContain('/ivx/chat');
     expect(routes).toContain('/ivx/agent-command-center');
     expect(routes).toContain('/ivx/autonomous-control');
@@ -13,7 +24,6 @@ describe('Autonomous dashboard owner controls', () => {
   });
 
   it('does not publish duplicate module routes', () => {
-    const routes = AUTONOMOUS_CONTROL_ROUTES.map((item) => item.route);
     expect(new Set(routes).size).toBe(routes.length);
   });
 });
