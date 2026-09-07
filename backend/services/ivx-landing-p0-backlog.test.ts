@@ -34,7 +34,7 @@ import {
   seedLandingP0Backlog,
   type LandingResultRecord,
 } from './ivx-landing-p0-backlog';
-import { __resetLandingExecutorCachesForTests, executeLandingUnit, scanForSecrets } from './ivx-landing-p0-executor';
+import { __resetLandingExecutorCachesForTests, evaluateSupabaseAuthDiagnostic, executeLandingUnit, scanForSecrets } from './ivx-landing-p0-executor';
 import { classifyContinuityResult } from './ivx-autonomous-runtime-enforcer';
 
 const STORE_FILE = path.join(process.cwd(), 'logs', 'audit', 'task-engine', 'tasks.json');
@@ -269,6 +269,43 @@ describe('Cross-process duplicate retirement + BLOCKED re-verification', () => {
     expect(scanForSecrets('{"SUPABASE_SERVICE_ROLE_KEY":{"present":true,"length":219},"names":["SUPABASE_SERVICE_ROLE_KEY"]}')).toEqual([]);
     expect(scanForSecrets('{"role":"service_role","iss":"supabase"}')).toContain('service_role_value');
     expect(scanForSecrets('key=sb_secret_abcdefghijklmnopqrstuvwxyz')).toContain('supabase_secret_key');
+  });
+
+  it('accepts configured Supabase Auth when unrelated optional aliases are absent', () => {
+    const diagnostic = {
+      present: {
+        EXPO_PUBLIC_SUPABASE_URL: { present: false },
+        SUPABASE_URL: { present: true },
+        IVX_SUPABASE_URL: { present: false },
+        SUPABASE_SERVICE_ROLE_KEY: { present: true },
+        SUPABASE_SERVICE_KEY: { present: false },
+        EXPO_PUBLIC_SUPABASE_ANON_KEY: { present: true },
+      },
+      supabaseRestStoreDiagnostic: {
+        supabaseAnonKeyPresent: true,
+        canUseSupabaseRestStore: true,
+        databaseUrlPresent: false,
+      },
+      toolkitProxy: { available: false, toolkitUrl: null },
+    };
+    expect(evaluateSupabaseAuthDiagnostic(diagnostic)).toEqual({ configured: true, missing: [] });
+  });
+
+  it('fails closed when a required Supabase Auth binding or diagnostic object is missing', () => {
+    const missingAnon = evaluateSupabaseAuthDiagnostic({
+      present: { EXPO_PUBLIC_SUPABASE_URL: { present: true }, EXPO_PUBLIC_SUPABASE_ANON_KEY: { present: false } },
+      supabaseRestStoreDiagnostic: { supabaseAnonKeyPresent: false, canUseSupabaseRestStore: true },
+    });
+    expect(missingAnon.configured).toBe(false);
+    expect(missingAnon.missing).toContain('Supabase anonymous key');
+
+    const missingRestStore = evaluateSupabaseAuthDiagnostic({
+      present: { SUPABASE_URL: { present: true }, EXPO_PUBLIC_SUPABASE_ANON_KEY: { present: true } },
+      supabaseRestStoreDiagnostic: { supabaseAnonKeyPresent: true, canUseSupabaseRestStore: false },
+    });
+    expect(missingRestStore.configured).toBe(false);
+    expect(missingRestStore.missing).toContain('Supabase REST store');
+    expect(evaluateSupabaseAuthDiagnostic(undefined).configured).toBe(false);
   });
 });
 

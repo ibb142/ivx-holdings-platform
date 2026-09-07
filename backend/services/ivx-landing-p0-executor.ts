@@ -266,6 +266,42 @@ export function scanForSecrets(text: string): string[] {
   return [...new Set(codes)];
 }
 
+type LandingEnvPresence = Record<string, { present?: unknown } | undefined>;
+
+function diagnosticEnvPresent(present: LandingEnvPresence, name: string): boolean {
+  return present[name]?.present === true;
+}
+
+/**
+ * Evaluate only the bindings required by production Supabase Auth.
+ *
+ * The diagnostic intentionally contains unrelated optional Supabase aliases and
+ * database fields. Their false/null values must not invalidate Auth. This check
+ * remains fail-closed when the response is malformed or a required binding is
+ * absent.
+ */
+export function evaluateSupabaseAuthDiagnostic(value: unknown): { configured: boolean; missing: string[] } {
+  const root = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {};
+  const present = typeof root.present === 'object' && root.present !== null
+    ? root.present as LandingEnvPresence
+    : {};
+  const restStore = typeof root.supabaseRestStoreDiagnostic === 'object' && root.supabaseRestStoreDiagnostic !== null
+    ? root.supabaseRestStoreDiagnostic as Record<string, unknown>
+    : {};
+
+  const urlPresent = ['EXPO_PUBLIC_SUPABASE_URL', 'SUPABASE_URL', 'IVX_SUPABASE_URL']
+    .some((name) => diagnosticEnvPresent(present, name));
+  const anonKeyPresent = diagnosticEnvPresent(present, 'EXPO_PUBLIC_SUPABASE_ANON_KEY')
+    && restStore.supabaseAnonKeyPresent === true;
+  const restStoreUsable = restStore.canUseSupabaseRestStore === true;
+
+  const missing: string[] = [];
+  if (!urlPresent) missing.push('Supabase URL');
+  if (!anonKeyPresent) missing.push('Supabase anonymous key');
+  if (!restStoreUsable) missing.push('Supabase REST store');
+  return { configured: missing.length === 0, missing };
+}
+
 // ── Production data loaders (cached, shared across agents) ───────────────────
 
 type LandingPage = Probe & { fetchedAt: string };
@@ -900,10 +936,11 @@ async function runContract(fetchImpl: typeof fetch, probeName: string, c: Collec
       if (result.status !== 200) return fail(`env diagnostic HTTP ${result.status || result.error}`, 'api', 'restore diagnostic route');
       const leaks = scanForSecrets(result.text);
       if (leaks.length > 0) return fail(`env diagnostic leaks secret patterns: ${leaks.join(', ')}`, 'security', 'report booleans only, never values');
-      const json = parseJson(result.text) as Record<string, unknown> | undefined;
-      const flattened = JSON.stringify(json ?? {});
-      const supabaseMissing = /"[^"]*supabase[^"]*"\s*:\s*(false|"missing"|"not[_ -]?configured"|null)/i.test(flattened);
-      return supabaseMissing ? fail('diagnostic reports Supabase auth not configured', 'auth', 'configure production Supabase env on API host') : pass('production auth env reported configured; no secret values exposed');
+      const json = parseJson(result.text);
+      const auth = evaluateSupabaseAuthDiagnostic(json);
+      return auth.configured
+        ? pass('production auth env reported configured; no secret values exposed')
+        : fail(`diagnostic missing required Supabase auth bindings: ${auth.missing.join(', ')}`, 'auth', 'configure production Supabase URL, anonymous key, and REST store binding on API host');
     }
     default: return blocked(`unknown contract probe ${probeName}`);
   }
