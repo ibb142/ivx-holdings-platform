@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { landingFleetFocusEnabled } from './services/ivx-landing-fleet-focus';
 import { stopAutonomous112RuntimeEnforcer } from './services/ivx-autonomous-runtime-enforcer';
+import { resumePendingCertificateRuns } from './services/ivx-real-execution-certificate';
 import {
   IVX_ENTERPRISE_MIDDLEWARE_MARKER,
   observabilityMiddleware,
@@ -6753,6 +6754,18 @@ app.notFound(async (context) => {
 });
 
 const landingFleetFocus = landingFleetFocusEnabled();
+
+// Durable certificate tasks are persisted in Supabase and must be recovered
+// after every API restart. This stays outside the fleet-focus scheduler gate:
+// suppressing unrelated schedulers must never strand an already-authorized
+// 112-agent certificate run in `pending`.
+void resumePendingCertificateRuns()
+  .then(({ resumed, runIds }) => {
+    console.log('[IVXRealExecutionCert] boot recovery complete', { resumed, runIds });
+  })
+  .catch((err) => {
+    console.error('[IVXRealExecutionCert] boot recovery failed', err instanceof Error ? err.message : err);
+  });
 if (!landingFleetFocus) {
   try { startNightOpsScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] night ops scheduler failed to start:', err instanceof Error ? err.message : err); }
   try { void bootstrapDataVault(); startDataVaultScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] data vault scheduler failed to start:', err instanceof Error ? err.message : err); }
