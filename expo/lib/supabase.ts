@@ -199,6 +199,11 @@ let _client: SupabaseClient | null = null;
 let _clientInitAttempted = false;
 let _clientInitError: string | null = null;
 
+// Hosted Auth has shown 9-10s first-response latency in production QA. Keep a
+// finite fail-closed budget, but do not abort a request that is still inside
+// that observed service window and amplify it into retries plus fallback.
+export const HOSTED_AUTH_REQUEST_TIMEOUT_MS = 12_000;
+
 function buildSupabaseClient(url: string, key: string): SupabaseClient {
   const selfHosted = !isHostedSupabase(url);
   const effective = getEffectiveUrl(url);
@@ -225,7 +230,7 @@ function buildSupabaseClient(url: string, key: string): SupabaseClient {
         logAuthTokenRequestIfDev(urlStr, nextOptions);
         const controller = new AbortController();
         const isAuthRequest = typeof url === 'string' && (url.includes('/auth/v1/token') || url.includes('/auth/v1/user'));
-        const timeoutMs = isAuthRequest ? 8000 : (selfHosted ? 20000 : 15000);
+        const timeoutMs = isAuthRequest ? HOSTED_AUTH_REQUEST_TIMEOUT_MS : (selfHosted ? 20000 : 15000);
         const timeout = setTimeout(() => controller.abort(), timeoutMs);
         return fetch(url, {
           ...nextOptions,
