@@ -16,6 +16,8 @@ describe('real execution certificate boot recovery', () => {
     expect(service).toContain('await Promise.all(processing)');
     expect(service).toContain("r.task_type === 'real_execution_certification'");
     expect(service).toContain('/^rec-\\d+$/.test(r.run_id)');
+    expect(service).toContain('INTERRUPTED_RUNNING_AFTER_MS');
+    expect(service).toContain("startsWith('Execution timer start failed:')");
 
     const server = readFileSync(join(import.meta.dir, '../server.ts'), 'utf8');
     expect(server).toContain("import app, { certificateBootRecovery } from './backend/hono-extended';");

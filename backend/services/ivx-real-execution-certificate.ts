@@ -186,18 +186,30 @@ export async function resumePendingCertificateRuns(): Promise<{ resumed: number;
 
 async function processCertificateRun(runId: string): Promise<void> {
   const CONCURRENCY = 3;
+  const INTERRUPTED_RUNNING_AFTER_MS = 2 * 60 * 1000;
 
   // Process every pending/running task for this run (running = interrupted by restart)
   for (;;) {
     const res = await fetchExecutionsByRun(runId);
     if (!res.ok) throw new Error(`cannot read durable run state: ${res.error}`);
-    const remaining = (res.data ?? []).filter((r) => r.final_status === 'pending' || r.final_status === 'running');
+    const unfinished = (res.data ?? []).filter((r) => r.final_status === 'pending' || r.final_status === 'running');
+    const remaining = unfinished.filter((r) =>
+      r.final_status === 'pending'
+      || !r.started_at
+      || Date.now() - new Date(r.started_at).getTime() >= INTERRUPTED_RUNNING_AFTER_MS,
+    );
     const done = (res.data ?? []).filter((r) => r.final_status !== 'pending' && r.final_status !== 'running');
     if (activeRun?.runId === runId) {
       activeRun.processed = done.length;
       activeRun.failed = done.filter((r) => r.final_status !== 'completed').length;
     }
-    if (remaining.length === 0) break;
+    if (unfinished.length === 0) break;
+    if (remaining.length === 0) {
+      // Another live instance owns the fresh RUNNING rows. Wait for its durable
+      // terminal update instead of executing or certifying them twice.
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      continue;
+    }
 
     const batch = remaining.slice(0, CONCURRENCY);
     await Promise.all(batch.map(async (row, i) => {
@@ -213,6 +225,12 @@ async function processCertificateRun(runId: string): Promise<void> {
       // certificate must finish with visible BLOCKED evidence and can then be
       // retried; it may never spin on the same three rows indefinitely.
       if (!result.ok && !result.runRecord) {
+        if ((result.error ?? '').startsWith('Execution timer start failed:')) {
+          // The partial unique index permits one RUNNING row per agent. During
+          // a rolling deploy, a failed conditional transition means another
+          // instance won the durable claim; it is not an agent failure.
+          return;
+        }
         const at = new Date().toISOString();
         await updateExecution(row.task_id, {
           final_status: 'blocked',
