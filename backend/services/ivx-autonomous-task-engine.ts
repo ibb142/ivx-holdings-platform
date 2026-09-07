@@ -27,10 +27,20 @@ import {
   appendDurableEvent,
   readDurableEvents,
 } from './ivx-durable-store';
+import {
+  claimPostgresAutonomousTasks,
+  compareAndSetPostgresAutonomousTask,
+  createPostgresAutonomousTasks,
+  heartbeatPostgresAutonomousTasks,
+  linkPostgresAutonomousOrphans,
+  postgresAtomicQueueSelected,
+  readPostgresAutonomousTasks,
+  startPostgresAutonomousTasks,
+} from './ivx-postgres-autonomous-task-store';
 import { appendFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
-export const IVX_TASK_ENGINE_MARKER = 'ivx-autonomous-task-engine-2026-07-27';
+export const IVX_TASK_ENGINE_MARKER = 'ivx-autonomous-task-engine-2026-09-07-fleet-batch-v1';
 
 // ── Phase 4: 23-state task state machine ─────────────────────────────────────
 
@@ -339,6 +349,14 @@ let taskReadCache: { value: Task[]; at: number } | null = null;
 let taskReadInFlight: Promise<Task[]> | null = null;
 let taskWriteRevision = 0;
 
+function cloneTasks(tasks: readonly Task[]): Task[] {
+  // Durable reads are cached across the fleet. Never hand the cached array to a
+  // mutation: an unsuccessful write would otherwise leave process memory ahead
+  // of the durable ledger and manufacture lease/state evidence that was never
+  // persisted.
+  return structuredClone(tasks) as Task[];
+}
+
 async function withTaskMutationLock<T>(mutation: () => Promise<T>): Promise<T> {
   const previous = taskMutationTail;
   let release!: () => void;
@@ -378,15 +396,18 @@ function contentHash(input: string): string {
 
 /** Read all tasks from the durable store. */
 async function readAllTasks(): Promise<Task[]> {
+  if (postgresAtomicQueueSelected()) {
+    return readPostgresAutonomousTasks();
+  }
   if (isDurableStoreConfigured()) {
     const now = Date.now();
     if (taskReadCache && now - taskReadCache.at <= TASK_READ_CACHE_TTL_MS) {
-      return taskReadCache.value;
+      return cloneTasks(taskReadCache.value);
     }
     // The TTL alone does not collapse a cold-cache burst: all 112 callers can
     // miss it before the first Supabase read finishes. Share that read, including
     // its failure, instead of issuing another request for each agent/dashboard.
-    if (taskReadInFlight) return taskReadInFlight;
+    if (taskReadInFlight) return cloneTasks(await taskReadInFlight);
     const readRevision = taskWriteRevision;
     const pending = (async () => {
       const data = await readDurableJson<Task[]>(TASKS_KEY, []);
@@ -396,14 +417,14 @@ async function readAllTasks(): Promise<Task[]> {
       // A slow read started before a successful mutation must not replace its
       // newer persisted snapshot (or return the older task state to a caller).
       if (taskWriteRevision !== readRevision && taskReadCache) {
-        return taskReadCache.value;
+        return cloneTasks(taskReadCache.value);
       }
-      taskReadCache = { value: data, at: Date.now() };
+      taskReadCache = { value: cloneTasks(data), at: Date.now() };
       return data;
     })();
     taskReadInFlight = pending;
     try {
-      return await pending;
+      return cloneTasks(await pending);
     } finally {
       if (taskReadInFlight === pending) taskReadInFlight = null;
     }
@@ -418,10 +439,13 @@ async function readAllTasks(): Promise<Task[]> {
 
 /** Write all tasks to the durable store (atomic). */
 async function writeAllTasks(tasks: Task[]): Promise<void> {
+  if (postgresAtomicQueueSelected()) {
+    throw new Error('postgres_atomic tasks must be mutated with row-atomic RPCs');
+  }
   if (isDurableStoreConfigured()) {
     await writeDurableJson(TASKS_KEY, tasks);
     taskWriteRevision += 1;
-    taskReadCache = { value: tasks, at: Date.now() };
+    taskReadCache = { value: cloneTasks(tasks), at: Date.now() };
     return;
   }
   await mkdir(STORE_DIR, { recursive: true });
@@ -639,6 +663,16 @@ export async function linkOrphanTasksToObjective(objectiveId: string): Promise<{
   linked: number;
   error: string | null;
 }> {
+  if (postgresAtomicQueueSelected()) {
+    return withTaskMutationLock(async () => {
+      const objectives = await readAllObjectives();
+      if (!objectives.some((objective) => objective.objectiveId === objectiveId && objective.status !== 'cancelled')) {
+        return { ok: false, linked: 0, error: 'Objective not found or cancelled.' };
+      }
+      const linked = await linkPostgresAutonomousOrphans(objectiveId);
+      return { ok: true, linked, error: null };
+    });
+  }
   return withTaskMutationLock(() => linkOrphanTasksToObjectiveUnlocked(objectiveId));
 }
 
@@ -784,7 +818,7 @@ function validIsoOrNull(value: string | null | undefined): string | null {
  * Create a task and add it to the queue. Uses idempotency key to prevent
  * duplicate submissions — duplicate submissions return the existing task.
  */
-async function createTaskUnlocked(input: {
+export type CreateTaskInput = {
   objectiveId?: string | null;
   parentTaskId?: string | null;
   title: string;
@@ -803,15 +837,11 @@ async function createTaskUnlocked(input: {
   dependencies?: string[];
   executionOrder?: number;
   maxRetries?: number;
-}): Promise<{ ok: boolean; task: Task | null; error: string | null; duplicate: boolean }> {
-  const tasks = await readAllTasks();
+};
 
-  // Phase 8: Duplicate prevention — check idempotency key
-  const existing = tasks.find((t) => t.idempotencyKey === input.idempotencyKey && t.state !== 'CANCELLED' && t.state !== 'EXPIRED');
-  if (existing) {
-    return { ok: true, task: existing, error: null, duplicate: true };
-  }
+export type CreateTaskResult = { ok: boolean; task: Task | null; error: string | null; duplicate: boolean };
 
+function buildQueuedTask(input: CreateTaskInput): Task {
   const taskType = input.taskType ?? 'development';
   const routing = routeTaskToAgent(taskType);
   const requestedBusinessValue = Number.isFinite(input.businessValue) ? Number(input.businessValue) : 3;
@@ -857,15 +887,79 @@ async function createTaskUnlocked(input: {
     traceId: null,
   };
 
+  return task;
+}
+
+async function createTaskUnlocked(input: CreateTaskInput): Promise<CreateTaskResult> {
+  const tasks = await readAllTasks();
+
+  // Phase 8: Duplicate prevention — check idempotency key
+  const existing = tasks.find((t) => t.idempotencyKey === input.idempotencyKey && t.state !== 'CANCELLED' && t.state !== 'EXPIRED');
+  if (existing) {
+    return { ok: true, task: existing, error: null, duplicate: true };
+  }
+
+  const task = buildQueuedTask(input);
+
   tasks.push(task);
   await writeAllTasks(tasks);
-  await appendEvent({ type: 'task_created', taskId: task.taskId, state: task.state, taskType });
+  await appendEvent({ type: 'task_created', taskId: task.taskId, state: task.state, taskType: task.taskType });
 
   return { ok: true, task, error: null, duplicate: false };
 }
 
-export async function createTask(input: Parameters<typeof createTaskUnlocked>[0]): ReturnType<typeof createTaskUnlocked> {
+export async function createTask(input: CreateTaskInput): Promise<CreateTaskResult> {
+  if (postgresAtomicQueueSelected()) {
+    const [result] = await createPostgresAutonomousTasks([buildQueuedTask(input)]);
+    return result ?? { ok: false, task: null, error: 'postgres_atomic create returned no result', duplicate: false };
+  }
   return withTaskMutationLock(() => createTaskUnlocked(input));
+}
+
+/**
+ * Create a fleet backlog with one durable document write. Idempotency is
+ * evaluated against both existing state and tasks created earlier in this same
+ * batch, so a 112-lane bootstrap cannot lose rows or issue 112 full-document
+ * writes.
+ */
+export async function createTasksBatch(inputs: readonly CreateTaskInput[]): Promise<CreateTaskResult[]> {
+  if (postgresAtomicQueueSelected()) {
+    return createPostgresAutonomousTasks(inputs.map((input) => buildQueuedTask(input)));
+  }
+  return withTaskMutationLock(async () => {
+    if (inputs.length === 0) return [];
+    const tasks = await readAllTasks();
+    const activeByKey = new Map(
+      tasks
+        .filter((task) => task.state !== 'CANCELLED' && task.state !== 'EXPIRED')
+        .map((task) => [task.idempotencyKey, task]),
+    );
+    const results: CreateTaskResult[] = [];
+    const created: Task[] = [];
+
+    for (const input of inputs) {
+      const existing = activeByKey.get(input.idempotencyKey);
+      if (existing) {
+        results.push({ ok: true, task: existing, error: null, duplicate: true });
+        continue;
+      }
+      const task = buildQueuedTask(input);
+      tasks.push(task);
+      activeByKey.set(task.idempotencyKey, task);
+      created.push(task);
+      results.push({ ok: true, task, error: null, duplicate: false });
+    }
+
+    if (created.length > 0) {
+      await writeAllTasks(tasks);
+      await appendEvent({
+        type: 'tasks_created_batch',
+        count: created.length,
+        taskIds: created.map((task) => task.taskId),
+      });
+    }
+    return results;
+  });
 }
 
 /**
@@ -927,6 +1021,39 @@ export async function transitionTaskState(
   toState: TaskState,
   metadata?: { error?: string; blocker?: string; evidence?: TaskEvidence; filesChanged?: string[]; commitSha?: string; deploymentId?: string; approvalId?: string },
 ): Promise<{ ok: boolean; task: Task | null; error: string | null }> {
+  if (postgresAtomicQueueSelected()) {
+    if (toState === 'LEASED') {
+      return {
+        ok: false,
+        task: null,
+        error: 'postgres_atomic leases must be acquired with leaseNextTask or leaseNextTasksBatch.',
+      };
+    }
+    return withTaskMutationLock(async () => {
+      const task = (await readAllTasks()).find((candidate) => candidate.taskId === taskId) ?? null;
+      if (!task) return { ok: false, task: null, error: `Task not found: ${taskId}` };
+      const fromState = task.state;
+      if (TERMINAL_STATES.includes(fromState) && !TERMINAL_STATES.includes(toState)) {
+        return { ok: false, task, error: `Task is in terminal state ${fromState} — cannot transition to ${toState}.` };
+      }
+      if (!isValidTransition(fromState, toState)) {
+        return { ok: false, task, error: `Invalid transition: ${fromState} → ${toState}. Allowed: ${VALID_TRANSITIONS[fromState].join(', ')}.` };
+      }
+      task.state = toState;
+      task.updatedAt = nowIso();
+      if (metadata?.error) task.error = metadata.error;
+      if (metadata?.blocker) task.blocker = metadata.blocker;
+      if (metadata?.evidence) task.evidence.push(metadata.evidence);
+      if (metadata?.filesChanged) task.filesChanged.push(...metadata.filesChanged);
+      if (metadata?.commitSha) task.commitSha = metadata.commitSha;
+      if (metadata?.deploymentId) task.deploymentId = metadata.deploymentId;
+      if (metadata?.approvalId) task.approvalId = metadata.approvalId;
+      if (toState === 'RUNNING' && !task.startedAt) task.startedAt = nowIso();
+      if (toState === 'RETRYING') task.retryCount += 1;
+      if (TERMINAL_SUCCESS_STATES.includes(toState) || toState === 'FAILED') task.completedAt = nowIso();
+      return compareAndSetPostgresAutonomousTask({ task, expectedStates: [fromState], eventType: 'state_transition' });
+    });
+  }
   return withTaskMutationLock(() => transitionTaskStateUnlocked(taskId, toState, metadata));
 }
 
@@ -1120,21 +1247,20 @@ export function compareProjectManagedTasks(a: Task, b: Task, nowMs = Date.now())
  * for IA-37 can never be leased by IA-01 — unless `options.stealPrefix` opts a
  * mission (e.g. `landing-p0:`) into work-stealing after the own lane is drained.
  */
-async function leaseNextTaskUnlocked(workerId: string, agentNumber?: number | null, options: LeaseOptions = {}): Promise<{ ok: boolean; task: Task | null; error: string | null }> {
-  const tasks = await readAllTasks();
+function recoveryChangeCount(recovery: StrandedRecovery): number {
+  return recovery.requeued.length
+    + recovery.expired.length
+    + recovery.failed.length
+    + recovery.duplicatesRetired.length
+    + recovery.blockedRequeued.length;
+}
 
-  // Expire stale leases + recover tasks stranded by a process death first.
-  const now = Date.now();
-  const recovery = recoverStrandedTasksInPlace(tasks, now);
-  // Persist recovery BEFORE candidate selection: transitionTaskState re-reads
-  // from the store, so requeued stale leases must be durable first — otherwise
-  // QUEUED→LEASED is rejected as LEASED→LEASED and recovery silently fails.
-  await writeAllTasks(tasks);
-  if (recovery.requeued.length + recovery.expired.length + recovery.failed.length + recovery.duplicatesRetired.length + recovery.blockedRequeued.length > 0) {
-    await appendEvent({ type: 'tasks_recovered', workerId, requeued: recovery.requeued.length, expired: recovery.expired.length, failed: recovery.failed.length, duplicatesRetired: recovery.duplicatesRetired.length, blockedRequeued: recovery.blockedRequeued.length, sample: recovery.requeued.slice(0, 5) });
-  }
-
-  // Find highest-priority queued task whose dependencies are met
+function selectLeaseCandidate(
+  tasks: Task[],
+  agentNumber: number | null | undefined,
+  options: LeaseOptions,
+  now: number,
+): { task: Task | null; stolen: boolean } {
   const dependenciesMet = (t: Task): boolean => t.dependencies.every((depId) => {
     const dep = tasks.find((d) => d.taskId === depId);
     return dep && TERMINAL_SUCCESS_STATES.includes(dep.state);
@@ -1155,32 +1281,135 @@ async function leaseNextTaskUnlocked(workerId: string, agentNumber?: number | nu
     candidates = queued.filter((t) => t.idempotencyKey.startsWith(prefix)).sort(byPriority);
     stolen = candidates.length > 0;
   }
+  return { task: candidates[0] ?? null, stolen };
+}
 
-  if (candidates.length === 0) {
+function markTaskLeased(task: Task, workerId: string, now: number): void {
+  const at = new Date(now).toISOString();
+  task.state = 'LEASED';
+  task.updatedAt = at;
+  task.leaseHolder = workerId;
+  task.leaseExpiresAt = new Date(now + LEASE_DURATION_MS).toISOString();
+  task.lastHeartbeatAt = at;
+}
+
+async function appendRecoveryEvent(recovery: StrandedRecovery, workerId: string): Promise<void> {
+  if (recoveryChangeCount(recovery) === 0) return;
+  await appendEvent({
+    type: 'tasks_recovered',
+    workerId,
+    requeued: recovery.requeued.length,
+    expired: recovery.expired.length,
+    failed: recovery.failed.length,
+    duplicatesRetired: recovery.duplicatesRetired.length,
+    blockedRequeued: recovery.blockedRequeued.length,
+    sample: recovery.requeued.slice(0, 5),
+  });
+}
+
+async function leaseNextTaskUnlocked(workerId: string, agentNumber?: number | null, options: LeaseOptions = {}): Promise<{ ok: boolean; task: Task | null; error: string | null }> {
+  const tasks = await readAllTasks();
+  const now = Date.now();
+  const recovery = recoverStrandedTasksInPlace(tasks, now);
+  const selected = selectLeaseCandidate(tasks, agentNumber, options, now);
+
+  if (!selected.task) {
+    if (recoveryChangeCount(recovery) > 0) {
+      await writeAllTasks(tasks);
+      await appendRecoveryEvent(recovery, workerId);
+    }
     return { ok: true, task: null, error: null };
   }
 
-  const task = candidates[0];
-  const transition = await transitionTaskStateUnlocked(task.taskId, 'LEASED');
-  if (!transition.ok || !transition.task) {
-    return { ok: false, task: null, error: transition.error };
-  }
+  markTaskLeased(selected.task, workerId, now);
+  await writeAllTasks(tasks);
+  await appendRecoveryEvent(recovery, workerId);
+  await appendEvent({
+    type: 'task_leased',
+    taskId: selected.task.taskId,
+    workerId,
+    ...(selected.stolen ? { stolenFromAgentNumber: selected.task.assignedAgentNumber, byAgentNumber: agentNumber ?? null } : {}),
+  });
+  return { ok: true, task: selected.task, error: null };
+}
 
-  // Set lease holder
-  const allTasks = await readAllTasks();
-  const leased = allTasks.find((t) => t.taskId === task.taskId);
-  if (leased) {
-    leased.leaseHolder = workerId;
-    leased.leaseExpiresAt = new Date(Date.now() + LEASE_DURATION_MS).toISOString();
-    leased.lastHeartbeatAt = nowIso();
-    await writeAllTasks(allTasks);
-  }
+export type FleetLeaseRequest = {
+  workerId: string;
+  agentNumber?: number | null;
+  options?: LeaseOptions;
+};
 
-  await appendEvent({ type: 'task_leased', taskId: task.taskId, workerId, ...(stolen ? { stolenFromAgentNumber: task.assignedAgentNumber, byAgentNumber: agentNumber ?? null } : {}) });
-  return { ok: true, task: transition.task, error: null };
+export type FleetLeaseResult = {
+  workerId: string;
+  agentNumber: number | null;
+  ok: boolean;
+  task: Task | null;
+  error: string | null;
+  stolen: boolean;
+};
+
+/**
+ * Lease one distinct task per fleet lane with one durable write. Selection and
+ * lease mutation happen under the same process-wide mutex, preserving owner
+ * lanes, dependency gates and mission scope while avoiding a 336-write start
+ * burst for 112 agents.
+ */
+export async function leaseNextTasksBatch(requests: readonly FleetLeaseRequest[]): Promise<FleetLeaseResult[]> {
+  if (postgresAtomicQueueSelected()) {
+    return claimPostgresAutonomousTasks(requests);
+  }
+  return withTaskMutationLock(async () => {
+    if (requests.length === 0) return [];
+    const tasks = await readAllTasks();
+    const now = Date.now();
+    const recovery = recoverStrandedTasksInPlace(tasks, now);
+    const results: FleetLeaseResult[] = [];
+
+    for (const request of requests) {
+      const selected = selectLeaseCandidate(tasks, request.agentNumber, request.options ?? {}, now);
+      if (!selected.task) {
+        results.push({ workerId: request.workerId, agentNumber: request.agentNumber ?? null, ok: true, task: null, error: null, stolen: false });
+        continue;
+      }
+      markTaskLeased(selected.task, request.workerId, now);
+      results.push({
+        workerId: request.workerId,
+        agentNumber: request.agentNumber ?? null,
+        ok: true,
+        task: selected.task,
+        error: null,
+        stolen: selected.stolen,
+      });
+    }
+
+    const leased = results.filter((result) => result.task !== null);
+    if (leased.length > 0 || recoveryChangeCount(recovery) > 0) {
+      await writeAllTasks(tasks);
+      await appendRecoveryEvent(recovery, 'fleet-batch');
+    }
+    if (leased.length > 0) {
+      await appendEvent({
+        type: 'tasks_leased_batch',
+        count: leased.length,
+        leases: leased.map((result) => ({
+          taskId: result.task?.taskId,
+          workerId: result.workerId,
+          agentNumber: result.agentNumber,
+          stolen: result.stolen,
+        })),
+      });
+    }
+    return results;
+  });
 }
 
 export async function leaseNextTask(workerId: string, agentNumber?: number | null, options: LeaseOptions = {}): Promise<{ ok: boolean; task: Task | null; error: string | null }> {
+  if (postgresAtomicQueueSelected()) {
+    const [result] = await claimPostgresAutonomousTasks([{ workerId, agentNumber, options }]);
+    return result
+      ? { ok: result.ok, task: result.task, error: result.error }
+      : { ok: false, task: null, error: 'postgres_atomic claim returned no result' };
+  }
   return withTaskMutationLock(() => leaseNextTaskUnlocked(workerId, agentNumber, options));
 }
 
@@ -1197,7 +1426,112 @@ async function heartbeatUnlocked(taskId: string, workerId: string): Promise<{ ok
 }
 
 export async function heartbeat(taskId: string, workerId: string): Promise<{ ok: boolean; error: string | null }> {
+  if (postgresAtomicQueueSelected()) {
+    const result = await heartbeatPostgresAutonomousTasks([{ taskId, workerId }]);
+    const rejected = result.rejected.find((entry) => entry.taskId === taskId);
+    return rejected ? { ok: false, error: rejected.error } : { ok: result.refreshed === 1, error: result.refreshed === 1 ? null : 'Heartbeat was not persisted.' };
+  }
   return withTaskMutationLock(() => heartbeatUnlocked(taskId, workerId));
+}
+
+export type FleetTaskLeaseIdentity = { taskId: string; workerId: string };
+export type FleetTaskMutationResult = {
+  taskId: string;
+  workerId: string;
+  ok: boolean;
+  task: Task | null;
+  error: string | null;
+};
+
+/** Move a newly leased fleet batch to RUNNING with one durable write. */
+export async function startLeasedTasksBatch(leases: readonly FleetTaskLeaseIdentity[]): Promise<FleetTaskMutationResult[]> {
+  if (postgresAtomicQueueSelected()) {
+    return startPostgresAutonomousTasks(leases);
+  }
+  return withTaskMutationLock(async () => {
+    if (leases.length === 0) return [];
+    const tasks = await readAllTasks();
+    const atMs = Date.now();
+    const at = new Date(atMs).toISOString();
+    const expiresAt = new Date(atMs + LEASE_DURATION_MS).toISOString();
+    const results: FleetTaskMutationResult[] = [];
+
+    for (const lease of leases) {
+      const task = tasks.find((candidate) => candidate.taskId === lease.taskId) ?? null;
+      if (!task) {
+        results.push({ ...lease, ok: false, task: null, error: 'Task not found.' });
+        continue;
+      }
+      if (task.leaseHolder !== lease.workerId) {
+        results.push({ ...lease, ok: false, task, error: 'Not the lease holder.' });
+        continue;
+      }
+      if (task.state !== 'LEASED') {
+        results.push({ ...lease, ok: false, task, error: `Cannot start from state ${task.state}.` });
+        continue;
+      }
+      task.state = 'RUNNING';
+      task.updatedAt = at;
+      task.startedAt = task.startedAt ?? at;
+      task.lastHeartbeatAt = at;
+      task.leaseExpiresAt = expiresAt;
+      results.push({ ...lease, ok: true, task, error: null });
+    }
+
+    const started = results.filter((result) => result.ok);
+    if (started.length > 0) {
+      await writeAllTasks(tasks);
+      await appendEvent({
+        type: 'tasks_started_batch',
+        count: started.length,
+        taskIds: started.map((result) => result.taskId),
+      });
+    }
+    return results;
+  });
+}
+
+/** Renew every valid fleet lease with one durable write, never one per agent. */
+export async function heartbeatTasksBatch(leases: readonly FleetTaskLeaseIdentity[]): Promise<{
+  ok: boolean;
+  refreshed: number;
+  rejected: Array<{ taskId: string; error: string }>;
+}> {
+  if (postgresAtomicQueueSelected()) {
+    return heartbeatPostgresAutonomousTasks(leases);
+  }
+  return withTaskMutationLock(async () => {
+    if (leases.length === 0) return { ok: true, refreshed: 0, rejected: [] };
+    const tasks = await readAllTasks();
+    const atMs = Date.now();
+    const at = new Date(atMs).toISOString();
+    const expiresAt = new Date(atMs + LEASE_DURATION_MS).toISOString();
+    const rejected: Array<{ taskId: string; error: string }> = [];
+    let refreshed = 0;
+
+    for (const lease of leases) {
+      const task = tasks.find((candidate) => candidate.taskId === lease.taskId);
+      if (!task) {
+        rejected.push({ taskId: lease.taskId, error: 'Task not found.' });
+        continue;
+      }
+      if (task.leaseHolder !== lease.workerId) {
+        rejected.push({ taskId: lease.taskId, error: 'Not the lease holder.' });
+        continue;
+      }
+      if (task.state !== 'LEASED' && task.state !== 'RUNNING') {
+        rejected.push({ taskId: lease.taskId, error: `Cannot heartbeat state ${task.state}.` });
+        continue;
+      }
+      task.lastHeartbeatAt = at;
+      task.leaseExpiresAt = expiresAt;
+      task.updatedAt = at;
+      refreshed += 1;
+    }
+
+    if (refreshed > 0) await writeAllTasks(tasks);
+    return { ok: rejected.length === 0, refreshed, rejected };
+  });
 }
 
 /** Release a lease (return task to queue without completing). */
@@ -1217,6 +1551,21 @@ async function releaseLeaseUnlocked(taskId: string, workerId: string): Promise<{
 }
 
 export async function releaseLease(taskId: string, workerId: string): Promise<{ ok: boolean; error: string | null }> {
+  if (postgresAtomicQueueSelected()) {
+    return withTaskMutationLock(async () => {
+      const task = (await readAllTasks()).find((candidate) => candidate.taskId === taskId) ?? null;
+      if (!task) return { ok: false, error: 'Task not found.' };
+      if (task.leaseHolder !== workerId) return { ok: false, error: 'Not the lease holder.' };
+      if (task.state !== 'LEASED' && task.state !== 'RUNNING') return { ok: false, error: `Cannot release from state ${task.state}.` };
+      const fromState = task.state;
+      task.state = 'QUEUED';
+      task.leaseHolder = null;
+      task.leaseExpiresAt = null;
+      task.updatedAt = nowIso();
+      const result = await compareAndSetPostgresAutonomousTask({ task, expectedStates: [fromState], leaseHolder: workerId, eventType: 'lease_released' });
+      return { ok: result.ok, error: result.error };
+    });
+  }
   return withTaskMutationLock(() => releaseLeaseUnlocked(taskId, workerId));
 }
 
@@ -1514,7 +1863,187 @@ async function addTaskEvidenceUnlocked(taskId: string, evidence: Omit<TaskEviden
 }
 
 export async function addTaskEvidence(taskId: string, evidence: Omit<TaskEvidence, 'evidenceId' | 'createdAt'>): Promise<{ ok: boolean; error: string | null }> {
+  if (postgresAtomicQueueSelected()) {
+    return withTaskMutationLock(async () => {
+      const task = (await readAllTasks()).find((candidate) => candidate.taskId === taskId) ?? null;
+      if (!task) return { ok: false, error: 'Task not found.' };
+      const fromState = task.state;
+      const fullEvidence: TaskEvidence = { ...evidence, evidenceId: generateId('evid'), createdAt: nowIso() };
+      task.evidence.push(fullEvidence);
+      task.updatedAt = nowIso();
+      const result = await compareAndSetPostgresAutonomousTask({ task, expectedStates: [fromState], eventType: 'evidence_added' });
+      return { ok: result.ok, error: result.error };
+    });
+  }
   return withTaskMutationLock(() => addTaskEvidenceUnlocked(taskId, evidence));
+}
+
+export type FinalizeEvidenceTaskInput = {
+  taskId: string;
+  workerId: string;
+  evidence: Omit<TaskEvidence, 'evidenceId' | 'createdAt'>;
+  outcome: 'VERIFIED' | 'BLOCKED' | 'FAILED';
+  blocker?: string;
+  error?: string;
+};
+
+export type FinalizeEvidenceTaskResult = {
+  ok: boolean;
+  task: Task | null;
+  error: string | null;
+  evidenceId: string | null;
+  states: TaskState[];
+};
+
+function evidenceMeetsCriterion(evidence: TaskEvidence, criterion: AcceptanceCriterion): boolean {
+  if (criterion.verificationMethod === 'evidence') return true;
+  if (criterion.verificationMethod === 'test_pass') return evidence.evidenceType === 'test_result';
+  if (criterion.verificationMethod === 'code_diff') return evidence.evidenceType === 'code_diff';
+  if (criterion.verificationMethod === 'http_200') {
+    return evidence.evidenceType === 'http_request' || evidence.evidenceType === 'production_verification';
+  }
+  if (criterion.verificationMethod === 'production_check') {
+    return evidence.evidenceType === 'production_verification';
+  }
+  return false;
+}
+
+/**
+ * Persist an evidence-backed audit outcome as one transaction-sized document
+ * write. This is the fleet path for real QA probes: evidence, acceptance gate
+ * and the complete state path are durable together, so a crash cannot strand a
+ * task between four separate writes or report VERIFIED without its proof.
+ */
+export async function finalizeEvidenceTask(input: FinalizeEvidenceTaskInput): Promise<FinalizeEvidenceTaskResult> {
+  if (postgresAtomicQueueSelected()) {
+    return withTaskMutationLock(async () => {
+      const task = (await readAllTasks()).find((candidate) => candidate.taskId === input.taskId) ?? null;
+      if (!task) return { ok: false, task: null, error: 'Task not found.', evidenceId: null, states: [] };
+      if (task.leaseHolder !== input.workerId) {
+        return { ok: false, task, error: 'Not the lease holder.', evidenceId: null, states: [] };
+      }
+      if (task.state !== 'RUNNING') {
+        return { ok: false, task, error: `Cannot finalize from state ${task.state}.`, evidenceId: null, states: [] };
+      }
+      const before = structuredClone(task) as Task;
+      const at = nowIso();
+      const fullEvidence: TaskEvidence = { ...input.evidence, evidenceId: generateId('evid'), createdAt: at };
+      task.evidence.push(fullEvidence);
+      task.updatedAt = at;
+      task.lastHeartbeatAt = at;
+      const states: TaskState[] = [];
+      if (input.outcome === 'BLOCKED') {
+        task.state = 'BLOCKED';
+        task.blocker = input.blocker?.trim() || 'evidence unavailable';
+        states.push('BLOCKED');
+      } else if (input.outcome === 'FAILED') {
+        task.state = 'FAILED';
+        task.error = input.error?.trim() || 'execution failed';
+        task.completedAt = at;
+        states.push('FAILED');
+      } else {
+        const path: TaskState[] = ['EXECUTION_COMPLETED', 'QA_IN_PROGRESS', 'VERIFIED'];
+        for (const next of path) {
+          if (!isValidTransition(task.state, next)) {
+            return { ok: false, task: before, error: `Invalid transition: ${task.state} → ${next}.`, evidenceId: null, states: [] };
+          }
+          task.state = next;
+          states.push(next);
+        }
+        for (const criterion of task.acceptanceCriteria) {
+          if (!criterion.met && evidenceMeetsCriterion(fullEvidence, criterion)) {
+            criterion.met = true;
+            criterion.evidence = fullEvidence.summary;
+          }
+        }
+        task.completedAt = at;
+        const validation = validateCompletion(task);
+        if (validation.verdict !== 'VERIFIED') {
+          return { ok: false, task: before, error: validation.reason, evidenceId: null, states: [] };
+        }
+      }
+      const result = await compareAndSetPostgresAutonomousTask({
+        task,
+        expectedStates: ['RUNNING'],
+        leaseHolder: input.workerId,
+        eventType: 'task_evidence_finalized',
+      });
+      return { ok: result.ok, task: result.task, error: result.error, evidenceId: result.ok ? fullEvidence.evidenceId : null, states: result.ok ? states : [] };
+    });
+  }
+  return withTaskMutationLock(async () => {
+    const tasks = await readAllTasks();
+    const task = tasks.find((candidate) => candidate.taskId === input.taskId) ?? null;
+    if (!task) return { ok: false, task: null, error: 'Task not found.', evidenceId: null, states: [] };
+    if (task.leaseHolder !== input.workerId) {
+      return { ok: false, task, error: 'Not the lease holder.', evidenceId: null, states: [] };
+    }
+    if (task.state !== 'RUNNING') {
+      return { ok: false, task, error: `Cannot finalize from state ${task.state}.`, evidenceId: null, states: [] };
+    }
+
+    const before = structuredClone(task) as Task;
+    const at = nowIso();
+    const fullEvidence: TaskEvidence = {
+      ...input.evidence,
+      evidenceId: generateId('evid'),
+      createdAt: at,
+    };
+    task.evidence.push(fullEvidence);
+    task.updatedAt = at;
+    task.lastHeartbeatAt = at;
+    const states: TaskState[] = [];
+
+    if (input.outcome === 'BLOCKED') {
+      if (!isValidTransition(task.state, 'BLOCKED')) {
+        return { ok: false, task, error: `Invalid transition: ${task.state} → BLOCKED.`, evidenceId: null, states: [] };
+      }
+      task.state = 'BLOCKED';
+      task.blocker = input.blocker?.trim() || 'evidence unavailable';
+      states.push('BLOCKED');
+    } else if (input.outcome === 'FAILED') {
+      if (!isValidTransition(task.state, 'FAILED')) {
+        return { ok: false, task, error: `Invalid transition: ${task.state} → FAILED.`, evidenceId: null, states: [] };
+      }
+      task.state = 'FAILED';
+      task.error = input.error?.trim() || 'execution failed';
+      task.completedAt = at;
+      states.push('FAILED');
+    } else {
+      const path: TaskState[] = ['EXECUTION_COMPLETED', 'QA_IN_PROGRESS', 'VERIFIED'];
+      for (const next of path) {
+        if (!isValidTransition(task.state, next)) {
+          Object.assign(task, before);
+          return { ok: false, task, error: `Invalid transition: ${task.state} → ${next}.`, evidenceId: null, states: [] };
+        }
+        task.state = next;
+        states.push(next);
+      }
+      for (const criterion of task.acceptanceCriteria) {
+        if (!criterion.met && evidenceMeetsCriterion(fullEvidence, criterion)) {
+          criterion.met = true;
+          criterion.evidence = fullEvidence.summary;
+        }
+      }
+      task.completedAt = at;
+      const validation = validateCompletion(task);
+      if (validation.verdict !== 'VERIFIED') {
+        Object.assign(task, before);
+        return { ok: false, task, error: validation.reason, evidenceId: null, states: [] };
+      }
+    }
+
+    await writeAllTasks(tasks);
+    await appendEvent({
+      type: 'task_evidence_finalized',
+      taskId: task.taskId,
+      evidenceId: fullEvidence.evidenceId,
+      evidenceType: fullEvidence.evidenceType,
+      outcome: input.outcome,
+      states,
+    });
+    return { ok: true, task, error: null, evidenceId: fullEvidence.evidenceId, states };
+  });
 }
 
 /** Mark an acceptance criterion as met. */
@@ -1535,6 +2064,20 @@ async function markCriterionMetUnlocked(taskId: string, criterionId: string, evi
 }
 
 export async function markCriterionMet(taskId: string, criterionId: string, evidence: string): Promise<{ ok: boolean; error: string | null }> {
+  if (postgresAtomicQueueSelected()) {
+    return withTaskMutationLock(async () => {
+      const task = (await readAllTasks()).find((candidate) => candidate.taskId === taskId) ?? null;
+      if (!task) return { ok: false, error: 'Task not found.' };
+      const criterion = task.acceptanceCriteria.find((candidate) => candidate.id === criterionId);
+      if (!criterion) return { ok: false, error: 'Criterion not found.' };
+      const fromState = task.state;
+      criterion.met = true;
+      criterion.evidence = evidence;
+      task.updatedAt = nowIso();
+      const result = await compareAndSetPostgresAutonomousTask({ task, expectedStates: [fromState], eventType: 'criterion_met' });
+      return { ok: result.ok, error: result.error };
+    });
+  }
   return withTaskMutationLock(() => markCriterionMetUnlocked(taskId, criterionId, evidence));
 }
 

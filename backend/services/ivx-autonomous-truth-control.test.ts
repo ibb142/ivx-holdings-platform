@@ -7,24 +7,29 @@ describe('IVX autonomous truth control enterprise invariants', () => {
   const enforcerSource = readFileSync(path.join(import.meta.dir, 'ivx-autonomous-runtime-enforcer.ts'), 'utf8');
 
   test('WORKING proof never falls back to task-engine updatedAt', () => {
-    expect(source).toContain('noInferenceFromTaskUpdatedAt:true');
+    expect(source).toContain('noInferenceFromTaskUpdatedAt: true');
     expect(source).not.toContain("task?.lastHeartbeatAt ?? task?.updatedAt");
   });
 
-  test('slow durable task storage is excluded from the live truth hot path', () => {
-    expect(source).toContain('durableTaskStoreRemovedFromHotTruthPath:true');
-    expect(source).toContain('taskEngineRunning:null');
-    expect(source).toContain('taskEngineHeartbeat:null');
-    expect(source).toContain("workingRequiresOneOf:['agent runtime busy + activeTaskId + heartbeat <=60s','dispatcher RUNNING + real workerJobId + dispatcher heartbeat <=60s']");
+  test('slow JSON document is excluded and indexed atomic lease rows are canonical', () => {
+    expect(source).toContain('durableJsonTaskStoreRemovedFromHotTruthPath: true');
+    expect(source).toContain('atomicTaskRowsAreCanonicalFleetProof: true');
+    expect(source).toContain("boundedDependency('postgres_atomic_leases', readPostgresFleetLeaseRows())");
+    expect(source).toContain("'postgres_atomic task + distinct leaseHolder + workerInstanceId + heartbeat <=60s'");
   });
 
   test('truth remains fail-closed for the full 112 worker certificate', () => {
     expect(source).toContain('evaluateFleetActivationEvidence');
     expect(source).toContain('fleetActivationGate.certified');
-    expect(source).toContain('const knownWorkerIdentities=0');
-    expect(source).toContain('queueBackend:autonomousQueueBackend()');
-    expect(source).toContain('counts.unknown===0');
-    expect(source).toContain('return {ok:continuousRuntimeCertified');
+    expect(source).toContain('const knownWorkerIdentities = new Set(');
+    expect(source).toContain('queueBackend: provenQueueBackend');
+    expect(source).toContain('counts.unknown === 0');
+    expect(source).toContain('ok: continuousRuntimeCertified');
+    expect(source).toContain("if (!row.leaseHolder.startsWith('agent:')) return null");
+    expect(source).toContain('row.assignedAgentNumber !== runtimeState.agentNumber');
+    expect(source).toContain('if (!row.workerInstanceId || !leaseFresh(row)) return false');
+    expect(source).toContain('const actuallyWorking = !blocked &&');
+    expect(source).toContain('eligibleAgentNumbers.has(agentNumber)');
   });
 
   test('a read-only truth snapshot cannot start or resume the dispatcher', () => {

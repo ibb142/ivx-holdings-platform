@@ -1,6 +1,5 @@
 # IVX Holdings — Enterprise Blueprint v6
-# Multi-instance backend, autoscaling, Redis cache, background worker,
-# separate staging, zero-downtime deploys with automatic rollback.
+# Disk-backed API, Redis cache, background workers and separate staging.
 # Updated: 2026-08-12T09:25:00Z
 
 services:
@@ -13,11 +12,10 @@ services:
     dockerContext: .
     dockerCommand: node /app/node_modules/tsx/dist/cli.mjs /app/server.ts
     plan: standard
-    scaling:
-      minInstances: 1
-      maxInstances: 3
-      targetCPUPercent: 70
-      targetMemoryPercent: 80
+    # Render persistent disks attach to one instance and cannot autoscale.
+    # The 112 fleet lanes are logical async jobs backed by the shared atomic
+    # PostgreSQL queue; they do not require 112 API instances.
+    numInstances: 1
     # Deploy only after GitHub's required checks pass. Workflow-only and QA
     # evidence commits do not change the API image and must never recycle the
     # single disk-backed production instance.
@@ -46,7 +44,7 @@ services:
       - key: IVX_DEPLOYMENT_ENV
         value: production
       - key: IVX_AUTOSCALING_ENABLED
-        value: "true"
+        value: "false"
       - key: IVX_DEDICATED_WORKER_ENABLED
         value: "true"
       - key: IVX_OWNER_FOCUS_QUEUE_MODE
@@ -62,17 +60,22 @@ services:
       - key: IVX_AUTONOMOUS_RUNTIME_ENFORCER_ENABLED
         value: "true"
       - key: IVX_AUTONOMOUS_QUEUE_BACKEND
-        value: durable_json
+        # Row-normalized Supabase queue. Leasing uses a single PostgreSQL RPC
+        # with FOR UPDATE SKIP LOCKED so overlapping runtimes cannot double-run.
+        value: postgres_atomic
       - key: IVX_CAMPAIGN_PERIODIC_FEED_ENABLED
         value: "false"
       - key: IVX_AUTONOMOUS_DOCTOR_INTERVAL_MS
         value: "60000"
       - key: IVX_CAMPAIGN_MAX_CONCURRENCY
-        value: "12"
+        # Fleet persistence batches cold reads, seeding, leases, starts and
+        # heartbeat renewal, so 112 logical lanes no longer create a Supabase
+        # request storm at the start boundary.
+        value: "112"
       - key: IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY
-        value: "12"
+        value: "112"
       - key: IVX_MAX_INSTANCES
-        value: "3"
+        value: "1"
       - key: CHAT_DATABASE_PATH
         value: /app/data/chat-room.sqlite
       - key: IVX_DATA_DIR
