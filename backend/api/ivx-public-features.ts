@@ -54,9 +54,11 @@ export function normalizePublicLandingDeals(rows: readonly Record<string, any>[]
   const canonicalCasaExists = rows.some((row) => String(row.id ?? '') === 'casa-rosario-001');
   return rows
     .filter((row) => !(canonicalCasaExists && String(row.id ?? '') === LEGACY_CASA_PLACEHOLDER_ID))
-    .map((row) => String(row.id ?? '') === 'JV-202603-5190'
-      ? { ...row, title: 'IVX JACKSONVILLE PRIME' }
-      : { ...row })
+    .map((row): Record<string, any> => {
+      const normalized: Record<string, any> = { ...row };
+      if (String(row.id ?? '') === 'JV-202603-5190') normalized.title = 'IVX JACKSONVILLE PRIME';
+      return normalized;
+    })
     .sort((a, b) => {
       const aId = String(a.id ?? '');
       const bId = String(b.id ?? '');
