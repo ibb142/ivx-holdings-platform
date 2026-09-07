@@ -277,7 +277,7 @@ export function useRealtimeChannel(
 
       channelsRef.current.push(channel);
     }
-  }, [applyDeltas, autoReconnect, cleanupChannels, queryClient]);
+  }, [configSignature, queryClient, cleanupChannels, autoReconnect, applyDeltas]);
 
   useEffect(() => {
     activeRef.current = true;
