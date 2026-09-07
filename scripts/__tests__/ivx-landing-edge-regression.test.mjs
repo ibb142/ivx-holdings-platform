@@ -7,6 +7,7 @@ import { findReturnGuaranteeClaims } from '../../qa/landing-copy-assertions.mjs'
 const source = readFileSync(new URL('../../expo/deploy-s3-direct.mjs', import.meta.url), 'utf8');
 const html = readFileSync(new URL('../../expo/ivxholding-landing/index.html', import.meta.url), 'utf8');
 const e2eWorkflow = readFileSync(new URL('../../.github/workflows/ivx-e2e.yml', import.meta.url), 'utf8');
+const qaWorkflow = readFileSync(new URL('../../.github/workflows/ivx-qa-suite.yml', import.meta.url), 'utf8');
 // Execute the actual deployment functions with mocked AWS commands. Never run
 // the deployment entrypoint or load credentials in this regression suite.
 const helperStart = source.indexOf('async function ensureWwwRedirectFunction()');
@@ -141,4 +142,8 @@ test('APK certification remains fail-closed and blocked geolocation is not reque
 test('the static landing deploy path does not trigger an unrelated mobile build', () => {
   assert.match(e2eWorkflow, /expo\/ivxholding-landing\/\*\|expo\/deploy-s3-direct\.mjs\|qa\/landing-\*\|scripts\/__tests__\/ivx-landing-\*/);
   assert.match(e2eWorkflow, /expo\/\*\|package\.json\|bun\.lock\|bun\.lockb\|tsconfig\.json\) mobile=true/);
+  assert.match(qaWorkflow, /expo\/ivxholding-landing\/\*\|expo\/deploy-s3-direct\.mjs\|qa\/landing-\*\|scripts\/__tests__\/ivx-landing-\*/);
+  assert.match(qaWorkflow, /expo\/\*\|package\.json\|bun\.lock\|bun\.lockb\|tsconfig\.json\) expo=true/);
+  assert.match(qaWorkflow, /if: steps\.impact\.outputs\.expo == 'true'/);
+  assert.match(qaWorkflow, /expo_tests=SKIPPED_NO_EXPO_APP_CHANGES/);
 });
