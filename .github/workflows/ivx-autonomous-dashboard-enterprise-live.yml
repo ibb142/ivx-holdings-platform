@@ -37,9 +37,6 @@ jobs:
       OWNER_PASSWORD_S6: ${{ secrets.IVX_OWNER_LOGIN_PASSWORD }}
       SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
-      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
-      DEFAULT_RENDER_SERVICE_ID: srv-d7t9ivreo5us73ftose0
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -120,28 +117,9 @@ jobs:
           echo "OWNER_USER_ID=$user_id" >> "$GITHUB_ENV"
           echo 'owner_predeploy_auth=PASS'
 
-      - name: Trigger exact-current-main Render deploy with Owner bearer
-        shell: bash
-        run: |
-          set -euo pipefail
-          SERVICE_ID="${RENDER_SERVICE_ID:-$DEFAULT_RENDER_SERVICE_ID}"
-          if [ -n "${RENDER_API_KEY:-}" ]; then
-            response=$(curl -fsS -X POST "https://api.render.com/v1/services/${SERVICE_ID}/deploys" -H "Authorization: Bearer ${RENDER_API_KEY}" -H 'Accept: application/json' -H 'Content-Type: application/json' --data "{\"clearCache\":\"do_not_clear\",\"commitId\":\"${GITHUB_SHA}\"}")
-            deploy_id=$(printf '%s' "$response" | jq -r '.id // .deploy.id // empty')
-            test -n "$deploy_id"
-            echo "DEPLOY_ID=$deploy_id" >> "$GITHUB_ENV"
-            echo 'render_deploy_mode=direct_api'
-          else
-            payload=$(jq -n '{action:"render_trigger_deploy",input:{clearCache:false},confirm:true,confirmText:"CONFIRM_IVX_RENDER_DEPLOY",reason:"Deploy exact current main for Autonomous Dashboard realtime certification."}')
-            code=$(curl -sS --retry 2 --retry-delay 2 --retry-all-errors --max-time 60 -o /tmp/render-deploy.json -w '%{http_code}' -X POST "${API_BASE}/api/ivx/developer-deploy/action" -H 'Content-Type: application/json' -H "Authorization: Bearer ${OWNER_TOKEN}" --data "$payload" || true)
-            echo "render_trigger_deploy http=$code"
-            jq 'del(.result.value,.value,.input)' /tmp/render-deploy.json 2>/dev/null || true
-            test "$code" = 200
-            test "$(jq -r '.ok // false' /tmp/render-deploy.json)" = true
-            echo 'render_deploy_mode=owner_runtime_bridge'
-          fi
-          echo 'render_deploy_trigger=PASS'
-
+      # Render already auto-deploys main. Certification observes that deployment;
+      # a second POST here replaces active worker leases and WebSocket sessions
+      # while other exact-SHA checks are still using the same production build.
       - name: Wait for production exact SHA
         shell: bash
         run: |
