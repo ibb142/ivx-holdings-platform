@@ -289,12 +289,12 @@
     + '  <div class="hd"><span data-r="sheetTitle">Comments</span><button class="ivxr-ico" data-r="sheetClose">&#10005;</button></div>'
     + '  <div class="bd" data-r="sheetBody"></div>'
     + '  <div class="ivxr-in" data-r="sheetInput" style="display:none">'
-    + '    <input type="text" maxlength="2000" placeholder="Add a comment..." data-r="cmtText" />'
+    + '    <input type="text" maxlength="2000" aria-label="Add a comment" placeholder="Add a comment..." data-r="cmtText" />'
     + '    <button data-r="cmtSend">Post</button>'
     + '  </div>'
     + '</div>'
     + '<div class="ivxr-toast" data-r="toast"></div>'
-    + '<input type="file" accept="video/mp4,video/quicktime,video/*" style="display:none" data-r="file" />';
+    + '<input type="file" aria-label="Upload a project video" accept="video/mp4,video/quicktime,video/*" style="display:none" data-r="file" />';
   document.body.appendChild(root);
 
   function el(name) { return root.querySelector('[data-r="' + name + '"]'); }

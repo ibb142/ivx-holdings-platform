@@ -137,6 +137,25 @@ describe('PostgreSQL autonomous task store', () => {
     expect(snapshots[1][0].taskId).toBe('task-cache-1');
   });
 
+  test('paginates beyond the Supabase 1,000-row response cap', async () => {
+    configureAtomicQueue();
+    const urls: string[] = [];
+    globalThis.fetch = (async (input) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes('offset=0')) {
+        return Response.json(Array.from({ length: 1_000 }, (_, index) => ({ payload: { taskId: `old-${index}` } })));
+      }
+      if (url.includes('offset=1000')) return Response.json([{ payload: { taskId: 'newest-landing-task' } }]);
+      throw new Error(`unexpected page ${url}`);
+    }) as typeof fetch;
+
+    const tasks = await readPostgresAutonomousTasks();
+    expect(tasks).toHaveLength(1_001);
+    expect(tasks.at(-1)?.taskId).toBe('newest-landing-task');
+    expect(urls).toHaveLength(2);
+  });
+
   test('migration makes claims row-atomic and keeps RPCs private', () => {
     const migration = readFileSync(path.join(import.meta.dir, '../../supabase/migrations/20260907151751_ivx_autonomous_atomic_task_queue.sql'), 'utf8');
     const uniqueLeaseMigration = readFileSync(path.join(import.meta.dir, '../../supabase/migrations/20260907153209_ivx_autonomous_unique_worker_lease.sql'), 'utf8');
