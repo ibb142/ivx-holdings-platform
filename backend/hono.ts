@@ -6759,13 +6759,14 @@ const landingFleetFocus = landingFleetFocusEnabled();
 // after every API restart. This stays outside the fleet-focus scheduler gate:
 // suppressing unrelated schedulers must never strand an already-authorized
 // 112-agent certificate run in `pending`.
-void resumePendingCertificateRuns()
+const certificateBootRecovery = resumePendingCertificateRuns()
   .then(({ resumed, runIds }) => {
     console.log('[IVXRealExecutionCert] boot recovery complete', { resumed, runIds });
   })
   .catch((err) => {
     console.error('[IVXRealExecutionCert] boot recovery failed', err instanceof Error ? err.message : err);
   });
+void certificateBootRecovery.finally(() => {
 if (!landingFleetFocus) {
   try { startNightOpsScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] night ops scheduler failed to start:', err instanceof Error ? err.message : err); }
   try { void bootstrapDataVault(); startDataVaultScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] data vault scheduler failed to start:', err instanceof Error ? err.message : err); }
@@ -6785,6 +6786,7 @@ if (!landingFleetFocus) {
 } else {
   console.log('[IVX Landing Fleet Focus] unrelated Hono schedulers suppressed');
 }
+});
 
 // Graceful shutdown: stop the queue worker on SIGTERM/SIGINT so Render
 // doesn't kill tasks mid-execution. The worker waits up to

@@ -154,6 +154,7 @@ export async function resumePendingCertificateRuns(): Promise<{ resumed: number;
   const pending = await fetchPendingExecutions(300);
   const rows = (pending.data ?? []).filter((r) => r.workflow === REAL_EXECUTION_WORKFLOW_ID);
   const runIds = [...new Set(rows.map((r) => r.run_id))];
+  const processing: Promise<void>[] = [];
   for (const runId of runIds) {
     console.log('[IVXRealExecutionCert] resuming pending run after restart', { runId, pendingTasks: rows.filter((r) => r.run_id === runId).length });
     activeRun = {
@@ -168,8 +169,12 @@ export async function resumePendingCertificateRuns(): Promise<{ resumed: number;
       phase: 'agents',
       note: 'resumed after restart — pending tasks survived redeploy',
     };
-    void processCertificateRun(runId).catch(() => undefined);
+    processing.push(processCertificateRun(runId));
   }
+  // Boot recovery is not complete merely because work was discovered. Keep
+  // competing background schedulers gated until every recovered certificate
+  // task has reached a terminal state and the certificate is persisted.
+  await Promise.all(processing);
   return { resumed: rows.length, runIds };
 }
 
