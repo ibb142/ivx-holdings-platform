@@ -24,7 +24,7 @@
  *   GET    /api/ivx/autonomous-task-engine/states               — 23-state machine
  */
 import type { Context as HonoContext } from 'hono';
-import { assertIVXOwnerOnly, ownerOnlyJson } from './owner-only';
+import { withIVXOwnerOnly } from './ivx-owner-route';
 import {
   createObjective,
   createTask,
@@ -66,20 +66,7 @@ type AutonomousTaskEngineHandler = (c: HonoContext) => Promise<Response>;
  * guard also accepts the active IVX system key used by trusted fleet workers.
  */
 export function withAutonomousTaskEngineOwner(handler: AutonomousTaskEngineHandler): AutonomousTaskEngineHandler {
-  return async (c: HonoContext): Promise<Response> => {
-    try {
-      const owner = await assertIVXOwnerOnly(c.req.raw);
-      if (!owner.userId) {
-        return ownerOnlyJson({ ok: false, error: 'IVX owner authentication required.' }, 401);
-      }
-      c.set('ownerEmail', owner.email ?? null);
-      return await handler(c);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'IVX owner authentication failed.';
-      const status = /missing bearer|invalid or expired|authentication required/i.test(message) ? 401 : 403;
-      return ownerOnlyJson({ ok: false, error: message }, status);
-    }
-  };
+  return withIVXOwnerOnly(handler);
 }
 
 export async function handleAutonomousTaskEngine(c: HonoContext): Promise<Response> {

@@ -4,6 +4,7 @@ import {
   getAllTasks,
   validateCompletion,
   type Task,
+  type TaskEvidence,
 } from './ivx-autonomous-task-engine';
 import { containPath, resolveRepoRoot } from './ivx-agent-engineering-tools';
 
@@ -188,15 +189,32 @@ function isEvidenceBacked(task: Task): boolean {
   return task.evidence.length > 0;
 }
 
-function isProductionVerified(task: Task): boolean {
-  return Boolean(
-    task.deploymentId
-    || task.evidence.some((item) => item.evidenceType === 'production_verification' || item.evidenceType === 'deployment_id'),
-  );
+function hasKnownSourceSha(sourceSha: string): boolean {
+  const normalized = sourceSha.trim().toLowerCase();
+  return normalized.length > 0 && !normalized.includes('unknown');
 }
 
-function isTestBacked(task: Task): boolean {
-  return task.evidence.some((item) => item.evidenceType === 'test_result' || item.evidenceType === 'device_qa');
+function hasExactShaEvidence(
+  task: Task,
+  sourceSha: string,
+  evidenceTypes: readonly TaskEvidence['evidenceType'][],
+): boolean {
+  if (!hasKnownSourceSha(sourceSha) || task.commitSha !== sourceSha) return false;
+  return task.evidence.some((item) => evidenceTypes.includes(item.evidenceType)
+    && item.commitSha === sourceSha
+    && item.contentHash.trim().length > 0);
+}
+
+function isProductionVerified(task: Task, sourceSha: string): boolean {
+  if (!task.deploymentId) return false;
+  return hasExactShaEvidence(task, sourceSha, ['production_verification', 'deployment_id'])
+    && task.evidence.some((item) => (
+      item.evidenceType === 'production_verification' || item.evidenceType === 'deployment_id'
+    ) && item.commitSha === sourceSha && item.deploymentId === task.deploymentId);
+}
+
+function isTestBacked(task: Task, sourceSha: string): boolean {
+  return hasExactShaEvidence(task, sourceSha, ['test_result', 'device_qa']);
 }
 
 function scoreAgent(tasks: Task[], agentNumber: number): AgentDecisionScore {
@@ -239,9 +257,9 @@ export function computeDecisionQualitySnapshot(
   const firstPass = rate(verified.filter((task) => task.retryCount === 0).length, verified.length);
   const integrity = rate(verified.filter((task) => validateCompletion(task).verdict === 'VERIFIED').length, verified.length);
   const testEligible = verified.filter((task) => task.taskType === 'development' || task.taskType === 'qa' || task.taskType === 'security');
-  const testEvidence = rate(testEligible.filter(isTestBacked).length, testEligible.length);
+  const testEvidence = rate(testEligible.filter((task) => isTestBacked(task, sourceSha)).length, testEligible.length);
   const prodEligible = verified.filter((task) => task.taskType === 'development' || task.taskType === 'deployment');
-  const productionVerification = rate(prodEligible.filter(isProductionVerified).length, prodEligible.length);
+  const productionVerification = rate(prodEligible.filter((task) => isProductionVerified(task, sourceSha)).length, prodEligible.length);
   const falseCompletion = rate(verified.filter((task) => validateCompletion(task).verdict !== 'VERIFIED').length, verified.length);
   const ownerIntervention = rate(recent.filter((task) => Boolean(task.approvalId) || /OWNER_GATE/i.test(task.blocker ?? '')).length, recent.length);
 

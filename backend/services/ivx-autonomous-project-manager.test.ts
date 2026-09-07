@@ -80,6 +80,57 @@ function makeObjective(overrides: Partial<Objective> = {}): Objective {
   };
 }
 
+function makeVerifiedCapabilityTask(index: number): Task {
+  const createdAt = new Date(NOW - 60_000).toISOString();
+  const completedAt = new Date(NOW - 1_000).toISOString();
+  return makeTask({
+    taskId: `capability-${index}`,
+    title: 'Architecture backend/API Expo mobile web Supabase database auth security QA E2E performance latency deploy Render monitoring incident media video',
+    taskType: 'development',
+    state: 'VERIFIED',
+    idempotencyKey: `decision-quality:qa-sha:capability:${index}`,
+    assignedAgentNumber: (index % 12) + 1,
+    assignedEngine: `ivx_capability_agent_${(index % 12) + 1}`,
+    dueAt: new Date(NOW + 86_400_000).toISOString(),
+    acceptanceCriteria: [{
+      id: `criterion-${index}`,
+      description: 'Exact test and production evidence passes',
+      verificationMethod: 'production_check',
+      met: true,
+      evidence: `capability-evidence-${index}`,
+    }],
+    evidence: [
+      {
+        evidenceId: `test-${index}`,
+        evidenceType: 'test_result',
+        source: 'ci',
+        contentHash: `test-hash-${index}`,
+        summary: 'Tests passed for exact source SHA',
+        createdAt: completedAt,
+        commitSha: 'qa-sha',
+        deploymentId: null,
+      },
+      {
+        evidenceId: `production-${index}`,
+        evidenceType: 'production_verification',
+        source: 'production',
+        contentHash: `production-hash-${index}`,
+        summary: 'Production verification passed for exact source SHA',
+        createdAt: completedAt,
+        commitSha: 'qa-sha',
+        deploymentId: 'deploy-qa',
+      },
+    ],
+    filesChanged: [`backend/capability-${index}.ts`],
+    commitSha: 'qa-sha',
+    deploymentId: 'deploy-qa',
+    createdAt,
+    updatedAt: completedAt,
+    startedAt: createdAt,
+    completedAt,
+  });
+}
+
 describe('Autonomous Project Manager control tower', () => {
   it('builds a dependency path and identifies only executable work as ready', () => {
     const first = makeTask();
@@ -159,5 +210,49 @@ describe('Autonomous Project Manager control tower', () => {
 
     expect(taskSchedulingScore(overdue, NOW)).toBeGreaterThan(taskSchedulingScore(undated, NOW));
     expect([undated, overdue].sort((a, b) => compareProjectManagedTasks(a, b, NOW))[0]?.taskId).toBe('overdue');
+  });
+
+  it('certifies exactly the requested nine capabilities only when every proof threshold is 10/10', () => {
+    const tasks = Array.from({ length: 20 }, (_, index) => makeVerifiedCapabilityTask(index));
+    const report = analyzeAutonomousProjectManagement({
+      objectives: [makeObjective()],
+      tasks,
+      approvals: [],
+      sourceSha: 'qa-sha',
+      nowMs: NOW,
+      configuredConcurrency: 12,
+    });
+
+    expect(report.capabilityCertification.capabilities.map((item) => item.id)).toEqual([
+      'brain',
+      'reasoning',
+      'capacity',
+      'skill',
+      'experience',
+      'retention',
+      'intelligence',
+      'self_upgrade',
+      'learning',
+    ]);
+    expect(report.capabilityCertification.capabilities).toHaveLength(9);
+    expect(report.capabilityCertification.capabilities.every((item) => item.scoreOutOf10 === 10)).toBe(true);
+    expect(report.capabilityCertification.capabilities.every((item) => item.status === 'VERIFIED_10_10')).toBe(true);
+    expect(report.capabilityCertification.scoreOutOf10).toBe(10);
+    expect(report.capabilityCertification.allNineTenOfTenVerified).toBe(true);
+    expect(report.brain.tenOfTenCertified).toBe(true);
+  });
+
+  it('does not award lease-integrity capacity credit when there is no active or recently verified work', () => {
+    const report = analyzeAutonomousProjectManagement({
+      objectives: [makeObjective()],
+      tasks: [makeTask({ state: 'QUEUED' })],
+      approvals: [],
+      sourceSha: 'qa-sha',
+      nowMs: NOW,
+      configuredConcurrency: 12,
+    });
+    const capacity = report.capabilityCertification.capabilities.find((item) => item.id === 'capacity');
+    expect(capacity?.evidence.find((item) => item.metric === 'fresh_lease_integrity')?.actual).toBe(0);
+    expect(capacity?.status).not.toBe('VERIFIED_10_10');
   });
 });

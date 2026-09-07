@@ -26,7 +26,7 @@ import {
 } from './ivx-autonomous-decision-quality';
 import { IVX_PROJECT_VISION } from './ivx-project-vision';
 
-export const IVX_AUTONOMOUS_PROJECT_MANAGER_MARKER = 'ivx-autonomous-project-manager-v1-2026-09-07';
+export const IVX_AUTONOMOUS_PROJECT_MANAGER_MARKER = 'ivx-autonomous-project-manager-v2-nine-capability-gate-2026-09-07';
 
 const ACTIVE_EXECUTION_STATES = new Set<TaskState>([
   'LEASED', 'RUNNING', 'EXECUTION_COMPLETED', 'QA_IN_PROGRESS',
@@ -52,6 +52,41 @@ export type ProjectManagerDimension = {
   status: 'PASS' | 'PARTIAL' | 'FAIL';
   evidence: string;
   gap: string | null;
+};
+
+export type AutonomousCapabilityId =
+  | 'brain'
+  | 'reasoning'
+  | 'capacity'
+  | 'skill'
+  | 'experience'
+  | 'retention'
+  | 'intelligence'
+  | 'self_upgrade'
+  | 'learning';
+
+export type AutonomousCapabilityEvidence = {
+  metric: string;
+  actual: string | number | boolean | null;
+  requiredForTen: string;
+  passed: boolean;
+  source:
+    | 'decision_quality_snapshot'
+    | 'objective_dependency_graph'
+    | 'durable_task_ledger'
+    | 'runtime_leases'
+    | 'corrective_work_loop';
+};
+
+export type AutonomousCapabilityAssessment = {
+  id: AutonomousCapabilityId;
+  label: string;
+  operationalDefinition: string;
+  scoreOutOf10: number;
+  rawScoreOutOf100: number;
+  status: 'VERIFIED_10_10' | 'PARTIAL' | 'NOT_VERIFIED';
+  evidence: AutonomousCapabilityEvidence[];
+  blockers: string[];
 };
 
 export type ObjectiveHealth = {
@@ -119,6 +154,14 @@ export type AutonomousProjectManagerReport = {
     tenOfTenCertified: boolean;
     blockers: string[];
   };
+  capabilityCertification: {
+    metric: 'evidence_backed_operational_capability_not_human_iq';
+    requestedTargetOutOf10: 10;
+    scoreOutOf10: number;
+    allNineTenOfTenVerified: boolean;
+    capabilities: AutonomousCapabilityAssessment[];
+    proofPolicy: string;
+  };
   portfolio: {
     totalObjectives: number;
     activeObjectives: number;
@@ -155,6 +198,37 @@ function clampScore(value: number): number {
 
 function ratioScore(numerator: number, denominator: number): number {
   return denominator > 0 ? clampScore((numerator / denominator) * 100) : 0;
+}
+
+function measuredRate(value: number | null): number {
+  return clampScore((value ?? 0) * 100);
+}
+
+function capability(
+  id: AutonomousCapabilityId,
+  label: string,
+  operationalDefinition: string,
+  rawScore: number,
+  evidence: AutonomousCapabilityEvidence[],
+): AutonomousCapabilityAssessment {
+  const normalized = clampScore(rawScore);
+  const blockers = evidence
+    .filter((item) => !item.passed)
+    .map((item) => `${item.metric}: actual=${String(item.actual)}; required=${item.requiredForTen}`);
+  return {
+    id,
+    label,
+    operationalDefinition,
+    scoreOutOf10: Math.round((normalized / 10) * 100) / 100,
+    rawScoreOutOf100: normalized,
+    status: normalized === 100 && blockers.length === 0
+      ? 'VERIFIED_10_10'
+      : normalized >= 60
+        ? 'PARTIAL'
+        : 'NOT_VERIFIED',
+    evidence,
+    blockers,
+  };
 }
 
 function dimension(
@@ -479,6 +553,209 @@ export function analyzeAutonomousProjectManagement(input: {
       'Close uncovered product/engineering domains and feed verified outcomes back into prioritization.'),
   ];
 
+  const dimensionScores = new Map(dimensions.map((item) => [item.id, item.score]));
+  const dimensionScore = (id: ProjectManagerDimensionId): number => dimensionScores.get(id) ?? 0;
+  const reasoningScore = clampScore((
+    dimensionScore('objective_clarity')
+    + dimensionScore('value_prioritization')
+    + dimensionScore('dependency_control')
+  ) / 3);
+  const qualityWindowMs = quality.windowHours * 60 * 60 * 1_000;
+  const recentAgentsWithVerifiedOutcomes = new Set(tasks
+    .filter((task) => {
+      const updated = parsedTime(task.updatedAt);
+      return updated !== null
+        && updated <= nowMs
+        && nowMs - updated <= qualityWindowMs
+        && task.assignedAgentNumber != null
+        && validateCompletion(task).verdict === 'VERIFIED';
+    })
+    .map((task) => task.assignedAgentNumber as number)).size;
+  const activeTasksWithFreshLease = activeTasks.filter((task) => {
+    const heartbeat = parsedTime(task.lastHeartbeatAt);
+    return Boolean(task.leaseHolder && heartbeat !== null && nowMs - heartbeat <= 60_000);
+  }).length;
+  const assignmentCoverage = tasks.length > 0 ? ratioScore(assigned, tasks.length) : 0;
+  const observedCapacityCoverage = ratioScore(Math.min(recentAgentsWithVerifiedOutcomes, concurrency), concurrency);
+  const leaseIntegrityScore = activeTasks.length > 0
+    ? ratioScore(activeTasksWithFreshLease, activeTasks.length)
+    : recentAgentsWithVerifiedOutcomes >= concurrency ? 100 : 0;
+  const capacityScore = clampScore(
+    assignmentCoverage * 0.30
+    + observedCapacityCoverage * 0.30
+    + (activeTasks.length <= concurrency ? 20 : 0)
+    + leaseIntegrityScore * 0.20,
+  );
+  const skillScore = clampScore((
+    measuredRate(quality.evidenceIntegrityRate.rate)
+    + measuredRate(quality.testEvidenceRate.rate)
+    + measuredRate(quality.productionVerificationRate.rate)
+  ) / 3);
+  const experienceSampleScore = clampScore(Math.min(1, quality.sampleTasks / 20) * 100);
+  const validatedVerifiedTasks = quality.evidenceIntegrityRate.numerator;
+  const experienceVerifiedScore = clampScore(Math.min(1, validatedVerifiedTasks / 20) * 100);
+  const experienceScore = clampScore(
+    experienceSampleScore * 0.40
+    + experienceVerifiedScore * 0.40
+    + measuredRate(quality.globalCoverageRate.rate) * 0.20,
+  );
+  const linkedTaskScore = tasks.length > 0 ? ratioScore(tasks.length - orphanTasks.length, tasks.length) : 0;
+  const retentionHistoryScore = clampScore(Math.min(1, tasks.length / 20) * 100);
+  const retentionScore = clampScore(
+    ledgerIntegrityScore * 0.50
+    + linkedTaskScore * 0.30
+    + retentionHistoryScore * 0.20,
+  );
+  const correctiveTasks = tasks.filter((task) =>
+    task.idempotencyKey.startsWith('decision-quality:')
+    || task.idempotencyKey.startsWith('semantic360:self-improvement:'),
+  );
+  const verifiedCorrectiveTasks = correctiveTasks.filter((task) => validateCompletion(task).verdict === 'VERIFIED');
+  const correctiveAttentionTasks = correctiveTasks.filter((task) => ATTENTION_STATES.has(task.state));
+  const correctiveCoverageScore = clampScore(Math.min(1, correctiveTasks.length / 5) * 100);
+  const correctiveSuccessScore = correctiveTasks.length > 0
+    ? ratioScore(verifiedCorrectiveTasks.length, correctiveTasks.length)
+    : 0;
+  const selfUpgradeScore = clampScore(
+    correctiveCoverageScore * 0.20
+    + correctiveSuccessScore * 0.60
+    + (correctiveTasks.length > 0 && correctiveAttentionTasks.length === 0 ? 20 : 0),
+  );
+  const effectiveFirstPassRate = (quality.firstPassRate.rate ?? 0) * (quality.evidenceIntegrityRate.rate ?? 0);
+  const learningScore = clampScore(
+    measuredRate(effectiveFirstPassRate) * 0.30
+    + measuredRate(quality.globalCoverageRate.rate) * 0.30
+    + correctiveSuccessScore * 0.40,
+  );
+  const evidenceRow = (
+    metric: string,
+    actual: AutonomousCapabilityEvidence['actual'],
+    requiredForTen: string,
+    passed: boolean,
+    source: AutonomousCapabilityEvidence['source'],
+  ): AutonomousCapabilityEvidence => ({ metric, actual, requiredForTen, passed, source });
+
+  const brainAssessment = capability(
+    'brain',
+    'Brain',
+    'Verified operational decision quality across outcomes, evidence, tests, production and IVX domain coverage; this is not IQ or consciousness.',
+    quality.overallScore,
+    [
+      evidenceRow('decision_quality', quality.overallScore, '100/100', quality.overallScore === 100, 'decision_quality_snapshot'),
+      evidenceRow('sample_tasks', quality.sampleTasks, '>=20 recent tasks', quality.sampleTasks >= 20, 'durable_task_ledger'),
+      evidenceRow('false_completion_rate', quality.falseCompletionRiskRate.rate, '0', (quality.falseCompletionRiskRate.rate ?? 1) === 0, 'decision_quality_snapshot'),
+    ],
+  );
+  const reasoningAssessment = capability(
+    'reasoning',
+    'Reasoning / Razonamiento',
+    'Turns owner outcomes into explicit objectives, priorities and an acyclic dependency plan without inventing dates or facts.',
+    reasoningScore,
+    [
+      evidenceRow('objective_clarity', dimensionScore('objective_clarity'), '100/100', dimensionScore('objective_clarity') === 100, 'objective_dependency_graph'),
+      evidenceRow('value_prioritization', dimensionScore('value_prioritization'), '100/100', dimensionScore('value_prioritization') === 100, 'objective_dependency_graph'),
+      evidenceRow('dependency_control', dimensionScore('dependency_control'), '100/100 and valid graph', dimensionScore('dependency_control') === 100 && dependencyAudit.valid, 'objective_dependency_graph'),
+    ],
+  );
+  const capacityAssessment = capability(
+    'capacity',
+    'Capacity / Capacidad',
+    'Schedules owned work within actually deployed concurrency and reports lease-backed execution separately from the 112-lane registry.',
+    capacityScore,
+    [
+      evidenceRow('assignment_coverage', assignmentCoverage, '100/100', assignmentCoverage === 100, 'durable_task_ledger'),
+      evidenceRow('recent_agents_with_verified_outcomes_vs_configured_concurrency', `${recentAgentsWithVerifiedOutcomes}/${concurrency}`, `>=${concurrency}/${concurrency}`, recentAgentsWithVerifiedOutcomes >= concurrency, 'runtime_leases'),
+      evidenceRow('wip_within_capacity', `${activeTasks.length}/${concurrency}`, `<=${concurrency}`, activeTasks.length <= concurrency, 'runtime_leases'),
+      evidenceRow('fresh_lease_integrity', leaseIntegrityScore, '100/100', leaseIntegrityScore === 100, 'runtime_leases'),
+    ],
+  );
+  const skillAssessment = capability(
+    'skill',
+    'Skill / Habilidad',
+    'Produces completion evidence, test proof and exact production verification for eligible engineering work.',
+    skillScore,
+    [
+      evidenceRow('evidence_integrity_rate', quality.evidenceIntegrityRate.rate, '1.0', quality.evidenceIntegrityRate.rate === 1, 'decision_quality_snapshot'),
+      evidenceRow('test_evidence_rate', quality.testEvidenceRate.rate, '1.0', quality.testEvidenceRate.rate === 1, 'decision_quality_snapshot'),
+      evidenceRow('production_verification_rate', quality.productionVerificationRate.rate, '1.0', quality.productionVerificationRate.rate === 1, 'decision_quality_snapshot'),
+    ],
+  );
+  const experienceAssessment = capability(
+    'experience',
+    'Experience / Experiencia',
+    'Demonstrated recent execution history across the complete IVX engineering surface, measured as outcomes rather than age or narrative claims.',
+    experienceScore,
+    [
+      evidenceRow('recent_task_sample', quality.sampleTasks, '>=20', quality.sampleTasks >= 20, 'durable_task_ledger'),
+      evidenceRow('validator_accepted_outcomes', validatedVerifiedTasks, '>=20', validatedVerifiedTasks >= 20, 'durable_task_ledger'),
+      evidenceRow('domain_coverage', quality.globalCoverageRate.rate, '1.0 across all defined domains', quality.globalCoverageRate.rate === 1, 'decision_quality_snapshot'),
+    ],
+  );
+  const retentionAssessment = capability(
+    'retention',
+    'Retention / Retención',
+    'Preserves objectives, task identity, state and evidence in the canonical durable ledger; this is operational memory, not model-weight memory.',
+    retentionScore,
+    [
+      evidenceRow('ledger_integrity', ledgerIntegrityScore, '100/100', ledgerIntegrityScore === 100, 'durable_task_ledger'),
+      evidenceRow('objective_linkage', linkedTaskScore, '100/100 and zero orphan tasks', linkedTaskScore === 100 && orphanTasks.length === 0, 'durable_task_ledger'),
+      evidenceRow('retained_history', tasks.length, '>=20 task records', tasks.length >= 20, 'durable_task_ledger'),
+    ],
+  );
+  const selfUpgradeAssessment = capability(
+    'self_upgrade',
+    'Self-upgrade / Auto-mejora',
+    'Detects measured weaknesses, creates bounded corrective work and accepts an upgrade only after the same evidence gates pass; protected changes remain owner-gated.',
+    selfUpgradeScore,
+    [
+      evidenceRow('corrective_tasks_created', correctiveTasks.length, '>=5 evidence-triggered tasks', correctiveTasks.length >= 5, 'corrective_work_loop'),
+      evidenceRow('corrective_tasks_verified', `${verifiedCorrectiveTasks.length}/${correctiveTasks.length}`, '100%', correctiveTasks.length > 0 && verifiedCorrectiveTasks.length === correctiveTasks.length, 'corrective_work_loop'),
+      evidenceRow('corrective_attention_tasks', correctiveAttentionTasks.length, '0', correctiveTasks.length > 0 && correctiveAttentionTasks.length === 0, 'corrective_work_loop'),
+    ],
+  );
+  const learningAssessment = capability(
+    'learning',
+    'Learning / Aprendizaje',
+    'Feeds verified outcomes and corrective results back into reprioritization; it does not claim unmeasured model training.',
+    learningScore,
+    [
+      evidenceRow('evidence_validated_first_pass_rate', effectiveFirstPassRate, '1.0', effectiveFirstPassRate === 1, 'decision_quality_snapshot'),
+      evidenceRow('global_domain_coverage', quality.globalCoverageRate.rate, '1.0', quality.globalCoverageRate.rate === 1, 'decision_quality_snapshot'),
+      evidenceRow('applied_corrective_success', correctiveTasks.length > 0 ? verifiedCorrectiveTasks.length / correctiveTasks.length : null, '1.0 with at least one correction', correctiveTasks.length > 0 && verifiedCorrectiveTasks.length === correctiveTasks.length, 'corrective_work_loop'),
+    ],
+  );
+  const intelligenceScore = clampScore((
+    brainAssessment.rawScoreOutOf100
+    + reasoningAssessment.rawScoreOutOf100
+    + skillAssessment.rawScoreOutOf100
+    + learningAssessment.rawScoreOutOf100
+  ) / 4);
+  const intelligenceAssessment = capability(
+    'intelligence',
+    'Intelligence / Inteligencia',
+    'Composite operational intelligence: reason over a plan, execute with proof, learn from outcomes and improve without unsupported claims.',
+    intelligenceScore,
+    [
+      evidenceRow('brain_component', brainAssessment.rawScoreOutOf100, '100/100', brainAssessment.rawScoreOutOf100 === 100, 'decision_quality_snapshot'),
+      evidenceRow('reasoning_component', reasoningAssessment.rawScoreOutOf100, '100/100', reasoningAssessment.rawScoreOutOf100 === 100, 'objective_dependency_graph'),
+      evidenceRow('skill_component', skillAssessment.rawScoreOutOf100, '100/100', skillAssessment.rawScoreOutOf100 === 100, 'decision_quality_snapshot'),
+      evidenceRow('learning_component', learningAssessment.rawScoreOutOf100, '100/100', learningAssessment.rawScoreOutOf100 === 100, 'corrective_work_loop'),
+    ],
+  );
+  const capabilities: AutonomousCapabilityAssessment[] = [
+    brainAssessment,
+    reasoningAssessment,
+    capacityAssessment,
+    skillAssessment,
+    experienceAssessment,
+    retentionAssessment,
+    intelligenceAssessment,
+    selfUpgradeAssessment,
+    learningAssessment,
+  ];
+  const allNineTenOfTenVerified = capabilities.every((item) => item.status === 'VERIFIED_10_10');
+  const capabilityScore = Math.round((capabilities.reduce((sum, item) => sum + item.scoreOutOf10, 0) / capabilities.length) * 100) / 100;
+
   const maturityScore = Math.round((dimensions.reduce((sum, item) => sum + item.score, 0) / dimensions.length) * 10) / 100;
   const brainScore = Math.round((quality.overallScore / 10) * 100) / 100;
   const criticalAttention = tasks.filter((task) => task.priority === 'critical' && ATTENTION_STATES.has(task.state));
@@ -492,6 +769,7 @@ export function analyzeAutonomousProjectManagement(input: {
   const tenOfTenCertified = quality.sampleTasks >= 20
     && quality.overallScore >= 95
     && dimensions.every((item) => item.score >= 95)
+    && allNineTenOfTenVerified
     && criticalAttention.length === 0
     && orphanTasks.length === 0
     && activeTasks.length <= concurrency
@@ -523,6 +801,14 @@ export function analyzeAutonomousProjectManagement(input: {
       tenOfTenCertified,
       blockers: maturityBlockers.slice(0, 30),
     },
+    capabilityCertification: {
+      metric: 'evidence_backed_operational_capability_not_human_iq',
+      requestedTargetOutOf10: 10,
+      scoreOutOf10: capabilityScore,
+      allNineTenOfTenVerified,
+      capabilities,
+      proofPolicy: 'Each 10/10 requires a raw 100/100 and every listed proof threshold to pass. A configured feature, queued task, registry entry or narrative claim is never proof.',
+    },
     portfolio: {
       totalObjectives: objectives.length,
       activeObjectives: objectives.filter((objective) => objective.status === 'active').length,
@@ -548,6 +834,7 @@ export function analyzeAutonomousProjectManagement(input: {
       'The critical path is dependency-order only unless every path task has estimatedMinutes; an incomplete estimate never becomes a fabricated delivery date.',
       'The 112-agent fleet is reported separately from physical concurrency. This control tower cannot certify 112/112 without distinct leases, fresh heartbeats and worker identities.',
       'Owner target dates and business success metrics are never invented. Missing values remain explicit planning gaps.',
+      'Brain, intelligence, experience, retention and learning are operational capability labels. They do not claim consciousness, human IQ, human experience or autonomous model-weight training.',
     ],
   };
 }

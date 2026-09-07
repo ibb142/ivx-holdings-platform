@@ -917,6 +917,7 @@ import {
   startSelfUpgradeScheduler,
   IVX_SELF_UPGRADE_MARKER,
 } from './services/ivx-daily-self-upgrade';
+import { withIVXOwnerOnly } from './api/ivx-owner-route';
 import { OPTIONS as seniorDeveloperOptions, handleIVXSeniorDeveloperCredentialAuditRequest, handleIVXSeniorDeveloperGithubAuditRequest, handleIVXSeniorDeveloperRunRequest, handleIVXSeniorDeveloperStatusRequest } from './api/ivx-senior-developer-runtime';
 import { auditIVXProductionCredentialRuntime, IVX_SENIOR_DEVELOPER_RUNTIME_MARKER, IVX_GITHUB_CANONICAL_PATH, IVX_GITHUB_CANONICAL_PATH_DESCRIPTION } from './services/ivx-senior-developer-runtime';
 import { OPTIONS as seniorDevToolsOptions, handleIVXSeniorDevAuditReportRequest, handleIVXSeniorDevToolsExecuteRequest, handleIVXSeniorDevToolsListRequest } from './api/ivx-senior-dev-tools';
@@ -4998,11 +4999,11 @@ app.post('/api/ivx/app-creation-pipeline/run', async (context) => handleAppPipel
 
 // IVX Agent Code Execution Layer — connects 112 IA agents to real code execution
 app.get('/api/ivx/agent-code-executor/status', () => handleExecutorStatusRequest());
-app.post('/api/ivx/agent-code-executor/write', async (context) => handleExecutorWriteRequest(context.req.raw));
-app.post('/api/ivx/agent-code-executor/build', async (context) => handleExecutorBuildRequest(context.req.raw));
-app.post('/api/ivx/agent-code-executor/deploy', async (context) => handleExecutorDeployRequest(context.req.raw));
-app.post('/api/ivx/agent-code-executor/full', async (context) => handleExecutorFullRequest(context.req.raw));
-app.post('/api/ivx/agent-code-executor/112-cert', async (context) => handleExecutor112CertRequest(context.req.raw));
+app.post('/api/ivx/agent-code-executor/write', withIVXOwnerOnly(async (context) => handleExecutorWriteRequest(context.req.raw)));
+app.post('/api/ivx/agent-code-executor/build', withIVXOwnerOnly(async (context) => handleExecutorBuildRequest(context.req.raw)));
+app.post('/api/ivx/agent-code-executor/deploy', withIVXOwnerOnly(async (context) => handleExecutorDeployRequest(context.req.raw)));
+app.post('/api/ivx/agent-code-executor/full', withIVXOwnerOnly(async (context) => handleExecutorFullRequest(context.req.raw)));
+app.post('/api/ivx/agent-code-executor/112-cert', withIVXOwnerOnly(async (context) => handleExecutor112CertRequest(context.req.raw)));
 
 // ── SignalWire SMS + Voice ───────────────────────────────────────────────────
 app.get('/api/ivx/signalwire/status', () => handleSignalWireStatus());
@@ -5017,20 +5018,20 @@ app.get('/api/ivx/signalwire/voice/brain', () => handleVoiceBrainStatus());
 app.post('/api/ivx/signalwire/conversational', async (c) => handleSignalWireConversationalCall(c.req.raw));
 app.post('/api/ivx/signalwire/verify', async (c) => handleSignalWireVerify(c.req.raw));
 // Daily autonomous self-upgrade
-app.get('/api/ivx/self-upgrade/status', () => {
+app.get('/api/ivx/self-upgrade/status', withIVXOwnerOnly(async () => {
   const status = getSelfUpgradeStatus();
   return new Response(JSON.stringify(status), { headers: { 'Content-Type': 'application/json' } });
-});
-app.post('/api/ivx/self-upgrade/run', async (c) => {
+}));
+app.post('/api/ivx/self-upgrade/run', withIVXOwnerOnly(async () => {
   const result = await runDailySelfUpgrade();
   return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
-});
-app.get('/api/ivx/self-upgrade/log', (c) => {
+}));
+app.get('/api/ivx/self-upgrade/log', withIVXOwnerOnly(async (c) => {
   const url = new URL(c.req.url);
   const limit = parseInt(url.searchParams.get('limit') || '10', 10);
   const log = getUpgradeLog(limit);
   return new Response(JSON.stringify({ ok: true, log, marker: IVX_SELF_UPGRADE_MARKER }), { headers: { 'Content-Type': 'application/json' } });
-});
+}));
 app.options('/api/ivx/signalwire/status', (c) => c.body(null, 204));
 app.options('/api/ivx/signalwire/sms', (c) => c.body(null, 204));
 app.options('/api/ivx/signalwire/voice', (c) => c.body(null, 204));
