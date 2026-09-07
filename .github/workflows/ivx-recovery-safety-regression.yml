@@ -1,0 +1,30 @@
+name: IVX Recovery Safety Regression
+
+on:
+  pull_request:
+    paths:
+      - 'backend/services/ivx-autonomous-truth-control.ts'
+      - 'scripts/qa-regression-tests/autonomous-truth-safety.test.mjs'
+      - '.github/workflows/ivx-recovery-safety-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ivx-recovery-safety-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  recovery-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.16.0'
+      - name: Fail-closed recovery and truthful accounting regressions
+        run: node --experimental-vm-modules --test scripts/qa-regression-tests/autonomous-truth-safety.test.mjs
