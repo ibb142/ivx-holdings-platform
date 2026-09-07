@@ -31,6 +31,7 @@ import { getAllExecutionStates } from './ivx-agent-runtime';
 export const IVX_LANDING_P0_MARKER = 'ivx-landing-p0-backlog-2026-09-04';
 export const LANDING_P0_PREFIX = 'landing-p0:';
 export const LANDING_P0_REPAIR_PREFIX = 'landing-p0-repair:';
+export const LANDING_P0_PATROL_PREFIX = 'landing-p0-patrol:';
 /** Evidence summary prefix — the status aggregator parses everything after it as JSON. */
 export const LANDING_P0_RESULT_EVIDENCE_PREFIX = 'LANDING_P0_RESULT ';
 
@@ -314,6 +315,41 @@ export function landingRepairKey(sha: string, unitId: string, defectCode: string
   return `${LANDING_P0_REPAIR_PREFIX}${sha}:${unitId}:${defectCode}`;
 }
 
+export function landingPatrolKey(sha: string, agentNumber: number): string {
+  return `${LANDING_P0_PATROL_PREFIX}${sha}:ia-${String(agentNumber).padStart(3, '0')}`;
+}
+
+export type ParsedLandingPatrolKey = { sha: string; agentNumber: number };
+
+export function parseLandingPatrolTaskKey(idempotencyKey: string): ParsedLandingPatrolKey | null {
+  if (!idempotencyKey.startsWith(LANDING_P0_PATROL_PREFIX)) return null;
+  const raw = idempotencyKey.slice(LANDING_P0_PATROL_PREFIX.length);
+  const match = /^([^:]+):ia-(\d{3})$/.exec(raw);
+  if (!match) return null;
+  const agentNumber = Number.parseInt(match[2], 10);
+  if (agentNumber < 1 || agentNumber > 112) return null;
+  return { sha: match[1], agentNumber };
+}
+
+export function isLandingPatrolTask(task: Pick<Task, 'idempotencyKey'>): boolean {
+  return parseLandingPatrolTaskKey(task.idempotencyKey) !== null;
+}
+
+/**
+ * Each logical IA owns one durable continuous-patrol task. Its first choices
+ * stay inside the lane assigned in LANDING_P0_UNITS; IA-112 receives a real
+ * exact-SHA check while the dependency-gated final certificate is unavailable.
+ */
+export function landingPatrolUnitFor(agentNumber: number, observationNumber: number): LandingUnit {
+  const eligible = LANDING_P0_UNITS.filter((unit) => unit.check.kind !== 'certificate');
+  const owned = eligible.filter((unit) => assignAgentForUnit(unit) === agentNumber);
+  const safeObservation = Number.isFinite(observationNumber) ? Math.max(0, Math.floor(observationNumber)) : 0;
+  if (owned.length > 0) return owned[safeObservation % owned.length];
+  const exactSha = eligible.find((unit) => unit.unitId === 'e2e.sha-match');
+  if (exactSha) return exactSha;
+  return eligible[Math.max(0, agentNumber - 1) % eligible.length];
+}
+
 export type ParsedLandingKey = { sha: string; unitId: string; repair: boolean; defectCode: string | null };
 
 function parseLandingKeyParts(raw: string): { sha: string; unitId: string; trailing: string[] } | null {
@@ -425,10 +461,13 @@ export async function isLandingP0MissionActive(): Promise<boolean> {
 // ── Seeding ──────────────────────────────────────────────────────────────────
 
 export type SeedResult = { sha: string; created: number; existing: number; total: number; certificateTaskId: string | null; error: string | null };
+export type PatrolSeedResult = { sha: string; created: number; existing: number; total: 112; error: string | null };
 
 const SEED_RECHECK_MS = 60 * 1000;
 const seedState = new Map<string, { at: number; result: SeedResult }>();
 let seedInFlight: Promise<SeedResult> | null = null;
+const patrolSeedState = new Map<string, { at: number; result: PatrolSeedResult }>();
+let patrolSeedInFlight: Promise<PatrolSeedResult> | null = null;
 
 /**
  * Idempotently materialise the Landing backlog for `sha`. Safe to call from all
@@ -518,6 +557,53 @@ export async function seedLandingP0Backlog(sha: string): Promise<SeedResult> {
   if (result.created > 0 || result.error) {
     console.log('[IVX Landing P0] backlog seeded', result);
   }
+  return result;
+}
+
+/**
+ * Materialise one reusable patrol assignment per IA. Audit/repair units remain
+ * critical and are always selected first; once a lane drains, its high-priority
+ * patrol task stays RUNNING, renews its lease, and records bounded live checks.
+ */
+export async function seedLandingP0Patrol(sha: string): Promise<PatrolSeedResult> {
+  const result: PatrolSeedResult = { sha, created: 0, existing: 0, total: 112, error: null };
+  try {
+    const created = await createTasksBatch(Array.from({ length: 112 }, (_, index) => {
+      const agentNumber = index + 1;
+      return {
+        title: `Landing P0 · IA-${String(agentNumber).padStart(3, '0')} · continuous production patrol`,
+        description: `Reusable 24/7 Landing QA patrol for IA-${String(agentNumber).padStart(3, '0')} on production SHA ${sha}. The lane executes live HTTP/API/HTML/CI checks, persists bounded evidence, and never converts waiting time into productive hours.`,
+        taskType: 'qa' as const,
+        idempotencyKey: landingPatrolKey(sha, agentNumber),
+        assignedAgentNumber: agentNumber,
+        priority: 'high' as const,
+        businessValue: 5,
+        executionOrder: 10_000 + agentNumber,
+        maxRetries: 1_000_000,
+      };
+    }));
+    for (const row of created) {
+      if (!row.ok || !row.task) {
+        result.error = row.error ?? 'patrol task creation failed';
+        continue;
+      }
+      if (row.duplicate) result.existing += 1;
+      else result.created += 1;
+    }
+  } catch (error) {
+    result.error = error instanceof Error ? error.message : String(error);
+  }
+  if (result.created > 0 || result.error) console.log('[IVX Landing P0] patrol seeded', result);
+  return result;
+}
+
+export async function ensureLandingP0PatrolSeeded(sha: string): Promise<PatrolSeedResult> {
+  const cached = patrolSeedState.get(sha);
+  if (cached && Date.now() - cached.at < SEED_RECHECK_MS) return cached.result;
+  if (patrolSeedInFlight) return patrolSeedInFlight;
+  patrolSeedInFlight = seedLandingP0Patrol(sha).finally(() => { patrolSeedInFlight = null; });
+  const result = await patrolSeedInFlight;
+  patrolSeedState.set(sha, { at: Date.now(), result });
   return result;
 }
 
