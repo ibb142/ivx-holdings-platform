@@ -1,25 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 
-import { getOwnerConversationSelectColumns } from '../api/ivx-owner-ai';
+import { OWNER_CONVERSATION_SELECT_COLUMNS } from '../api/ivx-owner-ai';
 
 describe('owner conversation schema contract', () => {
-  test('IVX conversation reads match the canonical schema', () => {
-    const columns = getOwnerConversationSelectColumns('ivx').split(',');
-
-    expect(columns).toEqual([
+  test('conversation reads use only columns shared by the IVX and legacy schemas', () => {
+    expect(OWNER_CONVERSATION_SELECT_COLUMNS.split(',')).toEqual([
       'id',
       'slug',
       'title',
-      'subtitle',
       'created_at',
       'updated_at',
-      'last_message_text',
-      'last_message_at',
     ]);
-    expect(columns).not.toContain('user_id');
-  });
-
-  test('legacy generic conversation reads retain user scoping', () => {
-    expect(getOwnerConversationSelectColumns('generic').split(',')).toContain('user_id');
+    expect(OWNER_CONVERSATION_SELECT_COLUMNS).not.toContain('user_id');
   });
 });
