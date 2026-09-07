@@ -48,6 +48,7 @@ import { listDeals } from '@/src/modules/ivx-developer/dealTrackingService';
 import { getDealMatching } from '@/src/modules/ivx-developer/dealMatchingService';
 
 type CrmRoute =
+  | '/admin/dashboard'
   | '/ivx/investors'
   | '/ivx/capital-network'
   | '/ivx/capital-outreach'
@@ -73,6 +74,12 @@ type CrmSection = {
 };
 
 const CRM_SECTIONS: CrmSection[] = [
+  {
+    title: 'Owner',
+    accent: Colors.gold,
+    links: [
+      { label: 'Dashboard', description: 'Owner operations dashboard', icon: Gauge, route: '/admin/dashboard', testID: 'crm-link-admin-dashboard' },
+    ]},
   {
     title: 'Capital',
     accent: Colors.gold,

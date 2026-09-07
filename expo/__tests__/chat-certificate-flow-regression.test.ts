@@ -6,6 +6,8 @@ const chatSource = readFileSync(resolve(import.meta.dir, '../app/ivx/chat.tsx'),
 const chatHubSource = readFileSync(resolve(import.meta.dir, '../components/ChatScreenContent.tsx'), 'utf8');
 const tabsLayoutSource = readFileSync(resolve(import.meta.dir, '../app/(tabs)/_layout.tsx'), 'utf8');
 const homeSource = readFileSync(resolve(import.meta.dir, '../app/(tabs)/home.tsx'), 'utf8');
+const crmSource = readFileSync(resolve(import.meta.dir, '../app/(tabs)/crm.tsx'), 'utf8');
+const dashboardFlowSource = readFileSync(resolve(import.meta.dir, '../.maestro/ivx-owner-dashboard-certificate.yaml'), 'utf8');
 const flowSource = readFileSync(resolve(import.meta.dir, '../.maestro/ivx-owner-chat-certificate.yaml'), 'utf8');
 const transportReliabilitySource = readFileSync(resolve(import.meta.dir, './chat-transport-reliability.test.ts'), 'utf8');
 
@@ -33,6 +35,17 @@ describe('IVX IA chat device certificate regression', () => {
 
   test('keeps the chat tab reachable from the owner tab bar', () => {
     expect(tabsLayoutSource).toContain("tabBarButtonTestID: 'tab-chat'");
+  });
+
+  test('dashboard certificate follows the authenticated Owner UI path', () => {
+    expect(crmSource).toContain("route: '/admin/dashboard'");
+    expect(crmSource).toContain("testID: 'crm-link-admin-dashboard'");
+    expect(dashboardFlowSource).not.toContain('openLink:');
+    expect(dashboardFlowSource.indexOf('id: "tab-crm"')).toBeLessThan(
+      dashboardFlowSource.indexOf('id: "crm-link-admin-dashboard"'),
+    );
+    expect(dashboardFlowSource).toContain('visible: "Dashboard"');
+    expect(dashboardFlowSource).toContain('- back');
   });
 
   test('keeps the owner AI room reachable from the Live Support hub', () => {
