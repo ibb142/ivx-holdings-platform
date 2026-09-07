@@ -3,7 +3,7 @@
  */
 import { serve } from '@hono/node-server';
 import { WebSocketServer } from 'ws';
-import app from './backend/hono-extended';
+import app, { certificateBootRecovery } from './backend/hono-extended';
 import { handleRealtimeVoiceConnection, getRealtimeVoiceStatus } from './backend/services/ivx-realtime-voice';
 import { handleAutonomousDashboardStreamConnection, IVX_AUTONOMOUS_DASHBOARD_STREAM_PATH } from './backend/services/ivx-autonomous-dashboard-stream';
 import { startSeniorDevWorker } from './backend/services/ivx-senior-dev-worker';
@@ -91,6 +91,10 @@ app.all('/api/ivx/autonomous/voice/laml', async (c) => handleAutonomousVoiceLaml
 app.all('/api/ivx/autonomous/voice/status', async (c) => handleAutonomousVoiceCallback(c.req.raw));
 app.get('/api/ivx/certification/autonomous-voice-public', async (c) => handleAutonomousVoicePublicCertificate(c.req.raw));
 
+// Certificate recovery owns the agent runtime until every recovered row is
+// terminal. Starting any fleet scheduler sooner recreates in-memory task locks
+// and blocks the certificate that boot is trying to recover.
+void certificateBootRecovery.finally(() => {
 startAutonomous112RuntimeEnforcer();
 if (!landingFleetFocus) {
   startAutonomousScheduler();
@@ -130,6 +134,7 @@ if (!landingFleetFocus) {
   startMemberAuthCertificationScheduler();
   if (process.env.IVX_SENIOR_DEV_WORKER_ENABLED === 'true') startSeniorDevWorker().catch((error) => console.error('[IVX Server] Senior dev worker failed to start', { error: error instanceof Error ? error.message : String(error) }));
 }
+});
 
 const productionFetch: typeof app.fetch = async (request, env, executionCtx) => {
   const url = new URL(request.url); const type = (url.searchParams.get('type') || '').trim().toLowerCase();

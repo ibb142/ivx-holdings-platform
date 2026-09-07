@@ -1,4 +1,5 @@
 import app from './hono';
+export { certificateBootRecovery } from './hono';
 import { autonomousJobLedgerOptions, handleAutonomousJobLedgerGet, handleAutonomousJobLedgerUpdate } from './api/ivx-autonomous-job-ledger';
 import { ownerAuthGuardianOptions, handleOwnerAuthGuardianGet, handleOwnerAuthGuardianAlert } from './api/ivx-owner-auth-guardian';
 import { startAutonomousQAScheduler, autonomousQAOptions, handleAutonomousQAGet } from './api/ivx-auth-qa-scheduler';
