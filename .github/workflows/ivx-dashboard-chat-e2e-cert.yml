@@ -4,6 +4,11 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'backend/api/ivx-owner-ai*'
+      - 'backend/services/ivx-owner-ai*'
+      - 'backend/services/ivx-autonomous-dashboard-stream.ts'
+      - 'backend/api/ivx-autonomous-ops-dashboard.ts'
+      - 'expo/__tests__/chat-certificate-flow-regression.test.ts'
       - 'expo/app/admin/dashboard.tsx'
       - 'expo/app/ivx/chat.tsx'
       - 'expo/src/modules/chat/**'
@@ -19,6 +24,11 @@ on:
   push:
     branches: [main]
     paths:
+      - 'backend/api/ivx-owner-ai*'
+      - 'backend/services/ivx-owner-ai*'
+      - 'backend/services/ivx-autonomous-dashboard-stream.ts'
+      - 'backend/api/ivx-autonomous-ops-dashboard.ts'
+      - 'expo/__tests__/chat-certificate-flow-regression.test.ts'
       - 'expo/app/admin/dashboard.tsx'
       - 'expo/app/ivx/chat.tsx'
       - 'expo/src/modules/chat/**'
@@ -65,8 +75,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
+
+      - name: Verify checked-out source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPO_PUBLIC_SOURCE_COMMIT_SHA"
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -152,7 +168,7 @@ jobs:
           bun test __tests__/chat-certificate-flow-regression.test.ts __tests__/chat-transport-reliability.test.ts
 
       - name: Wait for exact production SHA on main
-        if: ${{ github.event_name == 'push' }}
+        if: ${{ github.event_name != 'pull_request' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -187,6 +203,10 @@ jobs:
           APK=$(find app/build/outputs/apk/qa -name '*.apk' -type f | head -1)
           test -n "$APK"
           echo "APK_PATH=$(realpath "$APK")" >> "$GITHUB_ENV"
+          mkdir -p "$GITHUB_WORKSPACE/qa/evidence/dashboard-chat/apk"
+          cp "$APK" "$GITHUB_WORKSPACE/qa/evidence/dashboard-chat/apk/IVX-Owner-QA.apk"
+          cd "$GITHUB_WORKSPACE/qa/evidence/dashboard-chat/apk"
+          sha256sum IVX-Owner-QA.apk > IVX-Owner-QA.sha256
 
       - name: Enable KVM
         run: |

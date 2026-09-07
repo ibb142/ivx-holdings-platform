@@ -72,6 +72,9 @@ describe('IVX IA chat device certificate regression', () => {
     expect(clearStateIndex).toBeGreaterThan(launchIndex);
 
     const afterRestart = flowSource.slice(clearStateIndex);
+    const shellIndex = afterRestart.indexOf('- openLink: "ivx-app:///"');
+    expect(shellIndex).toBeGreaterThan(-1);
+    expect(shellIndex).toBeLessThan(afterRestart.indexOf('id: "tab-chat"'));
     expect(afterRestart).toContain(`visible: "${E2E_PROMPT}"`);
     expect(afterRestart).toContain(`visible: "${E2E_REPLY}"`);
     expect(afterRestart).toContain('id: "ivx-owner-chat-composer-dock"');
