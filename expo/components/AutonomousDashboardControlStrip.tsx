@@ -2,16 +2,12 @@ import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Activity, Bot, ClipboardList, Gauge, MessageCircle, RadioTower, Settings2 } from 'lucide-react-native';
+import { AUTONOMOUS_CONTROL_ROUTES as CONTROL_ROUTE_DEFINITIONS } from '@/constants/autonomous-control-routes';
 
-export const AUTONOMOUS_CONTROL_ROUTES = [
-  { label: 'IVX IA', route: '/ivx/chat', icon: MessageCircle },
-  { label: 'Command', route: '/ivx/agent-command-center', icon: Bot },
-  { label: 'Control', route: '/ivx/autonomous-control', icon: Settings2 },
-  { label: 'Live', route: '/ivx/autonomous-live', icon: RadioTower },
-  { label: 'Ops', route: '/ivx/autonomous-ops', icon: Activity },
-  { label: 'Ledger', route: '/ivx/agent-ledger', icon: ClipboardList },
-  { label: 'Diagnostics', route: '/ivx/auth-diagnostics', icon: Gauge },
-] as const;
+const CONTROL_ICONS = { Activity, Bot, ClipboardList, Gauge, MessageCircle, RadioTower, Settings2 };
+export const AUTONOMOUS_CONTROL_ROUTES = CONTROL_ROUTE_DEFINITIONS.map((item) => ({
+  ...item, icon: CONTROL_ICONS[item.icon],
+}));
 
 export default function AutonomousDashboardControlStrip() {
   const router = useRouter();

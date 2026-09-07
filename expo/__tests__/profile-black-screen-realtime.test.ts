@@ -54,14 +54,20 @@ describe('Profile black-screen regression — shared realtime hook remains rende
     expect(hook).toContain('const activeConfigs = configsRef.current;');
   });
 
-  it('setupChannels is keyed by semantic signature, never raw configs identity', () => {
+  it('setupChannels reads current configs from a ref and depends only on stable inputs', () => {
     const setupStart = hook.indexOf('const setupChannels = useCallback');
     expect(setupStart).toBeGreaterThan(-1);
     const setupEnd = hook.indexOf('\n\n  useEffect(() => {', setupStart);
     expect(setupEnd).toBeGreaterThan(setupStart);
     const setupBlock = hook.slice(setupStart, setupEnd);
-    expect(setupBlock).toContain('[configSignature, queryClient, cleanupChannels, autoReconnect, applyDeltas]');
-    expect(setupBlock).not.toMatch(/\[configs[,\]]/);
+    // Subscription topology is keyed by configSignature in the effect below.
+    // The callback itself reads configsRef, so it must not acquire a dependency
+    // on the caller's freshly allocated configs array (which caused the loop).
+    expect(setupBlock).toContain('const activeConfigs = configsRef.current;');
+    const dependencyList = setupBlock.match(/\},\s*\[([^\]]*)\]\);\s*$/)?.[1];
+    expect(dependencyList).toBeDefined();
+    const dependencies = dependencyList!.split(',').map((item) => item.trim()).sort();
+    expect(dependencies).toEqual(['applyDeltas', 'autoReconnect', 'cleanupChannels', 'queryClient']);
   });
 
   it('subscription effect is also keyed by semantic signature', () => {
