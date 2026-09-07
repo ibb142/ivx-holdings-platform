@@ -117,7 +117,7 @@
         '<div class="vx-comments"><div class="vx-comment-list"></div></div>' +
         '<div class="vx-time">' + vxAgo(v.created_at) + '</div>' +
         '<form class="vx-comment-form" onsubmit="vxAddComment(event, \'' + vid + '\')">' +
-          '<input class="vx-comment-input" placeholder="Add a comment..." maxlength="2000" required />' +
+          '<input class="vx-comment-input" aria-label="Add a comment" placeholder="Add a comment..." maxlength="2000" required />' +
           '<button type="submit" class="vx-comment-send">Post</button>' +
         '</form>' +
       '</div>';
