@@ -1,6 +1,6 @@
 # IVX Holdings — System Architecture
 
-**Last updated:** 2026-08-01
+**Last updated:** 2026-09-06
 **Production commit:** See `/health` endpoint
 **Canonical repository:** `ibb142/ivx-holdings-platform` (GitHub)
 
@@ -17,6 +17,16 @@ IVX Holdings is a real estate investment platform with an autonomous AI engineer
 - **AI provider** — OpenAI/Anthropic via IVX-owned provider layer (replacing Vercel AI Gateway)
 - **Autonomous worker** — IVX IA autonomous coder pipeline
 - **CI/CD** — GitHub → Render auto-deploy
+
+### Canonical Autonomous operating constitution
+
+The canonical fleet is **12 command agents (IA-001..IA-012) plus 100 execution agents (IA-013..IA-112)**. Autonomous is the single production mutation authority. Health monitors and GitHub Actions may observe, test, and certify, but they do not independently resume, retry, cancel, enqueue fleet work, or deploy.
+
+“112 agents working simultaneously” has one executable meaning: one production snapshot contains 112 distinct active agent identities, 112 distinct task leases, 112 fresh heartbeats, known claiming worker identities, deployed concurrency of at least 112, zero stale/blocked agents, an inactive emergency stop, one mutation authority, and an atomic PostgreSQL row queue. A 112-name registry, queued jobs, workflow fan-out, HTTP responses, or cumulative database calls do not satisfy this contract.
+
+Scale is staged. The system first proves stable rates and evidence at 12 slots, then proves distributed atomic claims, unique worker identities, graceful shutdown/drain, lease recovery, idempotency, and zero duplicate execution. Only then may capacity rise toward 112. The current legacy JSON-document queue is not approved for horizontal multi-instance execution.
+
+Owner controls outrank autonomy. Emergency stop, pause, approvals, spending limits, secrets, auth, payments, destructive data changes, infrastructure changes, and production release gates remain owner-controlled and fail closed.
 
 ---
 

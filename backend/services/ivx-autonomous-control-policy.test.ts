@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  activeFleetMutationAuthorityCount,
   autonomousDoctorRepairEnabled,
+  autonomousQueueBackend,
   autonomousRepairCapacity,
+  autonomousRuntimeEnforcerEnabled,
   deploymentAutoRepairEnabled,
   explicitEnvFlag,
   githubSupervisorMutationsEnabled,
@@ -37,6 +40,19 @@ describe('IVX autonomous one-authority policy', () => {
       IVX_CAMPAIGN_MAX_CONCURRENCY: '999',
       IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY: '999',
     })).toBe(112);
+  });
+
+  test('exactly one runtime authority is active in the safe default', () => {
+    expect(autonomousRuntimeEnforcerEnabled({})).toBe(true);
+    expect(activeFleetMutationAuthorityCount({})).toBe(1);
+    expect(activeFleetMutationAuthorityCount({
+      IVX_AUTONOMOUS_DOCTOR_REPAIR_ENABLED: 'true',
+    })).toBe(2);
+    expect(activeFleetMutationAuthorityCount({
+      IVX_DEPLOYMENT_AUTO_REPAIR_ENABLED: 'true',
+    })).toBe(2);
+    expect(autonomousQueueBackend({})).toBe('durable_json');
+    expect(autonomousQueueBackend({ IVX_AUTONOMOUS_QUEUE_BACKEND: ' POSTGRES_ATOMIC ' })).toBe('postgres_atomic');
   });
 
   test('deployment monitor does not arm without explicit opt-in', () => {

@@ -1574,7 +1574,17 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
   if (activeJob && isSameTaskScope(goal, activeJob.input.goal)) {
     // ATTACH (same task scope only): the new command is a retry/follow-up of
     // the running job. Reuse it so duplicate work is not enqueued.
-    appendDurableEvent(QUEUE_FILE, { type: 'job_attached', jobId: activeJob.jobId, ownerId, reason: 'same_task_scope' }).catch(() => {});
+    // A scheduler retry carrying the exact same taskId is an idempotent read,
+    // not a new lifecycle event. Persisting job_attached for every poll/retry
+    // created an unbounded event loop without representing new work.
+    const exactTaskRetry = Boolean(
+      input.taskId
+      && activeJob.input.taskId
+      && input.taskId === activeJob.input.taskId,
+    );
+    if (!exactTaskRetry) {
+      appendDurableEvent(QUEUE_FILE, { type: 'job_attached', jobId: activeJob.jobId, ownerId, reason: 'same_task_scope' }).catch(() => {});
+    }
     return { job: activeJob, attached: true, activeJobId: activeJob.jobId };
   }
   // DIFFERENT task scope: fall through and enqueue a separate job so the
@@ -1591,6 +1601,22 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
     executionMode: input.executionMode ?? null,
   });
   const normalizedGoal = normalizeGoalForRetry(goal);
+  const queue = await loadQueue();
+
+  // Exact campaign retries remain idempotent after the prior job has already
+  // completed. The queue retains the full 112-agent campaign, so taskId is the
+  // strongest correlation key and avoids manufacturing a second execution.
+  const completedExactTask = input.taskId
+    ? [...queue.jobs].reverse().find((job) => (
+      job.ownerId === ownerId
+      && job.input.taskId === input.taskId
+      && job.status === 'completed'
+    ))
+    : null;
+  if (completedExactTask) {
+    return { job: completedExactTask, attached: true, activeJobId: completedExactTask.jobId };
+  }
+
   const ledger = await loadLedger();
   const priorWithSameGoal = ledger.entries.find((e) => normalizeGoalForRetry(e.goal) === normalizedGoal && e.finalStatus === 'COMPLETE');
   if (priorWithSameGoal) {
@@ -1608,8 +1634,15 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
     });
     const dedup = checkDuplicateEvidence(newFingerprint, [{ jobId: priorWithSameGoal.jobId, fingerprint: priorFingerprint }]);
     if (dedup.isDuplicate) {
-      // Duplicate evidence — attach to the prior job's result, do not create a new job.
-      appendDurableEvent(QUEUE_FILE, { type: 'duplicate_evidence_rejected', idempotencyKey, priorJobId: dedup.priorJobId, reason: dedup.reason }).catch(() => {});
+      // Duplicate evidence — attach to the prior result when it is still in
+      // the bounded queue. The old implementation logged a rejection and then
+      // fell through to enqueue anyway, producing both events on every cycle.
+      const priorJob = [...queue.jobs].reverse().find((job) => (
+        job.jobId === dedup.priorJobId && job.status === 'completed'
+      ));
+      if (priorJob) {
+        return { job: priorJob, attached: true, activeJobId: priorJob.jobId };
+      }
     }
   }
 
@@ -1633,7 +1666,6 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
     idempotencyKey,
   };
 
-  const queue = await loadQueue();
   queue.jobs.push(job);
   await saveQueue(queue);
   appendDurableEvent(QUEUE_FILE, { type: 'job_enqueued', jobId: job.jobId, goal: goal.slice(0, 200), ownerId }).catch(() => {});

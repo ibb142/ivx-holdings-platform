@@ -8,6 +8,7 @@ export const IVX_AUTONOMOUS_LIVE_BOOTSTRAP_MARKER = 'ivx-autonomous-live-bootstr
 
 const DISPATCHER_FEED_INTERVAL_MS = 30_000;
 const PROVIDER_QA_INTERVAL_MS = 60_000;
+const PERIODIC_DISPATCHER_FEED_ENABLED = (process.env.IVX_CAMPAIGN_PERIODIC_FEED_ENABLED ?? '').trim().toLowerCase() === 'true';
 let booted = false;
 let bootAt: string | null = null;
 let bootError: string | null = null;
@@ -47,8 +48,10 @@ export function startAutonomousLiveBootstrap(): void {
   startCampaignDispatcher();
   void feedDispatcher('boot');
   runProviderQA('boot');
-  feedTimer = setInterval(() => { void feedDispatcher('interval'); }, DISPATCHER_FEED_INTERVAL_MS);
-  feedTimer.unref?.();
+  if (PERIODIC_DISPATCHER_FEED_ENABLED) {
+    feedTimer = setInterval(() => { void feedDispatcher('interval'); }, DISPATCHER_FEED_INTERVAL_MS);
+    feedTimer.unref?.();
+  }
   providerTimer = setInterval(() => { runProviderQA('interval'); }, PROVIDER_QA_INTERVAL_MS);
   providerTimer.unref?.();
 }
@@ -68,6 +71,7 @@ export async function getAutonomousLiveBootstrapStatus() {
     bootError,
     dispatcherAutoFeed: {
       running: Boolean(feedTimer),
+      enabledByPolicy: PERIODIC_DISPATCHER_FEED_ENABLED,
       intervalMs: DISPATCHER_FEED_INTERVAL_MS,
       lastFeedAt,
       lastFeedError,

@@ -400,7 +400,36 @@ function statusFromWorker(job: IVXWorkerJob): { status: CampaignJobStatus; stage
   }
 }
 
-async function syncRunningRecord(state: DispatcherState, record: CampaignJobRecord): Promise<void> {
+function applyWorkerSnapshot(record: CampaignJobRecord, job: IVXWorkerJob): void {
+  if (job.startedAt) record.startedAt = record.startedAt ?? job.startedAt;
+  record.lastHeartbeatAt = job.lastHeartbeatAt ?? record.lastHeartbeatAt;
+  record.workerStatus = job.status;
+  const mapped = statusFromWorker(job);
+  record.status = mapped.status;
+  record.stage = mapped.stage;
+  record.progress = mapped.progress;
+  const r = job.result;
+  if (r) {
+    record.changedFiles = r.changedFiles ?? [];
+    record.testsRun = r.testsRun ?? false;
+    record.testsPassed = r.testsPassed ?? false;
+    record.typecheckPassed = r.typecheckPassed ?? false;
+    record.commitSha = r.commitSha ?? null;
+    record.prNumber = r.prNumber ?? null;
+    record.prUrl = r.prUrl ?? null;
+    record.deployId = r.deployId ?? null;
+    record.healthOk = r.healthOk ?? null;
+    if (r.error) record.error = r.error;
+  }
+  if (job.status === 'completed' || job.status === 'failed' || job.status === 'blocked' || job.status === 'cancelled') {
+    record.finishedAt = job.finishedAt ?? new Date().toISOString();
+  }
+  if (job.status === 'failed' || job.status === 'blocked') {
+    record.error = job.error ?? record.error;
+  }
+}
+
+async function syncDispatchedRecord(state: DispatcherState, record: CampaignJobRecord): Promise<void> {
   if (!record.workerJobId) return;
   record.lastTickAt = new Date().toISOString();
   try {
@@ -411,33 +440,9 @@ async function syncRunningRecord(state: DispatcherState, record: CampaignJobReco
       record.finishedAt = new Date().toISOString();
       return;
     }
-    record.lastHeartbeatAt = job.lastHeartbeatAt ?? new Date().toISOString();
-    record.workerStatus = job.status;
-    const mapped = statusFromWorker(job);
-    record.status = mapped.status;
-    record.stage = mapped.stage;
-    record.progress = mapped.progress;
-    const r = job.result;
-    if (r) {
-      record.changedFiles = r.changedFiles ?? [];
-      record.testsRun = r.testsRun ?? false;
-      record.testsPassed = r.testsPassed ?? false;
-      record.typecheckPassed = r.typecheckPassed ?? false;
-      record.commitSha = r.commitSha ?? null;
-      record.prNumber = r.prNumber ?? null;
-      record.prUrl = r.prUrl ?? null;
-      record.deployId = r.deployId ?? null;
-      record.healthOk = r.healthOk ?? null;
-      if (r.error) record.error = r.error;
-    }
+    applyWorkerSnapshot(record, job);
     if (job.status === 'completed') {
-      record.finishedAt = job.finishedAt ?? new Date().toISOString();
       await logEvent('job_completed', { key: record.key, workerJobId: record.workerJobId, commitSha: record.commitSha, files: record.changedFiles.length });
-    } else if (job.status === 'failed' || job.status === 'blocked') {
-      record.finishedAt = job.finishedAt ?? new Date().toISOString();
-      record.error = job.error ?? record.error;
-    } else if (job.status === 'cancelled') {
-      record.finishedAt = job.finishedAt ?? new Date().toISOString();
     }
   } catch (err) {
     record.error = `Worker sync error: ${(err as Error).message}`;
@@ -454,6 +459,8 @@ function isRetryableFailure(record: CampaignJobRecord): boolean {
 
 export type TickResult = {
   started: string[];
+  /** Existing worker executions reused without manufacturing a new start. */
+  attached: string[];
   cancelled: string[];
   requeued: string[];
   failed: string[];
@@ -472,7 +479,7 @@ export type TickResult = {
 export async function tickCampaignDispatcher(): Promise<TickResult> {
   const state = await loadState();
   const result: TickResult = {
-    started: [], cancelled: [], requeued: [], failed: [],
+    started: [], attached: [], cancelled: [], requeued: [], failed: [],
     emergencyStop: false, paused: state.paused,
     activeCount: 0, maxConcurrency: getMaxCampaignConcurrency(),
   };
@@ -504,10 +511,12 @@ export async function tickCampaignDispatcher(): Promise<TickResult> {
     }
   }
 
-  // 2. SYNC active records with their real worker jobs.
+  // 2. SYNC every dispatched non-terminal record with its real worker job.
+  // A worker may remain queued for several ticks; workerJobId proves it was
+  // already dispatched and must be polled rather than submitted again.
   for (const record of state.records) {
-    if (record.status === 'RUNNING' && record.workerJobId) {
-      await syncRunningRecord(state, record);
+    if ((record.status === 'RUNNING' || record.status === 'QUEUED') && record.workerJobId) {
+      await syncDispatchedRecord(state, record);
     }
   }
 
@@ -621,12 +630,13 @@ export async function tickCampaignDispatcher(): Promise<TickResult> {
 
   // 6. START new jobs under bounded concurrency + lane locks + deploy mutex.
   const active = state.records.filter((r) => r.status === 'RUNNING');
+  const dispatched = state.records.filter((r) => r.workerJobId && (r.status === 'RUNNING' || r.status === 'QUEUED'));
   result.activeCount = active.length;
-  const busyLanes = new Set(active.map((r) => r.laneKey));
+  const busyLanes = new Set(dispatched.map((r) => r.laneKey));
   // DEPLOY MUTEX (Phase 4): at most one deploy-bearing job may ever be active —
   // concurrent production deploys that overwrite each other are forbidden.
-  let deployActive = active.some((r) => r.executionMode === 'deploy');
-  let slots = Math.max(0, getMaxCampaignConcurrency() - active.length);
+  let deployActive = dispatched.some((r) => r.executionMode === 'deploy');
+  let slots = Math.max(0, getMaxCampaignConcurrency() - dispatched.length);
 
   if (state.paused || state.stopped) {
     await saveState(state);
@@ -641,7 +651,7 @@ export async function tickCampaignDispatcher(): Promise<TickResult> {
     attemptsByAgent.set(record.agentNumber, (attemptsByAgent.get(record.agentNumber) ?? 0) + record.attempts);
   }
   const startable = state.records
-    .filter((r) => r.status === 'QUEUED')
+    .filter((r) => r.status === 'QUEUED' && !r.workerJobId)
     .filter((r) => !state.stoppedAgents.includes(r.agentNumber))
     .filter((r) => !busyLanes.has(r.laneKey))
     .sort((a, b) =>
@@ -690,20 +700,28 @@ export async function tickCampaignDispatcher(): Promise<TickResult> {
       executionMode: record.executionMode,
     };
     try {
-      const { job } = await bridge.enqueue(input);
+      const { job, attached } = await bridge.enqueue(input);
       record.workerJobId = job.jobId;
-      record.attempts += 1;
-      record.startedAt = record.startedAt ?? new Date().toISOString();
-      record.lastHeartbeatAt = new Date().toISOString();
-      record.status = 'RUNNING';
-      record.stage = 'WORKER JOB DISPATCHED';
-      record.progress = 15;
-      busyLanes.add(record.laneKey);
-      if (record.executionMode === 'deploy') deployActive = true;
-      slots -= 1;
-      result.started.push(record.key);
-      result.activeCount += 1;
-      await logEvent('job_started', { key: record.key, workerJobId: job.jobId, lane: record.laneKey, mode: record.executionMode });
+      if (!attached) record.attempts += 1;
+      applyWorkerSnapshot(record, job);
+      if (attached) {
+        record.stage = job.status === 'completed'
+          ? 'REUSED COMPLETED WORKER JOB — COMPLETED WITH EVIDENCE'
+          : `ATTACHED — ${record.stage}`;
+      }
+      const occupiesCapacity = record.status === 'RUNNING' || record.status === 'QUEUED';
+      if (occupiesCapacity) {
+        busyLanes.add(record.laneKey);
+        if (record.executionMode === 'deploy') deployActive = true;
+        slots -= 1;
+      }
+      if (attached) result.attached.push(record.key);
+      else result.started.push(record.key);
+      if (record.status === 'RUNNING') result.activeCount += 1;
+      if (!attached) {
+        const event = job.status === 'queued' ? 'job_dispatched' : 'job_started';
+        await logEvent(event, { key: record.key, workerJobId: job.jobId, lane: record.laneKey, mode: record.executionMode });
+      }
     } catch (err) {
       record.error = `Dispatch failed: ${(err as Error).message}`;
       if (isRetryableFailure(record)) {

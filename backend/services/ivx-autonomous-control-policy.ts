@@ -23,6 +23,21 @@ export function githubSupervisorMutationsEnabled(env: NodeJS.ProcessEnv = proces
   return explicitEnvFlag('IVX_GITHUB_ACTIONS_SUPERVISOR_MUTATIONS_ENABLED', env);
 }
 
+export function autonomousRuntimeEnforcerEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return (env.IVX_AUTONOMOUS_RUNTIME_ENFORCER_ENABLED ?? 'true').trim().toLowerCase() !== 'false';
+}
+
+export function activeFleetMutationAuthorityCount(env: NodeJS.ProcessEnv = process.env): number {
+  return Number(autonomousRuntimeEnforcerEnabled(env))
+    + Number(deploymentAutoRepairEnabled(env))
+    + Number(autonomousDoctorRepairEnabled(env))
+    + Number(githubSupervisorMutationsEnabled(env));
+}
+
+export function autonomousQueueBackend(env: NodeJS.ProcessEnv = process.env): string {
+  return (env.IVX_AUTONOMOUS_QUEUE_BACKEND ?? 'durable_json').trim().toLowerCase();
+}
+
 function boundedConcurrency(value: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(value ?? '', 10);
   if (!Number.isFinite(parsed) || parsed < 1) return fallback;

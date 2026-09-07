@@ -147,6 +147,21 @@ describe('per-owner single-flight queue', () => {
     expect(second.job.jobId).toBe(first.job.jobId);
   });
 
+  test('an exact taskId retry reuses one worker job instead of manufacturing work', async () => {
+    const ownerId = `test-exact-retry-${Date.now()}`;
+    const taskId = `campaign-task-${Date.now()}`;
+    const first = await enqueueOrAttachSeniorDeveloperJob(makeInput({ ownerId, taskId }));
+    const second = await enqueueOrAttachSeniorDeveloperJob(makeInput({ ownerId, taskId }));
+    const matching = (await listSeniorDeveloperJobs(200)).filter((job) => (
+      job.ownerId === ownerId && job.input.taskId === taskId
+    ));
+
+    expect(first.attached).toBe(false);
+    expect(second.attached).toBe(true);
+    expect(second.job.jobId).toBe(first.job.jobId);
+    expect(matching.length).toBe(1);
+  });
+
   test('different owners can have separate active jobs', async () => {
     const ownerA = await enqueueOrAttachSeniorDeveloperJob(makeInput({ ownerId: 'owner-A' }));
     const ownerB = await enqueueOrAttachSeniorDeveloperJob(makeInput({ ownerId: 'owner-B' }));
