@@ -1,0 +1,245 @@
+# Build-only delivery of the corrected Android app. No branch merge or backend deployment.
+# App source, production backend, and build recipe identities are recorded separately.
+name: IVX Fixed Android APK Delivery
+permissions:
+  contents: read
+concurrency:
+  group: ivx-current-production-apk-delivery
+  cancel-in-progress: false
+env:
+  NODE_ENV: production
+  EXPO_PUBLIC_API_BASE_URL: https://api.ivxholding.com
+  EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+  EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+  EXPO_PUBLIC_IVX_OPEN_ACCESS_MODE: 'false'
+  OWNER_EMAIL: iperez4242@gmail.com
+  OWNER_PASSWORD_S1: ${{ secrets.OWNER_NEW_PASSWORD }}
+  OWNER_PASSWORD_S2: ${{ secrets.OWNER_PASSWORD }}
+  OWNER_PASSWORD_S3: ${{ secrets.IVX_OWNER_PASSWORD }}
+  OWNER_PASSWORD_S4: ${{ secrets.IVX_OWNER_NEW_PASSWORD }}
+  OWNER_PASSWORD_S5: ${{ secrets.OWNER_LOGIN_PASSWORD }}
+  OWNER_PASSWORD_S6: ${{ secrets.IVX_OWNER_LOGIN_PASSWORD }}
+  QA_HARNESS_SHA: 47a8867375c4d2471626a244740e276d7dbed93d
+  IVX_RELEASE_KEYSTORE_BASE64: ${{ secrets.IVX_RELEASE_KEYSTORE_BASE64 }}
+  IVX_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.IVX_RELEASE_KEYSTORE_PASSWORD }}
+  IVX_RELEASE_KEY_ALIAS: ${{ secrets.IVX_RELEASE_KEY_ALIAS }}
+  IVX_RELEASE_KEY_PASSWORD: ${{ secrets.IVX_RELEASE_KEY_PASSWORD }}
+jobs:
+  build-and-certify:
+    name: Signed Dashboard routing fix and Android QA
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 90
+    steps:
+    - name: Pin corrected app source and the production backend
+      id: source
+      shell: bash
+      run: |
+        set -euo pipefail
+        live=$(curl -fsS --retry 2 --max-time 15 https://api.ivxholding.com/version | jq -r '.commit')
+        [[ "$live" =~ ^[0-9a-f]{40}$ ]]
+        remote_main=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" refs/heads/main | cut -f1)
+        test "$live" = "$remote_main"
+        source_sha="$QA_HARNESS_SHA"
+        remote_fix=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" refs/heads/fix/android-chat-restart-cert-20260907 | cut -f1)
+        test "$source_sha" = "$remote_fix"
+        echo "sha=$source_sha" >> "$GITHUB_OUTPUT"
+        echo "EXPO_PUBLIC_SOURCE_COMMIT_SHA=$source_sha" >> "$GITHUB_ENV"
+        echo "BACKEND_SOURCE_SHA=$live" >> "$GITHUB_ENV"
+        echo "app_source_sha=$source_sha backend_source_sha=$live"
+    - name: Check out the corrected app source
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ steps.source.outputs.sha }}
+        persist-credentials: false
+        fetch-depth: 20
+    - name: Verify corrected source includes current production
+      shell: bash
+      run: |
+        set -euo pipefail
+        test "$(git rev-parse HEAD)" = "$EXPO_PUBLIC_SOURCE_COMMIT_SHA"
+        git merge-base --is-ancestor "$BACKEND_SOURCE_SHA" HEAD
+        test -z "$(git status --porcelain)"
+    - uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: 1.3.9
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+    - uses: android-actions/setup-android@v3
+    - name: Install Android SDK packages with corruption recovery
+      shell: bash
+      run: |
+        set -euo pipefail
+        packages=('platform-tools' 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.1.12297006' 'cmake;3.22.1')
+        for attempt in 1 2 3; do
+          echo "android_sdk_install_attempt=$attempt"
+          if sdkmanager "${packages[@]}" </dev/null; then
+            sdkmanager --list_installed | grep -E 'platform-tools|android-36|36.0.0|27.1.12297006|3.22.1'
+            exit 0
+          fi
+          sleep $((attempt * 5))
+        done
+        echo 'Android SDK package installation failed after corruption recovery retries.' >&2
+        exit 1
+    - name: Resolve real owner credential binding
+      shell: bash
+      run: |
+        set -euo pipefail
+        test -n "$OWNER_EMAIL"
+        test -n "$EXPO_PUBLIC_SUPABASE_URL"
+        test -n "$EXPO_PUBLIC_SUPABASE_ANON_KEY"
+        owner_password=''
+        binding='none'
+        for pair in \
+          'OWNER_NEW_PASSWORD:OWNER_PASSWORD_S1' \
+          'OWNER_PASSWORD:OWNER_PASSWORD_S2' \
+          'IVX_OWNER_PASSWORD:OWNER_PASSWORD_S3' \
+          'IVX_OWNER_NEW_PASSWORD:OWNER_PASSWORD_S4' \
+          'OWNER_LOGIN_PASSWORD:OWNER_PASSWORD_S5' \
+          'IVX_OWNER_LOGIN_PASSWORD:OWNER_PASSWORD_S6'; do
+          name=${pair%%:*}
+          var=${pair##*:}
+          value=${!var:-}
+          if [ -n "$value" ]; then owner_password="$value"; binding="$name"; break; fi
+        done
+        test -n "$owner_password"
+        echo "::add-mask::$owner_password"
+        {
+          echo 'OWNER_PASSWORD_EFFECTIVE<<IVX_EOF'
+          echo "$owner_password"
+          echo 'IVX_EOF'
+          echo "OWNER_PASSWORD_BINDING=$binding"
+        } >> "$GITHUB_ENV"
+        echo "owner_password_binding=$binding"
+    - name: Install dependencies
+      run: |
+        set -euo pipefail
+        bun install --frozen-lockfile
+        cd expo
+        bun install --frozen-lockfile
+        bun scripts/apply-patches.mjs
+    - name: Dashboard and chat source hard gates
+      shell: bash
+      run: |
+        set -euo pipefail
+        test -f expo/app/admin/dashboard.tsx
+        test -f expo/app/ivx/chat.tsx
+        test -f expo/.maestro/ivx-owner-dashboard-certificate.yaml
+        test -f expo/.maestro/ivx-owner-chat-certificate.yaml
+        grep -q '<Text style={styles.title}>Dashboard</Text>' expo/app/admin/dashboard.tsx
+        grep -q "analytics_dashboard" expo/app/admin/dashboard.tsx
+        grep -q 'ivx-owner-chat-composer-dock' expo/.maestro/ivx-owner-chat-certificate.yaml
+        grep -q 'IVX_CHAT_E2E_OK' expo/.maestro/ivx-owner-chat-certificate.yaml
+        grep -q 'clearState: false' expo/.maestro/ivx-owner-chat-certificate.yaml
+        python3 scripts/__tests__/test_maestro_route_results.py
+        cd expo
+        bunx tsc --noEmit
+        bun test __tests__/native-intent-routing.test.ts __tests__/chat-certificate-flow-regression.test.ts __tests__/chat-transport-reliability.test.ts
+    - name: Validate production signing and package version
+      shell: bash
+      run: |
+        set -euo pipefail
+        for variable in IVX_RELEASE_KEYSTORE_BASE64 IVX_RELEASE_KEYSTORE_PASSWORD IVX_RELEASE_KEY_ALIAS IVX_RELEASE_KEY_PASSWORD; do
+          test -n "${!variable}"
+        done
+        umask 077
+        KEYSTORE_PATH="$RUNNER_TEMP/ivx-release.keystore"
+        printf '%s' "$IVX_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+        keytool -list -keystore "$KEYSTORE_PATH" -storepass "$IVX_RELEASE_KEYSTORE_PASSWORD" -alias "$IVX_RELEASE_KEY_ALIAS" >/dev/null
+        echo "IVX_RELEASE_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+        sed -E -i 's/versionCode [0-9]+/versionCode 131/; s/versionName "[^"]+"/versionName "1.10.33"/' expo/android/app/build.gradle
+    - name: Build the signed production APK
+      working-directory: expo/android
+      shell: bash
+      run: |
+        set -euo pipefail
+        chmod +x gradlew
+        ./gradlew assembleRelease --no-daemon -x lint
+        APK=app/build/outputs/apk/release/app-release.apk
+        test -s "$APK"
+        APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+        AAPT="$ANDROID_HOME/build-tools/36.0.0/aapt"
+        mkdir -p "$GITHUB_WORKSPACE/qa/evidence/dashboard-chat/apk"
+        DEST="$GITHUB_WORKSPACE/qa/evidence/dashboard-chat/apk/IVX-Holdings-v1.10.33.apk"
+        cp "$APK" "$DEST"
+        "$APKSIGNER" verify --verbose --print-certs "$DEST" > "$GITHUB_WORKSPACE/qa/evidence/dashboard-chat/apk/signature.txt"
+        "$AAPT" dump badging "$DEST" > "$GITHUB_WORKSPACE/qa/evidence/dashboard-chat/apk/manifest.txt"
+        head -1 "$GITHUB_WORKSPACE/qa/evidence/dashboard-chat/apk/manifest.txt" | grep -F "package: name='com.ivxholdings.app' versionCode='131' versionName='1.10.33'"
+        cd "$GITHUB_WORKSPACE/qa/evidence/dashboard-chat/apk"
+        sha256sum IVX-Holdings-v1.10.33.apk > IVX-Holdings-v1.10.33.sha256
+        jq -n --arg sourceSha "$EXPO_PUBLIC_SOURCE_COMMIT_SHA" --arg backendSha "$BACKEND_SOURCE_SHA" --arg harnessSha "$QA_HARNESS_SHA" --arg buildRecipeSha "$GITHUB_SHA" --arg apkSha256 "$(sha256sum IVX-Holdings-v1.10.33.apk | cut -d' ' -f1)" '{sourceSha:$sourceSha,backendSourceSha:$backendSha,harnessSha:$harnessSha,buildRecipeSha:$buildRecipeSha,apkSha256:$apkSha256,applicationId:"com.ivxholdings.app",version:"1.10.33",versionCode:131,productionSignatureVerified:true,runtimeCertification:"pending"}' > build.json
+        echo "APK_PATH=$DEST" >> "$GITHUB_ENV"
+    - name: Upload the signed APK candidate
+      uses: actions/upload-artifact@v4
+      with:
+        name: IVX-Holdings-v1.10.33-${{ steps.source.outputs.sha }}-candidate
+        path: qa/evidence/dashboard-chat/apk
+        retention-days: 30
+        if-no-files-found: error
+    - name: Bind the same assertions to the production app ID
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PY_BIND'
+        from pathlib import Path
+        files = [Path('expo/.maestro') / name for name in [
+         'ivx-owner-home-certificate.yaml', 'ivx-owner-dashboard-certificate.yaml', 'ivx-owner-chat-certificate.yaml'
+        ]] + [Path('scripts/ivx-dashboard-chat-android-e2e.sh'), Path('scripts/ivx-all-routes-human-e2e.sh')]
+        for path in files:
+         text=path.read_text()
+         assert 'com.ivxholdings.app.owner' in text, path
+         path.write_text(text.replace('com.ivxholdings.app.owner','com.ivxholdings.app'))
+        PY_BIND
+    - name: Enable KVM
+      run: |
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm
+    - name: Run real Dashboard and IVX IA Chat certificate
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: 30
+        arch: x86_64
+        profile: pixel_2
+        target: google_apis
+        disable-animations: false
+        disable-linux-hw-accel: false
+        ram-size: 2048M
+        heap-size: 512M
+        emulator-options: -no-window -gpu off -no-snapshot -noaudio -no-boot-anim
+        script: bash scripts/ivx-dashboard-chat-android-e2e.sh
+    - name: Verify the APK certificate and production identity
+      shell: bash
+      run: |
+        set -euo pipefail
+        CERT=qa/evidence/dashboard-chat/certificate.json
+        test "$(jq -r '.passed' "$CERT")" = true
+        test "$(jq -r '.sourceSha' "$CERT")" = "$EXPO_PUBLIC_SOURCE_COMMIT_SHA"
+        test "$(jq -r '.apkSha256' "$CERT")" = "$(sha256sum "$APK_PATH" | cut -d' ' -f1)"
+        test "$(jq -r '.liveAIReply and .chatPersistenceAfterRestart and .dashboardRendered' "$CERT")" = true
+        live=$(curl -fsS --retry 2 --max-time 15 https://api.ivxholding.com/version | jq -r '.commit')
+        test "$live" = "$BACKEND_SOURCE_SHA"
+        remote_main=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" refs/heads/main | cut -f1)
+        test "$remote_main" = "$BACKEND_SOURCE_SHA"
+        jq --arg backendSha "$BACKEND_SOURCE_SHA" --arg harnessSha "$QA_HARNESS_SHA" --arg buildRecipeSha "$GITHUB_SHA" '. + {backendSourceSha:$backendSha,qaHarnessSha:$harnessSha,buildRecipeSha:$buildRecipeSha,applicationId:"com.ivxholdings.app",version:"1.10.33",versionCode:131,productionSignatureVerified:true,backendShaMatchedAtCompletion:true}' "$CERT" > "$CERT.tmp"
+        mv "$CERT.tmp" "$CERT"
+        cat "$CERT"
+    - name: Upload Android evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: IVX-Holdings-v1.10.33-${{ steps.source.outputs.sha }}-QA-EVIDENCE
+        path: |
+          qa/evidence/dashboard-chat
+          qa/evidence/all-routes-human-e2e
+        retention-days: 30
+        if-no-files-found: warn
+'on':
+  push:
+    branches:
+    - qa/current-apk-delivery-20260907
+    paths:
+    - .github/workflows/ivx-current-apk-delivery.yml
+  workflow_dispatch: {}
