@@ -49,6 +49,7 @@ type ControlRow = {
 
 let cached: EmergencyStopStatus | null = null;
 let cachedAtMs = 0;
+let controlReadInFlight: Promise<EmergencyStopStatus> | null = null;
 
 function readTrimmed(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -90,6 +91,7 @@ function unavailableStatus(error: string): EmergencyStopStatus {
 export function resetEmergencyStopCacheForTests(): void {
   cached = null;
   cachedAtMs = 0;
+  controlReadInFlight = null;
 }
 
 /**
@@ -103,7 +105,21 @@ export async function checkEmergencyStop(): Promise<EmergencyStopStatus> {
   if (cached && now - cachedAtMs < CACHE_TTL_MS) {
     return { ...cached, source: 'cache', checkedAt: nowIso() };
   }
+  // A cold or expired cache can be reached by all fleet start guards at once.
+  // Share the real read and its unavailable result; never turn a failed control
+  // read into a cached success or bypass the owner's stop to reduce load.
+  if (controlReadInFlight) return controlReadInFlight;
+  const pending = readEmergencyStopFromSupabase();
+  controlReadInFlight = pending;
+  try {
+    return await pending;
+  } finally {
+    if (controlReadInFlight === pending) controlReadInFlight = null;
+  }
+}
 
+async function readEmergencyStopFromSupabase(): Promise<EmergencyStopStatus> {
+  const now = Date.now();
   const url = getSupabaseUrl();
   const key = getServiceRoleKey();
   if (!url || !key) {
