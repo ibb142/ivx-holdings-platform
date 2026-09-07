@@ -1,0 +1,39 @@
+name: IVX Owner Landing 112 One-Time Kickoff
+run-name: Owner-authorized landing 112 kickoff - production fe73e97
+on:
+  push:
+    branches: [ops/landing112-owner-kickoff-20260907]
+    paths:
+      - '.github/workflows/ivx-owner-landing112-kickoff.yml'
+      - 'scripts/ops/landing112_kickoff.py'
+      - 'scripts/ops/test_landing112_kickoff.py'
+permissions:
+  contents: read
+concurrency:
+  group: ivx-owner-landing112-kickoff
+  cancel-in-progress: false
+jobs:
+  kickoff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Test launcher guards - not live-agent certification
+        run: python3 -m unittest discover -s scripts/ops -p test_landing112_kickoff.py -v
+      - name: Verify production and dispatch or attach one landing fleet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ops/landing112_kickoff.py
+      - name: Preserve actual launch outcome
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: landing112-kickoff-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/landing112-kickoff/result.json
+          if-no-files-found: warn
+          retention-days: 14
