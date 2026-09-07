@@ -1,6 +1,9 @@
 /**
  * IVX Landing — Forgot Password E2E.
- * The branch-local suite verifies the /recover wire contract deterministically.\n * Production availability and delivery remain separate deployment gates. The reset page\n * also gets a deterministic browser test for a valid recovery session so the\n * change-password path cannot regress silently.
+ * The branch-local suite verifies the /recover wire contract deterministically.
+ * Production availability and delivery remain separate deployment gates. The reset page
+ * also gets a deterministic browser test for a valid recovery session so the
+ * change-password path cannot regress silently.
  */
 import { test, expect, type Page } from '@playwright/test';
 
