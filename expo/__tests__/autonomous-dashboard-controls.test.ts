@@ -9,7 +9,7 @@ const component = readFileSync(
   join(import.meta.dir, '..', 'components', 'AutonomousDashboardControlStrip.tsx'),
   'utf8',
 );
-const routes = [...component.matchAll(/route:\\s*'([^']+)'/g)].map((match) => match[1]);
+const routes = [...component.matchAll(/route:\s*'([^']+)'/g)].map((match) => match[1]);
 
 describe('Autonomous dashboard owner controls', () => {
   it('exports and exposes the critical owner modules', () => {
