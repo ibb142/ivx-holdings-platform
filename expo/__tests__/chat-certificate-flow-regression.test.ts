@@ -45,6 +45,8 @@ describe('IVX IA chat device certificate regression', () => {
       dashboardFlowSource.indexOf('id: "crm-link-admin-dashboard"'),
     );
     expect(dashboardFlowSource).toContain('visible: "Dashboard"');
+    expect(dashboardFlowSource).toContain('visible: "Total Members"');
+    expect(dashboardFlowSource).not.toContain('visible: "Members"');
     expect(dashboardFlowSource).toContain('- back');
   });
 
