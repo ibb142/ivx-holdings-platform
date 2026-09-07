@@ -734,6 +734,9 @@ export async function executeAgentRun(
   if (state.pauseState) {
     return { ok: false, runRecord: null, error: `Agent ${agentId} is paused` };
   }
+  if (state.activeTaskId || state.availability === 'busy') {
+    return { ok: false, runRecord: null, error: `Agent ${agentId} already has active task ${state.activeTaskId ?? '(unknown)'}` };
+  }
 
   // Step 2: Verify contract integrity
   if (!contract.systemInstructions || contract.systemInstructions.length < 200) {
@@ -774,7 +777,7 @@ export async function executeAgentRun(
   const workflow = typeof payload.__workflow === 'string' && payload.__workflow ? payload.__workflow : 'direct-run';
 
   // Persist the execution row FIRST (Supabase, not RAM) — pending → running
-  await insertExecutions([{
+  const insertedExecution = await insertExecutions([{
     task_id: taskId,
     run_id: runId,
     agent_id: agentId,
@@ -784,7 +787,15 @@ export async function executeAgentRun(
     final_status: 'pending',
     dedup_key: taskId,
   }]);
-  await updateExecution(taskId, { final_status: 'running', started_at: startISO, retry_count: 0 });
+  if (!insertedExecution.ok) {
+    return { ok: false, runRecord: null, error: `Execution ledger insert failed: ${insertedExecution.error ?? `HTTP ${insertedExecution.status}`}` };
+  }
+  const startedExecution = await updateExecution(taskId, {
+    final_status: 'running', started_at: startISO, finished_at: null, duration_ms: 0, retry_count: 0,
+  });
+  if (!startedExecution.ok) {
+    return { ok: false, runRecord: null, error: `Execution timer start failed: ${startedExecution.error ?? `HTTP ${startedExecution.status}`}` };
+  }
 
   state.activeTaskId = taskId;
   state.availability = 'busy';
@@ -965,7 +976,7 @@ CONTINUOUS BRAIN ESCALATION POLICY: ${IVX_AGENT_BRAIN_ESCALATION_POLICY}`,
   );
 
   // Persist the completed/failed/blocked execution (Supabase, not RAM)
-  await updateExecution(taskId, {
+  const persistedExecution = await updateExecution(taskId, {
     task_type: missionTaskType,
     final_status: finalStatus,
     real_tool_used: realToolUsed,
@@ -983,6 +994,10 @@ CONTINUOUS BRAIN ESCALATION POLICY: ${IVX_AGENT_BRAIN_ESCALATION_POLICY}`,
     simulated: false,
     finished_at: endISO,
   });
+  if (!persistedExecution.ok) {
+    finalStatus = 'failed';
+    errorMessage = `Execution completed but durable timer/evidence finalization failed: ${persistedExecution.error ?? `HTTP ${persistedExecution.status}`}`;
+  }
 
   // Update in-memory execution state
   state.activeTaskId = null;
