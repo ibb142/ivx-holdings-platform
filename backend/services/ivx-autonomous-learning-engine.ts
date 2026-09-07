@@ -184,12 +184,15 @@ async function ensureDailyStudyQueue(state: LearningState, sourceSha: string): P
   }
 }
 
-export async function observeAndLearn(input: LearningObservation): Promise<{ ok: boolean; state: LearningState; action: string }> {
+export async function observeAndLearn(
+  input: LearningObservation,
+  options: { allowTaskCreation?: boolean } = {},
+): Promise<{ ok: boolean; state: LearningState; action: string }> {
   const state = await loadState();
   state.lastObservedSha = input.sourceSha;
   state.lastObservedHealthy = input.certified;
 
-  await ensureDailyStudyQueue(state, input.sourceSha);
+  if (options.allowTaskCreation === true) await ensureDailyStudyQueue(state, input.sourceSha);
 
   if (input.certified) {
     const previousBadSha = state.lastComparison?.headSha ?? null;

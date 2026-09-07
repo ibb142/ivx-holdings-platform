@@ -54,6 +54,14 @@ describe('IVX GitHub Actions OIDC claims', () => {
     expect(validateIVXGitHubOIDCClaims({ ...valid, workflow_ref: 'ibb142/ivx-holdings-platform/.github/workflows/other.yml@refs/heads/main' }, now)).toBe(false);
   });
 
+  test('accepts the manual P0 112-agent fleet workflow', () => {
+    expect(validateIVXGitHubOIDCClaims({
+      ...valid,
+      workflow_ref: 'ibb142/ivx-holdings-platform/.github/workflows/landing-112-p0-force-fleet.yml@refs/heads/main',
+      event_name: 'workflow_dispatch',
+    }, now)).toBe(true);
+  });
+
   test('rejects wrong audience, repository ids, and expired tokens', () => {
     expect(validateIVXGitHubOIDCClaims({ ...valid, aud: 'other-audience' }, now)).toBe(false);
     expect(validateIVXGitHubOIDCClaims({ ...valid, repository_id: '999' }, now)).toBe(false);

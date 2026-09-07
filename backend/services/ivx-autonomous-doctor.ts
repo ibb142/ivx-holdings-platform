@@ -1,16 +1,15 @@
-import { getAllExecutionStates, enableAgent, resumeAgent } from './ivx-agent-runtime';
-import { campaignDispatcherControl, startCampaignDispatcher } from './ivx-campaign-dispatcher';
-import { setSchedulerEnabled } from './ivx-autonomous-scheduler';
+import { getAllExecutionStates, resumeAgent } from './ivx-agent-runtime';
+import { campaignDispatcherControl } from './ivx-campaign-dispatcher';
 import {
   enforceAutonomous112RuntimeTruth,
   getAutonomousTruthSnapshot,
-  IVX_AUTONOMOUS_ALWAYS_ON_24X7,
 } from './ivx-autonomous-truth-control';
 import {
   ensureAutonomousManagerBacklog,
   IVX_AUTONOMOUS_FLEET_SIZE,
 } from './ivx-autonomous-work-manager';
 import { observeAndLearn } from './ivx-autonomous-learning-engine';
+import { autonomousDoctorRepairEnabled, autonomousRepairCapacity } from './ivx-autonomous-control-policy';
 
 export const IVX_AUTONOMOUS_DOCTOR_MARKER = 'ivx-autonomous-doctor-learning-v2-2026-09-06';
 const DOCTOR_INTERVAL_MS = Math.max(10_000, Math.min(60_000, Number.parseInt(process.env.IVX_AUTONOMOUS_DOCTOR_INTERVAL_MS ?? '15000', 10) || 15_000));
@@ -27,6 +26,9 @@ type DoctorDiagnosis = {
 
 type DoctorStatus = {
   marker: string;
+  mode: 'observe' | 'repair';
+  repairEnabled: boolean;
+  repairCapacity: number;
   startedAt: string | null;
   lastRunAt: string | null;
   lastHealthyAt: string | null;
@@ -125,7 +127,7 @@ async function learnFromSnapshot(snapshot: Awaited<ReturnType<typeof getAutonomo
     total: snapshot.agents.counts.total,
     diagnoses: lastDiagnosis.map((row) => row.code),
     runtimeError: lastError,
-  });
+  }, { allowTaskCreation: false });
   lastLearningAction = result.action;
 }
 
@@ -149,18 +151,27 @@ async function repairFleet(snapshot: Awaited<ReturnType<typeof getAutonomousTrut
   if (snapshot.autonomous.emergencyStop) return;
   totalRepairs += 1;
   lastRepairAt = new Date().toISOString();
-  if (IVX_AUTONOMOUS_ALWAYS_ON_24X7) { await setSchedulerEnabled(true); startCampaignDispatcher(); }
-  await enforceAutonomous112RuntimeTruth();
+  const enforcement = await enforceAutonomous112RuntimeTruth();
+  if (enforcement.action === 'emergency_stop_respected' || enforcement.action === 'explicit_owner_stop_respected') {
+    lastRepairCompletedAt = new Date().toISOString();
+    return;
+  }
   const states = getAllExecutionStates();
   for (const state of states) {
-    if (IVX_AUTONOMOUS_ALWAYS_ON_24X7 && state.disabledState) enableAgent(state.agentId);
-    if (IVX_AUTONOMOUS_ALWAYS_ON_24X7 || !state.pauseState) resumeAgent(state.agentId);
+    if (!state.pauseState && !state.disabledState) resumeAgent(state.agentId);
   }
-  const lanes = getAllExecutionStates().filter((state) => state.agentNumber != null && !state.disabledState && state.health !== 'failed').map((state) => ({ agentId: state.agentId, agentNumber: state.agentNumber as number }));
+  const repairCapacity = autonomousRepairCapacity();
+  const lanes = getAllExecutionStates()
+    .filter((state) => state.agentNumber != null && !state.pauseState && !state.disabledState && state.health !== 'failed')
+    .slice(0, repairCapacity)
+    .map((state) => ({ agentId: state.agentId, agentNumber: state.agentNumber as number }));
   const backlog = await ensureAutonomousManagerBacklog({ sourceSha: sourceSha(), agents: lanes });
   if (!backlog.ok) throw new Error(`autonomous_manager_backlog_failed:${backlog.errors}`);
   const refreshed = await getAutonomousTruthSnapshot();
-  const unhealthyAgents = refreshed.agents.rows.filter((row) => row.status !== 'WORKING' || !row.heartbeatFresh).map((row) => row.agentNumber);
+  const unhealthyAgents = refreshed.agents.rows
+    .filter((row) => row.status !== 'WORKING' || !row.heartbeatFresh)
+    .slice(0, repairCapacity)
+    .map((row) => row.agentNumber);
   const retry = await retryAgentsBounded(unhealthyAgents);
   if (retry.failed > 0) console.error('[IVX Autonomous Doctor] targeted retry failures', retry);
   await campaignDispatcherControl('resume_all');
@@ -182,6 +193,10 @@ async function runDoctorOnce(reason: 'boot' | 'interval'): Promise<void> {
     }
     consecutiveUnhealthy += 1;
     console.warn('[IVX Autonomous Doctor] diagnosis', { reason, consecutiveUnhealthy, working: snapshot.agents.counts.working, total: snapshot.agents.counts.total, diagnoses: lastDiagnosis.map((row) => ({ code: row.code, affected: row.affectedAgents.length })), learning: lastLearningAction });
+    if (!autonomousDoctorRepairEnabled()) {
+      lastError = null;
+      return;
+    }
     await repairFleet(snapshot);
     for (let poll = 1; poll <= RECOVERY_POLLS; poll += 1) {
       await sleep(RECOVERY_POLL_MS);
@@ -220,12 +235,15 @@ export function startAutonomousDoctor(): void {
   bootTimer.unref?.();
   timer = setInterval(() => { void runDoctor('interval'); }, DOCTOR_INTERVAL_MS);
   timer.unref?.();
-  console.log('[IVX Autonomous Doctor] 24/7 supervisor armed', { marker: IVX_AUTONOMOUS_DOCTOR_MARKER, intervalMs: DOCTOR_INTERVAL_MS, requiredFleet: IVX_AUTONOMOUS_FLEET_SIZE, alwaysOnMandate: IVX_AUTONOMOUS_ALWAYS_ON_24X7 });
+  console.log('[IVX Autonomous Doctor] supervisor armed', { marker: IVX_AUTONOMOUS_DOCTOR_MARKER, intervalMs: DOCTOR_INTERVAL_MS, requiredFleet: IVX_AUTONOMOUS_FLEET_SIZE, mode: autonomousDoctorRepairEnabled() ? 'repair' : 'observe', repairCapacity: autonomousRepairCapacity() });
 }
 
 export function getAutonomousDoctorStatus(): DoctorStatus {
   return {
     marker: IVX_AUTONOMOUS_DOCTOR_MARKER,
+    mode: autonomousDoctorRepairEnabled() ? 'repair' : 'observe',
+    repairEnabled: autonomousDoctorRepairEnabled(),
+    repairCapacity: autonomousRepairCapacity(),
     startedAt,
     lastRunAt,
     lastHealthyAt,

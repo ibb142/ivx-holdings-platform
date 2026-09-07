@@ -624,6 +624,7 @@ async function runDeployMonitorJob(): Promise<ScheduledJobResult> {
   try {
     const { assessDeploymentBrain } = await import('./ivx-deployment-tools/deployment-brain');
     const { verifyCommitMatch, triggerRenderDeploy } = await import('./ivx-enterprise-deployment-engine');
+    const { deploymentAutoRepairEnabled } = await import('./ivx-autonomous-control-policy');
 
     const brain = await assessDeploymentBrain();
     const match = await verifyCommitMatch();
@@ -631,7 +632,7 @@ async function runDeployMonitorJob(): Promise<ScheduledJobResult> {
     let deployTriggered = false;
     let deployId: string | null = null;
 
-    if (!brain.commitMatch && brain.decision === 'deploy_now' && brain.autoRepairAvailable) {
+    if (deploymentAutoRepairEnabled() && !brain.commitMatch && brain.decision === 'deploy_now' && brain.autoRepairAvailable) {
       const trigger = await triggerRenderDeploy(false);
       if (trigger.ok && trigger.deploy) {
         deployTriggered = true;

@@ -19,11 +19,21 @@ describe('IVX autonomous truth control enterprise invariants', () => {
   });
 
   test('truth remains fail-closed for the full 112 worker certificate', () => {
-    expect(source).toContain('counts.working===112');
-    expect(source).toContain('counts.freshHeartbeat===112');
-    expect(source).toContain('counts.stale===0');
-    expect(source).toContain('counts.blocked===0');
+    expect(source).toContain('evaluateFleetActivationEvidence');
+    expect(source).toContain('fleetActivationGate.certified');
+    expect(source).toContain('const knownWorkerIdentities=0');
+    expect(source).toContain('queueBackend:autonomousQueueBackend()');
     expect(source).toContain('counts.unknown===0');
+    expect(source).toContain('return {ok:continuousRuntimeCertified');
+  });
+
+  test('a read-only truth snapshot cannot start or resume the dispatcher', () => {
+    const snapshotBody = source.slice(
+      source.indexOf('export async function getAutonomousTruthSnapshot()'),
+      source.indexOf('export async function enforceAutonomous112RuntimeTruth()'),
+    );
+    expect(snapshotBody).not.toContain('startCampaignDispatcher()');
+    expect(snapshotBody).not.toContain("campaignDispatcherControl('resume_all')");
   });
 
   test('continuity load is bounded to real deployed capacity', () => {

@@ -202,6 +202,50 @@ describe('IVX campaign dispatcher — duplication & idempotency (scenarios 4-5)'
     expect(a.key).toBe(b.key);
     expect((await records()).length).toBe(1);
   });
+
+  it('reports an attached worker separately and does not count it as a new start', async () => {
+    const existing = await fake.bridge.enqueue({
+      goal: 'existing campaign work',
+      ownerApproved: true,
+      approvePatch: false,
+      approveGitDeploy: false,
+      validationMode: 'focused',
+      systemMode: true,
+      ownerApprovedAction: null,
+    });
+    setCampaignWorkerBridgeForTests({
+      ...fake.bridge,
+      enqueue: async () => ({ job: existing.job, attached: true }),
+    });
+    const record = await ensureCampaignAssignment(assignment({ agentNumber: 8, dutyId: 'attached-retry' }));
+
+    const tick = await tickCampaignDispatcher();
+
+    expect(tick.started).not.toContain(record.key);
+    expect(tick.attached).toContain(record.key);
+    expect((await findRecord(record.key))?.stage).toContain('ATTACHED');
+  });
+
+  it('polls an already-dispatched queued job without submitting it again', async () => {
+    const queuedBridge = makeFakeBridge();
+    const originalEnqueue = queuedBridge.bridge.enqueue;
+    queuedBridge.bridge.enqueue = async (input) => {
+      const result = await originalEnqueue(input);
+      const job = queuedBridge.jobs.get(result.job.jobId)!;
+      job.status = 'queued';
+      return result;
+    };
+    setCampaignWorkerBridgeForTests(queuedBridge.bridge);
+    await ensureCampaignAssignment(assignment({ agentNumber: 9, dutyId: 'queued-on-worker' }));
+
+    const first = await tickCampaignDispatcher();
+    const second = await tickCampaignDispatcher();
+
+    expect(first.started.length).toBe(1);
+    expect(second.started.length).toBe(0);
+    expect(second.attached.length).toBe(0);
+    expect(queuedBridge.enqueued.length).toBe(1);
+  });
 });
 
 describe('IVX campaign dispatcher — failure, retry & repair (scenarios 6-8)', () => {

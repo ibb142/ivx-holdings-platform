@@ -14,6 +14,7 @@ import {
   getAutonomousSemantic360Status,
   runAutonomousSemantic360,
 } from './ivx-autonomous-semantic-360';
+import { autonomousRuntimeEnforcerEnabled } from './ivx-autonomous-control-policy';
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let leaseMirrorTimer: ReturnType<typeof setInterval> | null = null;
@@ -332,8 +333,13 @@ function run(reason: 'boot' | 'interval'): Promise<void> {
   return enforcerRunInFlight;
 }
 
-export function startAutonomous112RuntimeEnforcer(): void {
-  if (timer) return;
+export function startAutonomous112RuntimeEnforcer(): boolean {
+  if (timer) return true;
+  if (!autonomousRuntimeEnforcerEnabled()) {
+    continuityEnabled = false;
+    console.log('[IVX Autonomous Runtime Enforcer] disabled by explicit control policy');
+    return false;
+  }
   startedAt = new Date().toISOString();
   const bootKick = setTimeout(() => { void run('boot'); }, 5_000);
   bootKick.unref?.();
@@ -350,11 +356,13 @@ export function startAutonomous112RuntimeEnforcer(): void {
   // tasks owned by currently running continuity lanes and never fabricates work.
   heartbeatTimer = setInterval(() => { void runHeartbeatRefresh(); }, 20_000);
   heartbeatTimer.unref?.();
+  return true;
 }
 
 export function getAutonomous112RuntimeEnforcerStatus() {
   return {
     running: Boolean(timer),
+    enabledByPolicy: autonomousRuntimeEnforcerEnabled(),
     supervisoryRunInFlight: Boolean(enforcerRunInFlight),
     leaseMirrorRunning: Boolean(leaseMirrorTimer),
     leaseMirrorInFlight: Boolean(leaseMirrorInFlight),
