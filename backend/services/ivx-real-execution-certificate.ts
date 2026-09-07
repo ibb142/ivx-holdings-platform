@@ -152,7 +152,11 @@ export async function resumePendingCertificateRuns(): Promise<{ resumed: number;
   const ensure = await ensureRealExecutionTables();
   if (!ensure.ok) return { resumed: 0, runIds: [] };
   const pending = await fetchPendingExecutions(300);
-  const rows = (pending.data ?? []).filter((r) => r.workflow === REAL_EXECUTION_WORKFLOW_ID);
+  const rows = (pending.data ?? []).filter((r) =>
+    r.workflow === REAL_EXECUTION_WORKFLOW_ID
+    && r.task_type === 'real_execution_certification'
+    && /^rec-\d+$/.test(r.run_id),
+  );
   const runIds = [...new Set(rows.map((r) => r.run_id))];
   const processing: Promise<void>[] = [];
   for (const runId of runIds) {

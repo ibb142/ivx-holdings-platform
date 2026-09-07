@@ -13,7 +13,7 @@ import { startSmsNotificationScheduler, getSmsNotifierStatus } from './backend/s
 import { runCompletionCampaignCycle } from './backend/services/ivx-autonomous-completion-campaign';
 import { getLatestMemberAuthCertification, startMemberAuthCertificationScheduler } from './backend/services/ivx-member-auth-certification';
 import { startAgentHeartbeatLoop } from './backend/services/ivx-agent-persistence';
-import { buildHeartbeatRows, resumePendingCertificateRuns } from './backend/services/ivx-real-execution-certificate';
+import { buildHeartbeatRows } from './backend/services/ivx-real-execution-certificate';
 import { preloadAIProviderCredentialFromOwnerVariables } from './backend/services/ivx-ai-owner-variable-preload';
 import { mintIVXOutageOwnerSession, verifyIVXOutageOwnerSession } from './backend/services/ivx-outage-owner-session';
 import { listAutonomousVoiceCalls, placeAutonomousVoiceCall } from './backend/services/ivx-signalwire-voice';
@@ -117,8 +117,6 @@ if (!landingFleetFocus) {
 
 startAgentHeartbeatLoop(buildHeartbeatRows);
 if (!landingFleetFocus) {
-  const certResumeKick = setTimeout(() => { void resumePendingCertificateRuns().then((r) => { if (r.resumed > 0) console.log('[IVX Server] Real-execution tasks resumed after restart', r); }).catch((error) => console.warn('[IVX Server] Real-execution resume failed', { error: error instanceof Error ? error.message.slice(0, 160) : 'unknown' })); }, 25_000); certResumeKick.unref?.();
-
   startSmsNotificationScheduler();
   const smsStatus = getSmsNotifierStatus();
   console.log('[IVX Server] Autonomous owner communications initialized', { configured: smsStatus.phoneConfigured, destination: smsStatus.phoneMasked, schedulerRunning: smsStatus.schedulerRunning, smsDailyCap: smsStatus.smsDailyCap, voiceConfigured: smsStatus.voice.configured, voiceDailyCap: smsStatus.voice.dailyCap });
