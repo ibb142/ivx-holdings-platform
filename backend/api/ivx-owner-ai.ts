@@ -215,6 +215,12 @@ export type ResolvedOwnerTables = {
   messageConversationField: ResolvedMessageConversationField;
 };
 
+export function getOwnerConversationSelectColumns(schema: ResolvedOwnerSchema): string {
+  return schema === 'ivx'
+    ? 'id,slug,title,subtitle,created_at,updated_at,last_message_text,last_message_at'
+    : 'id,slug,title,user_id,created_at,updated_at';
+}
+
 const DEPLOYMENT_MARKER = 'ivx-owner-ai-senior-engineer-v7-0-2026-07-31-ivx-level-narrative';
 // Owner IVX IA runs on full multimodal gpt-4o (vision + documents).
 const DEFAULT_OWNER_AI_MODEL = 'gpt-4o';
@@ -3887,7 +3893,7 @@ async function findExistingOwnerConversation(
   for (const lookup of lookupAttempts) {
     const result = await scopedClient
       .from(tables.conversations)
-      .select('id,slug,title,user_id,created_at,updated_at')
+      .select(getOwnerConversationSelectColumns(tables.schema))
       .eq(lookup.field, lookup.value)
       .limit(5);
 
@@ -4007,7 +4013,7 @@ export async function ensureOwnerConversation(
   const payloads = buildConversationInsertPayloads(tables);
 
   for (const payload of payloads) {
-    const insertResult = await scopedClient.from(tables.conversations).insert(payload).select('id,slug,title,user_id,created_at,updated_at').limit(1);
+    const insertResult = await scopedClient.from(tables.conversations).insert(payload).select(getOwnerConversationSelectColumns(tables.schema)).limit(1);
     if (!insertResult.error) {
       const insertedRow = ((insertResult.data as Record<string, unknown>[] | null) ?? [])[0];
       if (insertedRow) {
