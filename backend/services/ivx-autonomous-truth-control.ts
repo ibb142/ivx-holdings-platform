@@ -13,6 +13,7 @@ import {
   activeFleetMutationAuthorityCount,
   autonomousQueueBackend,
   autonomousRepairCapacity,
+  autonomousRuntimeEnforcerEnabled,
 } from './ivx-autonomous-control-policy';
 import { evaluateFleetActivationEvidence } from './ivx-project-vision';
 import { readPostgresFleetLeaseRows, type AtomicFleetLeaseRow } from './ivx-postgres-autonomous-task-store';
@@ -126,27 +127,34 @@ async function cascadeStartAllAgents(): Promise<{ seedAgents: number[]; activate
 export async function getAutonomousTruthSnapshot() {
   const configuredQueueBackend = autonomousQueueBackend();
   const atomicQueueSelected = configuredQueueBackend === 'postgres_atomic';
+  const atomicRuntimeControlPlane = atomicQueueSelected && autonomousRuntimeEnforcerEnabled();
   const [dispatcherResult, schedulerResult, dispatcherRecordsResult, atomicLeasesResult] = await Promise.all([
-    boundedDependency('dispatcher_snapshot', Promise.resolve(getCampaignDispatcherSnapshot())),
-    boundedDependency('scheduler_state', Promise.resolve(getSchedulerState())),
-    boundedDependency('dispatcher_records', Promise.resolve(listCampaignDispatcherRecords())),
+    atomicRuntimeControlPlane
+      ? Promise.resolve({ value: null, error: null })
+      : boundedDependency('dispatcher_snapshot', Promise.resolve(getCampaignDispatcherSnapshot())),
+    atomicRuntimeControlPlane
+      ? Promise.resolve({ value: null, error: null })
+      : boundedDependency('scheduler_state', Promise.resolve(getSchedulerState())),
+    atomicRuntimeControlPlane
+      ? Promise.resolve({ value: [] as Awaited<ReturnType<typeof listCampaignDispatcherRecords>>, error: null })
+      : boundedDependency('dispatcher_records', Promise.resolve(listCampaignDispatcherRecords())),
     atomicQueueSelected
       ? boundedDependency('postgres_atomic_leases', readPostgresFleetLeaseRows())
       : Promise.resolve({ value: [] as AtomicFleetLeaseRow[], error: null }),
   ]);
   const dispatcher = dispatcherResult.value ?? {
-    paused: true,
+    paused: !atomicRuntimeControlPlane,
     emergencyStop: false,
     totals: { pendingOwner: 0, awaitingImplement: 0, queued: 0, running: 0, completed: 0, failed: 0, blocked: 0 },
-    maxConcurrency: 0,
+    maxConcurrency: atomicRuntimeControlPlane ? autonomousRepairCapacity() : 0,
   };
   const scheduler = schedulerResult.value;
   const dispatcherRecords = dispatcherRecordsResult.value ?? [];
   const atomicLeaseRows = atomicLeasesResult.value ?? [];
   const degradedDependencies = [
-    dispatcherResult.error ? 'dispatcher_snapshot' : null,
-    schedulerResult.error ? 'scheduler_state' : null,
-    dispatcherRecordsResult.error ? 'dispatcher_records' : null,
+    !atomicRuntimeControlPlane && dispatcherResult.error ? 'dispatcher_snapshot' : null,
+    !atomicRuntimeControlPlane && schedulerResult.error ? 'scheduler_state' : null,
+    !atomicRuntimeControlPlane && dispatcherRecordsResult.error ? 'dispatcher_records' : null,
     atomicQueueSelected && atomicLeasesResult.error ? 'postgres_atomic_leases' : null,
   ].filter((value): value is string => Boolean(value));
 
@@ -249,7 +257,9 @@ export async function getAutonomousTruthSnapshot() {
   const provenQueueBackend = atomicQueueSelected
     ? (atomicLeasesResult.error ? 'postgres_atomic_unavailable' : 'postgres_atomic')
     : configuredQueueBackend;
-  const deployedConcurrency = Math.min(dispatcher.maxConcurrency, autonomousRepairCapacity());
+  const deployedConcurrency = atomicRuntimeControlPlane
+    ? autonomousRepairCapacity()
+    : Math.min(dispatcher.maxConcurrency, autonomousRepairCapacity());
   const fleetActivationGate = evaluateFleetActivationEvidence({
     registeredAgents: agents.length,
     distinctActiveAgents,
@@ -263,8 +273,9 @@ export async function getAutonomousTruthSnapshot() {
     blockedAgents: counts.blocked,
     emergencyStop: dispatcher.emergencyStop,
   });
+  const schedulerEnabled = atomicRuntimeControlPlane || Boolean(scheduler?.enabled);
   const autonomousWorking = Boolean(
-    scheduler?.enabled && !dispatcher.paused && !dispatcher.emergencyStop
+    schedulerEnabled && !dispatcher.paused && !dispatcher.emergencyStop
     && (dispatcher.totals.running > 0 || dispatcher.totals.queued > 0 || counts.working > 0),
   );
   const continuousRuntimeCertified = degradedDependencies.length === 0
@@ -322,7 +333,7 @@ export async function getAutonomousTruthSnapshot() {
     },
     autonomous: {
       working: autonomousWorking,
-      schedulerEnabled: Boolean(scheduler?.enabled),
+      schedulerEnabled,
       dispatcherPaused: dispatcher.paused,
       emergencyStop: dispatcher.emergencyStop,
       runningJobs: dispatcher.totals.running,
@@ -366,6 +377,24 @@ export async function enforceAutonomous112RuntimeTruth() {
   if (before.autonomous.emergencyStop) return { ok: false, action: 'emergency_stop_respected', recovered: [], snapshot: before };
   if (control.stopped || control.paused) {
     return { ok: false, action: 'explicit_owner_stop_respected', recovered: [], recoverableTotal: 0, recoveryCapacity: autonomousRepairCapacity(), snapshot: before };
+  }
+  // The PostgreSQL queue and runtime enforcer are the sole mutation authority
+  // in Landing focus mode. Do not start or synchronize the legacy JSON-backed
+  // campaign dispatcher: that path competes for the same database and is not
+  // part of canonical atomic lease proof.
+  if (autonomousQueueBackend() === 'postgres_atomic' && autonomousRuntimeEnforcerEnabled()) {
+    const recoverable = before.agents.rows.filter((agent) =>
+      !agent.disabled && ['IDLE', 'STALE', 'UNKNOWN', 'BLOCKED'].includes(agent.status));
+    for (const agent of recoverable) resumeAgent(agent.agentId);
+    const after = await getAutonomousTruthSnapshot();
+    return {
+      ok: after.certification.continuousRuntimeCertified,
+      action: recoverable.length ? 'recovered_atomic_agents' : 'verified_atomic_runtime',
+      recovered: recoverable.map((agent) => agent.agentNumber),
+      recoverableTotal: recoverable.length,
+      recoveryCapacity: autonomousRepairCapacity(),
+      snapshot: after,
+    };
   }
   let controlPlaneRecovered = false;
   if (!before.autonomous.schedulerEnabled || before.autonomous.dispatcherPaused) {
