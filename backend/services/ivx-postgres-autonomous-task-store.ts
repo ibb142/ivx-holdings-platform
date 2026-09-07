@@ -18,7 +18,7 @@ import type {
 
 export const IVX_POSTGRES_AUTONOMOUS_TASK_STORE_MARKER = 'ivx-postgres-autonomous-task-store-2026-09-07-v1';
 const DEFAULT_TIMEOUT_MS = 30_000;
-const TRUTH_TIMEOUT_MS = 2_200;
+const TRUTH_TIMEOUT_MS = 8_000;
 const TASK_READ_CACHE_TTL_MS = 1_500;
 const BOOT_NONCE = randomUUID().slice(0, 12);
 let taskReadCache: { value: Task[]; at: number } | null = null;
@@ -123,7 +123,7 @@ async function restRequest<T>(
     } catch (error) {
       finalError = error;
       const message = error instanceof Error ? error.message : String(error);
-      const transient = /timeout|timed out|aborted|fetch failed|ECONN|HTTP 5\d\d|HTTP 429/i.test(message);
+      const transient = /timeout|timed out|aborted|fetch failed|ECONN|HTTP 5\d\d|HTTP 429|schema cache|retrying|temporar/i.test(message);
       if (!transient || attempt === attempts) break;
       await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
     }
@@ -316,7 +316,7 @@ export async function readPostgresFleetLeaseRows(): Promise<AtomicFleetLeaseRow[
   }>>(
     `ivx_autonomous_tasks?select=task_id,state,assigned_agent_number,lease_holder,worker_instance_id,last_heartbeat_at,lease_expires_at&state=in.${activeStates}&lease_holder=not.is.null&limit=1000`,
     { method: 'GET' },
-    { timeoutMs: TRUTH_TIMEOUT_MS, attempts: 1 },
+    { timeoutMs: TRUTH_TIMEOUT_MS, attempts: 2 },
   );
   if (!Array.isArray(rows)) throw new Error('postgres_atomic fleet truth response is not an array');
   return rows

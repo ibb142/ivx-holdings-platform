@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { landingFleetFocusEnabled } from './services/ivx-landing-fleet-focus';
 import {
   IVX_ENTERPRISE_MIDDLEWARE_MARKER,
   observabilityMiddleware,
@@ -6750,32 +6751,39 @@ app.notFound(async (context) => {
   return context.json({ error: 'Not found', deploymentMarker: DEPLOYMENT_MARKER }, 404);
 });
 
-try { startNightOpsScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] night ops scheduler failed to start:', err instanceof Error ? err.message : err); }
-try { void bootstrapDataVault(); startDataVaultScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] data vault scheduler failed to start:', err instanceof Error ? err.message : err); }
-try {
-  // Daily recovery report — runs once per day at boot + every 24h.
-  const runDailyReport = () => { void generateDailyReport().catch(() => {}); };
-  runDailyReport();
-  setInterval(runDailyReport, 24 * 60 * 60 * 1000).unref?.();
-} catch (err) { console.warn('[IVXOwnerAI-Hono] daily report scheduler failed to start:', err instanceof Error ? err.message : err); }
-try { startContinuousExecutionScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] continuous execution scheduler failed to start:', err instanceof Error ? err.message : err); }
-try { startAutonomousScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] autonomous scheduler failed to start:', err instanceof Error ? err.message : err); }
-try { startSmsNotificationScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] SMS notification scheduler failed to start:', err instanceof Error ? err.message : err); }
-try { startScaleLoopScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] scale loop scheduler failed to start:', err instanceof Error ? err.message : err); }
-try { startRoleAgentScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] role-agent run loop failed to start:', err instanceof Error ? err.message : err); }
-try { startEngineeringReportTicker(2); } catch (err) { console.warn('[IVXOwnerAI-Hono] engineering OS 2h report ticker failed to start:', err instanceof Error ? err.message : err); }
-try { startOwnerAITaskWorker(); } catch (err) { console.warn('[IVXOwnerAI-Hono] owner AI durable task worker failed to start:', err instanceof Error ? err.message : err); }
+const landingFleetFocus = landingFleetFocusEnabled();
+if (!landingFleetFocus) {
+  try { startNightOpsScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] night ops scheduler failed to start:', err instanceof Error ? err.message : err); }
+  try { void bootstrapDataVault(); startDataVaultScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] data vault scheduler failed to start:', err instanceof Error ? err.message : err); }
+  try {
+    // Daily recovery report — runs once per day at boot + every 24h.
+    const runDailyReport = () => { void generateDailyReport().catch(() => {}); };
+    runDailyReport();
+    setInterval(runDailyReport, 24 * 60 * 60 * 1000).unref?.();
+  } catch (err) { console.warn('[IVXOwnerAI-Hono] daily report scheduler failed to start:', err instanceof Error ? err.message : err); }
+  try { startContinuousExecutionScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] continuous execution scheduler failed to start:', err instanceof Error ? err.message : err); }
+  try { startAutonomousScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] autonomous scheduler failed to start:', err instanceof Error ? err.message : err); }
+  try { startSmsNotificationScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] SMS notification scheduler failed to start:', err instanceof Error ? err.message : err); }
+  try { startScaleLoopScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] scale loop scheduler failed to start:', err instanceof Error ? err.message : err); }
+  try { startRoleAgentScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] role-agent run loop failed to start:', err instanceof Error ? err.message : err); }
+  try { startEngineeringReportTicker(2); } catch (err) { console.warn('[IVXOwnerAI-Hono] engineering OS 2h report ticker failed to start:', err instanceof Error ? err.message : err); }
+  try { startOwnerAITaskWorker(); } catch (err) { console.warn('[IVXOwnerAI-Hono] owner AI durable task worker failed to start:', err instanceof Error ? err.message : err); }
+} else {
+  console.log('[IVX Landing Fleet Focus] unrelated Hono schedulers suppressed');
+}
 
 // Graceful shutdown: stop the queue worker on SIGTERM/SIGINT so Render
 // doesn't kill tasks mid-execution. The worker waits up to
 // IVX_QUEUE_SHUTDOWN_GRACE_MS for active tasks to complete.
 process.on('SIGTERM', () => { void stopOwnerAITaskWorker().then(() => process.exit(0)); });
 process.on('SIGINT', () => { void stopOwnerAITaskWorker().then(() => process.exit(0)); });
-try { startLandingSeoAutodeploy(); } catch (err) { console.warn('[IVXOwnerAI-Hono] landing SEO autodeploy failed to start:', err instanceof Error ? err.message : err); }
-try { startAutonomousMonitor(); } catch (err) { console.warn('[IVXOwnerAI-Hono] autonomous deploy monitor failed to start:', err instanceof Error ? err.message : err); }
-try { startEnterpriseReportScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] enterprise 2h report scheduler failed to start:', err instanceof Error ? err.message : err); }
-try { startAIKeyMonitor(); } catch (err) { console.warn('[IVXOwnerAI-Hono] AI key monitor failed to start:', err instanceof Error ? err.message : err); }
-try { startSelfUpgradeScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] daily self-upgrade scheduler failed to start:', err instanceof Error ? err.message : err); }
+if (!landingFleetFocus) {
+  try { startLandingSeoAutodeploy(); } catch (err) { console.warn('[IVXOwnerAI-Hono] landing SEO autodeploy failed to start:', err instanceof Error ? err.message : err); }
+  try { startAutonomousMonitor(); } catch (err) { console.warn('[IVXOwnerAI-Hono] autonomous deploy monitor failed to start:', err instanceof Error ? err.message : err); }
+  try { startEnterpriseReportScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] enterprise 2h report scheduler failed to start:', err instanceof Error ? err.message : err); }
+  try { startAIKeyMonitor(); } catch (err) { console.warn('[IVXOwnerAI-Hono] AI key monitor failed to start:', err instanceof Error ? err.message : err); }
+  try { startSelfUpgradeScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] daily self-upgrade scheduler failed to start:', err instanceof Error ? err.message : err); }
+}
 
 // ============================================================================
 // IVX Enterprise Time Zone System — register all timezone routes

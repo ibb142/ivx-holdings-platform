@@ -22,6 +22,10 @@ import {
 } from './ivx-autonomous-semantic-360';
 import { autonomousRuntimeEnforcerEnabled } from './ivx-autonomous-control-policy';
 import {
+  postgresAtomicQueueSelected,
+  readPostgresFleetLeaseRows,
+} from './ivx-postgres-autonomous-task-store';
+import {
   ensureLandingP0BacklogSeeded,
   isLandingP0MissionActive,
   LANDING_P0_PREFIX,
@@ -124,7 +128,9 @@ function currentSourceSha(): string {
  */
 async function syncRuntimeWorkingFromTaskLeases(): Promise<number> {
   if (!continuityEnabled) return 0;
-  const tasks = await getAllTasks();
+  const tasks = postgresAtomicQueueSelected()
+    ? await readPostgresFleetLeaseRows()
+    : await getAllTasks();
   const states = getAllExecutionStates();
   const stateByNumber = new Map(states.map((state) => [state.agentNumber, state]));
   const stateById = new Map(states.map((state) => [state.agentId, state]));
@@ -177,7 +183,11 @@ function runLeaseMirror(): Promise<void> {
 async function refreshInFlightTaskHeartbeats(): Promise<number> {
   if (!continuityEnabled || continuityRuns.size === 0) return 0;
   const activeWorkerIds = new Set([...continuityRuns.keys()].map((agentId) => `agent:${agentId}`));
-  const tasks = await getAllTasks();
+  // The atomic queue exposes a narrow lease projection. Reading it avoids
+  // transferring every task payload while 112 lanes are executing.
+  const tasks = postgresAtomicQueueSelected()
+    ? await readPostgresFleetLeaseRows()
+    : await getAllTasks();
   const leases: Array<{ taskId: string; workerId: string }> = [];
   for (const task of tasks) {
     if (!task.leaseHolder || !activeWorkerIds.has(task.leaseHolder)) continue;

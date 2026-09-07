@@ -102,6 +102,7 @@ import {
   getFleetEngineeringMetrics,
   IVX_REAL_ENGINEERING_CYCLE_MARKER,
 } from '../services/ivx-agent-real-engineering-cycle';
+import { landingFleetFocusEnabled } from '../services/ivx-landing-fleet-focus';
 
 async function ownerAuthorized(c: any, body: Record<string, unknown> = {}): Promise<boolean> {
   const provided = (typeof body.ownerApprovalToken === 'string' ? body.ownerApprovalToken : '') || c.req.header('x-ivx-owner-key') || '';
@@ -296,6 +297,12 @@ export function registerAgentRoutes(app: Hono): void {
     if (!oidcAuthorized && !legacyAuthorized) return c.json({ ok: false, error: 'Owner or approved IVX GitHub machine authorization required.' }, 401);
     const taskType = (body as any).taskType || 'audit';
     const payload = (body as any).payload || {};
+    if (landingFleetFocusEnabled() && payload.__workflow === 'IVX 112 Live AI Worker Certificate') {
+      return c.json({
+        ok: false,
+        error: 'Landing P0 fleet focus is active; generic certificate work is deferred until the Landing mission is released.',
+      }, 409);
+    }
     const ownerApprovalToken = oidcAuthorized ? 'github-oidc-machine-approved' : ((body as any).ownerApprovalToken || null);
     const result = await executeAgentRun(agentId, taskType, payload, ownerApprovalToken);
     return c.json({ ok: result.ok, marker: IVX_AGENT_API_MARKER, runRecord: result.runRecord, error: result.error });
