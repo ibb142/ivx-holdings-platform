@@ -315,17 +315,33 @@ export function landingRepairKey(sha: string, unitId: string, defectCode: string
 
 export type ParsedLandingKey = { sha: string; unitId: string; repair: boolean; defectCode: string | null };
 
+function parseLandingKeyParts(raw: string): { sha: string; unitId: string; trailing: string[] } | null {
+  const [sha, first, ...remaining] = raw.split(':');
+  if (!sha || !first) return null;
+
+  // Production carried 115 keys written by an older fleet dispatcher as
+  //   <sha>:ivx_holdings_<n>:<unitId>
+  // while the canonical seeder writes <sha>:<unitId>. Normalise both shapes so
+  // the agent identifier is never mistaken for a Landing unit. This is read
+  // compatibility only; new keys continue to use the canonical compact form.
+  if (/^ivx_holdings_\d+$/.test(first)) {
+    const [unitId, ...trailing] = remaining;
+    if (!unitId) return null;
+    return { sha, unitId, trailing };
+  }
+  return { sha, unitId: first, trailing: remaining };
+}
+
 export function parseLandingTaskKey(idempotencyKey: string): ParsedLandingKey | null {
   if (idempotencyKey.startsWith(LANDING_P0_REPAIR_PREFIX)) {
-    const rest = idempotencyKey.slice(LANDING_P0_REPAIR_PREFIX.length).split(':');
-    const [sha, unitId, ...code] = rest;
-    if (!sha || !unitId) return null;
-    return { sha, unitId, repair: true, defectCode: code.join(':') || null };
+    const parsed = parseLandingKeyParts(idempotencyKey.slice(LANDING_P0_REPAIR_PREFIX.length));
+    if (!parsed) return null;
+    return { sha: parsed.sha, unitId: parsed.unitId, repair: true, defectCode: parsed.trailing.join(':') || null };
   }
   if (idempotencyKey.startsWith(LANDING_P0_PREFIX)) {
-    const [sha, unitId] = idempotencyKey.slice(LANDING_P0_PREFIX.length).split(':');
-    if (!sha || !unitId) return null;
-    return { sha, unitId, repair: false, defectCode: null };
+    const parsed = parseLandingKeyParts(idempotencyKey.slice(LANDING_P0_PREFIX.length));
+    if (!parsed) return null;
+    return { sha: parsed.sha, unitId: parsed.unitId, repair: false, defectCode: null };
   }
   return null;
 }

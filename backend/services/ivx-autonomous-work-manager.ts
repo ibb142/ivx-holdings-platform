@@ -1,8 +1,10 @@
 import { stat } from 'node:fs/promises';
 import {
+  createObjective,
   createTask,
   getAllTasks,
   IN_PROGRESS_STATES,
+  linkOrphanTasksToObjective,
   type Task,
 } from './ivx-autonomous-task-engine';
 import { scanModuleUniverse } from './ivx-agent-real-engineering-cycle';
@@ -67,6 +69,9 @@ export type AutonomousManagerBacklogResult = {
   ok: boolean;
   marker: string;
   sourceSha: string;
+  objectiveId: string | null;
+  objectiveError: string | null;
+  orphanTasksLinked: number;
   lanes: number;
   targetActiveDepth: number;
   existing: number;
@@ -197,6 +202,7 @@ export async function ensureAutonomousWorkBlockForAgent(input: {
   sourceSha: string;
   agentId: string;
   agentNumber: number;
+  objectiveId?: string | null;
   targetActiveDepth?: number;
 }): Promise<AutonomousWorkBlockPlan> {
   const targetActiveDepth = Math.max(1, Math.min(3, Math.floor(input.targetActiveDepth ?? 1)));
@@ -235,11 +241,16 @@ export async function ensureAutonomousWorkBlockForAgent(input: {
     );
     if (nextModule) {
       const result = await createTask({
+        objectiveId: input.objectiveId ?? null,
         title: `Module audit: ${nextModule}`,
         description: `AUTONOMOUS_MANAGER work block for ${nextModule} at source SHA ${input.sourceSha}: inspect the real file, secret-scan, validate relative imports, find hygiene defects, queue repair tasks, and attach fresh evidence. Assigned lane: ${input.agentId} (IA-${input.agentNumber}).`,
         taskType: 'development',
         idempotencyKey: `${moduleAuditPrefix(input.sourceSha, input.agentId, input.agentNumber)}${nextModule}`,
         priority: 'medium',
+        businessValue: 3,
+        estimatedMinutes: 20,
+        milestone: input.sourceSha,
+        ownerRole: `${input.agentId} (IA-${input.agentNumber})`,
         assignedAgentNumber: input.agentNumber,
       });
       return {
@@ -264,11 +275,16 @@ export async function ensureAutonomousWorkBlockForAgent(input: {
     );
     if (secondary) {
       const result = await createTask({
+        objectiveId: input.objectiveId ?? null,
         title: `Module audit: ${secondary}`,
         description: `AUTONOMOUS_MANAGER secondary-list work block for critical repo surface ${secondary} at source SHA ${input.sourceSha}. This fallback is used only after the lane's primary code-module patrol is exhausted. Inspect the real file and attach fresh evidence; do not fabricate utilization.`,
         taskType: 'qa',
         idempotencyKey: `${secondaryPrefix(input.sourceSha, input.agentNumber)}${secondary}`,
         priority: 'high',
+        businessValue: 4,
+        estimatedMinutes: 20,
+        milestone: input.sourceSha,
+        ownerRole: `${input.agentId} (IA-${input.agentNumber})`,
         assignedAgentNumber: input.agentNumber,
       });
       return {
@@ -328,25 +344,60 @@ async function planBacklog(input: {
   sourceSha: string;
   agents: readonly AutonomousWorkLane[];
 }): Promise<AutonomousManagerBacklogResult> {
+  const objectiveResult = await createObjective({
+    ownerRequest: 'Continuously finish and improve IVX end to end.',
+    businessOutcome: 'Complete the highest-value IVX customer and operating journeys safely, measurably, and continuously.',
+    technicalOutcome: 'Discover, execute, test, production-verify, learn, and reprioritize every evidence-backed IVX gap.',
+    scope: 'Full IVX product: architecture, backend, mobile/web, data, auth/security, QA/E2E, performance, deployment, monitoring, media, and business-critical workflows.',
+    exclusions: ['Fabricated work', 'Narrative-only completion', 'Protected actions without owner approval'],
+    riskClassification: 'high',
+    priority: 'critical',
+    ownerRole: 'Autonomous Project Manager',
+    targetDate: null,
+    successMetrics: [
+      'Zero unsupported VERIFIED claims',
+      'Every engineering completion has exact test and production evidence',
+      'Critical blockers are resolved before cosmetic work',
+      'The next highest-value real gap is selected after each verified outcome',
+    ],
+    idempotencyKey: 'autonomous-project-completion:v1',
+    ownerEmail: 'autonomous-system@ivxholding.com',
+  });
+  const objectiveId = objectiveResult.objective?.objectiveId ?? null;
+  const linkResult = objectiveId
+    ? await linkOrphanTasksToObjective(objectiveId)
+    : { ok: false, linked: 0, error: objectiveResult.error ?? 'Canonical project objective unavailable.' };
   const result: AutonomousManagerBacklogResult = {
-    ok: true,
+    ok: Boolean(objectiveResult.ok && objectiveId && linkResult.ok),
     marker: IVX_AUTONOMOUS_WORK_MANAGER_MARKER,
     sourceSha: input.sourceSha,
+    objectiveId,
+    objectiveError: objectiveResult.error ?? linkResult.error,
+    orphanTasksLinked: linkResult.linked,
     lanes: input.agents.length,
     targetActiveDepth: IVX_AUTONOMOUS_TARGET_ACTIVE_DEPTH,
     existing: 0,
     primaryCreated: 0,
     secondaryCreated: 0,
     exhausted: 0,
-    errors: 0,
+    errors: objectiveResult.ok && objectiveId && linkResult.ok ? 0 : 1,
     generatedAt: new Date().toISOString(),
   };
+
+  // A project manager cannot create orphan work. If the canonical objective
+  // cannot be persisted, fail closed and let the next supervisor pass retry.
+  if (!result.ok) {
+    lastBacklogResult = result;
+    lastPlanAt = result.generatedAt;
+    return result;
+  }
 
   for (const lane of input.agents) {
     const plan = await ensureAutonomousWorkBlockForAgent({
       sourceSha: input.sourceSha,
       agentId: lane.agentId,
       agentNumber: lane.agentNumber,
+      objectiveId,
       targetActiveDepth: IVX_AUTONOMOUS_TARGET_ACTIVE_DEPTH,
     });
     if (!plan.ok) result.errors += 1;

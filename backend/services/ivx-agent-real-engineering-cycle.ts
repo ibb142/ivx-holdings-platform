@@ -37,6 +37,7 @@ import {
   getLandingUnit,
   isLandingP0MissionActive,
   LANDING_P0_PREFIX,
+  LANDING_P0_REPAIR_PREFIX,
   landingRepairKey,
   parseLandingTaskKey,
   resolveProductionSha,
@@ -269,7 +270,17 @@ export async function runRealEngineeringCycle(input: {
     // Owner P0 mission (qa/owner-priority-state.json → landing): materialise the
     // Landing backlog as real ledger tasks and let drained lanes steal Landing work.
     const landingActive = await isLandingP0MissionActive();
-    const leaseOptions = landingActive ? { stealPrefix: LANDING_P0_PREFIX } : {};
+    const activeLandingPrefixes = [
+      `${LANDING_P0_PREFIX}${input.sourceSha}:`,
+      `${LANDING_P0_REPAIR_PREFIX}${input.sourceSha}:`,
+    ];
+    const leaseOptions = {
+      ...(landingActive ? { stealPrefix: activeLandingPrefixes[0] } : {}),
+      missionScope: {
+        familyPrefixes: [LANDING_P0_PREFIX, LANDING_P0_REPAIR_PREFIX],
+        activePrefixes: landingActive ? activeLandingPrefixes : [],
+      },
+    };
     if (landingActive) await ensureLandingP0BacklogSeeded(input.sourceSha);
 
     let leased = await leaseNextTask(workerId, input.agentNumber, leaseOptions);

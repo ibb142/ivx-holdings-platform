@@ -16,6 +16,7 @@
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 import { verifyIVXGitHubActionsOIDCRequest } from '../services/ivx-github-actions-oidc';
 import { buildAutonomousDashboard } from '../services/ivx-autonomous-core';
+import { buildAutonomousProjectManagerReport } from '../services/ivx-autonomous-project-manager';
 import { buildHandoffManifest } from '../services/ivx-handoff';
 import { buildPriorityQueue } from '../services/ivx-priority-engine';
 import { listSelfHealReports, runSelfHealCycle, type TestSuiteList } from '../services/ivx-self-heal-cycle';
@@ -100,6 +101,14 @@ export async function handleAutonomousDashboardRequest(request: Request): Promis
   if (denied) return denied;
   const dashboard = await buildAutonomousDashboard();
   return ownerOnlyJson({ ok: true, dashboard: dashboard as unknown as Record<string, unknown> });
+}
+
+/** Owner-only, evidence-derived portfolio and operating control tower. */
+export async function handleAutonomousProjectManagerRequest(request: Request): Promise<Response> {
+  const denied = await requireOwner(request);
+  if (denied) return denied;
+  const projectManager = await buildAutonomousProjectManagerReport();
+  return ownerOnlyJson({ ok: true, projectManager: projectManager as unknown as Record<string, unknown> });
 }
 
 /**

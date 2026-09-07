@@ -144,6 +144,8 @@ export type AcceptanceCriterion = {
 
 export type Objective = {
   objectiveId: string;
+  /** Stable key preventing duplicate portfolio objectives across restarts. */
+  idempotencyKey?: string | null;
   originalOwnerRequest: string;
   businessOutcome: string;
   technicalOutcome: string;
@@ -154,6 +156,12 @@ export type Objective = {
   acceptanceCriteria: AcceptanceCriterion[];
   priority: 'critical' | 'high' | 'medium' | 'low';
   estimatedEffort: string;
+  /** Named accountable role; null means Autonomous still has to resolve ownership. */
+  ownerRole?: string | null;
+  /** Owner-provided delivery target. Autonomous never invents a deadline. */
+  targetDate?: string | null;
+  /** Measurable owner outcomes used by the PM control tower. */
+  successMetrics?: string[];
   assignedEngine: string | null;
   rollbackRequirement: boolean;
   finalVerificationMethod: string;
@@ -174,6 +182,15 @@ export type Task = {
   assignedAgentNumber: number | null;
   assignedEngine: string | null;
   priority: 'critical' | 'high' | 'medium' | 'low';
+  /** 1–5 owner/business value used after safety and priority gates. */
+  businessValue?: number;
+  /** Planning estimate only; actual duration remains evidence-derived. */
+  estimatedMinutes?: number | null;
+  /** Optional milestone and accountable role for portfolio reporting. */
+  milestone?: string | null;
+  ownerRole?: string | null;
+  /** Owner-provided ISO deadline; null means no deadline is claimed. */
+  dueAt?: string | null;
   acceptanceCriteria: AcceptanceCriterion[];
   dependencies: string[];
   executionOrder: number;
@@ -476,7 +493,7 @@ async function appendEvent(event: Record<string, unknown>): Promise<void> {
  * Create an objective from an owner request with full planning metadata.
  * Rejects unsafe or ambiguous autonomous execution until scope is resolved.
  */
-export async function createObjective(input: {
+async function createObjectiveUnlocked(input: {
   ownerRequest: string;
   businessOutcome?: string;
   technicalOutcome?: string;
@@ -484,11 +501,22 @@ export async function createObjective(input: {
   exclusions?: string[];
   riskClassification?: RiskClassification;
   priority?: Objective['priority'];
+  ownerRole?: string | null;
+  targetDate?: string | null;
+  successMetrics?: string[];
+  idempotencyKey?: string | null;
   ownerEmail: string;
-}): Promise<{ ok: boolean; objective: Objective | null; error: string | null }> {
+}): Promise<{ ok: boolean; objective: Objective | null; error: string | null; duplicate: boolean }> {
   const request = input.ownerRequest?.trim() ?? '';
   if (request.length === 0) {
-    return { ok: false, objective: null, error: 'Empty owner request — scope cannot be resolved.' };
+    return { ok: false, objective: null, error: 'Empty owner request — scope cannot be resolved.', duplicate: false };
+  }
+
+  const idempotencyKey = input.idempotencyKey?.trim() || null;
+  const objectives = await readAllObjectives();
+  if (idempotencyKey) {
+    const existing = objectives.find((objective) => objective.idempotencyKey === idempotencyKey && objective.status !== 'cancelled');
+    if (existing) return { ok: true, objective: existing, error: null, duplicate: true };
   }
 
   // Auto-classify risk based on keywords
@@ -526,6 +554,7 @@ export async function createObjective(input: {
 
   const objective: Objective = {
     objectiveId: generateId('obj'),
+    idempotencyKey,
     originalOwnerRequest: request,
     businessOutcome: input.businessOutcome ?? inferBusinessOutcome(request, taskType),
     technicalOutcome: input.technicalOutcome ?? inferTechnicalOutcome(request, taskType),
@@ -536,6 +565,9 @@ export async function createObjective(input: {
     acceptanceCriteria,
     priority: input.priority ?? (risk === 'critical' ? 'critical' : risk === 'high' ? 'high' : 'medium'),
     estimatedEffort: inferEffort(taskType),
+    ownerRole: input.ownerRole?.trim() || null,
+    targetDate: validIsoOrNull(input.targetDate),
+    successMetrics: (input.successMetrics ?? []).map((metric) => metric.trim()).filter(Boolean).slice(0, 20),
     assignedEngine: routeTaskToAgent(taskType)?.engine ?? null,
     rollbackRequirement: risk === 'high' || risk === 'critical',
     finalVerificationMethod: taskType === 'development' ? 'production_check' : 'evidence',
@@ -543,12 +575,50 @@ export async function createObjective(input: {
     status: 'active',
   };
 
-  const objectives = await readAllObjectives();
   objectives.push(objective);
   await writeAllObjectives(objectives);
   await appendEvent({ type: 'objective_created', objectiveId: objective.objectiveId, risk, requiredApprovals });
 
-  return { ok: true, objective, error: null };
+  return { ok: true, objective, error: null, duplicate: false };
+}
+
+export async function createObjective(input: Parameters<typeof createObjectiveUnlocked>[0]): ReturnType<typeof createObjectiveUnlocked> {
+  return withTaskMutationLock(() => createObjectiveUnlocked(input));
+}
+
+/**
+ * Attach legacy/orphan task rows to a real portfolio objective without changing
+ * their execution state, evidence, ownership or timestamps. This is an
+ * idempotent metadata repair used by the Autonomous PM bootstrap.
+ */
+async function linkOrphanTasksToObjectiveUnlocked(objectiveId: string): Promise<{
+  ok: boolean;
+  linked: number;
+  error: string | null;
+}> {
+  const objectives = await readAllObjectives();
+  if (!objectives.some((objective) => objective.objectiveId === objectiveId && objective.status !== 'cancelled')) {
+    return { ok: false, linked: 0, error: 'Objective not found or cancelled.' };
+  }
+  const tasks = await readAllTasks();
+  let linked = 0;
+  for (const task of tasks) {
+    if (task.objectiveId) continue;
+    task.objectiveId = objectiveId;
+    linked += 1;
+  }
+  if (linked === 0) return { ok: true, linked: 0, error: null };
+  await writeAllTasks(tasks);
+  await appendEvent({ type: 'orphan_tasks_linked_to_objective', objectiveId, linked });
+  return { ok: true, linked, error: null };
+}
+
+export async function linkOrphanTasksToObjective(objectiveId: string): Promise<{
+  ok: boolean;
+  linked: number;
+  error: string | null;
+}> {
+  return withTaskMutationLock(() => linkOrphanTasksToObjectiveUnlocked(objectiveId));
 }
 
 function detectTaskType(request: string): Task['taskType'] {
@@ -681,6 +751,12 @@ function inferEffort(taskType: Task['taskType']): string {
   }
 }
 
+function validIsoOrNull(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
 // ── Phase 4 + 8: Task creation + queue ───────────────────────────────────────
 
 /**
@@ -697,6 +773,11 @@ async function createTaskUnlocked(input: {
   assignedAgentNumber?: number | null;
   assignedEngine?: string | null;
   priority?: Task['priority'];
+  businessValue?: number;
+  estimatedMinutes?: number | null;
+  milestone?: string | null;
+  ownerRole?: string | null;
+  dueAt?: string | null;
   acceptanceCriteria?: AcceptanceCriterion[];
   dependencies?: string[];
   executionOrder?: number;
@@ -712,6 +793,8 @@ async function createTaskUnlocked(input: {
 
   const taskType = input.taskType ?? 'development';
   const routing = routeTaskToAgent(taskType);
+  const requestedBusinessValue = Number.isFinite(input.businessValue) ? Number(input.businessValue) : 3;
+  const requestedEstimate = Number.isFinite(input.estimatedMinutes) ? Number(input.estimatedMinutes) : null;
 
   const task: Task = {
     taskId: generateId('task'),
@@ -725,6 +808,11 @@ async function createTaskUnlocked(input: {
     assignedAgentNumber: input.assignedAgentNumber ?? routing?.agentNumber ?? null,
     assignedEngine: input.assignedEngine ?? routing?.engine ?? null,
     priority: input.priority ?? 'medium',
+    businessValue: Math.max(1, Math.min(5, Math.round(requestedBusinessValue))),
+    estimatedMinutes: requestedEstimate == null ? null : Math.max(1, Math.min(43_200, Math.round(requestedEstimate))),
+    milestone: input.milestone?.trim() || null,
+    ownerRole: input.ownerRole?.trim() || null,
+    dueAt: validIsoOrNull(input.dueAt),
     acceptanceCriteria: input.acceptanceCriteria ?? generateAcceptanceCriteria(taskType, input.title),
     dependencies: input.dependencies ?? [],
     executionOrder: input.executionOrder ?? 0,
@@ -952,7 +1040,56 @@ export type LeaseOptions = {
    * mutation lock, so a task is never executed by two agents at once.
    */
   stealPrefix?: string | null;
+  /**
+   * Keep version-bound mission work on the active release. Tasks outside these
+   * active prefixes remain durable history but cannot be leased by a newer
+   * runtime. Non-mission tasks are unaffected.
+   */
+  missionScope?: {
+    familyPrefixes: readonly string[];
+    activePrefixes: readonly string[];
+  } | null;
 };
+
+export function isTaskWithinMissionScope(
+  task: Pick<Task, 'idempotencyKey'>,
+  scope: LeaseOptions['missionScope'],
+): boolean {
+  if (!scope) return true;
+  const belongsToMissionFamily = scope.familyPrefixes.some((prefix) => task.idempotencyKey.startsWith(prefix));
+  if (!belongsToMissionFamily) return true;
+  return scope.activePrefixes.some((prefix) => task.idempotencyKey.startsWith(prefix));
+}
+
+/**
+ * Deterministic PM scheduling score. Safety/priority dominates, then an owner
+ * deadline, business value and anti-starvation age. This prevents a stream of
+ * newer medium work from starving an older high-value task.
+ */
+export function taskSchedulingScore(task: Task, nowMs = Date.now()): number {
+  const priorityBase: Record<Task['priority'], number> = { critical: 40_000, high: 30_000, medium: 20_000, low: 10_000 };
+  const dueMs = task.dueAt ? Date.parse(task.dueAt) : Number.NaN;
+  let deadline = 0;
+  if (Number.isFinite(dueMs)) {
+    const remaining = dueMs - nowMs;
+    if (remaining <= 0) deadline = 4_000;
+    else if (remaining <= 24 * 60 * 60 * 1000) deadline = 3_000;
+    else if (remaining <= 7 * 24 * 60 * 60 * 1000) deadline = 2_000;
+    else if (remaining <= 30 * 24 * 60 * 60 * 1000) deadline = 1_000;
+  }
+  const createdMs = Date.parse(task.createdAt);
+  const ageDays = Number.isFinite(createdMs) ? Math.max(0, (nowMs - createdMs) / (24 * 60 * 60 * 1000)) : 0;
+  const antiStarvation = Math.min(900, Math.floor(ageDays * 30));
+  const businessValue = Math.max(1, Math.min(5, Math.round(task.businessValue ?? 3))) * 100;
+  return priorityBase[task.priority] + deadline + businessValue + antiStarvation;
+}
+
+export function compareProjectManagedTasks(a: Task, b: Task, nowMs = Date.now()): number {
+  const scoreDelta = taskSchedulingScore(b, nowMs) - taskSchedulingScore(a, nowMs);
+  if (scoreDelta !== 0) return scoreDelta;
+  if (a.executionOrder !== b.executionOrder) return a.executionOrder - b.executionOrder;
+  return a.createdAt.localeCompare(b.createdAt) || a.taskId.localeCompare(b.taskId);
+}
 
 /**
  * Lease the next queued task for a worker. Returns null when no task is available.
@@ -977,13 +1114,14 @@ async function leaseNextTaskUnlocked(workerId: string, agentNumber?: number | nu
   }
 
   // Find highest-priority queued task whose dependencies are met
-  const priorityOrder: Record<Task['priority'], number> = { critical: 0, high: 1, medium: 2, low: 3 };
   const dependenciesMet = (t: Task): boolean => t.dependencies.every((depId) => {
     const dep = tasks.find((d) => d.taskId === depId);
     return dep && TERMINAL_SUCCESS_STATES.includes(dep.state);
   });
-  const byPriority = (a: Task, b: Task): number => priorityOrder[a.priority] - priorityOrder[b.priority] || a.executionOrder - b.executionOrder;
-  const queued = tasks.filter((t) => t.state === 'QUEUED' && dependenciesMet(t));
+  const byPriority = (a: Task, b: Task): number => compareProjectManagedTasks(a, b, now);
+  const queued = tasks.filter((t) => t.state === 'QUEUED'
+    && dependenciesMet(t)
+    && isTaskWithinMissionScope(t, options.missionScope));
   let candidates = queued
     // Ownership filter: agents lease only their own tasks plus explicitly
     // unassigned shared tasks. Shared/legacy tasks (assignedAgentNumber null)
@@ -1287,6 +1425,11 @@ export async function getTaskEngineSummary(): Promise<TaskEngineSummary> {
   const tasksFailed = tasks.filter((t) => t.state === 'FAILED').length;
   const tasksBlocked = tasks.filter((t) => t.state === 'BLOCKED').length;
   const tasksWaitingForApproval = tasks.filter((t) => t.state === 'WAITING_FOR_APPROVAL').length;
+  const taskIds = new Set(tasks.map((task) => task.taskId));
+  const externalDependencyCount = tasks.reduce(
+    (count, task) => count + task.dependencies.filter((dependencyId) => !taskIds.has(dependencyId)).length,
+    0,
+  );
 
   return {
     marker: IVX_TASK_ENGINE_MARKER,
@@ -1306,7 +1449,7 @@ export async function getTaskEngineSummary(): Promise<TaskEngineSummary> {
     leasingActive: true,
     approvalGateActive: true,
     stateMachineEnforced: true,
-    externalDependencyCount: 0,
+    externalDependencyCount,
   };
 }
 
