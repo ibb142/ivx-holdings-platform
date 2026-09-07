@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 104702)
-Total output lines: 7450
-
 import { handleIVXRadarStatus } from './api/ivx-radar';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -4324,7 +4321,248 @@ app.post('/api/ivx/deal-tracking/:dealId/status', async (context) => handleDealT
 app.options('/api/ivx/deal-tracking/:dealId/delete', () => dealTrackingOptions());
 app.post('/api/ivx/deal-tracking/:dealId/delete', async (context) => handleDealTrackingDeleteRequest(context.req.raw, context.req.param('dealId')));
 app.options('/api/ivx/deal-tracking/:dealId/join', () => dealTrackingOptions());
-app.post('/api/ivx/deal-tracking/:de…4702 tokens truncated…    }
+app.post('/api/ivx/deal-tracking/:dealId/join', async (context) => handleDealTrackingJoinRequest(context.req.raw, context.req.param('dealId')));
+app.options('/api/ivx/deal-tracking/:dealId/leave', () => dealTrackingOptions());
+app.post('/api/ivx/deal-tracking/:dealId/leave', async (context) => handleDealTrackingLeaveRequest(context.req.raw, context.req.param('dealId')));
+app.options('/api/ivx/deal-tracking/:dealId/documents', () => dealTrackingOptions());
+app.post('/api/ivx/deal-tracking/:dealId/documents', async (context) => handleDealTrackingAddDocumentRequest(context.req.raw, context.req.param('dealId')));
+app.options('/api/ivx/deal-tracking/:dealId/documents/:documentId/delete', () => dealTrackingOptions());
+app.post('/api/ivx/deal-tracking/:dealId/documents/:documentId/delete', async (context) => handleDealTrackingRemoveDocumentRequest(context.req.raw, context.req.param('dealId'), context.req.param('documentId')));
+
+app.options('/api/ivx/deal-pipeline/seed', () => dealPipelineSeedOptions());
+app.post('/api/ivx/deal-pipeline/seed', async (context) => handleDealPipelineSeedRequest(context.req.raw));
+
+app.options('/api/ivx/capital-command-center', () => capitalCommandCenterOptions());
+app.get('/api/ivx/capital-command-center', async (context) => handleCapitalCommandCenterRequest(context.req.raw));
+app.options('/api/ivx/capital-command-center/activity', () => capitalCommandCenterOptions());
+app.get('/api/ivx/capital-command-center/activity', async (context) => handleCapitalCommandActivityRequest(context.req.raw));
+app.options('/api/ivx/capital-command-center/best-investor', () => capitalCommandCenterOptions());
+app.post('/api/ivx/capital-command-center/best-investor', async (context) => handleBestInvestorWorkflowRequest(context.req.raw));
+
+app.options('/api/ivx/business-impact/dashboard', () => businessImpactOptions());
+app.get('/api/ivx/business-impact/dashboard', async (context) => handleBusinessImpactDashboardRequest(context.req.raw));
+app.options('/api/ivx/executive-layer', () => executiveLayerOptions());
+app.get('/api/ivx/executive-layer', async (context) => handleExecutiveLayerRequest(context.req.raw));
+app.options('/api/ivx/daily-report', () => dailyReportOptions());
+app.get('/api/ivx/daily-report', async (context) => handleDailyReportLatest(context.req.raw));
+app.post('/api/ivx/daily-report', async (context) => handleDailyReportGenerate(context.req.raw));
+app.options('/api/ivx/daily-report/preview', () => dailyReportOptions());
+app.post('/api/ivx/daily-report/preview', async (context) => handleDailyReportPreview(context.req.raw));
+app.options('/api/ivx/daily-report/history', () => dailyReportOptions());
+app.get('/api/ivx/daily-report/history', async (context) => handleDailyReportHistory(context.req.raw));
+app.options('/api/ivx/autonomous-os', () => autonomousOsOptions());
+app.get('/api/ivx/autonomous-os', async (context) => handleAutonomousOsStatus(context.req.raw));
+app.options('/api/ivx/autonomous-os/weekly', () => autonomousOsOptions());
+app.get('/api/ivx/autonomous-os/weekly', async (context) => handleAutonomousOsWeekly(context.req.raw));
+app.options('/api/ivx/technology-discovery', () => technologyDiscoveryOptions());
+app.get('/api/ivx/technology-discovery', async (context) => handleTechnologyDiscoveryStatusRequest(context.req.raw));
+app.options('/api/ivx/technology-discovery/scan', () => technologyDiscoveryOptions());
+app.post('/api/ivx/technology-discovery/scan', async (context) => handleTechnologyDiscoveryScanRequest(context.req.raw));
+app.options('/api/ivx/independence-status', () => independenceStatusOptions());
+app.get('/api/ivx/independence-status', async (context) => handleIVXIndependenceStatusRequest(context.req.raw));
+app.options('/api/ivx/owner-control-proof', () => ownerControlProofOptions());
+app.get('/api/ivx/owner-control-proof', async (context) => handleIVXOwnerControlProofRequest(context.req.raw));
+
+app.options('/api/ivx/memory', () => unifiedMemoryOptions());
+app.get('/api/ivx/memory', async (context) => handleMemoryListRequest(context.req.raw));
+app.post('/api/ivx/memory', async (context) => handleMemoryCreateRequest(context.req.raw));
+app.options('/api/ivx/memory/summary', () => unifiedMemoryOptions());
+app.get('/api/ivx/memory/summary', async (context) => handleMemorySummaryRequest(context.req.raw));
+app.options('/api/ivx/memory/:id', () => unifiedMemoryOptions());
+app.get('/api/ivx/memory/:id', async (context) => handleMemoryGetRequest(context.req.raw, context.req.param('id')));
+app.post('/api/ivx/memory/:id', async (context) => handleMemoryUpdateRequest(context.req.raw, context.req.param('id')));
+app.options('/api/ivx/memory/:id/forget', () => unifiedMemoryOptions());
+app.post('/api/ivx/memory/:id/forget', async (context) => handleMemoryForgetRequest(context.req.raw, context.req.param('id')));
+
+app.options('/api/ivx/action-loop', () => actionLoopOptions());
+app.get('/api/ivx/action-loop', async (context) => handleActionLoopListRequest(context.req.raw));
+app.post('/api/ivx/action-loop', async (context) => handleActionLoopCreateRequest(context.req.raw));
+app.options('/api/ivx/action-loop/learning', () => actionLoopOptions());
+app.get('/api/ivx/action-loop/learning', async (context) => handleActionLoopLearningRequest(context.req.raw));
+app.options('/api/ivx/action-loop/:id', () => actionLoopOptions());
+app.get('/api/ivx/action-loop/:id', async (context) => handleActionLoopGetRequest(context.req.raw, context.req.param('id')));
+app.options('/api/ivx/action-loop/:id/execution', () => actionLoopOptions());
+app.post('/api/ivx/action-loop/:id/execution', async (context) => handleActionLoopExecutionRequest(context.req.raw, context.req.param('id')));
+app.options('/api/ivx/action-loop/:id/outcome', () => actionLoopOptions());
+app.post('/api/ivx/action-loop/:id/outcome', async (context) => handleActionLoopOutcomeRequest(context.req.raw, context.req.param('id')));
+
+app.options('/api/ivx/live-work/feed', () => liveWorkOptions());
+app.get('/api/ivx/live-work/feed', async (context) => handleLiveWorkFeedRequest(context.req.raw));
+app.options('/api/ivx/live-work/agents', () => liveWorkOptions());
+app.get('/api/ivx/live-work/agents', async (context) => handleLiveWorkAgentsRequest(context.req.raw));
+app.options('/api/ivx/live-work/check-supabase', () => liveWorkOptions());
+app.post('/api/ivx/live-work/check-supabase', async (context) => handleLiveWorkCheckSupabaseRequest(context.req.raw));
+app.options('/api/ivx/live-work/status', () => liveWorkOptions());
+app.get('/api/ivx/live-work/status', async (context) => handleLiveWorkStatusRequest(context.req.raw));
+app.options('/api/ivx/live-work/tasks', () => liveWorkOptions());
+app.get('/api/ivx/live-work/tasks', async (context) => handleLiveWorkTasksRequest(context.req.raw));
+app.options('/api/ivx/live-work/task/:taskId', () => liveWorkOptions());
+app.get('/api/ivx/live-work/task/:taskId', async (context) => handleLiveWorkTaskRequest(context.req.raw, context.req.param('taskId')));
+app.options('/api/ivx/live-work/run', () => liveWorkOptions());
+app.post('/api/ivx/live-work/run', async (context) => handleLiveWorkRunRequest(context.req.raw));
+app.options('/api/ivx/live-work/approve', () => liveWorkOptions());
+app.post('/api/ivx/live-work/approve', async (context) => handleLiveWorkApproveRequest(context.req.raw));
+app.options('/api/ivx/live-work/cancel', () => liveWorkOptions());
+app.post('/api/ivx/live-work/cancel', async (context) => handleLiveWorkCancelRequest(context.req.raw));
+app.options('/api/ivx/execution-trace', () => executionTraceOptions());
+app.get('/api/ivx/execution-trace', async (context) => handleExecutionTraceListRequest(context.req.raw));
+app.options('/api/ivx/execution-trace/:id', () => executionTraceOptions());
+app.get('/api/ivx/execution-trace/:id', async (context) => handleExecutionTraceGetRequest(context.req.raw, context.req.param('id')));
+
+app.options('/api/ivx/autonomous-mode/tools', () => autonomousModeOptions());
+app.get('/api/ivx/autonomous-mode/tools', async (context) => handleAutonomousModeToolsRequest(context.req.raw));
+app.options('/api/ivx/autonomous-mode/run', () => autonomousModeOptions());
+app.post('/api/ivx/autonomous-mode/run', async (context) => handleAutonomousModeRunRequest(context.req.raw));
+app.options('/api/ivx/senior-developer/autonomous-mode/status', () => seniorDevAutonomousOptions());
+app.get('/api/ivx/senior-developer/autonomous-mode/status', async (context) => handleSeniorDevAutonomousStatusRequest(context.req.raw));
+app.options('/api/ivx/senior-developer/autonomous-mode/run', () => seniorDevAutonomousOptions());
+app.post('/api/ivx/senior-developer/autonomous-mode/run', async (context) => handleSeniorDevAutonomousRunRequest(context.req.raw));
+
+app.options('/api/ivx/owner-operations/dashboard', () => ownerOperationsOptions());
+app.get('/api/ivx/owner-operations/dashboard', async (context) => handleOwnerOperationsDashboardRequest(context.req.raw));
+app.options('/api/ivx/owner-operations/connections', () => ownerOperationsOptions());
+app.get('/api/ivx/owner-operations/connections', async (context) => handleOwnerOperationsConnectionsRequest(context.req.raw));
+app.options('/api/ivx/owner-operations/connections/test', () => ownerOperationsOptions());
+app.post('/api/ivx/owner-operations/connections/test', async (context) => handleOwnerOperationsConnectionTestRequest(context.req.raw));
+app.options('/api/ivx/owner-operations/actions', () => ownerOperationsOptions());
+app.get('/api/ivx/owner-operations/actions', async (context) => handleOwnerOperationsActionsRequest(context.req.raw));
+app.options('/api/ivx/owner-operations/removal-preflight', () => ownerOperationsOptions());
+app.get('/api/ivx/owner-operations/removal-preflight', async (context) => handleOwnerOperationsRemovalPreflightRequest(context.req.raw));
+
+app.options('/api/ivx/continuous-improvement/dashboard', () => continuousImprovementOptions());
+app.get('/api/ivx/continuous-improvement/dashboard', async (context) => handleContinuousImprovementDashboardRequest(context.req.raw));
+app.options('/api/ivx/continuous-improvement/self-audit', () => continuousImprovementOptions());
+app.post('/api/ivx/continuous-improvement/self-audit', async (context) => handleContinuousImprovementSelfAuditRequest(context.req.raw));
+app.options('/api/ivx/scheduler', () => schedulerOptions());
+app.get('/api/ivx/scheduler', async (context) => handleSchedulerStatusRequest(context.req.raw));
+app.options('/api/ivx/scheduler/run-now', () => schedulerOptions());
+app.post('/api/ivx/scheduler/run-now', async (context) => handleSchedulerRunNowRequest(context.req.raw));
+app.options('/api/ivx/scheduler/enable', () => schedulerOptions());
+app.post('/api/ivx/scheduler/enable', async (context) => handleSchedulerEnableRequest(context.req.raw));
+app.options('/api/ivx/continuous-improvement/proposals', () => continuousImprovementOptions());
+app.get('/api/ivx/continuous-improvement/proposals', async (context) => handleContinuousImprovementProposalsRequest(context.req.raw));
+app.options('/api/ivx/continuous-improvement/drift', () => continuousImprovementOptions());
+app.get('/api/ivx/continuous-improvement/drift', async (context) => handleContinuousImprovementDriftRequest(context.req.raw));
+app.options('/api/ivx/continuous-improvement/baseline', () => continuousImprovementOptions());
+app.post('/api/ivx/continuous-improvement/baseline', async (context) => handleContinuousImprovementBaselineRequest(context.req.raw));
+app.options('/api/ivx/continuous-improvement/safe-plan', () => continuousImprovementOptions());
+app.get('/api/ivx/continuous-improvement/safe-plan', async (context) => handleContinuousImprovementSafePlanRequest(context.req.raw));
+app.options('/api/ivx/continuous-improvement/safe-fixes', () => continuousImprovementOptions());
+app.get('/api/ivx/continuous-improvement/safe-fixes', async (context) => handleContinuousImprovementSafeFixesRequest(context.req.raw));
+
+app.options('/api/ivx/deliverables', () => deliverablesOptions());
+app.get('/api/ivx/deliverables', async (context) => handleDeliverableListRequest(context.req.raw));
+app.post('/api/ivx/deliverables', async (context) => handleDeliverableCreateRequest(context.req.raw));
+app.options('/api/ivx/deliverables/notifications', () => deliverablesOptions());
+app.get('/api/ivx/deliverables/notifications', async (context) => handleDeliverableNotificationsRequest(context.req.raw));
+app.options('/api/ivx/deliverables/:id', () => deliverablesOptions());
+app.get('/api/ivx/deliverables/:id', async (context) => handleDeliverableGetRequest(context.req.raw, context.req.param('id')));
+app.options('/api/ivx/deliverables/:id/verify', () => deliverablesOptions());
+app.get('/api/ivx/deliverables/:id/verify', async (context) => handleDeliverableVerifyRequest(context.req.raw, context.req.param('id')));
+
+app.options('/api/ivx/metrics', () => metricsOptions());
+app.get('/api/ivx/metrics', async (context) => handleMetricsRequest(context.req.raw));
+
+app.options('/api/ivx/verify/env-status', () => ownerStatusOptions());
+app.get('/api/ivx/verify/env-status', async (context) => {
+  const authFail = await requireOwnerAuth(context.req.raw);
+  if (authFail) return authFail;
+  return handleEnvStatusRequest(context.req.raw);
+});
+app.options('/api/ivx/autonomous/status', () => ownerStatusOptions());
+app.get('/api/ivx/autonomous/status', async (context) => handleAutonomousStatusRequest(context.req.raw));
+app.options('/api/ivx/autonomous/run', () => ownerStatusOptions());
+app.post('/api/ivx/autonomous/run', async (context) => handleAutonomousRunRequest(context.req.raw));
+app.options('/api/ivx/persistence/verify', () => ownerStatusOptions());
+app.get('/api/ivx/persistence/verify', async (context) => handlePersistenceVerifyRequest(context.req.raw));
+app.options('/api/ivx/ordering/board', () => orderingOptions());
+app.get('/api/ivx/ordering/board', async (context) => handleOrderingBoardRequest(context.req.raw));
+app.options('/api/ivx/ordering/report', () => orderingOptions());
+app.get('/api/ivx/ordering/report', async (context) => handleOrderingReportRequest(context.req.raw));
+app.options('/api/ivx/ordering/action', () => orderingOptions());
+app.post('/api/ivx/ordering/action', async (context) => handleOrderingActionRequest(context.req.raw));
+
+app.options('/api/ivx/runtime-variables', () => runtimeVariablesOptions());
+app.get('/api/ivx/runtime-variables', async (context) => {
+  const authFail = await requireOwnerAuth(context.req.raw);
+  if (authFail) return authFail;
+  return handleRuntimeVariablesRequest(context.req.raw);
+});
+app.options('/api/ivx/runtime-variables/verify', () => runtimeVariablesOptions());
+app.post('/api/ivx/runtime-variables/verify', async (context) => handleRuntimeVariablesVerifyRequest(context.req.raw));
+app.options('/api/ivx/runtime-variables/sync', () => runtimeVariablesOptions());
+app.post('/api/ivx/runtime-variables/sync', async (context) => handleRuntimeVariablesSyncRequest(context.req.raw));
+app.options('/api/ivx/runtime-variables/save', () => runtimeVariablesOptions());
+app.post('/api/ivx/runtime-variables/save', async (context) => handleRuntimeVariablesSaveRequest(context.req.raw));
+app.options('/api/ivx/runtime-variables/audit', () => runtimeVariablesOptions());
+app.get('/api/ivx/runtime-variables/audit', async (context) => {
+  const authFail = await requireOwnerAuth(context.req.raw);
+  if (authFail) return authFail;
+  return handleRuntimeVariablesAuditRequest(context.req.raw);
+});
+
+app.options('/api/ivx/development-control', () => ivxDevelopmentControlOptions());
+app.get('/api/ivx/development-control', async (context) => handleIVXDevelopmentControlRequest(context.req.raw));
+app.options('/api/ivx/development-action', () => ivxDevelopmentControlOptions());
+app.post('/api/ivx/development-action', async (context) => handleIVXDevelopmentActionRequest(context.req.raw));
+
+app.options('/api/ivx/control-room/status', () => controlRoomStatusOptions());
+app.get('/api/ivx/control-room/status', async (context) => handleIVXControlRoomStatusRequest(context.req.raw));
+app.options('/api/ivx/developer-deploy/status', () => developerDeployOptions());
+app.get('/api/ivx/developer-deploy/status', async (context) => handleIVXDeveloperDeployStatusRequest(context.req.raw));
+app.options('/api/ivx/developer-deploy/action', () => developerDeployOptions());
+app.post('/api/ivx/developer-deploy/action', async (context) => handleIVXDeveloperDeployActionRequest(context.req.raw));
+// ---- IVX Render Auto-Deploy Fix — public status + owner-approved fix ----
+app.options('/api/ivx/render-auto-deploy/status', () => publicJson({ ok: true }, 204));
+app.get('/api/ivx/render-auto-deploy/status', async (context) => handleRenderAutoDeployStatusRequest(context.req.raw));
+// ---- IVX Chat QA Evidence Ingestion (owner-only) ----
+app.options('/api/ivx/chat-qa/evidence', () => publicJson({ ok: true }, 204));
+app.post('/api/ivx/chat-qa/evidence', async (context) => {
+  try {
+    const { assertIVXOwnerOnly, ownerOnlyJson } = await import('./api/owner-only');
+    const ownerCtx = await assertIVXOwnerOnly(context.req.raw);
+    const body = await context.req.json();
+    const {
+      reportType,
+      traceId,
+      commitSha,
+      appVersion,
+      devicePlatform,
+      metrics,
+      testResults,
+      ownerComments,
+      linkedTask,
+      linkedCommit,
+    } = body || {};
+    if (!traceId || typeof traceId !== 'string') {
+      return ownerOnlyJson({ ok: false, error: 'Missing traceId' }, 400);
+    }
+    // Persist the QA evidence to the durable store (fire-and-forget).
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.IVX_SUPABASE_URL;
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (supabaseUrl && serviceKey) {
+        const sb = createClient(supabaseUrl, serviceKey);
+        await sb.from('ivx_chat_qa_evidence').insert({
+          trace_id: traceId,
+          report_type: reportType || 'ivx-chat-qa',
+          commit_sha: commitSha || null,
+          app_version: appVersion || null,
+          device_platform: devicePlatform || null,
+          owner_user_id: ownerCtx.userId || null,
+          owner_email_masked: ownerCtx.email ? `${ownerCtx.email.slice(0, 2)}***@${(ownerCtx.email.split('@')[1] || '').slice(0, 5)}` : null,
+          metrics: metrics ? JSON.stringify(metrics) : null,
+          test_results: testResults ? JSON.stringify(testResults) : null,
+          owner_comments: ownerComments || null,
+          linked_task: linkedTask || 'chat-fix-inverted-flatlist',
+          linked_commit: linkedCommit || '0ae6c19f9795',
+          created_at: new Date().toISOString(),
+        });
+      }
+    } catch (dbError) {
+      console.log('[IVXChatQA] Durable store write failed (non-fatal):', dbError instanceof Error ? dbError.message : 'unknown');
+    }
     console.log('[IVXChatQA] Evidence ingested:', {
       traceId,
       commitSha,
@@ -6528,7 +6766,6 @@ void resumePendingCertificateRuns()
   .catch((err) => {
     console.error('[IVXRealExecutionCert] boot recovery failed', err instanceof Error ? err.message : err);
   });
-
 if (!landingFleetFocus) {
   try { startNightOpsScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] night ops scheduler failed to start:', err instanceof Error ? err.message : err); }
   try { void bootstrapDataVault(); startDataVaultScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] data vault scheduler failed to start:', err instanceof Error ? err.message : err); }
