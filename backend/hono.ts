@@ -6759,7 +6759,7 @@ const landingFleetFocus = landingFleetFocusEnabled();
 // after every API restart. This stays outside the fleet-focus scheduler gate:
 // suppressing unrelated schedulers must never strand an already-authorized
 // 112-agent certificate run in `pending`.
-const certificateBootRecovery = resumePendingCertificateRuns()
+export const certificateBootRecovery = resumePendingCertificateRuns()
   .then(({ resumed, runIds }) => {
     console.log('[IVXRealExecutionCert] boot recovery complete', { resumed, runIds });
   })
