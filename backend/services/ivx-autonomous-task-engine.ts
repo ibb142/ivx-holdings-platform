@@ -35,6 +35,7 @@ import {
   linkPostgresAutonomousOrphans,
   postgresAtomicQueueSelected,
   readPostgresAutonomousTasks,
+  readPostgresTaskById,
   startPostgresAutonomousTasks,
 } from './ivx-postgres-autonomous-task-store';
 import { appendFile, mkdir } from 'node:fs/promises';
@@ -1041,7 +1042,7 @@ export async function transitionTaskState(
       };
     }
     return withTaskMutationLock(async () => {
-      const task = (await readAllTasks()).find((candidate) => candidate.taskId === taskId) ?? null;
+      const task = await readPostgresTaskById(taskId);
       if (!task) return { ok: false, task: null, error: `Task not found: ${taskId}` };
       const fromState = task.state;
       if (fromState === 'RETRYING' && (toState === 'QUEUED' || toState === 'RUNNING') && (!taskRetryDue(task) || toState === 'RUNNING')) {
@@ -1577,7 +1578,7 @@ async function releaseLeaseUnlocked(taskId: string, workerId: string): Promise<{
 export async function releaseLease(taskId: string, workerId: string): Promise<{ ok: boolean; error: string | null }> {
   if (postgresAtomicQueueSelected()) {
     return withTaskMutationLock(async () => {
-      const task = (await readAllTasks()).find((candidate) => candidate.taskId === taskId) ?? null;
+      const task = await readPostgresTaskById(taskId);
       if (!task) return { ok: false, error: 'Task not found.' };
       if (task.leaseHolder !== workerId) return { ok: false, error: 'Not the lease holder.' };
       if (task.state !== 'LEASED' && task.state !== 'RUNNING') return { ok: false, error: `Cannot release from state ${task.state}.` };
@@ -1864,6 +1865,7 @@ export async function getAllApprovals(): Promise<ApprovalRecord[]> {
 
 /** Get a single task by id. */
 export async function getTaskById(taskId: string): Promise<Task | null> {
+  if (postgresAtomicQueueSelected()) return readPostgresTaskById(taskId);
   const tasks = await readAllTasks();
   return tasks.find((t) => t.taskId === taskId) ?? null;
 }
@@ -1889,7 +1891,7 @@ async function addTaskEvidenceUnlocked(taskId: string, evidence: Omit<TaskEviden
 export async function addTaskEvidence(taskId: string, evidence: Omit<TaskEvidence, 'evidenceId' | 'createdAt'>): Promise<{ ok: boolean; error: string | null }> {
   if (postgresAtomicQueueSelected()) {
     return withTaskMutationLock(async () => {
-      const task = (await readAllTasks()).find((candidate) => candidate.taskId === taskId) ?? null;
+      const task = await readPostgresTaskById(taskId);
       if (!task) return { ok: false, error: 'Task not found.' };
       const fromState = task.state;
       const fullEvidence: TaskEvidence = { ...evidence, evidenceId: generateId('evid'), createdAt: nowIso() };
@@ -1920,7 +1922,14 @@ export async function recordLeasedTaskEvidence(input: {
   workerId: string;
   evidence: Omit<TaskEvidence, 'evidenceId' | 'createdAt'>;
   maxRetainedEvidence?: number;
+  /** Atomically finish this observation and schedule the next patrol. */
+  nextObservationAt?: string;
 }): Promise<RecordLeasedTaskEvidenceResult> {
+  if (input.nextObservationAt !== undefined && (
+    !input.task.idempotencyKey.startsWith('landing-p0-patrol:')
+    || !Number.isFinite(Date.parse(input.nextObservationAt))
+    || Date.parse(input.nextObservationAt) <= Date.now()
+  )) throw new Error('A future patrol observation time is required');
   const applyObservation = (task: Task): { task: Task; evidenceId: string } => {
     const at = nowIso();
     const evidenceId = generateId('evid');
@@ -1931,6 +1940,19 @@ export async function recordLeasedTaskEvidence(input: {
     task.updatedAt = at;
     task.lastHeartbeatAt = at;
     task.leaseExpiresAt = new Date(Date.now() + LEASE_DURATION_MS).toISOString();
+    if (input.nextObservationAt) {
+      // A completed observation closes the retry episode. Failed probes remain
+      // FAIL in their evidence; they are never certified by this queue release.
+      task.state = 'QUEUED';
+      task.leaseHolder = null;
+      task.leaseExpiresAt = null;
+      task.lastHeartbeatAt = null;
+      task.retryCount = 0;
+      task.retryStartedAt = null;
+      task.retryNotBefore = input.nextObservationAt;
+      task.error = null;
+      task.blocker = null;
+    }
     return { task, evidenceId };
   };
 
@@ -2000,7 +2022,7 @@ function evidenceMeetsCriterion(evidence: TaskEvidence, criterion: AcceptanceCri
 export async function finalizeEvidenceTask(input: FinalizeEvidenceTaskInput): Promise<FinalizeEvidenceTaskResult> {
   if (postgresAtomicQueueSelected()) {
     return withTaskMutationLock(async () => {
-      const task = (await readAllTasks()).find((candidate) => candidate.taskId === input.taskId) ?? null;
+      const task = await readPostgresTaskById(input.taskId);
       if (!task) return { ok: false, task: null, error: 'Task not found.', evidenceId: null, states: [] };
       if (task.leaseHolder !== input.workerId) {
         return { ok: false, task, error: 'Not the lease holder.', evidenceId: null, states: [] };
@@ -2149,7 +2171,7 @@ async function markCriterionMetUnlocked(taskId: string, criterionId: string, evi
 export async function markCriterionMet(taskId: string, criterionId: string, evidence: string): Promise<{ ok: boolean; error: string | null }> {
   if (postgresAtomicQueueSelected()) {
     return withTaskMutationLock(async () => {
-      const task = (await readAllTasks()).find((candidate) => candidate.taskId === taskId) ?? null;
+      const task = await readPostgresTaskById(taskId);
       if (!task) return { ok: false, error: 'Task not found.' };
       const criterion = task.acceptanceCriteria.find((candidate) => candidate.id === criterionId);
       if (!criterion) return { ok: false, error: 'Criterion not found.' };
@@ -2262,3 +2284,4 @@ export function isActionAllowed(engine: string, action: string): { allowed: bool
   }
   return { allowed: true, reason: 'Action permitted.' };
 }
+

@@ -397,7 +397,7 @@ async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
 
     let semantic360 = getAutonomousSemantic360Status();
     let decisionQuality = getAutonomousDecisionQualityStatus();
-    if (continuityEnabled) {
+    if (continuityEnabled && !landingMissionActive) {
       await runAutonomousSemantic360(sourceSha);
       semantic360 = getAutonomousSemantic360Status();
       await runAutonomousDecisionQualityLoop(sourceSha);
@@ -563,3 +563,4 @@ export function getContinuityOutcomeCounts(): Record<ContinuityOutcome | 'inFlig
 export function getContinuityOutcomes(): Array<AgentContinuityRecord & { agentNumber: number }> {
   return [...lastOutcomeByAgent.entries()].map(([agentNumber, record]) => ({ agentNumber, ...record })).sort((a, b) => a.agentNumber - b.agentNumber);
 }
+
