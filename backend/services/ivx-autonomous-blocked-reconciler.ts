@@ -1,8 +1,9 @@
 /** IVX Autonomous blocked + productivity recovery hot loop. */
 import { getAllTasks, releaseLease, transitionTaskState, type Task } from './ivx-autonomous-task-engine';
-import { updateExecutionState } from './ivx-agent-runtime';
+import { getExecutionState, updateExecutionState } from './ivx-agent-runtime';
 import { resolveProductionSha } from './ivx-landing-p0-backlog';
-import { postgresAtomicQueueSelected, readPostgresCurrentTasks } from './ivx-postgres-autonomous-task-store';
+import { compareAndSetPostgresAutonomousTask, postgresAtomicQueueSelected, readPostgresCurrentTasks } from './ivx-postgres-autonomous-task-store';
+import { planTaskRetry, taskRetryDue, FLEET_RETRY_BUDGET_MS } from './ivx-retry-policy';
 
 export const IVX_BLOCKED_RECONCILER_MARKER = 'ivx-autonomous-realtime-productivity-reconciler-2026-09-08-current-work-v4';
 const DEFAULT_INTERVAL_MS = 15_000;
@@ -22,8 +23,41 @@ function latestProductiveEvidenceMs(task: Task): number { let latest = Date.pars
 async function readRecoveryTasks(): Promise<Task[]> {
   // Production atomic queue: this hot 15-second loop must never paginate the
   // historical ledger. Only states this reconciler can act on are transferred.
-  if (postgresAtomicQueueSelected()) return readPostgresCurrentTasks(['BLOCKED', 'RUNNING']);
+  if (postgresAtomicQueueSelected()) return readPostgresCurrentTasks(['BLOCKED', 'RUNNING', 'RETRYING']);
   return getAllTasks();
+}
+function clearMatchingSlot(task: Task): void {
+  const agentId = task.leaseHolder?.startsWith('agent:') ? task.leaseHolder.slice(6) : null;
+  if (agentId && getExecutionState(agentId)?.activeTaskId === task.taskId) {
+    updateExecutionState(agentId, { availability: 'available', activeTaskId: null });
+  }
+}
+
+/** CAS moves the task and releases its lease together, without a historical scan. */
+async function scheduleBlockedRetry(task: Task): Promise<boolean> {
+  const next = { ...task, ...planTaskRetry(task) };
+  const result = postgresAtomicQueueSelected()
+    ? await compareAndSetPostgresAutonomousTask({ task: next, expectedStates: ['BLOCKED'], eventType: next.state === 'RETRYING' ? 'retry_scheduled' : 'retry_budget_exhausted' })
+    : await transitionTaskState(task.taskId, 'RETRYING');
+  if (result.ok) clearMatchingSlot(task);
+  return result.ok;
+}
+
+async function releaseDueRetries(tasks: Task[], now: number): Promise<number> {
+  let errors = 0;
+  for (const task of tasks) {
+    if (task.state !== 'RETRYING' || !taskRetryDue(task, now)) continue;
+    const expired = task.retryStartedAt && now - Date.parse(task.retryStartedAt) >= FLEET_RETRY_BUDGET_MS;
+    const next: Task = { ...task, state: expired ? 'FAILED' : 'QUEUED', updatedAt: new Date(now).toISOString(), leaseHolder: null, leaseExpiresAt: null, lastHeartbeatAt: null };
+    if (expired) { next.error = 'retry time_budget exhausted'; next.completedAt = next.updatedAt; }
+    try {
+      const result = postgresAtomicQueueSelected()
+        ? await compareAndSetPostgresAutonomousTask({ task: next, expectedStates: ['RETRYING'], eventType: expired ? 'retry_budget_exhausted' : 'retry_due' })
+        : await transitionTaskState(task.taskId, next.state);
+      if (!result.ok) errors += 1;
+    } catch { errors += 1; }
+  }
+  return errors;
 }
 async function releaseAliveButIdleTasks(tasks: Task[], now: number): Promise<{ seen: number; released: number; runtimeSlotsCleared: number; errors: number }> {
   const staleMs = productivityStaleMs(); let seen = 0; let released = 0; let runtimeSlotsCleared = 0; let errors = 0;
@@ -50,9 +84,10 @@ export async function reconcileRetryableBlockedTasks(): Promise<BlockedReconcile
     const taskSha = shaFromTask(task); const staleSha = Boolean(taskSha && productionSha && taskSha !== productionSha); const transientWorkflow = isTransientWorkflowBlock(task);
     if (isRealDefect(task) && !staleSha) { retainedRealDefects += 1; continue; }
     if (!staleSha && !transientWorkflow) continue;
-    try { const moved = await transitionTaskState(task.taskId, 'QUEUED', { blocker: undefined, error: undefined }); if (moved.ok) requeued += 1; else errors += 1; } catch { errors += 1; }
+    try { if (await scheduleBlockedRetry(task)) requeued += 1; else errors += 1; } catch { errors += 1; }
   }
   const productivity = await releaseAliveButIdleTasks(tasks, now); errors += productivity.errors;
+  errors += await releaseDueRetries(tasks, now);
   return { marker: IVX_BLOCKED_RECONCILER_MARKER, measuredAt: new Date().toISOString(), productionSha, blockedSeen: blocked.length, requeued, retainedRealDefects, retainedOwnerOrConfig, aliveButIdleSeen: productivity.seen, staleLeasesReleased: productivity.released, runtimeSlotsCleared: productivity.runtimeSlotsCleared, errors };
 }
 export function startBlockedTaskReconciler(): boolean {

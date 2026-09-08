@@ -39,6 +39,7 @@ import {
 } from './ivx-postgres-autonomous-task-store';
 import { appendFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { planTaskRetry, taskRetryDue, taskRetryExpired } from './ivx-retry-policy';
 
 export const IVX_TASK_ENGINE_MARKER = 'ivx-autonomous-task-engine-2026-09-07-fleet-batch-v1';
 
@@ -104,7 +105,7 @@ const VALID_TRANSITIONS: Record<TaskState, TaskState[]> = {
   RUNNING: ['PAUSED', 'EXECUTION_COMPLETED', 'FAILED', 'RETRYING', 'BLOCKED', 'CANCELLED'],
   PAUSED: ['RUNNING', 'CANCELLED', 'EXPIRED'],
   RETRYING: ['QUEUED', 'RUNNING', 'FAILED'],
-  BLOCKED: ['WAITING_FOR_APPROVAL', 'CANCELLED', 'QUEUED'],
+  BLOCKED: ['WAITING_FOR_APPROVAL', 'CANCELLED', 'QUEUED', 'RETRYING', 'FAILED'],
   CANCELLED: [],
   FAILED: ['RETRYING'],
   EXECUTION_COMPLETED: ['QA_IN_PROGRESS', 'FAILED'],
@@ -210,6 +211,9 @@ export type Task = {
   lastHeartbeatAt: string | null;
   retryCount: number;
   maxRetries: number;
+  /** Durable retry schedule; waiting never retains a worker lease. */
+  retryStartedAt?: string | null;
+  retryNotBefore?: string | null;
   error: string | null;
   blocker: string | null;
   evidence: TaskEvidence[];
@@ -979,6 +983,10 @@ async function transitionTaskStateUnlocked(
 
   const fromState = task.state;
 
+  if (fromState === 'RETRYING' && (toState === 'QUEUED' || toState === 'RUNNING') && (!taskRetryDue(task) || toState === 'RUNNING')) {
+    return { ok: false, task, error: 'Retry must become due and acquire a fresh queue lease.' };
+  }
+
   // Terminal states cannot transition
   if (TERMINAL_STATES.includes(fromState) && !TERMINAL_STATES.includes(toState)) {
     return { ok: false, task, error: `Task is in terminal state ${fromState} — cannot transition to ${toState}.` };
@@ -992,6 +1000,9 @@ async function transitionTaskStateUnlocked(
   // Apply transition
   task.state = toState;
   task.updatedAt = nowIso();
+  if (fromState === 'RETRYING' && toState === 'QUEUED' && taskRetryExpired(task)) {
+    task.state = 'FAILED'; task.error = 'retry time_budget exhausted'; task.completedAt = nowIso();
+  }
 
   if (metadata?.error) task.error = metadata.error;
   if (metadata?.blocker) task.blocker = metadata.blocker;
@@ -1006,7 +1017,7 @@ async function transitionTaskStateUnlocked(
     task.leaseHolder = generateId('worker');
     task.leaseExpiresAt = new Date(Date.now() + LEASE_DURATION_MS).toISOString();
   }
-  if (toState === 'RETRYING') task.retryCount += 1;
+  if (toState === 'RETRYING' || fromState === 'BLOCKED' && toState === 'QUEUED') Object.assign(task, planTaskRetry(task));
   if (TERMINAL_SUCCESS_STATES.includes(toState)) task.completedAt = nowIso();
   if (toState === 'FAILED') task.completedAt = nowIso();
 
@@ -1033,6 +1044,9 @@ export async function transitionTaskState(
       const task = (await readAllTasks()).find((candidate) => candidate.taskId === taskId) ?? null;
       if (!task) return { ok: false, task: null, error: `Task not found: ${taskId}` };
       const fromState = task.state;
+      if (fromState === 'RETRYING' && (toState === 'QUEUED' || toState === 'RUNNING') && (!taskRetryDue(task) || toState === 'RUNNING')) {
+        return { ok: false, task, error: 'Retry must become due and acquire a fresh queue lease.' };
+      }
       if (TERMINAL_STATES.includes(fromState) && !TERMINAL_STATES.includes(toState)) {
         return { ok: false, task, error: `Task is in terminal state ${fromState} — cannot transition to ${toState}.` };
       }
@@ -1041,6 +1055,9 @@ export async function transitionTaskState(
       }
       task.state = toState;
       task.updatedAt = nowIso();
+      if (fromState === 'RETRYING' && toState === 'QUEUED' && taskRetryExpired(task)) {
+        task.state = 'FAILED'; task.error = 'retry time_budget exhausted'; task.completedAt = nowIso();
+      }
       if (metadata?.error) task.error = metadata.error;
       if (metadata?.blocker) task.blocker = metadata.blocker;
       if (metadata?.evidence) task.evidence.push(metadata.evidence);
@@ -1049,7 +1066,7 @@ export async function transitionTaskState(
       if (metadata?.deploymentId) task.deploymentId = metadata.deploymentId;
       if (metadata?.approvalId) task.approvalId = metadata.approvalId;
       if (toState === 'RUNNING' && !task.startedAt) task.startedAt = nowIso();
-      if (toState === 'RETRYING') task.retryCount += 1;
+      if (toState === 'RETRYING' || fromState === 'BLOCKED' && toState === 'QUEUED') Object.assign(task, planTaskRetry(task));
       if (TERMINAL_SUCCESS_STATES.includes(toState) || toState === 'FAILED') task.completedAt = nowIso();
       return compareAndSetPostgresAutonomousTask({ task, expectedStates: [fromState], eventType: 'state_transition' });
     });
@@ -1129,14 +1146,14 @@ export function recoverStrandedTasksInPlace(tasks: Task[], nowMs: number): Stran
   const recovery: StrandedRecovery = { requeued: [], expired: [], failed: [], duplicatesRetired: [], blockedRequeued: [] };
   recovery.duplicatesRetired = retireDuplicateTasksInPlace(tasks, nowMs);
   const requeue = (t: Task, reason: string) => {
-    t.retryCount += 1;
-    if (t.retryCount > Math.max(1, t.maxRetries)) {
+    const previousState = t.state;
+    Object.assign(t, planTaskRetry(t, nowMs));
+    if (t.state === 'FAILED') {
       // STALE may expire; mid-completion strandings fail closed.
-      t.state = t.state === 'STALE' ? 'EXPIRED' : 'FAILED';
-      t.error = `stranded (${reason}) ${t.retryCount - 1} times; exceeded maxRetries=${t.maxRetries}`;
+      t.state = previousState === 'STALE' ? 'EXPIRED' : 'FAILED';
+      t.error = `stranded (${reason}); ${t.error}`;
       (t.state === 'EXPIRED' ? recovery.expired : recovery.failed).push(t.taskId);
     } else {
-      t.state = 'QUEUED';
       t.error = null;
       recovery.requeued.push(t.taskId);
     }
@@ -1145,6 +1162,13 @@ export function recoverStrandedTasksInPlace(tasks: Task[], nowMs: number): Stran
     t.updatedAt = new Date(nowMs).toISOString();
   };
   for (const t of tasks) {
+    if (t.state === 'RETRYING' && taskRetryDue(t, nowMs)) {
+      t.state = taskRetryExpired(t, nowMs) ? 'FAILED' : 'QUEUED';
+      t.updatedAt = new Date(nowMs).toISOString();
+      if (t.state === 'FAILED') { t.error = 'retry time_budget exhausted'; t.completedAt = t.updatedAt; recovery.failed.push(t.taskId); }
+      else recovery.requeued.push(t.taskId);
+      continue;
+    }
     const lastTouch = Date.parse(t.lastHeartbeatAt ?? t.updatedAt ?? t.createdAt ?? '') || 0;
     if (t.state === 'LEASED' && t.leaseExpiresAt && Date.parse(t.leaseExpiresAt) < nowMs) {
       t.state = 'QUEUED';
@@ -1159,12 +1183,11 @@ export function recoverStrandedTasksInPlace(tasks: Task[], nowMs: number): Stran
     // BLOCKED Landing units re-verify (bounded by maxRetries): immediately after a
     // quoted GitHub rate-limit reset, otherwise every 30 minutes. BLOCKED → QUEUED is a
     // valid transition; module-audit OWNER_GATE blocks are never touched.
-    if (t.state === 'BLOCKED' && REVERIFY_KEY_PREFIXES.some((prefix) => t.idempotencyKey.startsWith(prefix)) && t.retryCount < Math.max(1, t.maxRetries)) {
+    if (t.state === 'BLOCKED' && REVERIFY_KEY_PREFIXES.some((prefix) => t.idempotencyKey.startsWith(prefix)) && t.retryCount < Math.max(0, t.maxRetries)) {
       const reset = /resets (\d{4}-\d{2}-\d{2}T[0-9:.]+Z)/.exec(t.blocker ?? '');
       const due = reset ? Date.parse(reset[1]) + 30_000 : (Date.parse(t.updatedAt) || 0) + BLOCKED_REVERIFY_MS;
       if (nowMs >= due) {
-        t.retryCount += 1;
-        t.state = 'QUEUED';
+        Object.assign(t, planTaskRetry(t, nowMs));
         t.blocker = null;
         t.leaseHolder = null;
         t.leaseExpiresAt = null;
@@ -1267,6 +1290,7 @@ function selectLeaseCandidate(
   });
   const byPriority = (a: Task, b: Task): number => compareProjectManagedTasks(a, b, now);
   const queued = tasks.filter((t) => t.state === 'QUEUED'
+    && taskRetryDue(t, now)
     && dependenciesMet(t)
     && isTaskWithinMissionScope(t, options.missionScope));
   let candidates = queued

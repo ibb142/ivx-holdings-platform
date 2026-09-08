@@ -21,6 +21,7 @@ import { autonomousIntelligenceMissionSchedulerOptions, handleAutonomousIntellig
 import { buildLandingP0Status, LANDING_P0_LANES, LANDING_P0_UNITS } from './services/ivx-landing-p0-backlog';
 import { getAutonomous112RuntimeEnforcerStatus, getContinuityOutcomes } from './services/ivx-autonomous-runtime-enforcer';
 import { landingFleetFocusEnabled } from './services/ivx-landing-fleet-focus';
+import { fleetSloOptions, handleFleetSloGet } from './api/ivx-fleet-slo';
 import { buildLandingFleetProof, getLandingPatrolLiveStates } from './services/ivx-landing-continuous-patrol';
 
 const LANDING_P0_PUBLIC_HEADERS = {
@@ -80,6 +81,8 @@ app.get('/api/ivx/landing-p0/agents', async () => {
 
 app.options('/api/ivx/autonomous/control-plane', () => autonomousControlPlaneOptions());
 app.get('/api/ivx/autonomous/control-plane', async (c) => handleAutonomousControlPlaneGet(c.req.raw));
+app.options('/api/ivx/autonomous/fleet-slo', () => fleetSloOptions());
+app.get('/api/ivx/autonomous/fleet-slo', async (c) => handleFleetSloGet(c.req.raw));
 app.options('/api/ivx/autonomous/ledger', () => autonomousJobLedgerOptions());
 app.get('/api/ivx/autonomous/ledger', async (c) => handleAutonomousJobLedgerGet(c.req.raw));
 app.options('/api/ivx/autonomous/ledger/update', () => autonomousJobLedgerOptions());

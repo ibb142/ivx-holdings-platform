@@ -11,6 +11,7 @@ import { startAutonomousScheduler } from './backend/services/ivx-autonomous-sche
 import { startAutonomousIntelligenceMissionScheduler } from './backend/services/ivx-autonomous-intelligence-mission-scheduler';
 import { startContinuousExecutionScheduler, startContinuousSession, getContinuousSession } from './backend/services/ivx-continuous-execution';
 import { startBlockedTaskReconciler } from './backend/services/ivx-autonomous-blocked-reconciler';
+import { startFleetSloMonitor } from './backend/services/ivx-fleet-slo';
 import { startSmsNotificationScheduler, getSmsNotifierStatus } from './backend/services/ivx-autonomous-sms-notifier';
 import { runCompletionCampaignCycle } from './backend/services/ivx-autonomous-completion-campaign';
 import { getLatestMemberAuthCertification, startMemberAuthCertificationScheduler } from './backend/services/ivx-member-auth-certification';
@@ -38,6 +39,8 @@ const OWNER_LOGIN_CERT_MARKER = 'ivx-owner-login-outage-cert-2026-08-15';
 const LIVE_VOICE_CERT_TRACE_ID = 'ivx-autonomous-live-voice-cert-20260816-v1';
 
 console.log('[IVX Server] Starting Hono API server...', { host: HOST, port: PORT, nodeEnv: process.env.NODE_ENV || 'development' });
+// Independent of fleet bootstrap: a stuck bootstrap must still alert.
+startFleetSloMonitor();
 const landingFleetFocus = landingFleetFocusEnabled();
 if (!landingFleetFocus) {
   void preloadAIProviderCredentialFromOwnerVariables().catch((error) => console.warn('[IVX Server] AI owner-variable preload unavailable', { error: error instanceof Error ? error.message.slice(0, 160) : 'unknown' }));

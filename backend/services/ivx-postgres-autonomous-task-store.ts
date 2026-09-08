@@ -7,6 +7,7 @@
  */
 import { hostname } from 'node:os';
 import { randomUUID } from 'node:crypto';
+import { decideRetry, isTransientFailure, retryAfterMs, RetryQuota } from './ivx-retry-policy';
 import type { FleetLeaseRequest, FleetLeaseResult, FleetTaskLeaseIdentity, FleetTaskMutationResult, Task, TaskState } from './ivx-autonomous-task-engine';
 
 export const IVX_POSTGRES_AUTONOMOUS_TASK_STORE_MARKER = 'ivx-postgres-autonomous-task-store-2026-09-08-current-work-v2';
@@ -18,6 +19,7 @@ const BOOT_NONCE = randomUUID().slice(0, 12);
 let taskReadCache: { value: Task[]; at: number } | null = null;
 let taskReadInFlight: Promise<Task[]> | null = null;
 let taskMutationRevision = 0;
+const upstreamRetryQuota = new RetryQuota();
 
 type AtomicCreateResult = { ok: boolean; task: Task | null; duplicate: boolean; error: string | null };
 type AtomicCasResult = { ok: boolean; task: Task | null; error: string | null };
@@ -45,9 +47,34 @@ function headers(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
 function externalError(payload: unknown, fallback: string): string { if (payload && typeof payload === 'object') { const record = payload as Record<string, unknown>; const candidate = record.message ?? record.error ?? record.details; if (typeof candidate === 'string' && candidate.trim()) return candidate.trim().slice(0, 320); } return fallback; }
 async function parsePayload(response: Response): Promise<unknown> { const text = await response.text().catch(() => ''); if (!text) return null; try { return JSON.parse(text) as unknown; } catch { return { message: text.slice(0, 320) }; } }
 async function restRequest<T>(path: string, init: RequestInit, options: { timeoutMs?: number; attempts?: number; env?: NodeJS.ProcessEnv } = {}): Promise<T> {
-  const env = options.env ?? process.env; const attempts = Math.max(1, Math.min(options.attempts ?? 2, 3)); let finalError: unknown = null;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) { try { const response = await fetch(`${supabaseUrl(env)}/rest/v1/${path}`, { ...init, headers: { ...headers(env), ...(init.headers ?? {}) }, signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS) }); const payload = await parsePayload(response); if (!response.ok) throw new Error(externalError(payload, `postgres_atomic REST returned HTTP ${response.status}`)); return payload as T; } catch (error) { finalError = error; const message = error instanceof Error ? error.message : String(error); const transient = /timeout|timed out|aborted|fetch failed|ECONN|HTTP 5\d\d|HTTP 429|schema cache|retrying|temporar/i.test(message); if (!transient || attempt === attempts) break; await new Promise((resolve) => setTimeout(resolve, 250 * attempt)); } }
-  throw finalError instanceof Error ? finalError : new Error('postgres_atomic request failed');
+  const env = options.env ?? process.env;
+  // A timed-out mutation may already have committed. Replaying a claim or CAS
+  // blindly can lose the original result or repeat a side effect.
+  const readOnly = !init.method || init.method === 'GET' || init.method === 'HEAD';
+  const attempts = readOnly ? Math.max(1, Math.min(options.attempts ?? 2, 3)) : 1;
+  const budgetMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const started = Date.now();
+  for (let attempt = 0; ; attempt += 1) {
+    let status: number | undefined;
+    let retryAfter = 0;
+    try {
+      const remaining = budgetMs - (Date.now() - started);
+      if (remaining <= 0) throw new Error('postgres_atomic request time budget exhausted');
+      const response = await fetch(`${supabaseUrl(env)}/rest/v1/${path}`, {
+        ...init, headers: { ...headers(env), ...(init.headers ?? {}) },
+        signal: AbortSignal.timeout(remaining),
+      });
+      status = response.status;
+      retryAfter = retryAfterMs(response.headers.get('retry-after'));
+      const payload = await parsePayload(response);
+      if (!response.ok) throw new Error(`postgres_atomic HTTP ${status}: ${externalError(payload, 'request failed')}`);
+      return payload as T;
+    } catch (error) {
+      const decision = decideRetry({ retriesUsed: attempt, maxRetries: attempts - 1, startedAtMs: started, nowMs: Date.now(), maxElapsedMs: budgetMs, baseMs: 250, capMs: 2_000, retryAfterMs: retryAfter });
+      if (!isTransientFailure(error, status) || !decision.retry || !upstreamRetryQuota.take()) throw error;
+      await new Promise((resolve) => setTimeout(resolve, decision.delayMs));
+    }
+  }
 }
 async function rpc<T>(name: string, body: Record<string, unknown>, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> { return restRequest<T>(`rpc/${name}`, { method: 'POST', body: JSON.stringify(body) }, { timeoutMs }); }
 function cloneTasks(tasks: readonly Task[]): Task[] { return structuredClone(tasks) as Task[]; }
@@ -71,7 +98,17 @@ export async function readPostgresCurrentTasks(states: readonly TaskState[]): Pr
     { timeoutMs: TRUTH_TIMEOUT_MS, attempts: 3 },
   );
   if (!Array.isArray(rows)) throw new Error('postgres_atomic current-task response is not an array');
+  if (rows.length >= 1_000) throw new Error('postgres_atomic current-task response reached its safety limit; telemetry is incomplete');
   return rows.map((row) => structuredClone(row.payload));
+}
+
+/** Aggregate monitoring reads current work only; heartbeats cannot create proof. */
+export async function readPostgresFleetSloTasks(): Promise<Task[]> {
+  return readPostgresCurrentTasks(['LEASED', 'RUNNING', 'BLOCKED', 'RETRYING', 'EXECUTION_COMPLETED', 'QA_IN_PROGRESS']);
+}
+
+export async function persistPostgresFleetSloSample(sample: Record<string, unknown>): Promise<void> {
+  await restRequest('ivx_autonomous_task_events', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ event_type: 'fleet_slo_sample', worker_instance_id: autonomousWorkerInstanceId(), event: sample }) }, { timeoutMs: TRUTH_TIMEOUT_MS });
 }
 
 export async function readPostgresAutonomousTasks(): Promise<Task[]> {

@@ -226,7 +226,7 @@ export type ProspectRow = {
 };
 
 export type AlertRow = {
-  alert_type: 'stale_heartbeat' | 'stuck_agent' | 'output_without_evidence' | 'prohibited_tool_attempt' | 'auth_failure' | 'agent_unhealthy';
+  alert_type: 'stale_heartbeat' | 'stuck_agent' | 'output_without_evidence' | 'prohibited_tool_attempt' | 'auth_failure' | 'agent_unhealthy' | 'fleet_productivity_breach' | 'fleet_productivity_recovered' | 'fleet_telemetry_missing';
   agent_id: string | null;
   severity: 'info' | 'warning' | 'critical';
   detail: string;

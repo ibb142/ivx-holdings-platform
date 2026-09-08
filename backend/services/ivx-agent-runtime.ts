@@ -33,6 +33,8 @@ import {
 } from './ivx-agent-contracts';
 import { type CompanyId, type DivisionId } from './ivx-enterprise-master-registry';
 import { requestIVXAIText } from '../ivx-ai-runtime';
+import { decideRetry, isTransientFailure } from './ivx-retry-policy';
+import { isEngineeringTool } from './ivx-agent-engineering-tools';
 /** ISO-8601 UTC timestamp with second precision (jq `fromdateiso8601` compatible). */
 function isoSecondPrecision(date: Date = new Date()): string {
   return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
@@ -818,8 +820,10 @@ export async function executeAgentRun(
 
   // Step 5+6: REAL EXECUTION — at least one real permitted tool must succeed.
   const timeoutMs = Math.min(Math.max(contract.timeoutPolicy.toolCallTimeoutMs || 12_000, 4_000), 20_000);
-  const maxRetries = Math.min(Math.max(contract.retryPolicy.maxRetries ?? 1, 0), 2);
-  const retryDelayMs = Math.min(Math.max(contract.retryPolicy.initialDelayMs || 500, 200), 1_500);
+  const maxRetries = Math.min(Math.max(contract.retryPolicy.maxRetries ?? 1, 0), 10);
+  const executionBudgetMs = contract.timeoutPolicy.executionTimeoutMs;
+  const replaySafeTools = new Set(['sec_edgar_fulltext', 'sec_edgar_submissions', 'wikipedia_search', 'worldbank_indicator', 'frankfurter_fx', 'crm_read']);
+  let totalAttemptCostUsd = 0;
 
   let toolResults: RealToolResult[] = [];
   let missionTaskType = taskType;
@@ -848,10 +852,15 @@ export async function executeAgentRun(
 
     const primaryOk = toolResults.length > 0 && toolResults[0].ok;
     const anyBlocked = toolResults.some((t) => t.blocked);
-    if (primaryOk || anyBlocked || attempt >= maxRetries) break;
-    attempt++;
+    totalAttemptCostUsd += Math.max(0.001 * toolResults.length, toolResults.reduce((sum, result) => sum + Math.max(0, result.costUsd || 0), 0));
+    const retryable = toolResults.length > 0
+      && toolResults.every((result) => replaySafeTools.has(result.toolId) || isEngineeringTool(result.toolId))
+      && toolResults.filter((result) => !result.ok).every((result) => isTransientFailure(result.error, result.httpStatus));
+    const decision = decideRetry({ retriesUsed: attempt, maxRetries, startedAtMs: startTime, nowMs: Date.now(), maxElapsedMs: executionBudgetMs, baseMs: contract.retryPolicy.initialDelayMs, capMs: contract.retryPolicy.maxDelayMs });
+    if (primaryOk || anyBlocked || !retryable || !decision.retry || totalAttemptCostUsd + projectedCostUsd * Math.max(1, toolResults.length) > costLimitUsd) break;
+    attempt = decision.nextRetry;
     await updateExecution(taskId, { retry_count: attempt });
-    await new Promise((r) => setTimeout(r, retryDelayMs * attempt));
+    await new Promise((r) => setTimeout(r, decision.delayMs));
   }
 
   const endTime = Date.now();
@@ -864,7 +873,7 @@ export async function executeAgentRun(
   const toolResultId = firstOk ? firstOk.toolResultId : null;
   const verifiedOutput = Boolean(firstOk && firstOk.sourceReference && firstOk.contentSha256 && firstOk.httpStatus >= 200);
   const anyBlocked = toolResults.some((t) => t.blocked);
-  const costUsd = Number((0.001 * Math.max(1, toolResults.length)).toFixed(4));
+  const costUsd = Number(totalAttemptCostUsd.toFixed(4));
 
   // FAIL any execution that has no verifiable source. produceAgentOutput alone
   // can NEVER complete a task — it is an advisory annotation only.

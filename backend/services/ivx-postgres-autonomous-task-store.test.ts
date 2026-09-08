@@ -11,6 +11,7 @@ import {
   readPostgresFleetLeaseRows,
   resetPostgresAutonomousTaskStoreForTests,
   startPostgresAutonomousTasks,
+  readPostgresCurrentTasks,
 } from './ivx-postgres-autonomous-task-store';
 
 const savedEnv = { ...process.env };
@@ -30,6 +31,35 @@ function configureAtomicQueue(): void {
 }
 
 describe('PostgreSQL autonomous task store', () => {
+  test('retries a transient HTTP status even when the response body has no retry keywords', async () => {
+    configureAtomicQueue();
+    let calls = 0;
+    globalThis.fetch = (async () => ++calls === 1 ? Response.json({ message: 'upstream rejected' }, { status: 503 }) : Response.json([])) as typeof fetch;
+    expect(await readPostgresCurrentTasks(['RUNNING'])).toEqual([]);
+    expect(calls).toBe(2);
+  });
+
+  test('does not retry authorization failures or an ambiguous committed claim', async () => {
+    configureAtomicQueue();
+    let calls = 0;
+    globalThis.fetch = (async () => { calls += 1; return Response.json({ message: 'temporarily unavailable' }, { status: 403 }); }) as typeof fetch;
+    await expect(readPostgresCurrentTasks(['RUNNING'])).rejects.toThrow('HTTP 403');
+    expect(calls).toBe(1);
+    calls = 0;
+    globalThis.fetch = (async () => { calls += 1; throw new Error('fetch failed after server committed'); }) as typeof fetch;
+    await expect(claimPostgresAutonomousTasks([{ workerId: 'agent:ivx_holdings_1', agentNumber: 1 }])).rejects.toThrow('fetch failed');
+    expect(calls).toBe(1);
+  });
+
+  test('fails closed on truncated current-work truth and respects Retry-After time budget', async () => {
+    configureAtomicQueue();
+    globalThis.fetch = (async () => Response.json(Array.from({ length: 1000 }, () => ({ payload: {} })))) as typeof fetch;
+    await expect(readPostgresCurrentTasks(['RUNNING'])).rejects.toThrow('telemetry is incomplete');
+    let calls = 0;
+    globalThis.fetch = (async () => { calls += 1; return Response.json({}, { status: 429, headers: { 'Retry-After': '60' } }); }) as typeof fetch;
+    await expect(readPostgresCurrentTasks(['RUNNING'])).rejects.toThrow('HTTP 429');
+    expect(calls).toBe(1);
+  });
   test('selects the backend only when explicitly configured', () => {
     delete process.env.IVX_AUTONOMOUS_QUEUE_BACKEND;
     expect(postgresAtomicQueueSelected()).toBe(false);
