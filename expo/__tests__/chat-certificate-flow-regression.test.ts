@@ -6,6 +6,8 @@ const chatSource = readFileSync(resolve(import.meta.dir, '../app/ivx/chat.tsx'),
 const chatHubSource = readFileSync(resolve(import.meta.dir, '../components/ChatScreenContent.tsx'), 'utf8');
 const tabsLayoutSource = readFileSync(resolve(import.meta.dir, '../app/(tabs)/_layout.tsx'), 'utf8');
 const homeSource = readFileSync(resolve(import.meta.dir, '../app/(tabs)/home.tsx'), 'utf8');
+const crmSource = readFileSync(resolve(import.meta.dir, '../app/(tabs)/crm.tsx'), 'utf8');
+const dashboardFlowSource = readFileSync(resolve(import.meta.dir, '../.maestro/ivx-owner-dashboard-certificate.yaml'), 'utf8');
 const flowSource = readFileSync(resolve(import.meta.dir, '../.maestro/ivx-owner-chat-certificate.yaml'), 'utf8');
 const transportReliabilitySource = readFileSync(resolve(import.meta.dir, './chat-transport-reliability.test.ts'), 'utf8');
 
@@ -17,8 +19,8 @@ const requiredChatTestIDs = [
   'ivx-owner-chat-scroll-to-latest',
 ];
 
-const E2E_PROMPT = 'Return only the result of joining IVX_CHAT_E2E_ and OK.';
-const E2E_REPLY = 'IVX_CHAT_E2E_OK';
+const E2E_PROMPT = 'Write IVX_CHAT_E2E_ immediately followed by OK, then a space and the sum of 17 plus 25. Return only that final text.';
+const E2E_REPLY = 'IVX_CHAT_E2E_OK 42';
 
 describe('IVX IA chat device certificate regression', () => {
   test('keeps every certificate testID rendered by the chat surface', () => {
@@ -33,6 +35,19 @@ describe('IVX IA chat device certificate regression', () => {
 
   test('keeps the chat tab reachable from the owner tab bar', () => {
     expect(tabsLayoutSource).toContain("tabBarButtonTestID: 'tab-chat'");
+  });
+
+  test('dashboard certificate follows the authenticated Owner UI path', () => {
+    expect(crmSource).toContain("route: '/admin/dashboard'");
+    expect(crmSource).toContain("testID: 'crm-link-admin-dashboard'");
+    expect(dashboardFlowSource).not.toContain('openLink:');
+    expect(dashboardFlowSource.indexOf('id: "tab-crm"')).toBeLessThan(
+      dashboardFlowSource.indexOf('id: "crm-link-admin-dashboard"'),
+    );
+    expect(dashboardFlowSource).toContain('visible: "Dashboard"');
+    expect(dashboardFlowSource).toContain('visible: "Total Members"');
+    expect(dashboardFlowSource).not.toContain('visible: "Members"');
+    expect(dashboardFlowSource).toContain('- back');
   });
 
   test('keeps the owner AI room reachable from the Live Support hub', () => {
@@ -55,6 +70,8 @@ describe('IVX IA chat device certificate regression', () => {
 
   test('hard-gates send -> live AI reply -> visible render', () => {
     expect(E2E_PROMPT).not.toContain(E2E_REPLY);
+    expect(E2E_PROMPT).not.toContain('Reply exactly:');
+    expect(E2E_PROMPT).not.toContain('joining');
     expect(flowSource).toContain(`inputText: "${E2E_PROMPT}"`);
     expect(flowSource).toContain(`visible: "${E2E_PROMPT}"`);
     expect(flowSource).toContain(`visible: "${E2E_REPLY}"`);

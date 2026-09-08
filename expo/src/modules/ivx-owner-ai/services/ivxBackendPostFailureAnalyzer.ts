@@ -248,7 +248,14 @@ export function classifyBackendPostFailureReason(input: {
   const body = lower(input.backendResponse);
   const haystack = `${reason} ${body}`;
 
-  // 1. Owner-gated route auth rejection / fallback — the dominant documented
+  // 1. A dependency timeout is not proof that the owner's JWT is invalid.
+  //    Check it before the broad auth markers so a Supabase getUser timeout stays
+  //    retryable and is reported truthfully.
+  if (status === 408 || /timed out|timeout|total timeout|no progress past/.test(haystack)) {
+    return 'timeout';
+  }
+
+  // 2. Owner-gated route auth rejection / fallback — the dominant documented
   //    cause (BLOCK 13/21/30). Detect by status OR the route-failure markers
   //    the request service stamps onto the reason.
   if (
@@ -259,16 +266,11 @@ export function classifyBackendPostFailureReason(input: {
     return 'owner_ai_route_failure';
   }
 
-  // 2. Route missing — 404 / endpoint not registered / no such route. Must win
+  // 3. Route missing — 404 / endpoint not registered / no such route. Must win
   //    before the generic 4xx status bucket so a missing route is never lumped
   //    into ambiguous "status code".
   if (status === 404 || /route_missing|not found|no such route|route not registered|cannot (?:post|get) \//.test(haystack)) {
     return 'route_missing';
-  }
-
-  // 3. Timeout — explicit timeout text or 408 Request Timeout.
-  if (status === 408 || /timed out|timeout|total timeout|no progress past/.test(haystack)) {
-    return 'timeout';
   }
 
   // 4. Backend exception — 5xx, or the service-unavailable HTML classification

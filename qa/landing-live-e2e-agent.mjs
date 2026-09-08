@@ -2,6 +2,7 @@
 import { chromium } from 'playwright';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { findReturnGuaranteeClaims } from './landing-copy-assertions.mjs';
 
 const agentNumber = Number(process.env.AGENT_NUMBER || process.argv[2]);
 const agentId = process.env.AGENT_ID || `ivx_holdings_${agentNumber}`;
@@ -143,7 +144,8 @@ async function security(page) {
 async function legal(page) {
   const body = await page.locator('body').innerText();
   record('risk-of-loss', /loss of principal/i.test(body), 'Loss-of-principal disclosure visible', 'P0');
-  record('no-guaranteed-return', !/guaranteed (return|roi|profit)/i.test(body), 'No guaranteed return language', 'P0');
+  const guaranteeClaims = findReturnGuaranteeClaims(body);
+  record('no-guaranteed-return', guaranteeClaims.length === 0, JSON.stringify({ guaranteeClaims }), 'P0');
   for (const path of ['/privacy.html', '/terms.html', '/disclosures.html', '/legal.html']) {
     const response = await http(path);
     record(`legal-${path.slice(1)}-reachable`, response.status === 200, `${path} HTTP ${response.status}`, 'P0');
@@ -163,7 +165,10 @@ async function deals(page) {
   const body = await page.locator('body').innerText();
   record('three-deals-visible', /Jacksonville/i.test(body) && /Perez Residence/i.test(body) && /Casa Rosario/i.test(body), 'All three deals rendered', 'P0');
   record('deal-actions-visible', await page.getByRole('link', { name: /Invest Now/i }).count() >= 3, 'Invest Now appears for deals', 'P0');
-  record('no-broken-loaded-images', await page.evaluate(() => [...document.images].filter((img) => img.complete).every((img) => img.naturalWidth > 0)), 'All completed images decoded', 'P0');
+  const brokenImages = await page.evaluate(() => [...document.images]
+    .filter((img) => img.complete && img.naturalWidth === 0)
+    .map((img) => ({ src: img.currentSrc || img.src, alt: img.alt })));
+  record('no-broken-loaded-images', brokenImages.length === 0, JSON.stringify({ brokenImages }), 'P0');
   record('deal-card-dom-present', await cards.count() >= 3, `deal-like nodes=${await cards.count()}`);
 }
 
@@ -184,8 +189,8 @@ async function capture(page) {
 
 async function apk(page) {
   const apk = page.locator('a[href$=".apk"]').first();
-  const href = await apk.getAttribute('href');
-  record('apk-link-present', Boolean(href), href || 'missing', 'P0');
+  const href = await apk.count() ? await apk.getAttribute('href') : null;
+  record('apk-link-present', Boolean(href), href || 'No certified APK download is exposed; download gate remains FAIL', 'P0');
   if (href) {
     const response = await http(href, { method: 'HEAD' });
     record('apk-download-http-200', response.status === 200, `HTTP ${response.status}`, 'P0');

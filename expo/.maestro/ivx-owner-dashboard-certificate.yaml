@@ -7,9 +7,15 @@ tags:
   - critical
 ---
 # Runs after the real owner login flow on the same installed QA build.
-# Expo Router needs an absolute-path custom-scheme URL. With only two slashes,
-# "admin" becomes the URL host; three slashes preserve /admin/dashboard.
-- openLink: "ivx-app:///admin/dashboard"
+# Follow the authenticated owner UI instead of relying on a reactivation intent:
+# the Owner-only CRM tab and the Admin layout both enforce the existing guards.
+- tapOn:
+    id: "tab-crm"
+- extendedWaitUntil:
+    visible: "CRM"
+    timeout: 20000
+- tapOn:
+    id: "crm-link-admin-dashboard"
 - extendedWaitUntil:
     visible: "Dashboard"
     timeout: 20000
@@ -18,7 +24,7 @@ tags:
 - assertNotVisible: "Login service temporarily unavailable"
 # Core owner dashboard modules must paint instead of a black/blank surface.
 - extendedWaitUntil:
-    visible: "Members"
+    visible: "Total Members"
     timeout: 15000
 - extendedWaitUntil:
     visible: "Properties"
@@ -33,8 +39,8 @@ tags:
     duration: 800
 - assertVisible: "Dashboard"
 - assertNotVisible: "Something went wrong"
-# Return to the authenticated owner shell so the next certificate can open Chat.
-- openLink: "ivx-app:///"
+# Return to the authenticated tab shell so the next certificate can open Chat.
+- back
 - extendedWaitUntil:
     visible:
       id: "tab-chat"

@@ -946,7 +946,6 @@
   var _analyticsEventCount = 0;
   var _analyticsMaxPerSession = 500;
   var _scrollThresholds = { 25: false, 50: false, 75: false, 100: false };
-  var _geoFetched = false;
 
   function ivxTrack(eventName, props) {
     if (_analyticsEventCount >= _analyticsMaxPerSession) return;
@@ -1084,29 +1083,9 @@
     }, true);
   })();
 
-  (function fetchGeoData() {
-    if (_geoFetched) return;
-    _geoFetched = true;
-    fetch('https://ipapi.co/json/', { mode: 'cors' })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (data && data.country_name) {
-          GEO_DATA = {
-            country: data.country_name,
-            countryCode: data.country_code,
-            city: data.city,
-            region: data.region,
-            lat: data.latitude,
-            lng: data.longitude,
-            timezone: data.timezone
-          };
-          ivxTrack('geo_backfill', {});
-        }
-      })
-      .catch(function() {
-        /* ipapi.co CORS or rate limit — geo backfill is optional, fail silently */
-      });
-  })();
+  // Optional IP geolocation stays uncollected. The previous automatic request
+  // to an external provider was blocked by CSP and ran before cookie consent.
+  // An unavailable analytics enrichment must not break the public intake.
 
   window.addEventListener('beforeunload', function() {
     var duration = Math.round((Date.now() - PAGE_START) / 1000);
@@ -4143,3 +4122,4 @@
   });
   mo.observe(document.body, { childList: true, subtree: true });
 })();
+
