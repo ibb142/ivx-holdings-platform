@@ -30,10 +30,10 @@ import {
   readPostgresFleetLeaseRows,
 } from './ivx-postgres-autonomous-task-store';
 
-export const IVX_LANDING_CONTINUOUS_PATROL_MARKER = 'ivx-landing-continuous-patrol-2026-09-08-nonblocking-v2';
+export const IVX_LANDING_CONTINUOUS_PATROL_MARKER = 'ivx-landing-continuous-patrol-2026-09-08-nonblocking-v3';
 
-const DEFAULT_PATROL_INTERVAL_MS = 60 * 1000;
-const MIN_PATROL_INTERVAL_MS = 60 * 1000;
+const DEFAULT_PATROL_INTERVAL_MS = 5 * 1000;
+const MIN_PATROL_INTERVAL_MS = 1 * 1000;
 const MAX_PATROL_INTERVAL_MS = 60 * 60 * 1000;
 
 export type LandingPatrolLiveState = {
@@ -311,4 +311,3 @@ export async function runLandingPatrolSession(input: {
     error: lostError,
   };
 }
-
