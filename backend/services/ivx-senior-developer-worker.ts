@@ -2434,6 +2434,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
     if (job.input.executionMode === 'code_change' || job.input.executionMode === 'deploy') {
       const coderProof = await runIVXAutonomousCoder({
         taskId: job.input.taskId ?? job.jobId,
+        allowedFiles: job.input.filesAffected,
         goal: job.input.goal,
         executionMode: job.input.executionMode,
         ownerId: job.ownerId,

@@ -45,7 +45,7 @@ export function validateCertificate(item, report, context) {
 
 export function workerGoal(m, item) {
   return [marker(m, item), `${item.priority} item ${item.number}: ${item.title}.`, `QA lane owner IA ${item.assignedAgentNumber}; this is a scoped Senior Developer job, not proof that 112 independent coders are running.`,
-    `Action: ${item.action}`, `Acceptance: ${item.acceptance}`, `Repository instructions: ${MANIFEST_PATH}; qa/landing-owner-audit-sync.md.`,
+    `Action: ${item.action}`, `Acceptance: ${item.acceptance}`, `Allowed files: ${item.scopeFiles.join(', ')}. Reject patches outside this exact file set.`, `Repository instructions: ${MANIFEST_PATH}; qa/landing-owner-audit-sync.md.`,
     item.executionMode === 'qa_only' ? 'QA ONLY. Inspect and test with existing approved QA identities/fixtures. Do not change production records, send messages, alter infrastructure, permissions or authentication boundaries. If access or verified business data is missing, return BLOCKED with the exact dependency.' : 'Make the smallest low-risk application or QA code correction, run focused tests, and follow the existing PR, required CI and deployment policy. Do not change credentials, IAM, payments, destructive migrations, infrastructure or security boundaries. If the required change crosses those gates, return BLOCKED with the exact dependency.',
     'Do not infer a pass from task completion or overall workflow success. Preserve real failures and critical skips. Attach item-specific test output, expected/observed values and artifacts. Do not publish private audit data, credentials or user records in repository files, logs or artifacts. For production certification follow the approved artifact reference contract in qa/landing-owner-audit-sync.md. Report code fixed separately from production certified.',
     `Target completion requested by owner: ${m.targetCompleteBy}; never manufacture evidence to meet the deadline.`].join('\n');
@@ -96,6 +96,19 @@ export async function runSync({ fetchImpl = fetch, maxMinutes = 11 } = {}) {
   const meta = current.find(r => r.item.number === 1)?.data;
   const m = validateManifest({ ...meta?.ownerAuditManifest, items: current.map(r => r.data.definition).sort((a, b) => a.number - b.number) });
   if (Date.now() > Date.parse(m.monitorUntil)) { console.log('Owner audit monitoring window finished.'); return; }
+
+  // A push must wait for the matching API code before submitting private goals.
+  const expectedRuntimeSha = process.env.GITHUB_SHA;
+  if (!/^[a-f0-9]{40}$/.test(expectedRuntimeSha || '')) throw new Error('Expected runtime source SHA is missing');
+  const runtimeReadyUntil = Date.now() + 8 * 60_000;
+  while (true) {
+    const version = (await api('/version')).body;
+    const liveSha = version.commit ?? version.version?.commit;
+    if (liveSha === expectedRuntimeSha) break;
+    if (Date.now() >= runtimeReadyUntil) throw new Error('Matching runtime deployment is not ready; private work was not submitted');
+    await new Promise(resolve => setTimeout(resolve, 15_000));
+  }
+
   const state = { missionId: m.missionId, startedAt: meta.missionState?.startedAt || now(), ...meta.missionState, auditId, items: {} };
   if (state.missionId !== m.missionId) throw new Error('Stored mission identity mismatch');
   for (const item of m.items) {
