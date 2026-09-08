@@ -17,6 +17,7 @@ import {
   CloudFrontClient,
   CreateFunctionCommand,
   CreateInvalidationCommand,
+  GetInvalidationCommand,
   GetDistributionConfigCommand,
   DescribeFunctionCommand,
   PublishFunctionCommand,
@@ -27,6 +28,7 @@ import {
   GetResponseHeadersPolicyCommand,
 } from '@aws-sdk/client-cloudfront';
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
+import { completeLandingInvalidation } from './scripts/landing-cloudfront-invalidation.mjs';
 
 // ── AWS Configuration ─────────────────────────────────
 const ACCESS_KEY = process.env.AWS_ACCESS_KEY_ID || process.env.IVX_AWS_ACCESS_KEY_ID || '';
@@ -687,17 +689,26 @@ async function deploy() {
   console.log('');
   console.log('CloudFront invalidation...');
   try {
-    const inv = await cf.send(new CreateInvalidationCommand({
-      DistributionId: DIST_ID,
-      InvalidationBatch: {
-        CallerReference: 'ivx-deploy-' + Date.now(),
-        Paths: { Quantity: 1, Items: ['/*'] },
-      },
-    }));
-    console.log('✅ CloudFront invalidated:', inv.Invalidation?.Id || 'unknown');
+    const inv = await completeLandingInvalidation({
+      create: async () => (await cf.send(new CreateInvalidationCommand({
+        DistributionId: DIST_ID,
+        InvalidationBatch: {
+          CallerReference: 'ivx-deploy-' + Date.now(),
+          Paths: { Quantity: 1, Items: ['/*'] },
+        },
+      }), { abortSignal: AbortSignal.timeout(30_000) })).Invalidation,
+      read: async (id) => (await cf.send(new GetInvalidationCommand({
+        DistributionId: DIST_ID, Id: id,
+      }), { abortSignal: AbortSignal.timeout(30_000) })).Invalidation,
+      onCreated: (id) => console.log('CloudFront invalidation created:', id),
+    });
+    console.log('CloudFront invalidation COMPLETED:', inv.id);
+    results.push({ key: 'cloudfront-invalidation', status: 'ok', invalidationId: inv.id, invalidationStatus: inv.status });
   } catch (e) {
     console.error('❌ CloudFront invalidation FAILED:', e?.name || 'Unknown', e?.message || 'Unknown error');
     if (e?.$metadata) console.error('   HTTP:', e.$metadata.httpStatusCode, '| Request ID:', e.$metadata.requestId || 'N/A');
+    results.push({ key: 'cloudfront-invalidation', status: 'fail', error: e?.message || 'Unknown' });
+    fail++;
   }
 
   // ── Summary ────────────────────────────────────────
@@ -724,6 +735,7 @@ async function deploy() {
   // Write results for verification
   writeFileSync(LANDING_DIR + '/deploy-results.json', JSON.stringify({ ok, fail, results, buildVer: BUILD_VER, timestamp: new Date().toISOString() }, null, 2));
 
+  if (fail > 0) process.exitCode = 1;
   return { ok, fail };
 }
 
