@@ -1,0 +1,84 @@
+name: IVX bounded database availability recovery
+
+on:
+  push:
+    branches: [ops/supabase-ha-recovery-20260908]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ivx-bounded-database-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover-data-plane:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PROJECT_REF: kvclcdjmjghndxsngfzb
+      SUPABASE_URL: https://kvclcdjmjghndxsngfzb.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - name: Probe real durable reads and perform at most one conditional restart
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_SERVICE_ROLE_KEY" || { echo 'Missing service-role binding'; exit 2; }
+          mkdir -p evidence
+          : > evidence/probes.jsonl
+          probe() {
+            local phase="$1" code
+            code=$(curl -sS --max-time 10 -o /tmp/ivx-db-probe.json -w '%{http_code}' \
+              -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+              -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+              "$SUPABASE_URL/rest/v1/ivx_durable_documents?select=doc_key&limit=1" || true)
+            jq -nc --arg at "$(date -u +%FT%TZ)" --arg phase "$phase" --arg http "$code" \
+              '{at:$at,phase:$phase,http:$http}' | tee -a evidence/probes.jsonl
+            if [ "$code" = 200 ]; then
+              jq -e 'type == "array"' /tmp/ivx-db-probe.json >/dev/null
+              return 0
+            fi
+            case "$code" in 000|5??) return 1 ;; *) echo "Data access rejected: HTTP $code; restart refused"; exit 3 ;; esac
+          }
+          healthy=false
+          for i in 1 2 3; do
+            if probe before; then healthy=true; break; fi
+            sleep 2
+          done
+          restarted=false
+          if [ "$healthy" = false ]; then
+            test -n "$SUPABASE_ACCESS_TOKEN" || { echo 'Missing management-token binding; recovery unavailable'; exit 4; }
+            code=$(curl -sS --max-time 15 -o /tmp/ivx-project.json -w '%{http_code}' \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              "https://api.supabase.com/v1/projects/$PROJECT_REF" || true)
+            test "$code" = 200 || { echo "Management authentication failed: HTTP $code"; exit 5; }
+            test "$(jq -r '.id // .ref // empty' /tmp/ivx-project.json)" = "$PROJECT_REF"
+            code=$(curl -sS --max-time 45 -o /tmp/ivx-restart.json -w '%{http_code}' \
+              -X POST -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              -H 'Content-Type: application/json' \
+              "https://api.supabase.com/v1/projects/$PROJECT_REF/restart" || true)
+            echo "supabase_restart_http=$code"
+            case "$code" in 200|201|202) restarted=true ;; *) echo 'Restart was not accepted'; exit 6 ;; esac
+          fi
+          consecutive=0
+          for i in $(seq 1 40); do
+            if probe after; then consecutive=$((consecutive+1)); else consecutive=0; fi
+            if [ "$consecutive" -ge 3 ]; then break; fi
+            sleep 10
+          done
+          test "$consecutive" -ge 3 || { echo 'Durable reads did not recover'; exit 7; }
+          auth=$(curl -sS --max-time 10 -o /tmp/ivx-auth-health.json -w '%{http_code}' \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" "$SUPABASE_URL/auth/v1/health" || true)
+          test "$auth" = 200 || { echo "Auth health remains unavailable: HTTP $auth"; exit 8; }
+          jq -n --arg sha "$GITHUB_SHA" --arg at "$(date -u +%FT%TZ)" --argjson restarted "$restarted" \
+            '{ok:true,projectRef:"kvclcdjmjghndxsngfzb",sourceSha:$sha,verifiedAt:$at,restarted:$restarted,durableReadSamples:3,authHealthHttp:200,productionRowsModified:0,renderConfigurationChanged:false}' \
+            | tee evidence/recovery.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ivx-db-availability-${{ github.sha }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
