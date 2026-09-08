@@ -8,6 +8,9 @@ import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 const URL = `${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h`;
 const POLL_MS = 5_000;
+// A cold durable-ledger read can outlast one poll. Keep the request alive
+// without overlapping reads; freshness still depends on the server timestamp.
+const REQUEST_TIMEOUT_MS = 40_000;
 const RADAR_SIZE = 270;
 const RADAR_CENTER = RADAR_SIZE / 2;
 const RADAR_RADIUS = 112;
@@ -87,7 +90,8 @@ export default function LandingWorkersLiveScreen() {
     if (pendingRequest.current || AppState.currentState === 'background') return;
     const controller = new AbortController();
     pendingRequest.current = controller;
-    const deadline = setTimeout(() => controller.abort(), 15_000);
+    const deadline = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const startedAt = Date.now();
     if (!silent) setLoading(true);
     try {
       const token = await getIVXAccessToken();
@@ -105,7 +109,11 @@ export default function LandingWorkersLiveScreen() {
       setPayload(json);
       setError(null);
     } catch (e) {
-      if (mounted.current) setError(e instanceof Error ? e.message : 'Unable to load 112-worker telemetry.');
+      const message = controller.signal.aborted
+        ? 'Telemetry request timed out. Retrying the live ledger…'
+        : (e instanceof Error && e.message) || 'Unable to load 112-worker telemetry.';
+      console.warn('[IVXMissionControl] Telemetry read failed', { elapsedMs: Date.now() - startedAt, message });
+      if (mounted.current) setError(message);
     } finally {
       clearTimeout(deadline);
       pendingRequest.current = null;
@@ -155,8 +163,10 @@ export default function LandingWorkersLiveScreen() {
           <View style={styles.heroTop}>
             <Radio size={20} color={fresh ? '#22C55E' : '#94A3B8'} />
             <Text style={styles.heroTitle}>LIVE OPERATIONS RADAR</Text>
-            <Text testID="ivx-mission-telemetry-state" style={[styles.liveState, { color: fresh ? '#22C55E' : '#F59E0B' }]}>{fresh ? 'LIVE TELEMETRY' : payload ? 'STALE TELEMETRY' : 'CONNECTING'}</Text>
+            <Text testID="ivx-mission-telemetry-state" style={[styles.liveState, { color: fresh ? '#22C55E' : '#F59E0B' }]}>{fresh ? 'LIVE TELEMETRY' : payload ? 'STALE TELEMETRY' : error ? 'RECONNECTING' : 'CONNECTING'}</Text>
           </View>
+
+          {error ? <View style={styles.alert}><AlertTriangle size={18} color="#EF4444" /><Text style={styles.error}>{error}</Text></View> : null}
 
           <RadarBoard agents={agents} fresh={fresh} />
 
@@ -190,7 +200,6 @@ export default function LandingWorkersLiveScreen() {
         </View>
 
         {loading && !payload ? <Text style={styles.message}>Connecting to production worker ledger…</Text> : null}
-        {error ? <View style={styles.alert}><AlertTriangle size={18} color="#EF4444" /><Text style={styles.error}>{error}</Text></View> : null}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>MISSION ALERT CENTER</Text>

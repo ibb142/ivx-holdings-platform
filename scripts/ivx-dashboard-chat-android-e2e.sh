@@ -55,7 +55,7 @@ timeout 240s "$MAESTRO" test "$FLOW_DIR/chat.yaml" \
   --output qa/evidence/dashboard-chat/chat.xml
 
 # 4) Aviation mission dashboard: complete live roster and restart navigation.
-timeout 180s "$MAESTRO" test "$FLOW_DIR/mission.yaml" \
+timeout 300s "$MAESTRO" test "$FLOW_DIR/mission.yaml" \
   --env OWNER_EMAIL="$OWNER_EMAIL" \
   --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" \
   --format junit --output qa/evidence/dashboard-chat/mission.xml

@@ -723,6 +723,7 @@ async function runMedia(fetchImpl: typeof fetch, source: 'deals-images' | 'deals
   const { urls, owners, emptyOwners, error } = await mediaUrls(fetchImpl, source, c);
   if (error) return fail(error, 'api', 'restore source API');
   c.evidence.push(`${source}: ${urls.length} media urls`);
+  if (urls.length === 0) return fail(`no ${source} urls found; no media was verified`, 'media', 'attach the required media before certification');
   if (assert === 'no-missing') return emptyOwners.length === 0 ? pass(`every ${source.split('-')[0]} item has media`) : fail(`no media on: ${emptyOwners.join(', ')}`, 'media', 'attach media');
   if (assert === 'no-duplicates') {
     const shared = [...owners.entries()].filter(([, set]) => set.size > 1);
@@ -732,7 +733,6 @@ async function runMedia(fetchImpl: typeof fetch, source: 'deals-images' | 'deals
     const bad = urls.filter((u) => !/^https:\/\//i.test(u) || /localhost|127\.0\.0\.1|\.local\b/i.test(u));
     return bad.length === 0 ? pass(`${urls.length} media urls https`) : fail(`non-https/local media: ${bad.slice(0, 5).map((u) => truncate(u, 60)).join(', ')}`, 'media', 'serve media from https CDN');
   }
-  if (urls.length === 0) return source === 'deals-videos' ? pass('no video urls to verify (see deals.videos-present)') : fail(`no ${source} urls found`, 'media', 'attach media');
   const sample = urls.slice(0, max ?? 40);
   const results = await mapLimit(sample, MEDIA_CONCURRENCY, async (url) => ({ url, result: await headOrGet(fetchImpl, url) }));
   for (const { url, result } of results) c.api.push(`${truncate(url, 90)} → ${result.status || result.error} ${result.contentType || '-'} ${result.bytes}B`);
@@ -741,15 +741,20 @@ async function runMedia(fetchImpl: typeof fetch, source: 'deals-images' | 'deals
     return dead.length === 0 ? pass(`${sample.length}/${urls.length} media urls resolve`) : fail(`${dead.length}/${sample.length} media unreachable: ${dead.slice(0, 5).map((d) => `${truncate(d.url, 60)} (${d.result.status || d.result.error})`).join(', ')}`, 'media', 'fix broken/missing media URLs');
   }
   if (assert === 'mime') {
+    const unavailable = results.filter(({ result }) => result.status !== 200 && result.status !== 206);
+    if (unavailable.length > 0) return fail(`${unavailable.length}/${sample.length} media responses unavailable; MIME not verified`, 'media', 'restore the media responses before checking content-type');
     const expected = source.includes('video') ? /^video\/|^application\/(vnd\.apple\.mpegurl|x-mpegurl|dash\+xml)/ : /^image\//;
-    const wrong = results.filter(({ result }) => result.status < 400 && result.status !== 0 && !expected.test(result.contentType) && !(result.contentType === '' && source.includes('video')));
+    const wrong = results.filter(({ result }) => !expected.test(result.contentType));
     return wrong.length === 0 ? pass(`${sample.length} media with correct MIME`) : fail(`${wrong.length}/${sample.length} wrong MIME: ${wrong.slice(0, 5).map((w) => `${truncate(w.url, 50)} → ${w.result.contentType || 'none'}`).join(', ')}`, 'media', 'serve media with correct content-type');
   }
   // weight
+  const unavailable = results.filter(({ result }) => result.status !== 200 && result.status !== 206);
+  if (unavailable.length > 0) return fail(`${unavailable.length}/${sample.length} media responses unavailable; weight not verified`, 'media', 'restore the media responses before measuring weight');
   const heavy = results.filter(({ result }) => result.bytes > 1_500_000);
   const unknown = results.filter(({ result }) => result.bytes === 0 && result.status < 400).length;
   const total = results.reduce((sum, { result }) => sum + result.bytes, 0);
   c.evidence.push(`media weight total ${total}B (${unknown} unknown sizes)`);
+  if (unknown > 0) return blocked(`${unknown}/${sample.length} media sizes unavailable; weight budget cannot be certified`);
   return heavy.length === 0 ? pass(`no image > 1.5MB (total ${Math.round(total / 1024)}KB)`) : fail(`${heavy.length} images > 1.5MB: ${heavy.slice(0, 4).map((h) => `${truncate(h.url, 50)} ${Math.round(h.result.bytes / 1024)}KB`).join(', ')}`, 'performance', 'compress/resize images');
 }
 
@@ -788,7 +793,7 @@ async function runReels(fetchImpl: typeof fetch, assert: 'unique' | 'by-id' | 'm
 }
 
 const PROBE_EMAIL = `ivx-landing-p0-probe-${Date.now().toString(36)}@invalid.ivxholding.test`;
-const VALID_REGISTRATION = { firstName: 'IVX', lastName: 'Probe', name: 'IVX Probe', email: PROBE_EMAIL, phone: '+15555550100', cell: '+15555550100', role: 'investor', zip: '33101', zipCode: '33101', password: 'Probe-Password-1!x' };
+const VALID_REGISTRATION = { firstName: 'IVX', lastName: 'Probe', email: PROBE_EMAIL, phone: '+15555550100', country: 'US', roles: ['investor'], acceptTerms: true, dateOfBirth: '1990-01-01', gender: 'prefer_not_to_say', zipCode: '33101', password: 'Probe-Password-1!x' };
 
 function isValidationStatus(status: number): boolean {
   return status === 400 || status === 422 || status === 409;
@@ -815,23 +820,19 @@ async function runContract(fetchImpl: typeof fetch, probeName: string, c: Collec
     if (result.status >= 500 || result.status === 0) return fail(`registration ${result.status || result.error} on invalid input`, 'infra', 'handle validation without 5xx');
     if (result.status >= 200 && result.status < 300) return fail(`registration ACCEPTED invalid payload (${result.status}) — member may have been created for ${PROBE_EMAIL}`, 'api', 'enforce server-side validation');
     if (!isValidationStatus(result.status)) return fail(`unexpected ${result.status} for invalid registration`, 'api', 'return 400 with message');
-    if (expectFieldHint && !expectFieldHint.test(message)) return pass(`rejected (${result.status}); message does not name the field: "${truncate(message, 60)}"`);
+    if (expectFieldHint && !expectFieldHint.test(message)) return fail(`rejected (${result.status}) for an unverified field: "${truncate(message, 60)}"`, 'api', 'isolate and verify the intended validation rule');
     return pass(`rejected ${result.status}: "${truncate(message, 60)}"`);
   };
   switch (probeName) {
     case 'register-empty': return registration({}, null);
-    case 'register-missing-name': { const { firstName: _a, name: _b, ...rest } = VALID_REGISTRATION; return registration(rest, /name/i); }
-    case 'register-missing-last-name': { const { lastName: _a, ...rest } = VALID_REGISTRATION; return registration({ ...rest, name: 'IVX' }, /last|name/i); }
+    case 'register-missing-name': { const { firstName: _a, ...rest } = VALID_REGISTRATION; return registration(rest, /first|name/i); }
+    case 'register-missing-last-name': { const { lastName: _a, ...rest } = VALID_REGISTRATION; return registration(rest, /last|name/i); }
     case 'register-invalid-email': return registration({ ...VALID_REGISTRATION, email: 'not-an-email' }, /email/i);
-    case 'register-missing-cell': { const { phone: _a, cell: _b, ...rest } = VALID_REGISTRATION; return registration(rest, /phone|cell|mobile/i); }
-    case 'register-invalid-role': return registration({ ...VALID_REGISTRATION, role: 'zzz-invalid-role' }, /role/i);
-    case 'register-invalid-zip': return registration({ ...VALID_REGISTRATION, zip: 'ABC', zipCode: 'ABC' }, /zip|postal/i);
+    case 'register-missing-cell': { const { phone: _a, ...rest } = VALID_REGISTRATION; return registration(rest, /phone|cell|mobile/i); }
+    case 'register-invalid-role': return registration({ ...VALID_REGISTRATION, roles: ['zzz-invalid-role'] }, /role/i);
+    case 'register-invalid-zip': return blocked('ZIP validation requires an isolated registration acceptance fixture; production must not receive an otherwise valid account-creation probe');
     case 'register-picture-optional': {
-      const { firstName: _a, name: _b, ...rest } = VALID_REGISTRATION;
-      const verdict = await registration(rest, null);
-      if (verdict.status !== 'PASS') return verdict;
-      const last = c.api[c.api.length - 1] ?? '';
-      return /picture|photo|avatar|image/i.test(last) ? fail('validation demands a picture — picture must be optional', 'api', 'make picture optional') : pass('picture not required by validation');
+      return blocked('Optional picture requires successful registration with a controlled QA identity; rejection for another missing field is not proof');
     }
     case 'register-duplicate': {
       const owner = (process.env.IVX_OWNER_EMAIL ?? '').trim();
@@ -843,7 +844,7 @@ async function runContract(fetchImpl: typeof fetch, probeName: string, c: Collec
       if (result.status === 429) return blocked('production rate limiter (429) — probe deferred');
       if (result.status >= 200 && result.status < 300) return fail('duplicate registration ACCEPTED (2xx) for existing owner email', 'auth', 'reject duplicate emails with 409');
       if (result.status >= 500 || result.status === 0) return fail(`duplicate registration → ${result.status || result.error}`, 'infra', 'handle duplicates without 5xx');
-      return /exist|already|duplicate|taken|registered|in use/i.test(message) || result.status === 409 ? pass(`duplicate rejected ${result.status}: "${truncate(message, 60)}"`) : pass(`duplicate rejected ${result.status} (generic message)`);
+      return /exist|already|duplicate|taken|registered|in use/i.test(message) || result.status === 409 ? pass(`duplicate rejected ${result.status}: "${truncate(message, 60)}"`) : fail(`duplicate rule not verified by ${result.status}: "${truncate(message, 60)}"`, 'auth', 'verify an explicit duplicate rejection with a controlled existing QA identity');
     }
     case 'register-error-message': {
       const verdict = await registration({}, null);
@@ -895,11 +896,10 @@ async function runContract(fetchImpl: typeof fetch, probeName: string, c: Collec
       if (result.status === 404) return fail('reset-password route missing', 'api', 'mount /api/members/reset-password');
       return result.status >= 500 || result.status === 0 ? fail(`reset-password → ${result.status || result.error}`, 'infra', 'reject invalid token with 4xx') : pass(`invalid reset token rejected (${result.status})`);
     }
+    case 'expired-token': return blocked('Expiry verification requires an issuer-signed expired QA token; an invalid signature does not prove expiry enforcement');
     case 'protected-unauth':
-    case 'expired-token':
     case 'invalid-token': {
-      const expired = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' + Buffer.from(JSON.stringify({ sub: 'probe', exp: 1_600_000_000, role: 'authenticated' })).toString('base64url') + '.invalidsignature';
-      const headers: Record<string, string> = probeName === 'protected-unauth' ? {} : { authorization: `Bearer ${probeName === 'expired-token' ? expired : 'invalid.token.value'}` };
+      const headers: Record<string, string> = probeName === 'protected-unauth' ? {} : { authorization: 'Bearer invalid.token.value' };
       const result = await probe(fetchImpl, `${LANDING_API_URL}/api/ivx/autonomous-core/dashboard`, { headers: { accept: 'application/json', ...headers } });
       c.api.push(`GET /api/ivx/autonomous-core/dashboard (${probeName}) → ${result.status || result.error}`);
       if (result.status === 401 || result.status === 403) return pass(`protected route rejected ${probeName} (${result.status})`);
