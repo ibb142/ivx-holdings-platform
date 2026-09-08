@@ -1,0 +1,134 @@
+name: Owner Activate 112 Landing Now
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/owner-activate-112-landing-now.yml'
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: owner-activate-112-landing-now
+  cancel-in-progress: false
+
+env:
+  API_BASE: https://api.ivxholding.com
+
+jobs:
+  activate-112-landing:
+    name: Activate all 112 IA on Landing P0
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify owner Landing P0 state
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f qa/owner-priority-state.json
+          test "$(jq -r '.active // false' qa/owner-priority-state.json)" = true
+          test "$(jq -r '.priority // ""' qa/owner-priority-state.json)" = 'P0-OWNER'
+          test "$(jq -r '.mission // ""' qa/owner-priority-state.json)" = 'landing'
+          echo 'OWNER_P0_LANDING=PASS'
+
+      - name: Validate 144-item owner audit contracts
+        run: node --test qa/landing-owner-audit-sync.test.mjs qa/landing-owner-audit-store.test.mjs
+
+      - name: Resolve exact live SHA and 112-agent registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 3 --retry-delay 2 --max-time 20 "$API_BASE/version" -o /tmp/version.json
+          curl -fsS --retry 3 --retry-delay 2 --max-time 20 "$API_BASE/api/ivx/agents" -o /tmp/agents.json
+          LIVE_SHA=$(jq -r '.commit // .version.commit // empty' /tmp/version.json)
+          test -n "$LIVE_SHA"
+          test "$(jq -r '.ok // false' /tmp/agents.json)" = true
+          test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
+          echo "LIVE_SHA=$LIVE_SHA" >> "$GITHUB_ENV"
+          jq -r '.agents[] | [.agentNumber,.agentId] | @tsv' /tmp/agents.json > /tmp/agents.tsv
+          test "$(wc -l < /tmp/agents.tsv | tr -d ' ')" = 112
+          echo "LIVE_SHA=$LIVE_SHA TOTAL_AGENTS=112"
+
+      - name: Mint bounded GitHub recovery identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          token_json=$(curl -fsS --max-time 15 \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=ivx-360-autonomous-recovery")
+          OIDC_TOKEN=$(printf '%s' "$token_json" | jq -r '.value // empty')
+          test -n "$OIDC_TOKEN"
+          echo "::add-mask::$OIDC_TOKEN"
+          echo "OIDC_TOKEN=$OIDC_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Put all 112 real IA back to work on Landing 10/10
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/landing112 qa/evidence/autonomous
+          export API_BASE LIVE_SHA OIDC_TOKEN
+          run_one() {
+            number="$1"; agent_id="$2"; http=000; ok=false
+            lanes=(
+              'landing-shell-navigation'
+              'landing-owner-signin'
+              'landing-member-registration'
+              'landing-forgot-password'
+              'landing-property-cards'
+              'landing-deal-ordering'
+              'landing-reels-media'
+              'landing-video-playback'
+              'landing-responsive-mobile'
+              'landing-api-contracts'
+              'landing-cloudfront-live'
+              'landing-accessibility'
+              'landing-performance'
+              'landing-console-errors'
+              'landing-form-submission'
+              'landing-auth-session'
+            )
+            idx=$(( (number - 1) % ${#lanes[@]} ))
+            lane="${lanes[$idx]}"
+            task_id="owner-landing-now-${GITHUB_RUN_ID}-${number}-${lane}"
+            body=$(jq -nc \
+              --arg sourceSha "$LIVE_SHA" \
+              --arg taskId "$task_id" \
+              --arg lane "$lane" \
+              --argjson number "$number" \
+              '{taskType:"audit",payload:{sourceSha:$sourceSha,__taskId:$taskId,__workflow:"Owner Activate 112 Landing Now",__toolId:"code_search",__toolParams:{pattern:$lane,scope:"expo/ivxholding-landing"},mission:"landing",priority:"P0-OWNER",agentNumber:$number,goal:("LANDING 10/10 P0 NOW: audit, identify, repair through approved autonomous paths, re-test, and attach real evidence for " + $lane + ". Use the current 144-item owner landing audit as the acceptance backlog. No simulated success; blocked dependencies must be classified and resumed, not burned as retry failures."),realExecutionOnly:true,simulatedSuccessAllowed:false}}')
+            http=$(curl -sS --max-time 90 -o "/tmp/landing112/${number}.response.json" -w '%{http_code}' \
+              -X POST "$API_BASE/api/ivx/agents/${agent_id}/run" \
+              -H 'Content-Type: application/json' \
+              -H "X-IVX-GitHub-OIDC: ${OIDC_TOKEN}" \
+              --data "$body" || true)
+            [ "$http" = 200 ] && ok=$(jq -r '.ok // false' "/tmp/landing112/${number}.response.json")
+            jq -n --argjson n "$number" --arg id "$agent_id" --arg lane "$lane" --arg http "$http" --argjson ok "$ok" \
+              '{agentNumber:$n,agentId:$id,lane:$lane,httpStatus:$http,accepted:$ok}' > "/tmp/landing112/${number}.json"
+          }
+          export -f run_one
+          while IFS=$'\t' read -r number agent_id; do printf '%s\t%s\n' "$number" "$agent_id"; done < /tmp/agents.tsv \
+            | xargs -P 112 -n 2 bash -c 'run_one "$0" "$1"'
+          jq -s 'sort_by(.agentNumber)' /tmp/landing112/[0-9]*.json > qa/evidence/autonomous/owner-activate-112-landing-now.json
+          total=$(jq 'length' qa/evidence/autonomous/owner-activate-112-landing-now.json)
+          accepted=$(jq '[.[] | select(.accepted == true)] | length' qa/evidence/autonomous/owner-activate-112-landing-now.json)
+          echo "LANDING_112_TOTAL=$total LANDING_112_ACCEPTED=$accepted"
+          test "$total" = 112
+          test "$accepted" = 112
+
+      - name: Run existing 144-item owner landing audit synchronization
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node qa/landing-owner-audit-sync.mjs
+
+      - name: Upload exact activation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: owner-activate-112-landing-now-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qa/evidence/autonomous/owner-activate-112-landing-now.json
+          if-no-files-found: warn
