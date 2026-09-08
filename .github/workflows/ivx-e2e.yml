@@ -31,8 +31,8 @@ jobs:
             echo 'MOBILE_IMPACT=FULL_MAIN_GATE'
             exit 0
           fi
-          git fetch --no-tags origin "${{ github.base_ref }}" --depth=1
-          base=$(git merge-base HEAD "origin/${{ github.base_ref }}")
+          # Compare with the immutable event base; a shallow fetch of moving main can sever ancestry.
+          base=$(git merge-base HEAD "${{ github.event.pull_request.base.sha }}")
           git diff --name-only "$base"...HEAD > "$RUNNER_TEMP/changed-files.txt"
           cat "$RUNNER_TEMP/changed-files.txt"
           mobile=false
