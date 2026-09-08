@@ -9,6 +9,7 @@ import { handleAutonomousDashboardStreamConnection, IVX_AUTONOMOUS_DASHBOARD_STR
 import { startSeniorDevWorker } from './backend/services/ivx-senior-dev-worker';
 import { startAutonomousScheduler } from './backend/services/ivx-autonomous-scheduler';
 import { startAutonomousIntelligenceMissionScheduler } from './backend/services/ivx-autonomous-intelligence-mission-scheduler';
+import { startContinuousExecutionScheduler, startContinuousSession, getContinuousSession } from './backend/services/ivx-continuous-execution';
 import { startSmsNotificationScheduler, getSmsNotifierStatus } from './backend/services/ivx-autonomous-sms-notifier';
 import { runCompletionCampaignCycle } from './backend/services/ivx-autonomous-completion-campaign';
 import { getLatestMemberAuthCertification, startMemberAuthCertificationScheduler } from './backend/services/ivx-member-auth-certification';
@@ -68,19 +69,12 @@ app.post('/api/ivx/autonomous/control', async (c) => {
   const allowed: TruthControlAction[] = ['start_all','stop_all','pause_all','resume_all','pause_agent','resume_agent','disable_agent','enable_agent','retry_agent'];
   if (!allowed.includes(action)) return c.json({ ok: false, error: `action must be one of: ${allowed.join(', ')}` }, 400);
   try {
-    const oidcRecoveryAuthorized = (action === 'start_all' || action === 'resume_all')
-      && await verifyIVXGitHubActionsOIDCRequest(c.req.raw);
+    const oidcRecoveryAuthorized = (action === 'start_all' || action === 'resume_all') && await verifyIVXGitHubActionsOIDCRequest(c.req.raw);
     let authorization: unknown = 'github_oidc_recovery';
-    if (!oidcRecoveryAuthorized) {
-      const auth = await assertIVXRegisteredOwnerBearer(c.req.raw, `autonomous_control:${action}`);
-      authorization = auth.approval;
-    }
+    if (!oidcRecoveryAuthorized) { const auth = await assertIVXRegisteredOwnerBearer(c.req.raw, `autonomous_control:${action}`); authorization = auth.approval; }
     const snapshot = await applyTruthControl(action, typeof (body as any).agentId === 'string' ? (body as any).agentId : undefined, typeof (body as any).agentNumber === 'number' ? (body as any).agentNumber : undefined);
     return c.json({ ok: true, action, authorization, snapshot });
-  } catch (error: any) {
-    const status = typeof error?.status === 'number' ? error.status : 400;
-    return c.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, status);
-  }
+  } catch (error: any) { const status = typeof error?.status === 'number' ? error.status : 400; return c.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, status); }
 });
 
 app.options('/api/ivx/autonomous/voice', () => autonomousVoiceOptions());
@@ -91,47 +85,57 @@ app.all('/api/ivx/autonomous/voice/laml', async (c) => handleAutonomousVoiceLaml
 app.all('/api/ivx/autonomous/voice/status', async (c) => handleAutonomousVoiceCallback(c.req.raw));
 app.get('/api/ivx/certification/autonomous-voice-public', async (c) => handleAutonomousVoicePublicCertificate(c.req.raw));
 
-// Certificate recovery owns the agent runtime until every recovered row is
-// terminal. Starting any fleet scheduler sooner recreates in-memory task locks
-// and blocks the certificate that boot is trying to recover.
+// Certificate recovery owns the agent runtime until every recovered row is terminal.
 void certificateBootRecovery.finally(() => {
-startAutonomous112RuntimeEnforcer();
-if (!landingFleetFocus) {
-  startAutonomousScheduler();
-  startAutonomousIntelligenceMissionScheduler();
-  startGitHubActionsExternalSupervisor();
-  startAutonomousLiveBootstrap();
-  startAutonomousDoctor();
-} else {
-  console.log('[IVX Landing Fleet Focus] exclusive 112-lane runtime active; unrelated server schedulers suppressed');
-}
+  startAutonomous112RuntimeEnforcer();
+  if (!landingFleetFocus) {
+    startAutonomousScheduler();
+    startAutonomousIntelligenceMissionScheduler();
+    startGitHubActionsExternalSupervisor();
+    startAutonomousLiveBootstrap();
+    startAutonomousDoctor();
+    // 24/7 self-heal: scheduler is always booted. If no durable session is
+    // active after a restart, create one. Sessions renew before their horizon;
+    // they do not pause merely because the owner is using the app.
+    startContinuousExecutionScheduler();
+    void (async () => {
+      try {
+        const current = await getContinuousSession();
+        if (!['running', 'paused'].includes(current.status)) {
+          await startContinuousSession({ maxDurationMs: 12 * 60 * 60_000, maxPasses: 500, intervalMs: 60_000, stopWhenClean: false, suites: ['typecheck'] });
+        }
+      } catch (error) {
+        console.warn('[IVX Server] continuous self-heal bootstrap failed', { error: error instanceof Error ? error.message : String(error) });
+      }
+    })();
+  } else {
+    console.log('[IVX Landing Fleet Focus] exclusive 112-lane runtime active; unrelated server schedulers suppressed');
+  }
 
-const runCompletionCycleSafely = async (reason: string): Promise<void> => {
-  try { const state = await runCompletionCampaignCycle(4); console.log('[IVX Completion Campaign]', { reason, phase: state.phase, verifiedAgents: state.totals.verifiedAgents }); }
-  catch (error) { console.error('[IVX Completion Campaign] cycle failed', { reason, error: error instanceof Error ? error.message : String(error) }); }
-};
-if (!landingFleetFocus) {
-  const campaignBootKick = setTimeout(() => { void runCompletionCycleSafely('boot'); }, 20_000); campaignBootKick.unref?.();
-  const campaignTimer = setInterval(() => { void runCompletionCycleSafely('interval'); }, COMPLETION_CAMPAIGN_INTERVAL_MS); campaignTimer.unref?.();
-}
+  const runCompletionCycleSafely = async (reason: string): Promise<void> => {
+    try { const state = await runCompletionCampaignCycle(4); console.log('[IVX Completion Campaign]', { reason, phase: state.phase, verifiedAgents: state.totals.verifiedAgents }); }
+    catch (error) { console.error('[IVX Completion Campaign] cycle failed', { reason, error: error instanceof Error ? error.message : String(error) }); }
+  };
+  if (!landingFleetFocus) {
+    const campaignBootKick = setTimeout(() => { void runCompletionCycleSafely('boot'); }, 20_000); campaignBootKick.unref?.();
+    const campaignTimer = setInterval(() => { void runCompletionCycleSafely('interval'); }, COMPLETION_CAMPAIGN_INTERVAL_MS); campaignTimer.unref?.();
+  }
 
-startAgentHeartbeatLoop(buildHeartbeatRows);
-if (!landingFleetFocus) {
-  startSmsNotificationScheduler();
-  const smsStatus = getSmsNotifierStatus();
-  console.log('[IVX Server] Autonomous owner communications initialized', { configured: smsStatus.phoneConfigured, destination: smsStatus.phoneMasked, schedulerRunning: smsStatus.schedulerRunning, smsDailyCap: smsStatus.smsDailyCap, voiceConfigured: smsStatus.voice.configured, voiceDailyCap: smsStatus.voice.dailyCap });
-
-  const liveVoiceCertKick = setTimeout(() => { void (async () => {
-    try {
-      const existing = (await listAutonomousVoiceCalls(200)).find((row) => row.traceId === LIVE_VOICE_CERT_TRACE_ID && row.requestStatus === 'queued' && Boolean(row.callSid));
-      if (existing) return;
-      await placeAutonomousVoiceCall({ traceId: LIVE_VOICE_CERT_TRACE_ID, message: 'Hello. This is IVX Autonomous. This is our live end to end voice certification call.' });
-    } catch (error) { console.warn('[IVX Voice Cert] Call attempt failed', { traceId: LIVE_VOICE_CERT_TRACE_ID, error: error instanceof Error ? error.message.slice(0, 180) : 'unknown' }); }
-  })(); }, 60_000); liveVoiceCertKick.unref?.();
-
-  startMemberAuthCertificationScheduler();
-  if (process.env.IVX_SENIOR_DEV_WORKER_ENABLED === 'true') startSeniorDevWorker().catch((error) => console.error('[IVX Server] Senior dev worker failed to start', { error: error instanceof Error ? error.message : String(error) }));
-}
+  startAgentHeartbeatLoop(buildHeartbeatRows);
+  if (!landingFleetFocus) {
+    startSmsNotificationScheduler();
+    const smsStatus = getSmsNotifierStatus();
+    console.log('[IVX Server] Autonomous owner communications initialized', { configured: smsStatus.phoneConfigured, destination: smsStatus.phoneMasked, schedulerRunning: smsStatus.schedulerRunning, smsDailyCap: smsStatus.smsDailyCap, voiceConfigured: smsStatus.voice.configured, voiceDailyCap: smsStatus.voice.dailyCap });
+    const liveVoiceCertKick = setTimeout(() => { void (async () => {
+      try {
+        const existing = (await listAutonomousVoiceCalls(200)).find((row) => row.traceId === LIVE_VOICE_CERT_TRACE_ID && row.requestStatus === 'queued' && Boolean(row.callSid));
+        if (existing) return;
+        await placeAutonomousVoiceCall({ traceId: LIVE_VOICE_CERT_TRACE_ID, message: 'Hello. This is IVX Autonomous. This is our live end to end voice certification call.' });
+      } catch (error) { console.warn('[IVX Voice Cert] Call attempt failed', { traceId: LIVE_VOICE_CERT_TRACE_ID, error: error instanceof Error ? error.message.slice(0, 180) : 'unknown' }); }
+    })(); }, 60_000); liveVoiceCertKick.unref?.();
+    startMemberAuthCertificationScheduler();
+    if (process.env.IVX_SENIOR_DEV_WORKER_ENABLED === 'true') startSeniorDevWorker().catch((error) => console.error('[IVX Server] Senior dev worker failed to start', { error: error instanceof Error ? error.message : String(error) }));
+  }
 });
 
 const productionFetch: typeof app.fetch = async (request, env, executionCtx) => {
@@ -146,23 +150,15 @@ const productionFetch: typeof app.fetch = async (request, env, executionCtx) => 
 
 app.get('/api/ivx/realtime-voice/status', (c) => c.json(getRealtimeVoiceStatus()));
 app.options('/api/ivx/realtime-voice/status', (c) => c.body(null, 204));
-
 const voiceWss = new WebSocketServer({ noServer: true });
 voiceWss.on('connection', (ws, request) => { void handleRealtimeVoiceConnection(ws as any, request); });
 const dashboardWss = new WebSocketServer({ noServer: true });
 dashboardWss.on('connection', (ws, request) => { void handleAutonomousDashboardStreamConnection(ws as any, request); });
-
 const httpServer = serve({ fetch: productionFetch, port: PORT, hostname: HOST }, (info) => console.log('[IVX Server] Hono API server online', { host: HOST, port: info.port, family: info.family }));
 httpServer.on('upgrade', (request, socket, head) => {
   const url = new URL(request.url || '', `http://${request.headers.host || 'localhost'}`);
-  if (url.pathname === '/api/ivx/realtime-voice') {
-    voiceWss.handleUpgrade(request, socket, head, (ws) => { voiceWss.emit('connection', ws, request); });
-    return;
-  }
-  if (url.pathname === IVX_AUTONOMOUS_DASHBOARD_STREAM_PATH) {
-    dashboardWss.handleUpgrade(request, socket, head, (ws) => { dashboardWss.emit('connection', ws, request); });
-    return;
-  }
+  if (url.pathname === '/api/ivx/realtime-voice') { voiceWss.handleUpgrade(request, socket, head, (ws) => { voiceWss.emit('connection', ws, request); }); return; }
+  if (url.pathname === IVX_AUTONOMOUS_DASHBOARD_STREAM_PATH) { dashboardWss.handleUpgrade(request, socket, head, (ws) => { dashboardWss.emit('connection', ws, request); }); return; }
   socket.destroy();
 });
 console.log('[IVX Server] Realtime Voice WebSocket endpoint: ws://.../api/ivx/realtime-voice');
