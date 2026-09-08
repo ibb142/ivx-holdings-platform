@@ -24,6 +24,7 @@
  * relevant tests passed, typecheck passed, and (for code changes) a real commit
  * SHA was produced.
  */
+import { assertPrivateRepairScope, publicRepairGoal } from './ivx-private-repair-boundary';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -291,6 +292,8 @@ export type IVXAutonomousCoderProof = {
 
 export type IVXAutonomousCoderInput = {
   taskId: string;
+  /** Exact repository paths authorized for a private repair. */
+  allowedFiles?: string[];
   goal: string;
   /** Owner mandate 2026-08-28 (Mission F): originating IA for commit/PR
    *  attribution trailers. Absent = SYSTEM attribution (never ambiguous). */
@@ -2255,6 +2258,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       let patchApplied = false;
       let applyError: string | null = null;
       try {
+        assertPrivateRepairScope(input.goal, input.allowedFiles, fallback.operations.map(op => op.path));
         for (const op of fallback.operations) {
           await applyPatchOperation(op, projectRoot, input.fileWriter, input.fileReader);
         }
@@ -2663,6 +2667,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     const appliedOps: IVXAutonomousCoderPatchOperation[] = [];
     let applyError: string | null = null;
     try {
+      assertPrivateRepairScope(input.goal, input.allowedFiles, parsed.operations.map(op => op.path));
       for (const op of parsed.operations) {
         await applyPatchOperation(op, projectRoot, input.fileWriter, input.fileReader);
         appliedOps.push(op);
@@ -2923,6 +2928,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         const branchName = input.executionMode === 'deploy'
           ? approvedProductionBranch
           : `${AUTONOMOUS_CODER_BRANCH}-${sanitizeBranchSuffix(input.taskId)}`;
+        assertPrivateRepairScope(input.goal, input.allowedFiles, filesChanged);
         const commitResult = input.commitFn
           ? await input.commitFn(filesChanged, branchName)
           : await commitFilesViaGitDataApi(filesChanged, branchName, buildAttributionTrailers(input));
@@ -2957,11 +2963,12 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     if (input.executionMode === 'code_change' && commitSha && branch) {
       try {
         onPhase?.('committing', `Creating pull request: ${branch} → main.`);
-        const prTitle = `IVX autonomous coder: ${input.goal.slice(0, 72)}`;
+        const publicGoal = publicRepairGoal(input.goal);
+        const prTitle = `IVX autonomous coder: ${publicGoal.slice(0, 72)}`;
         const prBody = [
           `## Autonomous Code Change`,
           ``,
-          `**Goal:** ${input.goal}`,
+          `**Goal:** ${publicGoal}`,
           `**Commit:** ${commitSha}`,
           `**Branch:** ${branch}`,
           `**Files changed:** ${filesChanged.join(', ')}`,

@@ -1,7 +1,27 @@
 name: Landing P0 112-Agent Force Fleet
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Existing force-fleet audit or owner 144-item synchronization
+        type: choice
+        options: [force_fleet, owner_audit_sync]
+        default: force_fleet
+  push:
+    branches: [main]
+    paths:
+      - 'qa/landing-owner-audit-sync.*'
+      - 'backend/services/ivx-audit-item-store.ts'
+      - '.github/workflows/landing-112-p0-force-fleet.yml'
+  pull_request:
+    paths:
+      - 'qa/landing-owner-audit-sync.*'
+      - 'backend/services/ivx-audit-item-store.ts'
+      - '.github/workflows/landing-112-p0-force-fleet.yml'
+  schedule:
+    - cron: '*/15 18-23 8 9 *'
+    - cron: '*/15 0-4 9 9 *'
 
 permissions:
   contents: read
@@ -9,14 +29,15 @@ permissions:
   id-token: write
 
 concurrency:
-  group: landing-p0-112-force-fleet
-  cancel-in-progress: true
+  group: landing-p0-112-${{ github.event_name == 'pull_request' && github.event.pull_request.number || inputs.mode || 'owner_audit_sync' }}
+  cancel-in-progress: false
 
 env:
   API_BASE: https://api.ivxholding.com
 
 jobs:
   force-landing-fleet:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode != 'owner_audit_sync'
     name: Put all 112 real agents on Landing P0
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -119,3 +140,36 @@ jobs:
           name: landing-p0-112-force-fleet-${{ github.run_id }}-${{ github.run_attempt }}
           path: qa/evidence/autonomous/landing-p0-112-force-fleet.json
           if-no-files-found: warn
+
+  owner-audit-contract-tests:
+    name: Validate 144-item sync and certification contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test qa/landing-owner-audit-sync.test.mjs qa/landing-owner-audit-store.test.mjs
+
+  owner-audit-sync:
+    name: Sync 144 items and execute scoped repairs with evidence
+    needs: owner-audit-contract-tests
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.mode == 'owner_audit_sync')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Synchronize, verify receipts, advance, and collect per-item evidence
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node qa/landing-owner-audit-sync.mjs

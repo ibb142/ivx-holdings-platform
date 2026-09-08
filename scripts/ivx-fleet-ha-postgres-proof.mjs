@@ -12,7 +12,7 @@ try {
   await a.query("create role anon; create role authenticated; create role service_role bypassrls; create table public.ivx_durable_documents(doc_key text primary key, value jsonb, updated_at timestamptz default now()); create table public.ivx_agent_states(agent_number integer,last_heartbeat timestamptz);");
   for (const name of ['20260907151751_ivx_autonomous_atomic_task_queue.sql', '20260907153209_ivx_autonomous_unique_worker_lease.sql',
     '20260907175500_ivx_autonomous_release_worker_leases.sql', '20260908174136_ivx_fleet_retry_schedule.sql',
-    '20260908203927_ivx_fleet_dashboard_observation.sql', '20260908203936_ivx_fleet_process_fencing.sql', '20260908211042_ivx_senior_queue_atomic.sql', '20260908211054_ivx_shared_room_messages.sql', '20260908211101_ivx_ha_observation_roles.sql']) {
+    '20260908203927_ivx_fleet_dashboard_observation.sql', '20260908203936_ivx_fleet_process_fencing.sql', '20260908211042_ivx_senior_queue_atomic.sql', '20260908211054_ivx_shared_room_messages.sql', '20260908211101_ivx_ha_observation_roles.sql', '20260908220633_ivx_senior_lease_identity_required.sql']) {
     await a.query(await readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8'));
   }
   const fixtures = [1, 2].map(n => ({ taskId: `ha-${n}`, idempotencyKey: `ha-${n}`, assignedAgentNumber: 1,
@@ -62,7 +62,11 @@ try {
 
   assert.equal(await claimSenior(b, qb.jobId, 'another-worker'), null, 'one active job per owner across replicas');
   await assert.rejects(patch(a, [{ expected: senior, next: { ...senior, status: 'completed' }, workerInstanceId: 'stale-worker' }]), /Worker lease lost/);
+  await assert.rejects(patch(b, [{ expected: senior, next: { ...senior, status: 'completed' } }]), /Worker lease identity required/);
+  await assert.rejects(patch(b, [{ expected: senior, next: { ...senior, lastHeartbeatAt: new Date().toISOString() } }]), /Worker lease identity required/);
   await patch(a, [{ expected: senior, next: { ...senior, status: 'cancelled' } }]);
+  const cancelled = { ...senior, status: 'cancelled' };
+  await assert.rejects(patch(b, [{ expected: cancelled, next: { ...cancelled, status: 'running' } }]), /Terminal job cannot be reactivated/);
   await assert.rejects(patch(b, [{ expected: senior, next: { ...senior, status: 'completed' }, workerInstanceId: seniorWorker }]), /changed concurrently/);
   assert.ok(await claimSenior(b, qb.jobId, 'another-worker'), 'owner cancellation returns capacity');
   await Promise.all([a.query('select public.ivx_senior_ledger_put($1::jsonb)', [JSON.stringify({ jobId: 'proof-a' })]),
@@ -77,6 +81,6 @@ try {
   const roles = (await b.query('select public.ivx_fleet_dashboard_observation() as value')).rows[0].value;
   assert.equal(roles.instances[0].processRole, 'api'); assert.equal(roles.instances[0].sharedState, true);
   console.log(JSON.stringify({ ok: true, database: 'isolated PostgreSQL', connections: 2, concurrentClaimWinners: 1,
-    sharedRoomHistory: true, privateRoomStorage: true, roleObservation: true, parallelEnqueuesPreserved: true, atomicSeniorClaims: true, crossReplicaOwnerSingleFlight: true, concurrentProofsPreserved: true, wrongProcessStartRejected: true, wrongProcessHeartbeatRejected: true, staleCompletionRejected: true,
+    sharedRoomHistory: true, privateRoomStorage: true, roleObservation: true, parallelEnqueuesPreserved: true, atomicSeniorClaims: true, missingWorkerIdentityRejected: true, terminalResurrectionRejected: true, crossReplicaOwnerSingleFlight: true, concurrentProofsPreserved: true, wrongProcessStartRejected: true, wrongProcessHeartbeatRejected: true, staleCompletionRejected: true,
     expiredLeaseCannotResurrect: true, survivorRefilled: true, lateShutdownFenced: true, privateObservation: true, productionRowsTouched: 0 }));
 } finally { await Promise.allSettled([a.end(), b.end()]); }

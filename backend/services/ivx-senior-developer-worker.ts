@@ -1871,12 +1871,15 @@ function withQueueWrite<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-async function updateJob(jobId: string, patch: Partial<IVXWorkerJob>): Promise<void> {
+async function updateJob(jobId: string, patch: Partial<IVXWorkerJob>, onlyIfActive = false): Promise<void> {
   await withQueueWrite(async () => {
     const queue = await loadQueue();
     const idx = queue.jobs.findIndex((j) => j.jobId === jobId);
     if (idx < 0) return;
     const existing = queue.jobs[idx];
+    // A late phase notification must check the state inside the serialized write.
+    // Checking before entering this queue can resurrect a finished job.
+    if (onlyIfActive && !ACTIVE_STATUSES.has(existing.status)) return;
     const isActive = ACTIVE_STATUSES.has(patch.status ?? existing.status);
     queue.jobs[idx] = {
       ...existing,
@@ -2086,10 +2089,6 @@ function finalizeResultWithStateRecord(
  * worker as the runtime progresses through phases.
  */
 async function updateJobStage(jobId: string, stage: IVXWorkerJobStage, detail: string): Promise<void> {
-  const current = await getSeniorDeveloperJob(jobId);
-  if (current && !ACTIVE_STATUSES.has(current.status)) {
-    return;
-  }
   const statusMap: Record<IVXWorkerJobStage, IVXWorkerJobStatus> = {
     QUEUED: 'queued',
     RUNNING: 'running',
@@ -2106,7 +2105,7 @@ async function updateJobStage(jobId: string, stage: IVXWorkerJobStage, detail: s
     status: statusMap[stage],
     progressPercent: STAGE_PROGRESS[stage],
     stageDetail: detail,
-  });
+  }, true);
 }
 
 /** Map a senior-developer runtime phase to a worker job stage. */
@@ -2494,6 +2493,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
     if (job.input.executionMode === 'code_change' || job.input.executionMode === 'deploy') {
       const coderProof = await runIVXAutonomousCoder({
         taskId: job.input.taskId ?? job.jobId,
+        allowedFiles: job.input.ownerApprovedAction?.filesAffected,
         goal: job.input.goal,
         executionMode: job.input.executionMode,
         ownerId: job.ownerId,
