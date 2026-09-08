@@ -27,7 +27,6 @@ const MANUAL_ONLY_FLEET_CONTROLLERS = [
   'landing-112-3h-enterprise-human-qa.yml',
   'landing-112-agent-autonomous-qa.yml',
   'landing-112-autonomous-3h-scheduler.yml',
-  'landing-112-p0-force-fleet.yml',
 ] as const;
 
 function triggerBlock(source: string): string {
@@ -48,6 +47,26 @@ describe('IVX fleet control authority workflows', () => {
       expect(triggers, workflow).not.toContain('push:');
       expect(triggers, workflow).not.toContain('workflow_run:');
     }
+  });
+
+  test('landing force remains manual and owner audit sync has a bounded separate job', async () => {
+    const source = await readFile(path.join(REPO_ROOT, '.github/workflows/landing-112-p0-force-fleet.yml'), 'utf8');
+    const force = source.slice(source.indexOf('\n  force-landing-fleet:'), source.indexOf('\n  owner-audit-contract-tests:'));
+    const sync = source.slice(source.indexOf('\n  owner-audit-sync:'));
+    expect(force).toContain("if: github.event_name == 'workflow_dispatch' && inputs.mode != 'owner_audit_sync'");
+    expect(sync).toContain("if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.mode == 'owner_audit_sync')");
+    expect(sync).toContain('needs: owner-audit-contract-tests');
+    expect(sync).toContain('timeout-minutes: 25');
+    expect(sync).toContain('contents: read');
+    expect(sync).toContain('actions: read');
+    expect(sync).not.toContain('contents: write');
+    expect(sync).not.toContain('actions/upload-artifact');
+    expect(sync).toContain('node qa/landing-owner-audit-sync.mjs');
+    expect(triggerBlock(source)).toContain("cron: '*/15 18-23 8 9 *'");
+    expect(triggerBlock(source)).toContain("cron: '*/15 0-4 9 9 *'");
+    const controller = await readFile(path.join(REPO_ROOT, 'qa/landing-owner-audit-sync.mjs'), 'utf8');
+    expect(controller).toContain('Date.now() > Date.parse(m.monitorUntil)');
+    expect(controller).toContain('approveGitDeploy: false');
   });
 
   test('read-only deployment evidence cannot request a deploy', async () => {
