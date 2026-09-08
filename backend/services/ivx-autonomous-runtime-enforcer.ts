@@ -42,8 +42,9 @@ import {
   runLandingPatrolSession,
 } from './ivx-landing-continuous-patrol';
 
-export const IVX_AUTONOMOUS_RUNTIME_ENFORCER_MARKER = 'ivx-autonomous-runtime-enforcer-2026-09-07-continuous-refill-v5';
+export const IVX_AUTONOMOUS_RUNTIME_ENFORCER_MARKER = 'ivx-autonomous-runtime-enforcer-2026-09-08-hard-112-v6';
 export const IVX_AUTONOMOUS_REFILL_INTERVAL_MS = 5_000;
+export const IVX_AUTONOMOUS_FLEET_SIZE = 112;
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let leaseMirrorTimer: ReturnType<typeof setInterval> | null = null;
@@ -73,7 +74,6 @@ let lastLeaseMirrorAt: string | null = null;
 let lastLeaseMirrorCount = 0;
 const continuityRuns = new Map<string, Promise<void>>();
 const mirroredAgentIds = new Set<string>();
-const DEFAULT_CONTINUITY_MAX_CONCURRENCY = 12;
 
 const ACTIVE_TASK_STATES = new Set([
   'LEASED', 'RUNNING', 'EXECUTION_COMPLETED', 'QA_IN_PROGRESS',
@@ -94,10 +94,16 @@ function refillDelayMs(outcome: ContinuityOutcome): number {
   return Number.isFinite(configured) && configured >= 100 ? Math.min(configured, 30_000) : 250;
 }
 
+/**
+ * The IVX production fleet is exactly 112 logical execution lanes. Capacity is
+ * a runtime invariant, not a tuning default. An absent, malformed, or lower
+ * environment value must never silently downgrade the fleet to 12 (or any other
+ * partial count). Pause/stop/disable controls remain the explicit mechanisms for
+ * intentionally reducing work.
+ */
 export function getContinuityMaxConcurrency(): number {
   const configured = Number.parseInt(process.env.IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY ?? '', 10);
-  if (!Number.isFinite(configured) || configured < 1) return DEFAULT_CONTINUITY_MAX_CONCURRENCY;
-  return Math.min(configured, 112);
+  return configured === IVX_AUTONOMOUS_FLEET_SIZE ? configured : IVX_AUTONOMOUS_FLEET_SIZE;
 }
 
 export function classifyContinuityResult(result: { ok: boolean; action: string; taskId: string | null; states: string[] }): ContinuityOutcome {
@@ -214,8 +220,6 @@ function runLeaseMirror(): Promise<void> {
 async function refreshInFlightTaskHeartbeats(): Promise<number> {
   if (!continuityEnabled || continuityRuns.size === 0) return 0;
   const activeWorkerIds = new Set([...continuityRuns.keys()].map((agentId) => `agent:${agentId}`));
-  // The atomic queue exposes a narrow lease projection. Reading it avoids
-  // transferring every task payload while 112 lanes are executing.
   const tasks = postgresAtomicQueueSelected()
     ? await readPostgresFleetLeaseRows()
     : await getAllTasks();
@@ -243,16 +247,11 @@ function runHeartbeatRefresh(): Promise<void> {
 }
 
 function startContinuityRun(agentId: string, agentNumber: number, preparedTask: Task): void {
-  // The independent lease mirror may observe this exact PostgreSQL RUNNING row
-  // between startLeasedTasksBatch() and this call. Treat that as confirmation,
-  // while still rejecting a different active task for the same IA.
   if (!canStartPreparedContinuity(agentId, preparedTask.taskId)) return;
   refillStarted += 1;
   let outcome: ContinuityOutcome = 'failed';
   const sourceSha = currentSourceSha();
 
-  // Lease-first: the fleet-level manager already maintains the durable backlog.
-  // Do not make every IA perform another planning/read pass before it can lease.
   const cycle: Promise<RealEngineeringCycleResult> = isLandingPatrolTask(preparedTask)
     ? runLandingPatrolSession({
       task: preparedTask,
@@ -359,16 +358,11 @@ function refillAllAvailableAgents(
     const leaseResults = await leaseNextTasksBatch(candidates.map((state) => ({
       workerId: `agent:${state.agentId}`,
       agentNumber: state.agentNumber,
-      options: {
-        missionScope,
-      },
+      options: { missionScope },
     })));
     const leased = leaseResults.filter((result) => result.ok && result.task !== null);
     if (leased.length === 0) return;
-    const started = await startLeasedTasksBatch(leased.map((result) => ({
-      taskId: result.task!.taskId,
-      workerId: result.workerId,
-    })));
+    const started = await startLeasedTasksBatch(leased.map((result) => ({ taskId: result.task!.taskId, workerId: result.workerId })));
     const stateByWorker = new Map(candidates.map((state) => [`agent:${state.agentId}`, state]));
     for (const result of started) {
       if (!result.ok || !result.task) continue;
@@ -398,9 +392,6 @@ async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
     const sourceSha = currentSourceSha();
     landingMissionActive = continuityEnabled && await isLandingP0MissionActive();
 
-    // Seed, lease and start the fleet in three durable batch writes. This makes
-    // 112 distinct leases observable before execution while avoiding hundreds
-    // of full-document writes at the same start boundary.
     await refillAllAvailableAgents(sourceSha, landingMissionActive);
     void runLeaseMirror();
 
@@ -411,8 +402,6 @@ async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
       semantic360 = getAutonomousSemantic360Status();
       await runAutonomousDecisionQualityLoop(sourceSha);
       decisionQuality = getAutonomousDecisionQualityStatus();
-      // Owner Landing P0 is the only queue while active. General module patrol
-      // resumes automatically when the owner priority file releases the mission.
       if (!landingMissionActive) {
         const lanes = getAllExecutionStates()
           .filter((state) => state.agentNumber != null && !state.pauseState && !state.disabledState && state.health !== 'failed')
@@ -435,6 +424,7 @@ async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
       unknown: result.snapshot.agents.counts.unknown,
       continuityEnabled,
       landingMissionActive,
+      continuityMaxConcurrency: getContinuityMaxConcurrency(),
       continuityInFlight: continuityRuns.size,
       refillStarted,
       refillCompleted,
@@ -448,8 +438,6 @@ async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
       autonomousManager: getAutonomousWorkManagerStatus(),
     });
 
-    // Heartbeats are also renewed by a dedicated timer independent of this
-    // heavier supervisor loop. This call provides an extra post-cycle refresh.
     void runHeartbeatRefresh();
   } catch (error) {
     lastOk = false;
@@ -461,9 +449,7 @@ async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
 
 function run(reason: 'boot' | 'interval'): Promise<void> {
   if (enforcerRunInFlight) return enforcerRunInFlight;
-  enforcerRunInFlight = runOnce(reason).finally(() => {
-    enforcerRunInFlight = null;
-  });
+  enforcerRunInFlight = runOnce(reason).finally(() => { enforcerRunInFlight = null; });
   return enforcerRunInFlight;
 }
 
@@ -480,20 +466,12 @@ export function startAutonomous112RuntimeEnforcer(): boolean {
   timer = setInterval(() => { void run('interval'); }, IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS);
   timer.unref?.();
 
-  // Dedicated 10s mirror is independent from slow semantic/QA supervisor work.
-  // It never manufactures work: only real lease-bearing task-engine records are mirrored.
   leaseMirrorTimer = setInterval(() => { void runLeaseMirror(); }, 10_000);
   leaseMirrorTimer.unref?.();
 
-  // Dedicated durable heartbeat renewal is also independent from the slow
-  // semantic/decision/backlog supervisor path. It only renews lease-bearing
-  // tasks owned by currently running continuity lanes and never fabricates work.
   heartbeatTimer = setInterval(() => { void runHeartbeatRefresh(); }, 20_000);
   heartbeatTimer.unref?.();
 
-  // Keep capacity repair independent from semantic/decision supervisor work.
-  // A long supervisor pass must never prevent a lane whose task completed,
-  // expired, or was finalized by a rolling-deploy predecessor from refilling.
   refillTimer = setInterval(() => {
     void runLeaseMirror().finally(() => { void refillAllAvailableAgents(); });
   }, IVX_AUTONOMOUS_REFILL_INTERVAL_MS);
@@ -501,7 +479,6 @@ export function startAutonomous112RuntimeEnforcer(): boolean {
   return true;
 }
 
-/** Stop new work and atomically return this Render process's leases to queue. */
 export function stopAutonomous112RuntimeEnforcer(): Promise<number> {
   if (stopInFlight) return stopInFlight;
   continuityEnabled = false;
@@ -514,9 +491,7 @@ export function stopAutonomous112RuntimeEnforcer(): Promise<number> {
   leaseMirrorTimer = null;
   heartbeatTimer = null;
   refillTimer = null;
-  stopInFlight = (postgresAtomicQueueSelected()
-    ? releasePostgresWorkerInstanceTasks()
-    : Promise.resolve(0))
+  stopInFlight = (postgresAtomicQueueSelected() ? releasePostgresWorkerInstanceTasks() : Promise.resolve(0))
     .catch((error) => {
       console.error('[IVX Autonomous 112 Shutdown] lease release failed', { error: error instanceof Error ? error.message : String(error) });
       return 0;
@@ -550,6 +525,7 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     landingMissionActive,
     refillInFlight: Boolean(refillInFlight),
     continuityMaxConcurrency: getContinuityMaxConcurrency(),
+    canonicalFleetSize: IVX_AUTONOMOUS_FLEET_SIZE,
     continuityInFlight: continuityRuns.size,
     refillStarted,
     refillCompleted,
@@ -569,7 +545,7 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     semantic360: getAutonomousSemantic360Status(),
     decisionQuality: getAutonomousDecisionQualityStatus(),
     autonomousManager: getAutonomousWorkManagerStatus(),
-    truthPolicy: 'Autonomous Manager maintains real work blocks. Continuity is lease-first and bounded by IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY (safe code default 12, configured fleet maximum 112). Backlog creation, leasing, RUNNING transitions and 20-second lease heartbeats use bounded fleet batches. Landing P0 creates one reusable, own-agent patrol task per IA after critical audit/repair work; patrols execute live checks on a bounded cadence and cap stored evidence, while waiting time is never reported as productive. Only durable active tasks with a real leaseHolder are mirrored into agent-runtime busy/activeTaskId every 10 seconds; promise count alone is never proof. Work stealing is disabled for the Landing fleet, so holder/assignment equality is required. Idle/ALREADY_VERIFIED is never counted as completed work; owner/system stop, pause, disable and failed-health states are respected.',
+    truthPolicy: 'IVX production fleet capacity is a hard 112-lane invariant whenever Autonomous is enabled. Environment drift cannot silently reduce concurrency. Backlog creation, leasing, RUNNING transitions and 20-second lease heartbeats use bounded fleet batches. A dedicated 5-second refill repairs capacity independently from the heavier supervisor. Only durable active tasks with a real leaseHolder are mirrored into busy/activeTaskId; heartbeat alone is never productive evidence. Explicit owner/system pause, stop, disable and failed-health controls remain respected.',
   };
 }
 
