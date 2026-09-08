@@ -6,6 +6,7 @@ const chatSource = readFileSync(resolve(import.meta.dir, '../app/ivx/chat.tsx'),
 const chatHubSource = readFileSync(resolve(import.meta.dir, '../components/ChatScreenContent.tsx'), 'utf8');
 const tabsLayoutSource = readFileSync(resolve(import.meta.dir, '../app/(tabs)/_layout.tsx'), 'utf8');
 const homeSource = readFileSync(resolve(import.meta.dir, '../app/(tabs)/home.tsx'), 'utf8');
+const loginSource = readFileSync(resolve(import.meta.dir, '../app/login.tsx'), 'utf8');
 const flowSource = readFileSync(resolve(import.meta.dir, '../.maestro/ivx-owner-chat-certificate.yaml'), 'utf8');
 const transportReliabilitySource = readFileSync(resolve(import.meta.dir, './chat-transport-reliability.test.ts'), 'utf8');
 
@@ -47,6 +48,7 @@ describe('IVX IA chat device certificate regression', () => {
     for (const testID of flowTestIDs) {
       const present =
         chatSource.includes(`testID="${testID}"`) ||
+        loginSource.includes(`testID="${testID}"`) ||
         chatHubSource.includes(`testID="${testID}"`) ||
         tabsLayoutSource.includes(`tabBarButtonTestID: '${testID}'`);
       expect(present).toBe(true);
@@ -72,6 +74,9 @@ describe('IVX IA chat device certificate regression', () => {
     expect(clearStateIndex).toBeGreaterThan(launchIndex);
 
     const afterRestart = flowSource.slice(clearStateIndex);
+    expect(afterRestart).toContain('inputText: ${OWNER_EMAIL}');
+    expect(afterRestart).toContain('inputText: ${OWNER_PASSWORD}');
+    expect(afterRestart.indexOf('id: "login-submit"')).toBeLessThan(afterRestart.indexOf('id: "tab-chat"'));
     expect(afterRestart).toContain(`element: "${E2E_PROMPT}"`);
     expect(afterRestart).toContain(`element: "${E2E_REPLY}"`);
     expect(afterRestart).toContain('id: "ivx-owner-chat-composer-dock"');

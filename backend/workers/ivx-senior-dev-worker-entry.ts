@@ -9,18 +9,21 @@ import { getWorkerMaxConcurrency, stopSeniorDeveloperQueue } from '../services/i
 import { startAutonomous112RuntimeEnforcer, stopAutonomous112RuntimeEnforcer } from '../services/ivx-autonomous-runtime-enforcer';
 import { startBlockedTaskReconciler, stopBlockedTaskReconciler } from '../services/ivx-autonomous-blocked-reconciler';
 import { startFleetSloMonitor } from '../services/ivx-fleet-slo';
+import { startAutonomousDoctor } from '../services/ivx-autonomous-doctor';
 
 console.log('[IVX-SENIOR-DEV-01] process entry', {
   pid: process.pid,
   at: new Date().toISOString(),
   campaignConcurrency: getWorkerMaxConcurrency(),
   fleetExecutionPlane: process.env.IVX_AUTONOMOUS_RUNTIME_ENFORCER_ENABLED !== 'false',
+  autonomousDoctorRepair: process.env.IVX_AUTONOMOUS_DOCTOR_REPAIR_ENABLED === 'true',
 });
 
 startFleetSloMonitor();
 startBlockedTaskReconciler();
 const fleetStarted = startAutonomous112RuntimeEnforcer();
-console.log('[IVX-SENIOR-DEV-01] 112-lane execution plane', { started: fleetStarted });
+startAutonomousDoctor();
+console.log('[IVX-SENIOR-DEV-01] 112-lane execution plane', { started: fleetStarted, autonomousDoctor: true });
 
 startSeniorDevWorker().then(() => {
   console.log('[IVX-SENIOR-DEV-01] exited normally', getSeniorDevWorkerStatus());

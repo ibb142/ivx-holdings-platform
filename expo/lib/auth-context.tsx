@@ -6,6 +6,7 @@ import { persistAuth, loadStoredAuth, clearStoredAuth, setAuthCredentials } from
 import { clearOwnerResilientSession } from './owner-session-resilience';
 import { LoginTrace } from './login-trace';
 import { signInWithEmailPassword } from './auth-password-sign-in';
+import { deferAuthWork } from './deferred-auth-work';
 import { canonicalizeRole, isAdminRole, normalizeRole, sanitizeEmail } from './auth-helpers';
 
 import { extractChallengeId, extractFirstVerifiedMfaFactor, getMfaChallengeRequirement, type ParsedMfaFactor } from './auth-mfa';
@@ -1770,13 +1771,19 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             console.log('[Auth] Ignoring auth state session — no manual login for this app session');
             return;
           }
-          const challengeRequired = await requireTwoFactorIfNeeded(session, `auth event ${String(_event)}`);
-          if (!challengeRequired) {
-            const handledSession = await handleSession(session);
-            if (!handledSession.accepted) {
-              console.log('[Auth] Auth state session blocked:', handledSession.blockedReason ?? 'admin access lock');
+          // Supabase awaits subscribers. Profile/MFA requests may need the same
+          // session/refresh operation to finish, so run them after it releases.
+          deferAuthWork(async () => {
+            if (cancelled || !manualOwnerLoginRef.current || ownerIPActiveRef.current) return;
+            const challengeRequired = await requireTwoFactorIfNeeded(session, `auth event ${String(_event)}`);
+            if (cancelled || !manualOwnerLoginRef.current || ownerIPActiveRef.current) return;
+            if (!challengeRequired) {
+              const handledSession = await handleSession(session);
+              if (!handledSession.accepted) {
+                console.log('[Auth] Auth state session blocked:', handledSession.blockedReason ?? 'admin access lock');
+              }
             }
-          }
+          }, error => console.log('[Auth] Deferred session validation failed:', error instanceof Error ? error.message : 'unknown'));
         } else if (_event === 'SIGNED_OUT') {
           sessionWarmupKeyRef.current = null;
           ownerRepairKeyRef.current = null;

@@ -39,6 +39,8 @@ timeout 180s "$MAESTRO" test expo/.maestro/ivx-owner-autonomous-certificate.yaml
 CHAT_E2E_SUFFIX="${GITHUB_RUN_ID:-local}_${GITHUB_RUN_ATTEMPT:-1}_$(date +%s)"
 timeout 240s "$MAESTRO" test expo/.maestro/ivx-owner-chat-certificate.yaml \
   --env CHAT_E2E_SUFFIX="$CHAT_E2E_SUFFIX" \
+  --env OWNER_EMAIL="$OWNER_EMAIL" \
+  --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" \
   --format junit \
   --output qa/evidence/dashboard-chat/chat.xml
 
@@ -59,7 +61,7 @@ jq -n \
   --arg sha "${EXPO_PUBLIC_SOURCE_COMMIT_SHA:-${GITHUB_SHA:-unknown}}" \
   --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --argjson totalRoutes "$(jq -r '.totalRoutes' qa/evidence/all-routes-human-e2e/certificate.json)" \
-  '{certificate:"IVX-DASHBOARD-CHAT-ALL-ROUTES-E2E",passed:true,sourceSha:$sha,realOwnerLogin:true,dashboardRoute:"/admin/dashboard",dashboardRendered:true,dashboardScrolled:true,autonomousIndependentSignalsRendered:true,chatOpened:true,liveAIReply:true,chatPersistenceAfterRestart:true,allExpoRoutesHumanPatrolled:true,totalRoutes:$totalRoutes,routeCoveragePercent:100,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' \
+  '{certificate:"IVX-DASHBOARD-CHAT-ALL-ROUTES-E2E",passed:true,sourceSha:$sha,realOwnerLogin:true,dashboardRoute:"/admin/dashboard",dashboardRendered:true,dashboardScrolled:true,autonomousIndependentSignalsRendered:true,chatOpened:true,liveAIReply:true,chatPersistenceAfterRestart:true,allExpoRoutesAutomatedPatrolled:true,totalRoutes:$totalRoutes,routeCoveragePercent:100,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' \
   > qa/evidence/dashboard-chat/certificate.json
 cat qa/evidence/dashboard-chat/certificate.json
 

@@ -5,9 +5,13 @@ APP_ID="com.ivxholdings.app.owner"
 EVIDENCE="qa/evidence/all-routes-human-e2e"
 FLOW_DIR="$EVIDENCE/generated-flows"
 mkdir -p "$FLOW_DIR"
-: > "$EVIDENCE/results.jsonl"
+: > "$EVIDENCE/manifest.jsonl"
+: > "$EVIDENCE/process-loss.txt"
+: > "$EVIDENCE/process-samples.txt"
+suite_pid=''
+monitor_pid=''
 
-trap 'rc=$?; adb exec-out screencap -p > "$EVIDENCE/failure.png" 2>/dev/null || true; adb logcat -d -v threadtime > "$EVIDENCE/failure-logcat.txt" 2>/dev/null || true; exit $rc' EXIT
+trap 'rc=$?; [ -z "$monitor_pid" ] || kill "$monitor_pid" 2>/dev/null || true; [ -z "$suite_pid" ] || kill "$suite_pid" 2>/dev/null || true; adb exec-out screencap -p > "$EVIDENCE/failure.png" 2>/dev/null || true; adb logcat -d -v threadtime > "$EVIDENCE/failure-logcat.txt" 2>/dev/null || true; exit $rc' EXIT
 
 MAESTRO="${HOME}/.maestro/bin/maestro"
 
@@ -48,19 +52,20 @@ route_from_file() {
   printf '/%s' "$rel"
 }
 
-mapfile -t files < <(find expo/app -type f \( -name '*.tsx' -o -name '*.ts' \) | sort)
+mapfile -t files < <(rg --files expo/app -g '*.tsx' -g '*.ts' | sort)
 
+# Enumerate every route before starting Maestro. A single suite avoids starting
+# a new JVM/ADB session hundreds of times; all route assertions remain required.
 total=0
-passed=0
-failed=0
 for file in "${files[@]}"; do
   route=$(route_from_file "$file") || continue
   total=$((total + 1))
-  safe=$(printf '%s' "${route:-root}" | tr '/[]() ' '_' | tr -cd '[:alnum:]_.-')
-  flow="$FLOW_DIR/${total}-${safe}.yaml"
+  name="IVX automated route $total"
+  screenshot="route-$total"
+  flow="$FLOW_DIR/$(printf '%04d' "$total").yaml"
   cat > "$flow" <<YAML
 appId: $APP_ID
-name: IVX human-depth route ${route:-/}
+name: $name
 ---
 - openLink: "ivx-app:///${route#/}"
 - waitForAnimationToEnd
@@ -74,42 +79,38 @@ name: IVX human-depth route ${route:-/}
     duration: 500
 - waitForAnimationToEnd
 - assertNotVisible: "Something went wrong"
+- takeScreenshot: "$screenshot"
 YAML
-
-  started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  set +e
-  timeout 75s "$MAESTRO" test "$flow" --format junit --output "$EVIDENCE/${total}-${safe}.xml"
-  rc=$?
-  set -e
-  alive=false
-  if timeout 8s adb shell pidof "$APP_ID" >/dev/null 2>&1; then alive=true; fi
-  adb exec-out screencap -p > "$EVIDENCE/${total}-${safe}.png" 2>/dev/null || true
-
-  ok=false
-  if [ "$rc" -eq 0 ] && [ "$alive" = true ]; then
-    ok=true
-    passed=$((passed + 1))
-  else
-    failed=$((failed + 1))
-  fi
-  jq -nc \
-    --arg file "$file" --arg route "$route" --arg started "$started" \
-    --argjson ok "$ok" --argjson processAlive "$alive" --argjson exitCode "$rc" \
-    '{file:$file,route:$route,humanOpened:true,scrollExercised:true,noFatalUiBanner:$ok,processAlive:$processAlive,exitCode:$exitCode,passed:$ok,startedAt:$started}' \
-    >> "$EVIDENCE/results.jsonl"
+  jq -nc --arg file "$file" --arg route "$route" --arg name "$name" --arg screenshot "$screenshot" \
+    '{file:$file,route:$route,name:$name,screenshot:$screenshot}' >> "$EVIDENCE/manifest.jsonl"
 done
-
-jq -s '.' "$EVIDENCE/results.jsonl" > "$EVIDENCE/results.json"
-jq -n \
-  --arg sha "${EXPO_PUBLIC_SOURCE_COMMIT_SHA:-${GITHUB_SHA:-unknown}}" \
-  --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  --argjson total "$total" --argjson passed "$passed" --argjson failed "$failed" \
-  '{certificate:"IVX-ALL-EXPO-ROUTES-HUMAN-E2E",sourceSha:$sha,totalRoutes:$total,passedRoutes:$passed,failedRoutes:$failed,coveragePercent:(if $total>0 then (($passed*10000/$total)|floor/100) else 0 end),passed:($total>0 and $failed==0 and $passed==$total),realOwnerLogin:true,physicalAndroidEmulator:true,everyRouteOpened:true,everyRouteScrolled:true,processSurvivalChecked:true,verifiedAt:$verifiedAt}' \
-  > "$EVIDENCE/certificate.json"
-cat "$EVIDENCE/certificate.json"
-
 test "$total" -gt 100
-test "$failed" -eq 0
-test "$passed" -eq "$total"
-
+initial_pid=$(timeout 8s adb shell pidof "$APP_ID" | tr -d '\r')
+test -n "$initial_pid"
+set +e
+timeout 2700s "$MAESTRO" test "$FLOW_DIR" --format junit --output "$EVIDENCE/suite.xml" \
+  --test-output-dir "$EVIDENCE/artifacts" &
+suite_pid=$!
+(
+  while kill -0 "$suite_pid" 2>/dev/null; do
+    current_pid=$(timeout 8s adb shell pidof "$APP_ID" 2>/dev/null | tr -d '\r')
+    printf '%s %s\n' "$(date -u +%FT%TZ)" "$current_pid" >> "$EVIDENCE/process-samples.txt"
+    if [ "$current_pid" != "$initial_pid" ]; then
+      printf 'Process identity changed or disappeared\n' >> "$EVIDENCE/process-loss.txt"
+    fi
+    sleep 2
+  done
+) &
+monitor_pid=$!
+wait "$suite_pid"
+rc=$?
+suite_pid=''
+kill "$monitor_pid" 2>/dev/null || true
+wait "$monitor_pid" 2>/dev/null || true
+monitor_pid=''
+set -e
+alive=false
+final_pid=$(timeout 8s adb shell pidof "$APP_ID" 2>/dev/null | tr -d '\r') || true
+if [ "$final_pid" = "$initial_pid" ] && [ ! -s "$EVIDENCE/process-loss.txt" ] && [ -s "$EVIDENCE/process-samples.txt" ]; then alive=true; fi
+python3 scripts/ivx-route-suite-proof.py "$EVIDENCE" "${EXPO_PUBLIC_SOURCE_COMMIT_SHA:-${GITHUB_SHA:-unknown}}" "$rc" "$alive"
 trap - EXIT
