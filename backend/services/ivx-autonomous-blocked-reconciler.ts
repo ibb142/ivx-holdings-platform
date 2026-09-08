@@ -1,20 +1,22 @@
 /**
- * IVX Autonomous Blocked Reconciler
+ * IVX Autonomous Blocked + Productivity Reconciler
  *
- * Requeues ONLY blockers that are demonstrably transient:
- *  - evidence tied to an older production SHA after a new SHA is live;
- *  - CI/workflow checks that were still in_progress/queued when sampled.
+ * Two fail-closed recovery loops share one timer:
+ *  1) requeue only demonstrably transient BLOCKED tasks;
+ *  2) detect a fresh heartbeat with no productive evidence and release that
+ *     lease so the 5-second fleet refill can immediately give the IA real work.
  *
- * Real defects, owner/security gates and missing configuration stay BLOCKED.
- * This prevents stale BLOCKED rows from starving the 112-lane queue without
- * hiding genuine failures.
+ * A heartbeat is liveness, never proof of production. Real defects and
+ * owner/security/config gates remain BLOCKED until repaired with evidence.
  */
-import { getAllTasks, transitionTaskState, type Task } from './ivx-autonomous-task-engine';
+import { getAllTasks, releaseLease, transitionTaskState, type Task } from './ivx-autonomous-task-engine';
 import { resolveProductionSha } from './ivx-landing-p0-backlog';
 
-export const IVX_BLOCKED_RECONCILER_MARKER = 'ivx-autonomous-blocked-reconciler-2026-09-08-v1';
-const DEFAULT_INTERVAL_MS = 30_000;
+export const IVX_BLOCKED_RECONCILER_MARKER = 'ivx-autonomous-realtime-productivity-reconciler-2026-09-08-v2';
+const DEFAULT_INTERVAL_MS = 15_000;
 const MIN_BLOCK_AGE_MS = 20_000;
+const DEFAULT_PRODUCTIVITY_STALE_MS = 5 * 60_000;
+const HEARTBEAT_FRESH_MS = 60_000;
 let timer: ReturnType<typeof setInterval> | null = null;
 let runInFlight = false;
 
@@ -26,6 +28,8 @@ export type BlockedReconcileResult = {
   requeued: number;
   retainedRealDefects: number;
   retainedOwnerOrConfig: number;
+  aliveButIdleSeen: number;
+  staleLeasesReleased: number;
   errors: number;
 };
 
@@ -55,6 +59,52 @@ function isRealDefect(task: Task): boolean {
   return /defect persists|\b502\b|\b500\b|broken|invalid contract|missing target|crash|failed/.test(text);
 }
 
+function productivityStaleMs(): number {
+  const raw = Number.parseInt(process.env.IVX_PRODUCTIVITY_STALE_MS ?? '', 10);
+  if (!Number.isFinite(raw)) return DEFAULT_PRODUCTIVITY_STALE_MS;
+  return Math.max(60_000, Math.min(raw, 30 * 60_000));
+}
+
+function latestProductiveEvidenceMs(task: Task): number {
+  let latest = Date.parse(task.startedAt ?? task.createdAt ?? '') || 0;
+  for (const evidence of task.evidence ?? []) {
+    const at = Date.parse(evidence.createdAt ?? '');
+    if (Number.isFinite(at) && at > latest) latest = at;
+  }
+  return latest;
+}
+
+async function releaseAliveButIdleTasks(tasks: Task[], now: number): Promise<{ seen: number; released: number; errors: number }> {
+  const staleMs = productivityStaleMs();
+  let seen = 0;
+  let released = 0;
+  let errors = 0;
+
+  for (const task of tasks) {
+    if (task.state !== 'RUNNING' || !task.leaseHolder) continue;
+    const heartbeatMs = Date.parse(task.lastHeartbeatAt ?? '');
+    if (!Number.isFinite(heartbeatMs) || now - heartbeatMs > HEARTBEAT_FRESH_MS) continue;
+    const productiveMs = latestProductiveEvidenceMs(task);
+    if (productiveMs > 0 && now - productiveMs < staleMs) continue;
+    const startedMs = Date.parse(task.startedAt ?? '');
+    if (Number.isFinite(startedMs) && now - startedMs < staleMs) continue;
+
+    seen += 1;
+    try {
+      // This is not a failure and does not consume retry budget. Releasing the
+      // lease makes the durable row QUEUED; the 5s runtime refill assigns the
+      // lane another eligible task. A still-running old promise loses its lease
+      // and must fail closed instead of continuing to claim productive status.
+      const result = await releaseLease(task.taskId, task.leaseHolder);
+      if (result.ok) released += 1;
+      else errors += 1;
+    } catch {
+      errors += 1;
+    }
+  }
+  return { seen, released, errors };
+}
+
 export async function reconcileRetryableBlockedTasks(): Promise<BlockedReconcileResult> {
   const productionSha = resolveProductionSha().toLowerCase();
   const tasks = await getAllTasks();
@@ -78,26 +128,23 @@ export async function reconcileRetryableBlockedTasks(): Promise<BlockedReconcile
     const staleSha = Boolean(taskSha && productionSha && taskSha !== productionSha);
     const transientWorkflow = isTransientWorkflowBlock(task);
 
-    // A real defect on the CURRENT SHA remains blocked until Autonomous repairs
-    // it and produces new evidence. A stale-SHA defect is safe to re-verify.
     if (isRealDefect(task) && !staleSha) {
       retainedRealDefects += 1;
       continue;
     }
-
     if (!staleSha && !transientWorkflow) continue;
 
     try {
-      const moved = await transitionTaskState(task.taskId, 'QUEUED', {
-        blocker: undefined,
-        error: undefined,
-      });
+      const moved = await transitionTaskState(task.taskId, 'QUEUED', { blocker: undefined, error: undefined });
       if (moved.ok) requeued += 1;
       else errors += 1;
     } catch {
       errors += 1;
     }
   }
+
+  const productivity = await releaseAliveButIdleTasks(tasks, now);
+  errors += productivity.errors;
 
   return {
     marker: IVX_BLOCKED_RECONCILER_MARKER,
@@ -107,6 +154,8 @@ export async function reconcileRetryableBlockedTasks(): Promise<BlockedReconcile
     requeued,
     retainedRealDefects,
     retainedOwnerOrConfig,
+    aliveButIdleSeen: productivity.seen,
+    staleLeasesReleased: productivity.released,
     errors,
   };
 }
@@ -115,15 +164,17 @@ export function startBlockedTaskReconciler(): boolean {
   if (timer) return true;
   if ((process.env.IVX_BLOCKED_RECONCILER ?? 'on').toLowerCase() === 'off') return false;
   const raw = Number.parseInt(process.env.IVX_BLOCKED_RECONCILER_INTERVAL_MS ?? '', 10);
-  const intervalMs = Number.isFinite(raw) && raw >= 10_000 ? raw : DEFAULT_INTERVAL_MS;
+  const intervalMs = Number.isFinite(raw) && raw >= 5_000 ? raw : DEFAULT_INTERVAL_MS;
   const tick = () => {
     if (runInFlight) return;
     runInFlight = true;
     void reconcileRetryableBlockedTasks()
       .then((result) => {
-        if (result.requeued > 0 || result.errors > 0) console.log('[IVX Blocked Reconciler]', result);
+        if (result.requeued > 0 || result.staleLeasesReleased > 0 || result.errors > 0) {
+          console.log('[IVX Realtime Productivity Reconciler]', result);
+        }
       })
-      .catch((error) => console.warn('[IVX Blocked Reconciler] failed', error instanceof Error ? error.message : String(error)))
+      .catch((error) => console.warn('[IVX Realtime Productivity Reconciler] failed', error instanceof Error ? error.message : String(error)))
       .finally(() => { runInFlight = false; });
   };
   tick();
