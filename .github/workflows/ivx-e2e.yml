@@ -156,7 +156,7 @@ jobs:
           WORKSPACE=$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)
           SCHEMES_JSON=$(xcodebuild -workspace "$WORKSPACE" -list -json)
           SCHEME=$(printf '%s' "$SCHEMES_JSON" | python3 -c 'import json,sys,pathlib; d=json.load(sys.stdin); s=d["workspace"]["schemes"]; w=pathlib.Path(sys.argv[1]).stem; print(next((x for x in [w,"IVXHoldings"] if x in s), s[0]))' "$WORKSPACE")
-          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -sdk iphonesimulator -destination "id=$IVX_SIMULATOR_UDID" -derivedDataPath "$RUNNER_TEMP/ivx-derived" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -sdk iphonesimulator -destination "id=$IVX_SIMULATOR_UDID" -derivedDataPath "$RUNNER_TEMP/ivx-derived" ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
           APP=$(find "$RUNNER_TEMP/ivx-derived/Build/Products/Release-iphonesimulator" -maxdepth 2 -type d -name '*.app' -print -quit)
           echo "IVX_IOS_APP=$APP" >> "$GITHUB_ENV"
       - name: Install and launch IVX app — HARD GATE
