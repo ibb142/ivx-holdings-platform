@@ -43,8 +43,12 @@ export async function handleAutonomousDashboardStreamConnection(ws: WebSocket, r
   let pushing = false;
   let interval: NodeJS.Timeout | null = null;
   let sequence = 0;
+  let closed = false;
+  let authenticating = false;
 
   const stop = () => {
+    closed = true;
+    clearTimeout(authTimer);
     if (interval) clearInterval(interval);
     interval = null;
   };
@@ -60,8 +64,10 @@ export async function handleAutonomousDashboardStreamConnection(ws: WebSocket, r
   authTimer.unref?.();
 
   const pushSnapshot = async () => {
-    if (!authenticated || !token || pushing || ws.readyState !== WS_OPEN) return;
+    if (closed || !authenticated || !token || pushing || ws.readyState !== WS_OPEN) return;
+    if (ws.bufferedAmount > 1_000_000) { closeWith(4408, 'dashboard consumer too slow'); return; }
     pushing = true;
+    const snapshotRange = range;
     try {
       const response = await handleAutonomousOpsDashboardRequest(ownerRequest(token, range));
       if (response.status === 401 || response.status === 403) {
@@ -70,6 +76,7 @@ export async function handleAutonomousDashboardStreamConnection(ws: WebSocket, r
         return;
       }
       const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+      if (closed || snapshotRange !== range) return;
       if (!response.ok || !payload || payload.ok !== true) {
         send(ws, {
           type: 'stream_error',
@@ -111,7 +118,8 @@ export async function handleAutonomousDashboardStreamConnection(ws: WebSocket, r
       }
 
       if (message.type === 'auth') {
-        if (authenticated) return;
+        if (authenticated || authenticating || closed) return;
+        authenticating = true;
         const supplied = typeof message.token === 'string' ? message.token.trim() : '';
         if (!supplied) {
           closeWith(4401, 'owner bearer missing');
@@ -120,6 +128,7 @@ export async function handleAutonomousDashboardStreamConnection(ws: WebSocket, r
         range = safeRange(message.range);
         try {
           const auth = await assertIVXRegisteredOwnerBearer(ownerRequest(supplied, range), 'autonomous_dashboard_stream');
+          if (closed || ws.readyState !== WS_OPEN) return;
           token = supplied;
           authenticated = true;
           clearTimeout(authTimer);
@@ -133,6 +142,7 @@ export async function handleAutonomousDashboardStreamConnection(ws: WebSocket, r
             connectedAt: new Date().toISOString(),
           });
           await pushSnapshot();
+          if (closed || ws.readyState !== WS_OPEN) return;
           interval = setInterval(() => { void pushSnapshot(); }, IVX_AUTONOMOUS_DASHBOARD_STREAM_INTERVAL_MS);
           interval.unref?.();
         } catch {

@@ -23,6 +23,7 @@ import {
 import { autonomousRuntimeEnforcerEnabled } from './ivx-autonomous-control-policy';
 import {
   postgresAtomicQueueSelected,
+  autonomousWorkerInstanceId,
   readPostgresFleetLeaseRows,
   releasePostgresWorkerInstanceTasks,
 } from './ivx-postgres-autonomous-task-store';
@@ -47,6 +48,8 @@ export const IVX_AUTONOMOUS_REFILL_INTERVAL_MS = 5_000;
 export const IVX_AUTONOMOUS_FLEET_SIZE = 112;
 
 let timer: ReturnType<typeof setInterval> | null = null;
+let bootKick: ReturnType<typeof setTimeout> | null = null;
+let stopping = false;
 let leaseMirrorTimer: ReturnType<typeof setInterval> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let refillTimer: ReturnType<typeof setInterval> | null = null;
@@ -226,6 +229,7 @@ async function refreshInFlightTaskHeartbeats(): Promise<number> {
   const leases: Array<{ taskId: string; workerId: string }> = [];
   for (const task of tasks) {
     if (!task.leaseHolder || !activeWorkerIds.has(task.leaseHolder)) continue;
+    if ('workerInstanceId' in task && task.workerInstanceId !== autonomousWorkerInstanceId()) continue;
     if (!ACTIVE_TASK_STATES.has(task.state) || !task.leaseHolder) continue;
     leases.push({ taskId: task.taskId, workerId: task.leaseHolder });
   }
@@ -355,11 +359,13 @@ function refillAllAvailableAgents(
         ]
         : [],
     };
+    if (stopping) return;
     const leaseResults = await leaseNextTasksBatch(candidates.map((state) => ({
       workerId: `agent:${state.agentId}`,
       agentNumber: state.agentNumber,
       options: { missionScope },
     })));
+    if (stopping) return;
     const leased = leaseResults.filter((result) => result.ok && result.task !== null);
     if (leased.length === 0) return;
     const started = await startLeasedTasksBatch(leased.map((result) => ({ taskId: result.task!.taskId, workerId: result.workerId })));
@@ -380,10 +386,12 @@ function refillAllAvailableAgents(
 }
 
 async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
+  if (stopping) return;
   lastRunAt = new Date().toISOString();
   try {
     await runLeaseMirror();
     const result = await enforceAutonomous112RuntimeTruth();
+    if (stopping) return;
     lastOk = result.ok;
     lastRecovered = result.recovered;
     lastError = null;
@@ -454,6 +462,7 @@ function run(reason: 'boot' | 'interval'): Promise<void> {
 }
 
 export function startAutonomous112RuntimeEnforcer(): boolean {
+  if (stopping) return false;
   if (timer) return true;
   if (!autonomousRuntimeEnforcerEnabled()) {
     continuityEnabled = false;
@@ -461,7 +470,7 @@ export function startAutonomous112RuntimeEnforcer(): boolean {
     return false;
   }
   startedAt = new Date().toISOString();
-  const bootKick = setTimeout(() => { void run('boot'); }, 5_000);
+  bootKick = setTimeout(() => { void run('boot'); }, 5_000);
   bootKick.unref?.();
   timer = setInterval(() => { void run('interval'); }, IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS);
   timer.unref?.();
@@ -481,6 +490,9 @@ export function startAutonomous112RuntimeEnforcer(): boolean {
 
 export function stopAutonomous112RuntimeEnforcer(): Promise<number> {
   if (stopInFlight) return stopInFlight;
+  stopping = true;
+  if (bootKick) clearTimeout(bootKick);
+  bootKick = null;
   continuityEnabled = false;
   landingMissionActive = false;
   if (timer) clearInterval(timer);
@@ -491,7 +503,9 @@ export function stopAutonomous112RuntimeEnforcer(): Promise<number> {
   leaseMirrorTimer = null;
   heartbeatTimer = null;
   refillTimer = null;
-  stopInFlight = (postgresAtomicQueueSelected() ? releasePostgresWorkerInstanceTasks() : Promise.resolve(0))
+  // Let any claim already sent to PostgreSQL settle before releasing this process.
+  stopInFlight = Promise.allSettled([refillInFlight, heartbeatRefreshInFlight])
+    .then(() => postgresAtomicQueueSelected() ? releasePostgresWorkerInstanceTasks() : 0)
     .catch((error) => {
       console.error('[IVX Autonomous 112 Shutdown] lease release failed', { error: error instanceof Error ? error.message : String(error) });
       return 0;
@@ -563,4 +577,3 @@ export function getContinuityOutcomeCounts(): Record<ContinuityOutcome | 'inFlig
 export function getContinuityOutcomes(): Array<AgentContinuityRecord & { agentNumber: number }> {
   return [...lastOutcomeByAgent.entries()].map(([agentNumber, record]) => ({ agentNumber, ...record })).sort((a, b) => a.agentNumber - b.agentNumber);
 }
-
