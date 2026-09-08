@@ -101,7 +101,7 @@ done
 
 jq -s '.' "$EVIDENCE/results.jsonl" > "$EVIDENCE/results.json"
 jq -n \
-  --arg sha "${GITHUB_SHA:-unknown}" \
+  --arg sha "${EXPO_PUBLIC_SOURCE_COMMIT_SHA:-${GITHUB_SHA:-unknown}}" \
   --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --argjson total "$total" --argjson passed "$passed" --argjson failed "$failed" \
   '{certificate:"IVX-ALL-EXPO-ROUTES-HUMAN-E2E",sourceSha:$sha,totalRoutes:$total,passedRoutes:$passed,failedRoutes:$failed,coveragePercent:(if $total>0 then (($passed*10000/$total)|floor/100) else 0 end),passed:($total>0 and $failed==0 and $passed==$total),realOwnerLogin:true,physicalAndroidEmulator:true,everyRouteOpened:true,everyRouteScrolled:true,processSurvivalChecked:true,verifiedAt:$verifiedAt}' \

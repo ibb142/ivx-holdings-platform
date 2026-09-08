@@ -12,7 +12,7 @@ try {
   await a.query("create role anon; create role authenticated; create role service_role bypassrls; create table public.ivx_durable_documents(doc_key text primary key, value jsonb, updated_at timestamptz default now()); create table public.ivx_agent_states(agent_number integer,last_heartbeat timestamptz);");
   for (const name of ['20260907151751_ivx_autonomous_atomic_task_queue.sql', '20260907153209_ivx_autonomous_unique_worker_lease.sql',
     '20260907175500_ivx_autonomous_release_worker_leases.sql', '20260908174136_ivx_fleet_retry_schedule.sql',
-    '20260908203927_ivx_fleet_dashboard_observation.sql', '20260908203936_ivx_fleet_process_fencing.sql', '20260908210000_ivx_senior_queue_atomic.sql', '20260908210001_ivx_shared_room_messages.sql', '20260908210002_ivx_ha_observation_roles.sql']) {
+    '20260908203927_ivx_fleet_dashboard_observation.sql', '20260908203936_ivx_fleet_process_fencing.sql', '20260908211042_ivx_senior_queue_atomic.sql', '20260908211054_ivx_shared_room_messages.sql', '20260908211101_ivx_ha_observation_roles.sql']) {
     await a.query(await readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8'));
   }
   const fixtures = [1, 2].map(n => ({ taskId: `ha-${n}`, idempotencyKey: `ha-${n}`, assignedAgentNumber: 1,

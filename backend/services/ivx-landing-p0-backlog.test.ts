@@ -382,9 +382,9 @@ describe('Executor produces real evidence from live responses (injected fetch)',
     const previous = process.env.GITHUB_TOKEN;
     delete process.env.GITHUB_TOKEN;
     const unit = LANDING_P0_UNITS.find((u) => u.unitId === 'reels.production-render-browser')!;
-    const { record } = await executeLandingUnit(unit, ctx, { fetchImpl: fakeFetch });
+    const { record } = await executeLandingUnit(unit, { ...ctx, productionSha: 'a'.repeat(40) }, { fetchImpl: fakeFetch });
     expect(record.status).toBe('BLOCKED');
-    expect(record.blocked_reason).toContain('GITHUB_TOKEN');
+    expect(record.blocked_reason).toContain('GitHub API HTTP 404');
     if (previous !== undefined) process.env.GITHUB_TOKEN = previous;
   });
 

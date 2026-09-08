@@ -231,5 +231,5 @@ app.post('/api/ivx/auth/direct-sign-in', async (c) => handleIVXDirectAuthSignIn(
 app.options('/api/ivx/auth/restart-supabase', () => ivxSupabaseRestartOptions());
 app.post('/api/ivx/auth/restart-supabase', async (c) => handleIVXSupabaseRestart(c.req.raw));
 
-if (!landingFleetFocusEnabled()) startAutonomousQAScheduler();
+if (process.env.IVX_PROCESS_ROLE !== 'api' && !landingFleetFocusEnabled()) startAutonomousQAScheduler();
 export default app;

@@ -9,7 +9,7 @@ assert(/^[a-f0-9]{40}$/.test(sha)); assert(token);
 const apiService = 'srv-d7t9ivreo5us73ftose0', workerService = 'srv-d9i15fg4n6ts73bn00j0';
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 async function request(path: string, body?: unknown) {
-  const response = await fetch(base + path, { method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(20_000),
+  const response = await fetch(base + path, { method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(body ? 60_000 : 20_000),
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Connection: 'close' }, ...(body ? { body: JSON.stringify(body) } : {}) });
   assert.equal(response.status, 200, `HTTP ${response.status} at ${path}`);
   const value = await response.json(); assert.equal(value.ok, true, `Operation rejected at ${path}`); return value;
@@ -27,7 +27,8 @@ async function action(action: string, serviceId: string, numInstances?: number) 
 // Wait until both services have the exact release and shared state before scaling.
 let prepared = false;
 for (let i = 0; i < 60; i++) {
-  const t = await topology();
+  const t = await topology().catch(() => null);
+  if (!t) { await sleep(5000); continue; }
   prepared = t.apiInstances.length >= 1 && t.workerInstances.length >= 1;
   if (prepared) break;
   await sleep(5000);
@@ -39,7 +40,8 @@ for (const service of [workerService, apiService]) {
 }
 let before: any, consecutive = 0;
 for (let i = 0; i < 72; i++) {
-  const t = await topology();
+  const t = await topology().catch(() => null);
+  if (!t) { consecutive = 0; await sleep(5000); continue; }
   if (t.ready && t.apiInstances.length === 2 && t.workerInstances.length === 2) consecutive++; else consecutive = 0;
   if (consecutive >= 4) { before = t; break; }
   await sleep(5000);

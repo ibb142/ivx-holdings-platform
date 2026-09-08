@@ -6710,6 +6710,7 @@ export const certificateBootRecovery = resumePendingCertificateRuns()
     console.error('[IVXRealExecutionCert] boot recovery failed', err instanceof Error ? err.message : err);
   });
 void certificateBootRecovery.finally(() => {
+if (process.env.IVX_PROCESS_ROLE === 'api') return;
 if (!landingFleetFocus) {
   try { startNightOpsScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] night ops scheduler failed to start:', err instanceof Error ? err.message : err); }
   try { void bootstrapDataVault(); startDataVaultScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] data vault scheduler failed to start:', err instanceof Error ? err.message : err); }

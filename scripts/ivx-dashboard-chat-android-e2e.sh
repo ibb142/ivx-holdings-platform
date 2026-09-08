@@ -30,6 +30,10 @@ timeout 180s "$MAESTRO" test expo/.maestro/ivx-owner-dashboard-certificate.yaml 
   --output qa/evidence/dashboard-chat/dashboard.xml
 
 # 3) IVX IA Chat: live AI reply + durable thread across restart.
+timeout 180s "$MAESTRO" test expo/.maestro/ivx-owner-autonomous-certificate.yaml \
+  --format junit \
+  --output qa/evidence/dashboard-chat/autonomous.xml
+
 timeout 240s "$MAESTRO" test expo/.maestro/ivx-owner-chat-certificate.yaml \
   --format junit \
   --output qa/evidence/dashboard-chat/chat.xml
@@ -48,10 +52,10 @@ test "$(jq -r '.passed' qa/evidence/all-routes-human-e2e/certificate.json)" = tr
 test "$(jq -r '.coveragePercent' qa/evidence/all-routes-human-e2e/certificate.json)" = 100
 
 jq -n \
-  --arg sha "${GITHUB_SHA:-unknown}" \
+  --arg sha "${EXPO_PUBLIC_SOURCE_COMMIT_SHA:-${GITHUB_SHA:-unknown}}" \
   --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --argjson totalRoutes "$(jq -r '.totalRoutes' qa/evidence/all-routes-human-e2e/certificate.json)" \
-  '{certificate:"IVX-DASHBOARD-CHAT-ALL-ROUTES-E2E",passed:true,sourceSha:$sha,realOwnerLogin:true,dashboardRoute:"/admin/dashboard",dashboardRendered:true,dashboardScrolled:true,chatOpened:true,liveAIReply:true,chatPersistenceAfterRestart:true,allExpoRoutesHumanPatrolled:true,totalRoutes:$totalRoutes,routeCoveragePercent:100,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' \
+  '{certificate:"IVX-DASHBOARD-CHAT-ALL-ROUTES-E2E",passed:true,sourceSha:$sha,realOwnerLogin:true,dashboardRoute:"/admin/dashboard",dashboardRendered:true,dashboardScrolled:true,autonomousIndependentSignalsRendered:true,chatOpened:true,liveAIReply:true,chatPersistenceAfterRestart:true,allExpoRoutesHumanPatrolled:true,totalRoutes:$totalRoutes,routeCoveragePercent:100,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' \
   > qa/evidence/dashboard-chat/certificate.json
 cat qa/evidence/dashboard-chat/certificate.json
 
