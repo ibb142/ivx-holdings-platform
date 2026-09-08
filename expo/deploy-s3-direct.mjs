@@ -10,13 +10,14 @@
  * Usage:
  *   AWS_ACCESS_KEY_ID=xxx AWS_SECRET_ACCESS_KEY=xxx bun run deploy-s3-direct.mjs
  *
- * If env vars are not set, falls back to legacy credentials with a warning.
+ * Missing credentials stop the deployment; there is no credential fallback.
  */
 import { S3Client, PutObjectCommand, HeadBucketCommand, PutBucketWebsiteCommand } from '@aws-sdk/client-s3';
 import {
   CloudFrontClient,
   CreateFunctionCommand,
   CreateInvalidationCommand,
+  GetInvalidationCommand,
   GetDistributionConfigCommand,
   DescribeFunctionCommand,
   PublishFunctionCommand,
@@ -25,6 +26,7 @@ import {
   ListResponseHeadersPoliciesCommand,
   CreateResponseHeadersPolicyCommand,
   GetResponseHeadersPolicyCommand,
+  UpdateResponseHeadersPolicyCommand,
 } from '@aws-sdk/client-cloudfront';
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
 
@@ -56,11 +58,17 @@ async function ensureWwwRedirectFunction() {
   var request = event.request;
   var host = request.headers.host && request.headers.host.value;
   if (host && host.toLowerCase() === 'www.ivxholding.com') {
+    var query = [];
+    var params = request.querystring || {};
+    Object.keys(params).forEach(function(key) {
+      var values = params[key].multiValue || [params[key]];
+      values.forEach(function(item) { query.push(key + '=' + item.value); });
+    });
     return {
       statusCode: 301,
       statusDescription: 'Moved Permanently',
       headers: {
-        location: { value: 'https://ivxholding.com' + request.uri },
+        location: { value: 'https://ivxholding.com' + request.uri + (query.length ? '?' + query.join('&') : '') },
         'cache-control': { value: 'public, max-age=3600' }
       }
     };
@@ -82,7 +90,7 @@ async function ensureWwwRedirectFunction() {
     etag = updated.ETag || '';
     functionArn = updated.FunctionSummary?.FunctionMetadata?.FunctionARN || functionArn;
   } catch (error) {
-    if (error?.name !== 'NoSuchFunction') throw error;
+    if (!['NoSuchFunctionExists', 'NoSuchFunction'].includes(error?.name)) throw error;
     const created = await cf.send(new CreateFunctionCommand({
       Name: name,
       FunctionConfig: { Comment: 'Redirect www.ivxholding.com to apex', Runtime: 'cloudfront-js-2.0' },
@@ -91,8 +99,23 @@ async function ensureWwwRedirectFunction() {
     etag = created.ETag || '';
     functionArn = created.FunctionSummary?.FunctionMetadata?.FunctionARN || '';
   }
+  if (!etag) throw new Error('CloudFront function response is missing an ETag');
   const published = await cf.send(new PublishFunctionCommand({ Name: name, IfMatch: etag }));
-  return published.FunctionSummary?.FunctionMetadata?.FunctionARN || functionArn;
+  const publishedArn = published.FunctionSummary?.FunctionMetadata?.FunctionARN || functionArn;
+  if (!publishedArn) throw new Error('CloudFront function response is missing an ARN');
+  return publishedArn;
+}
+
+async function waitForCompletedInvalidation(id, initialStatus) {
+  if (!id) throw new Error('CloudFront invalidation response is missing an ID');
+  let status = initialStatus;
+  const deadline = Date.now() + 300_000;
+  while (status !== 'Completed') {
+    if (Date.now() >= deadline) throw new Error('CloudFront invalidation did not complete within 5 minutes');
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    const result = await cf.send(new GetInvalidationCommand({ DistributionId: DIST_ID, Id: id }));
+    status = result.Invalidation?.Status;
+  }
 }
 
 const LANDING_DIR = '/home/user/rork-app/expo/ivxholding-landing';
@@ -529,7 +552,8 @@ async function deploy() {
       policyETag = getRes.ETag || '';
     }
   } catch (e) {
-    console.warn('  Could not list existing policies:', e?.message || 'Unknown');
+    console.error('Could not read security headers policies:', e?.name, e?.message);
+    throw e;
   }
 
   const policyConfig = {
@@ -543,13 +567,16 @@ async function deploy() {
       OriginOverride: false,
     },
     CustomHeadersConfig: {
-      Quantity: 2,
+      Quantity: 1,
       Items: [
-        { Header: 'Content-Security-Policy', Value: "upgrade-insecure-requests; default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com https://connect.facebook.net https://snap.licdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' https://api.qrserver.com https://*.supabase.co https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev data:; font-src 'self' https://fonts.gstatic.com; media-src 'self' https://*.supabase.co https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev; connect-src 'self' https://api.ivxholding.com https://*.supabase.co wss://*.supabase.co; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://api.ivxholding.com; frame-ancestors 'none';", Override: true },
         { Header: 'Permissions-Policy', Value: 'geolocation=(), microphone=(), camera=(), payment=()', Override: true },
       ],
     },
     SecurityHeadersConfig: {
+      ContentSecurityPolicy: {
+        ContentSecurityPolicy: "upgrade-insecure-requests; default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com https://connect.facebook.net https://snap.licdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' https://api.qrserver.com https://*.supabase.co https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev data:; font-src 'self' https://fonts.gstatic.com; media-src 'self' https://*.supabase.co https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev; connect-src 'self' https://api.ivxholding.com https://ivx-holdings-platform.onrender.com https://*.supabase.co wss://*.supabase.co; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://api.ivxholding.com; frame-ancestors 'none';",
+        Override: true,
+      },
       StrictTransportSecurity: {
         AccessControlMaxAgeSec: 31536000,
         IncludeSubdomains: true,
@@ -565,7 +592,10 @@ async function deploy() {
 
   try {
     if (policyId) {
-      console.log('  Policy already exists:', policyId);
+      await cf.send(new UpdateResponseHeadersPolicyCommand({
+        Id: policyId, IfMatch: policyETag, ResponseHeadersPolicyConfig: policyConfig,
+      }));
+      console.log('  Updated policy:', policyId);
     } else {
       const createRes = await cf.send(new CreateResponseHeadersPolicyCommand({
         ResponseHeadersPolicyConfig: policyConfig,
@@ -573,12 +603,13 @@ async function deploy() {
       policyId = createRes.ResponseHeadersPolicy?.Id || '';
       console.log('  Created policy:', policyId);
     }
+    if (!policyId) throw new Error('CloudFront response-headers policy ID is missing');
   } catch (e) {
-    console.warn('  Could not create/find policy:', e?.message || 'Unknown');
+    console.error('Could not configure security headers policy:', e?.name, e?.message);
+    throw e;
   }
 
-  // Attach security policy and host redirect to the distribution. The redirect
-  // is independent of the optional response-headers policy.
+  // Both security headers and the host redirect are required for certification.
   let redirectFunctionArn = '';
   try {
     redirectFunctionArn = await ensureWwwRedirectFunction();
@@ -586,12 +617,14 @@ async function deploy() {
     edgeStatus.redirectFunction = 'failed';
     edgeStatus.error = `${e?.name || 'Unknown'}: ${e?.message || 'Unknown error'}`;
     console.warn('  Could not publish www redirect function:', e?.message || 'Unknown');
+    throw e;
   }
   if (policyId || redirectFunctionArn) {
     try {
       const distRes = await cf.send(new GetDistributionConfigCommand({ Id: DIST_ID }));
       const distConfig = distRes.DistributionConfig;
       const currentETag = distRes.ETag || '';
+      if (!distConfig || !currentETag) throw new Error('CloudFront distribution configuration or ETag is missing');
 
       if (distConfig) {
         if (!distConfig.DefaultCacheBehavior) {
@@ -607,6 +640,9 @@ async function deploy() {
         const currentPolicyId = distConfig.DefaultCacheBehavior.ResponseHeadersPolicyId;
         const policyChanged = Boolean(policyId && currentPolicyId !== policyId);
         const currentAssociations = distConfig.DefaultCacheBehavior.FunctionAssociations?.Items || [];
+        if (redirectFunctionArn && currentAssociations.some((item) => item.EventType === 'viewer-request' && item.FunctionARN !== redirectFunctionArn)) {
+          throw new Error('Existing viewer-request function requires owner review; refusing to replace it');
+        }
         const otherAssociations = currentAssociations.filter((item) => item.EventType !== 'viewer-request');
         const hasRedirectFunction = Boolean(redirectFunctionArn && currentAssociations.some((item) => item.EventType === 'viewer-request' && item.FunctionARN === redirectFunctionArn));
         if (redirectFunctionArn && !hasRedirectFunction) {
@@ -635,6 +671,7 @@ async function deploy() {
       edgeStatus.redirectFunction = 'failed';
       edgeStatus.error = `${e?.name || 'Unknown'}: ${e?.message || 'Unknown error'}`;
       if (e?.$metadata) console.warn('   HTTP:', e.$metadata.httpStatusCode, '| Request ID:', e.$metadata.requestId || 'N/A');
+      throw e;
     }
   }
 
@@ -694,10 +731,15 @@ async function deploy() {
         Paths: { Quantity: 1, Items: ['/*'] },
       },
     }));
-    console.log('✅ CloudFront invalidated:', inv.Invalidation?.Id || 'unknown');
+    const invalidationId = inv.Invalidation?.Id;
+    if (!invalidationId) throw new Error('CloudFront invalidation response is missing an ID');
+    console.log('✅ CloudFront invalidation created:', invalidationId);
+    await waitForCompletedInvalidation(invalidationId, inv.Invalidation?.Status);
+    console.log('✅ CloudFront invalidation COMPLETED:', invalidationId);
   } catch (e) {
     console.error('❌ CloudFront invalidation FAILED:', e?.name || 'Unknown', e?.message || 'Unknown error');
     if (e?.$metadata) console.error('   HTTP:', e.$metadata.httpStatusCode, '| Request ID:', e.$metadata.requestId || 'N/A');
+    throw e;
   }
 
   // ── Summary ────────────────────────────────────────

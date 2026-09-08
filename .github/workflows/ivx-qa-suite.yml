@@ -20,6 +20,35 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Detect Expo application impact
+        id: impact
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            git fetch --no-tags origin "${{ github.base_ref }}" --depth=1
+            base=$(git merge-base HEAD "origin/${{ github.base_ref }}")
+          else
+            base="${{ github.event.before }}"
+            if [ -z "$base" ] || printf '%s' "$base" | grep -Eq '^0+$'; then
+              echo 'expo=true' >> "$GITHUB_OUTPUT"
+              echo 'EXPO_IMPACT=FULL_GATE_NO_BASE'
+              exit 0
+            fi
+          fi
+          git diff --name-only "$base"...HEAD > "$RUNNER_TEMP/qa-changed-files.txt"
+          cat "$RUNNER_TEMP/qa-changed-files.txt"
+          expo=false
+          while IFS= read -r path; do
+            case "$path" in
+              # Static landing files are covered by the dedicated regression
+              # and Playwright gates; they do not execute React Native code.
+              expo/ivxholding-landing/*|expo/deploy-s3-direct.mjs|qa/landing-*|scripts/__tests__/ivx-landing-*|.github/workflows/landing-*) ;;
+              expo/*|package.json|bun.lock|bun.lockb|tsconfig.json) expo=true; break ;;
+            esac
+          done < "$RUNNER_TEMP/qa-changed-files.txt"
+          echo "expo=$expo" >> "$GITHUB_OUTPUT"
+          echo "EXPO_IMPACT=$expo"
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.9
@@ -41,6 +70,7 @@ jobs:
         run: |
           set -euo pipefail
           node --test scripts/__tests__/ivx-senior-quality-gate.test.mjs
+          node --test scripts/__tests__/ivx-landing-edge-regression.test.mjs
           echo 'senior_quality_gate=PASS'
       - name: '3. Backend unit tests — process isolated — HARD GATE'
         shell: bash
@@ -70,6 +100,7 @@ jobs:
           test "$failed" -eq 0
           echo 'backend_tests=PASS'
       - name: '4. Expo unit tests — process isolated — HARD GATE'
+        if: steps.impact.outputs.expo == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -93,6 +124,10 @@ jobs:
           echo "isolated_expo_test_files=$count failed_files=$failed" | tee -a expo-test-results.txt
           test "$failed" -eq 0
           echo 'expo_tests=PASS'
+      - name: '4b. Expo unit tests — scoped skip evidence'
+        if: steps.impact.outputs.expo != 'true'
+        run: |
+          echo 'expo_tests=SKIPPED_NO_EXPO_APP_CHANGES' | tee expo-test-results.txt
       - name: '5. Critical file protection test — HARD GATE'
         run: |
           set -euo pipefail
