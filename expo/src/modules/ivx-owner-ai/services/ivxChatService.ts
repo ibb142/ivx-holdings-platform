@@ -904,6 +904,10 @@ async function bootstrapOwnerConversationRaw(): Promise<IVXConversation> {
   const client = getIVXSupabaseClient();
   const tables = await resolveIVXTables();
 
+  // Discovery already established that shared persistence is unavailable.
+  // Do not spend another minute probing profiles and conversation inserts.
+  if (tables.schema === 'none') return getLocalConversation();
+
   console.log('[IVXChatService] Bootstrapping conversation using schema:', tables.schema, 'dbSchema:', tables.dbSchema, 'table:', tables.conversations);
 
   let ownerContext = null as Awaited<ReturnType<typeof getIVXOwnerAuthContext>> | null;
@@ -1372,13 +1376,15 @@ async function sendOwnerTextMessage(input: {
     return localMessage;
   }
 
-  let ownerContext = null as Awaited<ReturnType<typeof getIVXOwnerAuthContext>> | null;
-  try {
-    ownerContext = await getIVXOwnerAuthContext();
-  } catch (error) {
-    console.log('[IVXChatService] Owner auth unavailable for sendOwnerTextMessage, switching to local mode:', error instanceof Error ? error.message : 'unknown');
-  }
   const tables = await resolveIVXTables();
+  let ownerContext = null as Awaited<ReturnType<typeof getIVXOwnerAuthContext>> | null;
+  if (tables.schema !== 'none') {
+    try {
+      ownerContext = await getIVXOwnerAuthContext();
+    } catch (error) {
+      console.log('[IVXChatService] Owner auth unavailable for sendOwnerTextMessage, switching to local mode:', error instanceof Error ? error.message : 'unknown');
+    }
+  }
   const conversation = await bootstrapOwnerConversation();
   const body = trimOrNull(input.body);
 
@@ -1388,7 +1394,7 @@ async function sendOwnerTextMessage(input: {
 
   if (!ownerContext || tables.schema === 'none') {
     if (input.requireRemote === true) {
-      throw new Error(!ownerContext ? 'Owner session is required to save this message.' : 'Shared room persistence is unavailable.');
+      throw new Error(tables.schema === 'none' ? 'Shared room persistence is unavailable.' : 'Owner session is required to save this message.');
     }
 
     const localMessage = createLocalMessage({
@@ -1402,13 +1408,13 @@ async function sendOwnerTextMessage(input: {
     await appendLocalMessage(localMessage);
     emitLocalOwnerMessage(localMessage, 'send_owner_text_local_mode');
     trackOwnerSendAudit({
-      transport: resolveLocalAuditTransport(!!ownerContext),
+      transport: tables.schema === 'none' ? 'local_fallback' : resolveLocalAuditTransport(!!ownerContext),
       conversationId: conversation.id,
       messageId: localMessage.id,
       senderRole: 'owner',
-      reason: resolveLocalAuditReason(!!ownerContext, tables.schema === 'none'
+      reason: tables.schema === 'none'
         ? 'IVX shared tables are unavailable, so the message was persisted locally.'
-        : 'Owner text send switched to local persistence.'),
+        : resolveLocalAuditReason(!!ownerContext, 'Owner text send switched to local persistence.'),
     });
     console.log('[IVXChatService] Owner text message stored locally');
     return localMessage;

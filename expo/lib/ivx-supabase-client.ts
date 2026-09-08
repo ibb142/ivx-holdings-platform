@@ -51,6 +51,12 @@ export type IVXOwnerAIConfigAudit = {
 };
 
 function readTrimmedEnv(name: string): string {
+  // Expo embeds only static process.env.EXPO_PUBLIC_* property references.
+  // Keep server-only credentials on the dynamic, non-inlined path below.
+  if (name === 'EXPO_PUBLIC_IVX_API_BASE_URL') return (process.env.EXPO_PUBLIC_IVX_API_BASE_URL ?? '').trim();
+  if (name === 'EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL') return (process.env.EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL ?? '').trim();
+  if (name === 'EXPO_PUBLIC_API_BASE_URL') return (process.env.EXPO_PUBLIC_API_BASE_URL ?? '').trim();
+  if (name === 'EXPO_PUBLIC_SUPABASE_URL') return (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').trim();
   return (process.env[name] ?? '').trim();
 }
 

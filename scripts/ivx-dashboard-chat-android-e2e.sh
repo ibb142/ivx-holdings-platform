@@ -24,6 +24,15 @@ done
 
 trap 'rc=$?; adb exec-out screencap -p > qa/evidence/dashboard-chat/failure.png 2>/dev/null || true; adb logcat -d -v threadtime > qa/evidence/dashboard-chat/failure-logcat.txt 2>/dev/null || true; exit $rc' EXIT
 
+UI_FAILURES=0
+record_flow_failure() {
+  local name="$1"
+  UI_FAILURES=$((UI_FAILURES + 1))
+  mkdir -p "qa/evidence/dashboard-chat/failures/$name"
+  adb exec-out screencap -p > "qa/evidence/dashboard-chat/failures/$name/screen.png" 2>/dev/null || true
+  adb logcat -d -v threadtime > "qa/evidence/dashboard-chat/failures/$name/logcat.txt" 2>/dev/null || true
+}
+
 timeout 120s adb install -r "$APK_PATH"
 timeout 30s adb wait-for-device
 
@@ -47,18 +56,22 @@ timeout 180s "$MAESTRO" test "$FLOW_DIR/dashboard.yaml" \
 # 3) IVX IA Chat: live AI reply + durable thread across restart.
 # An old reply already in persistent history must never satisfy a new run.
 IVX_CHAT_E2E_NONCE="$(node -e 'console.log(require("node:crypto").randomUUID().replace(/-/g,""))')"
-timeout 240s "$MAESTRO" test "$FLOW_DIR/chat.yaml" \
+if ! timeout 240s "$MAESTRO" test "$FLOW_DIR/chat.yaml" \
   --env OWNER_EMAIL="$OWNER_EMAIL" \
   --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" \
   --env IVX_CHAT_E2E_NONCE="$IVX_CHAT_E2E_NONCE" \
   --format junit \
-  --output qa/evidence/dashboard-chat/chat.xml
+  --output qa/evidence/dashboard-chat/chat.xml; then
+  record_flow_failure chat
+fi
 
 # 4) Aviation mission dashboard: complete live roster and restart navigation.
-timeout 300s "$MAESTRO" test "$FLOW_DIR/mission.yaml" \
+if ! timeout 300s "$MAESTRO" test "$FLOW_DIR/mission.yaml" \
   --env OWNER_EMAIL="$OWNER_EMAIL" \
   --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" \
-  --format junit --output qa/evidence/dashboard-chat/mission.xml
+  --format junit --output qa/evidence/dashboard-chat/mission.xml; then
+  record_flow_failure mission
+fi
 
 # 5) The installed APK creates one real read-only task over authenticated SSE.
 export IVX_HANDOFF_NONCE="native-${IVX_CHAT_E2E_NONCE}"
@@ -79,6 +92,10 @@ PY_ID
 )"
 export IVX_HANDOFF_JOB_ID
 node scripts/ivx-autonomous-handoff-live-cert.mjs
+
+# Collect independent chat/mission evidence in one build, but every original
+# assertion remains mandatory before the full route suite or PASS certificate.
+test "$UI_FAILURES" -eq 0
 
 # 6) Reuse the same authenticated owner session and physically open/scroll every
 # Expo Router screen. Any crash, fatal banner, process death, timeout, or route
