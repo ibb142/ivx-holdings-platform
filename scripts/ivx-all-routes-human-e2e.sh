@@ -51,8 +51,7 @@ route_from_file() {
 mapfile -t files < <(find expo/app -type f \( -name '*.tsx' -o -name '*.ts' \) | sort)
 
 total=0
-passed=0
-failed=0
+: > "$EVIDENCE/route-manifest.jsonl"
 for file in "${files[@]}"; do
   route=$(route_from_file "$file") || continue
   total=$((total + 1))
@@ -60,7 +59,7 @@ for file in "${files[@]}"; do
   flow="$FLOW_DIR/${total}-${safe}.yaml"
   cat > "$flow" <<YAML
 appId: $APP_ID
-name: IVX human-depth route ${route:-/}
+name: IVX route $total ${route:-/}
 ---
 - openLink: "ivx-app:///${route#/}"
 - waitForAnimationToEnd
@@ -74,40 +73,39 @@ name: IVX human-depth route ${route:-/}
     duration: 500
 - waitForAnimationToEnd
 - assertNotVisible: "Something went wrong"
+- takeScreenshot: route-$total
 YAML
 
-  started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  set +e
-  timeout 75s "$MAESTRO" test "$flow" --format junit --output "$EVIDENCE/${total}-${safe}.xml"
-  rc=$?
-  set -e
-  alive=false
-  if timeout 8s adb shell pidof "$APP_ID" >/dev/null 2>&1; then alive=true; fi
-  adb exec-out screencap -p > "$EVIDENCE/${total}-${safe}.png" 2>/dev/null || true
-
-  ok=false
-  if [ "$rc" -eq 0 ] && [ "$alive" = true ]; then
-    ok=true
-    passed=$((passed + 1))
-  else
-    failed=$((failed + 1))
-  fi
-  jq -nc \
-    --arg file "$file" --arg route "$route" --arg started "$started" \
-    --argjson ok "$ok" --argjson processAlive "$alive" --argjson exitCode "$rc" \
-    '{file:$file,route:$route,humanOpened:true,scrollExercised:true,noFatalUiBanner:$ok,processAlive:$processAlive,exitCode:$exitCode,passed:$ok,startedAt:$started}' \
-    >> "$EVIDENCE/results.jsonl"
+  jq -nc --arg file "$file" --arg route "$route" --arg name "IVX route $total ${route:-/}" \
+    '{file:$file,route:$route,name:$name}' >> "$EVIDENCE/route-manifest.jsonl"
 done
 
-jq -s '.' "$EVIDENCE/results.jsonl" > "$EVIDENCE/results.json"
+# Run one Maestro suite: starting a JVM and reconnecting the driver for each of
+# 274 routes can exhaust the 70-minute job before coverage is complete.
+# The same route assertions and screenshots still execute for every flow.
+set +e
+timeout 2700s "$MAESTRO" test "$FLOW_DIR" --format junit \
+  --output "$EVIDENCE/routes.xml" --test-output-dir "$EVIDENCE/maestro"
+route_exit=$?
+set -e
+
+python3 scripts/ivx-maestro-route-results.py \
+  "$EVIDENCE/route-manifest.jsonl" "$EVIDENCE/routes.xml" "$EVIDENCE/results.json"
+passed=$(jq '[.[] | select(.passed == true)] | length' "$EVIDENCE/results.json")
+failed=$((total - passed))
+jq -c '.[]' "$EVIDENCE/results.json" > "$EVIDENCE/results.jsonl"
+timeout 8s adb shell pidof "$APP_ID" > "$EVIDENCE/process.txt"
+
 jq -n \
-  --arg sha "${GITHUB_SHA:-unknown}" \
+  --arg sha "$(git rev-parse HEAD)" \
   --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --argjson total "$total" --argjson passed "$passed" --argjson failed "$failed" \
-  '{certificate:"IVX-ALL-EXPO-ROUTES-HUMAN-E2E",sourceSha:$sha,totalRoutes:$total,passedRoutes:$passed,failedRoutes:$failed,coveragePercent:(if $total>0 then (($passed*10000/$total)|floor/100) else 0 end),passed:($total>0 and $failed==0 and $passed==$total),realOwnerLogin:true,physicalAndroidEmulator:true,everyRouteOpened:true,everyRouteScrolled:true,processSurvivalChecked:true,verifiedAt:$verifiedAt}' \
+  --argjson exitCode "$route_exit" \
+  '{certificate:"IVX-ALL-EXPO-ROUTES-ANDROID-SMOKE",sourceSha:$sha,totalRoutes:$total,passedRoutes:$passed,failedRoutes:$failed,exitCode:$exitCode,coveragePercent:(if $total>0 then (($passed*10000/$total)|floor/100) else 0 end),passed:($exitCode==0 and $total>100 and $failed==0 and $passed==$total),realOwnerLogin:true,automated:true,physicalAndroidEmulator:true,everyRouteOpened:($failed==0 and $passed==$total),everyRouteScrolled:($failed==0 and $passed==$total),processSurvivalChecked:true,verifiedAt:$verifiedAt}' \
   > "$EVIDENCE/certificate.json"
 cat "$EVIDENCE/certificate.json"
 
+test "$route_exit" -eq 0
 test "$total" -gt 100
 test "$failed" -eq 0
 test "$passed" -eq "$total"

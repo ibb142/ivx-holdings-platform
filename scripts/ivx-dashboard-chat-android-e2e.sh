@@ -4,6 +4,13 @@ set -euo pipefail
 : "${APK_PATH:?APK_PATH is required}"
 : "${OWNER_EMAIL:?OWNER_EMAIL is required}"
 : "${OWNER_PASSWORD_EFFECTIVE:?OWNER_PASSWORD_EFFECTIVE is required}"
+: "${EXPO_PUBLIC_SOURCE_COMMIT_SHA:?EXPO_PUBLIC_SOURCE_COMMIT_SHA is required}"
+
+# Pull-request GITHUB_SHA can name a synthetic merge commit. The APK is built
+# from the pinned source head, so use that same identity for its certificate.
+SOURCE_SHA="$(git rev-parse HEAD)"
+test "$SOURCE_SHA" = "$EXPO_PUBLIC_SOURCE_COMMIT_SHA"
+APK_SHA256="$(sha256sum "$APK_PATH" | awk '{print $1}')"
 
 mkdir -p qa/evidence/dashboard-chat
 
@@ -30,7 +37,10 @@ timeout 180s "$MAESTRO" test expo/.maestro/ivx-owner-dashboard-certificate.yaml 
   --output qa/evidence/dashboard-chat/dashboard.xml
 
 # 3) IVX IA Chat: live AI reply + durable thread across restart.
+# An old reply already in persistent history must never satisfy a new run.
+IVX_CHAT_E2E_NONCE="$(node -e 'console.log(require("node:crypto").randomUUID().replace(/-/g,""))')"
 timeout 240s "$MAESTRO" test expo/.maestro/ivx-owner-chat-certificate.yaml \
+  --env IVX_CHAT_E2E_NONCE="$IVX_CHAT_E2E_NONCE" \
   --format junit \
   --output qa/evidence/dashboard-chat/chat.xml
 
@@ -48,10 +58,12 @@ test "$(jq -r '.passed' qa/evidence/all-routes-human-e2e/certificate.json)" = tr
 test "$(jq -r '.coveragePercent' qa/evidence/all-routes-human-e2e/certificate.json)" = 100
 
 jq -n \
-  --arg sha "${GITHUB_SHA:-unknown}" \
+  --arg sha "$SOURCE_SHA" \
+  --arg apkSha256 "$APK_SHA256" \
+  --arg chatProbeNonce "$IVX_CHAT_E2E_NONCE" \
   --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --argjson totalRoutes "$(jq -r '.totalRoutes' qa/evidence/all-routes-human-e2e/certificate.json)" \
-  '{certificate:"IVX-DASHBOARD-CHAT-ALL-ROUTES-E2E",passed:true,sourceSha:$sha,realOwnerLogin:true,dashboardRoute:"/admin/dashboard",dashboardRendered:true,dashboardScrolled:true,chatOpened:true,liveAIReply:true,chatPersistenceAfterRestart:true,allExpoRoutesHumanPatrolled:true,totalRoutes:$totalRoutes,routeCoveragePercent:100,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' \
+  '{certificate:"IVX-DASHBOARD-CHAT-ALL-ROUTES-E2E",passed:true,sourceSha:$sha,apkSha256:$apkSha256,chatProbeNonce:$chatProbeNonce,realOwnerLogin:true,dashboardRoute:"/admin/dashboard",dashboardRendered:true,dashboardScrolled:true,chatOpened:true,liveAIReply:true,chatPersistenceAfterRestart:true,allExpoRoutesAndroidSmokePassed:true,totalRoutes:$totalRoutes,routeCoveragePercent:100,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' \
   > qa/evidence/dashboard-chat/certificate.json
 cat qa/evidence/dashboard-chat/certificate.json
 

@@ -4,6 +4,13 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'backend/api/ivx-owner-ai*'
+      - 'backend/services/ivx-owner-ai*'
+      - 'backend/services/ivx-autonomous-dashboard-stream.ts'
+      - 'backend/api/ivx-autonomous-ops-dashboard.ts'
+      - 'expo/__tests__/chat-certificate-flow-regression.test.ts'
+      - 'expo/app/+native-intent.tsx'
+      - 'expo/__tests__/native-intent-routing.test.ts'
       - 'expo/app/admin/dashboard.tsx'
       - 'expo/app/ivx/chat.tsx'
       - 'expo/src/modules/chat/**'
@@ -15,10 +22,20 @@ on:
       - 'expo/.maestro/ivx-owner-dashboard-certificate.yaml'
       - 'expo/.maestro/ivx-owner-chat-certificate.yaml'
       - 'scripts/ivx-dashboard-chat-android-e2e.sh'
+      - 'scripts/ivx-all-routes-human-e2e.sh'
+      - 'scripts/ivx-maestro-route-results.py'
+      - 'scripts/__tests__/test_maestro_route_results.py'
       - '.github/workflows/ivx-dashboard-chat-e2e-cert.yml'
   push:
     branches: [main]
     paths:
+      - 'backend/api/ivx-owner-ai*'
+      - 'backend/services/ivx-owner-ai*'
+      - 'backend/services/ivx-autonomous-dashboard-stream.ts'
+      - 'backend/api/ivx-autonomous-ops-dashboard.ts'
+      - 'expo/__tests__/chat-certificate-flow-regression.test.ts'
+      - 'expo/app/+native-intent.tsx'
+      - 'expo/__tests__/native-intent-routing.test.ts'
       - 'expo/app/admin/dashboard.tsx'
       - 'expo/app/ivx/chat.tsx'
       - 'expo/src/modules/chat/**'
@@ -30,6 +47,9 @@ on:
       - 'expo/.maestro/ivx-owner-dashboard-certificate.yaml'
       - 'expo/.maestro/ivx-owner-chat-certificate.yaml'
       - 'scripts/ivx-dashboard-chat-android-e2e.sh'
+      - 'scripts/ivx-all-routes-human-e2e.sh'
+      - 'scripts/ivx-maestro-route-results.py'
+      - 'scripts/__tests__/test_maestro_route_results.py'
       - '.github/workflows/ivx-dashboard-chat-e2e-cert.yml'
   workflow_dispatch: {}
 
@@ -65,8 +85,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
+
+      - name: Verify checked-out source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPO_PUBLIC_SOURCE_COMMIT_SHA"
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -147,12 +173,13 @@ jobs:
           grep -q 'ivx-owner-chat-composer-dock' expo/.maestro/ivx-owner-chat-certificate.yaml
           grep -q 'IVX_CHAT_E2E_OK' expo/.maestro/ivx-owner-chat-certificate.yaml
           grep -q 'clearState: false' expo/.maestro/ivx-owner-chat-certificate.yaml
+          python3 scripts/__tests__/test_maestro_route_results.py
           cd expo
           bunx tsc --noEmit
-          bun test __tests__/chat-certificate-flow-regression.test.ts __tests__/chat-transport-reliability.test.ts
+          bun test __tests__/native-intent-routing.test.ts __tests__/chat-certificate-flow-regression.test.ts __tests__/chat-transport-reliability.test.ts
 
       - name: Wait for exact production SHA on main
-        if: ${{ github.event_name == 'push' }}
+        if: ${{ github.event_name != 'pull_request' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -187,6 +214,10 @@ jobs:
           APK=$(find app/build/outputs/apk/qa -name '*.apk' -type f | head -1)
           test -n "$APK"
           echo "APK_PATH=$(realpath "$APK")" >> "$GITHUB_ENV"
+          mkdir -p "$GITHUB_WORKSPACE/qa/evidence/dashboard-chat/apk"
+          cp "$APK" "$GITHUB_WORKSPACE/qa/evidence/dashboard-chat/apk/IVX-Owner-QA.apk"
+          cd "$GITHUB_WORKSPACE/qa/evidence/dashboard-chat/apk"
+          sha256sum IVX-Owner-QA.apk > IVX-Owner-QA.sha256
 
       - name: Enable KVM
         run: |
@@ -222,6 +253,8 @@ jobs:
         if: always()
         with:
           name: ivx-dashboard-chat-e2e-${{ github.event.pull_request.head.sha || github.sha }}
-          path: qa/evidence/dashboard-chat
+          path: |
+            qa/evidence/dashboard-chat
+            qa/evidence/all-routes-human-e2e
           if-no-files-found: warn
           retention-days: 30
