@@ -27,6 +27,7 @@ import {
   type TaskState,
 } from './ivx-autonomous-task-engine';
 import { getAllExecutionStates } from './ivx-agent-runtime';
+import { fetchLandingGitHubRead } from './ivx-landing-github-read';
 import { postgresAtomicQueueSelected, readPostgresTaskIdentitiesByPrefix } from './ivx-postgres-autonomous-task-store';
 
 export const IVX_LANDING_P0_MARKER = 'ivx-landing-p0-backlog-2026-09-04';
@@ -841,15 +842,12 @@ export async function fetchMainSha(fetchImpl: typeof fetch = fetch): Promise<str
   const now = Date.now();
   if (mainShaCache.expiresAt > now) return mainShaCache.sha;
   try {
-    const headers: Record<string, string> = { accept: 'application/vnd.github+json', 'user-agent': 'ivx-landing-p0' };
-    const token = (process.env.GITHUB_TOKEN ?? '').trim();
-    if (token) headers.authorization = `Bearer ${token}`;
-    const response = await fetchImpl(`https://api.github.com/repos/${LANDING_REPO}/commits/main`, { headers, signal: AbortSignal.timeout(8_000) });
+    const response = await fetchLandingGitHubRead('commits/main', fetchImpl);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const body = (await response.json()) as { sha?: string };
-    mainShaCache = { sha: typeof body.sha === 'string' ? body.sha : null, expiresAt: now + 5 * 60 * 1000 };
+    mainShaCache = { sha: typeof body.sha === 'string' && /^[a-f0-9]{40}$/i.test(body.sha) ? body.sha : null, expiresAt: now + 5 * 60 * 1000 };
   } catch {
-    mainShaCache = { sha: null, expiresAt: now + 60 * 1000 };
+    mainShaCache = { sha: null, expiresAt: now + 5 * 60 * 1000 };
   }
   return mainShaCache.sha;
 }
@@ -867,4 +865,3 @@ export async function buildLandingP0Status(): Promise<LandingP0Status> {
     mission,
   });
 }
-
