@@ -10,9 +10,10 @@
  * owner/security/config gates remain BLOCKED until repaired with evidence.
  */
 import { getAllTasks, releaseLease, transitionTaskState, type Task } from './ivx-autonomous-task-engine';
+import { updateExecutionState } from './ivx-agent-runtime';
 import { resolveProductionSha } from './ivx-landing-p0-backlog';
 
-export const IVX_BLOCKED_RECONCILER_MARKER = 'ivx-autonomous-realtime-productivity-reconciler-2026-09-08-v2';
+export const IVX_BLOCKED_RECONCILER_MARKER = 'ivx-autonomous-realtime-productivity-reconciler-2026-09-08-v3';
 const DEFAULT_INTERVAL_MS = 15_000;
 const MIN_BLOCK_AGE_MS = 20_000;
 const DEFAULT_PRODUCTIVITY_STALE_MS = 5 * 60_000;
@@ -30,6 +31,7 @@ export type BlockedReconcileResult = {
   retainedOwnerOrConfig: number;
   aliveButIdleSeen: number;
   staleLeasesReleased: number;
+  runtimeSlotsCleared: number;
   errors: number;
 };
 
@@ -74,10 +76,11 @@ function latestProductiveEvidenceMs(task: Task): number {
   return latest;
 }
 
-async function releaseAliveButIdleTasks(tasks: Task[], now: number): Promise<{ seen: number; released: number; errors: number }> {
+async function releaseAliveButIdleTasks(tasks: Task[], now: number): Promise<{ seen: number; released: number; runtimeSlotsCleared: number; errors: number }> {
   const staleMs = productivityStaleMs();
   let seen = 0;
   let released = 0;
+  let runtimeSlotsCleared = 0;
   let errors = 0;
 
   for (const task of tasks) {
@@ -91,18 +94,28 @@ async function releaseAliveButIdleTasks(tasks: Task[], now: number): Promise<{ s
 
     seen += 1;
     try {
-      // This is not a failure and does not consume retry budget. Releasing the
-      // lease makes the durable row QUEUED; the 5s runtime refill assigns the
-      // lane another eligible task. A still-running old promise loses its lease
-      // and must fail closed instead of continuing to claim productive status.
-      const result = await releaseLease(task.taskId, task.leaseHolder);
-      if (result.ok) released += 1;
-      else errors += 1;
+      const workerId = task.leaseHolder;
+      const agentId = workerId.startsWith('agent:') ? workerId.slice('agent:'.length) : null;
+      const result = await releaseLease(task.taskId, workerId);
+      if (result.ok) {
+        released += 1;
+        // Critical truth-bridge fix: releaseLease clears the durable lease, but
+        // the in-memory runtime can still carry activeTaskId until the next
+        // mirror pass. That makes canRunContinuity() reject this IA and wastes
+        // production time. Clear the matching runtime slot in the SAME recovery
+        // transaction so the existing 5-second refill can pick it immediately.
+        if (agentId) {
+          updateExecutionState(agentId, { availability: 'available', activeTaskId: null });
+          runtimeSlotsCleared += 1;
+        }
+      } else {
+        errors += 1;
+      }
     } catch {
       errors += 1;
     }
   }
-  return { seen, released, errors };
+  return { seen, released, runtimeSlotsCleared, errors };
 }
 
 export async function reconcileRetryableBlockedTasks(): Promise<BlockedReconcileResult> {
@@ -156,6 +169,7 @@ export async function reconcileRetryableBlockedTasks(): Promise<BlockedReconcile
     retainedOwnerOrConfig,
     aliveButIdleSeen: productivity.seen,
     staleLeasesReleased: productivity.released,
+    runtimeSlotsCleared: productivity.runtimeSlotsCleared,
     errors,
   };
 }
