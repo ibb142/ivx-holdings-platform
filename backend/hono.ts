@@ -922,7 +922,7 @@ import {
 } from './services/ivx-daily-self-upgrade';
 import { withIVXOwnerOnly } from './api/ivx-owner-route';
 import { OPTIONS as seniorDeveloperOptions, handleIVXSeniorDeveloperCredentialAuditRequest, handleIVXSeniorDeveloperGithubAuditRequest, handleIVXSeniorDeveloperRunRequest, handleIVXSeniorDeveloperStatusRequest } from './api/ivx-senior-developer-runtime';
-import { auditIVXProductionCredentialRuntime, IVX_SENIOR_DEVELOPER_RUNTIME_MARKER, IVX_GITHUB_CANONICAL_PATH, IVX_GITHUB_CANONICAL_PATH_DESCRIPTION } from './services/ivx-senior-developer-runtime';
+import { IVX_SENIOR_DEVELOPER_RUNTIME_MARKER, IVX_GITHUB_CANONICAL_PATH, IVX_GITHUB_CANONICAL_PATH_DESCRIPTION } from './services/ivx-senior-developer-runtime';
 import { OPTIONS as seniorDevToolsOptions, handleIVXSeniorDevAuditReportRequest, handleIVXSeniorDevToolsExecuteRequest, handleIVXSeniorDevToolsListRequest } from './api/ivx-senior-dev-tools';
 import { OPTIONS as branchPrProofOptions, handleIVXBranchPrProofRequest, handleIVXBranchPrProofStatusRequest } from './api/ivx-branch-pr-proof';
 import { OPTIONS as seniorDeveloperWorkerOptions, handleInternalDeploymentAuthorizationConsumeRequest, handleSeniorDeveloperWorkerEnqueueRequest, handleSeniorDeveloperWorkerJobRequest, handleSeniorDeveloperWorkerJobsRequest, handleSeniorDeveloperWorkerLastProofRequest, handleSeniorDeveloperWorkerLedgerRequest, handleSeniorDeveloperWorkerStatusRequest, handleSeniorDeveloperWorkerActiveJobRequest, handleSeniorDeveloperWorkerCancelJobRequest, handleSeniorDeveloperWorkerResumeJobRequest } from './api/ivx-senior-developer-worker';
@@ -3336,105 +3336,44 @@ app.get('/health/ready', async () => {
   }, { status: ready ? 200 : 503 });
 });
 
-app.get('/health', async (context) => {
-  const publicChatHealth = getPublicChatHealthSnapshot();
+// Render uses this endpoint to decide whether to restart the API process.
+// Keep it local: dependency probes belong to /health/ready and /health/queue.
+// Waiting for GitHub/Render credentials and then Supabase used the entire
+// five-second Render deadline and left uncancelled remote work on every probe.
+app.get('/health', (context) => {
   const aiStartup = validateIVXAIStartup();
   const providerHealth = getProviderHealth();
-  // Configuration confirms a key and endpoint are present; only a successful
-  // live request confirms that the configured provider is actually ready.
-  const primaryProviderReady = providerHealth.state === 'PROVIDER_READY';
-  const aiServiceAvailable = primaryProviderReady || providerHealth.state === 'FALLBACK_READY';
-
-  // Senior Developer Runtime diagnostic: validates that all execution
-  // credentials (GitHub, Render) are present and reachable at runtime.
-  // SECURITY: Public health only exposes enabled + blockers count.
-  // Credential presence, markers, route lists, and internal paths are
-  // never exposed publicly — they require owner auth via /api/ivx/owner-ai/status.
-  let sdEnabled = false;
-  let sdBlockers: string[] = [];
-  let sdGithubReady = false;
-  let sdRenderReady = false;
-  let sdVariablesValidated = false;
-  try {
-    const credAudit = await Promise.race([
-      auditIVXProductionCredentialRuntime(),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('credential audit timeout')), 2500)),
-    ]);
-    sdGithubReady = credAudit.github.canReadRepo === true;
-    sdRenderReady = credAudit.render.canDeploy === true;
-    sdEnabled = credAudit.ok;
-    sdVariablesValidated = credAudit.ok;
-    sdBlockers = credAudit.blockers;
-  } catch {
-    // audit failed or timed out — defaults remain false/empty
-  }
-
-  // Supabase configuration check for QA-SUPA-001.
-  // Only exposes a boolean — no URLs, keys, or project refs.
+  const aiServiceAvailable = providerHealth.state === 'PROVIDER_READY' || providerHealth.state === 'FALLBACK_READY';
   const databaseConfigured = Boolean(
-    readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL) ||
-    readTrimmed(process.env.SUPABASE_URL)
+    readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_URL) || readTrimmed(process.env.SUPABASE_URL)
   ) && Boolean(
     readTrimmed(process.env.SUPABASE_SERVICE_ROLE_KEY) ||
     readTrimmed(process.env.SUPABASE_SERVICE_KEY) ||
     readTrimmed(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY)
   );
-
-  // Queue worker summary — lets monitoring tools check everything in one call
-  // instead of requiring a separate /health/queue request.
-  // SECURITY: Only exposes public-safe fields (running, depth, counts). No worker IDs,
-  // no task IDs, no internal state beyond aggregate counts.
   const workerInfo = getWorkerRuntimeInfo();
-  let queueDepth = 0;
-  let deadLetterCount = 0;
-  let staleQueue = false;
-  let saturated = false;
-  let total5xx = 0;
-  try {
-    const queueResult = await Promise.race([
-      checkOwnerAIQueueHealth(),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('queue health timeout')), 2500)),
-    ]);
-    if (queueResult.ok && queueResult.detail) {
-      const d = queueResult.detail as Record<string, unknown>;
-      queueDepth = typeof d.depth === 'number' ? d.depth : 0;
-      deadLetterCount = typeof d.deadLetterCount === 'number' ? d.deadLetterCount : 0;
-      staleQueue = typeof d.staleQueue === 'boolean' ? d.staleQueue : false;
-      saturated = typeof d.saturated === 'boolean' ? d.saturated : false;
-      const alerts = d.alerts as Record<string, unknown> | undefined;
-      total5xx = typeof alerts?.total5xx === 'number' ? alerts.total5xx : 0;
-    }
-  } catch {
-    // queue check failed or timed out — defaults remain zeros
-  }
-
-  // SECURITY: Public /health returns only minimal uptime info.
-  // No route enumeration, no credential presence, no internal markers,
-  // no key prefixes, no deployment history, no service IDs.
-  // Owner-authenticated status is at /api/ivx/owner-ai/status.
   return context.json({
-    ok: true,
-    status: 'healthy',
+    ok: !workerInfo.shuttingDown,
+    status: workerInfo.shuttingDown ? 'draining' : 'healthy',
+    scope: 'liveness',
     databaseConfigured,
-    ai: {
-      ok: aiServiceAvailable,
-      model: aiStartup.model,
-    },
-    // seniorDeveloper details redacted from public health — use /api/ivx/owner-ai/status with auth
+    ai: { ok: aiServiceAvailable, model: aiStartup.model },
     queue: {
       workerRunning: workerInfo.running,
       activeTasks: workerInfo.activeTasks,
       shuttingDown: workerInfo.shuttingDown,
-      depth: queueDepth,
-      deadLetterCount,
-      staleQueue,
-      saturated,
-      alerts5xx: total5xx,
+      // No durable queue read was performed. Unknown counts must not look empty.
+      telemetryAvailable: false,
+      depth: null,
+      deadLetterCount: null,
+      staleQueue: null,
+      saturated: null,
+      alerts5xx: null,
     },
     commit: LIVE_COMMIT_SHA,
     bootTime: SERVER_BOOT_TIME,
     timestamp: nowIso(),
-  }, 200, {
+  }, workerInfo.shuttingDown ? 503 : 200, {
     'Cache-Control': 'no-store, no-cache, must-revalidate',
     'Pragma': 'no-cache',
   });
