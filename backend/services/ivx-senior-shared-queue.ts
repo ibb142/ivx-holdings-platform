@@ -28,8 +28,8 @@ export async function patchSharedSeniorQueue<T extends Queue>(queue: T, claimed:
   const saved = await rpc<T>('ivx_senior_queue_patch', { p_changes: changes });
   return rememberSeniorQueue(saved);
 }
-export function claimSharedSeniorJob<T>(jobId: string): Promise<T | null> {
-  return rpc('ivx_senior_queue_claim', { p_job_id: jobId, p_worker_instance_id: autonomousWorkerInstanceId() });
+export function claimSharedSeniorJob<T>(jobId: string, resume = false): Promise<T | null> {
+  return rpc('ivx_senior_queue_claim', { p_job_id: jobId, p_worker_instance_id: autonomousWorkerInstanceId(), p_resume: resume });
 }
 export async function putSharedSeniorResult(result: unknown): Promise<void> {
   await rpc('ivx_senior_ledger_put', { p_result: result });

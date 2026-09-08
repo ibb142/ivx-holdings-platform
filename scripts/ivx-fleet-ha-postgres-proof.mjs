@@ -44,6 +44,7 @@ try {
   assert.equal(observation.activeTasks.length, 1);
   const privileges = (await a.query("select has_function_privilege('anon','public.ivx_fleet_dashboard_observation()','execute') as anon, has_function_privilege('authenticated','public.ivx_fleet_dashboard_observation()','execute') as authenticated, has_function_privilege('service_role','public.ivx_fleet_dashboard_observation()','execute') as service")).rows[0];
   assert.deepEqual(privileges, { anon: false, authenticated: false, service: true });
+  // The claim RPC also fences restart resumes of already-created PRs.
   const queueJob = n => ({ jobId: `senior-${n}`, ownerId: 'test-owner', status: 'queued', attempts: 0, createdAt: new Date().toISOString(), idempotencyKey: `senior-key-${n}` });
   const qa = queueJob(1), qb = queueJob(2);
   const patch = (client, changes) => client.query('select public.ivx_senior_queue_patch($1::jsonb) as value', [JSON.stringify(changes)]);
@@ -54,6 +55,11 @@ try {
   const seniorClaims = await Promise.all([claimSenior(a, qa.jobId, 'senior-a'), claimSenior(b, qa.jobId, 'senior-b')]);
   assert.equal(seniorClaims.filter(Boolean).length, 1, 'shared document claims are atomic');
   const senior = seniorClaims.find(Boolean); const seniorWorker = senior.leaseWorkerInstanceId;
+  const resume = { jobId: 'resume-test', ownerId: 'resume-owner', status: 'committing', attempts: 1, leaseExpiresAt: new Date(Date.now()-1000).toISOString(), result: { commitSha: 'a'.repeat(40), prNumber: 1 } };
+  await patch(a, [{ expected: null, next: resume }]);
+  const resumes = await Promise.all([a.query('select public.ivx_senior_queue_claim($1,$2,true) as value', [resume.jobId,'resume-a']), b.query('select public.ivx_senior_queue_claim($1,$2,true) as value', [resume.jobId,'resume-b'])]);
+  assert.equal(resumes.filter(r => r.rows[0].value).length, 1, 'only one replica may resume the same PR merge wait');
+
   assert.equal(await claimSenior(b, qb.jobId, 'another-worker'), null, 'one active job per owner across replicas');
   await assert.rejects(patch(a, [{ expected: senior, next: { ...senior, status: 'completed' }, workerInstanceId: 'stale-worker' }]), /Worker lease lost/);
   await patch(a, [{ expected: senior, next: { ...senior, status: 'cancelled' } }]);

@@ -359,11 +359,13 @@ function refillAllAvailableAgents(
         ]
         : [],
     };
+    if (stopping) return;
     const leaseResults = await leaseNextTasksBatch(candidates.map((state) => ({
       workerId: `agent:${state.agentId}`,
       agentNumber: state.agentNumber,
       options: { missionScope },
     })));
+    if (stopping) return;
     const leased = leaseResults.filter((result) => result.ok && result.task !== null);
     if (leased.length === 0) return;
     const started = await startLeasedTasksBatch(leased.map((result) => ({ taskId: result.task!.taskId, workerId: result.workerId })));
@@ -501,7 +503,9 @@ export function stopAutonomous112RuntimeEnforcer(): Promise<number> {
   leaseMirrorTimer = null;
   heartbeatTimer = null;
   refillTimer = null;
-  stopInFlight = (postgresAtomicQueueSelected() ? releasePostgresWorkerInstanceTasks() : Promise.resolve(0))
+  // Let any claim already sent to PostgreSQL settle before releasing this process.
+  stopInFlight = Promise.allSettled([refillInFlight, heartbeatRefreshInFlight])
+    .then(() => postgresAtomicQueueSelected() ? releasePostgresWorkerInstanceTasks() : 0)
     .catch((error) => {
       console.error('[IVX Autonomous 112 Shutdown] lease release failed', { error: error instanceof Error ? error.message : String(error) });
       return 0;

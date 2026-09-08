@@ -48,7 +48,7 @@ begin
 end;
 $$;
 
-create or replace function public.ivx_senior_queue_claim(p_job_id text,p_worker_instance_id text)
+create or replace function public.ivx_senior_queue_claim(p_job_id text,p_worker_instance_id text,p_resume boolean default false)
 returns jsonb language plpgsql security invoker set search_path='' as $$
 declare v_doc jsonb; v_job jsonb; v_index integer; v_now timestamptz := clock_timestamp();
 begin
@@ -56,11 +56,16 @@ begin
   select value into v_doc from public.ivx_durable_documents where doc_key='senior-developer-worker/queue.json' for update;
   select value,(ordinality-1)::integer into v_job,v_index from jsonb_array_elements(coalesce(v_doc->'jobs','[]'::jsonb)) with ordinality
     where value->>'jobId'=p_job_id limit 1;
-  if v_job is null or v_job->>'status'<>'queued' then return null; end if;
+  if v_job is null then return null; end if;
+  if p_resume then
+    if v_job->>'status'<>'committing' or nullif(v_job->'result'->>'commitSha','') is null
+      or v_job->'result'->>'prNumber' is null
+      or coalesce((v_job->>'leaseExpiresAt')::timestamptz,'-infinity') > clock_timestamp() then return null; end if;
+  elsif v_job->>'status'<>'queued' then return null; end if;
   if exists (select 1 from jsonb_array_elements(v_doc->'jobs') j where j->>'ownerId'=v_job->>'ownerId'
     and j->>'jobId'<>p_job_id and j->>'status' not in ('queued','completed','failed','cancelled','blocked')) then return null; end if;
-  v_job := v_job || jsonb_build_object('status','running','stage','RUNNING','startedAt',v_now,'lastHeartbeatAt',v_now,
-    'attempts',coalesce((v_job->>'attempts')::integer,0)+1,'leaseWorkerInstanceId',p_worker_instance_id,'leaseExpiresAt',v_now+interval '120 seconds');
+  v_job := v_job || jsonb_build_object('status',case when p_resume then 'committing' else 'running' end,'stage',case when p_resume then 'COMMITTING' else 'RUNNING' end,'startedAt',v_now,'lastHeartbeatAt',v_now,
+    'attempts',coalesce((v_job->>'attempts')::integer,0)+case when p_resume then 0 else 1 end,'leaseWorkerInstanceId',p_worker_instance_id,'leaseExpiresAt',v_now+interval '120 seconds');
   v_doc := jsonb_set(v_doc,array['jobs',v_index::text],v_job);
   update public.ivx_durable_documents set value=v_doc,updated_at=v_now where doc_key='senior-developer-worker/queue.json';
   return v_job;
@@ -82,6 +87,6 @@ begin
     where doc_key='senior-developer-worker/proof-ledger.json';
 end;
 $$;
-revoke execute on function public.ivx_senior_queue_patch(jsonb),public.ivx_senior_queue_claim(text,text),public.ivx_senior_ledger_put(jsonb) from public,anon,authenticated;
-grant execute on function public.ivx_senior_queue_patch(jsonb),public.ivx_senior_queue_claim(text,text),public.ivx_senior_ledger_put(jsonb) to service_role;
+revoke execute on function public.ivx_senior_queue_patch(jsonb),public.ivx_senior_queue_claim(text,text,boolean),public.ivx_senior_ledger_put(jsonb) from public,anon,authenticated;
+grant execute on function public.ivx_senior_queue_patch(jsonb),public.ivx_senior_queue_claim(text,text,boolean),public.ivx_senior_ledger_put(jsonb) to service_role;
 notify pgrst,'reload schema';

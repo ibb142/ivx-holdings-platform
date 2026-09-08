@@ -1167,7 +1167,7 @@ async function recoverStuckCiWaitJobs(queue: QueueDoc): Promise<void> {
     if (!activityAt) continue;
     if (Date.now() - new Date(activityAt).getTime() < CI_WAIT_RESUME_THRESHOLD_MS) continue;
     activeCiResumeJobIds.add(job.jobId);
-    void resumeCiWaitJob(job.jobId).finally(() => {
+    void resumeCiWaitJob(job.jobId).catch(() => {}).finally(() => {
       activeCiResumeJobIds.delete(job.jobId);
     });
   }
@@ -1177,11 +1177,24 @@ async function recoverStuckCiWaitJobs(queue: QueueDoc): Promise<void> {
  *  point with the persisted state and finalizes the job exactly like the
  *  normal autonomous-coder path (COMPLETED only on a confirmed merge). */
 async function resumeCiWaitJob(jobId: string): Promise<void> {
-  const job = await getSeniorDeveloperJob(jobId);
+  if (queueStopping) return;
+  let job = await getSeniorDeveloperJob(jobId);
   if (!job || !ACTIVE_STATUSES.has(job.status)) return;
   const prNumber = job.result?.prNumber;
   const commitSha = job.result?.commitSha;
   if (prNumber == null || !commitSha) return;
+  if (sharedSeniorQueueEnabled()) {
+    const claimed = await claimSharedSeniorJob<IVXWorkerJob>(jobId, true);
+    if (!claimed) return;
+    job = claimed; claimedJobIds.add(jobId);
+  }
+  const controller: { cancelled: boolean } = { cancelled: queueStopping };
+  activeJobControllers.set(jobId, controller);
+  const heartbeat = sharedSeniorQueueEnabled() ? setInterval(() => {
+    if (!controller.cancelled) void updateJob(jobId, { lastHeartbeatAt: nowIso() }).catch(() => { controller.cancelled = true; });
+  }, 20_000) : null;
+  heartbeat?.unref?.();
+  try {
   const resumeStartedAt = nowIso();
   await updateJobStage(jobId, 'COMMITTING', `Worker restart detected — resuming CI wait for PR #${prNumber} (commit ${commitSha.slice(0, 12)}) with the original taskId. No duplicate job created.`);
   const proof = await resumeIVXAutonomousCoderFromCiWait({
@@ -1195,9 +1208,13 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     testsPassed: job.result?.testsPassed !== false,
     typecheckPassed: job.result?.typecheckPassed !== false,
     filesChanged: job.result?.changedFiles ?? [],
+    beforeMerge: async () => {
+      if (controller.cancelled) throw new Error('Worker lease lost before resumed merge');
+      await updateJob(jobId, { lastHeartbeatAt: nowIso() });
+    },
     onPhase: (phase, detail) => {
       const { stage, detail: mappedDetail } = autonomousCoderPhaseToStage(phase);
-      void updateJobStage(jobId, stage, detail || mappedDetail);
+      void updateJobStage(jobId, stage, detail || mappedDetail).catch(() => { controller.cancelled = true; });
     },
   });
   const result = summarizeAutonomousCoderProof(jobId, proof);
@@ -1220,6 +1237,10 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     error: finalized.error,
   });
   await appendLedger(finalized);
+  } finally {
+    if (heartbeat) clearInterval(heartbeat);
+    claimedJobIds.delete(jobId); activeJobControllers.delete(jobId);
+  }
 }
 
 /** Window after startedAt within which a recovered commit must have been
