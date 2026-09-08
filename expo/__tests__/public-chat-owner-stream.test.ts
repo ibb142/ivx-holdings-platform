@@ -3,6 +3,7 @@ import { afterEach, describe, expect, mock, test } from 'bun:test';
 let accessToken: string | null = 'test-owner-session';
 mock.module('@/lib/api-base', () => ({ getDirectApiBaseUrl: () => 'https://api.example.test' }));
 mock.module('@/lib/ivx-supabase-client', () => ({ getIVXAccessToken: async () => accessToken }));
+mock.module('expo/fetch', () => ({ fetch: (url: string, init?: RequestInit) => globalThis.fetch(url, init) }));
 const { streamPublicChatMessage } = await import('../lib/public-chat-stream');
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });

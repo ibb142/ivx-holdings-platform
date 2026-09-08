@@ -14,6 +14,7 @@
  */
 import { getDirectApiBaseUrl } from '@/lib/api-base';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
+import { fetch as fetchStream } from 'expo/fetch';
 import type { PublicChatHistoryItem } from './public-chat';
 
 // ── Stream event types ─────────────────────────────────────────────────────
@@ -99,9 +100,11 @@ export async function streamPublicChatMessage(
     }
   }
 
-  let response: Response;
+  let response: Awaited<ReturnType<typeof fetchStream>>;
   try {
-    response = await fetch(url, {
+    // Expo's native transport exposes a ReadableStream on Android and iOS.
+    // React Native's global XMLHttpRequest-backed fetch does not.
+    response = await fetchStream(url, {
       method: 'POST',
       headers: await buildStreamHeaders(input.clientId),
       body: JSON.stringify({

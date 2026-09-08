@@ -17,7 +17,7 @@ case "$APP_ID" in com.ivxholdings.app|com.ivxholdings.app.owner) ;; *) echo 'Uns
 FLOW_DIR="qa/evidence/dashboard-chat/flows"
 mkdir -p "$FLOW_DIR"
 # Reuse identical assertions against the installed release or QA package.
-for name in home dashboard chat mission; do
+for name in home dashboard chat mission public-handoff; do
   sed "s/^appId: com.ivxholdings.app.owner$/appId: $APP_ID/" \
     "expo/.maestro/ivx-owner-${name}-certificate.yaml" > "$FLOW_DIR/${name}.yaml"
 done
@@ -56,7 +56,27 @@ timeout 240s "$MAESTRO" test "$FLOW_DIR/chat.yaml" \
 timeout 180s "$MAESTRO" test "$FLOW_DIR/mission.yaml" \
   --format junit --output qa/evidence/dashboard-chat/mission.xml
 
-# 5) Reuse the same authenticated owner session and physically open/scroll every
+# 5) The installed APK creates one real read-only task over authenticated SSE.
+export IVX_HANDOFF_NONCE="native-${IVX_CHAT_E2E_NONCE}"
+timeout 180s "$MAESTRO" test "$FLOW_DIR/public-handoff.yaml" \
+  --env IVX_HANDOFF_NONCE="$IVX_HANDOFF_NONCE" \
+  --format junit --output qa/evidence/dashboard-chat/native-handoff.xml
+adb shell uiautomator dump /sdcard/ivx-handoff.xml >/dev/null
+adb pull /sdcard/ivx-handoff.xml qa/evidence/dashboard-chat/native-handoff-view.xml >/dev/null
+IVX_HANDOFF_JOB_ID="$(python3 - <<'PY_ID'
+import re, xml.etree.ElementTree as ET
+root = ET.parse('qa/evidence/dashboard-chat/native-handoff-view.xml').getroot()
+text = '\n'.join(node.attrib.get('text', '') for node in root.iter())
+ids = re.findall(r'JOB_ID:\s*([A-Za-z0-9_-]+)', text)
+if len(set(ids)) != 1:
+    raise SystemExit('Native chat must render exactly one Autonomous job identity')
+print(ids[0])
+PY_ID
+)"
+export IVX_HANDOFF_JOB_ID
+node scripts/ivx-autonomous-handoff-live-cert.mjs
+
+# 6) Reuse the same authenticated owner session and physically open/scroll every
 # Expo Router screen. Any crash, fatal banner, process death, timeout, or route
 # that cannot paint fails the entire certificate.
 IVX_REUSE_AUTHENTICATED_SESSION=true bash scripts/ivx-all-routes-human-e2e.sh
@@ -76,7 +96,7 @@ jq -n \
   --arg chatProbeNonce "$IVX_CHAT_E2E_NONCE" \
   --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --argjson totalRoutes "$(jq -r '.totalRoutes' qa/evidence/all-routes-human-e2e/certificate.json)" \
-  '{certificate:"IVX-DASHBOARD-CHAT-ALL-ROUTES-E2E",passed:true,sourceSha:$sha,apkSha256:$apkSha256,appId:$appId,missionControlRendered:true,missionLiveTelemetry:true,missionRoster112:true,chatProbeNonce:$chatProbeNonce,realOwnerLogin:true,dashboardRoute:"/admin/dashboard",dashboardRendered:true,dashboardScrolled:true,chatOpened:true,liveAIReply:true,chatPersistenceAfterRestart:true,allExpoRoutesAndroidSmokePassed:true,totalRoutes:$totalRoutes,routeCoveragePercent:100,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' \
+  '{certificate:"IVX-DASHBOARD-CHAT-ALL-ROUTES-E2E",passed:true,sourceSha:$sha,apkSha256:$apkSha256,appId:$appId,missionControlRendered:true,missionLiveTelemetry:true,missionRoster112:true,nativeAutonomousHandoffCompleted:true,chatProbeNonce:$chatProbeNonce,realOwnerLogin:true,dashboardRoute:"/admin/dashboard",dashboardRendered:true,dashboardScrolled:true,chatOpened:true,liveAIReply:true,chatPersistenceAfterRestart:true,allExpoRoutesAndroidSmokePassed:true,totalRoutes:$totalRoutes,routeCoveragePercent:100,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' \
   > qa/evidence/dashboard-chat/certificate.json
 cat qa/evidence/dashboard-chat/certificate.json
 
