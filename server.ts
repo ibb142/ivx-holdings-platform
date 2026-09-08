@@ -10,6 +10,7 @@ import { startSeniorDevWorker } from './backend/services/ivx-senior-dev-worker';
 import { startAutonomousScheduler } from './backend/services/ivx-autonomous-scheduler';
 import { startAutonomousIntelligenceMissionScheduler } from './backend/services/ivx-autonomous-intelligence-mission-scheduler';
 import { startContinuousExecutionScheduler, startContinuousSession, getContinuousSession } from './backend/services/ivx-continuous-execution';
+import { startBlockedTaskReconciler } from './backend/services/ivx-autonomous-blocked-reconciler';
 import { startSmsNotificationScheduler, getSmsNotifierStatus } from './backend/services/ivx-autonomous-sms-notifier';
 import { runCompletionCampaignCycle } from './backend/services/ivx-autonomous-completion-campaign';
 import { getLatestMemberAuthCertification, startMemberAuthCertificationScheduler } from './backend/services/ivx-member-auth-certification';
@@ -85,18 +86,15 @@ app.all('/api/ivx/autonomous/voice/laml', async (c) => handleAutonomousVoiceLaml
 app.all('/api/ivx/autonomous/voice/status', async (c) => handleAutonomousVoiceCallback(c.req.raw));
 app.get('/api/ivx/certification/autonomous-voice-public', async (c) => handleAutonomousVoicePublicCertificate(c.req.raw));
 
-// Certificate recovery owns the agent runtime until every recovered row is terminal.
 void certificateBootRecovery.finally(() => {
   startAutonomous112RuntimeEnforcer();
+  startBlockedTaskReconciler();
   if (!landingFleetFocus) {
     startAutonomousScheduler();
     startAutonomousIntelligenceMissionScheduler();
     startGitHubActionsExternalSupervisor();
     startAutonomousLiveBootstrap();
     startAutonomousDoctor();
-    // 24/7 self-heal: scheduler is always booted. If no durable session is
-    // active after a restart, create one. Sessions renew before their horizon;
-    // they do not pause merely because the owner is using the app.
     startContinuousExecutionScheduler();
     void (async () => {
       try {
@@ -108,6 +106,22 @@ void certificateBootRecovery.finally(() => {
         console.warn('[IVX Server] continuous self-heal bootstrap failed', { error: error instanceof Error ? error.message : String(error) });
       }
     })();
+    // Renewable sessions remove the 12-hour session horizon as an operational
+    // stop: every minute, a completed/stopped/failed horizon is replaced with a
+    // fresh verified session. This gives continuous 24/7 coverage across days.
+    const selfHealRenewal = setInterval(() => {
+      void (async () => {
+        try {
+          const current = await getContinuousSession();
+          if (['completed', 'stopped', 'failed', 'idle'].includes(current.status)) {
+            await startContinuousSession({ maxDurationMs: 12 * 60 * 60_000, maxPasses: 500, intervalMs: 60_000, stopWhenClean: false, suites: ['typecheck'] });
+          }
+        } catch (error) {
+          console.warn('[IVX Server] continuous self-heal renewal failed', { error: error instanceof Error ? error.message : String(error) });
+        }
+      })();
+    }, 60_000);
+    selfHealRenewal.unref?.();
   } else {
     console.log('[IVX Landing Fleet Focus] exclusive 112-lane runtime active; unrelated server schedulers suppressed');
   }
