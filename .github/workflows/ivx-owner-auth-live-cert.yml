@@ -18,7 +18,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ivx-owner-auth-live-cert-${{ github.event.pull_request.number || github.ref }}
@@ -30,7 +30,7 @@ jobs:
     timeout-minutes: 20
     env:
       OWNER_EMAIL: iperez4242@gmail.com
-      OWNER_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD }}
+      OWNER_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD || secrets.OWNER_PASSWORD || secrets.IVX_OWNER_PASSWORD || secrets.IVX_OWNER_NEW_PASSWORD || secrets.OWNER_LOGIN_PASSWORD || secrets.IVX_OWNER_LOGIN_PASSWORD }}
       SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
       API_BASE: https://api.ivxholding.com
@@ -60,7 +60,7 @@ jobs:
         run: |
           set -euo pipefail
           body=$(jq -nc --arg email "$OWNER_EMAIL" --arg password "$OWNER_PASSWORD" '{email:$email,password:$password}')
-          curl -sS --max-time 15 -o /tmp/login.json -w '%{http_code} %{time_total}' -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" -H "apikey: ${SUPABASE_ANON_KEY}" -H 'Content-Type: application/json' --data "$body" > /tmp/login.metrics
+          curl -sS --max-time 15 -o /tmp/login.json -w '%{http_code} %{time_total}\n' -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" -H "apikey: ${SUPABASE_ANON_KEY}" -H 'Content-Type: application/json' --data "$body" > /tmp/login.metrics
           read -r code total < /tmp/login.metrics
           test "$code" = 200 || { echo "password_grant_http=$code"; jq '{error,error_code,msg,message}' /tmp/login.json 2>/dev/null || true; exit 1; }
           token=$(jq -r '.access_token // empty' /tmp/login.json)
@@ -68,6 +68,7 @@ jobs:
           app_role=$(jq -r '.user.app_metadata.role // empty' /tmp/login.json)
           user_role=$(jq -r '.user.user_metadata.role // empty' /tmp/login.json)
           test -n "$token"; test -n "$user_id"
+          echo "::add-mask::$token"
           case "$app_role:$user_role" in *owner*|*admin*) ;; *) exit 1;; esac
           login_ms=$(awk -v t="$total" 'BEGIN { printf "%d", t*1000 }')
           echo "LOGIN_MS=$login_ms" >> "$GITHUB_ENV"
@@ -106,12 +107,4 @@ jobs:
         with:
           name: ivx-owner-auth-e2e-live-${{ github.sha }}
           path: qa/evidence/ivx-owner-auth-e2e-live.json
-      - name: Persist certificate
-        shell: bash
-        run: |
-          git config user.name 'IVX Auth Certifier'
-          git config user.email 'ivx-auth-certifier@users.noreply.github.com'
-          git add qa/evidence/ivx-owner-auth-e2e-live.json
-          git diff --cached --quiet && exit 0
-          git commit -m "cert(auth): owner E2E live ${SOURCE_SHA:0:12} [skip ci]"
-          if [ "${{ github.event_name }}" = "pull_request" ]; then git push origin HEAD:${{ github.event.pull_request.head.ref }}; else git pull --rebase origin main && git push origin HEAD:main; fi
+      # The uploaded artifact persists the proof without changing the tested SHA.

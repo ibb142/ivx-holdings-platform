@@ -60,7 +60,7 @@ jobs:
         run: |
           set -euo pipefail
           body=$(jq -nc --arg email "$OWNER_EMAIL" --arg password "$OWNER_PASSWORD" '{email:$email,password:$password}')
-          curl -sS --max-time 20 -o /tmp/login.json -w '%{http_code} %{time_total}' \
+          curl -sS --max-time 20 -o /tmp/login.json -w '%{http_code} %{time_total}\n' \
             -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" \
             -H "apikey: ${SUPABASE_KEY}" \
             -H 'Content-Type: application/json' \
@@ -72,6 +72,7 @@ jobs:
           app_role=$(jq -r '.user.app_metadata.role // empty' /tmp/login.json)
           user_role=$(jq -r '.user.user_metadata.role // empty' /tmp/login.json)
           test -n "$token"
+          echo "::add-mask::$token"
           test -n "$user_id"
           case "$app_role:$user_role" in *owner*|*admin*) ;; *) echo "owner_role_check=FAIL"; exit 1;; esac
           echo "OWNER_TOKEN=$token" >> "$GITHUB_ENV"
@@ -133,7 +134,7 @@ jobs:
           grep -q 'testID="tabs-auth-transition"' 'expo/app/(tabs)/_layout.tsx'
           grep -q 'Opening sign in…' 'expo/app/(tabs)/_layout.tsx'
           grep -q 'sceneStyle: { backgroundColor:' 'expo/app/(tabs)/_layout.tsx'
-          grep -q 'Home ready' 'expo/app/(tabs)/(home)/home.tsx'
+          grep -q 'Home ready' 'expo/app/(tabs)/home.tsx'
       - name: Install dependencies
         run: |
           set -euo pipefail
