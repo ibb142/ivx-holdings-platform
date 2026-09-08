@@ -17,8 +17,8 @@ const requiredChatTestIDs = [
   'ivx-owner-chat-scroll-to-latest',
 ];
 
-const E2E_PROMPT = 'Return only the result of joining IVX_CHAT_E2E_ and OK.';
-const E2E_REPLY = 'IVX_CHAT_E2E_OK';
+const E2E_PROMPT = 'Return only the result of joining IVX_CHAT_E2E_ and ${CHAT_E2E_SUFFIX}.';
+const E2E_REPLY = 'IVX_CHAT_E2E_${CHAT_E2E_SUFFIX}';
 
 describe('IVX IA chat device certificate regression', () => {
   test('keeps every certificate testID rendered by the chat surface', () => {
@@ -56,7 +56,7 @@ describe('IVX IA chat device certificate regression', () => {
   test('hard-gates send -> live AI reply -> visible render', () => {
     expect(E2E_PROMPT).not.toContain(E2E_REPLY);
     expect(flowSource).toContain(`inputText: "${E2E_PROMPT}"`);
-    expect(flowSource).toContain(`visible: "${E2E_PROMPT}"`);
+    expect(flowSource).toContain(`element: "${E2E_PROMPT}"`);
     expect(flowSource).toContain(`visible: "${E2E_REPLY}"`);
     expect(flowSource).toContain('timeout: 60000');
     expect(flowSource).toContain('assertNotVisible: "Not sent"');
@@ -72,8 +72,8 @@ describe('IVX IA chat device certificate regression', () => {
     expect(clearStateIndex).toBeGreaterThan(launchIndex);
 
     const afterRestart = flowSource.slice(clearStateIndex);
-    expect(afterRestart).toContain(`visible: "${E2E_PROMPT}"`);
-    expect(afterRestart).toContain(`visible: "${E2E_REPLY}"`);
+    expect(afterRestart).toContain(`element: "${E2E_PROMPT}"`);
+    expect(afterRestart).toContain(`element: "${E2E_REPLY}"`);
     expect(afterRestart).toContain('id: "ivx-owner-chat-composer-dock"');
   });
 
