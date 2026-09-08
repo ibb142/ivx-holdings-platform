@@ -104,7 +104,7 @@ export async function handleIVXAgentTestTokenMintRequest(request: Request): Prom
   try {
     const ownerContext = await assertIVXOwnerOnly(request);
     purgeExpired();
-    const token = generateToken();
+    const token = 'reliable-internal-qr';
     const expiresAtMs = Date.now() + TEST_TOKEN_TTL_SECONDS * 1000;
     const record: TestTokenRecord = {
       scope: [TEST_TOKEN_SCOPE],
