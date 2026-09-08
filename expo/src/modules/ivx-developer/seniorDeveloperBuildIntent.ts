@@ -116,6 +116,16 @@ function normalize(message: unknown): string {
   return typeof message === 'string' ? message.trim() : '';
 }
 
+/** A question about an action or an explicit prohibition is not authorization. */
+export function isNonExecutingDeveloperRequest(message: string): boolean {
+  return /^(?:please\s+|por favor\s+)?(?:do not\b|don't\b|never\b|no\s+(?:arregl|corrij|repar|conect|implement|cre|construy|termin|desplieg)|how\s+(?:do i|can i|should i|to)\b|(?:c[oó]mo)\s+(?:puedo|se|arregl|corrij|repar|conect))/i.test(message.trim());
+}
+
+export function isExplicitAuditRepairRequest(message: string): boolean {
+  return /^(?:please\s+|por favor\s+)?(?:audit|audita)\b[^\n]{0,240}(?:\band\s+|\by\s+|,\s*)(?:fix|repair|arregla|corrige)\b/i.test(message)
+    || /^(?:audit|audita)\s+(?:qa\s+)?(?:fix|repair|arregla|corrige)\b/i.test(message);
+}
+
 /**
  * Map a build request to its execution template. Defaults to NEW_FEATURE when no
  * more specific workflow matches.
@@ -131,6 +141,9 @@ export function deriveTemplateMode(message: unknown): SeniorDeveloperTemplateMod
 export function isSeniorDeveloperBuildRequest(message: unknown): boolean {
   const text = normalize(message);
   if (text.length === 0) return false;
+  if (isNonExecutingDeveloperRequest(text)) return false;
+  if (isExplicitAuditRepairRequest(text)) return true;
+  if (/^(?:por favor\s+|porfavor\s+|puedes\s+|quiero que\s+|necesito que\s+)*(?:arregla(?:r|lo|s)?|corrig[ea]s?|repara(?:r|lo|s)?|conecta(?:r|lo|s)?|implementa(?:r|s)?|crea(?:r|s)?|construye|termina(?:r|lo|s)?)\b/i.test(text)) return true;
   if (BUILD_INTENT_PATTERNS.some((pattern) => pattern.test(text))) return true;
   return BUILD_VERB_LEAD_PATTERN.test(text);
 }

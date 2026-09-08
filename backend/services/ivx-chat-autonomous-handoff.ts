@@ -84,9 +84,13 @@ function noExecution(reason: string): AutonomousExecutionIntent {
 export function detectAutonomousExecutionIntent(message: string): AutonomousExecutionIntent {
   const trimmed = message.trim();
   if (!trimmed) return noExecution('Empty message.');
+  if (/^(?:please\s+|por favor\s+)?(?:do not\b|don't\b|never\b|no\s+(?:arregl|corrij|repar|conect|implement|cre|construy|termin|desplieg)|how\s+(?:do i|can i|should i|to)\b|c[oó]mo\s+(?:puedo|se|arregl|corrij|repar|conect))/i.test(trimmed)) {
+    return noExecution('Question or explicit prohibition - execution not requested.');
+  }
 
   const decision: IVXOwnerExecutionDecision = classifyOwnerExecutionCommand(trimmed);
-  const matchedBuildIntent = BUILD_INTENT_PATTERNS.some((pattern) => pattern.test(trimmed));
+  const directInstruction = /^(?:please\s+|can you\s+|could you\s+|por favor\s+|puedes\s+|quiero que\s+|necesito que\s+)*(?:fix|repair|connect|integrate|wire|arregla(?:r|lo|s)?|corrig[ea]s?|repara(?:r|lo|s)?|conecta(?:r|lo|s)?|implementa(?:r|s)?|crea(?:r|s)?|construye|termina(?:r|lo|s)?)\b/i.test(trimmed);
+  const matchedBuildIntent = directInstruction || BUILD_INTENT_PATTERNS.some((pattern) => pattern.test(trimmed));
   const explicitExecution = decision.isOwnerExecutionCommand || matchedBuildIntent;
 
   // Only apply conversational overrides when there is NO explicit execution

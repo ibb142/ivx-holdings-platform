@@ -6,6 +6,20 @@ import {
 } from './ivxOwnerIntentClassifier';
 
 describe('ivxOwnerIntentClassifier', () => {
+  it.each([
+    'Fix this 3 items end to end provide the last apk with fix ivx ia connect to autonomous',
+    'Fix chat now',
+    'Connect IVX IA to Autonomous',
+    'Arregla el dashboard ahora',
+    'Conecta IVX IA con Autonomous',
+    'Audit QA fix this dashboard',
+    'Audit the dashboard and fix the issue',
+  ])('routes the affirmative owner instruction to the worker: %s', (prompt: string) => {
+    expect(classifyOwnerIntent(prompt).routesToWorker).toBe(true);
+  });
+  it.each(['How do I fix the bug?', 'How can I deploy this?', 'Please do not fix the bug', 'Do not deploy this', 'Cómo puedo arreglar el dashboard', 'How do I fix this?', 'Do not fix the app', 'No arregles el dashboard', 'Audit the dashboard, do not fix anything'])('keeps questions and negated actions out of execution: %s', (prompt: string) => {
+    expect(classifyOwnerIntent(prompt).routesToWorker).toBe(false);
+  });
   describe('classifyOwnerIntent — diagnostic requests', () => {
     it('classifies "Audit the loading problem on this chat" as diagnostic', () => {
       const result = classifyOwnerIntent('Audit the loading problem on this chat, explain what is wrong, what must be fixed, and deploy it.');

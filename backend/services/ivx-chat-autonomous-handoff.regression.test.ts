@@ -2,6 +2,16 @@ import { describe, expect, it } from 'bun:test';
 import { detectAutonomousExecutionIntent } from './ivx-chat-autonomous-handoff';
 
 describe('IVX IA senior-developer routing regressions', () => {
+  it.each(['Fix chat now', 'Connect IVX IA to Autonomous', 'Arregla el dashboard ahora', 'Conecta IVX IA con Autonomous'])('routes a direct owner command: %s', (message: string) => {
+    const result = detectAutonomousExecutionIntent(message);
+    expect(result.isExecutionCommand).toBe(true);
+    expect(result.executionMode).toBe('code_change');
+  });
+
+  it.each(['Do not fix the bug', 'Please do not deploy this', 'How do I fix the bug?', 'No arregles el dashboard', 'Cómo puedo arreglar el dashboard'])('does not execute a prohibition or question: %s', (message: string) => {
+    expect(detectAutonomousExecutionIntent(message).isExecutionCommand).toBe(false);
+  });
+
   it('executes mixed explain+fix commands instead of narrating', () => {
     const result = detectAutonomousExecutionIntent('Explain why the owner screen crashes and fix this bug now');
     expect(result.isExecutionCommand).toBe(true);
