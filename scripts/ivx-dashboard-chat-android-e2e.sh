@@ -29,8 +29,9 @@ timeout 180s "$MAESTRO" test expo/.maestro/ivx-owner-dashboard-certificate.yaml 
   --format junit \
   --output qa/evidence/dashboard-chat/dashboard.xml
 
-# 3) IVX IA Chat: live AI reply + durable thread across restart.
+# 3) Independent Autonomous signals; keep its screenshots in the uploaded bundle.
 timeout 180s "$MAESTRO" test expo/.maestro/ivx-owner-autonomous-certificate.yaml \
+  --test-output-dir qa/evidence/dashboard-chat/autonomous-artifacts \
   --format junit \
   --output qa/evidence/dashboard-chat/autonomous.xml
 
