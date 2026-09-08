@@ -22,6 +22,16 @@ const E2E_PROMPT = 'Return only the result of joining IVX_CHAT_E2E_ and ${CHAT_E
 const E2E_REPLY = 'IVX_CHAT_E2E_${CHAT_E2E_SUFFIX}';
 
 describe('IVX IA chat device certificate regression', () => {
+  test('both device certificate callers bind the fresh reply marker and restart credentials', () => {
+    for (const script of ['ivx-owner-home-android-e2e.sh', 'ivx-dashboard-chat-android-e2e.sh']) {
+      const source = readFileSync(resolve(import.meta.dir, '../../scripts', script), 'utf8');
+      const invocation = source.slice(source.indexOf('test expo/.maestro/ivx-owner-chat-certificate.yaml')).split('\n\n')[0];
+      for (const name of ['CHAT_E2E_SUFFIX', 'OWNER_EMAIL', 'OWNER_PASSWORD']) {
+        expect(invocation).toContain(`--env ${name}=`);
+      }
+    }
+  });
+
   test('keeps every certificate testID rendered by the chat surface', () => {
     for (const testID of requiredChatTestIDs) {
       expect(chatSource).toContain(`testID="${testID}"`);
