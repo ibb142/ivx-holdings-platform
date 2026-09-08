@@ -182,10 +182,6 @@ export async function buildLandingFleetProof(sourceSha = resolveProductionSha(),
   };
 }
 
-function leaseOwnershipLost(error: string | null): boolean {
-  return /not the lease holder|state changed|cannot record leased evidence in state/i.test(error ?? '');
-}
-
 export async function runLandingPatrolSession(input: {
   task: Task;
   agentId: string;
@@ -264,11 +260,12 @@ export async function runLandingPatrolSession(input: {
           workerId,
           evidence,
           maxRetainedEvidence: 24,
+          nextObservationAt: new Date(Date.now() + getLandingPatrolIntervalMs()).toISOString(),
         });
         if (!persisted.ok || !persisted.task) {
           state.persistenceErrors += 1;
           state.lastError = persisted.error ?? 'Patrol observation was not persisted.';
-          if (leaseOwnershipLost(state.lastError)) lostError = state.lastError;
+          lostError = state.lastError;
         } else {
           task = persisted.task;
           if (persisted.evidenceId) evidenceIds.push(persisted.evidenceId);
@@ -277,6 +274,7 @@ export async function runLandingPatrolSession(input: {
       } catch (error) {
         state.persistenceErrors += 1;
         state.lastError = error instanceof Error ? error.message : String(error);
+        lostError = state.lastError;
       }
 
       state.lastObservationAt = execution.record.completed_at;
@@ -297,7 +295,7 @@ export async function runLandingPatrolSession(input: {
       });
     }
   } finally {
-    if (!lostError) await releaseLease(task.taskId, workerId).catch(() => undefined);
+    if (!lostError && task.state === 'RUNNING') await releaseLease(task.taskId, workerId).catch(() => undefined);
     liveByAgent.delete(input.agentNumber);
   }
 
@@ -313,3 +311,4 @@ export async function runLandingPatrolSession(input: {
     error: lostError,
   };
 }
+

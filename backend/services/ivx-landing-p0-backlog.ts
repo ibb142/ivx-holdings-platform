@@ -27,6 +27,7 @@ import {
   type TaskState,
 } from './ivx-autonomous-task-engine';
 import { getAllExecutionStates } from './ivx-agent-runtime';
+import { postgresAtomicQueueSelected, readPostgresTaskIdentitiesByPrefix } from './ivx-postgres-autonomous-task-store';
 
 export const IVX_LANDING_P0_MARKER = 'ivx-landing-p0-backlog-2026-09-04';
 export const LANDING_P0_PREFIX = 'landing-p0:';
@@ -487,7 +488,9 @@ export async function ensureLandingP0BacklogSeeded(sha: string): Promise<SeedRes
 export async function seedLandingP0Backlog(sha: string): Promise<SeedResult> {
   const result: SeedResult = { sha, created: 0, existing: 0, total: LANDING_P0_UNITS.length, certificateTaskId: null, error: null };
   try {
-    const tasks = await getAllTasks();
+    const tasks = postgresAtomicQueueSelected()
+      ? await readPostgresTaskIdentitiesByPrefix(`${LANDING_P0_PREFIX}${sha}:`)
+      : await getAllTasks();
     const byKey = new Map(tasks.filter((t) => t.state !== 'CANCELLED' && t.state !== 'EXPIRED').map((t) => [t.idempotencyKey, t]));
     const nonCertificateIds: string[] = [];
     const certificate = LANDING_P0_UNITS.find((unit) => unit.check.kind === 'certificate') ?? null;
@@ -563,7 +566,7 @@ export async function seedLandingP0Backlog(sha: string): Promise<SeedResult> {
 /**
  * Materialise one reusable patrol assignment per IA. Audit/repair units remain
  * critical and are always selected first; once a lane drains, its high-priority
- * patrol task stays RUNNING, renews its lease, and records bounded live checks.
+ * patrol task performs one observation, releases its lease and schedules the next.
  */
 export async function seedLandingP0Patrol(sha: string): Promise<PatrolSeedResult> {
   const result: PatrolSeedResult = { sha, created: 0, existing: 0, total: 112, error: null };
@@ -864,3 +867,4 @@ export async function buildLandingP0Status(): Promise<LandingP0Status> {
     mission,
   });
 }
+

@@ -45,7 +45,7 @@ function headers(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
   return { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json', 'Content-Type': 'application/json' };
 }
 function externalError(payload: unknown, fallback: string): string { if (payload && typeof payload === 'object') { const record = payload as Record<string, unknown>; const candidate = record.message ?? record.error ?? record.details; if (typeof candidate === 'string' && candidate.trim()) return candidate.trim().slice(0, 320); } return fallback; }
-async function parsePayload(response: Response): Promise<unknown> { const text = await response.text().catch(() => ''); if (!text) return null; try { return JSON.parse(text) as unknown; } catch { return { message: text.slice(0, 320) }; } }
+async function parsePayload(response: Response): Promise<unknown> { const text = await response.text(); if (!text) return null; try { return JSON.parse(text) as unknown; } catch { return { message: text.slice(0, 320) }; } }
 async function restRequest<T>(path: string, init: RequestInit, options: { timeoutMs?: number; attempts?: number; env?: NodeJS.ProcessEnv } = {}): Promise<T> {
   const env = options.env ?? process.env;
   // A timed-out mutation may already have committed. Replaying a claim or CAS
@@ -78,13 +78,34 @@ async function restRequest<T>(path: string, init: RequestInit, options: { timeou
 }
 async function rpc<T>(name: string, body: Record<string, unknown>, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> { return restRequest<T>(`rpc/${name}`, { method: 'POST', body: JSON.stringify(body) }, { timeoutMs }); }
 function cloneTasks(tasks: readonly Task[]): Task[] { return structuredClone(tasks) as Task[]; }
-function mergeTaskResultsIntoCache(tasks: readonly (Task | null | undefined)[]): void { taskMutationRevision += 1; if (!taskReadCache) return; const next = cloneTasks(taskReadCache.value); const indexById = new Map(next.map((task, index) => [task.taskId, index])); for (const task of tasks) { if (!task) continue; const copy = structuredClone(task) as Task; const index = indexById.get(copy.taskId); if (index === undefined) { indexById.set(copy.taskId, next.length); next.push(copy); } else next[index] = copy; } taskReadCache = { value: next, at: Date.now() }; }
+function mergeTaskResultsIntoCache(tasks: readonly (Task | null | undefined)[]): void { taskMutationRevision += 1; if (!taskReadCache) return; const next = [...taskReadCache.value]; const indexById = new Map(next.map((task, index) => [task.taskId, index])); for (const task of tasks) { if (!task) continue; const copy = structuredClone(task) as Task; const index = indexById.get(copy.taskId); if (index === undefined) { indexById.set(copy.taskId, next.length); next.push(copy); } else next[index] = copy; } taskReadCache = { value: next, at: Date.now() }; }
 function invalidateTaskReadCache(): void { taskMutationRevision += 1; taskReadCache = null; }
 
 async function fetchAllPostgresTasks(): Promise<Task[]> {
   const pageSize = 1_000; const maxRows = 20_000; const all: Task[] = [];
   for (let offset = 0; offset < maxRows; offset += pageSize) { const rows = await restRequest<RestTaskRow[]>(`ivx_autonomous_tasks?select=payload&order=created_at.asc&offset=${offset}&limit=${pageSize}`, { method: 'GET' }); if (!Array.isArray(rows)) throw new Error('postgres_atomic task response is not an array'); all.push(...rows.map((row) => structuredClone(row.payload))); if (rows.length < pageSize) return all; }
   throw new Error(`postgres_atomic task ledger exceeds safe pagination limit (${maxRows})`);
+}
+
+/** Targeted reads keep a single task mutation independent of ledger size. */
+export async function readPostgresTaskById(taskId: string): Promise<Task | null> {
+  if (!taskId.trim()) throw new Error('Task identity is required');
+  const query = new URLSearchParams({ select: 'payload', task_id: `eq.${taskId}`, limit: '1' });
+  const rows = await restRequest<RestTaskRow[]>(`ivx_autonomous_tasks?${query}`, { method: 'GET' });
+  if (!Array.isArray(rows) || rows.length > 1) throw new Error('postgres_atomic single-task response is invalid');
+  if (!rows.length) return null;
+  if (rows[0].payload?.taskId !== taskId) throw new Error('postgres_atomic task identity mismatch');
+  return structuredClone(rows[0].payload);
+}
+
+/** Seeding needs only identities for one mission, never historical evidence. */
+export async function readPostgresTaskIdentitiesByPrefix(prefix: string): Promise<Array<Pick<Task, 'taskId' | 'idempotencyKey' | 'state'>>> {
+  if (!/^[a-z0-9-]+:[a-f0-9]{40}:$/.test(prefix)) throw new Error('Exact mission prefix is required');
+  const query = new URLSearchParams({ select: 'task_id,idempotency_key,state', idempotency_key: `like.${prefix}*`, limit: '1000' });
+  const rows = await restRequest<Array<{ task_id: string; idempotency_key: string; state: TaskState }>>(`ivx_autonomous_tasks?${query}`, { method: 'GET' });
+  if (!Array.isArray(rows) || rows.length >= 1000) throw new Error('postgres_atomic mission identities are incomplete');
+  if (rows.some(row => !row.task_id || !row.idempotency_key?.startsWith(prefix))) throw new Error('postgres_atomic mission identity mismatch');
+  return rows.map(row => ({ taskId: row.task_id, idempotencyKey: row.idempotency_key, state: row.state }));
 }
 
 /** Hot-path read for watchdog/recovery. Never scans historical terminal rows. */
@@ -133,3 +154,4 @@ export async function readPostgresFleetLeaseRows(): Promise<AtomicFleetLeaseRow[
   if (!Array.isArray(rows)) throw new Error('postgres_atomic fleet truth response is not an array');
   return rows.filter((row): row is typeof row & { lease_holder: string; last_heartbeat_at: string } => Boolean(row.task_id && row.lease_holder && row.last_heartbeat_at)).map((row) => ({ taskId: row.task_id, idempotencyKey: row.idempotency_key, state: row.state, assignedAgentNumber: row.assigned_agent_number, leaseHolder: row.lease_holder, workerInstanceId: row.worker_instance_id, lastHeartbeatAt: row.last_heartbeat_at, leaseExpiresAt: row.lease_expires_at }));
 }
+
