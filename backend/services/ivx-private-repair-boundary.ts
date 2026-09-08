@@ -18,3 +18,11 @@ export function assertPrivateRepairScope(goal: string, allowedFiles: readonly st
     throw new Error('PRIVATE_REPAIR_SCOPE_VIOLATION: proposed patch exceeds the authorized file set.');
   }
 }
+
+/** Allow landing source formats only when that exact file has recorded approval. */
+export function isApprovedLandingRepairPath(goal: string, allowedFiles: readonly string[] | undefined, filePath: string): boolean {
+  if (!isPrivateRepairGoal(goal)) return false;
+  assertPrivateRepairScope(goal, allowedFiles, [filePath]);
+  return /^qa\/landing-[A-Za-z0-9_.-]+\.mjs$/.test(filePath)
+    || /^expo\/ivxholding-landing\/[A-Za-z0-9_.\/-]+\.(?:html|css|js|mjs|json)$/.test(filePath);
+}
