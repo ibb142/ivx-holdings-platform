@@ -1,4 +1,5 @@
 import { getDirectApiBaseUrl } from '@/lib/api-base';
+import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
 
 export type PublicChatRole = 'user' | 'assistant';
 
@@ -7,13 +8,15 @@ export type PublicChatHistoryItem = {
   content: string;
 };
 
+export type PublicChatApiSource = 'chatgpt' | 'fallback' | 'autonomous' | 'deployment-brain';
+
 export type PublicChatApiResponse = {
   ok: true;
   requestId: string;
   sessionId: string;
   answer: string;
   model: string;
-  source: 'chatgpt' | 'fallback';
+  source: PublicChatApiSource;
   deploymentMarker: string;
   commit?: string;
   commitShort?: string;
@@ -23,6 +26,9 @@ export type PublicChatApiResponse = {
   timestamp: string;
   endpoint: string | null;
   persistence?: 'supabase' | 'json' | 'none';
+  jobId?: string | null;
+  jobStatus?: string | null;
+  jobStage?: string | null;
 };
 
 export type PublicChatSessionMessage = {
@@ -102,16 +108,26 @@ export type SendPublicChatInput = {
 };
 
 /**
- * Build request headers, attaching the stable per-device client id so the
- * backend authorizes chat history by device instead of the volatile request IP.
+ * Build request headers, attaching the stable per-device client id and, when
+ * available, the logged-in owner bearer. The streaming backend validates the
+ * bearer before routing execution commands to the real Senior Developer Worker.
  */
-function buildPublicChatHeaders(clientId?: string): Record<string, string> {
+async function buildPublicChatHeaders(clientId?: string): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    Accept: 'text/event-stream, application/json',
   };
   const trimmed = readTrimmed(clientId);
   if (trimmed) {
     headers['x-ivx-client-id'] = trimmed;
+  }
+  try {
+    const token = await getIVXAccessToken();
+    if (token && token.split('.').length === 3) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+  } catch {
+    // Public/member chat remains available without an owner bearer.
   }
   return headers;
 }
@@ -136,6 +152,84 @@ async function parseErrorResponse(response: Response): Promise<string> {
   } catch {
     return text.slice(0, 240);
   }
+}
+
+type StreamEvent = Record<string, unknown> & {
+  type?: string;
+  text?: string;
+  error?: string;
+  requestId?: string;
+  sessionId?: string;
+  model?: string;
+  source?: string;
+  jobId?: string | null;
+  jobStatus?: string | null;
+  jobStage?: string | null;
+  timestamp?: string;
+  deploymentMarker?: string;
+  commit?: string;
+  commitShort?: string;
+};
+
+function normalizeStreamSource(value: unknown): PublicChatApiSource {
+  const source = readTrimmed(value).toLowerCase();
+  if (source === 'autonomous') return 'autonomous';
+  if (source === 'deployment-brain') return 'deployment-brain';
+  if (source === 'chatgpt') return 'chatgpt';
+  return 'fallback';
+}
+
+function parseStreamResponse(text: string, input: SendPublicChatInput): PublicChatApiResponse {
+  let completed: StreamEvent | null = null;
+  let lastError = '';
+
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line.startsWith('data:')) continue;
+    const json = line.slice(5).trim();
+    if (!json) continue;
+    try {
+      const event = JSON.parse(json) as StreamEvent;
+      if (event.type === 'response.error') {
+        lastError = readTrimmed(event.error);
+      }
+      if (event.type === 'response.completed') {
+        completed = event;
+      }
+    } catch {
+      // Ignore malformed/partial SSE rows and continue to the terminal event.
+    }
+  }
+
+  if (!completed) {
+    throw new Error(lastError || 'IVX chat stream ended without a completed response.');
+  }
+
+  const answer = readTrimmed(completed.text);
+  if (!answer) {
+    throw new Error(lastError || 'IVX chat stream returned an empty answer.');
+  }
+
+  const now = new Date().toISOString();
+  return {
+    ok: true,
+    requestId: readTrimmed(completed.requestId) || input.requestId,
+    sessionId: readTrimmed(completed.sessionId) || input.sessionId,
+    answer,
+    model: readTrimmed(completed.model) || 'ivx-public-chat-stream',
+    source: normalizeStreamSource(completed.source),
+    deploymentMarker: readTrimmed(completed.deploymentMarker) || 'ivx-owner-aware-public-chat-stream-v1',
+    commit: readTrimmed(completed.commit) || undefined,
+    commitShort: readTrimmed(completed.commitShort) || undefined,
+    rateLimitRemaining: -1,
+    rateLimitResetAt: now,
+    timestamp: readTrimmed(completed.timestamp) || now,
+    endpoint: '/public/chat/stream',
+    persistence: undefined,
+    jobId: readTrimmed(completed.jobId) || null,
+    jobStatus: readTrimmed(completed.jobStatus) || null,
+    jobStage: readTrimmed(completed.jobStage) || null,
+  };
 }
 
 export async function fetchPublicChatHealth(): Promise<PublicHealthResponse> {
@@ -164,12 +258,21 @@ export async function fetchPublicChatHealth(): Promise<PublicHealthResponse> {
   return payload;
 }
 
+/**
+ * Owner-aware canonical Chat transport.
+ *
+ * All chat turns use the streaming endpoint. Public/member users receive the
+ * same conversational AI behavior; a valid owner bearer activates the existing
+ * Chat -> Autonomous handoff for explicit build/fix/deploy commands. We collect
+ * the terminal SSE event into the legacy response shape so the current UI does
+ * not need a parallel message pipeline.
+ */
 export async function sendPublicChatMessage(input: SendPublicChatInput): Promise<PublicChatApiResponse> {
   const baseUrl = getPublicChatBaseUrl();
-  const url = `${baseUrl}/public/chat`;
+  const url = `${baseUrl}/public/chat/stream`;
   const images = input.images ?? [];
   const documents = input.documents ?? [];
-  console.log('[PublicChat] Sending message to:', url, {
+  console.log('[PublicChat] Sending owner-aware message to:', url, {
     requestId: input.requestId,
     sessionId: input.sessionId,
     historyCount: input.history.length,
@@ -180,7 +283,7 @@ export async function sendPublicChatMessage(input: SendPublicChatInput): Promise
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: buildPublicChatHeaders(input.clientId),
+    headers: await buildPublicChatHeaders(input.clientId),
     body: JSON.stringify({
       requestId: input.requestId,
       sessionId: input.sessionId,
@@ -195,14 +298,15 @@ export async function sendPublicChatMessage(input: SendPublicChatInput): Promise
     throw new Error(await parseErrorResponse(response));
   }
 
-  const payload = await response.json() as PublicChatApiResponse;
-  console.log('[PublicChat] Message response:', {
+  const text = await response.text();
+  const payload = parseStreamResponse(text, input);
+  console.log('[PublicChat] Stream response:', {
     requestId: payload.requestId,
     source: payload.source,
     model: payload.model,
-    persistence: payload.persistence,
-    deploymentMarker: payload.deploymentMarker,
-    block17Marker: payload.block17Marker,
+    jobId: payload.jobId,
+    jobStatus: payload.jobStatus,
+    endpoint: payload.endpoint,
   });
   return payload;
 }
@@ -214,7 +318,7 @@ export async function fetchPublicChatHistory(sessionId: string, limit: number = 
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: buildPublicChatHeaders(clientId),
+    headers: await buildPublicChatHeaders(clientId),
   });
 
   if (!response.ok) {
@@ -238,7 +342,7 @@ export async function fetchPublicChatSessions(limit: number = 20, clientId?: str
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: buildPublicChatHeaders(clientId),
+    headers: await buildPublicChatHeaders(clientId),
   });
 
   if (!response.ok) {
