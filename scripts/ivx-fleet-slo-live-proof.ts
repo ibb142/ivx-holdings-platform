@@ -97,7 +97,7 @@ if (import.meta.main) {
     if (index) await sleep(15_000);
     // Health must pass on its first attempt; retries would hide a restart.
     const started = Date.now();
-    const response = await fetch(config.base + '/health', { redirect: 'error', signal: AbortSignal.timeout(5_000) });
+    const response = await fetch(config.base + '/health', { redirect: 'error', signal: AbortSignal.timeout(5_000), headers: { Connection: 'close' } });
     assert.equal(response.status, 200);
     const health = await response.json();
     assert.equal(health.ok, true);
