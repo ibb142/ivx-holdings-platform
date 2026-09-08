@@ -41,10 +41,13 @@ describe('IVX autonomous truth control enterprise invariants', () => {
     expect(snapshotBody).not.toContain("campaignDispatcherControl('resume_all')");
   });
 
-  test('continuity load is bounded to real deployed capacity', () => {
-    expect(enforcerSource).toContain('const DEFAULT_CONTINUITY_MAX_CONCURRENCY = 12');
-    expect(enforcerSource).toContain('process.env.IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY');
+  test('continuity capacity cannot silently degrade below the canonical 112 lanes', () => {
+    expect(enforcerSource).toContain('export const IVX_AUTONOMOUS_FLEET_SIZE = 112');
+    expect(enforcerSource).not.toContain('DEFAULT_CONTINUITY_MAX_CONCURRENCY = 12');
+    expect(enforcerSource).toContain('configured === IVX_AUTONOMOUS_FLEET_SIZE ? configured : IVX_AUTONOMOUS_FLEET_SIZE');
     expect(enforcerSource).toContain('continuityRuns.size >= getContinuityMaxConcurrency()');
+    expect(enforcerSource).toContain('continuityMaxConcurrency: getContinuityMaxConcurrency()');
+    expect(enforcerSource).toContain('canonicalFleetSize: IVX_AUTONOMOUS_FLEET_SIZE');
     expect(enforcerSource.match(/continuityRuns\.set\(agentId, promise\);\s*void runLeaseMirror\(\);/g)).toHaveLength(1);
   });
 });
