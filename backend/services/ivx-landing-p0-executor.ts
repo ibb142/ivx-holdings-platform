@@ -1015,6 +1015,11 @@ async function runCertificate(fetchImpl: typeof fetch, productionSha: string, c:
   }
   const main = await fetchMainSha(fetchImpl);
   c.evidence.push(`audits=${audits.length} notDone=${notDone.length} failing=${failing.length} main=${main ?? 'unknown'}`);
+  for (const task of audits) {
+    for (const evidence of task.evidence) {
+      c.evidence.push(`Task: ${task.title} - Evidence: ${JSON.stringify(evidence)}`);
+    }
+  }
   if (audits.length === 0) return blocked('no Landing audit units found for this SHA');
   if (notDone.length > 0) return blocked(`${notDone.length} audit units not yet VERIFIED`);
   if (failing.length > 0) return fail(`certificate FAIL — ${failing.length} unit(s) not PASS: ${[...new Set(failing)].slice(0, 12).join(', ')}`, 'unknown', 'resolve listed units, then re-run certificate');
@@ -1038,7 +1043,11 @@ export async function executeLandingUnit(unit: LandingUnit, ctx: LandingExecutio
       case 'css-media': verdict = await runCssMedia(fetchImpl, check.query, c); break;
       case 'links': verdict = await runLinks(fetchImpl, check.scope, check.max, c); break;
       case 'routes': verdict = await runRoutes(fetchImpl, check.paths, c); break;
-      case 'api': verdict = await runApi(fetchImpl, check.path, check.asserts, c); break;
+      case 'api':
+            if (!/^[\w.-]+@[\w.-]+\.[A-Za-z]{2,6}$/.test(check.qaEmail)) {
+              return fail('Invalid email format', 'validation', 'Invalid email format provided');
+            }
+            verdict = await runApi(fetchImpl, check.path, check.asserts, c); break;
       case 'deals': verdict = await runDeals(fetchImpl, check.assert, c); break;
       case 'media': verdict = await runMedia(fetchImpl, check.source, check.assert, check.max, c); break;
       case 'reels': verdict = await runReels(fetchImpl, check.assert, c); break;
