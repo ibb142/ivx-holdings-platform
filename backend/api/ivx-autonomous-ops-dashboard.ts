@@ -13,6 +13,7 @@ import { readDurableJson } from '../services/ivx-durable-store';
 import { getSmsNotifierStatus } from '../services/ivx-autonomous-sms-notifier';
 import { buildAutonomousProductivity24h } from '../services/ivx-autonomous-productivity-intelligence';
 import path from 'node:path';
+import { createDashboardReadCache } from '../services/ivx-dashboard-read-cache';
 
 export const IVX_AUTONOMOUS_OPS_DASHBOARD_MARKER = 'ivx-autonomous-ops-dashboard-2026-09-03-productivity-intelligence';
 export function OPTIONS(): Response { return ownerOnlyOptions(); }
@@ -69,6 +70,21 @@ async function readOwnerActions():Promise<OwnerAction[]> {
   } catch{return[];}
 }
 
+// Executive reports are supplemental. Their storage reads must not delay the
+// live roster, and simultaneous owners/sockets share the same durable read.
+let optionalRead: Promise<void> | null = null;
+let optionalUpdatedAt = 0;
+let optionalReport: Awaited<ReturnType<typeof getLatestReport>> = null;
+let optionalActions: OwnerAction[] = [];
+function refreshOptionalInputs() {
+  if (optionalRead || Date.now() - optionalUpdatedAt < 30_000) return;
+  optionalRead = Promise.all([getLatestReport(), readOwnerActions()])
+    .then(([report, actions]) => { optionalReport = report; optionalActions = actions; optionalUpdatedAt = Date.now(); })
+    .catch(() => { optionalUpdatedAt = Date.now(); })
+    .finally(() => { optionalRead = null; });
+}
+const readSharedLedger = createDashboardReadCache(() => readAgentDashboardLedger(2000), ledger => ledger.ok);
+
 export async function handleAutonomousOpsDashboardRequest(request:Request):Promise<Response>{
   try{await assertIVXOwnerOnly(request);}catch(err){return ownerOnlyJson({ok:false,error:err instanceof Error?err.message:'unauthorized'},401);}
 
@@ -83,7 +99,10 @@ export async function handleAutonomousOpsDashboardRequest(request:Request):Promi
   else if(range==='7d'){start=now-7*86400000;label='Last 7 days';}
   else if(range==='30d'){start=now-30*86400000;label='Last 30 days';}
 
-  const [ledger,latestReport,ownerActions]=await Promise.all([readAgentDashboardLedger(2000),getLatestReport(),readOwnerActions()]);
+  refreshOptionalInputs();
+  const { value: ledger, observedAt } = await readSharedLedger();
+  if (!ledger.ok) return ownerOnlyJson({ok:false,error:'Durable dashboard telemetry is unavailable.'},503);
+  const latestReport=optionalReport,ownerActions=optionalActions;
   const productivity24h=buildAutonomousProductivity24h(ledger.executions,{now,fleetSize:112,landingBudgetHours:Number.parseFloat(process.env.IVX_LANDING_VERIFIED_HOURS_BUDGET??'120')||120});
   const productivityByAgent=new Map(productivity24h.perAgent.map(p=>[p.agentId,p]));
   const statesById=new Map(ledger.states.map(s=>[s.agent_id,s]));
@@ -171,9 +190,10 @@ export async function handleAutonomousOpsDashboardRequest(request:Request):Promi
   const sms=getSmsNotifierStatus();
   const realAgentCount=agents.filter(a=>a.tasksStartedToday>0||a.lastActivityTime!==null).length;
   const runtimeCommit=process.env.RENDER_GIT_COMMIT??process.env.GIT_COMMIT_SHA??null;
-  return ownerOnlyJson({ok:true,dashboard:{marker:IVX_AUTONOMOUS_OPS_DASHBOARD_MARKER,ledgerMarker:IVX_AGENT_DASHBOARD_LEDGER_MARKER,generatedAt:nowIso(),
+  return ownerOnlyJson({ok:true,dashboard:{marker:IVX_AUTONOMOUS_OPS_DASHBOARD_MARKER,ledgerMarker:IVX_AGENT_DASHBOARD_LEDGER_MARKER,generatedAt:observedAt,
+    history:{limit:2000,possiblyTruncated:ledger.executions.length===2000,returnedActivityItems:Math.min(100,activityItems.length)},
     backendCommitSha:runtimeCommit,backendBootTime:null,backendRouteCount:0,githubHeadSha:null,commitMatch:false,dateRange:{start:new Date(start).toISOString(),end:new Date(now).toISOString(),label},
-    agents,activityItems,categoryBreakdown,dailySummary,liveActivityFeed,ownerActionRequests:ownerActions,deploymentStatus:{renderDeployId:null,renderDeployStatus:null,renderCommitSha:runtimeCommit,productionHealthy:true},
+    agents,activityItems:activityItems.slice(0,100),categoryBreakdown:categoryBreakdown.map(c=>({...c,items:c.items.slice(0,10)})),dailySummary,liveActivityFeed:liveActivityFeed.slice(0,100),ownerActionRequests:ownerActions,deploymentStatus:{renderDeployId:null,renderDeployStatus:null,renderCommitSha:runtimeCommit,productionHealthy:ledger.ok},
     realAgentCount,placeholderAgentCount:agents.length-realAgentCount,rolling24h,productivity24h,
     enterprise112:{registryCount:ALL_AGENT_CONTRACTS.length,durableStateCount:ledger.states.length,durableExecutionCount:ledger.executions.length,storeMode:ledger.mode,ledgerOk:ledger.ok,ledgerError:ledger.error},
     smsConversation:{enabled:sms.ownerActionSchedulerRunning,reminderMinutes:sms.ownerActionReminderMinutes,phoneConfigured:sms.phoneConfigured,phoneMasked:sms.phoneMasked,pendingTracked:sms.trackedPendingActions},

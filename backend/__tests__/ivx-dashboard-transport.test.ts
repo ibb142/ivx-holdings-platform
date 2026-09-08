@@ -1,0 +1,58 @@
+import { afterAll, expect, mock, test } from 'bun:test';
+import { ALL_AGENT_CONTRACTS } from '../services/ivx-agent-contracts';
+
+// Run this contract test in its own Bun process: it replaces storage only.
+// Authentication and ownerOnlyJson's real 900 KB transport ceiling stay active.
+const previousSecret = process.env.IVX_AI_SYSTEM_SECRET;
+process.env.IVX_AI_SYSTEM_SECRET = 'dashboard-contract-machine-key';
+let ledgerOk = false;
+const startedAt = new Date(Date.now() - 10_000).toISOString();
+const executions = Array.from({ length: 2000 }, (_, i) => {
+  const agent = ALL_AGENT_CONTRACTS[i % 112]!;
+  return {
+    task_id: `contract-${i}`, run_id: 'contract-run', agent_id: agent.agentId,
+    agent_number: agent.agentNumber, workflow: 'contract', task_type: 'dashboard transport audit',
+    final_status: 'completed', real_tool_used: true, tools_used: ['repository.read'],
+    tool_result_id: `result-${i}`, source_reference: `https://example.test/evidence/${'x'.repeat(400)}`,
+    verified_output: true, evidence: null, evidence_sha256: 'a'.repeat(64),
+    output: { text: 'large output '.repeat(2000) }, cost_usage: { usd: 0 },
+    error: null, retry_count: 0, duration_ms: 1000, dedup_key: `contract-${i}`,
+    simulated: false, started_at: startedAt, finished_at: startedAt,
+  };
+});
+mock.module('../services/ivx-agent-dashboard-ledger', () => ({
+  IVX_AGENT_DASHBOARD_LEDGER_MARKER: 'contract-ledger',
+  readAgentDashboardLedger: async () => ({ ok: ledgerOk, mode: 'dedicated', states: [], executions, error: ledgerOk ? null : 'database unavailable' }),
+}));
+mock.module('../services/ivx-daily-executive-report', () => ({ getLatestReport: async () => null }));
+mock.module('../services/ivx-durable-store', () => ({ readDurableJson: async () => [] }));
+mock.module('../services/ivx-agent-runtime', () => ({ getAllExecutionStates: () => [] }));
+mock.module('../services/ivx-autonomous-sms-notifier', () => ({ getSmsNotifierStatus: () => ({ ownerActionSchedulerRunning: false }) }));
+const { handleAutonomousOpsDashboardRequest } = await import('../api/ivx-autonomous-ops-dashboard');
+afterAll(() => {
+  if (previousSecret === undefined) delete process.env.IVX_AI_SYSTEM_SECRET;
+  else process.env.IVX_AI_SYSTEM_SECRET = previousSecret;
+  mock.restore();
+});
+
+test('preserves all 112 agents under the actual transport ceiling and fails closed on unavailable telemetry', async () => {
+  const request = () => new Request('https://api.ivxholding.com/api/ivx/autonomous-ops', {
+    headers: { 'X-IVX-System-Key': 'dashboard-contract-machine-key' },
+  });
+  expect((await handleAutonomousOpsDashboardRequest(request())).status).toBe(503);
+  ledgerOk = true;
+  const response = await handleAutonomousOpsDashboardRequest(request());
+  expect(response.status).toBe(200);
+  const text = await response.text();
+  expect(Buffer.byteLength(text)).toBeLessThan(900_000);
+  const body = JSON.parse(text);
+  expect(body.ok).toBe(true);
+  expect(body.dashboard.agents).toHaveLength(112);
+  expect(new Set(body.dashboard.agents.map((a: { agentNumber: number }) => a.agentNumber)).size).toBe(112);
+  expect(body.dashboard.enterprise112.ledgerOk).toBe(true);
+  expect(body.dashboard.history.possiblyTruncated).toBe(true);
+  expect(body.dashboard.activityItems).toHaveLength(100);
+  expect(body.responseTruncated).toBeUndefined();
+  const unauthenticated = await handleAutonomousOpsDashboardRequest(new Request('https://api.ivxholding.com/api/ivx/autonomous-ops'));
+  expect(unauthenticated.status).toBe(401);
+});
