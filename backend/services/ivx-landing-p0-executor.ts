@@ -14,6 +14,7 @@
  * rate-limiter waits. No secret values are ever written into evidence.
  */
 import { getAllTasks, TERMINAL_SUCCESS_STATES } from './ivx-autonomous-task-engine';
+import { fetchLandingGitHubRead } from './ivx-landing-github-read';
 import {
   fetchMainSha,
   LANDING_API_URL,
@@ -246,6 +247,23 @@ function isSkippableHref(href: string): boolean {
   return lower === '' || lower === '#' || lower.startsWith('#') || lower.startsWith('mailto:') || lower.startsWith('tel:') || lower.startsWith('javascript:') || lower.startsWith('sms:');
 }
 
+/** A network-crawl exclusion is not a broken CTA: fragments and contact links have real destinations. */
+export function hasLandingCtaTarget(attrs: Record<string, string>, html: string): boolean {
+  if (attrs.onclick?.trim()) return true;
+  const href = (attrs.href ?? '').trim();
+  if (!href || href === '#' || /^javascript:/i.test(href)) return false;
+  if (href.startsWith('#')) {
+    let target: string;
+    try { target = decodeURIComponent(href.slice(1)); } catch { return false; }
+    const markup = html.replace(/<!--[^]*?-->|<script\b[^]*?<\/script>/gi, '');
+    const ids = [...markup.matchAll(/<[^/!][^>]*>/g)].map((tag) => parseAttrs(tag[0]).id);
+    return ids.filter((id) => id === target).length === 1;
+  }
+  if (/^mailto:/i.test(href)) return /^[^\s@?]+@[^\s@?]+\.[^\s@?]+$/.test(href.slice(7).split('?')[0]);
+  if (/^(tel|sms):/i.test(href)) return /^[+\d][\d().\s-]{2,}(?:\?.*)?$/.test(href.slice(href.indexOf(':') + 1));
+  try { return ['https:', 'http:'].includes(new URL(href, `${LANDING_URL}/`).protocol); } catch { return false; }
+}
+
 function decodeJwtRole(token: string): string | null {
   try {
     const payload = token.split('.')[1] ?? '';
@@ -299,15 +317,12 @@ type CiRuns = { runs: CiRun[]; blocked: string | null };
 
 function loadCiRuns(fetchImpl: typeof fetch, sha: string): Promise<CiRuns> {
   return cached(`ci-runs:${sha}`, CACHE_5M, async () => {
-    const token = (process.env.GITHUB_TOKEN ?? '').trim();
-    if (!token) return { runs: [], blocked: 'GITHUB_TOKEN not configured on the API host — CI evidence cannot be read' };
-    const result = await probe(fetchImpl, `https://api.github.com/repos/${LANDING_REPO}/actions/runs?head_sha=${encodeURIComponent(sha)}&per_page=100`, {
-      headers: { accept: 'application/vnd.github+json', authorization: `Bearer ${token}` },
-    });
+    const result = await probe((() => fetchLandingGitHubRead(`actions/runs?head_sha=${sha}&per_page=100`, fetchImpl)) as typeof fetch, `https://api.github.com/repos/${LANDING_REPO}/actions/runs`);
     if (result.status === 403 || result.status === 429) {
       const reset = result.headers?.get('x-ratelimit-reset');
-      const resetIso = reset ? new Date(Number.parseInt(reset, 10) * 1000).toISOString() : 'unknown';
-      return { runs: [], blocked: `GitHub API rate-limited for the configured token (resets ${resetIso})` };
+      const resetMs = Number.parseInt(reset ?? '', 10) * 1000;
+      const resetIso = Number.isFinite(resetMs) ? new Date(resetMs).toISOString() : 'unknown';
+      return { runs: [], blocked: `GitHub API access/rate limit (${result.status}; resets ${resetIso})` };
     }
     if (!result.ok) return { runs: [], blocked: `GitHub API HTTP ${result.status || result.error}` };
     const body = parseJson(result.text) as { workflow_runs?: CiRun[] } | undefined;
@@ -516,7 +531,7 @@ async function runHtmlAsserts(fetchImpl: typeof fetch, asserts: HtmlAssert[], c:
       case 'cta-present': {
         const ctaRe = /invest|register|sign ?up|sign ?in|join|apply|get started|contact|log ?in|start|learn more|view deals?/i;
         const ctas = [...tags(html, 'a'), ...tags(html, 'button')].filter((el) => ctaRe.test(stripTags(el.inner)) || ctaRe.test(el.attrs['aria-label'] ?? ''));
-        const broken = ctas.filter((el) => 'href' in el.attrs && isSkippableHref(el.attrs.href ?? '') && !el.attrs.onclick).length;
+        const broken = ctas.filter((el) => 'href' in el.attrs && !hasLandingCtaTarget(el.attrs, html)).length;
         if (ctas.length === 0) problems.push('no CTA (invest/register/sign in/join/apply/contact) found');
         else if (broken > 0) problems.push(`${broken}/${ctas.length} CTA anchors without a real target`);
         else notes.push(`${ctas.length} CTAs with targets`);
@@ -968,7 +983,7 @@ async function runCi(fetchImpl: typeof fetch, workflow: string, check: string, p
   const { runs, blocked: blockedReason } = await loadCiRuns(fetchImpl, productionSha);
   c.browser.push(`${workflow} :: ${check} @ ${productionSha.slice(0, 9)}`);
   if (blockedReason) return blocked(blockedReason);
-  const matching = runs.filter((run) => run.name === workflow).sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
+  const matching = runs.filter((run) => run.name === workflow && run.head_sha === productionSha).sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
   if (matching.length === 0) return blocked(`no "${workflow}" run exists for production SHA ${productionSha.slice(0, 9)} — dispatch it (workflow_dispatch) to produce browser evidence`);
   const latest = matching[0];
   c.evidence.push(`workflow_run_id=${latest.id} ${latest.html_url} status=${latest.status} conclusion=${latest.conclusion ?? '-'}`);
