@@ -20,8 +20,8 @@ describe('native link destinations', () => {
         .toBe('/admin/dashboard');
     });
 
-    test(`keeps root navigation usable on ${mode}`, () => {
-      expect(redirectSystemPath({ path: 'ivx-app:///', initial })).toBe('ivx-app:///');
+    test(`normalizes root navigation for the tab shell on ${mode}`, () => {
+      expect(redirectSystemPath({ path: 'ivx-app:///', initial })).toBe('/');
       expect(redirectSystemPath({ path: '/', initial })).toBe('/');
       expect(redirectSystemPath({ path: '', initial })).toBe('/');
       expect(redirectSystemPath({ path: '  ', initial })).toBe('/');
