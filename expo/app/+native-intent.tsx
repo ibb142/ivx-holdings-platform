@@ -1,7 +1,12 @@
 /** Preserve native link destinations for both cold launches and the running app.
- * Expo Router parses the URL and the existing route guards verify access.
- * Replacing every link with `/` silently sent Dashboard and Chat back to Home.
+ * Expo Router parses non-root URLs and the existing route guards verify access.
+ * Normalize the custom-scheme root so restart recovery returns to the tab shell.
  */
 export function redirectSystemPath({ path }: { path: string; initial: boolean }) {
-  return typeof path === 'string' && path.trim().length > 0 ? path : '/';
+  if (typeof path !== 'string') return '/';
+
+  const normalizedPath = path.trim();
+  if (normalizedPath.length === 0 || normalizedPath === 'ivx-app:///') return '/';
+
+  return normalizedPath;
 }
