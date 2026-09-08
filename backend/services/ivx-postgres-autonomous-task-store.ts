@@ -34,10 +34,11 @@ export function postgresAtomicQueueSelected(env: NodeJS.ProcessEnv = process.env
 export function postgresAtomicQueueConfigured(env: NodeJS.ProcessEnv = process.env): boolean { return postgresAtomicQueueSelected(env) && Boolean(supabaseUrl(env) && serviceRoleKey(env)); }
 export function autonomousWorkerInstanceId(env: NodeJS.ProcessEnv = process.env): string {
   const explicit = trimmed(env.IVX_AUTONOMOUS_WORKER_INSTANCE_ID || env.IVX_INTERNAL_WORKER_ID);
-  if (explicit) return explicit.slice(0, 240);
   const service = trimmed(env.RENDER_SERVICE_ID || env.RENDER_SERVICE_NAME) || 'local';
   const instance = trimmed(env.RENDER_INSTANCE_ID || env.HOSTNAME) || hostname() || 'unknown-host';
-  return `${service}:${instance}:${process.pid}:${BOOT_NONCE}`.slice(0, 240);
+  // A configured name identifies a fleet, never a process. Preserve the unique
+  // suffix even when a long prefix is configured on every Render replica.
+  return `${(explicit || service).slice(0, 100)}:${instance.slice(0, 90)}:${process.pid}:${BOOT_NONCE}`;
 }
 function autonomousLeaseSeconds(env: NodeJS.ProcessEnv = process.env): number { const configured = Number.parseInt(env.IVX_AUTONOMOUS_LEASE_SECONDS ?? '', 10); return Number.isFinite(configured) ? Math.max(60, Math.min(300, configured)) : DEFAULT_LEASE_SECONDS; }
 function headers(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
@@ -77,6 +78,10 @@ async function restRequest<T>(path: string, init: RequestInit, options: { timeou
   }
 }
 async function rpc<T>(name: string, body: Record<string, unknown>, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> { return restRequest<T>(`rpc/${name}`, { method: 'POST', body: JSON.stringify(body) }, { timeoutMs }); }
+export function readPostgresFleetDashboardObservation(): Promise<unknown> {
+  if (!postgresAtomicQueueConfigured()) throw new Error('Shared fleet observation requires postgres_atomic');
+  return rpc('ivx_fleet_dashboard_observation', {}, 5_000);
+}
 function cloneTasks(tasks: readonly Task[]): Task[] { return structuredClone(tasks) as Task[]; }
 function mergeTaskResultsIntoCache(tasks: readonly (Task | null | undefined)[]): void { taskMutationRevision += 1; if (!taskReadCache) return; const next = [...taskReadCache.value]; const indexById = new Map(next.map((task, index) => [task.taskId, index])); for (const task of tasks) { if (!task) continue; const copy = structuredClone(task) as Task; const index = indexById.get(copy.taskId); if (index === undefined) { indexById.set(copy.taskId, next.length); next.push(copy); } else next[index] = copy; } taskReadCache = { value: next, at: Date.now() }; }
 function invalidateTaskReadCache(): void { taskMutationRevision += 1; taskReadCache = null; }
@@ -129,7 +134,7 @@ export async function readPostgresFleetSloTasks(): Promise<Task[]> {
 }
 
 export async function persistPostgresFleetSloSample(sample: Record<string, unknown>): Promise<void> {
-  await restRequest('ivx_autonomous_task_events', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ event_type: 'fleet_slo_sample', worker_instance_id: autonomousWorkerInstanceId(), event: sample }) }, { timeoutMs: TRUTH_TIMEOUT_MS });
+  await restRequest('ivx_autonomous_task_events', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ event_type: 'fleet_slo_sample', worker_instance_id: autonomousWorkerInstanceId(), event: { ...sample, instance_role: process.env.IVX_WORKER_MODE === 'true' ? 'worker' : 'api', service_id: process.env.RENDER_SERVICE_ID ?? null } }) }, { timeoutMs: TRUTH_TIMEOUT_MS });
 }
 
 export async function readPostgresAutonomousTasks(): Promise<Task[]> {
@@ -154,4 +159,3 @@ export async function readPostgresFleetLeaseRows(): Promise<AtomicFleetLeaseRow[
   if (!Array.isArray(rows)) throw new Error('postgres_atomic fleet truth response is not an array');
   return rows.filter((row): row is typeof row & { lease_holder: string; last_heartbeat_at: string } => Boolean(row.task_id && row.lease_holder && row.last_heartbeat_at)).map((row) => ({ taskId: row.task_id, idempotencyKey: row.idempotency_key, state: row.state, assignedAgentNumber: row.assigned_agent_number, leaseHolder: row.lease_holder, workerInstanceId: row.worker_instance_id, lastHeartbeatAt: row.last_heartbeat_at, leaseExpiresAt: row.lease_expires_at }));
 }
-
