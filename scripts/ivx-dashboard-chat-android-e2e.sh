@@ -35,7 +35,10 @@ timeout 180s "$MAESTRO" test expo/.maestro/ivx-owner-autonomous-certificate.yaml
   --format junit \
   --output qa/evidence/dashboard-chat/autonomous.xml
 
+# Use a fresh marker so persisted replies from previous runs cannot pass.
+CHAT_E2E_SUFFIX="${GITHUB_RUN_ID:-local}_${GITHUB_RUN_ATTEMPT:-1}_$(date +%s)"
 timeout 240s "$MAESTRO" test expo/.maestro/ivx-owner-chat-certificate.yaml \
+  --env CHAT_E2E_SUFFIX="$CHAT_E2E_SUFFIX" \
   --format junit \
   --output qa/evidence/dashboard-chat/chat.xml
 
