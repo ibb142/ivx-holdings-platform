@@ -13,15 +13,16 @@
  *                       ↘ blocked / failed
  *   unverified = fixed but not yet confirmed by a check.
  *
- * Layout (durable across restarts):
+ * Durable document/event keys (server-only store in production; local fallback in development):
  *   logs/audit/audit-items/<auditId>/items.jsonl   append-only event log
  *   logs/audit/audit-items/<auditId>/state.json    materialised current state
  *
- * The JSONL log is the source of truth (append-only, never rewritten); the
- * state file is a fast-read materialised view rebuilt on each mutation.
+ * Events are append-only. The current state and discovery index are persisted
+ * through the existing durable adapter when configured, and on disk otherwise.
  */
 import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { appendDurableEvent, isDurableStoreConfigured, readDurableJson, writeDurableJson } from './ivx-durable-store';
 
 export type AuditItemStatus =
   | 'pending'
@@ -59,6 +60,8 @@ export type AuditItemSet = {
 };
 
 const ITEMS_ROOT = path.join(process.cwd(), 'logs', 'audit', 'audit-items');
+const INDEX_PATH = path.join(ITEMS_ROOT, 'index.json');
+let indexWrite: Promise<void> = Promise.resolve();
 
 const VALID_STATUSES: ReadonlySet<AuditItemStatus> = new Set<AuditItemStatus>([
   'pending', 'in_progress', 'blocked', 'failed', 'fixed', 'unverified', 'verified',
@@ -104,11 +107,26 @@ type ItemEvent =
   | { type: 'update_status'; itemId: string; patch: Partial<AuditItem>; at: string };
 
 async function appendEvent(auditId: string, event: ItemEvent): Promise<void> {
+  if (isDurableStoreConfigured()) {
+    await appendDurableEvent(logPath(auditId), event);
+    return;
+  }
   await mkdir(auditDir(auditId), { recursive: true });
   await appendFile(logPath(auditId), `${JSON.stringify(event)}\n`, 'utf8');
 }
 
 async function writeState(set: AuditItemSet): Promise<void> {
+  if (isDurableStoreConfigured()) {
+    await writeDurableJson(statePath(set.auditId), set);
+    // Serialize index registration in this process; state lives in its own document.
+    const register = indexWrite.catch(() => undefined).then(async () => {
+      const ids = await readDurableJson<string[]>(INDEX_PATH, []);
+      if (!ids.includes(set.auditId)) await writeDurableJson(INDEX_PATH, [...ids, set.auditId]);
+    });
+    indexWrite = register;
+    await register;
+    return;
+  }
   await mkdir(auditDir(set.auditId), { recursive: true });
   await writeFile(statePath(set.auditId), JSON.stringify(set, null, 2), 'utf8');
 }
@@ -141,6 +159,11 @@ export async function createAuditItemSet(title: string): Promise<AuditItemSet> {
 }
 
 export async function getAuditItemSet(auditId: string): Promise<AuditItemSet | null> {
+  if (isDurableStoreConfigured()) {
+    const durable = await readDurableJson<AuditItemSet | null>(statePath(auditId), null);
+    if (durable) return durable;
+    // Keep existing local sets readable during migration. Database errors propagate.
+  }
   try {
     const raw = await readFile(statePath(auditId), 'utf8');
     return JSON.parse(raw) as AuditItemSet;
@@ -249,11 +272,11 @@ export function countByStatus(set: AuditItemSet): AuditItemStatusCounts {
 }
 
 export async function listAuditItemSets(limit: number = 25): Promise<AuditItemSet[]> {
-  let entries: string[] = [];
+  let entries: string[] = isDurableStoreConfigured() ? await readDurableJson<string[]>(INDEX_PATH, []) : [];
   try {
-    entries = await readdir(ITEMS_ROOT);
+    entries = [...new Set([...entries, ...(await readdir(ITEMS_ROOT))])].filter(entry => !entry.endsWith('.json'));
   } catch {
-    return [];
+    // Durable sets remain discoverable on a fresh container with no local directory.
   }
   const sets = await Promise.all(entries.map((entry) => getAuditItemSet(entry)));
   return sets
