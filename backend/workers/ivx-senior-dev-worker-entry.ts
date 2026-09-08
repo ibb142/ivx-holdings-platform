@@ -1,20 +1,32 @@
 /**
- * IVX-SENIOR-DEV-01 — Worker Process Entry Point
+ * IVX-SENIOR-DEV-01 — Dedicated execution-plane entry point.
  *
- * Starts the autonomous senior developer worker as a long-running background
- * process. Designed to run on Render as a separate worker service.
+ * This Render background worker owns both:
+ *   1) owner-triggered Senior Developer jobs; and
+ *   2) the durable 112-lane Autonomous fleet execution loop.
  *
- * Usage:
- *   node /app/node_modules/tsx/dist/cli.mjs /app/backend/workers/ivx-senior-dev-worker-entry.ts
+ * Production web API remains the control plane. Render sets
+ * IVX_AUTONOMOUS_RUNTIME_ENFORCER_ENABLED=false on the web service and true on
+ * this worker, preventing fleet load from starving /health or owner APIs.
  */
 
 import { startSeniorDevWorker, getSeniorDevWorkerStatus } from '../services/ivx-senior-dev-worker';
-// Importing the campaign worker starts its bounded queue-drain timer. This
-// unifies the live Render worker with the queue populated by Autonomous while
-// retaining the owner AI task processor below.
 import { getWorkerMaxConcurrency } from '../services/ivx-senior-developer-worker';
+import { startAutonomous112RuntimeEnforcer, stopAutonomous112RuntimeEnforcer } from '../services/ivx-autonomous-runtime-enforcer';
+import { startBlockedTaskReconciler, stopBlockedTaskReconciler } from '../services/ivx-autonomous-blocked-reconciler';
+import { startFleetSloMonitor, stopFleetSloMonitor } from '../services/ivx-fleet-slo';
 
-console.log('[IVX-SENIOR-DEV-01] process entry', { pid: process.pid, at: new Date().toISOString(), campaignConcurrency: getWorkerMaxConcurrency() });
+console.log('[IVX-SENIOR-DEV-01] process entry', {
+  pid: process.pid,
+  at: new Date().toISOString(),
+  campaignConcurrency: getWorkerMaxConcurrency(),
+  fleetExecutionPlane: process.env.IVX_AUTONOMOUS_RUNTIME_ENFORCER_ENABLED !== 'false',
+});
+
+startFleetSloMonitor();
+startBlockedTaskReconciler();
+const fleetStarted = startAutonomous112RuntimeEnforcer();
+console.log('[IVX-SENIOR-DEV-01] 112-lane execution plane', { started: fleetStarted });
 
 startSeniorDevWorker().then(() => {
   console.log('[IVX-SENIOR-DEV-01] exited normally', getSeniorDevWorkerStatus());
@@ -23,10 +35,14 @@ startSeniorDevWorker().then(() => {
   process.exit(1);
 });
 
-process.on('SIGTERM', () => {
-  console.log('[IVX-SENIOR-DEV-01] SIGTERM received, stopping gracefully');
-});
+async function shutdown(signal: string): Promise<void> {
+  console.log(`[IVX-SENIOR-DEV-01] ${signal} received, returning fleet capacity`);
+  stopBlockedTaskReconciler();
+  stopFleetSloMonitor();
+  await stopAutonomous112RuntimeEnforcer().catch((error) => {
+    console.error('[IVX-SENIOR-DEV-01] fleet shutdown error', error instanceof Error ? error.message : String(error));
+  });
+}
 
-process.on('SIGINT', () => {
-  console.log('[IVX-SENIOR-DEV-01] SIGINT received, stopping gracefully');
-});
+process.on('SIGTERM', () => { void shutdown('SIGTERM'); });
+process.on('SIGINT', () => { void shutdown('SIGINT'); });
