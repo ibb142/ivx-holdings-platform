@@ -342,7 +342,7 @@ export default function ChatHubScreen() {
                 sessionId: finalSessionId,
                 answer: text || finalText,
                 model,
-                source: source as 'chatgpt' | 'fallback',
+                source: source as PublicChatApiResponse['source'],
                 deploymentMarker: 'ivx-public-chat-stream',
                 rateLimitRemaining: 19,
                 rateLimitResetAt: new Date(Date.now() + 300000).toISOString(),
@@ -563,7 +563,7 @@ export default function ChatHubScreen() {
 
                   <View style={styles.chipRow}>
                     <StatusChip label={healthQuery.data?.ok ? 'API healthy' : healthQuery.error ? 'API issue' : 'Checking API'} tone={healthQuery.data?.ok ? 'live' : healthQuery.error ? 'error' : 'warn'} icon="wifi" />
-                    <StatusChip label={source === 'chatgpt' ? 'ChatGPT live' : 'Fallback visible'} tone={source === 'chatgpt' ? 'live' : 'warn'} icon="shield" />
+                    <StatusChip label={source === 'autonomous' ? 'Autonomous worker' : source === 'chatgpt' ? 'ChatGPT live' : 'Fallback visible'} tone={source === 'chatgpt' || source === 'autonomous' ? 'live' : 'warn'} icon="shield" />
                   </View>
                   <View style={styles.chipRow}>
                     <StatusChip label={`${messageCount} saved`} tone="live" icon="archive" />

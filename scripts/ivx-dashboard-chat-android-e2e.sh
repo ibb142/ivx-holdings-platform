@@ -17,7 +17,7 @@ case "$APP_ID" in com.ivxholdings.app|com.ivxholdings.app.owner) ;; *) echo 'Uns
 FLOW_DIR="qa/evidence/dashboard-chat/flows"
 mkdir -p "$FLOW_DIR"
 # Reuse identical assertions against the installed release or QA package.
-for name in home dashboard chat mission public-handoff; do
+for name in home dashboard chat mission public-handoff reauthenticate; do
   sed "s/^appId: com.ivxholdings.app.owner$/appId: $APP_ID/" \
     "expo/.maestro/ivx-owner-${name}-certificate.yaml" > "$FLOW_DIR/${name}.yaml"
 done
@@ -48,12 +48,16 @@ timeout 180s "$MAESTRO" test "$FLOW_DIR/dashboard.yaml" \
 # An old reply already in persistent history must never satisfy a new run.
 IVX_CHAT_E2E_NONCE="$(node -e 'console.log(require("node:crypto").randomUUID().replace(/-/g,""))')"
 timeout 240s "$MAESTRO" test "$FLOW_DIR/chat.yaml" \
+  --env OWNER_EMAIL="$OWNER_EMAIL" \
+  --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" \
   --env IVX_CHAT_E2E_NONCE="$IVX_CHAT_E2E_NONCE" \
   --format junit \
   --output qa/evidence/dashboard-chat/chat.xml
 
 # 4) Aviation mission dashboard: complete live roster and restart navigation.
 timeout 180s "$MAESTRO" test "$FLOW_DIR/mission.yaml" \
+  --env OWNER_EMAIL="$OWNER_EMAIL" \
+  --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" \
   --format junit --output qa/evidence/dashboard-chat/mission.xml
 
 # 5) The installed APK creates one real read-only task over authenticated SSE.
@@ -96,7 +100,7 @@ jq -n \
   --arg chatProbeNonce "$IVX_CHAT_E2E_NONCE" \
   --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --argjson totalRoutes "$(jq -r '.totalRoutes' qa/evidence/all-routes-human-e2e/certificate.json)" \
-  '{certificate:"IVX-DASHBOARD-CHAT-ALL-ROUTES-E2E",passed:true,sourceSha:$sha,apkSha256:$apkSha256,appId:$appId,missionControlRendered:true,missionLiveTelemetry:true,missionRoster112:true,nativeAutonomousHandoffCompleted:true,chatProbeNonce:$chatProbeNonce,realOwnerLogin:true,dashboardRoute:"/admin/dashboard",dashboardRendered:true,dashboardScrolled:true,chatOpened:true,liveAIReply:true,chatPersistenceAfterRestart:true,allExpoRoutesAndroidSmokePassed:true,totalRoutes:$totalRoutes,routeCoveragePercent:100,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' \
+  '{certificate:"IVX-DASHBOARD-CHAT-ALL-ROUTES-E2E",passed:true,sourceSha:$sha,apkSha256:$apkSha256,appId:$appId,missionControlRendered:true,missionLiveTelemetry:true,missionRoster112:true,nativeAutonomousHandoffCompleted:true,chatProbeNonce:$chatProbeNonce,realOwnerLogin:true,dashboardRoute:"/admin/dashboard",dashboardRendered:true,dashboardScrolled:true,chatOpened:true,liveAIReply:true,chatPersistenceAfterRestart:true,manualReauthenticationAfterRestart:true,allExpoRoutesAndroidSmokePassed:true,totalRoutes:$totalRoutes,routeCoveragePercent:100,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' \
   > qa/evidence/dashboard-chat/certificate.json
 cat qa/evidence/dashboard-chat/certificate.json
 
