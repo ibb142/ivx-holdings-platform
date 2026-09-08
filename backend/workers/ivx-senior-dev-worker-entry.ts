@@ -1,20 +1,14 @@
 /**
  * IVX-SENIOR-DEV-01 — Dedicated execution-plane entry point.
  *
- * This Render background worker owns both:
- *   1) owner-triggered Senior Developer jobs; and
- *   2) the durable 112-lane Autonomous fleet execution loop.
- *
- * Production web API remains the control plane. Render sets
- * IVX_AUTONOMOUS_RUNTIME_ENFORCER_ENABLED=false on the web service and true on
- * this worker, preventing fleet load from starving /health or owner APIs.
+ * The background worker owns the durable 112-lane fleet. The web service can
+ * therefore remain a control plane and keep owner APIs/health responsive.
  */
-
 import { startSeniorDevWorker, getSeniorDevWorkerStatus } from '../services/ivx-senior-dev-worker';
 import { getWorkerMaxConcurrency } from '../services/ivx-senior-developer-worker';
 import { startAutonomous112RuntimeEnforcer, stopAutonomous112RuntimeEnforcer } from '../services/ivx-autonomous-runtime-enforcer';
 import { startBlockedTaskReconciler, stopBlockedTaskReconciler } from '../services/ivx-autonomous-blocked-reconciler';
-import { startFleetSloMonitor, stopFleetSloMonitor } from '../services/ivx-fleet-slo';
+import { startFleetSloMonitor } from '../services/ivx-fleet-slo';
 
 console.log('[IVX-SENIOR-DEV-01] process entry', {
   pid: process.pid,
@@ -38,7 +32,6 @@ startSeniorDevWorker().then(() => {
 async function shutdown(signal: string): Promise<void> {
   console.log(`[IVX-SENIOR-DEV-01] ${signal} received, returning fleet capacity`);
   stopBlockedTaskReconciler();
-  stopFleetSloMonitor();
   await stopAutonomous112RuntimeEnforcer().catch((error) => {
     console.error('[IVX-SENIOR-DEV-01] fleet shutdown error', error instanceof Error ? error.message : String(error));
   });
