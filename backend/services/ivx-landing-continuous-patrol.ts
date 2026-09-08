@@ -2,9 +2,10 @@
  * IVX Landing continuous patrol.
  *
  * A patrol task is a durable, reusable assignment owned by exactly one IA.
- * While its lease is valid the IA executes live Landing checks on a bounded
- * cadence, records capped evidence, and relies on the fleet heartbeat batch for
- * liveness. Waiting time is never counted as productive execution time.
+ * Each lease performs ONE real Landing observation, persists evidence, then
+ * releases the lease immediately. The fleet refill can therefore give the IA
+ * another repair/audit/patrol task instead of holding a RUNNING lane asleep
+ * between observations. Waiting time is never counted as productive work.
  */
 import { createHash } from 'node:crypto';
 import {
@@ -29,12 +30,11 @@ import {
   readPostgresFleetLeaseRows,
 } from './ivx-postgres-autonomous-task-store';
 
-export const IVX_LANDING_CONTINUOUS_PATROL_MARKER = 'ivx-landing-continuous-patrol-2026-09-07-v1';
+export const IVX_LANDING_CONTINUOUS_PATROL_MARKER = 'ivx-landing-continuous-patrol-2026-09-08-nonblocking-v2';
 
-const DEFAULT_PATROL_INTERVAL_MS = 15 * 60 * 1000;
+const DEFAULT_PATROL_INTERVAL_MS = 60 * 1000;
 const MIN_PATROL_INTERVAL_MS = 60 * 1000;
 const MAX_PATROL_INTERVAL_MS = 60 * 60 * 1000;
-const CONTINUATION_POLL_MS = 5_000;
 
 export type LandingPatrolLiveState = {
   agentNumber: number;
@@ -182,18 +182,6 @@ export async function buildLandingFleetProof(sourceSha = resolveProductionSha(),
   };
 }
 
-async function waitWhileAuthorized(milliseconds: number, shouldContinue: () => boolean): Promise<void> {
-  let remaining = milliseconds;
-  while (remaining > 0 && shouldContinue()) {
-    const slice = Math.min(CONTINUATION_POLL_MS, remaining);
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, slice);
-      timer.unref?.();
-    });
-    remaining -= slice;
-  }
-}
-
 function leaseOwnershipLost(error: string | null): boolean {
   return /not the lease holder|state changed|cannot record leased evidence in state/i.test(error ?? '');
 }
@@ -246,7 +234,8 @@ export async function runLandingPatrolSession(input: {
   liveByAgent.set(input.agentNumber, state);
 
   try {
-    while (input.shouldContinue()) {
+    // ONE real observation per lease. Never sleep while holding fleet capacity.
+    if (input.shouldContinue()) {
       const observationNumber = Math.max(0, task.recordsChanged ?? 0);
       const unit = landingPatrolUnitFor(input.agentNumber, observationNumber);
       lastUnitId = unit.unitId;
@@ -279,14 +268,10 @@ export async function runLandingPatrolSession(input: {
         if (!persisted.ok || !persisted.task) {
           state.persistenceErrors += 1;
           state.lastError = persisted.error ?? 'Patrol observation was not persisted.';
-          if (leaseOwnershipLost(state.lastError)) {
-            lostError = state.lastError;
-            break;
-          }
+          if (leaseOwnershipLost(state.lastError)) lostError = state.lastError;
         } else {
           task = persisted.task;
           if (persisted.evidenceId) evidenceIds.push(persisted.evidenceId);
-          if (evidenceIds.length > 24) evidenceIds.splice(0, evidenceIds.length - 24);
           state.lastError = null;
         }
       } catch (error) {
@@ -308,12 +293,8 @@ export async function runLandingPatrolSession(input: {
         productiveSeconds: execution.record.productive_seconds,
         observation: state.observations,
         persisted: state.lastError === null,
+        leasePolicy: 'release_after_observation',
       });
-
-      // Spread subsequent checks across the interval to avoid a synchronized
-      // 112-lane request burst while every IA remains durably leased/heartbeating.
-      const spreadMs = (input.agentNumber * 7_919) % 60_000;
-      await waitWhileAuthorized(getLandingPatrolIntervalMs() + spreadMs, input.shouldContinue);
     }
   } finally {
     if (!lostError) await releaseLease(task.taskId, workerId).catch(() => undefined);
