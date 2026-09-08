@@ -304,6 +304,10 @@ export function registerAgentRoutes(app: Hono): void {
       }, 409);
     }
     const ownerApprovalToken = oidcAuthorized ? 'github-oidc-machine-approved' : ((body as any).ownerApprovalToken || null);
+    if (taskType === 'p4-apk-artifact-drift') {
+      const result = await handleApkArtifactDrift(c);
+      return result;
+    }
     const result = await executeAgentRun(agentId, taskType, payload, ownerApprovalToken);
     return c.json({ ok: result.ok, marker: IVX_AGENT_API_MARKER, runRecord: result.runRecord, error: result.error });
   });
