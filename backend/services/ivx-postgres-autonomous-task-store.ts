@@ -134,7 +134,7 @@ export async function readPostgresFleetSloTasks(): Promise<Task[]> {
 }
 
 export async function persistPostgresFleetSloSample(sample: Record<string, unknown>): Promise<void> {
-  await restRequest('ivx_autonomous_task_events', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ event_type: 'fleet_slo_sample', worker_instance_id: autonomousWorkerInstanceId(), event: { ...sample, instance_role: process.env.IVX_WORKER_MODE === 'true' ? 'worker' : 'api', service_id: process.env.RENDER_SERVICE_ID ?? null } }) }, { timeoutMs: TRUTH_TIMEOUT_MS });
+  await restRequest('ivx_autonomous_task_events', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ event_type: 'fleet_slo_sample', worker_instance_id: autonomousWorkerInstanceId(), event: { ...sample, instance_role: process.env.IVX_WORKER_MODE === 'true' ? 'worker' : 'api', service_id: process.env.RENDER_SERVICE_ID ?? null, process_role: process.env.IVX_PROCESS_ROLE ?? null, shared_worker_queue: process.env.IVX_WORKER_QUEUE_ATOMIC === 'true', shared_state: process.env.IVX_REQUIRE_SHARED_STATE === 'true', draining: process.env.IVX_INSTANCE_DRAINING === 'true' } }) }, { timeoutMs: TRUTH_TIMEOUT_MS });
 }
 
 export async function readPostgresAutonomousTasks(): Promise<Task[]> {

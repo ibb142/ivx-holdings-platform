@@ -9,10 +9,10 @@ if (!['127.0.0.1', 'localhost'].includes(url.hostname) || url.pathname !== '/ivx
 const a = new pg.Client({ connectionString }), b = new pg.Client({ connectionString });
 await Promise.all([a.connect(), b.connect()]);
 try {
-  await a.query("create role anon; create role authenticated; create role service_role bypassrls; create table public.ivx_durable_documents(doc_key text, value jsonb); create table public.ivx_agent_states(agent_number integer,last_heartbeat timestamptz);");
+  await a.query("create role anon; create role authenticated; create role service_role bypassrls; create table public.ivx_durable_documents(doc_key text primary key, value jsonb, updated_at timestamptz default now()); create table public.ivx_agent_states(agent_number integer,last_heartbeat timestamptz);");
   for (const name of ['20260907151751_ivx_autonomous_atomic_task_queue.sql', '20260907153209_ivx_autonomous_unique_worker_lease.sql',
     '20260907175500_ivx_autonomous_release_worker_leases.sql', '20260908174136_ivx_fleet_retry_schedule.sql',
-    '20260908203927_ivx_fleet_dashboard_observation.sql', '20260908203936_ivx_fleet_process_fencing.sql']) {
+    '20260908203927_ivx_fleet_dashboard_observation.sql', '20260908203936_ivx_fleet_process_fencing.sql', '20260908210000_ivx_senior_queue_atomic.sql', '20260908210001_ivx_shared_room_messages.sql', '20260908210002_ivx_ha_observation_roles.sql']) {
     await a.query(await readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8'));
   }
   const fixtures = [1, 2].map(n => ({ taskId: `ha-${n}`, idempotencyKey: `ha-${n}`, assignedAgentNumber: 1,
@@ -44,7 +44,33 @@ try {
   assert.equal(observation.activeTasks.length, 1);
   const privileges = (await a.query("select has_function_privilege('anon','public.ivx_fleet_dashboard_observation()','execute') as anon, has_function_privilege('authenticated','public.ivx_fleet_dashboard_observation()','execute') as authenticated, has_function_privilege('service_role','public.ivx_fleet_dashboard_observation()','execute') as service")).rows[0];
   assert.deepEqual(privileges, { anon: false, authenticated: false, service: true });
+  const queueJob = n => ({ jobId: `senior-${n}`, ownerId: 'test-owner', status: 'queued', attempts: 0, createdAt: new Date().toISOString(), idempotencyKey: `senior-key-${n}` });
+  const qa = queueJob(1), qb = queueJob(2);
+  const patch = (client, changes) => client.query('select public.ivx_senior_queue_patch($1::jsonb) as value', [JSON.stringify(changes)]);
+  await Promise.all([patch(a, [{ expected: null, next: qa }]), patch(b, [{ expected: null, next: qb }])]);
+  let queue = (await a.query("select value from public.ivx_durable_documents where doc_key='senior-developer-worker/queue.json'")).rows[0].value;
+  assert.equal(queue.jobs.length, 2, 'parallel API enqueues must not overwrite each other');
+  const claimSenior = async (client, id, worker) => (await client.query('select public.ivx_senior_queue_claim($1,$2) as value', [id, worker])).rows[0].value;
+  const seniorClaims = await Promise.all([claimSenior(a, qa.jobId, 'senior-a'), claimSenior(b, qa.jobId, 'senior-b')]);
+  assert.equal(seniorClaims.filter(Boolean).length, 1, 'shared document claims are atomic');
+  const senior = seniorClaims.find(Boolean); const seniorWorker = senior.leaseWorkerInstanceId;
+  assert.equal(await claimSenior(b, qb.jobId, 'another-worker'), null, 'one active job per owner across replicas');
+  await assert.rejects(patch(a, [{ expected: senior, next: { ...senior, status: 'completed' }, workerInstanceId: 'stale-worker' }]), /Worker lease lost/);
+  await patch(a, [{ expected: senior, next: { ...senior, status: 'cancelled' } }]);
+  await assert.rejects(patch(b, [{ expected: senior, next: { ...senior, status: 'completed' }, workerInstanceId: seniorWorker }]), /changed concurrently/);
+  assert.ok(await claimSenior(b, qb.jobId, 'another-worker'), 'owner cancellation returns capacity');
+  await Promise.all([a.query('select public.ivx_senior_ledger_put($1::jsonb)', [JSON.stringify({ jobId: 'proof-a' })]),
+    b.query('select public.ivx_senior_ledger_put($1::jsonb)', [JSON.stringify({ jobId: 'proof-b' })])]);
+  const ledger = (await a.query("select value from public.ivx_durable_documents where doc_key='senior-developer-worker/proof-ledger.json'")).rows[0].value;
+  assert.equal(ledger.entries.length, 2, 'parallel proof writes must both survive');
+  await a.query("insert into public.ivx_shared_room_messages(room_id,username,text,source) values ('ha-room','fixture','Shared across connections','user')");
+  assert.equal((await b.query("select text from public.ivx_shared_room_messages where room_id='ha-room'")).rows[0].text, 'Shared across connections');
+  const roomAccess = (await a.query("select has_table_privilege('anon','public.ivx_shared_room_messages','select') as anon, has_table_privilege('authenticated','public.ivx_shared_room_messages','insert') as authenticated, has_table_privilege('service_role','public.ivx_shared_room_messages','select,insert') as service")).rows[0];
+  assert.deepEqual(roomAccess, { anon: false, authenticated: false, service: true });
+  await a.query("insert into public.ivx_autonomous_task_events(event_type,worker_instance_id,event) values ('fleet_slo_sample','ha-role-test','{\"instance_role\":\"api\",\"process_role\":\"api\",\"shared_state\":true,\"shared_worker_queue\":true}')");
+  const roles = (await b.query('select public.ivx_fleet_dashboard_observation() as value')).rows[0].value;
+  assert.equal(roles.instances[0].processRole, 'api'); assert.equal(roles.instances[0].sharedState, true);
   console.log(JSON.stringify({ ok: true, database: 'isolated PostgreSQL', connections: 2, concurrentClaimWinners: 1,
-    wrongProcessStartRejected: true, wrongProcessHeartbeatRejected: true, staleCompletionRejected: true,
+    sharedRoomHistory: true, privateRoomStorage: true, roleObservation: true, parallelEnqueuesPreserved: true, atomicSeniorClaims: true, crossReplicaOwnerSingleFlight: true, concurrentProofsPreserved: true, wrongProcessStartRejected: true, wrongProcessHeartbeatRejected: true, staleCompletionRejected: true,
     expiredLeaseCannotResurrect: true, survivorRefilled: true, lateShutdownFenced: true, privateObservation: true, productionRowsTouched: 0 }));
 } finally { await Promise.allSettled([a.end(), b.end()]); }
