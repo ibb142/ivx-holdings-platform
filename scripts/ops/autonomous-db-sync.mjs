@@ -21,7 +21,7 @@ export function validateConnection(raw) {
       && !(u.hostname.endsWith('.pooler.supabase.com') && user === `postgres.${project}`)) return null;
     if (u.searchParams.has('sslmode') && !['require','verify-ca','verify-full'].includes(u.searchParams.get('sslmode'))) return null;
     return { host:u.hostname, port:Number(u.port || 5432), user, password:decodeURIComponent(u.password), database:'postgres',
-      ssl:{rejectUnauthorized:true,ca:databaseCa}, connectionTimeoutMillis:5000, query_timeout:5000, statement_timeout:5000 };
+      ssl:{rejectUnauthorized:true,ca:databaseCa}, connectionTimeoutMillis:20000, query_timeout:20000, statement_timeout:15000 };
   } catch { return null; }
 }
 
@@ -234,15 +234,17 @@ export async function main() {
     const config=validateConnection(candidate.value); if(!config) continue;
     mask(candidate.value); mask(config.password);
     const client=new pg.Client(config); client.on('error',()=>console.log('database_probe_connection_error'));
+    let phase='connect';
     try {
       await client.connect();
+      phase='control_read';
       const r=await client.query('SELECT active FROM public.ivx_agent_controls WHERE control_name = $1 LIMIT 2',['emergency_stop']);
       if(r.rows.length!==1 || typeof r.rows[0].active!=='boolean') throw new Error('control_row_invalid');
       chosen=candidate;
       console.log(JSON.stringify({probe:'PASS',serviceId:entry.serviceId,source:candidate.source,ownerStopActive:r.rows[0].active}));
     } catch(error) {
       const known=['ENOTFOUND','ENETUNREACH','ECONNREFUSED','ETIMEDOUT','28P01','3D000','42501','CERT_HAS_EXPIRED','SELF_SIGNED_CERT_IN_CHAIN','UNABLE_TO_VERIFY_LEAF_SIGNATURE'];
-      console.log(JSON.stringify({probe:'FAIL',serviceId:entry.serviceId,source:candidate.source,reason:known.includes(error?.code)?error.code:'database_probe_failed'}));
+      console.log(JSON.stringify({probe:'FAIL',serviceId:entry.serviceId,source:candidate.source,phase,reason:known.includes(error?.code)?error.code:/timeout|timed out/i.test(String(error?.message))?'database_timeout':'database_probe_failed'}));
     }
     finally { await client.end(); }
   }
