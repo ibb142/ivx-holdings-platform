@@ -11,7 +11,7 @@
  * installs the session via `setSession()`.
  *
  * This test verifies:
- *   1. Supabase auth token/user requests still get 8s per-request timeout.
+ *   1. Password grants get 15s; other auth requests retain 8s.
  *   2. Non-auth requests keep short timeout (15s hosted / 20s self-hosted).
  *   3. Mobile login uses backend-mediated `/api/members/login`, not direct Supabase.
  *   4. Role resolution timeout is 5s and non-blocking.
@@ -22,13 +22,7 @@
 
 import { describe, it, expect } from 'bun:test';
 
-// Mirror the logic from supabase.ts to verify the timeout decision
-function getSupabaseFetchTimeoutMs(url: string, selfHosted: boolean): number {
-  const isAuthRequest =
-    typeof url === 'string' &&
-    (url.includes('/auth/v1/token') || url.includes('/auth/v1/user'));
-  return isAuthRequest ? 8000 : selfHosted ? 20000 : 15000;
-}
+import { getSupabaseFetchTimeoutMs } from '../lib/supabase-request-timeout';
 
 // Mirror constants from auth-context.tsx
 const AUTH_BOOTSTRAP_TIMEOUT_MS = 3500;
@@ -39,14 +33,15 @@ const AUTH_ROLE_RESOLUTION_TIMEOUT_MS = 5000;
 const OWNER_TRUSTED_DEVICE_WINDOW_MS = 1000 * 60 * 60 * 24 * 30;
 
 describe('Owner sign-in architecture hardening (v1.10.2)', () => {
-  it('supabase.ts: auth token requests get 8s per-request timeout (was 45s)', () => {
+  it('supabase.ts: password grants get 15s while user and refresh requests retain 8s', () => {
     const authUrl = 'https://kvclcdjmjghndxsngfzb.supabase.co/auth/v1/token?grant_type=password';
     const userUrl = 'https://kvclcdjmjghndxsngfzb.supabase.co/auth/v1/user';
 
-    expect(getSupabaseFetchTimeoutMs(authUrl, false)).toBe(8000);
+    expect(getSupabaseFetchTimeoutMs(authUrl, false)).toBe(15000);
     expect(getSupabaseFetchTimeoutMs(userUrl, false)).toBe(8000);
-    expect(getSupabaseFetchTimeoutMs(authUrl, true)).toBe(8000);
+    expect(getSupabaseFetchTimeoutMs(authUrl, true)).toBe(15000);
     expect(getSupabaseFetchTimeoutMs(userUrl, true)).toBe(8000);
+    expect(getSupabaseFetchTimeoutMs(authUrl.replace('password', 'refresh_token'), false)).toBe(8000);
   });
 
   it('supabase.ts: non-auth requests keep short timeout (15s hosted / 20s self-hosted)', () => {
@@ -81,20 +76,20 @@ describe('Owner sign-in architecture hardening (v1.10.2)', () => {
     const authTokenUrl = 'https://kvclcdjmjghndxsngfzb.supabase.co/auth/v1/token?grant_type=password';
 
     // Per-request auth timeout
-    expect(getSupabaseFetchTimeoutMs(authTokenUrl, false)).toBe(8000);
+    expect(getSupabaseFetchTimeoutMs(authTokenUrl, false)).toBe(15000);
     // Per-stage context timeouts
     expect(AUTH_BOOTSTRAP_TIMEOUT_MS).toBeLessThanOrEqual(5000);
     expect(AUTH_REFRESH_TIMEOUT_MS).toBeLessThanOrEqual(5000);
     expect(AUTH_ROLE_RESOLUTION_TIMEOUT_MS).toBeLessThanOrEqual(5000);
 
-    // No single timeout exceeds 8s for auth requests — login must complete <5s
+    // Password grants remain bounded at the live Auth certification deadline.
     const maxAuthTimeout = Math.max(
       getSupabaseFetchTimeoutMs(authTokenUrl, false),
       AUTH_BOOTSTRAP_TIMEOUT_MS,
       AUTH_REFRESH_TIMEOUT_MS,
       AUTH_ROLE_RESOLUTION_TIMEOUT_MS,
     );
-    expect(maxAuthTimeout).toBeLessThanOrEqual(8000);
+    expect(maxAuthTimeout).toBeLessThanOrEqual(15000);
   });
 
   it('architecture: mobile uses backend /api/members/login (Instagram technique) because direct Supabase Auth times out', () => {
