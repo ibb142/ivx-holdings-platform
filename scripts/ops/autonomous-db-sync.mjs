@@ -164,6 +164,32 @@ export async function readLinkedGroups(key) {
   throw new Error('render_group_pagination_limit');
 }
 
+export async function readPoolerCandidates(configurations, token=process.env.SUPABASE_ACCESS_TOKEN) {
+  if(!token?.trim())return [];
+  const credentials=configurations.flatMap(entry=>candidates(entry.env).map(candidate=>({entry,candidate,config:validateConnection(candidate.value)})))
+    .filter(item=>item.config && item.config.user==='postgres' && connectionIssue(item.candidate.value)==='valid');
+  if(!credentials.length)return [];
+  let rows;
+  try {rows=await request(`https://api.supabase.com/v1/projects/${project}/config/database/pooler`,token.trim());}
+  catch(error) {console.log(JSON.stringify({poolerDiscovery:'FAIL',reason:/^remote_http_[0-9]{3}$/.test(error.message)?error.message:'management_request_failed'}));return [];}
+  if(!Array.isArray(rows))throw new Error('pooler_response_invalid');
+  const result=[];const seen=new Set();
+  for(const row of rows) {
+    if(row.database_type!=='PRIMARY')continue;
+    let endpoint;
+    try {endpoint=new URL(row.connection_string || row.connectionString);}catch {continue;}
+    if(!['postgres:','postgresql:'].includes(endpoint.protocol) || !endpoint.hostname.endsWith('.pooler.supabase.com')
+      || decodeURIComponent(endpoint.username)!==`postgres.${project}` || endpoint.pathname!=='/postgres')continue;
+    for(const {entry,config} of credentials) {
+      const url=new URL(endpoint.href);url.password=config.password;url.port='5432';url.search='?sslmode=verify-full';
+      if(!validateConnection(url.href) || seen.has(url.href))continue;
+      seen.add(url.href);result.push({serviceId:entry.serviceId+'_pooler_session',env:{SUPABASE_POOLER_URL:url.href}});
+    }
+  }
+  console.log(JSON.stringify({poolerDiscovery:'PASS',candidates:result.length}));
+  return result;
+}
+
 export async function main() {
   const key=await renderKey();
   const configurations=[];
@@ -179,8 +205,10 @@ export async function main() {
   console.log(JSON.stringify({linkedGroupsAudited:groups.length}));
   const github={serviceId:'github_actions',env:process.env};
   console.log(JSON.stringify({source:'github_actions',credentialPresence:Object.fromEntries([...aliases,'SUPABASE_DB_PASSWORD'].map(n=>[n,Boolean(process.env[n]?.trim())])),connectionIssues:Object.fromEntries(aliases.map(n=>[n,connectionIssue(process.env[n])]))}));
+  const sources=[...configurations,...groups,github];
+  const poolers=await readPoolerCandidates(sources);
   let chosen=null;
-  for(const entry of [...configurations,...groups,github]) for(const candidate of candidates(entry.env)) {
+  for(const entry of [...sources,...poolers]) for(const candidate of candidates(entry.env)) {
     if(chosen) break;
     if(connectionIssue(candidate.value)!=='valid')continue;
     const config=validateConnection(candidate.value); if(!config) continue;
