@@ -16,7 +16,7 @@ function validate(service) {
 
 // Applying this change costs an additional $36/month at September 2026 rates.
 // Merge/execute only after the owner approves that recurring cost.
-export async function upgradeAPI({ request, approved, commit }) {
+export async function upgradeAPI({ request, approved, commit, wait = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
   if (approved !== true) throw new Error('Recurring cost approval required');
   if (!/^[a-f0-9]{40}$/.test(commit ?? '')) throw new Error('Exact deployment commit required');
   const path = `/services/${SERVICE}`;
@@ -37,8 +37,10 @@ export async function upgradeAPI({ request, approved, commit }) {
   if (verified.value !== '--max-old-space-size=1024') throw new Error('Node heap readback failed');
   const requestedAt = Date.now();
   let deploy = await request('POST', `${path}/deploys`, { clearCache: 'do_not_clear', commitId: commit });
-  if (!deploy.id) {
+  for (let attempt = 0; !deploy.id && attempt < 15; attempt++) {
     // A successful empty response must be reconciled, never blindly POSTed again.
+    // Render may accept the request before the deploy exists in its list API.
+    await wait(2000);
     const recent = await request('GET', `${path}/deploys?limit=5`);
     deploy = (Array.isArray(recent) ? recent : []).map(row => row.deploy ?? row).find(row =>
       row.commit?.id === commit && Date.parse(row.createdAt) >= requestedAt &&

@@ -22,15 +22,16 @@ test('empty successful Render responses are supported; malformed JSON remains an
   await assert.rejects(decodeRenderResponse(new Response('{broken')));
 });
 test('empty accepted deployment is reconciled without issuing a second POST', async () => {
-  const f = fixture(); let posts = 0;
+  const f = fixture(); let posts = 0; let reads = 0;
   const request = async (method, path, body) => {
     if (method === 'POST') { posts++; return {}; }
-    if (path.endsWith('/deploys?limit=5')) return [{ deploy: { id: 'dep-confirmed', commit: { id: commit },
+    if (path.endsWith('/deploys?limit=5')) { if (++reads < 3) return []; return [{ deploy: { id: 'dep-confirmed', commit: { id: commit },
       createdAt: new Date(Date.now() + 1).toISOString(), status: 'queued' } }];
+    }
     return f.request(method, path, body);
   };
-  const result = await upgradeAPI({ request, approved: true, commit });
-  assert.equal(result.deployId, 'dep-confirmed'); assert.equal(posts, 1);
+  const result = await upgradeAPI({ request, approved: true, commit, wait: async () => {} });
+  assert.equal(result.deployId, 'dep-confirmed'); assert.equal(posts, 1); assert.equal(reads, 3);
 });
 test('missing approval performs no network calls', async () => {
   const f = fixture();
