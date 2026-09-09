@@ -10,13 +10,17 @@ def certify(directory, source_sha, exit_code, process_alive):
     root = Path(directory)
     manifest = [json.loads(line) for line in (root / 'manifest.jsonl').read_text().splitlines()]
     cases = {}
-    valid_report = True
+    reports = sorted((root / 'suites').glob('*.xml')) if (root / 'suites').is_dir() else []
+    if not reports and (root / 'suite.xml').is_file():
+        reports = [root / 'suite.xml']
+    valid_report = bool(reports)
     try:
-        for case in ET.parse(root / 'suite.xml').iter('testcase'):
-            identity = case.get('name')
-            if identity in cases:
-                valid_report = False
-            cases[identity] = case
+        for report in reports:
+            for case in ET.parse(report).iter('testcase'):
+                identity = case.get('name')
+                if identity in cases:
+                    valid_report = False
+                cases[identity] = case
     except (OSError, ET.ParseError):
         valid_report = False
     valid_report = valid_report and set(cases) == {row['name'] for row in manifest}

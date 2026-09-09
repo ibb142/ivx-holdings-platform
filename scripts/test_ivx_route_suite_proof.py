@@ -30,6 +30,23 @@ class RouteCertificateTests(unittest.TestCase):
         root, cases = self.fixture()
         self.assertTrue(self.check(root, cases))
 
+    def test_complete_batched_reports_pass(self):
+        root, cases = self.fixture()
+        suites = root / 'suites'
+        suites.mkdir()
+        for index, start in enumerate(range(0, len(cases), 20), 1):
+            report = suites / f'batch-{index:03d}.xml'
+            report.write_text('<testsuites><testsuite>' + ''.join(cases[start:start + 20]) + '</testsuite></testsuites>')
+        self.assertTrue(module.certify(root, 'a' * 40, 0, True)['passed'])
+
+    def test_batched_reports_still_fail_closed(self):
+        root, cases = self.fixture()
+        suites = root / 'suites'
+        suites.mkdir()
+        (suites / 'batch-001.xml').write_text(
+            '<testsuites><testsuite>' + ''.join(cases[:100]) + '</testsuite></testsuites>')
+        self.assertFalse(module.certify(root, 'a' * 40, 0, True)['passed'])
+
     def test_missing_duplicate_failed_or_skipped_route_fails(self):
         for replacement in (None, '<testcase name="route-0" status="SUCCESS" />',
                             '<testcase name="route-100" status="FAILED"><failure /></testcase>',
