@@ -345,9 +345,9 @@ function refillAllAvailableAgents(
 
     if (requestedLandingMission) {
       const seeded = await ensureLandingP0BacklogSeeded(requestedSourceSha);
-      if (seeded.error) throw new Error(`landing_backlog_seed_failed: ${seeded.error}`);
+      if (seeded.error) console.warn('[IVX Autonomous 112 Seed] backlog degraded; checking existing current-mission work', { error: seeded.error });
       const patrol = await ensureLandingP0PatrolSeeded(requestedSourceSha);
-      if (patrol.error) throw new Error(`landing_patrol_seed_failed: ${patrol.error}`);
+      if (patrol.error) console.warn('[IVX Autonomous 112 Seed] patrol degraded; checking existing current-mission work', { error: patrol.error });
     }
     const missionScope = {
       familyPrefixes: [LANDING_P0_PREFIX, LANDING_P0_REPAIR_PREFIX, LANDING_P0_PATROL_PREFIX],
