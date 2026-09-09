@@ -65,7 +65,16 @@ test.describe('Forgot Password — reset-password.html', () => {
   test('invalid recovery code is rejected', async ({ page }) => {
     await page.goto(BASE + '/reset-password.html?code=definitely-invalid-code', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.status')).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('.status')).toContainText(/Could not verify your recovery link/i);
+    await expect(page.locator('.status')).toContainText(/Could not verify your recovery link/i, { timeout: 20000 });
+  });
+
+  test('a stalled recovery exchange ends with an error and never reveals the password form', async ({ page }) => {
+    await page.route('**/supabase.min.js', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/javascript', body: `window.supabase={createClient:()=>({auth:{exchangeCodeForSession:()=>new Promise(()=>{})}})};` });
+    });
+    await page.goto(BASE + '/reset-password.html?code=stalled-exchange', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.status')).toContainText(/Verification timed out/i, { timeout: 20000 });
+    await expect(page.locator('#form')).toBeHidden();
   });
 
   test('valid recovery fragment establishes session, updates password, then signs out', async ({ page }) => {

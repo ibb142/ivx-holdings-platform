@@ -48,13 +48,13 @@ function leaseFresh(row: AtomicFleetLeaseRow): boolean {
   return Number.isFinite(expiresAt) && expiresAt > Date.now();
 }
 
-async function boundedDependency<T>(label: string, task: Promise<T>): Promise<BoundedDependency<T>> {
+async function boundedDependency<T>(label: string, task: Promise<T>, budgetMs = IVX_AUTONOMOUS_TRUTH_DEPENDENCY_TIMEOUT_MS): Promise<BoundedDependency<T>> {
   let timer: ReturnType<typeof setTimeout> | null = null;
   try {
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(
-        () => reject(new Error(`${label}_timeout_${IVX_AUTONOMOUS_TRUTH_DEPENDENCY_TIMEOUT_MS}ms`)),
-        IVX_AUTONOMOUS_TRUTH_DEPENDENCY_TIMEOUT_MS,
+        () => reject(new Error(`${label}_timeout_${budgetMs}ms`)),
+        budgetMs,
       );
     });
     return { value: await Promise.race([task, timeout]), error: null };
@@ -139,7 +139,7 @@ export async function getAutonomousTruthSnapshot() {
       ? Promise.resolve({ value: [] as Awaited<ReturnType<typeof listCampaignDispatcherRecords>>, error: null })
       : boundedDependency('dispatcher_records', Promise.resolve(listCampaignDispatcherRecords())),
     atomicQueueSelected
-      ? boundedDependency('postgres_atomic_leases', readPostgresFleetLeaseRows())
+      ? boundedDependency('postgres_atomic_leases', readPostgresFleetLeaseRows(), 30_000)
       : Promise.resolve({ value: [] as AtomicFleetLeaseRow[], error: null }),
   ]);
   const dispatcher = dispatcherResult.value ?? {

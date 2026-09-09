@@ -20,7 +20,7 @@ export function emergencyStopPostgresConfig(env: NodeJS.ProcessEnv = process.env
   // A dedicated, short-lived connection cannot wait behind the failed task pool.
   return { host: db.hostname, port: Number(db.port || 5432), user,
     password: decodeURIComponent(db.password), database: 'postgres',
-    ssl: supabasePostgresTls(), connectionTimeoutMillis: 3_000,
+    ssl: supabasePostgresTls(), connectionTimeoutMillis: 20_000,
     query_timeout: 3_000, statement_timeout: 3_000,
     application_name: 'ivx_owner_stop_read' };
 }

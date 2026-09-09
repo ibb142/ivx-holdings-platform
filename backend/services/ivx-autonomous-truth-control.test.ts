@@ -14,7 +14,7 @@ describe('IVX autonomous truth control enterprise invariants', () => {
   test('slow JSON document is excluded and indexed atomic lease rows are canonical', () => {
     expect(source).toContain('durableJsonTaskStoreRemovedFromHotTruthPath: true');
     expect(source).toContain('atomicTaskRowsAreCanonicalFleetProof: true');
-    expect(source).toContain("boundedDependency('postgres_atomic_leases', readPostgresFleetLeaseRows())");
+    expect(source).toContain("boundedDependency('postgres_atomic_leases', readPostgresFleetLeaseRows(), 30_000)");
     expect(source).toContain("'postgres_atomic task + distinct leaseHolder + workerInstanceId + heartbeat <=60s'");
   });
 
