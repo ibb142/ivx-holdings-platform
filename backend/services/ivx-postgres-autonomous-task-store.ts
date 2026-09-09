@@ -78,7 +78,7 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
     if (casts[key] === 'jsonb' && value !== null && value !== undefined) return JSON.stringify(value);
     return value ?? null;
   });
-  const result = await getDirectPool(env).query(`select public.${name}(${placeholders}) as result`, values);
+  const result = await getDirectPool(env).query<{ result: T }>(`select public.${name}(${placeholders}) as result`, values);
   if (!result.rows?.length) throw new Error(`direct_postgres_rpc_empty:${name}`);
   return result.rows[0].result as T;
 }
@@ -137,7 +137,7 @@ export async function readPostgresTaskById(taskId: string): Promise<Task | null>
     return structuredClone(rows[0].payload);
   } catch (error) {
     if (!directDbUrl()) throw error;
-    const result = await getDirectPool().query('select payload from public.ivx_autonomous_tasks where task_id = $1 limit 1', [taskId]);
+    const result = await getDirectPool().query<RestTaskRow>('select payload from public.ivx_autonomous_tasks where task_id = $1 limit 1', [taskId]);
     return result.rows[0]?.payload ? structuredClone(result.rows[0].payload) : null;
   }
 }
@@ -151,7 +151,7 @@ export async function readPostgresTaskIdentitiesByPrefix(prefix: string): Promis
     return rows.map(row => ({ taskId: row.task_id, idempotencyKey: row.idempotency_key, state: row.state }));
   } catch (error) {
     if (!directDbUrl()) throw error;
-    const result = await getDirectPool().query('select task_id, idempotency_key, state from public.ivx_autonomous_tasks where idempotency_key like $1 order by created_at asc limit 1000', [`${prefix}%`]);
+    const result = await getDirectPool().query<{ task_id: string; idempotency_key: string; state: TaskState }>('select task_id, idempotency_key, state from public.ivx_autonomous_tasks where idempotency_key like $1 order by created_at asc limit 1000', [`${prefix}%`]);
     if (result.rows.length >= 1000) throw new Error('postgres_atomic mission identities are incomplete');
     return result.rows.map((row) => ({ taskId: row.task_id, idempotencyKey: row.idempotency_key, state: row.state as TaskState }));
   }
@@ -167,7 +167,7 @@ export async function readPostgresCurrentTasks(states: readonly TaskState[]): Pr
     return rows.map((row) => structuredClone(row.payload));
   } catch (error) {
     if (!directDbUrl()) throw error;
-    const result = await getDirectPool().query('select payload from public.ivx_autonomous_tasks where state = any($1::text[]) order by updated_at desc limit 1000', [unique]);
+    const result = await getDirectPool().query<RestTaskRow>('select payload from public.ivx_autonomous_tasks where state = any($1::text[]) order by updated_at desc limit 1000', [unique]);
     if (result.rows.length >= 1000) throw new Error('postgres_atomic current-task response reached its safety limit; telemetry is incomplete');
     return result.rows.map((row) => structuredClone(row.payload));
   }
@@ -200,7 +200,7 @@ export async function readPostgresFleetLeaseRows(): Promise<AtomicFleetLeaseRow[
   } catch (error) {
     if (!directDbUrl()) throw error;
     const activeStates = ['LEASED','RUNNING','EXECUTION_COMPLETED','QA_IN_PROGRESS','READY_FOR_DEPLOYMENT','DEPLOYING','DEPLOYED','PRODUCTION_VERIFYING'];
-    const result = await getDirectPool().query('select task_id, idempotency_key, state, assigned_agent_number, lease_holder, worker_instance_id, last_heartbeat_at, lease_expires_at from public.ivx_autonomous_tasks where state = any($1::text[]) and lease_holder is not null order by updated_at desc limit 1000', [activeStates]);
+    const result = await getDirectPool().query<{ task_id: string; idempotency_key: string; state: TaskState; assigned_agent_number: number | null; lease_holder: string; worker_instance_id: string | null; last_heartbeat_at: string | Date; lease_expires_at: string | Date | null }>('select task_id, idempotency_key, state, assigned_agent_number, lease_holder, worker_instance_id, last_heartbeat_at, lease_expires_at from public.ivx_autonomous_tasks where state = any($1::text[]) and lease_holder is not null order by updated_at desc limit 1000', [activeStates]);
     return result.rows.filter((row) => row.task_id && row.lease_holder && row.last_heartbeat_at).map((row) => ({ taskId: row.task_id, idempotencyKey: row.idempotency_key, state: row.state as TaskState, assignedAgentNumber: row.assigned_agent_number, leaseHolder: row.lease_holder, workerInstanceId: row.worker_instance_id, lastHeartbeatAt: new Date(row.last_heartbeat_at).toISOString(), leaseExpiresAt: row.lease_expires_at ? new Date(row.lease_expires_at).toISOString() : null }));
   }
 }
