@@ -12,7 +12,7 @@ export async function handleFleetHaGet(request: Request): Promise<Response> {
   const workers = current.filter(i => i.role === 'worker' && i.processRole === 'worker');
   return ownerOnlyJson({ ok: observation.status === 'AVAILABLE', marker: 'ivx-api-worker-ha-2026-09-08-v1',
     measuredAt: observation.measuredAt, commitSha: observation.commitSha, requiredInstancesPerRole: 2,
-    ready: api.length >= 2 && workers.length >= 2, apiInstances: api, workerInstances: workers,
+    ready: api.length >= 2 && workers.length >= targetAgents, apiInstances: api, workerInstances: workers,
     fleet: observation.counts, scope: 'API and worker process redundancy with shared PostgreSQL state',
     recoveryTestRequired: true, databaseFailoverTested: false }, observation.status === 'AVAILABLE' ? 200 : 503);
 }
