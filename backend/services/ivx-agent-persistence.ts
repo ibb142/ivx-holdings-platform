@@ -31,6 +31,7 @@
  * logged (binding NAME only — never the secret value).
  */
 import { createHash } from 'node:crypto';
+import { createPersistenceStoreResolver, type PersistenceStoreMode } from './ivx-persistence-store-resolution';
 
 export const IVX_AGENT_PERSISTENCE_MARKER = 'ivx-agent-persistence-2026-08-18';
 
@@ -254,9 +255,8 @@ export type CertificateRow = {
 
 // ── Storage mode detection + dedicated-table bootstrap ───────────────────────
 
-type StoreMode = 'dedicated' | 'jobs_fallback' | 'unavailable';
+type StoreMode = PersistenceStoreMode;
 
-let cachedMode: StoreMode | null = null;
 let lastEnsureDetail = 'not yet probed';
 
 const REAL_EXECUTION_DDL = `
@@ -421,29 +421,16 @@ async function tryDedicatedBootstrap(): Promise<{ ok: boolean; detail: string }>
   }
 }
 
+const storeResolver = createPersistenceStoreResolver({
+  dedicated: () => sbRequest<unknown[]>('ivx_agent_states?select=agent_id&limit=1'),
+  bootstrap: tryDedicatedBootstrap,
+  fallback: () => sbRequest<unknown[]>('ivx_agent_jobs?select=id&limit=1'),
+});
+
 async function resolveStoreMode(force = false): Promise<StoreMode> {
-  if (cachedMode && cachedMode !== 'unavailable' && !force) return cachedMode;
-  const dedicated = await sbRequest<unknown[]>('ivx_agent_states?select=agent_id&limit=1');
-  if (dedicated.ok) {
-    cachedMode = 'dedicated';
-    lastEnsureDetail = 'dedicated tables active';
-    return cachedMode;
-  }
-  const bootstrap = await tryDedicatedBootstrap();
-  if (bootstrap.ok) {
-    cachedMode = 'dedicated';
-    lastEnsureDetail = bootstrap.detail;
-    return cachedMode;
-  }
-  const jobs = await sbRequest<unknown[]>('ivx_agent_jobs?select=id&limit=1');
-  if (jobs.ok) {
-    cachedMode = 'jobs_fallback';
-    lastEnsureDetail = `durable jobs-table store active (Supabase ivx_agent_jobs); ${bootstrap.detail}`;
-    return cachedMode;
-  }
-  cachedMode = 'unavailable';
-  lastEnsureDetail = `no durable store reachable: ${jobs.error ?? 'unknown'}`;
-  return cachedMode;
+  const result = await storeResolver.resolve(force);
+  lastEnsureDetail = result.detail;
+  return result.mode;
 }
 
 /**
@@ -456,7 +443,7 @@ export async function ensureRealExecutionTables(): Promise<{ ok: boolean; create
 }
 
 export function activeStoreMode(): string {
-  return cachedMode ?? 'unprobed';
+  return storeResolver.snapshot()?.mode ?? 'unprobed';
 }
 
 // ── jobs_fallback typed-document helpers ─────────────────────────────────────
