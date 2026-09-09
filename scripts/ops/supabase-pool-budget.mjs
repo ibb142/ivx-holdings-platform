@@ -1,5 +1,15 @@
 import { pathToFileURL } from 'node:url';
 export const PROJECT = 'kvclcdjmjghndxsngfzb';
+export function poolConfigurationShape(rows) {
+  return {
+    container: Array.isArray(rows) ? 'array' : typeof rows,
+    entries: (Array.isArray(rows) ? rows : [rows]).slice(0,4).map(row => ({
+      primary: row?.database_type === 'PRIMARY',
+      poolSizeType: row?.default_pool_size === null ? 'null' : typeof row?.default_pool_size,
+      numericPoolSize: typeof row?.default_pool_size === 'number' ? row.default_pool_size : null,
+    })),
+  };
+}
 export function primaryPoolSizes(rows) {
   if (!rows || typeof rows!=='object') throw new Error('Invalid pool configuration');
   const pools=Array.isArray(rows)?rows.filter(row=>row.database_type==='PRIMARY'):[rows];
@@ -20,7 +30,9 @@ export async function run(fetchImpl=fetch,token=process.env.SUPABASE_ACCESS_TOKE
     if(!response.ok)throw new Error('Supabase '+method+' '+path+' HTTP '+response.status);
     return response.json();
   }
-  const before=primaryPoolSizes(await request('/config/database/pgbouncer'));
+  const configuration=await request('/config/database/pgbouncer');
+  console.log(JSON.stringify({poolConfigurationShape:poolConfigurationShape(configuration)}));
+  const before=primaryPoolSizes(configuration);
   // This incident's database has 60 slots, with Auth/Storage/PostgREST sharing
   // them. Bound external pool servers; this does not limit logical IA lanes.
   if (Math.max(...before)>15) throw new Error('Pool differs from audited configuration; review required');

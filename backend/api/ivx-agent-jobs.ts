@@ -585,7 +585,7 @@ async function workerTick(): Promise<void> {
 }
 
 export function startIVXAgentWorkerLoop(): void {
-  if (workerLoopStarted || readTrimmed(process.env.IVX_AGENT_WORKER_DISABLED).toLowerCase() === 'true') {
+  if (workerLoopStarted || process.env.IVX_PROCESS_ROLE === 'api' || readTrimmed(process.env.IVX_SUPABASE_RECOVERY_MODE).toLowerCase() === 'true' || readTrimmed(process.env.IVX_AGENT_WORKER_DISABLED).toLowerCase() === 'true') {
     return;
   }
   workerLoopStarted = true;
