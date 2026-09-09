@@ -10,8 +10,8 @@ test('rejects invalid hosts, other projects and disabled TLS',()=>{
 });
 test('constructs a connection only from an explicit Supabase password and encodes reserved characters',()=>{
   assert.equal(candidates({}).length,0);
-  const c=candidates({SUPABASE_DB_PASSWORD:'a@b#c'});
-  assert.equal(validateConnection(c[0].value).password,'a@b#c');
+  const c=candidates({SUPABASE_DB_PASSWORD:'a@b#c%'});
+  assert.equal(validateConnection(c[0].value).password,'a@b#c%');
 });
 for(const fromGithub of [false,true]) for(const probeFails of [true,false]) test(`sync requires a real successful probe: probeFails=${probeFails}, fromGithub=${fromGithub}`,async()=>{
   const savedFetch=globalThis.fetch, SavedClient=pg.Client, savedKey=process.env.RENDER_API_KEY;
@@ -142,4 +142,43 @@ test('trusts the official Supabase root while retaining certificate verification
  const cert=new crypto.X509Certificate(config.ssl.ca.at(-1));
  assert.equal(cert.fingerprint256,'80:70:25:AD:50:D4:ED:21:9D:2C:9C:7D:29:9C:00:4F:82:4E:B0:0C:F7:F6:5A:FE:F6:07:D0:7B:72:E6:CA:FA');
  assert.equal(cert.ca,true);assert.equal(cert.verify(cert.publicKey),true);
+});
+
+for (const vaultToken of ['test-owner-management','test-rejected-management']) test(`recovery validates the existing owner-vault credential once: ${vaultToken}`,async()=>{
+  const savedFetch=globalThis.fetch,savedLog=console.log;
+  const keys=['SUPABASE_SERVICE_ROLE_KEY','JWT_SECRET','IVX_OWNER_VARIABLES_ENCRYPTION_KEY','APP_SECRET'];
+  const saved=Object.fromEntries(keys.map(k=>[k,process.env[k]]));
+  const logs=[];let managementCalls=0,vaultReads=0;
+  try {
+    for(const k of keys)delete process.env[k];
+    Object.assign(process.env,{SUPABASE_SERVICE_ROLE_KEY:'test-service',JWT_SECRET:'test-encryption'});
+    console.log=value=>logs.push(value);
+    const iv=crypto.randomBytes(12);
+    const cipher=crypto.createCipheriv('aes-256-gcm',crypto.createHash('sha256').update('test-encryption').digest(),iv);
+    cipher.setAAD(Buffer.from('ivx_owner_variables:v1'));
+    const encrypted=Buffer.concat([cipher.update(vaultToken),cipher.final()]);
+    globalThis.fetch=async(url,init)=>{
+      assert.equal(init.method,undefined);assert.equal(init.body,undefined);
+      if(new URL(url).hostname==='kvclcdjmjghndxsngfzb.supabase.co') {
+        assert.equal(new URL(url).searchParams.get('name'),'eq.SUPABASE_ACCESS_TOKEN');
+        assert.equal(init.headers.apikey,'test-service');vaultReads++;
+        return Response.json([{encrypted_value:encrypted.toString('base64'),value_iv:iv.toString('base64'),value_tag:cipher.getAuthTag().toString('base64'),value_hash:crypto.createHash('sha256').update(vaultToken).digest('hex')}]);
+      }
+      assert.equal(url,'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/config/database/pooler');
+      managementCalls++;
+      if(init.headers.Authorization==='Bearer test-rejected-management')return new Response('',{status:401});
+      assert.equal(init.headers.Authorization,'Bearer test-owner-management');
+      return Response.json([{database_type:'PRIMARY',connection_string:'postgresql://postgres.kvclcdjmjghndxsngfzb:[YOUR-PASSWORD]@aws-0-us-west-2.pooler.supabase.com:6543/postgres'}]);
+    };
+    const found=await readPoolerCandidates([{serviceId:'github_actions',env:{SUPABASE_DB_PASSWORD:'existing%password'}}],'test-rejected-management');
+    assert.equal(vaultReads,1);
+    assert.equal(managementCalls,vaultToken==='test-owner-management'?2:1);
+    assert.equal(found.length,vaultToken==='test-owner-management'?1:0);
+    if(found.length)assert.equal(validateConnection(found[0].env.SUPABASE_POOLER_URL).password,'existing%password');
+    const publicLogs=logs.filter(line=>!line.startsWith('::add-mask::')).join('\n');
+    assert.ok(!publicLogs.includes(vaultToken));assert.ok(!publicLogs.includes('existing%password'));
+  } finally {
+    globalThis.fetch=savedFetch;console.log=savedLog;
+    for(const k of keys)if(saved[k]===undefined)delete process.env[k];else process.env[k]=saved[k];
+  }
 });
