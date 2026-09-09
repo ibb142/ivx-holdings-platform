@@ -731,7 +731,7 @@ async function requestIVXAITextInternal(input: {
   const promptChars = prompt.length + system.length + messages.reduce((sum, m) => sum + m.content.length, 0);
   const adaptiveTimeoutMs = computeAdaptiveTimeoutMs({ promptChars, maxOutputTokens: input.maxOutputTokens });
   const queueLane: IVXAIQueueLane = classifyRequestLane({ promptChars, maxOutputTokens: input.maxOutputTokens });
-  const queueSlot = await acquireAIQueueSlot(queueLane);
+  const queueSlot = await acquireAIQueueSlot(queueLane, { signal: input.abortSignal });
   const callStartedAt = Date.now();
 
   let result: Awaited<ReturnType<typeof generateText>> | null = null;
@@ -1073,7 +1073,7 @@ export async function* streamIVXAIText(input: {
   const promptChars = prompt.length + system.length + messages.reduce((sum, m) => sum + m.content.length, 0);
   const adaptiveTimeoutMs = computeAdaptiveTimeoutMs({ promptChars, maxOutputTokens: input.maxOutputTokens });
   const queueLane = classifyRequestLane({ promptChars, maxOutputTokens: input.maxOutputTokens });
-  const queueSlot = await acquireAIQueueSlot(queueLane);
+  const queueSlot = await acquireAIQueueSlot(queueLane, { signal: input.abortSignal });
   const callStartedAt = Date.now();
 
   ensureIVXAIGatewayEnvironment();
