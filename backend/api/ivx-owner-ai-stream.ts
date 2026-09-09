@@ -76,6 +76,7 @@ export async function handleIVXOwnerAIStreamRequest(request: Request): Promise<R
           system,
           prompt,
           maxOutputTokens,
+          abortSignal: request.signal,
         })) {
           controller.enqueue(encoder.encode(sseLine(chunk)));
         }
