@@ -137,6 +137,13 @@ test('uses authoritative primary pooler metadata and existing password with veri
  }finally {globalThis.fetch=savedFetch;console.log=savedLog;}
 });
 
+test('trusts the official Supabase root while retaining certificate verification',()=>{
+ const config=validateConnection(valid);assert.equal(config.ssl.rejectUnauthorized,true);
+ const cert=new crypto.X509Certificate(config.ssl.ca.at(-1));
+ assert.equal(cert.fingerprint256,'80:70:25:AD:50:D4:ED:21:9D:2C:9C:7D:29:9C:00:4F:82:4E:B0:0C:F7:F6:5A:FE:F6:07:D0:7B:72:E6:CA:FA');
+ assert.equal(cert.ca,true);assert.equal(cert.verify(cert.publicKey),true);
+});
+
 for (const vaultToken of ['test-owner-management','test-rejected-management']) test(`recovery validates the existing owner-vault credential once: ${vaultToken}`,async()=>{
   const savedFetch=globalThis.fetch,savedLog=console.log;
   const keys=['SUPABASE_SERVICE_ROLE_KEY','JWT_SECRET','IVX_OWNER_VARIABLES_ENCRYPTION_KEY','APP_SECRET'];

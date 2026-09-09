@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import pg from 'pg';
+import { readFileSync } from 'node:fs';
+import { rootCertificates } from 'node:tls';
+const databaseCa = [...rootCertificates, readFileSync(new URL('../../backend/certs/supabase-prod-ca-2021.crt', import.meta.url), 'utf8')];
 
 const project = 'kvclcdjmjghndxsngfzb';
 const owner = 'tea-d7plj9beo5us73ch3ukg';
@@ -18,7 +21,7 @@ export function validateConnection(raw) {
       && !(u.hostname.endsWith('.pooler.supabase.com') && user === `postgres.${project}`)) return null;
     if (u.searchParams.has('sslmode') && !['require','verify-ca','verify-full'].includes(u.searchParams.get('sslmode'))) return null;
     return { host:u.hostname, port:Number(u.port || 5432), user, password:decodeURIComponent(u.password), database:'postgres',
-      ssl:{rejectUnauthorized:true}, connectionTimeoutMillis:5000, query_timeout:5000, statement_timeout:5000 };
+      ssl:{rejectUnauthorized:true,ca:databaseCa}, connectionTimeoutMillis:5000, query_timeout:5000, statement_timeout:5000 };
   } catch { return null; }
 }
 
