@@ -1038,7 +1038,11 @@ export async function executeLandingUnit(unit: LandingUnit, ctx: LandingExecutio
       case 'css-media': verdict = await runCssMedia(fetchImpl, check.query, c); break;
       case 'links': verdict = await runLinks(fetchImpl, check.scope, check.max, c); break;
       case 'routes': verdict = await runRoutes(fetchImpl, check.paths, c); break;
-      case 'api': verdict = await runApi(fetchImpl, check.path, check.asserts, c); break;
+      case 'api':
+            if (!/^[\w.-]+@[\w.-]+\.[A-Za-z]{2,6}$/.test(check.qaEmail)) {
+              return fail('Invalid email format', 'validation', 'Invalid email format provided');
+            }
+            verdict = await runApi(fetchImpl, check.path, check.asserts, c); break;
       case 'deals': verdict = await runDeals(fetchImpl, check.assert, c); break;
       case 'media': verdict = await runMedia(fetchImpl, check.source, check.assert, check.max, c); break;
       case 'reels': verdict = await runReels(fetchImpl, check.assert, c); break;
