@@ -3537,10 +3537,23 @@ export default function IVXOwnerChatRoute() {
           metadata: { mode, requestClass: trustContext.requestClass, confirmedSensitiveAction, trustStates: trustContext.namedStates, sessionId: ownerSessionIdRef.current }});
         console.log('[IVXOwnerChatRoute] Owner message sent to Supabase. trust:', trustContext.namedStates, 'confirmed:', confirmedSensitiveAction);
       } catch (sendError) {
-        console.log('[IVX_TRACE] 2.X_SEND_QUEUE_THREW_NO_AI_TRIGGER', { clientId, errorMessage: sendError instanceof Error ? sendError.message : String(sendError) });
-        const wdSendFail = watchdogTraceId ? activeWatchdogTracesRef.current.get(watchdogTraceId) ?? null : null;
-        wdSendFail?.fail('AI_TRIGGER_DECISION', `sendQueue threw: ${sendError instanceof Error ? sendError.message : String(sendError)}`);
-        throw sendError instanceof Error ? sendError : new Error(String(sendError));
+        const persistenceError = sendError instanceof Error ? sendError.message : String(sendError);
+        if (startAssistantImmediately) {
+          // The AI request was deliberately started before persistence. Treat a
+          // degraded Supabase write as a background concern: the Owner AI route
+          // also persists the user/assistant pair, and retrying this entire
+          // mutation would start a second AI request that cancels the first one.
+          console.log('[IVX_TRACE] 2.4_BACKGROUND_PERSISTENCE_DEGRADED_AI_CONTINUES', {
+            clientId,
+            errorMessage: persistenceError,
+          });
+          watchdogTrace?.pass('AI_TRIGGER_DECISION', 'persistence=degraded ai=continues');
+        } else {
+          console.log('[IVX_TRACE] 2.X_SEND_QUEUE_THREW_NO_AI_TRIGGER', { clientId, errorMessage: persistenceError });
+          const wdSendFail = watchdogTraceId ? activeWatchdogTracesRef.current.get(watchdogTraceId) ?? null : null;
+          wdSendFail?.fail('AI_TRIGGER_DECISION', `sendQueue threw: ${persistenceError}`);
+          throw sendError instanceof Error ? sendError : new Error(String(sendError));
+        }
       }
 
       if (trustContext.requiresElevatedConfirmation && !confirmedSensitiveAction) {
@@ -3589,6 +3602,10 @@ export default function IVXOwnerChatRoute() {
         watchdogTrace?.complete('SUCCESS');
       }
     },
+    // The transport queue owns persistence retries. Retrying this mutation at
+    // the React Query layer would duplicate side effects and cancel the live AI
+    // request via the per-conversation supersession guard.
+    retry: false,
     onSuccess: async (_data, variables) => {
       // Refetch the authoritative remote thread FIRST so the just-sent owner row
       // is present in `messages` BEFORE the optimistic pending copy is removed.

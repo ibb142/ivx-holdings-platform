@@ -87,6 +87,21 @@ describe('IVX IA chat device certificate regression', () => {
     expect(chatSource.slice(decisionIndex, triggerIndex)).toContain('!trustContext.requiresElevatedConfirmation');
   });
 
+  test('does not cancel or duplicate a running AI reply when background persistence degrades', () => {
+    const mutationIndex = chatSource.indexOf('const sendMessageMutation = useMutation');
+    const degradedIndex = chatSource.indexOf('2.4_BACKGROUND_PERSISTENCE_DEGRADED_AI_CONTINUES', mutationIndex);
+    const modeContinuationIndex = chatSource.indexOf("if (mode === 'ai_only')", degradedIndex);
+    const mutationEndIndex = chatSource.indexOf('\n\n  useEffect(', mutationIndex);
+
+    expect(mutationIndex).toBeGreaterThan(-1);
+    expect(degradedIndex).toBeGreaterThan(mutationIndex);
+    expect(modeContinuationIndex).toBeGreaterThan(degradedIndex);
+    expect(chatSource.slice(degradedIndex - 700, modeContinuationIndex)).toContain('if (startAssistantImmediately)');
+    expect(chatSource.slice(degradedIndex, modeContinuationIndex)).toContain("persistence=degraded ai=continues");
+    expect(mutationEndIndex).toBeGreaterThan(modeContinuationIndex);
+    expect(chatSource.slice(mutationIndex, mutationEndIndex)).toContain('retry: false');
+  });
+
   test('hard-gates app restart persistence without clearing state', () => {
     const stopIndex = flowSource.indexOf('- stopApp');
     const launchIndex = flowSource.indexOf('- launchApp:');
