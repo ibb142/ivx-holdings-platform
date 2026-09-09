@@ -41,12 +41,26 @@ async function request(url, token, init={}) {
   return r.json();
 }
 
-async function renderKey() {
+export async function renderKey() {
   const direct=(process.env.RENDER_API_KEY || process.env.IVX_RENDER_API_KEY || '').trim();
   if (direct) { mask(direct); return direct; }
   const service=process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!service) throw new Error('github_supabase_service_binding_missing');
-  const rows=await request(`${base}/rest/v1/ivx_owner_variables?select=encrypted_value,value_iv,value_tag,value_hash&name=eq.RENDER_API_KEY`,service,{headers:{apikey:service}});
+  let rows;
+  try {
+    rows=await request(`${base}/rest/v1/ivx_owner_variables?select=encrypted_value,value_iv,value_tag,value_hash&name=eq.RENDER_API_KEY&limit=2`,service,{headers:{apikey:service}});
+  } catch(error) {
+    const transient=error.name==='TimeoutError' || error.name==='TypeError' || /^remote_http_5[0-9]{2}$/.test(error.message);
+    if(!transient) throw new Error('owner_variable_rest_access_failed');
+    const management=process.env.SUPABASE_ACCESS_TOKEN?.trim();
+    if(!management) throw new Error('owner_variable_rest_unavailable_management_binding_missing');
+    console.log('owner_variable_rest_unavailable: trying_read_only_management_query');
+    try {
+      rows=await request(`https://api.supabase.com/v1/projects/${project}/database/query`,management,{
+        method:'POST',body:JSON.stringify({query: "SELECT encrypted_value, value_iv, value_tag, value_hash FROM public.ivx_owner_variables WHERE name = 'RENDER_API_KEY' LIMIT 2",read_only:true})
+      });
+    } catch { throw new Error('owner_variable_management_read_failed'); }
+  }
   if (!Array.isArray(rows) || rows.length!==1) throw new Error('render_owner_variable_missing');
   const row=rows[0];
   const secrets=[process.env.IVX_OWNER_VARIABLES_ENCRYPTION_KEY,process.env.APP_SECRET,process.env.JWT_SECRET,
