@@ -177,8 +177,10 @@ export async function main() {
   }
   const groups=await readLinkedGroups(key);
   console.log(JSON.stringify({linkedGroupsAudited:groups.length}));
+  const github={serviceId:'github_actions',env:process.env};
+  console.log(JSON.stringify({source:'github_actions',credentialPresence:Object.fromEntries([...aliases,'SUPABASE_DB_PASSWORD'].map(n=>[n,Boolean(process.env[n]?.trim())])),connectionIssues:Object.fromEntries(aliases.map(n=>[n,connectionIssue(process.env[n])]))}));
   let chosen=null;
-  for(const entry of [...configurations,...groups]) for(const candidate of candidates(entry.env)) {
+  for(const entry of [...configurations,...groups,github]) for(const candidate of candidates(entry.env)) {
     if(chosen) break;
     if(connectionIssue(candidate.value)!=='valid')continue;
     const config=validateConnection(candidate.value); if(!config) continue;

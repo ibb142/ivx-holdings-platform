@@ -13,15 +13,16 @@ test('constructs a connection only from an explicit Supabase password and encode
   const c=candidates({SUPABASE_DB_PASSWORD:'a@b#c'});
   assert.equal(validateConnection(c[0].value).password,'a@b#c');
 });
-for(const probeFails of [true,false]) test(`sync requires a real successful probe: probeFails=${probeFails}`,async()=>{
+for(const fromGithub of [false,true]) for(const probeFails of [true,false]) test(`sync requires a real successful probe: probeFails=${probeFails}, fromGithub=${fromGithub}`,async()=>{
   const savedFetch=globalThis.fetch, SavedClient=pg.Client, savedKey=process.env.RENDER_API_KEY;
-  const savedLog=console.log;
+  const savedLog=console.log, savedDb=process.env.SUPABASE_DB_URL;
   const envs=new Map(); let puts=0, closed=0;
   const api='srv-d7t9ivreo5us73ftose0', worker='srv-d9i15fg4n6ts73bn00j0';
-  envs.set(api,{SUPABASE_DB_URL:valid,UNRELATED:'preserved'});envs.set(worker,{UNRELATED:'preserved'});
+  envs.set(api,{...(fromGithub?{}:{SUPABASE_DB_URL:valid}),UNRELATED:'preserved'});envs.set(worker,{UNRELATED:'preserved'});
   try {
     console.log=()=>{};
     process.env.RENDER_API_KEY='unit-test-render-key';
+    if(fromGithub)process.env.SUPABASE_DB_URL=valid;else delete process.env.SUPABASE_DB_URL;
     pg.Client=class {
       on(){}
       async connect(){ if(probeFails) throw new Error('test unavailable'); }
@@ -33,7 +34,7 @@ for(const probeFails of [true,false]) test(`sync requires a real successful prob
       if(u.pathname==='/v1/env-groups')return Response.json([]);
       const id=u.pathname.split('/')[3];assert.ok(envs.has(id));
       if(init.method==='PUT') {
-        assert.equal(id,worker);assert.ok(u.pathname.endsWith('/env-vars/SUPABASE_DB_URL'));
+        if(!fromGithub)assert.equal(id,worker);assert.ok(u.pathname.endsWith('/env-vars/SUPABASE_DB_URL'));
         envs.get(id).SUPABASE_DB_URL=JSON.parse(init.body).value;puts++;
         return Response.json({});
       }
@@ -41,10 +42,11 @@ for(const probeFails of [true,false]) test(`sync requires a real successful prob
       return Response.json({ownerId:'tea-d7plj9beo5us73ch3ukg',repo:'https://github.com/ibb142/ivx-holdings-platform'});
     };
     if(probeFails) await assert.rejects(main(),/no_verified_same_project/); else await main();
-    assert.equal(puts,probeFails?0:1);assert.equal(closed,1);
+    assert.equal(puts,probeFails?0:fromGithub?2:1);assert.equal(closed,1);
     assert.equal(envs.get(worker).UNRELATED,'preserved');
   } finally {
     globalThis.fetch=savedFetch;pg.Client=SavedClient;console.log=savedLog;
+    if(savedDb===undefined)delete process.env.SUPABASE_DB_URL;else process.env.SUPABASE_DB_URL=savedDb;
     if(savedKey===undefined)delete process.env.RENDER_API_KEY;else process.env.RENDER_API_KEY=savedKey;
   }
 });
