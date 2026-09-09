@@ -218,6 +218,24 @@ export async function readPostgresFleetSloTasks(): Promise<Task[]> {
   return readPostgresCurrentTasks(['LEASED', 'RUNNING', 'BLOCKED', 'RETRYING', 'EXECUTION_COMPLETED', 'QA_IN_PROGRESS']);
 }
 
+/** One latest observation per current patrol; never hydrate the historical task ledger. */
+export async function readPostgresPatrolObservations(sha: string): Promise<import('./ivx-autonomous-recovery-health').PatrolObservation[]> {
+  if (!/^[a-f0-9]{40}$/i.test(sha)) throw new Error('Invalid patrol source SHA');
+  type Row = import('./ivx-autonomous-recovery-health').PatrolObservation;
+  const prefix = `landing-p0-patrol:${sha}:`;
+  const directRead = async () => (await getDirectPool().query<Row>(
+    "select task_id, assigned_agent_number, payload->'evidence'->-1 as evidence from public.ivx_autonomous_tasks where idempotency_key like $1 order by assigned_agent_number limit 113", [prefix + '%'])).rows;
+  let rows: Row[];
+  if (preferDirectTransport()) rows = await directRead();
+  else {
+    try {
+      rows = await restRequest<Row[]>(`ivx_autonomous_tasks?select=task_id,assigned_agent_number,evidence:payload->evidence->-1&idempotency_key=like.${prefix}*&order=assigned_agent_number&limit=113`, { method: 'GET' }, { timeoutMs: TRUTH_TIMEOUT_MS, attempts: 1 });
+    } catch (error) { if (!mayFailoverRead(error)) throw error; rows = await directRead(); }
+  }
+  if (!Array.isArray(rows) || rows.length > 112) throw new Error('Patrol observation identities are ambiguous');
+  return rows;
+}
+
 /** The reconciler only inspects queued tasks that still carry a lease. */
 export async function readPostgresRecoveryTasks(): Promise<Task[]> {
   const key = `recovery:${taskMutationRevision}`;

@@ -83,6 +83,22 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with: { bun-version: 1.3.9 }
       - run: cd expo && bun install --frozen-lockfile
+      - name: Isolate Playwright dependencies from the unrelated Chrome APT feed
+        run: |
+          # Playwright downloads its own Chromium. Keep Ubuntu dependency checks
+          # intact while excluding the runner's independently updated Chrome feed.
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          def chrome_feed(text):
+              return "dl.google.com/linux/chrome" in text
+          for path in Path("/etc/apt/sources.list.d").glob("*"):
+              if path.suffix == ".list":
+                  lines = path.read_text().splitlines(keepends=True)
+                  path.write_text("".join("# Playwright: unrelated Chrome feed disabled " + line if chrome_feed(line) and not line.lstrip().startswith("#") else line for line in lines))
+              elif path.suffix == ".sources":
+                  blocks = path.read_text().split("\n\n")
+                  path.write_text("\n\n".join(block for block in blocks if not chrome_feed(block)))
+          PY
       - name: Install Playwright browsers
         working-directory: expo
         run: bunx playwright install --with-deps chromium
