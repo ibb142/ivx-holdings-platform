@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { writeFile, mkdir } from 'node:fs/promises';
+import { processIdentityMatchesObservedInstance } from './ivx-fleet-ha-identities';
 
 const base = process.env.API_BASE;
 const sha = process.env.IVX_TARGET_SHA || process.env.GITHUB_SHA || '';
@@ -154,7 +155,11 @@ if (process.env.IVX_HA_RESTART_WORKER === 'true') {
     const start = Date.now();
     const response = await fetch(base + '/health', { redirect: 'error', signal: AbortSignal.timeout(5000), headers: { Connection: 'close' } });
     assert.equal(response.status, 200, 'API availability failed during worker restart');
-    const h = await response.json(); assert.equal(h.commit, sha); assert(apiIds.has(h.instanceId));
+    const h = await response.json(); assert.equal(h.commit, sha);
+    assert(
+      processIdentityMatchesObservedInstance(h.instanceId, apiIds),
+      `Health process ${String(h.instanceId || 'missing')} is not hosted by a certified API instance`,
+    );
     health.push({ instanceId: h.instanceId, ms: Date.now() - start, at: new Date().toISOString() });
     const current = await (renderKey ? physicalTopology() : topology()).catch(() => null);
     const currentWorkers = current ? workerProcessIds(current) : new Set<string>();
