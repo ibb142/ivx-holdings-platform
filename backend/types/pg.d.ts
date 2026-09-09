@@ -1,7 +1,7 @@
 declare module 'pg' {
   export type ClientConfig = {
     host: string; port: number; user: string; password: string; database: string;
-    ssl: { rejectUnauthorized: boolean };
+    ssl: { rejectUnauthorized: boolean; ca?: string | string[] };
     application_name?: string; connectionTimeoutMillis?: number;
     query_timeout?: number; statement_timeout?: number;
   };
@@ -24,7 +24,7 @@ declare module 'pg' {
   export class Pool {
     constructor(config: {
       connectionString: string;
-      ssl?: { rejectUnauthorized: boolean };
+      ssl?: { rejectUnauthorized: boolean; ca?: string | string[] };
       application_name?: string;
       max?: number;
       idleTimeoutMillis?: number;

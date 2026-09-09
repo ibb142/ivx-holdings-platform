@@ -13,14 +13,17 @@ const user = {
 } as User;
 let providerResult: { data: { user: User | null }; error: AuthError | null };
 let profile: Record<string, unknown>;
+let profileStatus: number;
+let profileError: { message: string } | null;
 const getUser = mock(async (_token: string) => providerResult);
-const maybeSingle = mock(async () => ({ data: profile, error: null }));
+const maybeSingle = mock(async () => ({ data: profile, error: profileError, status: profileStatus }));
+const abortSignal = mock((_signal: AbortSignal) => ({ maybeSingle }));
 const networkGuard = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected live request in isolated auth contract'));
 const providerModule = Bun.resolveSync('@supabase/supabase-js', new URL('../../expo/shared/ivx/', import.meta.url).pathname);
 mock.module(providerModule, () => ({
   createClient: () => ({
     auth: { getUser },
-    from: () => ({ select: () => ({ eq: () => ({ maybeSingle }) }) }),
+    from: () => ({ select: () => ({ eq: () => ({ abortSignal }) }) }),
   }),
 }));
 const { IVXAuthServiceUnavailableError, resolveIVXAuthenticatedRequest } = await import('../../expo/shared/ivx/access-control');
@@ -31,8 +34,11 @@ const auditLog = spyOn(console, 'log').mockImplementation(() => {});
 beforeEach(() => {
   providerResult = { data: { user }, error: null };
   profile = { id: user.id, email: user.email, role: 'owner' };
+  profileStatus = 200;
+  profileError = null;
   getUser.mockReset().mockImplementation(async () => providerResult);
-  maybeSingle.mockClear();
+  maybeSingle.mockReset().mockImplementation(async () => ({ data: profile, error: profileError, status: profileStatus }));
+  abortSignal.mockClear();
 });
 afterEach(() => {
   auditLog.mockClear();
@@ -121,5 +127,58 @@ test('a recovered provider permits only its successfully verified owner and clea
     expect(clearSpy).toHaveBeenCalled();
   } finally {
     clearSpy.mockRestore();
+  }
+});
+
+test('an unavailable profile source cannot fall back to an owner role in metadata', async () => {
+  for (const status of [0, 429, 500, 503]) {
+    profileStatus = status;
+    profileError = { message: 'private profile transport diagnostic' };
+    const failure = await resolveIVXAuthenticatedRequest(request(), '[availability-test]').catch(error => error);
+    expect(failure).toBeInstanceOf(IVXAuthServiceUnavailableError);
+    expect(failure.status).toBe(503);
+  }
+  maybeSingle.mockRejectedValueOnce(new TypeError('private profile network diagnostic'));
+  await expect(resolveIVXAuthenticatedRequest(request(), '[availability-test]')).rejects.toBeInstanceOf(IVXAuthServiceUnavailableError);
+});
+
+test('a stuck profile request is aborted and its deadline is cleared', async () => {
+  maybeSingle.mockImplementationOnce(() => new Promise(() => {}));
+  const originalSetTimeout = globalThis.setTimeout;
+  const handles: ReturnType<typeof setTimeout>[] = [];
+  const timerSpy = spyOn(globalThis, 'setTimeout').mockImplementation(((callback, delay, ...args) => {
+    const handle = originalSetTimeout(callback, delay === 5_000 ? 5 : delay, ...args);
+    if (delay === 5_000) handles.push(handle);
+    return handle;
+  }) as typeof setTimeout);
+  const clearSpy = spyOn(globalThis, 'clearTimeout');
+  try {
+    const failure = await resolveIVXAuthenticatedRequest(request(), '[availability-test]').catch(error => error);
+    expect(failure).toBeInstanceOf(IVXAuthServiceUnavailableError);
+    expect(abortSignal.mock.calls[0][0].aborted).toBe(true);
+    expect(handles).toHaveLength(1);
+    expect(clearSpy).toHaveBeenCalledWith(handles[0]);
+  } finally {
+    timerSpy.mockRestore();
+    clearSpy.mockRestore();
+  }
+});
+
+test('profile verification uses only the remaining session deadline', async () => {
+  const now = Date.now();
+  const clock = spyOn(Date, 'now').mockReturnValue(now);
+  getUser.mockImplementationOnce(async () => {
+    clock.mockReturnValue(now + 14_990);
+    return providerResult;
+  });
+  maybeSingle.mockImplementationOnce(() => new Promise(() => {}));
+  const timerSpy = spyOn(globalThis, 'setTimeout');
+  try {
+    await expect(resolveIVXAuthenticatedRequest(request(), '[availability-test]')).rejects.toBeInstanceOf(IVXAuthServiceUnavailableError);
+    expect(timerSpy.mock.calls.map(call => call[1])).toEqual([15_000, 10]);
+    expect(abortSignal.mock.calls[0][0].aborted).toBe(true);
+  } finally {
+    clock.mockRestore();
+    timerSpy.mockRestore();
   }
 });
