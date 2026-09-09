@@ -29,7 +29,9 @@ type JobDoc = {
   updated_at?: string;
 };
 
-async function restGet<T>(path: string, timeoutMs = 3000): Promise<{ ok: boolean; status: number; data: T | null; error: string | null }> {
+// A bounded history read includes transfer/JSON decoding after the indexed scan.
+// Three seconds cut off valid 2,000-row reads and triggered more fallback traffic.
+async function restGet<T>(path: string, timeoutMs = 15_000): Promise<{ ok: boolean; status: number; data: T | null; error: string | null }> {
   const binding = resolveSupabaseBinding();
   if (binding.missing.length) {
     return { ok: false, status: 0, data: null, error: `Supabase missing ${binding.missing.join(', ')}` };
@@ -47,10 +49,11 @@ async function restGet<T>(path: string, timeoutMs = 3000): Promise<{ ok: boolean
     let data: T | null = null;
     try { data = text ? JSON.parse(text) as T : null; } catch { data = null; }
     return {
-      ok: response.ok,
+      ok: response.ok && Array.isArray(data),
       status: response.status,
-      data: response.ok ? data : null,
-      error: response.ok ? null : `HTTP ${response.status}: ${text.slice(0, 240)}`,
+      data: response.ok && Array.isArray(data) ? data : null,
+      error: !response.ok ? `HTTP ${response.status}: ${text.slice(0, 240)}`
+        : Array.isArray(data) ? null : 'Invalid dashboard ledger array response',
     };
   } catch (error) {
     return { ok: false, status: 0, data: null, error: error instanceof Error ? error.message : String(error) };
@@ -88,17 +91,17 @@ function normalizeExecution(value: unknown): ExecutionRow | null {
   };
 }
 
-async function fetchDedicatedExecutions(limit: number): Promise<{ ok: boolean; rows: ExecutionRow[]; error: string | null }> {
+async function fetchDedicatedExecutions(limit: number): Promise<{ ok: boolean; status: number; rows: ExecutionRow[]; error: string | null }> {
   const result = await restGet<ExecutionRow[]>(`ivx_agent_executions?select=*&order=started_at.desc.nullslast&limit=${limit}`);
-  return { ok: result.ok, rows: (result.data ?? []).map(normalizeExecution).filter((r): r is ExecutionRow => Boolean(r)), error: result.error };
+  return { ok: result.ok, status: result.status, rows: (Array.isArray(result.data) ? result.data : []).map(normalizeExecution).filter((r): r is ExecutionRow => Boolean(r)), error: result.error };
 }
 
-async function fetchFallbackExecutions(limit: number): Promise<{ ok: boolean; rows: ExecutionRow[]; error: string | null }> {
+async function fetchFallbackExecutions(limit: number): Promise<{ ok: boolean; status: number; rows: ExecutionRow[]; error: string | null }> {
   const result = await restGet<JobDoc[]>(`ivx_agent_jobs?type=eq.ivx_rec_execution&select=id,type,status,payload,created_at,updated_at&order=created_at.desc&limit=${limit}`);
-  const rows = (result.data ?? [])
+  const rows = (Array.isArray(result.data) ? result.data : [])
     .map((doc) => normalizeExecution(doc.payload))
     .filter((r): r is ExecutionRow => Boolean(r));
-  return { ok: result.ok, rows, error: result.error };
+  return { ok: result.ok, status: result.status, rows, error: result.error };
 }
 
 export async function readAgentDashboardLedger(limit = 500): Promise<AgentDashboardLedger> {
@@ -112,16 +115,15 @@ export async function readAgentDashboardLedger(limit = 500): Promise<AgentDashbo
   let execResult = firstExecutions;
   if (execResult.ok && mode !== 'jobs_fallback') mode = 'dedicated';
 
-  // If the cached mode was not yet established, probe both read paths without
-  // fabricating success. The first real successful source becomes the dashboard source.
-  if (!execResult.ok && mode !== 'dedicated') {
+  // Switch persistence only when its table is absent. Timeouts and outages must
+  // not multiply reads or replace a failed canonical ledger with another store.
+  if (!execResult.ok && execResult.status === 404 && mode === 'jobs_fallback') {
     const dedicated = await fetchDedicatedExecutions(safeLimit);
     if (dedicated.ok) {
       mode = 'dedicated';
       execResult = dedicated;
     }
-  }
-  if (!execResult.ok && mode !== 'jobs_fallback') {
+  } else if (!execResult.ok && execResult.status === 404 && mode !== 'jobs_fallback') {
     const fallback = await fetchFallbackExecutions(safeLimit);
     if (fallback.ok) {
       mode = 'jobs_fallback';

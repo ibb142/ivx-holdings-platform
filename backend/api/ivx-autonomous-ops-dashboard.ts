@@ -86,11 +86,13 @@ function refreshOptionalInputs() {
     .finally(() => { optionalRead = null; });
 }
 const readSharedInputs = createDashboardReadCache(async () => {
-  const [ledger, fleetSignals] = await Promise.all([
-    readAgentDashboardLedger(2000), readFleetDashboardSignals(),
-  ]);
-  return { ledger, fleetSignals };
-}, ({ ledger, fleetSignals }) => ledger.ok && fleetSignals.status === 'AVAILABLE');
+  const ledger = await readAgentDashboardLedger(2000);
+  const ledgerObservedAt = new Date().toISOString();
+  // Observe live work after the larger history read, so its real timestamp is
+  // still fresh when the owner receives the response. Keep history time explicit.
+  const fleetSignals = ledger.ok ? await readFleetDashboardSignals() : null;
+  return { ledger, fleetSignals, ledgerObservedAt };
+}, ({ ledger, fleetSignals }) => ledger.ok && fleetSignals?.status === 'AVAILABLE');
 
 export async function handleAutonomousOpsDashboardRequest(request:Request):Promise<Response>{
   try{await assertIVXOwnerOnly(request);}catch(err){return ownerOnlyJson({ok:false,error:err instanceof Error?err.message:'unauthorized'},401);}
@@ -107,8 +109,8 @@ export async function handleAutonomousOpsDashboardRequest(request:Request):Promi
   else if(range==='30d'){start=now-30*86400000;label='Last 30 days';}
 
   refreshOptionalInputs();
-  const { value: { ledger, fleetSignals }, observedAt } = await readSharedInputs();
-  if (!ledger.ok) return ownerOnlyJson({ok:false,error:'Durable dashboard telemetry is unavailable.'},503);
+  const { value: { ledger, fleetSignals, ledgerObservedAt }, observedAt } = await readSharedInputs();
+  if (!ledger.ok || !fleetSignals) return ownerOnlyJson({ok:false,error:'Durable dashboard telemetry is unavailable.'},503);
   const latestReport=optionalReport,ownerActions=optionalActions;
   const productivity24h=buildAutonomousProductivity24h(ledger.executions,{now,fleetSize:112,landingBudgetHours:Number.parseFloat(process.env.IVX_LANDING_VERIFIED_HOURS_BUDGET??'120')||120});
   const productivityByAgent=new Map(productivity24h.perAgent.map(p=>[p.agentId,p]));
@@ -190,7 +192,7 @@ export async function handleAutonomousOpsDashboardRequest(request:Request):Promi
   const realAgentCount=agents.filter(a=>a.tasksStartedToday>0||a.lastActivityTime!==null).length;
   const runtimeCommit=process.env.RENDER_GIT_COMMIT??process.env.GIT_COMMIT_SHA??null;
   return ownerOnlyJson({ok:true,dashboard:{marker:IVX_AUTONOMOUS_OPS_DASHBOARD_MARKER,ledgerMarker:IVX_AGENT_DASHBOARD_LEDGER_MARKER,generatedAt:observedAt,
-    fleetSignals,servedBy:{instanceId:autonomousWorkerInstanceId(),role:'api'},history:{limit:2000,possiblyTruncated:ledger.executions.length===2000,returnedActivityItems:Math.min(100,activityItems.length)},
+    fleetSignals,servedBy:{instanceId:autonomousWorkerInstanceId(),role:'api'},history:{generatedAt:ledgerObservedAt,limit:2000,possiblyTruncated:ledger.executions.length===2000,returnedActivityItems:Math.min(100,activityItems.length)},
     backendCommitSha:runtimeCommit,backendBootTime:null,backendRouteCount:0,githubHeadSha:null,commitMatch:false,dateRange:{start:new Date(start).toISOString(),end:new Date(now).toISOString(),label},
     agents,activityItems:activityItems.slice(0,100),categoryBreakdown,dailySummary,liveActivityFeed:liveActivityFeed.slice(0,100),ownerActionRequests:ownerActions,deploymentStatus:{renderDeployId:null,renderDeployStatus:null,renderCommitSha:runtimeCommit,productionHealthy:ledger.ok&&fleetSignals.status==='AVAILABLE'},
     realAgentCount,placeholderAgentCount:agents.length-realAgentCount,rolling24h,productivity24h,
