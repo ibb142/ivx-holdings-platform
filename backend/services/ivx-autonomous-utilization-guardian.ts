@@ -2,10 +2,10 @@ import { getFleetSloSnapshot, type FleetSloSnapshot } from './ivx-fleet-slo';
 import { autonomousDoctorRepairEnabled } from './ivx-autonomous-control-policy';
 import type { IVXWorkerJobInput } from './ivx-senior-developer-worker';
 
-export const IVX_AUTONOMOUS_UTILIZATION_GUARDIAN_MARKER = 'ivx-utilization-reasoning-bridge-v2-2026-09-09';
+export const IVX_AUTONOMOUS_UTILIZATION_GUARDIAN_MARKER = 'ivx-utilization-reasoning-bridge-v3-2026-09-09';
 const CHECK_INTERVAL_MS = 60_000;
 const COOLDOWN_MS = 15 * 60_000;
-type Diagnosis = 'EXECUTION_WITHOUT_RESULTS' | 'DISPATCH_OR_CAPACITY_GAP' | 'PARTIAL_PRODUCTIVITY';
+type Diagnosis = 'TELEMETRY_UNAVAILABLE' | 'EXECUTION_WITHOUT_RESULTS' | 'DISPATCH_OR_CAPACITY_GAP' | 'PARTIAL_PRODUCTIVITY';
 type Dependencies = {
   snapshot: () => FleetSloSnapshot | null;
   enabled: () => boolean;
@@ -13,7 +13,7 @@ type Dependencies = {
   enqueue: (input: IVXWorkerJobInput) => Promise<{ job: { jobId: string }; attached: boolean }>;
 };
 export type GuardianStatus = {
-  action: 'WAITING_FOR_EVIDENCE' | 'OBSERVE_ONLY' | 'HEALTHY' | 'CONFIRMING_BREACH' | 'COOLDOWN' | 'REPAIR_QUEUED' | 'REPAIR_ATTACHED' | 'ERROR';
+  action: 'WAITING_FOR_EVIDENCE' | 'OBSERVE_ONLY' | 'HEALTHY' | 'CONFIRMING_BREACH' | 'COOLDOWN' | 'REPAIR_QUEUED' | 'REPAIR_ATTACHED' | 'RETRY_BACKOFF' | 'ERROR';
   diagnosis: Diagnosis | null;
   jobId: string | null;
   error: string | null;
@@ -25,12 +25,16 @@ export class UtilizationReasoningGuardian {
   private previousSample: string | null = null;
   private previousIncident: string | null = null;
   private submittedAt: number | null = null;
+  private retryAfter = 0;
+  private failures = 0;
   private status: GuardianStatus = { action: 'WAITING_FOR_EVIDENCE', diagnosis: null, jobId: null, error: null };
   constructor(private readonly deps: Dependencies) {}
   snapshot(): GuardianStatus { return { ...this.status }; }
   run(): Promise<GuardianStatus> {
     if (this.inFlight) return this.inFlight;
     this.inFlight = this.collect().catch((error) => {
+      this.failures += 1;
+      this.retryAfter = this.deps.now() + Math.min(COOLDOWN_MS, CHECK_INTERVAL_MS * 2 ** Math.min(this.failures, 4));
       this.status = { ...this.status, action: 'ERROR', error: error instanceof Error ? error.message : String(error) };
       return this.snapshot();
     }).finally(() => { this.inFlight = null; });
@@ -40,7 +44,7 @@ export class UtilizationReasoningGuardian {
     const sample = this.deps.snapshot();
     const now = this.deps.now();
     const measured = Date.parse(sample?.measured_at ?? '');
-    if (!sample || sample.status === 'UNKNOWN' || !sample.durable || !Number.isFinite(measured)
+    if (!sample || (sample.status !== 'UNKNOWN' && !sample.durable) || !Number.isFinite(measured)
       || measured > now || now - measured > 60_000 || !/^[a-f0-9]{40}$/i.test(sample.commit_sha)) {
       this.previousSample = null;
       this.previousIncident = null;
@@ -53,7 +57,8 @@ export class UtilizationReasoningGuardian {
       this.status = { ...this.status, action: 'HEALTHY', diagnosis: null, error: null };
       return this.snapshot();
     }
-    const diagnosis: Diagnosis = sample.running_agents === sample.target_agents && sample.productive_agents === 0
+    // A fresh failed observation proves telemetry failure, never fleet productivity.
+    const diagnosis: Diagnosis = sample.status === 'UNKNOWN' ? 'TELEMETRY_UNAVAILABLE' : sample.running_agents === sample.target_agents && sample.productive_agents === 0
       ? 'EXECUTION_WITHOUT_RESULTS'
       : (sample.running_agents ?? 0) < sample.target_agents ? 'DISPATCH_OR_CAPACITY_GAP' : 'PARTIAL_PRODUCTIVITY';
     const incident = `${sample.commit_sha}:${diagnosis}`;
@@ -63,6 +68,8 @@ export class UtilizationReasoningGuardian {
     this.status = { ...this.status, diagnosis, error: null };
     if (!this.deps.enabled()) {
       this.status.action = 'OBSERVE_ONLY';
+    } else if (now < this.retryAfter) {
+      this.status.action = 'RETRY_BACKOFF';
     } else if (!confirmed) {
       this.status.action = 'CONFIRMING_BREACH';
     } else if (this.submittedAt !== null && now - this.submittedAt < COOLDOWN_MS) {
@@ -75,6 +82,11 @@ export class UtilizationReasoningGuardian {
           '[TEMPLATE_MODE:BUG_FIX] Investigate and repair a persistent IVX fleet productivity incident.',
           `Observed hypothesis class: ${diagnosis}. This is a hypothesis, not a proven root cause.`,
           `Exact measured evidence: ${JSON.stringify(sample)}`,
+          ...(diagnosis === 'TELEMETRY_UNAVAILABLE' ? [
+            'The monitor observed a telemetry failure. Agent counts and productive duration are UNKNOWN, not zero and not certified. Diagnose read, snapshot construction and persistence separately using failure_stage and failure_kind.',
+            'Compare REST availability, direct PostgreSQL availability, query latency, connection pressure and owner-control availability. Start with bounded read-only probes. Do not add unbounded retries or restart healthy services blindly.',
+            'If the repair queue or owner stop cannot be read, report the blocked dependency; do not bypass the stop or replace durable leases with process-local execution.',
+          ] : []),
           'Read current worker, dispatcher, queue, Doctor and CI evidence before editing. Compare the deployed SHA with current code and existing repair PRs; continue existing repairs instead of duplicating them.',
           'Distinguish fresh heartbeat, task lease, actual tool execution, successful result and productive duration. Identify the earliest broken transition. Compare competing causes: priority exclusivity, missing worker capacity, database/RPC failure, repeated QA failure, stale evidence or retry exhaustion.',
           'Use actual code and tool results to support or reject each hypothesis. Reproduce the cause, prepare the smallest reversible code fix and a regression test, run typecheck and relevant QA. Preserve the diagnosis, attempted repair and test evidence for subsequent investigations.',
@@ -93,6 +105,8 @@ export class UtilizationReasoningGuardian {
       // The existing queue enforces emergency stop, owner single-flight and task identity.
       const result = await this.deps.enqueue(input);
       this.submittedAt = now;
+      this.failures = 0;
+      this.retryAfter = 0;
       this.status = { action: result.attached ? 'REPAIR_ATTACHED' : 'REPAIR_QUEUED', diagnosis, jobId: result.job.jobId, error: null };
     }
     return this.snapshot();
@@ -102,6 +116,8 @@ export class UtilizationReasoningGuardian {
 const guardian = new UtilizationReasoningGuardian({
   snapshot: getFleetSloSnapshot, enabled: autonomousDoctorRepairEnabled, now: Date.now,
   enqueue: async (input) => {
+    const { assertEmergencyStopInactive } = await import('./ivx-emergency-stop-gate');
+    await assertEmergencyStopInactive('autonomous-utilization-guardian');
     const { enqueueOrAttachSeniorDeveloperJob } = await import('./ivx-senior-developer-worker');
     return enqueueOrAttachSeniorDeveloperJob(input);
   },
@@ -111,7 +127,13 @@ export function runAutonomousUtilizationGuardian(): Promise<GuardianStatus> { re
 export function getAutonomousUtilizationStatus(): GuardianStatus { return guardian.snapshot(); }
 export function startAutonomousUtilizationGuardian(): boolean {
   if (timer) return false;
+  let previousTransition = '';
   const tick = () => { void guardian.run().then(status => {
+    const transition = `${status.action}:${status.diagnosis}:${status.jobId}`;
+    if (transition !== previousTransition) {
+      console.info('[IVX Utilization Reasoning] transition', { marker: IVX_AUTONOMOUS_UTILIZATION_GUARDIAN_MARKER, action: status.action, diagnosis: status.diagnosis, jobId: status.jobId });
+      previousTransition = transition;
+    }
     if (status.action === 'ERROR') console.error('[IVX Utilization Reasoning]', status);
   }); };
   tick();

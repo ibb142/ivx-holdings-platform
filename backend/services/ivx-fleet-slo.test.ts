@@ -71,3 +71,20 @@ describe('Fleet SLO evidence and alerts', () => {
     expect((await handleFleetSloGet(new Request('https://api.ivx.test/api/ivx/autonomous/fleet-slo'))).status).toBe(401);
   });
 });
+
+test('identifies read versus persistence timeouts without leaking raw errors or certifying productivity', async () => {
+  for (const stage of ['read', 'persist']) {
+    const failure = () => { throw new Error('timeout secret=must-not-escape'); };
+    const monitor = new FleetSloMonitor({
+      read: async () => stage === 'read' ? failure() : [],
+      persist: async () => { if (stage === 'persist') failure(); },
+      alert: async () => ({ ok: true }), now: () => NOW, sha: () => SHA,
+    });
+    const result = await monitor.sample();
+    expect(result.failure_stage).toBe(stage);
+    expect(result.failure_kind).toBe('timeout');
+    expect(result.status).toBe('UNKNOWN');
+    expect(result.productive_agents).toBeNull();
+    expect(JSON.stringify(result)).not.toContain('must-not-escape');
+  }
+});
