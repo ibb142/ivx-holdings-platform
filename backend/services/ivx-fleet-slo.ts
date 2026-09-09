@@ -91,10 +91,11 @@ type Dependencies = {
   now: () => number; sha: () => string;
 };
 
-/** One in-flight sample; failed delivery never consumes alert suppression. */
+/** Sampling and alert delivery each have one in-flight operation. */
 export class FleetSloMonitor {
   private latest: FleetSloSnapshot | null = null;
   private inFlight: Promise<FleetSloSnapshot> | null = null;
+  private alertInFlight: Promise<void> | null = null;
   private deliveredStatus: FleetSloSnapshot['status'] | null = null;
   private deliveredAt = 0;
   constructor(private readonly deps: Dependencies) {}
@@ -138,6 +139,13 @@ export class FleetSloMonitor {
       console.error('[IVX Fleet SLO] telemetry unavailable', { marker: IVX_FLEET_SLO_MARKER, measured_at: snapshot.measured_at, failure_stage: stage, failure_kind: kind });
     }
     this.latest = snapshot;
+    // Alert storage may be slower than the 45-second HA heartbeat window.
+    // It must never hold the sample lock or prevent fresh durable heartbeats.
+    this.deliverAlert(snapshot);
+    return { ...snapshot };
+  }
+  private deliverAlert(snapshot: FleetSloSnapshot): void {
+    if (this.alertInFlight) return;
     const now = this.deps.now();
     const changed = snapshot.status !== this.deliveredStatus;
     const needsAlert = snapshot.status === 'MET'
@@ -149,14 +157,15 @@ export class FleetSloMonitor {
         agent_id: null, severity: snapshot.status === 'MET' ? 'info' : 'critical',
         detail: JSON.stringify(snapshot),
       };
-      try {
-        const result = await this.deps.alert(alert);
-        if (!result.ok) throw new Error('Alert persistence rejected');
-        this.deliveredStatus = snapshot.status;
-        this.deliveredAt = now;
-      } catch { console.error('[IVX Fleet SLO] alert delivery failed; retry on next sample', { alert_type: alert.alert_type }); }
+      this.alertInFlight = (async () => {
+        try {
+          const result = await this.deps.alert(alert);
+          if (!result.ok) throw new Error('Alert persistence rejected');
+          this.deliveredStatus = snapshot.status;
+          this.deliveredAt = now;
+        } catch { console.error('[IVX Fleet SLO] alert delivery failed; retry on next sample', { alert_type: alert.alert_type }); }
+      })().finally(() => { this.alertInFlight = null; });
     }
-    return { ...snapshot };
   }
 }
 
