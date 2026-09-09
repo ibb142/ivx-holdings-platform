@@ -34,7 +34,21 @@ export async function run(fetchImpl=fetch,token=process.env.SUPABASE_ACCESS_TOKE
   }
   const configuration=await request('/config/database/pgbouncer');
   console.log(JSON.stringify({poolConfigurationShape:poolConfigurationShape(configuration)}));
-  const before=primaryPoolSizes(configuration);
+  let effectiveConfiguration=configuration;
+  // Supabase Studio treats an omitted size as the compute default. Only use
+  // that documented 15-slot default for the recognized settings response and
+  // a fresh database read proving this project still has 60 connections.
+  if(configuration && !Array.isArray(configuration) && configuration.default_pool_size===undefined
+      && ['transaction','session'].includes(configuration.pool_mode)
+      && typeof configuration.server_idle_timeout==='number') {
+    const limits=await request('/database/query','POST',{
+      query:"select current_setting('max_connections')::int as max_connections",read_only:true
+    });
+    if(!Array.isArray(limits)||limits[0]?.max_connections!==60)throw Error('Compute default cannot be verified');
+    effectiveConfiguration={...configuration,default_pool_size:15};
+    console.log(JSON.stringify({poolSizeSource:'supabase_compute_default',maxConnectionsVerified:60}));
+  }
+  const before=primaryPoolSizes(effectiveConfiguration);
   // This incident's database has 60 slots, with Auth/Storage/PostgREST sharing
   // them. Bound external pool servers; this does not limit logical IA lanes.
   if (Math.max(...before)>15) throw new Error('Pool differs from audited configuration; review required');
