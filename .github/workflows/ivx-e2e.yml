@@ -169,11 +169,20 @@ jobs:
       - name: Install Maestro
         run: curl -Ls "https://get.maestro.mobile.dev" | bash
       - name: Run Maestro launch smoke test — HARD GATE
-        env: { MAESTRO_CLI_NO_ANALYTICS: '1' }
-        run: ~/.maestro/bin/maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml
+        timeout-minutes: 10
+        env:
+          MAESTRO_CLI_NO_ANALYTICS: '1'
+          # XCTest driver initialization timed out after the app had already
+          # compiled, installed and launched. Keep app assertions unchanged.
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: '300000'
+        run: |
+          set -euo pipefail
+          ~/.maestro/bin/maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml 2>&1 | tee maestro-launch.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: maestro-report-${{ github.sha }}
-          path: maestro-report.xml
+          path: |
+            maestro-report.xml
+            maestro-launch.log
           if-no-files-found: warn
