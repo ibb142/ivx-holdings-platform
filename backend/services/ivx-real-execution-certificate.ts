@@ -158,7 +158,6 @@ export async function resumePendingCertificateRuns(): Promise<{ resumed: number;
     && /^rec-\d+$/.test(r.run_id),
   );
   const runIds = [...new Set(rows.map((r) => r.run_id))];
-  const processing: Promise<void>[] = [];
   for (const runId of runIds) {
     console.log('[IVXRealExecutionCert] resuming pending run after restart', { runId, pendingTasks: rows.filter((r) => r.run_id === runId).length });
     activeRun = {
@@ -173,19 +172,20 @@ export async function resumePendingCertificateRuns(): Promise<{ resumed: number;
       phase: 'agents',
       note: 'resumed after restart — pending tasks survived redeploy',
     };
-    processing.push(processCertificateRun(runId));
+    // Recovery shares the API's small heap: finish one durable run before
+    // starting the next instead of multiplying per-run tool concurrency.
+    await processCertificateRun(runId);
   }
   // Boot recovery is not complete merely because work was discovered. Keep
   // competing background schedulers gated until every recovered certificate
   // task has reached a terminal state and the certificate is persisted.
-  await Promise.all(processing);
   return { resumed: rows.length, runIds };
 }
 
 // ── Core processing ──────────────────────────────────────────────────────────
 
 async function processCertificateRun(runId: string): Promise<void> {
-  const CONCURRENCY = 3;
+  const CONCURRENCY = process.env.IVX_PROCESS_ROLE === 'api' ? 1 : 3;
   const INTERRUPTED_RUNNING_AFTER_MS = 2 * 60 * 1000;
 
   // Process every pending/running task for this run (running = interrupted by restart)
