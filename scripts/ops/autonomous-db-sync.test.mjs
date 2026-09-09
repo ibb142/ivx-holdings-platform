@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
 import crypto from 'node:crypto';
-import { candidates, connectionIssue, normalizeStoredConnection, repairKnownConnection, main, readLinkedGroups, renderKey, validateConnection } from './autonomous-db-sync.mjs';
+import { candidates, connectionIssue, normalizeStoredConnection, repairKnownConnection, main, readPoolerCandidates, readLinkedGroups, renderKey, validateConnection } from './autonomous-db-sync.mjs';
 const valid='postgresql://postgres:unit-test-only@db.kvclcdjmjghndxsngfzb.supabase.co/postgres';
 test('rejects invalid hosts, other projects and disabled TLS',()=>{
   for(const v of ['postgresql://postgres:x@base/postgres','postgresql://postgres:x@db.other.supabase.co/postgres',valid+'?sslmode=disable']) assert.equal(validateConnection(v),null);
@@ -118,4 +118,21 @@ test('normalizes pasted assignments and raw invalid percent characters without g
   const raw=valid.replace('unit-test-only','secret%raw');
   assert.equal(validateConnection(normalizeStoredConnection(raw)).password,'secret%raw');
   for(const value of ['not a uri',raw.replace('kvclcdjmjghndxsngfzb','other'),raw+'?sslmode=disable',valid])assert.equal(normalizeStoredConnection(value),null);
+});
+
+test('uses authoritative primary pooler metadata and existing password with verified TLS',async()=>{
+ const savedFetch=globalThis.fetch,savedLog=console.log;
+ try {
+  console.log=()=>{};
+  globalThis.fetch=async(url,init)=>{
+   assert.equal(url,'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/config/database/pooler');assert.equal(init.method,undefined);
+   return Response.json([
+    {database_type:'PRIMARY',connection_string:'postgresql://postgres.kvclcdjmjghndxsngfzb:[YOUR-PASSWORD]@aws-0-us-east-1.pooler.supabase.com:6543/postgres'},
+    {database_type:'PRIMARY',connection_string:'postgresql://postgres.other:x@aws-0-us-east-1.pooler.supabase.com:6543/postgres'}
+   ]);
+  };
+  const result=await readPoolerCandidates([{serviceId:'github_actions',env:{SUPABASE_DB_URL:valid}}],'test-management');
+  assert.equal(result.length,1);const config=validateConnection(result[0].env.SUPABASE_POOLER_URL);
+  assert.equal(config.password,'unit-test-only');assert.equal(config.user,'postgres.kvclcdjmjghndxsngfzb');assert.equal(config.port,5432);assert.equal(config.ssl.rejectUnauthorized,true);
+ }finally {globalThis.fetch=savedFetch;console.log=savedLog;}
 });
