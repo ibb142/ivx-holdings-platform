@@ -181,6 +181,16 @@ export type IVXAccessRuntime = 'development' | 'production';
 export type IVXAccessSecurityMode = 'strict' | 'test_open_access' | 'system_bypass';
 export type IVXGuardFailureStage = 'token' | 'session' | 'profile' | 'role' | 'config';
 
+/** A provider outage cannot establish whether an owner session is valid. */
+export class IVXAuthServiceUnavailableError extends Error {
+  readonly status = 503;
+
+  constructor() {
+    super('IVX owner verification is temporarily unavailable. Please retry.');
+    this.name = 'IVXAuthServiceUnavailableError';
+  }
+}
+
 type IVXOwnerProfileRow = Record<string, unknown> & {
   id?: string | null;
   email?: string | null;
@@ -600,11 +610,12 @@ export async function resolveIVXAuthenticatedRequest(
 
   const client = createIVXServerClient(accessToken);
   let userResult: Awaited<ReturnType<typeof client.auth.getUser>>;
+  let authTimer: ReturnType<typeof setTimeout> | undefined;
   try {
     userResult = await Promise.race([
       client.auth.getUser(accessToken),
       new Promise<never>((_resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('IVX auth guard failed: Supabase session lookup timed out.')), 15_000);
+        const timer = authTimer = setTimeout(() => reject(new IVXAuthServiceUnavailableError()), 15_000);
         // timer may be a NodeJS.Timeout or a number depending on the platform
         if (typeof timer === 'object' && timer && 'unref' in timer) {
           (timer as { unref?: () => void }).unref?.();
@@ -622,7 +633,11 @@ export async function resolveIVXAuthenticatedRequest(
       roleAudit: null,
       detail: msg,
     });
-    throw new Error(msg.includes('timed out') ? 'IVX auth guard failed: invalid or expired Supabase session.' : msg);
+    // A failed or timed-out lookup has not rejected the credential. Keep access
+    // closed while distinguishing provider availability from session validity.
+    throw new IVXAuthServiceUnavailableError();
+  } finally {
+    if (authTimer !== undefined) clearTimeout(authTimer);
   }
 
   if (userResult.error || !userResult.data.user) {
@@ -635,6 +650,11 @@ export async function resolveIVXAuthenticatedRequest(
       roleAudit: null,
       detail: userResult.error?.message ?? 'Supabase user lookup returned no user.',
     });
+    const status = userResult.error?.status;
+    if (userResult.error && (userResult.error.name === 'AuthRetryableFetchError'
+      || status === 0 || status === 429 || (status !== undefined && status >= 500))) {
+      throw new IVXAuthServiceUnavailableError();
+    }
     throw new Error('IVX auth guard failed: invalid or expired Supabase session.');
   }
 

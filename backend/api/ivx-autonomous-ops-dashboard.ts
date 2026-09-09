@@ -4,6 +4,7 @@
  * durable Supabase execution/state ledger used by the 112-agent runtime.
  */
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
+import { IVXAuthServiceUnavailableError } from '../../expo/shared/ivx';
 import { ALL_AGENT_CONTRACTS } from '../services/ivx-agent-contracts';
 import { getAgentByNumber } from '../services/ivx-enterprise-master-registry';
 import { readFleetDashboardSignals, type AgentFleetSignal } from '../services/ivx-fleet-dashboard-signals';
@@ -95,7 +96,7 @@ const readSharedInputs = createDashboardReadCache(async () => {
 }, ({ ledger, fleetSignals }) => ledger.ok && fleetSignals?.status === 'AVAILABLE');
 
 export async function handleAutonomousOpsDashboardRequest(request:Request):Promise<Response>{
-  try{await assertIVXOwnerOnly(request);}catch(err){return ownerOnlyJson({ok:false,error:err instanceof Error?err.message:'unauthorized'},401);}
+  try{await assertIVXOwnerOnly(request);}catch(err){return ownerOnlyJson({ok:false,error:err instanceof Error?err.message:'unauthorized'},err instanceof IVXAuthServiceUnavailableError?503:401);}
 
   const url=new URL(request.url);
   const range=url.searchParams.get('range')??'24h';
