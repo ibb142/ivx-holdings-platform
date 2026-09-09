@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { dirname } from 'node:path';
 
 const chatSource = readFileSync(resolve(import.meta.dir, '../app/ivx/chat.tsx'), 'utf8');
 const chatHubSource = readFileSync(resolve(import.meta.dir, '../components/ChatScreenContent.tsx'), 'utf8');
@@ -21,6 +22,19 @@ const E2E_PROMPT = 'Return only the result of joining IVX_CHAT_E2E_ and OK_${IVX
 const E2E_REPLY = 'IVX_CHAT_E2E_OK_${IVX_CHAT_E2E_NONCE}';
 
 describe('IVX IA chat device certificate regression', () => {
+  test('nested authentication flows resolve when Home QA runs the source YAML directly', () => {
+    const visited = new Set<string>();
+    const visit = (path: string) => {
+      if (visited.has(path)) return;
+      visited.add(path);
+      const source = readFileSync(path, 'utf8');
+      for (const match of source.matchAll(/- runFlow: "([^"]+)"/g)) {
+        visit(resolve(dirname(path), match[1]));
+      }
+    };
+    visit(resolve(import.meta.dir, '../.maestro/ivx-owner-chat-certificate.yaml'));
+    expect(visited.size).toBe(3);
+  });
   test('keeps every certificate testID rendered by the chat surface', () => {
     for (const testID of requiredChatTestIDs) {
       expect(chatSource).toContain(`testID="${testID}"`);
