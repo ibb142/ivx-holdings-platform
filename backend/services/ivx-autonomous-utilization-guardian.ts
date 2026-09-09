@@ -17,6 +17,7 @@ export type GuardianStatus = {
   diagnosis: Diagnosis | null;
   jobId: string | null;
   error: string | null;
+  blockedDependency?: 'owner_control_unavailable' | 'owner_stop_active' | 'repair_queue';
 };
 
 /** Reuse measured, hashed tool evidence. Never infer productive hours from text. */
@@ -35,7 +36,11 @@ export class UtilizationReasoningGuardian {
     this.inFlight = this.collect().catch((error) => {
       this.failures += 1;
       this.retryAfter = this.deps.now() + Math.min(COOLDOWN_MS, CHECK_INTERVAL_MS * 2 ** Math.min(this.failures, 4));
-      this.status = { ...this.status, action: 'ERROR', error: error instanceof Error ? error.message : String(error) };
+      const message = error instanceof Error ? error.message : String(error);
+      const blockedDependency = message.startsWith('EMERGENCY_STOP_UNAVAILABLE') ? 'owner_control_unavailable'
+        : message.startsWith('EMERGENCY_STOP_ACTIVE') ? 'owner_stop_active' : 'repair_queue';
+      this.status = { ...this.status, action: 'ERROR', blockedDependency,
+        error: `Repair blocked: ${blockedDependency}`, jobId: null };
       return this.snapshot();
     }).finally(() => { this.inFlight = null; });
     return this.inFlight;
@@ -54,7 +59,7 @@ export class UtilizationReasoningGuardian {
     if (sample.status === 'MET') {
       this.previousSample = null;
       this.previousIncident = null;
-      this.status = { ...this.status, action: 'HEALTHY', diagnosis: null, error: null };
+      this.status = { ...this.status, action: 'HEALTHY', diagnosis: null, error: null, blockedDependency: undefined };
       return this.snapshot();
     }
     // A fresh failed observation proves telemetry failure, never fleet productivity.
@@ -65,7 +70,7 @@ export class UtilizationReasoningGuardian {
     const confirmed = this.previousIncident === incident && this.previousSample !== sample.measured_at;
     this.previousIncident = incident;
     this.previousSample = sample.measured_at;
-    this.status = { ...this.status, diagnosis, error: null };
+    this.status = { ...this.status, diagnosis };
     if (!this.deps.enabled()) {
       this.status.action = 'OBSERVE_ONLY';
     } else if (now < this.retryAfter) {
@@ -131,7 +136,7 @@ export function startAutonomousUtilizationGuardian(): boolean {
   const tick = () => { void guardian.run().then(status => {
     const transition = `${status.action}:${status.diagnosis}:${status.jobId}`;
     if (transition !== previousTransition) {
-      console.info('[IVX Utilization Reasoning] transition', { marker: IVX_AUTONOMOUS_UTILIZATION_GUARDIAN_MARKER, action: status.action, diagnosis: status.diagnosis, jobId: status.jobId });
+      console.info('[IVX Utilization Reasoning] transition', { marker: IVX_AUTONOMOUS_UTILIZATION_GUARDIAN_MARKER, action: status.action, diagnosis: status.diagnosis, jobId: status.jobId, blockedDependency: status.blockedDependency });
       previousTransition = transition;
     }
     if (status.action === 'ERROR') console.error('[IVX Utilization Reasoning]', status);

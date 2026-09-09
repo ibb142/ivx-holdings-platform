@@ -16,11 +16,13 @@
  *     hot loops.
  */
 
+import { emergencyStopReadCanFailOver, readEmergencyStopPostgres } from './ivx-emergency-stop-postgres';
+
 const CONTROL_TABLE = 'ivx_agent_controls';
 const CONTROL_NAME = 'emergency_stop';
 const CACHE_TTL_MS = 15_000;
 
-export const IVX_EMERGENCY_STOP_GATE_MARKER = 'ivx-emergency-stop-gate-2026-09-05-v2-fail-closed';
+export const IVX_EMERGENCY_STOP_GATE_MARKER = 'ivx-emergency-stop-gate-2026-09-09-v3-same-project-failover';
 
 export type EmergencyStopStatus = {
   /** True when the owner has engaged the emergency stop. */
@@ -34,7 +36,7 @@ export type EmergencyStopStatus = {
   /** When this status was read. */
   checkedAt: string;
   /** Where the answer came from. `unavailable` = read failed and execution must fail closed. */
-  source: 'supabase' | 'cache' | 'unavailable';
+  source: 'supabase' | 'postgres' | 'cache' | 'unavailable';
   /** Read error detail when source === 'unavailable'. Never contains secrets. */
   error: string | null;
 };
@@ -130,15 +132,27 @@ async function readEmergencyStopFromSupabase(): Promise<EmergencyStopStatus> {
 
   try {
     const query = `${url}/rest/v1/${CONTROL_TABLE}?control_name=eq.${CONTROL_NAME}&select=control_name,active,reason,updated_by,updated_at&limit=1`;
-    const response = await fetch(query, {
-      method: 'GET',
-      headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' },
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!response.ok) {
-      throw new Error(`Supabase read failed with HTTP ${response.status}`);
+    let rows: unknown;
+    let source: 'supabase' | 'postgres' = 'supabase';
+    try {
+      const response = await fetch(query, {
+        method: 'GET',
+        headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' },
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!response.ok) {
+        throw new Error(`Supabase read failed with HTTP ${response.status}`);
+      }
+      rows = await response.json();
+    } catch (error) {
+      if (!emergencyStopReadCanFailOver(error)) throw error;
+      rows = await readEmergencyStopPostgres();
+      source = 'postgres';
     }
-    const rows = (await response.json()) as ControlRow[];
+    if (!Array.isArray(rows) || rows.length > 1 || rows.some((row: ControlRow | null) =>
+      !row || row.control_name !== CONTROL_NAME || typeof row.active !== 'boolean')) {
+      throw new Error('Invalid emergency-stop control response');
+    }
     const row = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
     const status: EmergencyStopStatus = {
       active: row ? row.active === true : false,
@@ -146,7 +160,7 @@ async function readEmergencyStopFromSupabase(): Promise<EmergencyStopStatus> {
       updatedBy: row ? readTrimmed(row.updated_by) || null : null,
       updatedAt: row ? readTrimmed(row.updated_at) || null : null,
       checkedAt: nowIso(),
-      source: 'supabase',
+      source,
       error: null,
     };
     cached = status;
