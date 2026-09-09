@@ -741,7 +741,8 @@ async function inspectSupabaseTablesViaKnownRestProbes(schema: string | null, ta
   const requestedTable = table?.toLowerCase() ?? null;
   const candidates = (await loadCandidateTableNamesFromSql())
     .filter((name) => !requestedTable || name.toLowerCase() === requestedTable)
-    .slice(0, Math.max(limit, DEFAULT_LIMIT));
+    // A capability probe requesting five tables must not fan out to 200.
+    .slice(0, Math.max(0, Math.min(limit, MAX_LIMIT)));
   const rows: TableInspectionRow[] = [];
   let index = 0;
   async function worker(): Promise<void> {
