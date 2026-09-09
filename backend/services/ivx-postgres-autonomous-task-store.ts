@@ -133,6 +133,18 @@ export function readPostgresFleetDashboardObservation(): Promise<unknown> {
   return rpc('ivx_fleet_dashboard_observation', {}, 5_000);
 
 }
+
+/** Owner dashboard reads the canonical ledger through the configured queue transport. */
+export async function readPostgresAgentDashboardRows(kind: 'states' | 'executions' | 'jobs', limit: number): Promise<unknown[]> {
+  const statements = {
+    states: 'select * from public.ivx_agent_states order by agent_number asc limit $1',
+    executions: 'select * from public.ivx_agent_executions order by started_at desc nulls last limit $1',
+    jobs: "select id, type, status, payload, created_at, updated_at from public.ivx_agent_jobs where type = 'ivx_rec_execution' order by created_at desc limit $1",
+  };
+  if (!Object.hasOwn(statements, kind) || !Number.isFinite(limit)) throw new Error('Invalid dashboard ledger read');
+  const bound = kind === 'states' ? 112 : Math.max(112, Math.min(2000, Math.floor(limit)));
+  return (await getDirectPool().query(statements[kind], [bound])).rows;
+}
 function cloneTasks(tasks: readonly Task[]): Task[] { return structuredClone(tasks) as Task[]; }
 function mergeTaskResultsIntoCache(tasks: readonly (Task | null | undefined)[]): void { taskMutationRevision += 1; if (!taskReadCache) return; const next = [...taskReadCache.value]; const indexById = new Map(next.map((task, index) => [task.taskId, index])); for (const task of tasks) { if (!task) continue; const copy = structuredClone(task) as Task; const index = indexById.get(copy.taskId); if (index === undefined) { indexById.set(copy.taskId, next.length); next.push(copy); } else next[index] = copy; } taskReadCache = { value: next, at: Date.now() }; }
 function invalidateTaskReadCache(): void { taskMutationRevision += 1; taskReadCache = null; }
