@@ -1,0 +1,38 @@
+import { expect, test } from 'bun:test';
+
+for (const fails of [false, true]) test(`configured same-project queue selects one direct transport; fails=${fails}`, async () => {
+  const child = Bun.spawn([process.execPath, '-e', `
+    import { mock } from 'bun:test';
+    let queries=0, restCalls=0;
+    mock.module('pg',()=>({Client:class {},Pool:class {
+      constructor(config) {
+        if(config.ssl.rejectUnauthorized!==true || !config.ssl.ca?.length)throw new Error('TLS not verified');
+        if(config.connectionString.includes('sslmode'))throw new Error('URL overrides TLS');
+        if(config.connectionTimeoutMillis!==20000 || config.statement_timeout!==5000)throw new Error('unbounded connection');
+      }
+      async query(sql) {
+        queries++;
+        if(${fails})throw new Error('ambiguous direct failure');
+        if(sql.includes('ivx_autonomous_tasks_claim_batch'))return {rows:[{result:[{ok:false,task:null,error:'no_task'}]}]};
+        return {rows:[]};
+      }
+    }}));
+    process.env.IVX_AUTONOMOUS_QUEUE_BACKEND='postgres_atomic';
+    process.env.EXPO_PUBLIC_SUPABASE_URL='https://testproject.supabase.co';
+    process.env.SUPABASE_SERVICE_ROLE_KEY='test-only';
+    process.env.SUPABASE_DB_URL='postgresql://postgres.testproject:test@aws-0-us-east-1.pooler.supabase.com/postgres?sslmode=verify-full';
+    globalThis.fetch=async()=>{restCalls++;throw new Error('REST must not be called');};
+    const m=await import(${JSON.stringify(new URL('./ivx-postgres-autonomous-task-store.ts', import.meta.url).pathname)});
+    if(!m.preferDirectTransport())throw new Error('same project was not selected');
+    if(m.preferDirectTransport({...process.env,SUPABASE_DB_URL:process.env.SUPABASE_DB_URL.replace('postgres.testproject','postgres.other')}))throw new Error('other project accepted');
+    for(const operation of [()=>m.readPostgresFleetLeaseRows(),()=>m.readPostgresCurrentTasks(['RUNNING']),()=>m.claimPostgresAutonomousTasks([{workerId:'agent:test',agentNumber:1}])]) {
+      let failed=false;
+      try {await operation();}catch(e){if(!String(e).includes('ambiguous direct failure'))throw e;failed=true;}
+      if(failed!==${fails})throw new Error('incorrect failure result');
+    }
+    if(restCalls!==0 || queries!==3)throw new Error('transport replay or unexpected call count');
+  `], {stdout:'pipe',stderr:'pipe',timeout:10000});
+  const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+  expect(stderr).toBe('');
+  expect(code).toBe(0);
+});

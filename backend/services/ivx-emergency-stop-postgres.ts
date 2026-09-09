@@ -1,4 +1,5 @@
 import { Client, type ClientConfig } from 'pg';
+import { supabasePostgresTls } from './ivx-supabase-postgres-tls';
 
 /** Only the same Supabase project may answer an owner-control read. */
 export function emergencyStopPostgresConfig(env: NodeJS.ProcessEnv = process.env): ClientConfig {
@@ -19,7 +20,7 @@ export function emergencyStopPostgresConfig(env: NodeJS.ProcessEnv = process.env
   // A dedicated, short-lived connection cannot wait behind the failed task pool.
   return { host: db.hostname, port: Number(db.port || 5432), user,
     password: decodeURIComponent(db.password), database: 'postgres',
-    ssl: { rejectUnauthorized: true }, connectionTimeoutMillis: 3_000,
+    ssl: supabasePostgresTls(), connectionTimeoutMillis: 20_000,
     query_timeout: 3_000, statement_timeout: 3_000,
     application_name: 'ivx_owner_stop_read' };
 }

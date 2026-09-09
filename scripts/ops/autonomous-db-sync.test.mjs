@@ -1,0 +1,203 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import pg from 'pg';
+import crypto from 'node:crypto';
+import { candidates, connectionIssue, normalizeStoredConnection, repairKnownConnection, main, readPoolerCandidates, readLinkedGroups, renderKey, validateConnection, probeFailure } from './autonomous-db-sync.mjs';
+const valid='postgresql://postgres:unit-test-only@db.kvclcdjmjghndxsngfzb.supabase.co/postgres';
+test('preserves exact passwords through direct and pooler URI construction',async()=>{
+  const savedFetch=globalThis.fetch,savedLog=console.log;
+  try {
+    console.log=()=>{};
+    globalThis.fetch=async()=>Response.json([{database_type:'PRIMARY',connection_string:'postgresql://postgres.kvclcdjmjghndxsngfzb:placeholder@aws-0-us-east-1.pooler.supabase.com:6543/postgres'}]);
+    for(const password of [' leading-and-trailing ', 'a%40b@c#d:/?', 'quote\"and\'single', 'unicode-é-密碼']) {
+      const env={SUPABASE_DB_PASSWORD:password};
+      assert.equal(validateConnection(candidates(env)[0].value).password,password);
+      const poolers=await readPoolerCandidates([{serviceId:'test',env}],'test-token');
+      assert.equal(validateConnection(poolers[0].env.SUPABASE_POOLER_URL).password,password);
+    }
+  } finally {globalThis.fetch=savedFetch;console.log=savedLog;}
+});
+test('probe diagnostics classify upstream errors without exposing arbitrary text',()=>{
+  assert.deepEqual(probeFailure({code:'28P01',message:'password authentication failed for user private-value'}),{reason:'28P01',detail:'password_authentication_failed'});
+  assert.equal(probeFailure({code:'XX000',message:'Circuit breaker open: private-value'}).detail,'pooler_circuit_breaker');
+  assert.equal(probeFailure({message:'Tenant or user not found: private-value'}).detail,'pooler_tenant_or_user_not_found');
+  assert.deepEqual(probeFailure({code:'private-value',message:'private-value'}),{reason:'database_probe_failed',detail:'unclassified'});
+});
+test('rejects invalid hosts, other projects and disabled TLS',()=>{
+  for(const v of ['postgresql://postgres:x@base/postgres','postgresql://postgres:x@db.other.supabase.co/postgres',valid+'?sslmode=disable']) assert.equal(validateConnection(v),null);
+  assert.equal(validateConnection(valid).ssl.rejectUnauthorized,true);
+});
+test('constructs a connection only from an explicit Supabase password and encodes reserved characters',()=>{
+  assert.equal(candidates({}).length,0);
+  const c=candidates({SUPABASE_DB_PASSWORD:'a@b#c%'});
+  assert.equal(validateConnection(c[0].value).password,'a@b#c%');
+});
+for(const fromGithub of [false,true]) for(const probeFails of [true,false]) test(`sync requires a real successful probe: probeFails=${probeFails}, fromGithub=${fromGithub}`,async()=>{
+  const savedFetch=globalThis.fetch, SavedClient=pg.Client, savedKey=process.env.RENDER_API_KEY;
+  const savedLog=console.log, savedDb=process.env.SUPABASE_DB_URL;
+  const envs=new Map(); let puts=0, closed=0;
+  const api='srv-d7t9ivreo5us73ftose0', worker='srv-d9i15fg4n6ts73bn00j0';
+  envs.set(api,{...(fromGithub?{}:{SUPABASE_DB_URL:valid}),UNRELATED:'preserved'});envs.set(worker,{UNRELATED:'preserved'});
+  try {
+    console.log=()=>{};
+    process.env.RENDER_API_KEY='unit-test-render-key';
+    if(fromGithub)process.env.SUPABASE_DB_URL=valid;else delete process.env.SUPABASE_DB_URL;
+    pg.Client=class {
+      on(){}
+      async connect(){ if(probeFails) throw new Error('test unavailable'); }
+      async query(sql,args){assert.match(sql,/^SELECT active/);assert.deepEqual(args,['emergency_stop']);return {rows:[{active:false}]};}
+      async end(){closed++;}
+    };
+    globalThis.fetch=async(url,init)=>{
+      const u=new URL(url); assert.equal(u.hostname,'api.render.com');
+      if(u.pathname==='/v1/env-groups')return Response.json([]);
+      const id=u.pathname.split('/')[3];assert.ok(envs.has(id));
+      if(init.method==='PUT') {
+        if(!fromGithub)assert.equal(id,worker);assert.ok(u.pathname.endsWith('/env-vars/SUPABASE_DB_URL'));
+        envs.get(id).SUPABASE_DB_URL=JSON.parse(init.body).value;puts++;
+        return Response.json({});
+      }
+      if(u.pathname.endsWith('/env-vars'))return Response.json(Object.entries(envs.get(id)).map(([key,value])=>({envVar:{key,value}})));
+      return Response.json({ownerId:'tea-d7plj9beo5us73ch3ukg',repo:'https://github.com/ibb142/ivx-holdings-platform'});
+    };
+    if(probeFails) await assert.rejects(main(),/no_verified_same_project/); else await main();
+    assert.equal(puts,probeFails?0:fromGithub?2:1);assert.equal(closed,1);
+    assert.equal(envs.get(worker).UNRELATED,'preserved');
+  } finally {
+    globalThis.fetch=savedFetch;pg.Client=SavedClient;console.log=savedLog;
+    if(savedDb===undefined)delete process.env.SUPABASE_DB_URL;else process.env.SUPABASE_DB_URL=savedDb;
+    if(savedKey===undefined)delete process.env.RENDER_API_KEY;else process.env.RENDER_API_KEY=savedKey;
+  }
+});
+
+for (const status of [503,401]) test(`owner variable recovery is read-only and respects authorization: ${status}`,async()=>{
+  const savedFetch=globalThis.fetch, savedLog=console.log;
+  const keys=['RENDER_API_KEY','IVX_RENDER_API_KEY','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_ACCESS_TOKEN','JWT_SECRET'];
+  const saved=Object.fromEntries(keys.map(k=>[k,process.env[k]]));
+  let managementCalls=0;
+  try {
+    for(const k of keys) delete process.env[k];
+    Object.assign(process.env,{SUPABASE_SERVICE_ROLE_KEY:'test-service',SUPABASE_ACCESS_TOKEN:'test-management',JWT_SECRET:'test-encryption'});
+    console.log=()=>{};
+    const value='test-render-key', iv=crypto.randomBytes(12);
+    const cipher=crypto.createCipheriv('aes-256-gcm',crypto.createHash('sha256').update('test-encryption').digest(),iv);
+    cipher.setAAD(Buffer.from('ivx_owner_variables:v1'));
+    const encrypted=Buffer.concat([cipher.update(value),cipher.final()]);
+    globalThis.fetch=async(url,init)=>{
+      if(new URL(url).hostname.endsWith('.supabase.co'))return new Response('',{status});
+      assert.equal(url,'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query');
+      assert.equal(init.method,'POST');assert.equal(init.headers.Authorization,'Bearer test-management');
+      const body=JSON.parse(init.body);assert.equal(body.read_only,true);
+      assert.equal(body.query,"SELECT encrypted_value, value_iv, value_tag, value_hash FROM public.ivx_owner_variables WHERE name = 'RENDER_API_KEY' LIMIT 2");
+      managementCalls++;
+      return Response.json([{encrypted_value:encrypted.toString('base64'),value_iv:iv.toString('base64'),value_tag:cipher.getAuthTag().toString('base64'),value_hash:crypto.createHash('sha256').update(value).digest('hex')}]);
+    };
+    if(status===401)await assert.rejects(renderKey(),/owner_variable_rest_access_failed/);
+    else assert.equal(await renderKey(),value);
+    assert.equal(managementCalls,status===401?0:1);
+  } finally {
+    globalThis.fetch=savedFetch;console.log=savedLog;
+    for(const k of keys)if(saved[k]===undefined)delete process.env[k];else process.env[k]=saved[k];
+  }
+});
+
+test('audits only groups linked to the target services without writing or logging values',async()=>{
+  const savedFetch=globalThis.fetch, savedLog=console.log; const logs=[];let reads=0;
+  const ownerId='tea-d7plj9beo5us73ch3ukg';
+  const linked={id:'evg-test123',ownerId,serviceLinks:[{id:'srv-d9i15fg4n6ts73bn00j0'}]};
+  try {
+    console.log=value=>logs.push(value);
+    globalThis.fetch=async(url,init)=>{
+      assert.equal(init.method,undefined);
+      if(new URL(url).pathname==='/v1/env-groups')return Response.json([{envGroup:linked},{envGroup:{id:'evg-other',ownerId,serviceLinks:[{id:'srv-other'}]}}]);
+      assert.equal(new URL(url).pathname,'/v1/env-groups/evg-test123');reads++;
+      return Response.json({...linked,envVars:[{key:'SUPABASE_DB_URL',value:valid}]});
+    };
+    const groups=await readLinkedGroups('test-key');
+    assert.equal(reads,1);assert.equal(groups.length,1);assert.equal(groups[0].env.SUPABASE_DB_URL,valid);
+    assert.ok(!logs.join('').includes('unit-test-only'));
+  } finally {globalThis.fetch=savedFetch;console.log=savedLog;}
+});
+
+test('repairs only the observed base hostname and keeps credential validation enforced',()=>{
+  const broken=valid.replace('db.kvclcdjmjghndxsngfzb.supabase.co','base');
+  assert.equal(connectionIssue(broken),'invalid_base_hostname');
+  assert.equal(repairKnownConnection(broken),valid);
+  assert.equal(candidates({SUPABASE_DB_URL:broken})[1].value,valid);
+  for(const v of [broken.replace('unit-test-only','[YOUR-PASSWORD]'),broken.replace('@base','@db.other.supabase.co'),broken+'?sslmode=disable',broken.replace('/postgres','/other')])assert.equal(repairKnownConnection(v),null);
+  assert.equal(connectionIssue('https://example.com'),'not_postgres_uri');
+  assert.equal(connectionIssue('postgresql://postgres@base/postgres'),'missing_database_credentials');
+  assert.equal(connectionIssue(broken.replace('unit-test-only','[YOUR-PASSWORD]')),'placeholder_password');
+});
+
+test('normalizes pasted assignments and raw invalid percent characters without guessing credentials',()=>{
+  assert.equal(normalizeStoredConnection(`SUPABASE_DB_URL="${valid}"`),valid);
+  assert.equal(normalizeStoredConnection(`'${valid}'`),valid);
+  assert.equal(normalizeStoredConnection(`psql '${valid}'`),valid);
+  const raw=valid.replace('unit-test-only','secret%raw');
+  assert.equal(validateConnection(normalizeStoredConnection(raw)).password,'secret%raw');
+  for(const value of ['not a uri',raw.replace('kvclcdjmjghndxsngfzb','other'),raw+'?sslmode=disable',valid])assert.equal(normalizeStoredConnection(value),null);
+});
+
+test('uses authoritative primary pooler metadata and existing password with verified TLS',async()=>{
+ const savedFetch=globalThis.fetch,savedLog=console.log;
+ try {
+  console.log=()=>{};
+  globalThis.fetch=async(url,init)=>{
+   assert.equal(url,'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/config/database/pooler');assert.equal(init.method,undefined);
+   return Response.json([
+    {database_type:'PRIMARY',connection_string:'postgresql://postgres.kvclcdjmjghndxsngfzb:[YOUR-PASSWORD]@aws-0-us-east-1.pooler.supabase.com:6543/postgres'},
+    {database_type:'PRIMARY',connection_string:'postgresql://postgres.other:x@aws-0-us-east-1.pooler.supabase.com:6543/postgres'}
+   ]);
+  };
+  const result=await readPoolerCandidates([{serviceId:'github_actions',env:{SUPABASE_DB_URL:valid}}],'test-management');
+  assert.equal(result.length,1);const config=validateConnection(result[0].env.SUPABASE_POOLER_URL);
+  assert.equal(config.password,'unit-test-only');assert.equal(config.user,'postgres.kvclcdjmjghndxsngfzb');assert.equal(config.port,5432);assert.equal(config.ssl.rejectUnauthorized,true);
+ }finally {globalThis.fetch=savedFetch;console.log=savedLog;}
+});
+
+test('trusts the official Supabase root while retaining certificate verification',()=>{
+ const config=validateConnection(valid);assert.equal(config.ssl.rejectUnauthorized,true);
+ const cert=new crypto.X509Certificate(config.ssl.ca.at(-1));
+ assert.equal(cert.fingerprint256,'80:70:25:AD:50:D4:ED:21:9D:2C:9C:7D:29:9C:00:4F:82:4E:B0:0C:F7:F6:5A:FE:F6:07:D0:7B:72:E6:CA:FA');
+ assert.equal(cert.ca,true);assert.equal(cert.verify(cert.publicKey),true);
+});
+
+for (const vaultToken of ['test-owner-management','test-rejected-management']) test(`recovery validates the existing owner-vault credential once: ${vaultToken}`,async()=>{
+  const savedFetch=globalThis.fetch,savedLog=console.log;
+  const keys=['SUPABASE_SERVICE_ROLE_KEY','JWT_SECRET','IVX_OWNER_VARIABLES_ENCRYPTION_KEY','APP_SECRET'];
+  const saved=Object.fromEntries(keys.map(k=>[k,process.env[k]]));
+  const logs=[];let managementCalls=0,vaultReads=0;
+  try {
+    for(const k of keys)delete process.env[k];
+    Object.assign(process.env,{SUPABASE_SERVICE_ROLE_KEY:'test-service',JWT_SECRET:'test-encryption'});
+    console.log=value=>logs.push(value);
+    const iv=crypto.randomBytes(12);
+    const cipher=crypto.createCipheriv('aes-256-gcm',crypto.createHash('sha256').update('test-encryption').digest(),iv);
+    cipher.setAAD(Buffer.from('ivx_owner_variables:v1'));
+    const encrypted=Buffer.concat([cipher.update(vaultToken),cipher.final()]);
+    globalThis.fetch=async(url,init)=>{
+      assert.equal(init.method,undefined);assert.equal(init.body,undefined);
+      if(new URL(url).hostname==='kvclcdjmjghndxsngfzb.supabase.co') {
+        assert.equal(new URL(url).searchParams.get('name'),'eq.SUPABASE_ACCESS_TOKEN');
+        assert.equal(init.headers.apikey,'test-service');vaultReads++;
+        return Response.json([{encrypted_value:encrypted.toString('base64'),value_iv:iv.toString('base64'),value_tag:cipher.getAuthTag().toString('base64'),value_hash:crypto.createHash('sha256').update(vaultToken).digest('hex')}]);
+      }
+      assert.equal(url,'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/config/database/pooler');
+      managementCalls++;
+      if(init.headers.Authorization==='Bearer test-rejected-management')return new Response('',{status:401});
+      assert.equal(init.headers.Authorization,'Bearer test-owner-management');
+      return Response.json([{database_type:'PRIMARY',connection_string:'postgresql://postgres.kvclcdjmjghndxsngfzb:[YOUR-PASSWORD]@aws-0-us-west-2.pooler.supabase.com:6543/postgres'}]);
+    };
+    const found=await readPoolerCandidates([{serviceId:'github_actions',env:{SUPABASE_DB_PASSWORD:'existing%password'}}],'test-rejected-management');
+    assert.equal(vaultReads,1);
+    assert.equal(managementCalls,vaultToken==='test-owner-management'?2:1);
+    assert.equal(found.length,vaultToken==='test-owner-management'?1:0);
+    if(found.length)assert.equal(validateConnection(found[0].env.SUPABASE_POOLER_URL).password,'existing%password');
+    const publicLogs=logs.filter(line=>!line.startsWith('::add-mask::')).join('\n');
+    assert.ok(!publicLogs.includes(vaultToken));assert.ok(!publicLogs.includes('existing%password'));
+  } finally {
+    globalThis.fetch=savedFetch;console.log=savedLog;
+    for(const k of keys)if(saved[k]===undefined)delete process.env[k];else process.env[k]=saved[k];
+  }
+});
