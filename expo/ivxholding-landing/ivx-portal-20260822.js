@@ -184,8 +184,6 @@
   /** Send the password reset email via Supabase (anti-enumeration: generic response). */
   async function handleForgotPasswordSubmit(e) {
     e.preventDefault();
-    var SUPABASE_URL = window.IVX_SUPABASE_URL || window.SUPABASE_URL || '';
-    var SUPABASE_ANON_KEY = window.IVX_SUPABASE_ANON_KEY || window.SUPABASE_ANON_KEY || '';
     var errEl = document.getElementById('portal-forgot-error');
     var okEl = document.getElementById('portal-forgot-success');
     var btn = document.getElementById('portal-forgot-btn');
@@ -199,6 +197,16 @@
     }
     btn.textContent = 'Sending...'; btn.disabled = true;
     try {
+      // Configuration and the SDK load asynchronously. Keep this submission
+      // pending briefly and re-read the globals instead of capturing placeholders.
+      var SUPABASE_URL = '';
+      var SUPABASE_ANON_KEY = '';
+      for (var attempt = 0; attempt <= 80; attempt++) {
+        SUPABASE_URL = window.IVX_SUPABASE_URL || window.SUPABASE_URL || '';
+        SUPABASE_ANON_KEY = window.IVX_SUPABASE_ANON_KEY || window.SUPABASE_ANON_KEY || '';
+        if (!isPlaceholder(SUPABASE_URL) && !isPlaceholder(SUPABASE_ANON_KEY) && window.supabase) break;
+        if (attempt < 80) await new Promise(function(resolve) { setTimeout(resolve, 100); });
+      }
       if (isPlaceholder(SUPABASE_URL) || isPlaceholder(SUPABASE_ANON_KEY) || !window.supabase) {
         throw new Error('Service temporarily unavailable — please try again.');
       }
