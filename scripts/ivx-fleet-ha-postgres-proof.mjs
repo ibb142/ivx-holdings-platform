@@ -20,6 +20,21 @@ try {
   await a.query('select public.ivx_autonomous_tasks_create_batch($1::jsonb)', [JSON.stringify(fixtures)]);
   const request = JSON.stringify([{ workerId: 'agent:ivx_holdings_1', agentNumber: 1 }]);
   const claim = async (client, id) => (await client.query('select public.ivx_autonomous_tasks_claim_batch($1::jsonb,$2,60) as value', [request, id])).rows[0].value[0];
+  await a.query(await readFile(new URL('../supabase/migrations/20260909140808_ivx_nonblocking_worker_claims.sql', import.meta.url), 'utf8'));
+  // A live competing transaction retains its lock throughout this request.
+  // The loser must return promptly without taking work or weakening fencing.
+  await a.query('begin');
+  try {
+    await a.query("select pg_advisory_xact_lock(hashtextextended('ivx-autonomous-worker:agent:ivx_holdings_1',0))");
+    await b.query("set statement_timeout='1s'");
+    const contended = await claim(b, 'contended-replica');
+    assert.equal(contended.task, null);
+    assert.equal(contended.claimContended, true);
+    assert.equal(contended.ok, true);
+  } finally {
+    await a.query('rollback');
+    await b.query('reset statement_timeout');
+  }
   const claims = await Promise.all([claim(a, 'replica-a'), claim(b, 'replica-b')]);
   assert.equal(claims.filter(c => c.task).length, 1, 'two DB connections must acquire exactly one logical lane');
   const winner = claims[0].task ? 'replica-a' : 'replica-b'; const loser = winner === 'replica-a' ? 'replica-b' : 'replica-a';
