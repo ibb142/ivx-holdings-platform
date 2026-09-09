@@ -20,7 +20,7 @@ try {
   await a.query('select public.ivx_autonomous_tasks_create_batch($1::jsonb)', [JSON.stringify(fixtures)]);
   const request = JSON.stringify([{ workerId: 'agent:ivx_holdings_1', agentNumber: 1 }]);
   const claim = async (client, id) => (await client.query('select public.ivx_autonomous_tasks_claim_batch($1::jsonb,$2,60) as value', [request, id])).rows[0].value[0];
-  await a.query(await readFile(new URL('../supabase/migrations/20260909140808_ivx_nonblocking_worker_claims.sql', import.meta.url), 'utf8'));
+  await a.query(await readFile(new URL('../supabase/migrations/20260909141222_ivx_nonblocking_worker_claims.sql', import.meta.url), 'utf8'));
   // A live competing transaction retains its lock throughout this request.
   // The loser must return promptly without taking work or weakening fencing.
   await a.query('begin');
