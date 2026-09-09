@@ -165,6 +165,10 @@ export async function handleIVXRenderDeployLatestRequest(request: Request): Prom
     }, triggerStatus >= 400 && triggerStatus < 600 ? triggerStatus : 502);
   }
 
+  if (parsed && typeof parsed === 'object' && parsed.message === 'rollback is not supported') {
+    return ownerOnlyJson({ ok: false, error: 'rollback_unsupported', message: parsed.message }, 400);
+  }
+
   const deploy = normalizeDeploy(parsed);
   const commitSha = deploy.commit && typeof deploy.commit.id === 'string' ? deploy.commit.id : null;
   const commitMessage = deploy.commit && typeof deploy.commit.message === 'string' ? deploy.commit.message : null;
