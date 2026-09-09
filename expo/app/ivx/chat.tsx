@@ -861,6 +861,8 @@ export default function IVXOwnerChatRoute() {
   const queryClient = useQueryClient();
   const router = useRouter();
   const flatListRef = useRef<FlatList<IVXMessage> | null>(null);
+  const webListMetricsRef = useRef({ height: 0, offset: 0 });
+  const webPrependAnchorRef = useRef<{ height: number; offset: number } | null>(null);
   const composerInputRef = useRef<TextInput | null>(null);
   const composerValueRef = useRef<string>('');
   const highlightedMessageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -5653,6 +5655,7 @@ export default function IVXOwnerChatRoute() {
     ivxDiagnostics.recordScroll('message-list');
     mediaLifecycle.handleScroll(event);
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    webListMetricsRef.current = { height: contentSize.height, offset: contentOffset.y };
     // INVERTED FLATLIST: offset 0 = newest message (visually at bottom). The
     // user is "at bottom" (latest) when contentOffset.y is near 0. The user is
     // reading older history when contentOffset.y is large (scrolled down in
@@ -5698,6 +5701,7 @@ export default function IVXOwnerChatRoute() {
           .then((result) => {
             hasMoreOlderMessagesRef.current = result.hasMore;
             if (result.addedCount > 0) {
+              if (Platform.OS === 'web') webPrependAnchorRef.current = { ...webListMetricsRef.current };
               // Preserve the scroll anchor: the FlatList keeps the currently-
               // visible message in view because we only APPEND older rows to
               // the end of the inverted data (visually above the newest).
@@ -6727,9 +6731,18 @@ export default function IVXOwnerChatRoute() {
               }
               ListFooterComponent={listInverted ? listFooter : null}
               ListHeaderComponent={listInverted ? null : listFooter}
-              maintainVisibleContentPosition={Platform.OS === 'web' ? { minIndexForVisible: 0 } : undefined}
               ListFooterComponentStyle={styles.listFooterContainer}
               onContentSizeChange={(width, height) => {
+                webListMetricsRef.current.height = height;
+                const prependAnchor = webPrependAnchorRef.current;
+                if (Platform.OS === 'web' && prependAnchor) {
+                  webPrependAnchorRef.current = null;
+                  flatListRef.current?.scrollToOffset({
+                    offset: prependAnchor.offset + Math.max(0, height - prependAnchor.height),
+                    animated: false,
+                  });
+                  return;
+                }
                 ivxDiagnostics.recordContentHeight(`h=${Math.round(height)} count=${displayedMessages.length} atBottom=${isAtBottomRef.current}`);
                 // INVERTED FLATLIST: The list naturally anchors at offset 0
                 // (newest message) on first layout. No scrollToEnd needed.
