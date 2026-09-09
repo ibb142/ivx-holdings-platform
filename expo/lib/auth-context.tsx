@@ -6,6 +6,7 @@ import { persistAuth, loadStoredAuth, clearStoredAuth, setAuthCredentials } from
 import { clearOwnerResilientSession } from './owner-session-resilience';
 import { LoginTrace } from './login-trace';
 import { signInWithEmailPassword } from './auth-password-sign-in';
+import { deferAuthWork } from './deferred-auth-work';
 import { canonicalizeRole, isAdminRole, normalizeRole, sanitizeEmail } from './auth-helpers';
 
 import { extractChallengeId, extractFirstVerifiedMfaFactor, getMfaChallengeRequirement, type ParsedMfaFactor } from './auth-mfa';
@@ -1770,13 +1771,19 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             console.log('[Auth] Ignoring auth state session — no manual login for this app session');
             return;
           }
-          const challengeRequired = await requireTwoFactorIfNeeded(session, `auth event ${String(_event)}`);
-          if (!challengeRequired) {
-            const handledSession = await handleSession(session);
-            if (!handledSession.accepted) {
-              console.log('[Auth] Auth state session blocked:', handledSession.blockedReason ?? 'admin access lock');
+          // Supabase awaits subscribers. Profile/MFA requests may need the same
+          // session/refresh operation to finish, so run them after it releases.
+          deferAuthWork(async () => {
+            if (cancelled || !manualOwnerLoginRef.current || ownerIPActiveRef.current) return;
+            const challengeRequired = await requireTwoFactorIfNeeded(session, `auth event ${String(_event)}`);
+            if (cancelled || !manualOwnerLoginRef.current || ownerIPActiveRef.current) return;
+            if (!challengeRequired) {
+              const handledSession = await handleSession(session);
+              if (!handledSession.accepted) {
+                console.log('[Auth] Auth state session blocked:', handledSession.blockedReason ?? 'admin access lock');
+              }
             }
-          }
+          }, error => console.log('[Auth] Deferred session validation failed:', error instanceof Error ? error.message : 'unknown'));
         } else if (_event === 'SIGNED_OUT') {
           sessionWarmupKeyRef.current = null;
           ownerRepairKeyRef.current = null;
@@ -1828,7 +1835,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     return () => clearTimeout(timer);
   }, [isLoading]);
 
-  const loginOwnerPasswordless = useCallback(async (ownerEmail: string): Promise<LoginResult> => {
+  const loginOwnerPasswordless = useCallback(async (ownerEmail: string, ownerPassword?: string): Promise<LoginResult> => {
     const normalizedOwnerEmail = sanitizeEmail(ownerEmail);
     if (!normalizedOwnerEmail) {
       return { success: false, message: 'Enter your owner email to sign in.' };
@@ -1844,7 +1851,17 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           const response = await fetchWithOwnerRegistrationTimeout(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({ email: normalizedOwnerEmail, emergency: 'ivx_emergency_recovery' }),
+            // IVX_OWNER_OUTAGE_CREDENTIAL_BOUND_V1
+            // Bind an emergency session to the exact password supplied by the
+            // owner. The backend compares it in constant time against its
+            // existing owner credential before minting a short-lived token.
+            body: JSON.stringify({
+              email: normalizedOwnerEmail,
+              emergency: 'ivx_emergency_recovery',
+              ...(typeof ownerPassword === 'string' && ownerPassword.length > 0
+                ? { password: ownerPassword }
+                : {}),
+            }),
           });
           const text = await response.text();
           let parsed: Record<string, unknown> = {};
@@ -2129,9 +2146,30 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         const direct = await signInWithEmailPassword(freshClient, normalizedEmail, password);
         trace.checkpoint('SUPABASE_RESPONSE_RECEIVED', { success: direct.ok });
         if (!direct.ok) {
-          manualOwnerLoginRef.current = false;
           const directError = direct.error as AuthError & { status?: number; code?: string };
           const normalizedDirect = normalizeLoginFailureMessage(directError.message);
+
+          // Both password-grant paths are unavailable. Recover only for the
+          // allowlisted owner, using the exact entered password. The emergency
+          // endpoint validates it against the backend credential binding before
+          // issuing its bounded HMAC-signed outage session.
+          if (isOwnerAdminEmail(normalizedEmail)
+            && normalizedDirect.failureReason === 'service_unavailable') {
+            trace.checkpoint('OWNER_RECOVERY_STARTED', {
+              errorCode: directError.code ?? 'direct_signin_failed',
+            });
+            const recovery = await loginOwnerPasswordless(normalizedEmail, password);
+            trace.checkpoint('OWNER_RECOVERY_COMPLETE', {
+              success: recovery.success,
+              errorMessage: recovery.success ? undefined : recovery.message,
+            });
+            if (recovery.success) {
+              return recovery;
+            }
+            console.log('[Auth] Credential-bound owner outage recovery unavailable:', recovery.failureReason ?? 'unknown');
+          }
+
+          manualOwnerLoginRef.current = false;
           trace.checkpoint('FAILED', {
             stage: 'auth',
             errorCode: directError.code ?? 'direct_signin_failed',
@@ -2154,11 +2192,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       } else {
         // Owner password drift: the Supabase password can drift from the
         // runtime-bound owner credential. Recover through the backend-managed
-        // emergency route — it validates against the server-side binding and
-        // never trusts a client-supplied password.
+        // emergency route — it validates the supplied password in constant
+        // time against the server-side binding before minting a session.
         if (isOwnerAdminEmail(normalizedEmail) && lastFailure?.failureReason === 'invalid_credentials') {
           trace.checkpoint('OWNER_RECOVERY_STARTED', { errorCode: lastFailure?.errorCode ?? 'invalid_credentials' });
-          const recovery = await loginOwnerPasswordless(normalizedEmail);
+          const recovery = await loginOwnerPasswordless(normalizedEmail, password);
           trace.checkpoint('OWNER_RECOVERY_COMPLETE', {
             success: recovery.success,
             errorMessage: recovery.success ? undefined : recovery.message,

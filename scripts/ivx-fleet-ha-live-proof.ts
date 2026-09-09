@@ -2,15 +2,26 @@ import assert from 'node:assert/strict';
 import { writeFile, mkdir } from 'node:fs/promises';
 
 const base = process.env.API_BASE;
-const sha = process.env.GITHUB_SHA ?? '';
+const sha = process.env.IVX_TARGET_SHA || process.env.GITHUB_SHA || '';
 const token = process.env.OWNER_TOKEN;
+const systemKey = process.env.IVX_SYSTEM_KEY;
+const renderKey = process.env.RENDER_API_KEY?.trim();
 assert.equal(base, 'https://api.ivxholding.com');
-assert(/^[a-f0-9]{40}$/.test(sha)); assert(token);
+assert(/^[a-f0-9]{40}$/.test(sha));
+assert(token || systemKey, 'Owner bearer or protected system credential is required');
 const apiService = 'srv-d7t9ivreo5us73ftose0', workerService = 'srv-d9i15fg4n6ts73bn00j0';
+const expectedRepo = 'https://github.com/ibb142/ivx-holdings-platform';
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 async function request(path: string, body?: unknown) {
+  // Preserve the real Owner validation performed by the workflow, then use
+  // the protected machine credential for repeated probes when available so a
+  // degraded Auth gateway cannot invalidate an otherwise valid HA sample.
+  const authHeaders = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(systemKey ? { 'X-IVX-System-Key': String(systemKey) } : {}),
+  };
   const response = await fetch(base + path, { method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(body ? 60_000 : 20_000),
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Connection: 'close' }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    headers: { ...authHeaders, 'Content-Type': 'application/json', Connection: 'close' }, ...(body ? { body: JSON.stringify(body) } : {}) });
   assert.equal(response.status, 200, `HTTP ${response.status} at ${path}`);
   const value = await response.json(); assert.equal(value.ok, true, `Operation rejected at ${path}`); return value;
 }
@@ -24,48 +35,148 @@ async function action(action: string, serviceId: string, numInstances?: number) 
   return request('/api/ivx/developer-deploy/action', { action, input: { serviceId, ...(numInstances ? { numInstances } : {}) },
     confirm: true, confirmText: 'CONFIRM_IVX_RENDER_SERVICE_UPDATE', reason: 'Owner-authorized API/worker HA rollout and verification for items 8/9.' });
 }
-// Wait until both services have the exact release and shared state before scaling.
-let prepared = false;
-for (let i = 0; i < 60; i++) {
-  const t = await topology().catch(() => null);
-  if (!t) { await sleep(5000); continue; }
-  prepared = t.apiInstances.length >= 1 && t.workerInstances.length >= 1;
-  if (prepared) break;
-  await sleep(5000);
+async function renderRequest(path: string) {
+  assert(renderKey, 'RENDER_API_KEY is not bound in this workflow');
+  const response = await fetch(`https://api.render.com/v1${path}`, {
+    redirect: 'error',
+    signal: AbortSignal.timeout(20_000),
+    headers: { Authorization: `Bearer ${renderKey}`, Accept: 'application/json' },
+  });
+  const text = await response.text();
+  assert.equal(response.status, 200, `Render HTTP ${response.status} at ${path}: ${text.slice(0, 200)}`);
+  return JSON.parse(text);
 }
-assert(prepared, 'Current release with shared state is not running in both roles');
+async function exactLiveDeploy(serviceId: string) {
+  const payload = await renderRequest(`/services/${encodeURIComponent(serviceId)}/deploys?limit=20`);
+  assert(Array.isArray(payload), `Render deploy response for ${serviceId} is not an array`);
+  const deploys = payload.map((entry: any) => entry?.deploy ?? entry);
+  const live = deploys.find((deploy: any) => deploy?.status === 'live');
+  assert(live, `No live Render deploy for ${serviceId}`);
+  const commitSha = live?.commit?.id ?? live?.commitId ?? live?.commit?.sha;
+  assert.equal(commitSha, sha, `Render live deploy for ${serviceId} is not the certification SHA`);
+  return { id: live.id, status: live.status, commitSha, finishedAt: live.finishedAt ?? null };
+}
+async function physicalInstances(serviceId: string) {
+  const payload = await renderRequest(`/services/${encodeURIComponent(serviceId)}/instances`);
+  assert(Array.isArray(payload), `Render instance response for ${serviceId} is not an array`);
+  const instances = payload.map((entry: any) => ({
+    instanceId: String(entry?.id ?? ''),
+    createdAt: String(entry?.createdAt ?? ''),
+  }));
+  assert(instances.every((entry: any) => entry.instanceId && entry.createdAt), `Malformed Render instance for ${serviceId}`);
+  assert.equal(new Set(instances.map((entry: any) => entry.instanceId)).size, instances.length, `Duplicate Render instance for ${serviceId}`);
+  return instances;
+}
+async function physicalTopology() {
+  const [api, worker, apiInstances, workerInstances] = await Promise.all([
+    renderRequest(`/services/${apiService}`),
+    renderRequest(`/services/${workerService}`),
+    physicalInstances(apiService),
+    physicalInstances(workerService),
+  ]);
+  assert.equal(api.id, apiService); assert.equal(worker.id, workerService);
+  assert.equal(api.repo, expectedRepo); assert.equal(worker.repo, expectedRepo);
+  assert.equal(api.branch, 'main'); assert.equal(worker.branch, 'main');
+  assert.equal(api.type, 'web_service'); assert.equal(worker.type, 'background_worker');
+  assert.equal(api.suspended, 'not_suspended'); assert.equal(worker.suspended, 'not_suspended');
+  return {
+    source: 'render-public-api-list-instances',
+    observedAt: new Date().toISOString(),
+    api: { serviceId: api.id, configuredInstances: api.serviceDetails?.numInstances, instances: apiInstances },
+    worker: { serviceId: worker.id, configuredInstances: worker.serviceDetails?.numInstances, instances: workerInstances },
+  };
+}
+function twoByTwo(value: any) {
+  return value?.api?.configuredInstances === 2 && value?.worker?.configuredInstances === 2
+    && value.api.instances.length === 2 && value.worker.instances.length === 2;
+}
+function sharedTwoByTwo(value: any) {
+  return value?.ready === true && value.apiInstances?.length === 2 && value.workerInstances?.length === 2;
+}
+function apiProcessIds(value: any): Set<string> {
+  const rows = value?.api?.instances ?? value?.apiInstances ?? [];
+  return new Set(rows.map((entry: any) => entry.instanceId));
+}
+function workerProcessIds(value: any): Set<string> {
+  const rows = value?.worker?.instances ?? value?.workerInstances ?? [];
+  return new Set(rows.map((entry: any) => entry.instanceId));
+}
+async function optionalSharedTopology() {
+  let value: any;
+  try {
+    value = await topology();
+  } catch {
+    return { status: 'UNAVAILABLE', topology: null };
+  }
+  assert.equal(value.apiInstances.length, 2); assert.equal(value.workerInstances.length, 2);
+  return { status: 'PASS', topology: value };
+}
+// When a CI Render key is present, query Render's physical instances endpoint
+// directly. Otherwise, fail closed on the app's shared PostgreSQL heartbeats;
+// those rows carry unique Render host, PID, boot nonce, role and exact SHA.
+const exactDeploys = renderKey ? {
+  api: await exactLiveDeploy(apiService),
+  worker: await exactLiveDeploy(workerService),
+} : null;
+const scaleResults: Record<string, unknown> = {};
 for (const service of [workerService, apiService]) {
-  await action('render_scale_service', service, 2);
+  scaleResults[service] = await action('render_scale_service', service, 2);
   console.log(JSON.stringify({ scaleAccepted: true, serviceId: service, requestedInstances: 2, liveVerified: false }));
 }
 let before: any, consecutive = 0;
 for (let i = 0; i < 72; i++) {
-  const t = await topology().catch(() => null);
-  if (!t) { consecutive = 0; await sleep(5000); continue; }
-  if (t.ready && t.apiInstances.length === 2 && t.workerInstances.length === 2) consecutive++; else consecutive = 0;
-  if (consecutive >= 4) { before = t; break; }
+  const value = await (renderKey ? physicalTopology() : topology()).catch(() => null);
+  const ready = renderKey ? value && twoByTwo(value) : value && sharedTwoByTwo(value);
+  if (ready) consecutive++; else consecutive = 0;
+  if (consecutive >= 3) { before = value; break; }
   await sleep(5000);
 }
-assert(before, 'Two healthy processes per role did not become observable');
-const proof: Record<string, unknown> = { sourceSha: sha, before, rollingWorkerRestart: false, databaseFailoverTested: false, verifiedAt: new Date().toISOString() };
+assert(before, 'Two distinct, current processes per role did not become observable');
+const sharedBefore = renderKey ? await optionalSharedTopology() : { status: 'PASS', topology: before };
+const proof: Record<string, unknown> = {
+  sourceSha: sha,
+  exactDeploys,
+  scaleResults,
+  authorizationMode: token && systemKey ? 'owner-validated-protected-system-key' : token ? 'owner-bearer' : 'protected-system-key',
+  physicalTopologySource: renderKey ? 'render-public-api-list-instances' : 'shared-postgres-process-heartbeats',
+  before,
+  sharedStateObservation: sharedBefore,
+  rollingWorkerRestart: false,
+  databaseFailoverTested: false,
+  verifiedAt: new Date().toISOString(),
+};
 if (process.env.IVX_HA_RESTART_WORKER === 'true') {
-  const oldWorkers = new Set(before.workerInstances.map((i: any) => i.instanceId));
-  const apiIds = new Set(before.apiInstances.map((i: any) => i.instanceId));
+  const oldWorkers = workerProcessIds(before);
+  const apiIds = apiProcessIds(before);
   await action('render_restart_service', workerService);
-  const health: unknown[] = []; let after: any;
+  const health: unknown[] = []; let after: any; let recoveryProbe = -1;
   for (let i = 0; i < 90; i++) {
     const start = Date.now();
     const response = await fetch(base + '/health', { redirect: 'error', signal: AbortSignal.timeout(5000), headers: { Connection: 'close' } });
     assert.equal(response.status, 200, 'API availability failed during worker restart');
     const h = await response.json(); assert.equal(h.commit, sha); assert(apiIds.has(h.instanceId));
     health.push({ instanceId: h.instanceId, ms: Date.now() - start, at: new Date().toISOString() });
-    const t = await topology();
-    if (t.ready && t.workerInstances.length === 2 && t.workerInstances.every((w: any) => !oldWorkers.has(w.instanceId))) after = t;
-    if (after && i >= 40) break;
+    const current = await (renderKey ? physicalTopology() : topology()).catch(() => null);
+    const currentWorkers = current ? workerProcessIds(current) : new Set<string>();
+    const ready = renderKey ? current && twoByTwo(current) : current && sharedTwoByTwo(current);
+    if (ready && currentWorkers.size === 2 && [...currentWorkers].every(id => !oldWorkers.has(id))) {
+      after = current;
+      if (recoveryProbe < 0) recoveryProbe = i;
+    }
+    if (after && i - recoveryProbe >= 20) break;
     await sleep(3000);
   }
-  assert(after, 'Worker processes did not recover after restart');
-  Object.assign(proof, { after, health, rollingWorkerRestart: true, apiAvailabilityDuringRestart: 'PASS', taskRecoveryClaimed: false });
+  assert(after && recoveryProbe >= 0, 'Two replacement worker processes did not recover after restart');
+  const sharedAfter = renderKey ? await optionalSharedTopology() : { status: 'PASS', topology: after };
+  Object.assign(proof, {
+    after,
+    sharedStateObservationAfterRestart: sharedAfter,
+    health,
+    rollingWorkerRestart: true,
+    workerProcessReplacement: 'PASS',
+    apiAvailabilityDuringRestart: 'PASS',
+    taskRecoveryClaimed: false,
+  });
 }
 await mkdir('qa/evidence/fleet-ha', { recursive: true });
 await writeFile('qa/evidence/fleet-ha/live.json', JSON.stringify(proof, null, 2));

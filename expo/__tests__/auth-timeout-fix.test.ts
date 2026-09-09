@@ -114,10 +114,11 @@ describe('Owner sign-in architecture hardening (v1.10.2)', () => {
     expect(OWNER_TRUSTED_DEVICE_WINDOW_MS).toBe(thirtyDaysMs);
   });
 
-  it('architecture: owner password drift uses backend-managed emergency recovery', async () => {
+  it('architecture: owner password drift and provider outage use credential-bound emergency recovery', async () => {
     const source = await Bun.file(new URL('../lib/auth-context.tsx', import.meta.url)).text();
-    expect(source).toContain('loginOwnerPasswordless(normalizedEmail)');
-    expect(source).not.toContain('loginOwnerPasswordless(normalizedEmail, password)');
+    expect(source).toContain('loginOwnerPasswordless(normalizedEmail, password)');
+    expect(source).toContain('IVX_OWNER_OUTAGE_CREDENTIAL_BOUND_V1');
+    expect(source).toContain("normalizedDirect.failureReason === 'service_unavailable'");
     expect(source).toContain("trace.checkpoint('OWNER_RECOVERY_COMPLETE'");
   });
 

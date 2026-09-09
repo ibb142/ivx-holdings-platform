@@ -88,7 +88,7 @@ function buildSSEResponse(events: string[]): Response {
 }
 
 describe('P0 chat streaming UX', () => {
-  it('calls onProgress for every SSE delta without waiting for the full response', async () => {
+  it('uses the canonical full-pipeline route and renders its final-event contract', async () => {
     const events = [
       'data: {"type":"start","startedAt":"2026-08-10T12:00:00.000Z"}\n\n',
       'data: {"type":"delta","delta":"Hello "}\n\n',
@@ -96,7 +96,11 @@ describe('P0 chat streaming UX', () => {
       `data: {"type":"final","status":200,"ok":true,"body":{"ok":true,"status":"ok","answer":"Hello world","source":"chatgpt","model":"openai/gpt-4o","requestId":"req-123","conversationId":"conv-123","assistantMessageId":"msg-123","assistantPersisted":true}}\n\n`,
     ];
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => buildSSEResponse(events);
+    let requestedUrl = '';
+    globalThis.fetch = async (input) => {
+      requestedUrl = String(input);
+      return buildSSEResponse(events);
+    };
 
     try {
       const deltas: string[] = [];
@@ -110,6 +114,7 @@ describe('P0 chat streaming UX', () => {
       );
 
       expect(deltas).toEqual(['Hello ', 'world']);
+      expect(requestedUrl).toBe('https://api.ivxholding.com/api/ivx/owner-ai');
       expect(result.answer).toBe('Hello world');
       expect(result.source).toBe('remote_api');
     } finally {

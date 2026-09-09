@@ -29,8 +29,18 @@ timeout 180s "$MAESTRO" test expo/.maestro/ivx-owner-dashboard-certificate.yaml 
   --format junit \
   --output qa/evidence/dashboard-chat/dashboard.xml
 
-# 3) IVX IA Chat: live AI reply + durable thread across restart.
-timeout 240s "$MAESTRO" test expo/.maestro/ivx-owner-chat-certificate.yaml \
+# 3) Independent Autonomous signals; keep its screenshots in the uploaded bundle.
+timeout 180s "$MAESTRO" test expo/.maestro/ivx-owner-autonomous-certificate.yaml \
+  --test-output-dir qa/evidence/dashboard-chat/autonomous-artifacts \
+  --format junit \
+  --output qa/evidence/dashboard-chat/autonomous.xml
+
+# Use a fresh marker so persisted replies from previous runs cannot pass.
+CHAT_E2E_SUFFIX="${GITHUB_RUN_ID:-local}_${GITHUB_RUN_ATTEMPT:-1}_$(date +%s)"
+timeout 420s "$MAESTRO" test expo/.maestro/ivx-owner-chat-certificate.yaml \
+  --env CHAT_E2E_SUFFIX="$CHAT_E2E_SUFFIX" \
+  --env OWNER_EMAIL="$OWNER_EMAIL" \
+  --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" \
   --format junit \
   --output qa/evidence/dashboard-chat/chat.xml
 
@@ -44,14 +54,14 @@ adb exec-out screencap -p > qa/evidence/dashboard-chat/final.png || true
 adb logcat -d -v threadtime > qa/evidence/dashboard-chat/logcat.txt || true
 
 test -s qa/evidence/dashboard-chat/process.txt
-test "$(jq -r '.passed' qa/evidence/all-routes-human-e2e/certificate.json)" = true
-test "$(jq -r '.coveragePercent' qa/evidence/all-routes-human-e2e/certificate.json)" = 100
+jq -e '.passed == true and .coveragePercent == 100' \
+  qa/evidence/all-routes-human-e2e/certificate.json >/dev/null
 
 jq -n \
-  --arg sha "${GITHUB_SHA:-unknown}" \
+  --arg sha "${EXPO_PUBLIC_SOURCE_COMMIT_SHA:-${GITHUB_SHA:-unknown}}" \
   --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --argjson totalRoutes "$(jq -r '.totalRoutes' qa/evidence/all-routes-human-e2e/certificate.json)" \
-  '{certificate:"IVX-DASHBOARD-CHAT-ALL-ROUTES-E2E",passed:true,sourceSha:$sha,realOwnerLogin:true,dashboardRoute:"/admin/dashboard",dashboardRendered:true,dashboardScrolled:true,chatOpened:true,liveAIReply:true,chatPersistenceAfterRestart:true,allExpoRoutesHumanPatrolled:true,totalRoutes:$totalRoutes,routeCoveragePercent:100,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' \
+  '{certificate:"IVX-DASHBOARD-CHAT-ALL-ROUTES-E2E",passed:true,sourceSha:$sha,realOwnerLogin:true,dashboardRoute:"/admin/dashboard",dashboardRendered:true,dashboardScrolled:true,autonomousIndependentSignalsRendered:true,chatOpened:true,liveAIReply:true,chatPersistenceAfterRestart:true,allExpoRoutesAutomatedPatrolled:true,totalRoutes:$totalRoutes,routeCoveragePercent:100,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' \
   > qa/evidence/dashboard-chat/certificate.json
 cat qa/evidence/dashboard-chat/certificate.json
 

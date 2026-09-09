@@ -130,7 +130,10 @@ async function rpc<T>(name: string, body: Record<string, unknown>, timeoutMs = D
 }
 export function readPostgresFleetDashboardObservation(): Promise<unknown> {
   if (!postgresAtomicQueueConfigured()) throw new Error('Shared fleet observation requires postgres_atomic');
-  return rpc('ivx_fleet_dashboard_observation', {}, 5_000);
+  return rpc('ivx_fleet_dashboard_observation', {}, 5_000).catch((error) => {
+    if (!mayFailoverRead(error)) throw error;
+    return directRpc('ivx_fleet_dashboard_observation', {});
+  });
 
 }
 function cloneTasks(tasks: readonly Task[]): Task[] { return structuredClone(tasks) as Task[]; }
@@ -273,7 +276,27 @@ async function fetchPostgresRecoveryTasks(): Promise<Task[]> {
 }
 
 export async function persistPostgresFleetSloSample(sample: Record<string, unknown>): Promise<void> {
-  await restRequest('ivx_autonomous_task_events', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ event_type: 'fleet_slo_sample', worker_instance_id: autonomousWorkerInstanceId(), event: { ...sample, instance_role: process.env.IVX_WORKER_MODE === 'true' ? 'worker' : 'api', service_id: process.env.RENDER_SERVICE_ID ?? null, process_role: process.env.IVX_PROCESS_ROLE ?? null, shared_worker_queue: process.env.IVX_WORKER_QUEUE_ATOMIC === 'true', shared_state: process.env.IVX_REQUIRE_SHARED_STATE === 'true', draining: process.env.IVX_INSTANCE_DRAINING === 'true' } }) }, { timeoutMs: TRUTH_TIMEOUT_MS });
+  const workerInstanceId = autonomousWorkerInstanceId();
+  const event = { ...sample, instance_role: process.env.IVX_WORKER_MODE === 'true' ? 'worker' : 'api', service_id: process.env.RENDER_SERVICE_ID ?? null, process_role: process.env.IVX_PROCESS_ROLE ?? null, shared_worker_queue: process.env.IVX_WORKER_QUEUE_ATOMIC === 'true', shared_state: process.env.IVX_REQUIRE_SHARED_STATE === 'true', draining: process.env.IVX_INSTANCE_DRAINING === 'true' };
+  const persistDirect = async () => {
+    await getDirectPool().query(
+      'insert into public.ivx_autonomous_task_events(event_type,worker_instance_id,event) values ($1,$2,$3::jsonb)',
+      ['fleet_slo_sample', workerInstanceId, JSON.stringify(event)],
+    );
+  };
+  if (directDbUrl() && trimmed(process.env.IVX_SUPABASE_RECOVERY_MODE).toLowerCase() === 'true') {
+    await persistDirect();
+    return;
+  }
+  try {
+    await restRequest('ivx_autonomous_task_events', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ event_type: 'fleet_slo_sample', worker_instance_id: workerInstanceId, event }) }, { timeoutMs: TRUTH_TIMEOUT_MS });
+  } catch (error) {
+    if (!mayFailoverRead(error)) throw error;
+    // Telemetry samples are append-only observations. If PostgREST times out
+    // after accepting one, a duplicate direct sample is harmless: the HA view
+    // selects only the newest row per process identity.
+    await persistDirect();
+  }
 
 }
 

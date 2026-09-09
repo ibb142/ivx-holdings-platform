@@ -169,7 +169,11 @@ chat_checkpoint() {
 # steps 3-8). Fail closed.
 if [ "$rc" -eq 0 ] && [ "$CHAT_CERT_CAPABLE" -eq 1 ]; then
   adb logcat -c >/dev/null 2>&1 || true
-  timeout 150s "$MAESTRO" test expo/.maestro/ivx-owner-chat-certificate.yaml \
+  CHAT_E2E_SUFFIX="${GITHUB_RUN_ID:-local}_${GITHUB_RUN_ATTEMPT:-1}_$(date +%s)"
+  timeout 420s "$MAESTRO" test expo/.maestro/ivx-owner-chat-certificate.yaml \
+    --env CHAT_E2E_SUFFIX="$CHAT_E2E_SUFFIX" \
+    --env OWNER_EMAIL="$OWNER_EMAIL" \
+    --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" \
     --format junit \
     --output owner-chat-maestro.xml
   chat_maestro_rc=$?

@@ -2960,6 +2960,12 @@ const OWNER_AI_REQUEST_TIMEOUT_MS = 58_000;
  */
 const OWNER_AI_SSE_TIMEOUT_MS = 180_000;
 
+function createOwnerAICallerAbortError(message = 'Owner AI request aborted by caller'): Error {
+  const error = new Error(message);
+  error.name = 'AbortError';
+  return error;
+}
+
 export type IVXOwnerAIProgressEvent =
   | { type: 'start'; startedAt?: string }
   | { type: 'stage'; stage: string }
@@ -3095,26 +3101,46 @@ function logBackendPostProofThrow(input: {
 }
 
 /**
- * Real SSE/heartbeat consumer for POST /api/ivx/owner-ai. Issues ONE attempt
- * against the active endpoint with `Accept: text/event-stream`. The backend
- * runs the SAME internal handler and emits start/stage/heartbeat/final events.
+ * Real SSE consumer for POST /api/ivx/owner-ai. Issues ONE attempt against the
+ * canonical owner endpoint with `Accept: text/event-stream`. The backend keeps
+ * the complete owner pipeline and emits start/stage/heartbeat/delta/final.
  * Each event invokes `onProgress` so the caller (chat.tsx) can keep the
  * watchdog trace alive (`heartbeat()` resets BACKEND_POST_FINISHED timeout).
  *
- * On `final` we synthesize a `Response` carrying the canonical JSON body so
+ * On `final` we synthesize a canonical JSON `Response` so
  * the rest of `requestOwnerAI` keeps its existing parsing path.
  */
 async function fetchOwnerAIWithHeartbeat(
   accessToken: string,
   payload: OwnerAIRequestPayload,
   onProgress: (event: IVXOwnerAIProgressEvent) => void,
+  externalSignal?: AbortSignal,
 ): Promise<SSEFetchResult> {
   assertRemoteRoutingAvailable();
+  if (externalSignal?.aborted) {
+    throw createOwnerAICallerAbortError('Owner AI request aborted by caller before SSE fetch started');
+  }
+
   const endpoint = getIVXOwnerAIEndpoint();
   const controller = new AbortController();
+  let rejectDeadline: ((reason: Error) => void) | null = null;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    rejectDeadline = reject;
+  });
   const timeoutId = setTimeout(() => {
-    controller.abort(new Error(`Owner AI SSE timed out after ${OWNER_AI_SSE_TIMEOUT_MS}ms`));
+    const error = new Error(`Owner AI SSE timed out after ${OWNER_AI_SSE_TIMEOUT_MS}ms`);
+    rejectDeadline?.(error);
+    if (!controller.signal.aborted) controller.abort(error);
   }, OWNER_AI_SSE_TIMEOUT_MS);
+  let externalAbortHandler: (() => void) | null = null;
+  if (externalSignal) {
+    externalAbortHandler = () => {
+      const error = createOwnerAICallerAbortError();
+      rejectDeadline?.(error);
+      if (!controller.signal.aborted) controller.abort(error);
+    };
+    externalSignal.addEventListener('abort', externalAbortHandler);
+  }
   const sseHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'text/event-stream',
@@ -3135,12 +3161,15 @@ async function fetchOwnerAIWithHeartbeat(
   try {
     let response: Response;
     try {
-      response = await fetch(endpoint, {
-        method: 'POST',
-        headers: sseHeaders,
-        body: sseBody,
-        signal: controller.signal,
-      });
+      response = await Promise.race([
+        fetch(endpoint, {
+          method: 'POST',
+          headers: sseHeaders,
+          body: sseBody,
+          signal: controller.signal,
+        }),
+        deadline,
+      ]);
     } catch (fetchError) {
       logBackendPostProofThrow({
         label: 'Owner AI SSE',
@@ -3226,7 +3255,7 @@ async function fetchOwnerAIWithHeartbeat(
     };
 
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await Promise.race([reader.read(), deadline]);
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       let newlineIdx = buffer.indexOf('\n\n');
@@ -3245,14 +3274,10 @@ async function fetchOwnerAIWithHeartbeat(
       throw new Error(streamError ?? 'owner-ai stream closed without final event');
     }
     const final = finalEvent as { status: number; ok: boolean; body: unknown };
-    // ROOT-CAUSE FIX (2026-06-16): when the SSE final event body is null/empty
-    // but the status is 2xx, the old code synthesized an empty string body which
-    // dead-ended on "couldn't read its response" in the parse path — even though
-    // the backend successfully completed the task. Synthesize a minimal success
-    // response instead so the chat RENDERS and never shows a false error.
-    const synthesizedBody = final.body == null || final.body === ''
-      ? JSON.stringify({ answer: `Task completed (HTTP ${final.status}).`, status: 'ok' })
-      : JSON.stringify(final.body);
+    if (final.body == null || final.body === '') {
+      throw new Error('owner-ai stream final event did not include a response body');
+    }
+    const synthesizedBody = JSON.stringify(final.body);
     const synthesized = new Response(synthesizedBody, {
       status: final.status,
       headers: { 'Content-Type': 'application/json' },
@@ -3260,6 +3285,9 @@ async function fetchOwnerAIWithHeartbeat(
     return { endpoint, response: synthesized };
   } finally {
     clearTimeout(timeoutId);
+    if (externalSignal && externalAbortHandler) {
+      try { externalSignal.removeEventListener('abort', externalAbortHandler); } catch { /* noop */ }
+    }
   }
 }
 
@@ -3272,9 +3300,19 @@ function delay(ms: number): Promise<void> {
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number, externalSignal?: AbortSignal): Promise<Response> {
+  if (externalSignal?.aborted) {
+    throw createOwnerAICallerAbortError('Owner AI request aborted by caller before fetch started');
+  }
+
   const controller = new AbortController();
+  let rejectDeadline: ((reason: Error) => void) | null = null;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    rejectDeadline = reject;
+  });
   const timeoutId = setTimeout(() => {
-    controller.abort(new Error(`Owner AI request timed out after ${timeoutMs}ms`));
+    const error = new Error(`Owner AI request timed out after ${timeoutMs}ms`);
+    rejectDeadline?.(error);
+    if (!controller.signal.aborted) controller.abort(error);
   }, timeoutMs);
 
   // Forward external aborts (reliability wrapper / watchdog cancel) into the
@@ -3283,24 +3321,25 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   // never reaching BACKEND_POST_FINISHED.
   let externalAbortHandler: (() => void) | null = null;
   if (externalSignal) {
-    if (externalSignal.aborted) {
-      controller.abort(new Error('Owner AI request aborted by caller before fetch started'));
-    } else {
-      externalAbortHandler = () => {
-        try { controller.abort(new Error('Owner AI request aborted by caller')); } catch { /* noop */ }
-      };
-      externalSignal.addEventListener('abort', externalAbortHandler);
-    }
+    externalAbortHandler = () => {
+      const error = createOwnerAICallerAbortError();
+      rejectDeadline?.(error);
+      if (!controller.signal.aborted) controller.abort(error);
+    };
+    externalSignal.addEventListener('abort', externalAbortHandler);
   }
 
   try {
-    return await fetch(url, {
-      ...init,
-      signal: controller.signal,
-    });
+    return await Promise.race([
+      fetch(url, {
+        ...init,
+        signal: controller.signal,
+      }),
+      deadline,
+    ]);
   } catch (error) {
     if (externalSignal?.aborted) {
-      throw new Error('Owner AI request aborted by caller');
+      throw createOwnerAICallerAbortError();
     }
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error(`Owner AI request timed out after ${timeoutMs}ms`);
@@ -4291,6 +4330,9 @@ async function fetchOwnerAIEndpointWithFallback(
 
         return { endpoint, response };
       } catch (error) {
+        if (externalSignal?.aborted) {
+          throw error;
+        }
         const message = error instanceof Error ? error.message : 'Unknown endpoint error';
         if (attempt < MAX_ENDPOINT_ATTEMPTS && isTransientOwnerAIRouteFailure(null, message)) {
           console.log(`[IVXAIRequestService] ${requestLabel} transient network error, retrying:`, endpoint, message, 'attempt:', attempt, 'bearerHeaderPresent:', true);
@@ -4603,16 +4645,16 @@ export const ivxAIRequestService = {
       // run the tool-grounded server-side agent for 60–90s+, which exceeds the
       // host's ~60s request cap and the 58s JSON per-POST timeout — surfacing as
       // the `BACKEND_POST_FINISHED` "Unable to reach IVX Owner AI" (no HTTP
-      // status) TRUE_FAILURE. The backend already streams start/stage/heartbeat/
-      // final SSE events (verified live), which keep the connection alive well
-      // past the proxy cap. When the caller plumbs `onProgress` (chat.tsx does),
-      // we now consume that stream via fetchOwnerAIWithHeartbeat (180s ceiling).
+      // status) TRUE_FAILURE. With `Accept: text/event-stream`, the canonical
+      // owner route emits start/stage/heartbeat/delta/final while preserving the
+      // full owner pipeline. When the caller plumbs `onProgress` (chat.tsx does),
+      // we consume that stream via fetchOwnerAIWithHeartbeat (180s ceiling).
       // If the deploy/proxy does not honor SSE, it throws a recoverable error and
       // we transparently fall back to the legacy JSON path below.
       let result: { endpoint: string; response: Response } | null = null;
       if (typeof onProgress === 'function') {
         try {
-          result = await fetchOwnerAIWithHeartbeat(accessToken, payload, onProgress);
+          result = await fetchOwnerAIWithHeartbeat(accessToken, payload, onProgress, options?.signal);
           console.log('[IVXAIRequestService] Owner AI request resolved endpoint:', result.endpoint, 'status:', result.response.status, 'transport: sse');
         } catch (sseError) {
           const sseMessage = sseError instanceof Error ? sseError.message : 'unknown';

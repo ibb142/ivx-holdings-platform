@@ -20,6 +20,15 @@ on:
         description: Verify a rolling worker restart with continuous API probes
         type: boolean
         default: false
+      target_sha:
+        description: Existing main SHA to certify (defaults to the dispatched ref)
+        type: string
+        required: false
+        default: ''
+      authorized_system_fallback:
+        description: Use the protected IVX machine credential if Supabase Auth is unreachable
+        type: boolean
+        default: false
 
 concurrency:
   group: ivx-render-live-status-proof-main
@@ -44,12 +53,24 @@ jobs:
       OWNER_PASSWORD_S6: ${{ secrets.IVX_OWNER_LOGIN_PASSWORD }}
       SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      IVX_SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET || secrets.IVX_SYSTEM_SECRET }}
+      IVX_TARGET_SHA: ${{ inputs.target_sha || github.sha }}
+      IVX_AUTHORIZED_SYSTEM_FALLBACK: ${{ inputs.authorized_system_fallback || (github.event_name == 'push' && github.ref_name == 'main' && contains(github.event.head_commit.message, '[verify-fleet-ha-recovery]')) }}
       IVX_HA_RESTART_WORKER: ${{ inputs.restart_worker || contains(github.event.head_commit.message, '[verify-fleet-ha-recovery]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.9
+      - name: Resolve protected certification target
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$IVX_TARGET_SHA"
+          test "$(printf '%s' "$target" | grep -Ec '^[a-f0-9]{40}$')" = 1
+          echo "IVX_TARGET_SHA=$target" >> "$GITHUB_ENV"
+          echo "certification_target=$target trigger_sha=$GITHUB_SHA"
       - name: Publish pending exact-SHA status
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -58,13 +79,18 @@ jobs:
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${IVX_TARGET_SHA}" \
             -d "{\"state\":\"pending\",\"context\":\"ivx/render-live-exact-sha\",\"description\":\"Waiting for Render exact-SHA production parity\"}"
 
       - name: Wait for health and version exact SHA
         shell: bash
         run: |
           set -euo pipefail
+          test "$(printf '%s' "$IVX_TARGET_SHA" | grep -Ec '^[a-f0-9]{40}$')" = 1
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$IVX_TARGET_SHA" != "$GITHUB_SHA" ]; then
+            git fetch origin main --quiet
+            test "$IVX_TARGET_SHA" = "$(git rev-parse origin/main)" || { echo 'target_sha must be current main'; exit 1; }
+          fi
           for i in $(seq 1 90); do
             health_code=$(curl -sS -m 20 -o /tmp/health.json -w '%{http_code}' "${API_BASE}/health" || true)
             version_code=$(curl -sS -m 20 -o /tmp/version.json -w '%{http_code}' "${API_BASE}/version" || true)
@@ -72,13 +98,13 @@ jobs:
             health_ok=$(jq -r '.ok // false' /tmp/health.json 2>/dev/null || echo false)
             version_commit=$(jq -r '.commit // empty' /tmp/version.json 2>/dev/null || true)
             version_ok=$(jq -r '.ok // false' /tmp/version.json 2>/dev/null || echo false)
-            echo "poll=$i health_http=$health_code health_ok=$health_ok health_sha=${health_commit:-missing} version_http=$version_code version_ok=$version_ok version_sha=${version_commit:-missing} expected=$GITHUB_SHA"
-            if [ "$health_code" = "200" ] && [ "$version_code" = "200" ] && [ "$health_ok" = "true" ] && [ "$version_ok" = "true" ] && [ "$health_commit" = "$GITHUB_SHA" ] && [ "$version_commit" = "$GITHUB_SHA" ]; then
+            echo "poll=$i health_http=$health_code health_ok=$health_ok health_sha=${health_commit:-missing} version_http=$version_code version_ok=$version_ok version_sha=${version_commit:-missing} expected=$IVX_TARGET_SHA"
+            if [ "$health_code" = "200" ] && [ "$version_code" = "200" ] && [ "$health_ok" = "true" ] && [ "$version_ok" = "true" ] && [ "$health_commit" = "$IVX_TARGET_SHA" ] && [ "$version_commit" = "$IVX_TARGET_SHA" ]; then
               exit 0
             fi
             sleep 10
           done
-          echo "Production did not reach exact SHA ${GITHUB_SHA}" >&2
+          echo "Production did not reach exact SHA ${IVX_TARGET_SHA}" >&2
           exit 1
 
       - name: Resolve real owner credential binding
@@ -101,22 +127,34 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "owner_password_binding=$binding"
 
-      - name: Authenticate real Owner before deploy
+      - name: Authenticate real Owner or protected owner-authorized automation
         shell: bash
         run: |
           set -euo pipefail
           body=$(jq -nc --arg email "$OWNER_EMAIL" --arg password "$OWNER_PASSWORD_EFFECTIVE" '{email:$email,password:$password}')
-          code=$(curl -sS --retry 3 --retry-delay 2 --retry-all-errors --max-time 25 -o /tmp/login-predeploy.json -w '%{http_code}' -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" -H "apikey: ${SUPABASE_ANON_KEY}" -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" -H 'Content-Type: application/json' --data "$body" || true)
-          test "$code" = 200 || { jq '{error,error_code,msg,message}' /tmp/login-predeploy.json 2>/dev/null || true; exit 1; }
-          token=$(jq -r '.access_token // empty' /tmp/login-predeploy.json)
-          user_id=$(jq -r '.user.id // empty' /tmp/login-predeploy.json)
-          role=$(jq -r '.user.app_metadata.role // .user.user_metadata.role // empty' /tmp/login-predeploy.json)
-          test -n "$token"; test -n "$user_id"
-          case "$role" in owner|admin) ;; *) echo "Owner role gate failed role=${role:-missing}"; exit 1;; esac
-          echo "::add-mask::$token"
-          echo "OWNER_TOKEN=$token" >> "$GITHUB_ENV"
-          echo "OWNER_USER_ID=$user_id" >> "$GITHUB_ENV"
-          echo 'owner_predeploy_auth=PASS'
+          code=$(curl -sS --retry 2 --retry-delay 2 --retry-all-errors --max-time 20 -o /tmp/login-predeploy.json -w '%{http_code}' -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" -H "apikey: ${SUPABASE_ANON_KEY}" -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" -H 'Content-Type: application/json' --data "$body" || true)
+          if [ "$code" = 200 ]; then
+            token=$(jq -r '.access_token // empty' /tmp/login-predeploy.json)
+            user_id=$(jq -r '.user.id // empty' /tmp/login-predeploy.json)
+            role=$(jq -r '.user.app_metadata.role // .user.user_metadata.role // empty' /tmp/login-predeploy.json)
+            test -n "$token"; test -n "$user_id"
+            case "$role" in owner|admin) ;; *) echo "Owner role gate failed role=${role:-missing}"; exit 1;; esac
+            echo "::add-mask::$token"
+            echo "OWNER_TOKEN=$token" >> "$GITHUB_ENV"
+            echo "OWNER_USER_ID=$user_id" >> "$GITHUB_ENV"
+            echo 'IVX_HA_AUTH_MODE=owner_bearer' >> "$GITHUB_ENV"
+            echo 'owner_predeploy_auth=PASS'
+            exit 0
+          fi
+          jq '{error,error_code,msg,message}' /tmp/login-predeploy.json 2>/dev/null || true
+          if [ "$IVX_AUTHORIZED_SYSTEM_FALLBACK" = true ] && [ "$GITHUB_ACTOR" = ibb142 ] && [ -n "${IVX_SYSTEM_KEY:-}" ]; then
+            echo "::add-mask::$IVX_SYSTEM_KEY"
+            echo 'IVX_HA_AUTH_MODE=system_key' >> "$GITHUB_ENV"
+            echo 'owner_authorized_system_auth=PASS reason=supabase_auth_unreachable'
+            exit 0
+          fi
+          echo "Supabase owner authentication failed with HTTP ${code:-000}; protected fallback was not authorized."
+          exit 1
 
       - name: Apply two replicas and prove shared topology
         run: bun scripts/ivx-fleet-ha-live-proof.ts
@@ -124,7 +162,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: fleet-ha-${{ github.sha }}-${{ github.run_attempt }}
+          name: fleet-ha-${{ env.IVX_TARGET_SHA }}-${{ github.run_attempt }}
           path: qa/evidence/fleet-ha/
           if-no-files-found: warn
 
@@ -142,7 +180,7 @@ jobs:
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${IVX_TARGET_SHA}" \
             -d "{\"state\":\"success\",\"context\":\"ivx/render-live-exact-sha\",\"description\":\"Exact SHA, stable health, authenticated fleet SLO verified\"}"
 
       - name: Publish failure exact-SHA status
@@ -154,5 +192,5 @@ jobs:
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${IVX_TARGET_SHA}" \
             -d "{\"state\":\"failure\",\"context\":\"ivx/render-live-exact-sha\",\"description\":\"Render exact-SHA production parity failed\"}"
