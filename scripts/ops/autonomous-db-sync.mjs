@@ -48,9 +48,25 @@ export function repairKnownConnection(raw) {
   } catch {return null;}
 }
 
+export function normalizeStoredConnection(raw) {
+  if(typeof raw!=='string')return null;
+  let value=raw.trim().replace(/^(?:export\s+)?SUPABASE_DB_URL\s*=\s*/, '').replace(/^psql\s+(?=['"])/, '');
+  if((value.startsWith('"')&&value.endsWith('"'))||(value.startsWith("'")&&value.endsWith("'")))value=value.slice(1,-1).trim();
+  if(connectionIssue(value)==='valid')return value===raw.trim()?null:value;
+  // A pasted password can contain reserved URI characters. Only recognize the
+  // exact project host and postgres user/database; never infer missing secrets.
+  const host=`db.${project}.supabase.co`.replaceAll('.', '\\.');
+  const match=new RegExp(`^postgres(?:ql)?://postgres:(.+)@(${host})(:5432)?/postgres(?:\\?sslmode=(require|verify-ca|verify-full))?$`).exec(value);
+  if(!match || /[\r\n]/.test(match[1]) || connectionIssue(value)!=='malformed_uri')return null;
+  const repaired=`postgresql://postgres:${encodeURIComponent(match[1])}@${match[2]}${match[3]||''}/postgres${match[4]?`?sslmode=${match[4]}`:''}`;
+  return connectionIssue(repaired)==='valid'?repaired:null;
+}
+
 export function candidates(env) {
   const result = aliases.filter(k=>env[k]?.trim()).map(k=>({source:k, value:env[k].trim()}));
   for(const candidate of [...result]) {
+    const normalized=normalizeStoredConnection(candidate.value);
+    if(normalized)result.push({source:candidate.source+'_uri_normalization',value:normalized});
     const repaired=repairKnownConnection(candidate.value);
     if(repaired)result.push({source:candidate.source+'_hostname_repair',value:repaired});
   }
@@ -161,8 +177,10 @@ export async function main() {
   }
   const groups=await readLinkedGroups(key);
   console.log(JSON.stringify({linkedGroupsAudited:groups.length}));
+  const github={serviceId:'github_actions',env:process.env};
+  console.log(JSON.stringify({source:'github_actions',credentialPresence:Object.fromEntries([...aliases,'SUPABASE_DB_PASSWORD'].map(n=>[n,Boolean(process.env[n]?.trim())])),connectionIssues:Object.fromEntries(aliases.map(n=>[n,connectionIssue(process.env[n])]))}));
   let chosen=null;
-  for(const entry of [...configurations,...groups]) for(const candidate of candidates(entry.env)) {
+  for(const entry of [...configurations,...groups,github]) for(const candidate of candidates(entry.env)) {
     if(chosen) break;
     if(connectionIssue(candidate.value)!=='valid')continue;
     const config=validateConnection(candidate.value); if(!config) continue;
