@@ -145,7 +145,13 @@ const proof: Record<string, unknown> = {
   rollingWorkerRestart: false,
   databaseFailoverTested: false,
   verifiedAt: new Date().toISOString(),
+  verification: 'PENDING',
 };
+// Preserve the exact pre-restart IDs if a later assertion fails. A checkpoint
+// is explicitly pending and can never be mistaken for a completed certificate.
+await mkdir('qa/evidence/fleet-ha', { recursive: true });
+await writeFile('qa/evidence/fleet-ha/live.json', JSON.stringify(proof, null, 2));
+console.log(JSON.stringify({ phase: 'before-worker-restart', before, sharedStateStatus: sharedBefore.status }));
 if (process.env.IVX_HA_RESTART_WORKER === 'true') {
   const oldWorkers = workerProcessIds(before);
   const apiIds = apiProcessIds(before);
@@ -158,7 +164,7 @@ if (process.env.IVX_HA_RESTART_WORKER === 'true') {
     const h = await response.json(); assert.equal(h.commit, sha);
     assert(
       processIdentityMatchesObservedInstance(h.instanceId, apiIds),
-      `Health process ${String(h.instanceId || 'missing')} is not hosted by a certified API instance`,
+      `Health process ${String(h.instanceId || 'missing')} is not hosted by certified API instances ${JSON.stringify([...apiIds])}`,
     );
     health.push({ instanceId: h.instanceId, ms: Date.now() - start, at: new Date().toISOString() });
     const current = await (renderKey ? physicalTopology() : topology()).catch(() => null);
@@ -183,6 +189,7 @@ if (process.env.IVX_HA_RESTART_WORKER === 'true') {
     taskRecoveryClaimed: false,
   });
 }
-await mkdir('qa/evidence/fleet-ha', { recursive: true });
+proof.verification = 'PASS';
+proof.verifiedAt = new Date().toISOString();
 await writeFile('qa/evidence/fleet-ha/live.json', JSON.stringify(proof, null, 2));
 console.log(JSON.stringify(proof));
