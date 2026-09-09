@@ -10,6 +10,12 @@ on:
         required: false
         default: 'true'
         type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - "expo/deploy-s3-direct.mjs"
+      - "qa/landing-edge-deploy.test.mjs"
+      - ".github/workflows/landing-s3-production-deploy.yml"
   push:
     branches: [main]
     paths:
@@ -31,7 +37,7 @@ on:
 
 # IVX AWS deployment identity: owner-managed GitHub Secrets. Values remain masked.
 permissions:
-  contents: write
+  contents: read
 
 env:
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -46,8 +52,22 @@ env:
   EXPO_PUBLIC_TIKTOK_PIXEL_ID: ${{ secrets.EXPO_PUBLIC_TIKTOK_PIXEL_ID }}
   EXPO_PUBLIC_LINKEDIN_PARTNER_ID: ${{ secrets.EXPO_PUBLIC_LINKEDIN_PARTNER_ID }}
 
+concurrency:
+  group: landing-s3-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
+  cancel-in-progress: false
+
 jobs:
+  edge-contracts:
+    name: CloudFront deployment contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node --test qa/landing-edge-deploy.test.mjs
   deploy:
+    if: github.event_name != 'pull_request'
+    needs: [edge-contracts]
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -69,18 +89,11 @@ jobs:
           ! grep -q 'All properties are title-verified and insured' expo/ivxholding-landing/index.html
           grep -q 'Deal structures and protections vary by opportunity' expo/ivxholding-landing/index.html
 
-      - name: Persist Deep-QA landing fix
+      - name: Require reviewed landing source
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'IVX Landing Production QA'
-          git config user.email 'ivx-landing-qa@users.noreply.github.com'
-          if ! git diff --quiet -- expo/ivxholding-landing/index.html; then
-            git add expo/ivxholding-landing/index.html
-            git commit -m 'fix(landing): enforce truthful public claims [skip ci]'
-            git pull --rebase origin main
-            git push origin HEAD:main
-          fi
+          git diff --exit-code -- expo/ivxholding-landing/index.html
           echo "LANDING_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Validate owner-managed deployment secrets
@@ -157,13 +170,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          headers=$(curl -sSI --max-time 20 https://www.ivxholding.com/ || true)
+          for attempt in $(seq 1 40); do
+            headers=$(curl -sSI --max-time 20 https://www.ivxholding.com/ || true)
+            status=$(printf '%s\n' "$headers" | head -n 1 | awk '{print $2}')
+            location=$(printf '%s\n' "$headers" | grep -i '^location:' | head -n 1 | sed -E 's/^[Ll]ocation:[[:space:]]*//; s/\r$//' || true)
+            valid_status=false
+            case "$status" in 301|302|307|308) valid_status=true ;; esac
+            if [ "$valid_status" = true ]; then
+              case "$location" in
+                https://ivxholding.com|https://ivxholding.com/|https://ivxholding.com/*)
+                  echo "www_redirect=PASS status=$status location=$location"
+                  exit 0 ;;
+              esac
+            fi
+            echo "Waiting for CloudFront redirect propagation: attempt=$attempt status=${status:-missing}"
+            if [ "$attempt" -lt 40 ]; then sleep 15; fi
+          done
           printf '%s\n' "$headers"
-          status=$(printf '%s\n' "$headers" | head -n 1 | awk '{print $2}')
-          location=$(printf '%s\n' "$headers" | grep -i '^location:' | head -n 1 | sed -E 's/^[Ll]ocation:[[:space:]]*//; s/\r$//' || true)
-          case "$status" in 301|302|307|308) ;; *) echo "::error::www redirect failed status=${status:-missing}"; exit 1;; esac
-          case "$location" in https://ivxholding.com|https://ivxholding.com/|https://ivxholding.com/*) ;; *) echo "::error::bad redirect location=${location:-missing}"; exit 1;; esac
-          echo "www_redirect=PASS status=$status location=$location"
+          echo "::error::www redirect failed status=${status:-missing} location=${location:-missing}"
+          exit 1
 
       - name: Build Expo web app
         if: github.event.inputs.deployWebApp != 'false'

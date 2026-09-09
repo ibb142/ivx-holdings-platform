@@ -1,3 +1,4 @@
+import { requireSharedState } from '../services/ivx-shared-room-storage';
 /**
  * IVX Public Chat SSE streaming endpoint.
  *
@@ -158,6 +159,7 @@ async function persistPublicTurn(input: {
       // fall through to JSON
     }
   }
+  if (requireSharedState()) throw new Error('Shared chat persistence unavailable');
   if (publicChatHistoryStorage) {
     try {
       publicChatHistoryStorage.createMessage({

@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Activity, AlertTriangle, ArrowLeft, CheckCircle2, Clock3, Crosshair, Radio, RefreshCw, ShieldCheck, Wrench } from 'lucide-react-native';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
+import { visibleFleetSignals, type FleetDashboardSignals } from '@/shared/ivx/fleet-signals';
 
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 const URL = `${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h`;
@@ -15,7 +16,7 @@ const RADAR_SIZE = 270;
 const RADAR_CENTER = RADAR_SIZE / 2;
 const RADAR_RADIUS = 112;
 
-type AgentStatus = 'ACTIVE' | 'IDLE' | 'RUNNING' | 'TESTING' | 'DEPLOYING' | 'VERIFYING' | 'RETRYING' | 'BLOCKED' | 'OWNER_ACTION_REQUIRED' | 'FAILED' | 'COMPLETED';
+type AgentStatus = 'ACTIVE' | 'IDLE' | 'ASSIGNED' | 'UNKNOWN' | 'RUNNING' | 'TESTING' | 'DEPLOYING' | 'VERIFYING' | 'RETRYING' | 'BLOCKED' | 'OWNER_ACTION_REQUIRED' | 'FAILED' | 'COMPLETED';
 type Agent = {
   agentNumber: number;
   agentId: string;
@@ -42,7 +43,10 @@ type DashboardPayload = {
   dashboard?: {
     marker?: string;
     generatedAt?: string;
+    backendCommitSha?: string;
     agents?: Agent[];
+    enterprise112?: { ledgerOk?: boolean };
+    fleetSignals?: FleetDashboardSignals;
     rolling24h?: {
       tasksStarted: number;
       tasksCompleted: number;
@@ -58,7 +62,7 @@ type DashboardPayload = {
 function tone(status: AgentStatus) {
   if (['RUNNING','TESTING','DEPLOYING','VERIFYING','RETRYING'].includes(status)) return '#38BDF8';
   if (status === 'COMPLETED') return '#22C55E';
-  if (status === 'BLOCKED' || status === 'OWNER_ACTION_REQUIRED') return '#F59E0B';
+  if (status === 'ASSIGNED' || status === 'BLOCKED' || status === 'OWNER_ACTION_REQUIRED') return '#F59E0B';
   if (status === 'FAILED') return '#EF4444';
   return '#64748B';
 }
@@ -99,6 +103,7 @@ export default function LandingWorkersLiveScreen() {
       const res = await fetch(URL, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal });
       const json = await res.json() as DashboardPayload;
       if (!res.ok || !json.ok || !json.dashboard) throw new Error(json.error || `Dashboard HTTP ${res.status}`);
+      if (json.dashboard.enterprise112?.ledgerOk !== true) throw new Error('Durable worker telemetry is unavailable.');
       const roster = json.dashboard.agents;
       if (!Array.isArray(roster) || roster.length !== 112 || new Set(roster.map(a => a.agentNumber)).size !== 112
         || roster.some(a => !Number.isInteger(a.agentNumber) || a.agentNumber < 1 || a.agentNumber > 112)) {
@@ -134,17 +139,16 @@ export default function LandingWorkersLiveScreen() {
 
   const agents = useMemo(() => payload?.dashboard?.agents || [], [payload]);
   const age = checkedAt - Date.parse(payload?.dashboard?.generatedAt || '');
-  const fresh = !error && Number.isFinite(age) && age >= -1000 && age <= 15_000;
-  const working = agents.filter(a => ['RUNNING','TESTING','DEPLOYING','VERIFYING','RETRYING'].includes(a.status)).length;
-  const testing = agents.filter(a => a.status === 'TESTING').length;
-  const deploying = agents.filter(a => a.status === 'DEPLOYING').length;
-  const verifying = agents.filter(a => a.status === 'VERIFYING').length;
-  const completed = agents.filter(a => a.status === 'COMPLETED').length;
-  const blocked = agents.filter(a => a.status === 'BLOCKED' || a.status === 'OWNER_ACTION_REQUIRED').length;
-  const failed = agents.filter(a => a.status === 'FAILED').length;
+  const signals = visibleFleetSignals(payload?.dashboard?.fleetSignals, checkedAt);
+  const fresh = !error && Boolean(signals && signals.commitSha === payload?.dashboard?.backendCommitSha)
+    && Number.isFinite(age) && age >= -1000 && age <= 15_000;
+  const working = signals?.counts.running ?? 0;
+  const completed = payload?.dashboard?.rolling24h?.tasksCompleted ?? agents.reduce((sum, a) => sum + a.tasksCompletedToday, 0);
+  const blocked = agents.reduce((sum, a) => sum + a.tasksBlockedToday, 0);
+  const failed = payload?.dashboard?.rolling24h?.tasksFailed ?? agents.reduce((sum, a) => sum + a.tasksFailedToday, 0);
   const withProof = agents.filter(a => Boolean(a.lastSourceReference && a.lastEvidenceSha)).length;
   const exact112 = agents.length === 112;
-  const alerts = agents.filter(a => a.status === 'BLOCKED' || a.status === 'OWNER_ACTION_REQUIRED' || a.status === 'FAILED').slice(0, 8);
+  const alerts = agents.filter(a => a.tasksBlockedToday > 0 || a.tasksFailedToday > 0 || a.status === 'OWNER_ACTION_REQUIRED').slice(0, 8);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top','bottom']} testID="ivx-mission-control-screen">
@@ -172,25 +176,25 @@ export default function LandingWorkersLiveScreen() {
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.missionStrip}>
             <StatusChip label="RUNNING" value={fresh ? working : null} color="#38BDF8" />
-            <StatusChip label="TESTING" value={fresh ? testing : null} color="#60A5FA" />
-            <StatusChip label="DEPLOYING" value={fresh ? deploying : null} color="#A78BFA" />
-            <StatusChip label="VERIFYING" value={fresh ? verifying : null} color="#22D3EE" />
-            <StatusChip label="COMPLETED" value={fresh ? completed : null} color="#22C55E" />
-            <StatusChip label="BLOCKED" value={fresh ? blocked : null} color="#F59E0B" />
-            <StatusChip label="FAILED" value={fresh ? failed : null} color="#EF4444" />
+            <StatusChip label="ASSIGNED" value={fresh ? signals?.counts.assigned ?? null : null} color="#F59E0B" />
+            <StatusChip label="HEARTBEATS" value={fresh ? signals?.counts.heartbeat ?? null : null} color="#A78BFA" />
+            <StatusChip label="PRODUCTIVE" value={fresh ? signals?.counts.productive ?? null : null} color="#22D3EE" />
+            <StatusChip label="COMPLETED 24H" value={fresh ? completed : null} color="#22C55E" />
+            <StatusChip label="BLOCKED 24H" value={fresh ? blocked : null} color="#F59E0B" />
+            <StatusChip label="FAILED 24H" value={fresh ? failed : null} color="#EF4444" />
           </ScrollView>
 
           <View style={styles.metrics}>
             <Metric label="Workers" value={`${agents.length}/112`} color={exact112 ? '#22C55E' : '#EF4444'} />
             <Metric label="Reported running" value={fresh ? working : "—"} color="#38BDF8" />
-            <Metric label="Completed" value={fresh ? completed : '—'} color="#22C55E" />
-            <Metric label="Alerts" value={fresh ? blocked + failed : '—'} color={!fresh ? '#94A3B8' : blocked + failed > 0 ? '#F59E0B' : '#22C55E'} />
-            <Metric label="Proof" value={`${withProof}/112`} color={withProof === 112 ? '#22C55E' : '#FBBF24'} />
+            <Metric label="Completed · 24h" value={fresh ? completed : '—'} color="#22C55E" />
+            <Metric label="Alerts · 24h" value={fresh ? blocked + failed : '—'} color={!fresh ? '#94A3B8' : blocked + failed > 0 ? '#F59E0B' : '#22C55E'} />
+            <Metric label="Recorded proof" value={`${withProof}/112`} color={withProof === 112 ? '#22C55E' : '#FBBF24'} />
             <Metric label="Coverage" value={`${pct(withProof, 112)}%`} color="#FBBF24" />
           </View>
 
           <View style={styles.proofMeter}>
-            <View style={styles.proofMeterHeader}><Text style={styles.proofMeterLabel}>EVIDENCE COVERAGE</Text><Text style={styles.proofMeterValue}>{withProof}/112</Text></View>
+            <View style={styles.proofMeterHeader}><Text style={styles.proofMeterLabel}>RECORDED EVIDENCE COVERAGE</Text><Text style={styles.proofMeterValue}>{withProof}/112</Text></View>
             <View style={styles.proofTrack}><View style={[styles.proofFill,{width:`${pct(withProof, 112)}%`}]} /></View>
           </View>
 
@@ -203,9 +207,9 @@ export default function LandingWorkersLiveScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>MISSION ALERT CENTER</Text>
-          <Text style={styles.sectionSub}>Blocked, failed and owner-action-required workers rise here automatically.</Text>
+          <Text style={styles.sectionSub}>Failed or blocked tasks in the last 24 hours and pending owner actions.</Text>
           {!fresh ? <Text style={styles.message}>Waiting for fresh telemetry to evaluate fleet alerts.</Text> : alerts.length === 0 ? (
-            <View style={styles.clearPanel}><CheckCircle2 size={18} color="#22C55E" /><Text style={styles.clearText}>No active fleet alerts in the current ledger snapshot.</Text></View>
+            <View style={styles.clearPanel}><CheckCircle2 size={18} color="#22C55E" /><Text style={styles.clearText}>No failed or blocked tasks in the last 24 hours.</Text></View>
           ) : alerts.map(agent => (
             <View key={`alert-${agent.agentId}`} style={styles.alertRow}>
               <View style={[styles.dot,{backgroundColor:tone(agent.status)}]} />
@@ -218,7 +222,7 @@ export default function LandingWorkersLiveScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>IA-001 → IA-112 LIVE WORK MAP</Text>
           <Text style={styles.sectionSub}>Operational radar visualization only — not physical GPS. Each card below is tied to real runtime evidence.</Text>
-          {agents.map(agent => <AgentCard key={agent.agentId} agent={agent} />)}
+          {agents.map(agent => <AgentCard key={agent.agentId} agent={agent} fresh={fresh} />)}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -270,15 +274,16 @@ function Metric({ label, value, color }: { label: string; value: string | number
   return <View style={styles.metric}><Text style={[styles.metricValue,{color}]}>{value}</Text><Text style={styles.metricLabel}>{label}</Text></View>;
 }
 
-function AgentCard({ agent }: { agent: Agent }) {
+function AgentCard({ agent, fresh }: { agent: Agent; fresh: boolean }) {
+  const status = fresh ? agent.status : 'UNKNOWN';
   return (
     <View style={styles.card}>
       <View style={styles.cardHead}>
-        <View style={[styles.dot,{backgroundColor:tone(agent.status)}]} />
+        <View style={[styles.dot,{backgroundColor:tone(status)}]} />
         <View style={styles.identity}><Text style={styles.agentName}>IA-{String(agent.agentNumber).padStart(3,'0')} · {agent.name}</Text><Text style={styles.meta}>{agent.department} · {agent.health || 'unknown'} · {agent.availability || 'unknown'}</Text></View>
-        <Text style={[styles.status,{color:tone(agent.status)}]}>{agent.status}</Text>
+        <Text style={[styles.status,{color:tone(status)}]}>{fresh ? status : 'STALE'}</Text>
       </View>
-      <Row label="MISSION" value={agent.currentTask || agent.primaryResponsibility || 'No task recorded yet.'} />
+      <Row label={fresh ? 'MISSION' : 'LAST OBSERVED MISSION'} value={agent.currentTask || agent.primaryResponsibility || 'No task recorded yet.'} />
       <Row label="TOOL" value={agent.lastToolUsed || 'No tool evidence yet.'} />
       <Row label="SOURCE" value={agent.lastSourceReference || 'No source reference yet.'} />
       <Row label="EVIDENCE SHA" value={agent.lastEvidenceSha || 'No evidence SHA yet.'} />

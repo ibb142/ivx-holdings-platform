@@ -313,6 +313,9 @@ function constantTimeEquals(a: string, b: string): boolean {
 
 export async function checkIVXAISystemKey(request: Request): Promise<boolean> {
   const systemKey = request.headers.get('X-IVX-System-Key')?.trim() ?? '';
+  // Owner bearer requests do not use machine credentials. Avoid a secrets-store
+  // round trip before their normal session validation, including when unauthenticated.
+  if (!systemKey) return false;
   const activeSecret = await resolveActiveIVXSystemSecret();
   if (!activeSecret) {
     return IVX_AI_SYSTEM_SECRET_ENV().length > 0 && constantTimeEquals(systemKey, IVX_AI_SYSTEM_SECRET_ENV());

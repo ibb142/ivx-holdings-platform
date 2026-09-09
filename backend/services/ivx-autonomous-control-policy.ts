@@ -24,6 +24,7 @@ export function githubSupervisorMutationsEnabled(env: NodeJS.ProcessEnv = proces
 }
 
 export function autonomousRuntimeEnforcerEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.IVX_PROCESS_ROLE === 'api') return false;
   return (env.IVX_AUTONOMOUS_RUNTIME_ENFORCER_ENABLED ?? 'true').trim().toLowerCase() !== 'false';
 }
 

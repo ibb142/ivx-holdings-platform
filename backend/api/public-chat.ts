@@ -1,3 +1,4 @@
+import { requireSharedState } from '../services/ivx-shared-room-storage';
 import {
   extractPublicChatImages,
   generatePublicChatAnswer,
@@ -306,6 +307,7 @@ async function persistPublicTurn(input: {
     }
   }
 
+  if (requireSharedState()) throw new Error('Shared chat persistence unavailable');
   if (publicChatHistoryStorage) {
     try {
       publicChatHistoryStorage.createMessage({
@@ -630,6 +632,7 @@ export async function handlePublicChatHistoryGet(request: Request): Promise<Resp
     }
   }
 
+  if (requireSharedState()) return jsonResponse({ ok: false, error: 'Shared chat history unavailable' }, 503);
   if (!publicChatHistoryStorage) {
     return jsonResponse({
       ok: false,
@@ -697,6 +700,7 @@ export async function handlePublicChatSessionsGet(request: Request): Promise<Res
     }
   }
 
+  if (requireSharedState()) return jsonResponse({ ok: false, error: 'Shared chat history unavailable' }, 503);
   if (!publicChatHistoryStorage) {
     return jsonResponse({
       ok: false,

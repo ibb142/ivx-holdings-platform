@@ -90,12 +90,14 @@ export async function verifyFleetSloLive(config: Config) {
 if (import.meta.main) {
   const config = { base: (process.env.API_BASE ?? '').replace(/\/$/, ''), sha: process.env.GITHUB_SHA ?? '', key: process.env.IVX_SYSTEM_KEY ?? '' };
   console.log(JSON.stringify(await verifyFleetSloLive(config)));
-  let bootTime: string | undefined;
+  const boots = new Map<string, string>();
+  const requiredInstances = Number(process.env.IVX_EXPECTED_API_INSTANCES ?? 2);
+  assert([1, 2].includes(requiredInstances));
   for (let index = 0; index <= 20; index++) {
     if (index) await sleep(15_000);
     // Health must pass on its first attempt; retries would hide a restart.
     const started = Date.now();
-    const response = await fetch(config.base + '/health', { redirect: 'error', signal: AbortSignal.timeout(5_000) });
+    const response = await fetch(config.base + '/health', { redirect: 'error', signal: AbortSignal.timeout(5_000), headers: { Connection: 'close' } });
     assert.equal(response.status, 200);
     const health = await response.json();
     assert.equal(health.ok, true);
@@ -103,12 +105,16 @@ if (import.meta.main) {
     assert.equal(health.commit, config.sha);
     assert.equal(typeof health.bootTime, 'string');
     assert(Number.isFinite(Date.parse(health.bootTime)));
-    bootTime ??= health.bootTime;
-    assert.equal(health.bootTime, bootTime, 'Production process restarted during verification');
-    console.log(JSON.stringify({ stability_sample: index, bootTime, health_ms: Date.now() - started, sha: health.commit }));
+    const instance = health.instanceId ?? 'legacy-single-instance';
+    assert.equal(typeof instance, 'string');
+    if (boots.has(instance)) assert.equal(health.bootTime, boots.get(instance), 'Instance boot time changed during verification');
+    else boots.set(instance, health.bootTime);
+    assert(boots.size <= requiredInstances, 'Unexpected process replacement during stability verification');
+    console.log(JSON.stringify({ stability_sample: index, instanceId: instance, bootTime: health.bootTime, health_ms: Date.now() - started, sha: health.commit }));
   }
   console.log(JSON.stringify(await verifyFleetSloLive(config)));
-  console.log('fleet_slo_contract=PASS health_stability_seconds=300');
+  assert.equal(boots.size, requiredInstances, 'Load balancer did not serve every expected replica');
+  console.log(`fleet_slo_contract=PASS health_stability_seconds=300 stable_api_instances=${boots.size}`);
   // BREACH is reported explicitly: a working alerting contract does not imply
   // that the fleet has met its productivity objective.
 }

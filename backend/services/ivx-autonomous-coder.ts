@@ -3272,6 +3272,7 @@ export type IVXAutonomousCoderResumeInput = {
   typecheckPassed: boolean;
   filesChanged?: string[];
   onPhase?: (phase: IVXAutonomousCoderPhase, detail: string) => void;
+  beforeMerge?: () => Promise<void>;
   requiredChecksFn?: (commitSha: string) => Promise<IVXCiCheckEvidence[]>;
   mergeFn?: (prNumber: number, commitMessage: string) => Promise<{ merged: boolean; mergeCommitSha: string | null }>;
   ciWaitTimeoutMs?: number;
@@ -3358,6 +3359,7 @@ export async function resumeIVXAutonomousCoderFromCiWait(
         onPhase?.('blocked', error);
       } else {
         onPhase?.('committing', `Restart resume: all required CI checks GREEN on ${input.commitSha.slice(0, 12)} — merging PR #${input.prNumber}.`);
+        await input.beforeMerge?.();
         const mergeResult = input.mergeFn
           ? await input.mergeFn(input.prNumber, `Merge PR #${input.prNumber}: ${input.goal.slice(0, 60)}`)
           : await mergePullRequest(input.prNumber, `Merge PR #${input.prNumber}: ${input.goal.slice(0, 60)}`);

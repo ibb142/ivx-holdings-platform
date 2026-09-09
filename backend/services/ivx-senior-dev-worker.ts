@@ -1,3 +1,5 @@
+import { autonomousWorkerInstanceId } from './ivx-postgres-autonomous-task-store';
+import { sharedSeniorQueueEnabled } from './ivx-senior-shared-queue';
 /**
  * IVX-SENIOR-DEV-01 — Autonomous Senior Developer Worker (REAL IMPLEMENTATION)
  *
@@ -27,7 +29,7 @@ import { dirname, resolve } from 'node:path';
 import {
   getTask,
   listTasks,
-  patchTask,
+  patchTask as storePatchTask,
   type IVXOwnerAITaskRow,
 } from './ivx-owner-ai-task-queue';
 import { hasApproval, writeProofLedger, updateProofLedger, type IVXSeniorDevApprovalAction } from './ivx-senior-dev-proof';
@@ -121,6 +123,25 @@ export async function startSeniorDevWorker(): Promise<void> {
   console.log('[IVX-SENIOR-DEV-01] Worker stopped gracefully');
 }
 
+const leaseLostTasks = new Set<string>();
+async function patchTask(id: string, patch: Record<string, unknown>, extraFilter = ''): Promise<IVXOwnerAITaskRow | null> {
+  const owned = sharedSeniorQueueEnabled() && state.currentTaskId === id;
+  if (owned && leaseLostTasks.has(id)) throw new Error('Physical worker lease lost');
+  const filter = owned ? `${extraFilter}&assigned_worker_id=eq.${encodeURIComponent(autonomousWorkerInstanceId())}&heartbeat_at=gt.${encodeURIComponent(new Date(Date.now() - TASK_CLAIM_TIMEOUT_MS).toISOString())}` : extraFilter;
+  const result = await storePatchTask(id, patch, filter);
+  if (owned && !result) { leaseLostTasks.add(id); throw new Error('Physical worker lease update rejected'); }
+  return result;
+}
+function staleTaskFilter(task: IVXOwnerAITaskRow): string {
+  return `&status=eq.${encodeURIComponent(task.status)}&heartbeat_at=${task.heartbeat_at ? `eq.${encodeURIComponent(task.heartbeat_at)}` : 'is.null'}`;
+}
+async function requirePhysicalTaskLease(taskId: string): Promise<void> {
+  if (!sharedSeniorQueueEnabled()) return;
+  const task = await getTask(taskId);
+  if (leaseLostTasks.has(taskId) || !task || task.assigned_worker_id !== autonomousWorkerInstanceId()
+    || !task.heartbeat_at || Date.now() - Date.parse(task.heartbeat_at) > TASK_CLAIM_TIMEOUT_MS) throw new Error('Physical worker lease lost before external mutation');
+}
+
 async function tick(): Promise<void> {
   // ─── Orphan-task recovery ──────────────────────────────────────────
   // If the worker restarts mid-loop (e.g. Render redeploy), a task can be
@@ -145,7 +166,7 @@ async function tick(): Promise<void> {
       || (typeof t.trace_id === 'string' && t.trace_id.startsWith('senior-dev-'));
     if (!isSeniorDev) return false;
     if (t.status !== 'QUEUED' && t.status !== 'RETRYING') return false;
-    if (t.assigned_worker_id && t.assigned_worker_id !== IVX_SENIOR_DEV_WORKER_ID) return false;
+    if (t.assigned_worker_id && t.assigned_worker_id !== IVX_SENIOR_DEV_WORKER_ID && t.assigned_worker_id !== autonomousWorkerInstanceId()) return false;
     return true;
   });
 
@@ -160,6 +181,10 @@ async function tick(): Promise<void> {
   state.currentTaskId = task.id;
   state.runCount += 1;
 
+  const heartbeat = sharedSeniorQueueEnabled() ? setInterval(() => {
+    void patchTask(task.id, { heartbeat_at: new Date().toISOString() }).catch(() => { leaseLostTasks.add(task.id); });
+  }, 20_000) : null;
+  heartbeat?.unref?.();
   try {
     await executeSeniorDevTask(claimed);
   } catch (error) {
@@ -167,6 +192,8 @@ async function tick(): Promise<void> {
     console.log('[IVX-SENIOR-DEV-01] executeSeniorDevTask error:', error instanceof Error ? error.message : 'unknown');
     await failTask(task.id, error instanceof Error ? error.message : 'unknown');
   } finally {
+    if (heartbeat) clearInterval(heartbeat);
+    leaseLostTasks.delete(task.id);
     state.currentTaskId = null;
     state.currentPhase = null;
   }
@@ -181,6 +208,8 @@ async function recoverOrphanedTasks(): Promise<void> {
       || (typeof t.trace_id === 'string' && t.trace_id.startsWith('senior-dev-'));
     if (!isSeniorDev) continue;
     if (t.status !== 'RUNNING' && t.status !== 'WAITING_APPROVAL' && t.status !== 'COMMITTING') continue;
+    const heartbeatMs = Date.parse(t.heartbeat_at ?? '');
+    if (Number.isFinite(heartbeatMs) && now - heartbeatMs <= TASK_CLAIM_TIMEOUT_MS) continue;
     // If the task already has a commit_sha, it did real work — the worker just
     // got killed (likely by its own Render deploy restarting the runtime) before
     // reaching VERIFIED. Mark it terminal FAILED with the real evidence it has,
@@ -194,7 +223,7 @@ async function recoverOrphanedTasks(): Promise<void> {
         checkpoint: 'FAILED (orphaned after commit — worker killed by self-deploy restart before LIVE_VERIFYING)',
         error_message: `Worker restarted mid-task after commit ${t.commit_sha}. The commit is real and on GitHub; the task just did not reach VERIFIED because the worker process was killed by its own Render deploy triggering a runtime restart. File(s) changed: ${JSON.stringify(t.files_changed ?? [])}.`,
         checkpoint_history: appendCheckpoint(null, `ORPHAN_TERMINATED_WITH_COMMIT at ${new Date().toISOString()} (commitSha=${t.commit_sha})`),
-      });
+      }, staleTaskFilter(t));
       continue;
     }
     const hb = t.heartbeat_at ? new Date(t.heartbeat_at).getTime() : 0;
@@ -204,9 +233,10 @@ async function recoverOrphanedTasks(): Promise<void> {
     console.log('[IVX-SENIOR-DEV-01] Requeuing orphaned task', { taskId: s.id, status: s.status, heartbeatAt: s.heartbeat_at });
     await patchTask(s.id, {
       status: 'RETRYING',
+      assigned_worker_id: IVX_SENIOR_DEV_WORKER_ID,
       checkpoint: 'RETRYING (orphan recovered — stale heartbeat)',
       checkpoint_history: appendCheckpoint(null, `ORPHAN_RECOVERED at ${new Date().toISOString()}`),
-    });
+    }, staleTaskFilter(s));
   }
 }
 
@@ -220,7 +250,7 @@ async function claimTask(taskId: string): Promise<IVXOwnerAITaskRow | null> {
   const patched = await patchTask(taskId, {
     status: 'RUNNING',
     checkpoint: `CLAIMED by ${IVX_SENIOR_DEV_WORKER_ID}`,
-    assigned_worker_id: IVX_SENIOR_DEV_WORKER_ID,
+    assigned_worker_id: sharedSeniorQueueEnabled() ? autonomousWorkerInstanceId() : IVX_SENIOR_DEV_WORKER_ID,
     heartbeat_at: now,
     checkpoint_history: appendCheckpoint(null, `CLAIMED by ${IVX_SENIOR_DEV_WORKER_ID} at ${now}`),
   }, filter);
@@ -411,6 +441,7 @@ async function executeSeniorDevTask(task: IVXOwnerAITaskRow): Promise<void> {
   let lastCommitSha: string | null = null;
   const commitMessage = `IVX-SENIOR-DEV-01: ${plan.summary}\n\nTask: ${task.id}\nWorker: ${IVX_SENIOR_DEV_WORKER_ID}`;
   for (const edit of localEdits) {
+    await requirePhysicalTaskLease(task.id);
     const commitResult = await githubCommitFile({
       path: edit.path,
       content: edit.content,
@@ -523,6 +554,7 @@ async function executeSeniorDevTask(task: IVXOwnerAITaskRow): Promise<void> {
 
     // 7c. Trigger Render deploy and capture deployId.
     await setPhase(task.id, 'DEPLOYING', runId);
+    await requirePhysicalTaskLease(task.id);
     const deployResult = await triggerRenderDeploy(false);
     if (!deployResult.ok || !deployResult.deploy) {
       // Trigger failed — no restart will happen. Mark FAILED (not resumable).

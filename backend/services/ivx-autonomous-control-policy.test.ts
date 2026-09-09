@@ -16,6 +16,10 @@ import {
 } from './ivx-enterprise-deployment-engine';
 
 describe('IVX autonomous one-authority policy', () => {
+  test('API role cannot execute fleet work even with a legacy enforcer flag', () => {
+    expect(autonomousRuntimeEnforcerEnabled({ IVX_PROCESS_ROLE: 'api', IVX_AUTONOMOUS_RUNTIME_ENFORCER_ENABLED: 'true' })).toBe(false);
+    expect(autonomousRuntimeEnforcerEnabled({ IVX_PROCESS_ROLE: 'worker', IVX_AUTONOMOUS_RUNTIME_ENFORCER_ENABLED: 'true' })).toBe(true);
+  });
   test('all secondary mutation loops fail closed by default', () => {
     const env: NodeJS.ProcessEnv = {};
     expect(deploymentAutoRepairEnabled(env)).toBe(false);

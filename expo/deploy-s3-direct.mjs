@@ -58,11 +58,18 @@ async function ensureWwwRedirectFunction() {
   var request = event.request;
   var host = request.headers.host && request.headers.host.value;
   if (host && host.toLowerCase() === 'www.ivxholding.com') {
+    var query = [];
+    Object.keys(request.querystring || {}).forEach(function (key) {
+      var entry = request.querystring[key];
+      (entry.multiValue || [entry]).forEach(function (value) {
+        query.push(key + '=' + value.value);
+      });
+    });
     return {
       statusCode: 301,
       statusDescription: 'Moved Permanently',
       headers: {
-        location: { value: 'https://ivxholding.com' + request.uri },
+        location: { value: 'https://ivxholding.com' + request.uri + (query.length ? '?' + query.join('&') : '') },
         'cache-control': { value: 'public, max-age=3600' }
       }
     };
@@ -84,7 +91,7 @@ async function ensureWwwRedirectFunction() {
     etag = updated.ETag || '';
     functionArn = updated.FunctionSummary?.FunctionMetadata?.FunctionARN || functionArn;
   } catch (error) {
-    if (error?.name !== 'NoSuchFunction') throw error;
+    if (error?.name !== 'NoSuchFunctionExists') throw error;
     const created = await cf.send(new CreateFunctionCommand({
       Name: name,
       FunctionConfig: { Comment: 'Redirect www.ivxholding.com to apex', Runtime: 'cloudfront-js-2.0' },
@@ -93,6 +100,7 @@ async function ensureWwwRedirectFunction() {
     etag = created.ETag || '';
     functionArn = created.FunctionSummary?.FunctionMetadata?.FunctionARN || '';
   }
+  if (!etag || !functionArn) throw new Error('CloudFront function version or ARN missing');
   const published = await cf.send(new PublishFunctionCommand({ Name: name, IfMatch: etag }));
   return published.FunctionSummary?.FunctionMetadata?.FunctionARN || functionArn;
 }
@@ -545,13 +553,13 @@ async function deploy() {
       OriginOverride: false,
     },
     CustomHeadersConfig: {
-      Quantity: 2,
+      Quantity: 1,
       Items: [
-        { Header: 'Content-Security-Policy', Value: "upgrade-insecure-requests; default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com https://connect.facebook.net https://snap.licdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' https://api.qrserver.com https://*.supabase.co https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev data:; font-src 'self' https://fonts.gstatic.com; media-src 'self' https://*.supabase.co https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev; connect-src 'self' https://api.ivxholding.com https://*.supabase.co wss://*.supabase.co; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://api.ivxholding.com; frame-ancestors 'none';", Override: true },
         { Header: 'Permissions-Policy', Value: 'geolocation=(), microphone=(), camera=(), payment=()', Override: true },
       ],
     },
     SecurityHeadersConfig: {
+      ContentSecurityPolicy: { ContentSecurityPolicy: "upgrade-insecure-requests; default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com https://connect.facebook.net https://snap.licdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' https://api.qrserver.com https://*.supabase.co https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev data:; font-src 'self' https://fonts.gstatic.com; media-src 'self' https://*.supabase.co https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev; connect-src 'self' https://api.ivxholding.com https://*.supabase.co wss://*.supabase.co; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://api.ivxholding.com; frame-ancestors 'none';", Override: true },
       StrictTransportSecurity: {
         AccessControlMaxAgeSec: 31536000,
         IncludeSubdomains: true,
@@ -609,6 +617,9 @@ async function deploy() {
         const currentPolicyId = distConfig.DefaultCacheBehavior.ResponseHeadersPolicyId;
         const policyChanged = Boolean(policyId && currentPolicyId !== policyId);
         const currentAssociations = distConfig.DefaultCacheBehavior.FunctionAssociations?.Items || [];
+        if (redirectFunctionArn && currentAssociations.some((item) => item.EventType === 'viewer-request' && item.FunctionARN !== redirectFunctionArn)) {
+          throw new Error('Existing viewer-request function requires explicit integration');
+        }
         const otherAssociations = currentAssociations.filter((item) => item.EventType !== 'viewer-request');
         const hasRedirectFunction = Boolean(redirectFunctionArn && currentAssociations.some((item) => item.EventType === 'viewer-request' && item.FunctionARN === redirectFunctionArn));
         if (redirectFunctionArn && !hasRedirectFunction) {
@@ -626,10 +637,10 @@ async function deploy() {
             IfMatch: currentETag,
           }));
           console.log('  ✅ Attached security headers and www redirect function to distribution');
-          edgeStatus.redirectFunction = 'attached';
+          edgeStatus.redirectFunction = redirectFunctionArn ? 'attached' : 'failed';
         } else {
           console.log('  Security policy and www redirect function already attached');
-          edgeStatus.redirectFunction = 'attached';
+          edgeStatus.redirectFunction = redirectFunctionArn ? 'attached' : 'failed';
         }
       }
     } catch (e) {
@@ -672,6 +683,10 @@ async function deploy() {
     if (e?.$metadata) console.error('   HTTP:', e.$metadata.httpStatusCode, '| Request ID:', e.$metadata.requestId || 'N/A');
   }
 
+  if (edgeStatus.redirectFunction !== 'attached') {
+    results.push({ key: 'cloudfront-www-redirect', status: 'fail', error: edgeStatus.error || 'Redirect function was not attached' });
+    fail++;
+  }
   edgeStatus.updatedAt = new Date().toISOString();
   try {
     await s3.send(new PutObjectCommand({
