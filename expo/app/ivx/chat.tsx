@@ -4405,7 +4405,7 @@ export default function IVXOwnerChatRoute() {
 
     const scrollToTarget = (messages: IVXMessage[]) => {
       // INVERTED FLATLIST: search in reversed array to get inverted index.
-      const reversed = [...messages].reverse();
+      const reversed = chatListData(messages, Platform.OS !== 'web');
       const resolvedIndex = reversed.findIndex((message) => message.id === messageId);
       if (resolvedIndex < 0) {
         pendingJumpMessageIdRef.current = messageId;
