@@ -20,6 +20,7 @@ const TASK_READ_CACHE_TTL_MS = 1_500;
 const BOOT_NONCE = randomUUID().slice(0, 12);
 let taskReadCache: { value: Task[]; at: number } | null = null;
 let taskReadInFlight: Promise<Task[]> | null = null;
+const currentReadsInFlight = new Map<string, Promise<Task[]>>();
 let taskMutationRevision = 0;
 let directPool: Pool | null = null;
 const upstreamRetryQuota = new RetryQuota();
@@ -29,7 +30,7 @@ type AtomicCasResult = { ok: boolean; task: Task | null; error: string | null };
 type RestTaskRow = { payload: Task };
 export type AtomicFleetLeaseRow = { taskId: string; idempotencyKey: string; state: TaskState; assignedAgentNumber: number | null; leaseHolder: string; workerInstanceId: string | null; lastHeartbeatAt: string; leaseExpiresAt: string | null };
 
-export function resetPostgresAutonomousTaskStoreForTests(): void { taskReadCache = null; taskReadInFlight = null; taskMutationRevision = 0; directPool = null; }
+export function resetPostgresAutonomousTaskStoreForTests(): void { taskReadCache = null; taskReadInFlight = null; currentReadsInFlight.clear(); taskMutationRevision = 0; directPool = null; }
 function trimmed(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
 function supabaseUrl(env: NodeJS.ProcessEnv = process.env): string { return trimmed(env.EXPO_PUBLIC_SUPABASE_URL || env.SUPABASE_URL).replace(/\/+$/, ''); }
 function serviceRoleKey(env: NodeJS.ProcessEnv = process.env): string { return trimmed(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_KEY); }
@@ -172,7 +173,18 @@ export async function readPostgresTaskIdentitiesByPrefix(prefix: string): Promis
 }
 
 export async function readPostgresCurrentTasks(states: readonly TaskState[]): Promise<Task[]> {
-  const unique = [...new Set(states)]; if (unique.length === 0) return [];
+  const unique = [...new Set(states)].sort(); if (unique.length === 0) return [];
+  // Observers share only overlapping requests, never stale success or failure caches.
+  const key = `${taskMutationRevision}:${unique.join(',')}`;
+  const existing = currentReadsInFlight.get(key);
+  if (existing) return cloneTasks(await existing);
+  const pending = fetchPostgresCurrentTasks(unique);
+  currentReadsInFlight.set(key, pending);
+  try { return cloneTasks(await pending); }
+  finally { if (currentReadsInFlight.get(key) === pending) currentReadsInFlight.delete(key); }
+}
+
+async function fetchPostgresCurrentTasks(unique: TaskState[]): Promise<Task[]> {
   try {
     const stateFilter = `(${unique.join(',')})`;
     const rows = await restRequest<RestTaskRow[]>(`ivx_autonomous_tasks?select=payload&state=in.${stateFilter}&order=updated_at.desc&limit=1000`, { method: 'GET' }, { timeoutMs: TRUTH_TIMEOUT_MS, attempts: 3 });

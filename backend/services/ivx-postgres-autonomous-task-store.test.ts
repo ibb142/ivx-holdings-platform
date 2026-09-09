@@ -204,3 +204,30 @@ describe('PostgreSQL autonomous task store', () => {
     expect(uniqueLeaseMigration).toContain("task.lease_expires_at < v_now");
   });
 });
+
+test('coalesces concurrent current-state observers without caching stale results or sharing mutable payloads', async () => {
+  configureAtomicQueue();
+  let reads = 0;
+  globalThis.fetch = (async () => {
+    reads += 1;
+    await new Promise(resolve => setTimeout(resolve, 5));
+    return Response.json([{ payload: { taskId: `observation-${reads}` } }]);
+  }) as typeof fetch;
+  const results = await Promise.all(Array.from({ length: 112 }, (_, n) =>
+    readPostgresCurrentTasks(n % 2 ? ['RUNNING', 'LEASED'] : ['LEASED', 'RUNNING'])));
+  expect(reads).toBe(1);
+  results[0][0].taskId = 'modified';
+  expect(results[1][0].taskId).toBe('observation-1');
+  expect((await readPostgresCurrentTasks(['RUNNING', 'LEASED']))[0].taskId).toBe('observation-2');
+});
+
+test('releases a failed shared observation so the next read can recover', async () => {
+  configureAtomicQueue();
+  let reads = 0;
+  globalThis.fetch = (async () => { reads += 1; return Response.json({}, { status: 403 }); }) as typeof fetch;
+  const failed = await Promise.allSettled(Array.from({ length: 12 }, () => readPostgresCurrentTasks(['RUNNING'])));
+  expect(failed.every(result => result.status === 'rejected')).toBe(true);
+  expect(reads).toBe(1);
+  globalThis.fetch = (async () => Response.json([])) as typeof fetch;
+  expect(await readPostgresCurrentTasks(['RUNNING'])).toEqual([]);
+});

@@ -19,6 +19,8 @@ export type FleetSloSnapshot = {
   running_agents: number | null; leased_agents: number | null; heartbeat_agents: number | null;
   retry_waiting_tasks: number | null; evidence_window_seconds: number;
   productivity_ratio: number | null; durable: boolean; error: string | null;
+  failure_stage?: 'read' | 'build' | 'persist';
+  failure_kind?: 'timeout' | 'authorization' | 'upstream' | 'unknown';
 };
 
 function fresh(value: string | null | undefined, now: number, window: number): boolean {
@@ -110,21 +112,30 @@ export class FleetSloMonitor {
   }
   private async collect(): Promise<FleetSloSnapshot> {
     let snapshot: FleetSloSnapshot;
+    let stage: 'read' | 'build' | 'persist' = 'read';
     try {
       const tasks = await this.deps.read();
+      stage = 'build';
       snapshot = buildFleetSloSnapshot(tasks, this.deps.now(), this.deps.sha());
+      stage = 'persist';
       await this.deps.persist({ ...snapshot, durable: true });
       snapshot.durable = true;
-    } catch {
+    } catch (error) {
+      // Classify locally; never copy credentials or raw upstream responses into telemetry.
+      const message = error instanceof Error ? error.message : String(error);
+      const kind = /timeout|timed out|time budget|aborted/i.test(message) ? 'timeout'
+        : /HTTP (401|403)/i.test(message) ? 'authorization'
+        : /HTTP 5\d\d/i.test(message) ? 'upstream' : 'unknown';
       snapshot = {
         marker: IVX_FLEET_SLO_MARKER, retry_policy: IVX_RETRY_POLICY_MARKER,
         measured_at: new Date(this.deps.now()).toISOString(), commit_sha: this.deps.sha(),
+        failure_stage: stage, failure_kind: kind,
         status: 'UNKNOWN', target_agents: FLEET_SLO_TARGET,
         productive_agents: null, productive_deficit: null, running_agents: null, leased_agents: null,
         heartbeat_agents: null, retry_waiting_tasks: null, evidence_window_seconds: FLEET_EVIDENCE_WINDOW_MS / 1_000,
         productivity_ratio: null, durable: false, error: 'Fleet evidence could not be read or persisted',
       };
-      console.error('[IVX Fleet SLO] telemetry unavailable', { marker: IVX_FLEET_SLO_MARKER, measured_at: snapshot.measured_at });
+      console.error('[IVX Fleet SLO] telemetry unavailable', { marker: IVX_FLEET_SLO_MARKER, measured_at: snapshot.measured_at, failure_stage: stage, failure_kind: kind });
     }
     this.latest = snapshot;
     const now = this.deps.now();

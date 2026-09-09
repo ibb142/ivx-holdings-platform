@@ -13,6 +13,7 @@ import {
   type IVXTaskRecord,
 } from '../services/ivx-task-state-store';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
+import { IVXAuthServiceUnavailableError } from '../../expo/shared/ivx';
 
 function readTrimmed(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
 function taskProgressPercent(task: IVXTaskRecord): number {
@@ -57,7 +58,8 @@ async function requireOwner(request: Request): Promise<{ ok: true } | { ok: fals
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'IVX owner authentication required.';
-    const status = message.toLowerCase().includes('missing bearer') ? 401 : 403;
+    const status = error instanceof IVXAuthServiceUnavailableError ? 503
+      : message.toLowerCase().includes('missing bearer') ? 401 : 403;
     return { ok: false, response: ownerOnlyJson({ ok: false, error: message }, status) };
   }
 }
@@ -77,8 +79,14 @@ export async function handleLiveWorkFeedRequest(request: Request): Promise<Respo
  * - default                -> legacy background-agent runs
  */
 export async function handleLiveWorkAgentsRequest(request: Request): Promise<Response> {
-  const auth = await requireOwner(request); if (!auth.ok) return auth.response;
   const url = new URL(request.url);
+  // The enterprise handler performs its own owner verification. Keep the
+  // individual-certificate route's precedence without authenticating twice.
+  if (url.searchParams.get('enterpriseDashboard') === '1' && url.searchParams.get('individualCerts') !== '1') {
+    const { handleAutonomousOpsDashboardRequest } = await import('./ivx-autonomous-ops-dashboard');
+    return handleAutonomousOpsDashboardRequest(request);
+  }
+  const auth = await requireOwner(request); if (!auth.ok) return auth.response;
   if (url.searchParams.get('individualCerts') === '1') {
     const hoursRaw = Number.parseInt(url.searchParams.get('hours') ?? '24', 10);
     const hours = Number.isFinite(hoursRaw) ? Math.max(1, Math.min(720, hoursRaw)) : 24;
@@ -92,10 +100,6 @@ export async function handleLiveWorkAgentsRequest(request: Request): Promise<Res
       return ownerOnlyJson({ ok: true, marker: report.marker, generatedAt: report.generatedAt, certificate: cert });
     }
     return ownerOnlyJson({ ok: true, report });
-  }
-  if (url.searchParams.get('enterpriseDashboard') === '1') {
-    const { handleAutonomousOpsDashboardRequest } = await import('./ivx-autonomous-ops-dashboard');
-    return handleAutonomousOpsDashboardRequest(request);
   }
   const limit = Number.parseInt(url.searchParams.get('limit') ?? '50', 10) || 50;
   try { return ownerOnlyJson({ ok: true, agents: await listAgentRuns(limit) }); }

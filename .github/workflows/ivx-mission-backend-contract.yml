@@ -1,0 +1,71 @@
+name: IVX Mission Backend Contracts
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/api/ivx-autonomous-ops-dashboard.ts'
+      - 'backend/api/ivx-live-work.ts'
+      - 'backend/api/owner-only.ts'
+      - 'backend/services/ivx-dashboard-read-cache*'
+      - 'backend/services/ivx-agent-dashboard-ledger*'
+      - 'backend/services/ivx-autonomous-dashboard-stream.ts'
+      - 'backend/services/ivx-chat-autonomous-handoff*'
+      - 'backend/__tests__/ivx-dashboard-transport.test.ts'
+      - 'backend/__tests__/ivx-system-key-request.test.ts'
+      - 'backend/__tests__/ivx-owner-auth-availability.test.ts'
+      - 'expo/shared/ivx/access-control.ts'
+      - 'supabase/migrations/*ivx_dashboard_execution_started_at_index.sql'
+      - 'supabase/migrations/*ivx_fleet_assignment_count_index.sql'
+      - '.github/workflows/ivx-mission-backend-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/api/ivx-autonomous-ops-dashboard.ts'
+      - 'backend/api/ivx-live-work.ts'
+      - 'backend/api/owner-only.ts'
+      - 'backend/services/ivx-dashboard-read-cache*'
+      - 'backend/services/ivx-agent-dashboard-ledger*'
+      - 'backend/services/ivx-autonomous-dashboard-stream.ts'
+      - 'backend/services/ivx-chat-autonomous-handoff*'
+      - 'backend/__tests__/ivx-dashboard-transport.test.ts'
+      - 'backend/__tests__/ivx-system-key-request.test.ts'
+      - 'backend/__tests__/ivx-owner-auth-availability.test.ts'
+      - 'expo/shared/ivx/access-control.ts'
+      - 'supabase/migrations/*ivx_dashboard_execution_started_at_index.sql'
+      - 'supabase/migrations/*ivx_fleet_assignment_count_index.sql'
+      - '.github/workflows/ivx-mission-backend-contract.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - name: Install dependencies
+        run: |
+          bun install --frozen-lockfile
+          cd expo
+          bun install --frozen-lockfile
+      - name: Backend TypeScript
+        working-directory: backend
+        run: ../node_modules/.bin/tsc --noEmit
+      - name: Real response contract, owner guard, shared ledger and handoff regression
+        run: |
+          set -euo pipefail
+          bun test backend/__tests__/ivx-dashboard-transport.test.ts
+          bun test backend/__tests__/ivx-system-key-request.test.ts
+          bun test backend/__tests__/ivx-owner-auth-availability.test.ts
+          bun test backend/services/ivx-dashboard-read-cache.test.ts
+          bun test backend/services/ivx-agent-dashboard-ledger.test.ts
+          bun test backend/services/ivx-chat-autonomous-handoff.regression.test.ts
