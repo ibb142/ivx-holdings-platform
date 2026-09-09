@@ -106,7 +106,7 @@ export async function handleAutonomousControlPlaneVerifyAll(request: Request): P
 
   try {
     const result = await verifyAllEnterpriseAgents();
-    const control = await loadControlState();
+    const control = await retryOperation(loadControlState, 3);
     const records = await listCampaignDispatcherRecords();
     const campaign = buildAppCompletionCampaign(control, records);
     return ownerOnlyJson({
@@ -133,6 +133,16 @@ export async function handleAutonomousControlPlaneVerifyAll(request: Request): P
     });
   } catch (error) {
     return ownerOnlyJson({ ok: false, marker: IVX_AUTONOMOUS_CONTROL_PLANE_MARKER, error: error instanceof Error ? error.message : 'Unable to verify agents.' }, 500);
+  }
+}
+
+async function retryOperation(fn, retries) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (i === retries - 1) throw error;
+    }
   }
 }
 
