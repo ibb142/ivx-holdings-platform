@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
 import crypto from 'node:crypto';
-import { candidates, main, readLinkedGroups, renderKey, validateConnection } from './autonomous-db-sync.mjs';
+import { candidates, connectionIssue, repairKnownConnection, main, readLinkedGroups, renderKey, validateConnection } from './autonomous-db-sync.mjs';
 const valid='postgresql://postgres:unit-test-only@db.kvclcdjmjghndxsngfzb.supabase.co/postgres';
 test('rejects invalid hosts, other projects and disabled TLS',()=>{
   for(const v of ['postgresql://postgres:x@base/postgres','postgresql://postgres:x@db.other.supabase.co/postgres',valid+'?sslmode=disable']) assert.equal(validateConnection(v),null);
@@ -96,4 +96,15 @@ test('audits only groups linked to the target services without writing or loggin
     assert.equal(reads,1);assert.equal(groups.length,1);assert.equal(groups[0].env.SUPABASE_DB_URL,valid);
     assert.ok(!logs.join('').includes('unit-test-only'));
   } finally {globalThis.fetch=savedFetch;console.log=savedLog;}
+});
+
+test('repairs only the observed base hostname and keeps credential validation enforced',()=>{
+  const broken=valid.replace('db.kvclcdjmjghndxsngfzb.supabase.co','base');
+  assert.equal(connectionIssue(broken),'invalid_base_hostname');
+  assert.equal(repairKnownConnection(broken),valid);
+  assert.equal(candidates({SUPABASE_DB_URL:broken})[1].value,valid);
+  for(const v of [broken.replace('unit-test-only','[YOUR-PASSWORD]'),broken.replace('@base','@db.other.supabase.co'),broken+'?sslmode=disable',broken.replace('/postgres','/other')])assert.equal(repairKnownConnection(v),null);
+  assert.equal(connectionIssue('https://example.com'),'not_postgres_uri');
+  assert.equal(connectionIssue('postgresql://postgres@base/postgres'),'missing_database_credentials');
+  assert.equal(connectionIssue(broken.replace('unit-test-only','[YOUR-PASSWORD]')),'placeholder_password');
 });

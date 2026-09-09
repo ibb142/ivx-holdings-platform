@@ -22,8 +22,38 @@ export function validateConnection(raw) {
   } catch { return null; }
 }
 
+export function connectionIssue(raw) {
+  if(!raw?.trim())return 'missing';
+  try {
+    const u=new URL(raw.trim());
+    if(!['postgres:','postgresql:'].includes(u.protocol))return 'not_postgres_uri';
+    if(!u.username || !u.password)return 'missing_database_credentials';
+    const password=decodeURIComponent(u.password);
+    if(/^(?:\[?YOUR[-_ ](?:DB[-_ ])?PASSWORD\]?|password|changeme|\*+)$/i.test(password))return 'placeholder_password';
+    if(u.hostname==='base')return 'invalid_base_hostname';
+    if(u.pathname!=='/postgres')return 'database_name_mismatch';
+    return validateConnection(raw)?'valid':'project_or_tls_mismatch';
+  } catch { return 'malformed_uri'; }
+}
+
+export function repairKnownConnection(raw) {
+  try {
+    const u=new URL(raw.trim());
+    // Repair only the observed invalid host, preserving existing credentials.
+    // A same-project live TLS probe is mandatory before persisting this candidate.
+    if(connectionIssue(raw)!=='invalid_base_hostname' || u.username!=='postgres'
+      || u.pathname!=='/postgres' || (u.port && u.port!=='5432'))return null;
+    u.hostname=`db.${project}.supabase.co`;
+    return validateConnection(u.href)?u.href:null;
+  } catch {return null;}
+}
+
 export function candidates(env) {
   const result = aliases.filter(k=>env[k]?.trim()).map(k=>({source:k, value:env[k].trim()}));
+  for(const candidate of [...result]) {
+    const repaired=repairKnownConnection(candidate.value);
+    if(repaired)result.push({source:candidate.source+'_hostname_repair',value:repaired});
+  }
   if (env.SUPABASE_DB_PASSWORD?.trim()) {
     const u = new URL(`postgresql://db.${project}.supabase.co/postgres`);
     u.username = env.SUPABASE_DB_USER?.trim() || 'postgres';
@@ -107,7 +137,7 @@ export async function readLinkedGroups(key) {
         || !group.serviceLinks.some(link=>services.includes(link.id)) || !Array.isArray(group.envVars))throw new Error('render_group_identity_invalid');
       const env={};
       for(const e of group.envVars)if(typeof e.key==='string'&&typeof e.value==='string')env[e.key]=e.value;
-      console.log(JSON.stringify({groupId:meta.id,credentialPresence:Object.fromEntries([...aliases,'SUPABASE_DB_PASSWORD'].map(n=>[n,Boolean(env[n]?.trim())])),validUrlAliases:aliases.filter(n=>validateConnection(env[n]))}));
+      console.log(JSON.stringify({groupId:meta.id,credentialPresence:Object.fromEntries([...aliases,'SUPABASE_DB_PASSWORD'].map(n=>[n,Boolean(env[n]?.trim())])),validUrlAliases:aliases.filter(n=>validateConnection(env[n])),connectionIssues:Object.fromEntries(aliases.map(n=>[n,connectionIssue(env[n])]))}));
       result.push({serviceId:meta.id,env});
     }
     if(rows.length<100)return result;
@@ -126,7 +156,7 @@ export async function main() {
     if(service.ownerId!==owner || service.repo!=='https://github.com/ibb142/ivx-holdings-platform') throw new Error('render_service_identity_mismatch');
     const env=await readEnv(serviceId,key);
     const names=[...aliases,'SUPABASE_DB_PASSWORD','SUPABASE_DB_HOST','SUPABASE_DB_USER'];
-    console.log(JSON.stringify({serviceId,credentialPresence:Object.fromEntries(names.map(n=>[n,Boolean(env[n]?.trim())])),validUrlAliases:aliases.filter(n=>validateConnection(env[n]))}));
+    console.log(JSON.stringify({serviceId,credentialPresence:Object.fromEntries(names.map(n=>[n,Boolean(env[n]?.trim())])),validUrlAliases:aliases.filter(n=>validateConnection(env[n])),connectionIssues:Object.fromEntries(aliases.map(n=>[n,connectionIssue(env[n])]))}));
     configurations.push({serviceId,env});
   }
   const groups=await readLinkedGroups(key);
@@ -134,6 +164,7 @@ export async function main() {
   let chosen=null;
   for(const entry of [...configurations,...groups]) for(const candidate of candidates(entry.env)) {
     if(chosen) break;
+    if(connectionIssue(candidate.value)!=='valid')continue;
     const config=validateConnection(candidate.value); if(!config) continue;
     mask(candidate.value); mask(config.password);
     const client=new pg.Client(config); client.on('error',()=>console.log('database_probe_connection_error'));
@@ -143,7 +174,10 @@ export async function main() {
       if(r.rows.length!==1 || typeof r.rows[0].active!=='boolean') throw new Error('control_row_invalid');
       chosen=candidate;
       console.log(JSON.stringify({probe:'PASS',serviceId:entry.serviceId,source:candidate.source,ownerStopActive:r.rows[0].active}));
-    } catch { console.log(JSON.stringify({probe:'FAIL',serviceId:entry.serviceId,source:candidate.source})); }
+    } catch(error) {
+      const known=['ENOTFOUND','ENETUNREACH','ECONNREFUSED','ETIMEDOUT','28P01','3D000','42501','CERT_HAS_EXPIRED','SELF_SIGNED_CERT_IN_CHAIN','UNABLE_TO_VERIFY_LEAF_SIGNATURE'];
+      console.log(JSON.stringify({probe:'FAIL',serviceId:entry.serviceId,source:candidate.source,reason:known.includes(error?.code)?error.code:'database_probe_failed'}));
+    }
     finally { await client.end(); }
   }
   if(!chosen) throw new Error('no_verified_same_project_database_connection');
