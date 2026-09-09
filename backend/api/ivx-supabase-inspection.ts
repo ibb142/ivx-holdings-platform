@@ -1,4 +1,5 @@
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
+import { supabasePostgresTls, withoutPostgresUrlTlsOptions } from '../services/ivx-supabase-postgres-tls';
 
 type SupabaseInspectionKind = 'tables' | 'schema' | 'columns' | 'rls';
 
@@ -18,7 +19,7 @@ type PgPool = {
 
 type PgPoolConstructor = new (config: {
   connectionString: string;
-  ssl?: { rejectUnauthorized: boolean };
+  ssl?: { rejectUnauthorized: boolean; ca?: string[] };
   application_name?: string;
   max?: number;
   idleTimeoutMillis?: number;
@@ -268,10 +269,10 @@ async function getInspectionPool(): Promise<PgPool> {
 
   const pgModule = await import('pg') as { Pool: PgPoolConstructor };
   cachedPool = new pgModule.Pool({
-    connectionString,
-    ssl: { rejectUnauthorized: false },
+    connectionString: withoutPostgresUrlTlsOptions(connectionString),
+    ssl: supabasePostgresTls(),
     application_name: 'ivx_read_only_inspection',
-    max: 3,
+    max: 1,
     idleTimeoutMillis: 10_000,
     connectionTimeoutMillis: 8_000,
   });
