@@ -150,7 +150,7 @@ export async function handleIVXRenderDeployLatestRequest(request: Request): Prom
   if (!triggerOk) {
     return ownerOnlyJson({
       ok: false,
-      error: triggerErr ? 'render_api_network_error' : `render_api_http_${triggerStatus}`,
+      error: triggerErr ? 'render_api_network_error' : (triggerStatus === 400 ? 'render_api_rollback_not_supported' : `render_api_http_${triggerStatus}`),
       credentials: credentialReport,
       renderAudit,
       renderResponse: parsed,
