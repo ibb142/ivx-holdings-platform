@@ -10,8 +10,12 @@ for (const fails of [false, true]) test(`configured same-project queue selects o
         if(config.connectionString.includes('sslmode'))throw new Error('URL overrides TLS');
         if(config.connectionTimeoutMillis!==20000 || config.statement_timeout!==5000)throw new Error('unbounded connection');
       }
-      async query(sql) {
+      async query(sql, values) {
         queries++;
+        if(sql.includes('ivx_autonomous_task_compare_and_set')) {
+          if(!sql.includes('$2::jsonb') || values[1]!==JSON.stringify(['RUNNING']))throw new Error('CAS does not match deployed JSONB state contract');
+          if(!${fails})return {rows:[{result:{ok:false,error:'state_conflict'}}]};
+        }
         if(${fails})throw new Error('ambiguous direct failure');
         if(sql.includes('ivx_autonomous_tasks_claim_batch'))return {rows:[{result:[{ok:false,task:null,error:'no_task'}]}]};
         return {rows:[]};
@@ -25,12 +29,12 @@ for (const fails of [false, true]) test(`configured same-project queue selects o
     const m=await import(${JSON.stringify(new URL('./ivx-postgres-autonomous-task-store.ts', import.meta.url).pathname)});
     if(!m.preferDirectTransport())throw new Error('same project was not selected');
     if(m.preferDirectTransport({...process.env,SUPABASE_DB_URL:process.env.SUPABASE_DB_URL.replace('postgres.testproject','postgres.other')}))throw new Error('other project accepted');
-    for(const operation of [()=>m.readPostgresFleetLeaseRows(),()=>m.readPostgresCurrentTasks(['RUNNING']),()=>m.claimPostgresAutonomousTasks([{workerId:'agent:test',agentNumber:1}])]) {
+    for(const operation of [()=>m.readPostgresFleetLeaseRows(),()=>m.readPostgresCurrentTasks(['RUNNING']),()=>m.claimPostgresAutonomousTasks([{workerId:'agent:test',agentNumber:1}]),()=>m.compareAndSetPostgresAutonomousTask({task:{taskId:'test'},expectedStates:['RUNNING'],eventType:'verified'})]) {
       let failed=false;
       try {await operation();}catch(e){if(!String(e).includes('ambiguous direct failure'))throw e;failed=true;}
       if(failed!==${fails})throw new Error('incorrect failure result');
     }
-    if(restCalls!==0 || queries!==3)throw new Error('transport replay or unexpected call count');
+    if(restCalls!==0 || queries!==4)throw new Error('transport replay or unexpected call count');
   `], {stdout:'pipe',stderr:'pipe',timeout:10000});
   const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
   expect(stderr).toBe('');
