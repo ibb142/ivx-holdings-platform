@@ -2,15 +2,20 @@ import assert from 'node:assert/strict';
 import { writeFile, mkdir } from 'node:fs/promises';
 
 const base = process.env.API_BASE;
-const sha = process.env.GITHUB_SHA ?? '';
+const sha = process.env.IVX_TARGET_SHA || process.env.GITHUB_SHA || '';
 const token = process.env.OWNER_TOKEN;
+const systemKey = process.env.IVX_SYSTEM_KEY;
 assert.equal(base, 'https://api.ivxholding.com');
-assert(/^[a-f0-9]{40}$/.test(sha)); assert(token);
+assert(/^[a-f0-9]{40}$/.test(sha));
+assert(token || systemKey, 'Owner bearer or protected system credential is required');
 const apiService = 'srv-d7t9ivreo5us73ftose0', workerService = 'srv-d9i15fg4n6ts73bn00j0';
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 async function request(path: string, body?: unknown) {
+  const authHeaders = token
+    ? { Authorization: `Bearer ${token}` }
+    : { 'X-IVX-System-Key': String(systemKey) };
   const response = await fetch(base + path, { method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(body ? 60_000 : 20_000),
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Connection: 'close' }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    headers: { ...authHeaders, 'Content-Type': 'application/json', Connection: 'close' }, ...(body ? { body: JSON.stringify(body) } : {}) });
   assert.equal(response.status, 200, `HTTP ${response.status} at ${path}`);
   const value = await response.json(); assert.equal(value.ok, true, `Operation rejected at ${path}`); return value;
 }

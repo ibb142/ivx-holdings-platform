@@ -88,7 +88,7 @@ export async function verifyFleetSloLive(config: Config) {
 }
 
 if (import.meta.main) {
-  const config = { base: (process.env.API_BASE ?? '').replace(/\/$/, ''), sha: process.env.GITHUB_SHA ?? '', key: process.env.IVX_SYSTEM_KEY ?? '' };
+  const config = { base: (process.env.API_BASE ?? '').replace(/\/$/, ''), sha: process.env.IVX_TARGET_SHA || process.env.GITHUB_SHA || '', key: process.env.IVX_SYSTEM_KEY ?? '' };
   console.log(JSON.stringify(await verifyFleetSloLive(config)));
   const boots = new Map<string, string>();
   const requiredInstances = Number(process.env.IVX_EXPECTED_API_INSTANCES ?? 2);
