@@ -27,7 +27,7 @@ function fresh(value: string | null | undefined, now: number, window: number): b
 }
 
 /** Only a successful structured tool result can substantiate productivity. */
-function successfulEvidence(evidence: TaskEvidence, agent: number, sha: string, now: number): boolean {
+export function successfulEvidence(evidence: TaskEvidence, agent: number, sha: string, now: number): boolean {
   if (!/^[a-f0-9]{64}$/i.test(evidence.contentHash ?? '') || !evidence.source
     || !fresh(evidence.createdAt, now, FLEET_EVIDENCE_WINDOW_MS)) return false;
   if (createHash('sha256').update(evidence.summary).digest('hex') !== evidence.contentHash) return false;
@@ -41,6 +41,19 @@ function successfulEvidence(evidence: TaskEvidence, agent: number, sha: string, 
   return true;
 }
 
+/** The dashboard and the SLO use exactly the same evidence predicate. */
+export function fleetTaskSignals(task: Task, now: number, sha: string) {
+  const agentNumber = Number(/^agent:ivx_holdings_(\d+)$/.exec(task.leaseHolder ?? '')?.[1]);
+  const activeLease = Number.isInteger(agentNumber) && agentNumber >= 1 && agentNumber <= FLEET_SLO_TARGET
+    && Date.parse(task.leaseExpiresAt ?? '') > now;
+  const heartbeatFresh = activeLease && fresh(task.lastHeartbeatAt, now, HEARTBEAT_FRESH_MS);
+  const running = activeLease && task.state === 'RUNNING';
+  const latest = [...(task.evidence ?? [])].filter(e => e.summary?.startsWith('LANDING_P0_RESULT '))
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
+  const evidence = running && heartbeatFresh && latest && successfulEvidence(latest, agentNumber, sha, now) ? latest : null;
+  return { agentNumber, activeLease, heartbeatFresh, running, evidence };
+}
+
 export function buildFleetSloSnapshot(tasks: readonly Task[], now = Date.now(), sha = resolveProductionSha()): FleetSloSnapshot {
   if (!/^[a-f0-9]{40}$/i.test(sha)) throw new Error('Production SHA unavailable');
   const running = new Set<number>();
@@ -49,21 +62,13 @@ export function buildFleetSloSnapshot(tasks: readonly Task[], now = Date.now(), 
   const productive = new Set<number>();
   for (const task of tasks) {
     // Work stealing can differ from assignment. Attribute to the actual holder.
-    const match = /^agent:ivx_holdings_(\d+)$/.exec(task.leaseHolder ?? '');
-    const agent = Number(match?.[1]);
-    if (!Number.isInteger(agent) || agent < 1 || agent > FLEET_SLO_TARGET) continue;
-    const activeLease = Date.parse(task.leaseExpiresAt ?? '') > now;
-    const heartbeat = activeLease && fresh(task.lastHeartbeatAt, now, HEARTBEAT_FRESH_MS);
+    const { agentNumber: agent, activeLease, heartbeatFresh: heartbeat, evidence } = fleetTaskSignals(task, now, sha);
     if (heartbeat) heartbeats.add(agent);
     if (!activeLease) continue;
     if (task.state === 'LEASED') leased.add(agent);
     if (task.state !== 'RUNNING') continue;
     running.add(agent);
-    // Inspect the most recent result, so a new FAIL supersedes an earlier PASS.
-    const latest = [...(task.evidence ?? [])]
-      .filter((evidence) => evidence.summary?.startsWith('LANDING_P0_RESULT '))
-      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
-    if (heartbeat && latest && successfulEvidence(latest, agent, sha, now)) productive.add(agent);
+    if (evidence) productive.add(agent);
   }
   return {
     marker: IVX_FLEET_SLO_MARKER, retry_policy: IVX_RETRY_POLICY_MARKER,

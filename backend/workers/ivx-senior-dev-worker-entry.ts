@@ -4,8 +4,8 @@
  * The background worker owns the durable 112-lane fleet. The web service can
  * therefore remain a control plane and keep owner APIs/health responsive.
  */
-import { startSeniorDevWorker, getSeniorDevWorkerStatus } from '../services/ivx-senior-dev-worker';
-import { getWorkerMaxConcurrency } from '../services/ivx-senior-developer-worker';
+import { startSeniorDevWorker, getSeniorDevWorkerStatus, requestSeniorDevWorkerStop } from '../services/ivx-senior-dev-worker';
+import { getWorkerMaxConcurrency, stopSeniorDeveloperQueue } from '../services/ivx-senior-developer-worker';
 import { startAutonomous112RuntimeEnforcer, stopAutonomous112RuntimeEnforcer } from '../services/ivx-autonomous-runtime-enforcer';
 import { startBlockedTaskReconciler, stopBlockedTaskReconciler } from '../services/ivx-autonomous-blocked-reconciler';
 import { startFleetSloMonitor } from '../services/ivx-fleet-slo';
@@ -35,6 +35,9 @@ startSeniorDevWorker().then(() => {
 });
 
 async function shutdown(signal: string): Promise<void> {
+  process.env.IVX_INSTANCE_DRAINING = 'true';
+  requestSeniorDevWorkerStop();
+  stopSeniorDeveloperQueue();
   console.log(`[IVX-SENIOR-DEV-01] ${signal} received, returning fleet capacity`);
   stopAutonomousUtilizationGuardian();
   stopBlockedTaskReconciler();

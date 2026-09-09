@@ -1,3 +1,4 @@
+import { updateRenderReplicas } from '../services/ivx-render-replicas';
 import { gunzipSync } from 'node:zlib';
 import { requestIVXAIText } from '../ivx-ai-runtime';
 import { createClient } from '@supabase/supabase-js';
@@ -49,6 +50,7 @@ type DeveloperDeployAction =
   | 'github_list_webhooks'
   | 'verify_url_sha256'
   | 'render_trigger_deploy'
+  | 'render_scale_service'
   | 'render_restart_service'
   | 'render_upsert_env_var'
   | 'render_copy_env_var'
@@ -162,6 +164,7 @@ function normalizeAction(value: unknown): DeveloperDeployAction {
     || normalized === 'github_list_webhooks'
     || normalized === 'verify_url_sha256'
     || normalized === 'render_trigger_deploy'
+    || normalized === 'render_scale_service'
     || normalized === 'render_restart_service'
     || normalized === 'render_upsert_env_var'
     || normalized === 'render_copy_env_var'
@@ -289,7 +292,7 @@ function requiredConfirmationText(action: DeveloperDeployAction): string {
   if (action === 'render_trigger_deploy') {
     return RENDER_DEPLOY_CONFIRM_TEXT;
   }
-  if (action === 'render_restart_service' || action === 'render_upsert_env_var' || action === 'render_copy_env_var' || action === 'render_update_subdomain_policy' || action === 'render_update_source' || action === 'render_get_deploy_status') {
+  if (action === 'render_scale_service' || action === 'render_restart_service' || action === 'render_upsert_env_var' || action === 'render_copy_env_var' || action === 'render_update_subdomain_policy' || action === 'render_update_source' || action === 'render_get_deploy_status') {
     return RENDER_SERVICE_CONFIRM_TEXT;
   }
   if (action === 'cloudfront_invalidate') {
@@ -2256,7 +2259,7 @@ async function buildStatus(): Promise<Record<string, unknown>> {
       serviceIdConfigured: renderServiceConfigured,
       credentialSource: renderCredentialSource,
       serviceName: readEnv('RENDER_SERVICE_NAME') || 'ivx-holdings-platform',
-      supportedActions: ['render_trigger_deploy', 'render_restart_service', 'render_upsert_env_var', 'render_copy_env_var', 'render_update_subdomain_policy', 'render_update_source', 'render_get_logs', 'render_get_deploy_status'],
+      supportedActions: ['render_scale_service', 'render_trigger_deploy', 'render_restart_service', 'render_upsert_env_var', 'render_copy_env_var', 'render_update_subdomain_policy', 'render_update_source', 'render_get_logs', 'render_get_deploy_status'],
       deployConfirmationTextRequired: RENDER_DEPLOY_CONFIRM_TEXT,
       serviceUpdateConfirmationTextRequired: RENDER_SERVICE_CONFIRM_TEXT,
     },
@@ -4098,6 +4101,9 @@ async function runAction(action: DeveloperDeployAction, input: Record<string, un
   }
   if (action === 'render_trigger_deploy') {
     return await runRenderTriggerDeploy(input);
+  }
+  if (action === 'render_scale_service') {
+    return updateRenderReplicas({ serviceId: await getRenderServiceId(input), numInstances: Number(input.numInstances) }, await renderHeaders());
   }
   if (action === 'render_restart_service') {
     return await runRenderRestartService(input);
