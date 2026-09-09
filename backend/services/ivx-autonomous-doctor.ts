@@ -192,6 +192,11 @@ async function runDoctorOnce(reason: 'boot' | 'interval'): Promise<void> {
     rememberSnapshot(snapshot);
     await learnFromSnapshot(snapshot);
     if (snapshot.certification.continuousRuntimeCertified || lastDiagnosis.length === 0) {
+      if (!lastHealthyAt || consecutiveUnhealthy > 0) console.info('[IVX Autonomous Doctor] recovery health verified', {
+        sourceSha: sourceSha(), recentPatrolAgents: recentObservations.size,
+        workingNow: snapshot.agents.counts.working, certified: snapshot.certification.continuousRuntimeCertified,
+        unnecessaryRetriesSkipped: lastDiagnosis.length === 0,
+      });
       lastHealthyAt = new Date().toISOString();
       consecutiveUnhealthy = 0;
       lastError = null;
