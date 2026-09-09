@@ -10,6 +10,7 @@ import { startAutonomous112RuntimeEnforcer, stopAutonomous112RuntimeEnforcer } f
 import { startBlockedTaskReconciler, stopBlockedTaskReconciler } from '../services/ivx-autonomous-blocked-reconciler';
 import { startFleetSloMonitor } from '../services/ivx-fleet-slo';
 import { startAutonomousDoctor } from '../services/ivx-autonomous-doctor';
+import { startAutonomousUtilizationGuardian, stopAutonomousUtilizationGuardian } from '../services/ivx-autonomous-utilization-guardian';
 
 const databaseRecoveryMode = (process.env.IVX_SUPABASE_RECOVERY_MODE ?? '').trim().toLowerCase() === 'true';
 
@@ -32,10 +33,14 @@ if (!databaseRecoveryMode) {
   startBlockedTaskReconciler();
 }
 const fleetStarted = startAutonomous112RuntimeEnforcer();
-if (!databaseRecoveryMode) startAutonomousDoctor();
+if (!databaseRecoveryMode) {
+  startAutonomousDoctor();
+  startAutonomousUtilizationGuardian();
+}
 console.log('[IVX-SENIOR-DEV-01] 112-lane execution plane', {
   started: fleetStarted,
   autonomousDoctor: !databaseRecoveryMode,
+  utilizationGuardian: !databaseRecoveryMode,
   databaseRecoveryMode,
 });
 
@@ -52,6 +57,7 @@ if (!databaseRecoveryMode) {
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`[IVX-SENIOR-DEV-01] ${signal} received, returning fleet capacity`);
+  stopAutonomousUtilizationGuardian();
   if (!databaseRecoveryMode) stopBlockedTaskReconciler();
   await stopAutonomous112RuntimeEnforcer().catch((error) => {
     console.error('[IVX-SENIOR-DEV-01] fleet shutdown error', error instanceof Error ? error.message : String(error));
