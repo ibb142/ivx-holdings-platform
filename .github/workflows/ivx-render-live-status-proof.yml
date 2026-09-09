@@ -2,7 +2,7 @@ name: IVX Render Live Status Proof
 
 on:
   push:
-    branches: [main, fix/fleet-render-ha-20260908]
+    branches: [main]
     paths:
       - 'backend/**'
       - 'server.ts'
@@ -56,8 +56,8 @@ jobs:
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       IVX_SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET || secrets.IVX_SYSTEM_SECRET }}
       IVX_TARGET_SHA: ${{ inputs.target_sha || github.sha }}
-      IVX_AUTHORIZED_SYSTEM_FALLBACK: ${{ inputs.authorized_system_fallback || (github.event_name == 'push' && github.ref_name == 'fix/fleet-render-ha-20260908') }}
-      IVX_HA_RESTART_WORKER: ${{ inputs.restart_worker || github.ref_name == 'fix/fleet-render-ha-20260908' || contains(github.event.head_commit.message, '[verify-fleet-ha-recovery]') }}
+      IVX_AUTHORIZED_SYSTEM_FALLBACK: ${{ inputs.authorized_system_fallback || (github.event_name == 'push' && github.ref_name == 'main' && contains(github.event.head_commit.message, '[verify-fleet-ha-recovery]')) }}
+      IVX_HA_RESTART_WORKER: ${{ inputs.restart_worker || contains(github.event.head_commit.message, '[verify-fleet-ha-recovery]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -68,11 +68,6 @@ jobs:
         run: |
           set -euo pipefail
           target="$IVX_TARGET_SHA"
-          if [ "$GITHUB_REF_NAME" = fix/fleet-render-ha-20260908 ]; then
-            test "$GITHUB_ACTOR" = ibb142
-            git fetch origin main --quiet
-            target=$(git rev-parse origin/main)
-          fi
           test "$(printf '%s' "$target" | grep -Ec '^[a-f0-9]{40}$')" = 1
           echo "IVX_TARGET_SHA=$target" >> "$GITHUB_ENV"
           echo "certification_target=$target trigger_sha=$GITHUB_SHA"
