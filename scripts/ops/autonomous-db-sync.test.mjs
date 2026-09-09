@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
 import crypto from 'node:crypto';
-import { candidates, connectionIssue, repairKnownConnection, main, readLinkedGroups, renderKey, validateConnection } from './autonomous-db-sync.mjs';
+import { candidates, connectionIssue, normalizeStoredConnection, repairKnownConnection, main, readLinkedGroups, renderKey, validateConnection } from './autonomous-db-sync.mjs';
 const valid='postgresql://postgres:unit-test-only@db.kvclcdjmjghndxsngfzb.supabase.co/postgres';
 test('rejects invalid hosts, other projects and disabled TLS',()=>{
   for(const v of ['postgresql://postgres:x@base/postgres','postgresql://postgres:x@db.other.supabase.co/postgres',valid+'?sslmode=disable']) assert.equal(validateConnection(v),null);
@@ -107,4 +107,13 @@ test('repairs only the observed base hostname and keeps credential validation en
   assert.equal(connectionIssue('https://example.com'),'not_postgres_uri');
   assert.equal(connectionIssue('postgresql://postgres@base/postgres'),'missing_database_credentials');
   assert.equal(connectionIssue(broken.replace('unit-test-only','[YOUR-PASSWORD]')),'placeholder_password');
+});
+
+test('normalizes pasted assignments and raw invalid percent characters without guessing credentials',()=>{
+  assert.equal(normalizeStoredConnection(`SUPABASE_DB_URL="${valid}"`),valid);
+  assert.equal(normalizeStoredConnection(`'${valid}'`),valid);
+  assert.equal(normalizeStoredConnection(`psql '${valid}'`),valid);
+  const raw=valid.replace('unit-test-only','secret%raw');
+  assert.equal(validateConnection(normalizeStoredConnection(raw)).password,'secret%raw');
+  for(const value of ['not a uri',raw.replace('kvclcdjmjghndxsngfzb','other'),raw+'?sslmode=disable',valid])assert.equal(normalizeStoredConnection(value),null);
 });
