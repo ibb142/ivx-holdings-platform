@@ -2966,11 +2966,6 @@ function createOwnerAICallerAbortError(message = 'Owner AI request aborted by ca
   return error;
 }
 
-function getIVXOwnerAIStreamEndpoint(): string {
-  const endpoint = getIVXOwnerAIEndpoint().replace(/\/+$/, '');
-  return endpoint.endsWith('/stream') ? endpoint : `${endpoint}/stream`;
-}
-
 export type IVXOwnerAIProgressEvent =
   | { type: 'start'; startedAt?: string }
   | { type: 'stage'; stage: string }
@@ -3106,13 +3101,13 @@ function logBackendPostProofThrow(input: {
 }
 
 /**
- * Real SSE consumer for POST /api/ivx/owner-ai/stream. Issues ONE attempt
- * against the active endpoint with `Accept: text/event-stream`. The backend
- * emits start/delta/done events directly from the streaming AI runtime.
+ * Real SSE consumer for POST /api/ivx/owner-ai. Issues ONE attempt against the
+ * canonical owner endpoint with `Accept: text/event-stream`. The backend keeps
+ * the complete owner pipeline and emits start/stage/heartbeat/delta/final.
  * Each event invokes `onProgress` so the caller (chat.tsx) can keep the
  * watchdog trace alive (`heartbeat()` resets BACKEND_POST_FINISHED timeout).
  *
- * On `done` (or the legacy `final`) we synthesize a canonical JSON `Response` so
+ * On `final` we synthesize a canonical JSON `Response` so
  * the rest of `requestOwnerAI` keeps its existing parsing path.
  */
 async function fetchOwnerAIWithHeartbeat(
@@ -3126,7 +3121,7 @@ async function fetchOwnerAIWithHeartbeat(
     throw createOwnerAICallerAbortError('Owner AI request aborted by caller before SSE fetch started');
   }
 
-  const endpoint = getIVXOwnerAIStreamEndpoint();
+  const endpoint = getIVXOwnerAIEndpoint();
   const controller = new AbortController();
   let rejectDeadline: ((reason: Error) => void) | null = null;
   const deadline = new Promise<never>((_resolve, reject) => {
@@ -3210,8 +3205,6 @@ async function fetchOwnerAIWithHeartbeat(
     let buffer = '';
     let finalEvent: { status: number; ok: boolean; body: unknown } | null = null;
     let streamError: string | null = null;
-    let streamedText = '';
-    let resolvedStreamModel: string | null = null;
 
     const dispatchEvent = (line: string): void => {
       if (!line.startsWith('data:')) return;
@@ -3224,39 +3217,6 @@ async function fetchOwnerAIWithHeartbeat(
         return;
       }
       const type = typeof payloadEvent.type === 'string' ? payloadEvent.type : '';
-      if (type === 'done') {
-        const doneText = typeof payloadEvent.text === 'string' && payloadEvent.text.length > 0
-          ? payloadEvent.text
-          : streamedText;
-        const doneError = typeof payloadEvent.error === 'string' ? payloadEvent.error : null;
-        if (!doneText.trim()) {
-          streamError = doneError ?? 'owner-ai stream completed without reply text';
-          try { onProgress({ type: 'error', error: streamError }); } catch { /* listener safe */ }
-          return;
-        }
-        const providerMetadata = isRecord(payloadEvent.providerMetadata)
-          ? payloadEvent.providerMetadata
-          : null;
-        const providerModel = providerMetadata && typeof providerMetadata.model === 'string'
-          ? providerMetadata.model
-          : null;
-        const model = providerModel ?? resolvedStreamModel ?? DEFAULT_IVX_OWNER_AI_MODEL;
-        finalEvent = {
-          status: 200,
-          ok: true,
-          body: {
-            requestId: payload.requestId,
-            conversationId: payload.conversationId,
-            answer: doneText,
-            model,
-            status: 'ok',
-            source: 'remote_api',
-            provider: 'chatgpt',
-          },
-        };
-        try { onProgress({ type: 'final', status: 200, ok: true }); } catch { /* listener safe */ }
-        return;
-      }
       if (type === 'final') {
         const status = typeof payloadEvent.status === 'number' ? payloadEvent.status : 200;
         const ok = typeof payloadEvent.ok === 'boolean' ? payloadEvent.ok : status >= 200 && status < 300;
@@ -3282,16 +3242,12 @@ async function fetchOwnerAIWithHeartbeat(
       }
       if (type === 'start') {
         const startedAt = typeof payloadEvent.startedAt === 'string' ? payloadEvent.startedAt : undefined;
-        resolvedStreamModel = typeof payloadEvent.model === 'string' && payloadEvent.model !== 'default'
-          ? payloadEvent.model
-          : resolvedStreamModel;
         try { onProgress({ type: 'start', startedAt }); } catch { /* listener safe */ }
         return;
       }
       if (type === 'delta') {
         const delta = typeof payloadEvent.delta === 'string' ? payloadEvent.delta : '';
         if (delta) {
-          streamedText += delta;
           try { onProgress({ type: 'delta', delta }); } catch { /* listener safe */ }
         }
         return;
@@ -4689,10 +4645,10 @@ export const ivxAIRequestService = {
       // run the tool-grounded server-side agent for 60–90s+, which exceeds the
       // host's ~60s request cap and the 58s JSON per-POST timeout — surfacing as
       // the `BACKEND_POST_FINISHED` "Unable to reach IVX Owner AI" (no HTTP
-      // status) TRUE_FAILURE. The dedicated backend `/stream` route emits
-      // start/delta/done SSE events, keeping the connection alive past the proxy
-      // cap. When the caller plumbs `onProgress` (chat.tsx does), we consume that
-      // stream via fetchOwnerAIWithHeartbeat (180s ceiling).
+      // status) TRUE_FAILURE. With `Accept: text/event-stream`, the canonical
+      // owner route emits start/stage/heartbeat/delta/final while preserving the
+      // full owner pipeline. When the caller plumbs `onProgress` (chat.tsx does),
+      // we consume that stream via fetchOwnerAIWithHeartbeat (180s ceiling).
       // If the deploy/proxy does not honor SSE, it throws a recoverable error and
       // we transparently fall back to the legacy JSON path below.
       let result: { endpoint: string; response: Response } | null = null;

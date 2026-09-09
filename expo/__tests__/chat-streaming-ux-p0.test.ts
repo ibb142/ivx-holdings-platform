@@ -88,12 +88,12 @@ function buildSSEResponse(events: string[]): Response {
 }
 
 describe('P0 chat streaming UX', () => {
-  it('uses the dedicated stream route and renders the real done-event contract', async () => {
+  it('uses the canonical full-pipeline route and renders its final-event contract', async () => {
     const events = [
       'data: {"type":"start","startedAt":"2026-08-10T12:00:00.000Z"}\n\n',
       'data: {"type":"delta","delta":"Hello "}\n\n',
       'data: {"type":"delta","delta":"world"}\n\n',
-      'data: {"type":"done","text":"Hello world","usage":{"outputTokens":2},"providerMetadata":{"model":"openai/gpt-4o"}}\n\n',
+      `data: {"type":"final","status":200,"ok":true,"body":{"ok":true,"status":"ok","answer":"Hello world","source":"chatgpt","model":"openai/gpt-4o","requestId":"req-123","conversationId":"conv-123","assistantMessageId":"msg-123","assistantPersisted":true}}\n\n`,
     ];
     const originalFetch = globalThis.fetch;
     let requestedUrl = '';
@@ -114,7 +114,7 @@ describe('P0 chat streaming UX', () => {
       );
 
       expect(deltas).toEqual(['Hello ', 'world']);
-      expect(requestedUrl).toBe('https://api.ivxholding.com/api/ivx/owner-ai/stream');
+      expect(requestedUrl).toBe('https://api.ivxholding.com/api/ivx/owner-ai');
       expect(result.answer).toBe('Hello world');
       expect(result.source).toBe('remote_api');
     } finally {

@@ -10,7 +10,6 @@ const loginSource = readFileSync(resolve(import.meta.dir, '../app/login.tsx'), '
 const flowSource = readFileSync(resolve(import.meta.dir, '../.maestro/ivx-owner-chat-certificate.yaml'), 'utf8');
 const transportReliabilitySource = readFileSync(resolve(import.meta.dir, './chat-transport-reliability.test.ts'), 'utf8');
 const ownerAIRequestSource = readFileSync(resolve(import.meta.dir, '../src/modules/ivx-owner-ai/services/ivxAIRequestService.ts'), 'utf8');
-const ownerAIStreamSource = readFileSync(resolve(import.meta.dir, '../../backend/api/ivx-owner-ai-stream.ts'), 'utf8');
 
 const requiredChatTestIDs = [
   'ivx-owner-chat-composer-dock',
@@ -104,17 +103,16 @@ describe('IVX IA chat device certificate regression', () => {
     expect(chatSource.slice(mutationIndex, mutationEndIndex)).toContain('retry: false');
   });
 
-  test('binds owner chat streaming to the real SSE route and done-event contract', () => {
-    expect(ownerAIRequestSource).toContain("return endpoint.endsWith('/stream') ? endpoint : `${endpoint}/stream`");
-    expect(ownerAIRequestSource).toContain("if (type === 'done')");
-    expect(ownerAIRequestSource).toContain('answer: doneText');
+  test('binds owner chat streaming to the canonical full-pipeline SSE route', () => {
+    expect(ownerAIRequestSource).toContain('const endpoint = getIVXOwnerAIEndpoint()');
+    expect(ownerAIRequestSource).toContain("Accept: 'text/event-stream'");
+    expect(ownerAIRequestSource).toContain("if (type === 'final')");
     expect(ownerAIRequestSource).toContain('fetchOwnerAIWithHeartbeat(accessToken, payload, onProgress, options?.signal)');
   });
 
   test('keeps owner chat deadlines deterministic and cancellation end-to-end', () => {
     expect(ownerAIRequestSource).toContain('Promise.race([reader.read(), deadline])');
     expect(ownerAIRequestSource).toContain('if (externalSignal?.aborted) {\n          throw error;');
-    expect(ownerAIStreamSource).toContain('abortSignal: request.signal');
     expect(ownerAIRequestSource).not.toContain('Task completed (HTTP ${final.status})');
   });
 
