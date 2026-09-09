@@ -1,7052 +1,272 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as DocumentPicker from 'expo-document-picker';
-import * as Haptics from 'expo-haptics';
-import {
-  RecordingPresets,
-  requestRecordingPermissionsAsync,
-  setAudioModeAsync,
-  useAudioRecorder,
-  useAudioRecorderState} from 'expo-audio';
-import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
-import {
-  Alert,
-  Animated,
-  AppState,
-  type AppStateStatus,
-  FlatList,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  type LayoutChangeEvent,
-  Linking,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View} from 'react-native';
-import { MessageBubble } from '@/src/modules/chat/components/MessageBubble';
-import { ExecutionConsoleBubble } from '@/src/modules/ivx-owner-ai/components/ExecutionConsoleBubble';
-import { coerceExecutionStatusFromPayload } from '@/src/modules/ivx-owner-ai/hooks/useExecutionStatusPoll';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Activity, ChevronDown, ClipboardList, Cpu, Crosshair, Gauge, GitBranch, KeyRound, LayoutDashboard, LineChart, Lock, Mail, Megaphone, MessageCircle, Mic, Paperclip, Pin, PlayCircle, Radar, Radio, Rocket, Search, Send, ShieldCheck, Sparkles, Square, Terminal, Unplug, Upload, UserPlus, Users, X } from 'lucide-react-native';
-import IVXBrandIcon from '@/components/IVXBrandIcon';
-import ErrorBoundary from '@/components/ErrorBoundary';
-import { SafeIcon } from '@/lib/safe-icon';
-import { useWebKeyboard, scrollInputIntoView } from '@/hooks/useWebKeyboard';
-import Colors from '@/constants/colors';
-import { IVXImage } from '@/components/ivx';
-import { IVX_OWNER_AI_PROFILE, IVX_OWNER_AI_ROOM_ID } from '@/constants/ivx-owner-ai';
-import { useAuth } from '@/lib/auth-context';
-import { isAdminRole } from '@/lib/auth-helpers';
-import { IVX_BASELINE_OWNER_EMAILS } from '@/shared/ivx/access-control';
-import { resolveDevTestModeContext } from '@/lib/dev-test-mode';
-import { getIVXAccessToken, getIVXOwnerAIConfigAudit, IVX_CANONICAL_API_BASE_URL, type IVXOwnerAIConfigAudit } from '@/lib/ivx-supabase-client';
-import { runOwnerSessionPreflight, OWNER_SESSION_REQUIRED_LABEL } from '@/src/modules/ivx-owner-ai/services/ownerSessionPreflight';
-import { isOpenAccessModeEnabled } from '@/lib/open-access';
-import { safeSetString } from '@/lib/safe-clipboard';
-import type { IVXMessage, IVXOwnerAIRouterDebug, IVXOwnerAIToolOutput, IVXUploadInput, IVXExecutionStatusPayload } from '@/shared/ivx';
-import { assertCleanOwnerAIResponseText, isIVXServiceUnavailableDiagnostics } from '@/src/modules/ivx-owner-ai/services/ivxAIRequestService';
-import { runDurableOwnerAIFallback, resumePendingDurableTasks, shouldAttemptDurableFallback } from '@/src/modules/ivx-owner-ai/services/ivxDurableTaskService';
-import { ivxAIWatchdog, type WatchdogTraceHandle } from '@/src/modules/ivx-owner-ai/services/ivxAIWatchdog';
-import { IVXWatchdogBanner, IVXWatchdogDrawer } from '@/components/IVXWatchdogPanel';
-import { IVXStagedTimeoutBanner, type TimeoutEvidence } from '@/components/IVXStagedTimeoutBanner';
-import { createAIOrchestrator, type AIOrchestrator } from '@/src/modules/ivx-owner-ai/services/ivxOwnerAIOrchestrator';
-import Constants from 'expo-constants';
-import { getIVXBuildInfo } from '@/constants/build-info';
-import { getIVXRuntimeInfo } from '@/lib/runtime-environment';
-import { ivxDiagnostics } from '@/src/modules/ivx-developer/diagnosticsStore';
-import { refreshOwnerSession } from '@/src/modules/ivx-developer/authDiagnosticsService';
-import IVXAdvancedExecutionMode from '@/components/IVXAdvancedExecutionMode';
-
-// Legacy panel kept for fallback access (not currently mounted).
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import _IVXLiveWorkVisibility from '@/components/IVXLiveWorkVisibility';
-import { resolveAIExecutionStage, formatAIExecutionStage, type AIExecutionStage } from '@/src/modules/chat/services/chatMessageUtils';
-import { ChatQaPanel } from '@/src/modules/chat/components/ChatQaPanel';
-import {
-  collectChatQaMetrics,
-  generateQaTraceId,
-  IVX_CHAT_QA_PANEL_ENABLED,
-  type ChatQaMetrics} from '@/src/modules/chat/services/chatQaDiagnostics';
-import {
-  getActiveRuntimeSource,
-  getRuntimeSourceLabel,
-  getRuntimeStatusCopy,
-  hasActiveStreamingState,
-  hasRuntimeFailure,
-  isPendingRequestState,
-  isAcceptableAssistantSource,
-  isExpectedAssistantSource,
-  normalizeRuntimeSource,
-  shouldPreserveRequestScopedRuntime,
-  shouldShowFallbackUI} from '@/src/modules/chat/chatRuntimeState';
-import {
-  buildIVXChatAuditReport,
-  buildIVXFunctionalityProofList,
-  buildIVXRoomRuntimeSnapshot,
-  getIVXOwnerAIErrorDiagnostics,
-  getLastIVXOwnerAIRuntimeProof,
-  getLastIVXOwnerAIPrimaryRouteFailure,
-  getLastIVXOwnerAIAuthDiagnostic,
-  ivxAIRequestService,
-  ivxChatService,
-  ivxOwnerMemoryService,
-  createIVXOwnerFileUnderstandingPrompt,
-  createIVXOwnerMultiFileUnderstandingPrompt,
-  ivxInboxService,
-  detectIVXRoomStatus,
-  invalidateIVXRoomProbeCache,
-  recordIVXOwnerChatAuditEvent,
-  type IVXChatAuditReport,
-  type IVXFunctionalityProofItem,
-  type IVXOwnerReceiveAudit,
-  type IVXOwnerRealtimeSubscriptionAudit,
-  type IVXOwnerSendAudit,
-  type IVXProofRecord,
-  type IVXRoomRuntimeSnapshot} from '@/src/modules/ivx-owner-ai/services';
-import { isIVXLocalFirstChatEnabled } from '@/src/modules/ivx-owner-ai/services/ivxLocalFirstRuntime';
-import type { IVXOwnerFileInsight } from '@/src/modules/ivx-owner-ai/services/ivxOwnerMemoryService';
-import { transcribeAudioRecording } from '@/src/modules/ivx-owner-ai/services/ivxMultimodalService';
-import { enforceIVXChatQualityFirewall } from '@/src/modules/ivx-owner-ai/services/ivxChatQualityFirewall';
-import { executeReliably, type ReliabilityTrace } from '@/src/modules/chat/services/aiReliability';
-import { useChatSendQueue } from '@/src/modules/chat/services/useChatSendQueue';
-import { shouldStartAssistantBeforePersistence } from '@/src/modules/chat/services/ivxSendTriggerPolicy';
-import { shouldRenderInlineImage } from '@/src/modules/chat/services/ivxChat';
-import {
-  isExplicitSensitiveActionConfirmation,
-  resolveOwnerTrustContext,
-  stripSensitiveActionConfirmationPrefix,
-  type OwnerRequestClass} from '@/src/modules/ivx-owner-ai/services/ownerTrust';
-import type { ChatMessage, ChatReplyContext, ChatRoomRuntimeSignals, ChatRoomStatus, ServiceRuntimeHealth } from '@/src/modules/chat/types/chat';
-import { resolveRoomCapabilityState, type RoomCapabilityResolution } from '@/src/modules/chat/services/roomCapabilityResolver';
-import { sanitizeUserFacingChatText } from '@/src/modules/chat/services/visibleTextSanitizer';
-import {
-  IVX_REPLY_CONTEXT_PREFIX,
-  IVX_REPLY_CONTEXT_SUFFIX,
-  safeTrim,
-  isRecord,
-  createTransientMessageId,
-  formatMessageTime,
-  formatMessageDateKey,
-  formatMessageDateLabel,
-  isOwnMessage,
-  getAttachmentLabel,
-  getAttachmentKindFromUpload,
-  parseStructuredSystemMessage,
-  isInternalTranscriptMessage,
-  buildVisibleAssistantTransient,
-  encodeReplyBody,
-  parseReplyBody,
-  normalizeComposerText,
-  sortMessagesByCanonicalOrder,
-  type ParsedReplyBody} from '@/src/modules/chat/services/chatMessageUtils';
-import {
-  controlTowerAggregator,
-  executeOperatorAction,
-  getActionLabel,
-  type CTDashboardSnapshot,
-  type CTEvidenceRecord,
-  type CTRiskAssessment,
-  type CTOperatorActionRun,
-  type CTSystemNode} from '@/lib/control-tower';
-import { liveIntelligenceService } from '@/lib/control-tower/live-intelligence';
-import { useLiveIntelligenceSnapshot } from '@/lib/control-tower/use-live-intelligence';
-import { getIVXControlRoomStatus, type IVXControlRoomItem, type IVXControlRoomItemStatus, type IVXControlRoomStatus } from '@/src/modules/ivx-owner-ai/services/ivxControlRoomService';
-import { IVX_COMMAND_BRAIN, getCommandBrainPending, isCommandBrainCommand, listCommandBrainCommands, runCommandBrain } from '@/src/modules/ivx-owner-ai/services/ivxCommandBrain';
-import {
-  buildSeniorDeveloperApprovalCard,
-  buildSeniorDeveloperJobDraft,
-  buildSeniorDeveloperSubmitStatusCard,
-  isSeniorDeveloperBuildRequest,
-  type SeniorDeveloperJobDraft} from '@/src/modules/ivx-developer/seniorDeveloperBuildIntent';
-import {
-  classifyOwnerIntent} from '@/src/modules/ivx-owner-ai/services/ivxOwnerIntentClassifier';
-import {
-  runChatDiagnostic,
-  formatDiagnosticResultCard,
-  formatDiagnosticProgressCard,
-  type DiagnosticStage,
-  type DiagnosticFinding} from '@/src/modules/ivx-owner-ai/services/ivxChatDiagnosticEngine';
-import {
-  getSeniorDeveloperWorkerLastProof,
-  isWorkerJobComplete,
-  pollSeniorDeveloperWorkerJob,
-  submitSeniorDeveloperWorkerJob,
-  type WorkerJobView} from '@/src/modules/ivx-developer/seniorDeveloperWorkerService';
-import { useMediaLifecycleList } from '@/src/modules/media-lifecycle/hooks';
-
-type PickerAsset = {
-  uri: string;
-  name?: string | null;
-  mimeType?: string | null;
-  size?: number | null;
-  file?: {
-    arrayBuffer: () => Promise<ArrayBuffer>;
-    name?: string;
-    size?: number;
-    type?: string;
-  } | null;
-};
-
-type OwnerCommandResult = {
-  command: string;
-  args: string;
-  response: string;
-};
-
-type QAProofItem = {
-  id: string;
-  label: string;
-  passed: boolean;
-  detail: string;
-};
-
-type OwnerPromptTemplate = {
-  id: 'deal_review' | 'investor_reply' | 'document_summary';
-  label: string;
-  prompt: string;
-  testID: string;
-};
-
-type ProbeMetadata = {
-  observedAt: string | null;
-  source: 'remote_api' | 'local_app_brain' | 'provider_fallback' | 'pending' | 'unknown';
-  endpoint: string | null;
-  deploymentMarker: string | null;
-  lastFailureReason: string | null;
-};
-
-type AIProxyStatusSnapshot = {
-  status: 'idle' | 'checking' | 'connected' | 'blocked' | 'error';
-  observedAt: string | null;
-  url: string | null;
-  model: string | null;
-  gateway: string | null;
-  configured: boolean;
-  deploymentMarker: string | null;
-  error: string | null;
-};
-
-type RuntimeDebugSnapshot = {
-  authMode: 'owner_session' | 'open_access_dev_bypass' | 'missing_owner_session';
-  ownerBypassEnabled: boolean;
-  conversationId: string | null;
-  requestId: string | null;
-  source: 'remote_api' | 'local_app_brain' | 'provider_fallback' | 'pending' | 'unknown';
-  endpoint: string | null;
-  deploymentMarker: string | null;
-  selectedIntent: string | null;
-  selectedTool: string | null;
-  requestStage: string;
-  failureClass: string;
-  httpStatus: string;
-  responsePreview: string;
-  failureDetail: string;
-  lastAttemptAt: string | null;
-  lastVerifiedAt: string | null;
-  hasVisibleResponseText: boolean;
-};
-
-type PendingOwnerMessage = {
-  clientId: string;
-  text: string;
-  createdAt: string;
-  mode: 'send_only' | 'send_and_ai' | 'ai_only' | 'attachment';
-  status: 'sending' | 'uploading' | 'uploaded' | 'failed';
-  errorMessage?: string | null;
-  upload?: IVXUploadInput | null;
-  uploadProgress?: number | null;
-  replyTo?: ChatReplyContext | null;
-};
-
-type OwnerConversationDraft = {
-  text: string;
-  attachmentDrafts: PendingOwnerMessage[];
-  updatedAt: string;
-};
-
-const OWNER_PROMPT_TEMPLATES: readonly OwnerPromptTemplate[] = [
-  {
-    id: 'deal_review',
-    label: 'Deal review',
-    prompt: 'Review this real estate deal like a senior IVX analyst. Summarize upside, risks, missing diligence, required documents, investor suitability notes, and the exact next action list.',
-    testID: 'ivx-owner-template-deal-review'},
-  {
-    id: 'investor_reply',
-    label: 'Investor reply',
-    prompt: 'Draft a compliant investor-support reply. Keep it clear, warm, non-promissory, and include what the investor should review before requesting allocation access.',
-    testID: 'ivx-owner-template-investor-reply'},
-  {
-    id: 'document_summary',
-    label: 'Doc summary',
-    prompt: 'Summarize the attached document or pasted text. Extract the key financial terms, obligations, deadlines, risk disclosures, missing signatures, and follow-up questions.',
-    testID: 'ivx-owner-template-document-summary'},
-];
-
-type BackendAuditSummary = {
-  currentEnvironment: 'development' | 'production';
-  routingPolicy: string;
-  auditState: string;
-  configSource: string;
-  explicitProductionPin: string;
-  configuredOwnerAIBaseUrl: string;
-  activeBaseUrl: string;
-  activeHost: string;
-  activeEndpoint: string;
-  directApiBaseUrl: string;
-  directApiHost: string;
-  ownerAiHealthUrl: string;
-  ownerRoute53AuditUrl: string;
-  ownerRoute53UpsertUrl: string;
-  appApiHealthUrl: string;
-  appApiRoute53AuditUrl: string;
-  devFallbackBaseUrl: string;
-  activeFallbackBaseUrl: string;
-  selectionReason: string;
-  fallbackUsed: string;
-  whyFallbackSelected: string;
-  wasFallbackUsed: string;
-  productionGuard: string;
-  productionGuardBlocked: boolean;
-  failureMode: string;
-  recommendedResolution: string;
-  gracefulDegradationNote: string;
-  workflowTrace: string[];
-  mismatchWarnings: string[];
-};
-
-type OwnerAIProofStatus = {
-  id: 'local_app_brain_ready' | 'remote_api_verified' | 'blocked_by_auth' | 'dev_fallback' | 'remote_api_unverified';
-  tone: 'pass' | 'blocked' | 'warn' | 'pending';
-  title: string;
-  detail: string;
-  evidence: string;
-  testID: string;
-};
-
-type DeliveryBranchStatus = {
-  branch: 'remote_db_insert' | 'local_fallback' | 'auth_session_failure' | 'not_observed';
-  title: string;
-  detail: string;
-  evidence: string;
-};
-
-type ReceiveBranchStatus = {
-  branch: 'realtime_event' | 'local_listener' | 'not_observed';
-  title: string;
-  detail: string;
-  evidence: string;
-};
-
-type ResolvedSendBranch = 'primary_realtime' | 'alternate_shared' | 'snapshot_fallback' | 'local_only';
-
-type SendBranchProofRow = {
-  branch: ResolvedSendBranch | null;
-  label: string;
-  context: string;
-};
-
-function resolveSendBranch(
-  deliveryBranch: DeliveryBranchStatus['branch'],
-  runtimeSource: RuntimeDebugSnapshot['source'],
-  httpStatus: string,
-): SendBranchProofRow {
-  if (deliveryBranch === 'not_observed') {
-    return { branch: null, label: 'pending', context: 'no send observed' };
-  }
-
-  const statusFragment = httpStatus !== 'pending' && httpStatus !== 'none' ? ` Â· ${httpStatus}` : '';
-
-  if (deliveryBranch === 'remote_db_insert') {
-    if (runtimeSource === 'remote_api' || runtimeSource === 'local_app_brain') {
-      return { branch: 'primary_realtime', label: 'primary_realtime', context: `assistant db insert${statusFragment}` };
-    }
-    if (runtimeSource === 'provider_fallback') {
-      return { branch: 'alternate_shared', label: 'alternate_shared', context: `gateway db insert${statusFragment}` };
-    }
-    return { branch: 'primary_realtime', label: 'primary_realtime', context: `db insert Â· source ${runtimeSource}${statusFragment}` };
-  }
-
-  if (deliveryBranch === 'local_fallback') {
-    return { branch: 'snapshot_fallback', label: 'snapshot_fallback', context: `local fallback path${statusFragment}` };
-  }
-
-  if (deliveryBranch === 'auth_session_failure') {
-    return { branch: 'local_only', label: 'local_only', context: `auth/session unavailable${statusFragment}` };
-  }
-
-  return { branch: 'local_only', label: 'local_only', context: `unresolved branch${statusFragment}` };
-}
-
-function getRuntimeFallbackState(source: RuntimeDebugSnapshot['source']): string {
-  if (source === 'remote_api' || source === 'local_app_brain') {
-    return 'cleared';
-  }
-  if (source === 'provider_fallback') {
-    return 'active';
-  }
-  return 'pending';
-}
-
-function getRuntimeDegradedState(status: IVXRoomRuntimeSnapshot['runtimeStatus']): string {
-  if (status === 'live') {
-    return 'cleared';
-  }
-  if (status === 'probing') {
-    return 'pending';
-  }
-  return status;
-}
-
-function formatRuntimeTimestamp(value: string | null): string {
-  if (!value) {
-    return 'pending';
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return parsed.toLocaleTimeString();
-}
-
-function getRuntimeProofHeadline(runtime: RuntimeDebugSnapshot): { title: string; detail: string } {
-  if (hasRuntimeFailure(runtime)) {
-    return {
-      title: 'Assistant path needs attention',
-      detail: 'The last reply did not complete cleanly. Your message remains saved.'};
-  }
-
-  if (runtime.hasVisibleResponseText) {
-    return {
-      title: 'Assistant response captured',
-      detail: 'Reply delivered cleanly.'};
-  }
-
-  if (isPendingRequestState(runtime)) {
-    return {
-      title: 'Message sent',
-      detail: 'Reply will appear when ready.'};
-  }
-
-  return {
-    title: 'Assistant ready',
-    detail: 'Conversation is available.'};
-}
-
-type AuditInfoRowProps = {
-  label: string;
-  value: string;
-  testID?: string;
-};
-
-const AuditInfoRow = React.memo(function AuditInfoRow({ label, value, testID }: AuditInfoRowProps) {
-  const normalizedValue = safeTrim(value).length > 0 ? value : 'â€”';
-
-  return (
-    <View style={styles.backendAuditRow} testID={testID}>
-      <Text style={styles.backendAuditLabel}>{label}</Text>
-      <Text style={styles.backendAuditValue}>{normalizedValue}</Text>
-    </View>
-  );
-});
-
-const IVX_OWNER_MESSAGES_QUERY_KEY = ['ivx-owner-ai', 'messages'] as const;
-const IVX_OWNER_CONVERSATION_QUERY_KEY = ['ivx-owner-ai', 'conversation'] as const;
-const IVX_CHAT_COLD_START_TIMEOUT_MS = 8_000;
-
-async function resolveWithinChatColdStartDeadline<T>(operation: Promise<T>, fallback: () => Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  try {
-    return await Promise.race<T>([
-      operation,
-      new Promise<T>((resolve) => {
-        timer = setTimeout(() => {
-          void fallback().then(resolve);
-        }, IVX_CHAT_COLD_START_TIMEOUT_MS);
-      }),
-    ]);
-  } finally {
-    if (timer) {
-      clearTimeout(timer);
-    }
-  }
-}
-const IVX_ROOM_STATUS_QUERY_KEY = ['ivx-owner-ai', 'room-status'] as const;
-const IVX_CONTROL_ROOM_STATUS_QUERY_KEY = ['ivx-owner-ai', 'control-room-status'] as const;
-const CONTROL_ROOM_FALLBACK_ITEMS: IVXControlRoomItem[] = [
-  { id: 'supabase-status', label: 'Supabase status', status: 'not_verified', detail: 'not verified' },
-  { id: 'supabase-tables', label: 'Supabase tables', status: 'not_verified', detail: 'not verified' },
-  { id: 'supabase-auth', label: 'Supabase auth', status: 'not_verified', detail: 'not verified' },
-  { id: 'supabase-storage', label: 'Supabase storage', status: 'not_verified', detail: 'not verified' },
-  { id: 'supabase-rls', label: 'Supabase RLS policies', status: 'not_verified', detail: 'not verified' },
-  { id: 'message-persistence', label: 'Message persistence status', status: 'not_verified', detail: 'not verified' },
-  { id: 'ai-response-persistence', label: 'AI response persistence status', status: 'not_verified', detail: 'not verified' },
-  { id: 'backend-health', label: 'Backend API health', status: 'not_verified', detail: 'not verified' },
-  { id: 'dns-tls', label: 'DNS/TLS status', status: 'not_verified', detail: 'not verified' },
-  { id: 'github-repo', label: 'GitHub repo status', status: 'not_verified', detail: 'not verified' },
-  { id: 'github-branch', label: 'Current branch', status: 'not_verified', detail: 'not verified' },
-  { id: 'github-uncommitted', label: 'Uncommitted files', status: 'not_verified', detail: 'not verified' },
-  { id: 'deployment-status', label: 'Deployment status', status: 'not_verified', detail: 'not verified' },
-  { id: 'aws-iam', label: 'AWS/IAM status', status: 'not_verified', detail: 'not verified' },
-  { id: 'env-checklist', label: 'Environment variable checklist', status: 'not_verified', detail: 'not verified' },
-  { id: 'missing-secrets', label: 'Missing secrets checklist', status: 'not_verified', detail: 'not verified' },
-  { id: 'logs-summary', label: 'Logs viewer/status summary', status: 'not_connected', detail: 'not connected' },
-  { id: 'verification-tests', label: 'Run verification tests', status: 'not_verified', detail: 'not verified' },
-  { id: 'fix-queue', label: 'Fix queue / pending blockers', status: 'not_verified', detail: 'not verified' },
-  { id: 'export-setup', label: 'Export setup instructions', status: 'available', detail: 'README_IVX_DEPLOYMENT.md, ENVIRONMENT_VARIABLES.md, and IVX_AI_BRAIN_TOOLS.md' },
-];
-const IVX_OWNER_DRAFT_STORAGE_KEY = 'ivx-owner-ai:conversation-draft:v1';
-const IVX_MAX_DRAFT_ATTACHMENTS = 20;
-const IVX_OWNER_PINNED_MESSAGES_STORAGE_KEY = 'ivx-owner-ai:pinned-messages:v1';
-const AI_PROBE_INTERVAL_MS = 30_000;
-const AI_FAST_PROXY_TIMEOUT_MS = 5_000;
-const AI_FAST_PROXY_INTERVAL_MS = 60_000;
-const OWNER_COMMAND_PREFIX = '/';
-
-/**
- * Frontend build stamp. Bump this string whenever the chat client changes so the
- * owner-only debug panel can prove â€” on the live device â€” exactly which client
- * bundle is running. If the panel shows an OLD stamp, the device is still on a
- * stale bundle and repo fixes have NOT reached production yet.
- */
-const IVX_FRONTEND_BUILD_STAMP = 'ivx-chat-client-2026-06-10t-owner-debug-panel-v1';
-
-/** A task surfaced inline in the chat so the owner can jump straight to the Live Work monitor. */
-type ChatLiveWorkTask = { label: string; isSupabase: boolean; startedAt: string };
-
-const LIVE_WORK_TASK_PATTERNS: readonly { re: RegExp; label: string; supabase?: boolean }[] = [
-  { re: /\bcheck\s+supabase\b|\bsupabase\b.*\b(check|status|health|connection|query)\b/i, label: 'Checking Supabase', supabase: true },
-  { re: /\bimprove\s+ivx\b|\bself[-\s]?improve\b|\bdaily improvement\b/i, label: 'Improving IVX' },
-  { re: /\bdeploy\b|\bship it\b|\bpush to (prod|main|production)\b/i, label: 'Deploying to production' },
-  { re: /\b(scan|find|discover)\b.*\b(opportunit|capital|investor|prospect|deal|buyer|partner)\b/i, label: 'Scanning for capital sources' },
-  { re: /\b(fix|debug|repair)\b/i, label: 'Running a fix' },
-  { re: /\b(audit|verify|run (the )?tests?)\b/i, label: 'Auditing & verifying' },
-  { re: /\b(build|create)\b.*\b(feature|screen|module|api|endpoint)\b/i, label: 'Building' },
-  { re: /\b(live work|show me.*work|what are you (doing|working))\b/i, label: 'Live work' },
-];
-
-/** Exact phrasings that route a chat message straight to the Senior Developer Worker. Shown as empty-state hints. */
-const WORKER_TRIGGER_HINTS: readonly string[] = [
-  'â€œBuild feature â€¦â€ / â€œBuild module â€¦â€',
-  'â€œCreate screen â€¦â€ / â€œCreate endpoint â€¦â€',
-  'â€œFix bug â€¦â€ / â€œRepair â€¦â€ / â€œPatch â€¦â€',
-  'â€œRefactor â€¦â€ / â€œRewrite â€¦â€',
-  'â€œDeploy â€¦â€ / â€œShip to productionâ€',
-];
-
-/**
- * Detect whether a sent message kicks off a REAL autonomous job.
- *
- * Per owner directive: normal chat messages containing words like "fix",
- * "build", "deploy", "task", "work", "complete", or "developer" must NOT
- * create fake progress UI. A live-work banner is only shown when a real
- * autonomous job exists with a job ID â€” the backend task queue must create
- * the job first. This function now returns null for normal text messages;
- * real job status is set via setActiveLiveWorkTask when a job ID is received
- * from the backend task queue.
- */
-function detectChatLiveWorkTask(_text: string): { label: string; isSupabase: boolean } | null {
-  return null;
-}
-const DEFAULT_OWNER_AI_CONFIG_AUDIT: IVXOwnerAIConfigAudit = getIVXOwnerAIConfigAudit();
-
-function createInitialAIProxyStatus(): AIProxyStatusSnapshot {
-  return {
-    status: 'idle',
-    observedAt: null,
-    url: null,
-    model: null,
-    gateway: null,
-    configured: false,
-    deploymentMarker: null,
-    error: null};
-}
-
-function buildOwnerAIProxyStatusUrl(audit: IVXOwnerAIConfigAudit): string | null {
-  const baseUrl = safeTrim(audit.activeBaseUrl).replace(/\/+$/, '');
-  return baseUrl ? `${baseUrl}/api/ivx/owner-ai/proxy-status` : null;
-}
-
-async function fetchOwnerAIProxyStatus(audit: IVXOwnerAIConfigAudit): Promise<AIProxyStatusSnapshot> {
-  const url = buildOwnerAIProxyStatusUrl(audit);
-  if (!url) {
-    return {
-      ...createInitialAIProxyStatus(),
-      status: 'error',
-      error: audit.configurationError ?? 'Owner AI proxy status URL is not configured.'};
-  }
-
-  const accessToken = await getIVXAccessToken();
-  if (!accessToken) {
-    return {
-      ...createInitialAIProxyStatus(),
-      status: 'blocked',
-      observedAt: new Date().toISOString(),
-      url,
-      error: 'Owner session token is not hydrated yet.'};
-  }
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => {
-    controller.abort();
-  }, AI_FAST_PROXY_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${accessToken}`},
-      signal: controller.signal});
-    const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
-    const runtime = isRecord(payload?.runtime) ? payload.runtime : {};
-    const runtimeConfigured = runtime.configured === true;
-    const deploymentMarker = typeof payload?.deploymentMarker === 'string' ? payload.deploymentMarker : null;
-    const model = typeof runtime.model === 'string' ? runtime.model : null;
-    const gateway = typeof runtime.gateway === 'string' ? runtime.gateway : null;
-    const error = typeof payload?.error === 'string' ? payload.error : typeof payload?.detail === 'string' ? payload.detail : null;
-
-    if (!response.ok) {
-      return {
-        status: response.status === 401 || response.status === 403 ? 'blocked' : 'error',
-        observedAt: new Date().toISOString(),
-        url,
-        model,
-        gateway,
-        configured: false,
-        deploymentMarker,
-        error: error ?? `Proxy status returned HTTP ${response.status}.`};
-    }
-
-    return {
-      status: runtimeConfigured ? 'connected' : 'error',
-      observedAt: new Date().toISOString(),
-      url,
-      model,
-      gateway,
-      configured: runtimeConfigured,
-      deploymentMarker,
-      error: runtimeConfigured ? null : 'Proxy route is live, but AI gateway configuration is not ready.'};
-  } catch (error) {
-    return {
-      ...createInitialAIProxyStatus(),
-      status: 'error',
-      observedAt: new Date().toISOString(),
-      url,
-      error: error instanceof Error ? error.message : 'Unable to reach Owner AI proxy status.'};
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function getControlRoomTone(status: IVXControlRoomItemStatus): 'pass' | 'warn' | 'error' | 'pending' {
-  if (status === 'verified' || status === 'connected' || status === 'available') {
-    return 'pass';
-  }
-  if (status === 'blocked' || status === 'missing_access' || status === 'not_connected') {
-    return 'error';
-  }
-  return 'pending';
-}
-
-function getControlRoomStatusLabel(status: IVXControlRoomItemStatus): string {
-  return status.replace(/_/g, ' ');
-}
-
-const OWNER_COMMANDS: Record<string, { description: string; handler: (args: string) => string }> = {
-  help: {
-    description: 'List available owner commands',
-    handler: () => {
-      const lines = Object.entries(OWNER_COMMANDS).map(([cmd, info]) => `/${cmd} â€” ${info.description}`);
-      return `Available owner commands:\n${lines.join('\n')}`;
-    }},
-  status: {
-    description: 'Show current room and AI backend status',
-    handler: () => 'Room status: check the header card for live backend status, storage mode, delivery method, and AI health.'},
-  clear: {
-    description: 'Clear local message cache (does not delete server messages)',
-    handler: () => 'Local cache cleared. Pull to refresh to reload from server.'},
-  reconnect: {
-    description: 'Force reconnect to the shared room backend',
-    handler: () => 'Reconnect triggered. Room status will be re-detected.'},
-  probe: {
-    description: 'Run a health probe on the AI backend',
-    handler: () => 'AI health probe triggered. Check the AI indicator for updated status.'},
-  broadcast: {
-    description: 'Send a broadcast notification to all participants',
-    handler: (args: string) => {
-      if (!safeTrim(args)) return 'Usage: /broadcast <message>';
-      return `Broadcast queued: "${safeTrim(args)}". Participants will be notified on next sync.`;
-    }},
-  knowledge: {
-    description: 'Ask a knowledge-base question',
-    handler: () => 'Knowledge query routed to AI. Response will appear as an assistant reply.'},
-  proof: {
-    description: 'Show the latest live room proof summary',
-    handler: () => 'Compiling the latest room proof summary.'},
-  risk: {
-    description: 'Show the highest live chat/runtime risks',
-    handler: () => 'Compiling the current risk envelope for chat/runtime.'},
-  incident: {
-    description: 'Show the latest live incident summary',
-    handler: () => 'Compiling the latest incident summary for the owner room.'},
-  deps: {
-    description: 'Inspect the active dependency chain for the owner room',
-    handler: () => 'Compiling the current dependency chain for the owner room.'},
-  heal: {
-    description: 'Run an allowed intervention, e.g. /heal rerun-proof or /heal clear-stuck',
-    handler: (args: string) => safeTrim(args) ? `Preparing allowed intervention: ${safeTrim(args)}` : 'Usage: /heal <rerun-proof|clear-stuck|provider-probe|shared-sync|inbox-sync|transcript>'},
-  replay: {
-    description: 'Replay the latest safe operator intervention',
-    handler: () => 'Preparing the latest safe operator intervention for replay.'},
-  brain: {
-    description: 'List the Command Brain commands that run owner surfaces inline',
-    handler: () => listCommandBrainCommands()},
-  ...Object.fromEntries(
-    Object.values(IVX_COMMAND_BRAIN).map((entry) => [
-      entry.command,
-      {
-        description: `${entry.description} (usage: ${entry.usage})`,
-        handler: () => getCommandBrainPending(entry.command) ?? `Running /${entry.command}â€¦`},
-    ]),
-  )};
-
-function parseOwnerCommand(text: string): OwnerCommandResult | null {
-  const trimmed = safeTrim(text);
-  if (!trimmed.startsWith(OWNER_COMMAND_PREFIX)) return null;
-  const parts = trimmed.slice(OWNER_COMMAND_PREFIX.length).split(/\s+/);
-  const command = (parts[0] ?? '').toLowerCase();
-  const args = parts.slice(1).join(' ');
-  if (!command) return null;
-  const handler = OWNER_COMMANDS[command];
-  if (!handler) return { command, args, response: `Unknown command: /${command}. Type /help for available commands.` };
-  console.log('[IVXOwnerChatRoute] Owner command detected:', command, 'args:', args);
-  return { command, args, response: handler.handler(args) };
-}
-
-function buildSensitiveActionConfirmationMessage(input: {
-  normalizedText: string;
-  requestClass: OwnerRequestClass;
-  conversationAccessState: 'fallback_chat_only' | 'full_backend_execution';
-  backendAdminVerified: boolean;
-}): string {
-  const confirmationTarget = input.normalizedText.startsWith('/')
-    ? `/confirm ${input.normalizedText}`
-    : `confirm ${input.normalizedText}`;
-  const confirmationReason = input.requestClass.replace(/_/g, ' ');
-  const backendState = input.backendAdminVerified ? 'backend_admin_verified' : 'backend_admin_unverified';
-
-  return [
-    'Result: confirmation required',
-    `Explanation: Owner-room trust stays active for normal conversation, but ${confirmationReason} needs explicit confirmation before any admin execution is claimed.`,
-    `Evidence: owner_room_authenticated Â· ${backendState} Â· ${input.conversationAccessState} Â· destructive_action_requires_confirmation`,
-    'Affected dependencies: owner room trust â†’ backend admin execution gate',
-    'Operator action log: pending_confirmation',
-    'Rollback: not required',
-    `Linked proof cards: confirm with ${confirmationTarget}`,
-  ].join('\n');
-}
-
-function buildFallbackChatOnlyExecutionMessage(input: {
-  normalizedText: string;
-  requestClass: OwnerRequestClass;
-}): string {
-  const requestedAction = input.normalizedText || 'the requested action';
-  const actionReason = input.requestClass.replace(/_/g, ' ');
-
-  return [
-    'Result: blocked',
-    `Explanation: Owner room trust is active, but ${actionReason} requires verified backend admin access. I can discuss or plan ${requestedAction}, but I will not claim backend/admin execution until verification is restored.`,
-    'Evidence: owner_room_authenticated Â· backend_admin_unverified',
-    'Affected dependencies: owner room trust â†’ fallback runtime â†’ backend admin execution gate',
-    'Operator action log: chat_only_limit',
-    'Rollback: not required',
-    'Linked proof cards: wait for backend_admin_verified or continue with normal chat',
-  ].join('\n');
-}
-
-function buildLocalSafeActionConfirmationMessage(input: {
-  normalizedText: string;
-  requestClass: OwnerRequestClass;
-}): string {
-  const requestedAction = safeTrim(input.normalizedText) || 'this action';
-  const readableClass = input.requestClass.replace(/_/g, ' ');
-  return [
-    'Confirmation needed before I proceed.',
-    `This looks like a ${readableClass} request: â€œ${requestedAction}â€.`,
-    'Reply with â€œconfirmâ€ followed by the same request if you want me to continue. I can also help plan it safely first.',
-  ].join('\n');
-}
-
-function getDeliveryBranchStatus(audit: IVXOwnerSendAudit | null): DeliveryBranchStatus {
-  if (!audit) {
-    return {
-      branch: 'not_observed',
-      title: 'send path pending proof',
-      detail: 'No completed owner-room send has been captured in this session yet.',
-      evidence: 'Send one message now to capture DB/local/auth branch evidence.'};
-  }
-
-  if (audit.transport === 'remote_db_insert') {
-    return {
-      branch: 'remote_db_insert',
-      title: 'remote db insert',
-      detail: 'The last owner-room write reached shared Supabase persistence.',
-      evidence: `${audit.messageId} Â· ${audit.reason}`};
-  }
-
-  if (audit.transport === 'auth_session_failure') {
-    return {
-      branch: 'auth_session_failure',
-      title: 'auth/session failure',
-      detail: 'The last owner-room write could not use shared persistence because owner auth/session was unavailable.',
-      evidence: `${audit.messageId} Â· ${audit.reason}`};
-  }
-
-  return {
-    branch: 'local_fallback',
-    title: 'local fallback',
-    detail: 'The last owner-room write fell back to local-only persistence after the shared path failed.',
-    evidence: `${audit.messageId} Â· ${audit.reason}`};
-}
-
-function getReceiveBranchStatus(audit: IVXOwnerReceiveAudit | null): ReceiveBranchStatus {
-  if (!audit) {
-    return {
-      branch: 'not_observed',
-      title: 'receive path pending proof',
-      detail: 'No owner-room receive event has been captured in this session yet.',
-      evidence: 'Wait for a fresh inbound message or realtime echo to capture receive-branch proof.'};
-  }
-
-  if (audit.transport === 'realtime_event') {
-    return {
-      branch: 'realtime_event',
-      title: 'realtime event',
-      detail: 'The last inbound owner-room message was delivered through the realtime subscription.',
-      evidence: `${audit.messageId} Â· ${audit.reason}`};
-  }
-
-  return {
-    branch: 'local_listener',
-    title: 'local listener',
-    detail: 'The last inbound owner-room message was delivered through the local fallback listener.',
-    evidence: `${audit.messageId} Â· ${audit.reason}`};
-}
-
-const DateSeparator = React.memo(function DateSeparator({ value }: { value: string }) {
-  return (
-    <View style={styles.dateSeparatorRow} testID={`ivx-owner-date-separator-${formatMessageDateKey(value)}`}>
-      <View style={styles.dateSeparatorLine} />
-      <Text style={styles.dateSeparatorText}>{formatMessageDateLabel(value)}</Text>
-      <View style={styles.dateSeparatorLine} />
-    </View>
-  );
-});
-
-export default function IVXOwnerChatRoute() {
-  // Realtime: invalidate on DB changes
-  useRealtimeTable('notifications', [['notifications']]);
-  const queryClient = useQueryClient();
-  const router = useRouter();
-  const flatListRef = useRef<FlatList<IVXMessage> | null>(null);
-  const composerInputRef = useRef<TextInput | null>(null);
-  const composerValueRef = useRef<string>('');
-  const highlightedMessageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingJumpMessageIdRef = useRef<string | null>(null);
-  const suppressAutoScrollUntilRef = useRef<number>(0);
-  const lastNonKeyboardRootHeightRef = useRef<number>(0);
-  const isAtBottomRef = useRef<boolean>(true);
-  const prevMessageCountRef = useRef<number>(0);
-  const prevSearchActiveRef = useRef<boolean>(false);
-  const lastScrolledConversationIdRef = useRef<string | null>(null);
-  // OPEN-ON-LATEST FIX: tracks whether the chat still needs to be anchored to
-  // the newest message after first load / conversation switch. Kept as React
-  // state (not a ref) so a dedicated retry effect can re-render and keep trying
-  // until the FlatList actually reports it is at the bottom. Prevents the race
-  // where scrollToEnd / scrollToIndex fail silently before dynamic message
-  // bubbles have been measured.
-  const [initialScrollPending, setInitialScrollPending] = useState<boolean>(true);
-  const insets = useSafeAreaInsets();
-  const { user, userId, isLoading, isAuthenticated, userRole, loginOwnerPasswordless } = useAuth();
-  const [composerValue, setComposerValue] = useState<string>('');
-  const [messageSearchQuery, setMessageSearchQuery] = useState<string>('');
-  const [searchOpen, setSearchOpen] = useState<boolean>(false);
-  const [pinnedMessageIds, setPinnedMessageIds] = useState<string[]>([]);
-  const [selectedReplyContext, setSelectedReplyContext] = useState<ChatReplyContext | null>(null);
-  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
-  const [missingReplyMessageId, setMissingReplyMessageId] = useState<string | null>(null);
-  const pinnedMessagesRestoreCompletedRef = useRef<boolean>(false);
-  const [isPickingFile, setIsPickingFile] = useState<boolean>(false);
-  const [draftAttachments, setDraftAttachments] = useState<{ upload: IVXUploadInput; isImage: boolean; isVideo: boolean }[]>([]);
-  const [composerHeight, setComposerHeight] = useState<number>(0);
-  const [composerInputHeight, setComposerInputHeight] = useState<number>(44);
-  const [keyboardInset, setKeyboardInset] = useState<number>(0);
-  const [rootLayoutHeight, setRootLayoutHeight] = useState<number>(0);
-  const [showDiagnostics, setShowDiagnostics] = useState<boolean>(false);
-  // Build-information diagnostics banner: ALWAYS hidden by default. The owner
-  // can reopen it from Owner Control â†’ Diagnostics â†’ Build Information. The
-  // closed state is persisted across app restarts so production never shows
-  // the overlay unless explicitly requested.
-  // Diagnostics overlay removed â€” moved to protected /admin/diagnostics route.
-  // The chat screen no longer renders a floating diagnostics panel.
-  // Owner session gate removed: chat composer is always usable without requiring
-  // a separate owner verification step. The preflight state is kept ready for
-  // backwards compatibility with any diagnostics that still inspect it.
-  const ownerSessionPreflight = { state: 'ready' as const };
-  const [passwordlessLoading, setPasswordlessLoading] = useState<boolean>(false);
-  const [showScrollToLatest, setShowScrollToLatest] = useState<boolean>(false);
-  const [unreadCount, setUnreadCount] = useState<number>(0);
-  // Chat QA diagnostic panel â€” owner-only, temporary, removable after certification.
-  const [showQaPanel, setShowQaPanel] = useState<boolean>(false);
-  const [qaTraceId] = useState<string>(() => generateQaTraceId());
-  const [qaSubmitting, setQaSubmitting] = useState<boolean>(false);
-  const [qaSubmitResult, setQaSubmitResult] = useState<'idle' | 'success' | 'error' | null>(null);
-  const [firstContentOffsetRecorded, setFirstContentOffsetRecorded] = useState<number | null>(null);
-  const duplicateMessageCountRef = useRef<number>(0);
-  const lastReconnectTimeRef = useRef<string | null>(null);
-  const isOpenAccessBuild = isOpenAccessModeEnabled();
-  const localFirstChatMode = useMemo<boolean>(() => isIVXLocalFirstChatEnabled(), []);
-  const ownerId = useMemo<string>(() => user?.id ?? userId ?? (isOpenAccessBuild || localFirstChatMode ? 'ivx-local-owner' : ''), [isOpenAccessBuild, localFirstChatMode, user?.id, userId]);
-  const ownerLabel = useMemo<string>(() => safeTrim(user?.email) || (localFirstChatMode ? 'IVX Owner' : isOpenAccessBuild ? 'IVX Owner Dev' : 'IVX Owner'), [isOpenAccessBuild, localFirstChatMode, user?.email]);
-  const devTestMode = useMemo(() => resolveDevTestModeContext({ userId: ownerId, email: user?.email }), [ownerId, user?.email]);
-  const ownerAIConfigAudit = useMemo<IVXOwnerAIConfigAudit>(() => {
-    try {
-      return getIVXOwnerAIConfigAudit();
-    } catch (error) {
-      console.log('[IVXOwnerChatRoute] Owner AI config audit fallback used:', error instanceof Error ? error.message : 'unknown');
-      return DEFAULT_OWNER_AI_CONFIG_AUDIT;
-    }
-  }, []);
-  const liveSnapshot = useLiveIntelligenceSnapshot();
-  const ownerSessionIdRef = useRef<string>(`ivx-owner-room-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
-  // Active IVX Owner AI watchdog traces, keyed by traceId. Threaded through
-  // mutation inputs so each send has its own checkpoint report.
-  const activeWatchdogTracesRef = useRef<Map<string, WatchdogTraceHandle>>(new Map());
-  const [watchdogDrawerVisible, setWatchdogDrawerVisible] = useState<boolean>(false);
-  // Staged timeout banner state â€” replaces the single 180s watchdog timeout
-  // with progressive UX: 15s "Still working", 45s retry, 90s backend status
-  // check, 180s fail with exact evidence. No infinite spinner.
-  const [stagedTimeoutTraceId, setStagedTimeoutTraceId] = useState<string | null>(null);
-  const [stagedTimeoutMessageId, setStagedTimeoutMessageId] = useState<string>('');
-  const [stagedTimeoutRequestStarted, setStagedTimeoutRequestStarted] = useState<boolean>(false);
-  const [stagedTimeoutLastCheckpoint, setStagedTimeoutLastCheckpoint] = useState<string | null>(null);
-  const orchestratorRef = useRef<AIOrchestrator | null>(null);
-  const stagedTimeoutStartRef = useRef<number>(Date.now());
-  const [liveWorkVisible, setLiveWorkVisible] = useState<boolean>(false);
-  // The task most recently kicked off from chat, surfaced as an inline Live Work
-  // button so the owner can jump straight to the real-time execution monitor.
-  const [activeLiveWorkTask, setActiveLiveWorkTask] = useState<ChatLiveWorkTask | null>(null);
-
-  // One-tap owner sign-in is no longer required to use the chat composer.
-  // The helper is kept as a no-op stub so any existing callers do not break.
-  const handlePasswordlessOwnerSignIn = useCallback(async () => {
-    console.log('[IVXOwnerChatRoute] Owner sign-in gate removed; no-op sign-in invoked.');
-  }, []);
-
-  // Owner-session gate removed: the chat composer is always available. Any
-  // auth requirements are handled transparently by the underlying chat service.
-  // This useEffect is intentionally left empty to preserve hook order stability.
-  useEffect(() => {
-    console.log('[IVXOwnerChatRoute] Owner session gate disabled; composer ready for all users.');
-  }, [ownerId, user?.email]);
-
-  // P0 durable-task restore (503-recovery mandate Phase 4): after an app
-  // restart, re-poll any pending durable tasks so recovered answers are
-  // restored instead of lost.
-  useEffect(() => {
-    let mounted = true;
-    void resumePendingDurableTasks((task) => {
-      if (!mounted || !task.answer) return;
-      if (task.status !== 'VERIFIED' && task.status !== 'COMPLETED') return;
-      const restoredId = createTransientMessageId('ivx-owner-ai-durable-restored');
-      setTransientAssistantMessages((current) => [
-        ...current.filter((message) => message.id !== restoredId),
-        buildVisibleAssistantTransient({
-          id: restoredId,
-          conversationId: 'ivx-owner-room',
-          body: `${task.answer}\n\nâ™»ï¸ Restored from durable task ${task.taskId} after app restart.`}),
-      ]);
-    }).catch((restoreErr) => {
-      console.log('[IVXOwnerChatRoute] durable_restore_failed_safely:', restoreErr instanceof Error ? restoreErr.message : 'unknown');
-    });
-    return () => { mounted = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Diagnostics overlay removed â€” moved to protected /admin/diagnostics route.
-  // The button in the control room now navigates to /admin/diagnostics instead.
-  // Overlay lifecycle hardening: close the live-work overlay automatically
-  // when the app backgrounds, when the screen unmounts, or when navigation
-  // pulls the route off. Prevents ghost overlays + stale poller activity.
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      if (next !== 'active') {
-        setLiveWorkVisible(false);
-        setWatchdogDrawerVisible(false);
-      }
-    });
-    return () => {
-      sub.remove();
-      setLiveWorkVisible(false);
-      setWatchdogDrawerVisible(false);
-    };
-  }, []);
-  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recorderState = useAudioRecorderState(audioRecorder);
-
-  const roomStatusQuery = useQuery<ChatRoomStatus, Error>({
-    queryKey: IVX_ROOM_STATUS_QUERY_KEY,
-    queryFn: async () => {
-      console.log('[IVXOwnerChatRoute] Detecting IVX room status via ivx_* tables');
-      try {
-        const status = await detectIVXRoomStatus();
-        console.log('[IVXOwnerChatRoute] IVX room status result:', status.storageMode, status.deliveryMethod);
-        setRoomProbeAt(new Date().toISOString());
-        return status;
-      } catch (error) {
-        console.log('[IVXOwnerChatRoute] Room status detection failed:', error instanceof Error ? error.message : 'unknown');
-        if (!isOpenAccessBuild) {
-          throw error instanceof Error ? error : new Error('Unable to detect owner room status.');
-        }
-
-        setRoomProbeAt(new Date().toISOString());
-        return {
-          storageMode: 'local_device_only',
-          visibility: 'local_only',
-          deliveryMethod: 'local_only',
-          warning: 'Open-access development mode is active. The owner room stays usable locally while live room detection recovers.'};
-      }
-    },
-    staleTime: 25_000,
-    refetchInterval: 60_000});
-
-  const ivxRoomStatus: ChatRoomStatus | null = roomStatusQuery.data ?? null;
-
-  // DISAPPEAR-FIX (2026-07-05): ref mirror of the last non-empty messages data.
-  // Used by the messagesQuery `select` to keep the prior thread visible when a
-  // transient empty refetch lands (e.g. canonical conversation id briefly
-  // diverged from the id messages were saved under). Prevents the chat from
-  // blanking while the service-layer recovery repopulates the canonical id.
-  const lastNonEmptyMessagesRef = useRef<IVXMessage[] | null>(null);
-
-  const messagesQuery = useQuery<IVXMessage[], Error>({
-    queryKey: IVX_OWNER_MESSAGES_QUERY_KEY,
-    queryFn: async () => {
-      console.log('[IVXOwnerChatRoute] Loading owner messages');
-      try {
-        const loaded = await resolveWithinChatColdStartDeadline(
-          ivxChatService.listOwnerMessages(),
-          ivxChatService.getLocalOwnerMessages,
-        );
-        // Proof-first hydration log: prove the thread re-hydrates on mount /
-        // refresh / route change with a real message count, not an empty reset.
-        console.log('[IVXChatStateProof] hydration_ok', {
-          room: IVX_OWNER_AI_PROFILE.sharedRoom.id,
-          sessionId: ownerSessionIdRef.current,
-          hydratedMessageCount: loaded.length,
-          localFirstChatMode,
-          platform: Platform.OS});
-        return loaded;
-      } catch (error) {
-        console.log('[IVXChatStateProof] hydration_failed', {
-          reason: error instanceof Error ? error.message : 'unknown',
-          isOpenAccessBuild});
-        if (!isOpenAccessBuild) {
-          throw error instanceof Error ? error : new Error('Unable to load owner messages.');
-        }
-
-        return [];
-      }
-    },
-    // Keep the loaded conversation in cache long enough that a route change /
-    // tab switch / quick reload never blanks the chat before the refetch lands.
-    // The durable local mirror (ivxChatService) backs a full page reload.
-    gcTime: 24 * 60 * 60 * 1000,
-    staleTime: 15_000,
-    placeholderData: (previous) => previous,
-    // DISAPPEAR-FIX (2026-07-05): a transient empty refetch (e.g. the canonical
-    // conversation id briefly diverging from the id messages were saved under)
-    // must NEVER blank the rendered thread. If a fresh fetch returns an empty
-    // array while we already have non-empty cached data, keep the cached data
-    // visible. The durable local mirror + cross-conversation recovery in the
-    // service layer will repopulate the canonical id on the next successful load.
-    select: (data: IVXMessage[]) => {
-      if (data.length > 0) {
-        lastNonEmptyMessagesRef.current = data;
-        return data;
-      }
-      if (lastNonEmptyMessagesRef.current && lastNonEmptyMessagesRef.current.length > 0) {
-        console.log('[IVXChatStateProof] preserving cached messages over empty refetch', {
-          cachedCount: lastNonEmptyMessagesRef.current.length});
-        return lastNonEmptyMessagesRef.current;
-      }
-      return data;
-    }});
-  const conversationQuery = useQuery({
-    queryKey: IVX_OWNER_CONVERSATION_QUERY_KEY,
-    queryFn: async () => {
-      console.log('[IVXOwnerChatRoute] Bootstrapping owner conversation');
-      try {
-        return await resolveWithinChatColdStartDeadline(
-          ivxChatService.bootstrapOwnerConversation(),
-          async () => ({
-            id: IVX_OWNER_AI_ROOM_ID,
-            slug: IVX_OWNER_AI_PROFILE.sharedRoom.id,
-            title: IVX_OWNER_AI_PROFILE.sharedRoom.title,
-            subtitle: 'Local conversation while the secure room reconnects.',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            lastMessageText: null,
-            lastMessageAt: null}),
-        );
-      } catch (error) {
-        console.log('[IVXOwnerChatRoute] Owner conversation bootstrap failed:', error instanceof Error ? error.message : 'unknown');
-        if (!isOpenAccessBuild) {
-          throw error instanceof Error ? error : new Error('Unable to open the owner room.');
-        }
-
-        return {
-          id: 'ivx-owner-room',
-          slug: 'ivx-owner-room',
-          title: IVX_OWNER_AI_PROFILE.sharedRoom.title,
-          subtitle: 'Open-access development room',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          lastMessageText: null,
-          lastMessageAt: null};
-      }
-    }});
-  const messages = messagesQuery.data ?? [];
-  // CONVERSATION-ID FIX (2026-06-10): the backend-returned conversation id,
-  // adopted as canonical after every owner-ai response and persisted durably.
-  // `canonicalConversationId` is the SINGLE id every save AND every restore keys
-  // off, so the id used to save always equals the id used to restore. All
-  // alternate fallbacks (slug literals, locally generated room ids,
-  // IVX_OWNER_AI_PROFILE.sharedRoom.id) are removed in favour of this resolver.
-  const [adoptedConversationId, setAdoptedConversationId] = useState<string | null>(null);
-  const [conversationIdProof, setConversationIdProof] = useState<{
-    clientBeforeSend: string | null;
-    backendReturned: string | null;
-    usedForSave: string | null;
-    usedForRestore: string | null;
-  }>({ clientBeforeSend: null, backendReturned: null, usedForSave: null, usedForRestore: null });
-  const canonicalConversationId = useMemo<string>(() => {
-    return safeTrim(adoptedConversationId)
-      || safeTrim(conversationQuery.data?.id)
-      || IVX_OWNER_AI_ROOM_ID;
-  }, [adoptedConversationId, conversationQuery.data?.id]);
-  const canonicalConversationIdRef = useRef<string>(canonicalConversationId);
-  useEffect(() => {
-    canonicalConversationIdRef.current = canonicalConversationId;
-  }, [canonicalConversationId]);
-  // On mount, restore the durably-adopted canonical id so the SAME conversation
-  // (and its saved messages) is keyed identically after an app close/reopen.
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const stored = await ivxChatService.getCanonicalConversationId();
-        if (!cancelled && stored) {
-          setAdoptedConversationId((current) => current ?? stored);
-          setConversationIdProof((current) => ({
-            ...current,
-            usedForRestore: current.usedForRestore ?? stored}));
-          console.log('[IVXConversationId] Restored canonical conversation id on mount:', stored);
-        }
-      } catch (error) {
-        console.log('[IVXConversationId] Canonical id restore failed:', error instanceof Error ? error.message : 'unknown');
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  // Adopt the backend-returned conversation id as canonical after a response.
-  const adoptCanonicalConversationId = useCallback((backendConversationId: string | null | undefined): string => {
-    const clientBeforeSend = canonicalConversationIdRef.current;
-    const trimmedBackend = safeTrim(backendConversationId);
-    const nextCanonical = trimmedBackend || clientBeforeSend;
-    if (trimmedBackend && trimmedBackend !== clientBeforeSend) {
-      setAdoptedConversationId(trimmedBackend);
-      void ivxChatService.setCanonicalConversationId(trimmedBackend);
-      console.log('[IVXConversationId] Adopted backend conversation id as canonical:', {
-        clientBeforeSend,
-        backendReturned: trimmedBackend});
-    }
-    setConversationIdProof({
-      clientBeforeSend,
-      backendReturned: trimmedBackend || null,
-      usedForSave: nextCanonical,
-      usedForRestore: nextCanonical});
-    return nextCanonical;
-  }, []);
-  const transcribeVoiceMutation = useMutation<string, Error, string>({
-    mutationFn: async (uri) => {
-      await recordIVXOwnerChatAuditEvent({
-        action: 'voice_transcription',
-        conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
-        status: 'started',
-        summary: 'Owner voice transcription started.',
-        metadata: { platform: Platform.OS, sessionId: ownerSessionIdRef.current }});
-      const result = await transcribeAudioRecording({
-        uri,
-        fileName: Platform.OS === 'web' ? 'ivx-owner-voice.webm' : 'ivx-owner-voice.m4a',
-        mimeType: Platform.OS === 'web' ? 'audio/webm' : 'audio/m4a'});
-      return result.text;
-    },
-    onSuccess: (transcript) => {
-      const normalizedTranscript = normalizeComposerText(transcript).trim();
-      if (!normalizedTranscript) {
-        Alert.alert('Voice not transcribed', 'No speech was detected in that recording.');
-        void recordIVXOwnerChatAuditEvent({
-          action: 'voice_transcription',
-          conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
-          status: 'failed',
-          summary: 'Voice transcription completed without usable speech.',
-          metadata: { sessionId: ownerSessionIdRef.current }});
-        return;
-      }
-
-      const currentText = normalizeComposerText(composerValueRef.current).trim();
-      const nextText = currentText ? `${currentText}\n${normalizedTranscript}` : normalizedTranscript;
-      composerValueRef.current = nextText;
-      setComposerValue(nextText);
-      setComposerInputHeight(Math.min(Math.max(Math.ceil(nextText.length / 28) * 22 + 22, 44), 112));
-      composerInputRef.current?.focus();
-      void recordIVXOwnerChatAuditEvent({
-        action: 'voice_transcription',
-        conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
-        status: 'success',
-        summary: 'Voice transcription inserted into the IVX Owner AI composer.',
-        metadata: { transcriptLength: normalizedTranscript.length, sessionId: ownerSessionIdRef.current }});
-    },
-    onError: (error) => {
-      console.log('[IVXOwnerChatRoute] Voice transcription error:', error.message);
-      void recordIVXOwnerChatAuditEvent({
-        action: 'voice_transcription',
-        conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
-        status: 'failed',
-        summary: 'Voice transcription failed.',
-        metadata: { error: error.message, sessionId: ownerSessionIdRef.current }});
-      Alert.alert('Voice transcription unavailable', error.message || 'We could not transcribe that recording. Please try again.');
-    }});
-  type OwnerAIAuthState = 'AUTH_INITIALIZING' | 'SIGNED_OUT' | 'SESSION_REFRESHING' | 'SIGNED_IN_MEMBER' | 'SIGNED_IN_OWNER' | 'AUTH_ERROR';
-  const ownerAIAuthState = useMemo<OwnerAIAuthState>(() => {
-    if (isLoading) return 'AUTH_INITIALIZING';
-    if (!isAuthenticated || !user) return 'SIGNED_OUT';
-    if (isAdminRole(userRole)) return 'SIGNED_IN_OWNER';
-    return 'SIGNED_IN_MEMBER';
-  }, [isLoading, isAuthenticated, user, userRole]);
-  const ownerAIAuthReady = ownerAIAuthState === 'SIGNED_IN_OWNER';
-  const ownerRoomAuthenticated = useMemo<boolean>(() => {
-    if (devTestMode.testModeActive) {
-      return true;
-    }
-    const normalizedConversationId = safeTrim(conversationQuery.data?.id);
-    const normalizedConversationSlug = safeTrim(conversationQuery.data?.slug);
-    return localFirstChatMode
-      || isOpenAccessBuild
-      || ownerAIAuthReady
-      || !!userId
-      || normalizedConversationId === IVX_OWNER_AI_PROFILE.sharedRoom.id
-      || normalizedConversationSlug === IVX_OWNER_AI_PROFILE.sharedRoom.slug;
-  }, [conversationQuery.data?.id, conversationQuery.data?.slug, devTestMode.testModeActive, isOpenAccessBuild, localFirstChatMode, ownerAIAuthReady, userId]);
-  const controlRoomQuery = useQuery<IVXControlRoomStatus, Error>({
-    queryKey: IVX_CONTROL_ROOM_STATUS_QUERY_KEY,
-    queryFn: getIVXControlRoomStatus,
-    enabled: ownerRoomAuthenticated,
-    staleTime: 60_000,
-    refetchInterval: 120_000});
-
-  const [transientAssistantMessages, setTransientAssistantMessages] = useState<IVXMessage[]>([]);
-  const [currentStreamingMessageId, setCurrentStreamingMessageId] = useState<string | null>(null);
-  // FINAL IVX IA CHAT EXECUTION MODE (owner mandate 2026-07-19): side-channel
-  // map from transient assistant message id â†’ the 9-field executionStatus payload
-  // the backend attached to its 202 response. Kept outside IVXMessage (which is
-  // the persisted Supabase row shape) so we don't widen the DB schema. The
-  // renderMessage callback reads this map to decide whether to render a
-  // live-polling ExecutionConsoleBubble instead of a plain MessageBubble.
-  const [executionStatusByMessageId, setExecutionStatusByMessageId] = useState<Map<string, IVXExecutionStatusPayload>>(new Map());
-  const [pendingOwnerMessages, setPendingOwnerMessages] = useState<PendingOwnerMessage[]>([]);
-  // Phase 4 (areas B, C, E): cursor-based older-messages pagination. When the
-  // owner scrolls to the top of the currently-loaded window, we fetch the next
-  // page of older messages via listOlderOwnerMessages(cursor) and prepend them
-  // to the React Query cache, preserving the scroll anchor. The loadingRef
-  // prevents concurrent fetches; hasMoreRef short-circuits once the older page
-  // returns fewer than pageSize+1 rows (no more history).
-  const loadingOlderMessagesRef = useRef<boolean>(false);
-  const hasMoreOlderMessagesRef = useRef<boolean>(true);
-  const [, setOlderMessagesLoading] = useState<boolean>(false);
-  const draftRestoreCompletedRef = useRef<boolean>(false);
-  const uploadProgressTimersRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
-  const normalizedComposerValue = useMemo<string>(() => normalizeComposerText(composerValue), [composerValue]);
-  const composerHasText = safeTrim(normalizedComposerValue).length > 0;
-  const allMessages = useMemo<IVXMessage[]>(() => {
-    const visiblePersistentMessages = messages.filter((message) => !isInternalTranscriptMessage(message));
-    const persistentAssistantBodies = new Set(
-      visiblePersistentMessages
-        .filter((message) => message.senderRole === 'assistant')
-        .map((message) => safeTrim(message.body))
-        .filter((body) => body.length > 0),
-    );
-    const visibleTransientAssistantMessages = transientAssistantMessages.filter((message) => {
-      if (isInternalTranscriptMessage(message)) {
-        return false;
-      }
-
-      if (message.senderRole !== 'assistant') {
-        return true;
-      }
-
-      // P0 FIX: keep the currently streaming assistant message in the list even
-      // while its body is empty, so the message bubble renders immediately with
-      // a blinking cursor and the user sees real end-to-end typing.
-      if (message.id === currentStreamingMessageId) {
-        return true;
-      }
-
-      return safeTrim(message.body).length > 0;
-    });
-    const transientIds = new Set(visibleTransientAssistantMessages.map((message) => message.id));
-    const transientAssistantBodies = new Set(
-      visibleTransientAssistantMessages
-        .filter((message) => message.senderRole === 'assistant')
-        .map((message) => safeTrim(message.body))
-        .filter((body) => body.length > 0),
-    );
-    // Content keys of owner turns ALREADY persisted remotely. A still-pending
-    // (non-failed) optimistic owner message whose text matches one of these is
-    // the SAME turn that just landed in the DB â€” suppress the optimistic copy so
-    // a just-sent message is never shown twice during the successâ†’refetch window.
-    const remoteOwnerContentKeys = new Set(
-      visiblePersistentMessages
-        .filter((message) => message.senderRole === 'owner' && !message.attachmentUrl)
-        .map((message) => safeTrim(message.body).toLowerCase())
-        .filter((body) => body.length > 0),
-    );
-    const deduped = new Map<string, IVXMessage>();
-
-    for (const pendingMessage of pendingOwnerMessages) {
-      const normalizedPendingText = safeTrim(pendingMessage.text);
-      const pendingUpload = pendingMessage.upload ?? null;
-      if (!normalizedPendingText && !pendingUpload) {
-        continue;
-      }
-      // A non-failed text turn already mirrored remotely â†’ drop the optimistic
-      // duplicate (the authoritative remote row renders instead). Failed turns
-      // stay so the retry/dismiss card remains visible.
-      if (
-        pendingMessage.status !== 'failed'
-        && pendingMessage.mode !== 'attachment'
-        && !pendingUpload
-        && normalizedPendingText.length > 0
-        && remoteOwnerContentKeys.has(normalizedPendingText.toLowerCase())
-      ) {
-        continue;
-      }
-
-      const uploadProgress = typeof pendingMessage.uploadProgress === 'number'
-        ? Math.max(0, Math.min(100, Math.round(pendingMessage.uploadProgress)))
-        : null;
-      const uploadStatusText = pendingMessage.mode === 'attachment' && pendingMessage.status !== 'failed'
-        ? pendingMessage.status === 'uploaded'
-          ? `Uploaded ${pendingUpload?.name ?? 'attachment'} successfully`
-          : uploadProgress != null
-            ? `Uploading ${pendingUpload?.name ?? 'attachment'} â€¢ ${uploadProgress}%`
-            : `Preparing ${pendingUpload?.name ?? 'attachment'}...`
-        : pendingMessage.errorMessage ?? normalizedPendingText;
-
-      deduped.set(pendingMessage.clientId, {
-        id: pendingMessage.clientId,
-        conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
-        senderUserId: ownerId || null,
-        senderRole: 'owner',
-        senderLabel: ownerLabel,
-        body: pendingMessage.status === 'failed' ? (pendingMessage.errorMessage ?? pendingMessage.text) : (pendingMessage.mode === 'attachment' ? uploadStatusText : pendingMessage.text),
-        attachmentUrl: pendingUpload?.uri ?? null,
-        attachmentName: pendingUpload?.name ?? null,
-        attachmentMime: pendingUpload?.type ?? null,
-        attachmentSize: pendingUpload?.size ?? null,
-        attachmentKind: pendingUpload ? getAttachmentKindFromUpload(pendingUpload) : 'text',
-        createdAt: pendingMessage.createdAt,
-        updatedAt: pendingMessage.createdAt,
-        sendStatus: pendingMessage.status,
-        replyTo: pendingMessage.replyTo ?? null} as IVXMessage & { sendStatus: PendingOwnerMessage['status']; replyTo?: ChatReplyContext | null });
-    }
-
-    // GUARANTEE-BUBBLE DEDUP:
-    // Prefer the transient assistant bubble over the persistent row when bodies
-    // match. The transient was just produced locally for THIS reply, so it is
-    // the most reliable source of truth that a bubble must render. The
-    // persistent row may arrive late, be filtered by isInternalTranscriptMessage,
-    // be role-mismatched by the backend, or have a body that subtly diverges
-    // from the transient (badge / tool label). On cold reload the transient is
-    // gone and the persistent row renders normally â€” no duplicates over time.
-    let droppedDuplicatePersistents = 0;
-    for (const message of visiblePersistentMessages) {
-      const normalizedBody = safeTrim(message.body);
-      const isDuplicateOfActiveTransient = message.senderRole === 'assistant'
-        && !transientIds.has(message.id)
-        && normalizedBody.length > 0
-        && transientAssistantBodies.has(normalizedBody);
-
-      if (isDuplicateOfActiveTransient) {
-        droppedDuplicatePersistents += 1;
-        continue;
-      }
-
-      deduped.set(message.id, message);
-    }
-    // Deduplicate execution-mode assistant messages by taskId. When the same
-    // worker taskId is returned for multiple requests (per-owner single-flight
-    // or retries), keep only the newest transient bubble so the chat shows
-    // exactly one terminal response per task instead of repeated BLOCKED messages.
-    const taskIdSeen = new Map<string, IVXMessage>();
-    for (const message of visibleTransientAssistantMessages) {
-      if (!message.taskId) {
-        if (!deduped.has(message.id)) {
-          deduped.set(message.id, message);
-        }
-        continue;
-      }
-      const existing = taskIdSeen.get(message.taskId);
-      if (!existing || new Date(message.createdAt).getTime() > new Date(existing.createdAt).getTime()) {
-        taskIdSeen.set(message.taskId, message);
-      }
-    }
-    for (const message of taskIdSeen.values()) {
-      if (!deduped.has(message.id)) {
-        deduped.set(message.id, message);
-      }
-    }
-    // Canonical server-created order with a stable message-ID tiebreak.
-    // This keeps reloads and realtime duplicates from moving existing bubbles.
-    // QA diagnostics: track how many duplicates were removed by the dedup layer.
-    const rawCount = messages.length + visibleTransientAssistantMessages.length + pendingOwnerMessages.length;
-    const dedupCount = Math.max(0, rawCount - deduped.size);
-    duplicateMessageCountRef.current = dedupCount;
-    return sortMessagesByCanonicalOrder(Array.from(deduped.values()));
-  }, [conversationQuery.data?.id, currentStreamingMessageId, messages, ownerId, ownerLabel, pendingOwnerMessages, transientAssistantMessages]);
-
-  // DURABLE ANTI-DISAPPEAR MIRROR:
-  // Every committed/rendered owner + assistant turn is written into the durable
-  // local shadow as soon as it is shown. This guarantees the conversation
-  // survives a reload / route change even when the next remote read does not
-  // return a message (conversation-id mismatch or a transient remote-read
-  // failure) â€” the merge in listOwnerMessages always restores the shadow.
-  // Pending/failed/in-flight turns are excluded so only real delivered content
-  // is persisted; the helper dedupes so this is idempotent.
-  const durableMirrorPayload = useMemo<IVXMessage[]>(() => {
-    return allMessages.filter((message) => {
-      if (isInternalTranscriptMessage(message)) {
-        return false;
-      }
-      const sendStatus = (message as IVXMessage & { sendStatus?: PendingOwnerMessage['status'] }).sendStatus;
-      if (sendStatus === 'failed' || sendStatus === 'sending' || sendStatus === 'uploading') {
-        return false;
-      }
-      return safeTrim(message.body).length > 0 || !!message.attachmentUrl;
-    });
-  }, [allMessages]);
-  const durableMirrorSignature = useMemo<string>(
-    () => durableMirrorPayload.map((message) => `${message.id}:${safeTrim(message.body).length}`).join('|'),
-    [durableMirrorPayload],
-  );
-  useEffect(() => {
-    if (durableMirrorPayload.length === 0) {
-      return;
-    }
-    void ivxChatService.appendOwnerMessagesToLocalMirror(durableMirrorPayload);
-    // durableMirrorPayload is recomputed in lockstep with the signature; the
-    // signature is the dependency so we only re-mirror when content changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [durableMirrorSignature]);
-
-  useEffect(() => {
-    let mounted = true;
-
-    void (async () => {
-      try {
-        const rawDraft = await AsyncStorage.getItem(IVX_OWNER_DRAFT_STORAGE_KEY);
-        if (!mounted) {
-          return;
-        }
-
-        if (!rawDraft) {
-          draftRestoreCompletedRef.current = true;
-          return;
-        }
-
-        const parsed = JSON.parse(rawDraft) as Partial<OwnerConversationDraft>;
-        const restoredText = typeof parsed.text === 'string' ? parsed.text : '';
-        const restoredAttachmentDrafts = Array.isArray(parsed.attachmentDrafts)
-          ? parsed.attachmentDrafts.filter((message): message is PendingOwnerMessage => {
-            const candidate = message as Partial<PendingOwnerMessage>;
-            return candidate.mode === 'attachment'
-              && candidate.status === 'failed'
-              && typeof candidate.clientId === 'string'
-              && typeof candidate.createdAt === 'string'
-              && typeof candidate.text === 'string'
-              && typeof candidate.upload?.uri === 'string'
-              && typeof candidate.upload?.name === 'string';
-          })
-          : [];
-
-        composerValueRef.current = restoredText;
-        setComposerValue(restoredText);
-        if (restoredText.length > 0) {
-          setComposerInputHeight(Math.min(Math.max(Math.ceil(restoredText.length / 28) * 22 + 22, 44), 112));
-        }
-        if (restoredAttachmentDrafts.length > 0) {
-          setPendingOwnerMessages((current) => {
-            const existingIds = new Set(current.map((message) => message.clientId));
-            return [...restoredAttachmentDrafts.filter((message) => !existingIds.has(message.clientId)), ...current];
-          });
-        }
-        draftRestoreCompletedRef.current = true;
-        console.log('[IVXOwnerChatRoute] Restored owner draft:', { textLength: restoredText.length, attachmentDraftCount: restoredAttachmentDrafts.length });
-      } catch (error) {
-        draftRestoreCompletedRef.current = true;
-        console.log('[IVXOwnerChatRoute] Failed to restore owner draft:', error instanceof Error ? error.message : 'unknown');
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!draftRestoreCompletedRef.current) {
-      return;
-    }
-
-    const draftText = composerValueRef.current;
-    const attachmentDrafts = pendingOwnerMessages.filter((message) => message.mode === 'attachment' && message.status === 'failed' && message.upload);
-    const hasDraft = safeTrim(draftText).length > 0 || attachmentDrafts.length > 0;
-    const timeout = setTimeout(() => {
-      void (async () => {
-        try {
-          if (!hasDraft) {
-            await AsyncStorage.removeItem(IVX_OWNER_DRAFT_STORAGE_KEY);
-            console.log('[IVXOwnerChatRoute] Cleared owner draft storage');
-            return;
-          }
-
-          const draft: OwnerConversationDraft = {
-            text: draftText,
-            attachmentDrafts,
-            updatedAt: new Date().toISOString()};
-          await AsyncStorage.setItem(IVX_OWNER_DRAFT_STORAGE_KEY, JSON.stringify(draft));
-          console.log('[IVXOwnerChatRoute] Saved owner draft:', { textLength: draftText.length, attachmentDraftCount: attachmentDrafts.length });
-        } catch (error) {
-          console.log('[IVXOwnerChatRoute] Failed to persist owner draft:', error instanceof Error ? error.message : 'unknown');
-        }
-      })();
-    }, 250);
-
-    return () => clearTimeout(timeout);
-  }, [composerValue, pendingOwnerMessages]);
-
-  const normalizedMessageSearchQuery = useMemo<string>(() => safeTrim(messageSearchQuery).toLowerCase(), [messageSearchQuery]);
-  const displayedMessages = useMemo<IVXMessage[]>(() => {
-    return normalizedMessageSearchQuery
-      ? allMessages.filter((message) => safeTrim(message.body).toLowerCase().includes(normalizedMessageSearchQuery))
-      : allMessages;
-  }, [allMessages, normalizedMessageSearchQuery]);
-  const searchActive = normalizedMessageSearchQuery.length > 0;
-
-  // INVERTED FLATLIST FIX (Phase 2): Reverse the displayed messages so the
-  // newest message is at index 0. Combined with `inverted={true}` on the
-  // FlatList, the list NATURALLY anchors at the newest message on first
-  // layout â€” zero setTimeout, zero retry loop, zero race condition. This is
-  // the WhatsApp/iMessage pattern and eliminates the defect where the chat
-  // opened on months-old messages because scrollToEnd fired before dynamic
-  // bubble layout measurement completed.
-  const invertedData = useMemo<IVXMessage[]>(() => [...displayedMessages].reverse(), [displayedMessages]);
-
-  // IVX Media Lifecycle: register all chat messages and wire viewport/scroll
-  // tracking so image/video attachments obey centralized lifecycle rules.
-  const mediaLifecycle = useMediaLifecycleList('chat', invertedData, {
-    module: 'ivx-chat',
-    keyExtractor: (_item, index) => `chat:message:${index}`,
-    getMediaType: (item) => {
-      const message = item as IVXMessage;
-      if (message.attachmentKind === 'video') return 'video' as const;
-      if (message.attachmentKind === 'image' && message.attachmentUrl) return 'image' as const;
-      return 'unknown' as const;
-    },
-    getSourceUrl: (item) => (item as IVXMessage).attachmentUrl ?? null,
-    getThumbnailUrl: (item) => (item as IVXMessage).attachmentUrl ?? null,
-    getContainerId: (item) => (item as IVXMessage).id,
-  });
-
-  // Watchdog: report MESSAGE_ARRAY_MERGED / FILTER_VISIBLE_PASSED / DEDUP_PASSED
-  // / SEARCH_PIN_FILTER_PASSED for every active trace as soon as its bound
-  // assistant transient id surfaces in the relevant pipeline stage.
-  useEffect(() => {
-    if (activeWatchdogTracesRef.current.size === 0) return;
-    const allIds = new Set(allMessages.map((m) => m.id));
-    const visibleIds = new Set(displayedMessages.map((m) => m.id));
-    const assistantCountAll = allMessages.filter((m) => m.senderRole === 'assistant').length;
-    // Build lookup maps for dedup-recovery: when a newer transient with the same
-    // taskId supersedes an older one (removed from displayedMessages by taskId
-    // dedup at lines ~1396-1413), the trace bound to the old id can still
-    // complete because the owner's response IS visible â€” just via the newer
-    // bubble. Also, FlatList windowing means renderMessage is only called for
-    // items in the viewport; an off-screen assistant bubble would never trigger
-    // RENDER_MESSAGE_CALLED, causing a false 90s SILENT_FAILURE timeout.
-    const allMessageById = new Map(allMessages.map((m) => [m.id, m]));
-    const visibleTaskIds = new Set<string>();
-    for (const message of displayedMessages) {
-      if (message.senderRole === 'assistant' && message.taskId) {
-        visibleTaskIds.add(message.taskId);
-      }
-    }
-    for (const trace of activeWatchdogTracesRef.current.values()) {
-      const report = trace.getReport();
-      if (report.finalStatus !== 'PENDING') continue;
-      const boundIds = report.assistantTransientIds;
-      if (boundIds.length === 0) continue;
-      const anyInAll = boundIds.some((id) => allIds.has(id));
-      const anyInVisible = boundIds.some((id) => visibleIds.has(id));
-      if (anyInAll) {
-        trace.pass('MESSAGE_ARRAY_MERGED', `assistantsInAllMessages=${assistantCountAll}`);
-        trace.pass('FILTER_VISIBLE_PASSED', 'not removed by isInternalTranscriptMessage');
-        trace.pass('DEDUP_PASSED', 'transient retained through dedup');
-      }
-      if (anyInVisible) {
-        trace.pass('SEARCH_PIN_FILTER_PASSED', `searchActive=${searchActive}`);
-        // Pass RENDER_MESSAGE_CALLED directly when the bound id is in
-        // displayedMessages. FlatList only calls renderMessage for viewport
-        // items â€” an off-screen assistant bubble (e.g. scroll-to-latest
-        // hasn't completed yet) would never trigger renderMessage, causing
-        // a false 90s SILENT_FAILURE timeout. If the id is in
-        // displayedMessages, FlatList WILL render it when it enters view.
-        trace.pass('RENDER_MESSAGE_CALLED', 'id in displayedMessages (FlatList renders on view)');
-      } else {
-        // Dedup recovery: a newer transient with the same taskId may have
-        // replaced the bound id in displayedMessages. The owner's response
-        // IS visible â€” just via a newer bubble â€” so complete the trace.
-        const boundTaskIds = new Set<string>();
-        for (const boundId of boundIds) {
-          const msg = allMessageById.get(boundId);
-          if (msg?.taskId) {
-            boundTaskIds.add(msg.taskId);
-          }
-        }
-        const anyTaskIdVisible = Array.from(boundTaskIds).some((taskId) => visibleTaskIds.has(taskId));
-        if (anyTaskIdVisible) {
-          trace.pass('SEARCH_PIN_FILTER_PASSED', 'superseded by newer same-taskId bubble');
-          trace.pass('RENDER_MESSAGE_CALLED', 'rendered via newer same-taskId bubble');
-          trace.pass('ASSISTANT_BUBBLE_VISIBLE', 'newer same-taskId bubble visible on screen');
-          trace.complete('SUCCESS');
-        }
-      }
-    }
-  }, [allMessages, displayedMessages, searchActive]);
-
-  const handleViewableItemsChanged = useRef((info: { viewableItems: Array<{ item: IVXMessage; index: number | null; isViewable: boolean; percent?: number }> }) => {
-    const { viewableItems } = info;
-    if (activeWatchdogTracesRef.current.size > 0) {
-      const visibleIds = new Set(viewableItems.map((v) => v.item.id));
-      for (const trace of activeWatchdogTracesRef.current.values()) {
-        const report = trace.getReport();
-        if (report.finalStatus !== 'PENDING') continue;
-        const anyVisible = report.assistantTransientIds.some((id) => visibleIds.has(id));
-        if (anyVisible) {
-          trace.pass('ASSISTANT_BUBBLE_VISIBLE', 'viewable on screen');
-          trace.complete('SUCCESS');
-        }
-      }
-    }
-    // Forward viewport info to the centralized media lifecycle controller.
-    mediaLifecycle.handleViewableItemsChanged({ viewableItems: viewableItems as never });
-  }).current;
-  const pinnedMessageIdSet = useMemo<Set<string>>(() => new Set(pinnedMessageIds), [pinnedMessageIds]);
-  const pinnedMessages = useMemo<IVXMessage[]>(() => {
-    if (pinnedMessageIds.length === 0) {
-      return [];
-    }
-
-    return allMessages
-      .filter((message) => pinnedMessageIdSet.has(message.id) && !isInternalTranscriptMessage(message))
-      .sort((a, b) => pinnedMessageIds.indexOf(a.id) - pinnedMessageIds.indexOf(b.id));
-  }, [allMessages, pinnedMessageIdSet, pinnedMessageIds]);
-
-  useEffect(() => {
-    let mounted = true;
-
-    void AsyncStorage.getItem(IVX_OWNER_PINNED_MESSAGES_STORAGE_KEY)
-      .then((rawPinnedIds) => {
-        if (!mounted) {
-          return;
-        }
-
-        if (!rawPinnedIds) {
-          pinnedMessagesRestoreCompletedRef.current = true;
-          return;
-        }
-
-        const parsed = JSON.parse(rawPinnedIds) as unknown;
-        if (Array.isArray(parsed)) {
-          const restoredIds = parsed
-            .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-            .filter((value, index, values) => values.indexOf(value) === index);
-          setPinnedMessageIds(restoredIds);
-          console.log('[IVXOwnerChatRoute] Restored pinned messages:', restoredIds.length);
-        }
-        pinnedMessagesRestoreCompletedRef.current = true;
-      })
-      .catch((error) => {
-        pinnedMessagesRestoreCompletedRef.current = true;
-        console.log('[IVXOwnerChatRoute] Failed to restore pinned messages:', error instanceof Error ? error.message : 'unknown');
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!pinnedMessagesRestoreCompletedRef.current) {
-      return;
-    }
-
-    void AsyncStorage.setItem(IVX_OWNER_PINNED_MESSAGES_STORAGE_KEY, JSON.stringify(pinnedMessageIds)).catch((error) => {
-      console.log('[IVXOwnerChatRoute] Failed to persist pinned messages:', error instanceof Error ? error.message : 'unknown');
-    });
-  }, [pinnedMessageIds]);
-
-  useEffect(() => {
-    if (pinnedMessageIds.length === 0 || allMessages.length === 0) {
-      return;
-    }
-
-    const availableIds = new Set(allMessages.map((message) => message.id));
-    setPinnedMessageIds((current) => current.filter((messageId) => availableIds.has(messageId)));
-  }, [allMessages, pinnedMessageIds.length]);
-
-  useEffect(() => {
-    let mounted = true;
-    let unsubscribe = () => {};
-
-    void (async () => {
-      try {
-        const nextUnsubscribe = await ivxChatService.subscribeToOwnerMessages((incomingMessage) => {
-          if (!mounted) {
-            return;
-          }
-
-          queryClient.setQueryData<IVXMessage[]>(IVX_OWNER_MESSAGES_QUERY_KEY, (currentMessages) => {
-            const nextMessages = currentMessages ?? [];
-            if (nextMessages.some((message) => message.id === incomingMessage.id)) {
-              return nextMessages;
-            }
-            setRealtimeEventsObserved((currentCount) => currentCount + 1);
-            return [...nextMessages, incomingMessage];
-          });
-        }, (status) => {
-          if (!mounted) {
-            return;
-          }
-          console.log('[IVXOwnerChatRoute] Realtime subscription state:', status);
-          setRealtimeSubscriptionState(status);
-          if (status === 'SUBSCRIBED' || status === 'reconnected') {
-            lastReconnectTimeRef.current = new Date().toISOString();
-          }
-        });
-
-        if (!mounted) {
-          nextUnsubscribe();
-          return;
-        }
-
-        unsubscribe = nextUnsubscribe;
-      } catch (error) {
-        console.log('[IVXOwnerChatRoute] Realtime subscription failed:', error instanceof Error ? error.message : 'unknown');
-      }
-    })();
-
-    return () => {
-      mounted = false;
-      unsubscribe();
-    };
-  }, [queryClient]);
-
-  useEffect(() => {
-    if (displayedMessages.length === 0) {
-      return;
-    }
-
-    // Always force a jump-to-end when the conversation FIRST loads / is switched.
-    // The thread must open on the newest message so the owner sees the latest
-    // conversation immediately, matching WhatsApp/iMessage behavior.
-    const activeConversationId = conversationQuery.data?.id ?? 'ivx-owner-room';
-    const isConversationSwitch = lastScrolledConversationIdRef.current !== activeConversationId;
-    if (isConversationSwitch) {
-      lastScrolledConversationIdRef.current = activeConversationId;
-      ivxDiagnostics.recordAutoScroll('conversation-load');
-      // OPEN-ON-LATEST FIX: anchor the thread to the newest message. We keep a
-      // state flag so the retry effect can keep trying until the FlatList actually
-      // reports it is at the bottom, covering dynamic bubble heights and Android's
-      // delayed measurement. The user must never land on months-old messages.
-      setInitialScrollPending(true);
-      isAtBottomRef.current = true;
-      setShowScrollToLatest(false);
-      setUnreadCount(0);
-    }
-
-    if (!localFirstChatMode) {
-      void ivxInboxService.markOwnerConversationAsRead(conversationQuery.data?.id).catch((error: unknown) => {
-        console.log('[IVXOwnerChatRoute] Mark read failed:', error instanceof Error ? error.message : 'unknown');
-      });
-    }
-  }, [conversationQuery.data?.id, localFirstChatMode, displayedMessages]);
-
-  const persistSupportMessage = useCallback(async (text: string, role: 'system' | 'assistant' = 'system') => {
-    const trimmedText = safeTrim(text);
-    if (!trimmedText) {
-      return;
-    }
-
-    await ivxChatService.sendOwnerSupportMessage({
-      body: trimmedText,
-      senderRole: role,
-      senderLabel: role === 'assistant' ? IVX_OWNER_AI_PROFILE.name : 'System',
-      attachmentKind: role === 'assistant' ? 'text' : 'system',
-      requireRemote: false});
-    console.log('[IVXOwnerChatRoute] Support message persisted:', role, trimmedText.slice(0, 60));
-  }, []);
-
-  const [aiBackendReachable, setAiBackendReachable] = useState<boolean>(false);
-  const [aiHealthDetail, setAiHealthDetail] = useState<ServiceRuntimeHealth>('inactive');
-  const sendQueue = useChatSendQueue();
-  const [aiReplyPending, setAiReplyPending] = useState<boolean>(false);
-  const [streamingText, setStreamingText] = useState<string>('');
-  const [ownerCommandsActive, setOwnerCommandsActive] = useState<boolean>(false);
-  const [knowledgeActive, setKnowledgeActive] = useState<boolean>(false);
-  const [codeAwareActive, setCodeAwareActive] = useState<boolean>(false);
-  const [fileUploadActive, setFileUploadActive] = useState<boolean>(false);
-  const [roomProbeAt, setRoomProbeAt] = useState<string | null>(null);
-  const [aiProbeMetadata, setAiProbeMetadata] = useState<ProbeMetadata>({
-    observedAt: null,
-    source: 'unknown',
-    endpoint: null,
-    deploymentMarker: null,
-    lastFailureReason: null});
-  const [aiProxyStatus, setAiProxyStatus] = useState<AIProxyStatusSnapshot>(() => createInitialAIProxyStatus());
-  const [lastToolOutputs, setLastToolOutputs] = useState<IVXOwnerAIToolOutput[]>([]);
-  const [runtimeDebugSnapshot, setRuntimeDebugSnapshot] = useState<RuntimeDebugSnapshot>({
-    authMode: isOpenAccessBuild ? 'open_access_dev_bypass' : (user || userId ? 'owner_session' : 'missing_owner_session'),
-    ownerBypassEnabled: isOpenAccessBuild,
-    conversationId: null,
-    requestId: null,
-    source: 'unknown',
-    endpoint: ownerAIConfigAudit.activeEndpoint ?? null,
-    deploymentMarker: null,
-    selectedIntent: null,
-    selectedTool: null,
-    requestStage: 'idle',
-    failureClass: 'none',
-    httpStatus: 'pending',
-    responsePreview: 'pending',
-    failureDetail: 'No live send attempted yet.',
-    lastAttemptAt: null,
-    lastVerifiedAt: null,
-    hasVisibleResponseText: false});
-  const [lastSendAt, setLastSendAt] = useState<string | null>(null);
-  const [lastReplyAt, setLastReplyAt] = useState<string | null>(null);
-  const [replyFailures, setReplyFailures] = useState<number>(0);
-  const [fallbackSuccessCount, setFallbackSuccessCount] = useState<number>(0);
-  const [latencySamplesMs, setLatencySamplesMs] = useState<number[]>([]);
-  const [lastReliabilityTrace, setLastReliabilityTrace] = useState<ReliabilityTrace | null>(null);
-  // Exact owner-auth failure reason surfaced as an in-app banner so the owner
-  // sees WHY the privileged owner route was rejected (issuer mismatch / expired /
-  // session invalid / email not in IVX_OWNER_REGISTRATION_EMAILS) instead of a
-  // silent fallback. Cleared automatically on the next clean owner request.
-  const [ownerAuthFailureBanner, setOwnerAuthFailureBanner] = useState<{ reason: string; statusCode: number | null } | null>(null);
-  const [isRefreshingOwnerSession, setIsRefreshingOwnerSession] = useState<boolean>(false);
-  const [realtimeEventsObserved, setRealtimeEventsObserved] = useState<number>(0);
-  const [realtimeSubscriptionState, setRealtimeSubscriptionState] = useState<string | null>(null);
-  const [nerveSnapshot, setNerveSnapshot] = useState<CTDashboardSnapshot | null>(null);
-  const probeRetryCount = useRef<number>(0);
-  const nerveSnapshotRef = useRef<CTDashboardSnapshot | null>(null);
-  const roomRuntimeRef = useRef<IVXRoomRuntimeSnapshot | null>(null);
-  const auditReportRef = useRef<IVXChatAuditReport | null>(null);
-  const MAX_PROBE_RETRIES = 2;
-  const PROBE_RETRY_DELAY_MS = 3000;
-  const aiReachableRef = useRef<boolean>(false);
-  const aiHealthRef = useRef<ServiceRuntimeHealth>('inactive');
-  const aiProxyConnectedRef = useRef<boolean>(false);
-  const ownerAIRoutingBlocked = ownerAIConfigAudit.blocksRemoteRequests || !ownerAIConfigAudit.activeEndpoint;
-  const effectiveAiBackendReachable = aiBackendReachable;
-  const effectiveAiHealthDetail: ServiceRuntimeHealth = aiHealthDetail;
-  const trustRuntimeState = useMemo(() => ({
-    source: normalizeRuntimeSource(runtimeDebugSnapshot.source),
-    requestStage: runtimeDebugSnapshot.requestStage,
-    failureClass: runtimeDebugSnapshot.failureClass,
-    isFallback: runtimeDebugSnapshot.source === 'provider_fallback',
-    isStreaming: hasActiveStreamingState(runtimeDebugSnapshot),
-    hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText}), [runtimeDebugSnapshot]);
-  const fallbackChatOnlyActive = useMemo<boolean>(() => {
-    if (devTestMode.testModeActive) {
-      return false;
-    }
-    return shouldShowFallbackUI(trustRuntimeState);
-  }, [devTestMode.testModeActive, trustRuntimeState]);
-  const backendAdminVerified = useMemo<boolean>(() => {
-    if (devTestMode.testModeActive) {
-      return true;
-    }
-    if (!ownerRoomAuthenticated) {
-      return false;
-    }
-
-    if (fallbackChatOnlyActive) {
-      return false;
-    }
-
-    return trustRuntimeState.source === 'remote_api'
-      || trustRuntimeState.source === 'local_app_brain'
-      || aiProbeMetadata.source === 'remote_api'
-      || aiProbeMetadata.source === 'local_app_brain'
-      || (effectiveAiBackendReachable && effectiveAiHealthDetail === 'active');
-  }, [aiProbeMetadata.source, devTestMode.testModeActive, effectiveAiBackendReachable, effectiveAiHealthDetail, fallbackChatOnlyActive, ownerRoomAuthenticated, trustRuntimeState.source]);
-  const currentOwnerTrust = useMemo(() => resolveOwnerTrustContext({
-    messageText: normalizedComposerValue,
-    ownerRoomAuthenticated,
-    backendAdminVerified,
-    fallbackModeActive: fallbackChatOnlyActive,
-    devTestModeActive: devTestMode.testModeActive}), [backendAdminVerified, devTestMode.testModeActive, fallbackChatOnlyActive, normalizedComposerValue, ownerRoomAuthenticated]);
-
-  useEffect(() => {
-    aiReachableRef.current = effectiveAiBackendReachable;
-  }, [effectiveAiBackendReachable]);
-
-  useEffect(() => {
-    aiHealthRef.current = effectiveAiHealthDetail;
-  }, [effectiveAiHealthDetail]);
-
-  useEffect(() => {
-    aiProxyConnectedRef.current = aiProxyStatus.status === 'connected';
-  }, [aiProxyStatus.status]);
-
-  useEffect(() => {
-    nerveSnapshotRef.current = nerveSnapshot;
-  }, [nerveSnapshot]);
-
-  useEffect(() => {
-    if (localFirstChatMode) {
-      setAiProxyStatus((current) => ({
-        ...current,
-        status: 'connected',
-        observedAt: new Date().toISOString(),
-        model: 'ivx-local-app-brain',
-        gateway: 'local_app_brain',
-        configured: true,
-        error: null}));
-      return undefined;
-    }
-
-    if (ownerAIRoutingBlocked) {
-      setAiProxyStatus({
-        ...createInitialAIProxyStatus(),
-        status: 'blocked',
-        observedAt: new Date().toISOString(),
-        url: buildOwnerAIProxyStatusUrl(ownerAIConfigAudit),
-        error: ownerAIConfigAudit.configurationError ?? 'Owner AI routing is blocked by configuration.'});
-      return undefined;
-    }
-
-    let cancelled = false;
-    const runFastProxyStatusCheck = async () => {
-      setAiProxyStatus((current) => ({
-        ...current,
-        status: current.status === 'connected' ? 'connected' : 'checking',
-        url: buildOwnerAIProxyStatusUrl(ownerAIConfigAudit) ?? current.url,
-        error: null}));
-      const result = await fetchOwnerAIProxyStatus(ownerAIConfigAudit);
-      if (cancelled) {
-        return;
-      }
-
-      setAiProxyStatus(result);
-      console.log('[IVXOwnerChatRoute] Fast AI proxy status:', {
-        status: result.status,
-        configured: result.configured,
-        model: result.model,
-        gateway: result.gateway,
-        deploymentMarker: result.deploymentMarker,
-        url: result.url});
-
-      if (result.status === 'connected') {
-        setAiBackendReachable(true);
-        setAiHealthDetail('active');
-        setAiProbeMetadata((current) => ({
-          observedAt: result.observedAt,
-          source: 'remote_api',
-          endpoint: ownerAIConfigAudit.activeEndpoint ?? current.endpoint,
-          deploymentMarker: result.deploymentMarker ?? current.deploymentMarker,
-          lastFailureReason: null}));
-        setRuntimeDebugSnapshot((current) => ({
-          ...current,
-          source: shouldPreserveRequestScopedRuntime(current) ? current.source : 'remote_api',
-          endpoint: ownerAIConfigAudit.activeEndpoint ?? current.endpoint,
-          deploymentMarker: result.deploymentMarker ?? current.deploymentMarker,
-          requestStage: current.requestStage === 'idle' ? 'proxy_status_ok' : current.requestStage,
-          failureClass: current.failureClass === 'pending' ? 'none' : current.failureClass,
-          failureDetail: current.failureDetail === 'No live send attempted yet.'
-            ? 'Fast proxy status connected. Full capability probe continues in the background.'
-            : current.failureDetail,
-          lastVerifiedAt: result.observedAt ?? current.lastVerifiedAt}));
-      }
-    };
-
-    void runFastProxyStatusCheck();
-    const interval = setInterval(() => {
-      void runFastProxyStatusCheck();
-    }, AI_FAST_PROXY_INTERVAL_MS);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [localFirstChatMode, ownerAIConfigAudit.activeBaseUrl, ownerAIConfigAudit.activeEndpoint, ownerAIConfigAudit.configurationError, ownerAIRoutingBlocked]);
-
-  useEffect(() => {
-    setRuntimeDebugSnapshot((current) => {
-      const shouldPreserveActiveRequest = shouldPreserveRequestScopedRuntime(current);
-      return {
-        ...current,
-        authMode: isOpenAccessBuild ? 'open_access_dev_bypass' : (user || userId ? 'owner_session' : 'missing_owner_session'),
-        ownerBypassEnabled: isOpenAccessBuild,
-        conversationId: conversationQuery.data?.id ?? null,
-        endpoint: aiProbeMetadata.endpoint ?? ownerAIConfigAudit.activeEndpoint ?? current.endpoint,
-        deploymentMarker: aiProbeMetadata.deploymentMarker ?? current.deploymentMarker,
-        source: shouldPreserveActiveRequest ? current.source : 'unknown'};
-    });
-  }, [aiProbeMetadata.deploymentMarker, aiProbeMetadata.endpoint, aiProbeMetadata.source, conversationQuery.data?.id, isOpenAccessBuild, ownerAIConfigAudit.activeEndpoint, user, userId]);
-
-  useEffect(() => {
-    if (ownerAIRoutingBlocked) {
-      console.error('[IVXOwnerChatRoute] Owner AI routing blocked by environment policy:', {
-        environment: ownerAIConfigAudit.currentEnvironment,
-        routingPolicy: ownerAIConfigAudit.routingPolicy,
-        configuredBaseUrl: ownerAIConfigAudit.configuredBaseUrl,
-        activeBaseUrl: ownerAIConfigAudit.activeBaseUrl,
-        configurationError: ownerAIConfigAudit.configurationError,
-        pointsToDevHost: ownerAIConfigAudit.pointsToDevHost});
-      return;
-    }
-
-    console.log('[IVXOwnerChatRoute] Owner AI routing audit pass:', {
-      environment: ownerAIConfigAudit.currentEnvironment,
-      routingPolicy: ownerAIConfigAudit.routingPolicy,
-      activeBaseUrl: ownerAIConfigAudit.activeBaseUrl,
-      fallbackUsed: ownerAIConfigAudit.fallbackUsed});
-  }, [
-    ownerAIConfigAudit.activeBaseUrl,
-    ownerAIConfigAudit.configuredBaseUrl,
-    ownerAIConfigAudit.configurationError,
-    ownerAIConfigAudit.currentEnvironment,
-    ownerAIConfigAudit.fallbackUsed,
-    ownerAIConfigAudit.pointsToDevHost,
-    ownerAIConfigAudit.routingPolicy,
-    ownerAIRoutingBlocked,
-  ]);
-
-  useEffect(() => {
-    if (localFirstChatMode) {
-      setNerveSnapshot(null);
-      return undefined;
-    }
-
-    controlTowerAggregator.start();
-    setNerveSnapshot(controlTowerAggregator.getSnapshot());
-    const unsubscribe = controlTowerAggregator.subscribe((snapshot) => {
-      setNerveSnapshot(snapshot);
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [localFirstChatMode]);
-
-  useEffect(() => {
-    if (localFirstChatMode) {
-      return undefined;
-    }
-
-    const sessionId = ownerSessionIdRef.current;
-    const baseMetadata = {
-      roomId: conversationQuery.data?.id ?? 'ivx-owner-room',
-      route: '/ivx/chat',
-      sender: ownerLabel};
-
-    liveIntelligenceService.captureEvent({
-      eventName: 'session_start',
-      screen: '/ivx/chat',
-      module: 'chat',
-      sessionId,
-      userId: ownerId || null,
-      anonId: ownerId || sessionId,
-      metadata: baseMetadata});
-    liveIntelligenceService.captureEvent({
-      eventName: 'page_view',
-      screen: '/ivx/chat',
-      module: 'chat',
-      sessionId,
-      userId: ownerId || null,
-      anonId: ownerId || sessionId,
-      metadata: baseMetadata});
-    liveIntelligenceService.captureEvent({
-      eventName: 'chat_open',
-      screen: '/ivx/chat',
-      module: 'chat',
-      sessionId,
-      userId: ownerId || null,
-      anonId: ownerId || sessionId,
-      metadata: baseMetadata});
-    void recordIVXOwnerChatAuditEvent({
-      action: 'room_open',
-      conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
-      status: 'success',
-      summary: 'IVX Owner AI room opened locally with runtime and persistence checks active.',
-      metadata: { sessionId, localFirstChatMode, ownerRoomAuthenticated }});
-
-    return () => {
-      liveIntelligenceService.captureEvent({
-        eventName: 'session_end',
-        screen: '/ivx/chat',
-        module: 'chat',
-        sessionId,
-        userId: ownerId || null,
-        anonId: ownerId || sessionId,
-        metadata: {
-          ...baseMetadata,
-          reason: 'route_unmount'}});
-    };
-  }, [conversationQuery.data?.id, localFirstChatMode, ownerId, ownerLabel, ownerRoomAuthenticated]);
-
-  const assistantReplyMutation = useMutation<void, Error, { text: string; nonBlocking: boolean; watchdogTraceId?: string | null }>({
-    mutationFn: async ({ text, nonBlocking, watchdogTraceId }) => {
-      const mutationRunId = createTransientMessageId('ivx-owner-ai-run');
-      // Resolve the per-send watchdog trace threaded in from handleSend.
-      const trace: WatchdogTraceHandle | null = watchdogTraceId
-        ? activeWatchdogTracesRef.current.get(watchdogTraceId) ?? null
-        : null;
-      // Defensive: ensure AI_MUTATION_STARTED is always marked as soon as the
-      // mutation function begins, even if the trace passed in was not found.
-      trace?.pass('AI_MUTATION_STARTED', 'assistantReplyMutation.mutationFn entered', { mutationRunId, nonBlocking });
-      console.log('[IVX_TRACE] 3_MUTATION_START', { mutationRunId, nonBlocking, textLength: text.length });
-      console.log('[IVXOwnerChatRoute] assistant_mutation_start', { mutationRunId, nonBlocking });
-      const startedAt = Date.now();
-      const startedAtIso = new Date(startedAt).toISOString();
-      const transientReplyId = createTransientMessageId('ivx-owner-ai-reply');
-      // INVARIANT: every send must end with at least one visible assistant bubble.
-      // We track every bubble id this mutation emits in a local Set. In `finally`
-      // we use a FUNCTIONAL setState so we can authoritatively inspect the live
-      // transient list (not a stale closure / flag) and only force-add a fallback
-      // when NONE of this mutation's bubbles are present in the committed state.
-      // This closes the class of bugs where a boolean flag said "emitted" but the
-      // committed state had already lost the bubble (race, dedup, refetch wipe).
-      const emittedBubbleIds = new Set<string>();
-      let bubbleEmitted = false;
-
-      setRuntimeDebugSnapshot((current) => ({
-        ...current,
-        conversationId: conversationQuery.data?.id ?? current.conversationId,
-        requestStage: 'request_started',
-        failureClass: 'pending',
-        httpStatus: 'pending',
-        source: 'pending',
-        responsePreview: sanitizeUserFacingChatText(safeTrim(text)).slice(0, 160) || current.responsePreview,
-        failureDetail: 'Awaiting AI response from live runtime.',
-        lastAttemptAt: startedAtIso,
-        hasVisibleResponseText: false}));
-      setAiReplyPending(true);
-      setStreamingText('');
-      setCurrentStreamingMessageId(transientReplyId);
-      // P0 FIX: create the assistant message placeholder immediately so the user
-      // watches the real answer grow inside the actual message bubble, not a
-      // separate spinner-like streaming widget. Each delta will append to this
-      // same transient message.
-      setTransientAssistantMessages((current) => {
-        if (current.some((message) => message.id === transientReplyId)) return current;
-        emittedBubbleIds.add(transientReplyId);
-        bubbleEmitted = true;
-        return [
-          ...current,
-          buildVisibleAssistantTransient({
-            id: transientReplyId,
-            conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
-            body: ''}),
-        ];
-      });
-      // Watchdog: force-clear typing indicator after a hard ceiling so it can never get stuck.
-      const watchdogTimer = setTimeout(() => {
-        console.log('[IVXOwnerChatRoute] assistant_reply_watchdog_fired â€” force-clearing typing indicator after 190s.');
-        setAiReplyPending(false);
-        setStreamingText('');
-      }, 190_000);
-      try {
-        // Send keys off the single canonical id (adopted from the prior backend
-        // response when available). This is the "client conversationId before
-        // send" proof value.
-        const reliableConversationId = canonicalConversationIdRef.current;
-        setConversationIdProof((current) => ({ ...current, clientBeforeSend: reliableConversationId }));
-        trace?.pass('BACKEND_POST_STARTED', `POST owner-ai (conversation=${reliableConversationId})`);
-        setStagedTimeoutRequestStarted(true);
-        setStagedTimeoutLastCheckpoint('BACKEND_POST_STARTED');
-        const { value: aiResult, trace: reliabilityTrace } = await executeReliably(
-          reliableConversationId,
-          async (executorSignal: AbortSignal) => ivxAIRequestService.requestOwnerAI(
-            {
-              conversationId: reliableConversationId,
-              message: text,
-              senderLabel: ownerLabel,
-              mode: 'chat',
-              persistUserMessage: false,
-              persistAssistantMessage: true,
-              devTestModeActive: devTestMode.testModeActive},
-            {
-              // Forward the reliability wrapper's combined AbortSignal so a
-              // total-timeout abort (45s budget) actually cancels the in-flight
-              // fetch â€” closing the silent-hang window between
-              // BACKEND_POST_STARTED and BACKEND_POST_FINISHED.
-              signal: executorSignal,
-              // Real SSE/heartbeat: each backend progress event (start/stage/
-              // heartbeat/final) resets the watchdog timeout, so audit-class
-              // prompts cannot be misclassified as BACKEND_POST_FINISHED silent
-              // failures while the backend is still working.
-              onProgress: (event) => {
-                if (!trace) return;
-                if (event.type === 'heartbeat') {
-                  trace.heartbeat(`heartbeat:${event.elapsedMs}ms`);
-                } else if (event.type === 'stage') {
-                  trace.heartbeat(`stage:${event.stage}`);
-                } else if (event.type === 'start') {
-                  trace.heartbeat('sse_start');
-                } else if (event.type === 'delta') {
-                  const delta = event.delta;
-                  setStreamingText((prev) => prev + delta);
-                  // P0 FIX: append the provider delta to the same assistant transient
-                  // message so the user sees the real text growing in the actual
-                  // bubble, not a separate spinner-like streaming widget.
-                  setTransientAssistantMessages((current) => {
-                    const existing = current.find((message) => message.id === transientReplyId);
-                    if (!existing) return current;
-                    const updatedBody = (existing.body ?? '') + delta;
-                    return [
-                      ...current.filter((message) => message.id !== transientReplyId),
-                      buildVisibleAssistantTransient({
-                        id: existing.id,
-                        conversationId: existing.conversationId,
-                        body: updatedBody,
-                        taskId: existing.taskId ?? null}),
-                    ];
-                  });
-                } else if (event.type === 'final') {
-                  trace.heartbeat(`sse_final:${event.status}`);
-                }
-              }},
-          ),
-          // ROOT-CAUSE FIX (2026-06-10): heavy audit/fix prompts run the
-          // tool-grounded server-side agent for 60â€“90s+, which exceeds the host's
-          // ~60s request cap. requestOwnerAI now consumes the backend SSE stream
-          // (180s heartbeat ceiling) when onProgress is plumbed. The reliability
-          // budget must therefore cover a full streaming run â€” a 95s budget aborted
-          // valid streams mid-flight and produced the BACKEND_POST_FINISHED
-          // "Unable to reach IVX Owner AI" (no HTTP status) TRUE_FAILURE. 185s
-          // covers one full SSE attempt plus margin; a retry only fires if the
-          // first attempt failed fast (budget remains).
-          { totalTimeoutMs: 185_000, maxAttempts: 2, baseDelayMs: 600, maxDelayMs: 4_000 },
-        );
-        const reliabilityTraceAttempts = reliabilityTrace.attempts.length;
-        const reliabilityFinalOutcome = reliabilityTrace.finalOutcome;
-        const reliabilityTotalMs = reliabilityTrace.totalElapsedMs;
-        // CONVERSATION-ID FIX: adopt the backend-returned conversation id as the
-        // canonical id for ALL subsequent save AND restore operations. Returns
-        // the id every save below must use.
-        const canonicalIdForThisTurn = adoptCanonicalConversationId(aiResult.conversationId);
-        console.log('[IVXConversationId] turn_resolved', {
-          clientBeforeSend: reliableConversationId,
-          backendReturned: aiResult.conversationId ?? null,
-          usedForSaveAndRestore: canonicalIdForThisTurn});
-        // The user still gets a live answer here, but if it came from the
-        // /public/chat fallback, the privileged /api/ivx/owner-ai route FAILED
-        // (auth/network/backend). Record that real failure on the watchdog so
-        // the red "IVX AI BLOCKED" banner surfaces it (with status code +
-        // backend response) instead of hiding it behind the recovery.
-        const primaryRouteFailure = (aiResult.source === 'provider_fallback' || aiResult.fallbackUsed === true)
-          ? getLastIVXOwnerAIPrimaryRouteFailure()
-          : null;
-        // ROUND-TRIP TRUTH: BACKEND_POST_FINISHED means "an HTTP response was
-        // received" (CHECKPOINT_EXPECTED). When the privileged owner route
-        // degraded but the request was RECOVERED via the /public/chat fallback,
-        // a real HTTP response WITH answer text was received â€” the round trip
-        // COMPLETED. In that case the checkpoint must PASS (it is not a failed
-        // round trip); the privileged-route degradation is surfaced separately
-        // via the owner-auth banner. This removes the "a full backend response
-        // shape exists but BACKEND_POST_FINISHED is still marked failed" false
-        // negative. Only a genuine round-trip failure with NO recovered answer
-        // (synthetic OWNER_AUTH_FAILED / OWNER_AI_NETWORK_FAILED, recorded with
-        // recoveredViaFallback:false) fails the checkpoint.
-        const recoveredAnswerText = typeof aiResult.answer === 'string' ? aiResult.answer.trim() : '';
-        const roundTripCompletedWithAnswer = Boolean(primaryRouteFailure?.recoveredViaFallback)
-          && recoveredAnswerText.length > 0;
-        if (primaryRouteFailure) {
-          // Surface the EXACT owner-auth failure reason as an in-app banner when the
-          // privileged route was rejected for an auth reason (401/403). The backend
-          // auth-diagnostic snapshot names the precise branch: issuer mismatch /
-          // expired / Supabase rejected / email not in IVX_OWNER_REGISTRATION_EMAILS.
-          const isAuthFailure = primaryRouteFailure.statusCode === 401
-            || primaryRouteFailure.statusCode === 403
-            || primaryRouteFailure.classification.includes('auth');
-          if (isAuthFailure) {
-            const authDiag = getLastIVXOwnerAIAuthDiagnostic();
-            const exactReason = authDiag?.rootCause
-              ?? (authDiag?.ownerEmailAllowlisted === false
-                ? `Signed in${authDiag.authenticatedEmailMasked ? ` as ${authDiag.authenticatedEmailMasked}` : ''}, but this email is not in the owner allowlist (IVX_OWNER_REGISTRATION_EMAILS).`
-                : primaryRouteFailure.reason);
-            setOwnerAuthFailureBanner({ reason: exactReason, statusCode: primaryRouteFailure.statusCode });
-          } else {
-            setOwnerAuthFailureBanner(null);
-          }
-          if (roundTripCompletedWithAnswer) {
-            // HTTP response received + real answer text via the recovery path: the
-            // round trip is NOT a failure. PASS the checkpoint (SUCCESS_VERIFIED for
-            // the round trip) and record the privileged-route degradation as data â€”
-            // honest, but never a false BACKEND_POST_FINISHED failure when a backend
-            // response shape exists.
-            trace?.pass('BACKEND_POST_FINISHED', `recovered_via_fallback attempts=${reliabilityTraceAttempts} outcome=${reliabilityFinalOutcome}`, {
-              requestId: aiResult.requestId,
-              assistantPersisted: aiResult.assistantPersisted,
-              recoveredViaFallback: true,
-              degradedRoute: primaryRouteFailure.endpoint,
-              degradedReason: primaryRouteFailure.reason,
-              statusCode: primaryRouteFailure.statusCode,
-              classification: primaryRouteFailure.classification});
-            console.log('[IVX_TRACE] BACKEND_POST_FINISHED_PASS_RECOVERED_VIA_FALLBACK', {
-              statusCode: primaryRouteFailure.statusCode,
-              classification: primaryRouteFailure.classification,
-              answerLength: recoveredAnswerText.length});
-          } else {
-            // No recovered answer â€” a genuine round-trip failure (synthetic
-            // OWNER_AUTH_FAILED / OWNER_AI_NETWORK_FAILED, recoveredViaFallback:false).
-            // Fail the checkpoint with the classified reason (AUTH_FAILED /
-            // NETWORK_FAILED) so the owner gets ONE truthful terminal state.
-            trace?.fail('BACKEND_POST_FINISHED', primaryRouteFailure.reason, {
-              statusCode: primaryRouteFailure.statusCode,
-              backendResponse: primaryRouteFailure.backendResponse,
-              classification: primaryRouteFailure.classification,
-              stage: primaryRouteFailure.stage,
-              endpoint: primaryRouteFailure.endpoint,
-              recoveredViaFallback: primaryRouteFailure.recoveredViaFallback});
-            console.log('[IVX_TRACE] BACKEND_ROUTE_FAILED_NO_RECOVERED_ANSWER', {
-              statusCode: primaryRouteFailure.statusCode,
-              classification: primaryRouteFailure.classification});
-          }
-        } else {
-          // Privileged route succeeded â€” clear any stale auth-failure banner.
-          setOwnerAuthFailureBanner(null);
-          trace?.pass('BACKEND_POST_FINISHED', `attempts=${reliabilityTraceAttempts} outcome=${reliabilityFinalOutcome}`, {
-            requestId: aiResult.requestId,
-            assistantPersisted: aiResult.assistantPersisted});
-          setStagedTimeoutLastCheckpoint('BACKEND_POST_FINISHED');
-        }
-        setLastReliabilityTrace(reliabilityTrace);
-        void recordIVXOwnerChatAuditEvent({
-          action: 'assistant_reply',
-          conversationId: reliableConversationId,
-          status: 'started',
-          summary: 'IVX Owner AI assistant request completed reliability wrapper and entered response validation.',
-          metadata: { attempts: reliabilityTraceAttempts, finalOutcome: reliabilityFinalOutcome, elapsedMs: reliabilityTotalMs, sessionId: ownerSessionIdRef.current }});
-        const runtimeProof = getLastIVXOwnerAIRuntimeProof();
-        const normalizedSource = normalizeRuntimeSource(runtimeProof?.source ?? aiResult.source);
-        const uncheckedAnswer = assertCleanOwnerAIResponseText(aiResult.answer);
-        const recentConversation = allMessages.slice(-40);
-        const previousOwnerText = [...recentConversation]
-          .reverse()
-          .find((message) => message.senderRole === 'owner' && safeTrim(message.body).toLowerCase() !== safeTrim(text).toLowerCase())
-          ?.body ?? null;
-        const previousAssistantTexts = recentConversation
-          .filter((message) => message.senderRole === 'assistant')
-          .map((message) => safeTrim(message.body))
-          .filter(Boolean)
-          .slice(-10);
-        const qualityEnforcement = enforceIVXChatQualityFirewall({
-          ownerText: text,
-          assistantText: uncheckedAnswer,
-          previousOwnerText,
-          previousAssistantTexts,
-        });
-        const normalizedAnswer = qualityEnforcement.text;
-        if (qualityEnforcement.blocked) {
-          console.error('[IVX_CHAT_QUALITY_FIREWALL] response_blocked', {
-            code: qualityEnforcement.decision.code,
-            severity: qualityEnforcement.decision.severity,
-            score: qualityEnforcement.decision.score,
-            reasons: qualityEnforcement.decision.reasons,
-            requestId: aiResult.requestId,
-          });
-          void recordIVXOwnerChatAuditEvent({
-            action: 'assistant_reply',
-            conversationId: reliableConversationId,
-            status: 'failed',
-            summary: `IVX Chat Quality Firewall blocked ${qualityEnforcement.decision.code}.`,
-            metadata: {
-              requestId: aiResult.requestId,
-              qualityCode: qualityEnforcement.decision.code,
-              qualityScore: qualityEnforcement.decision.score,
-              qualityReasons: qualityEnforcement.decision.reasons,
-              sessionId: ownerSessionIdRef.current,
-            },
-          });
-        }
-        const responseToolOutputs = qualityEnforcement.blocked ? [] : (aiResult.toolOutputs ?? []);
-        const routerDebug: IVXOwnerAIRouterDebug | undefined = aiResult.routerDebug;
-        setLastToolOutputs(responseToolOutputs);
-        // Only surface a "Tool used" badge when a real tool actually executed.
-        // Filtering empty/whitespace tool names prevents the misleading
-        // "Tool used: ," badge that appeared on pure-narrative replies and
-        // falsely implied work was performed when none was.
-        const executedToolNames = responseToolOutputs
-          .map((output) => (typeof output.tool === 'string' ? output.tool.trim() : ''))
-          .filter((name) => name.length > 0);
-        const toolUsedLabel = executedToolNames.length > 0
-          ? `Tool used: ${executedToolNames.join(', ')}`
-          : null;
-        const visibleAnswer = toolUsedLabel ? `${normalizedAnswer}\n\n${toolUsedLabel}` : normalizedAnswer;
-
-        // FINAL IVX IA CHAT EXECUTION MODE (owner mandate 2026-07-19): capture
-        // the strict 9-field executionStatus payload the backend attached to its
-        // 202 response. Stored in a side-channel map keyed by the transient
-        // assistant message id so renderMessage can swap the plain MessageBubble
-        // for a live-polling ExecutionConsoleBubble. When the job is still
-        // running (HTTP 202), the console bubble polls the worker statusUrl and
-        // streams live stage/progress until the terminal verified-evidence block
-        // arrives. No narrative planning â€” execution console only.
-        const executionStatusPayload = qualityEnforcement.blocked ? null : (aiResult.executionStatus ?? null);
-        if (executionStatusPayload) {
-          const capturedTransientId = transientReplyId;
-          setExecutionStatusByMessageId((current) => {
-            const next = new Map(current);
-            next.set(capturedTransientId, executionStatusPayload);
-            return next;
-          });
-          console.log('[IVXOwnerChatRoute] execution-mode status captured:', {
-            transientReplyId: capturedTransientId,
-            taskId: executionStatusPayload.taskId,
-            category: executionStatusPayload.category,
-            status: executionStatusPayload.status,
-            stage: executionStatusPayload.stage,
-            liveProgress: executionStatusPayload.liveProgress,
-            httpStatus: executionStatusPayload.httpStatus});
-        }
-
-        console.log('[IVX_TRACE] 4_BACKEND_RESPONSE', { mutationRunId, source: normalizedSource, answerLength: normalizedAnswer.length, requestId: aiResult.requestId, assistantPersisted: aiResult.assistantPersisted });
-        console.log('[IVXOwnerChatRoute] assistant_generation_success:', { source: normalizedSource, answerLength: normalizedAnswer.length, requestId: aiResult.requestId, toolUsed: toolUsedLabel });
-        if (!normalizedAnswer) {
-          trace?.fail('ASSISTANT_TEXT_PRESENT', 'Backend returned empty answer text.', { source: normalizedSource });
-          throw new Error('IVX Owner AI completed without returning visible response text.');
-        }
-        trace?.pass('ASSISTANT_TEXT_PRESENT', `length=${normalizedAnswer.length} preview=${normalizedAnswer.slice(0, 60)}`, { source: normalizedSource });
-        // Relaxed source gate: never silently discard a backend-stamped assistant reply.
-        // Render the assistant bubble for every acceptable source; attach a warning badge
-        // when the source is not one of the canonical/expected labels.
-        const assistantSourceExpected = isExpectedAssistantSource(normalizedSource);
-        const assistantSourceAcceptable = isAcceptableAssistantSource(normalizedSource);
-        if (!assistantSourceExpected) {
-          console.log('[IVXOwnerChatRoute] Non-primary assistant source rendered with warning badge:', {
-            normalizedSource,
-            rawSource: runtimeProof?.source ?? aiResult.source ?? null,
-            requestId: aiResult.requestId,
-            acceptable: assistantSourceAcceptable});
-        }
-        const visibleAnswerWithBadge = assistantSourceExpected
-          ? visibleAnswer
-          : `${visibleAnswer}\n\nâš ï¸ Source: ${normalizedSource} (unverified)`;
-
-        console.log('[IVXOwnerChatRoute] assistant_send_attempt (primary path)');
-        // Flip bubbleEmitted=true BEFORE the setState call so a sync throw in
-        // the updater (e.g. buildVisibleAssistantTransient on malformed data)
-        // still classifies as success/VISIBLE_ERROR â€” never the phantom
-        // ASSISTANT_TRANSIENT_CREATED failure the watchdog used to report.
-        emittedBubbleIds.add(transientReplyId);
-        bubbleEmitted = true;
-        try { trace?.bindTransient(transientReplyId); } catch (bindErr) { console.log('[IVXOwnerChatRoute] success_bindTransient_threw_safely_continuing:', bindErr instanceof Error ? bindErr.message : 'unknown'); }
-        try {
-          setTransientAssistantMessages((current) => {
-            const existing = current.find((message) => message.id === transientReplyId);
-            if (existing) {
-              // P0 FIX: update the existing streaming bubble in-place so the
-              // final answer does not flash or jump. The bubble has already been
-              // streaming deltas; this just finalizes it with the canonical text.
-              return current.map((message) =>
-                message.id === transientReplyId
-                  ? buildVisibleAssistantTransient({
-                      id: existing.id,
-                      conversationId: existing.conversationId,
-                      body: visibleAnswerWithBadge,
-                      taskId: executionStatusPayload?.taskId ?? existing.taskId ?? null})
-                  : message);
-            }
-            // Fallback: create the bubble if the request somehow ran without a
-            // streaming placeholder (e.g. non-SSE fast path).
-            const replyMessage = buildVisibleAssistantTransient({
-              id: transientReplyId,
-              conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
-              body: visibleAnswerWithBadge,
-              taskId: executionStatusPayload?.taskId ?? null});
-            return [...current.filter((message) => message.id !== transientReplyId), replyMessage];
-          });
-        } catch (setErr) {
-          console.log('[IVXOwnerChatRoute] success_setState_threw_safely_continuing:', setErr instanceof Error ? setErr.message : 'unknown');
-        }
-        trace?.pass('ASSISTANT_TRANSIENT_CREATED', `id=${transientReplyId} role=assistant`, { transientReplyId, bodyPreview: visibleAnswerWithBadge.slice(0, 60) });
-        console.log('[IVX_TRACE] 5_SUCCESS_BUBBLE_EMIT', { mutationRunId, transientReplyId, bodyPreview: visibleAnswerWithBadge.slice(0, 60) });
-        console.log('[IVXOwnerChatRoute] assistant_success_bubble_set', { mutationRunId, transientReplyId });
-        setRuntimeDebugSnapshot((current) => ({
-          ...current,
-          requestStage: 'response_ok',
-          failureClass: 'none',
-          source: normalizedSource,
-          httpStatus: runtimeProof?.statusCode !== null && runtimeProof?.statusCode !== undefined
-            ? String(runtimeProof.statusCode)
-            : '200',
-          responsePreview: visibleAnswer.slice(0, 160) || current.responsePreview,
-          failureDetail: 'Reply delivered and saved.',
-          lastVerifiedAt: new Date().toISOString(),
-          hasVisibleResponseText: true}));
-
-        setAiBackendReachable(true);
-        setAiHealthDetail('active');
-        setAiProbeMetadata({
-          observedAt: new Date().toISOString(),
-          source: normalizedSource,
-          endpoint: aiResult.endpoint ?? runtimeProof?.endpoint ?? null,
-          deploymentMarker: aiResult.deploymentMarker ?? runtimeProof?.deploymentMarker ?? null,
-          lastFailureReason: null});
-        setRuntimeDebugSnapshot((current) => {
-          const nextRequestStage = (runtimeProof?.failureClass === 'none' && (runtimeProof?.source === 'remote_api' || runtimeProof?.source === 'local_app_brain') ? runtimeProof?.requestStage : null)
-            ?? 'response_ok';
-          return {
-            ...current,
-            conversationId: conversationQuery.data?.id ?? current.conversationId,
-            requestId: runtimeProof?.requestId ?? aiResult.requestId ?? null,
-            source: normalizedSource,
-            endpoint: aiResult.endpoint ?? runtimeProof?.endpoint ?? current.endpoint,
-            deploymentMarker: aiResult.deploymentMarker ?? runtimeProof?.deploymentMarker ?? current.deploymentMarker,
-            selectedIntent: routerDebug?.selectedIntent ?? aiResult.selectedIntent ?? current.selectedIntent,
-            selectedTool: routerDebug?.selectedTool ?? aiResult.selectedTool ?? (responseToolOutputs.length > 0 ? responseToolOutputs.map((output) => output.tool).join(', ') : current.selectedTool),
-            requestStage: nextRequestStage,
-            failureClass: 'none',
-            httpStatus: (runtimeProof?.failureClass === 'none' && runtimeProof?.statusCode !== null && runtimeProof?.statusCode !== undefined)
-              ? String(runtimeProof.statusCode)
-              : '200',
-            responsePreview: visibleAnswer.slice(0, 160) || current.responsePreview,
-            failureDetail: 'Reply delivered and saved.',
-            lastVerifiedAt: new Date().toISOString(),
-            hasVisibleResponseText: true};
-        });
-        setLastReplyAt(new Date().toISOString());
-        setLatencySamplesMs((samples) => [...samples.slice(-9), Date.now() - startedAt]);
-        console.log('[IVXOwnerChatRoute] assistant_send_success (primary path):', {
-          requestId: aiResult.requestId,
-          source: normalizedSource,
-          endpoint: aiResult.endpoint ?? null,
-          deploymentMarker: aiResult.deploymentMarker ?? null,
-          model: aiResult.model});
-
-        // --- Report Continuation Auto-Continue ---
-        let currentResult = aiResult;
-        let currentPartNumber = 1;
-        const MAX_CONTINUATION_PARTS = 20;
-        while (currentResult.continuationToken && !currentResult.continuationComplete && currentPartNumber <= MAX_CONTINUATION_PARTS) {
-          const partMessage = `Part ${currentPartNumber} of ${currentResult.continuationTotalParts ?? '?'} complete. Continuing automatically...`;
-          const continuationTransientId = createTransientMessageId('ivx-owner-ai-continuation');
-          setTransientAssistantMessages((current) => {
-            const message = buildVisibleAssistantTransient({
-              id: continuationTransientId,
-              conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
-              body: partMessage});
-            return [...current, message];
-          });
-
-          // Small delay for UX
-          await new Promise((resolve) => setTimeout(resolve, 600));
-
-          try {
-            const nextResult = await ivxAIRequestService.requestOwnerAI({
-              conversationId: reliableConversationId,
-              message: 'CONTINUE',
-              senderLabel: ownerLabel,
-              mode: 'chat',
-              persistUserMessage: false,
-              persistAssistantMessage: true,
-              devTestModeActive: devTestMode.testModeActive,
-              continuationToken: currentResult.continuationToken});
-            const nextNormalizedAnswer = assertCleanOwnerAIResponseText(nextResult.answer);
-            const nextReplyId = createTransientMessageId('ivx-owner-ai-reply');
-            setTransientAssistantMessages((current) => {
-              const replyMessage = buildVisibleAssistantTransient({
-                id: nextReplyId,
-                conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
-                body: nextNormalizedAnswer});
-              return [...current.filter((message) => message.id !== nextReplyId), replyMessage];
-            });
-            currentResult = nextResult;
-            currentPartNumber++;
-          } catch (continueError) {
-            console.log('[IVXOwnerChatRoute] Continuation auto-continue failed:', continueError instanceof Error ? continueError.message : 'unknown');
-            const fallbackPrompt = currentResult.continuationPrompt ?? `Reply CONTINUE to resume from item ${currentResult.continuationNextItemNumber ?? '?'}.`;
-            const fallbackTransientId = createTransientMessageId('ivx-owner-ai-continuation-fallback');
-            setTransientAssistantMessages((current) => {
-              const message = buildVisibleAssistantTransient({
-                id: fallbackTransientId,
-                conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
-                body: fallbackPrompt});
-              return [...current.filter((m) => m.id !== continuationTransientId), message];
-            });
-            break;
-          }
-        }
-        // --- End Report Continuation Auto-Continue ---
-
-        try {
-          if (aiResult.assistantPersisted !== true) {
-            await persistSupportMessage(visibleAnswer, 'assistant');
-          }
-          console.log('[IVXOwnerChatRoute] assistant_commit_success (primary path)');
-          void recordIVXOwnerChatAuditEvent({
-            action: 'assistant_reply',
-            conversationId: aiResult.conversationId,
-            messageId: aiResult.assistantMessageId ?? transientReplyId,
-            status: 'success',
-            summary: 'Assistant reply delivered and persisted or confirmed by backend.',
-            metadata: {
-              requestId: aiResult.requestId,
-              source: normalizedSource,
-              endpoint: aiResult.endpoint ?? null,
-              deploymentMarker: aiResult.deploymentMarker ?? null,
-              model: aiResult.model,
-              answerLength: visibleAnswer.length,
-              reliabilityAttempts: reliabilityTraceAttempts,
-              sessionId: ownerSessionIdRef.current}});
-          // Refetch (not just invalidate) so the persisted assistant message is in the
-          // query cache BEFORE we remove the transient bubble. Using invalidateQueries
-          // alone created a race where the transient was filtered before the refetch
-          // landed, causing the assistant reply to briefly or permanently disappear from
-          // the UI when the persisted body did not exactly match (e.g. backend trimmed,
-          // sanitized, or differently-cased the text). We now keep the transient bubble
-          // until allMessages' dedup logic naturally removes it when a persistent
-          // assistant message with the same body arrives. If after a grace window the
-          // persisted message still has not landed (offline, persistence rejected, etc.),
-          // the transient stays visible so the owner never loses the reply.
-          try {
-            await queryClient.refetchQueries({ queryKey: IVX_OWNER_MESSAGES_QUERY_KEY });
-          } catch (refetchErr) {
-            console.log('[IVXOwnerChatRoute] assistant_commit_refetch_failed_but_visible_reply_kept:', refetchErr instanceof Error ? refetchErr.message : 'unknown');
-          }
-          // Keep the transient bubble. The dedup in `allMessages` removes it the moment
-          // a persistent assistant message with the same body is present in cache.
-          // Never force-filter the transient here â€” that was the disappearing-reply bug.
-        } catch (persistErr) {
-          console.log('[IVXOwnerChatRoute] assistant_commit_failed_but_visible_reply_kept:', persistErr instanceof Error ? persistErr.message : 'unknown');
-          setRuntimeDebugSnapshot((current) => ({
-            ...current,
-            failureDetail: 'Reply delivered locally. Save will retry on refresh.',
-            hasVisibleResponseText: true}));
-        }
-        if (!localFirstChatMode) {
-          try {
-            liveIntelligenceService.captureEvent({
-              eventName: 'chat_message',
-              screen: '/ivx/chat',
-              module: 'chat',
-              sessionId: ownerSessionIdRef.current,
-              userId: ownerId || null,
-              anonId: ownerId || ownerSessionIdRef.current,
-              metadata: {
-                role: 'assistant',
-                roomId: conversationQuery.data?.id ?? 'ivx-owner-room',
-                source: normalizedSource,
-                requestId: aiResult.requestId ?? null,
-                message: sanitizeUserFacingChatText(visibleAnswer).slice(0, 240)}});
-          } catch (eventErr) {
-            console.log('[IVXOwnerChatRoute] Post-processing event capture failed (response still delivered):', eventErr instanceof Error ? eventErr.message : 'unknown');
-          }
-        }
-      } catch (aiErr) {
-        // HARDENED CATCH: each helper is independently guarded so a throw in a
-        // diagnostics helper cannot abort the catch handler before we (a) emit
-        // an error bubble and (b) mark BACKEND_POST_FINISHED failed. Without
-        // this, the watchdog mis-reported the run as
-        // `ASSISTANT_TRANSIENT_CREATED failed` even though the real root cause
-        // was the backend / network failure caught here.
-        let diagnostics: ReturnType<typeof getIVXOwnerAIErrorDiagnostics> | null = null;
-        try { diagnostics = getIVXOwnerAIErrorDiagnostics(aiErr); } catch (diagErr) { console.log('[IVXOwnerChatRoute] diagnostics_helper_threw_safely_continuing:', diagErr instanceof Error ? diagErr.message : 'unknown'); }
-        const failureMessage = aiErr instanceof Error ? aiErr.message : 'Owner AI request error.';
-        let serviceUnavailable = false;
-        try { serviceUnavailable = isIVXServiceUnavailableDiagnostics(diagnostics); } catch (unavailErr) { console.log('[IVXOwnerChatRoute] service_unavailable_helper_threw_safely_continuing:', unavailErr instanceof Error ? unavailErr.message : 'unknown'); }
-        console.log('[IVXOwnerChatRoute] assistant_send_failure:', {
-          failureMessage,
-          diagnostics,
-          serviceUnavailable,
-          blockedByRoutingGuard: ownerAIRoutingBlocked,
-          activeEndpoint: ownerAIConfigAudit.activeEndpoint,
-          routingPolicy: ownerAIConfigAudit.routingPolicy});
-
-        // Flip bubbleEmitted=true and mark BACKEND_POST_FINISHED failed FIRST,
-        // so even if the setState updater throws later the watchdog already
-        // sees a real VISIBLE_ERROR (catch ran) instead of a phantom
-        // ASSISTANT_TRANSIENT_CREATED failure.
-        const errorTransientId = createTransientMessageId('ivx-owner-ai-error');
-        emittedBubbleIds.add(errorTransientId);
-        bubbleEmitted = true;
-        try { trace?.bindTransient(errorTransientId); } catch (bindErr) { console.log('[IVXOwnerChatRoute] catch_bindTransient_threw_safely_continuing:', bindErr instanceof Error ? bindErr.message : 'unknown'); }
-        try { trace?.fail('BACKEND_POST_FINISHED', failureMessage, { serviceUnavailable, errorTransientId, statusCode: diagnostics?.statusCode ?? null, backendResponse: diagnostics?.responsePreview ?? diagnostics?.detail ?? null }); } catch (failErr) { console.log('[IVXOwnerChatRoute] trace_fail_threw_safely_continuing:', failErr instanceof Error ? failErr.message : 'unknown'); }
-        // Surface a SHORT owner-friendly reason instead of raw internal jargon
-        // ("stage: auth Â· classification: provider_exhausted" leaked debug terms
-        // into the chat and made every failure look broken). Map the diagnostic
-        // to plain language; the full technical detail still lives in the
-        // runtime-debug snapshot + audit event for engineers.
-        const failureReasonSuffix = (() => {
-          if (!diagnostics) return '';
-          const status = diagnostics.statusCode ?? null;
-          if (status === 401 || status === 403 || diagnostics.stage === 'auth') {
-            return ' (your owner session needs to be refreshed â€” open Auth Diagnostics)';
-          }
-          if (diagnostics.stage === 'network') {
-            return ' (connection to the server was interrupted)';
-          }
-          if (status && status >= 500) {
-            return ' (the server is temporarily unavailable)';
-          }
-          return '';
-        })();
-        // Honest error card: surface the exact route + HTTP status + trace id +
-        // an owner-readable next-fix so a failed send is never a dead-end blank
-        // bubble. Status is the real HTTP code when present, otherwise the
-        // failure stage (network/no-response) â€” never a fabricated 200.
-        const routePath = (() => {
-          const ep = diagnostics?.endpoint ?? ownerAIConfigAudit.activeEndpoint ?? null;
-          if (!ep) return 'owner-ai';
-          try { return new URL(ep).pathname; } catch { return ep; }
-        })();
-        const statusLabel = diagnostics?.statusCode != null
-          ? String(diagnostics.statusCode)
-          : (diagnostics?.stage === 'network' ? 'network' : 'no-response');
-        const nextFix = (() => {
-          const status = diagnostics?.statusCode ?? null;
-          if (status === 401 || status === 403 || diagnostics?.stage === 'auth') {
-            return 'Open Auth Diagnostics to refresh your owner session.';
-          }
-          if (diagnostics?.stage === 'network' || statusLabel === 'network' || statusLabel === 'no-response') {
-            return 'Check your connection and tap send again to retry.';
-          }
-          if (status != null && status >= 500) {
-            return 'The server is warming up â€” retry in a moment.';
-          }
-          return 'Tap send to retry; if it persists, open Auth Diagnostics.';
-        })();
-        const diagnosticsCardLine = `Route: ${routePath} Â· Status: ${statusLabel} Â· Trace: ${watchdogTraceId ?? 'n/a'}\nNext: ${nextFix}`;
-        try {
-          setTransientAssistantMessages((current) => [
-            ...current.filter((message) => message.id !== transientReplyId),
-            buildVisibleAssistantTransient({
-              id: errorTransientId,
-              conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
-              body: serviceUnavailable
-                ? `Service temporarily unavailable. Please try again in a moment.\n\n${diagnosticsCardLine}`
-                : `I was unable to generate a reply right now.${failureReasonSuffix}\n\n${diagnosticsCardLine}`}),
-          ]);
-        } catch (setErr) {
-          console.log('[IVXOwnerChatRoute] error_bubble_setState_threw_safely_continuing:', setErr instanceof Error ? setErr.message : 'unknown');
-        }
-        console.log('[IVX_TRACE] 6_CATCH_BUBBLE_EMIT', { mutationRunId, errorTransientId, failureMessage });
-        console.log('[IVXOwnerChatRoute] assistant_error_bubble_set', { mutationRunId, errorTransientId });
-        const failedTrace = isRecord(aiErr) && isRecord((aiErr as { reliabilityTrace?: unknown }).reliabilityTrace)
-          ? (aiErr as { reliabilityTrace: ReliabilityTrace }).reliabilityTrace
-          : null;
-        if (failedTrace) {
-          setLastReliabilityTrace(failedTrace);
-        }
-        void recordIVXOwnerChatAuditEvent({
-          action: 'assistant_reply',
-          conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
-          status: 'failed',
-          summary: 'Assistant reply failed after reliability handling.',
-          metadata: {
-            failureMessage,
-            diagnostics,
-            serviceUnavailable,
-            reliabilityAttempts: failedTrace?.attempts.length ?? null,
-            finalOutcome: failedTrace?.finalOutcome ?? null,
-            sessionId: ownerSessionIdRef.current}});
-        setRuntimeDebugSnapshot((current) => ({
-          ...current,
-          conversationId: conversationQuery.data?.id ?? current.conversationId,
-          requestId: diagnostics?.requestId ?? current.requestId,
-          endpoint: diagnostics?.endpoint ?? current.endpoint ?? ownerAIConfigAudit.activeEndpoint,
-          requestStage: diagnostics?.stage ?? 'response',
-          failureClass: diagnostics?.classification ?? 'provider_exhausted',
-          httpStatus: diagnostics?.statusCode !== null && diagnostics?.statusCode !== undefined ? String(diagnostics.statusCode) : 'unavailable',
-          responsePreview: '',
-          failureDetail: 'The message was sent. Send another prompt when you are ready.',
-          hasVisibleResponseText: false}));
-        setAiBackendReachable(false);
-        setAiHealthDetail('inactive');
-        setAiProbeMetadata((current) => ({
-          ...current,
-          observedAt: new Date().toISOString(),
-          endpoint: diagnostics?.endpoint ?? current.endpoint ?? ownerAIConfigAudit.activeEndpoint,
-          lastFailureReason: serviceUnavailable ? 'temporarily_unavailable' : 'provider_exhausted'}));
-        console.log('[IVXOwnerChatRoute] assistant provider and local guard paths exhausted; no fake assistant text inserted:', {
-          originalFailureMessage: failureMessage,
-          diagnostics,
-          serviceUnavailable});
-        // P0 DURABLE FALLBACK (503-recovery mandate): a transient 5xx/timeout/
-        // network failure must never lose the owner request. Hand the message
-        // to the persisted server-side task queue and poll it to completion â€”
-        // the owner never retypes anything.
-        if (shouldAttemptDurableFallback(diagnostics, failureMessage)) {
-          const durableBubbleId = createTransientMessageId('ivx-owner-ai-durable');
-          emittedBubbleIds.add(durableBubbleId);
-          const updateDurableBubble = (body: string) => {
-            try {
-              setTransientAssistantMessages((current) => [
-                ...current.filter((message) => message.id !== durableBubbleId),
-                buildVisibleAssistantTransient({
-                  id: durableBubbleId,
-                  conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
-                  body}),
-              ]);
-            } catch (bubbleErr) {
-              console.log('[IVXOwnerChatRoute] durable_bubble_set_threw_safely_continuing:', bubbleErr instanceof Error ? bubbleErr.message : 'unknown');
-            }
-          };
-          updateDurableBubble(`â™»ï¸ Auto-recovery started â€” your message is saved server-side and will be answered without retyping.\nTrace: ${watchdogTraceId ?? 'n/a'}`);
-          void (async () => {
-            const durableResult = await runDurableOwnerAIFallback({
-              message: text,
-              conversationId: conversationQuery.data?.id ?? null,
-              traceId: watchdogTraceId ?? null,
-              onStatus: (task) => {
-                if (task.terminal || task.status === 'COMPLETED') return;
-                updateDurableBubble(`â™»ï¸ Auto-recovery in progress â€” Task ${task.taskId}\nStatus: ${task.status} Â· Checkpoint: ${task.checkpoint} Â· Retries: ${task.retryCount}\nYour message is safe; no need to retype it.`);
-              }});
-            if (durableResult.ok && durableResult.answer) {
-              updateDurableBubble(durableResult.answer);
-              setRuntimeDebugSnapshot((current) => ({
-                ...current,
-                requestStage: 'response_ok',
-                failureClass: 'none',
-                httpStatus: '200',
-                responsePreview: (durableResult.answer ?? '').slice(0, 160),
-                failureDetail: `Recovered automatically via durable task ${durableResult.taskId}.`,
-                hasVisibleResponseText: true,
-                lastVerifiedAt: new Date().toISOString()}));
-              setAiBackendReachable(true);
-              setAiHealthDetail('active');
-            } else if (durableResult.taskId) {
-              updateDurableBubble(`Auto-recovery did not finish. Task ${durableResult.taskId} Â· Status: ${durableResult.status ?? 'UNKNOWN'}\nLast checkpoint: ${durableResult.checkpoint ?? 'n/a'}\nYour message is preserved server-side â€” you can retry or cancel it.`);
-            } else {
-              updateDurableBubble(`Auto-recovery could not start (${durableResult.error ?? 'unknown reason'}). Your message stays visible above â€” tap send to retry.`);
-            }
-          })();
-        }
-      } finally {
-        clearTimeout(watchdogTimer);
-        setAiReplyPending(false);
-        setStreamingText('');
-        setCurrentStreamingMessageId(null);
-        // INVARIANT GUARANTEE (state-authoritative):
-        // Use functional setState to inspect the LIVE committed transient list.
-        // If none of this mutation's emitted bubble ids are present (race,
-        // dedup wipe, swallowed throw, concurrent mutation overwrite, stale
-        // closure flag), force-add a visible fallback synchronously inside
-        // the same setState call so React can never drop or reorder it.
-        const invariantFallbackId = createTransientMessageId('ivx-owner-ai-invariant-fallback');
-        console.log('[IVX_TRACE] 7_FINALLY_ENTER', {
-          mutationRunId,
-          bubbleEmittedFlag: bubbleEmitted,
-          emittedBubbleIds: Array.from(emittedBubbleIds)});
-        console.log('[IVXOwnerChatRoute] assistant_mutation_finally_entry', {
-          mutationRunId,
-          bubbleEmittedFlag: bubbleEmitted,
-          emittedBubbleIds: Array.from(emittedBubbleIds)});
-        setTransientAssistantMessages((current) => {
-          const currentIds = new Set(current.map((message) => message.id));
-          const anyEmittedPresent = Array.from(emittedBubbleIds).some((id) => currentIds.has(id));
-          console.log('[IVX_TRACE] 8_FINAL_BUBBLE_COUNT', {
-            mutationRunId,
-            currentTransientCount: current.length,
-            currentTransientIds: Array.from(currentIds),
-            emittedBubbleIds: Array.from(emittedBubbleIds),
-            anyEmittedPresent});
-          if (anyEmittedPresent) {
-            console.log('[IVXOwnerChatRoute] assistant_invariant_satisfied', {
-              mutationRunId,
-              presentIds: Array.from(emittedBubbleIds).filter((id) => currentIds.has(id))});
-            return current;
-          }
-          console.log('[IVXOwnerChatRoute] assistant_invariant_fallback_emitted â€” committed state has none of this mutation\'s bubbles. Forcing fallback.', {
-            mutationRunId,
-            transientReplyId,
-            emittedBubbleIds: Array.from(emittedBubbleIds),
-            currentTransientCount: current.length,
-            bubbleEmittedFlag: bubbleEmitted});
-          trace?.bindTransient(invariantFallbackId);
-          return [
-            ...current.filter((message) => message.id !== transientReplyId && !emittedBubbleIds.has(message.id)),
-            buildVisibleAssistantTransient({
-              id: invariantFallbackId,
-              conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
-              body: 'No assistant reply was received for that message. Tap to try again.'}),
-          ];
-        });
-        // Watchdog finalization: BLOCKED if the invariant fallback fired,
-        // VISIBLE_ERROR if catch path ran, SUCCESS otherwise.
-        if (trace) {
-          const report = trace.getReport();
-          if (report.finalStatus === 'PENDING') {
-            const backendCheckpoint = report.checkpoints.find((cp) => cp.name === 'BACKEND_POST_FINISHED');
-            const catchFailed = backendCheckpoint?.status === 'fail';
-            // DEGRADED (yellow, not red): the round trip COMPLETED with a real
-            // answer but via the /public/chat recovery path (privileged owner
-            // route bypassed). The checkpoint PASSED with recoveredViaFallback:true,
-            // so finalize as DEGRADED â€” a truthful "recovered" warning, never a
-            // red BLOCKED failure when a valid answer exists.
-            const recoveredViaFallback = backendCheckpoint?.status === 'pass'
-              && backendCheckpoint.data?.recoveredViaFallback === true;
-            if (catchFailed) {
-              trace.complete('VISIBLE_ERROR');
-            } else if (recoveredViaFallback) {
-              trace.complete('DEGRADED');
-            } else if (!bubbleEmitted) {
-              // Invariant fallback fired and a visible "No assistant replyâ€¦"
-              // bubble was committed by the functional setState above. The user
-              // sees a message, so classify as VISIBLE_ERROR (not BLOCKED) and
-              // do NOT call trace.fail('ASSISTANT_TRANSIENT_CREATED') â€” the
-              // real root cause was already captured (or will be by the
-              // incident ingest); the watchdog should not report a phantom
-              // checkpoint failure when a bubble is actually on screen.
-              trace.complete('VISIBLE_ERROR');
-            } else {
-              trace.complete('SUCCESS');
-            }
-          }
-          if (watchdogTraceId) {
-            activeWatchdogTracesRef.current.delete(watchdogTraceId);
-          }
-        }
-      }
-      // Clear staged timeout banner â€” the AI reply lifecycle is complete
-      // (success, visible error, or invariant fallback). No infinite spinner.
-      setStagedTimeoutTraceId(null);
-    },
-    onError: (error) => {
-      console.log('[IVXOwnerChatRoute] Assistant reply mutation error suppressed from chat UI:', error.message);
-      setStagedTimeoutTraceId(null);
-    },
-    onSettled: () => {
-      setAiReplyPending(false);
-      setStreamingText('');
-      setCurrentStreamingMessageId(null);
-    }});
-
-  // Pending owner-approval build-job draft (set when a build request is detected,
-  // executed when the owner replies /confirm). Routes to the self-hosted worker.
-  const pendingBuildDraftRef = useRef<SeniorDeveloperJobDraft | null>(null);
-
-  /**
-   * Run an owner-approved build draft against the self-hosted Senior Developer
-   * Worker: submit â†’ poll â†’ render the real proof. No narrative, no fake commit.
-   */
-  const runSeniorDeveloperWorkerFromChat = useCallback(async (draft: SeniorDeveloperJobDraft): Promise<void> => {
-    await persistSupportMessage([
-      'Result: SUBMITTING',
-      `Explanation: Routing "${draft.title}" to the self-hosted Senior Developer Worker.`,
-      'Evidence: POST /api/ivx/senior-developer/worker/jobs (owner-gated, no narrative).',
-      'Operator action log: senior-developer-worker-submit',
-      'Linked surface: POST /api/ivx/senior-developer/worker/jobs',
-    ].join('\n'), 'system');
-
-    const submit = await submitSeniorDeveloperWorkerJob(draft);
-    if (submit.statusCode !== 'SUBMITTED' || !submit.jobId) {
-      const code = submit.statusCode === 'SUBMITTED' ? 'WORKER_UNAVAILABLE' : submit.statusCode;
-      await persistSupportMessage(buildSeniorDeveloperSubmitStatusCard(code, submit.reason), 'system');
-      return;
-    }
-
-    const jobId = submit.jobId;
-    const finished: WorkerJobView | null = await pollSeniorDeveloperWorkerJob(jobId, {
-      intervalMs: 4000,
-      timeoutMs: 180000});
-    const lastProof = await getSeniorDeveloperWorkerLastProof();
-    const result = finished?.result ?? null;
-    const complete = isWorkerJobComplete(result);
-    const finalStatus = complete
-      ? 'COMPLETE'
-      : result?.finalStatus ?? (finished ? finished.status.toUpperCase() : 'RUNNING');
-
-    await persistSupportMessage([
-      `Result: ${finalStatus}`,
-      `JOB_ID: ${jobId}`,
-      `COMMIT_HASH: ${result?.commitSha ?? lastProof?.lastCommitHash ?? 'none'}`,
-      `DEPLOY_ID: ${result?.deployId ?? lastProof?.lastDeployId ?? 'none'}`,
-      `HEALTH_STATUS: ${result?.healthStatus ?? lastProof?.lastHealthStatus ?? 'none'}`,
-      `VERSION_MATCH: ${(result?.commitMatch ?? lastProof?.lastVersionMatch) ? 'true' : 'false'}`,
-      `TEST_STATUS: ${result ? (result.testsRun ? (result.testsPassed ? 'passed' : 'failed') : 'not run') : 'unknown'}`,
-      `DEPLOY_STATUS: ${result?.deployStatus ?? (result?.finalStatus ?? 'unknown')}`,
-      `Evidence: ${result?.error ?? (complete ? 'End-to-end production run verified by the worker ledger.' : 'Job did not reach a verified COMPLETE state. FINAL_STATUS=COMPLETE only with commit hash + deploy id + health 200 + version match.')}`,
-      'Operator action log: senior-developer-worker-result',
-      'Linked surface: GET /api/ivx/worker-last-proof',
-    ].join('\n'), 'system');
-  }, [persistSupportMessage]);
-
-  /**
-   * Owner taps the visible "Approve + Run" button on an approval card. Resolves
-   * the pending build draft (or reconstructs it from the card goal) and routes
-   * it straight to the self-hosted worker â€” no /confirm reply needed.
-   */
-  const handleApproveAndRunFromCard = useCallback(async (cardBody: string): Promise<void> => {
-    let draft = pendingBuildDraftRef.current;
-    if (!draft) {
-      const rows = parseStructuredSystemMessage(cardBody) ?? [];
-      const goalRow = rows.find((row) => row.label.toLowerCase() === 'goal');
-      const marker = 'task end-to-end:';
-      const raw = goalRow?.value ?? '';
-      const markerIndex = raw.toLowerCase().indexOf(marker);
-      const original = markerIndex >= 0 ? raw.slice(markerIndex + marker.length).trim() : raw;
-      draft = buildSeniorDeveloperJobDraft(original.length > 0 ? original : 'Create IVX Worker Proof module');
-    }
-    pendingBuildDraftRef.current = null;
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await runSeniorDeveloperWorkerFromChat(draft);
-  }, [runSeniorDeveloperWorkerFromChat]);
-
-  const buildCommandContractResponse = useCallback(async (command: string, args: string): Promise<string | null> => {
-    const snapshot = nerveSnapshotRef.current;
-    const runtime = roomRuntimeRef.current;
-
-    if (command === 'proof') {
-      const report = auditReportRef.current;
-      const proofLines = runtime?.proofs.slice(0, 3).map((proof) => `${proof.title}: ${proof.status} (${Math.round(proof.confidence * 100)}%)`) ?? [];
-      return [
-        `Result: ${report?.liveReady ? 'pass' : runtime?.runtimeStatus ?? 'probing'}`,
-        `Explanation: ${report?.summary ?? `Room ${runtime?.roomId ?? 'ivx-owner-room'} is ${runtime?.runtimeStatus ?? 'probing'} with stream ${runtime?.streamStatus ?? 'unavailable'}.`}`,
-        `Evidence: ${proofLines.join(' | ') || 'No verified proof rows yet'}${report ? ` | audit ${report.passedCount}/${report.totalCount} passed` : ''}`,
-        `Affected dependencies: ${(snapshot?.systemNodes.filter((node) => node.id.includes('chat') || node.id.includes('realtime') || node.id.includes('ai_runtime')).slice(0, 4).map((node) => node.name).join(' â†’ ')) || 'Chat transport â†’ Realtime â†’ AI runtime'}`,
-        'Operator action log: proof-inspect',
-        'Rollback: not required',
-        `Linked proof cards: ${runtime?.proofs.slice(0, 2).map((proof) => proof.id).join(', ') || 'none'}`,
-      ].join('\n');
-    }
-
-    if (command === 'risk') {
-      const risks = snapshot?.riskAssessments.filter((risk) => risk.subjectId.includes('chat') || risk.subjectId.includes('ai_ops') || risk.subjectId.includes('realtime_sync')).slice(0, 3) ?? [];
-      return [
-        `Result: ${risks.length > 0 ? 'available' : 'empty'}`,
-        'Explanation: Returning the highest live room/runtime risks.',
-        `Evidence: ${risks.map((risk) => `${risk.subjectId.replace('module:', '')} ${Math.round(risk.currentRiskScore * 100)}% / blast ${risk.blastRadius}`).join(' | ') || 'No elevated risks currently'}`,
-        `Affected dependencies: ${risks.flatMap((risk) => risk.causeChain.slice(0, 3)).slice(0, 6).join(' â†’ ') || 'none'}`,
-        'Operator action log: risk-inspect',
-        'Rollback: not required',
-        `Linked proof cards: ${risks.map((risk) => risk.id).join(', ') || 'none'}`,
-      ].join('\n');
-    }
-
-    if (command === 'incident') {
-      const incident = snapshot?.incidents.find((item) => item.module === 'chat' || item.module === 'ai_ops' || item.module === 'realtime_sync') ?? null;
-      return [
-        `Result: ${incident ? 'available' : 'none'}`,
-        `Explanation: ${incident ? incident.description : 'No active owner-room incident is currently open.'}`,
-        `Evidence: ${incident?.evidenceIds?.join(', ') || 'No linked evidence IDs'}`,
-        `Affected dependencies: ${incident?.rootCauseHypothesis ?? 'No dependency chain attached'}`,
-        `Operator action log: ${incident?.executedActions?.join(' | ') || 'No interventions executed yet'}`,
-        'Rollback: depends on chosen intervention',
-        `Linked proof cards: ${incident?.evidenceIds?.slice(0, 3).join(', ') || 'none'}`,
-      ].join('\n');
-    }
-
-    if (command === 'deps') {
-      const nodes = snapshot?.systemNodes.filter((node) => node.id.includes('chat') || node.id.includes('realtime') || node.id.includes('ai_runtime') || node.id.includes('shared_room')).slice(0, 5) ?? [];
-      return [
-        `Result: ${nodes.length > 0 ? 'available' : 'empty'}`,
-        'Explanation: Returning the current owner-room dependency spine.',
-        `Evidence: ${nodes.map((node) => `${node.name}:${node.status}`).join(' | ') || 'No dependency nodes captured yet'}`,
-        `Affected dependencies: ${nodes.flatMap((node) => node.dependencies).slice(0, 8).join(' â†’ ') || 'none'}`,
-        'Operator action log: dependency-inspect',
-        'Rollback: not required',
-        `Linked proof cards: ${nodes.flatMap((node) => node.proofIds).slice(0, 4).join(', ') || 'none'}`,
-      ].join('\n');
-    }
-
-    if (command === 'heal') {
-      const normalized = safeTrim(args).toLowerCase();
-      const action = normalized === 'rerun-proof'
-        ? 'rerun_health_probe'
-        : normalized === 'clear-stuck'
-          ? 'transition_stuck_sends'
-          : normalized === 'provider-probe'
-            ? 'force_provider_probe'
-            : normalized === 'shared-sync'
-              ? 'rerun_shared_room_sync'
-              : normalized === 'inbox-sync'
-                ? 'rerun_inbox_sync'
-                : normalized === 'transcript'
-                  ? 'force_transcript_reconciliation'
-                  : null;
-      if (!action) {
-        return 'Result: blocked\nExplanation: Allowed interventions are rerun-proof, clear-stuck, provider-probe, shared-sync, inbox-sync, and transcript.\nEvidence: permission guard\nAffected dependencies: chat transport\nOperator action log: not-started\nRollback: not required\nLinked proof cards: none';
-      }
-      const result = await executeOperatorAction(action, 'chat');
-      void recordIVXOwnerChatAuditEvent({
-        action: 'control_action',
-        conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
-        status: result.success ? 'success' : 'failed',
-        summary: `Owner control action ${getActionLabel(action)} completed.`,
-        metadata: { action, resultMessage: result.message, sessionId: ownerSessionIdRef.current }});
-      invalidateIVXRoomProbeCache();
-      await queryClient.invalidateQueries({ queryKey: IVX_ROOM_STATUS_QUERY_KEY });
-      setAiHealthDetail('inactive');
-      return [
-        `Result: ${result.success ? 'success' : 'failed'}`,
-        `Explanation: ${result.message}`,
-        `Evidence: ${(snapshot?.evidence.filter((proof) => proof.subjectId.includes('chat') || proof.subjectId.includes('realtime')).slice(0, 2).map((proof) => proof.claim).join(' | ')) || 'No linked proof rows yet'}`,
-        `Affected dependencies: ${(snapshot?.systemNodes.filter((node) => node.id.includes('chat') || node.id.includes('realtime')).slice(0, 3).map((node) => node.name).join(' â†’ ')) || 'Chat transport â†’ Realtime'}`,
-        `Operator action log: ${getActionLabel(action)}`,
-        `Rollback: ${action === 'transition_stuck_sends' ? 'available' : 'not required'}`,
-        `Linked proof cards: ${(snapshot?.evidence.filter((proof) => proof.subjectId.includes('chat') || proof.subjectId.includes('realtime')).slice(0, 3).map((proof) => proof.id).join(', ')) || 'none'}`,
-      ].join('\n');
-    }
-
-    if (command === 'replay') {
-      const latestReplayable = (snapshot?.actionRuns ?? [])
-        .find((action) => action.rollbackAvailable && action.result !== 'failed');
-      if (!latestReplayable) {
-        return 'Result: blocked\nExplanation: No replayable safe action is currently available.\nEvidence: operator action history empty\nAffected dependencies: none\nOperator action log: not-started\nRollback: not required\nLinked proof cards: none';
-      }
-      const replayResult = await executeOperatorAction(latestReplayable.actionType, 'chat');
-      invalidateIVXRoomProbeCache();
-      await queryClient.invalidateQueries({ queryKey: IVX_ROOM_STATUS_QUERY_KEY });
-      setAiHealthDetail('inactive');
-      const replayProofs = snapshot?.evidence
-        .filter((proof) => proof.subjectId.includes('chat') || proof.subjectId.includes('ai_') || proof.subjectId.includes('shared_room') || proof.subjectId.includes('realtime') || proof.subjectId.includes('inbox_sync'))
-        .sort((a, b) => new Date(b.observedAt).getTime() - new Date(a.observedAt).getTime())
-        .slice(0, 3) ?? [];
-      const replayNodes = snapshot?.systemNodes
-        .filter((node) => node.id.includes('chat') || node.id.includes('realtime') || node.id.includes('ai_runtime') || node.id.includes('shared_room'))
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .slice(0, 6) ?? [];
-      return [
-        `Result: ${replayResult.success ? 'success' : 'failed'}`,
-        `Explanation: Replayed ${getActionLabel(latestReplayable.actionType)}. ${replayResult.message}`,
-        `Evidence: ${replayProofs.slice(0, 2).map((proof) => proof.claim).join(' | ') || 'No linked proof rows yet'}`,
-        `Affected dependencies: ${replayNodes.slice(0, 4).map((node) => node.name).join(' â†’ ') || 'chat transport'}`,
-        `Operator action log: replay:${latestReplayable.id}`,
-        `Rollback: ${latestReplayable.rollbackAvailable ? 'available' : 'not available'}`,
-        `Linked proof cards: ${replayProofs.slice(0, 3).map((proof) => proof.id).join(', ') || 'none'}`,
-      ].join('\n');
-    }
-
-    if (isCommandBrainCommand(command)) {
-      const brainResponse = await runCommandBrain(command, args);
-      if (brainResponse) {
-        return brainResponse;
-      }
-    }
-
-    return null;
-  }, [queryClient]);
-
-  const sendMessageMutation = useMutation<void, Error, { text: string; mode: 'send_only' | 'send_and_ai' | 'ai_only'; clientId: string; capturedText: string; replyTo: ChatReplyContext | null; watchdogTraceId?: string | null }>({
-    mutationFn: async ({ text, mode, clientId, capturedText, replyTo, watchdogTraceId }) => {
-      console.log('[IVX_TRACE] 2.1_SEND_MUTATION_START', { clientId, mode, localFirstChatMode, textLength: text.length });
-      const persistedOwnerText = encodeReplyBody(text, replyTo);
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const hasConfirmationPrefix = isExplicitSensitiveActionConfirmation(text);
-      const strippedConfirmedText = stripSensitiveActionConfirmationPrefix(text);
-      const strippedTrustContext = resolveOwnerTrustContext({
-        messageText: strippedConfirmedText,
-        ownerRoomAuthenticated,
-        backendAdminVerified,
-        fallbackModeActive: fallbackChatOnlyActive,
-        devTestModeActive: devTestMode.testModeActive});
-      const confirmedSensitiveAction = hasConfirmationPrefix && strippedTrustContext.requiresElevatedConfirmation;
-      const effectiveText = confirmedSensitiveAction ? strippedConfirmedText : text;
-      const trustContext = confirmedSensitiveAction
-        ? strippedTrustContext
-        : resolveOwnerTrustContext({
-          messageText: effectiveText,
-          ownerRoomAuthenticated,
-          backendAdminVerified,
-          fallbackModeActive: fallbackChatOnlyActive,
-          devTestModeActive: devTestMode.testModeActive});
-
-      // ====================================================================
-      // INTENT CLASSIFICATION (owner directive 2026-07-25) â€” runs BEFORE the
-      // build-intent check. A diagnostic request ("audit the loading problem",
-      // "why is X failing") must NEVER be misrouted to the worker just because
-      // it contains the word "deploy" or "fix". The classifier separates:
-      //   diagnostic / code_change / deployment / status / explanation
-      // Only code_change and deployment route to the worker.
-      // ====================================================================
-      const ownerIntent = classifyOwnerIntent(effectiveText);
-      const isConfirmReply = isExplicitSensitiveActionConfirmation(text);
-      const wdSenior = watchdogTraceId ? activeWatchdogTracesRef.current.get(watchdogTraceId) ?? null : null;
-
-      // DIAGNOSTIC ROUTING â€” run the chat diagnostic engine and return a real
-      // diagnosis card, NOT a progress percentage. This is the fix for the
-      // owner-reported failure where "Audit the loading problem on this chat
-      // ... and deploy it" was misrouted to the worker and returned
-      // "RUNNING 10% / COMMITTING 65%" instead of a diagnosis.
-      if (ownerIntent.isDiagnostic && !isConfirmReply) {
-        console.log('[IVXOwnerChatRoute] Diagnostic intent detected â€” running chat diagnostic engine', {
-          intent: ownerIntent.intent,
-          subject: ownerIntent.diagnosticSubject,
-          reason: ownerIntent.reason});
-        // Persist the owner's message first
-        await sendQueue.mutateAsync({ text: persistedOwnerText, mode, clientId, replyTo, senderLabel: ownerLabel, capturedText });
-        setLastSendAt(new Date().toISOString());
-        wdSenior?.pass('AI_TRIGGER_DECISION', `branch=diagnostic subject=${ownerIntent.diagnosticSubject ?? 'general'}`);
-
-        // Show an immediate diagnostic-started card so the owner knows a real
-        // diagnosis is running, not a worker progress bar.
-        await persistSupportMessage([
-          'DIAGNOSTIC STARTED',
-          '',
-          `I am auditing the ${ownerIntent.diagnosticSubject ?? 'chat'} loading path.`,
-          '',
-          'I will inspect:',
-          '  - App open â†’ auth session restore â†’ owner verification',
-          '  - Conversation lookup â†’ message history load â†’ realtime subscription',
-          '  - AI capability load â†’ worker status â†’ UI render â†’ composer ready',
-          '',
-          'I will return:',
-          '  - Exact files and functions in the loading path',
-          '  - Confirmed root cause with evidence',
-          '  - Proposed fix with specific code changes',
-          '  - Production API health check result',
-          '',
-          'This is a real diagnostic, not a progress percentage.',
-        ].join('\n'), 'assistant');
-
-        // Run the diagnostic with live progress cards
-        try {
-          const result = await runChatDiagnostic(
-            ownerIntent.diagnosticSubject ?? 'chat loading',
-            (stage: DiagnosticStage, finding: DiagnosticFinding) => {
-              // Show each stage as a progress card with REAL evidence
-              void persistSupportMessage(formatDiagnosticProgressCard(stage, finding), 'system');
-            },
-          );
-
-          // Quality gate: verify the diagnosis has real evidence before showing
-          const hasRootCause = !!result.rootCause;
-          const hasAffectedFiles = result.affectedFiles.length > 0;
-          const hasProposedFix = !!result.proposedFix;
-          const evidenceCount = result.findings.length;
-
-          if (!hasRootCause || !hasAffectedFiles || !hasProposedFix) {
-            await persistSupportMessage([
-              'DIAGNOSTIC QUALITY GATE: FAIL',
-              '',
-              `Root cause: ${hasRootCause ? 'confirmed' : 'MISSING'}`,
-              `Affected files: ${hasAffectedFiles ? result.affectedFiles.length + ' found' : 'NONE'}`,
-              `Proposed fix: ${hasProposedFix ? 'provided' : 'MISSING'}`,
-              `Evidence count: ${evidenceCount}`,
-              '',
-              'The diagnostic did not meet the senior-developer quality bar. Not marking complete.',
-            ].join('\n'), 'system');
-            wdSenior?.fail('AI_MUTATION_STARTED', 'diagnostic quality gate failed');
-            return;
-          }
-
-          // Show the final diagnosis card
-          await persistSupportMessage(formatDiagnosticResultCard(result), 'assistant');
-          wdSenior?.complete('SUCCESS');
-        } catch (diagError) {
-          await persistSupportMessage([
-            'DIAGNOSTIC FAILED',
-            '',
-            `The diagnostic engine encountered an error: ${diagError instanceof Error ? diagError.message : 'unknown'}`,
-            'This is a real failure, not a timeout. Please retry or inspect manually.',
-          ].join('\n'), 'system');
-          wdSenior?.fail('AI_MUTATION_STARTED', `diagnostic engine error: ${diagError instanceof Error ? diagError.message : 'unknown'}`);
-        }
-        return;
-      }
-
-      // STATUS REQUEST â€” return task/progress status, not a diagnosis
-      if (ownerIntent.intent === 'status' && !isConfirmReply) {
-        console.log('[IVXOwnerChatRoute] Status intent detected â€” returning current task status');
-        await sendQueue.mutateAsync({ text: persistedOwnerText, mode, clientId, replyTo, senderLabel: ownerLabel, capturedText });
-        setLastSendAt(new Date().toISOString());
-        wdSenior?.pass('AI_TRIGGER_DECISION', 'branch=status');
-        await persistSupportMessage([
-          'TASK STATUS',
-          '',
-          'Current chat session status:',
-          `  - Messages loaded: ${messages.length}`,
-          `  - Conversation ID: ${canonicalConversationId}`,
-          `  - AI backend reachable: ${aiReachableRef.current ? 'yes' : 'no'}`,
-          `  - Room status: ${ivxRoomStatus?.storageMode ?? 'probing'}`,
-          `  - Pending owner messages: ${pendingOwnerMessages.length}`,
-          `  - Transient assistant messages: ${transientAssistantMessages.length}`,
-          '',
-          'No active worker job in this session. Send a build/fix/deploy request to start one.',
-        ].join('\n'), 'system');
-        wdSenior?.complete('SUCCESS');
-        return;
-      }
-
-      // EXPLANATION REQUEST â€” route to the AI for a conversational answer
-      // (do NOT route to the worker â€” explanations are not code changes)
-      if (ownerIntent.intent === 'explanation' && !isConfirmReply && !isSeniorDeveloperBuildRequest(effectiveText)) {
-        console.log('[IVXOwnerChatRoute] Explanation intent detected â€” routing to conversational AI', {
-          reason: ownerIntent.reason});
-        // Fall through to the normal AI reply path below â€” do NOT route to worker
-      }
-
-      // BUILD-INTENT ROUTING (runs AFTER diagnostic/status/explanation checks)
-      // â€” build app, build module, create feature, fix bug, and deploy requests
-      // that are NOT diagnostic must route to the self-hosted Senior Developer
-      // Worker as an owner-approved job. Database inspection only happens when
-      // the owner explicitly asks for it.
-      if (isConfirmReply && pendingBuildDraftRef.current) {
-        const approvedDraft = pendingBuildDraftRef.current;
-        pendingBuildDraftRef.current = null;
-        await sendQueue.mutateAsync({ text: persistedOwnerText, mode, clientId, replyTo, senderLabel: ownerLabel, capturedText });
-        setLastSendAt(new Date().toISOString());
-        wdSenior?.pass('AI_TRIGGER_DECISION', 'branch=senior_developer_confirm');
-        await runSeniorDeveloperWorkerFromChat(approvedDraft);
-        wdSenior?.complete('SUCCESS');
-        return;
-      }
-      // BUILD-INTENT ROUTING â€” only route to the worker when the intent
-      // classifier confirms this is a real code_change or deployment request.
-      // A diagnostic request that contains "deploy it" or "fix" must NOT
-      // reach the worker â€” it was already handled by the diagnostic branch above.
-      if (!isConfirmReply && ownerIntent.routesToWorker && isSeniorDeveloperBuildRequest(effectiveText)) {
-        const draft = buildSeniorDeveloperJobDraft(effectiveText);
-        await sendQueue.mutateAsync({ text: persistedOwnerText, mode, clientId, replyTo, senderLabel: ownerLabel, capturedText });
-        setLastSendAt(new Date().toISOString());
-        wdSenior?.pass('AI_TRIGGER_DECISION', `branch=senior_developer_build intent=${ownerIntent.intent}`);
-        // Submit directly to the autonomous senior developer worker.
-        // The worker will execute audits/diagnosis/code edits/tests autonomously
-        // and pause at WAITING_APPROVAL before any production mutation.
-        void runSeniorDeveloperWorkerFromChat(draft);
-        wdSenior?.complete('SUCCESS');
-        return;
-      }
-
-      if (localFirstChatMode) {
-        const wdLF = watchdogTraceId ? activeWatchdogTracesRef.current.get(watchdogTraceId) ?? null : null;
-        const startAssistantImmediately = shouldStartAssistantBeforePersistence({ localFirstChatMode, mode });
-        const persistencePromise = sendQueue.mutateAsync({
-          text: persistedOwnerText,
-          mode,
-          clientId,
-          replyTo,
-          senderLabel: ownerLabel,
-          capturedText});
-
-        if (startAssistantImmediately) {
-          // The local queue can retry persistence for minutes. The optimistic row is
-          // already visible, so it must not block a valid Owner AI request.
-          void persistencePromise
-            .then(() => setLastSendAt(new Date().toISOString()))
-            .catch((sendError: unknown) => {
-              console.log('[IVXOwnerChatRoute] local-first persistence continues in the retry queue:', sendError instanceof Error ? sendError.message : String(sendError));
-            });
-        } else {
-          try {
-            await persistencePromise;
-            setLastSendAt(new Date().toISOString());
-          } catch (sendError) {
-            wdLF?.fail('AI_TRIGGER_DECISION', `sendQueue failed in localFirst: ${sendError instanceof Error ? sendError.message : String(sendError)}`);
-            throw sendError instanceof Error ? sendError : new Error(String(sendError));
-          }
-        }
-
-        if (trustContext.requiresElevatedConfirmation && !confirmedSensitiveAction) {
-          wdLF?.pass('AI_TRIGGER_DECISION', 'branch=local_first_elevated_confirmation');
-          await persistSupportMessage(buildLocalSafeActionConfirmationMessage({
-            normalizedText: effectiveText,
-            requestClass: trustContext.requestClass}), 'assistant');
-          wdLF?.complete('SUCCESS');
-          return;
-        }
-
-        if (mode === 'send_and_ai' || mode === 'ai_only') {
-          console.log('[IVX_TRACE] 2.2_AI_TRIGGER_LOCAL_FIRST', { clientId, mode, startAssistantImmediately });
-          wdLF?.pass('AI_TRIGGER_DECISION', `branch=local_first mode=${mode} persistence=${startAssistantImmediately ? 'background' : 'confirmed'}`);
-          // Mark the handoff before invoking the mutation so a blocked persistence
-          // queue can never strand this trace at USER_ROW_INSERTED.
-          wdLF?.pass('AI_MUTATION_STARTED', `local_first branch invoking assistantReplyMutation mode=${mode}`, { clientId });
-          // FIX: Fire AI reply as background â€” do NOT block the send mutation.
-          void assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: mode === 'send_and_ai', watchdogTraceId }).catch((aiErr: unknown) => {
-            console.log('[IVX_TRACE] 2.X_LOCAL_FIRST_AI_RETRY_1', { clientId, err: aiErr instanceof Error ? aiErr.message : String(aiErr) });
-            void assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: mode === 'send_and_ai', watchdogTraceId }).catch((retryErr: unknown) => {
-              console.log('[IVX_TRACE] 2.X_LOCAL_FIRST_AI_BOTH_FAILED', { clientId, err: retryErr instanceof Error ? retryErr.message : String(retryErr) });
-              wdLF?.fail('AI_MUTATION_STARTED', `local_first assistantReplyMutation rejected twice: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`);
-            });
-          });
-        } else {
-          console.log('[IVX_TRACE] 2.X_LOCAL_FIRST_NO_AI_BRANCH', { clientId, mode });
-          wdLF?.pass('AI_TRIGGER_DECISION', `branch=local_first_send_only mode=${mode}`);
-          wdLF?.complete('SUCCESS');
-        }
-        return;
-      }
-
-      const commandResult = parseOwnerCommand(effectiveText);
-
-      if (commandResult) {
-        console.log('[IVXOwnerChatRoute] Processing owner command:', commandResult.command, 'trust:', trustContext.namedStates, 'confirmed:', confirmedSensitiveAction);
-        liveIntelligenceService.captureEvent({
-          eventName: 'routing_selected',
-          screen: '/ivx/chat',
-          module: 'chat',
-          sessionId: ownerSessionIdRef.current,
-          userId: ownerId || null,
-          anonId: ownerId || ownerSessionIdRef.current,
-          metadata: {
-            roomId: conversationQuery.data?.id ?? 'ivx-owner-room',
-            command: commandResult.command,
-            args: commandResult.args,
-            confirmedSensitiveAction,
-            requestClass: trustContext.requestClass,
-            trustStates: trustContext.namedStates}});
-        const wdCmd = watchdogTraceId ? activeWatchdogTracesRef.current.get(watchdogTraceId) ?? null : null;
-        try {
-          await sendQueue.mutateAsync({ text: persistedOwnerText, mode, clientId, replyTo, senderLabel: ownerLabel, capturedText });
-          setLastSendAt(new Date().toISOString());
-          if (trustContext.conversationAccessState === 'fallback_chat_only' && trustContext.requiresElevatedConfirmation) {
-            await persistSupportMessage(buildFallbackChatOnlyExecutionMessage({
-              normalizedText: effectiveText,
-              requestClass: trustContext.requestClass}), 'system');
-            return;
-          }
-          if (trustContext.requiresElevatedConfirmation && !confirmedSensitiveAction) {
-            wdCmd?.pass('AI_TRIGGER_DECISION', 'branch=owner_command_elevated_confirmation');
-            await persistSupportMessage(buildSensitiveActionConfirmationMessage({
-              normalizedText: effectiveText,
-              requestClass: trustContext.requestClass,
-              conversationAccessState: trustContext.conversationAccessState,
-              backendAdminVerified: trustContext.backendAdminState === 'backend_admin_verified'}), 'system');
-            wdCmd?.complete('SUCCESS');
-            return;
-          }
-          wdCmd?.pass('AI_TRIGGER_DECISION', `branch=owner_command command=${commandResult.command}`);
-          const structuredResponse = await buildCommandContractResponse(commandResult.command, commandResult.args);
-          await persistSupportMessage(structuredResponse ?? commandResult.response, 'system');
-          wdCmd?.complete('SUCCESS');
-        } catch (sendError) {
-          throw sendError instanceof Error ? sendError : new Error(String(sendError));
-        }
-
-        if (commandResult.command === 'reconnect') {
-          invalidateIVXRoomProbeCache();
-          await queryClient.invalidateQueries({ queryKey: IVX_ROOM_STATUS_QUERY_KEY });
-        }
-        if (commandResult.command === 'probe') {
-          setAiHealthDetail('inactive');
-        }
-        if (commandResult.command === 'knowledge' && safeTrim(commandResult.args)) {
-          console.log('[IVXOwnerChatRoute] Routing knowledge query to AI:', commandResult.args.slice(0, 40));
-          // Synchronously mark the assistant mutation as started so the watchdog
-          // never reports a phantom stall at AI_TRIGGER_DECISION if the async
-          // call is delayed or queued behind an earlier mutation.
-          wdCmd?.pass('AI_MUTATION_STARTED', `owner_command knowledge invoking assistantReplyMutation`, { command: commandResult.command });
-          await assistantReplyMutation.mutateAsync({ text: `[Knowledge Query] ${commandResult.args}`, nonBlocking: false });
-        }
-        return;
-      }
-
-      liveIntelligenceService.captureEvent({
-        eventName: 'chat_message',
-        screen: '/ivx/chat',
-        module: 'chat',
-        sessionId: ownerSessionIdRef.current,
-        userId: ownerId || null,
-        anonId: ownerId || ownerSessionIdRef.current,
-        metadata: {
-          roomId: conversationQuery.data?.id ?? 'ivx-owner-room',
-          role: 'owner',
-          message: sanitizeUserFacingChatText(text),
-          confirmedSensitiveAction,
-          requestClass: trustContext.requestClass,
-          trustStates: trustContext.namedStates}});
-      try {
-        const queueResult = await sendQueue.mutateAsync({ text: persistedOwnerText, mode, clientId, replyTo, senderLabel: ownerLabel, capturedText });
-        setLastSendAt(new Date().toISOString());
-        void recordIVXOwnerChatAuditEvent({
-          action: 'message_send',
-          conversationId: 'ivx-owner-room',
-          messageId: queueResult.messageId,
-          status: 'success',
-          summary: 'Owner message saved through the IVX chat send path.',
-          metadata: { mode, requestClass: trustContext.requestClass, confirmedSensitiveAction, trustStates: trustContext.namedStates, sessionId: ownerSessionIdRef.current }});
-        console.log('[IVXOwnerChatRoute] Owner message sent to Supabase. trust:', trustContext.namedStates, 'confirmed:', confirmedSensitiveAction);
-      } catch (sendError) {
-        console.log('[IVX_TRACE] 2.X_SEND_QUEUE_THREW_NO_AI_TRIGGER', { clientId, errorMessage: sendError instanceof Error ? sendError.message : String(sendError) });
-        const wdSendFail = watchdogTraceId ? activeWatchdogTracesRef.current.get(watchdogTraceId) ?? null : null;
-        wdSendFail?.fail('AI_TRIGGER_DECISION', `sendQueue threw: ${sendError instanceof Error ? sendError.message : String(sendError)}`);
-        throw sendError instanceof Error ? sendError : new Error(String(sendError));
-      }
-
-      const watchdogTrace = watchdogTraceId ? activeWatchdogTracesRef.current.get(watchdogTraceId) ?? null : null;
-
-      if (trustContext.requiresElevatedConfirmation && !confirmedSensitiveAction) {
-        console.log('[IVX_TRACE] 2.X_ELEVATED_CONFIRMATION_EARLY_RETURN', { clientId, requestClass: trustContext.requestClass, namedStates: trustContext.namedStates });
-        watchdogTrace?.pass('AI_TRIGGER_DECISION', `branch=elevated_confirmation class=${trustContext.requestClass}`);
-        await persistSupportMessage(buildSensitiveActionConfirmationMessage({
-          normalizedText: effectiveText,
-          requestClass: trustContext.requestClass,
-          conversationAccessState: trustContext.conversationAccessState,
-          backendAdminVerified: trustContext.backendAdminState === 'backend_admin_verified'}), 'system');
-        watchdogTrace?.complete('SUCCESS');
-        return;
-      }
-      if (mode === 'ai_only') {
-        console.log('[IVX_TRACE] 2.2_AI_TRIGGER_AI_ONLY', { clientId });
-        watchdogTrace?.pass('AI_TRIGGER_DECISION', 'branch=ai_only');
-        // Synchronously mark the assistant mutation as started so the watchdog
-        // never reports a phantom stall at AI_TRIGGER_DECISION if the async
-        // call is delayed or queued behind an earlier mutation.
-        watchdogTrace?.pass('AI_MUTATION_STARTED', 'ai_only branch invoking assistantReplyMutation', { clientId });
-        await assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: false, watchdogTraceId });
-        return;
-      }
-
-      if (mode === 'send_and_ai') {
-        console.log('[IVX_TRACE] 2.2_AI_TRIGGER_SEND_AND_AI', { clientId, aiReachable: aiReachableRef.current, trust: trustContext.namedStates });
-        console.log('[IVXOwnerChatRoute] Auto-triggering AI reply after send, aiReachable:', aiReachableRef.current, 'trust:', trustContext.namedStates);
-        watchdogTrace?.pass('AI_TRIGGER_DECISION', 'branch=send_and_ai');
-        // Synchronously mark the assistant mutation as started so the watchdog
-        // never reports a phantom stall at AI_TRIGGER_DECISION if the async
-        // call is delayed or queued behind an earlier mutation.
-        watchdogTrace?.pass('AI_MUTATION_STARTED', 'send_and_ai branch invoking assistantReplyMutation', { clientId });
-        // Retry-once wrapper: if the first AI mutation attempt fails, retry once
-        // before surfacing the error. The watchdog still records each attempt.
-        // We now await the wrapper so the send mutation lifecycle stays coherent
-        // with the AI call and the watchdog trace remains active until the full
-        // round trip finishes or fails.
-        const triggerAIWithRetry = async () => {
-          try {
-            await assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: true, watchdogTraceId });
-          } catch (firstErr) {
-            console.log('[IVX_TRACE] 2.X_AI_TRIGGER_RETRY_1', { clientId, err: firstErr instanceof Error ? firstErr.message : String(firstErr) });
-            try {
-              await assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: true, watchdogTraceId });
-            } catch (secondErr) {
-              console.log('[IVX_TRACE] 2.X_AI_TRIGGER_BOTH_FAILED', { clientId, err: secondErr instanceof Error ? secondErr.message : String(secondErr) });
-              watchdogTrace?.fail('AI_MUTATION_STARTED', `assistantReplyMutation rejected twice: ${secondErr instanceof Error ? secondErr.message : String(secondErr)}`);
-            }
-          }
-        };
-        // FIX: Fire the AI reply as a background side effect â€” do NOT await it.
-        // The send mutation must complete as soon as the user message is persisted
-        // so onSuccess fires promptly (composer already cleared in handleSend,
-        // pending message removed, user can send again). The assistantReplyMutation
-        // manages its own loading state (aiReplyPending) and inserts the assistant
-        // message when the reply arrives via realtime/polling.
-        void triggerAIWithRetry();
-      } else if (mode === 'send_only') {
-        watchdogTrace?.pass('AI_TRIGGER_DECISION', 'branch=send_only_no_ai');
-        watchdogTrace?.complete('SUCCESS');
-      }
-    },
-    onSuccess: async (_data, variables) => {
-      // Refetch the authoritative remote thread FIRST so the just-sent owner row
-      // is present in `messages` BEFORE the optimistic pending copy is removed.
-      // This guarantees continuity â€” the turn is always shown by either the
-      // pending entry or the persisted remote row, never neither (no
-      // "message disappears after send" gap). The owner content-dedup in
-      // `allMessages` suppresses the optimistic copy the moment the remote row
-      // arrives, so the brief overlap never renders a duplicate.
-      // Composer is now cleared immediately in handleSend (before mutate).
-      // This refetch ensures the persisted remote row replaces the optimistic copy.
-      try {
-        await queryClient.invalidateQueries({ queryKey: IVX_OWNER_MESSAGES_QUERY_KEY });
-      } catch (refetchError) {
-        console.log('[IVXOwnerChatRoute] Post-send refetch failed (optimistic row retained until next load):', refetchError instanceof Error ? refetchError.message : 'unknown');
-      } finally {
-        setPendingOwnerMessages((current) => current.filter((message) => message.clientId !== variables.clientId));
-      }
-      requestAnimationFrame(() => {
-        // INVERTED FLATLIST: offset 0 = newest message.
-        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-      });
-    },
-    onError: (error, variables) => {
-      setPendingOwnerMessages((current) => current.map((message) => (
-        message.clientId === variables.clientId
-          ? { ...message, status: 'failed', errorMessage: error.message }
-          : message
-      )));
-      console.log('[IVXOwnerChatRoute] Send mutation error:', error.message, 'clientId:', variables.clientId);
-      void recordIVXOwnerChatAuditEvent({
-        action: 'message_send',
-        conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
-        messageId: variables.clientId,
-        status: 'failed',
-        summary: 'Owner message send failed.',
-        metadata: { error: error.message, mode: variables.mode, sessionId: ownerSessionIdRef.current }});
-      Alert.alert('Message not sent', error.message);
-    }});
-
-  useEffect(() => {
-    let cancelled = false;
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-
-    const applyCapabilityProbeResult = (result: Awaited<ReturnType<typeof ivxAIRequestService.probeOwnerAIHealth>>) => {
-      const fullProbeAIAvailable = result.health === 'active' && result.capabilities?.ai_chat === true;
-      const proxyConnected = aiProxyConnectedRef.current;
-      const aiAvailable = fullProbeAIAvailable || proxyConnected;
-      setAiBackendReachable(aiAvailable);
-      setAiHealthDetail(aiAvailable ? 'active' : 'inactive');
-      setKnowledgeActive(result.capabilities?.knowledge_answers === true);
-      setOwnerCommandsActive(result.capabilities?.owner_commands === true);
-      setCodeAwareActive(result.capabilities?.code_aware_support === true);
-      setFileUploadActive(result.capabilities?.file_upload === true);
-      if (aiAvailable) {
-        probeRetryCount.current = 0;
-      }
-    };
-
-    const singleProbeAttempt = async (): Promise<Awaited<ReturnType<typeof ivxAIRequestService.probeOwnerAIHealth>>> => {
-      const result = await ivxAIRequestService.probeOwnerAIHealth();
-      setAiProbeMetadata((current) => ({
-        observedAt: new Date().toISOString(),
-        source: result.source,
-        endpoint: result.endpoint,
-        deploymentMarker: result.deploymentMarker,
-        lastFailureReason: result.health === 'inactive' ? current.lastFailureReason : null}));
-      setRuntimeDebugSnapshot((current) => ({
-        ...current,
-        conversationId: conversationQuery.data?.id ?? current.conversationId,
-        source: shouldPreserveRequestScopedRuntime(current) ? current.source : 'unknown',
-        endpoint: result.endpoint ?? current.endpoint,
-        deploymentMarker: result.deploymentMarker ?? current.deploymentMarker}));
-      if (result.roomStatus) {
-        setRoomProbeAt(new Date().toISOString());
-        queryClient.setQueryData<ChatRoomStatus>(IVX_ROOM_STATUS_QUERY_KEY, result.roomStatus);
-      }
-      console.log('[IVXOwnerChatRoute] AI health probe result:', {
-        health: result.health,
-        source: result.source,
-        endpoint: result.endpoint,
-        deploymentMarker: result.deploymentMarker,
-        storageMode: result.roomStatus?.storageMode ?? ivxRoomStatus?.storageMode ?? 'unknown'});
-      return result;
-    };
-
-    const probe = async () => {
-      const result = await singleProbeAttempt();
-      void recordIVXOwnerChatAuditEvent({
-        action: 'sync_probe',
-        conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
-        status: result.health === 'active' ? 'success' : 'failed',
-        summary: 'IVX Owner AI backend capability probe completed.',
-        metadata: { health: result.health, source: result.source, endpoint: result.endpoint, deploymentMarker: result.deploymentMarker, sessionId: ownerSessionIdRef.current }});
-      if (cancelled) return;
-
-      if (result.health === 'active') {
-        applyCapabilityProbeResult(result);
-        return;
-      }
-
-      if (probeRetryCount.current < MAX_PROBE_RETRIES) {
-        probeRetryCount.current += 1;
-        console.log('[IVXOwnerChatRoute] AI health probe: retry', probeRetryCount.current, 'of', MAX_PROBE_RETRIES, 'in', PROBE_RETRY_DELAY_MS, 'ms');
-        await new Promise((resolve) => setTimeout(resolve, PROBE_RETRY_DELAY_MS));
-        if (cancelled) return;
-        const retryResult = await singleProbeAttempt();
-        if (cancelled) return;
-        if (retryResult.health === 'active') {
-          applyCapabilityProbeResult(retryResult);
-          return;
-        }
-      }
-
-      console.log('[IVXOwnerChatRoute] AI health probe: inactive after retries');
-      const proxyConnected = aiProxyConnectedRef.current;
-      if (proxyConnected) {
-        console.log('[IVXOwnerChatRoute] Keeping AI connected from fast proxy status while full capability probe recovers');
-      }
-      setAiBackendReachable(proxyConnected);
-      setAiHealthDetail(proxyConnected ? 'active' : 'inactive');
-      setKnowledgeActive(false);
-      setOwnerCommandsActive(false);
-      setCodeAwareActive(false);
-      setFileUploadActive(false);
-    };
-
-    const initialDelay = setTimeout(() => {
-      if (!cancelled) void probe();
-    }, 1500);
-
-    intervalId = setInterval(() => {
-      void probe();
-    }, AI_PROBE_INTERVAL_MS);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(initialDelay);
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [ivxRoomStatus?.storageMode, queryClient]);
-
-  const runtimeSignals = useMemo<ChatRoomRuntimeSignals>(() => {
-    if (localFirstChatMode) {
-      return {
-        aiBackendHealth: 'active',
-        aiBackendSource: 'local_app_brain',
-        aiResponseState: aiReplyPending ? 'responding' : 'idle',
-        fileUploadAvailability: 'inactive',
-        knowledgeBackendHealth: 'inactive',
-        ownerCommandAvailability: 'inactive',
-        codeAwareServiceAvailability: 'inactive'};
-    }
-
-    const normalizedRuntimeState = {
-      source: normalizeRuntimeSource(runtimeDebugSnapshot.source),
-      requestStage: runtimeDebugSnapshot.requestStage,
-      failureClass: runtimeDebugSnapshot.failureClass,
-      isFallback: runtimeDebugSnapshot.source === 'provider_fallback',
-      isStreaming: hasActiveStreamingState(runtimeDebugSnapshot),
-      hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText};
-    const activeRuntimeSource = getActiveRuntimeSource(normalizedRuntimeState);
-    const hasFailure = hasRuntimeFailure(normalizedRuntimeState);
-    const proxyConnected = aiProxyStatus.status === 'connected';
-    const effectiveAiHealth: ServiceRuntimeHealth = hasFailure
-      ? 'inactive'
-      : activeRuntimeSource === 'remote_api' || aiHealthDetail === 'active' || proxyConnected
-        ? 'active'
-        : 'inactive';
-    const isAiLive = effectiveAiHealth === 'active';
-    const resolvedAISource = activeRuntimeSource === 'unknown' && proxyConnected
-      ? 'remote_api'
-      : activeRuntimeSource;
-    return {
-      aiBackendHealth: effectiveAiHealth,
-      aiBackendSource: resolvedAISource === 'pending' ? 'unknown' : resolvedAISource,
-      aiResponseState: isAiLive ? 'idle' : 'inactive',
-      fileUploadAvailability: fileUploadActive ? 'active' : 'inactive',
-      knowledgeBackendHealth: knowledgeActive ? 'active' : 'inactive',
-      ownerCommandAvailability: ownerCommandsActive ? 'active' : 'inactive',
-      codeAwareServiceAvailability: codeAwareActive ? 'active' : 'inactive'};
-  }, [aiHealthDetail, aiProxyStatus.status, aiReplyPending, codeAwareActive, devTestMode.testModeActive, fileUploadActive, knowledgeActive, localFirstChatMode, ownerCommandsActive, runtimeDebugSnapshot]);
-
-  const resolution = useMemo<RoomCapabilityResolution>(() => {
-    console.log('[IVXOwnerChatRoute] Resolving capabilities:', {
-      storageMode: ivxRoomStatus?.storageMode ?? 'unknown',
-      deliveryMethod: ivxRoomStatus?.deliveryMethod ?? 'unknown',
-      aiHealth: effectiveAiHealthDetail,
-      aiReachable: effectiveAiBackendReachable,
-      knowledgeActive,
-      ownerCommandsActive,
-      codeAwareActive,
-      fileUploadActive});
-    return resolveRoomCapabilityState(ivxRoomStatus, runtimeSignals);
-  }, [effectiveAiBackendReachable, effectiveAiHealthDetail, ivxRoomStatus, runtimeSignals, knowledgeActive, ownerCommandsActive, codeAwareActive, fileUploadActive]);
-
-  const clearUploadProgressTimer = useCallback((clientId: string) => {
-    const timer = uploadProgressTimersRef.current[clientId];
-    if (timer) {
-      clearInterval(timer);
-      delete uploadProgressTimersRef.current[clientId];
-    }
-  }, []);
-
-  const startUploadProgressTimer = useCallback((clientId: string) => {
-    clearUploadProgressTimer(clientId);
-    uploadProgressTimersRef.current[clientId] = setInterval(() => {
-      setPendingOwnerMessages((current) => current.map((message) => {
-        if (message.clientId !== clientId || message.status !== 'uploading') {
-          return message;
-        }
-        const currentProgress = typeof message.uploadProgress === 'number' ? message.uploadProgress : 8;
-        const nextProgress = Math.min(92, currentProgress + Math.max(3, Math.round((96 - currentProgress) / 7)));
-        return { ...message, uploadProgress: nextProgress };
-      }));
-    }, 420);
-  }, [clearUploadProgressTimer]);
-
-  useEffect(() => {
-    return () => {
-      Object.values(uploadProgressTimersRef.current).forEach((timer) => clearInterval(timer));
-      uploadProgressTimersRef.current = {};
-    };
-  }, []);
-
-  const attachmentMutation = useMutation<IVXMessage, Error, { upload: IVXUploadInput; clientId: string; capturedBody: string; replyTo: ChatReplyContext | null }>({
-    mutationFn: async ({ upload, capturedBody, replyTo }) => {
-      const persistedAttachmentBody = encodeReplyBody(capturedBody, replyTo);
-      console.log('[IVXOwnerChatRoute] Attachment send body length:', capturedBody.length, 'replyTo:', replyTo?.messageId ?? null);
-      return ivxChatService.sendOwnerAttachmentMessage({
-        upload,
-        body: persistedAttachmentBody,
-        senderLabel: ownerLabel});
-    },
-    onSuccess: async (_message, variables) => {
-      clearUploadProgressTimer(variables.clientId);
-      setPendingOwnerMessages((current) => current.map((message) => (
-        message.clientId === variables.clientId
-          ? { ...message, status: 'uploaded', uploadProgress: 100, errorMessage: null }
-          : message
-      )));
-      commitComposerClear(variables.capturedBody);
-      if (variables.replyTo) {
-        setSelectedReplyContext(null);
-      }
-      void recordIVXOwnerChatAuditEvent({
-        action: 'attachment_upload',
-        conversationId: _message.conversationId,
-        messageId: _message.id,
-        status: 'success',
-        summary: 'Owner attachment uploaded and persisted in the IVX room.',
-        metadata: {
-          fileName: variables.upload.name,
-          fileType: variables.upload.type ?? null,
-          size: variables.upload.size ?? null,
-          attachmentKind: _message.attachmentKind,
-          sessionId: ownerSessionIdRef.current}});
-      await queryClient.invalidateQueries({ queryKey: IVX_OWNER_MESSAGES_QUERY_KEY });
-      setTimeout(() => {
-        setPendingOwnerMessages((current) => current.filter((message) => message.clientId !== variables.clientId));
-      }, 650);
-    },
-    onError: (error, variables) => {
-      clearUploadProgressTimer(variables.clientId);
-      setPendingOwnerMessages((current) => current.map((message) => (
-        message.clientId === variables.clientId
-          ? { ...message, status: 'failed', uploadProgress: null, errorMessage: `Upload failed: ${error.message}` }
-          : message
-      )));
-      void recordIVXOwnerChatAuditEvent({
-        action: 'attachment_upload',
-        conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
-        messageId: variables.clientId,
-        status: 'failed',
-        summary: 'Owner attachment upload failed.',
-        metadata: { error: error.message, fileName: variables.upload.name, sessionId: ownerSessionIdRef.current }});
-      Alert.alert('Upload failed', error.message);
-    }});
-
-  const handleComposerChange = useCallback((value: string) => {
-    composerValueRef.current = value;
-    setComposerValue(value);
-  }, []);
-
-  const commitComposerClear = useCallback((capturedText?: string) => {
-    const latestValue = normalizeComposerText(composerValueRef.current);
-    const preservedValue = normalizeComposerText(capturedText);
-    if (preservedValue.length > 0 && latestValue !== preservedValue) {
-      console.log('[IVXOwnerChatRoute] Composer changed after send started, preserving latest draft');
-      return;
-    }
-
-    setSelectedReplyContext(null);
-    composerValueRef.current = '';
-    setComposerValue('');
-    setComposerInputHeight(44);
-    composerInputRef.current?.clear();
-    void AsyncStorage.removeItem(IVX_OWNER_DRAFT_STORAGE_KEY).catch((error) => {
-      console.log('[IVXOwnerChatRoute] Failed to clear owner draft after send:', error instanceof Error ? error.message : 'unknown');
-    });
-  }, []);
-
-  const handleApplyPromptTemplate = useCallback((template: OwnerPromptTemplate) => {
-    const currentText = normalizeComposerText(composerValueRef.current).trim();
-    const nextText = currentText ? `${template.prompt}\n\n${currentText}` : template.prompt;
-    composerValueRef.current = nextText;
-    setComposerValue(nextText);
-    setComposerInputHeight(Math.min(Math.max(Math.ceil(nextText.length / 28) * 22 + 22, 44), 112));
-    composerInputRef.current?.focus();
-    void Haptics.selectionAsync();
-    void recordIVXOwnerChatAuditEvent({
-      action: 'template_apply',
-      conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
-      status: 'success',
-      summary: `Owner prompt template applied: ${template.label}.`,
-      metadata: { templateId: template.id, sessionId: ownerSessionIdRef.current }});
-  }, [conversationQuery.data?.id]);
-
-  const stopVoiceRecording = useCallback(async () => {
-    try {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await audioRecorder.stop();
-      await setAudioModeAsync({ allowsRecording: false });
-      const uri = audioRecorder.uri;
-      if (!uri) {
-        Alert.alert('Voice not saved', 'No recording file was created. Please try again.');
-        return;
-      }
-      await transcribeVoiceMutation.mutateAsync(uri);
-    } catch (error) {
-      console.log('[IVXOwnerChatRoute] Stop voice recording error:', error instanceof Error ? error.message : 'unknown');
-      Alert.alert('Voice not transcribed', 'We could not stop or transcribe that recording. Please try again.');
-    }
-  }, [audioRecorder, transcribeVoiceMutation]);
-
-  const startVoiceRecording = useCallback(async () => {
-    if (sendMessageMutation.isPending || attachmentMutation.isPending || isPickingFile || transcribeVoiceMutation.isPending || recorderState.isRecording) {
-      return;
-    }
-
-    try {
-      const permission = await requestRecordingPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Microphone permission required', 'Please allow microphone access to use voice input.');
-        return;
-      }
-
-      await setAudioModeAsync({
-        allowsRecording: true,
-        playsInSilentMode: true});
-      await audioRecorder.prepareToRecordAsync();
-      audioRecorder.record({ forDuration: 120 });
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      void recordIVXOwnerChatAuditEvent({
-        action: 'voice_transcription',
-        conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
-        status: 'started',
-        summary: 'Owner voice recording started.',
-        metadata: { sessionId: ownerSessionIdRef.current, platform: Platform.OS }});
-    } catch (error) {
-      console.log('[IVXOwnerChatRoute] Start voice recording error:', error instanceof Error ? error.message : 'unknown');
-      Alert.alert('Voice recording unavailable', 'We could not start recording. Please try again.');
-    }
-  }, [attachmentMutation.isPending, audioRecorder, conversationQuery.data?.id, isPickingFile, sendMessageMutation.isPending, recorderState.isRecording, transcribeVoiceMutation.isPending]);
-
-  const handleVoicePress = useCallback(async () => {
-    if (recorderState.isRecording) {
-      await stopVoiceRecording();
-      return;
-    }
-    await startVoiceRecording();
-  }, [recorderState.isRecording, startVoiceRecording, stopVoiceRecording]);
-
-  const handleSearchQueryChange = useCallback((value: string) => {
-    setMessageSearchQuery(value);
-    const trimmed = safeTrim(value);
-    if (trimmed.length >= 3) {
-      void recordIVXOwnerChatAuditEvent({
-        action: 'search',
-        conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
-        status: 'success',
-        summary: 'Owner searched the IVX Owner AI conversation.',
-        metadata: { queryLength: trimmed.length, resultCount: displayedMessages.length, sessionId: ownerSessionIdRef.current }});
-    }
-  }, [conversationQuery.data?.id, displayedMessages.length]);
-
-  const handleAskAI = useCallback((submittedText?: unknown) => {
-    if (sendMessageMutation.isPending || aiReplyPending || attachmentMutation.isPending || isPickingFile || !composerHasText) return;
-    const normalizedText = normalizeComposerText(submittedText, composerValueRef.current);
-    const text = safeTrim(normalizedText);
-    if (!text) {
-      console.log('[IVXOwnerChatRoute] Skipping empty AI ask after normalization');
-      return;
-    }
-    const clientId = createTransientMessageId('ivx-owner-ai-only-send');
-    const createdAt = new Date().toISOString();
-    const replyTo = selectedReplyContext;
-    setPendingOwnerMessages((current) => [...current, { clientId, text: normalizedText, createdAt, mode: 'ai_only', status: 'sending', errorMessage: null, replyTo }]);
-    setSelectedReplyContext(null);
-    console.log('[IVXOwnerChatRoute] handleAskAI explicit AI request length:', text.length, 'clientId:', clientId, 'replyTo:', replyTo?.messageId ?? null);
-    // A new owner message always starts a NEW action: replace any prior task
-    // banner with the newly detected task (or clear it when this message is not
-    // a task) so a stale "Auditing & verifying" banner can never hijack a fresh
-    // unrelated message.
-    const detectedTask = detectChatLiveWorkTask(text);
-    setActiveLiveWorkTask(detectedTask ? { ...detectedTask, startedAt: createdAt } : null);
-    sendMessageMutation.mutate({ text, mode: 'ai_only', clientId, capturedText: normalizedText, replyTo });
-  }, [aiReplyPending, attachmentMutation.isPending, composerHasText, isPickingFile, sendMessageMutation.isPending, selectedReplyContext, sendMessageMutation]);
-
-  const handleOpenLiveWork = useCallback((runSupabase?: boolean) => {
-    const wantsSupabase = runSupabase ?? activeLiveWorkTask?.isSupabase ?? false;
-    router.push((wantsSupabase ? '/ivx/live-work?run=supabase' : '/ivx/live-work') as never);
-    void Haptics.selectionAsync().catch(() => undefined);
-  }, [activeLiveWorkTask?.isSupabase, router]);
-
-  const handleCopyTaskLog = useCallback(async () => {
-    const tail = displayedMessages.slice(-12).map((m) => `${safeTrim(m.senderLabel) || 'message'}: ${safeTrim(m.body)}`).join('\n');
-    const header = activeLiveWorkTask ? `IVX Live Work task: ${activeLiveWorkTask.label} (started ${activeLiveWorkTask.startedAt})` : 'IVX chat log';
-    const ok = await safeSetString(`${header}\n\n${tail}`);
-    if (ok) {
-      Alert.alert('Copied', 'Task log copied to clipboard.');
-    }
-  }, [activeLiveWorkTask, displayedMessages]);
-
-  const handleRetryMessage = useCallback((message: ChatMessage) => {
-    const pendingMessage = pendingOwnerMessages.find((candidate) => candidate.clientId === message.id);
-    const normalizedText = normalizeComposerText(pendingMessage?.text ?? message.text ?? '');
-    const text = safeTrim(normalizedText);
-    const isAttachmentRetry = pendingMessage?.mode === 'attachment' && pendingMessage.upload;
-    if (!pendingMessage || (!text && !isAttachmentRetry) || sendMessageMutation.isPending || attachmentMutation.isPending) {
-      console.log('[IVXOwnerChatRoute] Retry skipped:', message.id, 'hasPending:', Boolean(pendingMessage), 'busy:', sendMessageMutation.isPending || attachmentMutation.isPending);
-      return;
-    }
-
-    if (isAttachmentRetry && pendingMessage.upload) {
-      setPendingOwnerMessages((current) => current.map((candidate) => (
-        candidate.clientId === pendingMessage.clientId
-          ? { ...candidate, status: 'uploading', errorMessage: null, uploadProgress: 8 }
-          : candidate
-      )));
-      startUploadProgressTimer(pendingMessage.clientId);
-      console.log('[IVXOwnerChatRoute] Retrying failed owner attachment:', pendingMessage.clientId, pendingMessage.upload.name);
-      attachmentMutation.mutate({ upload: pendingMessage.upload, clientId: pendingMessage.clientId, capturedBody: normalizedText, replyTo: pendingMessage.replyTo ?? null });
-      return;
-    }
-
-    setPendingOwnerMessages((current) => current.map((candidate) => (
-      candidate.clientId === pendingMessage.clientId
-        ? { ...candidate, status: 'sending', errorMessage: null }
-        : candidate
-    )));
-    console.log('[IVXOwnerChatRoute] Retrying failed owner message:', pendingMessage.clientId, 'mode:', pendingMessage.mode);
-    sendMessageMutation.mutate({
-      text,
-      mode: pendingMessage.mode as 'send_only' | 'send_and_ai' | 'ai_only',
-      clientId: pendingMessage.clientId,
-      capturedText: normalizedText,
-      replyTo: pendingMessage.replyTo ?? null});
-  }, [attachmentMutation, sendMessageMutation.isPending, pendingOwnerMessages, sendMessageMutation, startUploadProgressTimer]);
-
-  /**
-   * One-tap owner-session recovery from the chat screen: forces a Supabase
-   * session refresh (logs out for a fresh login if that fails), confirms
-   * ownerDetected, and â€” on success â€” automatically retries the most recent
-   * failed Owner AI message so the owner never has to re-type it.
-   */
-  const handleRefreshOwnerSession = useCallback(async () => {
-    if (isRefreshingOwnerSession) {
-      return;
-    }
-    setIsRefreshingOwnerSession(true);
-    try {
-      const result = await refreshOwnerSession();
-      console.log('[IVXOwnerChatRoute] Refresh Owner Session result:', result.step, 'ownerDetected:', result.ownerDetected, 'http:', result.httpStatus);
-      if (result.ownerDetected) {
-        setOwnerAuthFailureBanner(null);
-        const lastFailed = [...pendingOwnerMessages].reverse().find((message) => message.status === 'failed');
-        if (lastFailed) {
-          console.log('[IVXOwnerChatRoute] Auto-retrying failed Owner AI message after session refresh:', lastFailed.clientId);
-          handleRetryMessage({
-            id: lastFailed.clientId,
-            text: lastFailed.text} as ChatMessage);
-          Alert.alert('Owner session refreshed', 'ownerDetected: YES. Retrying your last messageâ€¦');
-        } else {
-          Alert.alert('Owner session refreshed', 'ownerDetected: YES. Your owner session is active again.');
-        }
-      } else if (result.needsSignIn) {
-        Alert.alert('Sign in required', result.message, [
-          { text: 'Open Auth Diagnostics', onPress: () => router.push('/ivx/auth-diagnostics' as never) },
-          { text: 'OK', style: 'cancel' },
-        ]);
-      } else {
-        Alert.alert('Owner session still rejected', result.message, [
-          { text: 'Open Auth Diagnostics', onPress: () => router.push('/ivx/auth-diagnostics' as never) },
-          { text: 'OK', style: 'cancel' },
-        ]);
-      }
-    } catch (error) {
-      console.log('[IVXOwnerChatRoute] Refresh Owner Session error:', error instanceof Error ? error.message : 'unknown');
-      Alert.alert('Refresh failed', error instanceof Error ? error.message : 'Owner session refresh failed.');
-    } finally {
-      setIsRefreshingOwnerSession(false);
-    }
-  }, [handleRetryMessage, isRefreshingOwnerSession, pendingOwnerMessages, router]);
-
-  const handleDismissFailedMessage = useCallback((messageId: string) => {
-    console.log('[IVXOwnerChatRoute] Removing failed local message:', messageId);
-    clearUploadProgressTimer(messageId);
-    setPendingOwnerMessages((current) => current.filter((message) => message.clientId !== messageId));
-  }, [clearUploadProgressTimer]);
-
-  const handleOpenAttachment = useCallback(async (message: IVXMessage) => {
-    if (!message.attachmentUrl) {
-      return;
-    }
-
-    try {
-      await Linking.openURL(message.attachmentUrl);
-    } catch (error) {
-      Alert.alert('Unable to open attachment', error instanceof Error ? error.message : 'Unknown attachment error.');
-    }
-  }, []);
-
-  const handlePickFile = useCallback(async () => {
-    if (attachmentMutation.isPending || isPickingFile) {
-      return;
-    }
-    if (draftAttachments.length >= IVX_MAX_DRAFT_ATTACHMENTS) {
-      Alert.alert('Attachment limit reached', `You can attach up to ${IVX_MAX_DRAFT_ATTACHMENTS} files per message. Send these first, then add more.`);
-      return;
-    }
-
-    try {
-      await Haptics.selectionAsync();
-      setIsPickingFile(true);
-      const pickerResult = await DocumentPicker.getDocumentAsync({
-        copyToCacheDirectory: true,
-        multiple: true,
-        type: '*/*'});
-
-      if (pickerResult.canceled || !pickerResult.assets || pickerResult.assets.length === 0) {
-        console.log('[IVXOwnerChatRoute] Attachment picker canceled');
-        return;
-      }
-
-      const remainingSlots = IVX_MAX_DRAFT_ATTACHMENTS - draftAttachments.length;
-      const assets = (pickerResult.assets as PickerAsset[]).slice(0, remainingSlots);
-      const truncated = pickerResult.assets.length > assets.length;
-
-      const nextDrafts = assets.map((asset) => {
-        const upload: IVXUploadInput = {
-          uri: asset.uri,
-          file: asset.file ?? null,
-          name: asset.name?.trim() || asset.file?.name?.trim() || `ivx-file-${Date.now()}`,
-          type: asset.mimeType ?? asset.file?.type ?? null,
-          size: typeof asset.size === 'number'
-            ? asset.size
-            : typeof asset.file?.size === 'number'
-              ? asset.file.size
-              : null};
-        const mime = (upload.type ?? '').toLowerCase();
-        const nameLower = upload.name.toLowerCase();
-        const isImage = mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|heic|heif|bmp)$/.test(nameLower);
-        const isVideo = mime.startsWith('video/') || /\.(mp4|mov|m4v|webm|avi|mkv)$/.test(nameLower);
-        return { upload, isImage, isVideo };
-      });
-
-      console.log('[IVXOwnerChatRoute] Attachments selected as draft batch:', nextDrafts.length, 'truncated:', truncated);
-      setDraftAttachments((current) => [...current, ...nextDrafts].slice(0, IVX_MAX_DRAFT_ATTACHMENTS));
-      if (truncated) {
-        Alert.alert('Some files skipped', `Only ${IVX_MAX_DRAFT_ATTACHMENTS} files can be attached at once. The extra files were not added.`);
-      }
-      composerInputRef.current?.focus();
-    } catch (error) {
-      console.log('[IVXOwnerChatRoute] Attachment picker failed:', error instanceof Error ? error.message : 'unknown');
-      Alert.alert('File pick failed', error instanceof Error ? error.message : 'Unknown file picker error.');
-    } finally {
-      setIsPickingFile(false);
-    }
-  }, [attachmentMutation.isPending, draftAttachments.length, isPickingFile]);
-
-  const handleClearDraftAttachment = useCallback(() => {
-    console.log('[IVXOwnerChatRoute] Cleared all draft attachments');
-    setDraftAttachments([]);
-  }, []);
-
-  const handleRemoveDraftAttachment = useCallback((index: number) => {
-    setDraftAttachments((current) => current.filter((_, idx) => idx !== index));
-  }, []);
-
-  const sendDraftAttachment = useCallback(async () => {
-    if (draftAttachments.length === 0) return;
-    const batch = draftAttachments.slice(0, IVX_MAX_DRAFT_ATTACHMENTS);
-    const totalCount = batch.length;
-    const composerText = normalizeComposerText(composerValueRef.current);
-    const trimmed = safeTrim(composerText);
-    const imageCount = batch.filter((item) => item.isImage).length;
-    const videoCount = batch.filter((item) => item.isVideo).length;
-    const otherCount = totalCount - imageCount - videoCount;
-    const breakdown = [
-      imageCount > 0 ? `${imageCount} image${imageCount === 1 ? '' : 's'}` : null,
-      videoCount > 0 ? `${videoCount} video${videoCount === 1 ? '' : 's'}` : null,
-      otherCount > 0 ? `${otherCount} other file${otherCount === 1 ? '' : 's'}` : null,
-    ].filter((line): line is string => typeof line === 'string').join(', ');
-    const defaultCaption = totalCount === 1
-      ? (batch[0].isImage ? 'Analyze this image.' : batch[0].isVideo ? 'Analyze this video.' : 'Analyze this attachment.')
-      : `Analyze all ${totalCount} attachments (${breakdown}).`;
-    const captionText = trimmed.length > 0 ? composerText : defaultCaption;
-    const replyTo = selectedReplyContext;
-
-    console.log('[IVXOwnerChatRoute] Sending multi-attachment batch:', { totalCount, imageCount, videoCount, otherCount });
-
-    // Clear composer + drafts immediately for snappy UX
-    composerValueRef.current = '';
-    setComposerValue('');
-    setDraftAttachments([]);
-    composerInputRef.current?.clear();
-    Keyboard.dismiss();
-    if (replyTo) {
-      setSelectedReplyContext(null);
-    }
-
-    const fileInsights: IVXOwnerFileInsight[] = [];
-    let successCount = 0;
-    let failureCount = 0;
-
-    for (let i = 0; i < batch.length; i += 1) {
-      const { upload } = batch[i];
-      const clientId = createTransientMessageId('ivx-owner-attachment');
-      const itemCaption = totalCount === 1
-        ? captionText
-        : `(${i + 1}/${totalCount}) ${upload.name}`;
-      try {
-        const fileInsight = await ivxOwnerMemoryService.summarizePickedFile({
-          uri: upload.uri ?? null,
-          name: upload.name,
-          mimeType: upload.type ?? null,
-          size: upload.size ?? null,
-          file: upload.file ?? null});
-        await ivxOwnerMemoryService.recordFileUpload(fileInsight);
-        fileInsights.push(fileInsight);
-
-        setPendingOwnerMessages((current) => [...current, {
-          clientId,
-          text: itemCaption,
-          createdAt: new Date().toISOString(),
-          mode: 'attachment',
-          status: 'uploading',
-          errorMessage: null,
-          upload,
-          uploadProgress: 8,
-          replyTo: i === 0 ? replyTo : null}]);
-        startUploadProgressTimer(clientId);
-
-        await attachmentMutation.mutateAsync({ upload, clientId, capturedBody: itemCaption, replyTo: i === 0 ? replyTo : null });
-        successCount += 1;
-      } catch (error) {
-        failureCount += 1;
-        console.log('[IVXOwnerChatRoute] Attachment upload failed in batch:', upload.name, error instanceof Error ? error.message : 'unknown');
-      }
-    }
-
-    console.log('[IVXOwnerChatRoute] Multi-attachment batch complete:', { totalCount, successCount, failureCount, insightsRecorded: fileInsights.length });
-
-    if (fileInsights.length === 0) {
-      Alert.alert('Attachment send failed', 'No files were uploaded successfully. Please try again.');
-      return;
-    }
-
-    try {
-      const analysisPrompt = fileInsights.length === 1
-        ? (trimmed.length > 0
-          ? `${captionText}\n\n${createIVXOwnerFileUnderstandingPrompt(fileInsights[0])}`
-          : createIVXOwnerFileUnderstandingPrompt(fileInsights[0]))
-        : createIVXOwnerMultiFileUnderstandingPrompt({ files: fileInsights, caption: trimmed.length > 0 ? captionText : null });
-      // Attachment analysis is a secondary AI call; there is no active send-message
-      // watchdog trace here, so we rely on the defensive mutationFn guard and the
-      // retry wrapper below. A failure is logged but does not block the user.
-      await assistantReplyMutation.mutateAsync({
-        text: analysisPrompt,
-        nonBlocking: true});
-    } catch (error) {
-      console.log('[IVXOwnerChatRoute] Multi-attachment AI analysis failed:', error instanceof Error ? error.message : 'unknown');
-    }
-  }, [assistantReplyMutation, attachmentMutation, draftAttachments, selectedReplyContext, startUploadProgressTimer]);
-
-  const handleSend = useCallback((submittedText?: unknown) => {
-    const tapAt = new Date().toISOString();
-    console.log('[IVX_TRACE] 0_TAP_ENTER', { tapAt, sendPending: sendMessageMutation.isPending, attachPending: attachmentMutation.isPending, isPickingFile, draftAttachments: draftAttachments.length, composerHasText });
-    ivxAIWatchdog.recordTap({ tapAt });
-    if (sendMessageMutation.isPending || attachmentMutation.isPending || isPickingFile) {
-      console.log('[IVX_TRACE] 0_TAP_BLOCKED_BUSY', { sendPending: sendMessageMutation.isPending, attachPending: attachmentMutation.isPending, isPickingFile });
-      ivxAIWatchdog.recordTapBlocked('busy', { sendPending: sendMessageMutation.isPending, attachPending: attachmentMutation.isPending, isPickingFile });
-      return;
-    }
-    if (draftAttachments.length > 0) {
-      void sendDraftAttachment();
-      return;
-    }
-    if (!composerHasText) {
-      console.log('[IVX_TRACE] 0_TAP_BLOCKED_NO_TEXT', {});
-      ivxAIWatchdog.recordTapBlocked('no_text', {});
-      return;
-    }
-    const normalizedText = normalizeComposerText(submittedText, composerValueRef.current);
-    const text = safeTrim(normalizedText);
-    if (!text) {
-      console.log('[IVX_TRACE] 0_TAP_BLOCKED_EMPTY_NORMALIZED', {});
-      ivxAIWatchdog.recordTapBlocked('empty_after_normalize', {});
-      return;
-    }
-    const isCommand = !localFirstChatMode && text.startsWith(OWNER_COMMAND_PREFIX);
-    const mode = isCommand ? 'send_only' : 'send_and_ai';
-    const clientId = createTransientMessageId('ivx-owner-local-send');
-    const createdAt = new Date().toISOString();
-    const replyTo = selectedReplyContext;
-    setPendingOwnerMessages((current) => [...current, { clientId, text: normalizedText, createdAt, mode, status: 'sending', errorMessage: null, replyTo }]);
-    setSelectedReplyContext(null);
-    // Create a watchdog trace for this send. Each checkpoint will be reported
-    // as the lifecycle progresses; if any fails or the trace stalls past 10s,
-    // a BLOCKED/SILENT_FAILURE report is published to the in-app drawer + banner.
-    const watchdogTrace = ivxAIWatchdog.createTrace({
-      userMessageId: clientId,
-      userText: text,
-      conversationId: conversationQuery.data?.id ?? null});
-    activeWatchdogTracesRef.current.set(watchdogTrace.traceId, watchdogTrace);
-    // Activate staged timeout banner for AI-bearing modes
-    if (mode !== 'send_only') {
-      stagedTimeoutStartRef.current = Date.now();
-      setStagedTimeoutTraceId(watchdogTrace.traceId);
-      setStagedTimeoutMessageId(clientId);
-      setStagedTimeoutRequestStarted(false);
-      setStagedTimeoutLastCheckpoint('SEND_TAP');
-    }
-    watchdogTrace.pass('SEND_TAP', `mode=${mode} length=${text.length}`, { clientId, isCommand });
-    watchdogTrace.pass('USER_ROW_INSERTED', `pending clientId=${clientId}`, { clientId });
-    console.log('[IVX_TRACE] 1_SEND_TAP', { mode, isCommand, clientId, textLength: text.length, localFirstChatMode, traceId: watchdogTrace.traceId });
-    console.log('[IVX_TRACE] 2_USER_ROW_INSERTED', { clientId, pendingCountAfter: 'see next render', traceId: watchdogTrace.traceId });
-    console.log('[IVXOwnerChatRoute] handleSend mode:', mode, 'isCommand:', isCommand, 'aiReachable:', aiReachableRef.current, 'length:', text.length, 'clientId:', clientId, 'replyTo:', replyTo?.messageId ?? null);
-    // A new owner message always starts a NEW action: replace any prior task
-    // banner with the newly detected task (or clear it when this message is not
-    // a task) so a stale "Auditing & verifying" banner can never hijack a fresh
-    // unrelated message.
-    const detectedTask = detectChatLiveWorkTask(text);
-    setActiveLiveWorkTask(detectedTask ? { ...detectedTask, startedAt: createdAt } : null);
-    // FIX: Clear the composer IMMEDIATELY before firing the mutation so the user
-    // can start typing their next message right away. The previous code only
-    // cleared the composer in sendMessageMutation.onSuccess, which fires AFTER
-    // the entire send+AI round trip â€” potentially 90s later.
-    commitComposerClear(normalizedText);
-    sendMessageMutation.mutate({ text, mode: mode as 'send_only' | 'send_and_ai', clientId, capturedText: normalizedText, replyTo, watchdogTraceId: watchdogTrace.traceId });
-  }, [attachmentMutation.isPending, commitComposerClear, composerHasText, draftAttachments.length, isPickingFile, localFirstChatMode, sendMessageMutation.isPending, selectedReplyContext, sendDraftAttachment, sendMessageMutation]);
-
-  const handleStartReplyToMessage = useCallback((message: ChatMessage) => {
-    const previewText = safeTrim(message.text) || safeTrim(message.fileName) || 'Attachment';
-    const replyContext: ChatReplyContext = {
-      messageId: message.id,
-      senderLabel: safeTrim(message.senderLabel) || 'Message',
-      previewText: previewText.length > 140 ? `${previewText.slice(0, 137)}...` : previewText};
-    setSelectedReplyContext(replyContext);
-    composerInputRef.current?.focus();
-    console.log('[IVXOwnerChatRoute] Reply context selected:', replyContext.messageId);
-    void recordIVXOwnerChatAuditEvent({
-      action: 'reply_context',
-      conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
-      messageId: replyContext.messageId,
-      status: 'success',
-      summary: 'Owner selected a reply context in IVX Owner AI.',
-      metadata: { senderLabel: replyContext.senderLabel, sessionId: ownerSessionIdRef.current }});
-  }, [conversationQuery.data?.id]);
-
-  const handleJumpToMessage = useCallback((messageId: string) => {
-    // INVERTED FLATLIST: index is in invertedData (newest-first).
-    const targetIndex = invertedData.findIndex((message) => message.id === messageId);
-    const targetExistsOutsideSearch = searchActive && allMessages.some((message) => message.id === messageId);
-    if (targetIndex < 0 && !targetExistsOutsideSearch) {
-      console.log('[IVXOwnerChatRoute] Reply context original message missing:', messageId);
-      setMissingReplyMessageId(messageId);
-      Alert.alert('Original message unavailable', 'That replied-to message is not in this room anymore. The reply preview remains visible.');
-      return;
-    }
-
-    if (highlightedMessageTimeoutRef.current) {
-      clearTimeout(highlightedMessageTimeoutRef.current);
-    }
-
-    setMissingReplyMessageId(null);
-    suppressAutoScrollUntilRef.current = Date.now() + 2200;
-    setHighlightedMessageId(messageId);
-    highlightedMessageTimeoutRef.current = setTimeout(() => {
-      setHighlightedMessageId((current) => current === messageId ? null : current);
-      highlightedMessageTimeoutRef.current = null;
-    }, 1600);
-
-    const scrollToTarget = (messages: IVXMessage[]) => {
-      // INVERTED FLATLIST: search in reversed array to get inverted index.
-      const reversed = [...messages].reverse();
-      const resolvedIndex = reversed.findIndex((message) => message.id === messageId);
-      if (resolvedIndex < 0) {
-        pendingJumpMessageIdRef.current = messageId;
-        console.log('[IVXOwnerChatRoute] Reply context jump pending until full thread renders:', messageId);
-        return;
-      }
-      pendingJumpMessageIdRef.current = null;
-      flatListRef.current?.scrollToIndex({ index: resolvedIndex, animated: true, viewPosition: 0.65 });
-      console.log('[IVXOwnerChatRoute] Jumped to reply context:', messageId, 'invertedIndex:', resolvedIndex);
-    };
-
-    if (searchActive) {
-      pendingJumpMessageIdRef.current = messageId;
-      setMessageSearchQuery('');
-      setTimeout(() => scrollToTarget(allMessages), 160);
-      return;
-    }
-
-    scrollToTarget(displayedMessages);
-  }, [allMessages, displayedMessages, invertedData, searchActive]);
-
-  const handleTogglePinnedMessage = useCallback((message: ChatMessage) => {
-    setPinnedMessageIds((current) => {
-      if (current.includes(message.id)) {
-        console.log('[IVXOwnerChatRoute] Unpinned owner-room message:', message.id);
-        void recordIVXOwnerChatAuditEvent({
-          action: 'pin_message',
-          conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
-          messageId: message.id,
-          status: 'success',
-          summary: 'Owner unpinned a message in IVX Owner AI.',
-          metadata: { pinned: false, sessionId: ownerSessionIdRef.current }});
-        return current.filter((messageId) => messageId !== message.id);
-      }
-
-      console.log('[IVXOwnerChatRoute] Pinned owner-room message:', message.id);
-      void recordIVXOwnerChatAuditEvent({
-        action: 'pin_message',
-        conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
-        messageId: message.id,
-        status: 'success',
-        summary: 'Owner pinned a message in IVX Owner AI.',
-        metadata: { pinned: true, sessionId: ownerSessionIdRef.current }});
-      return [...current, message.id].filter((messageId, index, messageIds) => messageIds.indexOf(messageId) === index);
-    });
-  }, [conversationQuery.data?.id]);
-
-  const renderMessage = useCallback(({ item, index }: { item: IVXMessage; index: number }) => {
-    // INVERTED FLATLIST: invertedData is newest-first. The chronologically
-    // older message is at index + 1 (visually above in inverted layout). Date
-    // separators show when the current message starts a new day vs the older
-    // message above it.
-    const olderMessage = index < invertedData.length - 1 ? invertedData[index + 1] : null;
-    const currentDayKey = formatMessageDateKey(item.createdAt);
-    const olderDayKey = olderMessage ? formatMessageDateKey(olderMessage.createdAt) : null;
-    const shouldShowDateSeparator = currentDayKey !== olderDayKey;
-    const ownMessage = isOwnMessage(item, ownerId);
-    const isAssistant = item.senderRole === 'assistant';
-    const isSystem = item.senderRole === 'system';
-    if (isAssistant) {
-      console.log('[IVX_TRACE] 9_RENDER_MESSAGE_ASSISTANT', { id: item.id, bodyLength: (item.body ?? '').length, bodyPreview: (item.body ?? '').slice(0, 60), senderRole: item.senderRole });
-      // Report the RENDER_MESSAGE_CALLED checkpoint OUTSIDE the render phase.
-      // trace.pass() notifies watchdog subscribers (setState in useWatchdogSnapshot),
-      // and renderMessage runs inside React's render. Scheduling on a microtask
-      // moves the watchdog update out of render so React never warns
-      // "Cannot update a component (IVXWatchdogâ€¦) while rendering a different component."
-      const renderTraceItemId = item.id;
-      const renderTraceBodyLen = (item.body ?? '').length;
-      const scheduleRenderCheckpoint = typeof queueMicrotask === 'function'
-        ? queueMicrotask
-        : (cb: () => void): void => { setTimeout(cb, 0); };
-      scheduleRenderCheckpoint(() => {
-        const renderTrace = ivxAIWatchdog.getTraceForTransient(renderTraceItemId);
-        renderTrace?.pass('RENDER_MESSAGE_CALLED', `id=${renderTraceItemId} bodyLen=${renderTraceBodyLen}`);
-      });
-    }
-
-    // Safe render fallback: if a visible assistant row has an invalid/null/non-string
-    // body (and no attachment), render a visible error bubble instead of silently
-    // dropping it. This prevents the disappearing-reply class of bugs from ever
-    // recurring even if upstream payload parsing breaks.
-    if (isAssistant && !item.attachmentUrl && (typeof item.body !== 'string' || item.body.length === 0)) {
-      if (__DEV__) {
-        // eslint-disable-next-line no-console
-        console.error('[IVXOwnerChatRoute][dev] Invalid assistant message body â€” rendering safe fallback bubble.', { id: item.id, body: item.body });
-      }
-      const fallbackChatMessage = {
-        id: item.id,
-        conversationId: item.conversationId,
-        senderId: item.senderUserId ?? item.senderRole,
-        senderLabel: item.senderLabel ?? IVX_OWNER_AI_PROFILE.name,
-        text: 'I was unable to display this reply. Please try resending.',
-        replyTo: null,
-        createdAt: item.createdAt,
-        sendStatus: 'failed' as const,
-        optimistic: false,
-        localOnly: false} satisfies ChatMessage;
-      return (
-        <>
-          {shouldShowDateSeparator ? <DateSeparator value={item.createdAt} /> : null}
-          <View
-            style={[styles.messageRow, styles.messageRowOther]}
-            testID={`ivx-owner-message-${item.id}`}
-          >
-            <MessageBubble message={fallbackChatMessage} isMine={false} />
-          </View>
-        </>
-      );
-    }
-
-    if (isSystem) {
-      const structuredRows = parseStructuredSystemMessage(item.body);
-      const resultRow = structuredRows?.find((row) => row.label.toLowerCase() === 'result');
-      const isApprovalCard = resultRow?.value === 'OWNER_APPROVAL_REQUIRED';
-      const approvalBody = item.body ?? '';
-      return (
-        <>
-          {shouldShowDateSeparator ? <DateSeparator value={item.createdAt} /> : null}
-          <View style={styles.systemMessageRow} testID={`ivx-owner-message-${item.id}`}>
-          <View style={styles.systemBubble}>
-            <View style={styles.systemLabelRow}>
-              <Terminal size={12} color={Colors.info} />
-              <Text style={styles.systemLabel}>{structuredRows ? 'Command Result' : 'System'}</Text>
-            </View>
-            {structuredRows ? (
-              <View style={styles.commandCard} testID={`ivx-owner-command-card-${item.id}`}>
-                {structuredRows.map((row, index) => (
-                  <View key={`${item.id}-${row.label}-${index}`} style={styles.commandRow}>
-                    <Text style={styles.commandLabel}>{row.label}</Text>
-                    <Text style={styles.commandValue}>{row.value}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : item.body ? <Text style={styles.systemText}>{item.body}</Text> : null}
-            {isApprovalCard ? (
-              <Pressable
-                style={styles.approveRunButton}
-                onPress={() => { void handleApproveAndRunFromCard(approvalBody); }}
-                accessibilityRole="button"
-                accessibilityLabel="Approve and run this build job"
-                testID={`ivx-owner-approve-run-${item.id}`}
-              >
-                <PlayCircle size={16} color={Colors.black} />
-                <Text style={styles.approveRunButtonText}>Approve + Run</Text>
-              </Pressable>
-            ) : null}
-            <Text style={styles.systemMeta}>{formatMessageTime(item.createdAt)}</Text>
-          </View>
-        </View>
-        </>
-      );
-    }
-
-    // FINAL IVX IA CHAT EXECUTION MODE (owner mandate 2026-07-19): when the
-    // assistant message carries an executionStatus payload (attached by the
-    // send path when the backend returned 202 for fix/build/deploy/audit/QA/
-    // refactor/migration/create module/create app/senior developer prompts),
-    // render a live-polling ExecutionConsoleBubble instead of the plain
-    // MessageBubble. The console polls the worker statusUrl, streams live
-    // stage/progress, and swaps to the verified-evidence block when the job
-    // reaches a terminal state. No narrative planning â€” execution only.
-    const executionStatusForMessage = isAssistant
-      ? executionStatusByMessageId.get(item.id) ?? null
-      : null;
-    if (isAssistant && executionStatusForMessage) {
-      const coerced = coerceExecutionStatusFromPayload(executionStatusForMessage);
-      if (coerced) {
-        return (
-          <>
-            {shouldShowDateSeparator ? <DateSeparator value={item.createdAt} /> : null}
-            <View
-              style={[styles.messageRow, styles.messageRowOther]}
-              testID={`ivx-owner-message-${item.id}`}
-            >
-              <ExecutionConsoleBubble
-                initialStatus={coerced}
-                authToken={null}
-                categoryLabel={coerced.category ?? undefined}
-              />
-            </View>
-          </>
-        );
-      }
-    }
-
-    const pendingState = pendingOwnerMessages.find((pendingMessage) => pendingMessage.clientId === item.id);
-    const parsedReplyBody = pendingState?.replyTo ? { replyTo: pendingState.replyTo, body: item.body ?? '' } : parseReplyBody(item.body);
-    const chatMessage = {
-      id: item.id,
-      conversationId: item.conversationId,
-      senderId: item.senderUserId ?? item.senderRole,
-      senderLabel: isAssistant ? (item.senderLabel ?? IVX_OWNER_AI_PROFILE.name) : (item.senderLabel ?? 'IVX Owner'),
-      text: parsedReplyBody.body,
-      replyTo: parsedReplyBody.replyTo,
-      createdAt: item.createdAt,
-      sendStatus: pendingState?.status === 'uploading' || pendingState?.status === 'uploaded' ? 'sending' : (pendingState?.status ?? 'sent'),
-      optimistic: pendingState?.status === 'sending' || pendingState?.status === 'uploading' || pendingState?.status === 'uploaded',
-      localOnly: Boolean(pendingState),
-      readBy: ownMessage && !pendingState ? ['owner', 'assistant'] : undefined,
-      fileUrl: item.attachmentUrl ?? undefined,
-      fileName: item.attachmentName ?? undefined,
-      fileMime: item.attachmentMime ?? undefined,
-      fileSize: item.attachmentSize ?? undefined,
-      fileType: item.attachmentKind === 'image'
-        ? 'image'
-        : item.attachmentKind === 'video'
-          ? 'video'
-          : item.attachmentKind === 'pdf'
-            ? 'pdf'
-            : item.attachmentUrl
-              ? 'file'
-              : undefined} satisfies ChatMessage;
-
-    return (
-      <>
-        {shouldShowDateSeparator ? <DateSeparator value={item.createdAt} /> : null}
-        <View
-          style={[
-            styles.messageRow,
-            ownMessage ? styles.messageRowOwn : styles.messageRowOther,
-            highlightedMessageId === item.id ? styles.messageRowHighlighted : null,
-          ]}
-          testID={`ivx-owner-message-${item.id}`}
-        >
-          <MessageBubble
-            message={chatMessage}
-            isMine={ownMessage}
-            searchQuery={messageSearchQuery}
-            onRetry={handleRetryMessage}
-            onDismiss={handleDismissFailedMessage}
-            onTogglePin={handleTogglePinnedMessage}
-            onReply={handleStartReplyToMessage}
-            onOpenReplyContext={handleJumpToMessage}
-            isPinned={pinnedMessageIdSet.has(item.id)}
-            isStreaming={currentStreamingMessageId === item.id}
-          />
-        </View>
-      </>
-    );
-  }, [currentStreamingMessageId, displayedMessages, executionStatusByMessageId, handleApproveAndRunFromCard, handleDismissFailedMessage, handleJumpToMessage, handleRetryMessage, handleStartReplyToMessage, handleTogglePinnedMessage, highlightedMessageId, messageSearchQuery, ownerId, pendingOwnerMessages, pinnedMessageIdSet]);
-
-  useEffect(() => {
-    const pendingMessageId = pendingJumpMessageIdRef.current;
-    if (!pendingMessageId) {
-      return;
-    }
-
-    // INVERTED FLATLIST: find index in invertedData (newest-first).
-    const targetIndex = invertedData.findIndex((message) => message.id === pendingMessageId);
-    if (targetIndex < 0) {
-      return;
-    }
-
-    suppressAutoScrollUntilRef.current = Date.now() + 2200;
-    flatListRef.current?.scrollToIndex({ index: targetIndex, animated: true, viewPosition: 0.65 });
-    pendingJumpMessageIdRef.current = null;
-    console.log('[IVXOwnerChatRoute] Completed pending reply context jump:', pendingMessageId, 'invertedIndex:', targetIndex);
-  }, [invertedData]);
-
-  const refreshing = messagesQuery.isRefetching || conversationQuery.isRefetching;
-  const isRecordingVoice = recorderState.isRecording;
-  const isTranscribingVoice = transcribeVoiceMutation.isPending;
-  const isBusy = sendMessageMutation.isPending || attachmentMutation.isPending || isPickingFile || isRecordingVoice || isTranscribingVoice;
-  const isAuthBlocked = !ownerAIAuthReady;
-  const sendingDisabled = (!composerHasText && draftAttachments.length === 0) || isBusy || isAuthBlocked;
-  const isAIWorking = aiReplyPending || sendMessageMutation.isPending || attachmentMutation.isPending;
-  // Auto-expire the inline Live Work task banner once the underlying work
-  // actually finishes. Without this, an "Auditing & verifying" banner set on a
-  // prior send stays "active" forever (it was only ever cleared by the explicit
-  // Dismiss button) and could be carried into an unrelated new conversation
-  // state. We only clear AFTER observing a workingâ†’idle transition, so the
-  // banner can't be wiped before the work it represents has begun.
-  const liveWorkTaskWasWorkingRef = useRef<boolean>(false);
-  useEffect(() => {
-    if (isAIWorking) {
-      if (activeLiveWorkTask) {
-        liveWorkTaskWasWorkingRef.current = true;
-      }
-      return;
-    }
-    if (liveWorkTaskWasWorkingRef.current && activeLiveWorkTask) {
-      liveWorkTaskWasWorkingRef.current = false;
-      const timeout = setTimeout(() => {
-        setActiveLiveWorkTask(null);
-      }, 3000);
-      return () => clearTimeout(timeout);
-    }
-    return undefined;
-  }, [activeLiveWorkTask, isAIWorking]);
-  const aiExecutionStage = useMemo<AIExecutionStage>(() => {
-    return resolveAIExecutionStage({
-      attachmentPending: attachmentMutation.isPending,
-      sendPending: sendMessageMutation.isPending,
-      aiReplyPending,
-      requestStage: runtimeDebugSnapshot.requestStage,
-      source: runtimeDebugSnapshot.source,
-      failureClass: runtimeDebugSnapshot.failureClass,
-      hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText});
-  }, [aiReplyPending, attachmentMutation.isPending, sendMessageMutation.isPending, runtimeDebugSnapshot.requestStage, runtimeDebugSnapshot.source, runtimeDebugSnapshot.failureClass, runtimeDebugSnapshot.hasVisibleResponseText]);
-  const aiWorkingMessage = useMemo<string>(() => {
-    return formatAIExecutionStage(aiExecutionStage);
-  }, [aiExecutionStage]);
-  const attachmentDisabled = attachmentMutation.isPending || isPickingFile || isRecordingVoice || isTranscribingVoice;
-  // Chat loading placeholders removed: the composer always shows the same
-  // prompt regardless of in-flight uploads/sends so the UI never feels stuck.
-  const composerPlaceholder = 'Message IVX Owner AI';
-  const activeFallbackForCurrentMessage = shouldShowFallbackUI({
-    source: normalizeRuntimeSource(runtimeDebugSnapshot.source),
-    requestStage: runtimeDebugSnapshot.requestStage,
-    failureClass: runtimeDebugSnapshot.failureClass,
-    isFallback: runtimeDebugSnapshot.source === 'provider_fallback',
-    isStreaming: hasActiveStreamingState(runtimeDebugSnapshot),
-    hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText});
-  // Loading state is fully removed: the room renders immediately as 'ready',
-  // backed by the durable local mirror + cached query placeholder data so the
-  // thread never blanks while the network refetch lands.
-  const primaryState = useMemo<'room_error' | 'ready'>(() => {
-    if ((messagesQuery.error || conversationQuery.error) && allMessages.length === 0) {
-      return 'room_error';
-    }
-
-    return 'ready';
-  }, [allMessages.length, conversationQuery.error, messagesQuery.error]);
-  const messageAudit = useMemo(() => {
-    const ownerMessages = allMessages.filter((message) => isOwnMessage(message, ownerId)).length;
-    const assistantMessages = allMessages.filter((message) => message.senderRole === 'assistant').length;
-
-    return {
-      ownerMessages,
-      assistantMessages};
-  }, [allMessages, ownerId]);
-  const lastSendAudit = useMemo<IVXOwnerSendAudit | null>(() => {
-    return ivxChatService.getLastOwnerSendAudit();
-  }, [allMessages.length, aiReplyPending, sendMessageMutation.isPending, attachmentMutation.isPending, isPickingFile]);
-  const lastReceiveAudit = useMemo<IVXOwnerReceiveAudit | null>(() => {
-    return ivxChatService.getLastOwnerReceiveAudit();
-  }, [allMessages.length, realtimeEventsObserved, realtimeSubscriptionState]);
-  const realtimeSubscriptionAudit = useMemo<IVXOwnerRealtimeSubscriptionAudit>(() => {
-    return ivxChatService.getOwnerRealtimeSubscriptionAudit();
-  }, [allMessages.length, realtimeEventsObserved, realtimeSubscriptionState]);
-  const deliveryBranchStatus = useMemo<DeliveryBranchStatus>(() => {
-    return getDeliveryBranchStatus(lastSendAudit);
-  }, [lastSendAudit]);
-  const receiveBranchStatus = useMemo<ReceiveBranchStatus>(() => {
-    return getReceiveBranchStatus(lastReceiveAudit);
-  }, [lastReceiveAudit]);
-  const runtimeSnapshot = useMemo(() => {
-    return buildIVXRoomRuntimeSnapshot({
-      roomId: conversationQuery.data?.id ?? 'ivx-owner-room',
-      roomStatus: ivxRoomStatus,
-      roomProbeObservedAt: roomProbeAt,
-      aiHealth: effectiveAiHealthDetail,
-      aiProbeObservedAt: aiProbeMetadata.observedAt,
-      aiSource: runtimeSignals.aiBackendSource ?? 'unknown',
-      aiEndpoint: runtimeDebugSnapshot.endpoint ?? aiProbeMetadata.endpoint,
-      deploymentMarker: runtimeDebugSnapshot.deploymentMarker ?? aiProbeMetadata.deploymentMarker,
-      model: runtimeSignals.aiBackendSource === 'local_app_brain' ? 'ivx-local-app-brain' : runtimeSignals.aiBackendSource === 'remote_api' ? 'ivx-owner-remote' : 'unverified',
-      messages: allMessages,
-      messageSendPending: sendMessageMutation.isPending,
-      aiReplyPending,
-      attachmentPending: attachmentMutation.isPending || isPickingFile,
-      lastSendAt,
-      lastReplyAt,
-      sendFailures: sendMessageMutation.isError ? 1 : 0,
-      replyFailures,
-      fallbackSuccessCount,
-      realtimeEventsObserved,
-      latencySamplesMs,
-      realtimeSubscriptionState,
-      deliveryProof: {
-        sendBranch: deliveryBranchStatus.branch,
-        sendTitle: deliveryBranchStatus.title,
-        sendDetail: deliveryBranchStatus.detail,
-        sendEvidence: deliveryBranchStatus.evidence,
-        sendObservedAt: lastSendAudit?.observedAt ?? null,
-        receiveBranch: receiveBranchStatus.branch,
-        receiveTitle: receiveBranchStatus.title,
-        receiveDetail: receiveBranchStatus.detail,
-        receiveEvidence: receiveBranchStatus.evidence,
-        receiveObservedAt: lastReceiveAudit?.observedAt ?? null}});
-  }, [
-    effectiveAiHealthDetail,
-    aiProbeMetadata.deploymentMarker,
-    aiProbeMetadata.endpoint,
-    aiProbeMetadata.observedAt,
-    aiReplyPending,
-    allMessages,
-    attachmentMutation.isPending,
-    conversationQuery.data?.id,
-    deliveryBranchStatus.branch,
-    deliveryBranchStatus.detail,
-    deliveryBranchStatus.evidence,
-    deliveryBranchStatus.title,
-    isPickingFile,
-    ivxRoomStatus,
-    lastReceiveAudit?.observedAt,
-    lastReplyAt,
-    lastSendAt,
-    lastSendAudit?.observedAt,
-    latencySamplesMs,
-    sendMessageMutation.isPending,
-    realtimeEventsObserved,
-    realtimeSubscriptionState,
-    receiveBranchStatus.branch,
-    receiveBranchStatus.detail,
-    receiveBranchStatus.evidence,
-    receiveBranchStatus.title,
-    replyFailures,
-    fallbackSuccessCount,
-    roomProbeAt,
-    runtimeDebugSnapshot.deploymentMarker,
-    runtimeDebugSnapshot.endpoint,
-    runtimeSignals.aiBackendSource,
-    sendMessageMutation.isError,
-  ]);
-  const backendAuditSummary = useMemo<BackendAuditSummary>(() => {
-    const configuredBaseUrl = ownerAIConfigAudit.configuredBaseUrl;
-    const activeBaseUrl = ownerAIConfigAudit.activeBaseUrl;
-    const configSource = ownerAIConfigAudit.configuredFrom ?? (ownerAIConfigAudit.fallbackUsed ? 'EXPO_PUBLIC_PROJECT_ID derived dev fallback' : 'unconfigured');
-    const activeEndpoint = aiProbeMetadata.endpoint ?? ownerAIConfigAudit.activeEndpoint ?? 'unconfigured';
-    const lastFailureReason = aiProbeMetadata.lastFailureReason?.toLowerCase() ?? '';
-
-    let failureMode = ownerAIConfigAudit.configurationError ?? 'No backend probe failure captured yet.';
-    let recommendedResolution = ownerAIConfigAudit.currentEnvironment === 'production'
-      ? 'Set EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL to the intended public Owner AI base URL for production.'
-      : 'Set EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL to pin development to a specific backend, or keep the project-scoped fallback derived from EXPO_PUBLIC_PROJECT_ID.';
-
-    if (ownerAIConfigAudit.mismatchWarnings.length > 0) {
-      failureMode = ownerAIConfigAudit.mismatchWarnings[0] ?? failureMode;
-      recommendedResolution = 'Align the owner-room host, the app-wide API host, and the DNS audit target before debugging the upstream runtime further.';
-    }
-
-    if (!ownerAIRoutingBlocked && ownerAIConfigAudit.fallbackUsed) {
-      failureMode = 'Development routing is using the project-scoped fallback derived from EXPO_PUBLIC_PROJECT_ID because no explicit owner AI base URL is configured.';
-      recommendedResolution = 'This is allowed in development. Set EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL if you want dev to target a fixed backend instead of the EXPO_PUBLIC_PROJECT_ID fallback.';
-    }
-
-    if (lastFailureReason.includes('could not resolve host') || lastFailureReason.includes('failed to fetch') || lastFailureReason.includes('network request failed') || lastFailureReason.includes('load failed')) {
-      failureMode = `The active endpoint was unreachable from the client runtime. Last failure: ${aiProbeMetadata.lastFailureReason ?? 'network resolution failure'}.`;
-      recommendedResolution = activeBaseUrl
-        ? `Verify DNS and public reachability for ${activeBaseUrl}. If this backend is private or internal-only, point this build to the correct public Owner AI base URL via EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL.`
-        : recommendedResolution;
-    }
-
-    if (ownerAIConfigAudit.currentEnvironment === 'production' && !ownerAIRoutingBlocked && lastFailureReason) {
-      recommendedResolution = `${recommendedResolution} Production does not silently downgrade Owner AI routing to a dev host or provider-backed health state when the configured remote endpoint fails.`;
-    }
-
-    if (ownerAIRoutingBlocked && ownerAIConfigAudit.currentEnvironment === 'production') {
-      recommendedResolution = ownerAIConfigAudit.pointsToDevHost
-        ? 'Replace the development-like Owner AI host with the intended production public URL in EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL.'
-        : 'Provide EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL in production. No implicit fallback to EXPO_PUBLIC_IVX_API_BASE_URL or project-scoped dev hosts is allowed.';
-    }
-
-    return {
-      currentEnvironment: ownerAIConfigAudit.currentEnvironment,
-      routingPolicy: ownerAIConfigAudit.routingPolicy,
-      auditState: ownerAIRoutingBlocked
-        ? 'guard_blocked'
-        : ownerAIConfigAudit.mismatchWarnings.length > 0
-          ? 'split_host_path'
-          : effectiveAiHealthDetail === 'active'
-            ? 'live'
-            : effectiveAiHealthDetail === 'degraded'
-              ? 'degraded'
-              : 'probing_or_unverified',
-      configSource,
-      explicitProductionPin: ownerAIConfigAudit.explicitProductionPinApplied
-        ? `yes â€” ${ownerAIConfigAudit.configuredBaseUrl ?? ownerAIConfigAudit.canonicalBaseUrl}`
-        : 'no',
-      configuredOwnerAIBaseUrl: configuredBaseUrl ?? 'unconfigured',
-      activeBaseUrl: activeBaseUrl ?? 'blocked',
-      activeHost: ownerAIConfigAudit.activeHost ?? 'unconfigured',
-      activeEndpoint,
-      directApiBaseUrl: ownerAIConfigAudit.directApiBaseUrl ?? 'unconfigured',
-      directApiHost: ownerAIConfigAudit.directApiHost ?? 'unconfigured',
-      ownerAiHealthUrl: ownerAIConfigAudit.healthCheckUrl ?? 'unconfigured',
-      ownerRoute53AuditUrl: ownerAIConfigAudit.route53AuditUrl ?? 'unconfigured',
-      ownerRoute53UpsertUrl: ownerAIConfigAudit.route53UpsertUrl ?? 'unconfigured',
-      appApiHealthUrl: ownerAIConfigAudit.appApiHealthCheckUrl ?? 'unconfigured',
-      appApiRoute53AuditUrl: ownerAIConfigAudit.appApiRoute53AuditUrl ?? 'unconfigured',
-      devFallbackBaseUrl: ownerAIConfigAudit.devFallbackBaseUrl ?? 'unconfigured',
-      activeFallbackBaseUrl: ownerAIConfigAudit.fallbackUsed ? (ownerAIConfigAudit.activeBaseUrl ?? 'unconfigured') : 'not-active',
-      selectionReason: ownerAIConfigAudit.selectionReason,
-      fallbackUsed: ownerAIConfigAudit.fallbackUsed ? `yes â€” ${ownerAIConfigAudit.fallbackReason ?? 'development fallback applied'}` : 'no',
-      whyFallbackSelected: ownerAIConfigAudit.fallbackReason ?? (ownerAIConfigAudit.fallbackUsed ? ownerAIConfigAudit.selectionReason : 'Fallback not selected.'),
-      wasFallbackUsed: ownerAIConfigAudit.fallbackUsed ? 'yes' : 'no',
-      productionGuard: ownerAIRoutingBlocked
-        ? `blocked â€” ${ownerAIConfigAudit.configurationError ?? 'Owner AI routing guard rejected this configuration.'}`
-        : ownerAIConfigAudit.currentEnvironment === 'production'
-          ? 'pass â€” production routing is explicitly set by EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL'
-          : 'pass â€” development routing policy allows explicit or project-scoped fallback',
-      productionGuardBlocked: ownerAIRoutingBlocked,
-      failureMode,
-      recommendedResolution,
-      gracefulDegradationNote: ownerAIRoutingBlocked
-        ? 'The room stays mounted, message sending still works, and AI health is forced inactive so production cannot appear healthy while misrouted.'
-        : ownerAIConfigAudit.currentEnvironment === 'production'
-          ? 'When the configured production backend is unreachable, the UI remains interactive, the thread stays mounted, a safe audit fallback message is persisted in-chat, and health stays inactive instead of silently switching to a development-style runtime fallback.'
-          : 'When the owner AI backend is unreachable, the UI remains interactive, the thread stays mounted, and a safe audit fallback response can keep development moving while routing is audited.',
-      workflowTrace: ownerAIConfigAudit.workflowTrace,
-      mismatchWarnings: ownerAIConfigAudit.mismatchWarnings};
-  }, [aiProbeMetadata.endpoint, aiProbeMetadata.lastFailureReason, effectiveAiHealthDetail, ownerAIConfigAudit, ownerAIRoutingBlocked]);
-
-  const auditReport = useMemo(() => {
-    return buildIVXChatAuditReport({
-      openAccessEnabled: isOpenAccessBuild,
-      ownerAuthenticated: !!user || !!userId,
-      conversationReady: !!conversationQuery.data?.id && !conversationQuery.error,
-      messageListReady: !messagesQuery.error,
-      roomStatus: ivxRoomStatus,
-      runtimeSnapshot,
-      aiIndicatorState: resolution.aiIndicator.state,
-      aiIndicatorLabel: resolution.aiIndicator.label,
-      aiIndicatorDetail: resolution.aiIndicator.detail,
-      ownerAIConfigAudit,
-      activeEndpoint: backendAuditSummary.activeEndpoint,
-      lastFailureReason: aiProbeMetadata.lastFailureReason,
-      sendFailures: sendMessageMutation.isError ? 1 : 0,
-      replyFailures,
-      fallbackSuccessCount,
-      realtimeEventsObserved,
-      realtimeSubscriptionState,
-      messageCount: allMessages.length,
-      assistantMessageCount: messageAudit.assistantMessages});
-  }, [
-    aiProbeMetadata.lastFailureReason,
-    allMessages.length,
-    backendAuditSummary.activeEndpoint,
-    conversationQuery.data?.id,
-    conversationQuery.error,
-    isOpenAccessBuild,
-    ivxRoomStatus,
-    messageAudit.assistantMessages,
-    messagesQuery.error,
-    ownerAIConfigAudit,
-    realtimeEventsObserved,
-    realtimeSubscriptionState,
-    replyFailures,
-    fallbackSuccessCount,
-    resolution.aiIndicator.detail,
-    resolution.aiIndicator.label,
-    resolution.aiIndicator.state,
-    runtimeSnapshot,
-    sendMessageMutation.isError,
-    user,
-    userId,
-  ]);
-  const topStatusNote = useMemo(() => {
-    // Per-message error UI and the chat send queue technical errors now
-    // surface failures contextually. The stale top banner sourced from
-    // runtimeDebugSnapshot could persist after a successful send and
-    // mislead the owner, so it is intentionally suppressed.
-    return null;
-  }, []);
-  const ownerAIProofStatus = useMemo<OwnerAIProofStatus>(() => {
-    if (localFirstChatMode) {
-      return {
-        id: 'local_app_brain_ready',
-        tone: 'pass',
-        title: 'local IVX brain ready',
-        detail: 'The IVX chat room is running from the app first. Normal messages, assistant replies, attachments, and reloads stay available on this device.',
-        evidence: 'local_device_only Â· local_app_brain Â· optional_backend_later',
-        testID: 'ivx-owner-proof-local-app-brain-ready'};
-    }
-
-    if (devTestMode.testModeActive) {
-      return {
-        id: 'remote_api_verified',
-        tone: 'pass',
-        title: 'owner test mode active',
-        detail: 'Verified owner session is active. Owner actions can use the live response path.',
-        evidence: 'owner_room_authenticated Â· backend_admin_verified Â· full_backend_execution',
-        testID: 'ivx-owner-proof-test-mode-active'};
-    }
-
-    const normalizedRuntimeState = {
-      source: normalizeRuntimeSource(runtimeDebugSnapshot.source),
-      requestStage: runtimeDebugSnapshot.requestStage,
-      failureClass: runtimeDebugSnapshot.failureClass,
-      isFallback: runtimeDebugSnapshot.source === 'provider_fallback',
-      isStreaming: hasActiveStreamingState(runtimeDebugSnapshot),
-      hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText};
-    const requestIsPending = isPendingRequestState(normalizedRuntimeState);
-    const activeFallback = shouldShowFallbackUI(normalizedRuntimeState);
-    const missingOwnerAuth = !ownerRoomAuthenticated;
-    const remoteApiVerified = runtimeSnapshot.provider.source === 'remote_api'
-      && auditReport.remoteReplyVerified
-      && safeTrim(runtimeSnapshot.provider.endpoint).length;
-
-    if (remoteApiVerified) {
-      return {
-        id: 'remote_api_verified',
-        tone: 'pass',
-        title: 'remote_api verified',
-        detail: 'The deployed IVX endpoint answered the room probe and remote reply proof is verified in this runtime snapshot.',
-        evidence: `${runtimeSnapshot.provider.endpoint ?? backendAuditSummary.activeEndpoint} Â· deployment ${runtimeSnapshot.provider.deploymentMarker ?? 'missing'} Â· source ${runtimeSnapshot.provider.source}`,
-        testID: 'ivx-owner-proof-remote-api-verified'};
-    }
-
-    if (missingOwnerAuth) {
-      return {
-        id: 'blocked_by_auth',
-        tone: 'blocked',
-        title: 'blocked by auth',
-        detail: 'Remote admin proof is blocked because owner-room trust is not established in this runtime yet. Normal owner chat should only require room trust, not repeated backend re-verification.',
-        evidence: `${backendAuditSummary.currentEnvironment} runtime Â· source ${runtimeSnapshot.provider.source} Â· endpoint ${runtimeSnapshot.provider.endpoint ?? backendAuditSummary.activeEndpoint}`,
-        testID: 'ivx-owner-proof-blocked-by-auth'};
-    }
-
-    if (activeFallback && !requestIsPending) {
-      const fallbackHasVisibleReply = normalizedRuntimeState.hasVisibleResponseText === true;
-      return {
-        id: 'dev_fallback',
-        tone: fallbackHasVisibleReply ? 'pass' : 'pending',
-        title: fallbackHasVisibleReply ? 'assistant ready' : 'assistant path pending',
-        detail: fallbackHasVisibleReply
-          ? 'Reply delivered cleanly.'
-          : 'Normal conversation stays available while the reply path recovers.',
-        evidence: runtimeSnapshot.provider.endpoint ?? backendAuditSummary.activeEndpoint,
-        testID: fallbackHasVisibleReply ? 'ivx-owner-proof-assistant-ready' : 'ivx-owner-proof-assistant-pending'};
-    }
-
-    return {
-      id: 'remote_api_unverified',
-      tone: 'pending',
-      title: 'remote_api pending proof',
-      detail: 'Remote routing is configured, but a fresh verified remote reply proof has not landed yet in this room snapshot.',
-      evidence: `${runtimeSnapshot.provider.endpoint ?? backendAuditSummary.activeEndpoint} Â· runtime ${runtimeSnapshot.runtimeStatus} Â· stream ${runtimeSnapshot.streamStatus}`,
-      testID: 'ivx-owner-proof-remote-api-pending'};
-  }, [auditReport.remoteReplyVerified, backendAuditSummary.activeEndpoint, backendAuditSummary.activeFallbackBaseUrl, backendAuditSummary.currentEnvironment, backendAuditSummary.fallbackUsed, devTestMode.testModeActive, localFirstChatMode, ownerRoomAuthenticated, runtimeDebugSnapshot, runtimeSnapshot.provider.deploymentMarker, runtimeSnapshot.provider.endpoint, runtimeSnapshot.provider.source, runtimeSnapshot.runtimeStatus, runtimeSnapshot.streamStatus]);
-  const qaChecklist = useMemo<QAProofItem[]>(() => {
-    const canUseComposer = primaryState === 'ready';
-    const hasRoom = !!conversationQuery.data?.id && !conversationQuery.error;
-    const sendReady = canUseComposer && !isBusy;
-    const assistantReady = resolution.aiIndicator.state === 'available' || resolution.aiIndicator.state === 'degraded' || isOpenAccessBuild;
-    const transcriptHealthy = runtimeSnapshot.transcriptIntegrity === 'verified';
-
-    return [
-      {
-        id: 'dev-unblock',
-        label: 'Room access',
-        passed: ownerRoomAuthenticated,
-        detail: ownerRoomAuthenticated
-          ? `Room trust active as ${isOpenAccessBuild ? 'open_access_dev_bypass' : 'owner_room_authenticated'}.`
-          : 'Owner room trust is not established yet.'},
-      {
-        id: 'room-bootstrap',
-        label: 'Room bootstrap',
-        passed: hasRoom,
-        detail: hasRoom
-          ? `Room ready: ${conversationQuery.data?.title ?? IVX_OWNER_AI_PROFILE.sharedRoom.title}.`
-          : conversationQuery.error?.message ?? 'Owner room is still bootstrapping.'},
-      {
-        id: 'thread-load',
-        label: 'Thread load',
-        passed: !messagesQuery.error,
-        detail: messagesQuery.error
-          ? messagesQuery.error.message
-          : allMessages.length > 0
-            ? `${allMessages.length} message(s) loaded in the thread.`
-            : 'Thread is open and ready for the first message.'},
-      {
-        id: 'composer-dock',
-        label: 'Composer dock',
-        passed: canUseComposer,
-        detail: canUseComposer
-          ? 'Input and send controls stay docked above the bottom inset.'
-          : 'Composer is intentionally hidden while the room is recovering.'},
-      {
-        id: 'send-path',
-        label: 'Send path',
-        passed: sendReady,
-        detail: sendReady
-          ? sendingDisabled
-            ? 'Send button is visible. Enter text to enable sending.'
-            : 'Send button is visible and ready to deliver the next message.'
-          : 'Send path is temporarily busy with an active send or upload.'},
-      {
-        id: 'assistant-path',
-        label: 'Assistant path',
-        passed: assistantReady,
-        detail: ownerAIRoutingBlocked
-          ? `Blocked by routing guard. ${ownerAIConfigAudit.configurationError ?? 'Owner AI production configuration is invalid.'}`
-          : `${resolution.aiIndicator.label}. ${resolution.aiIndicator.detail} Source: ${runtimeSnapshot.provider.source}. Endpoint: ${backendAuditSummary.activeEndpoint}.`},
-      {
-        id: 'provider-proof-mode',
-        label: 'Provider proof mode',
-        passed: ownerAIProofStatus.id === 'remote_api_verified',
-        detail: `${ownerAIProofStatus.title}. ${ownerAIProofStatus.detail} Evidence: ${ownerAIProofStatus.evidence}.`},
-      {
-        id: 'transcript-proof',
-        label: 'Transcript proof',
-        passed: transcriptHealthy,
-        detail: runtimeSnapshot.duplicateWriteDetected
-          ? 'Duplicate transcript write risk detected in the loaded thread.'
-          : messageAudit.assistantMessages > 0
-            ? `${messageAudit.ownerMessages} owner message(s) and ${messageAudit.assistantMessages} assistant reply/replies detected with ordered transcript audit.`
-            : messageAudit.ownerMessages > 0
-              ? `${messageAudit.ownerMessages} owner message(s) detected. Awaiting an assistant reply proof in this loaded thread.`
-              : 'No persisted proof messages yet in this session.'},
-    ];
-  }, [
-    allMessages.length,
-    conversationQuery.data?.id,
-    conversationQuery.data?.title,
-    conversationQuery.error,
-    backendAuditSummary.activeEndpoint,
-    isBusy,
-    isOpenAccessBuild,
-    ownerAIConfigAudit.configurationError,
-    ownerAIRoutingBlocked,
-    messageAudit.assistantMessages,
-    messageAudit.ownerMessages,
-    messagesQuery.error,
-    ownerAIProofStatus.detail,
-    ownerAIProofStatus.evidence,
-    ownerAIProofStatus.id,
-    ownerAIProofStatus.title,
-    ownerRoomAuthenticated,
-    primaryState,
-    resolution.aiIndicator.detail,
-    resolution.aiIndicator.label,
-    resolution.aiIndicator.state,
-    runtimeSnapshot.duplicateWriteDetected,
-    runtimeSnapshot.provider.source,
-    runtimeSnapshot.transcriptIntegrity,
-    sendingDisabled,
-  ]);
-  const qaOverallPassed = useMemo(() => qaChecklist.every((item) => item.passed), [qaChecklist]);
-  const functionalityProofList = useMemo<IVXFunctionalityProofItem[]>(() => {
-    return buildIVXFunctionalityProofList(auditReport, runtimeSnapshot);
-  }, [auditReport, runtimeSnapshot]);
-  const functionalityProofCounts = useMemo(() => {
-    return functionalityProofList.reduce(
-      (counts, item) => {
-        if (item.status === 'live') {
-          counts.live += 1;
-        } else if (item.status === 'pass') {
-          counts.pass += 1;
-        } else {
-          counts.fail += 1;
-        }
-        return counts;
-      },
-      { live: 0, pass: 0, fail: 0 },
-    );
-  }, [functionalityProofList]);
-  useEffect(() => {
-    auditReportRef.current = auditReport;
-  }, [auditReport]);
-  const ownerGraphNodes = useMemo<CTSystemNode[]>(() => {
-    if (!nerveSnapshot) {
-      return [];
-    }
-
-    const allowedNodeIds = new Set<string>([
-      'module:chat',
-      'module:ai_ops',
-      'module:realtime_sync',
-      'service:chat_transport',
-      'service:ai_runtime',
-      'service:shared_room',
-      'service:inbox_sync',
-      'service:realtime',
-    ]);
-
-    return nerveSnapshot.systemNodes
-      .filter((node) => allowedNodeIds.has(node.id))
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .slice(0, 6);
-  }, [nerveSnapshot]);
-  const ownerGraphProofs = useMemo<CTEvidenceRecord[]>(() => {
-    if (!nerveSnapshot) {
-      return [];
-    }
-
-    return nerveSnapshot.evidence
-      .filter((proof) => proof.subjectId.includes('chat') || proof.subjectId.includes('ai_') || proof.subjectId.includes('shared_room') || proof.subjectId.includes('realtime') || proof.subjectId.includes('inbox_sync'))
-      .sort((a, b) => new Date(b.observedAt).getTime() - new Date(a.observedAt).getTime())
-      .slice(0, 3);
-  }, [nerveSnapshot]);
-  const ownerGraphRisks = useMemo<CTRiskAssessment[]>(() => {
-    if (!nerveSnapshot) {
-      return [];
-    }
-
-    return nerveSnapshot.riskAssessments
-      .filter((risk) => risk.subjectId.includes('chat') || risk.subjectId.includes('ai_ops') || risk.subjectId.includes('realtime_sync'))
-      .sort((a, b) => b.currentRiskScore - a.currentRiskScore)
-      .slice(0, 3);
-  }, [nerveSnapshot]);
-  const ownerActionFeed = useMemo<CTOperatorActionRun[]>(() => {
-    if (!nerveSnapshot) {
-      return [];
-    }
-
-    return nerveSnapshot.actionRuns
-      .filter((action) => action.targetId.includes('chat') || action.targetId.includes('ai_ops') || action.targetId.includes('realtime_sync'))
-      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
-      .slice(0, 2);
-  }, [nerveSnapshot]);
-  const roomControlMutation = useMutation<{ success: boolean; message: string }, Error, 'rerun_health_probe' | 'transition_stuck_sends'>({
-    mutationFn: async (action) => {
-      console.log('[IVXOwnerChatRoute] Executing room control action:', action);
-      return executeOperatorAction(action, 'chat');
-    },
-    onSuccess: async (result, action) => {
-      invalidateIVXRoomProbeCache();
-      await queryClient.invalidateQueries({ queryKey: IVX_ROOM_STATUS_QUERY_KEY });
-      setAiHealthDetail('inactive');
-      const affectedDependencies = ownerGraphNodes.slice(0, 3).map((node) => node.name).join(' â†’ ') || 'chat transport';
-      const linkedProofs = ownerGraphProofs.slice(0, 2).map((proof) => proof.claim).join(' | ') || 'No fresh linked proofs yet';
-      await persistSupportMessage([
-        `Result: ${result.success ? 'success' : 'failed'}`,
-        `Explanation: ${result.message}`,
-        `Evidence: ${linkedProofs}`,
-        `Dependencies: ${affectedDependencies}`,
-        `Action: ${getActionLabel(action)}`,
-        `Rollback: ${action === 'transition_stuck_sends' ? 'available' : 'not required'}`,
-      ].join('\n'), 'system');
-    },
-    onError: async (error, action) => {
-      await persistSupportMessage([
-        'Result: failed',
-        `Explanation: ${error.message}`,
-        `Evidence: ${ownerGraphProofs.slice(0, 1).map((proof) => proof.claim).join(' | ') || 'No fresh linked proofs yet'}`,
-        `Dependencies: ${ownerGraphNodes.slice(0, 3).map((node) => node.name).join(' â†’ ') || 'chat transport'}`,
-        `Action: ${getActionLabel(action)}`,
-        'Rollback: not executed',
-      ].join('\n'), 'system');
-    }});
-  useEffect(() => {
-    roomRuntimeRef.current = runtimeSnapshot;
-  }, [runtimeSnapshot]);
-
-  const proofBadgeTone = useMemo<'pass' | 'warn' | 'blocked' | 'pending'>(() => {
-    if (runtimeSnapshot.runtimeStatus === 'live') return 'pass';
-    if (runtimeSnapshot.runtimeStatus === 'blocked') return 'blocked';
-    if (runtimeSnapshot.runtimeStatus === 'probing') return 'pending';
-    return 'warn';
-  }, [runtimeSnapshot.runtimeStatus]);
-  const proofBadgeLabel = useMemo<string>(() => {
-    if (runtimeSnapshot.runtimeStatus === 'live') return 'Live';
-    if (runtimeSnapshot.runtimeStatus === 'blocked') return 'Blocked';
-    if (runtimeSnapshot.runtimeStatus === 'probing') return 'Probing';
-    return activeFallbackForCurrentMessage ? 'Recovering' : 'Review';
-  }, [activeFallbackForCurrentMessage, runtimeSnapshot.runtimeStatus]);
-  const proofRows = useMemo<IVXProofRecord[]>(() => runtimeSnapshot.proofs, [runtimeSnapshot.proofs]);
-  const liveChatMetric = useMemo(() => {
-    return liveSnapshot.moduleMetrics.find((metric) => metric.moduleId === 'chat') ?? null;
-  }, [liveSnapshot.moduleMetrics]);
-  const liveTopSource = useMemo(() => {
-    return liveSnapshot.sourceMetrics[0] ?? null;
-  }, [liveSnapshot.sourceMetrics]);
-  const qaScopeNote = useMemo(() => {
-    if (isOpenAccessBuild) {
-      return 'Shared room/composer fixes are in shared code. Direct room-open bypass remains dev-only.';
-    }
-
-    return 'This route is running the shared room/composer fixes in the standard owner flow.';
-  }, [isOpenAccessBuild]);
-  const handleRoomControlActionPress = useCallback((action: 'rerun_health_probe' | 'transition_stuck_sends') => {
-    if (devTestMode.testModeActive) {
-      roomControlMutation.mutate(action);
-      return;
-    }
-
-    const actionLabel = getActionLabel(action);
-
-    if (fallbackChatOnlyActive || !backendAdminVerified) {
-      void persistSupportMessage(buildFallbackChatOnlyExecutionMessage({
-        normalizedText: `/${action === 'rerun_health_probe' ? 'heal rerun-proof' : 'heal clear-stuck'}`,
-        requestClass: 'admin_execution'}), 'system');
-      return;
-    }
-
-    Alert.alert(
-      'Confirm owner action',
-      `Continue with ${actionLabel}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Continue',
-          onPress: () => {
-            roomControlMutation.mutate(action);
-          }},
-      ],
-    );
-  }, [backendAdminVerified, devTestMode.testModeActive, fallbackChatOnlyActive, persistSupportMessage, roomControlMutation]);
-  const androidKeyboardActive = Platform.OS === 'android' && keyboardInset > 0;
-  const androidRootResizedByKeyboard = useMemo<boolean>(() => {
-    if (!androidKeyboardActive || rootLayoutHeight <= 0 || lastNonKeyboardRootHeightRef.current <= 0) {
-      return false;
-    }
-    const heightShrink = lastNonKeyboardRootHeightRef.current - rootLayoutHeight;
-    return heightShrink >= Math.max(80, keyboardInset * 0.35);
-  }, [androidKeyboardActive, keyboardInset, rootLayoutHeight]);
-  const manualKeyboardLift = useMemo<number>(() => {
-    if (!androidKeyboardActive || androidRootResizedByKeyboard) {
-      return 0;
-    }
-    return Math.min(Math.max(keyboardInset - insets.bottom + 10, 180), 360);
-  }, [androidKeyboardActive, androidRootResizedByKeyboard, insets.bottom, keyboardInset]);
-  const composerDockInset = useMemo(() => {
-    if (Platform.OS === 'android') {
-      return Math.max(insets.bottom, 16) + 8;
-    }
-    return Math.max(insets.bottom, 8) + 8;
-  }, [insets.bottom]);
-  const isKeyboardOpen = keyboardInset > 0;
-  const effectiveComposerBottom = useMemo(() => {
-    if (Platform.OS === 'android') {
-      if (isKeyboardOpen) {
-        return Math.max(insets.bottom, 12);
-      }
-      return composerDockInset;
-    }
-
-    if (isKeyboardOpen) {
-      return 4;
-    }
-
-    return composerDockInset;
-  }, [composerDockInset, insets.bottom, isKeyboardOpen]);
-  const listContentContainerStyle = useMemo(() => {
-    const bottomPadding = Math.max(composerHeight + effectiveComposerBottom + manualKeyboardLift + 96, insets.bottom + 120);
-    return displayedMessages.length === 0
-      ? [styles.emptyListContent, { paddingBottom: bottomPadding }]
-      : [styles.listContent, { paddingTop: 8, paddingBottom: bottomPadding }];
-  }, [displayedMessages.length, composerHeight, effectiveComposerBottom, insets.bottom, manualKeyboardLift]);
-  const developerToolsScrollPadding = useMemo<number>(() => {
-    return Math.max(composerHeight + effectiveComposerBottom + manualKeyboardLift + 48, insets.bottom + 120);
-  }, [composerHeight, effectiveComposerBottom, insets.bottom, manualKeyboardLift]);
-  const keyboardAvoidingBehavior = Platform.select<'height' | 'padding' | undefined>({
-    ios: 'padding',
-    android: 'height',
-    default: undefined});
-  const { keyboardHeight: webKeyboardHeight } = useWebKeyboard();
-  const keyboardVerticalOffset = useMemo<number>(() => {
-    if (Platform.OS !== 'ios') {
-      return 0;
-    }
-
-    return Math.max(insets.top + 56, 88);
-  }, [insets.top]);
-  const handleRootLayout = useCallback((event: LayoutChangeEvent) => {
-    const nextHeight = event.nativeEvent.layout.height;
-    if (nextHeight <= 0) {
-      return;
-    }
-    setRootLayoutHeight((current) => (Math.abs(current - nextHeight) > 1 ? nextHeight : current));
-    if (Platform.OS !== 'android' || keyboardInset <= 0) {
-      lastNonKeyboardRootHeightRef.current = nextHeight;
-    }
-  }, [keyboardInset]);
-  const renderPinnedMessagePreview = useCallback((message: IVXMessage) => {
-    const parsedPinnedBody = parseReplyBody(message.body);
-    const previewText = safeTrim(parsedPinnedBody.body) || safeTrim(message.attachmentName) || 'Attachment';
-    const senderLabel = message.senderRole === 'assistant' ? (message.senderLabel ?? IVX_OWNER_AI_PROFILE.name) : (message.senderLabel ?? 'IVX Owner');
-    return (
-      <View key={message.id} style={styles.pinnedMessageCard} testID={`ivx-owner-pinned-message-${message.id}`}>
-        <View style={styles.pinnedMessageTextStack}>
-          <Text style={styles.pinnedMessageSender} numberOfLines={1}>{senderLabel}</Text>
-          <Text style={styles.pinnedMessageText} numberOfLines={2}>{previewText}</Text>
-          {message.attachmentUrl ? <Text style={styles.pinnedMessageMeta} numberOfLines={1}>{`${message.attachmentName ?? 'Attachment'} Â· ${message.attachmentMime ?? message.attachmentKind}`}</Text> : null}
-        </View>
-        <Pressable
-          style={({ pressed }) => [styles.pinnedUnpinButton, pressed ? { opacity: 0.72 } : null]}
-          onPress={() => handleTogglePinnedMessage({ id: message.id } as ChatMessage)}
-          accessibilityRole="button"
-          accessibilityLabel="Unpin message"
-          testID={`ivx-owner-pinned-unpin-${message.id}`}
-        >
-          <X size={13} color="#F6C85F" />
-          <Text style={styles.pinnedUnpinText}>Unpin</Text>
-        </Pressable>
-      </View>
-    );
-  }, [handleTogglePinnedMessage]);
-
-  const pinnedMessagesSection = useMemo(() => {
-    if (pinnedMessages.length === 0) {
-      return null;
-    }
-
-    return (
-      <View style={styles.pinnedSection} testID="ivx-owner-pinned-section">
-        <View style={styles.pinnedSectionHeader}>
-          <Pin size={14} color="#F6C85F" />
-          <Text style={styles.pinnedSectionTitle}>Pinned messages</Text>
-          <Text style={styles.pinnedSectionCount}>{pinnedMessages.length}</Text>
-        </View>
-        <View style={styles.pinnedMessageList}>
-          {pinnedMessages.map(renderPinnedMessagePreview)}
-        </View>
-      </View>
-    );
-  }, [pinnedMessages, renderPinnedMessagePreview]);
-
-  const listFooter = useMemo(() => <View style={styles.listFooterSpacer} />, []);
-  // P0 chat UX fix: when the assistant is responding but no text has arrived
-  // yet, show a minimal animated typing indicator (pulsing dots) instead of
-  // static â€œrespondingâ€ / â€œprocessingâ€ text. Once the first delta arrives, the
-  // streaming bubble renders the live text with a blinking cursor. This removes
-  // all spinner-like static loading states and makes the response feel like
-  // real end-to-end typing.
-  const androidTopSpacerHeight = Platform.OS === 'android' ? Math.max(insets.top + 2, 24) : Math.max(insets.top, 0);
-  const runtimeProofHeadline = useMemo(() => getRuntimeProofHeadline(runtimeDebugSnapshot), [runtimeDebugSnapshot]);
-  // Owner-only live debug proof. Every value here is read live from the running
-  // client so the owner can confirm â€” on the device â€” which bundle/backend is
-  // active and that messages are actually saved and restored.
-  const ownerLiveDebug = useMemo(() => {
-    const wd = ivxAIWatchdog.getSnapshot();
-    const lastFinal = wd.finalized.length > 0 ? wd.finalized[wd.finalized.length - 1] : null;
-    const watchdogStatus = wd.active.length > 0
-      ? `running (${wd.active.length} active trace${wd.active.length === 1 ? '' : 's'})`
-      : lastFinal
-        ? `${lastFinal.finalStatus ?? 'idle'} Â· ${wd.finalized.length} trace${wd.finalized.length === 1 ? '' : 's'}`
-        : 'clean (no traces yet)';
-    const parserResult = runtimeDebugSnapshot.failureClass === 'response_invalid'
-      ? 'parse_failed (response_invalid)'
-      : runtimeDebugSnapshot.hasVisibleResponseText
-        ? 'clean (response parsed)'
-        : 'idle (no response yet)';
-    const storageSource = localFirstChatMode
-      ? 'AsyncStorage (local-first mirror)'
-      : isOpenAccessBuild
-        ? 'local fallback (open-access build)'
-        : 'Supabase (durable)';
-    const lastAIStatus = `${runtimeDebugSnapshot.requestStage} Â· ${runtimeDebugSnapshot.failureClass} Â· src=${normalizeRuntimeSource(runtimeDebugSnapshot.source)}`;
-    return {
-      frontendBuild: IVX_FRONTEND_BUILD_STAMP,
-      backendCommit: runtimeDebugSnapshot.deploymentMarker ?? aiProbeMetadata.deploymentMarker ?? 'pending',
-      backendEndpoint: runtimeDebugSnapshot.endpoint ?? backendAuditSummary.activeEndpoint,
-      conversationId: conversationQuery.data?.id ?? 'pending',
-      loadedMessageCount: `${messages.length} saved Â· ${allMessages.length} rendered`,
-      lastSavedMessageId: lastSendAudit?.messageId ?? 'pending',
-      lastAIStatus,
-      parserResult,
-      storageSource,
-      watchdogStatus};
-  }, [aiProbeMetadata.deploymentMarker, allMessages.length, backendAuditSummary.activeEndpoint, conversationQuery.data?.id, isOpenAccessBuild, localFirstChatMode, lastSendAudit?.messageId, messages.length, runtimeDebugSnapshot]);
-  const runtimeStatusCopy = useMemo(() => getRuntimeStatusCopy({
-    source: normalizeRuntimeSource(runtimeDebugSnapshot.source),
-    requestStage: runtimeDebugSnapshot.requestStage,
-    failureClass: runtimeDebugSnapshot.failureClass,
-    isFallback: runtimeDebugSnapshot.source === 'provider_fallback',
-    isStreaming: hasActiveStreamingState(runtimeDebugSnapshot),
-    hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText}), [runtimeDebugSnapshot]);
-  const runtimeProofPrimaryRows = useMemo<Array<{ label: string; value: string }>>(() => {
-    return [
-      { label: 'Request stage', value: runtimeDebugSnapshot.requestStage },
-      { label: 'Failure class', value: runtimeDebugSnapshot.failureClass },
-      { label: 'HTTP status', value: runtimeDebugSnapshot.httpStatus },
-      { label: 'Base URL', value: backendAuditSummary.activeBaseUrl },
-      { label: 'Endpoint', value: runtimeDebugSnapshot.endpoint ?? backendAuditSummary.activeEndpoint },
-      { label: 'Request ID', value: runtimeDebugSnapshot.requestId ?? 'pending' },
-      { label: 'Reliability attempts', value: lastReliabilityTrace ? `${lastReliabilityTrace.attempts.length} Â· ${lastReliabilityTrace.finalOutcome} Â· ${lastReliabilityTrace.totalElapsedMs}ms` : 'pending' },
-      { label: 'Response preview', value: runtimeDebugSnapshot.responsePreview },
-    ];
-  }, [backendAuditSummary.activeBaseUrl, backendAuditSummary.activeEndpoint, lastReliabilityTrace, runtimeDebugSnapshot]);
-  const developerToolsAllowed = useMemo<boolean>(() => {
-    return ownerRoomAuthenticated;
-  }, [ownerRoomAuthenticated]);
-  const developerStatusRows = useMemo<Array<{ id: string; label: string; value: string; tone: 'pass' | 'warn' | 'error' | 'pending' }>>(() => {
-    const supabasePending = conversationQuery.isLoading || messagesQuery.isLoading || roomStatusQuery.isLoading;
-    const supabaseReady = !conversationQuery.error && !messagesQuery.error && !roomStatusQuery.error;
-    const roomReady = !!conversationQuery.data?.id && !!ivxRoomStatus && !roomStatusQuery.isLoading;
-    const activeSource = getActiveRuntimeSource({
-      source: normalizeRuntimeSource(runtimeDebugSnapshot.source),
-      requestStage: runtimeDebugSnapshot.requestStage,
-      failureClass: runtimeDebugSnapshot.failureClass,
-      isFallback: runtimeDebugSnapshot.source === 'provider_fallback',
-      isStreaming: hasActiveStreamingState(runtimeDebugSnapshot),
-      hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText});
-    const proxyConnected = aiProxyStatus.status === 'connected';
-    const aiReady = activeSource === 'remote_api' || activeSource === 'local_app_brain' || effectiveAiHealthDetail === 'active' || proxyConnected;
-    const aiStatusValue = aiReady
-      ? activeSource === 'remote_api'
-        ? 'remote connected'
-        : activeSource === 'local_app_brain'
-          ? 'local brain ready'
-          : proxyConnected
-            ? `proxy connected Â· ${aiProxyStatus.model ?? 'model ready'}`
-            : 'ready'
-      : aiProxyStatus.status === 'checking'
-        ? 'checking proxy'
-        : aiProxyStatus.error
-          ? 'proxy needs attention'
-          : 'checking';
-
-    return [
-      { id: 'supabase', label: 'Supabase', value: supabaseReady ? 'connected' : supabasePending ? 'checking' : 'needs attention', tone: supabaseReady ? 'pass' : supabasePending ? 'pending' : 'error' },
-      { id: 'room', label: 'Room', value: roomReady ? `${ivxRoomStatus.storageMode} Â· ${ivxRoomStatus.deliveryMethod}` : roomStatusQuery.error ? 'probe failed' : 'opening', tone: roomReady ? 'pass' : roomStatusQuery.error ? 'error' : 'pending' },
-      { id: 'ai', label: 'AI', value: aiStatusValue, tone: aiReady ? 'pass' : aiReplyPending || aiProxyStatus.status === 'checking' ? 'pending' : 'warn' },
-      { id: 'audit', label: 'Audit', value: 'local + audit_events mirror', tone: 'pass' },
-      { id: 'files', label: 'Files', value: fileUploadActive ? 'upload + analysis active' : 'upload path ready', tone: fileUploadActive ? 'pass' : 'warn' },
-      { id: 'voice', label: 'Voice', value: isRecordingVoice ? 'recording' : isTranscribingVoice ? 'transcribing' : 'transcription ready', tone: isRecordingVoice || isTranscribingVoice ? 'pending' : 'pass' },
-      { id: 'templates', label: 'Templates', value: `${OWNER_PROMPT_TEMPLATES.length} business prompts`, tone: 'pass' },
-    ];
-  }, [aiProxyStatus.error, aiProxyStatus.model, aiProxyStatus.status, aiReplyPending, conversationQuery.data?.id, conversationQuery.error, conversationQuery.isLoading, effectiveAiHealthDetail, fileUploadActive, isRecordingVoice, isTranscribingVoice, ivxRoomStatus, messagesQuery.error, messagesQuery.isLoading, roomStatusQuery.error, roomStatusQuery.isLoading, runtimeDebugSnapshot]);
-  const sendBranchProof = useMemo<SendBranchProofRow>(() => {
-    return resolveSendBranch(
-      deliveryBranchStatus.branch,
-      runtimeDebugSnapshot.source,
-      runtimeDebugSnapshot.httpStatus,
-    );
-  }, [deliveryBranchStatus.branch, runtimeDebugSnapshot.source, runtimeDebugSnapshot.httpStatus]);
-
-  const composerStatusMessage = useMemo(() => {
-    if (devTestMode.testModeActive) {
-      return 'Assistant ready.';
-    }
-    // Auth state messages remain â€” these are not "loading" indicators.
-    if (ownerAIAuthState === 'AUTH_INITIALIZING') {
-      return 'Initializing IVX owner sessionâ€¦';
-    }
-    if (ownerAIAuthState === 'SIGNED_OUT') {
-      return 'Sign in as the IVX owner to use Owner AI.';
-    }
-    if (ownerAIAuthState === 'SESSION_REFRESHING') {
-      return 'Refreshing owner sessionâ€¦';
-    }
-    if (ownerAIAuthState === 'SIGNED_IN_MEMBER') {
-      return 'This account is not the IVX owner.';
-    }
-    if (ownerAIAuthState === 'AUTH_ERROR') {
-      return 'Authentication error. Tap to sign in again.';
-    }
-    // Loading indicators removed per owner request: the composer no longer
-    // displays "Recording...", "Transcribing...", or "Reply will appear"
-    // status text. The underlying voice/reply operations still work.
-    return 'Assistant ready.';
-  }, [devTestMode.testModeActive, ownerAIAuthState]);
-
-  const controlRoomItems = useMemo<IVXControlRoomItem[]>(() => {
-    if (controlRoomQuery.data?.statusItems && controlRoomQuery.data.statusItems.length > 0) {
-      return controlRoomQuery.data.statusItems;
-    }
-    if (controlRoomQuery.error) {
-      return [{ id: 'control-room', label: 'Owner/developer control room', status: 'not_connected', detail: controlRoomQuery.error.message }];
-    }
-    return CONTROL_ROOM_FALLBACK_ITEMS;
-  }, [controlRoomQuery.data?.statusItems, controlRoomQuery.error]);
-  const controlRoomSummary = useMemo(() => {
-    const verified = controlRoomItems.filter((item) => item.status === 'verified' || item.status === 'connected' || item.status === 'available').length;
-    const blocked = controlRoomItems.filter((item) => item.status === 'blocked' || item.status === 'missing_access' || item.status === 'not_connected' || item.status === 'not_verified').length;
-    return { verified, blocked, total: controlRoomItems.length };
-  }, [controlRoomItems]);
-  const shouldShowDiagnosticsToggle = developerToolsAllowed;
-
-  // â”€â”€ Chat QA Diagnostics â”€â”€
-  // Collect a live metrics snapshot for the owner-only QA panel. This reads
-  // ONLY structural metadata (IDs, counts, booleans) â€” no message contents,
-  // no tokens, no PII. The panel is gated behind developerToolsAllowed (owner
-  // auth) and can be disabled by setting IVX_CHAT_QA_PANEL_ENABLED = false.
-  const qaMetrics = useMemo<ChatQaMetrics>(() => {
-    return collectChatQaMetrics({
-      conversationId: canonicalConversationId,
-      activeRoomId: ownerSessionIdRef.current,
-      invertedData,
-      displayedMessages,
-      listInverted: true,
-      firstContentOffset: firstContentOffsetRecorded,
-      initialPositionApplied: !initialScrollPending,
-      userNearLatest: isAtBottomRef.current,
-      yellowArrowVisible: showScrollToLatest,
-      hasMoreOlderMessages: hasMoreOlderMessagesRef.current,
-      duplicateMessageCount: duplicateMessageCountRef.current,
-      realtimeSubscriptionCount: realtimeSubscriptionState ? 1 : 0,
-      lastReconnectTime: lastReconnectTimeRef.current,
-      traceId: qaTraceId});
-  }, [canonicalConversationId, invertedData, displayedMessages, firstContentOffsetRecorded, initialScrollPending, showScrollToLatest, realtimeSubscriptionState, qaTraceId]);
-
-  const handleSubmitQaEvidence = useCallback(async (report: string) => {
-    setQaSubmitting(true);
-    setQaSubmitResult(null);
-    try {
-      const token = await getIVXAccessToken();
-      const baseUrl = IVX_CANONICAL_API_BASE_URL;
-      const res = await fetch(`${baseUrl}/api/ivx/chat-qa/evidence`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})},
-        body: report});
-      if (res.ok) {
-        setQaSubmitResult('success');
-        console.log('[IVXChatQA] Evidence submitted successfully, traceId:', qaTraceId);
-      } else {
-        setQaSubmitResult('error');
-        console.log('[IVXChatQA] Evidence submission failed:', res.status);
-      }
-    } catch (error) {
-      setQaSubmitResult('error');
-      console.log('[IVXChatQA] Evidence submission error:', error instanceof Error ? error.message : 'unknown');
-    } finally {
-      setQaSubmitting(false);
-    }
-  }, [qaTraceId]);
-
-  // INVERTED FLATLIST: With `inverted={true}`, the newest message is at the
-  // TOP of the data array (index 0) and visually at the BOTTOM (anchored).
-  // "Scroll to latest" = scroll to offset 0 (the top of the inverted list).
-  // No setTimeout, no retry loop, no race condition â€” the inverted list
-  // naturally anchors at index 0 on first layout. This replaces the old
-  // scrollOwnerThreadToEnd (3 setTimeouts) + scrollToBottomRobust (4
-  // setTimeouts + scrollToIndex fallback) + 8-attempt retry loop that caused
-  // the defect where the chat opened on months-old messages.
-  const scrollOwnerThreadToEnd = useCallback((animated: boolean = true) => {
-    if (Date.now() < suppressAutoScrollUntilRef.current) {
-      return;
-    }
-    // Inverted list: offset 0 = newest message (visually at bottom).
-    requestAnimationFrame(() => {
-      flatListRef.current?.scrollToOffset({ offset: 0, animated });
-    });
-  }, []);
-
-  // INVERTED FLATLIST: scrollToBottomRobust is now a single deterministic
-  // call. The inverted list anchors at the newest message on first layout, so
-  // the initial scroll is a no-op (already at offset 0). This replaces the
-  // 4-setTimeout + scrollToIndex fallback that fired before dynamic bubble
-  // layout measurement completed.
-  const scrollToBottomRobust = useCallback((animated: boolean = false) => {
-    if (Date.now() < suppressAutoScrollUntilRef.current) {
-      return;
-    }
-    flatListRef.current?.scrollToOffset({ offset: 0, animated });
-  }, []);
-
-  // INVERTED FLATLIST: The retry loop is no longer needed. The inverted
-  // FlatList anchors at offset 0 (newest message) on first layout â€” zero
-  // setTimeout, zero retry. Clear the pending flag as soon as messages are
-  // present. The onLayout/onContentSizeChange handlers below also clear it.
-  useEffect(() => {
-    if (initialScrollPending && displayedMessages.length > 0) {
-      // Inverted list starts at offset 0 = newest. Mark positioned immediately.
-      isAtBottomRef.current = true;
-      setInitialScrollPending(false);
-      setShowScrollToLatest(false);
-    }
-  }, [initialScrollPending, displayedMessages.length]);
-
-  const handleMessageListScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    ivxDiagnostics.recordScroll('message-list');
-    mediaLifecycle.handleScroll(event);
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    // INVERTED FLATLIST: offset 0 = newest message (visually at bottom). The
-    // user is "at bottom" (latest) when contentOffset.y is near 0. The user is
-    // reading older history when contentOffset.y is large (scrolled down in
-    // inverted layout = visually scrolled up toward older messages).
-    const distanceFromLatest = Math.abs(contentOffset.y);
-    const maxScroll = Math.max(0, contentSize.height - layoutMeasurement.height);
-    const atBottom = distanceFromLatest < 96;
-    // QA diagnostics: record the first content offset observed after initial layout.
-    if (firstContentOffsetRecorded === null && displayedMessages.length > 0) {
-      setFirstContentOffsetRecorded(Math.round(contentOffset.y * 100) / 100);
-    }
-    const atTopOfInverted = maxScroll > 0 && contentOffset.y >= maxScroll - 120;
-    if (atBottom !== isAtBottomRef.current) {
-      isAtBottomRef.current = atBottom;
-      if (atBottom && initialScrollPending) {
-        setInitialScrollPending(false);
-      }
-      setShowScrollToLatest(!atBottom);
-      if (atBottom) {
-        setUnreadCount(0);
-      }
-    }
-    // INVERTED FLATLIST pagination: older history is at the BOTTOM of the
-    // inverted list (max scroll offset). When the user scrolls to the bottom
-    // of the inverted list (atTopOfInverted), fetch the next page of older
-    // messages. displayedMessages[0] is the OLDEST visible message.
-    if (
-      !searchActive &&
-      !initialScrollPending &&
-      atTopOfInverted &&
-      !loadingOlderMessagesRef.current &&
-      hasMoreOlderMessagesRef.current &&
-      displayedMessages.length > 0
-    ) {
-      const oldest = displayedMessages[0];
-      if (oldest) {
-        loadingOlderMessagesRef.current = true;
-        setOlderMessagesLoading(true);
-        ivxChatService
-          .listOlderOwnerMessages({
-            cursor: { createdAt: oldest.createdAt, id: oldest.id },
-            currentMessages: messagesQuery.data ?? []})
-          .then((result) => {
-            hasMoreOlderMessagesRef.current = result.hasMore;
-            if (result.addedCount > 0) {
-              // Preserve the scroll anchor: the FlatList keeps the currently-
-              // visible message in view because we only APPEND older rows to
-              // the end of the inverted data (visually above the newest).
-              queryClient.setQueryData<IVXMessage[]>(IVX_OWNER_MESSAGES_QUERY_KEY, () => result.messages);
-            }
-          })
-          .catch((error: unknown) => {
-            console.log('[IVXOwnerChatRoute] listOlderOwnerMessages failed:', error instanceof Error ? error.message : 'unknown');
-          })
-          .finally(() => {
-            loadingOlderMessagesRef.current = false;
-            setOlderMessagesLoading(false);
-          });
-      }
-    }
-  }, [initialScrollPending, searchActive, displayedMessages, messagesQuery.data, queryClient, mediaLifecycle]);
-
-  const handleScrollToLatest = useCallback(() => {
-    ivxDiagnostics.recordAutoScroll('jump-to-latest');
-    suppressAutoScrollUntilRef.current = 0;
-    isAtBottomRef.current = true;
-    setUnreadCount(0);
-    setShowScrollToLatest(false);
-    // INVERTED FLATLIST: offset 0 = newest message (visually at bottom).
-    // Single deterministic call â€” no setTimeout retry needed.
-    requestAnimationFrame(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }));
-  }, []);
-
-  // Floating chat navigation: when a message is sent or received, auto-scroll to the
-  // newest message UNLESS the owner is intentionally reading older messages â€” in which
-  // case surface the "jump to latest" button with an unread count instead.
-  useEffect(() => {
-    const previousCount = prevMessageCountRef.current;
-    const nextCount = displayedMessages.length;
-    const searchStateChanged = prevSearchActiveRef.current !== searchActive;
-    prevMessageCountRef.current = nextCount;
-    prevSearchActiveRef.current = searchActive;
-
-    // A search toggle swaps the visible data set; treat it as a re-sync, not new chat activity.
-    if (searchStateChanged || searchActive) {
-      return;
-    }
-    if (nextCount <= previousCount) {
-      return;
-    }
-    const added = nextCount - previousCount;
-    const readingOlder = !isAtBottomRef.current || Date.now() < suppressAutoScrollUntilRef.current;
-    if (readingOlder) {
-      setUnreadCount((current) => Math.min(current + added, 999));
-      setShowScrollToLatest(true);
-    } else {
-      ivxDiagnostics.recordAutoScroll('new-message');
-      scrollOwnerThreadToEnd(true);
-    }
-  }, [displayedMessages.length, searchActive, scrollOwnerThreadToEnd]);
-
-  useEffect(() => {
-    ivxDiagnostics.installConsoleInterceptor();
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (highlightedMessageTimeoutRef.current) {
-        clearTimeout(highlightedMessageTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    composerValueRef.current = composerValue;
-  }, [composerValue]);
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const handleKeyboardShow = (event: { endCoordinates?: { height?: number } }) => {
-      const nextInset = event.endCoordinates?.height ?? 0;
-      const normalizedInset = Platform.OS === 'android'
-        ? Math.max(nextInset - insets.bottom, 0)
-        : nextInset;
-      console.log('[IVXOwnerChatRoute] Keyboard shown inset:', normalizedInset, 'rawHeight:', nextInset, 'bottomInset:', insets.bottom);
-      setKeyboardInset(normalizedInset);
-      // INVERTED FLATLIST: scroll to offset 0 (newest) when keyboard opens.
-      // Single deterministic call â€” no setTimeout retry needed.
-      scrollOwnerThreadToEnd(true);
-    };
-
-    const handleKeyboardHide = () => {
-      console.log('[IVXOwnerChatRoute] Keyboard hidden');
-      setKeyboardInset(0);
-    };
-
-    const showSubscription = Keyboard.addListener(showEvent, handleKeyboardShow);
-    const hideSubscription = Keyboard.addListener(hideEvent, handleKeyboardHide);
-
-    return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
-    };
-  }, [insets.bottom, scrollOwnerThreadToEnd]);
-
-  return (
-    <ErrorBoundary fallbackTitle="IVX Owner AI unavailable">
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={keyboardAvoidingBehavior}
-        keyboardVerticalOffset={keyboardVerticalOffset}
-        onLayout={handleRootLayout}
-      >
-        <View style={[styles.androidStatusSpacer, { height: androidTopSpacerHeight }]} testID="ivx-owner-chat-android-status-spacer" />
-
-        <View style={styles.content}>
-          {primaryState !== 'room_error' ? (
-            <View style={styles.topSearchRail} testID="ivx-owner-chat-top-search-rail">
-              {searchOpen || searchActive ? (
-                <View style={styles.searchBarWrap} testID="ivx-owner-chat-search-wrap">
-                  <Search size={16} color={Colors.textTertiary} />
-                  <TextInput
-                    style={styles.searchInput}
-                    value={messageSearchQuery}
-                    onChangeText={handleSearchQueryChange}
-                    placeholder="Search this conversation"
-                    placeholderTextColor="#7C8797"
-                    returnKeyType="search"
-                    autoCorrect={false}
-                    autoFocus
-                    testID="ivx-owner-chat-search-input"
-                  />
-                  <Pressable
-                    style={styles.searchClearButton}
-                    onPress={() => {
-                      setMessageSearchQuery('');
-                      setSearchOpen(false);
-                      Keyboard.dismiss();
-                    }}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel="Close message search"
-                    testID="ivx-owner-chat-search-clear"
-                  >
-                    <X size={14} color={Colors.textTertiary} />
-                  </Pressable>
-                </View>
-              ) : (
-                <View style={styles.brandRow} testID="ivx-owner-chat-brand-row">
-                  <View style={styles.brandLeftCompact}>
-                    <View style={styles.brandMark}>
-                      <IVXBrandIcon size={22} />
-                    </View>
-                    <Text style={styles.brandTitleCompact} numberOfLines={1}>IVX IA</Text>
-                  </View>
-                  <Pressable
-                    style={styles.brandInlineSearch}
-                    onPress={() => setSearchOpen(true)}
-                    accessibilityRole="button"
-                    accessibilityLabel="Search this conversation"
-                    testID="ivx-owner-chat-search-open"
-                  >
-                    <Search size={16} color={Colors.textTertiary} />
-                    <Text style={styles.brandInlineSearchPlaceholder} numberOfLines={1}>Search this conversation</Text>
-                  </Pressable>
-                  <View style={styles.brandActions}>
-                    {shouldShowDiagnosticsToggle ? (
-                      <Pressable
-                        style={styles.controlRoomToggle}
-                        onPress={() => setShowDiagnostics((current) => !current)}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityLabel="Toggle owner developer control room"
-                        testID="ivx-owner-control-room-toggle"
-                      >
-                        <Terminal size={12} color={showDiagnostics ? Colors.black : Colors.primary} />
-                        <Text style={[styles.controlRoomToggleText, showDiagnostics ? styles.controlRoomToggleTextActive : null]}>{showDiagnostics ? 'Chat' : 'Control'}</Text>
-                      </Pressable>
-                    ) : null}
-                    {IVX_CHAT_QA_PANEL_ENABLED && developerToolsAllowed ? (
-                      <Pressable
-                        style={[styles.controlRoomToggle, { marginLeft: 4 }]}
-                        onPress={() => setShowQaPanel(true)}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityLabel="Open Chat QA diagnostic panel"
-                        testID="ivx-owner-chat-qa-toggle"
-                      >
-                        <ClipboardList size={12} color={Colors.primary} />
-                        <Text style={styles.controlRoomToggleText}>QA</Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                </View>
-              )}
-            </View>
-          ) : null}
-          {topStatusNote ? (
-            <View
-              style={ownerAIRoutingBlocked ? styles.blockedBanner : activeFallbackForCurrentMessage ? styles.degradedBanner : styles.devBanner}
-              testID="ivx-owner-chat-top-status"
-            >
-              <Text numberOfLines={3} style={ownerAIRoutingBlocked ? styles.blockedBannerText : activeFallbackForCurrentMessage ? styles.degradedBannerText : styles.devBannerText}>{topStatusNote}</Text>
-            </View>
-          ) : null}
-          {/* Owner-auth failure banner: surfaces the EXACT reason the privileged
-              owner route was rejected (issuer mismatch / expired / Supabase
-              rejected / email not in IVX_OWNER_REGISTRATION_EMAILS) instead of a
-              silent fallback. Tap opens Auth Diagnostics to recover. */}
-          {ownerAuthFailureBanner ? (
-            <Pressable
-              style={styles.ownerAuthFailureBanner}
-              onPress={() => router.push('/ivx/auth-diagnostics' as never)}
-              testID="ivx-owner-auth-failure-banner"
-            >
-              <View style={styles.ownerAuthFailureBannerHeader}>
-                <Lock size={13} color={Colors.error} />
-                <Text style={styles.ownerAuthFailureBannerTitle}>
-                  {`Owner route rejected${ownerAuthFailureBanner.statusCode ? ` (HTTP ${ownerAuthFailureBanner.statusCode})` : ''}`}
-                </Text>
-              </View>
-              <Text numberOfLines={4} style={styles.ownerAuthFailureBannerText}>{ownerAuthFailureBanner.reason}</Text>
-              <Pressable
-                style={[styles.refreshOwnerSessionButton, isRefreshingOwnerSession ? styles.actionButtonDisabled : null]}
-                onPress={(event) => {
-                  event.stopPropagation?.();
-                  void handleRefreshOwnerSession();
-                }}
-                disabled={isRefreshingOwnerSession}
-                testID="ivx-owner-refresh-session-banner"
-              >
-                <KeyRound size={13} color={Colors.black} />
-                <Text style={styles.refreshOwnerSessionButtonText}>Refresh Owner Session</Text>
-              </Pressable>
-              <Text style={styles.ownerAuthFailureBannerAction}>Tap card to open Auth Diagnostics â†’</Text>
-            </Pressable>
-          ) : null}
-
-          {/* ROUTINE BANNERS REMOVED â€” owner mandate 2026-08-09.
-              IVXWatchdogBanner and IVXStagedTimeoutBanner are NO LONGER rendered
-              in normal chat. They were showing "IVX AI WORKING", "Still working...",
-              watchdog telemetry, elapsed-time banners, and Cancel panels during
-              normal conversation â€” all of which the owner explicitly prohibited.
-
-              These components remain imported for the diagnostics drawer (opened
-              manually via the developer tools panel), but they do NOT render in
-              the normal chat flow. Only genuine error states (owner auth failure
-              banner above) surface in normal chat. */}
-
-          {showDiagnostics && developerToolsAllowed ? (
-            <ScrollView
-              style={styles.developerToolsScroll}
-              contentContainerStyle={[styles.developerToolsScrollContent, { paddingBottom: developerToolsScrollPadding }]}
-              showsVerticalScrollIndicator
-              nestedScrollEnabled
-              bounces
-              alwaysBounceVertical
-              overScrollMode="always"
-              scrollEventThrottle={16}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-              testID="ivx-owner-developer-tools-scroll"
-            >
-              <View style={styles.developerToolsCard} testID="ivx-owner-developer-tools-panel">
-                <View style={styles.developerToolsHeader}>
-                  <View style={styles.developerToolsIconWrap}>
-                    <Terminal size={15} color={Colors.black} />
-                  </View>
-                  <View style={styles.developerToolsCopy}>
-                    <Text style={styles.developerToolsEyebrow}>Developer tools</Text>
-                    <Text style={styles.developerToolsTitle}>Private runtime checks</Text>
-                  </View>
-                </View>
-                <View style={styles.developerStatusGrid}>
-                  {developerStatusRows.map((row) => (
-                    <View
-                      key={row.id}
-                      style={[
-                        styles.developerStatusTile,
-                        row.tone === 'pass'
-                          ? styles.developerStatusTilePass
-                          : row.tone === 'error'
-                            ? styles.developerStatusTileError
-                            : row.tone === 'pending'
-                              ? styles.developerStatusTilePending
-                              : styles.developerStatusTileWarn,
-                      ]}
-                      testID={`ivx-owner-devtools-${row.id}`}
-                    >
-                      <View style={[
-                        styles.developerStatusDot,
-                        row.tone === 'pass'
-                          ? styles.developerStatusDotPass
-                          : row.tone === 'error'
-                            ? styles.developerStatusDotError
-                            : row.tone === 'pending'
-                              ? styles.developerStatusDotPending
-                              : styles.developerStatusDotWarn,
-                      ]} />
-                      <Text style={styles.developerStatusLabel}>{row.label}</Text>
-                      <Text style={styles.developerStatusValue} numberOfLines={2}>{row.value}</Text>
-                    </View>
-                  ))}
-                </View>
-                <Text style={styles.developerToolsFootnote}>Visible only for authenticated owner developer sessions; normal users never see runtime metadata.</Text>
-              </View>
-
-              <View style={styles.controlRoomCard} testID="ivx-owner-developer-control-room">
-                <View style={styles.controlRoomHeaderRow}>
-                  <View style={styles.controlRoomHeaderCopy}>
-                    <Text style={styles.backendAuditEyebrow}>Owner/developer control room</Text>
-                    <Text style={styles.controlRoomTitle}>IVX system status</Text>
-                    <Text style={styles.controlRoomSubtitle}>{`${controlRoomSummary.verified}/${controlRoomSummary.total} verified or available Â· ${controlRoomSummary.blocked} pending/blocking`}</Text>
-                  </View>
-                  <View style={styles.controlRoomActions}>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/business-impact' as never)}
-                      testID="ivx-owner-open-business-impact"
-                    >
-                      <IVXBrandIcon size={13} />
-                      <Text style={styles.graphActionButtonText}>Command</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/admin/diagnostics' as never)}
-                      testID="ivx-owner-open-diagnostics-admin"
-                    >
-                      <Cpu size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Diagnostics</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/executive-layer' as never)}
-                      testID="ivx-owner-open-executive-layer"
-                    >
-                      <LineChart size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Executive</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/developer-monitor' as never)}
-                      testID="ivx-owner-open-developer-monitor"
-                    >
-                      <Activity size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Monitor</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/live-coding-stream' as never)}
-                      testID="ivx-owner-open-live-coding-stream"
-                    >
-                      <Radio size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Stream</Text>
-                    </Pressable>
-                    <Pressable
-                      style={[styles.graphActionButton, { backgroundColor: '#00E676' }]}
-                      onPress={() => router.push('/autonomous-dashboard' as never)}
-                      testID="ivx-owner-open-autonomous-live-work"
-                    >
-                      <Cpu size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Autonomous Live Work</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/live-work' as never)}
-                      testID="ivx-owner-open-live-work"
-                    >
-                      <Terminal size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Live Work</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/independence' as never)}
-                      testID="ivx-owner-open-independence-tracker"
-                    >
-                      <ShieldCheck size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Independence</Text>
-                    </Pressable>
-
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/variables' as never)}
-                      testID="ivx-owner-open-variables-tool"
-                    >
-                      <KeyRound size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Variables</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/innovation-dashboard' as never)}
-                      testID="ivx-owner-open-innovation-dashboard"
-                    >
-                      <Sparkles size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Innovation</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/opportunity-engine' as never)}
-                      testID="ivx-owner-open-opportunity-engine"
-                    >
-                      <Radar size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Opportunity</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/capital-network' as never)}
-                      testID="ivx-owner-open-capital-network"
-                    >
-                      <Users size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Capital</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/investors' as never)}
-                      testID="ivx-owner-open-investors"
-                    >
-                      <UserPlus size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Investors</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/crm-import' as never)}
-                      testID="ivx-owner-open-crm-import"
-                    >
-                      <Upload size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Import</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/runtime-variables' as never)}
-                      testID="ivx-owner-open-runtime-variables"
-                    >
-                      <KeyRound size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Variables</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/investor-discovery' as never)}
-                      testID="ivx-owner-open-investor-discovery"
-                    >
-                      <Search size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Discovery</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/capital-pipeline' as never)}
-                      testID="ivx-owner-open-capital-pipeline"
-                    >
-                      <GitBranch size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Pipeline</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/outreach' as never)}
-                      testID="ivx-owner-open-outreach"
-                    >
-                      <Megaphone size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Campaigns</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/capital-outreach' as never)}
-                      testID="ivx-owner-open-capital-outreach"
-                    >
-                      <Send size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Outreach</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/gmail-provider' as never)}
-                      testID="ivx-owner-open-gmail-provider"
-                    >
-                      <SafeIcon icon={Mail} name="Mail" size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Gmail</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/lead-scoring' as never)}
-                      testID="ivx-owner-open-lead-scoring"
-                    >
-                      <Gauge size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Lead Scores</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/deal-matching' as never)}
-                      testID="ivx-owner-open-deal-matching"
-                    >
-                      <Crosshair size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Matching</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/deal-tracking' as never)}
-                      testID="ivx-owner-open-deal-tracking"
-                    >
-                      <ClipboardList size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Deal Tracking</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/power-tools' as never)}
-                      testID="ivx-owner-open-power-tools"
-                    >
-                      <Rocket size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Power Tools</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/capital-command-center' as never)}
-                      testID="ivx-owner-open-capital-command-center"
-                    >
-                      <LayoutDashboard size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Command Center</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/ivx/auth-diagnostics' as never)}
-                      testID="ivx-owner-open-auth-diagnostics"
-                    >
-                      <Lock size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Auth</Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.graphActionButton}
-                      onPress={() => router.push('/admin/diagnostics' as never)}
-                      testID="ivx-owner-open-diagnostics-admin"
-                    >
-                      <Cpu size={13} color={Colors.black} />
-                      <Text style={styles.graphActionButtonText}>Diagnostics</Text>
-                    </Pressable>
-                    <Pressable
-                      style={[styles.graphActionButton, controlRoomQuery.isFetching ? styles.actionButtonDisabled : null]}
-                      onPress={() => { void controlRoomQuery.refetch(); }}
-                      disabled={controlRoomQuery.isFetching}
-                      testID="ivx-owner-control-room-refresh"
-                    >
-                      <Text style={styles.graphActionButtonText}>{controlRoomQuery.isFetching ? 'Checking' : 'Run tests'}</Text>
-                    </Pressable>
-                  </View>
-                </View>
-                {controlRoomQuery.error ? <Text style={styles.controlRoomError}>{controlRoomQuery.error.message}</Text> : null}
-                <View style={styles.controlRoomList}>
-                  {controlRoomItems.map((item, index) => {
-                    const tone = getControlRoomTone(item.status);
-                    return (
-                      <View key={item.id} style={styles.controlRoomRow} testID={`ivx-owner-control-room-${item.id}`}>
-                        <Text style={styles.controlRoomIndex}>{String(index + 1).padStart(2, '0')}</Text>
-                        <View style={styles.controlRoomRowCopy}>
-                          <View style={styles.controlRoomRowTop}>
-                            <Text style={styles.controlRoomLabel}>{item.label}</Text>
-                            <View style={[
-                              styles.controlRoomStatusBadge,
-                              tone === 'pass'
-                                ? styles.controlRoomStatusBadgePass
-                                : tone === 'error'
-                                  ? styles.controlRoomStatusBadgeError
-                                  : tone === 'pending'
-                                    ? styles.controlRoomStatusBadgePending
-                                    : styles.controlRoomStatusBadgeWarn,
-                            ]}>
-                              <Text style={[
-                                styles.controlRoomStatusText,
-                                tone === 'pass'
-                                  ? styles.controlRoomStatusTextPass
-                                  : tone === 'error'
-                                    ? styles.controlRoomStatusTextError
-                                    : tone === 'pending'
-                                      ? styles.controlRoomStatusTextPending
-                                      : styles.controlRoomStatusTextWarn,
-                              ]}>{getControlRoomStatusLabel(item.status)}</Text>
-                            </View>
-                          </View>
-                          <Text style={styles.controlRoomDetail}>{item.detail}</Text>
-                          {item.missingCredentialNames && item.missingCredentialNames.length > 0 ? (
-                            <Text style={styles.controlRoomMissing}>{`Missing: ${item.missingCredentialNames.join(', ')}`}</Text>
-                          ) : null}
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-                <Text style={styles.developerToolsFootnote}>No status is guessed here. Unconnected tools show not connected; unverified checks show not verified; missing secrets are listed by name only.</Text>
-              </View>
-
-              <View style={styles.sendBranchProofRow} testID="ivx-owner-send-branch-proof">
-                <Text style={styles.sendBranchProofLabel}>send branch</Text>
-                <Text
-                  style={[
-                    styles.sendBranchProofValue,
-                    sendBranchProof.branch === 'primary_realtime'
-                      ? styles.sendBranchProofValuePass
-                      : sendBranchProof.branch === 'alternate_shared'
-                        ? styles.sendBranchProofValueWarn
-                        : sendBranchProof.branch === 'snapshot_fallback' || sendBranchProof.branch === 'local_only'
-                          ? styles.sendBranchProofValueDegraded
-                          : styles.sendBranchProofValuePending,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {sendBranchProof.label}
-                </Text>
-                <Text style={styles.sendBranchProofContext} numberOfLines={1}>{sendBranchProof.context}</Text>
-              </View>
-
-              <View style={styles.qaCard} testID="ivx-owner-chat-qa-card">
-                <View style={styles.qaHeaderRow}>
-                  <View>
-                    <Text style={styles.qaEyebrow}>{`${auditReport.passedCount}/${auditReport.totalCount} audit checks passed`}</Text>
-                    <Text style={styles.qaTitle}>IVX Owner AI runtime audit</Text>
-                  </View>
-                  <View style={[
-                    styles.qaBadge,
-                    proofBadgeTone === 'pass'
-                      ? styles.qaBadgePass
-                      : proofBadgeTone === 'blocked'
-                        ? styles.qaBadgeBlocked
-                        : proofBadgeTone === 'pending'
-                          ? styles.qaBadgePending
-                          : styles.qaBadgeWarn,
-                  ]}>
-                    <Text style={[
-                      styles.qaBadgeText,
-                      proofBadgeTone === 'pass'
-                        ? styles.qaBadgeTextPass
-                        : proofBadgeTone === 'blocked'
-                          ? styles.qaBadgeTextBlocked
-                          : proofBadgeTone === 'pending'
-                            ? styles.qaBadgeTextPending
-                            : styles.qaBadgeTextWarn,
-                    ]}>
-                      {proofBadgeLabel}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.qaChecklist}>
-                  {qaChecklist.map((item) => (
-                    <View key={item.id} style={styles.qaItemRow} testID={`ivx-owner-chat-qa-${item.id}`}>
-                      <View style={[styles.qaDot, item.passed ? styles.qaDotPass : styles.qaDotWarn]} />
-                      <View style={styles.qaCopy}>
-                        <Text style={styles.qaItemLabel}>{item.label}</Text>
-                        <Text style={styles.qaItemDetail}>{item.detail}</Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-
-                <View style={styles.proofRail}>
-                  {proofRows.map((proof) => (
-                    <View key={proof.id} style={styles.proofRow} testID={`ivx-owner-proof-${proof.sourceType}`}>
-                      <View style={[
-                        styles.proofDot,
-                        proof.status === 'verified'
-                          ? styles.proofDotPass
-                          : proof.status === 'blocked'
-                            ? styles.proofDotBlocked
-                            : proof.status === 'pending'
-                              ? styles.proofDotPending
-                              : styles.proofDotWarn,
-                      ]} />
-                      <View style={styles.proofCopy}>
-                        <Text style={styles.proofTitle}>{proof.title}</Text>
-                        <Text style={styles.proofDetail}>{proof.summary}</Text>
-                        <Text style={styles.proofMeta}>
-                          {`${proof.sourceSignal} â€¢ confidence ${Math.round(proof.confidence * 100)}% â€¢ ${proof.observedAt}`}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-                <Text style={styles.qaScopeText}>{`${auditReport.summary} ${qaScopeNote}`}</Text>
-              </View>
-
-              <View style={styles.backendAuditCard} testID="ivx-owner-chat-live-proof">
-                <Text style={styles.backendAuditEyebrow}>Operational proof</Text>
-                <Text style={styles.backendAuditTitle}>Live chat telemetry</Text>
-                <AuditInfoRow label="Live users observed" value={String(liveSnapshot.totalLiveUsers)} />
-                <AuditInfoRow label="Chat active users" value={String(liveChatMetric?.activeUsers ?? 0)} />
-                <AuditInfoRow label="Chat sessions in progress" value={String(liveChatMetric?.sessionsInProgress ?? 0)} />
-                <AuditInfoRow label="Chat messages tracked" value={String(messageAudit.ownerMessages + messageAudit.assistantMessages)} />
-                <AuditInfoRow label="Fallback transport state" value={liveSnapshot.operator.fallbackTransportState} />
-                <AuditInfoRow label="Stuck users" value={String(liveSnapshot.operator.stuckUsers)} />
-                <Text style={styles.backendAuditBody}>
-                  {liveTopSource
-                    ? `Top source right now: ${liveTopSource.source} Â· quality ${liveTopSource.qualityScore} Â· conversions ${liveTopSource.conversions}.`
-                    : 'No remote source proof has been observed yet in the active intelligence window.'}
-                </Text>
-                <Text style={styles.backendAuditFootnote}>{'Session proof is emitted on room open, page view, chat open, chat message, fallback, routing events, and room close for /ivx/chat.'}</Text>
-              </View>
-
-              <View style={styles.backendAuditCard} testID="ivx-owner-chat-live-debug-panel">
-                <Text style={styles.backendAuditEyebrow}>Owner debug Â· live device proof</Text>
-                <Text style={styles.backendAuditTitle}>Is the running app the latest build?</Text>
-                <AuditInfoRow label="Frontend build version" value={ownerLiveDebug.frontendBuild} testID="ivx-owner-debug-frontend-build" />
-                <AuditInfoRow label="Backend commit / marker" value={ownerLiveDebug.backendCommit} testID="ivx-owner-debug-backend-commit" />
-                <AuditInfoRow label="Backend endpoint" value={ownerLiveDebug.backendEndpoint} testID="ivx-owner-debug-backend-endpoint" />
-                <AuditInfoRow label="Current conversation ID" value={ownerLiveDebug.conversationId} testID="ivx-owner-debug-conversation-id" />
-                <AuditInfoRow label="Loaded message count" value={ownerLiveDebug.loadedMessageCount} testID="ivx-owner-debug-message-count" />
-                <AuditInfoRow label="Last saved message ID" value={ownerLiveDebug.lastSavedMessageId} testID="ivx-owner-debug-last-saved-id" />
-                <AuditInfoRow label="Last AI response status" value={ownerLiveDebug.lastAIStatus} testID="ivx-owner-debug-last-ai-status" />
-                <AuditInfoRow label="Parser result" value={ownerLiveDebug.parserResult} testID="ivx-owner-debug-parser-result" />
-                <AuditInfoRow label="Storage source" value={ownerLiveDebug.storageSource} testID="ivx-owner-debug-storage-source" />
-                <AuditInfoRow label="Watchdog status" value={ownerLiveDebug.watchdogStatus} testID="ivx-owner-debug-watchdog-status" />
-                <Text style={styles.backendAuditFootnote}>{`If "Frontend build version" is not ${IVX_FRONTEND_BUILD_STAMP}, the device is still running a stale bundle and the latest repo fixes have NOT reached this app yet.`}</Text>
-              </View>
-
-              <View style={styles.backendAuditCard} testID="ivx-owner-chat-runtime-debug">
-                <Text style={styles.backendAuditEyebrow}>Runtime proof</Text>
-                <Text style={styles.backendAuditTitle}>Live remote proof card</Text>
-                <View style={styles.runtimeProofBanner} testID="ivx-owner-chat-proof-banner">
-                  <Text style={styles.runtimeProofBannerTitle}>{runtimeProofHeadline.title}</Text>
-                  <Text style={styles.runtimeProofBannerDetail}>{runtimeProofHeadline.detail}</Text>
-                </View>
-                {runtimeProofPrimaryRows.map((row) => (
-                  <AuditInfoRow
-                    key={row.label}
-                    label={row.label}
-                    value={row.value}
-                    testID={`ivx-owner-runtime-${row.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
-                  />
-                ))}
-                <AuditInfoRow label="Request source" value={getRuntimeSourceLabel(runtimeDebugSnapshot)} />
-                <AuditInfoRow label="Send branch" value={deliveryBranchStatus.branch} testID="ivx-owner-runtime-send-branch" />
-                <AuditInfoRow label="Send branch title" value={deliveryBranchStatus.title} testID="ivx-owner-runtime-send-title" />
-                <AuditInfoRow label="Latest send message ID" value={lastSendAudit?.messageId ?? 'pending'} testID="ivx-owner-runtime-send-message-id" />
-                <AuditInfoRow label="Latest send conversation ID" value={lastSendAudit?.conversationId ?? 'pending'} testID="ivx-owner-runtime-send-conversation-id" />
-                <AuditInfoRow label="Latest send observed" value={lastSendAudit?.observedAt ?? 'pending'} testID="ivx-owner-runtime-send-observed" />
-                <AuditInfoRow label="Receive branch" value={receiveBranchStatus.branch} testID="ivx-owner-runtime-receive-branch" />
-                <AuditInfoRow label="Receive branch title" value={receiveBranchStatus.title} testID="ivx-owner-runtime-receive-title" />
-                <AuditInfoRow label="Latest receive message ID" value={lastReceiveAudit?.messageId ?? 'pending'} testID="ivx-owner-runtime-receive-message-id" />
-                <AuditInfoRow label="Latest receive conversation ID" value={lastReceiveAudit?.conversationId ?? 'pending'} testID="ivx-owner-runtime-receive-conversation-id" />
-                <AuditInfoRow label="Latest receive observed" value={lastReceiveAudit?.observedAt ?? 'pending'} testID="ivx-owner-runtime-receive-observed" />
-                <AuditInfoRow label="Subscription owner" value={ownerSessionIdRef.current} testID="ivx-owner-runtime-subscription-owner" />
-                <AuditInfoRow label="Active realtime channel count" value={String(realtimeSubscriptionAudit.activeChannelCount)} testID="ivx-owner-runtime-active-channel-count" />
-                <AuditInfoRow label="Active realtime channels" value={realtimeSubscriptionAudit.activeChannels.join(', ') || 'none'} testID="ivx-owner-runtime-active-channels" />
-                <AuditInfoRow label="Realtime teardown count" value={String(realtimeSubscriptionAudit.teardownCount)} testID="ivx-owner-runtime-teardown-count" />
-                <AuditInfoRow label="Local listener count" value={String(realtimeSubscriptionAudit.localListenerCount)} testID="ivx-owner-runtime-local-listener-count" />
-                <AuditInfoRow label="Deployment marker" value={runtimeDebugSnapshot.deploymentMarker ?? 'pending'} />
-                <AuditInfoRow label="Auth mode" value={runtimeDebugSnapshot.authMode} />
-                <AuditInfoRow label="Owner room trust" value={ownerRoomAuthenticated ? 'owner_room_authenticated' : 'owner_room_unverified'} testID="ivx-owner-runtime-owner-room-trust" />
-                <AuditInfoRow label="Backend admin trust" value={backendAdminVerified ? 'backend_admin_verified' : 'backend_admin_unverified'} testID="ivx-owner-runtime-backend-admin-trust" />
-                <AuditInfoRow label="Conversation access" value={fallbackChatOnlyActive ? 'fallback_chat_only' : 'full_backend_execution'} testID="ivx-owner-runtime-conversation-access" />
-                <AuditInfoRow label="Action gate" value={currentOwnerTrust.requiresElevatedConfirmation ? 'destructive_action_requires_confirmation' : 'normal_owner_chat'} testID="ivx-owner-runtime-action-gate" />
-                <AuditInfoRow label="Request class" value={currentOwnerTrust.requestClass} testID="ivx-owner-runtime-request-class" />
-                <AuditInfoRow label="Owner/dev bypass enabled" value={runtimeDebugSnapshot.ownerBypassEnabled ? 'yes' : 'no'} />
-                <AuditInfoRow label="Conversation ID" value={runtimeDebugSnapshot.conversationId ?? 'pending'} />
-                <AuditInfoRow label="Selected intent" value={runtimeDebugSnapshot.selectedIntent ?? 'pending'} testID="ivx-owner-runtime-selected-intent" />
-                <AuditInfoRow label="Selected tool" value={runtimeDebugSnapshot.selectedTool ?? (lastToolOutputs.length > 0 ? lastToolOutputs.map((output) => output.tool).join(', ') : 'none')} testID="ivx-owner-runtime-selected-tool" />
-                <AuditInfoRow label="Tool used" value={lastToolOutputs.length > 0 ? lastToolOutputs.map((output) => output.tool).join(', ') : 'none'} testID="ivx-owner-runtime-tool-used" />
-                <AuditInfoRow label="Tool output" value={lastToolOutputs.length > 0 ? JSON.stringify(lastToolOutputs[0]?.output ?? lastToolOutputs[0]?.error ?? null).slice(0, 220) : 'none'} testID="ivx-owner-runtime-tool-output" />
-                <AuditInfoRow
-                  label="Fallback state"
-                  value={getRuntimeFallbackState(getActiveRuntimeSource({
-                    source: normalizeRuntimeSource(runtimeDebugSnapshot.source),
-                    requestStage: runtimeDebugSnapshot.requestStage,
-                    failureClass: runtimeDebugSnapshot.failureClass,
-                    isFallback: runtimeDebugSnapshot.source === 'provider_fallback',
-                    isStreaming: hasActiveStreamingState(runtimeDebugSnapshot),
-                    hasVisibleResponseText: runtimeDebugSnapshot.hasVisibleResponseText}))}
-                />
-                <AuditInfoRow label="Degraded state" value={getRuntimeDegradedState(runtimeSnapshot.runtimeStatus)} />
-                <AuditInfoRow label="Last attempt" value={formatRuntimeTimestamp(runtimeDebugSnapshot.lastAttemptAt)} />
-                <AuditInfoRow label="Last verified" value={formatRuntimeTimestamp(runtimeDebugSnapshot.lastVerifiedAt)} />
-                <Text style={styles.backendAuditBody}>{currentOwnerTrust.explanation}</Text>
-                <Text style={styles.backendAuditBody}>{runtimeDebugSnapshot.failureDetail}</Text>
-                <Text style={styles.backendAuditBody}>{`Send proof: ${deliveryBranchStatus.detail}`}</Text>
-                <Text style={styles.backendAuditFootnote}>{deliveryBranchStatus.evidence}</Text>
-                <Text style={styles.backendAuditBody}>{`Receive proof: ${receiveBranchStatus.detail}`}</Text>
-                <Text style={styles.backendAuditFootnote}>{receiveBranchStatus.evidence}</Text>
-              </View>
-
-              <View style={styles.qaCard} testID="ivx-owner-chat-functionality-proof-ledger">
-                <View style={styles.qaHeaderRow}>
-                  <View>
-                    <Text style={styles.qaEyebrow}>1â€“200 numbered proof ledger</Text>
-                    <Text style={styles.qaTitle}>IVX functionality truth table</Text>
-                  </View>
-                  <View style={styles.functionalitySummary}>
-                    <Text style={styles.functionalitySummaryText}>{`${functionalityProofCounts.live} live`}</Text>
-                    <Text style={styles.functionalitySummaryText}>{`${functionalityProofCounts.pass} pass`}</Text>
-                    <Text style={styles.functionalitySummaryText}>{`${functionalityProofCounts.fail} fail`}</Text>
-                  </View>
-                </View>
-                <View style={styles.functionalityLedgerList}>
-                  {functionalityProofList.map((item) => (
-                    <View key={item.key} style={styles.functionalityLedgerRow} testID={`ivx-owner-chat-proof-slot-${item.index}`}>
-                      <Text style={styles.functionalityLedgerIndex}>{item.index}</Text>
-                      <View style={styles.functionalityLedgerCopy}>
-                        <View style={styles.functionalityLedgerTitleRow}>
-                          <Text style={styles.functionalityLedgerTitle}>{item.title}</Text>
-                          <View
-                            style={[
-                              styles.functionalityLedgerBadge,
-                              item.status === 'live'
-                                ? styles.functionalityLedgerBadgeLive
-                                : item.status === 'pass'
-                                  ? styles.functionalityLedgerBadgePass
-                                  : styles.functionalityLedgerBadgeFail,
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.functionalityLedgerBadgeText,
-                                item.status === 'live'
-                                  ? styles.functionalityLedgerBadgeTextLive
-                                  : item.status === 'pass'
-                                    ? styles.functionalityLedgerBadgeTextPass
-                                    : styles.functionalityLedgerBadgeTextFail,
-                              ]}
-                            >
-                              {item.status.toUpperCase()}
-                            </Text>
-                          </View>
-                        </View>
-                        <Text style={styles.functionalityLedgerDetail}>{item.detail}</Text>
-                        <Text style={styles.functionalityLedgerEvidence}>{item.evidence}</Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.backendAuditCard} testID="ivx-owner-chat-backend-audit">
-                <Text style={styles.backendAuditEyebrow}>Environment audit</Text>
-                <Text style={styles.backendAuditTitle}>Owner AI routing audit</Text>
-                <View style={[styles.backendAuditBadge, ownerAIRoutingBlocked ? styles.backendAuditBadgeBlocked : styles.backendAuditBadgePass]}>
-                  <Text style={[styles.backendAuditBadgeText, ownerAIRoutingBlocked ? styles.backendAuditBadgeTextBlocked : styles.backendAuditBadgeTextPass]}>
-                    {ownerAIRoutingBlocked ? 'GUARD BLOCKED' : `${backendAuditSummary.currentEnvironment.toUpperCase()} ROUTING`}
-                  </Text>
-                </View>
-                <AuditInfoRow label="Current environment" value={backendAuditSummary.currentEnvironment} testID="ivx-owner-chat-audit-environment" />
-                <AuditInfoRow label="Routing policy" value={backendAuditSummary.routingPolicy} testID="ivx-owner-chat-audit-routing-policy" />
-                <AuditInfoRow label="Configured URL" value={backendAuditSummary.configuredOwnerAIBaseUrl} testID="ivx-owner-chat-audit-configured-url" />
-                <AuditInfoRow label="Active base URL" value={backendAuditSummary.activeBaseUrl} testID="ivx-owner-chat-audit-active-base-url" />
-                <AuditInfoRow label="Active host" value={backendAuditSummary.activeHost} testID="ivx-owner-chat-audit-active-host" />
-                <AuditInfoRow label="Active endpoint chosen" value={backendAuditSummary.activeEndpoint} testID="ivx-owner-chat-audit-active-endpoint" />
-                <AuditInfoRow label="App API base URL" value={backendAuditSummary.directApiBaseUrl} testID="ivx-owner-chat-audit-direct-api-url" />
-                <AuditInfoRow label="App API host" value={backendAuditSummary.directApiHost} testID="ivx-owner-chat-audit-direct-api-host" />
-                <AuditInfoRow label="Owner health URL" value={backendAuditSummary.ownerAiHealthUrl} testID="ivx-owner-chat-audit-owner-health" />
-                <AuditInfoRow label="Owner Route53 audit URL" value={backendAuditSummary.ownerRoute53AuditUrl} testID="ivx-owner-chat-audit-owner-route53" />
-                <AuditInfoRow label="App API health URL" value={backendAuditSummary.appApiHealthUrl} testID="ivx-owner-chat-audit-app-health" />
-                <AuditInfoRow label="App API Route53 audit URL" value={backendAuditSummary.appApiRoute53AuditUrl} testID="ivx-owner-chat-audit-app-route53" />
-                <AuditInfoRow label="Deployment marker" value={runtimeSnapshot.provider.deploymentMarker ?? 'pending'} testID="ivx-owner-chat-audit-deployment-marker" />
-                <AuditInfoRow label="Fallback used" value={backendAuditSummary.fallbackUsed} testID="ivx-owner-chat-audit-fallback-used" />
-                <Text style={styles.backendAuditBody}>{backendAuditSummary.failureMode}</Text>
-                <Text style={styles.backendAuditFootnote}>{backendAuditSummary.selectionReason}</Text>
-                <Text style={styles.backendAuditFootnote}>{backendAuditSummary.recommendedResolution}</Text>
-                <Text style={styles.backendAuditFootnote}>{backendAuditSummary.gracefulDegradationNote}</Text>
-                {backendAuditSummary.mismatchWarnings.length > 0 ? (
-                  <View style={styles.backendAuditList} testID="ivx-owner-chat-audit-mismatch-warnings">
-                    {backendAuditSummary.mismatchWarnings.map((warning, index) => (
-                      <Text key={`${warning}-${index}`} style={styles.backendAuditListItem}>{`â€¢ ${warning}`}</Text>
-                    ))}
-                  </View>
-                ) : null}
-                <View style={styles.backendAuditList} testID="ivx-owner-chat-audit-workflow-trace">
-                  {backendAuditSummary.workflowTrace.map((step, index) => (
-                    <Text key={`${step}-${index}`} style={styles.backendAuditListItem}>{`${index + 1}. ${step}`}</Text>
-                  ))}
-                </View>
-              </View>
-
-              {(ownerGraphNodes.length > 0 || ownerGraphProofs.length > 0 || ownerGraphRisks.length > 0) ? (
-                <View style={styles.graphCard} testID="ivx-owner-chat-graph-card">
-                  <View style={styles.graphHeaderRow}>
-                    <View>
-                      <Text style={styles.graphEyebrow}>Live graph</Text>
-                      <Text style={styles.graphTitle}>Owner room dependency spine</Text>
-                    </View>
-                    <View style={styles.graphActionRow}>
-                      <Pressable
-                        style={[styles.graphActionButton, roomControlMutation.isPending ? styles.actionButtonDisabled : null]}
-                        onPress={() => handleRoomControlActionPress('rerun_health_probe')}
-                        disabled={roomControlMutation.isPending}
-                        testID="ivx-owner-chat-rerun-proof"
-                      >
-                        <Text style={styles.graphActionButtonText}>Rerun proof</Text>
-                      </Pressable>
-                      <Pressable
-                        style={[styles.graphActionButton, roomControlMutation.isPending ? styles.actionButtonDisabled : null]}
-                        onPress={() => handleRoomControlActionPress('transition_stuck_sends')}
-                        disabled={roomControlMutation.isPending}
-                        testID="ivx-owner-chat-clear-stuck"
-                      >
-                        <Text style={styles.graphActionButtonText}>Clear stuck</Text>
-                      </Pressable>
-                      <Pressable
-                        style={[styles.graphActionButton, sendMessageMutation.isPending ? styles.actionButtonDisabled : null]}
-                        onPress={() => handleSend('/replay')}
-                        disabled={sendMessageMutation.isPending}
-                        testID="ivx-owner-chat-replay-last"
-                      >
-                        <Text style={styles.graphActionButtonText}>Replay last</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-
-                  {ownerGraphNodes.length > 0 ? (
-                    <View style={styles.graphNodeList}>
-                      {ownerGraphNodes.map((node) => (
-                        <View key={node.id} style={styles.graphNodeRow}>
-                          <View style={[
-                            styles.graphNodeDot,
-                            node.status === 'healthy'
-                              ? styles.graphNodeDotPass
-                              : node.status === 'critical'
-                                ? styles.graphNodeDotBlocked
-                                : node.status === 'degraded'
-                                  ? styles.graphNodeDotWarn
-                                  : styles.graphNodeDotPending,
-                          ]} />
-                          <View style={styles.graphNodeCopy}>
-                            <Text style={styles.graphNodeTitle}>{node.name}</Text>
-                            <Text style={styles.graphNodeMeta}>{`${node.dependencies.length} deps Â· ${node.status} Â· proof ${node.proofStatus}`}</Text>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-
-                  {ownerGraphRisks.length > 0 ? (
-                    <View style={styles.graphRiskList}>
-                      {ownerGraphRisks.map((risk) => (
-                        <View key={risk.id} style={styles.graphRiskRow}>
-                          <View style={styles.graphRiskCopy}>
-                            <Text style={styles.graphRiskTitle}>{risk.subjectId.replace('module:', '').replace(/_/g, ' ')}</Text>
-                            <Text style={styles.graphRiskMeta}>{`Blast radius ${risk.blastRadius} Â· ${risk.trendDirection} Â· ${risk.recommendedAction.replace(/_/g, ' ')}`}</Text>
-                          </View>
-                          <Text style={styles.graphRiskValue}>{`${Math.round(risk.currentRiskScore * 100)}%`}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-
-                  {ownerGraphProofs.length > 0 ? (
-                    <View style={styles.graphProofList}>
-                      {ownerGraphProofs.map((proof) => (
-                        <View key={proof.id} style={styles.graphProofRow}>
-                          <Text style={styles.graphProofClaim}>{proof.claim}</Text>
-                          <Text style={styles.graphProofMeta}>{`${proof.sourceType} Â· ${Math.round(proof.confidence * 100)}% Â· ${proof.userImpactLevel} impact`}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-
-                  {ownerActionFeed.length > 0 ? (
-                    <View style={styles.graphProofList}>
-                      {ownerActionFeed.map((action) => (
-                        <View key={action.id} style={styles.graphProofRow}>
-                          <Text style={styles.graphProofClaim}>{getActionLabel(action.actionType)}</Text>
-                          <Text style={styles.graphProofMeta}>{`${action.result} Â· ${action.approvalMode} Â· ${action.targetId.replace('module:', '').replace(/_/g, ' ')}`}</Text>
-                          {action.policyReason ? <Text style={styles.graphProofMeta}>{action.policyReason}</Text> : null}
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-                </View>
-              ) : null}
-            </ScrollView>
-          ) : null}
-
-          {showDiagnostics && developerToolsAllowed ? null : primaryState === 'room_error' ? (
-            <View style={styles.errorState} testID="ivx-owner-chat-error">
-              <Text style={styles.errorTitle}>Unable to load the owner room.</Text>
-              <Text style={styles.errorText}>{messagesQuery.error?.message ?? conversationQuery.error?.message ?? 'Please try again.'}</Text>
-              <Pressable
-                style={styles.retryButton}
-                onPress={() => {
-                  void messagesQuery.refetch();
-                  void conversationQuery.refetch();
-                  void roomStatusQuery.refetch();
-                }}
-                testID="ivx-owner-chat-retry"
-              >
-                <Text style={styles.retryButtonText}>Retry</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <>
-              {searchActive ? (
-                <Text style={styles.searchResultText} testID="ivx-owner-chat-search-count">
-                  {displayedMessages.length === 1 ? '1 matching message' : `${displayedMessages.length} matching messages`}
-                </Text>
-              ) : null}
-              <View style={styles.threadViewport} testID="ivx-owner-chat-thread-viewport">
-                {pinnedMessagesSection}
-                {missingReplyMessageId ? (
-                <Pressable
-                  style={styles.missingReplyBanner}
-                  onPress={() => setMissingReplyMessageId(null)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Dismiss missing original message notice"
-                  testID="ivx-owner-missing-reply-context"
-                >
-                  <MessageCircle size={14} color={Colors.warning} />
-                  <Text style={styles.missingReplyText}>Original replied-to message is unavailable. The reply preview is still preserved.</Text>
-                </Pressable>
-              ) : null}
-                <FlatList
-                  ref={flatListRef}
-                  data={invertedData}
-                  keyExtractor={(item) => item.id}
-                  renderItem={renderMessage}
-                  style={styles.messageList}
-                  contentContainerStyle={listContentContainerStyle}
-                  scrollEnabled
-                  nestedScrollEnabled
-                  bounces
-                  alwaysBounceVertical
-                  overScrollMode="always"
-                  showsVerticalScrollIndicator
-                  scrollEventThrottle={16}
-                  removeClippedSubviews={false}
-                  automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-                  inverted={true}
-              refreshControl={<RefreshControl tintColor={Colors.primary} refreshing={refreshing} onRefresh={() => {
-                void messagesQuery.refetch();
-                void conversationQuery.refetch();
-                void roomStatusQuery.refetch();
-                void controlRoomQuery.refetch();
-              }} />}
-              ListEmptyComponent={
-                <View style={styles.emptyState} testID={searchActive ? 'ivx-owner-chat-search-empty' : 'ivx-owner-chat-empty'}>
-                  <Sparkles size={28} color={Colors.primary} />
-                  <Text style={styles.emptyTitle}>{searchActive ? 'No matching messages' : IVX_OWNER_AI_PROFILE.sharedRoom.emptyTitle}</Text>
-                  <Text style={styles.emptyText}>{searchActive ? 'Try a different word or clear search to return to the full owner-room thread.' : resolution.emptyStateText}</Text>
-                </View>
-              }
-              ListFooterComponent={listFooter}
-              ListFooterComponentStyle={styles.listFooterContainer}
-              onContentSizeChange={(width, height) => {
-                ivxDiagnostics.recordContentHeight(`h=${Math.round(height)} count=${displayedMessages.length} atBottom=${isAtBottomRef.current}`);
-                // INVERTED FLATLIST: The list naturally anchors at offset 0
-                // (newest message) on first layout. No scrollToEnd needed.
-                // Only re-anchor to offset 0 if user is at bottom and new
-                // content (streaming/messages) arrives.
-                if (initialScrollPending && displayedMessages.length > 0) {
-                  isAtBottomRef.current = true;
-                  setInitialScrollPending(false);
-                  setShowScrollToLatest(false);
-                  return;
-                }
-                if (Date.now() < suppressAutoScrollUntilRef.current) {
-                  return;
-                }
-                // Keep pinned to newest (offset 0) as new messages/streaming
-                // content arrives, unless the user is reading older history.
-                if (isAtBottomRef.current) {
-                  flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-                }
-              }}
-              onLayout={() => {
-                // INVERTED FLATLIST: The list anchors at offset 0 (newest)
-                // on first layout. Clear the pending flag once data is present.
-                if (initialScrollPending && displayedMessages.length > 0) {
-                  isAtBottomRef.current = true;
-                  setInitialScrollPending(false);
-                  setShowScrollToLatest(false);
-                }
-              }}
-              onScrollToIndexFailed={(info) => {
-                suppressAutoScrollUntilRef.current = Date.now() + 1800;
-                flatListRef.current?.scrollToOffset({ offset: Math.max(0, info.averageItemLength * info.index), animated: true });
-                setTimeout(() => flatListRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.65 }), 220);
-              }}
-              onScrollBeginDrag={() => {
-                suppressAutoScrollUntilRef.current = Date.now() + 2800;
-              }}
-              onViewableItemsChanged={handleViewableItemsChanged}
-              onScroll={handleMessageListScroll}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-                  testID="ivx-owner-chat-list"
-                />
-                {showScrollToLatest && displayedMessages.length > 0 ? (
-                  <Pressable
-                    style={styles.scrollToLatestButton}
-                    onPress={handleScrollToLatest}
-                    accessibilityRole="button"
-                    accessibilityLabel={unreadCount > 0 ? `Scroll to latest message, ${unreadCount} unread` : 'Scroll to latest message'}
-                    testID="ivx-owner-chat-scroll-to-latest"
-                    hitSlop={8}
-                  >
-                    <ChevronDown size={22} color={Colors.black} />
-                    {unreadCount > 0 ? (
-                      <View style={styles.scrollToLatestBadge} testID="ivx-owner-chat-scroll-unread-badge">
-                        <Text style={styles.scrollToLatestBadgeText} numberOfLines={1}>
-                          {unreadCount > 99 ? '99+' : String(unreadCount)}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </Pressable>
-                ) : null}
-              </View>
-            </>
-          )}
-        </View>
-
-        {primaryState !== 'room_error' ? (
-          <View
-            style={[
-              styles.composerDock,
-              {
-                paddingBottom: effectiveComposerBottom,
-                transform: [{ translateY: -manualKeyboardLift }]},
-            ]}
-            testID="ivx-owner-chat-composer-dock"
-            accessibilityLabel="IVX owner chat certificate v1"
-          >
-
-            <View
-              style={styles.composerCard}
-              testID="ivx-owner-chat-composer"
-              onLayout={(event) => {
-                const nextHeight = event.nativeEvent.layout.height;
-                if (Math.abs(nextHeight - composerHeight) > 1) {
-                  setComposerHeight(nextHeight);
-                  // Only re-pin to the bottom when the owner is already there.
-                  // Composer growth (multi-line typing, attachment chips) must NOT
-                  // yank the viewport while older messages are being read.
-                  if (isAtBottomRef.current) {
-                    scrollOwnerThreadToEnd(false);
-                  }
-                }
-              }}
-            >
-              {/* Typing / loading indicator removed per owner request: the chat
-                  UI no longer displays animated dots or "Delivering your messageâ€¦"
-                  banners. The underlying send/mutation state still works. */}
-              {draftAttachments.length > 0 ? (
-                <View style={styles.draftAttachmentRow} testID="ivx-owner-draft-attachment">
-                  <View style={styles.draftAttachmentMeta}>
-                    <Text style={styles.draftAttachmentName} numberOfLines={1}>
-                      {`${draftAttachments.length} of ${IVX_MAX_DRAFT_ATTACHMENTS} attached`}
-                    </Text>
-                    <Text style={styles.draftAttachmentHint} numberOfLines={1}>
-                      {draftAttachments.length === 1
-                        ? (draftAttachments[0].isImage
-                          ? 'Add a question or tap send to analyze.'
-                          : draftAttachments[0].isVideo
-                            ? 'Tap send to analyze this video.'
-                            : 'Add instructions or tap send to analyze.')
-                        : 'Tap send and IVX will analyze every file in this batch.'}
-                    </Text>
-                  </View>
-                  <Pressable
-                    style={({ pressed }) => [styles.draftAttachmentClose, pressed ? { opacity: 0.6 } : null]}
-                    onPress={handleClearDraftAttachment}
-                    accessibilityRole="button"
-                    accessibilityLabel="Remove all attached files"
-                    testID="ivx-owner-draft-attachment-clear"
-                    hitSlop={8}
-                  >
-                    <X size={14} color={Colors.text} />
-                  </Pressable>
-                </View>
-              ) : null}
-              {draftAttachments.length > 0 ? (
-                <FlatList
-                  data={draftAttachments}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  keyExtractor={(item, index) => `${item.upload.name}-${index}`}
-                  contentContainerStyle={styles.draftAttachmentList}
-                  testID="ivx-owner-draft-attachment-list"
-                  renderItem={({ item, index }) => (
-                    <View style={styles.draftAttachmentTile} testID={`ivx-owner-draft-attachment-tile-${index}`}>
-                      {item.isImage && item.upload.uri ? (
-                        <Image
-                          source={{ uri: item.upload.uri }}
-                          style={styles.draftAttachmentThumb}
-                          resizeMode="cover"
-                          accessibilityLabel={`Attached image ${index + 1}`}
-                        />
-                      ) : (
-                        <View style={[styles.draftAttachmentThumb, styles.draftAttachmentFileIcon]}>
-                          <Paperclip size={18} color={Colors.primary} />
-                        </View>
-                      )}
-                      <Pressable
-                        style={({ pressed }) => [styles.draftAttachmentTileRemove, pressed ? { opacity: 0.6 } : null]}
-                        onPress={() => handleRemoveDraftAttachment(index)}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Remove file ${index + 1}`}
-                        testID={`ivx-owner-draft-attachment-remove-${index}`}
-                        hitSlop={6}
-                      >
-                        <X size={10} color={Colors.text} />
-                      </Pressable>
-                    </View>
-                  )}
-                />
-              ) : null}
-              {selectedReplyContext ? (
-                <View style={styles.replyComposerPreview} testID="ivx-owner-reply-preview">
-                  <View style={styles.replyComposerAccent} />
-                  <View style={styles.replyComposerCopy}>
-                    <Text style={styles.replyComposerLabel} numberOfLines={1}>{`Replying to ${selectedReplyContext.senderLabel}`}</Text>
-                    <Text style={styles.replyComposerText} numberOfLines={2}>{selectedReplyContext.previewText}</Text>
-                  </View>
-                  <Pressable
-                    style={({ pressed }) => [styles.replyComposerClose, pressed ? { opacity: 0.72 } : null]}
-                    onPress={() => setSelectedReplyContext(null)}
-                    accessibilityRole="button"
-                    accessibilityLabel="Cancel reply"
-                    testID="ivx-owner-reply-cancel"
-                  >
-                    <X size={14} color={Colors.textTertiary} />
-                  </Pressable>
-                </View>
-              ) : null}
-              {/* Live Work bar â€” ONLY visible when a real autonomous task is active.
-                  Normal chat never shows this. */}
-              {activeLiveWorkTask ? (
-              <View
-                style={[styles.chatLiveWorkBar, styles.chatLiveWorkBarActive]}
-                testID="ivx-chat-live-work-bar"
-              >
-                <Pressable
-                  style={styles.chatLiveWorkMain}
-                  onPress={() => handleOpenLiveWork()}
-                  accessibilityRole="button"
-                  accessibilityLabel="Open Live Work monitor"
-                  testID="ivx-chat-open-live-work"
-                  hitSlop={6}
-                >
-                  <View style={styles.chatLiveWorkDotActive} />
-                  <View style={styles.chatLiveWorkCopy}>
-                    <Text style={styles.chatLiveWorkTitle} numberOfLines={1}>
-                      {'Live Work'}
-                    </Text>
-                    <Text style={styles.chatLiveWorkSub} numberOfLines={1}>
-                      {'Watch IVX execute tasks in real time'}
-                    </Text>
-                  </View>
-                  <Terminal size={16} color={Colors.primary} />
-                </Pressable>
-                <View style={styles.chatLiveWorkActions}>
-                  <Pressable style={styles.chatLiveWorkAction} onPress={() => handleOpenLiveWork()} testID="ivx-chat-live-work-view" hitSlop={6}>
-                    <Activity size={13} color={Colors.text} />
-                    <Text style={styles.chatLiveWorkActionText}>View</Text>
-                  </Pressable>
-                  <Pressable style={styles.chatLiveWorkAction} onPress={() => setWatchdogDrawerVisible(true)} testID="ivx-chat-live-work-watchdog" hitSlop={6}>
-                    <ShieldCheck size={13} color={Colors.text} />
-                    <Text style={styles.chatLiveWorkActionText}>Watchdog</Text>
-                  </Pressable>
-                  <Pressable style={styles.chatLiveWorkAction} onPress={() => { void handleCopyTaskLog(); }} testID="ivx-chat-live-work-copy" hitSlop={6}>
-                    <Text style={styles.chatLiveWorkActionText}>Copy log</Text>
-                  </Pressable>
-                  <Pressable style={styles.chatLiveWorkAction} onPress={() => setActiveLiveWorkTask(null)} testID="ivx-chat-live-work-dismiss" hitSlop={6}>
-                    <X size={13} color={Colors.textTertiary} />
-                    <Text style={styles.chatLiveWorkActionText}>Dismiss</Text>
-                  </Pressable>
-                </View>
-              </View>
-              ) : null}
-              {ownerAIAuthState !== 'SIGNED_IN_OWNER' && ownerAIAuthState !== 'AUTH_INITIALIZING' ? (
-                <Pressable
-                  style={styles.ownerSignInBanner}
-                  onPress={() => router.push('/owner-login' as never)}
-                  testID="ivx-owner-sign-in-prompt"
-                >
-                  <Lock size={14} color={Colors.error} />
-                  <Text style={styles.ownerSignInBannerText}>
-                    {ownerAIAuthState === 'SIGNED_IN_MEMBER'
-                      ? 'This account is not the IVX owner. Sign in with the owner account.'
-                      : 'Sign in as the IVX owner to use Owner AI.'}
-                  </Text>
-                </Pressable>
-              ) : null}
-              <View style={styles.templateRow} testID="ivx-owner-chat-template-row">
-                {OWNER_PROMPT_TEMPLATES.map((template) => (
-                  <Pressable
-                    key={template.id}
-                    style={({ pressed }) => [styles.templateChip, pressed ? { opacity: 0.72 } : null]}
-                    onPress={() => handleApplyPromptTemplate(template)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Apply ${template.label} prompt template`}
-                    testID={template.testID}
-                  >
-                    <Text style={styles.templateChipText}>{template.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-              <View style={styles.composerPrimaryRow}>
-                <Pressable
-                  style={[styles.iconButton, attachmentDisabled ? styles.actionButtonDisabled : null]}
-                  onPress={() => void handlePickFile()}
-                  disabled={attachmentDisabled}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Attach a file"
-                  testID="ivx-owner-chat-attach"
-                >
-                  <Paperclip size={18} color={attachmentDisabled ? '#7C8797' : Colors.primary} />
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.iconButton,
-                    isRecordingVoice ? styles.voiceButtonActive : null,
-                    (isTranscribingVoice || sendMessageMutation.isPending || attachmentMutation.isPending || isPickingFile) ? styles.actionButtonDisabled : null,
-                  ]}
-                  onPress={() => { void handleVoicePress(); }}
-                  disabled={isTranscribingVoice || sendMessageMutation.isPending || attachmentMutation.isPending || isPickingFile}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel={isRecordingVoice ? 'Stop voice recording' : 'Start voice recording'}
-                  testID="ivx-owner-chat-voice"
-                >
-                  {isRecordingVoice ? <Square size={17} color={Colors.error} /> : <Mic size={18} color={isTranscribingVoice ? '#7C8797' : Colors.primary} />}
-                </Pressable>
-                <TextInput
-                  ref={composerInputRef}
-                  style={[styles.composerInput, { height: composerInputHeight }]}
-                  value={composerValue}
-                  onChangeText={handleComposerChange}
-                  editable={!attachmentMutation.isPending && !isPickingFile && !isRecordingVoice && !isTranscribingVoice}
-                  placeholder={composerPlaceholder}
-                  placeholderTextColor="#B8C0CC"
-                  multiline
-                  textAlignVertical="top"
-                  returnKeyType="send"
-                  blurOnSubmit={false}
-                  scrollEnabled={composerInputHeight >= 112}
-                  onContentSizeChange={(event) => {
-                    const nextHeight = Math.min(Math.max(event.nativeEvent.contentSize.height + 4, 44), 112);
-                    if (Math.abs(nextHeight - composerInputHeight) > 1) {
-                      setComposerInputHeight(nextHeight);
-                    }
-                    scrollOwnerThreadToEnd(false);
-                  }}
-                  onFocus={() => {
-                    scrollOwnerThreadToEnd(true);
-                    setTimeout(() => scrollOwnerThreadToEnd(true), Platform.OS === 'android' ? 420 : 220);
-                    if (Platform.OS === 'web') {
-                      const el = (composerInputRef.current as unknown as { _inputRef?: { current?: HTMLElement } } | null)?._inputRef?.current ?? null;
-                      scrollInputIntoView(el);
-                    }
-                  }}
-                  onSubmitEditing={(event) => {
-                    const submittedText = normalizeComposerText(event?.nativeEvent?.text, composerValueRef.current);
-                    handleSend(submittedText);
-                  }}
-                  testID="ivx-owner-chat-input"
-                />
-                <Pressable
-                  style={[styles.sendIconButton, (sendingDisabled || isBusy) ? styles.actionButtonDisabled : null]}
-                  onPress={() => {
-                    handleSend();
-                  }}
-                  disabled={sendingDisabled || isBusy}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Send message"
-                  testID="ivx-owner-chat-send"
-                >
-                  <Send size={18} color={sendingDisabled ? '#7C8797' : Colors.black} />
-                </Pressable>
-              </View>
-              <View style={styles.composerSecondaryRow}>
-                <Text numberOfLines={1} style={styles.composerHintText}>
-                  {composerStatusMessage}
-                </Text>
-                <Pressable
-                  style={[styles.aiButton, (sendingDisabled || isBusy) ? styles.actionButtonDisabled : null]}
-                  onPress={() => {
-                    handleAskAI();
-                  }}
-                  disabled={sendingDisabled || isBusy}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Ask IVX Owner AI"
-                  testID="ivx-owner-chat-ai"
-                >
-                  <Sparkles size={14} color={Colors.text} />
-                  <Text style={styles.aiButtonText}>AI</Text>
-                </Pressable>
-              </View>
-              {/* Owner session gate removed â€” composer is always available. */}
-            </View>
-          </View>
-        ) : null}
-      </KeyboardAvoidingView>
-      <IVXWatchdogDrawer visible={watchdogDrawerVisible} onClose={() => setWatchdogDrawerVisible(false)} />
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×vß”èµ©hºÚn¶X§zÍZ[\Ü™XXÝÈ\ÙPØ[˜XÚË\ÙQY™™XÝ\ÙSY[[Ë\ÙT™Y‹\ÙTÝ]HHœ›ÛH	Ü™XXÝ	ÎÂš[\Ü\Þ[˜ÔÝÜ˜YÙHœ›ÛH	Ð™XXÝ[˜]]™KX\Þ[˜Ë\ÝÜ˜YÙKØ\Þ[˜Ë\ÝÜ˜YÙIÎÂš[\Ü
+ˆ\ÈØÝ[Y[XÚÙ\ˆœ›ÛH	Ù^ËYØÝ[Y[\XÚÙ\‰ÎÂš[\Ü
+ˆ\È\XÜÈœ›ÛH	Ù^ËZ\XÜÉÎÂš[\ÜÂˆ™XÛÜ™[™Ô™\Ù]Ëˆ™\]Y\Ý™XÛÜ™[™Ô\›Z\ÜÚ[ÛœÐ\Þ[˜ËˆÙ]]Y[Ó[ÙP\Þ[˜Ëˆ\ÙP]Y[Ô™XÛÜ™\‹ˆ\ÙP]Y[Ô™XÛÜ™\”Ý]_Hœ›ÛH	Ù^ËX]Y[ÉÎÂš[\ÜÈ\ÙT™X[[YUX›HHœ›ÛH	ÐÚÛÚÜËÝ\ÙT™X[[YPÚ[›™[	ÎÂš[\ÜÈ\ÙS]]][Û‹\ÙT]Y\žK\ÙT]Y\žPÛY[Hœ›ÛH	Ð[œÝXÚËÜ™XXÝ\]Y\žIÎÂš[\ÜÈ\ÙT›Ý]\ˆHœ›ÛH	Ù^Ë\›Ý]\‰ÎÂš[\ÜÂˆ[\ˆ[š[X]Yˆ\Ý]Kˆ\H\Ý]TÝ]\Ëˆ›]\Ýˆ[XYÙKˆÙ^X›Ø\™ˆÙ^X›Ø\™]›ÚY[™ÕšY]Ëˆ\H^[Ý]Ú[™ÙQ]™[ˆ[šÚ[™Ëˆ\H˜]]™TØÜ›Û]™[ˆ\H˜]]™TÞ[]XÑ]™[ˆ]›Ü›Kˆ™\ÜØX›Kˆ™Yœ™\ÚÛÛ›ÛˆØÜ›ÛšY]ËˆÝ[TÚY]ˆ^ˆ^[œ]ˆšY]ßHœ›ÛH	Ü™XXÝ[˜]]™IÎÂš[\ÜÈY\ÜØYÙPX˜›HHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËØÚ]ØÛÛ\Û™[ËÓY\ÜØYÙPX˜›IÎÂš[\ÜÈ^XÝ][ÛÛÛœÛÛPX˜›HHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]ž[ÝÛ™\‹XZKØÛÛ\Û™[ËÑ^XÝ][ÛÛÛœÛÛPX˜›IÎÂš[\ÜÈÛÙ\˜ÙQ^XÝ][Û”Ý]\Ñœ›ÛT^[ØYHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]ž[ÝÛ™\‹XZKÚÛÚÜËÝ\ÙQ^XÝ][Û”Ý]\ÔÛ	ÎÂš[\ÜÈ\ÙTØY™P\™XR[œÙ]ÈHœ›ÛH	Ü™XXÝ[˜]]™K\ØY™KX\™XKXÛÛ^	ÎÂš[\ÜÈXÝ]š]KÚ]œ›Û‘ÝÛ‹Û\›Ø\™\ÝÜKÜ›ÜÜÚZ\‹Ø]YÙKÚ]œ˜[˜ÚÙ^T›Ý[™^[Ý]\Ú›Ø\™[™PÚ\ØÚËXZ[YYØ\Û™KY\ÜØYÙPÚ\˜ÛKZXË\\˜Û\[‹^PÚ\˜ÛK˜Y\‹˜Y[Ë›ØÚÙ]ÙX\˜ÚÙ[™ÚY[ÚXÚËÜ\šÛ\ËÜ]X\™K\›Z[˜[[œYË\ØY\Ù\”\Ë\Ù\œËHœ›ÛH	ÛXÚYK\™XXÝ[˜]]™IÎÂš[\ÜU–œ˜[™XÛÛˆœ›ÛH	ÐØÛÛ\Û™[ËÒU–œ˜[™XÛÛ‰ÎÂš[\Ü\œ›Ü›Ý[™\žHœ›ÛH	ÐØÛÛ\Û™[ËÑ\œ›Ü›Ý[™\žIÎÂš[\ÜÈØY™RXÛÛˆHœ›ÛH	ÐÛX‹ÜØY™KZXÛÛ‰ÎÂš[\ÜÈ\ÙUÙX’Ù^X›Ø\™ØÜ›Û[œ][ÕšY]ÈHœ›ÛH	ÐÚÛÚÜËÝ\ÙUÙX’Ù^X›Ø\™	ÎÂš[\ÜÛÛÜœÈœ›ÛH	ÐØÛÛœÝ[ËØÛÛÜœÉÎÂš[\ÜÈU–[XYÙHHœ›ÛH	ÐØÛÛ\Û™[ËÚ]ž	ÎÂš[\ÜÈU–ÓÕÓ‘T—ÐRWÔ“Ñ’SKU–ÓÕÓ‘T—ÐRWÔ“ÓÓWÒQHœ›ÛH	ÐØÛÛœÝ[ËÚ]ž[ÝÛ™\‹XZIÎÂš[\ÜÈ\ÙP]]Hœ›ÛH	ÐÛX‹Ø]]XÛÛ^	ÎÂš[\ÜÈ\ÐYZ[”›ÛHHœ›ÛH	ÐÛX‹Ø]]Z[\œÉÎÂš[\ÜÈU–ÐTÑSS‘WÓÕÓ‘T—ÑSPRSÈHœ›ÛH	ÐÜÚ\™YÚ]žØXØÙ\ÜËXÛÛ›Û	ÎÂš[\ÜÈ™\ÛÛ™Q]•\Ý[ÙPÛÛ^Hœ›ÛH	ÐÛX‹Ù]‹]\Ý[[ÙIÎÂš[\ÜÈÙ]U–XØÙ\ÜÕÚÙ[‹Ù]U–ÝÛ™\RPÛÛ™šYÐ]Y]U–ÐÐS“Ó’PÐSÐTWÐTÑWÕT“\HU–ÝÛ™\RPÛÛ™šYÐ]Y]Hœ›ÛH	ÐÛX‹Ú]ž\Ý\X˜\ÙKXÛY[	ÎÂš[\ÜÈ[“ÝÛ™\”Ù\ÜÚ[Û”™Y›YÚÕÓ‘T—ÔÑTÔÒSÓ—Ô‘TURT‘QÓP‘SHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]ž[ÝÛ™\‹XZKÜÙ\šXÙ\ËÛÝÛ™\”Ù\ÜÚ[Û”™Y›YÚ	ÎÂš[\ÜÈ\ÓÜ[XØÙ\ÜÓ[ÙQ[˜X›YHœ›ÛH	ÐÛX‹ÛÜ[‹XXØÙ\ÜÉÎÂš[\ÜÈØY™TÙ]Ýš[™ÈHœ›ÛH	ÐÛX‹ÜØY™KXÛ\›Ø\™	ÎÂš[\Ü\HÈU–Y\ÜØYÙKU–ÝÛ™\RT›Ý]\‘XYËU–ÝÛ™\RUÛÛÝ]]U–\ØY[œ]U–^XÝ][Û”Ý]\Ô^[ØYHœ›ÛH	ÐÜÚ\™YÚ]ž	ÎÂš[\ÜÈ\ÜÙ\ÛX[“ÝÛ™\RT™\ÜÛœÙU^\ÒU–Ù\šXÙU[˜]˜Z[X›QXYÛ›ÜÝXÜÈHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]ž[ÝÛ™\‹XZKÜÙ\šXÙ\ËÚ]žRT™\]Y\ÝÙ\šXÙIÎÂš[\ÜÈ[‘\˜X›SÝÛ™\RQ˜[˜XÚË™\Ý[YT[™[™Ñ\˜X›U\ÚÜËÚÝ[][\\˜X›Q˜[˜XÚÈHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]ž[ÝÛ™\‹XZKÜÙ\šXÙ\ËÚ]ž\˜X›U\ÚÔÙ\šXÙIÎÂš[\ÜÈ]žRUØ]ÚÙË\HØ]ÚÙÕ˜XÙR[™HHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]ž[ÝÛ™\‹XZKÜÙ\šXÙ\ËÚ]žRUØ]ÚÙÉÎÂš[\ÜÈU–Ø]ÚÙÐ˜[›™\‹U–Ø]ÚÙÑ˜]Ù\ˆHœ›ÛH	ÐØÛÛ\Û™[ËÒU–Ø]ÚÙÔ[™[	ÎÂš[\ÜÈU–ÝYÙY[Y[Ý]˜[›™\‹\H[Y[Ý]]šY[˜ÙHHœ›ÛH	ÐØÛÛ\Û™[ËÒU–ÝYÙY[Y[Ý]˜[›™\‰ÎÂš[\ÜÈÜ™X]PRSÜ˜Ú\Ý˜]Ü‹\HRSÜ˜Ú\Ý˜]ÜˆHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]ž[ÝÛ™\‹XZKÜÙ\šXÙ\ËÚ]žÝÛ™\RSÜ˜Ú\Ý˜]Ü‰ÎÂš[\ÜÛÛœÝ[Èœ›ÛH	Ù^ËXÛÛœÝ[ÉÎÂš[\ÜÈÙ]U–Z[[™›ÈHœ›ÛH	ÐØÛÛœÝ[ËØZ[Z[™›ÉÎÂš[\ÜÈÙ]U–[[YR[™›ÈHœ›ÛH	ÐÛX‹Ü[[YKY[š\›Û›Y[	ÎÂš[\ÜÈ]žXYÛ›ÜÝXÜÈHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]žY]™[Ü\‹ÙXYÛ›ÜÝXÜÔÝÜ™IÎÂš[\ÜÈ™Yœ™\ÚÝÛ™\”Ù\ÜÚ[ÛˆHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]žY]™[Ü\‹Ø]]XYÛ›ÜÝXÜÔÙ\šXÙIÎÂš[\ÜU–Y˜[˜ÙY^XÝ][Û“[ÙHœ›ÛH	ÐØÛÛ\Û™[ËÒU–Y˜[˜ÙY^XÝ][Û“[ÙIÎÂ‚‹ËÈYØXÞH[™[Ù\›Üˆ˜[˜XÚÈXØÙ\ÜÈ
+›ÝÝ\œ™[H[Ý[Y
+K‚‹ËÈ\Û[Y\ØX›K[™^[[™H\\ØÜš\Y\Û[Û›Ë][\ÙY]˜\œÂš[\ÜÒU–]™UÛÜšÕš\ÚXš[]Hœ›ÛH	ÐØÛÛ\Û™[ËÒU–]™UÛÜšÕš\ÚXš[]IÎÂš[\ÜÈ™\ÛÛ™PRQ^XÝ][Û”ÝYÙK›Ü›X]RQ^XÝ][Û”ÝYÙK\HRQ^XÝ][Û”ÝYÙHHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËØÚ]ÜÙ\šXÙ\ËØÚ]Y\ÜØYÙU][ÉÎÂš[\ÜÈÚ]XT[™[Hœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËØÚ]ØÛÛ\Û™[ËÐÚ]XT[™[	ÎÂš[\ÜÂˆÛÛXÝÚ]XSY]šXÜËˆÙ[™\˜]TXU˜XÙRYˆU–ÐÒUÔPWÔS‘SÑSP“Qˆ\HÚ]XSY]šXÜßHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËØÚ]ÜÙ\šXÙ\ËØÚ]XQXYÛ›ÜÝXÜÉÎÂš[\ÜÂˆÙ]XÝ]™T[[YTÛÝ\˜ÙKˆÙ][[YTÛÝ\˜ÙSX™[ˆÙ][[YTÝ]\ÐÛÜKˆ\ÐXÝ]™TÝ™X[Z[™ÔÝ]Kˆ\Ô[[YQ˜Z[\™Kˆ\Ô[™[™Ô™\]Y\ÝÝ]Kˆ\ÐXØÙ\X›P\ÜÚ\Ý[ÛÝ\˜ÙKˆ\Ñ^XÝY\ÜÚ\Ý[ÛÝ\˜ÙKˆ›Ü›X[^™T[[YTÛÝ\˜ÙKˆÚÝ[™\Ù\™T™\]Y\ÝØÛÜY[[YKˆÚÝ[ÚÝÑ˜[˜XÚÕR_Hœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËØÚ]ØÚ][[YTÝ]IÎÂš[\ÜÂˆZ[U–Ú]]Y]™\ÜˆZ[U–[˜Ý[Û˜[]T›ÛÙ“\ÝˆZ[U–›ÛÛT[[YTÛ˜\ÚÝˆÙ]U–ÝÛ™\RQ\œ›Ü‘XYÛ›ÜÝXÜËˆÙ]\ÝU–ÝÛ™\RT[[YT›ÛÙ‹ˆÙ]\ÝU–ÝÛ™\RTš[X\žT›Ý]Q˜Z[\™KˆÙ]\ÝU–ÝÛ™\RP]]XYÛ›ÜÝXËˆ]žRT™\]Y\ÝÙ\šXÙKˆ]žÚ]Ù\šXÙKˆ]žÝÛ™\“Y[[ÜžTÙ\šXÙKˆÜ™X]RU–ÝÛ™\‘š[U[™\œÝ[™[™Ô›Û\ˆÜ™X]RU–ÝÛ™\“][Qš[U[™\œÝ[™[™Ô›Û\ˆ]ž[˜›ÞÙ\šXÙKˆ]XÝU–›ÛÛTÝ]\Ëˆ[˜[Y]RU–›ÛÛT›Ø™PØXÚKˆ™XÛÜ™U–ÝÛ™\Ú]]Y]]™[ˆ\HU–Ú]]Y]™\Üˆ\HU–[˜Ý[Û˜[]T›ÛÙ’][Kˆ\HU–ÝÛ™\”™XÙZ]™P]Y]ˆ\HU–ÝÛ™\”™X[[YTÝXœØÜš\[Û]Y]ˆ\HU–ÝÛ™\”Ù[™]Y]ˆ\HU–›ÛÙ”™XÛÜ™ˆ\HU–›ÛÛT[[YTÛ˜\ÚÝHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]ž[ÝÛ™\‹XZKÜÙ\šXÙ\ÉÎÂš[\ÜÈ\ÒU–ØØ[š\œÝÚ][˜X›YHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]ž[ÝÛ™\‹XZKÜÙ\šXÙ\ËÚ]žØØ[š\œÝ[[YIÎÂš[\Ü\HÈU–ÝÛ™\‘š[R[œÚYÚHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]ž[ÝÛ™\‹XZKÜÙ\šXÙ\ËÚ]žÝÛ™\“Y[[ÜžTÙ\šXÙIÎÂš[\ÜÈ˜[œØÜšX™P]Y[Ô™XÛÜ™[™ÈHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]ž[ÝÛ™\‹XZKÜÙ\šXÙ\ËÚ]ž][[[Ù[Ù\šXÙIÎÂš[\ÜÈ[™›Ü˜ÙRU–Ú]]X[]Qš\™]Ø[Hœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]ž[ÝÛ™\‹XZKÜÙ\šXÙ\ËÚ]žÚ]]X[]Qš\™]Ø[	ÎÂš[\ÜÈ^XÝ]T™[XX›K\H™[XXš[]U˜XÙHHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËØÚ]ÜÙ\šXÙ\ËØZT™[XXš[]IÎÂš[\ÜÈ\ÙPÚ]Ù[™]Y]YHHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËØÚ]ÜÙ\šXÙ\ËÝ\ÙPÚ]Ù[™]Y]YIÎÂš[\ÜÈÚÝ[Ý\\ÜÚ\Ý[™Y›Ü™T\œÚ\Ý[˜ÙHHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËØÚ]ÜÙ\šXÙ\ËÚ]žÙ[™šYÙÙ\”ÛXÞIÎÂš[\ÜÈÚÝ[™[™\’[›[™R[XYÙHHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËØÚ]ÜÙ\šXÙ\ËÚ]žÚ]	ÎÂš[\ÜÂˆ\Ñ^XÚ]Ù[œÚ]]™PXÝ[ÛÛÛ™š\›X][Û‹ˆ™\ÛÛ™SÝÛ™\•\ÝÛÛ^ˆÝš\Ù[œÚ]]™PXÝ[ÛÛÛ™š\›X][Û”™Yš^ˆ\HÝÛ™\”™\]Y\ÝÛ\ÜßHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]ž[ÝÛ™\‹XZKÜÙ\šXÙ\ËÛÝÛ™\•\Ý	ÎÂš[\Ü\HÈÚ]Y\ÜØYÙKÚ]™\PÛÛ^Ú]›ÛÛT[[YTÚYÛ˜[ËÚ]›ÛÛTÝ]\ËÙ\šXÙT[[YRX[Hœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËØÚ]Ý\\ËØÚ]	ÎÂš[\ÜÈ™\ÛÛ™T›ÛÛPØ\Xš[]TÝ]K\H›ÛÛPØ\Xš[]T™\ÛÛ][ÛˆHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËØÚ]ÜÙ\šXÙ\ËÜ›ÛÛPØ\Xš[]T™\ÛÛ™\‰ÎÂš[\ÜÈØ[š]^™U\Ù\‘˜XÚ[™ÐÚ]^Hœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËØÚ]ÜÙ\šXÙ\ËÝš\ÚX›U^Ø[š]^™\‰ÎÂš[\ÜÂˆU–Ô‘TWÐÓÓ•VÔ‘Q’VˆU–Ô‘TWÐÓÓ•VÔÕQ‘’VˆØY™Uš[Kˆ\Ô™XÛÜ™ˆÜ™X]U˜[œÚY[Y\ÜØYÙRYˆ›Ü›X]Y\ÜØYÙU[YKˆ›Ü›X]Y\ÜØYÙQ]RÙ^Kˆ›Ü›X]Y\ÜØYÙQ]SX™[ˆ\ÓÝÛ“Y\ÜØYÙKˆÙ]]XÚY[X™[ˆÙ]]XÚY[Ú[™œ›ÛU\ØYˆ\œÙTÝXÝ\™YÞ\Ý[SY\ÜØYÙKˆ\Ò[\›˜[˜[œØÜš\Y\ÜØYÙKˆZ[š\ÚX›P\ÜÚ\Ý[˜[œÚY[ˆ[˜ÛÙT™\P›ÙKˆ\œÙT™\P›ÙKˆ›Ü›X[^™PÛÛ\ÜÙ\•^ˆÛÜY\ÜØYÙ\ÐžPØ[›ÛšXØ[Ü™\‹ˆ\H\œÙY™\P›Ù_Hœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËØÚ]ÜÙ\šXÙ\ËØÚ]Y\ÜØYÙU][ÉÎÂš[\ÜÂˆÛÛ›ÛÝÙ\YÙÜ™YØ]Ü‹ˆ^XÝ]SÜ\˜]ÜXÝ[Û‹ˆÙ]XÝ[Û“X™[ˆ\HÕ\Ú›Ø\™Û˜\ÚÝˆ\HÕ]šY[˜ÙT™XÛÜ™ˆ\HÕš\ÚÐ\ÜÙ\ÜÛY[ˆ\HÕÜ\˜]ÜXÝ[Û”[‹ˆ\HÕÞ\Ý[S›Ù_Hœ›ÛH	ÐÛX‹ØÛÛ›Û]ÝÙ\‰ÎÂš[\ÜÈ]™R[[YÙ[˜ÙTÙ\šXÙHHœ›ÛH	ÐÛX‹ØÛÛ›Û]ÝÙ\‹Û]™KZ[[YÙ[˜ÙIÎÂš[\ÜÈ\ÙS]™R[[YÙ[˜ÙTÛ˜\ÚÝHœ›ÛH	ÐÛX‹ØÛÛ›Û]ÝÙ\‹Ý\ÙK[]™KZ[[YÙ[˜ÙIÎÂš[\ÜÈÙ]U–ÛÛ›Û›ÛÛTÝ]\Ë\HU–ÛÛ›Û›ÛÛR][K\HU–ÛÛ›Û›ÛÛR][TÝ]\Ë\HU–ÛÛ›Û›ÛÛTÝ]\ÈHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]ž[ÝÛ™\‹XZKÜÙ\šXÙ\ËÚ]žÛÛ›Û›ÛÛTÙ\šXÙIÎÂš[\ÜÈU–ÐÓÓSPS‘Ð”RS‹Ù]ÛÛ[X[™œ˜Z[”[™[™Ë\ÐÛÛ[X[™œ˜Z[ÛÛ[X[™\ÝÛÛ[X[™œ˜Z[ÛÛ[X[™Ë[ÛÛ[X[™œ˜Z[ˆHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]ž[ÝÛ™\‹XZKÜÙ\šXÙ\ËÚ]žÛÛ[X[™œ˜Z[‰ÎÂš[\ÜÂˆZ[Ù[š[Ü‘]™[Ü\\›Ý˜[Ø\™ˆZ[Ù[š[Ü‘]™[Ü\’›Ø‘˜YˆZ[Ù[š[Ü‘]™[Ü\”ÝX›Z]Ý]\ÐØ\™ˆ\ÔÙ[š[Ü‘]™[Ü\Z[™\]Y\Ýˆ\HÙ[š[Ü‘]™[Ü\’›Ø‘˜YHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]žY]™[Ü\‹ÜÙ[š[Ü‘]™[Ü\Z[[[	ÎÂš[\ÜÂˆÛ\ÜÚYžSÝÛ™\’[[Hœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]ž[ÝÛ™\‹XZKÜÙ\šXÙ\ËÚ]žÝÛ™\’[[Û\ÜÚYšY\‰ÎÂš[\ÜÂˆ[Ú]XYÛ›ÜÝXËˆ›Ü›X]XYÛ›ÜÝXÔ™\Ý[Ø\™ˆ›Ü›X]XYÛ›ÜÝXÔ›ÙÜ™\ÜÐØ\™ˆ\HXYÛ›ÜÝXÔÝYÙKˆ\HXYÛ›ÜÝXÑš[™[™ßHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]ž[ÝÛ™\‹XZKÜÙ\šXÙ\ËÚ]žÚ]XYÛ›ÜÝXÑ[™Ú[™IÎÂš[\ÜÂˆÙ]Ù[š[Ü‘]™[Ü\•ÛÜšÙ\“\Ý›ÛÙ‹ˆ\ÕÛÜšÙ\’›ØÛÛ\]KˆÛÙ[š[Ü‘]™[Ü\•ÛÜšÙ\’›Ø‹ˆÝX›Z]Ù[š[Ü‘]™[Ü\•ÛÜšÙ\’›Ø‹ˆ\HÛÜšÙ\’›Ø•šY]ßHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÚ]žY]™[Ü\‹ÜÙ[š[Ü‘]™[Ü\•ÛÜšÙ\”Ù\šXÙIÎÂš[\ÜÈ\ÙSYYXSY™XÞXÛS\ÝHœ›ÛH	ÐÜÜ˜ËÛ[Ù[\ËÛYYXK[Y™XÞXÛKÚÛÚÜÉÎÂ‚\HXÚÙ\\ÜÙ]HÂˆ\šNˆÝš[™ÎÂˆ˜[YOÎˆÝš[™È[ÂˆZ[YU\OÎˆÝš[™È[ÂˆÚ^™OÎˆ[X™\ˆ[Âˆš[OÎˆÂˆ\œ˜^PY™™\Žˆ
+
+HOˆ›ÛZ\ÙO\œ˜^PY™™\ŽÂˆ˜[YOÎˆÝš[™ÎÂˆÚ^™OÎˆ[X™\ŽÂˆ\OÎˆÝš[™ÎÂˆH[ÂŸNÂ‚\HÝÛ™\ÛÛ[X[™™\Ý[HÂˆÛÛ[X[™ˆÝš[™ÎÂˆ\™ÜÎˆÝš[™ÎÂˆ™\ÜÛœÙNˆÝš[™ÎÂŸNÂ‚\HPT›ÛÙ’][HHÂˆYˆÝš[™ÎÂˆX™[ˆÝš[™ÎÂˆ\ÜÙYˆ›ÛÛX[ŽÂˆ]Z[ˆÝš[™ÎÂŸNÂ‚\HÝÛ™\”›Û\[\]HHÂˆYˆ	ÙX[Ü™]šY]ÉÈ	Ú[™\ÝÜ—Ü™\IÈ	ÙØÝ[Y[ÜÝ[[X\žIÎÂˆX™[ˆÝš[™ÎÂˆ›Û\ˆÝš[™ÎÂˆ\ÝQˆÝš[™ÎÂŸNÂ‚\H›Ø™SY]Y]HHÂˆØœÙ\™Y]ˆÝš[™È[ÂˆÛÝ\˜ÙNˆ	Ü™[[ÝWØ\IÈ	ÛØØ[Ø\Øœ˜Z[‰È	Ü›ÝšY\—Ù˜[˜XÚÉÈ	Ü[™[™ÉÈ	Ý[šÛ›ÝÛ‰ÎÂˆ[™Ú[ˆÝš[™È[Âˆ\Þ[Y[X\šÙ\ŽˆÝš[™È[Âˆ\Ý˜Z[\™T™X\ÛÛŽˆÝš[™È[ÂŸNÂ‚\HRT›ÞTÝ]\ÔÛ˜\ÚÝHÂˆÝ]\Îˆ	ÚYIÈ	ØÚXÚÚ[™ÉÈ	ØÛÛ›™XÝY	È	Ø›ØÚÙY	È	Ù\œ›Ü‰ÎÂˆØœÙ\™Y]ˆÝš[™È[Âˆ\›ˆÝš[™È[Âˆ[Ù[ˆÝš[™È[ÂˆØ]]Ø^NˆÝš[™È[ÂˆÛÛ™šYÝ\™Yˆ›ÛÛX[ŽÂˆ\Þ[Y[X\šÙ\ŽˆÝš[™È[Âˆ\œ›ÜŽˆÝš[™È[ÂŸNÂ‚\H[[YQXYÔÛ˜\ÚÝHÂˆ]][ÙNˆ	ÛÝÛ™\—ÜÙ\ÜÚ[Û‰È	ÛÜ[—ØXØÙ\Ü×Ù]—Øž\\ÜÉÈ	ÛZ\ÜÚ[™×ÛÝÛ™\—ÜÙ\ÜÚ[Û‰ÎÂˆÝÛ™\ž\\ÜÑ[˜X›Yˆ›ÛÛX[ŽÂˆÛÛ™\œØ][Û’YˆÝš[™È[Âˆ™\]Y\ÝYˆÝš[™È[ÂˆÛÝ\˜ÙNˆ	Ü™[[ÝWØ\IÈ	ÛØØ[Ø\Øœ˜Z[‰È	Ü›ÝšY\—Ù˜[˜XÚÉÈ	Ü[™[™ÉÈ	Ý[šÛ›ÝÛ‰ÎÂˆ[™Ú[ˆÝš[™È[Âˆ\Þ[Y[X\šÙ\ŽˆÝš[™È[ÂˆÙ[XÝY[[ˆÝš[™È[ÂˆÙ[XÝYÛÛˆÝš[™È[Âˆ™\]Y\ÝÝYÙNˆÝš[™ÎÂˆ˜Z[\™PÛ\ÜÎˆÝš[™ÎÂˆÝ]\ÎˆÝš[™ÎÂˆ™\ÜÛœÙT™]šY]ÎˆÝš[™ÎÂˆ˜Z[\™Q]Z[ˆÝš[™ÎÂˆ\Ý][\]ˆÝš[™È[Âˆ\Ý™\šYšYY]ˆÝš[™È[Âˆ\Õš\ÚX›T™\ÜÛœÙU^ˆ›ÛÛX[ŽÂŸNÂ‚\H[™[™ÓÝÛ™\“Y\ÜØYÙHHÂˆÛY[YˆÝš[™ÎÂˆ^ˆÝš[™ÎÂˆÜ™X]Y]ˆÝš[™ÎÂˆ[ÙNˆ	ÜÙ[™ÛÛ›IÈ	ÜÙ[™Ø[™ØZIÈ	ØZWÛÛ›IÈ	Ø]XÚY[	ÎÂˆÝ]\Îˆ	ÜÙ[™[™ÉÈ	Ý\ØY[™ÉÈ	Ý\ØYY	È	Ù˜Z[Y	ÎÂˆ\œ›Ü“Y\ÜØYÙOÎˆÝš[™È[Âˆ\ØYÎˆU–\ØY[œ][Âˆ\ØY›ÙÜ™\ÜÏÎˆ[X™\ˆ[Âˆ™\UÏÎˆÚ]™\PÛÛ^[ÂŸNÂ‚\HÝÛ™\ÛÛ™\œØ][Û‘˜YHÂˆ^ˆÝš[™ÎÂˆ]XÚY[˜YÎˆ[™[™ÓÝÛ™\“Y\ÜØYÙV×NÂˆ\]Y]ˆÝš[™ÎÂŸNÂ‚˜ÛÛœÝÕÓ‘T—Ô“ÓTÕSTUTÎˆ™XYÛ›HÝÛ™\”›Û\[\]V×HHÂˆÂˆYˆ	ÙX[Ü™]šY]ÉËˆX™[ˆ	ÑX[™]šY]ÉËˆ›Û\ˆ	Ô™]šY]È\È™X[\Ý]HX[ZÙHHÙ[š[ÜˆU–[˜[\ÝˆÝ[[X\š^™H\ÚYKš\ÚÜËZ\ÜÚ[™È[YÙ[˜ÙK™\]Z\™YØÝ[Y[Ë[™\ÝÜˆÝZ]Xš[]H›Ý\Ë[™H^XÝ™^XÝ[Ûˆ\Ý‰Ëˆ\ÝQˆ	Ú]ž[ÝÛ™\‹][\]KYX[\™]šY]ÉßKˆÂˆYˆ	Ú[™\ÝÜ—Ü™\IËˆX™[ˆ	Ò[™\ÝÜˆ™\IËˆ›Û\ˆ	Ñ˜YHÛÛ\X[[™\ÝÜ‹\Ý\Ü™\KˆÙY\]ÛX\‹Ø\›K›Û‹\›ÛZ\ÜÛÜžK[™[˜ÛYHÚ]H[™\ÝÜˆÚÝ[™]šY]È™Y›Ü™H™\]Y\Ý[™È[ØØ][ÛˆXØÙ\ÜË‰Ëˆ\ÝQˆ	Ú]ž[ÝÛ™\‹][\]KZ[™\ÝÜ‹\™\IßKˆÂˆYˆ	ÙØÝ[Y[ÜÝ[[X\žIËˆX™[ˆ	ÑØÈÝ[[X\žIËˆ›Û\ˆ	ÔÝ[[X\š^™HH]XÚYØÝ[Y[Üˆ\ÝY^ˆ^˜XÝHÙ^Hš[˜[˜ÚX[\›\ËØ›YØ][ÛœËXY[™\Ëš\ÚÈ\ØÛÜÝ\™\ËZ\ÜÚ[™ÈÚYÛ˜]\™\Ë[™›ÛÝË]\]Y\Ý[ÛœË‰Ëˆ\ÝQˆ	Ú]ž[ÝÛ™\‹][\]KYØÝ[Y[\Ý[[X\žIßK—NÂ‚\H˜XÚÙ[™]Y]Ý[[X\žHHÂˆÝ\œ™[[š\›Û›Y[ˆ	Ù]™[ÜY[	È	Ü›ÙXÝ[Û‰ÎÂˆ›Ý][™ÔÛXÞNˆÝš[™ÎÂˆ]Y]Ý]NˆÝš[™ÎÂˆÛÛ™šYÔÛÝ\˜ÙNˆÝš[™ÎÂˆ^XÚ]›ÙXÝ[Û”[ŽˆÝš[™ÎÂˆÛÛ™šYÝ\™YÝÛ™\RP˜\ÙU\›ˆÝš[™ÎÂˆXÝ]™P˜\ÙU\›ˆÝš[™ÎÂˆXÝ]™RÜÝˆÝš[™ÎÂˆXÝ]™Q[™Ú[ˆÝš[™ÎÂˆ\™XÝ\P˜\ÙU\›ˆÝš[™ÎÂˆ\™XÝ\RÜÝˆÝš[™ÎÂˆÝÛ™\ZRX[\›ˆÝš[™ÎÂˆÝÛ™\”›Ý]MLÐ]Y]\›ˆÝš[™ÎÂˆÝÛ™\”›Ý]MLÕ\Ù\\›ˆÝš[™ÎÂˆ\\RX[\›ˆÝš[™ÎÂˆ\\T›Ý]MLÐ]Y]\›ˆÝš[™ÎÂˆ]‘˜[˜XÚÐ˜\ÙU\›ˆÝš[™ÎÂˆXÝ]™Q˜[˜XÚÐ˜\ÙU\›ˆÝš[™ÎÂˆÙ[XÝ[Û”™X\ÛÛŽˆÝš[™ÎÂˆ˜[˜XÚÕ\ÙYˆÝš[™ÎÂˆÚQ˜[˜XÚÔÙ[XÝYˆÝš[™ÎÂˆØ\Ñ˜[˜XÚÕ\ÙYˆÝš[™ÎÂˆ›ÙXÝ[Û‘ÝX\™ˆÝš[™ÎÂˆ›ÙXÝ[Û‘ÝX\™›ØÚÙYˆ›ÛÛX[ŽÂˆ˜Z[\™S[ÙNˆÝš[™ÎÂˆ™XÛÛ[Y[™Y™\ÛÛ][ÛŽˆÝš[™ÎÂˆÜ˜XÙY[YÜ˜Y][Û“›ÝNˆÝš[™ÎÂˆÛÜšÙ›ÝÕ˜XÙNˆÝš[™Ö×NÂˆZ\ÛX]ÚØ\›š[™ÜÎˆÝš[™Ö×NÂŸNÂ‚\HÝÛ™\RT›ÛÙ”Ý]\ÈHÂˆYˆ	ÛØØ[Ø\Øœ˜Z[—Ü™XYIÈ	Ü™[[ÝWØ\WÝ™\šYšYY	È	Ø›ØÚÙYØžWØ]]	È	Ù]—Ù˜[˜XÚÉÈ	Ü™[[ÝWØ\WÝ[™\šYšYY	ÎÂˆÛ™Nˆ	Ü\ÜÉÈ	Ø›ØÚÙY	È	ÝØ\›‰È	Ü[™[™ÉÎÂˆ]NˆÝš[™ÎÂˆ]Z[ˆÝš[™ÎÂˆ]šY[˜ÙNˆÝš[™ÎÂˆ\ÝQˆÝš[™ÎÂŸNÂ‚\H[]™\žPœ˜[˜ÚÝ]\ÈHÂˆœ˜[˜Úˆ	Ü™[[ÝWÙ—Ú[œÙ\	È	ÛØØ[Ù˜[˜XÚÉÈ	Ø]]ÜÙ\ÜÚ[Û—Ù˜Z[\™IÈ	Û›ÝÛØœÙ\™Y	ÎÂˆ]NˆÝš[™ÎÂˆ]Z[ˆÝš[™ÎÂˆ]šY[˜ÙNˆÝš[™ÎÂŸNÂ‚\H™XÙZ]™Pœ˜[˜ÚÝ]\ÈHÂˆœ˜[˜Úˆ	Ü™X[[YWÙ]™[	È	ÛØØ[Û\Ý[™\‰È	Û›ÝÛØœÙ\™Y	ÎÂˆ]NˆÝš[™ÎÂˆ]Z[ˆÝš[™ÎÂˆ]šY[˜ÙNˆÝš[™ÎÂŸNÂ‚\H™\ÛÛ™YÙ[™œ˜[˜ÚH	Üš[X\žWÜ™X[[YIÈ	Ø[\›˜]WÜÚ\™Y	È	ÜÛ˜\ÚÝÙ˜[˜XÚÉÈ	ÛØØ[ÛÛ›IÎÂ‚\HÙ[™œ˜[˜Ú›ÛÙ”›ÝÈHÂˆœ˜[˜Úˆ™\ÛÛ™YÙ[™œ˜[˜Ú[ÂˆX™[ˆÝš[™ÎÂˆÛÛ^ˆÝš[™ÎÂŸNÂ‚™[˜Ý[Ûˆ™\ÛÛ™TÙ[™œ˜[˜Ú
+ˆ[]™\žPœ˜[˜Úˆ[]™\žPœ˜[˜ÚÝ]\ÖÉØœ˜[˜Ú	×Kˆ[[YTÛÝ\˜ÙNˆ[[YQXYÔÛ˜\ÚÝÉÜÛÝ\˜ÙI×KˆÝ]\ÎˆÝš[™ËŠNˆÙ[™œ˜[˜Ú›ÛÙ”›ÝÈÂˆYˆ
+[]™\žPœ˜[˜ÚOOH	Û›ÝÛØœÙ\™Y	ÊHÂˆ™]\›ˆÈœ˜[˜Úˆ[X™[ˆ	Ü[™[™ÉËÛÛ^ˆ	Û›ÈÙ[™ØœÙ\™Y	ÈNÂˆB‚ˆÛÛœÝÝ]\Ñœ˜YÛY[HÝ]\ÈOOH	Ü[™[™ÉÈ	‰ˆÝ]\ÈOOH	Û›Û™IÈÈ0­È	ÚÝ]\ßXˆ	ÉÎÂ‚ˆYˆ
+[]™\žPœ˜[˜ÚOOH	Ü™[[ÝWÙ—Ú[œÙ\	ÊHÂˆYˆ
+[[YTÛÝ\˜ÙHOOH	Ü™[[ÝWØ\IÈ[[YTÛÝ\˜ÙHOOH	ÛØØ[Ø\Øœ˜Z[‰ÊHÂˆ™]\›ˆÈœ˜[˜Úˆ	Üš[X\žWÜ™X[[YIËX™[ˆ	Üš[X\žWÜ™X[[YIËÛÛ^ˆ\ÜÚ\Ý[ˆ[œÙ\	ÜÝ]\Ñœ˜YÛY[XNÂˆBˆYˆ
+[[YTÛÝ\˜ÙHOOH	Ü›ÝšY\—Ù˜[˜XÚÉÊHÂˆ™]\›ˆÈœ˜[˜Úˆ	Ø[\›˜]WÜÚ\™Y	ËX™[ˆ	Ø[\›˜]WÜÚ\™Y	ËÛÛ^ˆØ]]Ø^Hˆ[œÙ\	ÜÝ]\Ñœ˜YÛY[XNÂˆBˆ™]\›ˆÈœ˜[˜Úˆ	Üš[X\žWÜ™X[[YIËX™[ˆ	Üš[X\žWÜ™X[[YIËÛÛ^ˆˆ[œÙ\0­ÈÛÝ\˜ÙH	Ü[[YTÛÝ\˜Ù_IÜÝ]\Ñœ˜YÛY[XNÂˆB‚ˆYˆ
+[]™\žPœ˜[˜ÚOOH	ÛØØ[Ù˜[˜XÚÉÊHÂˆ™]\›ˆÈœ˜[˜Úˆ	ÜÛ˜\ÚÝÙ˜[˜XÚÉËX™[ˆ	ÜÛ˜\ÚÝÙ˜[˜XÚÉËÛÛ^ˆØØ[˜[˜XÚÈ]	ÜÝ]\Ñœ˜YÛY[XNÂˆB‚ˆYˆ
+[]™\žPœ˜[˜ÚOOH	Ø]]ÜÙ\ÜÚ[Û—Ù˜Z[\™IÊHÂˆ™]\›ˆÈœ˜[˜Úˆ	ÛØØ[ÛÛ›IËX™[ˆ	ÛØØ[ÛÛ›IËÛÛ^ˆ]]ÜÙ\ÜÚ[Ûˆ[˜]˜Z[X›IÜÝ]\Ñœ˜YÛY[XNÂˆB‚ˆ™]\›ˆÈœ˜[˜Úˆ	ÛØØ[ÛÛ›IËX™[ˆ	ÛØØ[ÛÛ›IËÛÛ^ˆ[œ™\ÛÛ™Yœ˜[˜Ú	ÜÝ]\Ñœ˜YÛY[XNÂŸB‚™[˜Ý[ÛˆÙ][[YQ˜[˜XÚÔÝ]JÛÝ\˜ÙNˆ[[YQXYÔÛ˜\ÚÝÉÜÛÝ\˜ÙI×JNˆÝš[™ÈÂˆYˆ
+ÛÝ\˜ÙHOOH	Ü™[[ÝWØ\IÈÛÝ\˜ÙHOOH	ÛØØ[Ø\Øœ˜Z[‰ÊHÂˆ™]\›ˆ	ØÛX\™Y	ÎÂˆBˆYˆ
+ÛÝ\˜ÙHOOH	Ü›ÝšY\—Ù˜[˜XÚÉÊHÂˆ™]\›ˆ	ØXÝ]™IÎÂˆBˆ™]\›ˆ	Ü[™[™ÉÎÂŸB‚™[˜Ý[ÛˆÙ][[YQYÜ˜YYÝ]JÝ]\ÎˆU–›ÛÛT[[YTÛ˜\ÚÝÉÜ[[YTÝ]\É×JNˆÝš[™ÈÂˆYˆ
+Ý]\ÈOOH	Û]™IÊHÂˆ™]\›ˆ	ØÛX\™Y	ÎÂˆBˆYˆ
+Ý]\ÈOOH	Ü›Øš[™ÉÊHÂˆ™]\›ˆ	Ü[™[™ÉÎÂˆBˆ™]\›ˆÝ]\ÎÂŸB‚™[˜Ý[Ûˆ›Ü›X][[YU[Y\Ý[\
+˜[YNˆÝš[™È[
+NˆÝš[™ÈÂˆYˆ
+]˜[YJHÂˆ™]\›ˆ	Ü[™[™ÉÎÂˆB‚ˆÛÛœÝ\œÙYH™]È]J˜[YJNÂˆYˆ
+[X™\‹š\Ó˜SŠ\œÙY™Ù][YJ
+JJHÂˆ™]\›ˆ˜[YNÂˆB‚ˆ™]\›ˆ\œÙYÓØØ[U[YTÝš[™Ê
+NÂŸB‚™[˜Ý[ÛˆÙ][[YT›ÛÙ’XY[™J[[YNˆ[[YQXYÔÛ˜\ÚÝ
+NˆÈ]NˆÝš[™ÎÈ]Z[ˆÝš[™ÈHÂˆYˆ
+\Ô[[YQ˜Z[\™J[[YJJHÂˆ™]\›ˆÂˆ]Nˆ	Ð\ÜÚ\Ý[]™YYÈ][[Û‰Ëˆ]Z[ˆ	ÕH\Ý™\HY›ÝÛÛ\]HÛX[›Kˆ[Ý\ˆY\ÜØYÙH™[XZ[œÈØ]™Y‰ßNÂˆB‚ˆYˆ
+[[YKš\Õš\ÚX›T™\ÜÛœÙU^
+HÂˆ™]\›ˆÂˆ]Nˆ	Ð\ÜÚ\Ý[™\ÜÛœÙHØ\\™Y	Ëˆ]Z[ˆ	Ô™\H[]™\™YÛX[›K‰ßNÂˆB‚ˆYˆ
+\Ô[™[™Ô™\]Y\ÝÝ]J[[YJJHÂˆ™]\›ˆÂˆ]Nˆ	ÓY\ÜØYÙHÙ[	Ëˆ]Z[ˆ	Ô™\HÚ[\X\ˆÚ[ˆ™XYK‰ßNÂˆB‚ˆ™]\›ˆÂˆ]Nˆ	Ð\ÜÚ\Ý[™XYIËˆ]Z[ˆ	ÐÛÛ™\œØ][Ûˆ\È]˜Z[X›K‰ßNÂŸB‚\H]Y][™›Ô›ÝÔ›ÜÈHÂˆX™[ˆÝš[™ÎÂˆ˜[YNˆÝš[™ÎÂˆ\ÝQÎˆÝš[™ÎÂŸNÂ‚˜ÛÛœÝ]Y][™›Ô›ÝÈH™XXÝ›Y[[Ê[˜Ý[Ûˆ]Y][™›Ô›ÝÊÈX™[˜[YK\ÝQNˆ]Y][™›Ô›ÝÔ›ÜÊHÂˆÛÛœÝ›Ü›X[^™Y˜[YHHØY™Uš[J˜[YJK›[™ÝˆÈ˜[YHˆ	ø %	ÎÂ‚ˆ™]\›ˆ
+ˆšY]ÈÝ[O^ÜÝ[\Ë˜˜XÚÙ[™]Y]›ÝßH\ÝQ^Ý\ÝQO‚ˆ^Ý[O^ÜÝ[\Ë˜˜XÚÙ[™]Y]X™[OžÛX™[OÕ^‚ˆ^Ý[O^ÜÝ[\Ë˜˜XÚÙ[™]Y]˜[Y_OžÛ›Ü›X[^™Y˜[Y_OÕ^‚ˆÕšY]Ï‚ˆ
+NÂŸJNÂ‚˜ÛÛœÝU–ÓÕÓ‘T—ÓQTÔÐQÑT×ÔUQT–WÒÑVHHÉÚ]ž[ÝÛ™\‹XZIË	ÛY\ÜØYÙ\É×H\ÈÛÛœÝÂ˜ÛÛœÝU–ÓÕÓ‘T—ÐÓÓ•‘T”ÐUSÓ—ÔUQT–WÒÑVHHÉÚ]ž[ÝÛ™\‹XZIË	ØÛÛ™\œØ][Û‰×H\ÈÛÛœÝÂ˜ÛÛœÝU–ÐÒUÐÓÓÔÕT•ÕSQSÕUÓTÈHÌÂ‚˜\Þ[˜È[˜Ý[Ûˆ™\ÛÛ™UÚ][Ú]ÛÛÝ\XY[™OŠÜ\˜][ÛŽˆ›ÛZ\ÙO‹˜[˜XÚÎˆ
+
+HOˆ›ÛZ\ÙOŠNˆ›ÛZ\ÙOˆÂˆ][Y\Žˆ™]\›•\O\[ÙˆÙ][Y[Ý]ˆ[H[ÂˆžHÂˆ™]\›ˆ]ØZ]›ÛZ\ÙKœ˜XÙOŠÂˆÜ\˜][Û‹ˆ™]È›ÛZ\ÙOŠ
+™\ÛÛ™JHOˆÂˆ[Y\ˆHÙ][Y[Ý]
+
+
+HOˆÂˆ›ÚY˜[˜XÚÊ
+K[Š™\ÛÛ™JNÂˆKU–ÐÒUÐÓÓÔÕT•ÕSQSÕUÓTÊNÂˆJKˆJNÂˆHš[˜[HÂˆYˆ
+[Y\ŠHÂˆÛX\•[Y[Ý]
+[Y\ŠNÂˆBˆBŸB˜ÛÛœÝU–Ô“ÓÓWÔÕUT×ÔUQT–WÒÑVHHÉÚ]ž[ÝÛ™\‹XZIË	Ü›ÛÛK\Ý]\É×H\ÈÛÛœÝÂ˜ÛÛœÝU–ÐÓÓ•“ÓÔ“ÓÓWÔÕUT×ÔUQT–WÒÑVHHÉÚ]ž[ÝÛ™\‹XZIË	ØÛÛ›Û\›ÛÛK\Ý]\É×H\ÈÛÛœÝÂ˜ÛÛœÝÓÓ•“ÓÔ“ÓÓWÑSPÒ×ÒUSTÎˆU–ÛÛ›Û›ÛÛR][V×HHÂˆÈYˆ	ÜÝ\X˜\ÙK\Ý]\ÉËX™[ˆ	ÔÝ\X˜\ÙHÝ]\ÉËÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ë]Z[ˆ	Û›Ý™\šYšYY	ÈKˆÈYˆ	ÜÝ\X˜\ÙK]X›\ÉËX™[ˆ	ÔÝ\X˜\ÙHX›\ÉËÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ë]Z[ˆ	Û›Ý™\šYšYY	ÈKˆÈYˆ	ÜÝ\X˜\ÙKX]]	ËX™[ˆ	ÔÝ\X˜\ÙH]]	ËÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ë]Z[ˆ	Û›Ý™\šYšYY	ÈKˆÈYˆ	ÜÝ\X˜\ÙK\ÝÜ˜YÙIËX™[ˆ	ÔÝ\X˜\ÙHÝÜ˜YÙIËÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ë]Z[ˆ	Û›Ý™\šYšYY	ÈKˆÈYˆ	ÜÝ\X˜\ÙK\›ÉËX™[ˆ	ÔÝ\X˜\ÙH“ÈÛXÚY\ÉËÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ë]Z[ˆ	Û›Ý™\šYšYY	ÈKˆÈYˆ	ÛY\ÜØYÙK\\œÚ\Ý[˜ÙIËX™[ˆ	ÓY\ÜØYÙH\œÚ\Ý[˜ÙHÝ]\ÉËÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ë]Z[ˆ	Û›Ý™\šYšYY	ÈKˆÈYˆ	ØZK\™\ÜÛœÙK\\œÚ\Ý[˜ÙIËX™[ˆ	ÐRH™\ÜÛœÙH\œÚ\Ý[˜ÙHÝ]\ÉËÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ë]Z[ˆ	Û›Ý™\šYšYY	ÈKˆÈYˆ	Ø˜XÚÙ[™ZX[	ËX™[ˆ	Ð˜XÚÙ[™THX[	ËÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ë]Z[ˆ	Û›Ý™\šYšYY	ÈKˆÈYˆ	ÙœË]ÉËX™[ˆ	Ñ”ËÕÈÝ]\ÉËÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ë]Z[ˆ	Û›Ý™\šYšYY	ÈKˆÈYˆ	ÙÚ]X‹\™\ÉËX™[ˆ	ÑÚ]Xˆ™\ÈÝ]\ÉËÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ë]Z[ˆ	Û›Ý™\šYšYY	ÈKˆÈYˆ	ÙÚ]X‹Xœ˜[˜Ú	ËX™[ˆ	ÐÝ\œ™[œ˜[˜Ú	ËÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ë]Z[ˆ	Û›Ý™\šYšYY	ÈKˆÈYˆ	ÙÚ]X‹][˜ÛÛ[Z]Y	ËX™[ˆ	Õ[˜ÛÛ[Z]Yš[\ÉËÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ë]Z[ˆ	Û›Ý™\šYšYY	ÈKˆÈYˆ	Ù\Þ[Y[\Ý]\ÉËX™[ˆ	Ñ\Þ[Y[Ý]\ÉËÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ë]Z[ˆ	Û›Ý™\šYšYY	ÈKˆÈYˆ	Ø]ÜËZX[IËX™[ˆ	ÐUÔËÒPSHÝ]\ÉËÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ë]Z[ˆ	Û›Ý™\šYšYY	ÈKˆÈYˆ	Ù[‹XÚXÚÛ\Ý	ËX™[ˆ	Ñ[š\›Û›Y[˜\šXX›HÚXÚÛ\Ý	ËÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ë]Z[ˆ	Û›Ý™\šYšYY	ÈKˆÈYˆ	ÛZ\ÜÚ[™Ë\ÙXÜ™]ÉËX™[ˆ	ÓZ\ÜÚ[™ÈÙXÜ™]ÈÚXÚÛ\Ý	ËÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ë]Z[ˆ	Û›Ý™\šYšYY	ÈKˆÈYˆ	ÛÙÜË\Ý[[X\žIËX™[ˆ	ÓÙÜÈšY]Ù\‹ÜÝ]\ÈÝ[[X\žIËÝ]\Îˆ	Û›ÝØÛÛ›™XÝY	Ë]Z[ˆ	Û›ÝÛÛ›™XÝY	ÈKˆÈYˆ	Ý™\šYšXØ][Û‹]\ÝÉËX™[ˆ	Ô[ˆ™\šYšXØ][Ûˆ\ÝÉËÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ë]Z[ˆ	Û›Ý™\šYšYY	ÈKˆÈYˆ	Ùš^\]Y]YIËX™[ˆ	Ñš^]Y]YHÈ[™[™È›ØÚÙ\œÉËÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ë]Z[ˆ	Û›Ý™\šYšYY	ÈKˆÈYˆ	Ù^Ü\Ù]\	ËX™[ˆ	Ñ^ÜÙ]\[œÝXÝ[ÛœÉËÝ]\Îˆ	Ø]˜Z[X›IË]Z[ˆ	Ô‘PQQWÒU–ÑTÖSQS•›YS•’T“Ó“QS•ÕT’PP“TË›Y[™U–ÐRWÐ”RS—ÕÓÓË›Y	ÈK—NÂ˜ÛÛœÝU–ÓÕÓ‘T—ÑQ•ÔÕÔQÑWÒÑVHH	Ú]ž[ÝÛ™\‹XZN˜ÛÛ™\œØ][Û‹Y˜YŒIÎÂ˜ÛÛœÝU–ÓPVÑQ•ÐUPÒQS•ÈHŒÂ˜ÛÛœÝU–ÓÕÓ‘T—ÔS“‘QÓQTÔÐQÑT×ÔÕÔQÑWÒÑVHH	Ú]ž[ÝÛ™\‹XZNœ[›™Y[Y\ÜØYÙ\ÎŒIÎÂ˜ÛÛœÝRWÔ“Ð‘WÒS•T•SÓTÈHÌÌÂ˜ÛÛœÝRWÑTÕÔ“ÖWÕSQSÕUÓTÈHWÌÂ˜ÛÛœÝRWÑTÕÔ“ÖWÒS•T•SÓTÈHŒÌÂ˜ÛÛœÝÕÓ‘T—ÐÓÓSPS‘Ô‘Q’VH	ËÉÎÂ‚‹ÊŠ‚ˆ
+ˆœ›Û[™Z[Ý[\ˆ[\\ÈÝš[™ÈÚ[™]™\ˆHÚ]ÛY[Ú[™Ù\ÈÛÈBˆ
+ˆÝÛ™\‹[Û›HXYÈ[™[Ø[ˆ›Ý™H8 %ÛˆH]™H]šXÙH8 %^XÝHÚXÚÛY[ˆ
+ˆ[™H\È[›š[™ËˆYˆH[™[ÚÝÜÈ[ˆÓÝ[\H]šXÙH\ÈÝ[ÛˆBˆ
+ˆÝ[H[™H[™™\Èš^\È]™H“Õ™XXÚY›ÙXÝ[ÛˆY]‚ˆ
+‹Â˜ÛÛœÝU–Ñ”“Ó•S‘Ð•RSÔÕSTH	Ú]žXÚ]XÛY[LŒ‹L‹LL[ÝÛ™\‹YXYË\[™[]ŒIÎÂ‚‹ÊŠˆH\ÚÈÝ\™˜XÙY[›[™H[ˆHÚ]ÛÈHÝÛ™\ˆØ[ˆ[\Ý˜ZYÚÈH]™HÛÜšÈ[Ûš]Ü‹ˆ
+‹Â\HÚ]]™UÛÜšÕ\ÚÈHÈX™[ˆÝš[™ÎÈ\ÔÝ\X˜\ÙNˆ›ÛÛX[ŽÈÝ\Y]ˆÝš[™ÈNÂ‚˜ÛÛœÝU‘WÕÓÔ’×ÕTÒ×ÔUT“”Îˆ™XYÛ›HÈ™Nˆ™YÑ^ÈX™[ˆÝš[™ÎÈÝ\X˜\ÙOÎˆ›ÛÛX[ˆV×HHÂˆÈ™Nˆ×˜ÚXÚ×ÊÜÝ\X˜\ÙWŸœÝ\X˜\ÙW‹Š—ŠÚXÚßÝ]\ßX[ÛÛ›™XÝ[ÛŸ]Y\žJW‹ÚKX™[ˆ	ÐÚXÚÚ[™ÈÝ\X˜\ÙIËÝ\X˜\ÙNˆYHKˆÈ™Nˆ×š[\›Ý™WÊÚ]žŸœÙ[–ËW×OÚ[\›Ý™WŸ™Z[H[\›Ý™[Y[‹ÚKX™[ˆ	Ò[\›Ýš[™ÈU–	ÈKˆÈ™Nˆ×™\ÞWŸœÚ\]Ÿœ\ÚÈ
+›ÙXZ[Ÿ›ÙXÝ[ÛŠW‹ÚKX™[ˆ	Ñ\ÞZ[™ÈÈ›ÙXÝ[Û‰ÈKˆÈ™Nˆ×ŠØØ[Ÿš[™\ØÛÝ™\ŠW‹Š—ŠÜÜ[š]Ø\][[™\ÝÜŸ›ÜÜXÝX[^Y\Ÿ\™\ŠW‹ÚKX™[ˆ	ÔØØ[›š[™È›ÜˆØ\][ÛÝ\˜Ù\ÉÈKˆÈ™Nˆ×Šš^XYß™\Z\ŠW‹ÚKX™[ˆ	Ô[›š[™ÈHš^	ÈKˆÈ™Nˆ×Š]Y]™\šYž_[ˆ
+H
+OÝ\ÝÏÊW‹ÚKX™[ˆ	Ð]Y][™È	ˆ™\šYžZ[™ÉÈKˆÈ™Nˆ×ŠZ[Ü™X]JW‹Š—Š™X]\™_ØÜ™Y[Ÿ[Ù[_\_[™Ú[
+W‹ÚKX™[ˆ	ÐZ[[™ÉÈKˆÈ™Nˆ×Š]™HÛÜšßÚÝÈYKŠÛÜšßÚ]\™H[ÝH
+Ú[™ßÛÜšÚ[™ÊJW‹ÚKX™[ˆ	Ó]™HÛÜšÉÈK—NÂ‚‹ÊŠˆ^XÝ˜\Ú[™ÜÈ]›Ý]HHÚ]Y\ÜØYÙHÝ˜ZYÚÈHÙ[š[Üˆ]™[Ü\ˆÛÜšÙ\‹ˆÚÝÛˆ\È[\K\Ý]H[Ëˆ
+‹Â˜ÛÛœÝÓÔ’ÑT—Õ’QÑÑT—ÒS•Îˆ™XYÛ›HÝš[™Ö×HHÂˆ	ø 'Z[™X]\™H8 )¸ 'HÈ8 'Z[[Ù[H8 )¸ 'IËˆ	ø 'Ü™X]HØÜ™Y[ˆ8 )¸ 'HÈ8 'Ü™X]H[™Ú[8 )¸ 'IËˆ	ø 'š^YÈ8 )¸ 'HÈ8 '™\Z\ˆ8 )¸ 'HÈ8 ']Ú8 )¸ 'IËˆ	ø '™Y˜XÝÜˆ8 )¸ 'HÈ8 '™]Üš]H8 )¸ 'IËˆ	ø '\ÞH8 )¸ 'HÈ8 'Ú\È›ÙXÝ[Û¸ 'IË—NÂ‚‹ÊŠ‚ˆ
+ˆ]XÝÚ]\ˆHÙ[Y\ÜØYÙHÚXÚÜÈÙ™ˆH‘PS]]Û›Û[Ý\È›Ø‹‚ˆ
+‚ˆ
+ˆ\ˆÝÛ™\ˆ\™XÝ]™Nˆ›Ü›X[Ú]Y\ÜØYÙ\ÈÛÛZ[š[™ÈÛÜ™ÈZÙH™š^‹ˆ
+ˆ˜Z[‹™\ÞH‹\ÚÈ‹ÛÜšÈ‹˜ÛÛ\]H‹Üˆ™]™[Ü\ˆˆ]\Ý“Õˆ
+ˆÜ™X]H˜ZÙH›ÙÜ™\ÜÈRKˆH]™K]ÛÜšÈ˜[›™\ˆ\ÈÛ›HÚÝÛˆÚ[ˆH™X[ˆ
+ˆ]]Û›Û[Ý\È›Øˆ^\ÝÈÚ]H›ØˆQ8 %H˜XÚÙ[™\ÚÈ]Y]YH]\ÝÜ™X]Bˆ
+ˆH›Øˆš\œÝˆ\È[˜Ý[Ûˆ›ÝÈ™]\›œÈ[›Üˆ›Ü›X[^Y\ÜØYÙ\ÎÂˆ
+ˆ™X[›ØˆÝ]\È\ÈÙ]šXHÙ]XÝ]™S]™UÛÜšÕ\ÚÈÚ[ˆH›ØˆQ\È™XÙZ]™Yˆ
+ˆœ›ÛHH˜XÚÙ[™\ÚÈ]Y]YK‚ˆ
+‹Â™[˜Ý[Ûˆ]XÝÚ]]™UÛÜšÕ\ÚÊÝ^ˆÝš[™ÊNˆÈX™[ˆÝš[™ÎÈ\ÔÝ\X˜\ÙNˆ›ÛÛX[ˆH[Âˆ™]\›ˆ[ÂŸB˜ÛÛœÝQUSÓÕÓ‘T—ÐRWÐÓÓ‘’Q×ÐUQUˆU–ÝÛ™\RPÛÛ™šYÐ]Y]HÙ]U–ÝÛ™\RPÛÛ™šYÐ]Y]
+
+NÂ‚™[˜Ý[ÛˆÜ™X]R[š]X[RT›ÞTÝ]\Ê
+NˆRT›ÞTÝ]\ÔÛ˜\ÚÝÂˆ™]\›ˆÂˆÝ]\Îˆ	ÚYIËˆØœÙ\™Y]ˆ[ˆ\›ˆ[ˆ[Ù[ˆ[ˆØ]]Ø^Nˆ[ˆÛÛ™šYÝ\™Yˆ˜[ÙKˆ\Þ[Y[X\šÙ\Žˆ[ˆ\œ›ÜŽˆ[NÂŸB‚™[˜Ý[ÛˆZ[ÝÛ™\RT›ÞTÝ]\Õ\›
+]Y]ˆU–ÝÛ™\RPÛÛ™šYÐ]Y]
+NˆÝš[™È[ÂˆÛÛœÝ˜\ÙU\›HØY™Uš[J]Y]˜XÝ]™P˜\ÙU\›
+Kœ™\XÙJ×ÊÉË	ÉÊNÂˆ™]\›ˆ˜\ÙU\›È	Ø˜\ÙU\›KØ\KÚ]žÛÝÛ™\‹XZKÜ›ÞK\Ý]\Øˆ[ÂŸB‚˜\Þ[˜È[˜Ý[Ûˆ™]ÚÝÛ™\RT›ÞTÝ]\Ê]Y]ˆU–ÝÛ™\RPÛÛ™šYÐ]Y]
+Nˆ›ÛZ\ÙORT›ÞTÝ]\ÔÛ˜\ÚÝˆÂˆÛÛœÝ\›HZ[ÝÛ™\RT›ÞTÝ]\Õ\›
+]Y]
+NÂˆYˆ
+]\›
+HÂˆ™]\›ˆÂˆ‹‹˜Ü™X]R[š]X[RT›ÞTÝ]\Ê
+KˆÝ]\Îˆ	Ù\œ›Ü‰Ëˆ\œ›ÜŽˆ]Y]˜ÛÛ™šYÝ\˜][Û‘\œ›ÜˆÏÈ	ÓÝÛ™\ˆRH›ÞHÝ]\ÈT“\È›ÝÛÛ™šYÝ\™Y‰ßNÂˆB‚ˆÛÛœÝXØÙ\ÜÕÚÙ[ˆH]ØZ]Ù]U–XØÙ\ÜÕÚÙ[Š
+NÂˆYˆ
+XXØÙ\ÜÕÚÙ[ŠHÂˆ™]\›ˆÂˆ‹‹˜Ü™X]R[š]X[RT›ÞTÝ]\Ê
+KˆÝ]\Îˆ	Ø›ØÚÙY	ËˆØœÙ\™Y]ˆ™]È]J
+KÒTÓÔÝš[™Ê
+Kˆ\›ˆ\œ›ÜŽˆ	ÓÝÛ™\ˆÙ\ÜÚ[ÛˆÚÙ[ˆ\È›ÝY˜]YY]‰ßNÂˆB‚ˆÛÛœÝÛÛ›Û\ˆH™]ÈX›ÜÛÛ›Û\Š
+NÂˆÛÛœÝ[Y\ˆHÙ][Y[Ý]
+
+
+HOˆÂˆÛÛ›Û\‹˜X›Ü
+
+NÂˆKRWÑTÕÔ“ÖWÕSQSÕUÓTÊNÂ‚ˆžHÂˆÛÛœÝ™\ÜÛœÙHH]ØZ]™]Ú
+\›ÂˆY]Ùˆ	ÑÑU	ËˆXY\œÎˆÂˆXØÙ\ˆ	Ø\XØ][Û‹ÚœÛÛ‰Ëˆ]]Üš^˜][ÛŽˆ™X\™\ˆ	ØXØÙ\ÜÕÚÙ[ŸXKˆÚYÛ˜[ˆÛÛ›Û\‹œÚYÛ˜[JNÂˆÛÛœÝ^[ØYH]ØZ]™\ÜÛœÙKšœÛÛŠ
+K˜Ø]Ú
+
+
+HOˆ[
+H\È™XÛÜ™Ýš[™Ë[šÛ›ÝÛˆ[ÂˆÛÛœÝ[[YHH\Ô™XÛÜ™
+^[ØYËœ[[YJHÈ^[ØYœ[[YHˆßNÂˆÛÛœÝ[[YPÛÛ™šYÝ\™YH[[YK˜ÛÛ™šYÝ\™YOOHYNÂˆÛÛœÝ\Þ[Y[X\šÙ\ˆH\[Ùˆ^[ØYË™\Þ[Y[X\šÙ\ˆOOH	ÜÝš[™ÉÈÈ^[ØY™\Þ[Y[X\šÙ\ˆˆ[ÂˆÛÛœÝ[Ù[H\[Ùˆ[[YK›[Ù[OOH	ÜÝš[™ÉÈÈ[[YK›[Ù[ˆ[ÂˆÛÛœÝØ]]Ø^HH\[Ùˆ[[YK™Ø]]Ø^HOOH	ÜÝš[™ÉÈÈ[[YK™Ø]]Ø^Hˆ[ÂˆÛÛœÝ\œ›ÜˆH\[Ùˆ^[ØYË™\œ›ÜˆOOH	ÜÝš[™ÉÈÈ^[ØY™\œ›Üˆˆ\[Ùˆ^[ØYË™]Z[OOH	ÜÝš[™ÉÈÈ^[ØY™]Z[ˆ[Â‚ˆYˆ
+\™\ÜÛœÙK›ÚÊHÂˆ™]\›ˆÂˆÝ]\Îˆ™\ÜÛœÙKœÝ]\ÈOOHH™\ÜÛœÙKœÝ]\ÈOOHÈÈ	Ø›ØÚÙY	Èˆ	Ù\œ›Ü‰ËˆØœÙ\™Y]ˆ™]È]J
+KÒTÓÔÝš[™Ê
+Kˆ\›ˆ[Ù[ˆØ]]Ø^KˆÛÛ™šYÝ\™Yˆ˜[ÙKˆ\Þ[Y[X\šÙ\‹ˆ\œ›ÜŽˆ\œ›ÜˆÏÈ›ÞHÝ]\È™]\›™Y	Ü™\ÜÛœÙKœÝ]\ßK˜NÂˆB‚ˆ™]\›ˆÂˆÝ]\Îˆ[[YPÛÛ™šYÝ\™YÈ	ØÛÛ›™XÝY	Èˆ	Ù\œ›Ü‰ËˆØœÙ\™Y]ˆ™]È]J
+KÒTÓÔÝš[™Ê
+Kˆ\›ˆ[Ù[ˆØ]]Ø^KˆÛÛ™šYÝ\™Yˆ[[YPÛÛ™šYÝ\™Yˆ\Þ[Y[X\šÙ\‹ˆ\œ›ÜŽˆ[[YPÛÛ™šYÝ\™YÈ[ˆ	Ô›ÞH›Ý]H\È]™K]RHØ]]Ø^HÛÛ™šYÝ\˜][Ûˆ\È›Ý™XYK‰ßNÂˆHØ]Ú
+\œ›ÜŠHÂˆ™]\›ˆÂˆ‹‹˜Ü™X]R[š]X[RT›ÞTÝ]\Ê
+KˆÝ]\Îˆ	Ù\œ›Ü‰ËˆØœÙ\™Y]ˆ™]È]J
+KÒTÓÔÝš[™Ê
+Kˆ\›ˆ\œ›ÜŽˆ\œ›Üˆ[œÝ[˜Ù[Ùˆ\œ›ÜˆÈ\œ›Ü‹›Y\ÜØYÙHˆ	Õ[˜X›HÈ™XXÚÝÛ™\ˆRH›ÞHÝ]\Ë‰ßNÂˆHš[˜[HÂˆÛX\•[Y[Ý]
+[Y\ŠNÂˆBŸB‚™[˜Ý[ÛˆÙ]ÛÛ›Û›ÛÛUÛ™JÝ]\ÎˆU–ÛÛ›Û›ÛÛR][TÝ]\ÊNˆ	Ü\ÜÉÈ	ÝØ\›‰È	Ù\œ›Ü‰È	Ü[™[™ÉÈÂˆYˆ
+Ý]\ÈOOH	Ý™\šYšYY	ÈÝ]\ÈOOH	ØÛÛ›™XÝY	ÈÝ]\ÈOOH	Ø]˜Z[X›IÊHÂˆ™]\›ˆ	Ü\ÜÉÎÂˆBˆYˆ
+Ý]\ÈOOH	Ø›ØÚÙY	ÈÝ]\ÈOOH	ÛZ\ÜÚ[™×ØXØÙ\ÜÉÈÝ]\ÈOOH	Û›ÝØÛÛ›™XÝY	ÊHÂˆ™]\›ˆ	Ù\œ›Ü‰ÎÂˆBˆ™]\›ˆ	Ü[™[™ÉÎÂŸB‚™[˜Ý[ÛˆÙ]ÛÛ›Û›ÛÛTÝ]\ÓX™[
+Ý]\ÎˆU–ÛÛ›Û›ÛÛR][TÝ]\ÊNˆÝš[™ÈÂˆ™]\›ˆÝ]\Ëœ™\XÙJ×ËÙË	È	ÊNÂŸB‚˜ÛÛœÝÕÓ‘T—ÐÓÓSPS‘Îˆ™XÛÜ™Ýš[™ËÈ\ØÜš\[ÛŽˆÝš[™ÎÈ[™\Žˆ
+\™ÜÎˆÝš[™ÊHOˆÝš[™ÈOˆHÂˆ[ˆÂˆ\ØÜš\[ÛŽˆ	Ó\Ý]˜Z[X›HÝÛ™\ˆÛÛ[X[™ÉËˆ[™\Žˆ
+
+HOˆÂˆÛÛœÝ[™\ÈHØš™XÝ™[šY\ÊÕÓ‘T—ÐÓÓSPS‘ÊK›X\
+
+ØÛY[™›×JHOˆÉØÛYH8 %	Ú[™›Ë™\ØÜš\[ÛŸX
+NÂˆ™]\›ˆ]˜Z[X›HÝÛ™\ˆÛÛ[X[™Î—‰Û[™\Ëš›Ú[Š	×‰Ê_XÂˆ_KˆÝ]\ÎˆÂˆ\ØÜš\[ÛŽˆ	ÔÚÝÈÝ\œ™[›ÛÛH[™RH˜XÚÙ[™Ý]\ÉËˆ[™\Žˆ
+
+HOˆ	Ô›ÛÛHÝ]\ÎˆÚXÚÈHXY\ˆØ\™›Üˆ]™H˜XÚÙ[™Ý]\ËÝÜ˜YÙH[ÙK[]™\žHY]Ù[™RHX[‰ßKˆÛX\ŽˆÂˆ\ØÜš\[ÛŽˆ	ÐÛX\ˆØØ[Y\ÜØYÙHØXÚH
+Ù\È›Ý[]HÙ\™\ˆY\ÜØYÙ\ÊIËˆ[™\Žˆ
+
+HOˆ	ÓØØ[ØXÚHÛX\™Yˆ[È™Yœ™\ÚÈ™[ØYœ›ÛHÙ\™\‹‰ßKˆ™XÛÛ›™XÝˆÂˆ\ØÜš\[ÛŽˆ	Ñ›Ü˜ÙH™XÛÛ›™XÝÈHÚ\™Y›ÛÛH˜XÚÙ[™	Ëˆ[™\Žˆ
+
+HOˆ	Ô™XÛÛ›™XÝšYÙÙ\™Yˆ›ÛÛHÝ]\ÈÚ[™H™KY]XÝY‰ßKˆ›Ø™NˆÂˆ\ØÜš\[ÛŽˆ	Ô[ˆHX[›Ø™HÛˆHRH˜XÚÙ[™	Ëˆ[™\Žˆ
+
+HOˆ	ÐRHX[›Ø™HšYÙÙ\™YˆÚXÚÈHRH[™XØ]Üˆ›Üˆ\]YÝ]\Ë‰ßKˆœ›ØYØ\ÝˆÂˆ\ØÜš\[ÛŽˆ	ÔÙ[™Hœ›ØYØ\Ý›ÝYšXØ][ÛˆÈ[\XÚ\[ÉËˆ[™\Žˆ
+\™ÜÎˆÝš[™ÊHOˆÂˆYˆ
+\ØY™Uš[J\™ÜÊJH™]\›ˆ	Õ\ØYÙNˆØœ›ØYØ\ÝY\ÜØYÙO‰ÎÂˆ™]\›ˆœ›ØYØ\Ý]Y]YYˆ‰ÜØY™Uš[J\™ÜÊ_H‹ˆ\XÚ\[ÈÚ[™H›ÝYšYYÛˆ™^Þ[˜Ë˜Âˆ_KˆÛ›ÝÛYÙNˆÂˆ\ØÜš\[ÛŽˆ	Ð\ÚÈHÛ›ÝÛYÙKX˜\ÙH]Y\Ý[Û‰Ëˆ[™\Žˆ
+
+HOˆ	ÒÛ›ÝÛYÙH]Y\žH›Ý]YÈRKˆ™\ÜÛœÙHÚ[\X\ˆ\È[ˆ\ÜÚ\Ý[™\K‰ßKˆ›ÛÙŽˆÂˆ\ØÜš\[ÛŽˆ	ÔÚÝÈH]\Ý]™H›ÛÛH›ÛÙˆÝ[[X\žIËˆ[™\Žˆ
+
+HOˆ	ÐÛÛ\[[™ÈH]\Ý›ÛÛH›ÛÙˆÝ[[X\žK‰ßKˆš\ÚÎˆÂˆ\ØÜš\[ÛŽˆ	ÔÚÝÈHYÚ\Ý]™HÚ]Ü[[YHš\ÚÜÉËˆ[™\Žˆ
+
+HOˆ	ÐÛÛ\[[™ÈHÝ\œ™[š\ÚÈ[™[ÜH›ÜˆÚ]Ü[[YK‰ßKˆ[˜ÚY[ˆÂˆ\ØÜš\[ÛŽˆ	ÔÚÝÈH]\Ý]™H[˜ÚY[Ý[[X\žIËˆ[™\Žˆ
+
+HOˆ	ÐÛÛ\[[™ÈH]\Ý[˜ÚY[Ý[[X\žH›ÜˆHÝÛ™\ˆ›ÛÛK‰ßKˆ\ÎˆÂˆ\ØÜš\[ÛŽˆ	Ò[œÜXÝHXÝ]™H\[™[˜ÞHÚZ[ˆ›ÜˆHÝÛ™\ˆ›ÛÛIËˆ[™\Žˆ
+
+HOˆ	ÐÛÛ\[[™ÈHÝ\œ™[\[™[˜ÞHÚZ[ˆ›ÜˆHÝÛ™\ˆ›ÛÛK‰ßKˆX[ˆÂˆ\ØÜš\[ÛŽˆ	Ô[ˆ[ˆ[ÝÙY[\™[[Û‹K™ËˆÚX[™\[‹\›ÛÙˆÜˆÚX[ÛX\‹\ÝXÚÉËˆ[™\Žˆ
+\™ÜÎˆÝš[™ÊHOˆØY™Uš[J\™ÜÊHÈ™\\š[™È[ÝÙY[\™[[ÛŽˆ	ÜØY™Uš[J\™ÜÊ_Xˆ	Õ\ØYÙNˆÚX[™\[‹\›ÛÙŸÛX\‹\ÝXÚß›ÝšY\‹\›Ø™_Ú\™Y\Þ[˜ß[˜›Þ\Þ[˜ß˜[œØÜš\‰ßKˆ™\^NˆÂˆ\ØÜš\[ÛŽˆ	Ô™\^HH]\ÝØY™HÜ\˜]Üˆ[\™[[Û‰Ëˆ[™\Žˆ
+
+HOˆ	Ô™\\š[™ÈH]\ÝØY™HÜ\˜]Üˆ[\™[[Ûˆ›Üˆ™\^K‰ßKˆœ˜Z[ŽˆÂˆ\ØÜš\[ÛŽˆ	Ó\ÝHÛÛ[X[™œ˜Z[ˆÛÛ[X[™È][ˆÝÛ™\ˆÝ\™˜XÙ\È[›[™IËˆ[™\Žˆ
+
+HOˆ\ÝÛÛ[X[™œ˜Z[ÛÛ[X[™Ê
+_Kˆ‹‹“Øš™XÝ™œ›ÛQ[šY\ÊˆØš™XÝ˜[Y\ÊU–ÐÓÓSPS‘Ð”RSŠK›X\
+
+[žJHOˆÂˆ[žK˜ÛÛ[X[™ˆÂˆ\ØÜš\[ÛŽˆ	Ù[žK™\ØÜš\[ÛŸH
+\ØYÙNˆ	Ù[žK\ØYÙ_JXˆ[™\Žˆ
+
+HOˆÙ]ÛÛ[X[™œ˜Z[”[™[™Ê[žK˜ÛÛ[X[™
+HÏÈ[›š[™ÈÉÙ[žK˜ÛÛ[X[™x )˜KˆJKˆ
+_NÂ‚™[˜Ý[Ûˆ\œÙSÝÛ™\ÛÛ[X[™
+^ˆÝš[™ÊNˆÝÛ™\ÛÛ[X[™™\Ý[[ÂˆÛÛœÝš[[YYHØY™Uš[J^
+NÂˆYˆ
+]š[[YYœÝ\ÕÚ]
+ÕÓ‘T—ÐÓÓSPS‘Ô‘Q’V
+JH™]\›ˆ[ÂˆÛÛœÝ\ÈHš[[YYœÛXÙJÕÓ‘T—ÐÓÓSPS‘Ô‘Q’V›[™Ý
+KœÜ]
+×ÊËÊNÂˆÛÛœÝÛÛ[X[™H
+\ÖÌHÏÈ	ÉÊKÓÝÙ\Ø\ÙJ
+NÂˆÛÛœÝ\™ÜÈH\ËœÛXÙJJKš›Ú[Š	È	ÊNÂˆYˆ
+XÛÛ[X[™
+H™]\›ˆ[ÂˆÛÛœÝ[™\ˆHÕÓ‘T—ÐÓÓSPS‘ÖØÛÛ[X[™NÂˆYˆ
+Z[™\ŠH™]\›ˆÈÛÛ[X[™\™ÜË™\ÜÛœÙNˆ[šÛ›ÝÛˆÛÛ[X[™ˆÉØÛÛ[X[™Kˆ\HÚ[›Üˆ]˜Z[X›HÛÛ[X[™Ë˜NÂˆÛÛœÛÛK›ÙÊ	ÖÒU–ÝÛ™\Ú]›Ý]WHÝÛ™\ˆÛÛ[X[™]XÝY‰ËÛÛ[X[™	Ø\™ÜÎ‰Ë\™ÜÊNÂˆ™]\›ˆÈÛÛ[X[™\™ÜË™\ÜÛœÙNˆ[™\‹š[™\Š\™ÜÊHNÂŸB‚™[˜Ý[ÛˆZ[Ù[œÚ]]™PXÝ[ÛÛÛ™š\›X][Û“Y\ÜØYÙJ[œ]ˆÂˆ›Ü›X[^™Y^ˆÝš[™ÎÂˆ™\]Y\ÝÛ\ÜÎˆÝÛ™\”™\]Y\ÝÛ\ÜÎÂˆÛÛ™\œØ][ÛXØÙ\ÜÔÝ]Nˆ	Ù˜[˜XÚ×ØÚ]ÛÛ›IÈ	Ù[Ø˜XÚÙ[™Ù^XÝ][Û‰ÎÂˆ˜XÚÙ[™YZ[•™\šYšYYˆ›ÛÛX[ŽÂŸJNˆÝš[™ÈÂˆÛÛœÝÛÛ™š\›X][Û•\™Ù]H[œ]››Ü›X[^™Y^œÝ\ÕÚ]
+	ËÉÊBˆÈØÛÛ™š\›H	Ú[œ]››Ü›X[^™Y^XˆˆÛÛ™š\›H	Ú[œ]››Ü›X[^™Y^XÂˆÛÛœÝÛÛ™š\›X][Û”™X\ÛÛˆH[œ]œ™\]Y\ÝÛ\ÜËœ™\XÙJ×ËÙË	È	ÊNÂˆÛÛœÝ˜XÚÙ[™Ý]HH[œ]˜˜XÚÙ[™YZ[•™\šYšYYÈ	Ø˜XÚÙ[™ØYZ[—Ý™\šYšYY	Èˆ	Ø˜XÚÙ[™ØYZ[—Ý[™\šYšYY	ÎÂ‚ˆ™]\›ˆÂˆ	Ô™\Ý[ˆÛÛ™š\›X][Ûˆ™\]Z\™Y	Ëˆ^[˜][ÛŽˆÝÛ™\‹\›ÛÛH\ÝÝ^\ÈXÝ]™H›Üˆ›Ü›X[ÛÛ™\œØ][Û‹]	ØÛÛ™š\›X][Û”™X\ÛÛŸH™YYÈ^XÚ]ÛÛ™š\›X][Ûˆ™Y›Ü™H[žHYZ[ˆ^XÝ][Ûˆ\ÈÛZ[YY˜ˆ]šY[˜ÙNˆÝÛ™\—Ü›ÛÛWØ]][XØ]Y0­È	Ø˜XÚÙ[™Ý]_H0­È	Ú[œ]˜ÛÛ™\œØ][ÛXØÙ\ÜÔÝ]_H0­È\ÝXÝ]™WØXÝ[Û—Ü™\]Z\™\×ØÛÛ™š\›X][Û˜ˆ	ÐY™™XÝY\[™[˜ÚY\ÎˆÝÛ™\ˆ›ÛÛH\Ý8¡¤ˆ˜XÚÙ[™YZ[ˆ^XÝ][ÛˆØ]IËˆ	ÓÜ\˜]ÜˆXÝ[ÛˆÙÎˆ[™[™×ØÛÛ™š\›X][Û‰Ëˆ	Ô›Û˜XÚÎˆ›Ý™\]Z\™Y	Ëˆ[šÙY›ÛÙˆØ\™ÎˆÛÛ™š\›HÚ]	ØÛÛ™š\›X][Û•\™Ù]XˆKš›Ú[Š	×‰ÊNÂŸB‚™[˜Ý[ÛˆZ[˜[˜XÚÐÚ]Û›Q^XÝ][Û“Y\ÜØYÙJ[œ]ˆÂˆ›Ü›X[^™Y^ˆÝš[™ÎÂˆ™\]Y\ÝÛ\ÜÎˆÝÛ™\”™\]Y\ÝÛ\ÜÎÂŸJNˆÝš[™ÈÂˆÛÛœÝ™\]Y\ÝYXÝ[ÛˆH[œ]››Ü›X[^™Y^	ÝH™\]Y\ÝYXÝ[Û‰ÎÂˆÛÛœÝXÝ[Û”™X\ÛÛˆH[œ]œ™\]Y\ÝÛ\ÜËœ™\XÙJ×ËÙË	È	ÊNÂ‚ˆ™]\›ˆÂˆ	Ô™\Ý[ˆ›ØÚÙY	Ëˆ^[˜][ÛŽˆÝÛ™\ˆ›ÛÛH\Ý\ÈXÝ]™K]	ØXÝ[Û”™X\ÛÛŸH™\]Z\™\È™\šYšYY˜XÚÙ[™YZ[ˆXØÙ\ÜËˆHØ[ˆ\ØÝ\ÜÈÜˆ[ˆ	Ü™\]Y\ÝYXÝ[ÛŸK]HÚ[›ÝÛZ[H˜XÚÙ[™ØYZ[ˆ^XÝ][Ûˆ[[™\šYšXØ][Ûˆ\È™\ÝÜ™Y˜ˆ	Ñ]šY[˜ÙNˆÝÛ™\—Ü›ÛÛWØ]][XØ]Y0­È˜XÚÙ[™ØYZ[—Ý[™\šYšYY	Ëˆ	ÐY™™XÝY\[™[˜ÚY\ÎˆÝÛ™\ˆ›ÛÛH\Ý8¡¤ˆ˜[˜XÚÈ[[YH8¡¤ˆ˜XÚÙ[™YZ[ˆ^XÝ][ÛˆØ]IËˆ	ÓÜ\˜]ÜˆXÝ[ÛˆÙÎˆÚ]ÛÛ›WÛ[Z]	Ëˆ	Ô›Û˜XÚÎˆ›Ý™\]Z\™Y	Ëˆ	Ó[šÙY›ÛÙˆØ\™ÎˆØZ]›Üˆ˜XÚÙ[™ØYZ[—Ý™\šYšYYÜˆÛÛ[YHÚ]›Ü›X[Ú]	ËˆKš›Ú[Š	×‰ÊNÂŸB‚™[˜Ý[ÛˆZ[ØØ[ØY™PXÝ[ÛÛÛ™š\›X][Û“Y\ÜØYÙJ[œ]ˆÂˆ›Ü›X[^™Y^ˆÝš[™ÎÂˆ™\]Y\ÝÛ\ÜÎˆÝÛ™\”™\]Y\ÝÛ\ÜÎÂŸJNˆÝš[™ÈÂˆÛÛœÝ™\]Y\ÝYXÝ[ÛˆHØY™Uš[J[œ]››Ü›X[^™Y^
+H	Ý\ÈXÝ[Û‰ÎÂˆÛÛœÝ™XYX›PÛ\ÜÈH[œ]œ™\]Y\ÝÛ\ÜËœ™\XÙJ×ËÙË	È	ÊNÂˆ™]\›ˆÂˆ	ÐÛÛ™š\›X][Ûˆ™YYY™Y›Ü™HH›ØÙYY‰Ëˆ\ÈÛÚÜÈZÙHH	Ü™XYX›PÛ\ÜßH™\]Y\Ýˆ8 '	Ü™\]Y\ÝYXÝ[ÛŸx 'K˜ˆ	Ô™\HÚ]8 'ÛÛ™š\›x 'H›ÛÝÙYžHHØ[YH™\]Y\ÝYˆ[ÝHØ[YHÈÛÛ[YKˆHØ[ˆ[ÛÈ[[ˆ]ØY™[Hš\œÝ‰ËˆKš›Ú[Š	×‰ÊNÂŸB‚™[˜Ý[ÛˆÙ][]™\žPœ˜[˜ÚÝ]\Ê]Y]ˆU–ÝÛ™\”Ù[™]Y][
+Nˆ[]™\žPœ˜[˜ÚÝ]\ÈÂˆYˆ
+X]Y]
+HÂˆ™]\›ˆÂˆœ˜[˜Úˆ	Û›ÝÛØœÙ\™Y	Ëˆ]Nˆ	ÜÙ[™][™[™È›ÛÙ‰Ëˆ]Z[ˆ	Ó›ÈÛÛ\]YÝÛ™\‹\›ÛÛHÙ[™\È™Y[ˆØ\\™Y[ˆ\ÈÙ\ÜÚ[ÛˆY]‰Ëˆ]šY[˜ÙNˆ	ÔÙ[™Û™HY\ÜØYÙH›ÝÈÈØ\\™H‹ÛØØ[Ø]]œ˜[˜Ú]šY[˜ÙK‰ßNÂˆB‚ˆYˆ
+]Y]˜[œÜÜOOH	Ü™[[ÝWÙ—Ú[œÙ\	ÊHÂˆ™]\›ˆÂˆœ˜[˜Úˆ	Ü™[[ÝWÙ—Ú[œÙ\	Ëˆ]Nˆ	Ü™[[ÝHˆ[œÙ\	Ëˆ]Z[ˆ	ÕH\ÝÝÛ™\‹\›ÛÛHÜš]H™XXÚYÚ\™YÝ\X˜\ÙH\œÚ\Ý[˜ÙK‰Ëˆ]šY[˜ÙNˆ	Ø]Y]›Y\ÜØYÙRYH0­È	Ø]Y]œ™X\ÛÛŸXNÂˆB‚ˆYˆ
+]Y]˜[œÜÜOOH	Ø]]ÜÙ\ÜÚ[Û—Ù˜Z[\™IÊHÂˆ™]\›ˆÂˆœ˜[˜Úˆ	Ø]]ÜÙ\ÜÚ[Û—Ù˜Z[\™IËˆ]Nˆ	Ø]]ÜÙ\ÜÚ[Ûˆ˜Z[\™IËˆ]Z[ˆ	ÕH\ÝÝÛ™\‹\›ÛÛHÜš]HÛÝ[›Ý\ÙHÚ\™Y\œÚ\Ý[˜ÙH™XØ]\ÙHÝÛ™\ˆ]]ÜÙ\ÜÚ[ÛˆØ\È[˜]˜Z[X›K‰Ëˆ]šY[˜ÙNˆ	Ø]Y]›Y\ÜØYÙRYH0­È	Ø]Y]œ™X\ÛÛŸXNÂˆB‚ˆ™]\›ˆÂˆœ˜[˜Úˆ	ÛØØ[Ù˜[˜XÚÉËˆ]Nˆ	ÛØØ[˜[˜XÚÉËˆ]Z[ˆ	ÕH\ÝÝÛ™\‹\›ÛÛHÜš]H™[˜XÚÈÈØØ[[Û›H\œÚ\Ý[˜ÙHY\ˆHÚ\™Y]˜Z[Y‰Ëˆ]šY[˜ÙNˆ	Ø]Y]›Y\ÜØYÙRYH0­È	Ø]Y]œ™X\ÛÛŸXNÂŸB‚™[˜Ý[ÛˆÙ]™XÙZ]™Pœ˜[˜ÚÝ]\Ê]Y]ˆU–ÝÛ™\”™XÙZ]™P]Y][
+Nˆ™XÙZ]™Pœ˜[˜ÚÝ]\ÈÂˆYˆ
+X]Y]
+HÂˆ™]\›ˆÂˆœ˜[˜Úˆ	Û›ÝÛØœÙ\™Y	Ëˆ]Nˆ	Ü™XÙZ]™H][™[™È›ÛÙ‰Ëˆ]Z[ˆ	Ó›ÈÝÛ™\‹\›ÛÛH™XÙZ]™H]™[\È™Y[ˆØ\\™Y[ˆ\ÈÙ\ÜÚ[ÛˆY]‰Ëˆ]šY[˜ÙNˆ	ÕØZ]›ÜˆHœ™\Ú[˜›Ý[™Y\ÜØYÙHÜˆ™X[[YHXÚÈÈØ\\™H™XÙZ]™KXœ˜[˜Ú›ÛÙ‹‰ßNÂˆB‚ˆYˆ
+]Y]˜[œÜÜOOH	Ü™X[[YWÙ]™[	ÊHÂˆ™]\›ˆÂˆœ˜[˜Úˆ	Ü™X[[YWÙ]™[	Ëˆ]Nˆ	Ü™X[[YH]™[	Ëˆ]Z[ˆ	ÕH\Ý[˜›Ý[™ÝÛ™\‹\›ÛÛHY\ÜØYÙHØ\È[]™\™Y›ÝYÚH™X[[YHÝXœØÜš\[Û‹‰Ëˆ]šY[˜ÙNˆ	Ø]Y]›Y\ÜØYÙRYH0­È	Ø]Y]œ™X\ÛÛŸXNÂˆB‚ˆ™]\›ˆÂˆœ˜[˜Úˆ	ÛØØ[Û\Ý[™\‰Ëˆ]Nˆ	ÛØØ[\Ý[™\‰Ëˆ]Z[ˆ	ÕH\Ý[˜›Ý[™ÝÛ™\‹\›ÛÛHY\ÜØYÙHØ\È[]™\™Y›ÝYÚHØØ[˜[˜XÚÈ\Ý[™\‹‰Ëˆ]šY[˜ÙNˆ	Ø]Y]›Y\ÜØYÙRYH0­È	Ø]Y]œ™X\ÛÛŸXNÂŸB‚˜ÛÛœÝ]TÙ\\˜]ÜˆH™XXÝ›Y[[Ê[˜Ý[Ûˆ]TÙ\\˜]ÜŠÈ˜[YHNˆÈ˜[YNˆÝš[™ÈJHÂˆ™]\›ˆ
+ˆšY]ÈÝ[O^ÜÝ[\Ë™]TÙ\\˜]Ü”›ÝßH\ÝQ^Ø]ž[ÝÛ™\‹Y]K\Ù\\˜]Ü‹IÙ›Ü›X]Y\ÜØYÙQ]RÙ^J˜[YJ_XO‚ˆšY]ÈÝ[O^ÜÝ[\Ë™]TÙ\\˜]Ü“[™_HÏ‚ˆ^Ý[O^ÜÝ[\Ë™]TÙ\\˜]Ü•^OžÙ›Ü›X]Y\ÜØYÙQ]SX™[
+˜[YJ_OÕ^‚ˆšY]ÈÝ[O^ÜÝ[\Ë™]TÙ\\˜]Ü“[™_HÏ‚ˆÕšY]Ï‚ˆ
+NÂŸJNÂ‚™^ÜY˜][[˜Ý[ÛˆU–ÝÛ™\Ú]›Ý]J
+HÂˆËÈ™X[[YNˆ[˜[Y]HÛˆˆÚ[™Ù\Âˆ\ÙT™X[[YUX›J	Û›ÝYšXØ][ÛœÉËÖÉÛ›ÝYšXØ][ÛœÉ×WJNÂˆÛÛœÝ]Y\žPÛY[H\ÙT]Y\žPÛY[
+
+NÂˆÛÛœÝ›Ý]\ˆH\ÙT›Ý]\Š
+NÂˆÛÛœÝ›]\Ý™YˆH\ÙT™Y›]\ÝU–Y\ÜØYÙOˆ[Š[
+NÂˆÛÛœÝÛÛ\ÜÙ\’[œ]™YˆH\ÙT™Y^[œ][Š[
+NÂˆÛÛœÝÛÛ\ÜÙ\•˜[YT™YˆH\ÙT™YÝš[™ÏŠ	ÉÊNÂˆÛÛœÝYÚYÚYY\ÜØYÙU[Y[Ý]™YˆH\ÙT™Y™]\›•\O\[ÙˆÙ][Y[Ý]ˆ[Š[
+NÂˆÛÛœÝ[™[™Ò[\Y\ÜØYÙRY™YˆH\ÙT™YÝš[™È[Š[
+NÂˆÛÛœÝÝ\™\ÜÐ]]ÔØÜ›Û[[™YˆH\ÙT™Y[X™\Š
+NÂˆÛÛœÝ\Ý›Û’Ù^X›Ø\™›ÛÝZYÚ™YˆH\ÙT™Y[X™\Š
+NÂˆÛÛœÝ\Ð]›ÝÛT™YˆH\ÙT™Y›ÛÛX[ŠYJNÂˆÛÛœÝ™]“Y\ÜØYÙPÛÝ[™YˆH\ÙT™Y[X™\Š
+NÂˆÛÛœÝ™]”ÙX\˜ÚXÝ]™T™YˆH\ÙT™Y›ÛÛX[Š˜[ÙJNÂˆÛÛœÝ\ÝØÜ›ÛYÛÛ™\œØ][Û’Y™YˆH\ÙT™YÝš[™È[Š[
+NÂˆËÈÔS‹SÓ‹SUTÕ’Vˆ˜XÚÜÈÚ]\ˆHÚ]Ý[™YYÈÈ™H[˜ÚÜ™YÂˆËÈH™]Ù\ÝY\ÜØYÙHY\ˆš\œÝØYÈÛÛ™\œØ][ÛˆÝÚ]ÚˆÙ\\È™XXÝˆËÈÝ]H
+›ÝH™YŠHÛÈHYXØ]Y™]žHY™™XÝØ[ˆ™K\™[™\ˆ[™ÙY\žZ[™ÂˆËÈ[[H›]\ÝXÝX[H™\ÜÈ]\È]H›ÝÛKˆ™]™[ÈH˜XÙBˆËÈÚ\™HØÜ›ÛÑ[™ÈØÜ›ÛÒ[™^˜Z[Ú[[H™Y›Ü™H[˜[ZXÈY\ÜØYÙBˆËÈX˜›\È]™H™Y[ˆYX\Ý\™Y‚ˆÛÛœÝÚ[š]X[ØÜ›Û[™[™ËÙ][š]X[ØÜ›Û[™[™×HH\ÙTÝ]O›ÛÛX[ŠYJNÂˆÛÛœÝ[œÙ]ÈH\ÙTØY™P\™XR[œÙ]Ê
+NÂˆÛÛœÝÈ\Ù\‹\Ù\’Y\ÓØY[™Ë\Ð]][XØ]Y\Ù\”›ÛKÙÚ[“ÝÛ™\”\ÜÝÛÜ™\ÜÈHH\ÙP]]
+
+NÂˆÛÛœÝØÛÛ\ÜÙ\•˜[YKÙ]ÛÛ\ÜÙ\•˜[YWHH\ÙTÝ]OÝš[™ÏŠ	ÉÊNÂˆÛÛœÝÛY\ÜØYÙTÙX\˜Ú]Y\žKÙ]Y\ÜØYÙTÙX\˜Ú]Y\žWHH\ÙTÝ]OÝš[™ÏŠ	ÉÊNÂˆÛÛœÝÜÙX\˜ÚÜ[‹Ù]ÙX\˜ÚÜ[—HH\ÙTÝ]O›ÛÛX[Š˜[ÙJNÂˆÛÛœÝÜ[›™YY\ÜØYÙRYËÙ][›™YY\ÜØYÙRY×HH\ÙTÝ]OÝš[™Ö×OŠ×JNÂˆÛÛœÝÜÙ[XÝY™\PÛÛ^Ù]Ù[XÝY™\PÛÛ^HH\ÙTÝ]OÚ]™\PÛÛ^[Š[
+NÂˆÛÛœÝÚYÚYÚYY\ÜØYÙRYÙ]YÚYÚYY\ÜØYÙRYHH\ÙTÝ]OÝš[™È[Š[
+NÂˆÛÛœÝÛZ\ÜÚ[™Ô™\SY\ÜØYÙRYÙ]Z\ÜÚ[™Ô™\SY\ÜØYÙRYHH\ÙTÝ]OÝš[™È[Š[
+NÂˆÛÛœÝ[›™YY\ÜØYÙ\Ô™\ÝÜ™PÛÛ\]Y™YˆH\ÙT™Y›ÛÛX[Š˜[ÙJNÂˆÛÛœÝÚ\ÔXÚÚ[™Ñš[KÙ]\ÔXÚÚ[™Ñš[WHH\ÙTÝ]O›ÛÛX[Š˜[ÙJNÂˆÛÛœÝÙ˜Y]XÚY[ËÙ]˜Y]XÚY[×HH\ÙTÝ]OÈ\ØYˆU–\ØY[œ]È\Ò[XYÙNˆ›ÛÛX[ŽÈ\ÕšY[Îˆ›ÛÛX[ˆV×OŠ×JNÂˆÛÛœÝØÛÛ\ÜÙ\’ZYÚÙ]ÛÛ\ÜÙ\’ZYÚHH\ÙTÝ]O[X™\Š
+NÂˆÛÛœÝØÛÛ\ÜÙ\’[œ]ZYÚÙ]ÛÛ\ÜÙ\’[œ]ZYÚHH\ÙTÝ]O[X™\Š
+NÂˆÛÛœÝÚÙ^X›Ø\™[œÙ]Ù]Ù^X›Ø\™[œÙ]HH\ÙTÝ]O[X™\Š
+NÂˆÛÛœÝÜ›ÛÝ^[Ý]ZYÚÙ]›ÛÝ^[Ý]ZYÚHH\ÙTÝ]O[X™\Š
+NÂˆÛÛœÝÜÚÝÑXYÛ›ÜÝXÜËÙ]ÚÝÑXYÛ›ÜÝXÜ×HH\ÙTÝ]O›ÛÛX[Š˜[ÙJNÂˆËÈZ[Z[™›Ü›X][ÛˆXYÛ›ÜÝXÜÈ˜[›™\ŽˆSÐVTÈY[ˆžHY˜][ˆHÝÛ™\‚ˆËÈØ[ˆ™[Ü[ˆ]œ›ÛHÝÛ™\ˆÛÛ›Û8¡¤ˆXYÛ›ÜÝXÜÈ8¡¤ˆZ[[™›Ü›X][Û‹ˆBˆËÈÛÜÙYÝ]H\È\œÚ\ÝYXÜ›ÜÜÈ\™\Ý\ÈÛÈ›ÙXÝ[Ûˆ™]™\ˆÚÝÜÂˆËÈHÝ™\›^H[›\ÜÈ^XÚ]H™\]Y\ÝY‚ˆËÈXYÛ›ÜÝXÜÈÝ™\›^H™[[Ý™Y8 %[Ý™YÈ›ÝXÝYØYZ[‹ÙXYÛ›ÜÝXÜÈ›Ý]K‚ˆËÈHÚ]ØÜ™Y[ˆ›ÈÛ™Ù\ˆ™[™\œÈH›Ø][™ÈXYÛ›ÜÝXÜÈ[™[‚ˆËÈÝÛ™\ˆÙ\ÜÚ[ÛˆØ]H™[[Ý™YˆÚ]ÛÛ\ÜÙ\ˆ\È[Ø^\È\ØX›HÚ]Ý]™\]Z\š[™ÂˆËÈHÙ\\˜]HÝÛ™\ˆ™\šYšXØ][ÛˆÝ\ˆH™Y›YÚÝ]H\ÈÙ\™XYH›Ü‚ˆËÈ˜XÚÝØ\™ÈÛÛ\]Xš[]HÚ][žHXYÛ›ÜÝXÜÈ]Ý[[œÜXÝ]‚ˆÛÛœÝÝÛ™\”Ù\ÜÚ[Û”™Y›YÚHÈÝ]Nˆ	Ü™XYIÈ\ÈÛÛœÝNÂˆÛÛœÝÜ\ÜÝÛÜ™\ÜÓØY[™ËÙ]\ÜÝÛÜ™\ÜÓØY[™×HH\ÙTÝ]O›ÛÛX[Š˜[ÙJNÂˆÛÛœÝÜÚÝÔØÜ›ÛÓ]\ÝÙ]ÚÝÔØÜ›ÛÓ]\ÝHH\ÙTÝ]O›ÛÛX[Š˜[ÙJNÂˆÛÛœÝÝ[œ™XYÛÝ[Ù][œ™XYÛÝ[HH\ÙTÝ]O[X™\Š
+NÂˆËÈÚ]PHXYÛ›ÜÝXÈ[™[8 %ÝÛ™\‹[Û›K[\Ü˜\žK™[[Ý˜X›HY\ˆÙ\YšXØ][Û‹‚ˆÛÛœÝÜÚÝÔXT[™[Ù]ÚÝÔXT[™[HH\ÙTÝ]O›ÛÛX[Š˜[ÙJNÂˆÛÛœÝÜXU˜XÙRYHH\ÙTÝ]OÝš[™ÏŠ
+
+HOˆÙ[™\˜]TXU˜XÙRY
+
+JNÂˆÛÛœÝÜXTÝX›Z][™ËÙ]XTÝX›Z][™×HH\ÙTÝ]O›ÛÛX[Š˜[ÙJNÂˆÛÛœÝÜXTÝX›Z]™\Ý[Ù]XTÝX›Z]™\Ý[HH\ÙTÝ]O	ÚYIÈ	ÜÝXØÙ\ÜÉÈ	Ù\œ›Ü‰È[Š[
+NÂˆÛÛœÝÙš\œÝÛÛ[Ù™œÙ]™XÛÜ™YÙ]š\œÝÛÛ[Ù™œÙ]™XÛÜ™YHH\ÙTÝ]O[X™\ˆ[Š[
+NÂˆÛÛœÝ\XØ]SY\ÜØYÙPÛÝ[™YˆH\ÙT™Y[X™\Š
+NÂˆÛÛœÝ\Ý™XÛÛ›™XÝ[YT™YˆH\ÙT™YÝš[™È[Š[
+NÂˆÛÛœÝ\ÓÜ[XØÙ\ÜÐZ[H\ÓÜ[XØÙ\ÜÓ[ÙQ[˜X›Y
+
+NÂˆÛÛœÝØØ[š\œÝÚ][ÙHH\ÙSY[[Ï›ÛÛX[Š
+
+HOˆ\ÒU–ØØ[š\œÝÚ][˜X›Y
+
+K×JNÂˆÛÛœÝÝÛ™\’YH\ÙSY[[ÏÝš[™ÏŠ
+
+HOˆ\Ù\ËšYÏÈ\Ù\’YÏÈ
+\ÓÜ[XØÙ\ÜÐZ[ØØ[š\œÝÚ][ÙHÈ	Ú]ž[ØØ[[ÝÛ™\‰Èˆ	ÉÊKÚ\ÓÜ[XØÙ\ÜÐZ[ØØ[š\œÝÚ][ÙK\Ù\ËšY\Ù\’YJNÂˆÛÛœÝÝÛ™\“X™[H\ÙSY[[ÏÝš[™ÏŠ
+
+HOˆØY™Uš[J\Ù\Ë™[XZ[
+H
+ØØ[š\œÝÚ][ÙHÈ	ÒU–ÝÛ™\‰Èˆ\ÓÜ[XØÙ\ÜÐZ[È	ÒU–ÝÛ™\ˆ]‰Èˆ	ÒU–ÝÛ™\‰ÊKÚ\ÓÜ[XØÙ\ÜÐZ[ØØ[š\œÝÚ][ÙK\Ù\Ë™[XZ[JNÂˆÛÛœÝ]•\Ý[ÙHH\ÙSY[[Ê
+
+HOˆ™\ÛÛ™Q]•\Ý[ÙPÛÛ^
+È\Ù\’YˆÝÛ™\’Y[XZ[ˆ\Ù\Ë™[XZ[JKÛÝÛ™\’Y\Ù\Ë™[XZ[JNÂˆÛÛœÝÝÛ™\RPÛÛ™šYÐ]Y]H\ÙSY[[ÏU–ÝÛ™\RPÛÛ™šYÐ]Y]Š
+
+HOˆÂˆžHÂˆ™]\›ˆÙ]U–ÝÛ™\RPÛÛ™šYÐ]Y]
+
+NÂˆHØ]Ú
+\œ›ÜŠHÂˆÛÛœÛÛK›ÙÊ	ÖÒU–ÝÛ™\Ú]›Ý]WHÝÛ™\ˆRHÛÛ™šYÈ]Y]˜[˜XÚÈ\ÙY‰Ë\œ›Üˆ[œÝ[˜Ù[Ùˆ\œ›ÜˆÈ\œ›Ü‹›Y\ÜØYÙHˆ	Ý[šÛ›ÝÛ‰ÊNÂˆ™]\›ˆQUSÓÕÓ‘T—ÐRWÐÓÓ‘’Q×ÐUQUÂˆBˆK×JNÂˆÛÛœÝ]™TÛ˜\ÚÝH\ÙS]™R[[YÙ[˜ÙTÛ˜\ÚÝ
+
+NÂˆÛÛœÝÝÛ™\”Ù\ÜÚ[Û’Y™YˆH\ÙT™YÝš[™ÏŠ]ž[ÝÛ™\‹\›ÛÛKIÑ]K››ÝÊ
+_KIÓX]œ˜[™ÛJ
+KÔÝš[™ÊÍŠKœÛXÙJ‹
+_X
+NÂˆËÈXÝ]™HU–ÝÛ™\ˆRHØ]ÚÙÈ˜XÙ\ËÙ^YYžH˜XÙRYˆ™XYY›ÝYÚˆËÈ]]][Ûˆ[œ]ÈÛÈXXÚÙ[™\È]ÈÝÛˆÚXÚÜÚ[™\Ü‚ˆÛÛœÝXÝ]™UØ]ÚÙÕ˜XÙ\Ô™YˆH\ÙT™YX\Ýš[™ËØ]ÚÙÕ˜XÙR[™OŠ™]ÈX\
+
+JNÂˆÛÛœÝÝØ]ÚÙÑ˜]Ù\•š\ÚX›KÙ]Ø]ÚÙÑ˜]Ù\•š\ÚX›WHH\ÙTÝ]O›ÛÛX[Š˜[ÙJNÂˆËÈÝYÙY[Y[Ý]˜[›™\ˆÝ]H8 %™\XÙ\ÈHÚ[™ÛHNÈØ]ÚÙÈ[Y[Ý]ˆËÈÚ]›ÙÜ™\ÜÚ]™HVˆM\È”Ý[ÛÜšÚ[™È‹\È™]žKLÈ˜XÚÙ[™Ý]\ÂˆËÈÚXÚËNÈ˜Z[Ú]^XÝ]šY[˜ÙKˆ›È[™š[š]HÜ[›™\‹‚ˆÛÛœÝÜÝYÙY[Y[Ý]˜XÙRYÙ]ÝYÙY[Y[Ý]˜XÙRYHH\ÙTÝ]OÝš[™È[Š[
+NÂˆÛÛœÝÜÝYÙY[Y[Ý]Y\ÜØYÙRYÙ]ÝYÙY[Y[Ý]Y\ÜØYÙRYHH\ÙTÝ]OÝš[™ÏŠ	ÉÊNÂˆÛÛœÝÜÝYÙY[Y[Ý]™\]Y\ÝÝ\YÙ]ÝYÙY[Y[Ý]™\]Y\ÝÝ\YHH\ÙTÝ]O›ÛÛX[Š˜[ÙJNÂˆÛÛœÝÜÝYÙY[Y[Ý]\ÝÚXÚÜÚ[Ù]ÝYÙY[Y[Ý]\ÝÚXÚÜÚ[HH\ÙTÝ]OÝš[™È[Š[
+NÂˆÛÛœÝÜ˜Ú\Ý˜]Ü”™YˆH\ÙT™YRSÜ˜Ú\Ý˜]Üˆ[Š[
+NÂˆÛÛœÝÝYÙY[Y[Ý]Ý\™YˆH\ÙT™Y[X™\Š]K››ÝÊ
+JNÂˆÛÛœÝÛ]™UÛÜšÕš\ÚX›KÙ]]™UÛÜšÕš\ÚX›WHH\ÙTÝ]O›ÛÛX[Š˜[ÙJNÂˆËÈH\ÚÈ[ÜÝ™XÙ[HÚXÚÙYÙ™ˆœ›ÛHÚ]Ý\™˜XÙY\È[ˆ[›[™H]™HÛÜšÂˆËÈ]ÛˆÛÈHÝÛ™\ˆØ[ˆ[\Ý˜ZYÚÈH™X[][YH^XÝ][Ûˆ[Ûš]Ü‹‚ˆÛÛœÝØXÝ]™S]™UÛÜšÕ\ÚËÙ]XÝ]™S]™UÛÜšÕ\Ú×HH\ÙTÝ]OÚ]]™UÛÜšÕ\ÚÈ[Š[
+NÂ‚ˆËÈÛ™K]\ÝÛ™\ˆÚYÛ‹Z[ˆ\È›ÈÛ™Ù\ˆ™\]Z\™YÈ\ÙHHÚ]ÛÛ\ÜÙ\‹‚ˆËÈH[\ˆ\ÈÙ\\ÈH›Ë[ÜÝXˆÛÈ[žH^\Ý[™ÈØ[\œÈÈ›Ýœ™XZË‚ˆÛÛœÝ[™T\ÜÝÛÜ™\ÜÓÝÛ™\”ÚYÛ’[ˆH\ÙPØ[˜XÚÊ\Þ[˜È
+
+HOˆÂˆÛÛœÛÛK›ÙÊ	ÖÒU–ÝÛ™\Ú]›Ý]WHÝÛ™\ˆÚYÛ‹Z[ˆØ]H™[[Ý™YÈ›Ë[ÜÚYÛ‹Z[ˆ[›ÚÙY‰ÊNÂˆK×JNÂ‚ˆËÈÝÛ™\‹\Ù\ÜÚ[ÛˆØ]H™[[Ý™YˆHÚ]ÛÛ\ÜÙ\ˆ\È[Ø^\È]˜Z[X›Kˆ[žBˆËÈ]]™\]Z\™[Y[È\™H[™Y˜[œÜ\™[HžHH[™\›Z[™ÈÚ]Ù\šXÙK‚ˆËÈ\È\ÙQY™™XÝ\È[[[Û˜[HY[\HÈ™\Ù\™HÛÚÈÜ™\ˆÝXš[]K‚ˆ\ÙQY™™XÝ
+
+
+HOˆÂˆÛÛœÛÛK›ÙÊ	ÖÒU–ÝÛ™\Ú]›Ý]WHÝÛ™\ˆÙ\ÜÚ[ÛˆØ]H\ØX›YÈÛÛ\ÜÙ\ˆ™XYH›Üˆ[\Ù\œË‰ÊNÂˆKÛÝÛ™\’Y\Ù\Ë™[XZ[JNÂ‚ˆËÈ\˜X›K]\ÚÈ™\ÝÜ™H
+LË\™XÛÝ™\žHX[™]H\ÙH
+NˆY\ˆ[ˆ\ˆËÈ™\Ý\™K\Û[žH[™[™È\˜X›H\ÚÜÈÛÈ™XÛÝ™\™Y[œÝÙ\œÈ\™BˆËÈ™\ÝÜ™Y[œÝXYÙˆÜÝ‚ˆ\ÙQY™™XÝ
+
+
+HOˆÂˆ][Ý[YHYNÂˆ›ÚY™\Ý[YT[™[™Ñ\˜X›U\ÚÜÊ
+\ÚÊHOˆÂˆYˆ
+[[Ý[Y]\ÚË˜[œÝÙ\ŠH™]\›ŽÂˆYˆ
+\ÚËœÝ]\ÈOOH	Õ‘T’Q’QQ	È	‰ˆ\ÚËœÝ]\ÈOOH	ÐÓÓTUQ	ÊH™]\›ŽÂˆÛÛœÝ™\ÝÜ™YYHÜ™X]U˜[œÚY[Y\ÜØYÙRY
+	Ú]ž[ÝÛ™\‹XZKY\˜X›K\™\ÝÜ™Y	ÊNÂˆÙ]˜[œÚY[\ÜÚ\Ý[Y\ÜØYÙ\Ê
+Ý\œ™[
+HOˆÂˆ‹‹˜Ý\œ™[™š[\Š
+Y\ÜØYÙJHOˆY\ÜØYÙKšYOOH™\ÝÜ™YY
+KˆZ[š\ÚX›P\ÜÚ\Ý[˜[œÚY[
+ÂˆYˆ™\ÝÜ™YYˆÛÛ™\œØ][Û’Yˆ	Ú]ž[ÝÛ™\‹\›ÛÛIËˆ›ÙNˆ	Ý\ÚË˜[œÝÙ\ŸW—¸¦nûî#È™\ÝÜ™Yœ›ÛH\˜X›H\ÚÈ	Ý\ÚË\ÚÒYHY\ˆ\™\Ý\˜JKˆJNÂˆJK˜Ø]Ú
+
+™\ÝÜ™Q\œŠHOˆÂˆÛÛœÛÛK›ÙÊ	ÖÒU–ÝÛ™\Ú]›Ý]WH\˜X›WÜ™\ÝÜ™WÙ˜Z[YÜØY™[N‰Ë™\ÝÜ™Q\œˆ[œÝ[˜Ù[Ùˆ\œ›ÜˆÈ™\ÝÜ™Q\œ‹›Y\ÜØYÙHˆ	Ý[šÛ›ÝÛ‰ÊNÂˆJNÂˆ™]\›ˆ
+
+HOˆÈ[Ý[YH˜[ÙNÈNÂˆËÈ\Û[Y\ØX›K[™^[[™H™XXÝZÛÚÜËÙ^]\Ý]™KY\ÂˆK×JNÂ‚ˆËÈXYÛ›ÜÝXÜÈÝ™\›^H™[[Ý™Y8 %[Ý™YÈ›ÝXÝYØYZ[‹ÙXYÛ›ÜÝXÜÈ›Ý]K‚ˆËÈH]Ûˆ[ˆHÛÛ›Û›ÛÛH›ÝÈ˜]šYØ]\ÈÈØYZ[‹ÙXYÛ›ÜÝXÜÈ[œÝXY‚ˆËÈÝ™\›^HY™XÞXÛH\™[š[™ÎˆÛÜÙHH]™K]ÛÜšÈÝ™\›^H]]ÛX]XØ[BˆËÈÚ[ˆH\˜XÚÙÜ›Ý[™ËÚ[ˆHØÜ™Y[ˆ[›[Ý[ËÜˆÚ[ˆ˜]šYØ][Û‚ˆËÈ[ÈH›Ý]HÙ™‹ˆ™]™[ÈÚÜÝÝ™\›^\È
+ÈÝ[HÛ\ˆXÝ]š]K‚ˆ\ÙQY™™XÝ
+
+
+HOˆÂˆÛÛœÝÝXˆH\Ý]K˜Y]™[\Ý[™\Š	ØÚ[™ÙIË
+™^ˆ\Ý]TÝ]\ÊHOˆÂˆYˆ
+™^OOH	ØXÝ]™IÊHÂˆÙ]]™UÛÜšÕš\ÚX›J˜[ÙJNÂˆÙ]Ø]ÚÙÑ˜]Ù\•š\ÚX›J˜[ÙJNÂˆBˆJNÂˆ™]\›ˆ
+
+HOˆÂˆÝX‹œ™[[Ý™J
+NÂˆÙ]]™UÛÜšÕš\ÚX›J˜[ÙJNÂˆÙ]Ø]ÚÙÑ˜]Ù\•š\ÚX›J˜[ÙJNÂˆNÂˆK×JNÂˆÛÛœÝ]Y[Ô™XÛÜ™\ˆH\ÙP]Y[Ô™XÛÜ™\Š™XÛÜ™[µÓÝ·æÚ$z{-®éÜj×dogDrawer visible={watchdogDrawerVisible} onClose={() => setWatchdogDrawerVisible(false)} />
       {liveWorkVisible ? (
         <View style={styles.liveWorkOverlay} testID="ivx-live-work-overlay" pointerEvents="box-none">
           <View style={styles.liveWorkSheet} pointerEvents="auto">

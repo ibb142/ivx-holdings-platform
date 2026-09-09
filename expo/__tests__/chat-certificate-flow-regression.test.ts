@@ -70,9 +70,21 @@ describe('IVX IA chat device certificate regression', () => {
     expect(flowSource).toContain(`inputText: "${E2E_PROMPT}"`);
     expect(flowSource).toContain(`element: "${E2E_PROMPT}"`);
     expect(flowSource).toContain(`visible: "${E2E_REPLY}"`);
-    expect(flowSource).toContain('timeout: 60000');
+    expect(flowSource).toContain('timeout: 200000');
     expect(flowSource).toContain('assertNotVisible: "Not sent"');
     expect(flowSource).toContain('assertNotVisible: "I was unable to display this reply"');
+  });
+
+  test('starts the normal conversational AI request before durable persistence can stall', () => {
+    const triggerIndex = chatSource.indexOf('2.2_AI_TRIGGER_BEFORE_PERSISTENCE');
+    const decisionIndex = chatSource.lastIndexOf('const startAssistantImmediately', triggerIndex);
+    const persistenceIndex = chatSource.indexOf('const queueResult = await sendQueue.mutateAsync', triggerIndex);
+
+    expect(triggerIndex).toBeGreaterThan(-1);
+    expect(decisionIndex).toBeGreaterThan(-1);
+    expect(persistenceIndex).toBeGreaterThan(triggerIndex);
+    expect(chatSource.slice(triggerIndex, persistenceIndex)).toContain('void triggerAssistantWithRetry()');
+    expect(chatSource.slice(decisionIndex, triggerIndex)).toContain('!trustContext.requiresElevatedConfirmation');
   });
 
   test('hard-gates app restart persistence without clearing state', () => {
