@@ -50,7 +50,12 @@ const config: ExpoConfig = {
     ['expo-audio', { microphonePermission: 'Allow IVX Holdings to capture voice prompts for transcription.' }],
     withFmtXcode26Fix as unknown as [string, any],
   ],
-  experiments: { typedRoutes: true, baseUrl: '/app' },
+  // Render publishes expo/dist at the domain root. The AWS export is mounted
+  // under /app; sharing that prefix makes the Render chat request missing JS.
+  experiments: {
+    typedRoutes: true,
+    baseUrl: process.env.RENDER_SERVICE_TYPE === 'static' ? '' : '/app',
+  },
 };
 
 export default config;
