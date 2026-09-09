@@ -440,6 +440,7 @@ async function syncDispatchedRecord(state: DispatcherState, record: CampaignJobR
       record.finishedAt = new Date().toISOString();
       return;
     }
+    if (record.error?.startsWith('Worker sync error:')) record.error = null;
     applyWorkerSnapshot(record, job);
     if (job.status === 'completed') {
       await logEvent('job_completed', { key: record.key, workerJobId: record.workerJobId, commitSha: record.commitSha, files: record.changedFiles.length });
@@ -472,7 +473,7 @@ export type TickResult = {
 
 /**
  * One scheduler tick:
- *   1. stale-job recovery, 2. sync active records with real worker state,
+ *   1. sync real worker state, 2. recover confirmed stale jobs,
  *   3. failure → retry-or-FAIL transition, 4. start eligible jobs within
  *   concurrency + lane + deploy-mutex + control-gate constraints.
  */
@@ -484,10 +485,22 @@ export async function tickCampaignDispatcher(): Promise<TickResult> {
     activeCount: 0, maxConcurrency: getMaxCampaignConcurrency(),
   };
 
-  // 1. STALE-JOB RECOVERY (requirement I) — running records with a dead
+  // 1. SYNC every dispatched non-terminal record with its real worker job.
+  // A worker may remain queued for several ticks; workerJobId proves it was
+  // already dispatched and must be polled rather than submitted again.
+  for (const record of state.records) {
+    if ((record.status === 'RUNNING' || record.status === 'QUEUED') && record.workerJobId) {
+      await syncDispatchedRecord(state, record);
+    }
+  }
+
+  // 2. STALE-JOB RECOVERY (requirement I) — running records with a dead
   //    heartbeat are requeued (if retries remain) or failed durably.
   const now = Date.now();
   for (const record of state.records) {
+    // An old dashboard snapshot is not proof that its worker is dead.
+    // A failed sync must not cancel work or consume the retry budget.
+    if (record.error?.startsWith('Worker sync error:')) continue;
     if (record.status !== 'RUNNING' || !record.lastHeartbeatAt) continue;
     const age = now - Date.parse(record.lastHeartbeatAt);
     if (Number.isFinite(age) && age > STALE_HEARTBEAT_MS) {
@@ -508,15 +521,6 @@ export async function tickCampaignDispatcher(): Promise<TickResult> {
         result.failed.push(record.key);
       }
       await logEvent('stale_recovered', { key: record.key, retryCount: record.retryCount });
-    }
-  }
-
-  // 2. SYNC every dispatched non-terminal record with its real worker job.
-  // A worker may remain queued for several ticks; workerJobId proves it was
-  // already dispatched and must be polled rather than submitted again.
-  for (const record of state.records) {
-    if ((record.status === 'RUNNING' || record.status === 'QUEUED') && record.workerJobId) {
-      await syncDispatchedRecord(state, record);
     }
   }
 
