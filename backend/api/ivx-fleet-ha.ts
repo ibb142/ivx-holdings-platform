@@ -7,7 +7,7 @@ export async function handleFleetHaGet(request: Request): Promise<Response> {
   const observation = await readFleetDashboardSignals();
   const instances = observation.instances as Array<FleetInstance & { processRole?: string; sharedState?: boolean; sharedWorkerQueue?: boolean; draining?: boolean }>;
   const current = instances.filter(i => i.commitSha === observation.commitSha && !i.draining
-    && i.sharedState && i.sharedWorkerQueue && Date.now() - Date.parse(i.lastSeenAt) >= -5_000 && Date.now() - Date.parse(i.lastSeenAt) <= 45_000);
+    && i.sharedState && i.sharedWorkerQueue && Date.now() - Date.parse(i.lastSeenAt) <= 45_000);
   const api = current.filter(i => i.role === 'api' && i.processRole === 'api');
   const workers = current.filter(i => i.role === 'worker' && i.processRole === 'worker');
   return ownerOnlyJson({ ok: observation.status === 'AVAILABLE', marker: 'ivx-api-worker-ha-2026-09-08-v1',
