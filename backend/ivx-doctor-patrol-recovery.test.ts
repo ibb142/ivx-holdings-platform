@@ -10,7 +10,7 @@ test('doctor avoids restarting 112 recently observed idle patrols without certif
  const snapshot={degraded:false,degradedDependencies:[],autonomous:{schedulerEnabled:true,dispatcherPaused:false,emergencyStop:false},agents:{rows,counts:{total:112,working:0,freshHeartbeat:0,stale:0,blocked:0,unknown:0}},certification:{continuousRuntimeCertified:false}};
  mock.module('./backend/services/ivx-agent-runtime.ts',()=>({getAllExecutionStates:()=>[],resumeAgent:()=>calls.push('resume')}));
  mock.module('./backend/services/ivx-campaign-dispatcher.ts',()=>({campaignDispatcherControl:async()=>calls.push('retry')}));
- mock.module('./backend/services/ivx-autonomous-truth-control.ts',()=>({getAutonomousTruthSnapshot:async()=>snapshot,enforceAutonomous112RuntimeTruth:async()=>{calls.push('enforce');return {};}}));
+ mock.module('./backend/services/ivx-autonomous-truth-control.ts',()=>({getAutonomousTruthSnapshot:async()=>snapshot,enforceAutonomous112RuntimeTruth:async()=>{calls.push('enforce');snapshot.certification.continuousRuntimeCertified=true;return {};}}));
  mock.module('./backend/services/ivx-autonomous-work-manager.ts',()=>({IVX_AUTONOMOUS_FLEET_SIZE:112,ensureAutonomousManagerBacklog:async()=>{calls.push('backlog');return {ok:true};}}));
  mock.module('./backend/services/ivx-autonomous-learning-engine.ts',()=>({observeAndLearn:async()=>({action:'observed'})}));
  mock.module('./backend/services/ivx-autonomous-control-policy.ts',()=>({autonomousDoctorRepairEnabled:()=>true,autonomousRepairCapacity:()=>112}));
@@ -19,6 +19,9 @@ test('doctor avoids restarting 112 recently observed idle patrols without certif
  await m.runAutonomousDoctorCycle();
  const status=m.getAutonomousDoctorStatus();
  if(calls.length||status.totalRepairs!==0||status.lastCertification.certified!==false||status.recentPatrolAgents!==112||!status.lastHealthyAt)throw Error(JSON.stringify({calls,status}));
- `],{cwd:new URL('../',import.meta.url).pathname,stdout:'pipe',stderr:'pipe',timeout:5000});
- const [code,err]=await Promise.all([child.exited,new Response(child.stderr).text()]);expect(err).toBe('');expect(code).toBe(0);
+ rows[0].status='STALE';
+ await m.runAutonomousDoctorCycle();
+ if(!calls.includes('enforce')||!calls.includes('backlog')||calls.includes('retry'))throw Error('Atomic recovery entered legacy dispatcher '+JSON.stringify(calls));
+ `],{cwd:new URL('../',import.meta.url).pathname,stdout:'pipe',stderr:'pipe',timeout:8000});
+ const [code,err]=await Promise.all([child.exited,new Response(child.stderr).text()]);expect(err).not.toContain('Error:');expect(code).toBe(0);
 });

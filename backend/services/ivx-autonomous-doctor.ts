@@ -171,6 +171,12 @@ async function repairFleet(snapshot: Awaited<ReturnType<typeof getAutonomousTrut
     .map((state) => ({ agentId: state.agentId, agentNumber: state.agentNumber as number }));
   const backlog = await ensureAutonomousManagerBacklog({ sourceSha: sourceSha(), agents: lanes });
   if (!backlog.ok) throw new Error(`autonomous_manager_backlog_failed:${backlog.errors}`);
+  // Atomic fleet recovery belongs to its fenced runtime enforcer. Starting the
+  // legacy campaign queue here would reintroduce a competing recovery loop.
+  if (postgresAtomicQueueSelected()) {
+    lastRepairCompletedAt = new Date().toISOString();
+    return;
+  }
   const refreshed = await getAutonomousTruthSnapshot();
   const unhealthyAgents = refreshed.agents.rows
     .filter((row) => (row.status !== 'WORKING' || !row.heartbeatFresh) && !observedBetweenPatrols(row, recentObservations) && !row.paused && !row.disabled)
