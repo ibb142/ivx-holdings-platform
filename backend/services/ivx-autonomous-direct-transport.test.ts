@@ -22,7 +22,7 @@ for (const fails of [false, true]) test(`configured same-project queue selects o
     process.env.SUPABASE_SERVICE_ROLE_KEY='test-only';
     process.env.SUPABASE_DB_URL='postgresql://postgres.testproject:test@aws-0-us-east-1.pooler.supabase.com/postgres?sslmode=verify-full';
     globalThis.fetch=async()=>{restCalls++;throw new Error('REST must not be called');};
-    const m=await import('./backend/services/ivx-postgres-autonomous-task-store.ts');
+    const m=await import(${JSON.stringify(new URL('./ivx-postgres-autonomous-task-store.ts', import.meta.url).pathname)});
     if(!m.preferDirectTransport())throw new Error('same project was not selected');
     if(m.preferDirectTransport({...process.env,SUPABASE_DB_URL:process.env.SUPABASE_DB_URL.replace('postgres.testproject','postgres.other')}))throw new Error('other project accepted');
     for(const operation of [()=>m.readPostgresFleetLeaseRows(),()=>m.readPostgresCurrentTasks(['RUNNING']),()=>m.claimPostgresAutonomousTasks([{workerId:'agent:test',agentNumber:1}])]) {
