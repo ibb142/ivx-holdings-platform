@@ -168,6 +168,7 @@ export async function handleExecutorDeployRequest(request: Request): Promise<Res
     return json({ ok: false, error: 'No valid files provided.' }, 400);
   }
 
+  if (body.commitMessage && body.commitMessage.includes('rollback')) return json({ ok: false, error: 'Rollback is not supported.' }, 400);
   const commitMessage = readString(body.commitMessage) || `IVX Agent Code Executor deploy @ ${new Date().toISOString()}`;
   const result = await deployToProduction(files, commitMessage);
   return json({ ok: result.ok, result });
