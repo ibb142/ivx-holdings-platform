@@ -143,6 +143,9 @@ export async function handleRenderRollback(request: Request): Promise<Response> 
       return ownerOnlyJson({ ok: false, error: 'deployId is required' }, 400);
     }
     const result = await RenderTool.rollbackDeploy(deployId);
+if (result.error && result.error.includes('rollback is not supported for deploy')) {
+  return ownerOnlyJson({ ok: false, error: 'Rollback not supported for this deployment' }, 400);
+}
     return ownerOnlyJson({
       ok: result.ok,
       error: result.error,
