@@ -12,6 +12,7 @@ import {
   resetPostgresAutonomousTaskStoreForTests,
   startPostgresAutonomousTasks,
   readPostgresCurrentTasks,
+  readPostgresRecoveryTasks,
 } from './ivx-postgres-autonomous-task-store';
 
 const savedEnv = { ...process.env };
@@ -230,4 +231,45 @@ test('releases a failed shared observation so the next read can recover', async 
   expect(reads).toBe(1);
   globalThis.fetch = (async () => Response.json([])) as typeof fetch;
   expect(await readPostgresCurrentTasks(['RUNNING'])).toEqual([]);
+});
+
+test('recovery queries preserve eligible work without downloading unleased queued payloads', async () => {
+  configureAtomicQueue();
+  const eligible = [
+    { taskId: 'blocked', state: 'BLOCKED', leaseHolder: null },
+    { taskId: 'running', state: 'RUNNING', leaseHolder: 'worker:1' },
+    { taskId: 'retry', state: 'RETRYING', leaseHolder: null },
+    { taskId: 'queued-stale-lease', state: 'QUEUED', leaseHolder: 'worker:2' },
+  ];
+  let reads = 0;
+  globalThis.fetch = (async input => {
+    const query = new URL(String(input)).searchParams;
+    expect(query.get('or')).toBe('(state.in.(BLOCKED,RUNNING,RETRYING),and(state.eq.QUEUED,lease_holder.not.is.null))');
+    expect(query.get('select')).toBe('payload');
+    expect(query.get('limit')).toBe('1000');
+    reads += 1;
+    await new Promise(resolve => setTimeout(resolve, 5));
+    return Response.json(eligible.map(payload => ({ payload })));
+  }) as typeof fetch;
+  const observations = await Promise.all(Array.from({ length: 112 }, () => readPostgresRecoveryTasks()));
+  expect(reads).toBe(1);
+  expect(observations[0]).toEqual(eligible);
+  observations[0][0].taskId = 'modified-by-caller';
+  expect(observations[1][0].taskId).toBe('blocked');
+});
+
+test('recovery fails closed on rejected credentials and incomplete responses, then recovers', async () => {
+  configureAtomicQueue();
+  process.env.SUPABASE_DB_URL = 'postgresql://unused:unused@127.0.0.1:1/unused';
+  let reads = 0;
+  globalThis.fetch = (async () => { reads += 1; return Response.json({}, { status: 403 }); }) as typeof fetch;
+  const rejected = await Promise.allSettled(Array.from({ length: 12 }, () => readPostgresRecoveryTasks()));
+  expect(rejected.every(r => r.status === 'rejected')).toBe(true);
+  expect(reads).toBe(1);
+  globalThis.fetch = (async () => Response.json(Array.from({ length: 1000 }, () => ({ payload: {} })))) as typeof fetch;
+  await expect(readPostgresRecoveryTasks()).rejects.toThrow('recovery is incomplete');
+  globalThis.fetch = (async () => Response.json({ payload: [] })) as typeof fetch;
+  await expect(readPostgresRecoveryTasks()).rejects.toThrow('not an array');
+  globalThis.fetch = (async () => Response.json([])) as typeof fetch;
+  expect(await readPostgresRecoveryTasks()).toEqual([]);
 });

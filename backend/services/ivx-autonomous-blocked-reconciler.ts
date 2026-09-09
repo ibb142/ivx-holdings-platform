@@ -2,7 +2,7 @@
 import { getAllTasks, releaseLease, transitionTaskState, type Task } from './ivx-autonomous-task-engine';
 import { getExecutionState, updateExecutionState } from './ivx-agent-runtime';
 import { resolveProductionSha } from './ivx-landing-p0-backlog';
-import { compareAndSetPostgresAutonomousTask, postgresAtomicQueueSelected, readPostgresCurrentTasks } from './ivx-postgres-autonomous-task-store';
+import { compareAndSetPostgresAutonomousTask, postgresAtomicQueueSelected, readPostgresRecoveryTasks } from './ivx-postgres-autonomous-task-store';
 import { planTaskRetry, taskRetryDue, FLEET_RETRY_BUDGET_MS } from './ivx-retry-policy';
 
 export const IVX_BLOCKED_RECONCILER_MARKER = 'ivx-autonomous-dependency-recovery-2026-09-08-v5';
@@ -23,7 +23,7 @@ function isExternalDependencyWait(task: Task): boolean { return isTransientWorkf
 function isRealDefect(task: Task): boolean { return /defect persists|\b502\b|\b500\b|broken|invalid contract|missing target|crash|failed/.test(taskText(task)); }
 function productivityStaleMs(): number { const raw = Number.parseInt(process.env.IVX_PRODUCTIVITY_STALE_MS ?? '', 10); return Number.isFinite(raw) ? Math.max(60_000, Math.min(raw, 30 * 60_000)) : DEFAULT_PRODUCTIVITY_STALE_MS; }
 function latestProductiveEvidenceMs(task: Task): number { let latest = Date.parse(task.startedAt ?? task.createdAt ?? '') || 0; for (const evidence of task.evidence ?? []) { const at = Date.parse(evidence.createdAt ?? ''); if (Number.isFinite(at) && at > latest) latest = at; } return latest; }
-async function readRecoveryTasks(): Promise<Task[]> { if (postgresAtomicQueueSelected()) return readPostgresCurrentTasks(['BLOCKED', 'RUNNING', 'RETRYING', 'QUEUED']); return getAllTasks(); }
+async function readRecoveryTasks(): Promise<Task[]> { if (postgresAtomicQueueSelected()) return readPostgresRecoveryTasks(); return getAllTasks(); }
 function clearMatchingSlot(task: Task): void { const agentId = task.leaseHolder?.startsWith('agent:') ? task.leaseHolder.slice(6) : null; if (agentId && getExecutionState(agentId)?.activeTaskId === task.taskId) updateExecutionState(agentId, { availability: 'available', activeTaskId: null }); }
 
 async function writeTask(task: Task, expectedStates: Task['state'][], eventType: string): Promise<boolean> {
