@@ -120,6 +120,9 @@ export async function startRealExecutionCertificateRun(): Promise<{ ok: boolean;
     return { ok: false, runId: null, error: `Failed to enqueue 112 durable tasks: ${inserted.error}` };
   }
 
+  // The control plane only enqueues. Workers poll the same durable rows.
+  if (process.env.IVX_PROCESS_ROLE === 'api') return { ok: true, runId, error: null };
+
   activeRun = {
     runId,
     status: 'running',
@@ -148,7 +151,7 @@ export async function startRealExecutionCertificateRun(): Promise<{ ok: boolean;
  * survive restarts because they live in Supabase.
  */
 export async function resumePendingCertificateRuns(): Promise<{ resumed: number; runIds: string[] }> {
-  if (!persistenceConfigured()) return { resumed: 0, runIds: [] };
+  if (process.env.IVX_PROCESS_ROLE === 'api' || !persistenceConfigured()) return { resumed: 0, runIds: [] };
   const ensure = await ensureRealExecutionTables();
   if (!ensure.ok) return { resumed: 0, runIds: [] };
   const pending = await fetchPendingExecutions(300);
@@ -172,7 +175,7 @@ export async function resumePendingCertificateRuns(): Promise<{ resumed: number;
       phase: 'agents',
       note: 'resumed after restart — pending tasks survived redeploy',
     };
-    // Recovery shares the API's small heap: finish one durable run before
+    // Recovery shares the worker's bounded heap: finish one durable run before
     // starting the next instead of multiplying per-run tool concurrency.
     await processCertificateRun(runId);
   }
@@ -185,7 +188,7 @@ export async function resumePendingCertificateRuns(): Promise<{ resumed: number;
 // ── Core processing ──────────────────────────────────────────────────────────
 
 async function processCertificateRun(runId: string): Promise<void> {
-  const CONCURRENCY = process.env.IVX_PROCESS_ROLE === 'api' ? 1 : 3;
+  const CONCURRENCY = 1;
   const INTERRUPTED_RUNNING_AFTER_MS = 2 * 60 * 1000;
 
   // Process every pending/running task for this run (running = interrupted by restart)

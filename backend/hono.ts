@@ -6699,7 +6699,7 @@ app.notFound(async (context) => {
 const landingFleetFocus = landingFleetFocusEnabled();
 
 // Durable certificate tasks are persisted in Supabase and must be recovered
-// after every API restart. This stays outside the fleet-focus scheduler gate:
+// after every worker restart. API processes never execute certificate tasks. This stays outside the fleet-focus scheduler gate:
 // suppressing unrelated schedulers must never strand an already-authorized
 // 112-agent certificate run in `pending`.
 export const certificateBootRecovery = resumePendingCertificateRuns()
@@ -6741,7 +6741,7 @@ const stopRuntimeWorkers = () => Promise.allSettled([
 ]).then(() => process.exit(0));
 process.on('SIGTERM', () => { void stopRuntimeWorkers(); });
 process.on('SIGINT', () => { void stopRuntimeWorkers(); });
-if (!landingFleetFocus) {
+if (process.env.IVX_PROCESS_ROLE !== 'api' && !landingFleetFocus) {
   try { startLandingSeoAutodeploy(); } catch (err) { console.warn('[IVXOwnerAI-Hono] landing SEO autodeploy failed to start:', err instanceof Error ? err.message : err); }
   try { startAutonomousMonitor(); } catch (err) { console.warn('[IVXOwnerAI-Hono] autonomous deploy monitor failed to start:', err instanceof Error ? err.message : err); }
   try { startEnterpriseReportScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] enterprise 2h report scheduler failed to start:', err instanceof Error ? err.message : err); }
