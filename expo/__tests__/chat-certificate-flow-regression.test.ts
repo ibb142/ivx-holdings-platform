@@ -79,7 +79,7 @@ describe('IVX IA chat device certificate regression', () => {
     expect(E2E_PROMPT).not.toContain(E2E_REPLY);
     expect(flowSource).toContain(`inputText: "${E2E_PROMPT}"`);
     expect(flowSource).toContain(`visible: "${E2E_PROMPT}"`);
-    expect(flowSource).toContain(`visible: "${E2E_REPLY}"`);
+    expect(flowSource).toContain(`visible: ".*${E2E_REPLY}.*"`);
     expect(flowSource).toContain('timeout: 60000');
     expect(flowSource).toContain('assertNotVisible: "Not sent"');
     expect(flowSource).toContain('assertNotVisible: "I was unable to display this reply"');
@@ -98,8 +98,21 @@ describe('IVX IA chat device certificate regression', () => {
     expect(shellIndex).toBeGreaterThan(-1);
     expect(shellIndex).toBeLessThan(afterRestart.indexOf('id: "tab-chat"'));
     expect(afterRestart).toContain(`visible: "${E2E_PROMPT}"`);
-    expect(afterRestart).toContain(`visible: "${E2E_REPLY}"`);
+    expect(afterRestart).toContain(`visible: ".*${E2E_REPLY}.*"`);
     expect(afterRestart).toContain('id: "ivx-owner-chat-composer-dock"');
+  });
+
+  test('reply selectors accept real wording but reject echoed prompts and stale runs', () => {
+    const nonce = '622000eb687645a6921e4ba61e16799d';
+    const selectors = [...flowSource.matchAll(/visible: "([^"]*IVX_CHAT_E2E_OK_[^"]*)"/g)];
+    expect(selectors).toHaveLength(2);
+    for (const [, selector] of selectors) {
+      const pattern = new RegExp(`^${selector.replace('${IVX_CHAT_E2E_NONCE}', nonce)}$`);
+      expect(pattern.test(`The result is: IVX_CHAT_E2E_OK_${nonce}.`)).toBe(true);
+      expect(pattern.test(`IVX_CHAT_E2E_OK_${nonce}`)).toBe(true);
+      expect(pattern.test(E2E_PROMPT.replace('${IVX_CHAT_E2E_NONCE}', nonce))).toBe(false);
+      expect(pattern.test('IVX_CHAT_E2E_OK_another_run')).toBe(false);
+    }
   });
 
   test('keeps retry behavior hard-gated in the transport reliability suite', () => {
