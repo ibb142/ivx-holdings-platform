@@ -1,4 +1,5 @@
 import { stat } from 'node:fs/promises';
+import { postgresAtomicQueueSelected, readPostgresAutonomousTaskIndex } from './ivx-postgres-autonomous-task-store';
 import {
   createObjective,
   createTask,
@@ -204,7 +205,7 @@ export async function ensureAutonomousWorkBlockForAgent(input: {
   agentNumber: number;
   objectiveId?: string | null;
   targetActiveDepth?: number;
-}): Promise<AutonomousWorkBlockPlan> {
+}, planningTasks?: readonly TaskIndexRecord[]): Promise<AutonomousWorkBlockPlan> {
   const targetActiveDepth = Math.max(1, Math.min(3, Math.floor(input.targetActiveDepth ?? 1)));
   const base = {
     marker: IVX_AUTONOMOUS_WORK_MANAGER_MARKER,
@@ -215,7 +216,7 @@ export async function ensureAutonomousWorkBlockForAgent(input: {
   };
 
   try {
-    const tasks = await getAllTasks();
+    const tasks = planningTasks ?? (postgresAtomicQueueSelected() ? await readPostgresAutonomousTaskIndex() : await getAllTasks());
     const existing = findExistingEligibleTasks(tasks, input.agentNumber);
     if (existing.length >= targetActiveDepth) {
       return {
@@ -392,6 +393,8 @@ async function planBacklog(input: {
     return result;
   }
 
+  // One narrow snapshot per patrol; never clone the full evidence ledger 112 times.
+  const planningTasks = postgresAtomicQueueSelected() ? await readPostgresAutonomousTaskIndex() : await getAllTasks();
   for (const lane of input.agents) {
     const plan = await ensureAutonomousWorkBlockForAgent({
       sourceSha: input.sourceSha,
@@ -399,7 +402,7 @@ async function planBacklog(input: {
       agentNumber: lane.agentNumber,
       objectiveId,
       targetActiveDepth: IVX_AUTONOMOUS_TARGET_ACTIVE_DEPTH,
-    });
+    }, planningTasks);
     if (!plan.ok) result.errors += 1;
     if (plan.source === 'existing_queue') result.existing += 1;
     else if (plan.source === 'autonomous_manager_primary' && plan.created) result.primaryCreated += 1;

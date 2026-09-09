@@ -292,3 +292,25 @@ export async function readPostgresFleetLeaseRows(): Promise<AtomicFleetLeaseRow[
     return directRead();
   }
 }
+
+/** Planning needs identities and states, never historical evidence payloads. */
+export type AutonomousTaskIndex = Pick<Task, 'taskId' | 'idempotencyKey' | 'assignedAgentNumber' | 'state' | 'title'>;
+export async function readPostgresAutonomousTaskIndex(): Promise<AutonomousTaskIndex[]> {
+  const all: AutonomousTaskIndex[] = [];
+  const pageSize = 1000;
+  for (let offset = 0; offset < 20000; offset += pageSize) {
+    type IndexRow = { task_id: string; idempotency_key: string; assigned_agent_number: number | null; state: TaskState; title: string };
+    const rows = preferDirectTransport()
+      ? (await getDirectPool().query<IndexRow>(
+        "select task_id, idempotency_key, assigned_agent_number, state, payload->>'title' as title from public.ivx_autonomous_tasks order by created_at asc, task_id asc offset $1 limit $2",
+        [offset, pageSize])).rows
+      : await restRequest<IndexRow[]>(
+        `ivx_autonomous_tasks?select=task_id,idempotency_key,assigned_agent_number,state,title:payload->>title&order=created_at.asc,task_id.asc&offset=${offset}&limit=${pageSize}`,
+        { method: 'GET' });
+    if (!Array.isArray(rows)) throw new Error('postgres_atomic planning index is invalid');
+    all.push(...rows.map(row => ({ taskId: row.task_id, idempotencyKey: row.idempotency_key,
+      assignedAgentNumber: row.assigned_agent_number, state: row.state, title: row.title })));
+    if (rows.length < pageSize) return all;
+  }
+  throw new Error('postgres_atomic planning index exceeds safe pagination limit');
+}
