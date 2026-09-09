@@ -22,3 +22,10 @@ test('configuration defaults and missing metadata remain distinguishable',()=>{
   assert.deepEqual(primaryPoolSizes({default_pool_size:5}),[5]);
   assert.throws(()=>primaryPoolSizes({connection_string:'not-a-size'}));
 });
+
+test('configuration diagnostics never serialize credentials or unknown values', async () => {
+  const {poolConfigurationShape}=await import('./supabase-pool-budget.mjs');
+  const result=JSON.stringify(poolConfigurationShape({connection_string:'SECRET',default_pool_size:'SECRET',password:'SECRET'}));
+  assert.equal(result.includes('SECRET'),false);
+  assert.equal(JSON.parse(result).entries[0].poolSizeType,'string');
+});
