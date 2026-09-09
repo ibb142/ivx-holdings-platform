@@ -85,7 +85,29 @@ jobs:
       - run: cd expo && bun install --frozen-lockfile
       - name: Install Playwright browsers
         working-directory: expo
-        run: bunx playwright install --with-deps chromium
+        run: |
+          set -euo pipefail
+          # The hosted runner's optional Google Chrome APT source is not needed
+          # by Playwright and can intermittently publish mismatched indexes.
+          # Disable only that source while Playwright installs Ubuntu libraries.
+          chrome_source=/etc/apt/sources.list.d/google-chrome.list
+          disabled_source="$RUNNER_TEMP/google-chrome.list.ivx-disabled"
+          restore_chrome_source() {
+            if [ -f "$disabled_source" ]; then
+              sudo mv "$disabled_source" "$chrome_source"
+            fi
+          }
+          trap restore_chrome_source EXIT
+          if [ -f "$chrome_source" ]; then
+            sudo mv "$chrome_source" "$disabled_source"
+          fi
+          for attempt in 1 2 3; do
+            if bunx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            sleep $((attempt * 5))
+          done
+          exit 1
       - name: Start branch-local landing for PR validation
         if: github.event_name == 'pull_request'
         run: |
@@ -143,12 +165,24 @@ jobs:
       - name: Generate iOS native project
         working-directory: expo
         timeout-minutes: 8
-        env: { EXPO_PUBLIC_SOURCE_COMMIT_SHA: '${{ github.sha }}' }
+        env:
+          EXPO_PUBLIC_SOURCE_COMMIT_SHA: '${{ github.sha }}'
+          # React Native 0.81 supports this mirror override. repo1.maven.org
+          # returned 404 for the published dependency tarball in this run,
+          # while the canonical Maven endpoint redirects to RN's artifact CDN.
+          ENTERPRISE_REPOSITORY: https://repo.maven.apache.org/maven2
         run: |
           set -euo pipefail
           rm -rf ios
           bunx expo prebuild --platform ios --no-install
-          cd ios && pod install --silent
+          cd ios
+          for attempt in 1 2 3; do
+            if pod install --silent; then
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          exit 1
       - name: Build self-contained iOS simulator app — HARD GATE
         working-directory: expo
         timeout-minutes: 32

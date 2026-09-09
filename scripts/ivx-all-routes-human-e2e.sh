@@ -52,7 +52,7 @@ route_from_file() {
   printf '/%s' "$rel"
 }
 
-mapfile -t files < <(rg --files expo/app -g '*.tsx' -g '*.ts' | sort)
+mapfile -t files < <(find expo/app -type f \( -name '*.tsx' -o -name '*.ts' \) -print | sort)
 
 # Enumerate every route before starting Maestro. A single suite avoids starting
 # a new JVM/ADB session hundreds of times; all route assertions remain required.
