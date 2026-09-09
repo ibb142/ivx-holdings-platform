@@ -201,6 +201,38 @@ export async function readPostgresFleetSloTasks(): Promise<Task[]> {
   return readPostgresCurrentTasks(['LEASED', 'RUNNING', 'BLOCKED', 'RETRYING', 'EXECUTION_COMPLETED', 'QA_IN_PROGRESS']);
 }
 
+/** The reconciler only inspects queued tasks that still carry a lease. */
+export async function readPostgresRecoveryTasks(): Promise<Task[]> {
+  const key = `recovery:${taskMutationRevision}`;
+  const existing = currentReadsInFlight.get(key);
+  if (existing) return cloneTasks(await existing);
+  const pending = fetchPostgresRecoveryTasks();
+  currentReadsInFlight.set(key, pending);
+  try { return cloneTasks(await pending); }
+  finally { if (currentReadsInFlight.get(key) === pending) currentReadsInFlight.delete(key); }
+}
+
+async function fetchPostgresRecoveryTasks(): Promise<Task[]> {
+  try {
+    // Unleased QUEUED work is left to the atomic dispatcher. Reading its full
+    // payload here can fill the 1,000-row cap and starve actual recovery work.
+    const query = new URLSearchParams({ select: 'payload',
+      or: '(state.in.(BLOCKED,RUNNING,RETRYING),and(state.eq.QUEUED,lease_holder.not.is.null))',
+      order: 'updated_at.desc', limit: '1000' });
+    const rows = await restRequest<RestTaskRow[]>(`ivx_autonomous_tasks?${query}`, { method: 'GET' }, { timeoutMs: TRUTH_TIMEOUT_MS, attempts: 3 });
+    if (!Array.isArray(rows)) throw new Error('postgres_atomic recovery-task response is not an array');
+    if (rows.length >= 1000) throw new Error('postgres_atomic recovery-task response reached its safety limit; recovery is incomplete');
+    return rows.map(row => structuredClone(row.payload));
+  } catch (error) {
+    if (!mayFailoverRead(error)) throw error;
+    const result = await getDirectPool().query<RestTaskRow>(
+      'select payload from public.ivx_autonomous_tasks where state = any($1::text[]) or (state = $2 and lease_holder is not null) order by updated_at desc limit 1000',
+      [['BLOCKED', 'RUNNING', 'RETRYING'], 'QUEUED']);
+    if (result.rows.length >= 1000) throw new Error('postgres_atomic recovery-task response reached its safety limit; recovery is incomplete');
+    return result.rows.map(row => structuredClone(row.payload));
+  }
+}
+
 export async function persistPostgresFleetSloSample(sample: Record<string, unknown>): Promise<void> {
   await restRequest('ivx_autonomous_task_events', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ event_type: 'fleet_slo_sample', worker_instance_id: autonomousWorkerInstanceId(), event: { ...sample, instance_role: process.env.IVX_WORKER_MODE === 'true' ? 'worker' : 'api', service_id: process.env.RENDER_SERVICE_ID ?? null, process_role: process.env.IVX_PROCESS_ROLE ?? null, shared_worker_queue: process.env.IVX_WORKER_QUEUE_ATOMIC === 'true', shared_state: process.env.IVX_REQUIRE_SHARED_STATE === 'true', draining: process.env.IVX_INSTANCE_DRAINING === 'true' } }) }, { timeoutMs: TRUTH_TIMEOUT_MS });
 
