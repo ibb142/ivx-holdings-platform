@@ -1,0 +1,48 @@
+name: IVX Orphaned Certificate Recovery
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ivx-orphaned-certificate-recovery.yml'
+      - 'scripts/ops/recover-orphaned-certificates*'
+  pull_request:
+    paths:
+      - '.github/workflows/ivx-orphaned-certificate-recovery.yml'
+      - 'scripts/ops/recover-orphaned-certificates*'
+  workflow_run:
+    workflows: ['IVX 112 Live AI Worker Certificate']
+    types: [completed]
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: ivx-orphan-certificate-recovery-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test scripts/ops/recover-orphaned-certificates.test.mjs
+  recover:
+    needs: verify
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/ops/recover-orphaned-certificates.mjs
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}

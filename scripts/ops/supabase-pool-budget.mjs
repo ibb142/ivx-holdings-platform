@@ -3,7 +3,7 @@ export const PROJECT = 'kvclcdjmjghndxsngfzb';
 export function poolConfigurationShape(rows) {
   return {
     container: Array.isArray(rows) ? 'array' : typeof rows,
-    knownKeys: rows && typeof rows==='object' ? Object.keys(rows).filter(key=>['data','result','pgbouncer','pooler','config','default_pool_size','pool_size','connection_string','message','error','code','status'].includes(key)) : [],
+    knownKeys: rows && typeof rows==='object' ? Object.keys(rows).filter(key=>/^[a-zA-Z_]{1,48}$/.test(key)) : [],
     keyCount: rows && typeof rows==='object' ? Object.keys(rows).length : 0,
     entries: (Array.isArray(rows) ? rows : [rows]).slice(0,4).map(row => ({
       primary: row?.database_type === 'PRIMARY',
