@@ -53,7 +53,7 @@ async function parsePayload(response: Response): Promise<unknown> { const text =
 function getDirectPool(env: NodeJS.ProcessEnv = process.env): Pool {
   const connectionString = directDbUrl(env);
   if (!connectionString) throw new Error('direct_postgres_not_configured');
-  if (!directPool) directPool = new Pool({ connectionString, ssl: { rejectUnauthorized: false }, max: 4, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000 });
+  if (!directPool) directPool = new Pool({ connectionString, ssl: { rejectUnauthorized: true }, max: 4, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000 });
   return directPool;
 }
 const DIRECT_RPC_ARGS: Record<string, string[]> = {
@@ -107,14 +107,18 @@ async function restRequest<T>(path: string, init: RequestInit, options: { timeou
     }
   }
 }
+function mayFailoverRead(error: unknown): boolean {
+  if (!directDbUrl()) return false;
+  const message = error instanceof Error ? error.message : String(error);
+  const status = /postgres_atomic HTTP (\d{3})/.exec(message)?.[1];
+  // Auth, throttling and invalid/truncated evidence must retain their failure.
+  return status ? ['502', '503', '504'].includes(status) : isTransientFailure(error);
+}
 async function rpc<T>(name: string, body: Record<string, unknown>, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
-  try {
-    return await restRequest<T>(`rpc/${name}`, { method: 'POST', body: JSON.stringify(body) }, { timeoutMs });
-  } catch (error) {
-    if (!directDbUrl()) throw error;
-    console.warn('[IVX postgres_atomic] PostgREST RPC unavailable; using direct PostgreSQL failover', { name, error: error instanceof Error ? error.message : String(error) });
-    return directRpc<T>(name, body);
-  }
+  // Select direct transport before sending a mutation, never after an ambiguous
+  // timeout: the REST request may already have committed its claim or CAS.
+  if ((!supabaseUrl() || !serviceRoleKey()) && directDbUrl()) return directRpc<T>(name, body);
+  return restRequest<T>(`rpc/${name}`, { method: 'POST', body: JSON.stringify(body) }, { timeoutMs });
 }
 function cloneTasks(tasks: readonly Task[]): Task[] { return structuredClone(tasks) as Task[]; }
 function mergeTaskResultsIntoCache(tasks: readonly (Task | null | undefined)[]): void { taskMutationRevision += 1; if (!taskReadCache) return; const next = [...taskReadCache.value]; const indexById = new Map(next.map((task, index) => [task.taskId, index])); for (const task of tasks) { if (!task) continue; const copy = structuredClone(task) as Task; const index = indexById.get(copy.taskId); if (index === undefined) { indexById.set(copy.taskId, next.length); next.push(copy); } else next[index] = copy; } taskReadCache = { value: next, at: Date.now() }; }
@@ -136,7 +140,7 @@ export async function readPostgresTaskById(taskId: string): Promise<Task | null>
     if (rows[0].payload?.taskId !== taskId) throw new Error('postgres_atomic task identity mismatch');
     return structuredClone(rows[0].payload);
   } catch (error) {
-    if (!directDbUrl()) throw error;
+    if (!mayFailoverRead(error)) throw error;
     const result = await getDirectPool().query<RestTaskRow>('select payload from public.ivx_autonomous_tasks where task_id = $1 limit 1', [taskId]);
     return result.rows[0]?.payload ? structuredClone(result.rows[0].payload) : null;
   }
@@ -150,7 +154,7 @@ export async function readPostgresTaskIdentitiesByPrefix(prefix: string): Promis
     if (!Array.isArray(rows) || rows.length >= 1000) throw new Error('postgres_atomic mission identities are incomplete');
     return rows.map(row => ({ taskId: row.task_id, idempotencyKey: row.idempotency_key, state: row.state }));
   } catch (error) {
-    if (!directDbUrl()) throw error;
+    if (!mayFailoverRead(error)) throw error;
     const result = await getDirectPool().query<{ task_id: string; idempotency_key: string; state: TaskState }>('select task_id, idempotency_key, state from public.ivx_autonomous_tasks where idempotency_key like $1 order by created_at asc limit 1000', [`${prefix}%`]);
     if (result.rows.length >= 1000) throw new Error('postgres_atomic mission identities are incomplete');
     return result.rows.map((row) => ({ taskId: row.task_id, idempotencyKey: row.idempotency_key, state: row.state as TaskState }));
@@ -166,7 +170,7 @@ export async function readPostgresCurrentTasks(states: readonly TaskState[]): Pr
     if (rows.length >= 1_000) throw new Error('postgres_atomic current-task response reached its safety limit; telemetry is incomplete');
     return rows.map((row) => structuredClone(row.payload));
   } catch (error) {
-    if (!directDbUrl()) throw error;
+    if (!mayFailoverRead(error)) throw error;
     const result = await getDirectPool().query<RestTaskRow>('select payload from public.ivx_autonomous_tasks where state = any($1::text[]) order by updated_at desc limit 1000', [unique]);
     if (result.rows.length >= 1000) throw new Error('postgres_atomic current-task response reached its safety limit; telemetry is incomplete');
     return result.rows.map((row) => structuredClone(row.payload));
@@ -198,7 +202,7 @@ export async function readPostgresFleetLeaseRows(): Promise<AtomicFleetLeaseRow[
     if (!Array.isArray(rows)) throw new Error('postgres_atomic fleet truth response is not an array');
     return rows.filter((row): row is typeof row & { lease_holder: string; last_heartbeat_at: string } => Boolean(row.task_id && row.lease_holder && row.last_heartbeat_at)).map((row) => ({ taskId: row.task_id, idempotencyKey: row.idempotency_key, state: row.state, assignedAgentNumber: row.assigned_agent_number, leaseHolder: row.lease_holder, workerInstanceId: row.worker_instance_id, lastHeartbeatAt: row.last_heartbeat_at, leaseExpiresAt: row.lease_expires_at }));
   } catch (error) {
-    if (!directDbUrl()) throw error;
+    if (!mayFailoverRead(error)) throw error;
     const activeStates = ['LEASED','RUNNING','EXECUTION_COMPLETED','QA_IN_PROGRESS','READY_FOR_DEPLOYMENT','DEPLOYING','DEPLOYED','PRODUCTION_VERIFYING'];
     const result = await getDirectPool().query<{ task_id: string; idempotency_key: string; state: TaskState; assigned_agent_number: number | null; lease_holder: string; worker_instance_id: string | null; last_heartbeat_at: string | Date; lease_expires_at: string | Date | null }>('select task_id, idempotency_key, state, assigned_agent_number, lease_holder, worker_instance_id, last_heartbeat_at, lease_expires_at from public.ivx_autonomous_tasks where state = any($1::text[]) and lease_holder is not null order by updated_at desc limit 1000', [activeStates]);
     return result.rows.filter((row) => row.task_id && row.lease_holder && row.last_heartbeat_at).map((row) => ({ taskId: row.task_id, idempotencyKey: row.idempotency_key, state: row.state as TaskState, assignedAgentNumber: row.assigned_agent_number, leaseHolder: row.lease_holder, workerInstanceId: row.worker_instance_id, lastHeartbeatAt: new Date(row.last_heartbeat_at).toISOString(), leaseExpiresAt: row.lease_expires_at ? new Date(row.lease_expires_at).toISOString() : null }));
