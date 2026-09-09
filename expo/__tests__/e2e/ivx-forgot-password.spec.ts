@@ -65,7 +65,7 @@ test.describe('Forgot Password — reset-password.html', () => {
   test('invalid recovery code is rejected', async ({ page }) => {
     await page.goto(BASE + '/reset-password.html?code=definitely-invalid-code', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.status')).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('.status')).toContainText(/Could not verify your recovery link/i);
+    await expect(page.locator('.status')).toContainText(/Could not verify your recovery link/i, { timeout: 20000 });
   });
 
   test('valid recovery fragment establishes session, updates password, then signs out', async ({ page }) => {

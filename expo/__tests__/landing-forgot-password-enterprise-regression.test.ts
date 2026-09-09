@@ -36,6 +36,8 @@ describe('Landing + Forgot Password enterprise regression gate', () => {
     expect(reset).toContain("sb.auth.updateUser({password:p1})");
     expect(reset).toContain("sb.auth.signOut({scope:'local'})");
     expect(reset).toContain("location.href='/'");
+    expect(reset).toContain('IVX_RECOVERY_AUTH_DEADLINE_V1');
+    expect(reset).toContain('AUTH_OPERATION_TIMEOUT_MS=12000');
   });
 
   it('does not expose a service-role key in the public landing recovery runtime', () => {

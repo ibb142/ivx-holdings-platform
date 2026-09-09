@@ -39,6 +39,7 @@ jobs:
       SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
       API_BASE: https://api.ivxholding.com
+      RUN_EVENT: ${{ github.event_name }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -119,7 +120,7 @@ jobs:
             [ "$code" != 000 ] || code=0
             if [ "$code" = 200 ]; then
               test "$(jq -r '.id // empty' /tmp/user.json)" = "$OWNER_USER_ID"
-              echo 'TOKEN_VERIFICATION_MODE=supabase_user_endpoint_and_backend_gate' >> "$GITHUB_ENV"
+              echo 'TOKEN_VERIFICATION_MODE=supabase_user_endpoint_verified' >> "$GITHUB_ENV"
             else
               case "$code" in
                 0|5??)
@@ -140,17 +141,50 @@ jobs:
             echo 'TOKEN_VERIFICATION_MODE=live_backend_outage_session' >> "$GITHUB_ENV"
             echo 'supabase_user_endpoint=SKIPPED verified_by_live_backend_outage_session=true'
           fi
+      - name: Wait for exact production SHA on protected push
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          deployed_sha=''
+          for attempt in $(seq 1 30); do
+            if curl -fsS --max-time 10 "${API_BASE}/health" -o /tmp/health.json; then
+              deployed_sha=$(jq -r '.commit // empty' /tmp/health.json)
+              if [ "$deployed_sha" = "$SOURCE_SHA" ]; then
+                echo "exact_production_sha=PASS sha=$deployed_sha attempt=$attempt"
+                break
+              fi
+            fi
+            sleep 10
+          done
+          test "$deployed_sha" = "$SOURCE_SHA"
       - name: Verify live owner-only backend gate with real session
         shell: bash
         run: |
           set -euo pipefail
+          if [ "$RUN_EVENT" = pull_request ] && [ "$AUTH_MODE" = supabase_password_grant ] && [ "$SUPABASE_USER_HTTP" = 200 ]; then
+            echo 'BACKEND_OWNER_GATE_REQUIRED=false' >> "$GITHUB_ENV"
+            echo 'BACKEND_OWNER_GATE_HTTP=0' >> "$GITHUB_ENV"
+            echo 'TOKEN_VERIFICATION_MODE=supabase_user_endpoint_pr_source_gate' >> "$GITHUB_ENV"
+            echo 'backend_owner_gate=DEFERRED_UNTIL_EXACT_SHA_DEPLOY'
+            exit 0
+          fi
+          echo 'BACKEND_OWNER_GATE_REQUIRED=true' >> "$GITHUB_ENV"
           code=$(curl -sS --retry 4 --retry-delay 2 --retry-all-errors --max-time 20 -o /tmp/owner-gate.json -w '%{http_code}' "${API_BASE}/api/ivx/verify/env-status" -H "Authorization: Bearer ${OWNER_TOKEN}" || true)
           [ "$code" != 000 ] || code=0
           test "$code" = 200
           test "$(jq -r '.ok // false' /tmp/owner-gate.json)" = true
-          if [ "$TOKEN_VERIFICATION_MODE" = pending_live_backend_owner_gate ]; then
-            echo 'TOKEN_VERIFICATION_MODE=live_backend_owner_gate_during_provider_degradation' >> "$GITHUB_ENV"
-          fi
+          echo "BACKEND_OWNER_GATE_HTTP=$code" >> "$GITHUB_ENV"
+          case "$TOKEN_VERIFICATION_MODE" in
+            pending_live_backend_owner_gate)
+              echo 'TOKEN_VERIFICATION_MODE=live_backend_owner_gate_during_provider_degradation' >> "$GITHUB_ENV"
+              ;;
+            live_backend_outage_session)
+              ;;
+            *)
+              echo 'TOKEN_VERIFICATION_MODE=supabase_user_endpoint_and_backend_gate' >> "$GITHUB_ENV"
+              ;;
+          esac
       - name: Verify unauthenticated owner gate remains closed
         shell: bash
         run: |
@@ -161,7 +195,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p qa/evidence
-          jq -n --arg sha "$SOURCE_SHA" --arg userId "$OWNER_USER_ID" --arg appRole "$OWNER_APP_ROLE" --arg userRole "$OWNER_USER_ROLE" --arg authMode "$AUTH_MODE" --arg sessionMethod "$SESSION_METHOD" --arg passwordBinding "$OWNER_PASSWORD_BINDING" --arg tokenVerificationMode "$TOKEN_VERIFICATION_MODE" --argjson passwordGrantHttp "$PASSWORD_GRANT_HTTP" --argjson supabaseUserHttp "$SUPABASE_USER_HTTP" --argjson loginMs "$LOGIN_MS" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{certificate:"IVX-OWNER-AUTH-E2E-LIVE",passed:true,sourceSha:$sha,realPasswordValidated:true,realPasswordGrant:($authMode=="supabase_password_grant"),passwordGrantHttp:$passwordGrantHttp,passwordBinding:$passwordBinding,directProviderUnavailable:($passwordGrantHttp==0 or $passwordGrantHttp>=500 or $supabaseUserHttp==0 or $supabaseUserHttp>=500),credentialDriftObserved:($passwordGrantHttp>=400 and $passwordGrantHttp<500),authMode:$authMode,sessionMethod:$sessionMethod,outageFallbackExercised:($authMode=="ivx_owner_outage_session"),loginLatencyMs:$loginMs,supabaseUserEndpointHttp:$supabaseUserHttp,tokenVerificationMode:$tokenVerificationMode,identityMatch:true,ownerUserId:$userId,appMetadataRole:$appRole,userMetadataRole:$userRole,backendOwnerGateHttp:200,unauthenticatedGateClosed:true,secretValuesReturned:false,fastPathMarker:"IVX_OWNER_POST_LOGIN_FAST_PATH_V1",backgroundRepairMarker:"IVX_OWNER_REPAIR_BACKGROUND_V1",directPasswordMarker:"IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1",verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-auth-e2e-live.json
+          jq -n --arg sha "$SOURCE_SHA" --arg runEvent "$RUN_EVENT" --arg userId "$OWNER_USER_ID" --arg appRole "$OWNER_APP_ROLE" --arg userRole "$OWNER_USER_ROLE" --arg authMode "$AUTH_MODE" --arg sessionMethod "$SESSION_METHOD" --arg passwordBinding "$OWNER_PASSWORD_BINDING" --arg tokenVerificationMode "$TOKEN_VERIFICATION_MODE" --arg backendOwnerGateRequired "$BACKEND_OWNER_GATE_REQUIRED" --argjson backendOwnerGateHttp "$BACKEND_OWNER_GATE_HTTP" --argjson passwordGrantHttp "$PASSWORD_GRANT_HTTP" --argjson supabaseUserHttp "$SUPABASE_USER_HTTP" --argjson loginMs "$LOGIN_MS" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{certificate:"IVX-OWNER-AUTH-E2E-LIVE",passed:true,sourceSha:$sha,runEvent:$runEvent,realPasswordValidated:true,realPasswordGrant:($authMode=="supabase_password_grant"),passwordGrantHttp:$passwordGrantHttp,passwordBinding:$passwordBinding,directProviderUnavailable:($passwordGrantHttp==0 or $passwordGrantHttp>=500 or $supabaseUserHttp==0 or $supabaseUserHttp>=500),credentialDriftObserved:($passwordGrantHttp>=400 and $passwordGrantHttp<500),authMode:$authMode,sessionMethod:$sessionMethod,outageFallbackExercised:($authMode=="ivx_owner_outage_session"),loginLatencyMs:$loginMs,supabaseUserEndpointHttp:$supabaseUserHttp,tokenVerificationMode:$tokenVerificationMode,identityMatch:true,ownerUserId:$userId,appMetadataRole:$appRole,userMetadataRole:$userRole,backendOwnerGateRequired:($backendOwnerGateRequired=="true"),backendOwnerGateHttp:$backendOwnerGateHttp,backendOwnerGateDeferredUntilExactShaDeploy:($backendOwnerGateRequired=="false"),unauthenticatedGateClosed:true,secretValuesReturned:false,fastPathMarker:"IVX_OWNER_POST_LOGIN_FAST_PATH_V1",backgroundRepairMarker:"IVX_OWNER_REPAIR_BACKGROUND_V1",directPasswordMarker:"IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1",verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-auth-e2e-live.json
           cat qa/evidence/ivx-owner-auth-e2e-live.json
       - uses: actions/upload-artifact@v4
         with:
