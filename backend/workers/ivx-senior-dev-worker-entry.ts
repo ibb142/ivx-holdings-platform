@@ -10,6 +10,7 @@ import { startAutonomous112RuntimeEnforcer, stopAutonomous112RuntimeEnforcer } f
 import { startBlockedTaskReconciler, stopBlockedTaskReconciler } from '../services/ivx-autonomous-blocked-reconciler';
 import { startFleetSloMonitor } from '../services/ivx-fleet-slo';
 import { startAutonomousDoctor } from '../services/ivx-autonomous-doctor';
+import { startAutonomousUtilizationGuardian, stopAutonomousUtilizationGuardian } from '../services/ivx-autonomous-utilization-guardian';
 
 console.log('[IVX-SENIOR-DEV-01] process entry', {
   pid: process.pid,
@@ -23,7 +24,8 @@ startFleetSloMonitor();
 startBlockedTaskReconciler();
 const fleetStarted = startAutonomous112RuntimeEnforcer();
 startAutonomousDoctor();
-console.log('[IVX-SENIOR-DEV-01] 112-lane execution plane', { started: fleetStarted, autonomousDoctor: true });
+startAutonomousUtilizationGuardian();
+console.log('[IVX-SENIOR-DEV-01] 112-lane execution plane', { started: fleetStarted, autonomousDoctor: true, utilizationGuardian: true });
 
 startSeniorDevWorker().then(() => {
   console.log('[IVX-SENIOR-DEV-01] exited normally', getSeniorDevWorkerStatus());
@@ -34,6 +36,7 @@ startSeniorDevWorker().then(() => {
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`[IVX-SENIOR-DEV-01] ${signal} received, returning fleet capacity`);
+  stopAutonomousUtilizationGuardian();
   stopBlockedTaskReconciler();
   await stopAutonomous112RuntimeEnforcer().catch((error) => {
     console.error('[IVX-SENIOR-DEV-01] fleet shutdown error', error instanceof Error ? error.message : String(error));
