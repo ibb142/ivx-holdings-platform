@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 describe('real execution certificate boot recovery', () => {
-  it('wires durable pending-run recovery into the API bootstrap', () => {
+  it('wires role-gated durable pending-run recovery before local schedulers', () => {
     const source = readFileSync(join(import.meta.dir, 'hono.ts'), 'utf8');
 
     expect(source).toContain("import { resumePendingCertificateRuns } from './services/ivx-real-execution-certificate';");
