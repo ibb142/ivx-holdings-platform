@@ -32,6 +32,7 @@ import {
   Text,
   TextInput,
   View} from 'react-native';
+import { chatListData, chatScrollMetrics, scrollChatToLatest } from '@/src/modules/chat/chatListLayout';
 import { MessageBubble } from '@/src/modules/chat/components/MessageBubble';
 import { ExecutionConsoleBubble } from '@/src/modules/ivx-owner-ai/components/ExecutionConsoleBubble';
 import { coerceExecutionStatusFromPayload } from '@/src/modules/ivx-owner-ai/hooks/useExecutionStatusPoll';
@@ -1568,13 +1569,14 @@ export default function IVXOwnerChatRoute() {
   const searchActive = normalizedMessageSearchQuery.length > 0;
 
   // INVERTED FLATLIST FIX (Phase 2): Reverse the displayed messages so the
-  // newest message is at index 0. Combined with `inverted={true}` on the
+  // newest message is at index 0. Combined with `inverted={listInverted}` on the
   // FlatList, the list NATURALLY anchors at the newest message on first
   // layout — zero setTimeout, zero retry loop, zero race condition. This is
   // the WhatsApp/iMessage pattern and eliminates the defect where the chat
   // opened on months-old messages because scrollToEnd fired before dynamic
   // bubble layout measurement completed.
-  const invertedData = useMemo<IVXMessage[]>(() => [...displayedMessages].reverse(), [displayedMessages]);
+  const listInverted = Platform.OS !== 'web';
+  const invertedData = useMemo<IVXMessage[]>(() => chatListData(displayedMessages, listInverted), [displayedMessages, listInverted]);
 
   // IVX Media Lifecycle: register all chat messages and wire viewport/scroll
   // tracking so image/video attachments obey centralized lifecycle rules.
@@ -3625,7 +3627,7 @@ export default function IVXOwnerChatRoute() {
       }
       requestAnimationFrame(() => {
         // INVERTED FLATLIST: offset 0 = newest message.
-        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+        scrollChatToLatest(flatListRef.current, Platform.OS !== 'web', true);
       });
     },
     onError: (error, variables) => {
@@ -4454,7 +4456,7 @@ export default function IVXOwnerChatRoute() {
     // older message is at index + 1 (visually above in inverted layout). Date
     // separators show when the current message starts a new day vs the older
     // message above it.
-    const olderMessage = index < invertedData.length - 1 ? invertedData[index + 1] : null;
+    const olderMessage = invertedData[index + (listInverted ? 1 : -1)] ?? null;
     const currentDayKey = formatMessageDateKey(item.createdAt);
     const olderDayKey = olderMessage ? formatMessageDateKey(olderMessage.createdAt) : null;
     const shouldShowDateSeparator = currentDayKey !== olderDayKey;
@@ -4641,7 +4643,7 @@ export default function IVXOwnerChatRoute() {
         </View>
       </>
     );
-  }, [currentStreamingMessageId, displayedMessages, executionStatusByMessageId, handleApproveAndRunFromCard, handleDismissFailedMessage, handleJumpToMessage, handleRetryMessage, handleStartReplyToMessage, handleTogglePinnedMessage, highlightedMessageId, messageSearchQuery, ownerId, pendingOwnerMessages, pinnedMessageIdSet]);
+  }, [currentStreamingMessageId, displayedMessages, invertedData, listInverted, executionStatusByMessageId, handleApproveAndRunFromCard, handleDismissFailedMessage, handleJumpToMessage, handleRetryMessage, handleStartReplyToMessage, handleTogglePinnedMessage, highlightedMessageId, messageSearchQuery, ownerId, pendingOwnerMessages, pinnedMessageIdSet]);
 
   useEffect(() => {
     const pendingMessageId = pendingJumpMessageIdRef.current;
@@ -5565,7 +5567,7 @@ export default function IVXOwnerChatRoute() {
       activeRoomId: ownerSessionIdRef.current,
       invertedData,
       displayedMessages,
-      listInverted: true,
+      listInverted,
       firstContentOffset: firstContentOffsetRecorded,
       initialPositionApplied: !initialScrollPending,
       userNearLatest: isAtBottomRef.current,
@@ -5575,7 +5577,7 @@ export default function IVXOwnerChatRoute() {
       realtimeSubscriptionCount: realtimeSubscriptionState ? 1 : 0,
       lastReconnectTime: lastReconnectTimeRef.current,
       traceId: qaTraceId});
-  }, [canonicalConversationId, invertedData, displayedMessages, firstContentOffsetRecorded, initialScrollPending, showScrollToLatest, realtimeSubscriptionState, qaTraceId]);
+  }, [canonicalConversationId, invertedData, displayedMessages, listInverted, firstContentOffsetRecorded, initialScrollPending, showScrollToLatest, realtimeSubscriptionState, qaTraceId]);
 
   const handleSubmitQaEvidence = useCallback(async (report: string) => {
     setQaSubmitting(true);
@@ -5604,7 +5606,7 @@ export default function IVXOwnerChatRoute() {
     }
   }, [qaTraceId]);
 
-  // INVERTED FLATLIST: With `inverted={true}`, the newest message is at the
+  // INVERTED FLATLIST: With `inverted={listInverted}`, the newest message is at the
   // TOP of the data array (index 0) and visually at the BOTTOM (anchored).
   // "Scroll to latest" = scroll to offset 0 (the top of the inverted list).
   // No setTimeout, no retry loop, no race condition — the inverted list
@@ -5618,7 +5620,7 @@ export default function IVXOwnerChatRoute() {
     }
     // Inverted list: offset 0 = newest message (visually at bottom).
     requestAnimationFrame(() => {
-      flatListRef.current?.scrollToOffset({ offset: 0, animated });
+      scrollChatToLatest(flatListRef.current, Platform.OS !== 'web', animated);
     });
   }, []);
 
@@ -5631,7 +5633,7 @@ export default function IVXOwnerChatRoute() {
     if (Date.now() < suppressAutoScrollUntilRef.current) {
       return;
     }
-    flatListRef.current?.scrollToOffset({ offset: 0, animated });
+    scrollChatToLatest(flatListRef.current, Platform.OS !== 'web', animated);
   }, []);
 
   // INVERTED FLATLIST: The retry loop is no longer needed. The inverted
@@ -5655,14 +5657,14 @@ export default function IVXOwnerChatRoute() {
     // user is "at bottom" (latest) when contentOffset.y is near 0. The user is
     // reading older history when contentOffset.y is large (scrolled down in
     // inverted layout = visually scrolled up toward older messages).
-    const distanceFromLatest = Math.abs(contentOffset.y);
-    const maxScroll = Math.max(0, contentSize.height - layoutMeasurement.height);
+    const { distanceFromLatest, atOlderEdge } = chatScrollMetrics(
+      contentOffset.y, contentSize.height, layoutMeasurement.height, Platform.OS !== 'web');
     const atBottom = distanceFromLatest < 96;
     // QA diagnostics: record the first content offset observed after initial layout.
     if (firstContentOffsetRecorded === null && displayedMessages.length > 0) {
       setFirstContentOffsetRecorded(Math.round(contentOffset.y * 100) / 100);
     }
-    const atTopOfInverted = maxScroll > 0 && contentOffset.y >= maxScroll - 120;
+    const atTopOfInverted = atOlderEdge;
     if (atBottom !== isAtBottomRef.current) {
       isAtBottomRef.current = atBottom;
       if (atBottom && initialScrollPending) {
@@ -5721,7 +5723,7 @@ export default function IVXOwnerChatRoute() {
     setShowScrollToLatest(false);
     // INVERTED FLATLIST: offset 0 = newest message (visually at bottom).
     // Single deterministic call — no setTimeout retry needed.
-    requestAnimationFrame(() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true }));
+    requestAnimationFrame(() => scrollChatToLatest(flatListRef.current, Platform.OS !== 'web', true));
   }, []);
 
   // Floating chat navigation: when a message is sent or received, auto-scroll to the
@@ -6709,7 +6711,7 @@ export default function IVXOwnerChatRoute() {
                   scrollEventThrottle={16}
                   removeClippedSubviews={false}
                   automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-                  inverted={true}
+                  inverted={listInverted}
               refreshControl={<RefreshControl tintColor={Colors.primary} refreshing={refreshing} onRefresh={() => {
                 void messagesQuery.refetch();
                 void conversationQuery.refetch();
@@ -6723,7 +6725,9 @@ export default function IVXOwnerChatRoute() {
                   <Text style={styles.emptyText}>{searchActive ? 'Try a different word or clear search to return to the full owner-room thread.' : resolution.emptyStateText}</Text>
                 </View>
               }
-              ListFooterComponent={listFooter}
+              ListFooterComponent={listInverted ? listFooter : null}
+              ListHeaderComponent={listInverted ? null : listFooter}
+              maintainVisibleContentPosition={Platform.OS === 'web' ? { minIndexForVisible: 0 } : undefined}
               ListFooterComponentStyle={styles.listFooterContainer}
               onContentSizeChange={(width, height) => {
                 ivxDiagnostics.recordContentHeight(`h=${Math.round(height)} count=${displayedMessages.length} atBottom=${isAtBottomRef.current}`);
@@ -6732,6 +6736,7 @@ export default function IVXOwnerChatRoute() {
                 // Only re-anchor to offset 0 if user is at bottom and new
                 // content (streaming/messages) arrives.
                 if (initialScrollPending && displayedMessages.length > 0) {
+                  scrollChatToLatest(flatListRef.current, listInverted, false);
                   isAtBottomRef.current = true;
                   setInitialScrollPending(false);
                   setShowScrollToLatest(false);
@@ -6743,13 +6748,14 @@ export default function IVXOwnerChatRoute() {
                 // Keep pinned to newest (offset 0) as new messages/streaming
                 // content arrives, unless the user is reading older history.
                 if (isAtBottomRef.current) {
-                  flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+                  scrollChatToLatest(flatListRef.current, Platform.OS !== 'web', false);
                 }
               }}
               onLayout={() => {
                 // INVERTED FLATLIST: The list anchors at offset 0 (newest)
                 // on first layout. Clear the pending flag once data is present.
                 if (initialScrollPending && displayedMessages.length > 0) {
+                  scrollChatToLatest(flatListRef.current, listInverted, false);
                   isAtBottomRef.current = true;
                   setInitialScrollPending(false);
                   setShowScrollToLatest(false);

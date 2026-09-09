@@ -92,7 +92,7 @@ export function collectChatQaMetrics(params: {
   const { invertedData, displayedMessages } = params;
 
   // In inverted data, index 0 = newest, last index = oldest.
-  const firstRenderedMessageId = invertedData.length > 0 ? invertedData[0].id : null;
+  const firstRenderedMessageId = invertedData.length > 0 ? invertedData[params.listInverted ? 0 : invertedData.length - 1].id : null;
   const newestServerMessageId = displayedMessages.length > 0
     ? displayedMessages[displayedMessages.length - 1].id
     : null;
