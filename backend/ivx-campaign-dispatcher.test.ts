@@ -400,6 +400,36 @@ describe('IVX campaign dispatcher — emergency stop & recovery (scenarios 14-16
     expect(snapshot.emergencyStop).toBe(true);
   });
 
+  it('refreshes worker evidence before cancelling an old dispatcher snapshot', async () => {
+    await ensureCampaignAssignment(assignment({ agentNumber: 1, dutyId: 'd1' }));
+    await tickCampaignDispatcher();
+    const rec = (await findRecord('1:IMPLEMENT:d1'))!;
+    const jobId = rec.workerJobId!;
+    rec.lastHeartbeatAt = new Date(Date.now() - 11 * 60 * 1000).toISOString();
+    fake.jobs.get(jobId)!.lastHeartbeatAt = new Date().toISOString();
+    await tickCampaignDispatcher();
+    expect(fake.cancelled).not.toContain(jobId);
+    expect(rec.workerJobId).toBe(jobId);
+    expect(rec.retryCount).toBe(0);
+  });
+
+  it('does not cancel an unobservable worker and resumes polling after recovery', async () => {
+    await ensureCampaignAssignment(assignment({ agentNumber: 1, dutyId: 'd1' }));
+    await tickCampaignDispatcher();
+    const rec = (await findRecord('1:IMPLEMENT:d1'))!;
+    const jobId = rec.workerJobId!;
+    rec.lastHeartbeatAt = new Date(Date.now() - 11 * 60 * 1000).toISOString();
+    setCampaignWorkerBridgeForTests({ ...fake.bridge, get: async () => { throw new Error('temporary read failure'); } });
+    await tickCampaignDispatcher();
+    expect(fake.cancelled).not.toContain(jobId);
+    expect(rec.retryCount).toBe(0);
+    expect(rec.error).toStartWith('Worker sync error:');
+    setCampaignWorkerBridgeForTests(fake.bridge);
+    await tickCampaignDispatcher();
+    expect(rec.error).toBeNull();
+    expect(rec.workerJobId).toBe(jobId);
+  });
+
   it('15. stale running jobs are cancelled and requeued within retry limits', async () => {
     await ensureCampaignAssignment(assignment({ agentNumber: 1, dutyId: 'd1' }));
     await tickCampaignDispatcher();
