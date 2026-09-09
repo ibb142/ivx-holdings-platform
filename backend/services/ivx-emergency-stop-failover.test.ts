@@ -58,7 +58,7 @@ describe('owner stop transport recovery', () => {
     for (const error of [new Error('fetch failed'),new Error('getaddrinfo ENOTFOUND base'),new DOMException('aborted','TimeoutError'),new Error('HTTP 503')]) expect(emergencyStopReadCanFailOver(error)).toBe(true);
     for (const error of [new Error('HTTP 403 timeout'), new Error('HTTP 429'),new SyntaxError('Unexpected JSON token')]) expect(emergencyStopReadCanFailOver(error)).toBe(false);
   });
-  it('rejects a different database or placeholder host instead of reading an unrelated owner stop', () => {
+  it('rejects a different database or invalid host instead of reading an unrelated owner stop', () => {
     for (const db of ['postgresql://postgres:test@base/postgres','postgresql://postgres:test@db.other.supabase.co/postgres','postgresql://postgres.other:test@aws-0-us-west-2.pooler.supabase.com/postgres']) {
       expect(() => emergencyStopPostgresConfig({EXPO_PUBLIC_SUPABASE_URL:'https://testproject.supabase.co',SUPABASE_DB_URL:db})).toThrow('project_mismatch');
     }
