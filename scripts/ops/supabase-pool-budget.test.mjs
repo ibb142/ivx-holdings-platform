@@ -29,3 +29,20 @@ test('configuration diagnostics never serialize credentials or unknown values', 
   assert.equal(result.includes('SECRET'),false);
   assert.equal(JSON.parse(result).entries[0].poolSizeType,'string');
 });
+
+test('omitted documented compute default requires live capacity proof and explicit post-write readback',async()=>{
+  for(const max of [60,90]){
+    let patched=false;
+    const f=async(url,options)=>{
+      if(url.endsWith('/database/query')){
+        assert.equal(JSON.parse(options.body).read_only,true);
+        return Response.json([{max_connections:max}]);
+      }
+      if(options.method==='PATCH'){patched=true;return Response.json({});}
+      return Response.json(patched?{default_pool_size:5}:{pool_mode:'transaction',server_idle_timeout:600});
+    };
+    if(max===60)await run(f,'private');
+    else await assert.rejects(run(f,'private'),/Compute default cannot be verified/);
+    assert.equal(patched,max===60);
+  }
+});
