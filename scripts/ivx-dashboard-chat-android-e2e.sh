@@ -54,8 +54,8 @@ adb exec-out screencap -p > qa/evidence/dashboard-chat/final.png || true
 adb logcat -d -v threadtime > qa/evidence/dashboard-chat/logcat.txt || true
 
 test -s qa/evidence/dashboard-chat/process.txt
-test "$(jq -r '.passed' qa/evidence/all-routes-human-e2e/certificate.json)" = true
-test "$(jq -r '.coveragePercent' qa/evidence/all-routes-human-e2e/certificate.json)" = 100
+jq -e '.passed == true and .coveragePercent == 100' \
+  qa/evidence/all-routes-human-e2e/certificate.json >/dev/null
 
 jq -n \
   --arg sha "${EXPO_PUBLIC_SOURCE_COMMIT_SHA:-${GITHUB_SHA:-unknown}}" \

@@ -63,6 +63,11 @@ class RouteCertificateTests(unittest.TestCase):
         (root / 'artifacts' / 'route-7.png').unlink()
         self.assertFalse(self.check(root, cases))
 
+    def test_dashboard_consumer_compares_json_coverage_numerically(self):
+        source = Path(__file__).with_name('ivx-dashboard-chat-android-e2e.sh').read_text()
+        self.assertIn("jq -e '.passed == true and .coveragePercent == 100'", source)
+        self.assertNotIn("jq -r '.coveragePercent'", source)
+
 
 if __name__ == '__main__':
     unittest.main()
