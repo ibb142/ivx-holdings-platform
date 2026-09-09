@@ -13,6 +13,7 @@ import {
   type IVXTaskRecord,
 } from '../services/ivx-task-state-store';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
+import { IVXAuthServiceUnavailableError } from '../../expo/shared/ivx';
 
 function readTrimmed(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
 function taskProgressPercent(task: IVXTaskRecord): number {
@@ -57,7 +58,8 @@ async function requireOwner(request: Request): Promise<{ ok: true } | { ok: fals
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'IVX owner authentication required.';
-    const status = message.toLowerCase().includes('missing bearer') ? 401 : 403;
+    const status = error instanceof IVXAuthServiceUnavailableError ? 503
+      : message.toLowerCase().includes('missing bearer') ? 401 : 403;
     return { ok: false, response: ownerOnlyJson({ ok: false, error: message }, status) };
   }
 }

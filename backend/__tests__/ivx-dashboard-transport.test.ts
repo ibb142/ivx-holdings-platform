@@ -1,5 +1,6 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { ALL_AGENT_CONTRACTS } from '../services/ivx-agent-contracts';
+import { IVXAuthServiceUnavailableError } from '../../expo/shared/ivx';
 
 // Run this contract test in its own Bun process: it replaces storage only.
 // Authentication and ownerOnlyJson's real 900 KB transport ceiling stay active.
@@ -92,4 +93,18 @@ test('preserves all 112 agents under the actual transport ceiling and fails clos
   const unauthenticated = await handleAutonomousOpsDashboardRequest(new Request('https://api.ivxholding.com/api/ivx/live-work/agents?enterpriseDashboard=1'));
   expect(unauthenticated.status).toBe(401);
   expect(ownerGuard).toHaveBeenCalledTimes(1);
+});
+
+test('owner verification outages return 503 without disclosing cached dashboard data', async () => {
+  const previousFleetReads = fleetReads;
+  for (const query of ['?enterpriseDashboard=1', '']) {
+    ownerGuard.mockRejectedValueOnce(new IVXAuthServiceUnavailableError());
+    const response = await handleAutonomousOpsDashboardRequest(new Request(`https://api.ivxholding.com/api/ivx/live-work/agents${query}`));
+    expect(response.status).toBe(503);
+    const body = await response.json();
+    expect(body.ok).toBe(false);
+    expect(body.dashboard).toBeUndefined();
+    expect(body.error).toContain('temporarily unavailable');
+  }
+  expect(fleetReads).toBe(previousFleetReads);
 });
