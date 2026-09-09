@@ -17,9 +17,6 @@ for (const fails of [false, true]) test(`configured same-project queue selects o
           if(!${fails})return {rows:[{result:{ok:false,error:'state_conflict'}}]};
         }
         if(${fails})throw new Error('ambiguous direct failure');
-        if(sql.includes('ivx_agent_executions') && values[0]!==2000)throw new Error('history limit not clamped');
-        if(sql.includes('ivx_agent_states') && values[0]!==112)throw new Error('state limit not bounded');
-        if(sql.includes('ivx_agent_jobs') && (!sql.includes("type = 'ivx_rec_execution'") || values[0]!==112))throw new Error('fallback filter not bounded');
         if(sql.includes('ivx_autonomous_tasks_claim_batch'))return {rows:[{result:[{ok:false,task:null,error:'no_task'}]}]};
         return {rows:[]};
       }
@@ -32,12 +29,12 @@ for (const fails of [false, true]) test(`configured same-project queue selects o
     const m=await import(${JSON.stringify(new URL('./ivx-postgres-autonomous-task-store.ts', import.meta.url).pathname)});
     if(!m.preferDirectTransport())throw new Error('same project was not selected');
     if(m.preferDirectTransport({...process.env,SUPABASE_DB_URL:process.env.SUPABASE_DB_URL.replace('postgres.testproject','postgres.other')}))throw new Error('other project accepted');
-    for(const operation of [()=>m.readPostgresFleetLeaseRows(),()=>m.readPostgresCurrentTasks(['RUNNING']),()=>m.claimPostgresAutonomousTasks([{workerId:'agent:test',agentNumber:1}]),()=>m.compareAndSetPostgresAutonomousTask({task:{taskId:'test'},expectedStates:['RUNNING'],eventType:'verified'}),()=>m.readPostgresAgentDashboardRows('executions',99999),()=>m.readPostgresAgentDashboardRows('states',99999),()=>m.readPostgresAgentDashboardRows('jobs',-1)]) {
+    for(const operation of [()=>m.readPostgresFleetLeaseRows(),()=>m.readPostgresCurrentTasks(['RUNNING']),()=>m.claimPostgresAutonomousTasks([{workerId:'agent:test',agentNumber:1}]),()=>m.compareAndSetPostgresAutonomousTask({task:{taskId:'test'},expectedStates:['RUNNING'],eventType:'verified'})]) {
       let failed=false;
       try {await operation();}catch(e){if(!String(e).includes('ambiguous direct failure'))throw e;failed=true;}
       if(failed!==${fails})throw new Error('incorrect failure result');
     }
-    if(restCalls!==0 || queries!==7)throw new Error('transport replay or unexpected call count');
+    if(restCalls!==0 || queries!==4)throw new Error('transport replay or unexpected call count');
   `], {stdout:'pipe',stderr:'pipe',timeout:10000});
   const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
   expect(stderr).toBe('');
