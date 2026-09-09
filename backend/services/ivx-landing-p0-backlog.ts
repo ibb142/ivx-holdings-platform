@@ -572,8 +572,17 @@ export async function seedLandingP0Backlog(sha: string): Promise<SeedResult> {
 export async function seedLandingP0Patrol(sha: string): Promise<PatrolSeedResult> {
   const result: PatrolSeedResult = { sha, created: 0, existing: 0, total: 112, error: null };
   try {
-    const created = await createTasksBatch(Array.from({ length: 112 }, (_, index) => {
-      const agentNumber = index + 1;
+    const existingTasks = postgresAtomicQueueSelected()
+      ? await readPostgresTaskIdentitiesByPrefix(`${LANDING_P0_PATROL_PREFIX}${sha}:`)
+      : await getAllTasks();
+    const existingKeys = new Set(existingTasks
+      .filter(task => task.state !== 'CANCELLED' && task.state !== 'EXPIRED')
+      .map(task => task.idempotencyKey));
+    const missingAgents = Array.from({ length: 112 }, (_, index) => index + 1)
+      .filter(agentNumber => !existingKeys.has(landingPatrolKey(sha, agentNumber)));
+    result.existing = 112 - missingAgents.length;
+    if (missingAgents.length === 0) return result;
+    const created = await createTasksBatch(missingAgents.map((agentNumber) => {
       return {
         title: `Landing P0 · IA-${String(agentNumber).padStart(3, '0')} · continuous production patrol`,
         description: `Reusable 24/7 Landing QA patrol for IA-${String(agentNumber).padStart(3, '0')} on production SHA ${sha}. The lane executes live HTTP/API/HTML/CI checks, persists bounded evidence, and never converts waiting time into productive hours.`,
