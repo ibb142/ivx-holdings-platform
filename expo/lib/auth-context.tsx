@@ -2155,11 +2155,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           // issuing its bounded HMAC-signed outage session.
           if (isOwnerAdminEmail(normalizedEmail)
             && normalizedDirect.failureReason === 'service_unavailable') {
-            trace.checkpoint('OWNER_OUTAGE_RECOVERY_STARTED', {
+            trace.checkpoint('OWNER_RECOVERY_STARTED', {
               errorCode: directError.code ?? 'direct_signin_failed',
             });
             const recovery = await loginOwnerPasswordless(normalizedEmail, password);
-            trace.checkpoint('OWNER_OUTAGE_RECOVERY_COMPLETE', {
+            trace.checkpoint('OWNER_RECOVERY_COMPLETE', {
               success: recovery.success,
               errorMessage: recovery.success ? undefined : recovery.message,
             });
