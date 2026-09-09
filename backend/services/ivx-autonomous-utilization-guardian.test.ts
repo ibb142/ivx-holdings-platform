@@ -47,9 +47,12 @@ describe('fleet evidence to reasoning worker', () => {
   it('preserves queue emergency-stop failures and retries without marking success', async () => {
     const f = fixture(); await f.guardian.run(); f.advance(); f.fail(true);
     expect((await f.guardian.run()).action).toBe('ERROR'); expect(f.guardian.snapshot().jobId).toBeNull();
+    expect(f.guardian.snapshot().blockedDependency).toBe('owner_stop_active');
     f.fail(false); f.advance(); expect((await f.guardian.run()).action).toBe('RETRY_BACKOFF');
+    expect(f.guardian.snapshot().blockedDependency).toBe('owner_stop_active');
     expect(f.calls).toHaveLength(1);
     f.advance(); expect((await f.guardian.run()).action).toBe('REPAIR_QUEUED');
+    expect(f.guardian.snapshot().blockedDependency).toBeUndefined();
   });
   it('coalesces concurrent ticks and limits repeated repair submissions', async () => {
     const f = fixture(); await f.guardian.run(); f.advance();
