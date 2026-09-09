@@ -63,6 +63,7 @@ describe('owner stop transport recovery', () => {
       expect(() => emergencyStopPostgresConfig({EXPO_PUBLIC_SUPABASE_URL:'https://testproject.supabase.co',SUPABASE_DB_URL:db})).toThrow('project_mismatch');
     }
     const config = emergencyStopPostgresConfig({EXPO_PUBLIC_SUPABASE_URL:'https://testproject.supabase.co',SUPABASE_DB_URL:'postgresql://postgres.testproject:test@aws-0-us-west-2.pooler.supabase.com/postgres?sslmode=disable'});
-    expect(config.ssl).toEqual({rejectUnauthorized:true});
+    expect(config.ssl.rejectUnauthorized).toBe(true);
+    expect(config.ssl.ca).toBeDefined();
   });
 });

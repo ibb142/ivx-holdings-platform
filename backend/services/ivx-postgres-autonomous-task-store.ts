@@ -9,6 +9,7 @@
 import { hostname } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
+import { supabasePostgresTls, withoutPostgresUrlTlsOptions } from './ivx-supabase-postgres-tls';
 import { decideRetry, isTransientFailure, retryAfterMs, RetryQuota } from './ivx-retry-policy';
 import type { FleetLeaseRequest, FleetLeaseResult, FleetTaskLeaseIdentity, FleetTaskMutationResult, Task, TaskState } from './ivx-autonomous-task-engine';
 
@@ -55,7 +56,7 @@ async function parsePayload(response: Response): Promise<unknown> { const text =
 function getDirectPool(env: NodeJS.ProcessEnv = process.env): Pool {
   const connectionString = directDbUrl(env);
   if (!connectionString) throw new Error('direct_postgres_not_configured');
-  if (!directPool) directPool = new Pool({ connectionString, ssl: { rejectUnauthorized: true }, max: 4, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000 });
+  if (!directPool) directPool = new Pool({ connectionString: withoutPostgresUrlTlsOptions(connectionString), ssl: supabasePostgresTls(), max: 4, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000 });
   return directPool;
 }
 const DIRECT_RPC_ARGS: Record<string, string[]> = {
