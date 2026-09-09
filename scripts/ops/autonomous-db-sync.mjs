@@ -73,7 +73,7 @@ export function candidates(env) {
   if (env.SUPABASE_DB_PASSWORD?.trim()) {
     const u = new URL(`postgresql://db.${project}.supabase.co/postgres`);
     u.username = env.SUPABASE_DB_USER?.trim() || 'postgres';
-    u.password = env.SUPABASE_DB_PASSWORD.trim();
+    u.password = encodeURIComponent(env.SUPABASE_DB_PASSWORD.trim());
     if (env.SUPABASE_DB_HOST?.trim()) u.hostname = env.SUPABASE_DB_HOST.trim();
     u.port = env.SUPABASE_DB_PORT?.trim() || '5432';
     result.push({source:'SUPABASE_DB_PASSWORD',value:u.href});
@@ -90,11 +90,16 @@ async function request(url, token, init={}) {
 export async function renderKey() {
   const direct=(process.env.RENDER_API_KEY || process.env.IVX_RENDER_API_KEY || '').trim();
   if (direct) { mask(direct); return direct; }
+  return readOwnerVariableKey('RENDER_API_KEY');
+}
+
+async function readOwnerVariableKey(name) {
+  if (!['RENDER_API_KEY','SUPABASE_ACCESS_TOKEN'].includes(name)) throw new Error('owner_variable_name_not_allowed');
   const service=process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!service) throw new Error('github_supabase_service_binding_missing');
   let rows;
   try {
-    rows=await request(`${base}/rest/v1/ivx_owner_variables?select=encrypted_value,value_iv,value_tag,value_hash&name=eq.RENDER_API_KEY&limit=2`,service,{headers:{apikey:service}});
+    rows=await request(`${base}/rest/v1/ivx_owner_variables?select=encrypted_value,value_iv,value_tag,value_hash&name=eq.${name}&limit=2`,service,{headers:{apikey:service}});
   } catch(error) {
     const transient=error.name==='TimeoutError' || error.name==='TypeError' || /^remote_http_5[0-9]{2}$/.test(error.message);
     if(!transient) throw new Error('owner_variable_rest_access_failed');
@@ -103,11 +108,11 @@ export async function renderKey() {
     console.log('owner_variable_rest_unavailable: trying_read_only_management_query');
     try {
       rows=await request(`https://api.supabase.com/v1/projects/${project}/database/query`,management,{
-        method:'POST',body:JSON.stringify({query: "SELECT encrypted_value, value_iv, value_tag, value_hash FROM public.ivx_owner_variables WHERE name = 'RENDER_API_KEY' LIMIT 2",read_only:true})
+        method:'POST',body:JSON.stringify({query: `SELECT encrypted_value, value_iv, value_tag, value_hash FROM public.ivx_owner_variables WHERE name = '${name}' LIMIT 2`,read_only:true})
       });
     } catch { throw new Error('owner_variable_management_read_failed'); }
   }
-  if (!Array.isArray(rows) || rows.length!==1) throw new Error('render_owner_variable_missing');
+  if (!Array.isArray(rows) || rows.length!==1) throw new Error('owner_variable_missing');
   const row=rows[0];
   const secrets=[process.env.IVX_OWNER_VARIABLES_ENCRYPTION_KEY,process.env.APP_SECRET,process.env.JWT_SECRET,
     crypto.createHash('sha256').update(`${base}:${service}`).digest('hex')].filter(Boolean);
@@ -121,7 +126,7 @@ export async function renderKey() {
       mask(value); return value;
     } catch { /* Try only the configured encryption keys, never guess passwords. */ }
   }
-  throw new Error('render_owner_variable_decryption_failed');
+  throw new Error('owner_variable_decryption_failed');
 }
 
 async function readEnv(serviceId,key) {
@@ -170,8 +175,20 @@ export async function readPoolerCandidates(configurations, token=process.env.SUP
     .filter(item=>item.config && item.config.user==='postgres' && connectionIssue(item.candidate.value)==='valid');
   if(!credentials.length)return [];
   let rows;
-  try {rows=await request(`https://api.supabase.com/v1/projects/${project}/config/database/pooler`,token.trim());}
-  catch(error) {console.log(JSON.stringify({poolerDiscovery:'FAIL',reason:/^remote_http_[0-9]{3}$/.test(error.message)?error.message:'management_request_failed'}));return [];}
+  const endpointUrl=`https://api.supabase.com/v1/projects/${project}/config/database/pooler`;
+  try {
+    try { rows=await request(endpointUrl,token.trim()); }
+    catch(error) {
+      if(error.message!=='remote_http_401')throw error;
+      // The owner vault contains a separately configured management credential.
+      // Validate it with the same scoped read; never reset or invent a token.
+      const ownerToken=await readOwnerVariableKey('SUPABASE_ACCESS_TOKEN');
+      if(ownerToken===token.trim())throw new Error('owner_management_token_matches_rejected_binding');
+      rows=await request(endpointUrl,ownerToken);
+      console.log(JSON.stringify({poolerCredentialSource:'owner_variable',projectVerified:true}));
+    }
+  }
+  catch(error) {console.log(JSON.stringify({poolerDiscovery:'FAIL',reason:/^(?:remote_http_[0-9]{3}|owner_[a-z_]+)$/.test(error.message)?error.message:'management_request_failed'}));return [];}
   if(!Array.isArray(rows))throw new Error('pooler_response_invalid');
   const result=[];const seen=new Set();
   for(const row of rows) {
@@ -181,7 +198,7 @@ export async function readPoolerCandidates(configurations, token=process.env.SUP
     if(!['postgres:','postgresql:'].includes(endpoint.protocol) || !endpoint.hostname.endsWith('.pooler.supabase.com')
       || decodeURIComponent(endpoint.username)!==`postgres.${project}` || endpoint.pathname!=='/postgres')continue;
     for(const {entry,config} of credentials) {
-      const url=new URL(endpoint.href);url.password=config.password;url.port='5432';url.search='?sslmode=verify-full';
+      const url=new URL(endpoint.href);url.password=encodeURIComponent(config.password);url.port='5432';url.search='?sslmode=verify-full';
       if(!validateConnection(url.href) || seen.has(url.href))continue;
       seen.add(url.href);result.push({serviceId:entry.serviceId+'_pooler_session',env:{SUPABASE_POOLER_URL:url.href}});
     }
