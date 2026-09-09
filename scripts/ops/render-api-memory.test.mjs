@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { upgradeAPI, SERVICE } from './render-api-memory.mjs';
+import { upgradeAPI, SERVICE, decodeRenderResponse } from './render-api-memory.mjs';
 const commit = 'a'.repeat(40);
 function fixture({ wrongOwner = false, failedPlan = false, heap = '--max-old-space-size=320' } = {}) {
   const calls = [];
@@ -16,6 +16,22 @@ function fixture({ wrongOwner = false, failedPlan = false, heap = '--max-old-spa
   };
   return { request, calls };
 }
+test('empty successful Render responses are supported; malformed JSON remains an error', async () => {
+  assert.deepEqual(await decodeRenderResponse(new Response(null, { status: 204 })), {});
+  assert.deepEqual(await decodeRenderResponse(new Response('{"id":"dep-test"}')), { id: 'dep-test' });
+  await assert.rejects(decodeRenderResponse(new Response('{broken')));
+});
+test('empty accepted deployment is reconciled without issuing a second POST', async () => {
+  const f = fixture(); let posts = 0;
+  const request = async (method, path, body) => {
+    if (method === 'POST') { posts++; return {}; }
+    if (path.endsWith('/deploys?limit=5')) return [{ deploy: { id: 'dep-confirmed', commit: { id: commit },
+      createdAt: new Date(Date.now() + 1).toISOString(), status: 'queued' } }];
+    return f.request(method, path, body);
+  };
+  const result = await upgradeAPI({ request, approved: true, commit });
+  assert.equal(result.deployId, 'dep-confirmed'); assert.equal(posts, 1);
+});
 test('missing approval performs no network calls', async () => {
   const f = fixture();
   await assert.rejects(upgradeAPI({ ...f, approved: false, commit }), /approval/);
