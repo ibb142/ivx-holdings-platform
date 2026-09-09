@@ -62,7 +62,7 @@ jobs:
         run: |
           set -euo pipefail
           body=$(jq -nc --arg email "$OWNER_EMAIL" --arg password "$OWNER_PASSWORD" '{email:$email,password:$password}')
-          curl -sS --max-time 15 -o /tmp/login.json -w '%{http_code} %{time_total}' -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" -H "apikey: ${SUPABASE_ANON_KEY}" -H 'Content-Type: application/json' --data "$body" > /tmp/login.metrics
+          curl -sS --max-time 15 -o /tmp/login.json -w '%{http_code} %{time_total}\n' -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" -H "apikey: ${SUPABASE_ANON_KEY}" -H 'Content-Type: application/json' --data "$body" > /tmp/login.metrics
           read -r code total < /tmp/login.metrics
           test "$code" = 200 || { echo "password_grant_http=$code"; jq '{error,error_code,msg,message}' /tmp/login.json 2>/dev/null || true; exit 1; }
           token=$(jq -r '.access_token // empty' /tmp/login.json)
