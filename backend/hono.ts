@@ -1,3 +1,6 @@
+import { handleFleetHaGet } from './api/ivx-fleet-ha';
+import { SharedRoomStorage, requireSharedState } from './services/ivx-shared-room-storage';
+import { autonomousWorkerInstanceId } from './services/ivx-postgres-autonomous-task-store';
 import { handleIVXRadarStatus } from './api/ivx-radar';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -1648,6 +1651,7 @@ const WEB_DIST_ROOT = path.join(SERVER_ROOT, 'expo', 'dist');
 const CHAT_DATABASE_PATH = (process.env.CHAT_DATABASE_PATH?.trim() || path.join(SERVER_ROOT, 'data', 'chat-room.sqlite'));
 const CHAT_DEFAULT_ROOM_ID = (process.env.CHAT_ROOM_ID?.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').slice(0, 40) || 'main-room');
 const publicChatStorage = new ChatStorage(CHAT_DATABASE_PATH);
+const publicRoomStorage = new SharedRoomStorage(publicChatStorage);
 setPublicChatHistoryStorage(publicChatStorage);
 setPublicChatStreamStorage(publicChatStorage);
 const publicRoomMembers = new Map<string, number>();
@@ -1824,11 +1828,11 @@ async function handleReelById(id: string): Promise<Response> {
   }
 }
 
-function getPublicRoomSnapshot(roomId: string): { roomId: string; onlineCount: number; messageCount: number } {
+async function getPublicRoomSnapshot(roomId: string): Promise<{ roomId: string; onlineCount: number | null; messageCount: number }> {
   return {
     roomId,
-    onlineCount: publicRoomMembers.get(roomId) ?? 0,
-    messageCount: publicChatStorage.getRoomMessageCount(roomId),
+    onlineCount: requireSharedState() ? null : publicRoomMembers.get(roomId) ?? 0,
+    messageCount: await publicRoomStorage.getRoomMessageCount(roomId),
   };
 }
 
@@ -2620,7 +2624,7 @@ async function buildRenderProofToolPayload(tool: RenderProofToolName, endpoint: 
   }
 
   if (tool === 'room-status') {
-    const room = getPublicRoomSnapshot(CHAT_DEFAULT_ROOM_ID);
+    const room = await getPublicRoomSnapshot(CHAT_DEFAULT_ROOM_ID);
     return {
       ok: true,
       status: 'verified',
@@ -2630,8 +2634,8 @@ async function buildRenderProofToolPayload(tool: RenderProofToolName, endpoint: 
       timestamp: nowIso(),
       data: {
         room,
-        totalMessageCount: publicChatStorage.getTotalMessageCount(),
-        storageMode: 'portable_json',
+        totalMessageCount: requireSharedState() ? null : publicChatStorage.getTotalMessageCount(),
+        storageMode: requireSharedState() ? 'supabase_shared' : 'portable_json',
       },
     };
   }
@@ -2752,7 +2756,7 @@ async function handlePublicRoomMessages(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const roomId = sanitizeRoomId(url.searchParams.get('roomId')) || CHAT_DEFAULT_ROOM_ID;
   const limit = readPublicLimit(url.searchParams.get('limit'));
-  const messages = publicChatStorage.listMessages(roomId, limit);
+  const messages = await publicRoomStorage.listMessages(roomId, limit);
   return publicJson({
     ok: true,
     roomId,
@@ -2766,7 +2770,7 @@ async function handlePublicRoomState(request: Request): Promise<Response> {
   const roomId = sanitizeRoomId(url.searchParams.get('roomId')) || CHAT_DEFAULT_ROOM_ID;
   return publicJson({
     ok: true,
-    room: getPublicRoomSnapshot(roomId),
+    room: await getPublicRoomSnapshot(roomId),
     deploymentMarker: DEPLOYMENT_MARKER,
   });
 }
@@ -2786,7 +2790,7 @@ async function handlePublicRoomSend(request: Request): Promise<Response> {
     }, 400);
   }
 
-  const message: ChatRoomMessage = publicChatStorage.createMessage({
+  const message: ChatRoomMessage = await publicRoomStorage.createMessage({
     roomId,
     username,
     text,
@@ -2808,7 +2812,7 @@ async function handlePublicRoomSend(request: Request): Promise<Response> {
   if (text && isDeploymentCommand(text)) {
     const brainResult = await routeDeploymentCommand(text);
     if (brainResult) {
-      const brainMessage: ChatRoomMessage = publicChatStorage.createMessage({
+      const brainMessage: ChatRoomMessage = await publicRoomStorage.createMessage({
         roomId,
         username: 'IVX Deployment Brain',
         text: brainResult,
@@ -2829,22 +2833,21 @@ async function handlePublicRoomSend(request: Request): Promise<Response> {
           endpoint: null,
         },
         requestId: createId('deploy-brain-request'),
-        room: getPublicRoomSnapshot(roomId),
+        room: await getPublicRoomSnapshot(roomId),
         deploymentMarker: DEPLOYMENT_MARKER,
         timestamp: nowIso(),
       }, 201);
     }
   }
 
-  const roomMessages = publicChatStorage
-    .listMessages(roomId, 24)
+  const roomMessages = (await publicRoomStorage.listMessages(roomId, 24))
     .filter((storedMessage) => storedMessage.id !== message.id);
   const aiResult = await generatePublicChatAnswer({
     message: text,
     history: mapRoomMessagesToPublicChatHistory(roomMessages),
     sessionId: roomId,
   });
-  const assistantMessage: ChatRoomMessage = publicChatStorage.createMessage({
+  const assistantMessage: ChatRoomMessage = await publicRoomStorage.createMessage({
     roomId,
     username: 'IVX Owner AI',
     text: aiResult.answer,
@@ -2870,7 +2873,7 @@ async function handlePublicRoomSend(request: Request): Promise<Response> {
       endpoint: aiResult.endpoint,
     },
     requestId: createId('public-room-request'),
-    room: getPublicRoomSnapshot(roomId),
+    room: await getPublicRoomSnapshot(roomId),
     deploymentMarker: DEPLOYMENT_MARKER,
     timestamp: nowIso(),
   }, 201);
@@ -3356,6 +3359,7 @@ app.get('/health', (context) => {
     ok: !workerInfo.shuttingDown,
     status: workerInfo.shuttingDown ? 'draining' : 'healthy',
     scope: 'liveness',
+    instanceId: autonomousWorkerInstanceId(),
     databaseConfigured,
     ai: { ok: aiServiceAvailable, model: aiStartup.model },
     queue: {
@@ -6706,6 +6710,7 @@ export const certificateBootRecovery = resumePendingCertificateRuns()
     console.error('[IVXRealExecutionCert] boot recovery failed', err instanceof Error ? err.message : err);
   });
 void certificateBootRecovery.finally(() => {
+if (process.env.IVX_PROCESS_ROLE === 'api') return;
 if (!landingFleetFocus) {
   try { startNightOpsScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] night ops scheduler failed to start:', err instanceof Error ? err.message : err); }
   try { void bootstrapDataVault(); startDataVaultScheduler(); } catch (err) { console.warn('[IVXOwnerAI-Hono] data vault scheduler failed to start:', err instanceof Error ? err.message : err); }
@@ -6774,6 +6779,7 @@ app.post('/api/ivx/owner-action/:traceId/status', async (context) => handleUpdat
 // IVX Autonomous Operations Dashboard — unified owner dashboard
 // ============================================================================
 app.options('/api/ivx/autonomous-ops/dashboard', () => autonomousOpsDashboardOptions());
+app.get('/api/ivx/autonomous/ha', async (context) => handleFleetHaGet(context.req.raw));
 app.get('/api/ivx/autonomous-ops/dashboard', async (context) => handleAutonomousOpsDashboardRequest(context.req.raw));
 
 // ============================================================================

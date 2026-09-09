@@ -69,7 +69,7 @@ describe('PostgreSQL autonomous task store', () => {
     configureAtomicQueue();
     expect(postgresAtomicQueueSelected()).toBe(true);
     expect(postgresAtomicQueueConfigured()).toBe(true);
-    expect(autonomousWorkerInstanceId()).toBe('render-worker-test-01');
+    expect(autonomousWorkerInstanceId()).toStartWith('render-worker-test-01:');
   });
 
   test('sends fleet claims, starts and heartbeats as one RPC per batch', async () => {
@@ -117,7 +117,7 @@ describe('PostgreSQL autonomous task store', () => {
     expect(started).toHaveLength(112);
     expect(heartbeat).toEqual({ ok: true, refreshed: 112, rejected: [] });
     expect(calls).toHaveLength(3);
-    expect(calls.every((call) => call.body.p_worker_instance_id === 'render-worker-test-01')).toBe(true);
+    expect(calls.every((call) => call.body.p_worker_instance_id === autonomousWorkerInstanceId())).toBe(true);
     expect((calls[0].body.p_requests as unknown[])).toHaveLength(112);
     expect((calls[1].body.p_leases as unknown[])).toHaveLength(112);
     expect((calls[2].body.p_leases as unknown[])).toHaveLength(112);
