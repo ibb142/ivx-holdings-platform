@@ -41,6 +41,8 @@ describe('PostgreSQL autonomous task store', () => {
 
   test('does not retry authorization failures or an ambiguous committed claim', async () => {
     configureAtomicQueue();
+    // A configured fallback must not bypass auth or replay a committed mutation.
+    process.env.SUPABASE_DB_URL = 'postgresql://unused:unused@127.0.0.1:1/unused';
     let calls = 0;
     globalThis.fetch = (async () => { calls += 1; return Response.json({ message: 'temporarily unavailable' }, { status: 403 }); }) as typeof fetch;
     await expect(readPostgresCurrentTasks(['RUNNING'])).rejects.toThrow('HTTP 403');
@@ -53,6 +55,7 @@ describe('PostgreSQL autonomous task store', () => {
 
   test('fails closed on truncated current-work truth and respects Retry-After time budget', async () => {
     configureAtomicQueue();
+    process.env.SUPABASE_DB_URL = 'postgresql://unused:unused@127.0.0.1:1/unused';
     globalThis.fetch = (async () => Response.json(Array.from({ length: 1000 }, () => ({ payload: {} })))) as typeof fetch;
     await expect(readPostgresCurrentTasks(['RUNNING'])).rejects.toThrow('telemetry is incomplete');
     let calls = 0;
@@ -66,7 +69,7 @@ describe('PostgreSQL autonomous task store', () => {
     configureAtomicQueue();
     expect(postgresAtomicQueueSelected()).toBe(true);
     expect(postgresAtomicQueueConfigured()).toBe(true);
-    expect(autonomousWorkerInstanceId()).toBe('render-worker-test-01');
+    expect(autonomousWorkerInstanceId()).toStartWith('render-worker-test-01:');
   });
 
   test('sends fleet claims, starts and heartbeats as one RPC per batch', async () => {
@@ -114,7 +117,7 @@ describe('PostgreSQL autonomous task store', () => {
     expect(started).toHaveLength(112);
     expect(heartbeat).toEqual({ ok: true, refreshed: 112, rejected: [] });
     expect(calls).toHaveLength(3);
-    expect(calls.every((call) => call.body.p_worker_instance_id === 'render-worker-test-01')).toBe(true);
+    expect(calls.every((call) => call.body.p_worker_instance_id === autonomousWorkerInstanceId())).toBe(true);
     expect((calls[0].body.p_requests as unknown[])).toHaveLength(112);
     expect((calls[1].body.p_leases as unknown[])).toHaveLength(112);
     expect((calls[2].body.p_leases as unknown[])).toHaveLength(112);

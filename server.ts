@@ -90,6 +90,7 @@ app.all('/api/ivx/autonomous/voice/status', async (c) => handleAutonomousVoiceCa
 app.get('/api/ivx/certification/autonomous-voice-public', async (c) => handleAutonomousVoicePublicCertificate(c.req.raw));
 
 void certificateBootRecovery.finally(() => {
+  if (process.env.IVX_PROCESS_ROLE === 'api') return;
   startAutonomous112RuntimeEnforcer();
   startBlockedTaskReconciler();
   if (!landingFleetFocus) {
@@ -180,3 +181,19 @@ httpServer.on('upgrade', (request, socket, head) => {
 });
 console.log('[IVX Server] Realtime Voice WebSocket endpoint: ws://.../api/ivx/realtime-voice');
 console.log('[IVX Server] Autonomous Dashboard WebSocket endpoint:', IVX_AUTONOMOUS_DASHBOARD_STREAM_PATH);
+
+// Render removes the retiring replica from rotation; close persistent streams
+// explicitly so clients reconnect to a surviving process and refresh the DB view.
+if (process.env.IVX_PROCESS_ROLE === 'api') {
+  let shuttingDown = false;
+  const shutdownApi = () => {
+    if (shuttingDown) return;
+    shuttingDown = true; process.env.IVX_INSTANCE_DRAINING = 'true';
+    for (const ws of dashboardWss.clients) ws.close(1012, 'Service restarting');
+    for (const ws of voiceWss.clients) ws.close(1012, 'Service restarting');
+    httpServer.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 25_000).unref();
+  };
+  process.on('SIGTERM', shutdownApi);
+  process.on('SIGINT', shutdownApi);
+}

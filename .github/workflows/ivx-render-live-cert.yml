@@ -15,7 +15,7 @@ on:
 permissions:
   contents: read
 
-# Enterprise invariant: only one automatic backend deployment decision may execute at a time.
+# Render auto-deploys main. Push runs observe and certify; explicit recovery deploys remain manual.
 concurrency:
   group: ivx-production-deploy-governor
   cancel-in-progress: false
@@ -101,7 +101,7 @@ jobs:
           exit 1
 
       - name: Create exactly one Render deploy for target SHA
-        if: steps.target.outputs.already_live != 'true' && env.RENDER_API_KEY != '' && steps.active.outputs.same_sha_active != 'true' && env.TARGET_BECAME_LIVE != 'true'
+        if: github.event_name == 'workflow_dispatch' && steps.target.outputs.already_live != 'true' && env.RENDER_API_KEY != '' && steps.active.outputs.same_sha_active != 'true' && env.TARGET_BECAME_LIVE != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -130,7 +130,7 @@ jobs:
           echo "deploy_governor=CREATED_ONCE deploy_id=$deploy_id sha=$TARGET_SHA"
 
       - name: Fallback through protected IVX deploy bridge
-        if: steps.target.outputs.already_live != 'true' && env.RENDER_API_KEY == '' && (env.IVX_AI_SYSTEM_SECRET != '' || env.IVX_SYSTEM_SECRET != '')
+        if: github.event_name == 'workflow_dispatch' && steps.target.outputs.already_live != 'true' && env.RENDER_API_KEY == '' && (env.IVX_AI_SYSTEM_SECRET != '' || env.IVX_SYSTEM_SECRET != '')
         shell: bash
         run: |
           set -euo pipefail

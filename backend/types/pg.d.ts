@@ -18,6 +18,7 @@ declare module 'pg' {
       connectionTimeoutMillis?: number;
     });
 
+    query<T = Record<string, unknown>>(text: string, values?: unknown[]): Promise<QueryResult<T>>;
     connect(): Promise<PoolClient>;
     end(): Promise<void>;
   }

@@ -6,7 +6,8 @@
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 import { ALL_AGENT_CONTRACTS } from '../services/ivx-agent-contracts';
 import { getAgentByNumber } from '../services/ivx-enterprise-master-registry';
-import { getAllExecutionStates } from '../services/ivx-agent-runtime';
+import { readFleetDashboardSignals, type AgentFleetSignal } from '../services/ivx-fleet-dashboard-signals';
+import { autonomousWorkerInstanceId } from '../services/ivx-postgres-autonomous-task-store';
 import { readAgentDashboardLedger, IVX_AGENT_DASHBOARD_LEDGER_MARKER } from '../services/ivx-agent-dashboard-ledger';
 import { getLatestReport } from '../services/ivx-daily-executive-report';
 import { readDurableJson } from '../services/ivx-durable-store';
@@ -18,13 +19,14 @@ import { createDashboardReadCache } from '../services/ivx-dashboard-read-cache';
 export const IVX_AUTONOMOUS_OPS_DASHBOARD_MARKER = 'ivx-autonomous-ops-dashboard-2026-09-03-productivity-intelligence';
 export function OPTIONS(): Response { return ownerOnlyOptions(); }
 
-type AgentStatus = 'ACTIVE' | 'IDLE' | 'RUNNING' | 'TESTING' | 'DEPLOYING' | 'VERIFYING' | 'RETRYING' | 'BLOCKED' | 'OWNER_ACTION_REQUIRED' | 'FAILED' | 'COMPLETED';
+type AgentStatus = 'ACTIVE' | 'IDLE' | 'ASSIGNED' | 'UNKNOWN' | 'RUNNING' | 'TESTING' | 'DEPLOYING' | 'VERIFYING' | 'RETRYING' | 'BLOCKED' | 'OWNER_ACTION_REQUIRED' | 'FAILED' | 'COMPLETED';
 type ActivityCategory = 'DEVELOPMENT' | 'INVESTORS' | 'BUYERS' | 'LEADS_CRM' | 'PROPERTIES_DEALS' | 'MARKETING' | 'FINANCIAL' | 'AUTONOMOUS_SYSTEM';
 type UnifiedAgent = {
   agentNumber:number; agentId:string; name:string; department:string; primaryResponsibility:string; status:AgentStatus;
   currentTask:string|null; tasksStartedToday:number; tasksCompletedToday:number; tasksFailedToday:number; tasksBlockedToday:number;
   lastActivityTime:string|null; totalExecutionTimeMs:number|null; successRate:number|null; evidenceLink:string|null; traceId:string|null;
   lastToolUsed?:string|null; lastSourceReference?:string|null; lastEvidenceSha?:string|null; health?:string; availability?:string;
+  signals: AgentFleetSignal | null;
 };
 type ActivityItem = {
   itemNumber:number; agent:string; department:string; category:ActivityCategory; task:string; actionExecuted:string; result:string;
@@ -39,7 +41,7 @@ const CATEGORIES: ActivityCategory[] = ['DEVELOPMENT','INVESTORS','BUYERS','LEAD
 function nowIso(){ return new Date().toISOString(); }
 function isWithin(iso:string|null|undefined,start:number,end=Date.now()){ if(!iso)return false; const n=Date.parse(iso); return Number.isFinite(n)&&n>=start&&n<=end; }
 function pct(done:number,failed:number){ const n=done+failed; return n?Math.round(done/n*100):null; }
-function executionStatus(s:string):AgentStatus { return s==='running'||s==='pending'?'RUNNING':s==='completed'?'COMPLETED':s==='blocked'?'BLOCKED':s==='failed'?'FAILED':'IDLE'; }
+export function executionStatus(s:string):AgentStatus { return s==='running'?'RUNNING':s==='pending'?'ASSIGNED':s==='completed'?'COMPLETED':s==='blocked'?'BLOCKED':s==='failed'?'FAILED':'IDLE'; }
 function department(group:string):string {
   if(group.includes('App Development')||group.includes('Digital')) return 'Engineering';
   if(group.includes('Growth')||group.includes('Marketing')) return 'Growth & Marketing';
@@ -83,7 +85,12 @@ function refreshOptionalInputs() {
     .catch(() => { optionalUpdatedAt = Date.now(); })
     .finally(() => { optionalRead = null; });
 }
-const readSharedLedger = createDashboardReadCache(() => readAgentDashboardLedger(2000), ledger => ledger.ok);
+const readSharedInputs = createDashboardReadCache(async () => {
+  const [ledger, fleetSignals] = await Promise.all([
+    readAgentDashboardLedger(2000), readFleetDashboardSignals(),
+  ]);
+  return { ledger, fleetSignals };
+}, ({ ledger, fleetSignals }) => ledger.ok && fleetSignals.status === 'AVAILABLE');
 
 export async function handleAutonomousOpsDashboardRequest(request:Request):Promise<Response>{
   try{await assertIVXOwnerOnly(request);}catch(err){return ownerOnlyJson({ok:false,error:err instanceof Error?err.message:'unauthorized'},401);}
@@ -100,13 +107,13 @@ export async function handleAutonomousOpsDashboardRequest(request:Request):Promi
   else if(range==='30d'){start=now-30*86400000;label='Last 30 days';}
 
   refreshOptionalInputs();
-  const { value: ledger, observedAt } = await readSharedLedger();
+  const { value: { ledger, fleetSignals }, observedAt } = await readSharedInputs();
   if (!ledger.ok) return ownerOnlyJson({ok:false,error:'Durable dashboard telemetry is unavailable.'},503);
   const latestReport=optionalReport,ownerActions=optionalActions;
   const productivity24h=buildAutonomousProductivity24h(ledger.executions,{now,fleetSize:112,landingBudgetHours:Number.parseFloat(process.env.IVX_LANDING_VERIFIED_HOURS_BUDGET??'120')||120});
   const productivityByAgent=new Map(productivity24h.perAgent.map(p=>[p.agentId,p]));
   const statesById=new Map(ledger.states.map(s=>[s.agent_id,s]));
-  const runtimeById=new Map(getAllExecutionStates().map(s=>[s.agentId,s]));
+  const signalsByNumber=new Map(fleetSignals.agents.map(s=>[s.agentNumber,s]));
   const executions=ledger.executions.filter(e=>isWithin(e.started_at,start));
   const executionsByAgent=new Map<string,typeof executions>();
   for(const e of executions){const arr=executionsByAgent.get(e.agent_id)??[];arr.push(e);executionsByAgent.set(e.agent_id,arr);}
@@ -114,32 +121,24 @@ export async function handleAutonomousOpsDashboardRequest(request:Request):Promi
   let agents:UnifiedAgent[]=ALL_AGENT_CONTRACTS.map(contract=>{
     const meta=getAgentByNumber(contract.agentNumber);
     const durable=statesById.get(contract.agentId);
-    const runtime=runtimeById.get(contract.agentId);
+    const signals=signalsByNumber.get(contract.agentNumber)??null;
     const runs=(executionsByAgent.get(contract.agentId)??[]).sort((a,b)=>(b.started_at??'').localeCompare(a.started_at??''));
     const latest=runs[0]??null;
-    const running=runs.find(r=>r.final_status==='running'||r.final_status==='pending')??null;
     const completed=runs.filter(r=>r.final_status==='completed').length;
     const failed=runs.filter(r=>r.final_status==='failed').length;
     const blocked=runs.filter(r=>r.final_status==='blocked').length;
     const duration=runs.reduce((sum,r)=>sum+(Number.isFinite(r.duration_ms)?r.duration_ms:0),0);
-    const status:AgentStatus = runtime?.availability==='busy'||running ? 'RUNNING'
-      : runtime?.availability==='paused'||runtime?.availability==='disabled' ? 'BLOCKED'
-      : durable?.health==='degraded'||durable?.health==='failed' ? 'FAILED'
-      : latest?.final_status==='completed' ? 'COMPLETED' : 'IDLE';
-    const currentTask=running
-      ? `${running.task_type}${running.tools_used.length?` · ${running.tools_used.join(', ')}`:''}`
-      : latest
-        ? `Last: ${latest.task_type}${latest.source_reference?' · evidence recorded':''}`
-        : runtime?.activeTaskId ?? null;
+    const status:AgentStatus = !signals ? 'UNKNOWN' : signals.running ? 'RUNNING' : signals.assignedTasks > 0 ? 'ASSIGNED' : 'IDLE';
+    const currentTask=signals?.activeTaskId??null;
     const productivity=productivityByAgent.get(contract.agentId);
     return {
       agentNumber:contract.agentNumber,agentId:contract.agentId,name:contract.agentName,
       department:department(meta?.functionalGroup??String(contract.divisionId)),primaryResponsibility:meta?.mission??contract.mission,
       status,currentTask,tasksStartedToday:runs.length,tasksCompletedToday:completed,tasksFailedToday:failed,tasksBlockedToday:blocked,
-      lastActivityTime:durable?.last_heartbeat??latest?.finished_at??latest?.started_at??runtime?.lastHeartbeat??null,totalExecutionTimeMs:runs.length?duration:null,
-      successRate:pct(completed,failed),evidenceLink:`/api/ivx/agents/runs/${contract.agentId}`,traceId:latest?.task_id??runtime?.activeTaskId??null,
+      signals,lastActivityTime:latest?.finished_at??latest?.started_at??null,totalExecutionTimeMs:runs.length?duration:null,
+      successRate:pct(completed,failed),evidenceLink:`/api/ivx/agents/runs/${contract.agentId}`,traceId:signals?.activeTaskId??latest?.task_id??null,
       lastToolUsed:durable?.last_tool_used??latest?.tools_used?.[0]??null,lastSourceReference:durable?.last_source_reference??latest?.source_reference??null,
-      lastEvidenceSha:durable?.last_evidence_sha??latest?.evidence_sha256??null,health:durable?.health??runtime?.health??'unknown',availability:runtime?.availability??durable?.availability??'available',
+      lastEvidenceSha:durable?.last_evidence_sha??latest?.evidence_sha256??null,health:durable?.health??'unknown',availability:durable?.availability??'unknown',
       productivity24h:productivity??null,
     } as UnifiedAgent & {productivity24h:unknown};
   });
@@ -170,9 +169,9 @@ export async function handleAutonomousOpsDashboardRequest(request:Request):Promi
   const idleMs=Math.max(0,windowMs-Math.min(windowMs,activeMs));
   const rolling24h={windowStart:new Date(start).toISOString(),windowEnd:new Date(now).toISOString(),tasksStarted:executions.length,
     tasksCompleted:executions.filter(r=>r.final_status==='completed').length,tasksFailed:executions.filter(r=>r.final_status==='failed').length,
-    tasksRunning:executions.filter(r=>r.final_status==='running'||r.final_status==='pending').length,activeTimeMs:activeMs,idleTimeMs:idleMs,
+    tasksRunning:fleetSignals.counts.running,activeTimeMs:activeMs,idleTimeMs:idleMs,
     autonomousAttributed:activityItems.length,unknownAttributed:0,proofEntries:executions.filter(r=>Boolean(r.evidence_sha256||r.source_reference)).length,ownerActionsRequired:pendingActions.length};
-  const categoryBreakdown=CATEGORIES.map(cat=>{const items=activityItems.filter(i=>i.category===cat);return{category:cat,total:items.length,completed:items.filter(i=>i.status==='COMPLETED').length,failed:items.filter(i=>i.status==='FAILED').length,blocked:items.filter(i=>i.status==='BLOCKED'||i.status==='OWNER_ACTION_REQUIRED').length,items};});
+  const categoryBreakdown=CATEGORIES.map(cat=>{const items=activityItems.filter(i=>i.category===cat);return{category:cat,total:items.length,completed:items.filter(i=>i.status==='COMPLETED').length,failed:items.filter(i=>i.status==='FAILED').length,blocked:items.filter(i=>i.status==='BLOCKED'||i.status==='OWNER_ACTION_REQUIRED').length,items:items.slice(0,10)};});
   const liveActivityFeed=activityItems.filter(i=>i.status==='RUNNING').map(i=>({time:i.startTime??nowIso(),agent:i.agent,department:i.department,currentAction:i.actionExecuted,status:'RUNNING' as AgentStatus,progressPercent:null,traceId:i.traceId,taskId:i.traceId}));
 
   const report=latestReport?.report;
@@ -191,9 +190,9 @@ export async function handleAutonomousOpsDashboardRequest(request:Request):Promi
   const realAgentCount=agents.filter(a=>a.tasksStartedToday>0||a.lastActivityTime!==null).length;
   const runtimeCommit=process.env.RENDER_GIT_COMMIT??process.env.GIT_COMMIT_SHA??null;
   return ownerOnlyJson({ok:true,dashboard:{marker:IVX_AUTONOMOUS_OPS_DASHBOARD_MARKER,ledgerMarker:IVX_AGENT_DASHBOARD_LEDGER_MARKER,generatedAt:observedAt,
-    history:{limit:2000,possiblyTruncated:ledger.executions.length===2000,returnedActivityItems:Math.min(100,activityItems.length)},
+    fleetSignals,servedBy:{instanceId:autonomousWorkerInstanceId(),role:'api'},history:{limit:2000,possiblyTruncated:ledger.executions.length===2000,returnedActivityItems:Math.min(100,activityItems.length)},
     backendCommitSha:runtimeCommit,backendBootTime:null,backendRouteCount:0,githubHeadSha:null,commitMatch:false,dateRange:{start:new Date(start).toISOString(),end:new Date(now).toISOString(),label},
-    agents,activityItems:activityItems.slice(0,100),categoryBreakdown:categoryBreakdown.map(c=>({...c,items:c.items.slice(0,10)})),dailySummary,liveActivityFeed:liveActivityFeed.slice(0,100),ownerActionRequests:ownerActions,deploymentStatus:{renderDeployId:null,renderDeployStatus:null,renderCommitSha:runtimeCommit,productionHealthy:ledger.ok},
+    agents,activityItems:activityItems.slice(0,100),categoryBreakdown,dailySummary,liveActivityFeed:liveActivityFeed.slice(0,100),ownerActionRequests:ownerActions,deploymentStatus:{renderDeployId:null,renderDeployStatus:null,renderCommitSha:runtimeCommit,productionHealthy:ledger.ok&&fleetSignals.status==='AVAILABLE'},
     realAgentCount,placeholderAgentCount:agents.length-realAgentCount,rolling24h,productivity24h,
     enterprise112:{registryCount:ALL_AGENT_CONTRACTS.length,durableStateCount:ledger.states.length,durableExecutionCount:ledger.executions.length,storeMode:ledger.mode,ledgerOk:ledger.ok,ledgerError:ledger.error},
     smsConversation:{enabled:sms.ownerActionSchedulerRunning,reminderMinutes:sms.ownerActionReminderMinutes,phoneConfigured:sms.phoneConfigured,phoneMasked:sms.phoneMasked,pendingTracked:sms.trackedPendingActions},

@@ -8,12 +8,18 @@ on:
       - 'server.ts'
       - 'Dockerfile'
       - 'scripts/ivx-fleet-slo-live-proof.ts'
+      - 'scripts/ivx-fleet-ha-live-proof.ts'
       - 'render.yaml'
       - 'package.json'
       - 'bun.lock'
       - 'bun.lockb'
       - '.github/workflows/ivx-render-live-status-proof.yml'
   workflow_dispatch:
+    inputs:
+      restart_worker:
+        description: Verify a rolling worker restart with continuous API probes
+        type: boolean
+        default: false
 
 concurrency:
   group: ivx-render-live-status-proof-main
@@ -26,9 +32,19 @@ permissions:
 jobs:
   prove-live-exact-sha:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     env:
       API_BASE: https://api.ivxholding.com
+      OWNER_EMAIL: iperez4242@gmail.com
+      OWNER_PASSWORD_S1: ${{ secrets.OWNER_NEW_PASSWORD }}
+      OWNER_PASSWORD_S2: ${{ secrets.OWNER_PASSWORD }}
+      OWNER_PASSWORD_S3: ${{ secrets.IVX_OWNER_PASSWORD }}
+      OWNER_PASSWORD_S4: ${{ secrets.IVX_OWNER_NEW_PASSWORD }}
+      OWNER_PASSWORD_S5: ${{ secrets.OWNER_LOGIN_PASSWORD }}
+      OWNER_PASSWORD_S6: ${{ secrets.IVX_OWNER_LOGIN_PASSWORD }}
+      SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+      IVX_HA_RESTART_WORKER: ${{ inputs.restart_worker || contains(github.event.head_commit.message, '[verify-fleet-ha-recovery]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -64,6 +80,53 @@ jobs:
           done
           echo "Production did not reach exact SHA ${GITHUB_SHA}" >&2
           exit 1
+
+      - name: Resolve real owner credential binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OWNER_EMAIL"; test -n "$SUPABASE_URL"; test -n "$SUPABASE_ANON_KEY"
+          owner_password=''; binding='none'
+          for pair in 'OWNER_NEW_PASSWORD:OWNER_PASSWORD_S1' 'OWNER_PASSWORD:OWNER_PASSWORD_S2' 'IVX_OWNER_PASSWORD:OWNER_PASSWORD_S3' 'IVX_OWNER_NEW_PASSWORD:OWNER_PASSWORD_S4' 'OWNER_LOGIN_PASSWORD:OWNER_PASSWORD_S5' 'IVX_OWNER_LOGIN_PASSWORD:OWNER_PASSWORD_S6'; do
+            name=${pair%%:*}; var=${pair##*:}; value=${!var:-}
+            if [ -n "$value" ]; then owner_password="$value"; binding="$name"; break; fi
+          done
+          test -n "$owner_password" || { echo 'No Owner password alias is bound.'; exit 1; }
+          echo "::add-mask::$owner_password"
+          {
+            echo 'OWNER_PASSWORD_EFFECTIVE<<IVX_EOF'
+            echo "$owner_password"
+            echo 'IVX_EOF'
+            echo "OWNER_PASSWORD_BINDING=$binding"
+          } >> "$GITHUB_ENV"
+          echo "owner_password_binding=$binding"
+
+      - name: Authenticate real Owner before deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          body=$(jq -nc --arg email "$OWNER_EMAIL" --arg password "$OWNER_PASSWORD_EFFECTIVE" '{email:$email,password:$password}')
+          code=$(curl -sS --retry 3 --retry-delay 2 --retry-all-errors --max-time 25 -o /tmp/login-predeploy.json -w '%{http_code}' -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" -H "apikey: ${SUPABASE_ANON_KEY}" -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" -H 'Content-Type: application/json' --data "$body" || true)
+          test "$code" = 200 || { jq '{error,error_code,msg,message}' /tmp/login-predeploy.json 2>/dev/null || true; exit 1; }
+          token=$(jq -r '.access_token // empty' /tmp/login-predeploy.json)
+          user_id=$(jq -r '.user.id // empty' /tmp/login-predeploy.json)
+          role=$(jq -r '.user.app_metadata.role // .user.user_metadata.role // empty' /tmp/login-predeploy.json)
+          test -n "$token"; test -n "$user_id"
+          case "$role" in owner|admin) ;; *) echo "Owner role gate failed role=${role:-missing}"; exit 1;; esac
+          echo "::add-mask::$token"
+          echo "OWNER_TOKEN=$token" >> "$GITHUB_ENV"
+          echo "OWNER_USER_ID=$user_id" >> "$GITHUB_ENV"
+          echo 'owner_predeploy_auth=PASS'
+
+      - name: Apply two replicas and prove shared topology
+        run: bun scripts/ivx-fleet-ha-live-proof.ts
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fleet-ha-${{ github.sha }}-${{ github.run_attempt }}
+          path: qa/evidence/fleet-ha/
+          if-no-files-found: warn
 
       - name: Prove authenticated fleet telemetry and five-minute process stability
         env:

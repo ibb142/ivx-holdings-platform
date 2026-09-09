@@ -5,7 +5,6 @@
  */
 import {
   activeStoreMode,
-  fetchAgentStates,
   resolveSupabaseBinding,
   type AgentStateRow,
   type ExecutionRow,
@@ -30,7 +29,7 @@ type JobDoc = {
   updated_at?: string;
 };
 
-async function restGet<T>(path: string, timeoutMs = 15000): Promise<{ ok: boolean; status: number; data: T | null; error: string | null }> {
+async function restGet<T>(path: string, timeoutMs = 3000): Promise<{ ok: boolean; status: number; data: T | null; error: string | null }> {
   const binding = resolveSupabaseBinding();
   if (binding.missing.length) {
     return { ok: false, status: 0, data: null, error: `Supabase missing ${binding.missing.join(', ')}` };
@@ -104,13 +103,14 @@ async function fetchFallbackExecutions(limit: number): Promise<{ ok: boolean; ro
 
 export async function readAgentDashboardLedger(limit = 500): Promise<AgentDashboardLedger> {
   const safeLimit = Math.max(112, Math.min(2000, Math.floor(limit)));
-  const stateResult = await fetchAgentStates();
   let mode = activeStoreMode();
-  let execResult = mode === 'dedicated'
-    ? await fetchDedicatedExecutions(safeLimit)
-    : mode === 'jobs_fallback'
-      ? await fetchFallbackExecutions(safeLimit)
-      : { ok: false, rows: [] as ExecutionRow[], error: `Unsupported store mode ${mode}` };
+  // Dashboard reads do not run schema bootstrap, or serialize independent reads.
+  const [stateResult, firstExecutions] = await Promise.all([
+    restGet<AgentStateRow[]>('ivx_agent_states?select=*&order=agent_number.asc&limit=112'),
+    mode === 'jobs_fallback' ? fetchFallbackExecutions(safeLimit) : fetchDedicatedExecutions(safeLimit),
+  ]);
+  let execResult = firstExecutions;
+  if (execResult.ok && mode !== 'jobs_fallback') mode = 'dedicated';
 
   // If the cached mode was not yet established, probe both read paths without
   // fabricating success. The first real successful source becomes the dashboard source.
