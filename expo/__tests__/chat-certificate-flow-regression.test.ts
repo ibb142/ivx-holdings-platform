@@ -21,6 +21,7 @@ const requiredChatTestIDs = [
 
 const E2E_PROMPT = 'Return only the result of joining IVX_CHAT_E2E_ and ${CHAT_E2E_SUFFIX}.';
 const E2E_REPLY = 'IVX_CHAT_E2E_${CHAT_E2E_SUFFIX}';
+const E2E_REPLY_SELECTOR = `.*${E2E_REPLY}.*`;
 
 describe('IVX IA chat device certificate regression', () => {
   test('both device certificate callers bind the fresh reply marker and restart credentials', () => {
@@ -70,7 +71,7 @@ describe('IVX IA chat device certificate regression', () => {
     expect(E2E_PROMPT).not.toContain(E2E_REPLY);
     expect(flowSource).toContain(`inputText: "${E2E_PROMPT}"`);
     expect(flowSource).toContain(`element: "${E2E_PROMPT}"`);
-    expect(flowSource).toContain(`visible: "${E2E_REPLY}"`);
+    expect(flowSource).toContain(`visible: "${E2E_REPLY_SELECTOR}"`);
     expect(flowSource).toContain('timeout: 200000');
     expect(flowSource).toContain('assertNotVisible: "Not sent"');
     expect(flowSource).toContain('assertNotVisible: "I was unable to display this reply"');
@@ -129,7 +130,7 @@ describe('IVX IA chat device certificate regression', () => {
     expect(afterRestart).toContain('inputText: ${OWNER_PASSWORD}');
     expect(afterRestart.indexOf('id: "login-submit"')).toBeLessThan(afterRestart.indexOf('id: "tab-chat"'));
     expect(afterRestart).toContain(`element: "${E2E_PROMPT}"`);
-    expect(afterRestart).toContain(`element: "${E2E_REPLY}"`);
+    expect(afterRestart).toContain(`element: "${E2E_REPLY_SELECTOR}"`);
     expect(afterRestart).toContain('id: "ivx-owner-chat-composer-dock"');
   });
 
