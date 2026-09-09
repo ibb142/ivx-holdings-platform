@@ -92,6 +92,32 @@ async function readEnv(serviceId,key) {
   throw new Error('render_env_pagination_limit');
 }
 
+export async function readLinkedGroups(key) {
+  const result=[]; let cursor=''; const seen=new Set();
+  for(let page=0;page<20;page++) {
+    const rows=await request(`https://api.render.com/v1/env-groups?ownerId=${owner}&limit=100${cursor?`&cursor=${encodeURIComponent(cursor)}`:''}`,key);
+    if(!Array.isArray(rows))throw new Error('render_group_response_invalid');
+    for(const item of rows) {
+      const meta=item.envGroup || item;
+      if(meta.ownerId!==owner || !Array.isArray(meta.serviceLinks))throw new Error('render_group_identity_invalid');
+      if(!meta.serviceLinks.some(link=>services.includes(link.id)))continue;
+      if(typeof meta.id!=='string' || !/^evg-[a-z0-9]+$/.test(meta.id))throw new Error('render_group_id_invalid');
+      const group=await request(`https://api.render.com/v1/env-groups/${meta.id}`,key);
+      if(group.id!==meta.id || group.ownerId!==owner || !Array.isArray(group.serviceLinks)
+        || !group.serviceLinks.some(link=>services.includes(link.id)) || !Array.isArray(group.envVars))throw new Error('render_group_identity_invalid');
+      const env={};
+      for(const e of group.envVars)if(typeof e.key==='string'&&typeof e.value==='string')env[e.key]=e.value;
+      console.log(JSON.stringify({groupId:meta.id,credentialPresence:Object.fromEntries([...aliases,'SUPABASE_DB_PASSWORD'].map(n=>[n,Boolean(env[n]?.trim())])),validUrlAliases:aliases.filter(n=>validateConnection(env[n]))}));
+      result.push({serviceId:meta.id,env});
+    }
+    if(rows.length<100)return result;
+    cursor=rows.at(-1)?.cursor;
+    if(!cursor || seen.has(cursor))throw new Error('render_group_pagination_incomplete');
+    seen.add(cursor);
+  }
+  throw new Error('render_group_pagination_limit');
+}
+
 export async function main() {
   const key=await renderKey();
   const configurations=[];
@@ -103,8 +129,10 @@ export async function main() {
     console.log(JSON.stringify({serviceId,credentialPresence:Object.fromEntries(names.map(n=>[n,Boolean(env[n]?.trim())])),validUrlAliases:aliases.filter(n=>validateConnection(env[n]))}));
     configurations.push({serviceId,env});
   }
+  const groups=await readLinkedGroups(key);
+  console.log(JSON.stringify({linkedGroupsAudited:groups.length}));
   let chosen=null;
-  for(const entry of configurations) for(const candidate of candidates(entry.env)) {
+  for(const entry of [...configurations,...groups]) for(const candidate of candidates(entry.env)) {
     if(chosen) break;
     const config=validateConnection(candidate.value); if(!config) continue;
     mask(candidate.value); mask(config.password);
