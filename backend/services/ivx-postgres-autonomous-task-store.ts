@@ -77,7 +77,7 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
   const args = DIRECT_RPC_ARGS[name];
   if (!args) throw new Error(`direct_postgres_rpc_not_allowed:${name}`);
   const casts: Record<string, string> = {
-    p_tasks: 'jsonb', p_requests: 'jsonb', p_leases: 'jsonb', p_task: 'jsonb', p_expected_states: 'text[]',
+    p_tasks: 'jsonb', p_requests: 'jsonb', p_leases: 'jsonb', p_task: 'jsonb', p_expected_states: 'jsonb',
     p_worker_instance_id: 'text', p_lease_holder: 'text', p_event_type: 'text', p_objective_id: 'text', p_lease_seconds: 'integer',
   };
   const placeholders = args.map((key, index) => `$${index + 1}::${casts[key] ?? 'text'}`).join(', ');
