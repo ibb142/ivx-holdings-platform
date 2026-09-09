@@ -7,6 +7,8 @@ const previousSecret = process.env.IVX_AI_SYSTEM_SECRET;
 process.env.IVX_AI_SYSTEM_SECRET = 'dashboard-contract-machine-key';
 let ledgerOk = false;
 let fleetAvailable = false;
+let ledgerReadCompleted = false;
+let fleetReads = 0;
 const startedAt = new Date(Date.now() - 10_000).toISOString();
 const executions = Array.from({ length: 2000 }, (_, i) => {
   const agent = ALL_AGENT_CONTRACTS[i % 112]!;
@@ -23,12 +25,20 @@ const executions = Array.from({ length: 2000 }, (_, i) => {
 });
 mock.module('../services/ivx-agent-dashboard-ledger', () => ({
   IVX_AGENT_DASHBOARD_LEDGER_MARKER: 'contract-ledger',
-  readAgentDashboardLedger: async () => ({ ok: ledgerOk, mode: 'dedicated', states: [], executions, error: ledgerOk ? null : 'database unavailable' }),
+  readAgentDashboardLedger: async () => {
+    ledgerReadCompleted = false;
+    await Promise.resolve();
+    ledgerReadCompleted = true;
+    return { ok: ledgerOk, mode: 'dedicated', states: [], executions, error: ledgerOk ? null : 'database unavailable' };
+  },
 }));
 mock.module('../services/ivx-daily-executive-report', () => ({ getLatestReport: async () => null }));
 mock.module('../services/ivx-durable-store', () => ({ readDurableJson: async () => [] }));
 mock.module('../services/ivx-fleet-dashboard-signals', () => ({
-  readFleetDashboardSignals: async () => ({
+  readFleetDashboardSignals: async () => {
+    expect(ledgerReadCompleted).toBe(true);
+    fleetReads += 1;
+    return {
     marker: 'contract-fleet', status: fleetAvailable ? 'AVAILABLE' : 'UNKNOWN',
     measuredAt: fleetAvailable ? new Date().toISOString() : null, commitSha: 'a'.repeat(40),
     maxAgeMs: 15_000, evidenceWindowMs: 60_000, error: fleetAvailable ? null : 'observation unavailable',
@@ -38,7 +48,8 @@ mock.module('../services/ivx-fleet-dashboard-signals', () => ({
       agentNumber: a.agentNumber, heartbeatAt: null, heartbeatFresh: false, heartbeatSource: null,
       assignedTasks: i === 0 ? 1 : 0, running: false, activeTaskId: null, productive: false, evidence: null,
     })) : [], instances: [],
-  }),
+    };
+  },
 }));
 mock.module('../services/ivx-autonomous-sms-notifier', () => ({ getSmsNotifierStatus: () => ({ ownerActionSchedulerRunning: false }) }));
 const ownerGuard = spyOn(await import('../api/owner-only'), 'assertIVXOwnerOnly');
@@ -55,6 +66,7 @@ test('preserves all 112 agents under the actual transport ceiling and fails clos
   });
   expect((await handleAutonomousOpsDashboardRequest(request())).status).toBe(503);
   expect(ownerGuard).toHaveBeenCalledTimes(1);
+  expect(fleetReads).toBe(0);
   ledgerOk = true;
   const unavailableFleet = await (await handleAutonomousOpsDashboardRequest(request())).json();
   expect(unavailableFleet.dashboard.agents).toHaveLength(112);
