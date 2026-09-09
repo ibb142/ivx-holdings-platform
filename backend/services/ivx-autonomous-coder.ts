@@ -24,7 +24,7 @@
  * relevant tests passed, typecheck passed, and (for code changes) a real commit
  * SHA was produced.
  */
-import { assertPrivateRepairScope, publicRepairGoal } from './ivx-private-repair-boundary';
+import { assertPrivateRepairScope, isApprovedLandingRepairPath, publicRepairGoal } from './ivx-private-repair-boundary';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -649,11 +649,12 @@ async function readFilePreview(relPath: string, projectRoot: string, goal?: stri
 /** Paths the autonomous coder is allowed to modify. */
 const ALLOWED_PATCH_PATHS = /^((?:backend|expo)\/[A-Za-z0-9_.\/-]+\.ts$|(?:backend|expo)\/[A-Za-z0-9_.\/-]+\.tsx$|expo\/[A-Za-z0-9_.\/-]+\.json$|expo\/[A-Za-z0-9_.\/-]+\.gradle$)/;
 
-function assertSafePatchPath(filePath: string): void {
+function assertSafePatchPath(filePath: string, approvedScope?: Pick<IVXAutonomousCoderInput, 'goal' | 'allowedFiles'>): void {
   if (filePath.includes('..') || filePath.startsWith('/')) {
     throw new Error(`Unsafe patch path rejected: ${filePath}`);
   }
-  if (!ALLOWED_PATCH_PATHS.test(filePath)) {
+  const approvedLandingSource = approvedScope && isApprovedLandingRepairPath(approvedScope.goal, approvedScope.allowedFiles, filePath);
+  if (!ALLOWED_PATCH_PATHS.test(filePath) && !approvedLandingSource) {
     throw new Error(`Patch path outside allowed roots: ${filePath}. Only backend/*.ts, expo/*.ts(x), expo/*.json, expo/*.gradle are permitted.`);
   }
 }
@@ -663,8 +664,9 @@ async function applyPatchOperation(
   projectRoot: string,
   fileWriter?: (relPath: string, content: string) => Promise<void>,
   fileReader?: (relPath: string) => Promise<string>,
+  approvedScope?: Pick<IVXAutonomousCoderInput, 'goal' | 'allowedFiles'>,
 ): Promise<void> {
-  assertSafePatchPath(op.path);
+  assertSafePatchPath(op.path, approvedScope);
   const fullPath = path.join(projectRoot, op.path);
   const write = fileWriter ?? (async (rel: string, content: string) => {
     await mkdir(path.dirname(path.join(projectRoot, rel)), { recursive: true });
@@ -2260,7 +2262,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       try {
         assertPrivateRepairScope(input.goal, input.allowedFiles, fallback.operations.map(op => op.path));
         for (const op of fallback.operations) {
-          await applyPatchOperation(op, projectRoot, input.fileWriter, input.fileReader);
+          await applyPatchOperation(op, projectRoot, input.fileWriter, input.fileReader, input);
         }
         patchApplied = true;
         anyPatchApplied = true;
@@ -2669,7 +2671,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     try {
       assertPrivateRepairScope(input.goal, input.allowedFiles, parsed.operations.map(op => op.path));
       for (const op of parsed.operations) {
-        await applyPatchOperation(op, projectRoot, input.fileWriter, input.fileReader);
+        await applyPatchOperation(op, projectRoot, input.fileWriter, input.fileReader, input);
         appliedOps.push(op);
       }
       patchApplied = true;
@@ -3485,3 +3487,4 @@ export function buildAutonomousCoderAnswer(proof: IVXAutonomousCoderProof): stri
     `ERROR:\n${proof.error ?? 'NONE'}`,
   ].join('\n\n');
 }
+
