@@ -151,7 +151,7 @@ function mintRefreshToken(jwt: typeof import('jsonwebtoken'), user: AuthUserRow,
  * This is a SINGLE statement so ivx_exec_sql's EXECUTE can handle it.
  * SECURITY DEFINER allows it to access the auth schema.
  */
-const CREATE_FUNCTION_SQL = `CREATE OR REPLACE FUNCTION public.ivx_query_auth_user_by_email(user_email TEXT) RETURNS JSON AS $fn$ BEGIN RETURN (SELECT json_build_object('id', u.id::text, 'email', u.email, 'encrypted_password', u.encrypted_password, 'email_confirmed_at', u.email_confirmed_at, 'raw_user_meta_data', u.raw_user_meta_data, 'raw_app_meta_data', u.raw_app_meta_data, 'aud', u.aud, 'role', u.role, 'created_at', u.created_at::text, 'updated_at', u.updated_at::text) FROM auth.users u WHERE u.email = user_email LIMIT 1); END; $fn$ LANGUAGE plpgsql SECURITY DEFINER`;
+const CREATE_FUNCTION_SQL = `CREATE OR REPLACE FUNCTION public.ivx_query_auth_user_by_email(user_email TEXT) RETURNS JSON AS $fn$ BEGIN RETURN (SELECT json_build_object('id', u.id::text, 'email', u.email, 'encrypted_password', u.encrypted_password, 'email_confirmed_at', u.email_confirmed_at, 'raw_user_meta_data', u.raw_user_meta_data, 'raw_app_meta_data', u.raw_app_meta_data, 'aud', u.aud, 'role', u.role, 'created_at', u.created_at::text, 'updated_at', u.updated_at::text) FROM auth.users u WHERE u.email = user_email LIMIT 1); END; $fn$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''`;
 
 let _functionDeployed = false;
 

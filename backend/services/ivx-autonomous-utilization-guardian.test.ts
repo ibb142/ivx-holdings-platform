@@ -37,7 +37,7 @@ describe('fleet evidence to reasoning worker', () => {
     const f = fixture(); await f.guardian.run(); await f.guardian.run(); expect(f.calls).toHaveLength(0);
   });
   it('does not enqueue for missing, stale or non-durable telemetry', async () => {
-    for (const change of [ { status: 'UNKNOWN' }, { durable: false }, { measured_at: '2020-01-01T00:00:00Z' } ]) {
+    for (const change of [ { durable: false }, { measured_at: '2020-01-01T00:00:00Z' } ]) {
       const f = fixture(); Object.assign(f.sample, change); expect((await f.guardian.run()).action).toBe('WAITING_FOR_EVIDENCE'); expect(f.calls).toHaveLength(0);
     }
   });
@@ -47,7 +47,12 @@ describe('fleet evidence to reasoning worker', () => {
   it('preserves queue emergency-stop failures and retries without marking success', async () => {
     const f = fixture(); await f.guardian.run(); f.advance(); f.fail(true);
     expect((await f.guardian.run()).action).toBe('ERROR'); expect(f.guardian.snapshot().jobId).toBeNull();
-    f.fail(false); f.advance(); expect((await f.guardian.run()).action).toBe('REPAIR_QUEUED');
+    expect(f.guardian.snapshot().blockedDependency).toBe('owner_stop_active');
+    f.fail(false); f.advance(); expect((await f.guardian.run()).action).toBe('RETRY_BACKOFF');
+    expect(f.guardian.snapshot().blockedDependency).toBe('owner_stop_active');
+    expect(f.calls).toHaveLength(1);
+    f.advance(); expect((await f.guardian.run()).action).toBe('REPAIR_QUEUED');
+    expect(f.guardian.snapshot().blockedDependency).toBeUndefined();
   });
   it('coalesces concurrent ticks and limits repeated repair submissions', async () => {
     const f = fixture(); await f.guardian.run(); f.advance();
@@ -64,5 +69,49 @@ describe('fleet evidence to reasoning worker', () => {
     const f = fixture(); await f.guardian.run(); f.advance(); await f.guardian.run();
     f.advance(); f.sample.status = 'MET'; f.sample.productive_agents = 112;
     expect((await f.guardian.run()).action).toBe('HEALTHY'); expect(f.calls).toHaveLength(1);
+  });
+});
+
+describe('telemetry outage recovery bridge', () => {
+  it('routes two fresh failed observations to reasoning without pretending the evidence is durable', async () => {
+    const f = fixture();
+    Object.assign(f.sample, { status: 'UNKNOWN', durable: false, productive_agents: null,
+      failure_stage: 'read', failure_kind: 'timeout' });
+    expect((await f.guardian.run()).diagnosis).toBe('TELEMETRY_UNAVAILABLE');
+    await f.guardian.run();
+    expect(f.calls).toHaveLength(0);
+    f.advance();
+    expect((await f.guardian.run()).action).toBe('REPAIR_QUEUED');
+    expect(f.calls[0].goal).toContain('"failure_kind":"timeout"');
+    expect(f.calls[0].goal).toContain('UNKNOWN, not zero');
+    expect(f.sample.durable).toBe(false);
+    expect(f.sample.productive_agents).toBeNull();
+    expect(f.calls[0].approvePatch).toBe(false);
+    expect(f.calls[0].approveGitDeploy).toBe(false);
+  });
+  it('does not turn stale or future UNKNOWN observations into new failures', async () => {
+    for (const measured_at of ['2020-01-01T00:00:00Z', '2099-01-01T00:00:00Z']) {
+      const f = fixture(); Object.assign(f.sample, { status: 'UNKNOWN', durable: false, measured_at });
+      await f.guardian.run(); await f.guardian.run();
+      expect(f.guardian.snapshot().action).toBe('WAITING_FOR_EVIDENCE');
+      expect(f.calls).toHaveLength(0);
+    }
+  });
+  it('keeps outage repair observe-only when repair policy is disabled', async () => {
+    const f = fixture(); f.disable(); Object.assign(f.sample, { status: 'UNKNOWN', durable: false });
+    await f.guardian.run(); f.advance();
+    expect((await f.guardian.run()).action).toBe('OBSERVE_ONLY');
+    expect(f.calls).toHaveLength(0);
+  });
+  it('bounds retries when the repair queue itself is unavailable and resumes after it recovers', async () => {
+    const f = fixture(); Object.assign(f.sample, { status: 'UNKNOWN', durable: false });
+    f.fail(true); await f.guardian.run(); f.advance(); await f.guardian.run();
+    for (let n = 0; n < 10; n++) await f.guardian.run();
+    expect(f.calls).toHaveLength(1);
+    expect(f.guardian.snapshot().action).toBe('RETRY_BACKOFF');
+    expect(f.guardian.snapshot().jobId).toBeNull();
+    f.advance(120_000); f.fail(false);
+    expect((await f.guardian.run()).action).toBe('REPAIR_QUEUED');
+    expect(f.calls).toHaveLength(2);
   });
 });

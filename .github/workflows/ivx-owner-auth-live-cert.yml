@@ -18,7 +18,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ivx-owner-auth-live-cert-${{ github.event.pull_request.number || github.ref }}
@@ -30,18 +30,20 @@ jobs:
     timeout-minutes: 20
     env:
       OWNER_EMAIL: iperez4242@gmail.com
-      OWNER_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD }}
+      OWNER_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD || secrets.OWNER_PASSWORD || secrets.IVX_OWNER_PASSWORD || secrets.IVX_OWNER_NEW_PASSWORD || secrets.OWNER_LOGIN_PASSWORD || secrets.IVX_OWNER_LOGIN_PASSWORD }}
       SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
       API_BASE: https://api.ivxholding.com
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - name: Resolve source SHA
         shell: bash
-        run: echo "SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+        run: |
+          test "$(git rev-parse HEAD)" = '${{ github.event.pull_request.head.sha || github.sha }}'
+          echo "SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - name: Verify complete owner-login latency fix
         shell: bash
         run: |
@@ -64,6 +66,7 @@ jobs:
           read -r code total < /tmp/login.metrics
           test "$code" = 200 || { echo "password_grant_http=$code"; jq '{error,error_code,msg,message}' /tmp/login.json 2>/dev/null || true; exit 1; }
           token=$(jq -r '.access_token // empty' /tmp/login.json)
+          echo "::add-mask::$token"
           user_id=$(jq -r '.user.id // empty' /tmp/login.json)
           app_role=$(jq -r '.user.app_metadata.role // empty' /tmp/login.json)
           user_role=$(jq -r '.user.user_metadata.role // empty' /tmp/login.json)
@@ -104,14 +107,5 @@ jobs:
           cat qa/evidence/ivx-owner-auth-e2e-live.json
       - uses: actions/upload-artifact@v4
         with:
-          name: ivx-owner-auth-e2e-live-${{ github.sha }}
+          name: ivx-owner-auth-e2e-live-${{ github.event.pull_request.head.sha || github.sha }}
           path: qa/evidence/ivx-owner-auth-e2e-live.json
-      - name: Persist certificate
-        shell: bash
-        run: |
-          git config user.name 'IVX Auth Certifier'
-          git config user.email 'ivx-auth-certifier@users.noreply.github.com'
-          git add qa/evidence/ivx-owner-auth-e2e-live.json
-          git diff --cached --quiet && exit 0
-          git commit -m "cert(auth): owner E2E live ${SOURCE_SHA:0:12} [skip ci]"
-          if [ "${{ github.event_name }}" = "pull_request" ]; then git push origin HEAD:${{ github.event.pull_request.head.ref }}; else git pull --rebase origin main && git push origin HEAD:main; fi
