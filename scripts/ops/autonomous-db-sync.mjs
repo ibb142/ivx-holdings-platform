@@ -182,7 +182,7 @@ export async function readLinkedGroups(key) {
 export async function readPoolerCandidates(configurations, token=process.env.SUPABASE_ACCESS_TOKEN) {
   if(!token?.trim())return [];
   const credentials=configurations.flatMap(entry=>candidates(entry.env).map(candidate=>({entry,candidate,config:validateConnection(candidate.value)})))
-    .filter(item=>item.config && item.config.user==='postgres' && connectionIssue(item.candidate.value)==='valid');
+    .filter(item=>item.config && ['postgres',`postgres.${project}`].includes(item.config.user) && connectionIssue(item.candidate.value)==='valid');
   if(!credentials.length)return [];
   let rows;
   const endpointUrl=`https://api.supabase.com/v1/projects/${project}/config/database/pooler`;
@@ -208,9 +208,9 @@ export async function readPoolerCandidates(configurations, token=process.env.SUP
     if(!['postgres:','postgresql:'].includes(endpoint.protocol) || !endpoint.hostname.endsWith('.pooler.supabase.com')
       || decodeURIComponent(endpoint.username)!==`postgres.${project}` || endpoint.pathname!=='/postgres')continue;
     for(const {entry,config} of credentials) {
-      const url=new URL(endpoint.href);url.password=encodeURIComponent(config.password);url.port='5432';url.search='?sslmode=verify-full';
+      const url=new URL(endpoint.href);url.password=encodeURIComponent(config.password);url.port='6543';url.search='?sslmode=verify-full';
       if(!validateConnection(url.href) || seen.has(url.href))continue;
-      seen.add(url.href);result.push({serviceId:entry.serviceId+'_pooler_session',env:{SUPABASE_POOLER_URL:url.href}});
+      seen.add(url.href);result.push({serviceId:entry.serviceId+'_pooler_transaction',env:{SUPABASE_POOLER_URL:url.href}});
     }
   }
   console.log(JSON.stringify({poolerDiscovery:'PASS',candidates:result.length}));
@@ -236,7 +236,7 @@ export async function main() {
   const sources=[...configurations,...groups,github];
   const poolers=await readPoolerCandidates(sources);
   let chosen=null;
-  for(const entry of [...sources,...poolers]) for(const candidate of candidates(entry.env)) {
+  for(const entry of [...poolers,...sources]) for(const candidate of candidates(entry.env)) {
     if(chosen) break;
     if(connectionIssue(candidate.value)!=='valid')continue;
     const config=validateConnection(candidate.value); if(!config) continue;
