@@ -36,22 +36,49 @@ tags:
     timeout: 10000
 - assertNotVisible: "Sign In Failed"
 - assertNotVisible: "Login service temporarily unavailable"
+- runFlow:
+    when:
+      visible:
+        id: "ivx-owner-chat-scroll-to-latest"
+    commands:
+      - tapOn:
+          id: "ivx-owner-chat-scroll-to-latest"
 - tapOn:
     id: "ivx-owner-chat-input"
 - inputText: "Return only the result of joining IVX_CHAT_E2E_ and ${CHAT_E2E_SUFFIX}."
 - hideKeyboard
 - tapOn:
     id: "ivx-owner-chat-send"
-- extendedWaitUntil:
-    visible: ".*IVX_CHAT_E2E_${CHAT_E2E_SUFFIX}.*"
+- runFlow:
+    when:
+      visible:
+        id: "ivx-owner-chat-scroll-to-latest"
+    commands:
+      - tapOn:
+          id: "ivx-owner-chat-scroll-to-latest"
+- scrollUntilVisible:
+    element:
+      id: "chat-message-body-assistant-.*"
+      text: ".*IVX_CHAT_E2E_${CHAT_E2E_SUFFIX}.*"
+    direction: DOWN
+    visibilityPercentage: 50
     # The canonical Owner AI path is SSE-backed with a 180s hard ceiling.
     # Keep the assertion fail-closed while allowing one complete live stream
     # during provider/database degradation.
     timeout: 200000
+- assertVisible:
+    id: "chat-message-body-assistant-.*"
+    text: ".*IVX_CHAT_E2E_${CHAT_E2E_SUFFIX}.*"
 - scrollUntilVisible:
-    element: "Return only the result of joining IVX_CHAT_E2E_ and ${CHAT_E2E_SUFFIX}."
+    element:
+      id: "chat-message-body-owner-.*"
+      text: ".*Return only the result of joining IVX_CHAT_E2E_ and ${CHAT_E2E_SUFFIX}.*"
     direction: UP
+    visibilityPercentage: 50
     timeout: 20000
+- assertVisible:
+    id: "chat-message-body-owner-.*"
+    text: ".*Return only the result of joining IVX_CHAT_E2E_ and ${CHAT_E2E_SUFFIX}.*"
 - assertNotVisible: "Not sent"
 - assertNotVisible: "I was unable to display this reply"
 - assertVisible:
@@ -94,14 +121,33 @@ tags:
     visible:
       id: "ivx-owner-chat-composer-dock"
     timeout: 30000
+- runFlow:
+    when:
+      visible:
+        id: "ivx-owner-chat-scroll-to-latest"
+    commands:
+      - tapOn:
+          id: "ivx-owner-chat-scroll-to-latest"
 - scrollUntilVisible:
-    element: "Return only the result of joining IVX_CHAT_E2E_ and ${CHAT_E2E_SUFFIX}."
-    direction: UP
-    timeout: 30000
-- scrollUntilVisible:
-    element: ".*IVX_CHAT_E2E_${CHAT_E2E_SUFFIX}.*"
+    element:
+      id: "chat-message-body-assistant-.*"
+      text: ".*IVX_CHAT_E2E_${CHAT_E2E_SUFFIX}.*"
     direction: DOWN
+    visibilityPercentage: 50
     timeout: 30000
+- assertVisible:
+    id: "chat-message-body-assistant-.*"
+    text: ".*IVX_CHAT_E2E_${CHAT_E2E_SUFFIX}.*"
+- scrollUntilVisible:
+    element:
+      id: "chat-message-body-owner-.*"
+      text: ".*Return only the result of joining IVX_CHAT_E2E_ and ${CHAT_E2E_SUFFIX}.*"
+    direction: UP
+    visibilityPercentage: 50
+    timeout: 30000
+- assertVisible:
+    id: "chat-message-body-owner-.*"
+    text: ".*Return only the result of joining IVX_CHAT_E2E_ and ${CHAT_E2E_SUFFIX}.*"
 - assertNotVisible: "Not sent"
 - assertNotVisible: "I was unable to display this reply"
 - assertVisible:

@@ -288,7 +288,10 @@ export const MessageBubble = memo(function MessageBubble({
         ) : null}
 
         {displayText || isStreaming ? (
-          <Text style={[styles.messageText, textColorStyle]}>
+          <Text
+            style={[styles.messageText, textColorStyle]}
+            testID={`chat-message-body-${isMine ? 'owner' : 'assistant'}-${message.id}`}
+          >
             {highlightedSegments.length > 0
               ? highlightedSegments
                   .filter((segment) => typeof segment.text === 'string' && segment.text.length > 0)

@@ -10,6 +10,7 @@ const loginSource = readFileSync(resolve(import.meta.dir, '../app/login.tsx'), '
 const flowSource = readFileSync(resolve(import.meta.dir, '../.maestro/ivx-owner-chat-certificate.yaml'), 'utf8');
 const transportReliabilitySource = readFileSync(resolve(import.meta.dir, './chat-transport-reliability.test.ts'), 'utf8');
 const ownerAIRequestSource = readFileSync(resolve(import.meta.dir, '../src/modules/ivx-owner-ai/services/ivxAIRequestService.ts'), 'utf8');
+const messageBubbleSource = readFileSync(resolve(import.meta.dir, '../src/modules/chat/components/MessageBubble.tsx'), 'utf8');
 
 const requiredChatTestIDs = [
   'ivx-owner-chat-composer-dock',
@@ -20,8 +21,16 @@ const requiredChatTestIDs = [
 ];
 
 const E2E_PROMPT = 'Return only the result of joining IVX_CHAT_E2E_ and ${CHAT_E2E_SUFFIX}.';
+const E2E_PROMPT_SELECTOR = '.*Return only the result of joining IVX_CHAT_E2E_ and ${CHAT_E2E_SUFFIX}.*';
 const E2E_REPLY = 'IVX_CHAT_E2E_${CHAT_E2E_SUFFIX}';
 const E2E_REPLY_SELECTOR = `.*${E2E_REPLY}.*`;
+const OWNER_MESSAGE_SELECTOR = 'chat-message-body-owner-.*';
+const ASSISTANT_MESSAGE_SELECTOR = 'chat-message-body-assistant-.*';
+const DYNAMIC_MESSAGE_SELECTORS = new Set([OWNER_MESSAGE_SELECTOR, ASSISTANT_MESSAGE_SELECTOR]);
+const ROLE_BOUND_MESSAGE_TEST_ID = "testID={`chat-message-body-${isMine ? 'owner' : 'assistant'}-${message.id}`}";
+
+const ownerPromptElement = `element:\n      id: "${OWNER_MESSAGE_SELECTOR}"\n      text: "${E2E_PROMPT_SELECTOR}"`;
+const assistantReplyElement = `element:\n      id: "${ASSISTANT_MESSAGE_SELECTOR}"\n      text: "${E2E_REPLY_SELECTOR}"`;
 
 describe('IVX IA chat device certificate regression', () => {
   test('both device certificate callers bind the fresh reply marker and restart credentials', () => {
@@ -62,16 +71,20 @@ describe('IVX IA chat device certificate regression', () => {
         chatSource.includes(`testID="${testID}"`) ||
         loginSource.includes(`testID="${testID}"`) ||
         chatHubSource.includes(`testID="${testID}"`) ||
-        tabsLayoutSource.includes(`tabBarButtonTestID: '${testID}'`);
+        tabsLayoutSource.includes(`tabBarButtonTestID: '${testID}'`) ||
+        (DYNAMIC_MESSAGE_SELECTORS.has(testID) && messageBubbleSource.includes(ROLE_BOUND_MESSAGE_TEST_ID));
       expect(present).toBe(true);
     }
   });
 
-  test('hard-gates send -> live AI reply -> visible render', () => {
+  test('hard-gates send -> role-bound live AI reply -> visible render', () => {
     expect(E2E_PROMPT).not.toContain(E2E_REPLY);
     expect(flowSource).toContain(`inputText: "${E2E_PROMPT}"`);
-    expect(flowSource).toContain(`element: "${E2E_PROMPT}"`);
-    expect(flowSource).toContain(`visible: "${E2E_REPLY_SELECTOR}"`);
+    expect(flowSource).toContain(ownerPromptElement);
+    expect(flowSource).toContain(assistantReplyElement);
+    expect(flowSource).not.toContain(`visible: "${E2E_REPLY_SELECTOR}"`);
+    expect(flowSource).not.toContain(`element: "${E2E_PROMPT}"`);
+    expect(messageBubbleSource).toContain(ROLE_BOUND_MESSAGE_TEST_ID);
     expect(flowSource).toContain('timeout: 200000');
     expect(flowSource).toContain('assertNotVisible: "Not sent"');
     expect(flowSource).toContain('assertNotVisible: "I was unable to display this reply"');
@@ -129,8 +142,8 @@ describe('IVX IA chat device certificate regression', () => {
     expect(afterRestart).toContain('inputText: ${OWNER_EMAIL}');
     expect(afterRestart).toContain('inputText: ${OWNER_PASSWORD}');
     expect(afterRestart.indexOf('id: "login-submit"')).toBeLessThan(afterRestart.indexOf('id: "tab-chat"'));
-    expect(afterRestart).toContain(`element: "${E2E_PROMPT}"`);
-    expect(afterRestart).toContain(`element: "${E2E_REPLY_SELECTOR}"`);
+    expect(afterRestart).toContain(ownerPromptElement);
+    expect(afterRestart).toContain(assistantReplyElement);
     expect(afterRestart).toContain('id: "ivx-owner-chat-composer-dock"');
   });
 
