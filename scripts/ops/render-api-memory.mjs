@@ -2,6 +2,10 @@ import { pathToFileURL } from 'node:url';
 
 export const SERVICE = 'srv-d7t9ivreo5us73ftose0';
 const OWNER = 'tea-d7plj9beo5us73ch3ukg';
+export async function decodeRenderResponse(response) {
+  const body = await response.text();
+  return body.trim() ? JSON.parse(body) : {};
+}
 function validate(service) {
   if (service.id !== SERVICE || service.ownerId !== OWNER || service.type !== 'web_service' ||
       service.repo !== 'https://github.com/ibb142/ivx-holdings-platform' || service.branch !== 'main' ||
@@ -31,7 +35,15 @@ export async function upgradeAPI({ request, approved, commit }) {
   await request('PUT', `${path}/env-vars/NODE_OPTIONS`, { value: '--max-old-space-size=1024' });
   const verified = await request('GET', `${path}/env-vars/NODE_OPTIONS`);
   if (verified.value !== '--max-old-space-size=1024') throw new Error('Node heap readback failed');
-  const deploy = await request('POST', `${path}/deploys`, { clearCache: 'do_not_clear', commitId: commit });
+  const requestedAt = Date.now();
+  let deploy = await request('POST', `${path}/deploys`, { clearCache: 'do_not_clear', commitId: commit });
+  if (!deploy.id) {
+    // A successful empty response must be reconciled, never blindly POSTed again.
+    const recent = await request('GET', `${path}/deploys?limit=5`);
+    deploy = (Array.isArray(recent) ? recent : []).map(row => row.deploy ?? row).find(row =>
+      row.commit?.id === commit && Date.parse(row.createdAt) >= requestedAt &&
+      ['queued', 'build_in_progress', 'update_in_progress', 'pre_deploy_in_progress', 'live'].includes(row.status)) ?? {};
+  }
   if (typeof deploy.id !== 'string' || !deploy.id.startsWith('dep-')) throw new Error('Deployment ID missing');
   return { serviceId: SERVICE, plan: 'standard', instances: 2, heapMB: 1024, deployId: deploy.id,
     status: 'deployment_requested', productionRecoveryVerified: false };
@@ -48,7 +60,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       });
       // Never print provider responses, environment values, or credentials.
       if (!response.ok) throw new Error(`Render ${method} request failed: HTTP ${response.status}`);
-      return response.json();
+      return decodeRenderResponse(response);
     };
     console.log(JSON.stringify(await upgradeAPI({ request,
       approved: process.env.IVX_APPROVED_MEMORY_COST === '36_USD_PER_MONTH', commit: process.env.GITHUB_SHA })));
