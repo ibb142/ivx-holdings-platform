@@ -22,6 +22,14 @@ const E2E_PROMPT = 'Return only the result of joining IVX_CHAT_E2E_ and OK_${IVX
 const E2E_REPLY = 'IVX_CHAT_E2E_OK_${IVX_CHAT_E2E_NONCE}';
 
 describe('IVX IA chat device certificate regression', () => {
+  test('Home QA supplies the fresh chat nonce and credentials to the nested restart flow', () => {
+    const script = readFileSync(resolve(import.meta.dir, '../../scripts/ivx-owner-home-android-e2e.sh'), 'utf8');
+    const command = script.split('test expo/.maestro/ivx-owner-chat-certificate.yaml')[1]?.split('chat_maestro_rc=')[0];
+    for (const variable of ['OWNER_EMAIL', 'OWNER_PASSWORD', 'IVX_CHAT_E2E_NONCE']) {
+      expect(command).toContain(`--env ${variable}=`);
+    }
+    expect(script).toContain('randomUUID()');
+  });
   test('nested authentication flows resolve when Home QA runs the source YAML directly', () => {
     const visited = new Set<string>();
     const visit = (path: string) => {
