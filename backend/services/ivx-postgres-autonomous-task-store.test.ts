@@ -41,6 +41,8 @@ describe('PostgreSQL autonomous task store', () => {
 
   test('does not retry authorization failures or an ambiguous committed claim', async () => {
     configureAtomicQueue();
+    // A configured fallback must not bypass auth or replay a committed mutation.
+    process.env.SUPABASE_DB_URL = 'postgresql://unused:unused@127.0.0.1:1/unused';
     let calls = 0;
     globalThis.fetch = (async () => { calls += 1; return Response.json({ message: 'temporarily unavailable' }, { status: 403 }); }) as typeof fetch;
     await expect(readPostgresCurrentTasks(['RUNNING'])).rejects.toThrow('HTTP 403');
@@ -53,6 +55,7 @@ describe('PostgreSQL autonomous task store', () => {
 
   test('fails closed on truncated current-work truth and respects Retry-After time budget', async () => {
     configureAtomicQueue();
+    process.env.SUPABASE_DB_URL = 'postgresql://unused:unused@127.0.0.1:1/unused';
     globalThis.fetch = (async () => Response.json(Array.from({ length: 1000 }, () => ({ payload: {} })))) as typeof fetch;
     await expect(readPostgresCurrentTasks(['RUNNING'])).rejects.toThrow('telemetry is incomplete');
     let calls = 0;
