@@ -1,4 +1,4 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { ALL_AGENT_CONTRACTS } from '../services/ivx-agent-contracts';
 
 // Run this contract test in its own Bun process: it replaces storage only.
@@ -41,7 +41,8 @@ mock.module('../services/ivx-fleet-dashboard-signals', () => ({
   }),
 }));
 mock.module('../services/ivx-autonomous-sms-notifier', () => ({ getSmsNotifierStatus: () => ({ ownerActionSchedulerRunning: false }) }));
-const { handleAutonomousOpsDashboardRequest } = await import('../api/ivx-autonomous-ops-dashboard');
+const ownerGuard = spyOn(await import('../api/owner-only'), 'assertIVXOwnerOnly');
+const { handleLiveWorkAgentsRequest: handleAutonomousOpsDashboardRequest } = await import('../api/ivx-live-work');
 afterAll(() => {
   if (previousSecret === undefined) delete process.env.IVX_AI_SYSTEM_SECRET;
   else process.env.IVX_AI_SYSTEM_SECRET = previousSecret;
@@ -49,10 +50,11 @@ afterAll(() => {
 });
 
 test('preserves all 112 agents under the actual transport ceiling and fails closed on unavailable telemetry', async () => {
-  const request = () => new Request('https://api.ivxholding.com/api/ivx/autonomous-ops', {
+  const request = () => new Request('https://api.ivxholding.com/api/ivx/live-work/agents?enterpriseDashboard=1', {
     headers: { 'X-IVX-System-Key': 'dashboard-contract-machine-key' },
   });
   expect((await handleAutonomousOpsDashboardRequest(request())).status).toBe(503);
+  expect(ownerGuard).toHaveBeenCalledTimes(1);
   ledgerOk = true;
   const unavailableFleet = await (await handleAutonomousOpsDashboardRequest(request())).json();
   expect(unavailableFleet.dashboard.agents).toHaveLength(112);
@@ -74,6 +76,8 @@ test('preserves all 112 agents under the actual transport ceiling and fails clos
   expect(body.dashboard.history.possiblyTruncated).toBe(true);
   expect(body.dashboard.activityItems).toHaveLength(100);
   expect(body.responseTruncated).toBeUndefined();
-  const unauthenticated = await handleAutonomousOpsDashboardRequest(new Request('https://api.ivxholding.com/api/ivx/autonomous-ops'));
+  ownerGuard.mockClear();
+  const unauthenticated = await handleAutonomousOpsDashboardRequest(new Request('https://api.ivxholding.com/api/ivx/live-work/agents?enterpriseDashboard=1'));
   expect(unauthenticated.status).toBe(401);
+  expect(ownerGuard).toHaveBeenCalledTimes(1);
 });
