@@ -9,6 +9,7 @@ const proof = {
   certificate: 'IVX-MISSION-DURABLE-READ', passed: false, stage: 'configuration',
   sourceSha: env.EXPO_PUBLIC_SOURCE_COMMIT_SHA ?? null,
 };
+let missionStartedAt;
 try {
   assert(env.EXPO_PUBLIC_SUPABASE_URL && env.EXPO_PUBLIC_SUPABASE_ANON_KEY
     && env.OWNER_EMAIL && env.OWNER_PASSWORD_EFFECTIVE, 'Owner credential binding required');
@@ -25,7 +26,8 @@ try {
   assert(session.access_token, 'Owner access token missing');
   proof.authenticatedOwner = true;
   proof.stage = 'mission_read';
-  const startedAt = Date.now();
+  proof.httpStatus = null;
+  missionStartedAt = Date.now();
   const response = await fetch(api + '/api/ivx/live-work/agents?enterpriseDashboard=1&range=24h', {
     headers: { Authorization: 'Bearer ' + session.access_token },
     signal: AbortSignal.timeout(40_000),
@@ -34,7 +36,7 @@ try {
   assert.equal(response.status, 200, 'Authenticated mission ledger unavailable');
   const body = await response.json();
   const { ok, dashboard } = body;
-  proof.elapsedMs = Date.now() - startedAt;
+  proof.elapsedMs = Date.now() - missionStartedAt;
   proof.responseTruncated = body.responseTruncated === true;
   proof.backendSha = dashboard?.backendCommitSha ?? null;
   proof.rosterCount = Array.isArray(dashboard?.agents) ? dashboard.agents.length : 0;
@@ -79,6 +81,7 @@ try {
     : error instanceof Error ? error.name : 'UnknownError';
   throw new Error(`Mission certificate failed at ${proof.stage}: ${proof.error}`);
 } finally {
+  if (missionStartedAt !== undefined) proof.elapsedMs = Date.now() - missionStartedAt;
   proof.verifiedAt = new Date().toISOString();
   await mkdir('qa/evidence/dashboard-chat', { recursive: true });
   await writeFile('qa/evidence/dashboard-chat/mission-ledger-read.json', JSON.stringify(proof, null, 2));

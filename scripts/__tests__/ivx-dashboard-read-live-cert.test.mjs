@@ -27,7 +27,7 @@ function dashboard() {
 }
 
 // Only fixture traffic reaches this local server; none of these cases is live certification.
-for (const scenario of ['fresh', 'stale', 'wrong_commit', 'unknown', 'inconsistent_counts', 'invalid_json']) {
+for (const scenario of ['fresh', 'stale', 'wrong_commit', 'unknown', 'inconsistent_counts', 'invalid_json', 'connection_closed']) {
   test(`mission certificate ${scenario} and private failure diagnostics`, async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'ivx-mission-contract-'));
     const server = createServer((req, res) => {
@@ -36,6 +36,7 @@ for (const scenario of ['fresh', 'stale', 'wrong_commit', 'unknown', 'inconsiste
         return;
       }
       if (req.headers.authorization !== `Bearer ${privateValue}`) { res.writeHead(401).end(); return; }
+      if (scenario === 'connection_closed') { req.socket.destroy(); return; }
       if (scenario === 'invalid_json') { res.end(`private response: ${privateValue}`); return; }
       const body = dashboard();
       const signals = body.dashboard.fleetSignals;
@@ -60,7 +61,9 @@ for (const scenario of ['fresh', 'stale', 'wrong_commit', 'unknown', 'inconsiste
       assert.equal(result.code, scenario === 'fresh' ? 0 : 1);
       assert.equal(proof.passed, scenario === 'fresh');
       assert.equal(proof.authenticatedOwner, true);
-      assert.equal(proof.stage, scenario === 'fresh' ? 'verified' : scenario === 'invalid_json' ? 'mission_read' : 'mission_contract');
+      assert.equal(proof.stage, scenario === 'fresh' ? 'verified' : ['invalid_json', 'connection_closed'].includes(scenario) ? 'mission_read' : 'mission_contract');
+      assert.equal(proof.httpStatus, scenario === 'connection_closed' ? null : 200);
+      assert.equal(typeof proof.elapsedMs, 'number');
       assert.equal(`${raw}${result.stdout}${result.stderr}`.includes(privateValue), false);
       if (scenario === 'fresh') assert.deepEqual(proof.fleetCounts, { heartbeat: 0, assigned: 1, running: 0, productive: 0 });
       if (scenario === 'invalid_json') assert.equal(proof.error, 'SyntaxError');
