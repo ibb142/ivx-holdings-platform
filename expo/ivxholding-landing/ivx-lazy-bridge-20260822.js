@@ -40,6 +40,7 @@
       .catch(function(e) { console.error('[IVX] portal load failed', e); });
   };
   window.handlePortalLogin = function(e) {
+    e.preventDefault();
     window._ivxLazyLoad('portal').then(function(m) { m.handleLogin(e); })
       .catch(function(e) { console.error('[IVX] portal load failed', e); });
   };
@@ -52,6 +53,7 @@
       .catch(function(e) { console.error('[IVX] portal load failed', e); });
   };
   window.handleForgotPasswordSubmit = function(e) {
+    e.preventDefault();
     window._ivxLazyLoad('portal').then(function(m) { m.forgotSubmit(e); })
       .catch(function(e) { console.error('[IVX] portal load failed', e); });
   };

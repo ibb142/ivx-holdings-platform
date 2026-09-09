@@ -2,6 +2,7 @@ import { randomBytes, createCipheriv, createDecipheriv, createHash } from 'node:
 import { Buffer } from 'node:buffer';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions, type IVXOwnerRequestContext } from './owner-only';
 import { invalidateIVXSystemSecretCache } from '../services/ivx-system-secret';
+import { supabasePostgresTls, withoutPostgresUrlTlsOptions } from '../services/ivx-supabase-postgres-tls';
 
 const DEPLOYMENT_MARKER = 'ivx-owner-variables-2026-05-08t2305z-rest-storage';
 const RENDER_API_BASE_URL = 'https://api.render.com/v1';
@@ -429,12 +430,14 @@ async function getPool(): Promise<PgPool> {
   }
   const pgModule = await import('pg');
   cachedPool = new pgModule.Pool({
-    connectionString,
-    ssl: { rejectUnauthorized: false },
+    connectionString: withoutPostgresUrlTlsOptions(connectionString),
+    ssl: supabasePostgresTls(),
     application_name: 'ivx_owner_variables',
     max: 1,
     idleTimeoutMillis: 5_000,
-    connectionTimeoutMillis: 5_000,
+    connectionTimeoutMillis: 20_000,
+    query_timeout: 5_000,
+    statement_timeout: 5_000,
   });
   return cachedPool;
 }

@@ -210,7 +210,7 @@
       if (isPlaceholder(SUPABASE_URL) || isPlaceholder(SUPABASE_ANON_KEY) || !window.supabase) {
         throw new Error('Service temporarily unavailable — please try again.');
       }
-      var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'ivx-password-recovery-request' }, global: { fetch: function(input, init) { return fetch(input, Object.assign({}, init, { signal: AbortSignal.timeout(20000) })); } } });
       var redirectUrl = (window.location.origin && window.location.origin.indexOf('ivxholding.com') > -1)
         ? window.location.origin + '/reset-password.html'
         : 'https://ivxholding.com/reset-password.html';

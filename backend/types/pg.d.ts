@@ -29,6 +29,8 @@ declare module 'pg' {
       max?: number;
       idleTimeoutMillis?: number;
       connectionTimeoutMillis?: number;
+      query_timeout?: number;
+      statement_timeout?: number;
     });
 
     query<T = Record<string, unknown>>(text: string, values?: unknown[]): Promise<QueryResult<T>>;

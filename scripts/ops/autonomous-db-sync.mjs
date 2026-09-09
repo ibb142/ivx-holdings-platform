@@ -76,12 +76,19 @@ export function candidates(env) {
   if (env.SUPABASE_DB_PASSWORD?.trim()) {
     const u = new URL(`postgresql://db.${project}.supabase.co/postgres`);
     u.username = env.SUPABASE_DB_USER?.trim() || 'postgres';
-    u.password = encodeURIComponent(env.SUPABASE_DB_PASSWORD.trim());
+    u.password = encodeURIComponent(env.SUPABASE_DB_PASSWORD);
     if (env.SUPABASE_DB_HOST?.trim()) u.hostname = env.SUPABASE_DB_HOST.trim();
     u.port = env.SUPABASE_DB_PORT?.trim() || '5432';
     result.push({source:'SUPABASE_DB_PASSWORD',value:u.href});
   }
   return result;
+}
+
+export function probeFailure(error) {
+  const known=['ENOTFOUND','ENETUNREACH','ECONNREFUSED','ECONNRESET','ETIMEDOUT','28P01','28000','3D000','42501','53300','57P03','XX000','CERT_HAS_EXPIRED','SELF_SIGNED_CERT_IN_CHAIN','UNABLE_TO_VERIFY_LEAF_SIGNATURE'];
+  const message=String(error?.message || '');
+  const detail=/circuit.?breaker/i.test(message)?'pooler_circuit_breaker':/tenant or user not found/i.test(message)?'pooler_tenant_or_user_not_found':/password authentication failed/i.test(message)?'password_authentication_failed':/timeout|timed out/i.test(message)?'database_timeout':'unclassified';
+  return {reason:known.includes(error?.code)?error.code:detail==='database_timeout'?detail:'database_probe_failed',detail};
 }
 
 async function request(url, token, init={}) {
@@ -224,6 +231,7 @@ export async function main() {
   const groups=await readLinkedGroups(key);
   console.log(JSON.stringify({linkedGroupsAudited:groups.length}));
   const github={serviceId:'github_actions',env:process.env};
+  console.log(JSON.stringify({passwordInputAudit:{present:Boolean(process.env.SUPABASE_DB_PASSWORD),previousCodeWouldTrim:typeof process.env.SUPABASE_DB_PASSWORD==='string' && process.env.SUPABASE_DB_PASSWORD!==process.env.SUPABASE_DB_PASSWORD.trim()}}));
   console.log(JSON.stringify({source:'github_actions',credentialPresence:Object.fromEntries([...aliases,'SUPABASE_DB_PASSWORD'].map(n=>[n,Boolean(process.env[n]?.trim())])),connectionIssues:Object.fromEntries(aliases.map(n=>[n,connectionIssue(process.env[n])]))}));
   const sources=[...configurations,...groups,github];
   const poolers=await readPoolerCandidates(sources);
@@ -243,8 +251,7 @@ export async function main() {
       chosen=candidate;
       console.log(JSON.stringify({probe:'PASS',serviceId:entry.serviceId,source:candidate.source,ownerStopActive:r.rows[0].active}));
     } catch(error) {
-      const known=['ENOTFOUND','ENETUNREACH','ECONNREFUSED','ETIMEDOUT','28P01','3D000','42501','CERT_HAS_EXPIRED','SELF_SIGNED_CERT_IN_CHAIN','UNABLE_TO_VERIFY_LEAF_SIGNATURE'];
-      console.log(JSON.stringify({probe:'FAIL',serviceId:entry.serviceId,source:candidate.source,phase,reason:known.includes(error?.code)?error.code:/timeout|timed out/i.test(String(error?.message))?'database_timeout':'database_probe_failed'}));
+      console.log(JSON.stringify({probe:'FAIL',serviceId:entry.serviceId,source:candidate.source,phase,...probeFailure(error)}));
     }
     finally { await client.end(); }
   }

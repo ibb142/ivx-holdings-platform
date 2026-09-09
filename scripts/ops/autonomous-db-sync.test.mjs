@@ -2,8 +2,27 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
 import crypto from 'node:crypto';
-import { candidates, connectionIssue, normalizeStoredConnection, repairKnownConnection, main, readPoolerCandidates, readLinkedGroups, renderKey, validateConnection } from './autonomous-db-sync.mjs';
+import { candidates, connectionIssue, normalizeStoredConnection, repairKnownConnection, main, readPoolerCandidates, readLinkedGroups, renderKey, validateConnection, probeFailure } from './autonomous-db-sync.mjs';
 const valid='postgresql://postgres:unit-test-only@db.kvclcdjmjghndxsngfzb.supabase.co/postgres';
+test('preserves exact passwords through direct and pooler URI construction',async()=>{
+  const savedFetch=globalThis.fetch,savedLog=console.log;
+  try {
+    console.log=()=>{};
+    globalThis.fetch=async()=>Response.json([{database_type:'PRIMARY',connection_string:'postgresql://postgres.kvclcdjmjghndxsngfzb:placeholder@aws-0-us-east-1.pooler.supabase.com:6543/postgres'}]);
+    for(const password of [' leading-and-trailing ', 'a%40b@c#d:/?', 'quote\"and\'single', 'unicode-é-密碼']) {
+      const env={SUPABASE_DB_PASSWORD:password};
+      assert.equal(validateConnection(candidates(env)[0].value).password,password);
+      const poolers=await readPoolerCandidates([{serviceId:'test',env}],'test-token');
+      assert.equal(validateConnection(poolers[0].env.SUPABASE_POOLER_URL).password,password);
+    }
+  } finally {globalThis.fetch=savedFetch;console.log=savedLog;}
+});
+test('probe diagnostics classify upstream errors without exposing arbitrary text',()=>{
+  assert.deepEqual(probeFailure({code:'28P01',message:'password authentication failed for user private-value'}),{reason:'28P01',detail:'password_authentication_failed'});
+  assert.equal(probeFailure({code:'XX000',message:'Circuit breaker open: private-value'}).detail,'pooler_circuit_breaker');
+  assert.equal(probeFailure({message:'Tenant or user not found: private-value'}).detail,'pooler_tenant_or_user_not_found');
+  assert.deepEqual(probeFailure({code:'private-value',message:'private-value'}),{reason:'database_probe_failed',detail:'unclassified'});
+});
 test('rejects invalid hosts, other projects and disabled TLS',()=>{
   for(const v of ['postgresql://postgres:x@base/postgres','postgresql://postgres:x@db.other.supabase.co/postgres',valid+'?sslmode=disable']) assert.equal(validateConnection(v),null);
   assert.equal(validateConnection(valid).ssl.rejectUnauthorized,true);
