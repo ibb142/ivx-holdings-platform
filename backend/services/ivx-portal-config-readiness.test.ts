@@ -10,7 +10,7 @@ for (const filename of ['ivx-portal.js', 'ivx-portal-20260822.js']) {
       let calls = 0;
       const window: any = { location: { origin: 'https://ivxholding.com' } };
       const timers: Array<() => void> = [];
-      runInNewContext(readFileSync(`expo/ivxholding-landing/${filename}`, 'utf8'), {
+      runInNewContext(readFileSync(new URL(`../../expo/ivxholding-landing/${filename}`, import.meta.url), 'utf8'), {
         window, document: { getElementById: (id: string) => elements[id] }, console,
         setTimeout: (callback: () => void) => { timers.push(callback); },
       });
