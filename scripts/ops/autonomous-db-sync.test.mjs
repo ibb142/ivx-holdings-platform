@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
-import { candidates, main, validateConnection } from './autonomous-db-sync.mjs';
+import crypto from 'node:crypto';
+import { candidates, main, renderKey, validateConnection } from './autonomous-db-sync.mjs';
 const valid='postgresql://postgres:unit-test-only@db.kvclcdjmjghndxsngfzb.supabase.co/postgres';
 test('rejects invalid hosts, other projects and disabled TLS',()=>{
   for(const v of ['postgresql://postgres:x@base/postgres','postgresql://postgres:x@db.other.supabase.co/postgres',valid+'?sslmode=disable']) assert.equal(validateConnection(v),null);
@@ -44,5 +45,36 @@ for(const probeFails of [true,false]) test(`sync requires a real successful prob
   } finally {
     globalThis.fetch=savedFetch;pg.Client=SavedClient;console.log=savedLog;
     if(savedKey===undefined)delete process.env.RENDER_API_KEY;else process.env.RENDER_API_KEY=savedKey;
+  }
+});
+
+for (const status of [503,401]) test(`owner variable recovery is read-only and respects authorization: ${status}`,async()=>{
+  const savedFetch=globalThis.fetch, savedLog=console.log;
+  const keys=['RENDER_API_KEY','IVX_RENDER_API_KEY','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_ACCESS_TOKEN','JWT_SECRET'];
+  const saved=Object.fromEntries(keys.map(k=>[k,process.env[k]]));
+  let managementCalls=0;
+  try {
+    for(const k of keys) delete process.env[k];
+    Object.assign(process.env,{SUPABASE_SERVICE_ROLE_KEY:'test-service',SUPABASE_ACCESS_TOKEN:'test-management',JWT_SECRET:'test-encryption'});
+    console.log=()=>{};
+    const value='test-render-key', iv=crypto.randomBytes(12);
+    const cipher=crypto.createCipheriv('aes-256-gcm',crypto.createHash('sha256').update('test-encryption').digest(),iv);
+    cipher.setAAD(Buffer.from('ivx_owner_variables:v1'));
+    const encrypted=Buffer.concat([cipher.update(value),cipher.final()]);
+    globalThis.fetch=async(url,init)=>{
+      if(new URL(url).hostname.endsWith('.supabase.co'))return new Response('',{status});
+      assert.equal(url,'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query');
+      assert.equal(init.method,'POST');assert.equal(init.headers.Authorization,'Bearer test-management');
+      const body=JSON.parse(init.body);assert.equal(body.read_only,true);
+      assert.equal(body.query,"SELECT encrypted_value, value_iv, value_tag, value_hash FROM public.ivx_owner_variables WHERE name = 'RENDER_API_KEY' LIMIT 2");
+      managementCalls++;
+      return Response.json([{encrypted_value:encrypted.toString('base64'),value_iv:iv.toString('base64'),value_tag:cipher.getAuthTag().toString('base64'),value_hash:crypto.createHash('sha256').update(value).digest('hex')}]);
+    };
+    if(status===401)await assert.rejects(renderKey(),/owner_variable_rest_access_failed/);
+    else assert.equal(await renderKey(),value);
+    assert.equal(managementCalls,status===401?0:1);
+  } finally {
+    globalThis.fetch=savedFetch;console.log=savedLog;
+    for(const k of keys)if(saved[k]===undefined)delete process.env[k];else process.env[k]=saved[k];
   }
 });
