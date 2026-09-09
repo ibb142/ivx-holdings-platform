@@ -9,6 +9,7 @@ import {
   type AgentStateRow,
   type ExecutionRow,
 } from './ivx-agent-persistence';
+import { preferDirectTransport, readPostgresAgentDashboardRows } from './ivx-postgres-autonomous-task-store';
 
 export const IVX_AGENT_DASHBOARD_LEDGER_MARKER = 'ivx-agent-dashboard-ledger-2026-08-18';
 
@@ -31,7 +32,19 @@ type JobDoc = {
 
 // A bounded history read includes transfer/JSON decoding after the indexed scan.
 // Three seconds cut off valid 2,000-row reads and triggered more fallback traffic.
-async function restGet<T>(path: string, timeoutMs = 15_000): Promise<{ ok: boolean; status: number; data: T | null; error: string | null }> {
+async function ledgerGet<T>(path: string, kind: 'states' | 'executions' | 'jobs', limit: number, timeoutMs = 15_000): Promise<{ ok: boolean; status: number; data: T | null; error: string | null }> {
+  if (preferDirectTransport()) {
+    try {
+      const rows = await readPostgresAgentDashboardRows(kind, limit);
+      if (!Array.isArray(rows)) throw new Error('Invalid dashboard ledger array response');
+      return { ok: true, status: 200, data: rows as T, error: null };
+    } catch (error) {
+      // Preserve the canonical store on connection/query failures. Only a
+      // missing relation permits the existing alternative-table discovery.
+      const code = (error as { code?: string } | null)?.code;
+      return { ok: false, status: code === '42P01' ? 404 : 0, data: null, error: `Dashboard PostgreSQL read failed (${code ?? 'unavailable'})` };
+    }
+  }
   const binding = resolveSupabaseBinding();
   if (binding.missing.length) {
     return { ok: false, status: 0, data: null, error: `Supabase missing ${binding.missing.join(', ')}` };
@@ -92,12 +105,12 @@ function normalizeExecution(value: unknown): ExecutionRow | null {
 }
 
 async function fetchDedicatedExecutions(limit: number): Promise<{ ok: boolean; status: number; rows: ExecutionRow[]; error: string | null }> {
-  const result = await restGet<ExecutionRow[]>(`ivx_agent_executions?select=*&order=started_at.desc.nullslast&limit=${limit}`);
+  const result = await ledgerGet<ExecutionRow[]>(`ivx_agent_executions?select=*&order=started_at.desc.nullslast&limit=${limit}`, 'executions', limit);
   return { ok: result.ok, status: result.status, rows: (Array.isArray(result.data) ? result.data : []).map(normalizeExecution).filter((r): r is ExecutionRow => Boolean(r)), error: result.error };
 }
 
 async function fetchFallbackExecutions(limit: number): Promise<{ ok: boolean; status: number; rows: ExecutionRow[]; error: string | null }> {
-  const result = await restGet<JobDoc[]>(`ivx_agent_jobs?type=eq.ivx_rec_execution&select=id,type,status,payload,created_at,updated_at&order=created_at.desc&limit=${limit}`);
+  const result = await ledgerGet<JobDoc[]>(`ivx_agent_jobs?type=eq.ivx_rec_execution&select=id,type,status,payload,created_at,updated_at&order=created_at.desc&limit=${limit}`, 'jobs', limit);
   const rows = (Array.isArray(result.data) ? result.data : [])
     .map((doc) => normalizeExecution(doc.payload))
     .filter((r): r is ExecutionRow => Boolean(r));
@@ -105,11 +118,11 @@ async function fetchFallbackExecutions(limit: number): Promise<{ ok: boolean; st
 }
 
 export async function readAgentDashboardLedger(limit = 500): Promise<AgentDashboardLedger> {
-  const safeLimit = Math.max(112, Math.min(2000, Math.floor(limit)));
+  const safeLimit = Number.isFinite(limit) ? Math.max(112, Math.min(2000, Math.floor(limit))) : 500;
   let mode = activeStoreMode();
   // Dashboard reads do not run schema bootstrap, or serialize independent reads.
   const [stateResult, firstExecutions] = await Promise.all([
-    restGet<AgentStateRow[]>('ivx_agent_states?select=*&order=agent_number.asc&limit=112'),
+    ledgerGet<AgentStateRow[]>('ivx_agent_states?select=*&order=agent_number.asc&limit=112', 'states', 112),
     mode === 'jobs_fallback' ? fetchFallbackExecutions(safeLimit) : fetchDedicatedExecutions(safeLimit),
   ]);
   let execResult = firstExecutions;
