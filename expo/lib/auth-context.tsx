@@ -6,6 +6,7 @@ import { persistAuth, loadStoredAuth, clearStoredAuth, setAuthCredentials } from
 import { clearOwnerResilientSession } from './owner-session-resilience';
 import { LoginTrace } from './login-trace';
 import { signInWithEmailPassword } from './auth-password-sign-in';
+import { createDeferredAuthListener } from './deferred-auth-listener';
 import { canonicalizeRole, isAdminRole, normalizeRole, sanitizeEmail } from './auth-helpers';
 
 import { extractChallengeId, extractFirstVerifiedMfaFactor, getMfaChallengeRequirement, type ParsedMfaFactor } from './auth-mfa';
@@ -1747,9 +1748,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     void initAuth();
 
     let subscription: { unsubscribe: () => void } | null = null;
+    let disposeAuthListener: (() => void) | null = null;
     try {
-      const result = supabase.auth.onAuthStateChange(async (_event, session) => {
-        if (cancelled) {
+      const deferredAuth = createDeferredAuthListener(async (_event, session, isCurrent) => {
+        if (cancelled || !isCurrent()) {
           return;
         }
         if (_event === 'INITIAL_SESSION') {
@@ -1771,6 +1773,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             return;
           }
           const challengeRequired = await requireTwoFactorIfNeeded(session, `auth event ${String(_event)}`);
+          if (cancelled || !isCurrent()) return;
           if (!challengeRequired) {
             const handledSession = await handleSession(session);
             if (!handledSession.accepted) {
@@ -1798,7 +1801,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             sessionMonitorCleanup.current = null;
           }
         }
+      }, (error) => {
+        console.warn('[Auth] Deferred auth state processing failed:', error instanceof Error ? error.name : 'UnknownError');
       });
+      disposeAuthListener = deferredAuth.dispose;
+      const result = supabase.auth.onAuthStateChange(deferredAuth.listener);
       subscription = result?.data?.subscription ?? null;
     } catch (e) {
       console.log('[Auth] onAuthStateChange setup error:', (e as Error)?.message);
@@ -1806,6 +1813,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
     return () => {
       cancelled = true;
+      disposeAuthListener?.();
       try { subscription?.unsubscribe(); } catch {}
       if (sessionMonitorCleanup.current) {
         sessionMonitorCleanup.current();

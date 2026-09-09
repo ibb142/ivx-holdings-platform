@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { InteractionManager } from 'react-native';
 import { analytics } from './analytics';
 import { supabase } from './supabase';
+import { createDeferredAuthListener } from './deferred-auth-listener';
 import { usePathname } from 'expo-router';
 import type { EventCategory } from './analytics';
 import createContextHook from '@nkzw/create-context-hook';
@@ -96,16 +97,20 @@ export const [AnalyticsProvider, useAnalytics] = createContextHook<AnalyticsHook
       .then(({ data }) => bindIdentity(data.session?.user?.id))
       .catch((error) => console.log('[Analytics] Initial identity lookup failed:', (error as Error)?.message ?? 'unknown'));
 
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+    const deferredAuth = createDeferredAuthListener((_event, session) => {
       if (!session?.user?.id) {
         lastBoundUserId = null;
         return;
       }
-      void bindIdentity(session.user.id);
+      return bindIdentity(session.user.id);
+    }, (error) => {
+      console.warn('[Analytics] Identity session lookup failed:', error instanceof Error ? error.name : 'UnknownError');
     });
+    const { data } = supabase.auth.onAuthStateChange(deferredAuth.listener);
 
     return () => {
       cancelled = true;
+      deferredAuth.dispose();
       data.subscription.unsubscribe();
     };
   }, []);
