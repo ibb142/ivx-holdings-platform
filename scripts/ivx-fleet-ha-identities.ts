@@ -18,3 +18,13 @@ export function processIdentityMatchesObservedInstance(
   const pod = /^(srv-[a-z0-9]+)-[a-z0-9]+-([a-z0-9]+)$/.exec(host);
   return Boolean(pod && observedInstanceIds.has(`${pod[1]}-${pod[2]}`));
 }
+
+export function sharedProcessesCoverObservedInstances(
+  processIdentities: readonly unknown[],
+  observedInstanceIds: ReadonlySet<string>,
+): boolean {
+  return observedInstanceIds.size > 0 && processIdentities.length === observedInstanceIds.size
+    && new Set(processIdentities).size === processIdentities.length
+    && [...observedInstanceIds].every(id => processIdentities.some(identity =>
+      processIdentityMatchesObservedInstance(identity, new Set([id]))));
+}
