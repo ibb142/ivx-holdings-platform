@@ -150,6 +150,7 @@ function AppStack() {
 }
 
 export function AppProviders() {
+  const pathname = usePathname();
   React.useEffect(() => {
     logStartup('PROVIDERS_STARTED');
     logStartup('PROVIDERS_COMPLETED');
@@ -173,7 +174,7 @@ export function AppProviders() {
 
   return (
     <DiagnosticErrorBoundary>
-      <GestureHandlerRootView style={providerStyles.root} {...(Platform.OS === 'web' ? { touchAction: 'auto' as const } : {})}>
+      <GestureHandlerRootView testID={`ivx-route:${pathname}`} style={providerStyles.root} {...(Platform.OS === 'web' ? { touchAction: 'auto' as const } : {})}>
         <QueryClientProvider client={queryClient}>
           <ProviderBoundary name="I18n">
             <I18nProvider>

@@ -69,6 +69,19 @@ mapfile -t files < <(find expo/app -type f \( -name '*.tsx' -o -name '*.ts' \) -
 total=0
 for file in "${files[@]}"; do
   route=$(route_from_file "$file") || continue
+  # These routes intentionally redirect an authenticated owner. Every other
+  # route must reach its own destination; the previous screen cannot pass QA.
+  destination="$route"
+  case "$route" in
+    /|/login|/verify-access|/owner-access) destination='/home' ;;
+    /ivx) destination='/ivx/inbox' ;;
+    /admin/member) destination='/admin/members' ;;
+  esac
+  route_identifier=$(python3 - "$destination" <<'PY'
+import json, re, sys
+print(json.dumps('^' + re.escape('ivx-route:' + sys.argv[1]) + '$'))
+PY
+)
   total=$((total + 1))
   name="IVX automated route $total"
   screenshot="route-$total"
@@ -81,6 +94,10 @@ appId: $APP_ID
 name: $name
 ---
 - openLink: "ivx-app:///${route#/}"
+- extendedWaitUntil:
+    visible:
+      id: $route_identifier
+    timeout: 20000
 - waitForAnimationToEnd:
     timeout: 3000
 - assertNotVisible: "Something went wrong"
@@ -96,8 +113,8 @@ name: $name
 - assertNotVisible: "Something went wrong"
 - takeScreenshot: "$screenshot"
 YAML
-  jq -nc --arg file "$file" --arg route "$route" --arg name "$name" --arg screenshot "$screenshot" \
-    '{file:$file,route:$route,name:$name,screenshot:$screenshot}' >> "$EVIDENCE/manifest.jsonl"
+  jq -nc --arg file "$file" --arg route "$route" --arg expectedRoute "$destination" --arg name "$name" --arg screenshot "$screenshot" \
+    '{file:$file,route:$route,expectedRoute:$expectedRoute,name:$name,screenshot:$screenshot}' >> "$EVIDENCE/manifest.jsonl"
 done
 test "$total" -gt 100
 initial_pid=$(timeout 8s adb shell pidof "$APP_ID" | tr -d '\r')
