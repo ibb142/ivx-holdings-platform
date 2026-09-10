@@ -45,6 +45,30 @@ async function makeIsolatedRepo(label: string): Promise<{
 }
 
 describe('Landing repair source access', () => {
+  it('runs generated validation without inheriting worker credentials', async () => {
+    const repo = await makeIsolatedRepo('validation-environment');
+    const key = 'IVX_AUTONOMOUS_TEST_SECRET_SENTINEL';
+    const previous = process.env[key];
+    process.env[key] = 'fixture-value-must-stay-in-parent';
+    try {
+      await repo.fileWriter('backend/services/environment-check.cjs', [
+        'const assert = require("node:assert/strict");',
+        `assert.equal(process.env.${key}, undefined);`,
+        'for (const key of ["SUPABASE_SERVICE_ROLE_KEY", "DATABASE_URL", "GITHUB_TOKEN", "OPENAI_API_KEY", "RENDER_API_KEY", "IVX_AI_SYSTEM_SECRET"]) assert.equal(process.env[key], undefined);',
+        'assert.equal(process.env.NODE_ENV, "test");',
+        'assert.equal(process.env.CI, "1");',
+        'assert.ok(process.env.PATH);',
+        'console.log("validation-environment-pass");',
+      ].join('\n'));
+      const result = await runAutonomousCoderCommand(repo.root, 'node backend/services/environment-check.cjs');
+      expect(result.ok).toBe(true);
+      expect(result.stdoutTail).toContain('validation-environment-pass');
+      expect(process.env[key]).toBe('fixture-value-must-stay-in-parent');
+    } finally {
+      if (previous === undefined) delete process.env[key]; else process.env[key] = previous;
+    }
+  });
+
   it('retains selected source and revises rejected patches and Node test errors using the real compiler', async () => {
     const repo = await makeIsolatedRepo('deep-repair-revision');
     await Promise.all(Array.from({ length: 220 }, (_, i) => Promise.all([
