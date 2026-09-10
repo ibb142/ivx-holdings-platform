@@ -235,23 +235,79 @@
 (function(){
   var v = document.getElementById('homeFeedReel');
   if (!v) return;
-  fetch('https://api.ivxholding.com/api/reels', {headers:{'Accept':'application/json'}}).then(function(r){return r.json();}).then(function(d){
-    var list = (d && (d.videos || d.reels)) || [];
-    var first = null;
-    for (var i=0;i<list.length;i++){ if (list[i] && list[i].video_url) { first = list[i]; break; } }
-    if (first && first.video_url) {
-      if (first.thumbnail_url) v.setAttribute('poster', first.thumbnail_url);
-      v.muted = true;
-      v.preload = 'auto';
-      // Resolve compatibility assets against the API that serves them.
-      // Browser source selection falls back to MP4 when WebM is unsupported.
-      var sources = first.webm_url ? [{url:new URL(first.webm_url, 'https://api.ivxholding.com').href,type:'video/webm'}] : [];
-      sources.push({url:first.video_url,type:'video/mp4'});
-      sources.forEach(function(item){ var s=document.createElement('source'); s.src=item.url; s.type=item.type; v.appendChild(s); });
-      v.load();
-      var p = v.play && v.play(); if (p && p.catch) p.catch(function(){});
+  var busy = false, retryButton = null;
+  function showRetry() {
+    busy = false;
+    if (!retryButton) {
+      retryButton = document.createElement('button');
+      retryButton.type = 'button';
+      retryButton.className = 'ivx-home-reel-retry';
+      retryButton.textContent = 'Video unavailable — retry';
+      retryButton.style.cssText = 'display:block;min-height:44px;min-width:44px;margin:12px auto;padding:10px 18px;background:#fff;color:#111;border:1px solid #999;border-radius:8px;cursor:pointer';
+      retryButton.addEventListener('click', start);
+      v.parentNode.appendChild(retryButton);
     }
-  }).catch(function(){});
+    retryButton.hidden = false;
+    retryButton.style.display = 'block';
+  }
+  function hideRetry() {
+    if (retryButton) { retryButton.hidden = true; retryButton.style.display = 'none'; }
+  }
+  function attach(first) {
+    if (first.thumbnail_url) v.setAttribute('poster', first.thumbnail_url);
+    v.muted = true;
+    v.preload = 'auto';
+    Array.prototype.slice.call(v.querySelectorAll('source')).forEach(function(s){ s.remove(); });
+    v.removeAttribute('src');
+    var sources = first.webm_url ? [{url:new URL(first.webm_url, 'https://api.ivxholding.com').href,type:'video/webm'}] : [];
+    sources.push({url:first.video_url,type:'video/mp4'});
+    var failedSources = 0;
+    sources.forEach(function(item){
+      var s = document.createElement('source');
+      s.src = item.url; s.type = item.type;
+      s.addEventListener('error', function(){ if (++failedSources === sources.length) showRetry(); });
+      v.appendChild(s);
+    });
+    busy = false;
+    v.load();
+    var p = v.play && v.play(); if (p && p.catch) p.catch(function(){});
+  }
+  function attempt(number) {
+    var controller = new AbortController();
+    var timer = setTimeout(function(){ controller.abort(); }, 4000);
+    return fetch('https://api.ivxholding.com/api/reels', {headers:{'Accept':'application/json'},signal:controller.signal})
+      .then(function(r){
+        if (!r.ok) {
+          var error = new Error('Reel feed unavailable');
+          error.retryable = r.status === 408 || r.status === 429 || r.status >= 500;
+          throw error;
+        }
+        return r.json();
+      })
+      .then(function(d){
+        clearTimeout(timer);
+        var list = (d && (d.videos || d.reels)) || [];
+        var first = null;
+        for (var i=0;i<list.length;i++){ if (list[i] && list[i].video_url) { first = list[i]; break; } }
+        if (!first) { showRetry(); return; }
+        attach(first);
+      })
+      .catch(function(error){
+        clearTimeout(timer);
+        if (number < 2 && error.retryable !== false) {
+          setTimeout(function(){ attempt(number + 1); }, 500 * (number + 1));
+        } else showRetry();
+      });
+  }
+  function start() {
+    if (busy) return;
+    busy = true;
+    hideRetry();
+    attempt(0);
+  }
+  v.addEventListener('error', showRetry);
+  v.addEventListener('playing', hideRetry);
+  start();
 })();
 </script>
 

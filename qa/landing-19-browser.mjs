@@ -60,6 +60,15 @@ try {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(data) });
       });
     }
+    if (process.env.LANDING_PREVIEW_SOURCE && unit === 'reels.production-render-browser') {
+      // Reproduce the observed startup failure before accepting the real feed.
+      let injectedUnavailable = false;
+      await page.route('https://api.ivxholding.com/api/reels', async (route) => {
+        if (injectedUnavailable || route.request().method() !== 'GET') return route.continue();
+        injectedUnavailable = true;
+        await route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"isolated startup recovery fixture"}' });
+      });
+    }
     const response = await page.goto(base, { waitUntil: 'domcontentloaded' });
     assert.equal(response.status(), 200);
     await page.locator('#properties-grid .live-deal-card').first().waitFor({ state: 'visible' });
@@ -85,6 +94,14 @@ try {
           await page.waitForFunction(() => document.querySelector('#ivxReels .ivxr-slide video').paused);
           await video.click({ position: { x: 60, y: 150 } });
           await page.waitForFunction(() => !document.querySelector('#ivxReels .ivxr-slide video').paused);
+        }
+        if (process.env.LANDING_PREVIEW_SOURCE && unit === 'reels.autoplay-controls-browser') {
+          const originalSource = await video.getAttribute('src');
+          assert.ok(originalSource, 'A decoded reel must have its own media source');
+          await video.evaluate((v) => v.dispatchEvent(new Event('error')));
+          assert.equal(await video.getAttribute('src'), originalSource, 'A media error must not substitute footage from another reel');
+          await slide.getByRole('button', { name: 'Video failed — tap to retry', exact: true }).click();
+          await page.waitForFunction(() => { const v = document.querySelector('#ivxReels .ivxr-slide video'); return v?.readyState >= 2 && !v.paused && v.videoWidth > 0; });
         }
         if (unit === 'reels.engagement-browser') {
           await slide.locator('.like').click();
