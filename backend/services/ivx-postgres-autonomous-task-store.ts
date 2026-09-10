@@ -113,7 +113,8 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
     if (casts[key] === 'jsonb' && value !== null && value !== undefined) return JSON.stringify(value);
     return value ?? null;
   });
-  const pool = getDirectPool(env, name.startsWith('ivx_senior_') ? 'repair' : name === 'ivx_fleet_dashboard_observation' ? 'telemetry' : 'tasks');
+  const pool = getDirectPool(env, name.startsWith('ivx_senior_') ? 'repair'
+    : ['ivx_fleet_dashboard_observation', 'ivx_work_evidence_hours'].includes(name) ? 'telemetry' : 'tasks');
   const result = await queryWithPostgresDeadline<{ result: T }>(pool, `select public.${name}(${placeholders}) as result`, values);
   if (!result.rows?.length) throw new Error(`direct_postgres_rpc_empty:${name}`);
   return result.rows[0].result as T;

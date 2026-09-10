@@ -45,6 +45,14 @@ export async function proveWorkEvidenceArchive(db) {
   const access = (await db.query(`select has_table_privilege('anon','public.ivx_work_evidence_archive','select') as anon,
     has_function_privilege('authenticated','public.ivx_work_evidence_hours(timestamptz,timestamptz,numeric)','execute') as authenticated`)).rows[0];
   assert.deepEqual(access, { anon: false, authenticated: false });
+  // The read optimization must preserve exact accounting and existing ACLs.
+  await db.query(await readFile(new URL('../supabase/migrations/20260910165500_ivx_work_evidence_hours_cover.sql', import.meta.url), 'utf8'));
+  assert.deepEqual(await report('2026-06-01T06:00:00Z', '2026-06-01T07:00:00Z'), hours);
+  assert.deepEqual(await report('2026-06-01T06:00:00.500Z', '2026-06-01T06:00:02Z'), clipped);
+  const optimizedAccess = (await db.query(`select has_table_privilege('anon','public.ivx_work_evidence_archive','select') as anon,
+    has_function_privilege('authenticated','public.ivx_work_evidence_hours(timestamptz,timestamptz,numeric)','execute') as authenticated`)).rows[0];
+  assert.deepEqual(optimizedAccess, access);
   console.log(JSON.stringify({ immutableWorkEvidence: true, observationsSurvivedRotation: 41, staleCompletionRejected: true,
-    duplicatesExcluded: true, nonpassingTimeSeparated: true, clippingVerified: true, privateAccess: true }));
+    duplicatesExcluded: true, nonpassingTimeSeparated: true, clippingVerified: true, privateAccess: true,
+    optimizedAccountingUnchanged: true }));
 }
