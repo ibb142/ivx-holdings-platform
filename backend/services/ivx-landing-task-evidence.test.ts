@@ -21,12 +21,15 @@ test('one-shot Landing execution persists verifiable history without claiming cu
     const script = `
     import assert from 'node:assert/strict';
     import { createHash } from 'node:crypto';
-    import { isDurableStoreConfigured } from ${moduleUrl('ivx-durable-store')};
-    import { postgresAtomicQueueSelected } from ${moduleUrl('ivx-postgres-autonomous-task-store')};
-    import { createTask, getAllTasks, leaseNextTask, transitionTaskState } from ${moduleUrl('ivx-autonomous-task-engine')};
-    import { runRealEngineeringCycle } from ${moduleUrl('ivx-agent-real-engineering-cycle')};
-    import { decodeLandingResult, landingTaskKey } from ${moduleUrl('ivx-landing-p0-backlog')};
-    import { successfulEvidence, fleetTaskSignals } from ${moduleUrl('ivx-fleet-slo')};
+    // The repository has no package-level module type. Node 22/tsx may expose
+    // its TypeScript modules as CommonJS defaults, while newer Node exposes ESM.
+    const load = async url => { const module = await import(url); return module.default ?? module; };
+    const { isDurableStoreConfigured } = await load(${moduleUrl('ivx-durable-store')});
+    const { postgresAtomicQueueSelected } = await load(${moduleUrl('ivx-postgres-autonomous-task-store')});
+    const { createTask, getAllTasks, leaseNextTask, transitionTaskState } = await load(${moduleUrl('ivx-autonomous-task-engine')});
+    const { runRealEngineeringCycle } = await load(${moduleUrl('ivx-agent-real-engineering-cycle')});
+    const { decodeLandingResult, landingTaskKey } = await load(${moduleUrl('ivx-landing-p0-backlog')});
+    const { successfulEvidence, fleetTaskSignals } = await load(${moduleUrl('ivx-fleet-slo')});
     assert.equal(isDurableStoreConfigured(), false, 'An isolated local store is required');
     assert.equal(postgresAtomicQueueSelected(), false, 'A production queue must never be used by this test');
     const sha = ${JSON.stringify(sha)};
