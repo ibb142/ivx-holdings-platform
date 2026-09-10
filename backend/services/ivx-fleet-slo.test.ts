@@ -96,6 +96,28 @@ describe('Fleet SLO evidence and alerts', () => {
     expect(deliveries).toBe(2);
     finishAlert({ ok: true });
   });
+  test('a task-read failure can persist process presence without certifying productivity', async () => {
+    const saved: Record<string, unknown>[] = [];
+    let writesAvailable = true;
+    const monitor = new FleetSloMonitor({
+      read: async () => { throw new Error('Query read timeout'); },
+      persist: async sample => { if (!writesAvailable) throw new Error('database unavailable'); saved.push(sample); },
+      alert: async () => ({ ok: true }), now: () => NOW, sha: () => SHA,
+    });
+    const present = await monitor.sample();
+    expect(saved).toHaveLength(1);
+    expect(saved[0].status).toBe('UNKNOWN');
+    expect(present.durable).toBe(true);
+    expect(present.status).toBe('UNKNOWN');
+    expect(present.productive_agents).toBeNull();
+    expect(present.running_agents).toBeNull();
+    expect(fleetSloPrometheus(present)).toContain('ivx_fleet_telemetry_available 0');
+    writesAvailable = false;
+    const absent = await monitor.sample();
+    expect(absent.durable).toBe(false);
+    expect(absent.status).toBe('UNKNOWN');
+    expect(saved).toHaveLength(1);
+  });
   test('does not expose owner metrics without authentication', async () => {
     expect((await handleFleetSloGet(new Request('https://api.ivx.test/api/ivx/autonomous/fleet-slo'))).status).toBe(401);
   });

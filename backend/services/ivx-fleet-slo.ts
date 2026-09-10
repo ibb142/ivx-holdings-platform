@@ -137,6 +137,15 @@ export class FleetSloMonitor {
         productivity_ratio: null, durable: false, error: 'Fleet evidence could not be read or persisted',
       };
       console.error('[IVX Fleet SLO] telemetry unavailable', { marker: IVX_FLEET_SLO_MARKER, measured_at: snapshot.measured_at, failure_stage: stage, failure_kind: kind });
+      // A task-read failure is not a process heartbeat failure. Only a real
+      // PostgreSQL write can establish shared presence; productivity remains
+      // UNKNOWN and the SLO endpoint still rejects this sample with HTTP 503.
+      if (stage !== 'persist') {
+        try {
+          await this.deps.persist({ ...snapshot, durable: true });
+          snapshot.durable = true;
+        } catch { /* No durable presence is claimed when PostgreSQL cannot write. */ }
+      }
     }
     this.latest = snapshot;
     // Alert storage may be slower than the 45-second HA heartbeat window.
