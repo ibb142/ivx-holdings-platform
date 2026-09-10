@@ -162,8 +162,7 @@ jobs:
         with: { bun-version: 1.3.9 }
       - run: cd expo && bun install --frozen-lockfile
       - name: Select and boot deterministic iOS simulator
-        # Fresh runner data migration consumed two minutes before SpringBoard
-        # began booting. Keep a bounded startup budget before any app assertions.
+        # Fresh runner data migration can delay SpringBoard on a cold simulator.
         timeout-minutes: 6
         run: |
           set -euo pipefail
@@ -221,20 +220,22 @@ jobs:
       - name: Install Maestro
         run: curl -Ls "https://get.maestro.mobile.dev" | bash
       - name: Run Maestro launch smoke test — HARD GATE
-        timeout-minutes: 10
+        timeout-minutes: 15
         env:
           MAESTRO_CLI_NO_ANALYTICS: '1'
-          # XCTest driver initialization timed out after the app had already
-          # compiled, installed and launched. Keep app assertions unchanged.
-          MAESTRO_DRIVER_STARTUP_TIMEOUT: '300000'
+          # XCTest driver compilation on a cold macOS runner can exceed the
+          # default startup budget. UI assertions still remain hard failures.
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: '600000'
+          MAESTRO_DISABLE_UPDATE_CHECK: 'true'
         run: |
           set -euo pipefail
-          ~/.maestro/bin/maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml 2>&1 | tee maestro-launch.log
+          xcrun simctl bootstatus "$IVX_SIMULATOR_UDID" -b
+          ~/.maestro/bin/maestro --device "$IVX_SIMULATOR_UDID" test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml 2>&1 | tee maestro-startup.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: maestro-report-${{ github.sha }}
           path: |
             maestro-report.xml
-            maestro-launch.log
+            maestro-startup.log
           if-no-files-found: warn
