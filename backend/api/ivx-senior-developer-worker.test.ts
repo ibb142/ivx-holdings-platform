@@ -72,6 +72,21 @@ describe('resolveWorkerExecutionMode', () => {
 });
 
 describe('summarizeAutonomousCoderProof', () => {
+  test('retains the original failing regression separately from the passing patched validation', () => {
+    const result = summarizeAutonomousCoderProof('job-baseline-receipts', autonomousProof({
+      commandsRun: [
+        { command: 'node --import tsx --test backend/check.test.ts', phase: 'regression_baseline', ok: false, exitCode: 1, stdoutTail: 'ERR_ASSERTION: original behavior failed', stderrTail: '', durationMs: 15 },
+        { command: 'node --import tsx --test backend/check.test.ts', ok: true, exitCode: 0, stdoutTail: 'passed', stderrTail: '', durationMs: 12 },
+      ],
+    }));
+    const receipts = JSON.parse(JSON.stringify(result.validationEvidence));
+    expect(receipts[0].phase).toBe('regression_baseline');
+    expect(receipts[0].ok).toBe(false);
+    expect(receipts[1].ok).toBe(true);
+    expect(receipts[0].stdoutHash).not.toBe(receipts[1].stdoutHash);
+    expect(JSON.stringify(result)).not.toContain('original behavior failed');
+  });
+
   test('persists failed and successful validation receipts through the terminal execution record without raw output', () => {
     const proof = autonomousProof({
       finalStatus: 'BLOCKED', executionMode: 'code_change', error: 'Regression still fails',

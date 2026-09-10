@@ -87,6 +87,7 @@ describe('Landing repair source access', () => {
     let patches = 0;
     let regressionRan = false;
     let typecheckCommand = '';
+    let commitPersisted = false;
     const proof = await runIVXAutonomousCoder({
       taskId: 'landing-remediation:fixture:media.deal-videos', goal: [
         '[AUTONOMOUS_DIAGNOSTIC_DATA] Repair a Landing QA failure.',
@@ -123,6 +124,17 @@ describe('Landing repair source access', () => {
       },
       commitFn: async (_paths, branch) => ({ commitSha: 'test-deep-repair', commitUrl: 'https://example.test/commit', branch }),
       ...prAndCiMocks(), autoMergePr: true,
+      onCommitLanded: async info => {
+        expect(info.filesChanged).toContain(sourcePath);
+        expect(info.testsPassed).toBe(true);
+        expect(info.commandsRun.some(result => result.phase === 'regression_baseline' && !result.ok)).toBe(true);
+        await Promise.resolve();
+        commitPersisted = true;
+      },
+      prFn: async () => {
+        expect(commitPersisted).toBe(true);
+        return { prNumber: 99, prUrl: 'https://example.test/pr/99', merged: false, mergeCommitSha: null };
+      },
     });
     expect(proof.error).toBeNull();
     expect(plans).toBe(1);
@@ -131,6 +143,7 @@ describe('Landing repair source access', () => {
     expect(await repo.fileReader(sourcePath)).toContain('return value.trim();');
     expect(proof.testsPassed).toBe(true);
     expect(proof.typecheckPassed).toBe(true);
+    expect(proof.commandsRun.some(result => result.phase === 'regression_baseline' && !result.ok && (result.stdoutTail + result.stderrTail).includes('ERR_ASSERTION'))).toBe(true);
     expect(proof.iterations[1].failureSummary).toContain('test is not defined');
     expect(proof.prMerged).toBe(true);
     // Runtime declarations resolve real types; they must not mask invalid code.
@@ -150,6 +163,73 @@ describe('Landing repair source access', () => {
     expect(result.stderrTail).toContain('MODULE_NOT_FOUND');
     expect(result.command).not.toContain('npx');
   });
+
+  for (const repairSource of ['landing', 'diagnostic'] as const) {
+  it(`rejects a semantic no-op from ${repairSource} even when generated tests and typecheck pass`, async () => {
+    const repo = await makeIsolatedRepo(`already-green-regression-${repairSource}`);
+    const sourcePath = 'backend/services/video-attachments.ts';
+    const testPath = 'backend/services/video-attachments.test.ts';
+    const source = 'export function videoAttachments(values: string[]) { const out = values; return out.filter(Boolean); }';
+    await repo.fileWriter(sourcePath, source);
+    let commits = 0;
+    const proof = await runIVXAutonomousCoder({
+      taskId: repairSource === 'landing' ? 'landing-remediation:fixture:media.deal-videos-resolvable' : 'ivx-worker-diagnostic-fixture', goal: `[TEMPLATE_MODE:BUG_FIX] Repair missing videos in ${sourcePath}`,
+      executionMode: 'code_change', ownerId: 'test-owner', approvalPolicy: 'owner_gated', projectRoot: repo.root,
+      maxLlmCalls: 1, fileReader: repo.fileReader, fileWriter: repo.fileWriter,
+      llmCaller: async () => JSON.stringify({ rootCause: 'missing videos', technicalPlan: 'handle empty attachments', operations: [
+        { path: sourcePath, kind: 'replace_exact', oldText: 'return out.filter(Boolean);', newText: 'if (out.length === 0) return []; return out.filter(Boolean);', reason: 'empty attachments' },
+        { path: testPath, kind: 'create_file', oldText: '', newText: 'import { test } from "node:test"; import assert from "node:assert/strict"; import { videoAttachments } from "./video-attachments"; test("video remains attached", () => assert.deepEqual(videoAttachments(["https://example.test/video.mp4"]), ["https://example.test/video.mp4"]));', reason: 'regression' },
+      ] }),
+      testRunner: runAutonomousCoderCommand,
+      commitFn: async (_paths, branch) => { commits += 1; return { commitSha: 'must-not-commit', commitUrl: 'https://example.test/commit', branch }; },
+      ...prAndCiMocks(), autoMergePr: true,
+    });
+    expect(commits).toBe(0);
+    expect(proof.prMerged).toBe(false);
+    expect(proof.testsPassed).toBe(false);
+    expect(proof.iterations[0].failureSummary).toContain('REPAIR_REGRESSION_NOT_REPRODUCED');
+    expect(proof.commandsRun.find(result => result.phase === 'regression_baseline')?.ok).toBe(true);
+    expect(await repo.fileReader(sourcePath)).toBe(source);
+    expect(existsSync(path.join(repo.root, testPath))).toBe(false);
+  });
+  }
+
+  for (const failure of ['import-error', 'runner-exception'] as const) {
+    it(`rejects ${failure} as regression proof and restores source before validation`, async () => {
+      const repo = await makeIsolatedRepo(`baseline-${failure}`);
+      const sourcePath = 'backend/services/normalize-video.ts';
+      const testPath = 'backend/services/normalize-video.test.ts';
+      const source = 'export function normalizeVideo(value: string) { return value; }';
+      await repo.fileWriter(sourcePath, source);
+      let testCalls = 0;
+      let commits = 0;
+      const proof = await runIVXAutonomousCoder({
+        taskId: `landing-remediation:fixture:${failure}`, goal: `Trim whitespace in ${sourcePath}`,
+        executionMode: 'code_change', ownerId: 'test-owner', approvalPolicy: 'owner_gated', projectRoot: repo.root,
+        maxLlmCalls: 1, fileReader: repo.fileReader, fileWriter: repo.fileWriter,
+        llmCaller: async () => JSON.stringify({ rootCause: 'untrimmed URL', technicalPlan: 'trim whitespace', operations: [
+          { path: sourcePath, kind: 'replace_exact', oldText: 'return value;', newText: 'return value.trim();', reason: 'normalize input' },
+          { path: testPath, kind: 'create_file', oldText: '', newText: 'import { test } from "node:test"; import assert from "node:assert/strict"; import { normalizeVideo } from "./normalize-video"; test("trims input", () => assert.equal(normalizeVideo(" video "), "video"));', reason: 'regression' },
+        ] }),
+        testRunner: async (cwd, command) => {
+          if (command.startsWith('node --import tsx --test ') && ++testCalls === 1) {
+            expect(await repo.fileReader(sourcePath)).toBe(source);
+            if (failure === 'runner-exception') throw new Error('fixture runner unavailable');
+            return { command, ok: false, exitCode: 1, stdoutTail: '', stderrTail: 'ERR_MODULE_NOT_FOUND', durationMs: 1 };
+          }
+          expect(await repo.fileReader(sourcePath)).toContain('return value.trim();');
+          return runAutonomousCoderCommand(cwd, command);
+        },
+        commitFn: async (_paths, branch) => { commits += 1; return { commitSha: 'must-not-commit', commitUrl: 'https://example.test/commit', branch }; },
+        ...prAndCiMocks(), autoMergePr: true,
+      });
+      expect(commits).toBe(0);
+      expect(proof.prMerged).toBe(false);
+      expect(proof.iterations[0].failureSummary).toContain('REPAIR_REGRESSION_');
+      expect(await repo.fileReader(sourcePath)).toBe(source);
+      expect(existsSync(path.join(repo.root, testPath))).toBe(false);
+    });
+  }
 
   it('reads and edits the exact Landing source after the backend index is full, and runs its regression test', async () => {
     const repo = await makeIsolatedRepo('landing-repair');
