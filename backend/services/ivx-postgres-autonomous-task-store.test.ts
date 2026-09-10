@@ -14,6 +14,7 @@ import {
   startPostgresAutonomousTasks,
   readPostgresCurrentTasks,
   readPostgresRecoveryTasks,
+  readPostgresLandingTasks,
   readPostgresFleetProcessObservation,
 } from './ivx-postgres-autonomous-task-store';
 
@@ -255,6 +256,24 @@ test('coalesces concurrent current-state observers without caching stale results
   results[0][0].taskId = 'modified';
   expect(results[1][0].taskId).toBe('observation-1');
   expect((await readPostgresCurrentTasks(['RUNNING', 'LEASED']))[0].taskId).toBe('observation-2');
+});
+
+test('112 current-SHA Landing observers share one read without mixing deployments or retaining stale evidence', async () => {
+  configureAtomicQueue();
+  let reads = 0;
+  globalThis.fetch = (async input => {
+    const version = ++reads;
+    const filter = new URL(String(input)).searchParams.get('or');
+    expect(filter).toContain('landing-p0-patrol:');
+    await new Promise(resolve => setTimeout(resolve, 5));
+    return Response.json([{ payload: { taskId: `landing-${version}` } }]);
+  }) as typeof fetch;
+  const rows = await Promise.all(Array.from({ length: 112 }, () => readPostgresLandingTasks('a'.repeat(40))));
+  expect(reads).toBe(1);
+  rows[0][0].taskId = 'changed';
+  expect(rows[1][0].taskId).toBe('landing-1');
+  await Promise.all([readPostgresLandingTasks('a'.repeat(40)), readPostgresLandingTasks('b'.repeat(40))]);
+  expect(reads).toBe(3);
 });
 
 test('releases a failed shared observation so the next read can recover', async () => {
