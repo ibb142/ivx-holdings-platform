@@ -2311,7 +2311,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // Call the LLM for a lightweight plan first, then use only the plan-identified
     // files for patch generation. This splits the cognitive load and reduces
     // context from 30 files × 30k chars to just the relevant files.
-    let patchContextFiles = plannedContextFiles ?? inspectedFiles;
+    let patchContextFiles: { path: string; content: string }[] = plannedContextFiles ?? inspectedFiles;
     if (iterationCount === 1 && !taskPlan && (!input.llmCaller || input.planCaller)) {
       const planRequestId = `ac-plan-${randomUUID()}`;
       stageTrace = createStageTrace(planRequestId, 45_000);
