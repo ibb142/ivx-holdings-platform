@@ -74,6 +74,7 @@ try {
     blockedTelemetry = Promise.allSettled([store.readPostgresFleetSloTasks().finally(() => { telemetryFinished = true; })]);
     let telemetryBlocked = false;
     for (let attempt = 0; attempt < 40; attempt++) {
+      await admin.query('select pg_stat_clear_snapshot()');
       telemetryBlocked = Number((await admin.query("select count(*) from pg_stat_activity where application_name='ivx_telemetry' and wait_event_type='Lock'")).rows[0].count) === 1;
       if (telemetryBlocked) break;
       await new Promise(resolve => setTimeout(resolve, 25));
