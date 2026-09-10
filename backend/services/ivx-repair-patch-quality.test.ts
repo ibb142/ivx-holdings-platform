@@ -15,3 +15,8 @@ it('requires a changed regression test with a changed implementation', () => {
 it('does not prohibit an explicit owner task to improve diagnostics', () => {
   expect(() => assertRepairPatchQuality('owner-request', [{ path: 'backend/api/worker.ts', oldText: '', newText: 'console.info("observed");' }])).not.toThrow();
 });
+it('also requires regression coverage for diagnostic BUG_FIX jobs without a Landing task prefix', () => {
+  const patch = { path: 'backend/api/worker.ts', oldText: 'const cacheTtl = 120;', newText: 'const cacheTtl = 180;' };
+  expect(() => assertRepairPatchQuality('ivx-worker-incident', [patch], '[TEMPLATE_MODE:BUG_FIX] Repair a slow endpoint')).toThrow('REPAIR_REGRESSION_TEST_REQUIRED');
+  expect(() => assertRepairPatchQuality('ivx-worker-incident', [patch], '[AUTONOMOUS_DIAGNOSTIC_DATA] Repair observed failure')).toThrow('REPAIR_REGRESSION_TEST_REQUIRED');
+});

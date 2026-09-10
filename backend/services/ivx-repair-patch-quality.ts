@@ -8,8 +8,13 @@ function withoutDiagnostics(source: string): string {
     .replace(/[\s{}]/g, '');
 }
 
-export function assertRepairPatchQuality(taskId: string, operations: Operation[]): void {
-  if (!/^(fleet-reasoning|landing-remediation):/.test(taskId)) return;
+export function requiresRepairRegression(taskId: string, goal = ''): boolean {
+  return /^(fleet-reasoning|landing-remediation):/.test(taskId)
+    || /\[TEMPLATE_MODE:BUG_FIX\]|\[AUTONOMOUS_DIAGNOSTIC_DATA\]/.test(goal);
+}
+
+export function assertRepairPatchQuality(taskId: string, operations: Operation[], goal = ''): void {
+  if (!requiresRepairRegression(taskId, goal)) return;
   const tests = operations.filter(op => /\.(test|spec)\.[cm]?[jt]sx?$/.test(op.path));
   const source = operations.filter(op => !tests.includes(op) && /\.(?:[cm]?[jt]sx?|css|html)$/.test(op.path));
   if (!source.some(op => withoutDiagnostics(op.oldText) !== withoutDiagnostics(op.newText))) {

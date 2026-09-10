@@ -4,7 +4,7 @@ export function isPrivateRepairGoal(goal: string): boolean {
 }
 
 export function publicRepairGoal(goal: string): string {
-  return isPrivateRepairGoal(goal) || goal.includes('[AUTONOMOUS_DIAGNOSTIC_DATA]') ? 'Scoped application repair' : goal;
+  return isPrivateRepairGoal(goal) || /\[AUTONOMOUS_DIAGNOSTIC_DATA\]|\[TEMPLATE_MODE:BUG_FIX\]/.test(goal) ? 'Scoped application repair' : goal;
 }
 
 export function assertPrivateRepairScope(goal: string, allowedFiles: readonly string[] | undefined, paths: readonly string[]): void {

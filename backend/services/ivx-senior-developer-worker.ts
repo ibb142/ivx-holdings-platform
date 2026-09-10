@@ -75,6 +75,7 @@ import {
   type IVXAutonomousCoderPhase,
   type IVXCiCheckEvidence,
 } from './ivx-autonomous-coder';
+import { assertRepairResumeEvidence } from './ivx-repair-resume-evidence';
 import {
   IVX_FACTORY_ENGINE_MARKER,
   IVX_FACTORY_APPROVAL_PHRASE,
@@ -383,6 +384,7 @@ export type IVXWorkerJobResult = {
    * Output is fingerprinted, not copied: test output can contain credentials. */
   validationEvidence?: {
     command: string;
+    phase?: 'regression_baseline';
     kind: 'test' | 'typecheck' | 'other';
     ok: boolean;
     exitCode: number | null;
@@ -919,6 +921,20 @@ function autonomousCoderMutationProofError(proof: IVXAutonomousCoderProof): stri
   return null;
 }
 
+function validationEvidenceFromCommands(commands: IVXAutonomousCoderProof['commandsRun']): NonNullable<IVXWorkerJobResult['validationEvidence']> {
+  return commands.slice(0, 24).map(cmd => ({
+    command: cmd.command.slice(0, 1000),
+    ...(cmd.phase ? { phase: cmd.phase } : {}),
+    kind: /(?:^|\s)(?:test|--test)(?:\s|$)/.test(cmd.command) ? 'test' as const
+      : /(?:^|[\s/])tsc(?:\s|$)|--noEmit\b/.test(cmd.command) ? 'typecheck' as const : 'other' as const,
+    ok: cmd.ok,
+    exitCode: cmd.exitCode,
+    durationMs: cmd.durationMs,
+    stdoutHash: createHash('sha256').update(cmd.stdoutTail).digest('hex'),
+    stderrHash: createHash('sha256').update(cmd.stderrTail).digest('hex'),
+  }));
+}
+
 export function summarizeAutonomousCoderProof(
   jobId: string,
   proof: IVXAutonomousCoderProof,
@@ -966,16 +982,7 @@ export function summarizeAutonomousCoderProof(
     healthResponse: proof.healthResponse,
     versionResponse: proof.versionResponse,
     generatedFeatureSlug: null,
-    validationEvidence: proof.commandsRun.slice(0, 24).map(cmd => ({
-      command: cmd.command.slice(0, 1000),
-      kind: /(?:^|\s)(?:test|--test)(?:\s|$)/.test(cmd.command) ? 'test' as const
-        : /(?:^|[\s/])tsc(?:\s|$)|--noEmit\b/.test(cmd.command) ? 'typecheck' as const : 'other' as const,
-      ok: cmd.ok,
-      exitCode: cmd.exitCode,
-      durationMs: cmd.durationMs,
-      stdoutHash: createHash('sha256').update(cmd.stdoutTail).digest('hex'),
-      stderrHash: createHash('sha256').update(cmd.stderrTail).digest('hex'),
-    })),
+    validationEvidence: validationEvidenceFromCommands(proof.commandsRun),
     auditFiles: { json: '', jsonl: '' },
     finalStatus,
     error: mutationProofError ?? proof.error,
@@ -1235,6 +1242,7 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     filesChanged: job.result?.changedFiles ?? [],
     beforeMerge: async () => {
       if (controller.cancelled) throw new Error('Worker lease lost before resumed merge');
+      assertRepairResumeEvidence(jobId, job.input.goal, job.result?.validationEvidence);
       await updateJob(jobId, { lastHeartbeatAt: nowIso() });
     },
     onPhase: (phase, detail) => {
@@ -1243,6 +1251,11 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     },
   });
   const result = summarizeAutonomousCoderProof(jobId, proof);
+  // CI resume executes no new validation. Retain the same commit's persisted
+  // receipts, including the original failing regression, through a restart.
+  if (!result.validationEvidence?.length && job.result?.commitSha === commitSha) {
+    result.validationEvidence = job.result.validationEvidence ?? [];
+  }
   const finalized = finalizeResultWithStateRecord(job, result);
   const status: IVXWorkerJobStatus = finalized.finalStatus === 'COMPLETE'
     ? 'completed'
@@ -1962,10 +1975,10 @@ export function finalizeResultWithStateRecord(
     commands: (result.validationEvidence ?? []).map(cmd => ({
       command: cmd.command,
       exit_code: cmd.exitCode,
-      output_summary: `${cmd.ok ? 'PASS' : 'FAIL'}; duration_ms=${cmd.durationMs}; stdout_sha256=${cmd.stdoutHash}; stderr_sha256=${cmd.stderrHash}`,
+      output_summary: `${cmd.ok ? 'PASS' : 'FAIL'}; phase=${cmd.phase ?? 'validation'}; duration_ms=${cmd.durationMs}; stdout_sha256=${cmd.stdoutHash}; stderr_sha256=${cmd.stderrHash}`,
     })),
     tests: (result.validationEvidence ?? []).filter(cmd => cmd.kind === 'test').map(cmd => ({
-      name: cmd.command,
+      name: `${cmd.phase ? `[${cmd.phase}] ` : ''}${cmd.command}`,
       command: cmd.command,
       passed: cmd.ok,
       duration_ms: cmd.durationMs,
@@ -2535,8 +2548,9 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         // main-branch commit, etc.), the recovery sweep can still find the
         // commit on the ivx-autonomous branch and recover the job to COMPLETED
         // instead of orphaning it at COMMITTING 65% with commitSha=''.
-        onCommitLanded: ({ commitSha, commitUrl, branch }) => {
-          void updateJob(job.jobId, {
+        onCommitLanded: async ({ commitSha, commitUrl, branch, filesChanged, commandsRun, testsPassed, typecheckPassed }) => {
+          const validationEvidence = validationEvidenceFromCommands(commandsRun);
+          await updateJob(job.jobId, {
             stage: 'COMMITTING',
             status: 'committing',
             progressPercent: STAGE_PROGRESS['COMMITTING'],
@@ -2546,11 +2560,12 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
               goal: job.input.goal.slice(0, 280),
               ok: true,
               endToEndProductionComplete: false,
-              changedFiles: [],
-              testsRun: true,
-              testsPassed: true,
-              typecheckRun: true,
-              typecheckPassed: true,
+              changedFiles: filesChanged,
+              validationEvidence,
+              testsRun: validationEvidence.some(result => result.kind === 'test'),
+              testsPassed,
+              typecheckRun: validationEvidence.some(result => result.kind === 'typecheck'),
+              typecheckPassed,
               buildRun: false,
               commitCreated: true,
               commitSha,
