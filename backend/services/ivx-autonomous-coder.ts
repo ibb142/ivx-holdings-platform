@@ -440,8 +440,11 @@ function stageExceeded(stageStartedAt: number, phase: string): boolean {
   return Date.now() - stageStartedAt > limit;
 }
 
-/** Build a CANCELED proof for early-exit paths. */
-function buildCanceledProof(input: IVXAutonomousCoderInput, startedAt: number, iterations: IVXAutonomousCoderIteration[], commandsRun: IVXAutonomousCoderTestResult[], startingSha: string | null, filesInspected: { path: string }[], rootCause: string, technicalPlan: string, finalPatch: IVXAutonomousCoderPatchOperation[], patchAuthoredBy: 'ivx_llm' | 'ivx_deterministic_fallback' | null, llmCallCount: number, estimatedTokensUsed: number): IVXAutonomousCoderProof {
+type AutonomousStop = { finalStatus: 'CANCELED' | 'BLOCKED'; error: string };
+
+/** Preserve the actual stop cause and completed receipts. A resource limit is
+ * a blocker for the recovery router, never evidence of owner cancellation. */
+function buildStoppedProof(input: IVXAutonomousCoderInput, startedAt: number, iterations: IVXAutonomousCoderIteration[], commandsRun: IVXAutonomousCoderTestResult[], startingSha: string | null, filesInspected: { path: string }[], rootCause: string, technicalPlan: string, finalPatch: IVXAutonomousCoderPatchOperation[], patchAuthoredBy: 'ivx_llm' | 'ivx_deterministic_fallback' | null, llmCallCount: number, estimatedTokensUsed: number, stop: AutonomousStop): IVXAutonomousCoderProof {
   return {
     marker: IVX_AUTONOMOUS_CODER_MARKER,
     taskId: input.taskId,
@@ -478,8 +481,8 @@ function buildCanceledProof(input: IVXAutonomousCoderInput, startedAt: number, i
     versionResponse: null,
     iterationCount: iterations.length,
     durationMs: Date.now() - startedAt,
-    finalStatus: 'CANCELED',
-    error: 'JOB_CANCELED: owner requested cancellation before the job reached a terminal state.',
+    finalStatus: stop.finalStatus,
+    error: stop.error,
     generatedAt: nowIso(),
     secretValuesReturned: false,
     patchAuthoredBy,
@@ -2057,22 +2060,25 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     currentStageStartedAt = Date.now();
     currentStagePhase = phase;
   };
-  const checkStop = (phase: IVXAutonomousCoderPhase, iteration: number, detail: string): boolean => {
+  const checkStop = (phase: IVXAutonomousCoderPhase, iteration: number, detail: string): AutonomousStop | null => {
     input.heartbeat?.({ phase, iteration, elapsedMs: Date.now() - startedAt, detail });
-    if (isCanceled(input)) return true;
-    if (runtimeExceeded(startedAt, maxRuntimeMs)) return true;
+    if (isCanceled(input)) return { finalStatus: 'CANCELED', error: 'JOB_CANCELED: owner requested cancellation before the job reached a terminal state.' };
+    if (runtimeExceeded(startedAt, maxRuntimeMs)) return { finalStatus: 'BLOCKED',
+      error: `RUNTIME_LIMIT_EXCEEDED: elapsed ${Date.now() - startedAt} ms exceeded the job limit of ${maxRuntimeMs} ms at ${currentStagePhase}.` };
     // Per-stage timeout: check the CURRENT stage's wall-clock elapsed against
     // STAGE_TIMEOUTS_MS. The phase passed here is the stage we are about to
     // enter; markStageStart should have been called when the prior stage began.
-    if (stageExceeded(currentStageStartedAt, String(currentStagePhase))) return true;
-    return false;
+    if (stageExceeded(currentStageStartedAt, String(currentStagePhase))) return { finalStatus: 'BLOCKED',
+      error: `STAGE_TIMEOUT_EXCEEDED: ${currentStagePhase} elapsed ${Date.now() - currentStageStartedAt} ms exceeded its limit of ${STAGE_TIMEOUTS_MS[currentStagePhase]} ms. Inspect the retained command receipts before retrying.` };
+    return null;
   };
 
   // ── INSPECT ──────────────────────────────────────────────────────────────
   onPhase?.('inspecting', 'Indexing repository + picking inspection targets.');
   markStageStart('inspecting');
-  if (checkStop('inspecting', 0, 'pre-inspect')) {
-    return buildCanceledProof(input, startedAt, iterations, commandsRun, null, [], '', '', [], null, llmCallCount, estimatedTokensUsed);
+  const inspectionStop = checkStop('inspecting', 0, 'pre-inspect');
+  if (inspectionStop) {
+    return buildStoppedProof(input, startedAt, iterations, commandsRun, null, [], '', '', [], null, llmCallCount, estimatedTokensUsed, inspectionStop);
   }
   const projectRoot = resolveProjectRoot(input);
   const backendFiles: string[] = [];
@@ -2284,8 +2290,9 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // Cost / resource controls: check cancel + runtime + token budget at the
     // start of each iteration. If the budget is exceeded, BLOCKED with a real
     // reason instead of making another LLM call.
-    if (checkStop('planning', iterationCount, `pre-iteration-${iterationCount}`)) {
-      return buildCanceledProof(input, startedAt, iterations, commandsRun, startingSha, inspectedFiles, rootCause, technicalPlan, finalPatch, patchAuthoredBy, llmCallCount, estimatedTokensUsed);
+    const iterationStop = checkStop('planning', iterationCount, `pre-iteration-${iterationCount}`);
+    if (iterationStop) {
+      return buildStoppedProof(input, startedAt, iterations, commandsRun, startingSha, inspectedFiles, rootCause, technicalPlan, finalPatch, patchAuthoredBy, llmCallCount, estimatedTokensUsed, iterationStop);
     }
     if (tokenBudgetExceeded) {
       const iteration: IVXAutonomousCoderIteration = {

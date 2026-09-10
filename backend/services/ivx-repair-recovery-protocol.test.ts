@@ -10,7 +10,7 @@ test('restores scope and CI lessons from durable failures without weakening the 
     const restarted = JSON.parse(JSON.stringify({ error: 'wrapper '.repeat(150) + error }));
     const lesson = repairRecoveryLesson(restarted.error);
     assert.equal(lesson?.id, id);
-    assert.equal(lesson?.protocol, 'ivx-repair-recovery-protocol-v3');
+    assert.equal(lesson?.protocol, 'ivx-repair-recovery-protocol-v4');
     assert.match(lesson!.instruction, id === 'CI_REGRESSION' ? /Preserve existing assertions/ : /Do not substitute a different business rule/);
   }
 });
@@ -22,6 +22,16 @@ test('recognizes unsupported test globals and imports instead of repeating the s
     assert.match(lesson!.instruction, /built-in fetch/);
     assert.match(lesson!.instruction, /node:test/);
   }
+});
+
+test('recovers a bounded timeout lesson without treating owner cancellation as a timeout', () => {
+  for (const failure of ['STAGE_TIMEOUT_EXCEEDED: testing elapsed 121000 ms', 'RUNTIME_LIMIT_EXCEEDED: job limit exceeded']) {
+    const lesson = repairRecoveryLesson(failure);
+    assert.equal(lesson?.id, 'EXECUTION_TIMEOUT');
+    assert.match(lesson!.instruction, /Preserve the time limits and owner stops/);
+    assert.match(lesson!.instruction, /do not boot a production server/);
+  }
+  assert.equal(repairRecoveryLesson('JOB_CANCELED: owner requested cancellation'), null);
 });
 
 test('a missing patch target teaches explicit file creation without relaxing inspection', () => {

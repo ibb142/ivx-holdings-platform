@@ -102,6 +102,12 @@ async function authContext() {
   });
   return context;
 }
+async function closeAuthContext(context) {
+  // Finish local Auth/Postgres forwarding before disposing its request client.
+  // Waiting preserves handler failures; never silence them with ignoreErrors.
+  await context.unrouteAll({ behavior: 'wait' });
+  await context.close();
+}
 try {
   if (unit === 'registration.zip-code') {
     const before = await admin.auth.admin.listUsers();
@@ -144,8 +150,7 @@ try {
     assert.equal(profile.error, null);
     assert.equal(profile.data.email, input.email);
     checks.push('loading disables submission; outage preserves inputs; retry creates exactly one real Auth identity');
-    await context.unrouteAll({ behavior: 'wait' });
-    await context.close();
+    await closeAuthContext(context);
   } else {
     const member = await register();
     if (unit === 'registration.optional-picture') {
@@ -208,13 +213,14 @@ try {
         assert.equal(await signedOut.locator('#invest-authenticated-view').isVisible(), false);
       }
       checks.push('real password session accepted in existing account UI; persistence/logout checked when assigned');
-      await context.unrouteAll({ behavior: 'wait' });
-      await context.close();
+      await closeAuthContext(context);
     }
   }
 } catch (e) { error = e.message; process.exitCode = 1; }
 finally {
-  for (const context of browser?.contexts() || []) await context.unrouteAll({ behavior: 'wait' });
+  try {
+    for (const context of browser?.contexts() || []) await closeAuthContext(context);
+  } catch (e) { error ||= e.message; process.exitCode = 1; }
   await browser?.close();
   for (const id of created) { await admin.auth.admin.deleteUser(id); }
   server.stop(true);
