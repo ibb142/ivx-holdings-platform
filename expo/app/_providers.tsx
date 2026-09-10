@@ -25,6 +25,7 @@ import { EarnProvider } from '@/lib/earn-context';
 import { EmailProvider } from '@/lib/email-context';
 import { NetworkProvider } from '@/lib/network-context';
 import { PublicChatSessionProvider } from '@/lib/public-chat-session-context';
+import { IntroProvider } from '@/lib/intro-context';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -193,8 +194,10 @@ export function AppProviders() {
                                       <ProviderBoundary name="Network">
                                         <NetworkProvider>
                                           <PublicChatSessionProvider>
-                                            <StatusBar style="light" />
-                                            <AppStack />
+                                            <IntroProvider>
+                                              <StatusBar style="light" />
+                                              <AppStack />
+                                            </IntroProvider>
                                           </PublicChatSessionProvider>
                                         </NetworkProvider>
                                       </ProviderBoundary>
