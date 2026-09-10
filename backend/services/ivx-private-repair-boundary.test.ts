@@ -4,6 +4,8 @@ import { assertPrivateRepairScope, publicRepairGoal } from './ivx-private-repair
 const privateGoal = '[TEMPLATE_MODE:BUG_FIX] [OWNER_AUDIT:synthetic:row] Private acceptance text';
 test('private task metadata is replaced before public PR formatting', () => {
   assert.equal(publicRepairGoal(privateGoal), 'Scoped application repair');
+  assert.equal(publicRepairGoal('[TEMPLATE_MODE:BUG_FIX] Automated incident with private probe details'), 'Scoped application repair');
+  assert.equal(publicRepairGoal('[AUTONOMOUS_DIAGNOSTIC_DATA] Private diagnostic observations'), 'Scoped application repair');
   assert.equal(publicRepairGoal('Public application repair'), 'Public application repair');
 });
 test('private writes require an explicit file set', () => {
