@@ -75,6 +75,7 @@ import {
   type IVXAutonomousCoderPhase,
   type IVXCiCheckEvidence,
 } from './ivx-autonomous-coder';
+import { assertRepairResumeEvidence } from './ivx-repair-resume-evidence';
 import {
   IVX_FACTORY_ENGINE_MARKER,
   IVX_FACTORY_APPROVAL_PHRASE,
@@ -1241,6 +1242,7 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     filesChanged: job.result?.changedFiles ?? [],
     beforeMerge: async () => {
       if (controller.cancelled) throw new Error('Worker lease lost before resumed merge');
+      assertRepairResumeEvidence(jobId, job.input.goal, job.result?.validationEvidence);
       await updateJob(jobId, { lastHeartbeatAt: nowIso() });
     },
     onPhase: (phase, detail) => {
