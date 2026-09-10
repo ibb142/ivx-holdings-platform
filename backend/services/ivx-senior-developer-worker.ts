@@ -1086,6 +1086,13 @@ export async function expireStaleJobs(): Promise<string[]> {
     // in this process is alive — its heartbeat is refreshed by the resume's
     // onPhase callbacks. Never expire it out from under the resume.
     if (activeCiResumeJobIds.has(job.jobId)) continue;
+    if (sharedSeniorQueueEnabled()) {
+      // A live physical lease outranks an old phase timestamp. Committed
+      // work belongs to the dedicated recovery below, not generic expiry:
+      // retaining an old lease identity in a FAILED patch blocks the sweep.
+      if (job.result?.commitSha) continue;
+      if (job.leaseExpiresAt && Date.parse(job.leaseExpiresAt) > now) continue;
+    }
     const activityAt = job.lastHeartbeatAt ?? job.startedAt;
     if (!activityAt) continue;
     const activityAtMs = new Date(activityAt).getTime();
@@ -1105,6 +1112,10 @@ export async function expireStaleJobs(): Promise<string[]> {
       job.stageDetail = `Job expired after ${Math.round(STALE_JOB_TIMEOUT_MS / 1000)}s without a worker heartbeat.`;
       job.finishedAt = nowIso();
       job.error = `Stale job expired after heartbeat timeout (${STALE_JOB_TIMEOUT_MS}ms).`;
+      if (sharedSeniorQueueEnabled()) {
+        job.leaseWorkerInstanceId = null;
+        job.leaseExpiresAt = null;
+      }
       expired.push(job.jobId);
     }
   }
@@ -1598,11 +1609,14 @@ async function recoverStuckVerifyingJobs(queue: QueueDoc): Promise<void> {
 
 /**
  * Get the active (in-progress) job for a given owner. Returns null if no active
- * job exists. Also expires stale jobs before checking.
+ * job exists. Local queues expire stale jobs here; shared queues are read-only.
  */
 export async function getActiveJobForOwner(ownerId: string): Promise<IVXWorkerJob | null> {
   if (!ownerId) return null;
-  await expireStaleJobs();
+  // Shared queue reads must not run maintenance against another process's
+  // lease. The dedicated worker sweeps/reclaims expired jobs independently.
+  // Retain an existing job's identity while it waits for that recovery.
+  if (!sharedSeniorQueueEnabled()) await expireStaleJobs();
   const queue = await loadQueue();
   // Find the most recent active job for this owner.
   for (let i = queue.jobs.length - 1; i >= 0; i -= 1) {
@@ -1635,7 +1649,7 @@ export type EnqueueOrAttachResult = {
  * The user's request is NEVER discarded:
  *   - If no active job exists → a new job is created and queued.
  *   - If an active job exists for the same owner → the request attaches to it.
- *   - If the active job is stale → it is expired and a new job is created.
+ *   - Shared jobs retain their identity while workers recover expired leases.
  *
  * Owner approval MUST already be verified by the caller (API boundary).
  */
@@ -1655,7 +1669,7 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
 
   const ownerId = input.ownerId ?? 'default';
 
-  // Check for an existing active job for this owner (also expires stale jobs).
+  // Check for an existing active job; shared-queue maintenance belongs to workers.
   const activeJob = await getActiveJobForOwner(ownerId);
   if (activeJob && (input.taskId && activeJob.input.taskId
     ? input.taskId === activeJob.input.taskId
