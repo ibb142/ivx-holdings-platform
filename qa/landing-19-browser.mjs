@@ -12,6 +12,7 @@ const checks = [];
 let error;
 let failurePage, failureSignals;
 let diagnostics;
+let pendingFeedDetails = [];
 try {
   for (const width of [390, 1280]) {
     const context = await browser.newContext({ viewport: { width, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
@@ -19,12 +20,30 @@ try {
     page.setDefaultTimeout(20_000);
     const errors = [], failures = [];
     const mediaResponses = [];
+    pendingFeedDetails = [];
     failurePage = page;
     failureSignals = { width, errors, failures, mediaResponses };
     page.on('response', (r) => {
       const url = new URL(r.url());
       if (/\/api\/reels(?:\/|$)|\/media\/reels\/|\/videos\//.test(url.pathname)) {
-        mediaResponses.push({ path: url.pathname, status: r.status(), type: r.headers()['content-type'] });
+        const signal = { path: url.pathname, channel: url.searchParams.get('type'), status: r.status(), type: r.headers()['content-type'] };
+        mediaResponses.push(signal);
+        // Inspect the response already requested by the UI. Do not issue extra
+        // public requests or expose viewer identifiers and response bodies.
+        if (url.pathname === '/api/reels' && mediaResponses.length <= 20) {
+          pendingFeedDetails.push(r.json().then((body) => {
+            signal.count = body.count;
+            signal.total = body.total;
+            signal.feedType = body.feed_type;
+            signal.videoCount = Array.isArray(body.videos) ? body.videos.length : null;
+            const message = typeof body.error === 'string' ? body.error : '';
+            signal.errorClass = /timeout|timed out/i.test(message) ? 'UPSTREAM_TIMEOUT'
+              : /cloudflare|<html|<!doctype/i.test(message) ? 'UPSTREAM_HTML_ERROR'
+              : /column|relation|schema/i.test(message) ? 'DATABASE_SCHEMA_ERROR'
+              : /fetch failed|network/i.test(message) ? 'UPSTREAM_NETWORK_ERROR'
+              : message ? 'OTHER_API_ERROR' : null;
+          }).catch(() => { signal.bodyUnavailable = true; }));
+        }
       }
     });
     page.on('pageerror', (e) => errors.push(e.message));
@@ -209,6 +228,15 @@ try {
       sources: [...v.querySelectorAll('source')].map((s) => ({ src: s.src, type: s.type })),
       retryVisible: Boolean(v.parentNode.querySelector('.ivx-home-reel-retry:not([hidden])')),
     }));
+    diagnostics.modalVideos = await failurePage.locator('#ivxReels .ivxr-slide video').evaluateAll((videos) => videos.slice(0, 3).map((v) => ({
+      sourcePath: v.currentSrc ? new URL(v.currentSrc).pathname : '',
+      readyState: v.readyState, networkState: v.networkState, paused: v.paused,
+      width: v.videoWidth, errorCode: v.error?.code ?? null,
+    })));
+    let timeout;
+    try {
+      await Promise.race([Promise.allSettled(pendingFeedDetails), new Promise((resolve) => { timeout = setTimeout(resolve, 1000); })]);
+    } finally { clearTimeout(timeout); }
   } catch (diagnosticError) { diagnostics.captureError = diagnosticError.message; }
 }
 finally {
