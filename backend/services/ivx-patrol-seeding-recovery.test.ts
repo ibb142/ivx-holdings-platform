@@ -49,6 +49,9 @@ test('seed outage does not prevent claims of already durable current-mission wor
       releaseLease:async()=>{throw Error('no lease was claimed');}
     }));
     mock.module('./backend/services/ivx-autonomous-work-manager.ts',()=>({ensureAutonomousManagerBacklog:async()=>{},getAutonomousWorkManagerStatus:()=>({})}));
+    mock.module('./backend/services/ivx-technical-schedule.ts',()=>({
+      ensureTechnicalScheduleSeeded:async()=>{throw Error('technical seed offline');}
+    }));
     mock.module('./backend/services/ivx-autonomous-decision-quality.ts',()=>({getAutonomousDecisionQualityStatus:()=>({}),runAutonomousDecisionQualityLoop:async()=>{}}));
     mock.module('./backend/services/ivx-autonomous-semantic-360.ts',()=>({getAutonomousSemantic360Status:()=>({}),runAutonomousSemantic360:async()=>{}}));
     mock.module('./backend/services/ivx-autonomous-control-policy.ts',()=>({autonomousRuntimeEnforcerEnabled:()=>true}));
@@ -75,5 +78,6 @@ test('seed outage does not prevent claims of already durable current-mission wor
     if(claims<1)throw Error('existing work starved by seed outage');
   `],{cwd:new URL('../../',import.meta.url).pathname,stdout:'pipe',stderr:'pipe',timeout:10000});
   const [code,err]=await Promise.all([child.exited,new Response(child.stderr).text()]);
+  if(code!==0)throw Error(err || 'Patrol recovery child failed without diagnostics');
   expect(err).not.toContain('existing work starved');expect(code).toBe(0);
 });
