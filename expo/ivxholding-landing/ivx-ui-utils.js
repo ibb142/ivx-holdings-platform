@@ -7,7 +7,7 @@
 (function() {
   var scrollKey = 'ivx_scroll_' + location.pathname;
   window.addEventListener('pagehide', function() {
-    try { sessionStorage.setItem(scrollKey, String(window.scrollY)); } catch(e) {}
+    try { sessionStorage.setItem(scrollKey, String(window.scrollY)); } catch(e) { console.error('SessionStorage Error:', e.message); }
   });
   window.addEventListener('pageshow', function(event) {
     if (event.persisted) {
