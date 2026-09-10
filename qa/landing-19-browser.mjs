@@ -60,6 +60,26 @@ try {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(data) });
       });
     }
+    if (process.env.LANDING_PREVIEW_SOURCE && unit === 'reels.scroll-navigation-browser') {
+      let releaseOldChannel;
+      const changedChannel = new Promise((resolve) => { releaseOldChannel = resolve; });
+      let heldInitial = false;
+      await page.route('https://api.ivxholding.com/api/reels?**', async (route) => {
+        const url = new URL(route.request().url());
+        if (url.searchParams.get('type') === 'reel') {
+          releaseOldChannel();
+          return route.continue();
+        }
+        if (!heldInitial && url.searchParams.get('limit') === '6' && !url.searchParams.has('type') && !url.searchParams.has('channel')) {
+          heldInitial = true;
+          let timer;
+          await Promise.race([changedChannel, new Promise((resolve) => { timer = setTimeout(resolve, 5000); })]);
+          clearTimeout(timer);
+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ videos: [{ id: 'stale-channel-fixture', title: 'Stale channel response', video_url: 'https://ivxholding.com/qa-stale-channel.mp4' }] }) });
+        }
+        return route.continue();
+      });
+    }
     if (process.env.LANDING_PREVIEW_SOURCE && unit === 'reels.production-render-browser') {
       // Reproduce the observed startup failure before accepting the real feed.
       let injectedUnavailable = false;
