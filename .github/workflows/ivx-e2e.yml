@@ -15,14 +15,16 @@ jobs:
   mobile-impact:
     name: Mobile impact classifier
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       mobile: ${{ steps.detect.outputs.mobile }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          # Keep ancestry for merge-base without downloading historical file bodies.
-          filter: blob:none
+          # The PR merge commit and its two parents contain both exact trees.
+          fetch-depth: 2
+      - name: Verify shallow PR classification
+        run: node --test qa/ivx-mobile-impact-shallow.test.mjs
       - name: Detect mobile-impacting changes
         id: detect
         shell: bash
@@ -33,9 +35,14 @@ jobs:
             echo 'MOBILE_IMPACT=FULL_MAIN_GATE'
             exit 0
           fi
-          # Compare with the immutable event base; a shallow fetch of moving main can sever ancestry.
-          base=$(git merge-base HEAD "${{ github.event.pull_request.base.sha }}")
-          git diff --name-only "$base"...HEAD > "$RUNNER_TEMP/changed-files.txt"
+          # Compare exact trees; full repository ancestry is unnecessary.
+          base="${{ github.event.pull_request.base.sha }}"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$base" = "$(git cat-file -p HEAD | awk '/^parent / { print $2; exit }')" || {
+            echo '::error::PR base does not match the tested merge commit.'
+            exit 1
+          }
+          git diff --no-renames --name-only "$base" HEAD > "$RUNNER_TEMP/changed-files.txt"
           cat "$RUNNER_TEMP/changed-files.txt"
           mobile=false
           while IFS= read -r path; do
