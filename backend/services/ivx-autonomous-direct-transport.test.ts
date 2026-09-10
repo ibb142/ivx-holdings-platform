@@ -3,12 +3,21 @@ import { expect, test } from 'bun:test';
 for (const fails of [false, true]) test(`configured same-project queue selects one direct transport; fails=${fails}`, async () => {
   const child = Bun.spawn([process.execPath, '-e', `
     import { mock } from 'bun:test';
-    let queries=0, restCalls=0;
+    let queries=0, restCalls=0, releases=0; const boundaries=[];
     mock.module('pg',()=>({Client:class {},Pool:class {
       constructor(config) {
         if(config.ssl.rejectUnauthorized!==true || !config.ssl.ca?.length)throw new Error('TLS not verified');
         if(config.connectionString.includes('sslmode'))throw new Error('URL overrides TLS');
         if(config.connectionTimeoutMillis!==20000 || config.statement_timeout!==5000)throw new Error('unbounded connection');
+      }
+      async connect() {
+        return {
+          query:async(sql,values)=>{
+            if(/^(BEGIN|SET LOCAL|COMMIT|ROLLBACK)/.test(sql)){boundaries.push(sql);return {rows:[]};}
+            return this.query(sql,values);
+          },
+          release:(destroy)=>{if(destroy!==${fails})throw new Error('failed connection was reused');releases++;}
+        };
       }
       async query(sql, values) {
         queries++;
@@ -35,6 +44,8 @@ for (const fails of [false, true]) test(`configured same-project queue selects o
       if(failed!==${fails})throw new Error('incorrect failure result');
     }
     if(restCalls!==0 || queries!==4)throw new Error('transport replay or unexpected call count');
+    if(releases!==2 || boundaries.filter(x=>x==='BEGIN').length!==2)throw new Error('RPC transaction missing');
+    if(boundaries.filter(x=>x==='${fails ? 'ROLLBACK' : 'COMMIT'}').length!==2)throw new Error('incorrect transaction cleanup');
   `], {stdout:'pipe',stderr:'pipe',timeout:10000});
   const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
   expect(stderr).toBe('');
