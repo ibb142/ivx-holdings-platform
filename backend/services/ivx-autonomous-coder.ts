@@ -27,6 +27,8 @@
 import { MOBILE_CHECK, verifiedMobileSkip } from './ivx-ci-conditional-evidence';
 import { assertPrivateRepairScope, publicRepairGoal } from './ivx-private-repair-boundary';
 import { assertRepairPatchQuality, requiresRepairRegression } from './ivx-repair-patch-quality';
+import { assertLandingRepairScope } from './ivx-landing-repair-scope';
+import { assertRepairTestRuntime, NODE_REPAIR_TEST_GUIDANCE, repairRecoveryLesson } from './ivx-repair-recovery-protocol';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -359,6 +361,8 @@ export type IVXAutonomousCoderInput = {
   rollbackFn?: (commitSha: string, branch: string) => Promise<{ reverted: boolean; revertCommitSha: string | null; error: string | null }>,
   /** Injectable PR creation function for testing. When omitted, the real GitHub API is used. */
   prFn?: (branch: string, title: string, body: string) => Promise<{ prNumber: number; prUrl: string; merged: boolean; mergeCommitSha: string | null }>;
+  /** Reconcile owner closure while waiting; a closed PR cannot occupy a repair lane. */
+  prStateFn?: (prNumber: number) => Promise<{ state: 'open' | 'closed' | 'unknown'; merged: boolean; mergeCommitSha: string | null }>;
   /** Injectable merge function for testing. When omitted, the real GitHub API is used. */
   mergeFn?: (prNumber: number, commitMessage: string) => Promise<{ merged: boolean; mergeCommitSha: string | null }>;
   /** Injectable required-checks fetcher for testing: returns current per-check
@@ -384,9 +388,9 @@ export type IVXAutonomousCoderInput = {
    *  the pull request is created and BEFORE the CI wait begins. Lets the caller
    *  persist the full resume state (commitSha, prNumber, prUrl, branch) so a
    *  worker restart during the CI wait can resume the merge chain instead of
-   *  orphaning the job for the stale sweep to expire. Must never throw; errors
-   *  are swallowed. */
-  onPrCreated?: (info: { commitSha: string; prNumber: number; prUrl: string; branch: string }) => void,
+   *  orphaning the job for the stale sweep to expire. Its persistence must
+   *  finish successfully before CI waiting or merge may begin. */
+  onPrCreated?: (info: { commitSha: string; prNumber: number; prUrl: string; branch: string }) => void | Promise<void>,
 };
 
 export type IVXAutonomousCoderPhase =
@@ -889,6 +893,7 @@ Rules:
 - Repair goals that require regression coverage must include BOTH the functional source operation and a runnable node:test regression operation in the same response.
 - Create regression tests as backend/**/*.test.ts or expo/**/*.test.ts(x); plain JavaScript test paths are outside this engine's patch scope.
 - Repair tests execute with node --import tsx --test. Import every test API explicitly: import { test, describe, it } from 'node:test'; import assert from 'node:assert/strict'. There are no global describe/it/expect APIs and bun:test is unavailable in production.
+- ${NODE_REPAIR_TEST_GUIDANCE}
 - Validation uses NODE_ENV=test and does not inherit production credentials. Use isolated fixtures or dependency injection; do not depend on live database contents or call live write endpoints.
 - A repair regression must fail with ERR_ASSERTION against the original implementation and pass after the patch. Test an existing behavior through its real entry point. Already-passing tests, missing imports and tool failures do not reproduce the defect.
 - If Node reports ReferenceError for a test API, fix its import and assertions in the test. Never suppress the error, skip the test or weaken the assertion. On revision, the failed patch has been reverted; use the original source shown in FILE CONTENTS.
@@ -919,7 +924,9 @@ function buildPatchUserPrompt(goal: string, files: { path: string; content: stri
   const failureBlock = failureContext
     ? `\n\n--- PREVIOUS ATTEMPT FAILED ---\n${failureContext}\n\nRevise the patch to fix the failure. Output the corrected JSON.`
     : '';
-  return `GOAL:\n${goal}\n\nFILES:\n${fileBlocks}${failureBlock}`;
+  const lesson = repairRecoveryLesson(failureContext);
+  const recoveryBlock = lesson ? `\n\n--- VERSIONED RECOVERY RULE ${lesson.id} ---\n${lesson.instruction}` : '';
+  return `GOAL:\n${goal}\n\nFILES:\n${fileBlocks}${failureBlock}${recoveryBlock}`;
 }
 
 function parseLLMPatchResponse(response: string): { rootCause: string; technicalPlan: string; operations: IVXAutonomousCoderPatchOperation[] } | null {
@@ -1681,13 +1688,23 @@ async function waitForRequiredChecksGreen(
   commitSha: string,
   input: IVXAutonomousCoderInput,
   onPhase?: (phase: IVXAutonomousCoderPhase, detail: string) => void,
-): Promise<{ green: boolean; evidence: IVXCiCheckEvidence[]; timedOut: boolean; waitMs: number }> {
+  prNumber?: number,
+): Promise<{ green: boolean; evidence: IVXCiCheckEvidence[]; timedOut: boolean; waitMs: number; blocker?: string }> {
   const startedAt = Date.now();
   const timeoutMs = input.ciWaitTimeoutMs ?? DEFAULT_CI_WAIT_TIMEOUT_MS;
   const intervalMs = input.ciPollIntervalMs ?? DEFAULT_CI_POLL_INTERVAL_MS;
   const graceMs = input.ciNaGraceMs ?? DEFAULT_CI_NA_GRACE_MS;
   let last: IVXCiCheckEvidence[] = [];
   for (;;) {
+    // CI can finish long after an owner closes a rejected repair. Reconcile
+    // each poll so that the durable worker can finish this job and release its lane.
+    if (prNumber != null) {
+      const pr = input.prStateFn ? await input.prStateFn(prNumber) : await fetchPullRequestState(prNumber);
+      const blocker = pr.state === 'closed' && !pr.merged
+        ? `PR #${prNumber} is CLOSED without merging. CI wait stopped; task BLOCKED.`
+        : pr.state === 'unknown' ? `PR #${prNumber} state is unknown. CI wait stopped; task BLOCKED.` : undefined;
+      if (blocker) return { green: false, evidence: last, timedOut: false, waitMs: Date.now() - startedAt, blocker };
+    }
     const evidence = input.requiredChecksFn
       ? await input.requiredChecksFn(commitSha)
       : await fetchRequiredChecksForCommit(commitSha);
@@ -2159,6 +2176,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       let applyError: string | null = null;
       try {
         assertPrivateRepairScope(input.goal, input.allowedFiles, fallback.operations.map(op => op.path));
+        assertRepairPatchQuality(input.taskId, fallback.operations, input.goal);
         for (const op of fallback.operations) {
           await applyPatchOperation(op, projectRoot, input.fileWriter, input.fileReader);
         }
@@ -2463,10 +2481,6 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // the patch. A missing compiler cannot establish a passing baseline.
     const baselineFilePaths = parsed.operations.filter(op => op.kind === 'replace_exact' && /\.tsx?$/.test(op.path)).map(op => op.path);
     let baselineTsErrorCount = 0;
-    if (baselineFilePaths.length && !input.testRunner) {
-      const baseResult = await runAutonomousCoderCommand(projectRoot, scopedTypecheckCommand(projectRoot, baselineFilePaths));
-      baselineTsErrorCount = countTsErrors(baseResult.stderrTail + baseResult.stdoutTail);
-    }
 
     // ── APPLY PATCH ──────────────────────────────────────────────────────
     onPhase?.('patching', `Iteration ${iterationCount}: applying ${parsed.operations.length} patch operation(s).`);
@@ -2482,6 +2496,11 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       if (requiresRegression) {
         const unseen = parsed.operations.find(op => op.kind === 'replace_exact' && !patchContextFiles.some(file => file.path === op.path));
         if (unseen) throw new Error(`REPAIR_SOURCE_NOT_INSPECTED: ${unseen.path}. Modify only source actually read, or request a real existing path on revision.`);
+        await assertRepairTestRuntime(parsed.operations, input.fileReader ?? (async rel => readFile(path.join(projectRoot, rel), 'utf8')));
+      }
+      if (!requiresRegression && baselineFilePaths.length && !input.testRunner) {
+        const baseResult = await runAutonomousCoderCommand(projectRoot, scopedTypecheckCommand(projectRoot, baselineFilePaths));
+        baselineTsErrorCount = countTsErrors(baseResult.stderrTail + baseResult.stdoutTail);
       }
       if (requiresRegression) {
         const read = input.fileReader ?? (async (rel: string) => readFile(path.join(projectRoot, rel), 'utf8'));
@@ -2606,9 +2625,10 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       ? await input.testRunner(projectRoot, tscCmd)
       : await runAutonomousCoderCommand(projectRoot, tscCmd);
     commandsRun.push(typecheckResult);
-    // V6.15: Only fail typecheck if the patch INTRODUCED new errors.
+    // Regression repairs require a clean compile; legacy non-repair edits
+    // retain the existing baseline-error policy.
     const postPatchTsErrors = countTsErrors((typecheckResult.stderrTail || '') + (typecheckResult.stdoutTail || ''));
-    typecheckPassed = typecheckResult.ok || (postPatchTsErrors > 0 && postPatchTsErrors <= baselineTsErrorCount);
+    typecheckPassed = typecheckResult.ok || (!requiresRegression && postPatchTsErrors > 0 && postPatchTsErrors <= baselineTsErrorCount);
     buildRun = true;
 
     // ── DETERMINISTIC CONTENT-CHANGE CHECK ──────────────────────────────
@@ -2755,6 +2775,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           ? approvedProductionBranch
           : `${AUTONOMOUS_CODER_BRANCH}-${sanitizeBranchSuffix(input.taskId)}`;
         assertPrivateRepairScope(input.goal, input.allowedFiles, filesChanged);
+        assertLandingRepairScope(input.taskId, filesChanged);
         const commitResult = input.commitFn
           ? await input.commitFn(filesChanged, branchName)
           : await commitFilesViaGitDataApi(filesChanged, branchName, buildAttributionTrailers(input));
@@ -2814,10 +2835,9 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         prCreated = true;
         // FINAL CLOSEOUT 2026-08-23: persist PR state the instant the PR exists,
         // BEFORE the CI wait, so a worker restart mid-wait can resume the chain
-        // (see resumeIVXAutonomousCoderFromCiWait). Never throws into the run.
-        try {
-          input.onPrCreated?.({ commitSha, prNumber: prResult.prNumber, prUrl: prResult.prUrl, branch });
-        } catch { /* resilience callback must never break the run */ }
+        // (see resumeIVXAutonomousCoderFromCiWait). Persistence is a required
+        // boundary: failure blocks this run before CI waiting or any merge.
+        await input.onPrCreated?.({ commitSha, prNumber: prResult.prNumber, prUrl: prResult.prUrl, branch });
         onPhase?.('committing', `Pull request created: #${prNumber} — ${prUrl}`);
 
         // Auto-merge when owner-approved via autoMergePr flag. Owner mandate
@@ -2825,7 +2845,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         // every required GitHub check on the head SHA is GREEN.
         if (input.autoMergePr && !prResult.merged) {
           onPhase?.('committing', `Waiting for required CI checks on ${commitSha.slice(0, 12)} before merging PR #${prNumber} (CI-before-merge).`);
-          const ci = await waitForRequiredChecksGreen(commitSha, input, onPhase);
+          const ci = await waitForRequiredChecksGreen(commitSha, input, onPhase, prNumber);
           ciChecksWaited = true;
           ciChecksGreen = ci.green;
           ciCheckEvidence = ci.evidence;
@@ -2838,7 +2858,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
               .filter((e) => !(e.matched && e.status === 'completed' && e.conclusion === 'success'))
               .map((e) => `${e.context}=${e.matched ? `${e.status}/${e.conclusion ?? 'none'}` : 'NOT_REPORTED'}`)
               .join('; ');
-            error = `${ci.timedOut ? 'Required CI checks TIMED OUT' : 'Required CI checks FAILED'} on ${commitSha.slice(0, 12)} — merge NOT attempted. Task BLOCKED, never COMPLETED. Checks: ${failing}. Autonomous may repair and open another PR.`;
+            error = ci.blocker ?? `${ci.timedOut ? 'Required CI checks TIMED OUT' : 'Required CI checks FAILED'} on ${commitSha.slice(0, 12)} — merge NOT attempted. Task BLOCKED, never COMPLETED. Checks: ${failing}. Autonomous may repair and open another PR.`;
             onPhase?.('blocked', error);
           } else {
             onPhase?.('committing', `All required CI checks GREEN. Auto-merging PR #${prNumber} (owner approved).`);
@@ -3168,11 +3188,12 @@ export async function resumeIVXAutonomousCoderFromCiWait(
         ownerId: input.ownerId,
         approvalPolicy: 'owner_gated',
         requiredChecksFn: input.requiredChecksFn,
+        prStateFn: input.prStateFn,
         ciWaitTimeoutMs: input.ciWaitTimeoutMs,
         ciPollIntervalMs: input.ciPollIntervalMs,
         ciNaGraceMs: input.ciNaGraceMs,
         sleepFn: input.sleepFn,
-      }, onPhase);
+      }, onPhase, input.prNumber);
       ciChecksGreen = ci.green;
       ciCheckEvidence = ci.evidence;
       ciWaitMs = ci.waitMs;
@@ -3181,10 +3202,11 @@ export async function resumeIVXAutonomousCoderFromCiWait(
           .filter((e) => !(e.matched && e.status === 'completed' && e.conclusion === 'success'))
           .map((e) => `${e.context}=${e.matched ? `${e.status}/${e.conclusion ?? 'none'}` : 'NOT_REPORTED'}`)
           .join('; ');
-        error = `${ci.timedOut ? 'Required CI checks TIMED OUT' : 'Required CI checks FAILED'} (restart resume) on ${input.commitSha.slice(0, 12)} — merge NOT attempted. Task BLOCKED, never COMPLETED. Checks: ${failing}.`;
+        error = ci.blocker ?? `${ci.timedOut ? 'Required CI checks TIMED OUT' : 'Required CI checks FAILED'} (restart resume) on ${input.commitSha.slice(0, 12)} — merge NOT attempted. Task BLOCKED, never COMPLETED. Checks: ${failing}.`;
         onPhase?.('blocked', error);
       } else {
         onPhase?.('committing', `Restart resume: all required CI checks GREEN on ${input.commitSha.slice(0, 12)} — merging PR #${input.prNumber}.`);
+        assertLandingRepairScope(input.taskId, input.filesChanged ?? []);
         await input.beforeMerge?.();
         const mergeResult = input.mergeFn
           ? await input.mergeFn(input.prNumber, `Merge PR #${input.prNumber}: ${publicRepairGoal(input.goal).slice(0, 60)}`)

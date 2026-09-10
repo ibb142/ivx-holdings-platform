@@ -7,16 +7,13 @@
  * another repair/audit/patrol task instead of holding a RUNNING lane asleep
  * between observations. Waiting time is never counted as productive work.
  */
-import { createHash } from 'node:crypto';
 import {
   getAllTasks,
   recordLeasedTaskEvidence,
   releaseLease,
   type Task,
-  type TaskEvidence,
 } from './ivx-autonomous-task-engine';
 import {
-  encodeLandingResult,
   LANDING_P0_PATROL_PREFIX,
   LANDING_P0_PREFIX,
   LANDING_P0_REPAIR_PREFIX,
@@ -25,6 +22,7 @@ import {
   resolveProductionSha,
 } from './ivx-landing-p0-backlog';
 import { executeLandingUnit } from './ivx-landing-p0-executor';
+import { landingTaskEvidence } from './ivx-landing-task-evidence';
 import {
   postgresAtomicQueueSelected,
   readPostgresFleetLeaseRows,
@@ -67,10 +65,6 @@ const liveByAgent = new Map<number, LandingPatrolLiveState>();
 
 function nowIso(): string {
   return new Date().toISOString();
-}
-
-function hash(text: string): string {
-  return createHash('sha256').update(text).digest('hex');
 }
 
 export function getLandingPatrolIntervalMs(env: NodeJS.ProcessEnv = process.env): number {
@@ -244,15 +238,8 @@ export async function runLandingPatrolSession(input: {
         repair: false,
       });
       productiveSeconds += execution.full.productive_seconds;
-      const summary = encodeLandingResult(execution.record);
-      const evidence: Omit<TaskEvidence, 'evidenceId' | 'createdAt'> = {
-        evidenceType: unit.check.kind === 'ci' ? 'test_result' : 'production_verification',
-        source: `continuous-patrol:${unit.unitId}`,
-        contentHash: hash(summary),
-        summary,
-        commitSha: input.sourceSha,
-        deploymentId: null,
-      };
+      const evidence = landingTaskEvidence(execution.record, `continuous-patrol:${unit.unitId}`,
+        unit.check.kind === 'ci' ? 'test_result' : 'production_verification');
 
       try {
         const persisted = await recordLeasedTaskEvidence({

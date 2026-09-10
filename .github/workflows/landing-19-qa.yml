@@ -28,6 +28,7 @@ jobs:
         run: |
           bun test backend/api/ivx-public-features.test.ts backend/ivx-public-source-recovery.test.ts
           bun test backend/ivx-registration-orchestrator.test.ts
+          bun test backend/ivx-canonical-identity-model.test.ts
   auth-acceptance:
     name: Isolated Auth and Postgres acceptance
     runs-on: ubuntu-latest
@@ -38,7 +39,7 @@ jobs:
         with: { bun-version: 1.3.9 }
       - run: bun install --frozen-lockfile --ignore-scripts
       - uses: supabase/setup-cli@v1
-        with: { version: latest }
+        with: { version: 2.117.0 }
       - name: Start isolated local Supabase
         id: stack
         shell: bash
@@ -47,6 +48,13 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ivx-landing19-supabase"
           cd "$RUNNER_TEMP/ivx-landing19-supabase"
           supabase init
+          python3 - <<'PY'
+          import pathlib, re
+          config = pathlib.Path('supabase/config.toml')
+          text, count = re.subn(r'^jwt_expiry\s*=\s*\d+\s*$', 'jwt_expiry = 60', config.read_text(), flags=re.M)
+          assert count == 1, 'Expected one local Auth token expiry setting'
+          config.write_text(text)
+          PY
           supabase start --exclude studio,imgproxy,inbucket,realtime,storage-api,edge-runtime,logflare,vector,supavisor
           supabase status -o env > "$RUNNER_TEMP/landing19-local.env"
           python3 - <<'PY'
@@ -56,7 +64,7 @@ jobs:
               if "=" in line:
                   k, v = line.split("=", 1)
                   values[k] = v.strip().strip('"')
-          mapping = {"SUPABASE_URL":"API_URL", "EXPO_PUBLIC_SUPABASE_URL":"API_URL", "SUPABASE_ANON_KEY":"ANON_KEY", "EXPO_PUBLIC_SUPABASE_ANON_KEY":"ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY":"SERVICE_ROLE_KEY", "IVX_QA_JWT_SECRET":"JWT_SECRET", "IVX_QA_DB_URL":"DB_URL"}
+          mapping = {"SUPABASE_URL":"API_URL", "EXPO_PUBLIC_SUPABASE_URL":"API_URL", "SUPABASE_ANON_KEY":"ANON_KEY", "EXPO_PUBLIC_SUPABASE_ANON_KEY":"ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY":"SERVICE_ROLE_KEY", "IVX_QA_DB_URL":"DB_URL"}
           assert values["API_URL"].startswith("http://127.0.0.1:")
           with open(os.environ["GITHUB_ENV"], "a") as f:
               for target, source in mapping.items():

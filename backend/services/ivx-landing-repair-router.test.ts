@@ -36,6 +36,34 @@ function setup() {
 }
 
 describe('persisted Landing failure to real coder', () => {
+  it('persists the enforced public-response scope with a video repair', async () => {
+    const s = setup();
+    await s.router.route({ ...observation, agentId: 'ivx_holdings_15', record: { ...record, unit_id: 'deals.videos-present', agent_number: 15 } });
+    expect(s.submitted).toHaveLength(1);
+    expect(s.submitted[0].ownerApprovedAction?.filesAffected).toContain('backend/api/ivx-public-features.ts');
+    expect(s.submitted[0].ownerApprovedAction?.filesAffected).not.toContain('backend/services/ivx-deal-matching-engine.ts');
+    expect(s.submitted[0].goal).toContain('ivx-landing-repair-scope-v1');
+    expect(s.submitted[0].goal).toContain('Missing customer media is a dependency');
+  });
+  it('reconstructs the runtime rule from the durable failure in a new router process', async () => {
+    const inputs: IVXWorkerJobInput[] = [];
+    const stored = JSON.parse(JSON.stringify({ jobId: 'prior', ownerId: 'autonomous-landing-repair', status: 'blocked',
+      input: { taskId: `landing-remediation:${sha}:structure.header` }, finishedAt: new Date(now - 301000).toISOString(),
+      error: 'REPAIR_REGRESSION_NOT_REPRODUCED ' + 'wrapper '.repeat(100) + "Cannot find module 'bun:test'" }));
+    for (let restart = 0; restart < 2; restart++) {
+      const router = new LandingRepairRouter({ enabled: () => true, productionSha: () => sha, now: () => now,
+        guard: async () => undefined, jobs: async () => [stored], enqueue: async input => {
+          inputs.push(input); return { job: { ...stored, jobId: 'retry', status: 'queued', input }, attached: false };
+        } });
+      expect((await router.route(observation)).action).toBe('QUEUED');
+    }
+    expect(inputs).toHaveLength(2);
+    for (const input of inputs) {
+      expect(input.goal).toContain('ivx-repair-recovery-protocol-v2/NODE_TEST_RUNTIME');
+      expect(input.goal).toContain('Preserve existing bun:test suites');
+      expect(input.approveGitDeploy).toBe(false);
+    }
+  });
   it('routes repeated observations once with agent and evidence attribution; never changes FAIL', async () => {
     const s = setup();
     const outcomes = await Promise.all(Array.from({ length: 112 }, () => s.router.route(observation)));

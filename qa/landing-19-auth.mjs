@@ -13,7 +13,7 @@ assert.ok(['registration.zip-code', 'registration.optional-picture', 'registrati
 const supabaseUrl = process.env.SUPABASE_URL;
 assert.equal(new URL(supabaseUrl).hostname, '127.0.0.1', 'Acceptance must never mutate a hosted Supabase project');
 const anon = process.env.SUPABASE_ANON_KEY, service = process.env.SUPABASE_SERVICE_ROLE_KEY;
-assert.ok(anon && service && process.env.IVX_QA_JWT_SECRET);
+assert.ok(anon && service);
 const admin = createClient(supabaseUrl, service, { auth: { persistSession: false, autoRefreshToken: false } });
 const { handleMemberRegister, handleMemberLogin, handleGetMemberProfile, handleRegistrationStatusRequest } = await import('../backend/api/ivx-members.ts');
 const routes = { '/api/members/register': handleMemberRegister, '/api/members/login': handleMemberLogin, '/api/members/me': handleGetMemberProfile, '/api/ivx/registration/status': handleRegistrationStatusRequest };
@@ -79,7 +79,7 @@ async function openAuthPage(context, input, mode = 'login', expectSession = fals
     await page.locator('#invest-first').fill(input.firstName);
     await page.locator('#invest-last').fill(input.lastName);
     await page.locator('#invest-birthday').fill(input.dateOfBirth);
-    await page.locator('#invest-gender').selectOption('prefer_not_to_say');
+    await page.locator('#invest-gender').selectOption('other');
   }
   return page;
 }
@@ -147,11 +147,23 @@ try {
     } else if (unit === 'auth.expired-token') {
       const signedIn = await login(member.input);
       assert.equal((await request('/api/members/me', null, signedIn.accessToken)).status, 200);
-      const claims = jwt.verify(signedIn.accessToken, process.env.IVX_QA_JWT_SECRET, { algorithms: ['HS256'] });
-      const expired = jwt.sign({ ...claims, iat: Math.floor(Date.now()/1000)-3600, exp: Math.floor(Date.now()/1000)-300 }, process.env.IVX_QA_JWT_SECRET, { algorithm: 'HS256' });
-      assert.equal(jwt.verify(expired, process.env.IVX_QA_JWT_SECRET, { algorithms: ['HS256'], ignoreExpiration: true }).sub, member.id);
-      assert.equal((await request('/api/members/me', null, expired)).status, 401);
-      checks.push('same real issuer: valid signed session reaches profile; correctly signed expired token returns 401');
+      // Keep the actual GoTrue-issued token unchanged. Let it expire naturally
+      // so this acceptance is independent of HS256/ES256 signing configuration.
+      const claims = jwt.decode(signedIn.accessToken);
+      assert.equal(claims.sub, member.id);
+      const expiresIn = claims.exp * 1000 - Date.now();
+      assert.ok(expiresIn > 0 && expiresIn <= 65_000, 'Local QA issuer must use a 60-second token lifetime');
+      await new Promise((resolve) => setTimeout(resolve, expiresIn + 1000));
+      const deadline = Date.now() + 65_000;
+      let expiredStatus;
+      do {
+        expiredStatus = (await request('/api/members/me', null, signedIn.accessToken)).status;
+        assert.ok([200, 401].includes(expiredStatus), `Unexpected expiry response ${expiredStatus}`);
+        if (expiredStatus === 401) break;
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      } while (Date.now() < deadline);
+      assert.equal(expiredStatus, 401, 'The unchanged real session must be rejected after expiry and issuer clock tolerance');
+      checks.push('unchanged real issuer token: protected profile returns 200 before expiry and 401 after natural expiration');
     } else if (unit === 'registration.e2e-member-creation') {
       const signedIn = await login(member.input);
       const profile = await request('/api/members/me', null, signedIn.accessToken);

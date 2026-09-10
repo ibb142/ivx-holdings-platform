@@ -45,6 +45,31 @@ async function makeIsolatedRepo(label: string): Promise<{
 }
 
 describe('Landing repair source access', () => {
+  it('refuses an unrelated matching-score repair before file mutation or commit', async () => {
+    const repo = await makeIsolatedRepo('video-defect-scope');
+    const source = 'backend/services/ivx-deal-matching-engine.ts';
+    const original = 'export function scoreDealMatch() { return 0; }';
+    await repo.fileWriter(source, original);
+    let writes = 0;
+    let commits = 0;
+    const proof = await runIVXAutonomousCoder({
+      taskId: `landing-remediation:${'a'.repeat(40)}:deals.videos-present`,
+      goal: '[TEMPLATE_MODE:BUG_FIX] [AUTONOMOUS_DIAGNOSTIC_DATA] Repair missing property videos. Inspect backend/services/ivx-deal-matching-engine.ts.',
+      executionMode: 'code_change', approvalPolicy: 'owner_gated', ownerId: 'scope-test',
+      projectRoot: repo.root, maxLlmCalls: 1, fileReader: repo.fileReader,
+      fileWriter: async (file, content) => { writes++; await repo.fileWriter(file, content); },
+      llmCaller: async () => JSON.stringify({ rootCause: 'Video score absent', technicalPlan: 'Add a video score', operations: [
+        { kind: 'replace_exact', path: source, oldText: original, newText: 'export function scoreDealMatch() { return 100; }', reason: 'video score' },
+        { kind: 'create_file', path: 'backend/services/ivx-deal-matching-engine.node-regression.test.ts', oldText: '', newText: 'import {test} from "node:test"; import assert from "node:assert/strict"; test("video score", () => assert.equal(100, 100));', reason: 'regression' },
+      ] }),
+      commitFn: async () => { commits++; throw new Error('No commit is allowed'); },
+    });
+    expect(proof.finalStatus).toBe('BLOCKED');
+    expect(proof.iterations.some(iteration => iteration.failureSummary?.includes('REPAIR_DEFECT_SCOPE_VIOLATION'))).toBe(true);
+    expect(writes).toBe(0);
+    expect(commits).toBe(0);
+    expect(await repo.fileReader(source)).toBe(original);
+  });
   it('runs generated validation without inheriting worker credentials', async () => {
     const repo = await makeIsolatedRepo('validation-environment');
     const key = 'IVX_AUTONOMOUS_TEST_SECRET_SENTINEL';
@@ -167,8 +192,8 @@ describe('Landing repair source access', () => {
   for (const repairSource of ['landing', 'diagnostic'] as const) {
   it(`rejects a semantic no-op from ${repairSource} even when generated tests and typecheck pass`, async () => {
     const repo = await makeIsolatedRepo(`already-green-regression-${repairSource}`);
-    const sourcePath = 'backend/services/video-attachments.ts';
-    const testPath = 'backend/services/video-attachments.test.ts';
+    const sourcePath = 'backend/api/ivx-public-features.ts';
+    const testPath = 'backend/api/ivx-public-features.node-regression.test.ts';
     const source = 'export function videoAttachments(values: string[]) { const out = values; return out.filter(Boolean); }';
     await repo.fileWriter(sourcePath, source);
     let commits = 0;
@@ -178,7 +203,7 @@ describe('Landing repair source access', () => {
       maxLlmCalls: 1, fileReader: repo.fileReader, fileWriter: repo.fileWriter,
       llmCaller: async () => JSON.stringify({ rootCause: 'missing videos', technicalPlan: 'handle empty attachments', operations: [
         { path: sourcePath, kind: 'replace_exact', oldText: 'return out.filter(Boolean);', newText: 'if (out.length === 0) return []; return out.filter(Boolean);', reason: 'empty attachments' },
-        { path: testPath, kind: 'create_file', oldText: '', newText: 'import { test } from "node:test"; import assert from "node:assert/strict"; import { videoAttachments } from "./video-attachments"; test("video remains attached", () => assert.deepEqual(videoAttachments(["https://example.test/video.mp4"]), ["https://example.test/video.mp4"]));', reason: 'regression' },
+        { path: testPath, kind: 'create_file', oldText: '', newText: 'import { test } from "node:test"; import assert from "node:assert/strict"; import { videoAttachments } from "./ivx-public-features"; test("video remains attached", () => assert.deepEqual(videoAttachments(["https://example.test/video.mp4"]), ["https://example.test/video.mp4"]));', reason: 'regression' },
       ] }),
       testRunner: runAutonomousCoderCommand,
       commitFn: async (_paths, branch) => { commits += 1; return { commitSha: 'must-not-commit', commitUrl: 'https://example.test/commit', branch }; },
@@ -284,8 +309,82 @@ describe('IVX Autonomous Coder — pilot sentinel', () => {
  * PR + required-CI-checks gates. A code_change task only reaches COMPLETED
  * when its PR merges after ALL required checks report success.
  */
-function prAndCiMocks(prNumber = 99): Pick<IVXAutonomousCoderInput, 'prFn' | 'mergeFn' | 'requiredChecksFn'> {
+describe('durable repair boundaries', () => {
+  it('rejects a Bun suite mutation, then repairs through a separate real Node regression', async () => {
+    const repo = await makeIsolatedRepo('node-sidecar-recovery');
+    const sourcePath = 'backend/services/normalize-video.ts';
+    const legacyPath = 'backend/services/normalize-video.test.ts';
+    const regressionPath = 'backend/services/normalize-video.node-regression.test.ts';
+    const source = 'export function normalizeVideo(value: string) { return value; }';
+    const legacy = 'import { test, expect } from "bun:test"; test("legacy", () => expect(true).toBe(true));';
+    await repo.fileWriter(sourcePath, source);
+    await repo.fileWriter(legacyPath, legacy);
+    let calls = 0;
+    const commands: string[] = [];
+    const proof = await runIVXAutonomousCoder({
+      taskId: 'landing-remediation:fixture:normalize-video', goal: '[TEMPLATE_MODE:BUG_FIX] Trim video URL whitespace in backend/services/normalize-video.ts.',
+      ownerId: 'test-owner', executionMode: 'code_change', approvalPolicy: 'owner_gated', projectRoot: repo.root,
+      fileReader: repo.fileReader, fileWriter: repo.fileWriter,
+      planCaller: async () => JSON.stringify({ targetFiles: [sourcePath], filesToInspect: [legacyPath], hypothesis: 'missing trim' }),
+      llmCaller: async (_system, prompt) => {
+        calls++;
+        if (calls > 1) expect(prompt).toContain('VERSIONED RECOVERY RULE NODE_TEST_RUNTIME');
+        return JSON.stringify({ rootCause: 'missing trim', technicalPlan: 'trim through real normalization entry point', operations: [
+          { path: sourcePath, kind: 'replace_exact', oldText: 'return value;', newText: 'return value.trim();' },
+          ...(calls === 1 ? [{ path: legacyPath, kind: 'replace_exact', oldText: '"legacy"', newText: '"legacy acceptance"' }] : [
+            { path: regressionPath, kind: 'create_file', oldText: '', newText: 'import {test} from "node:test"; import assert from "node:assert/strict"; import {normalizeVideo} from "./normalize-video"; test("trim", () => assert.equal(normalizeVideo(" video "), "video"));' },
+          ]),
+        ] });
+      },
+      testRunner: async (cwd, command) => { commands.push(command); return runAutonomousCoderCommand(cwd, command); },
+      commitFn: async () => ({ commitSha: 'c'.repeat(40), commitUrl: 'https://github.com/owner/repo/commit/'+'c'.repeat(40), branch: 'repair-example' }),
+      ...prAndCiMocks(), autoMergePr: true,
+    });
+    expect(calls).toBe(2);
+    expect(commands.some(command => command.includes(legacyPath))).toBe(false);
+    expect(await repo.fileReader(legacyPath)).toBe(legacy);
+    expect(proof.commandsRun.some(command => command.phase === 'regression_baseline' && !command.ok && command.stdoutTail.includes('ERR_ASSERTION'))).toBe(true);
+    expect(proof.finalStatus).toBe('COMPLETED');
+  }, 30000);
+
+  for (const behavior of ['delayed', 'rejected'] as const) {
+    it(`waits for ${behavior} PR identity persistence before CI or merge`, async () => {
+      const repo = await makeIsolatedRepo('pr-persistence-' + behavior);
+      let saved = false;
+      let checks = 0;
+      let merges = 0;
+      const gates = prAndCiMocks();
+      const proof = await runIVXAutonomousCoder({
+        taskId: 'pr-persistence-fixture-' + behavior, goal: `Change the pilot label from ${PILOT_LABEL} to ${PILOT_LABEL_TARGET}.`,
+        ownerId: 'test-owner', executionMode: 'code_change', approvalPolicy: 'owner_gated', projectRoot: repo.root,
+        fileReader: repo.fileReader, fileWriter: repo.fileWriter,
+        llmCaller: async () => JSON.stringify({ rootCause: 'requested label', technicalPlan: 'replace label', operations: [
+          { path: 'backend/services/ivx-autonomous-coder-pilot.ts', kind: 'replace_exact', oldText: `export const PILOT_LABEL = '${PILOT_LABEL}';`, newText: `export const PILOT_LABEL = '${PILOT_LABEL_TARGET}';` },
+        ] }),
+        testRunner: async (_cwd, command) => ({ command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1 }),
+        commitFn: async () => ({ commitSha: 'c'.repeat(40), commitUrl: 'https://github.com/owner/repo/commit/'+'c'.repeat(40), branch: 'repair-example' }),
+        prFn: gates.prFn, prStateFn: gates.prStateFn, autoMergePr: true,
+        onPrCreated: () => {
+          if (behavior === 'rejected') throw new Error('PR_RESUME_PERSISTENCE_REQUIRED');
+          return new Promise<void>(resolve => setTimeout(() => { saved = true; resolve(); }, 25));
+        },
+        requiredChecksFn: async () => { checks++; expect(saved).toBe(true); return gates.requiredChecksFn!('c'.repeat(40)); },
+        mergeFn: async () => { merges++; return { merged: true, mergeCommitSha: 'm'.repeat(40) }; },
+      });
+      expect(proof.prCreated).toBe(true);
+      if (behavior === 'delayed') {
+        expect(proof.finalStatus).toBe('COMPLETED'); expect(merges).toBe(1); expect(checks).toBe(1);
+      } else {
+        expect(proof.finalStatus).toBe('BLOCKED'); expect(merges).toBe(0); expect(checks).toBe(0);
+        expect(proof.error).toContain('PR_RESUME_PERSISTENCE_REQUIRED');
+      }
+    });
+  }
+});
+
+function prAndCiMocks(prNumber = 99): Pick<IVXAutonomousCoderInput, 'prFn' | 'prStateFn' | 'mergeFn' | 'requiredChecksFn'> {
   return {
+    prStateFn: async () => ({ state: 'open', merged: false, mergeCommitSha: null }),
     prFn: async () => ({
       prNumber,
       prUrl: `https://github.com/ibb142/ivx-holdings-platform/pull/${prNumber}`,

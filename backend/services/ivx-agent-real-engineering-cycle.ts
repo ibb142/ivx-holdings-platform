@@ -33,17 +33,18 @@ import {
 } from './ivx-autonomous-task-engine';
 import { containPath, fileHasUnexemptedSecret, resolveRepoRoot } from './ivx-agent-engineering-tools';
 import {
-  encodeLandingResult,
   ensureLandingP0BacklogSeeded,
   getLandingUnit,
   isLandingP0MissionActive,
   LANDING_P0_PREFIX,
   LANDING_P0_REPAIR_PREFIX,
+  LANDING_P0_PATROL_PREFIX,
   landingRepairKey,
   parseLandingTaskKey,
   resolveProductionSha,
 } from './ivx-landing-p0-backlog';
 import { executeLandingUnit } from './ivx-landing-p0-executor';
+import { landingTaskEvidence } from './ivx-landing-task-evidence';
 
 export const IVX_REAL_ENGINEERING_CYCLE_MARKER = 'ivx-agent-real-engineering-cycle-2026-09-01';
 
@@ -284,7 +285,9 @@ export async function runRealEngineeringCycle(input: {
     const leaseOptions = {
       ...(landingActive ? { stealPrefix: activeLandingPrefixes[0] } : {}),
       missionScope: {
-        familyPrefixes: [LANDING_P0_PREFIX, LANDING_P0_REPAIR_PREFIX],
+        // Patrols have their own executor. The legacy engineering loop must
+        // never lease a patrol (including an obsolete SHA) as a module audit.
+        familyPrefixes: [LANDING_P0_PREFIX, LANDING_P0_REPAIR_PREFIX, LANDING_P0_PATROL_PREFIX],
         activePrefixes: landingActive ? activeLandingPrefixes : [],
       },
     };
@@ -419,7 +422,7 @@ export async function runRealEngineeringCycle(input: {
     }
 
     const probeWorker = `probe:${workerId}:${Date.now()}`;
-    const remaining = await leaseNextTask(probeWorker, input.agentNumber);
+    const remaining = await leaseNextTask(probeWorker, input.agentNumber, leaseOptions);
     if (remaining.task) await releaseLease(remaining.task.taskId, probeWorker);
     return {
       ...base,
@@ -596,7 +599,7 @@ async function runLandingTask(
     repair: parsed.repair,
   });
   const evidenceType: TaskEvidence['evidenceType'] = unit.check.kind === 'ci' ? 'test_result' : 'production_verification';
-  const evidence = await makeEvidence(evidenceType, unit.unitId, encodeLandingResult(record));
+  const evidence = landingTaskEvidence(record, unit.unitId, evidenceType);
   const productiveMinutes = Math.round((full.productive_seconds / 60) * 10) / 10;
   console.log('[IVX Landing P0] unit executed', {
     agentNumber: input.agentNumber,

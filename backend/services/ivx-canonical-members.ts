@@ -199,7 +199,14 @@ async function findExisting(input: CanonicalMemberInput): Promise<CanonicalMembe
   const phoneDigits = normPhoneDigits(input.phone);
   if (phoneDigits.length >= 10) {
     const rows = await rest<CanonicalMemberRow[]>(`/members?phone=like.*${encodeURIComponent(phoneDigits.slice(-10))}&limit=1`);
-    if (rows.length > 0) return rows[0];
+    if (rows.length > 0) {
+      const candidate = rows[0];
+      // A shared phone is not proof that two registered identities are the
+      // same person. Preserve both accounts instead of merging into the first.
+      if (authUserId && candidate.auth_user_id && candidate.auth_user_id !== authUserId) return null;
+      if (email && normEmail(candidate.email) && normEmail(candidate.email) !== email) return null;
+      return candidate;
+    }
   }
   return null;
 }

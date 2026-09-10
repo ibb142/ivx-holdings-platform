@@ -39,7 +39,7 @@ import {
   readDurableJson,
   writeDurableJson,
 } from './ivx-durable-store';
-import { checkEmergencyStop } from './ivx-emergency-stop-gate';
+import { assertEmergencyStopInactive, checkEmergencyStop } from './ivx-emergency-stop-gate';
 import { classifyTaskType } from './ivx-completion-validator';
 import {
   IVX_GIT_DEPLOY_CONFIRM_TEXT,
@@ -76,6 +76,7 @@ import {
   type IVXCiCheckEvidence,
 } from './ivx-autonomous-coder';
 import { assertRepairResumeEvidence } from './ivx-repair-resume-evidence';
+import { recoverCommittedPullRequest } from './ivx-commit-pr-recovery';
 import {
   IVX_FACTORY_ENGINE_MARKER,
   IVX_FACTORY_APPROVAL_PHRASE,
@@ -1184,9 +1185,9 @@ const CI_WAIT_RESUME_THRESHOLD_MS = 90 * 1000; // 90s
  * Resume code-change jobs whose worker process was killed while waiting for
  * the PR's required CI checks (FINAL CLOSEOUT 2026-08-23).
  *
- * Candidates: jobs at status 'committing' whose persisted result carries a
- * prNumber + commitSha with prMerged=false — exactly the state persisted by
- * the coder's onPrCreated callback right before the CI wait began. For each,
+ * Candidates: jobs at status 'committing' with a persisted commitSha and no
+ * confirmed merge. Recover a missing PR identity from the exact stored branch
+ * before resuming; a commit alone never certifies completion. For each,
  * ONE background resume is spawned (guarded by activeCiResumeJobIds) that
  * re-queries the PR and required checks and continues the chain:
  *   checks running → keep waiting · checks green → merge · checks red → BLOCKED
@@ -1198,7 +1199,6 @@ const CI_WAIT_RESUME_THRESHOLD_MS = 90 * 1000; // 90s
 async function recoverStuckCiWaitJobs(queue: QueueDoc): Promise<void> {
   const candidates = queue.jobs.filter((j) =>
     j.status === 'committing'
-    && j.result?.prNumber != null
     && j.result?.commitSha
     && j.result?.prMerged !== true
     && !activeCiResumeJobIds.has(j.jobId));
@@ -1221,11 +1221,11 @@ async function recoverStuckCiWaitJobs(queue: QueueDoc): Promise<void> {
  *  normal autonomous-coder path (COMPLETED only on a confirmed merge). */
 async function resumeCiWaitJob(jobId: string): Promise<void> {
   if (queueStopping) return;
+  try { await assertEmergencyStopInactive('senior-worker-ci-recovery'); }
+  catch { return; } // Retain the durable job while owner control blocks recovery.
   let job = await getSeniorDeveloperJob(jobId);
   if (!job || !ACTIVE_STATUSES.has(job.status)) return;
-  const prNumber = job.result?.prNumber;
-  const commitSha = job.result?.commitSha;
-  if (prNumber == null || !commitSha) return;
+  if (!job.result?.commitSha) return;
   if (sharedSeniorQueueEnabled()) {
     const claimed = await claimSharedSeniorJob<IVXWorkerJob>(jobId, true);
     if (!claimed) return;
@@ -1238,10 +1238,39 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
   }, 20_000) : null;
   heartbeat?.unref?.();
   try {
+  const commitSha = job.result?.commitSha;
+  if (!commitSha || !job.result) return;
+  let prNumber = job.result.prNumber;
+  if (prNumber == null) {
+    try {
+      const token = ledgerGithubToken();
+      if (!token) throw new Error('PR_RECOVERY_LOOKUP_FAILED: GitHub credential unavailable');
+      const recovered = await recoverCommittedPullRequest({
+        repo: ledgerGithubRepo(), branch: job.result.branch ?? '', commitSha,
+        read: url => fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(10000) }),
+      });
+      if (controller.cancelled) throw new Error('PR_RECOVERY_LOOKUP_FAILED: worker lease lost');
+      const result = { ...job.result, ...recovered, prMerged: false, prMergeCommitSha: null,
+        ciResumeState: { jobId, taskId: job.input.taskId ?? jobId, phase: 'CI_WAIT' as const,
+          commitSha, ...recovered, branch: job.result.branch ?? '', mergeTarget: 'main', persistedAt: nowIso() } };
+      await updateJob(jobId, { result, lastHeartbeatAt: nowIso() });
+      job.result = result;
+      prNumber = recovered.prNumber;
+    } catch (error) {
+      if (!controller.cancelled) {
+        const reason = error instanceof Error ? error.message : 'PR_RECOVERY_LOOKUP_FAILED';
+        const permanent = /PR_RECOVERY_(IDENTITY_REQUIRED|AMBIGUOUS|INCOMPLETE)/.test(reason);
+        await updateJob(jobId, { error: reason, stageDetail: reason,
+          ...(permanent ? { status: 'blocked' as const, stage: 'FAILED' as const, finishedAt: nowIso(),
+            result: { ...job.result, ok: false, finalStatus: 'BLOCKED' as const, endToEndProductionComplete: false, error: reason } } : {}) });
+      }
+      return;
+    }
+  }
   const resumeStartedAt = nowIso();
   await updateJobStage(jobId, 'COMMITTING', `Worker restart detected — resuming CI wait for PR #${prNumber} (commit ${commitSha.slice(0, 12)}) with the original taskId. No duplicate job created.`);
   const proof = await resumeIVXAutonomousCoderFromCiWait({
-    taskId: job.jobId,
+    taskId: job.input.taskId ?? job.jobId,
     goal: job.input.goal,
     ownerId: job.ownerId,
     commitSha,
@@ -1252,6 +1281,7 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     typecheckPassed: job.result?.typecheckPassed !== false,
     filesChanged: job.result?.changedFiles ?? [],
     beforeMerge: async () => {
+      await assertEmergencyStopInactive('senior-worker-resumed-merge');
       if (controller.cancelled) throw new Error('Worker lease lost before resumed merge');
       assertRepairResumeEvidence(jobId, job.input.goal, job.result?.validationEvidence);
       await updateJob(jobId, { lastHeartbeatAt: nowIso() });
@@ -1320,6 +1350,7 @@ async function recoverStuckCommittingJobs(queue: QueueDoc): Promise<void> {
     j.status === 'committing' &&
     j.stage === 'COMMITTING' &&
     j.result?.prNumber == null &&
+    !j.result?.commitSha &&
     j.startedAt &&
     now - new Date(j.startedAt).getTime() > COMMITTING_RECOVERY_THRESHOLD_MS);
   if (stuckJobs.length === 0) return;
@@ -1459,6 +1490,9 @@ async function recoverStuckVerifyingJobs(queue: QueueDoc): Promise<void> {
   // verifyLiveCommitMatch poll ran too quickly before the Render deploy completed).
   const stuckJobs = queue.jobs.filter((j) =>
     j.result?.commitSha &&
+    // An unmerged code-change job belongs to PR/CI recovery. A later live SHA
+    // cannot replace its missing PR identity or required-check evidence.
+    !(j.status === 'committing' && j.result?.prMerged !== true) &&
     j.startedAt &&
     now - new Date(j.startedAt).getTime() > VERIFYING_RECOVERY_THRESHOLD_MS &&
     (
@@ -2613,45 +2647,41 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         // resume state the instant the PR exists — BEFORE the CI wait begins —
         // so a worker restart mid-wait resumes the merge chain with the SAME
         // jobId instead of being orphaned for the stale sweep to expire.
-        onPrCreated: ({ commitSha, prNumber, prUrl, branch }) => {
-          void (async () => {
-            try {
-              const current = await getSeniorDeveloperJob(job.jobId);
-              const prior = current?.result ?? null;
-              // onCommitLanded always persists the full result BEFORE the PR is
-              // created; if it is somehow missing, keep the last known-good
-              // result untouched rather than writing a partial one.
-              if (!prior) return;
-              await updateJob(job.jobId, {
-                stage: 'COMMITTING',
-                status: 'committing',
-                progressPercent: STAGE_PROGRESS['COMMITTING'],
-                stageDetail: `Pull request #${prNumber} created — CI-wait resume state persisted (commit ${commitSha.slice(0, 12)}, branch ${branch}).`,
-                result: {
-                  ...prior,
-                  prNumber,
-                  prUrl,
-                  prMerged: false,
-                  prMergeCommitSha: null,
-                  commitSha,
-                  branch,
-                  ciResumeState: {
-                    jobId: job.jobId,
-                    taskId: job.jobId,
-                    phase: 'CI_WAIT',
-                    commitSha,
-                    prNumber,
-                    prUrl,
-                    branch,
-                    mergeTarget: 'main',
-                    persistedAt: nowIso(),
-                  },
-                },
-              });
-            } catch {
-              // Resilience callback must never break the run.
-            }
-          })();
+        onPrCreated: async ({ commitSha, prNumber, prUrl, branch }) => {
+          const current = await getSeniorDeveloperJob(job.jobId);
+          const prior = current?.result ?? null;
+          // onCommitLanded always persists the full result BEFORE the PR is
+          // created; if it is somehow missing, keep the last known-good
+          // result untouched rather than writing a partial one.
+          if (!prior || prior.commitSha !== commitSha || controller.cancelled) {
+            throw new Error('PR_RESUME_PERSISTENCE_REQUIRED: committed identity or worker lease unavailable');
+          }
+          await updateJob(job.jobId, {
+            stage: 'COMMITTING',
+            status: 'committing',
+            progressPercent: STAGE_PROGRESS['COMMITTING'],
+            stageDetail: `Pull request #${prNumber} created — CI-wait resume state persisted (commit ${commitSha.slice(0, 12)}, branch ${branch}).`,
+            result: {
+              ...prior,
+              prNumber,
+              prUrl,
+              prMerged: false,
+              prMergeCommitSha: null,
+              commitSha,
+              branch,
+              ciResumeState: {
+                jobId: job.jobId,
+                taskId: job.input.taskId ?? job.jobId,
+                phase: 'CI_WAIT',
+                commitSha,
+                prNumber,
+                prUrl,
+                branch,
+                mergeTarget: 'main',
+                persistedAt: nowIso(),
+              },
+            },
+          });
         },
       });
 
