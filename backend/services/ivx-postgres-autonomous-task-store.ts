@@ -158,7 +158,9 @@ export type FleetProcessObservation = {
 export async function readPostgresFleetProcessObservation(): Promise<FleetProcessObservation> {
   if (!postgresAtomicQueueConfigured()) throw new Error('Shared process observation requires postgres_atomic');
   const directRead = async (): Promise<FleetProcessObservation> => {
-    const result = await getDirectPool(process.env, 'telemetry').query<{ measuredAt: Date; instances: FleetProcessObservation['instances'] }>(`
+    // Use transaction-local server deadlines for every telemetry operation.
+    // A client read timeout alone can leave this one shared connection busy.
+    const result = await queryWithPostgresDeadline<{ measuredAt: Date; instances: FleetProcessObservation['instances'] }>(getDirectPool(process.env, 'telemetry'), `
       select statement_timestamp() as "measuredAt", coalesce((select jsonb_agg(i) from (
         select distinct on (worker_instance_id) worker_instance_id as "instanceId",
           event->>'instance_role' as role, event->>'commit_sha' as "commitSha",
@@ -171,7 +173,7 @@ export async function readPostgresFleetProcessObservation(): Promise<FleetProces
         where event_type='fleet_slo_sample' and created_at > statement_timestamp() - interval '60 seconds'
           and event->>'instance_role' in ('api','worker')
         order by worker_instance_id, created_at desc limit 1000
-      ) i), '[]'::jsonb) as instances`);
+      ) i), '[]'::jsonb) as instances`, []);
     const row = result.rows[0];
     if (!row || !Array.isArray(row.instances) || row.instances.length >= 1000) throw new Error('Incomplete process observation');
     return { measuredAt: new Date(row.measuredAt).toISOString(), instances: row.instances };
@@ -262,7 +264,7 @@ export async function readPostgresCurrentTasks(states: readonly TaskState[]): Pr
 
 async function fetchPostgresCurrentTasks(unique: TaskState[], purpose: PoolPurpose = 'tasks'): Promise<Task[]> {
   const directRead = async () => {
-    const result = await getDirectPool(process.env, purpose).query<RestTaskRow>('select payload from public.ivx_autonomous_tasks where state = any($1::text[]) order by updated_at desc limit 1000', [unique]);
+    const result = await queryWithPostgresDeadline<RestTaskRow>(getDirectPool(process.env, purpose), 'select payload from public.ivx_autonomous_tasks where state = any($1::text[]) order by updated_at desc limit 1000', [unique]);
     if (result.rows.length >= 1000) throw new Error('postgres_atomic current-task response reached its safety limit; telemetry is incomplete');
     return result.rows.map((row) => structuredClone(row.payload));
   };
@@ -344,7 +346,7 @@ export async function persistPostgresFleetSloSample(sample: Record<string, unkno
   const workerInstanceId = autonomousWorkerInstanceId();
   const event = { ...sample, instance_role: process.env.IVX_WORKER_MODE === 'true' ? 'worker' : 'api', service_id: process.env.RENDER_SERVICE_ID ?? null, process_role: process.env.IVX_PROCESS_ROLE ?? null, shared_worker_queue: process.env.IVX_WORKER_QUEUE_ATOMIC === 'true', shared_state: process.env.IVX_REQUIRE_SHARED_STATE === 'true', draining: process.env.IVX_INSTANCE_DRAINING === 'true' };
   const persistDirect = async () => {
-    await getDirectPool(process.env, 'telemetry').query(
+    await queryWithPostgresDeadline(getDirectPool(process.env, 'telemetry'),
       'insert into public.ivx_autonomous_task_events(event_type,worker_instance_id,event) values ($1,$2,$3::jsonb)',
       ['fleet_slo_sample', workerInstanceId, JSON.stringify(event)],
     );

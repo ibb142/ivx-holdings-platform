@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { writeFile, mkdir } from 'node:fs/promises';
 import { processIdentityMatchesObservedInstance, sharedProcessesCoverObservedInstances } from './ivx-fleet-ha-identities';
+import { ProbeHttpError, readRecoveringSharedObservation } from './ivx-fleet-ha-observation';
 
 const base = process.env.API_BASE;
 const sha = process.env.IVX_TARGET_SHA || process.env.GITHUB_SHA || '';
@@ -13,9 +14,6 @@ assert(token || systemKey, 'Owner bearer or protected system credential is requi
 const apiService = 'srv-d7t9ivreo5us73ftose0', workerService = 'srv-d9i15fg4n6ts73bn00j0';
 const expectedRepo = 'https://github.com/ibb142/ivx-holdings-platform';
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
-class ProbeHttpError extends Error {
-  constructor(readonly status: number, path: string) { super(`HTTP ${status} at ${path}`); }
-}
 async function request(path: string, body?: unknown) {
   // Preserve the real Owner validation performed by the workflow, then use
   // the protected machine credential for repeated probes when available so a
@@ -137,11 +135,7 @@ for (let i = 0; i < 72; i++) {
     // the recovery experiment only after physical and shared state agree.
     // Retry transport unavailability here only; authentication, SHA, freshness
     // and malformed evidence still fail immediately.
-    shared = renderKey ? await topology().catch((error: unknown) => {
-      if ((error instanceof ProbeHttpError && (error.status === 429 || error.status >= 500))
-        || (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name))) return null;
-      throw error;
-    }) : value;
+    shared = renderKey ? await readRecoveringSharedObservation(topology) : value;
   }
   const ready = shared && sharedTopologyCoversPhysical(shared, value);
   if (ready) consecutive++; else consecutive = 0;
@@ -202,16 +196,20 @@ if (process.env.IVX_HA_RESTART_WORKER === 'true') {
     if (after && i - recoveryProbe >= 20) {
       // A replaced worker can leave a recent heartbeat during graceful drain.
       // Keep probing API availability until only the two replacements remain.
-      const candidate = renderKey ? await topology() : after;
-      const complete = sharedTopologyCoversPhysical(candidate, after);
-      const observation = { measuredAt: candidate.measuredAt, apiCount: candidate.apiInstances.length,
-        workerCount: candidate.workerInstances.length, identitiesMatch: complete };
+      const candidate = renderKey ? await readRecoveringSharedObservation(topology) : after;
+      const complete = Boolean(candidate && sharedTopologyCoversPhysical(candidate, after));
+      const observation = { measuredAt: candidate?.measuredAt ?? null, sharedAvailable: Boolean(candidate),
+        apiCount: candidate?.apiInstances.length ?? null, workerCount: candidate?.workerInstances.length ?? null,
+        identitiesMatch: complete };
       sharedConvergence.push(observation);
       Object.assign(proof, { health, sharedConvergence });
       await writeFile('qa/evidence/fleet-ha/live.json', JSON.stringify(proof, null, 2));
       console.log(JSON.stringify({ phase: 'shared-worker-drain', ...observation }));
       if (complete) { sharedAfter = verifiedSharedTopology(candidate, after); break; }
     }
+    // Preserve first-attempt health evidence even if the next probe fails.
+    Object.assign(proof, { health, sharedConvergence });
+    await writeFile('qa/evidence/fleet-ha/live.json', JSON.stringify(proof, null, 2));
     await sleep(3000);
   }
   assert(after && recoveryProbe >= 0, 'Two replacement worker processes did not recover after restart');

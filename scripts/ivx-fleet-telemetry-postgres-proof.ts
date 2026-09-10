@@ -74,6 +74,29 @@ try {
       && instance.sharedState && instance.sharedWorkerQueue));
     console.log(JSON.stringify({ ok: true, processObservationWithLockedTaskLedger: 'PASS', productionRowsTouched: 0 }));
   } finally { clearTimeout(deadline); await admin.query('rollback'); }
+  // Reproduce SLO and HA sharing their single telemetry connection. A slow
+  // task read must be cancelled by PostgreSQL before process observation runs.
+  await admin.query('begin');
+  try {
+    await admin.query('lock table public.ivx_autonomous_tasks in access exclusive mode');
+    const blockedRead = store.readPostgresFleetSloTasks();
+    const rejectedRead = assert.rejects(blockedRead, (error: unknown) =>
+      (error as { code: string }).code === '55P03');
+    let waiting = false;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      waiting = Number((await admin.query("select count(*) from pg_stat_activity where application_name='ivx_telemetry' and wait_event_type='Lock'")).rows[0].count) === 1;
+      if (waiting) break;
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    assert(waiting, 'SLO read must hold the single telemetry connection while blocked');
+    const queuedProcessRead = store.readPostgresFleetProcessObservation();
+    await rejectedRead;
+    const processObservation = await queuedProcessRead;
+    assert(processObservation.instances.some(instance => instance.instanceId === store.autonomousWorkerInstanceId()));
+    await store.persistPostgresFleetSloSample({ commit_sha: 'a'.repeat(40), measured_at: new Date().toISOString(), durable: true });
+    console.log(JSON.stringify({ ok: true, serverCancelledBlockedSloRead: 'PASS',
+      queuedProcessObservationRecovered: 'PASS', durableSampleAfterCancellation: 'PASS', productionRowsTouched: 0 }));
+  } finally { await admin.query('rollback'); }
 } finally {
   if (deadline) clearTimeout(deadline);
   await admin.query('select pg_advisory_unlock(9811593)');
