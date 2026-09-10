@@ -32,7 +32,7 @@ import { createSeniorJobAdmission } from './ivx-senior-job-admission';
  *     job whose `ownerApproved` flag is not true.
  *   - No secret values are ever stored on a job or in the ledger.
  */
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   appendDurableEvent,
   isDurableStoreConfigured,
@@ -379,6 +379,17 @@ export type IVXWorkerJobResult = {
    *  during execution and stored on the result so the answer-format can render
    *  the 7-section narrative from it. */
   executionRecord?: IVXExecutionRecord;
+  /** Bounded command receipts retained in the shared queue and proof ledger.
+   * Output is fingerprinted, not copied: test output can contain credentials. */
+  validationEvidence?: {
+    command: string;
+    kind: 'test' | 'typecheck' | 'other';
+    ok: boolean;
+    exitCode: number | null;
+    durationMs: number;
+    stdoutHash: string;
+    stderrHash: string;
+  }[];
   /** Phase 12 evidence fingerprint — deterministic hash of commitSha + deployId
    *  + filesChanged + finalStatus. Used by the duplicate-worker prevention to
    *  reject duplicate redeploys as separate completed development tasks. */
@@ -926,7 +937,7 @@ export function summarizeAutonomousCoderProof(
     endToEndProductionComplete: completed && proof.productionVerified,
     changedFiles: proof.filesChanged.slice(0, 25),
     filesInspected: proof.filesInspected.slice(0, 25),
-    testsRun: proof.commandsRun.some((cmd) => /test/i.test(cmd.command)),
+    testsRun: proof.commandsRun.some((cmd) => /(?:^|\s)(?:test|--test)(?:\s|$)/.test(cmd.command)),
     testsPassed: proof.testsPassed,
     typecheckRun: proof.commandsRun.some((cmd) => /tsc|typecheck|noEmit/i.test(cmd.command)),
     typecheckPassed: proof.typecheckPassed,
@@ -955,6 +966,16 @@ export function summarizeAutonomousCoderProof(
     healthResponse: proof.healthResponse,
     versionResponse: proof.versionResponse,
     generatedFeatureSlug: null,
+    validationEvidence: proof.commandsRun.slice(0, 24).map(cmd => ({
+      command: cmd.command.slice(0, 1000),
+      kind: /(?:^|\s)(?:test|--test)(?:\s|$)/.test(cmd.command) ? 'test' as const
+        : /(?:^|[\s/])tsc(?:\s|$)|--noEmit\b/.test(cmd.command) ? 'typecheck' as const : 'other' as const,
+      ok: cmd.ok,
+      exitCode: cmd.exitCode,
+      durationMs: cmd.durationMs,
+      stdoutHash: createHash('sha256').update(cmd.stdoutTail).digest('hex'),
+      stderrHash: createHash('sha256').update(cmd.stderrTail).digest('hex'),
+    })),
     auditFiles: { json: '', jsonl: '' },
     finalStatus,
     error: mutationProofError ?? proof.error,
@@ -1919,7 +1940,7 @@ async function updateJob(jobId: string, patch: Partial<IVXWorkerJob>, onlyIfActi
  * execution path. Every execution branch (read-only / factory / autonomous /
  * developer_executor) funnels through this before appendLedger.
  */
-function finalizeResultWithStateRecord(
+export function finalizeResultWithStateRecord(
   job: IVXWorkerJob,
   result: IVXWorkerJobResult,
 ): IVXWorkerJobResult {
@@ -1937,7 +1958,20 @@ function finalizeResultWithStateRecord(
     ...record,
     status: taskState,
     root_cause: result.error ? result.error.slice(0, 500) : null,
-    files_inspected: [],
+    files_inspected: result.filesInspected?.slice(0, 50) ?? [],
+    commands: (result.validationEvidence ?? []).map(cmd => ({
+      command: cmd.command,
+      exit_code: cmd.exitCode,
+      output_summary: `${cmd.ok ? 'PASS' : 'FAIL'}; duration_ms=${cmd.durationMs}; stdout_sha256=${cmd.stdoutHash}; stderr_sha256=${cmd.stderrHash}`,
+    })),
+    tests: (result.validationEvidence ?? []).filter(cmd => cmd.kind === 'test').map(cmd => ({
+      name: cmd.command,
+      command: cmd.command,
+      passed: cmd.ok,
+      duration_ms: cmd.durationMs,
+    })),
+    started_at: Number.isFinite(Date.parse(job.startedAt ?? job.createdAt))
+      ? Date.parse(job.startedAt ?? job.createdAt) : record.started_at,
     files_changed: result.changedFiles.slice(0, 50),
     commit_sha: result.commitSha,
     deployment_id: result.deployId,
