@@ -78,26 +78,19 @@ fi
 export IVX_HANDOFF_NONCE="native-${IVX_CHAT_E2E_NONCE}"
 # Android injects individual key events; include typing time as well as the
 # bounded live handoff wait before terminating the instrumentation process.
-timeout 420s "$MAESTRO" test "$FLOW_DIR/public-handoff.yaml" \
-  --env IVX_HANDOFF_NONCE="$IVX_HANDOFF_NONCE" \
-  --debug-output qa/evidence/dashboard-chat/native-handoff-debug \
-  --format junit --output qa/evidence/dashboard-chat/native-handoff.xml
-# Maestro copies the rendered response through the same accessibility driver
-# that passed the assertions. Android's separate uiautomator dump requires an
-# idle window and fails on the chat's continuous decorative animation.
-IVX_HANDOFF_JOB_ID="$(python3 scripts/ivx-native-handoff-identity.py \
-  qa/evidence/dashboard-chat/native-handoff-debug "$IVX_HANDOFF_NONCE")"
-export IVX_HANDOFF_JOB_ID
-node scripts/ivx-autonomous-handoff-live-cert.mjs
+if ! MAESTRO="$MAESTRO" FLOW_DIR="$FLOW_DIR" bash scripts/ivx-native-handoff-certificate.sh; then
+  record_flow_failure native-handoff
+fi
 
 # Collect independent chat/mission evidence in one build, but every original
-# assertion remains mandatory before the full route suite or PASS certificate.
-test "$UI_FAILURES" -eq 0
+# assertion remains mandatory before the PASS certificate. Collect independent
+# route failures in this same run even if handoff evidence extraction failed.
 
 # 6) Reuse the same authenticated owner session and physically open/scroll every
 # Expo Router screen. Any crash, fatal banner, process death, timeout, or route
 # that cannot paint fails the entire certificate.
 IVX_REUSE_AUTHENTICATED_SESSION=true bash scripts/ivx-all-routes-human-e2e.sh
+test "$UI_FAILURES" -eq 0
 
 timeout 10s adb shell pidof "$APP_ID" > qa/evidence/dashboard-chat/process.txt
 adb exec-out screencap -p > qa/evidence/dashboard-chat/final.png || true
