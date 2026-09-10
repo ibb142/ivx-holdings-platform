@@ -13,7 +13,7 @@ export type PublicChatApiResponse = {
   sessionId: string;
   answer: string;
   model: string;
-  source: 'chatgpt' | 'fallback';
+  source: 'chatgpt' | 'fallback' | 'autonomous' | 'deployment-brain';
   deploymentMarker: string;
   commit?: string;
   commitShort?: string;

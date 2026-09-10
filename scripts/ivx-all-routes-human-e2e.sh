@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_ID="com.ivxholdings.app.owner"
+APP_ID="${IVX_APP_ID:-com.ivxholdings.app.owner}"
 EVIDENCE="qa/evidence/all-routes-human-e2e"
 FLOW_DIR="$EVIDENCE/generated-flows"
 REPORT_DIR="$EVIDENCE/suites"
