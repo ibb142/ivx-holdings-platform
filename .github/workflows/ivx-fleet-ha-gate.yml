@@ -3,7 +3,7 @@ on:
   push:
     branches: [fix/fleet-render-ha-20260908, fix/fleet-backend-ha-20260908]
   pull_request:
-    paths: ['backend/**', 'expo/**', 'supabase/migrations/**', 'scripts/ivx-fleet-ha-postgres-proof.mjs', 'scripts/ivx-fleet-ha-live-proof.ts', 'scripts/ivx-fleet-ha-identities.ts', 'scripts/ivx-fleet-ha-identities.test.ts', '.github/workflows/ivx-fleet-ha-gate.yml']
+    paths: ['backend/**', 'expo/**', 'supabase/migrations/**', 'scripts/ivx-fleet-ha-postgres-proof.mjs', 'scripts/ivx-fleet-telemetry-postgres-proof.ts', 'scripts/ivx-fleet-ha-live-proof.ts', 'scripts/ivx-fleet-ha-identities.ts', 'scripts/ivx-fleet-ha-identities.test.ts', '.github/workflows/ivx-fleet-ha-gate.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,5 +28,8 @@ jobs:
       - run: bun test scripts/ivx-fleet-ha-identities.test.ts
       - run: bun test backend/ivx-final-closeout-resume.test.ts backend/services/ivx-native-intent.test.ts backend/services/ivx-fleet-dashboard-signals.test.ts backend/services/ivx-fleet-slo.test.ts backend/services/ivx-postgres-autonomous-task-store.test.ts backend/services/ivx-render-replicas.test.ts backend/services/ivx-shared-room-storage.test.ts backend/services/ivx-autonomous-control-policy.test.ts
       - run: node scripts/ivx-fleet-ha-postgres-proof.mjs
+        env:
+          IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
+      - run: bun scripts/ivx-fleet-telemetry-postgres-proof.ts
         env:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
