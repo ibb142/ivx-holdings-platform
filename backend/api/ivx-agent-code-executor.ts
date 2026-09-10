@@ -112,6 +112,12 @@ export async function handleExecutorWriteRequest(request: Request): Promise<Resp
 
 export async function handleExecutorBuildRequest(request: Request): Promise<Response> {
   let body: { files?: unknown; agentNumber?: unknown; agentId?: unknown; appName?: unknown; buildCommand?: unknown };
+
+  // Capacity check
+  const { runningAgents, targetAgents } = getExecutorStatus();
+  if (runningAgents >= targetAgents) {
+    return json({ ok: false, error: 'No available capacity to execute the build.' }, 503);
+  }
   try {
     body = (await request.json()) as typeof body;
   } catch {
