@@ -343,7 +343,10 @@
   });
 
   /* ---------- feed loading ---------- */
+  var feedGeneration = 0;
   function resetFeed() {
+    feedGeneration += 1;
+    state.loading = false;
     deactivateCurrent();
     feedEl.innerHTML = '';
     state.cursor = null;
@@ -412,6 +415,8 @@
   function loadMore() {
     if (state.loading || state.done) return;
     state.loading = true;
+    var generation = feedGeneration;
+    function isCurrentFeed() { return generation === feedGeneration; }
     var spin = document.createElement('div');
     spin.className = 'ivxr-spin';
     var spinAdded = false;
@@ -423,12 +428,14 @@
     apiFetchJson(currentPath)
       .then(function (data) {
         removeSpin();
+        if (!isCurrentFeed()) return;
         var vids = (data && data.videos) || [];
         // Fallback: if the dedicated Project Reels rail is empty, serve the unified
         // investor feed so the Reels surface never appears broken to visitors.
         if (state.channel === '__reels' && vids.length === 0 && !state.cursor) {
           return apiFetchJson('/api/reels?limit=6&viewer_id=' + encodeURIComponent(VIEWER))
             .then(function (fbData) {
+              if (!isCurrentFeed()) return;
               var fbVids = (fbData && fbData.videos) || [];
               fbVids.forEach(function (v) {
                 if (state.videos[v.id]) return;
@@ -440,6 +447,7 @@
               finishLoad();
             })
             .catch(function () {
+              if (!isCurrentFeed()) return;
               showFeedError();
               finishLoad();
             });
@@ -455,12 +463,14 @@
       })
       .catch(function (error) {
         removeSpin();
+        if (!isCurrentFeed()) return;
         console.error('[IVX Reels] Feed load failed:', error && error.message ? error.message : error);
         showFeedError();
         finishLoad();
       });
 
     function finishLoad() {
+      if (!isCurrentFeed()) return;
       state.loading = false;
       if (!feedEl.children.length) {
         var em = document.createElement('div');
