@@ -145,7 +145,8 @@ export async function handleAutonomousDashboardStreamConnection(ws: WebSocket, r
           if (closed || ws.readyState !== WS_OPEN) return;
           interval = setInterval(() => { void pushSnapshot(); }, IVX_AUTONOMOUS_DASHBOARD_STREAM_INTERVAL_MS);
           interval.unref?.();
-        } catch {
+        } catch (error) {
+          console.error('Authentication error:', error instanceof Error ? error.message : String(error));
           closeWith(4401, 'owner authentication failed');
         }
         return;
