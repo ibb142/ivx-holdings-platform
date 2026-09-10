@@ -54,13 +54,15 @@ describe('Landing repair source access', () => {
     await Promise.all(Array.from({ length: 220 }, (_, i) => repo.fileWriter(`backend/api/owner-credential-permission-security-emergency-stop-${i}.ts`, 'export const decoy = true;')));
     const sourcePath = 'backend/services/deal-video-normalization.ts';
     const testPath = 'backend/services/deal-video-normalization.test.ts';
-    const source = 'export function normalizeDealVideoUrl(value: string) { return value; }';
+    const source = 'import type { PoolClient } from "pg";\nexport function normalizeDealVideoUrl(value: string, db?: PoolClient) { return value; }';
     await repo.fileWriter(sourcePath, source);
+    await repo.fileWriter('backend/types/pg.d.ts', await readFile(path.join(path.dirname(fileURLToPath(import.meta.url)), 'types/pg.d.ts'), 'utf8'));
     await repo.fileWriter('expo/ivxholding-landing/index.html', '<main>Landing</main>');
     await repo.fileWriter('restricted.ts', 'DO_NOT_EXPOSE_PRIVATE_FIXTURE');
     let plans = 0;
     let patches = 0;
     let regressionRan = false;
+    let typecheckCommand = '';
     const proof = await runIVXAutonomousCoder({
       taskId: 'landing-remediation:fixture:media.deal-videos', goal: [
         '[AUTONOMOUS_DIAGNOSTIC_DATA] Repair a Landing QA failure.',
@@ -91,6 +93,7 @@ describe('Landing repair source access', () => {
       testRunner: async (cwd, command) => {
         const result = await runAutonomousCoderCommand(cwd, command);
         if (command.startsWith('node --import tsx --test ')) regressionRan = result.ok;
+        if (command.includes('/typescript/bin/tsc ')) typecheckCommand = command;
         expect(command).not.toContain('npx');
         return result;
       },
@@ -106,6 +109,12 @@ describe('Landing repair source access', () => {
     expect(proof.typecheckPassed).toBe(true);
     expect(proof.iterations[1].failureSummary).toContain('test is not defined');
     expect(proof.prMerged).toBe(true);
+    // Runtime declarations resolve real types; they must not mask invalid code.
+    expect(typecheckCommand).toContain('backend/types/pg.d.ts');
+    await repo.fileWriter(sourcePath, (await repo.fileReader(sourcePath)) + '\nconst invalidClient: PoolClient = { release: "not a function" };');
+    const invalid = await runAutonomousCoderCommand(repo.root, typecheckCommand);
+    expect(invalid.ok).toBe(false);
+    expect(invalid.stdoutTail).toContain('TS2322');
   });
 
   it('fails without an installed compiler and never reports the missing toolchain as a pass', async () => {
