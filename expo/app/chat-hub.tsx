@@ -531,7 +531,7 @@ export default function ChatHubScreen() {
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
           <KeyboardAvoidingView
             style={[styles.keyboardView, Platform.OS === 'web' && { paddingBottom: webKeyboardHeight }]}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}
           >
             <View style={[styles.headerShell, nativeKeyboardVisible && { display: 'none' }]}>
               <Animated.View style={[styles.heroCard, { transform: [{ scale: pulse }] }]} testID="public-chat-hero-card">
