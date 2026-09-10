@@ -26,6 +26,7 @@
  */
 import { MOBILE_CHECK, verifiedMobileSkip } from './ivx-ci-conditional-evidence';
 import { assertPrivateRepairScope, publicRepairGoal } from './ivx-private-repair-boundary';
+import { assertRepairPatchQuality, requiresRepairRegression } from './ivx-repair-patch-quality';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -110,6 +111,7 @@ export type IVXAutonomousCoderPatchOperation = {
 
 export type IVXAutonomousCoderTestResult = {
   command: string;
+  phase?: 'regression_baseline';
   ok: boolean;
   exitCode: number | null;
   stdoutTail: string;
@@ -377,7 +379,7 @@ export type IVXAutonomousCoderInput = {
    *  job record so a process crash between commit-landed and proof-return does
    *  not orphan the job at COMMITTING with an empty commitSha. Must never throw.
    *  If it throws, the error is swallowed and the engine continues. */
-  onCommitLanded?: (info: { commitSha: string; commitUrl: string; branch: string }) => void,
+  onCommitLanded?: (info: { commitSha: string; commitUrl: string; branch: string; filesChanged: string[]; commandsRun: IVXAutonomousCoderTestResult[]; testsPassed: boolean; typecheckPassed: boolean }) => void | Promise<void>,
   /** FINAL CLOSEOUT 2026-08-23 (restart/CI-wait resume): fired IMMEDIATELY after
    *  the pull request is created and BEFORE the CI wait begins. Lets the caller
    *  persist the full resume state (commitSha, prNumber, prUrl, branch) so a
@@ -838,10 +840,10 @@ function scopedTypecheckCommand(projectRoot: string, files: string[]): string {
   return `node ${path.join(projectRoot, 'node_modules', 'typescript', 'bin', 'tsc')} --noEmit --skipLibCheck --ignoreConfig --types node --target es2022 --module esnext --moduleResolution bundler ${inputs.join(' ')}`;
 }
 
-function targetedTestCommand(taskId: string, testFile: string): string {
+function targetedTestCommand(taskId: string, testFile: string, goal = ''): string {
   // Generated repair tests must run under the same Node + tsx contract as Render,
   // even when the caller/CI itself runs on Bun (which supplies extra test globals).
-  return /^(fleet-reasoning|landing-remediation):/.test(taskId)
+  return requiresRepairRegression(taskId, goal)
     ? `node --import tsx --test ${testFile}`
     : `bun test ${testFile}`;
 }
@@ -888,6 +890,7 @@ Rules:
 - Create regression tests as backend/**/*.test.ts or expo/**/*.test.ts(x); plain JavaScript test paths are outside this engine's patch scope.
 - Repair tests execute with node --import tsx --test. Import every test API explicitly: import { test, describe, it } from 'node:test'; import assert from 'node:assert/strict'. There are no global describe/it/expect APIs and bun:test is unavailable in production.
 - Validation uses NODE_ENV=test and does not inherit production credentials. Use isolated fixtures or dependency injection; do not depend on live database contents or call live write endpoints.
+- A repair regression must fail with ERR_ASSERTION against the original implementation and pass after the patch. Test an existing behavior through its real entry point. Already-passing tests, missing imports and tool failures do not reproduce the defect.
 - If Node reports ReferenceError for a test API, fix its import and assertions in the test. Never suppress the error, skip the test or weaken the assertion. On revision, the failed patch has been reverted; use the original source shown in FILE CONTENTS.
 - Missing customer media or credentials are external dependencies. Never invent assets, URLs, credentials, successful results or weaker acceptance criteria to make a repair pass.
 - If the goal is already satisfied, return {"rootCause":"already satisfied","technicalPlan":"no change needed","operations":[]}
@@ -2470,14 +2473,22 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     markStageStart('patching');
     let patchApplied = false;
     const appliedOps: IVXAutonomousCoderPatchOperation[] = [];
+    const requiresRegression = requiresRepairRegression(input.taskId, input.goal);
+    const originalSources = new Map<string, string | null>();
     let applyError: string | null = null;
     try {
       assertPrivateRepairScope(input.goal, input.allowedFiles, parsed.operations.map(op => op.path));
-      const { assertRepairPatchQuality } = await import('./ivx-repair-patch-quality');
-      assertRepairPatchQuality(input.taskId, parsed.operations);
-      if (/^(fleet-reasoning|landing-remediation):/.test(input.taskId)) {
+      assertRepairPatchQuality(input.taskId, parsed.operations, input.goal);
+      if (requiresRegression) {
         const unseen = parsed.operations.find(op => op.kind === 'replace_exact' && !patchContextFiles.some(file => file.path === op.path));
         if (unseen) throw new Error(`REPAIR_SOURCE_NOT_INSPECTED: ${unseen.path}. Modify only source actually read, or request a real existing path on revision.`);
+      }
+      if (requiresRegression) {
+        const read = input.fileReader ?? (async (rel: string) => readFile(path.join(projectRoot, rel), 'utf8'));
+        for (const op of parsed.operations) {
+          if (/\.(test|spec)\.[cm]?[jt]sx?$/.test(op.path) || originalSources.has(op.path)) continue;
+          originalSources.set(op.path, existsSync(path.join(projectRoot, op.path)) ? await read(op.path) : null);
+        }
       }
       for (const op of parsed.operations) {
         await applyPatchOperation(op, projectRoot, input.fileWriter, input.fileReader);
@@ -2537,8 +2548,41 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // mock can exercise pass/fail scenarios. In production, only run tests
     // when a test file actually exists on disk.
     const effectiveTestTarget = targetTest ?? (input.testRunner ? 'backend/ivx-autonomous-coder.test.ts' : null);
+    let regressionFailure: string | null = null;
+    if (requiresRegression && effectiveTestTarget) {
+      // Keep the generated test unchanged while restoring every implementation
+      // file to its inspected baseline. Always restore the patch before its
+      // normal test/typecheck run, including when the baseline runner fails.
+      const read = input.fileReader ?? (async (rel: string) => readFile(path.join(projectRoot, rel), 'utf8'));
+      const write = input.fileWriter ?? (async (rel: string, content: string) => {
+        await mkdir(path.dirname(path.join(projectRoot, rel)), { recursive: true });
+        await writeFile(path.join(projectRoot, rel), content, 'utf8');
+      });
+      const patchedSources = new Map<string, string>();
+      try {
+        for (const file of originalSources.keys()) patchedSources.set(file, await read(file));
+        for (const [file, original] of originalSources) {
+          if (original === null) await rm(path.join(projectRoot, file), { force: true });
+          else await write(file, original);
+        }
+        const command = targetedTestCommand(input.taskId, effectiveTestTarget, input.goal);
+        const baseline = input.testRunner
+          ? await input.testRunner(projectRoot, command)
+          : await runAutonomousCoderCommand(projectRoot, command);
+        commandsRun.push({ ...baseline, phase: 'regression_baseline' });
+        if (baseline.ok || baseline.exitCode !== 1 || !/\bERR_ASSERTION\b/.test(baseline.stdoutTail + baseline.stderrTail)) {
+          regressionFailure = 'REPAIR_REGRESSION_NOT_REPRODUCED: the same regression must fail with an assertion against the original implementation. Already-passing tests and infrastructure/import errors do not prove a repair.';
+        }
+      } catch (error) {
+        regressionFailure = `REPAIR_REGRESSION_BASELINE_FAILED: ${safeErrorMessage(error)}`;
+      } finally {
+        for (const [file, patched] of patchedSources) await write(file, patched);
+      }
+    } else if (requiresRegression) {
+      regressionFailure = 'REPAIR_REGRESSION_NOT_REPRODUCED: no executable regression was found.';
+    }
     if (effectiveTestTarget) {
-      testCmd = targetedTestCommand(input.taskId, effectiveTestTarget);
+      testCmd = targetedTestCommand(input.taskId, effectiveTestTarget, input.goal);
       if (input.testRunner) {
         testResult = await input.testRunner(projectRoot, testCmd);
       } else {
@@ -2552,6 +2596,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       testsActuallyRun = false;
       testsPassed = true; // neutral — typecheck + content-change are the gates
     }
+    if (regressionFailure) testsPassed = false;
 
     // The production image supplies TypeScript. Always run its installed entry
     // point; do not download `tsc` or turn compiler failures into skipped passes.
@@ -2605,6 +2650,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // ── ANALYZE FAILURE ──────────────────────────────────────────────────
     onPhase?.('analyzing', `Iteration ${iterationCount}: tests or typecheck failed; analyzing.`);
     const failureParts: string[] = [];
+    if (regressionFailure) failureParts.push(regressionFailure);
     if (!testsPassed && testResult) {
       failureParts.push(`TEST FAILURE (${testResult.command}):\nstdout: ${testResult.stdoutTail}\nstderr: ${testResult.stderrTail}`);
     }
@@ -2724,7 +2770,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         // still find the commit on the ivx-autonomous branch and recover the job
         // to COMPLETED instead of orphaning it at COMMITTING 65% with commitSha=''.
         try {
-          input.onCommitLanded?.({ commitSha, commitUrl, branch });
+          await input.onCommitLanded?.({ commitSha, commitUrl, branch, filesChanged: [...filesChanged], commandsRun: [...commandsRun], testsPassed, typecheckPassed });
         } catch {
           // The persistence callback must never break the engine loop.
         }
@@ -3230,7 +3276,7 @@ export function buildAutonomousCoderAnswer(proof: IVXAutonomousCoderProof): stri
   const commandsList = proof.commandsRun.length > 0
     ? proof.commandsRun.map((cmd) => {
         const status = cmd.ok ? 'PASS' : 'FAIL';
-        return `$ ${cmd.command} → ${status} (exit ${cmd.exitCode ?? '?'}, ${cmd.durationMs}ms)`;
+        return `${cmd.phase ? `[${cmd.phase}] ` : ''}$ ${cmd.command} → ${status} (exit ${cmd.exitCode ?? '?'}, ${cmd.durationMs}ms)`;
       }).join('\n')
     : 'NONE';
 
