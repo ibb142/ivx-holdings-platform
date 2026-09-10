@@ -296,12 +296,17 @@ function loadLandingHtml(fetchImpl: typeof fetch): Promise<LandingPage> {
 
 type DealRecord = Record<string, unknown>;
 
-function loadDeals(fetchImpl: typeof fetch): Promise<{ probe: Probe; deals: DealRecord[] }> {
+function loadDeals(fetchImpl: typeof fetch): Promise<{ probe: Probe; deals: DealRecord[]; contractError: string | null }> {
   return cached('deals', CACHE_60S, async () => {
     const result = await probe(fetchImpl, `${LANDING_API_URL}/api/deals`, { headers: { accept: 'application/json' } });
     const body = parseJson(result.text) as { deals?: unknown } | unknown[] | undefined;
-    const list = Array.isArray(body) ? body : Array.isArray((body as { deals?: unknown })?.deals) ? (body as { deals: unknown[] }).deals : [];
-    return { probe: result, deals: list.filter((row): row is DealRecord => typeof row === 'object' && row !== null) };
+    const list = Array.isArray(body) ? body : (body as { deals?: unknown })?.deals;
+    if (!Array.isArray(list)) return { probe: result, deals: [], contractError: '/api/deals response does not contain a deals array' };
+    // Do not silently discard malformed records and certify only the survivors.
+    if (!list.every((row): row is DealRecord => typeof row === 'object' && row !== null && !Array.isArray(row))) {
+      return { probe: result, deals: [], contractError: '/api/deals contains invalid deal records' };
+    }
+    return { probe: result, deals: list, contractError: null };
   });
 }
 
@@ -640,9 +645,11 @@ async function runApi(fetchImpl: typeof fetch, path: string, asserts: ApiAssert[
 }
 
 async function runDeals(fetchImpl: typeof fetch, assert: DealsAssert, c: Collector): Promise<Verdict> {
-  const { probe: p, deals } = await loadDeals(fetchImpl);
+  const { probe: p, deals, contractError } = await loadDeals(fetchImpl);
   c.api.push(`GET ${LANDING_API_URL}/api/deals → ${p.status || p.error} ${p.ms}ms (${deals.length} deals)`);
   if (p.status !== 200) return fail(`/api/deals HTTP ${p.status || p.error}`, 'api', 'restore public deals API');
+  if (contractError) return fail(contractError, 'api', 'restore the deals response contract');
+  if (deals.length === 0) return fail('no deals returned; no property assertion was verified', 'content', 'restore the published deals before certification');
   const titles = deals.map(dealTitle);
   c.evidence.push(`deal titles: ${titles.slice(0, 8).map((t) => `"${truncate(t, 30)}"`).join(', ')}`);
   switch (assert.assert) {
@@ -699,9 +706,10 @@ async function mediaUrls(fetchImpl: typeof fetch, source: 'deals-images' | 'deal
   const emptyOwners: string[] = [];
   const add = (url: string, owner: string) => { if (!owners.has(url)) owners.set(url, new Set()); owners.get(url)!.add(owner); };
   if (source === 'deals-images' || source === 'deals-videos') {
-    const { probe: p, deals } = await loadDeals(fetchImpl);
+    const { probe: p, deals, contractError } = await loadDeals(fetchImpl);
     c.api.push(`GET ${LANDING_API_URL}/api/deals → ${p.status || p.error}`);
     if (p.status !== 200) return { urls: [], owners, emptyOwners, error: `/api/deals HTTP ${p.status || p.error}` };
+    if (contractError) return { urls: [], owners, emptyOwners, error: contractError };
     for (const deal of deals) {
       const media = dealMedia(deal);
       const list = source === 'deals-images' ? media.images : media.videos;
