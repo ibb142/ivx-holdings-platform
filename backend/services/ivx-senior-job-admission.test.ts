@@ -2,6 +2,23 @@ import { describe, expect, it } from 'bun:test';
 import { createSeniorJobAdmission } from './ivx-senior-job-admission';
 const jobs = (count: number) => Array.from({ length: count }, (_, i) => ({ jobId: `job-${i}`, ownerId: `agent-${i}`, status: 'queued', createdAt: new Date().toISOString() }));
 describe('senior worker concurrent admission', () => {
+  for (const protectedWork of ['expired-commit', 'live-lease'] as const) {
+    it(`admits another owner with one execution slot while ${protectedWork} awaits recovery`, async () => {
+      const pending = jobs(2);
+      const orphan = { ...jobs(1)[0], jobId: 'orphan', status: 'running',
+        lastHeartbeatAt: new Date(Date.now() - 600_000).toISOString(),
+        leaseExpiresAt: new Date(Date.now() + (protectedWork === 'live-lease' ? 60_000 : -60_000)).toISOString(),
+        result: protectedWork === 'expired-commit' ? { commitSha: 'a'.repeat(40) } : null };
+      const queue = { jobs: [orphan, ...pending] };
+      const calls: string[] = [];
+      const next = createSeniorJobAdmission({ claimed: new Set<string>(), active: new Set(['running']),
+        staleAfterMs: 60_000, stopped: () => false, read: async () => queue,
+        claim: async job => { calls.push(job.jobId); return job.ownerId === orphan.ownerId ? null : job; } });
+      expect((await next())?.jobId).toBe('job-1');
+      expect(calls).toEqual(['job-1']);
+      expect(orphan.status).toBe('running');
+    });
+  }
   it('leaves committed retries to verification recovery and admits other queued work', async () => {
     const queue = { jobs: jobs(2).map((job, i) => ({ ...job, result: i === 0 ? { commitSha: 'a'.repeat(40) } : null })) };
     const claimedIds: string[] = [];
