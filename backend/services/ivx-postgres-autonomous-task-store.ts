@@ -265,6 +265,23 @@ export async function readPostgresTaskById(taskId: string): Promise<Task | null>
   }
 }
 
+/** Exact bounded identity lookup: daily planning must not download historical evidence. */
+export async function readPostgresTaskKeys(keys: readonly string[]): Promise<string[]> {
+  const unique = [...new Set(keys)];
+  if (unique.length > 112 || unique.some(key => !/^[a-zA-Z0-9:_-]{1,240}$/.test(key))) throw new Error('Invalid bounded task identity lookup');
+  const found: string[] = [];
+  for (let offset = 0; offset < unique.length; offset += 28) {
+    const batch = unique.slice(offset, offset + 28);
+    const rows = preferDirectTransport()
+      ? (await queryWithPostgresDeadline<{ idempotency_key: string }>(getDirectPool(),
+        'select distinct idempotency_key from public.ivx_autonomous_tasks where idempotency_key = any($1::text[])', [batch])).rows
+      : await restRequest<Array<{ idempotency_key: string }>>(`ivx_autonomous_tasks?${new URLSearchParams({ select: 'idempotency_key', idempotency_key: `in.(${batch.join(',')})`, limit: '1000' })}`, { method: 'GET' });
+    if (!Array.isArray(rows) || rows.length >= 1000 || rows.some(row => !batch.includes(row.idempotency_key))) throw new Error('Invalid task identity response');
+    found.push(...rows.map(row => row.idempotency_key));
+  }
+  return [...new Set(found)];
+}
+
 export async function readPostgresTaskIdentitiesByPrefix(prefix: string): Promise<Array<Pick<Task, 'taskId' | 'idempotencyKey' | 'state'>>> {
   if (!/^[a-z0-9-]+:[a-f0-9]{40}:$/.test(prefix)) throw new Error('Exact mission prefix is required');
   const directRead = async () => {
