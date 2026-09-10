@@ -753,7 +753,7 @@ async function revertPatchOperation(
 
 // ── TEST + TYPECHECK RUNNER ──────────────────────────────────────────────────
 
-async function runCommand(cwd: string, command: string): Promise<IVXAutonomousCoderTestResult> {
+export async function runAutonomousCoderCommand(cwd: string, command: string): Promise<IVXAutonomousCoderTestResult> {
   const started = Date.now();
   // Resolve the runtime: the Render container runs under node+tsx, not bun.
   // `bun test` and `bun x tsc` fail with ENOENT on the production container, so
@@ -766,13 +766,18 @@ async function runCommand(cwd: string, command: string): Promise<IVXAutonomousCo
   let effectiveArgs = parts.slice(1);
   let displayCommand = command;
   // When bun falls back to node, translate `bun test <file>` → `node --test <file>`
-  // (node:test runner) and `bun x tsc --noEmit` → `npx tsc --noEmit` (or node tsc).
+  // (node:test runner), and execute `bun x tsc` with the installed compiler.
   if (resolution.usedFallback && requestedRuntime === 'bun') {
     if (effectiveArgs[0] === 'test') {
       effectiveArgs = ['--import', 'tsx', '--test', ...effectiveArgs.slice(1)];
       displayCommand = `node ${effectiveArgs.join(' ')}`;
+    } else if (effectiveArgs[0] === 'x' && effectiveArgs[1] === 'tsc') {
+      const node = resolveRuntimeCommand('node');
+      effectiveCmd = node.resolvedPath ?? node.effectiveCommand;
+      effectiveArgs = [path.join(cwd, 'node_modules', 'typescript', 'bin', 'tsc'), ...effectiveArgs.slice(2)];
+      displayCommand = `node ${effectiveArgs.join(' ')}`;
     } else if (effectiveArgs[0] === 'x') {
-      // `bun x tsc` → use npx instead (with --yes so it never waits for confirmation)
+      // Other explicit bun x commands retain the existing non-interactive npx fallback.
       const npxRes = resolveRuntimeCommand('npx');
       effectiveCmd = npxRes.resolvedPath ?? npxRes.effectiveCommand;
       effectiveArgs = ['--yes', ...effectiveArgs.slice(1)]; // drop the 'x', add --yes
@@ -805,6 +810,20 @@ async function runCommand(cwd: string, command: string): Promise<IVXAutonomousCo
       durationMs: Date.now() - started,
     };
   }
+}
+
+/** Use the installed TypeScript package, never the unrelated npm package named tsc.
+ * Missing or broken toolchains fail the command; no network install or skipped gate. */
+function scopedTypecheckCommand(projectRoot: string, files: string[]): string {
+  return `node ${path.join(projectRoot, 'node_modules', 'typescript', 'bin', 'tsc')} --noEmit --skipLibCheck --ignoreConfig --types node --target es2022 --module esnext --moduleResolution bundler ${files.join(' ')}`;
+}
+
+function targetedTestCommand(taskId: string, testFile: string): string {
+  // Generated repair tests must run under the same Node + tsx contract as Render,
+  // even when the caller/CI itself runs on Bun (which supplies extra test globals).
+  return /^(fleet-reasoning|landing-remediation):/.test(taskId)
+    ? `node --import tsx --test ${testFile}`
+    : `bun test ${testFile}`;
 }
 
 /** Pick the most relevant test file for the goal. Only returns files that
@@ -847,6 +866,8 @@ Rules:
 - Never invent an existing file path. For modifications, use files shown in FILES; a missing path is not evidence that an implementation exists.
 - Repair goals that require regression coverage must include BOTH the functional source operation and a runnable node:test regression operation in the same response.
 - Create regression tests as backend/**/*.test.ts or expo/**/*.test.ts(x); plain JavaScript test paths are outside this engine's patch scope.
+- Repair tests execute with node --import tsx --test. Import every test API explicitly: import { test, describe, it } from 'node:test'; import assert from 'node:assert/strict'. There are no global describe/it/expect APIs and bun:test is unavailable in production.
+- If Node reports ReferenceError for a test API, fix its import and assertions in the test. Never suppress the error, skip the test or weaken the assertion. On revision, the failed patch has been reverted; use the original source shown in FILE CONTENTS.
 - Missing customer media or credentials are external dependencies. Never invent assets, URLs, credentials, successful results or weaker acceptance criteria to make a repair pass.
 - If the goal is already satisfied, return {"rootCause":"already satisfied","technicalPlan":"no change needed","operations":[]}
 
@@ -856,7 +877,7 @@ NON-TRIVIAL TASK GUIDANCE:
 - When asked to MODIFY MULTIPLE FILES, include one operation per file.
 - When asked to ADD A TEST, create a new test file with kind="create_file". Use node:test and node:assert/strict so it runs with both Bun in CI and Node + tsx in production.
 - Read the FILE CONTENTS carefully and copy exact text for oldText from what you see.
-- PREFER create_file for new functionality — it is always reliable and never fails to apply.
+- Use create_file only for a new path. If that path already exists, inspect it and use replace_exact; never overwrite existing code blindly.
 - For large files (1000+ lines), PREFER create_file for new routes/modules instead of replace_exact.
 - If a replace_exact fails because oldText is not found, on revision use a DIFFERENT snippet or switch to create_file.
 
@@ -2137,11 +2158,11 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         // when a test file actually exists on disk.
         const effectiveTestTarget = targetTest ?? (input.testRunner ? 'backend/ivx-autonomous-coder.test.ts' : null);
         if (effectiveTestTarget) {
-          const testCmd = `bun test ${effectiveTestTarget}`;
+          const testCmd = targetedTestCommand(input.taskId, effectiveTestTarget);
           if (input.testRunner) {
             testResult = await input.testRunner(projectRoot, testCmd);
           } else {
-            testResult = await runCommand(projectRoot, testCmd);
+            testResult = await runAutonomousCoderCommand(projectRoot, testCmd);
           }
           commandsRun.push(testResult);
           testsActuallyRun = true;
@@ -2152,61 +2173,11 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           testsPassed = true; // neutral — typecheck + content-change are the gates
         }
 
-        // SCOPED TYPECHECK for the pilot fallback: the change is a trivial
-        // string-literal replacement in a tiny module, so a full-project
-        // `tsc --noEmit` (which times out on the Render container at 60s) is
-        // both unnecessary and a false gate. Instead, run a scoped typecheck on
-        // the single changed file via `tsc --noEmit --skipLibCheck <file>` when
-        // bun is unavailable, or `bun x tsc --noEmit --skipLibCheck <file>`.
-        // The full-project typecheck remains the gate for the LLM-driven path.
         const changedFilePath = fallback.operations[0]?.path ?? 'backend/services/ivx-autonomous-coder-pilot.ts';
-        // FIX: use --module esnext --moduleResolution bundler instead of
-        // --module nodenext. The nodenext setting rejects `import.meta`
-        // (TS1470) which the engine file and many backend modules use — a
-        // FALSE type error that blocked every LLM patch touching such a file.
-        // esnext+bundler still catches REAL type errors (verified) but allows
-        // import.meta, which is valid in the actual runtime (node+tsx / bun).
-        const typecheckCmd = `bun x tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`;
-        let typecheckResult: IVXAutonomousCoderTestResult;
-        if (input.testRunner) {
-          typecheckResult = await input.testRunner(projectRoot, typecheckCmd);
-        } else {
-          // Run a scoped typecheck on just the changed file. The full-project
-          // typecheck is too slow on Render (60s timeout) and the change is a
-          // string literal in an isolated module — a scoped check is the honest
-          // gate for this controlled pilot.
-          const bunRes = resolveRuntimeCommand('bun');
-          const bunAvail = !bunRes.usedFallback && bunRes.resolvedPath !== null;
-          // V6.20 FIX: When neither bun nor local tsc is available (Render
-          // production: `bun install --production` skips devDependencies so
-          // typescript is NOT installed), SKIP the typecheck gracefully.
-          // Do NOT fall back to `npx --yes tsc` — it downloads a deprecated
-          // wrong package (tsc@2.0.4) that is NOT the TypeScript compiler.
-          // The content-change check is the real gate for the pilot label.
-          let pilotScopedCmd: string | null = null;
-          if (bunAvail) {
-            pilotScopedCmd = `bun x tsc --noEmit --skipLibCheck --ignoreConfig --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`;
-          } else {
-            try {
-              await stat(path.join(projectRoot, 'node_modules', '.bin', 'tsc'));
-              pilotScopedCmd = `node ${path.join(projectRoot, 'node_modules', '.bin', 'tsc')} --noEmit --skipLibCheck --ignoreConfig --target es2022 --module esnext --moduleResolution bundler ${changedFilePath}`;
-            } catch {
-              pilotScopedCmd = null;
-            }
-          }
-          if (pilotScopedCmd) {
-            typecheckResult = await runCommand(projectRoot, pilotScopedCmd);
-          } else {
-            typecheckResult = {
-              command: 'tsc (skipped — not available on production container)',
-              ok: true,
-              exitCode: 0,
-              stdoutTail: 'TypeScript compiler not installed (bun install --production skips devDeps). Typecheck skipped; content-change check is the gate.',
-              stderrTail: '',
-              durationMs: 0,
-            };
-          }
-        }
+        const typecheckCmd = scopedTypecheckCommand(projectRoot, [changedFilePath]);
+        const typecheckResult = input.testRunner
+          ? await input.testRunner(projectRoot, typecheckCmd)
+          : await runAutonomousCoderCommand(projectRoot, typecheckCmd);
         commandsRun.push(typecheckResult);
         typecheckPassed = typecheckResult.ok;
         buildRun = true;
@@ -2464,56 +2435,13 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     finalPatch = parsed.operations;
     anyPatchGenerated = true;
 
-    // V6.15 FIX: Baseline typecheck — capture pre-existing TS errors BEFORE
-    // applying the patch. Files like hono.ts have pre-existing TS errors
-    // (duplicate handleGetAuditTrail, createServiceClient not found, etc.).
-    // The scoped typecheck after the patch fails on those pre-existing errors,
-    // causing every LLM patch touching those files to BLOCK even when the
-    // patch itself is clean. By capturing the baseline error count before the
-    // patch and comparing after, we only fail when the patch INTRODUCES new
-    // errors.
-    //
-    // V6.15.1 FIX: When tsc is NOT locally available (typescript is not in
-    // package.json and Render uses `bun install --production` which skips
-    // devDependencies), the `npx --yes tsc` fallback downloads TypeScript
-    // every run → 60s timeout. In that environment we skip the baseline
-    // typecheck entirely — the content-change check is the real gate. This is
-    // honest: typecheckRun=false, typecheckPassed=true (neutral), and the
-    // proof records that typecheck was skipped because tsc was unavailable.
+    // Compare against the same installed compiler and flags before and after
+    // the patch. A missing compiler cannot establish a passing baseline.
     const baselineFilePaths = parsed.operations.filter(op => op.kind === 'replace_exact' && /\.tsx?$/.test(op.path)).map(op => op.path);
-    const baselineFileArgs = baselineFilePaths.join(' ');
     let baselineTsErrorCount = 0;
-    let tscAvailableForBaseline = false;
-    if (baselineFileArgs && !input.testRunner) {
-      const localTscBase = path.join(projectRoot, 'node_modules', '.bin', 'tsc');
-      const bunResBase = resolveRuntimeCommand('bun');
-      const bunAvailBase = !bunResBase.usedFallback && bunResBase.resolvedPath !== null;
-      let baselineTscCmd: string | null = null;
-      if (bunAvailBase) {
-        baselineTscCmd = `bun x tsc --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${baselineFileArgs}`;
-        tscAvailableForBaseline = true;
-      } else {
-        try {
-          await stat(localTscBase);
-          baselineTscCmd = `node ${localTscBase} --noEmit --skipLibCheck --target es2022 --module esnext --moduleResolution bundler ${baselineFileArgs}`;
-          tscAvailableForBaseline = true;
-        } catch {
-          // tsc NOT locally available and bun NOT available — SKIP baseline
-          // typecheck. Do NOT fall back to npx --yes tsc (downloads TypeScript
-          // every run → 60s timeout on Render). The content-change check is
-          // the real gate in this environment.
-          baselineTscCmd = null;
-          tscAvailableForBaseline = false;
-        }
-      }
-      if (baselineTscCmd) {
-        try {
-          const baseResult = await runCommand(projectRoot, baselineTscCmd);
-          baselineTsErrorCount = countTsErrors((baseResult.stderrTail || '') + (baseResult.stdoutTail || ''));
-        } catch {
-          baselineTsErrorCount = 0;
-        }
-      }
+    if (baselineFilePaths.length && !input.testRunner) {
+      const baseResult = await runAutonomousCoderCommand(projectRoot, scopedTypecheckCommand(projectRoot, baselineFilePaths));
+      baselineTsErrorCount = countTsErrors(baseResult.stderrTail + baseResult.stdoutTail);
     }
 
     // ── APPLY PATCH ──────────────────────────────────────────────────────
@@ -2589,11 +2517,11 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // when a test file actually exists on disk.
     const effectiveTestTarget = targetTest ?? (input.testRunner ? 'backend/ivx-autonomous-coder.test.ts' : null);
     if (effectiveTestTarget) {
-      testCmd = `bun test ${effectiveTestTarget}`;
+      testCmd = targetedTestCommand(input.taskId, effectiveTestTarget);
       if (input.testRunner) {
         testResult = await input.testRunner(projectRoot, testCmd);
       } else {
-        testResult = await runCommand(projectRoot, testCmd);
+        testResult = await runAutonomousCoderCommand(projectRoot, testCmd);
       }
       commandsRun.push(testResult);
       testsActuallyRun = true;
@@ -2604,53 +2532,13 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       testsPassed = true; // neutral — typecheck + content-change are the gates
     }
 
-    // SCOPED TYPECHECK for the LLM path: the changed files are known after the
-    // patch is applied, so we run `tsc --noEmit --skipLibCheck <changedFiles>` on
-    // JUST those files instead of the full project. The full-project `tsc
-    // --noEmit` times out on the Render container at 60s, which was the root
-    // cause of pilot 4's BLOCKED verdict. A scoped check on the changed files is
-    // the honest gate — it catches type errors in the actual edit without the
-    // 60s full-project penalty. When bun is available we use `bun x tsc`; on
-    // Render (node+tsx, no bun) we use `npx tsc`.
-    const bunResTsc = resolveRuntimeCommand('bun');
-    const bunAvailTsc = !bunResTsc.usedFallback && bunResTsc.resolvedPath !== null;
-    const changedFileArgs = appliedOps.filter(op => /\.tsx?$/.test(op.path)).map(op => op.path).join(' ');
-    // V6.13 FIX: npx --yes tsc downloads typescript on every run and can
-    // timeout on the Render container. Use the locally-installed tsc via
-    // node_modules/.bin/tsc when available. Only fall back to npx if tsc
-    // is not found locally. This eliminates the 60s download stall that
-    // caused every LLM-driven patch to BLOCK at the typecheck stage.
-    //
-    // V6.15.1 FIX: When tsc is NOT locally available and bun is NOT available
-    // (Render production: `bun install --production` — typescript not in
-    // package.json), SKIP the typecheck entirely. Do NOT fall back to
-    // `npx --yes tsc` which downloads TypeScript every run → 60s timeout.
-    // The content-change check is the real gate in this environment.
-    // typecheckRun=false, typecheckPassed=true (neutral — like the bun test
-    // skip). This is honest: the proof records that typecheck was skipped.
-    // Gap 4 FIX: Always run typecheck. When bun is available use `bun x tsc`.
-    // When bun is unavailable, try local tsc via node_modules/.bin/tsc.
-    // When neither is available, use `npx tsc` (runCommand translates it).
-    // NEVER skip the typecheck quality gate.
-    const localTscPath = path.join(projectRoot, 'node_modules', '.bin', 'tsc');
-    let tscCmd: string;
-    if (bunAvailTsc) {
-      tscCmd = `bun x tsc --noEmit --skipLibCheck --ignoreConfig --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
-    } else {
-      try {
-        await stat(localTscPath);
-        tscCmd = `node ${localTscPath} --noEmit --skipLibCheck --ignoreConfig --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
-      } catch {
-        // Neither bun nor local tsc — use npx via runCommand (it handles the
-        // runtime translation). This may download tsc on first run but is the
-        // honest quality gate — we never skip typecheck.
-        tscCmd = `npx --yes tsc --noEmit --skipLibCheck --ignoreConfig --target es2022 --module esnext --moduleResolution bundler ${changedFileArgs}`;
-      }
-    }
-    let typecheckResult: IVXAutonomousCoderTestResult;
-    typecheckResult = input.testRunner
+    // The production image supplies TypeScript. Always run its installed entry
+    // point; do not download `tsc` or turn compiler failures into skipped passes.
+    const changedTsFiles = appliedOps.filter(op => /\.tsx?$/.test(op.path)).map(op => op.path);
+    const tscCmd = scopedTypecheckCommand(projectRoot, changedTsFiles);
+    const typecheckResult = input.testRunner
       ? await input.testRunner(projectRoot, tscCmd)
-      : await runCommand(projectRoot, tscCmd);
+      : await runAutonomousCoderCommand(projectRoot, tscCmd);
     commandsRun.push(typecheckResult);
     // V6.15: Only fail typecheck if the patch INTRODUCED new errors.
     const postPatchTsErrors = countTsErrors((typecheckResult.stderrTail || '') + (typecheckResult.stdoutTail || ''));
@@ -2697,10 +2585,10 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     onPhase?.('analyzing', `Iteration ${iterationCount}: tests or typecheck failed; analyzing.`);
     const failureParts: string[] = [];
     if (!testsPassed && testResult) {
-      failureParts.push(`TEST FAILURE (${testCmd}):\nstdout: ${testResult.stdoutTail}\nstderr: ${testResult.stderrTail}`);
+      failureParts.push(`TEST FAILURE (${testResult.command}):\nstdout: ${testResult.stdoutTail}\nstderr: ${testResult.stderrTail}`);
     }
     if (!typecheckPassed) {
-      failureParts.push(`TYPECHECK FAILURE (${tscCmd}):\nstdout: ${typecheckResult.stdoutTail}\nstderr: ${typecheckResult.stderrTail}`);
+      failureParts.push(`TYPECHECK FAILURE (${typecheckResult.command}):\nstdout: ${typecheckResult.stdoutTail}\nstderr: ${typecheckResult.stderrTail}`);
     }
     const failureSummary = truncate(failureParts.join('\n\n'), 2000);
     lastFailureContext = truncate(failureParts.join('\n\n'), FAILURE_OUTPUT_CHARS);
