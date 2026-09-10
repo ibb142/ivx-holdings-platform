@@ -37,6 +37,7 @@ test('planning index paginates identities without hydrating evidence payloads', 
     import {mock} from 'bun:test';
     let reads=0;
     mock.module('pg',()=>({Client:class {},Pool:class {
+      on() { return this; }
       async query(sql,values) {
         reads++;
         if(sql.includes('select payload ') || !sql.includes("payload->>'title'"))throw Error('full payload requested');
