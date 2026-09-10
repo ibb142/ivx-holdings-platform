@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createTasksBatch, finalizeEvidenceTask, type Task } from './ivx-autonomous-task-engine';
+import { createTasksBatch, finalizeEvidenceTask, transitionTaskState, type Task } from './ivx-autonomous-task-engine';
 import { getSchedulerState, isJobDue, runScheduledJob, type SchedulerState } from './ivx-autonomous-scheduler';
 import { checkEmergencyStop } from './ivx-emergency-stop-gate';
 
@@ -28,12 +28,29 @@ export async function ensureTechnicalScheduleSeeded(): Promise<void> {
   if (inputs.length) {
     const results = await createTasksBatch(inputs);
     if (results.some(result => !result.ok)) throw new Error('Technical schedule enqueue failed');
+    for (const result of results) {
+      if (result.task && canRecoverTechnicalRollout(result.task)) {
+        const retry = await transitionTaskState(result.task.taskId, 'RETRYING');
+        if (!retry.ok) throw new Error('Technical rollout recovery changed concurrently');
+      }
+    }
   }
   lastSeedAt = Date.now();
 }
 
 export function technicalTaskKind(task: Pick<Task, 'idempotencyKey'>) {
   return KINDS.find(kind => task.idempotencyKey.startsWith(`${PREFIX}${kind}:`)) ?? null;
+}
+
+/** An old replica may claim a newly supported task while a rollout drains.
+ * Retry only that zero-work rejection after the overlap window; preserve owner
+ * blocks, real execution evidence, and the existing attempt/time budgets. */
+export function canRecoverTechnicalRollout(task: Task, now = Date.now()): boolean {
+  const updated = Date.parse(task.updatedAt);
+  return technicalTaskKind(task) !== null && task.state === 'BLOCKED'
+    && task.blocker === 'NO_EXECUTOR: this task has no supported module inspection or Landing executor; no work was performed.'
+    && task.evidence.length === 0 && task.retryCount < task.maxRetries
+    && Number.isFinite(updated) && now - updated >= 120_000;
 }
 
 export async function executeTechnicalTask(task: Task, workerId: string, agentNumber: number, sourceSha: string) {

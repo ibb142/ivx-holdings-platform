@@ -18,11 +18,12 @@ try {
     await a.query(await readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8'));
   }
   const fixtures = [1, 2].map(n => ({ taskId: `ha-${n}`, idempotencyKey: `ha-${n}`, assignedAgentNumber: 1,
-    state: 'QUEUED', dependencies: [], retryCount: 0, maxRetries: 2 }));
+    state: 'QUEUED', dependencies: [], retryCount: 0, maxRetries: 2, startedAt: '2026-01-01T00:00:00.000Z' }));
   await a.query('select public.ivx_autonomous_tasks_create_batch($1::jsonb)', [JSON.stringify(fixtures)]);
   const request = JSON.stringify([{ workerId: 'agent:ivx_holdings_1', agentNumber: 1 }]);
   const claim = async (client, id) => (await client.query('select public.ivx_autonomous_tasks_claim_batch($1::jsonb,$2,60) as value', [request, id])).rows[0].value[0];
   await a.query(await readFile(new URL('../supabase/migrations/20260909141222_ivx_nonblocking_worker_claims.sql', import.meta.url), 'utf8'));
+  await a.query(await readFile(new URL('../supabase/migrations/20260910173400_ivx_fleet_attempt_clock.sql', import.meta.url), 'utf8'));
   // A live competing transaction retains its lock throughout this request.
   // The loser must return promptly without taking work or weakening fencing.
   await a.query('begin');
@@ -47,6 +48,9 @@ try {
   assert.equal((await start(loser)).ok, false, 'another replica must not start the winning lease');
   assert.equal((await heartbeat(loser)).refreshed, 0, 'another replica must not renew the winning lease');
   const running = await start(winner); assert.equal(running.ok, true);
+  assert.ok(Number.isFinite(Date.parse(running.task.attemptStartedAt)), 'Every winning lease records the current attempt start');
+  assert.equal(running.task.startedAt, '2026-01-01T00:00:00.000Z', 'A new attempt preserves the historical first start');
+  assert.ok(Date.parse(running.task.attemptStartedAt) > Date.parse(running.task.startedAt), 'A retry gets a fresh execution clock');
   const finish = async id => (await a.query('select public.ivx_autonomous_task_compare_and_set($1::jsonb,$2::jsonb,$3,$4,$5) as value',
     [JSON.stringify({ ...running.task, state: 'EXECUTION_COMPLETED' }), '["RUNNING"]', 'agent:ivx_holdings_1', id, 'ha_test'])).rows[0].value;
   assert.equal((await finish(loser)).ok, false, 'stale process completion must be fenced');

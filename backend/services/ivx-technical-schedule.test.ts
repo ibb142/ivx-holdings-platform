@@ -1,6 +1,21 @@
 import { expect, test } from 'bun:test';
 import { freshSchedulerState } from './ivx-autonomous-scheduler';
-import { dueTechnicalTasks, technicalTaskKind } from './ivx-technical-schedule';
+import { canRecoverTechnicalRollout, dueTechnicalTasks, technicalTaskKind } from './ivx-technical-schedule';
+import type { Task } from './ivx-autonomous-task-engine';
+
+test('rollout recovery retries only a drained old executor rejection without work', () => {
+  const now = Date.now();
+  const task = { idempotencyKey: 'technical-schedule:daily_self_audit:initial', state: 'BLOCKED',
+    blocker: 'NO_EXECUTOR: this task has no supported module inspection or Landing executor; no work was performed.',
+    evidence: [], retryCount: 0, maxRetries: 3, updatedAt: new Date(now - 120_000).toISOString() } as Task;
+  expect(canRecoverTechnicalRollout(task, now)).toBe(true);
+  expect(canRecoverTechnicalRollout(task, now - 1)).toBe(false);
+  expect(canRecoverTechnicalRollout({ ...task, state: 'RUNNING' }, now)).toBe(false);
+  expect(canRecoverTechnicalRollout({ ...task, blocker: 'OWNER_GATE: paused' }, now)).toBe(false);
+  expect(canRecoverTechnicalRollout({ ...task, retryCount: 3 }, now)).toBe(false);
+  expect(canRecoverTechnicalRollout({ ...task, idempotencyKey: 'unsupported:new-kind' }, now)).toBe(false);
+  expect(canRecoverTechnicalRollout({ ...task, evidence: [{ evidenceId: 'real-work' } as Task['evidence'][number]] }, now)).toBe(false);
+});
 
 test('worker replicas create the same due technical tasks without scheduling outreach', () => {
   const now = Date.now(); const state = freshSchedulerState(now);

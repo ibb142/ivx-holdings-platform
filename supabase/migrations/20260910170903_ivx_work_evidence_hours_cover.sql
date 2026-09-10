@@ -1,7 +1,9 @@
+-- Deployed as Supabase migration 20260910170903.
 -- Keep the existing private archive and accounting rules unchanged.
 -- A covering index avoids random reads of the much larger raw evidence payload.
 set local lock_timeout = '1s';
-set local statement_timeout = '5s';
+-- This one-time build has a separate deadline from the unchanged API timeout.
+set local statement_timeout = '20s';
 create index ivx_work_evidence_archive_hours_cover_idx
   on public.ivx_work_evidence_archive (((measurement->>'endEpoch')::numeric))
   include (agent_number, recorded_at, measurement)
