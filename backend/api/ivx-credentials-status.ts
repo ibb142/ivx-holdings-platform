@@ -198,6 +198,7 @@ async function testGitHub(): Promise<CredentialRow> {
     accountLogin = userParsed.login ?? null;
   } catch { /* keep null */ }
   const authenticated = user.status === 200 && repo.status === 200;
+if (!authenticated) console.error('[IVX] GitHub authentication failed: ensure credentials are correct');
   const scopeVerified = hasRepoScope && hasExplicitWorkflowScope;
   const accountVerified = accountLogin !== null;
   const resourceVerified = repo.status === 200 && (push || hasRepoScope);
