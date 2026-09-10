@@ -29,6 +29,7 @@ import { assertPrivateRepairScope, publicRepairGoal } from './ivx-private-repair
 import { assertRepairPatchQuality, requiresRepairRegression } from './ivx-repair-patch-quality';
 import { assertLandingRepairScope } from './ivx-landing-repair-scope';
 import { assertRepairTestRuntime, NODE_REPAIR_TEST_GUIDANCE, repairRecoveryLesson } from './ivx-repair-recovery-protocol';
+import { PatchWorkspace } from './ivx-patch-workspace';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -708,7 +709,7 @@ async function applyPatchOperation(
   projectRoot: string,
   fileWriter?: (relPath: string, content: string) => Promise<void>,
   fileReader?: (relPath: string) => Promise<string>,
-): Promise<void> {
+): Promise<string> {
   assertSafePatchPath(op.path);
   const fullPath = path.join(projectRoot, op.path);
   const write = fileWriter ?? (async (rel: string, content: string) => {
@@ -720,10 +721,11 @@ async function applyPatchOperation(
     const { existsSync } = await import('node:fs');
     if (existsSync(fullPath)) {
       const existing = await read(op.path);
-      if (existing === op.newText) return; // Idempotent: file already in desired state (2026-08-28).
+      if (existing === op.newText) return existing; // Idempotent: file already in desired state.
       throw new Error(`Create-file target already exists: ${op.path} — file exists with different content; re-emit this operation as update (oldText/newText) against the current content instead of create_file.`);
     }
     await write(op.path, op.newText);
+    return op.newText;
   } else {
     const source = await read(op.path);
     if (!source.includes(op.oldText)) {
@@ -731,29 +733,7 @@ async function applyPatchOperation(
     }
     const updated = source.replace(op.oldText, op.newText);
     await write(op.path, updated);
-  }
-}
-
-async function revertPatchOperation(
-  op: IVXAutonomousCoderPatchOperation,
-  projectRoot: string,
-  fileWriter?: (relPath: string, content: string) => Promise<void>,
-  fileReader?: (relPath: string) => Promise<string>,
-): Promise<void> {
-  const write = fileWriter ?? (async (rel: string, content: string) => {
-    await mkdir(path.dirname(path.join(projectRoot, rel)), { recursive: true });
-    await writeFile(path.join(projectRoot, rel), content, 'utf8');
-  });
-  const read = fileReader ?? (async (rel: string) => readFile(path.join(projectRoot, rel), 'utf8'));
-  if (op.kind === 'create_file') {
-    try { await rm(path.join(projectRoot, op.path)); } catch { /* already gone */ }
-  } else {
-    try {
-      const source = await read(op.path);
-      if (source.includes(op.newText)) {
-        await write(op.path, source.replace(op.newText, op.oldText));
-      }
-    } catch { /* file may not exist */ }
+    return updated;
   }
 }
 
@@ -2172,12 +2152,17 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       iterationCount = 1;
       // Run ONE iteration with the deterministic patch: apply → test → typecheck → verify.
       onPhase?.('patching', `Pilot fallback: applying exact replacement in ${fallback.sentinelFile}.`);
+      const pilotWorkspace = new PatchWorkspace(projectRoot, input.fileReader, input.fileWriter);
+      let keepPilotPatch = false;
+      try {
       let patchApplied = false;
       let applyError: string | null = null;
       try {
         assertPrivateRepairScope(input.goal, input.allowedFiles, fallback.operations.map(op => op.path));
         assertRepairPatchQuality(input.taskId, fallback.operations, input.goal);
         for (const op of fallback.operations) {
+          assertSafePatchPath(op.path);
+          await pilotWorkspace.capture(op.path);
           await applyPatchOperation(op, projectRoot, input.fileWriter, input.fileReader);
         }
         patchApplied = true;
@@ -2265,12 +2250,8 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         iterations.push(iteration);
         if (testsPassed && typecheckPassed && contentChangeVerified) {
           onPhase?.('verifying', 'Pilot fallback: tests + scoped typecheck + content-change check PASSED.');
+          keepPilotPatch = true;
         } else {
-          // Revert on failure so we don't leave a half-applied patch.
-          for (const op of fallback.operations) {
-            await revertPatchOperation(op, projectRoot, input.fileWriter, input.fileReader);
-          }
-          filesChanged = [];
           const failCtx = `Pilot fallback gate failed: testsPassed=${testsPassed} typecheckPassed=${typecheckPassed} contentChangeVerified=${contentChangeVerified}${contentChangeReason ? ` (${contentChangeReason})` : ''}. Typecheck stdout: ${typecheckResult.stdoutTail}. Typecheck stderr: ${typecheckResult.stderrTail}.`;
           lastPatchFailureReason = failCtx;
           lastFailureContext = failCtx;
@@ -2288,6 +2269,12 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           revised: false,
         };
         iterations.push(iteration);
+      }
+      } finally {
+        if (!keepPilotPatch) {
+          await pilotWorkspace.restore();
+          filesChanged = [];
+        }
       }
       // Skip the LLM loop — the deterministic path is the whole pilot.
       // Jump to the verify + commit section below.
@@ -2485,6 +2472,10 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // ── APPLY PATCH ──────────────────────────────────────────────────────
     onPhase?.('patching', `Iteration ${iterationCount}: applying ${parsed.operations.length} patch operation(s).`);
     markStageStart('patching');
+    const workspace = new PatchWorkspace(projectRoot, input.fileReader, input.fileWriter);
+    const expectedContents = new Map<string, string>();
+    let keepPatch = false;
+    try {
     let patchApplied = false;
     const appliedOps: IVXAutonomousCoderPatchOperation[] = [];
     const requiresRegression = requiresRepairRegression(input.taskId, input.goal);
@@ -2502,15 +2493,13 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         const baseResult = await runAutonomousCoderCommand(projectRoot, scopedTypecheckCommand(projectRoot, baselineFilePaths));
         baselineTsErrorCount = countTsErrors(baseResult.stderrTail + baseResult.stdoutTail);
       }
-      if (requiresRegression) {
-        const read = input.fileReader ?? (async (rel: string) => readFile(path.join(projectRoot, rel), 'utf8'));
-        for (const op of parsed.operations) {
-          if (/\.(test|spec)\.[cm]?[jt]sx?$/.test(op.path) || originalSources.has(op.path)) continue;
-          originalSources.set(op.path, existsSync(path.join(projectRoot, op.path)) ? await read(op.path) : null);
-        }
-      }
       for (const op of parsed.operations) {
-        await applyPatchOperation(op, projectRoot, input.fileWriter, input.fileReader);
+        assertSafePatchPath(op.path);
+        await workspace.capture(op.path);
+        if (requiresRegression && !/\.(test|spec)\.[cm]?[jt]sx?$/.test(op.path) && !originalSources.has(op.path)) {
+          originalSources.set(op.path, workspace.originals.get(op.path)!);
+        }
+        expectedContents.set(op.path, await applyPatchOperation(op, projectRoot, input.fileWriter, input.fileReader));
         appliedOps.push(op);
       }
       patchApplied = true;
@@ -2519,10 +2508,8 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     } catch (error) {
       applyError = safeErrorMessage(error);
       lastPatchFailureReason = `Patch application failed: ${applyError}`;
-      // Revert any partially applied ops
-      for (const op of appliedOps) {
-        await revertPatchOperation(op, projectRoot, input.fileWriter, input.fileReader);
-      }
+      // Restore before refreshing the source shown to the next model attempt.
+      await workspace.restore();
       filesChanged = [];
     }
 
@@ -2632,15 +2619,14 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     buildRun = true;
 
     // ── DETERMINISTIC CONTENT-CHANGE CHECK ──────────────────────────────
-    // The patched file(s) must actually contain the newText (proves the
-    // patch was applied, not just claimed). This is the real evidence the
-    // owner asked for: "actual diff generated + file changed".
-    let contentChangeVerified = true;
-    for (const op of appliedOps) {
+    // Verify the final contents after all operations, not intermediate snippets
+    // that a later operation may legitimately replace. Require an actual diff.
+    let contentChangeVerified = [...expectedContents].some(([file, content]) => workspace.originals.get(file) !== content);
+    for (const [file, expected] of expectedContents) {
       try {
         const read = input.fileReader ?? (async (rel: string) => readFile(path.join(projectRoot, rel), 'utf8'));
-        const updatedContent = await read(op.path);
-        if (op.kind === 'replace_exact' && !updatedContent.includes(op.newText)) {
+        const updatedContent = await read(file);
+        if (updatedContent !== expected) {
           contentChangeVerified = false;
           break;
         }
@@ -2664,12 +2650,14 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       };
       iterations.push(iteration);
       onPhase?.('verifying', `Iteration ${iterationCount}: tests + typecheck PASSED.`);
+      keepPatch = true;
       break;
     }
 
     // ── ANALYZE FAILURE ──────────────────────────────────────────────────
     onPhase?.('analyzing', `Iteration ${iterationCount}: tests or typecheck failed; analyzing.`);
     const failureParts: string[] = [];
+    if (!contentChangeVerified) failureParts.push('PATCH_CONTENT_NOT_VERIFIED: final file contents must match the applied operations and include a real change.');
     if (regressionFailure) failureParts.push(regressionFailure);
     if (!testsPassed && testResult) {
       failureParts.push(`TEST FAILURE (${testResult.command}):\nstdout: ${testResult.stdoutTail}\nstderr: ${testResult.stderrTail}`);
@@ -2696,21 +2684,20 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // ── REVERT + REVISE ──────────────────────────────────────────────────
     if (iterationCount < MAX_ITERATIONS) {
       onPhase?.('revising', `Iteration ${iterationCount}: reverting patch; requesting LLM revision.`);
-      for (const op of appliedOps) {
-        await revertPatchOperation(op, projectRoot, input.fileWriter, input.fileReader);
-      }
-      filesChanged = [];
       continue;
     }
 
     // Max iterations reached — BLOCKED
     onPhase?.('blocked', `Max iterations (${MAX_ITERATIONS}) reached; tests still failing.`);
-    // Revert the last attempt
-    for (const op of appliedOps) {
-      await revertPatchOperation(op, projectRoot, input.fileWriter, input.fileReader);
-    }
-    filesChanged = [];
     break;
+    } finally {
+      // Covers rejected iterations, partial writes, test/compiler exceptions,
+      // and cancellation callbacks. A failed restore throws and stops the job.
+      if (!keepPatch) {
+        await workspace.restore();
+        filesChanged = [];
+      }
+    }
   }
   } // end of else (non-pilot LLM loop)
 

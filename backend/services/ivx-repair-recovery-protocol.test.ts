@@ -10,9 +10,25 @@ test('restores scope and CI lessons from durable failures without weakening the 
     const restarted = JSON.parse(JSON.stringify({ error: 'wrapper '.repeat(150) + error }));
     const lesson = repairRecoveryLesson(restarted.error);
     assert.equal(lesson?.id, id);
-    assert.equal(lesson?.protocol, 'ivx-repair-recovery-protocol-v2');
+    assert.equal(lesson?.protocol, 'ivx-repair-recovery-protocol-v3');
     assert.match(lesson!.instruction, id === 'CI_REGRESSION' ? /Preserve existing assertions/ : /Do not substitute a different business rule/);
   }
+});
+
+test('recognizes unsupported test globals and imports instead of repeating the same runtime failure', () => {
+  for (const error of ["Cannot find module 'node-fetch'", 'jest is not defined', 'vi is not defined', "Cannot find name 'vi'"]) {
+    const lesson = repairRecoveryLesson('REPAIR_REGRESSION_NOT_REPRODUCED\n' + error);
+    assert.equal(lesson?.id, 'NODE_TEST_RUNTIME');
+    assert.match(lesson!.instruction, /built-in fetch/);
+    assert.match(lesson!.instruction, /node:test/);
+  }
+});
+
+test('a missing patch target teaches explicit file creation without relaxing inspection', () => {
+  const lesson = repairRecoveryLesson("ENOENT: no such file or directory, open '/app/backend/services/helper.ts'");
+  assert.equal(lesson?.id, 'PATCH_CONTEXT');
+  assert.match(lesson!.instruction, /create_file only for a verified missing/);
+  assert.match(lesson!.instruction, /replace_exact for existing files/);
 });
 
 test('recovers the actionable runtime rule from a long durable failure', () => {
