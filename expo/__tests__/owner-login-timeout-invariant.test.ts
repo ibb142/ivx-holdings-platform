@@ -69,7 +69,16 @@ describe('defect 1 — login deadline inversion', () => {
   test('the Supabase sign-in race uses the shared constant, not a literal', () => {
     const memberDbSource = readRepoFile('backend/services/ivx-member-database.ts');
     expect(memberDbSource).not.toContain('Supabase sign-in timed out after 10s');
-    expect(memberDbSource).toMatch(/setTimeout\(\s*\n?\s*\(\)\s*=>\s*reject\([\s\S]{0,120}MEMBER_LOGIN_INNER_BUDGET_MS/);
+    expect(memberDbSource).toMatch(/runAbortableAuthAttempt\([\s\S]{0,300}MEMBER_LOGIN_INNER_BUDGET_MS,\s*SIGN_IN_TIMEOUT_SENTINEL/);
+    const attemptSource = readRepoFile('backend/services/ivx-auth-attempt.ts');
+    expect(attemptSource).toContain('}, timeoutMs)');
+    expect(attemptSource).toContain('controller.abort(error)');
+  });
+
+  test('both bounded attempts fit within the route deadline', () => {
+    const outer = extractMs(hono, 'LOGIN_HARD_TIMEOUT_MS');
+    const inner = extractMs(memberDb, 'MEMBER_LOGIN_INNER_BUDGET_MS');
+    expect(outer).toBeGreaterThan(2 * inner);
   });
 });
 
