@@ -99,7 +99,7 @@ describe('persisted Landing failure to real coder', () => {
     }
     expect(inputs).toHaveLength(2);
     for (const input of inputs) {
-      expect(input.goal).toContain('ivx-repair-recovery-protocol-v3/NODE_TEST_RUNTIME');
+      expect(input.goal).toContain('ivx-repair-recovery-protocol-v4/NODE_TEST_RUNTIME');
       expect(input.goal).toContain('Preserve existing bun:test suites');
       expect(input.approveGitDeploy).toBe(false);
     }
