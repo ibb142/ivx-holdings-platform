@@ -44,7 +44,8 @@ test('seed outage does not prevent claims of already durable current-mission wor
     mock.module('./backend/services/ivx-autonomous-task-engine.ts',()=>({
       getAllTasks:async()=>[],heartbeatTasksBatch:async()=>({refreshed:0}),
       leaseNextTasksBatch:async(requests)=>{claims++;if(requests[0].options.missionScope.activePrefixes.length!==3)throw Error('mission fencing lost');return [];},
-      startLeasedTasksBatch:async()=>[]
+      startLeasedTasksBatch:async()=>[],
+      releaseLease:async()=>{throw Error('no lease was claimed');}
     }));
     mock.module('./backend/services/ivx-autonomous-work-manager.ts',()=>({ensureAutonomousManagerBacklog:async()=>{},getAutonomousWorkManagerStatus:()=>({})}));
     mock.module('./backend/services/ivx-autonomous-decision-quality.ts',()=>({getAutonomousDecisionQualityStatus:()=>({}),runAutonomousDecisionQualityLoop:async()=>{}}));

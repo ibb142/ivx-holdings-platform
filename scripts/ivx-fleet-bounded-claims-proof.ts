@@ -36,7 +36,8 @@ try {
       return rpc('ivx_autonomous_tasks_claim_batch', rows);
     },
     start: rows => rpc('ivx_autonomous_tasks_start_batch', rows),
-    onStarted: () => { dispatched++; },
+    onStarted: () => { dispatched++; return true; },
+    release: async () => { throw new Error('Accepted executions must retain their leases'); },
   });
   const running = await admin.query("select count(*)::int n,count(distinct lease_holder)::int holders from public.ivx_autonomous_tasks where state='RUNNING' and worker_instance_id='bounded-proof'");
   assert.equal(dispatched, 112); assert.deepEqual(running.rows[0], { n: 112, holders: 112 });
