@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import {
   Animated,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -200,12 +201,20 @@ const StatusChip = React.memo(function StatusChip({ label, tone, icon }: StatusC
 export default function ChatHubScreen() {
   const { width } = useWindowDimensions();
   const isCompact = width < 430;
+  const isNative = Platform.OS !== 'web';
   const listRef = useRef<FlatList<ChatMessage> | null>(null);
   const composerInputRef = useRef<TextInput | null>(null);
   const pulse = useRef(new Animated.Value(0.96)).current;
   const { sessionId, clientId, isHydrated, setActiveSession, startNewSession } = usePublicChatSession();
   const { keyboardHeight: webKeyboardHeight } = useWebKeyboard();
   const [composerValue, setComposerValue] = useState<string>('');
+  const [nativeKeyboardVisible, setNativeKeyboardVisible] = useState(false);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const show = Keyboard.addListener('keyboardDidShow', () => setNativeKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setNativeKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
   const [messages, setMessages] = useState<ChatMessage[]>(() => [createWelcomeMessage()]);
   const [latestResponse, setLatestResponse] = useState<PublicChatApiResponse | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -342,7 +351,7 @@ export default function ChatHubScreen() {
                 sessionId: finalSessionId,
                 answer: text || finalText,
                 model,
-                source: source as 'chatgpt' | 'fallback',
+                source: source as PublicChatApiResponse['source'],
                 deploymentMarker: 'ivx-public-chat-stream',
                 rateLimitRemaining: 19,
                 rateLimitResetAt: new Date(Date.now() + 300000).toISOString(),
@@ -523,9 +532,9 @@ export default function ChatHubScreen() {
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
           <KeyboardAvoidingView
             style={[styles.keyboardView, Platform.OS === 'web' && { paddingBottom: webKeyboardHeight }]}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined}
           >
-            <View style={styles.headerShell}>
+            <View style={[styles.headerShell, nativeKeyboardVisible && { display: 'none' }]}>
               <Animated.View style={[styles.heroCard, { transform: [{ scale: pulse }] }]} testID="public-chat-hero-card">
                 <LinearGradient
                   colors={['rgba(255, 215, 0, 0.18)', 'rgba(255, 215, 0, 0.04)', 'rgba(17, 17, 17, 0.96)']}
@@ -533,12 +542,12 @@ export default function ChatHubScreen() {
                   end={{ x: 1, y: 1 }}
                   style={styles.heroGradient}
                 />
-                <View style={styles.heroContent}>
+                <View style={[styles.heroContent, isNative && styles.nativeHeroContent]}>
                   <View style={styles.heroTopRow}>
                     <View style={styles.heroTextWrap}>
-                      <Text style={styles.eyebrow}>CHAT.IVXHOLDING.COM</Text>
-                      <Text style={styles.heroTitle}>IVX AI chat</Text>
-                      <Text style={styles.heroSubtitle}>{heroSubtitle}</Text>
+                      {!isNative && <Text style={styles.eyebrow}>CHAT.IVXHOLDING.COM</Text>}
+                      <Text style={[styles.heroTitle, isNative && styles.nativeHeroTitle]}>IVX AI chat</Text>
+                      {!isNative && <Text style={styles.heroSubtitle}>{heroSubtitle}</Text>}
                     </View>
                     <View style={styles.heroActions}>
                       <Pressable
@@ -563,20 +572,20 @@ export default function ChatHubScreen() {
 
                   <View style={styles.chipRow}>
                     <StatusChip label={healthQuery.data?.ok ? 'API healthy' : healthQuery.error ? 'API issue' : 'Checking API'} tone={healthQuery.data?.ok ? 'live' : healthQuery.error ? 'error' : 'warn'} icon="wifi" />
-                    <StatusChip label={source === 'chatgpt' ? 'ChatGPT live' : 'Fallback visible'} tone={source === 'chatgpt' ? 'live' : 'warn'} icon="shield" />
+                    <StatusChip label={source === 'autonomous' ? 'Autonomous worker' : source === 'chatgpt' ? 'ChatGPT live' : 'Fallback visible'} tone={source === 'chatgpt' || source === 'autonomous' ? 'live' : 'warn'} icon="shield" />
                   </View>
-                  <View style={styles.chipRow}>
+                  {!isNative && <View style={styles.chipRow}>
                     <StatusChip label={`${messageCount} saved`} tone="live" icon="archive" />
                     <StatusChip label={String(persistence)} tone={persistence === 'supabase' || persistence === 'json' ? 'live' : 'warn'} icon="sparkles" />
-                  </View>
+                  </View>}
                 </View>
               </Animated.View>
 
-              <View style={styles.sessionCard} testID="public-chat-session-card">
+              <View style={[styles.sessionCard, isNative && styles.nativeSessionCard]} testID="public-chat-session-card">
                 <View style={styles.sessionHeaderRow}>
                   <View>
                     <Text style={styles.sessionTitle}>Current session</Text>
-                    <Text style={styles.sessionIdText} numberOfLines={1}>{sessionId}</Text>
+                    {!isNative && <Text style={styles.sessionIdText} numberOfLines={1}>{sessionId}</Text>}
                   </View>
                   <Text style={styles.sessionCountText}>{sessionsQuery.data?.sessionCount ?? 0} sessions</Text>
                 </View>
@@ -737,6 +746,15 @@ const styles = StyleSheet.create({
   heroContent: {
     padding: 20,
     gap: 14},
+  nativeHeroContent: {
+    padding: 12,
+    gap: 8},
+  nativeHeroTitle: {
+    fontSize: 22,
+    marginTop: 4},
+  nativeSessionCard: {
+    padding: 10,
+    gap: 6},
   heroTopRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',

@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { getSupabaseFetchTimeoutMs } from './supabase-request-timeout';
 
 /**
  * Supabase config resolution.
@@ -224,8 +225,7 @@ function buildSupabaseClient(url: string, key: string): SupabaseClient {
         const nextOptions = stripConnectionPoolHeaderForAuth(urlStr, options);
         logAuthTokenRequestIfDev(urlStr, nextOptions);
         const controller = new AbortController();
-        const isAuthRequest = typeof url === 'string' && (url.includes('/auth/v1/token') || url.includes('/auth/v1/user'));
-        const timeoutMs = isAuthRequest ? 8000 : (selfHosted ? 20000 : 15000);
+        const timeoutMs = getSupabaseFetchTimeoutMs(urlStr, selfHosted);
         const timeout = setTimeout(() => controller.abort(), timeoutMs);
         return fetch(url, {
           ...nextOptions,

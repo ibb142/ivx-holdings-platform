@@ -1,3 +1,5 @@
+import { isExplicitAuditRepairRequest, isNonExecutingDeveloperRequest, isSeniorDeveloperBuildRequest } from '../../ivx-developer/seniorDeveloperBuildIntent';
+
 /**
  * IVX Owner Intent Classifier — deterministic owner-command routing.
  *
@@ -106,10 +108,13 @@ export function classifyOwnerIntent(message: string): OwnerIntentClassification 
   if (!text) {
     return { intent: 'explanation', routesToWorker: false, isDiagnostic: false, diagnosticSubject: null, reason: 'empty message — defaulting to explanation' };
   }
+  if (isNonExecutingDeveloperRequest(text)) {
+    return { intent: 'explanation', routesToWorker: false, isDiagnostic: false, diagnosticSubject: null, reason: 'question or explicit prohibition — execution not requested' };
+  }
 
   // Owner execution commands are authoritative. A QA checklist containing
   // "AUDIT -> FIX" later in the text is NOT a diagnostic request.
-  if (hasOwnerExecutionCommand(text)) {
+  if (hasOwnerExecutionCommand(text) || isExplicitAuditRepairRequest(text)) {
     return { intent: 'code_change', routesToWorker: true, isDiagnostic: false, diagnosticSubject: null, reason: 'explicit owner execution command detected' };
   }
 
@@ -128,7 +133,7 @@ export function classifyOwnerIntent(message: string): OwnerIntentClassification 
   if (DEPLOYMENT_PATTERNS.some((pattern) => pattern.test(text))) {
     return { intent: 'deployment', routesToWorker: true, isDiagnostic: false, diagnosticSubject: null, reason: 'explicit deployment request' };
   }
-  if (CODE_CHANGE_PATTERNS.some((pattern) => pattern.test(text))) {
+  if (CODE_CHANGE_PATTERNS.some((pattern) => pattern.test(text)) || isSeniorDeveloperBuildRequest(text)) {
     return { intent: 'code_change', routesToWorker: true, isDiagnostic: false, diagnosticSubject: null, reason: 'explicit code-change request' };
   }
   return { intent: 'explanation', routesToWorker: false, isDiagnostic: false, diagnosticSubject: null, reason: 'no specific intent pattern matched — defaulting to explanation' };

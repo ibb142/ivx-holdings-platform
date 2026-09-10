@@ -1,0 +1,40 @@
+appId: com.ivxholdings.app.owner
+name: IVX Aviation Mission Control Certificate
+tags:
+  - android-qa
+  - owner-auth
+  - dashboard
+---
+- openLink: "ivx-app:///autonomous-dashboard"
+- extendedWaitUntil:
+    visible: "IVX MISSION CONTROL"
+    timeout: 20000
+- extendedWaitUntil:
+    visible: "LIVE TELEMETRY"
+    timeout: 60000
+- assertVisible:
+    id: "ivx-mission-control-screen"
+- scrollUntilVisible:
+    element:
+      text: "112/112"
+    direction: DOWN
+    timeout: 15000
+- assertNotVisible: "Something went wrong"
+- stopApp
+- launchApp:
+    clearState: false
+# The app intentionally signs out on cold launch. Reauthenticate without
+# clearing app data, then verify the same durable conversation/route.
+- runFlow: "reauthenticate.yaml"
+- openLink: "ivx-app:///autonomous-dashboard"
+- extendedWaitUntil:
+    visible: "IVX MISSION CONTROL"
+    timeout: 20000
+- extendedWaitUntil:
+    visible: "LIVE TELEMETRY"
+    timeout: 60000
+- openLink: "ivx-app:///home"
+- extendedWaitUntil:
+    visible:
+      id: "tab-chat"
+    timeout: 20000

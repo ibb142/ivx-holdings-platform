@@ -107,7 +107,7 @@ export function getIVXBuildInfo(): IVXBuildInfo {
   const commitShort = commitFull ? commitFull.slice(0, 8) : 'local';
   const buildMarker = readString(extra.buildMarker, '');
   const buildTimestamp = readString(extra.buildTimestamp, '');
-  const appVersion = readString(Constants.expoConfig?.version, '0.0.0');
+  const appVersion = readString(Constants.nativeAppVersion || Constants.expoConfig?.version, '0.0.0');
   const apiBaseUrl = resolveApiBaseUrl();
   const supabaseProjectHint = redactedSupabaseProjectHint();
   const easProjectId = redactedEasProjectId(extra.eas?.projectId);
