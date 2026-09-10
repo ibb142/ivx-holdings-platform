@@ -3,7 +3,10 @@ import { decideRetry, isTransientFailure, retryAfterMs } from '../backend/servic
 
 const PATH = '/api/ivx/autonomous/fleet-slo';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-type Config = { base: string; sha: string; key: string; fetcher?: typeof fetch };
+type Config = {
+  base: string; sha: string; key: string; fetcher?: typeof fetch;
+  now?: () => number; wait?: (ms: number) => Promise<void>;
+};
 
 function validateConfig(config: Config) {
   assert(['https://api.ivxholding.com', 'https://ivx-holdings-platform.onrender.com'].includes(config.base), 'Unexpected production origin');
@@ -14,12 +17,14 @@ function validateConfig(config: Config) {
 // Read-only probes share the production retry policy; authentication failures
 // and invalid telemetry fail immediately. Never log a credential or response body.
 async function get(config: Config, path: string, authenticated: boolean) {
-  const startedAtMs = Date.now();
+  const now = config.now ?? Date.now;
+  const startedAtMs = now();
   let retriesUsed = 0;
   for (;;) {
     let status = 0;
     let after = 0;
     let failure: unknown;
+    let telemetryUnavailable = false;
     try {
       const response = await (config.fetcher ?? fetch)(config.base + path, {
         method: 'GET', redirect: 'error', signal: AbortSignal.timeout(5_000),
@@ -28,13 +33,19 @@ async function get(config: Config, path: string, authenticated: boolean) {
       status = response.status;
       after = retryAfterMs(response.headers.get('retry-after'));
       const body = await response.text();
-      if (!isTransientFailure(null, status)) return { response, body };
-      failure = new Error(`Production probe HTTP ${status}`);
+      // JSON reports an unknown sample with 503; the Prometheus exporter
+      // reports the same read outage with a 200 response and availability=0.
+      // Apply the existing bounded read policy to that explicit signal too.
+      telemetryUnavailable = path === PATH + '?format=prometheus' && status === 200
+        && response.headers.get('content-type')?.startsWith('text/plain') === true
+        && /^ivx_fleet_telemetry_available[ \t]+0[ \t]*$/m.test(body);
+      if (!isTransientFailure(null, status) && !telemetryUnavailable) return { response, body };
+      failure = new Error(telemetryUnavailable ? 'Production telemetry temporarily unavailable' : `Production probe HTTP ${status}`);
     } catch (error) { failure = error; }
-    const decision = decideRetry({ retriesUsed, maxRetries: 6, startedAtMs, nowMs: Date.now(), maxElapsedMs: 30_000, retryAfterMs: after });
-    if (!isTransientFailure(failure, status) || !decision.retry) throw new Error(`Production probe failed: ${path}, HTTP ${status || 'unavailable'}`);
+    const decision = decideRetry({ retriesUsed, maxRetries: 6, startedAtMs, nowMs: now(), maxElapsedMs: 30_000, retryAfterMs: after });
+    if (!isTransientFailure(failure, status) || !decision.retry) throw new Error(`Production probe failed: ${path}, HTTP ${status || 'unavailable'}${telemetryUnavailable ? ', telemetry unavailable' : ''}`);
     retriesUsed = decision.nextRetry;
-    await sleep(decision.delayMs);
+    await (config.wait ?? sleep)(decision.delayMs);
   }
 }
 
@@ -84,6 +95,8 @@ export async function verifyFleetSloLive(config: Config) {
   assert.equal(gauges.slo_met, gauges.productive_agents === 112 ? 1 : 0);
   assert(Number.isFinite(gauges.sample_timestamp_seconds));
   fresh(new Date(gauges.sample_timestamp_seconds * 1_000).toISOString());
+  // A bounded Prometheus retry must not outlive the JSON evidence's freshness.
+  fresh(sample.measured_at);
   return { verification: 'PASS', sha: config.sha, measured_at: sample.measured_at, productive_agents: sample.productive_agents, target_agents: 112, slo_status: sample.status, durable: true, unauthenticated_http: 401, authenticated_json_http: 200, prometheus_http: 200 };
 }
 
