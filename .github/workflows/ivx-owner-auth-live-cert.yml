@@ -43,11 +43,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - name: Resolve source SHA
         shell: bash
-        run: echo "SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+        run: |
+          test "$(git rev-parse HEAD)" = '${{ github.event.pull_request.head.sha || github.sha }}'
+          echo "SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - name: Verify complete owner-login latency fix
         shell: bash
         run: |
@@ -199,6 +201,6 @@ jobs:
           cat qa/evidence/ivx-owner-auth-e2e-live.json
       - uses: actions/upload-artifact@v4
         with:
-          name: ivx-owner-auth-e2e-live-${{ github.sha }}
+          name: ivx-owner-auth-e2e-live-${{ github.event.pull_request.head.sha || github.sha }}
           path: qa/evidence/ivx-owner-auth-e2e-live.json
       # The uploaded artifact persists the proof without changing the tested SHA.

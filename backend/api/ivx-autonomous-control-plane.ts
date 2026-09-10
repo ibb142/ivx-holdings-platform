@@ -9,7 +9,8 @@ import { listCampaignDispatcherRecords } from '../services/ivx-campaign-dispatch
 import { getSmsNotifierStatus } from '../services/ivx-autonomous-sms-notifier';
 import { isDurableStoreConfigured } from '../services/ivx-durable-store';
 import { ALL_ENTERPRISE_AGENTS, getFunctionalGroups, getAgentsByFunctionalGroup } from '../services/ivx-enterprise-master-registry';
-import { getSeniorDeveloperJob } from '../services/ivx-senior-developer-worker';
+import { listSeniorDeveloperJobs } from '../services/ivx-senior-developer-worker';
+import { createSupervisionRead } from '../services/ivx-control-plane-supervision-read';
 import { resolveMainSha, runGlobalCertificationSupervision } from '../services/ivx-global-certification-supervisor';
 import { readAllWorkflowAttributions } from '../services/ivx-agent-work-ledger';
 import type { WorkflowAttribution } from '../services/ivx-agent-work-ledger';
@@ -22,11 +23,15 @@ const HEARTBEAT_LIVE_TTL_MS = 120_000;
  * Short-lived in-memory cache for the control-plane GET telemetry payload.
  * The endpoint performs many durable-store reads (~5s cold); the radar samples
  * it with a 4s timeout, so uncached reads always looked like failures. This is
- * telemetry (not mutation state) — 120s staleness is fail-safe and each miss
- * refreshes the cache.
+ * telemetry (not mutation state). Cache for one five-second poll; slow
+ * certification work is coalesced and cannot block the live snapshot.
  */
 let controlPlaneCache: { at: number; body: string } | null = null;
-const CONTROL_PLANE_CACHE_TTL_MS = 180_000;
+const CONTROL_PLANE_CACHE_TTL_MS = 5_000;
+const readSupervision = createSupervisionRead(async () => {
+  const sha = await resolveMainSha();
+  return sha ? runGlobalCertificationSupervision(sha) : null;
+});
 const ACTIVE_WORKER_STATUSES = new Set(['running', 'patching', 'testing', 'committing', 'deploying', 'verifying', 'optimizing']);
 
 function countStatuses<T extends { status: string }>(items: T[]) {
@@ -155,9 +160,6 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
     // workflows on MAIN_SHA + production SHA parity + auto repair dispatch)
     // runs in parallel with the campaign read; its verdict gates every
     // certification claim in this response.
-    const supervisionPromise = resolveMainSha()
-      .then((sha) => (sha ? runGlobalCertificationSupervision(sha) : null))
-      .catch(() => null);
     if (controlPlaneCache && Date.now() - controlPlaneCache.at < CONTROL_PLANE_CACHE_TTL_MS) {
       return new Response(controlPlaneCache.body, {
         status: 200,
@@ -168,6 +170,7 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
         },
       });
     }
+    const supervisionPromise = readSupervision();
     const control = await loadControlState();
     const dispatcherRecords = await listCampaignDispatcherRecords();
     const campaign = buildAppCompletionCampaign(control, dispatcherRecords);
@@ -190,9 +193,11 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
     const queued = agentStatuses.QUEUED || 0;
 
     const registryByNumber = new Map(ALL_ENTERPRISE_AGENTS.map((agent) => [agent.agentNumber, agent]));
+    // One consistent durable snapshot, instead of one full queue read per IA.
+    const jobsById = new Map((await listSeniorDeveloperJobs(Number.MAX_SAFE_INTEGER)).map(job => [job.jobId, job]));
     const enrichedAgents = await Promise.all(campaign.assignments.map(async (item) => {
       const registry = registryByNumber.get(item.agentNumber);
-      const job = item.workerJobId ? await getSeniorDeveloperJob(item.workerJobId) : null;
+      const job = item.workerJobId ? jobsById.get(item.workerJobId) ?? null : null;
       const heartbeatAt = job?.lastHeartbeatAt || item.lastHeartbeatAt || null;
       const heartbeat = heartbeatState(heartbeatAt);
       const currentTask = job?.input.goal || item.assignedTask || null;

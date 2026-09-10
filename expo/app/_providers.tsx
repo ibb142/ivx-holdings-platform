@@ -13,6 +13,7 @@ import { injectWebKeyboardCSS } from '@/hooks/useWebKeyboard';
 import { checkForUpdates } from '@/lib/app-update-checker';
 import { logStartup } from '@/lib/startup-trace';
 import { supabase } from '@/lib/supabase';
+import { createDeferredAuthListener } from '@/lib/deferred-auth-listener';
 import Colors from '@/constants/colors';
 
 import { I18nProvider } from '@/lib/i18n-context';
@@ -23,6 +24,7 @@ import { WalletProvider } from '@/lib/wallet-context';
 import { EarnProvider } from '@/lib/earn-context';
 import { EmailProvider } from '@/lib/email-context';
 import { NetworkProvider } from '@/lib/network-context';
+import { PublicChatSessionProvider } from '@/lib/public-chat-session-context';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -113,9 +115,13 @@ function VerificationGate() {
     };
 
     void enforce();
-    const { data: listener } = supabase.auth.onAuthStateChange(() => { void enforce(); });
+    const deferredAuth = createDeferredAuthListener(() => enforce(), (error) => {
+      console.warn('[IVX] Verification session lookup failed:', error instanceof Error ? error.name : 'UnknownError');
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange(deferredAuth.listener);
     return () => {
       cancelled = true;
+      deferredAuth.dispose();
       listener.subscription.unsubscribe();
     };
   }, [pathname, router]);
@@ -185,8 +191,10 @@ export function AppProviders() {
                                     <EmailProvider>
                                       <ProviderBoundary name="Network">
                                         <NetworkProvider>
-                                          <StatusBar style="light" />
-                                          <AppStack />
+                                          <PublicChatSessionProvider>
+                                            <StatusBar style="light" />
+                                            <AppStack />
+                                          </PublicChatSessionProvider>
                                         </NetworkProvider>
                                       </ProviderBoundary>
                                     </EmailProvider>

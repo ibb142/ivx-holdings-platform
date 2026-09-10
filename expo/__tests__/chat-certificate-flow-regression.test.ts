@@ -36,7 +36,7 @@ describe('IVX IA chat device certificate regression', () => {
   test('both device certificate callers bind the fresh reply marker and restart credentials', () => {
     for (const script of ['ivx-owner-home-android-e2e.sh', 'ivx-dashboard-chat-android-e2e.sh']) {
       const source = readFileSync(resolve(import.meta.dir, '../../scripts', script), 'utf8');
-      const invocation = source.slice(source.indexOf('test expo/.maestro/ivx-owner-chat-certificate.yaml')).split('\n\n')[0];
+      const invocation = source.slice(source.search(/test (?:expo\/\.maestro\/ivx-owner-chat-certificate\.yaml|"\$FLOW_DIR\/chat\.yaml")/)).split('\n\n')[0];
       for (const name of ['CHAT_E2E_SUFFIX', 'OWNER_EMAIL', 'OWNER_PASSWORD']) {
         expect(invocation).toContain(`--env ${name}=`);
       }
@@ -145,6 +145,19 @@ describe('IVX IA chat device certificate regression', () => {
     expect(afterRestart).toContain(ownerPromptElement);
     expect(afterRestart).toContain(assistantReplyElement);
     expect(afterRestart).toContain('id: "ivx-owner-chat-composer-dock"');
+  });
+
+  test('reply selectors accept real wording but reject echoed prompts and stale runs', () => {
+    const nonce = '622000eb687645a6921e4ba61e16799d';
+    const selectors = [...flowSource.matchAll(/text: "([^"]*IVX_CHAT_E2E_\$\{CHAT_E2E_SUFFIX\}[^"]*)"/g)];
+    expect(selectors).toHaveLength(4);
+    for (const [, selector] of selectors) {
+      const pattern = new RegExp(`^${selector.replace('${CHAT_E2E_SUFFIX}', nonce)}$`);
+      expect(pattern.test(`The result is: IVX_CHAT_E2E_${nonce}.`)).toBe(true);
+      expect(pattern.test(`IVX_CHAT_E2E_${nonce}`)).toBe(true);
+      expect(pattern.test(E2E_PROMPT.replace('${CHAT_E2E_SUFFIX}', nonce))).toBe(false);
+      expect(pattern.test('IVX_CHAT_E2E_another_run')).toBe(false);
+    }
   });
 
   test('keeps retry behavior hard-gated in the transport reliability suite', () => {

@@ -6,7 +6,7 @@ import { persistAuth, loadStoredAuth, clearStoredAuth, setAuthCredentials } from
 import { clearOwnerResilientSession } from './owner-session-resilience';
 import { LoginTrace } from './login-trace';
 import { signInWithEmailPassword } from './auth-password-sign-in';
-import { deferAuthWork } from './deferred-auth-work';
+import { createDeferredAuthListener } from './deferred-auth-listener';
 import { canonicalizeRole, isAdminRole, normalizeRole, sanitizeEmail } from './auth-helpers';
 
 import { extractChallengeId, extractFirstVerifiedMfaFactor, getMfaChallengeRequirement, type ParsedMfaFactor } from './auth-mfa';
@@ -1748,9 +1748,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     void initAuth();
 
     let subscription: { unsubscribe: () => void } | null = null;
+    let disposeAuthListener: (() => void) | null = null;
     try {
-      const result = supabase.auth.onAuthStateChange(async (_event, session) => {
-        if (cancelled) {
+      const deferredAuth = createDeferredAuthListener(async (_event, session, isCurrent) => {
+        if (cancelled || !isCurrent()) {
           return;
         }
         if (_event === 'INITIAL_SESSION') {
@@ -1771,19 +1772,14 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             console.log('[Auth] Ignoring auth state session — no manual login for this app session');
             return;
           }
-          // Supabase awaits subscribers. Profile/MFA requests may need the same
-          // session/refresh operation to finish, so run them after it releases.
-          deferAuthWork(async () => {
-            if (cancelled || !manualOwnerLoginRef.current || ownerIPActiveRef.current) return;
-            const challengeRequired = await requireTwoFactorIfNeeded(session, `auth event ${String(_event)}`);
-            if (cancelled || !manualOwnerLoginRef.current || ownerIPActiveRef.current) return;
-            if (!challengeRequired) {
-              const handledSession = await handleSession(session);
-              if (!handledSession.accepted) {
-                console.log('[Auth] Auth state session blocked:', handledSession.blockedReason ?? 'admin access lock');
-              }
+          const challengeRequired = await requireTwoFactorIfNeeded(session, `auth event ${String(_event)}`);
+          if (cancelled || !isCurrent() || !manualOwnerLoginRef.current || ownerIPActiveRef.current) return;
+          if (!challengeRequired) {
+            const handledSession = await handleSession(session);
+            if (!handledSession.accepted) {
+              console.log('[Auth] Auth state session blocked:', handledSession.blockedReason ?? 'admin access lock');
             }
-          }, error => console.log('[Auth] Deferred session validation failed:', error instanceof Error ? error.message : 'unknown'));
+          }
         } else if (_event === 'SIGNED_OUT') {
           sessionWarmupKeyRef.current = null;
           ownerRepairKeyRef.current = null;
@@ -1805,7 +1801,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             sessionMonitorCleanup.current = null;
           }
         }
+      }, (error) => {
+        console.warn('[Auth] Deferred auth state processing failed:', error instanceof Error ? error.name : 'UnknownError');
       });
+      disposeAuthListener = deferredAuth.dispose;
+      const result = supabase.auth.onAuthStateChange(deferredAuth.listener);
       subscription = result?.data?.subscription ?? null;
     } catch (e) {
       console.log('[Auth] onAuthStateChange setup error:', (e as Error)?.message);
@@ -1813,6 +1813,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
     return () => {
       cancelled = true;
+      disposeAuthListener?.();
       try { subscription?.unsubscribe(); } catch {}
       if (sessionMonitorCleanup.current) {
         sessionMonitorCleanup.current();
