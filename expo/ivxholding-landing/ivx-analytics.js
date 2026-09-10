@@ -157,6 +157,8 @@ IVX.loadAdPixels = function() {
       window.fbq = function() {};
     }
   } catch(e) {
+    console.error('Error loading ad pixels:', IVX._sanitizePII(e.message));
+    IVX.track('pixel_loading_error', { error: IVX._sanitizePII(e.message) });
     window.gtag = function() {};
     window.fbq = function() {};
   }
