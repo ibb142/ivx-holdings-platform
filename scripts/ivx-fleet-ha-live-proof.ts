@@ -102,14 +102,14 @@ function workerProcessIds(value: any): Set<string> {
   const rows = value?.worker?.instances ?? value?.workerInstances ?? [];
   return new Set(rows.map((entry: any) => entry.instanceId));
 }
-async function optionalSharedTopology() {
-  let value: any;
-  try {
-    value = await topology();
-  } catch {
-    return { status: 'UNAVAILABLE', topology: null };
-  }
+async function requiredSharedTopology(physical: any) {
+  const value = await topology();
+  assert.equal(value.ready, true, 'Shared process observation is not ready');
   assert.equal(value.apiInstances.length, 2); assert.equal(value.workerInstances.length, 2);
+  assert(value.apiInstances.every((instance: any) => processIdentityMatchesObservedInstance(instance.instanceId, apiProcessIds(physical))), 'Shared API identities differ from Render');
+  assert(value.workerInstances.every((instance: any) => processIdentityMatchesObservedInstance(instance.instanceId, workerProcessIds(physical))), 'Shared worker identities differ from Render');
+  assert([...apiProcessIds(physical)].every(id => value.apiInstances.some((instance: any) => processIdentityMatchesObservedInstance(instance.instanceId, new Set([id])))), 'A Render API instance is missing shared evidence');
+  assert([...workerProcessIds(physical)].every(id => value.workerInstances.some((instance: any) => processIdentityMatchesObservedInstance(instance.instanceId, new Set([id])))), 'A Render worker instance is missing shared evidence');
   return { status: 'PASS', topology: value };
 }
 // When a CI Render key is present, query Render's physical instances endpoint
@@ -133,7 +133,7 @@ for (let i = 0; i < 72; i++) {
   await sleep(5000);
 }
 assert(before, 'Two distinct, current processes per role did not become observable');
-const sharedBefore = renderKey ? await optionalSharedTopology() : { status: 'PASS', topology: before };
+const sharedBefore = renderKey ? await requiredSharedTopology(before) : { status: 'PASS', topology: before };
 const proof: Record<string, unknown> = {
   sourceSha: sha,
   exactDeploys,
@@ -178,7 +178,7 @@ if (process.env.IVX_HA_RESTART_WORKER === 'true') {
     await sleep(3000);
   }
   assert(after && recoveryProbe >= 0, 'Two replacement worker processes did not recover after restart');
-  const sharedAfter = renderKey ? await optionalSharedTopology() : { status: 'PASS', topology: after };
+  const sharedAfter = renderKey ? await requiredSharedTopology(after) : { status: 'PASS', topology: after };
   Object.assign(proof, {
     after,
     sharedStateObservationAfterRestart: sharedAfter,

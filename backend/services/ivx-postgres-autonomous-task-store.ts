@@ -146,6 +146,58 @@ export function readPostgresFleetDashboardObservation(): Promise<unknown> {
   });
 
 }
+
+export type FleetProcessObservation = {
+  measuredAt: string;
+  instances: Array<{ instanceId: string; role: string; commitSha: string; serviceId: string | null;
+    lastSeenAt: string; processRole: string | null; sharedState: boolean; sharedWorkerQueue: boolean; draining: boolean }>;
+};
+
+/** HA needs recent process rows, never the task ledger or assignment aggregates. */
+export async function readPostgresFleetProcessObservation(): Promise<FleetProcessObservation> {
+  if (!postgresAtomicQueueConfigured()) throw new Error('Shared process observation requires postgres_atomic');
+  const directRead = async (): Promise<FleetProcessObservation> => {
+    const result = await getDirectPool(process.env, 'telemetry').query<{ measuredAt: Date; instances: FleetProcessObservation['instances'] }>(`
+      select statement_timestamp() as "measuredAt", coalesce((select jsonb_agg(i) from (
+        select distinct on (worker_instance_id) worker_instance_id as "instanceId",
+          event->>'instance_role' as role, event->>'commit_sha' as "commitSha",
+          event->>'service_id' as "serviceId", created_at as "lastSeenAt",
+          event->>'process_role' as "processRole",
+          coalesce((event->>'shared_state')::boolean,false) as "sharedState",
+          coalesce((event->>'shared_worker_queue')::boolean,false) as "sharedWorkerQueue",
+          coalesce((event->>'draining')::boolean,false) as draining
+        from public.ivx_autonomous_task_events
+        where event_type='fleet_slo_sample' and created_at > statement_timestamp() - interval '60 seconds'
+          and event->>'instance_role' in ('api','worker')
+        order by worker_instance_id, created_at desc limit 1000
+      ) i), '[]'::jsonb) as instances`);
+    const row = result.rows[0];
+    if (!row || !Array.isArray(row.instances) || row.instances.length >= 1000) throw new Error('Incomplete process observation');
+    return { measuredAt: new Date(row.measuredAt).toISOString(), instances: row.instances };
+  };
+  if (preferDirectTransport()) return directRead();
+  try {
+    const query = new URLSearchParams({ select: 'worker_instance_id,created_at,event', event_type: 'eq.fleet_slo_sample',
+      created_at: `gt.${new Date(Date.now() - 60_000).toISOString()}`, order: 'created_at.desc', limit: '1000' });
+    const rows = await restRequest<Array<{ worker_instance_id: string; created_at: string; event: Record<string, unknown> }>>(
+      `ivx_autonomous_task_events?${query}`, { method: 'GET' }, { timeoutMs: TRUTH_TIMEOUT_MS });
+    if (!Array.isArray(rows) || rows.length >= 1000) throw new Error('Incomplete process observation');
+    const latest = new Map<string, FleetProcessObservation['instances'][number]>();
+    for (const row of rows) {
+      if (latest.has(row.worker_instance_id)) continue;
+      const event = row.event;
+      if (!row.worker_instance_id || !event || !['api', 'worker'].includes(String(event.instance_role))) continue;
+      latest.set(row.worker_instance_id, { instanceId: row.worker_instance_id, role: String(event.instance_role),
+        commitSha: String(event.commit_sha ?? ''), serviceId: typeof event.service_id === 'string' ? event.service_id : null,
+        lastSeenAt: row.created_at, processRole: typeof event.process_role === 'string' ? event.process_role : null,
+        sharedState: event.shared_state === true, sharedWorkerQueue: event.shared_worker_queue === true, draining: event.draining === true });
+    }
+    return { measuredAt: new Date().toISOString(), instances: [...latest.values()] };
+  } catch (error) {
+    if (!mayFailoverRead(error)) throw error;
+    return directRead();
+  }
+}
 function cloneTasks(tasks: readonly Task[]): Task[] { return structuredClone(tasks) as Task[]; }
 function mergeTaskResultsIntoCache(tasks: readonly (Task | null | undefined)[]): void { taskMutationRevision += 1; if (!taskReadCache) return; const next = [...taskReadCache.value]; const indexById = new Map(next.map((task, index) => [task.taskId, index])); for (const task of tasks) { if (!task) continue; const copy = structuredClone(task) as Task; const index = indexById.get(copy.taskId); if (index === undefined) { indexById.set(copy.taskId, next.length); next.push(copy); } else next[index] = copy; } taskReadCache = { value: next, at: Date.now() }; }
 function invalidateTaskReadCache(): void { taskMutationRevision += 1; taskReadCache = null; }

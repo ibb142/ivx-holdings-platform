@@ -61,6 +61,19 @@ try {
   })]);
   console.log(JSON.stringify({ ok: true, database: 'isolated PostgreSQL', blockedTaskConnections: blocked,
     telemetryDuringBlockedMutations: 'PASS', durableSharedSample: true, telemetryMs: Date.now() - started, productionRowsTouched: 0 }));
+  clearTimeout(deadline);
+  await admin.query('select pg_advisory_unlock(9811593)');
+  await mutations;
+  // Even an inaccessible task ledger must not prevent reading process state.
+  await admin.query('begin');
+  try {
+    await admin.query('lock table public.ivx_autonomous_tasks in access exclusive mode');
+    const processObservation = await Promise.race([store.readPostgresFleetProcessObservation(),
+      new Promise<never>((_, reject) => { deadline = setTimeout(() => reject(new Error('Process observation touched the locked task ledger')), 2_000); })]);
+    assert(processObservation.instances.some(instance => instance.instanceId === store.autonomousWorkerInstanceId()
+      && instance.sharedState && instance.sharedWorkerQueue));
+    console.log(JSON.stringify({ ok: true, processObservationWithLockedTaskLedger: 'PASS', productionRowsTouched: 0 }));
+  } finally { clearTimeout(deadline); await admin.query('rollback'); }
 } finally {
   if (deadline) clearTimeout(deadline);
   await admin.query('select pg_advisory_unlock(9811593)');
