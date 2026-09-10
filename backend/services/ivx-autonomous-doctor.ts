@@ -59,6 +59,7 @@ type DoctorStatus = {
 let timer: ReturnType<typeof setInterval> | null = null;
 let bootTimer: ReturnType<typeof setTimeout> | null = null;
 let inFlight: Promise<void> | null = null;
+let learningInFlight: Promise<void> | null = null;
 let startedAt: string | null = null;
 let lastRunAt: string | null = null;
 let lastHealthyAt: string | null = null;
@@ -135,6 +136,16 @@ async function learnFromSnapshot(snapshot: Awaited<ReturnType<typeof getAutonomo
   lastLearningAction = result.action;
 }
 
+function scheduleLearning(snapshot: Awaited<ReturnType<typeof getAutonomousTruthSnapshot>>): void {
+  // The learning store is diagnostic, not the authority for a fenced repair.
+  // Coalesce writes independently so a slow/unavailable store cannot stop recovery.
+  if (learningInFlight) return;
+  learningInFlight = learnFromSnapshot(snapshot).catch(() => {
+    lastLearningAction = 'LEARNING_STORE_UNAVAILABLE';
+    console.warn('[IVX Autonomous Doctor] learning persistence unavailable; recovery continues');
+  }).finally(() => { learningInFlight = null; });
+}
+
 async function retryAgentsBounded(agentNumbers: readonly number[]): Promise<{ attempted: number; failed: number; errors: string[] }> {
   let attempted = 0;
   let failed = 0;
@@ -164,6 +175,12 @@ async function repairFleet(snapshot: Awaited<ReturnType<typeof getAutonomousTrut
   for (const state of states) {
     if (!state.pauseState && !state.disabledState) resumeAgent(state.agentId);
   }
+  // The atomic enforcer already owns backlog creation and lease recovery.
+  // Do not seed a second backlog through the legacy manager on every Doctor tick.
+  if (postgresAtomicQueueSelected()) {
+    lastRepairCompletedAt = new Date().toISOString();
+    return;
+  }
   const repairCapacity = autonomousRepairCapacity();
   const lanes = getAllExecutionStates()
     .filter((state) => state.agentNumber != null && !state.pauseState && !state.disabledState && state.health !== 'failed')
@@ -171,12 +188,6 @@ async function repairFleet(snapshot: Awaited<ReturnType<typeof getAutonomousTrut
     .map((state) => ({ agentId: state.agentId, agentNumber: state.agentNumber as number }));
   const backlog = await ensureAutonomousManagerBacklog({ sourceSha: sourceSha(), agents: lanes });
   if (!backlog.ok) throw new Error(`autonomous_manager_backlog_failed:${backlog.errors}`);
-  // Atomic fleet recovery belongs to its fenced runtime enforcer. Starting the
-  // legacy campaign queue here would reintroduce a competing recovery loop.
-  if (postgresAtomicQueueSelected()) {
-    lastRepairCompletedAt = new Date().toISOString();
-    return;
-  }
   const refreshed = await getAutonomousTruthSnapshot();
   const unhealthyAgents = refreshed.agents.rows
     .filter((row) => (row.status !== 'WORKING' || !row.heartbeatFresh) && !observedBetweenPatrols(row, recentObservations) && !row.paused && !row.disabled)
@@ -196,7 +207,7 @@ async function runDoctorOnce(reason: 'boot' | 'interval'): Promise<void> {
     if (postgresAtomicQueueSelected()) recentObservations = recentPatrolAgents(await readPostgresPatrolObservations(sourceSha()), sourceSha());
     let snapshot = await getAutonomousTruthSnapshot();
     rememberSnapshot(snapshot);
-    await learnFromSnapshot(snapshot);
+    scheduleLearning(snapshot);
     if (snapshot.certification.continuousRuntimeCertified || lastDiagnosis.length === 0) {
       if (!lastHealthyAt || consecutiveUnhealthy > 0) console.info('[IVX Autonomous Doctor] recovery health verified', {
         sourceSha: sourceSha(), recentPatrolAgents: recentObservations.size,
@@ -219,7 +230,7 @@ async function runDoctorOnce(reason: 'boot' | 'interval'): Promise<void> {
       await sleep(RECOVERY_POLL_MS);
       snapshot = await getAutonomousTruthSnapshot();
       rememberSnapshot(snapshot);
-      await learnFromSnapshot(snapshot);
+      scheduleLearning(snapshot);
       if (snapshot.certification.continuousRuntimeCertified || lastDiagnosis.length === 0) {
         lastHealthyAt = new Date().toISOString();
         consecutiveUnhealthy = 0;
@@ -230,7 +241,7 @@ async function runDoctorOnce(reason: 'boot' | 'interval'): Promise<void> {
     }
     lastError = `fleet_not_certified_after_repair:working=${snapshot.agents.counts.working}/${snapshot.agents.counts.total}:fresh=${snapshot.agents.counts.freshHeartbeat}`;
     totalRepairFailures += 1;
-    await learnFromSnapshot(snapshot);
+    scheduleLearning(snapshot);
     console.error('[IVX Autonomous Doctor] repair incomplete', { error: lastError, diagnoses: lastDiagnosis, learning: lastLearningAction });
   } catch (error) {
     lastError = error instanceof Error ? error.message : String(error);

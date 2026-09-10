@@ -89,11 +89,12 @@ function sanitizeExternalError(value: unknown): string {
 }
 
 async function parseResponsePayload(response: Response): Promise<unknown> {
-  const text = await response.text().catch(() => '');
+  const text = await response.text();
   if (!text) return null;
   try {
     return JSON.parse(text) as unknown;
   } catch {
+    if (response.ok) throw new Error('Supabase returned invalid JSON; durable state was not replaced');
     return { message: text.slice(0, 320) };
   }
 }
@@ -134,7 +135,13 @@ async function retryWithBackoff<T>(
   throw lastError instanceof Error ? lastError : new Error('retry exhausted');
 }
 
-class DurableStore {
+function missingTable(response: Response, payload: unknown): boolean {
+  // PGRST002 means the cache cannot be queried (an outage), not a missing table.
+  return response.status === 404 && !!payload && typeof payload === 'object'
+    && (payload as { code?: string }).code === 'PGRST205';
+}
+
+export class DurableStore {
   private schemaReady: Promise<void> | null = null;
 
   private restBaseUrl(): string {
@@ -188,10 +195,7 @@ class DurableStore {
     }
     const probePayload = await parseResponsePayload(probeResponse);
     const probeMessage = extractErrorMessage(probePayload, `Supabase schema probe returned HTTP ${probeResponse.status}.`);
-    const missingSchema = probeResponse.status === 404
-      || probeMessage.includes('PGRST205')
-      || probeMessage.includes('Could not find the table')
-      || probeMessage.includes('schema cache');
+    const missingSchema = missingTable(probeResponse, probePayload);
     if (!missingSchema) {
       throw new Error(`Supabase schema probe unavailable; DDL suppressed: ${probeMessage}`);
     }
@@ -236,8 +240,7 @@ class DurableStore {
       const payload = await parseResponsePayload(response);
       if (!response.ok) {
         const message = extractErrorMessage(payload, `Supabase REST returned HTTP ${response.status}.`);
-        const schemaCacheMiss = retrySchemaCache
-          && (message.includes('schema cache') || message.includes('PGRST205') || message.includes('Could not find the table'));
+        const schemaCacheMiss = retrySchemaCache && missingTable(response, payload);
         if (schemaCacheMiss) {
           await this.executeSql("select pg_notify('pgrst','reload schema')");
           await sleep(750);
@@ -264,6 +267,7 @@ class DurableStore {
       `/ivx_durable_documents?doc_key=eq.${encodeURIComponent(docKey)}&select=value&limit=1`,
       { method: 'GET' },
     );
+    if (!Array.isArray(rows)) throw new Error('Supabase returned an invalid document response; durable state was not replaced');
     if (Array.isArray(rows) && rows.length > 0 && rows[0] && rows[0].value !== undefined && rows[0].value !== null) {
       return rows[0].value;
     }
