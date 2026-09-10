@@ -50,7 +50,7 @@ export async function proveWorkEvidenceArchive(db) {
   await db.query(await readFile(new URL('../supabase/migrations/20260910174848_ivx_compact_work_intervals.sql', import.meta.url), 'utf8'));
   await assert.rejects(report('2026-06-01T06:00:00Z', '2026-06-01T07:00:00Z'), /bootstrap is incomplete/);
   await db.query('select public.ivx_backfill_work_intervals(25)');
-  await db.query(await readFile(new URL('../supabase/migrations/20260910175800_ivx_sequential_interval_bootstrap.sql', import.meta.url), 'utf8'));
+  await db.query(await readFile(new URL('../supabase/migrations/20260910181159_ivx_sequential_interval_bootstrap.sql', import.meta.url), 'utf8'));
   const pageBatch = async () => (await db.query('select public.ivx_backfill_work_interval_pages(1) as result')).rows[0].result;
   assert.equal((await pageBatch()).complete, false, 'The fixture must span multiple heap pages');
   // Local fixture only: a heap rewrite must restart physical scanning safely.
