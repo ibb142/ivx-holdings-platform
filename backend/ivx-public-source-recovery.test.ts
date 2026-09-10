@@ -9,11 +9,16 @@ async function isolated(code: string) {
 test('public deals coalesce concurrent reads, fail visibly, and recover without stale publications', async () => {
   await isolated(`
     import { mock } from 'bun:test';
-    let calls=0, mode='fail', seenSignal;
-    mock.module('@supabase/supabase-js',()=>({createClient:()=>({from:()=>{
-      calls++;
-      const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,abortSignal:signal=>{
+    let calls=0, mediaCalls=0, mode='fail', seenSignal;
+    mock.module('@supabase/supabase-js',()=>({createClient:()=>({from:table=>{
+      if(table==='jv_deals')calls++;else mediaCalls++;
+      const filters=[];
+      const q={select:()=>q,eq:(key,value)=>{filters.push([key,value]);return q},in:()=>q,order:()=>q,limit:()=>q,abortSignal:signal=>{
         seenSignal=signal;
+        if(table==='jv_deal_reels') {
+          for(const [key,value] of [['published',true],['approved',true],['visibility','public']])if(!filters.some(f=>f[0]===key&&f[1]===value))throw Error('private reel filter missing');
+          return Promise.resolve({data:[{id:'reel',project_id:'perez-residence-001',video_url:'https://cdn.example/property.mp4'},{id:'unrelated',project_id:'other-property',video_url:'https://cdn.example/other.mp4'}]});
+        }
         return new Promise(resolve=>setTimeout(()=>resolve(mode==='fail'?{error:{message:'upstream timeout'}}:{data:mode==='empty'?[]:[{id:'perez-residence-001'}],count:mode==='empty'?0:1}),20));
       }};return q;
     }})}));
@@ -22,7 +27,8 @@ test('public deals coalesce concurrent reads, fail visibly, and recover without 
     const responses=await Promise.all(Array.from({length:12},()=>handleJVDealsList(request)));
     if(calls!==1||!seenSignal||responses.some(r=>r.status!==503))throw Error('concurrency/failure semantics');
     for(const r of responses){const b=await r.json();if(b.deals||b.count===0)throw Error('failure presented as empty content');}
-    mode='ok';const ok=await handleJVDealsList(request);if(ok.status!==200||(await ok.json()).count!==1||calls!==2)throw Error('recovery failed');
+    mode='ok';const ok=await handleJVDealsList(request);const body=await ok.json();if(ok.status!==200||body.count!==1||calls!==2||mediaCalls!==1)throw Error('recovery failed');
+    if(body.deals[0].videos.length!==1||body.deals[0].videos[0].id!=='reel')throw Error('published deal video missing or cross-mapped');
     mode='empty';const empty=await handleJVDealsList(request);if((await empty.json()).count!==0||calls!==3)throw Error('unpublished content retained');
   `);
 });

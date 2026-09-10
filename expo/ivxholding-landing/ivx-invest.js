@@ -128,6 +128,7 @@
     var confirmBtn = el('invest-confirm-btn');
     if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Agree to terms to confirm'; }
     checkInvestAuth();
+    restoreInvestSession();
     showInvestStep(1);
     document.getElementById('invest-overlay').classList.add('open');
     document.body.style.overflow = 'hidden';
@@ -250,6 +251,46 @@
     }
   }
 
+  function applyInvestSession(session) {
+    _investState.userToken = session && session.access_token || '';
+    _investState.userEmail = session && session.user && session.user.email || '';
+    _investState.userId = session && session.user && session.user.id || '';
+    checkInvestAuth();
+  }
+  function investAuthClient() {
+    if (_investState._authSb) return _investState._authSb;
+    var cfg = getSupabaseConfig();
+    var client = window.supabase.createClient(cfg.url, cfg.key);
+    _investState._authSb = client;
+    client.auth.onAuthStateChange(function(_event, session) { applyInvestSession(session); });
+    return client;
+  }
+  async function restoreInvestSession() {
+    if (!validateAuthConfiguration().ok) return;
+    try {
+      var client = investAuthClient();
+      var stored = await client.auth.getSession();
+      var session = stored.data && stored.data.session;
+      if (!session) { applyInvestSession(null); return; }
+      var verified = await client.auth.getUser(session.access_token);
+      if (verified.error || !verified.data.user) { applyInvestSession(null); return; }
+      applyInvestSession(session);
+    } catch (_error) { applyInvestSession(null); }
+  }
+  async function signOutInvestSession() {
+    try {
+      var result = await investAuthClient().auth.signOut({ scope: 'local' });
+      if (result.error) throw result.error;
+      applyInvestSession(null);
+      setRegState(REG_STATES.IDLE);
+    } catch (_error) {
+      var err = document.getElementById('invest-auth-error');
+      if (err) { err.textContent = 'Could not sign out. Please retry.'; err.style.display = 'block'; }
+    }
+  }
+  var signOutButton = document.getElementById('invest-signout');
+  if (signOutButton) signOutButton.addEventListener('click', signOutInvestSession);
+
   async function handleInvestAuth(e) {
     e.preventDefault();
     // Phase 2: double-submit prevention via state machine.
@@ -359,7 +400,9 @@
             console.warn('[IVX Reg] Request timed out — polling status by ID. trace:', _investState.traceId);
             setRegState(REG_STATES.RECOVERABLE_ERROR);
             setAuthError('This is taking longer than expected. Checking your registration…');
-            var statusResp = await fetch(BACKEND_URL + '/api/ivx/registration/status?id=' + encodeURIComponent(registrationRequestId), { signal: controller.signal }).catch(function() { return null; });
+            // The registration controller is already aborted. Status recovery
+            // needs its own bounded request or it can never reach the API.
+            var statusResp = await fetch(BACKEND_URL + '/api/ivx/registration/status?id=' + encodeURIComponent(registrationRequestId), { signal: AbortSignal.timeout(8000) }).catch(function() { return null; });
             if (statusResp && statusResp.ok) {
               var statusData = await statusResp.json().catch(function() { return null; });
               if (statusData && statusData.finalStatus === 'completed' && statusData.stage === 'COMPLETED') {
@@ -386,7 +429,7 @@
           _investState.userId = data.authUserId || '';
           // Auto-login: email is auto-confirmed server-side, so sign in immediately.
           try {
-            _investState._authSb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            _investState._authSb = investAuthClient();
             var autoLoginResult = await _investState._authSb.auth.signInWithPassword({
               email: email.toLowerCase(),
               password: password
@@ -449,7 +492,7 @@
     // ---- LOGIN path: keep client-side Supabase signIn (no new user created) ----
     setRegState(REG_STATES.AUTH_CREATING);
     try {
-      var _authSb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      var _authSb = investAuthClient();
       var authResult = await _authSb.auth.signInWithPassword({ email: email.toLowerCase(), password: password });
       if (authResult.error) throw new Error(authResult.error.message || 'Authentication failed');
       var session = authResult.data && authResult.data.session;

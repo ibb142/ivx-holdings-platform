@@ -136,6 +136,7 @@ function u(lane: LandingLaneId, unitId: string, workstream: string, title: strin
   return { unitId, lane, workstream, title, severity, check };
 }
 
+const CI_LANDING_19 = 'IVX Landing 19 QA';
 const CI_LANDING_BROWSER = 'Landing 112-Agent Live E2E 3H QA';
 const CI_E2E_PIPELINE = 'IVX E2E Acceptance Pipeline';
 const CI_REELS = 'IVX Reels Live Certificate';
@@ -204,10 +205,10 @@ export const LANDING_P0_UNITS: readonly LandingUnit[] = [
   u('reels', 'reels.by-id', 'C_REELS', 'Reel detail endpoint resolves', 'P1', { kind: 'reels', assert: 'by-id' }),
   u('reels', 'reels.metadata', 'C_REELS', 'Reel metadata (title/likes/comments/share)', 'P1', { kind: 'reels', assert: 'metadata' }),
   u('reels', 'reels.route', 'C_REELS', 'Reels page route responds', 'P1', { kind: 'routes', paths: ['/reels'] }),
-  u('reels', 'reels.autoplay-controls-browser', 'C_REELS', 'Autoplay + controls (browser)', 'P1', { kind: 'ci', workflow: CI_REELS, check: 'autoplay-controls' }),
-  u('reels', 'reels.engagement-browser', 'C_REELS', 'Likes / comments / share (browser)', 'P1', { kind: 'ci', workflow: CI_REELS, check: 'engagement' }),
-  u('reels', 'reels.scroll-navigation-browser', 'C_REELS', 'Scroll / navigation / crash resistance (browser)', 'P0', { kind: 'ci', workflow: CI_REELS, check: 'scroll-navigation' }),
-  u('reels', 'reels.production-render-browser', 'C_REELS', 'Production browser rendering', 'P0', { kind: 'ci', workflow: CI_REELS, check: 'production-render' }),
+  u('reels', 'reels.autoplay-controls-browser', 'C_REELS', 'Autoplay + controls (browser)', 'P1', { kind: 'ci', workflow: CI_LANDING_19, check: 'reels.autoplay-controls-browser' }),
+  u('reels', 'reels.engagement-browser', 'C_REELS', 'Likes / comments / share (browser)', 'P1', { kind: 'ci', workflow: CI_LANDING_19, check: 'reels.engagement-browser' }),
+  u('reels', 'reels.scroll-navigation-browser', 'C_REELS', 'Scroll / navigation / crash resistance (browser)', 'P0', { kind: 'ci', workflow: CI_LANDING_19, check: 'reels.scroll-navigation-browser' }),
+  u('reels', 'reels.production-render-browser', 'C_REELS', 'Production browser rendering', 'P0', { kind: 'ci', workflow: CI_LANDING_19, check: 'reels.production-render-browser' }),
 
   // D. REGISTRATION — lane registration (IA-049..060)
   u('registration', 'registration.endpoint', 'D_REGISTRATION', 'Register endpoint validates (400 on empty)', 'P0', { kind: 'contract', probe: 'register-empty' }),
@@ -216,12 +217,12 @@ export const LANDING_P0_UNITS: readonly LandingUnit[] = [
   u('registration', 'registration.required-email', 'D_REGISTRATION', 'Email format enforced', 'P0', { kind: 'contract', probe: 'register-invalid-email' }),
   u('registration', 'registration.required-cell', 'D_REGISTRATION', 'Cell phone required', 'P1', { kind: 'contract', probe: 'register-missing-cell' }),
   u('registration', 'registration.role-selection', 'D_REGISTRATION', 'Role selection validated', 'P1', { kind: 'contract', probe: 'register-invalid-role' }),
-  u('registration', 'registration.zip-code', 'D_REGISTRATION', 'Zip code validated', 'P2', { kind: 'contract', probe: 'register-invalid-zip' }),
-  u('registration', 'registration.optional-picture', 'D_REGISTRATION', 'Picture optional', 'P2', { kind: 'contract', probe: 'register-picture-optional' }),
-  u('registration', 'registration.duplicate-user', 'D_REGISTRATION', 'Duplicate user rejected', 'P0', { kind: 'contract', probe: 'register-duplicate' }),
+  u('registration', 'registration.zip-code', 'D_REGISTRATION', 'Zip code validated', 'P2', { kind: 'ci', workflow: CI_LANDING_19, check: 'registration.zip-code' }),
+  u('registration', 'registration.optional-picture', 'D_REGISTRATION', 'Picture optional', 'P2', { kind: 'ci', workflow: CI_LANDING_19, check: 'registration.optional-picture' }),
+  u('registration', 'registration.duplicate-user', 'D_REGISTRATION', 'Duplicate user rejected', 'P0', { kind: 'ci', workflow: CI_LANDING_19, check: 'registration.duplicate-user' }),
   u('registration', 'registration.error-messages', 'D_REGISTRATION', 'Human-readable error messages', 'P1', { kind: 'contract', probe: 'register-error-message' }),
-  u('registration', 'registration.loading-retry-browser', 'D_REGISTRATION', 'Loading / retry states (browser)', 'P1', { kind: 'ci', workflow: CI_E2E_PIPELINE, check: 'registration-ui' }),
-  u('registration', 'registration.e2e-member-creation', 'D_REGISTRATION', 'Registration → member created → login (E2E)', 'P0', { kind: 'ci', workflow: CI_E2E_PIPELINE, check: 'registration-e2e' }),
+  u('registration', 'registration.loading-retry-browser', 'D_REGISTRATION', 'Loading / retry states (browser)', 'P1', { kind: 'ci', workflow: CI_LANDING_19, check: 'registration.loading-retry-browser' }),
+  u('registration', 'registration.e2e-member-creation', 'D_REGISTRATION', 'Registration → member created → login (E2E)', 'P0', { kind: 'ci', workflow: CI_LANDING_19, check: 'registration.e2e-member-creation' }),
 
   // E. AUTH — lane auth (IA-061..072)
   u('auth', 'auth.login-endpoint', 'E_AUTH', 'Login validates (400 on empty)', 'P0', { kind: 'contract', probe: 'login-empty' }),
@@ -230,12 +231,12 @@ export const LANDING_P0_UNITS: readonly LandingUnit[] = [
   u('auth', 'auth.forgot-password', 'E_AUTH', 'Forgot-password validates input', 'P1', { kind: 'contract', probe: 'forgot-invalid' }),
   u('auth', 'auth.reset-password', 'E_AUTH', 'Reset-password rejects invalid token', 'P1', { kind: 'contract', probe: 'reset-invalid' }),
   u('auth', 'auth.protected-routes', 'E_AUTH', 'Protected routes require auth', 'P0', { kind: 'contract', probe: 'protected-unauth' }),
-  u('auth', 'auth.expired-token', 'E_AUTH', 'Expired token → 401 (not 500)', 'P1', { kind: 'contract', probe: 'expired-token' }),
+  u('auth', 'auth.expired-token', 'E_AUTH', 'Expired token → 401 (not 500)', 'P1', { kind: 'ci', workflow: CI_LANDING_19, check: 'auth.expired-token' }),
   u('auth', 'auth.invalid-token', 'E_AUTH', 'Invalid token → 401 (not 500)', 'P1', { kind: 'contract', probe: 'invalid-token' }),
   u('auth', 'auth.supabase-binding', 'E_AUTH', 'Supabase production auth binding', 'P0', { kind: 'contract', probe: 'supabase-auth-settings' }),
   u('auth', 'auth.production-config', 'E_AUTH', 'Production auth configuration diagnostic', 'P0', { kind: 'contract', probe: 'env-diagnostic' }),
-  u('auth', 'auth.session-persistence-browser', 'E_AUTH', 'Session persistence / logout (browser)', 'P1', { kind: 'ci', workflow: CI_E2E_PIPELINE, check: 'session' }),
-  u('auth', 'auth.login-e2e', 'E_AUTH', 'Member + owner login (E2E)', 'P0', { kind: 'ci', workflow: CI_E2E_PIPELINE, check: 'login-e2e' }),
+  u('auth', 'auth.session-persistence-browser', 'E_AUTH', 'Session persistence / logout (browser)', 'P1', { kind: 'ci', workflow: CI_LANDING_19, check: 'auth.session-persistence-browser' }),
+  u('auth', 'auth.login-e2e', 'E_AUTH', 'Member + owner login (E2E)', 'P0', { kind: 'ci', workflow: CI_LANDING_19, check: 'auth.login-e2e' }),
 
   // J. API CONTRACTS — lane api (IA-073..084)
   u('api', 'api.health', 'J_API', 'Backend /health ok (fail-closed)', 'P0', { kind: 'api', path: '/health', asserts: [{ assert: 'status', is: [200] }, { assert: 'json' }, { assert: 'has-keys', keys: ['ok', 'status'] }] }),
@@ -260,8 +261,8 @@ export const LANDING_P0_UNITS: readonly LandingUnit[] = [
   u('accessibility', 'a11y.heading-order', 'H_ACCESSIBILITY', 'Heading order (single h1, no skips)', 'P2', { kind: 'html', asserts: [{ assert: 'heading-order' }] }),
   u('accessibility', 'a11y.zoomable', 'H_ACCESSIBILITY', 'Viewport zoom not disabled', 'P1', { kind: 'html', asserts: [{ assert: 'viewport-zoomable' }] }),
   u('accessibility', 'a11y.lang', 'H_ACCESSIBILITY', 'Document language declared', 'P2', { kind: 'html', asserts: [{ assert: 'lang-title' }] }),
-  u('accessibility', 'a11y.touch-targets-browser', 'H_ACCESSIBILITY', 'Touch targets >= 44pt (browser)', 'P1', { kind: 'ci', workflow: CI_LANDING_BROWSER, check: 'touch-targets' }),
-  u('accessibility', 'a11y.contrast-focus-browser', 'H_ACCESSIBILITY', 'Contrast / focus / keyboard (browser)', 'P1', { kind: 'ci', workflow: CI_LANDING_BROWSER, check: 'contrast-focus' }),
+  u('accessibility', 'a11y.touch-targets-browser', 'H_ACCESSIBILITY', 'Touch targets >= 44pt (browser)', 'P1', { kind: 'ci', workflow: CI_LANDING_19, check: 'a11y.touch-targets-browser' }),
+  u('accessibility', 'a11y.contrast-focus-browser', 'H_ACCESSIBILITY', 'Contrast / focus / keyboard (browser)', 'P1', { kind: 'ci', workflow: CI_LANDING_19, check: 'a11y.contrast-focus-browser' }),
 
   // I. PERFORMANCE — lane performance (IA-095..102)
   u('performance', 'perf.landing-ttfb', 'I_PERFORMANCE', 'Landing HTML fetch <= 1500ms', 'P1', { kind: 'perf', base: 'landing', path: '/', maxMs: 1500 }),
@@ -271,7 +272,7 @@ export const LANDING_P0_UNITS: readonly LandingUnit[] = [
   u('performance', 'perf.health-latency', 'I_PERFORMANCE', '/health <= 1000ms', 'P1', { kind: 'perf', base: 'api', path: '/health', maxMs: 1000 }),
   u('performance', 'perf.script-budget', 'I_PERFORMANCE', 'Script tag budget (<=15)', 'P2', { kind: 'html', asserts: [{ assert: 'script-budget', maxTags: 15 }] }),
   u('performance', 'perf.image-weight-total', 'I_PERFORMANCE', 'Landing image weight budget', 'P2', { kind: 'media', source: 'landing-images', assert: 'weight', max: 40 }),
-  u('performance', 'perf.console-network-browser', 'I_PERFORMANCE', 'Console / failed requests / long tasks (browser)', 'P0', { kind: 'ci', workflow: CI_LANDING_BROWSER, check: 'console-network' }),
+  u('performance', 'perf.console-network-browser', 'I_PERFORMANCE', 'Console / failed requests / long tasks (browser)', 'P0', { kind: 'ci', workflow: CI_LANDING_19, check: 'perf.console-network-browser' }),
 
   // K. SECURITY — lane security (IA-103..108)
   u('security', 'security.owner-dashboard-unauth', 'K_SECURITY', 'Owner dashboard rejects unauthenticated', 'P0', { kind: 'security', probe: 'unauth-privileged', path: '/api/ivx/autonomous-core/dashboard' }),
@@ -284,7 +285,7 @@ export const LANDING_P0_UNITS: readonly LandingUnit[] = [
   // L. PRODUCTION E2E — lane e2e (IA-109..112)
   u('e2e', 'e2e.sha-match', 'L_E2E', 'main SHA == production SHA', 'P0', { kind: 'sha-match' }),
   u('e2e', 'e2e.landing-http', 'L_E2E', 'Production landing URL healthy', 'P0', { kind: 'perf', base: 'landing', path: '/', maxMs: 10_000 }),
-  u('e2e', 'e2e.production-browser-suite', 'L_E2E', 'Production browser E2E on exact SHA', 'P0', { kind: 'ci', workflow: CI_LANDING_BROWSER, check: 'production-e2e' }),
+  u('e2e', 'e2e.production-browser-suite', 'L_E2E', 'Production browser E2E on exact SHA', 'P0', { kind: 'ci', workflow: CI_LANDING_19, check: 'e2e.production-browser-suite' }),
   u('e2e', 'e2e.certificate', 'L_E2E', 'Exact-SHA Landing certificate', 'P0', { kind: 'certificate' }),
 ];
 

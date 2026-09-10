@@ -500,7 +500,7 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
         id: p.id,
         project_id: v.project_id ? String(v.project_id) : null,
         video_url: v.video_url,
-        webm_url: WEBM_VARIANTS[String(p.id)] ?? null,
+        webm_url: WEBM_VARIANTS[String(p.id)] ? new URL(WEBM_VARIANTS[String(p.id)], 'https://api.ivxholding.com').href : null,
         hls_url: pb?.status === 'ready' ? pb.hls_url : null,
         poster_url: pb?.poster_url ?? null,
         preview_blur_url: (pb as { preview_blur_url?: string | null } | undefined)?.preview_blur_url ?? null,

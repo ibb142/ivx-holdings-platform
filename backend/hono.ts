@@ -1,4 +1,5 @@
 import { handleFleetHaGet } from './api/ivx-fleet-ha';
+import { reelVariantFileName } from './services/ivx-reel-variant';
 import { SharedRoomStorage, requireSharedState } from './services/ivx-shared-room-storage';
 import { autonomousWorkerInstanceId } from './services/ivx-postgres-autonomous-task-store';
 import { handleIVXRadarStatus } from './api/ivx-radar';
@@ -6555,10 +6556,10 @@ app.get('/api/ivx/owner-dashboard', async (context) => handleOwnerDashboardReque
 // These wrap the video platform feed so external consumers (app, landing, admin)
 // can use /api/reels without knowing the internal video-platform path structure.
 app.get('/media/reels/:id', async (c) => {
-  const id = String(c.req.param('id') || '').replace(/[^a-zA-Z0-9_-]/g, '');
-  if (!id) return c.json({ ok: false, error: 'invalid id' }, 400);
+  const fileName = reelVariantFileName(String(c.req.param('id') || ''));
+  if (!fileName) return c.json({ ok: false, error: 'invalid id' }, 400);
   try {
-    const buf = await readFile(path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'assets', 'reels', id + '.webm'));
+    const buf = await readFile(path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'assets', 'reels', fileName));
     return new Response(buf, { headers: { 'Content-Type': 'video/webm', 'Cache-Control': 'public, max-age=86400', 'Accept-Ranges': 'none' } });
   } catch {
     return c.json({ ok: false, error: 'variant not found' }, 404);

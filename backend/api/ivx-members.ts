@@ -36,6 +36,7 @@ import {
 } from '../services/ivx-registration-orchestrator';
 import { createClient } from '@supabase/supabase-js';
 import { assertIVXOwnerOnly } from './owner-only';
+import { validRegistrationPostalCode } from '../services/ivx-registration-postal-code';
 
 const DEPLOYMENT_MARKER = 'ivx-members-api-v1';
 
@@ -174,6 +175,9 @@ export async function handleMemberRegister(request: Request): Promise<Response> 
   }
   if (!phone || phone.replace(/\D/g, '').length < 10) {
     return normalizedError('INVALID_EMAIL', 'VALIDATING', { message: 'Please enter a valid phone number.' });
+  }
+  if (!validRegistrationPostalCode(zipCode, country)) {
+    return normalizedError('INVALID_POSTAL_CODE', 'VALIDATING', { message: 'Please enter a valid ZIP or postal code.' });
   }
   if (!acceptTerms) {
     return normalizedError('UNKNOWN_ERROR', 'VALIDATING', { message: 'You must accept the Terms of Service.' });
