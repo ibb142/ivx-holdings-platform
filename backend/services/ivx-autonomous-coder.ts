@@ -753,6 +753,17 @@ async function revertPatchOperation(
 
 // ── TEST + TYPECHECK RUNNER ──────────────────────────────────────────────────
 
+function validationProcessEnv(): NodeJS.ProcessEnv {
+  // Generated regression tests are validation programs, not production services.
+  // Keep runtime discovery/temp paths, but never inherit provider, database,
+  // owner, deployment, GitHub or other credentials from the worker process.
+  const env: NodeJS.ProcessEnv = { NODE_ENV: 'test', CI: '1', FORCE_COLOR: '0' };
+  for (const key of ['PATH', 'HOME', 'TMPDIR', 'TMP', 'TEMP', 'SystemRoot', 'WINDIR', 'LANG', 'LC_ALL']) {
+    if (process.env[key] !== undefined) env[key] = process.env[key];
+  }
+  return env;
+}
+
 export async function runAutonomousCoderCommand(cwd: string, command: string): Promise<IVXAutonomousCoderTestResult> {
   const started = Date.now();
   // Resolve the runtime: the Render container runs under node+tsx, not bun.
@@ -789,7 +800,7 @@ export async function runAutonomousCoderCommand(cwd: string, command: string): P
       cwd,
       timeout: COMMAND_TIMEOUT_MS,
       maxBuffer: 1024 * 1024 * 4,
-      env: { ...process.env, CI: '1', FORCE_COLOR: '0' },
+      env: validationProcessEnv(),
     });
     return {
       command: displayCommand,
@@ -876,6 +887,7 @@ Rules:
 - Repair goals that require regression coverage must include BOTH the functional source operation and a runnable node:test regression operation in the same response.
 - Create regression tests as backend/**/*.test.ts or expo/**/*.test.ts(x); plain JavaScript test paths are outside this engine's patch scope.
 - Repair tests execute with node --import tsx --test. Import every test API explicitly: import { test, describe, it } from 'node:test'; import assert from 'node:assert/strict'. There are no global describe/it/expect APIs and bun:test is unavailable in production.
+- Validation uses NODE_ENV=test and does not inherit production credentials. Use isolated fixtures or dependency injection; do not depend on live database contents or call live write endpoints.
 - If Node reports ReferenceError for a test API, fix its import and assertions in the test. Never suppress the error, skip the test or weaken the assertion. On revision, the failed patch has been reverted; use the original source shown in FILE CONTENTS.
 - Missing customer media or credentials are external dependencies. Never invent assets, URLs, credentials, successful results or weaker acceptance criteria to make a repair pass.
 - If the goal is already satisfied, return {"rootCause":"already satisfied","technicalPlan":"no change needed","operations":[]}
