@@ -2,6 +2,19 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { assertRepairTestRuntime, repairRecoveryLesson } from './ivx-repair-recovery-protocol';
 
+test('restores scope and CI lessons from durable failures without weakening the existing checks', () => {
+  for (const [error, id] of [
+    ['REPAIR_DEFECT_SCOPE_VIOLATION: unrelated investment score', 'DEFECT_SCOPE'],
+    ['Required CI checks FAILED on an exact commit: qa-suite=completed/failure', 'CI_REGRESSION'],
+  ]) {
+    const restarted = JSON.parse(JSON.stringify({ error: 'wrapper '.repeat(150) + error }));
+    const lesson = repairRecoveryLesson(restarted.error);
+    assert.equal(lesson?.id, id);
+    assert.equal(lesson?.protocol, 'ivx-repair-recovery-protocol-v2');
+    assert.match(lesson!.instruction, id === 'CI_REGRESSION' ? /Preserve existing assertions/ : /Do not substitute a different business rule/);
+  }
+});
+
 test('recovers the actionable runtime rule from a long durable failure', () => {
   const failure = 'REPAIR_REGRESSION_NOT_REPRODUCED ' + 'wrapper '.repeat(200) + "Cannot find module 'bun:test'";
   const afterRestart = JSON.parse(JSON.stringify({ error: failure }));

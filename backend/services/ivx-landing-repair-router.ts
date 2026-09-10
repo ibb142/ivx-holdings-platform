@@ -2,6 +2,7 @@ import { autonomousDoctorRepairEnabled } from './ivx-autonomous-control-policy';
 import { getLandingUnit, resolveProductionSha, type LandingResultRecord } from './ivx-landing-p0-backlog';
 import type { IVXWorkerJob, IVXWorkerJobInput } from './ivx-senior-developer-worker';
 import { repairRecoveryLesson } from './ivx-repair-recovery-protocol';
+import { landingRepairScopeForUnit } from './ivx-landing-repair-scope';
 
 const OWNER = 'autonomous-landing-repair';
 const TERMINAL = new Set(['completed', 'failed', 'blocked', 'cancelled']);
@@ -61,6 +62,7 @@ export class LandingRepairRouter {
     const busy = this.snapshot.find(job => job.ownerId === OWNER && !TERMINAL.has(job.status));
     if (busy) return result('BUSY');
     const recoveryRule = repairRecoveryLesson(last?.error);
+    const scope = landingRepairScopeForUnit(unit.unitId);
     const input: IVXWorkerJobInput = {
       ownerId: OWNER, taskId, actor: 'AUTONOMOUS', agentId, agentNumber: record.agent_number,
       ownerApproved: true, // Existing explicit Doctor repair policy and verified emergency-stop gate above.
@@ -70,6 +72,10 @@ export class LandingRepairRouter {
         '[TEMPLATE_MODE:BUG_FIX] [AUTONOMOUS_DIAGNOSTIC_DATA] Repair a reproduced Landing QA failure in actual source code.',
         `Unit ${unit.unitId}: ${unit.title}. Observed production SHA ${record.production_sha}.`,
         `Acceptance probe: ${JSON.stringify(unit.check)}`,
+        ...(scope ? [
+          `Enforced repair boundary ${scope.protocol}: ${scope.files.join(', ')}.`,
+          scope.instruction,
+        ] : []),
         ...(['html', 'css-media', 'links', 'routes', 'ci'].includes(unit.check.kind) ? [
           'Inspect the relevant Landing implementation: expo/ivxholding-landing/index.html, expo/ivxholding-landing/ivx-app.js, expo/ivxholding-landing/ivx-styles.css, expo/ivxholding-landing/ivx-ui-utils.js. Preserve all existing page behavior.',
         ] : []),
@@ -81,7 +87,7 @@ export class LandingRepairRouter {
         'Open a PR and merge only after all applicable checks approve that exact head. A commit or merged PR is not production recovery: the Landing patrol must re-verify the deployed version before reporting PASS.',
       ].join('\n'),
       ownerApprovedAction: {
-        proposedPlan: `Repair ${unit.unitId} from persisted QA evidence`, filesAffected: [], riskLevel: 'low',
+        proposedPlan: `Repair ${unit.unitId} from persisted QA evidence`, filesAffected: scope?.files ?? [], riskLevel: 'low',
         rollbackOption: 'Revert the reviewed repair commit', rollbackAvailable: true,
         auditLog: ['landing-repair-handoff-v1', sourceTaskId, evidenceId, record.production_sha!], secretValuesReturned: false,
       },

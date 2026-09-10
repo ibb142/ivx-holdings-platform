@@ -27,6 +27,7 @@
 import { MOBILE_CHECK, verifiedMobileSkip } from './ivx-ci-conditional-evidence';
 import { assertPrivateRepairScope, publicRepairGoal } from './ivx-private-repair-boundary';
 import { assertRepairPatchQuality, requiresRepairRegression } from './ivx-repair-patch-quality';
+import { assertLandingRepairScope } from './ivx-landing-repair-scope';
 import { assertRepairTestRuntime, NODE_REPAIR_TEST_GUIDANCE, repairRecoveryLesson } from './ivx-repair-recovery-protocol';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -2163,6 +2164,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       let applyError: string | null = null;
       try {
         assertPrivateRepairScope(input.goal, input.allowedFiles, fallback.operations.map(op => op.path));
+        assertRepairPatchQuality(input.taskId, fallback.operations, input.goal);
         for (const op of fallback.operations) {
           await applyPatchOperation(op, projectRoot, input.fileWriter, input.fileReader);
         }
@@ -2761,6 +2763,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           ? approvedProductionBranch
           : `${AUTONOMOUS_CODER_BRANCH}-${sanitizeBranchSuffix(input.taskId)}`;
         assertPrivateRepairScope(input.goal, input.allowedFiles, filesChanged);
+        assertLandingRepairScope(input.taskId, filesChanged);
         const commitResult = input.commitFn
           ? await input.commitFn(filesChanged, branchName)
           : await commitFilesViaGitDataApi(filesChanged, branchName, buildAttributionTrailers(input));
@@ -3190,6 +3193,7 @@ export async function resumeIVXAutonomousCoderFromCiWait(
         onPhase?.('blocked', error);
       } else {
         onPhase?.('committing', `Restart resume: all required CI checks GREEN on ${input.commitSha.slice(0, 12)} — merging PR #${input.prNumber}.`);
+        assertLandingRepairScope(input.taskId, input.filesChanged ?? []);
         await input.beforeMerge?.();
         const mergeResult = input.mergeFn
           ? await input.mergeFn(input.prNumber, `Merge PR #${input.prNumber}: ${publicRepairGoal(input.goal).slice(0, 60)}`)
