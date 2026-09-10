@@ -7,7 +7,7 @@ export async function handleFleetSloGet(request: Request): Promise<Response> {
   catch { return ownerOnlyJson({ ok: false, error: 'Owner authentication required' }, 401); }
   const snapshot = getFleetSloSnapshot();
   if (!snapshot) {
-    console.error('Snapshot is unavailable, potential capacity issue');
+    console.error('Snapshot is unavailable, potential capacity issue. Consider increasing fleet capacity or verifying dispatcher health.');
     return ownerOnlyJson({ ok: false, marker: IVX_FLEET_SLO_MARKER, status: 'UNKNOWN', error: 'Waiting for first durable sample' }, 503);
   }
   if (new URL(request.url).searchParams.get('format') === 'prometheus') {
