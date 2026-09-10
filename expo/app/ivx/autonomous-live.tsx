@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AppState, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Activity, AlertTriangle, ArrowLeft, CheckCircle2, Clock3, Globe2, RefreshCw, ShieldCheck } from 'lucide-react-native';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
+import { readLiveTelemetry } from '@/lib/live-telemetry-request';
 
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 const CONTROL_PLANE_URL = `${API_BASE}/api/ivx/autonomous/control-plane`;
@@ -184,29 +185,48 @@ export default function AutonomousLiveScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pending = useRef<AbortController | null>(null);
+  const mounted = useRef(false);
+  const [checkedAt, setCheckedAt] = useState(Date.now());
 
   const load = useCallback(async (silent = false) => {
+    if (!mounted.current) return;
+    setCheckedAt(Date.now());
+    if (pending.current || AppState.currentState === 'background') return;
+    const controller = new AbortController();
+    pending.current = controller;
     if (!silent) setLoading(true);
     try {
-      const token = await getIVXAccessToken();
-      if (!token) throw new Error('Owner session required.');
-      const response = await fetch(CONTROL_PLANE_URL, { headers: { Authorization: `Bearer ${token}` } });
-      const json = await response.json() as ControlPlane;
-      if (!response.ok || !json.ok) throw new Error(json.error || `Control plane HTTP ${response.status}`);
+      const json = await readLiveTelemetry(async signal => {
+        const token = await getIVXAccessToken();
+        if (signal.aborted) throw new Error('Telemetry read interrupted.');
+        if (!token) throw new Error('Owner session required. Please sign in again.');
+        const response = await fetch(CONTROL_PLANE_URL, { headers: { Authorization: `Bearer ${token}` }, signal });
+        const data = await response.json() as ControlPlane;
+        if (!response.ok || !data.ok) throw new Error(data.error || `Control plane HTTP ${response.status}`);
+        return data;
+      }, controller);
+      if (!mounted.current) return;
       setControl(json);
+      setCheckedAt(Date.now());
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load autonomous live telemetry.');
+      if (mounted.current) setError(err instanceof Error ? err.message : 'Unable to load autonomous live telemetry.');
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (pending.current === controller) pending.current = null;
+      if (mounted.current) { setLoading(false); setRefreshing(false); }
     }
   }, []);
 
   useEffect(() => {
+    mounted.current = true;
     void load(false);
     pollRef.current = setInterval(() => void load(true), POLL_INTERVAL_MS);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') void load(true);
+      else if (state === 'background') pending.current?.abort();
+    });
+    return () => { mounted.current = false; if (pollRef.current) clearInterval(pollRef.current); pending.current?.abort(); subscription.remove(); };
   }, [load]);
 
   const enterprise = control?.enterprise;
@@ -221,7 +241,9 @@ export default function AutonomousLiveScreen() {
   }, {}), [agents]);
   const regionRows = useMemo(() => Object.entries(regions).sort((a, b) => b[1] - a[1]), [regions]);
 
-  const overallState = !enterprise?.enabled
+  const snapshotAge = checkedAt - Date.parse(control?.generatedAt || '');
+  const fresh = !!control && Number.isFinite(snapshotAge) && snapshotAge >= -5_000 && snapshotAge <= 120_000;
+  const overallState = !control ? (error ? 'UNAVAILABLE' : 'CONNECTING') : !fresh ? 'STALE' : !enterprise?.enabled
     ? 'OFFLINE'
     : (enterprise.failed || 0) > 0 || (enterprise.blocked || 0) > 0
       ? 'DEGRADED'
@@ -250,15 +272,15 @@ export default function AutonomousLiveScreen() {
             <Text style={[styles.overallState, { color: overallTone }]}>{overallState}</Text>
           </View>
           <View style={styles.metrics}>
-            <Metric label="Registered" value={`${enterprise?.registered ?? 0}/${enterprise?.expectedAgents ?? 112}`} />
-            <Metric label="Working" value={presenceCounts.WORKING ?? 0} tone="#38BDF8" />
-            <Metric label="Queued" value={presenceCounts.QUEUED ?? 0} tone="#A78BFA" />
-            <Metric label="Idle" value={presenceCounts.IDLE ?? 0} tone="#94A3B8" />
-            <Metric label="Heartbeating" value={enterprise?.heartbeating ?? 0} tone="#22C55E" />
-            <Metric label="Attention" value={(presenceCounts.ATTENTION ?? 0) + (presenceCounts.STALE ?? 0)} tone="#EF4444" />
+            <Metric label="Registered" value={control ? `${enterprise?.registered ?? 0}/${enterprise?.expectedAgents ?? 112}` : '—/112'} />
+            <Metric label="Working" value={fresh ? presenceCounts.WORKING ?? 0 : '—'} tone="#38BDF8" />
+            <Metric label="Queued" value={fresh ? presenceCounts.QUEUED ?? 0 : '—'} tone="#A78BFA" />
+            <Metric label="Idle" value={fresh ? presenceCounts.IDLE ?? 0 : '—'} tone="#94A3B8" />
+            <Metric label="Heartbeating" value={fresh ? enterprise?.heartbeating ?? 0 : '—'} tone="#22C55E" />
+            <Metric label="Attention" value={fresh ? (presenceCounts.ATTENTION ?? 0) + (presenceCounts.STALE ?? 0) : '—'} tone="#EF4444" />
           </View>
           <View style={styles.proofRow}><ShieldCheck size={15} color={enterprise?.durableState ? '#22C55E' : '#EF4444'} /><Text style={styles.proofText}>Durable state: {enterprise?.durableState ? 'CONNECTED' : 'NOT CONFIRMED'}</Text></View>
-          <View style={styles.proofRow}><CheckCircle2 size={15} color={enterprise?.registryShapeValid ? '#22C55E' : '#EF4444'} /><Text style={styles.proofText}>Registry: {enterprise?.registryShapeValid ? '112 / 112 VALID' : 'INVALID'}</Text></View>
+          <View style={styles.proofRow}><CheckCircle2 size={15} color={enterprise?.registryShapeValid ? '#22C55E' : '#EF4444'} /><Text style={styles.proofText}>Registry: {!control ? 'NOT OBSERVED' : enterprise?.registryShapeValid ? '112 / 112 VALID' : 'INVALID'}</Text></View>
           <View style={styles.proofRow}><Clock3 size={15} color="#94A3B8" /><Text style={styles.proofText}>Last real worker heartbeat: {formatTime(enterprise?.lastHeartbeatAt)}</Text></View>
           <Text style={styles.generated}>Snapshot: {formatTime(control?.generatedAt)} · Source: {control?.source || 'unknown'}</Text>
         </View>
