@@ -10,6 +10,7 @@ assert.ok(source, 'The shipped homepage must initialize its project reel');
 const reel = { video_url: 'https://ivxholding.com/videos/example.mp4', webm_url: '/media/reels/example.webm', thumbnail_url: '/same-reel.jpg' };
 function fixture(respond) {
   const elements = [];
+  const window = {};
   function element(tagName) {
     const e = { tagName, children: [], listeners: {}, hidden: false, style: {}, attributes: {},
       addEventListener(name, fn) { (this.listeners[name] ||= []).push(fn); },
@@ -29,14 +30,14 @@ function fixture(respond) {
   video.play = () => Promise.resolve();
   vm.runInNewContext(source, {
     document: { getElementById: () => video, createElement: element },
-    URL, AbortController,
+    URL, AbortController, window,
     fetch: async (_url, options) => { assert.ok(options?.signal || process.env.LANDING_BOOTSTRAP_HTML, 'Fetch must have a deadline'); return respond(++calls); },
     // Advance backoff without waiting; network-deadline expiry is covered by
     // the aborted-request case. Cancelled deadline callbacks must not execute.
     setTimeout: (fn, ms) => { if (ms < 4000) queueMicrotask(fn); return {}; },
     clearTimeout: () => {},
   });
-  return { video, get calls() { return calls; }, get loads() { return loads; },
+  return { video, window, get calls() { return calls; }, get loads() { return loads; },
     button: () => elements.find(e => e.tagName === 'button') };
 }
 const json = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
@@ -94,4 +95,20 @@ test('exhausting this reel formats offers retry without borrowing another reel',
   assert.equal(f.button()?.hidden, false);
   assert.equal(f.calls, 1);
   assert.equal(f.video.children[1].src, reel.video_url);
+});
+
+test('a successful anonymous canonical catalog is retained as a separate recent page snapshot', async () => {
+  const data = { videos: [{ ...reel, id: 'same-reel', video_type: 'reel' }],
+    total: 1, next_cursor: null, personalized: false, channel: null,
+    ordering: 'canonical-unified-v2', feed_type: 'unified' };
+  const f = fixture(() => json(200, data)); await settle();
+  assert.equal(f.window.__ivxPublicReels?.data.videos[0].video_url, reel.video_url);
+  assert.ok(Date.now() - f.window.__ivxPublicReels.at < 1000);
+  assert.notEqual(f.window.__ivxPublicReels.data, data);
+});
+
+test('a viewer-specific response is never published as a shared public snapshot', async () => {
+  const f = fixture(() => json(200, { videos: [reel], personalized: true })); await settle();
+  assert.equal(f.loads, 1);
+  assert.equal(f.window.__ivxPublicReels, undefined);
 });

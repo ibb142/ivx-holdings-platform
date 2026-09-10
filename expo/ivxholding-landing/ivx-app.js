@@ -768,34 +768,34 @@
   ].filter(function(v, i, a) { return v && v.length > 5 && a.indexOf(v) === i; });
 
   // INSTANT CONFIG FETCH — fire immediately, don't wait for DOMContentLoaded
-  // The hardcoded backend URL always has real Supabase credentials
-  if (!_supabaseReady && _HARDCODED_BACKEND_URL) {
+  // The deployed static config can initialize auth while the API is degraded.
+  if (!_supabaseReady) {
     (function instantConfigFetch() {
-      var url = _HARDCODED_BACKEND_URL + '/api/landing-config?_t=' + Date.now();
-      console.log('[IVX] Instant config fetch from backend:', url);
-      var _icCtrl = new AbortController();
-      var _icTo = setTimeout(function() { _icCtrl.abort(); }, 6000);
-      fetch(url, { signal: _icCtrl.signal }).then(function(r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      }).then(function(cfg) {
-        clearTimeout(_icTo);
-        _INSTANT_CONFIG_FETCHED = true;
-        if (cfg.supabaseUrl && cfg.supabaseUrl.length > 10) SUPABASE_URL = cfg.supabaseUrl;
-        if (cfg.supabaseAnonKey && cfg.supabaseAnonKey.length > 10) SUPABASE_ANON_KEY = cfg.supabaseAnonKey;
-        if (cfg.apiBaseUrl && cfg.apiBaseUrl.length > 5) IVX_API = cfg.apiBaseUrl.replace(/\/$/, '');
-        if (cfg.appUrl && cfg.appUrl.length > 5) IVX_APP_URL = cfg.appUrl.replace(/\/$/, '');
-        if (cfg.backendUrl && cfg.backendUrl.length > 5) {
-          var bu = cfg.backendUrl.replace(/\/$/, '');
-          if (IVX_API_FALLBACKS.indexOf(bu) === -1) IVX_API_FALLBACKS.unshift(bu);
-        }
-        checkSupabaseReady();
-        cacheCredentials();
-        console.log('[IVX] Instant config loaded — Supabase ready:', _supabaseReady);
-      }).catch(function(err) {
-        clearTimeout(_icTo);
-        console.warn('[IVX] Instant config fetch failed:', err.message, '— will retry via discovery');
-      });
+      var sources = ['/ivx-config.json', 'https://ivxholding.com/ivx-config.json'];
+      if (_HARDCODED_BACKEND_URL) sources.push(_HARDCODED_BACKEND_URL + '/api/landing-config');
+      var index = 0;
+      function nextConfig() {
+        if (_supabaseReady || index >= sources.length) return;
+        var url = sources[index++] + '?_t=' + Date.now();
+        var controller = new AbortController();
+        var timer = setTimeout(function() { controller.abort(); }, 2000);
+        fetch(url, { signal: controller.signal }).then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        }).then(function(cfg) {
+          if (!cfg || typeof cfg.supabaseUrl !== 'string' || !/^https:\/\//i.test(cfg.supabaseUrl)
+              || !isValidSupabasePublicKey(cfg.supabaseAnonKey)) throw new Error('Invalid public auth configuration');
+          // Another startup consumer may already have initialized the same page.
+          if (!_supabaseReady) applyDiscoveredConfig(cfg);
+          _INSTANT_CONFIG_FETCHED = _supabaseReady;
+          clearTimeout(timer);
+        }).catch(function(err) {
+          clearTimeout(timer);
+          console.warn('[IVX] Public config source unavailable:', err.message);
+          nextConfig();
+        });
+      }
+      nextConfig();
     })();
   }
   var SESSION_ID = 'lp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);

@@ -10,12 +10,47 @@ const base = process.env.LANDING_URL || 'https://ivxholding.com';
 const browser = await chromium.launch();
 const checks = [];
 let error;
+let failurePage, failureSignals;
+let diagnostics;
+let pendingFeedDetails = [];
 try {
   for (const width of [390, 1280]) {
     const context = await browser.newContext({ viewport: { width, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
     const page = await context.newPage();
     page.setDefaultTimeout(20_000);
     const errors = [], failures = [];
+    const mediaResponses = [];
+    pendingFeedDetails = [];
+    failurePage = page;
+    failureSignals = { width, errors, failures, mediaResponses };
+    page.on('response', (r) => {
+      const url = new URL(r.url());
+      if (/\/api\/reels(?:\/|$)|\/media\/reels\/|\/videos\//.test(url.pathname)) {
+        const signal = { path: url.pathname, channel: url.searchParams.get('type'), status: r.status(), type: r.headers()['content-type'] };
+        mediaResponses.push(signal);
+        // Inspect the response already requested by the UI. Do not issue extra
+        // public requests or expose viewer identifiers and response bodies.
+        if (url.pathname === '/api/reels' && mediaResponses.length <= 20) {
+          pendingFeedDetails.push(r.json().then((body) => {
+            signal.count = body.count;
+            signal.total = body.total;
+            signal.feedType = body.feed_type;
+            signal.videoCount = Array.isArray(body.videos) ? body.videos.length : null;
+            const message = typeof body.error === 'string' ? body.error : '';
+            signal.errorMessage = message
+              .replace(/https?:\/\/[^\s"'<>]+/gi, '[URL]')
+              .replace(/\b(?:eyJ|sb_secret_|sb_publishable_)[\w.-]+/g, '[redacted]')
+              .replace(/(?:api[_-]?key|authorization|password|token)\s*[:=]\s*\S+/gi, '[redacted]')
+              .slice(0, 300);
+            signal.errorClass = /timeout|timed out/i.test(message) ? 'UPSTREAM_TIMEOUT'
+              : /cloudflare|<html|<!doctype/i.test(message) ? 'UPSTREAM_HTML_ERROR'
+              : /column|relation|schema/i.test(message) ? 'DATABASE_SCHEMA_ERROR'
+              : /fetch failed|network/i.test(message) ? 'UPSTREAM_NETWORK_ERROR'
+              : message ? 'OTHER_API_ERROR' : null;
+          }).catch(() => { signal.bodyUnavailable = true; }));
+        }
+      }
+    });
     page.on('pageerror', (e) => errors.push(e.message));
     page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
     page.on('requestfailed', (r) => { if (r.failure()?.errorText !== 'net::ERR_ABORTED') failures.push(`${r.method()} ${new URL(r.url()).pathname}: ${r.failure()?.errorText}`); });
@@ -186,11 +221,33 @@ try {
     await context.unrouteAll({ behavior: 'wait' });
     await context.close();
   }
-} catch (e) { error = e.stack || e.message; process.exitCode = 1; }
+} catch (e) {
+  error = e.stack || e.message;
+  process.exitCode = 1;
+  diagnostics = { ...failureSignals };
+  try {
+    diagnostics.homeVideo = await failurePage.locator('#homeFeedReel').evaluate((v) => ({
+      currentSrc: v.currentSrc, readyState: v.readyState, networkState: v.networkState,
+      paused: v.paused, currentTime: v.currentTime, width: v.videoWidth,
+      error: v.error && { code: v.error.code, message: v.error.message },
+      sources: [...v.querySelectorAll('source')].map((s) => ({ src: s.src, type: s.type })),
+      retryVisible: Boolean(v.parentNode.querySelector('.ivx-home-reel-retry:not([hidden])')),
+    }));
+    diagnostics.modalVideos = await failurePage.locator('#ivxReels .ivxr-slide video').evaluateAll((videos) => videos.slice(0, 3).map((v) => ({
+      sourcePath: v.currentSrc ? new URL(v.currentSrc).pathname : '',
+      readyState: v.readyState, networkState: v.networkState, paused: v.paused,
+      width: v.videoWidth, errorCode: v.error?.code ?? null,
+    })));
+    let timeout;
+    try {
+      await Promise.race([Promise.allSettled(pendingFeedDetails), new Promise((resolve) => { timeout = setTimeout(resolve, 1000); })]);
+    } finally { clearTimeout(timeout); }
+  } catch (diagnosticError) { diagnostics.captureError = diagnosticError.message; }
+}
 finally {
   for (const context of browser.contexts()) await context.unrouteAll({ behavior: 'wait' });
   await browser.close();
-  const result = { unit, sourceSha: process.env.GITHUB_SHA, passed: !error, checks, error, completedAt: new Date().toISOString() };
+  const result = { unit, sourceSha: process.env.GITHUB_SHA, passed: !error, checks, error, diagnostics, completedAt: new Date().toISOString() };
   result.sha256 = createHash('sha256').update(JSON.stringify(result)).digest('hex');
   await mkdir('evidence/landing-19', { recursive: true });
   await writeFile(`evidence/landing-19/${unit}.json`, JSON.stringify(result));
