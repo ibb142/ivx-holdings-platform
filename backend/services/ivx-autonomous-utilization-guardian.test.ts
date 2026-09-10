@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { UtilizationReasoningGuardian } from './ivx-autonomous-utilization-guardian';
 import type { FleetSloSnapshot } from './ivx-fleet-slo';
-import type { IVXWorkerJobInput } from './ivx-senior-developer-worker';
+import type { IVXWorkerJob, IVXWorkerJobInput } from './ivx-senior-developer-worker';
 function fixture() {
   let now = Date.parse('2026-09-09T03:00:00Z');
   let enabled = true;
@@ -13,11 +13,14 @@ function fixture() {
   };
   const calls: IVXWorkerJobInput[] = [];
   let failure = false;
+  let repair: Pick<IVXWorkerJob, 'jobId' | 'status' | 'error' | 'finishedAt'> | null = null;
   const guardian = new UtilizationReasoningGuardian({ snapshot: () => sample, enabled: () => enabled, now: () => now,
-    enqueue: async input => { calls.push(input); if (failure) throw new Error('EMERGENCY_STOP_ACTIVE'); return { job: { jobId: 'real-queue-id' }, attached: false }; },
+    readRepair: async () => repair,
+    enqueue: async input => { calls.push(input); if (failure) throw new Error('EMERGENCY_STOP_ACTIVE'); repair = { jobId: calls.length === 1 ? 'real-queue-id' : `repair-${calls.length}`, status: 'queued', error: null, finishedAt: null }; return { job: repair, attached: false }; },
   });
   return { guardian, sample, calls, advance: (ms = 60_000) => { now += ms; sample.measured_at = new Date(now).toISOString(); },
-    disable: () => { enabled = false; }, fail: (value: boolean) => { failure = value; } };
+    disable: () => { enabled = false; }, fail: (value: boolean) => { failure = value; },
+    finish: (status: IVXWorkerJob['status'], error: string | null = null) => { repair = { jobId: repair?.jobId ?? 'restored-repair', status, error, finishedAt: new Date(now).toISOString() }; } };
 }
 describe('fleet evidence to reasoning worker', () => {
   it('routes persistent 112 heartbeats with no results into the code-change worker, without certifying recovery', async () => {
@@ -57,7 +60,7 @@ describe('fleet evidence to reasoning worker', () => {
   it('coalesces concurrent ticks and limits repeated repair submissions', async () => {
     const f = fixture(); await f.guardian.run(); f.advance();
     await Promise.all([f.guardian.run(), f.guardian.run()]); f.advance();
-    expect((await f.guardian.run()).action).toBe('COOLDOWN'); expect(f.calls).toHaveLength(1);
+    expect((await f.guardian.run()).action).toBe('REPAIR_RUNNING'); expect(f.calls).toHaveLength(1);
   });
   it('requires new evidence confirmation after unknown telemetry or a changed SHA', async () => {
     const f = fixture(); await f.guardian.run(); f.advance(); f.sample.commit_sha = 'b'.repeat(40);
@@ -69,6 +72,47 @@ describe('fleet evidence to reasoning worker', () => {
     const f = fixture(); await f.guardian.run(); f.advance(); await f.guardian.run();
     f.advance(); f.sample.status = 'MET'; f.sample.productive_agents = 112;
     expect((await f.guardian.run()).action).toBe('HEALTHY'); expect(f.calls).toHaveLength(1);
+  });
+});
+
+describe('durable repair outcome supervision', () => {
+  it('detects a cancelled repair during cooldown and feeds its failure into the next attempt', async () => {
+    const f = fixture(); await f.guardian.run(); f.advance(); await f.guardian.run();
+    f.finish('cancelled', 'Physical worker lease expired'); f.advance();
+    expect((await f.guardian.run()).action).toBe('REPAIR_FAILED');
+    expect(f.guardian.snapshot().lastRepairOutcome?.status).toBe('cancelled');
+    f.advance(); expect((await f.guardian.run()).action).toBe('RETRY_BACKOFF');
+    f.advance(); expect((await f.guardian.run()).action).toBe('REPAIR_QUEUED');
+    expect(f.calls).toHaveLength(2);
+    expect(f.calls[1].goal).toContain('Physical worker lease expired');
+  });
+  it('keeps an active repair attached after the old cooldown expires', async () => {
+    const f = fixture(); await f.guardian.run(); f.advance(); await f.guardian.run();
+    f.advance(20 * 60_000);
+    expect((await f.guardian.run()).action).toBe('REPAIR_RUNNING');
+    expect(f.calls).toHaveLength(1);
+  });
+  it('restores a prior failed repair from durable state after restart', async () => {
+    const f = fixture(); f.finish('failed', 'GitHub default branch ref lookup failed: 401');
+    expect((await f.guardian.run()).action).toBe('REPAIR_FAILED');
+    expect(f.guardian.snapshot().jobId).toBe('restored-repair');
+    expect(f.calls).toHaveLength(0);
+    f.advance(120_000); await f.guardian.run();
+    expect(f.calls[0].goal).toContain('GitHub default branch ref lookup failed: 401');
+  });
+  it('does not certify a completed patch while live fleet evidence still breaches', async () => {
+    const f = fixture(); await f.guardian.run(); f.advance(); await f.guardian.run();
+    f.finish('completed'); f.advance();
+    expect((await f.guardian.run()).action).toBe('AWAITING_RECOVERY_EVIDENCE');
+    f.advance(); expect((await f.guardian.run()).action).toBe('COOLDOWN');
+    f.sample.status = 'MET'; f.sample.productive_agents = 112;
+    expect((await f.guardian.run()).action).toBe('HEALTHY');
+  });
+  it('redacts credentials from failure evidence', async () => {
+    const f = fixture(); f.finish('failed', 'Authorization Bearer ghp_secret_value https://example.invalid/?token=private');
+    await f.guardian.run();
+    expect(JSON.stringify(f.guardian.snapshot())).not.toContain('secret_value');
+    expect(JSON.stringify(f.guardian.snapshot())).not.toContain('token=private');
   });
 });
 

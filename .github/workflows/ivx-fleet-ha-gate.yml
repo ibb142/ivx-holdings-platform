@@ -26,6 +26,7 @@ jobs:
         with: { bun-version: 1.3.9 }
       - run: bun install --frozen-lockfile
       - run: bun test scripts/ivx-fleet-ha-identities.test.ts
+      - run: bun test backend/services/ivx-postgres-deadline.test.ts
       - run: bun test backend/ivx-final-closeout-resume.test.ts backend/services/ivx-native-intent.test.ts backend/services/ivx-fleet-dashboard-signals.test.ts backend/services/ivx-fleet-slo.test.ts backend/services/ivx-postgres-autonomous-task-store.test.ts backend/services/ivx-render-replicas.test.ts backend/services/ivx-shared-room-storage.test.ts backend/services/ivx-autonomous-control-policy.test.ts
       - run: node scripts/ivx-fleet-ha-postgres-proof.mjs
         env:
@@ -33,6 +34,11 @@ jobs:
       - run: bun scripts/ivx-fleet-telemetry-postgres-proof.ts
         env:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
-      - run: bun scripts/ivx-postgres-deadline-proof.ts
+      - run: |
+          bun build scripts/ivx-postgres-deadline-proof.ts --target=node --packages=external --outfile=qa/evidence/fleet-ha/deadline-proof.mjs
+          node qa/evidence/fleet-ha/deadline-proof.mjs
+        env:
+          IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
+      - run: bun scripts/ivx-fleet-bounded-claims-proof.ts
         env:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test

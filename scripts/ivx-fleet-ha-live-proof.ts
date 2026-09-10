@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { writeFile, mkdir } from 'node:fs/promises';
-import { processIdentityMatchesObservedInstance } from './ivx-fleet-ha-identities';
+import { processIdentityMatchesObservedInstance, sharedProcessesCoverObservedInstances } from './ivx-fleet-ha-identities';
 
 const base = process.env.API_BASE;
 const sha = process.env.IVX_TARGET_SHA || process.env.GITHUB_SHA || '';
@@ -13,6 +13,9 @@ assert(token || systemKey, 'Owner bearer or protected system credential is requi
 const apiService = 'srv-d7t9ivreo5us73ftose0', workerService = 'srv-d9i15fg4n6ts73bn00j0';
 const expectedRepo = 'https://github.com/ibb142/ivx-holdings-platform';
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+class ProbeHttpError extends Error {
+  constructor(readonly status: number, path: string) { super(`HTTP ${status} at ${path}`); }
+}
 async function request(path: string, body?: unknown) {
   // Preserve the real Owner validation performed by the workflow, then use
   // the protected machine credential for repeated probes when available so a
@@ -23,7 +26,7 @@ async function request(path: string, body?: unknown) {
   };
   const response = await fetch(base + path, { method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(body ? 60_000 : 20_000),
     headers: { ...authHeaders, 'Content-Type': 'application/json', Connection: 'close' }, ...(body ? { body: JSON.stringify(body) } : {}) });
-  assert.equal(response.status, 200, `HTTP ${response.status} at ${path}`);
+  if (response.status !== 200) throw new ProbeHttpError(response.status, path);
   const value = await response.json(); assert.equal(value.ok, true, `Operation rejected at ${path}`); return value;
 }
 async function topology() {
@@ -102,14 +105,15 @@ function workerProcessIds(value: any): Set<string> {
   const rows = value?.worker?.instances ?? value?.workerInstances ?? [];
   return new Set(rows.map((entry: any) => entry.instanceId));
 }
-async function requiredSharedTopology(physical: any) {
-  const value = await topology();
+function sharedTopologyCoversPhysical(value: any, physical: any): boolean {
+  return sharedTwoByTwo(value)
+    && sharedProcessesCoverObservedInstances(value.apiInstances.map((instance: any) => instance.instanceId), apiProcessIds(physical))
+    && sharedProcessesCoverObservedInstances(value.workerInstances.map((instance: any) => instance.instanceId), workerProcessIds(physical));
+}
+function verifiedSharedTopology(value: any, physical: any) {
   assert.equal(value.ready, true, 'Shared process observation is not ready');
   assert.equal(value.apiInstances.length, 2); assert.equal(value.workerInstances.length, 2);
-  assert(value.apiInstances.every((instance: any) => processIdentityMatchesObservedInstance(instance.instanceId, apiProcessIds(physical))), 'Shared API identities differ from Render');
-  assert(value.workerInstances.every((instance: any) => processIdentityMatchesObservedInstance(instance.instanceId, workerProcessIds(physical))), 'Shared worker identities differ from Render');
-  assert([...apiProcessIds(physical)].every(id => value.apiInstances.some((instance: any) => processIdentityMatchesObservedInstance(instance.instanceId, new Set([id])))), 'A Render API instance is missing shared evidence');
-  assert([...workerProcessIds(physical)].every(id => value.workerInstances.some((instance: any) => processIdentityMatchesObservedInstance(instance.instanceId, new Set([id])))), 'A Render worker instance is missing shared evidence');
+  assert(sharedTopologyCoversPhysical(value, physical), 'Shared process identities must cover exactly the current Render instances');
   return { status: 'PASS', topology: value };
 }
 // When a CI Render key is present, query Render's physical instances endpoint
@@ -124,16 +128,32 @@ for (const service of [workerService, apiService]) {
   scaleResults[service] = await action('render_scale_service', service, 2);
   console.log(JSON.stringify({ scaleAccepted: true, serviceId: service, requestedInstances: 2, liveVerified: false }));
 }
-let before: any, consecutive = 0;
+let before: any, sharedReady: any, consecutive = 0;
 for (let i = 0; i < 72; i++) {
   const value = await (renderKey ? physicalTopology() : topology()).catch(() => null);
-  const ready = renderKey ? value && twoByTwo(value) : value && sharedTwoByTwo(value);
+  let shared: any = null;
+  if (value && (renderKey ? twoByTwo(value) : sharedTwoByTwo(value))) {
+    // A live deployment can still be retiring its previous processes. Start
+    // the recovery experiment only after physical and shared state agree.
+    // Retry transport unavailability here only; authentication, SHA, freshness
+    // and malformed evidence still fail immediately.
+    shared = renderKey ? await topology().catch((error: unknown) => {
+      if ((error instanceof ProbeHttpError && (error.status === 429 || error.status >= 500))
+        || (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name))) return null;
+      throw error;
+    }) : value;
+  }
+  const ready = shared && sharedTopologyCoversPhysical(shared, value);
   if (ready) consecutive++; else consecutive = 0;
-  if (consecutive >= 3) { before = value; break; }
+  console.log(JSON.stringify({ phase: 'waiting-for-shared-startup', probe: i,
+    physicalReady: Boolean(value && (renderKey ? twoByTwo(value) : sharedTwoByTwo(value))),
+    sharedAvailable: Boolean(shared), apiCount: shared?.apiInstances?.length ?? null,
+    workerCount: shared?.workerInstances?.length ?? null, consecutive }));
+  if (consecutive >= 3) { before = value; sharedReady = shared; break; }
   await sleep(5000);
 }
-assert(before, 'Two distinct, current processes per role did not become observable');
-const sharedBefore = renderKey ? await requiredSharedTopology(before) : { status: 'PASS', topology: before };
+assert(before && sharedReady, 'Physical and shared state did not agree on two current processes per role');
+const sharedBefore = verifiedSharedTopology(sharedReady, before);
 const proof: Record<string, unknown> = {
   sourceSha: sha,
   exactDeploys,
@@ -157,6 +177,8 @@ if (process.env.IVX_HA_RESTART_WORKER === 'true') {
   const apiIds = apiProcessIds(before);
   await action('render_restart_service', workerService);
   const health: unknown[] = []; let after: any; let recoveryProbe = -1;
+  let sharedAfter: ReturnType<typeof verifiedSharedTopology> | null = null;
+  const sharedConvergence: unknown[] = [];
   for (let i = 0; i < 90; i++) {
     const start = Date.now();
     const response = await fetch(base + '/health', { redirect: 'error', signal: AbortSignal.timeout(5000), headers: { Connection: 'close' } });
@@ -173,16 +195,32 @@ if (process.env.IVX_HA_RESTART_WORKER === 'true') {
     if (ready && currentWorkers.size === 2 && [...currentWorkers].every(id => !oldWorkers.has(id))) {
       after = current;
       if (recoveryProbe < 0) recoveryProbe = i;
+    } else {
+      after = null;
+      recoveryProbe = -1;
     }
-    if (after && i - recoveryProbe >= 20) break;
+    if (after && i - recoveryProbe >= 20) {
+      // A replaced worker can leave a recent heartbeat during graceful drain.
+      // Keep probing API availability until only the two replacements remain.
+      const candidate = renderKey ? await topology() : after;
+      const complete = sharedTopologyCoversPhysical(candidate, after);
+      const observation = { measuredAt: candidate.measuredAt, apiCount: candidate.apiInstances.length,
+        workerCount: candidate.workerInstances.length, identitiesMatch: complete };
+      sharedConvergence.push(observation);
+      Object.assign(proof, { health, sharedConvergence });
+      await writeFile('qa/evidence/fleet-ha/live.json', JSON.stringify(proof, null, 2));
+      console.log(JSON.stringify({ phase: 'shared-worker-drain', ...observation }));
+      if (complete) { sharedAfter = verifiedSharedTopology(candidate, after); break; }
+    }
     await sleep(3000);
   }
   assert(after && recoveryProbe >= 0, 'Two replacement worker processes did not recover after restart');
-  const sharedAfter = renderKey ? await requiredSharedTopology(after) : { status: 'PASS', topology: after };
+  assert(sharedAfter, 'Shared state did not converge to exactly the replacement processes during the bounded recovery window');
   Object.assign(proof, {
     after,
     sharedStateObservationAfterRestart: sharedAfter,
     health,
+    sharedConvergence,
     rollingWorkerRestart: true,
     workerProcessReplacement: 'PASS',
     apiAvailabilityDuringRestart: 'PASS',

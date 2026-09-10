@@ -36,6 +36,7 @@ import { promisify } from 'node:util';
 import { requestIVXAIText } from '../ivx-ai-runtime';
 import { resolveRuntimeCommand } from './ivx-runtime-resolver';
 import { extractRenderApiKey, extractRenderServiceId } from './ivx-render-credentials';
+import { createAutonomousGithubTokenResolver } from './ivx-autonomous-github-credentials';
 import { verifyLiveCommitMatch, IVX_GIT_DEPLOY_CONFIRM_TEXT } from './ivx-senior-developer-runtime';
 
 const execFileAsync = promisify(execFile);
@@ -1300,9 +1301,9 @@ function readEnv(name: string): string {
  * commitFilesViaGitDataApi to throw "GITHUB_TOKEN is missing" every time,
  * leaving the worker orphaned at the COMMITTING phase (65%) with commitSha=''.
  */
-async function readOwnerRuntimeVariable(name: string): Promise<string> {
+async function readConfiguredRuntimeVariable(name: string, preferStored = false): Promise<string> {
   const envValue = readEnv(name);
-  if (envValue) return envValue;
+  if (envValue && !preferStored) return envValue;
   try {
     const ownerVariables = await Promise.race([
       import('../api/ivx-owner-variables'),
@@ -1313,7 +1314,7 @@ async function readOwnerRuntimeVariable(name: string): Promise<string> {
     ]);
     if (typeof ownerVariables.getIVXOwnerVariableRuntimeValue === 'function') {
       const stored = await Promise.race([
-        ownerVariables.getIVXOwnerVariableRuntimeValue(name as never),
+        ownerVariables.getIVXOwnerVariableRuntimeValue(name as never, { preferStored }),
         new Promise<null>((resolve) => {
           const timer = setTimeout(() => resolve(null), 5000);
           timer.unref?.();
@@ -1327,6 +1328,13 @@ async function readOwnerRuntimeVariable(name: string): Promise<string> {
     });
   }
   return '';
+}
+
+const resolveGithubToken = createAutonomousGithubTokenResolver();
+async function readOwnerRuntimeVariable(name: string): Promise<string> {
+  if (name !== 'GITHUB_TOKEN') return readConfiguredRuntimeVariable(name);
+  return resolveGithubToken(await readConfiguredRuntimeVariable('GITHUB_REPO_URL'),
+    preferStored => readConfiguredRuntimeVariable('GITHUB_TOKEN', preferStored));
 }
 
 function parseGithubRepoUrl(value: string): { owner: string; repo: string } | null {

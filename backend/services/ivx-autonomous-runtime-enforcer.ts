@@ -1,4 +1,5 @@
 import { RefillBackoff } from './ivx-refill-backoff';
+import { refillFleetBatches, POSTGRES_FLEET_CLAIM_BATCH_SIZE } from './ivx-fleet-refill-batches';
 import { enforceAutonomous112RuntimeTruth, IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS } from './ivx-autonomous-truth-control';
 import { getAllExecutionStates, updateExecutionState } from './ivx-agent-runtime';
 import { runRealEngineeringCycle, type RealEngineeringCycleResult } from './ivx-agent-real-engineering-cycle';
@@ -362,22 +363,21 @@ function refillAllAvailableAgents(
         : [],
     };
     if (stopping) return;
-    const leaseResults = await leaseNextTasksBatch(candidates.map((state) => ({
+    const stateByWorker = new Map(candidates.map((state) => [`agent:${state.agentId}`, state]));
+    await refillFleetBatches(candidates.map((state) => ({
       workerId: `agent:${state.agentId}`,
       agentNumber: state.agentNumber,
       options: { missionScope },
-    })));
-    if (stopping) return;
-    const leased = leaseResults.filter((result) => result.ok && result.task !== null);
-    if (leased.length === 0) return;
-    const started = await startLeasedTasksBatch(leased.map((result) => ({ taskId: result.task!.taskId, workerId: result.workerId })));
-    const stateByWorker = new Map(candidates.map((state) => [`agent:${state.agentId}`, state]));
-    for (const result of started) {
-      if (!result.ok || !result.task) continue;
-      const state = stateByWorker.get(result.workerId);
-      if (!state || state.agentNumber == null) continue;
-      startContinuityRun(state.agentId, state.agentNumber, result.task);
-    }
+    })), {
+      batchSize: postgresAtomicQueueSelected() ? POSTGRES_FLEET_CLAIM_BATCH_SIZE : IVX_AUTONOMOUS_FLEET_SIZE,
+      lease: leaseNextTasksBatch,
+      start: startLeasedTasksBatch,
+      shouldStop: () => stopping || !continuityEnabled,
+      onStarted: result => {
+        const state = stateByWorker.get(result.workerId);
+        if (state?.agentNumber != null && result.task) startContinuityRun(state.agentId, state.agentNumber, result.task);
+      },
+    });
     void runLeaseMirror();
   }).catch((error) => {
     console.error('[IVX Autonomous 112 Batch Refill] failed', { error: error instanceof Error ? error.message : String(error), ...refillBackoff.status() });
@@ -541,6 +541,7 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     landingMissionActive,
     refillInFlight: Boolean(refillInFlight),
     refillRecovery: refillBackoff.status(),
+    claimBatchSize: postgresAtomicQueueSelected() ? POSTGRES_FLEET_CLAIM_BATCH_SIZE : IVX_AUTONOMOUS_FLEET_SIZE,
     continuityMaxConcurrency: getContinuityMaxConcurrency(),
     canonicalFleetSize: IVX_AUTONOMOUS_FLEET_SIZE,
     continuityInFlight: continuityRuns.size,

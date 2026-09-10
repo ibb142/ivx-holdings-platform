@@ -17,11 +17,14 @@ declare module 'pg' {
   };
 
   export type PoolClient = {
+    on(event: 'error', listener: (error: Error) => void): PoolClient;
+    removeListener(event: 'error', listener: (error: Error) => void): PoolClient;
     query: <T = Record<string, unknown>>(text: string, values?: unknown[]) => Promise<QueryResult<T>>;
     release: (destroy?: boolean | Error) => void;
   };
 
   export class Pool {
+    on(event: 'error', listener: (error: Error, client: PoolClient) => void): this;
     constructor(config: {
       connectionString: string;
       ssl?: { rejectUnauthorized: boolean; ca?: string | string[] };

@@ -8,10 +8,13 @@ declare module 'pg' {
     rowCount: number | null;
   }
   export interface PoolClient {
+    on(event: 'error', listener: (error: Error) => void): PoolClient;
+    removeListener(event: 'error', listener: (error: Error) => void): PoolClient;
     query<R = unknown>(queryText: string, values?: unknown[]): Promise<QueryResult<R>>;
     release(err?: boolean): void;
   }
   export interface Pool {
+    on(event: 'error', listener: (error: Error, client: PoolClient) => void): Pool;
     query<R = unknown>(queryText: string, values?: unknown[]): Promise<QueryResult<R>>;
     connect(): Promise<PoolClient>;
     end(): Promise<void>;

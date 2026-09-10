@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { processIdentityMatchesObservedInstance } from './ivx-fleet-ha-identities';
+import { processIdentityMatchesObservedInstance, sharedProcessesCoverObservedInstances } from './ivx-fleet-ha-identities';
 
 const apiReplica = 'srv-api-788d9df44f-pf9vm';
 const processIdentity = `srv-api:${apiReplica}:17:b95dd96c-d5b`;
@@ -34,4 +34,23 @@ test('requires an exact identity segment rather than a substring match', () => {
   assert.equal(processIdentityMatchesObservedInstance(processIdentity, new Set(['pf9vm'])), false);
   assert.equal(processIdentityMatchesObservedInstance(`${processIdentity}:extra`, new Set([apiReplica])), false);
   assert.equal(processIdentityMatchesObservedInstance(null, new Set([apiReplica])), false);
+});
+
+test('requires both replacement workers and no remaining predecessor observation', () => {
+  const observed = new Set(['srv-worker-newa', 'srv-worker-newb']);
+  const a = 'fleet:srv-worker-deployment-newa:17:boot-a';
+  const b = 'fleet:srv-worker-deployment-newb:17:boot-b';
+  const previous = 'fleet:srv-worker-deployment-old:17:boot-old';
+  assert.equal(sharedProcessesCoverObservedInstances([a, b, previous], observed), false);
+  assert.equal(sharedProcessesCoverObservedInstances([a, previous], observed), false);
+  assert.equal(sharedProcessesCoverObservedInstances([a, b], observed), true);
+});
+
+test('two processes on one replica cannot substitute for a missing replica', () => {
+  const observed = new Set(['srv-worker-newa', 'srv-worker-newb']);
+  const a = 'fleet:srv-worker-deployment-newa:17:boot-a';
+  const duplicateHost = 'fleet:srv-worker-deployment-newa:18:boot-b';
+  assert.equal(sharedProcessesCoverObservedInstances([a, duplicateHost], observed), false);
+  assert.equal(sharedProcessesCoverObservedInstances([a, a], observed), false);
+  assert.equal(sharedProcessesCoverObservedInstances([], new Set()), false);
 });
