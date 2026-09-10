@@ -52,12 +52,24 @@ const STATUS_CONFIG: Record<TitleDocumentStatus, { color: string; label: string 
 export default function TitleReviewScreen() {
   // Realtime: auto-invalidate on DB changes
   useRealtimeTable('notifications', [['notifications']]);
-  const router = useRouter();
   const { submissionId } = useLocalSearchParams<{ submissionId: string }>();
 
   const initialSubmission = propertyDocumentSubmissions.find(
     (s) => s.id === (submissionId ?? 'pds-1')
   ) ?? propertyDocumentSubmissions[0];
+
+  if (!initialSubmission) {
+    return <View style={{ flex: 1, backgroundColor: Colors.background, padding: 24 }}>
+      <Stack.Screen options={{ title: 'Title Review' }} />
+      <EmptyState title="No title submission" message="Select an available property document submission to review." />
+    </View>;
+  }
+
+  return <TitleSubmissionReview key={initialSubmission.id} initialSubmission={initialSubmission} />;
+}
+
+function TitleSubmissionReview({ initialSubmission }: { initialSubmission: PropertyDocumentSubmission }) {
+  const router = useRouter();
 
   const [submission, setSubmission] = useState<PropertyDocumentSubmission>(initialSubmission);
   const [documents, setDocuments] = useState<TitleDocument[]>(initialSubmission.documents);

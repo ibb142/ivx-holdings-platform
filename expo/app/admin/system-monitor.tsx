@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRealtimeTable } from '@/hooks/useRealtimeChannel';
+import { useScreenActivity } from '@/hooks/useScreenActivity';
 import {
   View,
   Text,
@@ -108,17 +109,19 @@ function getActionColor(action: string): string {
 
 function LiveDot() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const screenActive = useScreenActivity();
 
   useEffect(() => {
+    if (!screenActive) return;
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0.3, duration: 800, useNativeDriver: true, isInteraction: false }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true, isInteraction: false }),
       ])
     );
     loop.start();
     return () => loop.stop();
-  }, [pulseAnim]);
+  }, [pulseAnim, screenActive]);
 
   return (
     <Animated.View style={[styles.liveDot, { opacity: pulseAnim }]} />
@@ -256,6 +259,7 @@ function ChannelRow({ channel }: { channel: GrowthChannel }) {
 }
 
 export default function SystemMonitorPage() {
+  const screenActive = useScreenActivity();
   // Realtime: auto-invalidate on DB changes
   useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();
@@ -269,22 +273,25 @@ export default function SystemMonitorPage() {
   const scanAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (!screenActive) return;
     const interval = setInterval(() => {
       setSecondsElapsed((prev) => prev + 1);
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [screenActive]);
 
   useEffect(() => {
+    if (!screenActive) return;
     const scanLoop = Animated.loop(
       Animated.timing(scanAnim, {
         toValue: 1,
         duration: 3000,
+        isInteraction: false,
         useNativeDriver: false})
     );
     scanLoop.start();
     return () => scanLoop.stop();
-  }, [scanAnim]);
+  }, [scanAnim, screenActive]);
 
   const scanWidth = scanAnim.interpolate({
     inputRange: [0, 0.5, 1],

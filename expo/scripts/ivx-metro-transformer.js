@@ -46,7 +46,17 @@ function patchMetroUnsafeImports(filename, source) {
 
 function transform(args) {
   const source = patchMetroUnsafeImports(args?.filename, args?.src);
-  const transformedArgs = source === args?.src ? args : { ...args, src: source };
+  // /app is the AWS web mount, never a native navigation prefix. Expo's
+  // prefix stripping otherwise turns /app-report into /-report on Android.
+  const options = args?.options;
+  const native = options?.platform === 'android' || options?.platform === 'ios';
+  const transformedArgs = {
+    ...args,
+    src: source,
+    ...(native ? { options: { ...options, customTransformOptions: {
+      ...options.customTransformOptions, baseUrl: '',
+    } } } : {}),
+  };
   return upstream.transform(transformedArgs);
 }
 

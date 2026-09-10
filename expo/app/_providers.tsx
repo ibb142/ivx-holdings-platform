@@ -26,6 +26,11 @@ import { EmailProvider } from '@/lib/email-context';
 import { NetworkProvider } from '@/lib/network-context';
 import { PublicChatSessionProvider } from '@/lib/public-chat-session-context';
 import { IntroProvider } from '@/lib/intro-context';
+import { setChatProvider } from '@/src/modules/chat/services/chatProvider';
+import { supabaseChatProvider } from '@/src/modules/chat/services/supabaseChatProvider';
+
+// Configure before a directly linked chat room can render.
+setChatProvider(supabaseChatProvider);
 
 const queryClient = new QueryClient({
   defaultOptions: {

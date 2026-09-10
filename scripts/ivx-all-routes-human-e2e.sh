@@ -104,6 +104,8 @@ name: $name
 - assertNotVisible: "Something went wrong"
 - assertNotVisible: "Application error"
 - assertNotVisible: "Unhandled Runtime Error"
+- assertNotVisible: "IVX Provider Error"
+- assertNotVisible: "Chat provider not configured.*"
 - assertNotVisible: "Login service temporarily unavailable"
 - swipe:
     start: 50%,78%
@@ -112,6 +114,8 @@ name: $name
 - waitForAnimationToEnd:
     timeout: 3000
 - assertNotVisible: "Something went wrong"
+- assertNotVisible: "IVX Provider Error"
+- assertNotVisible: "Chat provider not configured.*"
 - takeScreenshot: "$screenshot"
 YAML
   jq -nc --arg file "$file" --arg route "$route" --arg expectedRoute "$destination" --arg name "$name" --arg screenshot "$screenshot" \
@@ -174,6 +178,22 @@ for batch_number in $(seq 1 "$batch_count"); do
       timeout 15s adb shell am force-stop "$APP_ID" || true
       if ! timeout 45s adb shell am start -W -a android.intent.action.VIEW \
           -d 'ivx-app:///home' -p "$APP_ID" > "$EVIDENCE/$batch_name-diagnostic-relaunch.log" 2>&1; then
+        break
+      fi
+      # Cold launch intentionally signs out. Reauthenticate only for diagnostic
+      # collection; rc=1 and the original-process loss still forbid certification.
+      python3 - "$APP_ID" "$EVIDENCE/diagnostic-login.yaml" <<'PY'
+from pathlib import Path
+import sys
+flow = Path('expo/.maestro/ivx-owner-home-certificate.yaml').read_text()
+flow = flow.replace('appId: com.ivxholdings.app.owner', 'appId: ' + sys.argv[1])
+flow = flow.replace('clearState: true', 'clearState: false')
+flow = flow.replace('- inputText:', '- eraseText\n- inputText:')
+Path(sys.argv[2]).write_text(flow)
+PY
+      if ! timeout 240s "$MAESTRO" test "$EVIDENCE/diagnostic-login.yaml" \
+          --env OWNER_EMAIL="$OWNER_EMAIL" --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" \
+          --format junit --output "$EVIDENCE/$batch_name-diagnostic-login.xml"; then
         break
       fi
     fi

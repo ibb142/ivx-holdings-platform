@@ -24,7 +24,7 @@ export default function ModalScreen() {
       visible={true}
       onRequestClose={() => router.back()}
     >
-      <Pressable style={styles.overlay} onPress={() => router.back()}>
+      <Pressable testID="ivx-route:/modal" style={styles.overlay} onPress={() => router.back()}>
         <View style={styles.modalContent}>
           <Text style={styles.title}>Modal</Text>
           <Text style={styles.description}>

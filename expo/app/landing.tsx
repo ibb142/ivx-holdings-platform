@@ -1596,7 +1596,7 @@ export default function LandingScreen() {
               <View style={cardStyles.wrap}>
                 <View style={cardStyles.imageWrap}>
                   <Image
-                    source={{ uri: IVX_BUSINESS_CARD_URL }}
+                    source={IVX_BUSINESS_CARD_URL}
                     style={cardStyles.cardImage}
                     resizeMode="contain"
                   />
