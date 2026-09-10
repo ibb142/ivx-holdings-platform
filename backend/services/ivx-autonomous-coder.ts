@@ -565,7 +565,7 @@ function pickInspectionTargets(goal: string, availableFiles: string[]): string[]
   ].filter((f) => availableFiles.includes(f));
 
   const words = Array.from(new Set(
-    goal.toLowerCase()
+    inspectionSearchGoal(goal).toLowerCase()
       .replace(/[^a-z0-9\s]/g, ' ')
       .split(/\s+/)
       .filter((w) => w.length >= 4)
@@ -587,11 +587,18 @@ function explicitInspectionPaths(goal: string): string[] {
     .filter(file => !file.split('/').some(part => !part || part === '.' || part === '..')).slice(0, 15);
 }
 
+function inspectionSearchGoal(goal: string): string {
+  // Router/guardian tasks put the objective, unit and acceptance evidence first.
+  // Their permission/credential constraints stay in the LLM prompt, but must
+  // not outweigh the failing feature when retrieving implementation files.
+  return goal.includes('[AUTONOMOUS_DIAGNOSTIC_DATA]') ? goal.split('\n').slice(0, 3).join('\n') : goal;
+}
+
 /** Rank a bounded filename inventory before reducing the planner's context. */
 function selectPlanningFiles(goal: string, files: string[]): string[] {
   const explicit = new Set(explicitInspectionPaths(goal));
   const ignored = new Set(['that', 'this', 'with', 'from', 'have', 'repair', 'code', 'source', 'file', 'test', 'current', 'production', 'observed', 'evidence', 'change', 'actual', 'autonomous', 'required', 'before', 'after']);
-  const words = [...new Set((goal.toLowerCase().match(/[a-z]{4,}/g) ?? []).map(word => word.replace(/s$/, '')))].filter(word => !ignored.has(word));
+  const words = [...new Set((inspectionSearchGoal(goal).toLowerCase().match(/[a-z]{4,}/g) ?? []).map(word => word.replace(/s$/, '')))].filter(word => !ignored.has(word));
   const score = (file: string) => (explicit.has(file) ? 1000 : 0)
     + words.reduce((sum, word) => sum + (file.toLowerCase().includes(word) ? 3 : 0), 0)
     - (/\.(test|spec)\./.test(file) ? 1 : 0);
@@ -608,7 +615,7 @@ function selectPlanningFiles(goal: string, files: string[]): string[] {
  * the best match. Falls back to head+tail if no keywords match. */
 function extractRelevantSection(content: string, goal: string, maxChars: number): string {
   const lines = content.split('\n');
-  const goalWords = goal.toLowerCase()
+  const goalWords = inspectionSearchGoal(goal).toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter((w) => w.length >= 4)
@@ -839,6 +846,7 @@ Rules:
 - No secrets, no destructive operations.
 - Never invent an existing file path. For modifications, use files shown in FILES; a missing path is not evidence that an implementation exists.
 - Repair goals that require regression coverage must include BOTH the functional source operation and a runnable node:test regression operation in the same response.
+- Create regression tests as backend/**/*.test.ts or expo/**/*.test.ts(x); plain JavaScript test paths are outside this engine's patch scope.
 - Missing customer media or credentials are external dependencies. Never invent assets, URLs, credentials, successful results or weaker acceptance criteria to make a repair pass.
 - If the goal is already satisfied, return {"rootCause":"already satisfied","technicalPlan":"no change needed","operations":[]}
 
