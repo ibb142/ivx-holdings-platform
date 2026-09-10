@@ -2,6 +2,16 @@ import { describe, expect, it } from 'bun:test';
 import { createSeniorJobAdmission } from './ivx-senior-job-admission';
 const jobs = (count: number) => Array.from({ length: count }, (_, i) => ({ jobId: `job-${i}`, ownerId: `agent-${i}`, status: 'queued', createdAt: new Date().toISOString() }));
 describe('senior worker concurrent admission', () => {
+  it('leaves committed retries to verification recovery and admits other queued work', async () => {
+    const queue = { jobs: jobs(2).map((job, i) => ({ ...job, result: i === 0 ? { commitSha: 'a'.repeat(40) } : null })) };
+    const claimedIds: string[] = [];
+    const next = createSeniorJobAdmission({ claimed: new Set<string>(), active: new Set(['running']),
+      staleAfterMs: 60_000, stopped: () => false, read: async () => queue,
+      claim: async job => { claimedIds.push(job.jobId); return { ...job, status: 'running' }; } });
+    expect((await next())?.jobId).toBe('job-1');
+    expect(claimedIds).toEqual(['job-1']);
+    expect(queue.jobs[0].result?.commitSha).toBe('a'.repeat(40));
+  });
   it('admits 112 distinct jobs with one selection read and at most four concurrent durable claims', async () => {
     let reads = 0, activeClaims = 0, peakClaims = 0;
     const claimed = new Set<string>();

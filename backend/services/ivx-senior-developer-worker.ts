@@ -77,6 +77,7 @@ import {
 } from './ivx-autonomous-coder';
 import { assertRepairResumeEvidence } from './ivx-repair-resume-evidence';
 import { recoverCommittedPullRequest } from './ivx-commit-pr-recovery';
+import { committedFailurePatch, isCommittedRecoveryCandidate } from './ivx-senior-committed-recovery-policy';
 import {
   IVX_FACTORY_ENGINE_MARKER,
   IVX_FACTORY_APPROVAL_PHRASE,
@@ -1087,11 +1088,13 @@ export async function expireStaleJobs(): Promise<string[]> {
     // in this process is alive — its heartbeat is refreshed by the resume's
     // onPhase callbacks. Never expire it out from under the resume.
     if (activeCiResumeJobIds.has(job.jobId)) continue;
+    // A published commit must resume verification, even when an older retry
+    // left its phase at QUEUED/RUNNING. Never expire or recode that checkpoint.
+    if (job.result?.commitSha) continue;
     if (sharedSeniorQueueEnabled()) {
       // A live physical lease outranks an old phase timestamp. Committed
       // work belongs to the dedicated recovery below, not generic expiry:
       // retaining an old lease identity in a FAILED patch blocks the sweep.
-      if (job.result?.commitSha) continue;
       if (job.leaseExpiresAt && Date.parse(job.leaseExpiresAt) > now) continue;
     }
     const activityAt = job.lastHeartbeatAt ?? job.startedAt;
@@ -1185,7 +1188,7 @@ const CI_WAIT_RESUME_THRESHOLD_MS = 90 * 1000; // 90s
  * Resume code-change jobs whose worker process was killed while waiting for
  * the PR's required CI checks (FINAL CLOSEOUT 2026-08-23).
  *
- * Candidates: jobs at status 'committing' with a persisted commitSha and no
+ * Candidates: stale active jobs with a persisted commitSha, expired lease and no
  * confirmed merge. Recover a missing PR identity from the exact stored branch
  * before resuming; a commit alone never certifies completion. For each,
  * ONE background resume is spawned (guarded by activeCiResumeJobIds) that
@@ -1198,17 +1201,10 @@ const CI_WAIT_RESUME_THRESHOLD_MS = 90 * 1000; // 90s
  */
 async function recoverStuckCiWaitJobs(queue: QueueDoc): Promise<void> {
   const candidates = queue.jobs.filter((j) =>
-    j.status === 'committing'
-    && j.result?.commitSha
-    && j.result?.prMerged !== true
+    isCommittedRecoveryCandidate(j, Date.now(), CI_WAIT_RESUME_THRESHOLD_MS)
     && !activeCiResumeJobIds.has(j.jobId));
   if (candidates.length === 0) return;
   for (const job of candidates) {
-    // Only resume jobs that have actually been waiting (not jobs whose PR was
-    // just created milliseconds ago by a live coder run in THIS process).
-    const activityAt = job.lastHeartbeatAt ?? job.startedAt;
-    if (!activityAt) continue;
-    if (Date.now() - new Date(activityAt).getTime() < CI_WAIT_RESUME_THRESHOLD_MS) continue;
     activeCiResumeJobIds.add(job.jobId);
     void resumeCiWaitJob(job.jobId).catch(() => {}).finally(() => {
       activeCiResumeJobIds.delete(job.jobId);
@@ -2920,6 +2916,16 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
       /token.*(expired|invalid|revoked)/i,
     ];
     const isTransient = TRANSIENT_ERROR_PATTERNS.some((re) => re.test(message));
+    // Read the durable checkpoint: the initially admitted job predates commit
+    // publication. Retrying that snapshot recodes already published work and
+    // can overwrite its branch while leaving the old commit in the queue.
+    const current = await getSeniorDeveloperJob(job.jobId);
+    if (!current || !ACTIVE_STATUSES.has(current.status)) return null;
+    const committedPatch = committedFailurePatch(current, message, isTransient, nowIso());
+    if (committedPatch) {
+      await updateJob(job.jobId, committedPatch, true);
+      return null;
+    }
     const MAX_AUTO_RETRIES = 3;
     const currentAttempts = job.attempts;
 
