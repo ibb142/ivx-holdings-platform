@@ -15,6 +15,7 @@
  */
 import { getAllTasks, TERMINAL_SUCCESS_STATES } from './ivx-autonomous-task-engine';
 import { fetchLandingGitHubRead } from './ivx-landing-github-read';
+import { measureMediaWeight } from './ivx-media-weight';
 import {
   fetchMainSha,
   LANDING_API_URL,
@@ -734,7 +735,9 @@ async function runMedia(fetchImpl: typeof fetch, source: 'deals-images' | 'deals
     return bad.length === 0 ? pass(`${urls.length} media urls https`) : fail(`non-https/local media: ${bad.slice(0, 5).map((u) => truncate(u, 60)).join(', ')}`, 'media', 'serve media from https CDN');
   }
   const sample = urls.slice(0, max ?? 40);
-  const results = await mapLimit(sample, MEDIA_CONCURRENCY, async (url) => ({ url, result: await headOrGet(fetchImpl, url) }));
+  const results = await mapLimit(sample, MEDIA_CONCURRENCY, async (url) => ({
+    url, result: assert === 'weight' ? await measureMediaWeight(fetchImpl, url) : await headOrGet(fetchImpl, url),
+  }));
   for (const { url, result } of results) c.api.push(`${truncate(url, 90)} → ${result.status || result.error} ${result.contentType || '-'} ${result.bytes}B`);
   if (assert === 'resolvable') {
     const dead = results.filter(({ result }) => result.status === 0 || result.status >= 400);
@@ -987,6 +990,23 @@ async function runCi(fetchImpl: typeof fetch, workflow: string, check: string, p
   if (matching.length === 0) return blocked(`no "${workflow}" run exists for production SHA ${productionSha.slice(0, 9)} — dispatch it (workflow_dispatch) to produce browser evidence`);
   const latest = matching[0];
   c.evidence.push(`workflow_run_id=${latest.id} ${latest.html_url} status=${latest.status} conclusion=${latest.conclusion ?? '-'}`);
+  if (workflow === 'IVX Landing 19 QA') {
+    const jobs = await cached(`ci-jobs:${latest.id}:${latest.updated_at}`, CACHE_60S, async () => {
+      const response = await fetchLandingGitHubRead(`actions/runs/${latest.id}/jobs?per_page=100`, fetchImpl);
+      if (!response.ok) return null;
+      return await response.json() as { jobs?: Array<{ id: number; head_sha: string; html_url: string; steps?: Array<{ name: string; status: string; conclusion: string | null }> }> };
+    });
+    if (!jobs?.jobs) return blocked('Cannot read per-unit CI evidence');
+    const matches = jobs.jobs.flatMap((job) => job.head_sha === productionSha
+      ? (job.steps ?? []).filter((step) => step.name === check).map((step) => ({ job, step })) : []);
+    if (matches.length !== 1) return blocked(`Expected one exact-SHA step named ${check}; found ${matches.length}`);
+    const { job, step } = matches[0];
+    c.evidence.push(`job_id=${job.id} ${job.html_url}; step=${step.name}; status=${step.status}; conclusion=${step.conclusion}`);
+    if (step.status !== 'completed') return blocked(`${check} is ${step.status}`);
+    if (step.conclusion === 'success') return pass(`${check} passed on exact SHA in job ${job.id}`);
+    if (step.conclusion === 'skipped' || step.conclusion === 'cancelled') return blocked(`${check} was ${step.conclusion}; no acceptance proof`);
+    return fail(`${check} concluded ${step.conclusion}`, 'ci', `repair the actual assertion in ${job.html_url}`);
+  }
   if (latest.status !== 'completed') return blocked(`"${workflow}" run ${latest.id} still ${latest.status}`);
   if (latest.conclusion === 'success') return pass(`"${workflow}" run ${latest.id} succeeded on exact SHA`);
   return fail(`"${workflow}" run ${latest.id} concluded ${latest.conclusion}`, 'ci', `open ${latest.html_url} and fix the failing ${check} job`);

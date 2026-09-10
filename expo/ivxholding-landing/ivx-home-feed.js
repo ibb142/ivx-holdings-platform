@@ -77,7 +77,8 @@
     });
     return hlsLoading;
   }
-  function attachSource(video, hlsUrl, fallbackUrl) {
+  function attachSource(video, hlsUrl, fallbackUrl, webmUrl) {
+    if (webmUrl && video.canPlayType('video/webm')) { fallbackUrl = new URL(webmUrl, API_CANDIDATES[0]).href; hlsUrl = null; }
     if (video.__ivxAttached) return;
     video.__ivxAttached = true;
     if (!hlsUrl) { if (fallbackUrl) video.src = fallbackUrl; return; }
@@ -264,7 +265,7 @@
 
     /* Lazy playback: attach the source ONLY when visible; images load first. */
     card.__ivxActivate = function () {
-      attachSource(vid, v.hls_url, v.video_url);
+      attachSource(vid, v.hls_url, v.video_url, v.webm_url);
       vid.play().then(function () {
         vid.style.opacity = '1';
         if (img) img.style.opacity = '0';
@@ -273,7 +274,7 @@
     card.__ivxDeactivate = function () { try { vid.pause(); } catch (e) {} };
     card.__ivxPreload = function () {
       /* preload the NEXT featured video only — metadata, no full download */
-      if (!vid.__ivxAttached) { vid.preload = 'metadata'; attachSource(vid, v.hls_url, v.video_url); }
+      if (!vid.__ivxAttached) { vid.preload = 'metadata'; attachSource(vid, v.hls_url, v.video_url, v.webm_url); }
     };
     return card;
   }

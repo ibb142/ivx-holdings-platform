@@ -244,10 +244,11 @@
       if (first.thumbnail_url) v.setAttribute('poster', first.thumbnail_url);
       v.muted = true;
       v.preload = 'auto';
-      // The canonical API can expose a relative WebM compatibility path that
-      // is not published by the landing CDN. Assign the verified MP4 directly
-      // so Chromium does not stall while negotiating a missing source.
-      v.src = first.video_url;
+      // Resolve compatibility assets against the API that serves them.
+      // Browser source selection falls back to MP4 when WebM is unsupported.
+      var sources = first.webm_url ? [{url:new URL(first.webm_url, 'https://api.ivxholding.com').href,type:'video/webm'}] : [];
+      sources.push({url:first.video_url,type:'video/mp4'});
+      sources.forEach(function(item){ var s=document.createElement('source'); s.src=item.url; s.type=item.type; v.appendChild(s); });
       v.load();
       var p = v.play && v.play(); if (p && p.catch) p.catch(function(){});
     }
@@ -1129,6 +1130,7 @@
           </form>
         </div>
         <div id="invest-authenticated-view" style="display:none;">
+          <button type="button" class="invest-cta-secondary" id="invest-signout">Sign out</button>
           <div style="background:rgba(0,196,140,0.08);border:1px solid rgba(0,196,140,0.2);border-radius:14px;padding:16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
             <span style="font-size:24px;">&#10004;&#65039;</span>
             <div>
@@ -1391,4 +1393,3 @@
 <script src="/ivx-web-vitals.js?v20260813" defer></script>
 </body>
 </html>
-

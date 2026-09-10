@@ -131,7 +131,8 @@
     });
     return hlsLoading;
   }
-  function attachSource(video, hlsUrl, fallbackUrl) {
+  function attachSource(video, hlsUrl, fallbackUrl, webmUrl) {
+    if (webmUrl && video.canPlayType('video/webm')) { fallbackUrl = new URL(webmUrl, API_CANDIDATES[0]).href; hlsUrl = null; }
     if (video.__ivxAttached) return;
     video.__ivxAttached = true;
     if (!hlsUrl) { if (fallbackUrl) video.src = fallbackUrl; return; }
@@ -593,7 +594,7 @@
         if (vid.__ivxHls) { try { vid.__ivxHls.destroy(); } catch (err2) {} vid.__ivxHls = null; }
         vid.removeAttribute('src');
         slide.__video = nv;
-        attachSource(vid, nv.hls_url, nv.video_url);
+        attachSource(vid, nv.hls_url, nv.video_url, nv.webm_url);
         vid.play().catch(function () {});
         return;
       }
@@ -610,7 +611,7 @@
         vid.__ivxAttached = false;
         if (vid.__ivxHls) { try { vid.__ivxHls.destroy(); } catch (err) {} vid.__ivxHls = null; }
         vid.removeAttribute('src');
-        attachSource(vid, v.hls_url, v.video_url);
+        attachSource(vid, v.hls_url, v.video_url, v.webm_url);
         vid.play().catch(function () {});
       });
       slide.appendChild(rb);
@@ -741,7 +742,7 @@
       }
     });
 
-    slide.__attach = function () { attachSource(vid, v.hls_url, v.video_url); };
+    slide.__attach = function () { attachSource(vid, v.hls_url, v.video_url, v.webm_url); };
     slide.__vid = vid;
     return slide;
   }

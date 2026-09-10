@@ -38,7 +38,12 @@ const PRODUCTION_SUPABASE_ANON_KEY =
 
 function resolveSupabaseUrl(): string {
   const envUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-  if (envUrl && envUrl.includes('.supabase.co')) return envUrl.trim();
+  if (envUrl) {
+    const url = new URL(envUrl.trim());
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) throw new Error('Supabase URL must use HTTPS (HTTP is allowed only for local development).');
+    return url.href.replace(/\/$/, '');
+  }
   return PRODUCTION_SUPABASE_URL;
 }
 
@@ -73,7 +78,7 @@ export interface MemberRegistrationInput {
   lastName: string;
   /** Date of birth in ISO format (YYYY-MM-DD). */
   dateOfBirth?: string;
-  /** Gender: 'male' | 'female' | 'prefer_not_to_say'. */
+  /** Gender: 'male' | 'female' | 'other' | 'prefer_not_to_say'. */
   gender?: string;
   phone: string;
   country: string;

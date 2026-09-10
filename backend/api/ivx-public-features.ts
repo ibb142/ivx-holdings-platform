@@ -198,6 +198,22 @@ async function queryPublicDeals(): Promise<Response> {
       .abortSignal(controller.signal);
     if (error) throw new Error(error.message);
     const deals = normalizePublicLandingDeals(data || []);
+    // Reels are stored separately from jv_deals.photos. Include only approved,
+    // published public reels belonging to these deals; global reels must never
+    // be presented as footage of a particular property.
+    if (deals.length > 0) {
+      const { data: reels, error: reelsError } = await sb.from('jv_deal_reels')
+        .select('id,project_id,video_url,thumbnail_url,caption,published,approved,visibility')
+        .in('project_id', deals.map((deal) => String(deal.id)))
+        .eq('published', true).eq('approved', true).eq('visibility', 'public')
+        .order('sort_order', { ascending: true })
+        .abortSignal(controller.signal);
+      if (reelsError) throw new Error(reelsError.message);
+      for (const deal of deals) {
+        deal.videos = (reels || []).filter((reel) =>
+          String(reel.project_id) === String(deal.id) && /^https:\/\//i.test(reel.video_url || ''));
+      }
+    }
     return json({ deals, count: deals.length, sourceCount: count ?? deals.length, deploymentMarker: DEPLOYMENT_MARKER });
   } catch (err: unknown) {
     console.error('[handleJVDealsList] Supabase query failed:', err instanceof Error ? err.message : String(err));

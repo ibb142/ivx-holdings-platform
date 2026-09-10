@@ -17,7 +17,9 @@ export async function fetchLandingGitHubRead(
   if ((process.env.IVX_LANDING_REPO ?? 'ibb142/ivx-holdings-platform') !== 'ibb142/ivx-holdings-platform') {
     throw new Error('Public landing metadata repository does not match configured mission');
   }
-  if (path !== 'commits/main' && !/^actions\/runs\?head_sha=[a-f0-9]{40}&per_page=100$/i.test(path)) {
+  if (path !== 'commits/main'
+    && !/^actions\/runs\?head_sha=[a-f0-9]{40}&per_page=100$/i.test(path)
+    && !/^actions\/runs\/[1-9]\d*\/jobs\?per_page=100$/.test(path)) {
     throw new Error('Unsupported public landing metadata path');
   }
   const configured = (process.env.GITHUB_TOKEN ?? '').trim();

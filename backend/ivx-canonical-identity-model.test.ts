@@ -130,7 +130,7 @@ function handleFetch(url: string, init?: RequestInit): { status: number; body: u
         const pat = filter.val.replace(/%/g, '').toLowerCase();
         matching = matching.filter((m) => String(m[col] ?? '').toLowerCase().includes(pat));
       } else if (filter.op === 'like') {
-        const pat = filter.val.replace(/%/g, '');
+        const pat = filter.val.replace(/[%*]/g, '');
         matching = matching.filter((m) => String(m[col] ?? '').includes(pat));
       }
     }
@@ -185,6 +185,36 @@ describe('ITEM 1 — Canonical Identity Model', () => {
 
   // Import after mock setup
   const { upsertCanonicalMember } = require('./services/ivx-canonical-members') as typeof import('./services/ivx-canonical-members');
+
+  describe('Shared-phone registration identity', () => {
+    it('persists two distinct Auth identities sharing a phone without merging their records', async () => {
+      const first = await upsertCanonicalMember({ email: 'first@example.test', authUserId: 'auth-first', phone: '+15555550100' });
+      const second = await upsertCanonicalMember({ email: 'second@example.test', authUserId: 'auth-second', phone: '+15555550100' });
+      expect(first.ok).toBe(true);
+      expect(second.ok).toBe(true);
+      expect(second.action).toBe('created');
+      expect(second.member?.member_id).not.toBe(first.member?.member_id);
+      expect(_store.map(m => m.auth_user_id)).toEqual(['auth-first', 'auth-second']);
+      expect(_store[0].email).toBe('first@example.test');
+    });
+
+    it('does not claim a lead with a different email solely because its phone matches', async () => {
+      await upsertCanonicalMember({ email: 'lead@example.test', phone: '+15555550100' });
+      const result = await upsertCanonicalMember({ email: 'member@example.test', authUserId: 'auth-member', phone: '+15555550100' });
+      expect(result.action).toBe('created');
+      expect(_store[0].auth_user_id).toBeNull();
+      expect(_store).toHaveLength(2);
+    });
+
+    it('still completes a phone-only lead with no conflicting email or Auth identity', async () => {
+      const lead = await upsertCanonicalMember({ phone: '+15555550100' });
+      const result = await upsertCanonicalMember({ email: 'member@example.test', authUserId: 'auth-member', phone: '+15555550100' });
+      expect(result.ok).toBe(true);
+      expect(result.member?.member_id).toBe(lead.member?.member_id);
+      expect(result.member?.auth_user_id).toBe('auth-member');
+      expect(_store).toHaveLength(1);
+    });
+  });
 
   describe('Required fields present in types', () => {
     it('CanonicalMemberInput includes all 20 required enterprise-registration fields', () => {

@@ -23,6 +23,7 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { registerMember, type MemberRegistrationInput } from './ivx-member-database';
+import { validRegistrationPostalCode } from './ivx-registration-postal-code';
 import { onboardNewMember, VALID_ROLE_INTERESTS, type MemberRoleInterest } from './ivx-member-investor-system';
 import { upsertCanonicalMember } from './ivx-canonical-members';
 import { isDurableStoreConfigured, readDurableJson, writeDurableJson } from './ivx-durable-store';
@@ -173,6 +174,7 @@ export type RegistrationStage =
 
 export type RegistrationErrorCode =
   | 'INVALID_EMAIL'
+  | 'INVALID_POSTAL_CODE'
   | 'WEAK_PASSWORD'
   | 'EMAIL_EXISTS'
   | 'AUTH_CREATION_FAILED'
@@ -298,6 +300,7 @@ function classifyAuthError(message: string): RegistrationErrorCode {
 function userMessageForCode(code: RegistrationErrorCode): string {
   switch (code) {
     case 'INVALID_EMAIL': return 'Please enter a valid email address.';
+    case 'INVALID_POSTAL_CODE': return 'Please enter a valid ZIP or postal code.';
     case 'WEAK_PASSWORD': return 'Use a stronger password (at least 12 characters).';
     case 'EMAIL_EXISTS': return 'An account with this email already exists. Log in or reset your password.';
     case 'AUTH_CREATION_FAILED': return 'We could not create your account. Please try again.';
@@ -407,6 +410,9 @@ export async function orchestrateRegistration(
       message: pwCheck.reason ?? 'Password does not meet requirements.',
       retryable: false,
     });
+  }
+  if (!validRegistrationPostalCode(input.zipCode || '', input.country)) {
+    return makeError('INVALID_POSTAL_CODE', 'VALIDATING', traceId, registrationRequestId, { retryable: false });
   }
   if (!input.acceptTerms) {
     return makeError('UNKNOWN_ERROR', 'VALIDATING', traceId, registrationRequestId, {
