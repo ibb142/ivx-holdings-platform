@@ -32,4 +32,9 @@ tags:
 - assertNotVisible: "(?s).*No response body received.*"
 - assertNotVisible: "(?s).*AUTONOMOUS TASK: BLOCKED.*"
 - assertNotVisible: "(?s).*APPROVAL REQUIRED.*"
+- copyTextFrom: "(?s).*JOB_ID:.*"
+- evalScript: ${output.nativeJobMatches = maestro.copiedText.match(/JOB_ID:\s*([A-Za-z0-9_-]+)/g) || []}
+- assertTrue: ${output.nativeJobMatches.length === 1}
+- evalScript: ${output.nativeJobId = output.nativeJobMatches[0].replace(/JOB_ID:\s*/, '')}
+- evalScript: ${console.log('IVX_NATIVE_HANDOFF_JOB_ID=' + output.nativeJobId + ' NONCE=' + IVX_HANDOFF_NONCE)}
 - takeScreenshot: native-autonomous-handoff

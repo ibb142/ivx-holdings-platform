@@ -80,19 +80,13 @@ export IVX_HANDOFF_NONCE="native-${IVX_CHAT_E2E_NONCE}"
 # bounded live handoff wait before terminating the instrumentation process.
 timeout 420s "$MAESTRO" test "$FLOW_DIR/public-handoff.yaml" \
   --env IVX_HANDOFF_NONCE="$IVX_HANDOFF_NONCE" \
+  --debug-output qa/evidence/dashboard-chat/native-handoff-debug \
   --format junit --output qa/evidence/dashboard-chat/native-handoff.xml
-adb shell uiautomator dump /sdcard/ivx-handoff.xml >/dev/null
-adb pull /sdcard/ivx-handoff.xml qa/evidence/dashboard-chat/native-handoff-view.xml >/dev/null
-IVX_HANDOFF_JOB_ID="$(python3 - <<'PY_ID'
-import re, xml.etree.ElementTree as ET
-root = ET.parse('qa/evidence/dashboard-chat/native-handoff-view.xml').getroot()
-text = '\n'.join(node.attrib.get('text', '') for node in root.iter())
-ids = re.findall(r'JOB_ID:\s*([A-Za-z0-9_-]+)', text)
-if len(set(ids)) != 1:
-    raise SystemExit('Native chat must render exactly one Autonomous job identity')
-print(ids[0])
-PY_ID
-)"
+# Maestro copies the rendered response through the same accessibility driver
+# that passed the assertions. Android's separate uiautomator dump requires an
+# idle window and fails on the chat's continuous decorative animation.
+IVX_HANDOFF_JOB_ID="$(python3 scripts/ivx-native-handoff-identity.py \
+  qa/evidence/dashboard-chat/native-handoff-debug "$IVX_HANDOFF_NONCE")"
 export IVX_HANDOFF_JOB_ID
 node scripts/ivx-autonomous-handoff-live-cert.mjs
 
