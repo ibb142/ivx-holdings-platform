@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 import { proveInterruptedTaskRecovery } from './ivx-task-recovery-postgres-proof.mjs';
+import { proveWorkEvidenceArchive } from './ivx-work-evidence-postgres-proof.mjs';
 
 // This destructive fixture is restricted to an explicitly named local test DB.
 const connectionString = process.env.IVX_HA_TEST_DATABASE_URL;
@@ -103,4 +104,5 @@ try {
     interruptedTaskRecovery: taskRecovery.verification,
     sharedRoomHistory: true, privateRoomStorage: true, roleObservation: true, parallelEnqueuesPreserved: true, atomicSeniorClaims: true, missingWorkerIdentityRejected: true, terminalResurrectionRejected: true, crossReplicaOwnerSingleFlight: true, concurrentProofsPreserved: true, wrongProcessStartRejected: true, wrongProcessHeartbeatRejected: true, staleCompletionRejected: true,
     expiredLeaseCannotResurrect: true, survivorRefilled: true, lateShutdownFenced: true, privateObservation: true, productionRowsTouched: 0 }));
+  await proveWorkEvidenceArchive(a);
 } finally { await Promise.allSettled([a.end(), b.end()]); }

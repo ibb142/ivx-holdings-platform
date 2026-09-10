@@ -22,10 +22,10 @@ jobs:
       - uses: actions/checkout@v4
         timeout-minutes: 3
         with:
-          # Start with bounded ancestry; deepen only if the immutable PR base
-          # needs it. An unbounded checkout can hold the deployment queue open.
-          fetch-depth: 32
-          filter: blob:none
+          # The PR merge commit and its two parents contain both exact trees.
+          fetch-depth: 2
+      - name: Verify shallow PR classification
+        run: node --test qa/ivx-mobile-impact-shallow.test.mjs
       - name: Detect mobile-impacting changes
         id: detect
         shell: bash
@@ -37,25 +37,14 @@ jobs:
             echo 'MOBILE_IMPACT=FULL_MAIN_GATE'
             exit 0
           fi
-          # Compare with the immutable event base, never a moving main branch.
-          # Older branches deepen until merge-base is proven; lack of ancestry
-          # fails this required gate instead of declaring mobile unaffected.
-          base_ref="${{ github.event.pull_request.base.sha }}"
-          if ! git cat-file -e "$base_ref^{commit}" 2>/dev/null; then
-            git fetch --no-tags --filter=blob:none --depth=1 origin "$base_ref"
-          fi
-          base=''
-          for deepen_by in 0 64 128 256 512; do
-            if [ "$deepen_by" -gt 0 ]; then
-              git fetch --no-tags --filter=blob:none --deepen="$deepen_by" origin "$GITHUB_SHA" "$base_ref"
-            fi
-            if base=$(git merge-base HEAD "$base_ref"); then break; fi
-          done
-          if [ -z "$base" ]; then
-            echo '::error::PR ancestry could not be verified; mobile impact is unknown.'
+          # Compare exact trees; full repository ancestry is unnecessary.
+          base="${{ github.event.pull_request.base.sha }}"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$base" = "$(git cat-file -p HEAD | awk '/^parent / { print $2; exit }')" || {
+            echo '::error::PR base does not match the tested merge commit.'
             exit 1
-          fi
-          git diff --name-only "$base"...HEAD > "$RUNNER_TEMP/changed-files.txt"
+          }
+          git diff --no-renames --name-only "$base" HEAD > "$RUNNER_TEMP/changed-files.txt"
           cat "$RUNNER_TEMP/changed-files.txt"
           mobile=false
           while IFS= read -r path; do
