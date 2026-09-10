@@ -447,7 +447,7 @@ export function getWorkerMaxConcurrency(): number {
  * registry is process-local and two runtimes could execute the same job.
  */
 export function shouldExecuteWorkerQueueInThisProcess(): boolean {
-  if (queueStopping || process.env.IVX_PROCESS_ROLE === 'api') return false;
+  if (queueStopping || process.env.IVX_PROCESS_ROLE === 'api' || (process.env.IVX_SUPABASE_RECOVERY_MODE ?? '').trim().toLowerCase() === 'true') return false;
   const dedicatedEnabled = process.env.IVX_DEDICATED_WORKER_ENABLED === 'true';
   const workerProcess = process.env.IVX_WORKER_MODE === 'true';
   return !dedicatedEnabled || workerProcess;

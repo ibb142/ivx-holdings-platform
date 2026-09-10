@@ -12,7 +12,13 @@ import { startFleetSloMonitor } from '../services/ivx-fleet-slo';
 import { startAutonomousDoctor } from '../services/ivx-autonomous-doctor';
 import { startAutonomousUtilizationGuardian, stopAutonomousUtilizationGuardian } from '../services/ivx-autonomous-utilization-guardian';
 
+import { startCertificateWorker, stopCertificateWorker } from '../services/ivx-certificate-worker';
+
 const databaseRecoveryMode = (process.env.IVX_SUPABASE_RECOVERY_MODE ?? '').trim().toLowerCase() === 'true';
+// Fleet timers deliberately unref themselves. In recovery mode the auxiliary
+// worker is absent, so retain process lifetime until graceful shutdown instead
+// of exiting before the fleet's delayed boot tick can execute.
+const recoveryLifetime = databaseRecoveryMode ? setInterval(() => {}, 60_000) : null;
 
 console.log('[IVX-SENIOR-DEV-01] process entry', {
   pid: process.pid,
@@ -32,6 +38,7 @@ if (!databaseRecoveryMode) {
   startFleetSloMonitor();
   startBlockedTaskReconciler();
 }
+startCertificateWorker();
 const fleetStarted = startAutonomous112RuntimeEnforcer();
 if (!databaseRecoveryMode) {
   startAutonomousDoctor();
@@ -57,6 +64,7 @@ if (!databaseRecoveryMode) {
 
 async function shutdown(signal: string): Promise<void> {
   process.env.IVX_INSTANCE_DRAINING = 'true';
+  stopCertificateWorker();
   requestSeniorDevWorkerStop();
   stopSeniorDeveloperQueue();
   console.log(`[IVX-SENIOR-DEV-01] ${signal} received, returning fleet capacity`);
@@ -65,6 +73,7 @@ async function shutdown(signal: string): Promise<void> {
   await stopAutonomous112RuntimeEnforcer().catch((error) => {
     console.error('[IVX-SENIOR-DEV-01] fleet shutdown error', error instanceof Error ? error.message : String(error));
   });
+  if (recoveryLifetime) clearInterval(recoveryLifetime);
 }
 
 process.on('SIGTERM', () => { void shutdown('SIGTERM'); });

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 describe('real execution certificate boot recovery', () => {
-  it('wires durable pending-run recovery into the API bootstrap', () => {
+  it('wires role-gated durable pending-run recovery before local schedulers', () => {
     const source = readFileSync(join(import.meta.dir, 'hono.ts'), 'utf8');
 
     expect(source).toContain("import { resumePendingCertificateRuns } from './services/ivx-real-execution-certificate';");
@@ -13,7 +13,8 @@ describe('real execution certificate boot recovery', () => {
     expect(source.indexOf('export const certificateBootRecovery = resumePendingCertificateRuns()')).toBeLessThan(source.indexOf('void certificateBootRecovery.finally'));
 
     const service = readFileSync(join(import.meta.dir, 'services/ivx-real-execution-certificate.ts'), 'utf8');
-    expect(service).toContain('await Promise.all(processing)');
+    expect(service).toContain('await processCertificateRun(runId)');
+    expect(service).not.toContain('processing.push(processCertificateRun(runId))');
     expect(service).toContain("r.task_type === 'real_execution_certification'");
     expect(service).toContain('/^rec-\\d+$/.test(r.run_id)');
     expect(service).toContain('INTERRUPTED_RUNNING_AFTER_MS');

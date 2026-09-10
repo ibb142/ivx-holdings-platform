@@ -148,11 +148,11 @@ export async function buildLandingFleetProof(sourceSha = resolveProductionSha(),
     else assignmentMismatches.push({ assignedAgentNumber: row.assignedAgentNumber, leaseHolder: row.leaseHolder, taskId: row.taskId });
     const heartbeatMs = Date.parse(row.lastHeartbeatAt);
     const expiryMs = Date.parse(row.leaseExpiresAt ?? '');
-    if (Number.isFinite(heartbeatMs) && heartbeatMs >= nowMs - 60_000 && Number.isFinite(expiryMs) && expiryMs > nowMs) freshHeartbeats += 1;
+    if (row.state === 'RUNNING' && Number.isFinite(heartbeatMs) && heartbeatMs <= nowMs && heartbeatMs >= nowMs - 60_000 && Number.isFinite(expiryMs) && expiryMs > nowMs) freshHeartbeats += 1;
   }
   const missingAgents = Array.from({ length: 112 }, (_, index) => index + 1).filter((agentNumber) => !assigned.has(agentNumber));
   const duplicateAssignedAgents = [...countsByAssigned.entries()].filter(([, count]) => count > 1).map(([agentNumber]) => agentNumber).sort((a, b) => a - b);
-  const workerIdentityGate = postgresAtomicQueueSelected() ? instances.size === 1 : true;
+  const workerIdentityGate = postgresAtomicQueueSelected() ? active.every(row => Boolean(row.workerInstanceId?.trim())) : true;
   const exact112Working = active.length === 112
     && taskIds.size === 112
     && holders.size === 112

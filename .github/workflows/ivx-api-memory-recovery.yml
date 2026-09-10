@@ -1,0 +1,38 @@
+name: IVX API Memory Recovery
+on:
+  pull_request:
+    paths: ['.github/workflows/ivx-api-memory-recovery.yml', 'scripts/ops/render-api-memory*']
+  push:
+    branches: [main]
+    paths: ['.github/workflows/ivx-api-memory-recovery.yml', 'scripts/ops/render-api-memory*']
+permissions:
+  contents: read
+concurrency:
+  group: ivx-api-memory-recovery
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test scripts/ops/render-api-memory.test.mjs
+  apply:
+    # Do not merge this PR until the owner approves +$36/month recurring cost.
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/ops/render-api-memory.mjs
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          IVX_RENDER_API_KEY: ${{ secrets.IVX_RENDER_API_KEY }}
+          IVX_APPROVED_MEMORY_COST: '36_USD_PER_MONTH'

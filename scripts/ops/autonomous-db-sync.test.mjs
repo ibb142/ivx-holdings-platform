@@ -150,9 +150,9 @@ test('uses authoritative primary pooler metadata and existing password with veri
     {database_type:'PRIMARY',connection_string:'postgresql://postgres.other:x@aws-0-us-east-1.pooler.supabase.com:6543/postgres'}
    ]);
   };
-  const result=await readPoolerCandidates([{serviceId:'github_actions',env:{SUPABASE_DB_URL:valid}}],'test-management');
+  const result=await readPoolerCandidates([{serviceId:'render_existing_session',env:{SUPABASE_DB_URL:'postgresql://postgres.kvclcdjmjghndxsngfzb:unit-test-only@aws-0-us-east-1.pooler.supabase.com:5432/postgres'}},{serviceId:'github_actions',env:{SUPABASE_DB_URL:valid}}],'test-management');
   assert.equal(result.length,1);const config=validateConnection(result[0].env.SUPABASE_POOLER_URL);
-  assert.equal(config.password,'unit-test-only');assert.equal(config.user,'postgres.kvclcdjmjghndxsngfzb');assert.equal(config.port,5432);assert.equal(config.ssl.rejectUnauthorized,true);
+  assert.equal(config.password,'unit-test-only');assert.equal(config.user,'postgres.kvclcdjmjghndxsngfzb');assert.equal(config.port,6543);assert.equal(config.ssl.rejectUnauthorized,true);
  }finally {globalThis.fetch=savedFetch;console.log=savedLog;}
 });
 

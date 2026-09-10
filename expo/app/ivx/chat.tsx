@@ -3480,6 +3480,37 @@ export default function IVXOwnerChatRoute() {
         return;
       }
 
+      const watchdogTrace = watchdogTraceId ? activeWatchdogTracesRef.current.get(watchdogTraceId) ?? null : null;
+      const startAssistantImmediately = mode === 'send_and_ai'
+        && !trustContext.requiresElevatedConfirmation
+        && shouldStartAssistantBeforePersistence({ localFirstChatMode, mode });
+
+      const triggerAssistantWithRetry = async (): Promise<void> => {
+        try {
+          await assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: true, watchdogTraceId });
+        } catch (firstErr) {
+          console.log('[IVX_TRACE] 2.X_AI_TRIGGER_RETRY_1', { clientId, err: firstErr instanceof Error ? firstErr.message : String(firstErr) });
+          try {
+            await assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: true, watchdogTraceId });
+          } catch (secondErr) {
+            console.log('[IVX_TRACE] 2.X_AI_TRIGGER_BOTH_FAILED', { clientId, err: secondErr instanceof Error ? secondErr.message : String(secondErr) });
+            watchdogTrace?.fail('AI_MUTATION_STARTED', `assistantReplyMutation rejected twice: ${secondErr instanceof Error ? secondErr.message : String(secondErr)}`);
+          }
+        }
+      };
+
+      // The optimistic owner row is already visible and the durable send queue
+      // retries independently. Start a conversational AI request before remote
+      // persistence so a degraded database cannot strand the turn at
+      // USER_ROW_INSERTED. Sensitive actions still stop at the confirmation
+      // gate above and send-only/command paths remain persistence-first.
+      if (startAssistantImmediately) {
+        console.log('[IVX_TRACE] 2.2_AI_TRIGGER_BEFORE_PERSISTENCE', { clientId, mode, localFirstChatMode });
+        watchdogTrace?.pass('AI_TRIGGER_DECISION', 'branch=send_and_ai persistence=background');
+        watchdogTrace?.pass('AI_MUTATION_STARTED', 'send_and_ai invoking assistantReplyMutation before persistence', { clientId });
+        void triggerAssistantWithRetry();
+      }
+
       liveIntelligenceService.captureEvent({
         eventName: 'chat_message',
         screen: '/ivx/chat',
@@ -3506,13 +3537,24 @@ export default function IVXOwnerChatRoute() {
           metadata: { mode, requestClass: trustContext.requestClass, confirmedSensitiveAction, trustStates: trustContext.namedStates, sessionId: ownerSessionIdRef.current }});
         console.log('[IVXOwnerChatRoute] Owner message sent to Supabase. trust:', trustContext.namedStates, 'confirmed:', confirmedSensitiveAction);
       } catch (sendError) {
-        console.log('[IVX_TRACE] 2.X_SEND_QUEUE_THREW_NO_AI_TRIGGER', { clientId, errorMessage: sendError instanceof Error ? sendError.message : String(sendError) });
-        const wdSendFail = watchdogTraceId ? activeWatchdogTracesRef.current.get(watchdogTraceId) ?? null : null;
-        wdSendFail?.fail('AI_TRIGGER_DECISION', `sendQueue threw: ${sendError instanceof Error ? sendError.message : String(sendError)}`);
-        throw sendError instanceof Error ? sendError : new Error(String(sendError));
+        const persistenceError = sendError instanceof Error ? sendError.message : String(sendError);
+        if (startAssistantImmediately) {
+          // The AI request was deliberately started before persistence. Treat a
+          // degraded Supabase write as a background concern: the Owner AI route
+          // also persists the user/assistant pair, and retrying this entire
+          // mutation would start a second AI request that cancels the first one.
+          console.log('[IVX_TRACE] 2.4_BACKGROUND_PERSISTENCE_DEGRADED_AI_CONTINUES', {
+            clientId,
+            errorMessage: persistenceError,
+          });
+          watchdogTrace?.pass('AI_TRIGGER_DECISION', 'persistence=degraded ai=continues');
+        } else {
+          console.log('[IVX_TRACE] 2.X_SEND_QUEUE_THREW_NO_AI_TRIGGER', { clientId, errorMessage: persistenceError });
+          const wdSendFail = watchdogTraceId ? activeWatchdogTracesRef.current.get(watchdogTraceId) ?? null : null;
+          wdSendFail?.fail('AI_TRIGGER_DECISION', `sendQueue threw: ${persistenceError}`);
+          throw sendError instanceof Error ? sendError : new Error(String(sendError));
+        }
       }
-
-      const watchdogTrace = watchdogTraceId ? activeWatchdogTracesRef.current.get(watchdogTraceId) ?? null : null;
 
       if (trustContext.requiresElevatedConfirmation && !confirmedSensitiveAction) {
         console.log('[IVX_TRACE] 2.X_ELEVATED_CONFIRMATION_EARLY_RETURN', { clientId, requestClass: trustContext.requestClass, namedStates: trustContext.namedStates });
@@ -3537,6 +3579,10 @@ export default function IVXOwnerChatRoute() {
       }
 
       if (mode === 'send_and_ai') {
+        if (startAssistantImmediately) {
+          console.log('[IVX_TRACE] 2.3_AI_ALREADY_RUNNING_BEFORE_PERSISTENCE', { clientId });
+          return;
+        }
         console.log('[IVX_TRACE] 2.2_AI_TRIGGER_SEND_AND_AI', { clientId, aiReachable: aiReachableRef.current, trust: trustContext.namedStates });
         console.log('[IVXOwnerChatRoute] Auto-triggering AI reply after send, aiReachable:', aiReachableRef.current, 'trust:', trustContext.namedStates);
         watchdogTrace?.pass('AI_TRIGGER_DECISION', 'branch=send_and_ai');
@@ -3544,36 +3590,22 @@ export default function IVXOwnerChatRoute() {
         // never reports a phantom stall at AI_TRIGGER_DECISION if the async
         // call is delayed or queued behind an earlier mutation.
         watchdogTrace?.pass('AI_MUTATION_STARTED', 'send_and_ai branch invoking assistantReplyMutation', { clientId });
-        // Retry-once wrapper: if the first AI mutation attempt fails, retry once
-        // before surfacing the error. The watchdog still records each attempt.
-        // We now await the wrapper so the send mutation lifecycle stays coherent
-        // with the AI call and the watchdog trace remains active until the full
-        // round trip finishes or fails.
-        const triggerAIWithRetry = async () => {
-          try {
-            await assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: true, watchdogTraceId });
-          } catch (firstErr) {
-            console.log('[IVX_TRACE] 2.X_AI_TRIGGER_RETRY_1', { clientId, err: firstErr instanceof Error ? firstErr.message : String(firstErr) });
-            try {
-              await assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: true, watchdogTraceId });
-            } catch (secondErr) {
-              console.log('[IVX_TRACE] 2.X_AI_TRIGGER_BOTH_FAILED', { clientId, err: secondErr instanceof Error ? secondErr.message : String(secondErr) });
-              watchdogTrace?.fail('AI_MUTATION_STARTED', `assistantReplyMutation rejected twice: ${secondErr instanceof Error ? secondErr.message : String(secondErr)}`);
-            }
-          }
-        };
         // FIX: Fire the AI reply as a background side effect — do NOT await it.
         // The send mutation must complete as soon as the user message is persisted
         // so onSuccess fires promptly (composer already cleared in handleSend,
         // pending message removed, user can send again). The assistantReplyMutation
         // manages its own loading state (aiReplyPending) and inserts the assistant
         // message when the reply arrives via realtime/polling.
-        void triggerAIWithRetry();
+        void triggerAssistantWithRetry();
       } else if (mode === 'send_only') {
         watchdogTrace?.pass('AI_TRIGGER_DECISION', 'branch=send_only_no_ai');
         watchdogTrace?.complete('SUCCESS');
       }
     },
+    // The transport queue owns persistence retries. Retrying this mutation at
+    // the React Query layer would duplicate side effects and cancel the live AI
+    // request via the per-conversation supersession guard.
+    retry: false,
     onSuccess: async (_data, variables) => {
       // Refetch the authoritative remote thread FIRST so the just-sent owner row
       // is present in `messages` BEFORE the optimistic pending copy is removed.

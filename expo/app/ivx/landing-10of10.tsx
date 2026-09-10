@@ -16,6 +16,7 @@ const GAP_TITLES = [
 ] as const;
 
 const STATUS_COLOR: Record<AgentStatus, string> = {
+  ASSIGNED: Colors.warning, UNKNOWN: Colors.textTertiary,
   ACTIVE: Colors.success, IDLE: Colors.textTertiary, RUNNING: Colors.info, TESTING: Colors.info, DEPLOYING: Colors.info, VERIFYING: Colors.info,
   RETRYING: Colors.warning, BLOCKED: Colors.warning, OWNER_ACTION_REQUIRED: Colors.warning, FAILED: Colors.error, COMPLETED: Colors.success,
 };

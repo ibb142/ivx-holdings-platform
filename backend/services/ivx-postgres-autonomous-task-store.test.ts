@@ -13,6 +13,7 @@ import {
   startPostgresAutonomousTasks,
   readPostgresCurrentTasks,
   readPostgresRecoveryTasks,
+  readPostgresFleetProcessObservation,
 } from './ivx-postgres-autonomous-task-store';
 
 const savedEnv = { ...process.env };
@@ -32,6 +33,39 @@ function configureAtomicQueue(): void {
 }
 
 describe('PostgreSQL autonomous task store', () => {
+  test('process observation reads only recent events and preserves a newer draining sample', async () => {
+    configureAtomicQueue();
+    const event = { instance_role: 'worker', process_role: 'worker', commit_sha: 'a'.repeat(40),
+      shared_state: true, shared_worker_queue: true };
+    globalThis.fetch = (async input => {
+      const url = new URL(String(input));
+      expect(url.pathname).toBe('/rest/v1/ivx_autonomous_task_events');
+      expect(url.searchParams.get('event_type')).toBe('eq.fleet_slo_sample');
+      expect(url.searchParams.get('order')).toBe('created_at.desc');
+      expect(Date.now() - Date.parse(url.searchParams.get('created_at')!.slice(3))).toBeLessThan(61_000);
+      return Response.json([
+        { worker_instance_id: 'retiring', created_at: new Date().toISOString(), event: { ...event, draining: true } },
+        { worker_instance_id: 'retiring', created_at: new Date(Date.now()-1_000).toISOString(), event },
+        { worker_instance_id: 'replacement', created_at: new Date().toISOString(), event },
+      ]);
+    }) as typeof fetch;
+    const result = await readPostgresFleetProcessObservation();
+    expect(result.instances).toHaveLength(2);
+    expect(result.instances.find(i => i.instanceId === 'retiring')?.draining).toBe(true);
+    expect(result.instances.find(i => i.instanceId === 'replacement')?.sharedState).toBe(true);
+  });
+
+  test('process observation rejects denied credentials and truncated evidence', async () => {
+    configureAtomicQueue();
+    process.env.SUPABASE_DB_URL = 'postgresql://unused:unused@127.0.0.1:1/unused';
+    let calls = 0;
+    globalThis.fetch = (async () => { calls++; return Response.json({}, { status: 403 }); }) as typeof fetch;
+    await expect(readPostgresFleetProcessObservation()).rejects.toThrow('HTTP 403');
+    expect(calls).toBe(1);
+    globalThis.fetch = (async () => Response.json(Array.from({ length: 1000 }, () => ({})))) as typeof fetch;
+    await expect(readPostgresFleetProcessObservation()).rejects.toThrow('Incomplete process observation');
+  });
+
   test('retries a transient HTTP status even when the response body has no retry keywords', async () => {
     configureAtomicQueue();
     let calls = 0;

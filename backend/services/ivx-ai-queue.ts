@@ -43,16 +43,48 @@ export function classifyRequestLane(input: { promptChars: number; maxOutputToken
   return 'short';
 }
 
-function acquire(pool: QueuePool): Promise<void> {
+export type IVXAIQueueOptions = { signal?: AbortSignal | null; timeoutMs?: number };
+const MAX_WAITERS = 112;
+
+function acquire(pool: QueuePool, options: IVXAIQueueOptions): Promise<void> {
+  if (options.signal?.aborted) return Promise.reject(options.signal.reason ?? new Error('AI request cancelled'));
   if (pool.active < pool.maxConcurrent) {
     pool.active += 1;
     return Promise.resolve();
   }
-  return new Promise<void>((resolve) => {
-    pool.waiters.push(() => {
+  if (pool.waiters.length >= MAX_WAITERS) return Promise.reject(new Error('AI queue capacity exceeded'));
+  const configured = options.timeoutMs ?? Number(process.env.IVX_AI_QUEUE_WAIT_TIMEOUT_MS ?? 30000);
+  const timeoutMs = Number.isFinite(configured) && configured > 0 ? Math.min(configured, 60000) : 30000;
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      clearTimeout(timer);
+      options.signal?.removeEventListener('abort', onAbort);
+    };
+    const rejectWaiter = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      const index = pool.waiters.indexOf(grant);
+      if (index >= 0) pool.waiters.splice(index, 1);
+      cleanup();
+      reject(error);
+    };
+    const onAbort = () => rejectWaiter(options.signal?.reason ?? new Error('AI request cancelled'));
+    const grant = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
       pool.active += 1;
       resolve();
-    });
+    };
+    const timer = setTimeout(() => {
+      const error = new Error('AI queue wait timed out');
+      error.name = 'TimeoutError';
+      rejectWaiter(error);
+    }, timeoutMs);
+    pool.waiters.push(grant);
+    options.signal?.addEventListener('abort', onAbort, { once: true });
+    if (options.signal?.aborted) onAbort();
   });
 }
 
@@ -70,14 +102,15 @@ export type IVXAIQueueAcquisition = {
   release: () => void;
 };
 
-export async function acquireAIQueueSlot(lane: IVXAIQueueLane): Promise<IVXAIQueueAcquisition> {
+export async function acquireAIQueueSlot(lane: IVXAIQueueLane, options: IVXAIQueueOptions = {}): Promise<IVXAIQueueAcquisition> {
   const pool = lane === 'long' ? longPool : shortPool;
   const startedAt = Date.now();
-  await acquire(pool);
+  await acquire(pool, options);
+  let released = false;
   return {
     lane,
     waitMs: Date.now() - startedAt,
-    release: () => release(pool),
+    release: () => { if (!released) { released = true; release(pool); } },
   };
 }
 

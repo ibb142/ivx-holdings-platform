@@ -1,12 +1,15 @@
-/** Preserve native link destinations for both cold launches and the running app.
- * Expo Router parses non-root URLs and the existing route guards verify access.
- * Normalize the custom-scheme root so restart recovery returns to the tab shell.
- */
-export function redirectSystemPath({ path }: { path: string; initial: boolean }) {
-  if (typeof path !== 'string') return '/';
-
-  const normalizedPath = path.trim();
-  if (normalizedPath.length === 0 || normalizedPath === 'ivx-app:///') return '/';
-
-  return normalizedPath;
+// Preserve native destinations; route layouts still enforce authentication.
+export function redirectSystemPath({ path }: { path: string; initial: boolean }): string {
+  try {
+    if (path.startsWith('/') && !path.startsWith('//')) return path;
+    const url = new URL(path);
+    if (url.username || url.password) return '/';
+    if (url.protocol === 'ivx-app:') {
+      return `/${[url.hostname, url.pathname.replace(/^\/+/, '')].filter(Boolean).join('/')}${url.search}${url.hash}`;
+    }
+    if (url.protocol === 'https:' && ['chat.ivxholding.com', 'ivxholding.com', 'www.ivxholding.com'].includes(url.host)) {
+      return `${url.pathname}${url.search}${url.hash}`;
+    }
+  } catch { /* Invalid external links return to the app shell. */ }
+  return '/';
 }

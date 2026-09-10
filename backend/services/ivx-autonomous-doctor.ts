@@ -10,6 +10,8 @@ import {
 } from './ivx-autonomous-work-manager';
 import { observeAndLearn } from './ivx-autonomous-learning-engine';
 import { autonomousDoctorRepairEnabled, autonomousRepairCapacity } from './ivx-autonomous-control-policy';
+import { postgresAtomicQueueSelected, readPostgresPatrolObservations } from './ivx-postgres-autonomous-task-store';
+import { observedBetweenPatrols, recentPatrolAgents } from './ivx-autonomous-recovery-health';
 
 export const IVX_AUTONOMOUS_DOCTOR_MARKER = 'ivx-autonomous-doctor-learning-v2-2026-09-06';
 const DOCTOR_INTERVAL_MS = Math.max(10_000, Math.min(60_000, Number.parseInt(process.env.IVX_AUTONOMOUS_DOCTOR_INTERVAL_MS ?? '15000', 10) || 15_000));
@@ -42,6 +44,7 @@ type DoctorStatus = {
   totalRepairFailures: number;
   inFlight: boolean;
   lastDiagnosis: DoctorDiagnosis[];
+  recentPatrolAgents: number;
   lastCertification: null | {
     certified: boolean;
     working: number;
@@ -69,6 +72,7 @@ let totalRepairs = 0;
 let totalRepairFailures = 0;
 let lastDiagnosis: DoctorDiagnosis[] = [];
 let lastCertification: DoctorStatus['lastCertification'] = null;
+let recentObservations = new Set<number>();
 
 function sourceSha(): string {
   return process.env.RENDER_GIT_COMMIT
@@ -98,10 +102,10 @@ function diagnose(snapshot: Awaited<ReturnType<typeof getAutonomousTruthSnapshot
     diagnoses.push({ code: 'EMERGENCY_STOP_ACTIVE', severity: 'critical', detail: 'Emergency stop is active; doctor will not override it automatically.', affectedAgents: [] });
   }
   for (const status of ['BLOCKED', 'STALE', 'UNKNOWN', 'IDLE'] as const) {
-    const affected = rows.filter((row) => row.status === status).map((row) => row.agentNumber);
+    const affected = rows.filter((row) => row.status === status && !observedBetweenPatrols(row, recentObservations)).map((row) => row.agentNumber);
     if (affected.length) diagnoses.push({ code: `AGENTS_${status}`, severity: status === 'IDLE' ? 'high' : 'critical', detail: `${affected.length} IA are ${status}`, affectedAgents: affected });
   }
-  const noFreshHeartbeat = rows.filter((row) => !row.heartbeatFresh).map((row) => row.agentNumber);
+  const noFreshHeartbeat = rows.filter((row) => !row.heartbeatFresh && !observedBetweenPatrols(row, recentObservations)).map((row) => row.agentNumber);
   if (noFreshHeartbeat.length) diagnoses.push({ code: 'HEARTBEAT_GAP', severity: 'critical', detail: `${noFreshHeartbeat.length} IA lack a fresh runtime/dispatcher heartbeat`, affectedAgents: noFreshHeartbeat });
   return diagnoses;
 }
@@ -167,9 +171,15 @@ async function repairFleet(snapshot: Awaited<ReturnType<typeof getAutonomousTrut
     .map((state) => ({ agentId: state.agentId, agentNumber: state.agentNumber as number }));
   const backlog = await ensureAutonomousManagerBacklog({ sourceSha: sourceSha(), agents: lanes });
   if (!backlog.ok) throw new Error(`autonomous_manager_backlog_failed:${backlog.errors}`);
+  // Atomic fleet recovery belongs to its fenced runtime enforcer. Starting the
+  // legacy campaign queue here would reintroduce a competing recovery loop.
+  if (postgresAtomicQueueSelected()) {
+    lastRepairCompletedAt = new Date().toISOString();
+    return;
+  }
   const refreshed = await getAutonomousTruthSnapshot();
   const unhealthyAgents = refreshed.agents.rows
-    .filter((row) => row.status !== 'WORKING' || !row.heartbeatFresh)
+    .filter((row) => (row.status !== 'WORKING' || !row.heartbeatFresh) && !observedBetweenPatrols(row, recentObservations) && !row.paused && !row.disabled)
     .slice(0, repairCapacity)
     .map((row) => row.agentNumber);
   const retry = await retryAgentsBounded(unhealthyAgents);
@@ -182,10 +192,17 @@ async function runDoctorOnce(reason: 'boot' | 'interval'): Promise<void> {
   totalRuns += 1;
   lastRunAt = new Date().toISOString();
   try {
+    recentObservations = new Set();
+    if (postgresAtomicQueueSelected()) recentObservations = recentPatrolAgents(await readPostgresPatrolObservations(sourceSha()), sourceSha());
     let snapshot = await getAutonomousTruthSnapshot();
     rememberSnapshot(snapshot);
     await learnFromSnapshot(snapshot);
-    if (snapshot.certification.continuousRuntimeCertified) {
+    if (snapshot.certification.continuousRuntimeCertified || lastDiagnosis.length === 0) {
+      if (!lastHealthyAt || consecutiveUnhealthy > 0) console.info('[IVX Autonomous Doctor] recovery health verified', {
+        sourceSha: sourceSha(), recentPatrolAgents: recentObservations.size,
+        workingNow: snapshot.agents.counts.working, certified: snapshot.certification.continuousRuntimeCertified,
+        unnecessaryRetriesSkipped: lastDiagnosis.length === 0,
+      });
       lastHealthyAt = new Date().toISOString();
       consecutiveUnhealthy = 0;
       lastError = null;
@@ -203,7 +220,7 @@ async function runDoctorOnce(reason: 'boot' | 'interval'): Promise<void> {
       snapshot = await getAutonomousTruthSnapshot();
       rememberSnapshot(snapshot);
       await learnFromSnapshot(snapshot);
-      if (snapshot.certification.continuousRuntimeCertified) {
+      if (snapshot.certification.continuousRuntimeCertified || lastDiagnosis.length === 0) {
         lastHealthyAt = new Date().toISOString();
         consecutiveUnhealthy = 0;
         lastError = null;
@@ -227,6 +244,9 @@ function runDoctor(reason: 'boot' | 'interval'): Promise<void> {
   inFlight = runDoctorOnce(reason).finally(() => { inFlight = null; });
   return inFlight;
 }
+
+/** A manual diagnostic uses the same single-flight guard as the scheduled supervisor. */
+export function runAutonomousDoctorCycle(): Promise<void> { return runDoctor('interval'); }
 
 export function startAutonomousDoctor(): void {
   if (timer || bootTimer) return;
@@ -257,6 +277,7 @@ export function getAutonomousDoctorStatus(): DoctorStatus {
     totalRepairFailures,
     inFlight: Boolean(inFlight),
     lastDiagnosis,
+    recentPatrolAgents: recentObservations.size,
     lastCertification,
   };
 }

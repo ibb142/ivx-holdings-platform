@@ -4,10 +4,24 @@ set -euo pipefail
 APP_ID="${IVX_APP_ID:-com.ivxholdings.app.owner}"
 EVIDENCE="qa/evidence/all-routes-human-e2e"
 FLOW_DIR="$EVIDENCE/generated-flows"
-mkdir -p "$FLOW_DIR"
-: > "$EVIDENCE/results.jsonl"
+REPORT_DIR="$EVIDENCE/suites"
+ARTIFACT_DIR="$EVIDENCE/artifacts"
+RETRY_DIR="$EVIDENCE/instrumentation-retries"
+BATCH_SIZE="${IVX_ROUTE_BATCH_SIZE:-20}"
+case "$BATCH_SIZE" in
+  ''|*[!0-9]*) echo 'IVX_ROUTE_BATCH_SIZE must be a positive integer' >&2; exit 2 ;;
+esac
+test "$BATCH_SIZE" -gt 0
+mkdir -p "$FLOW_DIR" "$REPORT_DIR" "$ARTIFACT_DIR" "$RETRY_DIR"
+find "$FLOW_DIR" -type f -name '*.yaml' -delete
+find "$REPORT_DIR" -type f -name '*.xml' -delete
+find "$RETRY_DIR" -type f -delete
+: > "$EVIDENCE/manifest.jsonl"
+: > "$EVIDENCE/process-loss.txt"
+: > "$EVIDENCE/process-samples.txt"
+monitor_pid=''
 
-trap 'rc=$?; adb exec-out screencap -p > "$EVIDENCE/failure.png" 2>/dev/null || true; adb logcat -d -v threadtime > "$EVIDENCE/failure-logcat.txt" 2>/dev/null || true; exit $rc' EXIT
+trap 'rc=$?; [ -z "$monitor_pid" ] || kill "$monitor_pid" 2>/dev/null || true; adb exec-out screencap -p > "$EVIDENCE/failure.png" 2>/dev/null || true; adb logcat -d -v threadtime > "$EVIDENCE/failure-logcat.txt" 2>/dev/null || true; exit $rc' EXIT
 
 MAESTRO="${HOME}/.maestro/bin/maestro"
 
@@ -34,7 +48,7 @@ route_from_file() {
   local rel="${file#expo/app/}"
   rel="${rel%.tsx}"; rel="${rel%.ts}"
   case "$rel" in
-    _layout|_providers|+native-intent|+not-found|*/_layout|*/_providers) return 1 ;;
+    _layout|_providers|+native-intent|+not-found|*/_layout|*/_providers|*+api) return 1 ;;
   esac
   rel=$(printf '%s' "$rel" | sed -E 's#(^|/)\([^/]+\)(/|$)#\1#g; s#//+#/#g; s#^/##; s#/$##')
   rel="${rel%/index}"
@@ -48,21 +62,27 @@ route_from_file() {
   printf '/%s' "$rel"
 }
 
-mapfile -t files < <(find expo/app -type f \( -name '*.tsx' -o -name '*.ts' \) | sort)
+mapfile -t files < <(find expo/app -type f \( -name '*.tsx' -o -name '*.ts' \) -print | sort)
 
+# Enumerate every route before starting Maestro. Bounded suites renew Android
+# instrumentation without weakening any route assertion.
 total=0
-: > "$EVIDENCE/route-manifest.jsonl"
 for file in "${files[@]}"; do
   route=$(route_from_file "$file") || continue
   total=$((total + 1))
-  safe=$(printf '%s' "${route:-root}" | tr '/[]() ' '_' | tr -cd '[:alnum:]_.-')
-  flow="$FLOW_DIR/${total}-${safe}.yaml"
+  name="IVX automated route $total"
+  screenshot="route-$total"
+  batch_number=$(( (total - 1) / BATCH_SIZE + 1 ))
+  batch_dir="$FLOW_DIR/batch-$(printf '%03d' "$batch_number")"
+  mkdir -p "$batch_dir"
+  flow="$batch_dir/$(printf '%04d' "$total").yaml"
   cat > "$flow" <<YAML
 appId: $APP_ID
-name: IVX route $total ${route:-/}
+name: $name
 ---
 - openLink: "ivx-app:///${route#/}"
-- waitForAnimationToEnd
+- waitForAnimationToEnd:
+    timeout: 3000
 - assertNotVisible: "Something went wrong"
 - assertNotVisible: "Application error"
 - assertNotVisible: "Unhandled Runtime Error"
@@ -71,43 +91,75 @@ name: IVX route $total ${route:-/}
     start: 50%,78%
     end: 50%,32%
     duration: 500
-- waitForAnimationToEnd
+- waitForAnimationToEnd:
+    timeout: 3000
 - assertNotVisible: "Something went wrong"
-- takeScreenshot: route-$total
+- takeScreenshot: "$screenshot"
 YAML
+  jq -nc --arg file "$file" --arg route "$route" --arg name "$name" --arg screenshot "$screenshot" \
+    '{file:$file,route:$route,name:$name,screenshot:$screenshot}' >> "$EVIDENCE/manifest.jsonl"
+done
+test "$total" -gt 100
+initial_pid=$(timeout 8s adb shell pidof "$APP_ID" | tr -d '\r')
+test -n "$initial_pid"
+(
+  while true; do
+    current_pid=$(timeout 8s adb shell pidof "$APP_ID" 2>/dev/null | tr -d '\r')
+    printf '%s %s\n' "$(date -u +%FT%TZ)" "$current_pid" >> "$EVIDENCE/process-samples.txt"
+    if [ "$current_pid" != "$initial_pid" ]; then
+      printf 'Process identity changed or disappeared\n' >> "$EVIDENCE/process-loss.txt"
+    fi
+    sleep 2
+  done
+) &
+monitor_pid=$!
 
-  jq -nc --arg file "$file" --arg route "$route" --arg name "IVX route $total ${route:-/}" \
-    '{file:$file,route:$route,name:$name}' >> "$EVIDENCE/route-manifest.jsonl"
+# Long single Maestro sessions can lose Android UiAutomation while the app
+# itself remains healthy. Keep every route assertion, but renew Maestro's
+# instrumentation between bounded batches and aggregate all JUnit reports.
+rc=0
+batch_count=$(( (total + BATCH_SIZE - 1) / BATCH_SIZE ))
+for batch_number in $(seq 1 "$batch_count"); do
+  batch_name="batch-$(printf '%03d' "$batch_number")"
+  echo "route_batch=$batch_number/$batch_count size_limit=$BATCH_SIZE"
+  batch_rc=1
+  for attempt in 1 2; do
+    set +e
+    timeout 900s "$MAESTRO" test "$FLOW_DIR/$batch_name" \
+      --format junit \
+      --output "$REPORT_DIR/$batch_name.xml" \
+      --test-output-dir "$ARTIFACT_DIR/$batch_name-attempt-$attempt"
+    batch_rc=$?
+    set -e
+    if [ "$batch_rc" -eq 0 ]; then
+      break
+    fi
+    if [ "$attempt" -eq 1 ] && [ -s "$REPORT_DIR/$batch_name.xml" ] \
+        && grep -Eq 'DeviceServerDiedException|UiAutomation not connected|StatusRuntimeException: UNAVAILABLE' "$REPORT_DIR/$batch_name.xml"; then
+      cp "$REPORT_DIR/$batch_name.xml" "$RETRY_DIR/$batch_name-attempt-1.xml"
+      printf '%s infrastructure_retry=1\n' "$batch_name" >> "$RETRY_DIR/events.txt"
+      timeout 30s adb wait-for-device
+      test "$(timeout 8s adb shell pidof "$APP_ID" | tr -d '\r')" = "$initial_pid"
+      sleep 2
+      continue
+    fi
+    break
+  done
+  if [ "$batch_rc" -ne 0 ]; then
+    rc="$batch_rc"
+    break
+  fi
+  if [ -s "$EVIDENCE/process-loss.txt" ]; then
+    rc=1
+    break
+  fi
 done
 
-# Run one Maestro suite: starting a JVM and reconnecting the driver for each of
-# 274 routes can exhaust the 70-minute job before coverage is complete.
-# The same route assertions and screenshots still execute for every flow.
-set +e
-timeout 2700s "$MAESTRO" test "$FLOW_DIR" --format junit \
-  --output "$EVIDENCE/routes.xml" --test-output-dir "$EVIDENCE/maestro"
-route_exit=$?
-set -e
-
-python3 scripts/ivx-maestro-route-results.py \
-  "$EVIDENCE/route-manifest.jsonl" "$EVIDENCE/routes.xml" "$EVIDENCE/results.json"
-passed=$(jq '[.[] | select(.passed == true)] | length' "$EVIDENCE/results.json")
-failed=$((total - passed))
-jq -c '.[]' "$EVIDENCE/results.json" > "$EVIDENCE/results.jsonl"
-timeout 8s adb shell pidof "$APP_ID" > "$EVIDENCE/process.txt"
-
-jq -n \
-  --arg sha "$(git rev-parse HEAD)" \
-  --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  --argjson total "$total" --argjson passed "$passed" --argjson failed "$failed" \
-  --argjson exitCode "$route_exit" \
-  '{certificate:"IVX-ALL-EXPO-ROUTES-ANDROID-SMOKE",sourceSha:$sha,totalRoutes:$total,passedRoutes:$passed,failedRoutes:$failed,exitCode:$exitCode,coveragePercent:(if $total>0 then (($passed*10000/$total)|floor/100) else 0 end),passed:($exitCode==0 and $total>100 and $failed==0 and $passed==$total),realOwnerLogin:true,automated:true,physicalAndroidEmulator:true,everyRouteOpened:($failed==0 and $passed==$total),everyRouteScrolled:($failed==0 and $passed==$total),processSurvivalChecked:true,verifiedAt:$verifiedAt}' \
-  > "$EVIDENCE/certificate.json"
-cat "$EVIDENCE/certificate.json"
-
-test "$route_exit" -eq 0
-test "$total" -gt 100
-test "$failed" -eq 0
-test "$passed" -eq "$total"
-
+kill "$monitor_pid" 2>/dev/null || true
+wait "$monitor_pid" 2>/dev/null || true
+monitor_pid=''
+alive=false
+final_pid=$(timeout 8s adb shell pidof "$APP_ID" 2>/dev/null | tr -d '\r') || true
+if [ "$final_pid" = "$initial_pid" ] && [ ! -s "$EVIDENCE/process-loss.txt" ] && [ -s "$EVIDENCE/process-samples.txt" ]; then alive=true; fi
+python3 scripts/ivx-route-suite-proof.py "$EVIDENCE" "${EXPO_PUBLIC_SOURCE_COMMIT_SHA:-${GITHUB_SHA:-unknown}}" "$rc" "$alive"
 trap - EXIT

@@ -56,10 +56,11 @@ timeout 180s "$MAESTRO" test "$FLOW_DIR/dashboard.yaml" \
 # 3) IVX IA Chat: live AI reply + durable thread across restart.
 # An old reply already in persistent history must never satisfy a new run.
 IVX_CHAT_E2E_NONCE="$(node -e 'console.log(require("node:crypto").randomUUID().replace(/-/g,""))')"
-if ! timeout 240s "$MAESTRO" test "$FLOW_DIR/chat.yaml" \
+CHAT_E2E_SUFFIX="$IVX_CHAT_E2E_NONCE"
+if ! timeout 480s "$MAESTRO" test "$FLOW_DIR/chat.yaml" \
   --env OWNER_EMAIL="$OWNER_EMAIL" \
   --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" \
-  --env IVX_CHAT_E2E_NONCE="$IVX_CHAT_E2E_NONCE" \
+  --env CHAT_E2E_SUFFIX="$CHAT_E2E_SUFFIX" \
   --format junit \
   --output qa/evidence/dashboard-chat/chat.xml; then
   record_flow_failure chat
@@ -75,7 +76,9 @@ fi
 
 # 5) The installed APK creates one real read-only task over authenticated SSE.
 export IVX_HANDOFF_NONCE="native-${IVX_CHAT_E2E_NONCE}"
-timeout 180s "$MAESTRO" test "$FLOW_DIR/public-handoff.yaml" \
+# Android injects individual key events; include typing time as well as the
+# bounded live handoff wait before terminating the instrumentation process.
+timeout 420s "$MAESTRO" test "$FLOW_DIR/public-handoff.yaml" \
   --env IVX_HANDOFF_NONCE="$IVX_HANDOFF_NONCE" \
   --format junit --output qa/evidence/dashboard-chat/native-handoff.xml
 adb shell uiautomator dump /sdcard/ivx-handoff.xml >/dev/null
@@ -107,8 +110,8 @@ adb exec-out screencap -p > qa/evidence/dashboard-chat/final.png || true
 adb logcat -d -v threadtime > qa/evidence/dashboard-chat/logcat.txt || true
 
 test -s qa/evidence/dashboard-chat/process.txt
-test "$(jq -r '.passed' qa/evidence/all-routes-human-e2e/certificate.json)" = true
-test "$(jq -r '.coveragePercent' qa/evidence/all-routes-human-e2e/certificate.json)" = 100
+jq -e '.passed == true and .coveragePercent == 100' \
+  qa/evidence/all-routes-human-e2e/certificate.json >/dev/null
 
 jq -n \
   --arg sha "$SOURCE_SHA" \

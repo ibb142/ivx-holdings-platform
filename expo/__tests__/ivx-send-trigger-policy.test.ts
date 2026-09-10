@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { shouldStartAssistantBeforePersistence } from '@/src/modules/chat/services/ivxSendTriggerPolicy';
 
-describe('IVX local-first send trigger policy', () => {
+describe('IVX send trigger policy', () => {
   it('starts an AI reply without waiting for local message persistence', () => {
     expect(shouldStartAssistantBeforePersistence({
       localFirstChatMode: true,
@@ -20,10 +20,17 @@ describe('IVX local-first send trigger policy', () => {
     })).toBe(false);
   });
 
-  it('keeps remote-first sends persistence-first', () => {
+  it('starts remote-first AI without waiting on degraded persistence', () => {
     expect(shouldStartAssistantBeforePersistence({
       localFirstChatMode: false,
       mode: 'send_and_ai',
+    })).toBe(true);
+  });
+
+  it('keeps remote-first send-only operations persistence-first', () => {
+    expect(shouldStartAssistantBeforePersistence({
+      localFirstChatMode: false,
+      mode: 'send_only',
     })).toBe(false);
   });
 });

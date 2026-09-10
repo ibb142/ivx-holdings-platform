@@ -170,33 +170,40 @@ export async function handleCRMMain(req: Request): Promise<Response> {
 }
 
 // ── JV Deals ──────────────────────────────────────────────────────────────
+// Share only an in-flight public query; never retain published content after it
+// finishes, so unpublishing remains immediately visible on the next request.
+let publicDealsInFlight: Promise<{ body: unknown; status: number }> | null = null;
 export async function handleJVDealsList(req: Request): Promise<Response> {
+  if (!publicDealsInFlight) {
+    publicDealsInFlight = queryPublicDeals()
+      .then(async (response) => ({ body: await response.json(), status: response.status }))
+      .finally(() => { publicDealsInFlight = null; });
+  }
+  const result = await publicDealsInFlight;
+  return json(result.body, result.status);
+}
+
+async function queryPublicDeals(): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
   try {
     const sb = await getPublicDealsSB();
-    // Race against a timeout to prevent Supabase 522 from hanging the request
-    const queryPromise = sb.from('jv_deals')
+    const { data, error, count } = await sb.from('jv_deals')
       .select('id,title,project_name,description,property_address,city,state,property_type,total_investment,expected_roi,term_months,status,published,photos,display_order,created_at,updated_at', { count: 'exact' })
       .eq('published', true)
       .order('display_order', { ascending: true, nullsFirst: false })
       .order('updated_at', { ascending: false })
-      .limit(50);
-    const timeoutPromise = new Promise<{ data: null; error: { message: string }; count: null }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: 'Supabase request timed out' }, count: null }), 8000)
-    );
-    const { data, error, count } = await Promise.race([queryPromise, timeoutPromise]);
-    if (error) {
-      console.error('[handleJVDealsList] Supabase query error:', error.message);
-      return json({ deals: [], count: 0, error: error.message, deploymentMarker: DEPLOYMENT_MARKER });
-    }
+      .limit(50)
+      .abortSignal(controller.signal);
+    if (error) throw new Error(error.message);
     const deals = normalizePublicLandingDeals(data || []);
     return json({ deals, count: deals.length, sourceCount: count ?? deals.length, deploymentMarker: DEPLOYMENT_MARKER });
   } catch (err: unknown) {
-    const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
-    // If Supabase is unreachable, return empty deals instead of hanging or 500
-    if (msg.includes('abort') || msg.includes('timeout') || msg.includes('522') || msg.includes('timed out') || msg.includes('fetch')) {
-      return json({ deals: [], count: 0, deploymentMarker: DEPLOYMENT_MARKER });
-    }
-    return json({ error: err instanceof Error ? err.message : String(err), deploymentMarker: DEPLOYMENT_MARKER }, 500);
+    console.error('[handleJVDealsList] Supabase query failed:', err instanceof Error ? err.message : String(err));
+    // An unavailable source is not evidence that the owner has zero projects.
+    return json({ error: 'Deals are temporarily unavailable. Please retry.', code: 'DEALS_SOURCE_UNAVAILABLE', deploymentMarker: DEPLOYMENT_MARKER }, 503);
+  } finally {
+    clearTimeout(timer);
   }
 }
 

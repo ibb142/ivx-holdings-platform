@@ -67,6 +67,57 @@ describe('Fleet SLO evidence and alerts', () => {
     now += 61_000;
     expect(monitor.snapshot()?.error).toBe('SLO sample is stale');
   });
+  test('slow alerts cannot block fresh durable samples or create overlapping alert requests', async () => {
+    let now = NOW;
+    let deliveries = 0;
+    let finishAlert: (result: { ok: boolean }) => void = () => {};
+    const saved: Record<string, unknown>[] = [];
+    const monitor = new FleetSloMonitor({
+      read: async () => [],
+      persist: async (value) => { saved.push(value); },
+      alert: async () => {
+        deliveries++;
+        return new Promise<{ ok: boolean }>((resolve) => { finishAlert = resolve; });
+      },
+      now: () => now, sha: () => SHA,
+    });
+    await monitor.sample();
+    now += 60_000;
+    const fresh = await monitor.sample();
+    expect(saved).toHaveLength(2);
+    expect(fresh.measured_at).toBe(new Date(now).toISOString());
+    expect(fresh.durable).toBe(true);
+    expect(monitor.snapshot()?.status).toBe('BREACH');
+    expect(deliveries).toBe(1);
+
+    finishAlert({ ok: false });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await monitor.sample();
+    expect(deliveries).toBe(2);
+    finishAlert({ ok: true });
+  });
+  test('a task-read failure can persist process presence without certifying productivity', async () => {
+    const saved: Record<string, unknown>[] = [];
+    let writesAvailable = true;
+    const monitor = new FleetSloMonitor({
+      read: async () => { throw new Error('Query read timeout'); },
+      persist: async sample => { if (!writesAvailable) throw new Error('database unavailable'); saved.push(sample); },
+      alert: async () => ({ ok: true }), now: () => NOW, sha: () => SHA,
+    });
+    const present = await monitor.sample();
+    expect(saved).toHaveLength(1);
+    expect(saved[0].status).toBe('UNKNOWN');
+    expect(present.durable).toBe(true);
+    expect(present.status).toBe('UNKNOWN');
+    expect(present.productive_agents).toBeNull();
+    expect(present.running_agents).toBeNull();
+    expect(fleetSloPrometheus(present)).toContain('ivx_fleet_telemetry_available 0');
+    writesAvailable = false;
+    const absent = await monitor.sample();
+    expect(absent.durable).toBe(false);
+    expect(absent.status).toBe('UNKNOWN');
+    expect(saved).toHaveLength(1);
+  });
   test('does not expose owner metrics without authentication', async () => {
     expect((await handleFleetSloGet(new Request('https://api.ivx.test/api/ivx/autonomous/fleet-slo'))).status).toBe(401);
   });

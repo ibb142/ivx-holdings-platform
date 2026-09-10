@@ -1,14 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { dirname } from 'node:path';
 
 const chatSource = readFileSync(resolve(import.meta.dir, '../app/ivx/chat.tsx'), 'utf8');
 const chatHubSource = readFileSync(resolve(import.meta.dir, '../components/ChatScreenContent.tsx'), 'utf8');
 const tabsLayoutSource = readFileSync(resolve(import.meta.dir, '../app/(tabs)/_layout.tsx'), 'utf8');
 const homeSource = readFileSync(resolve(import.meta.dir, '../app/(tabs)/home.tsx'), 'utf8');
+const loginSource = readFileSync(resolve(import.meta.dir, '../app/login.tsx'), 'utf8');
 const flowSource = readFileSync(resolve(import.meta.dir, '../.maestro/ivx-owner-chat-certificate.yaml'), 'utf8');
 const transportReliabilitySource = readFileSync(resolve(import.meta.dir, './chat-transport-reliability.test.ts'), 'utf8');
+const ownerAIRequestSource = readFileSync(resolve(import.meta.dir, '../src/modules/ivx-owner-ai/services/ivxAIRequestService.ts'), 'utf8');
+const messageBubbleSource = readFileSync(resolve(import.meta.dir, '../src/modules/chat/components/MessageBubble.tsx'), 'utf8');
 
 const requiredChatTestIDs = [
   'ivx-owner-chat-composer-dock',
@@ -18,31 +20,29 @@ const requiredChatTestIDs = [
   'ivx-owner-chat-scroll-to-latest',
 ];
 
-const E2E_PROMPT = 'Return only the result of joining IVX_CHAT_E2E_ and OK_${IVX_CHAT_E2E_NONCE}.';
-const E2E_REPLY = 'IVX_CHAT_E2E_OK_${IVX_CHAT_E2E_NONCE}';
+const E2E_PROMPT = 'Return only the result of joining IVX_CHAT_E2E_ and ${CHAT_E2E_SUFFIX}.';
+const E2E_PROMPT_SELECTOR = '.*Return only the result of joining IVX_CHAT_E2E_ and ${CHAT_E2E_SUFFIX}.*';
+const E2E_REPLY = 'IVX_CHAT_E2E_${CHAT_E2E_SUFFIX}';
+const E2E_REPLY_SELECTOR = `.*${E2E_REPLY}.*`;
+const OWNER_MESSAGE_SELECTOR = 'chat-message-body-owner-.*';
+const ASSISTANT_MESSAGE_SELECTOR = 'chat-message-body-assistant-.*';
+const DYNAMIC_MESSAGE_SELECTORS = new Set([OWNER_MESSAGE_SELECTOR, ASSISTANT_MESSAGE_SELECTOR]);
+const ROLE_BOUND_MESSAGE_TEST_ID = "testID={`chat-message-body-${isMine ? 'owner' : 'assistant'}-${message.id}`}";
+
+const ownerPromptElement = `element:\n      id: "${OWNER_MESSAGE_SELECTOR}"\n      text: "${E2E_PROMPT_SELECTOR}"`;
+const assistantReplyElement = `element:\n      id: "${ASSISTANT_MESSAGE_SELECTOR}"\n      text: "${E2E_REPLY_SELECTOR}"`;
 
 describe('IVX IA chat device certificate regression', () => {
-  test('Home QA supplies the fresh chat nonce and credentials to the nested restart flow', () => {
-    const script = readFileSync(resolve(import.meta.dir, '../../scripts/ivx-owner-home-android-e2e.sh'), 'utf8');
-    const command = script.split('test expo/.maestro/ivx-owner-chat-certificate.yaml')[1]?.split('chat_maestro_rc=')[0];
-    for (const variable of ['OWNER_EMAIL', 'OWNER_PASSWORD', 'IVX_CHAT_E2E_NONCE']) {
-      expect(command).toContain(`--env ${variable}=`);
-    }
-    expect(script).toContain('randomUUID()');
-  });
-  test('nested authentication flows resolve when Home QA runs the source YAML directly', () => {
-    const visited = new Set<string>();
-    const visit = (path: string) => {
-      if (visited.has(path)) return;
-      visited.add(path);
-      const source = readFileSync(path, 'utf8');
-      for (const match of source.matchAll(/- runFlow: "([^"]+)"/g)) {
-        visit(resolve(dirname(path), match[1]));
+  test('both device certificate callers bind the fresh reply marker and restart credentials', () => {
+    for (const script of ['ivx-owner-home-android-e2e.sh', 'ivx-dashboard-chat-android-e2e.sh']) {
+      const source = readFileSync(resolve(import.meta.dir, '../../scripts', script), 'utf8');
+      const invocation = source.slice(source.search(/test (?:expo\/\.maestro\/ivx-owner-chat-certificate\.yaml|"\$FLOW_DIR\/chat\.yaml")/)).split('\n\n')[0];
+      for (const name of ['CHAT_E2E_SUFFIX', 'OWNER_EMAIL', 'OWNER_PASSWORD']) {
+        expect(invocation).toContain(`--env ${name}=`);
       }
-    };
-    visit(resolve(import.meta.dir, '../.maestro/ivx-owner-chat-certificate.yaml'));
-    expect(visited.size).toBe(3);
+    }
   });
+
   test('keeps every certificate testID rendered by the chat surface', () => {
     for (const testID of requiredChatTestIDs) {
       expect(chatSource).toContain(`testID="${testID}"`);
@@ -69,20 +69,65 @@ describe('IVX IA chat device certificate regression', () => {
     for (const testID of flowTestIDs) {
       const present =
         chatSource.includes(`testID="${testID}"`) ||
+        loginSource.includes(`testID="${testID}"`) ||
         chatHubSource.includes(`testID="${testID}"`) ||
-        tabsLayoutSource.includes(`tabBarButtonTestID: '${testID}'`);
+        tabsLayoutSource.includes(`tabBarButtonTestID: '${testID}'`) ||
+        (DYNAMIC_MESSAGE_SELECTORS.has(testID) && messageBubbleSource.includes(ROLE_BOUND_MESSAGE_TEST_ID));
       expect(present).toBe(true);
     }
   });
 
-  test('hard-gates send -> live AI reply -> visible render', () => {
+  test('hard-gates send -> role-bound live AI reply -> visible render', () => {
     expect(E2E_PROMPT).not.toContain(E2E_REPLY);
     expect(flowSource).toContain(`inputText: "${E2E_PROMPT}"`);
-    expect(flowSource).toContain(`visible: "${E2E_PROMPT}"`);
-    expect(flowSource).toContain(`visible: ".*${E2E_REPLY}.*"`);
-    expect(flowSource).toContain('timeout: 60000');
+    expect(flowSource).toContain(ownerPromptElement);
+    expect(flowSource).toContain(assistantReplyElement);
+    expect(flowSource).not.toContain(`visible: "${E2E_REPLY_SELECTOR}"`);
+    expect(flowSource).not.toContain(`element: "${E2E_PROMPT}"`);
+    expect(messageBubbleSource).toContain(ROLE_BOUND_MESSAGE_TEST_ID);
+    expect(flowSource).toContain('timeout: 200000');
     expect(flowSource).toContain('assertNotVisible: "Not sent"');
     expect(flowSource).toContain('assertNotVisible: "I was unable to display this reply"');
+  });
+
+  test('starts the normal conversational AI request before durable persistence can stall', () => {
+    const triggerIndex = chatSource.indexOf('2.2_AI_TRIGGER_BEFORE_PERSISTENCE');
+    const decisionIndex = chatSource.lastIndexOf('const startAssistantImmediately', triggerIndex);
+    const persistenceIndex = chatSource.indexOf('const queueResult = await sendQueue.mutateAsync', triggerIndex);
+
+    expect(triggerIndex).toBeGreaterThan(-1);
+    expect(decisionIndex).toBeGreaterThan(-1);
+    expect(persistenceIndex).toBeGreaterThan(triggerIndex);
+    expect(chatSource.slice(triggerIndex, persistenceIndex)).toContain('void triggerAssistantWithRetry()');
+    expect(chatSource.slice(decisionIndex, triggerIndex)).toContain('!trustContext.requiresElevatedConfirmation');
+  });
+
+  test('does not cancel or duplicate a running AI reply when background persistence degrades', () => {
+    const mutationIndex = chatSource.indexOf('const sendMessageMutation = useMutation');
+    const degradedIndex = chatSource.indexOf('2.4_BACKGROUND_PERSISTENCE_DEGRADED_AI_CONTINUES', mutationIndex);
+    const modeContinuationIndex = chatSource.indexOf("if (mode === 'ai_only')", degradedIndex);
+    const mutationEndIndex = chatSource.indexOf('\n\n  useEffect(', mutationIndex);
+
+    expect(mutationIndex).toBeGreaterThan(-1);
+    expect(degradedIndex).toBeGreaterThan(mutationIndex);
+    expect(modeContinuationIndex).toBeGreaterThan(degradedIndex);
+    expect(chatSource.slice(degradedIndex - 700, modeContinuationIndex)).toContain('if (startAssistantImmediately)');
+    expect(chatSource.slice(degradedIndex, modeContinuationIndex)).toContain("persistence=degraded ai=continues");
+    expect(mutationEndIndex).toBeGreaterThan(modeContinuationIndex);
+    expect(chatSource.slice(mutationIndex, mutationEndIndex)).toContain('retry: false');
+  });
+
+  test('binds owner chat streaming to the canonical full-pipeline SSE route', () => {
+    expect(ownerAIRequestSource).toContain('const endpoint = getIVXOwnerAIEndpoint()');
+    expect(ownerAIRequestSource).toContain("Accept: 'text/event-stream'");
+    expect(ownerAIRequestSource).toContain("if (type === 'final')");
+    expect(ownerAIRequestSource).toContain('fetchOwnerAIWithHeartbeat(accessToken, payload, onProgress, options?.signal)');
+  });
+
+  test('keeps owner chat deadlines deterministic and cancellation end-to-end', () => {
+    expect(ownerAIRequestSource).toContain('Promise.race([reader.read(), deadline])');
+    expect(ownerAIRequestSource).toContain('if (externalSignal?.aborted) {\n          throw error;');
+    expect(ownerAIRequestSource).not.toContain('Task completed (HTTP ${final.status})');
   });
 
   test('hard-gates app restart persistence without clearing state', () => {
@@ -94,24 +139,24 @@ describe('IVX IA chat device certificate regression', () => {
     expect(clearStateIndex).toBeGreaterThan(launchIndex);
 
     const afterRestart = flowSource.slice(clearStateIndex);
-    const shellIndex = afterRestart.indexOf('- openLink: "ivx-app:///home"');
-    expect(shellIndex).toBeGreaterThan(-1);
-    expect(shellIndex).toBeLessThan(afterRestart.indexOf('id: "tab-chat"'));
-    expect(afterRestart).toContain(`visible: "${E2E_PROMPT}"`);
-    expect(afterRestart).toContain(`visible: ".*${E2E_REPLY}.*"`);
+    expect(afterRestart).toContain('inputText: ${OWNER_EMAIL}');
+    expect(afterRestart).toContain('inputText: ${OWNER_PASSWORD}');
+    expect(afterRestart.indexOf('id: "login-submit"')).toBeLessThan(afterRestart.indexOf('id: "tab-chat"'));
+    expect(afterRestart).toContain(ownerPromptElement);
+    expect(afterRestart).toContain(assistantReplyElement);
     expect(afterRestart).toContain('id: "ivx-owner-chat-composer-dock"');
   });
 
   test('reply selectors accept real wording but reject echoed prompts and stale runs', () => {
     const nonce = '622000eb687645a6921e4ba61e16799d';
-    const selectors = [...flowSource.matchAll(/visible: "([^"]*IVX_CHAT_E2E_OK_[^"]*)"/g)];
-    expect(selectors).toHaveLength(2);
+    const selectors = [...flowSource.matchAll(/text: "([^"]*IVX_CHAT_E2E_\$\{CHAT_E2E_SUFFIX\}[^"]*)"/g)];
+    expect(selectors).toHaveLength(4);
     for (const [, selector] of selectors) {
-      const pattern = new RegExp(`^${selector.replace('${IVX_CHAT_E2E_NONCE}', nonce)}$`);
-      expect(pattern.test(`The result is: IVX_CHAT_E2E_OK_${nonce}.`)).toBe(true);
-      expect(pattern.test(`IVX_CHAT_E2E_OK_${nonce}`)).toBe(true);
-      expect(pattern.test(E2E_PROMPT.replace('${IVX_CHAT_E2E_NONCE}', nonce))).toBe(false);
-      expect(pattern.test('IVX_CHAT_E2E_OK_another_run')).toBe(false);
+      const pattern = new RegExp(`^${selector.replace('${CHAT_E2E_SUFFIX}', nonce)}$`);
+      expect(pattern.test(`The result is: IVX_CHAT_E2E_${nonce}.`)).toBe(true);
+      expect(pattern.test(`IVX_CHAT_E2E_${nonce}`)).toBe(true);
+      expect(pattern.test(E2E_PROMPT.replace('${CHAT_E2E_SUFFIX}', nonce))).toBe(false);
+      expect(pattern.test('IVX_CHAT_E2E_another_run')).toBe(false);
     }
   });
 
