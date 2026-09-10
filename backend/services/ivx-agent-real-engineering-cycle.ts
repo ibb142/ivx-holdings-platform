@@ -44,7 +44,6 @@ import {
   resolveProductionSha,
 } from './ivx-landing-p0-backlog';
 import { executeLandingUnit } from './ivx-landing-p0-executor';
-import { routePersistedLandingFailure } from './ivx-landing-repair-router';
 
 export const IVX_REAL_ENGINEERING_CYCLE_MARKER = 'ivx-agent-real-engineering-cycle-2026-09-01';
 
@@ -636,7 +635,8 @@ async function runLandingTask(
       };
     }
     states.push(...finalized.states);
-    if (finalized.evidenceId) {
+    if (finalized.evidenceId && record.status === 'FAIL') {
+      const { routePersistedLandingFailure } = await import('./ivx-landing-repair-router');
       await routePersistedLandingFailure({ taskId: task.taskId, evidenceId: finalized.evidenceId, agentId: input.agentId, record });
     }
     return {

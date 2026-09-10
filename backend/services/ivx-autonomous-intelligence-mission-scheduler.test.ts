@@ -1,4 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, afterAll, spyOn } from 'bun:test';
+import * as stopGate from './ivx-emergency-stop-gate';
+
+// Scheduling tests run with an explicitly readable owner control; production
+// no longer treats an absent control provider as authorization to execute.
+const stopRead = spyOn(stopGate, 'checkEmergencyStop').mockImplementation(async () => ({
+  active: false, reason: null, updatedBy: 'test-owner', updatedAt: null,
+  checkedAt: new Date().toISOString(), source: 'supabase', error: null,
+}));
+afterAll(() => stopRead.mockRestore());
 import {
   IVX_AUTONOMOUS_INTELLIGENCE_MISSION_SCHEDULER_MARKER,
   buildMissionGoal,
