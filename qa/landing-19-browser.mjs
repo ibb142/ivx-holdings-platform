@@ -95,6 +95,14 @@ try {
           await video.click({ position: { x: 60, y: 150 } });
           await page.waitForFunction(() => !document.querySelector('#ivxReels .ivxr-slide video').paused);
         }
+        if (process.env.LANDING_PREVIEW_SOURCE && unit === 'reels.autoplay-controls-browser') {
+          const originalSource = await video.getAttribute('src');
+          assert.ok(originalSource, 'A decoded reel must have its own media source');
+          await video.evaluate((v) => v.dispatchEvent(new Event('error')));
+          assert.equal(await video.getAttribute('src'), originalSource, 'A media error must not substitute footage from another reel');
+          await slide.getByRole('button', { name: 'Video failed — tap to retry', exact: true }).click();
+          await page.waitForFunction(() => { const v = document.querySelector('#ivxReels .ivxr-slide video'); return v?.readyState >= 2 && !v.paused && v.videoWidth > 0; });
+        }
         if (unit === 'reels.engagement-browser') {
           await slide.locator('.like').click();
           await page.waitForFunction(() => document.querySelector('#ivxReels .like').classList.contains('on'));

@@ -582,28 +582,14 @@
     if (v.poster_url || v.thumbnail_url || v.preview_blur_url) vid.poster = v.poster_url || v.thumbnail_url || v.preview_blur_url;
     slide.appendChild(vid);
 
-    /* playback failure → swap in the next playable reel; retry button last */
+    /* Keep failed media associated with this reel and offer explicit retry. */
     vid.addEventListener('error', function () {
-      var sibs = Array.prototype.slice.call((slide.parentNode || document).children);
-      var cur = slide.__video || v;
-      var idx = sibs.indexOf(slide);
-      for (var s2 = (idx >= 0 ? idx + 1 : 0); s2 < sibs.length; s2++) {
-        var nv = sibs[s2] && sibs[s2].__video;
-        if (!nv || nv === cur || !nv.video_url || nv.video_url === cur.video_url) continue;
-        vid.__ivxAttached = false;
-        if (vid.__ivxHls) { try { vid.__ivxHls.destroy(); } catch (err2) {} vid.__ivxHls = null; }
-        vid.removeAttribute('src');
-        slide.__video = nv;
-        attachSource(vid, nv.hls_url, nv.video_url, nv.webm_url);
-        vid.play().catch(function () {});
-        return;
-      }
       if (slide.querySelector('.ivxr-vidretry')) return;
       var rb = document.createElement('button');
       rb.className = 'ivxr-vidretry';
       rb.textContent = 'Video failed — tap to retry';
       rb.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:25;'
-        + 'background:rgba(0,0,0,.75);color:#fff;border:1px solid #E6C200;border-radius:999px;padding:12px 22px;'
+        + 'background:rgba(0,0,0,.75);color:#fff;border:1px solid #E6C200;border-radius:999px;padding:12px 22px;min-height:44px;min-width:44px;'
         + 'font:600 14px/1 -apple-system,Segoe UI,sans-serif;cursor:pointer';
       rb.addEventListener('click', function (e) {
         e.stopPropagation();
