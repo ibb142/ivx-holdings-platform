@@ -6654,7 +6654,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         updatedAt: nowIso(),
       });
       const execFreshState = await getOwnerConversationState(conversation.id, ownerContext.userId);
-      await setOwnerConversationState({ ...execFreshState, activeActionId: null, lastCompletedActionId: action.actionId, unresolvedQuestion: null });
+      await setOwnerConversationState({ ...execFreshState, activeActionId: null, activeActionId: action.actionId, lastCompletedActionId: action.actionId, unresolvedQuestion: null });
       return returnStateAnswer(result.answer, { actionId: action.actionId, evidence: result.evidence }, result.ok ? 'ok' : 'error');
     }
 
