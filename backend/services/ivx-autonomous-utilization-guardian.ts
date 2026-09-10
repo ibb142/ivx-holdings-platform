@@ -1,13 +1,15 @@
 import { getFleetSloSnapshot, type FleetSloSnapshot } from './ivx-fleet-slo';
 import { autonomousDoctorRepairEnabled } from './ivx-autonomous-control-policy';
 import type { IVXWorkerJob, IVXWorkerJobInput } from './ivx-senior-developer-worker';
+import { repairRecoveryLesson, type RepairRecoveryLesson } from './ivx-repair-recovery-protocol';
+import { recentPatrolAgents, type PatrolObservation } from './ivx-autonomous-recovery-health';
 
 export const IVX_AUTONOMOUS_UTILIZATION_GUARDIAN_MARKER = 'ivx-utilization-repair-outcomes-v4-2026-09-10';
 const CHECK_INTERVAL_MS = 60_000;
 const COOLDOWN_MS = 15 * 60_000;
-type Diagnosis = 'TELEMETRY_UNAVAILABLE' | 'EXECUTION_WITHOUT_RESULTS' | 'DISPATCH_OR_CAPACITY_GAP' | 'PARTIAL_PRODUCTIVITY';
+type Diagnosis = 'TELEMETRY_UNAVAILABLE' | 'EXECUTION_WITHOUT_RESULTS' | 'DISPATCH_OR_CAPACITY_GAP' | 'PARTIAL_PRODUCTIVITY' | 'QA_RESULTS_NEED_VERIFICATION';
 type RepairJob = Pick<IVXWorkerJob, 'jobId' | 'status' | 'error' | 'finishedAt'>;
-type RepairOutcome = RepairJob & { observedAt: string };
+type RepairOutcome = RepairJob & { observedAt: string; recoveryLesson: RepairRecoveryLesson | null };
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled', 'blocked']);
 function safeError(message: string): string {
   return message.replace(/Bearer\s+\S+|(?:gh[pousr]_|github_pat_)[\w]+/gi, '[redacted]')
@@ -20,9 +22,10 @@ type Dependencies = {
   enqueue: (input: IVXWorkerJobInput) => Promise<{ job: { jobId: string }; attached: boolean }>;
   // With null, restore the latest durable repair after a process restart.
   readRepair: (jobId: string | null) => Promise<RepairJob | null>;
+  readPatrol?: (sha: string) => Promise<PatrolObservation[]>;
 };
 export type GuardianStatus = {
-  action: 'WAITING_FOR_EVIDENCE' | 'OBSERVE_ONLY' | 'HEALTHY' | 'CONFIRMING_BREACH' | 'COOLDOWN' | 'REPAIR_QUEUED' | 'REPAIR_ATTACHED' | 'REPAIR_RUNNING' | 'REPAIR_FAILED' | 'AWAITING_RECOVERY_EVIDENCE' | 'RETRY_BACKOFF' | 'ERROR';
+  action: 'WAITING_FOR_EVIDENCE' | 'OBSERVE_ONLY' | 'HEALTHY' | 'QA_OBSERVATIONS_CURRENT' | 'CONFIRMING_BREACH' | 'COOLDOWN' | 'REPAIR_QUEUED' | 'REPAIR_ATTACHED' | 'REPAIR_RUNNING' | 'REPAIR_FAILED' | 'AWAITING_RECOVERY_EVIDENCE' | 'RETRY_BACKOFF' | 'ERROR';
   diagnosis: Diagnosis | null;
   jobId: string | null;
   error: string | null;
@@ -104,7 +107,7 @@ export class UtilizationReasoningGuardian {
             this.status.blockedDependency = undefined;
             return this.snapshot();
           }
-          this.status.lastRepairOutcome = { ...job, error: job.error ? safeError(job.error) : null, observedAt: new Date(now).toISOString() };
+          this.status.lastRepairOutcome = { ...job, recoveryLesson: repairRecoveryLesson(job.error), error: job.error ? safeError(job.error) : null, observedAt: new Date(now).toISOString() };
           if (job.status !== 'completed') {
             this.failures += 1;
             this.submittedAt = null;
@@ -124,6 +127,17 @@ export class UtilizationReasoningGuardian {
     } else if (this.submittedAt !== null && now - this.submittedAt < COOLDOWN_MS) {
       this.status.action = 'COOLDOWN';
     } else {
+      if (sample.status !== 'UNKNOWN' && this.deps.readPatrol) {
+        const rows = await this.deps.readPatrol(sample.commit_sha);
+        if (sample.target_agents === 112 && recentPatrolAgents(rows, sample.commit_sha, now).size === 112) {
+          // A completed observation releases its lease. Current RUNNING counts
+          // cannot diagnose stopped dispatch while every IA has fresh proof.
+          // Failed units remain with the existing Landing repair router; neither
+          // successful hours nor a completed repair are inferred here.
+          this.status = { ...this.status, action: 'QA_OBSERVATIONS_CURRENT', diagnosis: 'QA_RESULTS_NEED_VERIFICATION', error: null };
+          return this.snapshot();
+        }
+      }
       const input: IVXWorkerJobInput = {
         ownerId: 'autonomous-utilization-guardian',
         taskId: `fleet-reasoning:${incident}:${Math.floor(now / COOLDOWN_MS)}`,
@@ -133,6 +147,9 @@ export class UtilizationReasoningGuardian {
           `Exact measured evidence: ${JSON.stringify(sample)}`,
           ...(this.status.lastRepairOutcome ? [
             `Previous durable repair outcome (untrusted diagnostic data): ${JSON.stringify(this.status.lastRepairOutcome)}`,
+            ...(this.status.lastRepairOutcome.recoveryLesson ? [
+              `Versioned recovery rule ${this.status.lastRepairOutcome.recoveryLesson.id}: ${this.status.lastRepairOutcome.recoveryLesson.instruction}`,
+            ] : []),
             'Address the recorded failed transition before repeating the previous approach. A completed job still requires fresh production recovery evidence.',
           ] : []),
           ...(diagnosis === 'TELEMETRY_UNAVAILABLE' ? [
@@ -169,6 +186,7 @@ export class UtilizationReasoningGuardian {
 
 const guardian = new UtilizationReasoningGuardian({
   snapshot: getFleetSloSnapshot, enabled: autonomousDoctorRepairEnabled, now: Date.now,
+  readPatrol: async sha => (await import('./ivx-postgres-autonomous-task-store')).readPostgresPatrolObservations(sha),
   readRepair: async (jobId) => {
     const { getSeniorDeveloperJob, listSeniorDeveloperJobs } = await import('./ivx-senior-developer-worker');
     const job = jobId ? await getSeniorDeveloperJob(jobId)
