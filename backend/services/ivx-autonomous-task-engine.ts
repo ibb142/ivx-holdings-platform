@@ -1015,7 +1015,7 @@ async function transitionTaskStateUnlocked(
   if (metadata?.deploymentId) task.deploymentId = metadata.deploymentId;
   if (metadata?.approvalId) task.approvalId = metadata.approvalId;
 
-  if (toState === 'RUNNING' && !task.startedAt) task.startedAt = nowIso();
+  if (toState === 'RUNNING') { task.attemptStartedAt = nowIso(); task.startedAt ??= task.attemptStartedAt; }
   if (toState === 'LEASED') {
     task.leaseHolder = generateId('worker');
     task.leaseExpiresAt = new Date(Date.now() + LEASE_DURATION_MS).toISOString();
@@ -1068,7 +1068,7 @@ export async function transitionTaskState(
       if (metadata?.commitSha) task.commitSha = metadata.commitSha;
       if (metadata?.deploymentId) task.deploymentId = metadata.deploymentId;
       if (metadata?.approvalId) task.approvalId = metadata.approvalId;
-      if (toState === 'RUNNING' && !task.startedAt) task.startedAt = nowIso();
+      if (toState === 'RUNNING') { task.attemptStartedAt = nowIso(); task.startedAt ??= task.attemptStartedAt; }
       if (toState === 'RETRYING' || fromState === 'BLOCKED' && toState === 'QUEUED') Object.assign(task, planTaskRetry(task));
       if (TERMINAL_SUCCESS_STATES.includes(toState) || toState === 'FAILED') task.completedAt = nowIso();
       return compareAndSetPostgresAutonomousTask({ task, expectedStates: [fromState], eventType: 'state_transition' });
@@ -1500,6 +1500,7 @@ export async function startLeasedTasksBatch(leases: readonly FleetTaskLeaseIdent
       task.state = 'RUNNING';
       task.updatedAt = at;
       task.startedAt = task.startedAt ?? at;
+      task.attemptStartedAt = at;
       task.lastHeartbeatAt = at;
       task.leaseExpiresAt = expiresAt;
       results.push({ ...lease, ok: true, task, error: null });
@@ -2286,4 +2287,3 @@ export function isActionAllowed(engine: string, action: string): { allowed: bool
   }
   return { allowed: true, reason: 'Action permitted.' };
 }
-

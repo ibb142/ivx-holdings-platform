@@ -5,11 +5,15 @@ import type { Task } from './ivx-autonomous-task-engine';
 
 test('rollout recovery retries only a drained old executor rejection without work', () => {
   const now = Date.now();
-  const task = { idempotencyKey: 'technical-schedule:daily_self_audit:initial', state: 'BLOCKED',
+  const task = { idempotencyKey: 'technical-schedule:daily_self_audit:initial', taskType: 'qa', state: 'BLOCKED',
     blocker: 'NO_EXECUTOR: this task has no supported module inspection or Landing executor; no work was performed.',
     evidence: [], retryCount: 0, maxRetries: 3, updatedAt: new Date(now - 120_000).toISOString() } as Task;
   expect(canRecoverTechnicalRollout(task, now)).toBe(true);
   expect(canRecoverTechnicalRollout(task, now - 1)).toBe(false);
+  expect(canRecoverTechnicalRollout({ ...task, leaseExpiresAt: new Date(now + 60_000).toISOString() }, now)).toBe(false);
+  expect(canRecoverTechnicalRollout({ ...task, leaseHolder: 'agent:ivx_holdings_1', leaseExpiresAt: null }, now)).toBe(false);
+  expect(canRecoverTechnicalRollout({ ...task, leaseExpiresAt: 'unknown' }, now)).toBe(false);
+  expect(canRecoverTechnicalRollout({ ...task, taskType: 'outreach' }, now)).toBe(false);
   expect(canRecoverTechnicalRollout({ ...task, state: 'RUNNING' }, now)).toBe(false);
   expect(canRecoverTechnicalRollout({ ...task, blocker: 'OWNER_GATE: paused' }, now)).toBe(false);
   expect(canRecoverTechnicalRollout({ ...task, retryCount: 3 }, now)).toBe(false);
