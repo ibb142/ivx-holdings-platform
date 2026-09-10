@@ -28,7 +28,7 @@ import {
 } from './ivx-autonomous-task-engine';
 import { getAllExecutionStates } from './ivx-agent-runtime';
 import { fetchLandingGitHubRead } from './ivx-landing-github-read';
-import { postgresAtomicQueueSelected, readPostgresTaskIdentitiesByPrefix } from './ivx-postgres-autonomous-task-store';
+import { postgresAtomicQueueSelected, readPostgresTaskIdentitiesByPrefix, readPostgresLandingTasks } from './ivx-postgres-autonomous-task-store';
 
 export const IVX_LANDING_P0_MARKER = 'ivx-landing-p0-backlog-2026-09-04';
 export const LANDING_P0_PREFIX = 'landing-p0:';
@@ -862,12 +862,17 @@ export async function fetchMainSha(fetchImpl: typeof fetch = fetch): Promise<str
   return mainShaCache.sha;
 }
 
+export async function getLandingTasksForSha(sha: string): Promise<Task[]> {
+  return postgresAtomicQueueSelected() ? readPostgresLandingTasks(sha) : getAllTasks();
+}
+
 export async function buildLandingP0Status(): Promise<LandingP0Status> {
-  const [tasks, mainSha, mission] = await Promise.all([getAllTasks(), fetchMainSha(), readOwnerPriority()]);
+  const productionSha = resolveProductionSha();
+  const [tasks, mainSha, mission] = await Promise.all([getLandingTasksForSha(productionSha), fetchMainSha(), readOwnerPriority()]);
   const states = getAllExecutionStates();
   return aggregateLandingStatus({
     tasks,
-    productionSha: resolveProductionSha(),
+    productionSha,
     mainSha,
     registeredAgents: states.length,
     failedAgents: states.filter((s) => s.health === 'failed' || Boolean(s.disabledState)).length,
