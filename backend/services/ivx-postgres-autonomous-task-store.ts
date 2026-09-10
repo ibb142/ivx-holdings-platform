@@ -9,6 +9,7 @@
 import { hostname } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
+import { queryWithPostgresDeadline } from './ivx-postgres-deadline';
 import { emergencyStopPostgresConfig } from './ivx-emergency-stop-postgres';
 import { supabasePostgresTls, withoutPostgresUrlTlsOptions } from './ivx-supabase-postgres-tls';
 import { decideRetry, isTransientFailure, retryAfterMs, RetryQuota } from './ivx-retry-policy';
@@ -96,7 +97,7 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
     return value ?? null;
   });
   const pool = getDirectPool(env, name === 'ivx_fleet_dashboard_observation' ? 'telemetry' : 'tasks');
-  const result = await pool.query<{ result: T }>(`select public.${name}(${placeholders}) as result`, values);
+  const result = await queryWithPostgresDeadline<{ result: T }>(pool, `select public.${name}(${placeholders}) as result`, values);
   if (!result.rows?.length) throw new Error(`direct_postgres_rpc_empty:${name}`);
   return result.rows[0].result as T;
 }
