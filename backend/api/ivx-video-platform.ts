@@ -119,7 +119,7 @@ function cachedJson(body: string, status: number): Response {
     status,
     headers: {
       'Content-Type': 'application/json',
-      'Cache-Control': 'public, max-age=30, stale-while-revalidate=60',
+      'Cache-Control': status >= 200 && status < 300 ? 'public, max-age=30, stale-while-revalidate=60' : 'no-store',
       'X-IVX-Cache': 'HIT',
       ...CORS_HEADERS,
     },
@@ -150,7 +150,7 @@ async function withFeedCache(key: string, handler: () => Promise<Response>): Pro
       return { body, status: resp.status, expiresAt: Date.now() + FEED_CACHE_TTL_MS };
     }
     const stale = FEED_CACHE.get(key);
-    if (stale && stale.status >= 200 && stale.status < 300) {
+    if (stale && stale.status >= 200 && stale.status < 300 && Date.now() <= stale.expiresAt + 60_000) {
       return { ...stale, expiresAt: Date.now() + FEED_CACHE_TTL_MS };
     }
     return { body, status: resp.status, expiresAt: Date.now() + FEED_CACHE_TTL_MS };
@@ -162,7 +162,7 @@ async function withFeedCache(key: string, handler: () => Promise<Response>): Pro
       status: entry.status,
       headers: {
         'Content-Type': 'application/json',
-        'Cache-Control': 'public, max-age=30, stale-while-revalidate=60',
+        'Cache-Control': entry.status >= 200 && entry.status < 300 ? 'public, max-age=30, stale-while-revalidate=60' : 'no-store',
         'X-IVX-Cache': 'MISS',
         ...CORS_HEADERS,
       },
@@ -548,7 +548,7 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
       marker: VIDEO_PLATFORM_MARKER,
     });
   } catch (err) {
-    return json({ videos: [], count: 0, total: 0, next_cursor: null, channel: null, feed_type: 'unified', ordering: 'canonical-unified-v2', personalized: false, marker: VIDEO_PLATFORM_MARKER }, 200);
+    return json({ error: 'Video feed temporarily unavailable', marker: VIDEO_PLATFORM_MARKER }, 503);
   }
   }); // withFeedCache
 }
@@ -824,7 +824,7 @@ export async function handlePlatformHomeFeed(req: Request): Promise<Response> {
       marker: VIDEO_PLATFORM_MARKER,
     });
   } catch (err) {
-    return json({ deals: [], blocks: [], count: 0, deal_count: 0, video_count: 0, total_approved_videos: 0, pattern: '3-deals-1-featured-project-video', ordering: 'canonical-home-v3', personalized: false, marker: VIDEO_PLATFORM_MARKER }, 200);
+    return json({ error: 'Home feed temporarily unavailable', marker: VIDEO_PLATFORM_MARKER }, 503);
   }
   }); // withFeedCache
 }
