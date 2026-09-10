@@ -47,7 +47,7 @@
         }
       });
       lcpObserver.observe({ type: 'largest-contentful-paint', buffered: true });
-    } catch(e) {}
+    } catch(e) { console.error('PerformanceObserver error:', e); }
   }
 
   // CLS — Cumulative Layout Shift
