@@ -13,6 +13,9 @@ assert(token || systemKey, 'Owner bearer or protected system credential is requi
 const apiService = 'srv-d7t9ivreo5us73ftose0', workerService = 'srv-d9i15fg4n6ts73bn00j0';
 const expectedRepo = 'https://github.com/ibb142/ivx-holdings-platform';
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+class ProbeHttpError extends Error {
+  constructor(readonly status: number, path: string) { super(`HTTP ${status} at ${path}`); }
+}
 async function request(path: string, body?: unknown) {
   // Preserve the real Owner validation performed by the workflow, then use
   // the protected machine credential for repeated probes when available so a
@@ -23,7 +26,7 @@ async function request(path: string, body?: unknown) {
   };
   const response = await fetch(base + path, { method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(body ? 60_000 : 20_000),
     headers: { ...authHeaders, 'Content-Type': 'application/json', Connection: 'close' }, ...(body ? { body: JSON.stringify(body) } : {}) });
-  assert.equal(response.status, 200, `HTTP ${response.status} at ${path}`);
+  if (response.status !== 200) throw new ProbeHttpError(response.status, path);
   const value = await response.json(); assert.equal(value.ok, true, `Operation rejected at ${path}`); return value;
 }
 async function topology() {
@@ -125,16 +128,32 @@ for (const service of [workerService, apiService]) {
   scaleResults[service] = await action('render_scale_service', service, 2);
   console.log(JSON.stringify({ scaleAccepted: true, serviceId: service, requestedInstances: 2, liveVerified: false }));
 }
-let before: any, consecutive = 0;
+let before: any, sharedReady: any, consecutive = 0;
 for (let i = 0; i < 72; i++) {
   const value = await (renderKey ? physicalTopology() : topology()).catch(() => null);
-  const ready = renderKey ? value && twoByTwo(value) : value && sharedTwoByTwo(value);
+  let shared: any = null;
+  if (value && (renderKey ? twoByTwo(value) : sharedTwoByTwo(value))) {
+    // A live deployment can still be retiring its previous processes. Start
+    // the recovery experiment only after physical and shared state agree.
+    // Retry transport unavailability here only; authentication, SHA, freshness
+    // and malformed evidence still fail immediately.
+    shared = renderKey ? await topology().catch((error: unknown) => {
+      if ((error instanceof ProbeHttpError && (error.status === 429 || error.status >= 500))
+        || (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name))) return null;
+      throw error;
+    }) : value;
+  }
+  const ready = shared && sharedTopologyCoversPhysical(shared, value);
   if (ready) consecutive++; else consecutive = 0;
-  if (consecutive >= 3) { before = value; break; }
+  console.log(JSON.stringify({ phase: 'waiting-for-shared-startup', probe: i,
+    physicalReady: Boolean(value && (renderKey ? twoByTwo(value) : sharedTwoByTwo(value))),
+    sharedAvailable: Boolean(shared), apiCount: shared?.apiInstances?.length ?? null,
+    workerCount: shared?.workerInstances?.length ?? null, consecutive }));
+  if (consecutive >= 3) { before = value; sharedReady = shared; break; }
   await sleep(5000);
 }
-assert(before, 'Two distinct, current processes per role did not become observable');
-const sharedBefore = renderKey ? verifiedSharedTopology(await topology(), before) : { status: 'PASS', topology: before };
+assert(before && sharedReady, 'Physical and shared state did not agree on two current processes per role');
+const sharedBefore = verifiedSharedTopology(sharedReady, before);
 const proof: Record<string, unknown> = {
   sourceSha: sha,
   exactDeploys,
