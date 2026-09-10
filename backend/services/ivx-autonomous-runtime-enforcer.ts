@@ -1,3 +1,4 @@
+import { RefillBackoff } from './ivx-refill-backoff';
 import { enforceAutonomous112RuntimeTruth, IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS } from './ivx-autonomous-truth-control';
 import { getAllExecutionStates, updateExecutionState } from './ivx-agent-runtime';
 import { runRealEngineeringCycle, type RealEngineeringCycleResult } from './ivx-agent-real-engineering-cycle';
@@ -58,6 +59,7 @@ let enforcerRunInFlight: Promise<void> | null = null;
 let leaseMirrorInFlight: Promise<void> | null = null;
 let heartbeatRefreshInFlight: Promise<void> | null = null;
 let refillInFlight: Promise<void> | null = null;
+const refillBackoff = new RefillBackoff();
 let startedAt: string | null = null;
 let lastRunAt: string | null = null;
 let lastOk: boolean | null = null;
@@ -334,7 +336,7 @@ function refillAllAvailableAgents(
   requestedLandingMission = landingMissionActive,
 ): Promise<void> {
   if (refillInFlight) return refillInFlight;
-  refillInFlight = (async () => {
+  refillInFlight = refillBackoff.run(async () => {
     if (!continuityEnabled) return;
     const remainingCapacity = getContinuityMaxConcurrency() - continuityRuns.size;
     if (remainingCapacity <= 0) return;
@@ -377,8 +379,8 @@ function refillAllAvailableAgents(
       startContinuityRun(state.agentId, state.agentNumber, result.task);
     }
     void runLeaseMirror();
-  })().catch((error) => {
-    console.error('[IVX Autonomous 112 Batch Refill] failed', { error: error instanceof Error ? error.message : String(error) });
+  }).catch((error) => {
+    console.error('[IVX Autonomous 112 Batch Refill] failed', { error: error instanceof Error ? error.message : String(error), ...refillBackoff.status() });
   }).finally(() => {
     refillInFlight = null;
   });
@@ -538,6 +540,7 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     continuityEnabled,
     landingMissionActive,
     refillInFlight: Boolean(refillInFlight),
+    refillRecovery: refillBackoff.status(),
     continuityMaxConcurrency: getContinuityMaxConcurrency(),
     canonicalFleetSize: IVX_AUTONOMOUS_FLEET_SIZE,
     continuityInFlight: continuityRuns.size,
