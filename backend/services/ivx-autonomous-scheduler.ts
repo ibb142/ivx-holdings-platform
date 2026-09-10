@@ -25,6 +25,7 @@
  */
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import {
   isDurableStoreConfigured,
   readDurableJson,
@@ -387,6 +388,7 @@ export type ScheduledJobResult = {
 export type SelfAuditDeps = {
   runDailySelfAudit?: () => Promise<DailySelfAuditRun>;
   planSafeAutoImprovements?: (opts: { audit: DailySelfAuditRun }) => Promise<{ safeProposals: Array<{ id: string; category: string; severity: string; recommendedAction: string; evidence: Array<{ relativePath?: string }> }> }>;
+  enqueue?: typeof enqueueOrAttachSeniorDeveloperJob;
 };
 
 export type DriftDeps = {
@@ -425,11 +427,21 @@ async function runSelfAuditJob(deps: SelfAuditDeps = {}): Promise<ScheduledJobRe
     // closes the loop: scheduler discovers → worker fixes → coder commits →
     // PR created → (auto-merge or owner approval) → production.
     let codeFixJobsSubmitted = 0;
+    let codeFixJobsAttached = 0;
+    let codeFixJobsFailed = 0;
     for (const proposal of plan.safeProposals) {
       try {
+        const files = proposal.evidence.map(item => item.relativePath).filter((file): file is string => Boolean(file)).sort();
+        if (!files.length || !proposal.recommendedAction) throw new Error('Repair proposal lacks an inspected file or action');
+        const scope = createHash('sha256').update(JSON.stringify([proposal.category, files, proposal.recommendedAction])).digest('hex');
+        const sourceSha = process.env.RENDER_GIT_COMMIT ?? process.env.GITHUB_SHA ?? process.env.COMMIT_SHA ?? 'local';
+        const agentNumber = Number.parseInt(scope.slice(0, 8), 16) % 112 + 1;
         const goal = `Fix ${proposal.category} in ${proposal.evidence[0]?.relativePath ?? 'unknown file'}: ${proposal.recommendedAction}`;
-        await enqueueOrAttachSeniorDeveloperJob({
+        const accepted = await (deps.enqueue ?? enqueueOrAttachSeniorDeveloperJob)({
           goal,
+          taskId: `scheduler-repair:${sourceSha}:${scope}`,
+          agentNumber,
+          agentId: `ivx_holdings_${agentNumber}`,
           ownerApproved: true,
           approvePatch: false,
           approveGitDeploy: false,
@@ -447,14 +459,16 @@ async function runSelfAuditJob(deps: SelfAuditDeps = {}): Promise<ScheduledJobRe
           ownerId: 'autonomous-scheduler',
           executionMode: 'code_change',
         });
-        codeFixJobsSubmitted++;
+        if (accepted.attached) codeFixJobsAttached++;
+        else codeFixJobsSubmitted++;
       } catch {
-        // Best-effort: a failed enqueue must never break the scheduler.
+        codeFixJobsFailed++;
       }
     }
 
-    const summary = `Self-audit ${audit.auditId}: ${audit.summary.totalProposals} proposal(s), ${safeCount} safe, ${codeFixJobsSubmitted} code-fix job(s) submitted to worker queue.`;
-    return { kind: 'daily_self_audit', ok: true, durationMs: Date.now() - start, summary };
+    const summary = `Self-audit ${audit.auditId}: ${audit.summary.totalProposals} proposal(s), ${safeCount} safe, ${codeFixJobsSubmitted} new code-fix job(s), ${codeFixJobsAttached} existing job(s) attached, ${codeFixJobsFailed} submission(s) failed.`;
+    return { kind: 'daily_self_audit', ok: codeFixJobsFailed === 0, durationMs: Date.now() - start, summary,
+      ...(codeFixJobsFailed ? { error: `${codeFixJobsFailed} repair proposal(s) were not accepted by the worker queue.` } : {}) };
   } catch (error) {
     return {
       kind: 'daily_self_audit',
@@ -996,7 +1010,8 @@ export async function runScheduledJob(
     await patchJobState(kind, (job, now) => ({
       ...job,
       lastRunAt: nowIso(now),
-      nextDueAt: computeNextDue(now, job.intervalMs),
+      nextDueAt: computeNextDue(now, !result.ok && ['daily_self_audit', 'daily_drift_detection'].includes(kind)
+        ? Math.min(job.intervalMs, TICK_MS) : job.intervalMs),
       lastStatus: honestStatus,
       lastDurationMs: result.durationMs,
       lastSummary: result.error && isRealFailure ? `${result.summary} (${result.error})` : result.summary,

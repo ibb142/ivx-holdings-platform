@@ -1740,6 +1740,16 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
   const normalizedGoal = normalizeGoalForRetry(goal);
   const queue = await loadQueue();
 
+  // An owner may have several queued scopes. Its newest job is not necessarily
+  // this retry's job; inspect the whole durable queue before attempting insert.
+  const matchingActive = [...queue.jobs].reverse().find((candidate) => (
+    candidate.ownerId === ownerId && candidate.idempotencyKey === idempotencyKey
+    && ACTIVE_STATUSES.has(candidate.status)
+  ));
+  if (matchingActive) {
+    return { job: matchingActive, attached: true, activeJobId: matchingActive.jobId };
+  }
+
   // Exact campaign retries remain idempotent after the prior job has already
   // completed. The queue retains the full 112-agent campaign, so taskId is the
   // strongest correlation key and avoids manufacturing a second execution.
@@ -1804,7 +1814,22 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
   };
 
   queue.jobs.push(job);
-  await saveQueue(queue);
+  try {
+    await saveQueue(queue);
+  } catch (error) {
+    if (!sharedSeniorQueueEnabled()) throw error;
+    // Another replica can insert after our read, or a committed insert can lose
+    // its acknowledgement. Reconcile by identity once, without replaying the
+    // mutation or weakening PostgreSQL's uniqueness/lease checks.
+    let persisted: QueueDoc;
+    try { persisted = await loadQueue(); } catch { throw error; }
+    const accepted = [...persisted.jobs].reverse().find((candidate) => (
+      candidate.ownerId === ownerId && candidate.idempotencyKey === idempotencyKey
+      && (ACTIVE_STATUSES.has(candidate.status) || candidate.status === 'completed')
+    ));
+    if (!accepted) throw error;
+    return { job: accepted, attached: true, activeJobId: accepted.jobId };
+  }
   appendDurableEvent(QUEUE_FILE, { type: 'job_enqueued', jobId: job.jobId, goal: goal.slice(0, 200), ownerId }).catch(() => {});
 
   // Kick the worker without blocking the caller.

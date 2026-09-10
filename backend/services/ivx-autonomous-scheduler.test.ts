@@ -132,11 +132,44 @@ describe('scheduler pure helpers', () => {
 });
 
 describe('scheduler durable run (injected deps, no real scan)', () => {
+  test('distinct proposals retain task identity and retries are reported as attachments', async () => {
+    const jobs = new Set<string>();
+    const inputs: Array<{ taskId?: string | null; agentNumber?: number | null }> = [];
+    const proposals = ['first', 'second'].map(id => ({ id, category: 'logging_fix', severity: 'low',
+      recommendedAction: `Fix ${id} logger`, evidence: [{ relativePath: 'backend/services/shared.ts' }] }));
+    const deps = { selfAudit: {
+      runDailySelfAudit: async () => fakeAudit(),
+      planSafeAutoImprovements: async () => ({ safeProposals: proposals }),
+      enqueue: async (input: any) => {
+        inputs.push(input);
+        const attached = jobs.has(input.taskId); jobs.add(input.taskId);
+        return { attached, activeJobId: attached ? input.taskId : null, job: { jobId: input.taskId } } as any;
+      },
+    } };
+    const first = await runScheduledJob('daily_self_audit', deps);
+    const retry = await runScheduledJob('daily_self_audit', deps);
+    expect(first.summary).toContain('2 new code-fix job(s), 0 existing');
+    expect(retry.summary).toContain('0 new code-fix job(s), 2 existing');
+    expect(jobs.size).toBe(2);
+    expect(inputs.every(input => input.agentNumber! >= 1 && input.agentNumber! <= 112)).toBe(true);
+  });
+
+  test('failed repair handoff is visible and retries technical work within five minutes', async () => {
+    const result = await runScheduledJob('daily_self_audit', { selfAudit: {
+      runDailySelfAudit: async () => fakeAudit(),
+      planSafeAutoImprovements: async () => ({ safeProposals: [{ id: 'bad', category: 'logging_fix', severity: 'low', recommendedAction: 'Fix log', evidence: [] }] }),
+    } });
+    expect(result.ok).toBe(false);
+    expect(result.summary).toContain('1 submission(s) failed');
+    const state = await getSchedulerState();
+    expect(Date.parse(state.jobs.daily_self_audit.nextDueAt!) - Date.now()).toBeLessThanOrEqual(300_000);
+  });
   test('runs a self-audit job, persists + advances the cursor, wires memory/action-loop without throwing', async () => {
     const result = await runScheduledJob('daily_self_audit', {
       selfAudit: {
         runDailySelfAudit: async () => fakeAudit(),
-        planSafeAutoImprovements: async () => ({ safeProposals: [{}] }),
+        planSafeAutoImprovements: async () => ({ safeProposals: [{ id: 'p1', category: 'logging_fix', severity: 'low', recommendedAction: 'Fix missing log context', evidence: [{ relativePath: 'backend/services/example.ts' }] }] }),
+        enqueue: async () => ({ attached: false, activeJobId: null, job: { jobId: 'fixture' } } as any),
       },
     });
     expect(result.ok).toBe(true);

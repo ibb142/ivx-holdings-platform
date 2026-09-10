@@ -216,7 +216,7 @@ export async function ensureAutonomousWorkBlockForAgent(input: {
   };
 
   try {
-    const tasks = planningTasks ?? (postgresAtomicQueueSelected() ? await readPostgresAutonomousTaskIndex() : await getAllTasks());
+    const tasks = planningTasks ?? (postgresAtomicQueueSelected() ? await readPostgresAutonomousTaskIndex(input.sourceSha) : await getAllTasks());
     const existing = findExistingEligibleTasks(tasks, input.agentNumber);
     if (existing.length >= targetActiveDepth) {
       return {
@@ -394,7 +394,7 @@ async function planBacklog(input: {
   }
 
   // One narrow snapshot per patrol; never clone the full evidence ledger 112 times.
-  const planningTasks = postgresAtomicQueueSelected() ? await readPostgresAutonomousTaskIndex() : await getAllTasks();
+  const planningTasks = postgresAtomicQueueSelected() ? await readPostgresAutonomousTaskIndex(input.sourceSha) : await getAllTasks();
   for (const lane of input.agents) {
     const plan = await ensureAutonomousWorkBlockForAgent({
       sourceSha: input.sourceSha,

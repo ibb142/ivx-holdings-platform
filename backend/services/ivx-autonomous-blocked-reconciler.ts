@@ -1,11 +1,12 @@
 /** IVX Autonomous blocked + productivity recovery hot loop. */
 import { getAllTasks, releaseLease, transitionTaskState, type Task } from './ivx-autonomous-task-engine';
 import { getExecutionState, updateExecutionState } from './ivx-agent-runtime';
-import { resolveProductionSha } from './ivx-landing-p0-backlog';
+import { resolveProductionSha, getLandingTasksForSha, parseLandingTaskKey } from './ivx-landing-p0-backlog';
+import { assertEmergencyStopInactive } from './ivx-emergency-stop-gate';
 import { compareAndSetPostgresAutonomousTask, postgresAtomicQueueSelected, readPostgresRecoveryTasks } from './ivx-postgres-autonomous-task-store';
 import { planTaskRetry, taskRetryDue, FLEET_RETRY_BUDGET_MS } from './ivx-retry-policy';
 
-export const IVX_BLOCKED_RECONCILER_MARKER = 'ivx-autonomous-dependency-recovery-2026-09-08-v5';
+export const IVX_BLOCKED_RECONCILER_MARKER = 'ivx-autonomous-dependency-recovery-2026-09-10-v6';
 const DEFAULT_INTERVAL_MS = 15_000;
 const MIN_BLOCK_AGE_MS = 20_000;
 const DEFAULT_PRODUCTIVITY_STALE_MS = 5 * 60_000;
@@ -13,7 +14,25 @@ const HEARTBEAT_FRESH_MS = 60_000;
 const DEPENDENCY_WAIT_MS = 30_000;
 let timer: ReturnType<typeof setInterval> | null = null;
 let runInFlight = false;
-export type BlockedReconcileResult = { marker: string; measuredAt: string; productionSha: string; blockedSeen: number; requeued: number; dependencyWaits: number; retainedRealDefects: number; retainedOwnerOrConfig: number; aliveButIdleSeen: number; staleLeasesReleased: number; staleQueuedLeasesCleared: number; runtimeSlotsCleared: number; errors: number };
+export type BlockedReconcileResult = { marker: string; measuredAt: string; productionSha: string; blockedSeen: number; superseded: number; requeued: number; dependencyWaits: number; retainedRealDefects: number; retainedOwnerOrConfig: number; aliveButIdleSeen: number; staleLeasesReleased: number; staleQueuedLeasesCleared: number; runtimeSlotsCleared: number; errors: number };
+
+/** A new version gets new QA. Retain the old failure as cancelled history,
+ * with a durable replacement identity; never convert it into successful work. */
+export function supersededLandingReplacement(task: Task, current: readonly Task[], sha: string, now: number): Task | null {
+  const old = parseLandingTaskKey(task.idempotencyKey);
+  if (!/^[a-f0-9]{40}$/i.test(sha) || !old || !/^[a-f0-9]{40}$/i.test(old.sha) || old.sha === sha || task.taskType !== 'qa'
+    || task.state !== 'BLOCKED') return null;
+  if (task.leaseExpiresAt && (!Number.isFinite(Date.parse(task.leaseExpiresAt)) || Date.parse(task.leaseExpiresAt) > now)) return null;
+  if (task.leaseHolder && !task.leaseExpiresAt) return null;
+  const created = Date.parse(task.createdAt);
+  if (!Number.isFinite(created)) return null;
+  return current.find(candidate => {
+    const replacement = parseLandingTaskKey(candidate.idempotencyKey);
+    return replacement?.sha === sha && replacement.unitId === old.unitId && !replacement.repair
+      && candidate.taskType === 'qa' && !['CANCELLED', 'EXPIRED'].includes(candidate.state)
+      && Date.parse(candidate.createdAt) > created;
+  }) ?? null;
+}
 function taskText(task: Task): string { return `${task.title}\n${task.description}\n${task.blocker ?? ''}\n${task.error ?? ''}\n${(task.evidence ?? []).map((e) => e.summary ?? '').join('\n')}\n${task.idempotencyKey}`.toLowerCase(); }
 function shaFromTask(task: Task): string | null { const match = [task.idempotencyKey, task.description, task.blocker ?? ''].join(' ').match(/\b[0-9a-f]{40}\b/i); return match ? match[0].toLowerCase() : null; }
 function isOwnerOrConfigGate(task: Task): boolean { return /owner approval|owner-gated|not configured|missing credential|secret|iam|permission|billing|payment|mfa|security boundary/.test(taskText(task)); }
@@ -83,9 +102,23 @@ async function releaseAliveButIdleTasks(tasks: Task[], now: number): Promise<{ s
 
 export async function reconcileRetryableBlockedTasks(): Promise<BlockedReconcileResult> {
   const productionSha = resolveProductionSha().toLowerCase(); const tasks = await readRecoveryTasks(); const blocked = tasks.filter((task) => task.state === 'BLOCKED');
+  const current = postgresAtomicQueueSelected() && blocked.some(task => parseLandingTaskKey(task.idempotencyKey)?.sha !== productionSha)
+    ? await getLandingTasksForSha(productionSha) : [];
+  let superseded = 0; let retirementGuardChecked = false;
   let requeued = 0; let dependencyWaits = 0; let retainedRealDefects = 0; let retainedOwnerOrConfig = 0; let errors = 0; const now = Date.now();
   for (const task of blocked) {
     const updatedMs = Date.parse(task.updatedAt ?? ''); if (Number.isFinite(updatedMs) && now - updatedMs < MIN_BLOCK_AGE_MS) continue;
+    const replacement = supersededLandingReplacement(task, current, productionSha, now);
+    if (replacement) {
+      try {
+        if (!retirementGuardChecked) { await assertEmergencyStopInactive('superseded-landing-qa'); retirementGuardChecked = true; }
+        const next: Task = { ...task, state: 'CANCELLED', updatedAt: new Date(now).toISOString(), completedAt: new Date(now).toISOString(),
+          leaseHolder: null, leaseExpiresAt: null, lastHeartbeatAt: null,
+          error: `SUPERSEDED_BY_DEPLOYMENT:${productionSha}; replacementTaskId=${replacement.taskId}${task.error ? `; previousError=${task.error}` : ''}` };
+        if (await writeTask(next, ['BLOCKED'], 'landing_task_superseded')) superseded += 1; else errors += 1;
+      } catch { errors += 1; }
+      continue;
+    }
     if (isOwnerOrConfigGate(task)) { retainedOwnerOrConfig += 1; continue; }
     if (isExternalDependencyWait(task)) { try { if (await scheduleDependencyWait(task, now)) dependencyWaits += 1; else errors += 1; } catch { errors += 1; } continue; }
     const taskSha = shaFromTask(task); const staleSha = Boolean(taskSha && productionSha && taskSha !== productionSha);
@@ -96,7 +129,7 @@ export async function reconcileRetryableBlockedTasks(): Promise<BlockedReconcile
   const productivity = await releaseAliveButIdleTasks(tasks, now); errors += productivity.errors;
   const staleQueued = await clearStaleQueuedLeases(tasks, now); errors += staleQueued.errors;
   errors += await releaseDueRetries(tasks, now);
-  return { marker: IVX_BLOCKED_RECONCILER_MARKER, measuredAt: new Date().toISOString(), productionSha, blockedSeen: blocked.length, requeued, dependencyWaits, retainedRealDefects, retainedOwnerOrConfig, aliveButIdleSeen: productivity.seen, staleLeasesReleased: productivity.released, staleQueuedLeasesCleared: staleQueued.cleared, runtimeSlotsCleared: productivity.runtimeSlotsCleared, errors };
+  return { marker: IVX_BLOCKED_RECONCILER_MARKER, measuredAt: new Date().toISOString(), productionSha, blockedSeen: blocked.length, superseded, requeued, dependencyWaits, retainedRealDefects, retainedOwnerOrConfig, aliveButIdleSeen: productivity.seen, staleLeasesReleased: productivity.released, staleQueuedLeasesCleared: staleQueued.cleared, runtimeSlotsCleared: productivity.runtimeSlotsCleared, errors };
 }
-export function startBlockedTaskReconciler(): boolean { if (timer) return true; if ((process.env.IVX_BLOCKED_RECONCILER ?? 'on').toLowerCase() === 'off') return false; const raw = Number.parseInt(process.env.IVX_BLOCKED_RECONCILER_INTERVAL_MS ?? '', 10); const intervalMs = Number.isFinite(raw) && raw >= 5_000 ? raw : DEFAULT_INTERVAL_MS; const tick = () => { if (runInFlight) return; runInFlight = true; void reconcileRetryableBlockedTasks().then((result) => { if (result.requeued > 0 || result.dependencyWaits > 0 || result.staleLeasesReleased > 0 || result.staleQueuedLeasesCleared > 0 || result.errors > 0) console.log('[IVX Realtime Productivity Reconciler]', result); }).catch((error) => console.warn('[IVX Realtime Productivity Reconciler] failed', error instanceof Error ? error.message : String(error))).finally(() => { runInFlight = false; }); }; tick(); timer = setInterval(tick, intervalMs); timer.unref?.(); return true; }
+export function startBlockedTaskReconciler(): boolean { if (timer) return true; if ((process.env.IVX_BLOCKED_RECONCILER ?? 'on').toLowerCase() === 'off') return false; const raw = Number.parseInt(process.env.IVX_BLOCKED_RECONCILER_INTERVAL_MS ?? '', 10); const intervalMs = Number.isFinite(raw) && raw >= 5_000 ? raw : DEFAULT_INTERVAL_MS; const tick = () => { if (runInFlight) return; runInFlight = true; void reconcileRetryableBlockedTasks().then((result) => { if (result.superseded > 0 || result.requeued > 0 || result.dependencyWaits > 0 || result.staleLeasesReleased > 0 || result.staleQueuedLeasesCleared > 0 || result.errors > 0) console.log('[IVX Realtime Productivity Reconciler]', result); }).catch((error) => console.warn('[IVX Realtime Productivity Reconciler] failed', error instanceof Error ? error.message : String(error))).finally(() => { runInFlight = false; }); }; tick(); timer = setInterval(tick, intervalMs); timer.unref?.(); return true; }
 export function stopBlockedTaskReconciler(): void { if (!timer) return; clearInterval(timer); timer = null; }

@@ -8,9 +8,10 @@
  * - ambiguous campaign/evidence overlap uses MAX, never SUM.
  */
 import { listCampaignDispatcherRecords } from './ivx-campaign-dispatcher';
-import { getAllTasks, type Task } from './ivx-autonomous-task-engine';
+import { type Task } from './ivx-autonomous-task-engine';
+import { postgresAtomicQueueSelected, readPostgresWorkEvidenceHours, type WorkEvidenceHours } from './ivx-postgres-autonomous-task-store';
 import { getAutonomousTruthSnapshot } from './ivx-autonomous-truth-control';
-import { resolveProductionSha } from './ivx-landing-p0-backlog';
+import { resolveProductionSha, getLandingTasksForSha } from './ivx-landing-p0-backlog';
 import type { AgentLedgerDashboard } from './ivx-agent-work-ledger';
 
 export const IVX_112_THREE_LAYER_VERIFY_MARKER = 'ivx-112-three-layer-verifier-2026-09-04-v2-enterprise';
@@ -111,14 +112,15 @@ function recentTaskErrors(tasks: Task[], windowStart: number): Task[] {
   });
 }
 
-export async function buildThreeLayerVerifiedLedger(base: AgentLedgerDashboard) {
+export async function buildThreeLayerVerifiedLedger(base: AgentLedgerDashboard, auditedHours?: WorkEvidenceHours | null) {
   const now = Date.now();
   const windowStart = now - DAY_MS;
   const productionSha = resolveProductionSha();
-  const [records, tasks, runtimeTruth] = await Promise.all([
+  const [records, tasks, runtimeTruth, archive] = await Promise.all([
     listCampaignDispatcherRecords(),
-    getAllTasks(),
+    getLandingTasksForSha(productionSha),
     getAutonomousTruthSnapshot(),
+    auditedHours ?? (postgresAtomicQueueSelected() ? readPostgresWorkEvidenceHours(new Date(windowStart).toISOString(), new Date(now).toISOString()) : null),
   ]);
 
   const campaignIntervals = new Map<number, Interval[]>();
@@ -189,6 +191,13 @@ export async function buildThreeLayerVerifiedLedger(base: AgentLedgerDashboard) 
       if (parsed.productionSha === productionSha) exactShaAgents.add(parsed.agentNumber);
       else staleShaEvidence += 1;
     }
+  }
+
+  if (archive) {
+    // Time spans come from the permanent archive across deployments. Current
+    // SHA task reads above are only for certificate/failure evidence.
+    evidenceMsByAgent.clear();
+    for (const row of archive.agents) evidenceMsByAgent.set(row.agent_number, row.passing_seconds * 1000);
   }
 
   const campaignMsByAgent = new Map<number, number>();
@@ -275,6 +284,7 @@ export async function buildThreeLayerVerifiedLedger(base: AgentLedgerDashboard) 
       },
       layer2TimeIntegrity: {
         pass: layer2Pass,
+        evidenceArchive: archive ? { historicalEvidenceIncomplete: archive.historicalEvidenceIncomplete, archiveStartedAt: archive.archiveStartedAt } : null,
         policy: 'Only PASS evidence is eligible. 24h crossing spans are conservatively clipped. Duplicate evidence is removed. Ambiguous source overlap uses MAX, never SUM.',
         rowCount: base.rows.length,
         uniqueAgents: uniqueRowNumbers.size,

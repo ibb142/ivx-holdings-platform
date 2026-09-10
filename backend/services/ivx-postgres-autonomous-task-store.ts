@@ -96,6 +96,7 @@ const DIRECT_RPC_ARGS: Record<string, string[]> = {
   ivx_senior_queue_patch: ['p_changes'],
   ivx_senior_queue_claim: ['p_job_id', 'p_worker_instance_id', 'p_resume'],
   ivx_senior_ledger_put: ['p_result'],
+  ivx_work_evidence_hours: ['p_from', 'p_to', 'p_target_hours'],
 };
 async function directRpc<T>(name: string, body: Record<string, unknown>, env: NodeJS.ProcessEnv = process.env): Promise<T> {
   const args = DIRECT_RPC_ARGS[name];
@@ -103,6 +104,7 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
   const casts: Record<string, string> = {
     p_tasks: 'jsonb', p_requests: 'jsonb', p_leases: 'jsonb', p_task: 'jsonb', p_expected_states: 'jsonb',
     p_changes: 'jsonb', p_result: 'jsonb', p_resume: 'boolean',
+    p_from: 'timestamptz', p_to: 'timestamptz', p_target_hours: 'numeric',
     p_worker_instance_id: 'text', p_lease_holder: 'text', p_event_type: 'text', p_objective_id: 'text', p_lease_seconds: 'integer',
   };
   const placeholders = args.map((key, index) => `$${index + 1}::${casts[key] ?? 'text'}`).join(', ');
@@ -115,6 +117,23 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
   const result = await queryWithPostgresDeadline<{ result: T }>(pool, `select public.${name}(${placeholders}) as result`, values);
   if (!result.rows?.length) throw new Error(`direct_postgres_rpc_empty:${name}`);
   return result.rows[0].result as T;
+}
+
+export type WorkEvidenceHours = Record<string, unknown> & {
+  agents: Array<{ agent_number: number; observations: number; attempted_seconds: number; passing_seconds: number; nonpassing_seconds: number }>;
+  historicalEvidenceIncomplete: boolean;
+};
+
+export async function readPostgresWorkEvidenceHours(from: string, to: string, targetHours = 300): Promise<WorkEvidenceHours> {
+  if (!postgresAtomicQueueConfigured()) throw new Error('Durable work evidence requires postgres_atomic');
+  const result = await rpc<WorkEvidenceHours>('ivx_work_evidence_hours', { p_from: from, p_to: to, p_target_hours: targetHours });
+  if (!Array.isArray(result?.agents) || result.agents.length !== 112
+    || new Set(result.agents.map(row => row.agent_number)).size !== 112
+    || result.agents.some(row => !Number.isInteger(row.agent_number) || row.agent_number < 1 || row.agent_number > 112
+      || !Number.isFinite(row.passing_seconds) || row.passing_seconds < 0 || row.passing_seconds > (Date.parse(to) - Date.parse(from)) / 1000)) {
+    throw new Error('Incomplete or invalid immutable work evidence');
+  }
+  return result;
 }
 
 type SeniorRpc = 'ivx_senior_queue_patch' | 'ivx_senior_queue_claim' | 'ivx_senior_ledger_put';
@@ -243,6 +262,27 @@ async function fetchAllPostgresTasks(): Promise<Task[]> {
   const pageSize = 1_000; const maxRows = 20_000; const all: Task[] = [];
   for (let offset = 0; offset < maxRows; offset += pageSize) { const rows = preferDirectTransport() ? (await getDirectPool().query<RestTaskRow>('select payload from public.ivx_autonomous_tasks order by created_at asc offset $1 limit $2', [offset, pageSize])).rows : await restRequest<RestTaskRow[]>(`ivx_autonomous_tasks?select=payload&order=created_at.asc&offset=${offset}&limit=${pageSize}`, { method: 'GET' }); if (!Array.isArray(rows)) throw new Error('postgres_atomic task response is not an array'); all.push(...rows.map((row) => structuredClone(row.payload))); if (rows.length < pageSize) return all; }
   throw new Error(`postgres_atomic task ledger exceeds safe pagination limit (${maxRows})`);
+}
+
+/** Bound live Landing reads by deployment identity, regardless of ledger age. */
+export async function readPostgresLandingTasks(sha: string): Promise<Task[]> {
+  if (!/^[a-f0-9]{40}$/i.test(sha)) throw new Error('Invalid Landing source SHA');
+  const prefixes = ['landing-p0:', 'landing-p0-repair:', 'landing-p0-patrol:'];
+  const directRead = async () => (await getDirectPool().query<RestTaskRow>(
+    'select payload from public.ivx_autonomous_tasks where idempotency_key like any($1::text[]) order by task_id limit 1000',
+    [prefixes.map(prefix => `${prefix}${sha}:%`)],
+  )).rows;
+  let rows: RestTaskRow[];
+  if (preferDirectTransport()) rows = await directRead();
+  else {
+    try {
+      const filter = prefixes.map(prefix => `idempotency_key.like.${prefix}${sha}:*`).join(',');
+      rows = await restRequest<RestTaskRow[]>(`ivx_autonomous_tasks?select=payload&or=(${filter})&order=task_id&limit=1000`,
+        { method: 'GET' }, { timeoutMs: TRUTH_TIMEOUT_MS, attempts: 1 });
+    } catch (error) { if (!mayFailoverRead(error)) throw error; rows = await directRead(); }
+  }
+  if (!Array.isArray(rows) || rows.length >= 1000) throw new Error('Incomplete current-SHA Landing task response');
+  return rows.map(row => structuredClone(row.payload));
 }
 
 export async function readPostgresTaskById(taskId: string): Promise<Task | null> {
@@ -458,17 +498,23 @@ export async function readPostgresFleetLeaseRows(): Promise<AtomicFleetLeaseRow[
 
 /** Planning needs identities and states, never historical evidence payloads. */
 export type AutonomousTaskIndex = Pick<Task, 'taskId' | 'idempotencyKey' | 'assignedAgentNumber' | 'state' | 'title'>;
-export async function readPostgresAutonomousTaskIndex(): Promise<AutonomousTaskIndex[]> {
+export async function readPostgresAutonomousTaskIndex(sourceSha?: string): Promise<AutonomousTaskIndex[]> {
+  if (sourceSha !== undefined && !/^[a-f0-9]{40}$/i.test(sourceSha)) throw new Error('Invalid planning source SHA');
+  const families = ['landing-p0:', 'landing-p0-repair:', 'landing-p0-patrol:'];
+  // Old deployment audits are historical evidence, not eligible work for this
+  // deployment. Keep all non-Landing work and its deduplication identities.
+  const where = sourceSha ? ' where (not (idempotency_key like any($3::text[])) or idempotency_key like any($4::text[]))' : '';
+  const restFilter = sourceSha ? `&or=(and(${families.map(prefix => `idempotency_key.not.like.${prefix}*`).join(',')}),${families.map(prefix => `idempotency_key.like.${prefix}${sourceSha}:*`).join(',')})` : '';
   const all: AutonomousTaskIndex[] = [];
   const pageSize = 1000;
   for (let offset = 0; offset < 20000; offset += pageSize) {
     type IndexRow = { task_id: string; idempotency_key: string; assigned_agent_number: number | null; state: TaskState; title: string };
     const rows = preferDirectTransport()
       ? (await getDirectPool().query<IndexRow>(
-        "select task_id, idempotency_key, assigned_agent_number, state, payload->>'title' as title from public.ivx_autonomous_tasks order by created_at asc, task_id asc offset $1 limit $2",
-        [offset, pageSize])).rows
+        "select task_id, idempotency_key, assigned_agent_number, state, payload->>'title' as title from public.ivx_autonomous_tasks" + where + ' order by created_at asc, task_id asc offset $1 limit $2',
+        sourceSha ? [offset, pageSize, families.map(prefix => `${prefix}%`), families.map(prefix => `${prefix}${sourceSha}:%`)] : [offset, pageSize])).rows
       : await restRequest<IndexRow[]>(
-        `ivx_autonomous_tasks?select=task_id,idempotency_key,assigned_agent_number,state,title:payload->>title&order=created_at.asc,task_id.asc&offset=${offset}&limit=${pageSize}`,
+        `ivx_autonomous_tasks?select=task_id,idempotency_key,assigned_agent_number,state,title:payload->>title${restFilter}&order=created_at.asc,task_id.asc&offset=${offset}&limit=${pageSize}`,
         { method: 'GET' });
     if (!Array.isArray(rows)) throw new Error('postgres_atomic planning index is invalid');
     all.push(...rows.map(row => ({ taskId: row.task_id, idempotencyKey: row.idempotency_key,
