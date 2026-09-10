@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { createTask, getAllTasks } from './ivx-autonomous-task-engine';
+import { postgresAtomicQueueSelected, readPostgresTaskKeys } from './ivx-postgres-autonomous-task-store';
 import { readDurableJson, writeDurableJson } from './ivx-durable-store';
 
 export const IVX_AUTONOMOUS_LEARNING_MARKER = 'ivx-autonomous-learning-v3-ai-quantum-112-2026-09-06';
@@ -146,13 +147,16 @@ function curriculumDescription(agentNumber: number, sourceSha: string): string {
 
 async function ensureDailyStudyQueue(state: LearningState, sourceSha: string): Promise<void> {
   const today = utcDate();
-  const tasks = await getAllTasks();
+  const keys = Array.from({ length: IVX_AUTONOMOUS_LEARNING_FLEET_SIZE }, (_, i) => `autonomous-learning:${CURRICULUM_VERSION}:${today}:ia-${i + 1}`);
+  const existingKeys = new Set(postgresAtomicQueueSelected()
+    ? await readPostgresTaskKeys(keys)
+    : (await getAllTasks()).map(task => task.idempotencyKey));
   let created = 0;
   let represented = 0;
 
   for (let agentNumber = 1; agentNumber <= IVX_AUTONOMOUS_LEARNING_FLEET_SIZE; agentNumber += 1) {
     const idempotencyKey = `autonomous-learning:${CURRICULUM_VERSION}:${today}:ia-${agentNumber}`;
-    const existing = tasks.find((task) => task.idempotencyKey === idempotencyKey);
+    const existing = existingKeys.has(idempotencyKey);
     if (existing) {
       represented += 1;
       continue;

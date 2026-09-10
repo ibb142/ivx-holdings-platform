@@ -19,12 +19,16 @@ const getUser = mock(async (_token: string) => providerResult);
 const maybeSingle = mock(async () => ({ data: profile, error: profileError, status: profileStatus }));
 const abortSignal = mock((_signal: AbortSignal) => ({ maybeSingle }));
 const networkGuard = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected live request in isolated auth contract'));
+let clientFetch: typeof fetch | undefined;
 const providerModule = Bun.resolveSync('@supabase/supabase-js', new URL('../../expo/shared/ivx/', import.meta.url).pathname);
 mock.module(providerModule, () => ({
-  createClient: () => ({
+  createClient: (_url: string, _key: string, options: { global?: { fetch?: typeof fetch } }) => {
+    clientFetch = options.global?.fetch;
+    return ({
     auth: { getUser },
     from: () => ({ select: () => ({ eq: () => ({ abortSignal }) }) }),
-  }),
+    });
+  },
 }));
 const { IVXAuthServiceUnavailableError, resolveIVXAuthenticatedRequest } = await import('../../expo/shared/ivx/access-control');
 const request = () => new Request('https://example.test/owner-dashboard', {
@@ -83,6 +87,16 @@ test('a timed-out identity lookup fails closed with 503 and clears its deadline'
     expect(maybeSingle).not.toHaveBeenCalled();
     expect(deadlineHandles).toHaveLength(1);
     expect(clearSpy).toHaveBeenCalledWith(deadlineHandles[0]);
+    // Probe the actual custom transport with a local fetch stub. Its signal
+    // must already be aborted, so a timed-out lookup cannot retain a socket.
+    let transportSignal: AbortSignal | null | undefined;
+    networkGuard.mockImplementationOnce(async (_input, init) => {
+      transportSignal = init?.signal;
+      return new Response('{}');
+    });
+    await clientFetch!('https://example.test/auth/v1/user');
+    expect(transportSignal?.aborted).toBe(true);
+    networkGuard.mockClear();
   } finally {
     timerSpy.mockRestore();
     clearSpy.mockRestore();

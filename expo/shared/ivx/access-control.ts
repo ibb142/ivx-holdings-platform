@@ -411,12 +411,19 @@ function getIVXSupabaseServerConfig(): IVXSupabaseServerConfig {
   };
 }
 
-export function createIVXServerClient(accessToken: string): SupabaseClient {
+export function createIVXServerClient(accessToken: string, requestSignal?: AbortSignal): SupabaseClient {
   const config = getIVXSupabaseServerConfig();
   const ownerBypassToken = shouldAcceptOpenAccessOwnerToken() && accessToken === IVX_OPEN_ACCESS_OWNER_TOKEN;
+  const requestFetch = requestSignal
+    ? ((input, init) => fetch(input, {
+      ...init,
+      signal: init?.signal ? AbortSignal.any([init.signal, requestSignal]) : requestSignal,
+    })) as typeof fetch
+    : undefined;
 
   if (config.isServiceRole || ownerBypassToken) {
     return createClient(config.url, config.dataKey, {
+      global: { fetch: requestFetch },
       auth: {
         autoRefreshToken: false,
         persistSession: false,
@@ -430,6 +437,7 @@ export function createIVXServerClient(accessToken: string): SupabaseClient {
       persistSession: false,
     },
     global: {
+      fetch: requestFetch,
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
@@ -626,7 +634,8 @@ export async function resolveIVXAuthenticatedRequest(
     throw new Error('IVX auth guard failed: invalid or expired Supabase session.');
   }
 
-  const client = createIVXServerClient(accessToken);
+  const sessionController = new AbortController();
+  const client = createIVXServerClient(accessToken, sessionController.signal);
   // Session and profile verification share one deadline. A slow session lookup
   // must not give the following profile request another full timeout window.
   const authDeadline = Date.now() + 15_000;
@@ -636,7 +645,10 @@ export async function resolveIVXAuthenticatedRequest(
     userResult = await Promise.race([
       client.auth.getUser(accessToken),
       new Promise<never>((_resolve, reject) => {
-        const timer = authTimer = setTimeout(() => reject(new IVXAuthServiceUnavailableError()), 15_000);
+        const timer = authTimer = setTimeout(() => {
+          reject(new IVXAuthServiceUnavailableError());
+          sessionController.abort();
+        }, 15_000);
         // timer may be a NodeJS.Timeout or a number depending on the platform
         if (typeof timer === 'object' && timer && 'unref' in timer) {
           (timer as { unref?: () => void }).unref?.();

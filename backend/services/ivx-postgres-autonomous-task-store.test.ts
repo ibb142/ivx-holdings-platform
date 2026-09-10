@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
+  readPostgresTaskKeys,
   autonomousWorkerInstanceId,
   claimPostgresAutonomousTasks,
   heartbeatPostgresAutonomousTasks,
@@ -307,3 +308,23 @@ test('recovery fails closed on rejected credentials and incomplete responses, th
   globalThis.fetch = (async () => Response.json([])) as typeof fetch;
   expect(await readPostgresRecoveryTasks()).toEqual([]);
 });
+
+ test('exact identity reads bound each request and exclude evidence payloads', async () => {
+  configureAtomicQueue();
+  let calls = 0;
+  const keys = Array.from({ length: 112 }, (_, i) => `learning:today:ia-${i + 1}`);
+  globalThis.fetch = (async input => {
+    const url = new URL(String(input));
+    expect(url.searchParams.get('select')).toBe('idempotency_key');
+    const batch = url.searchParams.get('idempotency_key')!.slice(4, -1).split(',');
+    expect(batch.length).toBeLessThanOrEqual(28);
+    calls++;
+    return Response.json(batch.map(idempotency_key => ({ idempotency_key })));
+  }) as typeof fetch;
+  expect(await readPostgresTaskKeys(keys)).toEqual(keys);
+  expect(calls).toBe(4);
+  await expect(readPostgresTaskKeys(['unsafe,*'])).rejects.toThrow('Invalid bounded');
+  expect(calls).toBe(4);
+  globalThis.fetch = (async () => Response.json([{ idempotency_key: 'unrequested' }])) as typeof fetch;
+  await expect(readPostgresTaskKeys(keys)).rejects.toThrow('Invalid task identity response');
+ });
