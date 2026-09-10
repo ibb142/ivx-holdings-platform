@@ -3,7 +3,13 @@ name: IVX Reels Live Certificate
 on:
   push:
     branches: [main]
+  pull_request:
+    paths:
+      - '.github/workflows/ivx-reels-live-cert.yml'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   reels-live-cert:
@@ -15,21 +21,42 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Resolve production source for this verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$GITHUB_SHA"
+          # A workflow-only PR validates the checker against current production;
+          # it does not certify that the PR application is deployed.
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            target=$(git ls-remote origin refs/heads/main | awk '{print $1}')
+          fi
+          [[ "$target" =~ ^[0-9a-f]{40}$ ]]
+          echo "EXPECTED_PRODUCTION_SHA=$target" >> "$GITHUB_ENV"
+
       - name: Wait for production SHA parity
         shell: bash
         run: |
           set -euo pipefail
-          matched=0
+          stable=0
           for i in $(seq 1 60); do
             code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --connect-timeout 5 --max-time 15 "${API_BASE}/health" || true)
             if [ "$code" = "200" ]; then
               health_sha=$(jq -r '.commit // .sha // .gitCommit // .git_commit // empty' /tmp/health.json 2>/dev/null || true)
               ok=$(jq -r '.ok // false' /tmp/health.json 2>/dev/null || echo false)
-              if [ "$ok" = "true" ] && { [ "$health_sha" = "$GITHUB_SHA" ] || [[ "$GITHUB_SHA" == "$health_sha"* ]] || [[ "$health_sha" == "$GITHUB_SHA"* ]]; }; then matched=1; break; fi
+              if [ "$ok" = "true" ] && [ "$health_sha" = "$EXPECTED_PRODUCTION_SHA" ]; then
+                stable=$((stable + 1))
+                if [ "$stable" -ge 12 ]; then exit 0; fi
+              else
+                stable=0
+              fi
+            else
+              stable=0
             fi
-            sleep 10
+            sleep 5
           done
-          test "$matched" = "1"
+          echo 'Production did not stabilize on the expected source.'
+          exit 1
 
       - name: Verify canonical Reels feed has real content
         shell: bash
@@ -54,7 +81,9 @@ jobs:
       - name: Install browser visual verifier
         run: |
           npm install --no-save playwright@1.55.0
-          npx playwright install --with-deps chromium
+          # H.264/AAC playback requires the codecs distributed with Chrome.
+          # https://playwright.dev/docs/browsers#media-codecs
+          npx playwright install --with-deps chrome
 
       - name: Verify Reel actually renders in production browser
         shell: bash
@@ -65,8 +94,15 @@ jobs:
           const { chromium } = require('playwright');
           const fs = require('fs');
           (async () => {
-            const browser = await chromium.launch({headless:true});
+            const browser = await chromium.launch({headless:true,channel:'chrome'});
             const page = await browser.newPage({viewport:{width:390,height:844}});
+            const assertSource = async () => {
+              const response = await fetch(process.env.API_BASE + '/health', {signal:AbortSignal.timeout(15000)});
+              const health = await response.json();
+              if (!response.ok || health.ok !== true || health.commit !== process.env.EXPECTED_PRODUCTION_SHA) throw new Error('Production source changed during Reels verification');
+            };
+            await assertSource();
+            try {
             await page.goto(process.env.LANDING_BASE + '/?qa=' + Date.now(), {waitUntil:'domcontentloaded',timeout:60000});
             await page.locator('#properties-grid').waitFor({state:'visible',timeout:30000});
             await page.waitForFunction(() => document.querySelectorAll('[data-ivx-home-feed-video]').length > 0, null, {timeout:30000});
@@ -74,16 +110,24 @@ jobs:
             await card.scrollIntoViewIfNeeded();
             await card.waitFor({state:'visible',timeout:15000});
             await page.waitForFunction(() => { const v=document.querySelector('[data-ivx-home-feed-video] video'); return !!v && !!v.currentSrc && v.readyState>=2; }, null, {timeout:30000});
-            const proof=await card.evaluate(el=>{const v=el.querySelector('video');const r=el.getBoundingClientRect();return{visible:r.width>0&&r.height>0,width:r.width,height:r.height,currentSrc:v?.currentSrc||'',readyState:v?.readyState??-1};});
-            if(!proof.visible||!proof.currentSrc||proof.readyState<2) throw new Error('API PASS but Reel not visibly playable: '+JSON.stringify(proof));
+            const initialTime=await card.evaluate(el=>el.querySelector('video').currentTime);
+            await page.waitForFunction(start => { const v=document.querySelector('[data-ivx-home-feed-video] video'); return !!v && !v.paused && v.currentTime !== start; }, initialTime, {timeout:15000});
+            const proof=await card.evaluate(el=>{const v=el.querySelector('video');const r=el.getBoundingClientRect();return{visible:r.width>0&&r.height>0,width:r.width,height:r.height,currentSrc:v?.currentSrc||'',readyState:v?.readyState??-1,paused:v?.paused,currentTime:v?.currentTime};});
+            if(!proof.visible||!proof.currentSrc||proof.readyState<2||proof.paused||proof.currentTime===initialTime) throw new Error('API PASS but Reel not visibly playing: '+JSON.stringify(proof));
+            await assertSource();
             await page.screenshot({path:'qa/evidence/reels-live/landing-reel-visible.png',fullPage:true});
-            fs.writeFileSync('qa/evidence/reels-live/browser-proof.json',JSON.stringify({certified:true,proof,verifiedAt:new Date().toISOString()},null,2));
-            await browser.close();
+            fs.writeFileSync('qa/evidence/reels-live/browser-proof.json',JSON.stringify({certified:process.env.GITHUB_EVENT_NAME!=='pull_request',runnerValidated:true,browserChannel:'chrome',browserVersion:browser.version(),workflowSha:process.env.GITHUB_SHA,productionSha:process.env.EXPECTED_PRODUCTION_SHA,proof,verifiedAt:new Date().toISOString()},null,2));
+            } catch(error) {
+              const state=await page.locator('[data-ivx-home-feed-video] video').first().evaluate(v=>({currentSrc:v.currentSrc,readyState:v.readyState,networkState:v.networkState,paused:v.paused,error:v.error?{code:v.error.code,message:v.error.message}:null})).catch(()=>null);
+              console.error('Reels media failure:',JSON.stringify(state));
+              throw error;
+            } finally { await browser.close(); }
           })().catch(e=>{console.error(e);process.exit(1)});
           EOF
           NODE_PATH="$GITHUB_WORKSPACE/node_modules" node /tmp/reels-visual-proof.cjs
 
       - name: Emit Reels live certificate
+        if: github.event_name != 'pull_request'
         shell: bash
         run: |
           set -euo pipefail
