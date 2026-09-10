@@ -207,31 +207,29 @@ export async function observeAndLearn(
     return { ok: true, state, action: 'LAST_KNOWN_GOOD_UPDATED' };
   }
 
+  // An unhealthy observation is useful before any healthy baseline exists.
+  // Save the failure independently of optional GitHub comparison availability.
+  const fp = fingerprint(input);
+  let lesson = state.lessons.find((row) => row.fingerprint === fp && row.badSha === input.sourceSha);
+  if (lesson) {
+    lesson.occurrences += 1;
+    lesson.lastSeenAt = nowIso();
+  } else {
+    lesson = {
+      fingerprint: fp, firstSeenAt: nowIso(), lastSeenAt: nowIso(), occurrences: 1,
+      lastKnownGoodSha: state.lastKnownGoodSha, badSha: input.sourceSha,
+      suspectedFiles: [], diagnoses: input.diagnoses, repairVerified: false,
+    };
+    state.lessons.unshift(lesson);
+    state.lessons = state.lessons.slice(0, 100);
+  }
+
   if (state.lastKnownGoodSha && state.lastKnownGoodSha !== input.sourceSha) {
     try {
       const comparison = await compareWithLastKnownGood(state.lastKnownGoodSha, input.sourceSha);
       state.lastComparison = comparison;
       state.lastComparedAt = nowIso();
-      const fp = fingerprint(input);
-      const existing = state.lessons.find((lesson) => lesson.fingerprint === fp && lesson.badSha === input.sourceSha);
-      if (existing) {
-        existing.occurrences += 1;
-        existing.lastSeenAt = nowIso();
-        existing.suspectedFiles = comparison.highRiskFiles;
-      } else {
-        state.lessons.unshift({
-          fingerprint: fp,
-          firstSeenAt: nowIso(),
-          lastSeenAt: nowIso(),
-          occurrences: 1,
-          lastKnownGoodSha: state.lastKnownGoodSha,
-          badSha: input.sourceSha,
-          suspectedFiles: comparison.highRiskFiles,
-          diagnoses: input.diagnoses,
-          repairVerified: false,
-        });
-        state.lessons = state.lessons.slice(0, 100);
-      }
+      lesson.suspectedFiles = comparison.highRiskFiles;
       await saveState(state);
       return { ok: true, state, action: comparison.highRiskFiles.length ? 'REGRESSION_DIFF_RANKED' : 'REGRESSION_DIFF_EMPTY' };
     } catch (error) {
@@ -241,7 +239,7 @@ export async function observeAndLearn(
   }
 
   await saveState(state);
-  return { ok: true, state, action: 'NO_LAST_KNOWN_GOOD_YET' };
+  return { ok: true, state, action: state.lastKnownGoodSha ? 'FAILURE_RECORDED_ON_BASELINE' : 'FAILURE_RECORDED_WITHOUT_BASELINE' };
 }
 
 export async function getAutonomousLearningStatus(): Promise<LearningState> {

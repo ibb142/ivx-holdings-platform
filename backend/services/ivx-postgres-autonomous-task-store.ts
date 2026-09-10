@@ -9,6 +9,7 @@
 import { hostname } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
+import type { EventEmitter } from 'node:events';
 import { observePostgresPoolErrors, queryWithPostgresDeadline } from './ivx-postgres-deadline';
 import { emergencyStopPostgresConfig } from './ivx-emergency-stop-postgres';
 import { supabasePostgresTls, withoutPostgresUrlTlsOptions } from './ivx-supabase-postgres-tls';
@@ -28,6 +29,7 @@ let taskMutationRevision = 0;
 let directPool: Pool | null = null;
 let telemetryPool: Pool | null = null;
 let presencePool: Pool | null = null;
+let repairPool: Pool | null = null;
 const upstreamRetryQuota = new RetryQuota();
 
 type AtomicCreateResult = { ok: boolean; task: Task | null; duplicate: boolean; error: string | null };
@@ -35,7 +37,7 @@ type AtomicCasResult = { ok: boolean; task: Task | null; error: string | null };
 type RestTaskRow = { payload: Task };
 export type AtomicFleetLeaseRow = { taskId: string; idempotencyKey: string; state: TaskState; assignedAgentNumber: number | null; leaseHolder: string; workerInstanceId: string | null; lastHeartbeatAt: string; leaseExpiresAt: string | null };
 
-export function resetPostgresAutonomousTaskStoreForTests(): void { taskReadCache = null; taskReadInFlight = null; currentReadsInFlight.clear(); taskMutationRevision = 0; directPool = null; telemetryPool = null; presencePool = null; }
+export function resetPostgresAutonomousTaskStoreForTests(): void { taskReadCache = null; taskReadInFlight = null; currentReadsInFlight.clear(); taskMutationRevision = 0; directPool = null; telemetryPool = null; presencePool = null; repairPool = null; }
 function trimmed(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
 function supabaseUrl(env: NodeJS.ProcessEnv = process.env): string { return trimmed(env.EXPO_PUBLIC_SUPABASE_URL || env.SUPABASE_URL).replace(/\/+$/, ''); }
 function serviceRoleKey(env: NodeJS.ProcessEnv = process.env): string { return trimmed(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_KEY); }
@@ -60,11 +62,11 @@ function headers(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
 }
 function externalError(payload: unknown, fallback: string): string { if (payload && typeof payload === 'object') { const record = payload as Record<string, unknown>; const candidate = record.message ?? record.error ?? record.details; if (typeof candidate === 'string' && candidate.trim()) return candidate.trim().slice(0, 320); } return fallback; }
 async function parsePayload(response: Response): Promise<unknown> { const text = await response.text(); if (!text) return null; try { return JSON.parse(text) as unknown; } catch { return { message: text.slice(0, 320) }; } }
-type PoolPurpose = 'tasks' | 'telemetry' | 'presence';
+type PoolPurpose = 'tasks' | 'telemetry' | 'presence' | 'repair';
 function getDirectPool(env: NodeJS.ProcessEnv = process.env, purpose: PoolPurpose = 'tasks'): Pool {
   const connectionString = directDbUrl(env);
   if (!connectionString) throw new Error('direct_postgres_not_configured');
-  const existing = purpose === 'presence' ? presencePool : purpose === 'telemetry' ? telemetryPool : directPool;
+  const existing = purpose === 'repair' ? repairPool : purpose === 'presence' ? presencePool : purpose === 'telemetry' ? telemetryPool : directPool;
   if (existing) return existing;
   // Both mutations and aggregate monitoring can occupy their entire pool.
   // Reserve a separate connection for compact process reads and sample writes.
@@ -72,7 +74,14 @@ function getDirectPool(env: NodeJS.ProcessEnv = process.env, purpose: PoolPurpos
     max: purpose === 'tasks' ? 4 : 1, application_name: `ivx_${purpose}`,
     idleTimeoutMillis: 30_000, connectionTimeoutMillis: 20_000, query_timeout: 5_000, statement_timeout: 5_000 });
   observePostgresPoolErrors(pool, purpose);
-  if (purpose === 'presence') presencePool = pool; else if (purpose === 'telemetry') telemetryPool = pool; else directPool = pool;
+  if (purpose === 'repair') {
+    // Observe both idle and checked-out connection errors. Query promises still
+    // reject, destroy their failed connection, and never replay a mutation.
+    const events = pool as Pool & EventEmitter;
+    events.on('error', () => console.error('[IVX repair queue] PostgreSQL connection unavailable'));
+    events.on('connect', (client: EventEmitter) => client.on('error', () => {}));
+    repairPool = pool;
+  } else if (purpose === 'presence') presencePool = pool; else if (purpose === 'telemetry') telemetryPool = pool; else directPool = pool;
   return pool;
 }
 const DIRECT_RPC_ARGS: Record<string, string[]> = {
@@ -84,12 +93,16 @@ const DIRECT_RPC_ARGS: Record<string, string[]> = {
   ivx_autonomous_task_compare_and_set: ['p_task', 'p_expected_states', 'p_lease_holder', 'p_worker_instance_id', 'p_event_type'],
   ivx_autonomous_tasks_link_objective: ['p_objective_id'],
   ivx_fleet_dashboard_observation: [],
+  ivx_senior_queue_patch: ['p_changes'],
+  ivx_senior_queue_claim: ['p_job_id', 'p_worker_instance_id', 'p_resume'],
+  ivx_senior_ledger_put: ['p_result'],
 };
 async function directRpc<T>(name: string, body: Record<string, unknown>, env: NodeJS.ProcessEnv = process.env): Promise<T> {
   const args = DIRECT_RPC_ARGS[name];
   if (!args) throw new Error(`direct_postgres_rpc_not_allowed:${name}`);
   const casts: Record<string, string> = {
     p_tasks: 'jsonb', p_requests: 'jsonb', p_leases: 'jsonb', p_task: 'jsonb', p_expected_states: 'jsonb',
+    p_changes: 'jsonb', p_result: 'jsonb', p_resume: 'boolean',
     p_worker_instance_id: 'text', p_lease_holder: 'text', p_event_type: 'text', p_objective_id: 'text', p_lease_seconds: 'integer',
   };
   const placeholders = args.map((key, index) => `$${index + 1}::${casts[key] ?? 'text'}`).join(', ');
@@ -98,10 +111,31 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
     if (casts[key] === 'jsonb' && value !== null && value !== undefined) return JSON.stringify(value);
     return value ?? null;
   });
-  const pool = getDirectPool(env, name === 'ivx_fleet_dashboard_observation' ? 'telemetry' : 'tasks');
+  const pool = getDirectPool(env, name.startsWith('ivx_senior_') ? 'repair' : name === 'ivx_fleet_dashboard_observation' ? 'telemetry' : 'tasks');
   const result = await queryWithPostgresDeadline<{ result: T }>(pool, `select public.${name}(${placeholders}) as result`, values);
   if (!result.rows?.length) throw new Error(`direct_postgres_rpc_empty:${name}`);
   return result.rows[0].result as T;
+}
+
+type SeniorRpc = 'ivx_senior_queue_patch' | 'ivx_senior_queue_claim' | 'ivx_senior_ledger_put';
+type SeniorDocumentKey = 'senior-developer-worker/queue.json' | 'senior-developer-worker/proof-ledger.json';
+export async function seniorQueuePostgresRpc<T>(name: SeniorRpc, body: Record<string, unknown>): Promise<T> {
+  emergencyStopPostgresConfig(); // Reject cross-project bindings before any query.
+  if (!['ivx_senior_queue_patch', 'ivx_senior_queue_claim', 'ivx_senior_ledger_put'].includes(name)) throw new Error('Repair RPC not allowed');
+  return directRpc<T>(name, body);
+}
+export async function readSeniorQueuePostgresDocument<T>(key: SeniorDocumentKey): Promise<T | null> {
+  emergencyStopPostgresConfig();
+  if (!['senior-developer-worker/queue.json', 'senior-developer-worker/proof-ledger.json'].includes(key)) throw new Error('Repair document not allowed');
+  const result = await queryWithPostgresDeadline<{ value: T }>(getDirectPool(process.env, 'repair'),
+    'select value from public.ivx_durable_documents where doc_key = $1 limit 1', [key]);
+  return result.rows[0]?.value ?? null;
+}
+export async function appendSeniorProofPostgresEvent(event: Record<string, unknown>): Promise<void> {
+  emergencyStopPostgresConfig();
+  await queryWithPostgresDeadline(getDirectPool(process.env, 'repair'),
+    'insert into public.ivx_durable_events(doc_key,event) values ($1,$2::jsonb)',
+    ['senior-developer-worker/proof-ledger.json', JSON.stringify(event)]);
 }
 async function restRequest<T>(path: string, init: RequestInit, options: { timeoutMs?: number; attempts?: number; env?: NodeJS.ProcessEnv } = {}): Promise<T> {
   const env = options.env ?? process.env;
