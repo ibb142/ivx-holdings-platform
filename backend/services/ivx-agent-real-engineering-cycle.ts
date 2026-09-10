@@ -33,7 +33,6 @@ import {
 } from './ivx-autonomous-task-engine';
 import { containPath, fileHasUnexemptedSecret, resolveRepoRoot } from './ivx-agent-engineering-tools';
 import {
-  encodeLandingResult,
   ensureLandingP0BacklogSeeded,
   getLandingUnit,
   isLandingP0MissionActive,
@@ -44,6 +43,7 @@ import {
   resolveProductionSha,
 } from './ivx-landing-p0-backlog';
 import { executeLandingUnit } from './ivx-landing-p0-executor';
+import { landingTaskEvidence } from './ivx-landing-task-evidence';
 
 export const IVX_REAL_ENGINEERING_CYCLE_MARKER = 'ivx-agent-real-engineering-cycle-2026-09-01';
 
@@ -596,7 +596,7 @@ async function runLandingTask(
     repair: parsed.repair,
   });
   const evidenceType: TaskEvidence['evidenceType'] = unit.check.kind === 'ci' ? 'test_result' : 'production_verification';
-  const evidence = await makeEvidence(evidenceType, unit.unitId, encodeLandingResult(record));
+  const evidence = landingTaskEvidence(record, unit.unitId, evidenceType);
   const productiveMinutes = Math.round((full.productive_seconds / 60) * 10) / 10;
   console.log('[IVX Landing P0] unit executed', {
     agentNumber: input.agentNumber,

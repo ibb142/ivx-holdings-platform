@@ -284,6 +284,79 @@ describe('IVX Autonomous Coder — pilot sentinel', () => {
  * PR + required-CI-checks gates. A code_change task only reaches COMPLETED
  * when its PR merges after ALL required checks report success.
  */
+describe('durable repair boundaries', () => {
+  it('rejects a Bun suite mutation, then repairs through a separate real Node regression', async () => {
+    const repo = await makeIsolatedRepo('node-sidecar-recovery');
+    const sourcePath = 'backend/services/normalize-video.ts';
+    const legacyPath = 'backend/services/normalize-video.test.ts';
+    const regressionPath = 'backend/services/normalize-video.node-regression.test.ts';
+    const source = 'export function normalizeVideo(value: string) { return value; }';
+    const legacy = 'import { test, expect } from "bun:test"; test("legacy", () => expect(true).toBe(true));';
+    await repo.fileWriter(sourcePath, source);
+    await repo.fileWriter(legacyPath, legacy);
+    let calls = 0;
+    const commands: string[] = [];
+    const proof = await runIVXAutonomousCoder({
+      taskId: 'landing-remediation:fixture:normalize-video', goal: '[TEMPLATE_MODE:BUG_FIX] Trim video URL whitespace in backend/services/normalize-video.ts.',
+      ownerId: 'test-owner', executionMode: 'code_change', approvalPolicy: 'owner_gated', projectRoot: repo.root,
+      fileReader: repo.fileReader, fileWriter: repo.fileWriter,
+      planCaller: async () => JSON.stringify({ targetFiles: [sourcePath], filesToInspect: [legacyPath], hypothesis: 'missing trim' }),
+      llmCaller: async (_system, prompt) => {
+        calls++;
+        if (calls > 1) expect(prompt).toContain('VERSIONED RECOVERY RULE NODE_TEST_RUNTIME');
+        return JSON.stringify({ rootCause: 'missing trim', technicalPlan: 'trim through real normalization entry point', operations: [
+          { path: sourcePath, kind: 'replace_exact', oldText: 'return value;', newText: 'return value.trim();' },
+          ...(calls === 1 ? [{ path: legacyPath, kind: 'replace_exact', oldText: '"legacy"', newText: '"legacy acceptance"' }] : [
+            { path: regressionPath, kind: 'create_file', oldText: '', newText: 'import {test} from "node:test"; import assert from "node:assert/strict"; import {normalizeVideo} from "./normalize-video"; test("trim", () => assert.equal(normalizeVideo(" video "), "video"));' },
+          ]),
+        ] });
+      },
+      testRunner: async (cwd, command) => { commands.push(command); return runAutonomousCoderCommand(cwd, command); },
+      commitFn: async () => ({ commitSha: 'c'.repeat(40), commitUrl: 'https://github.com/owner/repo/commit/'+'c'.repeat(40), branch: 'repair-example' }),
+      ...prAndCiMocks(), autoMergePr: true,
+    });
+    expect(calls).toBe(2);
+    expect(commands.some(command => command.includes(legacyPath))).toBe(false);
+    expect(await repo.fileReader(legacyPath)).toBe(legacy);
+    expect(proof.commandsRun.some(command => command.phase === 'regression_baseline' && !command.ok && command.stdoutTail.includes('ERR_ASSERTION'))).toBe(true);
+    expect(proof.finalStatus).toBe('COMPLETED');
+  }, 30000);
+
+  for (const behavior of ['delayed', 'rejected'] as const) {
+    it(`waits for ${behavior} PR identity persistence before CI or merge`, async () => {
+      const repo = await makeIsolatedRepo('pr-persistence-' + behavior);
+      let saved = false;
+      let checks = 0;
+      let merges = 0;
+      const gates = prAndCiMocks();
+      const proof = await runIVXAutonomousCoder({
+        taskId: 'pr-persistence-fixture-' + behavior, goal: `Change the pilot label from ${PILOT_LABEL} to ${PILOT_LABEL_TARGET}.`,
+        ownerId: 'test-owner', executionMode: 'code_change', approvalPolicy: 'owner_gated', projectRoot: repo.root,
+        fileReader: repo.fileReader, fileWriter: repo.fileWriter,
+        llmCaller: async () => JSON.stringify({ rootCause: 'requested label', technicalPlan: 'replace label', operations: [
+          { path: 'backend/services/ivx-autonomous-coder-pilot.ts', kind: 'replace_exact', oldText: `export const PILOT_LABEL = '${PILOT_LABEL}';`, newText: `export const PILOT_LABEL = '${PILOT_LABEL_TARGET}';` },
+        ] }),
+        testRunner: async (_cwd, command) => ({ command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1 }),
+        commitFn: async () => ({ commitSha: 'c'.repeat(40), commitUrl: 'https://github.com/owner/repo/commit/'+'c'.repeat(40), branch: 'repair-example' }),
+        prFn: gates.prFn, autoMergePr: true,
+        onPrCreated: () => {
+          if (behavior === 'rejected') throw new Error('PR_RESUME_PERSISTENCE_REQUIRED');
+          return new Promise<void>(resolve => setTimeout(() => { saved = true; resolve(); }, 25));
+        },
+        requiredChecksFn: async () => { checks++; expect(saved).toBe(true); return gates.requiredChecksFn!('c'.repeat(40)); },
+        mergeFn: async () => { merges++; return { merged: true, mergeCommitSha: 'm'.repeat(40) }; },
+      });
+      expect(proof.prCreated).toBe(true);
+      if (behavior === 'delayed') {
+        expect(proof.finalStatus).toBe('COMPLETED'); expect(merges).toBe(1); expect(checks).toBe(1);
+      } else {
+        expect(proof.finalStatus).toBe('BLOCKED'); expect(merges).toBe(0); expect(checks).toBe(0);
+        expect(proof.error).toContain('PR_RESUME_PERSISTENCE_REQUIRED');
+      }
+    });
+  }
+});
+
 function prAndCiMocks(prNumber = 99): Pick<IVXAutonomousCoderInput, 'prFn' | 'mergeFn' | 'requiredChecksFn'> {
   return {
     prFn: async () => ({

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'bun:test';
 import { UtilizationReasoningGuardian } from './ivx-autonomous-utilization-guardian';
 import type { FleetSloSnapshot } from './ivx-fleet-slo';
 import type { IVXWorkerJob, IVXWorkerJobInput } from './ivx-senior-developer-worker';
+import { createHash } from 'node:crypto';
+import type { PatrolObservation } from './ivx-autonomous-recovery-health';
 function fixture() {
   let now = Date.parse('2026-09-09T03:00:00Z');
   let enabled = true;
@@ -76,6 +78,16 @@ describe('fleet evidence to reasoning worker', () => {
 });
 
 describe('durable repair outcome supervision', () => {
+  it('restores runtime recovery guidance after restart before truncating diagnostic text', async () => {
+    const persistedFailure = JSON.stringify({ error: 'REPAIR_REGRESSION_NOT_REPRODUCED ' + 'wrapper '.repeat(200) + "Cannot find module 'bun:test'" });
+    for (let restart = 0; restart < 2; restart++) {
+      const f = fixture(); f.finish('blocked', JSON.parse(persistedFailure).error);
+      expect((await f.guardian.run()).lastRepairOutcome?.recoveryLesson?.id).toBe('NODE_TEST_RUNTIME');
+      f.advance(120_000); await f.guardian.run();
+      expect(f.calls[0].goal).toContain('separate focused *.node-regression.test.ts');
+      expect(f.calls[0].approveGitDeploy).toBe(false);
+    }
+  });
   it('detects a cancelled repair during cooldown and feeds its failure into the next attempt', async () => {
     const f = fixture(); await f.guardian.run(); f.advance(); await f.guardian.run();
     f.finish('cancelled', 'Physical worker lease expired'); f.advance();
@@ -113,6 +125,33 @@ describe('durable repair outcome supervision', () => {
     await f.guardian.run();
     expect(JSON.stringify(f.guardian.snapshot())).not.toContain('secret_value');
     expect(JSON.stringify(f.guardian.snapshot())).not.toContain('token=private');
+  });
+});
+
+describe('completed patrol observations and current leases', () => {
+  it('does not enqueue generic capacity repairs while all 112 have fresh QA, preserving actual failures', async () => {
+    for (const invalid of [false, true]) {
+      const f = fixture(); f.sample.running_agents = 0;
+      let now = Date.parse(f.sample.measured_at);
+      let calls = 0;
+      const guardian = new UtilizationReasoningGuardian({ snapshot: () => f.sample, enabled: () => true, now: () => now,
+        readRepair: async () => null,
+        readPatrol: async () => Array.from({ length: 112 }, (_, i): PatrolObservation => {
+          const status = i === 0 ? 'FAIL' : i === 1 ? 'BLOCKED' : 'PASS';
+          const summary = 'LANDING_P0_RESULT ' + JSON.stringify({ v: 1, agent_number: i + 1, production_sha: f.sample.commit_sha, status, completed_at: new Date(now - 1000).toISOString() });
+          return { task_id: `task-${i}`, assigned_agent_number: i + 1, evidence: { evidenceId: `e-${i}`, source: 'continuous-patrol:unit', summary,
+            evidenceType: 'production_verification', commitSha: f.sample.commit_sha, deploymentId: null,
+            contentHash: invalid && i === 0 ? 'wrong' : createHash('sha256').update(summary).digest('hex'), createdAt: new Date(now - 500).toISOString() } };
+        }),
+        enqueue: async () => { calls++; return { job: { jobId: 'repair' }, attached: false }; },
+      });
+      await guardian.run(); now += 60000; f.sample.measured_at = new Date(now).toISOString();
+      const result = await guardian.run();
+      expect(result.action).toBe(invalid ? 'REPAIR_QUEUED' : 'QA_OBSERVATIONS_CURRENT');
+      expect(calls).toBe(invalid ? 1 : 0);
+      expect(f.sample.productive_agents).toBe(0);
+      expect(f.sample.status).toBe('BREACH');
+    }
   });
 });
 
