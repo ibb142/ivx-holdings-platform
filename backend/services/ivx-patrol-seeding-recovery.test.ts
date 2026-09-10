@@ -7,6 +7,7 @@ test('patrol seed reads existing identities without locking 112 existing tasks',
     let creates=0, missing=false;
     mock.module('./backend/services/ivx-postgres-autonomous-task-store.ts',()=>({
       postgresAtomicQueueSelected:()=>true,
+      readPostgresLandingTasks:async()=>{throw Error('patrol seeding must use identities only');},
       readPostgresTaskIdentitiesByPrefix:async()=>Array.from({length:missing?111:112},(_,i)=>({
         taskId:'t'+i,idempotencyKey:'landing-p0-patrol:'+sha+':ia-'+String(i+1).padStart(3,'0'),state:'RUNNING'
       }))
