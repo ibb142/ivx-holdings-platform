@@ -34,11 +34,18 @@ jobs:
         if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
+          # A single match can come from the first new instance while another
+          # still serves the preceding revision during Render's rolling deploy.
+          # Require a stable sampling window; the browser still checks the exact
+          # commit before and after its assertions.
+          stable=0
           for attempt in $(seq 1 60); do
-            if curl -fsS --max-time 10 https://api.ivxholding.com/health -o /tmp/health.json; then
-              if jq -e --arg sha "$GITHUB_SHA" '.ok == true and .commit == $sha' /tmp/health.json > /dev/null; then
-                exit 0
-              fi
+            if curl -fsS --max-time 10 https://api.ivxholding.com/health -o /tmp/health.json && \
+              jq -e --arg sha "$GITHUB_SHA" '.ok == true and .commit == $sha' /tmp/health.json > /dev/null; then
+              stable=$((stable + 1))
+              if [ "$stable" -ge 12 ]; then exit 0; fi
+            else
+              stable=0
             fi
             sleep 5
           done
