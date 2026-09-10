@@ -411,12 +411,19 @@ function getIVXSupabaseServerConfig(): IVXSupabaseServerConfig {
   };
 }
 
-export function createIVXServerClient(accessToken: string): SupabaseClient {
+export function createIVXServerClient(accessToken: string, requestSignal?: AbortSignal): SupabaseClient {
   const config = getIVXSupabaseServerConfig();
   const ownerBypassToken = shouldAcceptOpenAccessOwnerToken() && accessToken === IVX_OPEN_ACCESS_OWNER_TOKEN;
+  const requestFetch = requestSignal
+    ? ((input, init) => fetch(input, {
+      ...init,
+      signal: init?.signal ? AbortSignal.any([init.signal, requestSignal]) : requestSignal,
+    })) as typeof fetch
+    : undefined;
 
   if (config.isServiceRole || ownerBypassToken) {
     return createClient(config.url, config.dataKey, {
+      global: { fetch: requestFetch },
       auth: {
         autoRefreshToken: false,
         persistSession: false,
@@ -430,6 +437,7 @@ export function createIVXServerClient(accessToken: string): SupabaseClient {
       persistSession: false,
     },
     global: {
+      fetch: requestFetch,
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
@@ -437,27 +445,45 @@ export function createIVXServerClient(accessToken: string): SupabaseClient {
   });
 }
 
-async function loadIVXOwnerProfile(client: SupabaseClient, userId: string, logPrefix: string): Promise<{
+async function loadIVXOwnerProfile(client: SupabaseClient, userId: string, logPrefix: string, remainingAuthMs: number): Promise<{
   profile: IVXOwnerProfileRow | null;
   errorMessage: string | null;
 }> {
-  const profileResult = await client.from('profiles').select('*').eq('id', userId).maybeSingle();
-
-  if (profileResult.error) {
-    console.log(`${logPrefix} Profile lookup failed:`, {
-      userId,
-      message: profileResult.error.message,
-    });
-    return {
-      profile: null,
-      errorMessage: profileResult.error.message,
-    };
+  if (remainingAuthMs <= 0) throw new IVXAuthServiceUnavailableError();
+  const controller = new AbortController();
+  let profileTimer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const profileResult = await Promise.race([
+      client.from('profiles').select('*').eq('id', userId).abortSignal(controller.signal).maybeSingle(),
+      new Promise<never>((_resolve, reject) => {
+        profileTimer = setTimeout(() => {
+          controller.abort();
+          reject(new IVXAuthServiceUnavailableError());
+        }, Math.min(5_000, remainingAuthMs));
+        if (typeof profileTimer === 'object' && profileTimer && 'unref' in profileTimer) {
+          (profileTimer as { unref?: () => void }).unref?.();
+        }
+      }),
+    ]);
+    if (profileResult.error) {
+      // An unavailable profile source cannot establish the current owner role.
+      // Do not fall back to metadata after a timeout or provider outage.
+      if (controller.signal.aborted || profileResult.status === 0
+        || profileResult.status === 429 || profileResult.status >= 500) {
+        throw new IVXAuthServiceUnavailableError();
+      }
+      console.log(`${logPrefix} Profile lookup failed:`, {
+        userId,
+        message: profileResult.error.message,
+      });
+      return { profile: null, errorMessage: profileResult.error.message };
+    }
+    return { profile: (profileResult.data as IVXOwnerProfileRow | null) ?? null, errorMessage: null };
+  } catch {
+    throw new IVXAuthServiceUnavailableError();
+  } finally {
+    if (profileTimer !== undefined) clearTimeout(profileTimer);
   }
-
-  return {
-    profile: (profileResult.data as IVXOwnerProfileRow | null) ?? null,
-    errorMessage: null,
-  };
 }
 
 export function resolveIVXRoleAudit(
@@ -608,14 +634,21 @@ export async function resolveIVXAuthenticatedRequest(
     throw new Error('IVX auth guard failed: invalid or expired Supabase session.');
   }
 
-  const client = createIVXServerClient(accessToken);
+  const sessionController = new AbortController();
+  const client = createIVXServerClient(accessToken, sessionController.signal);
+  // Session and profile verification share one deadline. A slow session lookup
+  // must not give the following profile request another full timeout window.
+  const authDeadline = Date.now() + 15_000;
   let userResult: Awaited<ReturnType<typeof client.auth.getUser>>;
   let authTimer: ReturnType<typeof setTimeout> | undefined;
   try {
     userResult = await Promise.race([
       client.auth.getUser(accessToken),
       new Promise<never>((_resolve, reject) => {
-        const timer = authTimer = setTimeout(() => reject(new IVXAuthServiceUnavailableError()), 15_000);
+        const timer = authTimer = setTimeout(() => {
+          reject(new IVXAuthServiceUnavailableError());
+          sessionController.abort();
+        }, 15_000);
         // timer may be a NodeJS.Timeout or a number depending on the platform
         if (typeof timer === 'object' && timer && 'unref' in timer) {
           (timer as { unref?: () => void }).unref?.();
@@ -659,7 +692,7 @@ export async function resolveIVXAuthenticatedRequest(
   }
 
   const user = userResult.data.user;
-  const ownerProfileResult = await loadIVXOwnerProfile(client, user.id, logPrefix);
+  const ownerProfileResult = await loadIVXOwnerProfile(client, user.id, logPrefix, authDeadline - Date.now());
   const roleAudit = resolveIVXRoleAudit(user, ownerProfileResult.profile, ownerProfileResult.errorMessage);
   const resolvedEmail = readIVXTrimmedString(ownerProfileResult.profile?.email) || user.email || null;
 
