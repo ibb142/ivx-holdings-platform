@@ -27,6 +27,7 @@ const currentReadsInFlight = new Map<string, Promise<Task[]>>();
 let taskMutationRevision = 0;
 let directPool: Pool | null = null;
 let telemetryPool: Pool | null = null;
+let presencePool: Pool | null = null;
 const upstreamRetryQuota = new RetryQuota();
 
 type AtomicCreateResult = { ok: boolean; task: Task | null; duplicate: boolean; error: string | null };
@@ -34,7 +35,7 @@ type AtomicCasResult = { ok: boolean; task: Task | null; error: string | null };
 type RestTaskRow = { payload: Task };
 export type AtomicFleetLeaseRow = { taskId: string; idempotencyKey: string; state: TaskState; assignedAgentNumber: number | null; leaseHolder: string; workerInstanceId: string | null; lastHeartbeatAt: string; leaseExpiresAt: string | null };
 
-export function resetPostgresAutonomousTaskStoreForTests(): void { taskReadCache = null; taskReadInFlight = null; currentReadsInFlight.clear(); taskMutationRevision = 0; directPool = null; telemetryPool = null; }
+export function resetPostgresAutonomousTaskStoreForTests(): void { taskReadCache = null; taskReadInFlight = null; currentReadsInFlight.clear(); taskMutationRevision = 0; directPool = null; telemetryPool = null; presencePool = null; }
 function trimmed(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
 function supabaseUrl(env: NodeJS.ProcessEnv = process.env): string { return trimmed(env.EXPO_PUBLIC_SUPABASE_URL || env.SUPABASE_URL).replace(/\/+$/, ''); }
 function serviceRoleKey(env: NodeJS.ProcessEnv = process.env): string { return trimmed(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_KEY); }
@@ -59,18 +60,18 @@ function headers(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
 }
 function externalError(payload: unknown, fallback: string): string { if (payload && typeof payload === 'object') { const record = payload as Record<string, unknown>; const candidate = record.message ?? record.error ?? record.details; if (typeof candidate === 'string' && candidate.trim()) return candidate.trim().slice(0, 320); } return fallback; }
 async function parsePayload(response: Response): Promise<unknown> { const text = await response.text(); if (!text) return null; try { return JSON.parse(text) as unknown; } catch { return { message: text.slice(0, 320) }; } }
-type PoolPurpose = 'tasks' | 'telemetry';
+type PoolPurpose = 'tasks' | 'telemetry' | 'presence';
 function getDirectPool(env: NodeJS.ProcessEnv = process.env, purpose: PoolPurpose = 'tasks'): Pool {
   const connectionString = directDbUrl(env);
   if (!connectionString) throw new Error('direct_postgres_not_configured');
-  const existing = purpose === 'telemetry' ? telemetryPool : directPool;
+  const existing = purpose === 'presence' ? presencePool : purpose === 'telemetry' ? telemetryPool : directPool;
   if (existing) return existing;
-  // Claims and CAS can wait on transaction locks. Reserve one connection so
-  // those operations cannot starve the fresh shared-process observations.
+  // Both mutations and aggregate monitoring can occupy their entire pool.
+  // Reserve a separate connection for compact process reads and sample writes.
   const pool = new Pool({ connectionString: withoutPostgresUrlTlsOptions(connectionString), ssl: supabasePostgresTls(),
-    max: purpose === 'telemetry' ? 1 : 4, application_name: `ivx_${purpose}`,
+    max: purpose === 'tasks' ? 4 : 1, application_name: `ivx_${purpose}`,
     idleTimeoutMillis: 30_000, connectionTimeoutMillis: 20_000, query_timeout: 5_000, statement_timeout: 5_000 });
-  if (purpose === 'telemetry') telemetryPool = pool; else directPool = pool;
+  if (purpose === 'presence') presencePool = pool; else if (purpose === 'telemetry') telemetryPool = pool; else directPool = pool;
   return pool;
 }
 const DIRECT_RPC_ARGS: Record<string, string[]> = {
@@ -158,9 +159,7 @@ export type FleetProcessObservation = {
 export async function readPostgresFleetProcessObservation(): Promise<FleetProcessObservation> {
   if (!postgresAtomicQueueConfigured()) throw new Error('Shared process observation requires postgres_atomic');
   const directRead = async (): Promise<FleetProcessObservation> => {
-    // Use transaction-local server deadlines for every telemetry operation.
-    // A client read timeout alone can leave this one shared connection busy.
-    const result = await queryWithPostgresDeadline<{ measuredAt: Date; instances: FleetProcessObservation['instances'] }>(getDirectPool(process.env, 'telemetry'), `
+    const result = await queryWithPostgresDeadline<{ measuredAt: Date; instances: FleetProcessObservation['instances'] }>(getDirectPool(process.env, 'presence'), `
       select statement_timestamp() as "measuredAt", coalesce((select jsonb_agg(i) from (
         select distinct on (worker_instance_id) worker_instance_id as "instanceId",
           event->>'instance_role' as role, event->>'commit_sha' as "commitSha",
@@ -264,7 +263,11 @@ export async function readPostgresCurrentTasks(states: readonly TaskState[]): Pr
 
 async function fetchPostgresCurrentTasks(unique: TaskState[], purpose: PoolPurpose = 'tasks'): Promise<Task[]> {
   const directRead = async () => {
-    const result = await queryWithPostgresDeadline<RestTaskRow>(getDirectPool(process.env, purpose), 'select payload from public.ivx_autonomous_tasks where state = any($1::text[]) order by updated_at desc limit 1000', [unique]);
+    const pool = getDirectPool(process.env, purpose);
+    const sql = 'select payload from public.ivx_autonomous_tasks where state = any($1::text[]) order by updated_at desc limit 1000';
+    const result = purpose === 'telemetry'
+      ? await queryWithPostgresDeadline<RestTaskRow>(pool, sql, [unique])
+      : await pool.query<RestTaskRow>(sql, [unique]);
     if (result.rows.length >= 1000) throw new Error('postgres_atomic current-task response reached its safety limit; telemetry is incomplete');
     return result.rows.map((row) => structuredClone(row.payload));
   };
@@ -346,7 +349,7 @@ export async function persistPostgresFleetSloSample(sample: Record<string, unkno
   const workerInstanceId = autonomousWorkerInstanceId();
   const event = { ...sample, instance_role: process.env.IVX_WORKER_MODE === 'true' ? 'worker' : 'api', service_id: process.env.RENDER_SERVICE_ID ?? null, process_role: process.env.IVX_PROCESS_ROLE ?? null, shared_worker_queue: process.env.IVX_WORKER_QUEUE_ATOMIC === 'true', shared_state: process.env.IVX_REQUIRE_SHARED_STATE === 'true', draining: process.env.IVX_INSTANCE_DRAINING === 'true' };
   const persistDirect = async () => {
-    await queryWithPostgresDeadline(getDirectPool(process.env, 'telemetry'),
+    await queryWithPostgresDeadline(getDirectPool(process.env, 'presence'),
       'insert into public.ivx_autonomous_task_events(event_type,worker_instance_id,event) values ($1,$2,$3::jsonb)',
       ['fleet_slo_sample', workerInstanceId, JSON.stringify(event)],
     );
