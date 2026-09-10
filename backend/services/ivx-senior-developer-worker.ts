@@ -1,4 +1,5 @@
 import { sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult } from './ivx-senior-shared-queue';
+import { createSeniorJobAdmission } from './ivx-senior-job-admission';
 /**
  * IVX Self-Hosted Senior Developer Worker — removes the external platform dependency as the
  * code EXECUTOR.
@@ -1191,7 +1192,7 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
   const controller: { cancelled: boolean } = { cancelled: queueStopping };
   activeJobControllers.set(jobId, controller);
   const heartbeat = sharedSeniorQueueEnabled() ? setInterval(() => {
-    if (!controller.cancelled) void updateJob(jobId, { lastHeartbeatAt: nowIso() }).catch(() => { controller.cancelled = true; });
+    if (!controller.cancelled) void updateJob(jobId, { lastHeartbeatAt: nowIso() }, true).catch(() => { controller.cancelled = true; });
   }, 20_000) : null;
   heartbeat?.unref?.();
   try {
@@ -1792,6 +1793,7 @@ export async function getSeniorDeveloperJob(jobId: string): Promise<IVXWorkerJob
   const queue = await loadQueue();
   const found = queue.jobs.find((j) => j.jobId === jobId) ?? null;
   if (found) return found;
+  if (sharedSeniorQueueEnabled()) return null; // A process mirror cannot certify a missing durable job.
   // LOST-UPDATE GUARD (2026-08-28): concurrent load-modify-save cycles can
   // persist a stale durable queue copy that misses a job enqueued moments
   // earlier. The in-process mirror is authoritative for such races — never
@@ -2194,43 +2196,15 @@ function phaseToStage(phase: string): { stage: IVXWorkerJobStage; detail: string
  * for explicit triggering and deterministic testing. Returns the result, or
  * null when there is no queued job.
  */
+const admitSeniorJob = createSeniorJobAdmission<IVXWorkerJob>({
+  read: loadQueue, claimed: claimedJobIds, active: ACTIVE_STATUSES,
+  staleAfterMs: STALE_JOB_TIMEOUT_MS, stopped: () => queueStopping,
+  claim: job => sharedSeniorQueueEnabled() ? claimSharedSeniorJob<IVXWorkerJob>(job.jobId) : Promise.resolve(job),
+});
+
 export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResult | null> {
-  if (queueStopping) return null;
-  const queue = await loadQueue();
-  if (queueStopping) return null;
-  // Bounded-concurrent claim: skip jobs already claimed in-process and jobs
-  // whose owner already has an actively-heartbeating job (per-owner
-  // single-flight is preserved under concurrent drain).
-  const busyOwners = new Set<string>();
-  const nowMs = Date.now();
-  for (const j of queue.jobs) {
-    if (claimedJobIds.has(j.jobId)) {
-      // Claimed jobs are executing (even before their status flips) — block
-      // their owner so concurrent drains never double-start one owner.
-      busyOwners.add(j.ownerId);
-      continue;
-    }
-    // Unclaimed QUEUED jobs are NOT executing: they must never mark their own
-    // owner busy. Previously a fresh queued job (age < STALE_JOB_TIMEOUT_MS)
-    // dead-locked itself and every job sat at QUEUED for a full stale window
-    // (~30 min) before the drain could claim it.
-    if (j.status === 'queued') continue;
-    if (!ACTIVE_STATUSES.has(j.status)) continue;
-    const heartbeatAge = nowMs - Date.parse(j.lastHeartbeatAt ?? j.createdAt);
-    if (Number.isFinite(heartbeatAge) && heartbeatAge < STALE_JOB_TIMEOUT_MS) {
-      busyOwners.add(j.ownerId);
-    }
-  }
-  let job = queue.jobs.find(
-    (j) => j.status === 'queued' && !claimedJobIds.has(j.jobId) && !busyOwners.has(j.ownerId),
-  );
+  const job = await admitSeniorJob();
   if (!job) return null;
-  if (sharedSeniorQueueEnabled()) {
-    const claimed = await claimSharedSeniorJob<IVXWorkerJob>(job.jobId);
-    if (!claimed) return null;
-    job = claimed;
-  }
-  claimedJobIds.add(job.jobId);
 
   const controller: { cancelled: boolean } = { cancelled: queueStopping };
   let leaseHeartbeat: ReturnType<typeof setInterval> | null = null;
@@ -2262,7 +2236,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
 
   leaseHeartbeat = sharedSeniorQueueEnabled() ? setInterval(() => {
     if (controller.cancelled) return;
-    void updateJob(job.jobId, { lastHeartbeatAt: nowIso() }).catch(() => { controller.cancelled = true; });
+    void updateJob(job.jobId, { lastHeartbeatAt: nowIso() }, true).catch(() => { controller.cancelled = true; });
   }, 20_000) : null;
   leaseHeartbeat?.unref?.();
     // If cancelled before we even started, abort.

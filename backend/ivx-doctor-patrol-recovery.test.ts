@@ -12,7 +12,8 @@ test('doctor avoids restarting 112 recently observed idle patrols without certif
  mock.module('./backend/services/ivx-campaign-dispatcher.ts',()=>({campaignDispatcherControl:async()=>calls.push('retry')}));
  mock.module('./backend/services/ivx-autonomous-truth-control.ts',()=>({getAutonomousTruthSnapshot:async()=>snapshot,enforceAutonomous112RuntimeTruth:async()=>{calls.push('enforce');snapshot.certification.continuousRuntimeCertified=true;return {};}}));
  mock.module('./backend/services/ivx-autonomous-work-manager.ts',()=>({IVX_AUTONOMOUS_FLEET_SIZE:112,ensureAutonomousManagerBacklog:async()=>{calls.push('backlog');return {ok:true};}}));
- mock.module('./backend/services/ivx-autonomous-learning-engine.ts',()=>({observeAndLearn:async()=>({action:'observed'})}));
+ // A stuck diagnostic write must not hold up the authority's recovery path.
+ mock.module('./backend/services/ivx-autonomous-learning-engine.ts',()=>({observeAndLearn:()=>new Promise(()=>{})}));
  mock.module('./backend/services/ivx-autonomous-control-policy.ts',()=>({autonomousDoctorRepairEnabled:()=>true,autonomousRepairCapacity:()=>112}));
  mock.module('./backend/services/ivx-postgres-autonomous-task-store.ts',()=>({postgresAtomicQueueSelected:()=>true,readPostgresPatrolObservations:async()=>observations}));
  const m=await import('./backend/services/ivx-autonomous-doctor.ts');
@@ -21,7 +22,7 @@ test('doctor avoids restarting 112 recently observed idle patrols without certif
  if(calls.length||status.totalRepairs!==0||status.lastCertification.certified!==false||status.recentPatrolAgents!==112||!status.lastHealthyAt)throw Error(JSON.stringify({calls,status}));
  rows[0].status='STALE';
  await m.runAutonomousDoctorCycle();
- if(!calls.includes('enforce')||!calls.includes('backlog')||calls.includes('retry'))throw Error('Atomic recovery entered legacy dispatcher '+JSON.stringify(calls));
+ if(!calls.includes('enforce')||calls.includes('backlog')||calls.includes('retry'))throw Error('Atomic recovery duplicated the backlog or entered legacy dispatcher '+JSON.stringify(calls));
  `],{cwd:new URL('../',import.meta.url).pathname,stdout:'pipe',stderr:'pipe',timeout:8000});
  const [code,err]=await Promise.all([child.exited,new Response(child.stderr).text()]);expect(err).not.toContain('Error:');expect(code).toBe(0);
 });
