@@ -42,6 +42,62 @@ async function makeIsolatedRepo(label: string): Promise<{
 }
 
 describe('Landing repair source access', () => {
+  it('plans from deep source paths and retains the selected implementation when revising a rejected patch', async () => {
+    const repo = await makeIsolatedRepo('deep-repair-revision');
+    await Promise.all(Array.from({ length: 220 }, (_, i) => Promise.all([
+      repo.fileWriter(`backend/a${i}.ts`, 'export const unrelated = 1;'),
+      repo.fileWriter(`expo/a${i}.ts`, 'export const unrelated = 1;'),
+    ])));
+    await Promise.all(Array.from({ length: 35 }, (_, i) => repo.fileWriter(`backend/api/deal-video-${i}.ts`, 'export const decoy = true;')));
+    const sourcePath = 'backend/services/deal-video-normalization.ts';
+    const testPath = 'backend/services/deal-video-normalization.test.ts';
+    const source = 'export function normalizeDealVideoUrl(value: string) { return value; }';
+    await repo.fileWriter(sourcePath, source);
+    await repo.fileWriter('expo/ivxholding-landing/index.html', '<main>Landing</main>');
+    await repo.fileWriter('restricted.ts', 'DO_NOT_EXPOSE_PRIVATE_FIXTURE');
+    let plans = 0;
+    let patches = 0;
+    let regressionRan = false;
+    const proof = await runIVXAutonomousCoder({
+      taskId: 'landing-remediation:fixture:media.deal-videos', goal: 'Repair Landing deal video normalization so incoming URL whitespace is trimmed, with a regression test.',
+      executionMode: 'code_change', ownerId: 'test-owner', approvalPolicy: 'owner_gated', projectRoot: repo.root,
+      fileReader: repo.fileReader, fileWriter: repo.fileWriter,
+      planCaller: async (_system, prompt) => {
+        plans += 1;
+        expect(prompt).toContain(sourcePath);
+        expect(prompt).toContain('expo/ivxholding-landing/index.html');
+        return JSON.stringify({ targetFiles: [sourcePath, testPath], filesToInspect: [sourcePath, 'backend/../restricted.ts'], changesRequired: 'trim URL whitespace', testsRequired: 'URL normalization', risks: 'bounded helper change' });
+      },
+      llmCaller: async (_system, prompt) => {
+        patches += 1;
+        expect(prompt).toContain(source);
+        expect(prompt).not.toContain('DO_NOT_EXPOSE_PRIVATE_FIXTURE');
+        if (patches > 1) expect(prompt).toContain('PREVIOUS ATTEMPT FAILED');
+        return JSON.stringify({ rootCause: 'untrimmed URL', technicalPlan: 'normalize whitespace', operations: [
+          { path: sourcePath, kind: 'replace_exact', oldText: patches === 1 ? 'return aSnippetThatDoesNotExist;' : 'return value;', newText: 'return value.trim();', reason: 'normalize input' },
+          { path: testPath, kind: 'create_file', oldText: '', newText: 'import { test } from "node:test"; import assert from "node:assert/strict"; import { normalizeDealVideoUrl } from "./deal-video-normalization"; test("trims a video URL", () => assert.equal(normalizeDealVideoUrl("  https://example.test/video.mp4  "), "https://example.test/video.mp4"));', reason: 'regression coverage' },
+        ] });
+      },
+      testRunner: async (cwd, command) => {
+        if (command.startsWith('bun test ')) {
+          const child = Bun.spawn([process.execPath, 'test', testPath], { cwd, stdout: 'pipe', stderr: 'pipe' });
+          const exitCode = await child.exited;
+          regressionRan = exitCode === 0;
+          return { command, ok: regressionRan, exitCode, stdoutTail: '', stderrTail: await new Response(child.stderr).text(), durationMs: 1 };
+        }
+        return { command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1 };
+      },
+      commitFn: async (_paths, branch) => ({ commitSha: 'test-deep-repair', commitUrl: 'https://example.test/commit', branch }),
+      ...prAndCiMocks(), autoMergePr: true,
+    });
+    expect(plans).toBe(1);
+    expect(patches).toBe(2);
+    expect(regressionRan).toBe(true);
+    expect(await repo.fileReader(sourcePath)).toContain('return value.trim();');
+    expect(proof.testsPassed).toBe(true);
+    expect(proof.prMerged).toBe(true);
+  });
+
   it('reads and edits the exact Landing source after the backend index is full, and runs its regression test', async () => {
     const repo = await makeIsolatedRepo('landing-repair');
     await Promise.all(Array.from({ length: 205 }, (_, i) => repo.fileWriter(`backend/a${i}.ts`, 'export const value = 1;')));

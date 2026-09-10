@@ -29,7 +29,7 @@ import { assertPrivateRepairScope, publicRepairGoal } from './ivx-private-repair
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, readdir, stat, writeFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, readdir, stat, writeFile, rm, realpath } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -313,6 +313,8 @@ export type IVXAutonomousCoderInput = {
   deployConfirmationText?: string;
   /** Injectable LLM caller for testing. */
   llmCaller?: (system: string, user: string) => Promise<string>;
+  /** Injectable planning-stage caller; exercises the same plan/context path as production. */
+  planCaller?: (system: string, user: string) => Promise<string>;
   /** Injectable test runner for testing. */
   testRunner?: (cwd: string, command: string) => Promise<IVXAutonomousCoderTestResult>;
   /** Injectable commit function for testing. */
@@ -585,6 +587,21 @@ function explicitInspectionPaths(goal: string): string[] {
     .filter(file => !file.split('/').some(part => !part || part === '.' || part === '..')).slice(0, 15);
 }
 
+/** Rank a bounded filename inventory before reducing the planner's context. */
+function selectPlanningFiles(goal: string, files: string[]): string[] {
+  const explicit = new Set(explicitInspectionPaths(goal));
+  const ignored = new Set(['that', 'this', 'with', 'from', 'have', 'repair', 'code', 'source', 'file', 'test', 'current', 'production', 'observed', 'evidence', 'change', 'actual', 'autonomous', 'required', 'before', 'after']);
+  const words = [...new Set((goal.toLowerCase().match(/[a-z]{4,}/g) ?? []).map(word => word.replace(/s$/, '')))].filter(word => !ignored.has(word));
+  const score = (file: string) => (explicit.has(file) ? 1000 : 0)
+    + words.reduce((sum, word) => sum + (file.toLowerCase().includes(word) ? 3 : 0), 0)
+    - (/\.(test|spec)\./.test(file) ? 1 : 0);
+  const ranked = [...new Set(files)].sort((a, b) => score(b) - score(a) || a.localeCompare(b));
+  // Reserve room for both source trees, even when one contains thousands of files.
+  return [...new Set([...explicit, ...ranked.slice(0, 150),
+    ...ranked.filter(file => file.startsWith('backend/')).slice(0, 25),
+    ...ranked.filter(file => file.startsWith('expo/')).slice(0, 25)])].slice(0, 200);
+}
+
 /** Extract a relevant section of a large file based on goal keywords.
  * Instead of sending the first N chars (which may miss the target code),
  * search for lines containing goal keywords and return a window around
@@ -638,7 +655,13 @@ function extractRelevantSection(content: string, goal: string, maxChars: number)
 
 async function readFilePreview(relPath: string, projectRoot: string, goal?: string): Promise<{ path: string; content: string; bytes: number } | null> {
   try {
+    if (!/^(backend|expo)\//.test(relPath) || relPath.includes('\\')
+      || relPath.split('/').some(part => !part || part.startsWith('.'))
+      || !INSPECTABLE_EXTENSIONS.has(path.extname(relPath))) return null;
     const absPath = path.join(projectRoot, relPath);
+    const [realRoot, realFile] = await Promise.all([realpath(projectRoot), realpath(absPath)]);
+    const relative = path.relative(realRoot, realFile);
+    if (!/^(backend|expo)\//.test(relative) || relative.split('/').some(part => part === '..')) return null;
     const content = await readFile(absPath, 'utf8');
     const bytes = Buffer.byteLength(content, 'utf8');
     if (bytes <= FULL_CONTENT_THRESHOLD) {
@@ -814,6 +837,9 @@ Rules:
 - Make the smallest safe change needed. 1-5 operations is typical for non-trivial tasks.
 - Only modify files under backend/ or expo/.
 - No secrets, no destructive operations.
+- Never invent an existing file path. For modifications, use files shown in FILES; a missing path is not evidence that an implementation exists.
+- Repair goals that require regression coverage must include BOTH the functional source operation and a runnable node:test regression operation in the same response.
+- Missing customer media or credentials are external dependencies. Never invent assets, URLs, credentials, successful results or weaker acceptance criteria to make a repair pass.
 - If the goal is already satisfied, return {"rootCause":"already satisfied","technicalPlan":"no change needed","operations":[]}
 
 NON-TRIVIAL TASK GUIDANCE:
@@ -2001,11 +2027,11 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
   const projectRoot = resolveProjectRoot(input);
   const backendFiles: string[] = [];
   const expoFiles: string[] = [];
-  await walkInspectableFiles('backend', backendFiles, 200, projectRoot);
-  await walkInspectableFiles('expo', expoFiles, 200, projectRoot);
+  await walkInspectableFiles('backend', backendFiles, 10_000, projectRoot);
+  await walkInspectableFiles('expo', expoFiles, 10_000, projectRoot);
   // Backend exhaustion must not erase the Expo tree, and an exact task path
   // must remain inspectable even beyond the bounded directory sample.
-  const availableFiles = [...new Set([...explicitInspectionPaths(input.goal), ...backendFiles, ...expoFiles])];
+  const availableFiles = selectPlanningFiles(input.goal, [...backendFiles, ...expoFiles]);
   const targetPaths = pickInspectionTargets(input.goal, availableFiles);
   const inspectedFiles: { path: string; content: string }[] = [];
   for (const target of targetPaths) {
@@ -2024,6 +2050,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
   let typecheckPassed = false;
   let buildRun = false;
   let lastFailureContext: string | null = null;
+  let plannedContextFiles: { path: string; content: string }[] | null = null;
   let iterationCount = 0;
   let anyPatchApplied = false;
   let anyPatchGenerated = false;
@@ -2284,14 +2311,14 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // Call the LLM for a lightweight plan first, then use only the plan-identified
     // files for patch generation. This splits the cognitive load and reduces
     // context from 30 files × 30k chars to just the relevant files.
-    let patchContextFiles = inspectedFiles;
-    if (iterationCount === 1 && !taskPlan && !input.llmCaller) {
+    let patchContextFiles: { path: string; content: string }[] = plannedContextFiles ?? inspectedFiles;
+    if (iterationCount === 1 && !taskPlan && (!input.llmCaller || input.planCaller)) {
       const planRequestId = `ac-plan-${randomUUID()}`;
       stageTrace = createStageTrace(planRequestId, 45_000);
       stageTrace.repoContextCollectedAt = nowIso();
       stageTrace.inputTokenEstimate = estimateTokens(input.goal) + estimateTokens(availableFiles.slice(0, 200).join('\n'));
       onPhase?.('planning', `Iteration ${iterationCount}: STAGE A — requesting task plan from LLM (45s timeout).`);
-      const plan = await callLLMForPlan(input.goal, availableFiles, undefined, stageTrace);
+      const plan = await callLLMForPlan(input.goal, availableFiles, input.planCaller, stageTrace);
       if (plan) {
         taskPlan = plan;
         stageTrace.targetFileSelectedAt = nowIso();
@@ -2317,6 +2344,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         // Plan failed — reduce context to first 5 inspected files (not 30)
         patchContextFiles = inspectedFiles.slice(0, 5);
       }
+      plannedContextFiles = patchContextFiles;
       stageTrace.promptConstructedAt = nowIso();
     } else if (iterationCount > 1 && lastLLMError && lastLLMError.includes('timed out')) {
       // V6.19: Context reduction on timeout — cut file previews in half and
@@ -2490,6 +2518,10 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       assertPrivateRepairScope(input.goal, input.allowedFiles, parsed.operations.map(op => op.path));
       const { assertRepairPatchQuality } = await import('./ivx-repair-patch-quality');
       assertRepairPatchQuality(input.taskId, parsed.operations);
+      if (/^(fleet-reasoning|landing-remediation):/.test(input.taskId)) {
+        const unseen = parsed.operations.find(op => op.kind === 'replace_exact' && !patchContextFiles.some(file => file.path === op.path));
+        if (unseen) throw new Error(`REPAIR_SOURCE_NOT_INSPECTED: ${unseen.path}. Modify only source actually read, or request a real existing path on revision.`);
+      }
       for (const op of parsed.operations) {
         await applyPatchOperation(op, projectRoot, input.fileWriter, input.fileReader);
         appliedOps.push(op);
@@ -2520,6 +2552,15 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         revised: true,
       };
       iterations.push(iteration);
+      // Keep the selected implementation across revisions and reread any real
+      // target after a failed application. Do not substitute unrelated defaults.
+      const refreshed: { path: string; content: string }[] = [];
+      const paths = [...new Set([...patchContextFiles.map(file => file.path), ...parsed.operations.map(op => op.path)])];
+      for (const file of paths.slice(0, MAX_INSPECTED_FILES)) {
+        const preview = await readFilePreview(file, projectRoot, input.goal);
+        if (preview) refreshed.push({ path: preview.path, content: preview.content });
+      }
+      if (refreshed.length) plannedContextFiles = refreshed;
       lastFailureContext = `Patch could not be applied: ${applyError}. The oldText may not match the file content exactly. Re-read the file content and generate a corrected patch.`;
       onPhase?.('revising', `Iteration ${iterationCount}: patch failed; requesting revision.`);
       continue;
