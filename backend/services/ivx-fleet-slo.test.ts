@@ -67,6 +67,35 @@ describe('Fleet SLO evidence and alerts', () => {
     now += 61_000;
     expect(monitor.snapshot()?.error).toBe('SLO sample is stale');
   });
+  test('slow alerts cannot block fresh durable samples or create overlapping alert requests', async () => {
+    let now = NOW;
+    let deliveries = 0;
+    let finishAlert: (result: { ok: boolean }) => void = () => {};
+    const saved: Record<string, unknown>[] = [];
+    const monitor = new FleetSloMonitor({
+      read: async () => [],
+      persist: async (value) => { saved.push(value); },
+      alert: async () => {
+        deliveries++;
+        return new Promise<{ ok: boolean }>((resolve) => { finishAlert = resolve; });
+      },
+      now: () => now, sha: () => SHA,
+    });
+    await monitor.sample();
+    now += 60_000;
+    const fresh = await monitor.sample();
+    expect(saved).toHaveLength(2);
+    expect(fresh.measured_at).toBe(new Date(now).toISOString());
+    expect(fresh.durable).toBe(true);
+    expect(monitor.snapshot()?.status).toBe('BREACH');
+    expect(deliveries).toBe(1);
+
+    finishAlert({ ok: false });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await monitor.sample();
+    expect(deliveries).toBe(2);
+    finishAlert({ ok: true });
+  });
   test('does not expose owner metrics without authentication', async () => {
     expect((await handleFleetSloGet(new Request('https://api.ivx.test/api/ivx/autonomous/fleet-slo'))).status).toBe(401);
   });
