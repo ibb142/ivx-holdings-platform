@@ -1,11 +1,13 @@
 import { describe, expect, it, beforeAll, afterAll } from 'bun:test';
 import path from 'node:path';
-import { writeFile, readFile, mkdir, rm } from 'node:fs/promises';
+import { writeFile, readFile, mkdir, rm, symlink } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import os from 'node:os';
 import {
   buildAutonomousCoderAnswer,
   runIVXAutonomousCoder,
+  runAutonomousCoderCommand,
   isPilotLabelChangeGoal,
   IVX_AUTONOMOUS_CODER_MARKER,
   type IVXAutonomousCoderInput,
@@ -31,6 +33,7 @@ async function makeIsolatedRepo(label: string): Promise<{
 }> {
   const root = path.join(TMP_ROOT, label);
   await mkdir(path.join(root, 'backend/services'), { recursive: true });
+  await symlink(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../node_modules'), path.join(root, 'node_modules'), 'dir');
   const pilotContent = `export const PILOT_LABEL = '${PILOT_LABEL}';\nexport const PILOT_LABEL_TARGET = '${PILOT_LABEL_TARGET}';\n`;
   await writeFile(path.join(root, 'backend/services/ivx-autonomous-coder-pilot.ts'), pilotContent, 'utf8');
   const fileWriter = async (rel: string, content: string) => {
@@ -42,7 +45,7 @@ async function makeIsolatedRepo(label: string): Promise<{
 }
 
 describe('Landing repair source access', () => {
-  it('plans from deep source paths and retains the selected implementation when revising a rejected patch', async () => {
+  it('retains selected source and revises rejected patches and Node test errors using the real compiler', async () => {
     const repo = await makeIsolatedRepo('deep-repair-revision');
     await Promise.all(Array.from({ length: 220 }, (_, i) => Promise.all([
       repo.fileWriter(`backend/a${i}.ts`, 'export const unrelated = 1;'),
@@ -78,29 +81,41 @@ describe('Landing repair source access', () => {
         expect(prompt).toContain(source);
         expect(prompt).not.toContain('DO_NOT_EXPOSE_PRIVATE_FIXTURE');
         if (patches > 1) expect(prompt).toContain('PREVIOUS ATTEMPT FAILED');
+        if (patches === 3) expect(prompt).toContain('test is not defined');
+        expect(_system).toContain('Import every test API explicitly');
         return JSON.stringify({ rootCause: 'untrimmed URL', technicalPlan: 'normalize whitespace', operations: [
           { path: sourcePath, kind: 'replace_exact', oldText: patches === 1 ? 'return aSnippetThatDoesNotExist;' : 'return value;', newText: 'return value.trim();', reason: 'normalize input' },
-          { path: testPath, kind: 'create_file', oldText: '', newText: 'import { test } from "node:test"; import assert from "node:assert/strict"; import { normalizeDealVideoUrl } from "./deal-video-normalization"; test("trims a video URL", () => assert.equal(normalizeDealVideoUrl("  https://example.test/video.mp4  "), "https://example.test/video.mp4"));', reason: 'regression coverage' },
+          { path: testPath, kind: 'create_file', oldText: '', newText: (patches === 2 ? '' : 'import { test } from "node:test"; ') + 'import assert from "node:assert/strict"; import { normalizeDealVideoUrl } from "./deal-video-normalization"; test("trims a video URL", () => assert.equal(normalizeDealVideoUrl("  https://example.test/video.mp4  "), "https://example.test/video.mp4"));', reason: 'regression coverage' },
         ] });
       },
       testRunner: async (cwd, command) => {
-        if (command.startsWith('bun test ')) {
-          const child = Bun.spawn([process.execPath, 'test', testPath], { cwd, stdout: 'pipe', stderr: 'pipe' });
-          const exitCode = await child.exited;
-          regressionRan = exitCode === 0;
-          return { command, ok: regressionRan, exitCode, stdoutTail: '', stderrTail: await new Response(child.stderr).text(), durationMs: 1 };
-        }
-        return { command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1 };
+        const result = await runAutonomousCoderCommand(cwd, command);
+        if (command.startsWith('node --import tsx --test ')) regressionRan = result.ok;
+        expect(command).not.toContain('npx');
+        return result;
       },
       commitFn: async (_paths, branch) => ({ commitSha: 'test-deep-repair', commitUrl: 'https://example.test/commit', branch }),
       ...prAndCiMocks(), autoMergePr: true,
     });
+    expect(proof.error).toBeNull();
     expect(plans).toBe(1);
-    expect(patches).toBe(2);
+    expect(patches).toBe(3);
     expect(regressionRan).toBe(true);
     expect(await repo.fileReader(sourcePath)).toContain('return value.trim();');
     expect(proof.testsPassed).toBe(true);
+    expect(proof.typecheckPassed).toBe(true);
+    expect(proof.iterations[1].failureSummary).toContain('test is not defined');
     expect(proof.prMerged).toBe(true);
+  });
+
+  it('fails without an installed compiler and never reports the missing toolchain as a pass', async () => {
+    const repo = await makeIsolatedRepo('missing-compiler');
+    await rm(path.join(repo.root, 'node_modules'));
+    const result = await runAutonomousCoderCommand(repo.root, `node ${path.join(repo.root, 'node_modules/typescript/bin/tsc')} --version`);
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderrTail).toContain('MODULE_NOT_FOUND');
+    expect(result.command).not.toContain('npx');
   });
 
   it('reads and edits the exact Landing source after the backend index is full, and runs its regression test', async () => {
@@ -124,19 +139,15 @@ describe('Landing repair source access', () => {
       },
       testRunner: async (cwd, command) => {
         commands.push(command);
-        if (command.startsWith('bun test ')) {
-          const child = Bun.spawn([process.execPath, 'test', testPath], { cwd, stdout: 'pipe', stderr: 'pipe' });
-          const exitCode = await child.exited;
-          return { command, ok: exitCode === 0, exitCode, stdoutTail: '', stderrTail: await new Response(child.stderr).text(), durationMs: 1 };
-        }
-        return { command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1 };
+        return runAutonomousCoderCommand(cwd, command);
       },
       commitFn: async (_paths, branch) => ({ commitSha: 'test-landing-commit', commitUrl: 'https://example.test/commit', branch }),
       ...prAndCiMocks(), autoMergePr: true,
     });
+    expect(proof.error).toBeNull();
     expect(sawSource).toBe(true);
     expect(await repo.fileReader(landing)).toContain('<header>IVX</header>');
-    expect(commands).toContain(`bun test ${testPath}`);
+    expect(commands).toContain(`node --import tsx --test ${testPath}`);
     expect(commands.filter(command => command.includes('tsc')).every(command => !command.includes('.html'))).toBe(true);
     expect(proof.filesChanged).toContain(landing);
     expect(proof.testsPassed).toBe(true);
@@ -793,6 +804,7 @@ describe('IVX Autonomous Coder — deterministic pilot fallback (Phase 3)', () =
   it('BLOCKS the pilot fallback when the sentinel label is NOT found in any safe source file (zero matches)', async () => {
     const root = path.join(TMP_ROOT, 'pilot-fallback-zero');
     await mkdir(path.join(root, 'backend/services'), { recursive: true });
+  await symlink(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../node_modules'), path.join(root, 'node_modules'), 'dir');
     // No pilot sentinel file — the label does not exist anywhere.
     await writeFile(path.join(root, 'backend/services/unrelated.ts'), 'export const UNRELATED = "nothing";', 'utf8');
     const fileWriter = async (rel: string, content: string) => {
@@ -829,6 +841,7 @@ describe('IVX Autonomous Coder — deterministic pilot fallback (Phase 3)', () =
   it('BLOCKS the pilot fallback when the sentinel label appears in MULTIPLE safe source files (ambiguous match)', async () => {
     const root = path.join(TMP_ROOT, 'pilot-fallback-multi');
     await mkdir(path.join(root, 'backend/services'), { recursive: true });
+  await symlink(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../node_modules'), path.join(root, 'node_modules'), 'dir');
     // Two files both DEFINE the sentinel label as an exported constant → ambiguous, must BLOCK.
     // (The narrowed scan matches only DEFINITIONS, not mere comment mentions, so both must define.)
     const sentinelA = `export const PILOT_LABEL = '${PILOT_LABEL}';\nexport const PILOT_LABEL_TARGET = '${PILOT_LABEL_TARGET}';\n`;

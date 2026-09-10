@@ -219,11 +219,22 @@ jobs:
       - name: Install Maestro
         run: curl -Ls "https://get.maestro.mobile.dev" | bash
       - name: Run Maestro launch smoke test — HARD GATE
-        env: { MAESTRO_CLI_NO_ANALYTICS: '1' }
-        run: ~/.maestro/bin/maestro test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml
+        timeout-minutes: 15
+        env:
+          MAESTRO_CLI_NO_ANALYTICS: '1'
+          # XCTest driver compilation on a cold macOS runner can exceed the
+          # default startup budget. UI assertions still remain hard failures.
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: '600000'
+          MAESTRO_DISABLE_UPDATE_CHECK: 'true'
+        run: |
+          set -euo pipefail
+          xcrun simctl bootstatus "$IVX_SIMULATOR_UDID" -b
+          ~/.maestro/bin/maestro --device "$IVX_SIMULATOR_UDID" test expo/.maestro/ivx-app-launch.yaml --format junit --output maestro-report.xml 2>&1 | tee maestro-startup.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: maestro-report-${{ github.sha }}
-          path: maestro-report.xml
+          path: |
+            maestro-report.xml
+            maestro-startup.log
           if-no-files-found: warn
