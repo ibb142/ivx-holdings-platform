@@ -4,6 +4,7 @@ import { Stack } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAdminGuard } from '@/hooks/useAdminGuard';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
+import { LenderProvider } from '@/lib/lender-context';
 
 // IVX Crash Shield: route-level error boundary for every admin screen.
 export { ErrorBoundary } from 'expo-router';
@@ -54,6 +55,7 @@ export default function AdminLayout() {
   }
 
   return (
+    <LenderProvider>
     <Stack screenOptions={ADMIN_STACK_SCREEN_OPTIONS}>
       <Stack.Screen name="index" />
       <Stack.Screen name="owner-controls" />
@@ -127,5 +129,6 @@ export default function AdminLayout() {
       <Stack.Screen name="business-overview" />
       <Stack.Screen name="diagnostics" />
     </Stack>
+    </LenderProvider>
   );
 }
