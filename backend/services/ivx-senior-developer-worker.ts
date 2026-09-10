@@ -1602,7 +1602,10 @@ async function recoverStuckVerifyingJobs(queue: QueueDoc): Promise<void> {
  */
 export async function getActiveJobForOwner(ownerId: string): Promise<IVXWorkerJob | null> {
   if (!ownerId) return null;
-  await expireStaleJobs();
+  // Shared queue reads must not run maintenance against another process's
+  // lease. The dedicated worker sweeps/reclaims expired jobs independently.
+  // Retain an existing job's identity while it waits for that recovery.
+  if (!sharedSeniorQueueEnabled()) await expireStaleJobs();
   const queue = await loadQueue();
   // Find the most recent active job for this owner.
   for (let i = queue.jobs.length - 1; i >= 0; i -= 1) {
@@ -1655,7 +1658,7 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
 
   const ownerId = input.ownerId ?? 'default';
 
-  // Check for an existing active job for this owner (also expires stale jobs).
+  // Check for an existing active job; shared-queue maintenance belongs to workers.
   const activeJob = await getActiveJobForOwner(ownerId);
   if (activeJob && (input.taskId && activeJob.input.taskId
     ? input.taskId === activeJob.input.taskId
