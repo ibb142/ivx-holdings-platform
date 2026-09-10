@@ -83,6 +83,10 @@ export type IVXCompletionValidatorResult = {
 };
 
 export function classifyTaskType(prompt: string): IVXTaskType {
+  // This prefix is set by the diagnostic repair routers. Their appended
+  // instructions necessarily mention inspection/auditing, but completion must
+  // still satisfy the code-task evidence gates. This is not execution approval.
+  if (/^\s*\[TEMPLATE_MODE:BUG_FIX\]\s*\[AUTONOMOUS_DIAGNOSTIC_DATA\]/.test(prompt)) return 'CODE_FIX';
   const lower = prompt.toLowerCase();
   const requestsImplementation = /\b(fix|repair|resolve|patch|change|update|add|create|build|implement)\b/.test(lower);
   const requestsFix = /\b(fix|repair|resolve|patch)\b/.test(lower);

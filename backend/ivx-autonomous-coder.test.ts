@@ -363,7 +363,7 @@ describe('durable repair boundaries', () => {
         ] }),
         testRunner: async (_cwd, command) => ({ command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1 }),
         commitFn: async () => ({ commitSha: 'c'.repeat(40), commitUrl: 'https://github.com/owner/repo/commit/'+'c'.repeat(40), branch: 'repair-example' }),
-        prFn: gates.prFn, autoMergePr: true,
+        prFn: gates.prFn, prStateFn: gates.prStateFn, autoMergePr: true,
         onPrCreated: () => {
           if (behavior === 'rejected') throw new Error('PR_RESUME_PERSISTENCE_REQUIRED');
           return new Promise<void>(resolve => setTimeout(() => { saved = true; resolve(); }, 25));
@@ -382,8 +382,9 @@ describe('durable repair boundaries', () => {
   }
 });
 
-function prAndCiMocks(prNumber = 99): Pick<IVXAutonomousCoderInput, 'prFn' | 'mergeFn' | 'requiredChecksFn'> {
+function prAndCiMocks(prNumber = 99): Pick<IVXAutonomousCoderInput, 'prFn' | 'prStateFn' | 'mergeFn' | 'requiredChecksFn'> {
   return {
+    prStateFn: async () => ({ state: 'open', merged: false, mergeCommitSha: null }),
     prFn: async () => ({
       prNumber,
       prUrl: `https://github.com/ibb142/ivx-holdings-platform/pull/${prNumber}`,
