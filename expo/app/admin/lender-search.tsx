@@ -48,7 +48,7 @@ import {
   SEARCH_CATEGORIES,
   SEARCH_REGIONS,
   SUGGESTED_SEARCHES} from '@/mocks/lender-discovery';
-import { LenderProvider, useLenders } from '@/lib/lender-context';
+import { useLenders } from '@/lib/lender-context';
 import { searchSECEdgar, SECSearchResult } from '@/lib/sec-edgar-service';
 import { formatCurrencyCompact } from '@/lib/formatters';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
@@ -303,7 +303,7 @@ const SECResultCard = React.memo(({
   );
 });
 
-function LenderSearchScreenContent() {
+export default function LenderSearchScreenContent() {
   const router = useRouter();
   // Safe access: if the LenderProvider is ever missing from the tree, `useLenders()`
   // returns undefined. Guarding here turns a hard crash
