@@ -7,6 +7,8 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
+import { buildRealtimeRuntimeChannelName } from '@/lib/realtime-channel-name';
+export { buildRealtimeRuntimeChannelName } from '@/lib/realtime-channel-name';
 import { useScreenActivity } from './useScreenActivity';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
@@ -57,14 +59,6 @@ let _realtimeInstanceSequence = 0;
 function nextRealtimeInstanceId(): string {
   _realtimeInstanceSequence += 1;
   return `i${_realtimeInstanceSequence}`;
-}
-
-export function buildRealtimeRuntimeChannelName(
-  baseName: string,
-  instanceId: string,
-  generation: number,
-): string {
-  return `${baseName}-${instanceId}-g${generation}`;
 }
 
 export function buildRealtimeConfigSignature(configs: RealtimeChannelConfig[]): string {
