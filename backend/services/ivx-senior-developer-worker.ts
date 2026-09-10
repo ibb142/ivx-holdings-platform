@@ -1,4 +1,4 @@
-import { sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult } from './ivx-senior-shared-queue';
+import { sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult, readSharedSeniorDocument, appendSharedSeniorProofEvent } from './ivx-senior-shared-queue';
 import { createSeniorJobAdmission } from './ivx-senior-job-admission';
 /**
  * IVX Self-Hosted Senior Developer Worker — removes the external platform dependency as the
@@ -462,7 +462,8 @@ async function loadQueue(): Promise<QueueDoc> {
     return memoryQueue;
   }
   try {
-    const doc = await readDurableJson<QueueDoc>(QUEUE_FILE, emptyQueue(true));
+    const doc = sharedSeniorQueueEnabled() ? await readSharedSeniorDocument<QueueDoc>(QUEUE_FILE, emptyQueue(true))
+      : await readDurableJson<QueueDoc>(QUEUE_FILE, emptyQueue(true));
     const queue: QueueDoc = { ...doc, marker: IVX_SENIOR_DEV_WORKER_MARKER, durable: true };
     return sharedSeniorQueueEnabled() ? rememberSeniorQueue(queue) : queue;
   } catch (error) {
@@ -508,9 +509,11 @@ async function loadLedger(): Promise<LedgerDoc> {
     return memoryLedger;
   }
   try {
-    const doc = await readDurableJson<LedgerDoc>(LEDGER_FILE, emptyLedger(true));
+    const doc = sharedSeniorQueueEnabled() ? await readSharedSeniorDocument<LedgerDoc>(LEDGER_FILE, emptyLedger(true))
+      : await readDurableJson<LedgerDoc>(LEDGER_FILE, emptyLedger(true));
     return { ...doc, marker: IVX_SENIOR_DEV_WORKER_MARKER, durable: true };
-  } catch {
+  } catch (error) {
+    if (sharedSeniorQueueEnabled()) throw error;
     if (!memoryLedger) memoryLedger = emptyLedger(false);
     return memoryLedger;
   }
@@ -628,7 +631,7 @@ async function githubLedgerWrite(doc: LedgerDoc): Promise<boolean> {
 async function appendLedger(result: IVXWorkerJobResult): Promise<void> {
   if (sharedSeniorQueueEnabled()) {
     await putSharedSeniorResult(result);
-    await appendDurableEvent(LEDGER_FILE, { type: 'proof_ledger_entry', ...result } as Record<string, unknown>);
+    await appendSharedSeniorProofEvent(LEDGER_FILE, { type: 'proof_ledger_entry', ...result } as Record<string, unknown>);
     return;
   }
   // Phase 12: fingerprint the evidence and reject duplicate redeploys as
