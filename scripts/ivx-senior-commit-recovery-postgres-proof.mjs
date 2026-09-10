@@ -11,7 +11,7 @@ try {
   // The preceding HA proof installs the original queue migrations in this
   // disposable local PostgreSQL service. No production data is involved.
   const patch = (client, changes) => client.query('select public.ivx_senior_queue_patch($1::jsonb)', [JSON.stringify(changes)]);
-  const claim = async (client, jobId, worker) => (await client.query('select public.ivx_senior_queue_claim($1,$2,true) as value', [jobId, worker])).rows[0].value;
+  const claim = async (client, jobId, worker, resume = true) => (await client.query('select public.ivx_senior_queue_claim($1,$2,$3) as value', [jobId, worker, resume])).rows[0].value;
   const fixture = suffix => ({ jobId: `commit-recovery-${suffix}`, ownerId: `commit-recovery-owner-${suffix}`,
     status: 'committing', attempts: 1, leaseExpiresAt: new Date(Date.now() - 1000).toISOString(),
     result: { commitSha: 'a'.repeat(40), branch: 'synthetic-repair', prNumber: null } });
@@ -23,7 +23,28 @@ try {
   assert.deepEqual(accessBefore, { anon: false, authenticated: false, service: true });
 
   await a.query(await readFile(new URL('../supabase/repair-functions/ivx-senior-commit-identity-recovery.sql', import.meta.url), 'utf8'));
+  const stranded = { ...fixture('stranded-running'), status: 'running', stage: 'RUNNING', attempts: 3 };
+  await patch(a, [{ expected: null, next: stranded }]);
+  assert.equal(await claim(a, stranded.jobId, 'before-phase-fix'), null, 'Baseline must reproduce committed RUNNING recovery deadlock');
+  await a.query(await readFile(new URL('../supabase/migrations/20260910193000_ivx_senior_committed_phase_recovery.sql', import.meta.url), 'utf8'));
   assert.deepEqual(await privileges(), accessBefore, 'Repair must preserve the existing access boundary');
+  let recoveredPhases = 0;
+  for (const status of ['queued', 'running', 'patching', 'testing', 'committing', 'deploying', 'verifying']) {
+    const job = status === 'running' ? stranded : { ...fixture(`phase-${status}`), status, attempts: 3 };
+    if (job !== stranded) await patch(a, [{ expected: null, next: job }]);
+    assert.equal(await claim(a, job.jobId, 'recoding-worker', false), null, 'Committed work cannot start a new coding attempt');
+    const racers = await Promise.all([claim(a, job.jobId, 'phase-worker-a'), claim(b, job.jobId, 'phase-worker-b')]);
+    assert.equal(racers.filter(Boolean).length, 1, `One winner for ${status}`);
+    const recovered = racers.find(Boolean);
+    assert.equal(recovered.status, 'committing');
+    assert.equal(recovered.stage, 'COMMITTING');
+    assert.equal(recovered.jobId, job.jobId);
+    assert.equal(recovered.attempts, job.attempts);
+    assert.deepEqual(recovered.result, job.result);
+    assert.equal(await claim(b, job.jobId, 'lease-thief'), null, 'Live recovery lease is protected');
+    await assert.rejects(patch(b, [{ expected: recovered, next: { ...recovered, status: 'completed' }, workerInstanceId: 'expired-process' }]), /Worker lease lost/);
+    recoveredPhases++;
+  }
   const claims = await Promise.all([claim(a, original.jobId, 'recovery-a'), claim(b, original.jobId, 'recovery-b')]);
   assert.equal(claims.filter(Boolean).length, 1, 'Exactly one physical worker may recover the same missing PR');
   const winner = claims.find(Boolean);
@@ -41,6 +62,9 @@ try {
     ['invalid-sha', { result: { ...original.result, commitSha: 'short-sha' } }],
     ['missing-commit', { result: { ...original.result, commitSha: null } }],
     ['terminal', { status: 'blocked' }],
+    ...['completed', 'failed', 'cancelled'].map(status => [`terminal-${status}`, { status }]),
+    ['merged', { result: { ...original.result, prMerged: true } }],
+    ['live-running', { status: 'running', leaseExpiresAt: new Date(Date.now() + 60_000).toISOString() }],
     ['same-owner', { ownerId: original.ownerId }],
   ]) {
     const job = { ...fixture(suffix), ...change };
@@ -54,7 +78,8 @@ try {
     baselineLostPrRecoveryRejected: true, missingPrRecoveryWinners: 1, sameJobPreserved: true,
     liveLeaseProtected: true, staleProcessWriteRejected: true, malformedIdentityRejected: true,
     terminalResurrectionRejected: true, ownerSingleFlightPreserved: true, existingPrResumePreserved: true,
-    privateAccessUnchanged: true, productionRowsTouched: 0 };
+    privateAccessUnchanged: true, strandedRunningBaselineRejected: true, recoveredActivePhases: recoveredPhases,
+    committedRecodingRejected: true, committedEvidenceAndAttemptPreserved: true, productionRowsTouched: 0 };
   const output = new URL('../qa/evidence/fleet-ha/senior-commit-recovery.json', import.meta.url);
   await mkdir(new URL('.', output), { recursive: true });
   await writeFile(output, JSON.stringify(proof, null, 2) + '\n');

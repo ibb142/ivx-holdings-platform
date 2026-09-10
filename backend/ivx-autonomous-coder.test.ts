@@ -310,6 +310,52 @@ describe('IVX Autonomous Coder — pilot sentinel', () => {
  * when its PR merges after ALL required checks report success.
  */
 describe('durable repair boundaries', () => {
+  it('edits inspected Landing modules introduced after the original four-file layout', async () => {
+    for (const module of ['analytics', 'csp-actions', 'home-feed', 'invest', 'portal', 'reels', 'web-vitals']) {
+      const repo = await makeIsolatedRepo('landing-module-' + module);
+      const sourcePath = `expo/ivxholding-landing/ivx-${module}.js`;
+      await repo.fileWriter(sourcePath, 'export const enabled = false;');
+      const proof = await runIVXAutonomousCoder({
+        taskId: 'landing-module-fixture-' + module, goal: `Enable the feature in ${sourcePath}.`,
+        ownerId: 'test-owner', executionMode: 'code_change', approvalPolicy: 'owner_gated', projectRoot: repo.root,
+        fileReader: repo.fileReader, fileWriter: repo.fileWriter,
+        planCaller: async () => JSON.stringify({ targetFiles: [sourcePath], hypothesis: 'feature disabled' }),
+        llmCaller: async () => JSON.stringify({ rootCause: 'feature disabled', technicalPlan: 'enable feature', operations: [
+          { path: sourcePath, kind: 'replace_exact', oldText: 'export const enabled = false;', newText: 'export const enabled = true;' },
+        ] }),
+        testRunner: async (_cwd, command) => ({ command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1 }),
+        commitFn: async (_files, branch) => ({ commitSha: 'c'.repeat(40), commitUrl: 'https://example.test/commit', branch }),
+        ...prAndCiMocks(), autoMergePr: true,
+      });
+      expect(proof.finalStatus).toBe('COMPLETED');
+      expect(proof.filesChanged).toEqual([sourcePath]);
+      expect(await repo.fileReader(sourcePath)).toBe('export const enabled = true;');
+    }
+  });
+  for (const executionMode of ['code_change', 'deploy'] as const) {
+    it(`retains a rejected commit checkpoint and stops before ${executionMode} continuation`, async () => {
+      const repo = await makeIsolatedRepo('commit-checkpoint-' + executionMode);
+      let continuations = 0;
+      const proof = await runIVXAutonomousCoder({
+        taskId: 'commit-checkpoint-' + executionMode, goal: `Change the pilot label from ${PILOT_LABEL} to ${PILOT_LABEL_TARGET}.`,
+        ownerId: 'test-owner', executionMode, approvalPolicy: 'owner_gated', projectRoot: repo.root,
+        fileReader: repo.fileReader, fileWriter: repo.fileWriter,
+        llmCaller: async () => JSON.stringify({ rootCause: 'requested label', technicalPlan: 'replace label', operations: [
+          { path: 'backend/services/ivx-autonomous-coder-pilot.ts', kind: 'replace_exact', oldText: `export const PILOT_LABEL = '${PILOT_LABEL}';`, newText: `export const PILOT_LABEL = '${PILOT_LABEL_TARGET}';` },
+        ] }),
+        testRunner: async (_cwd, command) => ({ command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1 }),
+        commitFn: async () => ({ commitSha: 'c'.repeat(40), commitUrl: 'https://example.test/commit', branch: executionMode === 'deploy' ? 'main' : 'repair-example' }),
+        onCommitLanded: async () => { throw new Error('checkpoint database unavailable'); },
+        deployApproved: true, deployConfirmationText: 'CONFIRM_IVX_RENDER_DEPLOY', autoMergePr: true,
+        prFn: async () => { continuations++; throw new Error('PR must wait for durable commit identity'); },
+        deployFn: async () => { continuations++; throw new Error('Deploy must wait for durable commit identity'); },
+      });
+      expect(continuations).toBe(0);
+      expect(proof.commitSha).toBe('c'.repeat(40));
+      expect(proof.error).toContain('COMMIT_CHECKPOINT_PERSISTENCE_REQUIRED');
+      expect(proof.finalStatus).not.toBe('COMPLETED');
+    });
+  }
   it('rejects a Bun suite mutation, then repairs through a separate real Node regression', async () => {
     const repo = await makeIsolatedRepo('node-sidecar-recovery');
     const sourcePath = 'backend/services/normalize-video.ts';

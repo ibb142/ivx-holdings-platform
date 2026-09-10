@@ -1,4 +1,5 @@
-type Job = { jobId: string; ownerId: string; status: string; createdAt: string; lastHeartbeatAt?: string | null };
+type Job = { jobId: string; ownerId: string; status: string; createdAt: string; lastHeartbeatAt?: string | null;
+  leaseExpiresAt?: string | null; result?: { commitSha?: string | null } | null };
 type Dependencies<T extends Job> = {
   read: () => Promise<{ jobs: T[] }>;
   claim: (job: T) => Promise<T | null>;
@@ -23,8 +24,10 @@ export function createSeniorJobAdmission<T extends Job>(deps: Dependencies<T>) {
     if (deps.stopped()) return null;
     const busyOwners = new Set(queue.jobs.filter(job => deps.claimed.has(job.jobId)
       || (job.status !== 'queued' && deps.active.has(job.status)
-        && Date.now() - Date.parse(job.lastHeartbeatAt ?? job.createdAt) < deps.staleAfterMs)).map(job => job.ownerId));
-    const job = queue.jobs.find(row => row.status === 'queued' && !deps.claimed.has(row.jobId) && !busyOwners.has(row.ownerId));
+        && (job.result?.commitSha || Date.parse(job.leaseExpiresAt ?? '') > Date.now()
+          || Date.now() - Date.parse(job.lastHeartbeatAt ?? job.createdAt) < deps.staleAfterMs))).map(job => job.ownerId));
+    const job = queue.jobs.find(row => row.status === 'queued' && !row.result?.commitSha
+      && !deps.claimed.has(row.jobId) && !busyOwners.has(row.ownerId));
     if (!job) return null;
     deps.claimed.add(job.jobId);
     const lane = nextLane++ % claimLanes.length;
