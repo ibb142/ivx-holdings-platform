@@ -1,5 +1,6 @@
 import { expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 it('fences stale runtime deployments before credentials or AWS writes', () => {
   const script = `
@@ -44,7 +45,7 @@ it('fences stale runtime deployments before credentials or AWS writes', () => {
     assert.equal(externalWrites,0);
   `;
   const result=spawnSync(process.execPath,['--eval',script],{
-    cwd:process.cwd(),encoding:'utf8',timeout:30_000,
+    cwd:fileURLToPath(new URL('../../',import.meta.url)),encoding:'utf8',timeout:30_000,
     env:{PATH:process.env.PATH,NODE_ENV:'test',IVX_PROCESS_ROLE:'api'},
   });
   if(result.status!==0) throw new Error(result.stderr || result.stdout || String(result.error));
