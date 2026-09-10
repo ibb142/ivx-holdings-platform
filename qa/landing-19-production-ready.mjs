@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 const sha = process.env.GITHUB_SHA;
 assert.match(sha || '', /^[a-f0-9]{40}$/);
-const assets = ['ivx-invest.js', 'ivx-home-feed.js', 'ivx-reels.js', 'ivx-styles.css', 'ivx-web-vitals.js'];
+const assets = ['ivx-invest.js', 'ivx-home-feed.js', 'ivx-reels.js', 'ivx-styles.css', 'ivx-web-vitals.js', 'ivx-app.js'];
 const hash = (body) => createHash('sha256').update(body).digest('hex');
 const csp = (html) => html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)"/i)?.[1];
 const expectedCsp = csp(await readFile('expo/ivxholding-landing/index.html', 'utf8'));
