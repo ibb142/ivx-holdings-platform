@@ -1,10 +1,20 @@
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import logger from './logger';
 import { isAdminRole as _isAdminRole } from './auth-helpers';
 import type { AdminRole, UserRole } from './auth-helpers';
 
 export type { AdminRole, UserRole };
 export const isAdminRole = _isAdminRole;
+
+// Identity metadata only; Supabase remains responsible for session tokens and
+// the backend remains responsible for authorization. SecureStore is native-only.
+const identityStorage = Platform.OS === 'web' ? {
+  getItemAsync: (key: string) => AsyncStorage.getItem(key),
+  setItemAsync: (key: string, value: string) => AsyncStorage.setItem(key, value),
+  deleteItemAsync: (key: string) => AsyncStorage.removeItem(key),
+} : SecureStore;
 
 let _userId: string | null = null;
 let _userRole: string | null = null;
@@ -59,8 +69,8 @@ export async function persistAuth(data: {
   _userRole = data.userRole;
   try {
     await Promise.all([
-      SecureStore.setItemAsync(KEYS.USER_ID, data.userId),
-      SecureStore.setItemAsync(KEYS.USER_ROLE, data.userRole),
+      identityStorage.setItemAsync(KEYS.USER_ID, data.userId),
+      identityStorage.setItemAsync(KEYS.USER_ROLE, data.userRole),
     ]);
     logger.authStore.log('Auth persisted for:', data.userId);
   } catch (error) {
@@ -76,8 +86,8 @@ export async function loadStoredAuth(): Promise<{
 }> {
   try {
     const [userId, userRole] = await Promise.all([
-      SecureStore.getItemAsync(KEYS.USER_ID),
-      SecureStore.getItemAsync(KEYS.USER_ROLE),
+      identityStorage.getItemAsync(KEYS.USER_ID),
+      identityStorage.getItemAsync(KEYS.USER_ROLE),
     ]);
     if (userId) {
       _userId = userId;
@@ -96,10 +106,10 @@ export async function clearStoredAuth(): Promise<void> {
   _userRole = null;
   try {
     await Promise.all([
-      SecureStore.deleteItemAsync(KEYS.USER_ID),
-      SecureStore.deleteItemAsync(KEYS.USER_ROLE),
-      SecureStore.deleteItemAsync('ipx_auth_token').catch(() => {}),
-      SecureStore.deleteItemAsync('ipx_refresh_token').catch(() => {}),
+      identityStorage.deleteItemAsync(KEYS.USER_ID),
+      identityStorage.deleteItemAsync(KEYS.USER_ROLE),
+      identityStorage.deleteItemAsync('ipx_auth_token').catch(() => {}),
+      identityStorage.deleteItemAsync('ipx_refresh_token').catch(() => {}),
     ]);
     logger.authStore.log('Auth cleared');
   } catch (error) {
