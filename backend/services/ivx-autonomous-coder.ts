@@ -24,6 +24,7 @@
  * relevant tests passed, typecheck passed, and (for code changes) a real commit
  * SHA was produced.
  */
+import { MOBILE_CHECK, verifiedMobileSkip } from './ivx-ci-conditional-evidence';
 import { assertPrivateRepairScope, publicRepairGoal } from './ivx-private-repair-boundary';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -148,6 +149,7 @@ export type IVXCiCheckEvidence = {
   conclusion: string | null;
   detailsUrl: string | null;
   matched: boolean;
+  conditionalSkipVerified?: boolean;
 };
 
 /**
@@ -1577,6 +1579,7 @@ async function fetchRequiredChecksForCommit(commitSha: string): Promise<IVXCiChe
       conclusion: run?.conclusion ?? null,
       detailsUrl: run?.details_url ?? null,
       matched: run !== null,
+      conditionalSkipVerified: context === MOBILE_CHECK && run?.name === MOBILE_CHECK && verifiedMobileSkip(runs),
     };
   });
 }
@@ -1584,13 +1587,13 @@ async function fetchRequiredChecksForCommit(commitSha: string): Promise<IVXCiChe
 /** Green requires EVERY required context to be matched, completed, and successful. */
 function requiredChecksAllGreen(evidence: IVXCiCheckEvidence[]): boolean {
   return evidence.length > 0
-    && evidence.every((e) => e.matched && e.status === 'completed' && e.conclusion === 'success');
+    && evidence.every((e) => e.matched && e.status === 'completed' && (e.conclusion === 'success' || e.conditionalSkipVerified === true));
 }
 
 /** A definitive failure is any matched required check that completed with a
  *  non-success conclusion (failure, cancelled, skipped, stale, timed_out). */
 function requiredChecksDefinitivelyFailed(evidence: IVXCiCheckEvidence[]): IVXCiCheckEvidence[] {
-  return evidence.filter((e) => e.matched && e.status === 'completed' && e.conclusion !== 'success');
+  return evidence.filter((e) => e.matched && e.status === 'completed' && e.conclusion !== 'success' && !e.conditionalSkipVerified);
 }
 
 /**
@@ -1625,7 +1628,7 @@ async function waitForRequiredChecksGreen(
     // grace period — but ONLY when every REPORTED required check is green and
     // at least four hard gates actually ran. The skipped context is recorded
     // as NOT_APPLICABLE in the evidence; it is never counted as green.
-    const successCount = evidence.filter((e) => e.matched && e.status === 'completed' && e.conclusion === 'success').length;
+    const successCount = evidence.filter((e) => e.matched && e.status === 'completed' && (e.conclusion === 'success' || e.conditionalSkipVerified === true)).length;
     const unmatched = evidence.filter((e) => !e.matched);
     if (
       unmatched.length > 0
