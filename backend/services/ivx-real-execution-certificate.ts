@@ -154,7 +154,11 @@ export async function resumePendingCertificateRuns(): Promise<{ resumed: number;
   if (process.env.IVX_PROCESS_ROLE === 'api' || !persistenceConfigured()) return { resumed: 0, runIds: [] };
   const ensure = await ensureRealExecutionTables();
   if (!ensure.ok) return { resumed: 0, runIds: [] };
-  const pending = await fetchPendingExecutions(300);
+  const pending = await fetchPendingExecutions(300, {
+    workflow: REAL_EXECUTION_WORKFLOW_ID,
+    taskType: 'real_execution_certification',
+  });
+  if (!pending.ok) throw new Error(`cannot discover durable pending runs: ${pending.error}`);
   const rows = (pending.data ?? []).filter((r) =>
     r.workflow === REAL_EXECUTION_WORKFLOW_ID
     && r.task_type === 'real_execution_certification'
