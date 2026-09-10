@@ -161,17 +161,6 @@
       window.IVX.track('web_vitals', report);
     }
 
-    // Send beacon to backend (non-blocking)
-    if (navigator && navigator.sendBeacon) {
-      var api = document.querySelector('meta[name="ivx-api-url"]');
-      var apiUrl = api ? api.content : '';
-      if (apiUrl && apiUrl.indexOf('__IVX_') !== 0) {
-        try {
-          navigator.sendBeacon(apiUrl + '/api/ivx/perf/vitals', JSON.stringify(report));
-        } catch(e) {}
-      }
-    }
-
     return report;
   }
 

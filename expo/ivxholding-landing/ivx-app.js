@@ -1084,7 +1084,9 @@
     }, true);
   })();
 
-  (function fetchGeoData() {
+  function fetchGeoData() {
+    // Optional location analytics follow the same explicit consent as ad pixels.
+    try { if (localStorage.getItem('ivx_cookie_consent') !== 'all') return; } catch(e) { return; }
     if (_geoFetched) return;
     _geoFetched = true;
     fetch('https://ipapi.co/json/', { mode: 'cors' })
@@ -1104,9 +1106,11 @@
         }
       })
       .catch(function() {
-        /* ipapi.co CORS or rate limit — geo backfill is optional, fail silently */
+        /* Geo backfill remains optional when the provider is unavailable. */
       });
-  })();
+  }
+  fetchGeoData();
+  window.addEventListener('ivx:analytics-consent', fetchGeoData);
 
   window.addEventListener('beforeunload', function() {
     var duration = Math.round((Date.now() - PAGE_START) / 1000);
@@ -4042,6 +4046,7 @@
   function acceptCookies() {
     try { localStorage.setItem('ivx_cookie_consent', 'all'); } catch(e) {}
     document.getElementById('cookie-banner').classList.remove('visible');
+    window.dispatchEvent(new Event('ivx:analytics-consent'));
     // Load ad pixels only after explicit consent (items 90-97)
     if (window.IVX && typeof IVX.loadAdPixels === 'function') {
       IVX.loadAdPixels();
