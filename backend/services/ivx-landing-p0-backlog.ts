@@ -162,7 +162,7 @@ export const LANDING_P0_UNITS: readonly LandingUnit[] = [
   u('structure', 'navigation.no-dead-controls', 'G_NAVIGATION', 'No dead anchors / unlabeled buttons', 'P1', { kind: 'html', asserts: [{ assert: 'no-dead-anchors' }, { assert: 'buttons-labeled' }] }),
   u('structure', 'navigation.cta-targets', 'G_NAVIGATION', 'CTAs present with real targets', 'P0', { kind: 'html', asserts: [{ assert: 'cta-present' }] }),
   u('structure', 'navigation.deep-links', 'G_NAVIGATION', 'Deep-link routes respond', 'P1', { kind: 'routes', paths: ['/', '/reels', '/register', '/login', '/deals'] }),
-  u('structure', 'navigation.back-modals-browser', 'G_NAVIGATION', 'Back navigation / modals (browser)', 'P1', { kind: 'ci', workflow: CI_LANDING_BROWSER, check: 'navigation' }),
+  u('structure', 'navigation.back-modals-browser', 'G_NAVIGATION', 'Back navigation / modals (browser)', 'P1', { kind: 'ci', workflow: 'Landing Navigation Browser QA', check: 'navigation' }),
 
   // B. DEALS — lane deals (IA-013..024)
   u('deals', 'deals.api-status', 'B_DEALS', 'Public deals API healthy', 'P0', { kind: 'api', path: '/api/deals', asserts: [{ assert: 'status', is: [200] }, { assert: 'content-type-json' }, { assert: 'array-at', key: 'deals' }] }),

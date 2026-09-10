@@ -733,8 +733,8 @@ async function runCommand(cwd: string, command: string): Promise<IVXAutonomousCo
   // (node:test runner) and `bun x tsc --noEmit` → `npx tsc --noEmit` (or node tsc).
   if (resolution.usedFallback && requestedRuntime === 'bun') {
     if (effectiveArgs[0] === 'test') {
-      effectiveArgs = ['--test', ...effectiveArgs.slice(1)];
-      displayCommand = `node --test ${effectiveArgs.slice(1).join(' ')}`;
+      effectiveArgs = ['--import', 'tsx', '--test', ...effectiveArgs.slice(1)];
+      displayCommand = `node ${effectiveArgs.join(' ')}`;
     } else if (effectiveArgs[0] === 'x') {
       // `bun x tsc` → use npx instead (with --yes so it never waits for confirmation)
       const npxRes = resolveRuntimeCommand('npx');
@@ -777,24 +777,13 @@ async function runCommand(cwd: string, command: string): Promise<IVXAutonomousCo
  * valid. For newly created files (create_file) where no corresponding test
  * exists yet, we return null so the caller knows to skip the test gate and
  * rely on typecheck + content-change verification instead. */
-function pickTargetTestFile(goal: string, changedFiles: string[]): string | null {
-  // If a changed file has a corresponding .test.ts that EXISTS, run it.
-  for (const changed of changedFiles) {
-    const testFile = changed.replace(/\.ts$/, '.test.ts');
-    if (testFile !== changed) {
-      try {
-        if (existsSync(path.resolve(DEFAULT_PROJECT_ROOT, testFile))) {
-          return testFile;
-        }
-      } catch {
-        // existsSync failed — skip this candidate
-      }
-    }
+function pickTargetTestFile(goal: string, changedFiles: string[], projectRoot: string): string | null {
+  const changedTests = changedFiles.filter(file => /\.(test|spec)\.[cm]?[jt]sx?$/.test(file));
+  const candidates = [...changedTests, ...changedFiles.map(file => file.replace(/\.([cm]?[jt]sx?)$/, '.test.$1'))];
+  for (const file of candidates) {
+    if (!/\.(test|spec)\.[cm]?[jt]sx?$/.test(file)) continue;
+    if (existsSync(path.resolve(projectRoot, file))) return file;
   }
-  // No default fallback — the autonomous coder's own test file uses
-  // `bun:test` imports which fail with `node --test` on Render (where bun
-  // is not installed). Returning null is honest: testsRun=false, and the
-  // typecheck + content-change verification gates are the real proof.
   return null;
 }
 
@@ -825,7 +814,7 @@ NON-TRIVIAL TASK GUIDANCE:
 - When asked to ADD A FIELD to an endpoint, find the response object in the file and add the field.
 - When asked to CREATE A NEW ROUTE, create a new file with kind="create_file" containing the route handler. Do NOT try to replace_exact in a 3000+ line file unless you can see the exact target text in the FILE CONTENTS.
 - When asked to MODIFY MULTIPLE FILES, include one operation per file.
-- When asked to ADD A TEST, create a new test file with kind="create_file".
+- When asked to ADD A TEST, create a new test file with kind="create_file". Use node:test and node:assert/strict so it runs with both Bun in CI and Node + tsx in production.
 - Read the FILE CONTENTS carefully and copy exact text for oldText from what you see.
 - PREFER create_file for new functionality — it is always reliable and never fails to apply.
 - For large files (1000+ lines), PREFER create_file for new routes/modules instead of replace_exact.
@@ -1535,9 +1524,8 @@ async function commitFilesViaGitDataApi(
 /**
  * Owner mandate 2026-08-23 (CI-before-merge): fetch the current state of the
  * REQUIRED CI checks for a commit SHA from the GitHub check-runs API. Only
- * the required contexts (REQUIRED_CI_CHECK_CONTEXTS or the owner-configured
- * IVX_REQUIRED_CI_CHECKS variable) are considered; unrelated checks cannot
- * block or approve a merge.
+ * required contexts are expected, and every additional reported check must
+ * also pass. A new workflow must not be silently excluded from the merge gate.
  */
 async function fetchRequiredChecksForCommit(commitSha: string): Promise<IVXCiCheckEvidence[]> {
   const token = await readOwnerRuntimeVariable('GITHUB_TOKEN');
@@ -1551,7 +1539,7 @@ async function fetchRequiredChecksForCommit(commitSha: string): Promise<IVXCiChe
     ? contextsRaw.split(',').map((s) => s.trim()).filter(Boolean)
     : [...REQUIRED_CI_CHECK_CONTEXTS];
   const res = await fetch(
-    `${GITHUB_API_BASE_URL}/repos/${repoInfo.owner}/${repoInfo.repo}/commits/${commitSha}/check-runs`,
+    `${GITHUB_API_BASE_URL}/repos/${repoInfo.owner}/${repoInfo.repo}/commits/${commitSha}/check-runs?per_page=100&filter=latest`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -1564,9 +1552,12 @@ async function fetchRequiredChecksForCommit(commitSha: string): Promise<IVXCiChe
     throw new Error(`GitHub check-runs fetch failed: ${res.status}`);
   }
   const data = await res.json() as {
+    total_count?: number;
     check_runs?: Array<{ name: string; status: string; conclusion: string | null; details_url: string | null }>;
   };
   const runs = data.check_runs ?? [];
+  if ((data.total_count ?? 0) > runs.length) throw new Error('Incomplete GitHub check evidence; refusing merge');
+  for (const run of runs) if (!contexts.includes(run.name)) contexts.push(run.name);
   return contexts.map((context) => {
     const run = runs.find((r) => r.name === context)
       ?? runs.find((r) => r.name.startsWith(context))
@@ -1709,210 +1700,18 @@ async function createPullRequestForBranch(
   return { prNumber: data.number, prUrl: data.html_url, merged: data.merged, mergeCommitSha: data.merge_commit_sha };
 }
 
-/**
- * Temporarily remove branch protection from the default branch, so the
- * autonomous worker can admin-merge its own PR without manual intervention.
- * Returns the prior protection config so it can be restored after merge.
- * If the branch has no protection, returns null (nothing to restore).
- */
-async function temporarilyRemoveBranchProtection(
-  owner: string,
-  repo: string,
-  branch: string,
-  headers: Record<string, string>,
-): Promise<{ required_reviews: number; enforce_admins: boolean; allow_force_pushes: boolean } | null> {
-  // Fetch current protection config
-  const protRes = await fetch(
-    `${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}/protection`,
-    { headers, signal: AbortSignal.timeout(10000) },
-  );
-  if (!protRes.ok) return null; // No protection or not found
-  const protData = await protRes.json() as {
-    required_pull_request_reviews?: { required_approving_review_count?: number };
-    enforce_admins?: { enabled?: boolean };
-    allow_force_pushes?: { enabled?: boolean };
-  };
-  const snapshot = {
-    required_reviews: protData.required_pull_request_reviews?.required_approving_review_count ?? 0,
-    enforce_admins: protData.enforce_admins?.enabled ?? false,
-    allow_force_pushes: protData.allow_force_pushes?.enabled ?? false,
-  };
-  // Remove protection entirely (DELETE)
-  const delRes = await fetch(
-    `${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}/protection`,
-    { method: 'DELETE', headers, signal: AbortSignal.timeout(10000) },
-  );
-  // 204 = success, 404 = already no protection — both fine
-  if (!delRes.ok && delRes.status !== 404) {
-    throw new Error(`Branch protection removal failed: ${delRes.status}`);
-  }
-  return snapshot;
-}
-
-/**
- * Restore branch protection after a merge. Best-effort — if restoration fails,
- * the error is logged but not thrown (the merge already succeeded).
- */
-async function restoreBranchProtection(
-  owner: string,
-  repo: string,
-  branch: string,
-  snapshot: { required_reviews: number; enforce_admins: boolean; allow_force_pushes: boolean } | null,
-  headers: Record<string, string>,
-): Promise<void> {
-  if (!snapshot) return; // No protection was in place
-  try {
-    const body: Record<string, unknown> = {
-      required_status_checks: null,
-      enforce_admins: snapshot.enforce_admins,
-      required_pull_request_reviews: {
-        required_approving_review_count: snapshot.required_reviews,
-        dismiss_stale_reviews: false,
-        require_code_owner_reviews: false,
-      },
-      restrictions: null,
-      allow_force_pushes: snapshot.allow_force_pushes,
-      required_linear_history: false,
-    };
-    const res = await fetch(
-      `${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}/protection`,
-      {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(10000),
-      },
-    );
-    if (!res.ok) {
-      console.error('[IVXAutonomousCoder] Branch protection restore failed:', res.status);
-    }
-  } catch (err) {
-    console.error('[IVXAutonomousCoder] Branch protection restore error:', safeErrorMessage(err));
-  }
-}
-
-/**
- * Merge a pull request via the GitHub REST API (squash merge).
- * Handles branch protection autonomously: temporarily removes protection,
- * merges the PR, then restores protection. Includes retry logic for
- * transient failures (network errors, 409 conflicts, rate limits).
- * Returns whether the merge succeeded and the merge commit SHA.
- */
+/** Merge the checked PR head without modifying repository protections. */
 async function mergePullRequest(
   prNumber: number,
   commitMessage: string,
+  checkedHeadSha: string,
 ): Promise<{ merged: boolean; mergeCommitSha: string | null }> {
   const token = await readOwnerRuntimeVariable('GITHUB_TOKEN');
   const repoUrl = await readOwnerRuntimeVariable('GITHUB_REPO_URL');
   const repoInfo = parseGithubRepoUrl(repoUrl);
-  if (!token || !repoInfo) {
-    throw new Error('GITHUB_TOKEN or GITHUB_REPO_URL is missing — cannot merge pull request.');
-  }
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
-    Accept: 'application/vnd.github+json',
-    'Content-Type': 'application/json',
-  };
-  const defaultBranch = (await readOwnerRuntimeVariable('GITHUB_DEFAULT_BRANCH')) || GITHUB_DEFAULT_BRANCH;
-
-  // Retry loop: attempt merge up to 3 times for transient failures
-  const MAX_MERGE_RETRIES = 3;
-  let protectionSnapshot: { required_reviews: number; enforce_admins: boolean; allow_force_pushes: boolean } | null = null;
-  let protectionRemoved = false;
-
-  for (let attempt = 1; attempt <= MAX_MERGE_RETRIES; attempt++) {
-    try {
-      // On first attempt, try direct merge. If 403 (branch protection),
-      // remove protection and retry.
-      const res = await fetch(
-        `${GITHUB_API_BASE_URL}/repos/${repoInfo.owner}/${repoInfo.repo}/pulls/${prNumber}/merge`,
-        {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify({
-            commit_title: commitMessage,
-            merge_method: 'squash',
-          }),
-          signal: AbortSignal.timeout(15000),
-        },
-      );
-
-      if (res.ok) {
-        const data = await res.json() as { sha: string | null; merged: boolean; message: string };
-        // Restore protection if we removed it
-        if (protectionRemoved) {
-          await restoreBranchProtection(repoInfo.owner, repoInfo.repo, defaultBranch, protectionSnapshot, headers);
-        }
-        return { merged: data.merged, mergeCommitSha: data.sha };
-      }
-
-      const errBody = await res.text().catch(() => '');
-      const status = res.status;
-
-      // 403 = branch protection blocking the merge
-      if (status === 403 && /branch protection|required status check|review/i.test(errBody) && !protectionRemoved) {
-        // Temporarily remove branch protection
-        protectionSnapshot = await temporarilyRemoveBranchProtection(repoInfo.owner, repoInfo.repo, defaultBranch, headers);
-        protectionRemoved = true;
-        // Wait 1s before retrying
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        continue; // Retry with protection removed
-      }
-
-      // 409 = merge conflict (non-retryable)
-      if (status === 409) {
-        if (protectionRemoved) {
-          await restoreBranchProtection(repoInfo.owner, repoInfo.repo, defaultBranch, protectionSnapshot, headers);
-        }
-        throw new Error(`GitHub PR merge conflict (409): ${errBody.slice(0, 300)}`);
-      }
-
-      // 405 = method not allowed — could be branch protection (required reviews)
-      // or PR not yet mergeable. If the error mentions reviews/branch protection,
-      // remove protection and retry. Otherwise just retry.
-      if (status === 405) {
-        if (/review|branch protection|approving/i.test(errBody) && !protectionRemoved) {
-          protectionSnapshot = await temporarilyRemoveBranchProtection(repoInfo.owner, repoInfo.repo, defaultBranch, headers);
-          protectionRemoved = true;
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
-        }
-        if (attempt < MAX_MERGE_RETRIES) {
-          await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
-          continue;
-        }
-      }
-
-      // Other errors — retry on last attempt only if transient
-      if (attempt < MAX_MERGE_RETRIES && status >= 500) {
-        await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
-        continue;
-      }
-
-      // Non-retryable error
-      if (protectionRemoved) {
-        await restoreBranchProtection(repoInfo.owner, repoInfo.repo, defaultBranch, protectionSnapshot, headers);
-      }
-      throw new Error(`GitHub PR merge failed: ${status} ${errBody.slice(0, 300)}`);
-    } catch (err) {
-      // Network error — retry if attempts remaining
-      if (attempt < MAX_MERGE_RETRIES) {
-        await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
-        continue;
-      }
-      // Final attempt failed — restore protection and throw
-      if (protectionRemoved) {
-        await restoreBranchProtection(repoInfo.owner, repoInfo.repo, defaultBranch, protectionSnapshot, headers);
-      }
-      throw err;
-    }
-  }
-
-  // Should never reach here
-  if (protectionRemoved) {
-    await restoreBranchProtection(repoInfo.owner, repoInfo.repo, defaultBranch, protectionSnapshot, headers);
-  }
-  return { merged: false, mergeCommitSha: null };
+  if (!token || !repoInfo) throw new Error('GITHUB_TOKEN or GITHUB_REPO_URL is missing — cannot merge pull request.');
+  const { mergeCheckedPullRequest } = await import('./ivx-checked-pr-merge');
+  return mergeCheckedPullRequest({ repository: `${repoInfo.owner}/${repoInfo.repo}`, token, prNumber, checkedHeadSha, title: commitMessage });
 }
 
 // ── RENDER DEPLOY ────────────────────────────────────────────────────────────
@@ -2282,7 +2081,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       }
       if (patchApplied) {
         onPhase?.('testing', 'Pilot fallback: running targeted tests + typecheck.');
-        const targetTest = pickTargetTestFile(input.goal, filesChanged);
+        const targetTest = pickTargetTestFile(input.goal, filesChanged, projectRoot);
         // Gap 4 FIX: Always run tests via runCommand when a test file exists.
         // When no test file exists (newly created files), honestly record
         // testsRun=false and rely on typecheck + content-change verification.
@@ -2679,6 +2478,8 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     let applyError: string | null = null;
     try {
       assertPrivateRepairScope(input.goal, input.allowedFiles, parsed.operations.map(op => op.path));
+      const { assertRepairPatchQuality } = await import('./ivx-repair-patch-quality');
+      assertRepairPatchQuality(input.taskId, parsed.operations);
       for (const op of parsed.operations) {
         await applyPatchOperation(op, projectRoot, input.fileWriter, input.fileReader);
         appliedOps.push(op);
@@ -2717,7 +2518,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // ── TEST ─────────────────────────────────────────────────────────────
     onPhase?.('testing', `Iteration ${iterationCount}: running targeted tests + typecheck.`);
     markStageStart('testing');
-    const targetTest = pickTargetTestFile(input.goal, filesChanged);
+    const targetTest = pickTargetTestFile(input.goal, filesChanged, projectRoot);
     // Gap 4 FIX: Only run tests when a test file actually exists. For newly
     // created files where no corresponding .test.ts exists, honestly record
     // testsRun=false and rely on typecheck + content-change verification.
@@ -3029,7 +2830,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
             onPhase?.('committing', `All required CI checks GREEN. Auto-merging PR #${prNumber} (owner approved).`);
             const mergeResult = input.mergeFn
               ? await input.mergeFn(prNumber, prTitle)
-              : await mergePullRequest(prNumber, prTitle);
+              : await mergePullRequest(prNumber, prTitle, commitSha);
             prMerged = mergeResult.merged;
             prMergeCommitSha = mergeResult.mergeCommitSha;
             if (prMerged && prMergeCommitSha) {
@@ -3372,8 +3173,8 @@ export async function resumeIVXAutonomousCoderFromCiWait(
         onPhase?.('committing', `Restart resume: all required CI checks GREEN on ${input.commitSha.slice(0, 12)} — merging PR #${input.prNumber}.`);
         await input.beforeMerge?.();
         const mergeResult = input.mergeFn
-          ? await input.mergeFn(input.prNumber, `Merge PR #${input.prNumber}: ${input.goal.slice(0, 60)}`)
-          : await mergePullRequest(input.prNumber, `Merge PR #${input.prNumber}: ${input.goal.slice(0, 60)}`);
+          ? await input.mergeFn(input.prNumber, `Merge PR #${input.prNumber}: ${publicRepairGoal(input.goal).slice(0, 60)}`)
+          : await mergePullRequest(input.prNumber, `Merge PR #${input.prNumber}: ${publicRepairGoal(input.goal).slice(0, 60)}`, input.commitSha);
         prMerged = mergeResult.merged;
         prMergeCommitSha = mergeResult.mergeCommitSha;
         if (prMerged && prMergeCommitSha) {

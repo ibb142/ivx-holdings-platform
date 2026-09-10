@@ -25,6 +25,7 @@ import {
   resolveProductionSha,
 } from './ivx-landing-p0-backlog';
 import { executeLandingUnit } from './ivx-landing-p0-executor';
+import { routePersistedLandingFailure } from './ivx-landing-repair-router';
 import {
   postgresAtomicQueueSelected,
   readPostgresFleetLeaseRows,
@@ -268,7 +269,10 @@ export async function runLandingPatrolSession(input: {
           lostError = state.lastError;
         } else {
           task = persisted.task;
-          if (persisted.evidenceId) evidenceIds.push(persisted.evidenceId);
+          if (persisted.evidenceId) {
+            evidenceIds.push(persisted.evidenceId);
+            await routePersistedLandingFailure({ taskId: task.taskId, evidenceId: persisted.evidenceId, agentId: input.agentId, record: execution.record });
+          }
           state.lastError = null;
         }
       } catch (error) {

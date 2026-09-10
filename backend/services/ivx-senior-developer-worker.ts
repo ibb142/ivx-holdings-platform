@@ -1612,6 +1612,7 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
 
   // FINAL MANDATE Phase 1: owner emergency stop halts all agent work at the enqueue boundary.
   const emergencyStop = await checkEmergencyStop();
+  if (emergencyStop.source === 'unavailable') throw new Error('EMERGENCY_STOP_UNAVAILABLE: job enqueue refused until owner control is readable.');
   if (emergencyStop.active) {
     throw new Error(
       `EMERGENCY_STOP_ACTIVE: owner emergency stop is engaged (${emergencyStop.reason ?? 'no reason recorded'}); job enqueue refused.`,
@@ -1622,7 +1623,9 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
 
   // Check for an existing active job for this owner (also expires stale jobs).
   const activeJob = await getActiveJobForOwner(ownerId);
-  if (activeJob && isSameTaskScope(goal, activeJob.input.goal)) {
+  if (activeJob && (input.taskId && activeJob.input.taskId
+    ? input.taskId === activeJob.input.taskId
+    : isSameTaskScope(goal, activeJob.input.goal))) {
     // ATTACH (same task scope only): the new command is a retry/follow-up of
     // the running job. Reuse it so duplicate work is not enqueued.
     // A scheduler retry carrying the exact same taskId is an idempotent read,
@@ -1648,6 +1651,7 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
   const idempotencyKey = computeIdempotencyKey({
     ownerId,
     goal,
+    taskId: input.taskId,
     approvalPhrase: input.gitDeployConfirmationText ?? input.patchConfirmationText ?? null,
     executionMode: input.executionMode ?? null,
   });
@@ -2215,13 +2219,15 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
   try {
   // FINAL MANDATE Phase 1: owner emergency stop halts queued jobs before execution.
   const emergencyStop = await checkEmergencyStop();
-  if (emergencyStop.active) {
+  if (emergencyStop.active || emergencyStop.source === 'unavailable') {
     await updateJob(job.jobId, {
       status: 'blocked',
       stage: 'FAILED',
-      stageDetail: `Emergency stop active — job blocked before execution (${emergencyStop.reason ?? 'no reason recorded'}).`,
+      stageDetail: `Owner control ${emergencyStop.source === 'unavailable' ? 'unavailable' : 'stopped'} — job blocked before execution.`,
       finishedAt: nowIso(),
-      error: 'EMERGENCY_STOP_ACTIVE: owner emergency stop is engaged; job refused at start boundary.',
+      error: emergencyStop.source === 'unavailable'
+        ? 'EMERGENCY_STOP_UNAVAILABLE: job refused until owner control is readable.'
+        : 'EMERGENCY_STOP_ACTIVE: owner emergency stop is engaged; job refused at start boundary.',
     });
     return null;
   }

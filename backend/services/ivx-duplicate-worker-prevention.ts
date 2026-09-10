@@ -9,6 +9,8 @@
  * Do not count duplicate redeploys as separate completed development tasks.
  */
 
+import { createHash } from 'node:crypto';
+
 export const IVX_DUPLICATE_WORKER_PREVENTION_MARKER = 'ivx-duplicate-worker-prevention-2026-07-20';
 
 /**
@@ -22,7 +24,12 @@ export function computeIdempotencyKey(input: {
   goal: string;
   approvalPhrase?: string | null;
   executionMode?: string | null;
+  taskId?: string | null;
 }): string {
+  // A durable task remains the same work when its diagnostic text changes.
+  if (input.taskId) return `task:${createHash('sha256').update(JSON.stringify([
+    input.ownerId, input.taskId, input.executionMode ?? 'default', Boolean(input.approvalPhrase),
+  ])).digest('hex')}`;
   const normalizedGoal = input.goal
     .toLowerCase()
     .replace(/\s+/g, ' ')

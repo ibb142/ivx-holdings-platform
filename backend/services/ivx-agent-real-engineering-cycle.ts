@@ -44,6 +44,7 @@ import {
   resolveProductionSha,
 } from './ivx-landing-p0-backlog';
 import { executeLandingUnit } from './ivx-landing-p0-executor';
+import { routePersistedLandingFailure } from './ivx-landing-repair-router';
 
 export const IVX_REAL_ENGINEERING_CYCLE_MARKER = 'ivx-agent-real-engineering-cycle-2026-09-01';
 
@@ -344,9 +345,15 @@ export async function runRealEngineeringCycle(input: {
     // ANALYZING — real inspection of the task's module (from title or description path).
     const moduleMatch = /module audit: (\S+)|module (\S+)/i.exec(`${task.title} ${task.description}`);
     const relPath = moduleMatch ? (moduleMatch[1] ?? moduleMatch[2]) : null;
+    if (!relPath) {
+      const blocker = 'NO_EXECUTOR: this task has no supported module inspection or Landing executor; no work was performed.';
+      await transitionTaskState(task.taskId, 'BLOCKED', { blocker });
+      return { ...base, ok: true, action: 'TASK_BLOCKED', taskId: task.taskId, startedAt, finishedAt: nowIso(),
+        states: [...states, 'BLOCKED'], productiveMinutes: 0, error: blocker };
+    }
     const inspection = relPath
       ? await inspectModule(relPath)
-      : { defects: [], inspected: true, summary: `non-module task executed: ${task.title}` };
+      : { defects: [], inspected: false, summary: 'No module inspected' };
 
     for (const defect of inspection.defects) {
       if (defect.ownerGateReason) {
@@ -629,6 +636,9 @@ async function runLandingTask(
       };
     }
     states.push(...finalized.states);
+    if (finalized.evidenceId) {
+      await routePersistedLandingFailure({ taskId: task.taskId, evidenceId: finalized.evidenceId, agentId: input.agentId, record });
+    }
     return {
       ...base,
       ok: true,
