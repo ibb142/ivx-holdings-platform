@@ -24,7 +24,7 @@
  * relevant tests passed, typecheck passed, and (for code changes) a real commit
  * SHA was produced.
  */
-import { MOBILE_CHECK, verifiedMobileSkip } from './ivx-ci-conditional-evidence';
+import { MOBILE_CHECK, verifiedMobileSkip, LANDING_PR_BROWSER_CHECK, verifyLandingPrBrowserSkip } from './ivx-ci-conditional-evidence';
 import { assertPrivateRepairScope, publicRepairGoal } from './ivx-private-repair-boundary';
 import { assertRepairPatchQuality, requiresRepairRegression } from './ivx-repair-patch-quality';
 import { assertLandingRepairScope } from './ivx-landing-repair-scope';
@@ -155,6 +155,7 @@ export type IVXCiCheckEvidence = {
   detailsUrl: string | null;
   matched: boolean;
   conditionalSkipVerified?: boolean;
+  conditionalSkipPending?: boolean;
 };
 
 /**
@@ -1632,6 +1633,10 @@ async function fetchRequiredChecksForCommit(commitSha: string): Promise<IVXCiChe
   };
   const runs = data.check_runs ?? [];
   if ((data.total_count ?? 0) > runs.length) throw new Error('Incomplete GitHub check evidence; refusing merge');
+  const landingSkip = await verifyLandingPrBrowserSkip({ runs, commitSha,
+    repo: `${repoInfo.owner}/${repoInfo.repo}`,
+    read: url => fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(10000) }),
+  });
   for (const run of runs) if (!contexts.includes(run.name)) contexts.push(run.name);
   return contexts.map((context) => {
     const run = runs.find((r) => r.name === context)
@@ -1645,7 +1650,9 @@ async function fetchRequiredChecksForCommit(commitSha: string): Promise<IVXCiChe
       conclusion: run?.conclusion ?? null,
       detailsUrl: run?.details_url ?? null,
       matched: run !== null,
-      conditionalSkipVerified: context === MOBILE_CHECK && run?.name === MOBILE_CHECK && verifiedMobileSkip(runs),
+      conditionalSkipVerified: (context === MOBILE_CHECK && run?.name === MOBILE_CHECK && verifiedMobileSkip(runs))
+        || (context === LANDING_PR_BROWSER_CHECK && landingSkip === 'verified'),
+      conditionalSkipPending: context === LANDING_PR_BROWSER_CHECK && landingSkip === 'pending',
     };
   });
 }
@@ -1659,7 +1666,7 @@ function requiredChecksAllGreen(evidence: IVXCiCheckEvidence[]): boolean {
 /** A definitive failure is any matched required check that completed with a
  *  non-success conclusion (failure, cancelled, skipped, stale, timed_out). */
 function requiredChecksDefinitivelyFailed(evidence: IVXCiCheckEvidence[]): IVXCiCheckEvidence[] {
-  return evidence.filter((e) => e.matched && e.status === 'completed' && e.conclusion !== 'success' && !e.conditionalSkipVerified);
+  return evidence.filter((e) => e.matched && e.status === 'completed' && e.conclusion !== 'success' && !e.conditionalSkipVerified && !e.conditionalSkipPending);
 }
 
 /**
