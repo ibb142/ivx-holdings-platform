@@ -208,7 +208,7 @@ export async function proveInterruptedTaskRecovery(reader, successor) {
         assert.deepEqual(final.payload.evidence, [ready.task.evidence[0], result]);
         for (const item of final.payload.evidence) assert.equal(hash(item.summary), item.contentHash);
         assert.equal((await reader.query('select count(*)::integer as count from public.ivx_autonomous_tasks where idempotency_key=$1', [fixture.idempotencyKey])).rows[0].count, 1);
-        const events = (await reader.query('select event_type,worker_instance_id,event,created_at from public.ivx_autonomous_task_events where task_id=$1 order by id', [taskId])).rows;
+        const events = (await reader.query('select event_id,event_type,worker_instance_id,event,created_at from public.ivx_autonomous_task_events where task_id=$1 order by event_id', [taskId])).rows;
         assert.equal(events.filter(event => event.event_type === 'recovery_fixture_verified').length, 1);
         assert.equal(events.filter(event => event.event_type === 'recovery_fixture_completed').length, 1);
         assert.equal(events.filter(event => event.event_type === 'recovery_fixture_forbidden').length, 0);
