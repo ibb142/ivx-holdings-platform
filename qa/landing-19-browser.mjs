@@ -60,6 +60,15 @@ try {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(data) });
       });
     }
+    if (process.env.LANDING_PREVIEW_SOURCE && unit === 'reels.production-render-browser') {
+      // Reproduce the observed startup failure before accepting the real feed.
+      let injectedUnavailable = false;
+      await page.route('https://api.ivxholding.com/api/reels', async (route) => {
+        if (injectedUnavailable || route.request().method() !== 'GET') return route.continue();
+        injectedUnavailable = true;
+        await route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"isolated startup recovery fixture"}' });
+      });
+    }
     const response = await page.goto(base, { waitUntil: 'domcontentloaded' });
     assert.equal(response.status(), 200);
     await page.locator('#properties-grid .live-deal-card').first().waitFor({ state: 'visible' });
