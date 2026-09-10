@@ -22,3 +22,37 @@ test('disabled scheduler and disabled environment never enqueue work', () => {
   try { process.env.IVX_SCHEDULER = 'off'; expect(dueTechnicalTasks(state)).toEqual([]); }
   finally { if (previous === undefined) delete process.env.IVX_SCHEDULER; else process.env.IVX_SCHEDULER = previous; }
 });
+
+test('durable state outage cannot reset owner controls or create new schedule identities', async () => {
+  const child = Bun.spawn([process.execPath, '-e', `
+    import { mock } from 'bun:test';
+    let mode = 'offline', writes = 0;
+    const durable = await import('./backend/services/ivx-durable-store.ts');
+    mock.module('./backend/services/ivx-durable-store.ts', () => ({
+      ...durable,
+      isDurableStoreConfigured: () => true,
+      readDurableJson: async () => { if (mode === 'offline') throw Error('scheduler storage offline'); return null; },
+      writeDurableJson: async () => { writes++; }, appendDurableEvent: async () => {}
+    }));
+    const scheduler = await import('./backend/services/ivx-autonomous-scheduler.ts');
+    const technical = await import('./backend/services/ivx-technical-schedule.ts');
+    for (const failure of ['offline', 'missing']) {
+      mode = failure;
+      let rejected = false;
+      try { await technical.ensureTechnicalScheduleSeeded(); } catch { rejected = true; }
+      if (!rejected) throw Error('Unreadable schedule was treated as enabled');
+    }
+    mode = 'offline';
+    let completionRejected = false;
+    try {
+      await scheduler.runScheduledJob('daily_drift_detection', {
+        requireExistingState: true,
+        drift: { detectArchitectureDrift: async () => { throw Error('injected scan failure'); } }
+      });
+    } catch { completionRejected = true; }
+    if (!completionRejected || writes !== 0) throw Error('Completion replaced unavailable owner state');
+  `], { cwd: new URL('../../', import.meta.url).pathname, stdout: 'pipe', stderr: 'pipe', timeout: 10000 });
+  const [code, error] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+  if (code !== 0) throw Error(error || 'Scheduler outage child failed without diagnostics');
+  expect(code).toBe(0);
+});

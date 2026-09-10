@@ -23,7 +23,7 @@ export function dueTechnicalTasks(state: SchedulerState, now = Date.now()) {
  * machinery supplies cross-process exclusion and restart recovery. */
 export async function ensureTechnicalScheduleSeeded(): Promise<void> {
   if (Date.now() - lastSeedAt < 30_000) return;
-  const state = await getSchedulerState();
+  const state = await getSchedulerState({ requireExisting: true });
   const inputs = dueTechnicalTasks(state);
   if (inputs.length) {
     const results = await createTasksBatch(inputs);
@@ -39,11 +39,11 @@ export function technicalTaskKind(task: Pick<Task, 'idempotencyKey'>) {
 export async function executeTechnicalTask(task: Task, workerId: string, agentNumber: number, sourceSha: string) {
   const kind = technicalTaskKind(task);
   if (!kind || task.state !== 'RUNNING') throw new Error('A running, leased technical task is required');
-  const [control, state] = await Promise.all([checkEmergencyStop(), getSchedulerState()]);
+  const [control, state] = await Promise.all([checkEmergencyStop(), getSchedulerState({ requireExisting: true })]);
   const startedAt = new Date().toISOString();
   const canRun = control.source !== 'unavailable' && !control.active && state.enabled
     && (process.env.IVX_SCHEDULER ?? 'on').toLowerCase() !== 'off';
-  const result = canRun ? await runScheduledJob(kind) : { ok: false, summary: 'Technical schedule paused by owner control.', durationMs: 0 };
+  const result = canRun ? await runScheduledJob(kind, { requireExistingState: true }) : { ok: false, summary: 'Technical schedule paused by owner control.', durationMs: 0 };
   const completedAt = new Date().toISOString();
   const seconds = canRun ? Math.min(result.durationMs, Date.parse(completedAt) - Date.parse(startedAt)) / 1000 : 0;
   const summary = 'IVX_WORK_RESULT ' + JSON.stringify({ v: 1, unit_id: kind, agent_number: agentNumber,
