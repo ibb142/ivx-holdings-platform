@@ -41,13 +41,13 @@ jobs:
             'landing-war-room-today.yml'
           )
           for workflow in "${lower[@]}"; do
-            gh run list --workflow "$workflow" --limit 50 \
+            gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --limit 50 \
               --json databaseId,status \
               --jq '.[] | select(.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "pending") | .databaseId' 2>/dev/null |
             while IFS= read -r run_id; do
               [ -z "$run_id" ] && continue
               echo "P0_PREEMPT workflow=$workflow run=$run_id"
-              gh run cancel "$run_id" || true
+              gh run cancel "$run_id" --repo "$GITHUB_REPOSITORY" || true
             done
           done
           echo 'OWNER_QUEUE_CONTROL=PASS priority=P0-OWNER mission=landing'
@@ -60,15 +60,15 @@ jobs:
         run: |
           set -euo pipefail
           current_sha=$(git rev-parse HEAD)
-          active=$(gh run list --workflow "$TARGET_WORKFLOW" --limit 50 \
-            --json status,headSha,databaseId \
-            --jq --arg sha "$current_sha" '[.[] | select(.headSha == $sha and (.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "pending"))] | length')
+          active=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$TARGET_WORKFLOW" --limit 50 \
+            --json status,headSha,databaseId | \
+            jq --arg sha "$current_sha" '[.[] | select(.headSha == $sha and (.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "pending"))] | length')
           if [ "$active" -gt 0 ]; then
             echo "LANDING_112_ORCHESTRATOR=PASS reason=current-main-run-already-active sha=${current_sha}"
             exit 0
           fi
           for attempt in 1 2 3; do
-            if gh workflow run "$TARGET_WORKFLOW" --ref main; then
+            if gh workflow run "$TARGET_WORKFLOW" --repo "$GITHUB_REPOSITORY" --ref main; then
               echo "LANDING_112_ORCHESTRATOR=PASS dispatch_attempt=${attempt} sha=${current_sha}"
               exit 0
             fi
@@ -86,11 +86,11 @@ jobs:
           set -euo pipefail
           current_sha=$(git rev-parse HEAD)
           for attempt in $(seq 1 12); do
-            found=$(gh run list --workflow "$TARGET_WORKFLOW" --limit 30 \
-              --json status,headSha,databaseId,url \
-              --jq --arg sha "$current_sha" '[.[] | select(.headSha == $sha)] | length')
+            found=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$TARGET_WORKFLOW" --limit 30 \
+              --json status,headSha,databaseId,url | \
+              jq --arg sha "$current_sha" '[.[] | select(.headSha == $sha)] | length')
             if [ "$found" -gt 0 ]; then
-              gh run list --workflow "$TARGET_WORKFLOW" --limit 5 --json status,conclusion,headSha,databaseId,url
+              gh run list --repo "$GITHUB_REPOSITORY" --workflow "$TARGET_WORKFLOW" --limit 5 --json status,conclusion,headSha,databaseId,url
               echo "LANDING_112_FLEET_ACCEPTED=PASS sha=${current_sha}"
               exit 0
             fi
