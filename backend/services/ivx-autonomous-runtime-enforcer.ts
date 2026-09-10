@@ -1,4 +1,5 @@
 import { RefillBackoff } from './ivx-refill-backoff';
+import { createRefillWakeup } from './ivx-refill-wakeup';
 import { refillFleetBatches, POSTGRES_FLEET_CLAIM_BATCH_SIZE } from './ivx-fleet-refill-batches';
 import { enforceAutonomous112RuntimeTruth, IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS } from './ivx-autonomous-truth-control';
 import { getAllExecutionStates, updateExecutionState } from './ivx-agent-runtime';
@@ -89,6 +90,12 @@ const ACTIVE_TASK_STATES = new Set([
 export type ContinuityOutcome = 'completed' | 'blocked' | 'idle' | 'failed';
 type AgentContinuityRecord = { outcome: ContinuityOutcome; action: string; taskId: string | null; module: string | null; productiveMinutes: number; at: string; error: string | null };
 const lastOutcomeByAgent = new Map<number, AgentContinuityRecord>();
+const refillWakeup = createRefillWakeup({
+  now: Date.now,
+  schedule: (callback, delay) => { const timer = setTimeout(callback, delay); timer.unref?.(); return timer; },
+  cancel: clearTimeout,
+  run: () => { if (!stopping && continuityEnabled) void refillAllAvailableAgents(); },
+});
 
 function refillDelayMs(outcome: ContinuityOutcome): number {
   if (outcome === 'failed') return 30_000;
@@ -325,8 +332,7 @@ function startContinuityRun(agentId: string, agentNumber: number, preparedTask: 
       if (state && !state.pauseState && !state.disabledState && state.activeTaskId) {
         updateExecutionState(agentId, { availability: 'available', activeTaskId: null });
       }
-      const next = setTimeout(() => { void refillAllAvailableAgents(); }, refillDelayMs(outcome));
-      next.unref?.();
+      if (!stopping) refillWakeup.request(refillDelayMs(outcome));
     });
   continuityRuns.set(agentId, promise);
   void runLeaseMirror();
@@ -493,6 +499,7 @@ export function startAutonomous112RuntimeEnforcer(): boolean {
 export function stopAutonomous112RuntimeEnforcer(): Promise<number> {
   if (stopInFlight) return stopInFlight;
   stopping = true;
+  refillWakeup.clear();
   if (bootKick) clearTimeout(bootKick);
   bootKick = null;
   continuityEnabled = false;
