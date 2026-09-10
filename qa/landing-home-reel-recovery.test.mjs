@@ -65,6 +65,7 @@ test('persistent failure stops after three requests and a user can retry', async
   assert.equal(f.calls, 4, 'A double click must not issue duplicate requests');
   assert.equal(f.loads, 1);
   assert.equal(f.button().hidden, true);
+  assert.equal(f.button().style.display, 'none');
 });
 
 test('aborted requests get bounded recovery instead of an infinite loop', async () => {
