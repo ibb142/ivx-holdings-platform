@@ -3,21 +3,23 @@ import { expect, test } from 'bun:test';
 for (const fails of [false, true]) test(`configured same-project queue selects one direct transport; fails=${fails}`, async () => {
   const child = Bun.spawn([process.execPath, '-e', `
     import { mock } from 'bun:test';
+    import { EventEmitter } from 'node:events';
     let queries=0, restCalls=0, releases=0; const boundaries=[];
-    mock.module('pg',()=>({Client:class {},Pool:class {
+    mock.module('pg',()=>({Client:class {},Pool:class extends EventEmitter {
       constructor(config) {
+        super();
         if(config.ssl.rejectUnauthorized!==true || !config.ssl.ca?.length)throw new Error('TLS not verified');
         if(config.connectionString.includes('sslmode'))throw new Error('URL overrides TLS');
         if(config.connectionTimeoutMillis!==20000 || config.statement_timeout!==5000)throw new Error('unbounded connection');
       }
       async connect() {
-        return {
+        return Object.assign(new EventEmitter(), {
           query:async(sql,values)=>{
             if(/^(BEGIN|SET LOCAL|COMMIT|ROLLBACK)/.test(sql)){boundaries.push(sql);return {rows:[]};}
             return this.query(sql,values);
           },
           release:(destroy)=>{if(destroy!==${fails})throw new Error('failed connection was reused');releases++;}
-        };
+        });
       }
       async query(sql, values) {
         queries++;

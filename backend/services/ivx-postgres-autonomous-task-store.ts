@@ -10,7 +10,7 @@ import { hostname } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import type { EventEmitter } from 'node:events';
-import { queryWithPostgresDeadline } from './ivx-postgres-deadline';
+import { observePostgresPoolErrors, queryWithPostgresDeadline } from './ivx-postgres-deadline';
 import { emergencyStopPostgresConfig } from './ivx-emergency-stop-postgres';
 import { supabasePostgresTls, withoutPostgresUrlTlsOptions } from './ivx-supabase-postgres-tls';
 import { decideRetry, isTransientFailure, retryAfterMs, RetryQuota } from './ivx-retry-policy';
@@ -73,6 +73,7 @@ function getDirectPool(env: NodeJS.ProcessEnv = process.env, purpose: PoolPurpos
   const pool = new Pool({ connectionString: withoutPostgresUrlTlsOptions(connectionString), ssl: supabasePostgresTls(),
     max: purpose === 'tasks' ? 4 : 1, application_name: `ivx_${purpose}`,
     idleTimeoutMillis: 30_000, connectionTimeoutMillis: 20_000, query_timeout: 5_000, statement_timeout: 5_000 });
+  observePostgresPoolErrors(pool, purpose);
   if (purpose === 'repair') {
     // Observe both idle and checked-out connection errors. Query promises still
     // reject, destroy their failed connection, and never replay a mutation.

@@ -35,8 +35,9 @@ test('112-lane manager patrol reads one planning index and no evidence ledger', 
 test('planning index paginates identities without hydrating evidence payloads', async () => {
   const child = Bun.spawn([process.execPath,'-e',`
     import {mock} from 'bun:test';
+    import { EventEmitter } from 'node:events';
     let reads=0;
-    mock.module('pg',()=>({Client:class {},Pool:class {
+    mock.module('pg',()=>({Client:class {},Pool:class extends EventEmitter {
       async query(sql,values) {
         reads++;
         if(sql.includes('select payload ') || !sql.includes("payload->>'title'"))throw Error('full payload requested');
