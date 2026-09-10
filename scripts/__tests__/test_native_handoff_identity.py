@@ -20,8 +20,13 @@ class NativeIdentityTests(unittest.TestCase):
         self.assertEqual(self.parse(
             "JsConsole IVX_NATIVE_HANDOFF_JOB_ID=old NONCE=native-previous\n"
             "command IVX_NATIVE_HANDOFF_JOB_ID=source NONCE=native-current\n"
-            "04:01 INFO JsConsole - IVX_NATIVE_HANDOFF_JOB_ID=job-123 NONCE=native-current\n"
-        ), "job-123")
+            "04:01 INFO JsConsole - IVX_NATIVE_HANDOFF_JOB_ID=ivx-worker-11111111-1111-4111-8111-111111111111 NONCE=native-current\n"
+        ), "ivx-worker-11111111-1111-4111-8111-111111111111")
+
+    def test_rejects_partial_streamed_identity(self):
+        for partial in ["ivx-worker", "ivx-worker-", "ivx-worker-11111111", "job-123"]:
+            with self.subTest(partial=partial), self.assertRaises(ValueError):
+                self.parse(f"JsConsole IVX_NATIVE_HANDOFF_JOB_ID={partial} NONCE=native-current\n")
 
     def test_rejects_missing_current_ui_evidence(self):
         with self.assertRaises(ValueError):
@@ -31,7 +36,7 @@ class NativeIdentityTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.parse("\n".join(
                 f"JsConsole IVX_NATIVE_HANDOFF_JOB_ID={job} NONCE=native-current"
-                for job in ["job-1", "job-2"]
+                for job in ["ivx-worker-11111111-1111-4111-8111-111111111111", "ivx-worker-22222222-2222-4222-8222-222222222222"]
             ))
 
 
