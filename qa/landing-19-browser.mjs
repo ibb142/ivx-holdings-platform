@@ -24,6 +24,18 @@ try {
       window.__qaLongTasks = [];
       new PerformanceObserver((list) => { for (const e of list.getEntries()) window.__qaLongTasks.push(e.duration); }).observe({ type: 'longtask', buffered: true });
     });
+    if (process.env.LANDING_PREVIEW_SOURCE) {
+      const preview = new URL(process.env.LANDING_PREVIEW_SOURCE);
+      assert.equal(preview.hostname, '127.0.0.1');
+      // Serve reviewed PR files under the real page origin so the public API's
+      // actual CORS policy still applies. Never use this as deployed evidence.
+      await context.route(new URL(base).origin + '/**', async (route) => {
+        const request = route.request(), url = new URL(request.url());
+        assert.ok(['GET', 'HEAD'].includes(request.method()), 'Static preview cannot perform public writes');
+        const response = await context.request.fetch(preview.origin + url.pathname + url.search, { method: request.method() });
+        await route.fulfill({ response });
+      });
+    }
     if (unit === 'reels.engagement-browser') {
       // Isolated browser interaction fixture. No public likes, comments or
       // shares are posted; this unit certifies browser request/response wiring.
@@ -106,6 +118,8 @@ try {
     }
     if (unit === 'a11y.contrast-focus-browser') {
       assert.ok(process.env.AXE_SOURCE, 'axe-core must be installed for actual contrast measurement');
+      // Measure the settled interface, after finite entrance animations finish.
+      await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== 'running' || !Number.isFinite(animation.effect.getComputedTiming().endTime)));
       await page.addScriptTag({ content: await readFile(process.env.AXE_SOURCE, 'utf8') });
       const violations = await page.evaluate(async () => (await window.axe.run(document, { runOnly: ['color-contrast'] })).violations.map((v) => ({ id: v.id, targets: v.nodes.map((n) => n.target) })));
       assert.deepEqual(violations, [], 'Color contrast violations');
@@ -131,7 +145,7 @@ try {
     checks.push({ width, passed: true });
     await context.close();
   }
-} catch (e) { error = e.message; process.exitCode = 1; }
+} catch (e) { error = e.stack || e.message; process.exitCode = 1; }
 finally {
   await browser.close();
   const result = { unit, sourceSha: process.env.GITHUB_SHA, passed: !error, checks, error, completedAt: new Date().toISOString() };
