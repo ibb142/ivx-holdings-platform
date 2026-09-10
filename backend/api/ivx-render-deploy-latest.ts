@@ -148,6 +148,21 @@ export async function handleIVXRenderDeployLatestRequest(request: Request): Prom
   }
 
   if (!triggerOk) {
+    if (parsed && typeof parsed === 'object' && 'message' in parsed && parsed['message']?.includes('rollback is not supported')) {
+      return ownerOnlyJson({
+        ok: false,
+        error: 'render_api_rollback_not_supported',
+        credentials: credentialReport,
+        renderAudit,
+        renderResponse: parsed,
+        runtime: {
+          node: process.version,
+          platform: process.platform,
+          timestamp: new Date().toISOString(),
+          deploymentMarker: process.env.DEPLOYMENT_MARKER ?? null,
+        },
+      }, 400);
+    }
     return ownerOnlyJson({
       ok: false,
       error: triggerErr ? 'render_api_network_error' : `render_api_http_${triggerStatus}`,
