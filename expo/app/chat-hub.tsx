@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import {
   Animated,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -206,6 +207,13 @@ export default function ChatHubScreen() {
   const { sessionId, clientId, isHydrated, setActiveSession, startNewSession } = usePublicChatSession();
   const { keyboardHeight: webKeyboardHeight } = useWebKeyboard();
   const [composerValue, setComposerValue] = useState<string>('');
+  const [nativeKeyboardVisible, setNativeKeyboardVisible] = useState(false);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const show = Keyboard.addListener('keyboardDidShow', () => setNativeKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setNativeKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
   const [messages, setMessages] = useState<ChatMessage[]>(() => [createWelcomeMessage()]);
   const [latestResponse, setLatestResponse] = useState<PublicChatApiResponse | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -525,7 +533,7 @@ export default function ChatHubScreen() {
             style={[styles.keyboardView, Platform.OS === 'web' && { paddingBottom: webKeyboardHeight }]}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           >
-            <View style={styles.headerShell}>
+            <View style={[styles.headerShell, nativeKeyboardVisible && { display: 'none' }]}>
               <Animated.View style={[styles.heroCard, { transform: [{ scale: pulse }] }]} testID="public-chat-hero-card">
                 <LinearGradient
                   colors={['rgba(255, 215, 0, 0.18)', 'rgba(255, 215, 0, 0.04)', 'rgba(17, 17, 17, 0.96)']}
