@@ -165,6 +165,7 @@ export function extractVideoAttachments(input: unknown): VideoAttachment[] {
   const single = record.videoUrl;
   if (single) push(single, record.videoName, record.videoMime ?? record.mimeType);
 
+  if (out.length === 0) return [];
   const seen = new Set<string>();
   return out.filter((video) => (seen.has(video.url) ? false : (seen.add(video.url), true)));
 }
