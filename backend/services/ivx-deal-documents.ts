@@ -24,7 +24,7 @@ export type DealDocumentAttachment = {
   kind: DealDocumentKind;
 };
 
-const DOCUMENT_MIME_PREFIXES = ['application/pdf', 'application/vnd', 'application/msword', 'text/csv', 'application/octet-stream'];
+const DOCUMENT_MIME_PREFIXES = ['application/pdf', 'application/vnd', 'application/msword', 'text/csv', 'application/octet-stream', 'image/jpeg', 'image/png'];
 const DOCUMENT_EXTENSIONS = ['.pdf', '.csv', '.xls', '.xlsx', '.doc', '.docx', '.txt'];
 
 function readTrimmed(value: unknown): string {
@@ -47,7 +47,7 @@ function looksLikeDocument(url: string, mime: string): boolean {
   if (lowerMime && DOCUMENT_MIME_PREFIXES.some((prefix) => lowerMime.startsWith(prefix))) {
     return true;
   }
-  if (lowerMime.startsWith('image/') || lowerMime.startsWith('video/') || lowerMime.startsWith('audio/')) {
+  if (lowerMime.startsWith('video/') || lowerMime.startsWith('audio/')) {
     return false;
   }
   const lowerUrl = url.toLowerCase().split('?')[0] ?? '';
