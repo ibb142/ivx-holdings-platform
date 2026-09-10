@@ -48,7 +48,7 @@ describe('Landing repair source access', () => {
       repo.fileWriter(`backend/a${i}.ts`, 'export const unrelated = 1;'),
       repo.fileWriter(`expo/a${i}.ts`, 'export const unrelated = 1;'),
     ])));
-    await Promise.all(Array.from({ length: 35 }, (_, i) => repo.fileWriter(`backend/api/deal-video-${i}.ts`, 'export const decoy = true;')));
+    await Promise.all(Array.from({ length: 220 }, (_, i) => repo.fileWriter(`backend/api/owner-credential-permission-security-emergency-stop-${i}.ts`, 'export const decoy = true;')));
     const sourcePath = 'backend/services/deal-video-normalization.ts';
     const testPath = 'backend/services/deal-video-normalization.test.ts';
     const source = 'export function normalizeDealVideoUrl(value: string) { return value; }';
@@ -59,7 +59,12 @@ describe('Landing repair source access', () => {
     let patches = 0;
     let regressionRan = false;
     const proof = await runIVXAutonomousCoder({
-      taskId: 'landing-remediation:fixture:media.deal-videos', goal: 'Repair Landing deal video normalization so incoming URL whitespace is trimmed, with a regression test.',
+      taskId: 'landing-remediation:fixture:media.deal-videos', goal: [
+        '[AUTONOMOUS_DIAGNOSTIC_DATA] Repair a Landing QA failure.',
+        'Unit media.deal-videos: repair deal video normalization so incoming URL whitespace is trimmed.',
+        'Acceptance probe: normalized video URLs, with a regression test.',
+        'Preserve owner credential permission security emergency stop controls. Never alter credential or permission settings.',
+      ].join('\n'),
       executionMode: 'code_change', ownerId: 'test-owner', approvalPolicy: 'owner_gated', projectRoot: repo.root,
       fileReader: repo.fileReader, fileWriter: repo.fileWriter,
       planCaller: async (_system, prompt) => {
