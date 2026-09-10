@@ -48,6 +48,10 @@ ENV HOST=0.0.0.0
 # bun is absent (ivx-runtime-resolver), so the Node-only runner is fully
 # self-sufficient and the build can never fail on bun setup.
 COPY --from=server-deps /app/node_modules ./node_modules
+# Autonomous validates generated code at runtime, so its compiler and TS loader
+# must be present in the final production image (including compiler native deps).
+RUN node /app/node_modules/typescript/bin/tsc --version \
+    && node --import tsx --eval ""
 COPY package.json ./package.json
 COPY server.ts ./server.ts
 COPY tsconfig.json ./tsconfig.json
