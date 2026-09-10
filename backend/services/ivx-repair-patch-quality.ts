@@ -1,3 +1,5 @@
+import { assertLandingRepairScope } from './ivx-landing-repair-scope';
+
 type Operation = { path: string; oldText: string; newText: string };
 
 function withoutDiagnostics(source: string): string {
@@ -15,6 +17,7 @@ export function requiresRepairRegression(taskId: string, goal = ''): boolean {
 
 export function assertRepairPatchQuality(taskId: string, operations: Operation[], goal = ''): void {
   if (!requiresRepairRegression(taskId, goal)) return;
+  assertLandingRepairScope(taskId, operations.map(operation => operation.path));
   const tests = operations.filter(op => /\.(test|spec)\.[cm]?[jt]sx?$/.test(op.path));
   const source = operations.filter(op => !tests.includes(op) && /\.(?:[cm]?[jt]sx?|css|html)$/.test(op.path));
   if (!source.some(op => withoutDiagnostics(op.oldText) !== withoutDiagnostics(op.newText))) {

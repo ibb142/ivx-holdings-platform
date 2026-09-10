@@ -2,18 +2,24 @@
  * These are instructions backed by regression tests, not model-authored memories.
  * No arbitrary diagnostic text is promoted into an executable instruction.
  */
-export const REPAIR_RECOVERY_PROTOCOL = 'ivx-repair-recovery-protocol-v1';
+export const REPAIR_RECOVERY_PROTOCOL = 'ivx-repair-recovery-protocol-v2';
 export const NODE_REPAIR_TEST_GUIDANCE = 'Preserve existing bun:test suites. Create a separate focused *.node-regression.test.ts beside the implementation, using node:test and node:assert/strict. Import every test API; do not use global expect. Run it with node --import tsx --test. The same test must fail with ERR_ASSERTION on the original implementation and pass with the fix.';
 
 export type RepairRecoveryLesson = {
   protocol: typeof REPAIR_RECOVERY_PROTOCOL;
-  id: 'NODE_TEST_RUNTIME' | 'PATCH_CONTEXT' | 'REGRESSION_REQUIRED' | 'DEFECT_NOT_REPRODUCED';
+  id: 'NODE_TEST_RUNTIME' | 'PATCH_CONTEXT' | 'REGRESSION_REQUIRED' | 'DEFECT_NOT_REPRODUCED' | 'DEFECT_SCOPE' | 'CI_REGRESSION';
   instruction: string;
 };
 
 export function repairRecoveryLesson(failure: string | null | undefined): RepairRecoveryLesson | null {
   if (!failure) return null;
   const make = (id: RepairRecoveryLesson['id'], instruction: string): RepairRecoveryLesson => ({ protocol: REPAIR_RECOVERY_PROTOCOL, id, instruction });
+  if (/REPAIR_DEFECT_SCOPE_VIOLATION/.test(failure)) {
+    return make('DEFECT_SCOPE', 'Re-read the enforced file boundary and the original acceptance probe. Fix the data path that produced the observed failure. Do not substitute a different business rule or expand the authorized files. Missing media is a dependency, never permission to fabricate URLs or alter investment scores.');
+  }
+  if (/Required CI checks FAILED/.test(failure)) {
+    return make('CI_REGRESSION', 'Read the failing CI log for the stored PR and exact commit. Preserve existing assertions and repair the regression in the implementation. A new passing test does not override an existing failing test or prove the original incident fixed. Keep the PR blocked until every applicable check approves that head.');
+  }
   // Inspect the complete persisted failure BEFORE redaction/truncation of its
   // display summary. The actionable runtime error often follows a long wrapper.
   if (/REPAIR_NODE_TEST_REQUIRED|Cannot find module ['"]bun:test['"]|Cannot find module ['"]bun:test['"] or its corresponding type declarations|\b(?:expect|describe|it|test) is not defined\b/.test(failure)) {

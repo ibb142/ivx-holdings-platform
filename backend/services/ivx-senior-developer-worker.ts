@@ -1270,7 +1270,7 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
   const resumeStartedAt = nowIso();
   await updateJobStage(jobId, 'COMMITTING', `Worker restart detected — resuming CI wait for PR #${prNumber} (commit ${commitSha.slice(0, 12)}) with the original taskId. No duplicate job created.`);
   const proof = await resumeIVXAutonomousCoderFromCiWait({
-    taskId: job.jobId,
+    taskId: job.input.taskId ?? job.jobId,
     goal: job.input.goal,
     ownerId: job.ownerId,
     commitSha,
@@ -2671,7 +2671,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
               branch,
               ciResumeState: {
                 jobId: job.jobId,
-                taskId: job.jobId,
+                taskId: job.input.taskId ?? job.jobId,
                 phase: 'CI_WAIT',
                 commitSha,
                 prNumber,

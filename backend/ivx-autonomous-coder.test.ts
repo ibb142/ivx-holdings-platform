@@ -45,6 +45,31 @@ async function makeIsolatedRepo(label: string): Promise<{
 }
 
 describe('Landing repair source access', () => {
+  it('refuses an unrelated matching-score repair before file mutation or commit', async () => {
+    const repo = await makeIsolatedRepo('video-defect-scope');
+    const source = 'backend/services/ivx-deal-matching-engine.ts';
+    const original = 'export function scoreDealMatch() { return 0; }';
+    await repo.fileWriter(source, original);
+    let writes = 0;
+    let commits = 0;
+    const proof = await runIVXAutonomousCoder({
+      taskId: `landing-remediation:${'a'.repeat(40)}:deals.videos-present`,
+      goal: '[TEMPLATE_MODE:BUG_FIX] [AUTONOMOUS_DIAGNOSTIC_DATA] Repair missing property videos. Inspect backend/services/ivx-deal-matching-engine.ts.',
+      executionMode: 'code_change', approvalPolicy: 'owner_gated', ownerId: 'scope-test',
+      projectRoot: repo.root, maxLlmCalls: 1, fileReader: repo.fileReader,
+      fileWriter: async (file, content) => { writes++; await repo.fileWriter(file, content); },
+      llmCaller: async () => JSON.stringify({ rootCause: 'Video score absent', technicalPlan: 'Add a video score', operations: [
+        { kind: 'replace_exact', path: source, oldText: original, newText: 'export function scoreDealMatch() { return 100; }', reason: 'video score' },
+        { kind: 'create_file', path: 'backend/services/ivx-deal-matching-engine.node-regression.test.ts', oldText: '', newText: 'import {test} from "node:test"; import assert from "node:assert/strict"; test("video score", () => assert.equal(100, 100));', reason: 'regression' },
+      ] }),
+      commitFn: async () => { commits++; throw new Error('No commit is allowed'); },
+    });
+    expect(proof.finalStatus).toBe('BLOCKED');
+    expect(proof.iterations.some(iteration => iteration.failureSummary?.includes('REPAIR_DEFECT_SCOPE_VIOLATION'))).toBe(true);
+    expect(writes).toBe(0);
+    expect(commits).toBe(0);
+    expect(await repo.fileReader(source)).toBe(original);
+  });
   it('runs generated validation without inheriting worker credentials', async () => {
     const repo = await makeIsolatedRepo('validation-environment');
     const key = 'IVX_AUTONOMOUS_TEST_SECRET_SENTINEL';
@@ -167,8 +192,8 @@ describe('Landing repair source access', () => {
   for (const repairSource of ['landing', 'diagnostic'] as const) {
   it(`rejects a semantic no-op from ${repairSource} even when generated tests and typecheck pass`, async () => {
     const repo = await makeIsolatedRepo(`already-green-regression-${repairSource}`);
-    const sourcePath = 'backend/services/video-attachments.ts';
-    const testPath = 'backend/services/video-attachments.test.ts';
+    const sourcePath = 'backend/api/ivx-public-features.ts';
+    const testPath = 'backend/api/ivx-public-features.node-regression.test.ts';
     const source = 'export function videoAttachments(values: string[]) { const out = values; return out.filter(Boolean); }';
     await repo.fileWriter(sourcePath, source);
     let commits = 0;
@@ -178,7 +203,7 @@ describe('Landing repair source access', () => {
       maxLlmCalls: 1, fileReader: repo.fileReader, fileWriter: repo.fileWriter,
       llmCaller: async () => JSON.stringify({ rootCause: 'missing videos', technicalPlan: 'handle empty attachments', operations: [
         { path: sourcePath, kind: 'replace_exact', oldText: 'return out.filter(Boolean);', newText: 'if (out.length === 0) return []; return out.filter(Boolean);', reason: 'empty attachments' },
-        { path: testPath, kind: 'create_file', oldText: '', newText: 'import { test } from "node:test"; import assert from "node:assert/strict"; import { videoAttachments } from "./video-attachments"; test("video remains attached", () => assert.deepEqual(videoAttachments(["https://example.test/video.mp4"]), ["https://example.test/video.mp4"]));', reason: 'regression' },
+        { path: testPath, kind: 'create_file', oldText: '', newText: 'import { test } from "node:test"; import assert from "node:assert/strict"; import { videoAttachments } from "./ivx-public-features"; test("video remains attached", () => assert.deepEqual(videoAttachments(["https://example.test/video.mp4"]), ["https://example.test/video.mp4"]));', reason: 'regression' },
       ] }),
       testRunner: runAutonomousCoderCommand,
       commitFn: async (_paths, branch) => { commits += 1; return { commitSha: 'must-not-commit', commitUrl: 'https://example.test/commit', branch }; },

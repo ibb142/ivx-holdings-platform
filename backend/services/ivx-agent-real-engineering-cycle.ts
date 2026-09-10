@@ -38,6 +38,7 @@ import {
   isLandingP0MissionActive,
   LANDING_P0_PREFIX,
   LANDING_P0_REPAIR_PREFIX,
+  LANDING_P0_PATROL_PREFIX,
   landingRepairKey,
   parseLandingTaskKey,
   resolveProductionSha,
@@ -284,7 +285,9 @@ export async function runRealEngineeringCycle(input: {
     const leaseOptions = {
       ...(landingActive ? { stealPrefix: activeLandingPrefixes[0] } : {}),
       missionScope: {
-        familyPrefixes: [LANDING_P0_PREFIX, LANDING_P0_REPAIR_PREFIX],
+        // Patrols have their own executor. The legacy engineering loop must
+        // never lease a patrol (including an obsolete SHA) as a module audit.
+        familyPrefixes: [LANDING_P0_PREFIX, LANDING_P0_REPAIR_PREFIX, LANDING_P0_PATROL_PREFIX],
         activePrefixes: landingActive ? activeLandingPrefixes : [],
       },
     };
@@ -419,7 +422,7 @@ export async function runRealEngineeringCycle(input: {
     }
 
     const probeWorker = `probe:${workerId}:${Date.now()}`;
-    const remaining = await leaseNextTask(probeWorker, input.agentNumber);
+    const remaining = await leaseNextTask(probeWorker, input.agentNumber, leaseOptions);
     if (remaining.task) await releaseLease(remaining.task.taskId, probeWorker);
     return {
       ...base,
