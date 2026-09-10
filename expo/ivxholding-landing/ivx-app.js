@@ -981,6 +981,24 @@
     }
   }
 
+  function postAnalytics(batch, keepalive) {
+    var restUrl = SUPABASE_URL.replace(/\/+$/, '') + '/rest/v1/landing_analytics';
+    var headers = {
+      'apikey': SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    };
+    // Publishable keys identify this public app through apikey; only legacy
+    // anon JWTs belong in the Authorization header.
+    if (SUPABASE_ANON_KEY.indexOf('sb_publishable_') !== 0) {
+      headers.Authorization = 'Bearer ' + SUPABASE_ANON_KEY;
+    }
+    return fetch(restUrl, {
+      method: 'POST', headers: headers, body: JSON.stringify(batch),
+      credentials: 'omit', keepalive: !!keepalive
+    });
+  }
+
   function flushAnalytics() {
     if (_analyticsFlushTimer) { clearTimeout(_analyticsFlushTimer); _analyticsFlushTimer = null; }
     if (_analyticsFlushing || _analyticsQueue.length === 0) return;
@@ -991,14 +1009,7 @@
     }
     _analyticsFlushing = true;
     var batch = _analyticsQueue.splice(0, 50);
-    var restUrl = SUPABASE_URL.replace(/\/+$/, '') + '/rest/v1/landing_analytics';
-    var headers = {
-      'apikey': SUPABASE_ANON_KEY,
-      'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal'
-    };
-    fetch(restUrl, { method: 'POST', headers: headers, body: JSON.stringify(batch) })
+    postAnalytics(batch, false)
       .then(function(resp) {
         _analyticsFlushing = false;
         if (resp.ok || resp.status === 201) {
@@ -1116,11 +1127,17 @@
     var duration = Math.round((Date.now() - PAGE_START) / 1000);
     ivxTrack('session_end', { duration: duration, eventsCount: _analyticsEventCount, engagementScore: ENGAGEMENT_SCORE });
     if (_analyticsQueue.length > 0 && !isPlaceholder(SUPABASE_URL) && !isPlaceholder(SUPABASE_ANON_KEY)) {
-      var restUrl = SUPABASE_URL.replace(/\/+$/, '') + '/rest/v1/landing_analytics';
-      var blob = new Blob([JSON.stringify(_analyticsQueue)], { type: 'application/json' });
-      try {
-        navigator.sendBeacon(restUrl + '?apikey=' + encodeURIComponent(SUPABASE_ANON_KEY), blob);
-      } catch(e) {}
+      // Beacon always includes credentials, which Supabase's wildcard CORS
+      // policy rejects. Keep this best-effort exit batch below the browser's
+      // 64 KiB keepalive limit and send the public key in its proper header.
+      var batch = _analyticsQueue.slice(0, 50);
+      while (batch.length && new Blob([JSON.stringify(batch)]).size > 60 * 1024) batch.pop();
+      if (batch.length) {
+        _analyticsQueue.splice(0, batch.length);
+        try {
+          postAnalytics(batch, true).catch(function() {});
+        } catch(e) {}
+      }
     }
   });
 

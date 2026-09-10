@@ -2,6 +2,7 @@ import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { verifyAnalyticsReload } from './landing-analytics-browser.mjs';
 
 const unit = process.argv[2];
 const supported = ['reels.autoplay-controls-browser', 'reels.engagement-browser', 'reels.scroll-navigation-browser', 'reels.production-render-browser', 'a11y.touch-targets-browser', 'a11y.contrast-focus-browser', 'perf.console-network-browser', 'e2e.production-browser-suite'];
@@ -88,6 +89,10 @@ try {
         injectedUnavailable = true;
         await route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"isolated startup recovery fixture"}' });
       });
+    }
+    if (process.env.LANDING_PREVIEW_SOURCE && (unit === 'reels.scroll-navigation-browser' || unit === 'e2e.production-browser-suite')) {
+      await verifyAnalyticsReload(page, base);
+      checks.push({ width, scope: 'configured analytics reload with isolated wildcard-CORS endpoint' });
     }
     const response = await page.goto(base, { waitUntil: 'domcontentloaded' });
     assert.equal(response.status(), 200);
