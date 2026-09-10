@@ -37,6 +37,11 @@ try {
             signal.feedType = body.feed_type;
             signal.videoCount = Array.isArray(body.videos) ? body.videos.length : null;
             const message = typeof body.error === 'string' ? body.error : '';
+            signal.errorMessage = message
+              .replace(/https?:\/\/[^\s"'<>]+/gi, '[URL]')
+              .replace(/\b(?:eyJ|sb_secret_|sb_publishable_)[\w.-]+/g, '[redacted]')
+              .replace(/(?:api[_-]?key|authorization|password|token)\s*[:=]\s*\S+/gi, '[redacted]')
+              .slice(0, 300);
             signal.errorClass = /timeout|timed out/i.test(message) ? 'UPSTREAM_TIMEOUT'
               : /cloudflare|<html|<!doctype/i.test(message) ? 'UPSTREAM_HTML_ERROR'
               : /column|relation|schema/i.test(message) ? 'DATABASE_SCHEMA_ERROR'
