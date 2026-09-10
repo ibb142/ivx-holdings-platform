@@ -6,7 +6,7 @@ import sys
 
 def read_identity(directory, nonce):
     pattern = re.compile(
-        r"JsConsole[^\n]*IVX_NATIVE_HANDOFF_JOB_ID=([A-Za-z0-9_-]+) NONCE="
+        r"JsConsole[^\n]*IVX_NATIVE_HANDOFF_JOB_ID=(ivx-worker-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}) NONCE="
         + re.escape(nonce) + r"(?:\s|$)"
     )
     identities = set()
