@@ -1,5 +1,6 @@
 import { appendFile, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { ownerAIAuthUnavailableResponse } from './owner-ai-auth-unavailable';
 import path from 'node:path';
 import { checkPreExecutionGate } from '../services/ivx-pre-execution-gate-middleware';
 import { IVX_OWNER_AI_PROFILE, IVX_OWNER_AI_ROOM_ID, IVX_OWNER_AI_ROOM_SLUG } from '../../expo/constants/ivx-owner-ai';
@@ -10528,6 +10529,9 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       originFrame,
       stack,
     });
+
+    const authUnavailableResponse = ownerAIAuthUnavailableResponse(error, ownerOnlyJson);
+    if (authUnavailableResponse) return authUnavailableResponse;
 
     // Auth/role failures must still surface as auth errors so the client can
     // refresh the session.
