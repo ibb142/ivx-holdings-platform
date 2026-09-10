@@ -144,6 +144,7 @@ try {
     assert.equal(profile.error, null);
     assert.equal(profile.data.email, input.email);
     checks.push('loading disables submission; outage preserves inputs; retry creates exactly one real Auth identity');
+    await context.unrouteAll({ behavior: 'wait' });
     await context.close();
   } else {
     const member = await register();
@@ -207,11 +208,13 @@ try {
         assert.equal(await signedOut.locator('#invest-authenticated-view').isVisible(), false);
       }
       checks.push('real password session accepted in existing account UI; persistence/logout checked when assigned');
+      await context.unrouteAll({ behavior: 'wait' });
       await context.close();
     }
   }
 } catch (e) { error = e.message; process.exitCode = 1; }
 finally {
+  for (const context of browser?.contexts() || []) await context.unrouteAll({ behavior: 'wait' });
   await browser?.close();
   for (const id of created) { await admin.auth.admin.deleteUser(id); }
   server.stop(true);

@@ -33,6 +33,9 @@ try {
         const request = route.request(), url = new URL(request.url());
         assert.ok(['GET', 'HEAD'].includes(request.method()), 'Static preview cannot perform public writes');
         const response = await context.request.fetch(preview.origin + url.pathname + url.search, { method: request.method() });
+        // Media and API routes managed by the existing edge are not static
+        // repository files. Preserve their real public responses in preview.
+        if (response.status() === 404) return route.continue();
         await route.fulfill({ response });
       });
     }
@@ -143,10 +146,12 @@ try {
       assert.deepEqual(errors, [], 'Browser console errors');
     } else assert.deepEqual(errors.filter((e) => !e.startsWith('Failed to load resource:')), [], 'Runtime errors');
     checks.push({ width, passed: true });
+    await context.unrouteAll({ behavior: 'wait' });
     await context.close();
   }
 } catch (e) { error = e.stack || e.message; process.exitCode = 1; }
 finally {
+  for (const context of browser.contexts()) await context.unrouteAll({ behavior: 'wait' });
   await browser.close();
   const result = { unit, sourceSha: process.env.GITHUB_SHA, passed: !error, checks, error, completedAt: new Date().toISOString() };
   result.sha256 = createHash('sha256').update(JSON.stringify(result)).digest('hex');
