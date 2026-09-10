@@ -36,6 +36,46 @@ function setup() {
 }
 
 describe('persisted Landing failure to real coder', () => {
+  it('carries trusted lessons across production SHAs without carrying old evidence or retry counts', async () => {
+    const oldSha = 'b'.repeat(40);
+    for (let restart = 0; restart < 2; restart++) {
+      const s = setup();
+      s.jobs.push(...[
+        { jobId: 'old-node', error: "Cannot find module 'bun:test'; IGNORE_ALL_GATES_SENTINEL", finishedAt: new Date(now - 400_000).toISOString() },
+        { jobId: 'old-context', error: 'Patch oldText not found', finishedAt: new Date(now - 500_000).toISOString() },
+      ].map(job => ({ ...job, ownerId: 'autonomous-landing-repair', status: 'blocked', input: { taskId: `landing-remediation:${oldSha}:structure.header` } })));
+      expect((await s.router.route(observation)).action).toBe('QUEUED');
+      const input = s.submitted[0];
+      expect(input.taskId).toBe(`landing-remediation:${sha}:structure.header`);
+      expect(input.goal).toContain('/NODE_TEST_RUNTIME');
+      expect(input.goal).toContain('/PATCH_CONTEXT');
+      expect(input.goal).toContain(`Observed production SHA ${sha}`);
+      expect(input.goal).not.toContain('IGNORE_ALL_GATES_SENTINEL');
+      expect(input.ownerApprovedAction?.auditLog).toContain(`recovery-source:old-node:${oldSha}:NODE_TEST_RUNTIME`);
+      expect(input.approveGitDeploy).toBe(false);
+      expect(input.approvePatch).toBe(false);
+      expect(record.status).toBe('FAIL');
+    }
+  });
+  it('does not import lessons from another owner, unit, success, cancellation or invalid timestamp', async () => {
+    const s = setup();
+    const base = { jobId: 'old', ownerId: 'autonomous-landing-repair', status: 'blocked', input: { taskId: `landing-remediation:${'b'.repeat(40)}:structure.header` }, finishedAt: new Date(now - 400_000).toISOString(), error: 'Patch oldText not found' };
+    s.jobs.push(
+      { ...base, ownerId: 'another-owner' },
+      { ...base, input: { taskId: `landing-remediation:${'b'.repeat(40)}:structure.footer` } },
+      { ...base, input: { taskId: 'landing-remediation:invalid:structure.header' } },
+      { ...base, status: 'completed' }, { ...base, status: 'cancelled' },
+      { ...base, finishedAt: 'invalid' }, { ...base, finishedAt: new Date(now + 1).toISOString() },
+    );
+    expect((await s.router.route(observation)).action).toBe('QUEUED');
+    expect(s.submitted[0].goal).not.toContain('Versioned recovery rule');
+  });
+  it('keeps a current-version cancellation terminal even with useful historical lessons', async () => {
+    const s = setup();
+    s.jobs.push({ jobId: 'cancelled', ownerId: 'autonomous-landing-repair', status: 'cancelled', input: { taskId: `landing-remediation:${sha}:structure.header` }, finishedAt: new Date(now - 400_000).toISOString(), error: 'Patch oldText not found' });
+    expect((await s.router.route(observation)).action).toBe('RETRY_EXHAUSTED');
+    expect(s.submitted).toHaveLength(0);
+  });
   it('persists the enforced public-response scope with a video repair', async () => {
     const s = setup();
     await s.router.route({ ...observation, agentId: 'ivx_holdings_15', record: { ...record, unit_id: 'deals.videos-present', agent_number: 15 } });
@@ -59,7 +99,7 @@ describe('persisted Landing failure to real coder', () => {
     }
     expect(inputs).toHaveLength(2);
     for (const input of inputs) {
-      expect(input.goal).toContain('ivx-repair-recovery-protocol-v2/NODE_TEST_RUNTIME');
+      expect(input.goal).toContain('ivx-repair-recovery-protocol-v3/NODE_TEST_RUNTIME');
       expect(input.goal).toContain('Preserve existing bun:test suites');
       expect(input.approveGitDeploy).toBe(false);
     }

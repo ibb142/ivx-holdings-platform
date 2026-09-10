@@ -2,8 +2,8 @@
  * These are instructions backed by regression tests, not model-authored memories.
  * No arbitrary diagnostic text is promoted into an executable instruction.
  */
-export const REPAIR_RECOVERY_PROTOCOL = 'ivx-repair-recovery-protocol-v2';
-export const NODE_REPAIR_TEST_GUIDANCE = 'Preserve existing bun:test suites. Create a separate focused *.node-regression.test.ts beside the implementation, using node:test and node:assert/strict. Import every test API; do not use global expect. Run it with node --import tsx --test. The same test must fail with ERR_ASSERTION on the original implementation and pass with the fix.';
+export const REPAIR_RECOVERY_PROTOCOL = 'ivx-repair-recovery-protocol-v3';
+export const NODE_REPAIR_TEST_GUIDANCE = 'Preserve existing bun:test suites. Create a separate focused *.node-regression.test.ts beside the implementation, using node:test and node:assert/strict. Import every test API; do not use global expect, jest or vi. Use the deployed Node built-in fetch when needed, not an uninstalled node-fetch import. Do not add dependencies to repair a test runtime mismatch. Run it with node --import tsx --test. The same test must fail with ERR_ASSERTION on the original implementation and pass with the fix.';
 
 export type RepairRecoveryLesson = {
   protocol: typeof REPAIR_RECOVERY_PROTOCOL;
@@ -22,11 +22,11 @@ export function repairRecoveryLesson(failure: string | null | undefined): Repair
   }
   // Inspect the complete persisted failure BEFORE redaction/truncation of its
   // display summary. The actionable runtime error often follows a long wrapper.
-  if (/REPAIR_NODE_TEST_REQUIRED|Cannot find module ['"]bun:test['"]|Cannot find module ['"]bun:test['"] or its corresponding type declarations|\b(?:expect|describe|it|test) is not defined\b/.test(failure)) {
+  if (/REPAIR_NODE_TEST_REQUIRED|Cannot find (?:module|package) ['"](?:bun:test|node-fetch)['"]|\b(?:expect|describe|it|test|jest|vi) is not defined\b|Cannot find name ['"](?:expect|describe|it|test|jest|vi)['"]/.test(failure)) {
     return make('NODE_TEST_RUNTIME', NODE_REPAIR_TEST_GUIDANCE);
   }
-  if (/Patch oldText not found|REPAIR_SOURCE_NOT_INSPECTED|Create-file target already exists/.test(failure)) {
-    return make('PATCH_CONTEXT', 'Read the actual current target file again. Copy an exact unique snippet from the inspected source. Use replace_exact for existing files and a new unique path for a new Node regression. Failed patches are reverted; never use an earlier proposed patch as the source baseline.');
+  if (/Patch oldText not found|REPAIR_SOURCE_NOT_INSPECTED|Create-file target already exists|ENOENT: no such file or directory, open/.test(failure)) {
+    return make('PATCH_CONTEXT', 'Read the actual current target file again. Copy an exact unique snippet from the inspected source. Use replace_exact for existing files and create_file only for a verified missing path inside the allowed boundary. Existing regression files must be inspected before updating them. Failed patches are reverted; never use an earlier proposed patch as the source baseline.');
   }
   if (/REPAIR_REGRESSION_TEST_REQUIRED/.test(failure)) return make('REGRESSION_REQUIRED', NODE_REPAIR_TEST_GUIDANCE);
   if (/REPAIR_REGRESSION_NOT_REPRODUCED/.test(failure)) {
