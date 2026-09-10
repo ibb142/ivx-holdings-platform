@@ -6234,8 +6234,10 @@ app.post('/api/ivx/video-pipeline/:videoId/retry', async (c) => handleVideoPipel
 // ── IVX Video Platform (enterprise vertical feed: ranked channels, engagement,
 //    analytics, stories, live, creator dashboard, moderation) ──────────────
 app.options('/api/ivx/video-platform/*', () => videoPlatformOptions());
-app.get('/api/ivx/video-platform/feed', async (c) => withTimeout(() => handlePlatformFeed(c.req.raw), () => Response.json({ videos: [], count: 0, total: 0, next_cursor: null, channel: null, feed_type: 'unified', ordering: 'canonical-unified-v2', personalized: false, marker: 'ivx-video-platform-v3-investor-first-2026-07-04' })));
-app.get('/api/ivx/video-platform/home-feed', async (c) => withTimeout(() => handlePlatformHomeFeed(c.req.raw), () => Response.json({ deals: [], blocks: [], count: 0, deal_count: 0, video_count: 0, total_approved_videos: 0, pattern: '3-deals-1-featured-project-video', ordering: 'canonical-home-v3', personalized: false, marker: 'ivx-video-platform-v3-investor-first-2026-07-04' })));
+// A missed deadline is not an empty published feed. A retryable 503 lets clients
+// keep existing content and retry the warm cache, without certifying false zeros.
+app.get('/api/ivx/video-platform/feed', async (c) => withTimeout(() => handlePlatformFeed(c.req.raw), () => Response.json({ error: 'Video feed temporarily unavailable. Please retry.', code: 'VIDEO_FEED_TIMEOUT', retryable: true }, { status: 503, headers: { 'Retry-After': '2', 'Cache-Control': 'no-store' } })));
+app.get('/api/ivx/video-platform/home-feed', async (c) => withTimeout(() => handlePlatformHomeFeed(c.req.raw), () => Response.json({ error: 'Home feed temporarily unavailable. Please retry.', code: 'HOME_FEED_TIMEOUT', retryable: true }, { status: 503, headers: { 'Retry-After': '2', 'Cache-Control': 'no-store' } })));
 app.post('/api/ivx/video-platform/deals/:dealId/meta', async (c) => handlePlatformDealMeta(c.req.raw, c.req.param('dealId')));
 app.get('/api/ivx/video-platform/channels', async () => withTimeout(() => handlePlatformChannels(), () => Response.json({ audiences: [], properties: [], marker: 'ivx-video-platform-v3-investor-first-2026-07-04' })));
 app.post('/api/ivx/video-platform/events', async (c) => handlePlatformEvents(c.req.raw));
