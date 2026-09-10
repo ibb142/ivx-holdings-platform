@@ -815,7 +815,16 @@ export async function runAutonomousCoderCommand(cwd: string, command: string): P
 /** Use the installed TypeScript package, never the unrelated npm package named tsc.
  * Missing or broken toolchains fail the command; no network install or skipped gate. */
 function scopedTypecheckCommand(projectRoot: string, files: string[]): string {
-  return `node ${path.join(projectRoot, 'node_modules', 'typescript', 'bin', 'tsc')} --noEmit --skipLibCheck --ignoreConfig --types node --target es2022 --module esnext --moduleResolution bundler ${files.join(' ')}`;
+  // --ignoreConfig omits ambient declarations normally included by the backend
+  // tsconfig. Keep the repository's runtime types in scoped checks as well;
+  // otherwise valid repairs importing pg/bcryptjs fail only in production.
+  const ambient = [
+    'backend/types/pg.d.ts',
+    'backend/types/bcryptjs.d.ts',
+    'backend/types/supabase-auth-error-compat.d.ts',
+  ].filter(file => existsSync(path.join(projectRoot, file)));
+  const inputs = [...new Set([...files, ...ambient])];
+  return `node ${path.join(projectRoot, 'node_modules', 'typescript', 'bin', 'tsc')} --noEmit --skipLibCheck --ignoreConfig --types node --target es2022 --module esnext --moduleResolution bundler ${inputs.join(' ')}`;
 }
 
 function targetedTestCommand(taskId: string, testFile: string): string {
