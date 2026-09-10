@@ -91,6 +91,15 @@ try {
     console.log(JSON.stringify({ ok: true, processObservationWithLockedTaskLedger: 'PASS',
       presenceDuringBlockedTelemetry: 'PASS', freshSampleCommitted: true, presenceMs: Date.now() - presenceStarted, productionRowsTouched: 0 }));
   } finally { clearTimeout(deadline); await admin.query('rollback'); await blockedTelemetry; }
+  // Idle sockets emit through pg-pool instead of a checked-out Client.
+  const idlePresence = (await admin.query("select pid from pg_stat_activity where application_name='ivx_presence' and state='idle'")).rows[0]?.pid;
+  assert(idlePresence, 'the presence fixture must own an idle connection');
+  await admin.query('select pg_terminate_backend($1)', [idlePresence]);
+  await new Promise(resolve => setTimeout(resolve, 100));
+  const reconnected = await store.readPostgresFleetProcessObservation();
+  assert(reconnected.instances.some(instance => instance.instanceId === store.autonomousWorkerInstanceId()));
+  console.log(JSON.stringify({ ok: true, idlePresenceConnectionLossHandled: 'PASS',
+    processSurvived: true, presenceReconnected: true, productionRowsTouched: 0 }));
 } finally {
   if (deadline) clearTimeout(deadline);
   await admin.query('select pg_advisory_unlock(9811593)');

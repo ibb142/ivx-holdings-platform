@@ -5,6 +5,7 @@ for (const fails of [false, true]) test(`configured same-project queue selects o
     import { mock } from 'bun:test';
     let queries=0, restCalls=0, releases=0; const boundaries=[];
     mock.module('pg',()=>({Client:class {},Pool:class {
+      on() { return this; }
       constructor(config) {
         if(config.ssl.rejectUnauthorized!==true || !config.ssl.ca?.length)throw new Error('TLS not verified');
         if(config.connectionString.includes('sslmode'))throw new Error('URL overrides TLS');
@@ -12,6 +13,7 @@ for (const fails of [false, true]) test(`configured same-project queue selects o
       }
       async connect() {
         return {
+          on() { return this; }, removeListener() { return this; },
           query:async(sql,values)=>{
             if(/^(BEGIN|SET LOCAL|COMMIT|ROLLBACK)/.test(sql)){boundaries.push(sql);return {rows:[]};}
             return this.query(sql,values);

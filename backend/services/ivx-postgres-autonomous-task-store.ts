@@ -71,6 +71,9 @@ function getDirectPool(env: NodeJS.ProcessEnv = process.env, purpose: PoolPurpos
   const pool = new Pool({ connectionString: withoutPostgresUrlTlsOptions(connectionString), ssl: supabasePostgresTls(),
     max: purpose === 'tasks' ? 4 : 1, application_name: `ivx_${purpose}`,
     idleTimeoutMillis: 30_000, connectionTimeoutMillis: 20_000, query_timeout: 5_000, statement_timeout: 5_000 });
+  // pg-pool discards a disconnected idle client, but its error event still
+  // needs a listener or Node terminates the entire API/worker process.
+  pool.on('error', () => console.error('[IVX PostgreSQL] idle connection lost', { pool: purpose }));
   if (purpose === 'presence') presencePool = pool; else if (purpose === 'telemetry') telemetryPool = pool; else directPool = pool;
   return pool;
 }
