@@ -361,6 +361,8 @@ export type IVXAutonomousCoderInput = {
   rollbackFn?: (commitSha: string, branch: string) => Promise<{ reverted: boolean; revertCommitSha: string | null; error: string | null }>,
   /** Injectable PR creation function for testing. When omitted, the real GitHub API is used. */
   prFn?: (branch: string, title: string, body: string) => Promise<{ prNumber: number; prUrl: string; merged: boolean; mergeCommitSha: string | null }>;
+  /** Reconcile owner closure while waiting; a closed PR cannot occupy a repair lane. */
+  prStateFn?: (prNumber: number) => Promise<{ state: 'open' | 'closed' | 'unknown'; merged: boolean; mergeCommitSha: string | null }>;
   /** Injectable merge function for testing. When omitted, the real GitHub API is used. */
   mergeFn?: (prNumber: number, commitMessage: string) => Promise<{ merged: boolean; mergeCommitSha: string | null }>;
   /** Injectable required-checks fetcher for testing: returns current per-check
@@ -1686,13 +1688,23 @@ async function waitForRequiredChecksGreen(
   commitSha: string,
   input: IVXAutonomousCoderInput,
   onPhase?: (phase: IVXAutonomousCoderPhase, detail: string) => void,
-): Promise<{ green: boolean; evidence: IVXCiCheckEvidence[]; timedOut: boolean; waitMs: number }> {
+  prNumber?: number,
+): Promise<{ green: boolean; evidence: IVXCiCheckEvidence[]; timedOut: boolean; waitMs: number; blocker?: string }> {
   const startedAt = Date.now();
   const timeoutMs = input.ciWaitTimeoutMs ?? DEFAULT_CI_WAIT_TIMEOUT_MS;
   const intervalMs = input.ciPollIntervalMs ?? DEFAULT_CI_POLL_INTERVAL_MS;
   const graceMs = input.ciNaGraceMs ?? DEFAULT_CI_NA_GRACE_MS;
   let last: IVXCiCheckEvidence[] = [];
   for (;;) {
+    // CI can finish long after an owner closes a rejected repair. Reconcile
+    // each poll so that the durable worker can finish this job and release its lane.
+    if (prNumber != null) {
+      const pr = input.prStateFn ? await input.prStateFn(prNumber) : await fetchPullRequestState(prNumber);
+      const blocker = pr.state === 'closed' && !pr.merged
+        ? `PR #${prNumber} is CLOSED without merging. CI wait stopped; task BLOCKED.`
+        : pr.state === 'unknown' ? `PR #${prNumber} state is unknown. CI wait stopped; task BLOCKED.` : undefined;
+      if (blocker) return { green: false, evidence: last, timedOut: false, waitMs: Date.now() - startedAt, blocker };
+    }
     const evidence = input.requiredChecksFn
       ? await input.requiredChecksFn(commitSha)
       : await fetchRequiredChecksForCommit(commitSha);
@@ -2833,7 +2845,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         // every required GitHub check on the head SHA is GREEN.
         if (input.autoMergePr && !prResult.merged) {
           onPhase?.('committing', `Waiting for required CI checks on ${commitSha.slice(0, 12)} before merging PR #${prNumber} (CI-before-merge).`);
-          const ci = await waitForRequiredChecksGreen(commitSha, input, onPhase);
+          const ci = await waitForRequiredChecksGreen(commitSha, input, onPhase, prNumber);
           ciChecksWaited = true;
           ciChecksGreen = ci.green;
           ciCheckEvidence = ci.evidence;
@@ -2846,7 +2858,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
               .filter((e) => !(e.matched && e.status === 'completed' && e.conclusion === 'success'))
               .map((e) => `${e.context}=${e.matched ? `${e.status}/${e.conclusion ?? 'none'}` : 'NOT_REPORTED'}`)
               .join('; ');
-            error = `${ci.timedOut ? 'Required CI checks TIMED OUT' : 'Required CI checks FAILED'} on ${commitSha.slice(0, 12)} — merge NOT attempted. Task BLOCKED, never COMPLETED. Checks: ${failing}. Autonomous may repair and open another PR.`;
+            error = ci.blocker ?? `${ci.timedOut ? 'Required CI checks TIMED OUT' : 'Required CI checks FAILED'} on ${commitSha.slice(0, 12)} — merge NOT attempted. Task BLOCKED, never COMPLETED. Checks: ${failing}. Autonomous may repair and open another PR.`;
             onPhase?.('blocked', error);
           } else {
             onPhase?.('committing', `All required CI checks GREEN. Auto-merging PR #${prNumber} (owner approved).`);
@@ -3176,11 +3188,12 @@ export async function resumeIVXAutonomousCoderFromCiWait(
         ownerId: input.ownerId,
         approvalPolicy: 'owner_gated',
         requiredChecksFn: input.requiredChecksFn,
+        prStateFn: input.prStateFn,
         ciWaitTimeoutMs: input.ciWaitTimeoutMs,
         ciPollIntervalMs: input.ciPollIntervalMs,
         ciNaGraceMs: input.ciNaGraceMs,
         sleepFn: input.sleepFn,
-      }, onPhase);
+      }, onPhase, input.prNumber);
       ciChecksGreen = ci.green;
       ciCheckEvidence = ci.evidence;
       ciWaitMs = ci.waitMs;
@@ -3189,7 +3202,7 @@ export async function resumeIVXAutonomousCoderFromCiWait(
           .filter((e) => !(e.matched && e.status === 'completed' && e.conclusion === 'success'))
           .map((e) => `${e.context}=${e.matched ? `${e.status}/${e.conclusion ?? 'none'}` : 'NOT_REPORTED'}`)
           .join('; ');
-        error = `${ci.timedOut ? 'Required CI checks TIMED OUT' : 'Required CI checks FAILED'} (restart resume) on ${input.commitSha.slice(0, 12)} — merge NOT attempted. Task BLOCKED, never COMPLETED. Checks: ${failing}.`;
+        error = ci.blocker ?? `${ci.timedOut ? 'Required CI checks TIMED OUT' : 'Required CI checks FAILED'} (restart resume) on ${input.commitSha.slice(0, 12)} — merge NOT attempted. Task BLOCKED, never COMPLETED. Checks: ${failing}.`;
         onPhase?.('blocked', error);
       } else {
         onPhase?.('committing', `Restart resume: all required CI checks GREEN on ${input.commitSha.slice(0, 12)} — merging PR #${input.prNumber}.`);
