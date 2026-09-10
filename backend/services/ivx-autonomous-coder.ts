@@ -693,14 +693,14 @@ async function readFilePreview(relPath: string, projectRoot: string, goal?: stri
 // ── PATCH APPLICATION ────────────────────────────────────────────────────────
 
 /** Paths the autonomous coder is allowed to modify. */
-const ALLOWED_PATCH_PATHS = /^((?:backend|expo)\/[A-Za-z0-9_.\/-]+\.ts$|(?:backend|expo)\/[A-Za-z0-9_.\/-]+\.tsx$|expo\/[A-Za-z0-9_.\/-]+\.json$|expo\/[A-Za-z0-9_.\/-]+\.gradle$|expo\/ivxholding-landing\/(?:index\.html|ivx-styles\.css|ivx-app\.js|ivx-ui-utils\.js)$)/;
+const ALLOWED_PATCH_PATHS = /^((?:backend|expo)\/[A-Za-z0-9_.\/-]+\.ts$|(?:backend|expo)\/[A-Za-z0-9_.\/-]+\.tsx$|expo\/[A-Za-z0-9_.\/-]+\.json$|expo\/[A-Za-z0-9_.\/-]+\.gradle$|expo\/ivxholding-landing\/(?:index\.html|ivx-styles\.css|ivx-[a-z0-9-]+\.js)$)/;
 
 function assertSafePatchPath(filePath: string): void {
   if (filePath.includes('..') || filePath.startsWith('/')) {
     throw new Error(`Unsafe patch path rejected: ${filePath}`);
   }
   if (!ALLOWED_PATCH_PATHS.test(filePath)) {
-    throw new Error(`Patch path outside allowed roots: ${filePath}. Only backend/*.ts, expo/*.ts(x), expo/*.json, expo/*.gradle and the four Landing UI source files are permitted.`);
+    throw new Error(`Patch path outside allowed roots: ${filePath}. Only backend/*.ts, expo/*.ts(x), expo/*.json, expo/*.gradle and Landing index/styles/ivx-*.js source modules are permitted.`);
   }
 }
 

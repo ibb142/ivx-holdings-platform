@@ -310,6 +310,28 @@ describe('IVX Autonomous Coder — pilot sentinel', () => {
  * when its PR merges after ALL required checks report success.
  */
 describe('durable repair boundaries', () => {
+  it('edits inspected Landing modules introduced after the original four-file layout', async () => {
+    for (const module of ['analytics', 'csp-actions', 'home-feed', 'invest', 'portal', 'reels', 'web-vitals']) {
+      const repo = await makeIsolatedRepo('landing-module-' + module);
+      const sourcePath = `expo/ivxholding-landing/ivx-${module}.js`;
+      await repo.fileWriter(sourcePath, 'export const enabled = false;');
+      const proof = await runIVXAutonomousCoder({
+        taskId: 'landing-module-fixture-' + module, goal: `Enable the feature in ${sourcePath}.`,
+        ownerId: 'test-owner', executionMode: 'code_change', approvalPolicy: 'owner_gated', projectRoot: repo.root,
+        fileReader: repo.fileReader, fileWriter: repo.fileWriter,
+        planCaller: async () => JSON.stringify({ targetFiles: [sourcePath], hypothesis: 'feature disabled' }),
+        llmCaller: async () => JSON.stringify({ rootCause: 'feature disabled', technicalPlan: 'enable feature', operations: [
+          { path: sourcePath, kind: 'replace_exact', oldText: 'export const enabled = false;', newText: 'export const enabled = true;' },
+        ] }),
+        testRunner: async (_cwd, command) => ({ command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1 }),
+        commitFn: async (_files, branch) => ({ commitSha: 'c'.repeat(40), commitUrl: 'https://example.test/commit', branch }),
+        ...prAndCiMocks(), autoMergePr: true,
+      });
+      expect(proof.finalStatus).toBe('COMPLETED');
+      expect(proof.filesChanged).toEqual([sourcePath]);
+      expect(await repo.fileReader(sourcePath)).toBe('export const enabled = true;');
+    }
+  });
   for (const executionMode of ['code_change', 'deploy'] as const) {
     it(`retains a rejected commit checkpoint and stops before ${executionMode} continuation`, async () => {
       const repo = await makeIsolatedRepo('commit-checkpoint-' + executionMode);
