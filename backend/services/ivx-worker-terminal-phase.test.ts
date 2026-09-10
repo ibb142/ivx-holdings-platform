@@ -13,9 +13,9 @@ const transpiler = new Bun.Transpiler({ loader: 'ts' });
 function fixture() {
   let row = { jobId: 'job', status: 'running', stage: 'RUNNING', lastHeartbeatAt: 'original', finishedAt: null, result: null };
   const code = transpiler.transformSync(writes + '\n' + stages);
-  const create = new Function('loadQueue', 'saveQueue', 'getSeniorDeveloperJob', 'ACTIVE_STATUSES', 'STAGE_PROGRESS', 'claimedJobIds', 'nowIso', code + '\nreturn { updateJob, updateJobStage };');
+  const create = new Function('loadQueueForJob', 'saveQueue', 'getSeniorDeveloperJob', 'ACTIVE_STATUSES', 'STAGE_PROGRESS', 'claimedJobIds', 'nowIso', code + '\nreturn { updateJob, updateJobStage };');
   const api = create(
-    async () => ({ jobs: [structuredClone(row)] }),
+    async (jobId: string) => { assert.equal(jobId, row.jobId); return { jobs: [structuredClone(row)] }; },
     async (next: { jobs: Array<typeof row> }) => { row = structuredClone(next.jobs[0]); },
     async () => { const snapshot = structuredClone(row); await new Promise(resolve => setTimeout(resolve, 1)); return snapshot; },
     new Set(['queued', 'running', 'patching', 'testing', 'committing', 'deploying', 'verifying']),
