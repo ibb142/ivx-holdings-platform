@@ -19,6 +19,7 @@ find "$RETRY_DIR" -type f -delete
 : > "$EVIDENCE/manifest.jsonl"
 : > "$EVIDENCE/process-loss.txt"
 : > "$EVIDENCE/process-samples.txt"
+: > "$EVIDENCE/diagnostic-relaunches.txt"
 monitor_pid=''
 
 trap 'rc=$?; [ -z "$monitor_pid" ] || kill "$monitor_pid" 2>/dev/null || true; adb exec-out screencap -p > "$EVIDENCE/failure.png" 2>/dev/null || true; adb logcat -d -v threadtime > "$EVIDENCE/failure-logcat.txt" 2>/dev/null || true; exit $rc' EXIT
@@ -140,6 +141,7 @@ for batch_number in $(seq 1 "$batch_count"); do
   batch_name="batch-$(printf '%03d' "$batch_number")"
   echo "route_batch=$batch_number/$batch_count size_limit=$BATCH_SIZE"
   batch_rc=1
+  batch_pid=$(timeout 8s adb shell pidof "$APP_ID" 2>/dev/null | tr -d '\r') || true
   for attempt in 1 2; do
     set +e
     timeout 900s "$MAESTRO" test "$FLOW_DIR/$batch_name" \
@@ -156,19 +158,25 @@ for batch_number in $(seq 1 "$batch_count"); do
       cp "$REPORT_DIR/$batch_name.xml" "$RETRY_DIR/$batch_name-attempt-1.xml"
       printf '%s infrastructure_retry=1\n' "$batch_name" >> "$RETRY_DIR/events.txt"
       timeout 30s adb wait-for-device
-      test "$(timeout 8s adb shell pidof "$APP_ID" | tr -d '\r')" = "$initial_pid"
+      test "$(timeout 8s adb shell pidof "$APP_ID" | tr -d '\r')" = "$batch_pid"
       sleep 2
       continue
     fi
     break
   done
-  if [ "$batch_rc" -ne 0 ]; then
-    rc="$batch_rc"
-    break
-  fi
-  if [ -s "$EVIDENCE/process-loss.txt" ]; then
+  if [ "$batch_rc" -ne 0 ] || [ -s "$EVIDENCE/process-loss.txt" ]; then
+    # A failed batch permanently invalidates this certificate. Continue only to
+    # collect the remaining defects instead of needing one APK build per crash.
     rc=1
-    break
+    if [ "$batch_number" -lt "$batch_count" ]; then
+      printf '%s batch_exit=%s diagnostic_relaunch=1\n' "$batch_name" "$batch_rc" >> "$EVIDENCE/diagnostic-relaunches.txt"
+      printf 'Diagnostic relaunch after failed batch %s; certificate invalid\n' "$batch_name" >> "$EVIDENCE/process-loss.txt"
+      timeout 15s adb shell am force-stop "$APP_ID" || true
+      if ! timeout 45s adb shell am start -W -a android.intent.action.VIEW \
+          -d 'ivx-app:///home' -p "$APP_ID" > "$EVIDENCE/$batch_name-diagnostic-relaunch.log" 2>&1; then
+        break
+      fi
+    fi
   fi
 done
 
