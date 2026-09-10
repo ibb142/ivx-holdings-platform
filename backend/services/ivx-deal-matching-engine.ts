@@ -167,6 +167,7 @@ export function scoreDealMatch(deal: ProjectRecord, contact: InvestorRecord): De
   const geographyFit = scoreGeographyFit(contact, deal.location);
   const capitalFit = scoreCapitalFit(contact, deal);
   const timelineFit = scoreTimelineFit(contact, deal);
+  const videoFit = deal.mediaCount > 0;
 
   const relationshipAvailable = contact.relationshipScore > 0;
   const dims: { score: number; weight: number }[] = [];
@@ -174,6 +175,7 @@ export function scoreDealMatch(deal: ProjectRecord, contact: InvestorRecord): De
   if (capitalFit.available) dims.push({ score: capitalFit.score, weight: CAPITAL_WEIGHT });
   if (timelineFit.available) dims.push({ score: timelineFit.score, weight: TIMELINE_WEIGHT });
   if (relationshipAvailable) dims.push({ score: clamp(contact.relationshipScore, 0, 100), weight: RELATIONSHIP_WEIGHT });
+  if (videoFit) dims.push({ score: 100, weight: 0.1 });
 
   const weightSum = dims.reduce((sum, d) => sum + d.weight, 0);
   const matchScore = weightSum > 0
