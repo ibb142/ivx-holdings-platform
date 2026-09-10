@@ -290,6 +290,12 @@
         var first = null;
         for (var i=0;i<list.length;i++){ if (list[i] && list[i].video_url) { first = list[i]; break; } }
         if (!first) { showRetry(); return; }
+        // Reuse this anonymous response if the modal's next request times out.
+        // Page memory only: the consumer enforces a 30-second freshness limit.
+        if (Array.isArray(d.videos) && d.videos.length <= 50 && d.personalized === false
+          && !d.channel && d.feed_type === 'unified' && d.ordering === 'canonical-unified-v2') {
+          window.__ivxPublicReels = { at: Date.now(), data: JSON.parse(JSON.stringify(d)) };
+        }
         attach(first);
       })
       .catch(function(error){
