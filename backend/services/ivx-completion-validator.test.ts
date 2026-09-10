@@ -35,6 +35,13 @@ function baseEvidence(overrides: Partial<IVXCompletionEvidence> = {}): IVXComple
 }
 
 describe('classifyTaskType', () => {
+  test('keeps generated diagnostic repairs as code tasks despite inspection instructions', () => {
+    const goal = '[TEMPLATE_MODE:BUG_FIX] [AUTONOMOUS_DIAGNOSTIC_DATA] Repair a reproduced Landing QA failure in actual source code.\nInspect the implementation and preserve audit logs. Produce a functional fix and a regression test.';
+    expect(classifyTaskType(goal)).toBe('CODE_FIX');
+  });
+  test('does not promote a quoted repair marker in an audit into implementation', () => {
+    expect(classifyTaskType('Audit this prompt and report only: [TEMPLATE_MODE:BUG_FIX] [AUTONOMOUS_DIAGNOSTIC_DATA] Repair the route')).toBe('INVESTIGATION');
+  });
   test('CODE_FIX for backend/api fix/bug prompt', () => {
     expect(classifyTaskType('Fix the broken health route and add a regression test')).toBe('CODE_FIX');
   });
