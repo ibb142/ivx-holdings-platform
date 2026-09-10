@@ -11,7 +11,6 @@ import {
   recordWorkflowAttribution,
 } from '../services/ivx-agent-work-ledger';
 import { listCampaignDispatcherRecords } from '../services/ivx-campaign-dispatcher';
-import { postgresAtomicQueueSelected, readPostgresWorkEvidenceHours } from '../services/ivx-postgres-autonomous-task-store';
 import {
   IVX_112_THREE_LAYER_VERIFY_MARKER,
   buildThreeLayerVerifiedLedger,
@@ -137,25 +136,11 @@ export async function handleAgentLedgerGet(request: Request): Promise<Response> 
   const auth = await authorize(request);
   if (!auth) return ownerOnlyJson({ ok: false, error: 'IVX owner authentication required.' }, 401);
   try {
-    const params = new URL(request.url).searchParams;
-    if (params.has('from')) {
-      const from = Date.parse(params.get('from') ?? '');
-      const to = params.has('to') ? Date.parse(params.get('to') ?? '') : Date.now();
-      const zoned = (value: string) => /T.*(?:Z|[+-]\d{2}:\d{2})$/i.test(value);
-      if (!zoned(params.get('from') ?? '') || (params.has('to') && !zoned(params.get('to') ?? ''))
-        || !Number.isFinite(from) || !Number.isFinite(to) || to <= from || to - from > 7 * DAY_MS || from > Date.now()) {
-        return ownerOnlyJson({ ok: false, error: 'Provide a valid from/to window of up to seven days, with an explicit timezone.' }, 400);
-      }
-      const hours = await readPostgresWorkEvidenceHours(new Date(from).toISOString(), new Date(to).toISOString());
-      return ownerOnlyJson({ ok: true, auth, marker: 'ivx-immutable-work-evidence-2026-09-10', hours });
-    }
-    const auditNow = new Date();
-    const [base, campaignRecords, durableAudit] = await Promise.all([
+    const [base, campaignRecords] = await Promise.all([
       getAgentLedgerDashboard(),
       listCampaignDispatcherRecords(),
-      postgresAtomicQueueSelected() ? readPostgresWorkEvidenceHours(new Date(auditNow.getTime() - DAY_MS).toISOString(), auditNow.toISOString()) : null,
     ]);
-    const verified = await buildThreeLayerVerifiedLedger(base, durableAudit);
+    const verified = await buildThreeLayerVerifiedLedger(base);
     const dashboard = verified.dashboard;
     const now = Date.now();
     const timedAgents = dashboard.rows.map((row) => withLiveTimer(row, now));
@@ -166,7 +151,6 @@ export async function handleAgentLedgerGet(request: Request): Promise<Response> 
       verificationMarker: IVX_112_THREE_LAYER_VERIFY_MARKER,
       auth,
       generatedAt: dashboard.generatedAt,
-      durableAudit,
       timerMeasuredAt: new Date(now).toISOString(),
       timerWindow: {
         startAt: new Date(now - DAY_MS).toISOString(),

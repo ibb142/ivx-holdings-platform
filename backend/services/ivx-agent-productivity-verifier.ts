@@ -9,7 +9,6 @@
  */
 import { listCampaignDispatcherRecords } from './ivx-campaign-dispatcher';
 import { type Task } from './ivx-autonomous-task-engine';
-import { postgresAtomicQueueSelected, readPostgresWorkEvidenceHours, type WorkEvidenceHours } from './ivx-postgres-autonomous-task-store';
 import { getAutonomousTruthSnapshot } from './ivx-autonomous-truth-control';
 import { resolveProductionSha, getLandingTasksForSha } from './ivx-landing-p0-backlog';
 import type { AgentLedgerDashboard } from './ivx-agent-work-ledger';
@@ -112,15 +111,14 @@ function recentTaskErrors(tasks: Task[], windowStart: number): Task[] {
   });
 }
 
-export async function buildThreeLayerVerifiedLedger(base: AgentLedgerDashboard, auditedHours?: WorkEvidenceHours | null) {
+export async function buildThreeLayerVerifiedLedger(base: AgentLedgerDashboard) {
   const now = Date.now();
   const windowStart = now - DAY_MS;
   const productionSha = resolveProductionSha();
-  const [records, tasks, runtimeTruth, archive] = await Promise.all([
+  const [records, tasks, runtimeTruth] = await Promise.all([
     listCampaignDispatcherRecords(),
     getLandingTasksForSha(productionSha),
     getAutonomousTruthSnapshot(),
-    auditedHours ?? (postgresAtomicQueueSelected() ? readPostgresWorkEvidenceHours(new Date(windowStart).toISOString(), new Date(now).toISOString()) : null),
   ]);
 
   const campaignIntervals = new Map<number, Interval[]>();
@@ -191,13 +189,6 @@ export async function buildThreeLayerVerifiedLedger(base: AgentLedgerDashboard, 
       if (parsed.productionSha === productionSha) exactShaAgents.add(parsed.agentNumber);
       else staleShaEvidence += 1;
     }
-  }
-
-  if (archive) {
-    // Time spans come from the permanent archive across deployments. Current
-    // SHA task reads above are only for certificate/failure evidence.
-    evidenceMsByAgent.clear();
-    for (const row of archive.agents) evidenceMsByAgent.set(row.agent_number, row.passing_seconds * 1000);
   }
 
   const campaignMsByAgent = new Map<number, number>();
@@ -284,7 +275,7 @@ export async function buildThreeLayerVerifiedLedger(base: AgentLedgerDashboard, 
       },
       layer2TimeIntegrity: {
         pass: layer2Pass,
-        evidenceArchive: archive ? { historicalEvidenceIncomplete: archive.historicalEvidenceIncomplete, archiveStartedAt: archive.archiveStartedAt } : null,
+        evidenceSource: 'Retained current-SHA task evidence plus durable campaign records; historical task evidence may be incomplete.',
         policy: 'Only PASS evidence is eligible. 24h crossing spans are conservatively clipped. Duplicate evidence is removed. Ambiguous source overlap uses MAX, never SUM.',
         rowCount: base.rows.length,
         uniqueAgents: uniqueRowNumbers.size,

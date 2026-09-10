@@ -96,7 +96,6 @@ const DIRECT_RPC_ARGS: Record<string, string[]> = {
   ivx_senior_queue_patch: ['p_changes'],
   ivx_senior_queue_claim: ['p_job_id', 'p_worker_instance_id', 'p_resume'],
   ivx_senior_ledger_put: ['p_result'],
-  ivx_work_evidence_hours: ['p_from', 'p_to', 'p_target_hours'],
 };
 async function directRpc<T>(name: string, body: Record<string, unknown>, env: NodeJS.ProcessEnv = process.env): Promise<T> {
   const args = DIRECT_RPC_ARGS[name];
@@ -104,7 +103,6 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
   const casts: Record<string, string> = {
     p_tasks: 'jsonb', p_requests: 'jsonb', p_leases: 'jsonb', p_task: 'jsonb', p_expected_states: 'jsonb',
     p_changes: 'jsonb', p_result: 'jsonb', p_resume: 'boolean',
-    p_from: 'timestamptz', p_to: 'timestamptz', p_target_hours: 'numeric',
     p_worker_instance_id: 'text', p_lease_holder: 'text', p_event_type: 'text', p_objective_id: 'text', p_lease_seconds: 'integer',
   };
   const placeholders = args.map((key, index) => `$${index + 1}::${casts[key] ?? 'text'}`).join(', ');
@@ -117,23 +115,6 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
   const result = await queryWithPostgresDeadline<{ result: T }>(pool, `select public.${name}(${placeholders}) as result`, values);
   if (!result.rows?.length) throw new Error(`direct_postgres_rpc_empty:${name}`);
   return result.rows[0].result as T;
-}
-
-export type WorkEvidenceHours = Record<string, unknown> & {
-  agents: Array<{ agent_number: number; observations: number; attempted_seconds: number; passing_seconds: number; nonpassing_seconds: number }>;
-  historicalEvidenceIncomplete: boolean;
-};
-
-export async function readPostgresWorkEvidenceHours(from: string, to: string, targetHours = 300): Promise<WorkEvidenceHours> {
-  if (!postgresAtomicQueueConfigured()) throw new Error('Durable work evidence requires postgres_atomic');
-  const result = await rpc<WorkEvidenceHours>('ivx_work_evidence_hours', { p_from: from, p_to: to, p_target_hours: targetHours });
-  if (!Array.isArray(result?.agents) || result.agents.length !== 112
-    || new Set(result.agents.map(row => row.agent_number)).size !== 112
-    || result.agents.some(row => !Number.isInteger(row.agent_number) || row.agent_number < 1 || row.agent_number > 112
-      || !Number.isFinite(row.passing_seconds) || row.passing_seconds < 0 || row.passing_seconds > (Date.parse(to) - Date.parse(from)) / 1000)) {
-    throw new Error('Incomplete or invalid immutable work evidence');
-  }
-  return result;
 }
 
 type SeniorRpc = 'ivx_senior_queue_patch' | 'ivx_senior_queue_claim' | 'ivx_senior_ledger_put';
