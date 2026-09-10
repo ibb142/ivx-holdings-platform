@@ -29,6 +29,7 @@ await admin.connect();
 const original = (await admin.query("select pg_get_functiondef('public.ivx_autonomous_tasks_link_objective(text)'::regprocedure) definition")).rows[0].definition;
 let mutations: Promise<unknown> | undefined;
 let observation: Promise<void> | undefined;
+let blockedTelemetry: Promise<unknown> | undefined;
 let deadline: ReturnType<typeof setTimeout> | undefined;
 try {
   await admin.query(`create or replace function public.ivx_autonomous_tasks_link_objective(p_objective_id text)
@@ -64,16 +65,31 @@ try {
   clearTimeout(deadline);
   await admin.query('select pg_advisory_unlock(9811593)');
   await mutations;
-  // Even an inaccessible task ledger must not prevent reading process state.
+  // Reproduce the production contention: an aggregate monitoring read occupies
+  // its connection while a new process sample must commit and remain readable.
   await admin.query('begin');
   try {
     await admin.query('lock table public.ivx_autonomous_tasks in access exclusive mode');
-    const processObservation = await Promise.race([store.readPostgresFleetProcessObservation(),
-      new Promise<never>((_, reject) => { deadline = setTimeout(() => reject(new Error('Process observation touched the locked task ledger')), 2_000); })]);
+    let telemetryFinished = false;
+    blockedTelemetry = Promise.allSettled([store.readPostgresFleetSloTasks().finally(() => { telemetryFinished = true; })]);
+    let telemetryBlocked = false;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      telemetryBlocked = Number((await admin.query("select count(*) from pg_stat_activity where application_name='ivx_telemetry' and wait_event_type='Lock'")).rows[0].count) === 1;
+      if (telemetryBlocked) break;
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    assert(telemetryBlocked, 'aggregate telemetry must actually be waiting on the task ledger');
+    const presenceStarted = Date.now();
+    const processObservation = await Promise.race([(async () => {
+      await store.persistPostgresFleetSloSample({ commit_sha: 'b'.repeat(40), measured_at: new Date().toISOString(), durable: true });
+      return store.readPostgresFleetProcessObservation();
+    })(), new Promise<never>((_, reject) => { deadline = setTimeout(() => reject(new Error('Process presence waited behind aggregate telemetry')), 1_500); })]);
     assert(processObservation.instances.some(instance => instance.instanceId === store.autonomousWorkerInstanceId()
-      && instance.sharedState && instance.sharedWorkerQueue));
-    console.log(JSON.stringify({ ok: true, processObservationWithLockedTaskLedger: 'PASS', productionRowsTouched: 0 }));
-  } finally { clearTimeout(deadline); await admin.query('rollback'); }
+      && instance.commitSha === 'b'.repeat(40) && instance.sharedState && instance.sharedWorkerQueue));
+    assert.equal(telemetryFinished, false, 'presence must finish before the blocked aggregate read');
+    console.log(JSON.stringify({ ok: true, processObservationWithLockedTaskLedger: 'PASS',
+      presenceDuringBlockedTelemetry: 'PASS', freshSampleCommitted: true, presenceMs: Date.now() - presenceStarted, productionRowsTouched: 0 }));
+  } finally { clearTimeout(deadline); await admin.query('rollback'); await blockedTelemetry; }
 } finally {
   if (deadline) clearTimeout(deadline);
   await admin.query('select pg_advisory_unlock(9811593)');
