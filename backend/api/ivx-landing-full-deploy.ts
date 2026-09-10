@@ -6,8 +6,8 @@
  * ivx-reels.js, and all JS/CSS assets. This is needed when the landing page on S3
  * is stale and the committed code has fixes that must reach production immediately.
  *
- * Public endpoint (no owner auth) so the autonomous system can trigger it after
- * a backend deploy. Uses a confirmation token to prevent accidental triggers.
+ * Owner or system-key authorization is required. Automated deployments also
+ * bind the request to the expected Render commit before writing any assets.
  */
 
 import { PutObjectCommand, S3Client, PutBucketWebsiteCommand, PutBucketPolicyCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
@@ -38,6 +38,7 @@ interface WwwRedirectResult {
 
 interface FullDeployResult {
   ok: boolean;
+  sourceCommitSha: string | null;
   bucket: string;
   region: string;
   uploads: UploadResult[];
@@ -336,7 +337,7 @@ function listLandingFiles(): string[] {
 
 /**
  * Deploy all landing files to S3 + invalidate CloudFront.
- * Public endpoint with confirmation token.
+ * Owner-authorized endpoint with confirmation token and optional commit binding.
  */
 export async function handleLandingFullDeploy(request: Request): Promise<Response> {
   const timestamp = new Date().toISOString();
@@ -358,9 +359,9 @@ export async function handleLandingFullDeploy(request: Request): Promise<Respons
     }, 401);
   }
 
-  let body: { confirm?: string; awsCredentials?: AwsCredentials; storeCredentials?: boolean } = {};
+  let body: { confirm?: string; expectedCommitSha?: string; awsCredentials?: AwsCredentials; storeCredentials?: boolean } = {};
   try {
-    body = await request.json() as { confirm?: string; awsCredentials?: AwsCredentials; storeCredentials?: boolean };
+    body = await request.json() as typeof body;
   } catch {
     // Allow empty body
   }
@@ -371,6 +372,17 @@ export async function handleLandingFullDeploy(request: Request): Promise<Respons
       error: 'Invalid confirmation token. Use {"confirm":"DEPLOY_IVX_LANDING_FULL"}',
       timestamp,
     }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  const sourceCommitSha = process.env.RENDER_GIT_COMMIT?.trim() || null;
+  if (body.expectedCommitSha !== undefined) {
+    if (typeof body.expectedCommitSha !== 'string' || !/^[a-f0-9]{40}$/.test(body.expectedCommitSha)) {
+      return ownerOnlyJson({ ok: false, error: 'A full lowercase commit SHA is required.', timestamp }, 400);
+    }
+    if (sourceCommitSha !== body.expectedCommitSha) {
+      return ownerOnlyJson({ ok: false, error: 'Render source commit does not match the requested deployment.',
+        expectedCommitSha: body.expectedCommitSha, sourceCommitSha, timestamp }, 409);
+    }
   }
 
   // If credentials are provided in the request body, store them for future use
@@ -576,6 +588,7 @@ export async function handleLandingFullDeploy(request: Request): Promise<Respons
 
   const result: FullDeployResult = {
     ok: allUploadsOk,
+    sourceCommitSha,
     bucket,
     region: awsRegion,
     uploads,
