@@ -942,6 +942,8 @@
   // ══════════════════════════════════════════════════════════════════════════════
   var _analyticsQueue = [];
   var _analyticsFlushing = false;
+  var _analyticsExiting = false;
+  var _analyticsExitSent = false;
   var _analyticsFlushTimer = null;
   var _analyticsEventCount = 0;
   var _analyticsMaxPerSession = 500;
@@ -983,22 +985,31 @@
 
   function flushAnalytics() {
     if (_analyticsFlushTimer) { clearTimeout(_analyticsFlushTimer); _analyticsFlushTimer = null; }
-    if (_analyticsFlushing || _analyticsQueue.length === 0) return;
+    if ((_analyticsFlushing && !_analyticsExiting) || _analyticsQueue.length === 0 || _analyticsExitSent) return;
     if (isPlaceholder(SUPABASE_URL) || isPlaceholder(SUPABASE_ANON_KEY)) {
       console.log('[IVX Analytics] Supabase not configured — queued', _analyticsQueue.length, 'events waiting');
-      _analyticsFlushTimer = setTimeout(flushAnalytics, 10000);
+      if (!_analyticsExiting) _analyticsFlushTimer = setTimeout(flushAnalytics, 10000);
       return;
     }
+    var batch = _analyticsQueue.slice(0, 50);
+    // Keep the total exit request below the browser's 64 KiB keepalive budget.
+    // Blob.size measures bytes correctly for multibyte event properties.
+    if (_analyticsExiting) {
+      while (batch.length && new Blob([JSON.stringify(batch)]).size > 48 * 1024) batch.pop();
+      if (!batch.length) return;
+      _analyticsExitSent = true;
+    }
     _analyticsFlushing = true;
-    var batch = _analyticsQueue.splice(0, 50);
+    _analyticsQueue.splice(0, batch.length);
     var restUrl = SUPABASE_URL.replace(/\/+$/, '') + '/rest/v1/landing_analytics';
     var headers = {
       'apikey': SUPABASE_ANON_KEY,
-      'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
       'Content-Type': 'application/json',
       'Prefer': 'return=minimal'
     };
-    fetch(restUrl, { method: 'POST', headers: headers, body: JSON.stringify(batch) })
+    // Legacy anon keys are JWTs; current publishable keys belong only in apikey.
+    if (SUPABASE_ANON_KEY.indexOf('eyJ') === 0) headers.Authorization = 'Bearer ' + SUPABASE_ANON_KEY;
+    fetch(restUrl, { method: 'POST', headers: headers, body: JSON.stringify(batch), credentials: 'omit', keepalive: _analyticsExiting })
       .then(function(resp) {
         _analyticsFlushing = false;
         if (resp.ok || resp.status === 201) {
@@ -1008,7 +1019,7 @@
           resp.text().catch(function() {});
           _analyticsQueue.unshift.apply(_analyticsQueue, batch);
         }
-        if (_analyticsQueue.length > 0) {
+        if (!_analyticsExiting && _analyticsQueue.length > 0) {
           _analyticsFlushTimer = setTimeout(flushAnalytics, 5000);
         }
       })
@@ -1016,7 +1027,7 @@
         _analyticsFlushing = false;
         console.warn('[IVX Analytics] Flush error:', err.message);
         _analyticsQueue.unshift.apply(_analyticsQueue, batch);
-        _analyticsFlushTimer = setTimeout(flushAnalytics, 15000);
+        if (!_analyticsExiting) _analyticsFlushTimer = setTimeout(flushAnalytics, 15000);
       });
   }
 
@@ -1113,15 +1124,10 @@
   window.addEventListener('ivx:analytics-consent', fetchGeoData);
 
   window.addEventListener('beforeunload', function() {
+    _analyticsExiting = true;
     var duration = Math.round((Date.now() - PAGE_START) / 1000);
     ivxTrack('session_end', { duration: duration, eventsCount: _analyticsEventCount, engagementScore: ENGAGEMENT_SCORE });
-    if (_analyticsQueue.length > 0 && !isPlaceholder(SUPABASE_URL) && !isPlaceholder(SUPABASE_ANON_KEY)) {
-      var restUrl = SUPABASE_URL.replace(/\/+$/, '') + '/rest/v1/landing_analytics';
-      var blob = new Blob([JSON.stringify(_analyticsQueue)], { type: 'application/json' });
-      try {
-        navigator.sendBeacon(restUrl + '?apikey=' + encodeURIComponent(SUPABASE_ANON_KEY), blob);
-      } catch(e) {}
-    }
+    flushAnalytics();
   });
 
 

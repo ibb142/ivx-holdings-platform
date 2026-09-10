@@ -13,11 +13,12 @@
  * exact reason — it is never reported as PASS. Productive seconds exclude
  * rate-limiter waits. No secret values are ever written into evidence.
  */
-import { getAllTasks, TERMINAL_SUCCESS_STATES } from './ivx-autonomous-task-engine';
+import { TERMINAL_SUCCESS_STATES } from './ivx-autonomous-task-engine';
 import { fetchLandingGitHubRead } from './ivx-landing-github-read';
 import { measureMediaWeight } from './ivx-media-weight';
 import {
   fetchMainSha,
+  getLandingTasksForSha,
   LANDING_API_URL,
   LANDING_REPO,
   LANDING_URL,
@@ -1020,7 +1021,7 @@ async function runShaMatch(fetchImpl: typeof fetch, productionSha: string, c: Co
 }
 
 async function runCertificate(fetchImpl: typeof fetch, productionSha: string, c: Collector): Promise<Verdict> {
-  const tasks = await getAllTasks();
+  const tasks = await getLandingTasksForSha(productionSha);
   const audits = tasks.filter((t) => { const parsed = parseLandingTaskKey(t.idempotencyKey); return parsed && !parsed.repair && parsed.sha === productionSha && parsed.unitId !== 'e2e.certificate'; });
   const notDone = audits.filter((t) => !TERMINAL_SUCCESS_STATES.includes(t.state));
   const failing: string[] = [];

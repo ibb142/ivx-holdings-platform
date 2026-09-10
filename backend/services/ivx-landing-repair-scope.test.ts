@@ -21,6 +21,13 @@ test('preserves a repair of the actual public media response and its Node regres
   ]));
 });
 
+test('rejects the observed image-as-document patch for a failing public image URL', () => {
+  assert.throws(() => assertRepairPatchQuality(`landing-remediation:${sha}:media.deal-images-mime`, [
+    { path: 'backend/services/ivx-deal-documents.ts', oldText: "['application/pdf']", newText: "['application/pdf', 'image/jpeg', 'image/png']" },
+    { path: 'backend/services/ivx-deal-documents.node-regression.test.ts', oldText: '', newText: 'import { test } from "node:test"; test("image accepted as document", verify);' },
+  ]), /REPAIR_DEFECT_SCOPE_VIOLATION/);
+});
+
 test('does not let a video repair change its acceptance probe, CI or an unrelated test', () => {
   for (const path of ['backend/services/ivx-landing-p0-executor.ts', '.github/workflows/ivx-qa.yml', 'backend/services/ivx-deal-matching-engine.node-regression.test.ts', 'backend/api/../services/ivx-deal-matching-engine.ts']) {
     assert.throws(() => assertRepairPatchQuality(`landing-remediation:${sha}:deals.videos-present`, [

@@ -24,12 +24,13 @@
  * relevant tests passed, typecheck passed, and (for code changes) a real commit
  * SHA was produced.
  */
-import { MOBILE_CHECK, verifiedMobileSkip } from './ivx-ci-conditional-evidence';
+import { MOBILE_CHECK, verifiedMobileSkip, LANDING_PR_BROWSER_CHECK, verifyLandingPrBrowserSkip } from './ivx-ci-conditional-evidence';
 import { assertPrivateRepairScope, publicRepairGoal } from './ivx-private-repair-boundary';
 import { assertRepairPatchQuality, requiresRepairRegression } from './ivx-repair-patch-quality';
 import { assertLandingRepairScope } from './ivx-landing-repair-scope';
 import { assertRepairTestRuntime, NODE_REPAIR_TEST_GUIDANCE, repairRecoveryLesson } from './ivx-repair-recovery-protocol';
 import { PatchWorkspace } from './ivx-patch-workspace';
+import { withIsolatedCoderWorkspace } from './ivx-coder-workspace';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -155,6 +156,7 @@ export type IVXCiCheckEvidence = {
   detailsUrl: string | null;
   matched: boolean;
   conditionalSkipVerified?: boolean;
+  conditionalSkipPending?: boolean;
 };
 
 /**
@@ -1498,6 +1500,7 @@ async function commitFilesViaGitDataApi(
   filePaths: string[],
   branch: string,
   attributionTrailers?: string,
+  projectRoot = DEFAULT_PROJECT_ROOT,
 ): Promise<{ commitSha: string; commitUrl: string; branch: string }> {
   // CRITICAL FIX: Use readOwnerRuntimeVariable (process.env + owner variables store fallback)
   // instead of bare readEnv. On Render, GITHUB_TOKEN lives in the encrypted owner variables
@@ -1532,7 +1535,7 @@ async function commitFilesViaGitDataApi(
     path: repoPath,
     mode: '100644' as const,
     type: 'blob' as const,
-    content: await readFile(path.join(DEFAULT_PROJECT_ROOT, repoPath), 'utf8'),
+    content: await readFile(path.join(projectRoot, repoPath), 'utf8'),
   })));
 
   const treeRes = await fetch(
@@ -1632,6 +1635,10 @@ async function fetchRequiredChecksForCommit(commitSha: string): Promise<IVXCiChe
   };
   const runs = data.check_runs ?? [];
   if ((data.total_count ?? 0) > runs.length) throw new Error('Incomplete GitHub check evidence; refusing merge');
+  const landingSkip = await verifyLandingPrBrowserSkip({ runs, commitSha,
+    repo: `${repoInfo.owner}/${repoInfo.repo}`,
+    read: url => fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(10000) }),
+  });
   for (const run of runs) if (!contexts.includes(run.name)) contexts.push(run.name);
   return contexts.map((context) => {
     const run = runs.find((r) => r.name === context)
@@ -1645,7 +1652,9 @@ async function fetchRequiredChecksForCommit(commitSha: string): Promise<IVXCiChe
       conclusion: run?.conclusion ?? null,
       detailsUrl: run?.details_url ?? null,
       matched: run !== null,
-      conditionalSkipVerified: context === MOBILE_CHECK && run?.name === MOBILE_CHECK && verifiedMobileSkip(runs),
+      conditionalSkipVerified: (context === MOBILE_CHECK && run?.name === MOBILE_CHECK && verifiedMobileSkip(runs))
+        || (context === LANDING_PR_BROWSER_CHECK && landingSkip === 'verified'),
+      conditionalSkipPending: context === LANDING_PR_BROWSER_CHECK && landingSkip === 'pending',
     };
   });
 }
@@ -1659,7 +1668,7 @@ function requiredChecksAllGreen(evidence: IVXCiCheckEvidence[]): boolean {
 /** A definitive failure is any matched required check that completed with a
  *  non-success conclusion (failure, cancelled, skipped, stale, timed_out). */
 function requiredChecksDefinitivelyFailed(evidence: IVXCiCheckEvidence[]): IVXCiCheckEvidence[] {
-  return evidence.filter((e) => e.matched && e.status === 'completed' && e.conclusion !== 'success' && !e.conditionalSkipVerified);
+  return evidence.filter((e) => e.matched && e.status === 'completed' && e.conclusion !== 'success' && !e.conditionalSkipVerified && !e.conditionalSkipPending);
 }
 
 /**
@@ -1969,6 +1978,13 @@ export async function runIVXAutonomousCoder(input: IVXAutonomousCoderInput): Pro
   // diagnostic state was accumulated before the throw. The worker then stores
   // the full proof (iterations, commands, files inspected) instead of null.
   try {
+    // Injected filesystem/test dependencies own their fixtures. Production
+    // callers use the immutable application source as a snapshot, never a
+    // shared patch directory across concurrent owner jobs.
+    if (!input.projectRoot && !input.fileReader && !input.fileWriter && !input.testRunner) {
+      return await withIsolatedCoderWorkspace(resolveProjectRoot(input), root =>
+        runIVXAutonomousCoderInner({ ...input, projectRoot: root }, Date.now()));
+    }
     return await runIVXAutonomousCoderInner(input, startedAt);
   } catch (error) {
     const message = safeErrorMessage(error);
@@ -2742,7 +2758,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         for (const relPath of filesChanged) {
           const content = input.fileReader
             ? await input.fileReader(relPath)
-            : await readFile(path.join(DEFAULT_PROJECT_ROOT, relPath), 'utf8');
+            : await readFile(path.join(projectRoot, relPath), 'utf8');
           if (/Implement the specific logic|placeholder implementation|TODO: implement the specific/i.test(content)) {
             finalStatus = 'FAILED';
             error = `PLACEHOLDER_PATCH_REJECTED: ${relPath} contains stub/placeholder code instead of a real repair.`;
@@ -2772,7 +2788,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         assertLandingRepairScope(input.taskId, filesChanged);
         const commitResult = input.commitFn
           ? await input.commitFn(filesChanged, branchName)
-          : await commitFilesViaGitDataApi(filesChanged, branchName, buildAttributionTrailers(input));
+          : await commitFilesViaGitDataApi(filesChanged, branchName, buildAttributionTrailers(input), projectRoot);
         commitSha = commitResult.commitSha;
         commitUrl = commitResult.commitUrl;
         branch = commitResult.branch;

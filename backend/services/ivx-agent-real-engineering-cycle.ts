@@ -45,6 +45,7 @@ import {
 } from './ivx-landing-p0-backlog';
 import { executeLandingUnit } from './ivx-landing-p0-executor';
 import { landingTaskEvidence } from './ivx-landing-task-evidence';
+import { executeTechnicalTask, technicalTaskKind } from './ivx-technical-schedule';
 
 export const IVX_REAL_ENGINEERING_CYCLE_MARKER = 'ivx-agent-real-engineering-cycle-2026-09-01';
 
@@ -342,6 +343,15 @@ export async function runRealEngineeringCycle(input: {
         return { ...base, ok: false, action: 'CYCLE_ERROR', taskId: task.taskId, error: `RUNNING transition refused: ${toRunning.error}` };
       }
       states.push('RUNNING');
+    }
+
+    if (technicalTaskKind(task)) {
+      const technical = await executeTechnicalTask({ ...task, state: 'RUNNING' }, workerId, input.agentNumber ?? task.assignedAgentNumber ?? 1, input.sourceSha);
+      const finished = technical.finalized;
+      return { ...base, ok: finished.ok, action: finished.ok ? (finished.task?.state === 'VERIFIED' ? 'TASK_COMPLETED' : 'TASK_BLOCKED') : 'CYCLE_ERROR',
+        taskId: task.taskId, startedAt: technical.startedAt, finishedAt: technical.completedAt,
+        states: [...states, ...finished.states], evidenceIds: finished.evidenceId ? [finished.evidenceId] : [],
+        productiveMinutes: technical.seconds / 60, nextTaskAvailable: true, error: finished.error ?? finished.task?.blocker ?? null };
     }
 
     // ANALYZING — real inspection of the task's module (from title or description path).

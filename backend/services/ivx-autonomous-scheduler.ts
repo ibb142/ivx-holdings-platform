@@ -25,6 +25,7 @@
  */
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import {
   isDurableStoreConfigured,
   readDurableJson,
@@ -247,22 +248,25 @@ function normalizeState(parsed: unknown): SchedulerState {
   };
 }
 
-export async function getSchedulerState(): Promise<SchedulerState> {
+export async function getSchedulerState(options: { requireExisting?: boolean } = {}): Promise<SchedulerState> {
   // Durable (Supabase) when configured so run history survives restarts/deploys
   // on the ephemeral-disk Render tier; falls back to the local filesystem otherwise.
   if (isDurableStoreConfigured()) {
     try {
       const parsed = await readDurableJson<unknown>(STATE_PATH, null);
       if (parsed) return normalizeState(parsed);
+      if (options.requireExisting) throw new Error('Existing scheduler state is unavailable');
       return freshSchedulerState();
-    } catch {
+    } catch (error) {
+      if (options.requireExisting) throw error;
       return freshSchedulerState();
     }
   }
   try {
     const raw = await readFile(STATE_PATH, 'utf8');
     return normalizeState(JSON.parse(raw));
-  } catch {
+  } catch (error) {
+    if (options.requireExisting) throw error;
     return freshSchedulerState();
   }
 }
@@ -305,9 +309,10 @@ async function patchJobState(
   kind: ScheduledJobKind,
   patch: (job: ScheduledJobState, now: number) => ScheduledJobState,
   now: number = Date.now(),
+  requireExisting: boolean = false,
 ): Promise<SchedulerState> {
   return enqueueWrite(async () => {
-    const state = await getSchedulerState();
+    const state = await getSchedulerState({ requireExisting });
     state.jobs[kind] = patch(state.jobs[kind], now);
     await writeSchedulerState(state);
     return state;
@@ -387,6 +392,7 @@ export type ScheduledJobResult = {
 export type SelfAuditDeps = {
   runDailySelfAudit?: () => Promise<DailySelfAuditRun>;
   planSafeAutoImprovements?: (opts: { audit: DailySelfAuditRun }) => Promise<{ safeProposals: Array<{ id: string; category: string; severity: string; recommendedAction: string; evidence: Array<{ relativePath?: string }> }> }>;
+  enqueue?: typeof enqueueOrAttachSeniorDeveloperJob;
 };
 
 export type DriftDeps = {
@@ -425,11 +431,21 @@ async function runSelfAuditJob(deps: SelfAuditDeps = {}): Promise<ScheduledJobRe
     // closes the loop: scheduler discovers → worker fixes → coder commits →
     // PR created → (auto-merge or owner approval) → production.
     let codeFixJobsSubmitted = 0;
+    let codeFixJobsAttached = 0;
+    let codeFixJobsFailed = 0;
     for (const proposal of plan.safeProposals) {
       try {
+        const files = proposal.evidence.map(item => item.relativePath).filter((file): file is string => Boolean(file)).sort();
+        if (!files.length || !proposal.recommendedAction) throw new Error('Repair proposal lacks an inspected file or action');
+        const scope = createHash('sha256').update(JSON.stringify([proposal.category, files, proposal.recommendedAction])).digest('hex');
+        const sourceSha = process.env.RENDER_GIT_COMMIT ?? process.env.GITHUB_SHA ?? process.env.COMMIT_SHA ?? 'local';
+        const agentNumber = Number.parseInt(scope.slice(0, 8), 16) % 112 + 1;
         const goal = `Fix ${proposal.category} in ${proposal.evidence[0]?.relativePath ?? 'unknown file'}: ${proposal.recommendedAction}`;
-        await enqueueOrAttachSeniorDeveloperJob({
+        const accepted = await (deps.enqueue ?? enqueueOrAttachSeniorDeveloperJob)({
           goal,
+          taskId: `scheduler-repair:${sourceSha}:${scope}`,
+          agentNumber,
+          agentId: `ivx_holdings_${agentNumber}`,
           ownerApproved: true,
           approvePatch: false,
           approveGitDeploy: false,
@@ -447,14 +463,16 @@ async function runSelfAuditJob(deps: SelfAuditDeps = {}): Promise<ScheduledJobRe
           ownerId: 'autonomous-scheduler',
           executionMode: 'code_change',
         });
-        codeFixJobsSubmitted++;
+        if (accepted.attached) codeFixJobsAttached++;
+        else codeFixJobsSubmitted++;
       } catch {
-        // Best-effort: a failed enqueue must never break the scheduler.
+        codeFixJobsFailed++;
       }
     }
 
-    const summary = `Self-audit ${audit.auditId}: ${audit.summary.totalProposals} proposal(s), ${safeCount} safe, ${codeFixJobsSubmitted} code-fix job(s) submitted to worker queue.`;
-    return { kind: 'daily_self_audit', ok: true, durationMs: Date.now() - start, summary };
+    const summary = `Self-audit ${audit.auditId}: ${audit.summary.totalProposals} proposal(s), ${safeCount} safe, ${codeFixJobsSubmitted} new code-fix job(s), ${codeFixJobsAttached} existing job(s) attached, ${codeFixJobsFailed} submission(s) failed.`;
+    return { kind: 'daily_self_audit', ok: codeFixJobsFailed === 0, durationMs: Date.now() - start, summary,
+      ...(codeFixJobsFailed ? { error: `${codeFixJobsFailed} repair proposal(s) were not accepted by the worker queue.` } : {}) };
   } catch (error) {
     return {
       kind: 'daily_self_audit',
@@ -949,11 +967,12 @@ function classifyRunStatus(
 
 /**
  * Run a single scheduled job NOW (regardless of due time) and persist its
- * result + next-due. Concurrency-guarded per kind. Never throws.
+ * result + next-due. Concurrency-guarded per kind. Persistence failures propagate
+ * to the caller so a leased task cannot report an unpersisted schedule as complete.
  */
 export async function runScheduledJob(
   kind: ScheduledJobKind,
-  deps: { selfAudit?: SelfAuditDeps; drift?: DriftDeps } = {},
+  deps: { selfAudit?: SelfAuditDeps; drift?: DriftDeps; requireExistingState?: boolean } = {},
 ): Promise<ScheduledJobResult> {
   if (inFlight.has(kind)) {
     return { kind, ok: false, durationMs: 0, summary: 'Already running.', error: 'Job already in flight.' };
@@ -996,13 +1015,14 @@ export async function runScheduledJob(
     await patchJobState(kind, (job, now) => ({
       ...job,
       lastRunAt: nowIso(now),
-      nextDueAt: computeNextDue(now, job.intervalMs),
+      nextDueAt: computeNextDue(now, !result.ok && ['daily_self_audit', 'daily_drift_detection'].includes(kind)
+        ? Math.min(job.intervalMs, TICK_MS) : job.intervalMs),
       lastStatus: honestStatus,
       lastDurationMs: result.durationMs,
       lastSummary: result.error && isRealFailure ? `${result.summary} (${result.error})` : result.summary,
       runCount: job.runCount + 1,
       failureCount: job.failureCount + (isRealFailure ? 1 : 0),
-    }));
+    }), Date.now(), deps.requireExistingState);
     await appendRunLog({ type: 'job_run', kind, ok: result.ok, durationMs: result.durationMs, summary: result.summary, at: nowIso() });
 
     // PERMANENT per-run evidence record (2026-07-26) — one row per execution,

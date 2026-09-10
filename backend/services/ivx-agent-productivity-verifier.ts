@@ -8,9 +8,9 @@
  * - ambiguous campaign/evidence overlap uses MAX, never SUM.
  */
 import { listCampaignDispatcherRecords } from './ivx-campaign-dispatcher';
-import { getAllTasks, type Task } from './ivx-autonomous-task-engine';
+import { type Task } from './ivx-autonomous-task-engine';
 import { getAutonomousTruthSnapshot } from './ivx-autonomous-truth-control';
-import { resolveProductionSha } from './ivx-landing-p0-backlog';
+import { resolveProductionSha, getLandingTasksForSha } from './ivx-landing-p0-backlog';
 import type { AgentLedgerDashboard } from './ivx-agent-work-ledger';
 
 export const IVX_112_THREE_LAYER_VERIFY_MARKER = 'ivx-112-three-layer-verifier-2026-09-04-v2-enterprise';
@@ -117,7 +117,7 @@ export async function buildThreeLayerVerifiedLedger(base: AgentLedgerDashboard) 
   const productionSha = resolveProductionSha();
   const [records, tasks, runtimeTruth] = await Promise.all([
     listCampaignDispatcherRecords(),
-    getAllTasks(),
+    getLandingTasksForSha(productionSha),
     getAutonomousTruthSnapshot(),
   ]);
 
@@ -275,6 +275,7 @@ export async function buildThreeLayerVerifiedLedger(base: AgentLedgerDashboard) 
       },
       layer2TimeIntegrity: {
         pass: layer2Pass,
+        evidenceSource: 'Retained current-SHA task evidence plus durable campaign records; historical task evidence may be incomplete.',
         policy: 'Only PASS evidence is eligible. 24h crossing spans are conservatively clipped. Duplicate evidence is removed. Ambiguous source overlap uses MAX, never SUM.',
         rowCount: base.rows.length,
         uniqueAgents: uniqueRowNumbers.size,

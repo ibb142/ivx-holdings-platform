@@ -1,4 +1,5 @@
 import { RefillBackoff } from './ivx-refill-backoff';
+import { ensureTechnicalScheduleSeeded } from './ivx-technical-schedule';
 import { createRefillWakeup } from './ivx-refill-wakeup';
 import { refillFleetBatches, preparedContinuityAllowed, POSTGRES_FLEET_CLAIM_BATCH_SIZE } from './ivx-fleet-refill-batches';
 import { enforceAutonomous112RuntimeTruth, IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS } from './ivx-autonomous-truth-control';
@@ -351,6 +352,10 @@ function refillAllAvailableAgents(
       .filter((state) => state.agentNumber != null && canRunContinuity(state.agentId))
       .slice(0, remainingCapacity);
     if (candidates.length === 0) return;
+
+    if ((process.env.IVX_SUPABASE_RECOVERY_MODE ?? '').toLowerCase() !== 'true') {
+      await ensureTechnicalScheduleSeeded().catch(error => console.warn('[IVX Technical Schedule] refill failed', error instanceof Error ? error.message : String(error)));
+    }
 
     if (requestedLandingMission) {
       const seeded = await ensureLandingP0BacklogSeeded(requestedSourceSha);
