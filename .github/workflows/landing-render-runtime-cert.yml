@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: landing-render-runtime-production
+  cancel-in-progress: false
+
 jobs:
   deploy-and-certify:
     runs-on: ubuntu-latest
@@ -22,15 +26,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Wait for IVX production backend
+      - name: Wait for the requested IVX backend commit
         shell: bash
         run: |
           set -euo pipefail
           for i in $(seq 1 30); do
-            code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 15 https://api.ivxholding.com/health || true)
-            if [ "$code" = "200" ]; then
-              echo "Backend health PASS"
-              cat /tmp/health.json | head -c 1000
+            code=$(curl -sS -o /tmp/version.json -w '%{http_code}' --max-time 15 https://api.ivxholding.com/version || true)
+            if [ "$code" = "200" ] && node -e 'const v=JSON.parse(require("fs").readFileSync("/tmp/version.json","utf8")); process.exit(v.commit===process.env.GITHUB_SHA?0:1)'; then
+              echo "Backend commit PASS: $GITHUB_SHA"
               exit 0
             fi
             echo "Backend not ready (HTTP $code), retry $i/30"
@@ -42,12 +45,24 @@ jobs:
       - name: Execute landing deployment inside Render runtime
         id: deploy
         shell: bash
+        env:
+          IVX_LANDING_SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET || secrets.IVX_SYSTEM_SECRET }}
         run: |
           set -euo pipefail
-          code=$(curl -sS -o /tmp/deploy.json -w '%{http_code}' --max-time 180 \
-            -X POST https://api.ivxholding.com/api/ivx/landing-deploy \
-            -H 'Content-Type: application/json' \
-            --data '{"confirm":"DEPLOY_IVX_LANDING_FULL"}')
+          test -n "$IVX_LANDING_SYSTEM_KEY" || { echo '::error::Landing system credential is missing.'; exit 1; }
+          echo "::add-mask::$IVX_LANDING_SYSTEM_KEY"
+          node -e 'require("fs").writeFileSync("/tmp/deploy-request.json",JSON.stringify({confirm:"DEPLOY_IVX_LANDING_FULL",expectedCommitSha:process.env.GITHUB_SHA}))'
+          for attempt in $(seq 1 18); do
+            code=$(curl -sS -o /tmp/deploy.json -w '%{http_code}' --max-time 180 \
+              -X POST https://api.ivxholding.com/api/ivx/landing-deploy \
+              -H 'Content-Type: application/json' \
+              -H "X-IVX-System-Key: $IVX_LANDING_SYSTEM_KEY" \
+              --data-binary @/tmp/deploy-request.json)
+            # A rolling deployment can route the next request to an older replica.
+            # HTTP 409 is returned before credentials or assets are written.
+            if [ "$code" != "409" ]; then break; fi
+            sleep 10
+          done
           echo "HTTP=$code"
           cat /tmp/deploy.json
           test "$code" = "200" || { echo "::error::Render runtime landing deploy returned HTTP $code"; exit 1; }
@@ -56,6 +71,7 @@ jobs:
           const x = JSON.parse(fs.readFileSync('/tmp/deploy.json','utf8'));
           const d = x.result || x;
           if (d.ok !== true) throw new Error('landing deploy result ok != true');
+          if (d.sourceCommitSha !== process.env.GITHUB_SHA) throw new Error('landing source commit does not match this workflow');
           if (!Array.isArray(d.uploads) || d.uploads.length === 0) throw new Error('no upload evidence');
           const bad = d.uploads.filter(u => u.ok !== true);
           if (bad.length) throw new Error(`${bad.length} uploads failed: ${bad.slice(0,5).map(u=>u.key+':'+u.error).join(', ')}`);
