@@ -15,17 +15,21 @@ jobs:
   mobile-impact:
     name: Mobile impact classifier
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       mobile: ${{ steps.detect.outputs.mobile }}
     steps:
       - uses: actions/checkout@v4
+        timeout-minutes: 3
         with:
-          fetch-depth: 0
-          # Keep ancestry for merge-base without downloading historical file bodies.
+          # Start with bounded ancestry; deepen only if the immutable PR base
+          # needs it. An unbounded checkout can hold the deployment queue open.
+          fetch-depth: 32
           filter: blob:none
       - name: Detect mobile-impacting changes
         id: detect
         shell: bash
+        timeout-minutes: 5
         run: |
           set -euo pipefail
           if [ "${GITHUB_EVENT_NAME}" != "pull_request" ]; then
@@ -33,8 +37,24 @@ jobs:
             echo 'MOBILE_IMPACT=FULL_MAIN_GATE'
             exit 0
           fi
-          # Compare with the immutable event base; a shallow fetch of moving main can sever ancestry.
-          base=$(git merge-base HEAD "${{ github.event.pull_request.base.sha }}")
+          # Compare with the immutable event base, never a moving main branch.
+          # Older branches deepen until merge-base is proven; lack of ancestry
+          # fails this required gate instead of declaring mobile unaffected.
+          base_ref="${{ github.event.pull_request.base.sha }}"
+          if ! git cat-file -e "$base_ref^{commit}" 2>/dev/null; then
+            git fetch --no-tags --filter=blob:none --depth=1 origin "$base_ref"
+          fi
+          base=''
+          for deepen_by in 0 64 128 256 512; do
+            if [ "$deepen_by" -gt 0 ]; then
+              git fetch --no-tags --filter=blob:none --deepen="$deepen_by" origin "$GITHUB_SHA" "$base_ref"
+            fi
+            if base=$(git merge-base HEAD "$base_ref"); then break; fi
+          done
+          if [ -z "$base" ]; then
+            echo '::error::PR ancestry could not be verified; mobile impact is unknown.'
+            exit 1
+          fi
           git diff --name-only "$base"...HEAD > "$RUNNER_TEMP/changed-files.txt"
           cat "$RUNNER_TEMP/changed-files.txt"
           mobile=false
