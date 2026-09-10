@@ -370,22 +370,26 @@
    * promoted to `API` so all subsequent calls (likes, comments, upload, events)
    * use the working backend.
    */
-  function apiFetchJson(path, hostIdx) {
+  function apiFetchJson(path, hostIdx, timeoutMs) {
     hostIdx = hostIdx || 0;
     if (hostIdx >= API_CANDIDATES.length) return Promise.reject(new Error('all API hosts failed'));
     var base = API_CANDIDATES[hostIdx];
     var url = base + path;
     /* AbortController timeout so a hung request does not freeze the UI forever. */
     var controller = new AbortController();
-    var timeout = setTimeout(function () { controller.abort(); }, 15000);
+    var timeout = setTimeout(function () { controller.abort(); }, timeoutMs || 15000);
     return fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } })
       .then(function (r) {
-        clearTimeout(timeout);
-        if (!r.ok) throw new Error('bad status ' + r.status);
+        if (!r.ok) {
+          var error = new Error('bad status ' + r.status);
+          error.retryable = r.status === 408 || r.status === 429 || r.status >= 500;
+          throw error;
+        }
         return r.text().then(function (text) {
           /* Accept JSON even if the Content-Type header is missing or transformed. */
           var data;
           try { data = JSON.parse(text); } catch (e) { throw new Error('not json'); }
+          clearTimeout(timeout);
           if (API !== base) API = base; /* promote working host */
           return data;
         });
@@ -393,9 +397,42 @@
       .catch(function (err) {
         clearTimeout(timeout);
         /* Do not swallow abort of the final host; surface it. */
-        if (hostIdx >= API_CANDIDATES.length - 1) throw err;
-        return apiFetchJson(path, hostIdx + 1);
+        if (err.retryable === false || hostIdx >= API_CANDIDATES.length - 1) throw err;
+        return apiFetchJson(path, hostIdx + 1, timeoutMs);
       });
+  }
+
+  function fetchFeedPage(path, isCurrentFeed) {
+    return apiFetchJson(path, 0, 4000).catch(function (error) {
+      if (!isCurrentFeed() || error.retryable === false) throw error;
+      var requested = new URL(path, API_CANDIDATES[0]);
+      var query = requested.searchParams;
+      // Only the first unfiltered public page can recover from the shared
+      // catalog. Never substitute another audience, project, or cursor page.
+      if (requested.pathname !== '/api/reels' || Array.from(query.keys()).some(function (key) {
+        return ['limit', 'viewer_id', 'type'].indexOf(key) < 0;
+      })) throw error;
+      var reelsOnly = query.get('type') === 'reel';
+      if (query.has('type') && !reelsOnly) throw error;
+      return apiFetchJson('/api/reels', 0, 4000).then(function (data) {
+        var vids = data && data.videos;
+        if (!Array.isArray(vids) || !vids.length || data.channel || data.personalized !== false
+          || data.ordering !== 'canonical-unified-v2' || data.feed_type !== 'unified'
+          || !vids.every(function (v) { return v && v.id && v.video_url; })) throw error;
+        // The unified endpoint can return published reels when no deal videos
+        // are playable. It represents the Reels rail only if that catalog is
+        // complete and consists entirely of reels; mixed/incomplete data fails.
+        if (reelsOnly && (data.next_cursor || data.total !== vids.length
+          || !vids.every(function (v) { return v.video_type === 'reel'; }))) throw error;
+        return Object.assign({}, data, { viewer_state_available: false, videos: vids.map(function (v) {
+          var copy = Object.assign({}, v, { viewer_state_available: false });
+          delete copy.viewer_liked;
+          delete copy.viewer_saved;
+          delete copy.viewer_following_creator;
+          return copy;
+        }) });
+      });
+    });
   }
 
   function showFeedError() {
@@ -425,10 +462,11 @@
     var removed = false;
     function removeSpin() { if (!removed && spin.parentNode) { spin.parentNode.removeChild(spin); removed = true; } }
 
-    apiFetchJson(currentPath)
+    fetchFeedPage(currentPath, isCurrentFeed)
       .then(function (data) {
         removeSpin();
         if (!isCurrentFeed()) return;
+        if (data && data.viewer_state_available === false) toast('Showing public videos. Likes and saves may be delayed.');
         var vids = (data && data.videos) || [];
         // Fallback: if the dedicated Project Reels rail is empty, serve the unified
         // investor feed so the Reels surface never appears broken to visitors.

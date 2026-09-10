@@ -11,7 +11,8 @@ function fixture() {
   const feedEl = { children: [], appendChild(el) { el.parentNode = this; this.children.push(el); }, removeChild(el) { this.children = this.children.filter(x => x !== el); el.parentNode = null; } };
   Object.defineProperty(feedEl, 'innerHTML', { set() { for (const el of this.children) el.parentNode = null; this.children = []; } });
   const state = { channel: '', loading: false, done: false, cursor: null, videos: {} };
-  const context = vm.createContext({ state, feedEl, VIEWER: 'isolated-viewer', encodeURIComponent,
+  const context = vm.createContext({ state, feedEl, VIEWER: 'isolated-viewer', encodeURIComponent, URL,
+    API_CANDIDATES: ['https://api.ivxholding.com'],
     deactivateCurrent() {}, observeSlides() {}, toast() {},
     document: { createElement: () => ({ querySelector: () => ({ addEventListener() {} }) }) },
     buildSlide: video => ({ video }), console: { error: (...args) => errors.push(args) }
@@ -66,4 +67,92 @@ test('concurrent pagination in the same channel still shares the active request'
   assert.equal(f.pending.length, 1);
   f.pending[0].resolve(videos('single')); await settle();
   assert.deepEqual(f.feedEl.children.map(x => x.video?.id), ['single']);
+});
+
+const publicFeed = () => ({
+  videos: ['one', 'two'].map(id => ({ id, title: id, video_type: 'reel',
+    video_url: 'https://ivxholding.com/' + id + '.mp4', viewer_liked: false, viewer_saved: false })),
+  next_cursor: null, total: 2, channel: null, personalized: false,
+  feed_type: 'unified', ordering: 'canonical-unified-v2',
+});
+
+test('a transient personalized feed failure recovers actual public reels with unknown viewer state', async () => {
+  const f = fixture();
+  f.state.channel = '__reels'; f.context.loadMore();
+  f.pending[0].reject(new Error('upstream timeout')); await settle();
+  assert.equal(f.pending.length, 2);
+  assert.equal(f.pending[1].path, '/api/reels');
+  const data = publicFeed();
+  f.pending[1].resolve(data); await settle();
+  assert.deepEqual(f.feedEl.children.map(x => x.video?.video_url), data.videos.map(x => x.video_url));
+  assert.equal(f.state.videos.one.viewer_state_available, false);
+  assert.equal(f.state.videos.one.viewer_liked, undefined, 'Public data must not assert the current viewer has not liked a reel');
+  assert.equal(data.videos[0].viewer_liked, false, 'Recovery must not mutate the source response');
+  assert.equal(f.state.done, true);
+});
+
+test('public recovery cannot replace a filtered, paginated, or denied request', async () => {
+  for (const args of [{ channel: 'buyer' }, { cursor: 'page-two' }, { denied: true }]) {
+    const f = fixture();
+    Object.assign(f.state, args); f.context.loadMore();
+    const error = new Error('unavailable');
+    if (args.denied) error.retryable = false;
+    f.pending[0].reject(error); await settle();
+    assert.equal(f.pending.length, 1);
+    assert.deepEqual(Object.keys(f.state.videos), []);
+    assert.equal(f.state.loading, false);
+  }
+});
+
+test('Project Reels recovery rejects a mixed, incomplete, or empty public catalog', async () => {
+  for (const alter of [d => { d.videos[0].video_type = 'deal'; },
+    d => { d.next_cursor = 'more'; d.total = 30; }, d => { d.videos = []; d.total = 0; }]) {
+    const f = fixture();
+    f.state.channel = '__reels'; f.context.loadMore();
+    f.pending[0].reject(new Error('timeout')); await settle();
+    assert.equal(f.pending.length, 2);
+    const data = publicFeed(); alter(data); f.pending[1].resolve(data); await settle();
+    assert.deepEqual(Object.keys(f.state.videos), []);
+    assert.equal(f.state.loading, false);
+  }
+});
+
+test('a public recovery arriving after a channel switch cannot insert its videos', async () => {
+  const f = fixture();
+  f.context.loadMore(); f.pending[0].reject(new Error('timeout')); await settle();
+  assert.equal(f.pending.length, 2);
+  f.state.channel = 'buyer'; f.context.resetFeed(); f.context.loadMore();
+  f.pending[2].resolve(videos('buyer')); await settle();
+  f.pending[1].resolve(publicFeed()); await settle();
+  assert.deepEqual(f.feedEl.children.map(x => x.video?.id), ['buyer']);
+});
+
+function transport(respond) {
+  const requests = [], timers = new Map(); let timerId = 0;
+  const context = vm.createContext({ URL, AbortController, API: 'https://primary.example',
+    API_CANDIDATES: ['https://primary.example', 'https://secondary.example'],
+    setTimeout: (fn, ms) => { timers.set(++timerId, { fn, ms }); return timerId; },
+    clearTimeout: id => timers.delete(id),
+    fetch: (url, options) => { requests.push({ url, options }); return Promise.resolve(respond(url, options)); },
+  });
+  vm.runInContext(source.slice(begin, end), context);
+  return { context, requests, timers };
+}
+
+test('feed transport does not fail over an authorization denial', async () => {
+  const f = transport(() => ({ ok: false, status: 403 }));
+  await assert.rejects(f.context.apiFetchJson('/api/reels', 0, 4000), /403/);
+  assert.equal(f.requests.length, 1);
+  assert.equal(f.timers.size, 0);
+});
+
+test('the feed deadline covers the response body as well as the headers', async () => {
+  let finishBody;
+  const f = transport(() => ({ ok: true, text: () => new Promise(resolve => { finishBody = resolve; }) }));
+  const pending = f.context.apiFetchJson('/api/reels', 0, 4000);
+  await settle();
+  assert.equal(f.timers.size, 1, 'A stalled body must still have an active deadline');
+  assert.equal([...f.timers.values()][0].ms, 4000);
+  finishBody('{"videos":[]}'); await pending;
+  assert.equal(f.timers.size, 0);
 });
