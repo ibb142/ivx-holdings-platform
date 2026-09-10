@@ -8,6 +8,16 @@ const mockDeals = [
 ];
 
 describe('normalizePublicLandingDeals', () => {
+  test('should fallback to media videos if videos array is empty', () => {
+    const dealsWithMedia = [
+      { id: 'deal-03', title: 'Deal 3', media: { videos: ['video2.mp4'] } },
+      { id: 'deal-04', title: 'Deal 4', media: {} },
+    ];
+    const result = normalizePublicLandingDeals(dealsWithMedia);
+    assert.deepEqual(result[0].videos, ['video2.mp4']);
+    assert.deepEqual(result[1].videos, []);
+  });
+
   test('should include videos property', () => {
     const result = normalizePublicLandingDeals(mockDeals);
     assert.deepEqual(result[0].videos, ['video1.mp4']);
