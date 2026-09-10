@@ -7,6 +7,7 @@ import { clearOwnerResilientSession } from './owner-session-resilience';
 import { LoginTrace } from './login-trace';
 import { signInWithEmailPassword } from './auth-password-sign-in';
 import { deferAuthWork } from './deferred-auth-work';
+import { readVerifiedSession } from './verified-session-restore';
 import { canonicalizeRole, isAdminRole, normalizeRole, sanitizeEmail } from './auth-helpers';
 
 import { extractChallengeId, extractFirstVerifiedMfaFactor, getMfaChallengeRequirement, type ParsedMfaFactor } from './auth-mfa';
@@ -1712,6 +1713,27 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       logStartup('AUTH_INITIALIZATION_STARTED');
       logStartup('AUTH_INIT_STARTED');
       try {
+        if (Platform.OS === 'web') {
+          const session = await withTimeout(
+            () => readVerifiedSession(supabase.auth),
+            AUTH_BOOTSTRAP_TIMEOUT_MS,
+            'initAuth.restoreWebSession',
+            null,
+          );
+          // A timed-out bootstrap must never overwrite a newer manual login.
+          if (!cancelled && !manualOwnerLoginRef.current && session) {
+            manualOwnerLoginRef.current = true;
+            const challengeRequired = await requireTwoFactorIfNeeded(session, 'web session restore');
+            if (!cancelled && manualOwnerLoginRef.current && !challengeRequired) {
+              await handleSession(session);
+            }
+          }
+          if (!cancelled) {
+            setIsLoading(false);
+            logStartup('AUTH_INIT_COMPLETED', 'web session checked with auth authority');
+          }
+          return;
+        }
         // IVX_STARTUP_SIGNOUT_SERIALIZED_V1
         // Never allow the cold-start sign-out to overlap a new manual login.
         // The previous fire-and-forget signOut could finish after a valid owner
