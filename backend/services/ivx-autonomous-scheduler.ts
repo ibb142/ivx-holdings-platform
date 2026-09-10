@@ -248,22 +248,25 @@ function normalizeState(parsed: unknown): SchedulerState {
   };
 }
 
-export async function getSchedulerState(): Promise<SchedulerState> {
+export async function getSchedulerState(options: { requireExisting?: boolean } = {}): Promise<SchedulerState> {
   // Durable (Supabase) when configured so run history survives restarts/deploys
   // on the ephemeral-disk Render tier; falls back to the local filesystem otherwise.
   if (isDurableStoreConfigured()) {
     try {
       const parsed = await readDurableJson<unknown>(STATE_PATH, null);
       if (parsed) return normalizeState(parsed);
+      if (options.requireExisting) throw new Error('Existing scheduler state is unavailable');
       return freshSchedulerState();
-    } catch {
+    } catch (error) {
+      if (options.requireExisting) throw error;
       return freshSchedulerState();
     }
   }
   try {
     const raw = await readFile(STATE_PATH, 'utf8');
     return normalizeState(JSON.parse(raw));
-  } catch {
+  } catch (error) {
+    if (options.requireExisting) throw error;
     return freshSchedulerState();
   }
 }
@@ -306,9 +309,10 @@ async function patchJobState(
   kind: ScheduledJobKind,
   patch: (job: ScheduledJobState, now: number) => ScheduledJobState,
   now: number = Date.now(),
+  requireExisting: boolean = false,
 ): Promise<SchedulerState> {
   return enqueueWrite(async () => {
-    const state = await getSchedulerState();
+    const state = await getSchedulerState({ requireExisting });
     state.jobs[kind] = patch(state.jobs[kind], now);
     await writeSchedulerState(state);
     return state;
@@ -963,11 +967,12 @@ function classifyRunStatus(
 
 /**
  * Run a single scheduled job NOW (regardless of due time) and persist its
- * result + next-due. Concurrency-guarded per kind. Never throws.
+ * result + next-due. Concurrency-guarded per kind. Persistence failures propagate
+ * to the caller so a leased task cannot report an unpersisted schedule as complete.
  */
 export async function runScheduledJob(
   kind: ScheduledJobKind,
-  deps: { selfAudit?: SelfAuditDeps; drift?: DriftDeps } = {},
+  deps: { selfAudit?: SelfAuditDeps; drift?: DriftDeps; requireExistingState?: boolean } = {},
 ): Promise<ScheduledJobResult> {
   if (inFlight.has(kind)) {
     return { kind, ok: false, durationMs: 0, summary: 'Already running.', error: 'Job already in flight.' };
@@ -1017,7 +1022,7 @@ export async function runScheduledJob(
       lastSummary: result.error && isRealFailure ? `${result.summary} (${result.error})` : result.summary,
       runCount: job.runCount + 1,
       failureCount: job.failureCount + (isRealFailure ? 1 : 0),
-    }));
+    }), Date.now(), deps.requireExistingState);
     await appendRunLog({ type: 'job_run', kind, ok: result.ok, durationMs: result.durationMs, summary: result.summary, at: nowIso() });
 
     // PERMANENT per-run evidence record (2026-07-26) — one row per execution,
