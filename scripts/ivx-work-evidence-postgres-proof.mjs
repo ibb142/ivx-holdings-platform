@@ -47,7 +47,7 @@ export async function proveWorkEvidenceArchive(db) {
   assert.deepEqual(access, { anon: false, authenticated: false });
   // The read optimization must preserve exact accounting and existing ACLs.
   await db.query(await readFile(new URL('../supabase/migrations/20260910170903_ivx_work_evidence_hours_cover.sql', import.meta.url), 'utf8'));
-  await db.query(await readFile(new URL('../supabase/migrations/20260910173300_ivx_compact_work_intervals.sql', import.meta.url), 'utf8'));
+  await db.query(await readFile(new URL('../supabase/migrations/20260910174848_ivx_compact_work_intervals.sql', import.meta.url), 'utf8'));
   await assert.rejects(report('2026-06-01T06:00:00Z', '2026-06-01T07:00:00Z'), /bootstrap is incomplete/);
   for (let batch = 0; batch < 5; batch++) {
     const result = (await db.query('select public.ivx_backfill_work_intervals(25) as result')).rows[0].result;
