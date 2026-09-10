@@ -39,7 +39,7 @@ import {
   readDurableJson,
   writeDurableJson,
 } from './ivx-durable-store';
-import { checkEmergencyStop } from './ivx-emergency-stop-gate';
+import { assertEmergencyStopInactive, checkEmergencyStop } from './ivx-emergency-stop-gate';
 import { classifyTaskType } from './ivx-completion-validator';
 import {
   IVX_GIT_DEPLOY_CONFIRM_TEXT,
@@ -1221,6 +1221,8 @@ async function recoverStuckCiWaitJobs(queue: QueueDoc): Promise<void> {
  *  normal autonomous-coder path (COMPLETED only on a confirmed merge). */
 async function resumeCiWaitJob(jobId: string): Promise<void> {
   if (queueStopping) return;
+  try { await assertEmergencyStopInactive('senior-worker-ci-recovery'); }
+  catch { return; } // Retain the durable job while owner control blocks recovery.
   let job = await getSeniorDeveloperJob(jobId);
   if (!job || !ACTIVE_STATUSES.has(job.status)) return;
   if (!job.result?.commitSha) return;
@@ -1279,6 +1281,7 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     typecheckPassed: job.result?.typecheckPassed !== false,
     filesChanged: job.result?.changedFiles ?? [],
     beforeMerge: async () => {
+      await assertEmergencyStopInactive('senior-worker-resumed-merge');
       if (controller.cancelled) throw new Error('Worker lease lost before resumed merge');
       assertRepairResumeEvidence(jobId, job.input.goal, job.result?.validationEvidence);
       await updateJob(jobId, { lastHeartbeatAt: nowIso() });

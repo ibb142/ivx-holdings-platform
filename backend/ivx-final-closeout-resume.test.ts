@@ -69,19 +69,21 @@ const RESUME_BASE = {
 } as const;
 
 describe('IVX Autonomous Coder — restart / CI-wait resume (final closeout 2026-08-23)', () => {
-  it('lost process lease prevents a resumed merge even when all required checks are green', async () => {
+  for (const refusal of ['Worker lease lost', 'EMERGENCY_STOP_ACTIVE', 'EMERGENCY_STOP_UNAVAILABLE']) {
+  it(`${refusal} prevents a resumed merge even when all required checks are green`, async () => {
     let mergeAttempted = false;
     const proof = await resumeIVXAutonomousCoderFromCiWait({
       ...RESUME_BASE,
       prStateFn: async () => ({ state: 'open', merged: false, mergeCommitSha: null }),
       requiredChecksFn: async () => greenChecks(),
-      beforeMerge: async () => { throw new Error('Worker lease lost'); },
+      beforeMerge: async () => { throw new Error(refusal); },
       mergeFn: async () => { mergeAttempted = true; return { merged: true, mergeCommitSha: 'forbidden' }; },
     });
     expect(mergeAttempted).toBe(false);
     expect(proof.prMerged).toBe(false);
     expect(proof.finalStatus).toBe('FAILED');
   });
+  }
   it('PR open + all checks green → merges and COMPLETES with the original taskId', async () => {
     const mergeCalls: number[] = [];
     const proof = await resumeIVXAutonomousCoderFromCiWait({
