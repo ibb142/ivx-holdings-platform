@@ -127,12 +127,22 @@ try {
     await page.locator('#invest-auth-error').getByText(/retry available/).waitFor();
     assert.equal(await page.locator('#invest-email').inputValue(), input.email);
     assert.equal(await page.locator('#invest-auth-btn').isEnabled(), true);
+    const retryResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/members/register' && response.request().method() === 'POST');
     await page.locator('#invest-auth-btn').click();
+    const response = await retryResponse;
+    assert.equal(new URL(response.url()).origin, fixtureBase);
+    const retryResult = await response.json();
+    assert.equal(response.status(), 200, JSON.stringify({ code: retryResult.code, message: retryResult.message }));
+    assert.equal(retryResult.ok, true);
     await page.locator('#invest-authenticated-view').waitFor({ state: 'visible' });
     assert.equal(attempts, 2);
     const { data } = await admin.auth.admin.listUsers();
     created.push(...data.users.filter((u) => u.email === input.email).map((u) => u.id));
     assert.equal(created.length, 1);
+    assert.equal(created[0], retryResult.authUserId);
+    const profile = await admin.from('profiles').select('id,email').eq('id', retryResult.authUserId).single();
+    assert.equal(profile.error, null);
+    assert.equal(profile.data.email, input.email);
     checks.push('loading disables submission; outage preserves inputs; retry creates exactly one real Auth identity');
     await context.close();
   } else {

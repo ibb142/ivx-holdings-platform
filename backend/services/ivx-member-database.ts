@@ -78,7 +78,7 @@ export interface MemberRegistrationInput {
   lastName: string;
   /** Date of birth in ISO format (YYYY-MM-DD). */
   dateOfBirth?: string;
-  /** Gender: 'male' | 'female' | 'prefer_not_to_say'. */
+  /** Gender: 'male' | 'female' | 'other' | 'prefer_not_to_say'. */
   gender?: string;
   phone: string;
   country: string;

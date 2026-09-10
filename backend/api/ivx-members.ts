@@ -107,7 +107,7 @@ function validateDateOfBirth(dateOfBirth: string): { valid: boolean; reason?: st
   return { valid: true };
 }
 
-const VALID_GENDERS = new Set(['male', 'female', 'prefer_not_to_say']);
+const VALID_GENDERS = new Set(['male', 'female', 'other', 'prefer_not_to_say']);
 
 // Validate gender: required, must be one of the allowed values
 function validateGender(gender: string): { valid: boolean; reason?: string } {
