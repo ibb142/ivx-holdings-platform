@@ -20,6 +20,10 @@ const JSON_HEADERS = {
   'Access-Control-Allow-Origin': 'https://ivxholding.com',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+  '/api/jv/deals': 'dealsHandler',
+  '/api/landing/deals': 'landingDealsHandler',
+  '/api/landing/config': 'landingConfigHandler',
+  '/api/landing/videos': 'videosHandler',
 } as const;
 
 function json(payload: Record<string, unknown>, status: number = 200): Response {
