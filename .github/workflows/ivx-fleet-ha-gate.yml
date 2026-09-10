@@ -3,7 +3,7 @@ on:
   push:
     branches: [fix/fleet-render-ha-20260908, fix/fleet-backend-ha-20260908]
   pull_request:
-    paths: ['backend/**', 'expo/**', 'supabase/migrations/**', 'scripts/ivx-fleet-ha-postgres-proof.mjs', 'scripts/ivx-fleet-telemetry-postgres-proof.ts', 'scripts/ivx-fleet-ha-live-proof.ts', 'scripts/ivx-fleet-ha-identities.ts', 'scripts/ivx-fleet-ha-identities.test.ts', '.github/workflows/ivx-fleet-ha-gate.yml']
+    paths: ['backend/**', 'expo/**', 'supabase/migrations/**', 'scripts/ivx-fleet-ha-postgres-proof.mjs', 'scripts/ivx-task-recovery-postgres-proof.mjs', 'scripts/ivx-fleet-telemetry-postgres-proof.ts', 'scripts/ivx-fleet-ha-live-proof.ts', 'scripts/ivx-fleet-ha-identities.ts', 'scripts/ivx-fleet-ha-identities.test.ts', '.github/workflows/ivx-fleet-ha-gate.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -42,3 +42,11 @@ jobs:
       - run: bun scripts/ivx-fleet-bounded-claims-proof.ts
         env:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
+      - name: Preserve task recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-recovery-${{ github.sha }}-${{ github.run_attempt }}
+          path: qa/evidence/fleet-ha/task-recovery.json
+          if-no-files-found: warn
+          retention-days: 30

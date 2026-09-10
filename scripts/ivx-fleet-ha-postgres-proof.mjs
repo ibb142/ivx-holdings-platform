@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
+import { proveInterruptedTaskRecovery } from './ivx-task-recovery-postgres-proof.mjs';
 
 // This destructive fixture is restricted to an explicitly named local test DB.
 const connectionString = process.env.IVX_HA_TEST_DATABASE_URL;
@@ -96,7 +97,10 @@ try {
   await a.query("insert into public.ivx_autonomous_task_events(event_type,worker_instance_id,event) values ('fleet_slo_sample','ha-role-test','{\"instance_role\":\"api\",\"process_role\":\"api\",\"shared_state\":true,\"shared_worker_queue\":true}')");
   const roles = (await b.query('select public.ivx_fleet_dashboard_observation() as value')).rows[0].value;
   assert.equal(roles.instances[0].processRole, 'api'); assert.equal(roles.instances[0].sharedState, true);
+  const taskRecovery = await proveInterruptedTaskRecovery(a, b);
+  assert.equal(taskRecovery.verification, 'PASS');
   console.log(JSON.stringify({ ok: true, database: 'isolated PostgreSQL', connections: 2, concurrentClaimWinners: 1,
+    interruptedTaskRecovery: taskRecovery.verification,
     sharedRoomHistory: true, privateRoomStorage: true, roleObservation: true, parallelEnqueuesPreserved: true, atomicSeniorClaims: true, missingWorkerIdentityRejected: true, terminalResurrectionRejected: true, crossReplicaOwnerSingleFlight: true, concurrentProofsPreserved: true, wrongProcessStartRejected: true, wrongProcessHeartbeatRejected: true, staleCompletionRejected: true,
     expiredLeaseCannotResurrect: true, survivorRefilled: true, lateShutdownFenced: true, privateObservation: true, productionRowsTouched: 0 }));
 } finally { await Promise.allSettled([a.end(), b.end()]); }
