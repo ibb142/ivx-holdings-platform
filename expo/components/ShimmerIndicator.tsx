@@ -41,21 +41,25 @@ export function ShimmerIndicator({
           Animated.timing(scale, {
             toValue: 1.1,
             duration: 600,
-            useNativeDriver: true}),
+            useNativeDriver: true,
+            isInteraction: false}),
           Animated.timing(opacity, {
             toValue: 0.9,
             duration: 600,
-            useNativeDriver: true}),
+            useNativeDriver: true,
+            isInteraction: false}),
         ]),
         Animated.parallel([
           Animated.timing(scale, {
             toValue: 0.85,
             duration: 600,
-            useNativeDriver: true}),
+            useNativeDriver: true,
+            isInteraction: false}),
           Animated.timing(opacity, {
             toValue: 0.4,
             duration: 600,
-            useNativeDriver: true}),
+            useNativeDriver: true,
+            isInteraction: false}),
         ]),
       ])
     );

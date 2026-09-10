@@ -1,6 +1,6 @@
 import { RefillBackoff } from './ivx-refill-backoff';
 import { createRefillWakeup } from './ivx-refill-wakeup';
-import { refillFleetBatches, POSTGRES_FLEET_CLAIM_BATCH_SIZE } from './ivx-fleet-refill-batches';
+import { refillFleetBatches, preparedContinuityAllowed, POSTGRES_FLEET_CLAIM_BATCH_SIZE } from './ivx-fleet-refill-batches';
 import { enforceAutonomous112RuntimeTruth, IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS } from './ivx-autonomous-truth-control';
 import { getAllExecutionStates, updateExecutionState } from './ivx-agent-runtime';
 import { runRealEngineeringCycle, type RealEngineeringCycleResult } from './ivx-agent-real-engineering-cycle';
@@ -9,6 +9,7 @@ import {
   heartbeatTasksBatch,
   leaseNextTasksBatch,
   startLeasedTasksBatch,
+  releaseLease,
   type Task,
 } from './ivx-autonomous-task-engine';
 import {
@@ -143,15 +144,13 @@ function canRunContinuity(agentId: string): boolean {
     && !state.activeTaskId;
 }
 
-function canStartPreparedContinuity(agentId: string, preparedTaskId: string): boolean {
-  if (!continuityEnabled || continuityRuns.has(agentId)) return false;
-  if (continuityRuns.size >= getContinuityMaxConcurrency()) return false;
-  const state = getAllExecutionStates().find((row) => row.agentId === agentId);
-  if (!state) return false;
-  return !state.pauseState
-    && !state.disabledState
-    && state.health !== 'failed'
-    && (!state.activeTaskId || state.activeTaskId === preparedTaskId);
+function canStartPreparedContinuity(agentId: string): boolean {
+  return preparedContinuityAllowed({
+    enabled: continuityEnabled, stopping,
+    hasLocalRun: continuityRuns.has(agentId),
+    atCapacity: continuityRuns.size >= getContinuityMaxConcurrency(),
+    state: getAllExecutionStates().find((row) => row.agentId === agentId),
+  });
 }
 
 function currentSourceSha(): string {
@@ -260,8 +259,8 @@ function runHeartbeatRefresh(): Promise<void> {
   return heartbeatRefreshInFlight;
 }
 
-function startContinuityRun(agentId: string, agentNumber: number, preparedTask: Task): void {
-  if (!canStartPreparedContinuity(agentId, preparedTask.taskId)) return;
+function startContinuityRun(agentId: string, agentNumber: number, preparedTask: Task): boolean {
+  if (!canStartPreparedContinuity(agentId)) return false;
   refillStarted += 1;
   let outcome: ContinuityOutcome = 'failed';
   const sourceSha = currentSourceSha();
@@ -336,6 +335,7 @@ function startContinuityRun(agentId: string, agentNumber: number, preparedTask: 
     });
   continuityRuns.set(agentId, promise);
   void runLeaseMirror();
+  return true;
 }
 
 function refillAllAvailableAgents(
@@ -378,10 +378,16 @@ function refillAllAvailableAgents(
       batchSize: postgresAtomicQueueSelected() ? POSTGRES_FLEET_CLAIM_BATCH_SIZE : IVX_AUTONOMOUS_FLEET_SIZE,
       lease: leaseNextTasksBatch,
       start: startLeasedTasksBatch,
+      release: async ({ taskId, workerId }) => {
+        const result = await releaseLease(taskId, workerId);
+        if (!result.ok) throw new Error(`Prepared lease release refused: ${result.error}`);
+      },
       shouldStop: () => stopping || !continuityEnabled,
       onStarted: result => {
         const state = stateByWorker.get(result.workerId);
-        if (state?.agentNumber != null && result.task) startContinuityRun(state.agentId, state.agentNumber, result.task);
+        return state?.agentNumber != null && result.task
+          ? startContinuityRun(state.agentId, state.agentNumber, result.task)
+          : false;
       },
     });
     void runLeaseMirror();

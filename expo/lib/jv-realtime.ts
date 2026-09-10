@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { useScreenActivity } from '@/hooks/useScreenActivity';
 import { Platform, AppState, AppStateStatus } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
@@ -156,6 +157,7 @@ export function invalidateAllJVQueries(queryClient: ReturnType<typeof useQueryCl
 }
 
 export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallbackPolling: boolean = true): { status: RealtimeStatus; lastEventAt: number } {
+  const screenActive = useScreenActivity();
   const queryClient = useQueryClient();
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const auditChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -174,7 +176,8 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
   const _pollSyncRef = useRef<number>(0);
 
   useEffect(() => {
-    destroyedRef.current = false;
+    destroyedRef.current = !screenActive;
+    if (!screenActive) return;
     tableCheckDoneRef.current = false;
 
     async function connectChannel() {
@@ -470,7 +473,7 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
         appStateSubscription.remove();
       }
     };
-  }, [queryClient, channelName, enableFallbackPolling]);
+  }, [queryClient, channelName, enableFallbackPolling, screenActive]);
 
   return { status, lastEventAt };
 }

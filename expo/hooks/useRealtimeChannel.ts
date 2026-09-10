@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
+import { useScreenActivity } from './useScreenActivity';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
@@ -137,6 +138,7 @@ export function useRealtimeChannel(
     applyDeltas?: boolean;
   },
 ): RealtimeChannelState {
+  const screenActive = useScreenActivity();
   const queryClient = useQueryClient();
   const channelsRef = useRef<RealtimeChannel[]>([]);
   const activeRef = useRef(true);
@@ -280,7 +282,8 @@ export function useRealtimeChannel(
   }, [configSignature, queryClient, cleanupChannels, autoReconnect, applyDeltas]);
 
   useEffect(() => {
-    activeRef.current = true;
+    activeRef.current = screenActive;
+    if (!screenActive) return;
     pausedRef.current = false;
     setupChannels();
 
@@ -305,7 +308,7 @@ export function useRealtimeChannel(
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       cleanupChannels();
     };
-  }, [configSignature, setupChannels, cleanupChannels, pauseOnBackground]);
+  }, [configSignature, setupChannels, cleanupChannels, pauseOnBackground, screenActive]);
 
   return state;
 }

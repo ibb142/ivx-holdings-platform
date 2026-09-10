@@ -69,19 +69,39 @@ const RESUME_BASE = {
 } as const;
 
 describe('IVX Autonomous Coder — restart / CI-wait resume (final closeout 2026-08-23)', () => {
-  it('lost process lease prevents a resumed merge even when all required checks are green', async () => {
+  it('retains the video defect boundary after restart even with green CI', async () => {
+    for (const filesChanged of [[], ['backend/services/ivx-deal-matching-engine.ts']]) {
+      let merges = 0;
+      const persisted = JSON.parse(JSON.stringify({ ...RESUME_BASE,
+        taskId: `landing-remediation:${'a'.repeat(40)}:deals.videos-present`, filesChanged }));
+      const proof = await resumeIVXAutonomousCoderFromCiWait({
+        ...persisted,
+        prStateFn: async () => ({ state: 'open', merged: false, mergeCommitSha: null }),
+        requiredChecksFn: async () => greenChecks(),
+        mergeFn: async () => { merges++; return { merged: true, mergeCommitSha: 'forbidden' }; },
+      });
+      expect(merges).toBe(0);
+      expect(proof.prMerged).toBe(false);
+      expect(proof.error).toContain('REPAIR_DEFECT_SCOPE_VIOLATION');
+      expect(proof.taskId).toBe(persisted.taskId);
+    }
+  });
+
+  for (const refusal of ['Worker lease lost', 'EMERGENCY_STOP_ACTIVE', 'EMERGENCY_STOP_UNAVAILABLE']) {
+  it(`${refusal} prevents a resumed merge even when all required checks are green`, async () => {
     let mergeAttempted = false;
     const proof = await resumeIVXAutonomousCoderFromCiWait({
       ...RESUME_BASE,
       prStateFn: async () => ({ state: 'open', merged: false, mergeCommitSha: null }),
       requiredChecksFn: async () => greenChecks(),
-      beforeMerge: async () => { throw new Error('Worker lease lost'); },
+      beforeMerge: async () => { throw new Error(refusal); },
       mergeFn: async () => { mergeAttempted = true; return { merged: true, mergeCommitSha: 'forbidden' }; },
     });
     expect(mergeAttempted).toBe(false);
     expect(proof.prMerged).toBe(false);
     expect(proof.finalStatus).toBe('FAILED');
   });
+  }
   it('PR open + all checks green → merges and COMPLETES with the original taskId', async () => {
     const mergeCalls: number[] = [];
     const proof = await resumeIVXAutonomousCoderFromCiWait({
