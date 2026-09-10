@@ -12,7 +12,7 @@ function fixture() {
   Object.defineProperty(feedEl, 'innerHTML', { set() { for (const el of this.children) el.parentNode = null; this.children = []; } });
   const state = { channel: '', loading: false, done: false, cursor: null, videos: {} };
   const context = vm.createContext({ state, feedEl, VIEWER: 'isolated-viewer', encodeURIComponent, URL,
-    API_CANDIDATES: ['https://api.ivxholding.com'],
+    API_CANDIDATES: ['https://api.ivxholding.com'], window: {},
     deactivateCurrent() {}, observeSlides() {}, toast() {},
     document: { createElement: () => ({ querySelector: () => ({ addEventListener() {} }) }) },
     buildSlide: video => ({ video }), console: { error: (...args) => errors.push(args) }
@@ -125,6 +125,28 @@ test('a public recovery arriving after a channel switch cannot insert its videos
   f.pending[2].resolve(videos('buyer')); await settle();
   f.pending[1].resolve(publicFeed()); await settle();
   assert.deepEqual(f.feedEl.children.map(x => x.video?.id), ['buyer']);
+});
+
+test('a recent homepage catalog recovers a transient failure without another database request', async () => {
+  const f = fixture();
+  f.context.window.__ivxPublicReels = { at: Date.now(), data: publicFeed() };
+  f.state.channel = '__reels'; f.context.loadMore();
+  f.pending[0].reject(new Error('cold viewer query timed out')); await settle();
+  assert.equal(f.pending.length, 1, 'Recovery must reuse the catalog already received on this page');
+  assert.deepEqual(f.feedEl.children.map(x => x.video?.id), ['one', 'two']);
+});
+
+test('expired or incompatible page snapshots cannot be used for recovery', async () => {
+  for (const snapshot of [{ at: Date.now() - 31000, data: publicFeed() },
+    { at: Date.now(), data: { ...publicFeed(), personalized: true } }]) {
+    const f = fixture();
+    f.context.window.__ivxPublicReels = snapshot;
+    f.context.loadMore(); f.pending[0].reject(new Error('timeout')); await settle();
+    assert.equal(f.pending.length, 2, 'An unusable snapshot requires a real public API response');
+    assert.deepEqual(Object.keys(f.state.videos), []);
+    f.pending[1].resolve(publicFeed()); await settle();
+    assert.deepEqual(f.feedEl.children.map(x => x.video?.id), ['one', 'two']);
+  }
 });
 
 function transport(respond) {

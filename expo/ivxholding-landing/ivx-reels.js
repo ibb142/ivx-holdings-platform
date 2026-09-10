@@ -414,7 +414,7 @@
       })) throw error;
       var reelsOnly = query.get('type') === 'reel';
       if (query.has('type') && !reelsOnly) throw error;
-      return apiFetchJson('/api/reels', 0, 4000).then(function (data) {
+      function recoverPublic(data) {
         var vids = data && data.videos;
         if (!Array.isArray(vids) || !vids.length || data.channel || data.personalized !== false
           || data.ordering !== 'canonical-unified-v2' || data.feed_type !== 'unified'
@@ -431,7 +431,13 @@
           delete copy.viewer_following_creator;
           return copy;
         }) });
-      });
+      }
+      var snapshot = window.__ivxPublicReels;
+      var age = snapshot ? Date.now() - snapshot.at : NaN;
+      if (age >= 0 && age <= 30000) {
+        try { return recoverPublic(snapshot.data); } catch (_) { /* request a current catalog */ }
+      }
+      return apiFetchJson('/api/reels', 0, 4000).then(recoverPublic);
     });
   }
 
