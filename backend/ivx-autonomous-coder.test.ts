@@ -41,6 +41,48 @@ async function makeIsolatedRepo(label: string): Promise<{
   return { root, fileWriter, fileReader };
 }
 
+describe('Landing repair source access', () => {
+  it('reads and edits the exact Landing source after the backend index is full, and runs its regression test', async () => {
+    const repo = await makeIsolatedRepo('landing-repair');
+    await Promise.all(Array.from({ length: 205 }, (_, i) => repo.fileWriter(`backend/a${i}.ts`, 'export const value = 1;')));
+    const landing = 'expo/ivxholding-landing/index.html';
+    const testPath = 'backend/services/landing-header.test.ts';
+    await repo.fileWriter(landing, '<main>Landing fixture</main>');
+    let sawSource = false;
+    const commands: string[] = [];
+    const proof = await runIVXAutonomousCoder({
+      taskId: 'landing-remediation:test-sha:structure.header', goal: `Restore the header in ${landing}`,
+      executionMode: 'code_change', ownerId: 'test-owner', approvalPolicy: 'owner_gated', projectRoot: repo.root,
+      fileReader: repo.fileReader, fileWriter: repo.fileWriter,
+      llmCaller: async (_system, prompt) => {
+        sawSource ||= prompt.includes('<main>Landing fixture</main>');
+        return JSON.stringify({ rootCause: 'missing header', technicalPlan: 'restore semantic header and regression', operations: [
+          { path: landing, kind: 'replace_exact', oldText: '<main>Landing fixture</main>', newText: '<header>IVX</header><main>Landing fixture</main>', reason: 'restore header' },
+          { path: testPath, kind: 'create_file', oldText: '', newText: 'import { test } from "node:test"; import assert from "node:assert/strict"; import { readFileSync } from "node:fs"; test("header exists", () => assert.match(readFileSync("expo/ivxholding-landing/index.html", "utf8"), /<header>/));', reason: 'reproduce missing header' },
+        ] });
+      },
+      testRunner: async (cwd, command) => {
+        commands.push(command);
+        if (command.startsWith('bun test ')) {
+          const child = Bun.spawn([process.execPath, 'test', testPath], { cwd, stdout: 'pipe', stderr: 'pipe' });
+          const exitCode = await child.exited;
+          return { command, ok: exitCode === 0, exitCode, stdoutTail: '', stderrTail: await new Response(child.stderr).text(), durationMs: 1 };
+        }
+        return { command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1 };
+      },
+      commitFn: async (_paths, branch) => ({ commitSha: 'test-landing-commit', commitUrl: 'https://example.test/commit', branch }),
+      ...prAndCiMocks(), autoMergePr: true,
+    });
+    expect(sawSource).toBe(true);
+    expect(await repo.fileReader(landing)).toContain('<header>IVX</header>');
+    expect(commands).toContain(`bun test ${testPath}`);
+    expect(commands.filter(command => command.includes('tsc')).every(command => !command.includes('.html'))).toBe(true);
+    expect(proof.filesChanged).toContain(landing);
+    expect(proof.testsPassed).toBe(true);
+    expect(proof.prMerged).toBe(true);
+  });
+});
+
 describe('IVX Autonomous Coder — pilot sentinel', () => {
   it('exposes the pilot label and target', () => {
     const sentinel = describePilotSentinel();

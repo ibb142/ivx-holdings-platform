@@ -514,7 +514,7 @@ const INSPECT_IGNORED_DIRS = new Set([
 ]);
 
 const INSPECTABLE_EXTENSIONS = new Set([
-  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.json', '.md', '.yaml', '.yml',
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.json', '.md', '.yaml', '.yml', '.html', '.css',
 ]);
 
 async function walkInspectableFiles(relDir: string, results: string[], max: number, projectRoot: string): Promise<void> {
@@ -550,6 +550,7 @@ async function walkInspectableFiles(relDir: string, results: string[], max: numb
 }
 
 function pickInspectionTargets(goal: string, availableFiles: string[]): string[] {
+  const explicit = explicitInspectionPaths(goal);
   const alwaysInclude = [
     'backend/services/ivx-autonomous-coder-pilot.ts',
     'backend/services/ivx-senior-developer-worker.ts',
@@ -576,7 +577,12 @@ function pickInspectionTargets(goal: string, availableFiles: string[]): string[]
   // Also include files whose CONTENT might contain the goal's significant terms.
   // This is handled in the inspect phase by reading file previews.
 
-  return Array.from(new Set([...alwaysInclude, ...hintMatches])).slice(0, MAX_INSPECTED_FILES);
+  return Array.from(new Set([...explicit, ...alwaysInclude, ...hintMatches])).slice(0, MAX_INSPECTED_FILES);
+}
+
+function explicitInspectionPaths(goal: string): string[] {
+  return [...new Set(goal.match(/\b(?:backend|expo)\/[A-Za-z0-9_.\/-]+\.(?:tsx?|jsx?|mjs|html|css)\b/g) ?? [])]
+    .filter(file => !file.split('/').some(part => !part || part === '.' || part === '..')).slice(0, 15);
 }
 
 /** Extract a relevant section of a large file based on goal keywords.
@@ -650,14 +656,14 @@ async function readFilePreview(relPath: string, projectRoot: string, goal?: stri
 // ── PATCH APPLICATION ────────────────────────────────────────────────────────
 
 /** Paths the autonomous coder is allowed to modify. */
-const ALLOWED_PATCH_PATHS = /^((?:backend|expo)\/[A-Za-z0-9_.\/-]+\.ts$|(?:backend|expo)\/[A-Za-z0-9_.\/-]+\.tsx$|expo\/[A-Za-z0-9_.\/-]+\.json$|expo\/[A-Za-z0-9_.\/-]+\.gradle$)/;
+const ALLOWED_PATCH_PATHS = /^((?:backend|expo)\/[A-Za-z0-9_.\/-]+\.ts$|(?:backend|expo)\/[A-Za-z0-9_.\/-]+\.tsx$|expo\/[A-Za-z0-9_.\/-]+\.json$|expo\/[A-Za-z0-9_.\/-]+\.gradle$|expo\/ivxholding-landing\/(?:index\.html|ivx-styles\.css|ivx-app\.js|ivx-ui-utils\.js)$)/;
 
 function assertSafePatchPath(filePath: string): void {
   if (filePath.includes('..') || filePath.startsWith('/')) {
     throw new Error(`Unsafe patch path rejected: ${filePath}`);
   }
   if (!ALLOWED_PATCH_PATHS.test(filePath)) {
-    throw new Error(`Patch path outside allowed roots: ${filePath}. Only backend/*.ts, expo/*.ts(x), expo/*.json, expo/*.gradle are permitted.`);
+    throw new Error(`Patch path outside allowed roots: ${filePath}. Only backend/*.ts, expo/*.ts(x), expo/*.json, expo/*.gradle and the four Landing UI source files are permitted.`);
   }
 }
 
@@ -1993,9 +1999,13 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     return buildCanceledProof(input, startedAt, iterations, commandsRun, null, [], '', '', [], null, llmCallCount, estimatedTokensUsed);
   }
   const projectRoot = resolveProjectRoot(input);
-  const availableFiles: string[] = [];
-  await walkInspectableFiles('backend', availableFiles, 200, projectRoot);
-  await walkInspectableFiles('expo', availableFiles, 200, projectRoot);
+  const backendFiles: string[] = [];
+  const expoFiles: string[] = [];
+  await walkInspectableFiles('backend', backendFiles, 200, projectRoot);
+  await walkInspectableFiles('expo', expoFiles, 200, projectRoot);
+  // Backend exhaustion must not erase the Expo tree, and an exact task path
+  // must remain inspectable even beyond the bounded directory sample.
+  const availableFiles = [...new Set([...explicitInspectionPaths(input.goal), ...backendFiles, ...expoFiles])];
   const targetPaths = pickInspectionTargets(input.goal, availableFiles);
   const inspectedFiles: { path: string; content: string }[] = [];
   for (const target of targetPaths) {
@@ -2434,7 +2444,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // typecheck entirely — the content-change check is the real gate. This is
     // honest: typecheckRun=false, typecheckPassed=true (neutral), and the
     // proof records that typecheck was skipped because tsc was unavailable.
-    const baselineFilePaths = parsed.operations.map((op) => op.path);
+    const baselineFilePaths = parsed.operations.filter(op => op.kind === 'replace_exact' && /\.tsx?$/.test(op.path)).map(op => op.path);
     const baselineFileArgs = baselineFilePaths.join(' ');
     let baselineTsErrorCount = 0;
     let tscAvailableForBaseline = false;
@@ -2555,7 +2565,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // Render (node+tsx, no bun) we use `npx tsc`.
     const bunResTsc = resolveRuntimeCommand('bun');
     const bunAvailTsc = !bunResTsc.usedFallback && bunResTsc.resolvedPath !== null;
-    const changedFileArgs = appliedOps.map((op) => op.path).join(' ');
+    const changedFileArgs = appliedOps.filter(op => /\.tsx?$/.test(op.path)).map(op => op.path).join(' ');
     // V6.13 FIX: npx --yes tsc downloads typescript on every run and can
     // timeout on the Render container. Use the locally-installed tsc via
     // node_modules/.bin/tsc when available. Only fall back to npx if tsc
@@ -2595,7 +2605,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     commandsRun.push(typecheckResult);
     // V6.15: Only fail typecheck if the patch INTRODUCED new errors.
     const postPatchTsErrors = countTsErrors((typecheckResult.stderrTail || '') + (typecheckResult.stdoutTail || ''));
-    typecheckPassed = typecheckResult.ok || (postPatchTsErrors <= baselineTsErrorCount);
+    typecheckPassed = typecheckResult.ok || (postPatchTsErrors > 0 && postPatchTsErrors <= baselineTsErrorCount);
     buildRun = true;
 
     // ── DETERMINISTIC CONTENT-CHANGE CHECK ──────────────────────────────
