@@ -1058,7 +1058,8 @@ export async function executeLandingUnit(unit: LandingUnit, ctx: LandingExecutio
   const bugs: LandingDefect[] = verdict.status === 'FAIL'
     ? [{ code: defectCode, severity: unit.severity, detail: truncate(verdict.detail, 300), root_cause: verdict.rootCause ?? 'unknown', remediation: truncate(verdict.remediation ?? 'investigate', 200) }]
     : [];
-  const fixes = ctx.repair && verdict.status === 'PASS' ? [`re-verified ${unit.unitId}: defect no longer reproducible`] : [];
+  // A successful recheck proves recovery, not that this read-only executor applied a code change.
+  const fixes: string[] = [];
   const evidenceLines = [...c.evidence, ...c.api.slice(0, 12), ...c.browser].map((line) => truncate(line, 200));
   const record: LandingResultRecord = {
     v: 1,

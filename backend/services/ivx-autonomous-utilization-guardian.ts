@@ -128,7 +128,7 @@ export class UtilizationReasoningGuardian {
         ownerId: 'autonomous-utilization-guardian',
         taskId: `fleet-reasoning:${incident}:${Math.floor(now / COOLDOWN_MS)}`,
         goal: [
-          '[TEMPLATE_MODE:BUG_FIX] Investigate and repair a persistent IVX fleet productivity incident.',
+          '[TEMPLATE_MODE:BUG_FIX] [AUTONOMOUS_DIAGNOSTIC_DATA] Investigate and repair a persistent IVX fleet productivity incident.',
           `Observed hypothesis class: ${diagnosis}. This is a hypothesis, not a proven root cause.`,
           `Exact measured evidence: ${JSON.stringify(sample)}`,
           ...(this.status.lastRepairOutcome ? [

@@ -268,7 +268,13 @@ export async function runLandingPatrolSession(input: {
           lostError = state.lastError;
         } else {
           task = persisted.task;
-          if (persisted.evidenceId) evidenceIds.push(persisted.evidenceId);
+          if (persisted.evidenceId) {
+            evidenceIds.push(persisted.evidenceId);
+            if (execution.record.status === 'FAIL') {
+              const { routePersistedLandingFailure } = await import('./ivx-landing-repair-router');
+              await routePersistedLandingFailure({ taskId: task.taskId, evidenceId: persisted.evidenceId, agentId: input.agentId, record: execution.record });
+            }
+          }
           state.lastError = null;
         }
       } catch (error) {

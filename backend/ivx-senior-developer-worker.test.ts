@@ -1,4 +1,6 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import * as stopGate from './services/ivx-emergency-stop-gate';
+import type { EmergencyStopStatus } from './services/ivx-emergency-stop-gate';
 import {
   IVX_SENIOR_DEV_WORKER_MARKER,
   buildSeniorDeveloperWorkerStatus,
@@ -11,9 +13,18 @@ import {
   listSeniorDeveloperJobs,
   expireStaleJobs,
   summarizeProof,
+  processNextSeniorDeveloperJob,
   type IVXWorkerJobInput,
 } from './services/ivx-senior-developer-worker';
 import type { IVXSeniorDeveloperRunProof } from './services/ivx-senior-developer-runtime';
+
+let stopState: EmergencyStopStatus;
+const stopRead = spyOn(stopGate, 'checkEmergencyStop').mockImplementation(async () => stopState);
+beforeEach(() => {
+  stopState = { active: false, reason: null, updatedBy: 'test-owner', updatedAt: null,
+    checkedAt: new Date().toISOString(), source: 'supabase', error: null };
+});
+afterAll(() => stopRead.mockRestore());
 
 function makeProof(overrides: Partial<IVXSeniorDeveloperRunProof> = {}): IVXSeniorDeveloperRunProof {
   const base = {
@@ -56,6 +67,33 @@ function makeInput(overrides: Partial<IVXWorkerJobInput> = {}): IVXWorkerJobInpu
     ...overrides,
   };
 }
+
+describe('worker owner-control enforcement', () => {
+  test('refuses enqueue when owner control is unavailable or stopped', async () => {
+    const count = (await listSeniorDeveloperJobs(200)).length;
+    stopState.source = 'unavailable';
+    await expect(enqueueOrAttachSeniorDeveloperJob(makeInput())).rejects.toThrow('EMERGENCY_STOP_UNAVAILABLE');
+    stopState.source = 'supabase'; stopState.active = true;
+    await expect(enqueueOrAttachSeniorDeveloperJob(makeInput())).rejects.toThrow('EMERGENCY_STOP_ACTIVE');
+    expect((await listSeniorDeveloperJobs(200)).length).toBe(count);
+  });
+  test('blocks an already queued job when the stop becomes unreadable before execution', async () => {
+    const previousRole = process.env.IVX_PROCESS_ROLE;
+    process.env.IVX_PROCESS_ROLE = 'api'; // Enqueue only; explicitly drive the worker below.
+    try {
+      const { job } = await enqueueOrAttachSeniorDeveloperJob(makeInput({ ownerId: 'stop-boundary' }));
+      stopState.source = 'unavailable';
+      expect(await processNextSeniorDeveloperJob()).toBeNull();
+      const blocked = await getSeniorDeveloperJob(job.jobId);
+      expect(blocked?.status).toBe('blocked');
+      expect(blocked?.error).toContain('EMERGENCY_STOP_UNAVAILABLE');
+      expect(blocked?.result).toBeNull();
+    } finally {
+      if (previousRole === undefined) delete process.env.IVX_PROCESS_ROLE;
+      else process.env.IVX_PROCESS_ROLE = previousRole;
+    }
+  });
+});
 
 describe('summarizeProof', () => {
   test('maps a successful end-to-end proof to a COMPLETE secret-safe result', () => {
@@ -113,6 +151,18 @@ describe('summarizeProof', () => {
 // ─── HTTP 409 FIX: Per-Owner Single-Flight Queue Tests ──────────────────────
 
 describe('per-owner single-flight queue', () => {
+  test('canonical task IDs distinguish units and preserve retries with new diagnostics', async () => {
+    const input = makeInput({ ownerId: 'canonical-task-owner', taskId: 'unit-a', goal: 'Repair observed failure' });
+    const first = await enqueueOrAttachSeniorDeveloperJob(input);
+    const retry = await enqueueOrAttachSeniorDeveloperJob({ ...input, goal: 'New failure details after a later observation' });
+    expect(retry.job.jobId).toBe(first.job.jobId);
+    expect(retry.attached).toBe(true);
+    const other = await enqueueOrAttachSeniorDeveloperJob({ ...input, taskId: 'unit-b' });
+    expect(other.job.jobId).not.toBe(first.job.jobId);
+    expect(other.attached).toBe(false);
+    expect(other.job.idempotencyKey).not.toBe(first.job.idempotencyKey);
+  });
+
   test('rejects a job without verified owner approval', async () => {
     await expect(
       enqueueOrAttachSeniorDeveloperJob(makeInput({ ownerApproved: false })),
