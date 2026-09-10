@@ -44,7 +44,7 @@
         savedAt: Date.now()
       };
       window.localStorage.setItem(PENDING_KEY, JSON.stringify(safe));
-    } catch (e) { /* localStorage may be unavailable in private mode */ }
+    } catch (e) { console.error('[IVX Invest] Error saving pending form:', e); }
   }
   function loadPendingForm() {
     try {
