@@ -226,6 +226,8 @@ export type Task = {
   createdAt: string;
   updatedAt: string;
   startedAt: string | null;
+  /** Fresh lease start, independent of the task's first historical attempt. */
+  attemptStartedAt?: string | null;
   completedAt: string | null;
   traceId: string | null;
 };

@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from 'bun:test';
 import type { Task } from './ivx-autonomous-task-engine';
-import { supersededLandingReplacement, reconcileRetryableBlockedTasks } from './ivx-autonomous-blocked-reconciler';
+import { hasFreshTaskAttempt, supersededLandingReplacement, reconcileRetryableBlockedTasks } from './ivx-autonomous-blocked-reconciler';
 import * as backlog from './ivx-landing-p0-backlog';
 import * as store from './ivx-postgres-autonomous-task-store';
 import * as stop from './ivx-emergency-stop-gate';
@@ -11,6 +11,14 @@ const old = { taskId: 'old', idempotencyKey: `landing-p0:${oldSha}:registration.
 } as Task;
 const current = { ...old, taskId: 'replacement', idempotencyKey: `landing-p0:${sha}:registration.duplicate-email`, createdAt: '2026-09-10T00:00:00Z', state: 'FAILED' } as Task;
 const now = Date.parse('2026-09-10T01:00:00Z');
+
+test('a newly leased retry gets its own grace period without changing historical work time', () => {
+  const task = { startedAt: new Date(now - 3_600_000).toISOString(), attemptStartedAt: new Date(now - 30_000).toISOString() };
+  expect(hasFreshTaskAttempt(task, now, 300_000)).toBe(true);
+  expect(task.startedAt).toBe('2026-09-10T00:00:00.000Z');
+  expect(hasFreshTaskAttempt({ ...task, attemptStartedAt: new Date(now - 300_000).toISOString() }, now, 300_000)).toBe(false);
+  expect(hasFreshTaskAttempt({ ...task, attemptStartedAt: new Date(now + 1).toISOString() }, now, 300_000)).toBe(false);
+});
 
 test('old configuration failures hand off to an existing newer QA task without certifying either', () => {
   expect(supersededLandingReplacement(old, [current], sha, now)?.taskId).toBe('replacement');

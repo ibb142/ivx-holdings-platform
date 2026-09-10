@@ -147,4 +147,3 @@ revoke execute on function public.ivx_work_evidence_hours(timestamptz,timestampt
 grant execute on function public.ivx_work_evidence_measurement(jsonb) to service_role;
 grant execute on function public.ivx_work_evidence_hours(timestamptz,timestamptz,numeric) to service_role;
 notify pgrst, 'reload schema';
-
