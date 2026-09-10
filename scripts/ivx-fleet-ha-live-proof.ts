@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { writeFile, mkdir } from 'node:fs/promises';
-import { processIdentityMatchesObservedInstance } from './ivx-fleet-ha-identities';
+import { processIdentityMatchesObservedInstance, sharedProcessesCoverObservedInstances } from './ivx-fleet-ha-identities';
 
 const base = process.env.API_BASE;
 const sha = process.env.IVX_TARGET_SHA || process.env.GITHUB_SHA || '';
@@ -102,14 +102,15 @@ function workerProcessIds(value: any): Set<string> {
   const rows = value?.worker?.instances ?? value?.workerInstances ?? [];
   return new Set(rows.map((entry: any) => entry.instanceId));
 }
-async function requiredSharedTopology(physical: any) {
-  const value = await topology();
+function sharedTopologyCoversPhysical(value: any, physical: any): boolean {
+  return sharedTwoByTwo(value)
+    && sharedProcessesCoverObservedInstances(value.apiInstances.map((instance: any) => instance.instanceId), apiProcessIds(physical))
+    && sharedProcessesCoverObservedInstances(value.workerInstances.map((instance: any) => instance.instanceId), workerProcessIds(physical));
+}
+function verifiedSharedTopology(value: any, physical: any) {
   assert.equal(value.ready, true, 'Shared process observation is not ready');
   assert.equal(value.apiInstances.length, 2); assert.equal(value.workerInstances.length, 2);
-  assert(value.apiInstances.every((instance: any) => processIdentityMatchesObservedInstance(instance.instanceId, apiProcessIds(physical))), 'Shared API identities differ from Render');
-  assert(value.workerInstances.every((instance: any) => processIdentityMatchesObservedInstance(instance.instanceId, workerProcessIds(physical))), 'Shared worker identities differ from Render');
-  assert([...apiProcessIds(physical)].every(id => value.apiInstances.some((instance: any) => processIdentityMatchesObservedInstance(instance.instanceId, new Set([id])))), 'A Render API instance is missing shared evidence');
-  assert([...workerProcessIds(physical)].every(id => value.workerInstances.some((instance: any) => processIdentityMatchesObservedInstance(instance.instanceId, new Set([id])))), 'A Render worker instance is missing shared evidence');
+  assert(sharedTopologyCoversPhysical(value, physical), 'Shared process identities must cover exactly the current Render instances');
   return { status: 'PASS', topology: value };
 }
 // When a CI Render key is present, query Render's physical instances endpoint
@@ -133,7 +134,7 @@ for (let i = 0; i < 72; i++) {
   await sleep(5000);
 }
 assert(before, 'Two distinct, current processes per role did not become observable');
-const sharedBefore = renderKey ? await requiredSharedTopology(before) : { status: 'PASS', topology: before };
+const sharedBefore = renderKey ? verifiedSharedTopology(await topology(), before) : { status: 'PASS', topology: before };
 const proof: Record<string, unknown> = {
   sourceSha: sha,
   exactDeploys,
@@ -157,6 +158,8 @@ if (process.env.IVX_HA_RESTART_WORKER === 'true') {
   const apiIds = apiProcessIds(before);
   await action('render_restart_service', workerService);
   const health: unknown[] = []; let after: any; let recoveryProbe = -1;
+  let sharedAfter: ReturnType<typeof verifiedSharedTopology> | null = null;
+  const sharedConvergence: unknown[] = [];
   for (let i = 0; i < 90; i++) {
     const start = Date.now();
     const response = await fetch(base + '/health', { redirect: 'error', signal: AbortSignal.timeout(5000), headers: { Connection: 'close' } });
@@ -173,16 +176,32 @@ if (process.env.IVX_HA_RESTART_WORKER === 'true') {
     if (ready && currentWorkers.size === 2 && [...currentWorkers].every(id => !oldWorkers.has(id))) {
       after = current;
       if (recoveryProbe < 0) recoveryProbe = i;
+    } else {
+      after = null;
+      recoveryProbe = -1;
     }
-    if (after && i - recoveryProbe >= 20) break;
+    if (after && i - recoveryProbe >= 20) {
+      // A replaced worker can leave a recent heartbeat during graceful drain.
+      // Keep probing API availability until only the two replacements remain.
+      const candidate = renderKey ? await topology() : after;
+      const complete = sharedTopologyCoversPhysical(candidate, after);
+      const observation = { measuredAt: candidate.measuredAt, apiCount: candidate.apiInstances.length,
+        workerCount: candidate.workerInstances.length, identitiesMatch: complete };
+      sharedConvergence.push(observation);
+      Object.assign(proof, { health, sharedConvergence });
+      await writeFile('qa/evidence/fleet-ha/live.json', JSON.stringify(proof, null, 2));
+      console.log(JSON.stringify({ phase: 'shared-worker-drain', ...observation }));
+      if (complete) { sharedAfter = verifiedSharedTopology(candidate, after); break; }
+    }
     await sleep(3000);
   }
   assert(after && recoveryProbe >= 0, 'Two replacement worker processes did not recover after restart');
-  const sharedAfter = renderKey ? await requiredSharedTopology(after) : { status: 'PASS', topology: after };
+  assert(sharedAfter, 'Shared state did not converge to exactly the replacement processes during the bounded recovery window');
   Object.assign(proof, {
     after,
     sharedStateObservationAfterRestart: sharedAfter,
     health,
+    sharedConvergence,
     rollingWorkerRestart: true,
     workerProcessReplacement: 'PASS',
     apiAvailabilityDuringRestart: 'PASS',
