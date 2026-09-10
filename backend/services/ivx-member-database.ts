@@ -6,6 +6,7 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { runAbortableAuthAttempt } from './ivx-auth-attempt';
 import { randomUUID, scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -574,7 +575,7 @@ export interface MemberLoginResult {
 }
 
 /** Create a Supabase client using the anon key (required for signInWithPassword to return a real session). */
-function getSupabaseAnonClient(): SupabaseClient {
+function getSupabaseAnonClient(signal?: AbortSignal): SupabaseClient {
   const url = resolveSupabaseUrl();
   const anonKey = resolveSupabaseAnonKey();
   if (!url || !anonKey) {
@@ -582,6 +583,29 @@ function getSupabaseAnonClient(): SupabaseClient {
   }
   return createClient(url, anonKey, {
     auth: { persistSession: false, autoRefreshToken: false },
+    ...(signal ? { global: { fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+      const requestId = randomUUID();
+      const started = performance.now();
+      console.info('[MemberDB:AuthTransport]', { requestId, stage: 'start' });
+      try {
+        const response = await fetch(input, {
+          ...init,
+          signal: init?.signal ? AbortSignal.any([signal, init.signal]) : signal,
+        });
+        console.info('[MemberDB:AuthTransport]', {
+          requestId, stage: 'response', status: response.status,
+          elapsedMs: Math.round(performance.now() - started),
+        });
+        return response;
+      } catch (error) {
+        // Do not log request bodies, headers, URLs, credentials or raw errors.
+        console.warn('[MemberDB:AuthTransport]', {
+          requestId, stage: signal.aborted ? 'aborted' : 'transport_error',
+          elapsedMs: Math.round(performance.now() - started),
+        });
+        throw error;
+      }
+    } } } : {}),
   });
 }
 
@@ -683,26 +707,15 @@ export async function loginMember(email: string, password: string): Promise<Memb
   //
   //    Upstream cold starts are also transient, so one retry is attempted before giving up.
   try {
-    const anonClient = getSupabaseAnonClient();
-    const signInOnce = async (): Promise<Awaited<ReturnType<typeof anonClient.auth.signInWithPassword>>> => {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error(SIGN_IN_TIMEOUT_SENTINEL)),
-          MEMBER_LOGIN_INNER_BUDGET_MS,
-        );
-      });
-      try {
-        return await Promise.race([
-          anonClient.auth.signInWithPassword({ email: normalizedEmail, password }),
-          timeoutPromise,
-        ]);
-      } finally {
-        if (timer) clearTimeout(timer);
-      }
-    };
+    // Each attempt owns its transport and client. An expired request is aborted
+    // before retrying and cannot mutate the next attempt's session state.
+    const signInOnce = () => runAbortableAuthAttempt(
+      (signal) => getSupabaseAnonClient(signal).auth.signInWithPassword({ email: normalizedEmail, password }),
+      MEMBER_LOGIN_INNER_BUDGET_MS,
+      SIGN_IN_TIMEOUT_SENTINEL,
+    );
 
-    let raced: Awaited<ReturnType<typeof anonClient.auth.signInWithPassword>>;
+    let raced: Awaited<ReturnType<typeof signInOnce>>;
     try {
       raced = await signInOnce();
     } catch (firstErr) {
