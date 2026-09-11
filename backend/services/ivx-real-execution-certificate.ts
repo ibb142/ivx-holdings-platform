@@ -63,7 +63,7 @@ export const WAR_ROOM_POLICY = {
 } as const;
 
 function commitSha(): string | null {
-  return (process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT_SHA || process.env.SOURCE_VERSION || '').trim() || null;
+  return (process.env.SOURCE_VERSION || process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT_SHA || '').trim() || null;
 }
 
 // ── Run progress (in-memory mirror; durable state is in Supabase) ────────────
