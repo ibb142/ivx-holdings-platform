@@ -53,7 +53,7 @@ test('fixed-target TLS probe is read-only, bounded and always closes',async()=>{
   }});
   assert.equal(r.ok,true);assert.equal(r.certified,false);assert.equal(ended,1);
   assert.match(queries[0],/^BEGIN READ ONLY/);assert.equal(queries.at(-1),'ROLLBACK');
-  assert.equal(queries.length,4);assert.ok(queries.slice(1,-1).every(q=>q.trim().startsWith('select ')));
+  assert.equal(queries.length,5);assert.ok(queries.slice(1,-1).every(q=>q.trim().startsWith('select ')));
   assert.equal(JSON.stringify(r).includes('synthetic-secret'),false);
 });
 test('lost connection response is redacted and never retries another credential',async()=>{
@@ -76,4 +76,17 @@ test('an unverified read-only state cannot pass the diagnostic',async()=>{
   const r=await auditPostgres({env,makeClient:()=>({on:()=>{},connect:async()=>{},end:async()=>{},
     query:async sql=>({rows:sql===SNAPSHOT?[{read_only:'off'}]:[]})})});
   assert.equal(r.ok,false);assert.equal(r.certified,false);
+});
+
+test('query statistics only interpolate an allowlisted catalog schema and never return SQL text',async()=>{
+  for (const schema of ['extensions','foreign_schema; select secret']) {
+    const queries=[];
+    const r=await auditPostgres({env,makeClient:()=>({on:()=>{},connect:async()=>{},end:async()=>{},query:async sql=>{
+      queries.push(sql);return {rows:sql===SNAPSHOT?[{read_only:'on',statement_statistics_schema:schema}]:[]};
+    }})});
+    assert.equal(r.ok,true);
+    assert.equal(queries.some(q=>q.includes('from extensions.pg_stat_statements')),schema==='extensions');
+    assert.equal(queries.some(q=>q.includes('foreign_schema')),false);
+    assert.equal(queries.some(q=>/select\s+query\s*[,\s]/i.test(q)),false);
+  }
 });

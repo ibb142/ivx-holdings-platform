@@ -42,6 +42,7 @@ export async function readRuntimeConnection(env,fetchImpl=fetch) {
 export const SNAPSHOT = `select clock_timestamp() as observed_at,
   current_setting('transaction_read_only') as read_only,
   current_setting('max_connections')::integer as max_connections,
+  (select n.nspname from pg_extension e join pg_namespace n on n.oid=e.extnamespace where e.extname='pg_stat_statements') as statement_statistics_schema,
   (select count(*)::integer from pg_stat_activity where backend_type='client backend') as client_connections,
   (select count(*)::integer from pg_locks where not granted) as waiting_locks,
   (select json_agg(s) from (select backend_type,state,wait_event_type,wait_event,count(*)::integer as connections,
@@ -101,13 +102,39 @@ export async function auditPostgres({ env=process.env, makeClient=config=>new pg
     report.connectionMs=Math.round(elapsed()-began);
     await bounded(client.query("BEGIN READ ONLY; SET LOCAL statement_timeout='5s'; SET LOCAL lock_timeout='1s'; SET LOCAL idle_in_transaction_session_timeout='10s';"),7000);
     transaction=true;
-    for (const [name,query] of [['metadata',SNAPSHOT],['queueCounts',
-      'select state,count(*)::integer as tasks from public.ivx_autonomous_tasks group by state order by state;']]) {
+    const measurements=[['metadata',SNAPSHOT],['activeQueries',`select pid,application_name,
+      state,wait_event_type,wait_event,extract(epoch from clock_timestamp()-query_start) as query_age_seconds,
+      pg_blocking_pids(pid) as blocking_pids,
+      case when query ilike '%ivx_autonomous_tasks_claim_batch%' then 'claim_batch'
+        when query ilike '%ivx_autonomous_task_events%' then 'task_events'
+        when query ilike '%ivx_autonomous_tasks%' then 'autonomous_tasks'
+        when query ilike '%ivx_durable_documents%' then 'durable_documents'
+        when query ilike '%pg_namespace%' or query ilike '%pg_proc%' then 'schema_catalog'
+        when query ilike '%jv_deals%' then 'jv_deals' else 'other' end as query_family
+      from pg_stat_activity where pid<>pg_backend_pid() and state='active'
+      order by query_start asc limit 25;`],['queueEstimate',
+      "select reltuples::bigint as estimated_rows, pg_relation_size(oid) as heap_bytes, pg_total_relation_size(oid) as total_bytes from pg_class where oid=to_regclass('public.ivx_autonomous_tasks');"]];
+    for (let index=0;index<measurements.length;index++) {
+      const [name,query]=measurements[index];
       const start=elapsed();const result=await bounded(client.query(query),7000);
       if (!Array.isArray(result.rows) || (name==='metadata' && (result.rows.length!==1 || result.rows[0].read_only!=='on'))) {
         throw Error('Unexpected diagnostic shape');
       }
       report.measurements.push({name,at:now(),elapsedMs:Math.round(elapsed()-start),rows:result.rows});
+      if (name==='metadata') {
+        const schema=result.rows[0].statement_statistics_schema;
+        if (schema==='public' || schema==='extensions') measurements.push(['queryStatistics',`select queryid::text,calls,
+          round(total_exec_time::numeric,2) as total_exec_ms,round(mean_exec_time::numeric,2) as mean_exec_ms,
+          round(max_exec_time::numeric,2) as max_exec_ms,rows,shared_blks_hit,shared_blks_read,temp_blks_written,
+          case when query ilike '%ivx_autonomous_tasks_claim_batch%' then 'claim_batch'
+            when query ilike '%ivx_autonomous_task_events%' then 'task_events'
+            when query ilike '%ivx_autonomous_tasks%' then 'autonomous_tasks'
+            when query ilike '%ivx_durable_documents%' then 'durable_documents'
+            when query ilike '%pg_namespace%' or query ilike '%pg_proc%' then 'schema_catalog'
+            when query ilike '%jv_deals%' then 'jv_deals' else 'other' end as query_family
+          from ${schema}.pg_stat_statements where calls>0 order by total_exec_time desc limit 15;`]);
+        else report.queryStatisticsUnavailable=true;
+      }
     }
     report.ok=true;
   } catch (error) { report.error=probeFailure(error); }
