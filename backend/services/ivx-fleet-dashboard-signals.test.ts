@@ -23,7 +23,7 @@ function runningTask(): Task {
 describe('shared fleet observation', () => {
   test('heartbeat only and eight pending assignments yield zero running/productive agents', () => {
     const result = buildFleetDashboardSignals(observation(), sha, now);
-    expect(result.counts).toEqual({ heartbeat: 1, assigned: 1, running: 0, productive: 0 });
+    expect(result.counts).toEqual({ heartbeat: 1, assigned: 1, running: 0, productive: 0, observed: null });
     expect(result.agents).toHaveLength(112);
     expect(result.agents[0].assignedTasks).toBe(0);
     expect(result.agents[1].heartbeatFresh).toBe(false);
