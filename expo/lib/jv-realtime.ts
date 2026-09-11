@@ -42,6 +42,8 @@ let _broadcastListenerCount = 0;
 let _tableVerified = false;
 let _tableVerifyTimestamp = 0;
 const TABLE_VERIFY_TTL = 60000;
+// Postgres subscription topics are client-local labels, unlike the broadcast topic.
+let postgresChannelSequence = 0;
 
 
 
@@ -164,7 +166,6 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
   const retryCountRef = useRef<number>(0);
   const realtimeConnectedRef = useRef<boolean>(false);
   const auditConnectedRef = useRef<boolean>(false);
-  const destroyedRef = useRef<boolean>(false);
   const tableCheckDoneRef = useRef<boolean>(false);
   const maxRetries = 15;
   const [status, setStatus] = useState<RealtimeStatus>('offline');
@@ -174,11 +175,34 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
   const _pollSyncRef = useRef<number>(0);
 
   useEffect(() => {
-    destroyedRef.current = false;
+    // An effect-local lifetime cannot be revived by Strict Mode replay.
+    let disposed = false;
+    let connecting = false;
+    const reconnectTimers = new Set<ReturnType<typeof setTimeout>>();
+    const scheduleReconnect = (callback: () => void, delay: number) => {
+      const timer = setTimeout(() => {
+        reconnectTimers.delete(timer);
+        if (!disposed) callback();
+      }, delay);
+      reconnectTimers.add(timer);
+    };
     tableCheckDoneRef.current = false;
+    realtimeConnectedRef.current = false;
 
     async function connectChannel() {
-      if (destroyedRef.current) return;
+      if (disposed || connecting) return;
+      connecting = true;
+      for (const timer of reconnectTimers) clearTimeout(timer);
+      reconnectTimers.clear();
+      try {
+        await connectChannelOnce();
+      } finally {
+        connecting = false;
+      }
+    }
+
+    async function connectChannelOnce() {
+      if (disposed) return;
 
       if (!isSupabaseConfigured()) {
         console.log(`[JV-Realtime:${channelName}] Supabase not configured — using polling only, no realtime connection attempted`);
@@ -189,12 +213,13 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
 
       if (!tableCheckDoneRef.current) {
         const exists = await verifyTableExists();
+        if (disposed) return;
         tableCheckDoneRef.current = true;
         if (!exists) {
           console.log(`[JV-Realtime:${channelName}] Table not found — fallback polling + re-check in 20s`);
           resetFallbackPolling(FALLBACK_POLL_INTERVAL);
-          setTimeout(() => {
-            if (!destroyedRef.current) {
+          scheduleReconnect(() => {
+            if (!disposed) {
               tableCheckDoneRef.current = false;
               void connectChannel();
             }
@@ -205,13 +230,16 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
 
       try {
         if (channelRef.current) {
-          try { void supabase.removeChannel(channelRef.current); } catch {}
+          const previous = channelRef.current;
           channelRef.current = null;
+          try { void supabase.removeChannel(previous).catch(() => {}); } catch {}
         }
-
+        // removeChannel is asynchronous; a stable topic may still resolve to the
+        // subscribed predecessor, or to another mounted screen's subscription.
         const channel = supabase
-          .channel(channelName)
+          .channel(`${channelName}:${++postgresChannelSequence}`)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'jv_deals' }, (payload) => {
+            if (disposed || channelRef.current !== channel) return;
             const newRecord = payload.new as Record<string, unknown> | undefined;
             const oldRecord = payload.old as Record<string, unknown> | undefined;
             console.log(`[JV-Realtime:${channelName}] Change detected:`, payload.eventType, '| new:', newRecord?.id, '| old:', oldRecord?.id);
@@ -224,11 +252,14 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
               console.log(`[JV-Realtime:${channelName}] Published deal changed — triggering IMMEDIATE landing sync`);
               triggerLandingSync(true);
             }
-          })
-          .subscribe((subscriptionStatus) => {
-            if (destroyedRef.current) return;
+          });
+        channelRef.current = channel;
+        channel.subscribe((subscriptionStatus) => {
+            if (disposed || channelRef.current !== channel) return;
             console.log(`[JV-Realtime:${channelName}] Status:`, subscriptionStatus);
             if (subscriptionStatus === 'SUBSCRIBED') {
+              for (const timer of reconnectTimers) clearTimeout(timer);
+              reconnectTimers.clear();
               realtimeConnectedRef.current = true;
               retryCountRef.current = 0;
               setStatus('live');
@@ -243,7 +274,7 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
                 retryCountRef.current++;
                 const delay = Math.min(2000 * Math.pow(1.3, retryCountRef.current), 5000);
                 console.log(`[JV-Realtime:${channelName}] Will retry realtime in ${Math.round(delay)}ms`);
-                setTimeout(() => { if (!destroyedRef.current) void connectChannel(); }, delay);
+                scheduleReconnect(() => { void connectChannel(); }, delay);
               } else {
                 console.log(`[JV-Realtime:${channelName}] Max retries reached — relying on fallback polling only`);
               }
@@ -254,12 +285,10 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
               resetFallbackPolling(FALLBACK_POLL_INTERVAL);
               if (retryCountRef.current < maxRetries) {
                 retryCountRef.current++;
-                setTimeout(() => { if (!destroyedRef.current) void connectChannel(); }, 5000);
+                scheduleReconnect(() => { void connectChannel(); }, 5000);
               }
             }
           });
-
-        channelRef.current = channel;
 
         connectAuditChannel();
       } catch (e) {
@@ -269,7 +298,7 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
     }
 
     function connectAuditChannel() {
-      if (destroyedRef.current || !isSupabaseConfigured()) return;
+      if (disposed || !isSupabaseConfigured()) return;
 
       try {
         if (auditChannelRef.current) {
@@ -278,7 +307,7 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
         }
 
         const auditChannel = supabase
-          .channel('realtime-audit-listener')
+          .channel(`realtime-audit-listener:${++postgresChannelSequence}`)
           .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'realtime_audit' }, (payload) => {
             const row = payload.new as Record<string, unknown> | undefined;
             const auditTable = typeof row?.event_table === 'string' ? row.event_table : 'unknown';
@@ -287,7 +316,7 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
             handleAuditEvent(row);
           })
           .subscribe((auditStatus) => {
-            if (destroyedRef.current) return;
+            if (disposed) return;
             console.log(`[JV-Audit] postgres_changes audit channel status: ${auditStatus}`);
             if (auditStatus === 'SUBSCRIBED') {
               auditConnectedRef.current = true;
@@ -323,7 +352,7 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
             handleAuditEvent(row);
           })
           .subscribe((bcastStatus) => {
-            if (destroyedRef.current) return;
+            if (disposed) return;
             console.log(`[JV-Audit] Broadcast audit channel status: ${bcastStatus}`);
             if (bcastStatus === 'SUBSCRIBED') {
               console.log('[JV-Audit] Broadcast audit channel connected — listening on realtime_audit:public');
@@ -339,7 +368,7 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
     }
 
     function handleAuditEvent(row: Record<string, unknown> | undefined) {
-      if (!row) return;
+      if (disposed || !row) return;
       setLastEventAt(Date.now());
 
       if (row?.event_table === 'jv_deals') {
@@ -356,14 +385,14 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
     }
 
     function resetFallbackPolling(interval: number) {
-      if (destroyedRef.current) return;
+      if (disposed) return;
       if (fallbackIntervalRef.current) {
         clearInterval(fallbackIntervalRef.current);
         fallbackIntervalRef.current = null;
       }
       if (!enableFallbackPolling) return;
       fallbackIntervalRef.current = setInterval(() => {
-        if (!destroyedRef.current) {
+        if (!disposed) {
           _pollSyncRef.current++;
           if (_pollSyncRef.current % 2 === 0) {
             console.log(`[JV-Realtime:${channelName}] Poll tick #${_pollSyncRef.current} — soft invalidate (active queries only)`);
@@ -385,7 +414,7 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
 
     const bc = getBroadcastChannel();
     const crossTabHandler = (event: MessageEvent) => {
-      if (destroyedRef.current) return;
+      if (disposed) return;
       if (event.data?.type === 'jv-invalidate') {
         console.log(`[JV-CrossTab:${channelName}] Received cross-tab invalidation: ${event.data.action}`);
         invalidateAllJVQueries(queryClient, false);
@@ -402,7 +431,7 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
 
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       visibilityHandler = () => {
-        if (!document.hidden && !destroyedRef.current) {
+        if (!document.hidden && !disposed) {
           console.log(`[JV-Realtime:${channelName}] Tab visible — force refetch + reconnect`);
           void queryClient.invalidateQueries({ queryKey: [PUBLISHED_QUERY_KEY], refetchType: 'active' });
           void queryClient.invalidateQueries({ queryKey: [JV_QUERY_KEY_PREFIX], refetchType: 'active' });
@@ -416,7 +445,7 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
       document.addEventListener('visibilitychange', visibilityHandler);
     } else {
       appStateSubscription = AppState.addEventListener('change', (state: AppStateStatus) => {
-        if (state === 'active' && !destroyedRef.current) {
+        if (state === 'active' && !disposed) {
           console.log(`[JV-Realtime:${channelName}] App foregrounded — force refetch + reconnect`);
           invalidateAllJVQueries(queryClient, false);
           retryCountRef.current = 0;
@@ -427,7 +456,7 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
           } else {
             console.log(`[JV-Realtime:${channelName}] Realtime still connected — force refetch only`);
             setTimeout(() => {
-              if (!destroyedRef.current) {
+              if (!disposed) {
                 void queryClient.invalidateQueries({ queryKey: [PUBLISHED_QUERY_KEY], refetchType: 'active' });
               }
             }, 500);
@@ -437,7 +466,10 @@ export function useJVRealtime(channelName: string = 'jv-deals-sync', enableFallb
     }
 
     return () => {
-      destroyedRef.current = true;
+      disposed = true;
+      for (const timer of reconnectTimers) clearTimeout(timer);
+      reconnectTimers.clear();
+      realtimeConnectedRef.current = false;
       if (bc) {
         bc.removeEventListener('message', crossTabHandler);
         _broadcastListenerCount--;
