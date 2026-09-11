@@ -24,6 +24,40 @@ try {
   const claim = async (client, id) => (await client.query('select public.ivx_autonomous_tasks_claim_batch($1::jsonb,$2,60) as value', [request, id])).rows[0].value[0];
   await a.query(await readFile(new URL('../supabase/migrations/20260909141222_ivx_nonblocking_worker_claims.sql', import.meta.url), 'utf8'));
   await a.query(await readFile(new URL('../supabase/migrations/20260910174741_ivx_fleet_attempt_clock.sql', import.meta.url), 'utf8'));
+  // Empty polling must be read-only while actual recovery keeps its audit trail.
+  const countClaims = async () => (await a.query("select count(*)::int n from public.ivx_autonomous_task_events where event_type='tasks_claimed_batch'")).rows[0].n;
+  const emptyRequest = JSON.stringify([{ workerId: 'agent:idle-proof', agentNumber: 112 }]);
+  const emptyClaim = async client => (await client.query('select public.ivx_autonomous_tasks_claim_batch($1::jsonb,$2,60) value', [emptyRequest, 'idle-proof'])).rows[0].value[0];
+  const oldCount = await countClaims();
+  assert.equal((await emptyClaim(a)).task, null);
+  assert.equal(await countClaims(), oldCount + 1, 'baseline reproduces an empty claim write');
+  const permissions = async () => (await a.query("select prosecdef,proconfig,proacl::text from pg_proc where oid='public.ivx_autonomous_tasks_claim_batch(jsonb,text,integer)'::regprocedure")).rows[0];
+  const originalPermissions = await permissions();
+  await a.query(await readFile(new URL('../supabase/migrations/20260911120700_ivx_empty_claim_pressure.sql', import.meta.url), 'utf8'));
+  assert.deepEqual(await permissions(), originalPermissions, 'function security and caller privileges are preserved');
+  const newCount = await countClaims();
+  for (let i = 0; i < 10; i++) {
+    const idle = await Promise.all([emptyClaim(a), emptyClaim(b)]);
+    assert(idle.every(row => row.ok && row.task === null));
+  }
+  assert.equal(await countClaims(), newCount, 'twenty empty claims from two connections perform zero event writes');
+  await a.query('begin');
+  try {
+    const checkpoint = { phase: 'QA_IN_PROGRESS', commitSha: 'c'.repeat(40), steps: ['saved', 'tested'] };
+    await a.query('select public.ivx_autonomous_tasks_create_batch($1::jsonb)', [JSON.stringify([
+      { taskId: 'idle-expired', idempotencyKey: 'idle-expired', assignedAgentNumber: 111, state: 'QUEUED', dependencies: [], checkpoint },
+      { taskId: 'idle-retry', idempotencyKey: 'idle-retry', assignedAgentNumber: 110, state: 'QUEUED', dependencies: [], checkpoint },
+    ])]);
+    await a.query("update public.ivx_autonomous_tasks set state='LEASED',lease_expires_at=now()-interval '1 second',payload=payload||'{\"state\":\"LEASED\"}'::jsonb where task_id='idle-expired'");
+    await a.query("update public.ivx_autonomous_tasks set state='RETRYING',payload=payload||jsonb_build_object('state','RETRYING','retryStartedAt',(now()-interval '1 minute')::text,'retryNotBefore',(now()-interval '1 second')::text) where task_id='idle-retry'");
+    const beforeRecovery = await countClaims();
+    await a.query("select public.ivx_autonomous_tasks_claim_batch('[]'::jsonb,'idle-maintenance-proof',60)");
+    assert.equal(await countClaims(), beforeRecovery + 1, 'maintenance without a new lease retains a durable audit event');
+    const recoveredRows = (await a.query("select state,payload->'checkpoint' checkpoint from public.ivx_autonomous_tasks where task_id in ('idle-expired','idle-retry') order by task_id")).rows;
+    assert.deepEqual(recoveredRows, [{ state: 'QUEUED', checkpoint }, { state: 'QUEUED', checkpoint }]);
+    const event = (await a.query("select event from public.ivx_autonomous_task_events where worker_instance_id='idle-maintenance-proof' order by event_id desc limit 1")).rows[0].event;
+    assert.equal(event.leased, 0); assert.equal(event.recovered, 1); assert.equal(event.retried, 1);
+  } finally { await a.query('rollback'); }
   // A live competing transaction retains its lock throughout this request.
   // The loser must return promptly without taking work or weakening fencing.
   await a.query('begin');
@@ -105,6 +139,7 @@ try {
   const taskRecovery = await proveInterruptedTaskRecovery(a, b);
   assert.equal(taskRecovery.verification, 'PASS');
   console.log(JSON.stringify({ ok: true, database: 'isolated PostgreSQL', connections: 2, concurrentClaimWinners: 1,
+    emptyClaimBaselineWrites: 1, correctedEmptyClaims: 20, correctedEmptyEventWrites: 0, maintenanceAuditedWithCheckpoints: true,
     interruptedTaskRecovery: taskRecovery.verification,
     sharedRoomHistory: true, privateRoomStorage: true, roleObservation: true, parallelEnqueuesPreserved: true, atomicSeniorClaims: true, missingWorkerIdentityRejected: true, terminalResurrectionRejected: true, crossReplicaOwnerSingleFlight: true, concurrentProofsPreserved: true, wrongProcessStartRejected: true, wrongProcessHeartbeatRejected: true, staleCompletionRejected: true,
     expiredLeaseCannotResurrect: true, survivorRefilled: true, lateShutdownFenced: true, privateObservation: true, productionRowsTouched: 0 }));
