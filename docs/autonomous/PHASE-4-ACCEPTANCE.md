@@ -144,3 +144,18 @@ The owner composer now takes a synchronous guard shared by Send, Ask AI, attachm
 The direct `/api/ivx/owner-ai/stream` route now uses the same owner/message admission store. A stable requestId is required. Deltas remain progressive, but `done` is delivered only after the response receipt is durable. Reconnection replays that result without a second provider call. `receiptPersisted` is separate from `assistantPersisted`: this direct route does not claim to insert conversation messages. Known authentication outage status is preserved as 503 rather than mislabeled 403. Ten endpoint tests cover admission, replay, real-time fixture deltas, persistence failure, disconnect, ownership and provider errors. They use a simulated provider and storage adapter; live owner/provider acceptance remains required.
 
 A missing network response does not establish that nothing executed. Recovery notices preserve that uncertainty and direct the owner to the original request instead of asserting that a retry cannot duplicate work.
+
+### Attribute an unavailable dependency before claiming provider failure
+
+The real owner Android run for `e957148` reached Home, Dashboard and Autonomous,
+then failed in Chat. Render traces at 2026-09-11 02:56:33/37 UTC identify
+`loadIVXOwnerProfile` and `AUTH_SERVICE_UNAVAILABLE` before model execution.
+The incident classifier previously labeled every otherwise-unidentified 502/503
+as `provider_transient`. Explicit owner-auth and database failures now retain
+their subsystem, while a bare HTTP status remains `unknown`.
+
+The regression includes the observed auth payload, auth-provider timeout
+wording, database pressure/read timeout, unknown 502/503 and explicit model,
+gateway and deadline failures. This changes diagnosis only. It does not bypass
+owner verification, change retries or timeouts, or repair the underlying profile
+lookup availability. The production E2E and continuity requirements still apply.

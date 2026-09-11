@@ -9,7 +9,39 @@ import {
   IVX_SUPABASE_QUEUE_RESILIENCE_MARKER,
   SUPABASE_FAILURE_THRESHOLD,
   SUPABASE_BACKOFF_MS,
+  classify503Source,
 } from './ivx-owner-ai-task-queue';
+
+describe('owner AI incident attribution', () => {
+  test('attributes the observed owner-profile outage to authentication', () => {
+    expect(classify503Source({ httpStatus: 503, message: JSON.stringify({
+      error: 'IVX owner verification is temporarily unavailable. Please retry.',
+      code: 'AUTH_SERVICE_UNAVAILABLE', retryable: true,
+    }) })).toBe('authentication_unavailable');
+  });
+
+  test('keeps an explicit auth outage separate from generic provider wording', () => {
+    expect(classify503Source({ httpStatus: 503,
+      message: '{"code":"AUTH_SERVICE_UNAVAILABLE","error":"Identity provider timeout"}',
+    })).toBe('authentication_unavailable');
+  });
+
+  test('identifies database pressure and the observed query timeout', () => {
+    expect(classify503Source({ httpStatus: 503, message: '{"code":"DATABASE_PRESSURE"}' })).toBe('database_unavailable');
+    expect(classify503Source({ httpStatus: 503, message: 'Query read timeout' })).toBe('database_unavailable');
+  });
+
+  test('does not infer a provider failure from HTTP status alone', () => {
+    expect(classify503Source({ httpStatus: 503, message: 'Service temporarily unavailable' })).toBe('unknown');
+    expect(classify503Source({ httpStatus: 502, message: '' })).toBe('unknown');
+  });
+
+  test('retains explicit provider, gateway and timeout attribution', () => {
+    expect(classify503Source({ httpStatus: 503, message: 'OpenAI provider unavailable' })).toBe('provider_transient');
+    expect(classify503Source({ httpStatus: 502, message: 'Bad gateway' })).toBe('gateway_or_render_edge');
+    expect(classify503Source({ httpStatus: 504, message: 'Deadline exceeded' })).toBe('timeout_converted');
+  });
+});
 
 describe('IVXOwnerAITaskQueue self-bootstrap DDL', () => {
   const envSnapshot = { ...process.env };

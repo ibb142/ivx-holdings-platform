@@ -148,6 +148,8 @@ export function nextStatusAfterFailure(retryCount: number, maxRetries: number, t
 }
 
 export type IVX503Source =
+  | 'authentication_unavailable'
+  | 'database_unavailable'
   | 'application_configuration'
   | 'application_relation_missing'
   | 'provider_transient'
@@ -159,12 +161,17 @@ export type IVX503Source =
 /** Classify where a 5xx on the owner AI route came from (Phase 1 instrumentation). */
 export function classify503Source(input: { httpStatus: number; message: string }): IVX503Source {
   const m = input.message.toLowerCase();
+  // Explicit subsystem failures must win over generic words such as provider
+  // or timeout. A failed owner-profile lookup happens before model execution.
+  if (m.includes('auth_service_unavailable')) return 'authentication_unavailable';
+  if (m.includes('database_pressure') || m.includes('query read timeout')) return 'database_unavailable';
   if (m.includes('not configured') || m.includes('environment variables')) return 'application_configuration';
   if (m.includes('relation') || m.includes('schema')) return 'application_relation_missing';
   if (input.httpStatus === 504 || m.includes('timed out') || m.includes('timeout')) return 'timeout_converted';
   if (m.includes('queue') && (m.includes('full') || m.includes('saturat'))) return 'queue_saturation';
   if (m.includes('gateway') || m.includes('bad gateway') || m.includes('render')) return 'gateway_or_render_edge';
-  if (input.httpStatus === 502 || input.httpStatus === 503 || m.includes('provider') || m.includes('openai') || m.includes('rate limit')) return 'provider_transient';
+  // A 502/503 alone cannot identify which dependency failed.
+  if (m.includes('provider') || m.includes('openai') || m.includes('rate limit')) return 'provider_transient';
   return 'unknown';
 }
 
