@@ -130,6 +130,50 @@ test('a verified non-owner remains denied in production', async () => {
   await expect(resolveIVXAuthenticatedRequest(request(), '[availability-test]')).rejects.toThrow('privileged IVX access is required');
 });
 
+for (const metadata of [
+  { role: 'owner' }, { role: 'admin' }, { role: 'developer' },
+  { user_role: 'owner' }, { app_role: 'superadmin' },
+  { profile: { role: 'owner' } }, { app_metadata: { role: 'owner' } },
+]) {
+  test(`editable user metadata cannot grant access: ${JSON.stringify(metadata)}`, async () => {
+    providerResult = { data: { user: {
+      ...user, email: 'member@example.test', app_metadata: { role: 'member' }, user_metadata: metadata,
+    } }, error: null };
+    profile = { id: user.id, email: 'member@example.test', role: 'member' };
+    await expect(resolveIVXAuthenticatedRequest(request(), '[role-trust-test]')).rejects.toThrow('privileged IVX access is required');
+  });
+}
+
+test('profile contact email cannot substitute for the verified Auth identity', async () => {
+  providerResult = { data: { user: { ...user, email: 'member@example.test', app_metadata: { role: 'member' } } }, error: null };
+  profile = { id: user.id, email: 'iperez4242@gmail.com', role: 'member' };
+  await expect(resolveIVXAuthenticatedRequest(request(), '[role-trust-test]')).rejects.toThrow('privileged IVX access is required');
+});
+
+test('the verified allowlisted owner remains authorized with a stale profile contact email', async () => {
+  providerResult = { data: { user: { ...user, email: 'iperez4242@gmail.com', app_metadata: { role: 'member' } } }, error: null };
+  profile = { id: user.id, email: 'old-contact@example.test', role: 'member' };
+  const context = await resolveIVXAuthenticatedRequest(request(), '[role-trust-test]');
+  expect(context.role).toBe('owner');
+  expect(context.email).toBe('iperez4242@gmail.com');
+});
+
+for (const trustedSource of ['profile', 'app_metadata']) {
+  for (const role of ['owner', 'admin', 'developer']) {
+    test(`server-managed ${trustedSource} ${role} remains authorized`, async () => {
+      providerResult = { data: { user: {
+        ...user, email: 'privileged@example.test',
+        app_metadata: { role: trustedSource === 'app_metadata' ? role : 'member' },
+        user_metadata: { role: 'member' },
+      } }, error: null };
+      profile = { id: user.id, email: 'privileged@example.test', role: trustedSource === 'profile' ? role : 'member' };
+      const context = await resolveIVXAuthenticatedRequest(request(), '[role-trust-test]');
+      expect(context.role).toBe(role);
+      expect(context.guardMode).toBe('strict');
+    });
+  }
+}
+
 test('a recovered provider permits only its successfully verified owner and clears the deadline', async () => {
   const clearSpy = spyOn(globalThis, 'clearTimeout');
   try {
