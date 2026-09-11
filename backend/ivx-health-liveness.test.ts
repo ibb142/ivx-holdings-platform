@@ -39,14 +39,27 @@ describe('production health liveness', () => {
   it('keeps dependency readiness fail-closed when the database or queue is down', async () => {
     const database = spyOn(queue, 'checkDatabaseHealth').mockResolvedValue({ ok: false, detail: { reason: 'database unavailable' } });
     const remoteQueue = spyOn(queue, 'checkQueueHealth').mockResolvedValue({ ok: false, detail: { reason: 'queue unavailable' } });
-    restores.push(() => database.mockRestore(), () => remoteQueue.mockRestore());
+    const auth = spyOn(queue, 'checkAuthHealth').mockResolvedValue({ ok: false, detail: { reason: 'auth unavailable' } });
+    restores.push(() => database.mockRestore(), () => remoteQueue.mockRestore(), () => auth.mockRestore());
     const response = await app.request('/health/ready');
     expect(response.status).toBe(503);
     const body = await response.json();
     expect(body.ok).toBe(false);
     expect(body.checks.database.ok).toBe(false);
+    expect(body.checks.auth.ok).toBe(false);
     expect(body.checks.queue.ok).toBe(false);
     expect(database).toHaveBeenCalledTimes(1);
     expect(remoteQueue).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires real Auth availability independently of database and queue readiness', async () => {
+    const ai = spyOn(queue, 'checkAIHealth').mockReturnValue({ ok: true, detail: {} });
+    const database = spyOn(queue, 'checkDatabaseHealth').mockResolvedValue({ ok: true, detail: {} });
+    const remoteQueue = spyOn(queue, 'checkQueueHealth').mockResolvedValue({ ok: true, detail: {} });
+    const auth = spyOn(queue, 'checkAuthHealth').mockResolvedValue({ ok: false, detail: { reason: 'auth unavailable' } });
+    restores.push(() => ai.mockRestore(), () => database.mockRestore(), () => remoteQueue.mockRestore(), () => auth.mockRestore());
+    expect((await app.request('/health/ready')).status).toBe(503);
+    auth.mockResolvedValue({ ok: true, detail: {} });
+    expect((await app.request('/health/ready')).status).toBe(200);
   });
 });
