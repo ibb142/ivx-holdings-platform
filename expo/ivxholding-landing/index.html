@@ -208,7 +208,534 @@
     <div class="ticker-item">&#127760; IVX Holdings &nbsp;<span class="up">Live Deals Open</span></div>
     <div class="ticker-item">&#128195; Investor Intake &nbsp;<span class="up">OTP + compliance review</span></div>
     <div class="ticker-item">&#127963;&#65039; Premium Real Estate &nbsp;<span class="up">Published opportunities</span></div>
-    <div class="ticker-item">&#128274; E…10771 tokens truncated…ss="partner-commission-badge">Deal-specific terms</div></div>
+    <div class="ticker-item">&#128274; Escrow Structured &nbsp;<span class="up">Documented process</span></div>
+    <div class="ticker-item">&#128200; Live Deal Terms &nbsp;<span class="up">Per-property review</span></div>
+    <div class="ticker-item">&#9889; Allocation Access &nbsp;<span class="up">Deal-specific minimums</span></div>
+    <div class="ticker-item">&#127968; Ownership Review &nbsp;<span class="up">Per-property terms</span></div>
+  </div>
+</div>
+
+<!-- PROPERTIES — Dynamic from Supabase, with static fallback -->
+<!-- PROJECT REELS — HOME FEED -->
+<section id="home-feed" style="padding:48px 24px 0;">
+  <div class="wrap">
+    <div class="live-deals-header reveal" style="margin-bottom:16px;">
+      <div class="live-deals-title-row">
+        <span style="font-size:22px;">&#127916;</span>
+        <h2 class="live-deals-title">Project Reels</h2>
+      </div>
+      <span class="live-deals-badge">Live construction &amp; drone updates</span>
+    </div>
+    <div class="ivx-home-reel-card" data-ivx-home-feed-video style="max-width:420px;border-radius:16px;overflow:hidden;background:#0b0e14;border:1px solid rgba(255,255,255,.08);">
+      <video id="homeFeedReel" muted autoplay loop playsinline preload="auto" poster="/ivx-og-image.png" style="width:100%;display:block;background:#000;min-height:220px;">Your browser cannot play this project update. <a href="/reels">View project reels</a>.</video>
+    </div>
+  </div>
+</section>
+<script>
+(function(){
+  var v = document.getElementById('homeFeedReel');
+  if (!v) return;
+  var busy = false, retryButton = null;
+  function showRetry() {
+    busy = false;
+    if (!retryButton) {
+      retryButton = document.createElement('button');
+      retryButton.type = 'button';
+      retryButton.className = 'ivx-home-reel-retry';
+      retryButton.textContent = 'Video unavailable — retry';
+      retryButton.style.cssText = 'display:block;min-height:44px;min-width:44px;margin:12px auto;padding:10px 18px;background:#fff;color:#111;border:1px solid #999;border-radius:8px;cursor:pointer';
+      retryButton.addEventListener('click', start);
+      v.parentNode.appendChild(retryButton);
+    }
+    retryButton.hidden = false;
+    retryButton.style.display = 'block';
+  }
+  function hideRetry() {
+    if (retryButton) { retryButton.hidden = true; retryButton.style.display = 'none'; }
+  }
+  function attach(first) {
+    if (first.thumbnail_url) v.setAttribute('poster', first.thumbnail_url);
+    v.muted = true;
+    v.preload = 'auto';
+    Array.prototype.slice.call(v.querySelectorAll('source')).forEach(function(s){ s.remove(); });
+    v.removeAttribute('src');
+    var sources = first.webm_url ? [{url:new URL(first.webm_url, 'https://api.ivxholding.com').href,type:'video/webm'}] : [];
+    sources.push({url:first.video_url,type:'video/mp4'});
+    var failedSources = 0;
+    sources.forEach(function(item){
+      var s = document.createElement('source');
+      s.src = item.url; s.type = item.type;
+      s.addEventListener('error', function(){ if (++failedSources === sources.length) showRetry(); });
+      v.appendChild(s);
+    });
+    busy = false;
+    v.load();
+    var p = v.play && v.play(); if (p && p.catch) p.catch(function(){});
+  }
+  function attempt(number) {
+    var controller = new AbortController();
+    var timer = setTimeout(function(){ controller.abort(); }, 8000);
+    return fetch('https://api.ivxholding.com/api/reels', {headers:{'Accept':'application/json'},signal:controller.signal})
+      .then(function(r){
+        if (!r.ok) {
+          var error = new Error('Reel feed unavailable');
+          error.retryable = r.status === 408 || r.status === 429 || r.status >= 500;
+          throw error;
+        }
+        return r.json();
+      })
+      .then(function(d){
+        clearTimeout(timer);
+        var list = (d && (d.videos || d.reels)) || [];
+        var first = null;
+        for (var i=0;i<list.length;i++){ if (list[i] && list[i].video_url) { first = list[i]; break; } }
+        if (!first) { showRetry(); return; }
+        // Reuse this anonymous response if the modal's next request times out.
+        // Page memory only: the consumer enforces a 30-second freshness limit.
+        if (Array.isArray(d.videos) && d.videos.length <= 50 && d.personalized === false
+          && !d.channel && d.feed_type === 'unified' && d.ordering === 'canonical-unified-v2') {
+          window.__ivxPublicReels = { at: Date.now(), data: JSON.parse(JSON.stringify(d)) };
+        }
+        attach(first);
+      })
+      .catch(function(error){
+        clearTimeout(timer);
+        if (number < 1 && error.retryable !== false) {
+          setTimeout(function(){ attempt(number + 1); }, 500 * (number + 1));
+        } else showRetry();
+      });
+  }
+  function start() {
+    if (busy) return;
+    busy = true;
+    hideRetry();
+    attempt(0);
+  }
+  v.addEventListener('error', showRetry);
+  v.addEventListener('playing', hideRetry);
+  start();
+})();
+</script>
+
+<section id="properties" style="padding:80px 24px 0;">
+  <div class="wrap">
+    <div class="live-deals-header reveal">
+      <div class="live-deals-title-row">
+        <span style="font-size:22px;">&#10024;</span>
+        <h2 class="live-deals-title">Featured Deals</h2>
+      </div>
+      <div class="live-deals-title-row" style="gap:10px;">
+        <div class="live-deals-badge ivx-investor-first-badge">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#00C48C" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg>
+          <span id="properties-live-count">Investor First</span>
+        </div>
+        <div class="live-deals-refresh-btn" id="refresh-deals-btn" style="cursor:pointer;" onclick="if(typeof fetchDeals==='function'){fetchDeals();this.querySelector('.auto-spin-icon').style.animation='spin 1s linear';setTimeout(function(){document.querySelector('.auto-spin-icon').style.animation=''},1000);}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="auto-spin-icon"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          <span id="refresh-label">Refresh</span>
+          <span id="refresh-ago" style="font-size:9px;color:var(--text3);font-weight:500;"></span>
+        </div>
+      </div>
+    </div>
+    <p class="live-deals-sub reveal">Investor-first feed: 3 live opportunities followed by 1 featured project reel — the same sequence as the IVX app.</p>
+    <div class="live-deals-grid" id="properties-grid">
+      <!-- Live JV cards are injected from STATIC_FALLBACK_DEALS and live APIs to keep the landing card structure synced with the app card. -->
+    </div>
+    <div id="deals-error-state" style="display:none;"></div>
+  </div>
+</section>
+
+<!-- Live deals loading indicator (hidden, used by JS) -->
+<div id="live-deals-loading" style="display:none;"></div>
+
+<!-- Project Reels are now integrated into the Featured Deals feed above. -->
+
+<!-- Member registration styles -->
+
+<!-- MEMBER REGISTRATION CTA + MODAL -->
+<section id="join" style="padding: 40px 24px 0;">
+  <div class="wrap">
+    <div class="mreg-cta-band reveal">
+      <h3>Become an IVX Member &mdash; Free</h3>
+      <p>Create your free member account to follow live projects, save deals, and unlock the full investor flow in the app.</p>
+      <button class="mreg-cta-btn" onclick="openFunnel()">Create Free Account &#8594;</button>
+    </div>
+  </div>
+</section>
+<!-- Member registration modal removed (item 112) — funnel is sole conversion route -->
+</div>
+<div class="vx-toast" id="vx-toast"></div>
+<script src="/ivx-app.js?v20260813" defer></script>
+
+<!-- FEATURES -->
+<section style="background:var(--bg2); border-top:1px solid var(--border); border-bottom:1px solid var(--border);">
+  <div class="wrap">
+    <div class="features-split">
+      <div class="reveal">
+        <p class="eyebrow">Platform Features</p>
+        <h2 class="section-h">Built for the<br>Qualified Investor Flow</h2>
+        <p class="section-p">A cleaner public flow for reviewing published opportunities, compliance steps, and next-stage investor onboarding.</p>
+        <div class="feat-list">
+          <div class="feat-item"><div class="feat-ico" style="background:rgba(255,215,0,0.1);">&#128202;</div><div class="feat-body"><h3>Deal-Specific Access</h3><p>Review live published opportunities and move forward only after completing the intake and reviewing the specific terms shown for that deal.</p></div></div>
+          <div class="feat-item"><div class="feat-ico" style="background:rgba(0,196,140,0.1);">&#128200;</div><div class="feat-body"><h3>Flexible Access</h3><p>Review opportunities, track performance, and manage your portfolio from one place with a clean investor flow.</p></div></div>
+          <div class="feat-item"><div class="feat-ico" style="background:rgba(74,144,217,0.1);">&#128737;&#65039;</div><div class="feat-body"><h3>Deal-Specific Payment Structure</h3><p>Payment, escrow, investor-verification, and project-protection terms are reviewed from the documents applicable to each opportunity.</p></div></div>
+          <div class="feat-item"><div class="feat-ico" style="background:rgba(255,107,107,0.1);">&#128176;</div><div class="feat-body"><h3>Deal-Level Distribution Terms</h3><p>Review each opportunity’s projected income profile, timeline, and ownership math before moving into the investor flow.</p></div></div>
+        </div>
+      </div>
+      <div class="phone-wrap reveal">
+        <div class="phone-glow"></div>
+        <div class="phone">
+          <div class="phone-notch"><div class="phone-notch-bar"></div></div>
+          <div class="phone-screen">
+            <div class="phone-topbar"><span class="phone-brand">IVXHOLDINGS</span><div class="phone-live"><div class="phone-live-dot"></div>LIVE</div></div>
+            <div class="phone-bal"><div class="phone-bal-lbl">INVESTOR DASHBOARD</div><div class="phone-bal-num">Live review</div><div class="phone-bal-chg">Published opportunities + intake status</div></div>
+            <div class="phone-chart">
+              <div class="phone-bar" style="height:38%"></div><div class="phone-bar" style="height:52%"></div><div class="phone-bar" style="height:44%"></div><div class="phone-bar" style="height:68%"></div><div class="phone-bar" style="height:58%"></div><div class="phone-bar" style="height:78%"></div><div class="phone-bar" style="height:63%"></div><div class="phone-bar" style="height:88%; background:rgba(255,215,0,0.22); border-top-color:#FFF2A3;"></div><div class="phone-bar" style="height:100%; background:rgba(255,215,0,0.28); border-top-color:#FFD700;"></div>
+            </div>
+            <div class="phone-holdings">
+              <div class="phone-holding"><div><div class="ph-name">Premium Property</div><div class="ph-loc">Development JV</div></div><div><div class="ph-val">Live</div><div class="ph-ret">Deal review</div></div></div>
+              <div class="phone-holding"><div><div class="ph-name">JV Direct Partner</div><div class="ph-loc">Equity Stake</div></div><div><div class="ph-val">Live</div><div class="ph-ret">Reviewed</div></div></div>
+              <div class="phone-holding"><div><div class="ph-name">Allocation Review</div><div class="ph-loc">Deal-specific minimums</div></div><div><div class="ph-val">Open</div><div class="ph-ret">Investor Access</div></div></div>
+            </div>
+          </div>
+          <div class="phone-tabs">
+            <div class="ptab"><div class="ptab-ico">&#127968;</div>Home</div>
+            <div class="ptab active"><div class="ptab-ico">&#128202;</div>Portfolio</div>
+            <div class="ptab"><div class="ptab-ico">&#127963;&#65039;</div>Market</div>
+            <div class="ptab"><div class="ptab-ico">&#128172;</div>Chat</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how-it-works">
+  <div class="wrap">
+    <div class="reveal" style="text-align:center; max-width:560px; margin:0 auto 0;">
+      <p class="eyebrow">Simple Process</p>
+      <h2 class="section-h">Start in 4 Easy Steps</h2>
+      <p class="section-p" style="margin:0 auto;">From investor intake to approved allocation review — everything is structured, documented, and fully digital.</p>
+    </div>
+    <div class="steps-grid">
+      <div class="step-card reveal reveal-delay-1"><div class="step-num">01</div><span class="step-ico">&#128195;</span><div class="step-ttl">Start Intake</div><div class="step-dsc">Create your account, confirm your email, and begin the investor intake required before member activation.</div></div>
+      <div class="step-card reveal reveal-delay-2"><div class="step-num">02</div><span class="step-ico">&#128179;</span><div class="step-ttl">Complete Investor Review</div><div class="step-dsc">Submit your intake, confirm identity details, and review the eligibility steps required before allocation access is enabled.</div></div>
+      <div class="step-card reveal reveal-delay-3"><div class="step-num">03</div><span class="step-ico">&#127963;&#65039;</span><div class="step-ttl">Review Published Deals</div><div class="step-dsc">Browse live opportunities, verify sale price and ownership math, and inspect project documents before you proceed.</div></div>
+      <div class="step-card reveal"><div class="step-num">04</div><span class="step-ico">&#128176;</span><div class="step-ttl">Move to Allocation</div><div class="step-dsc">Approved investors continue into the member flow, funding review, and final deal documentation for the selected opportunity.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- TWO-STEP REGISTRATION -->
+<section id="two-step-registration">
+  <div class="wrap">
+    <div class="reveal" style="text-align:center; max-width:620px; margin:0 auto;">
+      <p class="eyebrow">Two-Step Registration</p>
+      <h2 class="section-h">Free Member First.<br>Real Investor Second.</h2>
+      <p class="section-p" style="margin:0 auto;">Everyone starts as a free member. Investor activation is a separate, verified step with KYC, accreditation review, and funding access.</p>
+    </div>
+    <div class="steps-grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));">
+      <div class="step-card reveal reveal-delay-1">
+        <div class="step-num">STEP 1</div><span class="step-ico">&#128100;</span>
+        <div class="step-ttl">Free Member Registration</div>
+        <div class="step-dsc">Create a free account with email + phone (OTP) verification. Follow live projects, save deals, set ZIP-code alerts, and browse the JV pipeline. No payment. No commitment.</div>
+        <button class="mreg-cta-btn" style="margin-top:14px;" onclick="openFunnel()">Start Step 1 &#8594; Free Member Registration</button>
+      </div>
+      <div class="step-card reveal reveal-delay-2">
+        <div class="step-num">STEP 2</div><span class="step-ico">&#128274;</span>
+        <div class="step-ttl">Real Investor Activation</div>
+        <div class="step-dsc">Verified members upgrade to real investor status: identity (KYC) review, accreditation check, investment preferences, investor account creation, and allocation access to live opportunities.</div>
+        <button class="mreg-cta-btn" style="margin-top:14px;" onclick="document.getElementById('investor-chat') ? document.getElementById('investor-chat').scrollIntoView({behavior:'smooth'}) : openFunnel()">Start Step 2 &#8594; Real Investor Activation</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BUYER / INVESTOR / JV ZONE CAPTURE -->
+
+<!-- Zone Capture removed from primary flow — secondary route accessible via /capture -->
+
+
+<!-- INVESTOR MONEY SYSTEM -->
+<section id="investor-money">
+  <div class="wrap">
+    <div class="reveal" style="text-align:center; max-width:620px; margin:0 auto;">
+      <p class="eyebrow">Investor Money System</p>
+      <h2 class="section-h">Your Capital.<br>Fully Tracked.</h2>
+      <p class="section-p" style="margin:0 auto;">Activated investors can access account-level transaction and portfolio records through the IVX member flow as supported by enabled production services.</p>
+    </div>
+    <div class="trust-grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));">
+      <div class="tcard reveal reveal-delay-1"><span class="tcard-ico">&#128179;</span><div class="tcard-ttl">Investor Account</div><div class="tcard-dsc">Individual, entity, family office, fund, and institutional accounts with total invested, available cash, portfolio value, ROI, and IRR.</div><div class="tcard-tags"><span class="ttag">Portfolio</span><span class="ttag">ROI</span><span class="ttag">IRR</span></div></div>
+      <div class="tcard reveal reveal-delay-2"><span class="tcard-ico">&#128196;</span><div class="tcard-ttl">Statements</div><div class="tcard-dsc">Investor reporting supports account statements and transaction history. Available export formats and reporting periods depend on enabled production services.</div><div class="tcard-tags"><span class="ttag">PDF</span><span class="ttag">Excel</span><span class="ttag">CSV</span></div></div>
+      <div class="tcard reveal reveal-delay-3"><span class="tcard-ico">&#128200;</span><div class="tcard-ttl">Transactions</div><div class="tcard-dsc">Every movement gets a transaction ID, timestamp, status, approval chain, and digital audit trail. Nothing deleted &mdash; every edit tracked.</div><div class="tcard-tags"><span class="ttag">Ledger</span><span class="ttag">Audit Trail</span></div></div>
+      <div class="tcard reveal reveal-delay-1"><span class="tcard-ico">&#11015;&#65039;</span><div class="tcard-ttl">Deposits</div><div class="tcard-dsc">Pending and cleared deposits are tracked per account for funding methods enabled for that investor and offering.</div><div class="tcard-tags"><span class="ttag">Wires</span><span class="ttag">ACH</span></div></div>
+      <div class="tcard reveal reveal-delay-2"><span class="tcard-ico">&#11014;&#65039;</span><div class="tcard-ttl">Withdrawals</div><div class="tcard-dsc">Withdrawal requests with owner approval workflow &mdash; large payments require CEO, Finance, and Owner sign-off with full audit log.</div><div class="tcard-tags"><span class="ttag">Approvals</span><span class="ttag">Audit Log</span></div></div>
+      <div class="tcard reveal reveal-delay-3"><span class="tcard-ico">&#128176;</span><div class="tcard-ttl">Profit Tracking</div><div class="tcard-dsc">Realized and unrealized gain/loss, distributions, dividends, interest, and per-property waterfall &mdash; live profit tracking on every position.</div><div class="tcard-tags"><span class="ttag">Gain/Loss</span><span class="ttag">Waterfall</span></div></div>
+      <div class="tcard reveal reveal-delay-1"><span class="tcard-ico">&#127968;</span><div class="tcard-ttl">Realtor Payments</div><div class="tcard-dsc">Automatic commission engine: sale price, commission %, broker split, agent split, referral split, payment status, and 1099 reports.</div><div class="tcard-tags"><span class="ttag">Commissions</span><span class="ttag">1099</span></div></div>
+      <div class="tcard reveal reveal-delay-2"><span class="tcard-ico">&#128226;</span><div class="tcard-ttl">Influencer Commission %</div><div class="tcard-dsc">Referral links, campaign tracking, qualified leads, closed deals, revenue generated, commission %, payment status, and lifetime earnings.</div><div class="tcard-tags"><span class="ttag">Referrals</span><span class="ttag">Lifetime Earnings</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- BUSINESS AUTOMATION -->
+<section id="business-automation">
+  <div class="wrap">
+    <div class="reveal" style="text-align:center; max-width:620px; margin:0 auto;">
+      <p class="eyebrow">Business Automation</p>
+      <h2 class="section-h">The Engine Behind<br>Every Match</h2>
+      <p class="section-p" style="margin:0 auto;">CRM pipelines, AI matching, and multi-channel lead capture run automatically behind every registration and zone submission.</p>
+    </div>
+    <div class="trust-grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));">
+      <div class="tcard reveal reveal-delay-1"><span class="tcard-ico">&#128101;</span><div class="tcard-ttl">Buyer CRM</div><div class="tcard-dsc">Every buyer enters an automated pipeline: lead capture, ZIP-code preferences, budget, saved searches, property alerts, tasks, notes, and follow-ups.</div><div class="tcard-tags"><span class="ttag">Pipeline</span><span class="ttag">Alerts</span></div></div>
+      <div class="tcard reveal reveal-delay-2"><span class="tcard-ico">&#128188;</span><div class="tcard-ttl">Investor CRM</div><div class="tcard-dsc">Investor applications, KYC, accreditation, investment preferences, and opportunity matching tracked in a dedicated investor pipeline.</div><div class="tcard-tags"><span class="ttag">KYC</span><span class="ttag">Accreditation</span></div></div>
+      <div class="tcard reveal reveal-delay-3"><span class="tcard-ico">&#129309;</span><div class="tcard-ttl">JV Matching</div><div class="tcard-dsc">JV deals automatically matched to capital: JV &#8596; investor, developer &#8596; capital, land owner &#8596; builder, broker &#8596; buyer.</div><div class="tcard-tags"><span class="ttag">JV &#8596; Capital</span><span class="ttag">Deal Room</span></div></div>
+      <div class="tcard reveal reveal-delay-1"><span class="tcard-ico">&#129302;</span><div class="tcard-ttl">AI Opportunity Matching</div><div class="tcard-dsc">IVX AI pairs buyer &#8596; property and investor &#8596; opportunity using zone, radius, budget, and preference signals &mdash; then alerts both sides.</div><div class="tcard-tags"><span class="ttag">AI Engine</span><span class="ttag">Auto-Match</span></div></div>
+    </div>
+    <div class="reveal" style="max-width:720px;margin:26px auto 0;text-align:center;background:rgba(255,255,255,0.03);border:1px solid var(--gold-border);border-radius:18px;padding:20px 22px;">
+      <p style="font-size:11px;font-weight:800;letter-spacing:1.6px;color:var(--gold);text-transform:uppercase;margin:0 0 10px;">Multi-Channel Lead Capture</p>
+      <div id="channel-capture" style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;">
+        <span class="ttag" style="font-size:12px;padding:8px 14px;">Google capture</span>
+        <span class="ttag" style="font-size:12px;padding:8px 14px;">Instagram capture</span>
+        <span class="ttag" style="font-size:12px;padding:8px 14px;">LinkedIn capture</span>
+        <span class="ttag" style="font-size:12px;padding:8px 14px;">TikTok capture</span>
+      </div>
+      <p style="font-size:12px;color:var(--text3,#888);margin:12px 0 0;">Campaign visits can be tagged with UTM parameters and supported click IDs, then routed into the CRM when the corresponding production integrations are enabled.</p>
+    </div>
+  </div>
+</section>
+
+
+
+<!-- TRUST -->
+<section id="trust" class="trust-bg">
+  <div class="wrap">
+    <div class="reveal" style="text-align:center; max-width:560px; margin:0 auto;">
+      <p class="eyebrow">Trust & Security</p>
+      <h2 class="section-h">Structured For<br>Investor Review</h2>
+      <p class="section-p" style="margin:0 auto;">Built around documented deal structures, investor review, and transparent disclosures for each opportunity.</p>
+    </div>
+    <div class="trust-grid">
+      <div class="tcard reveal reveal-delay-1"><span class="tcard-ico">&#127963;&#65039;</span><div class="tcard-ttl">LLC Deal Structure</div><div class="tcard-dsc">Each opportunity is presented with project documentation, operating structure details, and transparent deal data for investor review.</div><div class="tcard-tags"><span class="ttag">LLC</span><span class="ttag">Documents</span><span class="ttag">Audited Flow</span></div></div>
+      <div class="tcard reveal reveal-delay-2"><span class="tcard-ico">&#128274;</span><div class="tcard-ttl">Investor Data Safeguards</div><div class="tcard-dsc">Investor intake data is handled through encrypted transport, controlled verification steps, and account-level access protections.</div><div class="tcard-tags"><span class="ttag">Encrypted</span><span class="ttag">2FA</span><span class="ttag">Review Gates</span></div></div>
+      <div class="tcard reveal reveal-delay-3"><span class="tcard-ico">&#127974;</span><div class="tcard-ttl">Deal Payment Review</div><div class="tcard-dsc">Funding and escrow instructions, when applicable, are handled outside marketing content and must be verified against the selected deal documents before funds are sent.</div><div class="tcard-tags"><span class="ttag">Deal-Specific</span><span class="ttag">Verified Instructions</span><span class="ttag">Review</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- REVIEW PROCESS -->
+<section id="reviews" class="reviews-bg">
+  <div class="wrap">
+    <div class="reveal" style="text-align:center; max-width:560px; margin:0 auto;">
+      <p class="eyebrow">Review Process</p>
+      <h2 class="section-h">What Happens<br>After You Apply</h2>
+    </div>
+    <div class="reviews-grid">
+      <div class="rcard reveal reveal-delay-1"><div class="rcard-stars">01</div><p class="rcard-text">Your intake is screened for contact accuracy, investor profile fit, and completion of the required identity references before any member activation step.</p><div class="rcard-author"><div class="rcard-av">IV</div><div><div class="rcard-name">Initial review</div><div class="rcard-role">Contact + investor profile check</div></div></div></div>
+      <div class="rcard reveal reveal-delay-2"><div class="rcard-stars">02</div><p class="rcard-text">Qualified applicants move into agreement review, tax acknowledgements, and secure document requests. Additional information may be required before access is approved.</p><div class="rcard-author"><div class="rcard-av">KY</div><div><div class="rcard-name">Compliance review</div><div class="rcard-role">KYC + authority + tax checks</div></div></div></div>
+      <div class="rcard reveal reveal-delay-3"><div class="rcard-stars">03</div><p class="rcard-text">Approved investors can then review the selected opportunity in more detail, complete member setup, and continue through the funding and allocation workflow for that deal.</p><div class="rcard-author"><div class="rcard-av">AL</div><div><div class="rcard-name">Allocation workflow</div><div class="rcard-role">Member setup + deal access</div></div></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="credibility" class="credibility-section">
+  <div class="credibility-wrap">
+    <div class="reveal" style="max-width:760px;">
+      <p class="eyebrow">Company Credibility</p>
+      <h2 class="section-h">Who investors are dealing with</h2>
+      <p class="credibility-intro">Clear company identity, investor-relations contact, business address, and management diligence access reduce friction before serious investors submit intake or request allocation review.</p>
+    </div>
+    <div class="credibility-grid">
+      <div class="credibility-card reveal reveal-delay-1">
+        <div class="credibility-icon entity">🏢</div>
+        <div class="credibility-label">Legal entity</div>
+        <div class="credibility-value">IVX Holdings LLC</div>
+        <div class="credibility-detail">Deal disclosures, offering terms, and investor communications are issued under the IVX entity so prospects know exactly which company they are reviewing.</div>
+      </div>
+      <div class="credibility-card reveal reveal-delay-2">
+        <div class="credibility-icon contact">✉️</div>
+        <div class="credibility-label">Investor relations</div>
+        <div class="credibility-value">investors@ivxholding.com</div>
+        <div class="credibility-detail">Investor questions can be directed to investors@ivxholding.com. Public leads move into review, follow-up, and next-step diligence through the same investor relations path.</div>
+      </div>
+      <div class="credibility-card reveal reveal-delay-3">
+        <div class="credibility-icon address">📍</div>
+        <div class="credibility-label">Business address</div>
+        <div class="credibility-value">1001 Brickell Bay Drive, Suite 2700, Miami, FL 33131</div>
+        <div class="credibility-detail">Primary investor correspondence and diligence support location for IVX Holdings.</div>
+      </div>
+      <div class="credibility-card reveal">
+        <div class="credibility-icon team">👥</div>
+        <div class="credibility-label">Management diligence</div>
+        <div class="credibility-value">Live team introductions available during active review</div>
+        <div class="credibility-detail">Qualified prospects can request a live call with management and deal operations before committing to a live opportunity.</div>
+      </div>
+    </div>
+    <div class="credibility-actions reveal">
+      <a href="#join" class="credibility-action primary" onclick="openFunnel(); return false;">Start investor intake →</a>
+      <a href="mailto:investors@ivxholding.com" class="credibility-action">Email investor relations</a>
+      <a href="mailto:investors@ivxholding.com" class="credibility-action">Request management call</a>
+    </div>
+  </div>
+</section>
+
+<section id="disclosures" class="disclosure-section">
+  <div class="disclosure-wrap reveal">
+    <p class="eyebrow">Investor Disclosures</p>
+    <h2 class="section-h">Review these before you click in</h2>
+    <div class="disclosure-shell">
+      <div class="disclosure-row">
+        <div class="disclosure-bullet"></div>
+        <div>
+          <div class="disclosure-title">Risk disclaimer</div>
+          <div class="disclosure-text">All investments involve risk, including partial or total loss of capital. Past performance does not predict future results.</div>
+        </div>
+      </div>
+      <div class="disclosure-row">
+        <div class="disclosure-bullet"></div>
+        <div>
+          <div class="disclosure-title">Fees</div>
+          <div class="disclosure-text">Fees, operating expenses, and sponsor compensation vary by offering and should be reviewed in the deal terms before participating.</div>
+        </div>
+      </div>
+      <div class="disclosure-row">
+        <div class="disclosure-bullet"></div>
+        <div>
+          <div class="disclosure-title">Liquidity / exit terms</div>
+          <div class="disclosure-text">Real estate offerings are typically illiquid. Exit timing, hold periods, and repayment waterfalls are defined per deal.</div>
+        </div>
+      </div>
+      <div class="disclosure-row">
+        <div class="disclosure-bullet"></div>
+        <div>
+          <div class="disclosure-title">No guaranteed returns</div>
+          <div class="disclosure-text">Projected ROI, distributions, and timelines are underwriting estimates only. They can change based on project performance, market conditions, and execution.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="operations" class="credibility-section" style="padding-top:34px;">
+  <div class="credibility-wrap">
+    <div class="reveal" style="max-width:760px;">
+      <p class="eyebrow">Operational Readiness</p>
+      <h2 class="section-h">What approved members get access to</h2>
+      <p class="credibility-intro">The public investor intake already routes applicants into the member systems used for registration, saved profiles, wallet preparation, and transaction visibility after approval.</p>
+    </div>
+    <div class="credibility-grid">
+      <div class="credibility-card reveal reveal-delay-1">
+        <div class="credibility-icon contact">👤</div>
+        <div class="credibility-label">Member registration</div>
+        <div class="credibility-value">Verified account creation after review</div>
+        <div class="credibility-detail">Qualified applicants move from the public intake into member registration before live deal access is enabled.</div>
+      </div>
+      <div class="credibility-card reveal reveal-delay-2">
+        <div class="credibility-icon entity">🛡️</div>
+        <div class="credibility-label">Investor profiles</div>
+        <div class="credibility-value">Saved onboarding and identity status</div>
+        <div class="credibility-detail">Member profiles store contact details, onboarding status, and investor-readiness checkpoints tied to the account.</div>
+      </div>
+      <div class="credibility-card reveal reveal-delay-3">
+        <div class="credibility-icon address">🏦</div>
+        <div class="credibility-label">Wallet readiness</div>
+        <div class="credibility-value">Funding methods prepared inside the platform</div>
+        <div class="credibility-detail">Wallet and funding steps are surfaced after approval so investors can move into live deals through the member flow.</div>
+      </div>
+      <div class="credibility-card reveal">
+        <div class="credibility-icon team">📊</div>
+        <div class="credibility-label">Transaction records</div>
+        <div class="credibility-value">Statements and investment status visibility</div>
+        <div class="credibility-detail">Approved member accounts are designed to keep transaction records, statements, and deal status visible after activation.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="investor-chat" class="credibility-section" style="padding-top:34px;">
+  <div class="credibility-wrap">
+    <div class="reveal" style="max-width:760px;">
+      <p class="eyebrow">Investor Chat</p>
+      <h2 class="section-h">The same IVX investor chat now lives on the landing page</h2>
+      <p class="credibility-intro">Visitors can ask investor questions, review the same AI-first support flow available in the app, and escalate to the IVX team before they submit the intake.</p>
+    </div>
+    <div class="landing-chat-grid">
+      <div class="landing-chat-highlights">
+        <div class="landing-chat-highlight reveal reveal-delay-1">
+          <div class="landing-chat-kicker"><span class="landing-chat-kicker-dot"></span>App-parity experience</div>
+          <div class="landing-chat-highlight-title">One investor support flow</div>
+          <div class="landing-chat-highlight-copy">The public landing now exposes the same IVX chat pattern used inside the app, so serious prospects can ask questions before they enter the intake.</div>
+        </div>
+        <div class="landing-chat-highlight reveal reveal-delay-2">
+          <div class="landing-chat-kicker"><span class="landing-chat-kicker-dot"></span>AI first, human when needed</div>
+          <div class="landing-chat-highlight-title">Fast answers with live escalation</div>
+          <div class="landing-chat-highlight-copy">Visitors can self-serve deal, diligence, and onboarding questions, then request a live investor-support follow-up without leaving the page.</div>
+        </div>
+        <div class="landing-chat-highlight reveal reveal-delay-3">
+          <div class="landing-chat-kicker"><span class="landing-chat-kicker-dot"></span>Conversion without friction</div>
+          <div class="landing-chat-highlight-title">Questions answered before intake</div>
+          <div class="landing-chat-highlight-copy">Questions about allocations, management access, wallet readiness, and risk disclosures are handled before a prospect submits the real investor review form.</div>
+        </div>
+      </div>
+      <div class="landing-chat-shell reveal" id="landing-chat-shell">
+        <div class="landing-chat-status">
+          <div class="landing-chat-status-dot is-connected" id="landing-chat-status-dot"></div>
+          <div class="landing-chat-status-copy">
+            <div class="landing-chat-status-title" id="landing-chat-status-title">IVX IA ready</div>
+            <div class="landing-chat-status-subtext" id="landing-chat-status-subtext">Streaming reliability, file/PDF analysis, memory, audit logs, and human escalation are wired in the app workspace.</div>
+          </div>
+          <div class="landing-chat-status-live is-active" id="landing-chat-status-live">IA + human support</div>
+        </div>
+        <div class="landing-chat-proof-rail" aria-label="IVX IA capability status">
+          <div class="landing-chat-proof-pill is-live">AI reliability</div>
+          <div class="landing-chat-proof-pill is-live">File + PDF review</div>
+          <div class="landing-chat-proof-pill is-live">Voice prompts</div>
+          <div class="landing-chat-proof-pill is-live">Memory + audit</div>
+        </div>
+        <div class="landing-chat-messages" id="landing-chat-messages" aria-live="polite"></div>
+        <div class="landing-chat-quick-replies" id="landing-chat-quick-replies">
+          <button type="button" class="landing-chat-quick-reply" data-reply="How do I invest?">How do I invest?</button>
+          <button type="button" class="landing-chat-quick-reply" data-reply="Minimum allocation">Minimum allocation</button>
+          <button type="button" class="landing-chat-quick-reply" data-reply="Review a deal like an IVX analyst">Deal review</button>
+          <button type="button" class="landing-chat-quick-reply" data-reply="Summarize a PDF or diligence document">PDF summary</button>
+          <button type="button" class="landing-chat-quick-reply" data-reply="Member access after approval">Member access after approval</button>
+          <button type="button" class="landing-chat-quick-reply" data-reply="Speak with management">Speak with management</button>
+          <button type="button" class="landing-chat-quick-reply" data-reply="Risk disclosures">Risk disclosures</button>
+        </div>
+        <div class="landing-chat-input-row">
+          <textarea id="landing-chat-input" class="landing-chat-input" aria-label="Message for IVX investor support" placeholder="Ask about investor intake, live opportunities, management diligence, or public risk disclosures."></textarea>
+          <input type="file" id="landing-chat-video-input" aria-label="Attach a video for IVX investor support" accept="video/mp4,video/quicktime,.mp4,.mov,.m4v" style="display:none" />
+          <button type="button" id="landing-chat-attach" class="landing-chat-attach" title="Attach a video" aria-label="Attach a video"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></button>
+          <button type="button" id="landing-chat-send" class="landing-chat-send">Send →</button>
+        </div>
+        <div class="landing-chat-actions">
+          <button type="button" id="landing-chat-human" class="landing-chat-human">Request Live Investor Support</button>
+          <a href="#join" class="landing-chat-intake" onclick="openFunnel(); return false;">Start Investor Intake</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PARTNER & EARN -->
+<section class="partners-section" id="partners">
+  <div class="partners-bg-glow"></div>
+  <div style="position:relative;z-index:2;">
+    <div class="partners-header reveal">
+      <div class="partners-headline-tag"><div class="earn-dot"></div>Partner Program &nbsp;&middot;&nbsp; Deal-Specific Terms</div>
+      <h2 class="partners-title">Join The IVX<br><span class="gold">Partner Network</span></h2>
+      <p class="partners-subtitle">Realtors, influencers, and brokers can apply to participate in the IVX referral and partner workflow, subject to approval, eligibility review, and deal-specific terms.</p>
+    </div>
+    <div class="partners-grid">
+      <div class="partner-card realtor reveal reveal-delay-1">
+        <div class="partner-card-top"><div class="partner-icon-wrap">&#127968;</div><div class="partner-commission-badge">Deal-specific terms</div></div>
+        <div class="partner-role">Realtor</div><div class="partner-name">Real Estate Agents</div>
+        <p class="partner-desc">Bring listings or qualified buyers into the IVX partner workflow under approval-based, deal-specific terms.</p>
+        <div class="partner-perks"><div class="partner-perk"><div class="partner-perk-check">&#10003;</div><span>Deal-specific referral workflow</span></div><div class="partner-perk"><div class="partner-perk-check">&#10003;</div><span>Approval and eligibility review</span></div><div class="partner-perk"><div class="partner-perk-check">&#10003;</div><span>Partner dashboard + tools</span></div></div>
+        <div class="partner-earning-box"><div class="peb-label">&#128176; Partner terms</div><div class="peb-example"><div class="peb-deal">Compensation</div><div class="peb-amount">Per agreement</div></div><div class="peb-divider"></div><div class="peb-example"><div class="peb-deal">Activation</div><div class="peb-amount">After approval</div></div></div>
+        <a href="#partner-overlay" class="partner-apply-btn" onclick="openPartnerApply('realtor'); return false;">Apply as Realtor Partner &rarr;</a>
+      </div>
+      <div class="partner-card influencer reveal reveal-delay-2">
+        <div class="partner-card-top"><div class="partner-icon-wrap">&#128241;</div><div class="partner-commission-badge">Deal-specific terms</div></div>
         <div class="partner-role">Influencer</div><div class="partner-name">Content Creators</div>
         <p class="partner-desc">Share IVX with your audience through an approved partner program built around review, suitability, and deal-specific terms.</p>
         <div class="partner-perks"><div class="partner-perk"><div class="partner-perk-check">&#10003;</div><span>Deal-specific compensation</span></div><div class="partner-perk"><div class="partner-perk-check">&#10003;</div><span>Personal referral workflow</span></div><div class="partner-perk"><div class="partner-perk-check">&#10003;</div><span>Payout timing per agreement</span></div></div>
