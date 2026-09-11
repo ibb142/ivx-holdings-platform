@@ -8,7 +8,7 @@ export async function handleFleetHaGet(request: Request): Promise<Response> {
   try {
     const observation = await readPostgresFleetProcessObservation();
     const age = Date.now() - Date.parse(observation.measuredAt);
-    if (!Number.isFinite(age) || age < -5_000 || age > 15_000) throw new Error('Stale process observation');
+    if (!Number.isFinite(age) || age < -10_000 || age > 30_000) throw new Error('Stale process observation');
     const current = observation.instances.filter(i => i.commitSha === commitSha && !i.draining
       && i.sharedState && i.sharedWorkerQueue && Date.now() - Date.parse(i.lastSeenAt) >= -5_000 && Date.now() - Date.parse(i.lastSeenAt) <= 45_000);
     const api = current.filter(i => i.role === 'api' && i.processRole === 'api');
