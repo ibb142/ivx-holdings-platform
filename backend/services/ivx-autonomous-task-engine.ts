@@ -20,6 +20,7 @@
  *   All state (objectives, tasks, approvals, leases) is persisted via the durable
  *   Supabase store so it survives restarts, redeploys, and scheduler crashes.
  */
+import { VERSIONED_INSPECTION_PREFIXES } from './ivx-autonomous-mission-scope';
 import {
   isDurableStoreConfigured,
   readDurableJson,
@@ -1242,6 +1243,8 @@ export type LeaseOptions = {
   missionScope?: {
     familyPrefixes: readonly string[];
     activePrefixes: readonly string[];
+    /** Filter inspections independently of Landing's priority prefixes. */
+    inspectionSourceSha?: string;
   } | null;
 };
 
@@ -1250,6 +1253,11 @@ export function isTaskWithinMissionScope(
   scope: LeaseOptions['missionScope'],
 ): boolean {
   if (!scope) return true;
+  if (scope.inspectionSourceSha !== undefined) {
+    const inspectionFamily = VERSIONED_INSPECTION_PREFIXES.find(prefix => task.idempotencyKey.startsWith(prefix));
+    if (inspectionFamily && (!/^[a-f0-9]{40}$/i.test(scope.inspectionSourceSha)
+      || !task.idempotencyKey.startsWith(`${inspectionFamily}${scope.inspectionSourceSha.toLowerCase()}:`))) return false;
+  }
   const belongsToMissionFamily = scope.familyPrefixes.some((prefix) => task.idempotencyKey.startsWith(prefix));
   if (!belongsToMissionFamily) return true;
   return scope.activePrefixes.some((prefix) => task.idempotencyKey.startsWith(prefix));
