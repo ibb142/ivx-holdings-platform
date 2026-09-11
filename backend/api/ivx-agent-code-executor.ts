@@ -104,7 +104,7 @@ export async function handleExecutorWriteRequest(request: Request): Promise<Resp
     return json({ ok: false, error: 'No valid files provided. Expected: { files: [{ path, content }] }' }, 400);
   }
 
-  const result = await writeAgentFiles(files);
+  const result = try { await writeAgentFiles(files); } catch (error) { console.error('[ExecutorWrite] File writing failed:', error); return json({ ok: false, error: 'File writing failed. See logs for details.' }, 500); }
   return json({ ok: result.ok, result, agentId: readString(body.agentId), agentNumber: body.agentNumber ?? null });
 }
 
