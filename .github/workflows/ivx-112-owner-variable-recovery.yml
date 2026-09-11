@@ -8,6 +8,8 @@ on:
       - .github/workflows/ivx-112-owner-variable-recovery.yml
       - scripts/ops/owner-runtime-binding*
       - scripts/ops/owner-recovery-deploy*
+      - backend/services/ivx-owner-binding-diagnostic*
+      - backend/api/ivx-render-diagnostic.ts
   workflow_dispatch: {}
 
 permissions:
@@ -26,6 +28,9 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 24 }
       - run: node --test scripts/ops/owner-runtime-binding.test.mjs scripts/ops/owner-recovery-deploy.test.mjs
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.3.9 }
+      - run: bun test backend/services/ivx-owner-binding-diagnostic.test.ts
   recover-deploy-verify:
     needs: verify-owner-binding
     if: github.ref == 'refs/heads/main'
@@ -124,3 +129,34 @@ jobs:
           test "$(jq -r '.totalAgents // 0' /tmp/agents.json)" = 112
           test "$(jq '[.agents[].agentId] | unique | length' /tmp/agents.json)" = 112
           echo 'live_112_registry=PASS'
+      - name: Compare persisted service bindings with the live process
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          try {
+            const base = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/+$/, '');
+            const auth = await fetch(`${base}/auth/v1/token?grant_type=password`, {
+              method: 'POST', headers: { apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: process.env.OWNER_EMAIL, password: process.env.IVX_OWNER_PASSWORD || process.env.OWNER_NEW_PASSWORD }),
+              signal: AbortSignal.timeout(20000),
+            });
+            if (!auth.ok) throw new Error(`Diagnostic owner authentication HTTP ${auth.status}`);
+            const session = await auth.json();
+            if (!session.access_token || session.user?.email?.toLowerCase() !== process.env.OWNER_EMAIL || !['owner','admin'].includes(session.user?.app_metadata?.role)) throw new Error('Diagnostic owner identity unconfirmed');
+            const response = await fetch(`${process.env.API_BASE}/api/ivx/render-diagnostic?limit=1`, {
+              headers: { Authorization: `Bearer ${session.access_token}` }, signal: AbortSignal.timeout(45000),
+            });
+            if (!response.ok) throw new Error(`Runtime diagnostic HTTP ${response.status}`);
+            const diagnostic = await response.json();
+            const keys = ['OWNER_NEW_PASSWORD','IVX_OWNER_PASSWORD','IVX_OWNER_EMAIL','EXPO_PUBLIC_SUPABASE_URL','SUPABASE_URL','EXPO_PUBLIC_SUPABASE_ANON_KEY','SUPABASE_ANON_KEY'];
+            const bindings = Object.fromEntries(keys.map(key => {
+              const row = diagnostic.ownerAuthEnvPresence?.[key];
+              return [key, { configured: row?.present === true, runtimePresent: row?.runtimePresent === true, matchesRuntime: typeof row?.matchesRuntime === 'boolean' ? row.matchesRuntime : null }];
+            }));
+            console.log(JSON.stringify({ sourceSha: process.env.GITHUB_SHA, runtimeSha: diagnostic.runtime?.commitSha ?? null, bindings, secretValuesReturned: false }));
+            if (!diagnostic.ok || diagnostic.runtime?.commitSha !== process.env.GITHUB_SHA) throw new Error('Exact runtime diagnostic not verified');
+          } catch (error) {
+            console.error(error instanceof Error && /^(Diagnostic owner|Runtime diagnostic|Exact runtime)/.test(error.message) ? error.message : 'Runtime binding diagnostic unavailable');
+            process.exitCode = 1;
+          }
+          NODE
