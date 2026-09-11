@@ -54,7 +54,7 @@ describe('IVXOwnerAITaskQueue self-bootstrap DDL', () => {
       const url = input.toString();
       calls++;
       if (url.includes('rest/v1/ivx_owner_ai_tasks')) {
-        return new Response(JSON.stringify({ message: 'relation does not exist' }), { status: 404 });
+        return new Response(JSON.stringify({ code: 'PGRST205', message: 'relation does not exist' }), { status: 404 });
       }
       if (url.includes('database/query')) {
         return calls === 2
@@ -84,7 +84,7 @@ describe('IVXOwnerAITaskQueue self-bootstrap DDL', () => {
       const url = input.toString();
       calls++;
       if (url.includes('rest/v1/ivx_owner_ai_tasks')) {
-        return new Response(JSON.stringify({ message: 'relation does not exist' }), { status: 404 });
+        return new Response(JSON.stringify({ code: 'PGRST205', message: 'relation does not exist' }), { status: 404 });
       }
       if (url.includes('database/query')) {
         return new Response('[]', { status: 544, headers: { 'content-type': 'application/json' } });
