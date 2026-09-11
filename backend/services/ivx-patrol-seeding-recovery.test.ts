@@ -31,14 +31,15 @@ test('patrol seed reads existing identities without locking 112 existing tasks',
   expect(err).toBe('');expect(code).toBe(0);
 });
 
-test('seed outage does not prevent claims of already durable current-mission work',async()=>{
+for (const controlMode of ['authorized', 'unavailable', 'individual_pause', 'read_failed']) test(`seed recovery admits only owner-authorized work: ${controlMode}`,async()=>{
   const child=Bun.spawn([process.execPath,'-e',`
     import {mock} from 'bun:test';
     let claims=0;
+    const controlMode=${JSON.stringify(controlMode)};
     const state={agentId:'ivx_holdings_1',agentNumber:1,pauseState:false,disabledState:false,health:'healthy',availability:'available',activeTaskId:null};
     mock.module('./backend/services/ivx-autonomous-truth-control.ts',()=>({
       IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS:30000,
-      enforceAutonomous112RuntimeTruth:async()=>({ok:false,recovered:[],action:'verified',snapshot:{autonomous:{dispatcherPaused:false,emergencyStop:false},agents:{counts:{}}}})
+      enforceAutonomous112RuntimeTruth:async()=>{if(controlMode==='read_failed')throw Error('control read unavailable');return {ok:false,recovered:[],action:'verified',snapshot:{autonomous:{dispatcherPaused:false,emergencyStop:false,ownerControlVerified:controlMode!=='unavailable'},agents:{counts:{},rows:[{agentId:state.agentId,agentNumber:1,paused:controlMode==='individual_pause',disabled:false}]}}};}
     }));
     mock.module('./backend/services/ivx-agent-runtime.ts',()=>({getAllExecutionStates:()=>[state],updateExecutionState:()=>{}}));
     mock.module('./backend/services/ivx-agent-real-engineering-cycle.ts',()=>({runRealEngineeringCycle:()=>{}}));
@@ -75,7 +76,7 @@ test('seed outage does not prevent claims of already durable current-mission wor
     m.startAutonomous112RuntimeEnforcer();
     await new Promise(r=>realTimeout(r,100));
     await m.stopAutonomous112RuntimeEnforcer();
-    if(claims<1)throw Error('existing work starved by seed outage');
+    if(controlMode==='authorized' ? claims<1 : claims!==0)throw Error('incorrect owner admission: '+controlMode+' claims='+claims);
   `],{cwd:new URL('../../',import.meta.url).pathname,stdout:'pipe',stderr:'pipe',timeout:10000});
   const [code,err]=await Promise.all([child.exited,new Response(child.stderr).text()]);
   if(code!==0)throw Error(err || 'Patrol recovery child failed without diagnostics');

@@ -158,14 +158,19 @@ export function registerAgentRoutes(app: Hono): void {
     const allowed = ['pause_all', 'resume_all', 'stop_all', 'stop_agent', 'retry_agent', 'reassign'];
     if (!allowed.includes(action)) return c.json({ ok: false, error: `action must be one of: ${allowed.join(', ')}` }, 400);
 
-    const oidcAuthorized = await verifyIVXGitHubActionsOIDCRequest(c.req.raw);
     const legacyAuthorized = await ownerAuthorized(c, body as Record<string, unknown>);
-    if (!legacyAuthorized && (!oidcAuthorized || action !== 'resume_all')) {
+    // A scheduled supervisor proves machine identity, not fresh owner intent.
+    // It cannot clear global or individual pauses through resume_all.
+    if (!legacyAuthorized) {
       return c.json({ ok: false, error: 'Owner authorization required.' }, 401);
     }
 
     const rawAgent = (body as Record<string, unknown>).agentNumber;
     const agentNumber = typeof rawAgent === 'number' ? rawAgent : undefined;
+    if ((rawAgent !== undefined || ['stop_agent', 'retry_agent'].includes(action))
+      && (!Number.isInteger(agentNumber) || agentNumber! < 1 || agentNumber! > 112)) {
+      return c.json({ ok: false, error: 'agentNumber must be an integer from 1 to 112.' }, 400);
+    }
     const control = await updateControlState(action as Parameters<typeof updateControlState>[0], agentNumber);
     // Control intent is durable after updateControlState; the dispatcher
     // application runs in the background so control calls stay inside the
@@ -173,12 +178,18 @@ export function registerAgentRoutes(app: Hono): void {
     if (action !== 'reassign') {
       void campaignDispatcherControl(action as 'pause_all' | 'resume_all' | 'stop_all' | 'stop_agent' | 'retry_agent', agentNumber).catch(() => undefined);
     }
-    const records = await Promise.race([
-      listCampaignDispatcherRecords(),
-      new Promise<Awaited<ReturnType<typeof listCampaignDispatcherRecords>>>((resolve) => setTimeout(() => resolve([]), 12_000)),
-    ]);
+    let recordsTimer: ReturnType<typeof setTimeout> | undefined;
+    let records: Awaited<ReturnType<typeof listCampaignDispatcherRecords>>;
+    try {
+      records = await Promise.race([
+        listCampaignDispatcherRecords(),
+        new Promise<Awaited<ReturnType<typeof listCampaignDispatcherRecords>>>((resolve) => {
+          recordsTimer = setTimeout(() => resolve([]), 12_000);
+        }),
+      ]);
+    } finally { if (recordsTimer) clearTimeout(recordsTimer); }
     const campaign = buildAppCompletionCampaign(control, records);
-    return c.json({ ok: true, marker: IVX_AGENT_API_MARKER, control, counts: campaign.counts, authorization: legacyAuthorized ? 'owner' : 'github_oidc_resume_only' });
+    return c.json({ ok: true, marker: IVX_AGENT_API_MARKER, control, counts: campaign.counts, authorization: 'owner' });
   });
 
   app.get('/api/ivx/agents/dashboard', (c) => {

@@ -14,6 +14,7 @@ import {
   startPostgresAutonomousTasks,
   readPostgresCurrentTasks,
   readPostgresRecoveryTasks,
+  readPostgresLandingTasks,
   readPostgresFleetProcessObservation,
 } from './ivx-postgres-autonomous-task-store';
 
@@ -243,7 +244,9 @@ describe('PostgreSQL autonomous task store', () => {
   test('active mission claims use a bounded prefix index before historical fallback', () => {
     const indexMigration = readFileSync(path.join(import.meta.dir, '../../supabase/migrations/20260911014433_autonomous_claim_mission_index.sql'), 'utf8');
     const claimMigration = readFileSync(path.join(import.meta.dir, '../../supabase/migrations/20260911014546_autonomous_claim_active_scope_first.sql'), 'utf8');
-    expect(indexMigration).toContain('CREATE INDEX CONCURRENTLY IF NOT EXISTS ivx_autonomous_tasks_queued_scope_idx');
+    expect(indexMigration).toContain('CREATE INDEX IF NOT EXISTS ivx_autonomous_tasks_queued_scope_idx');
+    expect(indexMigration).not.toContain('CREATE INDEX CONCURRENTLY');
+    expect(indexMigration).toContain('production migration executor wraps migrations in a transaction');
     expect(indexMigration).toContain('(idempotency_key text_pattern_ops, assigned_agent_number)');
     expect(indexMigration).toContain("WHERE state = 'QUEUED'");
     expect(claimMigration).toContain('foreach v_active_prefix in array v_active_prefixes');
@@ -272,6 +275,24 @@ test('coalesces concurrent current-state observers without caching stale results
   results[0][0].taskId = 'modified';
   expect(results[1][0].taskId).toBe('observation-1');
   expect((await readPostgresCurrentTasks(['RUNNING', 'LEASED']))[0].taskId).toBe('observation-2');
+});
+
+test('112 current-SHA Landing observers share one read without mixing deployments or retaining stale evidence', async () => {
+  configureAtomicQueue();
+  let reads = 0;
+  globalThis.fetch = (async input => {
+    const version = ++reads;
+    const filter = new URL(String(input)).searchParams.get('or');
+    expect(filter).toContain('landing-p0-patrol:');
+    await new Promise(resolve => setTimeout(resolve, 5));
+    return Response.json([{ payload: { taskId: `landing-${version}` } }]);
+  }) as typeof fetch;
+  const rows = await Promise.all(Array.from({ length: 112 }, () => readPostgresLandingTasks('a'.repeat(40))));
+  expect(reads).toBe(1);
+  rows[0][0].taskId = 'changed';
+  expect(rows[1][0].taskId).toBe('landing-1');
+  await Promise.all([readPostgresLandingTasks('a'.repeat(40)), readPostgresLandingTasks('b'.repeat(40))]);
+  expect(reads).toBe(3);
 });
 
 test('releases a failed shared observation so the next read can recover', async () => {

@@ -45,6 +45,38 @@ async function makeIsolatedRepo(label: string): Promise<{
 }
 
 describe('Landing repair source access', () => {
+  it('does not start model work after the worker loses its execution authority', async () => {
+    const repo = await makeIsolatedRepo('lost-authority-start');
+    let calls = 0;
+    const proof = await runIVXAutonomousCoder({
+      taskId: 'authority-start', goal: 'Build an internal helper', executionMode: 'code_change',
+      approvalPolicy: 'owner_gated', ownerId: 'authority-owner', projectRoot: repo.root,
+      assertExecutionAuthority: async () => { throw new Error('WORKER_AUTHORITY_UNCONFIRMED'); },
+      llmCaller: async () => { calls++; return '{}'; }, maxLlmCalls: 1,
+    });
+    expect(calls).toBe(0);
+    expect(proof.error).toContain('WORKER_AUTHORITY_UNCONFIRMED');
+    expect(proof.finalStatus).not.toBe('CANCELED');
+  });
+
+  it('rechecks physical authority after validation and before publishing a commit', async () => {
+    const repo = await makeIsolatedRepo('lost-authority-commit');
+    let authority = true, commits = 0;
+    const proof = await runIVXAutonomousCoder({
+      taskId: 'authority-commit', goal: 'Build an internal helper', executionMode: 'code_change',
+      approvalPolicy: 'owner_gated', ownerId: 'authority-owner', projectRoot: repo.root,
+      fileReader: repo.fileReader, fileWriter: repo.fileWriter,
+      assertExecutionAuthority: async () => { if (!authority) throw new Error('WORKER_AUTHORITY_UNCONFIRMED'); },
+      llmCaller: async () => JSON.stringify({ rootCause: 'Helper absent', technicalPlan: 'Add a deterministic helper',
+        operations: [{ path: 'backend/services/authority-helper.ts', kind: 'create_file', oldText: '',
+          newText: 'export function twice(value: number) { return value * 2; }', reason: 'Implement helper' }] }),
+      testRunner: async (_cwd, command) => { authority = false; return { command, ok: true, exitCode: 0, stdoutTail: '', stderrTail: '', durationMs: 1 }; },
+      commitFn: async (_files, branch) => { commits++; return { commitSha: 'a'.repeat(40), commitUrl: '', branch }; },
+    });
+    expect(commits).toBe(0);
+    expect(proof.error).toContain('WORKER_AUTHORITY_UNCONFIRMED');
+    expect(proof.finalStatus).not.toBe('CANCELED');
+  });
   it('refuses an unrelated matching-score repair before file mutation or commit', async () => {
     const repo = await makeIsolatedRepo('video-defect-scope');
     const source = 'backend/services/ivx-deal-matching-engine.ts';

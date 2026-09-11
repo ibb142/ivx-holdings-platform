@@ -3,12 +3,12 @@ import { EventEmitter } from 'node:events';
 import type { Pool } from 'pg';
 import { queryWithPostgresDeadline } from './ivx-postgres-deadline';
 
-for (const failAt of [null, 'select mutation', 'COMMIT', 'BEGIN']) {
+for (const failAt of [null, 'select mutation', 'COMMIT', 'BEGIN', 'SET LOCAL lock_timeout']) {
   test(`deadline transaction ${failAt ?? 'success'} cleans up without replay`, async () => {
     const calls: string[] = [], releases: boolean[] = [];
     const error = new Error('query timeout');
     const client = Object.assign(new EventEmitter(), {
-      query: async (text: string) => { calls.push(text); if (text === failAt) throw error; return { rows: [{ result: 1 }] }; },
+      query: async (text: string) => { calls.push(text); if (failAt && text.includes(failAt)) throw error; return { rows: [{ result: 1 }] }; },
       release: (destroy: boolean) => releases.push(destroy),
     });
     const pool = { connect: async () => client } as unknown as Pick<Pool, 'connect'>;
@@ -20,12 +20,11 @@ for (const failAt of [null, 'select mutation', 'COMMIT', 'BEGIN']) {
       expect((await result).rows).toEqual([{ result: 1 }]);
       expect(calls.at(-1)).toBe('COMMIT'); expect(releases).toEqual([false]);
     }
-    expect(calls.filter(x => x === 'select mutation').length).toBe(failAt === 'BEGIN' ? 0 : 1);
+    const setupFailure = failAt === 'BEGIN' || failAt === 'SET LOCAL lock_timeout';
+    expect(calls.filter(x => x === 'select mutation').length).toBe(setupFailure ? 0 : 1);
     expect(client.listenerCount('error')).toBe(0);
-    if (failAt !== 'BEGIN') expect(calls.slice(0,5)).toEqual([
-      'BEGIN', "SET LOCAL statement_timeout = '4s'", "SET LOCAL lock_timeout = '2s'",
-      "SET LOCAL idle_in_transaction_session_timeout = '8s'", 'select mutation',
-    ]);
+    expect(calls[0]).toContain("BEGIN; SET LOCAL statement_timeout = '4s'; SET LOCAL lock_timeout = '2s'; SET LOCAL idle_in_transaction_session_timeout = '8s'");
+    if (!failAt) expect(calls.length).toBe(3);
   });
 }
 
@@ -36,7 +35,7 @@ for (const disconnectAt of ['BEGIN', 'select mutation', 'COMMIT']) {
     const client = Object.assign(new EventEmitter(), {
       query: async (text: string) => {
         calls.push(text);
-        if (text === disconnectAt) client.emit('error', error);
+        if (text.includes(disconnectAt)) client.emit('error', error);
         return { rows: [{ result: 1 }] };
       },
       release: (destroy: boolean) => releases.push(destroy),

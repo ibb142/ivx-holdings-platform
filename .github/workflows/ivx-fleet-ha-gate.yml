@@ -3,7 +3,7 @@ on:
   push:
     branches: [fix/fleet-render-ha-20260908, fix/fleet-backend-ha-20260908]
   pull_request:
-    paths: ['backend/**', 'expo/**', 'supabase/migrations/**', 'supabase/repair-functions/**', 'scripts/ivx-senior-commit-recovery-postgres-proof.mjs', 'scripts/ivx-fleet-ha-postgres-proof.mjs', 'scripts/ivx-task-recovery-postgres-proof.mjs', 'scripts/ivx-fleet-telemetry-postgres-proof.ts', 'scripts/ivx-fleet-ha-live-proof.ts', 'scripts/ivx-fleet-ha-identities.ts', 'scripts/ivx-fleet-ha-identities.test.ts', '.github/workflows/ivx-fleet-ha-gate.yml']
+    paths: ['backend/**', 'expo/**', 'supabase/migrations/**', 'supabase/repair-functions/**', 'scripts/ivx-senior-commit-recovery-postgres-proof.mjs', 'scripts/ivx-senior-compact-receipt-proof.mjs', 'scripts/ivx-objective-link-postgres-proof.mjs', 'scripts/ivx-fleet-ha-postgres-proof.mjs', 'scripts/ivx-task-recovery-postgres-proof.mjs', 'scripts/ivx-fleet-telemetry-postgres-proof.ts', 'scripts/ivx-fleet-ha-live-proof.ts', 'scripts/ivx-fleet-ha-identities.ts', 'scripts/ivx-fleet-ha-identities.test.ts', '.github/workflows/ivx-fleet-ha-gate.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -32,8 +32,14 @@ jobs:
       - run: bun test backend/api/ivx-owner-ai-stream.test.ts
       - run: bun test backend/services/ivx-owner-ai-task-queue.test.ts
       - run: bun test expo/__tests__/owner-chat-submission.test.ts
+      - name: Require observed AI readiness and explicit billing failures
+        run: bun test backend/services/ivx-ai-readiness-state.test.ts
       - run: bun test backend/services/ivx-autonomous-scheduler.test.ts backend/services/ivx-technical-schedule.test.ts backend/services/ivx-landing-superseded-recovery.test.ts
       - run: bun test backend/services/ivx-coder-workspace.test.ts
+      - name: Verify manager identity, terminal writes, admission, planning and recovery
+        run: bun test backend/services/ivx-manager-recovery-regressions.test.ts backend/services/ivx-resume-pr-identity.test.ts backend/services/ivx-worker-terminal-phase.test.ts backend/services/ivx-coder-branch.test.ts backend/services/ivx-senior-job-admission.test.ts backend/services/ivx-senior-queue-reconciliation.test.ts backend/services/ivx-senior-committed-recovery-policy.test.ts backend/services/ivx-repair-resume-evidence.test.ts backend/services/ivx-autonomous-planning-continuity.test.ts backend/services/ivx-landing-p0-backlog.test.ts
+      - name: Refuse new model work and publication after worker authority is lost
+        run: bun test backend/ivx-autonomous-coder.test.ts --test-name-pattern 'authority'
       - run: bun test backend/ivx-final-closeout-resume.test.ts backend/services/ivx-native-intent.test.ts backend/services/ivx-fleet-dashboard-signals.test.ts backend/services/ivx-fleet-slo.test.ts backend/services/ivx-postgres-autonomous-task-store.test.ts backend/services/ivx-render-replicas.test.ts backend/services/ivx-shared-room-storage.test.ts backend/services/ivx-autonomous-control-policy.test.ts
       - run: node scripts/ivx-fleet-ha-postgres-proof.mjs
         env:
@@ -44,6 +50,10 @@ jobs:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - name: Verify owner chat admission and response reconciliation on PostgreSQL
         run: bun scripts/ivx-owner-chat-admission-postgres-proof.ts
+        env:
+          IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
+      - name: Verify compact mutation receipts and retained checkpoints
+        run: node scripts/ivx-senior-compact-receipt-proof.mjs
         env:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - run: bun scripts/ivx-fleet-telemetry-postgres-proof.ts
@@ -57,6 +67,10 @@ jobs:
       - run: bun scripts/ivx-fleet-bounded-claims-proof.ts
         env:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
+      - name: Verify objective linking progresses around occupied tasks
+        run: node scripts/ivx-objective-link-postgres-proof.mjs
+        env:
+          IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - name: Preserve task recovery evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -66,5 +80,7 @@ jobs:
             qa/evidence/fleet-ha/task-recovery.json
             qa/evidence/fleet-ha/senior-commit-recovery.json
             qa/evidence/fleet-ha/owner-chat-admission.json
+            qa/evidence/fleet-ha/objective-link.json
+            qa/evidence/fleet-ha/compact-receipt.json
           if-no-files-found: warn
           retention-days: 30

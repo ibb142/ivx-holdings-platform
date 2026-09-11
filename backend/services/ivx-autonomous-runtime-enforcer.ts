@@ -73,6 +73,7 @@ let continuityEnabled = false;
 let landingMissionActive = false;
 let refillStarted = 0;
 let refillCompleted = 0;
+let refillObserved = 0;
 let refillFailed = 0;
 let refillIdle = 0;
 let refillBlocked = 0;
@@ -89,8 +90,8 @@ const ACTIVE_TASK_STATES = new Set([
   'READY_FOR_DEPLOYMENT', 'DEPLOYING', 'DEPLOYED', 'PRODUCTION_VERIFYING',
 ]);
 
-export type ContinuityOutcome = 'completed' | 'blocked' | 'idle' | 'failed';
-type AgentContinuityRecord = { outcome: ContinuityOutcome; action: string; taskId: string | null; module: string | null; productiveMinutes: number; at: string; error: string | null };
+export type ContinuityOutcome = 'completed' | 'observed' | 'blocked' | 'idle' | 'failed';
+type AgentContinuityRecord = { outcome: ContinuityOutcome; action: string; taskId: string | null; module: string | null; productiveMinutes: number; evidenceIds: string[]; at: string; error: string | null };
 const lastOutcomeByAgent = new Map<number, AgentContinuityRecord>();
 const refillWakeup = createRefillWakeup({
   now: Date.now,
@@ -101,7 +102,7 @@ const refillWakeup = createRefillWakeup({
 
 function refillDelayMs(outcome: ContinuityOutcome): number {
   if (outcome === 'failed') return 30_000;
-  if (outcome === 'idle') {
+  if (outcome === 'idle' || outcome === 'observed') {
     const idle = Number.parseInt(process.env.IVX_CONTINUITY_IDLE_DELAY_MS ?? '', 10);
     return Number.isFinite(idle) && idle >= 1_000 ? Math.min(idle, 60_000) : 15_000;
   }
@@ -121,10 +122,13 @@ export function getContinuityMaxConcurrency(): number {
   return configured === IVX_AUTONOMOUS_FLEET_SIZE ? configured : IVX_AUTONOMOUS_FLEET_SIZE;
 }
 
-export function classifyContinuityResult(result: { ok: boolean; action: string; taskId: string | null; states: string[] }): ContinuityOutcome {
+export function classifyContinuityResult(result: { ok: boolean; action: string; taskId: string | null; states: string[]; evidenceIds?: string[] }): ContinuityOutcome {
   if (!result.ok) return 'failed';
   if (result.action === 'NO_TASK_AVAILABLE') return 'idle';
-  if (result.action === 'PATROL_SESSION_ENDED') return 'idle';
+  if (result.action === 'PATROL_SESSION_ENDED') {
+    if (!result.taskId) return 'failed';
+    return result.evidenceIds?.some(id => typeof id === 'string' && id.trim()) ? 'observed' : 'idle';
+  }
   if (result.action === 'PATROL_SESSION_LOST') return 'failed';
   if (result.states.includes('ALREADY_VERIFIED')) return 'idle';
   if (!result.taskId) return 'failed';
@@ -133,8 +137,15 @@ export function classifyContinuityResult(result: { ok: boolean; action: string; 
   return 'failed';
 }
 
+let ownerAllowedAgentNumbers = new Set<number>();
+
+function ownerAllowsAgent(agentId: string): boolean {
+  const state = getAllExecutionStates().find((row) => row.agentId === agentId);
+  return Boolean(state && ownerAllowedAgentNumbers.has(state.agentNumber));
+}
+
 function canRunContinuity(agentId: string): boolean {
-  if (!continuityEnabled || continuityRuns.has(agentId)) return false;
+  if (!continuityEnabled || !ownerAllowsAgent(agentId) || continuityRuns.has(agentId)) return false;
   if (continuityRuns.size >= getContinuityMaxConcurrency()) return false;
   const state = getAllExecutionStates().find((row) => row.agentId === agentId);
   if (!state) return false;
@@ -147,7 +158,7 @@ function canRunContinuity(agentId: string): boolean {
 
 function canStartPreparedContinuity(agentId: string): boolean {
   return preparedContinuityAllowed({
-    enabled: continuityEnabled, stopping,
+    enabled: continuityEnabled && ownerAllowsAgent(agentId), stopping,
     hasLocalRun: continuityRuns.has(agentId),
     atCapacity: continuityRuns.size >= getContinuityMaxConcurrency(),
     state: getAllExecutionStates().find((row) => row.agentId === agentId),
@@ -272,7 +283,7 @@ function startContinuityRun(agentId: string, agentNumber: number, preparedTask: 
       agentId,
       agentNumber,
       sourceSha,
-      shouldContinue: () => continuityEnabled && landingMissionActive && currentSourceSha() === sourceSha,
+      shouldContinue: () => continuityEnabled && ownerAllowsAgent(agentId) && landingMissionActive && currentSourceSha() === sourceSha,
     }).then((result) => ({
       ok: result.ok,
       marker: IVX_LANDING_CONTINUOUS_PATROL_MARKER,
@@ -302,10 +313,12 @@ function startContinuityRun(agentId: string, agentNumber: number, preparedTask: 
         taskId: result.taskId,
         module: result.module,
         productiveMinutes: result.productiveMinutes,
+        evidenceIds: [...result.evidenceIds],
         at: new Date().toISOString(),
         error: result.error,
       });
       if (outcome === 'completed') refillCompleted += 1;
+      else if (outcome === 'observed') refillObserved += 1;
       else if (outcome === 'blocked') refillBlocked += 1;
       else if (outcome === 'idle') {
         refillIdle += 1;
@@ -322,7 +335,7 @@ function startContinuityRun(agentId: string, agentNumber: number, preparedTask: 
     .catch((error) => {
       outcome = 'failed';
       refillFailed += 1;
-      lastOutcomeByAgent.set(agentNumber, { outcome: 'failed', action: 'EXCEPTION', taskId: null, module: null, productiveMinutes: 0, at: new Date().toISOString(), error: error instanceof Error ? error.message : String(error) });
+      lastOutcomeByAgent.set(agentNumber, { outcome: 'failed', action: 'EXCEPTION', taskId: null, module: null, productiveMinutes: 0, evidenceIds: [], at: new Date().toISOString(), error: error instanceof Error ? error.message : String(error) });
       console.error('[IVX Autonomous 112 Continuity] refill exception', { agentNumber, agentId, error: error instanceof Error ? error.message : String(error) });
     })
     .finally(() => {
@@ -407,6 +420,7 @@ function refillAllAvailableAgents(
 async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
   if (stopping) return;
   lastRunAt = new Date().toISOString();
+  let controlObserved = false;
   try {
     await runLeaseMirror();
     const result = await enforceAutonomous112RuntimeTruth();
@@ -415,28 +429,22 @@ async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
     lastRecovered = result.recovered;
     lastError = null;
 
-    continuityEnabled = Boolean(!result.snapshot.autonomous.dispatcherPaused && !result.snapshot.autonomous.emergencyStop);
+    continuityEnabled = Boolean(result.snapshot.autonomous.ownerControlVerified
+      && !result.snapshot.autonomous.dispatcherPaused && !result.snapshot.autonomous.emergencyStop);
+    ownerAllowedAgentNumbers = new Set(continuityEnabled
+      ? result.snapshot.agents.rows.filter((row) => !row.paused && !row.disabled).map((row) => row.agentNumber)
+      : []);
+    controlObserved = true;
     const sourceSha = currentSourceSha();
     landingMissionActive = continuityEnabled && await isLandingP0MissionActive();
 
     await refillAllAvailableAgents(sourceSha, landingMissionActive);
     void runLeaseMirror();
 
-    let semantic360 = getAutonomousSemantic360Status();
-    let decisionQuality = getAutonomousDecisionQualityStatus();
-    if (continuityEnabled && !landingMissionActive) {
-      await runAutonomousSemantic360(sourceSha);
-      semantic360 = getAutonomousSemantic360Status();
-      await runAutonomousDecisionQualityLoop(sourceSha);
-      decisionQuality = getAutonomousDecisionQualityStatus();
-      if (!landingMissionActive) {
-        const lanes = getAllExecutionStates()
-          .filter((state) => state.agentNumber != null && !state.pauseState && !state.disabledState && state.health !== 'failed')
-          .map((state) => ({ agentId: state.agentId, agentNumber: state.agentNumber as number }));
-        await ensureAutonomousManagerBacklog({ sourceSha, agents: lanes });
-        await refillAllAvailableAgents(sourceSha, false);
-      }
-    }
+    await refreshAutonomousPlanning(sourceSha, { enabled: continuityEnabled, landingMission: landingMissionActive });
+    const semantic360 = getAutonomousSemantic360Status();
+    const decisionQuality = getAutonomousDecisionQualityStatus();
+    if (continuityEnabled) await refillAllAvailableAgents(sourceSha, landingMissionActive);
 
     await runLeaseMirror();
     console.log('[IVX Autonomous 112 Runtime Enforcer]', {
@@ -455,6 +463,7 @@ async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
       continuityInFlight: continuityRuns.size,
       refillStarted,
       refillCompleted,
+      refillObserved,
       refillBlocked,
       refillIdle,
       refillFailed,
@@ -467,11 +476,28 @@ async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
 
     void runHeartbeatRefresh();
   } catch (error) {
+    if (!controlObserved) {
+      continuityEnabled = false;
+      ownerAllowedAgentNumbers.clear();
+    }
     lastOk = false;
     lastRecovered = [];
     lastError = error instanceof Error ? error.message : String(error);
     console.error('[IVX Autonomous 112 Runtime Enforcer] failed', { reason, error: lastError, continuityPreserved: continuityEnabled });
   }
+}
+
+/** Landing keeps execution priority while the manager maintains its bounded backlog. */
+export async function refreshAutonomousPlanning(sourceSha: string, policy: { enabled: boolean; landingMission: boolean }): Promise<void> {
+  if (!policy.enabled) return;
+  if (!policy.landingMission) {
+    await runAutonomousSemantic360(sourceSha);
+    await runAutonomousDecisionQualityLoop(sourceSha);
+  }
+  const lanes = getAllExecutionStates()
+    .filter(state => state.agentNumber != null && !state.pauseState && !state.disabledState && state.health !== 'failed')
+    .map(state => ({ agentId: state.agentId, agentNumber: state.agentNumber as number }));
+  await ensureAutonomousManagerBacklog({ sourceSha, agents: lanes });
 }
 
 function run(reason: 'boot' | 'interval'): Promise<void> {
@@ -565,6 +591,7 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     continuityInFlight: continuityRuns.size,
     refillStarted,
     refillCompleted,
+    refillObserved,
     refillBlocked,
     refillIdle,
     refillFailed,
@@ -586,9 +613,10 @@ export function getAutonomous112RuntimeEnforcerStatus() {
 }
 
 export function getContinuityOutcomeCounts(): Record<ContinuityOutcome | 'inFlight' | 'unknown', number> {
-  const counts: Record<ContinuityOutcome | 'inFlight' | 'unknown', number> = { completed: 0, blocked: 0, idle: 0, failed: 0, inFlight: continuityRuns.size, unknown: 0 };
+  const counts: Record<ContinuityOutcome | 'inFlight' | 'unknown', number> = { completed: 0, observed: 0, blocked: 0, idle: 0, failed: 0, inFlight: continuityRuns.size, unknown: 0 };
   const states = getAllExecutionStates();
   for (const state of states) {
+    if (continuityRuns.has(state.agentId)) continue;
     if (state.agentNumber == null) { counts.unknown += 1; continue; }
     const record = lastOutcomeByAgent.get(state.agentNumber);
     if (!record) counts.unknown += 1; else counts[record.outcome] += 1;
@@ -597,5 +625,5 @@ export function getContinuityOutcomeCounts(): Record<ContinuityOutcome | 'inFlig
 }
 
 export function getContinuityOutcomes(): Array<AgentContinuityRecord & { agentNumber: number }> {
-  return [...lastOutcomeByAgent.entries()].map(([agentNumber, record]) => ({ agentNumber, ...record })).sort((a, b) => a.agentNumber - b.agentNumber);
+  return [...lastOutcomeByAgent.entries()].map(([agentNumber, record]) => ({ agentNumber, ...record, evidenceIds: [...record.evidenceIds] })).sort((a, b) => a.agentNumber - b.agentNumber);
 }
