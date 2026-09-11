@@ -57,7 +57,7 @@ export function normalizePublicLandingDeals(rows: readonly Record<string, any>[]
     .map((row): Record<string, any> => {
       const normalized: Record<string, any> = { ...row };
       if (String(row.id ?? '') === 'JV-202603-5190') normalized.title = 'IVX JACKSONVILLE PRIME';
-      normalized.videos = row.videos || [];
+      normalized.videos = (row.videos || []).map((video: string) => ({ url: video, mime: 'video/mp4' }));
       return normalized;
     })
     .sort((a, b) => {
