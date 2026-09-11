@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { recoverDependencies } from './phase1-recover-dependencies.mjs';
 import { PROJECT } from './phase1-dependency-audit.mjs';
 const env = { PROJECT_REF: PROJECT, PHASE1_RECOVERY: PROJECT, SUPABASE_ACCESS_TOKEN: 'private-management', SUPABASE_SERVICE_ROLE_KEY: 'private-data' };
-function fixture({ identity = PROJECT, projectStatus = 'ACTIVE_HEALTHY', healthy = false, authStatus = 503, lost = false } = {}) {
+function fixture({ identity = PROJECT, projectStatus = 'ACTIVE_HEALTHY', healthy = false, authStatus = 503, durableStatus = 200, lost = false } = {}) {
   const mutations = [];
   const fetchImpl = async (url, init) => {
     assert.equal(init.redirect, 'error');
@@ -14,7 +14,7 @@ function fixture({ identity = PROJECT, projectStatus = 'ACTIVE_HEALTHY', healthy
     }
     if (url.endsWith(`/projects/${PROJECT}`)) return Response.json({ id: identity, status: projectStatus });
     if (url.includes('/health?')) return Response.json([{ name: 'auth', healthy }]);
-    if (url.includes('/rest/')) return Response.json([{ doc_key: 'private-data-row' }]);
+    if (url.includes('/rest/')) return Response.json([{ doc_key: 'private-data-row' }], { status: mutations.length ? 200 : durableStatus });
     return mutations.length ? Response.json({ name: 'GoTrue' }) : new Response(JSON.stringify({ name: 'GoTrue' }), { status: authStatus });
   };
   return { mutations, fetchImpl };
@@ -33,6 +33,11 @@ test('two failed probes permit one restart and three independent recovery observ
 test('an ambiguous restart is never replayed', async () => {
   const f = fixture({ lost: true }); const result = await recoverDependencies({ env, ...f, wait: async () => {} });
   assert.equal(f.mutations.length, 1); assert.equal(result.action, 'restart-not-confirmed'); assert(!JSON.stringify(result).includes('private'));
+});
+test('a sustained durable data outage can be recovered independently of healthy Auth', async () => {
+  const f = fixture({ healthy: true, authStatus: 200, durableStatus: 503 });
+  const result = await recoverDependencies({ env, ...f, wait: async () => {} });
+  assert.equal(f.mutations.length, 1); assert.equal(result.recoveryReason, 'durable-data-outage'); assert.equal(result.dependenciesRecovered, true);
 });
 test('identity mismatch or an in-progress platform operation prevents mutation', async () => {
   for (const option of [{ identity: 'other' }, { projectStatus: 'RESTARTING' }]) {

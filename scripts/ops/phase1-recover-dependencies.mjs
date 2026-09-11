@@ -2,7 +2,7 @@ import { writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { PROJECT } from './phase1-dependency-audit.mjs';
 
-// One project restart, only after two independent unhealthy Auth observations.
+// One project restart after a confirmed sustained Auth or durable data outage.
 // This operation never changes credentials, environment, data or owner controls.
 export async function recoverDependencies({ env = process.env, fetchImpl = fetch,
   wait = ms => new Promise(resolve => setTimeout(resolve, ms)), now = () => new Date().toISOString(), record = () => {} } = {}) {
@@ -29,7 +29,10 @@ export async function recoverDependencies({ env = process.env, fetchImpl = fetch
   const unhealthy = health.status === 200 && Array.isArray(health.body)
     && health.body.length === 1 && health.body[0]?.name === 'auth' && health.body[0]?.healthy === false;
   report.managementAuthUnhealthy = unhealthy;
-  if (!unhealthy) return { ...report, action: 'skipped', reason: 'Auth service is not confirmed unhealthy', finishedAt: now() };
+  if (health.status !== 200 || !Array.isArray(health.body) || health.body.length !== 1 || health.body[0]?.name !== 'auth'
+    || typeof health.body[0]?.healthy !== 'boolean') {
+    return { ...report, action: 'skipped', reason: 'Management service observation unavailable', finishedAt: now() };
+  }
   async function observe() {
     const [auth, durable] = await Promise.all([
       request(`${data}/auth/v1/health`, dataHeaders),
@@ -43,12 +46,17 @@ export async function recoverDependencies({ env = process.env, fetchImpl = fetch
   }
   for (let index = 0; index < 2; index++) {
     const observation = await observe();
-    if (observation.authOk) return { ...report, action: 'skipped', reason: 'Auth recovered before restart', finishedAt: now() };
-    if (![0, 500, 502, 503, 504, 520, 521, 522, 523, 524, 544].includes(observation.authStatus)) {
-      return { ...report, action: 'skipped', reason: 'Auth failure is not a confirmed transient outage', finishedAt: now() };
+    if (observation.authOk && observation.durableOk) return { ...report, action: 'skipped', reason: 'Dependencies recovered before restart', finishedAt: now() };
+    const transient = [0, 500, 502, 503, 504, 520, 521, 522, 523, 524, 544];
+    if ((!observation.authOk && !transient.includes(observation.authStatus)) || (!observation.durableOk && !transient.includes(observation.durableStatus))) {
+      return { ...report, action: 'skipped', reason: 'Dependency failure is not a confirmed transient outage', finishedAt: now() };
     }
     if (index === 0) await wait(5_000);
   }
+  const durableOutage = report.observations.every(observation => !observation.durableOk);
+  const authOutage = unhealthy && report.observations.every(observation => !observation.authOk);
+  if (!durableOutage && !authOutage) return { ...report, action: 'skipped', reason: 'No sustained dependency outage was confirmed', finishedAt: now() };
+  report.recoveryReason = durableOutage ? 'durable-data-outage' : 'auth-service-outage';
   // Do not replay the mutation if its acknowledgement is lost.
   report.restartAttempts = 1;
   report.restartRequestedAt = now();
