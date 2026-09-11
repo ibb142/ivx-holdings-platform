@@ -16,6 +16,9 @@
  */
 const { mock } = require('bun:test');
 
+// Shared client imports must not instantiate Expo's native networking in Bun.
+mock.module('expo/fetch', () => ({ fetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args) }));
+
 // expo-modules-core and react-native reference __DEV__ as a bare global.
 if (typeof (globalThis as Record<string, unknown>).__DEV__ === 'undefined') {
   (globalThis as Record<string, unknown>).__DEV__ = false;

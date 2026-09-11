@@ -1,3 +1,4 @@
+import '../services/ivx-global-ai-budget-fetch';
 /**
  * IVX-SENIOR-DEV-01 — Dedicated execution-plane entry point.
  *

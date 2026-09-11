@@ -252,12 +252,24 @@ export async function getLocalOwnerMessages(): Promise<IVXMessage[]> {
   return await loadLocalMessages();
 }
 
-async function saveLocalMessages(messages: IVXMessage[]): Promise<void> {
-  try {
-    const bounded = capOwnerMessages(messages, IVX_LOCAL_MESSAGES_MIRROR_CAP);
+// Remote history can finish after a new reply has already been rendered and
+// mirrored. Serialize every read/merge/write and union with the latest durable
+// contents inside that critical section, never overwrite from an old snapshot.
+let localMessageWriteQueue: Promise<void> = Promise.resolve();
+
+async function saveLocalMessages(messages: IVXMessage[]): Promise<boolean> {
+  const write = localMessageWriteQueue.then(async () => {
+    const current = await loadLocalMessages();
+    const bounded = capOwnerMessages(mergeOwnerMessages(messages, current), IVX_LOCAL_MESSAGES_MIRROR_CAP);
     await AsyncStorage.setItem(IVX_LOCAL_MESSAGES_STORAGE_KEY, JSON.stringify(bounded));
+  });
+  localMessageWriteQueue = write.catch(() => undefined);
+  try {
+    await write;
+    return true;
   } catch (error) {
     console.log('[IVXChatService] Failed to save local messages:', error instanceof Error ? error.message : 'unknown');
+    return false;
   }
 }
 
@@ -270,12 +282,10 @@ async function saveLocalMessages(messages: IVXMessage[]): Promise<void> {
  */
 async function persistOwnerMessageMirror(mergedMessages: IVXMessage[], conversationId: string): Promise<void> {
   try {
-    const mirror = capOwnerMessages(mergedMessages, IVX_LOCAL_MESSAGES_MIRROR_CAP);
-    await AsyncStorage.setItem(IVX_LOCAL_MESSAGES_STORAGE_KEY, JSON.stringify(mirror));
-    console.log('[IVXChatHydration] Local mirror updated', {
+    if (!await saveLocalMessages(mergedMessages)) return;
+    console.log('[IVXChatHydration] Local mirror merge completed', {
       conversationId,
-      mirrored: mirror.length,
-      cappedFrom: mergedMessages.length,
+      incomingCount: mergedMessages.length,
     });
   } catch (error) {
     console.log('[IVXChatHydration] Local mirror persist failed (conversation still rendered):', error instanceof Error ? error.message : 'unknown');
@@ -307,7 +317,7 @@ async function appendOwnerMessagesToLocalMirror(messages: IVXMessage[]): Promise
     // Union existing (authoritative base) with the newly rendered messages,
     // deduped by exact signature + content key, then re-cap and persist.
     const merged = mergeOwnerMessages(existing, durable);
-    await saveLocalMessages(merged);
+    if (!await saveLocalMessages(merged)) return;
     console.log('[IVXChatHydration] Durable mirror appended', {
       added: durable.length,
       total: merged.length,
@@ -871,7 +881,11 @@ async function insertMessage(tables: ResolvedTables, input: {
     throw new Error('Message insert did not return a readable row.');
   }
 
-  return await mapMessage(insertedRow);
+  const message = await mapMessage(insertedRow);
+  // Make the acknowledged remote row available after a cold restart even if
+  // summary/inbox work or the next authenticated history read is unavailable.
+  await appendOwnerMessagesToLocalMirror([message]);
+  return message;
 }
 
 /**

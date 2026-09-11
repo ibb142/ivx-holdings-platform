@@ -56,6 +56,10 @@ try {
   cases.push({ scenario: 'reverse_model_alignment_regression',
     request: 'Reverse the characters of 99a0314b. Return only the reversed text.',
     expected: 'b4130a99', history: refusalHistory });
+  // Retain the fresh compact-context failure from run 34649364458 too.
+  cases.push({ scenario: 'reverse_compact_context_regression',
+    request: 'Reverse the characters of b42ebadc. Return only the reversed text.',
+    expected: 'cdabe24b', history: refusalHistory });
 
   // Diagnostic comparison only: retain the previous prompt's answer on the
   // repeated-refusal case. Every candidate case below must still pass.

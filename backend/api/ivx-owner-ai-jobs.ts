@@ -9,6 +9,7 @@
  */
 import { getAIJob, listAIJobs, startAIJob } from '../services/ivx-ai-job-queue';
 import { getAIQueueSnapshot } from '../services/ivx-ai-queue';
+import { readGlobalAIBudgetStatus } from '../services/ivx-global-ai-budget';
 import { summarizeProviderTelemetry, listProviderTelemetry } from '../services/ivx-provider-telemetry';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 import { checkPreExecutionGate } from '../services/ivx-pre-execution-gate-middleware';
@@ -126,10 +127,10 @@ export async function handleIVXAIRuntimeObservabilityRequest(request: Request): 
   return ownerOnlyJson({
     ok: true,
     queue: getAIQueueSnapshot(),
+    globalBudget: await readGlobalAIBudgetStatus(),
     telemetry: {
       summary: summarizeProviderTelemetry(100),
       recent: listProviderTelemetry(20),
     },
   });
 }
-

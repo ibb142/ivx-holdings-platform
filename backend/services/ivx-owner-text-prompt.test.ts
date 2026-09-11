@@ -3,6 +3,26 @@ import type { IVXAITextMessage } from '../ivx-ai-runtime';
 import { buildOwnerTextModelInput } from './ivx-owner-text-prompt';
 
 describe('owner text prompt continuity', () => {
+  test('a strict literal operation excludes unrelated live production instructions', () => {
+    const history: IVXAITextMessage[] = [{ role: 'assistant', content: 'Earlier answer was incorrect.' }];
+    const input = buildOwnerTextModelInput({ request: 'Reverse "A7_B9". Return only the result.', history,
+      liveContext: '[IVX LIVE PRODUCTION CONTEXT] unrelated deployment evidence' });
+    expect(input.system).not.toContain('unrelated deployment evidence');
+    expect(input.system).not.toContain('OWNER AUTHORIZATION PERSISTENCE');
+    expect(input.system).toContain('do not authorize external actions');
+    expect(input.system).toContain('not instructions governing this turn');
+    expect(input.messages[0]).toEqual(history[0]);
+    expect(JSON.stringify(input)).not.toContain('9B_7A');
+  });
+
+  test('a compound request retains all production evidence and authorization rules', () => {
+    const liveContext = '[IVX LIVE PRODUCTION CONTEXT] SHA fixture';
+    const input = buildOwnerTextModelInput({ request: 'Reverse "A7_B9" and deploy the result.', history: [], liveContext });
+    expect(input.system).toContain(liveContext);
+    expect(input.system).toContain('OWNER AUTHORIZATION PERSISTENCE');
+    expect(input.system).not.toContain('LITERAL_INPUT_POSITIONS');
+  });
+
   test('indexes a literal input without supplying its reversed answer', () => {
     const request = 'Reverse the characters of ba1aef02. Return only the reversed text.';
     const input = buildOwnerTextModelInput({ request, history: [] });

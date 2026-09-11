@@ -70,7 +70,7 @@ test('successful diagnostics cannot convert a failed candidate into a certificat
 test('a successful candidate does not spend requests on diagnostics', async () => {
   const r = await runFixture(false);
   expect(r.proof.passed).toBe(true);
-  expect(r.proof.cases).toHaveLength(8);
+  expect(r.proof.cases).toHaveLength(9);
   expect(r.diagnosticInputs).toHaveLength(0);
   expect(r.exitCode).toBeUndefined();
 });

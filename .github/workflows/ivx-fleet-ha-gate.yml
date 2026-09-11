@@ -3,7 +3,7 @@ on:
   push:
     branches: [fix/fleet-render-ha-20260908, fix/fleet-backend-ha-20260908]
   pull_request:
-    paths: ['backend/**', 'expo/**', 'supabase/migrations/**', 'supabase/repair-functions/**', 'scripts/ivx-senior-commit-recovery-postgres-proof.mjs', 'scripts/ivx-senior-compact-receipt-proof.mjs', 'scripts/ivx-coder-workspace-postgres-proof.ts', 'scripts/ivx-objective-link-postgres-proof.mjs', 'scripts/ivx-fleet-ha-postgres-proof.mjs', 'scripts/ivx-task-recovery-postgres-proof.mjs', 'scripts/ivx-fleet-telemetry-postgres-proof.ts', 'scripts/ivx-mission-history-postgres-proof.ts', 'scripts/ivx-inspection-claim-postgres-proof.mjs', 'scripts/ivx-fleet-ha-live-proof.ts', 'scripts/ivx-fleet-ha-identities.ts', 'scripts/ivx-fleet-ha-identities.test.ts', '.github/workflows/ivx-fleet-ha-gate.yml']
+    paths: ['backend/**', 'expo/**', 'supabase/migrations/**', 'supabase/repair-functions/**', 'scripts/ivx-senior-commit-recovery-postgres-proof.mjs', 'scripts/ivx-senior-compact-receipt-proof.mjs', 'scripts/ivx-coder-workspace-postgres-proof.ts', 'scripts/ivx-objective-link-postgres-proof.mjs', 'scripts/ivx-fleet-ha-postgres-proof.mjs', 'scripts/ivx-global-ai-budget-postgres-proof.mjs', 'scripts/ivx-global-ai-budget-sdk-proof.ts', 'scripts/ivx-task-recovery-postgres-proof.mjs', 'scripts/ivx-fleet-telemetry-postgres-proof.ts', 'scripts/ivx-mission-history-postgres-proof.ts', 'scripts/ivx-inspection-claim-postgres-proof.mjs', 'scripts/ivx-fleet-ha-live-proof.ts', 'scripts/ivx-fleet-ha-identities.ts', 'scripts/ivx-fleet-ha-identities.test.ts', '.github/workflows/ivx-fleet-ha-gate.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -35,6 +35,9 @@ jobs:
       - run: bun test backend/services/ivx-owner-text-prompt.test.ts backend/services/ivx-ia-conversation-brain-deep-qa.test.ts
       - run: bun test expo/__tests__/owner-chat-submission.test.ts
       - run: bun test backend/services/ivx-jv-realtime-lifecycle.test.ts
+      - run: bun test backend/services/ivx-owner-chat-mirror-race.test.ts
+      - run: bun test backend/services/ivx-owner-native-sse.test.ts
+      - run: bun test backend/services/ivx-route-provider-bootstrap.test.ts
       - name: Bound empty claim polling without reducing 112-lane capacity
         run: node --experimental-strip-types --test backend/services/ivx-empty-claim-cooldown.test.mjs
       - name: Preserve certificate evidence independently of runtime expectations
@@ -47,6 +50,10 @@ jobs:
       - run: bun test backend/services/ivx-coder-workspace.test.ts
       - name: Bound provider attempts and stop cancelled or expired generations
         run: bun test backend/ivx-ai-provider-limits.test.ts backend/services/ivx-ai-queue.test.ts backend/services/ivx-retry-policy.test.ts
+      - name: Verify global AI budget transport, cancellation and pricing bounds
+        run: bun test backend/services/ivx-global-ai-budget.test.ts
+      - name: Verify installed SDK cannot retry a refused monetary admission
+        run: bun scripts/ivx-global-ai-budget-sdk-proof.ts
       - name: Verify manager identity, terminal writes, admission, planning and recovery
         run: bun test backend/services/ivx-manager-recovery-regressions.test.ts backend/services/ivx-resume-pr-identity.test.ts backend/services/ivx-worker-terminal-phase.test.ts backend/services/ivx-coder-branch.test.ts backend/services/ivx-senior-job-admission.test.ts backend/services/ivx-senior-queue-reconciliation.test.ts backend/services/ivx-senior-committed-recovery-policy.test.ts backend/services/ivx-repair-resume-evidence.test.ts backend/services/ivx-autonomous-planning-continuity.test.ts backend/services/ivx-landing-p0-backlog.test.ts
       - name: Require truthful inspection acceptance and lease ownership
@@ -55,6 +62,10 @@ jobs:
         run: bun test backend/ivx-autonomous-coder.test.ts --test-name-pattern 'authority'
       - run: bun test backend/ivx-final-closeout-resume.test.ts backend/services/ivx-native-intent.test.ts backend/services/ivx-fleet-dashboard-signals.test.ts backend/services/ivx-fleet-slo.test.ts backend/services/ivx-postgres-autonomous-task-store.test.ts backend/services/ivx-render-replicas.test.ts backend/services/ivx-shared-room-storage.test.ts backend/services/ivx-autonomous-control-policy.test.ts
       - run: node scripts/ivx-fleet-ha-postgres-proof.mjs
+        env:
+          IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
+      - name: Prove global monetary admission on four PostgreSQL connections
+        run: node scripts/ivx-global-ai-budget-postgres-proof.mjs
         env:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - name: Recover committed jobs with missing PR identity on PostgreSQL
@@ -113,5 +124,7 @@ jobs:
             qa/evidence/fleet-ha/compact-receipt.json
             qa/evidence/fleet-ha/senior-history.json
             qa/evidence/fleet-ha/coder-workspaces.json
+            qa/evidence/fleet-ha/global-ai-budget.json
+            qa/evidence/fleet-ha/global-ai-budget-sdk.json
           if-no-files-found: warn
           retention-days: 30
