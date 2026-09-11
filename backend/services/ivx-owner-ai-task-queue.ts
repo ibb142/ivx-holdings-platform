@@ -900,7 +900,7 @@ export async function ensureTaskTable(): Promise<boolean> {
   for (let attempt = 1; attempt <= DDL_RETRY_ATTEMPTS; attempt++) {
     try {
       const res = await fetch(`${MANAGEMENT_API_BASE}/projects/${managementProjectRef()}/database/query`, {
-        method: 'GET',
+        method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: TASK_TABLE_DDL }),
         signal: AbortSignal.timeout(30_000),

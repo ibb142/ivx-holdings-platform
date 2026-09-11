@@ -14,6 +14,7 @@ import {
   type IVXWorkerJobStatus,
 } from './ivx-senior-developer-worker';
 import { recordOwnerAuthorization, isOwnerAuthorized, getOwnerAuthorization } from './ivx-owner-authorization-store';
+import { chatWorkerIdentity } from './ivx-chat-worker-identity';
 
 const BUILD_INTENT_PATTERNS: RegExp[] = [
   /\bbuild (?:an? )?(?:new )?(?:app|module|feature|endpoint|screen|page|service|api|component|integration)\b/i,
@@ -148,15 +149,14 @@ export async function createAutonomousJobFromChat(
 ): Promise<AutonomousHandoffResult> {
   const intent = detectAutonomousExecutionIntent(message);
 
-  // Owner mandate 2026-08-23 (dashboard provenance): every chat -> worker job
-  // carries the ID of the source chat message that created it. When the
-  // caller has no message ID, a deterministic one is generated so the chain
-  // is never UNKNOWN.
-  const provenanceChatMessageId = sourceChatMessageId
-    ?? `chatmsg-${Date.now()}-${Math.abs(message.length * 31 + (conversationId ? conversationId.length * 7 : 0))}`;
   if (!intent.isExecutionCommand) {
     return { ok: false, jobId: null, status: null, stage: null, progressPercent: null, attached: false, error: 'Not an execution command.', intent };
   }
+  if (!sourceChatMessageId?.trim()) {
+    return { ok: false, jobId: null, status: null, stage: null, progressPercent: null, attached: false,
+      error: 'Chat message identity is required. Retry with the original message ID.', intent };
+  }
+  const identity = chatWorkerIdentity(ownerId, conversationId, sourceChatMessageId);
 
   const alreadyAuthorized = isOwnerAuthorized(ownerId, message);
   if (intent.requiresApproval && !alreadyAuthorized) {
@@ -170,7 +170,7 @@ export async function createAutonomousJobFromChat(
   // after a matching owner authorization already exists.
   if (!alreadyAuthorized && !intent.requiresApproval) {
     recordOwnerAuthorization({
-      taskId: `chat-${Date.now()}`,
+      taskId: identity.taskId,
       ownerId,
       goal: message.trim(),
       approvalPhrase: 'auto_execute_safe_scope',
@@ -181,6 +181,7 @@ export async function createAutonomousJobFromChat(
   }
 
   const jobInput: IVXWorkerJobInput = {
+    ...identity,
     goal: message.trim(),
     ownerApproved: true,
     approvePatch: true,
@@ -190,7 +191,6 @@ export async function createAutonomousJobFromChat(
     ownerApprovedAction: null,
     ownerId,
     conversationId,
-    sourceChatMessageId: provenanceChatMessageId,
     actor: 'AUTONOMOUS',
     executionMode: intent.executionMode,
   };

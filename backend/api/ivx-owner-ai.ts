@@ -106,6 +106,7 @@ import {
   type IVXWorkerJobInput,
 } from '../services/ivx-senior-developer-worker';
 import { recordApproval, type IVXSeniorDevApprovalAction } from '../services/ivx-senior-dev-proof';
+import { chatWorkerIdentity } from '../services/ivx-chat-worker-identity';
 import {
   runSeniorDeveloperAutonomousMode,
   renderFinalAutonomousReport,
@@ -6256,6 +6257,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
 
       const workerInput: IVXWorkerJobInput = {
         goal,
+        ...chatWorkerIdentity(workerOwnerId, conversation.id, requestId),
         ownerApproved: true,
         approvePatch: autoExecuteEndToEnd,
         patchConfirmationText: autoExecuteEndToEnd ? IVX_SAFE_PATCH_CONFIRM_TEXT : undefined,
@@ -9193,6 +9195,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       const workerOwnerId = ownerContext.userId ?? 'owner';
       const workerInput: IVXWorkerJobInput = {
         goal: prompt,
+        ...chatWorkerIdentity(workerOwnerId, conversation.id, requestId),
         ownerApproved: true,
         approvePatch: autoExecuteEndToEnd,
         // The runtime's patch approval gate requires BOTH the boolean flag AND
@@ -9205,6 +9208,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         approveGitDeploy: autoExecuteEndToEnd,
         gitDeployConfirmationText: autoExecuteEndToEnd ? IVX_GIT_DEPLOY_CONFIRM_TEXT : undefined,
         validationMode: 'focused',
+        executionMode: autoExecuteEndToEnd ? 'deploy' : 'code_change',
         systemMode: false,
         ownerApprovedAction: {
           proposedPlan: prompt.slice(0, 500),

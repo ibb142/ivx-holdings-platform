@@ -43,7 +43,7 @@ describe('public chat SSE streaming (isolated process)', () => {
       throw new Error(`public chat SSE streaming suite failed:\n${output}`);
     }
 
-    expect(output).toContain('4 pass');
+    expect(output).toContain('5 pass');
     expect(output).toContain('0 fail');
   }, 120_000);
 });

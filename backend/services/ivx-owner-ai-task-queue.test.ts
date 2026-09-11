@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
+import * as ownerVariables from '../api/ivx-owner-variables';
 import {
   ensureTaskTable,
   isTransientBootstrapStatus,
@@ -47,8 +48,13 @@ describe('IVXOwnerAITaskQueue self-bootstrap DDL', () => {
   test('ensureTaskTable retries on 544 and succeeds when DDL returns 201', async () => {
     __resetBootstrapStateForTests();
     setBootstrapEnv();
+    // The bootstrap scenario owns its token fixture. Do not perform a live
+    // Owner Variables lookup before exercising the mocked Management API.
+    const tokenLookup = spyOn(ownerVariables, 'getIVXOwnerVariableRuntimeValue')
+      .mockResolvedValue('sbp_test_management_token_for_retry_tests');
     const originalFetch = globalThis.fetch;
     let calls = 0;
+    let queryCalls = 0;
 
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
@@ -57,18 +63,23 @@ describe('IVXOwnerAITaskQueue self-bootstrap DDL', () => {
         return new Response(JSON.stringify({ message: 'relation does not exist' }), { status: 404 });
       }
       if (url.includes('database/query')) {
-        return calls === 2
+        if (init?.method !== 'POST') return new Response('method not allowed', { status: 405 });
+        queryCalls++;
+        return queryCalls === 1
           ? new Response('[]', { status: 544, headers: { 'content-type': 'application/json' } })
           : new Response('[]', { status: 201, headers: { 'content-type': 'application/json' } });
       }
-      return originalFetch(input, init);
+      if (url.endsWith('/rest/v1/')) return new Response('{}', { status: 200 });
+      throw new Error(`Unexpected bootstrap test request: ${url}`);
     };
 
     try {
       const result = await ensureTaskTable();
       expect(result).toBe(true);
       expect(calls).toBeGreaterThanOrEqual(2);
+      expect(queryCalls).toBe(2);
     } finally {
+      tokenLookup.mockRestore();
       globalThis.fetch = originalFetch;
       restoreEnv();
     }
@@ -77,16 +88,21 @@ describe('IVXOwnerAITaskQueue self-bootstrap DDL', () => {
   test('ensureTaskTable returns false after max retries on repeated 544', async () => {
     __resetBootstrapStateForTests();
     setBootstrapEnv();
+    const tokenLookup = spyOn(ownerVariables, 'getIVXOwnerVariableRuntimeValue')
+      .mockResolvedValue('sbp_test_management_token_for_retry_tests');
     const originalFetch = globalThis.fetch;
     let calls = 0;
+    let queryCalls = 0;
 
-    globalThis.fetch = async (input: RequestInfo | URL) => {
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
       calls++;
       if (url.includes('rest/v1/ivx_owner_ai_tasks')) {
         return new Response(JSON.stringify({ message: 'relation does not exist' }), { status: 404 });
       }
       if (url.includes('database/query')) {
+        if (init?.method !== 'POST') return new Response('method not allowed', { status: 405 });
+        queryCalls++;
         return new Response('[]', { status: 544, headers: { 'content-type': 'application/json' } });
       }
       return new Response('not found', { status: 404 });
@@ -96,7 +112,9 @@ describe('IVXOwnerAITaskQueue self-bootstrap DDL', () => {
       const result = await ensureTaskTable();
       expect(result).toBe(false);
       expect(calls).toBeGreaterThanOrEqual(3);
+      expect(queryCalls).toBe(3);
     } finally {
+      tokenLookup.mockRestore();
       globalThis.fetch = originalFetch;
       restoreEnv();
     }
