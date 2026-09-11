@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import pg from 'pg';
-import { normalizeStoredConnection, validateConnection, probeFailure } from './autonomous-db-sync.mjs';
+import { normalizeStoredConnection, repairKnownConnection, connectionIssue, validateConnection, probeFailure } from './autonomous-db-sync.mjs';
 
 export const PROJECT = 'kvclcdjmjghndxsngfzb';
 const aliases = ['SUPABASE_DB_URL', 'DATABASE_URL', 'POSTGRES_URL', 'SUPABASE_POOLER_URL'];
@@ -39,9 +39,14 @@ export async function auditPostgres({ env=process.env, makeClient=config=>new pg
   let selected;
   for (const name of aliases) {
     const raw=env[name]?.trim();
-    const config=raw ? validateConnection(normalizeStoredConnection(raw)||raw) : null;
+    const normalized=raw ? normalizeStoredConnection(raw)||raw : null;
+    // This existing repair only recognizes the previously observed literal
+    // "base" hostname for postgres/postgres and substitutes this fixed project.
+    // It preserves the credential and never writes configuration anywhere.
+    const repaired=normalized ? repairKnownConnection(normalized) : null;
+    const config=normalized ? validateConnection(repaired||normalized) : null;
     const valid=Boolean(config && [5432,6543].includes(config.port));
-    report.bindings.push({name,present:Boolean(raw),valid});
+    report.bindings.push({name,present:Boolean(raw),valid,issue:connectionIssue(normalized),knownHostnameRepair:Boolean(repaired)});
     if (!selected && valid) selected={name,config};
   }
   if (!selected) return {...report,error:{reason:'no_valid_same_project_database_binding'},finishedAt:now()};

@@ -4,6 +4,17 @@ import { auditPostgres, PROJECT, SNAPSHOT } from './phase1-postgres-audit.mjs';
 const connection=`postgresql://postgres:synthetic-secret@db.${PROJECT}.supabase.co:5432/postgres?sslmode=verify-full`;
 const env={PROJECT_REF:PROJECT,SUPABASE_DB_URL:connection,GITHUB_SHA:'a'.repeat(40)};
 
+test('the known base hostname repair stays on this project and only probes once',async()=>{
+  let connects=0;
+  const r=await auditPostgres({env:{...env,SUPABASE_DB_URL:connection.replace(`db.${PROJECT}.supabase.co`,'base')},makeClient:config=>{
+    assert.equal(config.host,`db.${PROJECT}.supabase.co`);assert.equal(config.password,'synthetic-secret');
+    return {on:()=>{},connect:async()=>{connects++;throw Object.assign(new Error('unreachable'),{code:'ENETUNREACH'});},end:async()=>{}};
+  }});
+  assert.equal(connects,1);assert.equal(r.bindings[0].knownHostnameRepair,true);
+  assert.equal(r.bindings[0].issue,'invalid_base_hostname');assert.equal(r.ok,false);
+  assert.equal(JSON.stringify(r).includes('synthetic-secret'),false);
+});
+
 test('missing, foreign-project and insecure connections open no client', async()=>{
   for (const value of [undefined,connection.replace(PROJECT,'foreignproject'),connection.replace('verify-full','disable')]) {
     const r=await auditPostgres({env:{...env,SUPABASE_DB_URL:value},makeClient:()=>{throw Error('must not connect');}});
