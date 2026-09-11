@@ -43,6 +43,8 @@ type FallbackInput = {
   maxOutputTokens: number | null | undefined;
   timeoutMs: number;
   abortSignal?: AbortSignal | null;
+  /** Failed primary credential; never retry it through an alias in the fallback chain. */
+  excludedApiKey?: string | null;
 };
 
 type Candidate = {
@@ -333,7 +335,7 @@ function buildCandidates(): Candidate[] {
  * configured provider.
  */
 export async function attemptProviderFallback(input: FallbackInput): Promise<IVXProviderInvocationResult | null> {
-  const chain = buildCandidates().slice(0, 3);
+  const chain = buildCandidates().filter(candidate => candidate.key !== input.excludedApiKey).slice(0, 3);
   if (chain.length === 0) return null;
   const deadline = Date.now() + input.timeoutMs;
   for (const candidate of chain) {

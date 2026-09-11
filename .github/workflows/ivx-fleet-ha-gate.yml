@@ -3,7 +3,7 @@ on:
   push:
     branches: [fix/fleet-render-ha-20260908, fix/fleet-backend-ha-20260908]
   pull_request:
-    paths: ['backend/**', 'expo/**', 'supabase/migrations/**', 'supabase/repair-functions/**', 'scripts/ivx-senior-commit-recovery-postgres-proof.mjs', 'scripts/ivx-senior-compact-receipt-proof.mjs', 'scripts/ivx-coder-workspace-postgres-proof.ts', 'scripts/ivx-objective-link-postgres-proof.mjs', 'scripts/ivx-fleet-ha-postgres-proof.mjs', 'scripts/ivx-task-recovery-postgres-proof.mjs', 'scripts/ivx-fleet-telemetry-postgres-proof.ts', 'scripts/ivx-mission-history-postgres-proof.ts', 'scripts/ivx-fleet-ha-live-proof.ts', 'scripts/ivx-fleet-ha-identities.ts', 'scripts/ivx-fleet-ha-identities.test.ts', '.github/workflows/ivx-fleet-ha-gate.yml']
+    paths: ['backend/**', 'expo/**', 'supabase/migrations/**', 'supabase/repair-functions/**', 'scripts/ivx-senior-commit-recovery-postgres-proof.mjs', 'scripts/ivx-senior-compact-receipt-proof.mjs', 'scripts/ivx-coder-workspace-postgres-proof.ts', 'scripts/ivx-objective-link-postgres-proof.mjs', 'scripts/ivx-fleet-ha-postgres-proof.mjs', 'scripts/ivx-task-recovery-postgres-proof.mjs', 'scripts/ivx-fleet-telemetry-postgres-proof.ts', 'scripts/ivx-mission-history-postgres-proof.ts', 'scripts/ivx-inspection-claim-postgres-proof.mjs', 'scripts/ivx-fleet-ha-live-proof.ts', 'scripts/ivx-fleet-ha-identities.ts', 'scripts/ivx-fleet-ha-identities.test.ts', '.github/workflows/ivx-fleet-ha-gate.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -38,6 +38,8 @@ jobs:
         run: bun test backend/services/ivx-ai-completion-probe.test.ts
       - run: bun test backend/services/ivx-autonomous-scheduler.test.ts backend/services/ivx-technical-schedule.test.ts backend/services/ivx-landing-superseded-recovery.test.ts
       - run: bun test backend/services/ivx-coder-workspace.test.ts
+      - name: Bound provider attempts and stop cancelled or expired generations
+        run: bun test backend/ivx-ai-provider-limits.test.ts backend/services/ivx-ai-queue.test.ts backend/services/ivx-retry-policy.test.ts
       - name: Verify manager identity, terminal writes, admission, planning and recovery
         run: bun test backend/services/ivx-manager-recovery-regressions.test.ts backend/services/ivx-resume-pr-identity.test.ts backend/services/ivx-worker-terminal-phase.test.ts backend/services/ivx-coder-branch.test.ts backend/services/ivx-senior-job-admission.test.ts backend/services/ivx-senior-queue-reconciliation.test.ts backend/services/ivx-senior-committed-recovery-policy.test.ts backend/services/ivx-repair-resume-evidence.test.ts backend/services/ivx-autonomous-planning-continuity.test.ts backend/services/ivx-landing-p0-backlog.test.ts
       - name: Require truthful inspection acceptance and lease ownership
@@ -69,6 +71,10 @@ jobs:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - name: Recover current work with 1200 obsolete blocked inspections
         run: bun scripts/ivx-mission-history-postgres-proof.ts
+        env:
+          IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
+      - name: Exclude obsolete inspections while preserving Landing and owner priority
+        run: node scripts/ivx-inspection-claim-postgres-proof.mjs
         env:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - run: |

@@ -733,6 +733,7 @@ async function requestIVXAITextInternal(input: {
   const callStartedAt = Date.now();
 
   try {
+  input.abortSignal?.throwIfAborted();
   let result: Awaited<ReturnType<typeof generateText>> | null = null;
   let lastError: unknown = null;
   let lastFailure: { status: number | null; responseBody: unknown } = { status: null, responseBody: null };
@@ -745,7 +746,7 @@ async function requestIVXAITextInternal(input: {
   //    the configured AI_GATEWAY_API_KEY. This avoids using the OpenAI-specific
   //    adapter against the Gateway's OpenAI-compatible endpoint.
   //  - Transient failures (network / 5xx / 429) retry against the SAME
-  //    provider with exponential backoff (max 3 attempts). Auth failures
+  //    provider with bounded backoff (max 5 attempts). Auth failures
   //    (401/403) never retry the same key — they mark the provider FAILED
   //    and route to the controlled different-key fallback.
   //  - The failure latch is no longer permanent: the state machine re-opens
@@ -757,7 +758,14 @@ async function requestIVXAITextInternal(input: {
     const apiKey = getIVXAIGatewayApiKey();
     const isVercelKey = isVercelGatewayKey(apiKey);
     for (let attempt = 1; attempt <= MAX_PRIMARY_ATTEMPTS && !result; attempt += 1) {
-      const callTimeoutMs = Math.max(1, adaptiveTimeoutMs - (Date.now() - callStartedAt));
+      input.abortSignal?.throwIfAborted();
+      const callTimeoutMs = adaptiveTimeoutMs - (Date.now() - callStartedAt);
+      if (callTimeoutMs <= 0) {
+        lastError = Object.assign(new Error('IVX AI request deadline exceeded before provider admission'), {
+          name: 'IVXAIGatewayTimeoutError',
+        });
+        break;
+      }
       const attemptSignal = AbortSignal.any([AbortSignal.timeout(callTimeoutMs), ...(input.abortSignal ? [input.abortSignal] : [])]);
       try {
         if (images.length > 0 || files.length > 0) {
@@ -868,7 +876,7 @@ async function requestIVXAITextInternal(input: {
     const failureMessage = lastError instanceof Error ? lastError.message : 'Gateway request failed';
     const isTimeout = lastError instanceof Error && lastError.name === 'IVXAIGatewayTimeoutError';
 
-    // === CONTROLLED FALLBACK — maximum ONE attempt with a DIFFERENT key ===
+    // === CONTROLLED FALLBACK — at most three distinct alternative credentials ===
     // The state machine ensures we only try fallback if the primary is FAILED.
     // The fallback module skips any provider using the same key as the primary.
     const failureClass = lastError ? classifyProviderFailure(lastError) : 'auth';
@@ -883,6 +891,7 @@ async function requestIVXAITextInternal(input: {
         maxOutputTokens: input.maxOutputTokens ?? null,
         timeoutMs: Math.max(1, adaptiveTimeoutMs - (Date.now() - callStartedAt)),
         abortSignal: input.abortSignal,
+        excludedApiKey: getIVXAIGatewayApiKey(),
       });
       if (fallbackResult) {
         markFallbackReady(fallbackResult.provider, fallbackResult.model);
@@ -1079,7 +1088,13 @@ export async function* streamIVXAIText(input: {
   const promptChars = prompt.length + system.length + messages.reduce((sum, m) => sum + m.content.length, 0);
   const adaptiveTimeoutMs = computeAdaptiveTimeoutMs({ promptChars, maxOutputTokens: input.maxOutputTokens });
   const queueLane = classifyRequestLane({ promptChars, maxOutputTokens: input.maxOutputTokens });
-  const queueSlot = await acquireAIQueueSlot(queueLane, { signal: input.abortSignal });
+  let queueSlot: Awaited<ReturnType<typeof acquireAIQueueSlot>>;
+  try {
+    queueSlot = await acquireAIQueueSlot(queueLane, { signal: input.abortSignal });
+  } catch (error) {
+    yield { type: 'error', error: error instanceof Error ? error.message : 'IVX AI queue admission failed' };
+    return;
+  }
   const callStartedAt = Date.now();
 
   const baseURL = baseUrlCandidates[0];
@@ -1096,6 +1111,7 @@ export async function* streamIVXAIText(input: {
   }, adaptiveTimeoutMs);
 
   try {
+    input.abortSignal?.throwIfAborted();
     ensureIVXAIGatewayEnvironment();
     const streamResult = streamText({
       model,
@@ -1120,7 +1136,7 @@ export async function* streamIVXAIText(input: {
       yield { type: 'delta', delta };
     }
 
-    if (!timedOut) {
+    if (!streamSignal.aborted) {
       try {
         usage = await streamResult.usage;
       } catch {
@@ -1130,7 +1146,14 @@ export async function* streamIVXAIText(input: {
   } catch (error) {
     lastError = error instanceof Error ? error.message : 'IVX AI stream failed';
   } finally {
+    // An aborted provider may close its iterator normally, without another
+    // delta or exception. Preserve that interruption in the terminal result.
+    if (input.abortSignal?.aborted) lastError = 'Generation stopped by user.';
+    else if (timedOut) lastError = `IVX AI stream timed out after ${adaptiveTimeoutMs}ms`;
     clearTimeout(timer);
+    // Consumer return/disconnect also enters finally. Cancel upstream work
+    // before releasing admission, otherwise generation can outlive its slot.
+    timeoutController.abort(new Error('IVX AI stream consumption ended'));
     queueSlot.release();
   }
 
