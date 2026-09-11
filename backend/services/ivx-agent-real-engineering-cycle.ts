@@ -299,6 +299,7 @@ export async function runRealEngineeringCycle(input: {
         // never lease a patrol (including an obsolete SHA) as a module audit.
         familyPrefixes: [LANDING_P0_PREFIX, LANDING_P0_REPAIR_PREFIX, LANDING_P0_PATROL_PREFIX],
         activePrefixes: landingActive ? activeLandingPrefixes : [],
+        inspectionSourceSha: input.sourceSha,
       },
     };
     if (!prepared && landingActive) await ensureLandingP0BacklogSeeded(input.sourceSha);
