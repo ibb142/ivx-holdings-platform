@@ -119,7 +119,7 @@ mock.module('@/lib/ivx-supabase-client', () => ({
 }));
 
 describe('IVX Owner AI auth header propagation', () => {
-  let fetchCalls: { url: string; headers: Record<string, string> }[] = [];
+  let fetchCalls: { url: string; headers: Record<string, string>; body: string | null }[] = [];
   let logCalls: unknown[][] = [];
   const originalFetch = globalThis.fetch;
   const originalConsoleLog = console.log;
@@ -148,7 +148,7 @@ describe('IVX Owner AI auth header propagation', () => {
           Object.assign(headers, init.headers);
         }
       }
-      fetchCalls.push({ url, headers });
+      fetchCalls.push({ url, headers, body: typeof init?.body === 'string' ? init.body : null });
       if (url.includes('/api/ivx/audit-report')) {
         return new Response(JSON.stringify({
           ok: true,
@@ -305,5 +305,53 @@ describe('IVX Owner AI auth header propagation', () => {
 
     expect(result.answer).toContain('HTTP status 200');
     expect(result.answer).toContain('JWT auth checked');
+  });
+
+  test('backend 503 is an explicit failure and cannot pass the reply-success gate', async () => {
+    const { ivxAIRequestService, assertOwnerAIResponseSucceeded, getIVXOwnerAIErrorDiagnostics } = await import('../src/modules/ivx-owner-ai/services/ivxAIRequestService');
+    globalThis.fetch = (async () => new Response(JSON.stringify({ error: 'Owner verification temporarily unavailable.', code: 'AUTH_SERVICE_UNAVAILABLE' }), {
+      status: 503, headers: { 'Content-Type': 'application/json' },
+    })) as typeof fetch;
+    const result = await ivxAIRequestService.requestOwnerAI({
+      requestId: 'chat-message-503', conversationId: 'test-owner-room', message: 'What is the weather like on Mars?',
+    });
+    expect(result.status).toBe('error');
+    expect(result.requestId).toBe('chat-message-503');
+    expect(result.answer).not.toContain('nothing was sent or changed');
+    expect(() => assertOwnerAIResponseSucceeded(result)).toThrow();
+    try { assertOwnerAIResponseSucceeded(result); } catch (error) {
+      expect(getIVXOwnerAIErrorDiagnostics(error)?.statusCode).toBe(503);
+    }
+  });
+
+  test('primary sends preserve the supplied logical message identity across retries', async () => {
+    const { ivxAIRequestService } = await import('../src/modules/ivx-owner-ai/services/ivxAIRequestService');
+    for (const requestId of ['chat-message-1', 'chat-message-1', 'chat-message-2']) {
+      const result = await ivxAIRequestService.requestOwnerAI({ requestId, conversationId: 'test-owner-room', message: 'What is the weather like on Mars?' });
+      expect(result.status).toBe('ok');
+    }
+    const bodies = fetchCalls.filter(call => call.url.includes('/api/ivx/owner-ai')).map(call => JSON.parse(call.body!));
+    expect(bodies.map(body => body.requestId)).toEqual(['chat-message-1', 'chat-message-1', 'chat-message-2']);
+    expect(new Set(bodies.map(body => body.message)).size).toBe(1);
+  });
+
+  test('a worker retry attaches to the original job and keeps chat provenance', async () => {
+    const { submitSeniorDeveloperWorkerJob } = await import('../src/modules/ivx-developer/seniorDeveloperWorkerService');
+    const { buildSeniorDeveloperJobDraft } = await import('../src/modules/ivx-developer/seniorDeveloperBuildIntent');
+    const bodies: Record<string, unknown>[] = [];
+    globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ ok: false, attached: true, job: { jobId: 'original-job' }, poll: '/jobs/original-job' }), {
+        status: 409, headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch;
+    const draft = { ...buildSeniorDeveloperJobDraft('Fix the chat scroll bug'), chatOrigin: { conversationId: 'test-owner-room', messageId: 'message-1' } };
+    const result = await submitSeniorDeveloperWorkerJob(draft);
+    expect(result.statusCode).toBe('SUBMITTED');
+    expect(result.jobId).toBe('original-job');
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].sourceChatMessageId).toBe('message-1');
+    expect(bodies[0].conversationId).toBe('test-owner-room');
+    expect(bodies[0].approveGitDeploy).toBe(false);
   });
 });

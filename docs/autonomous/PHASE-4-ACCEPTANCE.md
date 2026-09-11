@@ -13,7 +13,7 @@ from the owner, conversation and source message. It must retain that identity
 when reconciling an acknowledgement lost after persistence or recovering a
 committed job. A device `clientId` is not a message identity.
 
-Verify both chat entry points against shared storage with two API replicas.
+Verify public chat, owner chat and the direct owner worker endpoint against shared storage with two API replicas.
 Capture the conversation, user and assistant messages, source message identity,
 task/job identity, assigned agent, streamed provider response and owner controls.
 Retry before admission, during execution, after completion and after a process
@@ -23,6 +23,16 @@ The worker identity regression covers admission with substituted persistence.
 It does not certify cross-replica provider deduplication, replay after terminal
 history retention, or durable chat persistence during a production DB outage.
 Those remain separate live acceptance checks.
+
+The app threads its per-message client ID through primary transport retries and
+durable intake. A new message with equal text must retain a distinct ID. Direct
+worker submissions carry the conversation and source message; a 409 attachment
+recovers the original job rather than reporting worker unavailability. A global
+last-proof record is usable only when its job ID matches the submitted job.
+
+Backend/auth/network notices are failure outcomes, not model answers. The UI
+must validate the outcome before marking a reply successful or persisting it as
+assistant content. A lost response does not prove that no server-side work ran.
 
 The missing-table bootstrap uses the Management API's documented
 [`POST /v1/projects/{ref}/database/query`](https://supabase.com/docs/reference/api/v1-run-a-query).

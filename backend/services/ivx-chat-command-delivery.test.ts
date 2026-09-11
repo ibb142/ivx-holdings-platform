@@ -3,6 +3,8 @@ import * as shared from './ivx-senior-shared-queue';
 import * as stop from './ivx-emergency-stop-gate';
 import * as durable from './ivx-durable-store';
 import { createAutonomousJobFromChat } from './ivx-chat-autonomous-handoff';
+import * as ownerAuth from '../api/owner-only';
+import { handleSeniorDeveloperWorkerEnqueueRequest } from '../api/ivx-senior-developer-worker';
 import type { IVXWorkerJob } from './ivx-senior-developer-worker';
 
 // Exercise the real chat handoff and worker admission. Only persistence and
@@ -81,4 +83,31 @@ test('missing source identity cannot fabricate a traceable task', async () => {
   expect(result.ok).toBe(false);
   expect(result.jobId).toBeNull();
   expect(writes).toBe(0);
+});
+
+
+test('the direct owner worker endpoint reuses chat identity after a completed job', async () => {
+  const system = spyOn(ownerAuth, 'checkIVXAISystemKey').mockResolvedValue(false);
+  const auth = spyOn(ownerAuth, 'assertIVXRegisteredOwnerBearer').mockResolvedValue({
+    context: { userId: 'chat-owner' },
+    approval: { userId: 'chat-owner', ownerSessionDetected: true, ownerVerified: true, bearerAccepted: true },
+  } as unknown as Awaited<ReturnType<typeof ownerAuth.assertIVXRegisteredOwnerBearer>>);
+  restores.push(() => system.mockRestore(), () => auth.mockRestore());
+  const request = (messageId: string) => new Request('https://fixture.invalid/api/ivx/senior-developer/worker/jobs', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ goal: 'Fix the chat scroll bug', approvePatch: true, approveGitDeploy: false,
+      sourceChatMessageId: messageId, conversationId: 'chat-room' }),
+  });
+  const first = await handleSeniorDeveloperWorkerEnqueueRequest(request('message-1'));
+  expect(first.status).toBe(202);
+  jobs[0].status = 'completed'; jobs[0].stage = 'COMPLETE'; jobs[0].finishedAt = new Date().toISOString();
+  const retry = await handleSeniorDeveloperWorkerEnqueueRequest(request('message-1'));
+  expect(retry.status).toBe(409);
+  expect((await retry.json() as { jobId: string }).jobId).toBe(jobs[0].jobId);
+  expect(writes).toBe(1);
+  const next = await handleSeniorDeveloperWorkerEnqueueRequest(request('message-2'));
+  expect(next.status).toBe(202);
+  expect(jobs).toHaveLength(2);
+  expect(jobs[0].input.sourceChatMessageId).toBe('message-1');
+  expect(jobs[0].input.approveGitDeploy).toBe(false);
 });

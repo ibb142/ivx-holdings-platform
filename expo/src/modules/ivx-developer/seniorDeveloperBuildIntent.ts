@@ -30,6 +30,7 @@ export type SeniorDeveloperTemplateMode =
 
 /** A build request converted into an owner-approval worker-job draft. */
 export type SeniorDeveloperJobDraft = {
+  chatOrigin?: { conversationId: string; messageId: string };
   title: string;
   goal: string;
   /** Execution template the worker should follow for this request. */

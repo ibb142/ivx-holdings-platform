@@ -239,6 +239,7 @@ export async function runDurableOwnerAIFallback(input: {
   message: string;
   conversationId: string | null;
   messageId?: string | null;
+  idempotencyKey?: string | null;
   traceId?: string | null;
   onStatus?: (task: DurableTaskView) => void;
 }): Promise<DurableFallbackResult> {

@@ -106,6 +106,25 @@ export class IVXOwnerAIRequestError extends Error {
 
 export const IVX_SERVICE_UNAVAILABLE_MESSAGE = 'Service temporarily unavailable. Please try again.';
 
+/** Reject render-only failures before any reply, persistence or execution success gate. */
+export function assertOwnerAIResponseSucceeded(response: IVXOwnerAIResponse): void {
+  const failureModels = ['ivx_owner_session_required', 'ivx_owner_auth_failed',
+    'ivx_owner_ai_network_failed', 'ivx_owner_ai_backend_error'];
+  if (response.status !== 'error' && !response.failure && !failureModels.includes(response.model)) return;
+  const failure = response.failure;
+  throw new IVXOwnerAIRequestError(response.answer, createRequestDiagnostics({
+    stage: 'response',
+    classification: failure?.classification ?? response.model,
+    statusCode: failure?.statusCode ?? null,
+    endpoint: response.endpoint ?? null,
+    requestId: response.requestId,
+    responsePreview: response.answer.slice(0, 240),
+    detail: failure?.detail ?? 'The request returned a failure notice, not a completed AI answer.',
+    audit: getIVXOwnerAIConfigAudit(),
+  }));
+}
+
+
 const GATEWAY_CHAT_COMPLETIONS_PATH = '/v1/chat/completions';
 const DEFAULT_IVX_OWNER_AI_MODEL = 'openai/gpt-4o';
 const LOCAL_AI_PROVIDER_TIMEOUT_MS = 22_000;
@@ -2189,7 +2208,7 @@ async function requestPublicChatFallback(
     conversationId: payload.conversationId,
     answer: blockerAnswer,
     model: 'ivx_owner_session_required',
-    status: 'ok',
+    status: 'error',
     source: 'provider_fallback',
     endpoint: routingAudit.activeEndpoint ?? undefined,
     deploymentMarker: undefined,
@@ -2285,7 +2304,7 @@ function buildOwnerAuthFailedResponse(
     conversationId: payload.conversationId,
     answer,
     model: 'ivx_owner_auth_failed',
-    status: 'ok',
+    status: 'error',
     source: 'remote_api',
     endpoint: route,
     deploymentMarker: undefined,
@@ -2382,7 +2401,7 @@ function buildOwnerAINetworkFailedResponse(
     conversationId: payload.conversationId,
     answer,
     model: 'ivx_owner_ai_network_failed',
-    status: 'ok',
+    status: 'error',
     source: 'remote_api',
     endpoint: route,
     deploymentMarker: undefined,
@@ -2437,17 +2456,17 @@ function buildOwnerAIBackendErrorResponse(
   const charCount = payload.message.trim().length;
   let friendlyBody: string;
   if (failure.kind === 'parse') {
-    friendlyBody = `The IVX Owner AI backend replied, but I couldn't read its response. This is a temporary backend formatting issue, not an auth problem. Your message was kept (${charCount} characters) and nothing was sent or changed — please resend.`;
+    friendlyBody = `The IVX Owner AI backend replied, but I couldn't read its response. This is a temporary backend formatting issue, not an auth problem. Your message was kept (${charCount} characters) but completion is unconfirmed — please resend.`;
   } else if (failure.kind === 'sse') {
-    friendlyBody = `The live streaming connection to IVX Owner AI dropped before the answer finished. Your message was kept (${charCount} characters) and nothing was sent or changed — please resend; it reconnects automatically.`;
+    friendlyBody = `The live streaming connection to IVX Owner AI dropped before the answer finished. Your message was kept (${charCount} characters) but completion is unconfirmed — please resend; it reconnects automatically.`;
   } else if (status === 404 || status === 405) {
-    friendlyBody = `The IVX Owner AI route returned ${status} (route not available). The backend may be on an older deploy that doesn't have this route yet. Your message was kept (${charCount} characters) and nothing was sent or changed — resend once the latest backend is live.`;
+    friendlyBody = `The IVX Owner AI route returned ${status} (route not available). The backend may be on an older deploy that doesn't have this route yet. Your message was kept (${charCount} characters) but completion is unconfirmed — resend once the latest backend is live.`;
   } else if (status === 429) {
-    friendlyBody = `IVX Owner AI is rate-limited right now (429 — too many requests). Your message was kept (${charCount} characters) and nothing was sent or changed — wait a few seconds and resend.`;
+    friendlyBody = `IVX Owner AI is rate-limited right now (429 — too many requests). Your message was kept (${charCount} characters) but completion is unconfirmed — wait a few seconds and resend.`;
   } else if (status != null && status >= 500) {
-    friendlyBody = `The IVX Owner AI backend hit a server error (${status}). This is a backend issue, not an auth problem. Your message was kept (${charCount} characters) and nothing was sent or changed — please resend in a moment.`;
+    friendlyBody = `The IVX Owner AI backend hit a server error (${status}). The service could not confirm completion. Your message was kept (${charCount} characters) but completion is unconfirmed — please resend in a moment.`;
   } else {
-    friendlyBody = `The IVX Owner AI backend rejected the request${status != null ? ` (${status})` : ''}. This is a client-side request error, not an auth problem. Your message was kept (${charCount} characters) and nothing was sent or changed — please resend.`;
+    friendlyBody = `The IVX Owner AI backend rejected the request${status != null ? ` (${status})` : ''}. This is a client-side request error, not an auth problem. Your message was kept (${charCount} characters) but completion is unconfirmed — please resend.`;
   }
 
   setOwnerAIPrimaryRouteFailure({
@@ -2483,7 +2502,7 @@ function buildOwnerAIBackendErrorResponse(
     endpoint: route,
     baseUrl: routingAudit.activeBaseUrl,
     requestId: payload.requestId,
-    detail: `OWNER_AI_BACKEND_ERROR (${classification}); surfaced explicit backend blocker, request completed (no throw, no silent hang). ${failure.detail}`.slice(0, 600),
+    detail: `OWNER_AI_BACKEND_ERROR (${classification}); surfaced explicit backend blocker, request failed; completion unconfirmed. ${failure.detail}`.slice(0, 600),
     responsePreview: answer.slice(0, 240),
     deploymentMarker: null,
     provider: null,
@@ -2503,7 +2522,8 @@ function buildOwnerAIBackendErrorResponse(
     conversationId: payload.conversationId,
     answer,
     model: 'ivx_owner_ai_backend_error',
-    status: 'ok',
+    status: 'error',
+    failure: { classification, statusCode: status, detail: failure.detail },
     source: 'remote_api',
     endpoint: route,
     deploymentMarker: undefined,

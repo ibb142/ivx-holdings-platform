@@ -53,7 +53,7 @@ import { runOwnerSessionPreflight, OWNER_SESSION_REQUIRED_LABEL } from '@/src/mo
 import { isOpenAccessModeEnabled } from '@/lib/open-access';
 import { safeSetString } from '@/lib/safe-clipboard';
 import type { IVXMessage, IVXOwnerAIRouterDebug, IVXOwnerAIToolOutput, IVXUploadInput, IVXExecutionStatusPayload } from '@/shared/ivx';
-import { assertCleanOwnerAIResponseText, isIVXServiceUnavailableDiagnostics } from '@/src/modules/ivx-owner-ai/services/ivxAIRequestService';
+import { assertCleanOwnerAIResponseText, assertOwnerAIResponseSucceeded, isIVXServiceUnavailableDiagnostics } from '@/src/modules/ivx-owner-ai/services/ivxAIRequestService';
 import { runDurableOwnerAIFallback, resumePendingDurableTasks, shouldAttemptDurableFallback } from '@/src/modules/ivx-owner-ai/services/ivxDurableTaskService';
 import { ivxAIWatchdog, type WatchdogTraceHandle } from '@/src/modules/ivx-owner-ai/services/ivxAIWatchdog';
 import { IVXWatchdogBanner, IVXWatchdogDrawer } from '@/components/IVXWatchdogPanel';
@@ -2140,8 +2140,9 @@ export default function IVXOwnerChatRoute() {
     };
   }, [conversationQuery.data?.id, localFirstChatMode, ownerId, ownerLabel, ownerRoomAuthenticated]);
 
-  const assistantReplyMutation = useMutation<void, Error, { text: string; nonBlocking: boolean; watchdogTraceId?: string | null }>({
-    mutationFn: async ({ text, nonBlocking, watchdogTraceId }) => {
+  const assistantReplyMutation = useMutation<void, Error, { text: string; requestId: string; nonBlocking: boolean; watchdogTraceId?: string | null }>({
+    mutationFn: async ({ text, requestId, nonBlocking, watchdogTraceId }) => {
+      const commandConversationId = canonicalConversationIdRef.current;
       const mutationRunId = createTransientMessageId('ivx-owner-ai-run');
       // Resolve the per-send watchdog trace threaded in from handleSend.
       const trace: WatchdogTraceHandle | null = watchdogTraceId
@@ -2205,15 +2206,17 @@ export default function IVXOwnerChatRoute() {
         // Send keys off the single canonical id (adopted from the prior backend
         // response when available). This is the "client conversationId before
         // send" proof value.
-        const reliableConversationId = canonicalConversationIdRef.current;
+        const reliableConversationId = commandConversationId;
         setConversationIdProof((current) => ({ ...current, clientBeforeSend: reliableConversationId }));
         trace?.pass('BACKEND_POST_STARTED', `POST owner-ai (conversation=${reliableConversationId})`);
         setStagedTimeoutRequestStarted(true);
         setStagedTimeoutLastCheckpoint('BACKEND_POST_STARTED');
         const { value: aiResult, trace: reliabilityTrace } = await executeReliably(
           reliableConversationId,
-          async (executorSignal: AbortSignal) => ivxAIRequestService.requestOwnerAI(
+          async (executorSignal: AbortSignal) => {
+            const response = await ivxAIRequestService.requestOwnerAI(
             {
+              requestId,
               conversationId: reliableConversationId,
               message: text,
               senderLabel: ownerLabel,
@@ -2262,7 +2265,10 @@ export default function IVXOwnerChatRoute() {
                   trace.heartbeat(`sse_final:${event.status}`);
                 }
               }},
-          ),
+            );
+            assertOwnerAIResponseSucceeded(response);
+            return response;
+          },
           // ROOT-CAUSE FIX (2026-06-10): heavy audit/fix prompts run the
           // tool-grounded server-side agent for 60–90s+, which exceeds the host's
           // ~60s request cap. requestOwnerAI now consumes the backend SSE stream
@@ -2592,6 +2598,7 @@ export default function IVXOwnerChatRoute() {
           try {
             const nextResult = await ivxAIRequestService.requestOwnerAI({
               conversationId: reliableConversationId,
+              requestId: `${requestId}:continue:${currentPartNumber}`,
               message: 'CONTINUE',
               senderLabel: ownerLabel,
               mode: 'chat',
@@ -2599,6 +2606,7 @@ export default function IVXOwnerChatRoute() {
               persistAssistantMessage: true,
               devTestModeActive: devTestMode.testModeActive,
               continuationToken: currentResult.continuationToken});
+            assertOwnerAIResponseSucceeded(nextResult);
             const nextNormalizedAnswer = assertCleanOwnerAIResponseText(nextResult.answer);
             const nextReplyId = createTransientMessageId('ivx-owner-ai-reply');
             setTransientAssistantMessages((current) => {
@@ -2839,11 +2847,13 @@ export default function IVXOwnerChatRoute() {
               console.log('[IVXOwnerChatRoute] durable_bubble_set_threw_safely_continuing:', bubbleErr instanceof Error ? bubbleErr.message : 'unknown');
             }
           };
-          updateDurableBubble(`♻️ Auto-recovery started — your message is saved server-side and will be answered without retyping.\nTrace: ${watchdogTraceId ?? 'n/a'}`);
+          updateDurableBubble(`♻️ Auto-recovery requested — waiting for the server to confirm that your task was saved.\nTrace: ${watchdogTraceId ?? 'n/a'}`);
           void (async () => {
             const durableResult = await runDurableOwnerAIFallback({
               message: text,
-              conversationId: conversationQuery.data?.id ?? null,
+              conversationId: commandConversationId,
+              messageId: requestId,
+              idempotencyKey: JSON.stringify([ownerId, commandConversationId, requestId]),
               traceId: watchdogTraceId ?? null,
               onStatus: (task) => {
                 if (task.terminal || task.status === 'COMPLETED') return;
@@ -2997,7 +3007,8 @@ export default function IVXOwnerChatRoute() {
     const finished: WorkerJobView | null = await pollSeniorDeveloperWorkerJob(jobId, {
       intervalMs: 4000,
       timeoutMs: 180000});
-    const lastProof = await getSeniorDeveloperWorkerLastProof();
+    const observedProof = await getSeniorDeveloperWorkerLastProof();
+    const lastProof = observedProof?.lastJobId === jobId ? observedProof : null;
     const result = finished?.result ?? null;
     const complete = isWorkerJobComplete(result);
     const finalStatus = complete
@@ -3024,7 +3035,7 @@ export default function IVXOwnerChatRoute() {
    * the pending build draft (or reconstructs it from the card goal) and routes
    * it straight to the self-hosted worker — no /confirm reply needed.
    */
-  const handleApproveAndRunFromCard = useCallback(async (cardBody: string): Promise<void> => {
+  const handleApproveAndRunFromCard = useCallback(async (cardBody: string, cardId: string): Promise<void> => {
     let draft = pendingBuildDraftRef.current;
     if (!draft) {
       const rows = parseStructuredSystemMessage(cardBody) ?? [];
@@ -3035,6 +3046,7 @@ export default function IVXOwnerChatRoute() {
       const original = markerIndex >= 0 ? raw.slice(markerIndex + marker.length).trim() : raw;
       draft = buildSeniorDeveloperJobDraft(original.length > 0 ? original : 'Create IVX Worker Proof module');
     }
+    draft = { ...draft, chatOrigin: draft.chatOrigin ?? { conversationId: canonicalConversationIdRef.current, messageId: cardId } };
     pendingBuildDraftRef.current = null;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await runSeniorDeveloperWorkerFromChat(draft);
@@ -3344,7 +3356,8 @@ export default function IVXOwnerChatRoute() {
       // A diagnostic request that contains "deploy it" or "fix" must NOT
       // reach the worker — it was already handled by the diagnostic branch above.
       if (!isConfirmReply && ownerIntent.routesToWorker && isSeniorDeveloperBuildRequest(effectiveText)) {
-        const draft = buildSeniorDeveloperJobDraft(effectiveText);
+        const draft = { ...buildSeniorDeveloperJobDraft(effectiveText),
+          chatOrigin: { conversationId: canonicalConversationIdRef.current, messageId: clientId } };
         await sendQueue.mutateAsync({ text: persistedOwnerText, mode, clientId, replyTo, senderLabel: ownerLabel, capturedText });
         setLastSendAt(new Date().toISOString());
         wdSenior?.pass('AI_TRIGGER_DECISION', `branch=senior_developer_build intent=${ownerIntent.intent}`);
@@ -3401,9 +3414,9 @@ export default function IVXOwnerChatRoute() {
           // queue can never strand this trace at USER_ROW_INSERTED.
           wdLF?.pass('AI_MUTATION_STARTED', `local_first branch invoking assistantReplyMutation mode=${mode}`, { clientId });
           // FIX: Fire AI reply as background — do NOT block the send mutation.
-          void assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: mode === 'send_and_ai', watchdogTraceId }).catch((aiErr: unknown) => {
+          void assistantReplyMutation.mutateAsync({ requestId: clientId, text: effectiveText, nonBlocking: mode === 'send_and_ai', watchdogTraceId }).catch((aiErr: unknown) => {
             console.log('[IVX_TRACE] 2.X_LOCAL_FIRST_AI_RETRY_1', { clientId, err: aiErr instanceof Error ? aiErr.message : String(aiErr) });
-            void assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: mode === 'send_and_ai', watchdogTraceId }).catch((retryErr: unknown) => {
+            void assistantReplyMutation.mutateAsync({ requestId: clientId, text: effectiveText, nonBlocking: mode === 'send_and_ai', watchdogTraceId }).catch((retryErr: unknown) => {
               console.log('[IVX_TRACE] 2.X_LOCAL_FIRST_AI_BOTH_FAILED', { clientId, err: retryErr instanceof Error ? retryErr.message : String(retryErr) });
               wdLF?.fail('AI_MUTATION_STARTED', `local_first assistantReplyMutation rejected twice: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`);
             });
@@ -3475,7 +3488,7 @@ export default function IVXOwnerChatRoute() {
           // never reports a phantom stall at AI_TRIGGER_DECISION if the async
           // call is delayed or queued behind an earlier mutation.
           wdCmd?.pass('AI_MUTATION_STARTED', `owner_command knowledge invoking assistantReplyMutation`, { command: commandResult.command });
-          await assistantReplyMutation.mutateAsync({ text: `[Knowledge Query] ${commandResult.args}`, nonBlocking: false });
+          await assistantReplyMutation.mutateAsync({ requestId: clientId, text: `[Knowledge Query] ${commandResult.args}`, nonBlocking: false });
         }
         return;
       }
@@ -3487,11 +3500,11 @@ export default function IVXOwnerChatRoute() {
 
       const triggerAssistantWithRetry = async (): Promise<void> => {
         try {
-          await assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: true, watchdogTraceId });
+          await assistantReplyMutation.mutateAsync({ requestId: clientId, text: effectiveText, nonBlocking: true, watchdogTraceId });
         } catch (firstErr) {
           console.log('[IVX_TRACE] 2.X_AI_TRIGGER_RETRY_1', { clientId, err: firstErr instanceof Error ? firstErr.message : String(firstErr) });
           try {
-            await assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: true, watchdogTraceId });
+            await assistantReplyMutation.mutateAsync({ requestId: clientId, text: effectiveText, nonBlocking: true, watchdogTraceId });
           } catch (secondErr) {
             console.log('[IVX_TRACE] 2.X_AI_TRIGGER_BOTH_FAILED', { clientId, err: secondErr instanceof Error ? secondErr.message : String(secondErr) });
             watchdogTrace?.fail('AI_MUTATION_STARTED', `assistantReplyMutation rejected twice: ${secondErr instanceof Error ? secondErr.message : String(secondErr)}`);
@@ -3574,7 +3587,7 @@ export default function IVXOwnerChatRoute() {
         // never reports a phantom stall at AI_TRIGGER_DECISION if the async
         // call is delayed or queued behind an earlier mutation.
         watchdogTrace?.pass('AI_MUTATION_STARTED', 'ai_only branch invoking assistantReplyMutation', { clientId });
-        await assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: false, watchdogTraceId });
+        await assistantReplyMutation.mutateAsync({ requestId: clientId, text: effectiveText, nonBlocking: false, watchdogTraceId });
         return;
       }
 
@@ -4198,6 +4211,7 @@ export default function IVXOwnerChatRoute() {
   const sendDraftAttachment = useCallback(async () => {
     if (draftAttachments.length === 0) return;
     const batch = draftAttachments.slice(0, IVX_MAX_DRAFT_ATTACHMENTS);
+    const analysisRequestId = createTransientMessageId('ivx-owner-attachment-analysis');
     const totalCount = batch.length;
     const composerText = normalizeComposerText(composerValueRef.current);
     const trimmed = safeTrim(composerText);
@@ -4284,6 +4298,7 @@ export default function IVXOwnerChatRoute() {
       // watchdog trace here, so we rely on the defensive mutationFn guard and the
       // retry wrapper below. A failure is logged but does not block the user.
       await assistantReplyMutation.mutateAsync({
+        requestId: analysisRequestId,
         text: analysisPrompt,
         nonBlocking: true});
     } catch (error) {
@@ -4539,7 +4554,7 @@ export default function IVXOwnerChatRoute() {
             {isApprovalCard ? (
               <Pressable
                 style={styles.approveRunButton}
-                onPress={() => { void handleApproveAndRunFromCard(approvalBody); }}
+                onPress={() => { void handleApproveAndRunFromCard(approvalBody, item.id); }}
                 accessibilityRole="button"
                 accessibilityLabel="Approve and run this build job"
                 testID={`ivx-owner-approve-run-${item.id}`}

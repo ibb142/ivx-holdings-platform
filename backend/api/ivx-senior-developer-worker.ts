@@ -27,10 +27,13 @@ import {
   ownerOnlyJson,
   ownerOnlyOptions,
 } from './owner-only';
+import { chatWorkerIdentity } from '../services/ivx-chat-worker-identity';
 import { authorizeInternalDeploymentRequest, InternalDeployAuthError } from '../services/ivx-internal-deploy-auth';
 import { verifyIVXGitHubActionsOIDCRequest } from '../services/ivx-github-actions-oidc';
 
 type WorkerEnqueueRequest = {
+  sourceChatMessageId?: unknown;
+  conversationId?: unknown;
   goal?: unknown;
   executionMode?: unknown;
   templateMode?: unknown;
@@ -302,7 +305,9 @@ export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request
     // Prefix the execution template so the worker scaffolds the right shape of
     // work (whole app, module, feature, fix, refactor, or a business workflow).
     const ownerId = internalAuthorization ? `worker:${internalAuthorization.workerId}` : (approval.ownerSessionDetected ? (approval as Record<string, unknown>).userId as string ?? 'owner' : 'owner');
+    const sourceChatMessageId = readTrimmed(body.sourceChatMessageId);
     const input: IVXWorkerJobInput = {
+      ...(sourceChatMessageId ? chatWorkerIdentity(ownerId, readTrimmed(body.conversationId) || null, sourceChatMessageId) : {}),
       goal: `[TEMPLATE_MODE:${templateMode}] ${goal}`,
       ownerApproved: true,
       approvePatch,
