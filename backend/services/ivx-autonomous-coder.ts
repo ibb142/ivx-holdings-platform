@@ -3117,7 +3117,7 @@ export type IVXAutonomousCoderResumeInput = {
  * must have been persisted by the worker BEFORE the restart via onPrCreated.
  *
  * Recovery matrix (fail-closed, never a false COMPLETED):
- *  - PR already merged              → reconcile the merge SHA → COMPLETED
+ *  - PR already merged              → verify saved head checks and merge SHA
  *  - PR open + checks still running → resume waiting (heartbeat via onPhase)
  *  - PR open + checks all green     → merge → COMPLETED (merge SHA required)
  *  - PR open + checks failed/timed out → BLOCKED with exact per-check evidence
@@ -3137,6 +3137,19 @@ export async function resumeIVXAutonomousCoderFromCiWait(
   let ciWaitMs: number | null = null;
   let finalStatus: 'COMPLETED' | 'BLOCKED' | 'FAILED' = 'BLOCKED';
   let error: string | null = null;
+  const checkSavedHead = () => waitForRequiredChecksGreen(input.commitSha, {
+    taskId: input.taskId,
+    goal: input.goal,
+    executionMode: 'code_change',
+    ownerId: input.ownerId,
+    approvalPolicy: 'owner_gated',
+    requiredChecksFn: input.requiredChecksFn,
+    prStateFn: input.prStateFn,
+    ciWaitTimeoutMs: input.ciWaitTimeoutMs,
+    ciPollIntervalMs: input.ciPollIntervalMs,
+    ciNaGraceMs: input.ciNaGraceMs,
+    sleepFn: input.sleepFn,
+  }, onPhase, input.prNumber, input.branch);
 
   onPhase?.('committing', `Restart resume: re-querying PR #${input.prNumber} state and required CI checks for ${input.commitSha.slice(0, 12)}.`);
 
@@ -3147,12 +3160,24 @@ export async function resumeIVXAutonomousCoderFromCiWait(
     if (prState.merged) {
       prMerged = true;
       prMergeCommitSha = prState.mergeCommitSha;
-      finalStatus = prMergeCommitSha ? 'COMPLETED' : 'BLOCKED';
-      error = prMergeCommitSha
-        ? null
-        : `PR #${input.prNumber} is merged but GitHub returned no merge commit SHA — cannot confirm the merge; task BLOCKED, never COMPLETED.`;
-      onPhase?.(prMergeCommitSha ? 'completed' : 'blocked',
-        `Restart resume: PR #${input.prNumber} already merged${prMergeCommitSha ? ` (merge commit ${prMergeCommitSha.slice(0, 12)})` : ' — merge SHA missing'}.`);
+      if (!prMergeCommitSha) {
+        error = `PR #${input.prNumber} is merged but GitHub returned no merge commit SHA — cannot confirm the merge; task BLOCKED, never COMPLETED.`;
+      } else {
+        // A merge receipt does not prove acceptance. Reconcile the original
+        // head's checks after a restart without generating or publishing code.
+        const ci = await checkSavedHead();
+        ciChecksGreen = ci.green;
+        ciCheckEvidence = ci.evidence;
+        ciWaitMs = ci.waitMs;
+        if (ci.green) {
+          assertLandingRepairScope(input.taskId, input.filesChanged ?? []);
+          finalStatus = 'COMPLETED';
+        } else {
+          error = ci.blocker ?? `Required CI checks ${ci.timedOut ? 'TIMED OUT' : 'FAILED'} on the saved head ${input.commitSha} of already merged PR #${input.prNumber}. Task BLOCKED; the existing merge is retained.`;
+        }
+      }
+      onPhase?.(finalStatus === 'COMPLETED' ? 'completed' : 'blocked', error
+        ?? `Restart resume: PR #${input.prNumber} already merged at ${prMergeCommitSha}; saved head checks verified.`);
     } else if (prState.state === 'closed') {
       finalStatus = 'BLOCKED';
       error = `Restart resume: PR #${input.prNumber} is CLOSED without merging. Task BLOCKED, never COMPLETED.`;
@@ -3161,19 +3186,7 @@ export async function resumeIVXAutonomousCoderFromCiWait(
       // PR open — resume the CI-before-merge wait with the same fail-closed
       // rules as the original run (never merge on red/unknown checks).
       onPhase?.('committing', `Restart resume: PR #${input.prNumber} open — resuming required CI wait for ${input.commitSha.slice(0, 12)}.`);
-      const ci = await waitForRequiredChecksGreen(input.commitSha, {
-        taskId: input.taskId,
-        goal: input.goal,
-        executionMode: 'code_change',
-        ownerId: input.ownerId,
-        approvalPolicy: 'owner_gated',
-        requiredChecksFn: input.requiredChecksFn,
-        prStateFn: input.prStateFn,
-        ciWaitTimeoutMs: input.ciWaitTimeoutMs,
-        ciPollIntervalMs: input.ciPollIntervalMs,
-        ciNaGraceMs: input.ciNaGraceMs,
-        sleepFn: input.sleepFn,
-      }, onPhase, input.prNumber, input.branch);
+      const ci = await checkSavedHead();
       ciChecksGreen = ci.green;
       ciCheckEvidence = ci.evidence;
       ciWaitMs = ci.waitMs;

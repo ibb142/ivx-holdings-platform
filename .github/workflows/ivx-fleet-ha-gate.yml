@@ -29,6 +29,8 @@ jobs:
       - run: bun test backend/services/ivx-postgres-deadline.test.ts
       - name: Require observed AI readiness and explicit billing failures
         run: bun test backend/services/ivx-ai-readiness-state.test.ts
+      - name: Require a bounded valid completion before provider readiness
+        run: bun test backend/services/ivx-ai-completion-probe.test.ts
       - run: bun test backend/services/ivx-autonomous-scheduler.test.ts backend/services/ivx-technical-schedule.test.ts backend/services/ivx-landing-superseded-recovery.test.ts
       - run: bun test backend/services/ivx-coder-workspace.test.ts
       - name: Verify manager identity, terminal writes, admission, planning and recovery
@@ -47,6 +49,10 @@ jobs:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - name: Verify compact mutation receipts and retained checkpoints
         run: node scripts/ivx-senior-compact-receipt-proof.mjs
+        env:
+          IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
+      - name: Preserve terminal history before retention and reject late workers
+        run: node scripts/ivx-senior-history-proof.mjs
         env:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - run: bun scripts/ivx-fleet-telemetry-postgres-proof.ts
@@ -74,5 +80,6 @@ jobs:
             qa/evidence/fleet-ha/senior-commit-recovery.json
             qa/evidence/fleet-ha/objective-link.json
             qa/evidence/fleet-ha/compact-receipt.json
+            qa/evidence/fleet-ha/senior-history.json
           if-no-files-found: warn
           retention-days: 30
