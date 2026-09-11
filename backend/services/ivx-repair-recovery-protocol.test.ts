@@ -10,7 +10,7 @@ test('restores scope and CI lessons from durable failures without weakening the 
     const restarted = JSON.parse(JSON.stringify({ error: 'wrapper '.repeat(150) + error }));
     const lesson = repairRecoveryLesson(restarted.error);
     assert.equal(lesson?.id, id);
-    assert.equal(lesson?.protocol, 'ivx-repair-recovery-protocol-v4');
+    assert.equal(lesson?.protocol, 'ivx-repair-recovery-protocol-v5');
     assert.match(lesson!.instruction, id === 'CI_REGRESSION' ? /Preserve existing assertions/ : /Do not substitute a different business rule/);
   }
 });
@@ -32,6 +32,23 @@ test('recovers a bounded timeout lesson without treating owner cancellation as a
     assert.match(lesson!.instruction, /do not boot a production server/);
   }
   assert.equal(repairRecoveryLesson('JOB_CANCELED: owner requested cancellation'), null);
+});
+
+test('retains a database pressure recovery rule across restart for real queue failures', () => {
+  for (const failure of [
+    'Repair blocked: repair_queue: Query read timeout',
+    'canceling statement due to statement timeout',
+    'Connection terminated due to connection timeout',
+  ]) {
+    const persisted = JSON.parse(JSON.stringify({ error: failure }));
+    const lesson = repairRecoveryLesson(persisted.error);
+    assert.equal(lesson?.id, 'DATABASE_PRESSURE');
+    assert.match(lesson!.instruction, /filter unfinished work before LIMIT/);
+    assert.match(lesson!.instruction, /preserve history and evidence/);
+    assert.match(lesson!.instruction, /Do not increase concurrency or timeouts/);
+  }
+  assert.equal(repairRecoveryLesson('JOB_CANCELED: owner stopped after Query read timeout'), null);
+  assert.equal(repairRecoveryLesson('EMERGENCY_STOP_ACTIVE: previous Query read timeout'), null);
 });
 
 test('a missing patch target teaches explicit file creation without relaxing inspection', () => {
