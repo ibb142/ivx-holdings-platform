@@ -487,7 +487,7 @@
         console.log('[IVX Cache] Found', deals.length, 'cached deals (age:', Math.round((Date.now() - ts) / 1000), 's)');
         return deals;
       }
-    } catch(e) {}
+    } catch(e) { console.error('[IVX] Failed to cache credentials:', e.message); }
     return null;
   }
 
