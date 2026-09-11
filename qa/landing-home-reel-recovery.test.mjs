@@ -52,18 +52,18 @@ test('a temporary feed failure recovers and keeps both formats attached to the s
   assert.equal(f.video.attributes.poster, reel.thumbnail_url);
 });
 
-test('persistent failure stops after three requests and a user can retry', async () => {
+test('persistent failure stops after two requests and a user can retry', async () => {
   let restored = false;
   const f = fixture(() => restored ? json(200, { videos: [reel] }) : json(500, {}));
   await settle();
-  assert.equal(f.calls, 3);
+  assert.equal(f.calls, 2);
   assert.equal(f.loads, 0);
   assert.equal(f.button()?.hidden, false);
   restored = true;
   f.button().emit('click');
   f.button().emit('click');
   await settle();
-  assert.equal(f.calls, 4, 'A double click must not issue duplicate requests');
+  assert.equal(f.calls, 3, 'A double click must not issue duplicate requests');
   assert.equal(f.loads, 1);
   assert.equal(f.button().hidden, true);
   assert.equal(f.button().style.display, 'none');
@@ -72,7 +72,7 @@ test('persistent failure stops after three requests and a user can retry', async
 test('aborted requests get bounded recovery instead of an infinite loop', async () => {
   const f = fixture(() => { throw new DOMException('Timed out', 'AbortError'); });
   await settle();
-  assert.equal(f.calls, 3);
+  assert.equal(f.calls, 2);
   assert.equal(f.button()?.hidden, false);
 });
 
