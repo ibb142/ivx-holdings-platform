@@ -29,7 +29,9 @@ It uses the existing owner CI credentials for a real password grant and verifies
 the issued identity and protected owner gate. It races two identical requests,
 requires one original response, checks exact receipt replay from two distinct
 API processes, rejects changed content under the same ID, and accepts a new ID
-for equal text. It also verifies canonical SSE replay and a real direct stream
+for equal text. It rereads both assistant rows under the real owner session and
+requires exactly two owner rows for those two commands despite concurrent retries.
+It also verifies canonical SSE replay and a real direct stream
 with durable terminal replay. Each response must report the exact tested commit;
 an opaque process identity distinguishes the serving replica without exposing
 its hostname. Missing second-replica coverage is a failed check, not a pass.
@@ -37,6 +39,15 @@ its hostname. Missing second-replica coverage is a failed check, not a pass.
 This workflow runs after main deployment and archives a scoped proof. It does
 not certify app history, a process restart, public chat, worker execution, a
 restored backup or the complete phase. Those checks remain independently required.
+
+The knowledge and manual text paths honor both persistence flags before claiming
+a completed turn. A requested owner write must finish before model execution;
+the assistant ID is returned only after its write succeeds. Provider or history
+failures return an error status and do not become successful assistant notices.
+This correction still requires the live row checks and app reload proof.
+Authenticated health probes reach the existing capability-probe handler before
+conversation routing, so polling does not create ordinary model conversation
+turns or replace capability evidence with a prose response.
 
 The app threads its per-message client ID through primary transport retries and
 durable intake. A new message with equal text must retain a distinct ID. Direct

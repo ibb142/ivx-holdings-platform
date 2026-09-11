@@ -83,6 +83,13 @@ try {
   assert.ok([401, 403].includes(denied.response.status), 'UNAUTHENTICATED_OWNER_REQUEST_ACCEPTED');
   proof.checks.push('unauthenticated owner request rejected');
 
+  const health = await chat({ requestId: `phase4-health-${randomUUID()}`, message: 'health_probe', mode: 'chat' });
+  assert.equal(health.response.status, 200, 'OWNER_CAPABILITY_PROBE_FAILED');
+  assert.equal(health.body.probe, true, 'HEALTH_PROBE_MISROUTED_TO_CONVERSATION');
+  assert.equal(health.body.capabilities?.ai_chat, true, 'OWNER_CAPABILITY_AI_UNAVAILABLE');
+  assert.ok(health.body.capabilityProofs && health.body.roomStatus, 'OWNER_CAPABILITY_EVIDENCE_MISSING');
+  proof.checks.push('authenticated health probe returns executable capability evidence through its dedicated route');
+
   const requestId = `phase4-live-${randomUUID()}`;
   const suffix = randomUUID().replaceAll('-', '');
   const expected = `north_${suffix}`;
@@ -119,6 +126,26 @@ try {
   assert.notEqual(distinct.response.headers.get('x-ivx-request-replayed'), 'true', 'NEW_MESSAGE_REPLAYED_OLD_RECEIPT');
   assert.equal(distinct.body.answer.trim(), expected, 'NEW_MESSAGE_ANSWER_INCORRECT');
   proof.checks.push('changed content conflicts; equal text with a new identity executes independently');
+  for (const result of [original, distinct]) {
+    assert.equal(result.body.assistantPersisted, true, 'ASSISTANT_HISTORY_NOT_PERSISTED');
+    assert.ok(result.body.assistantMessageId, 'ASSISTANT_HISTORY_ID_MISSING');
+    const query = new URLSearchParams({ select: 'id,conversation_id,sender_role,body', id: `eq.${result.body.assistantMessageId}` });
+    const saved = await json(`${supabase.origin}/rest/v1/ivx_messages?${query}`, { headers: { apikey: process.env.SUPABASE_ANON_KEY } });
+    assert.equal(saved.response.status, 200, 'OWNER_HISTORY_READ_FAILED');
+    assert.equal(saved.body.length, 1, 'ASSISTANT_HISTORY_ROW_MISSING');
+    assert.equal(saved.body[0].sender_role, 'assistant', 'HISTORY_ROLE_MISMATCH');
+    assert.equal(saved.body[0].conversation_id, original.body.conversationId, 'HISTORY_CONVERSATION_MISMATCH');
+    assert.equal(saved.body[0].body.trim(), expected, 'HISTORY_ANSWER_MISMATCH');
+  }
+  assert.notEqual(original.body.assistantMessageId, distinct.body.assistantMessageId, 'DISTINCT_COMMAND_REUSED_ASSISTANT_ROW');
+  const ownerQuery = new URLSearchParams({ select: 'id', conversation_id: `eq.${original.body.conversationId}`,
+    sender_role: 'eq.owner', body: `eq.${request.message}` });
+  const ownerRows = await json(`${supabase.origin}/rest/v1/ivx_messages?${ownerQuery}`, { headers: { apikey: process.env.SUPABASE_ANON_KEY } });
+  assert.equal(ownerRows.response.status, 200, 'OWNER_PROMPT_HISTORY_READ_FAILED');
+  assert.equal(ownerRows.body.length, 2, 'OWNER_HISTORY_COMMAND_COUNT_MISMATCH');
+  proof.historyRows = { conversationId: original.body.conversationId, ownerMessages: ownerRows.body.map(row => row.id),
+    assistantMessages: [original.body.assistantMessageId, distinct.body.assistantMessageId] };
+  proof.checks.push('owner can reread saved assistant rows; two independent equal-text commands retain exactly two owner rows');
   const canonicalReplay = await stream('/api/ivx/owner-ai', request);
   const final = canonicalReplay.filter(event => event.type === 'final');
   assert.equal(final.length, 1, 'CANONICAL_SSE_TERMINAL_COUNT');

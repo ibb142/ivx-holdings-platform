@@ -1,4 +1,5 @@
 import { buildOwnerTextModelInput } from '../services/ivx-owner-text-prompt';
+import { deliverOwnerTextTurn } from '../services/ivx-owner-text-delivery';
 import { ownerRuntimeEvidenceHeaders } from '../services/ivx-owner-runtime-evidence';
 import { appendFile, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -6261,6 +6262,82 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
     const conversation = await ensureOwnerConversation(ownerContext.client, tables);
     const requestId = readTrimmedString(body.requestId) || createRequestId();
 
+    // Capability probes have their own contract and must not become chat turns.
+    if (isHealthProbe(prompt)) {
+      const plannerDecision = buildIVXOwnerAIPlannerDecision(prompt);
+      try {
+        await safeEnsureInboxState(ownerContext.client, tables, conversation.id, ownerContext.userId);
+        let aiResult: Awaited<ReturnType<typeof generateOwnerAIAnswer>> | null = null;
+        let aiError: string | null = null;
+        try {
+          aiResult = await generateOwnerAIAnswer({
+            promptText: 'Reply with READY only.',
+            sessionId: conversation.id,
+            healthProbe: true,
+          });
+        } catch (error) {
+          aiError = error instanceof Error ? error.message : 'AI health probe failed.';
+          console.log('[IVXOwnerAIBackend] AI health capability probe failed:', aiError);
+        }
+        const roomStatus = buildRoomStatus(tables);
+        const capabilityChecks = await buildOwnerCapabilityChecks({
+          client: ownerContext.client,
+          tables,
+          conversationId: conversation.id,
+          userId: ownerContext.userId,
+          requestId,
+          ownerContext,
+          aiResult,
+          aiError,
+        });
+        const probePayload: IVXOwnerAIHealthProbeResponse = {
+          requestId,
+          conversationId: conversation.id,
+          answer: aiResult?.answer ?? 'Health probe completed. See capabilityProofs for executable runtime checks.',
+          model: aiResult?.model ?? getOwnerAIModel(),
+          status: 'ok',
+          source: aiResult?.source,
+          provider: aiResult?.provider,
+          endpoint: aiResult?.endpoint,
+          deploymentMarker: DEPLOYMENT_MARKER,
+          runtimeV2: buildOwnerRuntimeV2({
+            requestId,
+            conversationId: conversation.id,
+            prompt,
+            plannerDecision,
+            recentMessages: [],
+            persistence: runtimePersistenceForTables(tables),
+          }),
+          probe: true,
+          resolvedSchema: tables.schema,
+          roomStatus,
+          capabilities: capabilityChecks.capabilities,
+          capabilityProofs: capabilityChecks.capabilityProofs,
+        };
+
+        return ownerOnlyJson(probePayload as unknown as Record<string, unknown>);
+      } catch (error) {
+        const status = getErrorStatus(error);
+        const message = error instanceof Error ? error.message : 'Health probe auth failed.';
+        console.log('[IVXOwnerAIBackend] Health probe auth/startup failed:', {
+          status,
+          message,
+          route: '/api/ivx/owner-ai',
+        });
+        return ownerOnlyJson({
+          error: 'Health probe auth failed.',
+          detail: message,
+          blocker: message.toLowerCase().includes('privileged ivx access is required') ? 'owner_role_guard' : 'owner_only_guard',
+          route: '/api/ivx/owner-ai',
+          deploymentMarker: DEPLOYMENT_MARKER,
+          requiredTables: IVX_OWNER_AI_TABLES,
+          resolvedTables: tables,
+          serverConfig: getServerConfigAudit(),
+        }, status);
+      }
+    }
+
+
     // ── V6.10 OWNER-AUTHORIZED DEVELOPER EXECUTION (fixes the gap where the
     // conversation state machine only executed read-only actions, so "Confirm do it"
     // after a deploy request re-ran the last property query instead of shipping
@@ -6486,6 +6563,37 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
         console.log('[IVXOwnerAIBackend] Conversation-state assistant persistence failed:', error instanceof Error ? error.message : 'unknown');
         return null;
       }
+    }
+
+    async function executeTextTurn(module: string, model: string, modelInput: ReturnType<typeof buildOwnerTextModelInput>) {
+      const delivered = await deliverOwnerTextTurn({
+        persistUserMessage,
+        persistAssistantMessage,
+        persistOwner: () => insertMessage(ownerContext.client, tables, {
+          conversationId: conversation.id,
+          senderRole: 'owner',
+          senderUserId: tables.schema === 'generic' ? ownerContext.userId : null,
+          senderLabel,
+          body: prompt,
+        }),
+        generate: async () => {
+          const result = await requestIVXAIText({ module, requestId, model, ...modelInput, maxOutputTokens: 8_000 });
+          const text = assertVisibleOwnerAIAnswer(result.text);
+          if (isCannedResponse(text)) throw new Error('OWNER_TEXT_RESPONSE_REJECTED');
+          return { ...result, text };
+        },
+        persistAssistant: async (result) => {
+          const id = await persistAssistant(result.text, result.providerMetadata.model);
+          if (!id) throw new Error('OWNER_TEXT_HISTORY_PERSISTENCE_FAILED');
+          return id;
+        },
+      });
+      await safeUpsertAIRequest(ownerContext.client, tables, {
+        requestId, conversationId: conversation.id, userId: ownerContext.userId, prompt,
+        responseText: delivered.result.text, responseMessageId: delivered.assistantMessageId,
+        status: 'completed', model: delivered.result.providerMetadata.model,
+      });
+      return delivered;
     }
 
     async function returnStateAnswer(answer: string, evidence: Record<string, unknown>, status: 'ok' | 'error' = 'ok'): Promise<Response> {
@@ -6757,22 +6865,12 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           liveContext: knowledgeLiveCtx,
         });
         const llmModel = resolveIVXAIModel() || 'openai/gpt-4o';
-        const llmResult = await requestIVXAIText({
-          module: 'owner-room-knowledge',
-          requestId,
-          model: llmModel,
-          ...knowledgeInput,
-          maxOutputTokens: 8_000,
-        });
+        const { result: llmResult, assistantMessageId } = await executeTextTurn('owner-room-knowledge', llmModel, knowledgeInput);
         const answer = assertVisibleOwnerAIAnswer(llmResult.text);
-        // Reject canned responses (Item 6)
-        if (isCannedResponse(answer)) {
-          console.error('[IVXOwnerAIBackend] CANNED_RESPONSE_REJECTED:', { traceId: authoritativeDecision.traceId, answerPreview: answer.slice(0, 200) });
-        }
         return ownerOnlyJson(buildOwnerAIResponsePayload({
           requestId,
-          conversationId: readTrimmedString(body.conversationId) || 'ivx-owner-ai-knowledge',
-          answer: isCannedResponse(answer) ? 'I could not generate a proper response. Please rephrase your question.' : answer,
+          conversationId: conversation.id,
+          answer,
           model: llmResult.providerMetadata.model,
           status: 'ok',
         }, {
@@ -6780,8 +6878,8 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           provider: llmResult.providerMetadata.provider,
           endpoint: llmResult.providerMetadata.endpoint ?? '/api/ivx/owner-ai/knowledge',
           deploymentMarker: DEPLOYMENT_MARKER,
-          assistantMessageId: null,
-          assistantPersisted: false,
+          assistantMessageId,
+          assistantPersisted: Boolean(assistantMessageId),
           selectedIntent: authoritativeDecision.intent,
           selectedTool: null,
           routerDebug: buildRouterDebug({
@@ -6804,10 +6902,10 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
         // a deploy, commit, or task creation, even if the LLM fails.
         return ownerOnlyJson(buildOwnerAIResponsePayload({
           requestId: readTrimmedString(body.requestId) || createRequestId(),
-          conversationId: readTrimmedString(body.conversationId) || 'ivx-owner-ai-knowledge-error',
-          answer: 'I could not reach the AI model to answer your question. This is a temporary infrastructure issue — please try again. No task was created, no deploy was triggered.',
+          conversationId: conversation.id,
+          answer: 'The text reply could not be completed and saved. A model response may have been generated. Recover this request before submitting it again.',
           model: 'ivx_authoritative_router_error',
-          status: 'ok',
+          status: 'error',
         }, {
           source: 'local_app_brain',
           provider: 'chatgpt',
@@ -6828,7 +6926,7 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           toolOutput: [],
           fallbackUsed: false,
           toolOutputs: [],
-        }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
+        }, body.devTestModeActive === true) as unknown as Record<string, unknown>, 503);
       }
     }
 
@@ -6862,18 +6960,12 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           liveContext: manualLiveCtx,
         });
         const llmModel = resolveIVXAIModel() || 'openai/gpt-4o';
-        const llmResult = await requestIVXAIText({
-          module: 'owner-room-manual',
-          requestId,
-          model: llmModel,
-          ...manualInput,
-          maxOutputTokens: 8_000,
-        });
+        const { result: llmResult, assistantMessageId } = await executeTextTurn('owner-room-manual', llmModel, manualInput);
         const answer = assertVisibleOwnerAIAnswer(llmResult.text);
         return ownerOnlyJson(buildOwnerAIResponsePayload({
           requestId,
-          conversationId: readTrimmedString(body.conversationId) || 'ivx-owner-ai-manual-llm',
-          answer: isCannedResponse(answer) ? 'I could not generate a proper response. Please rephrase your question.' : answer,
+          conversationId: conversation.id,
+          answer,
           model: llmResult.providerMetadata.model,
           status: 'ok',
         }, {
@@ -6881,8 +6973,8 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           provider: llmResult.providerMetadata.provider,
           endpoint: llmResult.providerMetadata.endpoint ?? '/api/ivx/owner-ai/manual-llm',
           deploymentMarker: DEPLOYMENT_MARKER,
-          assistantMessageId: null,
-          assistantPersisted: false,
+          assistantMessageId,
+          assistantPersisted: Boolean(assistantMessageId),
           selectedIntent: 'manual_answer' as OwnerRouterIntent,
           selectedTool: null,
           routerDebug: buildRouterDebug({
@@ -6903,10 +6995,10 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
         // honest error instead. Manual answer mode must NEVER trigger execution.
         return ownerOnlyJson(buildOwnerAIResponsePayload({
           requestId: readTrimmedString(body.requestId) || createRequestId(),
-          conversationId: readTrimmedString(body.conversationId) || 'ivx-owner-ai-manual-error',
-          answer: 'I could not reach the AI model to answer your question in manual mode. This is a temporary infrastructure issue — please try again. No tools were used, no execution was triggered.',
+          conversationId: conversation.id,
+          answer: 'The text reply could not be completed and saved. A model response may have been generated. Recover this request before submitting it again.',
           model: 'ivx_authoritative_router_error',
-          status: 'ok',
+          status: 'error',
         }, {
           source: 'local_app_brain',
           provider: 'chatgpt',
@@ -6927,7 +7019,7 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           toolOutput: [],
           fallbackUsed: false,
           toolOutputs: [],
-        }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
+        }, body.devTestModeActive === true) as unknown as Record<string, unknown>, 503);
       }
     }
 
@@ -7715,78 +7807,6 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
       }, commandResult.status === 'success' ? 200 : 500);
     }
 
-    if (isHealthProbe(prompt)) {
-      try {
-        await safeEnsureInboxState(ownerContext.client, tables, conversation.id, ownerContext.userId);
-        let aiResult: Awaited<ReturnType<typeof generateOwnerAIAnswer>> | null = null;
-        let aiError: string | null = null;
-        try {
-          aiResult = await generateOwnerAIAnswer({
-            promptText: 'Reply with READY only.',
-            sessionId: conversation.id,
-            healthProbe: true,
-          });
-        } catch (error) {
-          aiError = error instanceof Error ? error.message : 'AI health probe failed.';
-          console.log('[IVXOwnerAIBackend] AI health capability probe failed:', aiError);
-        }
-        const roomStatus = buildRoomStatus(tables);
-        const capabilityChecks = await buildOwnerCapabilityChecks({
-          client: ownerContext.client,
-          tables,
-          conversationId: conversation.id,
-          userId: ownerContext.userId,
-          requestId,
-          ownerContext,
-          aiResult,
-          aiError,
-        });
-        const probePayload: IVXOwnerAIHealthProbeResponse = {
-          requestId,
-          conversationId: conversation.id,
-          answer: aiResult?.answer ?? 'Health probe completed. See capabilityProofs for executable runtime checks.',
-          model: aiResult?.model ?? getOwnerAIModel(),
-          status: 'ok',
-          source: aiResult?.source,
-          provider: aiResult?.provider,
-          endpoint: aiResult?.endpoint,
-          deploymentMarker: DEPLOYMENT_MARKER,
-          runtimeV2: buildOwnerRuntimeV2({
-            requestId,
-            conversationId: conversation.id,
-            prompt,
-            plannerDecision,
-            recentMessages: [],
-            persistence: runtimePersistenceForTables(tables),
-          }),
-          probe: true,
-          resolvedSchema: tables.schema,
-          roomStatus,
-          capabilities: capabilityChecks.capabilities,
-          capabilityProofs: capabilityChecks.capabilityProofs,
-        };
-
-        return ownerOnlyJson(probePayload as unknown as Record<string, unknown>);
-      } catch (error) {
-        const status = getErrorStatus(error);
-        const message = error instanceof Error ? error.message : 'Health probe auth failed.';
-        console.log('[IVXOwnerAIBackend] Health probe auth/startup failed:', {
-          status,
-          message,
-          route: '/api/ivx/owner-ai',
-        });
-        return ownerOnlyJson({
-          error: 'Health probe auth failed.',
-          detail: message,
-          blocker: message.toLowerCase().includes('privileged ivx access is required') ? 'owner_role_guard' : 'owner_only_guard',
-          route: '/api/ivx/owner-ai',
-          deploymentMarker: DEPLOYMENT_MARKER,
-          requiredTables: IVX_OWNER_AI_TABLES,
-          resolvedTables: tables,
-          serverConfig: getServerConfigAudit(),
-        }, status);
-      }
-    }
 
     await safeEnsureInboxState(ownerContext.client, tables, conversation.id, ownerContext.userId);
 
