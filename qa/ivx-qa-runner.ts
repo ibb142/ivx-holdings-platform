@@ -3,6 +3,7 @@
  * Replaces all obsolete qa-*.mjs scripts with one comprehensive runner.
  * Every test has a stable ID, expected result, actual result, and evidence reference.
  */
+import { evaluateQAGate } from './ivx-qa-verdict';
 import type { QATestResult, QARunSummary, TestCategory, TestStatus } from './ivx-qa-types';
 import { RUNNER_VERSION, PRODUCTION_API, LANDING_URL } from './ivx-qa-types';
 import { CRITICAL_FILES, isCriticalFile } from './ivx-critical-files';
@@ -769,10 +770,12 @@ if (import.meta.main) {
         console.log(`  Actual: ${r.actual}`);
         if (r.errorDetail) console.log(`  Error: ${r.errorDetail.slice(0, 200)}`);
       }
+      const gate = evaluateQAGate(summary.results);
       const outPath = join(process.cwd(), 'qa', 'latest-run.json');
-      writeFile(outPath, JSON.stringify(summary, null, 2));
+      writeFile(outPath, JSON.stringify({ ...summary, gate }, null, 2));
       console.log(`\nResults written to ${outPath}`);
-      process.exit(summary.errors > 0 ? 1 : 0);
+      console.log(`QA_GATE=${gate.verdict}`);
+      process.exit(gate.exitCode);
     })
     .catch((err) => {
       console.error('QA runner fatal error:', err);
