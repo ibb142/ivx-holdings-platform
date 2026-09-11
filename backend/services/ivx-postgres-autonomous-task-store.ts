@@ -151,6 +151,20 @@ export async function readSeniorQueuePostgresDocument<T>(key: SeniorDocumentKey)
     'select value from public.ivx_durable_documents where doc_key = $1 limit 1', [key]);
   return result.rows[0]?.value ?? null;
 }
+/** Polling one repair must not transfer the history of every retained job. */
+export async function readSeniorQueuePostgresJob<T extends { jobId: string }>(jobId: string): Promise<T | null> {
+  emergencyStopPostgresConfig();
+  if (!jobId.trim()) throw new Error('Repair job identity is required');
+  const result = await queryWithPostgresDeadline<{ job: T }>(getDirectPool(process.env, 'repair'),
+    `select job from public.ivx_durable_documents d
+      cross join lateral jsonb_array_elements(d.value->'jobs') as job
+      where d.doc_key = $1 and job->>'jobId' = $2 limit 2`,
+    ['senior-developer-worker/queue.json', jobId]);
+  if (result.rows.length > 1) throw new Error('Duplicate repair job identity');
+  const job = result.rows[0]?.job ?? null;
+  if (job && job.jobId !== jobId) throw new Error('Repair job identity mismatch');
+  return job;
+}
 export async function appendSeniorProofPostgresEvent(event: Record<string, unknown>): Promise<void> {
   emergencyStopPostgresConfig();
   await queryWithPostgresDeadline(getDirectPool(process.env, 'repair'),
@@ -268,6 +282,13 @@ async function fetchAllPostgresTasks(): Promise<Task[]> {
 /** Bound live Landing reads by deployment identity, regardless of ledger age. */
 export async function readPostgresLandingTasks(sha: string): Promise<Task[]> {
   if (!/^[a-f0-9]{40}$/i.test(sha)) throw new Error('Invalid Landing source SHA');
+  const key = `landing:${sha}:${taskMutationRevision}`;
+  let pending = currentReadsInFlight.get(key);
+  if (!pending) { pending = fetchPostgresLandingTasks(sha); currentReadsInFlight.set(key, pending); }
+  try { return structuredClone(await pending); }
+  finally { if (currentReadsInFlight.get(key) === pending) currentReadsInFlight.delete(key); }
+}
+async function fetchPostgresLandingTasks(sha: string): Promise<Task[]> {
   const prefixes = ['landing-p0:', 'landing-p0-repair:', 'landing-p0-patrol:'];
   const directRead = async () => (await getDirectPool().query<RestTaskRow>(
     'select payload from public.ivx_autonomous_tasks where idempotency_key like any($1::text[]) order by task_id limit 1000',
@@ -283,7 +304,7 @@ export async function readPostgresLandingTasks(sha: string): Promise<Task[]> {
     } catch (error) { if (!mayFailoverRead(error)) throw error; rows = await directRead(); }
   }
   if (!Array.isArray(rows) || rows.length >= 1000) throw new Error('Incomplete current-SHA Landing task response');
-  return rows.map(row => structuredClone(row.payload));
+  return rows.map(row => row.payload);
 }
 
 export async function readPostgresTaskById(taskId: string): Promise<Task | null> {
