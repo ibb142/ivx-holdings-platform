@@ -4,7 +4,7 @@
  * Runs inside the backend and reads Render credentials from process.env or the
  * encrypted Owner Variables runtime bridge. Secrets are never returned.
  */
-import { ownerRuntimeBindingDrift } from '../services/ivx-owner-binding-diagnostic';
+import { ownerRuntimeBindingDrift, readOwnerRuntimeBindings } from '../services/ivx-owner-binding-diagnostic';
 import { auditIVXRenderRuntimeAccess } from '../services/ivx-senior-developer-runtime';
 import { getIVXOwnerVariableRuntimeValue, inspectIVXOwnerVariableRuntimeReadiness } from './ivx-owner-variables';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
@@ -139,7 +139,7 @@ export async function handleIVXRenderDiagnosticRequest(request: Request): Promis
   const [serviceResult, deploysResult, envVarsResult] = await Promise.all([
     callRender(`/services/${encodeURIComponent(serviceId)}`, apiKey),
     callRender(`/services/${encodeURIComponent(serviceId)}/deploys?limit=${limit}`, apiKey),
-    callRender(`/services/${encodeURIComponent(serviceId)}/env-vars`, apiKey),
+    readOwnerRuntimeBindings(key => callRender(`/services/${encodeURIComponent(serviceId)}/env-vars/${encodeURIComponent(key)}`, apiKey)),
   ]);
 
   const deploysArray: unknown[] = Array.isArray(deploysResult.body) ? deploysResult.body : [];

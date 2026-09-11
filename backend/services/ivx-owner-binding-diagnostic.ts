@@ -5,6 +5,32 @@ const OWNER_BINDING_KEYS = [
   'JWT_SECRET', 'APP_SECRET', 'IVX_OWNER_VARIABLES_ENCRYPTION_KEY',
 ] as const;
 
+type BindingResponse = { ok: boolean; status: number; body: unknown };
+
+/** Read only the fixed diagnostic keys. Render's list endpoint defaults to
+ * twenty rows, so a missing first-page key is not proof of absent config.
+ */
+export async function readOwnerRuntimeBindings(read: (key: string) => Promise<BindingResponse>): Promise<BindingResponse> {
+  let responses: Array<{ key: string; response: BindingResponse }>;
+  try {
+    responses = await Promise.all(OWNER_BINDING_KEYS.map(async key => ({ key, response: await read(key) })));
+  } catch {
+    return { ok: false, status: 0, body: [] };
+  }
+  const body: Array<{ key: string; value: string }> = [];
+  for (const { key, response } of responses) {
+    if (response.status === 404) continue;
+    if (!response.ok) return { ok: false, status: response.status, body: [] };
+    const wrapper = response.body && typeof response.body === 'object' ? response.body as Record<string, unknown> : {};
+    const entry = wrapper.envVar && typeof wrapper.envVar === 'object' ? wrapper.envVar as Record<string, unknown> : wrapper;
+    if (typeof entry.value !== 'string' || (entry.key !== undefined && entry.key !== key)) {
+      return { ok: false, status: 502, body: [] };
+    }
+    body.push({ key, value: entry.value });
+  }
+  return { ok: true, status: 200, body };
+}
+
 /** Owner-only comparison of the persisted service configuration and this
  * process. Values and fingerprints never leave the backend.
  */
