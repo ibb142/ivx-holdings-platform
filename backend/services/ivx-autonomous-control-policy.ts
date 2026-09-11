@@ -52,5 +52,5 @@ function boundedConcurrency(value: string | undefined, fallback: number): number
 export function autonomousRepairCapacity(env: NodeJS.ProcessEnv = process.env): number {
   const campaign = boundedConcurrency(env.IVX_CAMPAIGN_MAX_CONCURRENCY, 12);
   const continuity = boundedConcurrency(env.IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY, 12);
-  return 112;
+  return Math.max(campaign, continuity);
 }
