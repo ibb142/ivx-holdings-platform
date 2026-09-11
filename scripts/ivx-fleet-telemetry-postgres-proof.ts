@@ -37,7 +37,9 @@ try {
   try {
     await admin.query("insert into public.ivx_autonomous_tasks(task_id,idempotency_key,state,payload) select 'qa-slo-cap-history-'||n,'qa-slo-cap-history-'||n,'BLOCKED',jsonb_build_object('taskId','qa-slo-cap-history-'||n,'state','BLOCKED','evidence','[]'::jsonb) from generate_series(1,1200) n");
     const stamp = new Date().toISOString(), expiry = new Date(Date.now() + 120_000).toISOString();
-    for (const [label, state, agent] of [['running', 'RUNNING', 1], ['blocked-active', 'BLOCKED', 2], ['retry', 'RETRYING', null]] as const) {
+    const freeAgents = (await admin.query("select n from generate_series(1,112) n where not exists(select 1 from public.ivx_autonomous_tasks where lease_holder='agent:ivx_holdings_'||n) order by n limit 2")).rows.map(row => Number(row.n));
+    assert.equal(freeAgents.length, 2, 'Two unoccupied fixture lanes are required');
+    for (const [label, state, agent] of [['running', 'RUNNING', freeAgents[0]], ['blocked-active', 'BLOCKED', freeAgents[1]], ['retry', 'RETRYING', null]] as const) {
       const id = `qa-slo-cap-${label}`, holder = agent ? `agent:ivx_holdings_${agent}` : null;
       const payload = { taskId: id, state, evidence: [], leaseHolder: holder,
         leaseExpiresAt: holder ? expiry : null, lastHeartbeatAt: holder ? stamp : null };
