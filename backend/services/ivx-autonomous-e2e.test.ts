@@ -134,7 +134,7 @@ describe('IVX Autonomous Coder — E2E Integration', () => {
     // ── Assert: commit was created ─────────────────────────────────────────
     expect(proof.commitSha).toBe('abc123def456789012345678901234567890abcd');
     expect(proof.commitUrl).toContain('github.com/ibb142/ivx-holdings-platform');
-    expect(proof.branch).toBe('ivx-autonomous-e2e-test-001');
+    expect(proof.branch).toBe('ivx-autonomous-e2e-test-001-f3beafb35cda3467');
 
     // ── Assert: PR was created and merged after CI ────────────────────────
     expect(proof.prNumber).toBe(42);
@@ -507,8 +507,8 @@ describe('IVX Autonomous Coder — False-Completion Regression (2026-08-23)', ()
       fileWriter: m.fileWriter, fileReader: m.fileReader,
       onPhase: (() => {}) as never, sleepFn: async (): Promise<void> => {},
     });
-    expect(committedBranch).toBe('ivx-autonomous-ivx-branch-test-001');
-    expect(proof.branch).toBe('ivx-autonomous-ivx-branch-test-001');
+    expect(committedBranch).toBe('ivx-autonomous-ivx-branch-test-001-90083351cf5864ce');
+    expect(proof.branch).toBe('ivx-autonomous-ivx-branch-test-001-90083351cf5864ce');
     expect(proof.finalStatus).toBe('COMPLETED');
   });
 });

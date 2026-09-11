@@ -187,6 +187,11 @@ export async function proveInterruptedTaskRecovery(reader, successor) {
         assert.equal(lateRelease.released, 0, 'late old-worker shutdown must not release successor');
         const resumed = await start(successor, taskId, agent, replacement);
         assert.equal(resumed.ok, true);
+        assert.equal(resumed.task.startedAt, ready.task.startedAt, 'original start remains history');
+        assert(Date.parse(resumed.task.attemptStartedAt) > Date.parse(ready.task.attemptStartedAt), 'a recovered attempt must have a fresh inactivity clock');
+        const resumedClock = resumed.task.attemptStartedAt;
+        assert.equal((await heartbeat(successor, taskId, agent, replacement)).refreshed, 1);
+        assert.equal((await readTask(reader, taskId)).payload.attemptStartedAt, resumedClock, 'heartbeat cannot extend the productivity deadline');
         assert.equal((await cas(reader, { ...ready.task, state: 'EXECUTION_COMPLETED' }, ['RUNNING'], agent, worker, 'recovery_fixture_forbidden')).ok, false,
           'old process completion must remain fenced after new process starts');
         const result = evidence(`${taskId}:result`, `Isolated PostgreSQL recovery result for ${taskId}`);

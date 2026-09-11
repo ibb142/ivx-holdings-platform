@@ -26,10 +26,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install browser runner
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.3.9 }
+      - name: Install locked browser runner
         run: |
-          npm install --ignore-scripts --no-audit --no-fund --no-save playwright@1.55.0
-          npx playwright install --with-deps chromium
+          set -euo pipefail
+          # npm --no-save still re-resolves unrelated root dependencies. Use
+          # the reviewed lockfile, as the other passing browser gates do.
+          bun install --frozen-lockfile --ignore-scripts
+          bunx playwright install --with-deps chromium
       - name: Wait for this production commit
         if: github.event_name != 'pull_request'
         run: |

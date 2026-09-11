@@ -5,15 +5,15 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - 'expo/ivxholding-landing/**'
-      - 'expo/assets/images/**'
-      - 'backend/api/ivx-landing-full-deploy.ts'
-      - 'backend/services/ivx-cloudfront-invalidation.ts'
-      - '.github/workflows/landing-render-runtime-cert.yml'
+    # The live frontend carries the repository release SHA. Backend-only
+    # releases must refresh that identity before exact-SHA browser checks.
 
 permissions:
   contents: read
+
+concurrency:
+  group: landing-s3-production
+  cancel-in-progress: false
 
 jobs:
   deploy-and-certify:
@@ -22,15 +22,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Wait for IVX production backend
+      - name: Wait for the requested IVX backend commit
         shell: bash
         run: |
           set -euo pipefail
           for i in $(seq 1 30); do
-            code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 15 https://api.ivxholding.com/health || true)
-            if [ "$code" = "200" ]; then
-              echo "Backend health PASS"
-              cat /tmp/health.json | head -c 1000
+            code=$(curl -sS -o /tmp/version.json -w '%{http_code}' --max-time 15 https://api.ivxholding.com/version || true)
+            if [ "$code" = "200" ] && node -e 'const v=JSON.parse(require("fs").readFileSync("/tmp/version.json","utf8")); process.exit(v.commit===process.env.GITHUB_SHA?0:1)'; then
+              echo "Backend commit PASS: $GITHUB_SHA"
               exit 0
             fi
             echo "Backend not ready (HTTP $code), retry $i/30"
@@ -39,28 +38,45 @@ jobs:
           echo '::error::Production backend did not become healthy.'
           exit 1
 
-      - name: Execute landing deployment inside Render runtime
-        id: deploy
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: '1.3.9' }
+
+      - name: Install reviewed deployment dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Configure existing GitHub AWS deployment access
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Verify IVX AWS account
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl -sS -o /tmp/deploy.json -w '%{http_code}' --max-time 180 \
-            -X POST https://api.ivxholding.com/api/ivx/landing-deploy \
-            -H 'Content-Type: application/json' \
-            --data '{"confirm":"DEPLOY_IVX_LANDING_FULL"}')
-          echo "HTTP=$code"
-          cat /tmp/deploy.json
-          test "$code" = "200" || { echo "::error::Render runtime landing deploy returned HTTP $code"; exit 1; }
+          test "$(aws sts get-caller-identity --query Account --output text)" = '206818124217'
+          echo 'IVX_DEPLOY_IDENTITY_GATE=PASS'
+
+      - name: Publish reviewed assets directly to AWS
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_GOOGLE_ADS_KEY: ${{ secrets.EXPO_PUBLIC_GOOGLE_ADS_KEY }}
+          EXPO_PUBLIC_META_PIXEL_ID: ${{ secrets.EXPO_PUBLIC_META_PIXEL_ID }}
+          EXPO_PUBLIC_TIKTOK_PIXEL_ID: ${{ secrets.EXPO_PUBLIC_TIKTOK_PIXEL_ID }}
+          EXPO_PUBLIC_LINKEDIN_PARTNER_ID: ${{ secrets.EXPO_PUBLIC_LINKEDIN_PARTNER_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node qa/landing-runtime-publish.mjs | tee /tmp/deploy.json
           node - <<'NODE'
-          const fs = require('fs');
-          const x = JSON.parse(fs.readFileSync('/tmp/deploy.json','utf8'));
-          const d = x.result || x;
-          if (d.ok !== true) throw new Error('landing deploy result ok != true');
-          if (!Array.isArray(d.uploads) || d.uploads.length === 0) throw new Error('no upload evidence');
-          const bad = d.uploads.filter(u => u.ok !== true);
-          if (bad.length) throw new Error(`${bad.length} uploads failed: ${bad.slice(0,5).map(u=>u.key+':'+u.error).join(', ')}`);
-          if (!d.cloudFront || d.cloudFront.attempted !== true || d.cloudFront.ok !== true) throw new Error(`CloudFront invalidation not verified: ${JSON.stringify(d.cloudFront)}`);
-          console.log(`CERT_DEPLOY_PASS uploads=${d.uploads.length} invalidationId=${d.cloudFront.invalidationId || 'n/a'}`);
+          const d = JSON.parse(require('fs').readFileSync('/tmp/deploy.json', 'utf8'));
+          if (d.sourceCommitSha !== process.env.GITHUB_SHA || d.uploads < 1 ||
+              !d.invalidationId || d.invalidationStatus !== 'Completed') {
+            throw new Error('Deployment evidence is incomplete');
+          }
+          console.log('CERT_DEPLOY_PASS');
           NODE
 
       - name: Verify live CloudFront website
@@ -71,6 +87,7 @@ jobs:
           curl -fsS --max-time 30 -D /tmp/index.headers -o /tmp/index.html 'https://ivxholding.com/?ivx_cert=${{ github.sha }}'
           grep -qi '^content-type:.*text/html' /tmp/index.headers
           test $(wc -c < /tmp/index.html) -gt 1000
+          grep -Fq "name=\"ivx-deployment-sha\" content=\"${GITHUB_SHA}\"" /tmp/index.html
 
           curl -fsS --max-time 30 -D /tmp/js.headers -o /tmp/ivx-app.js 'https://ivxholding.com/ivx-app.js?ivx_cert=${{ github.sha }}'
           grep -qi '^content-type:.*\(javascript\|text/javascript\)' /tmp/js.headers
@@ -92,8 +109,8 @@ jobs:
         run: |
           echo '## IVX Landing Production Certificate' >> "$GITHUB_STEP_SUMMARY"
           echo "- Commit: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo '- Render runtime deployment: **PASS**' >> "$GITHUB_STEP_SUMMARY"
-          echo '- S3 uploads: **PASS**' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Exact Render backend commit: **PASS**' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Direct GitHub-to-AWS publication: **PASS**' >> "$GITHUB_STEP_SUMMARY"
           echo '- CloudFront invalidation: **PASS**' >> "$GITHUB_STEP_SUMMARY"
           echo '- Live index/html: **PASS**' >> "$GITHUB_STEP_SUMMARY"
           echo '- Live JS MIME/content: **PASS**' >> "$GITHUB_STEP_SUMMARY"

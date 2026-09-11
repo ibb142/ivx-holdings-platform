@@ -93,11 +93,16 @@ async function releaseAliveButIdleTasks(tasks: Task[], now: number): Promise<{ s
     if (task.state !== 'RUNNING' || !task.leaseHolder) continue;
     const heartbeatMs = Date.parse(task.lastHeartbeatAt ?? ''); if (!Number.isFinite(heartbeatMs) || now - heartbeatMs > HEARTBEAT_FRESH_MS) continue;
     const productiveMs = latestProductiveEvidenceMs(task); if (productiveMs > 0 && now - productiveMs < staleMs) continue;
-    const startedMs = Date.parse(task.startedAt ?? ''); if (Number.isFinite(startedMs) && now - startedMs < staleMs) continue;
+    if (hasFreshTaskAttempt(task, now, staleMs)) continue;
     seen += 1;
     try { const workerId = task.leaseHolder; const agentId = workerId.startsWith('agent:') ? workerId.slice('agent:'.length) : null; const result = await releaseLease(task.taskId, workerId); if (result.ok) { released += 1; if (agentId) { updateExecutionState(agentId, { availability: 'available', activeTaskId: null }); runtimeSlotsCleared += 1; } } else errors += 1; } catch { errors += 1; }
   }
   return { seen, released, runtimeSlotsCleared, errors };
+}
+
+export function hasFreshTaskAttempt(task: Pick<Task, 'attemptStartedAt' | 'startedAt'>, now: number, staleMs: number): boolean {
+  const started = Date.parse(task.attemptStartedAt ?? task.startedAt ?? '');
+  return Number.isFinite(started) && started <= now && now - started < staleMs;
 }
 
 export async function reconcileRetryableBlockedTasks(): Promise<BlockedReconcileResult> {

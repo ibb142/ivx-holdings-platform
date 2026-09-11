@@ -30,6 +30,7 @@ import { assertRepairPatchQuality, requiresRepairRegression } from './ivx-repair
 import { assertLandingRepairScope } from './ivx-landing-repair-scope';
 import { assertRepairTestRuntime, NODE_REPAIR_TEST_GUIDANCE, repairRecoveryLesson } from './ivx-repair-recovery-protocol';
 import { PatchWorkspace } from './ivx-patch-workspace';
+import { autonomousBranchSuffix, ensureAutonomousBranch } from './ivx-coder-branch';
 import { withIsolatedCoderWorkspace } from './ivx-coder-workspace';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -187,12 +188,6 @@ const DEFAULT_CI_POLL_INTERVAL_MS = 60 * 1000;
  *  grace period — while every REPORTED check is green — is filtered, not
  *  late. It is recorded as NOT_APPLICABLE in the evidence, never as green. */
 const DEFAULT_CI_NA_GRACE_MS = 10 * 60 * 1000;
-
-/** Sanitize a taskId into a safe git branch suffix. */
-function sanitizeBranchSuffix(taskId: string): string {
-  const s = taskId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  return s.slice(0, 24) || 'task';
-}
 
 /**
  * Owner mandate 2026-08-28 (Mission F): durable per-IA commit attribution.
@@ -698,14 +693,14 @@ async function readFilePreview(relPath: string, projectRoot: string, goal?: stri
 // ── PATCH APPLICATION ────────────────────────────────────────────────────────
 
 /** Paths the autonomous coder is allowed to modify. */
-const ALLOWED_PATCH_PATHS = /^((?:backend|expo)\/[A-Za-z0-9_.\/-]+\.ts$|(?:backend|expo)\/[A-Za-z0-9_.\/-]+\.tsx$|expo\/[A-Za-z0-9_.\/-]+\.json$|expo\/[A-Za-z0-9_.\/-]+\.gradle$|expo\/ivxholding-landing\/(?:index\.html|ivx-styles\.css|ivx-app\.js|ivx-ui-utils\.js)$)/;
+const ALLOWED_PATCH_PATHS = /^((?:backend|expo)\/[A-Za-z0-9_.\/-]+\.ts$|(?:backend|expo)\/[A-Za-z0-9_.\/-]+\.tsx$|expo\/[A-Za-z0-9_.\/-]+\.json$|expo\/[A-Za-z0-9_.\/-]+\.gradle$|expo\/ivxholding-landing\/(?:index\.html|ivx-styles\.css|ivx-[a-z0-9-]+\.js)$)/;
 
 function assertSafePatchPath(filePath: string): void {
   if (filePath.includes('..') || filePath.startsWith('/')) {
     throw new Error(`Unsafe patch path rejected: ${filePath}`);
   }
   if (!ALLOWED_PATCH_PATHS.test(filePath)) {
-    throw new Error(`Patch path outside allowed roots: ${filePath}. Only backend/*.ts, expo/*.ts(x), expo/*.json, expo/*.gradle and the four Landing UI source files are permitted.`);
+    throw new Error(`Patch path outside allowed roots: ${filePath}. Only backend/*.ts, expo/*.ts(x), expo/*.json, expo/*.gradle and Landing index/styles/ivx-*.js source modules are permitted.`);
   }
 }
 
@@ -1442,58 +1437,12 @@ async function ensureBranchExists(
   branch: string,
   headers: Record<string, string>,
 ): Promise<string> {
-  // Always fetch the current default branch HEAD so the autonomous branch
-  // is rebased onto the latest main before each commit. This prevents the
-  // branch from diverging and causing merge conflicts on PRs.
   const defaultBranch = (await readOwnerRuntimeVariable('GITHUB_DEFAULT_BRANCH')) || GITHUB_DEFAULT_BRANCH;
-  const baseRefRes = await fetch(
-    `${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(defaultBranch)}`,
-    { headers, signal: AbortSignal.timeout(10000) },
-  );
-  if (!baseRefRes.ok) throw new Error(`GitHub default branch ref lookup failed: ${baseRefRes.status}`);
-  const baseRefData = await baseRefRes.json() as { object?: { sha?: string } };
-  const baseSha = baseRefData.object?.sha;
-  if (!baseSha) throw new Error('GitHub default branch ref did not include a commit SHA.');
-
-  // Check if the autonomous branch already exists.
-  const refRes = await fetch(
-    `${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`,
-    { headers, signal: AbortSignal.timeout(10000) },
-  );
-  if (refRes.ok) {
-    // Branch exists — force-update it to the current main HEAD to prevent
-    // divergence and merge conflicts. Without this, stale commits accumulate
-    // on the branch and every PR becomes unmergeable.
-    const forceUpdateRes = await fetch(
-      `${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`,
-      {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ sha: baseSha, force: true }),
-        signal: AbortSignal.timeout(10000),
-      },
-    );
-    if (!forceUpdateRes.ok) {
-      throw new Error(`GitHub branch force-update failed: ${forceUpdateRes.status}`);
-    }
-    return baseSha;
-  }
-  if (refRes.status !== 404) throw new Error(`GitHub branch ref lookup failed: ${refRes.status}`);
-  // Branch does not exist — create it from the default branch HEAD.
-  const createRefRes = await fetch(
-    `${GITHUB_API_BASE_URL}/repos/${owner}/${repo}/git/refs`,
-    {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: baseSha }),
-      signal: AbortSignal.timeout(10000),
-    },
-  );
-  if (!createRefRes.ok && createRefRes.status !== 422) {
-    // 422 = branch already exists (race); treat as success.
-    throw new Error(`GitHub branch creation failed: ${createRefRes.status}`);
-  }
-  return baseSha;
+  return ensureAutonomousBranch({ branch, defaultBranch,
+    request: (suffix, init) => fetch(`${GITHUB_API_BASE_URL}/repos/${owner}/${repo}${suffix}`, {
+      ...init, headers, signal: AbortSignal.timeout(10000),
+    }),
+  });
 }
 
 async function commitFilesViaGitDataApi(
@@ -2726,6 +2675,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
 
   // ── VERIFY + COMMIT ──────────────────────────────────────────────────────
   let commitSha: string | null = null;
+  let commitCheckpointPersisted = false;
   let commitUrl: string | null = null;
   let branch: string | null = null;
   let prNumber: number | null = null;
@@ -2783,7 +2733,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         const approvedProductionBranch = (await readOwnerRuntimeVariable('GITHUB_DEFAULT_BRANCH')) || GITHUB_DEFAULT_BRANCH;
         const branchName = input.executionMode === 'deploy'
           ? approvedProductionBranch
-          : `${AUTONOMOUS_CODER_BRANCH}-${sanitizeBranchSuffix(input.taskId)}`;
+          : `${AUTONOMOUS_CODER_BRANCH}-${autonomousBranchSuffix(input.taskId)}`;
         assertPrivateRepairScope(input.goal, input.allowedFiles, filesChanged);
         assertLandingRepairScope(input.taskId, filesChanged);
         const commitResult = input.commitFn
@@ -2802,8 +2752,9 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         // to COMPLETED instead of orphaning it at COMMITTING 65% with commitSha=''.
         try {
           await input.onCommitLanded?.({ commitSha, commitUrl, branch, filesChanged: [...filesChanged], commandsRun: [...commandsRun], testsPassed, typecheckPassed });
-        } catch {
-          // The persistence callback must never break the engine loop.
+          commitCheckpointPersisted = true;
+        } catch (checkpointError) {
+          throw new Error(`COMMIT_CHECKPOINT_PERSISTENCE_REQUIRED: ${safeErrorMessage(checkpointError)}`);
         }
         onPhase?.('committing', `Commit created: ${commitSha}`);
       } catch (err) {
@@ -2817,7 +2768,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // After committing to the ivx-autonomous branch, create a PR to main
     // so the code change reaches production. When autoMergePr is true and
     // owner approval is given, merge the PR immediately.
-    if (input.executionMode === 'code_change' && commitSha && branch) {
+    if (input.executionMode === 'code_change' && commitSha && branch && commitCheckpointPersisted) {
       try {
         onPhase?.('committing', `Creating pull request: ${branch} → main.`);
         const publicGoal = publicRepairGoal(input.goal);
@@ -2920,12 +2871,12 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           : `Commit created (${commitSha.slice(0, 12)}) on branch ${branch}${prUrl ? ` with PR ${prUrl}` : ' but no pull request'} — the pull request was NOT merged. Task BLOCKED, never COMPLETED, until the PR merges after all required CI checks pass.`;
       }
       onPhase?.('blocked', error);
-    } else if (commitSha || input.executionMode === 'read_only') {
+    } else if ((commitSha && commitCheckpointPersisted) || input.executionMode === 'read_only') {
       finalStatus = 'COMPLETED';
     }
 
     // ── DEPLOY (owner-gated, deploy mode) ───────────────────────────────
-    if (input.executionMode === 'deploy' && commitSha) {
+    if (input.executionMode === 'deploy' && commitSha && commitCheckpointPersisted) {
       if (input.deployApproved && (input.deployConfirmationText === 'CONFIRM_IVX_RENDER_DEPLOY' || input.deployConfirmationText === IVX_GIT_DEPLOY_CONFIRM_TEXT)) {
         onPhase?.('deploying', 'Owner approval verified; triggering Render deploy.');
         try {
