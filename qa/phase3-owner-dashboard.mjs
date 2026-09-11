@@ -17,6 +17,13 @@ const output = 'qa/evidence/phase3';
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+let disconnected=false;
+const transports=new Set();
+await context.routeWebSocket('**/api/ivx/autonomous-dashboard-stream', socket=>{
+  if(disconnected){socket.close({code:1001,reason:'Network interruption proof'});return;}
+  const server=socket.connectToServer();
+  transports.add({socket,server});
+});
 const page = await context.newPage();
 page.setDefaultTimeout(45_000);
 let latest;
@@ -86,10 +93,16 @@ try {
   checks.push('Real Owner password submitted through production login UI');
   await page.goto(app + '/ivx/autonomous-ops', { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await capture('A');
+  disconnected=true;
   await context.setOffline(true);
+  // Existing WebSockets can survive Chromium's HTTP offline switch. Close the
+  // real transport as well; never fabricate snapshots or advance the clock.
+  for(const {socket,server} of transports){server.close();socket.close({code:1001,reason:'Network interruption proof'});}
+  transports.clear();
   await page.getByText('PRODUCTIVITY UNKNOWN', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
   assert((await page.getByTestId('fleet-independent-signals').innerText()).includes('UNKNOWN'));
   checks.push('Disconnected browser expires its last sample instead of displaying stale work as current');
+  disconnected=false;
   await context.setOffline(false);
   await page.getByText('PRODUCTIVITY UNKNOWN', { exact: true }).waitFor({ state: 'hidden', timeout: 60_000 });
   await capture('B');
@@ -100,6 +113,7 @@ try {
   process.exitCode = 1;
   checks.push({ failed: error instanceof Error ? error.message.replaceAll(password, '[redacted]') : 'Browser proof failed' });
 } finally {
+  disconnected=false;
   await context.setOffline(false).catch(() => {});
   await browser.close();
   const result = { item:'9.5', passed:!process.exitCode, sourceSha:sha, observedAt:new Date().toISOString(), checks, samples,

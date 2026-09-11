@@ -183,9 +183,14 @@ jobs:
           echo 'IVX_ITEM9_STABILITY_VERIFIED=true' >> "$GITHUB_ENV"
 
       - name: Measure configured limits, credit balance and actual provider activity
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
+          IVX_VERCEL_TOKEN: ${{ secrets.IVX_VERCEL_TOKEN }}
         run: node qa/phase3-capacity.mjs
 
       - name: Reconcile all 112 Owner dashboard rows and expire disconnected samples
+        if: ${{ !cancelled() && env.IVX_ITEM9_STABILITY_VERIFIED == 'true' }}
         env:
           OWNER_NEW_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD }}
           OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
