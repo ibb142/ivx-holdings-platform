@@ -123,7 +123,7 @@ describe('IVX IA chat device certificate regression', () => {
     expect(triggerIndex).toBeGreaterThan(-1);
     expect(decisionIndex).toBeGreaterThan(-1);
     expect(persistenceIndex).toBeGreaterThan(triggerIndex);
-    expect(chatSource.slice(triggerIndex, persistenceIndex)).toContain('void triggerAssistantWithRetry()');
+    expect(chatSource.slice(triggerIndex, persistenceIndex)).toContain('void triggerAssistant()');
     expect(chatSource.slice(decisionIndex, triggerIndex)).toContain('!trustContext.requiresElevatedConfirmation');
   });
 

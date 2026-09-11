@@ -3418,11 +3418,10 @@ export default function IVXOwnerChatRoute() {
           wdLF?.pass('AI_MUTATION_STARTED', `local_first branch invoking assistantReplyMutation mode=${mode}`, { clientId });
           // FIX: Fire AI reply as background — do NOT block the send mutation.
           void assistantReplyMutation.mutateAsync({ requestId: clientId, text: effectiveText, nonBlocking: mode === 'send_and_ai', watchdogTraceId }).catch((aiErr: unknown) => {
-            console.log('[IVX_TRACE] 2.X_LOCAL_FIRST_AI_RETRY_1', { clientId, err: aiErr instanceof Error ? aiErr.message : String(aiErr) });
-            void assistantReplyMutation.mutateAsync({ requestId: clientId, text: effectiveText, nonBlocking: mode === 'send_and_ai', watchdogTraceId }).catch((retryErr: unknown) => {
-              console.log('[IVX_TRACE] 2.X_LOCAL_FIRST_AI_BOTH_FAILED', { clientId, err: retryErr instanceof Error ? retryErr.message : String(retryErr) });
-              wdLF?.fail('AI_MUTATION_STARTED', `local_first assistantReplyMutation rejected twice: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`);
-            });
+            // The mutation already owns bounded transport retries. Restarting
+            // it here doubles attempts and postpones its terminal error UI.
+            console.log('[IVX_TRACE] 2.X_LOCAL_FIRST_AI_FAILED', { clientId, err: aiErr instanceof Error ? aiErr.message : String(aiErr) });
+            wdLF?.fail('AI_MUTATION_STARTED', `local_first assistantReplyMutation failed: ${aiErr instanceof Error ? aiErr.message : String(aiErr)}`);
           });
         } else {
           console.log('[IVX_TRACE] 2.X_LOCAL_FIRST_NO_AI_BRANCH', { clientId, mode });
@@ -3501,17 +3500,14 @@ export default function IVXOwnerChatRoute() {
         && !trustContext.requiresElevatedConfirmation
         && shouldStartAssistantBeforePersistence({ localFirstChatMode, mode });
 
-      const triggerAssistantWithRetry = async (): Promise<void> => {
+      const triggerAssistant = async (): Promise<void> => {
         try {
           await assistantReplyMutation.mutateAsync({ requestId: clientId, text: effectiveText, nonBlocking: true, watchdogTraceId });
-        } catch (firstErr) {
-          console.log('[IVX_TRACE] 2.X_AI_TRIGGER_RETRY_1', { clientId, err: firstErr instanceof Error ? firstErr.message : String(firstErr) });
-          try {
-            await assistantReplyMutation.mutateAsync({ requestId: clientId, text: effectiveText, nonBlocking: true, watchdogTraceId });
-          } catch (secondErr) {
-            console.log('[IVX_TRACE] 2.X_AI_TRIGGER_BOTH_FAILED', { clientId, err: secondErr instanceof Error ? secondErr.message : String(secondErr) });
-            watchdogTrace?.fail('AI_MUTATION_STARTED', `assistantReplyMutation rejected twice: ${secondErr instanceof Error ? secondErr.message : String(secondErr)}`);
-          }
+        } catch (error) {
+          // executeReliably has already applied the transport retry budget.
+          // Keep the original failure; an explicit owner retry is a new action.
+          console.log('[IVX_TRACE] 2.X_AI_TRIGGER_FAILED', { clientId, err: error instanceof Error ? error.message : String(error) });
+          watchdogTrace?.fail('AI_MUTATION_STARTED', `assistantReplyMutation failed: ${error instanceof Error ? error.message : String(error)}`);
         }
       };
 
@@ -3524,7 +3520,7 @@ export default function IVXOwnerChatRoute() {
         console.log('[IVX_TRACE] 2.2_AI_TRIGGER_BEFORE_PERSISTENCE', { clientId, mode, localFirstChatMode });
         watchdogTrace?.pass('AI_TRIGGER_DECISION', 'branch=send_and_ai persistence=background');
         watchdogTrace?.pass('AI_MUTATION_STARTED', 'send_and_ai invoking assistantReplyMutation before persistence', { clientId });
-        void triggerAssistantWithRetry();
+        void triggerAssistant();
       }
 
       liveIntelligenceService.captureEvent({
@@ -3612,7 +3608,7 @@ export default function IVXOwnerChatRoute() {
         // pending message removed, user can send again). The assistantReplyMutation
         // manages its own loading state (aiReplyPending) and inserts the assistant
         // message when the reply arrives via realtime/polling.
-        void triggerAssistantWithRetry();
+        void triggerAssistant();
       } else if (mode === 'send_only') {
         watchdogTrace?.pass('AI_TRIGGER_DECISION', 'branch=send_only_no_ai');
         watchdogTrace?.complete('SUCCESS');
