@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_ID="com.ivxholdings.app.owner"
+APP_ID="${IVX_APP_ID:-com.ivxholdings.app.owner}"
 EVIDENCE="qa/evidence/all-routes-human-e2e"
 FLOW_DIR="$EVIDENCE/generated-flows"
 REPORT_DIR="$EVIDENCE/suites"
@@ -19,6 +19,7 @@ find "$RETRY_DIR" -type f -delete
 : > "$EVIDENCE/manifest.jsonl"
 : > "$EVIDENCE/process-loss.txt"
 : > "$EVIDENCE/process-samples.txt"
+: > "$EVIDENCE/diagnostic-relaunches.txt"
 monitor_pid=''
 
 trap 'rc=$?; [ -z "$monitor_pid" ] || kill "$monitor_pid" 2>/dev/null || true; adb exec-out screencap -p > "$EVIDENCE/failure.png" 2>/dev/null || true; adb logcat -d -v threadtime > "$EVIDENCE/failure-logcat.txt" 2>/dev/null || true; exit $rc' EXIT
@@ -69,6 +70,19 @@ mapfile -t files < <(find expo/app -type f \( -name '*.tsx' -o -name '*.ts' \) -
 total=0
 for file in "${files[@]}"; do
   route=$(route_from_file "$file") || continue
+  # These routes intentionally redirect an authenticated owner. Every other
+  # route must reach its own destination; the previous screen cannot pass QA.
+  destination="$route"
+  case "$route" in
+    /|/login|/verify-access|/owner-access) destination='/home' ;;
+    /ivx) destination='/ivx/inbox' ;;
+    /admin/member) destination='/admin/members' ;;
+  esac
+  route_identifier=$(python3 - "$destination" <<'PY'
+import json, re, sys
+print(json.dumps('^' + re.escape('ivx-route:' + sys.argv[1]) + '$'))
+PY
+)
   total=$((total + 1))
   name="IVX automated route $total"
   screenshot="route-$total"
@@ -81,11 +95,17 @@ appId: $APP_ID
 name: $name
 ---
 - openLink: "ivx-app:///${route#/}"
+- extendedWaitUntil:
+    visible:
+      id: $route_identifier
+    timeout: 20000
 - waitForAnimationToEnd:
     timeout: 3000
 - assertNotVisible: "Something went wrong"
 - assertNotVisible: "Application error"
 - assertNotVisible: "Unhandled Runtime Error"
+- assertNotVisible: "IVX Provider Error"
+- assertNotVisible: "Chat provider not configured.*"
 - assertNotVisible: "Login service temporarily unavailable"
 - swipe:
     start: 50%,78%
@@ -94,10 +114,12 @@ name: $name
 - waitForAnimationToEnd:
     timeout: 3000
 - assertNotVisible: "Something went wrong"
+- assertNotVisible: "IVX Provider Error"
+- assertNotVisible: "Chat provider not configured.*"
 - takeScreenshot: "$screenshot"
 YAML
-  jq -nc --arg file "$file" --arg route "$route" --arg name "$name" --arg screenshot "$screenshot" \
-    '{file:$file,route:$route,name:$name,screenshot:$screenshot}' >> "$EVIDENCE/manifest.jsonl"
+  jq -nc --arg file "$file" --arg route "$route" --arg expectedRoute "$destination" --arg name "$name" --arg screenshot "$screenshot" \
+    '{file:$file,route:$route,expectedRoute:$expectedRoute,name:$name,screenshot:$screenshot}' >> "$EVIDENCE/manifest.jsonl"
 done
 test "$total" -gt 100
 initial_pid=$(timeout 8s adb shell pidof "$APP_ID" | tr -d '\r')
@@ -123,6 +145,7 @@ for batch_number in $(seq 1 "$batch_count"); do
   batch_name="batch-$(printf '%03d' "$batch_number")"
   echo "route_batch=$batch_number/$batch_count size_limit=$BATCH_SIZE"
   batch_rc=1
+  batch_pid=$(timeout 8s adb shell pidof "$APP_ID" 2>/dev/null | tr -d '\r') || true
   for attempt in 1 2; do
     set +e
     timeout 900s "$MAESTRO" test "$FLOW_DIR/$batch_name" \
@@ -139,19 +162,41 @@ for batch_number in $(seq 1 "$batch_count"); do
       cp "$REPORT_DIR/$batch_name.xml" "$RETRY_DIR/$batch_name-attempt-1.xml"
       printf '%s infrastructure_retry=1\n' "$batch_name" >> "$RETRY_DIR/events.txt"
       timeout 30s adb wait-for-device
-      test "$(timeout 8s adb shell pidof "$APP_ID" | tr -d '\r')" = "$initial_pid"
+      test "$(timeout 8s adb shell pidof "$APP_ID" | tr -d '\r')" = "$batch_pid"
       sleep 2
       continue
     fi
     break
   done
-  if [ "$batch_rc" -ne 0 ]; then
-    rc="$batch_rc"
-    break
-  fi
-  if [ -s "$EVIDENCE/process-loss.txt" ]; then
+  if [ "$batch_rc" -ne 0 ] || [ -s "$EVIDENCE/process-loss.txt" ]; then
+    # A failed batch permanently invalidates this certificate. Continue only to
+    # collect the remaining defects instead of needing one APK build per crash.
     rc=1
-    break
+    if [ "$batch_number" -lt "$batch_count" ]; then
+      printf '%s batch_exit=%s diagnostic_relaunch=1\n' "$batch_name" "$batch_rc" >> "$EVIDENCE/diagnostic-relaunches.txt"
+      printf 'Diagnostic relaunch after failed batch %s; certificate invalid\n' "$batch_name" >> "$EVIDENCE/process-loss.txt"
+      timeout 15s adb shell am force-stop "$APP_ID" || true
+      if ! timeout 45s adb shell am start -W -a android.intent.action.VIEW \
+          -d 'ivx-app:///home' -p "$APP_ID" > "$EVIDENCE/$batch_name-diagnostic-relaunch.log" 2>&1; then
+        break
+      fi
+      # Cold launch intentionally signs out. Reauthenticate only for diagnostic
+      # collection; rc=1 and the original-process loss still forbid certification.
+      python3 - "$APP_ID" "$EVIDENCE/diagnostic-login.yaml" <<'PY'
+from pathlib import Path
+import sys
+flow = Path('expo/.maestro/ivx-owner-home-certificate.yaml').read_text()
+flow = flow.replace('appId: com.ivxholdings.app.owner', 'appId: ' + sys.argv[1])
+flow = flow.replace('clearState: true', 'clearState: false')
+flow = flow.replace('- inputText:', '- eraseText\n- inputText:')
+Path(sys.argv[2]).write_text(flow)
+PY
+      if ! timeout 240s "$MAESTRO" test "$EVIDENCE/diagnostic-login.yaml" \
+          --env OWNER_EMAIL="$OWNER_EMAIL" --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" \
+          --format junit --output "$EVIDENCE/$batch_name-diagnostic-login.xml"; then
+        break
+      fi
+    fi
   fi
 done
 

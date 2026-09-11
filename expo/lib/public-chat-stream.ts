@@ -13,6 +13,8 @@
  * All deltas originate from the live AI gateway response.
  */
 import { getDirectApiBaseUrl } from '@/lib/api-base';
+import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
+import { fetch as fetchStream } from 'expo/fetch';
 import type { PublicChatHistoryItem } from './public-chat';
 
 // ── Stream event types ─────────────────────────────────────────────────────
@@ -20,7 +22,8 @@ import type { PublicChatHistoryItem } from './public-chat';
 export type ChatStreamEvent =
   | { type: 'response.started'; requestId: string; sessionId: string; timestamp: string }
   | { type: 'response.delta'; delta: string; requestId: string }
-  | { type: 'response.completed'; text: string; model: string; source: string; endpoint?: string | null; requestId: string; sessionId: string; error?: string; errorType?: string }
+  | { type: 'response.completed'; text: string; model: string; source: string; endpoint?: string | null; requestId: string; sessionId: string; error?: string; errorType?: string; jobId?: string | null; jobStatus?: string | null; jobStage?: string | null }
+  | { type: 'response.autonomous_task'; ok: boolean; jobId: string | null; status: string | null; stage: string | null; progressPercent: number | null; error: string | null }
   | { type: 'response.error'; error: string; requestId: string; sessionId: string; errorType?: string };
 
 export type StreamCallbacks = {
@@ -40,7 +43,7 @@ export type StreamPublicChatInput = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function buildStreamHeaders(clientId?: string): Record<string, string> {
+async function buildStreamHeaders(clientId?: string): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Accept': 'text/event-stream',
@@ -49,6 +52,9 @@ function buildStreamHeaders(clientId?: string): Record<string, string> {
   if (trimmed) {
     headers['x-ivx-client-id'] = trimmed;
   }
+  // Only the backend decides whether this session belongs to an owner.
+  const token = await getIVXAccessToken().catch(() => null);
+  if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
 }
 
@@ -94,11 +100,13 @@ export async function streamPublicChatMessage(
     }
   }
 
-  let response: Response;
+  let response: Awaited<ReturnType<typeof fetchStream>>;
   try {
-    response = await fetch(url, {
+    // Expo's native transport exposes a ReadableStream on Android and iOS.
+    // React Native's global XMLHttpRequest-backed fetch does not.
+    response = await fetchStream(url, {
       method: 'POST',
-      headers: buildStreamHeaders(input.clientId),
+      headers: await buildStreamHeaders(input.clientId),
       body: JSON.stringify({
         requestId: input.requestId,
         sessionId: input.sessionId,

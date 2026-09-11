@@ -63,6 +63,14 @@ class RouteCertificateTests(unittest.TestCase):
         (root / 'artifacts' / 'route-7.png').unlink()
         self.assertFalse(self.check(root, cases))
 
+    def test_diagnostic_relaunch_cannot_certify_even_if_later_routes_succeed(self):
+        root, cases = self.fixture()
+        # A completed diagnostic run still carries the sticky failure and
+        # original-process loss, regardless of subsequent successful screens.
+        self.assertFalse(self.check(root, cases, code=1, alive=False))
+        self.assertFalse(self.check(root, cases, code=1, alive=True))
+        self.assertFalse(self.check(root, cases, code=0, alive=False))
+
     def test_dashboard_consumer_compares_json_coverage_numerically(self):
         source = Path(__file__).with_name('ivx-dashboard-chat-android-e2e.sh').read_text()
         self.assertIn("jq -e '.passed == true and .coveragePercent == 100'", source)

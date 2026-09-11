@@ -16,7 +16,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, ErrorBoundary as RouterErrorBoundary, type ErrorBoundaryProps, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 
 /** Visible build stamp so the installed binary can be identified on-device. */
@@ -34,8 +34,15 @@ let splashFallbackTimer: ReturnType<typeof setTimeout> | null = setTimeout(() =>
   SplashScreen.hideAsync().catch(() => {});
 }, 2500);
 
-// Re-export expo-router's ErrorBoundary for route-level catches.
-export { ErrorBoundary } from 'expo-router';
+// Keep the router's recovery UI, and retain the stack needed to diagnose a
+// release-only route failure from Android evidence.
+export function ErrorBoundary(props: ErrorBoundaryProps) {
+  const pathname = usePathname();
+  useEffect(() => {
+    console.warn('[IVX_ROUTE_ERROR]', pathname, props.error.message, props.error.stack);
+  }, [pathname, props.error]);
+  return <RouterErrorBoundary {...props} />;
+}
 
 // -------------------------------------------------------------------
 // FATAL ERROR SHIELD — THIS IS THE BLACK SCREEN FIX.
@@ -316,11 +323,12 @@ function RootLayout(): React.ReactElement {
   }, []);
 
   useEffect(() => {
+    if (providersModule || importError || fatalError) return;
     const elapsedTimer = setInterval(() => {
       setElapsedMs(Date.now() - startTime);
     }, 200);
     return () => clearInterval(elapsedTimer);
-  }, [startTime]);
+  }, [startTime, providersModule, importError, fatalError]);
 
   useEffect(() => {
     let cancelled = false;

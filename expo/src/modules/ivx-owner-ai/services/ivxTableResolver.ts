@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getIVXSupabaseClient } from '@/lib/ivx-supabase-client';
 import { IVX_OWNER_AI_TABLES } from '@/shared/ivx';
+import { createBoundedSharedRead } from '@/lib/bounded-shared-read';
 
 export type ResolvedDbSchema = 'public' | 'generic';
 export type ResolvedTableSchema = 'ivx' | 'generic' | 'none';
@@ -81,10 +82,6 @@ function resolveGenericSenderId(senderUserId: string | null, senderRole: string)
   return senderUserId ?? 'unknown';
 }
 
-let cachedResolution: ResolvedTables | null = null;
-let cachedAt = 0;
-const CACHE_TTL_MS = 60_000;
-
 export function getScopedSupabaseClient(client: SupabaseClient, dbSchema: ResolvedDbSchema): ScopedSupabaseClient {
   if (dbSchema === 'public') {
     return client;
@@ -97,11 +94,11 @@ export function getRealtimeSchema(tables: ResolvedTables): ResolvedDbSchema {
   return tables.dbSchema;
 }
 
-async function canQueryTable(table: string, field: string, dbSchema: ResolvedDbSchema): Promise<boolean> {
+async function canQueryTable(table: string, field: string, dbSchema: ResolvedDbSchema, signal: AbortSignal): Promise<boolean> {
   try {
     const client = getIVXSupabaseClient();
     const scopedClient = getScopedSupabaseClient(client, dbSchema);
-    const { error } = await scopedClient.from(table).select(field).limit(1);
+    const { error } = await scopedClient.from(table).select(field).limit(1).abortSignal(signal);
     if (error) {
       console.log(`[IVXTableResolver] Probe failed for ${dbSchema}.${table}:`, error.message);
       return false;
@@ -114,58 +111,32 @@ async function canQueryTable(table: string, field: string, dbSchema: ResolvedDbS
   }
 }
 
-export async function resolveIVXTables(): Promise<ResolvedTables> {
-  const now = Date.now();
-  if (cachedResolution && (now - cachedAt) < CACHE_TTL_MS) {
-    return cachedResolution;
-  }
-
+async function probeIVXTables(signal: AbortSignal): Promise<ResolvedTables> {
   console.log('[IVXTableResolver] Probing for available tables...');
-
-  const ivxConvOk = await canQueryTable(IVX_OWNER_AI_TABLES.conversations, 'id', 'public');
-  const ivxMsgOk = await canQueryTable(IVX_OWNER_AI_TABLES.messages, 'id', 'public');
-
-  if (ivxConvOk && ivxMsgOk) {
-    console.log('[IVXTableResolver] RESOLVED: Using IVX tables in public schema (ivx_conversations, ivx_messages)');
-    cachedResolution = IVX_TABLES;
-    cachedAt = Date.now();
-    return IVX_TABLES;
+  for (const tables of [IVX_TABLES, GENERIC_SCHEMA_TABLES, GENERIC_PUBLIC_TABLES]) {
+    if (signal.aborted) return NONE_TABLES;
+    const available = await Promise.all([
+      canQueryTable(tables.conversations, 'id', tables.dbSchema, signal),
+      canQueryTable(tables.messages, 'id', tables.dbSchema, signal),
+    ]);
+    if (available.every(Boolean)) return tables;
   }
-
-  const genConvSchemaOk = await canQueryTable('conversations', 'id', 'generic');
-  const genMsgSchemaOk = await canQueryTable('messages', 'id', 'generic');
-
-  if (genConvSchemaOk && genMsgSchemaOk) {
-    console.log('[IVXTableResolver] RESOLVED: Using generic schema tables (generic.conversations, generic.messages)');
-    cachedResolution = GENERIC_SCHEMA_TABLES;
-    cachedAt = Date.now();
-    return GENERIC_SCHEMA_TABLES;
-  }
-
-  const genConvPublicOk = await canQueryTable('conversations', 'id', 'public');
-  const genMsgPublicOk = await canQueryTable('messages', 'id', 'public');
-
-  if (genConvPublicOk && genMsgPublicOk) {
-    console.log('[IVXTableResolver] RESOLVED: Using public generic fallback tables (public.conversations, public.messages)');
-    cachedResolution = GENERIC_PUBLIC_TABLES;
-    cachedAt = Date.now();
-    return GENERIC_PUBLIC_TABLES;
-  }
-
-  console.log('[IVXTableResolver] RESOLVED: No tables found — will use ivx defaults (will fail gracefully)');
-  cachedResolution = NONE_TABLES;
-  cachedAt = Date.now();
   return NONE_TABLES;
 }
 
+const tableDiscovery = createBoundedSharedRead(probeIVXTables, NONE_TABLES);
+
+export function resolveIVXTables(): Promise<ResolvedTables> {
+  return tableDiscovery.get();
+}
+
 export function invalidateTableResolverCache(): void {
-  cachedResolution = null;
-  cachedAt = 0;
+  tableDiscovery.invalidate();
   console.log('[IVXTableResolver] Cache invalidated');
 }
 
 export function getDetectedSchema(): ResolvedTableSchema {
-  return cachedResolution?.schema ?? 'none';
+  return tableDiscovery.peek()?.schema ?? 'none';
 }
 
 export function mapGenericMessageRow(row: Record<string, unknown>): {

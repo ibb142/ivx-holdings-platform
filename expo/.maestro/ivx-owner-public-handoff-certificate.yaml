@@ -1,0 +1,38 @@
+appId: com.ivxholdings.app.owner
+name: IVX Native Chat to Autonomous Certificate
+tags:
+  - android-qa
+  - owner-auth
+  - autonomous
+---
+- openLink: "ivx-app:///chat-hub"
+- extendedWaitUntil:
+    visible:
+      id: "public-chat-new-session-button"
+    timeout: 20000
+- tapOn:
+    id: "public-chat-new-session-button"
+- extendedWaitUntil:
+    visible:
+      id: "public-chat-message-input"
+    timeout: 10000
+- assertNotVisible: "(?s).*AUTONOMOUS TASK CREATED.*"
+- tapOn:
+    id: "public-chat-message-input"
+- inputText: "Audit repo pipeline read-only. Ref ${IVX_HANDOFF_NONCE}"
+- assertVisible: "(?s).*${IVX_HANDOFF_NONCE}.*"
+- hideKeyboard
+- tapOn:
+    id: "public-chat-send-button"
+- extendedWaitUntil:
+    visible: "(?s).*AUTONOMOUS TASK CREATED.*"
+    timeout: 60000
+- assertVisible:
+    id: "public-chat-status-autonomous-worker"
+- assertNotVisible: "(?s).*No response body received.*"
+- assertNotVisible: "(?s).*AUTONOMOUS TASK: BLOCKED.*"
+- assertNotVisible: "(?s).*APPROVAL REQUIRED.*"
+# The session title contains a truncated JOB_ID. Select only the full response.
+- copyTextFrom: "(?s).*JOB_ID: ivx-worker-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}.*"
+- evalScript: ${console.log('IVX_NATIVE_HANDOFF_UI=' + JSON.stringify({text:maestro.copiedText,nonce:IVX_HANDOFF_NONCE}))}
+- takeScreenshot: native-autonomous-handoff

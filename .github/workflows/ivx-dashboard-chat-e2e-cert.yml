@@ -4,6 +4,23 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'backend/api/ivx-owner-ai*'
+      - 'backend/services/ivx-owner-ai*'
+      - 'backend/services/ivx-autonomous-dashboard-stream.ts'
+      - 'backend/api/ivx-autonomous-ops-dashboard.ts'
+      - 'expo/__tests__/chat-certificate-flow-regression.test.ts'
+      - 'expo/app/+native-intent.tsx'
+      - 'expo/app/ivx/landing-workers-live.tsx'
+      - 'expo/lib/public-chat-stream.ts'
+      - 'expo/__tests__/public-chat-owner-stream.test.ts'
+      - 'expo/src/modules/ivx-developer/seniorDeveloperBuildIntent.ts'
+      - 'expo/.maestro/ivx-owner-mission-certificate.yaml'
+      - 'expo/.maestro/ivx-owner-public-handoff-certificate.yaml'
+      - 'expo/.maestro/ivx-owner-reauthenticate-certificate.yaml'
+      - 'scripts/ivx-autonomous-handoff-live-cert.mjs'
+      - 'scripts/ivx-dashboard-read-live-cert.mjs'
+      - 'scripts/__tests__/ivx-dashboard-read-live-cert.test.mjs'
+      - 'expo/__tests__/native-intent-routing.test.ts'
       - 'expo/app/admin/dashboard.tsx'
       - 'expo/app/ivx/chat.tsx'
       - 'expo/src/modules/chat/**'
@@ -15,10 +32,30 @@ on:
       - 'expo/.maestro/ivx-owner-dashboard-certificate.yaml'
       - 'expo/.maestro/ivx-owner-chat-certificate.yaml'
       - 'scripts/ivx-dashboard-chat-android-e2e.sh'
+      - 'scripts/ivx-all-routes-human-e2e.sh'
+      - 'scripts/ivx-maestro-route-results.py'
+      - 'scripts/__tests__/test_maestro_route_results.py'
       - '.github/workflows/ivx-dashboard-chat-e2e-cert.yml'
   push:
     branches: [main]
     paths:
+      - 'backend/api/ivx-owner-ai*'
+      - 'backend/services/ivx-owner-ai*'
+      - 'backend/services/ivx-autonomous-dashboard-stream.ts'
+      - 'backend/api/ivx-autonomous-ops-dashboard.ts'
+      - 'expo/__tests__/chat-certificate-flow-regression.test.ts'
+      - 'expo/app/+native-intent.tsx'
+      - 'expo/app/ivx/landing-workers-live.tsx'
+      - 'expo/lib/public-chat-stream.ts'
+      - 'expo/__tests__/public-chat-owner-stream.test.ts'
+      - 'expo/src/modules/ivx-developer/seniorDeveloperBuildIntent.ts'
+      - 'expo/.maestro/ivx-owner-mission-certificate.yaml'
+      - 'expo/.maestro/ivx-owner-public-handoff-certificate.yaml'
+      - 'expo/.maestro/ivx-owner-reauthenticate-certificate.yaml'
+      - 'scripts/ivx-autonomous-handoff-live-cert.mjs'
+      - 'scripts/ivx-dashboard-read-live-cert.mjs'
+      - 'scripts/__tests__/ivx-dashboard-read-live-cert.test.mjs'
+      - 'expo/__tests__/native-intent-routing.test.ts'
       - 'expo/app/admin/dashboard.tsx'
       - 'expo/app/ivx/chat.tsx'
       - 'expo/src/modules/chat/**'
@@ -30,6 +67,9 @@ on:
       - 'expo/.maestro/ivx-owner-dashboard-certificate.yaml'
       - 'expo/.maestro/ivx-owner-chat-certificate.yaml'
       - 'scripts/ivx-dashboard-chat-android-e2e.sh'
+      - 'scripts/ivx-all-routes-human-e2e.sh'
+      - 'scripts/ivx-maestro-route-results.py'
+      - 'scripts/__tests__/test_maestro_route_results.py'
       - '.github/workflows/ivx-dashboard-chat-e2e-cert.yml'
   workflow_dispatch: {}
 
@@ -44,10 +84,13 @@ concurrency:
 
 env:
   NODE_ENV: production
+  NODE_OPTIONS: --max-old-space-size=6144
   EXPO_PUBLIC_API_BASE_URL: https://api.ivxholding.com
+  EXPO_PUBLIC_IVX_API_BASE_URL: https://api.ivxholding.com
   EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
   EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
   EXPO_PUBLIC_IVX_OPEN_ACCESS_MODE: 'false'
+  IVX_REQUIRE_MATCHING_BACKEND: ${{ github.event_name != 'pull_request' }}
   EXPO_PUBLIC_SOURCE_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
   OWNER_EMAIL: iperez4242@gmail.com
   OWNER_PASSWORD_S1: ${{ secrets.OWNER_NEW_PASSWORD }}
@@ -61,12 +104,18 @@ jobs:
   certify-dashboard-chat:
     name: Real Owner Dashboard + IVX IA Chat E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
+
+      - name: Verify checked-out source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPO_PUBLIC_SOURCE_COMMIT_SHA"
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -147,14 +196,17 @@ jobs:
           grep -q 'ivx-owner-chat-composer-dock' expo/.maestro/ivx-owner-chat-certificate.yaml
           grep -Fq 'IVX_CHAT_E2E_${CHAT_E2E_SUFFIX}' expo/.maestro/ivx-owner-chat-certificate.yaml
           grep -q 'clearState: false' expo/.maestro/ivx-owner-chat-certificate.yaml
+          python3 scripts/__tests__/test_maestro_route_results.py
+          python3 scripts/__tests__/test_native_handoff_identity.py
+          node --test scripts/__tests__/ivx-dashboard-read-live-cert.test.mjs
           cd expo
           bunx tsc --noEmit
-          bun test __tests__/chat-certificate-flow-regression.test.ts __tests__/chat-transport-reliability.test.ts __tests__/deferred-auth-work.test.ts
+          bun test src/modules/ivx-owner-ai/services/ivxOwnerIntentClassifier.test.ts __tests__/public-chat-owner-stream.test.ts __tests__/native-intent-routing.test.ts __tests__/chat-certificate-flow-regression.test.ts __tests__/chat-transport-reliability.test.ts __tests__/live-telemetry-request.test.ts __tests__/bounded-shared-read.test.ts __tests__/deferred-auth-listener.test.ts __tests__/deferred-auth-work.test.ts
           cd ..
           python3 -m unittest discover -s scripts -p test_ivx_route_suite_proof.py
 
       - name: Wait for exact production SHA on main
-        if: ${{ github.event_name == 'push' }}
+        if: ${{ github.event_name != 'pull_request' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -168,6 +220,9 @@ jobs:
             sleep 5
           done
           test "$ready" = true
+
+      - name: Verify real mission ledger before Android compilation
+        run: node scripts/ivx-dashboard-read-live-cert.mjs
 
       - name: Prepare disposable QA signer
         shell: bash
@@ -189,6 +244,10 @@ jobs:
           APK=$(find app/build/outputs/apk/qa -name '*.apk' -type f | head -1)
           test -n "$APK"
           echo "APK_PATH=$(realpath "$APK")" >> "$GITHUB_ENV"
+          mkdir -p "$GITHUB_WORKSPACE/qa/evidence/dashboard-chat/apk"
+          cp "$APK" "$GITHUB_WORKSPACE/qa/evidence/dashboard-chat/apk/IVX-Owner-QA.apk"
+          cd "$GITHUB_WORKSPACE/qa/evidence/dashboard-chat/apk"
+          sha256sum IVX-Owner-QA.apk > IVX-Owner-QA.sha256
 
       - name: Enable KVM
         run: |

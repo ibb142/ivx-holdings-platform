@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const require = createRequire(import.meta.url);
 const projectRoot = join(import.meta.dir, '..');
@@ -17,6 +18,31 @@ type IVXMetroTransformer = {
 };
 
 describe('AI SDK Metro compatibility', () => {
+  test('bundles web mount prefixes only into web builds', () => {
+    const script = `
+      const transformer = require('./scripts/ivx-metro-transformer');
+      const generate = require('@babel/generator').default;
+      (async () => {
+        const mounts = {};
+        for (const platform of ['android', 'ios', 'web']) {
+          const result = await transformer.transform({
+            filename: process.cwd() + '/probe.js',
+            src: 'export const mount = process.env.EXPO_BASE_URL;',
+            options: { projectRoot: process.cwd(), platform, dev: false,
+              customTransformOptions: { baseUrl: '/app' } },
+          });
+          const exports = {};
+          new Function('exports', generate(result.ast).code)(exports);
+          mounts[platform] = exports.mount;
+        }
+        console.log(JSON.stringify(mounts));
+      })().catch(() => process.exit(1));
+    `;
+    const output = execFileSync('node', ['-e', script], {
+      cwd: projectRoot, encoding: 'utf8', env: { ...process.env, NODE_ENV: 'production' },
+    });
+    expect(JSON.parse(output.trim())).toEqual({ android: '', ios: '', web: '/app' });
+  });
   test('keeps the root layout outside the managed provider-injection signature', () => {
     const rootLayout = readFileSync(join(projectRoot, 'app/_layout.tsx'), 'utf8');
 

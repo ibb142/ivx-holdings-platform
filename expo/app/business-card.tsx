@@ -104,7 +104,7 @@ export default function BusinessCardScreen() {
         <Animated.View style={[styles.cardContainer, { opacity: cardOpacity, transform: [{ scale: cardScale }] }]}>
           <View style={styles.cardWrapper}>
             <Image
-              source={{ uri: IVX_BUSINESS_CARD_URL }}
+              source={IVX_BUSINESS_CARD_URL}
               style={styles.cardImage}
               resizeMode="contain"
             />

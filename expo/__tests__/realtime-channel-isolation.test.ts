@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { buildRealtimeRuntimeChannelName } from '@/hooks/useRealtimeChannel';
+import { buildRealtimeRuntimeChannelName } from '@/lib/realtime-channel-name';
 
 describe('Supabase realtime runtime channel isolation', () => {
   it('does not reuse a topic across mounted hook instances', () => {

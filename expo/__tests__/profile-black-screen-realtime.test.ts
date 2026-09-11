@@ -65,6 +65,6 @@ describe('Profile black-screen regression — shared realtime hook remains rende
   });
 
   it('subscription effect is also keyed by semantic signature', () => {
-    expect(hook).toContain('[configSignature, setupChannels, cleanupChannels, pauseOnBackground]');
+    expect(hook).toContain('[configSignature, setupChannels, cleanupChannels, pauseOnBackground, screenActive]');
   });
 });

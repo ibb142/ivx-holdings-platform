@@ -13,6 +13,7 @@ import { injectWebKeyboardCSS } from '@/hooks/useWebKeyboard';
 import { checkForUpdates } from '@/lib/app-update-checker';
 import { logStartup } from '@/lib/startup-trace';
 import { supabase } from '@/lib/supabase';
+import { createDeferredAuthListener } from '@/lib/deferred-auth-listener';
 import Colors from '@/constants/colors';
 
 import { I18nProvider } from '@/lib/i18n-context';
@@ -23,6 +24,13 @@ import { WalletProvider } from '@/lib/wallet-context';
 import { EarnProvider } from '@/lib/earn-context';
 import { EmailProvider } from '@/lib/email-context';
 import { NetworkProvider } from '@/lib/network-context';
+import { PublicChatSessionProvider } from '@/lib/public-chat-session-context';
+import { IntroProvider } from '@/lib/intro-context';
+import { setChatProvider } from '@/src/modules/chat/services/chatProvider';
+import { supabaseChatProvider } from '@/src/modules/chat/services/supabaseChatProvider';
+
+// Configure before a directly linked chat room can render.
+setChatProvider(supabaseChatProvider);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -113,9 +121,13 @@ function VerificationGate() {
     };
 
     void enforce();
-    const { data: listener } = supabase.auth.onAuthStateChange(() => { void enforce(); });
+    const deferredAuth = createDeferredAuthListener(() => enforce(), (error) => {
+      console.warn('[IVX] Verification session lookup failed:', error instanceof Error ? error.name : 'UnknownError');
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange(deferredAuth.listener);
     return () => {
       cancelled = true;
+      deferredAuth.dispose();
       listener.subscription.unsubscribe();
     };
   }, [pathname, router]);
@@ -144,6 +156,7 @@ function AppStack() {
 }
 
 export function AppProviders() {
+  const pathname = usePathname();
   React.useEffect(() => {
     logStartup('PROVIDERS_STARTED');
     logStartup('PROVIDERS_COMPLETED');
@@ -167,7 +180,7 @@ export function AppProviders() {
 
   return (
     <DiagnosticErrorBoundary>
-      <GestureHandlerRootView style={providerStyles.root} {...(Platform.OS === 'web' ? { touchAction: 'auto' as const } : {})}>
+      <GestureHandlerRootView testID={`ivx-route:${pathname}`} style={providerStyles.root} {...(Platform.OS === 'web' ? { touchAction: 'auto' as const } : {})}>
         <QueryClientProvider client={queryClient}>
           <ProviderBoundary name="I18n">
             <I18nProvider>
@@ -185,8 +198,12 @@ export function AppProviders() {
                                     <EmailProvider>
                                       <ProviderBoundary name="Network">
                                         <NetworkProvider>
-                                          <StatusBar style="light" />
-                                          <AppStack />
+                                          <PublicChatSessionProvider>
+                                            <IntroProvider>
+                                              <StatusBar style="light" />
+                                              <AppStack />
+                                            </IntroProvider>
+                                          </PublicChatSessionProvider>
                                         </NetworkProvider>
                                       </ProviderBoundary>
                                     </EmailProvider>
