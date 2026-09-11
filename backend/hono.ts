@@ -61,6 +61,7 @@ import {
   checkAIHealth as checkOwnerAIHealth,
   probeAIGatewayLive as probeOwnerAIGatewayLive,
   checkDatabaseHealth as checkOwnerAIDatabaseHealth,
+  checkAuthHealth as checkOwnerAIAuthHealth,
   checkQueueHealth as checkOwnerAIQueueHealth,
   checkProviderHealthDetail as checkOwnerAIProviderDetail,
   auditDatabaseEnvConfig,
@@ -3327,14 +3328,15 @@ app.get('/health/provider', () => {
 
 app.get('/health/ready', async () => {
   const ai = checkOwnerAIHealth();
-  const [database, queue] = await Promise.all([checkOwnerAIDatabaseHealth(), checkOwnerAIQueueHealth()]);
-  const ready = ai.ok && database.ok && queue.ok;
+  const [database, auth, queue] = await Promise.all([checkOwnerAIDatabaseHealth(), checkOwnerAIAuthHealth(), checkOwnerAIQueueHealth()]);
+  const ready = ai.ok && database.ok && auth.ok && queue.ok;
   return Response.json({
     ok: ready,
     status: ready ? 'ready' : 'degraded',
     checks: {
       ai: { ok: ai.ok, ...ai.detail },
       database: { ok: database.ok, ...database.detail },
+      auth: { ok: auth.ok, ...auth.detail },
       queue: { ok: queue.ok, ...queue.detail },
     },
     timestamp: new Date().toISOString(),
