@@ -100,6 +100,9 @@ const DIRECT_RPC_ARGS: Record<string, string[]> = {
   ivx_senior_queue_claim: ['p_job_id', 'p_worker_instance_id', 'p_resume'],
   ivx_senior_ledger_put: ['p_result'],
   ivx_work_evidence_hours: ['p_from', 'p_to', 'p_target_hours'],
+  ivx_ai_budget_reserve: ['p_reservation_id', 'p_worker_instance_id', 'p_model', 'p_request_sha', 'p_reserved_nano', 'p_pricing_evidence'],
+  ivx_ai_budget_finish: ['p_reservation_id', 'p_worker_instance_id', 'p_status', 'p_settled_upper_nano', 'p_generation_id'],
+  ivx_ai_budget_status: [],
 };
 async function directRpc<T>(name: string, body: Record<string, unknown>, env: NodeJS.ProcessEnv = process.env): Promise<T> {
   const args = DIRECT_RPC_ARGS[name];
@@ -108,6 +111,7 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
     p_tasks: 'jsonb', p_requests: 'jsonb', p_leases: 'jsonb', p_task: 'jsonb', p_expected_states: 'jsonb',
     p_changes: 'jsonb', p_result: 'jsonb', p_resume: 'boolean',
     p_from: 'timestamptz', p_to: 'timestamptz', p_target_hours: 'numeric',
+    p_reservation_id: 'uuid', p_reserved_nano: 'bigint', p_settled_upper_nano: 'bigint', p_pricing_evidence: 'jsonb',
     p_worker_instance_id: 'text', p_lease_holder: 'text', p_event_type: 'text', p_objective_id: 'text', p_lease_seconds: 'integer',
   };
   const placeholders = args.map((key, index) => `$${index + 1}::${casts[key] ?? 'text'}`).join(', ');
@@ -121,6 +125,14 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
   const result = await queryWithPostgresDeadline<{ result: T }>(pool, `select public.${name}(${placeholders}) as result`, values);
   if (!result.rows?.length) throw new Error(`direct_postgres_rpc_empty:${name}`);
   return result.rows[0].result as T;
+}
+
+export type GlobalAIBudgetRpc = 'ivx_ai_budget_reserve' | 'ivx_ai_budget_finish' | 'ivx_ai_budget_status';
+export async function globalAIBudgetRpc<T>(name: GlobalAIBudgetRpc, body: Record<string, unknown>): Promise<T> {
+  if (!['ivx_ai_budget_reserve', 'ivx_ai_budget_finish', 'ivx_ai_budget_status'].includes(name)) throw new Error('Budget RPC not allowed');
+  // Reuse existing bounded pools. Choose transport before the mutation; no
+  // fallback or replay after a response whose commit state is unknown.
+  return rpc<T>(name, body, 5_000);
 }
 
 export type WorkEvidenceHours = Record<string, unknown> & {

@@ -1,3 +1,4 @@
+import './backend/services/ivx-global-ai-budget-fetch';
 /**
  * IVX Holdings — Production Entry Point
  */
