@@ -248,7 +248,8 @@ describe('Landing repair source access', () => {
     expect(proof.commandsRun.find(result => result.phase === 'regression_baseline')?.ok).toBe(true);
     expect(await repo.fileReader(sourcePath)).toBe(source);
     expect(existsSync(path.join(repo.root, testPath))).toBe(false);
-  });
+  // Executes real Node/TypeScript subprocesses while other isolated files run in CI.
+  }, 20_000);
   }
 
   for (const failure of ['import-error', 'runner-exception'] as const) {
