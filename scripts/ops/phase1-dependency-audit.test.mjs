@@ -1,9 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { auditDependencies, PROJECT } from './phase1-dependency-audit.mjs';
+import { auditDependencies, PROJECT, summarizeMetrics } from './phase1-dependency-audit.mjs';
 
 const env = { PROJECT_REF: PROJECT, SUPABASE_ACCESS_TOKEN: 'management-test-secret', SUPABASE_SERVICE_ROLE_KEY: 'service-test-secret', GITHUB_SHA: 'a'.repeat(40) };
 const json = body => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+test('metrics keep only approved numeric totals and discard all labels', () => {
+  const result = summarizeMetrics('pg_locks_count{database="private"} 2\npg_locks_count{database="other"} 3\nsecret{token="private"} 1\nnode_load1 0.7\nnode_load5 NaN\n');
+  assert.deepEqual(result, { pg_locks_count: 5, node_load1: 0.7 });
+});
 function healthy(url) {
   if (url.endsWith('/billing/addons')) return json({ selected_addons: [{ type: 'compute_instance', variant: { id: 'ci_nano', name: 'Nano' } }] });
   if (url.includes('/health?services')) return json([{ name: 'db', healthy: true, status: 'ACTIVE_HEALTHY' }]);

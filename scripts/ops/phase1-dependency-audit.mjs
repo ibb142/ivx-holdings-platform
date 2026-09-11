@@ -6,6 +6,19 @@ const API = 'https://api.ivxholding.com';
 const SUPABASE = `https://${PROJECT}.supabase.co`;
 const MANAGEMENT = `https://api.supabase.com/v1/projects/${PROJECT}`;
 
+export function summarizeMetrics(source) {
+  const allowed = new Set(['node_load1', 'node_load5', 'node_memory_MemTotal_bytes', 'node_memory_MemAvailable_bytes',
+    'pg_stat_database_numbackends', 'pg_settings_max_connections', 'pg_locks_count', 'pg_stat_activity_count',
+    'pg_database_size_bytes', 'pg_stat_database_blks_read', 'pg_stat_database_blks_hit']);
+  const result = {};
+  for (const line of source.split('\n')) {
+    const match = /^([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{[^}]*\})?\s+([-+0-9.eE]+)(?:\s|$)/.exec(line);
+    if (!match || !allowed.has(match[1]) || !Number.isFinite(Number(match[2]))) continue;
+    result[match[1]] = (result[match[1]] || 0) + Number(match[2]);
+  }
+  return result;
+}
+
 // Read-only and fixed-target. Never emit response bodies, credentials or user rows.
 export async function auditDependencies({ env = process.env, fetchImpl = fetch, now = () => new Date().toISOString() } = {}) {
   if (env.PROJECT_REF && env.PROJECT_REF !== PROJECT) throw Error('Unexpected project');
@@ -28,8 +41,23 @@ export async function auditDependencies({ env = process.env, fetchImpl = fetch, 
     if (report.management.status === 200 && report.management.identityMatches) {
       report.compute = await probe(`${MANAGEMENT}/billing/addons`, bearer, b => ({ selected: Array.isArray(b?.selected_addons)
         ? b.selected_addons.filter(a => a?.type === 'compute_instance').map(a => ({ id: a.variant?.id ?? null, name: a.variant?.name ?? null })) : null }));
-      report.services = await probe(`${MANAGEMENT}/health?services=auth,rest&timeout_ms=5000`, bearer,
+      report.services = await probe(`${MANAGEMENT}/health?services=auth`, bearer,
         b => ({ services: Array.isArray(b) ? b.map(s => ({ name: s.name, healthy: s.healthy === true, status: s.status })) : null }));
+      report.pool = await probe(`${MANAGEMENT}/config/database/pgbouncer`, bearer,
+        b => ({ mode: ['transaction', 'session'].includes(b?.pool_mode) ? b.pool_mode : null,
+          configuredSize: Number.isInteger(b?.default_pool_size) ? b.default_pool_size : null,
+          idleTimeout: Number.isFinite(b?.server_idle_timeout) ? b.server_idle_timeout : null }));
+      const started = performance.now();
+      try {
+        const response = await fetchImpl(`${MANAGEMENT}/analytics/endpoints/metrics`, {
+          method: 'GET', headers: bearer, redirect: 'error', signal: AbortSignal.timeout(15_000),
+        });
+        const source = await response.text();
+        report.metrics = { status: response.status, observedAt: now(), elapsedMs: Math.round(performance.now() - started),
+          totals: response.ok ? summarizeMetrics(source) : {} };
+      } catch {
+        report.metrics = { status: 0, observedAt: now(), elapsedMs: Math.round(performance.now() - started), error: 'request_failed_or_timed_out' };
+      }
     }
   }
   if (serviceKey) {
