@@ -9,13 +9,13 @@ import { buildOwnerTextModelInput } from '../backend/services/ivx-owner-text-pro
 // no production data, task execution, writes, auth session, or certification.
 const proof = { sourceSha: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
   startedAt: new Date().toISOString(), scope: 'owner_text_model_comparison', phase4Certified: false,
-  productionRowsTouched: 0, maximumCalls: 10, catalog: [] as unknown[],
+  productionRowsTouched: 0, maximumCalls: 12, maxOutputTokens: 1024, catalog: [] as unknown[],
   cases: [] as Record<string, unknown>[], completed: false, error: null as string | null };
 try {
   const key = process.env.IVX_AI_GATEWAY_KEY || process.env.AI_GATEWAY_API_KEY;
   if (!key) throw new Error('CREDENTIAL_UNAVAILABLE');
   const catalog = await createGateway({ apiKey: key }).getAvailableModels();
-  const requested = ['openai/gpt-4o', 'openai/gpt-4.1'];
+  const requested = ['openai/gpt-4.1', 'openai/gpt-5.4'];
   const models = requested.map(id => catalog.models.find(m => m.id === id));
   if (models.some(model => !model)) throw new Error('CATALOG_MODEL_UNAVAILABLE');
   proof.catalog = models.map(model => ({ id: model!.id, pricing: model!.pricing }));
@@ -25,8 +25,8 @@ try {
       ? 'I cannot directly access or compute external database or file joining results. Please provide more context.'
       : 'No tengo la información de esa unión en el historial reciente. Necesito datos adicionales para responder.' },
   ]).flat();
-  const literals = ['ba1aef02', '11aa22bb', randomUUID().replaceAll('-', '').slice(0, 8)];
-  const cases = literals.map((literal, i) => ({ scenario: ['retained_failure', 'repeated_characters', 'fresh_literal'][i],
+  const literals = ['ba1aef02', '99a0314b', '11aa22bb', randomUUID().replaceAll('-', '').slice(0, 8)];
+  const cases = literals.map((literal, i) => ({ scenario: ['retained_4o_failure', 'retained_41_failure', 'repeated_characters', 'fresh_literal'][i],
     request: `Reverse the characters of ${literal}. Return only the reversed text.`, expected: [...literal].reverse().join('') }));
   const suffix = randomUUID().replaceAll('-', '');
   cases.push({ scenario: 'fresh_join', request: `Return only the result of joining north_ and ${suffix}.`, expected: `north_${suffix}` });
@@ -46,10 +46,10 @@ try {
       try {
         const result = await runWithOwnerAIStreamCallback(delta => { deltas++; streamedText += delta; },
           () => requestIVXAIText({ module: 'owner-room-knowledge', requestId, model,
-            ...modelInput, maxOutputTokens: 128, abortSignal: AbortSignal.timeout(20_000) }));
+            ...modelInput, reasoning: model === 'openai/gpt-5.4' ? 'low' : undefined, maxOutputTokens: 1024, abortSignal: AbortSignal.timeout(20_000) }));
         proof.cases.push({ ...entry, model, requestId, answer: result.text, streamedText, deltas,
           elapsedMs: Date.now() - started, source: result.providerMetadata.source,
-          actualModel: result.providerMetadata.model, endpoint: result.providerMetadata.endpoint,
+          actualModel: result.providerMetadata.model, endpoint: result.providerMetadata.endpoint, usage: result.usage,
           passed: result.providerMetadata.source === 'remote_api' && result.providerMetadata.model === model
             && result.providerMetadata.ivxAI.requestId === requestId && deltas > 0
             && result.text.trim() === entry.expected && streamedText.trim() === entry.expected });

@@ -595,6 +595,7 @@ export function getIVXAIConfigurationSnapshot(model: string = DEFAULT_IVX_AI_MOD
 
 export async function requestIVXAIText(input: {
   module: IVXAIModule;
+  reasoning?: 'low';
   requestId?: string | null;
   model?: string | null;
   system?: string | null;
@@ -630,6 +631,7 @@ export async function requestIVXAIText(input: {
 
 async function requestIVXAITextInternal(input: {
   module: IVXAIModule;
+  reasoning?: 'low';
   requestId?: string | null;
   model?: string | null;
   system?: string | null;
@@ -781,6 +783,7 @@ async function requestIVXAITextInternal(input: {
             ? [...baseMessages, multimodalUser]
             : [...messages, multimodalUser];
           result = await runWithHardTimeout('IVX AI direct (multimodal)', generateText({
+            reasoning: input.reasoning,
             model,
             maxRetries: 0, // The runtime owns the bounded retry policy.
             system: system.length > 0 ? system : undefined,
@@ -792,6 +795,7 @@ async function requestIVXAITextInternal(input: {
         } else {
           result = messages.length > 0
             ? await runWithHardTimeout('IVX AI direct (messages)', generateText({
+                reasoning: input.reasoning,
                 model,
                 maxRetries: 0,
                 system: system.length > 0 ? system : undefined,
@@ -800,6 +804,7 @@ async function requestIVXAITextInternal(input: {
                 messages,
               }), callTimeoutMs)
             : await runWithHardTimeout('IVX AI direct (prompt)', generateText({
+                reasoning: input.reasoning,
                 model,
                 maxRetries: 0,
                 system: system.length > 0 ? system : undefined,
@@ -1051,6 +1056,7 @@ export type IVXAIStreamChunk = {
  */
 export async function* streamIVXAIText(input: {
   module: IVXAIModule;
+  reasoning?: 'low';
   requestId?: string | null;
   model?: string | null;
   system?: string | null;
@@ -1093,6 +1099,7 @@ export async function* streamIVXAIText(input: {
   try {
     ensureIVXAIGatewayEnvironment();
     const streamResult = streamText({
+      reasoning: input.reasoning,
       model,
       maxRetries: 0,
       system: system.length > 0 ? system : undefined,
