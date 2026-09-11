@@ -25,7 +25,7 @@ async function requestRpc(name: string, body: Record<string, unknown>): Promise<
   if (!response.ok) throw new Error(`Shared senior queue ${name}: ${response.status === 409 ? 'concurrent edit' : 'operation rejected'} (HTTP ${response.status})`);
   return response;
 }
-async function rpc<T>(name: 'ivx_senior_queue_claim' | 'ivx_senior_queue_patch', body: Record<string, unknown>): Promise<T> {
+async function rpc<T>(name: 'ivx_senior_queue_claim' | 'ivx_senior_queue_patch_receipt', body: Record<string, unknown>): Promise<T> {
   // Select the configured same-project transport BEFORE execution. A timeout
   // never triggers a second mutation through another transport.
   readsInFlight.clear();
@@ -47,9 +47,26 @@ export async function patchSharedSeniorQueue<T extends Queue>(queue: T, claimed:
     next, expected: baseline.get(next.jobId) ?? null, workerInstanceId: claimed.has(next.jobId) ? autonomousWorkerInstanceId() : null,
   }));
   if (!changes.length) return queue;
-  const saved = await rpc<T>('ivx_senior_queue_patch', { p_changes: changes });
-  if (!saved || !Array.isArray(saved.jobs)) throw new Error('Shared senior queue patch returned an invalid snapshot; mutation not replayed');
-  return rememberSeniorQueue(saved);
+  const snapshot = structuredClone(queue);
+  const saved = await rpc<{ kind: string; updatedAt: string; jobs: Job[]; removedJobIds: string[] }>(
+    'ivx_senior_queue_patch_receipt', { p_changes: changes });
+  const invalid = () => new Error('Shared senior queue patch returned an invalid snapshot receipt; mutation not replayed');
+  if (!saved || saved.kind !== 'ivx-senior-patch-receipt-v1' || !Array.isArray(saved.jobs)
+    || !Array.isArray(saved.removedJobIds) || !Number.isFinite(Date.parse(saved.updatedAt))) throw invalid();
+  const expected = new Set(changes.map(change => change.next.jobId));
+  const acknowledged = new Set<string>();
+  for (const id of [...saved.jobs.map(job => job?.jobId), ...saved.removedJobIds]) {
+    if (typeof id !== 'string' || !expected.has(id) || acknowledged.has(id)) throw invalid();
+    acknowledged.add(id);
+  }
+  if (acknowledged.size !== expected.size) throw invalid();
+  const updates = new Map(saved.jobs.map(job => [job.jobId, job]));
+  const removed = new Set(saved.removedJobIds);
+  // This remains the caller's snapshot, with authoritative mutation receipts.
+  // Unrelated jobs are neither refreshed nor dropped; their old CAS baselines
+  // still reject concurrent changes. Scheduling always obtains a fresh read.
+  return rememberSeniorQueue({ ...snapshot, updatedAt: saved.updatedAt,
+    jobs: snapshot.jobs.filter(job => !removed.has(job.jobId)).map(job => updates.get(job.jobId) ?? job) });
 }
 export function claimSharedSeniorJob<T>(jobId: string, resume = false): Promise<T | null> {
   return rpc('ivx_senior_queue_claim', { p_job_id: jobId, p_worker_instance_id: autonomousWorkerInstanceId(), p_resume: resume });

@@ -94,6 +94,7 @@ const DIRECT_RPC_ARGS: Record<string, string[]> = {
   ivx_autonomous_tasks_link_objective: ['p_objective_id'],
   ivx_fleet_dashboard_observation: [],
   ivx_senior_queue_patch: ['p_changes'],
+  ivx_senior_queue_patch_receipt: ['p_changes'],
   ivx_senior_queue_claim: ['p_job_id', 'p_worker_instance_id', 'p_resume'],
   ivx_senior_ledger_put: ['p_result'],
   ivx_work_evidence_hours: ['p_from', 'p_to', 'p_target_hours'],
@@ -137,11 +138,11 @@ export async function readPostgresWorkEvidenceHours(from: string, to: string, ta
   return result;
 }
 
-type SeniorRpc = 'ivx_senior_queue_patch' | 'ivx_senior_queue_claim' | 'ivx_senior_ledger_put';
+type SeniorRpc = 'ivx_senior_queue_patch' | 'ivx_senior_queue_patch_receipt' | 'ivx_senior_queue_claim' | 'ivx_senior_ledger_put';
 type SeniorDocumentKey = 'senior-developer-worker/queue.json' | 'senior-developer-worker/proof-ledger.json';
 export async function seniorQueuePostgresRpc<T>(name: SeniorRpc, body: Record<string, unknown>): Promise<T> {
   emergencyStopPostgresConfig(); // Reject cross-project bindings before any query.
-  if (!['ivx_senior_queue_patch', 'ivx_senior_queue_claim', 'ivx_senior_ledger_put'].includes(name)) throw new Error('Repair RPC not allowed');
+  if (!['ivx_senior_queue_patch', 'ivx_senior_queue_patch_receipt', 'ivx_senior_queue_claim', 'ivx_senior_ledger_put'].includes(name)) throw new Error('Repair RPC not allowed');
   return directRpc<T>(name, body);
 }
 export async function readSeniorQueuePostgresDocument<T>(key: SeniorDocumentKey): Promise<T | null> {
