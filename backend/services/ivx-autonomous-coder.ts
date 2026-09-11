@@ -31,7 +31,7 @@ import { assertLandingRepairScope } from './ivx-landing-repair-scope';
 import { assertRepairTestRuntime, NODE_REPAIR_TEST_GUIDANCE, repairRecoveryLesson } from './ivx-repair-recovery-protocol';
 import { PatchWorkspace } from './ivx-patch-workspace';
 import { autonomousBranchSuffix, ensureAutonomousBranch } from './ivx-coder-branch';
-import { withIsolatedCoderWorkspace } from './ivx-coder-workspace';
+import { withIsolatedCoderWorkspace, type CoderWorkspaceEvidence } from './ivx-coder-workspace';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -213,6 +213,7 @@ function buildAttributionTrailers(input: {
 }
 
 export type IVXAutonomousCoderProof = {
+  workspaceEvidence?: CoderWorkspaceEvidence;
   marker: typeof IVX_AUTONOMOUS_CODER_MARKER;
   taskId: string;
   goal: string;
@@ -354,6 +355,8 @@ export type IVXAutonomousCoderInput = {
   isCanceled?: () => boolean,
   /** Physical worker lease and owner controls must permit each mutation. */
   assertExecutionAuthority?: () => Promise<void>,
+  /** Awaited before work and after cleanup; the worker persists under its lease. */
+  onWorkspaceEvidence?: (evidence: CoderWorkspaceEvidence) => Promise<void>,
   /** Heartbeat callback invoked at each stage boundary with the current phase,
    * iteration, and elapsed ms. Lets the caller detect a stuck stage externally. */
   heartbeat?: (info: { phase: IVXAutonomousCoderPhase; iteration: number; elapsedMs: number; detail: string }) => void,
@@ -1920,6 +1923,8 @@ async function verifyProductionHealth(): Promise<{ ok: boolean; commit: string |
 
 export async function runIVXAutonomousCoder(input: IVXAutonomousCoderInput): Promise<IVXAutonomousCoderProof> {
   const startedAt = Date.now();
+  let workspaceEvidence: CoderWorkspaceEvidence | undefined;
+  let completedProof: IVXAutonomousCoderProof | undefined;
   // FIX #3: the engine must NEVER throw. A throw escapes to the worker's
   // top-level catch, which stores `result=null` and `error=message` with NO
   // diagnostic trail (no iterations, no commandsRun, no filesInspected). This
@@ -1934,14 +1939,24 @@ export async function runIVXAutonomousCoder(input: IVXAutonomousCoderInput): Pro
     // callers use the immutable application source as a snapshot, never a
     // shared patch directory across concurrent owner jobs.
     if (!input.projectRoot && !input.fileReader && !input.fileWriter && !input.testRunner) {
-      return await withIsolatedCoderWorkspace(resolveProjectRoot(input), root =>
-        runIVXAutonomousCoderInner({ ...input, projectRoot: root }, Date.now()));
+      await input.assertExecutionAuthority?.();
+      const proof = await withIsolatedCoderWorkspace(resolveProjectRoot(input), async root => {
+        completedProof = await runIVXAutonomousCoderInner({ ...input, projectRoot: root }, Date.now());
+        return completedProof;
+      }, async evidence => {
+        workspaceEvidence = evidence;
+        await input.onWorkspaceEvidence?.(evidence);
+      });
+      return { ...proof, workspaceEvidence };
     }
     return await runIVXAutonomousCoderInner(input, startedAt);
   } catch (error) {
     const message = safeErrorMessage(error);
     input.onPhase?.('failed', `Autonomous coder threw: ${message}`);
+    // A late cleanup/receipt failure must retain any real commit and PR proof.
+    if (completedProof) return { ...completedProof, workspaceEvidence, finalStatus: 'FAILED', error: `ENGINE_THREW: ${message}` };
     return {
+      workspaceEvidence,
       marker: IVX_AUTONOMOUS_CODER_MARKER,
       taskId: input.taskId,
       goal: input.goal,
