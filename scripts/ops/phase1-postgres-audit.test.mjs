@@ -1,8 +1,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { auditPostgres, PROJECT, SNAPSHOT } from './phase1-postgres-audit.mjs';
+import { auditPostgres, readRuntimeConnection, PROJECT, SNAPSHOT } from './phase1-postgres-audit.mjs';
 const connection=`postgresql://postgres:synthetic-secret@db.${PROJECT}.supabase.co:5432/postgres?sslmode=verify-full`;
 const env={PROJECT_REF:PROJECT,SUPABASE_DB_URL:connection,GITHUB_SHA:'a'.repeat(40)};
+
+test('runtime fallback reads only the named variable after confirming the service owner',async()=>{
+  const urls=[];
+  const r=await readRuntimeConnection({RENDER_API_KEY:'synthetic-render-secret'},async(url,init)=>{
+    urls.push(url);assert.equal(init.method,'GET');assert.equal(init.redirect,'error');
+    return Response.json(url.endsWith('/env-vars/SUPABASE_DB_URL')?{key:'SUPABASE_DB_URL',value:connection}:
+      {id:'srv-d7t9ivreo5us73ftose0',ownerId:'tea-d7plj9beo5us73ch3ukg',repo:'https://github.com/ibb142/ivx-holdings-platform'});
+  });
+  assert.equal(urls.length,2);assert.equal(r.config.ssl.rejectUnauthorized,true);
+  assert.equal(JSON.stringify(r.audit).includes('synthetic-secret'),false);
+  assert.equal(JSON.stringify(r.audit).includes('synthetic-render-secret'),false);
+});
+test('runtime fallback refuses foreign service ownership before any secret read',async()=>{
+  let requests=0;
+  const r=await readRuntimeConnection({RENDER_API_KEY:'synthetic-render-secret'},async()=>{
+    requests++;return Response.json({id:'srv-d7t9ivreo5us73ftose0',ownerId:'foreign-owner',repo:'https://github.com/ibb142/ivx-holdings-platform'});
+  });
+  assert.equal(requests,1);assert.equal(r.config,undefined);
+  assert.equal(r.audit.reason,'runtime_service_identity_unverified');
+});
 
 test('the known base hostname repair stays on this project and only probes once',async()=>{
   let connects=0;

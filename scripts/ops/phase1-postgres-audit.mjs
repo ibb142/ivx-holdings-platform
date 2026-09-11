@@ -5,6 +5,40 @@ import { normalizeStoredConnection, repairKnownConnection, connectionIssue, vali
 
 export const PROJECT = 'kvclcdjmjghndxsngfzb';
 const aliases = ['SUPABASE_DB_URL', 'DATABASE_URL', 'POSTGRES_URL', 'SUPABASE_POOLER_URL'];
+const RUNTIME_SERVICE='srv-d7t9ivreo5us73ftose0';
+const RUNTIME_OWNER='tea-d7plj9beo5us73ch3ukg';
+
+export async function readRuntimeConnection(env,fetchImpl=fetch) {
+  const key=(env.RENDER_API_KEY||env.IVX_RENDER_API_KEY||'').trim();
+  const audit={credentialBinding:Boolean(key),serviceId:RUNTIME_SERVICE,requests:0};
+  if (!key) return {audit:{...audit,reason:'runtime_credential_binding_missing'}};
+  const base=`https://api.render.com/v1/services/${RUNTIME_SERVICE}`;
+  async function get(url) {
+    audit.requests++;
+    const response=await fetchImpl(url,{method:'GET',headers:{Authorization:`Bearer ${key}`},
+      redirect:'error',signal:AbortSignal.timeout(10000)});
+    const body=await response.json().catch(()=>null);
+    return {status:response.status,body};
+  }
+  try {
+    const service=await get(base);audit.serviceStatus=service.status;
+    if (service.status!==200 || service.body?.id!==RUNTIME_SERVICE || service.body?.ownerId!==RUNTIME_OWNER
+      || service.body?.repo!=='https://github.com/ibb142/ivx-holdings-platform') {
+      return {audit:{...audit,reason:'runtime_service_identity_unverified'}};
+    }
+    const variable=await get(`${base}/env-vars/SUPABASE_DB_URL`);audit.variableStatus=variable.status;
+    const body=variable.body?.envVar||variable.body;
+    if (variable.status!==200 || body?.key!=='SUPABASE_DB_URL' || typeof body.value!=='string') {
+      return {audit:{...audit,reason:'runtime_database_binding_unavailable'}};
+    }
+    const raw=normalizeStoredConnection(body.value)||body.value;
+    const repaired=repairKnownConnection(raw);
+    const config=validateConnection(repaired||raw);
+    audit.issue=connectionIssue(raw);audit.knownHostnameRepair=Boolean(repaired);
+    if (!config || ![5432,6543].includes(config.port)) return {audit:{...audit,reason:'runtime_database_binding_invalid'}};
+    return {audit:{...audit,valid:true},config};
+  } catch { return {audit:{...audit,reason:'runtime_connection_lookup_failed'}}; }
+}
 export const SNAPSHOT = `select clock_timestamp() as observed_at,
   current_setting('transaction_read_only') as read_only,
   current_setting('max_connections')::integer as max_connections,
@@ -31,7 +65,7 @@ async function bounded(promise, ms) {
 
 // This entry point only opens one TLS connection and a read-only transaction.
 // It never invokes credential synchronization, DDL, DML, restart or owner controls.
-export async function auditPostgres({ env=process.env, makeClient=config=>new pg.Client(config),
+export async function auditPostgres({ env=process.env, makeClient=config=>new pg.Client(config),fetchImpl=fetch,
   now=()=>new Date().toISOString(), elapsed=()=>performance.now() }={}) {
   if (env.PROJECT_REF!==PROJECT) throw Error('Unexpected project binding');
   const report={kind:'postgres-read-only-diagnostic',project:PROJECT,sourceSha:env.GITHUB_SHA||null,
@@ -48,6 +82,10 @@ export async function auditPostgres({ env=process.env, makeClient=config=>new pg
     const valid=Boolean(config && [5432,6543].includes(config.port));
     report.bindings.push({name,present:Boolean(raw),valid,issue:connectionIssue(normalized),knownHostnameRepair:Boolean(repaired)});
     if (!selected && valid) selected={name,config};
+  }
+  if (!selected) {
+    const runtime=await readRuntimeConnection(env,fetchImpl);report.runtimeBinding=runtime.audit;
+    if (runtime.config) selected={name:'RENDER_SUPABASE_DB_URL',config:runtime.config};
   }
   if (!selected) return {...report,error:{reason:'no_valid_same_project_database_binding'},finishedAt:now()};
   const client=makeClient({...selected.config,connectionTimeoutMillis:5000,query_timeout:7000,
