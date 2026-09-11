@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { settleBudgetWithRetry } from './ivx-global-ai-budget-settlement';
 
 export const GLOBAL_AI_BUDGET_MARKER = 'ivx-global-ai-budget-v1';
 export function globalAIBudgetEnabled(): boolean { return process.env.IVX_AI_GLOBAL_BUDGET_ENABLED === 'true'; }
@@ -95,24 +96,44 @@ export async function reserveGlobalAIBudget(model: string, requestSha: string, f
     if (error instanceof GlobalAIBudgetError) throw error;
     throw new GlobalAIBudgetError('durable admission unavailable');
   }
-  let finished = false;
-  return { quote, async finish(usage, notStarted = false) {
-    if (finished) return;
-    finished = true;
+  let finishPending: Promise<void> | null = null;
+  return { quote, finish(usage, notStarted = false) {
+    if (finishPending) return finishPending;
+    finishPending = (async () => {
     let amount: string | null = null;
     if (notStarted) amount = '0';
     else if (usage) { try { amount = usageCostUpperNano(quote, usage); } catch { usage = null; } }
-    try {
-      const result = await globalAIBudgetRpc<{ ok: boolean; pricingBoundBreached?: boolean }>('ivx_ai_budget_finish', {
+    await settleBudgetWithRetry(
+      params => globalAIBudgetRpc<{ ok: boolean; pricingBoundBreached?: boolean }>('ivx_ai_budget_finish', params),
+      {
         p_reservation_id: id, p_worker_instance_id: worker, p_status: notStarted ? 'cancelled' : usage ? 'settled' : 'uncertain',
         p_settled_upper_nano: amount, p_generation_id: usage?.generationId ?? null,
-      });
-      if (!result?.ok || result.pricingBoundBreached) console.error('[IVX Global Budget] settlement requires review', { reservationId: id });
-    } catch {
-      // Admission remains reserved in PostgreSQL. Do not replay the provider
-      // or refund an unknown charge after a failed settlement response.
-      console.error('[IVX Global Budget] reservation retained; settlement unconfirmed', { reservationId: id });
-    }
+      },
+      {
+        onRetry(settlement, attempts, delayMs) {
+          console.warn('[IVX Global Budget] settlement pending retry', {
+            reservationId: id, workerInstanceId: worker, attempts, delayMs,
+            status: settlement.p_status, settledUpperNano: settlement.p_settled_upper_nano,
+            generationId: settlement.p_generation_id,
+          });
+        },
+        onConfirmed(result, attempts) {
+          if (result.pricingBoundBreached) console.error('[IVX Global Budget] settlement requires review', { reservationId: id });
+          else if (attempts > 1) console.info('[IVX Global Budget] settlement recovered', { reservationId: id, attempts });
+        },
+        onUnconfirmed(settlement, attempts) {
+          // Keep the entire liability reserved. Persist only receipt metadata in
+          // operational logs so a stopped-process review can reconcile it.
+          console.error('[IVX Global Budget] reservation retained; settlement unconfirmed', {
+            reservationId: id, workerInstanceId: worker, attempts,
+            status: settlement.p_status, settledUpperNano: settlement.p_settled_upper_nano,
+            generationId: settlement.p_generation_id,
+          });
+        },
+      },
+    );
+    })();
+    return finishPending;
   }};
 }
 export async function readGlobalAIBudgetStatus(): Promise<Record<string, unknown>> {
