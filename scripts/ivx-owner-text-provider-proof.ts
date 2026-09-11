@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { requestIVXAIText, runWithOwnerAIStreamCallback } from '../backend/ivx-ai-runtime';
+import { requestIVXAIText, runWithOwnerAIStreamCallback, type IVXAITextMessage } from '../backend/ivx-ai-runtime';
 import { buildOwnerTextModelInput } from '../backend/services/ivx-owner-text-prompt';
+import { buildSeniorEngineerSystemPrompt } from '../backend/services/ivx-senior-engineer-persona';
 
 // Candidate prompt -> real provider only. No owner session, database, tools,
 // task execution, deployment or cross-replica deduplication is certified here.
@@ -14,6 +15,7 @@ const proof = {
   phase4Certified: false,
   passed: false,
   cases: [] as Array<Record<string, unknown>>,
+  diagnosticBaseline: null as Record<string, unknown> | null,
   error: null as string | null,
 };
 
@@ -21,16 +23,47 @@ try {
   if (!String(process.env.IVX_AI_GATEWAY_KEY || process.env.AI_GATEWAY_API_KEY || '').trim()) {
     throw new Error('EXISTING_GATEWAY_CREDENTIAL_UNAVAILABLE');
   }
-  for (const prefix of ['IVX_CHAT_E2E_', 'north_']) {
+  // Production Android failed after repeated mistaken answers about database
+  // joins. Keep that conversational shape with fresh, non-production operands.
+  const refusalHistory: IVXAITextMessage[] = Array.from({ length: 6 }, (_, i) => [
+    { role: 'user' as const, content: `Return only the result of joining earlier_ and ${randomUUID().replaceAll('-', '')}.` },
+    { role: 'assistant' as const, content: i % 2 === 0
+      ? 'I cannot directly access or compute external database or file joining results. Please provide more context.'
+      : 'No tengo la información de esa unión en el historial reciente. Necesito datos adicionales para responder.' },
+  ]).flat();
+  const liveContext = `[IVX LIVE PRODUCTION CONTEXT]\nFull SHA: ${proof.sourceSha}\nStatus: unverified in this candidate-only test\n[/IVX LIVE PRODUCTION CONTEXT]`;
+  const cases = ['IVX_CHAT_E2E_', 'north_'].flatMap((prefix) => ['short_history', 'repeated_refusals'].map((scenario) => {
     const suffix = randomUUID().replaceAll('-', '');
+    return { scenario, request: `Return only the result of joining ${prefix} and ${suffix}.`, expected: `${prefix}${suffix}`,
+      history: scenario === 'short_history' ? [
+        { role: 'user' as const, content: 'What was the last production fix?' },
+        { role: 'assistant' as const, content: 'No tengo esa información en el historial reciente.' },
+      ] : refusalHistory };
+  }));
+  const left = 100 + Math.floor(Math.random() * 900);
+  const right = 100 + Math.floor(Math.random() * 900);
+  cases.push({ scenario: 'arithmetic_after_refusals', request: `Calculate ${left} + ${right}. Return only the number.`, expected: String(left + right), history: refusalHistory });
+  const reversed = randomUUID().replaceAll('-', '').slice(0, 8);
+  cases.push({ scenario: 'reverse_after_refusals', request: `Reverse the characters of ${reversed}. Return only the reversed text.`, expected: [...reversed].reverse().join(''), history: refusalHistory });
+
+  // Diagnostic comparison only: retain the previous prompt's answer on the
+  // repeated-refusal case. Every candidate case below must still pass.
+  const baselineCase = cases.find((entry) => entry.scenario === 'repeated_refusals')!;
+  try {
+    const baseline = await requestIVXAIText({
+      module: 'owner-room-knowledge', requestId: `owner-text-baseline-${randomUUID()}`, model: 'openai/gpt-4o',
+      system: buildSeniorEngineerSystemPrompt(liveContext),
+      messages: [...baselineCase.history, { role: 'user', content: baselineCase.request }],
+      maxOutputTokens: 128, abortSignal: AbortSignal.timeout(20_000),
+    });
+    proof.diagnosticBaseline = { answer: baseline.text, expected: baselineCase.expected, matched: baseline.text.trim() === baselineCase.expected, source: baseline.providerMetadata.source };
+  } catch { proof.diagnosticBaseline = { error: 'BASELINE_PROVIDER_CALL_FAILED' }; }
+
+  for (const entry of cases) {
     const requestId = `owner-text-proof-${randomUUID()}`;
-    const request = `Return only the result of joining ${prefix} and ${suffix}.`;
+    const { request, expected } = entry;
     const modelInput = buildOwnerTextModelInput({
-      request,
-      history: [
-        { role: 'user', content: 'What was the last production fix?' },
-        { role: 'assistant', content: 'No tengo esa información en el historial reciente.' },
-      ],
+      request, history: entry.history, liveContext,
     });
     let deltas = 0;
     let streamedText = '';
@@ -42,11 +75,11 @@ try {
       module: 'owner-room-knowledge', requestId, model: 'openai/gpt-4o',
       ...modelInput, maxOutputTokens: 128, abortSignal: AbortSignal.timeout(20_000),
     }));
-    const expected = `${prefix}${suffix}`;
     const passed = result.providerMetadata.source === 'remote_api'
       && result.providerMetadata.ivxAI.requestId === requestId
       && deltas > 0 && streamedText.trim() === expected && result.text.trim() === expected;
     proof.cases.push({
+      scenario: entry.scenario, historyMessages: entry.history.length,
       requestId, request, expected, answer: result.text, streamedText, deltas,
       source: result.providerMetadata.source, model: result.providerMetadata.model,
       endpoint: result.providerMetadata.endpoint, elapsedMs: Date.now() - started, passed,
