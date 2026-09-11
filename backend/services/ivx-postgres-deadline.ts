@@ -21,11 +21,10 @@ export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
     // Startup parameters are not a reliable server deadline through a pooler.
     // BEGIN pins one backend; SET LOCAL applies to the following RPC and resets
     // at transaction end. Server cancellation precedes the client's 5s timeout.
-    for (const statement of ['BEGIN', "SET LOCAL statement_timeout = '4s'",
-      "SET LOCAL lock_timeout = '2s'", "SET LOCAL idle_in_transaction_session_timeout = '8s'"]) {
-      requireConnection();
-      await client.query(statement);
-    }
+    // One simple-query round trip pins the transaction and installs the same
+    // local limits. The parameterized mutation is sent only after this succeeds.
+    requireConnection();
+    await client.query("BEGIN; SET LOCAL statement_timeout = '4s'; SET LOCAL lock_timeout = '2s'; SET LOCAL idle_in_transaction_session_timeout = '8s'");
     requireConnection();
     const result = await client.query<T>(text, values);
     requireConnection();

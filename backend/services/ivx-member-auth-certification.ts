@@ -59,10 +59,11 @@ function ownerEmailFromRuntime(): string {
 async function ownerPasswordFromRuntime(): Promise<string> {
   // Priority: process.env first (Render dashboard), then encrypted Owner Variables store.
   // This ensures the Render dashboard env var always wins over stale stored values.
-  const envPassword = env('IVX_OWNER_PASSWORD', 'OWNER_NEW_PASSWORD');
+  // Passwords are opaque: trimming changes the credential supplied to Auth.
+  const envPassword = process.env.IVX_OWNER_PASSWORD || process.env.OWNER_NEW_PASSWORD || '';
   if (envPassword) return envPassword;
   try {
-    const stored = String(await getIVXOwnerVariableRuntimeValue('OWNER_NEW_PASSWORD', { preferStored: true }) || '').trim();
+    const stored = String(await getIVXOwnerVariableRuntimeValue('OWNER_NEW_PASSWORD', { preferStored: true }) || '');
     if (stored) return stored;
   } catch (error) {
     console.warn('[MemberAuthCert] durable OWNER_NEW_PASSWORD lookup failed:', error instanceof Error ? error.message.slice(0, 140) : 'unknown');

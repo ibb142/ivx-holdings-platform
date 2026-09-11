@@ -1,0 +1,39 @@
+import { afterEach, expect, spyOn, test } from 'bun:test';
+import * as deadline from './ivx-postgres-deadline';
+import { readSeniorQueuePostgresJob, resetPostgresAutonomousTaskStoreForTests } from './ivx-postgres-autonomous-task-store';
+
+const env = { ...process.env };
+afterEach(() => { process.env = { ...env }; resetPostgresAutonomousTaskStoreForTests(); });
+function configure() {
+  process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://queuereadtest.supabase.co';
+  process.env.SUPABASE_DB_URL = 'postgresql://postgres:test-only@db.queuereadtest.supabase.co:5432/postgres';
+}
+
+test('direct polling projects one job with bound identities and detects duplicate or mismatched results', async () => {
+  configure();
+  const query = spyOn(deadline, 'queryWithPostgresDeadline').mockResolvedValue({ rows: [{ job: { jobId: 'job-1', status: 'running' } }] } as never);
+  try {
+    expect(await readSeniorQueuePostgresJob('job-1')).toEqual({ jobId: 'job-1', status: 'running' });
+    expect(query.mock.calls[0][1]).toContain("job->>'jobId' = $2 limit 2");
+    expect(query.mock.calls[0][2]).toEqual(['senior-developer-worker/queue.json', 'job-1']);
+    query.mockResolvedValue({ rows: [] } as never);
+    expect(await readSeniorQueuePostgresJob('missing')).toBeNull();
+    query.mockResolvedValue({ rows: [{ job: { jobId: 'other' } }] } as never);
+    await expect(readSeniorQueuePostgresJob('job-1')).rejects.toThrow('identity mismatch');
+    query.mockResolvedValue({ rows: [{ job: { jobId: 'job-1' } }, { job: { jobId: 'job-1' } }] } as never);
+    await expect(readSeniorQueuePostgresJob('job-1')).rejects.toThrow('Duplicate');
+    query.mockRejectedValue(new Error('deadline exceeded'));
+    await expect(readSeniorQueuePostgresJob('job-1')).rejects.toThrow('deadline exceeded');
+    expect(query).toHaveBeenCalledTimes(5);
+  } finally { query.mockRestore(); }
+});
+
+test('cross-project database bindings cannot serve a repair job', async () => {
+  configure();
+  process.env.SUPABASE_DB_URL = 'postgresql://postgres:test-only@db.otherproject.supabase.co:5432/postgres';
+  const query = spyOn(deadline, 'queryWithPostgresDeadline');
+  try {
+    await expect(readSeniorQueuePostgresJob('job-1')).rejects.toThrow('project_mismatch');
+    expect(query).not.toHaveBeenCalled();
+  } finally { query.mockRestore(); }
+});

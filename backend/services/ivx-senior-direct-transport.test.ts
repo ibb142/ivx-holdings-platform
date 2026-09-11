@@ -24,7 +24,11 @@ for (const mode of ['success', 'mutation_failure', 'event_failure']) {
               queries.push({ sql, values });
               if (sql.startsWith('select value ')) { assert.equal(values[0], 'senior-developer-worker/queue.json'); return { rows: [{ value: structuredClone(doc) }] }; }
               if (sql.includes('ivx_senior_queue_claim')) { assert.equal(values[0], 'job-1'); assert.equal(values[2], false); assert(sql.includes('$3::boolean')); return { rows: [{ result: { jobId: 'job-1', status: 'running' } }] }; }
-              if (sql.includes('ivx_senior_queue_patch')) { assert.equal(JSON.parse(values[0])[0].next.status, 'running'); return { rows: [{ result: doc }] }; }
+              if (sql.includes('ivx_senior_queue_patch_receipt')) {
+                const next = JSON.parse(values[0])[0].next;
+                assert.equal(next.status, 'running');
+                return { rows: [{ result: { kind: 'ivx-senior-patch-receipt-v1', updatedAt: '2026-09-11T00:00:00Z', jobs: [next], removedJobIds: [] } }] };
+              }
               if (sql.includes('ivx_senior_ledger_put') && ${JSON.stringify(mode)} === 'mutation_failure') throw Error('ambiguous direct failure');
               if (sql.startsWith('insert into public.ivx_durable_events') && ${JSON.stringify(mode)} === 'event_failure') throw Error('supplemental event unavailable');
               return { rows: [{ result: null }] };
