@@ -13,10 +13,22 @@ assert.match(sha || '', /^[a-f0-9]{40}$/);
 assert(password, 'Protected Owner password binding is missing');
 const checks = [];
 const samples = [];
+const transport = [];
+function recordTransport(value) {
+  transport.push({ observedAt:new Date().toISOString(), ...value });
+  if (transport.length > 60) transport.shift();
+}
 const output = 'qa/evidence/phase3';
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+let disconnected=false;
+const transports=new Set();
+await context.routeWebSocket('**/api/ivx/autonomous-dashboard-stream', socket=>{
+  if(disconnected){socket.close({code:1001,reason:'Network interruption proof'});return;}
+  const server=socket.connectToServer();
+  transports.add({socket,server});
+});
 const page = await context.newPage();
 page.setDefaultTimeout(45_000);
 let latest;
@@ -30,12 +42,27 @@ function observe(dashboard) {
   }
 }
 page.on('response', async response => {
-  if (response.url().startsWith(api + '/api/ivx/live-work/agents?') && response.ok()) {
-    try { observe((await response.json()).dashboard); } catch { /* No incomplete response is evidence. */ }
+  if (response.url().startsWith(api + '/api/ivx/live-work/agents?')) {
+    recordTransport({type:'dashboard_http',status:response.status()});
+    if (response.ok()) {
+      try {
+        const body=await response.json();
+        recordTransport({type:'dashboard_payload',ok:body.ok,sourceSha:body.dashboard?.backendCommitSha,
+          status:body.dashboard?.fleetSignals?.status,measuredAt:body.dashboard?.fleetSignals?.measuredAt});
+        observe(body.dashboard);
+      } catch { /* No incomplete response is evidence. */ }
+    }
   }
 });
+page.on('requestfailed', request => {
+  if (request.url().startsWith(api + '/api/ivx/live-work/agents?')) recordTransport({type:'dashboard_request_failed'});
+});
 page.on('websocket', socket => socket.on('framereceived', event => {
-  try { const message = JSON.parse(String(event.payload)); if (message.type === 'snapshot') observe(message.dashboard); } catch { /* Ignore transport control frames. */ }
+  try { const message = JSON.parse(String(event.payload)); if (message.type === 'snapshot') {
+    recordTransport({type:'dashboard_websocket_snapshot',sourceSha:message.dashboard?.backendCommitSha,
+      status:message.dashboard?.fleetSignals?.status,measuredAt:message.dashboard?.fleetSignals?.measuredAt});
+    observe(message.dashboard);
+  } } catch { /* Ignore transport control frames. */ }
 }));
 async function health() {
   const response = await fetch(api + '/health', { redirect: 'error', signal: AbortSignal.timeout(10_000) });
@@ -83,13 +110,27 @@ try {
   await page.getByTestId('login-password').fill(password);
   await page.getByTestId('login-submit').click();
   await page.waitForURL(url => !url.pathname.startsWith('/login'), { timeout: 60_000 });
+  await page.getByTestId('home-runtime-ready').waitFor({state:'visible'});
   checks.push('Real Owner password submitted through production login UI');
-  await page.goto(app + '/ivx/autonomous-ops', { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  // Cold launch deliberately signs out in the current app. Follow the actual
+  // in-app controls so the manually authenticated session stays in this app.
+  await page.getByTestId('tab-profile').click();
+  await page.getByText('Admin Panel', {exact:true}).click();
+  await page.getByTestId('admin-autonomous-live-work-btn').click();
+  await page.getByTestId('autonomous-control-ops').click();
+  await page.waitForURL(url => url.pathname === '/ivx/autonomous-ops');
+  checks.push('Owner reached Ops through Profile, Admin Panel and Autonomous Live Work controls');
   await capture('A');
+  disconnected=true;
   await context.setOffline(true);
+  // Existing WebSockets can survive Chromium's HTTP offline switch. Close the
+  // real transport as well; never fabricate snapshots or advance the clock.
+  for(const {socket,server} of transports){server.close();socket.close({code:1001,reason:'Network interruption proof'});}
+  transports.clear();
   await page.getByText('PRODUCTIVITY UNKNOWN', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
   assert((await page.getByTestId('fleet-independent-signals').innerText()).includes('UNKNOWN'));
   checks.push('Disconnected browser expires its last sample instead of displaying stale work as current');
+  disconnected=false;
   await context.setOffline(false);
   await page.getByText('PRODUCTIVITY UNKNOWN', { exact: true }).waitFor({ state: 'hidden', timeout: 60_000 });
   await capture('B');
@@ -99,7 +140,18 @@ try {
 } catch (error) {
   process.exitCode = 1;
   checks.push({ failed: error instanceof Error ? error.message.replaceAll(password, '[redacted]') : 'Browser proof failed' });
+  // Record only known UI states and transport metadata, never cookies, tokens,
+  // input values, the complete page text, or arbitrary response bodies.
+  const visibleState=await page.evaluate(()=>({path:location.pathname,
+    rows:document.querySelectorAll('[data-testid^="enterprise-agent-"]').length,
+    metrics:!!document.querySelector('[data-testid="fleet-independent-signals"]'),
+    signIn:!!document.querySelector('[data-testid="login-submit"]'),
+    labels:['PRODUCTIVITY UNKNOWN','QA OBSERVATIONS','Access denied','Loading secure session',
+      'Dashboard unavailable','Something went wrong','authenticated Autonomous telemetry'].filter(label=>document.body.innerText.includes(label))
+  })).catch(()=>({unavailable:true}));
+  checks.push({visibleState,transport,receivedMatchingSnapshots:recent.length});
 } finally {
+  disconnected=false;
   await context.setOffline(false).catch(() => {});
   await browser.close();
   const result = { item:'9.5', passed:!process.exitCode, sourceSha:sha, observedAt:new Date().toISOString(), checks, samples,
