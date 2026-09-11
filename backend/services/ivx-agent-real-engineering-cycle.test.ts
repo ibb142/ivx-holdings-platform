@@ -15,6 +15,7 @@ import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promise
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { resolveRepoRoot } from './ivx-agent-engineering-tools';
 import {
   createTask,
   finalizeEvidenceTask,
@@ -164,7 +165,7 @@ describe('112-agent durable task ownership', () => {
     expect(stored?.taskType).toBe('discovery');
     const proof = stored!.evidence.find((e) => e.evidenceType === 'source_file_inspected')!;
     expect(proof.commitSha).toBe(SHA1);
-    expect(proof.contentHash).toBe(createHash('sha256').update(await readFile(proof.source)).digest('hex'));
+    expect(proof.contentHash).toBe(createHash('sha256').update(await readFile(path.join(resolveRepoRoot(), proof.source))).digest('hex'));
   });
 
   it('durable rerun: same agent + same SHA returns ALREADY_VERIFIED with the real taskId', async () => {
