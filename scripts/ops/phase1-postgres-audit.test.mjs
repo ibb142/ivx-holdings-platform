@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { auditPostgres, readRuntimeConnection, PROJECT, SNAPSHOT } from './phase1-postgres-audit.mjs';
+import { auditPostgres, readRuntimeConnection, statementShape, PROJECT, SNAPSHOT } from './phase1-postgres-audit.mjs';
 const connection=`postgresql://postgres:synthetic-secret@db.${PROJECT}.supabase.co:5432/postgres?sslmode=verify-full`;
 const env={PROJECT_REF:PROJECT,SUPABASE_DB_URL:connection,GITHUB_SHA:'a'.repeat(40)};
 
@@ -53,7 +53,7 @@ test('fixed-target TLS probe is read-only, bounded and always closes',async()=>{
   }});
   assert.equal(r.ok,true);assert.equal(r.certified,false);assert.equal(ended,1);
   assert.match(queries[0],/^BEGIN READ ONLY/);assert.equal(queries.at(-1),'ROLLBACK');
-  assert.equal(queries.length,5);assert.ok(queries.slice(1,-1).every(q=>q.trim().startsWith('select ')));
+  assert.equal(queries.length,8);assert.ok(queries.slice(1,-1).every(q=>q.trim().startsWith('select ')));
   assert.equal(JSON.stringify(r).includes('synthetic-secret'),false);
 });
 test('lost connection response is redacted and never retries another credential',async()=>{
@@ -78,15 +78,29 @@ test('an unverified read-only state cannot pass the diagnostic',async()=>{
   assert.equal(r.ok,false);assert.equal(r.certified,false);
 });
 
-test('query statistics only interpolate an allowlisted catalog schema and never return SQL text',async()=>{
+test('query statistics use an allowlisted schema and never publish raw SQL',async()=>{
   for (const schema of ['extensions','foreign_schema; select secret']) {
     const queries=[];
     const r=await auditPostgres({env,makeClient:()=>({on:()=>{},connect:async()=>{},end:async()=>{},query:async sql=>{
-      queries.push(sql);return {rows:sql===SNAPSHOT?[{read_only:'on',statement_statistics_schema:schema}]:[]};
+      queries.push(sql);return {rows:sql===SNAPSHOT?[{read_only:'on',statement_statistics_schema:schema}]:
+        sql.includes('as query_text')?[{queryid:'1',query_text:"select 'synthetic-sensitive-literal' from private_table"}]:[]};
     }})});
     assert.equal(r.ok,true);
     assert.equal(queries.some(q=>q.includes('from extensions.pg_stat_statements')),schema==='extensions');
     assert.equal(queries.some(q=>q.includes('foreign_schema')),false);
     assert.equal(queries.some(q=>/select\s+query\s*[,\s]/i.test(q)),false);
+    assert.equal(JSON.stringify(r).includes('synthetic-sensitive-literal'),false);
+    assert.equal(JSON.stringify(r).includes('private_table'),false);
+    assert.equal(JSON.stringify(r).includes('query_text'),false);
   }
+});
+
+test('SQL structure hides literals, comments, unknown names and dollar-quoted bodies',()=>{
+  const sql=`SELECT "d".value FROM public.ivx_durable_documents AS d WHERE doc_key = 'secret''literal'
+    /* outer sensitive /* nested secret */ hidden */ AND "private_identifier" = $tag$secret_body$tag$
+    -- hidden line\n ORDER BY updated_at DESC LIMIT 100`;
+  const shape=statementShape(sql);
+  assert.match(shape,/from public \. ivx_durable_documents/);
+  assert.match(shape,/order by updated_at desc limit \?/);
+  for(const hidden of ['secret','sensitive','hidden','private_identifier','100'])assert.equal(shape.includes(hidden),false);
 });

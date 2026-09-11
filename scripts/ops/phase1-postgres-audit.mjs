@@ -8,6 +8,45 @@ const aliases = ['SUPABASE_DB_URL', 'DATABASE_URL', 'POSTGRES_URL', 'SUPABASE_PO
 const RUNTIME_SERVICE='srv-d7t9ivreo5us73ftose0';
 const RUNTIME_OWNER='tea-d7plj9beo5us73ch3ukg';
 
+// Keep only fixed SQL vocabulary; literals and unknown identifiers cannot reach
+// logs or artifacts, even if pg_stat_statements contains sensitive SQL.
+const sqlVocabulary=new Set(`select with from where as and or not null is in any all order by asc desc limit offset
+  insert into update delete set values on conflict do returning join left right inner outer cross lateral using
+  group having union distinct case when then else end for skip locked true false begin commit rollback
+  public count coalesce json_agg jsonb_agg jsonb_array_elements jsonb_build_object row_to_json to_json json_build_object
+  array_agg min max sum now statement_timestamp current_setting nullif set_config json_to_record json_to_recordset
+  jsonb_to_record jsonb_to_recordset pg_catalog text json jsonb integer bigint numeric timestamp timestamptz
+  ivx_durable_documents ivx_durable_events ivx_autonomous_tasks ivx_autonomous_task_events
+  ivx_autonomous_tasks_claim_batch ivx_autonomous_tasks_create_batch ivx_autonomous_tasks_start_batch
+  ivx_autonomous_tasks_heartbeat_batch ivx_autonomous_tasks_release_worker ivx_autonomous_task_compare_and_set
+  ivx_fleet_dashboard_observation ivx_work_evidence_hours ivx_senior_queue_patch ivx_senior_queue_claim
+  ivx_senior_ledger_put value doc_key payload state task_id idempotency_key assigned_agent_number updated_at
+  created_at lease_holder lease_expires_at worker_instance_id event_type event`.split(/\s+/));
+export function statementShape(sql) {
+  const tokens=[];const names=new Map();let i=0;
+  const identifier=word=>{const lower=word.toLowerCase();if(sqlVocabulary.has(lower))return lower;
+    if(!names.has(word))names.set(word,`identifier_${names.size+1}`);return names.get(word);};
+  while(i<sql.length && tokens.length<1800) {
+    const tail=sql.slice(i);let match;
+    if((match=/^\s+/.exec(tail))) {i+=match[0].length;continue;}
+    if(tail.startsWith('--')) {const end=sql.indexOf('\n',i+2);i=end<0?sql.length:end+1;continue;}
+    if(tail.startsWith('/*')) {let depth=1;i+=2;while(i<sql.length&&depth){if(sql.startsWith('/*',i)){depth++;i+=2;}
+      else if(sql.startsWith('*/',i)){depth--;i+=2;}else i++;}continue;}
+    if((match=/^\$(?:[A-Za-z_][A-Za-z_0-9]*)?\$/.exec(tail))) {
+      const end=sql.indexOf(match[0],i+match[0].length);i=end<0?sql.length:end+match[0].length;tokens.push('?');continue;}
+    if(tail[0]==="'" || tail[0]==='"') {
+      const quote=tail[0];let value='';i++;while(i<sql.length){if(sql[i]==='\\'){i+=2;continue;}
+        if(sql[i]===quote){if(sql[i+1]===quote){value+=quote;i+=2;continue;}i++;break;}value+=sql[i++];}
+      tokens.push(quote==='"'?identifier(value):'?');continue;
+    }
+    if((match=/^\$\d+|^\d+(?:\.\d+)?/.exec(tail))){i+=match[0].length;tokens.push('?');continue;}
+    if((match=/^[A-Za-z_][A-Za-z_0-9$]*/.exec(tail))){i+=match[0].length;tokens.push(identifier(match[0]));continue;}
+    if((match=/^(?:->>|->|::|<=|>=|<>|!=|[(),.*=+\-\/< >;\[\]])/.exec(tail))){i+=match[0].length;tokens.push(match[0]);continue;}
+    i++;tokens.push('?');
+  }
+  return tokens.join(' ');
+}
+
 export async function readRuntimeConnection(env,fetchImpl=fetch) {
   const key=(env.RENDER_API_KEY||env.IVX_RENDER_API_KEY||'').trim();
   const audit={credentialBinding:Boolean(key),serviceId:RUNTIME_SERVICE,requests:0};
@@ -113,14 +152,31 @@ export async function auditPostgres({ env=process.env, makeClient=config=>new pg
         when query ilike '%jv_deals%' then 'jv_deals' else 'other' end as query_family
       from pg_stat_activity where pid<>pg_backend_pid() and state='active'
       order by query_start asc limit 25;`],['queueEstimate',
-      "select reltuples::bigint as estimated_rows, pg_relation_size(oid) as heap_bytes, pg_total_relation_size(oid) as total_bytes from pg_class where oid=to_regclass('public.ivx_autonomous_tasks');"]];
+      "select reltuples::bigint as estimated_rows, pg_relation_size(oid) as heap_bytes, pg_total_relation_size(oid) as total_bytes from pg_class where oid=to_regclass('public.ivx_autonomous_tasks');"],
+      ['idleTransactions',`select application_name,state,usename,count(*)::integer as connections,
+        max(extract(epoch from clock_timestamp()-xact_start)) as max_transaction_seconds,
+        case when query ilike 'COMMIT%' then 'commit' when query ilike 'BEGIN%' then 'begin'
+          when query ilike 'SET%' then 'set' when query ilike '%ivx_durable_documents%' then 'durable_documents'
+          when query ilike '%ivx_autonomous_tasks%' then 'autonomous_tasks' else 'other' end as last_statement_family
+        from pg_stat_activity where state like 'idle in transaction%' and pid<>pg_backend_pid()
+        group by application_name,state,usename,last_statement_family limit 30;`],
+      ['tableStatistics',`select relname,n_live_tup,n_dead_tup,seq_scan,seq_tup_read,idx_scan,idx_tup_fetch,
+        n_tup_ins,n_tup_upd,n_tup_del,n_tup_hot_upd,last_autovacuum,last_autoanalyze,
+        pg_relation_size(relid) as heap_bytes,pg_total_relation_size(relid) as total_bytes
+        from pg_stat_user_tables where schemaname='public' and relname in
+        ('ivx_durable_documents','ivx_autonomous_tasks','ivx_autonomous_task_events','jv_deals');`],
+      ['indexes',`select t.relname as table_name,c.relname as index_name,i.indisvalid,i.indisready,
+        pg_get_indexdef(i.indexrelid) as definition from pg_index i join pg_class t on t.oid=i.indrelid
+        join pg_class c on c.oid=i.indexrelid where i.indrelid in
+        (to_regclass('public.ivx_autonomous_tasks'),to_regclass('public.ivx_durable_documents')) limit 40;`]];
     for (let index=0;index<measurements.length;index++) {
       const [name,query]=measurements[index];
       const start=elapsed();const result=await bounded(client.query(query),7000);
       if (!Array.isArray(result.rows) || (name==='metadata' && (result.rows.length!==1 || result.rows[0].read_only!=='on'))) {
         throw Error('Unexpected diagnostic shape');
       }
-      report.measurements.push({name,at:now(),elapsedMs:Math.round(elapsed()-start),rows:result.rows});
+      const rows=name==='statementShapes'?result.rows.map(({query_text,...row})=>({...row,shape:statementShape(query_text)})):result.rows;
+      report.measurements.push({name,at:now(),elapsedMs:Math.round(elapsed()-start),rows});
       if (name==='metadata') {
         const schema=result.rows[0].statement_statistics_schema;
         if (schema==='public' || schema==='extensions') measurements.push(['queryStatistics',`select queryid::text,calls,
@@ -134,6 +190,11 @@ export async function auditPostgres({ env=process.env, makeClient=config=>new pg
             when query ilike '%jv_deals%' then 'jv_deals' else 'other' end as query_family
           from ${schema}.pg_stat_statements where calls>0 order by total_exec_time desc limit 15;`]);
         else report.queryStatisticsUnavailable=true;
+        if(schema==='public'||schema==='extensions') measurements.push(['statementShapes',`select queryid::text,
+          left(query,16000) as query_text from ${schema}.pg_stat_statements where queryid in
+          (3268397091923167603,-2792327436087087644,-8967737368402977499,2523043091432368203,
+          -2303944876909706765,1156818850290747812,-7945457970706214271,4080096186774504574,
+          -5566853358085852722,1918250860910811350) limit 10;`]);
       }
     }
     report.ok=true;
