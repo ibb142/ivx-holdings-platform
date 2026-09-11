@@ -147,7 +147,9 @@ export type AcceptanceCriterion = {
   id: string;
   description: string;
   /** How this criterion is verified: 'code_diff' | 'test_pass' | 'http_200' | 'production_check' | 'evidence' | 'manual' */
-  verificationMethod: 'code_diff' | 'test_pass' | 'http_200' | 'production_check' | 'evidence' | 'manual';
+  verificationMethod: 'code_diff' | 'test_pass' | 'http_200' | 'production_check' | 'evidence' | 'manual' | 'source_file_inspected';
+  expectedSource?: string;
+  expectedCommitSha?: string;
   /** True when this criterion has been met with real evidence. */
   met: boolean;
   /** Evidence artifact supporting the claim (null when not yet met). */
@@ -976,7 +978,7 @@ export async function createTasksBatch(inputs: readonly CreateTaskInput[]): Prom
 async function transitionTaskStateUnlocked(
   taskId: string,
   toState: TaskState,
-  metadata?: { error?: string; blocker?: string; evidence?: TaskEvidence; filesChanged?: string[]; commitSha?: string; deploymentId?: string; approvalId?: string },
+  metadata?: { error?: string; blocker?: string; evidence?: TaskEvidence; filesChanged?: string[]; commitSha?: string; deploymentId?: string; approvalId?: string; workerId?: string },
 ): Promise<{ ok: boolean; task: Task | null; error: string | null }> {
   const tasks = await readAllTasks();
   const task = tasks.find((t) => t.taskId === taskId);
@@ -985,6 +987,7 @@ async function transitionTaskStateUnlocked(
   }
 
   const fromState = task.state;
+  const before = structuredClone(task);
 
   if (fromState === 'RETRYING' && (toState === 'QUEUED' || toState === 'RUNNING') && (!taskRetryDue(task) || toState === 'RUNNING')) {
     return { ok: false, task, error: 'Retry must become due and acquire a fresh queue lease.' };
@@ -1024,6 +1027,14 @@ async function transitionTaskStateUnlocked(
   if (TERMINAL_SUCCESS_STATES.includes(toState)) task.completedAt = nowIso();
   if (toState === 'FAILED') task.completedAt = nowIso();
 
+  if (toState === 'VERIFIED') {
+    const validation = validateCompletion(task);
+    if (validation.verdict !== 'VERIFIED') return { ok: false, task: before, error: validation.reason };
+    if (!metadata?.workerId || task.leaseHolder !== metadata.workerId || !(Date.parse(task.leaseExpiresAt ?? '') > Date.now())) {
+      return { ok: false, task: before, error: 'Verification requires the current unexpired worker lease.' };
+    }
+  }
+
   await writeAllTasks(tasks);
   await appendEvent({ type: 'state_transition', taskId, fromState, toState, error: metadata?.error, blocker: metadata?.blocker });
 
@@ -1033,7 +1044,7 @@ async function transitionTaskStateUnlocked(
 export async function transitionTaskState(
   taskId: string,
   toState: TaskState,
-  metadata?: { error?: string; blocker?: string; evidence?: TaskEvidence; filesChanged?: string[]; commitSha?: string; deploymentId?: string; approvalId?: string },
+  metadata?: { error?: string; blocker?: string; evidence?: TaskEvidence; filesChanged?: string[]; commitSha?: string; deploymentId?: string; approvalId?: string; workerId?: string },
 ): Promise<{ ok: boolean; task: Task | null; error: string | null }> {
   if (postgresAtomicQueueSelected()) {
     if (toState === 'LEASED') {
@@ -1047,6 +1058,7 @@ export async function transitionTaskState(
       const task = await readPostgresTaskById(taskId);
       if (!task) return { ok: false, task: null, error: `Task not found: ${taskId}` };
       const fromState = task.state;
+      const before = structuredClone(task);
       if (fromState === 'RETRYING' && (toState === 'QUEUED' || toState === 'RUNNING') && (!taskRetryDue(task) || toState === 'RUNNING')) {
         return { ok: false, task, error: 'Retry must become due and acquire a fresh queue lease.' };
       }
@@ -1071,7 +1083,15 @@ export async function transitionTaskState(
       if (toState === 'RUNNING') { task.attemptStartedAt = nowIso(); task.startedAt ??= task.attemptStartedAt; }
       if (toState === 'RETRYING' || fromState === 'BLOCKED' && toState === 'QUEUED') Object.assign(task, planTaskRetry(task));
       if (TERMINAL_SUCCESS_STATES.includes(toState) || toState === 'FAILED') task.completedAt = nowIso();
-      return compareAndSetPostgresAutonomousTask({ task, expectedStates: [fromState], eventType: 'state_transition' });
+      if (toState === 'VERIFIED') {
+        const validation = validateCompletion(task);
+        if (validation.verdict !== 'VERIFIED') return { ok: false, task: before, error: validation.reason };
+        if (!metadata?.workerId || task.leaseHolder !== metadata.workerId || !(Date.parse(task.leaseExpiresAt ?? '') > Date.now())) {
+          return { ok: false, task: before, error: 'Verification requires the current unexpired worker lease.' };
+        }
+      }
+      return compareAndSetPostgresAutonomousTask({ task, expectedStates: [fromState],
+        ...(toState === 'VERIFIED' ? { leaseHolder: metadata!.workerId } : {}), eventType: 'state_transition' });
     });
   }
   return withTaskMutationLock(() => transitionTaskStateUnlocked(taskId, toState, metadata));
@@ -1755,6 +1775,15 @@ export function validateCompletion(task: Task): ValidationResult {
     };
   }
 
+  for (const criterion of task.acceptanceCriteria) {
+    if (criterion.verificationMethod === 'source_file_inspected' && !task.evidence.some((evidence) =>
+      evidenceMeetsCriterion(evidence, criterion)
+      && Date.parse(evidence.createdAt) >= Date.parse(task.attemptStartedAt ?? task.startedAt ?? task.createdAt))) {
+      return { verdict: 'PARTIAL', reason: 'Fresh inspection evidence does not match the planned source and revision.',
+        unmetCriteria: [criterion.description], remainingRisks: [] };
+    }
+  }
+
   // Code task with no code diff cannot be VERIFIED (unless NO_ACTION_REQUIRED)
   if (task.taskType === 'development' && task.filesChanged.length === 0 && task.state === 'VERIFIED') {
     return {
@@ -1819,7 +1848,7 @@ export async function getTaskEngineSummary(): Promise<TaskEngineSummary> {
 
   const tasksWithEvidence = tasks.filter((t) => t.evidence.length > 0).length;
   const tasksInProgress = tasks.filter((t) => isTaskInProgress(t.state)).length;
-  const tasksCompleted = tasks.filter((t) => isTaskCompleted(t.state)).length;
+  const tasksCompleted = tasks.filter((t) => ['VERIFIED', 'NO_ACTION_REQUIRED'].includes(validateCompletion(t).verdict)).length;
   const tasksFailed = tasks.filter((t) => t.state === 'FAILED').length;
   const tasksBlocked = tasks.filter((t) => t.state === 'BLOCKED').length;
   const tasksWaitingForApproval = tasks.filter((t) => t.state === 'WAITING_FOR_APPROVAL').length;
@@ -2004,6 +2033,12 @@ export type FinalizeEvidenceTaskResult = {
 };
 
 function evidenceMeetsCriterion(evidence: TaskEvidence, criterion: AcceptanceCriterion): boolean {
+  if (criterion.verificationMethod === 'source_file_inspected') {
+    return evidence.evidenceType === 'source_file_inspected'
+      && Boolean(criterion.expectedSource) && evidence.source === criterion.expectedSource
+      && /^[a-f0-9]{40}$/i.test(criterion.expectedCommitSha ?? '') && evidence.commitSha === criterion.expectedCommitSha
+      && /^[a-f0-9]{64}$/i.test(evidence.contentHash);
+  }
   if (criterion.verificationMethod === 'evidence') return true;
   if (criterion.verificationMethod === 'test_pass') return evidence.evidenceType === 'test_result';
   if (criterion.verificationMethod === 'code_diff') return evidence.evidenceType === 'code_diff';
@@ -2029,6 +2064,9 @@ export async function finalizeEvidenceTask(input: FinalizeEvidenceTaskInput): Pr
       if (!task) return { ok: false, task: null, error: 'Task not found.', evidenceId: null, states: [] };
       if (task.leaseHolder !== input.workerId) {
         return { ok: false, task, error: 'Not the lease holder.', evidenceId: null, states: [] };
+      }
+      if (!(Date.parse(task.leaseExpiresAt ?? '') > Date.now())) {
+        return { ok: false, task, error: 'Worker lease expired.', evidenceId: null, states: [] };
       }
       if (task.state !== 'RUNNING') {
         return { ok: false, task, error: `Cannot finalize from state ${task.state}.`, evidenceId: null, states: [] };
@@ -2085,6 +2123,9 @@ export async function finalizeEvidenceTask(input: FinalizeEvidenceTaskInput): Pr
     if (!task) return { ok: false, task: null, error: 'Task not found.', evidenceId: null, states: [] };
     if (task.leaseHolder !== input.workerId) {
       return { ok: false, task, error: 'Not the lease holder.', evidenceId: null, states: [] };
+    }
+    if (!(Date.parse(task.leaseExpiresAt ?? '') > Date.now())) {
+      return { ok: false, task, error: 'Worker lease expired.', evidenceId: null, states: [] };
     }
     if (task.state !== 'RUNNING') {
       return { ok: false, task, error: `Cannot finalize from state ${task.state}.`, evidenceId: null, states: [] };
