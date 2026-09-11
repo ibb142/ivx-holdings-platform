@@ -11,7 +11,9 @@
  * GET  /api/ivx/owner-ai/incidents                 — recent 5xx incidents on the owner AI route
  */
 
-import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
+import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions, type IVXOwnerRequestContext } from './owner-only';
+import { IVX_OWNER_AI_ROOM_ID } from '../../expo/constants/ivx-owner-ai';
+import { ownerChatRequestKey, ownerChatRequestStore, reconcileOwnerChatRequest } from '../services/ivx-owner-chat-admission';
 import {
   enqueueOwnerAITask,
   getTask,
@@ -42,6 +44,7 @@ async function requireOwner(request: Request): Promise<Response | null> {
 }
 
 interface DurableTaskCreateBody {
+  primaryRequestId?: string;
   message?: string;
   prompt?: string;
   conversationId?: string | null;
@@ -94,11 +97,10 @@ function taskView(task: NonNullable<Awaited<ReturnType<typeof getTask>>>): Recor
 
 /** POST /api/ivx/owner-ai/tasks — persist first, return the task id immediately. */
 export async function handleOwnerAITaskCreate(request: Request): Promise<Response> {
-  const authFailure = await requireOwner(request);
-  if (authFailure) return authFailure;
-
-  if (!isTaskQueueConfigured()) {
-    return ownerOnlyJson({ ok: false, error: 'Durable task queue persistence is not configured in this runtime.' }, 503);
+  let owner: IVXOwnerRequestContext;
+  try { owner = await assertIVXOwnerOnly(request); } catch (error) {
+    const status = error instanceof Error && 'status' in error ? (error as { status: number }).status : 401;
+    return ownerOnlyJson({ ok: false, error: 'IVX owner authentication failed.' }, status);
   }
 
   let body: DurableTaskCreateBody;
@@ -111,6 +113,19 @@ export async function handleOwnerAITaskCreate(request: Request): Promise<Respons
   const prompt = (body.message ?? body.prompt ?? '').trim();
   if (!prompt) {
     return ownerOnlyJson({ ok: false, error: 'message is required.' }, 400);
+  }
+
+  // A lost primary response is not permission to invoke a second provider.
+  // Reuse the original receipt and expose it through the existing polling UI.
+  if (body.primaryRequestId !== undefined) {
+    if (typeof body.primaryRequestId !== 'string' || !body.primaryRequestId.trim() || body.primaryRequestId.length > 512) {
+      return ownerOnlyJson({ ok: false, error: 'Invalid primaryRequestId.' }, 400);
+    }
+    return originalChatRequestStatus(request, `owner-request:${body.primaryRequestId}`, owner);
+  }
+
+  if (!isTaskQueueConfigured()) {
+    return ownerOnlyJson({ ok: false, error: 'Durable task queue persistence is not configured in this runtime.' }, 503);
   }
 
   try {
@@ -142,11 +157,27 @@ export async function handleOwnerAITaskCreate(request: Request): Promise<Respons
 
 /** GET /api/ivx/owner-ai/tasks/:id */
 export async function handleOwnerAITaskStatus(request: Request, taskId: string): Promise<Response> {
+  if (taskId.startsWith('owner-request:')) return originalChatRequestStatus(request, taskId);
   const authFailure = await requireOwner(request);
   if (authFailure) return authFailure;
   const task = await getTask(taskId);
   if (!task) return ownerOnlyJson({ ok: false, error: 'Task not found.', taskId }, 404);
   return ownerOnlyJson({ ok: true, task: taskView(task) }, 200);
+}
+
+async function originalChatRequestStatus(request: Request, taskId: string, authenticatedOwner?: IVXOwnerRequestContext): Promise<Response> {
+  try {
+    const owner = authenticatedOwner ?? await assertIVXOwnerOnly(request);
+    const requestId = taskId.slice('owner-request:'.length);
+    const task = await reconcileOwnerChatRequest(ownerChatRequestStore(owner.client),
+      ownerChatRequestKey(owner.userId, IVX_OWNER_AI_ROOM_ID, requestId), taskId);
+    if (!task) return ownerOnlyJson({ ok: false, code: 'OWNER_CHAT_RECONCILIATION_REQUIRED', requestId,
+      error: 'La entrega original aún no puede confirmarse. Reintenta el mismo mensaje; no se creó otra ejecución.' }, 503);
+    return ownerOnlyJson({ ok: true, duplicate: true, task, poll: `/api/ivx/owner-ai/tasks/${encodeURIComponent(taskId)}` }, task.terminal ? 200 : 202);
+  } catch (error) {
+    const status = error instanceof Error && 'status' in error ? (error as { status: number }).status : 503;
+    return ownerOnlyJson({ ok: false, error: 'No se pudo consultar la solicitud original.', executionOutcome: 'unknown' }, status);
+  }
 }
 
 /** GET /api/ivx/owner-ai/tasks */

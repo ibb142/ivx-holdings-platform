@@ -1,6 +1,7 @@
 import { appendFile, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { ownerAIAuthUnavailableResponse } from './owner-ai-auth-unavailable';
+import { ownerChatFingerprint, ownerChatRequestKey, ownerChatRequestStore, runOwnerChatOnce } from '../services/ivx-owner-chat-admission';
 import path from 'node:path';
 import { checkPreExecutionGate } from '../services/ivx-pre-execution-gate-middleware';
 import { IVX_OWNER_AI_PROFILE, IVX_OWNER_AI_ROOM_ID, IVX_OWNER_AI_ROOM_SLUG } from '../../expo/constants/ivx-owner-ai';
@@ -4386,7 +4387,7 @@ async function upsertAIRequest(
   }
 
   const scopedClient = getScopedClient(client, tables.dbSchema);
-  const upsertResult = await scopedClient.from(tables.aiRequests).upsert({
+  const payload = {
     request_id: input.requestId,
     conversation_id: input.conversationId,
     user_id: input.userId,
@@ -4396,13 +4397,15 @@ async function upsertAIRequest(
     status: input.status,
     model: input.model,
     updated_at: nowIso(),
-  }, {
-    onConflict: 'request_id',
-  });
-
-  if (upsertResult.error) {
-    throw new Error(upsertResult.error.message);
-  }
+  };
+  // A global request-id conflict must never overwrite another owner or room.
+  const update = await scopedClient.from(tables.aiRequests).update(payload)
+    .eq('request_id', input.requestId).eq('user_id', input.userId)
+    .eq('conversation_id', input.conversationId).select('request_id');
+  if (update.error) throw new Error(update.error.message);
+  if (update.data?.length) return;
+  const insert = await scopedClient.from(tables.aiRequests).insert(payload);
+  if (insert.error) throw new Error(insert.error.message);
 }
 
 function buildLiveGroundingContext(): string {
@@ -6081,29 +6084,38 @@ async function buildLiveSeniorDeveloperProofAnswer(): Promise<string> {
 }
 
 async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Response> {
+  try {
+    const authRequest = new Request(request.url, { method: request.method, headers: request.headers });
+    const ownerContext = await assertIVXOwnerOnly(authRequest);
+    const parsed: unknown = await request.json().catch(() => null);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return ownerOnlyJson({ error: 'Invalid or empty JSON body.' }, 400);
+    }
+    const body = parsed as IVXOwnerAIRequest;
+    const requestId = readTrimmedString(body.requestId) || createRequestId();
+    if (!readTrimmedString(body.message) || requestId.length > 512) {
+      return ownerOnlyJson({ error: 'message and a valid request identity are required.' }, 400);
+    }
+    // Auth stays first. Both JSON and SSE enter this durable admission before
+    // planner, tools, worker handoff, provider or message writes can execute.
+    return await runOwnerChatOnce({
+      key: ownerChatRequestKey(ownerContext.userId, IVX_OWNER_AI_ROOM_ID, requestId),
+      requestId,
+      identity: { ownerId: ownerContext.userId, conversationId: IVX_OWNER_AI_ROOM_ID, requestId },
+      fingerprint: ownerChatFingerprint({ ...body, conversationId: IVX_OWNER_AI_ROOM_ID }),
+      store: ownerChatRequestStore(ownerContext.client),
+      execute: () => executeIVXOwnerAIRequestInternal(request, ownerContext, { ...body, requestId }),
+    });
+  } catch (error) {
+    const authUnavailable = ownerAIAuthUnavailableResponse(error, ownerOnlyJson);
+    if (authUnavailable) return authUnavailable;
+    return ownerOnlyJson({ ok: false, status: 'error', error: error instanceof Error ? error.message : 'Owner request unavailable.' }, getErrorStatus(error));
+  }
+}
+
+async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: IVXOwnerRequestContext, body: IVXOwnerAIRequest): Promise<Response> {
   const startedAt = Date.now();
   try {
-    const authRequest = new Request(request.url, {
-      method: request.method,
-      headers: request.headers,
-    });
-    // Auth check FIRST — never reveal validation errors to unauthenticated callers.
-    const ownerContext = await assertIVXOwnerOnly(authRequest);
-    // Block 22R fix: read the body once, defensively. Empty/invalid bodies
-    // (e.g. unauthenticated probes, double-consumed streams from upstream
-    // middleware) previously surfaced as `Invalid state: ReadableStream is
-    // locked` HTTP 500. We now coerce any read failure to a clean 400.
-    let body: IVXOwnerAIRequest;
-    try {
-      const parsed = await request.json().catch(() => null);
-      if (!parsed || typeof parsed !== 'object') {
-        return ownerOnlyJson({ error: 'Invalid or empty JSON body.' }, 400);
-      }
-      body = parsed as IVXOwnerAIRequest;
-    } catch (bodyError) {
-      console.log('[IVXOwnerAIBackend] Request body unreadable, returning 400:', bodyError instanceof Error ? bodyError.message : 'unknown');
-      return ownerOnlyJson({ error: 'Request body unreadable.' }, 400);
-    }
     const prompt = readTrimmedString(body.message);
     const mode = body.mode === 'command' ? 'command' : 'chat';
     // Persistence is ON by default for the owner conversation. The owner chat is a
@@ -7796,7 +7808,12 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     }
 
     const existingAIRequest = await safeFindAIRequestByRequestId(ownerContext.client, tables, requestId);
-    if (existingAIRequest?.status === 'completed' && existingAIRequest.response_text?.trim()) {
+    if (existingAIRequest && (existingAIRequest.user_id !== ownerContext.userId
+      || existingAIRequest.conversation_id !== conversation.id || existingAIRequest.prompt !== prompt)) {
+      return ownerOnlyJson({ ok: false, status: 'error', code: 'OWNER_CHAT_IDENTITY_CONFLICT', requestId,
+        error: 'This request identity is already bound to different content or ownership.' }, 409);
+    }
+    if (existingAIRequest?.user_id === ownerContext.userId && existingAIRequest.conversation_id === conversation.id && existingAIRequest.prompt === prompt && existingAIRequest.status === 'completed' && existingAIRequest.response_text?.trim()) {
       console.log('[IVXOwnerAIBackend] Idempotent replay hit existing completed request:', {
         requestId,
         conversationId: existingAIRequest.conversation_id,

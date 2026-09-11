@@ -27,6 +27,8 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun test scripts/ivx-fleet-ha-identities.test.ts
       - run: bun test backend/services/ivx-postgres-deadline.test.ts
+      - run: bun test backend/services/ivx-owner-chat-admission.test.ts
+      - run: bun test backend/api/ivx-owner-ai-reconciliation.test.ts
       - run: bun test backend/services/ivx-autonomous-scheduler.test.ts backend/services/ivx-technical-schedule.test.ts backend/services/ivx-landing-superseded-recovery.test.ts
       - run: bun test backend/services/ivx-coder-workspace.test.ts
       - run: bun test backend/ivx-final-closeout-resume.test.ts backend/services/ivx-native-intent.test.ts backend/services/ivx-fleet-dashboard-signals.test.ts backend/services/ivx-fleet-slo.test.ts backend/services/ivx-postgres-autonomous-task-store.test.ts backend/services/ivx-render-replicas.test.ts backend/services/ivx-shared-room-storage.test.ts backend/services/ivx-autonomous-control-policy.test.ts
@@ -35,6 +37,10 @@ jobs:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - name: Recover committed jobs with missing PR identity on PostgreSQL
         run: node scripts/ivx-senior-commit-recovery-postgres-proof.mjs
+        env:
+          IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
+      - name: Verify owner chat admission and response reconciliation on PostgreSQL
+        run: bun scripts/ivx-owner-chat-admission-postgres-proof.ts
         env:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - run: bun scripts/ivx-fleet-telemetry-postgres-proof.ts
@@ -56,5 +62,6 @@ jobs:
           path: |
             qa/evidence/fleet-ha/task-recovery.json
             qa/evidence/fleet-ha/senior-commit-recovery.json
+            qa/evidence/fleet-ha/owner-chat-admission.json
           if-no-files-found: warn
           retention-days: 30

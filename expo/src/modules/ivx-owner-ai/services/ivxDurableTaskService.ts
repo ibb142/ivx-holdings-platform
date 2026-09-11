@@ -130,6 +130,7 @@ export async function enqueueDurableOwnerAITask(input: {
   message: string;
   conversationId: string | null;
   messageId?: string | null;
+  primaryRequestId?: string;
   traceId?: string | null;
   idempotencyKey?: string | null;
 }): Promise<{ ok: boolean; task: DurableTaskView | null; duplicate: boolean; error: string | null }> {
@@ -143,6 +144,7 @@ export async function enqueueDurableOwnerAITask(input: {
         message: input.message,
         conversationId: input.conversationId,
         messageId: input.messageId ?? null,
+        primaryRequestId: input.primaryRequestId,
         traceId: input.traceId ?? null,
         idempotencyKey: input.idempotencyKey ?? null,
       }),
@@ -239,6 +241,7 @@ export async function runDurableOwnerAIFallback(input: {
   message: string;
   conversationId: string | null;
   messageId?: string | null;
+  primaryRequestId?: string;
   idempotencyKey?: string | null;
   traceId?: string | null;
   onStatus?: (task: DurableTaskView) => void;
@@ -249,7 +252,7 @@ export async function runDurableOwnerAIFallback(input: {
   }
   const final = await pollDurableTask(intake.task.taskId, { onStatus: input.onStatus });
   if (!final) {
-    return { ok: false, taskId: intake.task.taskId, status: 'UNKNOWN', checkpoint: null, answer: null, error: 'Task status unavailable — it keeps running server-side and will be restored on reopen.' };
+    return { ok: false, taskId: intake.task.taskId, status: 'UNKNOWN', checkpoint: null, answer: null, error: 'No se pudo confirmar el estado de la solicitud. Conservamos su identificador para consultarlo al reabrir.' };
   }
   const succeeded = (final.status === 'VERIFIED' || final.status === 'COMPLETED') && typeof final.answer === 'string' && final.answer.length > 0;
   return {

@@ -107,3 +107,31 @@ Twenty-four hours of success does not establish 365 days of availability.
 
 Default Data Vault coverage and documented RPO/RTO targets must be verified
 against the actual backup inventory. They are not evidence of a tested restore.
+# Owner request admission and reconciliation
+
+JSON and SSE owner requests reserve `owner-chat-requests/<sha256(owner,room,message)>`
+in the existing `ivx_durable_documents` table before invoking a planner, provider,
+tool or worker. The table must retain its existing service-role-only privileges.
+Admission uses an INSERT and a unique document key; it never replaces an existing
+reservation. A content fingerprint detects reuse of an identity for different input.
+Completion compares the invocation token and pending state before storing the exact
+HTTP/JSON result and its message/task links. A lost write acknowledgement is checked
+by reading that same key; it is not permission for a new provider call.
+
+The chat's transient-error recovery passes `primaryRequestId` to the durable endpoint.
+That endpoint only polls the original receipt and preserves its identifier across
+app reopen. Absence of a readable receipt is an unknown outcome, not proof that the
+primary request never ran. Standalone durable tasks remain a separate API.
+
+A crashed in-flight invocation is not automatically taken over after a time limit:
+the provider or a tool may already have executed. Such a receipt remains pending
+until its outcome can be reconciled. Recovery of that ambiguous crash, pre-upgrade
+in-flight requests, the public chat route, real owner auth and provider behavior
+across deployed replicas still require live evidence before certifying 16.3.
+
+Validation includes concurrent admissions, insert/completion acknowledgement loss,
+failure before admission, unavailable persistence, changed content, owner isolation,
+terminal replay, and preserved message links. The PostgreSQL proof uses two clients
+only against the explicit local `ivx_ha_test` database and is an additional CI step.
+An embedded PostgreSQL run does not prove separate production replicas or a restored
+backup. The request ledger is now part of the required 17.5 restoration inventory.

@@ -2847,17 +2847,18 @@ export default function IVXOwnerChatRoute() {
               console.log('[IVXOwnerChatRoute] durable_bubble_set_threw_safely_continuing:', bubbleErr instanceof Error ? bubbleErr.message : 'unknown');
             }
           };
-          updateDurableBubble(`♻️ Auto-recovery requested — waiting for the server to confirm that your task was saved.\nTrace: ${watchdogTraceId ?? 'n/a'}`);
+          updateDurableBubble(`Consultando el resultado de tu mensaje original.\nTrace: ${watchdogTraceId ?? 'n/a'}`);
           void (async () => {
             const durableResult = await runDurableOwnerAIFallback({
               message: text,
               conversationId: commandConversationId,
               messageId: requestId,
+              primaryRequestId: requestId,
               idempotencyKey: JSON.stringify([ownerId, commandConversationId, requestId]),
               traceId: watchdogTraceId ?? null,
               onStatus: (task) => {
                 if (task.terminal || task.status === 'COMPLETED') return;
-                updateDurableBubble(`♻️ Auto-recovery in progress — Task ${task.taskId}\nStatus: ${task.status} · Checkpoint: ${task.checkpoint} · Retries: ${task.retryCount}\nYour message is safe; no need to retype it.`);
+                updateDurableBubble(`Solicitud ${task.taskId}\nEstado: ${task.status}. Esperando confirmar el resultado original.`);
               }});
             if (durableResult.ok && durableResult.answer) {
               updateDurableBubble(durableResult.answer);
