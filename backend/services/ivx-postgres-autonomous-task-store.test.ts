@@ -426,7 +426,9 @@ for (const failure of [null, 'setup', 'read', 'commit', 'disconnect'] as const) 
       query: async (sql: string, values?: unknown[]) => {
         calls.push(sql);
         if (sql.startsWith('select payload')) {
-          expect(values).toEqual([['landing-p0:', 'landing-p0-repair:', 'landing-p0-patrol:'].map(prefix => `${prefix}${sha}:%`)]);
+          expect(values).toEqual(['landing-p0:', 'landing-p0-repair:', 'landing-p0-patrol:'].map(prefix => `${prefix}${sha}:%`));
+          expect(sql).toContain('(idempotency_key like $1 or idempotency_key like $2 or idempotency_key like $3)');
+          expect(sql).toContain('order by task_id limit 1000');
           if (failure === 'disconnect') client.emit('error', problem);
         }
         if ((failure === 'setup' && sql.startsWith('BEGIN'))
