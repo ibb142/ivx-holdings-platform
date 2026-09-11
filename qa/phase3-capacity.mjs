@@ -88,7 +88,8 @@ for (let index=0; index<2; index++) {
   assert.equal(health.commit,sha);
   const runtime = await get(api,'/api/ivx/owner-ai/runtime',process.env.IVX_SYSTEM_KEY,true);
   assert.equal(runtime.ok,true);
-  samples.push({observedAt:new Date().toISOString(),instanceId:health.instanceId,queue:runtime.queue,
+  samples.push({observedAt:new Date().toISOString(),healthInstanceId:health.instanceId,
+    runtimeInstanceId:null,instanceCorrelation:'Separate load-balanced requests; health cannot identify the runtime replica',queue:runtime.queue,
     calls:runtime.telemetry.recent.map(({id,createdAt,module,model,endpoint,completionTokens,totalTokens,latencyMs,retryCount,status,httpStatus,queueWaitMs})=>
       ({id,createdAt,module,model,endpoint,completionTokens,totalTokens,latencyMs,retryCount,status,httpStatus,queueWaitMs}))});
   result.samples=samples;

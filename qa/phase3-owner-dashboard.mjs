@@ -13,6 +13,11 @@ assert.match(sha || '', /^[a-f0-9]{40}$/);
 assert(password, 'Protected Owner password binding is missing');
 const checks = [];
 const samples = [];
+const transport = [];
+function recordTransport(value) {
+  transport.push({ observedAt:new Date().toISOString(), ...value });
+  if (transport.length > 60) transport.shift();
+}
 const output = 'qa/evidence/phase3';
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch();
@@ -37,12 +42,27 @@ function observe(dashboard) {
   }
 }
 page.on('response', async response => {
-  if (response.url().startsWith(api + '/api/ivx/live-work/agents?') && response.ok()) {
-    try { observe((await response.json()).dashboard); } catch { /* No incomplete response is evidence. */ }
+  if (response.url().startsWith(api + '/api/ivx/live-work/agents?')) {
+    recordTransport({type:'dashboard_http',status:response.status()});
+    if (response.ok()) {
+      try {
+        const body=await response.json();
+        recordTransport({type:'dashboard_payload',ok:body.ok,sourceSha:body.dashboard?.backendCommitSha,
+          status:body.dashboard?.fleetSignals?.status,measuredAt:body.dashboard?.fleetSignals?.measuredAt});
+        observe(body.dashboard);
+      } catch { /* No incomplete response is evidence. */ }
+    }
   }
 });
+page.on('requestfailed', request => {
+  if (request.url().startsWith(api + '/api/ivx/live-work/agents?')) recordTransport({type:'dashboard_request_failed'});
+});
 page.on('websocket', socket => socket.on('framereceived', event => {
-  try { const message = JSON.parse(String(event.payload)); if (message.type === 'snapshot') observe(message.dashboard); } catch { /* Ignore transport control frames. */ }
+  try { const message = JSON.parse(String(event.payload)); if (message.type === 'snapshot') {
+    recordTransport({type:'dashboard_websocket_snapshot',sourceSha:message.dashboard?.backendCommitSha,
+      status:message.dashboard?.fleetSignals?.status,measuredAt:message.dashboard?.fleetSignals?.measuredAt});
+    observe(message.dashboard);
+  } } catch { /* Ignore transport control frames. */ }
 }));
 async function health() {
   const response = await fetch(api + '/health', { redirect: 'error', signal: AbortSignal.timeout(10_000) });
@@ -112,6 +132,16 @@ try {
 } catch (error) {
   process.exitCode = 1;
   checks.push({ failed: error instanceof Error ? error.message.replaceAll(password, '[redacted]') : 'Browser proof failed' });
+  // Record only known UI states and transport metadata, never cookies, tokens,
+  // input values, the complete page text, or arbitrary response bodies.
+  const visibleState=await page.evaluate(()=>({path:location.pathname,
+    rows:document.querySelectorAll('[data-testid^="enterprise-agent-"]').length,
+    metrics:!!document.querySelector('[data-testid="fleet-independent-signals"]'),
+    signIn:!!document.querySelector('[data-testid="login-submit"]'),
+    labels:['PRODUCTIVITY UNKNOWN','QA OBSERVATIONS','Access denied','Loading secure session',
+      'Dashboard unavailable','Something went wrong','authenticated Autonomous telemetry'].filter(label=>document.body.innerText.includes(label))
+  })).catch(()=>({unavailable:true}));
+  checks.push({visibleState,transport,receivedMatchingSnapshots:recent.length});
 } finally {
   disconnected=false;
   await context.setOffline(false).catch(() => {});
