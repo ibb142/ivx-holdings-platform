@@ -309,16 +309,21 @@ const TESTS: TestDef[] = [
   {
     id: 'QA-AUTH-001',
     category: 'owner_auth',
-    name: 'Owner passwordless login works',
-    expected: 'accessToken returned from emergency login',
+    name: 'Owner credential recovery login works',
+    expected: 'Authenticated owner session returned for valid supplied credentials',
     fn: async () => {
       const skip = skipIfProductionDown();
       if (skip) return skip;
+      const email = process.env.IVX_QA_OWNER_EMAIL;
+      const password = process.env.IVX_QA_OWNER_PASSWORD;
+      if (!email || !password) {
+        return { actual: 'Owner test credentials are not configured; authenticated recovery was not executed', status: 'SKIP' as TestStatus, evidenceRef: 'owner-test-credentials-required' };
+      }
       try {
         const res = await fetchWithRetry(`${PRODUCTION_API}/api/ivx/owner-passwordless-login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: 'iperez4242@gmail.com', emergency: 'ivx_emergency_recovery' }),
+          body: JSON.stringify({ email, password, emergency: 'ivx_emergency_recovery' }),
         });
         if (res.status === 503) {
           const body = await res.json().catch(() => ({})) as Record<string, unknown>;
@@ -331,7 +336,7 @@ const TESTS: TestDef[] = [
         const token = String(d.accessToken || '');
         return {
           actual: `token length=${token.length}, success=${d.success}`,
-          status: token.length > 100 ? 'PASS' : 'FAIL',
+          status: res.ok && d.success === true && token.length > 100 ? 'PASS' : 'FAIL',
           evidenceRef: 'owner-login',
         };
       } catch (err) {
