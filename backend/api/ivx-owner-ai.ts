@@ -104,13 +104,12 @@ import { handleAppGeneratorChatRoute } from '../services/ivx-app-generator-chat-
 import { buildSeniorDeveloperExecutionAnswer, buildSeniorDeveloperWorkerJobAnswer } from '../services/ivx-senior-developer-answer-format';
 import { enforceDeveloperExecutionAnswer } from '../services/ivx-developer-execution-guard';
 import {
-  enqueueOrAttachSeniorDeveloperJob,
   getSeniorDeveloperJob,
   type IVXWorkerJob,
   type IVXWorkerJobInput,
 } from '../services/ivx-senior-developer-worker';
 import { recordApproval, type IVXSeniorDevApprovalAction } from '../services/ivx-senior-dev-proof';
-import { chatWorkerIdentity } from '../services/ivx-chat-worker-identity';
+import { enqueueOwnerChatWorkerJob } from '../services/ivx-owner-chat-worker';
 import {
   runSeniorDeveloperAutonomousMode,
   renderFinalAutonomousReport,
@@ -6351,7 +6350,6 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
 
       const workerInput: IVXWorkerJobInput = {
         goal,
-        ...chatWorkerIdentity(workerOwnerId, conversation.id, requestId),
         ownerApproved: true,
         approvePatch: autoExecuteEndToEnd,
         patchConfirmationText: autoExecuteEndToEnd ? IVX_SAFE_PATCH_CONFIRM_TEXT : undefined,
@@ -6416,7 +6414,7 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
         // Approval recording is non-fatal — the inline flags still enforce the gate.
       }
 
-      const { job: enqueuedJob } = await enqueueOrAttachSeniorDeveloperJob(workerInput);
+      const { job: enqueuedJob } = await enqueueOwnerChatWorkerJob(workerInput, conversation.id, requestId);
       const taskId = enqueuedJob.jobId;
       console.log('[IVXOwnerAIBackend] state-machine→developer-worker:', {
         taskId,
@@ -8445,7 +8443,7 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
         ownerId: workerOwnerId,
       };
 
-      const { job: enqueuedInspectionJob, attached: inspectionAttached, activeJobId: inspectionActiveJobId } = await enqueueOrAttachSeniorDeveloperJob(inspectionWorkerInput);
+      const { job: enqueuedInspectionJob, attached: inspectionAttached, activeJobId: inspectionActiveJobId } = await enqueueOwnerChatWorkerJob(inspectionWorkerInput, conversation.id, requestId);
       const inspectionTaskId = enqueuedInspectionJob.jobId;
       console.log('[IVXOwnerAIBackend] chat→worker (read-only inspection):', {
         taskId: inspectionTaskId,
@@ -8637,7 +8635,7 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
         ownerId: workerOwnerId,
       };
 
-      const { job: enqueuedQaJob, attached: qaAttached, activeJobId: qaActiveJobId } = await enqueueOrAttachSeniorDeveloperJob(qaOnlyWorkerInput);
+      const { job: enqueuedQaJob, attached: qaAttached, activeJobId: qaActiveJobId } = await enqueueOwnerChatWorkerJob(qaOnlyWorkerInput, conversation.id, requestId);
       const qaTaskId = enqueuedQaJob.jobId;
       console.log('[IVXOwnerAIBackend] chat→worker (qa-only):', {
         taskId: qaTaskId,
@@ -8907,7 +8905,7 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
         },
         ownerId: workerOwnerId,
       };
-      const { job: enqueuedFactoryJob, attached: factoryAttached, activeJobId: factoryActiveJobId } = await enqueueOrAttachSeniorDeveloperJob(factoryWorkerInput);
+      const { job: enqueuedFactoryJob, attached: factoryAttached, activeJobId: factoryActiveJobId } = await enqueueOwnerChatWorkerJob(factoryWorkerInput, conversation.id, requestId);
       const factoryTaskId = enqueuedFactoryJob.jobId;
       console.log('[IVXOwnerAIBackend] factory engine enqueue:', {
         taskId: factoryTaskId,
@@ -9086,7 +9084,7 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
         // Approval recording is non-fatal — the inline flags still enforce the gate.
       }
 
-      const { job: enqueuedAutonomousJob, attached: autonomousAttached, activeJobId: autonomousActiveJobId } = await enqueueOrAttachSeniorDeveloperJob(autonomousWorkerInput);
+      const { job: enqueuedAutonomousJob, attached: autonomousAttached, activeJobId: autonomousActiveJobId } = await enqueueOwnerChatWorkerJob(autonomousWorkerInput, conversation.id, requestId);
       const autonomousTaskId = enqueuedAutonomousJob.jobId;
       console.log('[IVXOwnerAIBackend] autonomous coder enqueue:', {
         taskId: autonomousTaskId,
@@ -9219,7 +9217,6 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
       const workerOwnerId = ownerContext.userId ?? 'owner';
       const workerInput: IVXWorkerJobInput = {
         goal: prompt,
-        ...chatWorkerIdentity(workerOwnerId, conversation.id, requestId),
         ownerApproved: true,
         approvePatch: autoExecuteEndToEnd,
         // The runtime's patch approval gate requires BOTH the boolean flag AND
@@ -9284,7 +9281,7 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
         // Approval recording is non-fatal — the inline flags still enforce the gate.
       }
 
-      const { job: enqueuedJob, attached, activeJobId } = await enqueueOrAttachSeniorDeveloperJob(workerInput);
+      const { job: enqueuedJob, attached, activeJobId } = await enqueueOwnerChatWorkerJob(workerInput, conversation.id, requestId);
       const taskId = enqueuedJob.jobId;
       console.log('[IVXOwnerAIBackend] chat→worker enqueue:', {
         taskId,
