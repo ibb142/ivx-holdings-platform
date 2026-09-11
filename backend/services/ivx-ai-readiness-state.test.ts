@@ -6,7 +6,8 @@ describe('AI readiness requires a successful provider observation', () => {
   let env: NodeJS.ProcessEnv;
   beforeEach(() => {
     env = { ...process.env };
-    process.env.IVX_OPENAI_API_KEY = 'sk-test-placeholder';
+    // Deliberately invalid local fixture; these state checks never call a provider.
+    process.env.IVX_OPENAI_API_KEY = 'sk-local-readiness-test';
     resetProviderStateMachine();
     initProviderStateMachine('openai', 'gpt-4o', true, true);
   });
