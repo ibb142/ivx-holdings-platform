@@ -40,15 +40,15 @@ for (const fails of [false, true]) test(`configured same-project queue selects o
     const m=await import(${JSON.stringify(new URL('./ivx-postgres-autonomous-task-store.ts', import.meta.url).pathname)});
     if(!m.preferDirectTransport())throw new Error('same project was not selected');
     if(m.preferDirectTransport({...process.env,SUPABASE_DB_URL:process.env.SUPABASE_DB_URL.replace('postgres.testproject','postgres.other')}))throw new Error('other project accepted');
-    for(const operation of [()=>m.readPostgresFleetLeaseRows(),()=>m.readPostgresCurrentTasks(['RUNNING']),()=>m.claimPostgresAutonomousTasks([{workerId:'agent:test',agentNumber:1}]),()=>m.compareAndSetPostgresAutonomousTask({task:{taskId:'test'},expectedStates:['RUNNING'],eventType:'verified'})]) {
+    for(const operation of [()=>m.readPostgresFleetLeaseRows(),()=>m.readPostgresCurrentTasks(['RUNNING']),()=>m.readPostgresLandingTasks('a'.repeat(40)),()=>m.claimPostgresAutonomousTasks([{workerId:'agent:test',agentNumber:1}]),()=>m.compareAndSetPostgresAutonomousTask({task:{taskId:'test'},expectedStates:['RUNNING'],eventType:'verified'})]) {
       let failed=false;
       try {await operation();}catch(e){if(!String(e).includes('ambiguous direct failure'))throw e;failed=true;}
       if(failed!==${fails})throw new Error('incorrect failure result');
     }
-    if(restCalls!==0 || queries!==4)throw new Error('transport replay or unexpected call count');
+    if(restCalls!==0 || queries!==5)throw new Error('transport replay or unexpected call count');
     const setups=boundaries.filter(x=>x.startsWith('BEGIN;'));
-    if(releases!==2 || setups.length!==2 || setups.some(x=>!x.includes("SET LOCAL statement_timeout = '4s'") || !x.includes("SET LOCAL lock_timeout = '2s'") || !x.includes("SET LOCAL idle_in_transaction_session_timeout = '8s'")))throw new Error('bounded RPC transaction missing');
-    if(boundaries.filter(x=>x==='${fails ? 'ROLLBACK' : 'COMMIT'}').length!==2)throw new Error('incorrect transaction cleanup');
+    if(releases!==3 || setups.length!==3 || setups.some(x=>!x.includes("SET LOCAL statement_timeout = '4s'") || !x.includes("SET LOCAL lock_timeout = '2s'") || !x.includes("SET LOCAL idle_in_transaction_session_timeout = '8s'")))throw new Error('bounded transaction missing for Landing read or RPC');
+    if(boundaries.filter(x=>x==='${fails ? 'ROLLBACK' : 'COMMIT'}').length!==3)throw new Error('incorrect transaction cleanup');
   `], {stdout:'pipe',stderr:'pipe',timeout:10000});
   const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
   expect(stderr).toBe('');
