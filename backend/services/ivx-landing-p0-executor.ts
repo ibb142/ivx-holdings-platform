@@ -52,6 +52,8 @@ export type LandingEvidenceObject = {
   workstream: string;
   started_at: string;
   completed_at: string;
+  source_observed_at: string | null;
+  activity: { category: 'qa'; active_seconds: number; waiting_seconds: number };
   productive_seconds: number;
   repo_sha_before: string;
   repo_sha_after: string;
@@ -80,7 +82,7 @@ type Probe = { ok: boolean; status: number; ms: number; bytes: number; contentTy
 
 type Verdict = { status: 'PASS' | 'FAIL' | 'BLOCKED'; detail: string; blockedReason?: string; rootCause?: LandingDefect['root_cause']; remediation?: string };
 
-type Collector = { api: string[]; browser: string[]; files: string[]; evidence: string[]; limiterWaitMs: number };
+type Collector = { api: string[]; browser: string[]; files: string[]; evidence: string[]; limiterWaitMs: number; sourceObservedAt: string | null };
 
 const FETCH_TIMEOUT_MS = 12_000;
 const MEDIA_CONCURRENCY = 6;
@@ -103,7 +105,7 @@ export const SECRET_PATTERNS: ReadonlyArray<{ code: string; pattern: RegExp }> =
 // ── Utilities ────────────────────────────────────────────────────────────────
 
 function nowIso(): string {
-  return new Date().toISOString();
+  return new Date(Date.now()).toISOString();
 }
 
 function truncate(text: string, max = 160): string {
@@ -158,7 +160,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
   return results;
 }
 
-// Shared in-process caches (all 112 agents run in one API process).
+// Shared within each worker process; identity count does not imply process count.
 const cache = new Map<string, { expiresAt: number; value: Promise<unknown> }>();
 function cached<T>(key: string, ttlMs: number, loader: () => Promise<T>): Promise<T> {
   const hit = cache.get(key);
@@ -166,7 +168,7 @@ function cached<T>(key: string, ttlMs: number, loader: () => Promise<T>): Promis
   if (hit && hit.expiresAt > now) return hit.value as Promise<T>;
   const value = loader();
   cache.set(key, { expiresAt: now + ttlMs, value });
-  value.catch(() => cache.delete(key));
+  value.catch(() => { if (cache.get(key)?.value === value) cache.delete(key); });
   return value;
 }
 
@@ -180,21 +182,20 @@ export function __resetLandingExecutorCachesForTests(): void {
 // owner-login 3 burst) must never turn a real probe into a 429 false alarm.
 const limiterChains = new Map<string, { tail: Promise<void>; nextAt: number }>();
 async function routeBudget(family: string, minIntervalMs: number): Promise<number> {
+  const queuedAt = Date.now();
   const entry = limiterChains.get(family) ?? { tail: Promise.resolve(), nextAt: 0 };
-  let waited = 0;
   const run = entry.tail.then(async () => {
     const now = Date.now();
     const delay = Math.max(0, entry.nextAt - now);
     entry.nextAt = Math.max(now, entry.nextAt) + minIntervalMs;
     if (delay > 0) {
-      waited = delay;
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   });
   entry.tail = run.catch(() => undefined);
   limiterChains.set(family, entry);
   await run;
-  return waited;
+  return Math.max(0, Date.now() - queuedAt);
 }
 
 // ── HTML helpers (regex-based; no DOM library in the API image) ──────────────
@@ -320,20 +321,21 @@ function loadReels(fetchImpl: typeof fetch): Promise<{ probe: Probe; reels: Deal
 }
 
 type CiRun = { id: number; name: string; status: string; conclusion: string | null; html_url: string; head_sha: string; updated_at: string };
-type CiRuns = { runs: CiRun[]; blocked: string | null };
+type CiRuns = { runs: CiRun[]; blocked: string | null; observedAt: string };
 
 function loadCiRuns(fetchImpl: typeof fetch, sha: string): Promise<CiRuns> {
-  return cached(`ci-runs:${sha}`, CACHE_5M, async () => {
+  return cached(`ci-runs:${sha}`, CACHE_60S, async () => {
+    const observedAt = nowIso();
     const result = await probe((() => fetchLandingGitHubRead(`actions/runs?head_sha=${sha}&per_page=100`, fetchImpl)) as typeof fetch, `https://api.github.com/repos/${LANDING_REPO}/actions/runs`);
     if (result.status === 403 || result.status === 429) {
       const reset = result.headers?.get('x-ratelimit-reset');
       const resetMs = Number.parseInt(reset ?? '', 10) * 1000;
       const resetIso = Number.isFinite(resetMs) ? new Date(resetMs).toISOString() : 'unknown';
-      return { runs: [], blocked: `GitHub API access/rate limit (${result.status}; resets ${resetIso})` };
+      return { runs: [], observedAt, blocked: `GitHub API access/rate limit (${result.status}; resets ${resetIso})` };
     }
-    if (!result.ok) return { runs: [], blocked: `GitHub API HTTP ${result.status || result.error}` };
+    if (!result.ok) return { runs: [], observedAt, blocked: `GitHub API HTTP ${result.status || result.error}` };
     const body = parseJson(result.text) as { workflow_runs?: CiRun[] } | undefined;
-    return { runs: Array.isArray(body?.workflow_runs) ? body!.workflow_runs : [], blocked: null };
+    return { runs: Array.isArray(body?.workflow_runs) ? body!.workflow_runs : [], observedAt, blocked: null };
   });
 }
 
@@ -992,7 +994,9 @@ async function runPerf(fetchImpl: typeof fetch, base: 'landing' | 'api', path: s
 }
 
 async function runCi(fetchImpl: typeof fetch, workflow: string, check: string, productionSha: string, c: Collector): Promise<Verdict> {
-  const { runs, blocked: blockedReason } = await loadCiRuns(fetchImpl, productionSha);
+  const { runs, blocked: blockedReason, observedAt } = await loadCiRuns(fetchImpl, productionSha);
+  c.sourceObservedAt = observedAt;
+  c.evidence.push(`CI source observed at ${observedAt}; cache max age 60s`);
   c.browser.push(`${workflow} :: ${check} @ ${productionSha.slice(0, 9)}`);
   if (blockedReason) return blocked(blockedReason);
   const matching = runs.filter((run) => run.name === workflow && run.head_sha === productionSha).sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
@@ -1001,11 +1005,14 @@ async function runCi(fetchImpl: typeof fetch, workflow: string, check: string, p
   c.evidence.push(`workflow_run_id=${latest.id} ${latest.html_url} status=${latest.status} conclusion=${latest.conclusion ?? '-'}`);
   if (workflow === 'IVX Landing 19 QA') {
     const jobs = await cached(`ci-jobs:${latest.id}:${latest.updated_at}`, CACHE_60S, async () => {
+      const observedAt = nowIso();
       const response = await fetchLandingGitHubRead(`actions/runs/${latest.id}/jobs?per_page=100`, fetchImpl);
       if (!response.ok) return null;
-      return await response.json() as { jobs?: Array<{ id: number; head_sha: string; html_url: string; steps?: Array<{ name: string; status: string; conclusion: string | null }> }> };
+      const body = await response.json() as { jobs?: Array<{ id: number; head_sha: string; html_url: string; steps?: Array<{ name: string; status: string; conclusion: string | null }> }> };
+      return { ...body, observedAt };
     });
     if (!jobs?.jobs) return blocked('Cannot read per-unit CI evidence');
+    if (Date.parse(jobs.observedAt) < Date.parse(observedAt)) c.sourceObservedAt = jobs.observedAt;
     const matches = jobs.jobs.flatMap((job) => job.head_sha === productionSha
       ? (job.steps ?? []).filter((step) => step.name === check).map((step) => ({ job, step })) : []);
     if (matches.length !== 1) return blocked(`Expected one exact-SHA step named ${check}; found ${matches.length}`);
@@ -1056,9 +1063,9 @@ async function runCertificate(fetchImpl: typeof fetch, productionSha: string, c:
 
 export async function executeLandingUnit(unit: LandingUnit, ctx: LandingExecutionContext, deps: ExecutorDeps = {}): Promise<LandingUnitExecution> {
   const fetchImpl = deps.fetchImpl ?? fetch;
-  const startedAt = nowIso();
   const startedMs = Date.now();
-  const c: Collector = { api: [], browser: [], files: [], evidence: [], limiterWaitMs: 0 };
+  const startedAt = new Date(startedMs).toISOString();
+  const c: Collector = { api: [], browser: [], files: [], evidence: [], limiterWaitMs: 0, sourceObservedAt: null };
   let verdict: Verdict;
   try {
     const check = unit.check;
@@ -1081,8 +1088,12 @@ export async function executeLandingUnit(unit: LandingUnit, ctx: LandingExecutio
   } catch (error) {
     verdict = fail(`executor exception: ${error instanceof Error ? error.message : String(error)}`, 'unknown', 'inspect executor logs');
   }
-  const completedAt = nowIso();
-  const productiveSeconds = Math.max(0, Math.round(((Date.now() - startedMs - c.limiterWaitMs) / 1000) * 10) / 10);
+  const completedMs = Date.now();
+  const completedAt = new Date(completedMs).toISOString();
+  const elapsedMs = Math.max(0, completedMs - startedMs);
+  const waitingMs = Math.min(elapsedMs, Math.max(0, c.limiterWaitMs));
+  const productiveSeconds = (elapsedMs - waitingMs) / 1000;
+  const activity = { category: 'qa' as const, active_seconds: productiveSeconds, waiting_seconds: waitingMs / 1000 };
   const defectCode = unit.unitId.replace(/[^a-z0-9.-]/gi, '_');
   const bugs: LandingDefect[] = verdict.status === 'FAIL'
     ? [{ code: defectCode, severity: unit.severity, detail: truncate(verdict.detail, 300), root_cause: verdict.rootCause ?? 'unknown', remediation: truncate(verdict.remediation ?? 'investigate', 200) }]
@@ -1097,6 +1108,8 @@ export async function executeLandingUnit(unit: LandingUnit, ctx: LandingExecutio
     status: verdict.status,
     started_at: startedAt,
     completed_at: completedAt,
+    source_observed_at: c.sourceObservedAt,
+    activity,
     productive_seconds: productiveSeconds,
     production_sha: ctx.productionSha,
     api_checks: c.api.length,
@@ -1116,6 +1129,8 @@ export async function executeLandingUnit(unit: LandingUnit, ctx: LandingExecutio
     workstream: unit.workstream,
     started_at: startedAt,
     completed_at: completedAt,
+    source_observed_at: c.sourceObservedAt,
+    activity,
     productive_seconds: productiveSeconds,
     repo_sha_before: ctx.sourceSha,
     repo_sha_after: ctx.sourceSha,

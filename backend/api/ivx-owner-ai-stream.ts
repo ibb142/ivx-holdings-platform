@@ -14,6 +14,7 @@
 import { computeAdaptiveTimeoutMs, streamIVXAIText } from '../ivx-ai-runtime';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions, type IVXOwnerRequestContext } from './owner-only';
 import { IVX_OWNER_AI_ROOM_ID } from '../../expo/constants/ivx-owner-ai';
+import { ownerRuntimeEvidenceHeaders } from '../services/ivx-owner-runtime-evidence';
 import { ownerChatFingerprint, ownerChatRequestKey, ownerChatRequestStore, runOwnerChatOnce } from '../services/ivx-owner-chat-admission';
 
 function readTrimmed(value: unknown): string {
@@ -131,6 +132,7 @@ export async function handleIVXOwnerAIStreamRequest(request: Request): Promise<R
 
   return new Response(stream, {
     headers: {
+      ...ownerRuntimeEvidenceHeaders(),
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-store, no-transform',
       Connection: 'keep-alive',

@@ -13,6 +13,8 @@
  * the queue is contended.
  */
 
+import { configuredAdmissionLimit } from './ivx-fleet-admission-policy';
+
 type QueuePool = {
   name: 'short' | 'long';
   maxConcurrent: number;
@@ -22,14 +24,14 @@ type QueuePool = {
 
 const shortPool: QueuePool = {
   name: 'short',
-  maxConcurrent: Number.parseInt(process.env.IVX_AI_SHORT_POOL_MAX ?? '8', 10) || 8,
+  maxConcurrent: configuredAdmissionLimit(process.env.IVX_AI_SHORT_POOL_MAX, 8),
   active: 0,
   waiters: [],
 };
 
 const longPool: QueuePool = {
   name: 'long',
-  maxConcurrent: Number.parseInt(process.env.IVX_AI_LONG_POOL_MAX ?? '2', 10) || 2,
+  maxConcurrent: configuredAdmissionLimit(process.env.IVX_AI_LONG_POOL_MAX, 2),
   active: 0,
   waiters: [],
 };
@@ -48,6 +50,7 @@ const MAX_WAITERS = 112;
 
 function acquire(pool: QueuePool, options: IVXAIQueueOptions): Promise<void> {
   if (options.signal?.aborted) return Promise.reject(options.signal.reason ?? new Error('AI request cancelled'));
+  if (pool.maxConcurrent === 0) return Promise.reject(new Error('AI pool admission disabled by configured capacity'));
   if (pool.active < pool.maxConcurrent) {
     pool.active += 1;
     return Promise.resolve();
@@ -115,10 +118,12 @@ export async function acquireAIQueueSlot(lane: IVXAIQueueLane, options: IVXAIQue
 }
 
 export function getAIQueueSnapshot(): {
+  scope: 'process'; maxWaitingPerLane: number;
   short: { active: number; waiting: number; maxConcurrent: number };
   long: { active: number; waiting: number; maxConcurrent: number };
 } {
   return {
+    scope: 'process', maxWaitingPerLane: MAX_WAITERS,
     short: { active: shortPool.active, waiting: shortPool.waiters.length, maxConcurrent: shortPool.maxConcurrent },
     long: { active: longPool.active, waiting: longPool.waiters.length, maxConcurrent: longPool.maxConcurrent },
   };

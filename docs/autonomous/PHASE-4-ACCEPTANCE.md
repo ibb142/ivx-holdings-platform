@@ -24,6 +24,20 @@ It does not certify cross-replica provider deduplication, replay after terminal
 history retention, or durable chat persistence during a production DB outage.
 Those remain separate live acceptance checks.
 
+`scripts/ivx-owner-chat-live-proof.mjs` supplies an additional post-deploy check.
+It uses the existing owner CI credentials for a real password grant and verifies
+the issued identity and protected owner gate. It races two identical requests,
+requires one original response, checks exact receipt replay from two distinct
+API processes, rejects changed content under the same ID, and accepts a new ID
+for equal text. It also verifies canonical SSE replay and a real direct stream
+with durable terminal replay. Each response must report the exact tested commit;
+an opaque process identity distinguishes the serving replica without exposing
+its hostname. Missing second-replica coverage is a failed check, not a pass.
+
+This workflow runs after main deployment and archives a scoped proof. It does
+not certify app history, a process restart, public chat, worker execution, a
+restored backup or the complete phase. Those checks remain independently required.
+
 The app threads its per-message client ID through primary transport retries and
 durable intake. A new message with equal text must retain a distinct ID. Direct
 worker submissions carry the conversation and source message; a 409 attachment

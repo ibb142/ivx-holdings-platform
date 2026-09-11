@@ -26,7 +26,8 @@ import {
   getAutonomousSemantic360Status,
   runAutonomousSemantic360,
 } from './ivx-autonomous-semantic-360';
-import { autonomousRuntimeEnforcerEnabled } from './ivx-autonomous-control-policy';
+import { autonomousRuntimeEnforcerEnabled, autonomousContinuityCapacity } from './ivx-autonomous-control-policy';
+import { createFleetAdmissionRotation } from './ivx-fleet-admission-policy';
 import {
   postgresAtomicQueueSelected,
   autonomousWorkerInstanceId,
@@ -66,6 +67,7 @@ let heartbeatRefreshInFlight: Promise<void> | null = null;
 let refillInFlight: Promise<void> | null = null;
 const refillBackoff = new RefillBackoff();
 const emptyClaimCooldown = createEmptyClaimCooldown(IVX_AUTONOMOUS_REFILL_INTERVAL_MS);
+const selectAdmissionCandidates = createFleetAdmissionRotation();
 let startedAt: string | null = null;
 let lastRunAt: string | null = null;
 let lastOk: boolean | null = null;
@@ -113,15 +115,12 @@ function refillDelayMs(outcome: ContinuityOutcome): number {
 }
 
 /**
- * The IVX production fleet is exactly 112 logical execution lanes. Capacity is
- * a runtime invariant, not a tuning default. An absent, malformed, or lower
- * environment value must never silently downgrade the fleet to 12 (or any other
- * partial count). Pause/stop/disable controls remain the explicit mechanisms for
- * intentionally reducing work.
+ * Keep all 112 identities registered while admitting only configured capacity.
+ * Zero or invalid configuration prevents new admission; owner controls still
+ * determine which identities are eligible, and existing work can drain.
  */
 export function getContinuityMaxConcurrency(): number {
-  const configured = Number.parseInt(process.env.IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY ?? '', 10);
-  return configured === IVX_AUTONOMOUS_FLEET_SIZE ? configured : IVX_AUTONOMOUS_FLEET_SIZE;
+  return autonomousContinuityCapacity();
 }
 
 export function classifyContinuityResult(result: { ok: boolean; action: string; taskId: string | null; states: string[]; evidenceIds?: string[] }): ContinuityOutcome {
@@ -364,10 +363,9 @@ function refillAllAvailableAgents(
     const remainingCapacity = getContinuityMaxConcurrency() - continuityRuns.size;
     if (remainingCapacity <= 0) return;
     const claimScope = `${requestedSourceSha}:${requestedLandingMission}`;
-    const candidates = getAllExecutionStates()
+    const candidates = selectAdmissionCandidates(getAllExecutionStates()
       .filter((state) => state.agentNumber != null && canRunContinuity(state.agentId))
-      .filter((state) => emptyClaimCooldown.canClaim(`agent:${state.agentId}`, claimScope))
-      .slice(0, remainingCapacity);
+      .filter((state) => emptyClaimCooldown.canClaim(`agent:${state.agentId}`, claimScope)), remainingCapacity);
     if (candidates.length === 0) return;
 
     if ((process.env.IVX_SUPABASE_RECOVERY_MODE ?? '').toLowerCase() !== 'true') {

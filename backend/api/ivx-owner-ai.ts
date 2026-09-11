@@ -1,4 +1,5 @@
 import { buildOwnerTextModelInput } from '../services/ivx-owner-text-prompt';
+import { ownerRuntimeEvidenceHeaders } from '../services/ivx-owner-runtime-evidence';
 import { appendFile, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { ownerAIAuthUnavailableResponse } from './owner-ai-auth-unavailable';
@@ -5826,7 +5827,9 @@ export async function handleIVXOwnerAIRequest(request: Request): Promise<Respons
   const acceptHeader = (request.headers.get('accept') ?? '').toLowerCase();
   const wantsSSE = acceptHeader.includes('text/event-stream');
   if (wantsSSE) {
-    return handleIVXOwnerAIRequestSSE(request, auditAuthRequest, startedAt);
+    const streamed = await handleIVXOwnerAIRequestSSE(request, auditAuthRequest, startedAt);
+    for (const [key, value] of Object.entries(ownerRuntimeEvidenceHeaders())) streamed.headers.set(key, value);
+    return streamed;
   }
 
   // JSON path: hard ceiling so a stuck planner/AI gateway can never hold the
@@ -5852,6 +5855,7 @@ export async function handleIVXOwnerAIRequest(request: Request): Promise<Respons
   );
 
   // Phase 4c — fire-and-forget audit log to public.ai_usage_logs. Never blocks.
+  for (const [key, value] of Object.entries(ownerRuntimeEvidenceHeaders())) response.headers.set(key, value);
   // Do not clone/read the request body here; the owner chat handler consumes it once.
   void (async () => {
     let requestId: string | null = null;
