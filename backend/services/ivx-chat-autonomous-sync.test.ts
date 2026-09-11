@@ -1,7 +1,9 @@
 /**
  * SYNC TEST — IVX IA Chat Room ⇄ Senior Developer Autonomous Mode
  *
- * Proves the two surfaces are 100% synced: the same owner task routed through
+ * Unit coverage for the report contract shared by the two surfaces. This does
+ * not certify authenticated HTTP delivery, persistence, or live deployment.
+ * The same owner task routed through
  * the IVX IA chat room (`/api/ivx/owner-ai` → self_developer / self_improvement)
  * and through the dedicated autonomous-mode endpoint
  * (`/api/ivx/senior-developer/autonomous-mode/run`) produce IDENTICAL
@@ -39,53 +41,40 @@ const SAFE_EXECUTOR = async (task: string): Promise<never> => {
  * Simulates what the chat room does: run the autonomous pipeline, render the
  * strict report, and append it to the answer. Returns the parsed report block.
  */
-function simulateChatRoomAutonomousSync(prompt: string): {
+async function simulateChatRoomAutonomousSync(prompt: string): Promise<{
   report: FinalAutonomousReport;
   renderedBlock: string;
-} {
+}> {
   // The chat room calls runSeniorDeveloperAutonomousMode(prompt, { conversationId }).
   // We replicate that call deterministically with a fake executor so no real
   // filesystem/network/AI runs.
-  // NOTE: this is a sync wrapper — the real chat room awaits the promise.
-  const reportPromise = runSeniorDeveloperAutonomousMode(prompt, {
+  // Await the actual router result; never substitute a hand-written report.
+  const report = await runSeniorDeveloperAutonomousMode(prompt, {
     executor: SAFE_EXECUTOR,
+    credentialStatuses: { GITHUB_TOKEN: 'present', RENDER_API_KEY: 'present' },
     taskId: 'sync-test-deterministic',
   });
   return {
-    report: {
-      TASK_ID: 'sync-test-deterministic',
-      STATE: 'FAILED',
-      ROOT_CAUSE: 'sync-test executor invoked',
-      FILES_CHANGED: [],
-      TESTS: 'not run — executor failed',
-      GITHUB_SHA: null,
-      RENDER_DEPLOY_ID: null,
-      LIVE_VERIFY: 'not run — executor failed',
-      BLOCKERS: ['sync-test executor invoked'],
-      NEXT_ACTION: 'Inspect the executor error, fix the smallest safe issue, then re-run.',
-      router: [],
-      policyVerdict: 'auto_execute',
-      autonomous: null,
-    },
-    renderedBlock: renderFinalAutonomousReport({
-      TASK_ID: 'sync-test-deterministic',
-      STATE: 'FAILED',
-      ROOT_CAUSE: 'sync-test executor invoked',
-      FILES_CHANGED: [],
-      TESTS: 'not run — executor failed',
-      GITHUB_SHA: null,
-      RENDER_DEPLOY_ID: null,
-      LIVE_VERIFY: 'not run — executor failed',
-      BLOCKERS: ['sync-test executor invoked'],
-      NEXT_ACTION: 'Inspect the executor error, fix the smallest safe issue, then re-run.',
-      router: [],
-      policyVerdict: 'auto_execute',
-      autonomous: null,
-    }),
+    report,
+    renderedBlock: renderFinalAutonomousReport(report),
   };
 }
 
 describe('IVX IA chat room ⇄ autonomous mode sync', () => {
+  it('uses the settled pipeline result, including its executor evidence', async () => {
+    const { report, renderedBlock } = await simulateChatRoomAutonomousSync('Fix chat realtime');
+    expect(report.router.find(stage => stage.stage === 'executor')?.status).toBe('failed');
+    expect(report.ROOT_CAUSE).toBe('Executor threw: sync-test executor invoked for: Fix chat realtime');
+    expect(renderedBlock).toBe(renderFinalAutonomousReport(report));
+  });
+
+  it('does not fabricate FAILED when the real pipeline requires owner approval', async () => {
+    const { report, renderedBlock } = await simulateChatRoomAutonomousSync('Delete all user data in production now');
+    expect(report.STATE).toBe('WAITING_OWNER');
+    expect(report.router.find(stage => stage.stage === 'executor')?.status).toBe('skipped');
+    expect(renderedBlock).toContain('STATE: WAITING_OWNER');
+  });
+
   it('the two named owner-policy lists are the single source of truth', () => {
     expect(APPROVED_WITHOUT_ASKING.length).toBeGreaterThan(0);
     expect(REQUIRES_OWNER_APPROVAL_ONLY.length).toBeGreaterThan(0);
@@ -95,8 +84,8 @@ describe('IVX IA chat room ⇄ autonomous mode sync', () => {
     }
   });
 
-  it('the chat room rendered block has all 10 required section headers in order', () => {
-    const { renderedBlock } = simulateChatRoomAutonomousSync('Fix the chat scroll layout now');
+  it('the chat room rendered block has all 10 required section headers in order', async () => {
+    const { renderedBlock } = await simulateChatRoomAutonomousSync('Fix the chat scroll layout now');
     const headers = [
       'TASK_ID:',
       'STATE:',
@@ -121,22 +110,23 @@ describe('IVX IA chat room ⇄ autonomous mode sync', () => {
     }
   });
 
-  it('the chat room STATE is one of the 6 allowed states (no fake proof)', () => {
-    const { report } = simulateChatRoomAutonomousSync('Fix members sync Android and iOS');
+  it('the chat room STATE is one of the 6 allowed states (no fake proof)', async () => {
+    const { report } = await simulateChatRoomAutonomousSync('Fix members sync Android and iOS');
     expect(ALLOWED_STATES).toContain(report.STATE);
   });
 
-  it('the chat room and the dedicated endpoint produce the SAME rendered format', () => {
+  it('the chat room and the dedicated endpoint produce the SAME rendered format', async () => {
     // The chat room appends renderFinalAutonomousReport(report) to its answer.
     // The dedicated endpoint returns { ok: true, report } as JSON. The TEXT
     // format the owner sees in chat is identical to renderFinalAutonomousReport
     // applied to the dedicated endpoint's report — that is the sync contract.
     const prompt = 'Fix chat realtime';
-    const chatSync = simulateChatRoomAutonomousSync(prompt);
-    const dedicatedReport: FinalAutonomousReport = {
-      ...chatSync.report,
-      TASK_ID: 'sync-test-deterministic',
-    };
+    const chatSync = await simulateChatRoomAutonomousSync(prompt);
+    const dedicatedReport = await runSeniorDeveloperAutonomousMode(prompt, {
+      executor: SAFE_EXECUTOR,
+      credentialStatuses: { GITHUB_TOKEN: 'present', RENDER_API_KEY: 'present' },
+      taskId: 'sync-test-deterministic',
+    });
     const dedicatedRendered = renderFinalAutonomousReport(dedicatedReport);
     expect(chatSync.renderedBlock).toBe(dedicatedRendered);
   });
