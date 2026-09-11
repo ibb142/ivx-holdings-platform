@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { requestIVXAIText, runWithOwnerAIStreamCallback, type IVXAITextMessage } from '../backend/ivx-ai-runtime';
-import { buildOwnerTextModelInput } from '../backend/services/ivx-owner-text-prompt';
+import { buildOwnerTextModelInput, OWNER_TEXT_MODEL } from '../backend/services/ivx-owner-text-prompt';
 import { buildSeniorEngineerSystemPrompt } from '../backend/services/ivx-senior-engineer-persona';
 
 // Candidate prompt -> real provider only. No owner session, database, tools,
@@ -82,10 +82,11 @@ try {
       deltas++;
       streamedText += delta;
     }, () => requestIVXAIText({
-      module: 'owner-room-knowledge', requestId, model: 'openai/gpt-4o',
+      module: 'owner-room-knowledge', requestId, model: OWNER_TEXT_MODEL,
       ...modelInput, maxOutputTokens: 128, abortSignal: AbortSignal.timeout(20_000),
     }));
     const passed = result.providerMetadata.source === 'remote_api'
+      && result.providerMetadata.model === OWNER_TEXT_MODEL
       && result.providerMetadata.ivxAI.requestId === requestId
       && deltas > 0 && streamedText.trim() === expected && result.text.trim() === expected;
     proof.cases.push({

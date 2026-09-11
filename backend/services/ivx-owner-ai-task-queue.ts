@@ -605,7 +605,7 @@ class OwnerQueueLeaseLost extends Error {}
 const ownerQueueProviderReady = createOwnerQueueProviderGate({
   configured: isIVXAIConfigured, health: getProviderHealth,
   validate: () => requestIVXAIText({ module: 'owner-room', requestId: `${WORKER_ID}-startup-${Date.now()}`,
-    prompt: 'Reply with OK.', maxOutputTokens: 8, abortSignal: AbortSignal.timeout(10_000) }),
+    prompt: 'Reply with OK.', maxOutputTokens: 16, abortSignal: AbortSignal.timeout(10_000) }),
 });
 
 function loseOwnerLease(lease: ActiveOwnerLease) {

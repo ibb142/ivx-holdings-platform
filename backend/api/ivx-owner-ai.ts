@@ -1,4 +1,4 @@
-import { buildOwnerTextModelInput } from '../services/ivx-owner-text-prompt';
+import { buildOwnerTextModelInput, OWNER_TEXT_MODEL } from '../services/ivx-owner-text-prompt';
 import { deliverOwnerTextTurn } from '../services/ivx-owner-text-delivery';
 import { ownerRuntimeEvidenceHeaders } from '../services/ivx-owner-runtime-evidence';
 import { appendFile, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
@@ -6862,7 +6862,7 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           history: knowledgeHistory,
           liveContext: knowledgeLiveCtx,
         });
-        const llmModel = resolveIVXAIModel() || 'openai/gpt-4o';
+        const llmModel = resolveIVXAIModel(OWNER_TEXT_MODEL);
         const { result: llmResult, assistantMessageId } = await executeTextTurn('owner-room-knowledge', llmModel, knowledgeInput);
         const answer = assertVisibleOwnerAIAnswer(llmResult.text);
         return ownerOnlyJson(buildOwnerAIResponsePayload({
@@ -6957,7 +6957,7 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           history: manualHistory,
           liveContext: manualLiveCtx,
         });
-        const llmModel = resolveIVXAIModel() || 'openai/gpt-4o';
+        const llmModel = resolveIVXAIModel(OWNER_TEXT_MODEL);
         const { result: llmResult, assistantMessageId } = await executeTextTurn('owner-room-manual', llmModel, manualInput);
         const answer = assertVisibleOwnerAIAnswer(llmResult.text);
         return ownerOnlyJson(buildOwnerAIResponsePayload({

@@ -1,6 +1,11 @@
 import type { IVXAITextMessage } from '../ivx-ai-runtime';
 import { buildSeniorEngineerSystemPrompt } from './ivx-senior-engineer-persona';
 
+// Shared by both conversational text routes and the real-provider gate. The
+// bounded comparison in run 34634980118 retained GPT-4o's literal regression;
+// GPT-4.1 passed all five identical cases. Never substitute a local answer.
+export const OWNER_TEXT_MODEL = 'openai/gpt-4.1';
+
 /** Index only an explicitly supplied, bounded ASCII literal. This is input
  * representation, never the transformed answer, a tool result or authority.
  * Ambiguous requests continue through the normal model path unchanged. */
