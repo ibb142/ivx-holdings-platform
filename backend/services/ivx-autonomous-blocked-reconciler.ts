@@ -42,7 +42,7 @@ function isExternalDependencyWait(task: Task): boolean { return isTransientWorkf
 function isRealDefect(task: Task): boolean { return /defect persists|\b502\b|\b500\b|broken|invalid contract|missing target|crash|failed/.test(taskText(task)); }
 function productivityStaleMs(): number { const raw = Number.parseInt(process.env.IVX_PRODUCTIVITY_STALE_MS ?? '', 10); return Number.isFinite(raw) ? Math.max(60_000, Math.min(raw, 30 * 60_000)) : DEFAULT_PRODUCTIVITY_STALE_MS; }
 function latestProductiveEvidenceMs(task: Task): number { let latest = Date.parse(task.startedAt ?? task.createdAt ?? '') || 0; for (const evidence of task.evidence ?? []) { const at = Date.parse(evidence.createdAt ?? ''); if (Number.isFinite(at) && at > latest) latest = at; } return latest; }
-async function readRecoveryTasks(): Promise<Task[]> { if (postgresAtomicQueueSelected()) return readPostgresRecoveryTasks(); return getAllTasks(); }
+async function readRecoveryTasks(sourceSha: string): Promise<Task[]> { if (postgresAtomicQueueSelected()) return readPostgresRecoveryTasks(sourceSha); return getAllTasks(); }
 function clearMatchingSlot(task: Task): void { const agentId = task.leaseHolder?.startsWith('agent:') ? task.leaseHolder.slice(6) : null; if (agentId && getExecutionState(agentId)?.activeTaskId === task.taskId) updateExecutionState(agentId, { availability: 'available', activeTaskId: null }); }
 
 async function writeTask(task: Task, expectedStates: Task['state'][], eventType: string): Promise<boolean> {
@@ -106,7 +106,7 @@ export function hasFreshTaskAttempt(task: Pick<Task, 'attemptStartedAt' | 'start
 }
 
 export async function reconcileRetryableBlockedTasks(): Promise<BlockedReconcileResult> {
-  const productionSha = resolveProductionSha().toLowerCase(); const tasks = await readRecoveryTasks(); const blocked = tasks.filter((task) => task.state === 'BLOCKED');
+  const productionSha = resolveProductionSha().toLowerCase(); const tasks = await readRecoveryTasks(productionSha); const blocked = tasks.filter((task) => task.state === 'BLOCKED');
   const current = postgresAtomicQueueSelected() && blocked.some(task => parseLandingTaskKey(task.idempotencyKey)?.sha !== productionSha)
     ? await getLandingTasksForSha(productionSha) : [];
   let superseded = 0; let retirementGuardChecked = false;

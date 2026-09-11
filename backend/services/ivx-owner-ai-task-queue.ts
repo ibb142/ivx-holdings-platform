@@ -1,4 +1,5 @@
 import { boundedHealthProbe } from './ivx-bounded-health-probe';
+import { createOwnerQueueProviderGate, ownerQueueWorkerReadiness } from './ivx-owner-queue-readiness';
 /**
  * IVX Owner AI Durable Task Queue — P0 production reliability layer.
  *
@@ -59,6 +60,8 @@ export interface IVXOwnerAITaskRow {
   max_retries: number;
   next_retry_at: string | null;
   claimed_by: string | null;
+  queue_lease_token?: string | null;
+  queue_lease_until?: string | null;
   heartbeat_at: string | null;
   model: string | null;
   provider: string | null;
@@ -515,7 +518,7 @@ export async function cancelTask(id: string, reason: string): Promise<IVXOwnerAI
     checkpoint_history: appendCheckpoint(task.checkpoint_history, `CANCELED: ${reason.slice(0, 120)}`),
     error_code: 'CANCELED_BY_OWNER',
     error_message: reason.slice(0, 300),
-  });
+  }, `&status=eq.${encodeURIComponent(task.status)}&updated_at=eq.${encodeURIComponent(task.updated_at)}`);
 }
 
 export async function retryTask(id: string): Promise<{ ok: boolean; task: IVXOwnerAITaskRow | null; reason?: string }> {
@@ -533,37 +536,19 @@ export async function retryTask(id: string): Promise<{ ok: boolean; task: IVXOwn
     checkpoint_history: appendCheckpoint(task.checkpoint_history, 'MANUAL_RETRY_QUEUED'),
     next_retry_at: null,
     claimed_by: null,
+    queue_lease_token: null,
+    queue_lease_until: null,
     dead_letter: false,
     error_code: null,
     error_message: null,
-  });
+  }, `&status=eq.${encodeURIComponent(task.status)}&updated_at=eq.${encodeURIComponent(task.updated_at)}`);
   return { ok: updated !== null, task: updated };
 }
 
-/** Requeue tasks stuck RUNNING with a stale heartbeat (Render restart recovery). */
-export async function recoverOrphanTasks(staleMinutes: number = 3): Promise<number> {
+/** Recover only expired general-owner leases; senior jobs retain their own authority. */
+export async function recoverOrphanTasks(_staleMinutes: number = 3): Promise<number> {
   if (!isTaskQueueConfigured()) return 0;
-  const cutoff = new Date(Date.now() - staleMinutes * 60_000).toISOString();
-  const res = await restFetch(
-    `${TASKS_TABLE}?status=eq.RUNNING&heartbeat_at=lt.${encodeURIComponent(cutoff)}`,
-    {
-      method: 'PATCH',
-      headers: restHeaders({ Prefer: 'return=representation' }),
-      body: JSON.stringify({
-        status: 'RETRYING' satisfies IVXOwnerAITaskStatus,
-        checkpoint: 'RECOVERED_AFTER_RESTART',
-        claimed_by: null,
-        next_retry_at: nowIso(),
-        updated_at: nowIso(),
-      }),
-    },
-  );
-  if (!res.ok) return 0;
-  const rows = await res.json().catch(() => []) as IVXOwnerAITaskRow[];
-  if (rows.length > 0) {
-    console.log('[IVXOwnerAITaskQueue] recovered orphan tasks after restart', { count: rows.length, ids: rows.map((r) => r.id) });
-  }
-  return rows.length;
+  return queueRpc<number>('ivx_owner_ai_queue_recover', {});
 }
 
 /** Replay every dead-letter task (recoverable-failure replay, owner action). */
@@ -604,211 +589,128 @@ let workerShuttingDown = false;
 let activeTaskCount = 0;
 let activeHeartbeatTimers = new Map<string, ReturnType<typeof setInterval>>();
 
-async function claimTask(candidate: IVXOwnerAITaskRow): Promise<IVXOwnerAITaskRow | null> {
-  // Optimistic claim: only wins if the row is still claimable.
-  const res = await restFetch(
-    `${TASKS_TABLE}?id=eq.${encodeURIComponent(candidate.id)}&status=in.(QUEUED,RETRYING)`,
-    {
-      method: 'PATCH',
-      headers: restHeaders({ Prefer: 'return=representation' }),
-      body: JSON.stringify({
-        status: 'RUNNING' satisfies IVXOwnerAITaskStatus,
-        checkpoint: 'RUNNING',
-        checkpoint_history: appendCheckpoint(candidate.checkpoint_history, `RUNNING attempt ${candidate.retry_count + 1} on ${WORKER_ID}`),
-        claimed_by: WORKER_ID,
-        heartbeat_at: nowIso(),
-        updated_at: nowIso(),
-      }),
-    },
-  );
-  if (!res.ok) return null;
-  const rows = await res.json().catch(() => []) as IVXOwnerAITaskRow[];
-  return rows[0] ?? null;
+type ActiveOwnerLease = { task: IVXOwnerAITaskRow; lost: boolean; abort?: AbortController };
+const activeOwnerLeases = new Map<string, ActiveOwnerLease>();
+const queueSourceSha = () => (process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT_SHA || process.env.SOURCE_VERSION || '').trim();
+const queueInstanceId = () => process.env.RENDER_INSTANCE_ID || process.env.HOSTNAME || WORKER_ID;
+class OwnerQueueLeaseLost extends Error {}
+
+const ownerQueueProviderReady = createOwnerQueueProviderGate({
+  configured: isIVXAIConfigured, health: getProviderHealth,
+  validate: () => requestIVXAIText({ module: 'owner-room', requestId: `${WORKER_ID}-startup-${Date.now()}`,
+    prompt: 'Reply with OK.', maxOutputTokens: 16, abortSignal: AbortSignal.timeout(10_000) }),
+});
+
+function loseOwnerLease(lease: ActiveOwnerLease) {
+  lease.lost = true;
+  lease.abort?.abort();
 }
 
-async function persistAssistantReply(task: IVXOwnerAITaskRow, answer: string): Promise<string | null> {
-  if (!task.conversation_id) return null;
-  const res = await restFetch('messages?select=id', {
-    method: 'POST',
-    headers: restHeaders({ Prefer: 'return=representation' }),
-    body: JSON.stringify({
-      conversation_id: task.conversation_id,
-      sender_id: ASSISTANT_SENDER_ID,
-      text: answer,
-    }),
+async function queueRpc<T>(name: string, payload: Record<string, unknown>): Promise<T> {
+  const response = await restFetch(`rpc/${name}`, { method: 'POST', headers: restHeaders(), body: JSON.stringify(payload) });
+  if (!response.ok) throw Object.assign(new Error(`Owner queue ${name} temporarily unavailable (HTTP ${response.status})`), { httpStatus: response.status });
+  return await response.json() as T;
+}
+
+async function publishWorkerPulse(state: 'ready' | 'degraded' | 'draining') {
+  return queueRpc<{ authorized: boolean; state: string }>('ivx_owner_ai_worker_pulse', {
+    p_worker_id: WORKER_ID, p_source_sha: queueSourceSha(), p_instance_id: queueInstanceId(), p_state: state,
   });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    throw new Error(`Assistant reply persistence failed (HTTP ${res.status}): ${detail.slice(0, 160)} — temporarily unavailable`);
-  }
-  const rows = await res.json().catch(() => []) as { id?: string }[];
-  return rows[0]?.id ?? null;
+}
+
+async function updateOwnerLease(lease: ActiveOwnerLease, operation: string, payload: Record<string, unknown> = {}) {
+  if (lease.lost && operation !== 'release') throw new OwnerQueueLeaseLost('Task lease authority was lost');
+  const applied = await queueRpc<boolean>('ivx_owner_ai_queue_update', {
+    p_task_id: lease.task.id, p_worker_id: WORKER_ID, p_lease_token: lease.task.queue_lease_token,
+    p_operation: operation, p_payload: payload,
+  });
+  if (!applied) { loseOwnerLease(lease); throw new OwnerQueueLeaseLost('Task lease or owner authorization changed'); }
 }
 
 async function executeTask(task: IVXOwnerAITaskRow): Promise<void> {
+  if (!task.queue_lease_token) throw new Error('Queue returned an unfenced task');
   activeTaskCount++;
+  const lease: ActiveOwnerLease = { task, lost: false, abort: new AbortController() };
+  activeOwnerLeases.set(task.id, lease);
+  let heartbeatInFlight = false;
   const heartbeatTimer = setInterval(() => {
-    void patchTask(task.id, { heartbeat_at: nowIso() }).catch(() => {});
+    if (heartbeatInFlight || lease.lost) return;
+    heartbeatInFlight = true;
+    void updateOwnerLease(lease, 'heartbeat').catch(() => { loseOwnerLease(lease); }).finally(() => { heartbeatInFlight = false; });
   }, HEARTBEAT_INTERVAL_MS);
   activeHeartbeatTimers.set(task.id, heartbeatTimer);
-  const startedMs = Date.now();
-  const queueMs = Math.max(0, startedMs - new Date(task.created_at).getTime());
+  const startedMs = Date.now(), queueMs = Math.max(0, startedMs - Date.parse(task.created_at));
   try {
-    // Chaos injection (owner test hook): synthetic transient failure.
-    const chaos = applyChaos(task.chaos);
-    if (chaos.shouldFail) {
-      await patchTask(task.id, { chaos: chaos.updated });
-      const err = new Error(`SYNTHETIC_PROVIDER_${chaos.simulatedStatus} (owner chaos injection) — service unavailable`) as Error & { httpStatus: number };
-      err.httpStatus = chaos.simulatedStatus;
-      throw err;
+    // A recovered answer checkpoint is reused. Publication is one transaction;
+    // a lost HTTP response cannot create a second assistant message.
+    if (!task.answer?.trim()) {
+      const chaos = applyChaos(task.chaos);
+      if (chaos.shouldFail) {
+        await updateOwnerLease(lease, 'checkpoint', { chaos: chaos.updated });
+        throw Object.assign(new Error(`SYNTHETIC_PROVIDER_${chaos.simulatedStatus} — service unavailable`), { httpStatus: chaos.simulatedStatus });
+      }
+      await updateOwnerLease(lease, 'checkpoint', { checkpoint: 'PROVIDER_CALLED' });
+      const providerStart = Date.now();
+      const result = await requestIVXAIText({ module: 'owner-room', requestId: `${task.trace_id}-attempt${task.retry_count + 1}`, prompt: task.prompt, maxOutputTokens: 2_000, abortSignal: lease.abort!.signal });
+      const answer = result.text.trim();
+      if (!answer) throw new Error('Provider returned an empty answer — temporarily unavailable');
+      await updateOwnerLease(lease, 'checkpoint', { checkpoint: 'ANSWER_RECEIVED', answer,
+        model: result.providerMetadata.model ?? null, provider: result.providerMetadata.provider ?? null,
+        durations: { queueMs, providerMs: Date.now() - providerStart, totalMs: Date.now() - startedMs } });
     }
-
-    await patchTask(task.id, {
-      checkpoint: 'PROVIDER_CALLED',
-      checkpoint_history: appendCheckpoint(task.checkpoint_history, 'PROVIDER_CALLED'),
-      heartbeat_at: nowIso(),
+    if (lease.lost) throw new OwnerQueueLeaseLost('Lease lost before publication');
+    const receipt = await queueRpc<{ applied: boolean }>('ivx_owner_ai_queue_complete', {
+      p_task_id: task.id, p_worker_id: WORKER_ID, p_lease_token: task.queue_lease_token, p_sender_id: ASSISTANT_SENDER_ID,
     });
-
-    const providerStart = Date.now();
-    const result = await requestIVXAIText({
-      module: 'owner-room',
-      requestId: `${task.trace_id}-attempt${task.retry_count + 1}`,
-      prompt: task.prompt,
-      maxOutputTokens: 2_000,
-    });
-    const providerMs = Date.now() - providerStart;
-    const answer = result.text.trim();
-    if (!answer) throw new Error('Provider returned an empty answer — temporarily unavailable');
-
-    await patchTask(task.id, {
-      checkpoint: 'ANSWER_RECEIVED',
-      heartbeat_at: nowIso(),
-    });
-
-    const assistantMessageId = await persistAssistantReply(task, answer);
-
-    await patchTask(task.id, {
-      status: 'COMPLETED' satisfies IVXOwnerAITaskStatus,
-      checkpoint: 'COMPLETED',
-      answer,
-      assistant_message_id: assistantMessageId,
-      model: result.providerMetadata.model ?? null,
-      provider: result.providerMetadata.provider ?? null,
-      error_code: null,
-      error_message: null,
-      http_status: 200,
-      failure_source: null,
-    });
-
-    // VERIFIED = answer exists + (persisted to the conversation OR no conversation target).
-    const verified = answer.length > 0 && (task.conversation_id === null || assistantMessageId !== null);
-    await patchTask(task.id, {
-      status: (verified ? 'VERIFIED' : 'COMPLETED') satisfies IVXOwnerAITaskStatus,
-      checkpoint: verified ? 'VERIFIED' : 'COMPLETED',
-      checkpoint_history: appendCheckpoint(task.checkpoint_history, verified ? 'VERIFIED' : 'COMPLETED_UNVERIFIED_PERSISTENCE'),
-      durations: { queueMs, providerMs, totalMs: Date.now() - startedMs },
-    });
+    if (!receipt.applied) throw new OwnerQueueLeaseLost('Completion refused after lease or owner authorization changed');
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'owner AI task execution failed';
-    // heartbeat timer is cleared in finally
+    if (error instanceof OwnerQueueLeaseLost || lease.lost) return;
+    const message = error instanceof Error ? error.message : 'Owner queue execution failed';
     const httpStatus = (error as { httpStatus?: number }).httpStatus ?? null;
     const classification = classifyFailureForRetry({ httpStatus, message });
     const attempt = task.retry_count + 1;
     const outcome = nextStatusAfterFailure(attempt, task.max_retries, classification.transient);
-    const delayMs = computeRetryDelayMs(attempt);
-    const source = classify503Source({ httpStatus: httpStatus ?? 500, message });
-
-    console.log('[IVXOwnerAITaskQueue] task attempt failed', {
-      taskId: task.id,
-      traceId: task.trace_id,
-      attempt,
-      transient: classification.transient,
-      nextStatus: outcome.status,
-      deadLetter: outcome.deadLetter,
-      httpStatus,
-      source,
-    });
-
-    await patchTask(task.id, {
-      status: outcome.status,
-      checkpoint: outcome.status === 'RETRYING' ? `RETRY_SCHEDULED_ATTEMPT_${attempt + 1}` : (outcome.deadLetter ? 'DEAD_LETTER' : 'FAILED_PERMANENT'),
-      checkpoint_history: appendCheckpoint(task.checkpoint_history, `ATTEMPT_${attempt}_FAILED: ${classification.code}`),
-      retry_count: attempt,
-      next_retry_at: outcome.status === 'RETRYING' ? new Date(Date.now() + delayMs).toISOString() : null,
-      claimed_by: null,
-      dead_letter: outcome.deadLetter,
-      error_code: classification.code,
-      error_message: message.slice(0, 500),
-      http_status: httpStatus,
-      failure_source: source,
-      durations: { queueMs, totalMs: Date.now() - startedMs },
-    });
+    // Conditional failure cannot overwrite a committed answer after an ambiguous
+    // completion response, cancellation, takeover or shutdown.
+    await updateOwnerLease(lease, 'failure', { status: outcome.status, checkpoint: `ATTEMPT_${attempt}_FAILED: ${classification.code}`,
+      next_retry_at: outcome.status === 'RETRYING' ? new Date(Date.now() + computeRetryDelayMs(attempt)).toISOString() : null,
+      dead_letter: outcome.deadLetter, error_code: classification.code, error_message: message.slice(0, 500),
+      http_status: httpStatus, failure_source: classify503Source({ httpStatus: httpStatus ?? 500, message })
+    }).catch(() => { loseOwnerLease(lease); });
   } finally {
-    clearInterval(heartbeatTimer);
-    activeHeartbeatTimers.delete(task.id);
-    activeTaskCount--;
+    clearInterval(heartbeatTimer); activeHeartbeatTimers.delete(task.id); activeOwnerLeases.delete(task.id); activeTaskCount--;
   }
 }
 
 async function workerTick(): Promise<void> {
   if (workerTickRunning || !isTaskQueueConfigured() || workerShuttingDown) return;
-  // CREDIT DRAIN FIX (2026-08-16): Circuit breaker — do NOT claim tasks when
-  // the AI provider is not configured or in a FAILED state. Without this guard,
-  // the worker claims queued tasks and calls requestIVXAIText which burns real
-  // inference tokens even if the key is expired (retry storms). This check
-  // prevents any AI call when the key is missing or the provider is DOWN.
-  const aiConfigured = isIVXAIConfigured();
-  if (!aiConfigured) {
-    console.log('[IVXOwnerAITaskQueue] worker tick skipped — AI not configured (circuit breaker)');
-    return;
-  }
-  const providerHealth = getProviderHealth();
-  if (providerHealth.state === 'AI_UNAVAILABLE') {
-    console.log('[IVXOwnerAITaskQueue] worker tick skipped — AI provider UNAVAILABLE (circuit breaker)', {
-      state: providerHealth.state,
-      lastStatus: providerHealth.lastHttpStatus,
-    });
-    return;
-  }
   workerTickRunning = true;
   workerLastTickAt = nowIso();
   try {
-    const now = encodeURIComponent(nowIso());
-    const res = await restFetch(
-      `${TASKS_TABLE}?status=in.(QUEUED,RETRYING)&or=(next_retry_at.is.null,next_retry_at.lte.${now})&order=created_at.asc&limit=${MAX_CONCURRENT_CLAIMS}`,
-      { method: 'GET', headers: restHeaders() },
-    );
-    if (!res.ok) return;
-    const candidates = await res.json().catch(() => []) as IVXOwnerAITaskRow[];
-    for (const candidate of candidates) {
-      // CRITICAL: senior_dev tasks are owned by the IVX-SENIOR-DEV-01 autonomous
-      // worker (backend/services/ivx-senior-dev-worker.ts), which runs the real
-      // 8-phase engineering pipeline (PLANNING→INSPECTING→IMPLEMENTING→TESTING→
-      // WAITING_APPROVAL→COMMITTING→DEPLOYING→LIVE_VERIFYING→VERIFIED).
-      // The general queue worker must NEVER claim senior_dev tasks — doing so
-      // would call the chat AI, get a text answer, and falsely mark the task
-      // VERIFIED in ~10s with commitSha=null, deployId=null, filesChanged=[]
-      // (the exact fake certification the owner forbade). Skip them here so the
-      // senior dev worker is the sole executor of senior_dev tasks.
-      //
-      // We mark via trace_id (always "senior-dev-..." from the submit endpoint)
-      // because the task_type column is only created by the self-bootstrap DDL,
-      // which requires SUPABASE_ACCESS_TOKEN and may not have run yet. trace_id
-      // is in the original CREATE TABLE and is always present, so it is the
-      // reliable marker. task_type is checked too as a belt-and-suspenders.
-      const isSeniorDev = (candidate.task_type === 'senior_dev')
-        || (typeof candidate.trace_id === 'string' && candidate.trace_id.startsWith('senior-dev-'));
-      if (isSeniorDev) {
-        continue;
+    // The initial observation reads the durable owner gates before any startup
+    // generation. Authorization is checked again when publishing readiness and
+    // atomically on every claim/checkpoint/completion.
+    const provider = getProviderHealth();
+    const wasReady = isIVXAIConfigured() && ['PROVIDER_READY', 'FALLBACK_READY'].includes(provider.state)
+      && provider.lastHttpStatus === 200 && Number.isFinite(Date.parse(provider.lastValidationTime ?? ''));
+    const observation = await publishWorkerPulse(wasReady ? 'ready' : 'degraded');
+    if (workerShuttingDown || !await ownerQueueProviderReady(observation.authorized)) return;
+    if (!wasReady && !(await publishWorkerPulse('ready')).authorized) return;
+    if (workerShuttingDown) return;
+    const claimed = await queueRpc<{ authorized: boolean; tasks: IVXOwnerAITaskRow[] }>('ivx_owner_ai_queue_claim', {
+      p_worker_id: WORKER_ID, p_limit: Math.min(2, MAX_CONCURRENT_CLAIMS),
+    });
+    if (!claimed.authorized || !Array.isArray(claimed.tasks) || claimed.tasks.length > 2) return;
+    await Promise.all(claimed.tasks.map(async task => {
+      if (workerShuttingDown) {
+        await updateOwnerLease({ task, lost: false }, 'release').catch(() => {});
+        return;
       }
-      const claimed = await claimTask(candidate);
-      if (claimed) await executeTask(claimed);
-    }
+      await executeTask(task);
+    }));
   } catch (error) {
-    console.log('[IVXOwnerAITaskQueue] worker tick error (non-fatal):', error instanceof Error ? error.message : 'unknown');
-  } finally {
-    workerTickRunning = false;
-  }
+    console.warn('[IVXOwnerAITaskQueue] bounded worker tick failed', { error: error instanceof Error ? error.message : 'unknown' });
+  } finally { workerTickRunning = false; }
 }
 
 const MANAGEMENT_API_BASE = 'https://api.supabase.com/v1';
@@ -926,12 +828,13 @@ export async function ensureTaskTable(): Promise<boolean> {
   return false;
 }
 
-/** Start the durable worker: DDL bootstrap + restart recovery first, then a polling loop. */
+/** Start bounded worker observations and atomic claim/recovery on the execution plane. */
 export function startOwnerAITaskWorker(intervalMs: number = 20_000): void {
-  if (workerTimer) return;
+  if (workerTimer || process.env.IVX_PROCESS_ROLE === 'api') return;
   workerShuttingDown = false;
   console.log('[IVXOwnerAITaskQueue] starting durable worker', { workerId: WORKER_ID, intervalMs, maxConcurrent: MAX_CONCURRENT_CLAIMS, heartbeatMs: HEARTBEAT_INTERVAL_MS });
-  void ensureTaskTable().then(() => recoverOrphanTasks()).catch(() => 0);
+  // Schema is deployed by the approved migration, never bootstrapped by a timer.
+  void workerTick();
   workerTimer = setInterval(() => { void workerTick(); }, intervalMs);
   (workerTimer as { unref?: () => void }).unref?.();
 }
@@ -940,6 +843,7 @@ export function startOwnerAITaskWorker(intervalMs: number = 20_000): void {
  * Called on SIGTERM/SIGINT to ensure Render doesn't kill tasks mid-execution. */
 export async function stopOwnerAITaskWorker(graceMs: number = SHUTDOWN_GRACE_MS): Promise<void> {
   workerShuttingDown = true;
+  void publishWorkerPulse('draining').catch(() => {});
   if (workerTimer) {
     clearInterval(workerTimer);
     workerTimer = null;
@@ -953,6 +857,9 @@ export async function stopOwnerAITaskWorker(graceMs: number = SHUTDOWN_GRACE_MS)
     clearInterval(timer);
   }
   activeHeartbeatTimers.clear();
+  const outstanding = [...activeOwnerLeases.values()];
+  for (const lease of outstanding) loseOwnerLease(lease);
+  await Promise.all(outstanding.map(lease => updateOwnerLease(lease, 'release').catch(() => {})));
   if (activeTaskCount > 0) {
     console.warn('[IVXOwnerAITaskQueue] graceful shutdown exceeded grace period', { workerId: WORKER_ID, activeTasks: activeTaskCount });
   } else {
@@ -1126,23 +1033,29 @@ export async function checkQueueHealth(): Promise<HealthCheckResult> {
   const runtime = getWorkerRuntimeInfo();
   const circuit = getSupabaseCircuitState();
   if (!isTaskQueueConfigured()) return { ok: false, detail: { reason: 'queue persistence not configured', circuit, ...runtime } };
-  const [pending, dead] = await Promise.all([
-    boundedHealthProbe(`${getSupabaseUrl()}/rest/v1/${TASKS_TABLE}?status=in.(QUEUED,RETRYING,RUNNING)&select=id,status,created_at&order=created_at.asc&limit=200`, restHeaders(),
-      (body): body is Array<{ id: string; status: string; created_at: string }> => Array.isArray(body) && body.length <= 200
-        && body.every(row => typeof row?.id === 'string' && ['QUEUED', 'RETRYING', 'RUNNING'].includes(row.status) && Number.isFinite(Date.parse(row.created_at)))),
-    boundedHealthProbe(`${getSupabaseUrl()}/rest/v1/${TASKS_TABLE}?dead_letter=is.true&status=eq.FAILED&select=id&limit=100`, restHeaders(),
-      (body): body is Array<{ id: string }> => Array.isArray(body) && body.length <= 100 && body.every(row => typeof row?.id === 'string')),
-  ]);
-  if (!pending.ok || !dead.ok) return { ok: false, detail: { ...runtime, circuit,
-    reason: pending.error ?? dead.error ?? 'Queue observation unavailable', telemetryAvailable: false,
+  type Snapshot = { authorized: boolean; pending: Array<{ id: string; status: string; created_at: string }>; dead: Array<{ id: string }>; workers: unknown[] };
+  const observation = await boundedHealthProbe(`${getSupabaseUrl()}/rest/v1/rpc/ivx_owner_ai_queue_health?p_source_sha=${encodeURIComponent(queueSourceSha())}`, restHeaders(),
+    (body): body is Snapshot => {
+      if (!body || typeof body !== 'object') return false;
+      const value = body as Snapshot;
+      return typeof value.authorized === 'boolean' && Array.isArray(value.pending) && value.pending.length <= 200
+        && value.pending.every(row => typeof row?.id === 'string' && ['QUEUED', 'RETRYING', 'RUNNING'].includes(row.status) && Number.isFinite(Date.parse(row.created_at)))
+        && Array.isArray(value.dead) && value.dead.length <= 100 && value.dead.every(row => typeof row?.id === 'string')
+        && Array.isArray(value.workers) && value.workers.length <= 10;
+    });
+  if (!observation.ok) return { ok: false, detail: { ...runtime, circuit,
+    reason: observation.error ?? 'Queue observation unavailable', telemetryAvailable: false,
     depth: null, deadLetterCount: null, saturated: null, staleQueue: null } };
-  const rows = pending.value!;
+  const snapshot = observation.value!, rows = snapshot.pending;
   const oldestAgeMinutes = rows.length ? Math.max(0, Math.round((Date.now() - Date.parse(rows[0].created_at)) / 60_000)) : 0;
   const saturated = rows.length >= 150;
   const stale = oldestAgeMinutes > 15;
-  return { ok: runtime.running && !saturated && !stale && !circuit.open,
-    detail: { ...runtime, circuit, telemetryAvailable: true, depth: rows.length, depthCapped: rows.length === 200,
-      oldestQueuedAgeMinutes: oldestAgeMinutes, deadLetterCount: dead.value!.length, deadLetterCountCapped: dead.value!.length === 100,
+  const shared = ownerQueueWorkerReadiness(snapshot.workers, queueSourceSha());
+  return { ok: snapshot.authorized && shared.ready && !saturated && !stale && !circuit.open,
+    detail: { ...runtime, circuit, consumerScope: 'general_owner_ai', running: shared.ready, localWorkerRunning: runtime.running,
+      ownerAuthorized: snapshot.authorized,
+      workers: shared.workers, workerObservationReason: shared.reason, telemetryAvailable: true, depth: rows.length, depthCapped: rows.length === 200,
+      oldestQueuedAgeMinutes: oldestAgeMinutes, deadLetterCount: snapshot.dead.length, deadLetterCountCapped: snapshot.dead.length === 100,
       saturated, staleQueue: stale, alerts: computeIncidentAlerts() } };
 }
 

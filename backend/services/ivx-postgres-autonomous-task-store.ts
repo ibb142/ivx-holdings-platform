@@ -7,6 +7,8 @@
  * execution; otherwise PostgREST is used. Mutations never replay across transports.
  */
 import { hostname } from 'node:os';
+import { VERSIONED_INSPECTION_PREFIXES, VERSIONED_MISSION_PREFIXES } from './ivx-autonomous-mission-scope';
+import { localFleetExecutionMetrics } from './ivx-fleet-execution-metrics';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import type { EventEmitter } from 'node:events';
@@ -18,7 +20,7 @@ import type { FleetLeaseRequest, FleetLeaseResult, FleetTaskLeaseIdentity, Fleet
 
 export const IVX_POSTGRES_AUTONOMOUS_TASK_STORE_MARKER = 'ivx-postgres-autonomous-task-store-2026-09-08-current-work-v3-direct-failover';
 const DEFAULT_TIMEOUT_MS = 30_000;
-const TRUTH_TIMEOUT_MS = 8_000;
+export const TRUTH_TIMEOUT_MS = 30_000;
 const DEFAULT_LEASE_SECONDS = 120;
 const TASK_READ_CACHE_TTL_MS = 1_500;
 const BOOT_NONCE = randomUUID().slice(0, 12);
@@ -98,6 +100,9 @@ const DIRECT_RPC_ARGS: Record<string, string[]> = {
   ivx_senior_queue_claim: ['p_job_id', 'p_worker_instance_id', 'p_resume'],
   ivx_senior_ledger_put: ['p_result'],
   ivx_work_evidence_hours: ['p_from', 'p_to', 'p_target_hours'],
+  ivx_ai_budget_reserve: ['p_reservation_id', 'p_worker_instance_id', 'p_model', 'p_request_sha', 'p_reserved_nano', 'p_pricing_evidence'],
+  ivx_ai_budget_finish: ['p_reservation_id', 'p_worker_instance_id', 'p_status', 'p_settled_upper_nano', 'p_generation_id'],
+  ivx_ai_budget_status: [],
 };
 async function directRpc<T>(name: string, body: Record<string, unknown>, env: NodeJS.ProcessEnv = process.env): Promise<T> {
   const args = DIRECT_RPC_ARGS[name];
@@ -106,6 +111,7 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
     p_tasks: 'jsonb', p_requests: 'jsonb', p_leases: 'jsonb', p_task: 'jsonb', p_expected_states: 'jsonb',
     p_changes: 'jsonb', p_result: 'jsonb', p_resume: 'boolean',
     p_from: 'timestamptz', p_to: 'timestamptz', p_target_hours: 'numeric',
+    p_reservation_id: 'uuid', p_reserved_nano: 'bigint', p_settled_upper_nano: 'bigint', p_pricing_evidence: 'jsonb',
     p_worker_instance_id: 'text', p_lease_holder: 'text', p_event_type: 'text', p_objective_id: 'text', p_lease_seconds: 'integer',
   };
   const placeholders = args.map((key, index) => `$${index + 1}::${casts[key] ?? 'text'}`).join(', ');
@@ -119,6 +125,14 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
   const result = await queryWithPostgresDeadline<{ result: T }>(pool, `select public.${name}(${placeholders}) as result`, values);
   if (!result.rows?.length) throw new Error(`direct_postgres_rpc_empty:${name}`);
   return result.rows[0].result as T;
+}
+
+export type GlobalAIBudgetRpc = 'ivx_ai_budget_reserve' | 'ivx_ai_budget_finish' | 'ivx_ai_budget_status';
+export async function globalAIBudgetRpc<T>(name: GlobalAIBudgetRpc, body: Record<string, unknown>): Promise<T> {
+  if (!['ivx_ai_budget_reserve', 'ivx_ai_budget_finish', 'ivx_ai_budget_status'].includes(name)) throw new Error('Budget RPC not allowed');
+  // Reuse existing bounded pools. Choose transport before the mutation; no
+  // fallback or replay after a response whose commit state is unknown.
+  return rpc<T>(name, body, 5_000);
 }
 
 export type WorkEvidenceHours = Record<string, unknown> & {
@@ -222,7 +236,7 @@ export function readPostgresFleetDashboardObservation(): Promise<unknown> {
 export type FleetProcessObservation = {
   measuredAt: string;
   instances: Array<{ instanceId: string; role: string; commitSha: string; serviceId: string | null;
-    lastSeenAt: string; processRole: string | null; sharedState: boolean; sharedWorkerQueue: boolean; draining: boolean }>;
+    lastSeenAt: string; processRole: string | null; sharedState: boolean; sharedWorkerQueue: boolean; draining: boolean; capacity?: unknown }>;
 };
 
 /** HA needs recent process rows, never the task ledger or assignment aggregates. */
@@ -237,7 +251,7 @@ export async function readPostgresFleetProcessObservation(): Promise<FleetProces
           event->>'process_role' as "processRole",
           coalesce((event->>'shared_state')::boolean,false) as "sharedState",
           coalesce((event->>'shared_worker_queue')::boolean,false) as "sharedWorkerQueue",
-          coalesce((event->>'draining')::boolean,false) as draining
+          coalesce((event->>'draining')::boolean,false) as draining, event->'capacity' as capacity
         from public.ivx_autonomous_task_events
         where event_type='fleet_slo_sample' and created_at > statement_timestamp() - interval '60 seconds'
           and event->>'instance_role' in ('api','worker')
@@ -262,7 +276,8 @@ export async function readPostgresFleetProcessObservation(): Promise<FleetProces
       latest.set(row.worker_instance_id, { instanceId: row.worker_instance_id, role: String(event.instance_role),
         commitSha: String(event.commit_sha ?? ''), serviceId: typeof event.service_id === 'string' ? event.service_id : null,
         lastSeenAt: row.created_at, processRole: typeof event.process_role === 'string' ? event.process_role : null,
-        sharedState: event.shared_state === true, sharedWorkerQueue: event.shared_worker_queue === true, draining: event.draining === true });
+        sharedState: event.shared_state === true, sharedWorkerQueue: event.shared_worker_queue === true, draining: event.draining === true,
+        capacity: event.capacity ?? null });
     }
     return { measuredAt: new Date().toISOString(), instances: [...latest.values()] };
   } catch (error) {
@@ -291,9 +306,12 @@ export async function readPostgresLandingTasks(sha: string): Promise<Task[]> {
 }
 async function fetchPostgresLandingTasks(sha: string): Promise<Task[]> {
   const prefixes = ['landing-p0:', 'landing-p0-repair:', 'landing-p0-patrol:'];
-  const directRead = async () => (await getDirectPool().query<RestTaskRow>(
-    'select payload from public.ivx_autonomous_tasks where idempotency_key like any($1::text[]) order by task_id limit 1000',
-    [prefixes.map(prefix => `${prefix}${sha}:%`)],
+  // Separate LIKE predicates can use the existing text_pattern_ops identity
+  // index. LIKE ANY forces a ledger scan. Pin transaction-local deadlines so
+  // a pooled reader cannot outlive its caller and keep transmitting history.
+  const directRead = async () => (await queryWithPostgresDeadline<RestTaskRow>(getDirectPool(),
+    'select payload from public.ivx_autonomous_tasks where (idempotency_key like $1 or idempotency_key like $2 or idempotency_key like $3) order by task_id limit 1000',
+    prefixes.map(prefix => `${prefix}${sha}:%`),
   )).rows;
   let rows: RestTaskRow[];
   if (preferDirectTransport()) rows = await directRead();
@@ -377,9 +395,14 @@ export async function readPostgresCurrentTasks(states: readonly TaskState[]): Pr
 }
 
 async function fetchPostgresCurrentTasks(unique: TaskState[], purpose: PoolPurpose = 'tasks'): Promise<Task[]> {
+  // Inactive BLOCKED history contributes to none of the SLO counters. Filter it
+  // before LIMIT so historical failures cannot crowd out current lease evidence.
+  // Recovery/task callers still receive blocked work for their own inspection.
+  const sloPredicate = purpose === 'telemetry'
+    ? " and (state <> 'BLOCKED' or (lease_holder is not null and lease_expires_at > now()))" : '';
   const directRead = async () => {
     const pool = getDirectPool(process.env, purpose);
-    const sql = 'select payload from public.ivx_autonomous_tasks where state = any($1::text[]) order by updated_at desc limit 1000';
+    const sql = 'select payload from public.ivx_autonomous_tasks where state = any($1::text[])' + sloPredicate + ' order by updated_at desc limit 1000';
     const result = purpose === 'telemetry'
       ? await queryWithPostgresDeadline<RestTaskRow>(pool, sql, [unique])
       : await pool.query<RestTaskRow>(sql, [unique]);
@@ -389,7 +412,9 @@ async function fetchPostgresCurrentTasks(unique: TaskState[], purpose: PoolPurpo
   if (preferDirectTransport()) return directRead();
   try {
     const stateFilter = `(${unique.join(',')})`;
-    const rows = await restRequest<RestTaskRow[]>(`ivx_autonomous_tasks?select=payload&state=in.${stateFilter}&order=updated_at.desc&limit=1000`, { method: 'GET' }, { timeoutMs: TRUTH_TIMEOUT_MS, attempts: 3 });
+    const sloFilter = purpose === 'telemetry'
+      ? `&or=(state.neq.BLOCKED,and(lease_holder.not.is.null,lease_expires_at.gt.${new Date().toISOString()}))` : '';
+    const rows = await restRequest<RestTaskRow[]>(`ivx_autonomous_tasks?select=payload&state=in.${stateFilter}${sloFilter}&order=updated_at.desc&limit=1000`, { method: 'GET' }, { timeoutMs: TRUTH_TIMEOUT_MS, attempts: 3 });
     if (!Array.isArray(rows)) throw new Error('postgres_atomic current-task response is not an array');
     if (rows.length >= 1_000) throw new Error('postgres_atomic current-task response reached its safety limit; telemetry is incomplete');
     return rows.map((row) => structuredClone(row.payload));
@@ -425,21 +450,30 @@ export async function readPostgresPatrolObservations(sha: string): Promise<impor
 }
 
 /** The reconciler only inspects queued tasks that still carry a lease. */
-export async function readPostgresRecoveryTasks(): Promise<Task[]> {
-  const key = `recovery:${taskMutationRevision}`;
+export async function readPostgresRecoveryTasks(sourceSha?: string): Promise<Task[]> {
+  if (sourceSha !== undefined && !/^[a-f0-9]{40}$/i.test(sourceSha)) throw new Error('Invalid recovery source SHA');
+  const key = `recovery:${sourceSha ?? 'all'}:${taskMutationRevision}`;
   const existing = currentReadsInFlight.get(key);
   if (existing) return cloneTasks(await existing);
-  const pending = fetchPostgresRecoveryTasks();
+  const pending = fetchPostgresRecoveryTasks(sourceSha);
   currentReadsInFlight.set(key, pending);
   try { return cloneTasks(await pending); }
   finally { if (currentReadsInFlight.get(key) === pending) currentReadsInFlight.delete(key); }
 }
 
-async function fetchPostgresRecoveryTasks(): Promise<Task[]> {
+async function fetchPostgresRecoveryTasks(sourceSha?: string): Promise<Task[]> {
+  const families = VERSIONED_INSPECTION_PREFIXES;
+  // Keep running work, queued lease cleanup and live/uncertain holders across
+  // releases. Old unowned inspections must not fill recovery's safety cap.
+  // Landing history remains available to the replacement-aware reconciler.
+  const scope = sourceSha ? ` and (state = 'RUNNING'
+    or (lease_holder is not null and (state = 'QUEUED' or lease_expires_at is null or lease_expires_at > now()))
+    or not (idempotency_key like any($3::text[])) or idempotency_key like any($4::text[]))` : '';
   const directRead = async () => {
     const result = await getDirectPool().query<RestTaskRow>(
-      'select payload from public.ivx_autonomous_tasks where state = any($1::text[]) or (state = $2 and lease_holder is not null) order by updated_at desc limit 1000',
-      [['BLOCKED', 'RUNNING', 'RETRYING'], 'QUEUED']);
+      'select payload from public.ivx_autonomous_tasks where (state = any($1::text[]) or (state = $2 and lease_holder is not null))' + scope + ' order by updated_at desc limit 1000',
+      sourceSha ? [['BLOCKED', 'RUNNING', 'RETRYING'], 'QUEUED', families.map(prefix => `${prefix}%`), families.map(prefix => `${prefix}${sourceSha}:%`)]
+        : [['BLOCKED', 'RUNNING', 'RETRYING'], 'QUEUED']);
     if (result.rows.length >= 1000) throw new Error('postgres_atomic recovery-task response reached its safety limit; recovery is incomplete');
     return result.rows.map(row => structuredClone(row.payload));
   };
@@ -450,6 +484,7 @@ async function fetchPostgresRecoveryTasks(): Promise<Task[]> {
     const query = new URLSearchParams({ select: 'payload',
       or: '(state.in.(BLOCKED,RUNNING,RETRYING),and(state.eq.QUEUED,lease_holder.not.is.null))',
       order: 'updated_at.desc', limit: '1000' });
+    if (sourceSha) query.set('and', `(or(state.eq.RUNNING,and(lease_holder.not.is.null,or(state.eq.QUEUED,lease_expires_at.is.null,lease_expires_at.gt.${new Date().toISOString()})),and(${families.map(prefix => `idempotency_key.not.like.${prefix}*`).join(',')}),${families.map(prefix => `idempotency_key.like.${prefix}${sourceSha}:*`).join(',')}))`);
     const rows = await restRequest<RestTaskRow[]>(`ivx_autonomous_tasks?${query}`, { method: 'GET' }, { timeoutMs: TRUTH_TIMEOUT_MS, attempts: 3 });
     if (!Array.isArray(rows)) throw new Error('postgres_atomic recovery-task response is not an array');
     if (rows.length >= 1000) throw new Error('postgres_atomic recovery-task response reached its safety limit; recovery is incomplete');
@@ -462,7 +497,7 @@ async function fetchPostgresRecoveryTasks(): Promise<Task[]> {
 
 export async function persistPostgresFleetSloSample(sample: Record<string, unknown>): Promise<void> {
   const workerInstanceId = autonomousWorkerInstanceId();
-  const event = { ...sample, instance_role: process.env.IVX_WORKER_MODE === 'true' ? 'worker' : 'api', service_id: process.env.RENDER_SERVICE_ID ?? null, process_role: process.env.IVX_PROCESS_ROLE ?? null, shared_worker_queue: process.env.IVX_WORKER_QUEUE_ATOMIC === 'true', shared_state: process.env.IVX_REQUIRE_SHARED_STATE === 'true', draining: process.env.IVX_INSTANCE_DRAINING === 'true' };
+  const event = { ...sample, capacity: localFleetExecutionMetrics(), instance_role: process.env.IVX_WORKER_MODE === 'true' ? 'worker' : 'api', service_id: process.env.RENDER_SERVICE_ID ?? null, process_role: process.env.IVX_PROCESS_ROLE ?? null, shared_worker_queue: process.env.IVX_WORKER_QUEUE_ATOMIC === 'true', shared_state: process.env.IVX_REQUIRE_SHARED_STATE === 'true', draining: process.env.IVX_INSTANCE_DRAINING === 'true' };
   const persistDirect = async () => {
     await queryWithPostgresDeadline(getDirectPool(process.env, 'presence'),
       'insert into public.ivx_autonomous_task_events(event_type,worker_instance_id,event) values ($1,$2,$3::jsonb)',
@@ -523,11 +558,14 @@ export async function readPostgresFleetLeaseRows(): Promise<AtomicFleetLeaseRow[
 export type AutonomousTaskIndex = Pick<Task, 'taskId' | 'idempotencyKey' | 'assignedAgentNumber' | 'state' | 'title'>;
 export async function readPostgresAutonomousTaskIndex(sourceSha?: string): Promise<AutonomousTaskIndex[]> {
   if (sourceSha !== undefined && !/^[a-f0-9]{40}$/i.test(sourceSha)) throw new Error('Invalid planning source SHA');
-  const families = ['landing-p0:', 'landing-p0-repair:', 'landing-p0-patrol:'];
+  const families = VERSIONED_MISSION_PREFIXES;
   // Old deployment audits are historical evidence, not eligible work for this
-  // deployment. Keep all non-Landing work and its deduplication identities.
-  const where = sourceSha ? ' where (not (idempotency_key like any($3::text[])) or idempotency_key like any($4::text[]))' : '';
-  const restFilter = sourceSha ? `&or=(and(${families.map(prefix => `idempotency_key.not.like.${prefix}*`).join(',')}),${families.map(prefix => `idempotency_key.like.${prefix}${sourceSha}:*`).join(',')})` : '';
+  // deployment. Preserve repairs, owner work, current deduplication identities
+  // and previously started work so planning cannot overfill an occupied lane.
+  const startedStates = ['LEASED', 'RUNNING', 'PAUSED', 'EXECUTION_COMPLETED', 'QA_IN_PROGRESS', 'READY_FOR_DEPLOYMENT', 'DEPLOYING', 'DEPLOYED', 'PRODUCTION_VERIFYING'];
+  const where = sourceSha ? ` where (not (idempotency_key like any($3::text[])) or idempotency_key like any($4::text[])
+    or state = any($5::text[]) or (lease_holder is not null and (state = 'QUEUED' or lease_expires_at is null or lease_expires_at > now())))` : '';
+  const restFilter = sourceSha ? `&or=(and(${families.map(prefix => `idempotency_key.not.like.${prefix}*`).join(',')}),${families.map(prefix => `idempotency_key.like.${prefix}${sourceSha}:*`).join(',')},state.in.(${startedStates.join(',')}),and(lease_holder.not.is.null,or(state.eq.QUEUED,lease_expires_at.is.null,lease_expires_at.gt.${new Date().toISOString()})))` : '';
   const all: AutonomousTaskIndex[] = [];
   const pageSize = 1000;
   for (let offset = 0; offset < 20000; offset += pageSize) {
@@ -535,7 +573,7 @@ export async function readPostgresAutonomousTaskIndex(sourceSha?: string): Promi
     const rows = preferDirectTransport()
       ? (await getDirectPool().query<IndexRow>(
         "select task_id, idempotency_key, assigned_agent_number, state, payload->>'title' as title from public.ivx_autonomous_tasks" + where + ' order by created_at asc, task_id asc offset $1 limit $2',
-        sourceSha ? [offset, pageSize, families.map(prefix => `${prefix}%`), families.map(prefix => `${prefix}${sourceSha}:%`)] : [offset, pageSize])).rows
+        sourceSha ? [offset, pageSize, families.map(prefix => `${prefix}%`), families.map(prefix => `${prefix}${sourceSha}:%`), startedStates] : [offset, pageSize])).rows
       : await restRequest<IndexRow[]>(
         `ivx_autonomous_tasks?select=task_id,idempotency_key,assigned_agent_number,state,title:payload->>title${restFilter}&order=created_at.asc,task_id.asc&offset=${offset}&limit=${pageSize}`,
         { method: 'GET' });

@@ -98,8 +98,23 @@ jobs:
           set -euo pipefail
           bun test qa/ivx-critical-file-protection.test.ts --reporter=dots
           echo 'critical_files=PASS'
+      - name: 'Owner dashboard mobile control wiring — HARD GATE'
+        run: bun test qa/autonomous-mobile-360-guard.test.ts
+      - name: 'P0 certificate requires live observations — HARD GATE'
+        run: node --test scripts/ivx-block1-certificate.test.mjs
       - name: 'QA verdict rejects failures and incomplete acceptance — HARD GATE'
         run: bun test qa/ivx-qa-verdict.test.ts
+      - name: 'QA preflight session and exact-SHA regression tests — HARD GATE'
+        run: node --test qa/ivx-qa-preflight.test.mjs
+      - name: 'Bind a real Owner session after exact-SHA deployment'
+        if: github.ref == 'refs/heads/main'
+        run: node qa/ivx-qa-preflight.mjs
+        env:
+          IVX_COMMIT_SHA: ${{ github.sha }}
+          IVX_QA_OWNER_EMAIL: iperez4242@gmail.com
+          IVX_QA_OWNER_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD || secrets.OWNER_PASSWORD || secrets.IVX_OWNER_PASSWORD || secrets.IVX_OWNER_NEW_PASSWORD || secrets.OWNER_LOGIN_PASSWORD || secrets.IVX_OWNER_LOGIN_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
       - name: 'Owner recovery rejects unauthenticated requests on deployed SHA'
         if: github.ref == 'refs/heads/main'
         run: bun qa/ivx-owner-recovery-live.ts
@@ -111,6 +126,8 @@ jobs:
           echo 'qa_matrix=PASS'
         env:
           IVX_COMMIT_SHA: ${{ github.sha }}
+          IVX_QA_OWNER_EMAIL: iperez4242@gmail.com
+          IVX_QA_OWNER_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD || secrets.OWNER_PASSWORD || secrets.IVX_OWNER_PASSWORD || secrets.IVX_OWNER_NEW_PASSWORD || secrets.OWNER_LOGIN_PASSWORD || secrets.IVX_OWNER_LOGIN_PASSWORD }}
           NODE_ENV: ci
       - name: '7. Evidence generation'
         if: github.ref == 'refs/heads/main'

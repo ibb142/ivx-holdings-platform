@@ -60,5 +60,23 @@ test('an invalid queue observation keeps counts unknown and performs no retry', 
   globalThis.fetch = (async () => { calls++; return Response.json({ private: 'DO_NOT_REPORT' }); }) as typeof fetch;
   const result = await checkQueueHealth();
   expect(result.ok).toBe(false); expect(result.detail.depth).toBeNull(); expect(result.detail.deadLetterCount).toBeNull();
-  expect(result.detail.telemetryAvailable).toBe(false); expect(calls).toBe(2); expect(JSON.stringify(result)).not.toContain('DO_NOT_REPORT');
+  expect(result.detail.telemetryAvailable).toBe(false); expect(calls).toBe(1); expect(JSON.stringify(result)).not.toContain('DO_NOT_REPORT');
+});
+
+test('one bounded shared snapshot makes an API ready without a local worker and honors owner pause immediately', async () => {
+  configure(); const sha = 'a'.repeat(40); process.env.RENDER_GIT_COMMIT = sha;
+  for (const authorized of [true, false]) {
+    let calls = 0;
+    globalThis.fetch = (async (url, init) => {
+      calls++; expect(init?.method).toBe('GET');
+      expect(String(url)).toBe(`https://readiness-test.supabase.co/rest/v1/rpc/ivx_owner_ai_queue_health?p_source_sha=${sha}`);
+      return Response.json({ authorized, pending: [], dead: [], workers: [
+        { worker_id: 'worker-a', instance_id: 'instance-a', source_sha: sha, state: 'ready', last_seen_at: new Date().toISOString() },
+        { worker_id: 'worker-b', instance_id: 'instance-b', source_sha: sha, state: 'ready', last_seen_at: new Date().toISOString() },
+      ] });
+    }) as typeof fetch;
+    const result = await checkQueueHealth();
+    expect(result.ok).toBe(authorized); expect(result.detail.localWorkerRunning).toBe(false);
+    expect(result.detail.depth).toBe(0); expect(result.detail.workers).toHaveLength(2); expect(calls).toBe(1);
+  }
 });

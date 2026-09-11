@@ -7,6 +7,7 @@ type Dependencies<T extends Job> = {
   active: ReadonlySet<string>;
   staleAfterMs: number;
   stopped: () => boolean;
+  availableSlots?: () => number;
 };
 
 /** Share concurrent selection reads and reserve locally BEFORE the durable claim.
@@ -27,6 +28,7 @@ export function createSeniorJobAdmission<T extends Job>(deps: Dependencies<T>) {
     // owners in this bounded snapshot while PostgreSQL remains authoritative.
     for (let attempted = 0; attempted < queue.jobs.length; attempted++) {
       if (deps.stopped()) return null;
+      if (deps.availableSlots && !(deps.availableSlots() > 0)) return null;
       const busyOwners = new Set(queue.jobs.filter(job => deps.claimed.has(job.jobId)
         || (job.status !== 'queued' && deps.active.has(job.status)
           && (job.result?.commitSha || Date.parse(job.leaseExpiresAt ?? '') > Date.now()

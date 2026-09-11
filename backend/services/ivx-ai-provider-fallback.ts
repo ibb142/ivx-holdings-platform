@@ -6,6 +6,8 @@
  * credentials only. No prompt or credential values are logged.
  */
 
+import { retryAfterMs } from './ivx-retry-policy';
+
 export type IVXProviderName = 'ivx_ai_gateway' | 'openai_direct' | 'anthropic_direct';
 
 export type IVXProviderFailureClass =
@@ -40,6 +42,9 @@ type FallbackInput = {
   messages: { role: 'user' | 'assistant'; content: string }[];
   maxOutputTokens: number | null | undefined;
   timeoutMs: number;
+  abortSignal?: AbortSignal | null;
+  /** Failed primary credential; never retry it through an alias in the fallback chain. */
+  excludedApiKey?: string | null;
 };
 
 type Candidate = {
@@ -133,12 +138,27 @@ export function getIVXProviderChainSnapshot(): {
   };
 }
 
+function failureRecord(error: unknown): Record<string, unknown> {
+  return error && typeof error === 'object' ? error as Record<string, unknown> : {};
+}
+
+export function providerRetryAfterMs(error: unknown, now = Date.now()): number {
+  const record = failureRecord(error), cause = failureRecord(record.cause);
+  const headers = record.responseHeaders ?? cause.responseHeaders;
+  if (headers instanceof Headers) return retryAfterMs(headers.get('retry-after'), now);
+  const entry = Object.entries(failureRecord(headers)).find(([key]) => key.toLowerCase() === 'retry-after');
+  return retryAfterMs(typeof entry?.[1] === 'string' ? entry[1] : null, now);
+}
+
 export function classifyProviderFailure(error: unknown): IVXProviderFailureClass {
   if (!error) return 'unknown';
   const name = error instanceof Error ? error.name : '';
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  const record = failureRecord(error), cause = failureRecord(record.cause);
+  const body = record.responseBody ?? cause.responseBody;
+  const message = `${error instanceof Error ? error.message : String(error)} ${typeof body === 'string' ? body : JSON.stringify(body) ?? ''}`.toLowerCase();
   const statusMatch = message.match(/status=(\d{3})/);
-  const status = statusMatch ? Number.parseInt(statusMatch[1], 10) : null;
+  const structured = record.statusCode ?? record.status ?? cause.statusCode ?? cause.status;
+  const status = typeof structured === 'number' ? structured : statusMatch ? Number.parseInt(statusMatch[1], 10) : null;
 
   if (name === 'AbortError' || name === 'IVXAIGatewayTimeoutError' || message.includes('timed out') || message.includes('etimedout')) {
     return 'timeout';
@@ -146,12 +166,12 @@ export function classifyProviderFailure(error: unknown): IVXProviderFailureClass
   if (status === 401 || status === 403 || message.includes('unauthor') || message.includes('forbidden')) {
     return 'auth';
   }
-  if (status === 429 || message.includes('rate-limit') || message.includes('rate limit')) {
-    return 'rate_limit';
-  }
-  if (message.includes('insufficient_quota') || message.includes('quota')) {
+  // Billing rejection takes precedence over 429: depleted credits are not a
+  // transient rate limit and must not trigger spending on another credential.
+  if (status === 402 || message.includes('insufficient_quota') || message.includes('quota_for_entity_exceeded') || message.includes('quota')) {
     return 'quota';
   }
+  if (status === 429 || message.includes('rate-limit') || message.includes('rate limit')) return 'rate_limit';
   if (status !== null && status >= 500) return 'server_error';
   if (status === 400 || status === 422) return 'bad_request';
   if (
@@ -168,7 +188,6 @@ export function classifyProviderFailure(error: unknown): IVXProviderFailureClass
 export function isFailureRetryable(cls: IVXProviderFailureClass): boolean {
   return cls === 'timeout'
     || cls === 'rate_limit'
-    || cls === 'quota'
     || cls === 'server_error'
     || cls === 'network'
     || cls === 'auth';
@@ -187,14 +206,9 @@ function buildChatMessages(input: FallbackInput): { role: string; content: strin
   return output;
 }
 
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number, signal?: AbortSignal | null): Promise<Response> {
+  // Keep the deadline active while callers consume the response body too.
+  return fetch(url, { ...init, signal: AbortSignal.any([AbortSignal.timeout(timeoutMs), ...(signal ? [signal] : [])]) });
 }
 
 async function callOpenAIDirect(input: FallbackInput, apiKey: string): Promise<IVXProviderInvocationResult> {
@@ -216,6 +230,7 @@ async function callOpenAIDirect(input: FallbackInput, apiKey: string): Promise<I
       }),
     },
     input.timeoutMs,
+    input.abortSignal,
   );
   if (!response.ok) throw new Error(`openai_direct status=${response.status}`);
   const json = await response.json() as { choices?: { message?: { content?: string } }[] };
@@ -244,6 +259,7 @@ async function callVercelGateway(input: FallbackInput, apiKey: string): Promise<
       }),
     },
     input.timeoutMs,
+    input.abortSignal,
   );
   if (!response.ok) throw new Error(`ivx_ai_gateway status=${response.status}`);
   const json = await response.json() as { choices?: { message?: { content?: string } }[] };
@@ -276,6 +292,7 @@ async function callAnthropicDirect(input: FallbackInput, apiKey: string): Promis
       }),
     },
     input.timeoutMs,
+    input.abortSignal,
   );
   if (!response.ok) throw new Error(`anthropic_direct status=${response.status}`);
   const json = await response.json() as { content?: { type?: string; text?: string }[] };
@@ -318,12 +335,13 @@ function buildCandidates(): Candidate[] {
  * configured provider.
  */
 export async function attemptProviderFallback(input: FallbackInput): Promise<IVXProviderInvocationResult | null> {
-  const chain = buildCandidates().slice(0, 3);
+  const chain = buildCandidates().filter(candidate => candidate.key !== input.excludedApiKey).slice(0, 3);
   if (chain.length === 0) return null;
-
+  const deadline = Date.now() + input.timeoutMs;
   for (const candidate of chain) {
+    if (input.abortSignal?.aborted || Date.now() >= deadline) break;
     try {
-      const result = await candidate.run(input, candidate.key);
+      const result = await candidate.run({ ...input, timeoutMs: Math.max(1, deadline - Date.now()) }, candidate.key);
       console.log('[IVXAI][fallback] provider succeeded', {
         module: input.module,
         requestId: input.requestId,
@@ -333,12 +351,14 @@ export async function attemptProviderFallback(input: FallbackInput): Promise<IVX
       });
       return result;
     } catch (error) {
+      const failureClass = classifyProviderFailure(error);
       console.error('[IVXAI][fallback] provider failed', {
         module: input.module,
         requestId: input.requestId,
         provider: candidate.name,
-        failureClass: classifyProviderFailure(error),
+        failureClass,
       });
+      if (failureClass === 'quota' || failureClass === 'rate_limit') throw error;
     }
   }
 

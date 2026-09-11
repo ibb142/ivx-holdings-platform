@@ -18,6 +18,22 @@ const identityStorage = Platform.OS === 'web' ? {
 
 let _userId: string | null = null;
 let _userRole: string | null = null;
+// A backend-minted outage session is deliberately process-only. It lets an
+// owner who has just passed the exact password/allowlist login continue to the
+// owner API while Supabase Auth is unavailable, without restoring the former
+// persisted-token behaviour. The backend still verifies the HMAC on every
+// request.
+let _ownerOutageToken: string | null = null;
+
+function isUsableOwnerOutageToken(token: string | null): token is string {
+  if (!token) return false;
+  const parts = token.trim().split('.');
+  if (parts.length !== 5 || parts[0] !== 'ivxos1') return false;
+  const expiresAt = Number(parts[1]);
+  return Number.isFinite(expiresAt)
+    && expiresAt > Math.floor(Date.now() / 1000)
+    && Boolean(parts[2] && parts[3] && parts[4]);
+}
 
 const KEYS = {
   USER_ID: 'ipx_user_id',
@@ -25,13 +41,28 @@ const KEYS = {
 } as const;
 
 export function setAuthCredentials(
-  _token: string | null,
+  token: string | null,
   userId: string | null,
   userRole: string | null,
   _refreshToken?: string | null,
 ) {
   _userId = userId;
   _userRole = userRole;
+  _ownerOutageToken = userId && userRole === 'owner' && isUsableOwnerOutageToken(token)
+    ? token.trim()
+    : null;
+}
+
+/**
+ * Returns only the short-lived, backend-minted owner outage token held by this
+ * process. Supabase JWTs and refresh tokens are never stored here.
+ */
+export function getInMemoryOwnerOutageToken(): string | null {
+  if (!isUsableOwnerOutageToken(_ownerOutageToken)) {
+    _ownerOutageToken = null;
+    return null;
+  }
+  return _ownerOutageToken;
 }
 
 export function getAuthToken(): string | null {
@@ -104,6 +135,7 @@ export async function loadStoredAuth(): Promise<{
 export async function clearStoredAuth(): Promise<void> {
   _userId = null;
   _userRole = null;
+  _ownerOutageToken = null;
   try {
     await Promise.all([
       identityStorage.deleteItemAsync(KEYS.USER_ID),

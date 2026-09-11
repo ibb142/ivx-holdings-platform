@@ -2,6 +2,21 @@ import { describe, expect, it } from 'bun:test';
 import { createSeniorJobAdmission } from './ivx-senior-job-admission';
 const jobs = (count: number) => Array.from({ length: count }, (_, i) => ({ jobId: `job-${i}`, ownerId: `agent-${i}`, status: 'queued', createdAt: new Date().toISOString() }));
 describe('senior worker concurrent admission', () => {
+  it('enforces configured slots across concurrent callers and resumes after release', async () => {
+    const claimed = new Set<string>();
+    let limit = 2, peak = 0;
+    const next = createSeniorJobAdmission({ claimed, active: new Set(['running']), staleAfterMs: 60_000,
+      stopped: () => false, availableSlots: () => limit - claimed.size, read: async () => ({ jobs: jobs(112) }),
+      claim: async job => { peak = Math.max(peak, claimed.size); await Promise.resolve(); return job; } });
+    const admitted = await Promise.all(Array.from({ length: 112 }, next));
+    expect(admitted.filter(Boolean)).toHaveLength(2);
+    expect(peak).toBe(2);
+    limit = 0;
+    expect(await next()).toBeNull();
+    claimed.clear(); limit = 1;
+    expect(await next()).not.toBeNull();
+    expect(claimed.size).toBe(1);
+  });
   it('continues after PostgreSQL rejects an owner whose stale uncommitted work is still active', async () => {
     const pending = jobs(3);
     pending[1].ownerId = pending[0].ownerId;

@@ -1,5 +1,8 @@
 import { sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult, readSharedSeniorDocument, readSharedSeniorJob, appendSharedSeniorProofEvent } from './ivx-senior-shared-queue';
+import type { CoderWorkspaceEvidence } from './ivx-coder-workspace';
 import { createSeniorJobAdmission } from './ivx-senior-job-admission';
+import { configuredAdmissionLimit } from './ivx-fleet-admission-policy';
+import { registerSeniorExecutionMetrics } from './ivx-fleet-execution-metrics';
 /**
  * IVX Self-Hosted Senior Developer Worker — removes the external platform dependency as the
  * code EXECUTOR.
@@ -259,6 +262,17 @@ export type IVXWorkerJobInput = {
 };
 
 export type IVXWorkerJob = {
+  /** Physical isolation receipt retained after the active lease is released. */
+  workspaceEvidence?: CoderWorkspaceEvidence & {
+    jobId: string;
+    taskId: string;
+    ownerId: string;
+    agentId: string | null;
+    agentNumber: number | null;
+    workerInstanceId: string | null;
+    leaseExpiresAt: string | null;
+    runtimeSha: string | null;
+  };
   leaseWorkerInstanceId?: string | null;
   leaseExpiresAt?: string | null;
   jobId: string;
@@ -293,6 +307,7 @@ export type IVXWorkerJob = {
 import type { IVXTaskType } from './ivx-completion-validator';
 
 export type IVXWorkerJobResult = {
+  workspaceEvidence?: CoderWorkspaceEvidence;
   jobId: string;
   goal: string;
   ok: boolean;
@@ -357,7 +372,8 @@ export type IVXWorkerJobResult = {
   versionResponse?: { endpoint: string; httpStatus: number | null; commitSha: string | null; ok: boolean } | null;
   generatedFeatureSlug: string | null;
   auditFiles: { json: string; jsonl: string };
-  finalStatus: 'COMPLETE' | 'LOCAL_ONLY' | 'BLOCKED' | 'FAILED';
+  /** IN_PROGRESS preserves a committed checkpoint without claiming a final outcome. */
+  finalStatus: 'COMPLETE' | 'LOCAL_ONLY' | 'BLOCKED' | 'FAILED' | 'IN_PROGRESS';
   error: string | null;
   durable: boolean;
   generatedAt: string;
@@ -442,7 +458,30 @@ let draining = false;
 let queueStopping = false;
 
 /** Active job callbacks for cancel signaling. */
-const activeJobControllers = new Map<string, { cancelled: boolean; interrupted?: boolean }>();
+const activeJobControllers = new Map<string, { cancelled: boolean; interrupted?: boolean; executionMode?: string }>();
+
+function recordJobInterruption(jobId: string, controller: { cancelled: boolean; interrupted?: boolean },
+  reason: 'heartbeat_unconfirmed' | 'phase_write_unconfirmed' | 'authority_unconfirmed' | 'worker_shutdown', error?: unknown): void {
+  if (controller.interrupted) return;
+  controller.interrupted = true;
+  controller.cancelled = true;
+  const message = error instanceof Error ? error.message : '';
+  const event = { type: 'job_interrupted', jobId, reason, observedAt: nowIso(),
+    failureClass: /timeout|timed out/i.test(message) ? 'storage_timeout'
+      : /lease|authority|concurrent|conflict/i.test(message) ? 'ownership_unconfirmed' : null,
+    instanceId: process.env.RENDER_INSTANCE_ID ?? null };
+  // A former holder may append an observation, never overwrite the job. The
+  // process log retains the cause even when the durable event store is down.
+  console.warn('[IVX repair interruption]', JSON.stringify(event));
+  void appendSharedSeniorProofEvent(QUEUE_FILE, event);
+}
+registerSeniorExecutionMetrics(() => {
+  const modes = [...activeJobControllers.values()].map(c => c.executionMode);
+  return { activeRepairs: modes.filter(m => m === 'code_change' || m === 'deploy' || m === 'factory').length,
+    activeQA: modes.filter(m => m === 'qa_only').length, activeInspections: modes.filter(m => m === 'read_only').length,
+    activeUnclassified: modes.filter(m => !['code_change', 'deploy', 'factory', 'qa_only', 'read_only'].includes(m ?? '')).length,
+    configuredSlots: getWorkerMaxConcurrency() };
+});
 
 /**
  * Bounded-concurrent drain support (2026-08-22): in-process claim registry so
@@ -454,8 +493,7 @@ const claimedJobIds = new Set<string>();
 
 /** Max concurrent senior-developer job executions (configurable, bounded). */
 export function getWorkerMaxConcurrency(): number {
-  const raw = Number.parseInt(process.env.IVX_WORKER_MAX_CONCURRENCY ?? '', 10);
-  return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 112) : 112;
+  return configuredAdmissionLimit(process.env.IVX_WORKER_MAX_CONCURRENCY, 12);
 }
 
 /**
@@ -959,6 +997,7 @@ export function summarizeAutonomousCoderProof(
       ? 'BLOCKED'
       : 'FAILED';
   return {
+    ...(proof.workspaceEvidence ? { workspaceEvidence: proof.workspaceEvidence } : {}),
     jobId,
     goal: proof.goal.slice(0, 280),
     ok: completed,
@@ -1225,6 +1264,7 @@ async function recoverStuckCiWaitJobs(queue: QueueDoc): Promise<void> {
     && !activeCiResumeJobIds.has(j.jobId));
   if (candidates.length === 0) return;
   for (const job of candidates) {
+    if (new Set([...claimedJobIds, ...activeCiResumeJobIds]).size >= getWorkerMaxConcurrency()) break;
     activeCiResumeJobIds.add(job.jobId);
     void resumeCiWaitJob(job.jobId).catch(() => {}).finally(() => {
       activeCiResumeJobIds.delete(job.jobId);
@@ -1248,9 +1288,9 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     job = claimed; claimedJobIds.add(jobId);
   }
   const controller: { cancelled: boolean; interrupted?: boolean } = { cancelled: queueStopping, interrupted: queueStopping };
-  activeJobControllers.set(jobId, controller);
+  activeJobControllers.set(jobId, Object.assign(controller, { executionMode: job.input.executionMode }));
   const heartbeat = sharedSeniorQueueEnabled() ? setInterval(() => {
-    if (!controller.cancelled) void updateJob(jobId, { lastHeartbeatAt: nowIso() }, true).catch(() => { controller.interrupted = true; controller.cancelled = true; });
+    if (!controller.cancelled) void updateJob(jobId, { lastHeartbeatAt: nowIso() }, true).catch(error => recordJobInterruption(jobId, controller, 'heartbeat_unconfirmed', error));
   }, 20_000) : null;
   heartbeat?.unref?.();
   try {
@@ -1304,7 +1344,7 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     },
     onPhase: (phase, detail) => {
       const { stage, detail: mappedDetail } = autonomousCoderPhaseToStage(phase);
-      void updateJobStage(jobId, stage, detail || mappedDetail).catch(() => { controller.interrupted = true; controller.cancelled = true; });
+      void updateJobStage(jobId, stage, detail || mappedDetail).catch(error => recordJobInterruption(jobId, controller, 'phase_write_unconfirmed', error));
     },
   });
   if (controller.interrupted || queueStopping) return;
@@ -1779,15 +1819,13 @@ export async function cancelSeniorDeveloperJob(jobId: string): Promise<IVXWorker
     controller.cancelled = true;
   }
 
-  job.status = 'cancelled';
-  job.stage = 'FAILED';
-  job.stageDetail = 'Job cancelled by owner.';
-  job.cancelledAt = nowIso();
-  job.finishedAt = nowIso();
-  queue.jobs[idx] = job;
-  await saveQueue(queue);
-  appendDurableEvent(QUEUE_FILE, { type: 'job_cancelled', jobId }).catch(() => {});
-  return job;
+  const cancelledAt = nowIso();
+  await updateJob(jobId, { status: 'cancelled', stage: 'FAILED',
+    stageDetail: 'Job cancelled by owner.', error: 'Job cancelled by owner.',
+    cancelledAt, finishedAt: cancelledAt });
+  appendDurableEvent(QUEUE_FILE, { type: 'job_cancelled', jobId, ownerId: job.ownerId,
+    reason: 'owner_requested', cancelledAt }).catch(() => {});
+  return getSeniorDeveloperJob(jobId);
 }
 
 /**
@@ -1929,6 +1967,15 @@ async function updateJob(jobId: string, patch: Partial<IVXWorkerJob>, onlyIfActi
       // retain their final heartbeat as the last observed execution signal.
       lastHeartbeatAt: patch.lastHeartbeatAt ?? (isActive ? nowIso() : existing.lastHeartbeatAt),
     };
+    const next = queue.jobs[idx];
+    if (next.result && isActive && next.result.finalStatus === 'COMPLETE') {
+      // A commit/PR receipt is recoverable work, not a completed repair. Keep
+      // its identity and validation receipts while CI or deployment is pending.
+      next.result = { ...next.result, ok: false, finalStatus: 'IN_PROGRESS' };
+    } else if (next.result && next.status === 'cancelled') {
+      next.result = { ...next.result, ok: false, finalStatus: 'FAILED',
+        error: next.error ?? 'Job cancelled by owner.' };
+    }
     await saveQueue(queue);
   });
   // Concurrent-drain claim release: once a job reaches a terminal status its
@@ -2257,6 +2304,7 @@ function phaseToStage(phase: string): { stage: IVXWorkerJobStage; detail: string
 const admitSeniorJob = createSeniorJobAdmission<IVXWorkerJob>({
   read: loadQueue, claimed: claimedJobIds, active: ACTIVE_STATUSES,
   staleAfterMs: STALE_JOB_TIMEOUT_MS, stopped: () => queueStopping,
+  availableSlots: () => getWorkerMaxConcurrency() - new Set([...claimedJobIds, ...activeCiResumeJobIds]).size,
   claim: job => sharedSeniorQueueEnabled() ? claimSharedSeniorJob<IVXWorkerJob>(job.jobId) : Promise.resolve(job),
 });
 
@@ -2266,7 +2314,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
 
   const controller: { cancelled: boolean; interrupted?: boolean } = { cancelled: queueStopping, interrupted: queueStopping };
   let leaseHeartbeat: ReturnType<typeof setInterval> | null = null;
-  activeJobControllers.set(job.jobId, controller);
+  activeJobControllers.set(job.jobId, Object.assign(controller, { executionMode: job.input.executionMode }));
   try {
   // FINAL MANDATE Phase 1: owner emergency stop halts queued jobs before execution.
   const emergencyStop = await checkEmergencyStop();
@@ -2296,7 +2344,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
 
   leaseHeartbeat = sharedSeniorQueueEnabled() ? setInterval(() => {
     if (controller.cancelled) return;
-    void updateJob(job.jobId, { lastHeartbeatAt: nowIso() }, true).catch(() => { controller.interrupted = true; controller.cancelled = true; });
+    void updateJob(job.jobId, { lastHeartbeatAt: nowIso() }, true).catch(error => recordJobInterruption(job.jobId, controller, 'heartbeat_unconfirmed', error));
   }, 20_000) : null;
   leaseHeartbeat?.unref?.();
     // If cancelled before we even started, abort.
@@ -2325,7 +2373,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         onPhase: (phase: IVXReadOnlyInspectionPhase, detail: string) => {
           if (controller.cancelled) return;
           const { stage, detail: mappedDetail } = phaseToStage(phase);
-          void updateJobStage(job.jobId, stage, detail || mappedDetail).catch(() => { controller.interrupted = true; controller.cancelled = true; });
+          void updateJobStage(job.jobId, stage, detail || mappedDetail).catch(error => recordJobInterruption(job.jobId, controller, 'phase_write_unconfirmed', error));
         },
       });
 
@@ -2377,7 +2425,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         onPhase: (phase: IVXQAOnlyPhase, detail: string) => {
           if (controller.cancelled) return;
           const { stage, detail: mappedDetail } = qaPhaseToStage(phase);
-          void updateJobStage(job.jobId, stage, detail || mappedDetail).catch(() => { controller.interrupted = true; controller.cancelled = true; });
+          void updateJobStage(job.jobId, stage, detail || mappedDetail).catch(error => recordJobInterruption(job.jobId, controller, 'phase_write_unconfirmed', error));
         },
       });
 
@@ -2550,12 +2598,25 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
           await assertEmergencyStopInactive('senior-worker-mutation');
           if (controller.cancelled) throw new Error('JOB_CANCELED: owner cancelled the job');
           try { await updateJob(job.jobId, { lastHeartbeatAt: nowIso() }, true, true); }
-          catch (error) { controller.interrupted = true; controller.cancelled = true; throw error; }
+          catch (error) { recordJobInterruption(job.jobId, controller, 'authority_unconfirmed', error); throw error; }
+        },
+        onWorkspaceEvidence: async evidence => {
+          const current = await getSeniorDeveloperJob(job.jobId);
+          if (!current || (sharedSeniorQueueEnabled() && !current.leaseWorkerInstanceId)) {
+            throw new Error('WORKSPACE_RECEIPT_REQUIRES_WORKER_LEASE');
+          }
+          const sha = process.env.RENDER_GIT_COMMIT ?? '';
+          await updateJob(job.jobId, { workspaceEvidence: {
+            ...evidence, jobId: job.jobId, taskId: job.input.taskId ?? job.jobId,
+            ownerId: job.ownerId, agentId: job.input.agentId ?? null, agentNumber: job.input.agentNumber ?? null,
+            workerInstanceId: current.leaseWorkerInstanceId ?? null, leaseExpiresAt: current.leaseExpiresAt ?? null,
+            runtimeSha: /^[a-f0-9]{40}$/i.test(sha) ? sha : null,
+          } }, true, true);
         },
         onPhase: (phase: IVXAutonomousCoderPhase, detail: string) => {
           if (controller.cancelled) return;
           const { stage, detail: mappedDetail } = autonomousCoderPhaseToStage(phase);
-          void updateJobStage(job.jobId, stage, detail || mappedDetail).catch(() => { controller.interrupted = true; controller.cancelled = true; });
+          void updateJobStage(job.jobId, stage, detail || mappedDetail).catch(error => recordJobInterruption(job.jobId, controller, 'phase_write_unconfirmed', error));
         },
         // RESILIENCE: persist the commit SHA + branch to the job record the
         // instant the GitHub commit lands — BEFORE proof construction, deploy,
@@ -2702,7 +2763,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
       onPhase: (phase: string, _detail: string) => {
         if (controller.cancelled) return;
         const { stage, detail } = phaseToStage(phase);
-        void updateJobStage(job.jobId, stage, detail).catch(() => { controller.interrupted = true; controller.cancelled = true; });
+        void updateJobStage(job.jobId, stage, detail).catch(error => recordJobInterruption(job.jobId, controller, 'phase_write_unconfirmed', error));
       },
       // RESILIENCE: persist the commit SHA + branch to the job record the
       // instant the GitHub commit lands — BEFORE the Render deploy triggers.
@@ -2972,6 +3033,7 @@ export async function drainSeniorDeveloperQueue(): Promise<void> {
     await expireStaleJobs();
 
     const maxConcurrent = getWorkerMaxConcurrency();
+    if (maxConcurrent === 0) return;
     for (let processed = 0; !queueStopping && processed < MAX_QUEUE_RETAINED; processed += maxConcurrent) {
       const batch: Array<Promise<IVXWorkerJobResult | null>> = [];
       for (let i = 0; i < maxConcurrent; i += 1) {
@@ -3037,7 +3099,7 @@ export function stopSeniorDeveloperQueue(): void {
   if (queueDrainTimer) clearInterval(queueDrainTimer);
   if (staleSweepTimer) clearInterval(staleSweepTimer);
   queueDrainTimer = null; staleSweepTimer = null;
-  for (const controller of activeJobControllers.values()) { controller.interrupted = true; controller.cancelled = true; }
+  for (const [jobId, controller] of activeJobControllers) recordJobInterruption(jobId, controller, 'worker_shutdown');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3059,10 +3121,12 @@ export function buildSeniorDeveloperWorkerStatus(): Record<string, unknown> {
     perOwnerSingleFlight: true,
     uptimeSeconds: Math.floor(uptimeMs / 1000),
     concurrency: {
-      globalExecutionSlots: 1,
-      independentRuntimeCount: 0,
-      classification: 'SHARED_WORKER_WITH_ROLE',
-      note: 'The current worker is intentionally single-flight until isolated runtime leases are deployed and evidenced.',
+      scope: 'process',
+      configuredExecutionSlots: getWorkerMaxConcurrency(),
+      activeExecutions: activeJobControllers.size,
+      reservedJobs: new Set([...claimedJobIds, ...activeCiResumeJobIds]).size,
+      classification: 'BOUNDED_WORKER_WITH_OWNER_LEASES',
+      note: 'These are local execution slots. Independent owners may run concurrently; shared PostgreSQL claims preserve per-owner single-flight.',
     },
     heartbeatTracking: true,
     staleJobTimeoutMs: STALE_JOB_TIMEOUT_MS,
