@@ -1,4 +1,5 @@
 import { sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult, readSharedSeniorDocument, readSharedSeniorJob, appendSharedSeniorProofEvent } from './ivx-senior-shared-queue';
+import type { CoderWorkspaceEvidence } from './ivx-coder-workspace';
 import { createSeniorJobAdmission } from './ivx-senior-job-admission';
 import { configuredAdmissionLimit } from './ivx-fleet-admission-policy';
 import { registerSeniorExecutionMetrics } from './ivx-fleet-execution-metrics';
@@ -261,6 +262,17 @@ export type IVXWorkerJobInput = {
 };
 
 export type IVXWorkerJob = {
+  /** Physical isolation receipt retained after the active lease is released. */
+  workspaceEvidence?: CoderWorkspaceEvidence & {
+    jobId: string;
+    taskId: string;
+    ownerId: string;
+    agentId: string | null;
+    agentNumber: number | null;
+    workerInstanceId: string | null;
+    leaseExpiresAt: string | null;
+    runtimeSha: string | null;
+  };
   leaseWorkerInstanceId?: string | null;
   leaseExpiresAt?: string | null;
   jobId: string;
@@ -295,6 +307,7 @@ export type IVXWorkerJob = {
 import type { IVXTaskType } from './ivx-completion-validator';
 
 export type IVXWorkerJobResult = {
+  workspaceEvidence?: CoderWorkspaceEvidence;
   jobId: string;
   goal: string;
   ok: boolean;
@@ -967,6 +980,7 @@ export function summarizeAutonomousCoderProof(
       ? 'BLOCKED'
       : 'FAILED';
   return {
+    ...(proof.workspaceEvidence ? { workspaceEvidence: proof.workspaceEvidence } : {}),
     jobId,
     goal: proof.goal.slice(0, 280),
     ok: completed,
@@ -2561,6 +2575,19 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
           if (controller.cancelled) throw new Error('JOB_CANCELED: owner cancelled the job');
           try { await updateJob(job.jobId, { lastHeartbeatAt: nowIso() }, true, true); }
           catch (error) { controller.interrupted = true; controller.cancelled = true; throw error; }
+        },
+        onWorkspaceEvidence: async evidence => {
+          const current = await getSeniorDeveloperJob(job.jobId);
+          if (!current || (sharedSeniorQueueEnabled() && !current.leaseWorkerInstanceId)) {
+            throw new Error('WORKSPACE_RECEIPT_REQUIRES_WORKER_LEASE');
+          }
+          const sha = process.env.RENDER_GIT_COMMIT ?? '';
+          await updateJob(job.jobId, { workspaceEvidence: {
+            ...evidence, jobId: job.jobId, taskId: job.input.taskId ?? job.jobId,
+            ownerId: job.ownerId, agentId: job.input.agentId ?? null, agentNumber: job.input.agentNumber ?? null,
+            workerInstanceId: current.leaseWorkerInstanceId ?? null, leaseExpiresAt: current.leaseExpiresAt ?? null,
+            runtimeSha: /^[a-f0-9]{40}$/i.test(sha) ? sha : null,
+          } }, true, true);
         },
         onPhase: (phase: IVXAutonomousCoderPhase, detail: string) => {
           if (controller.cancelled) return;
