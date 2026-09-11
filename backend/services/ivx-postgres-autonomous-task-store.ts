@@ -7,6 +7,7 @@
  * execution; otherwise PostgREST is used. Mutations never replay across transports.
  */
 import { hostname } from 'node:os';
+import { VERSIONED_INSPECTION_PREFIXES, VERSIONED_MISSION_PREFIXES } from './ivx-autonomous-mission-scope';
 import { localFleetExecutionMetrics } from './ivx-fleet-execution-metrics';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
@@ -434,21 +435,30 @@ export async function readPostgresPatrolObservations(sha: string): Promise<impor
 }
 
 /** The reconciler only inspects queued tasks that still carry a lease. */
-export async function readPostgresRecoveryTasks(): Promise<Task[]> {
-  const key = `recovery:${taskMutationRevision}`;
+export async function readPostgresRecoveryTasks(sourceSha?: string): Promise<Task[]> {
+  if (sourceSha !== undefined && !/^[a-f0-9]{40}$/i.test(sourceSha)) throw new Error('Invalid recovery source SHA');
+  const key = `recovery:${sourceSha ?? 'all'}:${taskMutationRevision}`;
   const existing = currentReadsInFlight.get(key);
   if (existing) return cloneTasks(await existing);
-  const pending = fetchPostgresRecoveryTasks();
+  const pending = fetchPostgresRecoveryTasks(sourceSha);
   currentReadsInFlight.set(key, pending);
   try { return cloneTasks(await pending); }
   finally { if (currentReadsInFlight.get(key) === pending) currentReadsInFlight.delete(key); }
 }
 
-async function fetchPostgresRecoveryTasks(): Promise<Task[]> {
+async function fetchPostgresRecoveryTasks(sourceSha?: string): Promise<Task[]> {
+  const families = VERSIONED_INSPECTION_PREFIXES;
+  // Keep running work, queued lease cleanup and live/uncertain holders across
+  // releases. Old unowned inspections must not fill recovery's safety cap.
+  // Landing history remains available to the replacement-aware reconciler.
+  const scope = sourceSha ? ` and (state = 'RUNNING'
+    or (lease_holder is not null and (state = 'QUEUED' or lease_expires_at is null or lease_expires_at > now()))
+    or not (idempotency_key like any($3::text[])) or idempotency_key like any($4::text[]))` : '';
   const directRead = async () => {
     const result = await getDirectPool().query<RestTaskRow>(
-      'select payload from public.ivx_autonomous_tasks where state = any($1::text[]) or (state = $2 and lease_holder is not null) order by updated_at desc limit 1000',
-      [['BLOCKED', 'RUNNING', 'RETRYING'], 'QUEUED']);
+      'select payload from public.ivx_autonomous_tasks where (state = any($1::text[]) or (state = $2 and lease_holder is not null))' + scope + ' order by updated_at desc limit 1000',
+      sourceSha ? [['BLOCKED', 'RUNNING', 'RETRYING'], 'QUEUED', families.map(prefix => `${prefix}%`), families.map(prefix => `${prefix}${sourceSha}:%`)]
+        : [['BLOCKED', 'RUNNING', 'RETRYING'], 'QUEUED']);
     if (result.rows.length >= 1000) throw new Error('postgres_atomic recovery-task response reached its safety limit; recovery is incomplete');
     return result.rows.map(row => structuredClone(row.payload));
   };
@@ -459,6 +469,7 @@ async function fetchPostgresRecoveryTasks(): Promise<Task[]> {
     const query = new URLSearchParams({ select: 'payload',
       or: '(state.in.(BLOCKED,RUNNING,RETRYING),and(state.eq.QUEUED,lease_holder.not.is.null))',
       order: 'updated_at.desc', limit: '1000' });
+    if (sourceSha) query.set('and', `(or(state.eq.RUNNING,and(lease_holder.not.is.null,or(state.eq.QUEUED,lease_expires_at.is.null,lease_expires_at.gt.${new Date().toISOString()})),and(${families.map(prefix => `idempotency_key.not.like.${prefix}*`).join(',')}),${families.map(prefix => `idempotency_key.like.${prefix}${sourceSha}:*`).join(',')}))`);
     const rows = await restRequest<RestTaskRow[]>(`ivx_autonomous_tasks?${query}`, { method: 'GET' }, { timeoutMs: TRUTH_TIMEOUT_MS, attempts: 3 });
     if (!Array.isArray(rows)) throw new Error('postgres_atomic recovery-task response is not an array');
     if (rows.length >= 1000) throw new Error('postgres_atomic recovery-task response reached its safety limit; recovery is incomplete');
@@ -532,11 +543,14 @@ export async function readPostgresFleetLeaseRows(): Promise<AtomicFleetLeaseRow[
 export type AutonomousTaskIndex = Pick<Task, 'taskId' | 'idempotencyKey' | 'assignedAgentNumber' | 'state' | 'title'>;
 export async function readPostgresAutonomousTaskIndex(sourceSha?: string): Promise<AutonomousTaskIndex[]> {
   if (sourceSha !== undefined && !/^[a-f0-9]{40}$/i.test(sourceSha)) throw new Error('Invalid planning source SHA');
-  const families = ['landing-p0:', 'landing-p0-repair:', 'landing-p0-patrol:'];
+  const families = VERSIONED_MISSION_PREFIXES;
   // Old deployment audits are historical evidence, not eligible work for this
-  // deployment. Keep all non-Landing work and its deduplication identities.
-  const where = sourceSha ? ' where (not (idempotency_key like any($3::text[])) or idempotency_key like any($4::text[]))' : '';
-  const restFilter = sourceSha ? `&or=(and(${families.map(prefix => `idempotency_key.not.like.${prefix}*`).join(',')}),${families.map(prefix => `idempotency_key.like.${prefix}${sourceSha}:*`).join(',')})` : '';
+  // deployment. Preserve repairs, owner work, current deduplication identities
+  // and previously started work so planning cannot overfill an occupied lane.
+  const startedStates = ['LEASED', 'RUNNING', 'PAUSED', 'EXECUTION_COMPLETED', 'QA_IN_PROGRESS', 'READY_FOR_DEPLOYMENT', 'DEPLOYING', 'DEPLOYED', 'PRODUCTION_VERIFYING'];
+  const where = sourceSha ? ` where (not (idempotency_key like any($3::text[])) or idempotency_key like any($4::text[])
+    or state = any($5::text[]) or (lease_holder is not null and (state = 'QUEUED' or lease_expires_at is null or lease_expires_at > now())))` : '';
+  const restFilter = sourceSha ? `&or=(and(${families.map(prefix => `idempotency_key.not.like.${prefix}*`).join(',')}),${families.map(prefix => `idempotency_key.like.${prefix}${sourceSha}:*`).join(',')},state.in.(${startedStates.join(',')}),and(lease_holder.not.is.null,or(state.eq.QUEUED,lease_expires_at.is.null,lease_expires_at.gt.${new Date().toISOString()})))` : '';
   const all: AutonomousTaskIndex[] = [];
   const pageSize = 1000;
   for (let offset = 0; offset < 20000; offset += pageSize) {
@@ -544,7 +558,7 @@ export async function readPostgresAutonomousTaskIndex(sourceSha?: string): Promi
     const rows = preferDirectTransport()
       ? (await getDirectPool().query<IndexRow>(
         "select task_id, idempotency_key, assigned_agent_number, state, payload->>'title' as title from public.ivx_autonomous_tasks" + where + ' order by created_at asc, task_id asc offset $1 limit $2',
-        sourceSha ? [offset, pageSize, families.map(prefix => `${prefix}%`), families.map(prefix => `${prefix}${sourceSha}:%`)] : [offset, pageSize])).rows
+        sourceSha ? [offset, pageSize, families.map(prefix => `${prefix}%`), families.map(prefix => `${prefix}${sourceSha}:%`), startedStates] : [offset, pageSize])).rows
       : await restRequest<IndexRow[]>(
         `ivx_autonomous_tasks?select=task_id,idempotency_key,assigned_agent_number,state,title:payload->>title${restFilter}&order=created_at.asc,task_id.asc&offset=${offset}&limit=${pageSize}`,
         { method: 'GET' });
