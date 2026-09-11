@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 export function autonomousBranchSuffix(taskId: string): string {
   const prefix = taskId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'task';
-  return `${prefix}-${createHash('sha256').update(taskId).digest('hex').slice(0, 16)}`;
+  return `${prefix}-${createHash('sha256').update(taskId).digest('hex')}`;
 }
 
 type Request = (path: string, init?: RequestInit) => Promise<Response>;

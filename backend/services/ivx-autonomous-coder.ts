@@ -352,6 +352,8 @@ export type IVXAutonomousCoderInput = {
   /** Cancellation signal: when this returns true, the engine stops at the next
    * safe point and returns finalStatus='FAILED' with error='JOB_CANCELED'. */
   isCanceled?: () => boolean,
+  /** Physical worker lease and owner controls must permit each mutation. */
+  assertExecutionAuthority?: () => Promise<void>,
   /** Heartbeat callback invoked at each stage boundary with the current phase,
    * iteration, and elapsed ms. Lets the caller detect a stuck stage externally. */
   heartbeat?: (info: { phase: IVXAutonomousCoderPhase; iteration: number; elapsedMs: number; detail: string }) => void,
@@ -1630,6 +1632,7 @@ async function waitForRequiredChecksGreen(
   input: IVXAutonomousCoderInput,
   onPhase?: (phase: IVXAutonomousCoderPhase, detail: string) => void,
   prNumber?: number,
+  branch?: string,
 ): Promise<{ green: boolean; evidence: IVXCiCheckEvidence[]; timedOut: boolean; waitMs: number; blocker?: string }> {
   const startedAt = Date.now();
   const timeoutMs = input.ciWaitTimeoutMs ?? DEFAULT_CI_WAIT_TIMEOUT_MS;
@@ -1640,7 +1643,7 @@ async function waitForRequiredChecksGreen(
     // CI can finish long after an owner closes a rejected repair. Reconcile
     // each poll so that the durable worker can finish this job and release its lane.
     if (prNumber != null) {
-      const pr = input.prStateFn ? await input.prStateFn(prNumber) : await fetchPullRequestState(prNumber);
+      const pr = input.prStateFn ? await input.prStateFn(prNumber) : await fetchPullRequestState(prNumber, { commitSha, branch });
       const blocker = pr.state === 'closed' && !pr.merged
         ? `PR #${prNumber} is CLOSED without merging. CI wait stopped; task BLOCKED.`
         : pr.state === 'unknown' ? `PR #${prNumber} state is unknown. CI wait stopped; task BLOCKED.` : undefined;
@@ -1992,6 +1995,7 @@ export async function runIVXAutonomousCoder(input: IVXAutonomousCoderInput): Pro
 }
 
 async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, startedAt: number): Promise<IVXAutonomousCoderProof> {
+  await input.assertExecutionAuthority?.();
   const onPhase = input.onPhase;
   const iterations: IVXAutonomousCoderIteration[] = [];
   const commandsRun: IVXAutonomousCoderTestResult[] = [];
@@ -2134,6 +2138,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         for (const op of fallback.operations) {
           assertSafePatchPath(op.path);
           await pilotWorkspace.capture(op.path);
+          await input.assertExecutionAuthority?.();
           await applyPatchOperation(op, projectRoot, input.fileWriter, input.fileReader);
         }
         patchApplied = true;
@@ -2471,6 +2476,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         if (requiresRegression && !/\.(test|spec)\.[cm]?[jt]sx?$/.test(op.path) && !originalSources.has(op.path)) {
           originalSources.set(op.path, workspace.originals.get(op.path)!);
         }
+        await input.assertExecutionAuthority?.();
         expectedContents.set(op.path, await applyPatchOperation(op, projectRoot, input.fileWriter, input.fileReader));
         appliedOps.push(op);
       }
@@ -2736,6 +2742,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           : `${AUTONOMOUS_CODER_BRANCH}-${autonomousBranchSuffix(input.taskId)}`;
         assertPrivateRepairScope(input.goal, input.allowedFiles, filesChanged);
         assertLandingRepairScope(input.taskId, filesChanged);
+        await input.assertExecutionAuthority?.();
         const commitResult = input.commitFn
           ? await input.commitFn(filesChanged, branchName)
           : await commitFilesViaGitDataApi(filesChanged, branchName, buildAttributionTrailers(input), projectRoot);
@@ -2788,6 +2795,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           ``,
           `This PR was created by the IVX Autonomous Coder engine after the patch passed tests and typecheck.`,
         ].join('\n');
+        await input.assertExecutionAuthority?.();
         const prResult = input.prFn
           ? await input.prFn(branch, prTitle, prBody)
           : await createPullRequestForBranch(branch, 'main', prTitle, prBody);
@@ -2806,7 +2814,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         // every required GitHub check on the head SHA is GREEN.
         if (input.autoMergePr && !prResult.merged) {
           onPhase?.('committing', `Waiting for required CI checks on ${commitSha.slice(0, 12)} before merging PR #${prNumber} (CI-before-merge).`);
-          const ci = await waitForRequiredChecksGreen(commitSha, input, onPhase, prNumber);
+          const ci = await waitForRequiredChecksGreen(commitSha, input, onPhase, prNumber, branch ?? undefined);
           ciChecksWaited = true;
           ciChecksGreen = ci.green;
           ciCheckEvidence = ci.evidence;
@@ -2823,6 +2831,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
             onPhase?.('blocked', error);
           } else {
             onPhase?.('committing', `All required CI checks GREEN. Auto-merging PR #${prNumber} (owner approved).`);
+            await input.assertExecutionAuthority?.();
             const mergeResult = input.mergeFn
               ? await input.mergeFn(prNumber, prTitle)
               : await mergePullRequest(prNumber, prTitle, commitSha);
@@ -2880,6 +2889,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       if (input.deployApproved && (input.deployConfirmationText === 'CONFIRM_IVX_RENDER_DEPLOY' || input.deployConfirmationText === IVX_GIT_DEPLOY_CONFIRM_TEXT)) {
         onPhase?.('deploying', 'Owner approval verified; triggering Render deploy.');
         try {
+          await input.assertExecutionAuthority?.();
           const deployResult = input.deployFn
             ? await input.deployFn(commitSha)
             : await triggerRenderDeploy(commitSha);
@@ -3038,7 +3048,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
 // ── RESTART / CI-WAIT RESUME (FINAL CLOSEOUT 2026-08-23) ─────────────────────
 
 /** Live PR state from the GitHub API. */
-async function fetchPullRequestState(prNumber: number): Promise<{
+async function fetchPullRequestState(prNumber: number, expected: { commitSha: string; branch?: string }): Promise<{
   state: 'open' | 'closed' | 'unknown';
   merged: boolean;
   mergeCommitSha: string | null;
@@ -3056,7 +3066,16 @@ async function fetchPullRequestState(prNumber: number): Promise<{
   if (!res.ok) {
     throw new Error(`GitHub PR fetch failed: ${res.status}`);
   }
-  const data = await res.json() as { state?: string; merged?: boolean; merge_commit_sha?: string | null };
+  const data = await res.json() as { number?: number; state?: string; merged?: boolean; merge_commit_sha?: string | null;
+    head?: { sha?: string; ref?: string; repo?: { full_name?: string } };
+    base?: { ref?: string; repo?: { full_name?: string } } };
+  const repo = `${repoInfo.owner}/${repoInfo.repo}`.toLowerCase();
+  if (!/^[a-f0-9]{40}$/i.test(expected.commitSha) || !expected.branch
+    || data.number !== prNumber || data.head?.sha !== expected.commitSha || data.head.ref !== expected.branch
+    || data.head.repo?.full_name?.toLowerCase() !== repo || data.base?.ref !== 'main'
+    || data.base.repo?.full_name?.toLowerCase() !== repo) {
+    throw new Error('PR_RESUME_IDENTITY_MISMATCH: persisted repository, PR, branch, base and complete SHA must match; checkpoint retained.');
+  }
   return {
     state: data.state === 'open' || data.state === 'closed' ? data.state : 'unknown',
     merged: Boolean(data.merged),
@@ -3124,7 +3143,7 @@ export async function resumeIVXAutonomousCoderFromCiWait(
   try {
     const prState = input.prStateFn
       ? await input.prStateFn(input.prNumber)
-      : await fetchPullRequestState(input.prNumber);
+      : await fetchPullRequestState(input.prNumber, input);
     if (prState.merged) {
       prMerged = true;
       prMergeCommitSha = prState.mergeCommitSha;
@@ -3154,7 +3173,7 @@ export async function resumeIVXAutonomousCoderFromCiWait(
         ciPollIntervalMs: input.ciPollIntervalMs,
         ciNaGraceMs: input.ciNaGraceMs,
         sleepFn: input.sleepFn,
-      }, onPhase, input.prNumber);
+      }, onPhase, input.prNumber, input.branch);
       ciChecksGreen = ci.green;
       ciCheckEvidence = ci.evidence;
       ciWaitMs = ci.waitMs;
