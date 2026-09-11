@@ -1,3 +1,4 @@
+import { createFeedResponseCache } from '../services/ivx-feed-response-cache';
 /**
  * IVX Video Platform API — enterprise Instagram-grade video experience.
  *
@@ -80,97 +81,8 @@ function json(data: unknown, status = 200): Response {
 
 export const videoPlatformOptions = (): Response => new Response(null, { status: 204, headers: CORS_HEADERS });
 
-/* ---------------- TTL Response Cache ----------------
- * In-process TTL cache for read-heavy feed endpoints.
- * Caches the serialized JSON response for a short window (default 30s)
- * so that burst traffic serves from memory instead of hitting Supabase.
- * Per-cache-key locking prevents thundering-herd on cache miss.
- */
-type CacheEntry = { body: string; status: number; expiresAt: number };
-const FEED_CACHE = new Map<string, CacheEntry>();
-const FEED_CACHE_LOCKS = new Map<string, Promise<CacheEntry>>();
-const FEED_CACHE_TTL_MS = 30_000;
-const FEED_CACHE_MAX = 100;
-
-function feedCacheKey(path: string): string {
-  return path;
-}
-
-function getCachedEntry(key: string): CacheEntry | null {
-  const entry = FEED_CACHE.get(key);
-  if (!entry) return null;
-  if (Date.now() > entry.expiresAt) return null;
-  return entry;
-}
-
-function setCachedEntry(key: string, body: string, status: number): void {
-  // Never cache upstream failures. Keep the last successful entry available
-  // for stale-on-error recovery after its normal freshness window expires.
-  if (status < 200 || status >= 300) return;
-  if (FEED_CACHE.size >= FEED_CACHE_MAX) {
-    const oldest = [...FEED_CACHE.entries()].sort((a, b) => a[1].expiresAt - b[1].expiresAt)[0];
-    if (oldest) FEED_CACHE.delete(oldest[0]);
-  }
-  FEED_CACHE.set(key, { body, status, expiresAt: Date.now() + FEED_CACHE_TTL_MS });
-}
-
-function cachedJson(body: string, status: number): Response {
-  return new Response(body, {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': status >= 200 && status < 300 ? 'public, max-age=30, stale-while-revalidate=60' : 'no-store',
-      'X-IVX-Cache': 'HIT',
-      ...CORS_HEADERS,
-    },
-  });
-}
-
-async function withFeedCache(key: string, handler: () => Promise<Response>): Promise<Response> {
-  const cached = getCachedEntry(key);
-  if (cached) return cachedJson(cached.body, cached.status);
-
-  const inflight = FEED_CACHE_LOCKS.get(key);
-  if (inflight) {
-    const entry = await inflight;
-    return cachedJson(entry.body, entry.status);
-  }
-
-  const promise = (async () => {
-    let resp = await handler();
-    // One bounded retry covers transient Supabase/Cloudflare 5xx failures
-    // without turning the request into an unbounded retry loop.
-    if (resp.status >= 500) {
-      await new Promise((resolve) => setTimeout(resolve, 750));
-      resp = await handler();
-    }
-    const body = await resp.text();
-    if (resp.status >= 200 && resp.status < 300) {
-      setCachedEntry(key, body, resp.status);
-      return { body, status: resp.status, expiresAt: Date.now() + FEED_CACHE_TTL_MS };
-    }
-    const stale = FEED_CACHE.get(key);
-    if (stale && stale.status >= 200 && stale.status < 300 && Date.now() <= stale.expiresAt + 60_000) {
-      return { ...stale, expiresAt: Date.now() + FEED_CACHE_TTL_MS };
-    }
-    return { body, status: resp.status, expiresAt: Date.now() + FEED_CACHE_TTL_MS };
-  })();
-  FEED_CACHE_LOCKS.set(key, promise);
-  try {
-    const entry = await promise;
-    return new Response(entry.body, {
-      status: entry.status,
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': entry.status >= 200 && entry.status < 300 ? 'public, max-age=30, stale-while-revalidate=60' : 'no-store',
-        'X-IVX-Cache': 'MISS',
-        ...CORS_HEADERS,
-      },
-    });
-  } finally {
-    FEED_CACHE_LOCKS.delete(key);
-  }
-}
+// Public caches never contain viewer state, failure responses, or unbounded stale data.
+const withFeedCache = createFeedResponseCache({ headers: CORS_HEADERS });
 
 async function readBody(req: Request): Promise<Record<string, unknown>> {
   try { return await req.json() as Record<string, unknown>; } catch { return {}; }
@@ -356,8 +268,7 @@ async function filterPlayableEntries<T extends { row: { video_url: string | null
 }
 
 export async function handlePlatformFeed(req: Request): Promise<Response> {
-  const cacheKey = feedCacheKey(req.url);
-  return withFeedCache(cacheKey, async () => {
+  return withFeedCache(req, async () => {
   try {
     const url = new URL(req.url);
     const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || '50'), 1), 200);
@@ -548,7 +459,7 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
       marker: VIDEO_PLATFORM_MARKER,
     });
   } catch (err) {
-    return json({ error: 'Video feed temporarily unavailable', marker: VIDEO_PLATFORM_MARKER }, 503);
+    return json({ error: 'Feed temporarily unavailable. Please retry.', code: 'FEED_UNAVAILABLE', marker: VIDEO_PLATFORM_MARKER }, 503);
   }
   }); // withFeedCache
 }
@@ -658,8 +569,7 @@ function sortHomeFeedDeals(deals: HomeFeedDeal[]): HomeFeedDeal[] {
  * unattached videos never appear. One admin publish updates every platform.
  */
 export async function handlePlatformHomeFeed(req: Request): Promise<Response> {
-  const cacheKey = feedCacheKey(req.url);
-  return withFeedCache(cacheKey, async () => {
+  return withFeedCache(req, async () => {
   try {
     const url = new URL(req.url);
     const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || '60'), 1), 120);
@@ -824,7 +734,7 @@ export async function handlePlatformHomeFeed(req: Request): Promise<Response> {
       marker: VIDEO_PLATFORM_MARKER,
     });
   } catch (err) {
-    return json({ error: 'Home feed temporarily unavailable', marker: VIDEO_PLATFORM_MARKER }, 503);
+    return json({ error: 'Home feed temporarily unavailable. Please retry.', code: 'FEED_UNAVAILABLE', marker: VIDEO_PLATFORM_MARKER }, 503);
   }
   }); // withFeedCache
 }
