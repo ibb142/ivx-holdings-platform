@@ -26,7 +26,8 @@ function harness() {
     setTimeout: (fn: unknown) => { timers.add(fn); return fn; }, clearTimeout: (id: unknown) => timers.delete(id),
   });
   const events: any[] = [];
-  return { calls, legacy, timers, events, logs, cancelled: () => cancelled,
+  return { calls, legacy, timers, events, logs, cancelled: () => cancelled, close: () => stream.close(),
+    expire: () => { for (const fn of timers) (fn as () => void)(); },
     run: (signal?: AbortSignal) => api.run('fixture-owner-token', { requestId: 'fixture-request', conversationId: 'fixture-room', message: 'hello' }, (e: unknown) => events.push(e), signal),
     send: (event: unknown) => stream.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`)),
   };
@@ -45,9 +46,12 @@ test('native SSE delivers a delta before final without legacy JSON fallback', as
   expect(h.calls[0].init.headers.Authorization).toBe('Bearer fixture-owner-token');
   expect(JSON.parse(h.calls[0].init.body).requestId).toBe('fixture-request');
   h.send({ type: 'final', status: 200, ok: true, body: { answer: 'Hola', assistantPersisted: true } });
+  await flush();
+  expect(h.cancelled()).toBe(false);
+  expect(() => h.close()).not.toThrow();
   const result = await pending;
   expect(await result.response.json()).toEqual({ answer: 'Hola', assistantPersisted: true });
-  expect(h.cancelled()).toBe(true); expect(h.timers.size).toBe(0);
+  expect(h.cancelled()).toBe(false); expect(h.timers.size).toBe(0);
   expect(JSON.parse(h.logs[1][1])).toMatchObject({ requestId: 'fixture-request', deltaCount: 1, status: 200 });
   expect(JSON.stringify(h.logs)).not.toContain('fixture-owner-token');
   expect(JSON.stringify(h.logs)).not.toContain('Hola');
@@ -64,7 +68,32 @@ test('caller abort terminates a native stream while waiting for its next chunk',
 test('native stream errors stay errors and cannot manufacture a final answer', async () => {
   const h = harness(); const pending = h.run(); pending.catch(() => {});
   h.send({ type: 'error', error: 'AI_UNAVAILABLE' });
+  await flush();
+  expect(() => h.close()).not.toThrow();
   await expect(pending).rejects.toThrow('AI_UNAVAILABLE');
   expect(h.events).toEqual([{ type: 'error', error: 'AI_UNAVAILABLE' }]);
-  expect(h.cancelled()).toBe(true); expect(h.timers.size).toBe(0);
+  expect(h.cancelled()).toBe(false); expect(h.timers.size).toBe(0);
+});
+
+// Expo SDK54 didComplete calls controller.close even after reader.cancel.
+// A terminal SSE record can arrive one native event before didComplete.
+test('terminal 503 preserves the auth failure and permits native didComplete', async () => {
+  const h = harness(); const pending = h.run(); pending.catch(() => {});
+  h.send({ type: 'final', status: 503, ok: false, body: { code: 'AUTH_SERVICE_UNAVAILABLE' } });
+  await flush();
+  expect(h.cancelled()).toBe(false);
+  expect(() => h.close()).not.toThrow();
+  const result = await pending;
+  expect(result.response.status).toBe(503);
+  expect(await result.response.json()).toEqual({ code: 'AUTH_SERVICE_UNAVAILABLE' });
+  expect(h.timers.size).toBe(0);
+});
+
+test('terminal event with missing native completion retains the original deadline', async () => {
+  const h = harness(); const pending = h.run(); pending.catch(() => {});
+  h.send({ type: 'final', status: 200, body: { answer: 'Hola' } });
+  await flush(); h.expire();
+  await expect(pending).rejects.toThrow('timed out after 180000ms');
+  expect(h.calls[0].init.signal.aborted).toBe(true);
+  expect(h.timers.size).toBe(0);
 });

@@ -15,6 +15,7 @@ import { startAutonomousUtilizationGuardian, stopAutonomousUtilizationGuardian }
 
 import { startCertificateWorker, stopCertificateWorker } from '../services/ivx-certificate-worker';
 import { startOwnerAITaskWorker, stopOwnerAITaskWorker } from '../services/ivx-owner-ai-task-queue';
+import { startGlobalCertificationSupervisor, stopGlobalCertificationSupervisor } from '../services/ivx-global-certification-supervisor';
 
 const databaseRecoveryMode = (process.env.IVX_SUPABASE_RECOVERY_MODE ?? '').trim().toLowerCase() === 'true';
 // Fleet timers deliberately unref themselves. In recovery mode the auxiliary
@@ -49,6 +50,7 @@ const fleetStarted = startAutonomous112RuntimeEnforcer();
 if (!databaseRecoveryMode) {
   startAutonomousDoctor();
   startAutonomousUtilizationGuardian();
+  startGlobalCertificationSupervisor();
 }
 console.log('[IVX-SENIOR-DEV-01] 112-lane execution plane', {
   started: fleetStarted,
@@ -70,6 +72,7 @@ if (!databaseRecoveryMode) {
 
 async function shutdown(signal: string): Promise<void> {
   process.env.IVX_INSTANCE_DRAINING = 'true';
+  stopGlobalCertificationSupervisor();
   stopCertificateWorker();
   requestSeniorDevWorkerStop();
   stopSeniorDeveloperQueue();

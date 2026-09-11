@@ -3289,21 +3289,27 @@ async function fetchOwnerAIWithHeartbeat(
       }
     };
 
-    while (true) {
-      const { done, value } = await Promise.race([reader.read(), deadline]);
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let newlineIdx = buffer.indexOf('\n\n');
-      while (newlineIdx >= 0) {
-        const rawEvent = buffer.slice(0, newlineIdx);
-        buffer = buffer.slice(newlineIdx + 2);
-        const lines = rawEvent.split('\n');
-        for (const line of lines) dispatchEvent(line);
-        newlineIdx = buffer.indexOf('\n\n');
+    try {
+      while (true) {
+        const { done, value } = await Promise.race([reader.read(), deadline]);
+        if (done) break;
+        // The terminal SSE record precedes native didComplete. Drain to EOF
+        // under the original deadline: SDK54 reader.cancel() races the native
+        // controller.close() callback and raises a global JS exception.
+        if (finalEvent || streamError) continue;
+        buffer += decoder.decode(value, { stream: true });
+        let newlineIdx = buffer.indexOf('\n\n');
+        while (newlineIdx >= 0) {
+          const rawEvent = buffer.slice(0, newlineIdx);
+          buffer = buffer.slice(newlineIdx + 2);
+          const lines = rawEvent.split('\n');
+          for (const line of lines) dispatchEvent(line);
+          newlineIdx = buffer.indexOf('\n\n');
+        }
       }
-      if (finalEvent || streamError) break;
+    } finally {
+      reader.releaseLock();
     }
-    try { reader.cancel().catch(() => undefined); } catch { /* noop */ }
 
     if (!finalEvent) {
       throw new Error(streamError ?? 'owner-ai stream closed without final event');
