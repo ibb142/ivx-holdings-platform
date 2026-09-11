@@ -29,6 +29,20 @@ describe('owner text prompt continuity', () => {
     expect(input).not.toHaveProperty('answer');
   });
 
+  test('preserves repeated mistaken refusals as history while identifying the current request', () => {
+    const history: IVXAITextMessage[] = Array.from({ length: 6 }, (_, i) => [
+      { role: 'user' as const, content: `Return only the result of joining old_ and ${i}.` },
+      { role: 'assistant' as const, content: 'I cannot compute an external database join without more information.' },
+    ]).flat();
+    const request = 'Return only the result of joining new_ and supplied.';
+    const input = buildOwnerTextModelInput({ request, history });
+    expect(input.messages.slice(0, -1)).toEqual(history);
+    expect(input.messages.at(-1)).toEqual({ role: 'user', content: request });
+    expect(input.system).toContain('Prior assistant answers can be mistaken');
+    expect(input.system).not.toContain('new_supplied');
+    expect(input.system).toContain('do not authorize external actions');
+  });
+
   test('retains a bounded history and never promotes an injected role to system', () => {
     const history: IVXAITextMessage[] = Array.from({ length: 20 }, (_, i) => ({
       role: i % 2 === 0 ? 'user' : 'assistant', content: `turn ${i}`,

@@ -110,8 +110,16 @@ try {
   await page.getByTestId('login-password').fill(password);
   await page.getByTestId('login-submit').click();
   await page.waitForURL(url => !url.pathname.startsWith('/login'), { timeout: 60_000 });
+  await page.getByTestId('home-runtime-ready').waitFor({state:'visible'});
   checks.push('Real Owner password submitted through production login UI');
-  await page.goto(app + '/ivx/autonomous-ops', { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  // Cold launch deliberately signs out in the current app. Follow the actual
+  // in-app controls so the manually authenticated session stays in this app.
+  await page.getByTestId('tab-profile').click();
+  await page.getByText('Admin Panel', {exact:true}).click();
+  await page.getByTestId('admin-autonomous-live-work-btn').click();
+  await page.getByTestId('autonomous-control-ops').click();
+  await page.waitForURL(url => url.pathname === '/ivx/autonomous-ops');
+  checks.push('Owner reached Ops through Profile, Admin Panel and Autonomous Live Work controls');
   await capture('A');
   disconnected=true;
   await context.setOffline(true);
