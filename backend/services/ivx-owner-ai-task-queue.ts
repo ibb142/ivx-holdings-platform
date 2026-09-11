@@ -15,7 +15,7 @@ import { boundedHealthProbe } from './ivx-bounded-health-probe';
  */
 
 import { requestIVXAIText, validateIVXAIStartup, getProviderHealth, isIVXAIConfigured } from '../ivx-ai-runtime';
-import { markProviderReady } from './ivx-provider-state-machine';
+import { probeGatewayCompletion } from './ivx-ai-completion-probe';
 
 export type IVXOwnerAITaskStatus =
   | 'RECEIVED'
@@ -1071,7 +1071,7 @@ export function checkAIHealth(): HealthCheckResult {
  * ok=false with a specific reason if it failed.
  *
  * This is the difference between "configured" and "working" — the regular
- * checkAIHealth only verifies configuration, this verifies connectivity.
+ * checkAIHealth reads the last observation; this performs a fresh completion.
  */
 export async function probeAIGatewayLive(): Promise<{
   ok: boolean;
@@ -1107,68 +1107,19 @@ export async function probeAIGatewayLive(): Promise<{
 
   // Manual live probe verifies an actual minimal generation. Authentication-only
   // GET /models can succeed while billing, model access, or completion routing fails.
-  const url = `${endpoint}/chat/completions`;
-
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: startup.model,
-        messages: [{ role: 'user', content: 'Reply OK' }],
-        max_tokens: 16,
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    const latencyMs = Date.now() - started;
-
-    if (res.ok) {
-      // A successful zero-token authentication probe must release the provider
-      // circuit breaker. Previously this endpoint returned ok=true while the
-      // state machine remained AI_UNAVAILABLE, so every worker tick was skipped.
-      markProviderReady(startup.provider, startup.model);
-      return { ok: true, status: 200, reason: 'Gateway generation verified (POST /chat/completions)', keyPrefix, endpoint, latencyMs, ownerActionRequired: null };
-    }
-
-    const bodyText = await res.text().catch(() => '');
-    const isVercelKey = apiKey.startsWith('vck_');
-    if (res.status === 401 || res.status === 403) {
-      return {
-        ok: false, status: res.status, keyPrefix, endpoint, latencyMs,
-        reason: `Authentication failed (HTTP ${res.status}). The AI gateway key is expired or revoked.`,
-        ownerActionRequired: isVercelKey
-          ? 'Vercel AI Gateway key (vck_) is EXPIRED or REVOKED. Generate a new key at https://vercel.com/~/ai-gateway/api-keys and update IVX_AI_GATEWAY_KEY + AI_GATEWAY_API_KEY on Render.'
-          : 'OpenAI API key (sk_) was rejected. Verify the key is valid and has credits at https://platform.openai.com/api-keys. Update IVX_AI_GATEWAY_KEY on Render.',
-      };
-    }
-    if (res.status === 429) {
-      return {
-        ok: false, status: 429, keyPrefix, endpoint, latencyMs,
-        reason: 'Rate limited (HTTP 429). The gateway key has hit its rate limit.',
-        ownerActionRequired: 'Wait and retry. If persistent, check rate limits on the Vercel AI Gateway dashboard.',
-      };
-    }
-    return {
-      ok: false, status: res.status, keyPrefix, endpoint, latencyMs,
-      reason: `Gateway returned HTTP ${res.status}: ${bodyText.slice(0, 200)}`,
-      ownerActionRequired: res.status >= 500
-        ? 'Gateway server error — this is transient. Retry in a few minutes.'
-        : `Unexpected HTTP ${res.status} from gateway. Check the key and endpoint configuration on Render.`,
-    };
-  } catch (error) {
-    const latencyMs = Date.now() - started;
-    const isTimeout = error instanceof Error && (error.name === 'AbortError' || error.message.includes('abort'));
-    return {
-      ok: false, status: null, keyPrefix, endpoint, latencyMs,
-      reason: isTimeout ? 'Gateway probe timed out (10s)' : (error instanceof Error ? error.message : 'Network error'),
-      ownerActionRequired: isTimeout
-        ? 'Gateway did not respond within 10s — possible network issue or gateway is down. Retry.'
-        : 'Cannot reach the AI gateway endpoint. Check DNS and network connectivity.',
-    };
-  }
+  const result = await probeGatewayCompletion({
+    url: `${endpoint}/chat/completions`, apiKey, model: startup.model, provider: startup.provider,
+  });
+  return {
+    ok: result.ok, status: result.status, keyPrefix, endpoint, latencyMs: result.latencyMs,
+    reason: result.reason,
+    ownerActionRequired: result.ok ? null : result.code === 'AI_CREDITS_REQUIRED'
+      ? 'The provider requires a positive credit balance. Restore the balance and validate again.'
+      : result.status === 401 || result.status === 403
+        ? 'The provider rejected its configured credential. Verify the existing provider binding.'
+        : result.code === 'AI_PROBE_TIMEOUT' ? 'The provider did not finish a completion within 10 seconds.'
+          : 'The provider did not return a valid completion. Check its availability and response contract.',
+  };
 }
 
 export async function checkQueueHealth(): Promise<HealthCheckResult> {
