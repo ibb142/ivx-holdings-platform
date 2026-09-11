@@ -80,10 +80,11 @@ async function resolveSupabaseAnonKey(): Promise<string> {
 }
 
 async function readOwnerPassword(): Promise<string> {
-  const direct = readEnv('IVX_OWNER_PASSWORD') || readEnv('OWNER_NEW_PASSWORD');
+  const direct = process.env.IVX_OWNER_PASSWORD || process.env.OWNER_NEW_PASSWORD || '';
   if (direct) return direct;
   try {
-    return readTrimmed(await getIVXOwnerVariableRuntimeValue('OWNER_NEW_PASSWORD'));
+    const value = await getIVXOwnerVariableRuntimeValue('OWNER_NEW_PASSWORD');
+    return typeof value === 'string' ? value : '';
   } catch (error) {
     console.warn('[IVXOwnerPasswordlessLogin] durable OWNER_NEW_PASSWORD lookup failed:', error instanceof Error ? error.message : 'unknown');
     return '';
@@ -131,7 +132,7 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const email = sanitizeEmail(body.email);
   const emergency = readTrimmed(body.emergency).toLowerCase();
-  const submittedPassword = readTrimmed(body.password);
+  const submittedPassword = typeof body.password === 'string' ? body.password : '';
 
   if (emergency !== 'true' && emergency !== 'ivx_emergency_recovery') {
     return failure(
@@ -154,17 +155,24 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
     );
   }
 
-  const supabaseUrl = resolveSupabaseUrl();
-  const anonKey = await resolveSupabaseAnonKey();
-  if (!supabaseUrl || !anonKey) {
-    return failure('Supabase authentication binding is unavailable on the backend runtime.', 'supabase_auth_binding_unavailable', 503);
+  // A public recovery flag and an email do not authenticate the caller.
+  // Reject before reading runtime credentials or contacting the provider.
+  if (!submittedPassword) {
+    return failure('Owner credentials are required.', 'owner_credentials_required', 401);
   }
 
   const ownerEmail = (readEnv('IVX_OWNER_EMAIL') || allowlist[0] || email).toLowerCase();
-  const ownerPassword = await readOwnerPassword();
 
   if (ownerEmail !== email) {
     return failure('Requested owner email does not match the configured owner.', 'owner_runtime_email_mismatch', 403);
+  }
+
+  const ownerPassword = await readOwnerPassword();
+  if (!ownerPassword) {
+    return failure('Owner authentication bindings are unavailable.', 'owner_emergency_binding_unavailable', 503);
+  }
+  if (!credentialsMatch(submittedPassword, ownerPassword)) {
+    return failure('Invalid email or password.', 'owner_runtime_credential_mismatch', 401);
   }
 
   const buildOutageSessionResponse = (): Response | null => {
@@ -195,22 +203,13 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
   // that case the mobile app retries this emergency route with the exact
   // submitted password. Mint a bounded, server-signed owner session only
   // after a constant-time comparison against that existing runtime binding.
-  if (submittedPassword) {
-    if (!ownerPassword || !credentialsMatch(submittedPassword, ownerPassword)) {
-      return failure('Invalid email or password.', 'owner_runtime_credential_mismatch', 401);
-    }
-    const outageResponse = buildOutageSessionResponse();
-    if (outageResponse) return outageResponse;
-  }
+  const outageResponse = buildOutageSessionResponse();
+  if (outageResponse) return outageResponse;
 
-  if (!ownerPassword) {
-    const outageResponse = buildOutageSessionResponse();
-    if (outageResponse) return outageResponse;
-    return failure(
-      'Owner emergency authentication bindings are unavailable on the backend runtime.',
-      'owner_emergency_binding_unavailable',
-      503,
-    );
+  const supabaseUrl = resolveSupabaseUrl();
+  const anonKey = await resolveSupabaseAnonKey();
+  if (!supabaseUrl || !anonKey) {
+    return failure('Supabase authentication binding is unavailable on the backend runtime.', 'supabase_auth_binding_unavailable', 503);
   }
 
   try {
