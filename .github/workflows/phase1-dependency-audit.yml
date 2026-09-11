@@ -1,0 +1,34 @@
+name: Phase 1 dependency diagnostics
+on:
+  push:
+    branches: [fix/phase1-supabase-diagnostics-20260911]
+    paths:
+      - '.github/workflows/phase1-dependency-audit.yml'
+      - 'scripts/ops/phase1-dependency-audit*.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: phase1-dependency-diagnostics
+  cancel-in-progress: false
+jobs:
+  audit:
+    if: github.repository == 'ibb142/ivx-holdings-platform'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify fixed target and output redaction
+        run: node --test scripts/ops/phase1-dependency-audit.test.mjs
+      - name: Measure dependencies without modifying production
+        env:
+          PROJECT_REF: kvclcdjmjghndxsngfzb
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/ops/phase1-dependency-audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase1-dependency-audit
+          path: phase1-dependency-audit.json
+          if-no-files-found: error
