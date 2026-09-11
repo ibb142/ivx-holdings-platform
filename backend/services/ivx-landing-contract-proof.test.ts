@@ -1,13 +1,72 @@
 import { test, afterEach } from 'bun:test';
 import assert from 'node:assert/strict';
 import { executeLandingUnit, __resetLandingExecutorCachesForTests } from './ivx-landing-p0-executor';
-import type { LandingUnit } from './ivx-landing-p0-backlog';
+import type { DealsAssert, LandingUnit } from './ivx-landing-p0-backlog';
 
 afterEach(__resetLandingExecutorCachesForTests);
 const sha = 'a'.repeat(40);
 const ctx = { agentId: 'synthetic-agent', agentNumber: 1, taskId: 'synthetic-task', sourceSha: sha, productionSha: sha, repair: false };
 const unit = (check: LandingUnit['check']): LandingUnit => ({ unitId: 'synthetic-contract', lane: 'e2e', workstream: 'synthetic', title: 'Proof integrity', severity: 'P1', check });
 const castFetch = (fn: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>): typeof fetch => fn as typeof fetch;
+
+const dealAssertions: DealsAssert[] = [
+  { assert: 'videos' },
+  { assert: 'min-count', min: 1 }, { assert: 'present', title: 'Synthetic property' },
+  { assert: 'order', titles: ['Synthetic property'] }, { assert: 'published' },
+  { assert: 'unique-titles' }, { assert: 'unique-ids' }, { assert: 'financials' },
+  { assert: 'identity' }, { assert: 'cover' }, { assert: 'images' },
+];
+const completeDeal = { id: 'synthetic-deal', title: 'Synthetic property', published: true,
+  address: '123 Example Street', price: 100000, image_url: 'https://cdn.example/image.png',
+  video_url: 'https://cdn.example/video.mp4' };
+
+test('an empty deals response cannot certify any property assertion', async () => {
+  for (const assertion of dealAssertions) {
+    __resetLandingExecutorCachesForTests();
+    const result = await executeLandingUnit(unit({ kind: 'deals', assert: assertion }), ctx,
+      { fetchImpl: castFetch(async () => Response.json({ deals: [], count: 0 })) });
+    assert.equal(result.record.status, 'FAIL', assertion.assert);
+    assert.match(result.record.bugs_found[0].detail, /no deals.*verified/i);
+  }
+});
+
+test('malformed and partially invalid deals responses never certify the remaining records', async () => {
+  for (const body of [{}, { deals: null }, { deals: {} }, { deals: [completeDeal, null] },
+    { deals: [completeDeal, 'invalid'] }, { deals: [completeDeal, []] }]) {
+    __resetLandingExecutorCachesForTests();
+    const result = await executeLandingUnit(unit({ kind: 'deals', assert: { assert: 'videos' } }), ctx,
+      { fetchImpl: castFetch(async () => Response.json(body)) });
+    assert.equal(result.record.status, 'FAIL', JSON.stringify(body));
+    assert.equal(result.record.bugs_found[0].root_cause, 'api');
+  }
+});
+
+test('a valid nonempty deals contract still certifies each property assertion', async () => {
+  for (const assertion of dealAssertions) {
+    __resetLandingExecutorCachesForTests();
+    const result = await executeLandingUnit(unit({ kind: 'deals', assert: assertion }), ctx,
+      { fetchImpl: castFetch(async () => Response.json({ deals: [completeDeal], count: 1 })) });
+    assert.equal(result.record.status, 'PASS', assertion.assert);
+  }
+});
+
+test('a valid legacy array remains supported and an unavailable response stays failed', async () => {
+  for (const status of [200, 503]) {
+    __resetLandingExecutorCachesForTests();
+    const result = await executeLandingUnit(unit({ kind: 'deals', assert: { assert: 'videos' } }), ctx,
+      { fetchImpl: castFetch(async () => Response.json([completeDeal], { status })) });
+    assert.equal(result.record.status, status === 200 ? 'PASS' : 'FAIL');
+  }
+});
+
+test('media checks reject a partially invalid source before probing its remaining URLs', async () => {
+  let calls = 0;
+  const result = await executeLandingUnit(unit({ kind: 'media', source: 'deals-videos', assert: 'resolvable' }), ctx,
+    { fetchImpl: castFetch(async () => { calls += 1; return Response.json({ deals: [completeDeal, null] }); }) });
+  assert.equal(result.record.status, 'FAIL');
+  assert.equal(result.record.bugs_found[0].root_cause, 'api');
+  assert.equal(calls, 1);
+});
 
 test('each negative registration probe isolates its target field with all other required fields present', async () => {
   const cases = [

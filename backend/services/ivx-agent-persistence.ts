@@ -605,25 +605,38 @@ export async function fetchExecutionsByRun(runId: string): Promise<SbResult<Exec
   return { ok: false, status: 0, data: null, error: lastEnsureDetail, credentialBinding: 'none' };
 }
 
-export async function fetchPendingExecutions(limit = 200): Promise<SbResult<ExecutionRow[]>> {
+export type PendingExecutionRow = Pick<ExecutionRow,
+  'task_id' | 'run_id' | 'agent_id' | 'agent_number' | 'workflow' | 'task_type' | 'final_status' | 'started_at'>;
+
+export async function fetchPendingExecutions(
+  limit = 200,
+  filters: { workflow?: string; taskType?: string } = {},
+): Promise<SbResult<PendingExecutionRow[]>> {
+  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(1000, Math.floor(limit))) : 200;
   const mode = await resolveStoreMode();
   if (mode === 'dedicated') {
-    // Use the indexed task_id primary key to bound the database read, then
-    // filter pending states in-process. Filtering the entire accumulated table
-    // by final_status caused PostgreSQL 57014 statement timeouts in production
-    // because older installations do not have a final_status index.
-    const scanLimit = Math.max(limit, Math.min(5000, limit * 4));
-    const recent = await sbRequest<ExecutionRow[]>(`ivx_agent_executions?select=*&order=task_id.desc&limit=${scanLimit}`);
-    if (!recent.ok) return recent;
-    return {
-      ...recent,
-      data: (recent.data ?? [])
-        .filter((row) => row.final_status === 'pending' || row.final_status === 'running')
-        .slice(0, limit),
-    };
+    // idx_ivx_agent_exec_status_started supports selecting unfinished work.
+    // Limit AFTER the status/workflow filters so retained completed history
+    // cannot hide pending work. Discovery does not need large evidence/output.
+    const query = new URLSearchParams({
+      select: 'task_id,run_id,agent_id,agent_number,workflow,task_type,final_status,started_at',
+      final_status: 'in.(pending,running)',
+      order: 'started_at.asc.nullsfirst,task_id.asc',
+      limit: String(safeLimit),
+    });
+    if (filters.workflow) query.set('workflow', `eq.${filters.workflow}`);
+    if (filters.taskType) query.set('task_type', `eq.${filters.taskType}`);
+    const result = await sbRequest<PendingExecutionRow[]>(`ivx_agent_executions?${query}`);
+    if (result.ok && !Array.isArray(result.data)) {
+      return { ...result, ok: false, data: null, error: 'Invalid pending execution array response' };
+    }
+    return result;
   }
   if (mode === 'jobs_fallback') {
-    const res = await jobsSelect('type=eq.ivx_rec_execution&status=in.(queued,running)', limit);
+    let query = 'type=eq.ivx_rec_execution&status=in.(queued,running)';
+    if (filters.workflow) query += `&payload->>workflow=eq.${encodeURIComponent(filters.workflow)}`;
+    if (filters.taskType) query += `&payload->>task_type=eq.${encodeURIComponent(filters.taskType)}`;
+    const res = await jobsSelect(query, safeLimit);
     const rows = (res.data ?? [])
       .map((d) => d.payload as unknown as ExecutionRow)
       .filter((p) => p.final_status === 'pending' || p.final_status === 'running');
