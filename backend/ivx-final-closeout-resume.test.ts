@@ -148,6 +148,7 @@ describe('IVX Autonomous Coder — restart / CI-wait resume (final closeout 2026
     const proof = await resumeIVXAutonomousCoderFromCiWait({
       ...RESUME_BASE,
       prStateFn: async () => ({ state: 'closed', merged: true, mergeCommitSha: 'reconciled-merge-sha' }),
+      requiredChecksFn: async () => greenChecks(),
       mergeFn: async () => {
         mergeAttempted = true;
         return { merged: true, mergeCommitSha: null };
@@ -156,8 +157,37 @@ describe('IVX Autonomous Coder — restart / CI-wait resume (final closeout 2026
     expect(mergeAttempted).toBe(false);
     expect(proof.finalStatus).toBe('COMPLETED');
     expect(proof.prMergeCommitSha).toBe('reconciled-merge-sha');
+    expect(proof.ciChecksGreen).toBe(true);
+    expect(proof.ciCheckEvidence).toEqual(greenChecks());
+    expect(proof.iterations).toEqual([]);
+    expect(proof.commandsRun).toEqual([]);
     expect(proof.resumedFromRestart).toBe(true);
   });
+
+  for (const scenario of ['red', 'missing', 'unavailable'] as const) {
+    it(`already merged PR with ${scenario} CI cannot certify the saved job`, async () => {
+      let writes = 0;
+      const proof = await resumeIVXAutonomousCoderFromCiWait({
+        ...RESUME_BASE,
+        prStateFn: async () => ({ state: 'closed', merged: true, mergeCommitSha: 'reconciled-merge-sha' }),
+        requiredChecksFn: async () => {
+          if (scenario === 'unavailable') throw new Error('GitHub check lookup unavailable');
+          return scenario === 'red' ? redChecks() : [];
+        },
+        ciWaitTimeoutMs: 1, ciPollIntervalMs: 0, ciNaGraceMs: 0, sleepFn: async () => {},
+        mergeFn: async () => { writes++; throw new Error('Already merged work must not be merged again'); },
+      });
+      expect(writes).toBe(0);
+      expect(proof.finalStatus).not.toBe('COMPLETED');
+      expect(proof.ciChecksGreen).not.toBe(true);
+      expect(proof.commitSha).toBe(RESUME_BASE.commitSha);
+      expect(proof.prMerged).toBe(true);
+      expect(proof.prMergeCommitSha).toBe('reconciled-merge-sha');
+      expect(proof.llmCallCount).toBe(0);
+      expect(proof.deployRequested).toBe(false);
+      expect(proof.productionVerified).toBe(false);
+    });
+  }
 
   it('PR merged but GitHub returns no merge SHA → BLOCKED, never COMPLETED', async () => {
     const proof = await resumeIVXAutonomousCoderFromCiWait({
