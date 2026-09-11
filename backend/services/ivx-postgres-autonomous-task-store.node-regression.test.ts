@@ -4,6 +4,6 @@ import { TRUTH_TIMEOUT_MS } from './ivx-postgres-autonomous-task-store';
 
 describe('Telemetry Timeout Tests', () => {
   it('should have increased TRUTH_TIMEOUT_MS', () => {
-    assert.strictEqual(TRUTH_TIMEOUT_MS, 15000);
+    assert.strictEqual(TRUTH_TIMEOUT_MS, 30000);
   });
 });
