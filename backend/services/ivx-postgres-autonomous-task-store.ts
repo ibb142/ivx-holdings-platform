@@ -306,7 +306,7 @@ export async function readPostgresLandingTasks(sha: string): Promise<Task[]> {
 }
 async function fetchPostgresLandingTasks(sha: string): Promise<Task[]> {
   const prefixes = ['landing-p0:', 'landing-p0-repair:', 'landing-p0-patrol:'];
-  const directRead = async () => (await getDirectPool().query<RestTaskRow>(
+  const directRead = async () => (await queryWithPostgresDeadline<RestTaskRow>(getDirectPool(),
     'select payload from public.ivx_autonomous_tasks where idempotency_key like any($1::text[]) order by task_id limit 1000',
     [prefixes.map(prefix => `${prefix}${sha}:%`)],
   )).rows;
