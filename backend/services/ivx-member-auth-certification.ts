@@ -5,6 +5,7 @@ import { calculateFinancialSummary, determineTier } from './ivx-member-classific
 import { isDurableStoreConfigured, readDurableJson, writeDurableJson } from './ivx-durable-store';
 import { getIVXOwnerVariableRuntimeValue } from '../api/ivx-owner-variables';
 import { getIVXOwnerEmailAllowlist } from '../../expo/shared/ivx/access-control';
+import { readOwnerPasswordBinding } from './ivx-owner-password-runtime';
 
 export const IVX_MEMBER_AUTH_CERT_MARKER = 'ivx-member-auth-cert-v4-render-runtime-safe-2026-08-14';
 const STATE_KEY = 'logs/audit/member-auth-certification/latest.json';
@@ -60,8 +61,8 @@ async function ownerPasswordFromRuntime(): Promise<string> {
   // Priority: process.env first (Render dashboard), then encrypted Owner Variables store.
   // This ensures the Render dashboard env var always wins over stale stored values.
   // Passwords are opaque: trimming changes the credential supplied to Auth.
-  const envPassword = process.env.IVX_OWNER_PASSWORD || process.env.OWNER_NEW_PASSWORD || '';
-  if (envPassword) return envPassword;
+  const envPassword = readOwnerPasswordBinding();
+  if (envPassword || process.env.IVX_OWNER_PASSWORD_BASE64) return envPassword;
   try {
     const stored = String(await getIVXOwnerVariableRuntimeValue('OWNER_NEW_PASSWORD', { preferStored: true }) || '');
     if (stored) return stored;

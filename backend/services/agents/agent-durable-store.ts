@@ -88,7 +88,7 @@ export async function loadAgentState(): Promise<AgentStateSnapshot | null> {
   try {
     const raw = await readFile(STATE_PATH, 'utf8');
     const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object') return null;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
     const record = parsed as Record<string, unknown>;
     return {
       marker: typeof record.marker === 'string' ? record.marker : AGENT_DURABLE_STORE_MARKER,
