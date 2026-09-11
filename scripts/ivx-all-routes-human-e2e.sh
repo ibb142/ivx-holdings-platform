@@ -84,6 +84,7 @@ name: $name
 - waitForAnimationToEnd:
     timeout: 3000
 - assertNotVisible: "Something went wrong"
+- assertNotVisible: "IVX Provider Error"
 - assertNotVisible: "Application error"
 - assertNotVisible: "Unhandled Runtime Error"
 - assertNotVisible: "Login service temporarily unavailable"
@@ -94,8 +95,16 @@ name: $name
 - waitForAnimationToEnd:
     timeout: 3000
 - assertNotVisible: "Something went wrong"
-- takeScreenshot: "$screenshot"
+- assertNotVisible: "IVX Provider Error"
 YAML
+  if [ "$route" = '/chat-hub' ]; then
+    cat >> "$flow" <<'YAML'
+- assertVisible:
+    id: "public-chat-message-input"
+- assertNotVisible: "IVX public chat unavailable"
+YAML
+  fi
+  printf '%s\n' "- takeScreenshot: \"$screenshot\"" >> "$flow"
   jq -nc --arg file "$file" --arg route "$route" --arg name "$name" --arg screenshot "$screenshot" \
     '{file:$file,route:$route,name:$name,screenshot:$screenshot}' >> "$EVIDENCE/manifest.jsonl"
 done
