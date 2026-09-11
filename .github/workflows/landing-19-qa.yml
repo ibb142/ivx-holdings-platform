@@ -61,6 +61,8 @@ jobs:
       - run: bun install --frozen-lockfile --ignore-scripts
       - uses: supabase/setup-cli@v1
         with: { version: 2.117.0 }
+      - name: Verify isolated port allocation and unchanged Auth controls
+        run: python3 -m unittest discover -s qa -p test_landing_local_supabase_config.py -v
       - name: Start isolated local Supabase
         id: stack
         shell: bash
@@ -69,13 +71,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ivx-landing19-supabase"
           cd "$RUNNER_TEMP/ivx-landing19-supabase"
           supabase init
-          python3 - <<'PY'
-          import pathlib, re
-          config = pathlib.Path('supabase/config.toml')
-          text, count = re.subn(r'^jwt_expiry\s*=\s*\d+\s*$', 'jwt_expiry = 60', config.read_text(), flags=re.M)
-          assert count == 1, 'Expected one local Auth token expiry setting'
-          config.write_text(text)
-          PY
+          python3 "$GITHUB_WORKSPACE/qa/landing_local_supabase_config.py" supabase/config.toml
           supabase start --exclude studio,imgproxy,inbucket,realtime,storage-api,edge-runtime,logflare,vector,supavisor
           supabase status -o env > "$RUNNER_TEMP/landing19-local.env"
           python3 - <<'PY'
