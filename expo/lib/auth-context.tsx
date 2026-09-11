@@ -1876,11 +1876,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
             // IVX_OWNER_OUTAGE_CREDENTIAL_BOUND_V1
             // Bind an emergency session to the exact password supplied by the
-            // owner. The backend compares it in constant time against its
-            // existing owner credential before minting a short-lived token.
+            // owner. Require a refreshable Supabase session so chat preflight
+            // and session restoration use the same authentication authority.
             body: JSON.stringify({
               email: normalizedOwnerEmail,
               emergency: 'ivx_emergency_recovery',
+              requireSupabaseSession: true,
               ...(typeof ownerPassword === 'string' && ownerPassword.length > 0
                 ? { password: ownerPassword }
                 : {}),
@@ -1901,35 +1902,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             continue;
           }
           if (sessionMethod === 'ivx_owner_outage_session') {
-            const outageUserId = typeof parsed.userId === 'string' ? parsed.userId : '';
-            const outageEmail = sanitizeEmail(typeof parsed.email === 'string' ? parsed.email : normalizedOwnerEmail);
-            if (!isValidOwnerVerifiedUserId(outageUserId) || !isOwnerAdminEmail(outageEmail)) {
-              lastError = 'Backend outage owner session identity was not accepted.';
-              continue;
-            }
-            const outageOwnerUser: AuthUser = {
-              id: outageUserId,
-              email: outageEmail,
-              firstName: 'Owner',
-              lastName: 'IVX',
-              kycStatus: 'approved',
-              role: 'owner',
-              emailVerified: true,
-              accountType: 'owner',
-              accountStatus: 'active',
-            };
-            manualOwnerLoginRef.current = true;
-            ownerIPActiveRef.current = false;
-            activeSessionUserIdRef.current = outageUserId;
-            setUser(outageOwnerUser);
-            setUserRole('owner');
-            setIsAuthenticated(true);
-            setIsOwnerIPAccess(false);
-            setAuthCredentials(accessToken, outageUserId, 'owner');
-            await persistAuth({ token: accessToken, refreshToken: '', userId: outageUserId, userRole: 'owner' });
-            sessionInstalled = true;
-            console.log('[Auth] IVX owner outage session installed:', outageUserId, outageEmail);
-            break;
+            // Older backends may ignore requireSupabaseSession. Their outage
+            // tokens cannot be installed in Supabase or used by chat preflight.
+            lastError = 'Owner sign-in could not establish a Supabase session. Please retry when authentication is available.';
+            continue;
           }
           // Mark manual owner login BEFORE setSession so the synchronous
           // onAuthStateChange event does not trigger the owner auto-login block
