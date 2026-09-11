@@ -1,0 +1,93 @@
+import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+import { Hono } from 'hono';
+import { publicReadTimeout, publicMutationTimeout } from './services/ivx-public-timeout-response';
+
+const readRoutes = ['/api/projects/:projectId/comments', '/api/ivx/properties/featured',
+  '/api/ivx/featured-properties', '/api/ivx/jv-deals', '/api/ivx/deals', '/api/deals',
+  '/api/published-jv-deals', '/api/landing-deals', '/api/ivx/properties', '/api/properties',
+  '/api/ivx/videos/feed', '/api/ivx/video-platform/channels',
+  '/api/ivx/video-platform/stories', '/api/ivx/video-platform/live'];
+const writeRoutes = ['/api/projects/:projectId/like', '/api/projects/:projectId/share', '/api/projects/:projectId/save'];
+const source = readFileSync(process.env.IVX_PUBLIC_TIMEOUT_SOURCE || new URL('./hono.ts', import.meta.url), 'utf8');
+
+// Execute the shipped registrations and deadline with Hono, without booting
+// production background workers or connecting unit tests to external services.
+function fixture(mode: 'stalled' | 'success' | 'source-error') {
+  const app = new Hono();
+  const pending: Array<() => void> = [];
+  let attempts = 0, committed = 0;
+  const begin = source.indexOf('async function withTimeout<');
+  const end = source.indexOf('// NOTE: This is a static build label', begin);
+  if (begin < 0 || end < begin) throw Error('Missing deployed deadline helper');
+  const context: Record<string, unknown> = { app, Response, setTimeout, clearTimeout,
+    SB_HARD_TIMEOUT_MS: 5, publicReadTimeout, publicMutationTimeout };
+  const registrations: string[] = [];
+  for (const route of [...readRoutes, ...writeRoutes]) {
+    const matches = source.split('\n').filter(line => line.startsWith('app.')
+      && line.includes(`'${route}'`) && line.includes('withTimeout('));
+    if (matches.length !== 1) throw Error(`Ambiguous route: ${route}`);
+    registrations.push(matches[0]);
+    const handler = /=> (handle\w+)\(/.exec(matches[0])?.[1];
+    if (!handler) throw Error(`Missing handler: ${route}`);
+    context[handler] = () => {
+      attempts++;
+      if (mode === 'success') return Promise.resolve(Response.json({ marker: 'actual-response', items: ['retained'] }));
+      if (mode === 'source-error') return Promise.resolve(Response.json({ code: 'SOURCE_FAILURE' }, { status: 503 }));
+      return new Promise<Response>(resolve => pending.push(() => {
+        committed++; resolve(Response.json({ committed: true }));
+      }));
+    };
+  }
+  const deadline = new Bun.Transpiler({ loader: 'ts' }).transformSync(source.slice(begin, end));
+  vm.runInNewContext(deadline + '\n' + registrations.join('\n'), context);
+  return { app, finish: () => pending.splice(0).forEach(resolve => resolve()),
+    attempts: () => attempts, committed: () => committed };
+}
+
+test('every public read alias returns uncached 503 when its source misses the deadline', async () => {
+  const f = fixture('stalled');
+  try {
+    for (const route of readRoutes) {
+      const response = await f.app.request(route.replace(':projectId', 'project-1'));
+      expect(response.status, route).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(response.headers.get('retry-after')).toBe('2');
+      const body = await response.json();
+      expect(body.code).toBe('PUBLIC_READ_TIMEOUT');
+      expect(body.retryable).toBe(true);
+      for (const key of ['deals', 'properties', 'videos', 'count', 'total', 'success']) expect(body).not.toHaveProperty(key);
+    }
+  } finally { f.finish(); }
+});
+
+test('a timed-out engagement operation can still commit, so its response stays unknown and is never replayed', async () => {
+  const f = fixture('stalled');
+  try {
+    for (const route of writeRoutes) {
+      const response = await f.app.request(route.replace(':projectId', 'project-1'), { method: 'POST' });
+      expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(response.headers.has('retry-after')).toBe(false);
+      const body = await response.json();
+      expect(body).toMatchObject({ code: 'ENGAGEMENT_OUTCOME_UNKNOWN', outcome: 'unknown', retryable: false });
+      for (const key of ['liked', 'saved', 'success', 'like_count', 'save_count', 'share_count']) expect(body).not.toHaveProperty(key);
+    }
+    expect(f.committed()).toBe(0);
+    f.finish();
+    await Promise.resolve();
+    expect(f.committed()).toBe(3);
+    expect(f.attempts()).toBe(3);
+  } finally { f.finish(); }
+});
+
+test('completed reads and explicit source errors keep their actual response', async () => {
+  for (const mode of ['success', 'source-error'] as const) {
+    const f = fixture(mode);
+    const response = await f.app.request('/api/deals');
+    expect(response.status).toBe(mode === 'success' ? 200 : 503);
+    expect(await response.json()).toEqual(mode === 'success' ? { marker: 'actual-response', items: ['retained'] } : { code: 'SOURCE_FAILURE' });
+    expect(f.attempts()).toBe(1);
+  }
+});
