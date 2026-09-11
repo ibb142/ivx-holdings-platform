@@ -450,13 +450,20 @@ function statusFromDispatcherRecord(record: CampaignJobRecord): { status: ItemSt
 
 const DEFAULT_CONTROL: CampaignControlState = { paused: false, stopped: false, pausedAgents: [], stoppedAgents: [] };
 
-export async function loadControlState(): Promise<CampaignControlState> {
+export async function loadControlState(options: { required?: boolean } = {}): Promise<CampaignControlState> {
   if (!isDurableStoreConfigured()) {
+    if (options.required) throw new Error('Durable owner control is not configured');
     cachedControl = { ...DEFAULT_CONTROL };
     return cachedControl;
   }
   const stored = await readDurableJson<{ control?: CampaignControlState } | null>(STATE_KEY, null);
-  cachedControl = stored?.control ?? { ...DEFAULT_CONTROL };
+  const control = stored?.control;
+  if (options.required && (!control || typeof control.paused !== 'boolean' || typeof control.stopped !== 'boolean'
+    || !Array.isArray(control.pausedAgents) || !Array.isArray(control.stoppedAgents)
+    || [...control.pausedAgents, ...control.stoppedAgents].some((n) => !Number.isInteger(n) || n < 1 || n > 112))) {
+    throw new Error('Durable owner control is missing or malformed');
+  }
+  cachedControl = control ?? { ...DEFAULT_CONTROL };
   return cachedControl;
 }
 

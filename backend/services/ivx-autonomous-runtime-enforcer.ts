@@ -133,8 +133,15 @@ export function classifyContinuityResult(result: { ok: boolean; action: string; 
   return 'failed';
 }
 
+let ownerAllowedAgentNumbers = new Set<number>();
+
+function ownerAllowsAgent(agentId: string): boolean {
+  const state = getAllExecutionStates().find((row) => row.agentId === agentId);
+  return Boolean(state && ownerAllowedAgentNumbers.has(state.agentNumber));
+}
+
 function canRunContinuity(agentId: string): boolean {
-  if (!continuityEnabled || continuityRuns.has(agentId)) return false;
+  if (!continuityEnabled || !ownerAllowsAgent(agentId) || continuityRuns.has(agentId)) return false;
   if (continuityRuns.size >= getContinuityMaxConcurrency()) return false;
   const state = getAllExecutionStates().find((row) => row.agentId === agentId);
   if (!state) return false;
@@ -147,7 +154,7 @@ function canRunContinuity(agentId: string): boolean {
 
 function canStartPreparedContinuity(agentId: string): boolean {
   return preparedContinuityAllowed({
-    enabled: continuityEnabled, stopping,
+    enabled: continuityEnabled && ownerAllowsAgent(agentId), stopping,
     hasLocalRun: continuityRuns.has(agentId),
     atCapacity: continuityRuns.size >= getContinuityMaxConcurrency(),
     state: getAllExecutionStates().find((row) => row.agentId === agentId),
@@ -272,7 +279,7 @@ function startContinuityRun(agentId: string, agentNumber: number, preparedTask: 
       agentId,
       agentNumber,
       sourceSha,
-      shouldContinue: () => continuityEnabled && landingMissionActive && currentSourceSha() === sourceSha,
+      shouldContinue: () => continuityEnabled && ownerAllowsAgent(agentId) && landingMissionActive && currentSourceSha() === sourceSha,
     }).then((result) => ({
       ok: result.ok,
       marker: IVX_LANDING_CONTINUOUS_PATROL_MARKER,
@@ -407,6 +414,7 @@ function refillAllAvailableAgents(
 async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
   if (stopping) return;
   lastRunAt = new Date().toISOString();
+  let controlObserved = false;
   try {
     await runLeaseMirror();
     const result = await enforceAutonomous112RuntimeTruth();
@@ -415,7 +423,12 @@ async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
     lastRecovered = result.recovered;
     lastError = null;
 
-    continuityEnabled = Boolean(!result.snapshot.autonomous.dispatcherPaused && !result.snapshot.autonomous.emergencyStop);
+    continuityEnabled = Boolean(result.snapshot.autonomous.ownerControlVerified
+      && !result.snapshot.autonomous.dispatcherPaused && !result.snapshot.autonomous.emergencyStop);
+    ownerAllowedAgentNumbers = new Set(continuityEnabled
+      ? result.snapshot.agents.rows.filter((row) => !row.paused && !row.disabled).map((row) => row.agentNumber)
+      : []);
+    controlObserved = true;
     const sourceSha = currentSourceSha();
     landingMissionActive = continuityEnabled && await isLandingP0MissionActive();
 
@@ -467,6 +480,10 @@ async function runOnce(reason: 'boot' | 'interval'): Promise<void> {
 
     void runHeartbeatRefresh();
   } catch (error) {
+    if (!controlObserved) {
+      continuityEnabled = false;
+      ownerAllowedAgentNumbers.clear();
+    }
     lastOk = false;
     lastRecovered = [];
     lastError = error instanceof Error ? error.message : String(error);
