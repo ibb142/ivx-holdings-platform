@@ -505,6 +505,9 @@ export async function runSeniorDeveloperAutonomousMode(
   if (!testsOk && testStep?.status !== 'skipped') {
     blockers.push(`Tests failed: ${testStep?.proof ?? 'unknown'}`);
   }
+  if (!hasProductionVerification(autonomous)) {
+    blockers.push('Production verification missing or incomplete.');
+  }
 
   // Stage 6: proof_ledger — the autonomous report already recorded the trace.
   router.push({
@@ -587,6 +590,17 @@ function extractRenderDeployId(report: AutonomousModeReport): string | null {
   return null;
 }
 
+function hasProductionVerification(report: AutonomousModeReport): boolean {
+  const production = report.production;
+  const stages = report.steps.filter(stage => stage.step === 8);
+  return production != null
+    && Number.isInteger(production.total) && production.total >= 0
+    && Number.isInteger(production.failures) && production.failures >= 0 && production.failures <= production.total
+    && Number.isFinite(production.failureRate) && production.failureRate >= 0 && production.failureRate <= 1
+    && typeof production.thresholdExceeded === 'boolean'
+    && stages.length === 1 && stages[0].status === 'verified';
+}
+
 function deriveFinalState(
   report: AutonomousModeReport,
   testsOk: boolean,
@@ -601,8 +615,8 @@ function deriveFinalState(
     && (report.production.failures > 0 || report.production.thresholdExceeded);
   // VERIFIED only when the autonomous lifecycle, tests, and production health
   // all agree. Production health failures override an optimistic VERIFIED.
-  if (report.finalStatus === 'VERIFIED' && testsOk && !productionFailed) return 'VERIFIED';
-  if (report.finalStatus === 'FAILED' || !testsOk || productionFailed) return 'FAILED';
+  if (report.finalStatus === 'VERIFIED' && testsOk && !productionFailed && blockers.length === 0) return 'VERIFIED';
+  if (report.finalStatus === 'FAILED' || !testsOk || productionFailed || blockers.length > 0) return 'FAILED';
   // RUNNING is reserved for in-flight jobs; the synchronous router returns
   // READY when the work is queued but not yet verified, VERIFIED when proven.
   return 'READY';
