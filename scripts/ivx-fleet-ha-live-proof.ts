@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { writeFile, mkdir } from 'node:fs/promises';
 import { processIdentityMatchesObservedInstance, sharedProcessesCoverObservedInstances } from './ivx-fleet-ha-identities';
+import { HAStartupPendingError, requireStartupSha, validateHATopology, waitForHAStartup } from './ivx-fleet-ha-startup';
 
 const base = process.env.API_BASE;
 const sha = process.env.IVX_TARGET_SHA || process.env.GITHUB_SHA || '';
@@ -31,8 +32,7 @@ async function request(path: string, body?: unknown) {
 }
 async function topology() {
   const value = await request('/api/ivx/autonomous/ha');
-  assert.equal(value.marker, 'ivx-api-worker-ha-2026-09-08-v1'); assert.equal(value.commitSha, sha);
-  assert(Date.now() - Date.parse(value.measuredAt) <= 15_000, 'Stale HA observation');
+  validateHATopology(value, sha);
   return value;
 }
 async function action(action: string, serviceId: string, numInstances?: number) {
@@ -55,9 +55,9 @@ async function exactLiveDeploy(serviceId: string) {
   assert(Array.isArray(payload), `Render deploy response for ${serviceId} is not an array`);
   const deploys = payload.map((entry: any) => entry?.deploy ?? entry);
   const live = deploys.find((deploy: any) => deploy?.status === 'live');
-  assert(live, `No live Render deploy for ${serviceId}`);
+  if (!live) throw new HAStartupPendingError(`No live Render deploy yet for ${serviceId}`);
   const commitSha = live?.commit?.id ?? live?.commitId ?? live?.commit?.sha;
-  assert.equal(commitSha, sha, `Render live deploy for ${serviceId} is not the certification SHA`);
+  requireStartupSha(commitSha, sha, `Render live deploy for ${serviceId}`);
   return { id: live.id, status: live.status, commitSha, finishedAt: live.finishedAt ?? null };
 }
 async function physicalInstances(serviceId: string) {
@@ -119,10 +119,10 @@ function verifiedSharedTopology(value: any, physical: any) {
 // When a CI Render key is present, query Render's physical instances endpoint
 // directly. Otherwise, fail closed on the app's shared PostgreSQL heartbeats;
 // those rows carry unique Render host, PID, boot nonce, role and exact SHA.
-const exactDeploys = renderKey ? {
-  api: await exactLiveDeploy(apiService),
-  worker: await exactLiveDeploy(workerService),
-} : null;
+const exactDeploys = renderKey ? await waitForHAStartup(async () => {
+  const [api, worker] = await Promise.all([exactLiveDeploy(apiService), exactLiveDeploy(workerService)]);
+  return { api, worker };
+}, { onPending: (probe, detail) => console.log(JSON.stringify({ phase: 'waiting-for-render-live', probe, detail })) }) : null;
 const scaleResults: Record<string, unknown> = {};
 for (const service of [workerService, apiService]) {
   scaleResults[service] = await action('render_scale_service', service, 2);
@@ -135,9 +135,14 @@ for (let i = 0; i < 72; i++) {
   if (value && (renderKey ? twoByTwo(value) : sharedTwoByTwo(value))) {
     // A live deployment can still be retiring its previous processes. Start
     // the recovery experiment only after physical and shared state agree.
-    // Retry transport unavailability here only; authentication, SHA, freshness
-    // and malformed evidence still fail immediately.
+    // During rollout an old process can answer after /health reached the new
+    // SHA. Pending SHA/freshness never counts as a ready sample. Authentication
+    // and malformed evidence still fail immediately; post-startup checks remain strict.
     shared = renderKey ? await topology().catch((error: unknown) => {
+      if (error instanceof HAStartupPendingError) {
+        console.log(JSON.stringify({ phase: 'waiting-for-shared-evidence', probe: i, detail: error.message }));
+        return null;
+      }
       if ((error instanceof ProbeHttpError && (error.status === 429 || error.status >= 500))
         || (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name))) return null;
       throw error;
