@@ -29,7 +29,8 @@ function fixture() {
 for (const status of ['failed', 'blocked', 'completed', 'cancelled']) {
   test('a late phase cannot reopen a ' + status + ' job or replace its proof', async () => {
     const f = fixture();
-    const evidence = { finalStatus: status, generatedAt: 'finished', commitSha: null };
+    const evidence = { finalStatus: status === 'completed' ? 'COMPLETE' : status === 'blocked' ? 'BLOCKED' : 'FAILED',
+      ok: status === 'completed', error: 'preserved', generatedAt: 'finished', commitSha: null };
     const phase = f.updateJobStage('job', 'COMMITTING', 'late notification');
     const terminal = f.updateJob('job', { status, stage: status === 'completed' ? 'COMPLETED' : 'FAILED', finishedAt: 'finished', result: evidence, error: 'preserved' });
     await Promise.all([phase, terminal]);
@@ -72,3 +73,35 @@ for (const phase of ['COMPLETED', 'FAILED']) {
     assert.equal(f.read().finishedAt, 'finished');
   });
 }
+
+test('a committed checkpoint remains pending until CI and the final transition finish', async () => {
+  const f = fixture();
+  const commitSha = 'c'.repeat(40);
+  await f.updateJob('job', { status: 'committing', stage: 'COMMITTING', result: {
+    finalStatus: 'COMPLETE', ok: true, commitSha, prNumber: 1751,
+    ciResumeState: { phase: 'CI_WAIT', commitSha },
+  } });
+  const saved = f.read();
+  assert.equal(saved.result.finalStatus, 'IN_PROGRESS');
+  assert.equal(saved.result.ok, false);
+  assert.equal(saved.result.commitSha, commitSha);
+  assert.equal(saved.result.ciResumeState.phase, 'CI_WAIT');
+  assert.equal(saved.finishedAt, null);
+  await f.updateJob('job', { status: 'completed', stage: 'COMPLETED', finishedAt: 'finished',
+    result: { ...saved.result, finalStatus: 'COMPLETE', ok: true, ciChecksGreen: true } });
+  assert.equal(f.read().result.finalStatus, 'COMPLETE');
+  assert.equal(f.read().finishedAt, 'finished');
+});
+
+test('cancellation preserves the commit but cannot retain a successful outcome', async () => {
+  const f = fixture();
+  const commitSha = 'd'.repeat(40);
+  await f.updateJob('job', { status: 'committing', result: { finalStatus: 'COMPLETE', ok: true, commitSha, prNumber: 1751 } });
+  await f.updateJob('job', { status: 'cancelled', stage: 'FAILED', finishedAt: 'finished',
+    cancelledAt: 'finished', error: 'Job cancelled by owner.' });
+  assert.equal(f.read().result.finalStatus, 'FAILED');
+  assert.equal(f.read().result.ok, false);
+  assert.equal(f.read().result.error, 'Job cancelled by owner.');
+  assert.equal(f.read().result.commitSha, commitSha);
+  assert.equal(f.read().result.prNumber, 1751);
+});
