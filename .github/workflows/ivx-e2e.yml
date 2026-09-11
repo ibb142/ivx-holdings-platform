@@ -37,14 +37,28 @@ jobs:
             echo 'MOBILE_IMPACT=FULL_MAIN_GATE'
             exit 0
           fi
-          # Compare exact trees; full repository ancestry is unnecessary.
-          base="${{ github.event.pull_request.base.sha }}"
+          # Classify the exact GitHub-generated merge under test. The event's
+          # base can legitimately lag its first parent when main advances
+          # between event creation and checkout, but it must remain an
+          # ancestor; otherwise fail closed.
+          event_base="${{ github.event.pull_request.base.sha }}"
+          expected_head="${{ github.event.pull_request.head.sha }}"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$base" = "$(git cat-file -p HEAD | awk '/^parent / { print $2; exit }')" || {
-            echo '::error::PR base does not match the tested merge commit.'
+          tested_base="$(git rev-parse HEAD^1)"
+          tested_head="$(git rev-parse HEAD^2)"
+          test "$expected_head" = "$tested_head" || {
+            echo '::error::PR head does not match the tested merge commit.'
             exit 1
           }
-          git diff --no-renames --name-only "$base" HEAD > "$RUNNER_TEMP/changed-files.txt"
+          if [ "$event_base" != "$tested_base" ]; then
+            git fetch --no-tags --no-recurse-submodules --depth=64 origin "$event_base" "$tested_base"
+            git merge-base --is-ancestor "$event_base" "$tested_base" || {
+              echo '::error::PR event base is not an ancestor of the tested merge base.'
+              exit 1
+            }
+            echo "::notice::main advanced after the PR event; classifying tested base $tested_base"
+          fi
+          git diff --no-renames --name-only "$tested_base" HEAD > "$RUNNER_TEMP/changed-files.txt"
           cat "$RUNNER_TEMP/changed-files.txt"
           mobile=false
           while IFS= read -r path; do
