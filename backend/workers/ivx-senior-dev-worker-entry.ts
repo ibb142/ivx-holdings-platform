@@ -13,6 +13,7 @@ import { startAutonomousDoctor } from '../services/ivx-autonomous-doctor';
 import { startAutonomousUtilizationGuardian, stopAutonomousUtilizationGuardian } from '../services/ivx-autonomous-utilization-guardian';
 
 import { startCertificateWorker, stopCertificateWorker } from '../services/ivx-certificate-worker';
+import { startOwnerAITaskWorker, stopOwnerAITaskWorker } from '../services/ivx-owner-ai-task-queue';
 
 const databaseRecoveryMode = (process.env.IVX_SUPABASE_RECOVERY_MODE ?? '').trim().toLowerCase() === 'true';
 // Fleet timers deliberately unref themselves. In recovery mode the auxiliary
@@ -39,6 +40,10 @@ if (!databaseRecoveryMode) {
   startBlockedTaskReconciler();
 }
 startCertificateWorker();
+// The general owner queue now uses bounded atomic claims and fenced updates.
+// Keep this consumer available while the older auxiliary polling loops remain
+// suppressed; its SQL gate respects owner pause/emergency and database failure.
+startOwnerAITaskWorker();
 const fleetStarted = startAutonomous112RuntimeEnforcer();
 if (!databaseRecoveryMode) {
   startAutonomousDoctor();
@@ -70,7 +75,7 @@ async function shutdown(signal: string): Promise<void> {
   console.log(`[IVX-SENIOR-DEV-01] ${signal} received, returning fleet capacity`);
   stopAutonomousUtilizationGuardian();
   if (!databaseRecoveryMode) stopBlockedTaskReconciler();
-  await stopAutonomous112RuntimeEnforcer().catch((error) => {
+  await Promise.all([stopOwnerAITaskWorker(), stopAutonomous112RuntimeEnforcer()]).catch((error) => {
     console.error('[IVX-SENIOR-DEV-01] fleet shutdown error', error instanceof Error ? error.message : String(error));
   });
   if (recoveryLifetime) clearInterval(recoveryLifetime);
