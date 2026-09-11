@@ -45,6 +45,11 @@ try {
   cases.push({ scenario: 'arithmetic_after_refusals', request: `Calculate ${left} + ${right}. Return only the number.`, expected: String(left + right), history: refusalHistory });
   const reversed = randomUUID().replaceAll('-', '').slice(0, 8);
   cases.push({ scenario: 'reverse_after_refusals', request: `Reverse the characters of ${reversed}. Return only the reversed text.`, expected: [...reversed].reverse().join(''), history: refusalHistory });
+  // Keep the exact failed operand from run 34632973249, attempt 1. A fresh
+  // random operand passing later must not silently retire that failure.
+  cases.push({ scenario: 'reverse_transposition_regression',
+    request: 'Reverse the characters of ba1aef02. Return only the reversed text.',
+    expected: '20fea1ab', history: refusalHistory });
 
   // Diagnostic comparison only: retain the previous prompt's answer on the
   // repeated-refusal case. Every candidate case below must still pass.
@@ -65,6 +70,11 @@ try {
     const modelInput = buildOwnerTextModelInput({
       request, history: entry.history, liveContext,
     });
+    // Short arithmetic answers can occur coincidentally inside random history
+    // IDs. The full opaque text answers must never be supplied to the model.
+    if (expected.length >= 8 && JSON.stringify(modelInput).includes(expected)) {
+      throw new Error('REAL_PROVIDER_EXPECTED_ANSWER_LEAKED_INTO_INPUT');
+    }
     let deltas = 0;
     let streamedText = '';
     const started = Date.now();
