@@ -18,6 +18,7 @@ test('112-lane manager patrol reads one planning index and no evidence ledger', 
       getAllTasks:async()=>{throw Error('full evidence ledger read');}
     }));
     mock.module('./backend/services/ivx-agent-real-engineering-cycle.ts',()=>({
+      moduleInspectionCriteria:()=>{throw Error('existing backlog must not be recreated');},
       scanModuleUniverse:async()=>{throw Error('existing backlog must be used');}
     }));
     const m=await import('./backend/services/ivx-autonomous-work-manager.ts');

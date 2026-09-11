@@ -14,8 +14,11 @@ import { describe, expect, it, beforeAll, afterAll } from 'bun:test';
 import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { resolveRepoRoot } from './ivx-agent-engineering-tools';
 import {
   createTask,
+  finalizeEvidenceTask,
   getAllTasks,
   heartbeat,
   leaseNextTask,
@@ -26,6 +29,8 @@ import {
 } from './ivx-autonomous-task-engine.js';
 import {
   IVX_REAL_ENGINEERING_CYCLE_MARKER,
+  getFleetEngineeringMetrics,
+  moduleInspectionCriteria,
   runRealEngineeringCycle,
   scanModuleUniverse,
   seedModuleAuditTask,
@@ -34,7 +39,7 @@ import {
 const STORE_DIR = path.join(process.cwd(), 'logs', 'audit', 'task-engine');
 const STORE_FILE = path.join(STORE_DIR, 'tasks.json');
 const BACKUP_FILE = STORE_FILE + '.ownership-test-backup';
-const SHA1 = 'ownership-test-sha-0001';
+const SHA1 = 'a'.repeat(40);
 let fileStoreActive = false;
 
 beforeAll(async () => {
@@ -156,12 +161,17 @@ describe('112-agent durable task ownership', () => {
     const stored = (await ownedTasks()).find((t) => t.taskId === result.taskId);
     expect(stored?.state).toBe('VERIFIED');
     expect(stored?.evidence.some((e) => e.evidenceType === 'source_file_inspected')).toBe(true);
+    expect(validateCompletion(stored!).verdict).toBe('VERIFIED');
+    expect(stored?.taskType).toBe('discovery');
+    const proof = stored!.evidence.find((e) => e.evidenceType === 'source_file_inspected')!;
+    expect(proof.commitSha).toBe(SHA1);
+    expect(proof.contentHash).toBe(createHash('sha256').update(await readFile(path.join(resolveRepoRoot(), proof.source))).digest('hex'));
   });
 
   it('durable rerun: same agent + same SHA returns ALREADY_VERIFIED with the real taskId', async () => {
-    const first = await runRealEngineeringCycle({ agentId: 'ivx_holdings_3', agentNumber: 3, sourceSha: 'rerun-sha-0002' });
+    const first = await runRealEngineeringCycle({ agentId: 'ivx_holdings_3', agentNumber: 3, sourceSha: 'b'.repeat(40) });
     expect(first.action).toBe('TASK_COMPLETED');
-    const rerun = await runRealEngineeringCycle({ agentId: 'ivx_holdings_3', agentNumber: 3, sourceSha: 'rerun-sha-0002' });
+    const rerun = await runRealEngineeringCycle({ agentId: 'ivx_holdings_3', agentNumber: 3, sourceSha: 'b'.repeat(40) });
     expect(rerun.ok).toBe(true);
     expect(rerun.action).toBe('TASK_COMPLETED');
     expect(rerun.states).toEqual(['ALREADY_VERIFIED']);
@@ -187,7 +197,9 @@ describe('112-agent durable task ownership', () => {
     const probe = await createTask({
       title: `Module audit: ${todoModule}`,
       description: `Repair-ownership probe for module ${todoModule} (real defect present).`,
-      taskType: 'development',
+      taskType: 'discovery',
+      objectiveId: 'objective-inspection',
+      acceptanceCriteria: moduleInspectionCriteria(todoModule, SHA1),
       idempotencyKey: `repair-probe:${SHA1}:ivx_holdings_${owner}:${owner}:${todoModule}`,
       priority: 'high',
       assignedAgentNumber: owner,
@@ -200,6 +212,10 @@ describe('112-agent durable task ownership', () => {
     for (const repairId of result.repairTaskIds) {
       const repair = all.find((t) => t.taskId === repairId);
       expect(repair?.assignedAgentNumber).toBe(owner);
+      expect(repair?.objectiveId).toBe('objective-inspection');
+      expect(repair?.parentTaskId).toBe(probe.task!.taskId);
+      expect(repair?.dependencies).toEqual([probe.task!.taskId]);
+      expect(repair?.acceptanceCriteria.some((criterion) => criterion.verificationMethod === 'production_check')).toBe(true);
       expect(repair?.idempotencyKey).toContain(`repair:${SHA1}:${owner}:`);
     }
   });
@@ -208,7 +224,7 @@ describe('112-agent durable task ownership', () => {
     const created = await createTask({
       title: 'Integrity probe',
       description: 'Evidence-free completion probe',
-      taskType: 'audit',
+      taskType: 'qa',
       idempotencyKey: `integrity-probe:${SHA1}`,
       assignedAgentNumber: 1,
     });
@@ -219,7 +235,7 @@ describe('112-agent durable task ownership', () => {
     }
     const all = await ownedTasks();
     const task = all.find((t) => t.taskId === id)!;
-    expect(task.state).toBe('VERIFIED');
+    expect(task.state).toBe('QA_IN_PROGRESS');
     expect(task.evidence.length).toBe(0);
     const verdict = validateCompletion(task);
     expect(verdict.verdict).not.toBe('VERIFIED');
@@ -241,5 +257,86 @@ describe('112-agent durable task ownership', () => {
     );
     expect(persisted.length).toBe(112);
     expect(new Set(persisted.map((task) => task.assignedAgentNumber)).size).toBe(112);
+  });
+
+  it('does not complete a legacy repair task from an inspection alone', async () => {
+    const task = await createTask({ title: 'Module audit: package.json', description: 'Legacy repair criteria',
+      taskType: 'development', idempotencyKey: 'legacy-inspection', assignedAgentNumber: 700 });
+    const result = await runRealEngineeringCycle({ agentId: 'legacy', agentNumber: 700, sourceSha: SHA1 });
+    expect(result.taskId).toBe(task.task!.taskId);
+    expect(result.action).toBe('TASK_BLOCKED');
+    const stored = (await ownedTasks()).find((candidate) => candidate.taskId === result.taskId)!;
+    expect(stored.acceptanceCriteria.every((criterion) => !criterion.met)).toBe(true);
+    expect(stored.evidence.some((evidence) => evidence.evidenceType === 'source_file_inspected')).toBe(true);
+  });
+
+  it('rejects wrong revision, expired lease and unrelated evidence without persisting success', async () => {
+    const created = await createTask({ title: 'Module audit: package.json', description: 'Inspection identity probe',
+      taskType: 'discovery', idempotencyKey: 'inspection-fencing', assignedAgentNumber: 701,
+      acceptanceCriteria: moduleInspectionCriteria('package.json', SHA1) });
+    const taskId = created.task!.taskId;
+    await leaseNextTask('inspection-worker', 701);
+    await transitionTaskState(taskId, 'RUNNING');
+    const evidence = { evidenceType: 'source_file_inspected' as const, source: 'package.json',
+      contentHash: '1'.repeat(64), summary: 'synthetic receipt', commitSha: 'b'.repeat(40), deploymentId: null };
+    expect((await finalizeEvidenceTask({ taskId, workerId: 'inspection-worker', evidence, outcome: 'VERIFIED' })).ok).toBe(false);
+    expect((await finalizeEvidenceTask({ taskId, workerId: 'stale-worker', evidence: { ...evidence, commitSha: SHA1 }, outcome: 'VERIFIED' })).ok).toBe(false);
+    const raw = JSON.parse(await readFile(STORE_FILE, 'utf8')) as Task[];
+    raw.find((task) => task.taskId === taskId)!.leaseExpiresAt = new Date(Date.now() - 1000).toISOString();
+    await writeFile(STORE_FILE, JSON.stringify(raw));
+    const expired = await finalizeEvidenceTask({ taskId, workerId: 'inspection-worker', evidence: { ...evidence, commitSha: SHA1 }, outcome: 'VERIFIED' });
+    expect(expired.ok).toBe(false);
+    expect(expired.error).toContain('expired');
+    const stored = (await ownedTasks()).find((task) => task.taskId === taskId)!;
+    expect(stored.state).toBe('RUNNING');
+    expect(stored.evidence).toEqual([]);
+  });
+
+  it('counts inspections separately and excludes unsupported historical VERIFIED claims', async () => {
+    const before = await getFleetEngineeringMetrics();
+    expect(before.inspectionsCompletedVerified).toBeGreaterThan(0);
+    expect(before.tasksCompletedVerified).toBe(0);
+    expect(before.defectsFixed).toBe(0);
+    expect(before.productiveAgentMinutesTotal).toBe(0);
+    const raw = JSON.parse(await readFile(STORE_FILE, 'utf8')) as Task[];
+    const legacy = raw.find((task) => task.idempotencyKey === 'legacy-inspection')!;
+    legacy.state = 'VERIFIED';
+    await writeFile(STORE_FILE, JSON.stringify(raw));
+    const after = await getFleetEngineeringMetrics();
+    expect(after.invalidVerifiedClaims).toBe(before.invalidVerifiedClaims + 1);
+    expect(after.tasksCompletedVerified).toBe(before.tasksCompletedVerified);
+    expect(after.inspectionsCompletedVerified).toBe(before.inspectionsCompletedVerified);
+  });
+
+  it('the PostgreSQL transition path rejects unsupported success before issuing a mutation', async () => {
+    const fixture = structuredClone((await ownedTasks()).find((task) => task.title === 'Integrity probe')!);
+    const names = ['IVX_AUTONOMOUS_QUEUE_BACKEND', 'SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY',
+      'SUPABASE_DB_URL', 'DATABASE_URL', 'POSTGRES_URL', 'SUPABASE_POOLER_URL'] as const;
+    const saved = names.map((name) => process.env[name]);
+    const originalFetch = globalThis.fetch;
+    let mutations = 0;
+    try {
+      for (const name of names) delete process.env[name];
+      process.env.IVX_AUTONOMOUS_QUEUE_BACKEND = 'postgres_atomic';
+      process.env.SUPABASE_URL = 'https://fixture.invalid';
+      process.env.SUPABASE_SERVICE_ROLE_KEY = 'synthetic-test-key';
+      globalThis.fetch = (async (_url, init) => {
+        if (init?.method !== 'GET') mutations++;
+        return Response.json([{ payload: fixture }]);
+      }) as typeof fetch;
+      const refused = await transitionTaskState(fixture.taskId, 'VERIFIED');
+      expect(refused.ok).toBe(false);
+      expect(refused.task?.state).toBe('QA_IN_PROGRESS');
+      expect(mutations).toBe(0);
+      fixture.state = 'RUNNING'; fixture.leaseHolder = 'old-worker'; fixture.leaseExpiresAt = new Date(Date.now() - 1000).toISOString();
+      const expired = await finalizeEvidenceTask({ taskId: fixture.taskId, workerId: 'old-worker', outcome: 'VERIFIED',
+        evidence: { evidenceType: 'log', source: 'synthetic', summary: 'fixture', contentHash: '1'.repeat(64), commitSha: SHA1, deploymentId: null } });
+      expect(expired.ok).toBe(false);
+      expect(expired.error).toContain('expired');
+      expect(mutations).toBe(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+      names.forEach((name, index) => { if (saved[index] === undefined) delete process.env[name]; else process.env[name] = saved[index]; });
+    }
   });
 });

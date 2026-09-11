@@ -112,8 +112,8 @@
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
       flushEvents(true);
-      deactivateCurrent();
-    }
+      suspendPlayback();
+    } else resumePlayback();
   });
   window.addEventListener('pagehide', function () { flushEvents(true); });
 
@@ -275,6 +275,9 @@
 
   var root = document.createElement('div');
   root.id = 'ivxReels';
+  root.setAttribute('role', 'dialog');
+  root.setAttribute('aria-label', 'IVX video reels');
+  root.setAttribute('aria-modal', 'true');
   root.innerHTML = ''
     + '<div class="ivxr-top">'
     + '  <div class="ivxr-row">'
@@ -324,6 +327,54 @@
     muted: true,
     storyMode: false
   };
+
+  /* ---------- page playback ownership ---------- */
+  var playbackEpoch = 0;
+  var suspendedSlide = null;
+  var backgroundVideo = null;
+  var launchFocus = null;
+  var savedOverflow = null;
+
+  function pausePageVideos(except) {
+    document.querySelectorAll('video').forEach(function (video) {
+      if (video !== except && !video.paused) video.pause();
+    });
+  }
+
+  function visibleVideo(video) {
+    if (!video || !video.isConnected) return false;
+    var rect = video.getBoundingClientRect();
+    var style = window.getComputedStyle(video);
+    return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0
+      && rect.top < window.innerHeight && rect.left < window.innerWidth
+      && style.visibility !== 'hidden' && style.display !== 'none';
+  }
+
+  // Capture native play events, including late autoplay and resolved play()
+  // calls from other landing modules. Only one visible surface owns playback.
+  document.addEventListener('play', function (event) {
+    var video = event.target;
+    if (!video || video.tagName !== 'VIDEO') return;
+    var inside = root.contains(video);
+    if (document.hidden || root.classList.contains('open') !== inside) {
+      video.pause();
+      return;
+    }
+    pausePageVideos(video);
+  }, true);
+
+  function suspendPlayback() {
+    suspendedSlide = state.activeSlide && state.activeSlide.__vid && !state.activeSlide.__vid.paused
+      ? state.activeSlide : null;
+    deactivateCurrent();
+    pausePageVideos();
+  }
+
+  function resumePlayback() {
+    var slide = suspendedSlide;
+    suspendedSlide = null;
+    if (!document.hidden && root.classList.contains('open') && slide && root.contains(slide)) activateSlide(slide);
+  }
 
   /* ---------- tabs ---------- */
   var tabsEl = el('tabs');
@@ -1040,8 +1091,10 @@
   }
 
   function activateSlide(slide) {
+    if (document.hidden || !root.classList.contains('open')) return;
     if (state.activeSlide === slide) return;
     deactivateCurrent();
+    var epoch = playbackEpoch;
     state.activeSlide = slide;
     state.activeSince = Date.now();
     if (slide.__attach) slide.__attach();
@@ -1049,7 +1102,12 @@
     var vid = slide.__vid;
     if (vid) {
       vid.muted = state.muted;
-      vid.play().catch(function () { vid.muted = true; state.muted = true; vid.play().catch(function () {}); });
+      vid.play().catch(function () {
+        if (epoch !== playbackEpoch || document.hidden || !root.classList.contains('open') || state.activeSlide !== slide) return;
+        vid.muted = true;
+        state.muted = true;
+        vid.play().catch(function () {});
+      });
     }
     var v = slide.__video;
     if (v && v.id && String(v.id).indexOf('live-') !== 0) {
@@ -1058,6 +1116,7 @@
   }
 
   function deactivateCurrent() {
+    playbackEpoch += 1;
     var slide = state.activeSlide;
     if (!slide) return;
     clearTimeout(state.viewTimer);
@@ -1230,27 +1289,56 @@
 
   /* ---------- open / close ---------- */
   function openReels() {
+    if (root.classList.contains('open')) return;
+    launchFocus = document.activeElement;
+    savedOverflow = [document.documentElement.style.overflow, document.body.style.overflow];
+    backgroundVideo = Array.prototype.find.call(document.querySelectorAll('video'), function (video) {
+      return !root.contains(video) && !video.paused && visibleVideo(video);
+    }) || null;
     root.classList.add('open');
+    pausePageVideos();
     document.documentElement.style.overflow = 'hidden';
     document.body.style.overflow = 'hidden';
+    el('close').focus();
     track({ type: 'profile' });
     if (!feedEl.children.length || state.storyMode) { resetFeed(); loadMore(); }
     loadStoriesAndLive();
   }
   function closeReels() {
+    if (!root.classList.contains('open')) return;
     deactivateCurrent();
+    suspendedSlide = null;
+    pausePageVideos();
     flushEvents(false);
     root.classList.remove('open');
     sheetEl.classList.remove('open');
-    document.documentElement.style.overflow = '';
-    document.body.style.overflow = '';
+    document.documentElement.style.overflow = savedOverflow ? savedOverflow[0] : '';
+    document.body.style.overflow = savedOverflow ? savedOverflow[1] : '';
+    if (launchFocus && launchFocus.isConnected) launchFocus.focus({ preventScroll: true });
+    var resume = backgroundVideo;
+    backgroundVideo = null;
+    if (!document.hidden && visibleVideo(resume)) resume.play().catch(function () {});
   }
   launch.addEventListener('click', openReels);
   var navLaunch = document.getElementById('navReelsBtn');
   if (navLaunch) navLaunch.addEventListener('click', openReels);
   window.IVXOpenReels = openReels;
   el('close').addEventListener('click', closeReels);
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && root.classList.contains('open')) closeReels(); });
+  document.addEventListener('keydown', function (e) {
+    if (!root.classList.contains('open')) return;
+    if (e.key === 'Escape') { closeReels(); return; }
+    if (e.key !== 'Tab') return;
+    var focusable = Array.prototype.filter.call(root.querySelectorAll('button, input, a[href], [tabindex]'), function (node) {
+      return !node.disabled && node.tabIndex >= 0 && node.getClientRects().length > 0;
+    });
+    var first = focusable[0], last = focusable[focusable.length - 1];
+    if (!first) return;
+    if (e.shiftKey && (document.activeElement === first || !root.contains(document.activeElement))) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && (document.activeElement === last || !root.contains(document.activeElement))) {
+      e.preventDefault(); first.focus();
+    }
+  });
 
   /* deep link: ?video=<id> opens reels directly */
   try {
