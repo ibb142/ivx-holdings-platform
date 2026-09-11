@@ -1,0 +1,43 @@
+name: Supabase incident recovery
+on:
+  pull_request:
+    paths: ['scripts/ops/supabase-incident-recovery*', '.github/workflows/ivx-supabase-incident-recovery.yml']
+  push:
+    branches: [fix/public-feed-policy-recovery-20260911]
+    paths: ['scripts/ops/supabase-incident-recovery*', '.github/workflows/ivx-supabase-incident-recovery.yml']
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: ivx-supabase-incident-recovery
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: node --test scripts/ops/supabase-incident-recovery.test.mjs
+  recover:
+    needs: verify
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: Recover audited project and verify approved video reads
+        run: node scripts/ops/supabase-incident-recovery.mjs
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      - name: Preserve recovery receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-recovery-${{ github.sha }}-${{ github.run_attempt }}
+          path: qa/evidence/supabase-recovery/recovery.json
+          if-no-files-found: error
+          retention-days: 30

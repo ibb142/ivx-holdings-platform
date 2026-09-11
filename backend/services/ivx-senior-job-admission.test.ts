@@ -2,6 +2,49 @@ import { describe, expect, it } from 'bun:test';
 import { createSeniorJobAdmission } from './ivx-senior-job-admission';
 const jobs = (count: number) => Array.from({ length: count }, (_, i) => ({ jobId: `job-${i}`, ownerId: `agent-${i}`, status: 'queued', createdAt: new Date().toISOString() }));
 describe('senior worker concurrent admission', () => {
+  it('continues after PostgreSQL rejects an owner whose stale uncommitted work is still active', async () => {
+    const pending = jobs(3);
+    pending[1].ownerId = pending[0].ownerId;
+    const orphan = { ...pending[0], jobId: 'stale-uncommitted', status: 'running',
+      createdAt: new Date(Date.now() - 600_000).toISOString() };
+    const claimed = new Set<string>(), calls: string[] = [];
+    const next = createSeniorJobAdmission({ claimed, active: new Set(['running']), staleAfterMs: 60_000,
+      stopped: () => false, read: async () => ({ jobs: [orphan, ...pending] }),
+      claim: async job => { calls.push(job.jobId); return job.ownerId === orphan.ownerId ? null : job; } });
+    expect((await next())?.jobId).toBe('job-2');
+    expect(calls).toEqual(['job-0', 'job-2']);
+    expect([...claimed]).toEqual(['job-2']);
+    expect(orphan.status).toBe('running');
+  });
+  it('bounds rejected claims to one attempt per owner in the current selection', async () => {
+    const queue = jobs(6).map((job, i) => ({ ...job, ownerId: `owner-${i % 2}` }));
+    const claimed = new Set<string>(), calls: string[] = [];
+    const next = createSeniorJobAdmission({ claimed, active: new Set(['running']), staleAfterMs: 60_000,
+      stopped: () => false, read: async () => ({ jobs: queue }),
+      claim: async job => { calls.push(job.ownerId); return null; } });
+    expect(await next()).toBeNull();
+    expect(calls).toEqual(['owner-0', 'owner-1']);
+    expect(claimed.size).toBe(0);
+  });
+  it('does not try another owner after an ambiguous claim transport failure', async () => {
+    const claimed = new Set<string>(), calls: string[] = [];
+    const next = createSeniorJobAdmission({ claimed, active: new Set(['running']), staleAfterMs: 60_000,
+      stopped: () => false, read: async () => ({ jobs: jobs(2) }),
+      claim: async job => { calls.push(job.jobId); throw new Error('claim response lost'); } });
+    await expect(next()).rejects.toThrow('claim response lost');
+    expect(calls).toEqual(['job-0']);
+    expect(claimed.size).toBe(0);
+  });
+  it('honors an owner stop raised after a rejected claim', async () => {
+    const claimed = new Set<string>(), calls: string[] = [];
+    let stopped = false;
+    const next = createSeniorJobAdmission({ claimed, active: new Set(['running']), staleAfterMs: 60_000,
+      stopped: () => stopped, read: async () => ({ jobs: jobs(2) }),
+      claim: async job => { calls.push(job.jobId); stopped = true; return null; } });
+    expect(await next()).toBeNull();
+    expect(calls).toEqual(['job-0']);
+    expect(claimed.size).toBe(0);
+  });
   for (const protectedWork of ['expired-commit', 'live-lease'] as const) {
     it(`admits another owner with one execution slot while ${protectedWork} awaits recovery`, async () => {
       const pending = jobs(2);
