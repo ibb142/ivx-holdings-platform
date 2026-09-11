@@ -471,7 +471,7 @@ export async function updateControlState(
   action: 'pause_all' | 'resume_all' | 'stop_all' | 'stop_agent' | 'retry_agent' | 'reassign',
   agentNumber?: number,
 ): Promise<CampaignControlState> {
-  const current = await loadControlState();
+  const current = await loadControlState({ required: isDurableStoreConfigured() });
   const next: CampaignControlState = {
     ...current,
     pausedAgents: [...current.pausedAgents],
@@ -502,9 +502,9 @@ export async function updateControlState(
     case 'reassign':
       break;
   }
-  cachedControl = next;
   if (isDurableStoreConfigured()) {
     await writeDurableJson(STATE_KEY, { marker: IVX_APP_COMPLETION_MARKER, control: next, updatedAt: nowIso() });
+    cachedControl = next;
     await appendDurableEvent(EVENTS_KEY, {
       marker: IVX_APP_COMPLETION_MARKER,
       at: nowIso(),
@@ -512,7 +512,7 @@ export async function updateControlState(
       action,
       agentNumber: agentNumber ?? null,
     });
-  }
+  } else cachedControl = next;
   return next;
 }
 
