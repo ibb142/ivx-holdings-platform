@@ -1,0 +1,31 @@
+name: Phase 4 bounded owner model diagnostic
+on:
+  push:
+    branches: [diagnostic/phase4-owner-model-20260911]
+    paths:
+      - 'scripts/ivx-owner-model-diagnostic.ts'
+      - '.github/workflows/ivx-owner-model-diagnostic.yml'
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.3.9 }
+      - run: bun install --frozen-lockfile
+      - name: Compare ten bounded calls with existing credentials
+        run: bun scripts/ivx-owner-model-diagnostic.ts
+        env:
+          IVX_AI_GATEWAY_KEY: ${{ secrets.IVX_AI_GATEWAY_KEY }}
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+      - name: Preserve every answer and failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4-owner-model-comparison-${{ github.sha }}
+          path: qa/evidence/owner-model-diagnostic/comparison.json
+          if-no-files-found: error
+          retention-days: 30
