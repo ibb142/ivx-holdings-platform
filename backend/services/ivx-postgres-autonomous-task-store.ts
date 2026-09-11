@@ -94,6 +94,7 @@ const DIRECT_RPC_ARGS: Record<string, string[]> = {
   ivx_autonomous_tasks_link_objective: ['p_objective_id'],
   ivx_fleet_dashboard_observation: [],
   ivx_senior_queue_patch: ['p_changes'],
+  ivx_senior_queue_patch_receipt: ['p_changes'],
   ivx_senior_queue_claim: ['p_job_id', 'p_worker_instance_id', 'p_resume'],
   ivx_senior_ledger_put: ['p_result'],
   ivx_work_evidence_hours: ['p_from', 'p_to', 'p_target_hours'],
@@ -137,11 +138,11 @@ export async function readPostgresWorkEvidenceHours(from: string, to: string, ta
   return result;
 }
 
-type SeniorRpc = 'ivx_senior_queue_patch' | 'ivx_senior_queue_claim' | 'ivx_senior_ledger_put';
+type SeniorRpc = 'ivx_senior_queue_patch' | 'ivx_senior_queue_patch_receipt' | 'ivx_senior_queue_claim' | 'ivx_senior_ledger_put';
 type SeniorDocumentKey = 'senior-developer-worker/queue.json' | 'senior-developer-worker/proof-ledger.json';
 export async function seniorQueuePostgresRpc<T>(name: SeniorRpc, body: Record<string, unknown>): Promise<T> {
   emergencyStopPostgresConfig(); // Reject cross-project bindings before any query.
-  if (!['ivx_senior_queue_patch', 'ivx_senior_queue_claim', 'ivx_senior_ledger_put'].includes(name)) throw new Error('Repair RPC not allowed');
+  if (!['ivx_senior_queue_patch', 'ivx_senior_queue_patch_receipt', 'ivx_senior_queue_claim', 'ivx_senior_ledger_put'].includes(name)) throw new Error('Repair RPC not allowed');
   return directRpc<T>(name, body);
 }
 export async function readSeniorQueuePostgresDocument<T>(key: SeniorDocumentKey): Promise<T | null> {
@@ -150,6 +151,20 @@ export async function readSeniorQueuePostgresDocument<T>(key: SeniorDocumentKey)
   const result = await queryWithPostgresDeadline<{ value: T }>(getDirectPool(process.env, 'repair'),
     'select value from public.ivx_durable_documents where doc_key = $1 limit 1', [key]);
   return result.rows[0]?.value ?? null;
+}
+/** Polling one repair must not transfer the history of every retained job. */
+export async function readSeniorQueuePostgresJob<T extends { jobId: string }>(jobId: string): Promise<T | null> {
+  emergencyStopPostgresConfig();
+  if (!jobId.trim()) throw new Error('Repair job identity is required');
+  const result = await queryWithPostgresDeadline<{ job: T }>(getDirectPool(process.env, 'repair'),
+    `select job from public.ivx_durable_documents d
+      cross join lateral jsonb_array_elements(d.value->'jobs') as job
+      where d.doc_key = $1 and job->>'jobId' = $2 limit 2`,
+    ['senior-developer-worker/queue.json', jobId]);
+  if (result.rows.length > 1) throw new Error('Duplicate repair job identity');
+  const job = result.rows[0]?.job ?? null;
+  if (job && job.jobId !== jobId) throw new Error('Repair job identity mismatch');
+  return job;
 }
 export async function appendSeniorProofPostgresEvent(event: Record<string, unknown>): Promise<void> {
   emergencyStopPostgresConfig();
@@ -268,6 +283,13 @@ async function fetchAllPostgresTasks(): Promise<Task[]> {
 /** Bound live Landing reads by deployment identity, regardless of ledger age. */
 export async function readPostgresLandingTasks(sha: string): Promise<Task[]> {
   if (!/^[a-f0-9]{40}$/i.test(sha)) throw new Error('Invalid Landing source SHA');
+  const key = `landing:${sha}:${taskMutationRevision}`;
+  let pending = currentReadsInFlight.get(key);
+  if (!pending) { pending = fetchPostgresLandingTasks(sha); currentReadsInFlight.set(key, pending); }
+  try { return structuredClone(await pending); }
+  finally { if (currentReadsInFlight.get(key) === pending) currentReadsInFlight.delete(key); }
+}
+async function fetchPostgresLandingTasks(sha: string): Promise<Task[]> {
   const prefixes = ['landing-p0:', 'landing-p0-repair:', 'landing-p0-patrol:'];
   const directRead = async () => (await getDirectPool().query<RestTaskRow>(
     'select payload from public.ivx_autonomous_tasks where idempotency_key like any($1::text[]) order by task_id limit 1000',
@@ -283,7 +305,7 @@ export async function readPostgresLandingTasks(sha: string): Promise<Task[]> {
     } catch (error) { if (!mayFailoverRead(error)) throw error; rows = await directRead(); }
   }
   if (!Array.isArray(rows) || rows.length >= 1000) throw new Error('Incomplete current-SHA Landing task response');
-  return rows.map(row => structuredClone(row.payload));
+  return rows.map(row => row.payload);
 }
 
 export async function readPostgresTaskById(taskId: string): Promise<Task | null> {
