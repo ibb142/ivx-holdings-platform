@@ -373,7 +373,7 @@ export type IVXWorkerJobResult = {
   generatedFeatureSlug: string | null;
   auditFiles: { json: string; jsonl: string };
   /** IN_PROGRESS preserves a committed checkpoint without claiming a final outcome. */
-  finalStatus: 'IN_PROGRESS' | 'COMPLETE' | 'LOCAL_ONLY' | 'BLOCKED' | 'FAILED';
+  finalStatus: 'COMPLETE' | 'LOCAL_ONLY' | 'BLOCKED' | 'FAILED' | 'IN_PROGRESS';
   error: string | null;
   durable: boolean;
   generatedAt: string;
