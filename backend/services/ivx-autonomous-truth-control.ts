@@ -1,3 +1,4 @@
+import { checkEmergencyStop } from './ivx-emergency-stop-gate';
 import { getAllExecutionStates, pauseAgent, resumeAgent, disableAgent, enableAgent } from './ivx-agent-runtime';
 import {
   campaignDispatcherControl,
@@ -128,7 +129,7 @@ export async function getAutonomousTruthSnapshot() {
   const configuredQueueBackend = autonomousQueueBackend();
   const atomicQueueSelected = configuredQueueBackend === 'postgres_atomic';
   const atomicRuntimeControlPlane = atomicQueueSelected && autonomousRuntimeEnforcerEnabled();
-  const [dispatcherResult, schedulerResult, dispatcherRecordsResult, atomicLeasesResult] = await Promise.all([
+  const [dispatcherResult, schedulerResult, dispatcherRecordsResult, atomicLeasesResult, ownerControlResult, emergencyResult] = await Promise.all([
     atomicRuntimeControlPlane
       ? Promise.resolve({ value: null, error: null })
       : boundedDependency('dispatcher_snapshot', Promise.resolve(getCampaignDispatcherSnapshot())),
@@ -141,13 +142,22 @@ export async function getAutonomousTruthSnapshot() {
     atomicQueueSelected
       ? boundedDependency('postgres_atomic_leases', readPostgresFleetLeaseRows(), 30_000)
       : Promise.resolve({ value: [] as AtomicFleetLeaseRow[], error: null }),
+    boundedDependency('owner_control', loadControlState({ required: true })),
+    boundedDependency('emergency_stop', checkEmergencyStop()),
   ]);
+  const ownerControl = ownerControlResult.value;
+  const ownerControlVerified = Boolean(ownerControl && !ownerControlResult.error
+    && emergencyResult.value && emergencyResult.value.source !== 'unavailable' && !emergencyResult.error);
   const dispatcher = dispatcherResult.value ?? {
     paused: !atomicRuntimeControlPlane,
     emergencyStop: false,
     totals: { pendingOwner: 0, awaitingImplement: 0, queued: 0, running: 0, completed: 0, failed: 0, blocked: 0 },
     maxConcurrency: atomicRuntimeControlPlane ? autonomousRepairCapacity() : 0,
   };
+  // Atomic workers must observe the same durable owner intent as the dashboard.
+  // Unavailable control stops new work without claiming that the owner pressed stop.
+  const dispatcherPaused = dispatcher.paused || !ownerControlVerified || Boolean(ownerControl?.paused || ownerControl?.stopped);
+  const emergencyStop = dispatcher.emergencyStop || Boolean(emergencyResult.value?.active || ownerControl?.stopped);
   const scheduler = schedulerResult.value;
   const dispatcherRecords = dispatcherRecordsResult.value ?? [];
   const atomicLeaseRows = atomicLeasesResult.value ?? [];
@@ -156,6 +166,8 @@ export async function getAutonomousTruthSnapshot() {
     !atomicRuntimeControlPlane && schedulerResult.error ? 'scheduler_state' : null,
     !atomicRuntimeControlPlane && dispatcherRecordsResult.error ? 'dispatcher_records' : null,
     atomicQueueSelected && atomicLeasesResult.error ? 'postgres_atomic_leases' : null,
+    ownerControlResult.error || !ownerControl ? 'owner_control' : null,
+    emergencyResult.error || !emergencyResult.value || emergencyResult.value.source === 'unavailable' ? 'emergency_stop' : null,
   ].filter((value): value is string => Boolean(value));
 
   const github = getGitHubActionsExternalSupervisorStatus();
@@ -188,7 +200,8 @@ export async function getAutonomousTruthSnapshot() {
     );
     const runtimeWorking = state.availability === 'busy' && Boolean(state.activeTaskId) && runtimeHeartbeatFresh;
     const dispatcherWorking = Boolean(dispatcherRecord?.workerJobId && dispatcherRecord.status === 'RUNNING' && dispatcherHeartbeatFresh);
-    const blocked = state.pauseState || state.disabledState || state.availability === 'offline' || state.health === 'failed';
+    const ownerPaused = dispatcherPaused || Boolean(ownerControl?.pausedAgents.includes(state.agentNumber) || ownerControl?.stoppedAgents.includes(state.agentNumber));
+    const blocked = ownerPaused || emergencyStop || state.pauseState || state.disabledState || state.availability === 'offline' || state.health === 'failed';
     const actuallyWorking = !blocked && (taskEngineWorking || runtimeWorking || dispatcherWorking);
     const hasClaimedWork = Boolean(taskLease?.taskId || state.activeTaskId || dispatcherRecord?.workerJobId);
     // A registry/global heartbeat without claimed work is not work proof.
@@ -211,7 +224,7 @@ export async function getAutonomousTruthSnapshot() {
       availability: state.availability,
       health: state.health,
       queueDepth: state.queueDepth,
-      paused: state.pauseState,
+      paused: state.pauseState || ownerPaused,
       disabled: state.disabledState,
       lastHeartbeat: state.lastHeartbeat,
       dispatcherHeartbeat,
@@ -235,8 +248,8 @@ export async function getAutonomousTruthSnapshot() {
   };
 
   const registeredAgentNumbers = new Set(states.map((state) => state.agentNumber));
-  const eligibleAgentNumbers = new Set(states
-    .filter((state) => !state.pauseState && !state.disabledState && state.availability !== 'offline' && state.health !== 'failed')
+  const eligibleAgentNumbers = new Set(agents
+    .filter((state) => !state.paused && !state.disabled && state.availability !== 'offline' && state.health !== 'failed')
     .map((state) => state.agentNumber));
   const canonicalRows = atomicLeaseRows.filter((row) => {
     if (!row.workerInstanceId || !leaseFresh(row)) return false;
@@ -271,11 +284,11 @@ export async function getAutonomousTruthSnapshot() {
     queueBackend: provenQueueBackend,
     staleAgents: counts.stale,
     blockedAgents: counts.blocked,
-    emergencyStop: dispatcher.emergencyStop,
+    emergencyStop,
   });
   const schedulerEnabled = atomicRuntimeControlPlane || Boolean(scheduler?.enabled);
   const autonomousWorking = Boolean(
-    schedulerEnabled && !dispatcher.paused && !dispatcher.emergencyStop
+    schedulerEnabled && !dispatcherPaused && !emergencyStop
     && (dispatcher.totals.running > 0 || dispatcher.totals.queued > 0 || counts.working > 0),
   );
   const continuousRuntimeCertified = degradedDependencies.length === 0
@@ -334,8 +347,10 @@ export async function getAutonomousTruthSnapshot() {
     autonomous: {
       working: autonomousWorking,
       schedulerEnabled,
-      dispatcherPaused: dispatcher.paused,
-      emergencyStop: dispatcher.emergencyStop,
+      dispatcherPaused,
+      ownerControlVerified,
+      ownerControl,
+      emergencyStop,
       runningJobs: dispatcher.totals.running,
       queuedJobs: dispatcher.totals.queued,
       taskEngineRunning: canonicalRows.length,
@@ -373,7 +388,10 @@ export async function getAutonomousTruthSnapshot() {
 
 export async function enforceAutonomous112RuntimeTruth() {
   const before = await getAutonomousTruthSnapshot();
-  const control = await loadControlState().catch(() => ({ paused: false, stopped: false, pausedAgents: [], stoppedAgents: [] }));
+  const control = before.autonomous.ownerControl;
+  if (!before.autonomous.ownerControlVerified || !control) {
+    return { ok: false, action: 'owner_control_unavailable', recovered: [], recoverableTotal: 0, recoveryCapacity: autonomousRepairCapacity(), snapshot: before };
+  }
   if (before.autonomous.emergencyStop) return { ok: false, action: 'emergency_stop_respected', recovered: [], snapshot: before };
   if (control.stopped || control.paused) {
     return { ok: false, action: 'explicit_owner_stop_respected', recovered: [], recoverableTotal: 0, recoveryCapacity: autonomousRepairCapacity(), snapshot: before };
@@ -384,7 +402,7 @@ export async function enforceAutonomous112RuntimeTruth() {
   // part of canonical atomic lease proof.
   if (autonomousQueueBackend() === 'postgres_atomic' && autonomousRuntimeEnforcerEnabled()) {
     const recoverable = before.agents.rows.filter((agent) =>
-      !agent.disabled && ['IDLE', 'STALE', 'UNKNOWN', 'BLOCKED'].includes(agent.status));
+      !agent.disabled && !agent.paused && ['IDLE', 'STALE', 'UNKNOWN', 'BLOCKED'].includes(agent.status));
     for (const agent of recoverable) resumeAgent(agent.agentId);
     const after = await getAutonomousTruthSnapshot();
     return {
@@ -408,7 +426,7 @@ export async function enforceAutonomous112RuntimeTruth() {
   const current = controlPlaneRecovered ? await getAutonomousTruthSnapshot() : before;
   await runCampaignBootRecovery().catch(() => 0);
   await syncCampaignAssignmentsToDispatcher();
-  const allRecoverable = current.agents.rows.filter((agent) => !agent.disabled && ['IDLE', 'STALE', 'UNKNOWN', 'BLOCKED'].includes(agent.status));
+  const allRecoverable = current.agents.rows.filter((agent) => !agent.disabled && !agent.paused && ['IDLE', 'STALE', 'UNKNOWN', 'BLOCKED'].includes(agent.status));
   const recoveryLimit = Math.min(autonomousRepairCapacity(), allRecoverable.length);
   const recoverable = Array.from({ length: recoveryLimit }, (_, index) => allRecoverable[(recoveryCursor + index) % allRecoverable.length]);
   if (allRecoverable.length > 0) recoveryCursor = (recoveryCursor + recoveryLimit) % allRecoverable.length;
