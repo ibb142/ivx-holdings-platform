@@ -1,3 +1,4 @@
+import './services/ivx-global-ai-budget-fetch';
 /**
  * IVX Holdings — Background Worker Process
  *

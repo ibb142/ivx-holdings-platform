@@ -1,3 +1,4 @@
+import { fetch as expoFetch } from 'expo/fetch';
 import { probeLocalIVXBrain, requestLocalIVXBrain } from './localIVXBrainService';
 import { isIVXLocalFirstChatEnabled } from './ivxLocalFirstRuntime';
 import {
@@ -3179,10 +3180,12 @@ async function fetchOwnerAIWithHeartbeat(
     timeoutMs: OWNER_AI_SSE_TIMEOUT_MS,
   });
   try {
-    let response: Response;
+    let response: Awaited<ReturnType<typeof expoFetch>>;
     try {
       response = await Promise.race([
-        fetch(endpoint, {
+        // SDK 54's native global fetch may buffer SSE and omit response.body.
+        // Expo's streaming transport delivers readable chunks on Android/iOS.
+        expoFetch(endpoint, {
           method: 'POST',
           headers: sseHeaders,
           body: sseBody,
@@ -3225,6 +3228,8 @@ async function fetchOwnerAIWithHeartbeat(
     let buffer = '';
     let finalEvent: { status: number; ok: boolean; body: unknown } | null = null;
     let streamError: string | null = null;
+    let deltaCount = 0;
+    let firstDeltaAt: string | null = null;
 
     const dispatchEvent = (line: string): void => {
       if (!line.startsWith('data:')) return;
@@ -3241,6 +3246,9 @@ async function fetchOwnerAIWithHeartbeat(
         const status = typeof payloadEvent.status === 'number' ? payloadEvent.status : 200;
         const ok = typeof payloadEvent.ok === 'boolean' ? payloadEvent.ok : status >= 200 && status < 300;
         finalEvent = { status, ok, body: payloadEvent.body ?? null };
+        console.log('[IVXAIRequestService] OWNER_AI_SSE_FINAL', JSON.stringify({
+          requestId: payload.requestId, deltaCount, firstDeltaAt, status, at: new Date().toISOString(),
+        }));
         try { onProgress({ type: 'final', status, ok }); } catch { /* listener safe */ }
         return;
       }
@@ -3268,6 +3276,13 @@ async function fetchOwnerAIWithHeartbeat(
       if (type === 'delta') {
         const delta = typeof payloadEvent.delta === 'string' ? payloadEvent.delta : '';
         if (delta) {
+          deltaCount += 1;
+          if (deltaCount === 1) {
+            firstDeltaAt = new Date().toISOString();
+            console.log('[IVXAIRequestService] OWNER_AI_SSE_FIRST_DELTA', JSON.stringify({
+              requestId: payload.requestId, at: firstDeltaAt,
+            }));
+          }
           try { onProgress({ type: 'delta', delta }); } catch { /* listener safe */ }
         }
         return;
