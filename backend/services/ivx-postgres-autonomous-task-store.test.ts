@@ -16,6 +16,7 @@ import {
   readPostgresRecoveryTasks,
   readPostgresLandingTasks,
   readPostgresFleetProcessObservation,
+  readPostgresFleetSloTasks,
 } from './ivx-postgres-autonomous-task-store';
 
 const savedEnv = { ...process.env };
@@ -35,6 +36,20 @@ function configureAtomicQueue(): void {
 }
 
 describe('PostgreSQL autonomous task store', () => {
+  test('SLO filtering precedes the limit and keeps blocked tasks available to recovery callers', async () => {
+    configureAtomicQueue(); const urls: URL[] = [];
+    globalThis.fetch = (async input => { urls.push(new URL(String(input))); return Response.json([]); }) as typeof fetch;
+    await readPostgresFleetSloTasks();
+    await readPostgresCurrentTasks(['BLOCKED']);
+    expect(urls[0].searchParams.get('limit')).toBe('1000');
+    const filter = urls[0].searchParams.get('or')!;
+    expect(filter).toStartWith('(state.neq.BLOCKED,and(lease_holder.not.is.null,lease_expires_at.gt.');
+    expect(Number.isFinite(Date.parse(filter.split('lease_expires_at.gt.')[1].slice(0, -2)))).toBe(true);
+    expect(urls[1].searchParams.has('or')).toBe(false);
+    expect(urls[1].searchParams.get('state')).toBe('in.(BLOCKED)');
+    globalThis.fetch = (async () => Response.json(Array.from({ length: 1000 }, () => ({ payload: {} })))) as typeof fetch;
+    await expect(readPostgresFleetSloTasks()).rejects.toThrow('telemetry is incomplete');
+  });
   test('process observation reads only recent events and preserves a newer draining sample', async () => {
     configureAtomicQueue();
     const event = { instance_role: 'worker', process_role: 'worker', commit_sha: 'a'.repeat(40),

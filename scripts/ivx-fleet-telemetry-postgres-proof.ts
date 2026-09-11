@@ -32,6 +32,32 @@ let observation: Promise<void> | undefined;
 let blockedTelemetry: Promise<unknown> | undefined;
 let deadline: ReturnType<typeof setTimeout> | undefined;
 try {
+  // Reproduce the live failure: over 1,000 inactive blocked rows, newer than
+  // actual work. Read through the real application pool and preserve counters.
+  try {
+    await admin.query("insert into public.ivx_autonomous_tasks(task_id,idempotency_key,state,payload) select 'qa-slo-cap-history-'||n,'qa-slo-cap-history-'||n,'BLOCKED',jsonb_build_object('taskId','qa-slo-cap-history-'||n,'state','BLOCKED','evidence','[]'::jsonb) from generate_series(1,1200) n");
+    const stamp = new Date().toISOString(), expiry = new Date(Date.now() + 120_000).toISOString();
+    for (const [label, state, agent] of [['running', 'RUNNING', 1], ['blocked-active', 'BLOCKED', 2], ['retry', 'RETRYING', null]] as const) {
+      const id = `qa-slo-cap-${label}`, holder = agent ? `agent:ivx_holdings_${agent}` : null;
+      const payload = { taskId: id, state, evidence: [], leaseHolder: holder,
+        leaseExpiresAt: holder ? expiry : null, lastHeartbeatAt: holder ? stamp : null };
+      await admin.query("insert into public.ivx_autonomous_tasks(task_id,idempotency_key,state,lease_holder,lease_expires_at,last_heartbeat_at,payload,updated_at) values($1,$1,$2,$3,$4,$5,$6::jsonb,'2020-01-01')",
+        [id, state, holder, holder ? expiry : null, holder ? stamp : null, JSON.stringify(payload)]);
+    }
+    const old = (await admin.query("select count(*)::int n from (select task_id from public.ivx_autonomous_tasks where state in ('LEASED','RUNNING','BLOCKED','RETRYING','EXECUTION_COMPLETED','QA_IN_PROGRESS') order by updated_at desc limit 1000) q")).rows[0].n;
+    assert.equal(old, 1000, 'The previous query must reproduce truncation');
+    const relevant = (await store.readPostgresFleetSloTasks()).filter(task => task.taskId.startsWith('qa-slo-cap-'));
+    assert.equal(relevant.length, 3, 'Only inactive blocked history is excluded before LIMIT');
+    const { buildFleetSloSnapshot } = await import('../backend/services/ivx-fleet-slo');
+    const sample = buildFleetSloSnapshot(relevant, Date.now(), 'a'.repeat(40));
+    assert.equal(sample.running_agents, 1); assert.equal(sample.heartbeat_agents, 2);
+    assert.equal(sample.retry_waiting_tasks, 1); assert.equal(sample.productive_agents, 0);
+    await admin.query("insert into public.ivx_autonomous_tasks(task_id,idempotency_key,state,payload) select 'qa-slo-cap-retry-'||n,'qa-slo-cap-retry-'||n,'RETRYING',jsonb_build_object('taskId','qa-slo-cap-retry-'||n,'state','RETRYING') from generate_series(1,1000) n");
+    await assert.rejects(store.readPostgresFleetSloTasks(), /telemetry is incomplete/);
+    console.log(JSON.stringify({ ok: true, sourceSha: process.env.GITHUB_SHA, observedAt: new Date().toISOString(),
+      blockedHistoryRows: 1200, previousReadTruncated: true, boundedSloRead: 'PASS',
+      activeBlockedHeartbeatPreserved: true, retryCountPreserved: true, relevantOverflowRejected: true, productionRowsTouched: 0 }));
+  } finally { await admin.query("delete from public.ivx_autonomous_tasks where task_id like 'qa-slo-cap-%'"); }
   await admin.query(`create or replace function public.ivx_autonomous_tasks_link_objective(p_objective_id text)
     returns integer language plpgsql as $$ begin
       perform pg_advisory_xact_lock(9811593); return 0;
