@@ -11,6 +11,8 @@ on:
       - 'scripts/ivx-fleet-ha-live-proof.ts'
       - 'scripts/ivx-fleet-ha-identities.ts'
       - 'scripts/ivx-item9-certification-request.ts'
+      - 'qa/phase3-owner-dashboard.mjs'
+      - 'qa/phase3-capacity.mjs'
       - 'qa/certification/item-9-recovery-request.json'
       - 'render.yaml'
       - 'package.json'
@@ -179,6 +181,30 @@ jobs:
           set -euo pipefail
           bun scripts/ivx-fleet-slo-live-proof.ts
           echo 'IVX_ITEM9_STABILITY_VERIFIED=true' >> "$GITHUB_ENV"
+
+      - name: Measure configured limits, credit balance and actual provider activity
+        run: node qa/phase3-capacity.mjs
+
+      - name: Reconcile all 112 Owner dashboard rows and expire disconnected samples
+        env:
+          OWNER_NEW_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD }}
+          OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
+          IVX_OWNER_PASSWORD: ${{ secrets.IVX_OWNER_PASSWORD }}
+          IVX_OWNER_NEW_PASSWORD: ${{ secrets.IVX_OWNER_NEW_PASSWORD }}
+          OWNER_LOGIN_PASSWORD: ${{ secrets.OWNER_LOGIN_PASSWORD }}
+          IVX_OWNER_LOGIN_PASSWORD: ${{ secrets.IVX_OWNER_LOGIN_PASSWORD }}
+        run: |
+          bun install --frozen-lockfile
+          bunx playwright install --with-deps chromium
+          node qa/phase3-owner-dashboard.mjs
+
+      - name: Preserve authenticated dashboard evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase3-owner-dashboard-${{ env.IVX_TARGET_SHA }}-${{ github.run_attempt }}
+          path: qa/evidence/phase3/
+          if-no-files-found: warn
 
       - name: Publish success exact-SHA status
         if: success()
