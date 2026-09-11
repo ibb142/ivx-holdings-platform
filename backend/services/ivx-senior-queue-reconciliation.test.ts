@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test';
 import * as shared from './ivx-senior-shared-queue';
 import * as stop from './ivx-emergency-stop-gate';
 import * as durable from './ivx-durable-store';
-import { enqueueOrAttachSeniorDeveloperJob, type IVXWorkerJob, type IVXWorkerJobInput } from './ivx-senior-developer-worker';
+import * as coder from './ivx-autonomous-coder';
+import { enqueueOrAttachSeniorDeveloperJob, processNextSeniorDeveloperJob, type IVXWorkerJob, type IVXWorkerJobInput } from './ivx-senior-developer-worker';
 
 const savedEnv = { ...process.env };
 let jobs: IVXWorkerJob[] = [];
@@ -76,4 +77,24 @@ test('preserves a real failure and never attaches another owner or a failed repa
     await expect(enqueueOrAttachSeniorDeveloperJob(input(other))).rejects.toThrow('queue insert rejected');
     expect(writes).toBe(1);
   }
+});
+
+test('an uncertain phase write preserves the job instead of recording an owner cancellation', async () => {
+  await enqueueOrAttachSeniorDeveloperJob(input('interrupted-worker'));
+  const claim = spyOn(shared, 'claimSharedSeniorJob').mockImplementation(async () => {
+    jobs[0].status = 'running';
+    return structuredClone(jobs[0]) as never;
+  });
+  onWrite = next => { if (next.stage === 'PATCHING') throw new Error('Query read timeout'); };
+  const execute = spyOn(coder, 'runIVXAutonomousCoder').mockImplementation(async parameters => {
+    parameters.onPhase?.('patching', 'applying the authorized repair');
+    await new Promise(resolve => setTimeout(resolve, 10));
+    return {} as never; // A worker without authority cannot finalize this proof.
+  });
+  try {
+    expect(await processNextSeniorDeveloperJob()).toBeNull();
+    expect(jobs[0].status).toBe('running');
+    expect(jobs[0].cancelledAt).toBeNull();
+    expect(jobs[0].result).toBeNull();
+  } finally { claim.mockRestore(); execute.mockRestore(); }
 });

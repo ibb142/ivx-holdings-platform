@@ -167,13 +167,14 @@ async function repairFleet(snapshot: Awaited<ReturnType<typeof getAutonomousTrut
   totalRepairs += 1;
   lastRepairAt = new Date().toISOString();
   const enforcement = await enforceAutonomous112RuntimeTruth();
-  if (enforcement.action === 'emergency_stop_respected' || enforcement.action === 'explicit_owner_stop_respected') {
+  if (enforcement.action === 'emergency_stop_respected' || enforcement.action === 'explicit_owner_stop_respected' || enforcement.action === 'owner_control_unavailable') {
     lastRepairCompletedAt = new Date().toISOString();
     return;
   }
   const states = getAllExecutionStates();
   for (const state of states) {
-    if (!state.pauseState && !state.disabledState) resumeAgent(state.agentId);
+    const observed = enforcement.snapshot.agents.rows.find((row) => row.agentId === state.agentId);
+    if (observed && !observed.paused && !observed.disabled && !state.pauseState && !state.disabledState) resumeAgent(state.agentId);
   }
   // The atomic enforcer already owns backlog creation and lease recovery.
   // Do not seed a second backlog through the legacy manager on every Doctor tick.
