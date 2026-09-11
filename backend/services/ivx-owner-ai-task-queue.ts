@@ -1034,22 +1034,32 @@ export async function checkAuthHealth(): Promise<HealthCheckResult> {
 export function checkAIHealth(): HealthCheckResult {
   const startup = validateIVXAIStartup();
   const provider = getProviderHealth();
-  const providerOk = provider.state !== 'AI_UNAVAILABLE';
+  const providerOk = (provider.state === 'PROVIDER_READY' || provider.state === 'FALLBACK_READY')
+    && provider.lastHttpStatus === 200 && Boolean(provider.lastValidationTime);
+  const needsCredits = provider.lastHttpStatus === 402
+    || /positive credit balance|insufficient_quota|billing_hard_limit/i.test(provider.error ?? '');
+  const validationPending = provider.state === 'PROVIDER_VALIDATING' || provider.state === 'FALLBACK_VALIDATING';
+  const code = !startup.ok ? 'AI_CONFIGURATION_UNAVAILABLE' : providerOk ? null
+    : needsCredits ? 'AI_CREDITS_REQUIRED' : validationPending ? 'AI_VALIDATION_PENDING' : 'AI_UNAVAILABLE';
   return {
     ok: startup.ok && providerOk,
     detail: {
       startupOk: startup.ok,
       startupErrors: startup.errors,
       providerState: provider.state,
+      code,
+      lastHttpStatus: provider.lastHttpStatus,
+      lastValidationTime: provider.lastValidationTime,
       provider: startup.provider,
       model: startup.model,
       keyPrefix: startup.keyPrefix,
       keyLoaded: startup.keyLoaded,
       baseUrl: startup.baseUrl,
       providerType: startup.providerType,
-      ownerActionRequired: !providerOk
-        ? 'AI provider is UNAVAILABLE. Check /health/ai for details. If the key is expired (vck_ prefix), generate a new one at https://vercel.com/~/ai-gateway/api-keys and update IVX_AI_GATEWAY_KEY on Render.'
-        : null,
+      ownerActionRequired: code === 'AI_CREDITS_REQUIRED'
+        ? 'The AI provider requires a positive credit balance. Restore the provider balance and validate availability again.'
+        : code === 'AI_VALIDATION_PENDING' ? 'AI provider validation has not completed successfully.'
+        : code ? 'AI provider is unavailable. Check configuration and /health/ai for the current failure.' : null,
     },
   };
 }
