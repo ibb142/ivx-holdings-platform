@@ -186,7 +186,7 @@ export async function handleIVXRenderDiagnosticRequest(request: Request): Promis
     recentDeploys: deploys.map((d) => ({ id: d.id, status: d.status, trigger: d.trigger, commitSha: d.commitSha, commitMessage: d.commitMessage, finishedAt: d.finishedAt, createdAt: d.createdAt, failureReason: d.failureReason })),
     latestDeployEvents: latestEvents,
     deploysHttpStatus: deploysResult.status,
-    runtime: { commitSha: process.env.RENDER_GIT_COMMIT ?? null, node: process.version, platform: process.platform, timestamp: new Date().toISOString(), deploymentMarker: process.env.DEPLOYMENT_MARKER ?? null },
+    runtime: { commitSha: process.env.RENDER_GIT_COMMIT ?? null, serviceId: process.env.RENDER_SERVICE_ID ?? null, instanceId: process.env.RENDER_INSTANCE_ID ?? null, node: process.version, platform: process.platform, timestamp: new Date().toISOString(), deploymentMarker: process.env.DEPLOYMENT_MARKER ?? null },
     secretValuesReturned: false,
   });
 }

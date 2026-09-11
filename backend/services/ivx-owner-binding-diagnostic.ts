@@ -49,6 +49,7 @@ export function ownerRuntimeBindingDrift(body: unknown, runtime: Record<string, 
       present: Boolean(configured), length: configured?.length ?? 0,
       runtimePresent: Boolean(active), runtimeLength: active?.length ?? 0,
       matchesRuntime: configured && active ? configured === active : null,
+      matchesTrimmedConfiguration: configured && active ? configured.trim() === active : null,
     }];
   }));
 }
