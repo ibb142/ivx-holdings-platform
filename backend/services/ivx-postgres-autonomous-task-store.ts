@@ -7,6 +7,7 @@
  * execution; otherwise PostgREST is used. Mutations never replay across transports.
  */
 import { hostname } from 'node:os';
+import { localFleetExecutionMetrics } from './ivx-fleet-execution-metrics';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import type { EventEmitter } from 'node:events';
@@ -18,7 +19,7 @@ import type { FleetLeaseRequest, FleetLeaseResult, FleetTaskLeaseIdentity, Fleet
 
 export const IVX_POSTGRES_AUTONOMOUS_TASK_STORE_MARKER = 'ivx-postgres-autonomous-task-store-2026-09-08-current-work-v3-direct-failover';
 const DEFAULT_TIMEOUT_MS = 30_000;
-const TRUTH_TIMEOUT_MS = 8_000;
+export const TRUTH_TIMEOUT_MS = 30_000;
 const DEFAULT_LEASE_SECONDS = 120;
 const TASK_READ_CACHE_TTL_MS = 1_500;
 const BOOT_NONCE = randomUUID().slice(0, 12);
@@ -222,7 +223,7 @@ export function readPostgresFleetDashboardObservation(): Promise<unknown> {
 export type FleetProcessObservation = {
   measuredAt: string;
   instances: Array<{ instanceId: string; role: string; commitSha: string; serviceId: string | null;
-    lastSeenAt: string; processRole: string | null; sharedState: boolean; sharedWorkerQueue: boolean; draining: boolean }>;
+    lastSeenAt: string; processRole: string | null; sharedState: boolean; sharedWorkerQueue: boolean; draining: boolean; capacity?: unknown }>;
 };
 
 /** HA needs recent process rows, never the task ledger or assignment aggregates. */
@@ -237,7 +238,7 @@ export async function readPostgresFleetProcessObservation(): Promise<FleetProces
           event->>'process_role' as "processRole",
           coalesce((event->>'shared_state')::boolean,false) as "sharedState",
           coalesce((event->>'shared_worker_queue')::boolean,false) as "sharedWorkerQueue",
-          coalesce((event->>'draining')::boolean,false) as draining
+          coalesce((event->>'draining')::boolean,false) as draining, event->'capacity' as capacity
         from public.ivx_autonomous_task_events
         where event_type='fleet_slo_sample' and created_at > statement_timestamp() - interval '60 seconds'
           and event->>'instance_role' in ('api','worker')
@@ -262,7 +263,8 @@ export async function readPostgresFleetProcessObservation(): Promise<FleetProces
       latest.set(row.worker_instance_id, { instanceId: row.worker_instance_id, role: String(event.instance_role),
         commitSha: String(event.commit_sha ?? ''), serviceId: typeof event.service_id === 'string' ? event.service_id : null,
         lastSeenAt: row.created_at, processRole: typeof event.process_role === 'string' ? event.process_role : null,
-        sharedState: event.shared_state === true, sharedWorkerQueue: event.shared_worker_queue === true, draining: event.draining === true });
+        sharedState: event.shared_state === true, sharedWorkerQueue: event.shared_worker_queue === true, draining: event.draining === true,
+        capacity: event.capacity ?? null });
     }
     return { measuredAt: new Date().toISOString(), instances: [...latest.values()] };
   } catch (error) {
@@ -469,7 +471,7 @@ async function fetchPostgresRecoveryTasks(): Promise<Task[]> {
 
 export async function persistPostgresFleetSloSample(sample: Record<string, unknown>): Promise<void> {
   const workerInstanceId = autonomousWorkerInstanceId();
-  const event = { ...sample, instance_role: process.env.IVX_WORKER_MODE === 'true' ? 'worker' : 'api', service_id: process.env.RENDER_SERVICE_ID ?? null, process_role: process.env.IVX_PROCESS_ROLE ?? null, shared_worker_queue: process.env.IVX_WORKER_QUEUE_ATOMIC === 'true', shared_state: process.env.IVX_REQUIRE_SHARED_STATE === 'true', draining: process.env.IVX_INSTANCE_DRAINING === 'true' };
+  const event = { ...sample, capacity: localFleetExecutionMetrics(), instance_role: process.env.IVX_WORKER_MODE === 'true' ? 'worker' : 'api', service_id: process.env.RENDER_SERVICE_ID ?? null, process_role: process.env.IVX_PROCESS_ROLE ?? null, shared_worker_queue: process.env.IVX_WORKER_QUEUE_ATOMIC === 'true', shared_state: process.env.IVX_REQUIRE_SHARED_STATE === 'true', draining: process.env.IVX_INSTANCE_DRAINING === 'true' };
   const persistDirect = async () => {
     await queryWithPostgresDeadline(getDirectPool(process.env, 'presence'),
       'insert into public.ivx_autonomous_task_events(event_type,worker_instance_id,event) values ($1,$2,$3::jsonb)',

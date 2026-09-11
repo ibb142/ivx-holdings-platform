@@ -639,6 +639,9 @@ export type LandingResultRecord = {
   status: 'PASS' | 'FAIL' | 'BLOCKED';
   started_at: string;
   completed_at: string;
+  /** Original CI read time; absent for older or uninstrumented sources. */
+  source_observed_at?: string | null;
+  activity?: { category: 'qa'; active_seconds: number; waiting_seconds: number };
   productive_seconds: number;
   production_sha: string | null;
   api_checks: number;

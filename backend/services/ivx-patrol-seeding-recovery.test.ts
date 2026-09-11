@@ -55,7 +55,7 @@ for (const controlMode of ['authorized', 'unavailable', 'individual_pause', 'rea
     }));
     mock.module('./backend/services/ivx-autonomous-decision-quality.ts',()=>({getAutonomousDecisionQualityStatus:()=>({}),runAutonomousDecisionQualityLoop:async()=>{}}));
     mock.module('./backend/services/ivx-autonomous-semantic-360.ts',()=>({getAutonomousSemantic360Status:()=>({}),runAutonomousSemantic360:async()=>{}}));
-    mock.module('./backend/services/ivx-autonomous-control-policy.ts',()=>({autonomousRuntimeEnforcerEnabled:()=>true}));
+    mock.module('./backend/services/ivx-autonomous-control-policy.ts',()=>({autonomousRuntimeEnforcerEnabled:()=>true,autonomousContinuityCapacity:()=>12}));
     mock.module('./backend/services/ivx-postgres-autonomous-task-store.ts',()=>({
       postgresAtomicQueueSelected:()=>true,autonomousWorkerInstanceId:()=>'test',
       readPostgresFleetLeaseRows:async()=>[],releasePostgresWorkerInstanceTasks:async()=>0

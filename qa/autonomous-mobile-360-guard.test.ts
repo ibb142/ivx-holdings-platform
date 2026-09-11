@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve, relative } from 'node:path';
+import { AUTONOMOUS_CONTROL_ROUTES } from '../expo/components/autonomousDashboardControlRoutes';
 
 const ROOT = resolve(import.meta.dir, '..');
 const read = (path: string) => readFileSync(resolve(ROOT, path), 'utf8');
@@ -37,7 +38,7 @@ describe('Autonomous mobile 360 observability guard', () => {
   test('autonomous dashboard exposes owner control modules and mission control', () => {
     const dashboard = read('expo/app/autonomous-dashboard.tsx');
     const controls = read('expo/components/AutonomousDashboardControlStrip.tsx');
-    const routes = read('expo/components/autonomousDashboardControlRoutes.ts');
+    const routeSource = read('expo/components/autonomousDashboardControlRoutes.ts');
     expect(dashboard).toContain("from '@/components/AutonomousDashboardControlStrip'");
     expect(dashboard).toContain('<AutonomousDashboardControlStrip />');
     expect(dashboard).toContain('<LandingWorkersLiveScreen />');
@@ -45,8 +46,10 @@ describe('Autonomous mobile 360 observability guard', () => {
     expect(controls).toContain("from './autonomousDashboardControlRoutes'");
     expect(controls).toContain('AUTONOMOUS_CONTROL_ROUTES.map');
     expect(controls).toContain('router.push(route');
+    const routes = AUTONOMOUS_CONTROL_ROUTES.map(row => row.route);
     for (const route of ['/ivx/chat', '/ivx/agent-command-center', '/ivx/autonomous-control']) {
-      expect(routes).toContain(`route: '${route}'`);
+      expect(routeSource).toContain(`route: '${route}'`);
+      expect(routes).toContain(route);
     }
   });
 

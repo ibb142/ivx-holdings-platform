@@ -25,6 +25,7 @@ import {
   type AutonomousDecisionQualitySnapshot,
 } from './ivx-autonomous-decision-quality';
 import { IVX_PROJECT_VISION } from './ivx-project-vision';
+import { autonomousContinuityCapacity } from './ivx-autonomous-control-policy';
 
 export const IVX_AUTONOMOUS_PROJECT_MANAGER_MARKER = 'ivx-autonomous-project-manager-v2-nine-capability-gate-2026-09-07';
 
@@ -449,8 +450,7 @@ function buildNextActions(tasks: readonly Task[], dependencyAudit: DependencyAud
 }
 
 function configuredConcurrency(): number {
-  const parsed = Number.parseInt(process.env.IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY ?? '', 10);
-  return Number.isFinite(parsed) && parsed >= 1 ? Math.min(parsed, 112) : 12;
+  return autonomousContinuityCapacity();
 }
 
 export function analyzeAutonomousProjectManagement(input: {
@@ -462,7 +462,8 @@ export function analyzeAutonomousProjectManagement(input: {
   configuredConcurrency?: number;
 }): AutonomousProjectManagerReport {
   const nowMs = input.nowMs ?? Date.now();
-  const concurrency = Math.max(1, Math.min(112, Math.floor(input.configuredConcurrency ?? configuredConcurrency())));
+  const requestedCapacity = input.configuredConcurrency ?? configuredConcurrency();
+  const concurrency = Number.isSafeInteger(requestedCapacity) ? Math.max(0, Math.min(112, requestedCapacity)) : 0;
   const objectives = [...input.objectives];
   const tasks = [...input.tasks];
   const approvals = [...input.approvals];
@@ -579,7 +580,7 @@ export function analyzeAutonomousProjectManagement(input: {
   const observedCapacityCoverage = ratioScore(Math.min(recentAgentsWithVerifiedOutcomes, concurrency), concurrency);
   const leaseIntegrityScore = activeTasks.length > 0
     ? ratioScore(activeTasksWithFreshLease, activeTasks.length)
-    : recentAgentsWithVerifiedOutcomes >= concurrency ? 100 : 0;
+    : concurrency > 0 && recentAgentsWithVerifiedOutcomes >= concurrency ? 100 : 0;
   const capacityScore = clampScore(
     assignmentCoverage * 0.30
     + observedCapacityCoverage * 0.30
@@ -664,7 +665,7 @@ export function analyzeAutonomousProjectManagement(input: {
     capacityScore,
     [
       evidenceRow('assignment_coverage', assignmentCoverage, '100/100', assignmentCoverage === 100, 'durable_task_ledger'),
-      evidenceRow('recent_agents_with_verified_outcomes_vs_configured_concurrency', `${recentAgentsWithVerifiedOutcomes}/${concurrency}`, `>=${concurrency}/${concurrency}`, recentAgentsWithVerifiedOutcomes >= concurrency, 'runtime_leases'),
+      evidenceRow('recent_agents_with_verified_outcomes_vs_configured_concurrency', `${recentAgentsWithVerifiedOutcomes}/${concurrency}`, `>=${concurrency}/${concurrency}; admission enabled`, concurrency > 0 && recentAgentsWithVerifiedOutcomes >= concurrency, 'runtime_leases'),
       evidenceRow('wip_within_capacity', `${activeTasks.length}/${concurrency}`, `<=${concurrency}`, activeTasks.length <= concurrency, 'runtime_leases'),
       evidenceRow('fresh_lease_integrity', leaseIntegrityScore, '100/100', leaseIntegrityScore === 100, 'runtime_leases'),
     ],
@@ -764,9 +765,10 @@ export function analyzeAutonomousProjectManagement(input: {
     .map((item) => `${item.id}:${item.score}/100${item.gap ? ` — ${item.gap}` : ''}`);
   if (criticalAttention.length > 0) maturityBlockers.unshift(`critical_attention_tasks:${criticalAttention.length}`);
   if (orphanTasks.length > 0) maturityBlockers.unshift(`orphan_tasks:${orphanTasks.length}`);
+  if (concurrency === 0) maturityBlockers.unshift('admission_disabled');
   if (activeTasks.length > concurrency) maturityBlockers.unshift(`wip_over_capacity:${activeTasks.length}/${concurrency}`);
   if (!dependencyAudit.valid) maturityBlockers.unshift('dependency_graph_invalid');
-  const tenOfTenCertified = quality.sampleTasks >= 20
+  const tenOfTenCertified = concurrency > 0 && quality.sampleTasks >= 20
     && quality.overallScore >= 95
     && dimensions.every((item) => item.score >= 95)
     && allNineTenOfTenVerified
