@@ -50,6 +50,11 @@ try {
   cases.push({ scenario: 'reverse_transposition_regression',
     request: 'Reverse the characters of ba1aef02. Return only the reversed text.',
     expected: '20fea1ab', history: refusalHistory });
+  // GPT-4.1 failed this operand in run 34635489528; retain it independently
+  // of the next randomly generated challenge and without supplying the answer.
+  cases.push({ scenario: 'reverse_model_alignment_regression',
+    request: 'Reverse the characters of 99a0314b. Return only the reversed text.',
+    expected: 'b4130a99', history: refusalHistory });
 
   // Diagnostic comparison only: retain the previous prompt's answer on the
   // repeated-refusal case. Every candidate case below must still pass.
