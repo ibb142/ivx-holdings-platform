@@ -95,7 +95,7 @@ export function detectIVXConversationQuestion(message: string): IVXConversationT
 
 function parseExactJoinRequest(message: string): string | null {
   const match = (message ?? '').match(
-    /^\s*return\s+only\s+the\s+result\s+of\s+joining\s+([a-z0-9_.:-]{1,128})\s+and\s+([a-z0-9_.:-]{1,128})\.?\s*$/i,
+    /^\s*return\s+only\s+the\s+result\s+of\s+joining\s+([a-z0-9_:-](?:[a-z0-9_.:-]{0,126}[a-z0-9_:-])?)\s+and\s+([a-z0-9_:-](?:[a-z0-9_.:-]{0,126}[a-z0-9_:-])?)\.?\s*$/i,
   );
   if (!match) return null;
   return `${match[1]}${match[2]}`;
