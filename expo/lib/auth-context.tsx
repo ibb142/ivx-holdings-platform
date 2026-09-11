@@ -1,5 +1,6 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { supabase, ensureSupabaseClient, getSupabaseConfigAudit, SUPABASE_NOT_CONFIGURED_MESSAGE, forceProductionSupabaseClient } from './supabase';
 import { persistAuth, loadStoredAuth, clearStoredAuth, setAuthCredentials } from './auth-store';
