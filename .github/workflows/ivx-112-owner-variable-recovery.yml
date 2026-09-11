@@ -9,6 +9,9 @@ on:
       - scripts/ops/owner-runtime-binding*
       - scripts/ops/owner-recovery-deploy*
       - backend/services/ivx-owner-binding-diagnostic*
+      - backend/services/ivx-owner-password*
+      - backend/services/ivx-member-auth-certification.ts
+      - backend/api/ivx-owner-passwordless-login.ts
       - backend/api/ivx-render-diagnostic.ts
   workflow_dispatch: {}
 
@@ -30,7 +33,7 @@ jobs:
       - run: node --test scripts/ops/owner-runtime-binding.test.mjs scripts/ops/owner-recovery-deploy.test.mjs
       - uses: oven-sh/setup-bun@v2
         with: { bun-version: 1.3.9 }
-      - run: bun test backend/services/ivx-owner-binding-diagnostic.test.ts
+      - run: bun test backend/services/ivx-owner-binding-diagnostic.test.ts backend/services/ivx-owner-password-fidelity.test.ts
   recover-deploy-verify:
     needs: verify-owner-binding
     if: github.ref == 'refs/heads/main'
@@ -148,7 +151,7 @@ jobs:
             });
             if (!response.ok) throw new Error(`Runtime diagnostic HTTP ${response.status}`);
             const diagnostic = await response.json();
-            const keys = ['OWNER_NEW_PASSWORD','IVX_OWNER_PASSWORD','IVX_OWNER_EMAIL','EXPO_PUBLIC_SUPABASE_URL','SUPABASE_URL','EXPO_PUBLIC_SUPABASE_ANON_KEY','SUPABASE_ANON_KEY'];
+            const keys = ['OWNER_NEW_PASSWORD','IVX_OWNER_PASSWORD','IVX_OWNER_PASSWORD_BASE64','IVX_OWNER_EMAIL','EXPO_PUBLIC_SUPABASE_URL','SUPABASE_URL','EXPO_PUBLIC_SUPABASE_ANON_KEY','SUPABASE_ANON_KEY'];
             const bindings = Object.fromEntries(keys.map(key => {
               const row = diagnostic.ownerAuthEnvPresence?.[key];
               return [key, { configured: row?.present === true, runtimePresent: row?.runtimePresent === true, configuredLength: row?.length ?? null, runtimeLength: row?.runtimeLength ?? null, matchesRuntime: typeof row?.matchesRuntime === 'boolean' ? row.matchesRuntime : null, matchesTrimmedConfiguration: row?.matchesTrimmedConfiguration ?? null }];
@@ -157,7 +160,18 @@ jobs:
             if (!diagnostic.ok || diagnostic.runtime?.commitSha !== process.env.GITHUB_SHA) throw new Error('Exact runtime diagnostic not verified');
             const expectedService = process.env.RENDER_SERVICE_ID_RECOVERED || process.env.DEFAULT_RENDER_SERVICE_ID;
             if (!expectedService || diagnostic.service?.id !== expectedService || diagnostic.runtime?.serviceId !== expectedService) throw new Error('Runtime diagnostic service identity mismatch');
-            if (!['OWNER_NEW_PASSWORD', 'IVX_OWNER_PASSWORD'].every(key => bindings[key].matchesRuntime === true)) throw new Error('Runtime diagnostic owner password drift');
+            if (bindings.IVX_OWNER_PASSWORD_BASE64.matchesRuntime !== true) throw new Error('Runtime diagnostic owner password transport drift');
+            // Test the actual runtime resolver through its existing owner-only
+            // certificate endpoint. A timeout is not replayed; the durable
+            // certificate remains available for later read-only reconciliation.
+            const certResponse = await fetch(`${process.env.API_BASE}/api/ivx/certification/member-auth/run`, {
+              method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` }, signal: AbortSignal.timeout(120000),
+            });
+            const { certificate } = await certResponse.json();
+            const checkNames = ['runtimeConfig','ownerLogin','memberRegistration','memberLogin','memberPersistence','regularClassification','vipClassification','cleanup'];
+            const checks = Object.fromEntries(checkNames.map(name => [name, certificate?.checks?.[name]?.ok === true]));
+            console.log(JSON.stringify({ runtimeAuthSha: certificate?.commit ?? null, certified: certificate?.certified === true, checks, secretValuesReturned: false }));
+            if (!certResponse.ok || certificate?.commit !== process.env.GITHUB_SHA || certificate?.certified !== true || !Object.values(checks).every(Boolean)) throw new Error('Runtime diagnostic authentication certificate not verified');
           } catch (error) {
             console.error(error instanceof Error && /^(Diagnostic owner|Runtime diagnostic|Exact runtime)/.test(error.message) ? error.message : 'Runtime binding diagnostic unavailable');
             process.exitCode = 1;

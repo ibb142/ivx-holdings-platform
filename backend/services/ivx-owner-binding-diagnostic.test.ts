@@ -73,12 +73,13 @@ test('the production workflow rejects wrong services and stale passwords', async
   const source = section.split("node --input-type=module <<'NODE'\n")[1].split('\n          NODE')[0];
   const run = new (Object.getPrototypeOf(async () => {}).constructor)('process', 'fetch', 'console', source);
   const sha = 'a'.repeat(40), serviceId = 'service-fixture';
-  for (const scenario of ['valid', 'wrong-service', 'stale-password']) {
+  for (const scenario of ['valid', 'wrong-service', 'stale-password', 'failed-certificate', 'stale-certificate']) {
     const processFixture = { env: { GITHUB_SHA: sha, RENDER_SERVICE_ID_RECOVERED: serviceId, OWNER_EMAIL: 'owner@example.test', IVX_OWNER_PASSWORD: 'private-password-fixture', EXPO_PUBLIC_SUPABASE_URL: 'https://auth.example.test', API_BASE: 'https://api.example.test' }, exitCode: 0 };
     const logs: string[] = [];
     const fetchFixture = async (url: string) => ({ ok: true, status: 200, json: async () => url.includes('/auth/v1/token')
       ? { access_token: 'private-token-fixture', user: { email: 'owner@example.test', app_metadata: { role: 'owner' } } }
-      : { ok: true, service: { id: scenario === 'wrong-service' ? 'unrelated-service' : serviceId }, runtime: { commitSha: sha, serviceId, instanceId: 'instance-fixture' }, ownerAuthEnvPresence: Object.fromEntries(['IVX_OWNER_PASSWORD', 'OWNER_NEW_PASSWORD'].map(key => [key, { present: true, runtimePresent: true, matchesRuntime: scenario !== 'stale-password', length: 24, runtimeLength: 24 }])) } });
+      : url.includes('/certification/member-auth/run') ? { certificate: { commit: scenario === 'stale-certificate' ? 'b'.repeat(40) : sha, certified: scenario !== 'failed-certificate', checks: Object.fromEntries(['runtimeConfig','ownerLogin','memberRegistration','memberLogin','memberPersistence','regularClassification','vipClassification','cleanup'].map(name => [name, { ok: scenario !== 'failed-certificate' || name !== 'ownerLogin' }])) } }
+      : { ok: true, service: { id: scenario === 'wrong-service' ? 'unrelated-service' : serviceId }, runtime: { commitSha: sha, serviceId, instanceId: 'instance-fixture' }, ownerAuthEnvPresence: Object.fromEntries(['IVX_OWNER_PASSWORD', 'OWNER_NEW_PASSWORD', 'IVX_OWNER_PASSWORD_BASE64'].map(key => [key, { present: true, runtimePresent: true, matchesRuntime: key === 'IVX_OWNER_PASSWORD_BASE64' && scenario !== 'stale-password', length: 24, runtimeLength: 24 }])) } });
     await run(processFixture, fetchFixture, { log: (message: string) => logs.push(message), error: (message: string) => logs.push(message) });
     expect(processFixture.exitCode).toBe(scenario === 'valid' ? 0 : 1);
     expect(logs.join('\n')).not.toContain('private-password-fixture');
