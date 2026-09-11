@@ -235,7 +235,7 @@
 (function(){
   var v = document.getElementById('homeFeedReel');
   if (!v) return;
-  var busy = false, retryButton = null;
+  var busy = false, retryButton = null, deadline = 0;
   function showRetry() {
     busy = false;
     if (!retryButton) {
@@ -273,8 +273,10 @@
     var p = v.play && v.play(); if (p && p.catch) p.catch(function(){});
   }
   function attempt(number) {
+    var remaining = deadline - Date.now();
+    if (remaining <= 0) { showRetry(); return; }
     var controller = new AbortController();
-    var timer = setTimeout(function(){ controller.abort(); }, 8000);
+    var timer = setTimeout(function(){ controller.abort(); }, remaining);
     return fetch('https://api.ivxholding.com/api/reels', {headers:{'Accept':'application/json'},signal:controller.signal})
       .then(function(r){
         if (!r.ok) {
@@ -300,7 +302,7 @@
       })
       .catch(function(error){
         clearTimeout(timer);
-        if (number < 1 && error.retryable !== false) {
+        if (number < 1 && error.retryable !== false && Date.now() < deadline) {
           setTimeout(function(){ attempt(number + 1); }, 500 * (number + 1));
         } else showRetry();
       });
@@ -308,6 +310,7 @@
   function start() {
     if (busy) return;
     busy = true;
+    deadline = Date.now() + 18000;
     hideRetry();
     attempt(0);
   }
