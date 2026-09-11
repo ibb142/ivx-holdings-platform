@@ -28,6 +28,8 @@ import {
   releaseLease,
   TERMINAL_SUCCESS_STATES,
   transitionTaskState,
+  validateCompletion,
+  type AcceptanceCriterion,
   type Task,
   type TaskEvidence,
 } from './ivx-autonomous-task-engine';
@@ -143,7 +145,7 @@ async function makeEvidence(
 }
 
 /** Detect real defects in a module file. Secrets are owner-gated, never auto-handled. */
-async function inspectModule(relPath: string): Promise<{ defects: CycleDefect[]; inspected: boolean; summary: string }> {
+async function inspectModule(relPath: string): Promise<{ defects: CycleDefect[]; inspected: boolean; summary: string; contentHash?: string }> {
   const repoRoot = resolveRepoRoot();
   const defects: CycleDefect[] = [];
   let abs: string;
@@ -209,7 +211,12 @@ async function inspectModule(relPath: string): Promise<{ defects: CycleDefect[];
     });
   }
 
-  return { defects, inspected: true, summary: `inspected ${relPath} (${content.split('\n').length} lines, ${defects.length} defect(s))` };
+  return { defects, inspected: true, contentHash: sha256(content), summary: `inspected ${relPath} (${content.split('\n').length} lines, ${defects.length} defect(s))` };
+}
+
+export function moduleInspectionCriteria(source: string, sourceSha: string): AcceptanceCriterion[] {
+  return [{ id: 'source-inspection', description: `Inspect ${source} at ${sourceSha} and record its content digest and findings.`,
+    verificationMethod: 'source_file_inspected', expectedSource: source, expectedCommitSha: sourceSha, met: false, evidence: null }];
 }
 
 /**
@@ -229,7 +236,9 @@ export async function seedModuleAuditTask(sourceSha: string, agentId: string, ag
   const result = await createTask({
     title: `Module audit: ${rel}`,
     description: `Real engineering audit of module ${rel} against source SHA ${sourceSha}: inspect, secret-scan, import-graph check, hygiene defects; queue repairs for findings. Owner: ${agentId} (IA-${agentNumber ?? 'shared'}).`,
-    taskType: 'development',
+    taskType: 'discovery',
+    milestone: sourceSha,
+    acceptanceCriteria: moduleInspectionCriteria(rel, sourceSha),
     idempotencyKey: `module-audit:${sourceSha}:${agentId}:${agentNumber ?? 'shared'}:${rel}`,
     priority: 'medium',
     assignedAgentNumber: agentNumber,
@@ -310,7 +319,7 @@ export async function runRealEngineeringCycle(input: {
     }
     if (!leased.ok || !leased.task) {
       const seeded = await seedModuleAuditTask(input.sourceSha, input.agentId, input.agentNumber);
-      if (seeded && TERMINAL_SUCCESS_STATES.includes(seeded.state)) {
+      if (seeded && validateCompletion(seeded).verdict === 'VERIFIED') {
         // Durable rerun: this agent's owned audit for this exact SHA was already
         // executed and VERIFIED with fresh evidence — return the real taskId.
         const relMatch = /module audit: (\S+)/i.exec(seeded.title);
@@ -391,6 +400,10 @@ export async function runRealEngineeringCycle(input: {
         title: `Repair ${defect.kind}: ${relPath ?? task.title}`,
         description: `${defect.detail}. Discovered by real engineering cycle on SHA ${input.sourceSha}.`,
         taskType: defect.kind === 'secret' ? 'security' : 'development',
+        objectiveId: task.objectiveId,
+        parentTaskId: task.taskId,
+        dependencies: [task.taskId],
+        milestone: input.sourceSha,
         idempotencyKey: `repair:${input.sourceSha}:${task.assignedAgentNumber ?? 'shared'}:${relPath ?? task.title}:${defect.kind}`,
         priority: defect.severity === 'critical' ? 'critical' : defect.severity === 'high' ? 'high' : 'medium',
         assignedAgentNumber: task.assignedAgentNumber,
@@ -403,32 +416,21 @@ export async function runRealEngineeringCycle(input: {
       base.evidenceIds.push('defect-log');
     }
 
-    if (inspection.inspected && relPath) {
-      const inspectEvidence = await makeEvidence('source_file_inspected', relPath, inspection.summary);
-      await addTaskEvidence(task.taskId, inspectEvidence);
-      base.evidenceIds.push('source_file_inspected');
-      base.filesInspected.push(relPath);
-    }
-
-    // Complete fail-closed: EXECUTION_COMPLETED → QA_IN_PROGRESS → VERIFIED.
-    const execDone = await transitionTaskState(task.taskId, 'EXECUTION_COMPLETED');
-    if (!execDone.ok) {
-      await transitionTaskState(task.taskId, 'FAILED', { error: `EXECUTION_COMPLETED refused: ${execDone.error}` });
-      states.push('FAILED');
-      return { ...base, ok: false, action: 'TASK_FAILED', taskId: task.taskId, module: relPath, startedAt, states, error: execDone.error };
-    }
-    states.push('EXECUTION_COMPLETED');
     await heartbeat(task.taskId, workerId);
-    const qa = await transitionTaskState(task.taskId, 'QA_IN_PROGRESS');
-    states.push(qa.ok ? 'QA_IN_PROGRESS' : 'QA_TRANSITION_REFUSED');
-    if (qa.ok) {
-      // Fresh-evidence gate: the task just gained real inspection evidence this
-      // cycle, satisfying VERIFIED derivation from fresh proof — not registry age.
-      const verified = await transitionTaskState(task.taskId, 'VERIFIED');
-      states.push(verified.ok ? 'VERIFIED' : `VERIFY_REFUSED:${verified.error ?? 'unknown'}`);
-      if (!verified.ok) {
-        return { ...base, ok: false, action: 'TASK_FAILED', taskId: task.taskId, module: relPath, startedAt, states, error: verified.error };
-      }
+    const inspectEvidence = { ...await makeEvidence(inspection.inspected ? 'source_file_inspected' : 'log', relPath, inspection.summary, input.sourceSha),
+      ...(inspection.contentHash ? { contentHash: inspection.contentHash } : {}) };
+    const plannedInspection = task.taskType === 'discovery' && task.acceptanceCriteria.some((criterion) =>
+      criterion.verificationMethod === 'source_file_inspected' && criterion.expectedSource === relPath && criterion.expectedCommitSha === input.sourceSha);
+    const outcome = !inspection.inspected ? 'FAILED' : plannedInspection ? 'VERIFIED' : 'BLOCKED';
+    const finalized = await finalizeEvidenceTask({ taskId: task.taskId, workerId, evidence: inspectEvidence, outcome,
+      error: inspection.summary, blocker: 'Inspection performed, but this task requires different acceptance evidence. Repair completion was not proved.' });
+    states.push(...finalized.states);
+    if (inspection.inspected) base.filesInspected.push(relPath);
+    if (finalized.evidenceId) base.evidenceIds.push(finalized.evidenceId);
+    if (!finalized.ok || outcome !== 'VERIFIED') {
+      return { ...base, ok: finalized.ok, action: outcome === 'BLOCKED' ? 'TASK_BLOCKED' : 'TASK_FAILED', taskId: task.taskId,
+        module: relPath, startedAt, finishedAt: nowIso(), states, defects: inspection.defects,
+        error: finalized.error ?? finalized.task?.blocker ?? finalized.task?.error ?? null };
     }
 
     const probeWorker = `probe:${workerId}:${Date.now()}`;
@@ -483,6 +485,9 @@ export type FleetEngineeringMetrics = {
   generatedAt: string;
   tasksStarted: number;
   tasksCompletedVerified: number;
+  inspectionsCompletedVerified: number;
+  invalidVerifiedClaims: number;
+  inspectionAgentMinutesTotal: number;
   tasksBlockedOwnerGate: number;
   tasksFailed: number;
   tasksQueued: number;
@@ -505,28 +510,42 @@ export type FleetEngineeringMetrics = {
  * task) with real evidence — never wall-clock × fleet size.
  */
 export async function getFleetEngineeringMetrics(fleetSize = 112): Promise<FleetEngineeringMetrics> {
-  const tasks = await getAllTasks();
+  const allTasks = await getAllTasks();
+  const valid = (task: Task) => validateCompletion(task).verdict === 'VERIFIED';
+  // Historical duplicate keys do not count as separate delivered work.
+  const byKey = new Map<string, Task>();
+  for (const task of allTasks) {
+    const prior = byKey.get(task.idempotencyKey);
+    if (!prior || valid(task) && !valid(prior)) byKey.set(task.idempotencyKey, task);
+  }
+  const tasks = [...byKey.values()];
+  const isInspection = (task: Task) => /^(module-audit:|autonomous-secondary:)/.test(task.idempotencyKey)
+    || task.taskType === 'discovery' && task.acceptanceCriteria.some((criterion) => criterion.verificationMethod === 'source_file_inspected');
   const now = Date.now();
   let productiveMinutesTotal = 0;
   let minutes24h = 0;
   let minutes1h = 0;
   let defectsDiscovered = 0;
-  let modulesCovered = 0;
+  const coveredModules = new Set<string>();
+  let inspectionMinutes = 0;
   let repairTasksQueued = 0;
   let commitsRecorded = 0;
 
   for (const task of tasks) {
-    const hasRealEvidence = task.evidence.some((e) => e.evidenceType === 'source_file_inspected');
-    if (hasRealEvidence) modulesCovered += 1;
+    for (const evidence of task.evidence) {
+      if (valid(task) && evidence.evidenceType === 'source_file_inspected') coveredModules.add(evidence.source);
+    }
     if (task.commitSha) commitsRecorded += 1;
     if (task.idempotencyKey.startsWith('repair:')) repairTasksQueued += 1;
     if (task.evidence.some((e) => e.summary.startsWith('defects discovered'))) defectsDiscovered += 1;
-    if ((task.state === 'VERIFIED' || task.completedAt) && task.startedAt) {
+    if (valid(task) && task.completedAt && task.startedAt) {
       const spanMinutes = Math.min(
         MAX_TASK_MINUTES,
-        Math.max(0.1, (new Date(task.completedAt ?? task.updatedAt).getTime() - new Date(task.startedAt).getTime()) / 60_000),
+        Math.max(0, (Date.parse(task.completedAt) - Date.parse(task.attemptStartedAt ?? task.startedAt)) / 60_000),
       );
-      if (hasRealEvidence) {
+      if (!Number.isFinite(spanMinutes)) continue;
+      if (isInspection(task)) inspectionMinutes += spanMinutes;
+      else if (task.evidence.length > 0) {
         productiveMinutesTotal += spanMinutes;
         const ageMs = now - new Date(task.completedAt ?? task.updatedAt).getTime();
         if (ageMs <= 24 * 3600_000) minutes24h += spanMinutes;
@@ -535,12 +554,15 @@ export async function getFleetEngineeringMetrics(fleetSize = 112): Promise<Fleet
     }
   }
 
-  const defectsFixed = tasks.filter((t) => t.idempotencyKey.startsWith('repair:') && t.state === 'VERIFIED').length;
+  const defectsFixed = tasks.filter((t) => t.idempotencyKey.startsWith('repair:') && valid(t)).length;
   return {
     marker: IVX_REAL_ENGINEERING_CYCLE_MARKER,
     generatedAt: nowIso(),
     tasksStarted: tasks.filter((t) => t.startedAt !== null).length,
-    tasksCompletedVerified: tasks.filter((t) => t.state === 'VERIFIED').length,
+    tasksCompletedVerified: tasks.filter((t) => valid(t) && !isInspection(t)).length,
+    inspectionsCompletedVerified: tasks.filter((t) => valid(t) && isInspection(t)).length,
+    invalidVerifiedClaims: allTasks.filter((t) => t.state === 'VERIFIED' && !valid(t)).length,
+    inspectionAgentMinutesTotal: Math.round(inspectionMinutes * 1000) / 1000,
     tasksBlockedOwnerGate: tasks.filter((t) => t.state === 'BLOCKED' && (t.blocker ?? '').startsWith('OWNER_GATE')).length,
     tasksFailed: tasks.filter((t) => t.state === 'FAILED').length,
     tasksQueued: tasks.filter((t) => t.state === 'QUEUED').length,
@@ -553,8 +575,8 @@ export async function getFleetEngineeringMetrics(fleetSize = 112): Promise<Fleet
     productiveAgentHours1h: Math.round((minutes1h / 60) * 100) / 100,
     utilization24hPercent: Math.round((minutes24h / 60 / (fleetSize * 24)) * 100 * 100) / 100,
     fleetSizeAssumption: fleetSize,
-    modulesCovered,
-    note: 'Productive minutes are summed from real, evidence-backed task execution spans only (capped at 30 min/task). Utilization denominator is fleetSize×24h wall-clock.',
+    modulesCovered: coveredModules.size,
+    note: 'Validated delivery and source inspections are counted separately. Durations use actual attempt spans, capped at 30 min/task, without a minimum credit. Duplicate keys and invalid VERIFIED claims do not count as delivered work.',
   };
 }
 

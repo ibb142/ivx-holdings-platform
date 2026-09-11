@@ -142,6 +142,10 @@ try {
         const slide = modal.locator('.ivxr-slide').first(), video = slide.locator('video');
         await page.waitForFunction(() => { const v = document.querySelector('#ivxReels .ivxr-slide video'); return v?.readyState >= 2 && !v.paused && v.videoWidth > 0; });
         if (unit === 'reels.autoplay-controls-browser') {
+          assert.equal(await modal.getAttribute('role'), 'dialog');
+          assert.equal(await modal.getAttribute('aria-modal'), 'true');
+          assert.equal(await preview.evaluate((v) => v.paused), true, 'Background reel must pause while the modal is open');
+          assert.equal(await page.locator('video').evaluateAll((videos) => videos.filter((v) => !v.paused).length), 1, 'Only one video may play across the whole page');
           const before = await video.evaluate((v) => v.muted);
           await slide.locator('.mute').click();
           assert.equal(await video.evaluate((v) => v.muted), !before);
@@ -149,6 +153,14 @@ try {
           await page.waitForFunction(() => document.querySelector('#ivxReels .ivxr-slide video').paused);
           await video.click({ position: { x: 60, y: 150 } });
           await page.waitForFunction(() => !document.querySelector('#ivxReels .ivxr-slide video').paused);
+          await modal.locator('[data-r="close"]').click();
+          await modal.waitFor({ state: 'hidden' });
+          assert.equal(await video.evaluate((v) => v.paused), true);
+          assert.equal(await page.evaluate(() => document.activeElement?.id), 'ivxReelsBtn');
+          await page.locator('#ivxReelsBtn').click();
+          await modal.waitFor({ state: 'visible' });
+          await page.waitForFunction(() => !document.querySelector('#ivxReels .ivxr-slide video').paused);
+          assert.equal(await preview.evaluate((v) => v.paused), true);
         }
         if (process.env.LANDING_PREVIEW_SOURCE && unit === 'reels.autoplay-controls-browser') {
           const originalSource = await video.getAttribute('src');
