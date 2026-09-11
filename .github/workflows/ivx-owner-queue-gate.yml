@@ -1,0 +1,65 @@
+name: Owner queue recovery and fencing
+on:
+  pull_request:
+    paths:
+      - 'backend/services/ivx-owner-ai-task-queue*'
+      - 'backend/services/ivx-owner-queue-*'
+      - 'backend/workers/ivx-senior-dev-worker-entry.ts'
+      - 'supabase/repair-functions/ivx_owner_ai_queue_recovery.sql'
+      - 'scripts/ivx-owner-queue-*'
+      - '.github/workflows/ivx-owner-queue-gate.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/services/ivx-owner-ai-task-queue*'
+      - 'backend/services/ivx-owner-queue-*'
+      - 'backend/workers/ivx-senior-dev-worker-entry.ts'
+      - 'supabase/repair-functions/ivx_owner_ai_queue_recovery.sql'
+      - 'scripts/ivx-owner-queue-*'
+      - '.github/workflows/ivx-owner-queue-gate.yml'
+permissions:
+  contents: read
+concurrency:
+  group: owner-queue-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  postgres:
+    name: Real PostgreSQL owner queue acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ivx_owner_queue_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: '1.3.4' }
+      - uses: supabase/setup-cli@v1
+        with: { version: '2.117.0' }
+      - run: bun install --frozen-lockfile
+      - name: Generate migration with Supabase CLI
+        run: |
+          supabase migration new ivx_owner_ai_queue_recovery
+          migration=$(find supabase/migrations -name '*_ivx_owner_ai_queue_recovery.sql' | sort | tail -1)
+          cp supabase/repair-functions/ivx_owner_ai_queue_recovery.sql "$migration"
+          mkdir -p qa/evidence/owner-queue
+          cp "$migration" qa/evidence/owner-queue/
+          sha256sum "$migration"
+      - run: node --test backend/services/ivx-owner-queue-readiness.test.mjs
+      - run: node scripts/ivx-owner-queue-postgres-proof.mjs
+        env:
+          IVX_OWNER_QUEUE_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_owner_queue_test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: owner-queue-${{ github.sha }}-${{ github.run_attempt }}
+          path: qa/evidence/owner-queue/
+          if-no-files-found: error
+          retention-days: 30
