@@ -76,20 +76,19 @@ test('one-job polling uses the bounded reader and keeps distinct identities sepa
   expect(all).not.toHaveBeenCalled();
 });
 
-test('a single-job snapshot sends only its exact change and keeps other owners in the saved queue', async () => {
+test('a single-job snapshot sends its exact change and receives only its acknowledgement', async () => {
   direct();
   const existing = { jobId: 'job-1', status: 'running', ownerId: 'owner-1' };
-  const other = { jobId: 'job-2', status: 'running', ownerId: 'owner-2' };
   const queue = rememberSeniorQueue({ jobs: [structuredClone(existing)] });
   queue.jobs[0].status = 'testing';
   const patch = spyOn(store, 'seniorQueuePostgresRpc').mockImplementation(async (name, body) => {
-    expect(name).toBe('ivx_senior_queue_patch');
+    expect(name).toBe('ivx_senior_queue_patch_receipt');
     expect(body.p_changes).toEqual([{ next: queue.jobs[0], expected: existing, workerInstanceId: store.autonomousWorkerInstanceId() }]);
-    return { jobs: [queue.jobs[0], other] };
+    return { kind: 'ivx-senior-patch-receipt-v1', updatedAt: '2026-09-11T00:00:00Z', jobs: [queue.jobs[0]], removedJobIds: [] };
   });
   restores.push(() => patch.mockRestore());
   const saved = await patchSharedSeniorQueue(queue, new Set(['job-1']));
-  expect(saved.jobs).toEqual([queue.jobs[0], other]);
+  expect(saved.jobs).toEqual([queue.jobs[0]]);
   await patchSharedSeniorQueue(saved, new Set(['job-1']));
   expect(patch).toHaveBeenCalledTimes(1);
 });
