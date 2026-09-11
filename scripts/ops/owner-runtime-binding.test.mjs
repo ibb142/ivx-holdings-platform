@@ -14,12 +14,13 @@ function fixture({ authStatus=200, role='owner', email=env.OWNER_EMAIL, uncertai
     return vars.has(key)?Response.json({key,value:vars.get(key)}):new Response(null,{status:404});
   }};
 }
-test('the bound IVX_OWNER_PASSWORD authenticates and updates only the three runtime owner bindings',async()=>{
+test('the verified password updates only the four runtime owner bindings',async()=>{
   const f=fixture();const result=await bindOwnerRuntime({env,fetchImpl:f.fetchImpl});
   assert.equal(result.ownerAuthenticated,true);assert.equal(result.changed,true);
   assert.equal(f.vars.get('IVX_OWNER_PASSWORD'),'fixture-owner');assert.equal(f.vars.get('OWNER_NEW_PASSWORD'),'fixture-owner');
   assert.equal(f.vars.get('IVX_OWNER_EMAIL'),env.OWNER_EMAIL);assert.equal(f.vars.get('UNRELATED'),'retain-me');
-  assert.equal(f.calls.filter(c=>c.method==='PUT').length,3);
+  assert.equal(f.vars.get('IVX_OWNER_PASSWORD_BASE64'),Buffer.from(env.IVX_OWNER_PASSWORD).toString('base64'));
+  assert.equal(f.calls.filter(c=>c.method==='PUT').length,4);
   assert.equal(JSON.stringify(result).includes('fixture-owner'),false);
 });
 test('invalid credentials, wrong role and wrong owner never change Render',async()=>{
@@ -30,11 +31,12 @@ test('invalid credentials, wrong role and wrong owner never change Render',async
 });
 test('equal bindings need no write or deployment',async()=>{
   const f=fixture();f.vars.set('IVX_OWNER_PASSWORD',env.IVX_OWNER_PASSWORD);f.vars.set('OWNER_NEW_PASSWORD',env.IVX_OWNER_PASSWORD);f.vars.set('IVX_OWNER_EMAIL',env.OWNER_EMAIL);
+  f.vars.set('IVX_OWNER_PASSWORD_BASE64',Buffer.from(env.IVX_OWNER_PASSWORD).toString('base64'));
   const result=await bindOwnerRuntime({env,fetchImpl:f.fetchImpl});assert.equal(result.changed,false);assert.equal(f.calls.filter(c=>c.method==='PUT').length,0);
 });
 test('a lost write response is verified by readback without replaying the mutation',async()=>{
   const f=fixture({uncertain:true});const result=await bindOwnerRuntime({env,fetchImpl:f.fetchImpl});
-  assert.equal(result.changed,true);assert.equal(f.calls.filter(c=>c.method==='PUT').length,3);
+  assert.equal(result.changed,true);assert.equal(f.calls.filter(c=>c.method==='PUT').length,4);
 });
 test('the legacy alias works and secrets never enter returned evidence',async()=>{
   const f=fixture();const result=await bindOwnerRuntime({env:{...env,IVX_OWNER_PASSWORD:'',OWNER_NEW_PASSWORD:'fixture-owner'},fetchImpl:f.fetchImpl});
@@ -55,4 +57,13 @@ test('a rejected Render mutation stops immediately',async()=>{
     return f.fetchImpl(url,init);
   }}),/HTTP 403/);
   assert.equal(writes,1);
+});
+test('the encoded transport preserves expansion characters without leaking either representation',async()=>{
+  const password='Transport-$$-Pass!2026',f=fixture();
+  const result=await bindOwnerRuntime({env:{...env,IVX_OWNER_PASSWORD:password},fetchImpl:f.fetchImpl});
+  const encoded=f.vars.get('IVX_OWNER_PASSWORD_BASE64');
+  assert.equal(Buffer.from(encoded,'base64').toString('utf8'),password);
+  assert.equal(encoded.includes('$'),false);
+  assert.equal(JSON.stringify(result).includes(password),false);
+  assert.equal(JSON.stringify(result).includes(encoded),false);
 });
