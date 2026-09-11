@@ -22,7 +22,7 @@ export async function bindOwnerRuntime({ env = process.env, fetchImpl = fetch } 
   const headers = { Authorization: `Bearer ${renderKey}`, 'Content-Type': 'application/json' };
   const changedKeys = [];
   let uncertainWritesVerified = 0;
-  for (const [key, value] of [['IVX_OWNER_PASSWORD', ownerPassword], ['OWNER_NEW_PASSWORD', ownerPassword], ['IVX_OWNER_EMAIL', email]]) {
+  for (const [key, value] of [['IVX_OWNER_PASSWORD', ownerPassword], ['OWNER_NEW_PASSWORD', ownerPassword], ['IVX_OWNER_EMAIL', email], ['IVX_OWNER_PASSWORD_BASE64', Buffer.from(ownerPassword, 'utf8').toString('base64')]]) {
     const url = `https://api.render.com/v1/services/${serviceId}/env-vars/${key}`;
     const read = async () => {
       const response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(15000) });

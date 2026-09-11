@@ -4,6 +4,7 @@ import { ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 import { getIVXOwnerVariableRuntimeValue } from './ivx-owner-variables';
 import { getIVXOwnerEmailAllowlist } from '../../expo/shared/ivx/access-control';
 import { mintIVXOutageOwnerSession } from '../services/ivx-outage-owner-session';
+import { readOwnerPasswordBinding } from '../services/ivx-owner-password-runtime';
 
 const DEPLOYMENT_MARKER = 'ivx-owner-passwordless-login-outage-session-2026-08-15';
 const AUTH_TIMEOUT_MS = 10_000;
@@ -80,8 +81,8 @@ async function resolveSupabaseAnonKey(): Promise<string> {
 }
 
 async function readOwnerPassword(): Promise<string> {
-  const direct = process.env.IVX_OWNER_PASSWORD || process.env.OWNER_NEW_PASSWORD || '';
-  if (direct) return direct;
+  const direct = readOwnerPasswordBinding();
+  if (direct || process.env.IVX_OWNER_PASSWORD_BASE64) return direct;
   try {
     const value = await getIVXOwnerVariableRuntimeValue('OWNER_NEW_PASSWORD');
     return typeof value === 'string' ? value : '';
