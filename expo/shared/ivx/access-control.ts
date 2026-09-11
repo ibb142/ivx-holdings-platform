@@ -495,10 +495,11 @@ export function resolveIVXRoleAudit(
   const profileRole = extractIVXRoleCandidate(ownerProfile);
   const appMetadataRole = extractIVXRoleCandidate(user.app_metadata as Record<string, unknown> | null | undefined);
   const userMetadataRole = extractIVXRoleCandidate(user.user_metadata as Record<string, unknown> | null | undefined);
+  // Supabase users can edit user_metadata, including nested role aliases.
+  // Keep it in the audit record, but only server-managed sources grant access.
   const roleContext = resolveIVXRoleContext([
     profileRole,
     appMetadataRole,
-    userMetadataRole,
   ]);
 
   return {
@@ -694,7 +695,9 @@ export async function resolveIVXAuthenticatedRequest(
   const user = userResult.data.user;
   const ownerProfileResult = await loadIVXOwnerProfile(client, user.id, logPrefix, authDeadline - Date.now());
   const roleAudit = resolveIVXRoleAudit(user, ownerProfileResult.profile, ownerProfileResult.errorMessage);
-  const resolvedEmail = readIVXTrimmedString(ownerProfileResult.profile?.email) || user.email || null;
+  // The allowlist identifies the account verified by Auth, not a profile's
+  // contact address, which can be stale or belong to a different account.
+  const resolvedEmail = readIVXTrimmedString(user.email) || null;
 
   // Promote an authenticated user whose email is in the owner allowlist to `owner`,
   // even when their profiles.role / auth metadata role is unset — so a logged-in owner
@@ -737,7 +740,7 @@ export async function resolveIVXAuthenticatedRequest(
       return {
         client,
         userId: user.id,
-        email: readIVXTrimmedString(ownerProfileResult.profile?.email) || user.email || null,
+        email: resolvedEmail,
         role: 'owner',
         accessToken,
         guardMode: config.securityMode,
@@ -770,7 +773,7 @@ export async function resolveIVXAuthenticatedRequest(
   return {
     client,
     userId: user.id,
-    email: readIVXTrimmedString(ownerProfileResult.profile?.email) || user.email || null,
+    email: resolvedEmail,
     role: roleAudit.normalizedRole,
     accessToken,
     guardMode: config.securityMode,
