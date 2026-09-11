@@ -77,6 +77,7 @@ import {
 } from './ivx-autonomous-coder';
 import { assertRepairResumeEvidence } from './ivx-repair-resume-evidence';
 import { recoverCommittedPullRequest } from './ivx-commit-pr-recovery';
+import { autonomousBranchSuffix } from './ivx-coder-branch';
 import { committedFailurePatch, isCommittedRecoveryCandidate } from './ivx-senior-committed-recovery-policy';
 import {
   IVX_FACTORY_ENGINE_MARKER,
@@ -441,7 +442,7 @@ let draining = false;
 let queueStopping = false;
 
 /** Active job callbacks for cancel signaling. */
-const activeJobControllers = new Map<string, { cancelled: boolean }>();
+const activeJobControllers = new Map<string, { cancelled: boolean; interrupted?: boolean }>();
 
 /**
  * Bounded-concurrent drain support (2026-08-22): in-process claim registry so
@@ -1087,7 +1088,12 @@ const ACTIVE_STATUSES: ReadonlySet<IVXWorkerJobStatus> = new Set([
  * @returns array of expired job IDs
  */
 export async function expireStaleJobs(): Promise<string[]> {
-  const queue = await loadQueue();
+  let queue = await loadQueue();
+  // Recover a commit before generic lease expiry can replay code generation.
+  // An uncertain GitHub lookup also cannot authorize replay of COMMITTING work.
+  try { await recoverStuckCommittingJobs(queue); }
+  catch { /* An uncertain lookup never permits regeneration of COMMITTING work below. */ }
+  queue = await loadQueue();
   const now = Date.now();
   const expired: string[] = [];
 
@@ -1111,10 +1117,15 @@ export async function expireStaleJobs(): Promise<string[]> {
     const activityAtMs = new Date(activityAt).getTime();
     if (Number.isNaN(activityAtMs)) continue;
     if (sharedSeniorQueueEnabled() && job.leaseExpiresAt && Date.parse(job.leaseExpiresAt) <= now && !job.result?.commitSha) {
-      job.status = job.attempts < 3 ? 'queued' : 'failed';
+      const missingCommitIdentity = job.stage === 'COMMITTING';
+      job.status = !missingCommitIdentity && job.attempts < 3 ? 'queued' : 'failed';
       job.stage = job.status === 'queued' ? 'QUEUED' : 'FAILED';
+      job.finishedAt = job.status === 'failed' ? nowIso() : null;
+      job.progressPercent = STAGE_PROGRESS[job.stage];
       job.leaseWorkerInstanceId = null; job.leaseExpiresAt = null;
-      job.error = 'Physical worker lease expired; recovery budget enforced.';
+      job.error = missingCommitIdentity
+        ? 'COMMIT_CHECKPOINT_IDENTITY_UNRESOLVED: expired commit phase retained for exact recovery; code generation was not replayed.'
+        : 'Physical worker lease expired; recovery budget enforced.';
       job.stageDetail = job.error;
       expired.push(job.jobId);
       continue;
@@ -1236,10 +1247,10 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     if (!claimed) return;
     job = claimed; claimedJobIds.add(jobId);
   }
-  const controller: { cancelled: boolean } = { cancelled: queueStopping };
+  const controller: { cancelled: boolean; interrupted?: boolean } = { cancelled: queueStopping, interrupted: queueStopping };
   activeJobControllers.set(jobId, controller);
   const heartbeat = sharedSeniorQueueEnabled() ? setInterval(() => {
-    if (!controller.cancelled) void updateJob(jobId, { lastHeartbeatAt: nowIso() }, true).catch(() => { controller.cancelled = true; });
+    if (!controller.cancelled) void updateJob(jobId, { lastHeartbeatAt: nowIso() }, true).catch(() => { controller.interrupted = true; controller.cancelled = true; });
   }, 20_000) : null;
   heartbeat?.unref?.();
   try {
@@ -1282,8 +1293,8 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     prNumber,
     prUrl: job.result?.prUrl ?? null,
     branch: job.result?.branch ?? '',
-    testsPassed: job.result?.testsPassed !== false,
-    typecheckPassed: job.result?.typecheckPassed !== false,
+    testsPassed: job.result?.testsPassed === true,
+    typecheckPassed: job.result?.typecheckPassed === true,
     filesChanged: job.result?.changedFiles ?? [],
     beforeMerge: async () => {
       await assertEmergencyStopInactive('senior-worker-resumed-merge');
@@ -1293,14 +1304,17 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     },
     onPhase: (phase, detail) => {
       const { stage, detail: mappedDetail } = autonomousCoderPhaseToStage(phase);
-      void updateJobStage(jobId, stage, detail || mappedDetail).catch(() => { controller.cancelled = true; });
+      void updateJobStage(jobId, stage, detail || mappedDetail).catch(() => { controller.interrupted = true; controller.cancelled = true; });
     },
   });
+  if (controller.interrupted || queueStopping) return;
   const result = summarizeAutonomousCoderProof(jobId, proof);
   // CI resume executes no new validation. Retain the same commit's persisted
   // receipts, including the original failing regression, through a restart.
   if (!result.validationEvidence?.length && job.result?.commitSha === commitSha) {
     result.validationEvidence = job.result.validationEvidence ?? [];
+    result.testsRun = result.validationEvidence.some(receipt => receipt.kind === 'test' && receipt.phase !== 'regression_baseline');
+    result.typecheckRun = result.validationEvidence.some(receipt => receipt.kind === 'typecheck');
   }
   const finalized = finalizeResultWithStateRecord(job, result);
   const status: IVXWorkerJobStatus = finalized.finalStatus === 'COMPLETE'
@@ -1327,150 +1341,74 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
   }
 }
 
-/** Window after startedAt within which a recovered commit must have been
- *  authored. Guards against picking up an unrelated prior commit. */
-const COMMITTING_RECOVERY_WINDOW_MS = 20 * 60 * 1000; // 20 min
-
-/** Query the ivx-autonomous AND main branch HEADs to recover any job stuck
- *  at COMMITTING whose commit actually landed on GitHub.
- *
- *  V6.13 FIX: Previously only checked `ivx-autonomous` branch. Deploy jobs commit
- *  to `main` (triggering Render auto-deploy which restarts the container and
- *  kills the worker). Those jobs were NEVER recovered because the sweep only
- *  looked at `ivx-autonomous`. Now we check BOTH branches. */
+/** Recover a lost commit checkpoint only from full task and job trailers.
+ * Existing branches are never reset and validation results are never invented. */
 async function recoverStuckCommittingJobs(queue: QueueDoc): Promise<void> {
-  const token = ledgerGithubToken();
-  const repoUrl = typeof process.env.GITHUB_REPO_URL === 'string' ? process.env.GITHUB_REPO_URL.trim() : '';
-  const repoMatch = repoUrl.match(/github\.com[:/]([^/\s]+)\/([^/.\s]+)(?:\.git)?/i);
-  if (!token || !repoMatch?.[1] || !repoMatch?.[2]) return; // no credentials → skip
-  const owner = repoMatch[1];
-  const repo = repoMatch[2];
   const now = Date.now();
-
-  // Find jobs stuck at COMMITTING past the threshold.
-  // FINAL CLOSEOUT 2026-08-23: jobs with a persisted PR (result.prNumber) are
-  // CI-wait jobs — they are owned by the Layer 5 CI-wait resume, never by this
-  // commit-landed recovery (which would wrongly COMPLETE an unmerged PR job).
-  const stuckJobs = queue.jobs.filter((j) =>
-    j.status === 'committing' &&
-    j.stage === 'COMMITTING' &&
-    j.result?.prNumber == null &&
-    !j.result?.commitSha &&
-    j.startedAt &&
-    now - new Date(j.startedAt).getTime() > COMMITTING_RECOVERY_THRESHOLD_MS);
-  if (stuckJobs.length === 0) return;
-
-  // V6.13: Check BOTH branches — ivx-autonomous (code_change jobs) AND main (deploy jobs).
-  const branchesToCheck = ['ivx-autonomous', 'main'];
-  for (const branch of branchesToCheck) {
-    let branchHeadSha: string | null = null;
-    let branchHeadCommitDate: string | null = null;
-    let branchHeadMessage: string | null = null;
-    try {
-      const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/branches/${branch}`, {
+  const candidates = queue.jobs.filter(job => job.status === 'committing' && job.stage === 'COMMITTING'
+    && !job.result?.commitSha && job.result?.prNumber == null && job.startedAt
+    && now - Date.parse(job.startedAt) > COMMITTING_RECOVERY_THRESHOLD_MS
+    && (job.leaseExpiresAt == null || Date.parse(job.leaseExpiresAt) <= now)).slice(0, 4);
+  if (!candidates.length) return;
+  await assertEmergencyStopInactive('senior-worker-commit-checkpoint-recovery');
+  const token = ledgerGithubToken();
+  const match = (process.env.GITHUB_REPO_URL ?? '').match(/github\.com[:/]([^/\s]+)\/([^/.\s]+)(?:\.git)?/i);
+  if (!token || !match) return;
+  const repo = `${match[1]}/${match[2]}`;
+  for (const job of candidates) {
+    const taskId = job.input.taskId ?? job.jobId;
+    const suffix = autonomousBranchSuffix(taskId);
+    // Old branches are read-only candidates. A time window or prefix alone
+    // never identifies work; every candidate needs both full commit trailers.
+    const branches = [...new Set([job.result?.branch,
+      `ivx-autonomous-${suffix}`, `ivx-autonomous-${suffix.slice(0, -48)}`,
+      'ivx-autonomous', 'main'].filter((value): value is string => Boolean(value)))];
+    const matches = new Map<string, { sha: string; branch: string }>();
+    for (const branch of branches) {
+      const response = await fetch(`https://api.github.com/repos/${repo}/branches/${encodeURIComponent(branch)}`, {
         headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
         signal: AbortSignal.timeout(10000),
       });
-      if (res.ok) {
-        const data = await res.json() as { commit?: { sha?: string; commit?: { author?: { date?: string }; message?: string } } };
-        branchHeadSha = data.commit?.sha ?? null;
-        branchHeadCommitDate = data.commit?.commit?.author?.date ?? null;
-        branchHeadMessage = data.commit?.commit?.message ?? null;
-      }
-    } catch {
-      continue; // network error → try next branch
+      if (response.status === 404) continue;
+      if (!response.ok) throw new Error(`COMMIT_RECOVERY_LOOKUP_FAILED: HTTP ${response.status}`);
+      const data = await response.json() as { commit?: { sha?: string; commit?: { message?: string } } };
+      const sha = data.commit?.sha;
+      const lines = (data.commit?.commit?.message ?? '').split(/\r?\n/);
+      const trailer = (name: string, expected: string) => {
+        const values = lines.filter(line => line.startsWith(`${name}:`));
+        return values.length === 1 && values[0] === `${name}: ${expected}`;
+      };
+      if (!sha || !/^[a-f0-9]{40}$/i.test(sha)
+        || !trailer('IVX-Worker-Job', job.jobId) || !trailer('IVX-Task-ID', taskId)
+        || (job.input.agentId && !trailer('IVX-Agent-ID', job.input.agentId))) continue;
+      matches.set(sha, { sha, branch });
     }
-    if (!branchHeadSha || !branchHeadMessage) continue;
-
-    // Accept both commit message patterns: autonomous coder + senior developer runtime.
-    if (!/^IVX autonomous coder:/.test(branchHeadMessage) && !/^IVX senior developer/.test(branchHeadMessage) && !/^V6\./.test(branchHeadMessage)) continue;
-
-  // Verify the commit falls within the job's time window.
-  const commitMs = branchHeadCommitDate ? new Date(branchHeadCommitDate).getTime() : NaN;
-  let recovered = false;
-  for (const job of stuckJobs) {
-    const startedMs = new Date(job.startedAt!).getTime();
-    if (Number.isNaN(startedMs) || Number.isNaN(commitMs)) continue;
-    if (commitMs < startedMs - 60_000 || commitMs > startedMs + COMMITTING_RECOVERY_WINDOW_MS) continue;
-
-    // A deploy task is never complete from GitHub evidence alone. It must resume
-    // at verification with its real Render deployment ID and live endpoint proof.
-    if (job.input.approveGitDeploy) {
-      job.status = 'failed';
-      job.stage = 'FAILED';
-      job.progressPercent = STAGE_PROGRESS['FAILED'];
-      job.stageDetail = `Commit ${branchHeadSha.slice(0, 7)} landed on ${branch}, but no completed production verification chain exists.`;
-      job.finishedAt = nowIso();
-      job.error = 'Deployment task failed: a GitHub commit alone is not production verification.';
-      if (job.result) {
-        job.result.ok = false;
-        job.result.endToEndProductionComplete = false;
-        job.result.finalStatus = 'FAILED';
-        job.result.error = job.error;
-      }
-      recovered = true;
-      continue;
-    }
-    // GitHub evidence confirms the commit landed for this non-deploy job → recover.
-    const commitUrl = `https://github.com/${owner}/${repo}/commit/${branchHeadSha}`;
-    job.status = 'completed';
-    job.stage = 'COMPLETED';
-    job.progressPercent = STAGE_PROGRESS['COMPLETED'];
-    job.stageDetail = `Recovered from COMMITTING crash: GitHub evidence confirms commit ${branchHeadSha.slice(0, 7)} landed on ${branch}. Job completed.`;
-    job.finishedAt = nowIso();
-    job.error = null;
-    job.result = job.result ?? {
-      jobId: job.jobId,
-      goal: job.input.goal.slice(0, 280),
-      ok: true,
-      endToEndProductionComplete: false,
-      changedFiles: [],
-      testsRun: true,
-      testsPassed: true,
-      typecheckRun: true,
-      typecheckPassed: true,
-      buildRun: false,
-      commitCreated: true,
-      commitSha: branchHeadSha,
-      commitUrl,
-      pushed: true,
-      branch,
-      prNumber: null,
-      prUrl: null,
-      prMerged: false,
-      prMergeCommitSha: null,
-      deployId: null,
-      deployStatus: null,
-      deployVerified: false,
-      deployRequested: job.input.executionMode === 'deploy',
-      liveCommit: null,
-      commitMatch: false,
-      healthOk: false,
-      healthStatus: null,
-      versionEndpoint: null,
-      generatedFeatureSlug: null,
-      auditFiles: { json: '', jsonl: '' },
-      finalStatus: 'COMPLETE',
-      error: null,
-      durable: isDurableStoreConfigured(),
-      generatedAt: nowIso(),
-      taskType: classifyTaskType(job.input.goal),
+    if (matches.size !== 1) continue;
+    const recovered = [...matches.values()][0];
+    const reason = 'COMMIT_CHECKPOINT_RECOVERED: original commit retained; PR and validation recovery required.';
+    const previous = job.result;
+    job.result = {
+      jobId: job.jobId, goal: job.input.goal.slice(0, 280), ok: false, finalStatus: 'BLOCKED',
+      endToEndProductionComplete: false, changedFiles: [], testsRun: false, testsPassed: false,
+      typecheckRun: false, typecheckPassed: false, buildRun: false,
+      prNumber: null, prUrl: null, prMerged: false, prMergeCommitSha: null,
+      deployId: null, deployStatus: null, deployVerified: false, deployRequested: false,
+      liveCommit: null, commitMatch: false, healthOk: false, healthStatus: null, versionEndpoint: null,
+      generatedFeatureSlug: null, auditFiles: { json: '', jsonl: '' }, durable: isDurableStoreConfigured(),
+      generatedAt: nowIso(), ...previous,
+      commitCreated: true, commitSha: recovered.sha,
+      commitUrl: `https://github.com/${repo}/commit/${recovered.sha}`, pushed: true, branch: recovered.branch, error: reason,
     };
-    if (job.result && !job.result.commitSha) {
-      job.result.commitSha = branchHeadSha;
-      job.result.commitUrl = commitUrl;
-      job.result.branch = branch;
-      job.result.commitCreated = true;
-      job.result.pushed = true;
-    }
-    recovered = true;
-    appendDurableEvent(QUEUE_FILE, { type: 'job_recovered', jobId: job.jobId, commitSha: branchHeadSha, reason: 'committing_crash_recovery' }).catch(() => {});
-    }
-
-    if (recovered) {
-      await saveQueue(queue);
-    }
-  } // end for (branch of branchesToCheck)
+    // The existing CAS permits expired-lease requeue only with lease identity
+    // cleared. A queued commit is excluded from normal code generation.
+    job.status = 'queued'; job.stage = 'QUEUED'; job.progressPercent = STAGE_PROGRESS.QUEUED;
+    job.finishedAt = null; job.error = reason; job.stageDetail = reason;
+    job.leaseWorkerInstanceId = null; job.leaseExpiresAt = null;
+    await saveQueue(queue);
+    await appendDurableEvent(QUEUE_FILE, { type: 'commit_checkpoint_recovered', jobId: job.jobId,
+      taskId, ownerId: job.ownerId, commitSha: recovered.sha, branch: recovered.branch, at: nowIso() });
+    return; // Reload a fresh CAS baseline before recovering another job.
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1495,6 +1433,7 @@ async function recoverStuckVerifyingJobs(queue: QueueDoc): Promise<void> {
   // verifyLiveCommitMatch poll ran too quickly before the Render deploy completed).
   const stuckJobs = queue.jobs.filter((j) =>
     j.result?.commitSha &&
+    (j.leaseExpiresAt == null || Date.parse(j.leaseExpiresAt) <= now) &&
     // An unmerged code-change job belongs to PR/CI recovery. A later live SHA
     // cannot replace its missing PR identity or required-check evidence.
     !(j.status === 'committing' && j.result?.prMerged !== true) &&
@@ -1532,38 +1471,11 @@ async function recoverStuckVerifyingJobs(queue: QueueDoc): Promise<void> {
   }
   if (!liveCommit) return;
 
-  // Prepare GitHub compare API credentials for ancestor check.
-  const ghToken = ledgerGithubToken();
-  const repoUrl = typeof process.env.GITHUB_REPO_URL === 'string' ? process.env.GITHUB_REPO_URL.trim() : '';
-  const repoMatch = repoUrl.match(/github\.com[:/]([^/\s]+)\/([^/.\s]+)(?:\.git)?/i);
-  const ghOwner = repoMatch?.[1] ?? null;
-  const ghRepo = repoMatch?.[2] ?? null;
-
   let recovered = false;
   for (const job of stuckJobs) {
     const expectedSha = job.result!.commitSha!;
-    // Check if production is now serving the commit this job pushed.
-    // If not, check if the job's commit is an ANCESTOR of the live commit
-    // (a subsequent fix deploy may have been pushed on top of the job's commit).
-    if (liveCommit === expectedSha) {
-      // Exact match — production is serving our commit.
-    } else if (ghToken && ghOwner && ghRepo) {
-      // Check ancestry via GitHub compare API: is expectedSha an ancestor of liveCommit?
-      try {
-        const compareRes = await fetch(
-          `https://api.github.com/repos/${ghOwner}/${ghRepo}/compare/${expectedSha}...${liveCommit}`,
-          { headers: { Authorization: `Bearer ${ghToken}`, Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(10_000) },
-        );
-        if (!compareRes.ok) continue;
-        const compareData = await compareRes.json() as { status?: string };
-        // 'ahead' means liveCommit is ahead of expectedSha (expectedSha is an ancestor)
-        if (compareData.status !== 'ahead') continue;
-      } catch {
-        continue; // network error → skip this job
-      }
-    } else {
-      continue; // no GitHub credentials → can't verify ancestry
-    }
+    // An ancestor is not exact deployment evidence for this checkpoint.
+    if (liveCommit !== expectedSha) continue;
 
     // A deploy-mode task requires the atomic evidence captured by the active
     // worker: real Render ID + live status + /health + /version + SHA parity.
@@ -1580,13 +1492,15 @@ async function recoverStuckVerifyingJobs(queue: QueueDoc): Promise<void> {
       continue;
     }
     // A non-deploy job may be recovered from a commit/health match.
-    if (!job.result!.deployId) {
+    if (!job.result!.deployId || job.result!.deployStatus !== 'live'
+      || !job.result!.healthResponse?.ok || job.result!.healthResponse.commitSha !== expectedSha
+      || !job.result!.versionResponse?.ok || job.result!.versionResponse.commitSha !== expectedSha) {
       job.status = 'failed';
       job.stage = 'FAILED';
       job.progressPercent = STAGE_PROGRESS['FAILED'];
-      job.stageDetail = 'Production commit appeared live, but the task has no auditable Render deployment ID.';
+      job.stageDetail = 'Production commit appeared live, but its saved Render, health and version evidence is incomplete.';
       job.finishedAt = nowIso();
-      job.error = 'Deployment task failed: Render deployment ID is missing.';
+      job.error = 'Deployment task failed: complete saved production verification evidence is required.';
       job.result = { ...job.result!, ok: false, endToEndProductionComplete: false, deployVerified: false, finalStatus: 'FAILED', error: job.error };
       recovered = true;
       continue;
@@ -1594,7 +1508,7 @@ async function recoverStuckVerifyingJobs(queue: QueueDoc): Promise<void> {
     const result: IVXWorkerJobResult = {
       ...(job.result!),
       deployId: job.result!.deployId,
-      deployStatus: job.result!.deployStatus ?? 'live',
+      deployStatus: job.result!.deployStatus,
       deployVerified: true,
       deployRequested: job.input.approveGitDeploy,
       liveCommit,
@@ -1608,19 +1522,22 @@ async function recoverStuckVerifyingJobs(queue: QueueDoc): Promise<void> {
       generatedAt: nowIso(),
     };
     const finalized = finalizeResultWithStateRecord(job, result);
-    job.status = 'completed';
-    job.stage = 'COMPLETED';
-    job.progressPercent = STAGE_PROGRESS['COMPLETED'];
-    job.stageDetail = `Recovered from VERIFYING crash: production /health confirms commit ${expectedSha.slice(0, 7)} is live. Job completed with verified evidence.`;
+    const completed = finalized.finalStatus === 'COMPLETE';
+    job.status = completed ? 'completed' : finalized.finalStatus === 'BLOCKED' ? 'blocked' : 'failed';
+    job.stage = completed ? 'COMPLETED' : 'FAILED';
+    job.progressPercent = STAGE_PROGRESS[job.stage];
+    job.stageDetail = completed
+      ? `Recovered from VERIFYING crash with saved deployment evidence for ${expectedSha}.`
+      : finalized.error ?? 'Recovered verification did not pass the terminal evidence gate.';
     job.finishedAt = nowIso();
-    job.error = null;
+    job.error = finalized.error;
     job.result = finalized;
     recovered = true;
-    console.log('[IVX-SeniorDevWorker] VERIFYING recovery: job completed', {
+    console.log('[IVX-SeniorDevWorker] VERIFYING recovery: result reconciled', {
       jobId: job.jobId,
       commitSha: expectedSha,
       liveCommit,
-      match: true,
+      finalStatus: finalized.finalStatus,
     });
     appendDurableEvent(QUEUE_FILE, {
       type: 'job_recovered',
@@ -1992,15 +1909,18 @@ function withQueueWrite<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-async function updateJob(jobId: string, patch: Partial<IVXWorkerJob>, onlyIfActive = false): Promise<void> {
+async function updateJob(jobId: string, patch: Partial<IVXWorkerJob>, onlyIfActive = false, requireActive = false): Promise<void> {
   await withQueueWrite(async () => {
     const queue = await loadQueueForJob(jobId);
     const idx = queue.jobs.findIndex((j) => j.jobId === jobId);
-    if (idx < 0) return;
+    if (idx < 0) { if (requireActive) throw new Error('WORKER_AUTHORITY_UNCONFIRMED: job missing'); return; }
     const existing = queue.jobs[idx];
     // A late phase notification must check the state inside the serialized write.
     // Checking before entering this queue can resurrect a finished job.
-    if (onlyIfActive && !ACTIVE_STATUSES.has(existing.status)) return;
+    if (onlyIfActive && !ACTIVE_STATUSES.has(existing.status)) {
+      if (requireActive) throw new Error('WORKER_AUTHORITY_UNCONFIRMED: job is not active');
+      return;
+    }
     const isActive = ACTIVE_STATUSES.has(patch.status ?? existing.status);
     queue.jobs[idx] = {
       ...existing,
@@ -2223,6 +2143,12 @@ export function finalizeResultWithStateRecord(
  * worker as the runtime progresses through phases.
  */
 async function updateJobStage(jobId: string, stage: IVXWorkerJobStage, detail: string): Promise<void> {
+  // Terminal notifications arrive before the executor returns its complete
+  // proof. Only the awaited final write may release the lease and close work.
+  if (stage === 'COMPLETED' || stage === 'FAILED') {
+    await updateJob(jobId, { stageDetail: detail }, true);
+    return;
+  }
   const statusMap: Record<IVXWorkerJobStage, IVXWorkerJobStatus> = {
     QUEUED: 'queued',
     RUNNING: 'running',
@@ -2338,7 +2264,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
   const job = await admitSeniorJob();
   if (!job) return null;
 
-  const controller: { cancelled: boolean } = { cancelled: queueStopping };
+  const controller: { cancelled: boolean; interrupted?: boolean } = { cancelled: queueStopping, interrupted: queueStopping };
   let leaseHeartbeat: ReturnType<typeof setInterval> | null = null;
   activeJobControllers.set(job.jobId, controller);
   try {
@@ -2370,11 +2296,12 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
 
   leaseHeartbeat = sharedSeniorQueueEnabled() ? setInterval(() => {
     if (controller.cancelled) return;
-    void updateJob(job.jobId, { lastHeartbeatAt: nowIso() }, true).catch(() => { controller.cancelled = true; });
+    void updateJob(job.jobId, { lastHeartbeatAt: nowIso() }, true).catch(() => { controller.interrupted = true; controller.cancelled = true; });
   }, 20_000) : null;
   leaseHeartbeat?.unref?.();
     // If cancelled before we even started, abort.
     if (controller.cancelled) {
+        if (controller.interrupted) return null;
       await updateJob(job.jobId, {
         status: 'cancelled',
         stage: 'FAILED',
@@ -2398,11 +2325,12 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         onPhase: (phase: IVXReadOnlyInspectionPhase, detail: string) => {
           if (controller.cancelled) return;
           const { stage, detail: mappedDetail } = phaseToStage(phase);
-          void updateJobStage(job.jobId, stage, detail || mappedDetail).catch(() => { controller.cancelled = true; });
+          void updateJobStage(job.jobId, stage, detail || mappedDetail).catch(() => { controller.interrupted = true; controller.cancelled = true; });
         },
       });
 
       if (controller.cancelled) {
+        if (controller.interrupted) return null;
         await updateJob(job.jobId, {
           status: 'cancelled',
           stage: 'FAILED',
@@ -2449,11 +2377,12 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         onPhase: (phase: IVXQAOnlyPhase, detail: string) => {
           if (controller.cancelled) return;
           const { stage, detail: mappedDetail } = qaPhaseToStage(phase);
-          void updateJobStage(job.jobId, stage, detail || mappedDetail).catch(() => { controller.cancelled = true; });
+          void updateJobStage(job.jobId, stage, detail || mappedDetail).catch(() => { controller.interrupted = true; controller.cancelled = true; });
         },
       });
 
       if (controller.cancelled) {
+        if (controller.interrupted) return null;
         await updateJob(job.jobId, {
           status: 'cancelled',
           stage: 'FAILED',
@@ -2547,6 +2476,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
       }
 
       if (controller.cancelled) {
+        if (controller.interrupted) return null;
         await updateJob(job.jobId, {
           status: 'cancelled',
           stage: 'FAILED',
@@ -2614,10 +2544,18 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         deployApproved: job.input.approveGitDeploy,
         deployConfirmationText: job.input.gitDeployConfirmationText,
         autoMergePr: true,
+        isCanceled: () => controller.cancelled && !controller.interrupted,
+        assertExecutionAuthority: async () => {
+          if (controller.interrupted || queueStopping) throw new Error('WORKER_AUTHORITY_UNCONFIRMED: checkpoint retained for recovery');
+          await assertEmergencyStopInactive('senior-worker-mutation');
+          if (controller.cancelled) throw new Error('JOB_CANCELED: owner cancelled the job');
+          try { await updateJob(job.jobId, { lastHeartbeatAt: nowIso() }, true, true); }
+          catch (error) { controller.interrupted = true; controller.cancelled = true; throw error; }
+        },
         onPhase: (phase: IVXAutonomousCoderPhase, detail: string) => {
           if (controller.cancelled) return;
           const { stage, detail: mappedDetail } = autonomousCoderPhaseToStage(phase);
-          void updateJobStage(job.jobId, stage, detail || mappedDetail).catch(() => { controller.cancelled = true; });
+          void updateJobStage(job.jobId, stage, detail || mappedDetail).catch(() => { controller.interrupted = true; controller.cancelled = true; });
         },
         // RESILIENCE: persist the commit SHA + branch to the job record the
         // instant the GitHub commit lands — BEFORE proof construction, deploy,
@@ -2716,6 +2654,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
       });
 
       if (controller.cancelled) {
+        if (controller.interrupted) return null;
         await updateJob(job.jobId, {
           status: 'cancelled',
           stage: 'FAILED',
@@ -2763,7 +2702,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
       onPhase: (phase: string, _detail: string) => {
         if (controller.cancelled) return;
         const { stage, detail } = phaseToStage(phase);
-        void updateJobStage(job.jobId, stage, detail).catch(() => { controller.cancelled = true; });
+        void updateJobStage(job.jobId, stage, detail).catch(() => { controller.interrupted = true; controller.cancelled = true; });
       },
       // RESILIENCE: persist the commit SHA + branch to the job record the
       // instant the GitHub commit lands — BEFORE the Render deploy triggers.
@@ -2819,6 +2758,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
 
     // Check cancellation after the run.
     if (controller.cancelled) {
+        if (controller.interrupted) return null;
       await updateJob(job.jobId, {
         status: 'cancelled',
         stage: 'FAILED',
@@ -2900,6 +2840,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
     activeJobControllers.delete(job.jobId);
     return result;
   } catch (error) {
+    if (controller.interrupted || queueStopping) return null; // Lost authority is not owner cancellation.
     const message = error instanceof Error ? error.message.slice(0, 500) : 'Worker run failed.';
 
     // P0 FIX (owner mandate 2026-08-10): Automatic recovery for transient failures.
@@ -3096,7 +3037,7 @@ export function stopSeniorDeveloperQueue(): void {
   if (queueDrainTimer) clearInterval(queueDrainTimer);
   if (staleSweepTimer) clearInterval(staleSweepTimer);
   queueDrainTimer = null; staleSweepTimer = null;
-  for (const controller of activeJobControllers.values()) controller.cancelled = true;
+  for (const controller of activeJobControllers.values()) { controller.interrupted = true; controller.cancelled = true; }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

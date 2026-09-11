@@ -298,6 +298,13 @@ describe('Cross-process duplicate retirement + BLOCKED re-verification', () => {
 });
 
 describe('Truthful continuity classification', () => {
+  it('records a completed evidenced patrol as observation, separately from idle and repaired work', () => {
+    const patrol = { ok: true, action: 'PATROL_SESSION_ENDED', taskId: 'patrol-1', states: ['RUNNING', 'CONTINUOUS_PATROL', 'QUEUED'], evidenceIds: ['observation-1'] };
+    expect(classifyContinuityResult(patrol)).toBe('observed');
+    expect(classifyContinuityResult({ ...patrol, evidenceIds: [] })).toBe('idle');
+    expect(classifyContinuityResult({ ...patrol, taskId: null })).toBe('failed');
+    expect(classifyContinuityResult({ ...patrol, ok: false, action: 'PATROL_SESSION_LOST' })).toBe('failed');
+  });
   it('never counts idle or ALREADY_VERIFIED reruns as completed work', () => {
     expect(classifyContinuityResult({ ok: true, action: 'NO_TASK_AVAILABLE', taskId: null, states: [] })).toBe('idle');
     expect(classifyContinuityResult({ ok: true, action: 'TASK_COMPLETED', taskId: 'task_1', states: ['ALREADY_VERIFIED'] })).toBe('idle');
