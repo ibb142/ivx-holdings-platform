@@ -306,9 +306,12 @@ export async function readPostgresLandingTasks(sha: string): Promise<Task[]> {
 }
 async function fetchPostgresLandingTasks(sha: string): Promise<Task[]> {
   const prefixes = ['landing-p0:', 'landing-p0-repair:', 'landing-p0-patrol:'];
-  const directRead = async () => (await getDirectPool().query<RestTaskRow>(
-    'select payload from public.ivx_autonomous_tasks where idempotency_key like any($1::text[]) order by task_id limit 1000',
-    [prefixes.map(prefix => `${prefix}${sha}:%`)],
+  // Separate LIKE predicates can use the existing text_pattern_ops identity
+  // index. LIKE ANY forces a ledger scan. Pin transaction-local deadlines so
+  // a pooled reader cannot outlive its caller and keep transmitting history.
+  const directRead = async () => (await queryWithPostgresDeadline<RestTaskRow>(getDirectPool(),
+    'select payload from public.ivx_autonomous_tasks where (idempotency_key like $1 or idempotency_key like $2 or idempotency_key like $3) order by task_id limit 1000',
+    prefixes.map(prefix => `${prefix}${sha}:%`),
   )).rows;
   let rows: RestTaskRow[];
   if (preferDirectTransport()) rows = await directRead();
