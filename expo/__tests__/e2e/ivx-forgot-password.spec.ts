@@ -9,6 +9,32 @@ import { test, expect, type Page } from '@playwright/test';
 const BASE = process.env.E2E_BASE_URL ?? 'https://ivxholding.com';
 const QA_EMAIL = `qa-e2e-fp-${Date.now()}@ivxholding.com`;
 
+const recoveryNetwork = new WeakMap<Page, Array<Record<string, unknown>>>();
+test.beforeEach(async ({ page }) => {
+  const events: Array<Record<string, unknown>> = [];
+  recoveryNetwork.set(page, events);
+  const pathFor = (url: string) => {
+    const parsed = new URL(url);
+    return /\/(ivx-config\.json|api\/landing-config|auth\/v1\/recover)$/.test(parsed.pathname)
+      ? parsed.origin + parsed.pathname : null;
+  };
+  page.on('response', response => {
+    const path = pathFor(response.url());
+    if (path) events.push({ path, status: response.status() });
+  });
+  page.on('requestfailed', request => {
+    const path = pathFor(request.url());
+    if (path) events.push({ path, failed: true });
+  });
+});
+test.afterEach(async ({ page }, info) => {
+  if (info.status === info.expectedStatus) return;
+  const diagnostic = { network: (recoveryNetwork.get(page) || []).slice(-12),
+    forgotErrorVisible: await page.locator('#portal-forgot-error').isVisible().catch(() => false),
+    forgotSuccessVisible: await page.locator('#portal-forgot-success').isVisible().catch(() => false) };
+  console.log('RECOVERY_DIAGNOSTIC ' + JSON.stringify(diagnostic));
+});
+
 async function openPortalForgotView(page: Page): Promise<void> {
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('link', { name: 'My Portal' }).first().click();
