@@ -4,6 +4,7 @@
  * Runs inside the backend and reads Render credentials from process.env or the
  * encrypted Owner Variables runtime bridge. Secrets are never returned.
  */
+import { ownerRuntimeBindingDrift } from '../services/ivx-owner-binding-diagnostic';
 import { auditIVXRenderRuntimeAccess } from '../services/ivx-senior-developer-runtime';
 import { getIVXOwnerVariableRuntimeValue, inspectIVXOwnerVariableRuntimeReadiness } from './ivx-owner-variables';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
@@ -70,6 +71,7 @@ async function callRender(path: string, apiKey: string): Promise<{ ok: boolean; 
   try {
     const response = await fetch(`${RENDER_API_BASE}${path}`, {
       method: 'GET',
+      signal: AbortSignal.timeout(10000),
       headers: {
         Authorization: `Bearer ${apiKey}`,
         Accept: 'application/json',
@@ -86,20 +88,6 @@ async function callRender(path: string, apiKey: string): Promise<{ ok: boolean; 
   }
 }
 
-function readRenderEnvPresence(body: unknown): Record<string, { present: boolean; length: number }> {
-  const wanted = ['OWNER_NEW_PASSWORD', 'IVX_OWNER_PASSWORD', 'JWT_SECRET', 'APP_SECRET', 'IVX_OWNER_VARIABLES_ENCRYPTION_KEY'];
-  const result = Object.fromEntries(wanted.map((key) => [key, { present: false, length: 0 }])) as Record<string, { present: boolean; length: number }>;
-  if (!Array.isArray(body)) return result;
-  for (const raw of body) {
-    const wrapper = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
-    const entry = wrapper.envVar && typeof wrapper.envVar === 'object' ? wrapper.envVar as Record<string, unknown> : wrapper;
-    const key = typeof entry.key === 'string' ? entry.key : '';
-    if (!(key in result)) continue;
-    const value = typeof entry.value === 'string' ? entry.value : '';
-    result[key] = { present: value.length > 0, length: value.length };
-  }
-  return result;
-}
 
 export async function handleIVXRenderDiagnosticRequest(request: Request): Promise<Response> {
   try {
@@ -142,7 +130,7 @@ export async function handleIVXRenderDiagnosticRequest(request: Request): Promis
       credentials: credentialReport,
       renderAudit,
       hint: 'RENDER_API_KEY and RENDER_SERVICE_ID must be readable from process.env or the encrypted Owner Variables runtime bridge.',
-      runtime: { node: process.version, platform: process.platform, timestamp: new Date().toISOString() },
+      runtime: { commitSha: process.env.RENDER_GIT_COMMIT ?? null, node: process.version, platform: process.platform, timestamp: new Date().toISOString() },
     }, 500);
   }
 
@@ -157,7 +145,7 @@ export async function handleIVXRenderDiagnosticRequest(request: Request): Promis
   const deploysArray: unknown[] = Array.isArray(deploysResult.body) ? deploysResult.body : [];
   const deploys = deploysArray.map(normalizeDeploy);
   const latest = deploys[0];
-  const envPresence = readRenderEnvPresence(envVarsResult.body);
+  const envPresence = ownerRuntimeBindingDrift(envVarsResult.body);
 
   let latestEvents: unknown = null;
   if (latest?.id) {
@@ -198,7 +186,7 @@ export async function handleIVXRenderDiagnosticRequest(request: Request): Promis
     recentDeploys: deploys.map((d) => ({ id: d.id, status: d.status, trigger: d.trigger, commitSha: d.commitSha, commitMessage: d.commitMessage, finishedAt: d.finishedAt, createdAt: d.createdAt, failureReason: d.failureReason })),
     latestDeployEvents: latestEvents,
     deploysHttpStatus: deploysResult.status,
-    runtime: { node: process.version, platform: process.platform, timestamp: new Date().toISOString(), deploymentMarker: process.env.DEPLOYMENT_MARKER ?? null },
+    runtime: { commitSha: process.env.RENDER_GIT_COMMIT ?? null, node: process.version, platform: process.platform, timestamp: new Date().toISOString(), deploymentMarker: process.env.DEPLOYMENT_MARKER ?? null },
     secretValuesReturned: false,
   });
 }
