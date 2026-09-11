@@ -1,4 +1,4 @@
-import { sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult, readSharedSeniorDocument, appendSharedSeniorProofEvent } from './ivx-senior-shared-queue';
+import { sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult, readSharedSeniorDocument, readSharedSeniorJob, appendSharedSeniorProofEvent } from './ivx-senior-shared-queue';
 import { createSeniorJobAdmission } from './ivx-senior-job-admission';
 /**
  * IVX Self-Hosted Senior Developer Worker — removes the external platform dependency as the
@@ -508,6 +508,15 @@ async function saveQueue(doc: QueueDoc): Promise<void> {
       // Durable write failed — the in-memory mirror still keeps the worker alive.
     }
   }
+}
+
+async function loadQueueForJob(jobId: string): Promise<QueueDoc> {
+  if (!sharedSeniorQueueEnabled()) return loadQueue();
+  if (!isDurableStoreConfigured()) throw new Error('Shared queue storage unavailable');
+  const job = await readSharedSeniorJob<IVXWorkerJob>(QUEUE_FILE, jobId);
+  // The patch RPC merges only changed jobs against their exact snapshots. It
+  // retains other owners' jobs and enforces the same worker/lease identity.
+  return rememberSeniorQueue({ ...emptyQueue(true), jobs: job ? [job] : [] });
 }
 
 async function loadLedger(): Promise<LedgerDoc> {
@@ -1817,7 +1826,7 @@ export async function resumeSeniorDeveloperJob(jobId: string): Promise<IVXWorker
 
 /** Read one job by id (newest queue state). */
 export async function getSeniorDeveloperJob(jobId: string): Promise<IVXWorkerJob | null> {
-  const queue = await loadQueue();
+  const queue = await loadQueueForJob(jobId);
   const found = queue.jobs.find((j) => j.jobId === jobId) ?? null;
   if (found) return found;
   if (sharedSeniorQueueEnabled()) return null; // A process mirror cannot certify a missing durable job.
@@ -1902,7 +1911,7 @@ function withQueueWrite<T>(fn: () => Promise<T>): Promise<T> {
 
 async function updateJob(jobId: string, patch: Partial<IVXWorkerJob>, onlyIfActive = false, requireActive = false): Promise<void> {
   await withQueueWrite(async () => {
-    const queue = await loadQueue();
+    const queue = await loadQueueForJob(jobId);
     const idx = queue.jobs.findIndex((j) => j.jobId === jobId);
     if (idx < 0) { if (requireActive) throw new Error('WORKER_AUTHORITY_UNCONFIRMED: job missing'); return; }
     const existing = queue.jobs[idx];
