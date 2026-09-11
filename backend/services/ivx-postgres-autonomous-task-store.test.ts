@@ -239,6 +239,23 @@ describe('PostgreSQL autonomous task store', () => {
     expect(uniqueLeaseMigration).toContain("'alreadyActiveTaskId'");
     expect(uniqueLeaseMigration).toContain("task.lease_expires_at < v_now");
   });
+
+  test('active mission claims use a bounded prefix index before historical fallback', () => {
+    const indexMigration = readFileSync(path.join(import.meta.dir, '../../supabase/migrations/20260911014433_autonomous_claim_mission_index.sql'), 'utf8');
+    const claimMigration = readFileSync(path.join(import.meta.dir, '../../supabase/migrations/20260911014546_autonomous_claim_active_scope_first.sql'), 'utf8');
+    expect(indexMigration).toContain('CREATE INDEX CONCURRENTLY IF NOT EXISTS ivx_autonomous_tasks_queued_scope_idx');
+    expect(indexMigration).toContain('(idempotency_key text_pattern_ops, assigned_agent_number)');
+    expect(indexMigration).toContain("WHERE state = 'QUEUED'");
+    expect(claimMigration).toContain('foreach v_active_prefix in array v_active_prefixes');
+    expect(claimMigration).toContain("task.idempotency_key like v_active_prefix || '%'");
+    expect(claimMigration.indexOf('foreach v_active_prefix')).toBeLessThan(claimMigration.indexOf('if v_row.task_id is null then'));
+    expect(claimMigration).toContain('for update skip locked');
+    expect(claimMigration).toContain("prerequisite.state not in ('VERIFIED','NO_ACTION_REQUIRED')");
+    expect(claimMigration).toContain("raise exception 'Expected queue candidate query was not found");
+    expect(claimMigration).toContain("to_regclass('public.ivx_autonomous_tasks_queued_scope_idx')");
+    expect(claimMigration).toContain('index_state.indisvalid');
+    expect(claimMigration).not.toContain('security definer');
+  });
 });
 
 test('coalesces concurrent current-state observers without caching stale results or sharing mutable payloads', async () => {
