@@ -36,3 +36,17 @@ test('queue admission is bounded and aborted requests cannot take a free slot',a
  await Promise.all(waiting);held.forEach(slot=>slot.release());
  expect(getAIQueueSnapshot().long).toMatchObject({active:0,waiting:0});
 });
+
+test('zero and invalid configured pools reject before allocating or queueing work', async () => {
+ const modulePath = new URL('./ivx-ai-queue.ts', import.meta.url).pathname;
+ for (const limit of ['0', 'invalid', '-1']) {
+  const child = Bun.spawn([process.execPath, '-e', `
+   const {acquireAIQueueSlot,getAIQueueSnapshot}=await import(${JSON.stringify(modulePath)});
+   let rejected=0;
+   for(const lane of ['short','long'])try{await acquireAIQueueSlot(lane);}catch(e){if(e.message.includes('admission disabled'))rejected++;}
+   const s=getAIQueueSnapshot();
+   if(rejected!==2||s.short.active||s.long.active||s.short.waiting||s.long.waiting)process.exit(1);
+  `], { env: { ...process.env, IVX_AI_SHORT_POOL_MAX: limit, IVX_AI_LONG_POOL_MAX: limit }, stdout: 'pipe', stderr: 'pipe' });
+  expect(await child.exited).toBe(0);
+ }
+});

@@ -734,6 +734,7 @@ async function requestIVXAITextInternal(input: {
   const queueSlot = await acquireAIQueueSlot(queueLane, { signal: input.abortSignal });
   const callStartedAt = Date.now();
 
+  try {
   let result: Awaited<ReturnType<typeof generateText>> | null = null;
   let lastError: unknown = null;
   let lastFailure: { status: number | null; responseBody: unknown } = { status: null, responseBody: null };
@@ -781,6 +782,7 @@ async function requestIVXAITextInternal(input: {
             : [...messages, multimodalUser];
           result = await runWithHardTimeout('IVX AI direct (multimodal)', generateText({
             model,
+            maxRetries: 0, // The runtime owns the bounded retry policy.
             system: system.length > 0 ? system : undefined,
             maxOutputTokens: input.maxOutputTokens,
             abortSignal: input.abortSignal ?? undefined,
@@ -791,6 +793,7 @@ async function requestIVXAITextInternal(input: {
           result = messages.length > 0
             ? await runWithHardTimeout('IVX AI direct (messages)', generateText({
                 model,
+                maxRetries: 0,
                 system: system.length > 0 ? system : undefined,
                 maxOutputTokens: input.maxOutputTokens,
                 abortSignal: input.abortSignal ?? undefined,
@@ -798,6 +801,7 @@ async function requestIVXAITextInternal(input: {
               }), callTimeoutMs)
             : await runWithHardTimeout('IVX AI direct (prompt)', generateText({
                 model,
+                maxRetries: 0,
                 system: system.length > 0 ? system : undefined,
                 maxOutputTokens: input.maxOutputTokens,
                 abortSignal: input.abortSignal ?? undefined,
@@ -863,7 +867,6 @@ async function requestIVXAITextInternal(input: {
   }
 
   if (!result) {
-    queueSlot.release();
     const failureMessage = lastError instanceof Error ? lastError.message : 'Gateway request failed';
     const isTimeout = lastError instanceof Error && lastError.name === 'IVXAIGatewayTimeoutError';
 
@@ -962,7 +965,6 @@ async function requestIVXAITextInternal(input: {
       traceId,
     });
   }
-  queueSlot.release();
 
   const text = readTrimmed(result.text);
   if (!text) {
@@ -1024,6 +1026,10 @@ async function requestIVXAITextInternal(input: {
     usage: result.usage ?? null,
     providerMetadata,
   };
+  } finally {
+    // A fallback is still a model request and must retain its admission slot.
+    queueSlot.release();
+  }
 }
 
 export type IVXAIStreamChunk = {
@@ -1076,7 +1082,6 @@ export async function* streamIVXAIText(input: {
   const queueSlot = await acquireAIQueueSlot(queueLane, { signal: input.abortSignal });
   const callStartedAt = Date.now();
 
-  ensureIVXAIGatewayEnvironment();
   const baseURL = baseUrlCandidates[0];
 
   let accumulated = '';
@@ -1086,8 +1091,10 @@ export async function* streamIVXAIText(input: {
   const timer = setTimeout(() => { timedOut = true; }, adaptiveTimeoutMs);
 
   try {
+    ensureIVXAIGatewayEnvironment();
     const streamResult = streamText({
       model,
+      maxRetries: 0,
       system: system.length > 0 ? system : undefined,
       maxOutputTokens: input.maxOutputTokens,
       abortSignal: input.abortSignal ?? undefined,

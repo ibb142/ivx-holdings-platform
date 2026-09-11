@@ -34,6 +34,7 @@ import {
 import { type CompanyId, type DivisionId } from './ivx-enterprise-master-registry';
 import { requestIVXAIText } from '../ivx-ai-runtime';
 import { decideRetry, isTransientFailure } from './ivx-retry-policy';
+import { registerFleetControlMetrics } from './ivx-fleet-execution-metrics';
 import { isEngineeringTool } from './ivx-agent-engineering-tools';
 /** ISO-8601 UTC timestamp with second precision (jq `fromdateiso8601` compatible). */
 function isoSecondPrecision(date: Date = new Date()): string {
@@ -401,6 +402,15 @@ export function getExecutionState(agentId: string): AgentExecutionState | null {
 export function getAllExecutionStates(): AgentExecutionState[] {
   return ALL_AGENT_CONTRACTS.map((c) => executionStates.get(c.agentId)!).filter(Boolean);
 }
+
+registerFleetControlMetrics(() => {
+  const states = getAllExecutionStates();
+  const valid = states.length === 112 && new Set(states.map(s => s.agentNumber)).size === 112
+    && states.every(s => Number.isInteger(s.agentNumber) && s.agentNumber! >= 1 && s.agentNumber! <= 112
+      && s.agentId === `ivx_holdings_${s.agentNumber}`);
+  return { identitiesVerified: valid, paused: states.filter(s => s.pauseState).map(s => s.agentNumber!),
+    disabled: states.filter(s => s.disabledState).map(s => s.agentNumber!) };
+});
 
 export function updateExecutionState(agentId: string, updates: Partial<AgentExecutionState>): { ok: boolean; error: string | null } {
   const state = executionStates.get(agentId);
