@@ -380,6 +380,7 @@ function refillAllAvailableAgents(
     }
     const missionScope = {
       familyPrefixes: [LANDING_P0_PREFIX, LANDING_P0_REPAIR_PREFIX, LANDING_P0_PATROL_PREFIX],
+      inspectionSourceSha: requestedSourceSha,
       activePrefixes: requestedLandingMission
         ? [
           `${LANDING_P0_PREFIX}${requestedSourceSha}:`,
