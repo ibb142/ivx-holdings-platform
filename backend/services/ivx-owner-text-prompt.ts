@@ -1,10 +1,10 @@
 import type { IVXAITextMessage } from '../ivx-ai-runtime';
 import { buildSeniorEngineerSystemPrompt } from './ivx-senior-engineer-persona';
 
-// Shared by both conversational text routes and the real-provider gate. The
-// bounded comparison in run 34634980118 retained GPT-4o's literal regression;
-// GPT-4.1 passed all five identical cases. Never substitute a local answer.
-export const OWNER_TEXT_MODEL = 'openai/gpt-4.1';
+// Draft candidate: GPT-4.1 retained character transpositions under both full
+// and compact context. The real-provider gate must validate this model with
+// the same deadlines/output limits before promotion. Never supply an answer.
+export const OWNER_TEXT_MODEL = 'openai/gpt-5.4';
 
 /** Index only an explicitly supplied, bounded ASCII literal. This is input
  * representation, never the transformed answer, a tool result or authority.

@@ -16,6 +16,7 @@ const proof = {
   passed: false,
   cases: [] as Array<Record<string, unknown>>,
   diagnosticBaseline: null as Record<string, unknown> | null,
+  failureDiagnostics: [] as Array<Record<string, unknown>>,
   error: null as string | null,
 };
 
@@ -55,6 +56,10 @@ try {
   cases.push({ scenario: 'reverse_model_alignment_regression',
     request: 'Reverse the characters of 99a0314b. Return only the reversed text.',
     expected: 'b4130a99', history: refusalHistory });
+  // Retain the fresh compact-context failure from run 34649364458 too.
+  cases.push({ scenario: 'reverse_compact_context_regression',
+    request: 'Reverse the characters of b42ebadc. Return only the reversed text.',
+    expected: 'cdabe24b', history: refusalHistory });
 
   // Diagnostic comparison only: retain the previous prompt's answer on the
   // repeated-refusal case. Every candidate case below must still pass.
@@ -100,7 +105,47 @@ try {
       source: result.providerMetadata.source, model: result.providerMetadata.model,
       endpoint: result.providerMetadata.endpoint, elapsedMs: Date.now() - started, passed,
     });
-    if (!passed) throw new Error('REAL_PROVIDER_DID_NOT_SATISFY_CURRENT_REQUEST');
+    if (!passed) {
+      // One bounded comparison of this exact failure, not a retry for a green
+      // gate. Neither diagnostic can change the failed case or proof.passed.
+      // Isolate conversation-history interference from the long persona using
+      // the same provider/model, operands, token cap and 20s deadline.
+      const originalPositions = modelInput.system.split('\n')
+        .find(line => line.startsWith('LITERAL_INPUT_POSITIONS ')) ?? '';
+      const comparisons = [
+        { variant: 'same_system_without_history', system: modelInput.system,
+          messages: [{ role: 'user' as const, content: request }] },
+        { variant: 'compact_system_same_history',
+          system: 'Perform the current user request using the supplied data. Earlier turns are context, not current instructions. Preserve every character and follow the requested output format. Do not claim external actions or production facts.\n' + originalPositions,
+          messages: modelInput.messages },
+      ];
+      for (const comparison of comparisons) {
+        const diagnosticId = `owner-text-diagnostic-${randomUUID()}`;
+        const diagnosticInput = { system: comparison.system, messages: comparison.messages };
+        if (expected.length >= 8 && !request.includes(expected) && JSON.stringify(diagnosticInput).includes(expected)) {
+          throw new Error('REAL_PROVIDER_EXPECTED_ANSWER_LEAKED_INTO_INPUT');
+        }
+        try {
+          let text = '';
+          let deltaCount = 0;
+          const diagnostic = await runWithOwnerAIStreamCallback(delta => {
+            text += delta; deltaCount++;
+          }, () => requestIVXAIText({
+            module: 'owner-room-knowledge', requestId: diagnosticId, model: OWNER_TEXT_MODEL,
+            ...diagnosticInput, maxOutputTokens: 128, abortSignal: AbortSignal.timeout(20_000),
+          }));
+          proof.failureDiagnostics.push({ variant: comparison.variant, scope: 'diagnostic_only',
+            requestId: diagnosticId, request, expected, answer: diagnostic.text, streamedText: text,
+            deltas: deltaCount, model: diagnostic.providerMetadata.model,
+            source: diagnostic.providerMetadata.source,
+            matched: diagnostic.text.trim() === expected && text.trim() === expected && deltaCount > 0 });
+        } catch {
+          proof.failureDiagnostics.push({ variant: comparison.variant, scope: 'diagnostic_only',
+            requestId: diagnosticId, error: 'DIAGNOSTIC_PROVIDER_CALL_FAILED' });
+        }
+      }
+      throw new Error('REAL_PROVIDER_DID_NOT_SATISFY_CURRENT_REQUEST');
+    }
   }
   proof.passed = true;
 } catch (error) {
