@@ -1,0 +1,34 @@
+name: Private visitor chat access boundary
+on:
+  push:
+    branches: [fix/phase1-conversation-isolation-20260911]
+  pull_request:
+    paths:
+      - supabase/repair-functions/ivx-private-visitor-chat.sql
+      - scripts/ivx-private-visitor-chat-postgres-proof.mjs
+      - .github/workflows/ivx-private-visitor-chat-gate.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  private-visitor-chat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ivx_privacy_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.3.9 }
+      - run: bun install --frozen-lockfile
+      - name: Prove cross-visitor access is denied while backend persistence remains available
+        run: node scripts/ivx-private-visitor-chat-postgres-proof.mjs
+        env:
+          IVX_PRIVACY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_privacy_test
