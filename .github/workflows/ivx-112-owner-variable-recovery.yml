@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/ivx-112-owner-variable-recovery.yml
       - scripts/ops/owner-runtime-binding*
+      - scripts/ops/owner-recovery-deploy*
   workflow_dispatch: {}
 
 permissions:
@@ -24,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 24 }
-      - run: node --test scripts/ops/owner-runtime-binding.test.mjs
+      - run: node --test scripts/ops/owner-runtime-binding.test.mjs scripts/ops/owner-recovery-deploy.test.mjs
   recover-deploy-verify:
     needs: verify-owner-binding
     if: github.ref == 'refs/heads/main'
@@ -96,15 +97,14 @@ jobs:
           export SERVICE_ID="${RENDER_SERVICE_ID_RECOVERED:-$DEFAULT_RENDER_SERVICE_ID}"
           node scripts/ops/owner-runtime-binding.mjs
       - name: Trigger Render deployment when recovery credentials exist
-        if: ${{ steps.recover.outputs.recovered == 'true' && (steps.live.outputs.matched != 'true' || steps.bind.outputs.changed == 'true') }}
+        if: ${{ steps.recover.outputs.recovered == 'true' && steps.bind.outputs.changed == 'true' }}
+        env:
+          BINDINGS_CHANGED: ${{ steps.bind.outputs.changed }}
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${RENDER_API_KEY_RECOVERED:-}"
-          SERVICE_ID="${RENDER_SERVICE_ID_RECOVERED:-$DEFAULT_RENDER_SERVICE_ID}"
-          RESPONSE=$(curl -fsS -X POST "https://api.render.com/v1/services/${SERVICE_ID}/deploys" -H "Authorization: Bearer ${RENDER_API_KEY_RECOVERED}" -H 'Accept: application/json' -H 'Content-Type: application/json' --data '{"clearCache":"do_not_clear"}')
-          DEPLOY_ID=$(printf '%s' "$RESPONSE" | jq -r '.id // .deploy.id // empty'); test -n "$DEPLOY_ID"
-          echo "render_deploy_trigger=PASS deploy_id=$DEPLOY_ID"
+          export SERVICE_ID="${RENDER_SERVICE_ID_RECOVERED:-$DEFAULT_RENDER_SERVICE_ID}"
+          node scripts/ops/owner-recovery-deploy.mjs
       - name: Wait for exact production SHA
         shell: bash
         run: |
