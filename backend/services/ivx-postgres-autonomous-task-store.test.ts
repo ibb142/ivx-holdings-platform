@@ -244,7 +244,9 @@ describe('PostgreSQL autonomous task store', () => {
   test('active mission claims use a bounded prefix index before historical fallback', () => {
     const indexMigration = readFileSync(path.join(import.meta.dir, '../../supabase/migrations/20260911014433_autonomous_claim_mission_index.sql'), 'utf8');
     const claimMigration = readFileSync(path.join(import.meta.dir, '../../supabase/migrations/20260911014546_autonomous_claim_active_scope_first.sql'), 'utf8');
-    expect(indexMigration).toContain('CREATE INDEX CONCURRENTLY IF NOT EXISTS ivx_autonomous_tasks_queued_scope_idx');
+    expect(indexMigration).toContain('CREATE INDEX IF NOT EXISTS ivx_autonomous_tasks_queued_scope_idx');
+    expect(indexMigration).not.toContain('CREATE INDEX CONCURRENTLY');
+    expect(indexMigration).toContain('production migration executor wraps migrations in a transaction');
     expect(indexMigration).toContain('(idempotency_key text_pattern_ops, assigned_agent_number)');
     expect(indexMigration).toContain("WHERE state = 'QUEUED'");
     expect(claimMigration).toContain('foreach v_active_prefix in array v_active_prefixes');
