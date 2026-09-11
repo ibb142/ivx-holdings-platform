@@ -1,4 +1,5 @@
 import { RefillBackoff } from './ivx-refill-backoff';
+import { createEmptyClaimCooldown } from './ivx-empty-claim-cooldown';
 import { ensureTechnicalScheduleSeeded } from './ivx-technical-schedule';
 import { createRefillWakeup } from './ivx-refill-wakeup';
 import { refillFleetBatches, preparedContinuityAllowed, POSTGRES_FLEET_CLAIM_BATCH_SIZE } from './ivx-fleet-refill-batches';
@@ -64,6 +65,7 @@ let leaseMirrorInFlight: Promise<void> | null = null;
 let heartbeatRefreshInFlight: Promise<void> | null = null;
 let refillInFlight: Promise<void> | null = null;
 const refillBackoff = new RefillBackoff();
+const emptyClaimCooldown = createEmptyClaimCooldown(IVX_AUTONOMOUS_REFILL_INTERVAL_MS);
 let startedAt: string | null = null;
 let lastRunAt: string | null = null;
 let lastOk: boolean | null = null;
@@ -361,8 +363,10 @@ function refillAllAvailableAgents(
     if (!continuityEnabled) return;
     const remainingCapacity = getContinuityMaxConcurrency() - continuityRuns.size;
     if (remainingCapacity <= 0) return;
+    const claimScope = `${requestedSourceSha}:${requestedLandingMission}`;
     const candidates = getAllExecutionStates()
       .filter((state) => state.agentNumber != null && canRunContinuity(state.agentId))
+      .filter((state) => emptyClaimCooldown.canClaim(`agent:${state.agentId}`, claimScope))
       .slice(0, remainingCapacity);
     if (candidates.length === 0) return;
 
@@ -394,7 +398,11 @@ function refillAllAvailableAgents(
       options: { missionScope },
     })), {
       batchSize: postgresAtomicQueueSelected() ? POSTGRES_FLEET_CLAIM_BATCH_SIZE : IVX_AUTONOMOUS_FLEET_SIZE,
-      lease: leaseNextTasksBatch,
+      lease: async requests => {
+        const results = await leaseNextTasksBatch(requests);
+        emptyClaimCooldown.observe(requests, results, claimScope);
+        return results;
+      },
       start: startLeasedTasksBatch,
       release: async ({ taskId, workerId }) => {
         const result = await releaseLease(taskId, workerId);
@@ -537,6 +545,7 @@ export function stopAutonomous112RuntimeEnforcer(): Promise<number> {
   if (stopInFlight) return stopInFlight;
   stopping = true;
   refillWakeup.clear();
+  emptyClaimCooldown.clear();
   if (bootKick) clearTimeout(bootKick);
   bootKick = null;
   continuityEnabled = false;
