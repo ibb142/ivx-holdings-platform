@@ -19,7 +19,7 @@ import type { FleetLeaseRequest, FleetLeaseResult, FleetTaskLeaseIdentity, Fleet
 
 export const IVX_POSTGRES_AUTONOMOUS_TASK_STORE_MARKER = 'ivx-postgres-autonomous-task-store-2026-09-08-current-work-v3-direct-failover';
 const DEFAULT_TIMEOUT_MS = 30_000;
-export const TRUTH_TIMEOUT_MS = 15_000;
+export const TRUTH_TIMEOUT_MS = 30_000;
 const DEFAULT_LEASE_SECONDS = 120;
 const TASK_READ_CACHE_TTL_MS = 1_500;
 const BOOT_NONCE = randomUUID().slice(0, 12);
