@@ -41,13 +41,26 @@ describe('IVX autonomous truth control enterprise invariants', () => {
     expect(snapshotBody).not.toContain("campaignDispatcherControl('resume_all')");
   });
 
-  test('continuity capacity cannot silently degrade below the canonical 112 lanes', () => {
+  test('logical identities stay at 112 while admission respects configured capacity', () => {
     expect(enforcerSource).toContain('export const IVX_AUTONOMOUS_FLEET_SIZE = 112');
-    expect(enforcerSource).not.toContain('DEFAULT_CONTINUITY_MAX_CONCURRENCY = 12');
-    expect(enforcerSource).toContain('configured === IVX_AUTONOMOUS_FLEET_SIZE ? configured : IVX_AUTONOMOUS_FLEET_SIZE');
+    expect(enforcerSource).toContain('return autonomousContinuityCapacity()');
     expect(enforcerSource).toContain('continuityRuns.size >= getContinuityMaxConcurrency()');
     expect(enforcerSource).toContain('continuityMaxConcurrency: getContinuityMaxConcurrency()');
     expect(enforcerSource).toContain('canonicalFleetSize: IVX_AUTONOMOUS_FLEET_SIZE');
     expect(enforcerSource.match(/continuityRuns\.set\(agentId, promise\);\s*void runLeaseMirror\(\);/g)).toHaveLength(1);
+  });
+
+  test('the actual runtime honors reduced, zero and malformed admission settings', async () => {
+    const { getContinuityMaxConcurrency } = await import('./ivx-autonomous-runtime-enforcer');
+    const previous = process.env.IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY;
+    try {
+      for (const [value, expected] of [['12', 12], ['0', 0], ['bad', 0], ['112', 112]] as const) {
+        process.env.IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY = value;
+        expect(getContinuityMaxConcurrency()).toBe(expected);
+      }
+    } finally {
+      if (previous === undefined) delete process.env.IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY;
+      else process.env.IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY = previous;
+    }
   });
 });

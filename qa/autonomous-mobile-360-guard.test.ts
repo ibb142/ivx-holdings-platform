@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve, relative } from 'node:path';
+import { AUTONOMOUS_CONTROL_ROUTES } from '../expo/components/autonomousDashboardControlRoutes';
 
 const ROOT = resolve(import.meta.dir, '..');
 const read = (path: string) => readFileSync(resolve(ROOT, path), 'utf8');
@@ -36,10 +37,16 @@ describe('Autonomous mobile 360 observability guard', () => {
 
   test('autonomous dashboard exposes owner control modules and mission control', () => {
     const dashboard = read('expo/app/autonomous-dashboard.tsx');
-    expect(dashboard).toContain('OWNER CONTROL MODULES');
-    expect(dashboard).toContain('/ivx/chat');
-    expect(dashboard).toContain('/ivx/agent-command-center');
-    expect(dashboard).toContain('/ivx/autonomous-control');
+    const controls = read('expo/components/AutonomousDashboardControlStrip.tsx');
+    expect(dashboard).toContain("from '@/components/AutonomousDashboardControlStrip'");
+    expect(dashboard).toContain('<AutonomousDashboardControlStrip />');
+    expect(controls).toContain('OWNER CONTROL MODULES');
+    expect(controls).toContain('AUTONOMOUS_CONTROL_ROUTES.map');
+    expect(controls).toContain('router.push(route');
+    const routes = AUTONOMOUS_CONTROL_ROUTES.map(row => row.route);
+    for (const route of ['/ivx/chat', '/ivx/agent-command-center', '/ivx/autonomous-control']) {
+      expect(routes).toContain(route);
+    }
     expect(dashboard).toContain('LandingWorkersLiveScreen');
   });
 

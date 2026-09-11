@@ -9,6 +9,20 @@ const ctx = { agentId: 'synthetic-agent', agentNumber: 1, taskId: 'synthetic-tas
 const unit = (check: LandingUnit['check']): LandingUnit => ({ unitId: 'synthetic-contract', lane: 'e2e', workstream: 'synthetic', title: 'Proof integrity', severity: 'P1', check });
 const castFetch = (fn: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>): typeof fetch => fn as typeof fetch;
 
+test('concurrent route probes count their entire queue wait separately from QA work', async () => {
+  const results = await Promise.all(Array.from({ length: 3 }, () => executeLandingUnit(
+    unit({ kind: 'contract', probe: 'login-empty' }), ctx,
+    { fetchImpl: castFetch(async () => Response.json({ message: 'Invalid credentials' }, { status: 401 })) })));
+  const last = results[2].record;
+  assert.equal(last.status, 'PASS');
+  assert.ok(last.activity!.waiting_seconds >= 4.8, 'must include time queued behind both earlier probes');
+  for (const { record } of results) {
+    const elapsed = (Date.parse(record.completed_at) - Date.parse(record.started_at)) / 1000;
+    assert.ok(Math.abs(record.activity!.active_seconds + record.activity!.waiting_seconds - elapsed) < 0.001);
+    assert.equal(record.productive_seconds, record.activity!.active_seconds);
+  }
+}, 10_000);
+
 const dealAssertions: DealsAssert[] = [
   { assert: 'videos' },
   { assert: 'min-count', min: 1 }, { assert: 'present', title: 'Synthetic property' },

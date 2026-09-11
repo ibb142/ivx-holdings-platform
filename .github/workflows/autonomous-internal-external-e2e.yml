@@ -90,7 +90,21 @@ jobs:
           bun install --frozen-lockfile
           bun install --cwd expo --frozen-lockfile
       - name: Backend full test suite
-        run: bun test backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find backend -type f \( -name '*.test.ts' -o -name '*.test.tsx' \) | sort)
+          test "${#files[@]}" -gt 0
+          failed=0
+          for file in "${files[@]}"; do
+            test_root=$(mktemp -d "$RUNNER_TEMP/ivx-internal-XXXXXX")
+            if ! IVX_DATA_DIR="$test_root" IVX_WIRE_ENCRYPTION_KEY="ivx-internal-test-only-${GITHUB_RUN_ID}" NODE_ENV=test bun test "$file" --reporter=dots; then
+              failed=$((failed + 1))
+              echo "::error file=$file::Backend test failed"
+            fi
+            rm -rf "$test_root"
+          done
+          test "$failed" -eq 0
       - name: Autonomous mobile 360 guard
         run: bun test qa/autonomous-mobile-360-guard.test.ts
       - name: Expo typecheck

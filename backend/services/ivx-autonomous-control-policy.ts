@@ -5,6 +5,7 @@
  * retry work must be enabled explicitly so a new process cannot become a
  * second controller merely because it started.
  */
+import { configuredAdmissionLimit } from './ivx-fleet-admission-policy';
 export const IVX_AUTONOMOUS_CONTROL_POLICY_MARKER = 'ivx-autonomous-control-policy-v1-2026-09-06';
 
 export function explicitEnvFlag(name: string, env: NodeJS.ProcessEnv = process.env): boolean {
@@ -39,10 +40,8 @@ export function autonomousQueueBackend(env: NodeJS.ProcessEnv = process.env): st
   return (env.IVX_AUTONOMOUS_QUEUE_BACKEND ?? 'durable_json').trim().toLowerCase();
 }
 
-function boundedConcurrency(value: string | undefined, fallback: number): number {
-  const parsed = Number.parseInt(value ?? '', 10);
-  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
-  return Math.min(parsed, 112);
+export function autonomousContinuityCapacity(env: NodeJS.ProcessEnv = process.env): number {
+  return configuredAdmissionLimit(env.IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY, 12);
 }
 
 /**
@@ -50,7 +49,7 @@ function boundedConcurrency(value: string | undefined, fallback: number): number
  * capacity. This prevents a 12-slot runtime from issuing 112 retry commands.
  */
 export function autonomousRepairCapacity(env: NodeJS.ProcessEnv = process.env): number {
-  const campaign = boundedConcurrency(env.IVX_CAMPAIGN_MAX_CONCURRENCY, 12);
-  const continuity = boundedConcurrency(env.IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY, 12);
+  const campaign = configuredAdmissionLimit(env.IVX_CAMPAIGN_MAX_CONCURRENCY, 12);
+  const continuity = autonomousContinuityCapacity(env);
   return Math.min(campaign, continuity);
 }

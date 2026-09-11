@@ -1,7 +1,8 @@
 import type { Task } from './ivx-autonomous-task-engine';
 import { fleetTaskSignals, FLEET_EVIDENCE_WINDOW_MS } from './ivx-fleet-slo';
 import { resolveProductionSha } from './ivx-landing-p0-backlog';
-import { readPostgresFleetDashboardObservation, readPostgresPatrolObservations } from './ivx-postgres-autonomous-task-store';
+import { readPostgresFleetDashboardObservation, readPostgresPatrolObservations, readPostgresFleetProcessObservation, type FleetProcessObservation } from './ivx-postgres-autonomous-task-store';
+import { fleetControlObservation, fleetExecutionObservation } from './ivx-fleet-execution-observation';
 import type { PatrolObservation } from './ivx-autonomous-recovery-health';
 import { verifiedPatrolObservations } from './ivx-fleet-patrol-observations';
 
@@ -13,6 +14,7 @@ type Observation = {
   assignments: Array<{ agentNumber: number; taskCount: number }>; activeTasks: Task[];
   instances: FleetInstance[];
   patrolObservations?: PatrolObservation[];
+  processObservation?: FleetProcessObservation;
 };
 export function buildFleetDashboardSignals(raw: unknown, sha: string, now = Date.now()): FleetDashboardSignals {
   const value = raw as Observation;
@@ -46,23 +48,33 @@ export function buildFleetDashboardSignals(raw: unknown, sha: string, now = Date
     }
   }
   const observations = value.patrolObservations === undefined ? null : verifiedPatrolObservations(value.patrolObservations, sha, measured);
-  for (const a of agents) a.observation = observations?.get(a.agentNumber) ?? null;
+  const controls = fleetControlObservation(value.processObservation, value.instances, sha, measured);
+  for (const a of agents) { a.observation = observations?.get(a.agentNumber) ?? null; a.control = controls.get(a.agentNumber) ?? null; }
   return { marker: 'ivx-fleet-signals-2026-09-08-v1', status: 'AVAILABLE', measuredAt: value.measuredAt, commitSha: sha,
     maxAgeMs: FLEET_SIGNAL_MAX_AGE_MS, evidenceWindowMs: FLEET_EVIDENCE_WINDOW_MS, error: null, agents,
     counts: { heartbeat: agents.filter(a => a.heartbeatFresh).length, assigned: agents.filter(a => a.assignedTasks > 0).length,
       running: agents.filter(a => a.running).length, productive: agents.filter(a => a.productive).length,
       observed: observations?.size ?? null },
-    instances: value.instances };
+    instances: value.instances, execution: fleetExecutionObservation(value.processObservation, value.instances, sha, measured) };
 }
 /** Optional patrol reads cannot stall the primary dashboard or amplify an outage. */
 export function createFleetDashboardReader(deps: {
   base: () => Promise<unknown>; patrol: (sha: string) => Promise<PatrolObservation[]>;
   sha: () => string; now: () => number;
+  processes?: () => Promise<FleetProcessObservation>;
 }) {
   let pending: Promise<void> | null = null, nextReadAt = 0;
   let latest: { sha: string; startedAt: number; rows: PatrolObservation[] } | null = null;
+  let processPending: Promise<void> | null = null, nextProcessReadAt = 0;
+  let latestProcesses: { sha: string; startedAt: number; observation: FleetProcessObservation } | null = null;
   return async (): Promise<FleetDashboardSignals> => {
     const sha = deps.sha(), startedAt = deps.now();
+    if (deps.processes && !processPending && startedAt >= nextProcessReadAt) {
+      nextProcessReadAt = startedAt + FLEET_SIGNAL_MAX_AGE_MS;
+      processPending = Promise.resolve().then(deps.processes)
+        .then(observation => { latestProcesses = { sha, startedAt, observation }; })
+        .catch(() => { latestProcesses = null; }).finally(() => { processPending = null; });
+    }
     if (!pending && startedAt >= nextReadAt) {
       nextReadAt = startedAt + FLEET_SIGNAL_MAX_AGE_MS;
       pending = Promise.resolve().then(() => deps.patrol(sha))
@@ -75,6 +87,8 @@ export function createFleetDashboardReader(deps: {
       const patrol = latest?.sha === sha && now >= latest.startedAt && now - latest.startedAt <= FLEET_SIGNAL_MAX_AGE_MS
         ? latest.rows : undefined;
       return buildFleetDashboardSignals({ ...(base as Observation),
+        processObservation: latestProcesses?.sha === sha && now >= latestProcesses.startedAt && now - latestProcesses.startedAt <= FLEET_SIGNAL_MAX_AGE_MS
+          ? latestProcesses.observation : undefined,
         ...(patrol ? { patrolObservations: patrol } : {}) }, sha, now);
     } catch { return { marker: 'ivx-fleet-signals-2026-09-08-v1', status: 'UNKNOWN', measuredAt: null, commitSha: sha,
       maxAgeMs: FLEET_SIGNAL_MAX_AGE_MS, evidenceWindowMs: FLEET_EVIDENCE_WINDOW_MS, error: 'Shared fleet observation unavailable',
@@ -82,4 +96,4 @@ export function createFleetDashboardReader(deps: {
   };
 }
 export const readFleetDashboardSignals = createFleetDashboardReader({ base: readPostgresFleetDashboardObservation,
-  patrol: readPostgresPatrolObservations, sha: resolveProductionSha, now: Date.now });
+  patrol: readPostgresPatrolObservations, processes: readPostgresFleetProcessObservation, sha: resolveProductionSha, now: Date.now });
