@@ -18,6 +18,30 @@ create table if not exists public.ivx_owner_ai_queue_workers (
 alter table public.ivx_owner_ai_queue_workers enable row level security;
 revoke all on public.ivx_owner_ai_queue_workers from public, anon, authenticated;
 grant select, insert, update, delete on public.ivx_owner_ai_queue_workers to service_role;
+create index if not exists ivx_owner_ai_queue_workers_observation_idx
+  on public.ivx_owner_ai_queue_workers(source_sha,last_seen_at desc);
+
+-- One read-only, bounded snapshot replaces separate queue/dead-letter/worker
+-- HTTP reads. It observes owner controls without taking mutation locks.
+create or replace function public.ivx_owner_ai_queue_health(p_source_sha text)
+returns jsonb language sql stable security invoker set search_path = '' as $$
+  select jsonb_build_object(
+    'authorized', coalesce((select jsonb_typeof(value->'control'->'paused')='boolean'
+      and jsonb_typeof(value->'control'->'stopped')='boolean'
+      and value->'control'->>'paused'='false' and value->'control'->>'stopped'='false'
+      from public.ivx_durable_documents where doc_key='app-completion/campaign-state.json'),false)
+      and exists(select 1 from public.ivx_agent_controls where control_name='emergency_stop' and active is false),
+    'pending', coalesce((select jsonb_agg(to_jsonb(q)) from (
+      select id,status,created_at from public.ivx_owner_ai_tasks where status in ('QUEUED','RETRYING','RUNNING')
+      order by created_at limit 200) q),'[]'::jsonb),
+    'dead', coalesce((select jsonb_agg(to_jsonb(q)) from (
+      select id from public.ivx_owner_ai_tasks where dead_letter is true and status='FAILED' limit 100) q),'[]'::jsonb),
+    'workers', coalesce((select jsonb_agg(to_jsonb(q)) from (
+      select worker_id,source_sha,instance_id,state,last_seen_at from public.ivx_owner_ai_queue_workers
+      where source_sha=p_source_sha and last_seen_at>now()-interval '75 seconds'
+      order by last_seen_at desc limit 10) q),'[]'::jsonb)
+  );
+$$;
 
 -- Lock the same durable controls written by the dashboard. Missing or malformed
 -- authorization cannot be interpreted as permission to execute.
@@ -192,12 +216,14 @@ end;
 $$;
 
 revoke all on function public.ivx_owner_ai_queue_authorized() from public,anon,authenticated;
+revoke all on function public.ivx_owner_ai_queue_health(text) from public,anon,authenticated;
 revoke all on function public.ivx_owner_ai_worker_pulse(text,text,text,text) from public,anon,authenticated;
 revoke all on function public.ivx_owner_ai_queue_recover() from public,anon,authenticated;
 revoke all on function public.ivx_owner_ai_queue_claim(text,integer) from public,anon,authenticated;
 revoke all on function public.ivx_owner_ai_queue_update(uuid,text,uuid,text,jsonb) from public,anon,authenticated;
 revoke all on function public.ivx_owner_ai_queue_complete(uuid,text,uuid,text) from public,anon,authenticated;
 grant execute on function public.ivx_owner_ai_queue_authorized() to service_role;
+grant execute on function public.ivx_owner_ai_queue_health(text) to service_role;
 grant execute on function public.ivx_owner_ai_worker_pulse(text,text,text,text) to service_role;
 grant execute on function public.ivx_owner_ai_queue_recover() to service_role;
 grant execute on function public.ivx_owner_ai_queue_claim(text,integer) to service_role;

@@ -84,6 +84,7 @@ try {
   for (const control of ['paused', 'stopped']) {
     await a.query("update public.ivx_durable_documents set value=jsonb_set(value,$1,'true') where doc_key='app-completion/campaign-state.json'", [['control', control]]);
     assert.equal((await rpc(a, 'ivx_owner_ai_queue_claim', ['worker-a', 2])).authorized, false);
+    assert.equal((await rpc(a, 'ivx_owner_ai_queue_health', [sha])).authorized, false);
     await a.query("update public.ivx_durable_documents set value=jsonb_set(value,$1,'false') where doc_key='app-completion/campaign-state.json'", [['control', control]]);
   }
   await a.query("update public.ivx_agent_controls set active=true where control_name='emergency_stop'");
@@ -98,12 +99,26 @@ try {
   assert.equal((await rpc(b, 'ivx_owner_ai_queue_complete', [retry, 'worker-b', resumed.queue_lease_token, 'qa-assistant'])).applied, true);
   events.push('scheduled_retry_not_claimed_early', 'pause_stop_emergency_respected', 'graceful_release_preserves_answer');
 
+  // Exercise the real GET-RPC's stable function in a read-only transaction, with
+  // more rows than every response limit. No health probe may mutate the queue.
+  await a.query("insert into public.ivx_owner_ai_tasks(id,trace_id,idempotency_key,prompt,status) select gen_random_uuid(),'bounded-pending-'||n,'bounded-pending-'||n,'health fixture','QUEUED' from generate_series(1,205) n");
+  await a.query("insert into public.ivx_owner_ai_tasks(id,trace_id,idempotency_key,prompt,status,dead_letter) select gen_random_uuid(),'bounded-dead-'||n,'bounded-dead-'||n,'health fixture','FAILED',true from generate_series(1,105) n");
+  await a.query("insert into public.ivx_owner_ai_queue_workers(worker_id,instance_id,source_sha,state) select 'bounded-worker-'||n,'bounded-instance-'||n,$1,'ready' from generate_series(1,12) n", [sha]);
+  await a.query('begin read only');
+  const snapshot = await rpc(a, 'ivx_owner_ai_queue_health', [sha]);
+  assert.equal(snapshot.authorized, true); assert.equal(snapshot.pending.length, 200);
+  assert.equal(snapshot.dead.length, 100); assert.equal(snapshot.workers.length, 10);
+  assert.equal((await rpc(a, 'ivx_owner_ai_queue_health', ['b'.repeat(40)])).workers.length, 0);
+  await a.query('commit');
+  events.push('bounded_read_only_health_snapshot', 'health_workers_match_release_sha');
+
   await a.query('reset role');
-  const acl = (await a.query("select bool_and(not prosecdef) invoker, bool_and(proconfig @> array['search_path=\"\"']) empty_path from pg_proc where pronamespace='public'::regnamespace and proname in ('ivx_owner_ai_queue_authorized','ivx_owner_ai_worker_pulse','ivx_owner_ai_queue_recover','ivx_owner_ai_queue_claim','ivx_owner_ai_queue_update','ivx_owner_ai_queue_complete')")).rows[0];
+  const acl = (await a.query("select bool_and(not prosecdef) invoker, bool_and(proconfig @> array['search_path=\"\"']) empty_path from pg_proc where pronamespace='public'::regnamespace and proname in ('ivx_owner_ai_queue_authorized','ivx_owner_ai_queue_health','ivx_owner_ai_worker_pulse','ivx_owner_ai_queue_recover','ivx_owner_ai_queue_claim','ivx_owner_ai_queue_update','ivx_owner_ai_queue_complete')")).rows[0];
   assert.equal(acl.invoker, true); assert.equal(acl.empty_path, true);
   for (const role of ['anon', 'authenticated']) {
     await a.query(`set role ${role}`);
     await assert.rejects(rpc(a, 'ivx_owner_ai_queue_claim', ['worker-a', 1]), error => error.code === '42501');
+    await assert.rejects(rpc(a, 'ivx_owner_ai_queue_health', [sha]), error => error.code === '42501');
     await assert.rejects(a.query('select * from public.ivx_owner_ai_queue_workers'), error => error.code === '42501');
     await a.query('reset role');
   }

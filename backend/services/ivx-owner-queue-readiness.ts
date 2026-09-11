@@ -3,6 +3,34 @@ export type OwnerQueueWorkerObservation = {
   state: string; last_seen_at: string;
 };
 
+type ProviderObservation = { state: string; lastHttpStatus: number | null; lastValidationTime: string | null };
+
+/** A cold process needs an actual completion before claiming work. Failed probes
+ * are bounded to one per minute and never run while owner execution is paused. */
+export function createOwnerQueueProviderGate(deps: {
+  configured: () => boolean; health: () => ProviderObservation;
+  validate: () => Promise<unknown>; now?: () => number;
+}) {
+  let nextProbeAt = 0;
+  let probing = false;
+  const ready = () => {
+    const observed = deps.health();
+    return ['PROVIDER_READY', 'FALLBACK_READY'].includes(observed.state)
+      && observed.lastHttpStatus === 200 && Number.isFinite(Date.parse(observed.lastValidationTime ?? ''));
+  };
+  return async (authorized: boolean) => {
+    if (!authorized || !deps.configured()) return false;
+    if (ready()) return true;
+    const now = (deps.now ?? Date.now)();
+    if (probing || now < nextProbeAt) return false;
+    probing = true;
+    nextProbeAt = now + 60_000;
+    try { await deps.validate(); return ready(); }
+    catch { return false; }
+    finally { probing = false; }
+  };
+}
+
 export function ownerQueueWorkerReadiness(rows: unknown, sourceSha: string, now = Date.now()) {
   if (!Array.isArray(rows) || rows.length > 10 || !/^[a-f0-9]{40}$/.test(sourceSha)) {
     return { ready: false, workers: [], reason: 'Invalid worker observation' };

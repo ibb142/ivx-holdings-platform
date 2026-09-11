@@ -1,5 +1,5 @@
 import { boundedHealthProbe } from './ivx-bounded-health-probe';
-import { ownerQueueWorkerReadiness } from './ivx-owner-queue-readiness';
+import { createOwnerQueueProviderGate, ownerQueueWorkerReadiness } from './ivx-owner-queue-readiness';
 /**
  * IVX Owner AI Durable Task Queue — P0 production reliability layer.
  *
@@ -589,11 +589,22 @@ let workerShuttingDown = false;
 let activeTaskCount = 0;
 let activeHeartbeatTimers = new Map<string, ReturnType<typeof setInterval>>();
 
-type ActiveOwnerLease = { task: IVXOwnerAITaskRow; lost: boolean };
+type ActiveOwnerLease = { task: IVXOwnerAITaskRow; lost: boolean; abort?: AbortController };
 const activeOwnerLeases = new Map<string, ActiveOwnerLease>();
 const queueSourceSha = () => (process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT_SHA || process.env.SOURCE_VERSION || '').trim();
 const queueInstanceId = () => process.env.RENDER_INSTANCE_ID || process.env.HOSTNAME || WORKER_ID;
 class OwnerQueueLeaseLost extends Error {}
+
+const ownerQueueProviderReady = createOwnerQueueProviderGate({
+  configured: isIVXAIConfigured, health: getProviderHealth,
+  validate: () => requestIVXAIText({ module: 'owner-room', requestId: `${WORKER_ID}-startup-${Date.now()}`,
+    prompt: 'Reply with OK.', maxOutputTokens: 8, abortSignal: AbortSignal.timeout(10_000) }),
+});
+
+function loseOwnerLease(lease: ActiveOwnerLease) {
+  lease.lost = true;
+  lease.abort?.abort();
+}
 
 async function queueRpc<T>(name: string, payload: Record<string, unknown>): Promise<T> {
   const response = await restFetch(`rpc/${name}`, { method: 'POST', headers: restHeaders(), body: JSON.stringify(payload) });
@@ -613,19 +624,19 @@ async function updateOwnerLease(lease: ActiveOwnerLease, operation: string, payl
     p_task_id: lease.task.id, p_worker_id: WORKER_ID, p_lease_token: lease.task.queue_lease_token,
     p_operation: operation, p_payload: payload,
   });
-  if (!applied) { lease.lost = true; throw new OwnerQueueLeaseLost('Task lease or owner authorization changed'); }
+  if (!applied) { loseOwnerLease(lease); throw new OwnerQueueLeaseLost('Task lease or owner authorization changed'); }
 }
 
 async function executeTask(task: IVXOwnerAITaskRow): Promise<void> {
   if (!task.queue_lease_token) throw new Error('Queue returned an unfenced task');
   activeTaskCount++;
-  const lease: ActiveOwnerLease = { task, lost: false };
+  const lease: ActiveOwnerLease = { task, lost: false, abort: new AbortController() };
   activeOwnerLeases.set(task.id, lease);
   let heartbeatInFlight = false;
   const heartbeatTimer = setInterval(() => {
     if (heartbeatInFlight || lease.lost) return;
     heartbeatInFlight = true;
-    void updateOwnerLease(lease, 'heartbeat').catch(() => { lease.lost = true; }).finally(() => { heartbeatInFlight = false; });
+    void updateOwnerLease(lease, 'heartbeat').catch(() => { loseOwnerLease(lease); }).finally(() => { heartbeatInFlight = false; });
   }, HEARTBEAT_INTERVAL_MS);
   activeHeartbeatTimers.set(task.id, heartbeatTimer);
   const startedMs = Date.now(), queueMs = Math.max(0, startedMs - Date.parse(task.created_at));
@@ -640,7 +651,7 @@ async function executeTask(task: IVXOwnerAITaskRow): Promise<void> {
       }
       await updateOwnerLease(lease, 'checkpoint', { checkpoint: 'PROVIDER_CALLED' });
       const providerStart = Date.now();
-      const result = await requestIVXAIText({ module: 'owner-room', requestId: `${task.trace_id}-attempt${task.retry_count + 1}`, prompt: task.prompt, maxOutputTokens: 2_000 });
+      const result = await requestIVXAIText({ module: 'owner-room', requestId: `${task.trace_id}-attempt${task.retry_count + 1}`, prompt: task.prompt, maxOutputTokens: 2_000, abortSignal: lease.abort!.signal });
       const answer = result.text.trim();
       if (!answer) throw new Error('Provider returned an empty answer — temporarily unavailable');
       await updateOwnerLease(lease, 'checkpoint', { checkpoint: 'ANSWER_RECEIVED', answer,
@@ -665,7 +676,7 @@ async function executeTask(task: IVXOwnerAITaskRow): Promise<void> {
       next_retry_at: outcome.status === 'RETRYING' ? new Date(Date.now() + computeRetryDelayMs(attempt)).toISOString() : null,
       dead_letter: outcome.deadLetter, error_code: classification.code, error_message: message.slice(0, 500),
       http_status: httpStatus, failure_source: classify503Source({ httpStatus: httpStatus ?? 500, message })
-    }).catch(() => { lease.lost = true; });
+    }).catch(() => { loseOwnerLease(lease); });
   } finally {
     clearInterval(heartbeatTimer); activeHeartbeatTimers.delete(task.id); activeOwnerLeases.delete(task.id); activeTaskCount--;
   }
@@ -676,10 +687,16 @@ async function workerTick(): Promise<void> {
   workerTickRunning = true;
   workerLastTickAt = nowIso();
   try {
+    // The initial observation reads the durable owner gates before any startup
+    // generation. Authorization is checked again when publishing readiness and
+    // atomically on every claim/checkpoint/completion.
     const provider = getProviderHealth();
-    const providerReady = isIVXAIConfigured() && (provider.state === 'PROVIDER_READY' || provider.state === 'FALLBACK_READY');
-    const observation = await publishWorkerPulse(providerReady ? 'ready' : 'degraded');
-    if (!providerReady || !observation.authorized || workerShuttingDown) return;
+    const wasReady = isIVXAIConfigured() && ['PROVIDER_READY', 'FALLBACK_READY'].includes(provider.state)
+      && provider.lastHttpStatus === 200 && Number.isFinite(Date.parse(provider.lastValidationTime ?? ''));
+    const observation = await publishWorkerPulse(wasReady ? 'ready' : 'degraded');
+    if (workerShuttingDown || !await ownerQueueProviderReady(observation.authorized)) return;
+    if (!wasReady && !(await publishWorkerPulse('ready')).authorized) return;
+    if (workerShuttingDown) return;
     const claimed = await queueRpc<{ authorized: boolean; tasks: IVXOwnerAITaskRow[] }>('ivx_owner_ai_queue_claim', {
       p_worker_id: WORKER_ID, p_limit: Math.min(2, MAX_CONCURRENT_CLAIMS),
     });
@@ -841,7 +858,7 @@ export async function stopOwnerAITaskWorker(graceMs: number = SHUTDOWN_GRACE_MS)
   }
   activeHeartbeatTimers.clear();
   const outstanding = [...activeOwnerLeases.values()];
-  for (const lease of outstanding) lease.lost = true;
+  for (const lease of outstanding) loseOwnerLease(lease);
   await Promise.all(outstanding.map(lease => updateOwnerLease(lease, 'release').catch(() => {})));
   if (activeTaskCount > 0) {
     console.warn('[IVXOwnerAITaskQueue] graceful shutdown exceeded grace period', { workerId: WORKER_ID, activeTasks: activeTaskCount });
@@ -1016,27 +1033,29 @@ export async function checkQueueHealth(): Promise<HealthCheckResult> {
   const runtime = getWorkerRuntimeInfo();
   const circuit = getSupabaseCircuitState();
   if (!isTaskQueueConfigured()) return { ok: false, detail: { reason: 'queue persistence not configured', circuit, ...runtime } };
-  const [pending, dead, observedWorkers] = await Promise.all([
-    boundedHealthProbe(`${getSupabaseUrl()}/rest/v1/${TASKS_TABLE}?status=in.(QUEUED,RETRYING,RUNNING)&select=id,status,created_at&order=created_at.asc&limit=200`, restHeaders(),
-      (body): body is Array<{ id: string; status: string; created_at: string }> => Array.isArray(body) && body.length <= 200
-        && body.every(row => typeof row?.id === 'string' && ['QUEUED', 'RETRYING', 'RUNNING'].includes(row.status) && Number.isFinite(Date.parse(row.created_at)))),
-    boundedHealthProbe(`${getSupabaseUrl()}/rest/v1/${TASKS_TABLE}?dead_letter=is.true&status=eq.FAILED&select=id&limit=100`, restHeaders(),
-      (body): body is Array<{ id: string }> => Array.isArray(body) && body.length <= 100 && body.every(row => typeof row?.id === 'string')),
-    boundedHealthProbe(`${getSupabaseUrl()}/rest/v1/ivx_owner_ai_queue_workers?select=worker_id,source_sha,instance_id,state,last_seen_at&order=last_seen_at.desc&limit=10`, restHeaders(),
-      (body): body is unknown[] => Array.isArray(body) && body.length <= 10),
-  ]);
-  if (!pending.ok || !dead.ok || !observedWorkers.ok) return { ok: false, detail: { ...runtime, circuit,
-    reason: pending.error ?? dead.error ?? observedWorkers.error ?? 'Queue observation unavailable', telemetryAvailable: false,
+  type Snapshot = { authorized: boolean; pending: Array<{ id: string; status: string; created_at: string }>; dead: Array<{ id: string }>; workers: unknown[] };
+  const observation = await boundedHealthProbe(`${getSupabaseUrl()}/rest/v1/rpc/ivx_owner_ai_queue_health?p_source_sha=${encodeURIComponent(queueSourceSha())}`, restHeaders(),
+    (body): body is Snapshot => {
+      if (!body || typeof body !== 'object') return false;
+      const value = body as Snapshot;
+      return typeof value.authorized === 'boolean' && Array.isArray(value.pending) && value.pending.length <= 200
+        && value.pending.every(row => typeof row?.id === 'string' && ['QUEUED', 'RETRYING', 'RUNNING'].includes(row.status) && Number.isFinite(Date.parse(row.created_at)))
+        && Array.isArray(value.dead) && value.dead.length <= 100 && value.dead.every(row => typeof row?.id === 'string')
+        && Array.isArray(value.workers) && value.workers.length <= 10;
+    });
+  if (!observation.ok) return { ok: false, detail: { ...runtime, circuit,
+    reason: observation.error ?? 'Queue observation unavailable', telemetryAvailable: false,
     depth: null, deadLetterCount: null, saturated: null, staleQueue: null } };
-  const rows = pending.value!;
+  const snapshot = observation.value!, rows = snapshot.pending;
   const oldestAgeMinutes = rows.length ? Math.max(0, Math.round((Date.now() - Date.parse(rows[0].created_at)) / 60_000)) : 0;
   const saturated = rows.length >= 150;
   const stale = oldestAgeMinutes > 15;
-  const shared = ownerQueueWorkerReadiness(observedWorkers.value, queueSourceSha());
-  return { ok: shared.ready && !saturated && !stale && !circuit.open,
+  const shared = ownerQueueWorkerReadiness(snapshot.workers, queueSourceSha());
+  return { ok: snapshot.authorized && shared.ready && !saturated && !stale && !circuit.open,
     detail: { ...runtime, circuit, consumerScope: 'general_owner_ai', running: shared.ready, localWorkerRunning: runtime.running,
+      ownerAuthorized: snapshot.authorized,
       workers: shared.workers, workerObservationReason: shared.reason, telemetryAvailable: true, depth: rows.length, depthCapped: rows.length === 200,
-      oldestQueuedAgeMinutes: oldestAgeMinutes, deadLetterCount: dead.value!.length, deadLetterCountCapped: dead.value!.length === 100,
+      oldestQueuedAgeMinutes: oldestAgeMinutes, deadLetterCount: snapshot.dead.length, deadLetterCountCapped: snapshot.dead.length === 100,
       saturated, staleQueue: stale, alerts: computeIncidentAlerts() } };
 }
 
