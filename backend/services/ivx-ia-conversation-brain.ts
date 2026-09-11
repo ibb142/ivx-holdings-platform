@@ -19,7 +19,6 @@ export const IVX_IA_CONVERSATION_MARKER = 'ivx-ia-conversation-brain-2026-07-06'
  * Returns the question type or 'none'.
  */
 export type IVXConversationType =
-  | 'string_join'
   | 'math'
   | 'percentage'
   | 'greeting'
@@ -31,14 +30,6 @@ export type IVXConversationType =
   | 'none';
 
 export function detectIVXConversationQuestion(message: string): IVXConversationType {
-  // Deterministic exact-string composition. Owner/chat certification uses this
-  // natural-language form to prove that the live response belongs to the
-  // current request. Sending it to the LLM made the model explain that it
-  // lacked context instead of returning the joined value, even though both
-  // operands were present in the prompt. Keep the grammar intentionally narrow
-  // so ordinary prose and developer commands continue through normal routing.
-  if (parseExactJoinRequest(message) !== null) return 'string_join';
-
   const text = (message ?? '').toLowerCase().replace(/[^a-z0-9\s+\-*/=.%]/g, ' ');
   const compact = text.replace(/\s+/g, ' ').trim();
   if (!compact) return 'none';
@@ -91,14 +82,6 @@ export function detectIVXConversationQuestion(message: string): IVXConversationT
   if (compact === 'help' || compact.startsWith('help ') || compact.includes('can you help')) return 'help';
 
   return 'none';
-}
-
-function parseExactJoinRequest(message: string): string | null {
-  const match = (message ?? '').match(
-    /^\s*return\s+only\s+the\s+result\s+of\s+joining\s+([a-z0-9_:-](?:[a-z0-9_.:-]{0,126}[a-z0-9_:-])?)\s+and\s+([a-z0-9_:-](?:[a-z0-9_.:-]{0,126}[a-z0-9_:-])?)\.?\s*$/i,
-  );
-  if (!match) return null;
-  return `${match[1]}${match[2]}`;
 }
 
 /**
@@ -273,9 +256,6 @@ export function buildIVXConversationAnswer(message: string): string | null {
   const isSpanish = lang === 'es';
 
   switch (type) {
-    case 'string_join':
-      return parseExactJoinRequest(message);
-
     case 'math': {
       const result = evaluateMathQuestion(message);
       if (result === null || !isFinite(result)) return null;

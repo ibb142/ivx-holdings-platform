@@ -1,0 +1,34 @@
+name: Owner text prompt real provider
+on:
+  pull_request:
+    paths:
+      - 'backend/services/ivx-owner-text-prompt*'
+      - 'backend/services/ivx-senior-engineer-persona.ts'
+      - 'scripts/ivx-owner-text-provider-proof.ts'
+      - '.github/workflows/ivx-owner-text-provider-proof.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  candidate-prompt-real-provider:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.3.9 }
+      - run: bun install --frozen-lockfile
+      - name: Verify fresh transformations with real streaming
+        run: bun scripts/ivx-owner-text-provider-proof.ts
+        env:
+          IVX_AI_GATEWAY_KEY: ${{ secrets.IVX_AI_GATEWAY_KEY }}
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+      - name: Preserve candidate provider evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: owner-text-provider-${{ github.sha }}-${{ github.run_attempt }}
+          path: qa/evidence/owner-text/provider-proof.json
+          if-no-files-found: error
+          retention-days: 30
