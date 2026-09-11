@@ -53,7 +53,10 @@ function fakeAutonomous(
     } as unknown as AutonomousModeReport['toolAvailability'],
     plan: { blockCount: 1, blocks: [{ title: 'fake' }] },
     selfHeal: null,
-    production: null,
+    production: {
+      failureRate: 0, total: 1, failures: 0,
+      windowStartedAt: now, windowEndedAt: now, thresholdExceeded: false,
+    },
     humanApprovalRequired: false,
     approvalReason: null,
     steps: [
@@ -242,6 +245,50 @@ describe('Deploy Rule', () => {
 // ---------------------------------------------------------------------------
 
 describe('Final response format', () => {
+  it('cannot certify an optimistic executor result without production evidence', async () => {
+    const report = await runSeniorDeveloperAutonomousMode('Fix it now', {
+      executor: fakeExecutor(fakeAutonomous({ production: null })),
+      credentialStatuses: { GITHUB_TOKEN: 'present' },
+      taskId: 'task_missing_production',
+    });
+    expect(report.STATE).toBe('FAILED');
+    expect(report.BLOCKERS).toContain('Production verification missing or incomplete.');
+    expect(report.ROOT_CAUSE).not.toContain('All stages verified');
+    expect(report.NEXT_ACTION).not.toContain('verified live');
+  });
+
+  it.each(['skipped', 'failed'] as const)('cannot certify a %s production verification stage', async status => {
+    const input = fakeAutonomous();
+    input.steps = input.steps.map(stage => stage.step === 8 ? { ...stage, status } : stage);
+    const report = await runSeniorDeveloperAutonomousMode('Fix it now', {
+      executor: fakeExecutor(input), credentialStatuses: { GITHUB_TOKEN: 'present' },
+    });
+    expect(report.STATE).toBe('FAILED');
+    expect(report.BLOCKERS).toContain('Production verification missing or incomplete.');
+  });
+
+  it.each([
+    { total: -1 }, { total: Number.NaN }, { failures: -1 },
+    { failures: 2 }, { failureRate: Number.NaN }, { failureRate: 2 },
+  ])('rejects malformed production counters: %j', async counters => {
+    const input = fakeAutonomous();
+    input.production = { ...input.production!, ...counters };
+    const report = await runSeniorDeveloperAutonomousMode('Fix it now', {
+      executor: fakeExecutor(input), credentialStatuses: { GITHUB_TOKEN: 'present' },
+    });
+    expect(report.STATE).toBe('FAILED');
+    expect(report.BLOCKERS).toContain('Production verification missing or incomplete.');
+  });
+
+  it('preserves a valid empty rolling-event window after explicit production verification', async () => {
+    const input = fakeAutonomous();
+    input.production = { ...input.production!, total: 0, failures: 0, failureRate: 0 };
+    const report = await runSeniorDeveloperAutonomousMode('Fix it now', {
+      executor: fakeExecutor(input), credentialStatuses: { GITHUB_TOKEN: 'present' },
+    });
+    expect(report.STATE).toBe('VERIFIED');
+  });
+
   it('emits the exact section headers in the required order', async () => {
     const report = await runSeniorDeveloperAutonomousMode('Fix the chat scroll layout now', {
       executor: fakeExecutor(fakeAutonomous()),
