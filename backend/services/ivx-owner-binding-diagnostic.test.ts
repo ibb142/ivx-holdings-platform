@@ -66,3 +66,29 @@ test('uncertain and malformed Render reads cannot certify partial bindings', asy
   expect(result.ok).toBe(false);
   expect(JSON.stringify(result)).not.toContain('private-fixture');
 });
+
+test('the production workflow rejects wrong services and stale passwords', async () => {
+  const workflow = readFileSync(new URL('../../.github/workflows/ivx-112-owner-variable-recovery.yml', import.meta.url), 'utf8');
+  const section = workflow.split('name: Compare persisted service bindings with the live process')[1];
+  const source = section.split("node --input-type=module <<'NODE'\n")[1].split('\n          NODE')[0];
+  const run = new (Object.getPrototypeOf(async () => {}).constructor)('process', 'fetch', 'console', source);
+  const sha = 'a'.repeat(40), serviceId = 'service-fixture';
+  for (const scenario of ['valid', 'wrong-service', 'stale-password']) {
+    const processFixture = { env: { GITHUB_SHA: sha, RENDER_SERVICE_ID_RECOVERED: serviceId, OWNER_EMAIL: 'owner@example.test', IVX_OWNER_PASSWORD: 'private-password-fixture', EXPO_PUBLIC_SUPABASE_URL: 'https://auth.example.test', API_BASE: 'https://api.example.test' }, exitCode: 0 };
+    const logs: string[] = [];
+    const fetchFixture = async (url: string) => ({ ok: true, status: 200, json: async () => url.includes('/auth/v1/token')
+      ? { access_token: 'private-token-fixture', user: { email: 'owner@example.test', app_metadata: { role: 'owner' } } }
+      : { ok: true, service: { id: scenario === 'wrong-service' ? 'unrelated-service' : serviceId }, runtime: { commitSha: sha, serviceId, instanceId: 'instance-fixture' }, ownerAuthEnvPresence: Object.fromEntries(['IVX_OWNER_PASSWORD', 'OWNER_NEW_PASSWORD'].map(key => [key, { present: true, runtimePresent: true, matchesRuntime: scenario !== 'stale-password', length: 24, runtimeLength: 24 }])) } });
+    await run(processFixture, fetchFixture, { log: (message: string) => logs.push(message), error: (message: string) => logs.push(message) });
+    expect(processFixture.exitCode).toBe(scenario === 'valid' ? 0 : 1);
+    expect(logs.join('\n')).not.toContain('private-password-fixture');
+    expect(logs.join('\n')).not.toContain('private-token-fixture');
+  }
+});
+
+test('a trimmed runtime password is diagnosed without accepting it as exact', () => {
+  const rows = ownerRuntimeBindingDrift([{ key: 'IVX_OWNER_PASSWORD', value: ' opaque-fixture ' }], { IVX_OWNER_PASSWORD: 'opaque-fixture' });
+  expect(rows.IVX_OWNER_PASSWORD.matchesRuntime).toBe(false);
+  expect(rows.IVX_OWNER_PASSWORD.matchesTrimmedConfiguration).toBe(true);
+  expect(JSON.stringify(rows)).not.toContain('opaque-fixture');
+});
