@@ -56,15 +56,22 @@ tags:
     commands:
       - tapOn:
           id: "ivx-owner-chat-scroll-to-latest"
-- scrollUntilVisible:
-    element:
+# Use the real conversation search to keep this command and its eventual
+# answer in view while other owner runs append to the shared room. Scrolling
+# toward older history before the provider replies moves away from the pending
+# answer; the app correctly preserves that intentional reading position.
+# The suffix alone is not a passing answer: both assertions below still require
+# the sender role and the full joined value or full original command.
+- tapOn:
+    id: "ivx-owner-chat-search-open"
+- tapOn:
+    id: "ivx-owner-chat-search-input"
+- inputText: ${CHAT_E2E_SUFFIX}
+- hideKeyboard
+- extendedWaitUntil:
+    visible:
       id: "chat-message-body-assistant-.*"
       text: ".*IVX_CHAT_E2E_${CHAT_E2E_SUFFIX}.*"
-    # The owner room is shared. A concurrent certificate can append a newer
-    # turn after this run's reply; in the inverted FlatList the expected older
-    # reply is visually above the current tail, so search toward older rows.
-    direction: UP
-    visibilityPercentage: 50
     # The canonical Owner AI path is SSE-backed with a 180s hard ceiling.
     # Keep the assertion fail-closed while allowing one complete live stream
     # during provider/database degradation.
@@ -82,6 +89,15 @@ tags:
 - assertVisible:
     id: "chat-message-body-owner-.*"
     text: ".*Return only the result of joining IVX_CHAT_E2E_ and ${CHAT_E2E_SUFFIX}.*"
+- tapOn:
+    id: "ivx-owner-chat-search-clear"
+- runFlow:
+    when:
+      visible:
+        id: "ivx-owner-chat-scroll-to-latest"
+    commands:
+      - tapOn:
+          id: "ivx-owner-chat-scroll-to-latest"
 - assertNotVisible: "Not sent"
 - assertNotVisible: "I was unable to display this reply"
 - assertVisible:
@@ -131,14 +147,16 @@ tags:
     commands:
       - tapOn:
           id: "ivx-owner-chat-scroll-to-latest"
-- scrollUntilVisible:
-    element:
+- tapOn:
+    id: "ivx-owner-chat-search-open"
+- tapOn:
+    id: "ivx-owner-chat-search-input"
+- inputText: ${CHAT_E2E_SUFFIX}
+- hideKeyboard
+- extendedWaitUntil:
+    visible:
       id: "chat-message-body-assistant-.*"
       text: ".*IVX_CHAT_E2E_${CHAT_E2E_SUFFIX}.*"
-    # Preserve the same exact-marker search after restart even if another
-    # owner certificate appended a newer turn while this app was relaunched.
-    direction: UP
-    visibilityPercentage: 50
     timeout: 30000
 - assertVisible:
     id: "chat-message-body-assistant-.*"
@@ -153,6 +171,15 @@ tags:
 - assertVisible:
     id: "chat-message-body-owner-.*"
     text: ".*Return only the result of joining IVX_CHAT_E2E_ and ${CHAT_E2E_SUFFIX}.*"
+- tapOn:
+    id: "ivx-owner-chat-search-clear"
+- runFlow:
+    when:
+      visible:
+        id: "ivx-owner-chat-scroll-to-latest"
+    commands:
+      - tapOn:
+          id: "ivx-owner-chat-scroll-to-latest"
 - assertNotVisible: "Not sent"
 - assertNotVisible: "I was unable to display this reply"
 - assertVisible:

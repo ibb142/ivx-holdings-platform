@@ -7,7 +7,7 @@ set -euo pipefail
 
 mkdir -p qa/evidence/dashboard-chat
 
-trap 'rc=$?; adb exec-out screencap -p > qa/evidence/dashboard-chat/failure.png 2>/dev/null || true; adb logcat -d -v threadtime > qa/evidence/dashboard-chat/failure-logcat.txt 2>/dev/null || true; exit $rc' EXIT
+trap 'rc=$?; timeout 15s adb exec-out screencap -p > qa/evidence/dashboard-chat/failure.png 2>/dev/null || true; timeout 20s adb logcat -d -v threadtime > qa/evidence/dashboard-chat/failure-logcat.txt 2>/dev/null || true; exit $rc' EXIT
 
 timeout 120s adb install -r "$APK_PATH"
 timeout 30s adb wait-for-device
@@ -50,8 +50,8 @@ timeout 420s "$MAESTRO" test expo/.maestro/ivx-owner-chat-certificate.yaml \
 IVX_REUSE_AUTHENTICATED_SESSION=true bash scripts/ivx-all-routes-human-e2e.sh
 
 timeout 10s adb shell pidof com.ivxholdings.app.owner > qa/evidence/dashboard-chat/process.txt
-adb exec-out screencap -p > qa/evidence/dashboard-chat/final.png || true
-adb logcat -d -v threadtime > qa/evidence/dashboard-chat/logcat.txt || true
+timeout 15s adb exec-out screencap -p > qa/evidence/dashboard-chat/final.png || true
+timeout 20s adb logcat -d -v threadtime > qa/evidence/dashboard-chat/logcat.txt || true
 
 test -s qa/evidence/dashboard-chat/process.txt
 jq -e '.passed == true and .coveragePercent == 100' \
