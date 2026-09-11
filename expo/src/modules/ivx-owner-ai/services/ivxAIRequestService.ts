@@ -2181,7 +2181,7 @@ async function requestPublicChatFallback(
   });
   const blockerAnswer = assertCleanOwnerAIResponseText(
     isExecutionBlock
-      ? `That's an execution/task command, but your privileged owner session isn't active right now (${reason}), so I can't reach the real IVX execution engine to run it.\n\nI will NOT answer it from a different, generic engine — that would be the wrong context and would not actually run your task. Your full instruction was preserved (${payload.message.trim().length} characters) and nothing was sent or changed.\n\nTo run it: open IVX → Auth Diagnostics, tap Refresh token (or Re-authenticate), then resend the exact command.`
+      ? `That's an execution/task command, but your privileged owner session isn't active right now (${reason}), so I can't reach the real IVX execution engine to run it.\n\nI will NOT answer it from a different, generic engine — that would be the wrong context and would not actually run your task. Your full instruction was preserved (${payload.message.trim().length} characters) and the execution outcome has not been confirmed.\n\nTo run it: open IVX → Auth Diagnostics, tap Refresh token (or Re-authenticate), then resend the exact command.`
       : `Your privileged owner session isn't active right now (${reason}), so I can't reach the real IVX Owner AI to answer this.\n\nI will not substitute a generic reply from a different engine — you asked for real, end-to-end answers, so I'm telling you the truth instead of faking one.\n\nTo restore it: open IVX → Auth Diagnostics, tap Refresh token (or Re-authenticate), then resend your message.`,
   );
   await ivxOwnerMemoryService.recordConversationTurn({
@@ -2267,7 +2267,7 @@ function buildOwnerAuthFailedResponse(
   // calm, actionable line: your sign-in on THIS device needs refreshing.
   const friendlyBody =
     failure.body ??
-    `I'm online and working — but this device's owner sign-in needs to be refreshed before I can run privileged commands. Open Auth Diagnostics and tap Re-authenticate (sign in with your owner email), then send your command again. Your message was kept (${payload.message.trim().length} characters) and nothing was sent or changed.`;
+    `Owner authentication was not confirmed on this device. Open Auth Diagnostics and tap Re-authenticate (sign in with your owner email), then recover the original request in this conversation before retrying. Your message was kept (${payload.message.trim().length} characters) and the execution outcome has not been confirmed.`;
   const answer = assertCleanOwnerAIResponseText(friendlyBody);
 
   void ivxOwnerMemoryService.recordConversationTurn({
@@ -2327,7 +2327,7 @@ function buildOwnerAuthFailedResponse(
  * message naming the route, the per-POST timeout, a trace reference, and the
  * exact next fix — so `BACKEND_POST_FINISHED` completes with a real assistant
  * message instead of a silent throw. The full owner instruction is preserved
- * (character count) and nothing was sent or changed.
+ * (character count) and the execution outcome has not been confirmed.
  */
 function buildOwnerAINetworkFailedResponse(
   input: IVXOwnerAIRequest,
@@ -2364,7 +2364,7 @@ function buildOwnerAINetworkFailedResponse(
       `traceId: ${traceId}`,
       `nextFix: ${nextFix}`,
       '',
-      `I couldn't reach the IVX Owner AI backend (${failure.reason}). This is a network/connection issue, NOT an auth problem — your owner session was not rejected (no HTTP response was received). Your full instruction was preserved (${payload.message.trim().length} characters) and nothing was sent or changed. Resend when you're back online.`,
+      `I did not receive a confirmed response from the IVX Owner AI backend (${failure.reason}). No authentication verdict was received. Your full instruction was preserved (${payload.message.trim().length} characters) and the execution outcome has not been confirmed. A previous attempt may have executed. Reconnect and recover the original request before retrying.`,
     ].join('\n'),
   );
 
@@ -4599,7 +4599,7 @@ export const ivxAIRequestService = {
       `This device's cached owner session was issued by a different Supabase project than the one IVX now uses. ` +
       `I have automatically cleared the stale session on this device. ` +
       `Sign in again with your IVX owner email, then resend your command. ` +
-      `Your message was kept and nothing was sent or changed.`;
+      `Your message was kept and the execution outcome has not been confirmed.`;
     return buildOwnerAuthFailedResponse(input, {
         reason: `owner_session_required:${preflight.reason}`,
         statusCode: null,

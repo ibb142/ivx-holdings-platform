@@ -862,6 +862,8 @@ export default function IVXOwnerChatRoute() {
   const flatListRef = useRef<FlatList<IVXMessage> | null>(null);
   const composerInputRef = useRef<TextInput | null>(null);
   const composerValueRef = useRef<string>('');
+  // React Query pending state updates on the next render; native events can race it.
+  const submissionInFlightRef = useRef(false);
   const highlightedMessageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingJumpMessageIdRef = useRef<string | null>(null);
   const suppressAutoScrollUntilRef = useRef<number>(0);
@@ -4005,28 +4007,37 @@ export default function IVXOwnerChatRoute() {
     }
   }, [conversationQuery.data?.id, displayedMessages.length]);
 
-  const handleAskAI = useCallback((submittedText?: unknown) => {
-    if (sendMessageMutation.isPending || aiReplyPending || attachmentMutation.isPending || isPickingFile || !composerHasText) return;
-    const normalizedText = normalizeComposerText(submittedText, composerValueRef.current);
-    const text = safeTrim(normalizedText);
-    if (!text) {
-      console.log('[IVXOwnerChatRoute] Skipping empty AI ask after normalization');
-      return;
+  const handleAskAI = useCallback(async (submittedText?: unknown) => {
+    if (submissionInFlightRef.current || sendMessageMutation.isPending || aiReplyPending || attachmentMutation.isPending || isPickingFile || !composerHasText || !safeTrim(composerValueRef.current)) return;
+    submissionInFlightRef.current = true;
+    try {
+      const normalizedText = normalizeComposerText(submittedText, composerValueRef.current);
+      const text = safeTrim(normalizedText);
+      if (!text) {
+        console.log('[IVXOwnerChatRoute] Skipping empty AI ask after normalization');
+        return;
+      }
+      const clientId = createTransientMessageId('ivx-owner-ai-only-send');
+      const createdAt = new Date().toISOString();
+      const replyTo = selectedReplyContext;
+      setPendingOwnerMessages((current) => [...current, { clientId, text: normalizedText, createdAt, mode: 'ai_only', status: 'sending', errorMessage: null, replyTo }]);
+      setSelectedReplyContext(null);
+      console.log('[IVXOwnerChatRoute] handleAskAI explicit AI request length:', text.length, 'clientId:', clientId, 'replyTo:', replyTo?.messageId ?? null);
+      // A new owner message always starts a NEW action: replace any prior task
+      // banner with the newly detected task (or clear it when this message is not
+      // a task) so a stale "Auditing & verifying" banner can never hijack a fresh
+      // unrelated message.
+      const detectedTask = detectChatLiveWorkTask(text);
+      setActiveLiveWorkTask(detectedTask ? { ...detectedTask, startedAt: createdAt } : null);
+      commitComposerClear(normalizedText);
+      await sendMessageMutation.mutateAsync({ text, mode: 'ai_only', clientId, capturedText: normalizedText, replyTo });
+    } catch (error) {
+      // Mutation onError retains the original message and presents its error.
+      console.log('[IVXOwnerChatRoute] Submission did not complete:', error instanceof Error ? error.message : 'unknown');
+    } finally {
+      submissionInFlightRef.current = false;
     }
-    const clientId = createTransientMessageId('ivx-owner-ai-only-send');
-    const createdAt = new Date().toISOString();
-    const replyTo = selectedReplyContext;
-    setPendingOwnerMessages((current) => [...current, { clientId, text: normalizedText, createdAt, mode: 'ai_only', status: 'sending', errorMessage: null, replyTo }]);
-    setSelectedReplyContext(null);
-    console.log('[IVXOwnerChatRoute] handleAskAI explicit AI request length:', text.length, 'clientId:', clientId, 'replyTo:', replyTo?.messageId ?? null);
-    // A new owner message always starts a NEW action: replace any prior task
-    // banner with the newly detected task (or clear it when this message is not
-    // a task) so a stale "Auditing & verifying" banner can never hijack a fresh
-    // unrelated message.
-    const detectedTask = detectChatLiveWorkTask(text);
-    setActiveLiveWorkTask(detectedTask ? { ...detectedTask, startedAt: createdAt } : null);
-    sendMessageMutation.mutate({ text, mode: 'ai_only', clientId, capturedText: normalizedText, replyTo });
-  }, [aiReplyPending, attachmentMutation.isPending, composerHasText, isPickingFile, sendMessageMutation.isPending, selectedReplyContext, sendMessageMutation]);
+  }, [commitComposerClear, aiReplyPending, attachmentMutation.isPending, composerHasText, isPickingFile, sendMessageMutation.isPending, selectedReplyContext, sendMessageMutation]);
 
   const handleOpenLiveWork = useCallback((runSupabase?: boolean) => {
     const wantsSupabase = runSupabase ?? activeLiveWorkTask?.isSupabase ?? false;
@@ -4043,40 +4054,48 @@ export default function IVXOwnerChatRoute() {
     }
   }, [activeLiveWorkTask, displayedMessages]);
 
-  const handleRetryMessage = useCallback((message: ChatMessage) => {
+  const handleRetryMessage = useCallback(async (message: ChatMessage) => {
     const pendingMessage = pendingOwnerMessages.find((candidate) => candidate.clientId === message.id);
     const normalizedText = normalizeComposerText(pendingMessage?.text ?? message.text ?? '');
     const text = safeTrim(normalizedText);
     const isAttachmentRetry = pendingMessage?.mode === 'attachment' && pendingMessage.upload;
-    if (!pendingMessage || (!text && !isAttachmentRetry) || sendMessageMutation.isPending || attachmentMutation.isPending) {
+    if (submissionInFlightRef.current || !pendingMessage || (!text && !isAttachmentRetry) || sendMessageMutation.isPending || attachmentMutation.isPending) {
       console.log('[IVXOwnerChatRoute] Retry skipped:', message.id, 'hasPending:', Boolean(pendingMessage), 'busy:', sendMessageMutation.isPending || attachmentMutation.isPending);
       return;
     }
 
-    if (isAttachmentRetry && pendingMessage.upload) {
+    submissionInFlightRef.current = true;
+    try {
+      if (isAttachmentRetry && pendingMessage.upload) {
+        setPendingOwnerMessages((current) => current.map((candidate) => (
+          candidate.clientId === pendingMessage.clientId
+            ? { ...candidate, status: 'uploading', errorMessage: null, uploadProgress: 8 }
+            : candidate
+        )));
+        startUploadProgressTimer(pendingMessage.clientId);
+        console.log('[IVXOwnerChatRoute] Retrying failed owner attachment:', pendingMessage.clientId, pendingMessage.upload.name);
+        await attachmentMutation.mutateAsync({ upload: pendingMessage.upload, clientId: pendingMessage.clientId, capturedBody: normalizedText, replyTo: pendingMessage.replyTo ?? null });
+        return;
+      }
+
       setPendingOwnerMessages((current) => current.map((candidate) => (
         candidate.clientId === pendingMessage.clientId
-          ? { ...candidate, status: 'uploading', errorMessage: null, uploadProgress: 8 }
+          ? { ...candidate, status: 'sending', errorMessage: null }
           : candidate
       )));
-      startUploadProgressTimer(pendingMessage.clientId);
-      console.log('[IVXOwnerChatRoute] Retrying failed owner attachment:', pendingMessage.clientId, pendingMessage.upload.name);
-      attachmentMutation.mutate({ upload: pendingMessage.upload, clientId: pendingMessage.clientId, capturedBody: normalizedText, replyTo: pendingMessage.replyTo ?? null });
-      return;
+      console.log('[IVXOwnerChatRoute] Retrying failed owner message:', pendingMessage.clientId, 'mode:', pendingMessage.mode);
+      await sendMessageMutation.mutateAsync({
+        text,
+        mode: pendingMessage.mode as 'send_only' | 'send_and_ai' | 'ai_only',
+        clientId: pendingMessage.clientId,
+        capturedText: normalizedText,
+        replyTo: pendingMessage.replyTo ?? null});
+    } catch (error) {
+      // Mutation onError retains the original message and presents its error.
+      console.log('[IVXOwnerChatRoute] Submission did not complete:', error instanceof Error ? error.message : 'unknown');
+    } finally {
+      submissionInFlightRef.current = false;
     }
-
-    setPendingOwnerMessages((current) => current.map((candidate) => (
-      candidate.clientId === pendingMessage.clientId
-        ? { ...candidate, status: 'sending', errorMessage: null }
-        : candidate
-    )));
-    console.log('[IVXOwnerChatRoute] Retrying failed owner message:', pendingMessage.clientId, 'mode:', pendingMessage.mode);
-    sendMessageMutation.mutate({
-      text,
-      mode: pendingMessage.mode as 'send_only' | 'send_and_ai' | 'ai_only',
-      clientId: pendingMessage.clientId,
-      capturedText: normalizedText,
-      replyTo: pendingMessage.replyTo ?? null});
   }, [attachmentMutation, sendMessageMutation.isPending, pendingOwnerMessages, sendMessageMutation, startUploadProgressTimer]);
 
   /**
@@ -4307,71 +4326,79 @@ export default function IVXOwnerChatRoute() {
     }
   }, [assistantReplyMutation, attachmentMutation, draftAttachments, selectedReplyContext, startUploadProgressTimer]);
 
-  const handleSend = useCallback((submittedText?: unknown) => {
+  const handleSend = useCallback(async (submittedText?: unknown) => {
     const tapAt = new Date().toISOString();
     console.log('[IVX_TRACE] 0_TAP_ENTER', { tapAt, sendPending: sendMessageMutation.isPending, attachPending: attachmentMutation.isPending, isPickingFile, draftAttachments: draftAttachments.length, composerHasText });
     ivxAIWatchdog.recordTap({ tapAt });
-    if (sendMessageMutation.isPending || attachmentMutation.isPending || isPickingFile) {
+    if (submissionInFlightRef.current || sendMessageMutation.isPending || attachmentMutation.isPending || isPickingFile) {
       console.log('[IVX_TRACE] 0_TAP_BLOCKED_BUSY', { sendPending: sendMessageMutation.isPending, attachPending: attachmentMutation.isPending, isPickingFile });
       ivxAIWatchdog.recordTapBlocked('busy', { sendPending: sendMessageMutation.isPending, attachPending: attachmentMutation.isPending, isPickingFile });
       return;
     }
-    if (draftAttachments.length > 0) {
-      void sendDraftAttachment();
-      return;
+    submissionInFlightRef.current = true;
+    try {
+      if (draftAttachments.length > 0) {
+        await sendDraftAttachment();
+        return;
+      }
+      if (!composerHasText || !safeTrim(composerValueRef.current)) {
+        console.log('[IVX_TRACE] 0_TAP_BLOCKED_NO_TEXT', {});
+        ivxAIWatchdog.recordTapBlocked('no_text', {});
+        return;
+      }
+      const normalizedText = normalizeComposerText(submittedText, composerValueRef.current);
+      const text = safeTrim(normalizedText);
+      if (!text) {
+        console.log('[IVX_TRACE] 0_TAP_BLOCKED_EMPTY_NORMALIZED', {});
+        ivxAIWatchdog.recordTapBlocked('empty_after_normalize', {});
+        return;
+      }
+      const isCommand = !localFirstChatMode && text.startsWith(OWNER_COMMAND_PREFIX);
+      const mode = isCommand ? 'send_only' : 'send_and_ai';
+      const clientId = createTransientMessageId('ivx-owner-local-send');
+      const createdAt = new Date().toISOString();
+      const replyTo = selectedReplyContext;
+      setPendingOwnerMessages((current) => [...current, { clientId, text: normalizedText, createdAt, mode, status: 'sending', errorMessage: null, replyTo }]);
+      setSelectedReplyContext(null);
+      // Create a watchdog trace for this send. Each checkpoint will be reported
+      // as the lifecycle progresses; if any fails or the trace stalls past 10s,
+      // a BLOCKED/SILENT_FAILURE report is published to the in-app drawer + banner.
+      const watchdogTrace = ivxAIWatchdog.createTrace({
+        userMessageId: clientId,
+        userText: text,
+        conversationId: conversationQuery.data?.id ?? null});
+      activeWatchdogTracesRef.current.set(watchdogTrace.traceId, watchdogTrace);
+      // Activate staged timeout banner for AI-bearing modes
+      if (mode !== 'send_only') {
+        stagedTimeoutStartRef.current = Date.now();
+        setStagedTimeoutTraceId(watchdogTrace.traceId);
+        setStagedTimeoutMessageId(clientId);
+        setStagedTimeoutRequestStarted(false);
+        setStagedTimeoutLastCheckpoint('SEND_TAP');
+      }
+      watchdogTrace.pass('SEND_TAP', `mode=${mode} length=${text.length}`, { clientId, isCommand });
+      watchdogTrace.pass('USER_ROW_INSERTED', `pending clientId=${clientId}`, { clientId });
+      console.log('[IVX_TRACE] 1_SEND_TAP', { mode, isCommand, clientId, textLength: text.length, localFirstChatMode, traceId: watchdogTrace.traceId });
+      console.log('[IVX_TRACE] 2_USER_ROW_INSERTED', { clientId, pendingCountAfter: 'see next render', traceId: watchdogTrace.traceId });
+      console.log('[IVXOwnerChatRoute] handleSend mode:', mode, 'isCommand:', isCommand, 'aiReachable:', aiReachableRef.current, 'length:', text.length, 'clientId:', clientId, 'replyTo:', replyTo?.messageId ?? null);
+      // A new owner message always starts a NEW action: replace any prior task
+      // banner with the newly detected task (or clear it when this message is not
+      // a task) so a stale "Auditing & verifying" banner can never hijack a fresh
+      // unrelated message.
+      const detectedTask = detectChatLiveWorkTask(text);
+      setActiveLiveWorkTask(detectedTask ? { ...detectedTask, startedAt: createdAt } : null);
+      // FIX: Clear the composer IMMEDIATELY before firing the mutation so the user
+      // can start typing their next message right away. The previous code only
+      // cleared the composer in sendMessageMutation.onSuccess, which fires AFTER
+      // the entire send+AI round trip — potentially 90s later.
+      commitComposerClear(normalizedText);
+      await sendMessageMutation.mutateAsync({ text, mode: mode as 'send_only' | 'send_and_ai', clientId, capturedText: normalizedText, replyTo, watchdogTraceId: watchdogTrace.traceId });
+    } catch (error) {
+      // Mutation onError retains the original message and presents its error.
+      console.log('[IVXOwnerChatRoute] Submission did not complete:', error instanceof Error ? error.message : 'unknown');
+    } finally {
+      submissionInFlightRef.current = false;
     }
-    if (!composerHasText) {
-      console.log('[IVX_TRACE] 0_TAP_BLOCKED_NO_TEXT', {});
-      ivxAIWatchdog.recordTapBlocked('no_text', {});
-      return;
-    }
-    const normalizedText = normalizeComposerText(submittedText, composerValueRef.current);
-    const text = safeTrim(normalizedText);
-    if (!text) {
-      console.log('[IVX_TRACE] 0_TAP_BLOCKED_EMPTY_NORMALIZED', {});
-      ivxAIWatchdog.recordTapBlocked('empty_after_normalize', {});
-      return;
-    }
-    const isCommand = !localFirstChatMode && text.startsWith(OWNER_COMMAND_PREFIX);
-    const mode = isCommand ? 'send_only' : 'send_and_ai';
-    const clientId = createTransientMessageId('ivx-owner-local-send');
-    const createdAt = new Date().toISOString();
-    const replyTo = selectedReplyContext;
-    setPendingOwnerMessages((current) => [...current, { clientId, text: normalizedText, createdAt, mode, status: 'sending', errorMessage: null, replyTo }]);
-    setSelectedReplyContext(null);
-    // Create a watchdog trace for this send. Each checkpoint will be reported
-    // as the lifecycle progresses; if any fails or the trace stalls past 10s,
-    // a BLOCKED/SILENT_FAILURE report is published to the in-app drawer + banner.
-    const watchdogTrace = ivxAIWatchdog.createTrace({
-      userMessageId: clientId,
-      userText: text,
-      conversationId: conversationQuery.data?.id ?? null});
-    activeWatchdogTracesRef.current.set(watchdogTrace.traceId, watchdogTrace);
-    // Activate staged timeout banner for AI-bearing modes
-    if (mode !== 'send_only') {
-      stagedTimeoutStartRef.current = Date.now();
-      setStagedTimeoutTraceId(watchdogTrace.traceId);
-      setStagedTimeoutMessageId(clientId);
-      setStagedTimeoutRequestStarted(false);
-      setStagedTimeoutLastCheckpoint('SEND_TAP');
-    }
-    watchdogTrace.pass('SEND_TAP', `mode=${mode} length=${text.length}`, { clientId, isCommand });
-    watchdogTrace.pass('USER_ROW_INSERTED', `pending clientId=${clientId}`, { clientId });
-    console.log('[IVX_TRACE] 1_SEND_TAP', { mode, isCommand, clientId, textLength: text.length, localFirstChatMode, traceId: watchdogTrace.traceId });
-    console.log('[IVX_TRACE] 2_USER_ROW_INSERTED', { clientId, pendingCountAfter: 'see next render', traceId: watchdogTrace.traceId });
-    console.log('[IVXOwnerChatRoute] handleSend mode:', mode, 'isCommand:', isCommand, 'aiReachable:', aiReachableRef.current, 'length:', text.length, 'clientId:', clientId, 'replyTo:', replyTo?.messageId ?? null);
-    // A new owner message always starts a NEW action: replace any prior task
-    // banner with the newly detected task (or clear it when this message is not
-    // a task) so a stale "Auditing & verifying" banner can never hijack a fresh
-    // unrelated message.
-    const detectedTask = detectChatLiveWorkTask(text);
-    setActiveLiveWorkTask(detectedTask ? { ...detectedTask, startedAt: createdAt } : null);
-    // FIX: Clear the composer IMMEDIATELY before firing the mutation so the user
-    // can start typing their next message right away. The previous code only
-    // cleared the composer in sendMessageMutation.onSuccess, which fires AFTER
-    // the entire send+AI round trip — potentially 90s later.
-    commitComposerClear(normalizedText);
-    sendMessageMutation.mutate({ text, mode: mode as 'send_only' | 'send_and_ai', clientId, capturedText: normalizedText, replyTo, watchdogTraceId: watchdogTrace.traceId });
   }, [attachmentMutation.isPending, commitComposerClear, composerHasText, draftAttachments.length, isPickingFile, localFirstChatMode, sendMessageMutation.isPending, selectedReplyContext, sendDraftAttachment, sendMessageMutation]);
 
   const handleStartReplyToMessage = useCallback((message: ChatMessage) => {

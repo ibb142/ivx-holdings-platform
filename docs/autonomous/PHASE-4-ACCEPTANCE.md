@@ -135,3 +135,12 @@ terminal replay, and preserved message links. The PostgreSQL proof uses two clie
 only against the explicit local `ivx_ha_test` database and is an additional CI step.
 An embedded PostgreSQL run does not prove separate production replicas or a restored
 backup. The request ledger is now part of the required 17.5 restoration inventory.
+
+
+### Submission races and direct streaming route
+
+The owner composer now takes a synchronous guard shared by Send, Ask AI, attachment batches and retries before creating a new message identity. It releases the guard on success or error, ignores events for an already-cleared draft, and keeps the original ID for an explicit retry. Eleven tests execute the actual callbacks with pending state held at its pre-render value; they are not browser evidence.
+
+The direct `/api/ivx/owner-ai/stream` route now uses the same owner/message admission store. A stable requestId is required. Deltas remain progressive, but `done` is delivered only after the response receipt is durable. Reconnection replays that result without a second provider call. `receiptPersisted` is separate from `assistantPersisted`: this direct route does not claim to insert conversation messages. Known authentication outage status is preserved as 503 rather than mislabeled 403. Ten endpoint tests cover admission, replay, real-time fixture deltas, persistence failure, disconnect, ownership and provider errors. They use a simulated provider and storage adapter; live owner/provider acceptance remains required.
+
+A missing network response does not establish that nothing executed. Recovery notices preserve that uncertainty and direct the owner to the original request instead of asserting that a retry cannot duplicate work.
