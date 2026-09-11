@@ -1,0 +1,38 @@
+name: Phase 1 read-only Postgres diagnostic
+on:
+  push:
+    branches: [fix/phase1-supabase-diagnostics-20260911]
+    paths:
+      - '.github/workflows/phase1-postgres-audit.yml'
+      - 'scripts/ops/phase1-postgres-audit*.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: phase1-postgres-read-only-diagnostic
+  cancel-in-progress: false
+jobs:
+  audit:
+    if: github.repository == 'ibb142/ivx-holdings-platform'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Verify target, read-only execution and output redaction
+        run: node --test scripts/ops/phase1-postgres-audit.test.mjs
+      - name: Inspect one existing same-project database connection
+        env:
+          PROJECT_REF: kvclcdjmjghndxsngfzb
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+          SUPABASE_POOLER_URL: ${{ secrets.SUPABASE_POOLER_URL }}
+        run: node scripts/ops/phase1-postgres-audit.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase1-postgres-audit
+          path: phase1-postgres-audit.json
+          if-no-files-found: error
