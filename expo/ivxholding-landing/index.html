@@ -235,7 +235,7 @@
 (function(){
   var v = document.getElementById('homeFeedReel');
   if (!v) return;
-  var busy = false, retryButton = null;
+  var busy = false, retryButton = null, deadline = 0;
   function showRetry() {
     busy = false;
     if (!retryButton) {
@@ -273,8 +273,10 @@
     var p = v.play && v.play(); if (p && p.catch) p.catch(function(){});
   }
   function attempt(number) {
+    var remaining = deadline - Date.now();
+    if (remaining <= 0) { showRetry(); return; }
     var controller = new AbortController();
-    var timer = setTimeout(function(){ controller.abort(); }, 4000);
+    var timer = setTimeout(function(){ controller.abort(); }, remaining);
     return fetch('https://api.ivxholding.com/api/reels', {headers:{'Accept':'application/json'},signal:controller.signal})
       .then(function(r){
         if (!r.ok) {
@@ -290,11 +292,17 @@
         var first = null;
         for (var i=0;i<list.length;i++){ if (list[i] && list[i].video_url) { first = list[i]; break; } }
         if (!first) { showRetry(); return; }
+        // Reuse this anonymous response if the modal's next request times out.
+        // Page memory only: the consumer enforces a 30-second freshness limit.
+        if (Array.isArray(d.videos) && d.videos.length <= 50 && d.personalized === false
+          && !d.channel && d.feed_type === 'unified' && d.ordering === 'canonical-unified-v2') {
+          window.__ivxPublicReels = { at: Date.now(), data: JSON.parse(JSON.stringify(d)) };
+        }
         attach(first);
       })
       .catch(function(error){
         clearTimeout(timer);
-        if (number < 2 && error.retryable !== false) {
+        if (number < 1 && error.retryable !== false && Date.now() < deadline) {
           setTimeout(function(){ attempt(number + 1); }, 500 * (number + 1));
         } else showRetry();
       });
@@ -302,6 +310,7 @@
   function start() {
     if (busy) return;
     busy = true;
+    deadline = Date.now() + 18000;
     hideRetry();
     attempt(0);
   }
