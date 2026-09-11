@@ -1,5 +1,7 @@
 import { sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult, readSharedSeniorDocument, readSharedSeniorJob, appendSharedSeniorProofEvent } from './ivx-senior-shared-queue';
 import { createSeniorJobAdmission } from './ivx-senior-job-admission';
+import { configuredAdmissionLimit } from './ivx-fleet-admission-policy';
+import { registerSeniorExecutionMetrics } from './ivx-fleet-execution-metrics';
 /**
  * IVX Self-Hosted Senior Developer Worker — removes the external platform dependency as the
  * code EXECUTOR.
@@ -442,7 +444,14 @@ let draining = false;
 let queueStopping = false;
 
 /** Active job callbacks for cancel signaling. */
-const activeJobControllers = new Map<string, { cancelled: boolean; interrupted?: boolean }>();
+const activeJobControllers = new Map<string, { cancelled: boolean; interrupted?: boolean; executionMode?: string }>();
+registerSeniorExecutionMetrics(() => {
+  const modes = [...activeJobControllers.values()].map(c => c.executionMode);
+  return { activeRepairs: modes.filter(m => m === 'code_change' || m === 'deploy' || m === 'factory').length,
+    activeQA: modes.filter(m => m === 'qa_only').length, activeInspections: modes.filter(m => m === 'read_only').length,
+    activeUnclassified: modes.filter(m => !['code_change', 'deploy', 'factory', 'qa_only', 'read_only'].includes(m ?? '')).length,
+    configuredSlots: getWorkerMaxConcurrency() };
+});
 
 /**
  * Bounded-concurrent drain support (2026-08-22): in-process claim registry so
@@ -454,8 +463,7 @@ const claimedJobIds = new Set<string>();
 
 /** Max concurrent senior-developer job executions (configurable, bounded). */
 export function getWorkerMaxConcurrency(): number {
-  const raw = Number.parseInt(process.env.IVX_WORKER_MAX_CONCURRENCY ?? '', 10);
-  return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 112) : 112;
+  return configuredAdmissionLimit(process.env.IVX_WORKER_MAX_CONCURRENCY, 12);
 }
 
 /**
@@ -1225,6 +1233,7 @@ async function recoverStuckCiWaitJobs(queue: QueueDoc): Promise<void> {
     && !activeCiResumeJobIds.has(j.jobId));
   if (candidates.length === 0) return;
   for (const job of candidates) {
+    if (new Set([...claimedJobIds, ...activeCiResumeJobIds]).size >= getWorkerMaxConcurrency()) break;
     activeCiResumeJobIds.add(job.jobId);
     void resumeCiWaitJob(job.jobId).catch(() => {}).finally(() => {
       activeCiResumeJobIds.delete(job.jobId);
@@ -1248,7 +1257,7 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     job = claimed; claimedJobIds.add(jobId);
   }
   const controller: { cancelled: boolean; interrupted?: boolean } = { cancelled: queueStopping, interrupted: queueStopping };
-  activeJobControllers.set(jobId, controller);
+  activeJobControllers.set(jobId, Object.assign(controller, { executionMode: job.input.executionMode }));
   const heartbeat = sharedSeniorQueueEnabled() ? setInterval(() => {
     if (!controller.cancelled) void updateJob(jobId, { lastHeartbeatAt: nowIso() }, true).catch(() => { controller.interrupted = true; controller.cancelled = true; });
   }, 20_000) : null;
@@ -2257,6 +2266,7 @@ function phaseToStage(phase: string): { stage: IVXWorkerJobStage; detail: string
 const admitSeniorJob = createSeniorJobAdmission<IVXWorkerJob>({
   read: loadQueue, claimed: claimedJobIds, active: ACTIVE_STATUSES,
   staleAfterMs: STALE_JOB_TIMEOUT_MS, stopped: () => queueStopping,
+  availableSlots: () => getWorkerMaxConcurrency() - new Set([...claimedJobIds, ...activeCiResumeJobIds]).size,
   claim: job => sharedSeniorQueueEnabled() ? claimSharedSeniorJob<IVXWorkerJob>(job.jobId) : Promise.resolve(job),
 });
 
@@ -2266,7 +2276,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
 
   const controller: { cancelled: boolean; interrupted?: boolean } = { cancelled: queueStopping, interrupted: queueStopping };
   let leaseHeartbeat: ReturnType<typeof setInterval> | null = null;
-  activeJobControllers.set(job.jobId, controller);
+  activeJobControllers.set(job.jobId, Object.assign(controller, { executionMode: job.input.executionMode }));
   try {
   // FINAL MANDATE Phase 1: owner emergency stop halts queued jobs before execution.
   const emergencyStop = await checkEmergencyStop();
@@ -2972,6 +2982,7 @@ export async function drainSeniorDeveloperQueue(): Promise<void> {
     await expireStaleJobs();
 
     const maxConcurrent = getWorkerMaxConcurrency();
+    if (maxConcurrent === 0) return;
     for (let processed = 0; !queueStopping && processed < MAX_QUEUE_RETAINED; processed += maxConcurrent) {
       const batch: Array<Promise<IVXWorkerJobResult | null>> = [];
       for (let i = 0; i < maxConcurrent; i += 1) {
@@ -3059,10 +3070,12 @@ export function buildSeniorDeveloperWorkerStatus(): Record<string, unknown> {
     perOwnerSingleFlight: true,
     uptimeSeconds: Math.floor(uptimeMs / 1000),
     concurrency: {
-      globalExecutionSlots: 1,
-      independentRuntimeCount: 0,
-      classification: 'SHARED_WORKER_WITH_ROLE',
-      note: 'The current worker is intentionally single-flight until isolated runtime leases are deployed and evidenced.',
+      scope: 'process',
+      configuredExecutionSlots: getWorkerMaxConcurrency(),
+      activeExecutions: activeJobControllers.size,
+      reservedJobs: new Set([...claimedJobIds, ...activeCiResumeJobIds]).size,
+      classification: 'BOUNDED_WORKER_WITH_OWNER_LEASES',
+      note: 'These are local execution slots. Independent owners may run concurrently; shared PostgreSQL claims preserve per-owner single-flight.',
     },
     heartbeatTracking: true,
     staleJobTimeoutMs: STALE_JOB_TIMEOUT_MS,

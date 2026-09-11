@@ -23,8 +23,16 @@ export function verifiedPatrolObservations(rows: readonly PatrolObservation[], s
         || !Number.isFinite(start) || !Number.isFinite(end) || !Number.isFinite(stored)
         || start > end || end > stored || stored > now || now - end > PATROL_OBSERVATION_MAX_AGE_MS
         || now - stored > PATROL_OBSERVATION_MAX_AGE_MS) continue;
+      const sourceTime = typeof record.source_observed_at === 'string' ? Date.parse(record.source_observed_at) : NaN;
+      const sourceObservedAt = Number.isFinite(sourceTime) && sourceTime <= end ? record.source_observed_at : null;
+      const a = record.activity;
+      const activity = a?.category === 'qa' && Number.isFinite(a.active_seconds) && a.active_seconds >= 0
+        && Number.isFinite(a.waiting_seconds) && a.waiting_seconds >= 0
+        && (a.active_seconds + a.waiting_seconds) * 1000 <= end - start + 1
+        ? { category: 'qa' as const, activeSeconds: a.active_seconds, waitingSeconds: a.waiting_seconds } : null;
       result.set(agent, { taskId: row.task_id, evidenceId: evidence.evidenceId, outcome: record.status,
         source: evidence.source, contentHash: evidence.contentHash, commitSha: sha,
+        sourceObservedAt, activity,
         startedAt: record.started_at, completedAt: record.completed_at, recordedAt: evidence.createdAt });
     } catch { /* Malformed evidence remains unverified. */ }
   }

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { buildFleetDashboardSignals, createFleetDashboardReader } from './ivx-fleet-dashboard-signals';
-import { visibleFleetSignals } from '../../expo/shared/ivx/fleet-signals';
+import { fleetActivityLabel, patrolSourceFreshness, visibleFleetSignals } from '../../expo/shared/ivx/fleet-signals';
 
 const sha = 'a'.repeat(40), now = Date.parse('2026-09-11T00:00:00Z');
 function fixture(status = 'PASS') {
@@ -72,4 +72,32 @@ test('duplicate identities and fabricated totals cannot pass observation validat
   const signals = buildFleetDashboardSignals(fixture(), sha, now);
   expect(visibleFleetSignals({ ...signals, counts: { ...signals.counts, observed: 112 } }, now)).toBeNull();
   expect(visibleFleetSignals(signals, now + 15001)).toBeNull();
+});
+
+test('newly persisted QA cannot refresh an old source or invent missing timing', () => {
+  const raw = fixture('BLOCKED'), evidence = raw.patrolObservations[0].evidence;
+  const record = JSON.parse(evidence.summary.slice('LANDING_P0_RESULT '.length));
+  record.source_observed_at = new Date(now - 61_000).toISOString();
+  record.activity = { category: 'qa', active_seconds: 0.25, waiting_seconds: 0.75 };
+  evidence.summary = 'LANDING_P0_RESULT ' + JSON.stringify(record);
+  evidence.contentHash = createHash('sha256').update(evidence.summary).digest('hex');
+  const signal = buildFleetDashboardSignals(raw, sha, now).agents[6];
+  expect(signal.observation?.outcome).toBe('BLOCKED');
+  expect(patrolSourceFreshness(signal.observation, now)).toBe('STALE');
+  expect(signal.observation?.activity).toEqual({ category: 'qa', activeSeconds: 0.25, waitingSeconds: 0.75 });
+  expect(fleetActivityLabel(signal)).toBe('QA BLOCKED');
+  const legacy = buildFleetDashboardSignals(fixture(), sha, now).agents[6].observation;
+  expect(patrolSourceFreshness(legacy, now)).toBe('UNKNOWN');
+  expect(legacy?.activity).toBeNull();
+  expect(patrolSourceFreshness({ ...legacy!, sourceObservedAt: new Date(now - 20_000).toISOString() }, now)).toBe('FRESH');
+  expect(patrolSourceFreshness({ ...legacy!, sourceObservedAt: new Date(now + 1).toISOString() }, now)).toBe('UNKNOWN');
+});
+
+test('reported QA and waiting cannot exceed the measured observation interval', () => {
+  const raw = fixture(), evidence = raw.patrolObservations[0].evidence;
+  const record = JSON.parse(evidence.summary.slice('LANDING_P0_RESULT '.length));
+  record.activity = { category: 'qa', active_seconds: 112, waiting_seconds: 1 };
+  evidence.summary = 'LANDING_P0_RESULT ' + JSON.stringify(record);
+  evidence.contentHash = createHash('sha256').update(evidence.summary).digest('hex');
+  expect(buildFleetDashboardSignals(raw, sha, now).agents[6].observation?.activity).toBeNull();
 });
