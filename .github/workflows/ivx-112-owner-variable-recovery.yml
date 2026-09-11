@@ -151,10 +151,13 @@ jobs:
             const keys = ['OWNER_NEW_PASSWORD','IVX_OWNER_PASSWORD','IVX_OWNER_EMAIL','EXPO_PUBLIC_SUPABASE_URL','SUPABASE_URL','EXPO_PUBLIC_SUPABASE_ANON_KEY','SUPABASE_ANON_KEY'];
             const bindings = Object.fromEntries(keys.map(key => {
               const row = diagnostic.ownerAuthEnvPresence?.[key];
-              return [key, { configured: row?.present === true, runtimePresent: row?.runtimePresent === true, matchesRuntime: typeof row?.matchesRuntime === 'boolean' ? row.matchesRuntime : null }];
+              return [key, { configured: row?.present === true, runtimePresent: row?.runtimePresent === true, configuredLength: row?.length ?? null, runtimeLength: row?.runtimeLength ?? null, matchesRuntime: typeof row?.matchesRuntime === 'boolean' ? row.matchesRuntime : null, matchesTrimmedConfiguration: row?.matchesTrimmedConfiguration ?? null }];
             }));
-            console.log(JSON.stringify({ sourceSha: process.env.GITHUB_SHA, runtimeSha: diagnostic.runtime?.commitSha ?? null, bindings, secretValuesReturned: false }));
+            console.log(JSON.stringify({ sourceSha: process.env.GITHUB_SHA, runtimeSha: diagnostic.runtime?.commitSha ?? null, serviceId: diagnostic.service?.id ?? null, runtimeServiceId: diagnostic.runtime?.serviceId ?? null, instanceId: diagnostic.runtime?.instanceId ?? null, bindings, secretValuesReturned: false }));
             if (!diagnostic.ok || diagnostic.runtime?.commitSha !== process.env.GITHUB_SHA) throw new Error('Exact runtime diagnostic not verified');
+            const expectedService = process.env.RENDER_SERVICE_ID_RECOVERED || process.env.DEFAULT_RENDER_SERVICE_ID;
+            if (!expectedService || diagnostic.service?.id !== expectedService || diagnostic.runtime?.serviceId !== expectedService) throw new Error('Runtime diagnostic service identity mismatch');
+            if (!['OWNER_NEW_PASSWORD', 'IVX_OWNER_PASSWORD'].every(key => bindings[key].matchesRuntime === true)) throw new Error('Runtime diagnostic owner password drift');
           } catch (error) {
             console.error(error instanceof Error && /^(Diagnostic owner|Runtime diagnostic|Exact runtime)/.test(error.message) ? error.message : 'Runtime binding diagnostic unavailable');
             process.exitCode = 1;
