@@ -379,9 +379,14 @@ export async function readPostgresCurrentTasks(states: readonly TaskState[]): Pr
 }
 
 async function fetchPostgresCurrentTasks(unique: TaskState[], purpose: PoolPurpose = 'tasks'): Promise<Task[]> {
+  // Inactive BLOCKED history contributes to none of the SLO counters. Filter it
+  // before LIMIT so historical failures cannot crowd out current lease evidence.
+  // Recovery/task callers still receive blocked work for their own inspection.
+  const sloPredicate = purpose === 'telemetry'
+    ? " and (state <> 'BLOCKED' or (lease_holder is not null and lease_expires_at > now()))" : '';
   const directRead = async () => {
     const pool = getDirectPool(process.env, purpose);
-    const sql = 'select payload from public.ivx_autonomous_tasks where state = any($1::text[]) order by updated_at desc limit 1000';
+    const sql = 'select payload from public.ivx_autonomous_tasks where state = any($1::text[])' + sloPredicate + ' order by updated_at desc limit 1000';
     const result = purpose === 'telemetry'
       ? await queryWithPostgresDeadline<RestTaskRow>(pool, sql, [unique])
       : await pool.query<RestTaskRow>(sql, [unique]);
@@ -391,7 +396,9 @@ async function fetchPostgresCurrentTasks(unique: TaskState[], purpose: PoolPurpo
   if (preferDirectTransport()) return directRead();
   try {
     const stateFilter = `(${unique.join(',')})`;
-    const rows = await restRequest<RestTaskRow[]>(`ivx_autonomous_tasks?select=payload&state=in.${stateFilter}&order=updated_at.desc&limit=1000`, { method: 'GET' }, { timeoutMs: TRUTH_TIMEOUT_MS, attempts: 3 });
+    const sloFilter = purpose === 'telemetry'
+      ? `&or=(state.neq.BLOCKED,and(lease_holder.not.is.null,lease_expires_at.gt.${new Date().toISOString()}))` : '';
+    const rows = await restRequest<RestTaskRow[]>(`ivx_autonomous_tasks?select=payload&state=in.${stateFilter}${sloFilter}&order=updated_at.desc&limit=1000`, { method: 'GET' }, { timeoutMs: TRUTH_TIMEOUT_MS, attempts: 3 });
     if (!Array.isArray(rows)) throw new Error('postgres_atomic current-task response is not an array');
     if (rows.length >= 1_000) throw new Error('postgres_atomic current-task response reached its safety limit; telemetry is incomplete');
     return rows.map((row) => structuredClone(row.payload));
