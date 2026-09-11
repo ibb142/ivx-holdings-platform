@@ -24,6 +24,8 @@
  *      status degrades to PENDING — NEVER to GREEN (fail-closed).
  */
 
+import { createHash } from 'node:crypto';
+
 export const IVX_GLOBAL_CERTIFICATION_SUPERVISOR_MARKER =
   'ivx-global-certification-supervisor-v1-2026-08-28';
 
@@ -445,6 +447,7 @@ export type RepairDispatchResult = {
   jobId: string | null;
   attached: boolean;
   detail: string;
+  deferred?: boolean;
 };
 
 const recentDispatches = new Map<string, { at: number; jobId: string }>();
@@ -456,19 +459,31 @@ const REPAIR_DEDUPE_TTL_MS = 30 * 60_000;
  * (strict safe-patch gate), but production git deploy stays owner-gated and
  * high-risk operations keep their existing owner gates (owner rule 9).
  */
-export async function dispatchRepairMission(mission: RepairMission): Promise<RepairDispatchResult> {
+export async function dispatchRepairMission(mission: RepairMission, mayDispatch: () => boolean = () => true): Promise<RepairDispatchResult> {
+  const stopped = (): RepairDispatchResult => ({ workflow: mission.workflow, dispatched: false,
+    jobId: null, attached: false, deferred: true, detail: 'Supervisor stopped before dispatch.' });
+  if (!mayDispatch()) return stopped();
   const dedupeKey = `${mission.workflow}:${mission.mainSha}`;
   const recent = recentDispatches.get(dedupeKey);
   if (recent && Date.now() - recent.at < REPAIR_DEDUPE_TTL_MS) {
     return { workflow: mission.workflow, dispatched: false, jobId: recent.jobId, attached: true, detail: 'Repair mission already open for this workflow+SHA (dedupe window).' };
   }
   try {
-    const { enqueueOrAttachSeniorDeveloperJob } = await import('./ivx-senior-developer-worker');
+    if (!/^[a-f0-9]{40}$/i.test(mission.mainSha)) throw new Error('Full MAIN SHA is required for a repair identity.');
+    const taskId = `global-supervisor:${mission.mainSha}:${createHash('sha256').update(mission.workflow).digest('hex')}`;
+    const ownerId = 'machine:autonomous-global-supervisor';
+    const { enqueueOrAttachSeniorDeveloperJob, getActiveJobForOwner } = await import('./ivx-senior-developer-worker');
+    const active = await getActiveJobForOwner(ownerId);
+    if (active && active.input.taskId !== taskId) {
+      return { workflow: mission.workflow, dispatched: false, jobId: null, attached: false, deferred: true,
+        detail: 'Supervisor owner already has active work; this workflow waits without claiming its evidence.' };
+    }
     const { IVX_SAFE_PATCH_CONFIRM_TEXT } = await import('./ivx-senior-developer-runtime');
+    if (!mayDispatch()) return stopped();
     const result = await enqueueOrAttachSeniorDeveloperJob({
       goal:
-        `AUTONOMOUS GLOBAL SUPERVISOR — REPAIR MISSION for required certification workflow "${mission.workflow}". ` +
-        `Failure: ${mission.conclusion} (GitHub Actions run ${mission.runId ?? 'n/a'}) on MAIN ${mission.mainSha.slice(0, 9)}. ` +
+        `[TEMPLATE_MODE:BUG_FIX] [AUTONOMOUS_DIAGNOSTIC_DATA] AUTONOMOUS GLOBAL SUPERVISOR — REPAIR MISSION for required certification workflow "${mission.workflow}". ` +
+        `Failure: ${mission.conclusion} (GitHub Actions run ${mission.runId ?? 'n/a'}) on MAIN ${mission.mainSha}. ` +
         'Steps: (1) retrieve the failed job and its logs via the GitHub API, (2) determine the true root cause, ' +
         '(3) implement the LOWEST-RISK real code repair (no secrets, no IAM, no payments, no destructive migrations, ' +
         'no security-boundary changes — those are OWNER-GATED), (4) run the focused tests + typecheck, ' +
@@ -481,7 +496,9 @@ export async function dispatchRepairMission(mission: RepairMission): Promise<Rep
       validationMode: 'focused',
       systemMode: true,
       ownerApprovedAction: null,
-      ownerId: 'machine:autonomous-global-supervisor',
+      ownerId,
+      taskId,
+      executionMode: 'code_change',
     });
     const jobId = result.job?.jobId || null;
     if (jobId) recentDispatches.set(dedupeKey, { at: Date.now(), jobId });
@@ -504,7 +521,7 @@ export async function dispatchRepairMission(mission: RepairMission): Promise<Rep
 }
 
 /** One-shot supervision cycle used by the API endpoints (collect → compute → dispatch repairs). */
-export async function runGlobalCertificationSupervision(mainSha: string): Promise<{
+export async function runGlobalCertificationSupervision(mainSha: string, mayDispatch: () => boolean = () => true): Promise<{
   result: GlobalCertificationResult;
   dispatches: RepairDispatchResult[];
 }> {
@@ -512,7 +529,53 @@ export async function runGlobalCertificationSupervision(mainSha: string): Promis
   const result = computeGlobalCertification(input);
   const dispatches: RepairDispatchResult[] = [];
   for (const mission of result.repairMissions) {
-    dispatches.push(await dispatchRepairMission(mission));
+    if (!mayDispatch()) break;
+    const dispatch = await dispatchRepairMission(mission, mayDispatch);
+    dispatches.push(dispatch);
+    // One queued scope per supervisor owner. The shared worker admission
+    // chooses eligible owners and preserves existing Landing/scheduler work.
+    if (dispatch.dispatched || dispatch.deferred) break;
   }
   return { result, dispatches };
+}
+
+let supervisorTimer: ReturnType<typeof setTimeout> | null = null;
+let supervisorStarted = false;
+let supervisorGeneration = 0;
+
+/** Completion schedules the next cycle: slow collection never overlaps itself. */
+export function startGlobalCertificationSupervisor(): void {
+  if (supervisorStarted || process.env.IVX_SUPABASE_RECOVERY_MODE === 'true') return;
+  supervisorStarted = true;
+  const generation = ++supervisorGeneration;
+  const cycle = async (): Promise<void> => {
+    if (!supervisorStarted || generation !== supervisorGeneration) return;
+    try {
+      const { checkEmergencyStop } = await import('./ivx-emergency-stop-gate');
+      const stop = await checkEmergencyStop();
+      if (stop.active || stop.source === 'unavailable') return;
+      const sha = await resolveMainSha();
+      if (!sha || !supervisorStarted || generation !== supervisorGeneration) return;
+      const { result, dispatches } = await runGlobalCertificationSupervision(sha,
+        () => supervisorStarted && generation === supervisorGeneration);
+      console.log('[IVX Global Supervisor]', JSON.stringify({ observedAt: new Date().toISOString(),
+        mainSha: sha, status: result.status, dispatches }));
+    } catch {
+      console.warn('[IVX Global Supervisor] cycle unavailable; next bounded cycle will reconcile');
+    } finally {
+      if (supervisorStarted && generation === supervisorGeneration) {
+        supervisorTimer = setTimeout(() => void cycle(), 60_000);
+        supervisorTimer.unref?.();
+      }
+    }
+  };
+  supervisorTimer = setTimeout(() => void cycle(), 15_000);
+  supervisorTimer.unref?.();
+}
+
+export function stopGlobalCertificationSupervisor(): void {
+  supervisorStarted = false;
+  supervisorGeneration++;
+  if (supervisorTimer) clearTimeout(supervisorTimer);
+  supervisorTimer = null;
 }
