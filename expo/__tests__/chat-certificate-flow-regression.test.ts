@@ -90,6 +90,15 @@ describe('IVX IA chat device certificate regression', () => {
     expect(flowSource).toContain('assertNotVisible: "I was unable to display this reply"');
   });
 
+  test('searches older rows for the exact reply when concurrent owner runs append newer turns', () => {
+    const assistantSearches = flowSource.split(assistantReplyElement).slice(1);
+    expect(assistantSearches).toHaveLength(2);
+    for (const search of assistantSearches) {
+      expect(search.slice(0, 500)).toContain('direction: UP');
+      expect(search.slice(0, 500)).not.toContain('direction: DOWN');
+    }
+  });
+
   test('starts the normal conversational AI request before durable persistence can stall', () => {
     const triggerIndex = chatSource.indexOf('2.2_AI_TRIGGER_BEFORE_PERSISTENCE');
     const decisionIndex = chatSource.lastIndexOf('const startAssistantImmediately', triggerIndex);
