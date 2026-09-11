@@ -38,16 +38,19 @@ describe('Autonomous mobile 360 observability guard', () => {
   test('autonomous dashboard exposes owner control modules and mission control', () => {
     const dashboard = read('expo/app/autonomous-dashboard.tsx');
     const controls = read('expo/components/AutonomousDashboardControlStrip.tsx');
+    const routeSource = read('expo/components/autonomousDashboardControlRoutes.ts');
     expect(dashboard).toContain("from '@/components/AutonomousDashboardControlStrip'");
     expect(dashboard).toContain('<AutonomousDashboardControlStrip />');
+    expect(dashboard).toContain('<LandingWorkersLiveScreen />');
     expect(controls).toContain('OWNER CONTROL MODULES');
+    expect(controls).toContain("from './autonomousDashboardControlRoutes'");
     expect(controls).toContain('AUTONOMOUS_CONTROL_ROUTES.map');
     expect(controls).toContain('router.push(route');
     const routes = AUTONOMOUS_CONTROL_ROUTES.map(row => row.route);
     for (const route of ['/ivx/chat', '/ivx/agent-command-center', '/ivx/autonomous-control']) {
+      expect(routeSource).toContain(`route: '${route}'`);
       expect(routes).toContain(route);
     }
-    expect(dashboard).toContain('LandingWorkersLiveScreen');
   });
 
   test('expo route inventory is large enough to fail closed if mobile coverage disappears', () => {
