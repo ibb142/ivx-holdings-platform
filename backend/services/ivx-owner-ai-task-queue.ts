@@ -1,3 +1,4 @@
+import { boundedHealthProbe } from './ivx-bounded-health-probe';
 /**
  * IVX Owner AI Durable Task Queue — P0 production reliability layer.
  *
@@ -890,6 +891,8 @@ export async function ensureTaskTable(): Promise<boolean> {
     tableEnsured = true;
     return true;
   }
+  // A transient outage or credential failure is not evidence of a missing table.
+  if (probe.detail.tableMissing !== true) return false;
   // Prefer the encrypted Owner Variables store over stale process.env.
   const { getIVXOwnerVariableRuntimeValue } = await import('../api/ivx-owner-variables');
   const token = (await getIVXOwnerVariableRuntimeValue('SUPABASE_ACCESS_TOKEN', { preferStored: true })).trim();
@@ -900,7 +903,7 @@ export async function ensureTaskTable(): Promise<boolean> {
   for (let attempt = 1; attempt <= DDL_RETRY_ATTEMPTS; attempt++) {
     try {
       const res = await fetch(`${MANAGEMENT_API_BASE}/projects/${managementProjectRef()}/database/query`, {
-        method: 'GET',
+        method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: TASK_TABLE_DDL }),
         signal: AbortSignal.timeout(30_000),
@@ -1010,80 +1013,22 @@ export interface HealthCheckResult {
   detail: Record<string, unknown>;
 }
 
-async function probeSupabaseEndpoint(path: string, label: string): Promise<{ ok: boolean; status: number; latencyMs: number; bodyPreview: string; error?: string }> {
-  const url = `${getSupabaseUrl()}/rest/v1/${path}`;
-  const started = Date.now();
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5_000);
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: restHeaders(),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    const latencyMs = Date.now() - started;
-    const body = await res.text().catch(() => '');
-    return {
-      ok: res.ok,
-      status: res.status,
-      latencyMs,
-      bodyPreview: body.slice(0, 200),
-      error: res.ok ? undefined : `HTTP ${res.status} ${res.statusText}`,
-    };
-  } catch (error) {
-    const latencyMs = Date.now() - started;
-    const isTimeout = error instanceof Error && (error.name === 'AbortError' || error.message.includes('abort') || error.message.includes('timeout'));
-    return {
-      ok: false,
-      status: 0,
-      latencyMs,
-      bodyPreview: '',
-      error: isTimeout ? 'Probe timed out after 5s' : (error instanceof Error ? error.message : 'probe failed'),
-    };
-  }
+export async function checkDatabaseHealth(): Promise<HealthCheckResult> {
+  if (!isTaskQueueConfigured()) return { ok: false, detail: { reason: 'Database credentials unavailable', circuit: getSupabaseCircuitState() } };
+  // A bounded table read proves REST and database access without generating the
+  // entire OpenAPI schema on every health request.
+  const probe = await boundedHealthProbe(`${getSupabaseUrl()}/rest/v1/${TASKS_TABLE}?select=id&limit=1`, restHeaders(),
+    (body): body is Array<{ id: string }> => Array.isArray(body) && body.length <= 1 && body.every(row => typeof row?.id === 'string'));
+  return { ok: probe.ok, detail: { table: TASKS_TABLE, httpStatus: probe.status, latencyMs: probe.latencyMs,
+    tableMissing: probe.missingRelation === true, reason: probe.error ?? null,
+    tableProbe: { status: probe.status, latencyMs: probe.latencyMs }, circuit: getSupabaseCircuitState() } };
 }
 
-export async function checkDatabaseHealth(): Promise<HealthCheckResult> {
-  if (!isTaskQueueConfigured()) {
-    return { ok: false, detail: { reason: 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing in runtime', circuit: getSupabaseCircuitState() } };
-  }
-
-  // Probe multiple endpoints to distinguish total outage vs table-specific issue.
-  const [rootProbe, tableProbe] = await Promise.all([
-    probeSupabaseEndpoint('', 'REST root'),
-    probeSupabaseEndpoint(`${TASKS_TABLE}?select=id&limit=1`, TASKS_TABLE),
-  ]);
-
-  const rootOk = rootProbe.ok;
-  const tableOk = tableProbe.ok;
-
-  if (rootOk && tableOk) {
-    return {
-      ok: true,
-      detail: {
-        httpStatus: tableProbe.status,
-        latencyMs: tableProbe.latencyMs,
-        table: TASKS_TABLE,
-        circuit: getSupabaseCircuitState(),
-        rootProbe: { status: rootProbe.status, latencyMs: rootProbe.latencyMs },
-      },
-    };
-  }
-
-  return {
-    ok: false,
-    detail: {
-      reason: !rootOk
-        ? `Supabase REST root unreachable: ${rootProbe.error}`
-        : `Supabase table probe failed: ${tableProbe.error}`,
-      table: TASKS_TABLE,
-      circuit: getSupabaseCircuitState(),
-      rootProbe,
-      tableProbe,
-      urlHost: new URL(getSupabaseUrl()).host,
-    },
-  };
+export async function checkAuthHealth(): Promise<HealthCheckResult> {
+  if (!isTaskQueueConfigured()) return { ok: false, detail: { reason: 'Auth credentials unavailable' } };
+  const probe = await boundedHealthProbe(`${getSupabaseUrl()}/auth/v1/health`, restHeaders(),
+    (body): body is { name: string } => Boolean(body && typeof body === 'object' && 'name' in body && typeof body.name === 'string' && body.name.length));
+  return { ok: probe.ok, detail: { httpStatus: probe.status, latencyMs: probe.latencyMs, reason: probe.error ?? null } };
 }
 
 export function checkAIHealth(): HealthCheckResult {
@@ -1220,36 +1165,24 @@ export async function checkQueueHealth(): Promise<HealthCheckResult> {
   const runtime = getWorkerRuntimeInfo();
   const circuit = getSupabaseCircuitState();
   if (!isTaskQueueConfigured()) return { ok: false, detail: { reason: 'queue persistence not configured', circuit, ...runtime } };
-  try {
-    const res = await restFetch(
-      `${TASKS_TABLE}?status=in.(QUEUED,RETRYING,RUNNING)&select=id,status,created_at,dead_letter&order=created_at.asc&limit=200`,
-      { method: 'GET', headers: restHeaders() },
-    );
-    if (!res.ok) return { ok: false, detail: { reason: `queue read failed HTTP ${res.status}`, circuit: getSupabaseCircuitState(), ...runtime } };
-    const rows = await res.json().catch(() => []) as { status: string; created_at: string }[];
-    const oldest = rows[0]?.created_at ?? null;
-    const oldestAgeMinutes = oldest ? Math.round((Date.now() - new Date(oldest).getTime()) / 60_000) : 0;
-    const dlRes = await restFetch(`${TASKS_TABLE}?dead_letter=is.true&status=eq.FAILED&select=id&limit=100`, { method: 'GET', headers: restHeaders() });
-    const deadLetters = dlRes.ok ? ((await dlRes.json().catch(() => [])) as unknown[]).length : -1;
-    const saturated = rows.length >= 150;
-    const stale = oldestAgeMinutes > 15;
-    const finalCircuit = getSupabaseCircuitState();
-    return {
-      ok: runtime.running && !saturated && !stale && !finalCircuit.open,
-      detail: {
-        ...runtime,
-        circuit: finalCircuit,
-        depth: rows.length,
-        oldestQueuedAgeMinutes: oldestAgeMinutes,
-        deadLetterCount: deadLetters,
-        saturated,
-        staleQueue: stale,
-        alerts: computeIncidentAlerts(),
-      },
-    };
-  } catch (error) {
-    return { ok: false, detail: { reason: error instanceof Error ? error.message : 'queue probe failed', circuit: getSupabaseCircuitState(), ...runtime } };
-  }
+  const [pending, dead] = await Promise.all([
+    boundedHealthProbe(`${getSupabaseUrl()}/rest/v1/${TASKS_TABLE}?status=in.(QUEUED,RETRYING,RUNNING)&select=id,status,created_at&order=created_at.asc&limit=200`, restHeaders(),
+      (body): body is Array<{ id: string; status: string; created_at: string }> => Array.isArray(body) && body.length <= 200
+        && body.every(row => typeof row?.id === 'string' && ['QUEUED', 'RETRYING', 'RUNNING'].includes(row.status) && Number.isFinite(Date.parse(row.created_at)))),
+    boundedHealthProbe(`${getSupabaseUrl()}/rest/v1/${TASKS_TABLE}?dead_letter=is.true&status=eq.FAILED&select=id&limit=100`, restHeaders(),
+      (body): body is Array<{ id: string }> => Array.isArray(body) && body.length <= 100 && body.every(row => typeof row?.id === 'string')),
+  ]);
+  if (!pending.ok || !dead.ok) return { ok: false, detail: { ...runtime, circuit,
+    reason: pending.error ?? dead.error ?? 'Queue observation unavailable', telemetryAvailable: false,
+    depth: null, deadLetterCount: null, saturated: null, staleQueue: null } };
+  const rows = pending.value!;
+  const oldestAgeMinutes = rows.length ? Math.max(0, Math.round((Date.now() - Date.parse(rows[0].created_at)) / 60_000)) : 0;
+  const saturated = rows.length >= 150;
+  const stale = oldestAgeMinutes > 15;
+  return { ok: runtime.running && !saturated && !stale && !circuit.open,
+    detail: { ...runtime, circuit, telemetryAvailable: true, depth: rows.length, depthCapped: rows.length === 200,
+      oldestQueuedAgeMinutes: oldestAgeMinutes, deadLetterCount: dead.value!.length, deadLetterCountCapped: dead.value!.length === 100,
+      saturated, staleQueue: stale, alerts: computeIncidentAlerts() } };
 }
 
 export function checkProviderHealthDetail(): HealthCheckResult {

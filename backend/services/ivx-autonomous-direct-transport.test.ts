@@ -46,7 +46,8 @@ for (const fails of [false, true]) test(`configured same-project queue selects o
       if(failed!==${fails})throw new Error('incorrect failure result');
     }
     if(restCalls!==0 || queries!==4)throw new Error('transport replay or unexpected call count');
-    if(releases!==2 || boundaries.filter(x=>x==='BEGIN').length!==2)throw new Error('RPC transaction missing');
+    const setups=boundaries.filter(x=>x.startsWith('BEGIN;'));
+    if(releases!==2 || setups.length!==2 || setups.some(x=>!x.includes("SET LOCAL statement_timeout = '4s'") || !x.includes("SET LOCAL lock_timeout = '2s'") || !x.includes("SET LOCAL idle_in_transaction_session_timeout = '8s'")))throw new Error('bounded RPC transaction missing');
     if(boundaries.filter(x=>x==='${fails ? 'ROLLBACK' : 'COMMIT'}').length!==2)throw new Error('incorrect transaction cleanup');
   `], {stdout:'pipe',stderr:'pipe',timeout:10000});
   const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);

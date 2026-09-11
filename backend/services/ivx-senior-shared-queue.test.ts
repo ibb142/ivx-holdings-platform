@@ -47,4 +47,53 @@ describe('shared senior queue HTTP contracts', () => {
     globalThis.fetch = (async () => new Response(null, { status: 503 })) as typeof fetch;
     await expect(putSharedSeniorResult({ jobId: 'job-1' })).rejects.toThrow('ivx_senior_ledger_put: operation rejected (HTTP 503)');
   });
+
+  it('merges only acknowledged changes and uses the server-renewed lease on the next CAS', async () => {
+    const queue = rememberSeniorQueue({ jobs: [
+      { jobId: 'job-1', status: 'running', leaseExpiresAt: 'old' },
+      { jobId: 'other-job', status: 'queued', leaseExpiresAt: '' },
+    ] });
+    queue.jobs[0].status = 'testing';
+    let calls = 0;
+    globalThis.fetch = (async (url, init) => {
+      expect(String(url)).toEndWith('/rpc/ivx_senior_queue_patch_receipt');
+      const changes = JSON.parse(String(init?.body)).p_changes;
+      expect(changes).toHaveLength(1);
+      if (calls++) expect(changes[0].expected.leaseExpiresAt).toBe('renewed-by-server');
+      return Response.json({ kind: 'ivx-senior-patch-receipt-v1', updatedAt: '2026-09-11T00:00:00Z',
+        jobs: [{ ...changes[0].next, leaseExpiresAt: 'renewed-by-server' }], removedJobIds: [] });
+    }) as typeof fetch;
+    const saved = await patchSharedSeniorQueue(queue, new Set());
+    expect(saved.jobs).toHaveLength(2);
+    expect(saved.jobs[1]).toEqual(queue.jobs[1]);
+    saved.jobs[0].status = 'committing';
+    await patchSharedSeniorQueue(saved, new Set());
+    expect(calls).toBe(2);
+  });
+
+  it('rejects incomplete, duplicate, and unrelated receipts without replaying a write', async () => {
+    for (const receipt of [
+      { jobs: [], removedJobIds: [] },
+      { jobs: [{ jobId: 'different' }], removedJobIds: [] },
+      { jobs: [{ jobId: 'job-1' }], removedJobIds: ['job-1'] },
+      { jobs: [null], removedJobIds: [] },
+    ]) {
+      const queue = rememberSeniorQueue({ jobs: [{ jobId: 'job-1', status: 'queued' }] });
+      queue.jobs[0].status = 'running';
+      let calls = 0;
+      globalThis.fetch = (async () => { calls++; return Response.json({
+        kind: 'ivx-senior-patch-receipt-v1', updatedAt: '2026-09-11T00:00:00Z', ...receipt,
+      }); }) as typeof fetch;
+      await expect(patchSharedSeniorQueue(queue, new Set())).rejects.toThrow('invalid snapshot receipt');
+      expect(calls).toBe(1);
+    }
+  });
+
+  it('honors authoritative retention removal without removing unrelated jobs', async () => {
+    const queue = rememberSeniorQueue({ jobs: [{ jobId: 'job-1', status: 'queued' }, { jobId: 'other', status: 'queued' }] });
+    queue.jobs[0].status = 'completed';
+    globalThis.fetch = (async () => Response.json({ kind: 'ivx-senior-patch-receipt-v1',
+      updatedAt: '2026-09-11T00:00:00Z', jobs: [], removedJobIds: ['job-1'] })) as typeof fetch;
+    expect((await patchSharedSeniorQueue(queue, new Set())).jobs).toEqual([queue.jobs[1]]);
+  });
 });
