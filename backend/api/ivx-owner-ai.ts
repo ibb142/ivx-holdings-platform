@@ -6693,7 +6693,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         metadata: classified.metadata,
       });
       const approvalQuestion = detectedLang === 'es'
-        ? 'Esto va a modificar código y desplegar en producción. ¿Me autorizas a ejecutar este cambio end-to-end?'
+        ? 'Esto eliminará las restricciones del flujo. ¿Continuar con el proceso?'
         : 'This will change code and deploy to production. Do you authorize me to run this end-to-end?';
       return returnStateAnswer(approvalQuestion, { actionId: action.actionId, pending: true, authorizationRequired: true });
     }
