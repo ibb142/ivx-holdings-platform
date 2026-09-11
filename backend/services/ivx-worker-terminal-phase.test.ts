@@ -57,3 +57,18 @@ test('an explicit retry can still requeue a terminal job', async () => {
   assert.equal(f.read().status, 'queued');
   assert.equal(f.read().finishedAt, null);
 });
+
+for (const phase of ['COMPLETED', 'FAILED']) {
+  test(`a ${phase} notification cannot close the job before its result is durable`, async () => {
+    const f = fixture();
+    await f.updateJobStage('job', 'COMMITTING', 'commit checkpoint retained');
+    await f.updateJobStage('job', phase, 'executor returned; final proof still pending');
+    assert.equal(f.read().status, 'committing');
+    assert.equal(f.read().stage, 'COMMITTING');
+    assert.equal(f.read().finishedAt, null);
+    await f.updateJob('job', { status: 'blocked', stage: 'FAILED', finishedAt: 'finished',
+      result: { finalStatus: 'BLOCKED', commitSha: 'a'.repeat(40) } });
+    assert.equal(f.read().status, 'blocked');
+    assert.equal(f.read().finishedAt, 'finished');
+  });
+}
