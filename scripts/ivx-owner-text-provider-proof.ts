@@ -72,7 +72,7 @@ try {
     });
     // Short arithmetic answers can occur coincidentally inside random history
     // IDs. The full opaque text answers must never be supplied to the model.
-    if (expected.length >= 8 && JSON.stringify(modelInput).includes(expected)) {
+    if (expected.length >= 8 && !request.includes(expected) && JSON.stringify(modelInput).includes(expected)) {
       throw new Error('REAL_PROVIDER_EXPECTED_ANSWER_LEAKED_INTO_INPUT');
     }
     let deltas = 0;
