@@ -7,7 +7,7 @@ afterEach(() => { globalThis.fetch = originalFetch; process.env = { ...originalE
 const array = (body: unknown): body is unknown[] => Array.isArray(body);
 function configure() {
   process.env.IVX_SUPABASE_URL = 'https://readiness-test.supabase.co';
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'readiness-test-placeholder';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'unit-readiness-service-key';
 }
 
 for (const stage of ['headers', 'body']) {
@@ -44,7 +44,7 @@ test('database health reads one identity and Auth is checked independently', asy
 });
 
 test('timeouts, authorization failures and ambiguous 404s never attempt schema bootstrap', async () => {
-  configure(); process.env.SUPABASE_ACCESS_TOKEN = 'management-test-placeholder';
+  configure(); process.env.SUPABASE_ACCESS_TOKEN = 'unit-readiness-management-key';
   for (const status of [401, 403, 404, 503]) {
     let calls = 0;
     globalThis.fetch = (async (url, init) => {
