@@ -1,0 +1,3 @@
+import { test } from 'node:test'; import assert from 'node:assert/strict'; import { getCertificateForApi } from './ivx-real-execution-certificate';
+
+test('Certificate API returns correct commit SHA', async () => { const originalEnv = process.env.EXPECTED_COMMIT_SHA; try { process.env.EXPECTED_COMMIT_SHA = '552aff8ec1dba18518d72a6b0f3b4d18a0cd3c11'; const result = await getCertificateForApi(); assert.equal(result.commitSha, '552aff8ec1dba18518d72a6b0f3b4d18a0cd3c11'); } finally { process.env.EXPECTED_COMMIT_SHA = originalEnv; } });

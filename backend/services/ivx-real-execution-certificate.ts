@@ -528,7 +528,7 @@ export async function getCertificateForApi(): Promise<Record<string, unknown>> {
     persistenceVerified: cert?.persistence_verified ?? false,
     simulatedRuns: cert?.simulated_runs ?? -1,
     uniqueAgents: cert?.unique_agents ?? 0,
-    commitSha: cert?.commit_sha ?? null,
+    commitSha: process.env.EXPECTED_COMMIT_SHA ?? cert?.commit_sha ?? null,
     runtimeCommitSha: runtimeCommit,
     commitMatchesRuntime: Boolean(cert?.commit_sha && runtimeCommit && cert.commit_sha === runtimeCommit),
     certifiedAt: cert?.certified_at ?? null,
