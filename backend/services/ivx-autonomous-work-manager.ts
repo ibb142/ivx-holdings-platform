@@ -8,7 +8,7 @@ import {
   linkOrphanTasksToObjective,
   type Task,
 } from './ivx-autonomous-task-engine';
-import { scanModuleUniverse } from './ivx-agent-real-engineering-cycle';
+import { moduleInspectionCriteria, scanModuleUniverse } from './ivx-agent-real-engineering-cycle';
 import { containPath, resolveRepoRoot } from './ivx-agent-engineering-tools';
 
 export const IVX_AUTONOMOUS_WORK_MANAGER_MARKER = 'ivx-autonomous-work-manager-2026-09-05';
@@ -245,7 +245,8 @@ export async function ensureAutonomousWorkBlockForAgent(input: {
         objectiveId: input.objectiveId ?? null,
         title: `Module audit: ${nextModule}`,
         description: `AUTONOMOUS_MANAGER work block for ${nextModule} at source SHA ${input.sourceSha}: inspect the real file, secret-scan, validate relative imports, find hygiene defects, queue repair tasks, and attach fresh evidence. Assigned lane: ${input.agentId} (IA-${input.agentNumber}).`,
-        taskType: 'development',
+        taskType: 'discovery',
+        acceptanceCriteria: moduleInspectionCriteria(nextModule, input.sourceSha),
         idempotencyKey: `${moduleAuditPrefix(input.sourceSha, input.agentId, input.agentNumber)}${nextModule}`,
         priority: 'medium',
         businessValue: 3,
@@ -279,7 +280,8 @@ export async function ensureAutonomousWorkBlockForAgent(input: {
         objectiveId: input.objectiveId ?? null,
         title: `Module audit: ${secondary}`,
         description: `AUTONOMOUS_MANAGER secondary-list work block for critical repo surface ${secondary} at source SHA ${input.sourceSha}. This fallback is used only after the lane's primary code-module patrol is exhausted. Inspect the real file and attach fresh evidence; do not fabricate utilization.`,
-        taskType: 'qa',
+        taskType: 'discovery',
+        acceptanceCriteria: moduleInspectionCriteria(secondary, input.sourceSha),
         idempotencyKey: `${secondaryPrefix(input.sourceSha, input.agentNumber)}${secondary}`,
         priority: 'high',
         businessValue: 4,
