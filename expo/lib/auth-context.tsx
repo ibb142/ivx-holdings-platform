@@ -2120,7 +2120,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           trace.checkpoint('FAILED', { stage: 'auth', errorCode: sessionError.code, errorMessage: sessionError.message });
           return {
             success: false,
-            message: sessionError.message || 'Session could not be installed on the device.',
+            message: normalizeLoginFailureMessage(sessionError.message || 'Session could not be installed on the device.').message,
             failureReason: 'service_unavailable',
             supabaseErrorMessage: sessionError.message,
             supabaseErrorCode: sessionError.code,
@@ -2262,13 +2262,13 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         ? String((error as { name?: string }).name ?? '')
         : '';
       const normalizedFailure = normalizeLoginFailureMessage(authErrorMessage);
-      const displayMessage = (authErrorMessage?.trim() || normalizedFailure.message).trim();
+      const displayMessage = normalizedFailure.message;
       trace.checkpoint('FAILED', { stage: 'auth', errorCode, errorMessage: displayMessage, httpStatus: Number.isFinite(errorStatus) ? errorStatus : undefined });
       return {
         success: false,
         message: displayMessage,
         failureReason: normalizedFailure.failureReason,
-        supabaseErrorMessage: displayMessage,
+        supabaseErrorMessage: authErrorMessage?.trim() || displayMessage,
         ...(errorCode ? { supabaseErrorCode: errorCode } : {}),
         ...(Number.isFinite(errorStatus) ? { supabaseErrorStatus: errorStatus } : {}),
         ...(errorName ? { supabaseErrorName: errorName } : {}),
