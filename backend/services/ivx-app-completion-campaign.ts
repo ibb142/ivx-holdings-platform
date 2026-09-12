@@ -468,9 +468,13 @@ export async function loadControlState(options: { required?: boolean } = {}): Pr
 }
 
 export async function updateControlState(
-  action: 'pause_all' | 'resume_all' | 'stop_all' | 'stop_agent' | 'retry_agent' | 'reassign',
+  action: 'pause_all' | 'resume_all' | 'stop_all' | 'stop_agent' | 'retry_agent' | 'reassign' | 'pause_agent' | 'resume_agent' | 'disable_agent' | 'enable_agent',
   agentNumber?: number,
 ): Promise<CampaignControlState> {
+  if (['stop_agent', 'retry_agent', 'pause_agent', 'resume_agent', 'disable_agent', 'enable_agent'].includes(action)
+    && (!Number.isInteger(agentNumber) || agentNumber! < 1 || agentNumber! > 112)) {
+    throw new Error('agentNumber must be an integer from 1 to 112');
+  }
   const current = await loadControlState({ required: isDurableStoreConfigured() });
   const next: CampaignControlState = {
     ...current,
@@ -489,11 +493,20 @@ export async function updateControlState(
       next.stopped = true;
       break;
     case 'stop_agent':
+    case 'disable_agent':
       if (typeof agentNumber === 'number' && !next.stoppedAgents.includes(agentNumber)) {
         next.stoppedAgents.push(agentNumber);
       }
       break;
+    case 'pause_agent':
+    case 'resume_agent':
+      if (next.stoppedAgents.includes(agentNumber!)) throw new Error('Agent is stopped or disabled; enable it explicitly first');
+      if (action === 'pause_agent') {
+        if (!next.pausedAgents.includes(agentNumber!)) next.pausedAgents.push(agentNumber!);
+      } else next.pausedAgents = next.pausedAgents.filter((n) => n !== agentNumber);
+      break;
     case 'retry_agent':
+    case 'enable_agent':
       if (typeof agentNumber === 'number') {
         next.stoppedAgents = next.stoppedAgents.filter((n) => n !== agentNumber);
         next.pausedAgents = next.pausedAgents.filter((n) => n !== agentNumber);
