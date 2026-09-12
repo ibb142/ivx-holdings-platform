@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CAMPAIGN,LABELS,MAX_LIABILITY_NANO,reservationId,checkQuote } from './phase3-native-quota.mjs';
+import { CAMPAIGN,LABELS,MAX_LIABILITY_NANO,reservationId,checkQuote,checkTestKeyIdentity } from './phase3-native-quota.mjs';
 
 test('durable reservation identities cannot change with a workflow replay',()=>{
   const before=LABELS.map(reservationId),old=process.env.GITHUB_RUN_ATTEMPT;
@@ -23,4 +23,14 @@ test('financial envelope refuses oversized, expired and unsupported quotes',()=>
   assert.throws(()=>checkQuote({...q,reservedNano:'0'},now));
   assert(MAX_LIABILITY_NANO<200000000000n);
   assert.equal(CAMPAIGN,'phase3-native-quota-20260912-01');
+});
+
+test('cleanup verifies key ownership without requiring an active hydrated quota',()=>{
+  const id='isolated-key';
+  const key={id,name:CAMPAIGN,purpose:'ai-gateway',teamId:'team_fEfCJAenMBXVSGiX6LeoA3Ji'};
+  checkTestKeyIdentity(key,id);
+  checkTestKeyIdentity({...key,quota:{active:false}},id);
+  assert.throws(()=>checkTestKeyIdentity({...key,teamId:'different-team'},id));
+  assert.throws(()=>checkTestKeyIdentity({...key,name:'production-key'},id));
+  assert.throws(()=>checkTestKeyIdentity({...key,metadata:{bypassAll:true}},id));
 });

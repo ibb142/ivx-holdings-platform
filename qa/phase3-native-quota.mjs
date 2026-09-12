@@ -77,18 +77,22 @@ function fillPrompt(index) {
   return 'This is a bounded quota verification. Ignore the numbers; reply only OK.\n'
     + numbers.join(' ') + '\nReply only OK.';
 }
-async function getTestKey(context, id) {
-  const { apiKey } = await management(context, '/v1/api-keys/' + encodeURIComponent(id));
+export function checkTestKeyIdentity(apiKey, id) {
   assert(apiKey && apiKey.id === id && apiKey.teamId === TEAM && apiKey.purpose === 'ai-gateway',
     'TEST_KEY_BINDING_CHANGED');
   assert.equal(apiKey.name, CAMPAIGN, 'TEST_KEY_NAME_CHANGED');
   assert(!apiKey.metadata?.bypassAll, 'TEST_KEY_BYPASSES_CONTROLS');
-  assert(apiKey.quota && apiKey.quota.active && !apiKey.quota.archived, 'TEST_QUOTA_NOT_ACTIVE');
-  return apiKey;
+}
+async function getTestKey(context, id) {
+  const { apiKey } = await management(context, '/v1/api-keys/' + encodeURIComponent(id));
+  checkTestKeyIdentity(apiKey,id); return apiKey;
 }
 async function quotaSnapshot(context, id, label) {
-  const key = await getTestKey(context, id);
-  const snapshot = { label, at: new Date().toISOString(), ...budgetSummary(key.quota) };
+  await getTestKey(context,id);
+  const { budgets } = await management(context,'/ai-gateway/budgets/list');
+  const quota=budgets.find(b=>b.quotaEntityId==='api_key_id_'+id);
+  assert(quota && quota.active && !quota.archived,'TEST_QUOTA_NOT_ACTIVE');
+  const snapshot = { label, at: new Date().toISOString(), ...budgetSummary(quota) };
   context.proof.quotaSnapshots.push(snapshot); return snapshot;
 }
 async function pollSpend(context, id, minimum, label) {
@@ -223,10 +227,17 @@ async function main() {
   try {
     assert.equal(process.env.IVX_NATIVE_QUOTA_PROBE,CAMPAIGN,'CAMPAIGN_BINDING_REQUIRED');
     context=await prepareContext(proof); db=dbFor(context);
-    before=await readNativeState(context);checkNativeBudget(before.teamBudget);
     assert.equal((await db.rows()).length,0,'CAMPAIGN_ALREADY_HAS_DURABLE_RESERVATIONS');
     const list=await management(context,'/v1/api-keys?purpose=ai-gateway');
-    assert(!list.apiKeys.some(k=>k.name===CAMPAIGN),'PRIOR_CAMPAIGN_KEY_EXISTS');
+    const prior=list.apiKeys.filter(k=>k.name===CAMPAIGN);
+    for(const candidate of prior) {
+      // Exact orphan from the no-inference run 34693679116; never another key.
+      assert.equal(candidate.id,'jtAnoFZC1LAdFBOuA9gwn8byoEteiOrNxS4y0rwikpKds7aq','UNREVIEWED_PRIOR_KEY');
+      await getTestKey(context,candidate.id);
+      await management(context,'/v1/api-keys/'+encodeURIComponent(candidate.id),{method:'DELETE'});
+      proof.priorUnusedKeyDeleted=candidate.id;
+    }
+    before=await readNativeState(context);checkNativeBudget(before.teamBudget);
     const fillQuote=await freshQuote('openai/gpt-4.1'),smallQuote=await freshQuote('openai/gpt-4o-mini');
     assert(BigInt(fillQuote.reservedNano)*2n+BigInt(smallQuote.reservedNano)*2n<=MAX_LIABILITY_NANO,
       'PLANNED_CAMPAIGN_EXCEEDS_BOUND');
@@ -241,6 +252,9 @@ async function main() {
     assert(typeof testKeyId==='string' && typeof testKey==='string' && testKey.startsWith('vck_'),'TEST_KEY_CREATE_FAILED');
     assert.notEqual(testKeyId,before.key.id,'TEST_KEY_IS_PRODUCTION_KEY');
     proof.testKeyId=testKeyId;
+    await getTestKey(context,testKeyId);
+    await management(context,'/v1/api-keys/'+encodeURIComponent(testKeyId)+'/quota',{method:'PATCH',
+      body:{limitAmount:1,refreshPeriod:'none',includeByokInQuota:true,active:true,archived:false}});
     const first=await quotaSnapshot(context,testKeyId,'created');
     assert.equal(first.limitAmount,1,'TEST_QUOTA_LIMIT_MISMATCH');
     assert.equal(first.refreshPeriod,'none','TEST_QUOTA_PERIOD_MISMATCH');
@@ -305,6 +319,7 @@ async function main() {
         assert.equal(proof.sharedPolicyAfter.dailyLimitNano,'200000000000','SHARED_POLICY_CHANGED');
       }catch(error){proof.finalRowsError=safeError(error);proof.passed=false;process.exitCode=1;}
     }
+    proof.native429Observed=proof.calls.some(c=>c.statuses.includes(429));
     await emitProof(proof,'native-quota');
   }
 }

@@ -17,6 +17,7 @@ export async function requestJson(url, token, { method = 'GET', body, headers = 
     headers: { Accept: 'application/json', Authorization: 'Bearer ' + token,
       ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...headers },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  if (!response.body) return { status: response.status, data: null, retryAfter: response.headers.get('retry-after') };
   const reader = response.body.getReader(), chunks = []; let size = 0;
   try { for (;;) { const { done, value } = await reader.read(); if (done) break;
     size += value.byteLength; assert(size <= 3000000, 'RESPONSE_TOO_LARGE'); chunks.push(value); } }
