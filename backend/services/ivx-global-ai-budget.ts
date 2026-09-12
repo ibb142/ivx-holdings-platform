@@ -10,11 +10,17 @@ export class GlobalAIBudgetError extends Error {
 }
 export type BudgetQuote = { model: string; maxInputTokens: number; maxOutputTokens: number;
   inputNanoPerToken: string; outputNanoPerToken: string; reservedNano: string;
+  requestOverheadNano: string;
   catalogSha256: string; observedAt: string; validUntil: string };
-export type BudgetUsage = { inputTokens: number; outputTokens: number; generationId?: string };
-export type BudgetLease = { quote: BudgetQuote; finish(usage: BudgetUsage | null, notStarted?: boolean): Promise<void> };
+export type BudgetUsage = { inputTokens: number; outputTokens: number; generationId?: string; providerCostNano?: string };
+export type BudgetLease = { quote: BudgetQuote; finish(usage: BudgetUsage | null, notStarted?: boolean, generationId?: string): Promise<void> };
 type Catalog = { data?: unknown[] };
 const CATALOG_URL = 'https://ai-gateway.vercel.sh/v1/models';
+// Published 2026-09-07: team Provider Allowlist and ZDR each cost USD 0.10/1000
+// requests. Reserve both without assuming either is enabled. Paid reporting
+// metadata is rejected at admission. This allowance is not an invoice amount.
+// https://vercel.com/docs/ai-gateway/pricing#add-on-surcharges
+const REQUEST_OVERHEAD_NANO = 200_000n;
 type CatalogSnapshot = { value: Catalog; hash: string; at: number };
 let catalogCache: CatalogSnapshot | null = null;
 let catalogPending: Promise<CatalogSnapshot> | null = null;
@@ -29,12 +35,22 @@ export function usdToNanoCeil(value: unknown): bigint {
 function record(value: unknown): Record<string, unknown> { return value && typeof value === 'object' ? value as Record<string, unknown> : {}; }
 function maxRates(pricing: unknown): { input: bigint; output: bigint } {
   let input = 0n, output = 0n;
+  const inputKeys = ['input','input_cache_read','input_cache_write'];
   function visit(value: unknown) {
     for (const [key, item] of Object.entries(record(value))) {
-      if (['input','input_cache_read','input_cache_write'].includes(key)) {
+      if (inputKeys.includes(key)) {
         const price = usdToNanoCeil(item); if (price > input) input = price;
       } else if (key === 'output') {
         const price = usdToNanoCeil(item); if (price > output) output = price;
+      } else if ([...inputKeys, 'output'].some(name => key === name + '_tiers')) {
+        // The published *_tiers format stores the tariff in `cost`, not in a
+        // nested `input`/`output` field. Every tier must fit the reservation.
+        if (!Array.isArray(item)) throw new GlobalAIBudgetError('unverified model pricing tiers');
+        for (const tier of item) {
+          const price = usdToNanoCeil(record(tier).cost);
+          if (key === 'output_tiers') { if (price > output) output = price; }
+          else if (price > input) input = price;
+        }
       } else if (item && typeof item === 'object') visit(item);
     }
   }
@@ -53,10 +69,11 @@ export function quoteCatalogModel(catalog: Catalog, model: string, at: number, h
   const prices = maxRates(row.pricing);
   // Reserve a full input context plus the published maximum output. This is a
   // conservative liability, not chars/4 and not reported as an invoice cost.
-  const reserved = BigInt(context) * prices.input + BigInt(output) * prices.output;
+  const reserved = BigInt(context) * prices.input + BigInt(output) * prices.output + REQUEST_OVERHEAD_NANO;
   if (reserved <= 0n || reserved > 1_000_000_000_000_000n) throw new GlobalAIBudgetError('invalid quote envelope');
   return { model, maxInputTokens: context, maxOutputTokens: output,
     inputNanoPerToken: prices.input.toString(), outputNanoPerToken: prices.output.toString(), reservedNano: reserved.toString(),
+    requestOverheadNano: REQUEST_OVERHEAD_NANO.toString(),
     catalogSha256: hash, observedAt: new Date(at).toISOString(), validUntil: new Date(at + 300_000).toISOString() };
 }
 async function catalog(fetcher: typeof fetch): Promise<CatalogSnapshot> {
@@ -77,8 +94,15 @@ export function usageCostUpperNano(quote: BudgetQuote, usage: BudgetUsage): stri
   if (![usage.inputTokens, usage.outputTokens].every(n => Number.isSafeInteger(n) && n >= 0)) throw new GlobalAIBudgetError('unverified token usage');
   // A provider exceeding its published envelope is persisted by the DB and
   // disables admission, instead of quietly pretending the budget held.
-  return (BigInt(usage.inputTokens) * BigInt(quote.inputNanoPerToken)
-    + BigInt(usage.outputTokens) * BigInt(quote.outputNanoPerToken)).toString();
+  const tokenUpper = BigInt(usage.inputTokens) * BigInt(quote.inputNanoPerToken)
+    + BigInt(usage.outputTokens) * BigInt(quote.outputNanoPerToken) + BigInt(quote.requestOverheadNano);
+  if (usage.providerCostNano === undefined) return tokenUpper.toString();
+  if (!/^\d{1,16}$/.test(usage.providerCostNano)
+      || BigInt(usage.providerCostNano) > 1_000_000_000_000_000n) throw new GlobalAIBudgetError('unverified provider cost');
+  const reported = BigInt(usage.providerCostNano);
+  // A returned charge may include fixed fees that the token estimate omits.
+  // Never lower the token-plus-fee bound or discard a higher real charge.
+  return (reported > tokenUpper ? reported : tokenUpper).toString();
 }
 export async function reserveGlobalAIBudget(model: string, requestSha: string, fetcher: typeof fetch): Promise<BudgetLease> {
   const { autonomousWorkerInstanceId, globalAIBudgetRpc } = await import('./ivx-postgres-autonomous-task-store');
@@ -97,9 +121,10 @@ export async function reserveGlobalAIBudget(model: string, requestSha: string, f
     throw new GlobalAIBudgetError('durable admission unavailable');
   }
   let finishPending: Promise<void> | null = null;
-  return { quote, finish(usage, notStarted = false) {
+  return { quote, finish(usage, notStarted = false, generationId) {
     if (finishPending) return finishPending;
     finishPending = (async () => {
+    const receiptId = usage?.generationId ?? generationId ?? null;
     let amount: string | null = null;
     if (notStarted) amount = '0';
     else if (usage) { try { amount = usageCostUpperNano(quote, usage); } catch { usage = null; } }
@@ -107,7 +132,7 @@ export async function reserveGlobalAIBudget(model: string, requestSha: string, f
       params => globalAIBudgetRpc<{ ok: boolean; pricingBoundBreached?: boolean }>('ivx_ai_budget_finish', params),
       {
         p_reservation_id: id, p_worker_instance_id: worker, p_status: notStarted ? 'cancelled' : usage ? 'settled' : 'uncertain',
-        p_settled_upper_nano: amount, p_generation_id: usage?.generationId ?? null,
+        p_settled_upper_nano: amount, p_generation_id: receiptId,
       },
       {
         onRetry(settlement, attempts, delayMs) {
