@@ -798,7 +798,11 @@ export async function handleDeferredVideoAnalytics(req: Request): Promise<Respon
   if (!ids.length || ids.length > 50 || ids.some(id => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
     return json({ error: 'Provide 1 to 50 video UUIDs' }, 400);
   }
-  try {
+  const unavailable = () => json({ videos: [], degraded: true, data_available: false, code: 'ANALYTICS_UNAVAILABLE' });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // Bound this response without cancelling metadata reads shared with the feed.
+  // Underlying transports retain their own deadlines.
+  const read = async (): Promise<Response> => {
     const sb = await getSB();
     const [{ data, error }, meta] = await Promise.all([
       sb.from('project_videos').select('id').in('id', ids).eq('is_approved', true), getMetaDoc(),
@@ -808,8 +812,16 @@ export async function handleDeferredVideoAnalytics(req: Request): Promise<Respon
     if (!visible.length) return json({ videos: [] });
     const analytics = await getAnalyticsDoc();
     return json({ videos: visible.map((v: { id: string }) => ({ id: v.id, view_count: analytics.videos[v.id]?.views ?? 0 })) });
+  };
+  try {
+    return await Promise.race([
+      read(),
+      new Promise<Response>(resolve => { timer = setTimeout(() => resolve(unavailable()), 2500); }),
+    ]);
   } catch {
-    return json({ error: 'Video analytics temporarily unavailable', code: 'ANALYTICS_UNAVAILABLE' }, 503);
+    return unavailable();
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
 

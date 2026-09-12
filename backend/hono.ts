@@ -6260,7 +6260,7 @@ app.get('/api/home/feed', async (c) => handlePlatformHomeFeed(c.req.raw));
 app.post('/api/ivx/video-platform/deals/:dealId/meta', async (c) => handlePlatformDealMeta(c.req.raw, c.req.param('dealId')));
 app.get('/api/ivx/video-platform/channels', async () => withTimeout(() => handlePlatformChannels(), () => publicReadTimeout('channels')));
 app.post('/api/ivx/video-platform/events', async (c) => handlePlatformEvents(c.req.raw));
-app.get('/api/videos/analytics', async (c) => withTimeout(() => handleDeferredVideoAnalytics(c.req.raw), () => Response.json({ code: 'ANALYTICS_TIMEOUT' }, { status: 503, headers: { 'Cache-Control': 'no-store' } }), 6000));
+app.get('/api/videos/analytics', async (c) => handleDeferredVideoAnalytics(c.req.raw));
 app.get('/api/ivx/video-platform/videos/:videoId/analytics', async (c) => handlePlatformVideoAnalytics(c.req.param('videoId')));
 app.post('/api/ivx/video-platform/videos/:videoId/meta', async (c) => handlePlatformVideoMeta(c.req.raw, c.req.param('videoId')));
 app.post('/api/ivx/video-platform/videos/:videoId/report', async (c) => handlePlatformReport(c.req.raw, c.req.param('videoId')));
