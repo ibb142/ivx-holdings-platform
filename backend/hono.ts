@@ -1556,7 +1556,7 @@ async function withTimeout<T extends Response>(
   const timeoutPromise = new Promise<Response>((resolve) => {
     onDeadline = () => resolve(fallback());
     deadline?.addEventListener('abort', onDeadline, { once: true });
-    timer = setTimeout(onDeadline, timeoutMs);
+    timer = setTimeout(() => resolve(fallback()), timeoutMs);
   });
   try {
     return await Promise.race([handler(), timeoutPromise]);
