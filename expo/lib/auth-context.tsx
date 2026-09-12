@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 35188)
-Total output lines: 3261
-
 import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Platform } from 'react-native';
@@ -1079,7 +1076,1283 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       if (!error && data?.role) {
         const rawProfileRole = typeof data.role === 'string' ? data.role : null;
         const normalizedProfileRole = normalizeRole(rawProfileRole);
-        console.log(`[Auth] OWNER_PROFILE_QUERY_COMPLETED traceId=${traceId} source=profiles rawRole=${rawProfileRole} normalizedRole=${normalizedProfileRole} elapsed…15188 tokens truncated…n: 'admin_access_locked',
+        console.log(`[Auth] OWNER_PROFILE_QUERY_COMPLETED traceId=${traceId} source=profiles rawRole=${rawProfileRole} normalizedRole=${normalizedProfileRole} elapsed=${Date.now() - startTime}ms`);
+        if (shouldAcceptResolvedRole(rawProfileRole, normalizedProfileRole)) {
+          // Email allow-list upgrade: if the session email matches the configured owner email,
+          // promote the role to 'owner' even if profiles.role says something else.
+          // This is the SAME upgrade that handleSession applies, now baked into resolveServerRole
+          // so background hydration cannot downgrade the owner.
+          if (isOwnerAdminEmail(sessionEmail) && !isAdminRole(normalizedProfileRole)) {
+            console.log(`[Auth] OWNER_AUTHORIZED traceId=${traceId} source=profiles+email_allowlist role=owner elapsed=${Date.now() - startTime}ms`);
+            return { role: 'owner', source: 'profiles' };
+          }
+          return { role: normalizedProfileRole, source: 'profiles' };
+        }
+        console.log('[Auth] Profiles role did not map cleanly to a trusted role. Continuing fallback checks for:', rawProfileRole);
+      }
+
+      console.log('[Auth] Could not fetch role from profiles:', error?.message ?? 'no role returned');
+    } catch (error) {
+      console.log('[Auth] Profile role fetch error:', (error as Error)?.message ?? 'unknown');
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('get_user_role');
+      const rpcRole = extractRoleCandidate(data);
+      if (!error && rpcRole) {
+        const normalizedRpcRole = normalizeRole(rpcRole);
+        console.log(`[Auth] OWNER_PROFILE_QUERY_COMPLETED traceId=${traceId} source=rpc_get_user_role rawRole=${rpcRole} normalizedRole=${normalizedRpcRole} elapsed=${Date.now() - startTime}ms`);
+        if (shouldAcceptResolvedRole(rpcRole, normalizedRpcRole)) {
+          if (isOwnerAdminEmail(sessionEmail) && !isAdminRole(normalizedRpcRole)) {
+            console.log(`[Auth] OWNER_AUTHORIZED traceId=${traceId} source=rpc+email_allowlist role=owner elapsed=${Date.now() - startTime}ms`);
+            return { role: 'owner', source: 'rpc_get_user_role' };
+          }
+          return { role: normalizedRpcRole, source: 'rpc_get_user_role' };
+        }
+        console.log('[Auth] get_user_role RPC returned an untrusted role label. Continuing fallback checks for:', rpcRole);
+      }
+
+      console.log('[Auth] get_user_role RPC note:', error?.message ?? 'no role returned');
+    } catch (error) {
+      console.log('[Auth] get_user_role RPC error:', (error as Error)?.message ?? 'unknown');
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('verify_admin_access');
+      if (!error && extractAdminAccessFlag(data)) {
+        console.log(`[Auth] OWNER_PROFILE_QUERY_COMPLETED traceId=${traceId} source=rpc_verify_admin_access role=admin elapsed=${Date.now() - startTime}ms`);
+        // Email allow-list upgrade for verify_admin_access too
+        if (isOwnerAdminEmail(sessionEmail)) {
+          console.log(`[Auth] OWNER_AUTHORIZED traceId=${traceId} source=verify_admin+email_allowlist role=owner elapsed=${Date.now() - startTime}ms`);
+          return { role: 'owner', source: 'rpc_verify_admin_access' };
+        }
+        return { role: 'admin', source: 'rpc_verify_admin_access' };
+      }
+
+      console.log('[Auth] verify_admin_access RPC note:', error?.message ?? 'admin access not confirmed');
+    } catch (error) {
+      console.log('[Auth] verify_admin_access RPC error:', (error as Error)?.message ?? 'unknown');
+    }
+
+    try {
+      const trustedOwnerMeta = await getVerifiedOwnerDeviceMeta();
+      const trustedWindowActive = isTrustedOwnerDeviceWithinWindow(trustedOwnerMeta.verifiedAt);
+      const trustedRole = normalizeRole(trustedOwnerMeta.role);
+      if (
+        trustedWindowActive
+        && isValidOwnerVerifiedUserId(trustedOwnerMeta.userId)
+        && trustedOwnerMeta.userId === userId
+        && isAdminRole(trustedRole)
+      ) {
+        console.log(`[Auth] OWNER_PROFILE_QUERY_COMPLETED traceId=${traceId} source=trusted_device role=${trustedRole} elapsed=${Date.now() - startTime}ms`);
+        return { role: trustedRole, source: 'trusted_device' };
+      }
+    } catch (error) {
+      console.log('[Auth] Trusted-device role fallback note:', (error as Error)?.message ?? 'unknown');
+    }
+
+    // Email allow-list final fallback: if all server sources fail but the session email
+    // matches the configured owner email, the user IS the owner. This prevents the
+    // background hydration from downgrading an owner to investor when RLS or network
+    // issues block the profiles query.
+    if (isOwnerAdminEmail(sessionEmail)) {
+      console.log(`[Auth] OWNER_AUTHORIZED traceId=${traceId} source=email_allowlist_fallback role=owner elapsed=${Date.now() - startTime}ms`);
+      return { role: 'owner', source: 'fallback' };
+    }
+
+    console.log(`[Auth] OWNER_DENIED traceId=${traceId} source=fallback role=investor elapsed=${Date.now() - startTime}ms`);
+    return { role: 'investor', source: 'fallback' };
+  }, []);
+
+  const fetchProfileRole = useCallback(async (userId: string, sessionEmail?: string | null): Promise<string> => {
+    const resolvedRole = await resolveServerRole(userId, sessionEmail);
+    console.log('[Auth] Role resolution complete for user:', userId, 'role:', resolvedRole.role, 'source:', resolvedRole.source);
+    return resolvedRole.role;
+  }, [resolveServerRole]);
+
+  const resolveLocalSessionRoleFallback = useCallback(async (userId: string, sessionEmail?: string | null): Promise<SessionRoleBootstrap> => {
+    // Email allow-list: if the session email matches the configured owner email,
+    // return 'owner' immediately so the timeout fallback never downgrades the owner.
+    if (isOwnerAdminEmail(sessionEmail)) {
+      console.log('[Auth] Role resolution timeout fallback: using owner role from email allow-list for:', userId);
+      return {
+        role: 'owner',
+        source: 'timeout_fallback',
+        requiresBackgroundHydration: true,
+      };
+    }
+
+    try {
+      const [storedAuth, ownerDeviceVerified, trustedOwnerMeta] = await Promise.all([
+        loadStoredAuth(),
+        isOwnerDeviceVerified(),
+        getVerifiedOwnerDeviceMeta(),
+      ]);
+
+      const trustedRole = normalizeRole(trustedOwnerMeta.role);
+      const trustedWindowActive = isTrustedOwnerDeviceWithinWindow(trustedOwnerMeta.verifiedAt);
+      const sameVerifiedUser = ownerDeviceVerified
+        && isValidOwnerVerifiedUserId(trustedOwnerMeta.userId)
+        && trustedOwnerMeta.userId === userId;
+
+      if (sameVerifiedUser && trustedWindowActive && isAdminRole(trustedRole)) {
+        console.log('[Auth] Role resolution timeout fallback: using trusted-device role for:', userId, 'role:', trustedRole);
+        return {
+          role: trustedRole,
+          source: 'timeout_fallback',
+          requiresBackgroundHydration: true,
+        };
+      }
+
+      const storedRole = normalizeRole(storedAuth.userRole);
+      if (storedAuth.userId === userId && storedRole === 'investor') {
+        console.log('[Auth] Role resolution timeout fallback: keeping stored investor role for:', userId);
+      }
+    } catch (error) {
+      console.log('[Auth] Local session role fallback note:', (error as Error)?.message ?? 'unknown');
+    }
+
+    console.log('[Auth] Role resolution timeout fallback: defaulting to investor for:', userId);
+    return {
+      role: 'investor',
+      source: 'timeout_fallback',
+      requiresBackgroundHydration: true,
+    };
+  }, []);
+
+  const hydrateResolvedRoleInBackground = useCallback((session: Session, optimisticRole: string): void => {
+    const sessionUserId = session.user.id;
+    const sessionEmail = session.user.email;
+    console.log('[Auth] Scheduling background role hydration for:', sessionUserId, 'optimisticRole:', optimisticRole);
+
+    void Promise.resolve().then(async () => {
+      try {
+        // Pass sessionEmail so resolveServerRole can apply the email allow-list upgrade.
+        // This prevents background hydration from downgrading an owner to investor
+        // when the profiles query is slow/fails but the email matches the configured owner.
+        const resolvedRole = await resolveServerRole(sessionUserId, sessionEmail);
+        const normalizedResolvedRole = normalizeRole(resolvedRole.role);
+
+        if (activeSessionUserIdRef.current !== sessionUserId) {
+          console.log('[Auth] Background role hydration cancelled because active user changed:', sessionUserId);
+          return;
+        }
+
+        if (ownerIPActiveRef.current) {
+          console.log('[Auth] Background role hydration skipped because trusted owner mode is active for:', sessionUserId);
+          return;
+        }
+
+        // NEVER downgrade from an admin/owner role to investor during background hydration.
+        // The optimistic role was set by handleSession which has the full email allow-list
+        // upgrade logic. Background hydration should only UPGRADE, never downgrade.
+        if (isAdminRole(optimisticRole) && !isAdminRole(normalizedResolvedRole)) {
+          console.log('[Auth] Background role hydration SKIPPED — refusing to downgrade from', optimisticRole, 'to', normalizedResolvedRole, 'for user:', sessionUserId);
+          return;
+        }
+
+        if (normalizedResolvedRole === optimisticRole) {
+          console.log('[Auth] Background role hydration confirmed existing role for:', sessionUserId, 'role:', normalizedResolvedRole);
+          return;
+        }
+
+        console.log('[Auth] Background role hydration UPGRADING role for:', sessionUserId, 'from:', optimisticRole, 'to:', normalizedResolvedRole, 'source:', resolvedRole.source);
+        setUserRole((currentRole) => currentRole === normalizedResolvedRole ? currentRole : normalizedResolvedRole);
+        setUser((previousUser) => {
+          if (previousUser?.id !== sessionUserId) {
+            return previousUser;
+          }
+          if (previousUser.role === normalizedResolvedRole) {
+            return previousUser;
+          }
+          return { ...previousUser, role: normalizedResolvedRole };
+        });
+        setAuthCredentials(null, sessionUserId, normalizedResolvedRole);
+        await persistAuth({
+          token: session.access_token,
+          refreshToken: session.refresh_token || '',
+          userId: sessionUserId,
+          userRole: normalizedResolvedRole,
+        });
+      } catch (error) {
+        console.log('[Auth] Background role hydration note:', (error as Error)?.message ?? 'unknown');
+      }
+    });
+  }, [resolveServerRole]);
+
+  const clearTwoFactorState = useCallback(() => {
+    setRequiresTwoFactor((current) => current ? false : current);
+    setPendingTwoFactorEmail((currentEmail) => currentEmail ? '' : currentEmail);
+    setPendingTwoFactorFactor((currentFactor) => currentFactor === null ? currentFactor : null);
+  }, []);
+
+  // 2FA gating disabled at the owner's request. Owner login must route
+  // directly to /admin/owner-controls without any MFA pending state.
+  // We always clear any stale 2FA state and never block the session.
+  const requireTwoFactorIfNeeded = useCallback(async (_session: Session, source: string): Promise<boolean> => {
+    console.log('[Auth] 2FA gating disabled — skipping MFA challenge after', source);
+    clearTwoFactorState();
+    return false;
+  }, [clearTwoFactorState]);
+
+  const doLogout = useCallback(async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.log('[Auth] Logout error:', e);
+    }
+    ownerIPActiveRef.current = false;
+    sessionWarmupKeyRef.current = null;
+    ownerRepairKeyRef.current = null;
+    activeSessionUserIdRef.current = null;
+    lastHandledSessionKeyRef.current = null;
+    lastHandledSessionResultRef.current = null;
+    inFlightSessionKeyRef.current = null;
+    inFlightSessionPromiseRef.current = null;
+    manualOwnerLoginRef.current = false;
+    await clearStoredAuth();
+    await clearOwnerResilientSession().catch((error: unknown) => {
+      console.log('[Auth] Resilient owner session clear note:', error instanceof Error ? error.message : 'unknown');
+    });
+    // OWNER LOGOUT: Clear ALL owner SecureStore keys including trusted-device
+    // state so the next app launch requires manual email + password.
+    await clearOwnerIP();
+    setUser((previousUser) => previousUser === null ? previousUser : null);
+    setIsAuthenticated((current) => current ? false : current);
+    setUserRole((currentRole) => currentRole === 'investor' ? currentRole : 'investor');
+    clearTwoFactorState();
+    setIsOwnerIPAccess((current) => current ? false : current);
+    if (sessionMonitorCleanup.current) {
+      sessionMonitorCleanup.current();
+      sessionMonitorCleanup.current = null;
+    }
+    console.log('[Auth] Logged out');
+  }, [clearTwoFactorState]);
+
+  const startMonitor = useCallback(() => {
+    if (sessionMonitorCleanup.current) {
+      sessionMonitorCleanup.current();
+    }
+    sessionMonitorCleanup.current = startSessionMonitor(() => {
+      console.log('[Auth] Session timed out — logging out');
+      void doLogout();
+    });
+  }, [doLogout]);
+
+  const warmSessionInBackground = useCallback((session: Session, authUser: AuthUser, role: string) => {
+    const supaUser = session.user;
+    const warmupKey = `${supaUser.id}:${role}`;
+
+    if (sessionWarmupKeyRef.current === warmupKey) {
+      console.log('[Auth] Session warmup already scheduled for:', warmupKey);
+      return;
+    }
+
+    sessionWarmupKeyRef.current = warmupKey;
+    console.log('[Auth] Scheduling non-blocking session warmup for:', warmupKey);
+
+    const runWarmup = async (): Promise<void> => {
+      if (activeSessionUserIdRef.current !== supaUser.id) {
+        console.log('[Auth] Session warmup cancelled because active user changed:', supaUser.id);
+        return;
+      }
+
+      const registryTimestamp = new Date().toISOString();
+      const sessionCreatedAt = supaUser.created_at || registryTimestamp;
+
+      const warmupStatus = 'active';
+
+      try {
+        await upsertStoredMemberRegistryRecord({
+          id: supaUser.id,
+          email: authUser.email,
+          firstName: authUser.firstName,
+          lastName: authUser.lastName,
+          phone: authUser.phone || '',
+          country: authUser.country || '',
+          role,
+          status: warmupStatus,
+          kycStatus: authUser.kycStatus,
+          createdAt: sessionCreatedAt,
+          updatedAt: registryTimestamp,
+          lastSeenAt: registryTimestamp,
+          source: 'session',
+        });
+        console.log('[Auth] Member registry warmup complete for:', supaUser.id);
+      } catch (error) {
+        console.log('[Auth] Member registry warmup note:', (error as Error)?.message ?? 'unknown');
+      }
+
+      if (activeSessionUserIdRef.current !== supaUser.id) {
+        console.log('[Auth] Session warmup stopped after member registry because active user changed:', supaUser.id);
+        return;
+      }
+
+      try {
+        const profileEnsureResult = await ensureMemberProfileRecord({
+          id: supaUser.id,
+          email: authUser.email,
+          firstName: authUser.firstName,
+          lastName: authUser.lastName,
+          phone: authUser.phone || '',
+          country: authUser.country || '',
+          kycStatus: authUser.kycStatus,
+          role,
+          status: warmupStatus,
+          source: 'session',
+        });
+
+        if (!profileEnsureResult.success) {
+          console.log('[Auth] Profile warmup note:', profileEnsureResult.error || 'unknown');
+        } else {
+          console.log('[Auth] Profile warmup complete for:', supaUser.id);
+        }
+      } catch (error) {
+        console.log('[Auth] Profile warmup exception:', (error as Error)?.message ?? 'unknown');
+      }
+
+      if (activeSessionUserIdRef.current !== supaUser.id) {
+        console.log('[Auth] Session warmup stopped before sync because active user changed:', supaUser.id);
+        return;
+      }
+
+      try {
+        const status = await initializeSync();
+        console.log('[Auth] Supabase sync initialized. Connected:', status.connected);
+        await syncUserData(supaUser.id);
+        console.log('[Auth] User sync warmup complete for:', supaUser.id);
+      } catch (error) {
+        console.log('[Auth] User sync warmup note:', (error as Error)?.message ?? 'unknown');
+      }
+    };
+
+    void Promise.resolve().then(runWarmup);
+  }, []);
+
+  const handleSession = useCallback(async (session: Session): Promise<AuthSessionResult> => {
+    const supaUser = session.user;
+    const sessionKey = `${supaUser.id}:${session.expires_at ?? 'no-expiry'}:${session.access_token ?? 'no-token'}`;
+    const lastSessionResult = lastHandledSessionResultRef.current;
+    if (lastHandledSessionKeyRef.current === sessionKey && lastSessionResult) {
+      console.log('[Auth] Duplicate completed session event ignored for:', supaUser.id);
+      return lastSessionResult;
+    }
+
+    if (inFlightSessionKeyRef.current === sessionKey && inFlightSessionPromiseRef.current) {
+      console.log('[Auth] Duplicate in-flight session event joined for:', supaUser.id);
+      return inFlightSessionPromiseRef.current;
+    }
+
+    const handleSessionWork = async (): Promise<AuthSessionResult> => {
+    const meta = supaUser.user_metadata || {};
+
+    if (ownerIPActiveRef.current) {
+      console.log('[Auth] Replacing transient trusted-owner session with real Supabase session for:', supaUser.id);
+    }
+    ownerIPActiveRef.current = false;
+    setIsOwnerIPAccess((current) => current ? false : current);
+
+    if (shouldRepairOwnerAfterLogin(session)) {
+      const repairKey = `${supaUser.id}:${supaUser.updated_at ?? supaUser.email ?? 'owner'}`;
+      if (ownerRepairKeyRef.current !== repairKey) {
+        ownerRepairKeyRef.current = repairKey;
+        // IVX_OWNER_REPAIR_BACKGROUND_V1
+        // Profile/wallet repair is maintenance work and must never block a valid owner login.
+        void repairOwnerRegistrationAfterLogin(session).catch((error: unknown) => {
+          console.log('[Auth] Owner post-login repair note:', error instanceof Error ? error.message : 'unknown');
+          return null;
+        });
+      }
+    }
+
+    // Role resolution must never block navigation. We resolve optimistically
+    // from the server with a short deadline, and if it misses the deadline we use
+    // a safe fallback and rehydrate in the background. This prevents the login
+    // UI from appearing to hang for 30 seconds when the network is slow.
+    let roleBootstrap: SessionRoleBootstrap | null = null;
+    try {
+      roleBootstrap = await withTimeout<SessionRoleBootstrap | null>(
+        async () => {
+          const resolvedRole = await resolveServerRole(supaUser.id, supaUser.email);
+          return {
+            role: normalizeRole(resolvedRole.role),
+            source: resolvedRole.source,
+            requiresBackgroundHydration: false,
+          };
+        },
+        AUTH_ROLE_RESOLUTION_TIMEOUT_MS,
+        'resolveServerRole',
+        null,
+      );
+    } catch (roleError) {
+      console.log('[Auth] Role resolution threw (non-blocking):', (roleError as Error)?.message ?? 'unknown');
+    }
+    const resolvedSessionRole = roleBootstrap ?? await resolveLocalSessionRoleFallback(supaUser.id, supaUser.email);
+    let role = normalizeRole(resolvedSessionRole.role);
+
+    // Owner authorization is determined by the IVX backend via the
+    // /api/ivx/owner/authorize endpoint. The client no longer promotes roles
+    // based on email allow-list. The fallback here is used only when the server
+    // is unreachable and the stored trusted-device role is valid; it will be
+    // revalidated in the background.
+
+    if (resolvedSessionRole.source === 'timeout_fallback') {
+      console.log('[Auth] Session role bootstrap used timeout fallback for:', supaUser.id, 'role:', role);
+    }
+
+    if (!role) {
+      console.log('[Auth] No server role found for user:', supaUser.id, '— defaulting to investor. JWT metadata role is NOT trusted for authorization.');
+    }
+
+    if (shouldBlockRoleForAdminAccess(role, supaUser.email)) {
+      const blockedReason = getAdminAccessLockMessage();
+      console.log('[Auth] Admin access lock blocked authenticated session for:', supaUser.id, 'role:', role, 'email:', sanitizeEmail(supaUser.email ?? 'unknown'));
+      ownerIPActiveRef.current = false;
+      sessionWarmupKeyRef.current = null;
+      ownerRepairKeyRef.current = null;
+      activeSessionUserIdRef.current = null;
+      setUser((previousUser) => previousUser === null ? previousUser : null);
+      setUserRole((currentRole) => currentRole === 'investor' ? currentRole : 'investor');
+      setIsAuthenticated((current) => current ? false : current);
+      setIsOwnerIPAccess((current) => current ? false : current);
+      setDetectedIP((currentIP) => currentIP === null ? currentIP : null);
+      clearTwoFactorState();
+      setAuthCredentials(null, null, 'investor');
+      await clearStoredAuth();
+      if (sessionMonitorCleanup.current) {
+        sessionMonitorCleanup.current();
+        sessionMonitorCleanup.current = null;
+      }
+      try {
+        await supabase.auth.signOut();
+      } catch (error) {
+        console.log('[Auth] Admin access lock signOut note:', extractAuthErrorMessage(error) ?? 'unknown');
+      }
+      const blockedResult = { accepted: false, role, blockedReason };
+      lastHandledSessionKeyRef.current = sessionKey;
+      lastHandledSessionResultRef.current = blockedResult;
+      return blockedResult;
+    }
+
+    const authUser: AuthUser = {
+      id: supaUser.id,
+      email: supaUser.email || '',
+      firstName: meta.firstName || meta.first_name || '',
+      lastName: meta.lastName || meta.last_name || '',
+      kycStatus: isAdminRole(role) ? 'approved' : (meta.kycStatus || meta.kyc_status || 'pending'),
+      role,
+      emailVerified: !!supaUser.email_confirmed_at,
+      twoFactorEnabled: false,
+      phone: meta.phone || '',
+      country: meta.country || '',
+      accountType: meta.accountType === 'owner' ? 'owner' : 'investor',
+      accountStatus: 'active',
+    };
+
+    clearTwoFactorState();
+    activeSessionUserIdRef.current = supaUser.id;
+    setUser((previousUser) => areAuthUsersEqual(previousUser, authUser) ? previousUser : authUser);
+    setUserRole((currentRole) => currentRole === role ? currentRole : role);
+    setIsAuthenticated((current) => current ? current : true);
+
+    await persistAuth({
+      token: session.access_token,
+      refreshToken: session.refresh_token || '',
+      userId: supaUser.id,
+      userRole: role,
+    });
+
+    startMonitor();
+    console.log('[Auth] Session set for:', supaUser.id, 'role:', role, 'source:', resolvedSessionRole.source);
+    warmSessionInBackground(session, authUser, role);
+
+    if (resolvedSessionRole.requiresBackgroundHydration) {
+      hydrateResolvedRoleInBackground(session, role);
+    }
+
+    const acceptedResult = { accepted: true, role, blockedReason: null };
+    lastHandledSessionKeyRef.current = sessionKey;
+    lastHandledSessionResultRef.current = acceptedResult;
+    return acceptedResult;
+    };
+
+    const sessionPromise = handleSessionWork().finally(() => {
+      if (inFlightSessionKeyRef.current === sessionKey) {
+        inFlightSessionKeyRef.current = null;
+        inFlightSessionPromiseRef.current = null;
+      }
+    });
+    inFlightSessionKeyRef.current = sessionKey;
+    inFlightSessionPromiseRef.current = sessionPromise;
+    return sessionPromise;
+  }, [clearTwoFactorState, hydrateResolvedRoleInBackground, resolveLocalSessionRoleFallback, resolveServerRole, startMonitor, warmSessionInBackground]);
+
+  const activateOwnerIPSession = useCallback(async (ip: string, verifiedRole: string = 'owner', verifiedUserId?: string | null, verifiedEmail?: string | null) => {
+    if (shouldBlockRoleForAdminAccess(verifiedRole, verifiedEmail)) {
+      console.log('[Auth] Trusted owner IP activation blocked because owner-only admin access is enabled for another email:', sanitizeEmail(verifiedEmail ?? 'unknown'));
+      return;
+    }
+
+    // SECURITY HARDENING: Require a valid Supabase session before activating
+    // any owner IP / trusted-device bypass. This prevents authentication-less
+    // access — the owner must have signed in with valid credentials at least
+    // once in this app session for the trusted-device restore to work.
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData?.session) {
+        console.log('[Auth] Trusted owner IP activation BLOCKED: no valid Supabase session. Authentication-less access denied.');
+        return;
+      }
+    } catch (sessionCheckError) {
+      console.log('[Auth] Trusted owner IP activation BLOCKED: session check failed:', (sessionCheckError as Error)?.message);
+      return;
+    }
+
+    const normalizedVerifiedRole = normalizeRole(verifiedRole);
+    const effectiveRole = isAdminRole(normalizedVerifiedRole) ? normalizedVerifiedRole : 'owner';
+    const normalizedVerifiedEmail = sanitizeEmail(verifiedEmail ?? '');
+    const ownerUser: AuthUser = {
+      id: verifiedUserId || 'owner-ip-' + ip.replace(/\./g, '-'),
+      email: normalizedVerifiedEmail || 'owner@ivxholding.com',
+      firstName: 'Owner',
+      lastName: '(Trusted Device)',
+      kycStatus: 'approved',
+      role: effectiveRole,
+      emailVerified: true,
+    };
+    ownerIPActiveRef.current = true;
+    sessionWarmupKeyRef.current = null;
+    activeSessionUserIdRef.current = ownerUser.id;
+    setUser((previousUser) => areAuthUsersEqual(previousUser, ownerUser) ? previousUser : ownerUser);
+    setUserRole((currentRole) => currentRole === effectiveRole ? currentRole : effectiveRole);
+    setIsAuthenticated((current) => current ? current : true);
+    setIsOwnerIPAccess((current) => current ? current : true);
+    setDetectedIP((currentIP) => currentIP === ip ? currentIP : ip);
+    setAuthCredentials(null, ownerUser.id, effectiveRole);
+    console.log('[Auth] Trusted owner IP access activated for IP:', ip, 'role:', effectiveRole, 'userId:', ownerUser.id);
+
+    initializeSync().then((status) => {
+      console.log('[Auth] Supabase sync initialized for owner. Connected:', status.connected, '| Channels:', status.realtimeChannels);
+      syncOwnerData().then((stats) => {
+        console.log('[Auth] Owner data stats:', JSON.stringify(stats));
+      }).catch(() => {});
+    }).catch((err) => {
+      console.log('[Auth] Sync init failed (non-blocking):', (err as Error)?.message);
+    });
+  }, []);
+
+  const restoreTrustedOwnerSession = useCallback(async (): Promise<boolean> => {
+    try {
+      const [ipEnabled, ownerDeviceVerified, ownerDeviceMeta, storedIP] = await Promise.all([
+        isStoredOwnerIPEnabled(),
+        isOwnerDeviceVerified(),
+        getVerifiedOwnerDeviceMeta(),
+        getStoredOwnerIP(),
+      ]);
+      const hasValidTrustedIdentity = isValidOwnerVerifiedUserId(ownerDeviceMeta.userId);
+      const normalizedTrustedEmail = sanitizeEmail(ownerDeviceMeta.email ?? '');
+
+      if (isAdminAccessLocked() && !isOwnerAdminEmail(normalizedTrustedEmail)) {
+        console.log('[Auth] Trusted owner auto-restore skipped because the verified device email is not the configured owner email:', normalizedTrustedEmail || 'missing');
+        return false;
+      }
+
+      if (ownerDeviceVerified && !hasValidTrustedIdentity) {
+        console.log('[Auth] Trusted owner restore blocked because stored verified user id is invalid:', ownerDeviceMeta.userId);
+        await clearOwnerIP();
+        return false;
+      }
+
+      const shouldVerifyOwnerNetwork = ipEnabled && ownerDeviceVerified;
+      const currentIP = shouldVerifyOwnerNetwork ? await fetchDeviceIP() : null;
+      const nextDetectedIP = currentIP ?? storedIP ?? null;
+      setDetectedIP((currentDetectedIP) => currentDetectedIP === nextDetectedIP ? currentDetectedIP : nextDetectedIP);
+      const trustedDeviceWindowActive = isTrustedOwnerDeviceWithinWindow(ownerDeviceMeta.verifiedAt);
+      const hasTrustedWindowAccess = ipEnabled && ownerDeviceVerified && trustedDeviceWindowActive && isValidOwnerVerifiedUserId(ownerDeviceMeta.userId);
+      const trustedRole = normalizeRole(ownerDeviceMeta.role);
+      console.log('[Auth] Owner trusted-device check — current:', currentIP, 'stored:', storedIP, 'enabled:', ipEnabled, 'verified:', ownerDeviceVerified, 'verifiedUserId:', ownerDeviceMeta.userId, 'verifiedRole:', ownerDeviceMeta.role, 'verifiedAt:', ownerDeviceMeta.verifiedAt, 'trustedWindow:', trustedDeviceWindowActive, 'trustedWindowAccess:', hasTrustedWindowAccess);
+
+      if (ipEnabled && ownerDeviceVerified && storedIP && currentIP && isCarrierSubnetMatch(currentIP, storedIP)) {
+        console.log('[Auth] Trusted owner device matched carrier subnet — restoring owner access. Current:', currentIP, 'Stored:', storedIP);
+        if (currentIP !== storedIP) {
+          await setOwnerIP(currentIP);
+          console.log('[Auth] Updated stored owner IP to current:', currentIP);
+        }
+        await activateOwnerIPSession(currentIP, trustedRole, ownerDeviceMeta.userId, ownerDeviceMeta.email);
+        return true;
+      }
+
+      if (hasTrustedWindowAccess && ownerDeviceMeta.userId) {
+        const restoreIdentity = currentIP ?? storedIP ?? 'trusted-device';
+        if (currentIP && currentIP !== storedIP) {
+          await setOwnerIP(currentIP);
+          console.log('[Auth] Updated stored owner IP during trusted-window restore:', currentIP, 'previous:', storedIP ?? 'none');
+        }
+        console.log('[Auth] Trusted owner device is still inside the verification window — restoring owner access without blocking on exact IP match. Current:', currentIP ?? 'unavailable', 'Stored:', storedIP ?? 'none', 'Role:', trustedRole, 'User:', ownerDeviceMeta.userId);
+        await activateOwnerIPSession(restoreIdentity, trustedRole, ownerDeviceMeta.userId, ownerDeviceMeta.email);
+        return true;
+      }
+
+      if (ipEnabled && ownerDeviceVerified && trustedDeviceWindowActive && ownerDeviceMeta.userId && storedIP && currentIP && !isCarrierSubnetMatch(currentIP, storedIP)) {
+        console.log('[Auth] Trusted owner device within window but IP subnet mismatch — manual restore remains available. Current:', currentIP, 'stored:', storedIP);
+      }
+
+      if (ipEnabled && ownerDeviceVerified && storedIP && !currentIP) {
+        console.log('[Auth] Trusted owner device enabled but IP detection failed — exact IP restore is blocked, but verified-window restore may still be used when eligible');
+      }
+    } catch (error) {
+      console.log('[Auth] Trusted owner restore note:', (error as Error)?.message ?? 'unknown');
+    }
+
+    return false;
+  }, [activateOwnerIPSession]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const initAuth = async () => {
+      logStartup('AUTH_INITIALIZATION_STARTED');
+      logStartup('AUTH_INIT_STARTED');
+      try {
+        if (Platform.OS === 'web') {
+          const session = await withTimeout(
+            () => readVerifiedSession(supabase.auth),
+            AUTH_BOOTSTRAP_TIMEOUT_MS,
+            'initAuth.restoreWebSession',
+            null,
+          );
+          // A timed-out bootstrap must never overwrite a newer manual login.
+          if (!cancelled && !manualOwnerLoginRef.current && session) {
+            manualOwnerLoginRef.current = true;
+            const challengeRequired = await requireTwoFactorIfNeeded(session, 'web session restore');
+            if (!cancelled && manualOwnerLoginRef.current && !challengeRequired) {
+              await handleSession(session);
+            }
+          }
+          if (!cancelled) {
+            setIsLoading(false);
+            logStartup('AUTH_INIT_COMPLETED', 'web session checked with auth authority');
+          }
+          return;
+        }
+        // IVX_STARTUP_SIGNOUT_SERIALIZED_V1
+        // Never allow the cold-start sign-out to overlap a new manual login.
+        // The previous fire-and-forget signOut could finish after a valid owner
+        // session was created, emit SIGNED_OUT, clear isAuthenticated, and leave
+        // the active Home tab with only its dark navigator surface.
+        manualOwnerLoginRef.current = false;
+        await withTimeout(
+          () => supabase.auth.signOut({ scope: 'local' }).then(() => {
+            console.log('[Auth] Cold-launch signOut completed before manual login is enabled');
+          }),
+          AUTH_BOOTSTRAP_TIMEOUT_MS,
+          'initAuth.signOut',
+          undefined,
+        ).catch((e: unknown) => {
+          console.log('[Auth] Cold-launch signOut note:', (e as Error)?.message ?? 'unknown');
+        });
+
+        if (!cancelled) {
+          setIsLoading(false);
+          logStartup('AUTH_INITIALIZATION_COMPLETED', 'router unlocked after startup signOut');
+          logStartup('AUTH_INIT_COMPLETED', 'router unlocked after startup signOut');
+        }
+      } catch (e) {
+        logStartupError('AUTH_INITIALIZATION_FAILED', e);
+        logStartupError('AUTH_INIT_FAILED', e);
+        console.log('[Auth] Init error:', (e as Error)?.message);
+        // Always unlock the router even if setup threw.
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void initAuth();
+
+    let subscription: { unsubscribe: () => void } | null = null;
+    try {
+      const result = supabase.auth.onAuthStateChange(async (_event, session) => {
+        if (cancelled) {
+          return;
+        }
+        if (_event === 'INITIAL_SESSION') {
+          console.log('[Auth] State changed: INITIAL_SESSION — handled by startup bootstrap');
+          return;
+        }
+        if (ownerIPActiveRef.current) {
+          console.log('[Auth] State changed:', _event, '— IGNORED (owner IP active)');
+          return;
+        }
+        console.log('[Auth] State changed:', _event);
+        if (session) {
+          // Only accept sessions from manual login — not from automatic restore.
+          // manualOwnerLoginRef is set to true inside login() /
+          // loginOwnerPasswordless() / verify2FA() before the Supabase sign-in
+          // call. Without it, persisted sessions from cold launch are ignored.
+          if (!manualOwnerLoginRef.current) {
+            console.log('[Auth] Ignoring auth state session — no manual login for this app session');
+            return;
+          }
+          // Supabase awaits subscribers. Profile/MFA requests may need the same
+          // session/refresh operation to finish, so run them after it releases.
+          deferAuthWork(async () => {
+            if (cancelled || !manualOwnerLoginRef.current || ownerIPActiveRef.current) return;
+            const challengeRequired = await requireTwoFactorIfNeeded(session, `auth event ${String(_event)}`);
+            if (cancelled || !manualOwnerLoginRef.current || ownerIPActiveRef.current) return;
+            if (!challengeRequired) {
+              const handledSession = await handleSession(session);
+              if (!handledSession.accepted) {
+                console.log('[Auth] Auth state session blocked:', handledSession.blockedReason ?? 'admin access lock');
+              }
+            }
+          }, error => console.log('[Auth] Deferred session validation failed:', error instanceof Error ? error.message : 'unknown'));
+        } else if (_event === 'SIGNED_OUT') {
+          sessionWarmupKeyRef.current = null;
+          ownerRepairKeyRef.current = null;
+          activeSessionUserIdRef.current = null;
+          lastHandledSessionKeyRef.current = null;
+          lastHandledSessionResultRef.current = null;
+          inFlightSessionKeyRef.current = null;
+          inFlightSessionPromiseRef.current = null;
+          manualOwnerLoginRef.current = false;
+          setUser((previousUser) => previousUser === null ? previousUser : null);
+          setIsAuthenticated((current) => current ? false : current);
+          setUserRole((currentRole) => currentRole === 'investor' ? currentRole : 'investor');
+          clearTwoFactorState();
+          await clearStoredAuth();
+          await clearOwnerResilientSession().catch(() => {});
+          await clearOwnerIP();
+          if (sessionMonitorCleanup.current) {
+            sessionMonitorCleanup.current();
+            sessionMonitorCleanup.current = null;
+          }
+        }
+      });
+      subscription = result?.data?.subscription ?? null;
+    } catch (e) {
+      console.log('[Auth] onAuthStateChange setup error:', (e as Error)?.message);
+    }
+
+    return () => {
+      cancelled = true;
+      try { subscription?.unsubscribe(); } catch {}
+      if (sessionMonitorCleanup.current) {
+        sessionMonitorCleanup.current();
+        sessionMonitorCleanup.current = null;
+      }
+    };
+  }, [clearTwoFactorState, handleSession, requireTwoFactorIfNeeded]);
+
+  // Absolute hard timeout: no matter what happens during auth bootstrap,
+  // the router must never stay locked on a loading state. If isLoading is
+  // still true after 3s, force it false so the login screen can render.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (isLoading) {
+        console.warn('[Auth] Hard unlock timeout reached — forcing isLoading=false');
+        logStartup('AUTH_HARD_UNLOCK');
+        setIsLoading(false);
+      }
+    }, AUTH_BOOTSTRAP_TIMEOUT_MS + 1000);
+    return () => clearTimeout(timer);
+  }, [isLoading]);
+
+  const loginOwnerPasswordless = useCallback(async (ownerEmail: string, ownerPassword?: string): Promise<LoginResult> => {
+    const normalizedOwnerEmail = sanitizeEmail(ownerEmail);
+    if (!normalizedOwnerEmail) {
+      return { success: false, message: 'Enter your owner email to sign in.' };
+    }
+    setLoginLoading(true);
+    try {
+      const apiBaseUrls = getOwnerRegistrationApiBaseUrls();
+      let lastError: string | null = null;
+      let sessionInstalled = false;
+      for (const baseUrl of apiBaseUrls) {
+        const endpoint = `${baseUrl}/api/ivx/owner-passwordless-login`;
+        try {
+          const response = await fetchWithOwnerRegistrationTimeout(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            // IVX_OWNER_OUTAGE_CREDENTIAL_BOUND_V1
+            // Bind an emergency session to the exact password supplied by the
+            // owner. The backend compares it in constant time against its
+            // existing owner credential before minting a short-lived token.
+            body: JSON.stringify({
+              email: normalizedOwnerEmail,
+              emergency: 'ivx_emergency_recovery',
+              ...(typeof ownerPassword === 'string' && ownerPassword.length > 0
+                ? { password: ownerPassword }
+                : {}),
+            }),
+          });
+          const text = await response.text();
+          let parsed: Record<string, unknown> = {};
+          try { parsed = text ? (JSON.parse(text) as Record<string, unknown>) : {}; } catch {}
+          if (parsed.success !== true) {
+            lastError = typeof parsed.message === 'string' ? parsed.message : `Owner login failed (HTTP ${response.status}).`;
+            continue;
+          }
+          const accessToken = typeof parsed.accessToken === 'string' ? parsed.accessToken : '';
+          const refreshToken = typeof parsed.refreshToken === 'string' ? parsed.refreshToken : '';
+          const sessionMethod = typeof parsed.sessionMethod === 'string' ? parsed.sessionMethod : '';
+          if (!accessToken || (sessionMethod !== 'ivx_owner_outage_session' && !refreshToken)) {
+            lastError = 'Backend did not return session tokens.';
+            continue;
+          }
+          if (sessionMethod === 'ivx_owner_outage_session') {
+            const outageUserId = typeof parsed.userId === 'string' ? parsed.userId : '';
+            const outageEmail = sanitizeEmail(typeof parsed.email === 'string' ? parsed.email : normalizedOwnerEmail);
+            if (!isValidOwnerVerifiedUserId(outageUserId) || !isOwnerAdminEmail(outageEmail)) {
+              lastError = 'Backend outage owner session identity was not accepted.';
+              continue;
+            }
+            const outageOwnerUser: AuthUser = {
+              id: outageUserId,
+              email: outageEmail,
+              firstName: 'Owner',
+              lastName: 'IVX',
+              kycStatus: 'approved',
+              role: 'owner',
+              emailVerified: true,
+              accountType: 'owner',
+              accountStatus: 'active',
+            };
+            manualOwnerLoginRef.current = true;
+            ownerIPActiveRef.current = false;
+            activeSessionUserIdRef.current = outageUserId;
+            setUser(outageOwnerUser);
+            setUserRole('owner');
+            setIsAuthenticated(true);
+            setIsOwnerIPAccess(false);
+            setAuthCredentials(accessToken, outageUserId, 'owner');
+            await persistAuth({ token: accessToken, refreshToken: '', userId: outageUserId, userRole: 'owner' });
+            sessionInstalled = true;
+            console.log('[Auth] IVX owner outage session installed:', outageUserId, outageEmail);
+            break;
+          }
+          // Mark manual owner login BEFORE setSession so the synchronous
+          // onAuthStateChange event does not trigger the owner auto-login block
+          // and wipe the session immediately.
+          manualOwnerLoginRef.current = true;
+          const freshClient = ensureSupabaseClient();
+          const { data: sessionData, error: sessionError } = await freshClient.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (sessionError) {
+            manualOwnerLoginRef.current = false;
+            lastError = sessionError.message;
+            continue;
+          }
+          const session = sessionData.session;
+          if (!session) {
+            manualOwnerLoginRef.current = false;
+            lastError = 'No session returned from setSession.';
+            continue;
+          }
+          const challengeRequired = await requireTwoFactorIfNeeded(session, 'passwordless owner login');
+          if (challengeRequired) {
+            return { success: false, requiresTwoFactor: true, message: 'Enter the 6-digit code from your authenticator app to finish signing in.' };
+          }
+          const handled = await handleSession(session);
+          if (!handled.accepted) {
+            manualOwnerLoginRef.current = false;
+            return { success: false, message: handled.blockedReason ?? 'Owner session was not accepted.', failureReason: 'admin_access_locked' };
+          }
+          sessionInstalled = true;
+          break;
+        } catch (endpointError) {
+          lastError = endpointError instanceof Error ? endpointError.message : 'Owner login endpoint failed.';
+          continue;
+        }
+      }
+      if (!sessionInstalled) {
+        // No hardcoded password fallback. The passwordless login endpoint
+        // is the only path for this flow. If it fails, the owner must use
+        // the standard email + password login screen instead.
+        return {
+          success: false,
+          message: lastError ?? 'Owner passwordless login is not available. Please use email and password sign-in.',
+          failureReason: 'service_unavailable',
+        };
+      }
+      return { success: true, message: 'Owner signed in without a password.' };
+    } catch (error: unknown) {
+      const message = extractAuthErrorMessage(error) || 'Passwordless owner login failed.';
+      return { success: false, message, failureReason: 'unknown' };
+    } finally {
+      setLoginLoading(false);
+    }
+  }, [handleSession, requireTwoFactorIfNeeded]);
+
+  const login = useCallback(async (email: string, password: string): Promise<LoginResult> => {
+    setLoginLoading(true);
+    const trace = new LoginTrace();
+    try {
+      trace.checkpoint('LOGIN_TAP');
+      trace.checkpoint('CREDENTIAL_VALIDATION');
+      const normalizedEmail = sanitizeEmail(email);
+
+      let freshClient: SupabaseClient;
+      try {
+        freshClient = ensureSupabaseClient();
+        const audit = getSupabaseConfigAudit();
+        if (!audit.host.includes('kvclcdjmjghndxsngfzb')) {
+          console.warn('[Auth] Resolved Supabase host is not production, forcing production client:', audit.host);
+          freshClient = forceProductionSupabaseClient();
+        }
+      } catch (configError) {
+        const configAudit = getSupabaseConfigAudit();
+        console.log('[Auth] Supabase client not configured at login time:', configAudit);
+        trace.checkpoint('FAILED', { stage: 'auth', errorCode: 'not_configured', errorMessage: 'Supabase not configured' });
+        return {
+          success: false,
+          message: SUPABASE_NOT_CONFIGURED_MESSAGE,
+          failureReason: 'service_unavailable',
+          supabaseErrorMessage: SUPABASE_NOT_CONFIGURED_MESSAGE,
+          supabaseErrorCode: 'not_configured',
+          supabaseErrorStatus: 500,
+          supabaseErrorName: 'AuthError',
+        };
+      }
+
+      if (ownerIPActiveRef.current || isOwnerIPAccess) {
+        ownerIPActiveRef.current = false;
+        setIsOwnerIPAccess(false);
+      }
+
+      trace.checkpoint('BACKEND_REQUEST_STARTED');
+      manualOwnerLoginRef.current = true;
+
+      // IVX_OWNER_SUPABASE_DIRECT_PASSWORD_V1
+      // Owner password validation should not depend on Render cold-start latency.
+      // Supabase remains the credential authority. Backend login is retained below
+      // only as a transport/service fallback when direct Auth is unavailable.
+      if (isOwnerAdminEmail(normalizedEmail)) {
+        const directStartedAt = Date.now();
+        const directResult = await signInWithEmailPassword(freshClient, normalizedEmail, password);
+        if (directResult.ok) {
+          trace.checkpoint('BACKEND_RESPONSE_RECEIVED', { success: true });
+          trace.checkpoint('SESSION_CREATED');
+          trace.checkpoint('SESSION_PERSIST_STARTED');
+          const directSession = directResult.session;
+          trace.checkpoint('SESSION_PERSIST_COMPLETE');
+          console.log('[Auth] Direct owner Supabase session established in', Date.now() - directStartedAt, 'ms');
+          const challengeRequired = await requireTwoFactorIfNeeded(directSession, 'direct owner password sign-in');
+          if (challengeRequired) {
+            return { success: false, requiresTwoFactor: true, message: 'Enter the 6-digit code from your authenticator app to finish signing in.' };
+          }
+          trace.checkpoint('OWNER_LOOKUP_STARTED');
+          const handledDirectSession = await handleSession(directSession);
+          trace.checkpoint('OWNER_LOOKUP_COMPLETE', { success: handledDirectSession.accepted, errorMessage: handledDirectSession.blockedReason ?? undefined });
+          if (!handledDirectSession.accepted) {
+            return { success: false, message: handledDirectSession.blockedReason ?? getAdminAccessLockMessage(), failureReason: 'admin_access_locked' };
+          }
+          trace.checkpoint('APP_SESSION_READY');
+          return { success: true, message: 'Login successful', traceId: trace.traceId };
+        }
+
+        const directCode = String((directResult.error as { code?: string })?.code ?? '').toLowerCase();
+        const directMessage = String(directResult.error?.message ?? '').toLowerCase();
+        const invalidCredentials = directCode.includes('invalid_credentials')
+          || directMessage.includes('invalid login credentials')
+          || directMessage.includes('invalid email or password');
+        if (invalidCredentials) {
+          manualOwnerLoginRef.current = false;
+          trace.checkpoint('FAILED', { stage: 'auth', errorCode: directCode || 'invalid_credentials', errorMessage: directResult.error.message });
+          return {
+            success: false,
+            message: 'Invalid email or password.',
+            failureReason: 'invalid_credentials',
+            supabaseErrorMessage: directResult.error.message,
+            supabaseErrorCode: directCode || 'invalid_credentials',
+            supabaseErrorStatus: Number((directResult.error as { status?: number })?.status ?? 400),
+            supabaseErrorName: directResult.error.name || 'AuthError',
+          };
+        }
+        console.log('[Auth] Direct owner Supabase sign-in unavailable; trying existing backend fallback:', directResult.error.message);
+      }
+
+      const apiBaseUrls = getOwnerRegistrationApiBaseUrls();
+      let lastError: string | null = null;
+      let serverResult: {
+        success: boolean;
+        message?: string;
+        userId?: string;
+        email?: string;
+        accessToken?: string;
+        refreshToken?: string;
+        expiresAt?: number;
+        requiresVerification?: boolean;
+      } | null = null;
+
+      let lastFailure: Extract<ServerLoginOutcome, { kind: 'failure' }> | null = null;
+
+      for (const baseUrl of apiBaseUrls) {
+        const endpoint = `${baseUrl}/api/members/login`;
+        const outcome = await postMemberLoginWithRetry(endpoint, normalizedEmail, password);
+
+        if (outcome.kind === 'success') {
+          serverResult = {
+            success: true,
+            userId: outcome.userId,
+            email: outcome.email,
+            accessToken: outcome.accessToken,
+            refreshToken: outcome.refreshToken,
+            expiresAt: outcome.expiresAt,
+          };
+          lastError = null;
+          lastFailure = null;
+          break;
+        }
+
+        lastFailure = outcome;
+        lastError = outcome.message;
+
+        if (outcome.requiresVerification) {
+          return { success: false, message: outcome.message, requiresVerification: true, failureReason: 'verification_required' };
+        }
+
+        // A definitive answer from the server (wrong password, locked, rate
+        // limited) must NOT be retried against the next base URL — the answer
+        // will not change, and retrying burns the rate-limit budget.
+        if (!outcome.retryable) {
+          break;
+        }
+      }
+
+      const serverAccessToken = serverResult?.accessToken ?? '';
+      const serverRefreshToken = serverResult?.refreshToken ?? '';
+      const serverSessionUsable = serverResult?.success === true
+        && serverAccessToken.length > 0
+        && serverRefreshToken.length > 0;
+
+      let resolvedSession: Session | null = null;
+
+      if (serverSessionUsable) {
+        trace.checkpoint('BACKEND_RESPONSE_RECEIVED', { success: true });
+        trace.checkpoint('SESSION_CREATED');
+        trace.checkpoint('SESSION_PERSIST_STARTED');
+
+        const { data: sessionData, error: sessionError } = await freshClient.auth.setSession({
+          access_token: serverAccessToken,
+          refresh_token: serverRefreshToken,
+        });
+        if (sessionError) {
+          manualOwnerLoginRef.current = false;
+          trace.checkpoint('FAILED', { stage: 'auth', errorCode: sessionError.code, errorMessage: sessionError.message });
+          return {
+            success: false,
+            message: sessionError.message || 'Session could not be installed on the device.',
+            failureReason: 'service_unavailable',
+            supabaseErrorMessage: sessionError.message,
+            supabaseErrorCode: sessionError.code,
+            supabaseErrorName: 'AuthError',
+          };
+        }
+        resolvedSession = sessionData.session;
+      } else if (shouldFallBackToDirectSupabase(lastFailure)) {
+        // The login gateway is down or unreachable. Supabase is the auth authority
+        // that gateway would have called anyway, so go straight to it instead of
+        // telling the owner their own service is "temporarily unavailable".
+        trace.checkpoint('SUPABASE_REQUEST_STARTED', {
+          stage: 'auth',
+          errorCode: lastFailure?.errorCode ?? 'no_server_answer',
+          httpStatus: lastFailure?.status ?? 0,
+        });
+        console.log('[Auth] Login gateway unavailable, signing in directly against Supabase:', {
+          gatewayStatus: lastFailure?.status ?? 0,
+          gatewayCode: lastFailure?.errorCode ?? 'no_server_answer',
+        });
+
+        const direct = await signInWithEmailPassword(freshClient, normalizedEmail, password);
+        trace.checkpoint('SUPABASE_RESPONSE_RECEIVED', { success: direct.ok });
+        if (!direct.ok) {
+          const directError = direct.error as AuthError & { status?: number; code?: string };
+          const normalizedDirect = normalizeLoginFailureMessage(directError.message);
+
+          // Both password-grant paths are unavailable. Recover only for the
+          // allowlisted owner, using the exact entered password. The emergency
+          // endpoint validates it against the backend credential binding before
+          // issuing its bounded HMAC-signed outage session.
+          if (isOwnerAdminEmail(normalizedEmail)
+            && normalizedDirect.failureReason === 'service_unavailable') {
+            trace.checkpoint('OWNER_RECOVERY_STARTED', {
+              errorCode: directError.code ?? 'direct_signin_failed',
+            });
+            const recovery = await loginOwnerPasswordless(normalizedEmail, password);
+            trace.checkpoint('OWNER_RECOVERY_COMPLETE', {
+              success: recovery.success,
+              errorMessage: recovery.success ? undefined : recovery.message,
+            });
+            if (recovery.success) {
+              return recovery;
+            }
+            console.log('[Auth] Credential-bound owner outage recovery unavailable:', recovery.failureReason ?? 'unknown');
+          }
+
+          manualOwnerLoginRef.current = false;
+          trace.checkpoint('FAILED', {
+            stage: 'auth',
+            errorCode: directError.code ?? 'direct_signin_failed',
+            errorMessage: normalizedDirect.message,
+          });
+          return {
+            success: false,
+            message: normalizedDirect.message,
+            failureReason: normalizedDirect.failureReason,
+            supabaseErrorMessage: directError.message,
+            supabaseErrorName: 'AuthError',
+            ...(directError.code ? { supabaseErrorCode: directError.code } : {}),
+            ...(typeof directError.status === 'number' ? { supabaseErrorStatus: directError.status } : {}),
+          };
+        }
+
+        trace.checkpoint('SESSION_CREATED');
+        trace.checkpoint('SESSION_PERSIST_STARTED');
+        resolvedSession = direct.session;
+      } else {
+        // Owner password drift: the Supabase password can drift from the
+        // runtime-bound owner credential. Recover through the backend-managed
+        // emergency route — it validates the supplied password in constant
+        // time against the server-side binding before minting a session.
+        if (isOwnerAdminEmail(normalizedEmail) && lastFailure?.failureReason === 'invalid_credentials') {
+          trace.checkpoint('OWNER_RECOVERY_STARTED', { errorCode: lastFailure?.errorCode ?? 'invalid_credentials' });
+          const recovery = await loginOwnerPasswordless(normalizedEmail, password);
+          trace.checkpoint('OWNER_RECOVERY_COMPLETE', {
+            success: recovery.success,
+            errorMessage: recovery.success ? undefined : recovery.message,
+          });
+          if (recovery.success) {
+            return recovery;
+          }
+        }
+        const displayMessage = lastFailure?.message
+          || lastError
+          || 'Server login did not return a valid session. Please try again.';
+        const failureReason: LoginFailureReason = lastFailure?.failureReason ?? 'service_unavailable';
+        const errorCode = lastFailure?.errorCode ?? 'server_login_failed';
+        const httpStatus = lastFailure?.status ?? 0;
+        trace.checkpoint('FAILED', { stage: 'auth', errorCode, errorMessage: displayMessage });
+        console.log('[Auth] Login failed:', { failureReason, errorCode, httpStatus });
+        return {
+          success: false,
+          message: displayMessage,
+          failureReason,
+          supabaseErrorMessage: displayMessage,
+          supabaseErrorCode: errorCode,
+          supabaseErrorName: 'AuthError',
+          supabaseErrorStatus: httpStatus,
+        };
+      }
+      if (!resolvedSession) {
+        manualOwnerLoginRef.current = false;
+        trace.checkpoint('FAILED', { stage: 'auth', errorCode: 'session_missing', errorMessage: 'No session returned from setSession' });
+        return {
+          success: false,
+          message: 'Login succeeded but no session was returned.',
+          failureReason: 'service_unavailable',
+        };
+      }
+      trace.checkpoint('SESSION_PERSIST_COMPLETE');
+      const challengeRequired = await requireTwoFactorIfNeeded(resolvedSession, 'password sign-in');
+      if (challengeRequired) {
+        return { success: false, requiresTwoFactor: true, message: 'Enter the 6-digit code from your authenticator app to finish signing in.' };
+      }
+
+      trace.checkpoint('OWNER_LOOKUP_STARTED');
+      const handledSession = await handleSession(resolvedSession);
+      trace.checkpoint('OWNER_LOOKUP_COMPLETE', { success: handledSession.accepted, errorMessage: handledSession.blockedReason ?? undefined });
+      if (!handledSession.accepted) {
+        return {
+          success: false,
+          message: handledSession.blockedReason ?? getAdminAccessLockMessage(),
+          failureReason: 'admin_access_locked',
+        };
+      }
+      trace.checkpoint('APP_SESSION_READY');
+      return { success: true, message: 'Login successful', traceId: trace.traceId };
+    } catch (error: unknown) {
+      manualOwnerLoginRef.current = false;
+      const authErrorMessage = extractAuthErrorMessage(error);
+      const errorCode = typeof error === 'object' && error && 'code' in error
+        ? String((error as { code?: string }).code ?? '')
+        : '';
+      const errorStatus = typeof error === 'object' && error && 'status' in error
+        ? Number((error as { status?: number }).status)
+        : NaN;
+      const errorName = typeof error === 'object' && error && 'name' in error
+        ? String((error as { name?: string }).name ?? '')
+        : '';
+      const normalizedFailure = normalizeLoginFailureMessage(authErrorMessage);
+      const displayMessage = (authErrorMessage?.trim() || normalizedFailure.message).trim();
+      trace.checkpoint('FAILED', { stage: 'auth', errorCode, errorMessage: displayMessage, httpStatus: Number.isFinite(errorStatus) ? errorStatus : undefined });
+      return {
+        success: false,
+        message: displayMessage,
+        failureReason: normalizedFailure.failureReason,
+        supabaseErrorMessage: displayMessage,
+        ...(errorCode ? { supabaseErrorCode: errorCode } : {}),
+        ...(Number.isFinite(errorStatus) ? { supabaseErrorStatus: errorStatus } : {}),
+        ...(errorName ? { supabaseErrorName: errorName } : {}),
+      };
+    } finally {
+      setLoginLoading(false);
+    }
+  }, [handleSession, isOwnerIPAccess, loginOwnerPasswordless, requireTwoFactorIfNeeded]);
+
+  const verify2FA = useCallback(async (code: string): Promise<LoginResult> => {
+    setVerify2FALoading(true);
+    try {
+      let factor = pendingTwoFactorFactor;
+      if (!factor) {
+        const factorsResult = await supabase.auth.mfa.listFactors();
+        if (factorsResult.error) {
+          throw factorsResult.error;
+        }
+        factor = extractFirstVerifiedMfaFactor(factorsResult.data);
+      }
+
+      if (!factor) {
+        return { success: false, message: 'No verified authenticator factor was found for this account.' };
+      }
+
+      console.log('[Auth] Verifying MFA challenge for:', pendingTwoFactorEmail || 'current session', 'factor:', factor.friendlyName);
+      const challengeResult = await supabase.auth.mfa.challenge({ factorId: factor.id });
+      if (challengeResult.error) {
+        throw challengeResult.error;
+      }
+
+      const challengeId = extractChallengeId(challengeResult.data);
+      if (!challengeId) {
+        throw new Error('Supabase did not return an MFA challenge id.');
+      }
+
+      const verifyResult = await supabase.auth.mfa.verify({
+        factorId: factor.id,
+        challengeId,
+        code: code.trim(),
+      });
+      if (verifyResult.error) {
+        return { success: false, message: verifyResult.error.message || 'Invalid two-factor code.' };
+      }
+
+      clearTwoFactorState();
+      const sessionResult = await supabase.auth.getSession();
+      const verifiedSession = sessionResult.data.session;
+      if (!verifiedSession) {
+        throw new Error('Two-factor verification finished but no authenticated session was returned.');
+      }
+      // Mark manual login so onAuthStateChange accepts this session.
+      manualOwnerLoginRef.current = true;
+
+      const handledSession = await handleSession(verifiedSession);
+      if (!handledSession.accepted) {
+        return {
+          success: false,
+          message: handledSession.blockedReason ?? getAdminAccessLockMessage(),
+          failureReason: 'admin_access_locked',
         };
       }
       return { success: true, message: 'Two-factor verification complete.' };

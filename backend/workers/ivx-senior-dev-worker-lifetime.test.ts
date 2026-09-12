@@ -17,7 +17,7 @@ test('recovery worker stays alive until SIGTERM even when fleet timers are unref
     mock.module(${JSON.stringify(servicePath('ivx-fleet-slo'))},()=>({startFleetSloMonitor:()=>{throw new Error('auxiliary started');}}));
     mock.module(${JSON.stringify(servicePath('ivx-autonomous-doctor'))},()=>({startAutonomousDoctor:()=>{throw new Error('auxiliary started');}}));
     mock.module(${JSON.stringify(servicePath('ivx-autonomous-utilization-guardian'))},()=>({startAutonomousUtilizationGuardian:()=>{throw new Error('auxiliary started');},stopAutonomousUtilizationGuardian:()=>{}}));
-    mock.module(${JSON.stringify(servicePath('ivx-certificate-worker'))},()=>({startCertificateWorker:()=>{},stopCertificateWorker:()=>{}}));
+    mock.module(${JSON.stringify(servicePath('ivx-certificate-worker'))},()=>({startCertificateWorker:()=>{throw new Error('certificate rescans must remain paused');},stopCertificateWorker:()=>{}}));
     process.env.IVX_SUPABASE_RECOVERY_MODE='true';
     await import(${JSON.stringify(new URL('./ivx-senior-dev-worker-entry.ts', import.meta.url).pathname)});
     console.log('READY');
