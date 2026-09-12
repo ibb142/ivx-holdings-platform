@@ -29,10 +29,8 @@ let taskReadCache: { value: Task[]; at: number } | null = null;
 let taskReadInFlight: Promise<Task[]> | null = null;
 const currentReadsInFlight = new Map<string, Promise<Task[]>>();
 let taskMutationRevision = 0;
-let directPool: Pool | null = null;
-let telemetryPool: Pool | null = null;
-let presencePool: Pool | null = null;
-let repairPool: Pool | null = null;
+type PoolPurpose = 'tasks' | 'assignment' | 'heartbeat' | 'telemetry' | 'presence' | 'repair';
+const directPools = new Map<PoolPurpose, Pool>();
 const upstreamRetryQuota = new RetryQuota();
 
 type AtomicCreateResult = { ok: boolean; task: Task | null; duplicate: boolean; error: string | null };
@@ -40,7 +38,7 @@ type AtomicCasResult = { ok: boolean; task: Task | null; error: string | null };
 type RestTaskRow = { payload: Task };
 export type AtomicFleetLeaseRow = { taskId: string; idempotencyKey: string; state: TaskState; assignedAgentNumber: number | null; leaseHolder: string; workerInstanceId: string | null; lastHeartbeatAt: string; leaseExpiresAt: string | null };
 
-export function resetPostgresAutonomousTaskStoreForTests(): void { taskReadCache = null; taskReadInFlight = null; currentReadsInFlight.clear(); taskMutationRevision = 0; directPool = null; telemetryPool = null; presencePool = null; repairPool = null; }
+export function resetPostgresAutonomousTaskStoreForTests(): void { taskReadCache = null; taskReadInFlight = null; currentReadsInFlight.clear(); taskMutationRevision = 0; directPools.clear(); }
 function trimmed(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
 function supabaseUrl(env: NodeJS.ProcessEnv = process.env): string { return trimmed(env.EXPO_PUBLIC_SUPABASE_URL || env.SUPABASE_URL).replace(/\/+$/, ''); }
 function serviceRoleKey(env: NodeJS.ProcessEnv = process.env): string { return trimmed(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_KEY); }
@@ -65,17 +63,18 @@ function headers(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
 }
 function externalError(payload: unknown, fallback: string): string { if (payload && typeof payload === 'object') { const record = payload as Record<string, unknown>; const candidate = record.message ?? record.error ?? record.details; if (typeof candidate === 'string' && candidate.trim()) return candidate.trim().slice(0, 320); } return fallback; }
 async function parsePayload(response: Response): Promise<unknown> { const text = await response.text(); if (!text) return null; try { return JSON.parse(text) as unknown; } catch { return { message: text.slice(0, 320) }; } }
-type PoolPurpose = 'tasks' | 'telemetry' | 'presence' | 'repair';
 function getDirectPool(env: NodeJS.ProcessEnv = process.env, purpose: PoolPurpose = 'tasks'): Pool {
   const connectionString = directDbUrl(env);
   if (!connectionString) throw new Error('direct_postgres_not_configured');
-  const existing = purpose === 'repair' ? repairPool : purpose === 'presence' ? presencePool : purpose === 'telemetry' ? telemetryPool : directPool;
+  const existing = directPools.get(purpose);
   if (existing) return existing;
-  // Both mutations and aggregate monitoring can occupy their entire pool.
-  // Reserve a separate connection for compact process reads and sample writes.
+  // Split the original four task connections into 2 task + 1 assignment + 1
+  // heartbeat. A busy task or claim cannot exhaust another lane's local pool.
+  // The total stays at seven per process; replicas still share server capacity.
+  const leaseTraffic = purpose === 'assignment' || purpose === 'heartbeat';
   const pool = new Pool({ connectionString: withoutPostgresUrlTlsOptions(connectionString), ssl: supabasePostgresTls(),
-    max: purpose === 'tasks' ? 4 : 1, application_name: `ivx_${purpose}`,
-    idleTimeoutMillis: 30_000, connectionTimeoutMillis: 20_000, query_timeout: 5_000, statement_timeout: 5_000 });
+    max: purpose === 'tasks' ? 2 : 1, application_name: `ivx_${purpose}`,
+    idleTimeoutMillis: 30_000, connectionTimeoutMillis: leaseTraffic ? 2_000 : 20_000, query_timeout: 5_000, statement_timeout: 5_000 });
   observePostgresPoolErrors(pool, purpose);
   if (purpose === 'repair') {
     // Observe both idle and checked-out connection errors. Query promises still
@@ -83,8 +82,8 @@ function getDirectPool(env: NodeJS.ProcessEnv = process.env, purpose: PoolPurpos
     const events = pool as Pool & EventEmitter;
     events.on('error', () => console.error('[IVX repair queue] PostgreSQL connection unavailable'));
     events.on('connect', (client: EventEmitter) => client.on('error', () => {}));
-    repairPool = pool;
-  } else if (purpose === 'presence') presencePool = pool; else if (purpose === 'telemetry') telemetryPool = pool; else directPool = pool;
+  }
+  directPools.set(purpose, pool);
   return pool;
 }
 const DIRECT_RPC_ARGS: Record<string, string[]> = {
@@ -121,9 +120,13 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
     if (casts[key] === 'jsonb' && value !== null && value !== undefined) return JSON.stringify(value);
     return value ?? null;
   });
-  const pool = getDirectPool(env, name.startsWith('ivx_senior_') ? 'repair'
-    : ['ivx_fleet_dashboard_observation', 'ivx_work_evidence_hours'].includes(name) ? 'telemetry' : 'tasks');
-  const result = await queryWithPostgresDeadline<{ result: T }>(pool, `select public.${name}(${placeholders}) as result`, values);
+  const purpose: PoolPurpose = name.startsWith('ivx_senior_') ? 'repair'
+    : ['ivx_fleet_dashboard_observation', 'ivx_work_evidence_hours'].includes(name) ? 'telemetry'
+    : ['ivx_autonomous_tasks_claim_batch', 'ivx_autonomous_tasks_start_batch'].includes(name) ? 'assignment'
+    : ['ivx_autonomous_tasks_heartbeat_batch', 'ivx_autonomous_tasks_release_worker'].includes(name) ? 'heartbeat' : 'tasks';
+  const pool = getDirectPool(env, purpose);
+  const result = await queryWithPostgresDeadline<{ result: T }>(pool, `select public.${name}(${placeholders}) as result`, values,
+    purpose === 'assignment' ? 'assignment' : 'default');
   if (!result.rows?.length) throw new Error(`direct_postgres_rpc_empty:${name}`);
   return result.rows[0].result as T;
 }
@@ -613,4 +616,3 @@ export async function readSeniorActiveOwnerJobPostgres<T extends { ownerId: stri
   }
   return job;
 }
-
