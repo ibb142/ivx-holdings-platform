@@ -128,6 +128,14 @@ try {
     assert.equal(response.status(), 200);
     await page.locator('#properties-grid .live-deal-card').first().waitFor({ state: 'visible' });
     if (unit.startsWith('reels.') || unit === 'e2e.production-browser-suite') {
+      // A recovered request is accepted only after the canonical endpoint has
+      // returned a valid nonempty feed. Do not pass while fallback is pending,
+      // or substitute the independent homepage reel for the canonical feed.
+      await page.waitForFunction(() => window.__ivxHomeFeedStatus?.state !== 'loading' && window.__ivxHomeFeedStatus);
+      const canonicalFeed = await page.evaluate(() => window.__ivxHomeFeedStatus);
+      assert.equal(canonicalFeed.state, 'ready', 'Canonical home feed must recover');
+      assert.ok(canonicalFeed.blockCount > 0, 'Canonical home feed must contain published blocks');
+      checks.push({ width, canonicalFeed });
       const preview = page.locator('#homeFeedReel');
       await preview.scrollIntoViewIfNeeded();
       await page.waitForFunction(() => { const v = document.querySelector('#homeFeedReel'); return v?.readyState >= 2 && v.videoWidth > 0 && !v.error; });
@@ -238,6 +246,7 @@ try {
   process.exitCode = 1;
   diagnostics = { ...failureSignals };
   try {
+    diagnostics.canonicalFeed = await failurePage.evaluate(() => window.__ivxHomeFeedStatus ?? null);
     diagnostics.homeVideo = await failurePage.locator('#homeFeedReel').evaluate((v) => ({
       currentSrc: v.currentSrc, readyState: v.readyState, networkState: v.networkState,
       paused: v.paused, currentTime: v.currentTime, width: v.videoWidth,

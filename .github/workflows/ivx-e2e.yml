@@ -37,13 +37,34 @@ jobs:
             echo 'MOBILE_IMPACT=FULL_MAIN_GATE'
             exit 0
           fi
-          # Compare exact trees; full repository ancestry is unnecessary.
-          base="${{ github.event.pull_request.base.sha }}"
+          # Classify the exact tested merge. GitHub can advance its first
+          # parent while the event still names the PR's earlier base.
+          declared_base="${{ github.event.pull_request.base.sha }}"
+          declared_head="${{ github.event.pull_request.head.sha }}"
+          [[ "$declared_base" =~ ^[0-9a-f]{40}$ && "$declared_head" =~ ^[0-9a-f]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$base" = "$(git cat-file -p HEAD | awk '/^parent / { print $2; exit }')" || {
-            echo '::error::PR base does not match the tested merge commit.'
+          mapfile -t merge_parents < <(git cat-file -p HEAD | awk '/^parent / { print $2 }')
+          test "${#merge_parents[@]}" = 2 || {
+            echo '::error::Expected the two-parent PR merge commit.'
             exit 1
           }
+          base="${merge_parents[0]}"
+          test "$declared_head" = "${merge_parents[1]}" || {
+            echo '::error::PR head does not match the tested merge commit.'
+            exit 1
+          }
+          if [ "$declared_base" != "$base" ]; then
+            # A bounded history fetch proves an ordinary base advance. An
+            # unrelated/replaced base still fails and cannot suppress mobile QA.
+            if ! git merge-base --is-ancestor "$declared_base" "$base" 2>/dev/null; then
+              git fetch --no-tags --depth=64 origin "$base"
+            fi
+            git merge-base --is-ancestor "$declared_base" "$base" || {
+              echo '::error::PR base is not an ancestor of the tested merge base.'
+              exit 1
+            }
+            echo "PR_BASE_ADVANCED=$declared_base..$base"
+          fi
           git diff --no-renames --name-only "$base" HEAD > "$RUNNER_TEMP/changed-files.txt"
           cat "$RUNNER_TEMP/changed-files.txt"
           mobile=false

@@ -51,16 +51,33 @@
     return n.toFixed(n % 1 === 0 ? 0 : 2) + '%';
   }
 
-  function fetchHomeFeed(i) {
+  function fetchHomeFeed(i, deadline) {
     i = i || 0;
+    deadline = deadline || Date.now() + 18000;
     if (i >= API_CANDIDATES.length) return Promise.reject(new Error('all API hosts failed'));
-    return fetch(API_CANDIDATES[i] + '/api/ivx/video-platform/home-feed?limit=60')
+    var remaining = deadline - Date.now();
+    if (remaining <= 0) return Promise.reject(new Error('home feed request deadline exceeded'));
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, Math.min(9000, remaining));
+    window.__ivxHomeFeedStatus.attempts += 1;
+    return fetch(API_CANDIDATES[i] + '/api/ivx/video-platform/home-feed?limit=60', { signal: controller.signal })
       .then(function (r) {
         var ct = (r.headers.get('content-type') || '').toLowerCase();
-        if (!r.ok || ct.indexOf('json') === -1) throw new Error('bad response');
+        if (!r.ok || ct.indexOf('json') === -1) throw new Error('home feed response unavailable: HTTP ' + r.status);
         return r.json();
       })
-      .catch(function (err) { console.error('[IVX HomeFeed] API fetch error:', err); return fetchHomeFeed(i + 1); });
+      .then(function (data) {
+        if (!data || !Array.isArray(data.blocks)) throw new Error('invalid home feed response');
+        return data;
+      })
+      .finally(function () { clearTimeout(timer); })
+      .catch(function (err) {
+        if (i + 1 >= API_CANDIDATES.length || Date.now() >= deadline) throw err;
+        // A failed attempt remains a network diagnostic. Only failure of the
+        // whole bounded operation is a terminal application error.
+        console.warn('[IVX HomeFeed] retrying with alternate API host:', err.message);
+        return fetchHomeFeed(i + 1, deadline);
+      });
   }
 
   /* ---------- lazy HLS ---------- */
@@ -399,10 +416,12 @@
 
   /* ---------- boot ---------- */
   function boot() {
+    window.__ivxHomeFeedStatus = { state: 'loading', attempts: 0, blockCount: 0 };
     fetchHomeFeed(0)
       .then(function (data) {
-        if (!data || !Array.isArray(data.blocks)) return;
         homeFeed = data;
+        window.__ivxHomeFeedStatus.state = 'ready';
+        window.__ivxHomeFeedStatus.blockCount = data.blocks.length;
         applyHomeFeedLayout();
         var grid = document.getElementById('properties-grid');
         if (!grid) return;
@@ -434,7 +453,8 @@
         mo.observe(grid, { childList: true });
       })
       .catch(function (err) {
-        console.warn('[IVX HomeFeed] canonical feed unavailable — keeping local order:', err && err.message);
+        window.__ivxHomeFeedStatus.state = 'failed';
+        console.error('[IVX HomeFeed] canonical feed unavailable — keeping local order:', err && err.message);
       });
   }
 
