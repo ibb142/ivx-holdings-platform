@@ -1,0 +1,66 @@
+name: Phase 3 bounded real provider proof
+on:
+  pull_request:
+    paths:
+      - 'qa/phase3-provider-live*'
+      - '.github/workflows/ivx-phase3-provider-live-proof.yml'
+  push:
+    branches: ['verify/phase3-provider-live-20260912']
+    paths:
+      - 'qa/phase3-provider-live*'
+      - '.github/workflows/ivx-phase3-provider-live-proof.yml'
+  workflow_dispatch:
+    inputs:
+      campaign:
+        description: Existing reviewed campaign identifier; durable IDs prevent paid replays
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: phase3-provider-live-20260912
+  cancel-in-progress: false
+jobs:
+  verify-harness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.3.9 }
+      - run: bun install --frozen-lockfile
+      - run: node --test qa/phase3-provider-live-guards.test.mjs
+      - run: bun build qa/phase3-provider-live.mjs --target=bun --packages=external --outfile=/tmp/phase3-provider-live-check.mjs
+      - run: bun test backend/services/ivx-global-ai-budget.test.ts
+      - run: bun scripts/ivx-global-ai-budget-sdk-proof.ts
+  real-provider:
+    needs: verify-harness
+    if: >-
+      github.repository == 'ibb142/ivx-holdings-platform' && github.run_attempt == 1 &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && inputs.campaign == 'phase3-provider-live-20260912-01'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.3.9 }
+      - run: bun install --frozen-lockfile
+      - name: Run reviewed bounded experiment with the existing shared admission
+        run: bun qa/phase3-provider-live.mjs
+        env:
+          IVX_AUTHORIZED_PROVIDER_PROBE: phase3-provider-live-20260912-01
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
+          IVX_VERCEL_TOKEN: ${{ secrets.IVX_VERCEL_TOKEN }}
+      - name: Preserve actual results including failures and retained liabilities
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase3-provider-live-${{ github.sha }}-${{ github.run_attempt }}
+          path: qa/evidence/phase3-provider-live/proof.json
+          if-no-files-found: error
+          retention-days: 30
