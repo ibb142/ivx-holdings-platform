@@ -23,6 +23,7 @@ process.env.IVX_WORKER_MODE = 'false';
 process.env.IVX_PROCESS_ROLE = 'api';
 process.env.IVX_REQUIRE_SHARED_STATE = 'true';
 process.env.IVX_WORKER_QUEUE_ATOMIC = 'true';
+process.env.NODE_ENV = 'test';
 process.env.CI = 'true';
 const store = await import('../backend/services/ivx-postgres-autonomous-task-store');
 const admin = new pg.Client({ connectionString });
@@ -67,7 +68,8 @@ try {
     end $$`);
   await admin.query('select pg_advisory_lock(9811593)');
   let completedMutations = 0;
-  mutations = Promise.allSettled(Array.from({ length: 1 }, (_, index) =>
+  const mutationCount = 4;
+  mutations = Promise.allSettled(Array.from({ length: mutationCount }, (_, index) =>
     store.linkPostgresAutonomousOrphans(`blocked-fixture-${index}`).finally(() => { completedMutations++; })));
   let blocked = 0;
   for (let attempt = 0; attempt < 40; attempt++) {
@@ -89,11 +91,16 @@ try {
   await Promise.race([observation, new Promise<never>((_, reject) => {
     deadline = setTimeout(() => reject(new Error('Telemetry waited behind the blocked task pool')), 2_000);
   })]);
-  console.log(JSON.stringify({ ok: true, database: 'isolated PostgreSQL', blockedTaskConnections: blocked,
-    telemetryDuringBlockedMutations: 'PASS', durableSharedSample: true, telemetryMs: Date.now() - started, productionRowsTouched: 0 }));
+  const telemetryMs = Date.now() - started;
   clearTimeout(deadline);
   await admin.query('select pg_advisory_unlock(9811593)');
-  await mutations;
+  const mutationResults = await mutations as PromiseSettledResult<unknown>[];
+  assert.equal(mutationResults.length, mutationCount);
+  assert(mutationResults.every(result => result.status === 'fulfilled'), 'all blocked and queued mutations must finish after unlock');
+  assert.equal(completedMutations, mutationCount);
+  console.log(JSON.stringify({ ok: true, database: 'isolated PostgreSQL', blockedTaskConnections: blocked,
+    submittedMutations: mutationCount, queuedTaskMutations: mutationCount - blocked, completedMutations,
+    telemetryDuringBlockedMutations: 'PASS', durableSharedSample: true, telemetryMs, productionRowsTouched: 0 }));
   // Reproduce the production contention: an aggregate monitoring read occupies
   // its connection while a new process sample must commit and remain readable.
   await admin.query('begin');
@@ -104,7 +111,7 @@ try {
     let telemetryBlocked = false;
     for (let attempt = 0; attempt < 40; attempt++) {
       await admin.query('select pg_stat_clear_snapshot()');
-      telemetryBlocked = Number((await admin.query("select count(*) from pg_stat_activity where application_name='ivx_api' and wait_event_type='Lock'")).rows[0].count) === 1;
+      telemetryBlocked = Number((await admin.query("select count(*) from pg_stat_activity where application_name='ivx_telemetry' and wait_event_type='Lock'")).rows[0].count) === 1;
       if (telemetryBlocked) break;
       await new Promise(resolve => setTimeout(resolve, 25));
     }

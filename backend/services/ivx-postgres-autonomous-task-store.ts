@@ -11,7 +11,7 @@ import { VERSIONED_INSPECTION_PREFIXES, VERSIONED_MISSION_PREFIXES } from './ivx
 import { localFleetExecutionMetrics } from './ivx-fleet-execution-metrics';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
-import { getApiPool, getWorkerPool, resetDatabasePoolsForTests } from './ivx-database-pools';
+import { getObserverPool, getWorkerPool, resetDatabasePoolsForTests } from './ivx-database-pools';
 import { queryWithPostgresDeadline } from './ivx-postgres-deadline';
 import { SENIOR_QUEUE_ACTIVE_STATUSES, SENIOR_QUEUE_JOB_SQL, SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL } from './ivx-senior-work-queue';
 import { emergencyStopPostgresConfig } from './ivx-emergency-stop-postgres';
@@ -62,8 +62,9 @@ function externalError(payload: unknown, fallback: string): string { if (payload
 async function parsePayload(response: Response): Promise<unknown> { const text = await response.text(); if (!text) return null; try { return JSON.parse(text) as unknown; } catch { return { message: text.slice(0, 320) }; } }
 type PoolPurpose = 'tasks' | 'assignment' | 'heartbeat' | 'telemetry' | 'presence' | 'repair';
 function getDirectPool(env: NodeJS.ProcessEnv = process.env, purpose: PoolPurpose = 'tasks'): Pool {
-  // Compact dashboard/presence reads must remain available during blocked work.
-  return purpose === 'telemetry' || purpose === 'presence' ? getApiPool(env) : getWorkerPool(env, purpose);
+  // Public API saturation must not block fleet observations; aggregate
+  // telemetry must not occupy the connection needed to persist process health.
+  return purpose === 'telemetry' || purpose === 'presence' ? getObserverPool(env, purpose) : getWorkerPool(env, purpose);
 }
 const DIRECT_RPC_ARGS: Record<string, string[]> = {
   ivx_autonomous_tasks_create_batch: ['p_tasks'],

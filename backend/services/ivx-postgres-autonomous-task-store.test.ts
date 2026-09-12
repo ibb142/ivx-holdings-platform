@@ -107,8 +107,8 @@ test('saturated task and assignment pools leave heartbeats available within the 
     await readPostgresFleetSloTasks();
     await readPostgresFleetProcessObservation();
     await readSeniorQueuePostgresDocument('senior-developer-worker/queue.json');
-    expect(pools.size).toBe(5);
-    expect([...pools.values()].reduce((max, pool) => max + pool.options.max!, 0)).toBe(10);
+    expect(pools.size).toBe(6);
+    expect([...pools.values()].reduce((max, pool) => max + pool.options.max!, 0)).toBe(6);
     for (const name of ['ivx_worker_assignment', 'ivx_worker_heartbeat']) expect(pools.get(name)!.options.connectionTimeoutMillis).toBe(1_500);
     expect(rest).not.toHaveBeenCalled();
     tasksGate.resolve(); claimGate.resolve();

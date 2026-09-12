@@ -1,8 +1,9 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
-import { Pool } from 'pg';
+import { Client, Pool, type PoolClient } from 'pg';
 import { getApiPool, getWorkerPool, resetDatabasePoolsForTests } from './ivx-database-pools';
 import { publicFeedRead } from './ivx-public-feed-postgres';
+import { readPostgresFleetSloTasks, readPostgresFleetProcessObservation } from './ivx-postgres-autonomous-task-store';
 const saved = { ...process.env };
 afterEach(() => { resetDatabasePoolsForTests(); process.env = { ...saved }; });
 function configure() {
@@ -68,6 +69,48 @@ for (const flag of ['CI', 'NODE_ENV']) test(`reduced CI pool ceilings via ${flag
   expect((getApiPool() as any).options.max).toBe(6);
   expect((getWorkerPool() as any).options.max).toBe(1);
 });
+
+test('API saturation cannot block fleet telemetry or process presence', async () => {
+  configure(); process.env.CI = 'true'; process.env.IVX_AUTONOMOUS_QUEUE_BACKEND = 'postgres_atomic';
+  const api = getApiPool(), observed = new Map<string, Pool>();
+  const originalConnect = Pool.prototype.connect;
+  const checkout = spyOn(Pool.prototype, 'connect').mockImplementation(function (this: Pool) {
+    observed.set(this.options.application_name!, this);
+    return originalConnect.call(this) as never;
+  });
+  // Real pg.Pool queues, limits and timers; only network I/O is substituted.
+  const connect = spyOn(Client.prototype, 'connect').mockImplementation((callback: (error: Error | null) => void) => {
+    queueMicrotask(() => callback(null)); return undefined as never;
+  });
+  const query = spyOn(Client.prototype, 'query').mockImplementation((async (sql: string) => ({
+    rows: sql.includes('as instances') ? [{ measuredAt: new Date(), instances: [] }] : [],
+  })) as never);
+  const held: PoolClient[] = [];
+  try {
+    held.push(...await Promise.all(Array.from({ length: 6 }, () => api.connect())));
+    expect(api.totalCount).toBe(6); expect(api.idleCount).toBe(0);
+    const started = performance.now();
+    expect(await readPostgresFleetSloTasks()).toEqual([]);
+    const telemetry = observed.get('ivx_telemetry')!;
+    expect(telemetry).not.toBe(api);
+    held.push(await telemetry.connect());
+    expect(telemetry.idleCount).toBe(0);
+    const presence = await readPostgresFleetProcessObservation();
+    expect(presence.instances).toEqual([]);
+    expect(observed.get('ivx_presence')).not.toBe(api);
+    expect(observed.get('ivx_presence')).not.toBe(telemetry);
+    expect(api.idleCount).toBe(0); expect(api.waitingCount).toBe(0);
+    const elapsedMs = performance.now() - started;
+    expect(elapsedMs).toBeLessThan(1500);
+    console.log(JSON.stringify({ proof: 'local-pg-api-and-telemetry-saturation',
+      occupiedApiConnections: 6, occupiedTelemetryConnections: 1,
+      presenceAvailable: true, elapsedMs, productionRowsTouched: 0 }));
+  } finally {
+    for (const client of held) client.release();
+    await Promise.all([...new Set([api, ...observed.values()])].map(pool => pool.end()));
+    query.mockRestore(); connect.mockRestore(); checkout.mockRestore();
+  }
+}, 5000);
 
 test('worker lane allocations sum to 8 in production and 4 in CI', () => {
   for (const ci of ['false', 'true']) {
