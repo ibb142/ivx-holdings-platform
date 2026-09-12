@@ -1,12 +1,14 @@
 import { expect, test } from 'bun:test';
 
 async function isolated(source: string, runtime = 'bun') {
-  const command = runtime === 'node' ? ['node', '--import', 'tsx', '--input-type=module'] : [process.execPath];
+  const command = runtime === 'node' ? ['node', '--import', import.meta.resolve('tsx'), '--input-type=module'] : [process.execPath];
   const child = Bun.spawn([...command, '-e', `
     import { strict as assert } from 'node:assert';
     import { EventEmitter } from 'node:events';
-    import { queryWithSeniorQueueReadBudget as query, readSeniorQueueJson as readJson }
-      from ${JSON.stringify(new URL('./ivx-senior-queue-read-budget.ts', import.meta.url).pathname)};
+    import { createRequire } from 'node:module';
+    const require = createRequire(${JSON.stringify(import.meta.url)});
+    const { queryWithSeniorQueueReadBudget: query, readSeniorQueueJson: readJson } =
+      require(${JSON.stringify(new URL('./ivx-senior-queue-read-budget.ts', import.meta.url).pathname)});
     ${source}
   `], { stdout: 'pipe', stderr: 'pipe', timeout: 5000 });
   const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
@@ -78,7 +80,7 @@ test('one deadline includes checkout and setup, and original database failures r
 for (const runtime of ['bun', 'node']) {
 test(`${runtime}: real pg connection closes after a stalled query and the pool serves the next read`, () => isolated(`
   import { createServer } from 'node:net';
-  import { Pool } from 'pg';
+  const { Pool } = require('pg');
   const sockets = new Set(), queries = [];
   let connections = 0, firstClosed;
   const closed = new Promise(resolve => firstClosed = resolve);
