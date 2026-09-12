@@ -17,7 +17,14 @@ await mkdir(output, { recursive: true });
 const receipt = { item: '1.5', passed: false, startedAt: new Date().toISOString(),
   workflowSha: process.env.GITHUB_SHA, applicationSha: target, checks: [], errors: [],
   ownerTransport: [], sessionCleanup: null, noApplicationDeployment: true };
-const pass = (name, detail = {}) => receipt.checks.push({ name, at: new Date().toISOString(), ...detail });
+function checkpoint() {
+  return writeFile(`${output}/receipt.json`, JSON.stringify(receipt, null, 2));
+}
+const pass = (name, detail = {}) => {
+  const check = { name, at: new Date().toISOString(), ...detail };
+  receipt.checks.push(check);
+  console.log(JSON.stringify({ check }));
+};
 async function readiness(label) {
   for (const path of ['/health', '/version', '/health/ready']) {
     const response = await fetch(API + path, { signal: AbortSignal.timeout(15_000), redirect: 'error' });
@@ -43,6 +50,8 @@ async function readiness(label) {
 }
 
 const marker = `maple_${randomUUID().replaceAll('-', '')}`;
+receipt.marker = marker;
+await checkpoint();
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
 const page = await context.newPage();
@@ -54,20 +63,24 @@ let stage = 'preflight';
 page.on('response', response => {
   const url = response.url();
   if (url.startsWith(AUTH + '/auth/v1/token?grant_type=password') && response.status() === 200) {
-    pending.push(response.json().then(body => {
+    pending.push(response.json().then(async body => {
       assert.equal(body.user?.email?.toLowerCase(), 'iperez4242@gmail.com');
       assert(body.access_token, 'No Auth session');
       ownerSession = body.access_token;
       pass('owner_password_grant_from_login_ui', { http: 200 });
-    }));
+      await checkpoint();
+    }).catch(() => { receipt.errors.push({ stage: 'auth_observation', message: 'Could not inspect the login session' }); }));
   }
   const req = response.request();
   if (!url.startsWith(API + '/api/ivx/owner-ai') || req.method() !== 'POST'
       || !(req.postData() || '').includes(marker)) return;
   pending.push((async () => {
-    const body = await response.text();
     const mime = response.headers()['content-type'] || '';
     const observation = { path: new URL(url).pathname, status: response.status(), mime };
+    receipt.ownerTransport.push(observation);
+    let body;
+    try { body = await response.text(); }
+    catch { observation.bodyUnavailable = true; await checkpoint(); return; }
     if (mime.includes('text/event-stream')) {
       const frames = body.split('\n').filter(l => l.startsWith('data: ')).flatMap(l => {
         try { return [JSON.parse(l.slice(6))]; } catch { return []; }
@@ -87,8 +100,8 @@ page.on('response', response => {
       const answer = data.answer ?? data.text ?? '';
       if (answer.includes(marker) && !/fallback|error/.test(data.model || '')) ownerReply = answer;
     }
-    receipt.ownerTransport.push(observation);
-  })());
+    await checkpoint();
+  })().catch(() => { receipt.errors.push({ stage: 'transport_observation', message: 'Response evidence could not be read' }); }));
 });
 
 try {
@@ -126,6 +139,7 @@ try {
   stage = 'owner_chat_provider_reply';
   await page.getByTestId('ivx-owner-chat-input').fill(`For this harmless response check, reply with exactly this text: ${marker}`);
   await page.getByTestId('ivx-owner-chat-send').click();
+  await checkpoint();
   const rows = page.locator('[data-testid^="ivx-owner-message-"]').filter({ hasText: marker });
   await page.waitForFunction(value => [...document.querySelectorAll('[data-testid^="ivx-owner-message-"]')]
     .filter(e => e.textContent.includes(value)).length >= 2, marker, { timeout: 180_000 });
@@ -138,6 +152,7 @@ try {
   pass('owner_reply_visible_and_received_from_backend', { marker, matchingRows: await rows.count(),
     replySha256: createHash('sha256').update(ownerReply).digest('hex') });
   await readiness('after');
+  assert.equal(receipt.errors.length, 0, 'Evidence collector reported an error');
   receipt.passed = true;
 } catch (error) {
   receipt.errors.push({ stage, message: String(error.message).replaceAll(password, '[redacted]').slice(0,1200) });
