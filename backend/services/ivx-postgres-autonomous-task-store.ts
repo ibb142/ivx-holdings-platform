@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { getObserverPool, getWorkerPool, resetDatabasePoolsForTests } from './ivx-database-pools';
 import { queryWithPostgresDeadline } from './ivx-postgres-deadline';
-import { SENIOR_QUEUE_ACTIVE_STATUSES, SENIOR_QUEUE_JOB_SQL, SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL } from './ivx-senior-work-queue';
+import { SENIOR_ACTIVE_OWNER_JOB_SQL, SENIOR_QUEUE_ACTIVE_STATUSES, SENIOR_QUEUE_JOB_SQL, SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL } from './ivx-senior-work-queue';
 import { emergencyStopPostgresConfig } from './ivx-emergency-stop-postgres';
 import { decideRetry, isTransientFailure, retryAfterMs, RetryQuota } from './ivx-retry-policy';
 import type { FleetLeaseRequest, FleetLeaseResult, FleetTaskLeaseIdentity, FleetTaskMutationResult, Task, TaskState } from './ivx-autonomous-task-engine';
@@ -579,16 +579,7 @@ export async function readSeniorActiveOwnerJobPostgres<T extends { ownerId: stri
   emergencyStopPostgresConfig();
   if (!ownerId.trim()) throw new Error('Repair owner identity is required');
   const result = await queryWithPostgresDeadline<{ job: T }>(getDirectPool(process.env, 'repair'),
-    `select d.value->'jobs'->picked.ordinal as job
-      from public.ivx_durable_documents d
-      cross join lateral (
-        select ordinal
-        from generate_series(0, jsonb_array_length(d.value->'jobs') - 1) as positions(ordinal)
-        where (d.value->'jobs'->ordinal)->>'ownerId' = $2
-          and (d.value->'jobs'->ordinal)->>'status' = any($3::text[])
-        order by ordinal desc limit 1
-      ) picked
-      where d.doc_key = $1`,
+    SENIOR_ACTIVE_OWNER_JOB_SQL,
     ['senior-developer-worker/queue.json', ownerId, [...SENIOR_QUEUE_ACTIVE_STATUSES]]);
   const job = result.rows[0]?.job ?? null;
   if (job && (job.ownerId !== ownerId || !(SENIOR_QUEUE_ACTIVE_STATUSES as readonly string[]).includes(job.status))) {

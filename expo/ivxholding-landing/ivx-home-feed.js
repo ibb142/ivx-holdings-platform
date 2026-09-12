@@ -86,13 +86,14 @@
     if (remaining <= 0) return Promise.reject(new Error('home feed request deadline exceeded'));
     var controller = new AbortController();
     var timer = setTimeout(function () { controller.abort(); }, Math.min(9000, remaining));
-    var retryAt = 0;
+    var retryAt = null;
     window.__ivxHomeFeedStatus.attempts += 1;
     return fetch(API_CANDIDATES[i] + '/api/ivx/video-platform/home-feed?limit=60', { signal: controller.signal })
       .then(function (r) {
         var retryAfter = (r.headers.get('retry-after') || '').trim();
         retryAt = /^\d+$/.test(retryAfter) ? Date.now() + Number(retryAfter) * 1000
-          : /^[A-Za-z]{3}, /.test(retryAfter) ? Date.parse(retryAfter) : 0;
+          : /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/i.test(retryAfter) ? Date.parse(retryAfter) : null;
+        if (Number.isNaN(retryAt)) retryAt = null;
         var ct = (r.headers.get('content-type') || '').toLowerCase();
         if (!r.ok || ct.indexOf('json') === -1) {
           var error = new Error('home feed response unavailable: HTTP ' + r.status);
@@ -113,15 +114,18 @@
       .finally(function () { clearTimeout(timer); })
       .catch(function (err) {
         var waitMs = Math.max(0, (retryAt || 0) - Date.now());
-        if (err.retryable === false || i + 1 >= API_CANDIDATES.length || waitMs >= deadline - Date.now()) throw err;
+        if (err.retryable === false || window.__ivxHomeFeedStatus.attempts >= 4 || waitMs >= deadline - Date.now()) throw err;
+        // A cold shared producer can outlive two responses. Retry on the same
+        // host when it advertises recovery, within the original time budget.
+        // Without a valid Retry-After, retain the bounded alternate-host path.
+        var nextHost = retryAt !== null ? i : i + 1;
+        if (nextHost >= API_CANDIDATES.length) throw err;
         // A failed attempt remains a network diagnostic. Only failure of the
         // whole bounded operation is a terminal application error.
-        console.warn('[IVX HomeFeed] retrying with alternate API host:', err.message);
-        // Let the shared producer warm its cache before using the final attempt.
-        // Backoff consumes the existing operation budget; it never extends it.
-        if (!waitMs) return fetchHomeFeed(i + 1, deadline);
+        console.warn('[IVX HomeFeed] retrying canonical feed recovery:', err.message);
+        if (!waitMs) return fetchHomeFeed(nextHost, deadline);
         return new Promise(function (resolve) { setTimeout(resolve, waitMs); })
-          .then(function () { return fetchHomeFeed(i + 1, deadline); });
+          .then(function () { return fetchHomeFeed(nextHost, deadline); });
       });
   }
 

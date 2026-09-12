@@ -169,3 +169,74 @@ test('the request deadline remains active while the response body is being read'
   assert.equal(f.calls.length, 2); assert.equal(f.errors.length, 1);
   assert.equal(f.timers.size, 0);
 });
+
+test('a cold producer recovers on the same host only after its advertised retry delay', async () => {
+  let recovered = false;
+  const f = fixture(() => recovered ? response(200)
+    : response(200, { blocks: [], degraded: true, data_available: false }, 'application/json', '3'));
+  await settle();
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    assert.equal(f.calls.length, attempt);
+    assert.equal(f.window.__ivxHomeFeedStatus.state, 'loading');
+    f.advance(2999); await settle();
+    assert.equal(f.calls.length, attempt, 'Do not retry before the server permits it');
+    if (attempt === 3) recovered = true;
+    f.advance(1); await settle();
+  }
+  assert.equal(f.calls.length, 4);
+  assert.equal(new Set(f.calls.map(call => call.url)).size, 1);
+  assert.equal(f.window.__ivxHomeFeedStatus.state, 'ready');
+  assert.equal(f.window.__ivxHomeFeedStatus.blockCount, 1);
+  assert.equal(f.errors.length, 0); assert.equal(f.timers.size, 0);
+});
+
+test('Retry-After dates on 503 and 429 preserve the wait before a successful retry', async () => {
+  for (const status of [503, 429]) {
+    const f = fixture(n => n === 1 ? response(status, {}, 'application/json', 'Thu, 01 Jan 1970 00:00:04 GMT') : response(200));
+    await settle(); f.advance(2999); await settle();
+    assert.equal(f.calls.length, 1);
+    f.advance(1); await settle();
+    assert.equal(f.calls.length, 2);
+    assert.equal(f.window.__ivxHomeFeedStatus.state, 'ready');
+    assert.equal(f.timers.size, 0);
+  }
+});
+
+test('persistent advertised unavailability stops at four requests and never renders a fallback as ready', async () => {
+  const f = fixture(() => response(200, { blocks: [], degraded: true }, 'application/json', '3'));
+  await settle();
+  for (let i = 0; i < 3; i++) { f.advance(3000); await settle(); }
+  assert.equal(f.calls.length, 4);
+  assert.equal(f.window.__ivxHomeFeedStatus.state, 'failed');
+  assert.equal(f.window.__ivxHomeFeedStatus.blockCount, 0);
+  assert.equal(f.errors.length, 1); assert.equal(f.timers.size, 0);
+});
+
+test('an advertised wait beyond the operation budget cannot cause an early retry on another host', async () => {
+  for (const retryAfter of ['20', '9'.repeat(400)]) {
+    const f = fixture(() => response(503, {}, 'application/json', retryAfter));
+    await settle();
+    assert.equal(f.calls.length, 1);
+    assert.equal(f.window.__ivxHomeFeedStatus.state, 'failed');
+    assert.equal(f.timers.size, 0);
+  }
+});
+
+test('malformed Retry-After values retain the bounded alternate-host recovery', async () => {
+  for (const retryAfter of ['-1', '1.5', 'invalid date', 'Infinity']) {
+    const f = fixture(n => n === 1 ? response(503, {}, 'application/json', retryAfter) : response(200));
+    await settle();
+    assert.equal(f.calls.length, 2);
+    assert.notEqual(new URL(f.calls[0].url).host, new URL(f.calls[1].url).host);
+    assert.equal(f.window.__ivxHomeFeedStatus.state, 'ready');
+    assert.equal(f.timers.size, 0);
+  }
+});
+
+test('a delayed retry callback cannot dispatch after the original deadline', async () => {
+  const f = fixture(() => response(503, {}, 'application/json', '3'));
+  await settle(); f.advance(19000); await settle();
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.window.__ivxHomeFeedStatus.state, 'failed');
+  assert.equal(f.timers.size, 0);
+});
