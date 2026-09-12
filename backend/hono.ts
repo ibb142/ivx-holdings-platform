@@ -1549,14 +1549,20 @@ async function withTimeout<T extends Response>(
   fallback: () => Response,
   timeoutMs: number = SB_HARD_TIMEOUT_MS,
 ): Promise<Response> {
+  const deadline = readTimings.getStore()?.deadline;
+  if (deadline?.aborted) return fallback();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let onDeadline: (() => void) | undefined;
   const timeoutPromise = new Promise<Response>((resolve) => {
+    onDeadline = () => resolve(fallback());
+    deadline?.addEventListener('abort', onDeadline, { once: true });
     timer = setTimeout(() => resolve(fallback()), timeoutMs);
   });
   try {
     return await Promise.race([handler(), timeoutPromise]);
   } finally {
     if (timer) clearTimeout(timer);
+    if (onDeadline) deadline?.removeEventListener('abort', onDeadline);
   }
 }
 // NOTE: This is a static build label, NOT a deploy timestamp. Do not read freshness
@@ -2981,7 +2987,7 @@ app.use('*', cors({
 
 app.use('*', async (c, next) => {
   if (c.req.method !== 'GET' || !/^\/api\/(?:reels|landing-deals|deals|published-jv-deals|videos\/analytics|ivx\/(?:jv-deals|deals|videos\/feed|video-platform\/(?:feed|home-feed)))(?:$|\/)/.test(c.req.path)) return next();
-  const metrics = newReadTimings();
+  const metrics = newReadTimings(2500);
   await readTimings.run(metrics, next);
   for (const [key, value] of Object.entries(timingHeaders(metrics))) c.header(key, value);
 });
@@ -6578,7 +6584,7 @@ app.get('/media/reels/:id', async (c) => {
   }
 });
 
-app.get('/api/reels', async (c) => handlePlatformFeed(c.req.raw));
+app.get('/api/reels', async (c) => withTimeout(() => handlePlatformFeed(c.req.raw), () => publicReadTimeout('videos')));
 app.get('/api/reels/:id', async (c) => handleReelById(c.req.param('id')));
 
 // Canonical authoritative member count — public aggregate (no PII).

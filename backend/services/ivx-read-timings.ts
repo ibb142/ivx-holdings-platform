@@ -1,9 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-type Timings = { headersMs: number; payloadMs: number; completed: number; pending: number; poolMs: number | null };
+type Timings = { headersMs: number; payloadMs: number; completed: number; pending: number; poolMs: number | null; deadline?: AbortSignal };
 export const readTimings = new AsyncLocalStorage<Timings>();
-export function newReadTimings(): Timings {
-  return { headersMs: 0, payloadMs: 0, completed: 0, pending: 0, poolMs: null };
+export function newReadTimings(timeoutMs?: number): Timings {
+  return { headersMs: 0, payloadMs: 0, completed: 0, pending: 0, poolMs: null, deadline: timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs) };
 }
 export function recordPoolCheckout(ms: number): void {
   const metrics = readTimings.getStore();
@@ -23,11 +23,13 @@ export function timingHeaders(metrics: Timings): Record<string, string> {
 export async function measuredReadFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
   const metrics = readTimings.getStore();
   if (!metrics) return fetch(input, init);
+  const caller = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+  const signal = metrics.deadline ? AbortSignal.any([metrics.deadline, ...(caller ? [caller] : [])]) : caller;
   const started = performance.now();
   metrics.pending++;
   let response: Response;
-  try { response = await fetch(input, init); }
-  catch (error) { metrics.headersMs += performance.now() - started; metrics.pending--; throw error; }
+  try { response = await fetch(input, { ...init, signal }); }
+  catch (error) { metrics.headersMs += performance.now() - started; metrics.pending--; if (signal?.aborted) throw new DOMException('Public read deadline exceeded', 'AbortError'); throw error; }
   metrics.headersMs += performance.now() - started;
   const bodyStarted = performance.now();
   let ended = false;
@@ -44,7 +46,7 @@ export async function measuredReadFetch(input: string | URL | Request, init?: Re
         const next = await reader.read();
         if (next.done) { finish(); controller.close(); }
         else controller.enqueue(next.value);
-      } catch (error) { finish(); controller.error(error); }
+      } catch (error) { finish(); controller.error(signal?.aborted ? new DOMException('Public read deadline exceeded', 'AbortError') : error); }
     },
     async cancel(reason) { try { await reader.cancel(reason); } finally { finish(); } },
   });
@@ -56,7 +58,8 @@ export async function measuredReadFetch(input: string | URL | Request, init?: Re
 export async function boundedReadFetch(input: string | URL | Request, init?: RequestInit, timeoutMs = 5000): Promise<Response> {
   const deadline = AbortSignal.timeout(timeoutMs);
   const caller = init?.signal ?? (input instanceof Request ? input.signal : undefined);
-  const signal = caller ? AbortSignal.any([caller, deadline]) : deadline;
+  const budget = readTimings.getStore()?.deadline;
+  const signal = AbortSignal.any([deadline, ...(caller ? [caller] : []), ...(budget ? [budget] : [])]);
   try { return await measuredReadFetch(input, { ...init, signal }); }
   catch (error) {
     if (signal.aborted) throw new DOMException('Supabase request cancelled or deadline exceeded', 'AbortError');

@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { Hono } from 'hono';
+import { newReadTimings, readTimings } from './services/ivx-read-timings';
 import { publicReadTimeout, publicMutationTimeout } from './services/ivx-public-timeout-response';
 
 const readRoutes = ['/api/projects/:projectId/comments', '/api/ivx/properties/featured',
@@ -25,7 +26,7 @@ function fixture(mode: 'stalled' | 'success' | 'source-error' | 'late-success') 
   const budget = Number(/PUBLIC_DEALS_QUERY_TIMEOUT_MS = (\d+)/.exec(publicSource)?.[1]);
   if (!Number.isFinite(budget)) throw Error('Missing public deals source budget');
   // Scale real deadlines uniformly; keep the relationship between inner and outer.
-  const context: Record<string, unknown> = { app, Response,
+  const context: Record<string, unknown> = { app, Response, readTimings,
     setTimeout: (callback: () => void, ms: number) => setTimeout(callback, ms / 100),
     clearTimeout, PUBLIC_DEALS_QUERY_TIMEOUT_MS: budget,
     SB_HARD_TIMEOUT_MS: 6000, publicReadTimeout, publicMutationTimeout };
@@ -107,4 +108,26 @@ test('public deals preserve valid responses after the old six-second deadline', 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ marker: 'late-valid-response' });
   expect(f.attempts()).toBe(1);
+});
+
+
+test('public request budget ends a stalled route before its longer fallback timer', async () => {
+  const f = fixture('stalled');
+  try {
+    const metrics = newReadTimings(20);
+    const response = await readTimings.run(metrics, () => f.app.request('/api/landing-deals'));
+    expect(response.status).toBe(503);
+    expect(metrics.deadline?.aborted).toBe(true);
+    expect(f.attempts()).toBe(1);
+    expect(f.committed()).toBe(0);
+  } finally { f.finish(); }
+});
+
+test('an expired public request budget starts no source work', async () => {
+  const f = fixture('success');
+  const metrics = newReadTimings();
+  const stop = new AbortController(); stop.abort(); metrics.deadline = stop.signal;
+  const response = await readTimings.run(metrics, () => f.app.request('/api/landing-deals'));
+  expect(response.status).toBe(503);
+  expect(f.attempts()).toBe(0);
 });
