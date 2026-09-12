@@ -10,7 +10,11 @@ export const isAdminRole = _isAdminRole;
 
 // Identity metadata only; Supabase remains responsible for session tokens and
 // the backend remains responsible for authorization. SecureStore is native-only.
-const identityStorage = Platform.OS === 'web' ? {
+// Expo's native module graph can resolve Platform before a test or web shim is
+// installed. A real browser is still unambiguous, so use both signals and keep
+// SecureStore exclusive to native runtimes.
+const isWebRuntime = Platform.OS === 'web' || typeof window !== 'undefined';
+const identityStorage = isWebRuntime ? {
   getItemAsync: (key: string) => AsyncStorage.getItem(key),
   setItemAsync: (key: string, value: string) => AsyncStorage.setItem(key, value),
   deleteItemAsync: (key: string) => AsyncStorage.removeItem(key),

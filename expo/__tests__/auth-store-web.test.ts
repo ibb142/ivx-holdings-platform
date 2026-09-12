@@ -3,6 +3,7 @@ import { expect, mock, test } from 'bun:test';
 // Run in isolation: native SecureStore must never be touched by web sessions.
 const values = new Map<string, string>();
 const nativeCall = mock(() => { throw new Error('Native storage unavailable on web'); });
+Object.defineProperty(globalThis, 'window', { configurable: true, value: {} });
 mock.module('react-native', () => ({ Platform: { OS: 'web' } }));
 mock.module('expo-secure-store', () => ({
   getItemAsync: nativeCall, setItemAsync: nativeCall, deleteItemAsync: nativeCall,
