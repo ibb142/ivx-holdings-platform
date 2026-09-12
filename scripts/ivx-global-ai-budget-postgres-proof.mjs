@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import pg from 'pg';
+import { settleBudgetWithRetry } from '../backend/services/ivx-global-ai-budget-settlement.ts';
 
 export async function proveGlobalAIBudget(clients, realConnections = true) {
   const [a,b]=clients;
@@ -69,9 +70,41 @@ export async function proveGlobalAIBudget(clients, realConnections = true) {
     await a.query('rollback');await b.query('reset lock_timeout');
     assert.equal((await reserve(b)).allowed,true,'connection recovers after contention');
   }
+  // Reproduce a committed settlement with a lost acknowledgement using the
+  // actual retry helper and separate PostgreSQL connections. No AI is called.
+  await reset(10000,2);
+  const retryReservation=await reserve(a);
+  assert.equal(retryReservation.allowed,true);
+  const queued=[];
+  let settlementAttempts=0,resolveRecovered,rejectRecovered;
+  const recovered=new Promise((resolve,reject)=>{resolveRecovered=resolve;rejectRecovered=reject;});
+  await settleBudgetWithRetry(async params=>{
+    settlementAttempts++;
+    const client=settlementAttempts===1?a:b;
+    const value=(await client.query(
+      'select public.ivx_ai_budget_finish($1,$2,$3,$4,$5) value',
+      [params.p_reservation_id,params.p_worker_instance_id,params.p_status,
+        params.p_settled_upper_nano,params.p_generation_id])).rows[0].value;
+    if(settlementAttempts===1)throw Error('Drop only the acknowledgement after PostgreSQL committed');
+    assert.equal(value.duplicate,true);
+    return value;
+  },{
+    p_reservation_id:retryReservation.reservationId,p_worker_instance_id:'worker-a',
+    p_status:'settled',p_settled_upper_nano:'125',p_generation_id:'isolated-generation-receipt',
+  },{schedule:run=>queued.push(run),onConfirmed:()=>resolveRecovered()});
+  assert.equal(queued.length,1);
+  queued.shift()();
+  const recoveryDeadline=setTimeout(()=>rejectRecovered(Error('Settlement retry did not acknowledge within 5 seconds')),5000);
+  try{await recovered;}finally{clearTimeout(recoveryDeadline);}
+  assert.equal(settlementAttempts,2);
+  assert.equal((await snapshot()).settledUpperNano,'125');
+  assert.equal((await snapshot()).requestsActive,0);
+  assert.equal((await a.query('select generation_id from public.ivx_ai_budget_reservations where reservation_id=$1',
+    [retryReservation.reservationId])).rows[0].generation_id,'isolated-generation-receipt');
   const result={verification:'PASS',realConnections,connections:clients.length,attemptedAdmissions:20,admittedWithinBudget:3,
     sharedMonetaryAdmission:true,sharedCapacity:true,duplicateAdmissionRejected:true,settlementIdempotent:true,
     staleWorkerRejected:true,unknownChargesRetained:true,midnightLiabilityCarried:true,lostResponseFenced:true,
+    committedSettlementLostAckRecovered:true,settlementRetryAttempts:settlementAttempts,providerReceiptPreserved:true,
     priceOverrunStopsAdmission:true,rollbackAtomic:true,lockRecoveryTested:realConnections,privateAccess:true,
     sourceSha:process.env.GITHUB_SHA??null,observedAt:new Date().toISOString(),providerCalls:0,productionRowsTouched:0};
   return result;

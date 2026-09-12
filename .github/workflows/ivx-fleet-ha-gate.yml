@@ -46,6 +46,8 @@ jobs:
         run: bun test backend/ivx-ai-provider-limits.test.ts backend/services/ivx-ai-queue.test.ts backend/services/ivx-retry-policy.test.ts
       - name: Verify global AI budget transport, cancellation and pricing bounds
         run: bun test backend/services/ivx-global-ai-budget.test.ts
+      - name: Recover transient settlement failures without replaying provider calls
+        run: node --experimental-strip-types --test backend/services/ivx-global-ai-budget-settlement.test.mjs
       - name: Verify installed SDK cannot retry a refused monetary admission
         run: bun scripts/ivx-global-ai-budget-sdk-proof.ts
       - name: Verify manager identity, terminal writes, admission, planning and recovery
@@ -59,7 +61,7 @@ jobs:
         env:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - name: Prove global monetary admission on four PostgreSQL connections
-        run: node scripts/ivx-global-ai-budget-postgres-proof.mjs
+        run: node --experimental-strip-types scripts/ivx-global-ai-budget-postgres-proof.mjs
         env:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - name: Recover committed jobs with missing PR identity on PostgreSQL
