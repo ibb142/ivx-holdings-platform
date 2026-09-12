@@ -1,4 +1,5 @@
 import { createFeedResponseCache } from '../services/ivx-feed-response-cache';
+import { loadViewerEngagement } from '../services/ivx-viewer-engagement';
 /**
  * IVX Video Platform API — enterprise Instagram-grade video experience.
  *
@@ -387,16 +388,7 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
     const dealsById = await loadFeedDeals(sb, dealCandidates, titles);
     const viewerFollowing = new Set(followState.following);
     void profile;
-    let likedSet = new Set<string>();
-    let savedSet = new Set<string>();
-    if (viewerId && pageIds.length > 0) {
-      const [lr, sr] = await Promise.all([
-        sb.from('project_likes').select('project_id').in('project_id', pageIds).or(`user_id.eq.${viewerId},guest_id.eq.${viewerId}`),
-        sb.from('project_saves').select('project_id').in('project_id', pageIds).or(`user_id.eq.${viewerId},guest_id.eq.${viewerId}`),
-      ]);
-      likedSet = new Set((lr.data || []).map((r: any) => String(r.project_id)));
-      savedSet = new Set((sr.data || []).map((r: any) => String(r.project_id)));
-    }
+    const { liked: likedSet, saved: savedSet } = await loadViewerEngagement(sb, pageIds, viewerId);
 
     // VP9/webm fallback variants (codec-limited browsers cannot decode H.264).
     const WEBM_VARIANTS: Record<string, string> = { 'c0725a70-497f-4332-8f9d-03a29036d270': '/media/reels/c0725a70.webm' };
