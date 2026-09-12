@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { getConfiguredOwnerAdminEmail } from '@/lib/admin-access-lock';
 import { getSupabaseClient, supabase } from '@/lib/supabase';
 import { resolveSupabaseUrl } from '@/lib/supabase-env';
+import { getInMemoryOwnerOutageToken } from '@/lib/auth-store';
 import {
   getIVXAccessControlConfig,
   IVX_OPEN_ACCESS_OWNER_TOKEN,
@@ -537,6 +538,20 @@ export async function getIVXAccessToken(options: IVXAccessTokenOptions = {}): Pr
       expiringSoon: isExpiringSoon,
     });
     return accessToken;
+  }
+
+  // Supabase may be unavailable after the backend has already authenticated
+  // the owner and minted a bounded ivxos1 outage session. That token is held
+  // in memory only and is verified authoritatively by every backend request.
+  // Prefer it to another Supabase refresh attempt so Chat does not discard a
+  // session that the immediately preceding owner login explicitly installed.
+  const ownerOutageToken = getInMemoryOwnerOutageToken();
+  if (ownerOutageToken) {
+    console.log('[IVXSupabaseClient] Access token resolved', {
+      tokenPresent: true,
+      source: 'bounded_owner_outage_session',
+    });
+    return ownerOutageToken;
   }
 
   const recoveredToken = await refreshIVXSessionToken('missing_session_recovery');

@@ -1,8 +1,9 @@
 /**
  * BLOCK 1 — Owner Session Preflight (runs before ANY owner-gated IVX IA action).
  *
- * A single, reusable gate that proves a REAL owner Supabase session exists before
- * the app POSTs to an owner-gated route (Owner AI chat, Gmail OAuth setup, Capital
+ * A single, reusable gate that proves a real owner Supabase session or a bounded,
+ * backend-minted owner outage session exists before the app POSTs to an
+ * owner-gated route (Owner AI chat, Gmail OAuth setup, Capital
  * Outreach actions, Power Tools actions, CRM/Gmail draft actions). Instead of a
  * generic "Owner session token unavailable" or a misleading /public/chat fallback,
  * a failed preflight surfaces an explicit `OWNER_SESSION_REQUIRED` result so the
@@ -42,6 +43,7 @@ export type OwnerSessionBlockReason =
   | 'no_supabase_session'
   | 'no_access_token'
   | 'dev_token_blocked_in_production'
+  | 'outage_token_invalid'
   | 'token_not_jwt'
   | 'token_expired'
   | 'owner_email_missing'
@@ -54,6 +56,7 @@ export type OwnerSessionPreflightCheck = {
     | 'supabase_session'
     | 'access_token'
     | 'dev_token_block'
+    | 'bounded_outage_session'
     | 'owner_email'
     | 'owner_email_allowlisted'
     | 'issuer_match'
@@ -94,6 +97,27 @@ export class OwnerSessionRequiredError extends Error {
 }
 
 type DecodedJwt = { iss?: unknown; exp?: unknown; email?: unknown };
+
+type DecodedOwnerOutageToken = { expiresAt: number; email: string };
+
+export function decodeBoundedOwnerOutageToken(token: string): DecodedOwnerOutageToken | null {
+  const parts = token.trim().split('.');
+  if (parts.length !== 5 || parts[0] !== 'ivxos1') return null;
+  const [, expiresRaw, encodedEmail, nonce, signature] = parts;
+  const expiresAt = Number(expiresRaw);
+  if (!Number.isFinite(expiresAt) || !encodedEmail || !nonce || !signature) return null;
+  try {
+    const normalized = encodedEmail.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+    const email = (
+      typeof atob === 'function' ? atob(padded) : Buffer.from(padded, 'base64').toString('utf8')
+    ).trim().toLowerCase();
+    if (!email || !isIVXOwnerAllowlistedEmail(email)) return null;
+    return { expiresAt, email };
+  } catch {
+    return null;
+  }
+}
 
 function decodeJwtPayload(token: string): DecodedJwt | null {
   const segments = token.split('.');
@@ -279,8 +303,49 @@ export async function runOwnerSessionPreflight(
     passed: true,
     detail: isDevOpenToken
       ? 'Dev-open-access token allowed in this non-production runtime.'
-      : 'Real Supabase JWT (not the dev-open-access token).',
+      : accessToken.startsWith('ivxos1.')
+        ? 'Bounded owner outage token (not the dev-open-access token).'
+        : 'Real Supabase JWT (not the dev-open-access token).',
   });
+
+  // A bounded owner outage token is not a Supabase JWT. It is only installed in
+  // memory by the successful backend owner-login response, expires within an
+  // hour, and is HMAC-verified by the backend on every request. The client can
+  // validate its shape, expiry and allowlisted identity but never treats that
+  // inspection as signature verification.
+  if (!isDevOpenToken && accessToken.startsWith('ivxos1.')) {
+    const decodedOutageToken = decodeBoundedOwnerOutageToken(accessToken);
+    const secondsUntilExpiry = decodedOutageToken
+      ? Math.round(decodedOutageToken.expiresAt - Date.now() / 1000)
+      : null;
+    if (!decodedOutageToken || secondsUntilExpiry === null || secondsUntilExpiry <= 0) {
+      checks.push({
+        id: 'bounded_outage_session',
+        passed: false,
+        detail: decodedOutageToken
+          ? `Bounded owner outage session expired ${Math.abs(secondsUntilExpiry ?? 0)}s ago.`
+          : 'Bounded owner outage session is malformed or its email is not allowlisted.',
+      });
+      return {
+        ok: false,
+        label: OWNER_SESSION_REQUIRED_LABEL,
+        reason: 'outage_token_invalid',
+        detail: 'The bounded owner outage session is invalid or expired. Sign in as the IVX owner and retry.',
+        email: decodedOutageToken?.email ?? sessionEmail,
+        checks,
+      };
+    }
+    checks.push({
+      id: 'bounded_outage_session',
+      passed: true,
+      detail: `Backend-minted owner outage session present (expires in ${secondsUntilExpiry}s; signature remains backend-authoritative).`,
+    });
+    checks.push({ id: 'token_validity', passed: true, detail: 'Bounded owner outage session is not expired.' });
+    checks.push({ id: 'issuer_match', passed: null, detail: 'Supabase issuer check is not applicable to a backend-minted outage session.' });
+    checks.push({ id: 'owner_email', passed: true, detail: 'Owner email decoded from bounded outage session.' });
+    checks.push({ id: 'owner_email_allowlisted', passed: true, detail: 'Owner email is in the device allowlist.' });
+    return { ok: true, accessToken, email: decodedOutageToken.email, checks };
+  }
 
   // For a real JWT, validate format / expiry / issuer and resolve the email.
   if (!isDevOpenToken) {

@@ -1,4 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import logger from './logger';
 import { isAdminRole as _isAdminRole } from './auth-helpers';
 import type { AdminRole, UserRole } from './auth-helpers';
@@ -6,8 +8,36 @@ import type { AdminRole, UserRole } from './auth-helpers';
 export type { AdminRole, UserRole };
 export const isAdminRole = _isAdminRole;
 
+// Identity metadata only; Supabase remains responsible for session tokens and
+// the backend remains responsible for authorization. SecureStore is native-only.
+// Expo's native module graph can resolve Platform before a test or web shim is
+// installed. A real browser is still unambiguous, so use both signals and keep
+// SecureStore exclusive to native runtimes.
+const isWebRuntime = Platform.OS === 'web' || typeof window !== 'undefined';
+const identityStorage = isWebRuntime ? {
+  getItemAsync: (key: string) => AsyncStorage.getItem(key),
+  setItemAsync: (key: string, value: string) => AsyncStorage.setItem(key, value),
+  deleteItemAsync: (key: string) => AsyncStorage.removeItem(key),
+} : SecureStore;
+
 let _userId: string | null = null;
 let _userRole: string | null = null;
+// A backend-minted outage session is deliberately process-only. It lets an
+// owner who has just passed the exact password/allowlist login continue to the
+// owner API while Supabase Auth is unavailable, without restoring the former
+// persisted-token behaviour. The backend still verifies the HMAC on every
+// request.
+let _ownerOutageToken: string | null = null;
+
+function isUsableOwnerOutageToken(token: string | null): token is string {
+  if (!token) return false;
+  const parts = token.trim().split('.');
+  if (parts.length !== 5 || parts[0] !== 'ivxos1') return false;
+  const expiresAt = Number(parts[1]);
+  return Number.isFinite(expiresAt)
+    && expiresAt > Math.floor(Date.now() / 1000)
+    && Boolean(parts[2] && parts[3] && parts[4]);
+}
 
 const KEYS = {
   USER_ID: 'ipx_user_id',
@@ -15,13 +45,28 @@ const KEYS = {
 } as const;
 
 export function setAuthCredentials(
-  _token: string | null,
+  token: string | null,
   userId: string | null,
   userRole: string | null,
   _refreshToken?: string | null,
 ) {
   _userId = userId;
   _userRole = userRole;
+  _ownerOutageToken = userId && userRole === 'owner' && isUsableOwnerOutageToken(token)
+    ? token.trim()
+    : null;
+}
+
+/**
+ * Returns only the short-lived, backend-minted owner outage token held by this
+ * process. Supabase JWTs and refresh tokens are never stored here.
+ */
+export function getInMemoryOwnerOutageToken(): string | null {
+  if (!isUsableOwnerOutageToken(_ownerOutageToken)) {
+    _ownerOutageToken = null;
+    return null;
+  }
+  return _ownerOutageToken;
 }
 
 export function getAuthToken(): string | null {
@@ -59,8 +104,8 @@ export async function persistAuth(data: {
   _userRole = data.userRole;
   try {
     await Promise.all([
-      SecureStore.setItemAsync(KEYS.USER_ID, data.userId),
-      SecureStore.setItemAsync(KEYS.USER_ROLE, data.userRole),
+      identityStorage.setItemAsync(KEYS.USER_ID, data.userId),
+      identityStorage.setItemAsync(KEYS.USER_ROLE, data.userRole),
     ]);
     logger.authStore.log('Auth persisted for:', data.userId);
   } catch (error) {
@@ -76,8 +121,8 @@ export async function loadStoredAuth(): Promise<{
 }> {
   try {
     const [userId, userRole] = await Promise.all([
-      SecureStore.getItemAsync(KEYS.USER_ID),
-      SecureStore.getItemAsync(KEYS.USER_ROLE),
+      identityStorage.getItemAsync(KEYS.USER_ID),
+      identityStorage.getItemAsync(KEYS.USER_ROLE),
     ]);
     if (userId) {
       _userId = userId;
@@ -94,12 +139,13 @@ export async function loadStoredAuth(): Promise<{
 export async function clearStoredAuth(): Promise<void> {
   _userId = null;
   _userRole = null;
+  _ownerOutageToken = null;
   try {
     await Promise.all([
-      SecureStore.deleteItemAsync(KEYS.USER_ID),
-      SecureStore.deleteItemAsync(KEYS.USER_ROLE),
-      SecureStore.deleteItemAsync('ipx_auth_token').catch(() => {}),
-      SecureStore.deleteItemAsync('ipx_refresh_token').catch(() => {}),
+      identityStorage.deleteItemAsync(KEYS.USER_ID),
+      identityStorage.deleteItemAsync(KEYS.USER_ROLE),
+      identityStorage.deleteItemAsync('ipx_auth_token').catch(() => {}),
+      identityStorage.deleteItemAsync('ipx_refresh_token').catch(() => {}),
     ]);
     logger.authStore.log('Auth cleared');
   } catch (error) {
