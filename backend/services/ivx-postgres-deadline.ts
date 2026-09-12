@@ -13,6 +13,7 @@ export function observePostgresPoolErrors(pool: Pick<Pool, 'on'>, purpose: strin
 /** Transaction-local deadlines survive Supavisor transaction pooling. */
 export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
   pool: Pick<Pool, 'connect'>, text: string, values: unknown[],
+  options: { readOnly?: boolean } = {},
 ) {
   const startedAt = Date.now();
   let stageStartedAt = startedAt;
@@ -48,7 +49,8 @@ export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
     // local limits. The parameterized mutation is sent only after this succeeds.
     stage = 'setup'; stageStartedAt = Date.now();
     requireConnection();
-    await client.query("BEGIN; SET LOCAL statement_timeout = '4s'; SET LOCAL lock_timeout = '2s'; SET LOCAL idle_in_transaction_session_timeout = '8s'");
+    const begin = options.readOnly ? 'BEGIN READ ONLY' : 'BEGIN';
+    await client.query(`${begin}; SET LOCAL statement_timeout = '4s'; SET LOCAL lock_timeout = '2s'; SET LOCAL idle_in_transaction_session_timeout = '8s'`);
     requireConnection();
     stage = 'query'; stageStartedAt = Date.now();
     const result = await client.query<T>(text, values);

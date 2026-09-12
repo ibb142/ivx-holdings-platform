@@ -1,30 +1,9 @@
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 import { supabasePostgresTls, withoutPostgresUrlTlsOptions } from '../services/ivx-supabase-postgres-tls';
+import { observePostgresPoolErrors, queryWithPostgresDeadline } from '../services/ivx-postgres-deadline';
+import type { Pool } from 'pg';
 
 type SupabaseInspectionKind = 'tables' | 'schema' | 'columns' | 'rls';
-
-type PgQueryResult<T> = {
-  rows: T[];
-};
-
-type PgPoolClient = {
-  query: <T = Record<string, unknown>>(text: string, values?: unknown[]) => Promise<PgQueryResult<T>>;
-  release: () => void;
-};
-
-type PgPool = {
-  connect: () => Promise<PgPoolClient>;
-  end: () => Promise<void>;
-};
-
-type PgPoolConstructor = new (config: {
-  connectionString: string;
-  ssl?: { rejectUnauthorized: boolean; ca?: string[] };
-  application_name?: string;
-  max?: number;
-  idleTimeoutMillis?: number;
-  connectionTimeoutMillis?: number;
-}) => PgPool;
 
 type TableInspectionRow = {
   schema_name: string;
@@ -125,7 +104,7 @@ const FALLBACK_SQL_SCHEMA_PATHS = [
   'expo/supabase/ivx-owner-ai-phase1.sql',
 ] as const;
 
-let cachedPool: PgPool | null = null;
+let cachedPool: Pool | null = null;
 let cachedPoolKey: string | null = null;
 
 function readTrimmedEnv(name: string): string {
@@ -255,7 +234,7 @@ function buildSupabaseInspectionConnectionString(): string {
   return `postgres://${encodedUser}:${encodedPassword}@${dbHost}:${dbPort}/${encodedDbName}?sslmode=require&application_name=ivx_read_only_inspection`;
 }
 
-async function getInspectionPool(): Promise<PgPool> {
+async function getInspectionPool(): Promise<Pool> {
   const connectionString = buildSupabaseInspectionConnectionString();
   if (cachedPool && cachedPoolKey === connectionString) {
     return cachedPool;
@@ -267,7 +246,7 @@ async function getInspectionPool(): Promise<PgPool> {
     });
   }
 
-  const pgModule = await import('pg') as { Pool: PgPoolConstructor };
+  const pgModule = await import('pg');
   cachedPool = new pgModule.Pool({
     connectionString: withoutPostgresUrlTlsOptions(connectionString),
     ssl: supabasePostgresTls(),
@@ -275,27 +254,17 @@ async function getInspectionPool(): Promise<PgPool> {
     max: 1,
     idleTimeoutMillis: 10_000,
     connectionTimeoutMillis: 8_000,
+    query_timeout: 5_000,
   });
+  observePostgresPoolErrors(cachedPool, 'read-only-inspection');
   cachedPoolKey = connectionString;
   return cachedPool;
 }
 
 async function runReadOnlyQuery<T>(text: string, values: unknown[]): Promise<T[]> {
   const pool = await getInspectionPool();
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN READ ONLY');
-    const result = await client.query<T>(text, values);
-    await client.query('COMMIT');
-    return result.rows;
-  } catch (error) {
-    await client.query('ROLLBACK').catch((rollbackError: unknown) => {
-      console.log('[IVXSupabaseInspection] Read-only rollback failed:', rollbackError instanceof Error ? rollbackError.message : 'unknown');
-    });
-    throw error;
-  } finally {
-    client.release();
-  }
+  const result = await queryWithPostgresDeadline<T>(pool, text, values, { readOnly: true });
+  return result.rows;
 }
 
 async function readSupabaseOpenApiDefinitions(): Promise<Record<string, OpenApiDefinitionSchema>> {

@@ -19,6 +19,22 @@ test('fresh ended observations do not require an active worker lease', () => {
   expect(evaluateSample(observationSnapshot()).freshPassingAgents).toBe(112);
   expect(evaluateSample(observationSnapshot()).passed).toBe(true);
 });
+test('a leased lane needs a live owner lease and fresh passing evidence', () => {
+  const s = observationSnapshot();
+  Object.assign(s.data[0], { state: 'LEASED', lease_holder: 'worker-fixture', lease_expires_at: new Date(now + 60_000).toISOString() });
+  expect(evaluateSample(s).freshPassingAgents).toBe(112);
+  for (const lease of [
+    { lease_holder: null },
+    { lease_expires_at: null },
+    { lease_expires_at: new Date(now).toISOString() },
+  ]) {
+    const invalid = structuredClone(s);
+    Object.assign(invalid.data[0], lease);
+    expect(evaluateSample(invalid).agents[0].blockers).toContain('EXPIRED_OR_MISSING_LEASE');
+  }
+  s.sampledAt = new Date(now + 121_000).toISOString();
+  expect(evaluateSample(s).agents[0].blockers).toContain('STALE_EVIDENCE');
+});
 test('missing and duplicated identities cannot produce an empty success', () => {
   expect(evaluateSample({ sourceSha: sha, data: [] }).passed).toBe(false);
   const s = observationSnapshot(); s.data[1] = s.data[0];

@@ -4425,11 +4425,9 @@ app.options('/api/ivx/metrics', () => metricsOptions());
 app.get('/api/ivx/metrics', async (context) => handleMetricsRequest(context.req.raw));
 
 app.options('/api/ivx/verify/env-status', () => ownerStatusOptions());
-app.get('/api/ivx/verify/env-status', async (context) => {
-  const authFail = await requireOwnerAuth(context.req.raw);
-  if (authFail) return authFail;
-  return handleEnvStatusRequest(context.req.raw);
-});
+// The handler performs its own fresh owner verification. Running it twice adds
+// another identity-provider deadline and can reject an already verified read.
+app.get('/api/ivx/verify/env-status', async (context) => handleEnvStatusRequest(context.req.raw));
 app.options('/api/ivx/autonomous/status', () => ownerStatusOptions());
 app.get('/api/ivx/autonomous/status', async (context) => handleAutonomousStatusRequest(context.req.raw));
 app.options('/api/ivx/autonomous/run', () => ownerStatusOptions());
