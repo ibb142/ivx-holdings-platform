@@ -1,0 +1,68 @@
+name: IVX pending execution index maintenance
+on:
+  pull_request:
+    paths: ['scripts/ops/pending-execution-index*', 'scripts/ops/autonomous-db-sync.mjs', 'scripts/ivx-pending-execution-postgres-proof.mjs', 'supabase/repair-functions/ivx-pending-execution-index.sql', '.github/workflows/ivx-pending-index-maintenance.yml']
+  push:
+    branches: [main]
+    paths: ['scripts/ops/pending-execution-index*', 'scripts/ops/autonomous-db-sync.mjs', 'scripts/ivx-pending-execution-postgres-proof.mjs', 'supabase/repair-functions/ivx-pending-execution-index.sql', '.github/workflows/ivx-pending-index-maintenance.yml']
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: ivx-pending-execution-index-maintenance
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: ivx_ha_test }
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: node --test scripts/ops/pending-execution-index.test.mjs scripts/ops/autonomous-db-sync.test.mjs
+      - run: bun test backend/workers/ivx-global-supervisor-boot.test.ts backend/workers/ivx-senior-dev-worker-lifetime.test.ts
+      - name: Prove invalid-index recovery and unchanged history on PostgreSQL
+        run: node scripts/ivx-pending-execution-postgres-proof.mjs
+        env:
+          IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
+  apply-index:
+    needs: verify
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Complete the approved concurrent index and verify its actual plan
+        run: node scripts/ops/pending-execution-index.mjs
+        env:
+          IVX_APPLY_PENDING_INDEX: 'true'
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          IVX_RENDER_API_KEY: ${{ secrets.IVX_RENDER_API_KEY }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+          SUPABASE_POOLER_URL: ${{ secrets.SUPABASE_POOLER_URL }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+          SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          IVX_OWNER_VARIABLES_ENCRYPTION_KEY: ${{ secrets.IVX_OWNER_VARIABLES_ENCRYPTION_KEY }}
+          APP_SECRET: ${{ secrets.APP_SECRET }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pending-index-production-${{ github.sha }}
+          path: qa/evidence/fleet-ha/pending-index-production.json
+          if-no-files-found: warn
+          retention-days: 30

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import pg from 'pg';
+import { repairPendingExecutionIndex } from './ops/pending-execution-index.mjs';
 
 const connectionString = process.env.IVX_HA_TEST_DATABASE_URL;
 const url = new URL(connectionString ?? 'postgres://invalid/');
@@ -49,6 +50,7 @@ try {
   const sql = await readFile(new URL('../supabase/repair-functions/ivx-pending-execution-index.sql', import.meta.url), 'utf8');
   await db.query(sql);
   await db.query(sql);
+  assert.equal((await repairPendingExecutionIndex(db)).status, 'already_valid');
   await db.query('vacuum analyze public.ivx_agent_executions');
   // Repeat the named parameterized statement beyond PostgreSQL's custom-plan
   // sampling window, matching the prepared requests used by PostgREST.
@@ -59,8 +61,34 @@ try {
   assert.deepEqual(validity, { indisvalid: true, indisready: true });
   const preparedPlans = (await db.query("select generic_plans::int,custom_plans::int from pg_prepared_statements where name='pending-discovery-proof'")).rows[0];
   assert.ok(preparedPlans.generic_plans + preparedPlans.custom_plans >= 16, 'exercise real prepared execution beyond plan sampling');
+
+  // Reproduce the production failure with our own writer and our own cancelled
+  // builder. The interrupted index exists but is unusable; no history is lost.
+  await db.query('drop index concurrently public.idx_ivx_agent_exec_pending_discovery');
+  const writer = new pg.Client({ connectionString });
+  const builder = new pg.Client({ connectionString });
+  await writer.connect(); await builder.connect();
+  const pid = (await builder.query('select pg_backend_pid() pid')).rows[0].pid;
+  try {
+    await writer.query('begin');
+    await writer.query("update public.ivx_agent_executions set run_id=run_id where task_id='a-pending'");
+    const building = builder.query(sql).then(() => null, error => error);
+    let discovered = false;
+    for (let attempt=0;attempt<100;attempt++) {
+      const row = (await db.query("select indisvalid from pg_index where indexrelid=to_regclass('public.idx_ivx_agent_exec_pending_discovery')")).rows[0];
+      if (row) { discovered=true; break; }
+      await new Promise(resolve => setTimeout(resolve,20));
+    }
+    assert.ok(discovered, 'the concurrent builder committed its invalid catalog entry');
+    await db.query('select pg_cancel_backend($1)',[pid]);
+    assert.equal((await building)?.code, '57014');
+    await writer.query('rollback');
+    assert.equal((await repairPendingExecutionIndex(db)).status, 'rebuilt_invalid');
+    assert.equal((await repairPendingExecutionIndex(db)).status, 'already_valid');
+    assert.deepEqual(await history(),before,'rebuilding an invalid index preserves every historical row');
+  } finally { await writer.query('rollback'); await writer.end(); await builder.end(); }
   const receipt = { result: 'PASS', baselineBlockBoundFailed: true, baselinePlan, unchangedHistory: before, preparedPlans,
-    preparedExecutions: plans.length, finalPlan: plans.at(-1), concurrentIndexValid: true, idempotent: true };
+    preparedExecutions: plans.length, finalPlan: plans.at(-1), concurrentIndexValid: true, idempotent: true, invalidBuildRecovered: true };
   await mkdir('qa/evidence/fleet-ha', { recursive: true });
   await writeFile('qa/evidence/fleet-ha/pending-execution-discovery.json', JSON.stringify(receipt, null, 2) + '\n');
   console.log(JSON.stringify(receipt));

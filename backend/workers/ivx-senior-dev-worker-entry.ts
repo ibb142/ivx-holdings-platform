@@ -40,8 +40,10 @@ console.log('[IVX-SENIOR-DEV-01] process entry', {
 if (!databaseRecoveryMode) {
   startFleetSloMonitor();
   startBlockedTaskReconciler();
+  // Pending-certificate discovery can scan retained executions while its
+  // index is being recovered. Leave those durable runs queued during recovery.
+  startCertificateWorker();
 }
-startCertificateWorker();
 // The general owner queue now uses bounded atomic claims and fenced updates.
 // Keep this consumer available while the older auxiliary polling loops remain
 // suppressed; its SQL gate respects owner pause/emergency and database failure.
