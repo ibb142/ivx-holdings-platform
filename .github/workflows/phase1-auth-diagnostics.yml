@@ -28,7 +28,7 @@ jobs:
             sourceSha: process.env.GITHUB_SHA, observations: [], mutations: 0, rawLogsPublished: false, credentialsPublished: false };
           mkdirSync('qa-results', { recursive: true });
           const save = () => writeFileSync('qa-results/auth-availability.json', JSON.stringify(receipt, null, 2) + '\n');
-          const get = async (path, label) => {
+          const get = async (path, label, textMode = false) => {
             const observation = { label, method: 'GET', startedAt: new Date().toISOString() };
             receipt.observations.push(observation);
             const began = Date.now();
@@ -38,7 +38,7 @@ jobs:
                 headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' },
               });
               observation.http = response.status;
-              const payload = await response.json();
+              const payload = textMode ? await response.text() : await response.json();
               observation.durationMs = Date.now() - began;
               if (!response.ok) { observation.result = 'UNAVAILABLE'; return null; }
               observation.result = 'READ';
@@ -50,7 +50,7 @@ jobs:
             receipt.observations.push({ label: 'management_credential', result: 'MISSING' });
             process.exitCode = 1;
           } else {
-            const health = await get('/health?services=auth,rest,db&timeout_ms=15000', 'project_service_health');
+            const health = await get('/health?services=auth', 'project_service_health');
             if (health) {
               const list = Array.isArray(health.payload) ? health.payload : health.payload.services;
               const names = new Set(['auth', 'rest', 'db', 'database', 'realtime', 'storage', 'pooler']);
@@ -63,6 +63,10 @@ jobs:
               if (!Array.isArray(list)) health.observation.result = 'UNRECOGNIZED_FORMAT';
             }
             const categories = [
+              ['statement_timeout', /canceling statement due to statement timeout/i],
+              ['idle_transaction_timeout', /idle.in.transaction.{0,30}timeout/i],
+              ['pool_acquisition_timeout', /acquir.{0,50}timeout|timeout.{0,50}acquir|pool.{0,50}timeout/i],
+              ['context_deadline', /context deadline exceeded|context canceled/i],
               ['timeout', /timeout|timed out|context deadline/i],
               ['connection_limit', /too many connections|remaining connection slots|max_client_conn/i],
               ['connection_transport', /connection refused|connection reset|broken pipe|unexpected eof/i],
@@ -106,6 +110,31 @@ jobs:
               result.observation.categories = counts;
               // Raw messages, request headers, identities and SQL text stay in memory only.
               save();
+            }
+            const metrics = await get('/analytics/endpoints/metrics', 'resource_metrics', true);
+            if (metrics) {
+              const wanted = new Set(['node_load1', 'node_load5', 'node_memory_MemTotal_bytes',
+                'node_memory_MemAvailable_bytes', 'node_memory_SwapTotal_bytes', 'node_memory_SwapFree_bytes',
+                'node_vmstat_pswpin', 'node_vmstat_pswpout', 'node_cpu_seconds_total',
+                'node_disk_io_time_seconds_total', 'pg_settings_max_connections', 'pg_stat_database_numbackends']);
+              const samples = [];
+              for (const line of metrics.payload.split('\n')) {
+                const match = line.match(/^([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{([^}]*)\})?\s+([0-9.eE+-]+)$/);
+                if (!match || !wanted.has(match[1]) || !Number.isFinite(Number(match[3]))) continue;
+                const labels = {};
+                for (const label of (match[2] ?? '').matchAll(/(cpu|mode|device)="([a-zA-Z0-9_.-]{1,40})"/g)) labels[label[1]] = label[2];
+                samples.push({ metric: match[1], labels, value: Number(match[3]) });
+              }
+              metrics.observation.samples = samples.slice(0, 80);
+              if (!samples.length) metrics.observation.result = 'UNRECOGNIZED_FORMAT';
+            }
+            const addons = await get('/billing/addons', 'current_compute_selection');
+            if (addons) {
+              addons.observation.responseKeys = Object.keys(addons.payload).filter(key => /^[a-z_]{1,48}$/.test(key));
+              const selected = addons.payload.selected_addons;
+              addons.observation.selected = Array.isArray(selected) ? selected.map(item => Object.fromEntries(
+                Object.entries(item).filter(([key, value]) => ['type', 'addon_type', 'variant', 'addon_variant', 'name'].includes(key)
+                  && typeof value === 'string' && /^[a-zA-Z0-9_. -]{1,80}$/.test(value)))) : [];
             }
           }
           receipt.finishedAt = new Date().toISOString();
