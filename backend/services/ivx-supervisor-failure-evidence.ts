@@ -37,19 +37,31 @@ function redact(text: string): string {
     .replace(/((?:password|secret|access_token|refresh_token|api[_-]?key)\s*[=:]\s*)[^\s,}"]+/gi, '$1[redacted]');
 }
 
-async function boundedLog(response: Response): Promise<{ text: string; truncated: boolean }> {
+async function boundedLog(response: Response): Promise<{ text: string; prefix: string; truncated: boolean }> {
   if (!response.body) throw new Error('Failed job log has no body.');
   const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
+  let prefix = Buffer.alloc(0);
+  let tail = Buffer.alloc(0);
   let bytes = 0;
   try {
     while (true) {
       const chunk = await reader.read();
-      if (chunk.done) return { text: Buffer.concat(chunks).toString('utf8'), truncated: false };
-      const remaining = MAX_LOG_BYTES - bytes;
-      chunks.push(chunk.value.subarray(0, remaining));
-      bytes += Math.min(remaining, chunk.value.byteLength);
-      if (bytes === MAX_LOG_BYTES) return { text: Buffer.concat(chunks).toString('utf8'), truncated: true };
+      if (chunk.done) {
+        const head = prefix.toString('utf8');
+        return { prefix: head, text: bytes > MAX_LOG_BYTES
+          ? head.slice(0, Math.max(0, head.lastIndexOf('\n'))) + '\n[bounded log tail follows]\n'
+            + tail.toString('utf8').slice(tail.toString('utf8').indexOf('\n') + 1) : head,
+          truncated: bytes > MAX_LOG_BYTES };
+      }
+      bytes += chunk.value.byteLength;
+      if (bytes > 8 * 1024 * 1024) throw new Error('Failed job log exceeds transfer budget; dispatch deferred.');
+      if (prefix.length < MAX_LOG_BYTES) {
+        prefix = Buffer.concat([prefix, chunk.value.subarray(0, MAX_LOG_BYTES - prefix.length)]);
+      }
+      // Copy the retained tail so a small view cannot retain a large input buffer.
+      const recent = chunk.value.subarray(Math.max(0, chunk.value.byteLength - MAX_LOG_BYTES));
+      tail = Buffer.concat([tail.subarray(Math.min(tail.length,
+        Math.max(0, tail.length + recent.byteLength - MAX_LOG_BYTES))), recent]);
     }
   } finally {
     await reader.cancel();
@@ -109,7 +121,7 @@ export async function collectSupervisorFailureEvidence(mission: RepairMission): 
       if (!logExcerpt) throw new Error('Failed job has no diagnostic error excerpt; dispatch deferred.');
       jobs.push({ jobId: job.id, conclusion: job.conclusion,
         failedSteps: (job.steps || []).filter(step => FAILED.has(step.conclusion)).map(step => redact(step.name).slice(0, 200)),
-        logExcerpt, logPrefixSha256: sha256(log.text), logTruncated: log.truncated });
+        logExcerpt, logPrefixSha256: sha256(log.prefix), logTruncated: log.truncated });
       if (jobs.length === 3) break;
     }
     if (data.jobs.length < 100) break;

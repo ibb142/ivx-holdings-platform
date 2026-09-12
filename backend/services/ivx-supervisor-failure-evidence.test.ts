@@ -6,7 +6,7 @@ const run = { id: mission.runId, name: mission.workflow, head_sha: mission.mainS
 let fetchMock: ReturnType<typeof spyOn>;
 afterEach(() => fetchMock?.mockRestore());
 
-function respond(log: string, overrides: Partial<typeof run> = {}, currentSha = mission.mainSha) {
+function respond(log: string | ReadableStream<Uint8Array>, overrides: Partial<typeof run> = {}, currentSha = mission.mainSha) {
   const paths: string[] = [];
   fetchMock = spyOn(globalThis, 'fetch').mockImplementation(async input => {
     const path = new URL(String(input)).pathname;
@@ -69,5 +69,31 @@ test('oversized logs retain bounded and explicitly partial evidence', async () =
   respond('error: useful bounded context\n' + 'x'.repeat(600_000));
   const result = await collectSupervisorFailureEvidence(mission);
   expect(result.jobs[0].logTruncated).toBe(true);
+  expect(result.jobs[0].logExcerpt.length).toBeLessThanOrEqual(6000);
+});
+
+test('a failed owner authentication step after verbose passing tests remains visible', async () => {
+  respond('0 fail\n'.repeat(100_000) + '\nQA_PREFLIGHT_FAIL owner_auth_transport_failed\n##[error]Process completed with exit code 1.');
+  const result = await collectSupervisorFailureEvidence(mission);
+  expect(result.jobs[0].logExcerpt).toContain('QA_PREFLIGHT_FAIL owner_auth_transport_failed');
+  expect(result.jobs[0].logTruncated).toBe(true);
+});
+
+test('logs beyond the transfer budget defer repair instead of using an incomplete prefix', async () => {
+  respond('error: unrelated early fixture\n' + 'x'.repeat(8 * 1024 * 1024));
+  await expect(collectSupervisorFailureEvidence(mission)).rejects.toThrow('transfer budget');
+});
+
+
+test('streamed chunks retain the final error and redact tail credentials', async () => {
+  const enc = new TextEncoder();
+  respond(new ReadableStream({start(controller) {
+    for (let i = 0; i < 12; i++) controller.enqueue(enc.encode('passed test\n'.repeat(10_000)));
+    controller.enqueue(enc.encode('\nerror: owner transport failed password=private-password\n'));
+    controller.close();
+  }}));
+  const result = await collectSupervisorFailureEvidence(mission);
+  expect(result.jobs[0].logExcerpt).toContain('owner transport failed');
+  expect(result.jobs[0].logExcerpt).not.toContain('private-password');
   expect(result.jobs[0].logExcerpt.length).toBeLessThanOrEqual(6000);
 });
