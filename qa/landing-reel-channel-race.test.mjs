@@ -76,19 +76,42 @@ const publicFeed = () => ({
   feed_type: 'unified', ordering: 'canonical-unified-v2',
 });
 
-test('a transient personalized feed failure recovers actual public reels with unknown viewer state', async () => {
+test('a transient personalized feed failure recovers the same public Reels scope with unknown viewer state', async () => {
   const f = fixture();
   f.state.channel = '__reels'; f.context.loadMore();
   f.pending[0].reject(new Error('upstream timeout')); await settle();
   assert.equal(f.pending.length, 2);
-  assert.equal(f.pending[1].path, '/api/reels');
-  const data = publicFeed();
+  assert.equal(f.pending[1].path, '/api/reels?limit=6&type=reel');
+  const data = { ...publicFeed(), feed_type: 'reel' };
   f.pending[1].resolve(data); await settle();
   assert.deepEqual(f.feedEl.children.map(x => x.video?.video_url), data.videos.map(x => x.video_url));
   assert.equal(f.state.videos.one.viewer_state_available, false);
   assert.equal(f.state.videos.one.viewer_liked, undefined, 'Public data must not assert the current viewer has not liked a reel');
   assert.equal(data.videos[0].viewer_liked, false, 'Recovery must not mutate the source response');
   assert.equal(f.state.done, true);
+});
+
+test('anonymous Reels recovery preserves the requested page size and its pagination', async () => {
+  const f = fixture();
+  const loading = f.context.fetchFeedPage('/api/reels?limit=2&viewer_id=isolated-viewer&type=reel', () => true);
+  f.pending[0].reject(new Error('viewer state unavailable')); await settle();
+  assert.equal(f.pending[1].path, '/api/reels?limit=2&type=reel');
+  f.pending[1].resolve({ ...publicFeed(), feed_type: 'reel', total: 4, next_cursor: 'next-reel-page' });
+  const data = await loading;
+  assert.equal(data.videos.length, 2);
+  assert.equal(data.next_cursor, 'next-reel-page');
+  assert.equal(data.viewer_state_available, false);
+});
+
+test('a scoped Reels fallback still rejects a deal video', async () => {
+  const f = fixture();
+  f.state.channel = '__reels'; f.context.loadMore();
+  f.pending[0].reject(new Error('viewer state unavailable')); await settle();
+  const data = { ...publicFeed(), feed_type: 'reel' };
+  data.videos[0].video_type = 'deal';
+  f.pending[1].resolve(data); await settle();
+  assert.deepEqual(Object.keys(f.state.videos), []);
+  assert.equal(f.state.loading, false);
 });
 
 test('public recovery cannot replace a filtered, paginated, or denied request', async () => {
@@ -164,6 +187,36 @@ function transport(respond) {
 test('feed transport does not fail over an authorization denial', async () => {
   const f = transport(() => ({ ok: false, status: 403 }));
   await assert.rejects(f.context.apiFetchJson('/api/reels', 0, 4000), /403/);
+  assert.equal(f.requests.length, 1);
+  assert.equal(f.timers.size, 0);
+});
+
+for (const [name, unavailable] of [
+  ['data_available=false', () => Response.json({ videos: [], data_available: false })],
+  ['unavailable code', () => Response.json({ videos: [], code: 'PUBLIC_DATA_UNAVAILABLE' })],
+  ['unavailable header', () => Response.json({ videos: [] }, { headers: { 'X-IVX-Data-State': 'unavailable' } })],
+]) {
+  test(`Reels retries HTTP 200 with ${name} and surfaces a persistent outage`, async () => {
+    const recovered = transport(url => new URL(url).hostname === 'primary.example' ? unavailable() : Response.json(publicFeed()));
+    const data = await recovered.context.apiFetchJson('/api/reels', 0, 4000);
+    assert.equal(recovered.requests.length, 2);
+    assert.equal(data.videos.length, 2);
+    assert.equal(data.videos[0].id, 'one');
+    assert.equal(recovered.context.API, 'https://secondary.example');
+    assert.equal(recovered.timers.size, 0);
+
+    const outage = transport(() => unavailable());
+    await assert.rejects(outage.context.apiFetchJson('/api/reels', 0, 4000), /unavailable/i);
+    assert.equal(outage.requests.length, 2);
+    assert.equal(outage.context.API, 'https://primary.example');
+    assert.equal(outage.timers.size, 0);
+  });
+}
+
+test('an available empty Reels catalog remains valid even when served stale', async () => {
+  const f = transport(() => Response.json({ videos: [], data_available: true, degraded: true }));
+  const data = await f.context.apiFetchJson('/api/reels', 0, 4000);
+  assert.equal(data.videos.length, 0);
   assert.equal(f.requests.length, 1);
   assert.equal(f.timers.size, 0);
 });

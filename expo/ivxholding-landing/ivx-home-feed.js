@@ -90,10 +90,11 @@
     return fetch(API_CANDIDATES[i] + '/api/ivx/video-platform/home-feed?limit=60', { signal: controller.signal })
       .then(function (r) {
         var ct = (r.headers.get('content-type') || '').toLowerCase();
-        if (!r.ok || ct.indexOf('json') === -1) throw new Error('home feed response unavailable: HTTP ' + r.status);
+        if (!r.ok || ct.indexOf('json') === -1 || r.headers.get('X-IVX-Data-State') === 'unavailable') throw new Error('home feed response unavailable: HTTP ' + r.status);
         return r.json();
       })
       .then(function (data) {
+        if (data && (data.data_available === false || data.code === 'PUBLIC_DATA_UNAVAILABLE')) throw new Error('home feed data unavailable');
         if (!data || !Array.isArray(data.blocks)) throw new Error('invalid home feed response');
         return data;
       })

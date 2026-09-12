@@ -380,13 +380,55 @@ async function driveSelfAuditActionLoop(audit: DailySelfAuditRun, safePlanCount:
 
 // ── Job runners ──────────────────────────────────────────────────────────────
 
+export type SelfAuditSubmissionFailure = {
+  proposalId: string;
+  stage: 'proposal_validation' | 'worker_enqueue';
+  code: string;
+  errorFingerprint: string;
+};
+
 export type ScheduledJobResult = {
   kind: ScheduledJobKind;
   ok: boolean;
   durationMs: number;
   summary: string;
   error?: string;
+  submissionFailures?: {
+    total: number;
+    byCode: Record<string, number>;
+    samples: SelfAuditSubmissionFailure[];
+    omitted: number;
+  };
 };
+
+const MAX_SELF_AUDIT_FAILURE_SAMPLES = 50;
+
+/** Error messages can contain connection strings or credentials. Persist only
+ * diagnostic codes and a bounded-message fingerprint, never the raw exception. */
+function describeSubmissionFailure(error: unknown, stage: SelfAuditSubmissionFailure['stage']) {
+  const record = error && typeof error === 'object' ? error as Record<string, unknown> : null;
+  const message = typeof record?.message === 'string'
+    ? record.message : typeof error === 'string' ? error : 'Unknown thrown value';
+  // PostgreSQL classes exclude Node system codes such as EPIPE and EPERM.
+  const sqlState = typeof record?.code === 'string' && /^(?:[0-9][0-9A-Z]|F0|HV|P0|XX)[0-9A-Z]{3}$/.test(record.code)
+    ? record.code : null;
+  const connectionCode = typeof record?.code === 'string'
+    && /^(?:EPIPE|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH|ENOTFOUND|EAI_AGAIN)$/.test(record.code)
+    ? record.code : null;
+  const code = stage === 'proposal_validation' ? 'INVALID_PROPOSAL'
+    : message.startsWith('EMERGENCY_STOP_UNAVAILABLE:') ? 'OWNER_CONTROL_UNAVAILABLE'
+    : message.startsWith('EMERGENCY_STOP_ACTIVE:') ? 'OWNER_STOP_ACTIVE'
+    : sqlState ? `SQLSTATE_${sqlState}`
+    : connectionCode ? `CONNECTION_${connectionCode}`
+    : /timeout|timed out/i.test(message) ? 'TIMEOUT'
+    : /invalid JSON/i.test(message) ? 'INVALID_JSON'
+    : error instanceof SyntaxError ? 'SYNTAX_ERROR'
+    : 'UNCLASSIFIED';
+  return {
+    code,
+    errorFingerprint: createHash('sha256').update(`${stage}\n${code}\n${message.slice(0, 4096)}`).digest('hex'),
+  };
+}
 
 /** Optional injectable dependencies so the runner is unit-testable without real scans. */
 export type SelfAuditDeps = {
@@ -433,7 +475,10 @@ async function runSelfAuditJob(deps: SelfAuditDeps = {}): Promise<ScheduledJobRe
     let codeFixJobsSubmitted = 0;
     let codeFixJobsAttached = 0;
     let codeFixJobsFailed = 0;
+    const failureCounts: Record<string, number> = {};
+    const failureSamples: SelfAuditSubmissionFailure[] = [];
     for (const proposal of plan.safeProposals) {
+      let stage: SelfAuditSubmissionFailure['stage'] = 'proposal_validation';
       try {
         const files = proposal.evidence.map(item => item.relativePath).filter((file): file is string => Boolean(file)).sort();
         if (!files.length || !proposal.recommendedAction) throw new Error('Repair proposal lacks an inspected file or action');
@@ -441,6 +486,7 @@ async function runSelfAuditJob(deps: SelfAuditDeps = {}): Promise<ScheduledJobRe
         const sourceSha = process.env.RENDER_GIT_COMMIT ?? process.env.GITHUB_SHA ?? process.env.COMMIT_SHA ?? 'local';
         const agentNumber = Number.parseInt(scope.slice(0, 8), 16) % 112 + 1;
         const goal = `Fix ${proposal.category} in ${proposal.evidence[0]?.relativePath ?? 'unknown file'}: ${proposal.recommendedAction}`;
+        stage = 'worker_enqueue';
         const accepted = await (deps.enqueue ?? enqueueOrAttachSeniorDeveloperJob)({
           goal,
           taskId: `scheduler-repair:${sourceSha}:${scope}`,
@@ -465,14 +511,31 @@ async function runSelfAuditJob(deps: SelfAuditDeps = {}): Promise<ScheduledJobRe
         });
         if (accepted.attached) codeFixJobsAttached++;
         else codeFixJobsSubmitted++;
-      } catch {
+      } catch (error) {
         codeFixJobsFailed++;
+        const diagnostic = describeSubmissionFailure(error, stage);
+        failureCounts[diagnostic.code] = (failureCounts[diagnostic.code] ?? 0) + 1;
+        if (failureSamples.length < MAX_SELF_AUDIT_FAILURE_SAMPLES) {
+          failureSamples.push({
+            proposalId: typeof proposal.id === 'string' ? proposal.id.slice(0, 160) : 'unknown',
+            stage, ...diagnostic,
+          });
+        }
       }
     }
 
-    const summary = `Self-audit ${audit.auditId}: ${audit.summary.totalProposals} proposal(s), ${safeCount} safe, ${codeFixJobsSubmitted} new code-fix job(s), ${codeFixJobsAttached} existing job(s) attached, ${codeFixJobsFailed} submission(s) failed.`;
+    const failureSummary = Object.entries(failureCounts).sort(([a], [b]) => a.localeCompare(b))
+      .map(([code, count]) => `${code}=${count}`).join(', ');
+    const summary = `Self-audit ${audit.auditId}: ${audit.summary.totalProposals} proposal(s), ${safeCount} safe, ${codeFixJobsSubmitted} new code-fix job(s), ${codeFixJobsAttached} existing job(s) attached, ${codeFixJobsFailed} submission(s) failed.`
+      + (failureSummary ? ` Failure codes: ${failureSummary}.` : '');
     return { kind: 'daily_self_audit', ok: codeFixJobsFailed === 0, durationMs: Date.now() - start, summary,
-      ...(codeFixJobsFailed ? { error: `${codeFixJobsFailed} repair proposal(s) were not accepted by the worker queue.` } : {}) };
+      ...(codeFixJobsFailed ? {
+        error: `${codeFixJobsFailed} repair proposal(s) were not accepted by the worker queue.`,
+        submissionFailures: {
+          total: codeFixJobsFailed, byCode: failureCounts, samples: failureSamples,
+          omitted: codeFixJobsFailed - failureSamples.length,
+        },
+      } : {}) };
   } catch (error) {
     return {
       kind: 'daily_self_audit',
@@ -1023,7 +1086,11 @@ export async function runScheduledJob(
       runCount: job.runCount + 1,
       failureCount: job.failureCount + (isRealFailure ? 1 : 0),
     }), Date.now(), deps.requireExistingState);
-    await appendRunLog({ type: 'job_run', kind, ok: result.ok, durationMs: result.durationMs, summary: result.summary, at: nowIso() });
+    await appendRunLog({
+      type: 'job_run', kind, ok: result.ok, durationMs: result.durationMs, summary: result.summary,
+      ...(result.submissionFailures ? { submissionFailures: result.submissionFailures } : {}),
+      at: nowIso(),
+    });
 
     // PERMANENT per-run evidence record (2026-07-26) — one row per execution,
     // persisted to the durable Supabase store. Survives restarts/deploys.
