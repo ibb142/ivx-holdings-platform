@@ -106,12 +106,12 @@ export class IVXOwnerAIRequestError extends Error {
 }
 
 export const IVX_SERVICE_UNAVAILABLE_MESSAGE = 'Service temporarily unavailable. Please try again.';
+const OWNER_AI_FAILURE_MODELS = ['ivx_owner_session_required', 'ivx_owner_auth_failed',
+  'ivx_owner_ai_network_failed', 'ivx_owner_ai_backend_error', 'ivx_authoritative_router_error'];
 
 /** Reject render-only failures before any reply, persistence or execution success gate. */
 export function assertOwnerAIResponseSucceeded(response: IVXOwnerAIResponse): void {
-  const failureModels = ['ivx_owner_session_required', 'ivx_owner_auth_failed',
-    'ivx_owner_ai_network_failed', 'ivx_owner_ai_backend_error'];
-  if (response.status !== 'error' && !response.failure && !failureModels.includes(response.model)) return;
+  if (response.status !== 'error' && !response.failure && !OWNER_AI_FAILURE_MODELS.includes(response.model)) return;
   const failure = response.failure;
   throw new IVXOwnerAIRequestError(response.answer, createRequestDiagnostics({
     stage: 'response',
@@ -1726,11 +1726,35 @@ function deepScanForVisibleOwnerAIText(value: unknown, depth: number = 0): strin
   return best;
 }
 
+/** HTTP success and compatibility envelopes must not erase a declared failure. */
+function assertOwnerAIPayloadSucceeded(payload: unknown, depth = 0): void {
+  if (!isRecord(payload) || depth > 4) return;
+  if (payload.status === 'error' || payload.failure
+    || (typeof payload.model === 'string' && OWNER_AI_FAILURE_MODELS.includes(payload.model.trim()))) {
+    throw new Error(typeof payload.answer === 'string' && payload.answer.trim()
+      ? sanitizeOwnerAIVisibleText(payload.answer) || IVX_SERVICE_UNAVAILABLE_MESSAGE
+      : readErrorMessage(payload));
+  }
+  // These are the response envelopes understood by the compatibility reader.
+  // Do not inspect tool-output/history objects that may describe earlier errors.
+  for (const key of ['result', 'data', 'message']) {
+    assertOwnerAIPayloadSucceeded(payload[key], depth + 1);
+  }
+  if (payload.type === 'final') {
+    let body: unknown = payload.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch { return; }
+    }
+    assertOwnerAIPayloadSucceeded(body, depth + 1);
+  }
+}
+
 function extractCompatibilityOwnerAIResponse(
   payload: unknown,
   fallbackConversationId: string,
   fallbackRequestPrefix: string,
 ): IVXOwnerAICanonicalResponse | null {
+  assertOwnerAIPayloadSucceeded(payload);
   // ROOT-CAUSE FIX (2026-06-10) — render plain-text 2xx bodies.
   // When the backend (or an upstream proxy) returns the reply as a raw,
   // non-JSON string, `readOwnerAIResponseBody` hands us that string. Previously
@@ -1938,6 +1962,7 @@ function normalizeOwnerAIResponse(
   fallbackRequestPrefix: string,
   allowCompatibility: boolean,
 ): IVXOwnerAIResponse {
+  assertOwnerAIPayloadSucceeded(payload);
   const canonicalValidation = validateCanonicalOwnerAIResponse(payload, fallbackRequestPrefix);
   if (canonicalValidation.data) {
     return canonicalValidation.data;

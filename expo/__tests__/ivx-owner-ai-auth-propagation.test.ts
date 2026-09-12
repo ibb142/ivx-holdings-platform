@@ -324,6 +324,38 @@ describe('IVX Owner AI auth header propagation', () => {
     }
   });
 
+  for (const shape of ['canonical-error', 'router-error-model', 'wrapped-error'] as const) {
+    test(`HTTP 200 ${shape} cannot become a successful assistant reply`, async () => {
+      const { ivxAIRequestService, assertOwnerAIResponseSucceeded } = await import('../src/modules/ivx-owner-ai/services/ivxAIRequestService');
+      const failure = {
+        requestId: 'chat-message-model-failure', conversationId: 'test-owner-room',
+        answer: 'The text reply could not be completed and saved. Recover this request before submitting it again.',
+        model: shape === 'router-error-model' ? 'ivx_authoritative_router_error' : 'model',
+        status: shape === 'router-error-model' ? 'ok' : 'error', source: 'remote_api',
+        assistantPersisted: false,
+      };
+      const body = shape === 'wrapped-error' ? { type: 'final', body: JSON.stringify(failure) } : failure;
+      globalThis.fetch = (async () => Response.json(body)) as typeof fetch;
+      const result = await ivxAIRequestService.requestOwnerAI({
+        requestId: failure.requestId, conversationId: failure.conversationId, message: 'What is the weather like on Mars?',
+      });
+      expect(result.status).toBe('error');
+      expect(result.requestId).toBe(failure.requestId);
+      expect(() => assertOwnerAIResponseSucceeded(result)).toThrow();
+    });
+  }
+
+  test('compatibility parsing still accepts genuine answer text without canonical metadata', async () => {
+    const { ivxAIRequestService, assertOwnerAIResponseSucceeded } = await import('../src/modules/ivx-owner-ai/services/ivxAIRequestService');
+    globalThis.fetch = (async () => Response.json({ content: 'A genuine answer from the remote provider.' })) as typeof fetch;
+    const result = await ivxAIRequestService.requestOwnerAI({
+      requestId: 'chat-message-compat-success', conversationId: 'test-owner-room', message: 'What is the weather like on Mars?',
+    });
+    expect(result.status).toBe('ok');
+    expect(result.answer).toBe('A genuine answer from the remote provider.');
+    expect(() => assertOwnerAIResponseSucceeded(result)).not.toThrow();
+  });
+
   test('primary sends preserve the supplied logical message identity across retries', async () => {
     const { ivxAIRequestService } = await import('../src/modules/ivx-owner-ai/services/ivxAIRequestService');
     for (const requestId of ['chat-message-1', 'chat-message-1', 'chat-message-2']) {

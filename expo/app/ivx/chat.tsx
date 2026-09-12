@@ -3619,21 +3619,22 @@ export default function IVXOwnerChatRoute() {
     // request via the per-conversation supersession guard.
     retry: false,
     onSuccess: async (_data, variables) => {
-      // Refetch the authoritative remote thread FIRST so the just-sent owner row
-      // is present in `messages` BEFORE the optimistic pending copy is removed.
-      // This guarantees continuity — the turn is always shown by either the
-      // pending entry or the persisted remote row, never neither (no
-      // "message disappears after send" gap). The owner content-dedup in
-      // `allMessages` suppresses the optimistic copy the moment the remote row
-      // arrives, so the brief overlap never renders a duplicate.
-      // Composer is now cleared immediately in handleSend (before mutate).
-      // This refetch ensures the persisted remote row replaces the optimistic copy.
+      // A resolved invalidation can still return an empty/local fallback during
+      // an outage. Keep the original command until the loaded thread actually
+      // contains its owner row. This is display reconciliation, not a claim of
+      // remote persistence; allMessages suppresses overlapping owner copies.
       try {
         await queryClient.invalidateQueries({ queryKey: IVX_OWNER_MESSAGES_QUERY_KEY });
+        const loadedMessages = queryClient.getQueryData<IVXMessage[]>(IVX_OWNER_MESSAGES_QUERY_KEY) ?? [];
+        const ownerBody = safeTrim(encodeReplyBody(variables.text, variables.replyTo));
+        const ownerRowPresent = ownerBody.length > 0 && loadedMessages.some((message) => (
+          message.senderRole === 'owner' && safeTrim(message.body) === ownerBody
+        ));
+        if (ownerRowPresent) {
+          setPendingOwnerMessages((current) => current.filter((message) => message.clientId !== variables.clientId));
+        }
       } catch (refetchError) {
         console.log('[IVXOwnerChatRoute] Post-send refetch failed (optimistic row retained until next load):', refetchError instanceof Error ? refetchError.message : 'unknown');
-      } finally {
-        setPendingOwnerMessages((current) => current.filter((message) => message.clientId !== variables.clientId));
       }
       requestAnimationFrame(() => {
         // INVERTED FLATLIST: offset 0 = newest message.
