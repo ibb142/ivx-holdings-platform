@@ -1,0 +1,67 @@
+name: Phase 1 controlled API and worker recovery
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - qa/phase1-controlled-recovery.mjs
+      - qa/phase1-controlled-recovery.test.mjs
+      - .github/workflows/phase1-controlled-recovery.yml
+permissions:
+  contents: read
+  checks: read
+  pull-requests: read
+  statuses: write
+concurrency:
+  group: phase1-controlled-recovery-production
+  cancel-in-progress: false
+jobs:
+  harness:
+    name: Restart acceptance scope and verdict checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: node --test qa/phase1-controlled-recovery.test.mjs
+  hosted:
+    name: Controlled API and worker restart acceptance
+    needs: harness
+    if: >-
+      github.repository == 'ibb142/ivx-holdings-platform' &&
+      github.actor == 'ibb142' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'qa/phase1-controlled-recovery-20260912'
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.3.9 }
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Validate checks, restart API then worker once, and verify persisted work
+        env:
+          IVX_PHASE1_RESTART_AUTHORIZATION: controlled-api-then-worker-once
+          IVX_QA_HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          IVX_QA_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+          IVX_QA_PR: ${{ github.event.pull_request.number }}
+          IVX_TARGET_SHA: 65db16fb45eeba053a1a761ee602a1ef34ad98b7
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          IVX_SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET || secrets.IVX_SYSTEM_SECRET }}
+          SUPABASE_URL: https://kvclcdjmjghndxsngfzb.supabase.co
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: bun qa/phase1-controlled-recovery.mjs
+      - name: Preserve acceptance and cleanup evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-controlled-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qa-results/phase1-controlled-recovery/receipt.json
+          if-no-files-found: error
+          retention-days: 30
