@@ -37,7 +37,7 @@ export async function readDatabaseJson(context,path,options={},dependencies={}) 
   for(let attempt=0;attempt<5;attempt++) {
     try {
       last=await request(context.databaseUrl+path,context.serviceKey,{
-        ...options,method,headers:{apikey:context.serviceKey},timeout:15000});
+        ...options,method,headers:{apikey:context.serviceKey},timeout:45000});
       if(last.status===200 || ![429,500,502,503,504].includes(last.status)) return last;
       (context.proof.databaseReadRetries??=[]).push({path:path.split('?')[0],attempt:attempt+1,
         httpStatus:last.status,errorCode:safeCode(last.data?.code),at:new Date().toISOString()});
