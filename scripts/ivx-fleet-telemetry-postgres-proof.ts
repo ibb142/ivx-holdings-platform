@@ -66,15 +66,19 @@ try {
     end $$`);
   await admin.query('select pg_advisory_lock(9811593)');
   let completedMutations = 0;
-  mutations = Promise.allSettled(Array.from({ length: 4 }, (_, index) =>
+  // Saturate both task connections and queue two more mutations locally. The
+  // assignment and heartbeat lanes each own one of the former four slots.
+  const taskConnectionLimit = 2;
+  const mutationCount = 4;
+  mutations = Promise.allSettled(Array.from({ length: mutationCount }, (_, index) =>
     store.linkPostgresAutonomousOrphans(`blocked-fixture-${index}`).finally(() => { completedMutations++; })));
   let blocked = 0;
   for (let attempt = 0; attempt < 40; attempt++) {
     blocked = Number((await admin.query("select count(*) from pg_stat_activity where application_name='ivx_tasks' and wait_event='advisory'")).rows[0].count);
-    if (blocked === 4) break;
+    if (blocked === taskConnectionLimit) break;
     await new Promise(resolve => setTimeout(resolve, 25));
   }
-  assert.equal(blocked, 4, 'all task connections must be blocked throughout the observation');
+  assert.equal(blocked, taskConnectionLimit, 'all task connections must be blocked throughout the observation');
   const started = Date.now();
   observation = (async () => {
     const tasks = await store.readPostgresFleetSloTasks();
@@ -88,11 +92,16 @@ try {
   await Promise.race([observation, new Promise<never>((_, reject) => {
     deadline = setTimeout(() => reject(new Error('Telemetry waited behind the blocked task pool')), 2_000);
   })]);
-  console.log(JSON.stringify({ ok: true, database: 'isolated PostgreSQL', blockedTaskConnections: blocked,
-    telemetryDuringBlockedMutations: 'PASS', durableSharedSample: true, telemetryMs: Date.now() - started, productionRowsTouched: 0 }));
+  const telemetryMs = Date.now() - started;
   clearTimeout(deadline);
   await admin.query('select pg_advisory_unlock(9811593)');
-  await mutations;
+  const mutationResults = await mutations as PromiseSettledResult<unknown>[];
+  assert.equal(mutationResults.length, mutationCount);
+  assert(mutationResults.every(result => result.status === 'fulfilled'), 'all blocked and queued mutations must finish after unlock');
+  assert.equal(completedMutations, mutationCount);
+  console.log(JSON.stringify({ ok: true, database: 'isolated PostgreSQL', blockedTaskConnections: blocked,
+    submittedMutations: mutationCount, queuedTaskMutations: mutationCount - blocked, completedMutations,
+    telemetryDuringBlockedMutations: 'PASS', durableSharedSample: true, telemetryMs, productionRowsTouched: 0 }));
   // Reproduce the production contention: an aggregate monitoring read occupies
   // its connection while a new process sample must commit and remain readable.
   await admin.query('begin');
