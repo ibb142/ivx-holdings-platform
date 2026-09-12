@@ -3046,9 +3046,10 @@ export async function drainSeniorDeveloperQueue(): Promise<void> {
   if (draining || queueStopping) return;
   draining = true;
   try {
-    // The independent stale sweep maintains running queues. Avoid reading
-    // retained history again for every completed slot in an active pump.
-    if (activeDrainExecutions.size === 0) await expireStaleJobs();
+    // Shared recovery runs on the independent stale-sweep timer. It can wait
+    // for storage or CI, so it must not gate admission of unrelated ready work.
+    // The claim RPC still enforces physical leases and owner single-flight.
+    if (!sharedSeniorQueueEnabled() && activeDrainExecutions.size === 0) await expireStaleJobs();
     const slots = Math.max(0, getWorkerMaxConcurrency() - activeDrainExecutions.size);
     for (let i = 0; !queueStopping && i < slots; i++) {
       const execution = processNextSeniorDeveloperJob();

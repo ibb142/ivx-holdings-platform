@@ -9,14 +9,14 @@ const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
 // Run the actual production drain with controlled execution completions. A
 // held CI wait must not prevent another owner's ready work from taking a slot.
-function fixture(limit = 2) {
+function fixture(limit = 2, shared = false, maintain = async () => {}) {
   const queue: string[] = [];
   const started: string[] = [];
   const waiting = new Map<string, (result: object | null) => void>();
   let active = 0, peak = 0, polls = 0, maintenance = 0;
-  const drain = new Function('expireStaleJobs', 'getWorkerMaxConcurrency', 'processNextSeniorDeveloperJob', 'MAX_QUEUE_RETAINED',
+  const drain = new Function('expireStaleJobs', 'getWorkerMaxConcurrency', 'processNextSeniorDeveloperJob', 'MAX_QUEUE_RETAINED', 'sharedSeniorQueueEnabled',
     `let draining = false, queueStopping = false; const activeDrainExecutions = new Set();\n${body}\nreturn { run: drainSeniorDeveloperQueue, stop: () => { queueStopping = true; } };`)(
-      async () => { maintenance++; }, () => limit,
+      async () => { maintenance++; await maintain(); }, () => limit,
       async () => {
         polls++;
         const id = queue.shift();
@@ -24,12 +24,26 @@ function fixture(limit = 2) {
         started.push(id); active++; peak = Math.max(peak, active);
         try { return await new Promise<object | null>(resolve => waiting.set(id, resolve)); }
         finally { active--; waiting.delete(id); }
-      }, 200);
+      }, 200, () => shared);
   return { ...drain, queue, started, finish: (id: string) => waiting.get(id)?.({ jobId: id }),
     read: () => ({ active, peak, polls, maintenance }),
     close: async () => { drain.stop(); for (const resolve of waiting.values()) resolve(null); await tick(); },
   };
 }
+
+test('shared admission does not wait for maintenance before starting ready work', async () => {
+  let release!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const f = fixture(1, true, () => held);
+  f.queue.push('ready-supervisor-repair');
+  const run = f.run();
+  try {
+    await tick();
+    expect(f.started).toEqual(['ready-supervisor-repair']);
+    expect(f.read().maintenance).toBe(0);
+    expect(f.read().peak).toBe(1);
+  } finally { release(); await run; await f.close(); }
+});
 
 test('a completed slot admits the supervisor while another owner still waits for CI', async () => {
   const f = fixture();
