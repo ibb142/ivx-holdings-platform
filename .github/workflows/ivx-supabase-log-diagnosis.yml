@@ -46,10 +46,10 @@ jobs:
               'schema_cache': 'schema cache',
           }
           sql = "select timestamp, event_message from postgres_logs order by timestamp desc limit 200"
-          params = urllib.parse.urlencode({'sql': sql, 'iso_timestamp_start': start.isoformat(), 'iso_timestamp_end': end.isoformat()})
+          params = urllib.parse.urlencode({'sql': sql, 'iso_timestamp_start': start.isoformat(timespec='milliseconds').replace('+00:00', 'Z'), 'iso_timestamp_end': end.isoformat(timespec='milliseconds').replace('+00:00', 'Z')})
           request = urllib.request.Request('https://api.supabase.com/v1/projects/' + project + '/analytics/endpoints/logs.all?' + params,
               headers={'Authorization': 'Bearer ' + token})
-          print(json.dumps({'startedAt': start.isoformat(), 'finishedAt': end.isoformat(), 'mode': 'read_only'}))
+          print(json.dumps({'startedAt': start.isoformat(timespec='milliseconds').replace('+00:00', 'Z'), 'finishedAt': end.isoformat(timespec='milliseconds').replace('+00:00', 'Z'), 'mode': 'read_only'}))
           try:
               with urllib.request.urlopen(request, timeout=60) as response:
                   payload = json.load(response)
