@@ -103,9 +103,12 @@ async function getSB() {
   const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_HD3Xvq5bCQNJLFk1ROH9mQ_Wdb9xdDZ').trim();
   const timeoutFetch = (input: any, init?: any) => {
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), SB_TIMEOUT_MS);
-    return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(tid));
+    // fetch resolves at headers; keep the same deadline through PostgREST's
+    // JSON body read so a stalled body cannot retain a shared feed indefinitely.
+    const deadline = AbortSignal.timeout(SB_TIMEOUT_MS);
+    const caller = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+    const signal = caller ? AbortSignal.any([caller, deadline]) : deadline;
+    return fetch(input, { ...init, signal });
   };
   _sb = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false }, global: { fetch: timeoutFetch } });
   return _sb;
