@@ -44,9 +44,7 @@ select exists (
     and strpos(g.goal #>> '{}', $1) > 0
   union all
   select 1 from public.ivx_durable_documents d
-    where d.doc_key >= 'senior-developer-worker/archive/'
-      and d.doc_key < 'senior-developer-worker/archive0'
-      and d.doc_key like 'senior-developer-worker/archive/%'
+    where d.doc_key like 'senior-developer-worker/archive/%'
     and strpos(d.value #>> '{job,input,goal}', $1) > 0
 ) as seen`;
 
@@ -59,9 +57,7 @@ with candidates as (
     where d.doc_key = 'senior-developer-worker/queue.json'
   union all
   select d.value->'job' from public.ivx_durable_documents d
-    where d.doc_key >= 'senior-developer-worker/archive/'
-      and d.doc_key < 'senior-developer-worker/archive0'
-      and d.doc_key like 'senior-developer-worker/archive/%'
+    where d.doc_key like 'senior-developer-worker/archive/%'
       and d.value #>> '{job,input,sourceChatMessageId}' = $1
 ), matching as (
   select job from candidates where job->>'ownerId' = $2
