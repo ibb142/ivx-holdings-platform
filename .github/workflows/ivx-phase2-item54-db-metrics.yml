@@ -1,0 +1,30 @@
+name: Phase 2 item 5.4 database metrics
+on:
+  push:
+    branches: ['audit/phase2-item54-db-metrics-20260912']
+    paths: ['qa/phase2-item54-db-metrics*', '.github/workflows/ivx-phase2-item54-db-metrics.yml']
+permissions:
+  contents: read
+concurrency:
+  group: phase2-item54-db-metrics-20260912
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: node --test qa/phase2-item54-db-metrics.test.mjs
+      - name: Read two filtered infrastructure samples
+        run: node qa/phase2-item54-db-metrics.mjs
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase2-item54-db-metrics-${{ github.sha }}-${{ github.run_attempt }}
+          path: qa/evidence/phase2-item54/db-metrics.json
+          if-no-files-found: error
+          retention-days: 30
