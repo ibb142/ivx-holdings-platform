@@ -1,124 +1,113 @@
 import { expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { createServer } from 'node:http';
-import { runInNewContext } from 'node:vm';
 
-async function harness() {
-  const source = readFileSync(new URL('./ivx-video-platform.ts', import.meta.url), 'utf8');
-  const start = source.indexOf('  const timeoutFetch = ');
-  const end = source.indexOf('\n  _sb = createClient', start);
-  if (start < 0 || end < start) throw new Error('Video source transport not found');
-  const api: { run?: typeof fetch } = {};
-  // Use native fetch and real sockets: fetch resolves at headers, while the
-  // same signal must continue to govern body consumption. A hand-built
-  // Response or a fetch mock ignoring its signal does not model this contract.
-  // The imported-transport suite separately exercises the shipped 5s deadline.
-  runInNewContext(new Bun.Transpiler({ loader: 'ts' }).transformSync(source.slice(start, end)) + '\napi.run = timeoutFetch;', {
-    api, fetch, AbortSignal, Request, Response, Error, SB_TIMEOUT_MS: 200,
-  });
-  let requests = 0;
-  let notifyRequest!: () => void;
-  const requested = new Promise<void>(resolve => { notifyRequest = resolve; });
-  const server = createServer((req, res) => {
-    requests++;
-    notifyRequest();
-    if (req.url === '/stalled-headers') return;
-    if (req.url === '/empty') { res.writeHead(204); res.end(); return; }
-    const status = req.url === '/unavailable' ? 503 : 200;
-    res.writeHead(status, { 'content-type': 'application/json', 'content-range': '0-0/1' });
-    if (req.url === '/stalled-body') { res.flushHeaders(); res.write('['); return; }
-    res.end(JSON.stringify(status === 200 ? [{ id: 'published-video' }] : { code: 'SOURCE_UNAVAILABLE' }));
-  });
-  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('HTTP fixture did not bind');
-  const base = `http://127.0.0.1:${address.port}`;
-  return {
-    run: (path: string, init?: RequestInit) => api.run!(base + path, init),
-    requested,
-    get requests() { return requests; },
-    close: async () => {
-      server.closeAllConnections();
-      await new Promise<void>((resolve, reject) => server.close(error => {
-        if (error && (error as NodeJS.ErrnoException).code !== 'ERR_SERVER_NOT_RUNNING') reject(error);
-        else resolve();
+const scenarios = [
+  'stalled body after successful headers',
+  'source never sends headers',
+  'caller cancellation during source reads',
+  'completed JSON and HTTP failure remain unchanged',
+  'bodyless response remains empty',
+  'next read recovers after a stalled body',
+  'pre-cancelled caller cannot issue a request',
+];
+
+for (const scenario of scenarios) {
+  test(`source deadline: ${scenario}`, async () => {
+    // Capture the actual imported transport, including its imported helpers.
+    // Isolate the Supabase capture from other suites and use real HTTP sockets:
+    // native fetch resolves at headers but its signal also governs the body.
+    const child = Bun.spawn([process.execPath, '-e', `
+      import assert from 'node:assert/strict';
+      import { createServer } from 'node:http';
+      import { mock } from 'bun:test';
+      const scenario = ${JSON.stringify(scenario)};
+      let transport;
+      mock.module('@supabase/supabase-js', () => ({
+        createClient: (_url, _key, options) => {
+          transport = options.global.fetch;
+          throw new Error('Fixture captured the shipped Supabase transport');
+        },
       }));
-    },
-  };
+      const { handlePlatformHomeFeed } = await import('./backend/api/ivx-video-platform.ts');
+      await handlePlatformHomeFeed(new Request('https://fixture.invalid/home-feed'));
+      assert.equal(typeof transport, 'function');
+      let requests = 0, notifyRequest;
+      const requested = new Promise(resolve => { notifyRequest = resolve; });
+      const server = createServer((req, res) => {
+        requests++;
+        notifyRequest();
+        if (req.url === '/stalled-headers') return;
+        if (req.url === '/empty') { res.writeHead(204); res.end(); return; }
+        const status = req.url === '/unavailable' ? 503 : 200;
+        res.writeHead(status, { 'content-type': 'application/json', 'content-range': '0-0/1' });
+        if (req.url === '/stalled-body') { res.flushHeaders(); res.write('['); return; }
+        res.end(JSON.stringify(status === 200 ? [{ id: 'published-video' }] : { code: 'SOURCE_UNAVAILABLE' }));
+      });
+      await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+      const base = 'http://127.0.0.1:' + server.address().port;
+      const run = (path, init) => transport(base + path, init);
+      const caller = new AbortController();
+      // The SDK boundary may normalize TimeoutError to AbortError to suppress
+      // automatic retries. Both must reject the real outstanding HTTP read.
+      const cancelled = error => ['AbortError', 'TimeoutError'].includes(error?.name);
+      const started = Date.now();
+      try {
+        if (scenario === 'stalled body after successful headers') {
+          const response = await run('/stalled-body');
+          assert.equal(response.status, 200);
+          await assert.rejects(response.json(), cancelled);
+          assert.equal(requests, 1);
+        } else if (scenario === 'source never sends headers') {
+          await assert.rejects(run('/stalled-headers'), cancelled);
+          assert.equal(requests, 1);
+        } else if (scenario === 'caller cancellation during source reads') {
+          const work = run('/stalled-headers', { signal: caller.signal })
+            .then(() => ({ name: 'UnexpectedSuccess' }), error => error);
+          await requested;
+          caller.abort();
+          assert.equal((await work).name, 'AbortError');
+          assert.equal(requests, 1);
+        } else if (scenario === 'completed JSON and HTTP failure remain unchanged') {
+          for (const [path, status] of [['/healthy', 200], ['/unavailable', 503]]) {
+            const body = JSON.stringify(status === 200 ? [{ id: 'published-video' }] : { code: 'SOURCE_UNAVAILABLE' });
+            const response = await run(path);
+            assert.equal(response.status, status);
+            assert.equal(response.headers.get('content-range'), '0-0/1');
+            assert.equal(await response.text(), body);
+          }
+        } else if (scenario === 'bodyless response remains empty') {
+          const response = await run('/empty');
+          assert.equal(response.status, 204);
+          assert.equal(await response.text(), '');
+        } else if (scenario === 'next read recovers after a stalled body') {
+          const response = await run('/stalled-body');
+          await assert.rejects(response.json(), cancelled);
+          assert.deepEqual(await (await run('/healthy')).json(), [{ id: 'published-video' }]);
+          assert.equal(requests, 2);
+        } else if (scenario === 'pre-cancelled caller cannot issue a request') {
+          caller.abort();
+          await assert.rejects(run('/healthy', { signal: caller.signal }), { name: 'AbortError' });
+          assert.equal(requests, 0);
+          assert.deepEqual(await (await run('/healthy')).json(), [{ id: 'published-video' }]);
+          assert.equal(requests, 1);
+        } else { throw new Error('Unknown transport scenario'); }
+        if (scenario.includes('stalled body') || scenario === 'source never sends headers') {
+          const elapsed = Date.now() - started;
+          assert.ok(elapsed >= 4500 && elapsed < 8000, 'Shipped five-second deadline was not respected: ' + elapsed);
+        }
+        console.log(JSON.stringify({ scenario, passed: true, realHttp: true, importedTransport: true }));
+      } finally {
+        caller.abort();
+        server.closeAllConnections();
+        await new Promise((resolve, reject) => server.close(error => {
+          if (error && error.code !== 'ERR_SERVER_NOT_RUNNING') reject(error);
+          else resolve();
+        }));
+      }
+    `], { cwd: new URL('../../', import.meta.url).pathname, stdout: 'pipe', stderr: 'pipe', timeout: 12000 });
+    const [code, out, err] = await Promise.all([
+      child.exited, new Response(child.stdout).text(), new Response(child.stderr).text(),
+    ]);
+    if (out.trim()) console.info(out.trim());
+    expect(code, err).toBe(0);
+  }, 15000);
 }
-
-test('source deadline includes a stalled response body after successful headers', async () => {
-  const h = await harness();
-  try {
-    const response = await h.run('/stalled-body');
-    expect(response.status).toBe(200);
-    await expect(response.json()).rejects.toMatchObject({ name: 'TimeoutError' });
-    expect(h.requests).toBe(1);
-  } finally { await h.close(); }
-}, 3000);
-
-test('a source that never sends headers is cancelled at the deadline', async () => {
-  const h = await harness();
-  try {
-    await expect(h.run('/stalled-headers')).rejects.toMatchObject({ name: 'TimeoutError' });
-    expect(h.requests).toBe(1);
-  } finally { await h.close(); }
-}, 3000);
-
-test('caller cancellation is preserved during source reads', async () => {
-  const h = await harness();
-  const caller = new AbortController();
-  try {
-    const work = h.run('/stalled-headers', { signal: caller.signal })
-      .then(() => ({ name: 'UnexpectedSuccess' }), error => error);
-    await h.requested;
-    caller.abort();
-    expect(await work).toMatchObject({ name: 'AbortError' });
-    expect(h.requests).toBe(1);
-  } finally { caller.abort(); await h.close(); }
-}, 3000);
-
-test('completed JSON and source HTTP failure remain unchanged', async () => {
-  const h = await harness();
-  try {
-    for (const [path, status] of [['/healthy', 200], ['/unavailable', 503]] as const) {
-      const body = JSON.stringify(status === 200 ? [{ id: 'published-video' }] : { code: 'SOURCE_UNAVAILABLE' });
-      const result = await h.run(path);
-      expect(result.status).toBe(status);
-      expect(result.headers.get('content-range')).toBe('0-0/1');
-      expect(await result.text()).toBe(body);
-    }
-  } finally { await h.close(); }
-}, 3000);
-
-test('bodyless responses retain their status and empty body', async () => {
-  const h = await harness();
-  try {
-    const result = await h.run('/empty');
-    expect(result.status).toBe(204);
-    expect(await result.text()).toBe('');
-  } finally { await h.close(); }
-}, 3000);
-
-test('the next read can recover after a stalled body times out', async () => {
-  const h = await harness();
-  try {
-    const first = await h.run('/stalled-body');
-    await expect(first.json()).rejects.toMatchObject({ name: 'TimeoutError' });
-    const recovered = await h.run('/healthy');
-    expect(await recovered.json()).toEqual([{ id: 'published-video' }]);
-    expect(h.requests).toBe(2);
-  } finally { await h.close(); }
-}, 3000);
-
-test('a caller already cancelled cannot issue a source request', async () => {
-  const h = await harness();
-  const caller = new AbortController();
-  caller.abort();
-  try {
-    await expect(h.run('/healthy', { signal: caller.signal })).rejects.toMatchObject({ name: 'AbortError' });
-    expect(h.requests).toBe(0);
-    expect((await h.run('/healthy')).status).toBe(200);
-    expect(h.requests).toBe(1);
-  } finally { await h.close(); }
-}, 3000);
