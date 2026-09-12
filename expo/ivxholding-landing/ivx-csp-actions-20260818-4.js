@@ -87,7 +87,7 @@
       fn = function (dealId) {
         var url = 'https://ivxholding.com/?deal=' + encodeURIComponent(dealId);
         if (navigator.share) navigator.share({ title: 'IVX Investment', url: url }).catch(function () {});
-        else if (navigator.clipboard) navigator.clipboard.writeText(url).catch(function () {});
+        else if (navigator.clipboard) navigator.clipboard.writeText(url).catch(function (error) { console.error('[IVX CSP Actions] Error writing to clipboard:', error); });
       };
     }
     if (typeof fn !== 'function') {
