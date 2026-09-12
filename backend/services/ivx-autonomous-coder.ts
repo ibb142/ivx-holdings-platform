@@ -378,6 +378,8 @@ export type IVXAutonomousCoderInput = {
   /** Grace period before a never-reported required check is treated as
    *  NOT_APPLICABLE when every reported check is green (ms). Default 10 min. */
   ciNaGraceMs?: number;
+  /** Original persisted CI wait start for this exact task/head on recovery. */
+  ciWaitStartedAt?: string;
   /** When true, automatically merge the PR after creating it (code_change mode).
    *  Owner approval is still required — set by the worker based on job input. */
   autoMergePr?: boolean;
@@ -1637,7 +1639,12 @@ async function waitForRequiredChecksGreen(
   prNumber?: number,
   branch?: string,
 ): Promise<{ green: boolean; evidence: IVXCiCheckEvidence[]; timedOut: boolean; waitMs: number; blocker?: string }> {
-  const startedAt = Date.now();
+  const observedAt = Date.now();
+  const persistedAt = Date.parse(input.ciWaitStartedAt ?? '');
+  // A restart must not reset a saved wait. Invalid/future checkpoints cannot
+  // shorten the grace period; all reported checks still decide acceptance.
+  const startedAt = Number.isFinite(persistedAt) && persistedAt > 0 && persistedAt <= observedAt
+    ? persistedAt : observedAt;
   const timeoutMs = input.ciWaitTimeoutMs ?? DEFAULT_CI_WAIT_TIMEOUT_MS;
   const intervalMs = input.ciPollIntervalMs ?? DEFAULT_CI_POLL_INTERVAL_MS;
   const graceMs = input.ciNaGraceMs ?? DEFAULT_CI_NA_GRACE_MS;
@@ -3119,6 +3126,7 @@ export type IVXAutonomousCoderResumeInput = {
   ciWaitTimeoutMs?: number;
   ciPollIntervalMs?: number;
   ciNaGraceMs?: number;
+  ciWaitStartedAt?: string;
   sleepFn?: (ms: number) => Promise<void>;
   /** Injectable PR-state fetcher for testing. When omitted, the real GitHub
    *  API is used. */
@@ -3163,6 +3171,7 @@ export async function resumeIVXAutonomousCoderFromCiWait(
     ciWaitTimeoutMs: input.ciWaitTimeoutMs,
     ciPollIntervalMs: input.ciPollIntervalMs,
     ciNaGraceMs: input.ciNaGraceMs,
+    ciWaitStartedAt: input.ciWaitStartedAt,
     sleepFn: input.sleepFn,
   }, onPhase, input.prNumber, input.branch);
 

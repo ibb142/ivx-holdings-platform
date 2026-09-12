@@ -1491,7 +1491,9 @@ async function sendOwnerSupportMessage(input: {
   requireRemote?: boolean;
 }): Promise<IVXMessage> {
   const localFirstBody = trimOrNull(input.body);
-  if (isIVXLocalFirstChatEnabled()) {
+  // A device mirror is not an acknowledgement from the shared conversation.
+  // Required remote writes must use the authenticated DB path even in local mode.
+  if (isIVXLocalFirstChatEnabled() && input.requireRemote !== true) {
     if (!localFirstBody) {
       throw new Error('Support message body is required.');
     }

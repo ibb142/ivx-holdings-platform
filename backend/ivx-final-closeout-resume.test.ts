@@ -69,6 +69,44 @@ const RESUME_BASE = {
 } as const;
 
 describe('IVX Autonomous Coder — restart / CI-wait resume (final closeout 2026-08-23)', () => {
+  for (const checkpoint of ['original', 'invalid', 'future'] as const) {
+    it(`uses ${checkpoint} CI checkpoint time without resetting or bypassing the grace period`, async () => {
+      let merges = 0;
+      const ciWaitStartedAt = checkpoint === 'original' ? new Date(Date.now() - 11 * 60_000).toISOString()
+        : checkpoint === 'future' ? new Date(Date.now() + 60_000).toISOString() : 'invalid';
+      const missing = { context: 'path-filtered invariant', checkRunName: null,
+        status: 'not_reported', conclusion: null, detailsUrl: null, matched: false };
+      const proof = await resumeIVXAutonomousCoderFromCiWait({
+        ...RESUME_BASE, ciWaitStartedAt, ciWaitTimeoutMs: 0,
+        prStateFn: async () => ({ state: 'open', merged: false, mergeCommitSha: null }),
+        requiredChecksFn: async () => [...greenChecks(), missing],
+        mergeFn: async () => { merges++; return { merged: true, mergeCommitSha: 'same-head-merge' }; },
+      });
+      expect(merges).toBe(checkpoint === 'original' ? 1 : 0);
+      expect(proof.finalStatus).toBe(checkpoint === 'original' ? 'COMPLETED' : 'BLOCKED');
+      expect(proof.ciCheckEvidence?.at(-1)?.status).toBe(checkpoint === 'original' ? 'not_applicable' : 'not_reported');
+      expect(proof.taskId).toBe(RESUME_BASE.taskId);
+      expect(proof.commitSha).toBe(RESUME_BASE.commitSha);
+    });
+  }
+  for (const state of ['in_progress', 'failure'] as const) {
+    it(`an old checkpoint cannot approve a ${state} check`, async () => {
+      let merges = 0;
+      const checks = greenChecks();
+      checks[0] = { ...checks[0], status: state === 'in_progress' ? state : 'completed',
+        conclusion: state === 'failure' ? state : null };
+      const proof = await resumeIVXAutonomousCoderFromCiWait({
+        ...RESUME_BASE, ciWaitStartedAt: new Date(Date.now() - 60 * 60_000).toISOString(),
+        ciWaitTimeoutMs: 0,
+        prStateFn: async () => ({ state: 'open', merged: false, mergeCommitSha: null }),
+        requiredChecksFn: async () => checks,
+        mergeFn: async () => { merges++; return { merged: true, mergeCommitSha: 'forbidden' }; },
+      });
+      expect(merges).toBe(0);
+      expect(proof.finalStatus).toBe('BLOCKED');
+      expect(proof.ciChecksGreen).toBe(false);
+    });
+  }
   it('retains the video defect boundary after restart even with green CI', async () => {
     for (const filesChanged of [[], ['backend/services/ivx-deal-matching-engine.ts']]) {
       let merges = 0;

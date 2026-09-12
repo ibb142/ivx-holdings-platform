@@ -1828,7 +1828,7 @@ export default function IVXOwnerChatRoute() {
       senderRole: role,
       senderLabel: role === 'assistant' ? IVX_OWNER_AI_PROFILE.name : 'System',
       attachmentKind: role === 'assistant' ? 'text' : 'system',
-      requireRemote: false});
+      requireRemote: role === 'assistant'});
     console.log('[IVXOwnerChatRoute] Support message persisted:', role, trimmedText.slice(0, 60));
   }, []);
 
@@ -2678,7 +2678,7 @@ export default function IVXOwnerChatRoute() {
           console.log('[IVXOwnerChatRoute] assistant_commit_failed_but_visible_reply_kept:', persistErr instanceof Error ? persistErr.message : 'unknown');
           setRuntimeDebugSnapshot((current) => ({
             ...current,
-            failureDetail: 'Reply delivered locally. Save will retry on refresh.',
+            failureDetail: 'Reply is visible on this device. Saving to shared history failed.',
             hasVisibleResponseText: true}));
         }
         if (!localFirstChatMode) {
