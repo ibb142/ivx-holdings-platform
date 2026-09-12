@@ -36,7 +36,8 @@ export function parseOwnerResponse(contentType, text) {
 export const ORDER_SEEN_SQL = `
 select exists (
   select 1 from public.ivx_messages where conversation_id = $2::uuid
-    and sender_role = 'owner' and strpos(body, $1) > 0
+    and sender_role = 'owner'
+    and body like ('%' || replace(replace(replace($1, '!', '!!'), '%', '!%'), '_', '!_') || '%') escape '!'
   union all
   select 1 from public.ivx_durable_documents d
     cross join lateral jsonb_path_query(d.value, '$.jobs[*].input.goal') g(goal)

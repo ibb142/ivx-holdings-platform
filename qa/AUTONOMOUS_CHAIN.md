@@ -21,6 +21,13 @@ interrupted, inspect `proof.json` and the recorded request/job IDs; do not creat
 a new token merely to retry an order with an unknown outcome. Existing runtime
 approval gates still apply. A requested approval or blocked job fails acceptance.
 
+Apply `20260912224306_owner_message_preflight_index.sql` before live preflight.
+The partial trigram index covers Owner message bodies; the query escapes LIKE
+metacharacters so tokens still match literally. Queue and archive checks remain
+complete. The disposable PostgreSQL gate verifies a 33,000-message history uses
+the index and tests wildcard, role and conversation isolation. Neither a failed
+connection nor a timed-out query establishes that an order is absent.
+
 The test uses the actual `ivx-owner-chat-input`, `ivx-owner-chat-send` and execution
 console controls. It double-clicks once and requires one observed owner-AI
 submission. The server's message identity is preserved unchanged. Read-only,

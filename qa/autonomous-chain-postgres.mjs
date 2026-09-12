@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import pg from 'pg';
+import { readFile } from 'node:fs/promises';
 import { ORDER_SEEN_SQL, CHAIN_SNAPSHOT_SQL } from './autonomous-chain-evidence.mjs';
 
 // Disposable CI database only. No production URLs, environment fallbacks or
@@ -24,6 +25,33 @@ try {
   await client.query(`CREATE TABLE public.ivx_messages (id bigint generated always as identity primary key,
     conversation_id uuid, sender_role text, body text);
     CREATE TABLE public.ivx_durable_documents (doc_key text primary key, value jsonb);`);
+  await client.query(await readFile(new URL('../supabase/migrations/20260912224306_owner_message_preflight_index.sql', import.meta.url), 'utf8'));
+  await client.query("SET LOCAL statement_timeout = '4s'");
+  // A representative single-conversation history must use the token index,
+  // without planner hints or changing the production query's deadline.
+  await client.query(`INSERT INTO public.ivx_messages (conversation_id,sender_role,body)
+    SELECT $1::uuid, CASE WHEN n % 4 = 0 THEN 'owner' ELSE 'assistant' END,
+      repeat(md5(n::text), 24) FROM generate_series(1,33000) n`, [room]);
+  await client.query('ANALYZE public.ivx_messages');
+  const explain = (await client.query('EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ' + ORDER_SEEN_SQL, [token, room])).rows[0]['QUERY PLAN'][0];
+  const nodes = [];
+  const visit = plan => { nodes.push(plan); for (const child of plan.Plans ?? []) visit(child); };
+  visit(explain.Plan);
+  assert.ok(nodes.some(node => node['Index Name'] === 'idx_ivx_messages_owner_body_trgm'), 'Token preflight must use its partial index');
+  assert.equal(nodes.some(node => node['Node Type'] === 'Seq Scan' && node['Relation Name'] === 'ivx_messages'), false);
+  console.log(JSON.stringify({ fixtureRows: 33000, tokenIndexUsed: true, executionMs: explain['Execution Time'] }));
+  await client.query('DELETE FROM public.ivx_messages');
+  // LIKE metacharacters stay literal, and only Owner rows in this conversation
+  // count. Queue/archive branches retain their existing literal strpos checks.
+  for (const special of ['literal_under_score', 'literal%percent', 'literal!escape', String.raw`literal\backslash`]) {
+    const lookalike = special.replace(/[_%!\\]/g, 'X');
+    await client.query('INSERT INTO public.ivx_messages (conversation_id,sender_role,body) VALUES ($1,\'owner\',$2), ($1,\'assistant\',$3), ($4,\'owner\',$3)',
+      [room, lookalike, special, '22222222-2222-4222-8222-222222222222']);
+    assert.equal((await client.query(ORDER_SEEN_SQL, [special, room])).rows[0].seen, false);
+    await client.query('INSERT INTO public.ivx_messages (conversation_id,sender_role,body) VALUES ($1,\'owner\',$2)', [room, 'prefix ' + special + ' suffix']);
+    assert.equal((await client.query(ORDER_SEEN_SQL, [special, room])).rows[0].seen, true);
+    await client.query('DELETE FROM public.ivx_messages');
+  }
   assert.equal(await seen(), false);
   assert.deepEqual(await snapshot(), { jobIds: [], ownerMessageCount: 0, receipt: null });
   await client.query('INSERT INTO public.ivx_messages (conversation_id,sender_role,body) VALUES ($1,$2,$3)', [room, 'owner', message]);
