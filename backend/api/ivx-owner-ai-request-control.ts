@@ -1,320 +1,109 @@
-/**
- * IVX Owner AI Request Control — idempotency, status, retry, and cancel endpoints.
- *
- * POST   /api/ivx/owner-ai/request                  — idempotent AI request
- * GET    /api/ivx/owner-ai/request/:traceId/status  — query request status
- * POST   /api/ivx/owner-ai/request/:traceId/retry   — retry a failed request
- * POST   /api/ivx/owner-ai/request/:traceId/cancel  — cancel an in-flight request
- *
- * The same idempotency key never creates duplicate AI replies.
- */
+/** Owner request-control receipts. The primary JSON/SSE chat uses its own
+ * durable admission; persisting this receipt does not dispatch an AI provider. */
+import { randomUUID } from 'node:crypto';
+import { ownerOnlyJson, ownerOnlyOptions, assertIVXOwnerOnly, type IVXOwnerRequestContext } from './owner-only';
+import {
+  admitOwnerRequest, ownerRequestControlStore, ownerRequestDocumentKey,
+  ownerRequestFingerprint, ownerRequestTraceId, replaceOwnerRequest,
+  type OwnerRequestDocument,
+} from '../services/ivx-owner-request-control-store';
 
-import { ownerOnlyJson, ownerOnlyOptions, assertIVXOwnerOnly } from './owner-only';
+export function handleIVXOwnerAIRequestControlOptions(): Response { return ownerOnlyOptions(); }
+function authError(error: unknown): Response {
+  const status = error instanceof Error && 'status' in error ? (error as { status: number }).status : 401;
+  return ownerOnlyJson({ error: 'Authentication required' }, status);
+}
+function unavailable(): Response {
+  return ownerOnlyJson({ error: 'Request persistence could not be confirmed. Retry with the same idempotencyKey.',
+    code: 'OWNER_REQUEST_RECONCILIATION_REQUIRED', executionOutcome: 'unknown' }, 503);
+}
+function validKey(value: unknown): value is string { return typeof value === 'string' && !!value.trim() && value.length <= 512; }
+function optionalString(value: unknown): boolean { return value == null || typeof value === 'string'; }
 
-interface RequestRecord {
-  traceId: string;
-  requestId: string;
-  conversationId: string | null;
-  messageId: string;
-  idempotencyKey: string;
-  status: 'pending' | 'in_flight' | 'completed' | 'failed' | 'cancelled';
-  retryCount: number;
-  providerRequestId: string | null;
-  startedAt: string;
-  completedAt: string | null;
-  terminalResult: {
-    answer: string | null;
-    error: string | null;
-    httpStatus: number | null;
-  } | null;
-  structuredError: {
-    code: string;
-    message: string;
-    checkpoint: string | null;
-  } | null;
+/** POST /api/ivx/owner-ai/request. The caller must retain one explicit key per
+ * order. Pending, failed and cancelled receipts are replayed as well as success. */
+export async function handleIVXOwnerAIRequestCreate(request: Request): Promise<Response> {
+  let owner: IVXOwnerRequestContext;
+  try { owner = await assertIVXOwnerOnly(request); } catch (error) { return authError(error); }
+  let body: Record<string, unknown>;
+  try {
+    const parsed: unknown = await request.json();
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid body');
+    body = parsed as Record<string, unknown>;
+  } catch { return ownerOnlyJson({ error: 'Invalid JSON body' }, 400); }
+  if (typeof body.message !== 'string' || !body.message.trim()) return ownerOnlyJson({ error: 'message is required' }, 400);
+  if (!validKey(body.idempotencyKey)) return ownerOnlyJson({ error: 'A non-empty idempotencyKey of at most 512 characters is required.' }, 400);
+  if (![body.conversationId, body.messageId, body.traceId, body.senderLabel].every(optionalString)) {
+    return ownerOnlyJson({ error: 'Request identifiers and senderLabel must be strings.' }, 400);
+  }
+  const conversationId = (body.conversationId as string | null | undefined) ?? null;
+  const traceId = ownerRequestTraceId(owner.userId, body.idempotencyKey);
+  const fingerprint = ownerRequestFingerprint(body.message, conversationId, (body.senderLabel as string | null | undefined) ?? null);
+  const proposed: OwnerRequestDocument = { version: 1, ownerId: owner.userId, fingerprint, revision: randomUUID(), record: {
+    traceId, requestId: `req-${randomUUID()}`, idempotencyKey: body.idempotencyKey,
+    conversationId, messageId: (body.messageId as string | null | undefined) ?? `msg-${randomUUID()}`,
+    status: 'pending', retryCount: 0, providerRequestId: null, startedAt: new Date().toISOString(), completedAt: null,
+    terminalResult: null, structuredError: null,
+  } };
+  try {
+    const { document, duplicate } = await admitOwnerRequest(ownerRequestControlStore(owner.client), ownerRequestDocumentKey(owner.userId, traceId), proposed);
+    if (document.fingerprint !== fingerprint) return ownerOnlyJson({ traceId, code: 'OWNER_REQUEST_IDENTITY_CONFLICT',
+      error: 'This idempotencyKey already belongs to different content.' }, 409);
+    const record = document.record;
+    return ownerOnlyJson({ traceId: record.traceId, requestId: record.requestId, status: record.status,
+      idempotencyKey: record.idempotencyKey, duplicate, result: record.terminalResult,
+      message: duplicate ? 'Returning the persisted request receipt.' : 'Request control receipt persisted. Poll its traceId for status.',
+    }, duplicate ? 200 : 202);
+  } catch { return unavailable(); }
 }
 
-// In-memory store (persisted to Redis in production via the worker)
-const requestStore = new Map<string, RequestRecord>();
-const idempotencyIndex = new Map<string, string>(); // idempotencyKey → traceId
+async function withOwnerRecord(request: Request, traceId: string, action: (owner: IVXOwnerRequestContext, key: string, document: OwnerRequestDocument) => Promise<Response>): Promise<Response> {
+  let owner: IVXOwnerRequestContext;
+  try { owner = await assertIVXOwnerOnly(request); } catch (error) { return authError(error); }
+  if (!validKey(traceId)) return ownerOnlyJson({ error: 'Invalid traceId' }, 400);
+  const key = ownerRequestDocumentKey(owner.userId, traceId);
+  try {
+    const document = await ownerRequestControlStore(owner.client).read(key);
+    if (!document || document.ownerId !== owner.userId) return ownerOnlyJson({ traceId, status: 'not_found', error: 'Request not found.' }, 404);
+    if (document.version !== 1 || document.record.traceId !== traceId) return unavailable();
+    return await action(owner, key, document);
+  } catch { return unavailable(); }
+}
 
-const MAX_STORE_SIZE = 1000;
+export async function handleIVXOwnerAIRequestStatus(request: Request, traceId: string): Promise<Response> {
+  return withOwnerRecord(request, traceId, async (_owner, _key, document) => ownerOnlyJson({ ...document.record }, 200));
+}
 
-function pruneStore(): void {
-  if (requestStore.size > MAX_STORE_SIZE) {
-    const oldestKeys = Array.from(requestStore.keys())
-      .slice(0, requestStore.size - MAX_STORE_SIZE);
-    for (const key of oldestKeys) {
-      const record = requestStore.get(key);
-      if (record) {
-        idempotencyIndex.delete(record.idempotencyKey);
-      }
-      requestStore.delete(key);
+export async function handleIVXOwnerAIRequestRetry(request: Request, traceId: string): Promise<Response> {
+  return withOwnerRecord(request, traceId, async (owner, key, document) => {
+    const record = document.record;
+    if (record.status === 'pending' || record.status === 'in_flight') return ownerOnlyJson({ traceId, status: record.status, error: 'Request already pending or in flight.' }, 409);
+    if (record.status === 'completed') return ownerOnlyJson({ traceId, status: record.status, terminalResult: record.terminalResult }, 200);
+    // A provider receipt requires authoritative reconciliation, not a new dispatch.
+    if (record.providerRequestId) return ownerOnlyJson({ traceId, error: 'Provider outcome must be reconciled before retry.', code: 'OWNER_REQUEST_RECONCILIATION_REQUIRED' }, 409);
+    const next: OwnerRequestDocument = { ...document, revision: randomUUID(), record: { ...record,
+      status: 'pending', retryCount: record.retryCount + 1, startedAt: new Date().toISOString(), completedAt: null,
+      terminalResult: null, structuredError: null,
+    } };
+    if (!await replaceOwnerRequest(ownerRequestControlStore(owner.client), key, document, next)) {
+      return ownerOnlyJson({ traceId, error: 'Request changed concurrently. Refresh its status.' }, 409);
     }
-  }
+    return ownerOnlyJson({ traceId, requestId: record.requestId, status: 'pending', retryCount: next.record.retryCount }, 202);
+  });
 }
 
-function generateRequestId(): string {
-  return `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function generateTraceId(): string {
-  return `ivx-req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function generateIdempotencyKey(conversationId: string, message: string): string {
-  let hash = 0;
-  const input = `${conversationId}:${message}`;
-  for (let i = 0; i < input.length; i++) {
-    const char = input.charCodeAt(i);
-    hash = ((hash << 5) - hash + char) | 0;
-  }
-  return `idemp-${Math.abs(hash).toString(36)}-${input.length.toString(36)}`;
-}
-
-export function handleIVXOwnerAIRequestControlOptions(): Response {
-  return ownerOnlyOptions();
-}
-
-interface RequestControlBody {
-  message: string;
-  conversationId?: string | null;
-  messageId?: string;
-  traceId?: string;
-  idempotencyKey?: string;
-  senderLabel?: string;
-}
-
-/**
- * POST /api/ivx/owner-ai/request
- * Idempotent AI request: if the same idempotency key was already used,
- * return the cached result instead of creating a duplicate.
- */
-export async function handleIVXOwnerAIRequestCreate(rawRequest: Request): Promise<Response> {
-  let authContext;
-  try {
-    authContext = await assertIVXOwnerOnly(rawRequest);
-  } catch (authErr) {
-    const status = authErr instanceof Error && 'status' in authErr
-      ? (authErr as { status: number }).status
-      : 401;
-    return ownerOnlyJson({ error: 'Authentication required' }, status);
-  }
-
-  let body: RequestControlBody;
-  try {
-    body = await rawRequest.json() as RequestControlBody;
-  } catch {
-    return ownerOnlyJson({ error: 'Invalid JSON body' }, 400);
-  }
-
-  if (!body.message || typeof body.message !== 'string' || body.message.trim().length === 0) {
-    return ownerOnlyJson({ error: 'message is required' }, 400);
-  }
-
-  const conversationId = body.conversationId ?? null;
-  const messageId = body.messageId ?? `msg-${Date.now()}`;
-  const traceId = body.traceId ?? generateTraceId();
-  const idempotencyKey = body.idempotencyKey ?? generateIdempotencyKey(conversationId ?? 'default', body.message);
-
-  // Idempotency check: if this key was already used, return the cached result
-  const existingTraceId = idempotencyIndex.get(idempotencyKey);
-  if (existingTraceId) {
-    const existing = requestStore.get(existingTraceId);
-    if (existing && (existing.status === 'completed' || existing.status === 'in_flight')) {
-      return ownerOnlyJson({
-        traceId: existing.traceId,
-        requestId: existing.requestId,
-        status: existing.status,
-        idempotencyKey: existing.idempotencyKey,
-        duplicate: true,
-        result: existing.terminalResult,
-        message: 'Idempotent replay: returning cached result for this idempotency key.',
-      }, 200);
+export async function handleIVXOwnerAIRequestCancel(request: Request, traceId: string): Promise<Response> {
+  return withOwnerRecord(request, traceId, async (owner, key, document) => {
+    const record = document.record;
+    if (record.status === 'completed' || record.status === 'cancelled') return ownerOnlyJson({ traceId, status: record.status }, 200);
+    // Recording a flag is not proof that an external provider stopped.
+    if (record.status === 'in_flight' || record.providerRequestId) return ownerOnlyJson({ traceId, error: 'An in-flight provider outcome must be reconciled.', code: 'OWNER_REQUEST_RECONCILIATION_REQUIRED' }, 409);
+    const next: OwnerRequestDocument = { ...document, revision: randomUUID(), record: { ...record, status: 'cancelled',
+      completedAt: new Date().toISOString(), structuredError: { code: 'CANCELLED', message: 'Request cancelled by owner.', checkpoint: null },
+    } };
+    if (!await replaceOwnerRequest(ownerRequestControlStore(owner.client), key, document, next)) {
+      return ownerOnlyJson({ traceId, error: 'Request changed concurrently. Refresh its status.' }, 409);
     }
-  }
-
-  // Create new request record
-  const requestId = generateRequestId();
-  const record: RequestRecord = {
-    traceId,
-    requestId,
-    conversationId,
-    messageId,
-    idempotencyKey,
-    status: 'pending',
-    retryCount: 0,
-    providerRequestId: null,
-    startedAt: new Date().toISOString(),
-    completedAt: null,
-    terminalResult: null,
-    structuredError: null,
-  };
-
-  requestStore.set(traceId, record);
-  idempotencyIndex.set(idempotencyKey, traceId);
-  pruneStore();
-
-  return ownerOnlyJson({
-    traceId,
-    requestId,
-    status: 'pending',
-    idempotencyKey,
-    duplicate: false,
-    message: 'Request accepted. Use GET /request/:traceId/status to poll.',
-  }, 202);
-}
-
-/**
- * GET /api/ivx/owner-ai/request/:traceId/status
- * Query the status of a request by traceId.
- */
-export async function handleIVXOwnerAIRequestStatus(rawRequest: Request, traceId: string): Promise<Response> {
-  try {
-    await assertIVXOwnerOnly(rawRequest);
-  } catch (authErr) {
-    const status = authErr instanceof Error && 'status' in authErr
-      ? (authErr as { status: number }).status
-      : 401;
-    return ownerOnlyJson({ error: 'Authentication required' }, status);
-  }
-
-  const record = requestStore.get(traceId);
-  if (!record) {
-    return ownerOnlyJson({
-      traceId,
-      status: 'not_found',
-      message: 'No request found for this traceId.',
-    }, 404);
-  }
-
-  return ownerOnlyJson({
-    traceId: record.traceId,
-    requestId: record.requestId,
-    conversationId: record.conversationId,
-    messageId: record.messageId,
-    idempotencyKey: record.idempotencyKey,
-    status: record.status,
-    retryCount: record.retryCount,
-    providerRequestId: record.providerRequestId,
-    startedAt: record.startedAt,
-    completedAt: record.completedAt,
-    terminalResult: record.terminalResult,
-    structuredError: record.structuredError,
-  }, 200);
-}
-
-/**
- * POST /api/ivx/owner-ai/request/:traceId/retry
- * Retry a failed request. Increments retry count and resets status.
- */
-export async function handleIVXOwnerAIRequestRetry(rawRequest: Request, traceId: string): Promise<Response> {
-  try {
-    await assertIVXOwnerOnly(rawRequest);
-  } catch (authErr) {
-    const status = authErr instanceof Error && 'status' in authErr
-      ? (authErr as { status: number }).status
-      : 401;
-    return ownerOnlyJson({ error: 'Authentication required' }, status);
-  }
-
-  const record = requestStore.get(traceId);
-  if (!record) {
-    return ownerOnlyJson({ error: 'Request not found', traceId }, 404);
-  }
-
-  if (record.status === 'in_flight' || record.status === 'pending') {
-    return ownerOnlyJson({
-      error: 'Request is already in flight. Cancel it first or wait for completion.',
-      traceId,
-      status: record.status,
-    }, 409);
-  }
-
-  if (record.status === 'completed') {
-    return ownerOnlyJson({
-      message: 'Request already completed successfully. Use the cached result.',
-      traceId,
-      status: record.status,
-      terminalResult: record.terminalResult,
-    }, 200);
-  }
-
-  // Reset for retry
-  record.status = 'pending';
-  record.retryCount += 1;
-  record.completedAt = null;
-  record.terminalResult = null;
-  record.structuredError = null;
-  record.startedAt = new Date().toISOString();
-
-  return ownerOnlyJson({
-    traceId: record.traceId,
-    requestId: record.requestId,
-    status: 'pending',
-    retryCount: record.retryCount,
-    message: 'Request queued for retry.',
-  }, 202);
-}
-
-/**
- * POST /api/ivx/owner-ai/request/:traceId/cancel
- * Cancel an in-flight request.
- */
-export async function handleIVXOwnerAIRequestCancel(rawRequest: Request, traceId: string): Promise<Response> {
-  try {
-    await assertIVXOwnerOnly(rawRequest);
-  } catch (authErr) {
-    const status = authErr instanceof Error && 'status' in authErr
-      ? (authErr as { status: number }).status
-      : 401;
-    return ownerOnlyJson({ error: 'Authentication required' }, status);
-  }
-
-  const record = requestStore.get(traceId);
-  if (!record) {
-    return ownerOnlyJson({ error: 'Request not found', traceId }, 404);
-  }
-
-  if (record.status === 'completed' || record.status === 'cancelled') {
-    return ownerOnlyJson({
-      message: `Request already in terminal state: ${record.status}`,
-      traceId,
-      status: record.status,
-    }, 200);
-  }
-
-  record.status = 'cancelled';
-  record.completedAt = new Date().toISOString();
-  record.structuredError = {
-    code: 'CANCELLED',
-    message: 'Request cancelled by client.',
-    checkpoint: null,
-  };
-
-  return ownerOnlyJson({
-    traceId: record.traceId,
-    requestId: record.requestId,
-    status: 'cancelled',
-    message: 'Request cancelled successfully.',
-  }, 200);
-}
-
-/**
- * Update a request record (called internally by the AI processing pipeline).
- */
-export function updateRequestRecord(traceId: string, updates: Partial<RequestRecord>): void {
-  const record = requestStore.get(traceId);
-  if (!record) return;
-  Object.assign(record, updates);
-  if (updates.status === 'completed' || updates.status === 'failed' || updates.status === 'cancelled') {
-    record.completedAt = new Date().toISOString();
-  }
-}
-
-/**
- * Get a request record by traceId (for internal use).
- */
-export function getRequestRecord(traceId: string): RequestRecord | null {
-  return requestStore.get(traceId) ?? null;
+    return ownerOnlyJson({ traceId, requestId: record.requestId, status: 'cancelled' }, 200);
+  });
 }
