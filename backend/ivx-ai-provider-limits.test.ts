@@ -1,5 +1,6 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import * as ai from 'ai';
+import * as timers from 'node:timers/promises';
 import { createGateway } from '@ai-sdk/gateway';
 import * as state from './services/ivx-provider-state-machine';
 import * as fallback from './services/ivx-ai-provider-fallback';
@@ -132,6 +133,41 @@ test('structured 429 honors Retry-After, retains admission and recovers', async 
   expect(alternative).toHaveBeenCalledTimes(0);
   expect(getAIQueueSnapshot().short).toMatchObject({active:0,waiting:0});
 });
+for (const cancel of [false, true]) test(`early retry timer cannot ${cancel ? 'ignore cancellation' : 'start another provider attempt'}`, async () => {
+  const alternative = setup();
+  const controller = new AbortController();
+  let now = Date.now();
+  const started = now, attempted: number[] = [];
+  spies.push(spyOn(Date, 'now').mockImplementation(() => now));
+  spies.push(spyOn(timers, 'setTimeout').mockImplementation((async (delay, value, options) => {
+    options?.signal?.throwIfAborted();
+    // Reproduce the CI timer waking one millisecond before Retry-After.
+    now += Math.max(1, Number(delay) - 1);
+    if (cancel) controller.abort(new Error('QA cancelled during retry'));
+    return value;
+  }) as typeof timers.setTimeout));
+  const call = spyOn(ai, 'generateText').mockImplementation(async () => {
+    attempted.push(now);
+    expect(getAIQueueSnapshot().short.active).toBe(1);
+    if (attempted.length === 1) throw Object.assign(new Error('Slow down'), {
+      statusCode: 429, responseHeaders: { 'retry-after': '0.03' },
+    });
+    return result;
+  });
+  spies.push(call);
+  const response = requestIVXAIText({ module: 'provider-limit-fixture', prompt: 'fixture',
+    maxOutputTokens: 4, abortSignal: controller.signal });
+  if (cancel) {
+    await expect(response).rejects.toThrow('QA cancelled during retry');
+    expect(attempted).toEqual([started]);
+  } else {
+    expect((await response).text).toBe('fixture recovery');
+    expect(attempted).toEqual([started, started + 30]);
+  }
+  expect(alternative).toHaveBeenCalledTimes(0);
+  expect(getAIQueueSnapshot().short).toMatchObject({ active: 0, waiting: 0 });
+});
+
 test('provider Retry-After beyond the request deadline rejects instead of retrying early', async () => {
   const alternative = setup();
   const call=spyOn(ai,'generateText').mockRejectedValue(Object.assign(new Error('Slow down'),{statusCode:429,responseHeaders:{'retry-after':'3600'}}));

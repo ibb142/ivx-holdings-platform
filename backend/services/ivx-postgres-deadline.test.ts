@@ -65,7 +65,7 @@ for (const failAt of [null, 'select mutation', 'COMMIT', 'BEGIN', 'SET LOCAL loc
     const result = queryWithPostgresDeadline(pool, 'select mutation', []);
     if (failAt) {
       await expect(result).rejects.toBe(error);
-      expect(calls.at(-1)).toBe('ROLLBACK'); expect(releases).toEqual([true]);
+      expect(calls).not.toContain('ROLLBACK'); expect(releases).toEqual([true]);
     } else {
       expect((await result).rows).toEqual([{ result: 1 }]);
       expect(calls.at(-1)).toBe('COMMIT'); expect(releases).toEqual([false]);
@@ -93,8 +93,44 @@ for (const disconnectAt of ['BEGIN', 'select mutation', 'COMMIT']) {
     await expect(queryWithPostgresDeadline({ connect: async () => client } as unknown as Pick<Pool, 'connect'>,
       'select mutation', [])).rejects.toBe(error);
     expect(releases).toEqual([true]);
-    expect(calls.at(-1)).toBe('ROLLBACK');
+    expect(calls).not.toContain('ROLLBACK');
     expect(calls.filter(x => x === 'select mutation').length).toBe(disconnectAt === 'BEGIN' ? 0 : 1);
     expect(client.listenerCount('error')).toBe(0);
+  });
+}
+
+for (const code of [undefined, '08006', '57P01', '57014']) {
+  test(`failed connection cleanup preserves rejection and pool capacity: ${code ?? 'client timeout'}`, async () => {
+    const error = Object.assign(new Error('Query read timeout'), { code });
+    const calls: string[] = [], releases: boolean[] = [];
+    const client = Object.assign(new EventEmitter(), {
+      query: async (text: string) => {
+        calls.push(text);
+        if (text === 'select mutation') throw error;
+        if (text === 'ROLLBACK' && code !== '57014') {
+          return new Promise<never>(() => {});
+        }
+        return { rows: [] };
+      },
+      release: (destroy: boolean) => releases.push(destroy),
+    });
+    const logger = spyOn(console, 'error').mockImplementation(() => {});
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const operation = queryWithPostgresDeadline(
+        { connect: async () => client } as unknown as Pick<Pool, 'connect'>, 'select mutation', []);
+      const outcome = await Promise.race([
+        operation.then(() => 'unexpected success', failure => failure),
+        new Promise(resolve => { timer = setTimeout(() => resolve('cleanup stalled'), 100); }),
+      ]);
+      expect(outcome).toBe(error);
+      expect(releases).toEqual([true]);
+      expect(calls.filter(text => text === 'select mutation')).toHaveLength(1);
+      expect(calls.includes('ROLLBACK')).toBe(code === '57014');
+      expect(client.listenerCount('error')).toBe(0);
+    } finally {
+      clearTimeout(timer);
+      logger.mockRestore();
+    }
   });
 }
