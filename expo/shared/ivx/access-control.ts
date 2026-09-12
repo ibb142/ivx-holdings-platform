@@ -693,6 +693,35 @@ export async function resolveIVXAuthenticatedRequest(
   }
 
   const user = userResult.data.user;
+  const verifiedEmail = readIVXTrimmedString(user.email) || null;
+  // The server-configured allowlist already grants this verified Auth identity
+  // owner access below. A profile lookup cannot change that decision, but an
+  // unavailable PostgREST schema used to block it for five seconds. Preserve
+  // live Auth verification and require a confirmed email before this fast path.
+  const emailConfirmedAt = readIVXTrimmedString(user.email_confirmed_at);
+  if (isIVXOwnerAllowlistedEmail(verifiedEmail) && emailConfirmedAt
+    && Number.isFinite(Date.parse(emailConfirmedAt))) {
+    const authAudit = resolveIVXRoleAudit(user, null, null);
+    const ownerAudit: IVXRoleAudit = { ...authAudit, rawRole: 'owner', normalizedRole: 'owner' };
+    logGuardDecision({
+      logPrefix,
+      stage: 'allow',
+      config,
+      userId: user.id,
+      email: verifiedEmail,
+      roleAudit: ownerAudit,
+      detail: 'Live Auth confirmed the configured owner email; profile lookup is not required for this allowlist decision.',
+    });
+    return {
+      client,
+      userId: user.id,
+      email: verifiedEmail,
+      role: 'owner',
+      accessToken,
+      guardMode: config.securityMode,
+      roleAudit: ownerAudit,
+    };
+  }
   const ownerProfileResult = await loadIVXOwnerProfile(client, user.id, logPrefix, authDeadline - Date.now());
   const roleAudit = resolveIVXRoleAudit(user, ownerProfileResult.profile, ownerProfileResult.errorMessage);
   // The allowlist identifies the account verified by Auth, not a profile's

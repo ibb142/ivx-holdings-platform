@@ -158,6 +158,48 @@ test('the verified allowlisted owner remains authorized with a stale profile con
   expect(context.email).toBe('iperez4242@gmail.com');
 });
 
+test('a live Auth-confirmed allowlisted owner does not depend on an unavailable profile source', async () => {
+  providerResult = { data: { user: { ...user, email: 'iperez4242@gmail.com',
+    email_confirmed_at: '2026-09-01T00:00:00Z', app_metadata: { role: 'member' } } }, error: null };
+  profileStatus = 503;
+  profileError = { message: 'schema cache unavailable' };
+  const context = await resolveIVXAuthenticatedRequest(request(), '[allowlist-test]');
+  expect(context.role).toBe('owner');
+  expect(context.email).toBe('iperez4242@gmail.com');
+  expect(context.guardMode).toBe('strict');
+  expect(context.roleAudit.profileFound).toBe(false);
+  expect(getUser).toHaveBeenCalledTimes(1);
+  expect(maybeSingle).not.toHaveBeenCalled();
+});
+
+test('allowlisted email claims never bypass a rejected live Auth session', async () => {
+  providerResult = { data: { user: { ...user, email: 'iperez4242@gmail.com',
+    email_confirmed_at: '2026-09-01T00:00:00Z' } },
+    error: Object.assign(new Error('credential rejected'), { status: 401 }) as AuthError };
+  await expect(resolveIVXAuthenticatedRequest(request(), '[allowlist-test]')).rejects.toThrow('invalid or expired');
+  expect(maybeSingle).not.toHaveBeenCalled();
+});
+
+test('unconfirmed allowlisted email cannot use the profile-independent path', async () => {
+  for (const email_confirmed_at of [undefined, '', 'invalid-date']) {
+    providerResult = { data: { user: { ...user, email: 'iperez4242@gmail.com', email_confirmed_at } }, error: null };
+    profileStatus = 503;
+    profileError = { message: 'schema cache unavailable' };
+    await expect(resolveIVXAuthenticatedRequest(request(), '[allowlist-test]')).rejects.toBeInstanceOf(IVXAuthServiceUnavailableError);
+  }
+  expect(maybeSingle).toHaveBeenCalledTimes(3);
+});
+
+test('a confirmed non-owner still requires the current trusted profile source', async () => {
+  providerResult = { data: { user: { ...user, email: 'member@example.test',
+    email_confirmed_at: '2026-09-01T00:00:00Z', app_metadata: { role: 'member' },
+    user_metadata: { email: 'iperez4242@gmail.com', role: 'owner' } } }, error: null };
+  profileStatus = 503;
+  profileError = { message: 'schema cache unavailable' };
+  await expect(resolveIVXAuthenticatedRequest(request(), '[allowlist-test]')).rejects.toBeInstanceOf(IVXAuthServiceUnavailableError);
+  expect(maybeSingle).toHaveBeenCalledTimes(1);
+});
+
 for (const trustedSource of ['profile', 'app_metadata']) {
   for (const role of ['owner', 'admin', 'developer']) {
     test(`server-managed ${trustedSource} ${role} remains authorized`, async () => {
