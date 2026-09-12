@@ -90,7 +90,7 @@ export function summarizeRow(row) {
     }
   }
   visit(row.metadata);
-  const applications = ['PostgREST', 'postgrest', 'ivx_tasks', 'ivx_recovery', 'ivx_owner_variables'];
+  const applications = ['PostgREST', 'postgrest', 'ivx_tasks', 'ivx_repair', 'ivx_presence', 'ivx_telemetry', 'ivx_owner_variables'];
   const roles = ['service_role', 'authenticator', 'postgres', 'supabase_admin', 'supabase_auth_admin', 'anon', 'authenticated'];
   const statements = fields.filter(([key, value]) => ['query', 'statement', 'internal_query'].includes(key) && typeof value === 'string').map(([, value]) => value).join('\n');
   const errorClasses = [
@@ -117,6 +117,7 @@ export function summarizeRow(row) {
     sessionHashes: [...new Set(fields.filter(([key, value]) => key === 'session_id' && typeof value === 'string' && value).map(([, value]) => hash(value)))],
     statementOperations: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'].filter(operation => new RegExp(`\\b${operation}\\b`, 'i').test(statements)),
     statementKnownObjects: ['ivx_durable_documents', 'ivx_durable_events', 'ivx_owner_variables', 'ivx_agent_leases', 'ivx_autonomous_tasks'].filter(name => statements.includes(name)),
+    statementUsesParameters: /\$[1-9][0-9]*/.test(statements),
     // A shared queue snapshot can contain both IDs. A match is not causal attribution.
     causalAttribution: 'NOT_ESTABLISHED_BY_THIS_RECORD_MATCH',
   };
