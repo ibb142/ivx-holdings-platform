@@ -1,11 +1,12 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 test('Node HTTP preserves current serving evidence through JSON replay, SSE and middleware body access', () => {
   // The Node adapter replaces global Response. Bun-only tests cannot exercise
   // its lazy header/body conversion, so run the actual production transport.
   const result = spawnSync('node', ['--import', 'tsx', '--input-type=module', '-'], {
-    cwd: process.cwd(), encoding: 'utf8', timeout: 20_000,
+    cwd: fileURLToPath(new URL('../../', import.meta.url)), encoding: 'utf8', timeout: 20_000,
     env: { ...process.env, RENDER_GIT_COMMIT: 'a'.repeat(40) },
     input: `
 import assert from 'node:assert/strict';
