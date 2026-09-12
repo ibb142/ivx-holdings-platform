@@ -1,0 +1,28 @@
+name: Phase 1 Media Source Discovery
+on:
+  push:
+    branches: [qa/phase1-media-source-20260912]
+    paths:
+      - qa/phase1-media-source-discovery.py
+      - .github/workflows/phase1-media-source-discovery.yml
+permissions:
+  contents: read
+jobs:
+  inspect-casa-originals:
+    if: github.repository == 'ibb142/ivx-holdings-platform'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect registered originals and previous versions without writes
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_MAX_ATTEMPTS: '2'
+        run: python3 qa/phase1-media-source-discovery.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase1-media-source-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qa-results/phase1-media-source-discovery.json
+          if-no-files-found: error
