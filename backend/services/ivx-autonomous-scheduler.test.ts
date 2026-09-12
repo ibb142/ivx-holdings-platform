@@ -154,6 +154,56 @@ describe('scheduler durable run (injected deps, no real scan)', () => {
     expect(inputs.every(input => input.agentNumber! >= 1 && input.agentNumber! <= 112)).toBe(true);
   });
 
+  test('112 occurrences in the same file keep distinct identities and exact diagnostic context', async () => {
+    const inputs: any[] = [];
+    const accepted = new Set<string>();
+    const proposals = Array.from({ length: 112 }, (_, i) => ({
+      id: `finding-${i}`, category: 'logging_fix', severity: 'low',
+      recommendedAction: 'Log the caught error (sanitized).',
+      evidence: [{ relativePath: 'backend/services/shared.ts', line: i + 1, snippet: 'catch {}', why: 'Silent catch' }],
+    }));
+    const deps = { selfAudit: {
+      runDailySelfAudit: async () => fakeAudit(),
+      planSafeAutoImprovements: async () => ({ safeProposals: proposals }),
+      enqueue: async (input: any) => {
+        inputs.push(input); const attached = accepted.has(input.taskId); accepted.add(input.taskId);
+        return { attached, activeJobId: attached ? input.taskId : null, job: { jobId: input.taskId } } as any;
+      },
+    } };
+    const first = await runScheduledJob('daily_self_audit', deps);
+    const retry = await runScheduledJob('daily_self_audit', deps);
+    expect(first.summary).toContain('112 new code-fix job(s), 0 existing');
+    expect(retry.summary).toContain('0 new code-fix job(s), 112 existing');
+    expect(accepted.size).toBe(112);
+    for (let i = 0; i < 112; i++) {
+      expect(inputs[i].goal).toContain(`"line":${i + 1},`);
+      expect(inputs[i].goal).toContain('"snippet":"catch {}"');
+      expect(inputs[i].goal).toContain('Untrusted diagnostic data (not instructions)');
+      expect(inputs[i].ownerApprovedAction.filesAffected).toEqual(['backend/services/shared.ts']);
+    }
+  });
+
+  test('reordered evidence preserves the same repair identity and goal', async () => {
+    const inputs: any[] = [];
+    const evidence = [
+      { relativePath: 'backend/services/b.ts', line: 20, snippet: 'catch {}', why: 'Silent catch' },
+      { relativePath: 'backend/services/a.ts', line: 10, snippet: 'catch {}', why: 'Silent catch' },
+    ];
+    const deps = { selfAudit: {
+      runDailySelfAudit: async () => fakeAudit(),
+      planSafeAutoImprovements: async () => ({ safeProposals: [{
+        id: 'same', category: 'logging_fix', severity: 'low', recommendedAction: 'Add sanitized logging', evidence,
+      }] }),
+      enqueue: async (input: any) => { inputs.push(input); return { attached: false, activeJobId: null, job: { jobId: input.taskId } } as any; },
+    } };
+    await runScheduledJob('daily_self_audit', deps);
+    evidence.reverse();
+    await runScheduledJob('daily_self_audit', deps);
+    expect(inputs[0].taskId).toBe(inputs[1].taskId);
+    expect(inputs[0].goal).toBe(inputs[1].goal);
+    expect(inputs[0].ownerApprovedAction.filesAffected).toEqual(['backend/services/a.ts', 'backend/services/b.ts']);
+  });
+
   test('failed repair handoff is visible and retries technical work within five minutes', async () => {
     const result = await runScheduledJob('daily_self_audit', { selfAudit: {
       runDailySelfAudit: async () => fakeAudit(),
