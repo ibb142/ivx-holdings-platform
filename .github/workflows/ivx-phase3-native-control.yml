@@ -1,9 +1,9 @@
 name: Phase 3 native Vercel control
-run-name: Fresh native Vercel credential verification
+run-name: Apply and independently verify authorized USD 200 daily native budget
 on:
   push:
     branches: ['verify/phase3-native-token-20260912']
-    paths: ['qa/phase3-native-control.mjs', '.github/workflows/ivx-phase3-native-control.yml']
+    paths: ['qa/phase3-native-control.mjs', 'qa/phase3-native-budget.mjs', '.github/workflows/ivx-phase3-native-control.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -34,5 +34,52 @@ jobs:
         with:
           name: phase3-native-management-${{ github.sha }}-${{ github.run_attempt }}
           path: qa/evidence/phase3-native/management.json
+          if-no-files-found: error
+          retention-days: 30
+  apply-team-budget:
+    needs: management-observation
+    if: github.repository == 'ibb142/ivx-holdings-platform'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Apply exact owner-authorized native team budget
+        run: node qa/phase3-native-budget.mjs apply
+        env:
+          IVX_NATIVE_REVIEW: phase3-native-20260912
+          IVX_NATIVE_BUDGET_APPLY: owner-200-usd-daily-20260912
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase3-native-budget-apply-${{ github.sha }}-${{ github.run_attempt }}
+          path: qa/evidence/phase3-native/budget-apply.json
+          if-no-files-found: error
+          retention-days: 30
+  verify-team-budget:
+    needs: apply-team-budget
+    if: github.repository == 'ibb142/ivx-holdings-platform'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Independently read and verify native team budget
+        run: node qa/phase3-native-budget.mjs verify
+        env:
+          IVX_NATIVE_REVIEW: phase3-native-20260912
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase3-native-budget-verify-${{ github.sha }}-${{ github.run_attempt }}
+          path: qa/evidence/phase3-native/budget-verify.json
           if-no-files-found: error
           retention-days: 30
