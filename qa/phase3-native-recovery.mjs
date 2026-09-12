@@ -44,8 +44,8 @@ export function verifyObservedNativeQuota(prior) {
   return {httpStatus:402,type:error.type,limitUsd:1,
     spendUsd:quota.currentSpend,providerHttpAttempts:1,originalRunPassed:prior.passed};
 }
-const safeError=error=>/^[A-Z][A-Z0-9_]{2,100}$/.test(error?.message??'')
-  ?error.message:'NATIVE_RECOVERY_CHECK_FAILED';
+const safeError=error=>String(error?.message??'').split('\n')[0].trim().match(/^[A-Z][A-Z0-9_]{2,100}$/)?.[0]
+  ??'NATIVE_RECOVERY_CHECK_FAILED';
 // Public evidence contains only explicit QA metrics. Credential identifiers,
 // infrastructure bindings, raw rows and native responses stay in memory.
 export function publicRecoveryProof(proof) {
@@ -61,6 +61,9 @@ export function publicRecoveryProof(proof) {
     settlementConfirmed:['rpc_ack','independent_terminal_row'].includes(c.settlementConfirmation)}));
   const receipts=[...(proof.priorReceipts??[]),...(proof.receipts??[])];
   return {type:'native-recovery-result',startedAt:proof.startedAt,sourceSha:proof.sourceSha,runId:proof.runId,
+    stage:proof.stage,priorLogHttpStatus:numeric(proof.priorLogHttpStatus),
+    priorLogStorageHttpStatus:numeric(proof.priorLogStorageHttpStatus),
+    errorClass:['AssertionError','TypeError','SyntaxError','TimeoutError'].includes(proof.errorClass)?proof.errorClass:null,
     passed:proof.passed===true,
     error:proof.error?safeError({message:proof.error}):null,
     finalControlError:proof.finalControlError?safeError({message:proof.finalControlError}):null,
@@ -107,11 +110,14 @@ async function main() {
     maximumCampaignLiabilityNano:MAX_LIABILITY_NANO.toString()};
   let context,db,before;
   try {
+    proof.stage='validate_review';
     assert.equal(process.env.IVX_NATIVE_QUOTA_PROBE,'phase3-native-recovery-20260912','REVIEW_BINDING_REQUIRED');
     assert(process.env.GH_TOKEN,'WORKFLOW_LOG_READ_TOKEN_REQUIRED');
+    proof.stage='fetch_prior_log';
     const logResponse=await fetch('https://api.github.com/repos/ibb142/ivx-holdings-platform/actions/jobs/103566100793/logs',{
       headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+process.env.GH_TOKEN},
       redirect:'manual',signal:AbortSignal.timeout(30000)});
+    proof.priorLogHttpStatus=logResponse.status;
     let logBody=logResponse;
     if(logResponse.status===302) {
       const location=new URL(logResponse.headers.get('location'));
@@ -119,19 +125,25 @@ async function main() {
         || location.hostname.endsWith('.actions.githubusercontent.com')
         || location.hostname==='objects.githubusercontent.com'),'UNEXPECTED_LOG_STORAGE');
       // A signed log URL is fetched without the GitHub Authorization header.
+      proof.stage='fetch_prior_log_storage';
       logBody=await fetch(location,{redirect:'error',signal:AbortSignal.timeout(30000)});
     }
+    proof.priorLogStorageHttpStatus=logBody.status;
     assert.equal(logBody.status,200,'PRIOR_LOG_UNAVAILABLE');
     const logText=await logBody.text();assert(logText.length<3000000,'PRIOR_LOG_TOO_LARGE');
     const lines=logText.split('\n').filter(x=>x.includes('"type":"native-quota-result"'));
     assert.equal(lines.length,1,'AMBIGUOUS_PRIOR_RESULT');
+    proof.stage='parse_prior_log';
     const prior=JSON.parse(lines[0].slice(lines[0].indexOf('{')));
     const raw=JSON.stringify(prior,null,2)+'\n';
+    proof.stage='verify_prior_log_hash';
     assert.equal(createHash('sha256').update(raw).digest('hex'),PRIOR_SHA256,'PRIOR_ARTIFACT_CHANGED');
     proof.priorJobId=103566100793;
     proof.priorArtifactSha256=PRIOR_SHA256;
     proof.nativeQuotaRejection=verifyObservedNativeQuota(prior);
+    proof.stage='read_protected_bindings';
     context=await prepareContext(proof);db=dbFor(context);
+    proof.stage='read_prior_reservations';
     const rows=await db.rows();
     assert.equal(rows.length,10,'COMPLETION_REPLAY_OR_PRIOR_STATE_CHANGED');
     const expected=[
@@ -150,6 +162,7 @@ async function main() {
     }
     proof.priorRows=rows;
     proof.previousDenialClosure=rows.find(r=>r.reservation_id===reservationId('denied'));
+    proof.stage='read_native_controls';
     before=await readNativeState(context);checkNativeBudget(before.teamBudget);
     const list=await management(context,'/v1/api-keys?purpose=ai-gateway');
     assert(!list.apiKeys.some(k=>k.id===prior.testKeyId),'EXHAUSTED_TEST_KEY_STILL_PRESENT');
@@ -157,6 +170,7 @@ async function main() {
     proof.recoveryKeyId=before.key.id;proof.exhaustedTestKeyAbsent=true;
     proof.productionSettingsBefore=settings(before);
     proof.priorReceipts=[];
+    proof.stage='verify_prior_receipts';
     for(const old of [...prior.priorPaidReceipts,...prior.receipts]) {
       const receipt=await observedReceipt(context.gatewayKey,old.id,old.model);
       const row=rows.find(r=>r.generation_id===receipt.id);
@@ -169,6 +183,7 @@ async function main() {
     const quote=await freshQuote('openai/gpt-4o-mini');
     assert(rows.reduce((n,r)=>n+BigInt(r.reserved_nano),0n)+BigInt(quote.reservedNano)<=MAX_LIABILITY_NANO,
       'CAMPAIGN_LIABILITY_TOO_LARGE');
+    proof.stage='run_single_recovery';
     await callProvider(context,db,context.gatewayKey,'recovery',quote);
     proof.nativeServiceRecoveryObserved=true;
     assert.equal(proof.calls.length,1,'UNREVIEWED_RECOVERY_CALL');
@@ -176,7 +191,7 @@ async function main() {
     assert.equal(new Set(receipts.map(r=>r.id)).size,9,'RECEIPT_IDENTITY_NOT_UNIQUE');
     proof.verifiedReceiptCostNano=receipts.reduce((n,r)=>n+BigInt(r.costNano),0n).toString();
     proof.passed=true;
-  } catch(error) { proof.error=safeError(error);process.exitCode=1; }
+  } catch(error) { proof.error=safeError(error);proof.errorClass=error?.name;process.exitCode=1; }
   finally {
     if(context && before) {
       try {
