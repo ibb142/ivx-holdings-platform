@@ -27,3 +27,14 @@ export const SENIOR_QUEUE_JOB_SQL = `select job from public.ivx_durable_document
     jsonb_build_object('id', $2::text)) as job
   where d.doc_key = $1 and job->>'jobId' = $2 limit 2`;
 
+// Filter the owner and active states before materializing checkpoints. Repeated
+// d.value->'jobs' extraction per ordinal repeatedly expands the retained history.
+// Ordinality preserves the original last-match rule; bound text predicates keep
+// malformed identities from changing ownership or hiding an invalid checkpoint.
+export const SENIOR_ACTIVE_OWNER_JOB_SQL = `select job from public.ivx_durable_documents d
+  cross join lateral jsonb_path_query(coalesce(d.value->'jobs', '[]'::jsonb),
+    'strict $[*] ? ((@.ownerId == $owner || @.ownerId.type() != "string") && (@.status == $statuses[*] || @.status.type() != "string"))',
+    jsonb_build_object('owner', $2::text, 'statuses', to_jsonb($3::text[])))
+    with ordinality as matching(job, ordinal)
+  where d.doc_key = $1 and job->>'ownerId' = $2 and job->>'status' = any($3::text[])
+  order by ordinal desc limit 1`;

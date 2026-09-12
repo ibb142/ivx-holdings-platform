@@ -29,10 +29,11 @@ declare module 'pg' {
     readonly totalCount: number;
     readonly idleCount: number;
     readonly waitingCount: number;
-    constructor(config: {
+    constructor(config: (ClientConfig | {
       connectionString: string;
       ssl?: { rejectUnauthorized: boolean; ca?: string | string[] };
       application_name?: string;
+    }) & {
       max?: number;
       idleTimeoutMillis?: number;
       connectionTimeoutMillis?: number;

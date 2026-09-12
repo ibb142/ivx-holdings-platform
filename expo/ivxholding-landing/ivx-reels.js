@@ -421,16 +421,23 @@
    * promoted to `API` so all subsequent calls (likes, comments, upload, events)
    * use the working backend.
    */
-  function apiFetchJson(path, hostIdx, timeoutMs) {
+  function apiFetchJson(path, hostIdx, timeoutMs, deadline) {
     hostIdx = hostIdx || 0;
     if (hostIdx >= API_CANDIDATES.length) return Promise.reject(new Error('all API hosts failed'));
+    deadline = deadline || Date.now() + API_CANDIDATES.length * (timeoutMs || 15000);
+    var remaining = deadline - Date.now();
+    if (remaining <= 0) return Promise.reject(new Error('feed request deadline exceeded'));
     var base = API_CANDIDATES[hostIdx];
     var url = base + path;
     /* AbortController timeout so a hung request does not freeze the UI forever. */
     var controller = new AbortController();
-    var timeout = setTimeout(function () { controller.abort(); }, timeoutMs || 15000);
+    var timeout = setTimeout(function () { controller.abort(); }, Math.min(timeoutMs || 15000, remaining));
+    var retryAt = 0;
     return fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } })
       .then(function (r) {
+        var retryAfter = (r.headers && r.headers.get('retry-after') || '').trim();
+        retryAt = /^\d+$/.test(retryAfter) ? Date.now() + Number(retryAfter) * 1000
+          : /^[A-Za-z]{3}, /.test(retryAfter) ? Date.parse(retryAfter) : 0;
         if (!r.ok) {
           var error = new Error('bad status ' + r.status);
           error.retryable = r.status === 408 || r.status === 429 || r.status >= 500;
@@ -441,10 +448,11 @@
           var data;
           try { data = JSON.parse(text); } catch (e) { throw new Error('not json'); }
           if ((r.headers && r.headers.get('X-IVX-Data-State') === 'unavailable')
-            || (data && (data.data_available === false || data.code === 'PUBLIC_DATA_UNAVAILABLE'))) {
-            var unavailable = new Error('feed data unavailable');
-            unavailable.retryable = true;
-            throw unavailable;
+            || (data && ((data.degraded === true && data.data_available !== true)
+              || data.data_available === false || data.code === 'PUBLIC_DATA_UNAVAILABLE'))) {
+            var error = new Error('feed data unavailable');
+            error.retryable = true;
+            throw error;
           }
           clearTimeout(timeout);
           if (API !== base) API = base; /* promote working host */
@@ -454,8 +462,11 @@
       .catch(function (err) {
         clearTimeout(timeout);
         /* Do not swallow abort of the final host; surface it. */
-        if (err.retryable === false || hostIdx >= API_CANDIDATES.length - 1) throw err;
-        return apiFetchJson(path, hostIdx + 1, timeoutMs);
+        var waitMs = Math.max(0, (retryAt || 0) - Date.now());
+        if (err.retryable === false || hostIdx >= API_CANDIDATES.length - 1 || waitMs >= deadline - Date.now()) throw err;
+        if (!waitMs) return apiFetchJson(path, hostIdx + 1, timeoutMs, deadline);
+        return new Promise(function (resolve) { setTimeout(resolve, waitMs); })
+          .then(function () { return apiFetchJson(path, hostIdx + 1, timeoutMs, deadline); });
       });
   }
 
@@ -471,16 +482,18 @@
       })) throw error;
       var reelsOnly = query.get('type') === 'reel';
       if (query.has('type') && !reelsOnly) throw error;
-      function recoverPublic(data) {
+      function recoverPublic(data, expectedType) {
+        expectedType = expectedType || 'unified';
         var vids = data && data.videos;
-        var scopedReels = reelsOnly && data && data.feed_type === 'reel';
         if (!Array.isArray(vids) || !vids.length || data.channel || data.personalized !== false
-          || data.ordering !== 'canonical-unified-v2' || (data.feed_type !== 'unified' && !scopedReels)
+          || (data.degraded === true && data.data_available !== true) || data.data_available === false || data.code === 'PUBLIC_DATA_UNAVAILABLE'
+          || data.ordering !== 'canonical-unified-v2' || data.feed_type !== expectedType
           || !vids.every(function (v) { return v && v.id && v.video_url; })) throw error;
         // An exact public Reels page can preserve its pagination. A shared
         // unified snapshot represents this rail only when it is complete.
+        // Neither source may insert deal videos into the Project Reels rail.
         if (reelsOnly && (!vids.every(function (v) { return v.video_type === 'reel'; })
-          || (!scopedReels && (data.next_cursor || data.total !== vids.length)))) throw error;
+          || (expectedType === 'unified' && (data.next_cursor || data.total !== vids.length)))) throw error;
         return Object.assign({}, data, { viewer_state_available: false, videos: vids.map(function (v) {
           var copy = Object.assign({}, v, { viewer_state_available: false });
           delete copy.viewer_liked;
@@ -494,10 +507,14 @@
       if (age >= 0 && age <= 30000) {
         try { return recoverPublic(snapshot.data); } catch (_) { /* request a current catalog */ }
       }
-      var publicPath = reelsOnly
-        ? '/api/reels?limit=' + encodeURIComponent(query.get('limit') || '6') + '&type=reel'
-        : '/api/reels';
-      return apiFetchJson(publicPath, 0, 4000).then(recoverPublic);
+      // Optional viewer-state reads must not send Project Reels recovery to
+      // the investor catalog. Keep the requested rail and page size while
+      // removing only the viewer, so its anonymous response can share cache.
+      requested.searchParams.delete('viewer_id');
+      var publicPath = reelsOnly ? requested.pathname + requested.search : '/api/reels';
+      return apiFetchJson(publicPath, 0, 4000).then(function (data) {
+        return recoverPublic(data, reelsOnly ? 'reel' : 'unified');
+      });
     });
   }
 
