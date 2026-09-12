@@ -1,102 +1,124 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { runInNewContext } from 'node:vm';
 
-function harness(fetchImpl: typeof fetch) {
+async function harness() {
   const source = readFileSync(new URL('./ivx-video-platform.ts', import.meta.url), 'utf8');
   const start = source.indexOf('  const timeoutFetch = ');
   const end = source.indexOf('\n  _sb = createClient', start);
   if (start < 0 || end < start) throw new Error('Video source transport not found');
-  const timers = new Map<unknown, number>();
   const api: { run?: typeof fetch } = {};
+  // Use native fetch and real sockets: fetch resolves at headers, while the
+  // same signal must continue to govern body consumption. A hand-built
+  // Response or a fetch mock ignoring its signal does not model this contract.
+  // The imported-transport suite separately exercises the shipped 5s deadline.
   runInNewContext(new Bun.Transpiler({ loader: 'ts' }).transformSync(source.slice(start, end)) + '\napi.run = timeoutFetch;', {
-    api, fetch: fetchImpl, AbortController, Response, Error, SB_TIMEOUT_MS: 5000,
-    setTimeout: (fn: () => void, ms: number) => { timers.set(fn, ms); return fn; },
-    clearTimeout: (fn: unknown) => timers.delete(fn),
+    api, fetch, AbortSignal, Request, Response, Error, SB_TIMEOUT_MS: 200,
   });
-  return { run: api.run!, timers, expire: () => { for (const fn of [...timers.keys()]) (fn as () => void)(); } };
+  let requests = 0;
+  let notifyRequest!: () => void;
+  const requested = new Promise<void>(resolve => { notifyRequest = resolve; });
+  const server = createServer((req, res) => {
+    requests++;
+    notifyRequest();
+    if (req.url === '/stalled-headers') return;
+    if (req.url === '/empty') { res.writeHead(204); res.end(); return; }
+    const status = req.url === '/unavailable' ? 503 : 200;
+    res.writeHead(status, { 'content-type': 'application/json', 'content-range': '0-0/1' });
+    if (req.url === '/stalled-body') { res.flushHeaders(); res.write('['); return; }
+    res.end(JSON.stringify(status === 200 ? [{ id: 'published-video' }] : { code: 'SOURCE_UNAVAILABLE' }));
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('HTTP fixture did not bind');
+  const base = `http://127.0.0.1:${address.port}`;
+  return {
+    run: (path: string, init?: RequestInit) => api.run!(base + path, init),
+    requested,
+    get requests() { return requests; },
+    close: async () => {
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) => server.close(error => {
+        if (error && (error as NodeJS.ErrnoException).code !== 'ERR_SERVER_NOT_RUNNING') reject(error);
+        else resolve();
+      }));
+    },
+  };
 }
-async function flush() { for (let i = 0; i < 30; i++) await Promise.resolve(); }
 
 test('source deadline includes a stalled response body after successful headers', async () => {
-  let signal: AbortSignal | undefined;
-  const h = harness((async (_url, init) => {
-    signal = init?.signal as AbortSignal;
-    return new Response(new ReadableStream({ start() {} }), { headers: { 'content-type': 'application/json' } });
-  }) as typeof fetch);
-  let settled = false, failure: unknown;
-  const work = h.run('https://source.test').then(() => { settled = true; }, e => { settled = true; failure = e; });
-  await flush();
-  expect(settled).toBe(false);
-  expect([...h.timers.values()]).toEqual([5000]);
-  h.expire(); await flush();
-  expect(settled).toBe(true);
-  expect(failure).toBeInstanceOf(Error);
-  expect(signal?.aborted).toBe(true);
-  await work;
-  expect(h.timers.size).toBe(0);
-});
+  const h = await harness();
+  try {
+    const response = await h.run('/stalled-body');
+    expect(response.status).toBe(200);
+    await expect(response.json()).rejects.toMatchObject({ name: 'TimeoutError' });
+    expect(h.requests).toBe(1);
+  } finally { await h.close(); }
+}, 3000);
 
-test('a transport ignoring abort still settles at the original deadline', async () => {
-  const h = harness((() => new Promise(() => {})) as typeof fetch);
-  let rejected = false;
-  void h.run('https://source.test').catch(() => { rejected = true; });
-  h.expire(); await flush();
-  expect(rejected).toBe(true);
-  expect(h.timers.size).toBe(0);
-});
+test('a source that never sends headers is cancelled at the deadline', async () => {
+  const h = await harness();
+  try {
+    await expect(h.run('/stalled-headers')).rejects.toMatchObject({ name: 'TimeoutError' });
+    expect(h.requests).toBe(1);
+  } finally { await h.close(); }
+}, 3000);
 
 test('caller cancellation is preserved during source reads', async () => {
-  let signal: AbortSignal | undefined;
-  const h = harness((async (_url, init) => { signal = init?.signal as AbortSignal; return new Promise(() => {}); }) as typeof fetch);
-  const caller = new AbortController(); let rejected = false;
-  void h.run('https://source.test', { signal: caller.signal }).catch(() => { rejected = true; });
-  caller.abort(); await flush();
-  expect(rejected).toBe(true);
-  expect(signal?.aborted).toBe(true);
-  expect(h.timers.size).toBe(0);
-});
+  const h = await harness();
+  const caller = new AbortController();
+  try {
+    const work = h.run('/stalled-headers', { signal: caller.signal })
+      .then(() => ({ name: 'UnexpectedSuccess' }), error => error);
+    await h.requested;
+    caller.abort();
+    expect(await work).toMatchObject({ name: 'AbortError' });
+    expect(h.requests).toBe(1);
+  } finally { caller.abort(); await h.close(); }
+}, 3000);
 
 test('completed JSON and source HTTP failure remain unchanged', async () => {
-  for (const status of [200, 503]) {
-    const body = JSON.stringify(status === 200 ? [{ id: 'published-video' }] : { code: 'SOURCE_UNAVAILABLE' });
-    const h = harness((async () => new Response(body, { status, headers: { 'content-type': 'application/json', 'content-range': '0-0/1' } })) as typeof fetch);
-    const result = await h.run('https://source.test');
-    expect(result.status).toBe(status);
-    expect(result.headers.get('content-range')).toBe('0-0/1');
-    expect(await result.text()).toBe(body);
-    expect(h.timers.size).toBe(0);
-  }
-});
+  const h = await harness();
+  try {
+    for (const [path, status] of [['/healthy', 200], ['/unavailable', 503]] as const) {
+      const body = JSON.stringify(status === 200 ? [{ id: 'published-video' }] : { code: 'SOURCE_UNAVAILABLE' });
+      const result = await h.run(path);
+      expect(result.status).toBe(status);
+      expect(result.headers.get('content-range')).toBe('0-0/1');
+      expect(await result.text()).toBe(body);
+    }
+  } finally { await h.close(); }
+}, 3000);
 
 test('bodyless responses retain their status and empty body', async () => {
-  const h = harness((async () => new Response(null, { status: 204 })) as typeof fetch);
-  const result = await h.run('https://source.test');
-  expect(result.status).toBe(204);
-  expect(result.body).toBeNull();
-  expect(h.timers.size).toBe(0);
-});
+  const h = await harness();
+  try {
+    const result = await h.run('/empty');
+    expect(result.status).toBe(204);
+    expect(await result.text()).toBe('');
+  } finally { await h.close(); }
+}, 3000);
 
 test('the next read can recover after a stalled body times out', async () => {
-  let calls = 0;
-  const h = harness((async () => ++calls === 1
-    ? new Response(new ReadableStream({ start() {} }))
-    : Response.json([{ id: 'recovered-video' }])) as typeof fetch);
-  const first = h.run('https://source.test');
-  const rejected = first.catch(() => 'failed');
-  await flush(); h.expire();
-  expect(await rejected).toBe('failed');
-  const recovered = await h.run('https://source.test');
-  expect(await recovered.json()).toEqual([{ id: 'recovered-video' }]);
-  expect(calls).toBe(2);
-  expect(h.timers.size).toBe(0);
-});
+  const h = await harness();
+  try {
+    const first = await h.run('/stalled-body');
+    await expect(first.json()).rejects.toMatchObject({ name: 'TimeoutError' });
+    const recovered = await h.run('/healthy');
+    expect(await recovered.json()).toEqual([{ id: 'published-video' }]);
+    expect(h.requests).toBe(2);
+  } finally { await h.close(); }
+}, 3000);
 
 test('a caller already cancelled cannot issue a source request', async () => {
-  let calls = 0;
-  const h = harness((async () => { calls++; return Response.json([]); }) as typeof fetch);
-  const controller = new AbortController(); controller.abort();
-  await expect(h.run('https://source.test', { signal: controller.signal })).rejects.toThrow();
-  expect(calls).toBe(0);
-  expect(h.timers.size).toBe(0);
-});
+  const h = await harness();
+  const caller = new AbortController();
+  caller.abort();
+  try {
+    await expect(h.run('/healthy', { signal: caller.signal })).rejects.toMatchObject({ name: 'AbortError' });
+    expect(h.requests).toBe(0);
+    expect((await h.run('/healthy')).status).toBe(200);
+    expect(h.requests).toBe(1);
+  } finally { await h.close(); }
+}, 3000);
