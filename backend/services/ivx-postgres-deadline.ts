@@ -1,4 +1,4 @@
-import { recordPoolCheckout } from './ivx-read-timings';
+import { measuredSqlQuery, recordPoolCheckout } from './ivx-read-timings';
 import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
 
@@ -80,7 +80,7 @@ export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
       + (publicRole ? `; SET TRANSACTION READ ONLY; SET LOCAL ROLE ${publicRole === 'anon' ? 'anon' : 'service_role'}; SET LOCAL \"request.jwt.claims\" = '${JSON.stringify({ role: publicRole === 'anon' ? 'anon' : 'service_role' })}'; SET LOCAL \"request.jwt.claim.role\" = '${publicRole === 'anon' ? 'anon' : 'service_role'}'` : ''));
     requireConnection();
     stage = 'query'; stageStartedAt = Date.now();
-    const result = await client.query<T>(text, values);
+    const result = await measuredSqlQuery(() => client.query<T>(text, values));
     requireConnection();
     stage = 'commit'; stageStartedAt = Date.now();
     await client.query('COMMIT');
