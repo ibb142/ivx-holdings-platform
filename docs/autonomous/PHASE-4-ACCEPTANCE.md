@@ -88,7 +88,13 @@ start a worker, change controls or generate activity. An input JSON contains
 `sourceSha`, a timestamp (`sampledAt`, row `sampled_at`, or `capturedAt`) and
 `data`: the 112 current-SHA patrol rows, including `task_id`,
 `assigned_agent_number`, `idempotency_key`, `state`, lease fields and
-`latest_evidence`. Preserve the original query timestamp and raw samples.
+`latest_evidence` and `unit_evidence`: the newest immutable evidence for **every**
+unit assigned to that IA in `scripts/ivx-phase4-unit-catalog.json`. The catalog is
+checked against the production patrol assignment in regression tests. The sample
+cannot supply its own reduced coverage list. Retain FAIL/BLOCKED per unit until
+that same unit has a valid fresh recheck. IA15 min-count PASS cannot erase its
+videos-present FAIL. Missing, duplicated, stale, wrong-SHA or tampered secondary
+unit evidence fails the sample, including legacy latest-only inputs. Preserve the original query timestamp and raw samples.
 
 ```sh
 node scripts/ivx-phase4-continuity.mjs report.json sample-001.json sample-002.json

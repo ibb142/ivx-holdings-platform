@@ -1,11 +1,30 @@
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 // Observation acceptance policy, not a throughput estimate or a worker control.
 export const POLICY = Object.freeze({ agents: 112, evidenceMaxAgeMs: 120_000,
   sampleMaxGapMs: 120_000, initialWindowMs: 24 * 60 * 60 * 1000 });
 const hash = value => createHash('sha256').update(value).digest('hex');
+// Kept in sync with the authoritative production assignment by a regression.
+// Input samples cannot narrow their own required coverage to manufacture PASS.
+const UNIT_CATALOG = JSON.parse(readFileSync(new URL('./ivx-phase4-unit-catalog.json', import.meta.url), 'utf8'));
+function decodeEvidence(evidence, number, sourceSha, now) {
+  if (!evidence?.evidenceId || evidence.commitSha !== sourceSha ||
+      !evidence.source?.startsWith('continuous-patrol:') ||
+      !evidence.summary?.startsWith('LANDING_P0_RESULT ') ||
+      hash(evidence.summary) !== evidence.contentHash) throw new Error('invalid evidence');
+  const record = JSON.parse(evidence.summary.slice('LANDING_P0_RESULT '.length));
+  const ended = Date.parse(record.completed_at), persisted = Date.parse(evidence.createdAt);
+  const started = Date.parse(record.started_at);
+  if (record.v !== 1 || record.agent_number !== number || record.production_sha !== sourceSha ||
+      !UNIT_CATALOG[number]?.includes(record.unit_id) ||
+      !['PASS', 'FAIL', 'BLOCKED'].includes(record.status) ||
+      ![started, ended, persisted, now].every(Number.isFinite) || started > ended ||
+      ended > now || persisted > now || persisted < ended) throw new Error('invalid evidence');
+  return record;
+}
 
 export function evaluateSample(snapshot) {
   const errors = [];
@@ -24,6 +43,7 @@ export function evaluateSample(snapshot) {
     const blockers = [];
     let record = null;
     let validEvidence = false;
+    const unitVerdicts = [];
     if (matches.length !== 1) blockers.push(matches.length ? 'DUPLICATE_AGENT' : 'MISSING_AGENT');
     if (row) {
       if (!row.task_id || taskIds.has(row.task_id)) blockers.push('INVALID_TASK_IDENTITY');
@@ -33,23 +53,47 @@ export function evaluateSample(snapshot) {
       }
       const evidence = row.latest_evidence;
       try {
-        if (!evidence?.evidenceId || evidence.commitSha !== sourceSha ||
-            !evidence.source?.startsWith('continuous-patrol:') ||
-            !evidence.summary?.startsWith('LANDING_P0_RESULT ') ||
-            hash(evidence.summary) !== evidence.contentHash) throw new Error('invalid evidence');
-        record = JSON.parse(evidence.summary.slice('LANDING_P0_RESULT '.length));
+        record = decodeEvidence(evidence, number, sourceSha, now);
         const ended = Date.parse(record.completed_at), persisted = Date.parse(evidence.createdAt);
-        const started = Date.parse(record.started_at);
-        if (record.v !== 1 || record.agent_number !== number || record.production_sha !== sourceSha ||
-            !['PASS', 'FAIL', 'BLOCKED'].includes(record.status) ||
-            ![started, ended, persisted, now].every(Number.isFinite) || started > ended ||
-            ended > now || persisted > now) throw new Error('invalid evidence');
         validEvidence = true;
         if (now - ended > POLICY.evidenceMaxAgeMs || now - persisted > POLICY.evidenceMaxAgeMs) {
           blockers.push('STALE_EVIDENCE');
         }
         if (record.status !== 'PASS') blockers.push(`OBSERVATION_${record.status}`);
       } catch { blockers.push('INVALID_OR_MISSING_EVIDENCE'); }
+      const expectedUnits = UNIT_CATALOG[number];
+      const evidenceByUnit = new Map();
+      const ids = new Set();
+      const supplied = Array.isArray(row.unit_evidence) ? row.unit_evidence : [];
+      if (supplied.length !== expectedUnits.length) blockers.push('INCOMPLETE_UNIT_COVERAGE');
+      for (const item of supplied.slice(0, expectedUnits.length + 1)) {
+        try {
+          const unit = decodeEvidence(item, number, sourceSha, now);
+          if (evidenceByUnit.has(unit.unit_id) || ids.has(item.evidenceId)) throw new Error('duplicate unit');
+          evidenceByUnit.set(unit.unit_id, { item, record: unit });
+          ids.add(item.evidenceId);
+        } catch { blockers.push('INVALID_OR_DUPLICATE_UNIT_EVIDENCE'); }
+      }
+      for (const unitId of expectedUnits) {
+        const entry = evidenceByUnit.get(unitId);
+        const reasons = [];
+        if (!entry) reasons.push(`UNIT_${unitId}_MISSING`);
+        else {
+          if (entry.record.status !== 'PASS') reasons.push(`UNIT_${unitId}_${entry.record.status}`);
+          if (now - Date.parse(entry.record.completed_at) > POLICY.evidenceMaxAgeMs ||
+              now - Date.parse(entry.item.createdAt) > POLICY.evidenceMaxAgeMs) reasons.push(`UNIT_${unitId}_STALE`);
+        }
+        blockers.push(...reasons);
+        unitVerdicts.push({ unitId, evidenceId: entry?.item.evidenceId ?? null,
+          evidenceAt: entry?.record.completed_at ?? null, verdict: entry?.record.status ?? null,
+          passed: reasons.length === 0, blockers: reasons });
+      }
+      if (validEvidence) {
+        const latestUnit = evidenceByUnit.get(record.unit_id)?.item;
+        if (latestUnit?.evidenceId !== evidence.evidenceId || latestUnit?.contentHash !== evidence.contentHash) {
+          blockers.push('LATEST_EVIDENCE_NOT_IN_UNIT_COVERAGE');
+        }
+      }
       if (['FAILED', 'BLOCKED', 'CANCELLED', 'EXPIRED', 'PAUSED'].includes(row.state)) blockers.push(`TASK_${row.state}`);
       if (!['QUEUED', 'RETRYING', 'RUNNING', 'VERIFIED', 'NO_ACTION_REQUIRED', 'FAILED', 'BLOCKED', 'CANCELLED', 'EXPIRED', 'PAUSED'].includes(row.state)) {
         blockers.push('UNKNOWN_TASK_STATE');
@@ -63,7 +107,7 @@ export function evaluateSample(snapshot) {
       evidenceId: validEvidence ? row.latest_evidence.evidenceId : null,
       evidenceAt: validEvidence ? record.completed_at : null,
       observationVerdict: validEvidence ? record.status : null,
-      passed: blockers.length === 0, blockers });
+      passed: blockers.length === 0, blockers, unitVerdicts });
   }
   const passed = errors.length === 0 && agents.every(agent => agent.passed);
   return { sourceSha, sampledAt, passed, errors, agents, freshPassingAgents: agents.filter(agent => agent.passed).length,
