@@ -72,3 +72,27 @@ test('real Supabase SDK cannot retry a wrapper deadline as a network failure', a
     expect(calls).toBe(1);
   } finally { clearTimeout(watchdog); stop.abort(); globalThis.fetch = originalFetch; }
 });
+
+test('sequential dependencies inherit one budget and Request cancellation remains effective', async () => {
+  const original = globalThis.fetch;
+  const metrics = newReadTimings(45);
+  let calls = 0;
+  globalThis.fetch = (async (_input, init) => {
+    calls++;
+    const signal = init!.signal!;
+    signal.throwIfAborted();
+    return new Promise<Response>((resolve, reject) => {
+      const timer = setTimeout(() => resolve(Response.json({ ok: true })), 30);
+      signal.addEventListener('abort', () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
+    });
+  }) as typeof fetch;
+  try {
+    await expect(readTimings.run(metrics, async () => {
+      await (await measuredReadFetch('https://example.test/first')).json();
+      await measuredReadFetch('https://example.test/second');
+    })).rejects.toMatchObject({ name: 'AbortError' });
+    expect(calls).toBe(2);
+    const controller = new AbortController(); controller.abort();
+    await expect(readTimings.run(newReadTimings(1000), () => measuredReadFetch(new Request('https://example.test', { signal: controller.signal })))).rejects.toMatchObject({ name: 'AbortError' });
+  } finally { globalThis.fetch = original; }
+});
