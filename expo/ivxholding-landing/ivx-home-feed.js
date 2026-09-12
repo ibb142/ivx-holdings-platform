@@ -60,7 +60,7 @@
         if (!r.ok || ct.indexOf('json') === -1) throw new Error('bad response');
         return r.json();
       })
-      .catch(function () { return fetchHomeFeed(i + 1); });
+      .catch(function (err) { console.error('[IVX HomeFeed] API fetch error:', err); return fetchHomeFeed(i + 1); });
   }
 
   /* ---------- lazy HLS ---------- */

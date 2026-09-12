@@ -93,6 +93,38 @@ describe('worker owner-control enforcement', () => {
       else process.env.IVX_PROCESS_ROLE = previousRole;
     }
   });
+  test('cancellation during the start guard cannot be overwritten by admission', async () => {
+    const previousRole = process.env.IVX_PROCESS_ROLE;
+    process.env.IVX_PROCESS_ROLE = 'api';
+    let releaseGuard!: () => void;
+    let enteredGuard!: () => void;
+    const released = new Promise<void>(resolve => { releaseGuard = resolve; });
+    const entered = new Promise<void>(resolve => { enteredGuard = resolve; });
+    let execution: Promise<unknown> | undefined;
+    try {
+      const { job } = await enqueueOrAttachSeniorDeveloperJob(makeInput({ ownerId: 'cancel-start-boundary' }));
+      stopRead.mockImplementationOnce(async () => { enteredGuard(); await released; return stopState; });
+      execution = processNextSeniorDeveloperJob();
+      await entered;
+      const cancelled = await cancelSeniorDeveloperJob(job.jobId);
+      expect(cancelled?.status).toBe('cancelled');
+      releaseGuard();
+      await execution;
+      const stored = await getSeniorDeveloperJob(job.jobId);
+      expect(stored?.status).toBe('cancelled');
+      expect(stored?.startedAt).toBeNull();
+      expect(stored?.attempts).toBe(0);
+      expect(stored?.cancelledAt).toBe(cancelled?.cancelledAt);
+      expect(stored?.finishedAt).toBe(cancelled?.finishedAt);
+      expect(stored?.error).toBe('Job cancelled by owner.');
+      expect(stored?.result).toBeNull();
+    } finally {
+      releaseGuard();
+      await execution;
+      if (previousRole === undefined) delete process.env.IVX_PROCESS_ROLE;
+      else process.env.IVX_PROCESS_ROLE = previousRole;
+    }
+  });
 });
 
 describe('summarizeProof', () => {
