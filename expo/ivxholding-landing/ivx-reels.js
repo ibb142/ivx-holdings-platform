@@ -506,6 +506,33 @@
     feedEl.appendChild(em);
   }
 
+  // Fetch optional counters after cards render. Failure never rejects the feed.
+  function loadDeferredAnalytics(videos, isCurrent) {
+    var pending = videos.filter(function (v) { return v.analytics_status === 'deferred'; }).slice(0, 50);
+    if (!pending.length) return;
+    setTimeout(function () {
+      if (isCurrent && !isCurrent()) return;
+      var controller = new AbortController();
+      var timer = setTimeout(function () { controller.abort(); }, 6500);
+      fetch(API + '/api/videos/analytics?ids=' + encodeURIComponent(pending.map(function (v) { return v.id; }).join(',')), { signal: controller.signal })
+        .then(function (r) { if (!r.ok) throw new Error('analytics unavailable'); return r.json(); })
+        .then(function (data) {
+          if (isCurrent && !isCurrent()) return;
+          var counts = {};
+          (data.videos || []).forEach(function (v) { counts[v.id] = v.view_count; });
+          pending.forEach(function (v) {
+            if (Object.prototype.hasOwnProperty.call(counts, v.id)) {
+              v.view_count = counts[v.id]; v.analytics_status = 'ready';
+            } else v.analytics_status = 'unavailable';
+          });
+        })
+        .catch(function () {
+          if (!isCurrent || isCurrent()) pending.forEach(function (v) { v.analytics_status = 'unavailable'; });
+        })
+        .finally(function () { clearTimeout(timer); });
+    }, 0);
+  }
+
   function loadMore() {
     if (state.loading || state.done) return;
     state.loading = true;
@@ -537,6 +564,7 @@
                 state.videos[v.id] = v;
                 feedEl.appendChild(buildSlide(v, false));
               });
+              loadDeferredAnalytics(fbVids, isCurrentFeed);
               state.cursor = fbData && fbData.next_cursor;
               if (!state.cursor) state.done = true;
               finishLoad();
@@ -552,6 +580,7 @@
           state.videos[v.id] = v;
           feedEl.appendChild(buildSlide(v, false));
         });
+        loadDeferredAnalytics(vids, isCurrentFeed);
         state.cursor = data && data.next_cursor;
         if (!state.cursor) state.done = true;
         finishLoad();

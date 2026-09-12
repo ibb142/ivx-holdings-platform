@@ -1,3 +1,4 @@
+import { measuredReadFetch } from '../services/ivx-read-timings';
 /**
  * IVX Public Feature Handlers — registered under /api/ivx/*
  *
@@ -22,7 +23,7 @@ async function getPublicDealsSB() {
   const { createClient } = await import('@supabase/supabase-js');
   const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://kvclcdjmjghndxsngfzb.supabase.co').trim();
   const publicAnonKey = (process.env.SUPABASE_PUBLISHABLE_KEY || IVX_PUBLIC_SUPABASE_KEY).trim();
-  return createClient(url, publicAnonKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  return createClient(url, publicAnonKey, { auth: { autoRefreshToken: false, persistSession: false }, global: { fetch: measuredReadFetch } });
 }
 
 function json(data: unknown, status = 200): Response {

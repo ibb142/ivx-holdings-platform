@@ -1,3 +1,4 @@
+import { recordPoolCheckout } from './ivx-read-timings';
 import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
 
@@ -31,6 +32,7 @@ export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
     } catch { /* Preserve the original database failure if logging fails. */ }
   };
   const client = await pool.connect().catch(error => { reportFailure(error); throw error; });
+  recordPoolCheckout(Math.max(0, Date.now() - startedAt));
   let failed = false;
   let connectionError: Error | null = null;
   const onConnectionError = (error: Error) => { connectionError = error; };

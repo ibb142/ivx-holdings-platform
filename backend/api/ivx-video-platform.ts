@@ -1,3 +1,4 @@
+import { measuredReadFetch } from '../services/ivx-read-timings';
 import { createFeedResponseCache } from '../services/ivx-feed-response-cache';
 import { loadViewerEngagement } from '../services/ivx-viewer-engagement';
 import { createPlatformFeedLoader } from '../services/ivx-platform-feed-loader';
@@ -108,7 +109,7 @@ async function getSB() {
     const deadline = AbortSignal.timeout(SB_TIMEOUT_MS);
     const caller = init?.signal ?? (input instanceof Request ? input.signal : undefined);
     const signal = caller ? AbortSignal.any([caller, deadline]) : deadline;
-    return fetch(input, { ...init, signal });
+    return measuredReadFetch(input, { ...init, signal });
   };
   _sb = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false }, global: { fetch: timeoutFetch } });
   return _sb;
@@ -293,7 +294,8 @@ const readPlatformFeedInputs = createPlatformFeedLoader({
   meta: getMetaDoc,
   counts: async ids => loadEngagementCounts(await getSB(), ids),
   playback: loadPlaybackIndex,
-  analytics: getAnalyticsDoc,
+  // Feed ranking uses engagement + admin order; analytics are fetched after render.
+  analytics: async (): Promise<Awaited<ReturnType<typeof getAnalyticsDoc>>> => ({ videos: {}, history: {} }),
   deals: async () => readFeedDealRows(await getSB()),
   playable: async (videos, metaDoc) => {
     const now = Date.now();
@@ -414,7 +416,6 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
       const v = p.row;
       const pb = playback[p.id];
       const m = p.meta;
-      const stats = analyticsDoc.videos[p.id];
       const deal = dealsById[p.id] ?? null;
       return {
         id: p.id,
@@ -437,7 +438,8 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
         comment_count: p.comment_count,
         share_count: p.share_count,
         save_count: p.save_count,
-        view_count: stats?.views ?? 0,
+        view_count: null,
+        analytics_status: 'deferred',
         audiences: m.audiences,
         property_id: m.property_id,
         creator_id: m.creator_id,
@@ -679,7 +681,6 @@ export async function handlePlatformHomeFeed(req: Request): Promise<Response> {
       if (usedProjects.has(projectKey)) continue;
       usedProjects.add(projectKey);
       const pb = playback[r.id];
-      const stats = analyticsDoc.videos[r.id];
       const deal = resolved.dealId ? dealById.get(resolved.dealId) ?? null : null;
       featuredVideos.push({
         id: r.id,
@@ -701,7 +702,8 @@ export async function handlePlatformHomeFeed(req: Request): Promise<Response> {
         comment_count: r.comment_count,
         share_count: r.share_count,
         save_count: r.save_count,
-        view_count: stats?.views ?? 0,
+        view_count: null,
+        analytics_status: 'deferred',
         video_type: r.meta.video_type,
         is_featured: true,
         property_id: resolved.dealId ?? r.meta.property_id,
@@ -819,6 +821,27 @@ export async function handlePlatformEvents(req: Request): Promise<Response> {
     return json({ ok: true, recorded, marker: VIDEO_PLATFORM_MARKER });
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : 'events failed', marker: VIDEO_PLATFORM_MARKER }, 500);
+  }
+}
+
+/** Optional public aggregates. Never expose viewer IDs or watch history. */
+export async function handleDeferredVideoAnalytics(req: Request): Promise<Response> {
+  const ids = [...new Set((new URL(req.url).searchParams.get('ids') ?? '').split(',').filter(Boolean))];
+  if (!ids.length || ids.length > 50 || ids.some(id => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
+    return json({ error: 'Provide 1 to 50 video UUIDs' }, 400);
+  }
+  try {
+    const sb = await getSB();
+    const [{ data, error }, meta] = await Promise.all([
+      sb.from('project_videos').select('id').in('id', ids).eq('is_approved', true), getMetaDoc(),
+    ]);
+    if (error) throw error;
+    const visible = (data ?? []).filter((v: { id: string }) => isMetaVisible(normalizeVideoMeta(meta[v.id])));
+    if (!visible.length) return json({ videos: [] });
+    const analytics = await getAnalyticsDoc();
+    return json({ videos: visible.map((v: { id: string }) => ({ id: v.id, view_count: analytics.videos[v.id]?.views ?? 0 })) });
+  } catch {
+    return json({ error: 'Video analytics temporarily unavailable', code: 'ANALYTICS_UNAVAILABLE' }, 503);
   }
 }
 
