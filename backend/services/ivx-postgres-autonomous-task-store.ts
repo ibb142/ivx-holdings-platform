@@ -596,10 +596,16 @@ export async function readSeniorActiveOwnerJobPostgres<T extends { ownerId: stri
   emergencyStopPostgresConfig();
   if (!ownerId.trim()) throw new Error('Repair owner identity is required');
   const result = await queryWithPostgresDeadline<{ job: T }>(getDirectPool(process.env, 'repair'),
-    `select job from public.ivx_durable_documents d
-      cross join lateral jsonb_array_elements(d.value->'jobs') with ordinality as j(job, ordinal)
-      where d.doc_key = $1 and job->>'ownerId' = $2 and job->>'status' = any($3::text[])
-      order by ordinal desc limit 1`,
+    `select d.value->'jobs'->picked.ordinal as job
+      from public.ivx_durable_documents d
+      cross join lateral (
+        select ordinal
+        from generate_series(0, jsonb_array_length(d.value->'jobs') - 1) as positions(ordinal)
+        where (d.value->'jobs'->ordinal)->>'ownerId' = $2
+          and (d.value->'jobs'->ordinal)->>'status' = any($3::text[])
+        order by ordinal desc limit 1
+      ) picked
+      where d.doc_key = $1`,
     ['senior-developer-worker/queue.json', ownerId, [...SENIOR_QUEUE_ACTIVE_STATUSES]]);
   const job = result.rows[0]?.job ?? null;
   if (job && (job.ownerId !== ownerId || !(SENIOR_QUEUE_ACTIVE_STATUSES as readonly string[]).includes(job.status))) {

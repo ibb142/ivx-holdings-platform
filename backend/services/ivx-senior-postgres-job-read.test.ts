@@ -59,7 +59,7 @@ test('owner lookup binds identity, returns only one active checkpoint and propag
   const query = spyOn(deadline, 'queryWithPostgresDeadline').mockResolvedValue({ rows: [{ job: { ownerId: 'owner-1', status: 'running', jobId: 'job-1' } }] } as never);
   try {
     expect((await readSeniorActiveOwnerJobPostgres('owner-1'))?.ownerId).toBe('owner-1');
-    expect(query.mock.calls[0][1]).toContain("job->>'ownerId' = $2");
+    expect(query.mock.calls[0][1]).toContain("->>'ownerId' = $2");
     expect(query.mock.calls[0][1]).toContain('order by ordinal desc limit 1');
     expect(query.mock.calls[0][2]?.[1]).toBe('owner-1');
     query.mockResolvedValue({ rows: [{ job: { ownerId: 'other', status: 'running' } }] } as never);
