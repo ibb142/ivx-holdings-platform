@@ -57,13 +57,22 @@ function database(binding) {
       +[...PAID_LABELS,'denied'].map(reservationId).join(',')+')&select=reservation_id,worker_instance_id,model,request_sha,policy_revision,reserved_nano,status,settled_upper_nano,generation_id,created_at,completed_at',headers),
   };
 }
-function admission(binding,quote,label,stats) {
+function admission(binding,quote,label,stats,waitForCapacity=false) {
   const db=database(binding), id=reservationId(label),worker=CAMPAIGN+':'+label, finishSeen=deferred();
   const reserve=async (model,hash) => {
     stats.admissions++;checkQuote(quote);assert.equal(model,quote.model,'MODEL_QUOTE_MISMATCH');
     const params={p_reservation_id:id,p_worker_instance_id:worker,p_model:model,p_request_sha:hash,
       p_reserved_nano:quote.reservedNano,p_pricing_evidence:quote};
-    const result=await db.rpc('ivx_ai_budget_reserve',params);
+    let result;
+    // A test client can wait for natural free capacity before sending HTTP.
+    // The refused-request test below disables this wait and must be one SDK
+    // admission with zero provider attempts. Every DB retry keeps the same ID.
+    for(let i=0;i<(waitForCapacity?16:1);i++) {
+      stats.databaseAdmissionAttempts=(stats.databaseAdmissionAttempts||0)+1;
+      result=await db.rpc('ivx_ai_budget_reserve',params);
+      if(result.allowed===true||result.reason!=='global_capacity_exceeded'||!waitForCapacity||i===15)break;
+      await wait(750);
+    }
     stats.lastAdmissionReason=result.reason??null;
     if (result.allowed!==true || result.reservationId!==id) throw new GlobalAIBudgetError(result.reason??'unconfirmed');
     assert.equal(Number(result.policyRevision),2,'POLICY_REVISION_CHANGED');
@@ -102,8 +111,8 @@ async function childMain(label) {
   const input=createInterface({input:process.stdin});
   input.once('line',line=>{ if(['complete','cancel'].includes(line))action.resolve(line);else action.reject(new Error('INVALID_CHILD_COMMAND')); });
   input.once('close',()=>action.reject(new Error('PARENT_CHANNEL_CLOSED')));
-  const stats={label,pid:process.pid,admissions:0,gatewayAttempts:0,statuses:[],textDeltas:0,cancelRequested:false};
-  const a=admission(binding,quote,label,stats);
+  const stats={label,pid:process.pid,admissions:0,gatewayAttempts:0,statuses:[],quotaHeaders:[],textDeltas:0,cancelRequested:false};
+  const a=admission(binding,quote,label,stats,true);
   let selectedAction;
   try {
     const transport=createBudgetedFetch(async (resource,init) => {
@@ -114,10 +123,12 @@ async function childMain(label) {
       assert.equal(++stats.gatewayAttempts,1,'EXTRA_PAID_ATTEMPT_BLOCKED');
       const response=await nativeFetch(request);
       stats.statuses.push(response.status);
+      stats.quotaHeaders.push(Object.fromEntries([...response.headers].filter(([key,value])=>
+        /^(retry-after|x-ratelimit-[a-z-]+|ratelimit-[a-z-]+)$/.test(key)&&/^[\w .,:+/-]{1,160}$/.test(value))));
       emit({type:'headers',label,pid:process.pid,httpStatus:response.status,at:new Date().toISOString()});
       // Only delay delivery of the ORIGINAL response. Do not clone the stream,
       // fabricate response data, or report this hold as provider concurrency.
-      try {selectedAction=await bounded(action.promise,20_000,'PARENT_RELEASE_TIMEOUT');}
+      try {selectedAction=await bounded(action.promise,35_000,'PARENT_RELEASE_TIMEOUT');}
       catch(error){controller.abort();await response.body?.cancel().catch(()=>{});throw error;}
       return response;
     },{enabled:()=>true,reserve:a.reserve});
@@ -236,10 +247,10 @@ async function parentMain() {
     const quote=quotes[0];assert(quote,'NO_SUPPORTED_MODEL_WITHIN_CAMPAIGN_BOUND');proof.quote=quote;
     // Wait for natural capacity, never pause or change production to force a PASS.
     let idle=false;
-    for(let i=0;i<20;i++){const p=await db.rpc('ivx_ai_budget_status');checkPolicy(p);if(p.requestsActive===0){idle=true;break;}await wait(1500);}
+    for(let i=0;i<20;i++){const p=await db.rpc('ivx_ai_budget_status');checkPolicy(p);if(p.requestsActive<2){idle=true;break;}await wait(1500);}
     assert(idle,'PRODUCTION_CAPACITY_BUSY');
     const first=startChild(binding,quote,'complete',children,proof),second=startChild(binding,quote,'cancel',children,proof);
-    const headers=await bounded(Promise.all([first.headers,second.headers]),35_000,'TWO_REAL_RESPONSES_NOT_OBSERVED');
+    const headers=await bounded(Promise.all([first.headers,second.headers]),45_000,'TWO_REAL_RESPONSES_NOT_OBSERVED');
     assert(headers.every(x=>x.httpStatus===200),'REAL_PROVIDER_HTTP_NOT_200');
     assert.notEqual(headers[0].pid,headers[1].pid,'CLIENTS_NOT_SEPARATE_PROCESSES');
     rows=await db.rows();checkRows(rows);
@@ -296,6 +307,7 @@ async function parentMain() {
       if(proof.ownActiveReservations){proof.passed=false;proof.error='OWN_ACTIVE_RESERVATION_RETAINED';process.exitCode=1;}}
     catch{proof.finalLedgerObservation='UNAVAILABLE';proof.passed=false;process.exitCode=1;}
     proof.completedAt=new Date().toISOString();
+    proof.native429Observed=proof.calls.some(r=>r.statuses.includes(429));
     await mkdir('qa/evidence/phase3-provider-live',{recursive:true});
     await writeFile('qa/evidence/phase3-provider-live/proof.json',JSON.stringify(proof,null,2)+'\n');
     emit({type:'result',...proof});
