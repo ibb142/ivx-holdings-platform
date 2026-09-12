@@ -48,9 +48,11 @@ async function boundedLog(response: Response): Promise<{ text: string; prefix: s
       const chunk = await reader.read();
       if (chunk.done) {
         const head = prefix.toString('utf8');
+        const end = tail.toString('utf8');
+        const boundary = end.indexOf('\n');
         return { prefix: head, text: bytes > MAX_LOG_BYTES
           ? head.slice(0, Math.max(0, head.lastIndexOf('\n'))) + '\n[bounded log tail follows]\n'
-            + tail.toString('utf8').slice(tail.toString('utf8').indexOf('\n') + 1) : head,
+            + (boundary < 0 ? '' : end.slice(boundary + 1)) : head,
           truncated: bytes > MAX_LOG_BYTES };
       }
       bytes += chunk.value.byteLength;
