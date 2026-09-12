@@ -37,7 +37,7 @@ export function checkQuote(quote, now = Date.now()) {
   assert(Date.parse(quote.observedAt) <= now && Date.parse(quote.validUntil) > now, 'QUOTE_EXPIRED');
   assert(/^[a-f0-9]{64}$/.test(quote.catalogSha256 ?? ''), 'INVALID_CATALOG_HASH');
 }
-function dbFor(context) {
+export function dbFor(context) {
   return {
     async rpc(name,body={}) {
       assert(['ivx_ai_budget_status','ivx_ai_budget_reserve','ivx_ai_budget_finish'].includes(name),'UNREVIEWED_RPC');
@@ -64,7 +64,7 @@ function dbFor(context) {
     },
   };
 }
-async function freshQuote(model) {
+export async function freshQuote(model) {
   const r = await requestJson(ORIGIN + '/v1/models', '', { timeout:15000 });
   assert.equal(r.status, 200, 'CATALOG_HTTP_FAILED');
   const hash = createHash('sha256').update(JSON.stringify(r.data)).digest('hex');
@@ -137,7 +137,7 @@ export function receiptCoverageNano(quote, settlement, costNano) {
   assert(BigInt(costNano)>0n && BigInt(costNano)<=covered,'RECEIPT_COST_NOT_COVERED');
   return covered.toString();
 }
-async function observedReceipt(key,id,model) {
+export async function observedReceipt(key,id,model) {
   let receipt;
   for(let i=0;i<25;i++){
     const r=await requestJson(ORIGIN+'/v1/generation?id='+encodeURIComponent(id),key);
@@ -168,7 +168,7 @@ export function terminalRowMatches(row, params, quote, hash) {
     && (row.generation_id??null)===(params.p_generation_id??null));
 }
 
-async function callProvider(context, db, key, label, quote) {
+export async function callProvider(context, db, key, label, quote) {
   checkQuote(quote);
   const proof = context.proof;
   const before = await db.rows();
