@@ -1,0 +1,36 @@
+name: Phase 3 native Vercel control
+on:
+  push:
+    branches: ['verify/phase3-native-token-20260912']
+    paths: ['qa/phase3-native-control.mjs', '.github/workflows/ivx-phase3-native-control.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: phase3-native-vercel-control
+  cancel-in-progress: false
+jobs:
+  management-observation:
+    if: github.repository == 'ibb142/ivx-holdings-platform'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Observe native management access without exposing credentials
+        run: node qa/phase3-native-control.mjs
+        env:
+          IVX_NATIVE_REVIEW: phase3-native-20260912
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
+          IVX_VERCEL_TOKEN: ${{ secrets.IVX_VERCEL_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase3-native-management-${{ github.sha }}-${{ github.run_attempt }}
+          path: qa/evidence/phase3-native/management.json
+          if-no-files-found: error
+          retention-days: 30
