@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { observeBudgetReconciliation } from './phase3-budget-reconciliation.mjs';
 
 // Read-only production configuration and observed capacity. Never export envs,
@@ -98,8 +98,16 @@ result.budgetReconciliation = sharedBinding
   ? await observeBudgetReconciliation({ ...binding, sourceSha: sha })
   : { state: 'UNOBSERVED', reason: 'SERVICE_BINDINGS_DIFFER', modelCallsCreated: 0,
       productionRowsChanged: 0, secretsReturned: false, phase3Closed: false };
-result.billingMismatchCount = (result.budgetReconciliation.records || [])
-  .filter(record => record.reason === 'PROVIDER_COST_EXCEEDS_LEDGER').length;
+// Revisit the documented discrepancies even after they leave the latest-112
+// sample. This review follows the same Owner/HA/stability gates and only reads.
+const review = JSON.parse(await readFile(new URL('./certification/phase3-billing-review.json', import.meta.url), 'utf8'));
+assert.equal(review.version, 1);
+result.documentedReceiptReview = sharedBinding
+  ? await observeBudgetReconciliation({ ...binding, sourceSha: sha, reviewDay: review.day, reservationIds: review.reservationIds })
+  : { state: 'UNOBSERVED', reason: 'SERVICE_BINDINGS_DIFFER', productionRowsChanged: 0, modelCallsCreated: 0 };
+result.billingMismatchCount = new Set([
+  ...(result.budgetReconciliation.records || []), ...(result.documentedReceiptReview.records || []),
+].filter(record => record.reason === 'PROVIDER_COST_EXCEEDS_LEDGER').map(record => record.reservationId)).size;
 await checkpoint();
 const samples = [];
 for (let index=0; index<2; index++) {

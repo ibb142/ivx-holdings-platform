@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { GlobalAIBudgetError, globalAIBudgetEnabled, reserveGlobalAIBudget, type BudgetLease, type BudgetUsage } from './ivx-global-ai-budget';
+import { providerReportedCostNano, readGatewayReceiptCost } from './ivx-provider-reported-cost';
 
 const PROVIDER_HOSTS = new Set(['ai-gateway.vercel.sh','api.openai.com','api.anthropic.com','api.elevenlabs.io']);
 const KEY_NAMES = ['OPENAI_API_KEY','IVX_OPENAI_API_KEY','IVX_OPENAI_DIRECT_API_KEY','IVX_AI_GATEWAY_KEY',
@@ -29,6 +30,11 @@ function modelForRequest(request: Request, body: Record<string, unknown>): strin
   const url = new URL(request.url);
   if (request.method !== 'POST' || !['/v4/ai/language-model','/v3/ai/language-model','/v1/chat/completions','/v1/messages'].includes(url.pathname)) {
     throw new GlobalAIBudgetError('unpriced provider operation');
+  }
+  if (url.origin === 'https://ai-gateway.vercel.sh' && (
+    request.headers.has('ai-reporting-tags') || request.headers.has('ai-reporting-user')
+    || body.user !== undefined || body.tags !== undefined || body.quotaEntity !== undefined || body.quota_entity !== undefined)) {
+    throw new GlobalAIBudgetError('unpriced gateway reporting metadata');
   }
   // Paid tools, output modalities and custom gateway routing require their own
   // price envelopes. Do not let an unknown request spend through a text quote.
@@ -63,7 +69,18 @@ export function usageFromProvider(value: unknown): BudgetUsage | null {
       || ![input,output].every(n => Number.isSafeInteger(n) && n >= 0)) return null;
   const metadata = record(record(obj.providerMetadata).gateway);
   const id = metadata.generationId ?? obj.generationId ?? obj.id;
-  return { inputTokens: input, outputTokens: output, ...(typeof id === 'string' ? { generationId: id.slice(0,200) } : {}) };
+  let providerCostNano: string | undefined;
+  if (metadata.cost !== undefined) {
+    try { providerCostNano = providerReportedCostNano(metadata.cost); }
+    catch { return null; }
+  }
+  return { inputTokens: input, outputTokens: output, ...(typeof id === 'string' ? { generationId: id.slice(0,200) } : {}),
+    ...(providerCostNano !== undefined ? { providerCostNano } : {}) };
+}
+function generationFromProvider(value: unknown): string | undefined {
+  const obj = record(value), metadata = record(record(obj.providerMetadata).gateway);
+  const id = metadata.generationId ?? obj.generationId ?? obj.id;
+  return typeof id === 'string' && /^gen_[0-9A-HJKMNP-TV-Z]{26}$/.test(id) ? id : undefined;
 }
 
 export function createBudgetedFetch(nativeFetch: typeof fetch, dependencies: {
@@ -94,6 +111,7 @@ export function createBudgetedFetch(nativeFetch: typeof fetch, dependencies: {
     const controller = new AbortController();
     const signal = AbortSignal.any([request.signal, controller.signal]);
     const deadline = setTimeout(() => controller.abort(new Error('Global AI provider request deadline exceeded')), 120_000);
+    const providerStartedAt = Date.now();
     let response: Response;
     try { response = await nativeFetch(request, { signal, redirect: 'error' }); }
     catch (error) { clearTimeout(deadline); await lease.finish(null); throw error; }
@@ -102,6 +120,8 @@ export function createBudgetedFetch(nativeFetch: typeof fetch, dependencies: {
     const decoder = new TextDecoder();
     const isSse = response.headers.get('content-type')?.includes('text/event-stream');
     let buffer = '', recordedBytes = 0, truncated = false, usage: BudgetUsage | null = null, finished = false, terminalUsage = false;
+    let generationId: string | undefined;
+    let invalidStreamEvidence = false;
     let finishPending: Promise<void> | null = null;
     function capture(chunk: Uint8Array) {
       if (truncated) return;
@@ -115,9 +135,15 @@ export function createBudgetedFetch(nativeFetch: typeof fetch, dependencies: {
           if (data === '[DONE]') { terminalUsage = usage !== null; continue; }
           try {
             const event = record(JSON.parse(data));
+            generationId = generationFromProvider(event) ?? generationId;
             const candidate = usageFromProvider(event);
-            if (candidate) { usage = candidate; terminalUsage = event.type === 'finish'; }
-          } catch { /* Malformed or non-JSON SSE data retains the full liability. */ }
+            if (event.type === 'finish' && !candidate) invalidStreamEvidence = true;
+            const cost = record(record(event.providerMetadata).gateway).cost;
+            if (cost !== undefined) {
+              try { providerReportedCostNano(cost); } catch { invalidStreamEvidence = true; }
+            }
+            if (candidate) { usage = { ...candidate, ...(generationId ? { generationId } : {}) }; terminalUsage = event.type === 'finish'; }
+          } catch { invalidStreamEvidence = true; }
         }
       }
     }
@@ -126,9 +152,19 @@ export function createBudgetedFetch(nativeFetch: typeof fetch, dependencies: {
       clearTimeout(deadline);
       signal.removeEventListener('abort', onAbort);
       if (completed && !isSse && !truncated) {
-        try { usage = usageFromProvider(JSON.parse(buffer)); } catch { usage = null; }
+        try { const payload = JSON.parse(buffer); generationId = generationFromProvider(payload); usage = usageFromProvider(payload); }
+        catch { usage = null; }
       }
-      finishPending = lease.finish(completed && response.ok && !truncated && (!isSse || terminalUsage) ? usage : null);
+      finishPending = (async () => {
+        let verifiedUsage = completed && response.ok && !truncated && !invalidStreamEvidence && (!isSse || terminalUsage) ? usage : null;
+        if (verifiedUsage && new URL(request.url).origin === 'https://ai-gateway.vercel.sh'
+            && verifiedUsage.providerCostNano === undefined) {
+          const providerCostNano = await readGatewayReceiptCost({ request, generationId,
+            model: lease.quote.model, startedAt: providerStartedAt, completedAt: Date.now() }, { fetcher: nativeFetch });
+          verifiedUsage = providerCostNano === null ? null : { ...verifiedUsage, providerCostNano };
+        }
+        await lease.finish(verifiedUsage, false, generationId);
+      })();
       await finishPending;
     }
     function onAbort() {

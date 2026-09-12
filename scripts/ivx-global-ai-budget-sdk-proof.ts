@@ -15,6 +15,7 @@ const transport = createBudgetedFetch((async (input: RequestInfo | URL, init?: R
   nativeCalls++;
   return Response.json({ content: [{ type: 'text', text: 'bounded fixture' }],
     finishReason: { unified: 'stop', raw: 'stop' }, warnings: [],
+    providerMetadata: { gateway: { cost: '0.000008' } },
     usage: { inputTokens: { total: 2, noCache: 2, cacheRead: 0, cacheWrite: 0 },
       outputTokens: { total: 3, text: 3, reasoning: 0 } } });
 }) as typeof fetch, { enabled: () => true, reserve: async (model, hash) => {
@@ -22,7 +23,7 @@ const transport = createBudgetedFetch((async (input: RequestInfo | URL, init?: R
   assert.equal(model, 'openai/fixture'); assert.match(hash, /^[a-f0-9]{64}$/);
   if (mode === 'deny') throw new GlobalAIBudgetError('global_daily_budget_exceeded');
   return { quote: quoteCatalogModel(fixture, model, Date.now(), 'a'.repeat(64)), finish: async usage => {
-    assert.deepEqual(usage, { inputTokens: 2, outputTokens: 3 }); settlements++;
+    assert.deepEqual(usage, { inputTokens: 2, outputTokens: 3, providerCostNano: '8000' }); settlements++;
   } };
 } });
 const gateway = createGateway({ apiKey: 'vck_isolated_fixture', fetch: transport });
@@ -42,3 +43,4 @@ const proof = { verification: 'PASS', sourceSha: process.env.GITHUB_SHA ?? null,
 await mkdir('qa/evidence/fleet-ha', { recursive: true });
 await writeFile('qa/evidence/fleet-ha/global-ai-budget-sdk.json', JSON.stringify(proof, null, 2) + '\n');
 console.log(JSON.stringify(proof));
+
