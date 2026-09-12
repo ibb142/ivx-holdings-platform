@@ -1,5 +1,5 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
-import * as deadline from './ivx-postgres-deadline';
+import * as deadline from './ivx-senior-queue-read-budget';
 import { readSeniorActiveOwnerJobPostgres, readSeniorQueuePostgresJob, readSeniorWorkQueuePostgres, resetPostgresAutonomousTaskStoreForTests } from './ivx-postgres-autonomous-task-store';
 import { SENIOR_QUEUE_JOB_SQL, SENIOR_WORK_QUEUE_SQL, SENIOR_WORK_QUEUE_PATH } from './ivx-senior-work-queue';
 
@@ -12,7 +12,7 @@ function configure() {
 
 test('direct polling projects one job with bound identities and detects duplicate or mismatched results', async () => {
   configure();
-  const query = spyOn(deadline, 'queryWithPostgresDeadline').mockResolvedValue({ rows: [{ job: { jobId: 'job-1', status: 'running' } }] } as never);
+  const query = spyOn(deadline, 'queryWithSeniorQueueReadBudget').mockResolvedValue({ rows: [{ job: { jobId: 'job-1', status: 'running' } }] } as never);
   try {
     expect(await readSeniorQueuePostgresJob('job-1')).toEqual({ jobId: 'job-1', status: 'running' });
     expect(query.mock.calls[0][1]).toBe(SENIOR_QUEUE_JOB_SQL);
@@ -32,7 +32,7 @@ test('direct polling projects one job with bound identities and detects duplicat
 test('cross-project database bindings cannot serve a repair job', async () => {
   configure();
   process.env.SUPABASE_DB_URL = 'postgresql://postgres:test-only@db.otherproject.supabase.co:5432/postgres';
-  const query = spyOn(deadline, 'queryWithPostgresDeadline');
+  const query = spyOn(deadline, 'queryWithSeniorQueueReadBudget');
   try {
     await expect(readSeniorQueuePostgresJob('job-1')).rejects.toThrow('project_mismatch');
     await expect(readSeniorWorkQueuePostgres()).rejects.toThrow('project_mismatch');
@@ -43,7 +43,7 @@ test('cross-project database bindings cannot serve a repair job', async () => {
 test('work queue uses the bound scheduling projection and propagates outages without replay', async () => {
   configure();
   const queue = { jobs: [{ jobId: 'queued', status: 'queued', input: { taskId: 'original-task' } }] };
-  const query = spyOn(deadline, 'queryWithPostgresDeadline').mockResolvedValue({ rows: [{ value: queue }] } as never);
+  const query = spyOn(deadline, 'queryWithSeniorQueueReadBudget').mockResolvedValue({ rows: [{ value: queue }] } as never);
   try {
     expect(await readSeniorWorkQueuePostgres()).toEqual(queue);
     expect(query.mock.calls[0][1]).toBe(SENIOR_WORK_QUEUE_SQL);
@@ -56,7 +56,7 @@ test('work queue uses the bound scheduling projection and propagates outages wit
 
 test('owner lookup binds identity, returns only one active checkpoint and propagates an outage', async () => {
   configure();
-  const query = spyOn(deadline, 'queryWithPostgresDeadline').mockResolvedValue({ rows: [{ job: { ownerId: 'owner-1', status: 'running', jobId: 'job-1' } }] } as never);
+  const query = spyOn(deadline, 'queryWithSeniorQueueReadBudget').mockResolvedValue({ rows: [{ job: { ownerId: 'owner-1', status: 'running', jobId: 'job-1' } }] } as never);
   try {
     expect((await readSeniorActiveOwnerJobPostgres('owner-1'))?.ownerId).toBe('owner-1');
     expect(query.mock.calls[0][1]).toContain("->>'ownerId' = $2");

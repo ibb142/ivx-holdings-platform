@@ -1,6 +1,7 @@
 import { readSeniorActiveOwnerJobPostgres, autonomousWorkerInstanceId, preferDirectTransport, seniorQueuePostgresRpc, readSeniorQueuePostgresDocument, readSeniorQueuePostgresJob, readSeniorWorkQueuePostgres, appendSeniorProofPostgresEvent } from './ivx-postgres-autonomous-task-store';
-import { appendDurableEvent, durableKeyForFile, readDurableJson } from './ivx-durable-store';
+import { appendDurableEvent, durableKeyForFile } from './ivx-durable-store';
 import { SENIOR_QUEUE_ACTIVE_STATUSES, isSeniorQueueWorkItem } from './ivx-senior-work-queue';
+import { readSeniorQueueJson } from './ivx-senior-queue-read-budget';
 
 export function sharedSeniorQueueEnabled(): boolean { return process.env.IVX_WORKER_QUEUE_ATOMIC === 'true'; }
 type Job = { jobId: string };
@@ -87,9 +88,22 @@ export async function readSharedSeniorDocument<T>(file: string, fallback: T): Pr
   const key = durableKeyForFile(file);
   if (key !== 'senior-developer-worker/queue.json' && key !== 'senior-developer-worker/proof-ledger.json') throw new Error('Repair document not allowed');
   const direct = preferDirectTransport();
-  return sharedRead(`document:${direct}:${key}`, async () => direct
-    ? (await readSeniorQueuePostgresDocument<T>(key)) ?? fallback
-    : await readDurableJson(file, fallback));
+  return sharedRead(`document:${direct}:${key}`, async () => {
+    if (direct) return (await readSeniorQueuePostgresDocument<T>(key)) ?? fallback;
+    const url = [process.env.EXPO_PUBLIC_SUPABASE_URL, process.env.SUPABASE_URL]
+      .map(value => value?.trim()).find(Boolean)?.replace(/\/+$/, '');
+    const credential = [process.env.SUPABASE_SERVICE_ROLE_KEY, process.env.SUPABASE_SERVICE_KEY]
+      .map(value => value?.trim()).find(Boolean);
+    if (!url || !credential) throw new Error('Shared senior queue requires Supabase');
+    const rows = await readSeniorQueueJson<Array<{ value: T | null }>>(
+      `${url}/rest/v1/ivx_durable_documents?doc_key=eq.${encodeURIComponent(key)}&select=value&limit=1`,
+      { apikey: credential, Authorization: `Bearer ${credential}`, Accept: 'application/json' });
+    if (!Array.isArray(rows) || rows.length > 1 || (rows.length === 1
+      && (!rows[0] || typeof rows[0] !== 'object' || !('value' in rows[0])))) {
+      throw new Error('Shared senior queue returned an invalid document response');
+    }
+    return rows[0]?.value ?? fallback;
+  });
 }
 
 export async function readSharedSeniorWorkQueue<T extends { jobs: Array<{ status: string }> }>(file: string, fallback: T): Promise<T> {
