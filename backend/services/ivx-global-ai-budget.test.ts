@@ -74,7 +74,12 @@ test('each retry reserves separately and holds global capacity until body comple
     active++;reservations++;return{quote:quote(),finish:async(usage)=>{expect(usage).toMatchObject({inputTokens:5,outputTokens:3});active--;finishes++;}};
   }});
   const first=await guarded(request());expect(active).toBe(1);
-  expect((await guarded(request())).status).toBe(402);
+  const waiting=await guarded(request());
+  expect(waiting.status).toBe(429);
+  expect(waiting.headers.get('retry-after')).toBe('2');
+  expect((await waiting.json()).error).toMatchObject({
+    type:'rate_limit_error',code:'IVX_GLOBAL_AI_BUDGET_BLOCKED',message:'Global AI budget: global_capacity_exceeded',
+  });
   await first.text();expect(active).toBe(0);
   await (await guarded(request())).text();expect(reservations).toBe(2);expect(finishes).toBe(2);
 });

@@ -405,6 +405,17 @@ function normalizeGatewayFailure(error: unknown, context: IVXAIGatewayFailureCon
   return normalized;
 }
 
+function isLocalBudgetAdmissionFailure(error: unknown): boolean {
+  const record = readRecord(error);
+  if (record.code === 'IVX_GLOBAL_AI_BUDGET_BLOCKED'
+      || readRecord(record.cause).code === 'IVX_GLOBAL_AI_BUDGET_BLOCKED') return true;
+  let body = extractGatewayFailureContext(error).responseBody;
+  if (typeof body === 'string') {
+    try { body = JSON.parse(body); } catch { return false; }
+  }
+  return readRecord(readRecord(body).error).code === 'IVX_GLOBAL_AI_BUDGET_BLOCKED';
+}
+
 function normalizeMessages(messages: IVXAITextMessage[] | undefined): IVXAITextMessage[] {
   return (messages ?? [])
     .map((message) => ({
@@ -963,7 +974,9 @@ async function requestIVXAITextInternal(input: {
       queueWaitMs: queueSlot.waitMs,
     });
     const traceId = generateTraceId();
-    markAIUnavailable(traceId, failureMessage);
+    // Local admission rejects before provider HTTP. It must not invalidate
+    // healthy credentials or close the provider circuit for other requests.
+    if (!isLocalBudgetAdmissionFailure(lastError)) markAIUnavailable(traceId, failureMessage);
     throw normalizeGatewayFailure(lastError, {
       module: input.module,
       requestId: input.requestId ?? null,
