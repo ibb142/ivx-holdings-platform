@@ -9,6 +9,11 @@ import { TEAM, prepareContext, readNativeState, checkNativeBudget, budgetSummary
   management, emitProof } from './phase3-native-budget.mjs';
 
 const PRIOR_SHA256='bebed74f9a14ca05dc9a4a9e044b21af2297ff58b0a0ae7e1aba78d5e823ea07';
+export function evidenceContentHash(value) {
+  return createHash('sha256').update(JSON.stringify(value,(_,item)=>
+    item && typeof item==='object' && !Array.isArray(item)
+      ?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item)).digest('hex');
+}
 export function verifyObservedNativeQuota(prior) {
   assert.equal(prior.sourceSha,'d572ca0df73250b98d346aff6e2b03d6d11e86eb','PRIOR_SOURCE_CHANGED');
   assert.equal(prior.runId,'34698467674','PRIOR_RUN_CHANGED');
@@ -63,6 +68,7 @@ export function publicRecoveryProof(proof) {
   return {type:'native-recovery-result',startedAt:proof.startedAt,sourceSha:proof.sourceSha,runId:proof.runId,
     stage:proof.stage,priorLogHttpStatus:numeric(proof.priorLogHttpStatus),
     priorLogStorageHttpStatus:numeric(proof.priorLogStorageHttpStatus),
+    priorSerializedSha256:proof.priorSerializedSha256,priorContentSha256:proof.priorContentSha256,
     errorClass:['AssertionError','TypeError','SyntaxError','TimeoutError'].includes(proof.errorClass)?proof.errorClass:null,
     passed:proof.passed===true,
     error:proof.error?safeError({message:proof.error}):null,
@@ -137,7 +143,9 @@ async function main() {
     const prior=JSON.parse(lines[0].slice(lines[0].indexOf('{')));
     const raw=JSON.stringify(prior,null,2)+'\n';
     proof.stage='verify_prior_log_hash';
-    assert.equal(createHash('sha256').update(raw).digest('hex'),PRIOR_SHA256,'PRIOR_ARTIFACT_CHANGED');
+    proof.priorSerializedSha256=createHash('sha256').update(raw).digest('hex');
+    proof.priorContentSha256=evidenceContentHash(prior);
+    assert.equal(proof.priorContentSha256,'73bc9bdea21529dcbdb455c0b16adc2e48a870fd0b9c1a206ccdad4eb094c2e1','PRIOR_ARTIFACT_CONTENT_CHANGED');
     proof.priorJobId=103566100793;
     proof.priorArtifactSha256=PRIOR_SHA256;
     proof.nativeQuotaRejection=verifyObservedNativeQuota(prior);

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { verifyObservedNativeQuota, publicRecoveryProof } from './phase3-native-recovery.mjs';
+import { verifyObservedNativeQuota, publicRecoveryProof, evidenceContentHash } from './phase3-native-recovery.mjs';
 import { reservationId } from './phase3-native-quota.mjs';
 
 function fixture() {
@@ -16,6 +16,13 @@ function fixture() {
     quotaSnapshots:[{quotaEntityId:'api_key_id_'+key,scopeId:key,active:true,archived:false,
       limitAmount:1,currentSpend:1.18074}],passed:false};
 }
+test('evidence checksum ignores object key ordering but preserves values and array order',()=>{
+  const one={a:{x:1,y:2},z:[3,4]};
+  assert.equal(evidenceContentHash(one),evidenceContentHash({z:[3,4],a:{y:2,x:1}}));
+  assert.notEqual(evidenceContentHash(one),evidenceContentHash({a:{x:1,y:3},z:[3,4]}));
+  assert.notEqual(evidenceContentHash(one),evidenceContentHash({a:{x:1,y:2},z:[4,3]}));
+  assert.notEqual(evidenceContentHash(one),evidenceContentHash({a:{x:1,y:2},z:[3,4],extra:true}));
+});
 test('native proof rejects local refusal, scope mismatch, replay and uncovered liability',()=>{
   assert.equal(verifyObservedNativeQuota(fixture()).httpStatus,402);
   for(const mutate of [
