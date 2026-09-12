@@ -1,0 +1,32 @@
+name: Phase 1 Web Compatibility Acceptance
+on:
+  push:
+    branches: [qa/phase1-web-compatibility-20260912]
+    paths:
+      - qa/phase1-web-compatibility.mjs
+      - .github/workflows/phase1-web-compatibility.yml
+permissions:
+  contents: read
+jobs:
+  production-web-acceptance:
+    if: github.repository == 'ibb142/ivx-holdings-platform'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.3.9 }
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: bunx playwright install chromium
+      - name: Check source, dependencies, www and real Owner login-to-chat flow
+        env:
+          IVX_TARGET_SHA: ff253c2aa89294bdab138d52b89c72fc7d794e90
+          SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          IVX_QA_OWNER_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD || secrets.OWNER_PASSWORD || secrets.IVX_OWNER_PASSWORD || secrets.IVX_OWNER_NEW_PASSWORD || secrets.OWNER_LOGIN_PASSWORD || secrets.IVX_OWNER_LOGIN_PASSWORD }}
+        run: node qa/phase1-web-compatibility.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase1-web-compatibility-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qa-results/phase1-web-compatibility/
+          if-no-files-found: error
