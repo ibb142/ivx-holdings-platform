@@ -1,7 +1,11 @@
 import type { Pool } from 'pg';
+import { createHash } from 'node:crypto';
+
+const poolPurposes = new WeakMap<object, string>();
 
 /** pg removes failed idle connections itself; observe the error without exiting. */
 export function observePostgresPoolErrors(pool: Pick<Pool, 'on'>, purpose: string): void {
+  poolPurposes.set(pool, purpose);
   pool.on('error', () => console.error('[IVX PostgreSQL] idle connection failed', { pool: purpose }));
 }
 
@@ -9,7 +13,24 @@ export function observePostgresPoolErrors(pool: Pick<Pool, 'on'>, purpose: strin
 export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
   pool: Pick<Pool, 'connect'>, text: string, values: unknown[],
 ) {
-  const client = await pool.connect();
+  const startedAt = Date.now();
+  let stageStartedAt = startedAt;
+  let stage: 'checkout' | 'setup' | 'query' | 'commit' = 'checkout';
+  const reportFailure = (error: unknown) => {
+    // Identify a static SQL template without logging SQL, bound values, server
+    // error text, or connection credentials. Logging must not replace the error.
+    try {
+      const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
+      console.error('[IVX PostgreSQL] deadline failure ' + JSON.stringify({
+        pool: poolPurposes.get(pool) ?? 'unregistered', stage,
+        queryHash: createHash('sha256').update(text).digest('hex').slice(0, 16),
+        sqlState: typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code) ? code : null,
+        elapsedMs: Math.max(0, Date.now() - startedAt),
+        stageElapsedMs: Math.max(0, Date.now() - stageStartedAt),
+      }));
+    } catch { /* Preserve the original database failure if logging fails. */ }
+  };
+  const client = await pool.connect().catch(error => { reportFailure(error); throw error; });
   let failed = false;
   let connectionError: Error | null = null;
   const onConnectionError = (error: Error) => { connectionError = error; };
@@ -23,16 +44,20 @@ export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
     // at transaction end. Server cancellation precedes the client's 5s timeout.
     // One simple-query round trip pins the transaction and installs the same
     // local limits. The parameterized mutation is sent only after this succeeds.
+    stage = 'setup'; stageStartedAt = Date.now();
     requireConnection();
     await client.query("BEGIN; SET LOCAL statement_timeout = '4s'; SET LOCAL lock_timeout = '2s'; SET LOCAL idle_in_transaction_session_timeout = '8s'");
     requireConnection();
+    stage = 'query'; stageStartedAt = Date.now();
     const result = await client.query<T>(text, values);
     requireConnection();
+    stage = 'commit'; stageStartedAt = Date.now();
     await client.query('COMMIT');
     requireConnection();
     return result;
   } catch (error) {
     failed = true;
+    reportFailure(error);
     await client.query('ROLLBACK').catch(() => undefined);
     // Never replay an RPC after an ambiguous timeout or commit response loss.
     throw error;
