@@ -47,7 +47,7 @@ jobs:
               'client_authentication': 'no pg_hba.conf entry|role .* does not exist|database .* does not exist',
               'schema_cache': 'schema cache',
           }
-          sql = "select timestamp, event_message from postgres_logs cross join unnest(metadata) as m cross join unnest(m.parsed) as p where p.error_severity = 'FATAL' order by timestamp desc limit 200"
+          sql = "select timestamp, event_message from postgres_logs where regexp_contains(event_message, '(?i)authentication|remaining connection|too many clients|idle-in-transaction|administrator command|no space|out of memory|connection reset|broken pipe') order by timestamp desc limit 200"
           params = urllib.parse.urlencode({'sql': sql, 'iso_timestamp_start': start.isoformat(timespec='milliseconds').replace('+00:00', 'Z'), 'iso_timestamp_end': end.isoformat(timespec='milliseconds').replace('+00:00', 'Z')})
           request = urllib.request.Request('https://api.supabase.com/v1/projects/' + project + '/analytics/endpoints/logs.all?' + params,
               headers={'Authorization': 'Bearer ' + token})
@@ -62,11 +62,13 @@ jobs:
           except Exception:
               raise SystemExit('LOGS_API_TRANSPORT_FAILURE')
           if not isinstance(payload, dict) or payload.get('error') or not isinstance(payload.get('result'), list):
+              error_text = str(payload.get('error', '')).lower() if isinstance(payload, dict) else ''
+              print(json.dumps({'errorHints': [word for word in ['syntax', 'column', 'function', 'unnest', 'timestamp', 'permission', 'unsupported', 'not found', 'regexp_contains'] if word in error_text]}))
               raise SystemExit('LOGS_API_RESULT_INVALID')
           counts = {}
           for row in payload['result']:
               message = str(row.get('event_message', ''))
               category = next((label for label, pattern in categories.items() if re.search(pattern, message, re.I)), 'other')
               counts[category] = counts.get(category, 0) + 1
-          print(json.dumps({'source': 'postgres_logs', 'severity': 'FATAL', 'sampleSize': len(payload['result']), 'errorCategories': counts}))
+          print(json.dumps({'source': 'postgres_logs', 'filter': 'connection_failure_messages', 'sampleSize': len(payload['result']), 'errorCategories': counts}))
           print('LOG_DIAGNOSIS_COMPLETE')
