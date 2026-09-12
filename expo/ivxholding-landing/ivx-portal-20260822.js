@@ -14,7 +14,7 @@
     document.getElementById('portal-overlay').classList.add('open');
     document.body.style.overflow = 'hidden';
     var saved = null;
-    try { saved = JSON.parse(localStorage.getItem('ivx_portal_session') || 'null'); } catch(e) {}
+    try { saved = JSON.parse(localStorage.getItem('ivx_portal_session') || 'null'); } catch(e) { console.error('[IVX Portal] Session parse error:', e.message); }
     if (saved && saved.token && saved.email && (Date.now() - saved.ts) < 3600000) {
       _portalState.userId = saved.userId;
       _portalState.email = saved.email;
