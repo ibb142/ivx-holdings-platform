@@ -2981,7 +2981,7 @@ app.use('*', cors({
   },
   allowMethods: ['GET', 'POST', 'OPTIONS', 'HEAD'],
   allowHeaders: ['Content-Type', 'Authorization', 'apikey'],
-  exposeHeaders: ['X-Pool-Acquisition-Ms', 'X-IVX-Data-State', 'X-IVX-Data-Age-Ms', 'X-IVX-Cache', 'Retry-After', 'Content-Type', 'Cache-Control', 'X-IVX-Pool-Wait-Ms', 'X-IVX-Payload-Ms', 'X-IVX-Upstream-Headers-Ms', 'X-IVX-Timing-Scope'],
+  exposeHeaders: ['X-Pool-Acquisition-Ms', 'X-SQL-Execution-Ms', 'X-IVX-Data-State', 'X-IVX-Data-Age-Ms', 'X-IVX-Cache', 'Retry-After', 'Content-Type', 'Cache-Control', 'X-IVX-Pool-Wait-Ms', 'X-IVX-Payload-Ms', 'X-IVX-Upstream-Headers-Ms', 'X-IVX-Timing-Scope'],
   maxAge: 86400,
 }));
 
@@ -6645,30 +6645,8 @@ app.get('/api/metrics/authoritative-count', async () => {
 
 // tRPC-compatible waitlist stats — returns stats in the shape expected by tRPC clients.
 app.get('/api/trpc/waitlist.getStats', async () => {
-  try {
-    const { countCanonicalMembers, isCanonicalMembersConfigured } = await import('./services/ivx-canonical-members');
-    if (!isCanonicalMembersConfigured()) throw new Error('Member counts unavailable');
-    // Count in PostgreSQL without downloading personal member records or
-    // truncating the total at the registry list's 2,000-row limit. The shared
-    // reader coalesces overlapping HEADs and keeps its existing five-second cap.
-    const [total, waitlist] = await Promise.all([
-      countCanonicalMembers(), countCanonicalMembers({ memberType: 'waitlist' }),
-    ]);
-    if (!Number.isSafeInteger(total) || !Number.isSafeInteger(waitlist)
-      || total < 0 || waitlist < 0 || waitlist > total) throw new Error('Member counts unavailable');
-    return Response.json({
-      ok: true, waitlist, total, timestamp: nowIso(), deploymentMarker: DEPLOYMENT_MARKER,
-    }, { headers: { 'Cache-Control': 'no-store' } });
-  } catch {
-    // Unknown is not zero. Preserve the public contract while making a failed
-    // source retryable and excluding private database messages from the response.
-    return Response.json({
-      ok: false, waitlist: null, total: null,
-      code: 'WAITLIST_STATS_UNAVAILABLE', retryable: true,
-      error: 'Member counts are temporarily unavailable. Please retry.',
-      timestamp: nowIso(), deploymentMarker: DEPLOYMENT_MARKER,
-    }, { status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': '3' } });
-  }
+  const { handleWaitlistStats } = await import('./api/ivx-waitlist-stats');
+  return handleWaitlistStats(DEPLOYMENT_MARKER);
 });
 
 // tRPC-compatible waitlist join — proxies to the lead capture endpoint

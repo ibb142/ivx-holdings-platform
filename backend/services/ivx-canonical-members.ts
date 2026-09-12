@@ -26,7 +26,7 @@ const MEMBER_READ_TIMEOUT_MS = 5000;
 const MAX_PENDING_MEMBER_READS = 32;
 let memberReadScope: { url: string; key: string; pending: Map<string, Promise<unknown>> } | null = null;
 
-function shareMemberRead<T>(key: string, read: (signal: AbortSignal) => Promise<T>): Promise<T> {
+function shareMemberRead<T>(key: string, read: (signal: AbortSignal) => Promise<T>, timeoutMs = MEMBER_READ_TIMEOUT_MS): Promise<T> {
   const url = getSupabaseUrl();
   const serviceKey = getServiceKey();
   if (!url || !serviceKey) return Promise.reject(new CanonicalMembersReadError());
@@ -44,7 +44,7 @@ function shareMemberRead<T>(key: string, read: (signal: AbortSignal) => Promise<
         const error = new CanonicalMembersReadError();
         controller.abort(error);
         reject(error);
-      }, MEMBER_READ_TIMEOUT_MS);
+      }, timeoutMs);
     });
     // Keep the deadline through JSON consumption and reject even if a transport
     // ignores abort. A failed or completed read is never a cached empty registry.
@@ -475,11 +475,28 @@ export function listCanonicalMemberSummaryRows(): Promise<CanonicalMemberSummary
   );
 }
 
-export async function countCanonicalMembers(options: { memberType?: 'waitlist' } = {}): Promise<number> {
-  const filter = options.memberType === 'waitlist' ? '&member_type=eq.waitlist' : '';
-  const url = `${getSupabaseUrl()}/rest/v1/members?select=member_id${filter}`;
+/** Exact public aggregates without loading member identities or truncated lists. */
+export async function readCanonicalWaitlistStats(): Promise<{ total: number; waitlist: number }> {
+  return shareMemberRead('HEAD:waitlist-stats-v1', async signal => {
+    const count = async (filter: string) => {
+      const response = await fetch(`${getSupabaseUrl()}/rest/v1/members?select=member_id${filter}`, {
+        method: 'HEAD', headers: { ...headers('count=exact'), Range: '0-0' }, signal,
+      });
+      if (!response.ok) throw new CanonicalMembersReadError();
+      const match = /^(?:\d+-\d+|\*)\/(\d+)$/.exec(response.headers.get('content-range') ?? '');
+      const value = match ? Number(match[1]) : NaN;
+      if (!Number.isSafeInteger(value) || value < 0) throw new CanonicalMembersReadError();
+      return value;
+    };
+    const [total, waitlist] = await Promise.all([count(''), count('&member_type=eq.waitlist')]);
+    return { total, waitlist };
+  }, 3000);
+}
+
+export async function countCanonicalMembers(): Promise<number> {
+  const url = `${getSupabaseUrl()}/rest/v1/members?select=member_id`;
   const requestHeaders = { ...headers('count=exact'), Range: '0-0' };
-  return shareMemberRead(`HEAD:members-count${filter}`, async signal => {
+  return shareMemberRead('HEAD:members-count', async signal => {
     const response = await fetch(url, {
       method: 'HEAD',
       headers: requestHeaders,

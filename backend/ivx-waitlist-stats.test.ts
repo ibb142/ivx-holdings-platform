@@ -2,7 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { Hono } from 'hono';
-import * as canonicalMembers from './services/ivx-canonical-members';
+import * as waitlistAPI from './api/ivx-waitlist-stats';
 
 const initialFetch = globalThis.fetch;
 const envNames = ['SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY',
@@ -36,11 +36,11 @@ function fixture(reply: (read: Read) => Promise<Response> | Response, configured
   const begin = source.indexOf("app.get('/api/trpc/waitlist.getStats',");
   const end = source.indexOf('// tRPC-compatible waitlist join', begin);
   if (begin < 0 || end <= begin) throw new Error('Missing waitlist stats route');
-  const route = source.slice(begin, end).replace("await import('./services/ivx-canonical-members')", 'canonicalMembers');
+  const route = source.slice(begin, end).replace("await import('./api/ivx-waitlist-stats')", 'waitlistAPI');
   const app = new Hono();
   app.onError(() => Response.json({ error: 'Unhandled route error' }, { status: 500 }));
   vm.runInNewContext(new Bun.Transpiler({ loader: 'ts' }).transformSync(route), {
-    app, canonicalMembers, Response, Date, Number, Promise,
+    app, waitlistAPI, Response, Date, Number, Promise,
     nowIso: () => new Date().toISOString(), DEPLOYMENT_MARKER: 'isolated-waitlist-proof',
   });
   return { app, calls };

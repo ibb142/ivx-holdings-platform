@@ -10,12 +10,11 @@ import { hostname } from 'node:os';
 import { VERSIONED_INSPECTION_PREFIXES, VERSIONED_MISSION_PREFIXES } from './ivx-autonomous-mission-scope';
 import { localFleetExecutionMetrics } from './ivx-fleet-execution-metrics';
 import { randomUUID } from 'node:crypto';
-import { Pool } from 'pg';
-import type { EventEmitter } from 'node:events';
-import { observePostgresPoolErrors, queryWithPostgresDeadline } from './ivx-postgres-deadline';
+import type { Pool } from 'pg';
+import { getObserverPool, getWorkerPool, resetDatabasePoolsForTests } from './ivx-database-pools';
+import { queryWithPostgresDeadline } from './ivx-postgres-deadline';
 import { SENIOR_QUEUE_ACTIVE_STATUSES, SENIOR_QUEUE_JOB_SQL, SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL } from './ivx-senior-work-queue';
 import { emergencyStopPostgresConfig } from './ivx-emergency-stop-postgres';
-import { supabasePostgresTls, withoutPostgresUrlTlsOptions } from './ivx-supabase-postgres-tls';
 import { decideRetry, isTransientFailure, retryAfterMs, RetryQuota } from './ivx-retry-policy';
 import type { FleetLeaseRequest, FleetLeaseResult, FleetTaskLeaseIdentity, FleetTaskMutationResult, Task, TaskState } from './ivx-autonomous-task-engine';
 
@@ -29,8 +28,6 @@ let taskReadCache: { value: Task[]; at: number } | null = null;
 let taskReadInFlight: Promise<Task[]> | null = null;
 const currentReadsInFlight = new Map<string, Promise<Task[]>>();
 let taskMutationRevision = 0;
-type PoolPurpose = 'tasks' | 'assignment' | 'heartbeat' | 'telemetry' | 'presence' | 'repair';
-const directPools = new Map<PoolPurpose, Pool>();
 const upstreamRetryQuota = new RetryQuota();
 
 type AtomicCreateResult = { ok: boolean; task: Task | null; duplicate: boolean; error: string | null };
@@ -38,7 +35,7 @@ type AtomicCasResult = { ok: boolean; task: Task | null; error: string | null };
 type RestTaskRow = { payload: Task };
 export type AtomicFleetLeaseRow = { taskId: string; idempotencyKey: string; state: TaskState; assignedAgentNumber: number | null; leaseHolder: string; workerInstanceId: string | null; lastHeartbeatAt: string; leaseExpiresAt: string | null };
 
-export function resetPostgresAutonomousTaskStoreForTests(): void { taskReadCache = null; taskReadInFlight = null; currentReadsInFlight.clear(); taskMutationRevision = 0; directPools.clear(); }
+export function resetPostgresAutonomousTaskStoreForTests(): void { taskReadCache = null; taskReadInFlight = null; currentReadsInFlight.clear(); taskMutationRevision = 0; resetDatabasePoolsForTests(); }
 function trimmed(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
 function supabaseUrl(env: NodeJS.ProcessEnv = process.env): string { return trimmed(env.EXPO_PUBLIC_SUPABASE_URL || env.SUPABASE_URL).replace(/\/+$/, ''); }
 function serviceRoleKey(env: NodeJS.ProcessEnv = process.env): string { return trimmed(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_KEY); }
@@ -63,28 +60,11 @@ function headers(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
 }
 function externalError(payload: unknown, fallback: string): string { if (payload && typeof payload === 'object') { const record = payload as Record<string, unknown>; const candidate = record.message ?? record.error ?? record.details; if (typeof candidate === 'string' && candidate.trim()) return candidate.trim().slice(0, 320); } return fallback; }
 async function parsePayload(response: Response): Promise<unknown> { const text = await response.text(); if (!text) return null; try { return JSON.parse(text) as unknown; } catch { return { message: text.slice(0, 320) }; } }
+type PoolPurpose = 'tasks' | 'assignment' | 'heartbeat' | 'telemetry' | 'presence' | 'repair';
 function getDirectPool(env: NodeJS.ProcessEnv = process.env, purpose: PoolPurpose = 'tasks'): Pool {
-  const connectionString = directDbUrl(env);
-  if (!connectionString) throw new Error('direct_postgres_not_configured');
-  const existing = directPools.get(purpose);
-  if (existing) return existing;
-  // Split the original four task connections into 2 task + 1 assignment + 1
-  // heartbeat. A busy task or claim cannot exhaust another lane's local pool.
-  // The total stays at seven per process; replicas still share server capacity.
-  const leaseTraffic = purpose === 'assignment' || purpose === 'heartbeat';
-  const pool = new Pool({ connectionString: withoutPostgresUrlTlsOptions(connectionString), ssl: supabasePostgresTls(),
-    max: purpose === 'tasks' ? 2 : 1, application_name: `ivx_${purpose}`,
-    idleTimeoutMillis: 30_000, connectionTimeoutMillis: leaseTraffic ? 2_000 : 20_000, query_timeout: 5_000, statement_timeout: 5_000 });
-  observePostgresPoolErrors(pool, purpose);
-  if (purpose === 'repair') {
-    // Observe both idle and checked-out connection errors. Query promises still
-    // reject, destroy their failed connection, and never replay a mutation.
-    const events = pool as Pool & EventEmitter;
-    events.on('error', () => console.error('[IVX repair queue] PostgreSQL connection unavailable'));
-    events.on('connect', (client: EventEmitter) => client.on('error', () => {}));
-  }
-  directPools.set(purpose, pool);
-  return pool;
+  // Public API saturation must not block fleet observations; aggregate
+  // telemetry must not occupy the connection needed to persist process health.
+  return purpose === 'telemetry' || purpose === 'presence' ? getObserverPool(env, purpose) : getWorkerPool(env, purpose);
 }
 const DIRECT_RPC_ARGS: Record<string, string[]> = {
   ivx_autonomous_tasks_create_batch: ['p_tasks'],

@@ -1,3 +1,4 @@
+import { publicFeedRead } from '../services/ivx-public-feed-postgres';
 import { boundedReadFetch } from '../services/ivx-read-timings';
 import { withPublicFeedAvailability } from '../services/ivx-public-feed-availability';
 import { loadViewerEngagement } from '../services/ivx-viewer-engagement';
@@ -131,10 +132,10 @@ async function loadEngagementCounts(sb: any, ids: string[]): Promise<Record<stri
   for (const id of ids) counts[id] = { likes: 0, comments: 0, shares: 0, saves: 0 };
   if (ids.length === 0) return counts;
   const [likesRes, commentsRes, sharesRes, savesRes] = await Promise.all([
-    sb.from('project_likes').select('project_id').in('project_id', ids),
-    sb.from('project_comments').select('project_id').in('project_id', ids).eq('is_approved', true).is('deleted_at', null),
-    sb.from('project_shares').select('project_id').in('project_id', ids),
-    sb.from('project_saves').select('project_id').in('project_id', ids),
+    publicFeedRead<any>('select project_id from public.project_likes where project_id::text = any($1::text[])', [ids], () => sb.from('project_likes').select('project_id').in('project_id', ids)),
+    publicFeedRead<any>('select project_id from public.project_comments where project_id::text = any($1::text[]) and is_approved = true and deleted_at is null', [ids], () => sb.from('project_comments').select('project_id').in('project_id', ids).eq('is_approved', true).is('deleted_at', null)),
+    publicFeedRead<any>('select project_id from public.project_shares where project_id::text = any($1::text[])', [ids], () => sb.from('project_shares').select('project_id').in('project_id', ids)),
+    publicFeedRead<any>('select project_id from public.project_saves where project_id::text = any($1::text[])', [ids], () => sb.from('project_saves').select('project_id').in('project_id', ids)),
   ]);
   for (const row of likesRes.data || []) { const k = String(row.project_id); if (counts[k]) counts[k].likes += 1; }
   for (const row of commentsRes.data || []) { const k = String(row.project_id); if (counts[k]) counts[k].comments += 1; }
@@ -178,9 +179,10 @@ type FeedDeal = {
  */
 async function readFeedDealRows(sb: any): Promise<any[]> {
   try {
-    const { data } = await sb.from('jv_deals')
+    const { data } = await publicFeedRead<any>(
+      'select id,title,project_name,estimated_value,appraised_value,total_investment,min_investment,expected_roi,type from public.jv_deals where published = true limit 200', [], () => sb.from('jv_deals')
       .select('id,title,project_name,estimated_value,appraised_value,total_investment,min_investment,expected_roi,type')
-      .limit(200);
+      .eq('published', true).limit(200));
     return data ?? [];
   } catch { return []; }
 }
@@ -248,7 +250,8 @@ const readPlatformFeedInputs = createPlatformFeedLoader({
       .order('created_at', { ascending: false })
       .limit(200);
     if (projectId) query = query.eq('project_id', projectId);
-    const { data, error } = await query;
+    const { data, error } = await publicFeedRead<any>(
+      'select id,project_id,media_id,title,video_url,thumbnail_url,cover_url,duration_sec,width,height,orientation,video_type,is_pinned,is_approved,view_count,created_at from public.project_videos where is_approved = true and ($1::text is null or project_id::text = $1) order by is_pinned desc, created_at desc limit 200', [projectId], () => query);
     if (error) throw error;
     return data ?? [];
   },
@@ -556,10 +559,10 @@ export async function handlePlatformHomeFeed(req: Request): Promise<Response> {
     // catalog; serial query phases can exceed the bounded response deadline.
     const [inputs, { data: dealRows, error: dealsError }, dealMetaDoc] = await Promise.all([
       readPlatformFeedInputs(null),
-      Promise.resolve().then(() => sb.from('jv_deals').select('id,title,project_name,type,description,total_investment,expected_roi,min_investment,status,published,property_address,city,state,zip_code,country,property_type,photos,display_order,created_at,updated_at').eq('published', true).order('display_order', { ascending: true, nullsFirst: false }).order('updated_at', { ascending: false }).limit(100)),
+      publicFeedRead<any>('select id,title,project_name,type,description,total_investment,expected_roi,min_investment,status,published,property_address,city,state,zip_code,country,property_type,photos,display_order,created_at,updated_at from public.jv_deals where published = true order by display_order asc nulls last, updated_at desc limit 100', [], () => sb.from('jv_deals').select('id,title,project_name,type,description,total_investment,expected_roi,min_investment,status,published,property_address,city,state,zip_code,country,property_type,photos,display_order,created_at,updated_at').eq('published', true).order('display_order', { ascending: true, nullsFirst: false }).order('updated_at', { ascending: false }).limit(100)),
       Promise.resolve().then(getDealMetaDoc),
     ]);
-    if (dealsError) return json({ error: dealsError.message, marker: VIDEO_PLATFORM_MARKER }, 500);
+    if (dealsError) throw dealsError;
     const { videos, counts, playback, meta: metaDoc, analytics: analyticsDoc } = inputs;
     const now = Date.now();
 

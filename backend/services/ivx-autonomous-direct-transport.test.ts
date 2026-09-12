@@ -10,21 +10,19 @@ for (const fails of [false, true]) test(`configured same-project queue selects o
         super();
         if(config.ssl.rejectUnauthorized!==true || !config.ssl.ca?.length)throw new Error('TLS not verified');
         if(config.connectionString.includes('sslmode'))throw new Error('URL overrides TLS');
-        const expectedPools={ivx_tasks:{max:2,timeout:20000},ivx_assignment:{max:1,timeout:2000}};
-        const expected=expectedPools[config.application_name];
-        if(!expected || config.max!==expected.max || config.connectionTimeoutMillis!==expected.timeout || config.statement_timeout!==5000 || config.query_timeout!==5000)throw new Error('incorrect isolated pool budget');
+        if(config.connectionTimeoutMillis!==1500 || config.statement_timeout!==2500)throw new Error('unbounded connection');
         poolNames.push(config.application_name);
       }
       async connect() {
         return Object.assign(new EventEmitter(), {
           query:async(sql,values)=>{
             if(/^(BEGIN|SET LOCAL|COMMIT|ROLLBACK)/.test(sql)){boundaries.push(sql);return {rows:[]};}
-            return this.query(sql,values);
+            return this.rawQuery(sql,values);
           },
           release:(destroy)=>{if(destroy!==${fails})throw new Error('failed connection was reused');releases++;}
         });
       }
-      async query(sql, values) {
+      async rawQuery(sql, values) {
         queries++;
         if(sql.includes('ivx_autonomous_task_compare_and_set')) {
           if(!sql.includes('$2::jsonb') || values[1]!==JSON.stringify(['RUNNING']))throw new Error('CAS does not match deployed JSONB state contract');
@@ -49,24 +47,22 @@ for (const fails of [false, true]) test(`configured same-project queue selects o
       if(failed!==${fails})throw new Error('incorrect failure result');
     }
     if(restCalls!==0 || queries!==6)throw new Error('transport replay or unexpected call count');
-    if(JSON.stringify(poolNames)!==JSON.stringify(['ivx_tasks','ivx_assignment']))throw new Error('unexpected direct pool creation');
+    if(JSON.stringify(poolNames)!==JSON.stringify(['ivx_worker_tasks','ivx_worker_assignment']))throw new Error('unexpected direct pool creation');
     const setups=boundaries.filter(x=>x.startsWith('BEGIN;'));
-    const expectedDeadlines=[['4s','2s'],['4s','2s'],['2500ms','1000ms'],['4s','2s']];
-    if(releases!==4 || setups.length!==4 || setups.some((x,i)=>!x.includes("SET LOCAL statement_timeout = '"+expectedDeadlines[i][0]+"'") || !x.includes("SET LOCAL lock_timeout = '"+expectedDeadlines[i][1]+"'") || !x.includes("SET LOCAL idle_in_transaction_session_timeout = '8s'")))throw new Error('incorrect transaction deadline for planning, Landing read or assignment');
+    if(releases!==6 || setups.length!==6 || setups.some(x=>!x.includes("SET LOCAL statement_timeout = '2500ms'") || !x.includes("SET LOCAL lock_timeout = '1000ms'") || !x.includes("SET LOCAL idle_in_transaction_session_timeout = '5s'")))throw new Error('bounded transaction missing for planning, Landing read or RPC');
     // An ambiguous client failure must destroy the connection without sending
     // more SQL; a successful transaction must still commit exactly once.
     const endings=boundaries.filter(x=>x==='ROLLBACK' || x==='COMMIT');
-    if(endings.length!==${fails ? 0 : 4} || endings.some(x=>x!=='COMMIT'))throw new Error('incorrect transaction cleanup');
+    if(endings.length!==${fails ? 0 : 6} || endings.some(x=>x!=='COMMIT'))throw new Error('incorrect transaction cleanup');
   `], {stdout:'pipe',stderr:'pipe',timeout:10000});
   const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
   if (fails) {
     const lines = stderr.trim().split('\n');
-    expect(lines).toHaveLength(4);
-    const expectedPools = ['tasks', 'tasks', 'assignment', 'tasks'];
+    expect(lines).toHaveLength(6);
     for (const [index, line] of lines.entries()) {
       expect(line).toStartWith('[IVX PostgreSQL] deadline failure ');
       const diagnostic = JSON.parse(line.slice(line.indexOf('{')));
-      expect(diagnostic).toMatchObject({ pool: expectedPools[index], stage: 'query', sqlState: null });
+      expect(diagnostic).toMatchObject({ pool: index === 4 ? 'worker_assignment' : 'worker_tasks', stage: 'query', sqlState: null });
       expect(diagnostic.queryHash).toMatch(/^[a-f0-9]{16}$/);
       expect(line).not.toContain('ambiguous direct failure');
       expect(line).not.toContain('postgresql://');

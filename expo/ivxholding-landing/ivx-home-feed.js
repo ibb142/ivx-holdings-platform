@@ -86,24 +86,42 @@
     if (remaining <= 0) return Promise.reject(new Error('home feed request deadline exceeded'));
     var controller = new AbortController();
     var timer = setTimeout(function () { controller.abort(); }, Math.min(9000, remaining));
+    var retryAt = 0;
     window.__ivxHomeFeedStatus.attempts += 1;
     return fetch(API_CANDIDATES[i] + '/api/ivx/video-platform/home-feed?limit=60', { signal: controller.signal })
       .then(function (r) {
+        var retryAfter = (r.headers.get('retry-after') || '').trim();
+        retryAt = /^\d+$/.test(retryAfter) ? Date.now() + Number(retryAfter) * 1000
+          : /^[A-Za-z]{3}, /.test(retryAfter) ? Date.parse(retryAfter) : 0;
         var ct = (r.headers.get('content-type') || '').toLowerCase();
-        if (!r.ok || ct.indexOf('json') === -1) throw new Error('home feed response unavailable: HTTP ' + r.status);
+        if (!r.ok || ct.indexOf('json') === -1) {
+          var error = new Error('home feed response unavailable: HTTP ' + r.status);
+          error.retryable = r.ok || r.status === 408 || r.status === 429 || r.status >= 500;
+          throw error;
+        }
         return r.json();
       })
       .then(function (data) {
         if (!data || !Array.isArray(data.blocks)) throw new Error('invalid home feed response');
+        // The API can return an unavailable render structure with HTTP 200.
+        // Keep recovery active until the canonical source actually supplies data.
+        if (data.degraded === true || data.data_available === false || data.code === 'PUBLIC_DATA_UNAVAILABLE') {
+          throw new Error('home feed data unavailable');
+        }
         return data;
       })
       .finally(function () { clearTimeout(timer); })
       .catch(function (err) {
-        if (i + 1 >= API_CANDIDATES.length || Date.now() >= deadline) throw err;
+        var waitMs = Math.max(0, (retryAt || 0) - Date.now());
+        if (err.retryable === false || i + 1 >= API_CANDIDATES.length || waitMs >= deadline - Date.now()) throw err;
         // A failed attempt remains a network diagnostic. Only failure of the
         // whole bounded operation is a terminal application error.
         console.warn('[IVX HomeFeed] retrying with alternate API host:', err.message);
-        return fetchHomeFeed(i + 1, deadline);
+        // Let the shared producer warm its cache before using the final attempt.
+        // Backoff consumes the existing operation budget; it never extends it.
+        if (!waitMs) return fetchHomeFeed(i + 1, deadline);
+        return new Promise(function (resolve) { setTimeout(resolve, waitMs); })
+          .then(function () { return fetchHomeFeed(i + 1, deadline); });
       });
   }
 
