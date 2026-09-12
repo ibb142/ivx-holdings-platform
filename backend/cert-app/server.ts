@@ -100,6 +100,10 @@ function authMiddleware(c: any, next: any): Promise<any> {
   return next();
 }
 
+function sanitizeError(err: Error): { message: string, stack?: string } {
+  return { message: err.message, stack: err.stack?.split('\n').slice(0, 2).join('\n') };
+}
+
 export function createCertApp(): Hono<CertContext> {
   const app = new Hono<CertContext>();
   const db: CertDB = createCertDatabase();
@@ -353,7 +357,7 @@ export function createCertApp(): Hono<CertContext> {
   });
 
   app.onError((err, c) => {
-    console.error(`[cert-app] error: ${err.message}`, { traceId: c.get('traceId') });
+    console.error(`[cert-app] error: ${sanitizeError(err).message}`, { traceId: c.get('traceId'), stack: sanitizeError(err).stack });
     return c.json({
       ok: false,
       error: 'Internal server error.',
