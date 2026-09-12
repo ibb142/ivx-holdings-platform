@@ -4,6 +4,10 @@ import { createHash } from 'node:crypto';
 
 const poolPurposes = new WeakMap<object, string>();
 const poolEvents = new WeakMap<object, { connects: number; acquires: number }>();
+const transactionSetup = {
+  default: "BEGIN; SET LOCAL statement_timeout = '4s'; SET LOCAL lock_timeout = '2s'; SET LOCAL idle_in_transaction_session_timeout = '8s'",
+  assignment: "BEGIN; SET LOCAL statement_timeout = '2500ms'; SET LOCAL lock_timeout = '1000ms'; SET LOCAL idle_in_transaction_session_timeout = '8s'",
+} as const;
 
 /** pg removes failed idle connections itself; observe the error without exiting. */
 export function observePostgresPoolErrors(pool: Pick<Pool, 'on'>, purpose: string): void {
@@ -19,6 +23,7 @@ export function observePostgresPoolErrors(pool: Pick<Pool, 'on'>, purpose: strin
 /** Transaction-local deadlines survive Supavisor transaction pooling. */
 export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
   pool: Pick<Pool, 'connect'>, text: string, values: unknown[],
+  deadline: keyof typeof transactionSetup = 'default',
 ) {
   const startedAt = Date.now();
   let stageStartedAt = startedAt;
@@ -74,7 +79,7 @@ export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
     // local limits. The parameterized mutation is sent only after this succeeds.
     stage = 'setup'; stageStartedAt = Date.now();
     requireConnection();
-    await client.query("BEGIN; SET LOCAL statement_timeout = '4s'; SET LOCAL lock_timeout = '2s'; SET LOCAL idle_in_transaction_session_timeout = '8s'");
+    await client.query(transactionSetup[deadline]);
     requireConnection();
     stage = 'query'; stageStartedAt = Date.now();
     const result = await client.query<T>(text, values);
