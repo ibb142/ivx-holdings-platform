@@ -21,6 +21,7 @@ beforeEach(() => {
   const read = spyOn(shared, 'readSharedSeniorDocument').mockImplementation(async <T>(file: string, _fallback: T): Promise<T> => (
     file.endsWith('queue.json') ? { jobs: structuredClone(jobs), durable: true } : { entries: [], durable: true }
   ) as T);
+  const work = spyOn(shared, 'readSharedSeniorWorkQueue').mockImplementation(async () => ({ jobs: structuredClone(jobs), durable: true }));
   const write = spyOn(shared, 'patchSharedSeniorQueue').mockImplementation(async <T extends { jobs: { jobId: string }[] }>(queue: T): Promise<T> => {
     writes++;
     const next = queue.jobs.at(-1) as IVXWorkerJob;
@@ -29,7 +30,7 @@ beforeEach(() => {
     return queue;
   });
   const event = spyOn(durable, 'appendDurableEvent').mockResolvedValue(undefined);
-  restores.push(() => guard.mockRestore(), () => read.mockRestore(), () => write.mockRestore(), () => event.mockRestore());
+  restores.push(() => guard.mockRestore(), () => read.mockRestore(), () => work.mockRestore(), () => write.mockRestore(), () => event.mockRestore());
 });
 afterEach(() => { restores.splice(0).forEach(restore => restore()); process.env = { ...savedEnv }; });
 

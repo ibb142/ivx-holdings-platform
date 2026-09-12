@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import type { EventEmitter } from 'node:events';
 import { observePostgresPoolErrors, queryWithPostgresDeadline } from './ivx-postgres-deadline';
+import { SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL } from './ivx-senior-work-queue';
 import { emergencyStopPostgresConfig } from './ivx-emergency-stop-postgres';
 import { supabasePostgresTls, withoutPostgresUrlTlsOptions } from './ivx-supabase-postgres-tls';
 import { decideRetry, isTransientFailure, retryAfterMs, RetryQuota } from './ivx-retry-policy';
@@ -164,6 +165,13 @@ export async function readSeniorQueuePostgresDocument<T>(key: SeniorDocumentKey)
   if (!['senior-developer-worker/queue.json', 'senior-developer-worker/proof-ledger.json'].includes(key)) throw new Error('Repair document not allowed');
   const result = await queryWithPostgresDeadline<{ value: T }>(getDirectPool(process.env, 'repair'),
     'select value from public.ivx_durable_documents where doc_key = $1 limit 1', [key]);
+  return result.rows[0]?.value ?? null;
+}
+/** Fresh work and recovery checkpoints, without transferring terminal history. */
+export async function readSeniorWorkQueuePostgres<T>(): Promise<T | null> {
+  emergencyStopPostgresConfig();
+  const result = await queryWithPostgresDeadline<{ value: T }>(getDirectPool(process.env, 'repair'),
+    SENIOR_WORK_QUEUE_SQL, ['senior-developer-worker/queue.json', SENIOR_WORK_QUEUE_PATH]);
   return result.rows[0]?.value ?? null;
 }
 /** Polling one repair must not transfer the history of every retained job. */

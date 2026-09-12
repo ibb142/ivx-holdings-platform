@@ -1,9 +1,10 @@
-import { afterEach, expect, spyOn, test } from 'bun:test';
+import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test';
 import * as durable from './services/ivx-durable-store';
 import * as shared from './services/ivx-senior-shared-queue';
-import { expireStaleJobs, getActiveJobForOwner } from './services/ivx-senior-developer-worker';
+import { expireStaleJobs, getActiveJobForOwner, processNextSeniorDeveloperJob } from './services/ivx-senior-developer-worker';
 
 const spies: Array<{ mockRestore(): void }> = [];
+beforeEach(() => { spies.push(spyOn(shared, 'readSharedSeniorDocument').mockRejectedValue(new Error('Historical payload read unavailable'))); });
 afterEach(() => { for (const spy of spies.splice(0)) spy.mockRestore(); });
 
 test('owner lookup does not mutate another worker lease while admitting a chat task', async () => {
@@ -16,7 +17,7 @@ test('owner lookup does not mutate another worker lease while admitting a chat t
   ];
   spies.push(spyOn(durable, 'isDurableStoreConfigured').mockReturnValue(true));
   spies.push(spyOn(shared, 'sharedSeniorQueueEnabled').mockReturnValue(true));
-  spies.push(spyOn(shared, 'readSharedSeniorDocument').mockImplementation(async () =>
+  spies.push(spyOn(shared, 'readSharedSeniorWorkQueue').mockImplementation(async () =>
     structuredClone({ jobs, durable: true }) as any));
   const patch = spyOn(shared, 'patchSharedSeniorQueue').mockImplementation(async () => {
     throw new Error('Worker lease identity required');
@@ -35,7 +36,7 @@ test('shared sweep preserves a committed job for recovery instead of blocking th
     result: { commitSha: 'a'.repeat(40) } }];
   spies.push(spyOn(durable, 'isDurableStoreConfigured').mockReturnValue(true));
   spies.push(spyOn(shared, 'sharedSeniorQueueEnabled').mockReturnValue(true));
-  spies.push(spyOn(shared, 'readSharedSeniorDocument').mockImplementation(async () =>
+  spies.push(spyOn(shared, 'readSharedSeniorWorkQueue').mockImplementation(async () =>
     structuredClone({ jobs, durable: true }) as any));
   const patch = spyOn(shared, 'patchSharedSeniorQueue').mockImplementation(async () => {
     throw new Error('Worker lease identity required');
@@ -53,7 +54,7 @@ test('shared sweep requeues expired uncommitted work but preserves a live physic
     leaseExpiresAt: jobId === 'live' ? new Date(Date.now() + 120_000).toISOString() : '2020-01-01T00:02:00.000Z' }));
   spies.push(spyOn(durable, 'isDurableStoreConfigured').mockReturnValue(true));
   spies.push(spyOn(shared, 'sharedSeniorQueueEnabled').mockReturnValue(true));
-  spies.push(spyOn(shared, 'readSharedSeniorDocument').mockImplementation(async () =>
+  spies.push(spyOn(shared, 'readSharedSeniorWorkQueue').mockImplementation(async () =>
     structuredClone({ jobs, durable: true }) as any));
   const patch = spyOn(shared, 'patchSharedSeniorQueue').mockImplementation(async (queue) => queue);
   spies.push(patch);
@@ -63,4 +64,13 @@ test('shared sweep requeues expired uncommitted work but preserves a live physic
   expect(saved[0].leaseWorkerInstanceId).toBeNull();
   expect(saved[1].status).toBe('running');
   expect(saved[1].leaseWorkerInstanceId).toBe('physical-worker');
+});
+
+test('admission remains readable when retained historical payloads are unavailable', async () => {
+  spies.push(spyOn(durable, 'isDurableStoreConfigured').mockReturnValue(true));
+  spies.push(spyOn(shared, 'sharedSeniorQueueEnabled').mockReturnValue(true));
+  const work = spyOn(shared, 'readSharedSeniorWorkQueue').mockResolvedValue({ jobs: [], durable: true });
+  spies.push(work);
+  expect(await processNextSeniorDeveloperJob()).toBeNull();
+  expect(work).toHaveBeenCalledTimes(1);
 });
