@@ -6,12 +6,13 @@ import { fileURLToPath } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { generateText, streamText } from 'ai';
 import { createGateway } from '@ai-sdk/gateway';
+import { createOpenAI } from '@ai-sdk/openai';
 import { createBudgetedFetch } from '../backend/services/ivx-global-ai-budget-fetch.ts';
 import { GlobalAIBudgetError, quoteCatalogModel, usageCostUpperNano } from '../backend/services/ivx-global-ai-budget.ts';
 import { settleBudgetWithRetry } from '../backend/services/ivx-global-ai-budget-settlement.ts';
 import { providerReportedCostNano } from '../backend/services/ivx-provider-reported-cost.ts';
 import { CAMPAIGN, MAX_CAMPAIGN_NANO, PAID_LABELS, DB_ORIGIN, SERVICES,
-  reservationId, checkPolicy, checkQuote, sharedBinding, checkRows } from './phase3-provider-live-guards.mjs';
+  reservationId, checkPolicy, checkQuote, sharedBinding, checkRows, checkRefusal } from './phase3-provider-live-guards.mjs';
 import { paceOriginalResponse } from './phase3-provider-live-stream.mjs';
 
 // Owner-authorized bounded experiment. The production admission/stream parser
@@ -66,8 +67,8 @@ function admission(binding,quote,label,stats,waitForCapacity=false) {
       p_reserved_nano:quote.reservedNano,p_pricing_evidence:quote};
     let result;
     // A test client can wait for natural free capacity before sending HTTP.
-    // The refused-request test below disables this wait and must be one SDK
-    // admission with zero provider attempts. Every DB retry keeps the same ID.
+    // The refused-request test below disables this internal wait. It observes
+    // the SDK's bounded 429 retries, with zero provider attempts and one ID.
     for(let i=0;i<(waitForCapacity?16:1);i++) {
       stats.databaseAdmissionAttempts=(stats.databaseAdmissionAttempts||0)+1;
       result=await db.rpc('ivx_ai_budget_reserve',params);
@@ -112,7 +113,7 @@ async function childMain(label) {
   const input=createInterface({input:process.stdin});
   input.once('line',line=>{ if(['complete','cancel'].includes(line))action.resolve(line);else action.reject(new Error('INVALID_CHILD_COMMAND')); });
   input.once('close',()=>action.reject(new Error('PARENT_CHANNEL_CLOSED')));
-  const stats={label,pid:process.pid,admissions:0,gatewayAttempts:0,statuses:[],quotaHeaders:[],textDeltas:0,cancelRequested:false};
+  const stats={label,pid:process.pid,protocol:label==='cancel'?'gateway_openai_chat_completions':'gateway_ai_sdk',admissions:0,gatewayAttempts:0,statuses:[],quotaHeaders:[],textDeltas:0,cancelRequested:false};
   const a=admission(binding,quote,label,stats,true);
   let selectedAction;
   try {
@@ -120,7 +121,7 @@ async function childMain(label) {
       const request=new Request(resource,init),url=new URL(request.url);
       if(request.method==='GET')return nativeFetch(request);
       assert.equal(url.origin,gatewayOrigin,'UNREVIEWED_PROVIDER_ORIGIN');
-      assert(['/v4/ai/language-model','/v3/ai/language-model'].includes(url.pathname),'UNREVIEWED_PROVIDER_PATH');
+      assert(['/v4/ai/language-model','/v3/ai/language-model','/v1/chat/completions'].includes(url.pathname),'UNREVIEWED_PROVIDER_PATH');
       assert.equal(++stats.gatewayAttempts,1,'EXTRA_PAID_ATTEMPT_BLOCKED');
       const response=await nativeFetch(request);
       stats.statuses.push(response.status);
@@ -138,7 +139,13 @@ async function childMain(label) {
       return response;
     },{enabled:()=>true,reserve:a.reserve});
     const gateway=createGateway({apiKey:binding.gatewayKey,fetch:transport});
-    const result=streamText({model:gateway(quote.model),prompt:'Write the integers from 1 through 100, separated by spaces.',
+    // Chat Completions documents its Gateway generation ID in the first
+    // content chunk. The native AI SDK stream did not expose that ID before
+    // our earlier cancellation; those unknown charges remain fully retained.
+    const model=label==='cancel'
+      ?createOpenAI({apiKey:binding.gatewayKey,baseURL:gatewayOrigin+'/v1',fetch:transport}).chat(quote.model)
+      :gateway(quote.model);
+    const result=streamText({model,prompt:'Write the integers from 1 through 100, separated by spaces.',
       maxOutputTokens:256,maxRetries:0,abortSignal:AbortSignal.any([controller.signal,AbortSignal.timeout(60_000)]),
       onError:()=>{}});
     for await(const part of result.fullStream) {
@@ -175,29 +182,31 @@ function startChild(binding,quote,label,children,proof) {
   proc.stderr.on('data',chunk=>{proof.childDiagnosticBytes=(proof.childDiagnosticBytes||0)+chunk.length;});
   proc.on('error',()=>{headers.reject(new Error('CHILD_START_FAILED'));done.reject(new Error('CHILD_START_FAILED'));});
   proc.on('exit',()=>{headers.reject(new Error('CHILD_EXIT_BEFORE_HEADERS'));done.reject(new Error('CHILD_EXIT_BEFORE_RESULT'));reader.close();});
-  const child={proc,headers:headers.promise,done:done.promise,release(command){if(!sent&&!proc.stdin.destroyed){sent=true;proc.stdin.write(command+'\n');}}};
+  const child={proc,label,headers:headers.promise,done:done.promise,release(command){if(!sent&&!proc.stdin.destroyed){sent=true;proc.stdin.write(command+'\n');}}};
   children.push(child);return child;
 }
 
 async function refusedCall(binding,quote,label,expectedReason,proof,key) {
-  const stats={label,admissions:0,gatewayAttempts:0},a=admission(binding,quote,label,stats);
+  const stats={label,admissions:0,gatewayAttempts:0,admissionResponses:[]},a=admission(binding,quote,label,stats);
   if(proof)proof[key]=stats;
   const transport=createBudgetedFetch(async(resource,init)=>{
     const r=new Request(resource,init);if(r.method==='GET')return nativeFetch(r);
     stats.gatewayAttempts++;throw new Error('REFUSED_REQUEST_REACHED_TRANSPORT');
   },{enabled:()=>true,reserve:a.reserve});
-  const gateway=createGateway({apiKey:binding.gatewayKey,fetch:transport});
+  const gateway=createGateway({apiKey:binding.gatewayKey,fetch:async(resource,init)=>{
+    const response=await transport(resource,init);
+    if(response.status>=400)stats.admissionResponses.push({httpStatus:response.status,
+      retryAfter:response.headers.get('retry-after'),at:Date.now()});
+    return response;
+  }});
   let status=null;
   try{await generateText({model:gateway(quote.model),prompt:'Return OK.',maxOutputTokens:4,maxRetries:2});}
   catch(error){status=error?.statusCode??null;stats.errorCode=safeError(error);
     stats.errorName=/^[A-Za-z_]{1,80}$/.test(error?.name||'')?error.name:null;
     stats.lastErrorStatusCode=Number.isInteger(error?.lastError?.statusCode)?error.lastError.statusCode:null;}
   stats.httpStatus=Number.isInteger(status)?status:null;
-  assert.equal(status,402,'REFUSAL_NOT_NONRETRYABLE_402');
-  assert.equal(stats.admissions,1,'REFUSED_ADMISSION_WAS_RETRIED');
-  assert.equal(stats.gatewayAttempts,0,'REFUSED_REQUEST_REACHED_TRANSPORT');
-  assert.equal(stats.lastAdmissionReason,expectedReason,'WRONG_REFUSAL_REASON');
-  return {...stats,httpStatus:status,source:'shared_postgresql_admission_not_native_provider_quota',passed:true};
+  checkRefusal(stats,expectedReason);
+  return {...stats,source:'shared_postgresql_admission_not_native_provider_quota',passed:true};
 }
 
 async function parentMain() {
@@ -317,7 +326,7 @@ async function parentMain() {
     proof.openRequirements=['Native budget coverage and enforcement','Native provider quota/429 and retry-after behavior'];
   } catch(error) {proof.error=safeError(error);process.exitCode=1;}
   finally {
-    for(const child of children)child.release('cancel');
+    for(const child of children)child.release(child.label==='cancel'?'cancel':'complete');
     await Promise.allSettled(children.map(child=>bounded(child.done,20_000,'CHILD_CLEANUP_TIMEOUT')));
     for(const child of children){child.proc.stdin.end();if(child.proc.exitCode===null)child.proc.kill('SIGTERM');}
     if(db)try{rows=await db.rows();checkRows(rows);proof.finalReservations=rows;proof.ownActiveReservations=rows.filter(r=>r.status==='reserved').length;

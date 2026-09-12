@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 
-export const CAMPAIGN = 'phase3-provider-live-20260912-02';
+export const CAMPAIGN = 'phase3-provider-live-20260912-03';
 export const CAMPAIGN_EXPIRES = Date.parse('2026-09-13T00:00:00Z');
 export const MAX_CAMPAIGN_NANO = 1_000_000_000n;
 export const PAID_LABELS = ['complete', 'cancel', 'recovery'];
@@ -56,4 +56,21 @@ export function checkRows(rows) {
   assert.equal(new Set(rows.map(r => r.reservation_id)).size, rows.length, 'DUPLICATE_RESERVATION');
   assert(rows.reduce((sum,r) => sum + BigInt(r.reserved_nano), 0n) <= MAX_CAMPAIGN_NANO,
     'CAMPAIGN_BUDGET_EXCEEDED');
+}
+
+export function checkRefusal(stats,reason) {
+  assert.equal(stats.gatewayAttempts,0,'REFUSED_REQUEST_REACHED_TRANSPORT');
+  assert.equal(stats.lastAdmissionReason,reason,'WRONG_REFUSAL_REASON');
+  if(reason==='global_capacity_exceeded') {
+    // Production intentionally retries temporary shared capacity (PR #1783).
+    // These are local admissions, never native-provider 429 responses.
+    assert.equal(stats.admissions,3,'CAPACITY_RETRY_COUNT_MISMATCH');
+    assert.equal(stats.lastErrorStatusCode,429,'CAPACITY_NOT_RETRYABLE_429');
+    assert.equal(stats.admissionResponses.length,3,'CAPACITY_RESPONSE_COUNT_MISMATCH');
+    assert(stats.admissionResponses.every(r=>r.httpStatus===429&&r.retryAfter==='2'),'CAPACITY_RETRY_AFTER_MISMATCH');
+    for(let i=1;i<3;i++)assert(stats.admissionResponses[i].at-stats.admissionResponses[i-1].at>=1750,'RETRY_AFTER_IGNORED');
+  } else {
+    assert.equal(stats.httpStatus,402,'REFUSAL_NOT_NONRETRYABLE_402');
+    assert.equal(stats.admissions,1,'REFUSED_ADMISSION_WAS_RETRIED');
+  }
 }

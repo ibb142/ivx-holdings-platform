@@ -9,9 +9,19 @@ The fixed campaign allows three paid logical requests with a total conservative
 liability no greater than USD 1, inside the already authorized shared policy.
 Two child processes obtain independent reservations, then hold their original
 Gateway responses before consumption. A third SDK call must be denied by the
-real shared capacity check, make zero provider HTTP attempts, and not retry.
+real shared capacity check, make zero provider HTTP attempts, and honor its
+two-second Retry-After across exactly three bounded SDK admission attempts.
+This matches production PR #1783: temporary capacity returns local HTTP 429;
+monetary, uncertain-admission and duplicate failures remain HTTP 402.
 The first child drains its response; the second cancels after a real text delta
-under controlled consumer bandwidth, forwarding original bytes unchanged. It must retain its generation ID and full uncertain liability. A repeated
+under controlled consumer bandwidth, forwarding original bytes unchanged.
+Cancellation uses the installed OpenAI-compatible SDK against the same Gateway
+and shared transport; that protocol exposes its generation ID in the first
+content chunk. Completion and recovery use the Gateway SDK protocol. The prior
+native SDK cancellation did not expose its generation ID before abort; those
+two historical unknown liabilities remain fully retained and unclaimed as
+reconciled. The Chat Completions cancellation must retain its generation ID
+and full uncertain liability. A repeated
 reservation must be denied without a provider attempt. A final fresh call must
 complete and settle. All three generation IDs are checked against real receipts.
 
@@ -38,8 +48,8 @@ credentials remain `UNOBSERVED`. Listing budgets is not proof of active-key
 coverage or native enforcement. `item11_4Closed` and `item11_5Closed` remain false
 until their remaining native-control requirements have separate evidence.
 
-Native provider 429/retry-after behavior is not manufactured from the local
-budget's 402 response. Paid Gateway requests have no Gateway rate limit;
+Native provider 429/retry-after behavior is not manufactured from local
+capacity 429 or monetary 402 responses. Paid Gateway requests have no Gateway rate limit;
 upstream provider limits still apply and require a suitable controlled test.
 
 Official references:
