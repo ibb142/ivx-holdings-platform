@@ -1,0 +1,102 @@
+name: Phase 4 complete owner order chain
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'qa/autonomous-chain-evidence*'
+      - 'qa/autonomous-chain-postgres.mjs'
+      - 'qa/e2e/complete-autonomous-chain.spec.ts'
+      - 'qa/playwright.autonomous-chain.config.ts'
+      - 'qa/tsconfig.autonomous-chain.json'
+      - '.github/workflows/phase4-complete-autonomous-chain.yml'
+  workflow_dispatch:
+    inputs:
+      order:
+        description: Owner-authorized repair and deployment instruction
+        required: true
+        type: string
+      order_token:
+        description: Stable audit token (12-100 letters, digits, underscores or hyphens); never reuse for a new order
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+
+concurrency:
+  group: phase4-complete-owner-order-chain-${{ github.event_name == 'workflow_dispatch' && 'live' || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  chain-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: phase4_chain_contracts
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d phase4_chain_contracts"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Verify evidence rejection cases, types and test discovery
+        run: |
+          node --test qa/autonomous-chain-evidence.test.mjs
+          node qa/autonomous-chain-postgres.mjs
+          node node_modules/typescript/bin/tsc --project qa/tsconfig.autonomous-chain.json
+          node node_modules/playwright/cli.js test --config qa/playwright.autonomous-chain.config.ts --list
+  owner-order-chain:
+    needs: chain-contracts
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: node node_modules/playwright/cli.js install --with-deps chromium
+      - name: Submit one owner order and verify its durable execution
+        run: node node_modules/playwright/cli.js test --config qa/playwright.autonomous-chain.config.ts
+        env:
+          PHASE4_LIVE_CHAIN: '1'
+          PHASE4_ORDER: ${{ inputs.order }}
+          PHASE4_ORDER_TOKEN: ${{ inputs.order_token }}
+          GH_TOKEN: ${{ github.token }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_POOLER_URL: ${{ secrets.SUPABASE_POOLER_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          OWNER_NEW_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD }}
+          OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
+          IVX_OWNER_PASSWORD: ${{ secrets.IVX_OWNER_PASSWORD }}
+          IVX_OWNER_NEW_PASSWORD: ${{ secrets.IVX_OWNER_NEW_PASSWORD }}
+          OWNER_LOGIN_PASSWORD: ${{ secrets.OWNER_LOGIN_PASSWORD }}
+          IVX_OWNER_LOGIN_PASSWORD: ${{ secrets.IVX_OWNER_LOGIN_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase4-owner-chain-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qa/evidence/autonomous-chain/proof.json
+          if-no-files-found: error
+          retention-days: 30
