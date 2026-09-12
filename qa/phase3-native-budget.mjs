@@ -26,6 +26,34 @@ export async function requestJson(url, token, { method = 'GET', body, headers = 
   return { status: response.status, data, retryAfter: response.headers.get('retry-after') };
 }
 
+export async function readDatabaseJson(context,path,options={},dependencies={}) {
+  const method=options.method??'GET';
+  assert((method==='GET' && path.startsWith('/rest/v1/ivx_ai_budget_reservations?'))
+    || (method==='POST' && path==='/rest/v1/rpc/ivx_ai_budget_status'
+      && Object.keys(options.body??{}).length===0),'READ_RETRY_SCOPE_VIOLATION');
+  const request=dependencies.request??requestJson;
+  const pause=dependencies.pause??(ms=>new Promise(resolve=>setTimeout(resolve,ms)));
+  let last;
+  for(let attempt=0;attempt<5;attempt++) {
+    try {
+      last=await request(context.databaseUrl+path,context.serviceKey,{
+        ...options,method,headers:{apikey:context.serviceKey},timeout:15000});
+      if(last.status===200 || ![429,500,502,503,504].includes(last.status)) return last;
+      (context.proof.databaseReadRetries??=[]).push({path:path.split('?')[0],attempt:attempt+1,
+        httpStatus:last.status,errorCode:safeCode(last.data?.code),at:new Date().toISOString()});
+    } catch(error) {
+      (context.proof.databaseReadRetries??=[]).push({path:path.split('?')[0],attempt:attempt+1,
+        httpStatus:null,errorCode:safeCode(error?.name),at:new Date().toISOString()});
+    }
+    if(attempt<4) {
+      const retry=Number(last?.retryAfter);
+      await pause(Math.max((attempt+1)*1000,Number.isFinite(retry)?Math.min(10000,Math.max(0,retry*1000)):0));
+    }
+  }
+  if(last)return last;
+  throw new Error('DATABASE_READ_UNCONFIRMED');
+}
+
 export async function management(context, path, options = {}) {
   assert(path.startsWith('/') && !path.includes('://'), 'INVALID_MANAGEMENT_PATH');
   const separator = path.includes('?') ? '&' : '?';
@@ -68,8 +96,7 @@ export async function prepareContext(proof) {
   proof.sharedBindingVerified = true;
   const team = await management(context, '/v2/teams/' + TEAM);
   assert.equal(team.id, TEAM, 'TEAM_MISMATCH');
-  const policy = await requestJson(binding.databaseUrl + '/rest/v1/rpc/ivx_ai_budget_status',
-    binding.serviceKey, { method: 'POST', body: {}, headers: { apikey: binding.serviceKey }, timeout:30000 });
+  const policy = await readDatabaseJson(context,'/rest/v1/rpc/ivx_ai_budget_status',{method:'POST',body:{}});
   assert.equal(policy.status, 200, 'POLICY_READ_FAILED');
   assert.equal(policy.data.enabled, true, 'SHARED_BUDGET_DISABLED');
   assert.equal(policy.data.dailyLimitNano, '200000000000', 'SHARED_BUDGET_CHANGED');

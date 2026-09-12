@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
+import { readDatabaseJson } from './phase3-native-budget.mjs';
 import { sharedBinding, SERVICES } from './phase3-provider-live-guards.mjs';
 
 // Protected, read-only diagnosis of management access. Never logs tokens,
@@ -87,8 +88,7 @@ try {
     } catch { proof.databaseDiagnostics.poolConfigError='READ_UNCONFIRMED'; }
   }
   try {
-    const policy=await request(binding.databaseUrl+'/rest/v1/rpc/ivx_ai_budget_status',
-      binding.serviceKey,{}, {apikey:binding.serviceKey});
+    const policy=await readDatabaseJson({...binding,proof},'/rest/v1/rpc/ivx_ai_budget_status',{method:'POST',body:{}});
     proof.databaseDiagnostics.sharedPolicyHttpStatus=policy.status;
     assert.equal(policy.status,200,'POLICY_READ_FAILED');
     proof.sharedPolicy=policy.data;

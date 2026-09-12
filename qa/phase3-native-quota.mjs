@@ -10,7 +10,7 @@ import { GlobalAIBudgetError, quoteCatalogModel, usageCostUpperNano } from '../b
 import { settleBudgetWithRetry } from '../backend/services/ivx-global-ai-budget-settlement.ts';
 import { providerReportedCostNano } from '../backend/services/ivx-provider-reported-cost.ts';
 import { TEAM, prepareContext, readNativeState, checkNativeBudget, budgetSummary,
-  management, requestJson, emitProof } from './phase3-native-budget.mjs';
+  management, requestJson, readDatabaseJson, emitProof } from './phase3-native-budget.mjs';
 
 export const CAMPAIGN = 'phase3-native-quota-20260912-01';
 export const LABELS = Object.freeze(['fill1','fill2','fill3','fill4','fill5','fill6','fill7','fill8','fill9','denied','recovery']);
@@ -38,29 +38,29 @@ export function checkQuote(quote, now = Date.now()) {
   assert(/^[a-f0-9]{64}$/.test(quote.catalogSha256 ?? ''), 'INVALID_CATALOG_HASH');
 }
 function dbFor(context) {
-  const headers = { apikey: context.serviceKey };
   return {
-    async rpc(name, body = {}) {
-      assert(['ivx_ai_budget_status','ivx_ai_budget_reserve','ivx_ai_budget_finish'].includes(name), 'UNREVIEWED_RPC');
-      const r = await requestJson(context.databaseUrl + '/rest/v1/rpc/' + name, context.serviceKey,
-        { method:'POST', body, headers, timeout:30000 });
-      assert.equal(r.status, 200, 'DATABASE_HTTP_FAILED'); return r.data;
+    async rpc(name,body={}) {
+      assert(['ivx_ai_budget_status','ivx_ai_budget_reserve','ivx_ai_budget_finish'].includes(name),'UNREVIEWED_RPC');
+      const path='/rest/v1/rpc/'+name;
+      const r=name==='ivx_ai_budget_status'
+        ? await readDatabaseJson(context,path,{method:'POST',body})
+        : await requestJson(context.databaseUrl+path,context.serviceKey,
+          {method:'POST',body,headers:{apikey:context.serviceKey},timeout:30000});
+      assert.equal(r.status,200,'DATABASE_HTTP_FAILED');return r.data;
     },
     async activeRows() {
-      const r = await requestJson(context.databaseUrl + '/rest/v1/ivx_ai_budget_reservations?status=eq.reserved'
-        + '&order=created_at.asc&limit=4&select=reservation_id,worker_instance_id,model,created_at',
-        context.serviceKey, { headers, timeout:30000 });
+      const r=await readDatabaseJson(context,'/rest/v1/ivx_ai_budget_reservations?status=eq.reserved'
+        +'&order=created_at.asc&limit=4&select=reservation_id,worker_instance_id,model,created_at');
       assert.equal(r.status,200,'ACTIVE_ROWS_HTTP_FAILED');
-      assert(Array.isArray(r.data),'INVALID_ACTIVE_ROWS'); return r.data;
+      assert(Array.isArray(r.data),'INVALID_ACTIVE_ROWS');return r.data;
     },
     async rows() {
-      const r = await requestJson(context.databaseUrl + '/rest/v1/ivx_ai_budget_reservations?reservation_id=in.('
-        + LABELS.map(reservationId).join(',') + ')&select=reservation_id,worker_instance_id,model,request_sha,'
-        + 'policy_revision,reserved_nano,status,settled_upper_nano,generation_id,created_at,completed_at',
-        context.serviceKey, { headers, timeout:30000 });
-      assert.equal(r.status, 200, 'ROWS_HTTP_FAILED');
-      assert(Array.isArray(r.data) && r.data.every(x => LABELS.map(reservationId).includes(x.reservation_id)),
-        'INVALID_CAMPAIGN_ROWS'); return r.data;
+      const r=await readDatabaseJson(context,'/rest/v1/ivx_ai_budget_reservations?reservation_id=in.('
+        +LABELS.map(reservationId).join(',')+')&select=reservation_id,worker_instance_id,model,request_sha,'
+        +'policy_revision,reserved_nano,status,settled_upper_nano,generation_id,created_at,completed_at');
+      assert.equal(r.status,200,'ROWS_HTTP_FAILED');
+      assert(Array.isArray(r.data)&&r.data.every(x=>LABELS.map(reservationId).includes(x.reservation_id)),
+        'INVALID_CAMPAIGN_ROWS');return r.data;
     },
   };
 }
@@ -308,7 +308,8 @@ function existingLimits(state, excludedId) {
     'api_key_id_knOwlYBnQg2O8NXTSmdzabDiELeajwcuAxsOVavJAlvv60K7',
     'api_key_id_AfVkVmLscQFO0cj0SRJaZcAZVrdVUoj9hagCXBx2kYjfUXID',
     'api_key_id_lmcgOgp2P4cc70xHcz9lA1HAvza3uJxyIkR0Ea7zQZVjkvnY',
-    'api_key_id_ONdG1MfmiqLYVm0fEbxNUatjdxaWSIJtEhsnKOY7aBaqk3rs'].includes(b.quotaEntityId)).map(b=>({
+    'api_key_id_ONdG1MfmiqLYVm0fEbxNUatjdxaWSIJtEhsnKOY7aBaqk3rs',
+    'api_key_id_LSA0XIVQj6OKdv5yFsqzLYdqS8Ctd6rpvXtqfhFAzANCzyRq'].includes(b.quotaEntityId)).map(b=>({
     id:b.quotaEntityId,limit:b.limitAmount,period:b.refreshPeriod,active:b.active,archived:b.archived,
     byok:b.includeByokInQuota,
   })).sort((a,b)=>a.id.localeCompare(b.id));
@@ -317,13 +318,11 @@ async function reviewRetiredCapacity(context, db) {
   // Independently reviewed Render evidence: SIGTERM at 12:50:25, last log
   // 12:50:48, replacement live at 12:57:51, CPU/instance metrics at 13:08-13:12
   // identify exactly k9hjm and lzsnj. No current process owns c9sfd.
-  assert(Date.now()<Date.parse('2026-09-12T14:00:00Z'),'RETIREMENT_REVIEW_EXPIRED');
   const id='1308643c-2af6-4251-b6ea-e1bb651c4296';
   const worker='ivx-senior-dev-01:srv-d9i15fg4n6ts73bn00j0-5697ddff69-c9sfd:17:cc1c989b-532';
   const read=async()=>{
-    const r=await requestJson(context.databaseUrl+'/rest/v1/ivx_ai_budget_reservations?reservation_id=eq.'+id
-      +'&select=reservation_id,worker_instance_id,model,status,reserved_nano,settled_upper_nano,generation_id,created_at,completed_at',
-      context.serviceKey,{headers:{apikey:context.serviceKey},timeout:30000});
+    const r=await readDatabaseJson(context,'/rest/v1/ivx_ai_budget_reservations?reservation_id=eq.'+id
+      +'&select=reservation_id,worker_instance_id,model,status,reserved_nano,settled_upper_nano,generation_id,created_at,completed_at');
     assert.equal(r.status,200,'RETIRED_ROW_READ_FAILED');
     assert(Array.isArray(r.data)&&r.data.length===1,'RETIRED_ROW_MISSING');return r.data[0];
   };
@@ -341,6 +340,7 @@ async function reviewRetiredCapacity(context, db) {
   context.proof.retiredCapacityReview=review;
   assert(['reserved','uncertain'].includes(before.status),'RETIRED_ROW_STATUS_CHANGED');
   if(before.status==='reserved') {
+    assert(Date.now()<Date.parse('2026-09-12T14:00:00Z'),'RETIREMENT_REVIEW_EXPIRED');
     review.mutationAttempted=true;
     try {
       await db.rpc('ivx_ai_budget_finish',{p_reservation_id:id,p_worker_instance_id:worker,

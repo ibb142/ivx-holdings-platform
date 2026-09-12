@@ -60,3 +60,29 @@ test('a lost acknowledgment is confirmed only by the exact terminal reservation'
   }
   assert.equal(MAX_LIABILITY_NANO,11000000000n);
 });
+
+import { readDatabaseJson } from './phase3-native-budget.mjs';
+
+test('temporary database read errors retry without initiating mutations',async()=>{
+  const context={databaseUrl:'https://example.invalid',serviceKey:'fixture',proof:{}};
+  const delays=[];let calls=0;
+  const result=await readDatabaseJson(context,'/rest/v1/ivx_ai_budget_reservations?select=status',{},{
+    request:async()=>++calls<3?{status:503,data:{code:'PGRST003'}}:{status:200,data:[{status:'uncertain'}]},
+    pause:async ms=>{delays.push(ms)},
+  });
+  assert.equal(result.status,200);assert.equal(calls,3);assert.deepEqual(delays,[1000,2000]);
+  await assert.rejects(()=>readDatabaseJson(context,'/rest/v1/rpc/ivx_ai_budget_reserve',
+    {method:'POST',body:{}},{request:async()=>{throw Error('must not run')}}),/READ_RETRY_SCOPE_VIOLATION/);
+  assert.equal(calls,3);
+});
+test('read retries remain bounded and authentication failures stop immediately',async()=>{
+  const context={databaseUrl:'https://example.invalid',serviceKey:'fixture',proof:{}};
+  let calls=0;
+  const failed=await readDatabaseJson(context,'/rest/v1/ivx_ai_budget_reservations?select=status',{},
+    {request:async()=>{calls++;return {status:503,data:{code:'PGRST003'}}},pause:async()=>{}});
+  assert.equal(failed.status,503);assert.equal(calls,5);
+  calls=0;
+  const unauthorized=await readDatabaseJson(context,'/rest/v1/rpc/ivx_ai_budget_status',{method:'POST',body:{}},
+    {request:async()=>{calls++;return {status:401,data:{}}},pause:async()=>{throw Error('must not wait')}});
+  assert.equal(unauthorized.status,401);assert.equal(calls,1);
+});
