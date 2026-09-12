@@ -1,0 +1,123 @@
+name: Phase 1 Auth availability diagnostics
+on:
+  push:
+    branches: [qa/phase1-auth-diagnostics-20260912]
+    paths: [.github/workflows/phase1-auth-diagnostics.yml]
+permissions:
+  contents: read
+concurrency:
+  group: phase1-auth-read-only-diagnostics
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read service health and summarize bounded logs without private content
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { mkdirSync, writeFileSync } from 'node:fs';
+          const ref = 'kvclcdjmjghndxsngfzb';
+          const token = process.env.SUPABASE_ACCESS_TOKEN;
+          const end = new Date();
+          const start = new Date(end.getTime() - 30 * 60_000);
+          const receipt = { scope: 'read-only Auth availability diagnosis', project: ref,
+            startedAt: end.toISOString(), logWindowStart: start.toISOString(), logWindowEnd: end.toISOString(),
+            sourceSha: process.env.GITHUB_SHA, observations: [], mutations: 0, rawLogsPublished: false, credentialsPublished: false };
+          mkdirSync('qa-results', { recursive: true });
+          const save = () => writeFileSync('qa-results/auth-availability.json', JSON.stringify(receipt, null, 2) + '\n');
+          const get = async (path, label) => {
+            const observation = { label, method: 'GET', startedAt: new Date().toISOString() };
+            receipt.observations.push(observation);
+            const began = Date.now();
+            try {
+              const response = await fetch('https://api.supabase.com/v1/projects/' + ref + path, {
+                method: 'GET', redirect: 'error', signal: AbortSignal.timeout(30000),
+                headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' },
+              });
+              observation.http = response.status;
+              const payload = await response.json();
+              observation.durationMs = Date.now() - began;
+              if (!response.ok) { observation.result = 'UNAVAILABLE'; return null; }
+              observation.result = 'READ';
+              return { observation, payload };
+            } catch { observation.result = 'TRANSPORT_OR_FORMAT_ERROR'; observation.durationMs = Date.now() - began; return null; }
+            finally { save(); }
+          };
+          if (!token?.trim()) {
+            receipt.observations.push({ label: 'management_credential', result: 'MISSING' });
+            process.exitCode = 1;
+          } else {
+            const health = await get('/health?services=auth,rest,db&timeout_ms=15000', 'project_service_health');
+            if (health) {
+              const list = Array.isArray(health.payload) ? health.payload : health.payload.services;
+              const names = new Set(['auth', 'rest', 'db', 'database', 'realtime', 'storage', 'pooler']);
+              const statuses = new Set(['ACTIVE_HEALTHY', 'ACTIVE_UNHEALTHY', 'INACTIVE', 'COMING_UP', 'GOING_DOWN', 'UNKNOWN']);
+              health.observation.services = Array.isArray(list) ? list.map(item => ({
+                name: names.has(item.name) ? item.name : 'unknown',
+                status: statuses.has(item.status) ? item.status : 'unknown',
+                healthy: typeof item.healthy === 'boolean' ? item.healthy : null,
+              })) : [];
+              if (!Array.isArray(list)) health.observation.result = 'UNRECOGNIZED_FORMAT';
+            }
+            const categories = [
+              ['timeout', /timeout|timed out|context deadline/i],
+              ['connection_limit', /too many connections|remaining connection slots|max_client_conn/i],
+              ['connection_transport', /connection refused|connection reset|broken pipe|unexpected eof/i],
+              ['rate_limited', /rate.limit|too many requests/i],
+              ['jwt_rejected', /invalid.{0,30}(jwt|token)|(jwt|token).{0,30}(expired|invalid)/i],
+              ['invalid_credentials', /invalid login credentials|invalid password/i],
+              ['schema_cache', /schema cache|relation.{0,80}does not exist/i],
+              ['database_permission', /permission denied/i],
+              ['deadlock', /deadlock/i],
+              ['resource_exhausted', /out of memory|no space left|disk io|resource exhausted/i],
+              ['other_error', /\berror\b|\bfatal\b|\bpanic\b/i],
+            ];
+            const messages = (value, depth = 0) => {
+              if (!value || typeof value !== 'object' || depth > 8) return [];
+              const parts = [];
+              for (const [key, field] of Object.entries(value)) {
+                if (['event_message', 'message', 'msg', 'error'].includes(key) && typeof field === 'string') {
+                  try { parts.push(...messages(JSON.parse(field), depth + 1)); }
+                  catch { parts.push(field); }
+                } else if (key === 'level' && ['error', 'fatal', 'panic'].includes(field)) parts.push(field);
+                else if (field && typeof field === 'object') parts.push(...messages(field, depth + 1));
+              }
+              return parts;
+            };
+            for (const source of ['auth_logs', 'postgres_logs', 'edge_logs']) {
+              const query = new URLSearchParams({
+                sql: `select timestamp, event_message, metadata from ${source} order by timestamp desc limit 80`,
+                iso_timestamp_start: start.toISOString(), iso_timestamp_end: end.toISOString(),
+              });
+              const result = await get('/analytics/endpoints/logs.all?' + query, source);
+              if (!result) continue;
+              const rows = result.payload.result ?? result.payload.data?.result;
+              if (!Array.isArray(rows)) { result.observation.result = 'UNRECOGNIZED_FORMAT'; continue; }
+              const counts = Object.fromEntries([...categories.map(([name]) => [name, 0]), ['unclassified', 0]]);
+              for (const row of rows.slice(0, 80)) {
+                const text = messages(row).join(' ');
+                const name = categories.find(([, pattern]) => pattern.test(text))?.[0] ?? 'unclassified';
+                counts[name]++;
+              }
+              result.observation.sampledEntries = Math.min(rows.length, 80);
+              result.observation.categories = counts;
+              // Raw messages, request headers, identities and SQL text stay in memory only.
+              save();
+            }
+          }
+          receipt.finishedAt = new Date().toISOString();
+          receipt.result = receipt.observations.every(value => value.result === 'READ') ? 'DIAGNOSTIC_COMPLETE' : 'DIAGNOSTIC_INCOMPLETE';
+          if (receipt.result !== 'DIAGNOSTIC_COMPLETE') process.exitCode = 1;
+          save();
+          console.log(JSON.stringify(receipt));
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase1-auth-diagnostics-${{ github.run_id }}
+          path: qa-results/auth-availability.json
+          if-no-files-found: error
+          retention-days: 30
