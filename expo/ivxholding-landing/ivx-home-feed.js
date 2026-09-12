@@ -51,6 +51,33 @@
     return n.toFixed(n % 1 === 0 ? 0 : 2) + '%';
   }
 
+  // Fetch optional counters after cards render. Failure never rejects the feed.
+  function loadDeferredAnalytics(videos, isCurrent) {
+    var pending = videos.filter(function (v) { return v.analytics_status === 'deferred'; }).slice(0, 50);
+    if (!pending.length) return;
+    setTimeout(function () {
+      if (isCurrent && !isCurrent()) return;
+      var controller = new AbortController();
+      var timer = setTimeout(function () { controller.abort(); }, 6500);
+      fetch(API_CANDIDATES[0] + '/api/videos/analytics?ids=' + encodeURIComponent(pending.map(function (v) { return v.id; }).join(',')), { signal: controller.signal })
+        .then(function (r) { if (!r.ok) throw new Error('analytics unavailable'); return r.json(); })
+        .then(function (data) {
+          if (isCurrent && !isCurrent()) return;
+          var counts = {};
+          (data.videos || []).forEach(function (v) { counts[v.id] = v.view_count; });
+          pending.forEach(function (v) {
+            if (Object.prototype.hasOwnProperty.call(counts, v.id)) {
+              v.view_count = counts[v.id]; v.analytics_status = 'ready';
+            } else v.analytics_status = 'unavailable';
+          });
+        })
+        .catch(function () {
+          if (!isCurrent || isCurrent()) pending.forEach(function (v) { v.analytics_status = 'unavailable'; });
+        })
+        .finally(function () { clearTimeout(timer); });
+    }, 0);
+  }
+
   function fetchHomeFeed(i, deadline) {
     i = i || 0;
     deadline = deadline || Date.now() + 18000;
@@ -420,6 +447,7 @@
     fetchHomeFeed(0)
       .then(function (data) {
         homeFeed = data;
+        loadDeferredAnalytics(data.blocks.filter(function (b) { return b.type === 'video' && b.video; }).map(function (b) { return b.video; }), function () { return homeFeed === data; });
         window.__ivxHomeFeedStatus.state = 'ready';
         window.__ivxHomeFeedStatus.blockCount = data.blocks.length;
         applyHomeFeedLayout();

@@ -1,3 +1,4 @@
+import { newReadTimings, readTimings, timingHeaders } from './services/ivx-read-timings';
 import { publicReadTimeout, publicMutationTimeout } from './services/ivx-public-timeout-response';
 import { handleFleetHaGet } from './api/ivx-fleet-ha';
 import { reelVariantFileName } from './services/ivx-reel-variant';
@@ -1439,6 +1440,7 @@ import {
   handlePlatformChannels,
   handlePlatformEvents,
   handlePlatformVideoAnalytics,
+  handleDeferredVideoAnalytics,
   handlePlatformVideoMeta,
   handlePlatformFollowToggle,
   handlePlatformFollowList,
@@ -2973,9 +2975,16 @@ app.use('*', cors({
   },
   allowMethods: ['GET', 'POST', 'OPTIONS', 'HEAD'],
   allowHeaders: ['Content-Type', 'Authorization', 'apikey'],
-  exposeHeaders: ['Content-Type', 'Cache-Control'],
+  exposeHeaders: ['Content-Type', 'Cache-Control', 'X-IVX-Pool-Wait-Ms', 'X-IVX-Payload-Ms', 'X-IVX-Upstream-Headers-Ms', 'X-IVX-Timing-Scope'],
   maxAge: 86400,
 }));
+
+app.use('*', async (c, next) => {
+  if (c.req.method !== 'GET' || !/^\/api\/(?:reels|landing-deals|deals|published-jv-deals|videos\/analytics|ivx\/(?:jv-deals|deals|videos\/feed|video-platform\/(?:feed|home-feed)))(?:$|\/)/.test(c.req.path)) return next();
+  const metrics = newReadTimings();
+  await readTimings.run(metrics, next);
+  for (const [key, value] of Object.entries(timingHeaders(metrics))) c.header(key, value);
+});
 
 // ── Enterprise middleware stack ──
 app.use('*', securityHeadersMiddleware);
@@ -6244,6 +6253,7 @@ app.get('/api/ivx/video-platform/home-feed', async (c) => withTimeout(() => hand
 app.post('/api/ivx/video-platform/deals/:dealId/meta', async (c) => handlePlatformDealMeta(c.req.raw, c.req.param('dealId')));
 app.get('/api/ivx/video-platform/channels', async () => withTimeout(() => handlePlatformChannels(), () => publicReadTimeout('channels')));
 app.post('/api/ivx/video-platform/events', async (c) => handlePlatformEvents(c.req.raw));
+app.get('/api/videos/analytics', async (c) => withTimeout(() => handleDeferredVideoAnalytics(c.req.raw), () => Response.json({ code: 'ANALYTICS_TIMEOUT' }, { status: 503, headers: { 'Cache-Control': 'no-store' } }), 6000));
 app.get('/api/ivx/video-platform/videos/:videoId/analytics', async (c) => handlePlatformVideoAnalytics(c.req.param('videoId')));
 app.post('/api/ivx/video-platform/videos/:videoId/meta', async (c) => handlePlatformVideoMeta(c.req.raw, c.req.param('videoId')));
 app.post('/api/ivx/video-platform/videos/:videoId/report', async (c) => handlePlatformReport(c.req.raw, c.req.param('videoId')));

@@ -1,3 +1,4 @@
+import { measuredReadFetch } from './ivx-read-timings';
 /**
  * IVX durable document store (Supabase-backed) — THE PERMANENT DATA-LOSS FIX (2026-06-07).
  *
@@ -235,7 +236,7 @@ export class DurableStore {
     retrySchemaCache: boolean = true,
   ): Promise<T> {
     return retryWithBackoff(async () => {
-      const response = await fetch(`${this.restBaseUrl()}${pathName}`, {
+      const response = await measuredReadFetch(`${this.restBaseUrl()}${pathName}`, {
         ...init,
         headers: { ...buildHeaders(prefer), ...(init.headers ?? {}) },
         signal: AbortSignal.timeout(REST_TIMEOUT_MS),
@@ -247,7 +248,7 @@ export class DurableStore {
         if (schemaCacheMiss) {
           await this.executeSql("select pg_notify('pgrst','reload schema')");
           await sleep(750);
-          const retryResponse = await fetch(`${this.restBaseUrl()}${pathName}`, {
+          const retryResponse = await measuredReadFetch(`${this.restBaseUrl()}${pathName}`, {
             ...init,
             headers: { ...buildHeaders(prefer), ...(init.headers ?? {}) },
             signal: AbortSignal.timeout(REST_TIMEOUT_MS),

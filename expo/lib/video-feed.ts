@@ -46,7 +46,8 @@ export interface FeedVideo {
   comment_count: number;
   share_count: number;
   save_count?: number;
-  view_count?: number;
+  view_count?: number | null;
+  analytics_status?: 'deferred' | 'ready' | 'unavailable';
   property_id?: string | null;
   /** Type A `deal` (investor deal video) | Type B `reel` (project/construction reel). */
   video_type?: 'deal' | 'reel';

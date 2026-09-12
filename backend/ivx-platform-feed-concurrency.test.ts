@@ -32,7 +32,7 @@ test('real feed handler coalesces public reads and preserves each viewer and fre
     const realStore=await import('./backend/services/ivx-video-platform-store');
     mock.module('./backend/services/ivx-video-platform-store',()=>({...realStore,
       getMetaDoc:async()=>{counts.meta++;return structuredClone(metadata);},
-      getAnalyticsDoc:async()=>{counts.analytics++;return {videos:{},history:{}};},
+      getAnalyticsDoc:async()=>{counts.analytics++;throw Error('Analytics offline must not block rendering');},
       getFollowState:async viewer=>({following:viewer==='guest-a'?['creator-a']:[]}),
       getViewerProfile:async()=>{counts.profile++;throw Error('Unused viewer profile must not block canonical feed');}}));
     mock.module('./backend/services/ivx-video-pipeline',()=>({getPlaybackIndex:async()=>({})}));
@@ -53,7 +53,7 @@ test('real feed handler coalesces public reads and preserves each viewer and fre
       assert.equal(body.videos[0].viewer_following_creator,i%2===0);
       assert.equal(body.videos[0].like_count,1);assert.equal(body.videos[1].save_count,1);
     }
-    assert.deepEqual(counts,{catalog:1,meta:1,analytics:1,deals:1,media:2,profile:0});
+    assert.deepEqual(counts,{catalog:1,meta:1,analytics:0,deals:1,media:2,profile:0});
     metadata[a].status='draft'; rows.project_saves=[];
     const fresh=await read('guest-b');assert.equal(fresh.status,200);
     const body=await fresh.json();assert.deepEqual(body.videos.map(video=>video.id),[b]);
@@ -107,7 +107,7 @@ test('home and Reels share pending public reads while preserving deal ordering a
     const realStore=await import('./backend/services/ivx-video-platform-store');
     mock.module('./backend/services/ivx-video-platform-store',()=>({...realStore,
       getMetaDoc:async()=>{calls.meta++;return structuredClone(metadata);},
-      getAnalyticsDoc:async()=>{calls.analytics++;return {videos:{},history:{}};},
+      getAnalyticsDoc:async()=>{calls.analytics++;return new Promise(()=>{});},
       getDealMetaDoc:async()=>{calls.dealMeta++;return {};}}));
     mock.module('./backend/services/ivx-video-pipeline',()=>({getPlaybackIndex:async()=>{calls.playback++;return {};}}));
     globalThis.fetch=async(url,init)=>{
@@ -117,12 +117,12 @@ test('home and Reels share pending public reads while preserving deal ordering a
     const {handlePlatformFeed,handlePlatformHomeFeed}=await import('./backend/api/ivx-video-platform');
     const homePromise=handlePlatformHomeFeed(new Request('https://example.test/api/ivx/video-platform/home-feed?limit=60'));
     await new Promise(resolve=>setTimeout(resolve,20));
-    assert.deepEqual(calls,{catalog:1,meta:1,analytics:1,playback:1,dealMeta:1},
+    assert.deepEqual(calls,{catalog:1,meta:1,analytics:0,playback:1,dealMeta:1},
       'Home must start all independent sources while deal reads are still pending');
     const reelPromise=handlePlatformFeed(new Request('https://example.test/api/reels?type=reel'));
     await new Promise(resolve=>setTimeout(resolve,20));
     assert.equal(calls.catalog,1,'Reels must reuse the pending home catalog');
-    assert.equal(calls.meta,1);assert.equal(calls.analytics,1);assert.equal(calls.playback,1);
+    assert.equal(calls.meta,1);assert.equal(calls.analytics,0);assert.equal(calls.playback,1);
     releaseDeals();
     const [home,reels]=await Promise.all([homePromise,reelPromise]);
     assert.equal(home.status,200);assert.equal(reels.status,200);
