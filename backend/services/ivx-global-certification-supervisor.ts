@@ -61,6 +61,7 @@ const RED_CONCLUSIONS: ReadonlySet<string> = new Set([
   'timed_out',
   'startup_failure',
   'action_required',
+  'skipped', // added 'skipped' for SHA mismatch handling
 ]);
 
 export type SupervisorGlobalStatus = 'GREEN' | 'RED' | 'PENDING';
