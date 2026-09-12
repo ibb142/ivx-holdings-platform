@@ -1,0 +1,65 @@
+name: Phase 1 owner isolation acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - qa/phase1-owner-isolation-live.mjs
+      - qa/phase1-owner-isolation-live.test.mjs
+      - .github/workflows/phase1-owner-isolation-live.yml
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: Exact commit already deployed to production
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: phase1-owner-isolation-hosted
+  cancel-in-progress: false
+jobs:
+  harness:
+    name: Hosted acceptance harness regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: node --test qa/phase1-owner-isolation-live.test.mjs
+  hosted:
+    name: Production owner and member isolation
+    needs: harness
+    # No fork secrets. This one QA branch is the reviewed acceptance patch.
+    if: >-
+      github.repository == 'ibb142/ivx-holdings-platform' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        github.event.pull_request.head.ref == 'qa/phase1-owner-isolation-live-20260912'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Test hosted sessions, boundaries and persistence; remove only this run's fixtures
+        env:
+          IVX_PHASE1_HOSTED_QA: temporary-members-and-chat-fixtures
+          IVX_TARGET_SHA: ${{ inputs.target_sha || 'db3b8822bee93e44405ca9fafdc324e7b4cb4665' }}
+          IVX_QA_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          IVX_QA_OWNER_EMAIL: iperez4242@gmail.com
+          IVX_QA_OWNER_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD || secrets.OWNER_PASSWORD || secrets.IVX_OWNER_PASSWORD || secrets.IVX_OWNER_NEW_PASSWORD || secrets.OWNER_LOGIN_PASSWORD || secrets.IVX_OWNER_LOGIN_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node qa/phase1-owner-isolation-live.mjs
+      - name: Preserve receipt, including any failed cleanup
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-owner-isolation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qa-results/phase1-owner-isolation/receipt.json
+          if-no-files-found: error
+          retention-days: 30
