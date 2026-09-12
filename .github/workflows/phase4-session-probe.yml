@@ -1,0 +1,36 @@
+name: Phase 4 owner session and probe regressions
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'expo/lib/verified-session-restore.ts'
+      - 'expo/lib/single-flight-task.ts'
+      - 'expo/app/ivx/chat.tsx'
+      - 'qa/phase4-owner-session-probe.test.mjs'
+      - '.github/workflows/phase4-session-probe.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'expo/lib/verified-session-restore.ts'
+      - 'expo/lib/single-flight-task.ts'
+      - 'expo/app/ivx/chat.tsx'
+      - 'qa/phase4-owner-session-probe.test.mjs'
+      - '.github/workflows/phase4-session-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  session-and-probe-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify session races and overlapping capability probes
+        run: node --test qa/phase4-owner-session-probe.test.mjs

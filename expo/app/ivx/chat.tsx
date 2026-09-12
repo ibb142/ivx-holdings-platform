@@ -113,6 +113,7 @@ import {
   type IVXProofRecord,
   type IVXRoomRuntimeSnapshot} from '@/src/modules/ivx-owner-ai/services';
 import { isIVXLocalFirstChatEnabled } from '@/src/modules/ivx-owner-ai/services/ivxLocalFirstRuntime';
+import { createSingleFlightTask } from '@/lib/single-flight-task';
 import type { IVXOwnerFileInsight } from '@/src/modules/ivx-owner-ai/services/ivxOwnerMemoryService';
 import { transcribeAudioRecording } from '@/src/modules/ivx-owner-ai/services/ivxMultimodalService';
 import { enforceIVXChatQualityFirewall } from '@/src/modules/ivx-owner-ai/services/ivxChatQualityFirewall';
@@ -3679,6 +3680,7 @@ export default function IVXOwnerChatRoute() {
 
     const singleProbeAttempt = async (): Promise<Awaited<ReturnType<typeof ivxAIRequestService.probeOwnerAIHealth>>> => {
       const result = await ivxAIRequestService.probeOwnerAIHealth();
+      if (cancelled) return result;
       setAiProbeMetadata((current) => ({
         observedAt: new Date().toISOString(),
         source: result.source,
@@ -3700,12 +3702,14 @@ export default function IVXOwnerChatRoute() {
         source: result.source,
         endpoint: result.endpoint,
         deploymentMarker: result.deploymentMarker,
-        storageMode: result.roomStatus?.storageMode ?? ivxRoomStatus?.storageMode ?? 'unknown'});
+        storageMode: result.roomStatus?.storageMode ?? queryClient.getQueryData<ChatRoomStatus>(IVX_ROOM_STATUS_QUERY_KEY)?.storageMode ?? 'unknown'});
       return result;
     };
 
-    const probe = async () => {
+    const probe = createSingleFlightTask(async () => {
+      if (cancelled) return;
       const result = await singleProbeAttempt();
+      if (cancelled) return;
       void recordIVXOwnerChatAuditEvent({
         action: 'sync_probe',
         conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
@@ -3743,14 +3747,20 @@ export default function IVXOwnerChatRoute() {
       setOwnerCommandsActive(false);
       setCodeAwareActive(false);
       setFileUploadActive(false);
+    });
+
+    const runProbe = () => {
+      void probe().catch((error: unknown) => {
+        if (!cancelled) console.log('[IVXOwnerChatRoute] Capability probe failed:', error instanceof Error ? error.message : 'unknown');
+      });
     };
 
     const initialDelay = setTimeout(() => {
-      if (!cancelled) void probe();
+      if (!cancelled) runProbe();
     }, 1500);
 
     intervalId = setInterval(() => {
-      void probe();
+      runProbe();
     }, AI_PROBE_INTERVAL_MS);
 
     return () => {
@@ -3758,7 +3768,7 @@ export default function IVXOwnerChatRoute() {
       clearTimeout(initialDelay);
       if (intervalId) clearInterval(intervalId);
     };
-  }, [ivxRoomStatus?.storageMode, queryClient]);
+  }, [conversationQuery.data?.id, queryClient]);
 
   const runtimeSignals = useMemo<ChatRoomRuntimeSignals>(() => {
     if (localFirstChatMode) {
