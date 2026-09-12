@@ -36,13 +36,15 @@ test('public deals coalesce concurrent reads, fail visibly, and recover without 
 test('inspection uses verified CA despite URL sslmode and keeps read-only transaction', async () => {
   await isolated(`
     import {mock} from 'bun:test';
+    import {EventEmitter} from 'node:events';
     let config, released=false;const sql=[];
     process.env.SUPABASE_INSPECTION_DATABASE_URL='postgres://postgres:example@db.example.supabase.co/postgres?sslmode=require';
     mock.module('./backend/api/owner-only',()=>({assertIVXOwnerOnly:()=>{},ownerOnlyJson:()=>{},ownerOnlyOptions:()=>{}}));
-    mock.module('pg',()=>({Pool:class{constructor(c){config=c;}async connect(){return {query:async text=>{sql.push(text);return {rows:[]}},release:()=>{released=true}}}async end(){}}}));
+    mock.module('pg',()=>({Pool:class extends EventEmitter{constructor(c){super();config=c;}async connect(){return Object.assign(new EventEmitter(),{query:async text=>{sql.push(text);return {rows:[]}},release:destroy=>{if(destroy)throw Error('healthy connection discarded');released=true}})}async end(){}}}));
     const {inspectSupabaseTables}=await import('./backend/api/ivx-supabase-inspection');
     await inspectSupabaseTables('public',null,5);
     if(config.connectionString.includes('sslmode')||config.ssl.rejectUnauthorized!==true||!config.ssl.ca.length||config.max!==1)throw Error('unverified or oversized pool');
-    if(sql[0]!=='BEGIN READ ONLY'||sql.at(-1)!=='COMMIT'||!released)throw Error('transaction protection changed');
+    const setup=sql[0].split(';').map(statement=>statement.trim());
+    if(setup[0]!=='BEGIN READ ONLY'||!setup.includes("SET LOCAL statement_timeout = '4s'")||config.query_timeout!==5000||sql.at(-1)!=='COMMIT'||!released)throw Error('transaction protection changed');
   `);
 });
