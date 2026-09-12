@@ -1344,6 +1344,7 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     typecheckPassed: job.result?.typecheckPassed === true,
     filesChanged: job.result?.changedFiles ?? [],
     ciWaitStartedAt,
+    isCanceled: () => controller.cancelled || queueStopping,
     beforeMerge: async () => {
       await assertEmergencyStopInactive('senior-worker-resumed-merge');
       if (controller.cancelled) throw new Error('Worker lease lost before resumed merge');

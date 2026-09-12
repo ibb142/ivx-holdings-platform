@@ -1647,7 +1647,12 @@ async function waitForRequiredChecksGreen(
   const intervalMs = input.ciPollIntervalMs ?? DEFAULT_CI_POLL_INTERVAL_MS;
   const graceMs = input.ciNaGraceMs ?? DEFAULT_CI_NA_GRACE_MS;
   let last: IVXCiCheckEvidence[] = [];
+  const interrupted = () => ({
+    green: false, evidence: last, timedOut: false, waitMs: Date.now() - startedAt,
+    blocker: 'CI_WAIT_INTERRUPTED: worker execution authority lost; durable checkpoint retained for recovery.',
+  });
   for (;;) {
+    if (input.isCanceled?.()) return interrupted();
     // CI can finish long after an owner closes a rejected repair. Reconcile
     // each poll so that the durable worker can finish this job and release its lane.
     if (prNumber != null) {
@@ -1661,6 +1666,8 @@ async function waitForRequiredChecksGreen(
       ? await input.requiredChecksFn(commitSha)
       : await fetchRequiredChecksForCommit(commitSha);
     last = evidence;
+    // The lease can expire during GitHub reads, including the final green poll.
+    if (input.isCanceled?.()) return interrupted();
     if (requiredChecksAllGreen(evidence)) {
       return { green: true, evidence, timedOut: false, waitMs: Date.now() - startedAt };
     }
@@ -3126,6 +3133,7 @@ export type IVXAutonomousCoderResumeInput = {
   ciNaGraceMs?: number;
   ciWaitStartedAt?: string;
   sleepFn?: (ms: number) => Promise<void>;
+  isCanceled?: () => boolean;
   /** Injectable PR-state fetcher for testing. When omitted, the real GitHub
    *  API is used. */
   prStateFn?: (prNumber: number) => Promise<{ state: 'open' | 'closed' | 'unknown'; merged: boolean; mergeCommitSha: string | null }>;
@@ -3170,6 +3178,7 @@ export async function resumeIVXAutonomousCoderFromCiWait(
     ciPollIntervalMs: input.ciPollIntervalMs,
     ciNaGraceMs: input.ciNaGraceMs,
     ciWaitStartedAt: input.ciWaitStartedAt,
+    isCanceled: input.isCanceled,
     sleepFn: input.sleepFn,
   }, onPhase, input.prNumber, input.branch);
 
