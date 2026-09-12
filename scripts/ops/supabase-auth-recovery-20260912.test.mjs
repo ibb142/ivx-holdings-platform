@@ -34,6 +34,10 @@ test('credential and ambiguous health failures do not authorize restart', async 
   for (const healthHttp of [401, 403, 500]) assert.equal((await run({ healthHttp })).restarts, 0);
 });
 test('intermittent Auth health cannot pass preflight', async () => { assert.equal((await run({ health: [false, true] })).restarts, 0); });
+test('a bounded sample still requires two consecutive explicit Auth failures after a transient success', async () => {
+  const r = await run({ health: [false, true, false, false, true, true, true] });
+  assert.equal(r.restarts, 1); assert.equal(r.receipt.result, 'AUTH_RECOVERED');
+});
 test('changed or unreadable boot prevents an additional restart', async () => {
   assert.equal((await run({ boot: '2026-09-12T00:59:00Z' })).restarts, 0);
   assert.equal((await run({ bootHttp: 500 })).restarts, 0);
