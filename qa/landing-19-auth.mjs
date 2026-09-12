@@ -7,6 +7,7 @@ import path from 'node:path';
 import jwt from 'jsonwebtoken';
 import { chromium } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
+import { closeForwardedAuthPage } from './landing-auth-page-close.mjs';
 
 const unit = process.argv[2];
 assert.ok(['registration.zip-code', 'registration.optional-picture', 'registration.duplicate-user', 'registration.loading-retry-browser', 'registration.e2e-member-creation', 'auth.expired-token', 'auth.session-persistence-browser', 'auth.login-e2e'].includes(unit));
@@ -36,6 +37,11 @@ const password = 'Local-QA-' + randomUUID() + '!9a';
 const payload = () => ({ email: `qa-${randomUUID()}@example.test`, password, firstName: 'QA', lastName: 'Fixture', phone: '+15555550100', country: 'US', zipCode: '33101', roles: ['investor'], acceptTerms: true, dateOfBirth: '1990-01-01', gender: 'prefer_not_to_say', registrationRequestId: randomUUID() });
 const created = [], checks = [];
 let browser, error;
+const reportAsyncError = (reason) => {
+  error ||= reason instanceof Error ? reason.message : String(reason);
+  process.exitCode = 1;
+};
+process.on('unhandledRejection', reportAsyncError);
 async function request(route, body, token) {
   const response = await fetch(fixtureBase + route, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
   return { status: response.status, data: await response.json() };
@@ -59,6 +65,17 @@ async function login(input) {
 }
 async function openAuthPage(context, input, mode = 'login', expectSession = false) {
   const page = await context.newPage();
+  // Scope forwarding to this page, so its handlers can be drained before each
+  // close/reopen in the session-persistence test. Context isolation stays active.
+  await page.route(url => url.hostname.endsWith('.supabase.co'), async (route) => {
+    const req = route.request(), url = new URL(req.url());
+    const headers = { ...req.headers(), apikey: anon };
+    delete headers.host; delete headers.origin;
+    const bearer = headers.authorization?.replace(/^Bearer\s+/i, '');
+    if (!bearer || jwt.decode(bearer)?.role === 'anon' || bearer.startsWith('sb_publishable_')) headers.authorization = `Bearer ${anon}`;
+    const response = await context.request.fetch(supabaseUrl + url.pathname + url.search, { method: req.method(), headers, data: req.postDataBuffer() || undefined });
+    return route.fulfill({ response, headers: { ...response.headers(), 'access-control-allow-origin': fixtureBase, 'access-control-allow-headers': '*' } });
+  });
   await page.goto(fixtureBase, { waitUntil: 'domcontentloaded' });
   await page.addScriptTag({ path: 'node_modules/@supabase/supabase-js/dist/umd/supabase.js' });
   await page.waitForFunction(() => typeof window.openInvestModal === 'function');
@@ -88,14 +105,7 @@ async function authContext() {
   const context = await browser.newContext();
   await context.route('**/*', async (route) => {
     const req = route.request(), url = new URL(req.url());
-    if (url.hostname.endsWith('.supabase.co')) {
-      const headers = { ...req.headers(), apikey: anon };
-      delete headers.host; delete headers.origin;
-      const bearer = headers.authorization?.replace(/^Bearer\s+/i, '');
-      if (!bearer || jwt.decode(bearer)?.role === 'anon' || bearer.startsWith('sb_publishable_')) headers.authorization = `Bearer ${anon}`;
-      const response = await context.request.fetch(supabaseUrl + url.pathname + url.search, { method: req.method(), headers, data: req.postDataBuffer() || undefined });
-      return route.fulfill({ response, headers: { ...response.headers(), 'access-control-allow-origin': fixtureBase, 'access-control-allow-headers': '*' } });
-    }
+    if (url.hostname.endsWith('.supabase.co')) return route.abort();
     // Isolate third-party mutation side effects; public GET assets remain real.
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method()) && url.hostname !== '127.0.0.1') return route.abort();
     return route.continue();
@@ -103,6 +113,7 @@ async function authContext() {
   return context;
 }
 async function closeAuthContext(context) {
+  for (const page of context.pages()) await closeForwardedAuthPage(page);
   // Finish local Auth/Postgres forwarding before disposing its request client.
   // Waiting preserves handler failures; never silence them with ignoreErrors.
   await context.unrouteAll({ behavior: 'wait' });
@@ -202,12 +213,12 @@ try {
       await page.locator('#invest-authenticated-view').waitFor({ state: 'visible' });
       assert.equal(await page.locator('#invest-user-email').textContent(), member.input.email);
       if (unit === 'auth.session-persistence-browser') {
-        await page.close();
+        await closeForwardedAuthPage(page);
         const reloaded = await openAuthPage(context, member.input, 'login', true);
         await reloaded.locator('#invest-authenticated-view').waitFor({ state: 'visible' });
         await reloaded.locator('#invest-signout').click();
         await reloaded.locator('#invest-authenticated-view').waitFor({ state: 'hidden' });
-        await reloaded.close();
+        await closeForwardedAuthPage(reloaded);
         const signedOut = await openAuthPage(context, member.input);
         await signedOut.locator('#invest-auth-box').waitFor({ state: 'visible' });
         assert.equal(await signedOut.locator('#invest-authenticated-view').isVisible(), false);
@@ -224,6 +235,7 @@ finally {
   await browser?.close();
   for (const id of created) { await admin.auth.admin.deleteUser(id); }
   server.stop(true);
+  process.off('unhandledRejection', reportAsyncError);
   await mkdir('evidence/landing-19', { recursive: true });
   const result = { unit, sourceSha: process.env.GITHUB_SHA, environment: 'isolated real Supabase Auth/Postgres', passed: !error, checks, error };
   await writeFile(`evidence/landing-19/${unit}.json`, JSON.stringify(result));

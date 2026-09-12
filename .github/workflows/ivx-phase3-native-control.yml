@@ -1,0 +1,51 @@
+name: Phase 3 native Vercel control
+run-name: Verify native refusal and one authorized recovery
+on:
+  push:
+    branches: ['verify/phase3-native-token-20260912']
+    paths: ['qa/phase3-native-recovery*', '.github/workflows/ivx-phase3-native-control.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: phase3-native-vercel-control
+  cancel-in-progress: false
+jobs:
+  verify-recovery-harness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: '1.3.9' }
+      - run: bun install --frozen-lockfile
+      - run: bun test qa/phase3-native-quota.test.mjs qa/phase3-native-recovery.test.mjs
+      - run: bun build qa/phase3-native-recovery.mjs --target=bun --packages=external --outfile=/tmp/phase3-native-recovery-check.mjs
+  authorized-native-recovery:
+    needs: verify-recovery-harness
+    if: github.repository == 'ibb142/ivx-holdings-platform'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: '1.3.9' }
+      - run: bun install --frozen-lockfile
+      - name: Verify prior refusal and recover using existing protected bindings
+        run: bun qa/phase3-native-recovery.mjs
+        env:
+          IVX_NATIVE_REVIEW: phase3-native-20260912
+          IVX_NATIVE_QUOTA_PROBE: phase3-native-recovery-20260912
+          GH_TOKEN: ${{ github.token }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase3-native-recovery-${{ github.sha }}-${{ github.run_attempt }}
+          path: qa/evidence/phase3-native/native-recovery.json
+          if-no-files-found: error
+          retention-days: 30

@@ -1,6 +1,6 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import * as deadline from './ivx-postgres-deadline';
-import { readSeniorQueuePostgresJob, readSeniorWorkQueuePostgres, resetPostgresAutonomousTaskStoreForTests } from './ivx-postgres-autonomous-task-store';
+import { readSeniorActiveOwnerJobPostgres, readSeniorQueuePostgresJob, readSeniorWorkQueuePostgres, resetPostgresAutonomousTaskStoreForTests } from './ivx-postgres-autonomous-task-store';
 import { SENIOR_QUEUE_JOB_SQL, SENIOR_WORK_QUEUE_SQL, SENIOR_WORK_QUEUE_PATH } from './ivx-senior-work-queue';
 
 const env = { ...process.env };
@@ -53,3 +53,23 @@ test('work queue uses the bound scheduling projection and propagates outages wit
     expect(query).toHaveBeenCalledTimes(2);
   } finally { query.mockRestore(); }
 });
+
+test('owner lookup binds identity, returns only one active checkpoint and propagates an outage', async () => {
+  configure();
+  const query = spyOn(deadline, 'queryWithPostgresDeadline').mockResolvedValue({ rows: [{ job: { ownerId: 'owner-1', status: 'running', jobId: 'job-1' } }] } as never);
+  try {
+    expect((await readSeniorActiveOwnerJobPostgres('owner-1'))?.ownerId).toBe('owner-1');
+    expect(query.mock.calls[0][1]).toContain("->>'ownerId' = $2");
+    expect(query.mock.calls[0][1]).toContain('order by ordinal desc limit 1');
+    expect(query.mock.calls[0][2]?.[1]).toBe('owner-1');
+    query.mockResolvedValue({ rows: [{ job: { ownerId: 'other', status: 'running' } }] } as never);
+    await expect(readSeniorActiveOwnerJobPostgres('owner-1')).rejects.toThrow('mismatch');
+    query.mockResolvedValue({ rows: [{ job: { ownerId: 'owner-1', status: 'completed' } }] } as never);
+    await expect(readSeniorActiveOwnerJobPostgres('owner-1')).rejects.toThrow('mismatch');
+    query.mockResolvedValue({ rows: [] } as never);
+    expect(await readSeniorActiveOwnerJobPostgres('owner-1')).toBeNull();
+    query.mockRejectedValue(new Error('Query read timeout'));
+    await expect(readSeniorActiveOwnerJobPostgres('owner-1')).rejects.toThrow('Query read timeout');
+  } finally { query.mockRestore(); }
+});
+

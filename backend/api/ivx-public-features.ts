@@ -184,11 +184,17 @@ export async function handleJVDealsList(req: Request): Promise<Response> {
   return json(result.body, result.status);
 }
 
+// Every public deals alias must allow this source deadline to settle first.
+export const PUBLIC_DEALS_QUERY_TIMEOUT_MS = 8000;
+
 async function queryPublicDeals(): Promise<Response> {
+  const startedAt = Date.now();
+  let stage: 'client' | 'deals' | 'reels' = 'client';
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
+  const timer = setTimeout(() => controller.abort(), PUBLIC_DEALS_QUERY_TIMEOUT_MS);
   try {
     const sb = await getPublicDealsSB();
+    stage = 'deals';
     const { data, error, count } = await sb.from('jv_deals')
       .select('id,title,project_name,description,property_address,city,state,property_type,total_investment,expected_roi,term_months,status,published,photos,display_order,created_at,updated_at', { count: 'exact' })
       .eq('published', true)
@@ -196,19 +202,20 @@ async function queryPublicDeals(): Promise<Response> {
       .order('updated_at', { ascending: false })
       .limit(50)
       .abortSignal(controller.signal);
-    if (error) throw new Error(error.message);
+    if (error) throw error;
     const deals = normalizePublicLandingDeals(data || []);
     // Reels are stored separately from jv_deals.photos. Include only approved,
     // published public reels belonging to these deals; global reels must never
     // be presented as footage of a particular property.
     if (deals.length > 0) {
+      stage = 'reels';
       const { data: reels, error: reelsError } = await sb.from('jv_deal_reels')
         .select('id,project_id,video_url,thumbnail_url,caption,published,approved,visibility')
         .in('project_id', deals.map((deal) => String(deal.id)))
         .eq('published', true).eq('approved', true).eq('visibility', 'public')
         .order('sort_order', { ascending: true })
         .abortSignal(controller.signal);
-      if (reelsError) throw new Error(reelsError.message);
+      if (reelsError) throw reelsError;
       for (const deal of deals) {
         deal.videos = (reels || []).filter((reel) =>
           String(reel.project_id) === String(deal.id) && /^https:\/\//i.test(reel.video_url || ''));
@@ -216,7 +223,13 @@ async function queryPublicDeals(): Promise<Response> {
     }
     return json({ deals, count: deals.length, sourceCount: count ?? deals.length, deploymentMarker: DEPLOYMENT_MARKER });
   } catch (err: unknown) {
-    console.error('[handleJVDealsList] Supabase query failed:', err instanceof Error ? err.message : String(err));
+    // Keep only bounded diagnostics; never log query text, values or server messages.
+    const code = err && typeof err === 'object' && 'code' in err ? err.code : null;
+    console.error('[handleJVDealsList] source failure ' + JSON.stringify({
+      stage, elapsedMs: Math.max(0, Date.now() - startedAt),
+      sqlState: typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code) ? code : null,
+      aborted: controller.signal.aborted,
+    }));
     // An unavailable source is not evidence that the owner has zero projects.
     return json({ error: 'Deals are temporarily unavailable. Please retry.', code: 'DEALS_SOURCE_UNAVAILABLE', deploymentMarker: DEPLOYMENT_MARKER }, 503);
   } finally {

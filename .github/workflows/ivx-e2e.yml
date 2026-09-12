@@ -37,28 +37,35 @@ jobs:
             echo 'MOBILE_IMPACT=FULL_MAIN_GATE'
             exit 0
           fi
-          # Classify the exact GitHub-generated merge under test. The event's
-          # base can legitimately lag its first parent when main advances
-          # between event creation and checkout, but it must remain an
-          # ancestor; otherwise fail closed.
-          event_base="${{ github.event.pull_request.base.sha }}"
-          expected_head="${{ github.event.pull_request.head.sha }}"
+          # Classify the exact tested merge. GitHub can advance its first
+          # parent while the event still names the PR's earlier base.
+          declared_base="${{ github.event.pull_request.base.sha }}"
+          declared_head="${{ github.event.pull_request.head.sha }}"
+          [[ "$declared_base" =~ ^[0-9a-f]{40}$ && "$declared_head" =~ ^[0-9a-f]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          tested_base="$(git rev-parse HEAD^1)"
-          tested_head="$(git rev-parse HEAD^2)"
-          test "$expected_head" = "$tested_head" || {
+          mapfile -t merge_parents < <(git cat-file -p HEAD | awk '/^parent / { print $2 }')
+          test "${#merge_parents[@]}" = 2 || {
+            echo '::error::Expected the two-parent PR merge commit.'
+            exit 1
+          }
+          base="${merge_parents[0]}"
+          test "$declared_head" = "${merge_parents[1]}" || {
             echo '::error::PR head does not match the tested merge commit.'
             exit 1
           }
-          if [ "$event_base" != "$tested_base" ]; then
-            git fetch --no-tags --no-recurse-submodules --depth=64 origin "$event_base" "$tested_base"
-            git merge-base --is-ancestor "$event_base" "$tested_base" || {
-              echo '::error::PR event base is not an ancestor of the tested merge base.'
+          if [ "$declared_base" != "$base" ]; then
+            # A bounded history fetch proves an ordinary base advance. An
+            # unrelated/replaced base still fails and cannot suppress mobile QA.
+            if ! git merge-base --is-ancestor "$declared_base" "$base" 2>/dev/null; then
+              git fetch --no-tags --depth=64 origin "$base"
+            fi
+            git merge-base --is-ancestor "$declared_base" "$base" || {
+              echo '::error::PR base is not an ancestor of the tested merge base.'
               exit 1
             }
-            echo "::notice::main advanced after the PR event; classifying tested base $tested_base"
+            echo "PR_BASE_ADVANCED=$declared_base..$base"
           fi
-          git diff --no-renames --name-only "$tested_base" HEAD > "$RUNNER_TEMP/changed-files.txt"
+          git diff --no-renames --name-only "$base" HEAD > "$RUNNER_TEMP/changed-files.txt"
           cat "$RUNNER_TEMP/changed-files.txt"
           mobile=false
           while IFS= read -r path; do

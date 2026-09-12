@@ -1,4 +1,4 @@
-import { sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult, readSharedSeniorDocument, readSharedSeniorWorkQueue, readSharedSeniorJob, appendSharedSeniorProofEvent } from './ivx-senior-shared-queue';
+import { readSharedSeniorActiveOwnerJob, sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult, readSharedSeniorDocument, readSharedSeniorWorkQueue, readSharedSeniorJob, appendSharedSeniorProofEvent } from './ivx-senior-shared-queue';
 import { SENIOR_QUEUE_ACTIVE_STATUSES } from './ivx-senior-work-queue';
 import type { CoderWorkspaceEvidence } from './ivx-coder-workspace';
 import { createSeniorJobAdmission } from './ivx-senior-job-admission';
@@ -1627,6 +1627,10 @@ async function recoverStuckVerifyingJobs(queue: QueueDoc): Promise<void> {
  */
 export async function getActiveJobForOwner(ownerId: string): Promise<IVXWorkerJob | null> {
   if (!ownerId) return null;
+  if (sharedSeniorQueueEnabled()) {
+    if (!isDurableStoreConfigured()) throw new Error('Shared queue storage unavailable');
+    return readSharedSeniorActiveOwnerJob<IVXWorkerJob>(QUEUE_FILE, ownerId);
+  }
   // Shared queue reads must not run maintenance against another process's
   // lease. The dedicated worker sweeps/reclaims expired jobs independently.
   // Retain an existing job's identity while it waits for that recovery.
@@ -3046,9 +3050,10 @@ export async function drainSeniorDeveloperQueue(): Promise<void> {
   if (draining || queueStopping) return;
   draining = true;
   try {
-    // The independent stale sweep maintains running queues. Avoid reading
-    // retained history again for every completed slot in an active pump.
-    if (activeDrainExecutions.size === 0) await expireStaleJobs();
+    // Shared recovery runs on the independent stale-sweep timer. It can wait
+    // for storage or CI, so it must not gate admission of unrelated ready work.
+    // The claim RPC still enforces physical leases and owner single-flight.
+    if (!sharedSeniorQueueEnabled() && activeDrainExecutions.size === 0) await expireStaleJobs();
     const slots = Math.max(0, getWorkerMaxConcurrency() - activeDrainExecutions.size);
     for (let i = 0; !queueStopping && i < slots; i++) {
       const execution = processNextSeniorDeveloperJob();

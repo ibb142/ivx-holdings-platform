@@ -1,6 +1,6 @@
-import { autonomousWorkerInstanceId, preferDirectTransport, seniorQueuePostgresRpc, readSeniorQueuePostgresDocument, readSeniorQueuePostgresJob, readSeniorWorkQueuePostgres, appendSeniorProofPostgresEvent } from './ivx-postgres-autonomous-task-store';
+import { readSeniorActiveOwnerJobPostgres, autonomousWorkerInstanceId, preferDirectTransport, seniorQueuePostgresRpc, readSeniorQueuePostgresDocument, readSeniorQueuePostgresJob, readSeniorWorkQueuePostgres, appendSeniorProofPostgresEvent } from './ivx-postgres-autonomous-task-store';
 import { appendDurableEvent, durableKeyForFile, readDurableJson } from './ivx-durable-store';
-import { isSeniorQueueWorkItem } from './ivx-senior-work-queue';
+import { SENIOR_QUEUE_ACTIVE_STATUSES, isSeniorQueueWorkItem } from './ivx-senior-work-queue';
 
 export function sharedSeniorQueueEnabled(): boolean { return process.env.IVX_WORKER_QUEUE_ATOMIC === 'true'; }
 type Job = { jobId: string };
@@ -125,4 +125,19 @@ export async function appendSharedSeniorProofEvent(file: string, event: Record<s
   } catch {
     console.warn('[IVX repair queue] Supplemental proof event unavailable; canonical result retained');
   }
+}
+
+export async function readSharedSeniorActiveOwnerJob<T extends Job & { ownerId: string; status: string }>(file: string, ownerId: string): Promise<T | null> {
+  if (durableKeyForFile(file) !== 'senior-developer-worker/queue.json') throw new Error('Repair document not allowed');
+  if (!ownerId.trim()) throw new Error('Repair owner identity is required');
+  const direct = preferDirectTransport();
+  return sharedRead(`active-owner:${direct}:${ownerId}`, async () => {
+    if (direct) return readSeniorActiveOwnerJobPostgres<T>(ownerId);
+    const queue = await readSharedSeniorWorkQueue(file, { jobs: [] as T[] });
+    for (let i = queue.jobs.length - 1; i >= 0; i -= 1) {
+      const job = queue.jobs[i];
+      if (job.ownerId === ownerId && (SENIOR_QUEUE_ACTIVE_STATUSES as readonly string[]).includes(job.status)) return job;
+    }
+    return null;
+  });
 }

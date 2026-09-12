@@ -419,14 +419,28 @@ export async function listSelfDeployResumableTasks(limit: number = 20): Promise<
   }
 }
 
+const taskListReads = new Map<number, Promise<IVXOwnerAITaskRow[]>>();
+
 export async function listTasks(limit: number = 20): Promise<IVXOwnerAITaskRow[]> {
-  const capped = Math.min(Math.max(limit, 1), 100);
-  const res = await restFetch(`${TASKS_TABLE}?order=created_at.desc&limit=${capped}`, {
-    method: 'GET',
-    headers: restHeaders(),
-  });
-  if (!res.ok) return [];
-  return await res.json().catch(() => []) as IVXOwnerAITaskRow[];
+  const capped = Number.isFinite(limit) ? Math.min(Math.max(Math.trunc(limit), 1), 100) : 20;
+  let pending = taskListReads.get(capped);
+  if (!pending) {
+    pending = (async () => {
+      const res = await restFetch(`${TASKS_TABLE}?order=created_at.desc&limit=${capped}`, {
+        method: 'GET',
+        headers: restHeaders(),
+      });
+      if (!res.ok) return [];
+      return await res.json().catch(() => []) as IVXOwnerAITaskRow[];
+    })();
+    taskListReads.set(capped, pending);
+  }
+  try {
+    // Share only the in-flight read. Callers must not share mutable task state.
+    return structuredClone(await pending);
+  } finally {
+    if (taskListReads.get(capped) === pending) taskListReads.delete(capped);
+  }
 }
 
 export interface EnqueueTaskInput {
