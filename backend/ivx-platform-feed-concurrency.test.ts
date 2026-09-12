@@ -39,7 +39,9 @@ test('real feed handler coalesces public reads and preserves each viewer and fre
     globalThis.fetch=async(url,init)=>{
       assert.equal(init.method,'HEAD'); assert.ok(String(url).startsWith('https://media.example.test/'));
       assert.ok(!String(url).includes(hidden),'Draft footage must not be probed');
-      counts.media++;return new Response(null,{headers:{'content-type':'video/mp4'}});
+      counts.media++;
+      // An unreachable media host must not delay metadata or viewer state.
+      return new Promise(()=>{});
     };
     const {handlePlatformFeed}=await import('./backend/api/ivx-video-platform');
     const read=viewer=>handlePlatformFeed(new Request('https://example.test/api/reels?type=reel&limit=2&viewer_id='+viewer));
@@ -53,7 +55,7 @@ test('real feed handler coalesces public reads and preserves each viewer and fre
       assert.equal(body.videos[0].viewer_following_creator,i%2===0);
       assert.equal(body.videos[0].like_count,1);assert.equal(body.videos[1].save_count,1);
     }
-    assert.deepEqual(counts,{catalog:1,meta:1,analytics:0,deals:1,media:2,profile:0});
+    assert.deepEqual(counts,{catalog:1,meta:1,analytics:0,deals:1,media:0,profile:0});
     metadata[a].status='draft'; rows.project_saves=[];
     const fresh=await read('guest-b');assert.equal(fresh.status,200);
     const body=await fresh.json();assert.deepEqual(body.videos.map(video=>video.id),[b]);
@@ -110,9 +112,11 @@ test('home and Reels share pending public reads while preserving deal ordering a
       getAnalyticsDoc:async()=>{calls.analytics++;return new Promise(()=>{});},
       getDealMetaDoc:async()=>{calls.dealMeta++;return {};}}));
     mock.module('./backend/services/ivx-video-pipeline',()=>({getPlaybackIndex:async()=>{calls.playback++;return {};}}));
+    let mediaChecks=0;
     globalThis.fetch=async(url,init)=>{
       assert.equal(init.method,'HEAD');assert.ok(String(url).startsWith('https://media.example.test/'));
-      return new Response(null,{headers:{'content-type':'video/mp4'}});
+      mediaChecks++;
+      return new Promise(()=>{});
     };
     const {handlePlatformFeed,handlePlatformHomeFeed}=await import('./backend/api/ivx-video-platform');
     const homePromise=handlePlatformHomeFeed(new Request('https://example.test/api/ivx/video-platform/home-feed?limit=60'));
@@ -126,6 +130,7 @@ test('home and Reels share pending public reads while preserving deal ordering a
     releaseDeals();
     const [home,reels]=await Promise.all([homePromise,reelPromise]);
     assert.equal(home.status,200);assert.equal(reels.status,200);
+    assert.equal(mediaChecks,0,'Home and Reels return metadata without probing media hosts');
     const body=await home.json();
     assert.equal(body.pattern,'3-deals-1-featured-project-video');
     assert.deepEqual(body.blocks.filter(block=>block.type==='deal').map(block=>block.deal.id),['deal-a','deal-b','deal-c']);

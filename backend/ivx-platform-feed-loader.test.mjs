@@ -11,7 +11,7 @@ function deferred() {
 function fixture(overrides = {}) {
   const calls = [];
   const values = { videos: [{ id: 'video-1', title: 'Original' }], meta: { 'video-1': { published: true } },
-    counts: { 'video-1': { likes: 2 } }, playback: {}, analytics: { videos: {} }, deals: [{ id: 'deal-1' }], playable: new Set(['video-1']) };
+    counts: { 'video-1': { likes: 2 } }, playback: {}, analytics: { videos: {} }, deals: [{ id: 'deal-1' }], mediaCandidates: new Set(['video-1']) };
   const sources = Object.fromEntries(Object.entries(values).map(([name, value]) => [name, async (...args) => {
     calls.push({ name, args });
     return overrides[name] ? overrides[name](...args) : structuredClone(value);
@@ -30,7 +30,7 @@ test('independent documents and deals start while the catalog is still pending',
   assert.deepEqual(f.calls.find(c => c.name === 'counts').args, [['video-1']]);
   metadata.resolve(f.values.meta);
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(f.calls.filter(c => c.name === 'playable').length, 1, 'Media checks overlap the pending count query');
+  assert.equal(f.calls.filter(c => c.name === 'mediaCandidates').length, 1, 'Media candidate selection overlaps the pending count query');
   counts.resolve(f.values.counts);
   assert.deepEqual(await result, f.values);
 });
@@ -43,10 +43,10 @@ test('a burst of viewer requests shares the public catalog but receives independ
   const rows = await Promise.all(requests);
   for (const name of Object.keys(f.values)) assert.equal(f.calls.filter(c => c.name === name).length, 1);
   rows[0].meta['video-1'].published = false;
-  rows[0].playable.clear();
+  rows[0].mediaCandidates.clear();
   rows[0].counts['video-1'].likes = 0;
   assert.equal(rows[1].meta['video-1'].published, true);
-  assert.equal(rows[1].playable.has('video-1'), true);
+  assert.equal(rows[1].mediaCandidates.has('video-1'), true);
   assert.equal(rows[1].counts['video-1'].likes, 2);
 });
 

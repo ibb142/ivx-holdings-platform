@@ -8,9 +8,9 @@ export function createPlatformFeedLoader<V extends Video, M, C, P, A, D>(sources
   playback: () => Promise<P>;
   analytics: () => Promise<A>;
   deals: () => Promise<D>;
-  playable: (videos: V[], meta: M) => Promise<Set<string>>;
+  mediaCandidates: (videos: V[], meta: M) => Promise<Set<string>>;
 }, maxPending = 32) {
-  type Snapshot = { videos: V[]; meta: M; counts: C; playback: P; analytics: A; deals: D; playable: Set<string> };
+  type Snapshot = { videos: V[]; meta: M; counts: C; playback: P; analytics: A; deals: D; mediaCandidates: Set<string> };
   const pending = new Map<string, Promise<Snapshot>>();
   const call = <T>(dependency: string, read: () => Promise<T>): Promise<T> => {
     const startedAt = Date.now();
@@ -38,19 +38,19 @@ export function createPlatformFeedLoader<V extends Video, M, C, P, A, D>(sources
       const videos = call('videos', () => sources.videos(projectId));
       const meta = call('meta', sources.meta);
       const counts = videos.then(rows => call('counts', () => sources.counts(rows.map(row => String(row.id)))));
-      const playable = Promise.all([videos, meta]).then(([rows, metadata]) => call('media', () => sources.playable(rows, metadata)));
+      const mediaCandidates = Promise.all([videos, meta]).then(([rows, metadata]) => call('media_metadata', () => sources.mediaCandidates(rows, metadata)));
       // Start independent reads together, instead of adding their individual
       // deadlines. Keep failed reads attached until every producer settles so a
       // timeout cannot cause duplicate background work on the next request.
       work = call('total', () => Promise.allSettled([videos, meta, counts, call('playback', sources.playback),
-        call('analytics', sources.analytics), call('deals', sources.deals), playable] as const).then(results => {
+        call('analytics', sources.analytics), call('deals', sources.deals), mediaCandidates] as const).then(results => {
         for (const result of results) if (result.status === 'rejected') throw result.reason;
-        const [v, m, c, p, a, d, playableIds] = results as [
+        const [v, m, c, p, a, d, candidateIds] = results as [
           PromiseFulfilledResult<V[]>, PromiseFulfilledResult<M>, PromiseFulfilledResult<C>,
           PromiseFulfilledResult<P>, PromiseFulfilledResult<A>, PromiseFulfilledResult<D>, PromiseFulfilledResult<Set<string>>,
         ];
         return { videos: v.value, meta: m.value, counts: c.value, playback: p.value,
-          analytics: a.value, deals: d.value, playable: playableIds.value };
+          analytics: a.value, deals: d.value, mediaCandidates: candidateIds.value };
       })).finally(() => { if (pending.get(key) === work) pending.delete(key); });
       pending.set(key, work);
     }
