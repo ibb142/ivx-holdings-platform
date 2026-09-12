@@ -43,6 +43,8 @@ function server(override = () => undefined) {
       }
     }
     assert.equal(url.origin, SUPABASE);
+    assert.ok(init.headers.apikey);
+    assert.ok(token, 'Supabase Auth and REST use the same headers as the deployed SDK');
     if (url.pathname === '/auth/v1/token') {
       const found = [...users.values()].find(item => item.email === body.email);
       assert.ok(found);

@@ -41,7 +41,7 @@ export async function runProof(config, { fetchImpl = fetch, checkpoint = () => {
     if (!cleaning) requireProof(Date.now() < deadline, 'proof_deadline');
     const headers = { Accept: 'application/json', 'Cache-Control': 'no-store' };
     if (origin === SUPABASE) headers.apikey = admin ? config.serviceKey : config.anonKey;
-    if (admin || token) headers.Authorization = `Bearer ${admin ? config.serviceKey : token}`;
+    if (admin || token || origin === SUPABASE) headers.Authorization = `Bearer ${admin ? config.serviceKey : token ?? config.anonKey}`;
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (prefer) headers.Prefer = prefer;
     let response;
