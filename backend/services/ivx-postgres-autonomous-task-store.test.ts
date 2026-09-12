@@ -412,14 +412,15 @@ test('REST mission reads filter history before the cap and keep recovery ownersh
   await expect(readPostgresTaskKeys(keys)).rejects.toThrow('Invalid task identity response');
  });
 
-for (const failure of [null, 'setup', 'read', 'commit', 'disconnect'] as const) {
+for (const failure of [null, 'setup', 'read', 'commit', 'disconnect', 'server-cancel'] as const) {
   test(`Landing direct read ${failure ?? 'success'} preserves truth and releases its connection`, async () => {
     configureAtomicQueue();
     process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://landingdeadline.supabase.co';
     process.env.SUPABASE_DB_URL = 'postgresql://postgres:fixture@db.landingdeadline.supabase.co/postgres';
     const sha = 'a'.repeat(40);
     const calls: string[] = [], releases: boolean[] = [];
-    const problem = new Error('read connection failed');
+    const problem = Object.assign(new Error('read connection failed'),
+      failure === 'server-cancel' ? { code: '57014' } : {});
     const task = { taskId: 'landing-deadline', state: 'RUNNING', leaseHolder: 'worker-a',
       evidence: [{ summary: 'retained observation' }], checkpoint: { phase: 'COMMITTING' } };
     const client = Object.assign(new EventEmitter(), {
@@ -432,7 +433,7 @@ for (const failure of [null, 'setup', 'read', 'commit', 'disconnect'] as const) 
           if (failure === 'disconnect') client.emit('error', problem);
         }
         if ((failure === 'setup' && sql.startsWith('BEGIN'))
-          || (failure === 'read' && sql.startsWith('select payload'))
+          || ((failure === 'read' || failure === 'server-cancel') && sql.startsWith('select payload'))
           || (failure === 'commit' && sql === 'COMMIT')) throw problem;
         return { rows: [{ payload: task }] };
       },
@@ -446,7 +447,10 @@ for (const failure of [null, 'setup', 'read', 'commit', 'disconnect'] as const) 
       const pending = readPostgresLandingTasks(sha);
       if (failure) {
         await expect(pending).rejects.toBe(problem);
-        expect(calls.at(-1)).toBe('ROLLBACK');
+        // An acknowledged server cancellation can roll back. A client timeout
+        // or disconnected socket must be destroyed without another SQL round trip.
+        if (failure === 'server-cancel') expect(calls.at(-1)).toBe('ROLLBACK');
+        else expect(calls).not.toContain('ROLLBACK');
         expect(releases).toEqual([true]);
       } else {
         const result = await pending;
