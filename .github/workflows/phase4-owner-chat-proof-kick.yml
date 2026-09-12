@@ -1,0 +1,39 @@
+name: Run authorized Phase 4 Owner chat verification
+
+on:
+  push:
+    branches: [ops/phase4-owner-chat-proof-20260912]
+    paths: [.github/workflows/phase4-owner-chat-proof-kick.yml]
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: phase4-owner-chat-proof-kick-20260912
+  cancel-in-progress: false
+
+jobs:
+  dispatch-reviewed-main-proof:
+    if: github.repository == 'ibb142/ivx-holdings-platform' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify current main and ready production before one dispatch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_MAIN: a890d9a52647e6ca0238158331db6d8730c84ad6
+        shell: bash
+        run: |
+          set -euo pipefail
+          current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          test "$current" = "$EXPECTED_MAIN"
+          curl --fail --silent --show-error --max-time 15 https://api.ivxholding.com/health > "$RUNNER_TEMP/phase4-health.json"
+          jq -e --arg sha "$EXPECTED_MAIN" '.ok == true and .commit == $sha' "$RUNNER_TEMP/phase4-health.json" > /dev/null
+          curl --fail --silent --show-error --max-time 15 https://api.ivxholding.com/health/ready > "$RUNNER_TEMP/phase4-ready.json"
+          jq -e '.ready == true' "$RUNNER_TEMP/phase4-ready.json" > /dev/null
+          # The existing workflow retains its main-only gate, Owner login,
+          # protected secrets, real-message assertions and private artifact.
+          # Never retry this dispatch automatically after an uncertain result.
+          gh workflow run ivx-owner-chat-live-proof.yml --repo "$GITHUB_REPOSITORY" --ref main
+          echo "owner_chat_proof_dispatched=true expected_sha=$EXPECTED_MAIN phase4_certified=false"
