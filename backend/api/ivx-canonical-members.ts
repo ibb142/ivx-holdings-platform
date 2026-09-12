@@ -9,11 +9,13 @@
 
 import {
   listCanonicalMembers,
+  listCanonicalMemberSummaryRows,
   backfillCanonicalMembers,
   countCanonicalMembers,
   isCanonicalMembersConfigured,
   type ListMembersOptions,
   type CanonicalMemberRow,
+  type CanonicalMemberSummaryRow,
 } from '../services/ivx-canonical-members';
 import { assertIVXOwnerOnly, ownerOnlyJson } from './owner-only';
 
@@ -30,6 +32,15 @@ function jsonResponse(data: unknown, status = 200): Response {
   });
 }
 
+function unavailableMembersResponse(): Response {
+  return jsonResponse({
+    ok: false,
+    code: 'MEMBERS_SOURCE_UNAVAILABLE',
+    message: 'Members are temporarily unavailable. Please retry.',
+    deploymentMarker: DEPLOYMENT_MARKER,
+  }, 503);
+}
+
 export async function handleCanonicalMembersRegistry(request: Request): Promise<Response> {
   try { await assertIVXOwnerOnly(request); } catch { return ownerOnlyJson({ ok: false, error: 'AUTH_REQUIRED' }, 401); }
   const url = new URL(request.url);
@@ -39,7 +50,8 @@ export async function handleCanonicalMembersRegistry(request: Request): Promise<
     verified: (url.searchParams.get('verified') as ListMembersOptions['verified']) || undefined,
     limit: Number(url.searchParams.get('limit') || '1000') || 1000,
   };
-  const members = await listCanonicalMembers(options);
+  let members: CanonicalMemberRow[];
+  try { members = await listCanonicalMembers(options); } catch { return unavailableMembersResponse(); }
   return jsonResponse({
     ok: true,
     configured: isCanonicalMembersConfigured(),
@@ -51,7 +63,13 @@ export async function handleCanonicalMembersRegistry(request: Request): Promise<
 
 export async function handleCanonicalMembersSummary(request: Request): Promise<Response> {
   try { await assertIVXOwnerOnly(request); } catch { return ownerOnlyJson({ ok: false, error: 'AUTH_REQUIRED' }, 401); }
-  const members = await listCanonicalMembers({ limit: 2000 });
+  let members: CanonicalMemberSummaryRow[];
+  let total: number;
+  try {
+    [members, total] = await Promise.all([listCanonicalMemberSummaryRows(), countCanonicalMembers()]);
+  } catch {
+    return unavailableMembersResponse();
+  }
   const byType: Record<string, number> = {};
   const bySource: Record<string, number> = {};
   let smsVerified = 0;
@@ -64,7 +82,7 @@ export async function handleCanonicalMembersSummary(request: Request): Promise<R
   }
   return jsonResponse({
     ok: true,
-    total: await countCanonicalMembers(),
+    total,
     byType,
     bySource,
     smsVerified,
@@ -106,7 +124,8 @@ export async function handleCanonicalMembersList(request: Request): Promise<Resp
       deploymentMarker: DEPLOYMENT_MARKER,
     }, 503);
   }
-  const members: CanonicalMemberRow[] = await listCanonicalMembers(options);
+  let members: CanonicalMemberRow[];
+  try { members = await listCanonicalMembers(options); } catch { return unavailableMembersResponse(); }
   const counts = { members: 0, investors: 0, buyers: 0, jvDeals: 0, tokenized: 0, total: 0 };
   for (const m of members) {
     counts.total += 1;
@@ -133,3 +152,4 @@ export async function handleCanonicalMembersBackfill(request: Request): Promise<
   const result = await backfillCanonicalMembers();
   return jsonResponse({ ...result, deploymentMarker: DEPLOYMENT_MARKER }, result.ok ? 200 : 207);
 }
+

@@ -6,12 +6,17 @@ const owner = 'owner@example.test';
 const password = '  Local-Recovery-Example-783!  ';
 let durablePassword = '';
 let outageEnabled = true;
+let grantException: Error | null = null;
+let omitRefreshToken = false;
 let authError: null | { status: number; message: string } = null;
 const variableRead = mock(async (name: string) => name === 'OWNER_NEW_PASSWORD' ? durablePassword : '');
-const grant = mock(async (_input: { email: string; password: string }) => ({
-  data: { session: authError ? null : { access_token: 'isolated-access-session', refresh_token: 'isolated-refresh-session', expires_at: 2000000000, user: { id: 'test-owner' } } },
+const grant = mock(async (_input: { email: string; password: string }) => {
+  if (grantException) throw grantException;
+  return {
+  data: { session: authError ? null : { access_token: 'isolated-access-session', refresh_token: omitRefreshToken ? '' : 'isolated-refresh-session', expires_at: 2000000000, user: { id: 'test-owner' } } },
   error: authError,
-}));
+  };
+});
 const createClient = mock(() => ({ auth: { signInWithPassword: grant } }));
 const mint = mock((_email: string) => outageEnabled ? {
   token: 'isolated-owner-session', expiresAt: 2000000000, userId: 'test-owner', email: owner, role: 'owner',
@@ -34,7 +39,7 @@ beforeEach(() => {
   for (const name of envNames) delete process.env[name];
   process.env.IVX_OWNER_EMAIL = owner;
   process.env.IVX_OWNER_PASSWORD = password;
-  durablePassword = ''; outageEnabled = true; authError = null;
+  durablePassword = ''; outageEnabled = true; authError = null; grantException = null; omitRefreshToken = false;
   variableRead.mockClear(); grant.mockClear(); createClient.mockClear(); mint.mockClear(); network.mockClear();
 });
 afterAll(() => {
@@ -97,3 +102,48 @@ test('a valid credential can use real-provider flow when outage signing is unava
   expect(network).not.toHaveBeenCalled();
 });
 
+
+test('mobile recovery requests an installable Supabase session even when outage signing is enabled', async () => {
+  const response = await handle(request({ password, requireSupabaseSession: true }));
+  const body = await response.json();
+  expect(response.status).toBe(200);
+  expect(body.sessionMethod).toBe('bounded_password_grant');
+  expect(body.refreshToken).toBe('isolated-refresh-session');
+  expect(grant).toHaveBeenCalledWith({ email: owner, password });
+  expect(mint).not.toHaveBeenCalled();
+});
+
+for (const status of [400, 503]) {
+  test(`mobile recovery preserves provider rejection ${status} without incompatible outage tokens`, async () => {
+    authError = { status, message: status === 400 ? 'Invalid login credentials' : 'Authentication temporarily unavailable' };
+    const response = await handle(request({ password, requireSupabaseSession: true }));
+    const body = await response.json();
+    expect(response.status).toBe(status === 400 ? 502 : 503);
+    expect(body.success).toBe(false);
+    expect(body.accessToken).toBeUndefined();
+    expect(body.refreshToken).toBeUndefined();
+    expect(grant).toHaveBeenCalledTimes(1);
+    expect(mint).not.toHaveBeenCalled();
+  });
+}
+
+test('mobile recovery rejects invalid credentials before any grant or signing', async () => {
+  await expectRejectedWithoutSession(await handle(request({ password: 'wrong', requireSupabaseSession: true })), 401);
+});
+
+for (const [message, status] of [['Request timeout', 504], ['Network failed', 502]] as const) {
+  test(`mobile recovery preserves thrown ${status} failures without outage signing`, async () => {
+    grantException = new Error(message);
+    const response = await handle(request({ password, requireSupabaseSession: true }));
+    expect(response.status).toBe(status);
+    expect((await response.json()).success).toBe(false);
+    expect(mint).not.toHaveBeenCalled();
+  });
+}
+test('mobile recovery rejects a provider response without a refresh token', async () => {
+  omitRefreshToken = true;
+  const response = await handle(request({ password, requireSupabaseSession: true }));
+  expect(response.status).toBe(502);
+  expect((await response.json()).success).toBe(false);
+  expect(mint).not.toHaveBeenCalled();
+});

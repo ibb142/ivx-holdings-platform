@@ -31,6 +31,16 @@ jobs:
       - run: bun test scripts/ivx-fleet-ha-identities.test.ts
       - run: bun test backend/services/ivx-fleet-patrol-observations.test.ts
       - run: bun test backend/services/ivx-postgres-deadline.test.ts
+      - run: bun test backend/services/ivx-owner-chat-admission.test.ts
+      - run: bun test backend/api/ivx-owner-ai-reconciliation.test.ts
+      - run: bun test backend/api/ivx-owner-ai-stream.test.ts
+      - run: bun test backend/services/ivx-owner-ai-task-queue.test.ts
+      - run: bun test backend/services/ivx-owner-text-prompt.test.ts backend/services/ivx-ia-conversation-brain-deep-qa.test.ts
+      - run: bun test expo/__tests__/owner-chat-submission.test.ts
+      - run: bun test backend/services/ivx-jv-realtime-lifecycle.test.ts
+      - run: bun test backend/services/ivx-owner-chat-mirror-race.test.ts
+      - run: bun test backend/services/ivx-owner-native-sse.test.ts
+      - run: bun test backend/services/ivx-route-provider-bootstrap.test.ts
       - run: bun test backend/services/ivx-autonomous-direct-transport.test.ts
       - name: Bound empty claim polling without reducing 112-lane capacity
         run: node --experimental-strip-types --test backend/services/ivx-empty-claim-cooldown.test.mjs
@@ -70,6 +80,10 @@ jobs:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - name: Recover committed jobs with missing PR identity on PostgreSQL
         run: node scripts/ivx-senior-commit-recovery-postgres-proof.mjs
+        env:
+          IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
+      - name: Verify owner chat admission and response reconciliation on PostgreSQL
+        run: bun scripts/ivx-owner-chat-admission-postgres-proof.ts
         env:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - name: Verify compact mutation receipts and retained checkpoints
@@ -135,6 +149,7 @@ jobs:
           path: |
             qa/evidence/fleet-ha/task-recovery.json
             qa/evidence/fleet-ha/senior-commit-recovery.json
+            qa/evidence/fleet-ha/owner-chat-admission.json
             qa/evidence/fleet-ha/objective-link.json
             qa/evidence/fleet-ha/compact-receipt.json
             qa/evidence/fleet-ha/senior-history.json

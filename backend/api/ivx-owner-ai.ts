@@ -1,7 +1,10 @@
-import { buildOwnerTextModelInput } from '../services/ivx-owner-text-prompt';
+import { buildOwnerTextModelInput, OWNER_TEXT_MODEL } from '../services/ivx-owner-text-prompt';
+import { deliverOwnerTextTurn } from '../services/ivx-owner-text-delivery';
+import { ownerRuntimeEvidenceHeaders } from '../services/ivx-owner-runtime-evidence';
 import { appendFile, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { ownerAIAuthUnavailableResponse } from './owner-ai-auth-unavailable';
+import { ownerChatFingerprint, ownerChatRequestKey, ownerChatRequestStore, runOwnerChatOnce } from '../services/ivx-owner-chat-admission';
 import path from 'node:path';
 import { checkPreExecutionGate } from '../services/ivx-pre-execution-gate-middleware';
 import { IVX_OWNER_AI_PROFILE, IVX_OWNER_AI_ROOM_ID, IVX_OWNER_AI_ROOM_SLUG } from '../../expo/constants/ivx-owner-ai';
@@ -101,12 +104,12 @@ import { handleAppGeneratorChatRoute } from '../services/ivx-app-generator-chat-
 import { buildSeniorDeveloperExecutionAnswer, buildSeniorDeveloperWorkerJobAnswer } from '../services/ivx-senior-developer-answer-format';
 import { enforceDeveloperExecutionAnswer } from '../services/ivx-developer-execution-guard';
 import {
-  enqueueOrAttachSeniorDeveloperJob,
   getSeniorDeveloperJob,
   type IVXWorkerJob,
   type IVXWorkerJobInput,
 } from '../services/ivx-senior-developer-worker';
 import { recordApproval, type IVXSeniorDevApprovalAction } from '../services/ivx-senior-dev-proof';
+import { enqueueOwnerChatWorkerJob } from '../services/ivx-owner-chat-worker';
 import {
   runSeniorDeveloperAutonomousMode,
   renderFinalAutonomousReport,
@@ -4386,7 +4389,7 @@ async function upsertAIRequest(
   }
 
   const scopedClient = getScopedClient(client, tables.dbSchema);
-  const upsertResult = await scopedClient.from(tables.aiRequests).upsert({
+  const payload = {
     request_id: input.requestId,
     conversation_id: input.conversationId,
     user_id: input.userId,
@@ -4396,13 +4399,15 @@ async function upsertAIRequest(
     status: input.status,
     model: input.model,
     updated_at: nowIso(),
-  }, {
-    onConflict: 'request_id',
-  });
-
-  if (upsertResult.error) {
-    throw new Error(upsertResult.error.message);
-  }
+  };
+  // A global request-id conflict must never overwrite another owner or room.
+  const update = await scopedClient.from(tables.aiRequests).update(payload)
+    .eq('request_id', input.requestId).eq('user_id', input.userId)
+    .eq('conversation_id', input.conversationId).select('request_id');
+  if (update.error) throw new Error(update.error.message);
+  if (update.data?.length) return;
+  const insert = await scopedClient.from(tables.aiRequests).insert(payload);
+  if (insert.error) throw new Error(insert.error.message);
 }
 
 function buildLiveGroundingContext(): string {
@@ -5822,7 +5827,9 @@ export async function handleIVXOwnerAIRequest(request: Request): Promise<Respons
   const acceptHeader = (request.headers.get('accept') ?? '').toLowerCase();
   const wantsSSE = acceptHeader.includes('text/event-stream');
   if (wantsSSE) {
-    return handleIVXOwnerAIRequestSSE(request, auditAuthRequest, startedAt);
+    const streamed = await handleIVXOwnerAIRequestSSE(request, auditAuthRequest, startedAt);
+    for (const [key, value] of Object.entries(ownerRuntimeEvidenceHeaders())) streamed.headers.set(key, value);
+    return streamed;
   }
 
   // JSON path: hard ceiling so a stuck planner/AI gateway can never hold the
@@ -5848,6 +5855,7 @@ export async function handleIVXOwnerAIRequest(request: Request): Promise<Respons
   );
 
   // Phase 4c — fire-and-forget audit log to public.ai_usage_logs. Never blocks.
+  for (const [key, value] of Object.entries(ownerRuntimeEvidenceHeaders())) response.headers.set(key, value);
   // Do not clone/read the request body here; the owner chat handler consumes it once.
   void (async () => {
     let requestId: string | null = null;
@@ -6081,29 +6089,38 @@ async function buildLiveSeniorDeveloperProofAnswer(): Promise<string> {
 }
 
 async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Response> {
+  try {
+    const authRequest = new Request(request.url, { method: request.method, headers: request.headers });
+    const ownerContext = await assertIVXOwnerOnly(authRequest);
+    const parsed: unknown = await request.json().catch(() => null);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return ownerOnlyJson({ error: 'Invalid or empty JSON body.' }, 400);
+    }
+    const body = parsed as IVXOwnerAIRequest;
+    const requestId = readTrimmedString(body.requestId) || createRequestId();
+    if (!readTrimmedString(body.message) || requestId.length > 512) {
+      return ownerOnlyJson({ error: 'message and a valid request identity are required.' }, 400);
+    }
+    // Auth stays first. Both JSON and SSE enter this durable admission before
+    // planner, tools, worker handoff, provider or message writes can execute.
+    return await runOwnerChatOnce({
+      key: ownerChatRequestKey(ownerContext.userId, IVX_OWNER_AI_ROOM_ID, requestId),
+      requestId,
+      identity: { ownerId: ownerContext.userId, conversationId: IVX_OWNER_AI_ROOM_ID, requestId },
+      fingerprint: ownerChatFingerprint({ ...body, conversationId: IVX_OWNER_AI_ROOM_ID }),
+      store: ownerChatRequestStore(ownerContext.client),
+      execute: () => executeIVXOwnerAIRequestInternal(request, ownerContext, { ...body, requestId }),
+    });
+  } catch (error) {
+    const authUnavailable = ownerAIAuthUnavailableResponse(error, ownerOnlyJson);
+    if (authUnavailable) return authUnavailable;
+    return ownerOnlyJson({ ok: false, status: 'error', error: error instanceof Error ? error.message : 'Owner request unavailable.' }, getErrorStatus(error));
+  }
+}
+
+async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: IVXOwnerRequestContext, body: IVXOwnerAIRequest): Promise<Response> {
   const startedAt = Date.now();
   try {
-    const authRequest = new Request(request.url, {
-      method: request.method,
-      headers: request.headers,
-    });
-    // Auth check FIRST — never reveal validation errors to unauthenticated callers.
-    const ownerContext = await assertIVXOwnerOnly(authRequest);
-    // Block 22R fix: read the body once, defensively. Empty/invalid bodies
-    // (e.g. unauthenticated probes, double-consumed streams from upstream
-    // middleware) previously surfaced as `Invalid state: ReadableStream is
-    // locked` HTTP 500. We now coerce any read failure to a clean 400.
-    let body: IVXOwnerAIRequest;
-    try {
-      const parsed = await request.json().catch(() => null);
-      if (!parsed || typeof parsed !== 'object') {
-        return ownerOnlyJson({ error: 'Invalid or empty JSON body.' }, 400);
-      }
-      body = parsed as IVXOwnerAIRequest;
-    } catch (bodyError) {
-      console.log('[IVXOwnerAIBackend] Request body unreadable, returning 400:', bodyError instanceof Error ? bodyError.message : 'unknown');
-      return ownerOnlyJson({ error: 'Request body unreadable.' }, 400);
-    }
     const prompt = readTrimmedString(body.message);
     const mode = body.mode === 'command' ? 'command' : 'chat';
     // Persistence is ON by default for the owner conversation. The owner chat is a
@@ -6244,6 +6261,82 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     const conversation = await ensureOwnerConversation(ownerContext.client, tables);
     const requestId = readTrimmedString(body.requestId) || createRequestId();
 
+    // Capability probes have their own contract and must not become chat turns.
+    if (isHealthProbe(prompt)) {
+      const plannerDecision = buildIVXOwnerAIPlannerDecision(prompt);
+      try {
+        await safeEnsureInboxState(ownerContext.client, tables, conversation.id, ownerContext.userId);
+        let aiResult: Awaited<ReturnType<typeof generateOwnerAIAnswer>> | null = null;
+        let aiError: string | null = null;
+        try {
+          aiResult = await generateOwnerAIAnswer({
+            promptText: 'Reply with READY only.',
+            sessionId: conversation.id,
+            healthProbe: true,
+          });
+        } catch (error) {
+          aiError = error instanceof Error ? error.message : 'AI health probe failed.';
+          console.log('[IVXOwnerAIBackend] AI health capability probe failed:', aiError);
+        }
+        const roomStatus = buildRoomStatus(tables);
+        const capabilityChecks = await buildOwnerCapabilityChecks({
+          client: ownerContext.client,
+          tables,
+          conversationId: conversation.id,
+          userId: ownerContext.userId,
+          requestId,
+          ownerContext,
+          aiResult,
+          aiError,
+        });
+        const probePayload: IVXOwnerAIHealthProbeResponse = {
+          requestId,
+          conversationId: conversation.id,
+          answer: aiResult?.answer ?? 'Health probe completed. See capabilityProofs for executable runtime checks.',
+          model: aiResult?.model ?? getOwnerAIModel(),
+          status: 'ok',
+          source: aiResult?.source,
+          provider: aiResult?.provider,
+          endpoint: aiResult?.endpoint,
+          deploymentMarker: DEPLOYMENT_MARKER,
+          runtimeV2: buildOwnerRuntimeV2({
+            requestId,
+            conversationId: conversation.id,
+            prompt,
+            plannerDecision,
+            recentMessages: [],
+            persistence: runtimePersistenceForTables(tables),
+          }),
+          probe: true,
+          resolvedSchema: tables.schema,
+          roomStatus,
+          capabilities: capabilityChecks.capabilities,
+          capabilityProofs: capabilityChecks.capabilityProofs,
+        };
+
+        return ownerOnlyJson(probePayload as unknown as Record<string, unknown>);
+      } catch (error) {
+        const status = getErrorStatus(error);
+        const message = error instanceof Error ? error.message : 'Health probe auth failed.';
+        console.log('[IVXOwnerAIBackend] Health probe auth/startup failed:', {
+          status,
+          message,
+          route: '/api/ivx/owner-ai',
+        });
+        return ownerOnlyJson({
+          error: 'Health probe auth failed.',
+          detail: message,
+          blocker: message.toLowerCase().includes('privileged ivx access is required') ? 'owner_role_guard' : 'owner_only_guard',
+          route: '/api/ivx/owner-ai',
+          deploymentMarker: DEPLOYMENT_MARKER,
+          requiredTables: IVX_OWNER_AI_TABLES,
+          resolvedTables: tables,
+          serverConfig: getServerConfigAudit(),
+        }, status);
+      }
+    }
+
+
     // ── V6.10 OWNER-AUTHORIZED DEVELOPER EXECUTION (fixes the gap where the
     // conversation state machine only executed read-only actions, so "Confirm do it"
     // after a deploy request re-ran the last property query instead of shipping
@@ -6321,7 +6414,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         // Approval recording is non-fatal — the inline flags still enforce the gate.
       }
 
-      const { job: enqueuedJob } = await enqueueOrAttachSeniorDeveloperJob(workerInput);
+      const { job: enqueuedJob } = await enqueueOwnerChatWorkerJob(workerInput, conversation.id, requestId);
       const taskId = enqueuedJob.jobId;
       console.log('[IVXOwnerAIBackend] state-machine→developer-worker:', {
         taskId,
@@ -6468,6 +6561,37 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         console.log('[IVXOwnerAIBackend] Conversation-state assistant persistence failed:', error instanceof Error ? error.message : 'unknown');
         return null;
       }
+    }
+
+    async function executeTextTurn(module: string, model: string, modelInput: ReturnType<typeof buildOwnerTextModelInput>) {
+      const delivered = await deliverOwnerTextTurn({
+        persistUserMessage,
+        persistAssistantMessage,
+        persistOwner: () => insertMessage(ownerContext.client, tables, {
+          conversationId: conversation.id,
+          senderRole: 'owner',
+          senderUserId: tables.schema === 'generic' ? ownerContext.userId : null,
+          senderLabel,
+          body: prompt,
+        }),
+        generate: async () => {
+          const result = await requestIVXAIText({ module, requestId, model, ...modelInput, maxOutputTokens: 8_000 });
+          const text = assertVisibleOwnerAIAnswer(result.text);
+          if (isCannedResponse(text)) throw new Error('OWNER_TEXT_RESPONSE_REJECTED');
+          return { ...result, text };
+        },
+        persistAssistant: async (result) => {
+          const id = await persistAssistant(result.text, result.providerMetadata.model);
+          if (!id) throw new Error('OWNER_TEXT_HISTORY_PERSISTENCE_FAILED');
+          return id;
+        },
+      });
+      await safeUpsertAIRequest(ownerContext.client, tables, {
+        requestId, conversationId: conversation.id, userId: ownerContext.userId, prompt,
+        responseText: delivered.result.text, responseMessageId: delivered.assistantMessageId,
+        status: 'completed', model: delivered.result.providerMetadata.model,
+      });
+      return delivered;
     }
 
     async function returnStateAnswer(answer: string, evidence: Record<string, unknown>, status: 'ok' | 'error' = 'ok'): Promise<Response> {
@@ -6738,23 +6862,13 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
           history: knowledgeHistory,
           liveContext: knowledgeLiveCtx,
         });
-        const llmModel = resolveIVXAIModel() || 'openai/gpt-4o';
-        const llmResult = await requestIVXAIText({
-          module: 'owner-room-knowledge',
-          requestId,
-          model: llmModel,
-          ...knowledgeInput,
-          maxOutputTokens: 8_000,
-        });
+        const llmModel = resolveIVXAIModel(OWNER_TEXT_MODEL);
+        const { result: llmResult, assistantMessageId } = await executeTextTurn('owner-room-knowledge', llmModel, knowledgeInput);
         const answer = assertVisibleOwnerAIAnswer(llmResult.text);
-        // Reject canned responses (Item 6)
-        if (isCannedResponse(answer)) {
-          console.error('[IVXOwnerAIBackend] CANNED_RESPONSE_REJECTED:', { traceId: authoritativeDecision.traceId, answerPreview: answer.slice(0, 200) });
-        }
         return ownerOnlyJson(buildOwnerAIResponsePayload({
           requestId,
-          conversationId: readTrimmedString(body.conversationId) || 'ivx-owner-ai-knowledge',
-          answer: isCannedResponse(answer) ? 'I could not generate a proper response. Please rephrase your question.' : answer,
+          conversationId: conversation.id,
+          answer,
           model: llmResult.providerMetadata.model,
           status: 'ok',
         }, {
@@ -6762,8 +6876,8 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
           provider: llmResult.providerMetadata.provider,
           endpoint: llmResult.providerMetadata.endpoint ?? '/api/ivx/owner-ai/knowledge',
           deploymentMarker: DEPLOYMENT_MARKER,
-          assistantMessageId: null,
-          assistantPersisted: false,
+          assistantMessageId,
+          assistantPersisted: Boolean(assistantMessageId),
           selectedIntent: authoritativeDecision.intent,
           selectedTool: null,
           routerDebug: buildRouterDebug({
@@ -6786,10 +6900,10 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         // a deploy, commit, or task creation, even if the LLM fails.
         return ownerOnlyJson(buildOwnerAIResponsePayload({
           requestId: readTrimmedString(body.requestId) || createRequestId(),
-          conversationId: readTrimmedString(body.conversationId) || 'ivx-owner-ai-knowledge-error',
-          answer: 'I could not reach the AI model to answer your question. This is a temporary infrastructure issue — please try again. No task was created, no deploy was triggered.',
+          conversationId: conversation.id,
+          answer: 'The text reply could not be completed and saved. A model response may have been generated. Recover this request before submitting it again.',
           model: 'ivx_authoritative_router_error',
-          status: 'ok',
+          status: 'error',
         }, {
           source: 'local_app_brain',
           provider: 'chatgpt',
@@ -6810,7 +6924,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
           toolOutput: [],
           fallbackUsed: false,
           toolOutputs: [],
-        }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
+        }, body.devTestModeActive === true) as unknown as Record<string, unknown>, 503);
       }
     }
 
@@ -6843,19 +6957,13 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
           history: manualHistory,
           liveContext: manualLiveCtx,
         });
-        const llmModel = resolveIVXAIModel() || 'openai/gpt-4o';
-        const llmResult = await requestIVXAIText({
-          module: 'owner-room-manual',
-          requestId,
-          model: llmModel,
-          ...manualInput,
-          maxOutputTokens: 8_000,
-        });
+        const llmModel = resolveIVXAIModel(OWNER_TEXT_MODEL);
+        const { result: llmResult, assistantMessageId } = await executeTextTurn('owner-room-manual', llmModel, manualInput);
         const answer = assertVisibleOwnerAIAnswer(llmResult.text);
         return ownerOnlyJson(buildOwnerAIResponsePayload({
           requestId,
-          conversationId: readTrimmedString(body.conversationId) || 'ivx-owner-ai-manual-llm',
-          answer: isCannedResponse(answer) ? 'I could not generate a proper response. Please rephrase your question.' : answer,
+          conversationId: conversation.id,
+          answer,
           model: llmResult.providerMetadata.model,
           status: 'ok',
         }, {
@@ -6863,8 +6971,8 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
           provider: llmResult.providerMetadata.provider,
           endpoint: llmResult.providerMetadata.endpoint ?? '/api/ivx/owner-ai/manual-llm',
           deploymentMarker: DEPLOYMENT_MARKER,
-          assistantMessageId: null,
-          assistantPersisted: false,
+          assistantMessageId,
+          assistantPersisted: Boolean(assistantMessageId),
           selectedIntent: 'manual_answer' as OwnerRouterIntent,
           selectedTool: null,
           routerDebug: buildRouterDebug({
@@ -6885,10 +6993,10 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         // honest error instead. Manual answer mode must NEVER trigger execution.
         return ownerOnlyJson(buildOwnerAIResponsePayload({
           requestId: readTrimmedString(body.requestId) || createRequestId(),
-          conversationId: readTrimmedString(body.conversationId) || 'ivx-owner-ai-manual-error',
-          answer: 'I could not reach the AI model to answer your question in manual mode. This is a temporary infrastructure issue — please try again. No tools were used, no execution was triggered.',
+          conversationId: conversation.id,
+          answer: 'The text reply could not be completed and saved. A model response may have been generated. Recover this request before submitting it again.',
           model: 'ivx_authoritative_router_error',
-          status: 'ok',
+          status: 'error',
         }, {
           source: 'local_app_brain',
           provider: 'chatgpt',
@@ -6909,7 +7017,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
           toolOutput: [],
           fallbackUsed: false,
           toolOutputs: [],
-        }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
+        }, body.devTestModeActive === true) as unknown as Record<string, unknown>, 503);
       }
     }
 
@@ -7697,78 +7805,6 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
       }, commandResult.status === 'success' ? 200 : 500);
     }
 
-    if (isHealthProbe(prompt)) {
-      try {
-        await safeEnsureInboxState(ownerContext.client, tables, conversation.id, ownerContext.userId);
-        let aiResult: Awaited<ReturnType<typeof generateOwnerAIAnswer>> | null = null;
-        let aiError: string | null = null;
-        try {
-          aiResult = await generateOwnerAIAnswer({
-            promptText: 'Reply with READY only.',
-            sessionId: conversation.id,
-            healthProbe: true,
-          });
-        } catch (error) {
-          aiError = error instanceof Error ? error.message : 'AI health probe failed.';
-          console.log('[IVXOwnerAIBackend] AI health capability probe failed:', aiError);
-        }
-        const roomStatus = buildRoomStatus(tables);
-        const capabilityChecks = await buildOwnerCapabilityChecks({
-          client: ownerContext.client,
-          tables,
-          conversationId: conversation.id,
-          userId: ownerContext.userId,
-          requestId,
-          ownerContext,
-          aiResult,
-          aiError,
-        });
-        const probePayload: IVXOwnerAIHealthProbeResponse = {
-          requestId,
-          conversationId: conversation.id,
-          answer: aiResult?.answer ?? 'Health probe completed. See capabilityProofs for executable runtime checks.',
-          model: aiResult?.model ?? getOwnerAIModel(),
-          status: 'ok',
-          source: aiResult?.source,
-          provider: aiResult?.provider,
-          endpoint: aiResult?.endpoint,
-          deploymentMarker: DEPLOYMENT_MARKER,
-          runtimeV2: buildOwnerRuntimeV2({
-            requestId,
-            conversationId: conversation.id,
-            prompt,
-            plannerDecision,
-            recentMessages: [],
-            persistence: runtimePersistenceForTables(tables),
-          }),
-          probe: true,
-          resolvedSchema: tables.schema,
-          roomStatus,
-          capabilities: capabilityChecks.capabilities,
-          capabilityProofs: capabilityChecks.capabilityProofs,
-        };
-
-        return ownerOnlyJson(probePayload as unknown as Record<string, unknown>);
-      } catch (error) {
-        const status = getErrorStatus(error);
-        const message = error instanceof Error ? error.message : 'Health probe auth failed.';
-        console.log('[IVXOwnerAIBackend] Health probe auth/startup failed:', {
-          status,
-          message,
-          route: '/api/ivx/owner-ai',
-        });
-        return ownerOnlyJson({
-          error: 'Health probe auth failed.',
-          detail: message,
-          blocker: message.toLowerCase().includes('privileged ivx access is required') ? 'owner_role_guard' : 'owner_only_guard',
-          route: '/api/ivx/owner-ai',
-          deploymentMarker: DEPLOYMENT_MARKER,
-          requiredTables: IVX_OWNER_AI_TABLES,
-          resolvedTables: tables,
-          serverConfig: getServerConfigAudit(),
-        }, status);
-      }
-    }
 
     await safeEnsureInboxState(ownerContext.client, tables, conversation.id, ownerContext.userId);
 
@@ -7777,7 +7813,12 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
     }
 
     const existingAIRequest = await safeFindAIRequestByRequestId(ownerContext.client, tables, requestId);
-    if (existingAIRequest?.status === 'completed' && existingAIRequest.response_text?.trim()) {
+    if (existingAIRequest && (existingAIRequest.user_id !== ownerContext.userId
+      || existingAIRequest.conversation_id !== conversation.id || existingAIRequest.prompt !== prompt)) {
+      return ownerOnlyJson({ ok: false, status: 'error', code: 'OWNER_CHAT_IDENTITY_CONFLICT', requestId,
+        error: 'This request identity is already bound to different content or ownership.' }, 409);
+    }
+    if (existingAIRequest?.user_id === ownerContext.userId && existingAIRequest.conversation_id === conversation.id && existingAIRequest.prompt === prompt && existingAIRequest.status === 'completed' && existingAIRequest.response_text?.trim()) {
       console.log('[IVXOwnerAIBackend] Idempotent replay hit existing completed request:', {
         requestId,
         conversationId: existingAIRequest.conversation_id,
@@ -8402,7 +8443,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         ownerId: workerOwnerId,
       };
 
-      const { job: enqueuedInspectionJob, attached: inspectionAttached, activeJobId: inspectionActiveJobId } = await enqueueOrAttachSeniorDeveloperJob(inspectionWorkerInput);
+      const { job: enqueuedInspectionJob, attached: inspectionAttached, activeJobId: inspectionActiveJobId } = await enqueueOwnerChatWorkerJob(inspectionWorkerInput, conversation.id, requestId);
       const inspectionTaskId = enqueuedInspectionJob.jobId;
       console.log('[IVXOwnerAIBackend] chat→worker (read-only inspection):', {
         taskId: inspectionTaskId,
@@ -8594,7 +8635,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         ownerId: workerOwnerId,
       };
 
-      const { job: enqueuedQaJob, attached: qaAttached, activeJobId: qaActiveJobId } = await enqueueOrAttachSeniorDeveloperJob(qaOnlyWorkerInput);
+      const { job: enqueuedQaJob, attached: qaAttached, activeJobId: qaActiveJobId } = await enqueueOwnerChatWorkerJob(qaOnlyWorkerInput, conversation.id, requestId);
       const qaTaskId = enqueuedQaJob.jobId;
       console.log('[IVXOwnerAIBackend] chat→worker (qa-only):', {
         taskId: qaTaskId,
@@ -8864,7 +8905,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         },
         ownerId: workerOwnerId,
       };
-      const { job: enqueuedFactoryJob, attached: factoryAttached, activeJobId: factoryActiveJobId } = await enqueueOrAttachSeniorDeveloperJob(factoryWorkerInput);
+      const { job: enqueuedFactoryJob, attached: factoryAttached, activeJobId: factoryActiveJobId } = await enqueueOwnerChatWorkerJob(factoryWorkerInput, conversation.id, requestId);
       const factoryTaskId = enqueuedFactoryJob.jobId;
       console.log('[IVXOwnerAIBackend] factory engine enqueue:', {
         taskId: factoryTaskId,
@@ -9043,7 +9084,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         // Approval recording is non-fatal — the inline flags still enforce the gate.
       }
 
-      const { job: enqueuedAutonomousJob, attached: autonomousAttached, activeJobId: autonomousActiveJobId } = await enqueueOrAttachSeniorDeveloperJob(autonomousWorkerInput);
+      const { job: enqueuedAutonomousJob, attached: autonomousAttached, activeJobId: autonomousActiveJobId } = await enqueueOwnerChatWorkerJob(autonomousWorkerInput, conversation.id, requestId);
       const autonomousTaskId = enqueuedAutonomousJob.jobId;
       console.log('[IVXOwnerAIBackend] autonomous coder enqueue:', {
         taskId: autonomousTaskId,
@@ -9188,6 +9229,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         approveGitDeploy: autoExecuteEndToEnd,
         gitDeployConfirmationText: autoExecuteEndToEnd ? IVX_GIT_DEPLOY_CONFIRM_TEXT : undefined,
         validationMode: 'focused',
+        executionMode: autoExecuteEndToEnd ? 'deploy' : 'code_change',
         systemMode: false,
         ownerApprovedAction: {
           proposedPlan: prompt.slice(0, 500),
@@ -9239,7 +9281,7 @@ async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Respon
         // Approval recording is non-fatal — the inline flags still enforce the gate.
       }
 
-      const { job: enqueuedJob, attached, activeJobId } = await enqueueOrAttachSeniorDeveloperJob(workerInput);
+      const { job: enqueuedJob, attached, activeJobId } = await enqueueOwnerChatWorkerJob(workerInput, conversation.id, requestId);
       const taskId = enqueuedJob.jobId;
       console.log('[IVXOwnerAIBackend] chat→worker enqueue:', {
         taskId,

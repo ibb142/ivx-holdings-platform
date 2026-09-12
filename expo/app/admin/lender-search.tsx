@@ -303,6 +303,14 @@ const SECResultCard = React.memo(({
   );
 });
 
+export default function LenderSearchScreen() {
+  return (
+    <LenderProvider>
+      <LenderSearchScreenContent />
+    </LenderProvider>
+  );
+}
+
 function LenderSearchScreenContent() {
   const router = useRouter();
   // Safe access: if the LenderProvider is ever missing from the tree, `useLenders()`

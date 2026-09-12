@@ -1,3 +1,4 @@
+import { fetch as expoFetch } from 'expo/fetch';
 import { probeLocalIVXBrain, requestLocalIVXBrain } from './localIVXBrainService';
 import { isIVXLocalFirstChatEnabled } from './ivxLocalFirstRuntime';
 import {
@@ -105,6 +106,25 @@ export class IVXOwnerAIRequestError extends Error {
 }
 
 export const IVX_SERVICE_UNAVAILABLE_MESSAGE = 'Service temporarily unavailable. Please try again.';
+const OWNER_AI_FAILURE_MODELS = ['ivx_owner_session_required', 'ivx_owner_auth_failed',
+  'ivx_owner_ai_network_failed', 'ivx_owner_ai_backend_error', 'ivx_authoritative_router_error'];
+
+/** Reject render-only failures before any reply, persistence or execution success gate. */
+export function assertOwnerAIResponseSucceeded(response: IVXOwnerAIResponse): void {
+  if (response.status !== 'error' && !response.failure && !OWNER_AI_FAILURE_MODELS.includes(response.model)) return;
+  const failure = response.failure;
+  throw new IVXOwnerAIRequestError(response.answer, createRequestDiagnostics({
+    stage: 'response',
+    classification: failure?.classification ?? response.model,
+    statusCode: failure?.statusCode ?? null,
+    endpoint: response.endpoint ?? null,
+    requestId: response.requestId,
+    responsePreview: response.answer.slice(0, 240),
+    detail: failure?.detail ?? 'The request returned a failure notice, not a completed AI answer.',
+    audit: getIVXOwnerAIConfigAudit(),
+  }));
+}
+
 
 const GATEWAY_CHAT_COMPLETIONS_PATH = '/v1/chat/completions';
 const DEFAULT_IVX_OWNER_AI_MODEL = 'openai/gpt-4o';
@@ -1706,11 +1726,35 @@ function deepScanForVisibleOwnerAIText(value: unknown, depth: number = 0): strin
   return best;
 }
 
+/** HTTP success and compatibility envelopes must not erase a declared failure. */
+function assertOwnerAIPayloadSucceeded(payload: unknown, depth = 0): void {
+  if (!isRecord(payload) || depth > 4) return;
+  if (payload.status === 'error' || payload.failure
+    || (typeof payload.model === 'string' && OWNER_AI_FAILURE_MODELS.includes(payload.model.trim()))) {
+    throw new Error(typeof payload.answer === 'string' && payload.answer.trim()
+      ? sanitizeOwnerAIVisibleText(payload.answer) || IVX_SERVICE_UNAVAILABLE_MESSAGE
+      : readErrorMessage(payload));
+  }
+  // These are the response envelopes understood by the compatibility reader.
+  // Do not inspect tool-output/history objects that may describe earlier errors.
+  for (const key of ['result', 'data', 'message']) {
+    assertOwnerAIPayloadSucceeded(payload[key], depth + 1);
+  }
+  if (payload.type === 'final') {
+    let body: unknown = payload.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch { return; }
+    }
+    assertOwnerAIPayloadSucceeded(body, depth + 1);
+  }
+}
+
 function extractCompatibilityOwnerAIResponse(
   payload: unknown,
   fallbackConversationId: string,
   fallbackRequestPrefix: string,
 ): IVXOwnerAICanonicalResponse | null {
+  assertOwnerAIPayloadSucceeded(payload);
   // ROOT-CAUSE FIX (2026-06-10) — render plain-text 2xx bodies.
   // When the backend (or an upstream proxy) returns the reply as a raw,
   // non-JSON string, `readOwnerAIResponseBody` hands us that string. Previously
@@ -1918,6 +1962,7 @@ function normalizeOwnerAIResponse(
   fallbackRequestPrefix: string,
   allowCompatibility: boolean,
 ): IVXOwnerAIResponse {
+  assertOwnerAIPayloadSucceeded(payload);
   const canonicalValidation = validateCanonicalOwnerAIResponse(payload, fallbackRequestPrefix);
   if (canonicalValidation.data) {
     return canonicalValidation.data;
@@ -2162,7 +2207,7 @@ async function requestPublicChatFallback(
   });
   const blockerAnswer = assertCleanOwnerAIResponseText(
     isExecutionBlock
-      ? `That's an execution/task command, but your privileged owner session isn't active right now (${reason}), so I can't reach the real IVX execution engine to run it.\n\nI will NOT answer it from a different, generic engine — that would be the wrong context and would not actually run your task. Your full instruction was preserved (${payload.message.trim().length} characters) and nothing was sent or changed.\n\nTo run it: open IVX → Auth Diagnostics, tap Refresh token (or Re-authenticate), then resend the exact command.`
+      ? `That's an execution/task command, but your privileged owner session isn't active right now (${reason}), so I can't reach the real IVX execution engine to run it.\n\nI will NOT answer it from a different, generic engine — that would be the wrong context and would not actually run your task. Your full instruction was preserved (${payload.message.trim().length} characters) and the execution outcome has not been confirmed.\n\nTo run it: open IVX → Auth Diagnostics, tap Refresh token (or Re-authenticate), then resend the exact command.`
       : `Your privileged owner session isn't active right now (${reason}), so I can't reach the real IVX Owner AI to answer this.\n\nI will not substitute a generic reply from a different engine — you asked for real, end-to-end answers, so I'm telling you the truth instead of faking one.\n\nTo restore it: open IVX → Auth Diagnostics, tap Refresh token (or Re-authenticate), then resend your message.`,
   );
   await ivxOwnerMemoryService.recordConversationTurn({
@@ -2189,7 +2234,7 @@ async function requestPublicChatFallback(
     conversationId: payload.conversationId,
     answer: blockerAnswer,
     model: 'ivx_owner_session_required',
-    status: 'ok',
+    status: 'error',
     source: 'provider_fallback',
     endpoint: routingAudit.activeEndpoint ?? undefined,
     deploymentMarker: undefined,
@@ -2248,7 +2293,7 @@ function buildOwnerAuthFailedResponse(
   // calm, actionable line: your sign-in on THIS device needs refreshing.
   const friendlyBody =
     failure.body ??
-    `I'm online and working — but this device's owner sign-in needs to be refreshed before I can run privileged commands. Open Auth Diagnostics and tap Re-authenticate (sign in with your owner email), then send your command again. Your message was kept (${payload.message.trim().length} characters) and nothing was sent or changed.`;
+    `Owner authentication was not confirmed on this device. Open Auth Diagnostics and tap Re-authenticate (sign in with your owner email), then recover the original request in this conversation before retrying. Your message was kept (${payload.message.trim().length} characters) and the execution outcome has not been confirmed.`;
   const answer = assertCleanOwnerAIResponseText(friendlyBody);
 
   void ivxOwnerMemoryService.recordConversationTurn({
@@ -2285,7 +2330,7 @@ function buildOwnerAuthFailedResponse(
     conversationId: payload.conversationId,
     answer,
     model: 'ivx_owner_auth_failed',
-    status: 'ok',
+    status: 'error',
     source: 'remote_api',
     endpoint: route,
     deploymentMarker: undefined,
@@ -2308,7 +2353,7 @@ function buildOwnerAuthFailedResponse(
  * message naming the route, the per-POST timeout, a trace reference, and the
  * exact next fix — so `BACKEND_POST_FINISHED` completes with a real assistant
  * message instead of a silent throw. The full owner instruction is preserved
- * (character count) and nothing was sent or changed.
+ * (character count) and the execution outcome has not been confirmed.
  */
 function buildOwnerAINetworkFailedResponse(
   input: IVXOwnerAIRequest,
@@ -2345,7 +2390,7 @@ function buildOwnerAINetworkFailedResponse(
       `traceId: ${traceId}`,
       `nextFix: ${nextFix}`,
       '',
-      `I couldn't reach the IVX Owner AI backend (${failure.reason}). This is a network/connection issue, NOT an auth problem — your owner session was not rejected (no HTTP response was received). Your full instruction was preserved (${payload.message.trim().length} characters) and nothing was sent or changed. Resend when you're back online.`,
+      `I did not receive a confirmed response from the IVX Owner AI backend (${failure.reason}). No authentication verdict was received. Your full instruction was preserved (${payload.message.trim().length} characters) and the execution outcome has not been confirmed. A previous attempt may have executed. Reconnect and recover the original request before retrying.`,
     ].join('\n'),
   );
 
@@ -2382,7 +2427,7 @@ function buildOwnerAINetworkFailedResponse(
     conversationId: payload.conversationId,
     answer,
     model: 'ivx_owner_ai_network_failed',
-    status: 'ok',
+    status: 'error',
     source: 'remote_api',
     endpoint: route,
     deploymentMarker: undefined,
@@ -2437,17 +2482,17 @@ function buildOwnerAIBackendErrorResponse(
   const charCount = payload.message.trim().length;
   let friendlyBody: string;
   if (failure.kind === 'parse') {
-    friendlyBody = `The IVX Owner AI backend replied, but I couldn't read its response. This is a temporary backend formatting issue, not an auth problem. Your message was kept (${charCount} characters) and nothing was sent or changed — please resend.`;
+    friendlyBody = `The IVX Owner AI backend replied, but I couldn't read its response. This is a temporary backend formatting issue, not an auth problem. Your message was kept (${charCount} characters) but completion is unconfirmed — please resend.`;
   } else if (failure.kind === 'sse') {
-    friendlyBody = `The live streaming connection to IVX Owner AI dropped before the answer finished. Your message was kept (${charCount} characters) and nothing was sent or changed — please resend; it reconnects automatically.`;
+    friendlyBody = `The live streaming connection to IVX Owner AI dropped before the answer finished. Your message was kept (${charCount} characters) but completion is unconfirmed — please resend; it reconnects automatically.`;
   } else if (status === 404 || status === 405) {
-    friendlyBody = `The IVX Owner AI route returned ${status} (route not available). The backend may be on an older deploy that doesn't have this route yet. Your message was kept (${charCount} characters) and nothing was sent or changed — resend once the latest backend is live.`;
+    friendlyBody = `The IVX Owner AI route returned ${status} (route not available). The backend may be on an older deploy that doesn't have this route yet. Your message was kept (${charCount} characters) but completion is unconfirmed — resend once the latest backend is live.`;
   } else if (status === 429) {
-    friendlyBody = `IVX Owner AI is rate-limited right now (429 — too many requests). Your message was kept (${charCount} characters) and nothing was sent or changed — wait a few seconds and resend.`;
+    friendlyBody = `IVX Owner AI is rate-limited right now (429 — too many requests). Your message was kept (${charCount} characters) but completion is unconfirmed — wait a few seconds and resend.`;
   } else if (status != null && status >= 500) {
-    friendlyBody = `The IVX Owner AI backend hit a server error (${status}). This is a backend issue, not an auth problem. Your message was kept (${charCount} characters) and nothing was sent or changed — please resend in a moment.`;
+    friendlyBody = `The IVX Owner AI backend hit a server error (${status}). The service could not confirm completion. Your message was kept (${charCount} characters) but completion is unconfirmed — please resend in a moment.`;
   } else {
-    friendlyBody = `The IVX Owner AI backend rejected the request${status != null ? ` (${status})` : ''}. This is a client-side request error, not an auth problem. Your message was kept (${charCount} characters) and nothing was sent or changed — please resend.`;
+    friendlyBody = `The IVX Owner AI backend rejected the request${status != null ? ` (${status})` : ''}. This is a client-side request error, not an auth problem. Your message was kept (${charCount} characters) but completion is unconfirmed — please resend.`;
   }
 
   setOwnerAIPrimaryRouteFailure({
@@ -2483,7 +2528,7 @@ function buildOwnerAIBackendErrorResponse(
     endpoint: route,
     baseUrl: routingAudit.activeBaseUrl,
     requestId: payload.requestId,
-    detail: `OWNER_AI_BACKEND_ERROR (${classification}); surfaced explicit backend blocker, request completed (no throw, no silent hang). ${failure.detail}`.slice(0, 600),
+    detail: `OWNER_AI_BACKEND_ERROR (${classification}); surfaced explicit backend blocker, request failed; completion unconfirmed. ${failure.detail}`.slice(0, 600),
     responsePreview: answer.slice(0, 240),
     deploymentMarker: null,
     provider: null,
@@ -2503,7 +2548,8 @@ function buildOwnerAIBackendErrorResponse(
     conversationId: payload.conversationId,
     answer,
     model: 'ivx_owner_ai_backend_error',
-    status: 'ok',
+    status: 'error',
+    failure: { classification, statusCode: status, detail: failure.detail },
     source: 'remote_api',
     endpoint: route,
     deploymentMarker: undefined,
@@ -3159,10 +3205,12 @@ async function fetchOwnerAIWithHeartbeat(
     timeoutMs: OWNER_AI_SSE_TIMEOUT_MS,
   });
   try {
-    let response: Response;
+    let response: Awaited<ReturnType<typeof expoFetch>>;
     try {
       response = await Promise.race([
-        fetch(endpoint, {
+        // SDK 54's native global fetch may buffer SSE and omit response.body.
+        // Expo's streaming transport delivers readable chunks on Android/iOS.
+        expoFetch(endpoint, {
           method: 'POST',
           headers: sseHeaders,
           body: sseBody,
@@ -3205,6 +3253,8 @@ async function fetchOwnerAIWithHeartbeat(
     let buffer = '';
     let finalEvent: { status: number; ok: boolean; body: unknown } | null = null;
     let streamError: string | null = null;
+    let deltaCount = 0;
+    let firstDeltaAt: string | null = null;
 
     const dispatchEvent = (line: string): void => {
       if (!line.startsWith('data:')) return;
@@ -3221,6 +3271,9 @@ async function fetchOwnerAIWithHeartbeat(
         const status = typeof payloadEvent.status === 'number' ? payloadEvent.status : 200;
         const ok = typeof payloadEvent.ok === 'boolean' ? payloadEvent.ok : status >= 200 && status < 300;
         finalEvent = { status, ok, body: payloadEvent.body ?? null };
+        console.log('[IVXAIRequestService] OWNER_AI_SSE_FINAL', JSON.stringify({
+          requestId: payload.requestId, deltaCount, firstDeltaAt, status, at: new Date().toISOString(),
+        }));
         try { onProgress({ type: 'final', status, ok }); } catch { /* listener safe */ }
         return;
       }
@@ -3248,27 +3301,40 @@ async function fetchOwnerAIWithHeartbeat(
       if (type === 'delta') {
         const delta = typeof payloadEvent.delta === 'string' ? payloadEvent.delta : '';
         if (delta) {
+          deltaCount += 1;
+          if (deltaCount === 1) {
+            firstDeltaAt = new Date().toISOString();
+            console.log('[IVXAIRequestService] OWNER_AI_SSE_FIRST_DELTA', JSON.stringify({
+              requestId: payload.requestId, at: firstDeltaAt,
+            }));
+          }
           try { onProgress({ type: 'delta', delta }); } catch { /* listener safe */ }
         }
         return;
       }
     };
 
-    while (true) {
-      const { done, value } = await Promise.race([reader.read(), deadline]);
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let newlineIdx = buffer.indexOf('\n\n');
-      while (newlineIdx >= 0) {
-        const rawEvent = buffer.slice(0, newlineIdx);
-        buffer = buffer.slice(newlineIdx + 2);
-        const lines = rawEvent.split('\n');
-        for (const line of lines) dispatchEvent(line);
-        newlineIdx = buffer.indexOf('\n\n');
+    try {
+      while (true) {
+        const { done, value } = await Promise.race([reader.read(), deadline]);
+        if (done) break;
+        // The terminal SSE record precedes native didComplete. Drain to EOF
+        // under the original deadline: SDK54 reader.cancel() races the native
+        // controller.close() callback and raises a global JS exception.
+        if (finalEvent || streamError) continue;
+        buffer += decoder.decode(value, { stream: true });
+        let newlineIdx = buffer.indexOf('\n\n');
+        while (newlineIdx >= 0) {
+          const rawEvent = buffer.slice(0, newlineIdx);
+          buffer = buffer.slice(newlineIdx + 2);
+          const lines = rawEvent.split('\n');
+          for (const line of lines) dispatchEvent(line);
+          newlineIdx = buffer.indexOf('\n\n');
+        }
       }
-      if (finalEvent || streamError) break;
+    } finally {
+      reader.releaseLock();
     }
-    try { reader.cancel().catch(() => undefined); } catch { /* noop */ }
 
     if (!finalEvent) {
       throw new Error(streamError ?? 'owner-ai stream closed without final event');
@@ -4579,7 +4645,7 @@ export const ivxAIRequestService = {
       `This device's cached owner session was issued by a different Supabase project than the one IVX now uses. ` +
       `I have automatically cleared the stale session on this device. ` +
       `Sign in again with your IVX owner email, then resend your command. ` +
-      `Your message was kept and nothing was sent or changed.`;
+      `Your message was kept and the execution outcome has not been confirmed.`;
     return buildOwnerAuthFailedResponse(input, {
         reason: `owner_session_required:${preflight.reason}`,
         statusCode: null,

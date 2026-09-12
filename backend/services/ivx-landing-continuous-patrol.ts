@@ -288,7 +288,11 @@ export async function runLandingPatrolSession(input: {
       });
     }
   } finally {
-    if (!lostError && task.state === 'RUNNING') await releaseLease(task.taskId, workerId).catch(() => undefined);
+    // A failed observation write must not leave an idle patrol holding capacity
+    // until lease expiry. releaseLease rereads durable state and enforces the
+    // current holder/process: a committed response loss or a replacement worker
+    // cannot be overwritten. Keep the original failure and make one cleanup attempt.
+    if (task.state === 'RUNNING') await releaseLease(task.taskId, workerId).catch(() => undefined);
     liveByAgent.delete(input.agentNumber);
   }
 

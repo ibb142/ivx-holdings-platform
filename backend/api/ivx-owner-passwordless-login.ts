@@ -134,6 +134,7 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
   const email = sanitizeEmail(body.email);
   const emergency = readTrimmed(body.emergency).toLowerCase();
   const submittedPassword = typeof body.password === 'string' ? body.password : '';
+  const requireSupabaseSession = body.requireSupabaseSession === true;
 
   if (emergency !== 'true' && emergency !== 'ivx_emergency_recovery') {
     return failure(
@@ -199,13 +200,12 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
     });
   };
 
-  // The normal member-login route can fail when the Supabase password has
-  // drifted from the owner credential already bound to the IVX runtime. In
-  // that case the mobile app retries this emergency route with the exact
-  // submitted password. Mint a bounded, server-signed owner session only
-  // after a constant-time comparison against that existing runtime binding.
-  const outageResponse = buildOutageSessionResponse();
-  if (outageResponse) return outageResponse;
+  // Mobile clients require a refreshable Supabase session for chat preflight.
+  // Preserve the credential-bound outage mode for callers that support it.
+  if (!requireSupabaseSession) {
+    const outageResponse = buildOutageSessionResponse();
+    if (outageResponse) return outageResponse;
+  }
 
   const supabaseUrl = resolveSupabaseUrl();
   const anonKey = await resolveSupabaseAnonKey();
@@ -237,11 +237,11 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
         : 0;
       const errorMessage = error?.message || 'Supabase did not return an owner session.';
       const serviceUnavailable = errorStatus >= 500 || /timeout|abort|fetch|network|unavailable|522|503|504/i.test(errorMessage);
-      if (serviceUnavailable) {
+      if (serviceUnavailable && !requireSupabaseSession) {
         const outageResponse = buildOutageSessionResponse();
         if (outageResponse) return outageResponse;
       }
-      return failure(errorMessage, 'owner_password_grant_failed', 502);
+      return failure(errorMessage, 'owner_password_grant_failed', requireSupabaseSession && serviceUnavailable ? 503 : 502);
     }
 
     const expiresAt = session.expires_at ?? 0;
@@ -262,8 +262,10 @@ export async function handleIVXOwnerPasswordlessLogin(request: Request): Promise
       timestamp: nowIso(),
     });
   } catch (error) {
-    const outageResponse = buildOutageSessionResponse();
-    if (outageResponse) return outageResponse;
+    if (!requireSupabaseSession) {
+      const outageResponse = buildOutageSessionResponse();
+      if (outageResponse) return outageResponse;
+    }
     const timedOut = error instanceof Error && /timeout|abort/i.test(error.message);
     return failure(
       timedOut ? 'Owner authentication timed out.' : (error instanceof Error ? error.message : 'Owner authentication failed.'),

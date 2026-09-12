@@ -1,7 +1,7 @@
-import { test, expect } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { join } from 'node:path';
 
-test('Owner streaming cancellation and authorization in an isolated process', async () => {
+test('Owner streaming admission, replay, cancellation and authorization in an isolated process', async () => {
   const child = Bun.spawn(['bun', 'test', join(import.meta.dir, 'ivx-owner-ai-stream.isolated-suite.ts')], {
     cwd: join(import.meta.dir, '..', '..'), stdout: 'pipe', stderr: 'pipe', env: { ...process.env },
   });

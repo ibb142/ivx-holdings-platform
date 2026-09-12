@@ -1112,7 +1112,9 @@ export async function* streamIVXAIText(input: {
   try {
     queueSlot = await acquireAIQueueSlot(queueLane, { signal: input.abortSignal });
   } catch (error) {
-    yield { type: 'error', error: error instanceof Error ? error.message : 'IVX AI queue admission failed' };
+    yield { type: 'error', error: input.abortSignal?.aborted
+      ? 'Generation stopped by user.'
+      : error instanceof Error ? error.message : 'IVX AI stream admission failed' };
     return;
   }
   const callStartedAt = Date.now();
@@ -1123,57 +1125,71 @@ export async function* streamIVXAIText(input: {
   let lastError: string | null = null;
   let usage: unknown = null;
   let timedOut = false;
-  const timeoutController = new AbortController();
-  const streamSignal = AbortSignal.any([timeoutController.signal, ...(input.abortSignal ? [input.abortSignal] : [])]);
+  const controller = new AbortController();
+  const stop = (message: string) => {
+    lastError ??= message;
+    controller.abort(new Error(lastError));
+  };
+  const onUserAbort = () => stop('Generation stopped by user.');
+  input.abortSignal?.addEventListener('abort', onUserAbort, { once: true });
+  if (input.abortSignal?.aborted) onUserAbort();
   const timer = setTimeout(() => {
     timedOut = true;
-    timeoutController.abort(new Error('IVX AI stream deadline exceeded'));
+    stop(`IVX AI stream timed out after ${adaptiveTimeoutMs}ms`);
   }, adaptiveTimeoutMs);
+  // Abort the SDK request AND bound local waits: an idle upstream may never
+  // produce another delta, and its usage promise can stall independently.
+  const waitForStream = <T>(pending: PromiseLike<T>): Promise<T> => new Promise((resolve, reject) => {
+    const onAbort = () => reject(controller.signal.reason);
+    controller.signal.addEventListener('abort', onAbort, { once: true });
+    Promise.resolve(pending).then(resolve, reject).finally(() => {
+      controller.signal.removeEventListener('abort', onAbort);
+    });
+    if (controller.signal.aborted) onAbort();
+  });
+  let iterator: AsyncIterator<string> | undefined;
 
   try {
-    input.abortSignal?.throwIfAborted();
+    controller.signal.throwIfAborted();
     ensureIVXAIGatewayEnvironment();
     const streamResult = streamText({
       model,
       maxRetries: 0,
       system: system.length > 0 ? system : undefined,
       maxOutputTokens: input.maxOutputTokens,
-      abortSignal: streamSignal,
+      abortSignal: controller.signal,
+      onError: ({ error }) => stop(error instanceof Error ? error.message : 'IVX AI stream failed'),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ...(messages.length > 0 ? { messages } as any : { prompt }),
     });
 
-    for await (const delta of streamResult.textStream) {
-      if (timedOut || input.abortSignal?.aborted) {
-        if (input.abortSignal?.aborted) {
-          lastError = 'Generation stopped by user.';
-        } else {
-          lastError = `IVX AI stream timed out after ${adaptiveTimeoutMs}ms`;
-        }
-        break;
-      }
+    iterator = streamResult.textStream[Symbol.asyncIterator]();
+    while (true) {
+      const next = await waitForStream(iterator.next());
+      controller.signal.throwIfAborted();
+      if (next.done) break;
+      const delta = next.value;
       accumulated += delta;
       yield { type: 'delta', delta };
     }
 
-    if (!streamSignal.aborted) {
+    if (!lastError) {
       try {
-        usage = await streamResult.usage;
+        usage = await waitForStream(streamResult.usage);
       } catch {
+        controller.signal.throwIfAborted();
         usage = null;
       }
     }
   } catch (error) {
-    lastError = error instanceof Error ? error.message : 'IVX AI stream failed';
+    lastError ??= error instanceof Error ? error.message : 'IVX AI stream failed';
   } finally {
-    // An aborted provider may close its iterator normally, without another
-    // delta or exception. Preserve that interruption in the terminal result.
-    if (input.abortSignal?.aborted) lastError = 'Generation stopped by user.';
-    else if (timedOut) lastError = `IVX AI stream timed out after ${adaptiveTimeoutMs}ms`;
     clearTimeout(timer);
-    // Consumer return/disconnect also enters finally. Cancel upstream work
-    // before releasing admission, otherwise generation can outlive its slot.
-    timeoutController.abort(new Error('IVX AI stream consumption ended'));
+    input.abortSignal?.removeEventListener('abort', onUserAbort);
+    controller.abort();
+    // Do not await return() on an unresponsive provider iterator. Cancellation
+    // must free admission even when that iterator is still awaiting upstream.
+    try { void Promise.resolve(iterator?.return?.()).catch(() => undefined); } catch { /* already closed */ }
     queueSlot.release();
   }
 
@@ -1197,7 +1213,7 @@ export async function* streamIVXAIText(input: {
     queueWaitMs: queueSlot.waitMs,
   });
 
-  if (lastError && accumulated.length === 0) {
+  if (lastError) {
     yield { type: 'error', error: lastError };
     return;
   }
@@ -1224,6 +1240,5 @@ export async function* streamIVXAIText(input: {
     text: accumulated,
     usage,
     providerMetadata,
-    ...(lastError ? { error: lastError } : {}),
   };
 }

@@ -220,7 +220,8 @@ test('a provider stream ending on cancellation cannot report successful partial 
   const chunks = [];
   for await (const chunk of streamIVXAIText({ module: 'provider-limit-fixture', prompt: 'fixture',
     maxOutputTokens: 4, abortSignal: controller.signal })) chunks.push(chunk);
-  expect(chunks.at(-1)).toMatchObject({ type: 'done', text: 'partial', error: 'Generation stopped by user.' });
+  expect(chunks.map(chunk => chunk.type)).toEqual(['delta', 'error']);
+  expect(chunks.at(-1)).toMatchObject({ type: 'error', error: 'Generation stopped by user.' });
   expect(getAIQueueSnapshot().short.active).toBe(0);
 });
 
@@ -231,7 +232,7 @@ test('stream admission rejection is returned as one explicit error without a pro
   const chunks = [];
   for await (const chunk of streamIVXAIText({ module: 'provider-limit-fixture', prompt: 'fixture',
     maxOutputTokens: 4, abortSignal: controller.signal })) chunks.push(chunk);
-  expect(chunks).toEqual([{ type: 'error', error: 'fixture admission cancelled' }]);
+  expect(chunks).toEqual([{ type: 'error', error: 'Generation stopped by user.' }]);
   expect(call).toHaveBeenCalledTimes(0);
 });
 

@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { EventEmitter } from 'node:events';
+import { Pool } from 'pg';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
@@ -409,3 +411,63 @@ test('REST mission reads filter history before the cap and keep recovery ownersh
   globalThis.fetch = (async () => Response.json([{ idempotency_key: 'unrequested' }])) as typeof fetch;
   await expect(readPostgresTaskKeys(keys)).rejects.toThrow('Invalid task identity response');
  });
+
+for (const failure of [null, 'setup', 'read', 'commit', 'disconnect', 'server-cancel'] as const) {
+  test(`Landing direct read ${failure ?? 'success'} preserves truth and releases its connection`, async () => {
+    configureAtomicQueue();
+    process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://landingdeadline.supabase.co';
+    process.env.SUPABASE_DB_URL = 'postgresql://postgres:fixture@db.landingdeadline.supabase.co/postgres';
+    const sha = 'a'.repeat(40);
+    const calls: string[] = [], releases: boolean[] = [];
+    const problem = Object.assign(new Error('read connection failed'),
+      failure === 'server-cancel' ? { code: '57014' } : {});
+    const task = { taskId: 'landing-deadline', state: 'RUNNING', leaseHolder: 'worker-a',
+      evidence: [{ summary: 'retained observation' }], checkpoint: { phase: 'COMMITTING' } };
+    const client = Object.assign(new EventEmitter(), {
+      query: async (sql: string, values?: unknown[]) => {
+        calls.push(sql);
+        if (sql.startsWith('select payload')) {
+          expect(values).toEqual(['landing-p0:', 'landing-p0-repair:', 'landing-p0-patrol:'].map(prefix => `${prefix}${sha}:%`));
+          expect(sql).toContain('(idempotency_key like $1 or idempotency_key like $2 or idempotency_key like $3)');
+          expect(sql).toContain('order by task_id limit 1000');
+          if (failure === 'disconnect') client.emit('error', problem);
+        }
+        if ((failure === 'setup' && sql.startsWith('BEGIN'))
+          || ((failure === 'read' || failure === 'server-cancel') && sql.startsWith('select payload'))
+          || (failure === 'commit' && sql === 'COMMIT')) throw problem;
+        return { rows: [{ payload: task }] };
+      },
+      release: (destroy: boolean) => { releases.push(destroy); },
+    });
+    const connect = spyOn(Pool.prototype, 'connect').mockImplementation(() => Promise.resolve(client) as never);
+    const unscoped = spyOn(Pool.prototype, 'query').mockImplementation(() => {
+      throw new Error('Landing read bypassed the transaction deadline');
+    });
+    try {
+      const pending = readPostgresLandingTasks(sha);
+      if (failure) {
+        await expect(pending).rejects.toBe(problem);
+        // An acknowledged server cancellation can roll back. A client timeout
+        // or disconnected socket must be destroyed without another SQL round trip.
+        if (failure === 'server-cancel') expect(calls.at(-1)).toBe('ROLLBACK');
+        else expect(calls).not.toContain('ROLLBACK');
+        expect(releases).toEqual([true]);
+      } else {
+        const result = await pending;
+        expect(result).toEqual([task]);
+        expect(result[0]).not.toBe(task);
+        expect(calls.at(-1)).toBe('COMMIT');
+        expect(releases).toEqual([false]);
+      }
+      expect(calls[0]).toContain("SET LOCAL statement_timeout = '4s'");
+      expect(calls[0]).toContain("SET LOCAL lock_timeout = '2s'");
+      expect(calls.filter(sql => sql.startsWith('select payload'))).toHaveLength(failure === 'setup' ? 0 : 1);
+      expect(unscoped).not.toHaveBeenCalled();
+      expect(connect).toHaveBeenCalledTimes(1);
+      expect(client.listenerCount('error')).toBe(0);
+    } finally {
+      unscoped.mockRestore();
+      connect.mockRestore();
+    }
+  });
+}

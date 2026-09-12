@@ -56,12 +56,37 @@ tags:
     commands:
       - tapOn:
           id: "ivx-owner-chat-scroll-to-latest"
-- scrollUntilVisible:
-    element:
+# Use the real conversation search to keep this command and its eventual
+# answer in view while other owner runs append to the shared room. Scrolling
+# toward older history before the provider replies moves away from the pending
+# answer; the app correctly preserves that intentional reading position.
+# The suffix alone is not a passing answer: both assertions below still require
+# the sender role and the full joined value or full original command.
+- tapOn:
+    id: "ivx-owner-chat-search-open"
+- waitForAnimationToEnd
+# A streaming/remote-ack render can land in the same frame as the first tap.
+# Retry the transition once only when the unopened control is still present;
+# the following search-input assertion remains fail-closed.
+- runFlow:
+    when:
+      visible:
+        id: "ivx-owner-chat-search-open"
+    commands:
+      - tapOn:
+          id: "ivx-owner-chat-search-open"
+- extendedWaitUntil:
+    visible:
+      id: "ivx-owner-chat-search-input"
+    timeout: 10000
+- tapOn:
+    id: "ivx-owner-chat-search-input"
+- inputText: ${CHAT_E2E_SUFFIX}
+- hideKeyboard
+- extendedWaitUntil:
+    visible:
       id: "chat-message-body-assistant-.*"
       text: ".*IVX_CHAT_E2E_${CHAT_E2E_SUFFIX}.*"
-    direction: DOWN
-    visibilityPercentage: 50
     # The canonical Owner AI path is SSE-backed with a 180s hard ceiling.
     # Keep the assertion fail-closed while allowing one complete live stream
     # during provider/database degradation.
@@ -79,6 +104,15 @@ tags:
 - assertVisible:
     id: "chat-message-body-owner-.*"
     text: ".*Return only the result of joining IVX_CHAT_E2E_ and ${CHAT_E2E_SUFFIX}.*"
+- tapOn:
+    id: "ivx-owner-chat-search-clear"
+- runFlow:
+    when:
+      visible:
+        id: "ivx-owner-chat-scroll-to-latest"
+    commands:
+      - tapOn:
+          id: "ivx-owner-chat-scroll-to-latest"
 - assertNotVisible: "Not sent"
 - assertNotVisible: "I was unable to display this reply"
 - assertVisible:
@@ -128,12 +162,30 @@ tags:
     commands:
       - tapOn:
           id: "ivx-owner-chat-scroll-to-latest"
-- scrollUntilVisible:
-    element:
+- tapOn:
+    id: "ivx-owner-chat-search-open"
+- waitForAnimationToEnd
+# Apply the same single recovery after the cold relaunch. The gate still
+# requires the real search field before it can enter or assert the marker.
+- runFlow:
+    when:
+      visible:
+        id: "ivx-owner-chat-search-open"
+    commands:
+      - tapOn:
+          id: "ivx-owner-chat-search-open"
+- extendedWaitUntil:
+    visible:
+      id: "ivx-owner-chat-search-input"
+    timeout: 10000
+- tapOn:
+    id: "ivx-owner-chat-search-input"
+- inputText: ${CHAT_E2E_SUFFIX}
+- hideKeyboard
+- extendedWaitUntil:
+    visible:
       id: "chat-message-body-assistant-.*"
       text: ".*IVX_CHAT_E2E_${CHAT_E2E_SUFFIX}.*"
-    direction: DOWN
-    visibilityPercentage: 50
     timeout: 30000
 - assertVisible:
     id: "chat-message-body-assistant-.*"
@@ -148,6 +200,15 @@ tags:
 - assertVisible:
     id: "chat-message-body-owner-.*"
     text: ".*Return only the result of joining IVX_CHAT_E2E_ and ${CHAT_E2E_SUFFIX}.*"
+- tapOn:
+    id: "ivx-owner-chat-search-clear"
+- runFlow:
+    when:
+      visible:
+        id: "ivx-owner-chat-scroll-to-latest"
+    commands:
+      - tapOn:
+          id: "ivx-owner-chat-scroll-to-latest"
 - assertNotVisible: "Not sent"
 - assertNotVisible: "I was unable to display this reply"
 - assertVisible:
