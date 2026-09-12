@@ -1,7 +1,7 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import * as deadline from './ivx-postgres-deadline';
 import { readSeniorQueuePostgresJob, readSeniorWorkQueuePostgres, resetPostgresAutonomousTaskStoreForTests } from './ivx-postgres-autonomous-task-store';
-import { SENIOR_WORK_QUEUE_SQL, SENIOR_WORK_QUEUE_PATH } from './ivx-senior-work-queue';
+import { SENIOR_QUEUE_JOB_SQL, SENIOR_WORK_QUEUE_SQL, SENIOR_WORK_QUEUE_PATH } from './ivx-senior-work-queue';
 
 const env = { ...process.env };
 afterEach(() => { process.env = { ...env }; resetPostgresAutonomousTaskStoreForTests(); });
@@ -15,7 +15,7 @@ test('direct polling projects one job with bound identities and detects duplicat
   const query = spyOn(deadline, 'queryWithPostgresDeadline').mockResolvedValue({ rows: [{ job: { jobId: 'job-1', status: 'running' } }] } as never);
   try {
     expect(await readSeniorQueuePostgresJob('job-1')).toEqual({ jobId: 'job-1', status: 'running' });
-    expect(query.mock.calls[0][1]).toContain("job->>'jobId' = $2 limit 2");
+    expect(query.mock.calls[0][1]).toBe(SENIOR_QUEUE_JOB_SQL);
     expect(query.mock.calls[0][2]).toEqual(['senior-developer-worker/queue.json', 'job-1']);
     query.mockResolvedValue({ rows: [] } as never);
     expect(await readSeniorQueuePostgresJob('missing')).toBeNull();

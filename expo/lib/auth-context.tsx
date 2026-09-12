@@ -1296,6 +1296,13 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   }, [clearTwoFactorState]);
 
   const doLogout = useCallback(async () => {
+    // Invalidate pending role/persistence work before remote sign-out can wait.
+    // Otherwise a slow bootstrap can put the old owner back into local state.
+    lastHandledSessionKeyRef.current = null;
+    lastHandledSessionResultRef.current = null;
+    inFlightSessionKeyRef.current = null;
+    inFlightSessionPromiseRef.current = null;
+    manualOwnerLoginRef.current = false;
     try {
       await supabase.auth.signOut();
     } catch (e) {
@@ -1305,11 +1312,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     sessionWarmupKeyRef.current = null;
     ownerRepairKeyRef.current = null;
     activeSessionUserIdRef.current = null;
-    lastHandledSessionKeyRef.current = null;
-    lastHandledSessionResultRef.current = null;
-    inFlightSessionKeyRef.current = null;
-    inFlightSessionPromiseRef.current = null;
-    manualOwnerLoginRef.current = false;
     await clearStoredAuth();
     await clearOwnerResilientSession().catch((error: unknown) => {
       console.log('[Auth] Resilient owner session clear note:', error instanceof Error ? error.message : 'unknown');
@@ -1443,6 +1445,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       return inFlightSessionPromiseRef.current;
     }
 
+    const supersededResult: AuthSessionResult = {
+      accepted: false,
+      role: 'investor',
+      blockedReason: 'Session changed while sign-in was completing. Please sign in again.',
+    };
     const handleSessionWork = async (): Promise<AuthSessionResult> => {
     const meta = supaUser.user_metadata || {};
 
@@ -1488,6 +1495,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       console.log('[Auth] Role resolution threw (non-blocking):', (roleError as Error)?.message ?? 'unknown');
     }
     const resolvedSessionRole = roleBootstrap ?? await resolveLocalSessionRoleFallback(supaUser.id, supaUser.email);
+    // Logout or a newer session can win while role lookup is pending. Match the
+    // actual attempt, including retries with the same token, before committing.
+    if (inFlightSessionPromiseRef.current !== sessionPromise) return supersededResult;
     let role = normalizeRole(resolvedSessionRole.role);
 
     // Owner authorization is determined by the IVX backend via the
@@ -1562,6 +1572,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       userRole: role,
     });
 
+    if (inFlightSessionPromiseRef.current !== sessionPromise) return supersededResult;
     startMonitor();
     console.log('[Auth] Session set for:', supaUser.id, 'role:', role, 'source:', resolvedSessionRole.source);
     warmSessionInBackground(session, authUser, role);
@@ -1577,7 +1588,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     };
 
     const sessionPromise = handleSessionWork().finally(() => {
-      if (inFlightSessionKeyRef.current === sessionKey) {
+      if (inFlightSessionPromiseRef.current === sessionPromise) {
         inFlightSessionKeyRef.current = null;
         inFlightSessionPromiseRef.current = null;
       }
@@ -3235,3 +3246,4 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     refetchProfile, isOwnerIPAccess, detectedIP, pendingTwoFactorEmail, pendingTwoFactorFactor,
   ]);
 });
+

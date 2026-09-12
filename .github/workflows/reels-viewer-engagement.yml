@@ -1,0 +1,38 @@
+name: Reels viewer engagement
+on:
+  pull_request:
+    paths:
+      - 'backend/api/ivx-video-platform.ts'
+      - 'backend/services/ivx-viewer-engagement.ts'
+      - 'backend/ivx-viewer-engagement.test.mjs'
+      - 'backend/services/ivx-platform-feed-loader.ts'
+      - 'backend/ivx-platform-feed-loader.test.mjs'
+      - 'backend/ivx-platform-feed-concurrency.test.ts'
+      - '.github/workflows/reels-viewer-engagement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/api/ivx-video-platform.ts'
+      - 'backend/services/ivx-viewer-engagement.ts'
+      - 'backend/ivx-viewer-engagement.test.mjs'
+      - 'backend/services/ivx-platform-feed-loader.ts'
+      - 'backend/ivx-platform-feed-loader.test.mjs'
+      - 'backend/ivx-platform-feed-concurrency.test.ts'
+      - '.github/workflows/reels-viewer-engagement.yml'
+permissions:
+  contents: read
+jobs:
+  viewer-engagement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test backend/ivx-viewer-engagement.test.mjs backend/ivx-platform-feed-loader.test.mjs
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.9'
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: bun test backend/ivx-platform-feed-concurrency.test.ts backend/ivx-video-feed-failure.test.ts backend/api/ivx-feed-failure-status.test.ts backend/services/ivx-feed-response-cache.test.ts

@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import type { EventEmitter } from 'node:events';
 import { observePostgresPoolErrors, queryWithPostgresDeadline } from './ivx-postgres-deadline';
-import { SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL } from './ivx-senior-work-queue';
+import { SENIOR_QUEUE_JOB_SQL, SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL } from './ivx-senior-work-queue';
 import { emergencyStopPostgresConfig } from './ivx-emergency-stop-postgres';
 import { supabasePostgresTls, withoutPostgresUrlTlsOptions } from './ivx-supabase-postgres-tls';
 import { decideRetry, isTransientFailure, retryAfterMs, RetryQuota } from './ivx-retry-policy';
@@ -179,9 +179,7 @@ export async function readSeniorQueuePostgresJob<T extends { jobId: string }>(jo
   emergencyStopPostgresConfig();
   if (!jobId.trim()) throw new Error('Repair job identity is required');
   const result = await queryWithPostgresDeadline<{ job: T }>(getDirectPool(process.env, 'repair'),
-    `select job from public.ivx_durable_documents d
-      cross join lateral jsonb_array_elements(d.value->'jobs') as job
-      where d.doc_key = $1 and job->>'jobId' = $2 limit 2`,
+    SENIOR_QUEUE_JOB_SQL,
     ['senior-developer-worker/queue.json', jobId]);
   if (result.rows.length > 1) throw new Error('Duplicate repair job identity');
   const job = result.rows[0]?.job ?? null;
