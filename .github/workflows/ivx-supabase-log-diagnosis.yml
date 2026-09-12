@@ -43,9 +43,11 @@ jobs:
               'memory': 'out of memory|cannot allocate memory',
               'connection_reset': 'connection reset|broken pipe|connection.*closed|connection.*terminated',
               'pool_timeout': 'pool.*timeout|pool.*timed out|checkout.*timeout',
+              'password_authentication': 'password authentication failed',
+              'client_authentication': 'no pg_hba.conf entry|role .* does not exist|database .* does not exist',
               'schema_cache': 'schema cache',
           }
-          sql = "select timestamp, event_message from postgres_logs order by timestamp desc limit 200"
+          sql = "select timestamp, event_message from postgres_logs cross join unnest(metadata) as m cross join unnest(m.parsed) as p where p.error_severity = 'FATAL' order by timestamp desc limit 200"
           params = urllib.parse.urlencode({'sql': sql, 'iso_timestamp_start': start.isoformat(timespec='milliseconds').replace('+00:00', 'Z'), 'iso_timestamp_end': end.isoformat(timespec='milliseconds').replace('+00:00', 'Z')})
           request = urllib.request.Request('https://api.supabase.com/v1/projects/' + project + '/analytics/endpoints/logs.all?' + params,
               headers={'Authorization': 'Bearer ' + token})
@@ -64,9 +66,7 @@ jobs:
           counts = {}
           for row in payload['result']:
               message = str(row.get('event_message', ''))
-              if not re.search(r'error|fatal|panic|timeout|timed out|terminated|connection reset|too many', message, re.I):
-                  continue
               category = next((label for label, pattern in categories.items() if re.search(pattern, message, re.I)), 'other')
               counts[category] = counts.get(category, 0) + 1
-          print(json.dumps({'source': 'postgres_logs', 'sampleSize': len(payload['result']), 'errorCategories': counts}))
+          print(json.dumps({'source': 'postgres_logs', 'severity': 'FATAL', 'sampleSize': len(payload['result']), 'errorCategories': counts}))
           print('LOG_DIAGNOSIS_COMPLETE')
