@@ -47,7 +47,7 @@ jobs:
               'client_authentication': 'no pg_hba.conf entry|role .* does not exist|database .* does not exist',
               'schema_cache': 'schema cache',
           }
-          sql = "select timestamp, event_message from postgres_logs where regexp_contains(event_message, '(?i)authentication|remaining connection|too many clients|idle-in-transaction|administrator command|no space|out of memory|connection reset|broken pipe') order by timestamp desc limit 200"
+          sql = "select p.error_severity as severity, p.sql_state_code as sqlstate, count(*) as n from postgres_logs as t cross join unnest(t.metadata) as m cross join unnest(m.parsed) as p where p.error_severity = 'FATAL' group by severity, sqlstate limit 50"
           params = urllib.parse.urlencode({'sql': sql, 'iso_timestamp_start': start.isoformat(timespec='milliseconds').replace('+00:00', 'Z'), 'iso_timestamp_end': end.isoformat(timespec='milliseconds').replace('+00:00', 'Z')})
           request = urllib.request.Request('https://api.supabase.com/v1/projects/' + project + '/analytics/endpoints/logs.all?' + params,
               headers={'Authorization': 'Bearer ' + token})
@@ -65,10 +65,8 @@ jobs:
               error_text = str(payload.get('error', '')).lower() if isinstance(payload, dict) else ''
               print(json.dumps({'errorHints': [word for word in ['syntax', 'column', 'function', 'unnest', 'timestamp', 'permission', 'unsupported', 'not found', 'regexp_contains'] if word in error_text]}))
               raise SystemExit('LOGS_API_RESULT_INVALID')
-          counts = {}
           for row in payload['result']:
-              message = str(row.get('event_message', ''))
-              category = next((label for label, pattern in categories.items() if re.search(pattern, message, re.I)), 'other')
-              counts[category] = counts.get(category, 0) + 1
-          print(json.dumps({'source': 'postgres_logs', 'filter': 'connection_failure_messages', 'sampleSize': len(payload['result']), 'errorCategories': counts}))
+              if row.get('severity') != 'FATAL' or not re.fullmatch(r'[0-9A-Z]{5}', str(row.get('sqlstate', ''))):
+                  raise SystemExit('UNEXPECTED_AGGREGATE_SHAPE')
+              print(json.dumps({'severity': 'FATAL', 'sqlstate': row['sqlstate'], 'count': int(row['n'])}))
           print('LOG_DIAGNOSIS_COMPLETE')
