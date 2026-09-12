@@ -2981,12 +2981,12 @@ app.use('*', cors({
   },
   allowMethods: ['GET', 'POST', 'OPTIONS', 'HEAD'],
   allowHeaders: ['Content-Type', 'Authorization', 'apikey'],
-  exposeHeaders: ['Content-Type', 'Cache-Control', 'X-IVX-Pool-Wait-Ms', 'X-IVX-Payload-Ms', 'X-IVX-Upstream-Headers-Ms', 'X-IVX-Timing-Scope'],
+  exposeHeaders: ['X-Pool-Acquisition-Ms', 'X-IVX-Data-State', 'X-IVX-Data-Age-Ms', 'X-IVX-Cache', 'Retry-After', 'Content-Type', 'Cache-Control', 'X-IVX-Pool-Wait-Ms', 'X-IVX-Payload-Ms', 'X-IVX-Upstream-Headers-Ms', 'X-IVX-Timing-Scope'],
   maxAge: 86400,
 }));
 
 app.use('*', async (c, next) => {
-  if (c.req.method !== 'GET' || !/^\/api\/(?:reels|landing-deals|deals|published-jv-deals|videos\/analytics|ivx\/(?:jv-deals|deals|videos\/feed|video-platform\/(?:feed|home-feed)))(?:$|\/)/.test(c.req.path)) return next();
+  if (c.req.method !== 'GET' || !/^\/api\/(?:home\/feed|reels|landing-deals|deals|published-jv-deals|videos\/analytics|ivx\/(?:jv-deals|deals|videos\/feed|video-platform\/(?:feed|home-feed)))(?:$|\/)/.test(c.req.path)) return next();
   const metrics = newReadTimings(2500);
   await readTimings.run(metrics, next);
   for (const [key, value] of Object.entries(timingHeaders(metrics))) c.header(key, value);
@@ -6252,10 +6252,11 @@ app.post('/api/ivx/video-pipeline/:videoId/retry', async (c) => handleVideoPipel
 // ── IVX Video Platform (enterprise vertical feed: ranked channels, engagement,
 //    analytics, stories, live, creator dashboard, moderation) ──────────────
 app.options('/api/ivx/video-platform/*', () => videoPlatformOptions());
-// A missed deadline is not an empty published feed. A retryable 503 lets clients
-// keep existing content and retry the warm cache, without certifying false zeros.
+// Public controllers return bounded snapshots or explicitly degraded render structures.
+// The outer deadline remains a last-resort guard for unexpected handler failures.
 app.get('/api/ivx/video-platform/feed', async (c) => withTimeout(() => handlePlatformFeed(c.req.raw), () => Response.json({ error: 'Video feed temporarily unavailable. Please retry.', code: 'VIDEO_FEED_TIMEOUT', retryable: true }, { status: 503, headers: { 'Retry-After': '2', 'Cache-Control': 'no-store' } })));
 app.get('/api/ivx/video-platform/home-feed', async (c) => withTimeout(() => handlePlatformHomeFeed(c.req.raw), () => Response.json({ error: 'Home feed temporarily unavailable. Please retry.', code: 'HOME_FEED_TIMEOUT', retryable: true }, { status: 503, headers: { 'Retry-After': '2', 'Cache-Control': 'no-store' } })));
+app.get('/api/home/feed', async (c) => handlePlatformHomeFeed(c.req.raw));
 app.post('/api/ivx/video-platform/deals/:dealId/meta', async (c) => handlePlatformDealMeta(c.req.raw, c.req.param('dealId')));
 app.get('/api/ivx/video-platform/channels', async () => withTimeout(() => handlePlatformChannels(), () => publicReadTimeout('channels')));
 app.post('/api/ivx/video-platform/events', async (c) => handlePlatformEvents(c.req.raw));

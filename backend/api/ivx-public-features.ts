@@ -1,3 +1,4 @@
+import { withPublicFeedAvailability } from '../services/ivx-public-feed-availability';
 import { measuredReadFetch } from '../services/ivx-read-timings';
 /**
  * IVX Public Feature Handlers — registered under /api/ivx/*
@@ -172,10 +173,14 @@ export async function handleCRMMain(req: Request): Promise<Response> {
 }
 
 // ── JV Deals ──────────────────────────────────────────────────────────────
-// Share only an in-flight public query; never retain published content after it
-// finishes, so unpublishing remains immediately visible on the next request.
+// Share public source work across aliases; the response cache retains only
+// bounded public snapshots and marks unavailable render fallbacks explicitly.
 let publicDealsInFlight: Promise<{ body: unknown; status: number }> | null = null;
 export async function handleJVDealsList(req: Request): Promise<Response> {
+  return withPublicFeedAvailability(req, () => readJVDealsList());
+}
+
+async function readJVDealsList(): Promise<Response> {
   if (!publicDealsInFlight) {
     publicDealsInFlight = queryPublicDeals()
       .then(async (response) => ({ body: await response.json(), status: response.status }))

@@ -6,9 +6,10 @@ async function isolated(code: string) {
   expect(exit, err).toBe(0);
 }
 
-test('public deals coalesce concurrent reads, fail visibly, and recover without stale publications', async () => {
+test('public deals coalesce reads, mark degraded fallback, recover and expire stale publications', async () => {
   await isolated(`
     import { mock } from 'bun:test';
+    let clock=Date.now(); Date.now=()=>clock;
     let calls=0, mediaCalls=0, mode='fail', seenSignal;
     mock.module('@supabase/supabase-js',()=>({createClient:()=>({from:table=>{
       if(table==='jv_deals')calls++;else mediaCalls++;
@@ -25,11 +26,11 @@ test('public deals coalesce concurrent reads, fail visibly, and recover without 
     const {handleJVDealsList}=await import('./backend/api/ivx-public-features');
     const request=new Request('https://example.com/api/deals');
     const responses=await Promise.all(Array.from({length:12},()=>handleJVDealsList(request)));
-    if(calls!==1||!seenSignal||responses.some(r=>r.status!==503))throw Error('concurrency/failure semantics');
-    for(const r of responses){const b=await r.json();if(b.deals||b.count===0)throw Error('failure presented as empty content');}
-    mode='ok';const ok=await handleJVDealsList(request);const body=await ok.json();if(ok.status!==200||body.count!==1||calls!==2||mediaCalls!==1)throw Error('recovery failed');
+    if(calls!==1||!seenSignal||responses.some(r=>r.status!==200||r.headers.get('X-IVX-Data-State')!=='unavailable'))throw Error('concurrency/failure semantics');
+    for(const r of responses){const b=await r.json();if(b.degraded!==true||b.data_available!==false)throw Error('unmarked empty fallback');}
+    clock+=3001;mode='ok';const ok=await handleJVDealsList(request);const body=await ok.json();if(ok.status!==200||body.count!==1||calls!==2||mediaCalls!==1)throw Error('recovery failed');
     if(body.deals[0].videos.length!==1||body.deals[0].videos[0].id!=='reel')throw Error('published deal video missing or cross-mapped');
-    mode='empty';const empty=await handleJVDealsList(request);if((await empty.json()).count!==0||calls!==3)throw Error('unpublished content retained');
+    clock+=90001;mode='empty';const empty=await handleJVDealsList(request);if((await empty.json()).count!==0||calls!==3)throw Error('unpublished content retained');
   `);
 });
 

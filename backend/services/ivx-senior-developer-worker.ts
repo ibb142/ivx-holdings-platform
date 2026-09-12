@@ -1,3 +1,4 @@
+import { PollBackoff, startAdaptivePoll } from './ivx-adaptive-poll';
 import { readSharedSeniorActiveOwnerJob, sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult, readSharedSeniorDocument, readSharedSeniorWorkQueue, readSharedSeniorJob, appendSharedSeniorProofEvent } from './ivx-senior-shared-queue';
 import { SENIOR_QUEUE_ACTIVE_STATUSES } from './ivx-senior-work-queue';
 import type { CoderWorkspaceEvidence } from './ivx-coder-workspace';
@@ -2330,9 +2331,12 @@ const admitSeniorJob = createSeniorJobAdmission<IVXWorkerJob>({
   claim: job => sharedSeniorQueueEnabled() ? claimSharedSeniorJob<IVXWorkerJob>(job.jobId) : Promise.resolve(job),
 });
 
+const admissionBackoff = new PollBackoff(15_000, 60_000);
+
 export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResult | null> {
-  const job = await admitSeniorJob();
-  if (!job) return null;
+  const job = await admitSeniorJob().catch(error => { admissionBackoff.defer(); throw error; });
+  if (!job) { admissionBackoff.defer(); return null; }
+  admissionBackoff.reset();
 
   const controller: { cancelled: boolean; interrupted?: boolean } = { cancelled: queueStopping, interrupted: queueStopping };
   let leaseHeartbeat: ReturnType<typeof setInterval> | null = null;
@@ -3047,7 +3051,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
  * single-flight. Periodic/enqueue kicks can fill a slot while other work runs.
  */
 export async function drainSeniorDeveloperQueue(): Promise<void> {
-  if (draining || queueStopping) return;
+  if (draining || queueStopping || admissionBackoff.remainingMs() > 0) return;
   draining = true;
   try {
     // Shared recovery runs on the independent stale-sweep timer. It can wait
@@ -3074,54 +3078,32 @@ export async function drainSeniorDeveloperQueue(): Promise<void> {
 // STALE JOB SWEEP (periodic)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Periodic stale job sweep — runs every STALE_CHECK_INTERVAL_MS. */
-let staleSweepTimer: ReturnType<typeof setInterval> | null = null;
-
-/**
- * Start the periodic stale job sweep. Called once at server boot. Safe to call
- * multiple times — only one timer is ever active.
- */
-export function startStaleJobSweep(): void {
-  if (!shouldExecuteWorkerQueueInThisProcess()) return;
-  if (staleSweepTimer) return;
-  staleSweepTimer = setInterval(() => {
-    void expireStaleJobs().catch(() => {});
-  }, STALE_CHECK_INTERVAL_MS);
-  staleSweepTimer.unref?.();
-}
-
-// Start the sweep automatically on module load.
-startStaleJobSweep();
-
-// ─────────────────────────────────────────────────────────────────────────────
-// V6.15: PERIODIC QUEUE DRAIN TIMER
-// ─────────────────────────────────────────────────────────────────────────────
-// Root cause: jobs sit at QUEUED (0%) until manually resumed via /resume.
-// The initial `void drainSeniorDeveloperQueue()` on enqueue fires once but if
-// the drain is already in progress (draining=true) or the job is enqueued after
-// the drain loop has exited, no timer picks it up. This periodic drain fires
-// every 15 seconds, ensuring queued jobs are always picked up within 15s
-// without manual intervention.
-let queueDrainTimer: ReturnType<typeof setInterval> | null = null;
+/** Recovery and admission have independent, non-overlapping retry schedules. */
+let stopStaleSweep: (() => void) | null = null;
+let stopQueueDrain: (() => void) | null = null;
 const QUEUE_DRAIN_INTERVAL_MS = 15_000;
 
-export function startQueueDrainTimer(): void {
-  if (!shouldExecuteWorkerQueueInThisProcess()) return;
-  if (queueDrainTimer) return;
-  queueDrainTimer = setInterval(() => {
-    void drainSeniorDeveloperQueue().catch(() => {});
-  }, QUEUE_DRAIN_INTERVAL_MS);
-  queueDrainTimer.unref?.();
+export function startStaleJobSweep(): void {
+  if (!shouldExecuteWorkerQueueInThisProcess() || stopStaleSweep || queueStopping) return;
+  stopStaleSweep = startAdaptivePoll(async () => (await expireStaleJobs()).length > 0,
+    STALE_CHECK_INTERVAL_MS, 300_000);
 }
 
-// Start the periodic drain automatically on module load.
+export function startQueueDrainTimer(): void {
+  if (!shouldExecuteWorkerQueueInThisProcess() || stopQueueDrain || queueStopping) return;
+  stopQueueDrain = startAdaptivePoll(async () => {
+    await drainSeniorDeveloperQueue();
+    return activeDrainExecutions.size > 0 && admissionBackoff.remainingMs() === 0;
+  }, QUEUE_DRAIN_INTERVAL_MS);
+}
+
+startStaleJobSweep();
 startQueueDrainTimer();
 
 export function stopSeniorDeveloperQueue(): void {
   queueStopping = true;
-  if (queueDrainTimer) clearInterval(queueDrainTimer);
-  if (staleSweepTimer) clearInterval(staleSweepTimer);
-  queueDrainTimer = null; staleSweepTimer = null;
+  stopQueueDrain?.(); stopStaleSweep?.();
+  stopQueueDrain = null; stopStaleSweep = null;
   for (const [jobId, controller] of activeJobControllers) recordJobInterruption(jobId, controller, 'worker_shutdown');
 }
 

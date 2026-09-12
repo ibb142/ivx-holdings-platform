@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { PollBackoff } from './ivx-adaptive-poll';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./ivx-senior-developer-worker.ts', import.meta.url), 'utf8');
@@ -14,7 +15,7 @@ function fixture(limit = 2, shared = false, maintain = async () => {}) {
   const started: string[] = [];
   const waiting = new Map<string, (result: object | null) => void>();
   let active = 0, peak = 0, polls = 0, maintenance = 0;
-  const drain = new Function('expireStaleJobs', 'getWorkerMaxConcurrency', 'processNextSeniorDeveloperJob', 'MAX_QUEUE_RETAINED', 'sharedSeniorQueueEnabled',
+  const drain = new Function('expireStaleJobs', 'getWorkerMaxConcurrency', 'processNextSeniorDeveloperJob', 'MAX_QUEUE_RETAINED', 'sharedSeniorQueueEnabled', 'admissionBackoff',
     `let draining = false, queueStopping = false; const activeDrainExecutions = new Set();\n${body}\nreturn { run: drainSeniorDeveloperQueue, stop: () => { queueStopping = true; } };`)(
       async () => { maintenance++; await maintain(); }, () => limit,
       async () => {
@@ -24,7 +25,7 @@ function fixture(limit = 2, shared = false, maintain = async () => {}) {
         started.push(id); active++; peak = Math.max(peak, active);
         try { return await new Promise<object | null>(resolve => waiting.set(id, resolve)); }
         finally { active--; waiting.delete(id); }
-      }, 200, () => shared);
+      }, 200, () => shared, new PollBackoff(15_000, 60_000));
   return { ...drain, queue, started, finish: (id: string) => waiting.get(id)?.({ jobId: id }),
     read: () => ({ active, peak, polls, maintenance }),
     close: async () => { drain.stop(); for (const resolve of waiting.values()) resolve(null); await tick(); },

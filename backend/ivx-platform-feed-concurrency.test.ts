@@ -62,9 +62,9 @@ test('real feed handler coalesces public reads and preserves each viewer and fre
     assert.equal(body.videos[0].viewer_saved,false);assert.equal(body.videos[0].save_count,0);
     assert.equal(counts.catalog,2);assert.equal(counts.meta,2);
     rejectCatalog=true;
-    const unavailable=await read('guest-b');assert.equal(unavailable.status,503);
+    const unavailable=await read('guest-b');assert.equal(unavailable.status,200);assert.equal(unavailable.headers.get('X-IVX-Data-State'),'unavailable');
     const failure=await unavailable.text();assert.equal(failure.includes('private upstream detail'),false);
-    assert.equal(failure.includes('"videos"'),false);
+    assert.equal(JSON.parse(failure).degraded,true);assert.equal(JSON.parse(failure).data_available,false);assert.deepEqual(JSON.parse(failure).videos,[]);
     rejectCatalog=false;assert.equal((await read('guest-b')).status,200);
   `], { cwd: new URL('../', import.meta.url).pathname, stdout: 'pipe', stderr: 'pipe', timeout: 15000 });
   const [code, stderr, stdout] = await Promise.all([child.exited, new Response(child.stderr).text(), new Response(child.stdout).text()]);
@@ -143,8 +143,9 @@ test('home and Reels share pending public reads while preserving deal ordering a
     assert.equal(fresh.status,200);assert.equal((await fresh.json()).video_count,0,'Fresh publication controls must still hide drafts');
     rejectDeals=true;
     const failed=await handlePlatformHomeFeed(new Request('https://example.test/api/ivx/video-platform/home-feed?limit=58'));
-    assert.equal(failed.status,503);assert.equal((await failed.text()).includes('private deal query detail'),false);
-    console.log(JSON.stringify({test:'home-and-reels-shared-inputs',passed:true,ordering:true,attachment:true,publication:true,failureStatus:503}));
+    assert.equal(failed.status,200);assert.equal(failed.headers.get('X-IVX-Data-State'),'unavailable');
+    const failure=await failed.json();assert.equal(failure.degraded,true);assert.equal(failure.data_available,false);assert.deepEqual(failure.blocks,[]);assert.equal(JSON.stringify(failure).includes('private deal query detail'),false);
+    console.log(JSON.stringify({test:'home-and-reels-shared-inputs',passed:true,ordering:true,attachment:true,publication:true,failureStatus:200,degraded:true}));
   `], { cwd: new URL('../', import.meta.url).pathname, stdout: 'pipe', stderr: 'pipe', timeout: 15000 });
   const [code, stderr, stdout] = await Promise.all([child.exited, new Response(child.stderr).text(), new Response(child.stdout).text()]);
   if (stdout.trim()) console.info(stdout.trim());
