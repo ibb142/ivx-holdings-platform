@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { DurableStore } from './ivx-durable-store';
 
 const originalFetch = globalThis.fetch;
+const shared = { sharePendingRead: true };
 const envNames = ['EXPO_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'] as const;
 let savedEnv: Array<string | undefined>;
 beforeEach(() => {
@@ -24,6 +25,23 @@ function deferred() {
 }
 const turn = () => new Promise<void>(resolve => setImmediate(resolve));
 
+test('ordinary document reads stay independent unless explicitly opted in', async () => {
+  const gate = deferred();
+  let reads = 0;
+  globalThis.fetch = (async input => {
+    if (!new URL(String(input)).searchParams.has('doc_key')) return Response.json([]);
+    const snapshot = ++reads;
+    await gate.promise;
+    return Response.json([{ value: { snapshot } }]);
+  }) as typeof fetch;
+  const store = new DurableStore();
+  const first = store.readJson('owner/session', {}), second = store.readJson('owner/session', {});
+  await turn();
+  gate.resolve();
+  expect(await Promise.all([first, second])).toEqual([{ snapshot: 1 }, { snapshot: 2 }]);
+  expect(reads).toBe(2);
+});
+
 test('a burst shares one document read, isolates caller values, and does not cache settled data', async () => {
   const gate = deferred();
   let reads = 0;
@@ -38,7 +56,7 @@ test('a burst shares one document read, isolates caller values, and does not cac
     return Response.json([{ value: snapshot }]);
   }) as typeof fetch;
   const store = new DurableStore();
-  const requests = Array.from({ length: 40 }, () => store.readJson('video-platform/meta.json', { version: 0, nested: { visible: false } }));
+  const requests = Array.from({ length: 40 }, () => store.readJson('video-platform/meta.json', { version: 0, nested: { visible: false } }, shared));
   await turn();
   const burstReads = reads;
   gate.resolve();
@@ -48,7 +66,7 @@ test('a burst shares one document read, isolates caller values, and does not cac
   values[0].nested.visible = false;
   expect(values[1].nested.visible).toBe(true);
   version = 2;
-  expect((await store.readJson('video-platform/meta.json', { version: 0 })).version).toBe(2);
+  expect((await store.readJson('video-platform/meta.json', { version: 0 }, shared)).version).toBe(2);
   expect(reads).toBe(2);
 });
 
@@ -65,8 +83,8 @@ test('different keys stay isolated and absent documents keep each caller fallbac
   const store = new DurableStore();
   const firstFallback = { missing: 'first' };
   const secondFallback = { missing: 'second' };
-  const requests = [store.readJson('owner/a&doc_key=eq.b', {}), store.readJson('owner/b', {}),
-    store.readJson('absent', firstFallback), store.readJson('absent', secondFallback)];
+  const requests = [store.readJson('owner/a&doc_key=eq.b', {}, shared), store.readJson('owner/b', {}, shared),
+    store.readJson('absent', firstFallback, shared), store.readJson('absent', secondFallback, shared)];
   await turn();
   gate.resolve();
   const [first, second, absentOne, absentTwo] = await Promise.all(requests);
@@ -93,14 +111,14 @@ test('a completed write invalidates pending reads without an older completion de
     return Response.json([{ value: { version: snapshot } }]);
   }) as typeof fetch;
   const store = new DurableStore();
-  const oldRead = store.readJson('meta', { version: 0 });
+  const oldRead = store.readJson('meta', { version: 0 }, shared);
   await turn();
   await store.writeJson('meta', { version: 2 });
-  const freshRead = store.readJson('meta', { version: 0 });
+  const freshRead = store.readJson('meta', { version: 0 }, shared);
   await turn();
   oldGate.resolve();
   expect((await oldRead).version).toBe(1);
-  const follower = store.readJson('meta', { version: 0 });
+  const follower = store.readJson('meta', { version: 0 }, shared);
   await turn();
   const readsBeforeRelease = reads;
   newGate.resolve();
@@ -121,8 +139,8 @@ test('an unavailable document remains an error for every caller and a later read
       : Response.json([{ value: { healthy: true } }]);
   }) as typeof fetch;
   const store = new DurableStore();
-  const first = store.readJson('meta', { healthy: false });
-  const second = store.readJson('meta', { healthy: false });
+  const first = store.readJson('meta', { healthy: false }, shared);
+  const second = store.readJson('meta', { healthy: false }, shared);
   const settled = Promise.allSettled([first, second]);
   await turn();
   gate.resolve();
@@ -131,7 +149,7 @@ test('an unavailable document remains an error for every caller and a later read
   for (const outcome of outcomes) if (outcome.status === 'rejected') expect(outcome.reason.message).toBe('Database unavailable');
   expect(reads).toBe(1);
   unavailable = false;
-  expect(await store.readJson('meta', { healthy: false })).toEqual({ healthy: true });
+  expect(await store.readJson('meta', { healthy: false }, shared)).toEqual({ healthy: true });
   expect(reads).toBe(2);
 });
 
@@ -156,15 +174,34 @@ for (const replyLost of [false, true]) test(`reads started during a write cannot
   const store = new DurableStore();
   const writeOutcome = store.writeJson('meta', { version: 2 }).then(() => 'success', () => 'uncertain');
   await writeStarted.promise;
-  const during = store.readJson('meta', { version: 0 });
+  const during = store.readJson('meta', { version: 0 }, shared);
   await turn();
   writeGate.resolve();
   expect(await writeOutcome).toBe(replyLost ? 'uncertain' : 'success');
-  const after = store.readJson('meta', { version: 0 });
+  const after = store.readJson('meta', { version: 0 }, shared);
   await turn();
   readGate.resolve();
   expect((await during).version).toBe(1);
   expect((await after).version).toBe(2);
   expect(reads).toBe(2);
   expect(writes).toBe(1);
+});
+
+test('public platform metadata opts in to shared pending durable reads', async () => {
+  const gate = deferred();
+  const reads: string[] = [];
+  globalThis.fetch = (async input => {
+    const key = new URL(String(input)).searchParams.get('doc_key');
+    if (key === null) return Response.json([]);
+    reads.push(key);
+    await gate.promise;
+    return Response.json([{ value: key.endsWith('/analytics.json') ? { videos: {}, history: {} } : {} }]);
+  }) as typeof fetch;
+  const { getMetaDoc, getDealMetaDoc, getAnalyticsDoc } = await import('./ivx-video-platform-store');
+  const requests = [getMetaDoc(), getMetaDoc(), getDealMetaDoc(), getDealMetaDoc(), getAnalyticsDoc(), getAnalyticsDoc()];
+  await turn();
+  gate.resolve();
+  await Promise.all(requests);
+  expect(reads).toHaveLength(3);
+  expect(new Set(reads).size).toBe(3);
 });

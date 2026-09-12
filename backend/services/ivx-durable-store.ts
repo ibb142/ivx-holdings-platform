@@ -141,6 +141,8 @@ function missingTable(response: Response, payload: unknown): boolean {
     && (payload as { code?: string }).code === 'PGRST205';
 }
 
+type DurableReadOptions = { sharePendingRead?: boolean };
+
 export class DurableStore {
   private schemaReady: Promise<void> | null = null;
   private readonly pendingDocumentReads = new Map<string, Promise<{ value: unknown }[]>>();
@@ -262,11 +264,13 @@ export class DurableStore {
     });
   }
 
-  async readJson<T>(docKey: string, fallback: T): Promise<T> {
+  async readJson<T>(docKey: string, fallback: T, options: DurableReadOptions = {}): Promise<T> {
     await this.ensureSchema();
     // A public page requests the same metadata through several routes. Share
     // only an overlapping read; settled data and caller fallbacks are not cached.
-    let work = this.pendingDocumentReads.get(docKey);
+    // Opt in only for public metadata that already permits concurrent snapshots.
+    // Private/operational documents keep a separate request for every read.
+    let work = options.sharePendingRead ? this.pendingDocumentReads.get(docKey) : undefined;
     if (!work) {
       work = this.restRequest<{ value: unknown }[]>(
         `/ivx_durable_documents?doc_key=eq.${encodeURIComponent(docKey)}&select=value&limit=1`,
@@ -277,7 +281,7 @@ export class DurableStore {
       }).finally(() => {
         if (this.pendingDocumentReads.get(docKey) === work) this.pendingDocumentReads.delete(docKey);
       });
-      this.pendingDocumentReads.set(docKey, work);
+      if (options.sharePendingRead) this.pendingDocumentReads.set(docKey, work);
     }
     const rows = await work;
     if (rows.length > 0 && rows[0] && rows[0].value !== undefined && rows[0].value !== null) {
@@ -338,8 +342,8 @@ function store(): DurableStore {
 }
 
 /** Read a store's JSON state from durable Supabase storage (by file path). */
-export async function readDurableJson<T>(file: string, fallback: T): Promise<T> {
-  return store().readJson<T>(durableKeyForFile(file), fallback);
+export async function readDurableJson<T>(file: string, fallback: T, options: DurableReadOptions = {}): Promise<T> {
+  return store().readJson<T>(durableKeyForFile(file), fallback, options);
 }
 
 /** Write a store's JSON state to durable Supabase storage (by file path). */

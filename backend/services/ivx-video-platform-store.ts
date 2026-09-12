@@ -194,7 +194,9 @@ function durableKey(name: string): string {
 async function readDurableFallback<T>(name: string): Promise<T | null> {
   try {
     const { readDurableJson } = await import('./ivx-durable-store');
-    const value = await readDurableJson<T>(durableKey(name), null as unknown as T);
+    const value = await readDurableJson<T>(durableKey(name), null as unknown as T, {
+      sharePendingRead: ['meta.json', 'deals-meta.json', 'analytics.json'].includes(name),
+    });
     return value === null ? null : value;
   } catch {
     return null;
