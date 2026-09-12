@@ -6,7 +6,7 @@ import { sharedBinding, SERVICES } from './phase3-provider-live-guards.mjs';
 // Protected, read-only diagnosis of management access. Never logs tokens,
 // Render environment values, full API responses, key suffixes or user emails.
 const TEAM = 'team_fEfCJAenMBXVSGiX6LeoA3Ji';
-const ALIASES = ['VERCEL_TOKEN', 'VERCEL_API_TOKEN', 'IVX_VERCEL_TOKEN'];
+const ALIASES = ['VERCEL_TOKEN', 'VERCEL_ACCESS_TOKEN', 'VERCEL_API_TOKEN', 'IVX_VERCEL_TOKEN'];
 const safeCode = value => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,100}$/.test(value) ? value : null;
 const proof = { scope: 'native_vercel_management_read_only', startedAt: new Date().toISOString(),
   sourceSha: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
@@ -63,7 +63,9 @@ try {
     .map(name => ({ source: index === 0 ? 'github_actions' : SERVICES[index - 1], name, value: env[name].trim() })));
   proof.availableBindings = candidates.map(({ source, name }) => ({ source, name }));
   assert(candidates.length, 'MANAGEMENT_CREDENTIAL_MISSING');
-  const token = candidates[0].value;
+  const selected = candidates.find(candidate => candidate.value.startsWith('vcp_')) ?? candidates[0];
+  proof.selectedBinding = { source: selected.source, name: selected.name };
+  const token = selected.value;
   proof.managementCredentialIsGatewayKey = token.startsWith('vck_');
   const policy = await request(binding.databaseUrl + '/rest/v1/rpc/ivx_ai_budget_status',
     binding.serviceKey, {}, { apikey: binding.serviceKey });
