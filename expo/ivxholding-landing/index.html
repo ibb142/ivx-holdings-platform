@@ -277,8 +277,12 @@
     if (remaining <= 0) { showRetry(); return; }
     var controller = new AbortController();
     var timer = setTimeout(function(){ controller.abort(); }, remaining);
+    var retryAt = 0;
     return fetch('https://api.ivxholding.com/api/reels', {headers:{'Accept':'application/json'},signal:controller.signal})
       .then(function(r){
+        var retryAfter = (r.headers && r.headers.get('retry-after') || '').trim();
+        retryAt = /^\d+$/.test(retryAfter) ? Date.now() + Number(retryAfter) * 1000
+          : /^[A-Za-z]{3}, /.test(retryAfter) ? Date.parse(retryAfter) : 0;
         if (!r.ok) {
           var error = new Error('Reel feed unavailable');
           error.retryable = r.status === 408 || r.status === 429 || r.status >= 500;
@@ -288,6 +292,11 @@
       })
       .then(function(d){
         clearTimeout(timer);
+        if (d && (d.degraded === true || d.data_available === false || d.code === 'PUBLIC_DATA_UNAVAILABLE')) {
+          var error = new Error('Reel feed data unavailable');
+          error.retryable = true;
+          throw error;
+        }
         var list = (d && (d.videos || d.reels)) || [];
         var first = null;
         for (var i=0;i<list.length;i++){ if (list[i] && list[i].video_url) { first = list[i]; break; } }
@@ -302,8 +311,9 @@
       })
       .catch(function(error){
         clearTimeout(timer);
-        if (number < 1 && error.retryable !== false && Date.now() < deadline) {
-          setTimeout(function(){ attempt(number + 1); }, 500 * (number + 1));
+        var waitMs = Math.max(500 * (number + 1), (retryAt || 0) - Date.now());
+        if (number < 1 && error.retryable !== false && waitMs < deadline - Date.now()) {
+          setTimeout(function(){ attempt(number + 1); }, waitMs);
         } else showRetry();
       });
   }

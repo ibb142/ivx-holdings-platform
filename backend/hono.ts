@@ -2981,7 +2981,7 @@ app.use('*', cors({
   },
   allowMethods: ['GET', 'POST', 'OPTIONS', 'HEAD'],
   allowHeaders: ['Content-Type', 'Authorization', 'apikey'],
-  exposeHeaders: ['X-Pool-Acquisition-Ms', 'X-IVX-Data-State', 'X-IVX-Data-Age-Ms', 'X-IVX-Cache', 'Retry-After', 'Content-Type', 'Cache-Control', 'X-IVX-Pool-Wait-Ms', 'X-IVX-Payload-Ms', 'X-IVX-Upstream-Headers-Ms', 'X-IVX-Timing-Scope'],
+  exposeHeaders: ['X-Pool-Acquisition-Ms', 'X-SQL-Execution-Ms', 'X-IVX-Data-State', 'X-IVX-Data-Age-Ms', 'X-IVX-Cache', 'Retry-After', 'Content-Type', 'Cache-Control', 'X-IVX-Pool-Wait-Ms', 'X-IVX-Payload-Ms', 'X-IVX-Upstream-Headers-Ms', 'X-IVX-Timing-Scope'],
   maxAge: 86400,
 }));
 
@@ -6645,21 +6645,8 @@ app.get('/api/metrics/authoritative-count', async () => {
 
 // tRPC-compatible waitlist stats — returns stats in the shape expected by tRPC clients.
 app.get('/api/trpc/waitlist.getStats', async () => {
-  const { listCanonicalMembers, isCanonicalMembersConfigured } = await import('./services/ivx-canonical-members');
-  let waitlist = 0;
-  let total = 0;
-  if (isCanonicalMembersConfigured()) {
-    const all = await listCanonicalMembers({ limit: 5000 });
-    total = all.length;
-    waitlist = all.filter((m: any) => m.member_type === 'waitlist').length;
-  }
-  return Response.json({
-    ok: true,
-    waitlist,
-    total,
-    timestamp: nowIso(),
-    deploymentMarker: DEPLOYMENT_MARKER,
-  });
+  const { handleWaitlistStats } = await import('./api/ivx-waitlist-stats');
+  return handleWaitlistStats(DEPLOYMENT_MARKER);
 });
 
 // tRPC-compatible waitlist join — proxies to the lead capture endpoint

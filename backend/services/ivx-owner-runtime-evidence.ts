@@ -11,3 +11,13 @@ export function ownerRuntimeEvidenceHeaders(): Record<string, string> {
     'X-IVX-Serving-Commit': /^[a-f0-9]{40}$/.test(source) ? source : 'unknown',
   };
 }
+
+export function withOwnerRuntimeEvidence(response: Response): Response {
+  // Hono's Node adapter lazily materializes Response.body from its original
+  // constructor options. Mutating a cached header object can be lost during
+  // that conversion. Snapshot all headers before touching body, then supply
+  // the complete Headers object at construction. This does not consume SSE.
+  const headers = new Headers(response.headers);
+  for (const [key, value] of Object.entries(ownerRuntimeEvidenceHeaders())) headers.set(key, value);
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}

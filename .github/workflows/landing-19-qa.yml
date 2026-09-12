@@ -97,7 +97,7 @@ jobs:
       - name: Install Chromium
         run: bunx playwright install chromium
       - name: Verify forwarded Auth page lifecycle
-        run: node --test qa/landing-auth-page-close.test.mjs
+        run: node --test qa/landing-auth-page-close.test.mjs qa/landing-preview-route.test.mjs
       - name: registration.zip-code
         if: ${{ !cancelled() && steps.stack.outcome == 'success' }}
         run: bun qa/landing-19-auth.mjs registration.zip-code
@@ -144,7 +144,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with: { bun-version: 1.3.9 }
       - run: bun install --frozen-lockfile --ignore-scripts
-      - run: bunx playwright install chromium
+      - name: Install browser with the required media codecs
+        run: bunx playwright install ${{ (startsWith(matrix.unit, 'reels.') || matrix.unit == 'e2e.production-browser-suite') && 'chrome' || 'chromium' }}
       - name: Preview current source with the public read API
         env:
           LANDING_PREVIEW_SOURCE: http://127.0.0.1:4175
@@ -176,7 +177,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with: { bun-version: 1.3.9 }
       - run: bun install --frozen-lockfile --ignore-scripts
-      - run: bunx playwright install chromium
+      - name: Install browser with the required media codecs
+        run: bunx playwright install ${{ (startsWith(matrix.unit, 'reels.') || matrix.unit == 'e2e.production-browser-suite') && 'chrome' || 'chromium' }}
       - name: Install contrast measurement
         run: |
           npm install --prefix "$RUNNER_TEMP/ivx-axe" --no-save --ignore-scripts axe-core@4.10.3

@@ -1,6 +1,6 @@
 import { buildOwnerTextModelInput, OWNER_TEXT_MODEL } from '../services/ivx-owner-text-prompt';
 import { deliverOwnerTextTurn } from '../services/ivx-owner-text-delivery';
-import { ownerRuntimeEvidenceHeaders } from '../services/ivx-owner-runtime-evidence';
+import { withOwnerRuntimeEvidence } from '../services/ivx-owner-runtime-evidence';
 import { appendFile, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { ownerAIAuthUnavailableResponse } from './owner-ai-auth-unavailable';
@@ -5828,15 +5828,14 @@ export async function handleIVXOwnerAIRequest(request: Request): Promise<Respons
   const wantsSSE = acceptHeader.includes('text/event-stream');
   if (wantsSSE) {
     const streamed = await handleIVXOwnerAIRequestSSE(request, auditAuthRequest, startedAt);
-    for (const [key, value] of Object.entries(ownerRuntimeEvidenceHeaders())) streamed.headers.set(key, value);
-    return streamed;
+    return withOwnerRuntimeEvidence(streamed);
   }
 
   // JSON path: hard ceiling so a stuck planner/AI gateway can never hold the
   // connection longer than the frontend watchdog budget. The SSE path above is
   // exempt — it emits heartbeats every 3s and is intended for long-running work.
   const OWNER_AI_JSON_TIMEOUT_MS = 60_000;
-  const response = await withOwnerAIRequestTimeout(
+  const response = withOwnerRuntimeEvidence(await withOwnerAIRequestTimeout(
     handleIVXOwnerAIRequestInternal(request),
     OWNER_AI_JSON_TIMEOUT_MS,
     () => {
@@ -5852,10 +5851,9 @@ export async function handleIVXOwnerAIRequest(request: Request): Promise<Respons
         deploymentMarker: DEPLOYMENT_MARKER,
       }, 504);
     },
-  );
+  ));
 
   // Phase 4c — fire-and-forget audit log to public.ai_usage_logs. Never blocks.
-  for (const [key, value] of Object.entries(ownerRuntimeEvidenceHeaders())) response.headers.set(key, value);
   // Do not clone/read the request body here; the owner chat handler consumes it once.
   void (async () => {
     let requestId: string | null = null;

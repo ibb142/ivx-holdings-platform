@@ -2,12 +2,18 @@ import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { installLandingPreviewRoute } from './landing-preview-route.mjs';
 
 const unit = process.argv[2];
 const supported = ['reels.autoplay-controls-browser', 'reels.engagement-browser', 'reels.scroll-navigation-browser', 'reels.production-render-browser', 'a11y.touch-targets-browser', 'a11y.contrast-focus-browser', 'perf.console-network-browser', 'e2e.production-browser-suite'];
 assert.ok(supported.includes(unit), `Unsupported unit ${unit}`);
 const base = process.env.LANDING_URL || 'https://ivxholding.com';
-const browser = await chromium.launch();
+// The published MP4 uses H.264/AAC, which the bundled Chromium build cannot
+// decode. Keep Chromium for non-media checks and verify media in real Chrome.
+const mediaUnit = unit.startsWith('reels.') || unit === 'e2e.production-browser-suite';
+const browserChannel = mediaUnit ? 'chrome' : 'chromium';
+const browser = await chromium.launch(mediaUnit ? { channel: 'chrome' } : {});
+const browserVersion = browser.version();
 const checks = [];
 let error;
 let failurePage, failureSignals;
@@ -60,19 +66,9 @@ try {
       new PerformanceObserver((list) => { for (const e of list.getEntries()) window.__qaLongTasks.push(e.duration); }).observe({ type: 'longtask', buffered: true });
     });
     if (process.env.LANDING_PREVIEW_SOURCE) {
-      const preview = new URL(process.env.LANDING_PREVIEW_SOURCE);
-      assert.equal(preview.hostname, '127.0.0.1');
       // Serve reviewed PR files under the real page origin so the public API's
       // actual CORS policy still applies. Never use this as deployed evidence.
-      await context.route(new URL(base).origin + '/**', async (route) => {
-        const request = route.request(), url = new URL(request.url());
-        assert.ok(['GET', 'HEAD'].includes(request.method()), 'Static preview cannot perform public writes');
-        const response = await context.request.fetch(preview.origin + url.pathname + url.search, { method: request.method() });
-        // Media and API routes managed by the existing edge are not static
-        // repository files. Preserve their real public responses in preview.
-        if (response.status() === 404) return route.continue();
-        await route.fulfill({ response });
-      });
+      await installLandingPreviewRoute(context, base, process.env.LANDING_PREVIEW_SOURCE);
     }
     if (unit === 'reels.engagement-browser') {
       // Isolated browser interaction fixture. No public likes, comments or
@@ -268,7 +264,7 @@ try {
 finally {
   for (const context of browser.contexts()) await context.unrouteAll({ behavior: 'wait' });
   await browser.close();
-  const result = { unit, sourceSha: process.env.GITHUB_SHA, passed: !error, checks, error, diagnostics, completedAt: new Date().toISOString() };
+  const result = { unit, sourceSha: process.env.GITHUB_SHA, browserChannel, browserVersion, passed: !error, checks, error, diagnostics, completedAt: new Date().toISOString() };
   result.sha256 = createHash('sha256').update(JSON.stringify(result)).digest('hex');
   await mkdir('evidence/landing-19', { recursive: true });
   await writeFile(`evidence/landing-19/${unit}.json`, JSON.stringify(result));
