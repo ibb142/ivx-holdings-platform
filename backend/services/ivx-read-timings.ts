@@ -1,9 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-type Timings = { headersMs: number; payloadMs: number; completed: number; pending: number; poolMs: number | null; poolMaxMs?: number; deadline?: AbortSignal };
+type Timings = { headersMs: number; payloadMs: number; completed: number; pending: number; poolMs: number | null; poolMaxMs?: number; sqlMs: number | null; sqlCompleted: number; sqlFailed: number; sqlPending: number; deadline?: AbortSignal };
 export const readTimings = new AsyncLocalStorage<Timings>();
 export function newReadTimings(timeoutMs?: number): Timings {
-  return { headersMs: 0, payloadMs: 0, completed: 0, pending: 0, poolMs: null, deadline: timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs) };
+  return { headersMs: 0, payloadMs: 0, completed: 0, pending: 0, poolMs: null, sqlMs: null, sqlCompleted: 0, sqlFailed: 0, sqlPending: 0, deadline: timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs) };
 }
 export function recordPoolCheckout(ms: number): void {
   const metrics = readTimings.getStore();
@@ -12,9 +12,27 @@ export function recordPoolCheckout(ms: number): void {
     metrics.poolMaxMs = Math.max(metrics.poolMaxMs ?? 0, ms);
   }
 }
+/** Client-observed SQL round trips include network and server time. They exclude
+ * pool checkout, transaction setup and commit, and do not imply transaction success.
+ * Capture the request context before awaiting so parallel requests stay separate.
+ */
+export async function measuredSqlExecution<T>(query: () => Promise<T>): Promise<T> {
+  const metrics = readTimings.getStore();
+  if (!metrics) return query();
+  const started = performance.now();
+  metrics.sqlPending++;
+  try { return await query(); }
+  catch (error) { metrics.sqlFailed++; throw error; }
+  finally {
+    metrics.sqlMs = (metrics.sqlMs ?? 0) + Math.max(0, performance.now() - started);
+    metrics.sqlPending--; metrics.sqlCompleted++;
+  }
+}
 export function timingHeaders(metrics: Timings): Record<string, string> {
   return {
     'X-Pool-Acquisition-Ms': metrics.poolMaxMs === undefined ? 'unavailable' : metrics.poolMaxMs.toFixed(1),
+    'X-SQL-Execution-Ms': metrics.sqlMs === null ? 'unavailable' : metrics.sqlMs.toFixed(1),
+    'X-IVX-SQL-Timing-Scope': `request-owned-pg-roundtrip-sum; completed=${metrics.sqlCompleted}; failed=${metrics.sqlFailed}; pending=${metrics.sqlPending}`,
     'X-IVX-Pool-Wait-Ms': metrics.poolMs === null ? 'unavailable' : metrics.poolMs.toFixed(1),
     'X-IVX-Payload-Ms': metrics.completed ? metrics.payloadMs.toFixed(1) : 'unavailable',
     'X-IVX-Upstream-Headers-Ms': metrics.completed || metrics.pending ? metrics.headersMs.toFixed(1) : 'unavailable',

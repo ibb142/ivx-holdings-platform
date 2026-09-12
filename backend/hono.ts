@@ -2981,7 +2981,7 @@ app.use('*', cors({
   },
   allowMethods: ['GET', 'POST', 'OPTIONS', 'HEAD'],
   allowHeaders: ['Content-Type', 'Authorization', 'apikey'],
-  exposeHeaders: ['X-Pool-Acquisition-Ms', 'X-IVX-Data-State', 'X-IVX-Data-Age-Ms', 'X-IVX-Cache', 'Retry-After', 'Content-Type', 'Cache-Control', 'X-IVX-Pool-Wait-Ms', 'X-IVX-Payload-Ms', 'X-IVX-Upstream-Headers-Ms', 'X-IVX-Timing-Scope'],
+  exposeHeaders: ['X-Pool-Acquisition-Ms', 'X-SQL-Execution-Ms', 'X-IVX-SQL-Timing-Scope', 'X-IVX-Data-State', 'X-IVX-Data-Age-Ms', 'X-IVX-Cache', 'Retry-After', 'Content-Type', 'Cache-Control', 'X-IVX-Pool-Wait-Ms', 'X-IVX-Payload-Ms', 'X-IVX-Upstream-Headers-Ms', 'X-IVX-Timing-Scope'],
   maxAge: 86400,
 }));
 
