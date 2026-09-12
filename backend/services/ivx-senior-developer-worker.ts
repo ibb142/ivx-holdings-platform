@@ -455,6 +455,7 @@ function emptyLedger(durable: boolean): LedgerDoc {
 let memoryQueue: QueueDoc | null = null;
 let memoryLedger: LedgerDoc | null = null;
 let draining = false;
+const activeDrainExecutions = new Set<Promise<IVXWorkerJobResult | null>>();
 let queueStopping = false;
 
 /** Active job callbacks for cancel signaling. */
@@ -1324,6 +1325,12 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     }
   }
   const resumeStartedAt = nowIso();
+  const savedCi = job.result.ciResumeState;
+  const ciWaitStartedAt = savedCi?.jobId === jobId
+    && savedCi.taskId === (job.input.taskId ?? jobId)
+    && savedCi.commitSha === commitSha && savedCi.prNumber === prNumber
+    && savedCi.branch === job.result.branch && savedCi.phase === 'CI_WAIT'
+    ? savedCi.persistedAt : undefined;
   await updateJobStage(jobId, 'COMMITTING', `Worker restart detected — resuming CI wait for PR #${prNumber} (commit ${commitSha.slice(0, 12)}) with the original taskId. No duplicate job created.`);
   const proof = await resumeIVXAutonomousCoderFromCiWait({
     taskId: job.input.taskId ?? job.jobId,
@@ -1336,6 +1343,7 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     testsPassed: job.result?.testsPassed === true,
     typecheckPassed: job.result?.typecheckPassed === true,
     filesChanged: job.result?.changedFiles ?? [],
+    ciWaitStartedAt,
     beforeMerge: async () => {
       await assertEmergencyStopInactive('senior-worker-resumed-merge');
       if (controller.cancelled) throw new Error('Worker lease lost before resumed merge');
@@ -2327,11 +2335,12 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
       error: emergencyStop.source === 'unavailable'
         ? 'EMERGENCY_STOP_UNAVAILABLE: job refused until owner control is readable.'
         : 'EMERGENCY_STOP_ACTIVE: owner emergency stop is engaged; job refused at start boundary.',
-    });
+    }, true);
     return null;
   }
 
-  // Check if this job was cancelled while queued.
+  // Recheck authority inside the serialized write: cancellation can complete
+  // while the admitted job awaits the owner-control read above.
   await updateJob(job.jobId, {
     status: 'running',
     stage: 'RUNNING',
@@ -2340,7 +2349,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
     startedAt: nowIso(),
     lastHeartbeatAt: nowIso(),
     attempts: sharedSeniorQueueEnabled() ? job.attempts : job.attempts + 1,
-  });
+  }, true, true);
 
   leaseHeartbeat = sharedSeniorQueueEnabled() ? setInterval(() => {
     if (controller.cancelled) return;
@@ -3018,29 +3027,28 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
 }
 
 /**
- * Bounded-concurrent queue drain: processes queued jobs up to
- * IVX_WORKER_MAX_CONCURRENCY at a time. Re-entrancy is guarded so only one
- * drain runs at a time. Expires stale jobs before draining. Each job is
- * claimed race-safely inside processNextSeniorDeveloperJob, so batch
- * parallelism never double-executes a job, and per-owner single-flight is
- * enforced at claim time.
+ * Fill free execution slots without waiting for unrelated jobs or CI waits.
+ * The pump is serialized; running executions retain their own promises and
+ * physical leases. Admission still enforces configured capacity and owner
+ * single-flight. Periodic/enqueue kicks can fill a slot while other work runs.
  */
 export async function drainSeniorDeveloperQueue(): Promise<void> {
   if (draining || queueStopping) return;
   draining = true;
   try {
-    // Expire stale jobs before processing.
-    await expireStaleJobs();
-
-    const maxConcurrent = getWorkerMaxConcurrency();
-    if (maxConcurrent === 0) return;
-    for (let processed = 0; !queueStopping && processed < MAX_QUEUE_RETAINED; processed += maxConcurrent) {
-      const batch: Array<Promise<IVXWorkerJobResult | null>> = [];
-      for (let i = 0; i < maxConcurrent; i += 1) {
-        batch.push(processNextSeniorDeveloperJob());
-      }
-      const results = await Promise.all(batch);
-      if (results.every((r) => r === null)) break;
+    // The independent stale sweep maintains running queues. Avoid reading
+    // retained history again for every completed slot in an active pump.
+    if (activeDrainExecutions.size === 0) await expireStaleJobs();
+    const slots = Math.max(0, getWorkerMaxConcurrency() - activeDrainExecutions.size);
+    for (let i = 0; !queueStopping && i < slots; i++) {
+      const execution = processNextSeniorDeveloperJob();
+      activeDrainExecutions.add(execution);
+      void execution.then(result => {
+        activeDrainExecutions.delete(execution);
+        // Null/rejection can mean no work or uncertain storage. Let the next
+        // bounded periodic kick retry; never spin on an empty or failed queue.
+        if (result && !queueStopping) void drainSeniorDeveloperQueue().catch(() => {});
+      }, () => { activeDrainExecutions.delete(execution); });
     }
   } finally {
     draining = false;
