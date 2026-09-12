@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import type { EventEmitter } from 'node:events';
 import { observePostgresPoolErrors, queryWithPostgresDeadline } from './ivx-postgres-deadline';
+import { queryWithSeniorQueueReadBudget } from './ivx-senior-queue-read-budget';
 import { SENIOR_QUEUE_ACTIVE_STATUSES, SENIOR_QUEUE_JOB_SQL, SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL } from './ivx-senior-work-queue';
 import { emergencyStopPostgresConfig } from './ivx-emergency-stop-postgres';
 import { supabasePostgresTls, withoutPostgresUrlTlsOptions } from './ivx-supabase-postgres-tls';
@@ -163,14 +164,14 @@ export async function seniorQueuePostgresRpc<T>(name: SeniorRpc, body: Record<st
 export async function readSeniorQueuePostgresDocument<T>(key: SeniorDocumentKey): Promise<T | null> {
   emergencyStopPostgresConfig();
   if (!['senior-developer-worker/queue.json', 'senior-developer-worker/proof-ledger.json'].includes(key)) throw new Error('Repair document not allowed');
-  const result = await queryWithPostgresDeadline<{ value: T }>(getDirectPool(process.env, 'repair'),
+  const result = await queryWithSeniorQueueReadBudget<{ value: T }>(getDirectPool(process.env, 'repair'),
     'select value from public.ivx_durable_documents where doc_key = $1 limit 1', [key]);
   return result.rows[0]?.value ?? null;
 }
 /** Fresh work and recovery checkpoints, without transferring terminal history. */
 export async function readSeniorWorkQueuePostgres<T>(): Promise<T | null> {
   emergencyStopPostgresConfig();
-  const result = await queryWithPostgresDeadline<{ value: T }>(getDirectPool(process.env, 'repair'),
+  const result = await queryWithSeniorQueueReadBudget<{ value: T }>(getDirectPool(process.env, 'repair'),
     SENIOR_WORK_QUEUE_SQL, ['senior-developer-worker/queue.json', SENIOR_WORK_QUEUE_PATH]);
   return result.rows[0]?.value ?? null;
 }
@@ -178,7 +179,7 @@ export async function readSeniorWorkQueuePostgres<T>(): Promise<T | null> {
 export async function readSeniorQueuePostgresJob<T extends { jobId: string }>(jobId: string): Promise<T | null> {
   emergencyStopPostgresConfig();
   if (!jobId.trim()) throw new Error('Repair job identity is required');
-  const result = await queryWithPostgresDeadline<{ job: T }>(getDirectPool(process.env, 'repair'),
+  const result = await queryWithSeniorQueueReadBudget<{ job: T }>(getDirectPool(process.env, 'repair'),
     SENIOR_QUEUE_JOB_SQL,
     ['senior-developer-worker/queue.json', jobId]);
   if (result.rows.length > 1) throw new Error('Duplicate repair job identity');
@@ -595,7 +596,7 @@ export async function readPostgresAutonomousTaskIndex(sourceSha?: string): Promi
 export async function readSeniorActiveOwnerJobPostgres<T extends { ownerId: string; status: string }>(ownerId: string): Promise<T | null> {
   emergencyStopPostgresConfig();
   if (!ownerId.trim()) throw new Error('Repair owner identity is required');
-  const result = await queryWithPostgresDeadline<{ job: T }>(getDirectPool(process.env, 'repair'),
+  const result = await queryWithSeniorQueueReadBudget<{ job: T }>(getDirectPool(process.env, 'repair'),
     `select d.value->'jobs'->picked.ordinal as job
       from public.ivx_durable_documents d
       cross join lateral (
