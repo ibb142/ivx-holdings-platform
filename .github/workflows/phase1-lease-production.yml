@@ -1,0 +1,39 @@
+name: Phase 1 live lease exclusion and renewal
+on:
+  push:
+    branches: [qa/phase1-lease-production-20260912]
+    paths:
+      - qa/phase1-lease-production.mjs
+      - qa/phase1-lease-production.test.mjs
+      - .github/workflows/phase1-lease-production.yml
+permissions:
+  contents: read
+concurrency:
+  group: phase1-lease-production-one-fixture
+  cancel-in-progress: false
+jobs:
+  acceptance:
+    if: github.repository == 'ibb142/ivx-holdings-platform'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify acceptance refuses incomplete evidence
+        run: node --test qa/phase1-lease-production.test.mjs
+      - name: Verify one temporary production lease across PostgreSQL and real API processes
+        env:
+          IVX_PHASE1_71_QA: one-temporary-lease-fixture
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          IVX_QA_OWNER_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD || secrets.OWNER_PASSWORD || secrets.IVX_OWNER_PASSWORD || secrets.IVX_OWNER_NEW_PASSWORD || secrets.OWNER_LOGIN_PASSWORD || secrets.IVX_OWNER_LOGIN_PASSWORD }}
+        run: node qa/phase1-lease-production.mjs
+      - name: Preserve actual result and cleanup evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-lease-production-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qa-results/phase1-lease-production/receipt.json
+          if-no-files-found: error
+          retention-days: 30
