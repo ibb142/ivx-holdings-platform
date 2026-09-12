@@ -13,10 +13,10 @@ test('durable reservation identities cannot change with a workflow replay',()=>{
 });
 test('financial envelope refuses oversized, expired and unsupported quotes',()=>{
   const now=Date.parse('2026-09-12T12:00:00Z');
-  const q={model:'openai/gpt-4.1',reservedNano:'4125468000',catalogSha256:'a'.repeat(64),
+  const q={model:'openai/gpt-4o',reservedNano:'822728000',catalogSha256:'a'.repeat(64),
     observedAt:new Date(now).toISOString(),validUntil:new Date(now+300000).toISOString()};
   checkQuote(q,now);
-  assert.throws(()=>checkQuote({...q,reservedNano:'4300000001'},now));
+  assert.throws(()=>checkQuote({...q,reservedNano:'1000000001'},now));
   assert.throws(()=>checkQuote({...q,model:'unreviewed/model'},now));
   assert.throws(()=>checkQuote(q,now+300000));
   assert.throws(()=>checkQuote({...q,catalogSha256:''},now));
