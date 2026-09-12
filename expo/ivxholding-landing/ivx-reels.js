@@ -464,8 +464,8 @@
       if (!isCurrentFeed() || error.retryable === false) throw error;
       var requested = new URL(path, API_CANDIDATES[0]);
       var query = requested.searchParams;
-      // Only the first unfiltered public page can recover from the shared
-      // catalog. Never substitute another audience, project, or cursor page.
+      // Only the first public page can recover without viewer state. Keep
+      // the Reels scope; never substitute another audience, project or cursor.
       if (requested.pathname !== '/api/reels' || Array.from(query.keys()).some(function (key) {
         return ['limit', 'viewer_id', 'type'].indexOf(key) < 0;
       })) throw error;
@@ -473,14 +473,14 @@
       if (query.has('type') && !reelsOnly) throw error;
       function recoverPublic(data) {
         var vids = data && data.videos;
+        var scopedReels = reelsOnly && data && data.feed_type === 'reel';
         if (!Array.isArray(vids) || !vids.length || data.channel || data.personalized !== false
-          || data.ordering !== 'canonical-unified-v2' || data.feed_type !== 'unified'
+          || data.ordering !== 'canonical-unified-v2' || (data.feed_type !== 'unified' && !scopedReels)
           || !vids.every(function (v) { return v && v.id && v.video_url; })) throw error;
-        // The unified endpoint can return published reels when no deal videos
-        // are playable. It represents the Reels rail only if that catalog is
-        // complete and consists entirely of reels; mixed/incomplete data fails.
-        if (reelsOnly && (data.next_cursor || data.total !== vids.length
-          || !vids.every(function (v) { return v.video_type === 'reel'; }))) throw error;
+        // An exact public Reels page can preserve its pagination. A shared
+        // unified snapshot represents this rail only when it is complete.
+        if (reelsOnly && (!vids.every(function (v) { return v.video_type === 'reel'; })
+          || (!scopedReels && (data.next_cursor || data.total !== vids.length)))) throw error;
         return Object.assign({}, data, { viewer_state_available: false, videos: vids.map(function (v) {
           var copy = Object.assign({}, v, { viewer_state_available: false });
           delete copy.viewer_liked;
@@ -494,7 +494,10 @@
       if (age >= 0 && age <= 30000) {
         try { return recoverPublic(snapshot.data); } catch (_) { /* request a current catalog */ }
       }
-      return apiFetchJson('/api/reels', 0, 4000).then(recoverPublic);
+      var publicPath = reelsOnly
+        ? '/api/reels?limit=' + encodeURIComponent(query.get('limit') || '6') + '&type=reel'
+        : '/api/reels';
+      return apiFetchJson(publicPath, 0, 4000).then(recoverPublic);
     });
   }
 
