@@ -184,9 +184,12 @@ export async function handleJVDealsList(req: Request): Promise<Response> {
   return json(result.body, result.status);
 }
 
+// Every public deals alias must allow this source deadline to settle first.
+export const PUBLIC_DEALS_QUERY_TIMEOUT_MS = 8000;
+
 async function queryPublicDeals(): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
+  const timer = setTimeout(() => controller.abort(), PUBLIC_DEALS_QUERY_TIMEOUT_MS);
   try {
     const sb = await getPublicDealsSB();
     const { data, error, count } = await sb.from('jv_deals')

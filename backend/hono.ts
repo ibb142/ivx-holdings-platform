@@ -1380,6 +1380,7 @@ import {
   handleInvestorsDashboard,
   handleCRMMain,
   handleJVDealsList,
+  PUBLIC_DEALS_QUERY_TIMEOUT_MS,
   handlePropertyAdminList,
   handlePropertyAdminCreate,
   handleMediaUpload,
@@ -1514,8 +1515,8 @@ const app = new Hono();
 
 /** Hard timeout wrapper for Supabase-dependent routes.
  *  Races the handler against a 6s deadline. If the handler doesn't finish
- *  in time, returns empty JSON so the frontend gets a fast 200 instead of
- *  a 15+ second hang when Supabase is unreachable. */
+ *  in time, returns the route's explicit unavailable response. Routes with
+ *  an inner deadline must give that deadline time to finish and clean up. */
 const SB_HARD_TIMEOUT_MS = 6_000;
 
 /** Deadline for POST /api/members/login.
@@ -6006,18 +6007,18 @@ app.get('/api/ivx/crm', async (c) => handleCRMMain(c.req.raw));
 
 // JV Deals
 app.options('/api/ivx/jv-deals', () => publicFeatureOptions());
-app.get('/api/ivx/jv-deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => publicReadTimeout('deals')));
+app.get('/api/ivx/jv-deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => publicReadTimeout('deals'), PUBLIC_DEALS_QUERY_TIMEOUT_MS + 1000));
 // Android app canonical aliases
 app.options('/api/ivx/deals', () => publicFeatureOptions());
-app.get('/api/ivx/deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => publicReadTimeout('deals')));
+app.get('/api/ivx/deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => publicReadTimeout('deals'), PUBLIC_DEALS_QUERY_TIMEOUT_MS + 1000));
 // Canonical aliases — /api/deals and /api/properties map to the ivx-prefixed routes
 app.options('/api/deals', () => publicFeatureOptions());
-app.get('/api/deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => publicReadTimeout('deals')));
+app.get('/api/deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => publicReadTimeout('deals'), PUBLIC_DEALS_QUERY_TIMEOUT_MS + 1000));
 // Public published-JV-deals and landing-deals aliases — app fetches these for content display
 app.options('/api/published-jv-deals', () => publicFeatureOptions());
-app.get('/api/published-jv-deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => publicReadTimeout('deals')));
+app.get('/api/published-jv-deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => publicReadTimeout('deals'), PUBLIC_DEALS_QUERY_TIMEOUT_MS + 1000));
 app.options('/api/landing-deals', () => publicFeatureOptions());
-app.get('/api/landing-deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => publicReadTimeout('deals')));
+app.get('/api/landing-deals', async (c) => withTimeout(() => handleJVDealsList(c.req.raw), () => publicReadTimeout('deals'), PUBLIC_DEALS_QUERY_TIMEOUT_MS + 1000));
 // Android app canonical aliases
 app.options('/api/ivx/properties', () => publicFeatureOptions());
 app.get('/api/ivx/properties', async (c) => withTimeout(() => handleFeaturedProperties(c.req.raw), () => publicReadTimeout('properties')));
