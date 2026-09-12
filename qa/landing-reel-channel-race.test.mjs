@@ -168,6 +168,36 @@ test('feed transport does not fail over an authorization denial', async () => {
   assert.equal(f.timers.size, 0);
 });
 
+for (const [name, unavailable] of [
+  ['data_available=false', () => Response.json({ videos: [], data_available: false })],
+  ['unavailable code', () => Response.json({ videos: [], code: 'PUBLIC_DATA_UNAVAILABLE' })],
+  ['unavailable header', () => Response.json({ videos: [] }, { headers: { 'X-IVX-Data-State': 'unavailable' } })],
+]) {
+  test(`Reels retries HTTP 200 with ${name} and surfaces a persistent outage`, async () => {
+    const recovered = transport(url => new URL(url).hostname === 'primary.example' ? unavailable() : Response.json(publicFeed()));
+    const data = await recovered.context.apiFetchJson('/api/reels', 0, 4000);
+    assert.equal(recovered.requests.length, 2);
+    assert.equal(data.videos.length, 2);
+    assert.equal(data.videos[0].id, 'one');
+    assert.equal(recovered.context.API, 'https://secondary.example');
+    assert.equal(recovered.timers.size, 0);
+
+    const outage = transport(() => unavailable());
+    await assert.rejects(outage.context.apiFetchJson('/api/reels', 0, 4000), /unavailable/i);
+    assert.equal(outage.requests.length, 2);
+    assert.equal(outage.context.API, 'https://primary.example');
+    assert.equal(outage.timers.size, 0);
+  });
+}
+
+test('an available empty Reels catalog remains valid even when served stale', async () => {
+  const f = transport(() => Response.json({ videos: [], data_available: true, degraded: true }));
+  const data = await f.context.apiFetchJson('/api/reels', 0, 4000);
+  assert.equal(data.videos.length, 0);
+  assert.equal(f.requests.length, 1);
+  assert.equal(f.timers.size, 0);
+});
+
 test('the feed deadline covers the response body as well as the headers', async () => {
   let finishBody;
   const f = transport(() => ({ ok: true, text: () => new Promise(resolve => { finishBody = resolve; }) }));

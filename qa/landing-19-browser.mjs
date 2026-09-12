@@ -25,17 +25,22 @@ try {
     failureSignals = { width, errors, failures, mediaResponses };
     page.on('response', (r) => {
       const url = new URL(r.url());
-      if (/\/api\/reels(?:\/|$)|\/media\/reels\/|\/videos\//.test(url.pathname)) {
+      if (/\/api\/reels(?:\/|$)|\/api\/ivx\/video-platform\/home-feed$|\/media\/reels\/|\/videos\//.test(url.pathname)) {
         const signal = { path: url.pathname, channel: url.searchParams.get('type'), status: r.status(), type: r.headers()['content-type'] };
         mediaResponses.push(signal);
         // Inspect the response already requested by the UI. Do not issue extra
         // public requests or expose viewer identifiers and response bodies.
-        if (url.pathname === '/api/reels' && mediaResponses.length <= 20) {
+        if (['/api/reels', '/api/ivx/video-platform/home-feed'].includes(url.pathname) && mediaResponses.length <= 20) {
           pendingFeedDetails.push(r.json().then((body) => {
             signal.count = body.count;
             signal.total = body.total;
             signal.feedType = body.feed_type;
             signal.videoCount = Array.isArray(body.videos) ? body.videos.length : null;
+            signal.blockCount = Array.isArray(body.blocks) ? body.blocks.length : null;
+            signal.dataAvailable = typeof body.data_available === 'boolean' ? body.data_available : null;
+            signal.degraded = body.degraded === true;
+            signal.unavailable = r.headers()['x-ivx-data-state'] === 'unavailable' || body.code === 'PUBLIC_DATA_UNAVAILABLE' || body.data_available === false;
+            signal.responseMs = r.request().timing().responseEnd;
             const message = typeof body.error === 'string' ? body.error : '';
             signal.errorMessage = message
               .replace(/https?:\/\/[^\s"'<>]+/gi, '[URL]')
