@@ -51,10 +51,10 @@ export function evaluateSample(snapshot) {
         if (record.status !== 'PASS') blockers.push(`OBSERVATION_${record.status}`);
       } catch { blockers.push('INVALID_OR_MISSING_EVIDENCE'); }
       if (['FAILED', 'BLOCKED', 'CANCELLED', 'EXPIRED', 'PAUSED'].includes(row.state)) blockers.push(`TASK_${row.state}`);
-      if (!['QUEUED', 'RETRYING', 'RUNNING', 'VERIFIED', 'NO_ACTION_REQUIRED', 'FAILED', 'BLOCKED', 'CANCELLED', 'EXPIRED', 'PAUSED'].includes(row.state)) {
+      if (!['QUEUED', 'RETRYING', 'LEASED', 'RUNNING', 'VERIFIED', 'NO_ACTION_REQUIRED', 'FAILED', 'BLOCKED', 'CANCELLED', 'EXPIRED', 'PAUSED'].includes(row.state)) {
         blockers.push('UNKNOWN_TASK_STATE');
       }
-      if (row.state === 'RUNNING' && (!row.lease_holder || !Number.isFinite(Date.parse(row.lease_expires_at)) || Date.parse(row.lease_expires_at) <= now)) {
+      if (['LEASED', 'RUNNING'].includes(row.state) && (!row.lease_holder || !Number.isFinite(Date.parse(row.lease_expires_at)) || Date.parse(row.lease_expires_at) <= now)) {
         blockers.push('EXPIRED_OR_MISSING_LEASE');
       }
       if (['QUEUED', 'RETRYING'].includes(row.state) && (!validEvidence || blockers.includes('STALE_EVIDENCE'))) blockers.push('QUEUE_WITHOUT_RECENT_PROGRESS');

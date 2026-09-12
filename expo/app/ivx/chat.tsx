@@ -52,6 +52,7 @@ import { getIVXAccessToken, getIVXOwnerAIConfigAudit, IVX_CANONICAL_API_BASE_URL
 import { runOwnerSessionPreflight, OWNER_SESSION_REQUIRED_LABEL } from '@/src/modules/ivx-owner-ai/services/ownerSessionPreflight';
 import { isOpenAccessModeEnabled } from '@/lib/open-access';
 import { safeSetString } from '@/lib/safe-clipboard';
+import { resolveChatRead } from '@/lib/chat-read-fallback';
 import type { IVXMessage, IVXOwnerAIRouterDebug, IVXOwnerAIToolOutput, IVXUploadInput, IVXExecutionStatusPayload } from '@/shared/ivx';
 import { assertCleanOwnerAIResponseText, assertOwnerAIResponseSucceeded, isIVXServiceUnavailableDiagnostics } from '@/src/modules/ivx-owner-ai/services/ivxAIRequestService';
 import { runDurableOwnerAIFallback, resumePendingDurableTasks, shouldAttemptDurableFallback } from '@/src/modules/ivx-owner-ai/services/ivxDurableTaskService';
@@ -463,25 +464,6 @@ const AuditInfoRow = React.memo(function AuditInfoRow({ label, value, testID }: 
 
 const IVX_OWNER_MESSAGES_QUERY_KEY = ['ivx-owner-ai', 'messages'] as const;
 const IVX_OWNER_CONVERSATION_QUERY_KEY = ['ivx-owner-ai', 'conversation'] as const;
-const IVX_CHAT_COLD_START_TIMEOUT_MS = 8_000;
-
-async function resolveWithinChatColdStartDeadline<T>(operation: Promise<T>, fallback: () => Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  try {
-    return await Promise.race<T>([
-      operation,
-      new Promise<T>((resolve) => {
-        timer = setTimeout(() => {
-          void fallback().then(resolve);
-        }, IVX_CHAT_COLD_START_TIMEOUT_MS);
-      }),
-    ]);
-  } finally {
-    if (timer) {
-      clearTimeout(timer);
-    }
-  }
-}
 const IVX_ROOM_STATUS_QUERY_KEY = ['ivx-owner-ai', 'room-status'] as const;
 const IVX_CONTROL_ROOM_STATUS_QUERY_KEY = ['ivx-owner-ai', 'control-room-status'] as const;
 const CONTROL_ROOM_FALLBACK_ITEMS: IVXControlRoomItem[] = [
@@ -1048,19 +1030,21 @@ export default function IVXOwnerChatRoute() {
     queryFn: async () => {
       console.log('[IVXOwnerChatRoute] Loading owner messages');
       try {
-        const loaded = await resolveWithinChatColdStartDeadline(
+        const history = await resolveChatRead(
           ivxChatService.listOwnerMessages(),
           ivxChatService.getLocalOwnerMessages,
         );
         // Proof-first hydration log: prove the thread re-hydrates on mount /
         // refresh / route change with a real message count, not an empty reset.
-        console.log('[IVXChatStateProof] hydration_ok', {
+        console.log(history.source === 'primary' ? '[IVXChatStateProof] hydration_ok' : '[IVXChatStateProof] hydration_degraded', {
           room: IVX_OWNER_AI_PROFILE.sharedRoom.id,
           sessionId: ownerSessionIdRef.current,
-          hydratedMessageCount: loaded.length,
+          hydratedMessageCount: history.value.length,
+          source: history.source,
+          fallbackCode: history.fallbackCode,
           localFirstChatMode,
           platform: Platform.OS});
-        return loaded;
+        return history.value;
       } catch (error) {
         console.log('[IVXChatStateProof] hydration_failed', {
           reason: error instanceof Error ? error.message : 'unknown',
@@ -1101,7 +1085,7 @@ export default function IVXOwnerChatRoute() {
     queryFn: async () => {
       console.log('[IVXOwnerChatRoute] Bootstrapping owner conversation');
       try {
-        return await resolveWithinChatColdStartDeadline(
+        const conversation = await resolveChatRead(
           ivxChatService.bootstrapOwnerConversation(),
           async () => ({
             id: IVX_OWNER_AI_ROOM_ID,
@@ -1111,8 +1095,9 @@ export default function IVXOwnerChatRoute() {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             lastMessageText: null,
-            lastMessageAt: null}),
+          lastMessageAt: null}),
         );
+        return conversation.value;
       } catch (error) {
         console.log('[IVXOwnerChatRoute] Owner conversation bootstrap failed:', error instanceof Error ? error.message : 'unknown');
         if (!isOpenAccessBuild) {
