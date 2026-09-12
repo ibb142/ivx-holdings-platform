@@ -42,7 +42,7 @@ function configureAtomicQueue(): void {
 }
 
 test('saturated task and assignment pools leave heartbeats available within the existing connection budget', async () => {
-  configureAtomicQueue();
+  configureAtomicQueue(); process.env.CI = 'true';
   process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://poolisolation.supabase.co';
   process.env.SUPABASE_DB_URL = 'postgresql://postgres:fixture@db.poolisolation.supabase.co/postgres';
   // Exercise the real pg.Pool checkout queue; only replace network I/O.
@@ -65,7 +65,7 @@ test('saturated task and assignment pools leave heartbeats available within the 
   const query = spyOn(Client.prototype, 'query').mockImplementation((async (sql: string) => {
     if (sql.startsWith('BEGIN')) setup.push(sql);
     if (sql.includes('ivx_ai_budget_status')) {
-      if (++taskQueries === 2) tasksOccupied.resolve();
+      if (++taskQueries === 1) tasksOccupied.resolve();
       await tasksGate.promise;
       return { rows: [{ result: { ok: true } }] };
     }
@@ -83,11 +83,11 @@ test('saturated task and assignment pools leave heartbeats available within the 
   const rest = spyOn(globalThis, 'fetch').mockImplementation(() => { throw new Error('Direct RPC must not replay through REST'); });
   const pending: Promise<unknown>[] = [];
   try {
-    pending.push(globalAIBudgetRpc('ivx_ai_budget_status', {}), globalAIBudgetRpc('ivx_ai_budget_status', {}));
+    pending.push(globalAIBudgetRpc('ivx_ai_budget_status', {}));
     await tasksOccupied.promise;
     pending.push(globalAIBudgetRpc('ivx_ai_budget_status', {}));
-    const tasks = pools.get('ivx_tasks')!;
-    expect(tasks.totalCount).toBe(2);
+    const tasks = pools.get('ivx_worker_tasks')!;
+    expect(tasks.totalCount).toBe(1);
     expect(tasks.idleCount).toBe(0);
     expect(tasks.waitingCount).toBe(1);
 
@@ -95,12 +95,12 @@ test('saturated task and assignment pools leave heartbeats available within the 
     await claimOccupied.promise;
     const leases = [{ taskId: 'task-1', workerId: 'worker-1' }];
     pending.push(startPostgresAutonomousTasks(leases));
-    expect(pools.get('ivx_assignment')!.waitingCount).toBe(1);
+    expect(pools.get('ivx_worker_assignment')!.waitingCount).toBe(1);
     expect(await heartbeatPostgresAutonomousTasks(leases)).toEqual({ ok: true, refreshed: 1, rejected: [] });
     expect(await releasePostgresWorkerInstanceTasks()).toBe(0);
     expect(tasks.waitingCount).toBe(1);
-    expect(pools.get('ivx_assignment')!.waitingCount).toBe(1);
-    expect(pools.get('ivx_heartbeat')!.idleCount).toBe(1);
+    expect(pools.get('ivx_worker_assignment')!.waitingCount).toBe(1);
+    expect(pools.get('ivx_worker_heartbeat')!.idleCount).toBe(1);
     expect(setup.some(sql => sql.includes("statement_timeout = '2500ms'") && sql.includes("lock_timeout = '1000ms'"))).toBe(true);
 
     // The remaining observers and repair queue keep independent pools too.
@@ -108,8 +108,8 @@ test('saturated task and assignment pools leave heartbeats available within the 
     await readPostgresFleetProcessObservation();
     await readSeniorQueuePostgresDocument('senior-developer-worker/queue.json');
     expect(pools.size).toBe(6);
-    expect([...pools.values()].reduce((max, pool) => max + pool.options.max!, 0)).toBe(7);
-    for (const name of ['ivx_assignment', 'ivx_heartbeat']) expect(pools.get(name)!.options.connectionTimeoutMillis).toBe(2_000);
+    expect([...pools.values()].reduce((max, pool) => max + pool.options.max!, 0)).toBe(6);
+    for (const name of ['ivx_worker_assignment', 'ivx_worker_heartbeat']) expect(pools.get(name)!.options.connectionTimeoutMillis).toBe(1_500);
     expect(rest).not.toHaveBeenCalled();
     tasksGate.resolve(); claimGate.resolve();
     await Promise.all(pending);
@@ -542,8 +542,8 @@ for (const failure of [null, 'setup', 'read', 'commit', 'disconnect', 'server-ca
         expect(calls.at(-1)).toBe('COMMIT');
         expect(releases).toEqual([false]);
       }
-      expect(calls[0]).toContain("SET LOCAL statement_timeout = '4s'");
-      expect(calls[0]).toContain("SET LOCAL lock_timeout = '2s'");
+      expect(calls[0]).toContain("SET LOCAL statement_timeout = '2500ms'");
+      expect(calls[0]).toContain("SET LOCAL lock_timeout = '1000ms'");
       expect(calls.filter(sql => sql.startsWith('select payload'))).toHaveLength(failure === 'setup' ? 0 : 1);
       expect(unscoped).not.toHaveBeenCalled();
       expect(connect).toHaveBeenCalledTimes(1);

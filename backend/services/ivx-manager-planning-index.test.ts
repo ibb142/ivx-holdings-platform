@@ -43,17 +43,17 @@ test('planning index paginates identities without hydrating evidence payloads', 
         return Object.assign(new EventEmitter(), {
           query:async(sql,values)=>{
             if(sql.startsWith('BEGIN;')) {
-              if(!sql.includes("SET LOCAL statement_timeout = '4s'") || !sql.includes("SET LOCAL lock_timeout = '2s'"))throw Error('unbounded planning page');
+              if(!sql.includes("SET LOCAL statement_timeout = '2500ms'") || !sql.includes("SET LOCAL lock_timeout = '1000ms'"))throw Error('unbounded planning page');
               setups++;return {rows:[]};
             }
             if(sql==='COMMIT'){commits++;return {rows:[]};}
             if(sql==='ROLLBACK')throw Error('unexpected planning rollback');
-            return this.query(sql,values);
+            return this.rawQuery(sql,values);
           },
           release:destroy=>{if(destroy)throw Error('successful connection discarded');releases++;}
         });
       }
-      async query(sql,values) {
+      async rawQuery(sql,values) {
         reads++;
         if(sql.includes('select payload ') || !sql.includes("payload->>'title'"))throw Error('full payload requested');
         const [offset,limit]=values;

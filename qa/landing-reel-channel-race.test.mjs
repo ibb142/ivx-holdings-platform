@@ -91,6 +91,65 @@ test('a transient personalized feed failure recovers the same public Reels scope
   assert.equal(f.state.done, true);
 });
 
+test('Project Reels recovery requests its public rail when the homepage snapshot contains deal videos', async () => {
+  const f = fixture();
+  const homepage = publicFeed();
+  homepage.videos.forEach(video => { video.video_type = 'deal'; });
+  f.context.window.__ivxPublicReels = { at: Date.now(), data: homepage };
+  f.state.channel = '__reels'; f.context.loadMore();
+  f.pending[0].reject(new Error('viewer query timed out')); await settle();
+  assert.equal(f.pending[1].path, '/api/reels?limit=6&type=reel');
+  assert.deepEqual(Object.keys(f.state.videos), [], 'An unrelated homepage catalog must not enter the requested rail');
+  const rail = { ...publicFeed(), feed_type: 'reel' };
+  rail.videos.forEach(video => { video.viewer_liked = true; video.viewer_following_creator = true; });
+  f.pending[1].resolve(rail); await settle();
+  assert.deepEqual(f.feedEl.children.map(x => x.video?.id), ['one', 'two']);
+  assert.equal(f.state.videos.one.viewer_liked, undefined);
+  assert.equal(f.state.videos.one.viewer_following_creator, undefined);
+  assert.equal(f.state.videos.one.viewer_state_available, false);
+  assert.equal(rail.videos[0].viewer_liked, true, 'Shared source data must stay unchanged');
+});
+
+test('a matching public Reels rail preserves its cursor', async () => {
+  const f = fixture();
+  f.state.channel = '__reels'; f.context.loadMore();
+  f.pending[0].reject(new Error('viewer query timed out')); await settle();
+  const rail = { ...publicFeed(), feed_type: 'reel', next_cursor: 'page-two', total: 10 };
+  f.pending[1].resolve(rail); await settle();
+  assert.deepEqual(f.feedEl.children.map(x => x.video?.id), ['one', 'two']);
+  assert.equal(f.state.cursor, 'page-two');
+  assert.equal(f.state.done, false);
+  f.context.loadMore();
+  const next = new URL(f.pending[2].path, 'https://api.ivxholding.com');
+  assert.equal(next.searchParams.get('type'), 'reel');
+  assert.equal(next.searchParams.get('cursor'), 'page-two');
+  f.pending[2].resolve(videos('three')); await settle();
+});
+
+test('matching public rail recovery rejects unavailable, private and mismatched responses', async () => {
+  for (const fields of [{ degraded: true }, { data_available: false }, { code: 'PUBLIC_DATA_UNAVAILABLE' },
+    { personalized: true }, { channel: 'buyer' }, { feed_type: 'unified' }, { ordering: 'other' }, { videos: [] }]) {
+    const f = fixture();
+    f.state.channel = '__reels'; f.context.loadMore();
+    f.pending[0].reject(new Error('timeout')); await settle();
+    f.pending[1].resolve({ ...publicFeed(), feed_type: 'reel', ...fields }); await settle();
+    assert.deepEqual(Object.keys(f.state.videos), [], JSON.stringify(fields));
+    assert.equal(f.state.loading, false);
+    assert.equal(f.errors.length, 1);
+  }
+});
+
+test('a matching public rail arriving after a channel switch cannot replace the current videos', async () => {
+  const f = fixture();
+  f.state.channel = '__reels'; f.context.loadMore();
+  f.pending[0].reject(new Error('timeout')); await settle();
+  f.state.channel = 'buyer'; f.context.resetFeed(); f.context.loadMore();
+  f.pending[2].resolve(videos('buyer')); await settle();
+  f.pending[1].resolve({ ...publicFeed(), feed_type: 'reel' }); await settle();
+  assert.deepEqual(f.feedEl.children.map(x => x.video?.id), ['buyer']);
+  assert.equal(f.state.loading, false);
+});
+
 test('anonymous Reels recovery preserves the requested page size and its pagination', async () => {
   const f = fixture();
   const loading = f.context.fetchFeedPage('/api/reels?limit=2&viewer_id=isolated-viewer&type=reel', () => true);
@@ -161,7 +220,9 @@ test('a recent homepage catalog recovers a transient failure without another dat
 
 test('expired or incompatible page snapshots cannot be used for recovery', async () => {
   for (const snapshot of [{ at: Date.now() - 31000, data: publicFeed() },
-    { at: Date.now(), data: { ...publicFeed(), personalized: true } }]) {
+    { at: Date.now(), data: { ...publicFeed(), personalized: true } },
+    { at: Date.now(), data: { ...publicFeed(), degraded: true } },
+    { at: Date.now(), data: { ...publicFeed(), data_available: false } }]) {
     const f = fixture();
     f.context.window.__ivxPublicReels = snapshot;
     f.context.loadMore(); f.pending[0].reject(new Error('timeout')); await settle();
@@ -173,21 +234,74 @@ test('expired or incompatible page snapshots cannot be used for recovery', async
 });
 
 function transport(respond) {
-  const requests = [], timers = new Map(); let timerId = 0;
+  const requests = [], timers = new Map(); let timerId = 0, clock = 1000;
   const context = vm.createContext({ URL, AbortController, API: 'https://primary.example',
+    Date: { now: () => clock, parse: Date.parse },
     API_CANDIDATES: ['https://primary.example', 'https://secondary.example'],
-    setTimeout: (fn, ms) => { timers.set(++timerId, { fn, ms }); return timerId; },
+    setTimeout: (fn, ms) => { timers.set(++timerId, { fn, ms, at: clock + ms }); return timerId; },
     clearTimeout: id => timers.delete(id),
     fetch: (url, options) => { requests.push({ url, options }); return Promise.resolve(respond(url, options)); },
   });
   vm.runInContext(source.slice(begin, end), context);
-  return { context, requests, timers };
+  return { context, requests, timers, advance(ms) {
+    clock += ms;
+    for (const [id, timer] of timers) if (timer.at <= clock) { timers.delete(id); timer.fn(); }
+  } };
 }
+
+test('a degraded reel response waits for Retry-After before using the second host', async () => {
+  for (const status of [200, 503, 429]) {
+    const f = transport(url => ({ ok: url.includes('secondary') || status === 200, status,
+      headers: { get: () => '3' }, text: async () => JSON.stringify(
+        url.includes('primary') ? { videos: [], degraded: true } : publicFeed()) }));
+    const pending = f.context.apiFetchJson('/api/reels', 0, 4000);
+    await settle(); assert.equal(f.requests.length, 1);
+    f.advance(2999); await settle(); assert.equal(f.requests.length, 1);
+    f.advance(1); const result = await pending;
+    assert.equal(result.videos.length, 2);
+    assert.equal(f.requests.length, 2);
+    assert.equal(f.context.API, 'https://secondary.example');
+    assert.equal(f.timers.size, 0);
+  }
+});
+
+test('reel Retry-After cannot exceed the combined existing host budgets', async () => {
+  const f = transport(() => ({ ok: false, status: 503, headers: { get: () => '60' } }));
+  await assert.rejects(f.context.apiFetchJson('/api/reels', 0, 4000), /503/);
+  assert.equal(f.requests.length, 1); assert.equal(f.timers.size, 0);
+});
+
+test('reel retries cannot restart after a suspended page exceeds its deadline', async () => {
+  const f = transport(() => ({ ok: false, status: 503, headers: { get: () => '3' } }));
+  const pending = f.context.apiFetchJson('/api/reels', 0, 4000);
+  const rejected = assert.rejects(pending);
+  await settle(); f.advance(9000); await rejected;
+  assert.equal(f.requests.length, 1); assert.equal(f.timers.size, 0);
+});
 
 test('feed transport does not fail over an authorization denial', async () => {
   const f = transport(() => ({ ok: false, status: 403 }));
   await assert.rejects(f.context.apiFetchJson('/api/reels', 0, 4000), /403/);
   assert.equal(f.requests.length, 1);
+  assert.equal(f.timers.size, 0);
+});
+
+test('feed transport fails over degraded HTTP 200 before promoting a host', async () => {
+  for (const flags of [{ degraded: true }, { data_available: false }, { code: 'PUBLIC_DATA_UNAVAILABLE' }]) {
+    const f = transport(url => ({ ok: true, text: async () => JSON.stringify(
+      url.startsWith('https://primary.example') ? { videos: [], ...flags } : publicFeed()) }));
+    const result = await f.context.apiFetchJson('/api/reels', 0, 4000);
+    assert.equal(result.videos.length, 2);
+    assert.equal(f.requests.length, 2);
+    assert.equal(f.context.API, 'https://secondary.example');
+    assert.equal(f.timers.size, 0);
+  }
+});
+
+test('a persistently degraded reel catalog is an error, not a completed empty page', async () => {
+  const f = transport(() => ({ ok: true, text: async () => '{"videos":[],"data_available":false}' }));
+  await assert.rejects(f.context.apiFetchJson('/api/reels', 0, 4000), /unavailable/i);
+  assert.equal(f.requests.length, 2);
   assert.equal(f.timers.size, 0);
 });
 

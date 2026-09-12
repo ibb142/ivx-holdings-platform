@@ -1,9 +1,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-type Timings = { headersMs: number; payloadMs: number; completed: number; pending: number; poolMs: number | null; poolMaxMs?: number; deadline?: AbortSignal };
+type Timings = { headersMs: number; payloadMs: number; completed: number; pending: number;
+  poolMs: number | null; poolMaxMs?: number; sqlMs: number | null; sqlCompleted: number; sqlPending: number; deadline?: AbortSignal };
 export const readTimings = new AsyncLocalStorage<Timings>();
 export function newReadTimings(timeoutMs?: number): Timings {
-  return { headersMs: 0, payloadMs: 0, completed: 0, pending: 0, poolMs: null, deadline: timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs) };
+  return { headersMs: 0, payloadMs: 0, completed: 0, pending: 0, poolMs: null,
+    sqlMs: null, sqlCompleted: 0, sqlPending: 0, deadline: timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs) };
 }
 export function recordPoolCheckout(ms: number): void {
   const metrics = readTimings.getStore();
@@ -12,13 +14,31 @@ export function recordPoolCheckout(ms: number): void {
     metrics.poolMaxMs = Math.max(metrics.poolMaxMs ?? 0, ms);
   }
 }
+/** Client-observed query round trips, including failed attempts and lock/network
+ * waits. Excludes checkout, transaction setup and commit; not server CPU time.
+ * Capture the request context before awaiting so unrelated requests stay isolated.
+ */
+export async function measuredSqlQuery<T>(operation: () => Promise<T>): Promise<T> {
+  const metrics = readTimings.getStore();
+  if (!metrics) return operation();
+  const started = performance.now();
+  metrics.sqlPending++;
+  try { return await operation(); }
+  finally {
+    metrics.sqlMs = (metrics.sqlMs ?? 0) + Math.max(0, performance.now() - started);
+    metrics.sqlPending--; metrics.sqlCompleted++;
+  }
+}
 export function timingHeaders(metrics: Timings): Record<string, string> {
   return {
     'X-Pool-Acquisition-Ms': metrics.poolMaxMs === undefined ? 'unavailable' : metrics.poolMaxMs.toFixed(1),
+    // A fallback may be returned while a query is still running. Do not present
+    // an incomplete sum, or an unobserved REST/cache read, as finished SQL time.
+    'X-SQL-Execution-Ms': metrics.sqlMs === null || metrics.sqlPending > 0 ? 'unavailable' : metrics.sqlMs.toFixed(1),
     'X-IVX-Pool-Wait-Ms': metrics.poolMs === null ? 'unavailable' : metrics.poolMs.toFixed(1),
     'X-IVX-Payload-Ms': metrics.completed ? metrics.payloadMs.toFixed(1) : 'unavailable',
     'X-IVX-Upstream-Headers-Ms': metrics.completed || metrics.pending ? metrics.headersMs.toFixed(1) : 'unavailable',
-    'X-IVX-Timing-Scope': `request-owned-upstream-sum; completed=${metrics.completed}; pending=${metrics.pending}`,
+    'X-IVX-Timing-Scope': `request-owned-upstream-sum; completed=${metrics.completed}; pending=${metrics.pending}; sql=client-query-roundtrip-sum; sql_completed=${metrics.sqlCompleted}; sql_pending=${metrics.sqlPending}`,
   };
 }
 /** HTTP header wait includes network/server time, NOT a measurement of Supavisor checkout.
