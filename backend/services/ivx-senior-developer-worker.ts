@@ -1325,6 +1325,12 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     }
   }
   const resumeStartedAt = nowIso();
+  const savedCi = job.result.ciResumeState;
+  const ciWaitStartedAt = savedCi?.jobId === jobId
+    && savedCi.taskId === (job.input.taskId ?? jobId)
+    && savedCi.commitSha === commitSha && savedCi.prNumber === prNumber
+    && savedCi.branch === job.result.branch && savedCi.phase === 'CI_WAIT'
+    ? savedCi.persistedAt : undefined;
   await updateJobStage(jobId, 'COMMITTING', `Worker restart detected — resuming CI wait for PR #${prNumber} (commit ${commitSha.slice(0, 12)}) with the original taskId. No duplicate job created.`);
   const proof = await resumeIVXAutonomousCoderFromCiWait({
     taskId: job.input.taskId ?? job.jobId,
@@ -1337,6 +1343,7 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     testsPassed: job.result?.testsPassed === true,
     typecheckPassed: job.result?.typecheckPassed === true,
     filesChanged: job.result?.changedFiles ?? [],
+    ciWaitStartedAt,
     beforeMerge: async () => {
       await assertEmergencyStopInactive('senior-worker-resumed-merge');
       if (controller.cancelled) throw new Error('Worker lease lost before resumed merge');
