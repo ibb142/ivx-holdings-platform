@@ -141,10 +141,10 @@ export function reconcileReceipt(row, payload, observedAt) {
  * an all-day reconciliation, or permission to release unknown liability.
  * This module has no automatic entrypoint and no mutations or model calls.
  */
-export async function observeBudgetReconciliation({ databaseUrl, serviceKey, gatewayKey, sourceSha },
+export async function observeBudgetReconciliation({ databaseUrl, serviceKey, gatewayKey, sourceSha, reservationIds, reviewDay },
   { fetcher = fetch, now = Date.now, wait: pause = wait } = {}) {
   const result = { sourceSha, observedAt: new Date(now()).toISOString(), state: 'UNOBSERVED',
-    cohortScope: 'latest_reservations_created_today_before_fixed_cutoff', maxReceipts: MAX_RECEIPTS,
+    cohortScope: reservationIds ? 'explicit_receipt_review_before_fixed_cutoff' : 'latest_reservations_created_today_before_fixed_cutoff', maxReceipts: MAX_RECEIPTS,
     records: [], selectionTruncated: false, ledgerStable: false,
     productionRowsChanged: 0, modelCallsCreated: 0, secretsReturned: false,
     fullDayReconciled: false, providerAccountReconciled: false, phase3Closed: false,
@@ -154,16 +154,28 @@ export async function observeBudgetReconciliation({ databaseUrl, serviceKey, gat
     requireValue(databaseUrl === DATABASE_ORIGIN && typeof serviceKey === 'string' && serviceKey.length > 0,
       'DATABASE_BINDING_UNAVAILABLE');
     requireValue(typeof gatewayKey === 'string' && gatewayKey.startsWith('vck_'), 'GATEWAY_BINDING_UNAVAILABLE');
+    const requestedIds = reservationIds === undefined ? null : new Set(Array.isArray(reservationIds) ? reservationIds : []);
+    requireValue(reservationIds === undefined || (Array.isArray(reservationIds) && reservationIds.length > 0
+      && reservationIds.length <= MAX_RECEIPTS && requestedIds.size === reservationIds.length
+      && reservationIds.every(id => typeof id === 'string' && UUID.test(id))), 'INVALID_RECEIPT_REVIEW');
     const deps = { fetcher, now, wait: pause, deadline: now() + 120_000 };
     // Give newly completed usage a short ingestion window. Older unresolved
     // reservations remain visible through the global status read below.
-    const day = new Date(now()).toISOString().slice(0, 10);
-    const cutoff = new Date(Math.max(Date.parse(day + 'T00:00:00.000Z'), now() - 60_000)).toISOString();
+    const currentDay = new Date(now()).toISOString().slice(0, 10);
+    const day = reviewDay ?? currentDay;
+    requireValue(typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day) && day <= currentDay
+      && Number.isFinite(Date.parse(day + 'T00:00:00Z'))
+      && new Date(Date.parse(day + 'T00:00:00Z')).toISOString().slice(0,10) === day
+      && (reviewDay === undefined || requestedIds), 'INVALID_REVIEW_DAY');
+    const cutoff = new Date(day === currentDay
+      ? Math.max(Date.parse(day + 'T00:00:00.000Z'), now() - 60_000)
+      : Date.parse(day + 'T00:00:00Z') + 86_400_000).toISOString();
     result.day = day; result.cutoff = cutoff;
+    if (requestedIds) result.requestedReservationIds = [...requestedIds];
     const headers = { apikey: serviceKey, Authorization: 'Bearer ' + serviceKey };
     const statusUrl = DATABASE_ORIGIN + '/rest/v1/rpc/ivx_ai_budget_status';
     const before = (await getJson(statusUrl, headers, deps)).value;
-    requireValue(before?.enabled === true && before.day === day && before.scope === 'all_instrumented_backend_provider_requests',
+    requireValue(before?.enabled === true && before.day === currentDay && before.scope === 'all_instrumented_backend_provider_requests',
       'GLOBAL_BUDGET_NOT_OBSERVED');
     integerNano(before.dailyLimitNano);
     requireValue(Number.isSafeInteger(before.policyRevision) && Number.isSafeInteger(before.maxConcurrent), 'INVALID_POLICY');
@@ -177,9 +189,12 @@ export async function observeBudgetReconciliation({ databaseUrl, serviceKey, gat
       day: 'eq.' + day, created_at: 'lt.' + cutoff,
       order: 'created_at.desc,reservation_id.desc', limit: String(MAX_RECEIPTS + 1),
     });
+    if (requestedIds) params.set('reservation_id', 'in.(' + [...requestedIds].join(',') + ')');
     const ledgerUrl = DATABASE_ORIGIN + '/rest/v1/ivx_ai_budget_reservations?' + params;
     const ledger = (await getJson(ledgerUrl, headers, deps)).value;
     requireValue(Array.isArray(ledger) && ledger.length <= MAX_RECEIPTS + 1, 'INVALID_LEDGER_READ');
+    requireValue(!requestedIds || (ledger.length === requestedIds.size
+      && ledger.every(row => requestedIds.has(row.reservation_id))), 'REVIEW_RESERVATIONS_MISSING');
     result.selectionTruncated = ledger.length > MAX_RECEIPTS;
     result.ledgerSha256 = createHash('sha256').update(JSON.stringify(ledger)).digest('hex');
     const rows = ledger.slice(0, MAX_RECEIPTS);
