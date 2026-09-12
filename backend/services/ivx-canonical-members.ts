@@ -490,7 +490,7 @@ export async function readCanonicalWaitlistStats(): Promise<{ total: number; wai
     };
     const [total, waitlist] = await Promise.all([count(''), count('&member_type=eq.waitlist')]);
     return { total, waitlist };
-  }, 3000);
+  }, 2500);
 }
 
 export async function countCanonicalMembers(): Promise<number> {

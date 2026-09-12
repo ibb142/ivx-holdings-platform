@@ -32,6 +32,19 @@ test('aggregate reader requests exact HEAD counts and rejects unknown totals', a
     expect(await readCanonicalWaitlistStats()).toEqual({ total: 5001, waitlist: 2300 });
     globalThis.fetch = (async () => new Response(null, { headers: { 'content-range': '0-0/*' } })) as typeof fetch;
     await expect(readCanonicalWaitlistStats()).rejects.toThrow('temporarily unavailable');
+    let aborted = 0;
+    globalThis.fetch = (async (_url, options) => {
+      options?.signal?.addEventListener('abort', () => { aborted++; });
+      return new Promise(() => {});
+    }) as typeof fetch;
+    const started = performance.now();
+    const timed = await handleWaitlistStats('test');
+    const elapsed = performance.now() - started;
+    expect(elapsed).toBeGreaterThanOrEqual(2400);
+    expect(elapsed).toBeLessThan(3500);
+    expect(aborted).toBe(2);
+    expect(await timed.json()).toMatchObject({ degraded: true, data_available: false });
+
   } finally {
     globalThis.fetch = originalFetch;
     if (oldUrl === undefined) delete process.env.SUPABASE_URL; else process.env.SUPABASE_URL = oldUrl;
