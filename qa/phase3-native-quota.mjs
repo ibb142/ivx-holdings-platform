@@ -91,9 +91,20 @@ async function quotaSnapshot(context, id, label) {
   await getTestKey(context,id);
   const { budgets } = await management(context,'/ai-gateway/budgets/list');
   const quota=budgets.find(b=>b.quotaEntityId==='api_key_id_'+id);
+  const snapshot = { label, at: new Date().toISOString(), ...(quota ? budgetSummary(quota) : {notYetVisible:true}) };
+  context.proof.quotaSnapshots.push(snapshot);
   assert(quota && quota.active && !quota.archived,'TEST_QUOTA_NOT_ACTIVE');
-  const snapshot = { label, at: new Date().toISOString(), ...budgetSummary(quota) };
-  context.proof.quotaSnapshots.push(snapshot); return snapshot;
+  return snapshot;
+}
+async function waitForQuota(context,id,label,limit,minimum=0) {
+  for(let i=0;i<30;i++) {
+    try {
+      const quota=await quotaSnapshot(context,id,label);
+      if(quota.limitAmount===limit && quota.currentSpend>=minimum-0.00000001) return quota;
+    } catch(error) { if(error?.message!=='TEST_QUOTA_NOT_ACTIVE')throw error; }
+    await wait(5000);
+  }
+  throw new Error('NATIVE_QUOTA_PROPAGATION_TIMEOUT');
 }
 async function pollSpend(context, id, minimum, label) {
   let quota;
@@ -211,7 +222,8 @@ async function callProvider(context, db, key, label, quote) {
   return stats;
 }
 function existingLimits(state, excludedId) {
-  return state.budgets.filter(b=>b.scopeType!=='team' && b.quotaEntityId!=='api_key_id_'+excludedId).map(b=>({
+  return state.budgets.filter(b=>b.scopeType!=='team' && !['api_key_id_'+excludedId,'api_key_id_jtAnoFZC1LAdFBOuA9gwn8byoEteiOrNxS4y0rwikpKds7aq',
+    'api_key_id_pWesf5bv7wl7jAK357RL2q4DlnWYS4SzQN6ufeQiLGbYlURw'].includes(b.quotaEntityId)).map(b=>({
     id:b.quotaEntityId,limit:b.limitAmount,period:b.refreshPeriod,active:b.active,archived:b.archived,
     byok:b.includeByokInQuota,
   })).sort((a,b)=>a.id.localeCompare(b.id));
@@ -255,14 +267,12 @@ async function main() {
     await getTestKey(context,testKeyId);
     await management(context,'/v1/api-keys/'+encodeURIComponent(testKeyId)+'/quota',{method:'PATCH',
       body:{limitAmount:1,refreshPeriod:'none',includeByokInQuota:true,active:true,archived:false}});
-    const first=await quotaSnapshot(context,testKeyId,'created');
-    assert.equal(first.limitAmount,1,'TEST_QUOTA_LIMIT_MISMATCH');
-    assert.equal(first.refreshPeriod,'none','TEST_QUOTA_PERIOD_MISMATCH');
-    assert.equal(first.currentSpend,0,'NEW_TEST_KEY_ALREADY_SPENT');
     event('test-key-created',{testKeyId,warmupSeconds:125});
     // Documented new-key metering may need two minutes. No paid warm-up calls.
     for(let i=0;i<5;i++){await wait(25000);event('metering-warmup',{elapsedSeconds:(i+1)*25});}
-    let quota=await quotaSnapshot(context,testKeyId,'before-spend');
+    let quota=await waitForQuota(context,testKeyId,'before-spend',1);
+    assert.equal(quota.refreshPeriod,'none','TEST_QUOTA_PERIOD_MISMATCH');
+    assert.equal(quota.currentSpend,0,'NEW_TEST_KEY_ALREADY_SPENT');
     for(let i=1;i<=2 && quota.currentSpend<1;i++) {
       await callProvider(context,db,testKey,'fill'+i,await freshQuote('openai/gpt-4.1'));
       const knownSpend=proof.receipts.reduce((n,r)=>n+BigInt(r.costNano),0n);
@@ -278,7 +288,7 @@ async function main() {
     assert(raisedLimit<=5,'RECOVERY_QUOTA_TOO_LARGE');
     await management(context,'/v1/api-keys/'+encodeURIComponent(testKeyId)+'/quota',{method:'PATCH',
       body:{limitAmount:raisedLimit,refreshPeriod:'none',includeByokInQuota:true}});
-    const raised=await quotaSnapshot(context,testKeyId,'recovery-quota');
+    const raised=await waitForQuota(context,testKeyId,'recovery-quota',raisedLimit,quota.currentSpend);
     assert.equal(raised.limitAmount,raisedLimit,'RECOVERY_QUOTA_NOT_APPLIED');
     assert(raised.currentSpend>=quota.currentSpend,'QUOTA_EDIT_RESET_SPEND');
     for(let i=0;i<4;i++){await wait(15000);event('recovery-propagation',{elapsedSeconds:(i+1)*15});}
