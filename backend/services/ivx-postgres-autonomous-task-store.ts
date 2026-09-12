@@ -235,11 +235,11 @@ async function rpc<T>(name: string, body: Record<string, unknown>, timeoutMs = D
 }
 export function readPostgresFleetDashboardObservation(): Promise<unknown> {
   if (!postgresAtomicQueueConfigured()) throw new Error('Shared fleet observation requires postgres_atomic');
-  return rpc('ivx_fleet_dashboard_observation', {}, 5_000).catch((error) => {
-    if (!mayFailoverRead(error)) throw error;
-    return directRpc('ivx_fleet_dashboard_observation', {});
-  });
-
+  // rpc already selects the same-project direct connection or REST. Re-entering
+  // directRpc after failure repeats an already-direct read, or activates a
+  // database binding that transport selection rejected. Keep the original error
+  // and let the caller's next observation refresh it through the selected route.
+  return rpc('ivx_fleet_dashboard_observation', {}, 5_000);
 }
 
 export type FleetProcessObservation = {
