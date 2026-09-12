@@ -1,4 +1,5 @@
-import { sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult, readSharedSeniorDocument, readSharedSeniorJob, appendSharedSeniorProofEvent } from './ivx-senior-shared-queue';
+import { sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult, readSharedSeniorDocument, readSharedSeniorWorkQueue, readSharedSeniorJob, appendSharedSeniorProofEvent } from './ivx-senior-shared-queue';
+import { SENIOR_QUEUE_ACTIVE_STATUSES } from './ivx-senior-work-queue';
 import type { CoderWorkspaceEvidence } from './ivx-coder-workspace';
 import { createSeniorJobAdmission } from './ivx-senior-job-admission';
 import { configuredAdmissionLimit } from './ivx-fleet-admission-policy';
@@ -558,6 +559,16 @@ async function loadQueueForJob(jobId: string): Promise<QueueDoc> {
   return rememberSeniorQueue({ ...emptyQueue(true), jobs: job ? [job] : [] });
 }
 
+async function loadWorkQueue(): Promise<QueueDoc> {
+  if (!sharedSeniorQueueEnabled()) return loadQueue();
+  if (!isDurableStoreConfigured()) throw new Error('Shared queue storage unavailable');
+  const doc = await readSharedSeniorWorkQueue<QueueDoc>(QUEUE_FILE, emptyQueue(true));
+  // The exact full job snapshots remain valid CAS baselines. The SQL patch
+  // retains every omitted historical row and other owners' concurrent work.
+  const queue: QueueDoc = { ...doc, marker: IVX_SENIOR_DEV_WORKER_MARKER, durable: true };
+  return rememberSeniorQueue(queue);
+}
+
 async function loadLedger(): Promise<LedgerDoc> {
   const durable = isDurableStoreConfigured();
   if (!durable) {
@@ -1115,9 +1126,7 @@ export function summarizeProof(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Statuses that are considered "active" (still in progress). */
-const ACTIVE_STATUSES: ReadonlySet<IVXWorkerJobStatus> = new Set([
-  'queued', 'running', 'patching', 'testing', 'committing', 'deploying', 'verifying',
-]);
+const ACTIVE_STATUSES: ReadonlySet<IVXWorkerJobStatus> = new Set(SENIOR_QUEUE_ACTIVE_STATUSES);
 
 /**
  * Expire active jobs whose last heartbeat is older than `STALE_JOB_TIMEOUT_MS`.
@@ -1128,12 +1137,12 @@ const ACTIVE_STATUSES: ReadonlySet<IVXWorkerJobStatus> = new Set([
  * @returns array of expired job IDs
  */
 export async function expireStaleJobs(): Promise<string[]> {
-  let queue = await loadQueue();
+  let queue = await loadWorkQueue();
   // Recover a commit before generic lease expiry can replay code generation.
   // An uncertain GitHub lookup also cannot authorize replay of COMMITTING work.
   try { await recoverStuckCommittingJobs(queue); }
   catch { /* An uncertain lookup never permits regeneration of COMMITTING work below. */ }
-  queue = await loadQueue();
+  queue = await loadWorkQueue();
   const now = Date.now();
   const expired: string[] = [];
 
@@ -1344,6 +1353,7 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     typecheckPassed: job.result?.typecheckPassed === true,
     filesChanged: job.result?.changedFiles ?? [],
     ciWaitStartedAt,
+    isCanceled: () => controller.cancelled || queueStopping,
     beforeMerge: async () => {
       await assertEmergencyStopInactive('senior-worker-resumed-merge');
       if (controller.cancelled) throw new Error('Worker lease lost before resumed merge');
@@ -1621,7 +1631,7 @@ export async function getActiveJobForOwner(ownerId: string): Promise<IVXWorkerJo
   // lease. The dedicated worker sweeps/reclaims expired jobs independently.
   // Retain an existing job's identity while it waits for that recovery.
   if (!sharedSeniorQueueEnabled()) await expireStaleJobs();
-  const queue = await loadQueue();
+  const queue = await loadWorkQueue();
   // Find the most recent active job for this owner.
   for (let i = queue.jobs.length - 1; i >= 0; i -= 1) {
     const job = queue.jobs[i];
@@ -2310,7 +2320,7 @@ function phaseToStage(phase: string): { stage: IVXWorkerJobStage; detail: string
  * null when there is no queued job.
  */
 const admitSeniorJob = createSeniorJobAdmission<IVXWorkerJob>({
-  read: loadQueue, claimed: claimedJobIds, active: ACTIVE_STATUSES,
+  read: loadWorkQueue, claimed: claimedJobIds, active: ACTIVE_STATUSES,
   staleAfterMs: STALE_JOB_TIMEOUT_MS, stopped: () => queueStopping,
   availableSlots: () => getWorkerMaxConcurrency() - new Set([...claimedJobIds, ...activeCiResumeJobIds]).size,
   claim: job => sharedSeniorQueueEnabled() ? claimSharedSeniorJob<IVXWorkerJob>(job.jobId) : Promise.resolve(job),

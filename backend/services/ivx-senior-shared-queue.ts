@@ -1,5 +1,6 @@
-import { autonomousWorkerInstanceId, preferDirectTransport, seniorQueuePostgresRpc, readSeniorQueuePostgresDocument, readSeniorQueuePostgresJob, appendSeniorProofPostgresEvent } from './ivx-postgres-autonomous-task-store';
+import { autonomousWorkerInstanceId, preferDirectTransport, seniorQueuePostgresRpc, readSeniorQueuePostgresDocument, readSeniorQueuePostgresJob, readSeniorWorkQueuePostgres, appendSeniorProofPostgresEvent } from './ivx-postgres-autonomous-task-store';
 import { appendDurableEvent, durableKeyForFile, readDurableJson } from './ivx-durable-store';
+import { isSeniorQueueWorkItem } from './ivx-senior-work-queue';
 
 export function sharedSeniorQueueEnabled(): boolean { return process.env.IVX_WORKER_QUEUE_ATOMIC === 'true'; }
 type Job = { jobId: string };
@@ -89,6 +90,17 @@ export async function readSharedSeniorDocument<T>(file: string, fallback: T): Pr
   return sharedRead(`document:${direct}:${key}`, async () => direct
     ? (await readSeniorQueuePostgresDocument<T>(key)) ?? fallback
     : await readDurableJson(file, fallback));
+}
+
+export async function readSharedSeniorWorkQueue<T extends { jobs: Array<{ status: string }> }>(file: string, fallback: T): Promise<T> {
+  const key = durableKeyForFile(file);
+  if (key !== 'senior-developer-worker/queue.json') throw new Error('Repair work queue not allowed');
+  const direct = preferDirectTransport();
+  return sharedRead(`work:${direct}:${key}`, async () => {
+    if (direct) return (await readSeniorWorkQueuePostgres<T>()) ?? fallback;
+    const queue = await readSharedSeniorDocument(file, fallback);
+    return { ...queue, jobs: queue.jobs.filter(isSeniorQueueWorkItem) };
+  });
 }
 
 export async function readSharedSeniorJob<T extends Job>(file: string, jobId: string): Promise<T | null> {

@@ -1,10 +1,13 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import * as ai from 'ai';
+import { createGateway } from '@ai-sdk/gateway';
 import * as state from './services/ivx-provider-state-machine';
 import * as fallback from './services/ivx-ai-provider-fallback';
 import { requestIVXAIText, streamIVXAIText } from './ivx-ai-runtime';
 import { getAIQueueSnapshot } from './services/ivx-ai-queue';
 import * as queue from './services/ivx-ai-queue';
+import { createBudgetedFetch } from './services/ivx-global-ai-budget-fetch';
+import { GlobalAIBudgetError } from './services/ivx-global-ai-budget';
 
 const originalKey = process.env.IVX_AI_GATEWAY_KEY;
 const originalCanonicalKey = process.env.AI_GATEWAY_API_KEY;
@@ -16,6 +19,7 @@ const originalCredentials = Object.fromEntries(credentialNames.map(name => [name
 const spies: Array<{ mockRestore(): void }> = [];
 afterEach(() => {
   for (const spy of spies.splice(0)) spy.mockRestore();
+  state.resetProviderStateMachine();
   if (originalKey === undefined) delete process.env.IVX_AI_GATEWAY_KEY;
   else process.env.IVX_AI_GATEWAY_KEY = originalKey;
   if (originalCanonicalKey === undefined) delete process.env.AI_GATEWAY_API_KEY;
@@ -37,6 +41,67 @@ function setup() {
   return alternative;
 }
 const result = { text:'fixture recovery', usage:{inputTokens:2,outputTokens:2,totalTokens:4} } as Awaited<ReturnType<typeof ai.generateText>>;
+test('local budget rejection preserves provider health and the next admitted request can run', async () => {
+  process.env.IVX_AI_GATEWAY_KEY = 'vck_qa_fixture';
+  state.initProviderStateMachine('vercel_ai_gateway', 'openai/gpt-4o', true, true);
+  state.markProviderReady('vercel_ai_gateway', 'openai/gpt-4o');
+  const before = state.getProviderHealth();
+  const alternative = spyOn(fallback, 'attemptProviderFallback').mockResolvedValue(null);
+  spies.push(alternative);
+  let upstreamCalls = 0;
+  const guarded = createBudgetedFetch((async () => { upstreamCalls++; throw new Error('unexpected upstream request'); }) as typeof fetch, {
+    enabled:() => true, reserve:async () => { throw new GlobalAIBudgetError('global_capacity_exceeded'); },
+  });
+  const gateway = createGateway({apiKey:'vck_qa_fixture',fetch:guarded});
+  // Exercise the real SDK error adapter before injecting its error into the
+  // runtime, so responseBody nested in cause cannot hide the local rejection.
+  const denial = await ai.generateText({model:gateway('openai/gpt-4o'),prompt:'fixture',maxRetries:0}).catch(error => error);
+  expect(upstreamCalls).toBe(0);
+  expect(fallback.classifyProviderFailure(denial)).toBe('rate_limit');
+  expect(fallback.providerRetryAfterMs(denial)).toBe(2000);
+  // Exhaust this caller's retry deadline without a multi-second test wait.
+  spies.push(spyOn(fallback, 'providerRetryAfterMs').mockReturnValue(3_600_000));
+  const call = spyOn(ai, 'generateText').mockRejectedValueOnce(denial).mockResolvedValue(result);
+  spies.push(call);
+  await expect(requestIVXAIText({module:'provider-limit-fixture',prompt:'fixture',maxOutputTokens:4})).rejects.toThrow('global_capacity_exceeded');
+  expect(state.getProviderHealth()).toEqual(before);
+  expect(getAIQueueSnapshot().short.active).toBe(0);
+  expect((await requestIVXAIText({module:'provider-limit-fixture',prompt:'fixture',maxOutputTokens:4})).text).toBe('fixture recovery');
+  expect(call).toHaveBeenCalledTimes(2);
+  expect(alternative).toHaveBeenCalledTimes(0);
+});
+
+test('a local daily budget rejection remains closed without invalidating healthy credentials', async () => {
+  process.env.IVX_AI_GATEWAY_KEY = 'vck_qa_fixture';
+  state.initProviderStateMachine('vercel_ai_gateway', 'openai/gpt-4o', true, true);
+  state.markProviderReady('vercel_ai_gateway', 'openai/gpt-4o');
+  const before = state.getProviderHealth();
+  const alternative = spyOn(fallback, 'attemptProviderFallback').mockResolvedValue(null);
+  spies.push(alternative);
+  const call = spyOn(ai, 'generateText').mockRejectedValue(Object.assign(new Error('Global AI budget: global_daily_budget_exceeded'), {
+    statusCode:402, responseBody:JSON.stringify({error:{type:'quota_for_entity_exceeded',code:'IVX_GLOBAL_AI_BUDGET_BLOCKED'}}),
+  }));
+  spies.push(call);
+  await expect(requestIVXAIText({module:'provider-limit-fixture',prompt:'fixture',maxOutputTokens:4})).rejects.toThrow('global_daily_budget_exceeded');
+  expect(call).toHaveBeenCalledTimes(1);
+  expect(alternative).toHaveBeenCalledTimes(0);
+  expect(state.getProviderHealth()).toEqual(before);
+  expect(getAIQueueSnapshot().short.active).toBe(0);
+});
+
+test('a real provider billing rejection still records unavailable health', async () => {
+  process.env.IVX_AI_GATEWAY_KEY = 'vck_qa_fixture';
+  state.initProviderStateMachine('vercel_ai_gateway', 'openai/gpt-4o', true, true);
+  state.markProviderReady('vercel_ai_gateway', 'openai/gpt-4o');
+  const call = spyOn(ai, 'generateText').mockRejectedValue(Object.assign(new Error('Provider credits exhausted'), {
+    statusCode:402,responseBody:'{"error":{"type":"quota_for_entity_exceeded"}}',
+  }));
+  spies.push(call);
+  await expect(requestIVXAIText({module:'provider-limit-fixture',prompt:'fixture',maxOutputTokens:4})).rejects.toThrow('Provider credits exhausted');
+  expect(state.getProviderHealth().state).toBe('AI_UNAVAILABLE');
+  expect(call).toHaveBeenCalledTimes(1);
+});
+
 test('402 and insufficient quota stop without another billable provider attempt', async () => {
   const alternative = setup();
   const call = spyOn(ai, 'generateText').mockRejectedValue(Object.assign(new Error('Budget exhausted'), {
