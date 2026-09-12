@@ -1324,6 +1324,14 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     }
   }
   const resumeStartedAt = nowIso();
+  const ciCheckpoint = job.result.ciResumeState;
+  // A claim renews startedAt. Only the original checkpoint for this exact
+  // task/PR/head may supply elapsed CI time across claims and deployments.
+  const ciWaitStartedAt = ciCheckpoint?.jobId === jobId
+    && ciCheckpoint.taskId === (job.input.taskId ?? jobId)
+    && ciCheckpoint.commitSha === commitSha && ciCheckpoint.prNumber === prNumber
+    && ciCheckpoint.branch === (job.result.branch ?? '')
+    ? ciCheckpoint.persistedAt : undefined;
   await updateJobStage(jobId, 'COMMITTING', `Worker restart detected — resuming CI wait for PR #${prNumber} (commit ${commitSha.slice(0, 12)}) with the original taskId. No duplicate job created.`);
   const proof = await resumeIVXAutonomousCoderFromCiWait({
     taskId: job.input.taskId ?? job.jobId,
@@ -1336,6 +1344,8 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     testsPassed: job.result?.testsPassed === true,
     typecheckPassed: job.result?.typecheckPassed === true,
     filesChanged: job.result?.changedFiles ?? [],
+    ciWaitStartedAt,
+    isCanceled: () => controller.cancelled || queueStopping,
     beforeMerge: async () => {
       await assertEmergencyStopInactive('senior-worker-resumed-merge');
       if (controller.cancelled) throw new Error('Worker lease lost before resumed merge');

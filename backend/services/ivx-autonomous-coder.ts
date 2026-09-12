@@ -373,6 +373,8 @@ export type IVXAutonomousCoderInput = {
   requiredChecksFn?: (commitSha: string) => Promise<IVXCiCheckEvidence[]>;
   /** Max wall-clock to wait for required CI checks before merge (ms). Default 50 minutes. */
   ciWaitTimeoutMs?: number;
+  /** Original durable CI checkpoint time; recovery must not reset grace or timeout. */
+  ciWaitStartedAt?: string;
   /** Poll interval for the CI wait (ms). Default 60s; tests pass 0. */
   ciPollIntervalMs?: number;
   /** Grace period before a never-reported required check is treated as
@@ -1637,12 +1639,20 @@ async function waitForRequiredChecksGreen(
   prNumber?: number,
   branch?: string,
 ): Promise<{ green: boolean; evidence: IVXCiCheckEvidence[]; timedOut: boolean; waitMs: number; blocker?: string }> {
-  const startedAt = Date.now();
+  const resumedAt = Date.now();
+  const checkpointAt = Date.parse(input.ciWaitStartedAt ?? '');
+  const startedAt = Number.isFinite(checkpointAt) && checkpointAt >= 0 && checkpointAt <= resumedAt
+    ? checkpointAt : resumedAt;
   const timeoutMs = input.ciWaitTimeoutMs ?? DEFAULT_CI_WAIT_TIMEOUT_MS;
   const intervalMs = input.ciPollIntervalMs ?? DEFAULT_CI_POLL_INTERVAL_MS;
   const graceMs = input.ciNaGraceMs ?? DEFAULT_CI_NA_GRACE_MS;
   let last: IVXCiCheckEvidence[] = [];
+  const interrupted = () => ({
+    green: false, evidence: last, timedOut: false, waitMs: Date.now() - startedAt,
+    blocker: 'CI_WAIT_INTERRUPTED: worker execution authority lost; durable checkpoint retained for recovery.',
+  });
   for (;;) {
+    if (input.isCanceled?.()) return interrupted();
     // CI can finish long after an owner closes a rejected repair. Reconcile
     // each poll so that the durable worker can finish this job and release its lane.
     if (prNumber != null) {
@@ -1656,6 +1666,8 @@ async function waitForRequiredChecksGreen(
       ? await input.requiredChecksFn(commitSha)
       : await fetchRequiredChecksForCommit(commitSha);
     last = evidence;
+    // The lease can expire during GitHub reads, including the final green poll.
+    if (input.isCanceled?.()) return interrupted();
     if (requiredChecksAllGreen(evidence)) {
       return { green: true, evidence, timedOut: false, waitMs: Date.now() - startedAt };
     }
@@ -3117,6 +3129,8 @@ export type IVXAutonomousCoderResumeInput = {
   requiredChecksFn?: (commitSha: string) => Promise<IVXCiCheckEvidence[]>;
   mergeFn?: (prNumber: number, commitMessage: string) => Promise<{ merged: boolean; mergeCommitSha: string | null }>;
   ciWaitTimeoutMs?: number;
+  ciWaitStartedAt?: string;
+  isCanceled?: () => boolean;
   ciPollIntervalMs?: number;
   ciNaGraceMs?: number;
   sleepFn?: (ms: number) => Promise<void>;
@@ -3161,6 +3175,8 @@ export async function resumeIVXAutonomousCoderFromCiWait(
     requiredChecksFn: input.requiredChecksFn,
     prStateFn: input.prStateFn,
     ciWaitTimeoutMs: input.ciWaitTimeoutMs,
+    ciWaitStartedAt: input.ciWaitStartedAt,
+    isCanceled: input.isCanceled,
     ciPollIntervalMs: input.ciPollIntervalMs,
     ciNaGraceMs: input.ciNaGraceMs,
     sleepFn: input.sleepFn,
