@@ -1,5 +1,5 @@
 // Preserve native destinations; route layouts still enforce authentication.
-export function redirectSystemPath({ path }: { path: string; initial: boolean }): string {
+function normalizeSystemPath(path: string): string {
   try {
     if (path.startsWith('/') && !path.startsWith('//')) return path;
     const url = new URL(path);
@@ -12,4 +12,15 @@ export function redirectSystemPath({ path }: { path: string; initial: boolean })
     }
   } catch { /* Invalid external links return to the app shell. */ }
   return '/';
+}
+
+export function redirectSystemPath({ path, initial }: { path: string; initial: boolean }): string {
+  const destination = normalizeSystemPath(path);
+  // Only these static regression destinations are logged. Never log incoming
+  // links, query parameters, fragments, credentials, or dynamic route IDs.
+  const pathname = destination.split(/[?#]/, 1)[0];
+  if (['/chat-hub', '/admin/waitlist-admin', '/app-guide'].includes(pathname)) {
+    console.info('[IVX Native Route]', { stage: 'normalized', destination: pathname, initial });
+  }
+  return destination;
 }

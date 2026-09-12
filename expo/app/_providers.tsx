@@ -5,7 +5,7 @@ import React, { Component, type ReactNode } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Stack, usePathname, useRouter } from 'expo-router';
+import { Stack, usePathname, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { DiagnosticErrorBoundary } from '@/components/DiagnosticErrorBoundary';
@@ -123,9 +123,23 @@ function VerificationGate() {
   return null;
 }
 
+function NativeRouteTrace() {
+  const segments = useSegments().join('/');
+  const rootState = useRootNavigationState();
+  const chatHubRegistered = rootState?.routeNames?.includes('chat-hub') ?? false;
+  React.useEffect(() => {
+    if (Platform.OS === 'web') return;
+    // Segment names are route templates (for example property/[id]); they do
+    // not expose the selected user's ID, URL parameters, or credentials.
+    console.info('[IVX Native Route]', { stage: 'focused', segments, chatHubRegistered });
+  }, [segments, chatHubRegistered]);
+  return null;
+}
+
 function AppStack() {
   return (
     <>
+      <NativeRouteTrace />
       <VerificationGate />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0A0A0F' } }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />

@@ -44,6 +44,13 @@ timeout 420s "$MAESTRO" test expo/.maestro/ivx-owner-chat-certificate.yaml \
   --format junit \
   --output qa/evidence/dashboard-chat/chat.xml
 
+# Run the known nested-to-root navigation regression before the full patrol so
+# a stale underlying screen fails immediately with its own evidence bundle.
+timeout 180s "$MAESTRO" test expo/.maestro/ivx-root-chat-navigation-certificate.yaml \
+  --test-output-dir qa/evidence/dashboard-chat/root-navigation-artifacts \
+  --format junit \
+  --output qa/evidence/dashboard-chat/root-navigation.xml
+
 # 4) Reuse the same authenticated owner session and physically open/scroll every
 # Expo Router screen. Any crash, fatal banner, process death, timeout, or route
 # that cannot paint fails the entire certificate.
