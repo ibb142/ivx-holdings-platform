@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { normalizePublicLandingDeals } from './ivx-public-features';
 
 const mockDeals = [
-  { id: 'deal-01', title: 'Deal 1', videos: ['video1.mp4', 'video2.webm'] },
+  { id: 'deal-01', title: 'Deal 1', videos: ['video1.mp4'], reels: ['video2.webm'] },
   { id: 'deal-02', title: 'Deal 2' },
 ];
 
