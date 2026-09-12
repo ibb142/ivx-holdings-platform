@@ -2,7 +2,7 @@ import { afterEach, expect, spyOn, test } from 'bun:test';
 import * as store from './ivx-postgres-autonomous-task-store';
 import * as durable from './ivx-durable-store';
 import { getSeniorDeveloperJob } from './ivx-senior-developer-worker';
-import { claimSharedSeniorJob, readSharedSeniorDocument, readSharedSeniorJob, rememberSeniorQueue, patchSharedSeniorQueue } from './ivx-senior-shared-queue';
+import { claimSharedSeniorJob, readSharedSeniorDocument, readSharedSeniorWorkQueue, readSharedSeniorJob, rememberSeniorQueue, patchSharedSeniorQueue } from './ivx-senior-shared-queue';
 
 const file = 'senior-developer-worker/queue.json';
 const restores: Array<() => void> = [];
@@ -11,6 +11,31 @@ function direct() {
   const selected = spyOn(store, 'preferDirectTransport').mockReturnValue(true);
   restores.push(() => selected.mockRestore());
 }
+
+test('work reads coalesce independently of history and a claim fences their snapshots', async () => {
+  direct();
+  const full = spyOn(store, 'readSeniorQueuePostgresDocument').mockResolvedValue({ jobs: [{ jobId: 'history', status: 'completed' }] });
+  const pending: Array<(value: any) => void> = [];
+  const work = spyOn(store, 'readSeniorWorkQueuePostgres').mockImplementation(() => new Promise(resolve => pending.push(resolve)));
+  const claim = spyOn(store, 'seniorQueuePostgresRpc').mockRejectedValue(new Error('uncertain claim'));
+  restores.push(() => full.mockRestore(), () => work.mockRestore(), () => claim.mockRestore());
+  const fallback = { jobs: [] as Array<{ jobId: string; status: string; version: number }> };
+  const readers = Array.from({ length: 112 }, () => readSharedSeniorWorkQueue(file, fallback));
+  expect((await readSharedSeniorDocument(file, fallback)).jobs[0].jobId).toBe('history');
+  expect(work).toHaveBeenCalledTimes(1);
+  await expect(claimSharedSeniorJob('job-1')).rejects.toThrow('uncertain claim');
+  const fresh = readSharedSeniorWorkQueue(file, fallback);
+  expect(work).toHaveBeenCalledTimes(2);
+  pending.forEach((resolve, i) => resolve({ jobs: [{ jobId: 'job-1', status: 'queued', version: i + 1 }] }));
+  const values = await Promise.all(readers);
+  values[0].jobs[0].version = -1;
+  expect(values[1].jobs[0].version).toBe(1);
+  expect((await fresh).jobs[0].version).toBe(2);
+  work.mockRejectedValue(new Error('work read unavailable'));
+  await expect(readSharedSeniorWorkQueue(file, fallback)).rejects.toThrow('work read unavailable');
+  expect(full).toHaveBeenCalledTimes(1);
+  await expect(readSharedSeniorWorkQueue('senior-developer-worker/proof-ledger.json', fallback)).rejects.toThrow('not allowed');
+});
 
 test('112 overlapping senior observers share one read, with independent snapshots and no stale cache', async () => {
   direct();

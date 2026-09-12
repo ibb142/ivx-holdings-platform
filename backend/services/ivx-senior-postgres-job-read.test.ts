@@ -1,6 +1,7 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import * as deadline from './ivx-postgres-deadline';
-import { readSeniorQueuePostgresJob, resetPostgresAutonomousTaskStoreForTests } from './ivx-postgres-autonomous-task-store';
+import { readSeniorQueuePostgresJob, readSeniorWorkQueuePostgres, resetPostgresAutonomousTaskStoreForTests } from './ivx-postgres-autonomous-task-store';
+import { SENIOR_WORK_QUEUE_SQL, SENIOR_WORK_QUEUE_PATH } from './ivx-senior-work-queue';
 
 const env = { ...process.env };
 afterEach(() => { process.env = { ...env }; resetPostgresAutonomousTaskStoreForTests(); });
@@ -34,6 +35,21 @@ test('cross-project database bindings cannot serve a repair job', async () => {
   const query = spyOn(deadline, 'queryWithPostgresDeadline');
   try {
     await expect(readSeniorQueuePostgresJob('job-1')).rejects.toThrow('project_mismatch');
+    await expect(readSeniorWorkQueuePostgres()).rejects.toThrow('project_mismatch');
     expect(query).not.toHaveBeenCalled();
+  } finally { query.mockRestore(); }
+});
+
+test('work queue uses the bound scheduling projection and propagates outages without replay', async () => {
+  configure();
+  const queue = { jobs: [{ jobId: 'queued', status: 'queued', input: { taskId: 'original-task' } }] };
+  const query = spyOn(deadline, 'queryWithPostgresDeadline').mockResolvedValue({ rows: [{ value: queue }] } as never);
+  try {
+    expect(await readSeniorWorkQueuePostgres()).toEqual(queue);
+    expect(query.mock.calls[0][1]).toBe(SENIOR_WORK_QUEUE_SQL);
+    expect(query.mock.calls[0][2]).toEqual(['senior-developer-worker/queue.json', SENIOR_WORK_QUEUE_PATH]);
+    query.mockRejectedValue(new Error('storage timeout'));
+    await expect(readSeniorWorkQueuePostgres()).rejects.toThrow('storage timeout');
+    expect(query).toHaveBeenCalledTimes(2);
   } finally { query.mockRestore(); }
 });

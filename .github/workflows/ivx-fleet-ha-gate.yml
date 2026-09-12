@@ -3,7 +3,7 @@ on:
   push:
     branches: [fix/fleet-render-ha-20260908, fix/fleet-backend-ha-20260908]
   pull_request:
-    paths: ['qa/phase3-budget-reconciliation.mjs', 'qa/phase3-budget-reconciliation.test.mjs', 'qa/phase3-capacity.mjs', 'backend/**', 'expo/**', 'supabase/migrations/**', 'supabase/repair-functions/**', 'scripts/ivx-senior-commit-recovery-postgres-proof.mjs', 'scripts/ivx-senior-compact-receipt-proof.mjs', 'scripts/ivx-senior-queue-spill-proof.mjs', 'scripts/ivx-coder-workspace-postgres-proof.ts', 'scripts/ivx-objective-link-postgres-proof.mjs', 'scripts/ivx-fleet-ha-postgres-proof.mjs', 'scripts/ivx-global-ai-budget-postgres-proof.mjs', 'scripts/ivx-global-ai-budget-sdk-proof.ts', 'scripts/ivx-task-recovery-postgres-proof.mjs', 'scripts/ivx-fleet-telemetry-postgres-proof.ts', 'scripts/ivx-mission-history-postgres-proof.ts', 'scripts/ivx-landing-read-postgres-proof.ts', 'scripts/ivx-inspection-claim-postgres-proof.mjs', 'scripts/ivx-fleet-ha-live-proof.ts', 'scripts/ivx-fleet-ha-identities.ts', 'scripts/ivx-fleet-ha-identities.test.ts', '.github/workflows/ivx-fleet-ha-gate.yml']
+    paths: ['qa/phase3-budget-reconciliation.mjs', 'qa/phase3-budget-reconciliation.test.mjs', 'qa/phase3-capacity.mjs', 'backend/**', 'expo/**', 'supabase/migrations/**', 'supabase/repair-functions/**', 'scripts/ivx-senior-commit-recovery-postgres-proof.mjs', 'scripts/ivx-senior-compact-receipt-proof.mjs', 'scripts/ivx-senior-queue-spill-proof.mjs', 'scripts/ivx-senior-work-queue-proof.ts', 'scripts/ivx-coder-workspace-postgres-proof.ts', 'scripts/ivx-objective-link-postgres-proof.mjs', 'scripts/ivx-fleet-ha-postgres-proof.mjs', 'scripts/ivx-global-ai-budget-postgres-proof.mjs', 'scripts/ivx-global-ai-budget-sdk-proof.ts', 'scripts/ivx-task-recovery-postgres-proof.mjs', 'scripts/ivx-fleet-telemetry-postgres-proof.ts', 'scripts/ivx-mission-history-postgres-proof.ts', 'scripts/ivx-landing-read-postgres-proof.ts', 'scripts/ivx-inspection-claim-postgres-proof.mjs', 'scripts/ivx-fleet-ha-live-proof.ts', 'scripts/ivx-fleet-ha-identities.ts', 'scripts/ivx-fleet-ha-identities.test.ts', '.github/workflows/ivx-fleet-ha-gate.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -84,6 +84,10 @@ jobs:
         run: node scripts/ivx-senior-queue-spill-proof.mjs
         env:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
+      - name: Read current repair work without transferring terminal history
+        run: bun scripts/ivx-senior-work-queue-proof.ts
+        env:
+          IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - name: Persist two concurrent repair workspaces under physical leases
         run: bun scripts/ivx-coder-workspace-postgres-proof.ts
         env:
@@ -131,10 +135,10 @@ jobs:
             qa/evidence/fleet-ha/compact-receipt.json
             qa/evidence/fleet-ha/senior-history.json
             qa/evidence/fleet-ha/senior-queue-spill.json
+            qa/evidence/fleet-ha/senior-work-queue.json
             qa/evidence/fleet-ha/coder-workspaces.json
             qa/evidence/fleet-ha/global-ai-budget.json
             qa/evidence/fleet-ha/global-ai-budget-sdk.json
             qa/evidence/fleet-ha/pending-execution-discovery.json
           if-no-files-found: warn
           retention-days: 30
-
