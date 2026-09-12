@@ -11,8 +11,8 @@ for (const mode of ['success', 'mutation_failure', 'event_failure']) {
       mock.module('pg', () => ({ Client: class {}, Pool: class extends EventEmitter {
         constructor(config) {
           super(); pools++;
-          assert.equal(config.max, 1);
-          assert.equal(config.application_name, 'ivx_repair');
+          assert.equal(config.max, 8);
+          assert.equal(config.application_name, 'ivx_worker');
           assert.equal(config.ssl.rejectUnauthorized, true);
           assert(config.ssl.ca.length > 0);
           assert(!config.connectionString.includes('sslmode'));

@@ -19,6 +19,7 @@ export function observePostgresPoolErrors(pool: Pick<Pool, 'on'>, purpose: strin
 /** Transaction-local deadlines survive Supavisor transaction pooling. */
 export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
   pool: Pick<Pool, 'connect'>, text: string, values: unknown[],
+  publicRole?: 'anon' | 'service_role',
 ) {
   const startedAt = Date.now();
   let stageStartedAt = startedAt;
@@ -69,12 +70,13 @@ export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
   try {
     // Startup parameters are not a reliable server deadline through a pooler.
     // BEGIN pins one backend; SET LOCAL applies to the following RPC and resets
-    // at transaction end. Server cancellation precedes the client's 5s timeout.
+    // at transaction end. Server cancellation precedes the client's 3.5s timeout.
     // One simple-query round trip pins the transaction and installs the same
     // local limits. The parameterized mutation is sent only after this succeeds.
     stage = 'setup'; stageStartedAt = Date.now();
     requireConnection();
-    await client.query("BEGIN; SET LOCAL statement_timeout = '4s'; SET LOCAL lock_timeout = '2s'; SET LOCAL idle_in_transaction_session_timeout = '8s'");
+    await client.query("BEGIN; SET LOCAL statement_timeout = '2500ms'; SET LOCAL lock_timeout = '1000ms'; SET LOCAL idle_in_transaction_session_timeout = '5s'"
+      + (publicRole ? `; SET TRANSACTION READ ONLY; SET LOCAL ROLE ${publicRole === 'anon' ? 'anon' : 'service_role'}; SET LOCAL \"request.jwt.claims\" = '${JSON.stringify({ role: publicRole === 'anon' ? 'anon' : 'service_role' })}'; SET LOCAL \"request.jwt.claim.role\" = '${publicRole === 'anon' ? 'anon' : 'service_role'}'` : ''));
     requireConnection();
     stage = 'query'; stageStartedAt = Date.now();
     const result = await client.query<T>(text, values);

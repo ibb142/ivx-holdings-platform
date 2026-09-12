@@ -459,8 +459,8 @@ for (const failure of [null, 'setup', 'read', 'commit', 'disconnect', 'server-ca
         expect(calls.at(-1)).toBe('COMMIT');
         expect(releases).toEqual([false]);
       }
-      expect(calls[0]).toContain("SET LOCAL statement_timeout = '4s'");
-      expect(calls[0]).toContain("SET LOCAL lock_timeout = '2s'");
+      expect(calls[0]).toContain("SET LOCAL statement_timeout = '2500ms'");
+      expect(calls[0]).toContain("SET LOCAL lock_timeout = '1000ms'");
       expect(calls.filter(sql => sql.startsWith('select payload'))).toHaveLength(failure === 'setup' ? 0 : 1);
       expect(unscoped).not.toHaveBeenCalled();
       expect(connect).toHaveBeenCalledTimes(1);

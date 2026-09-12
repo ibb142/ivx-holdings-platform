@@ -93,7 +93,7 @@ for (const failAt of [null, 'select mutation', 'COMMIT', 'BEGIN', 'SET LOCAL loc
     const setupFailure = failAt === 'BEGIN' || failAt === 'SET LOCAL lock_timeout';
     expect(calls.filter(x => x === 'select mutation').length).toBe(setupFailure ? 0 : 1);
     expect(client.listenerCount('error')).toBe(0);
-    expect(calls[0]).toContain("BEGIN; SET LOCAL statement_timeout = '4s'; SET LOCAL lock_timeout = '2s'; SET LOCAL idle_in_transaction_session_timeout = '8s'");
+    expect(calls[0]).toContain("BEGIN; SET LOCAL statement_timeout = '2500ms'; SET LOCAL lock_timeout = '1000ms'; SET LOCAL idle_in_transaction_session_timeout = '5s'");
     if (!failAt) expect(calls.length).toBe(3);
   });
 }
