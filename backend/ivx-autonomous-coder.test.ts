@@ -44,6 +44,51 @@ async function makeIsolatedRepo(label: string): Promise<{
   return { root, fileWriter, fileReader };
 }
 
+describe('validation before publication', () => {
+  for (const allowRevision of [false, true]) {
+    it(`${allowRevision ? 'revises and tests' : 'blocks'} a code patch without an executable test`, async () => {
+      const repo = await makeIsolatedRepo(`missing-validation-${allowRevision}`);
+      const source = 'backend/services/validation-helper.ts';
+      const testFile = 'backend/services/validation-helper.test.ts';
+      await repo.fileWriter(source, 'export function normalize(value: string) { return value; }');
+      let commits = 0;
+      let revisionRequested = false;
+      const proof = await runIVXAutonomousCoder({
+        taskId: `scheduler-repair:validation-${allowRevision}`,
+        goal: `Trim whitespace in ${source}.`, executionMode: 'code_change',
+        ownerId: 'fixture-owner', approvalPolicy: 'owner_gated', projectRoot: repo.root,
+        fileReader: repo.fileReader, fileWriter: repo.fileWriter, maxLlmCalls: allowRevision ? 4 : 1,
+        llmCaller: async (_system, prompt) => {
+          const includeTest = allowRevision && prompt.includes('EXECUTABLE_TEST_REQUIRED');
+          revisionRequested ||= includeTest;
+          return JSON.stringify({ rootCause: 'Whitespace is retained', technicalPlan: 'Trim the value and validate it', operations: [
+            { path: source, kind: 'replace_exact', oldText: 'return value;', newText: 'return value.trim();', reason: 'Normalize input' },
+            ...(includeTest ? [{ path: testFile, kind: 'create_file', oldText: '',
+              newText: 'import { test } from "node:test"; import assert from "node:assert/strict"; import { normalize } from "./validation-helper"; test("trims whitespace", () => assert.equal(normalize(" value "), "value"));', reason: 'Execute the changed behavior' }] : []),
+          ] });
+        },
+        commitFn: async (_files, branch) => { commits++; return { commitSha: 'a'.repeat(40), commitUrl: 'https://example.test/commit', branch }; },
+        ...prAndCiMocks(), autoMergePr: true,
+      });
+      if (allowRevision) {
+        expect(revisionRequested).toBe(true);
+        expect(proof.iterations[0].testsRun).toBe(false);
+        expect(proof.iterations[0].testsPassed).toBe(false);
+        expect(proof.iterations[0].failureSummary).toContain('EXECUTABLE_TEST_REQUIRED');
+        expect(proof.commandsRun.some(command => command.command.includes(testFile) && / test /.test(command.command) && command.ok)).toBe(true);
+        expect(proof.finalStatus).toBe('COMPLETED');
+        expect(commits).toBe(1);
+      } else {
+        expect(commits).toBe(0);
+        expect(proof.testsPassed).toBe(false);
+        expect(proof.finalStatus).toBe('BLOCKED');
+        expect(proof.iterations[0].failureSummary).toContain('EXECUTABLE_TEST_REQUIRED');
+        expect(await repo.fileReader(source)).toContain('return value;');
+      }
+    }, 20_000);
+  }
+});
+
 describe('Landing repair source access', () => {
   it('does not start model work after the worker loses its execution authority', async () => {
     const repo = await makeIsolatedRepo('lost-authority-start');

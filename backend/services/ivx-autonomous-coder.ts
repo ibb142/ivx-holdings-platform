@@ -839,12 +839,10 @@ function targetedTestCommand(taskId: string, testFile: string, goal = ''): strin
     : `bun test ${testFile}`;
 }
 
-/** Pick the most relevant test file for the goal. Only returns files that
- * actually exist on disk — a non-existent test file causes `bun test` to fail
- * with "Could not find" which blocks every iteration even when the patch is
- * valid. For newly created files (create_file) where no corresponding test
- * exists yet, we return null so the caller knows to skip the test gate and
- * rely on typecheck + content-change verification instead. */
+const MISSING_EXECUTABLE_TEST = 'EXECUTABLE_TEST_REQUIRED: no targeted test exists for the changed code. Add a .test.ts/.test.js or .spec.ts/.spec.js file that exercises the changed behavior; validation must execute before publishing a commit.';
+
+/** Return an existing targeted test. A missing test requests a model revision;
+ * typecheck alone cannot satisfy the worker completion contract for code. */
 function pickTargetTestFile(goal: string, changedFiles: string[], projectRoot: string): string | null {
   const changedTests = changedFiles.filter(file => /\.(test|spec)\.[cm]?[jt]sx?$/.test(file));
   const candidates = [...changedTests, ...changedFiles.map(file => file.replace(/\.([cm]?[jt]sx?)$/, '.test.$1'))];
@@ -2174,8 +2172,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         onPhase?.('testing', 'Pilot fallback: running targeted tests + typecheck.');
         const targetTest = pickTargetTestFile(input.goal, filesChanged, projectRoot);
         // Gap 4 FIX: Always run tests via runCommand when a test file exists.
-        // When no test file exists (newly created files), honestly record
-        // testsRun=false and rely on typecheck + content-change verification.
+        // A missing test must be added before the code can be published.
         let testsActuallyRun = false;
         let testResult: IVXAutonomousCoderTestResult | null = null;
         // When a testRunner is injected (unit tests), always run tests so the
@@ -2193,9 +2190,9 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           testsActuallyRun = true;
           testsPassed = testResult.ok;
         } else {
-          // No test file exists for the changed files — honestly skip tests
+          // Record the missing validation as a failed gate, never a pass.
           testsActuallyRun = false;
-          testsPassed = true; // neutral — typecheck + content-change are the gates
+          testsPassed = false;
         }
 
         const changedFilePath = fallback.operations[0]?.path ?? 'backend/services/ivx-autonomous-coder-pilot.ts';
@@ -2242,7 +2239,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           typecheckPassed,
           failureSummary: (testsPassed && typecheckPassed && contentChangeVerified)
             ? null
-            : `Pilot fallback gate failed: testsPassed=${testsPassed} typecheckPassed=${typecheckPassed} contentChangeVerified=${contentChangeVerified}${contentChangeReason ? ` (${contentChangeReason})` : ''}`,
+            : `${!testsActuallyRun ? `${MISSING_EXECUTABLE_TEST} ` : ''}Pilot fallback gate failed: testsPassed=${testsPassed} typecheckPassed=${typecheckPassed} contentChangeVerified=${contentChangeVerified}${contentChangeReason ? ` (${contentChangeReason})` : ''}`,
           revised: false,
         };
         iterations.push(iteration);
@@ -2250,7 +2247,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
           onPhase?.('verifying', 'Pilot fallback: tests + scoped typecheck + content-change check PASSED.');
           keepPilotPatch = true;
         } else {
-          const failCtx = `Pilot fallback gate failed: testsPassed=${testsPassed} typecheckPassed=${typecheckPassed} contentChangeVerified=${contentChangeVerified}${contentChangeReason ? ` (${contentChangeReason})` : ''}. Typecheck stdout: ${typecheckResult.stdoutTail}. Typecheck stderr: ${typecheckResult.stderrTail}.`;
+          const failCtx = `${!testsActuallyRun ? `${MISSING_EXECUTABLE_TEST} ` : ''}Pilot fallback gate failed: testsPassed=${testsPassed} typecheckPassed=${typecheckPassed} contentChangeVerified=${contentChangeVerified}${contentChangeReason ? ` (${contentChangeReason})` : ''}. Typecheck stdout: ${typecheckResult.stdoutTail}. Typecheck stderr: ${typecheckResult.stderrTail}.`;
           lastPatchFailureReason = failCtx;
           lastFailureContext = failCtx;
         }
@@ -2598,9 +2595,9 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       testsActuallyRun = true;
       testsPassed = testResult.ok;
     } else {
-      // No test file exists for the changed files — honestly skip tests
+      // Let the next model revision supply a real test before any commit/PR.
       testsActuallyRun = false;
-      testsPassed = true; // neutral — typecheck + content-change are the gates
+      testsPassed = false;
     }
     if (regressionFailure) testsPassed = false;
 
@@ -2657,6 +2654,7 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // ── ANALYZE FAILURE ──────────────────────────────────────────────────
     onPhase?.('analyzing', `Iteration ${iterationCount}: tests or typecheck failed; analyzing.`);
     const failureParts: string[] = [];
+    if (!testsActuallyRun) failureParts.push(MISSING_EXECUTABLE_TEST);
     if (!contentChangeVerified) failureParts.push('PATCH_CONTENT_NOT_VERIFIED: final file contents must match the applied operations and include a real change.');
     if (regressionFailure) failureParts.push(regressionFailure);
     if (!testsPassed && testResult) {
