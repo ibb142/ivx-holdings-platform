@@ -143,6 +143,7 @@ function missingTable(response: Response, payload: unknown): boolean {
 
 export class DurableStore {
   private schemaReady: Promise<void> | null = null;
+  private readonly pendingDocumentReads = new Map<string, Promise<{ value: unknown }[]>>();
 
   private restBaseUrl(): string {
     const url = getSupabaseUrl();
@@ -263,27 +264,46 @@ export class DurableStore {
 
   async readJson<T>(docKey: string, fallback: T): Promise<T> {
     await this.ensureSchema();
-    const rows = await this.restRequest<{ value: T }[]>(
-      `/ivx_durable_documents?doc_key=eq.${encodeURIComponent(docKey)}&select=value&limit=1`,
-      { method: 'GET' },
-    );
-    if (!Array.isArray(rows)) throw new Error('Supabase returned an invalid document response; durable state was not replaced');
-    if (Array.isArray(rows) && rows.length > 0 && rows[0] && rows[0].value !== undefined && rows[0].value !== null) {
-      return rows[0].value;
+    // A public page requests the same metadata through several routes. Share
+    // only an overlapping read; settled data and caller fallbacks are not cached.
+    let work = this.pendingDocumentReads.get(docKey);
+    if (!work) {
+      work = this.restRequest<{ value: unknown }[]>(
+        `/ivx_durable_documents?doc_key=eq.${encodeURIComponent(docKey)}&select=value&limit=1`,
+        { method: 'GET' },
+      ).then(rows => {
+        if (!Array.isArray(rows)) throw new Error('Supabase returned an invalid document response; durable state was not replaced');
+        return rows;
+      }).finally(() => {
+        if (this.pendingDocumentReads.get(docKey) === work) this.pendingDocumentReads.delete(docKey);
+      });
+      this.pendingDocumentReads.set(docKey, work);
+    }
+    const rows = await work;
+    if (rows.length > 0 && rows[0] && rows[0].value !== undefined && rows[0].value !== null) {
+      // Each caller may normalize its document. Keep those mutations private.
+      return structuredClone(rows[0].value) as T;
     }
     return fallback;
   }
 
   async writeJson(docKey: string, value: unknown): Promise<void> {
     await this.ensureSchema();
-    await this.restRequest<unknown>(
-      '/ivx_durable_documents?on_conflict=doc_key',
-      {
-        method: 'POST',
-        body: JSON.stringify({ doc_key: docKey, value, updated_at: nowIso() }),
-      },
-      'resolution=merge-duplicates,return=minimal',
-    );
+    this.pendingDocumentReads.delete(docKey);
+    try {
+      await this.restRequest<unknown>(
+        '/ivx_durable_documents?on_conflict=doc_key',
+        {
+          method: 'POST',
+          body: JSON.stringify({ doc_key: docKey, value, updated_at: nowIso() }),
+        },
+        'resolution=merge-duplicates,return=minimal',
+      );
+    } finally {
+      // Reads started before/during the write must not serve later callers,
+      // including when the write response is uncertain. Never replay the write here.
+      this.pendingDocumentReads.delete(docKey);
+    }
   }
 
   async appendEvent(docKey: string, event: Record<string, unknown>): Promise<void> {
