@@ -6645,21 +6645,30 @@ app.get('/api/metrics/authoritative-count', async () => {
 
 // tRPC-compatible waitlist stats — returns stats in the shape expected by tRPC clients.
 app.get('/api/trpc/waitlist.getStats', async () => {
-  const { listCanonicalMembers, isCanonicalMembersConfigured } = await import('./services/ivx-canonical-members');
-  let waitlist = 0;
-  let total = 0;
-  if (isCanonicalMembersConfigured()) {
-    const all = await listCanonicalMembers({ limit: 5000 });
-    total = all.length;
-    waitlist = all.filter((m: any) => m.member_type === 'waitlist').length;
+  try {
+    const { countCanonicalMembers, isCanonicalMembersConfigured } = await import('./services/ivx-canonical-members');
+    if (!isCanonicalMembersConfigured()) throw new Error('Member counts unavailable');
+    // Count in PostgreSQL without downloading personal member records or
+    // truncating the total at the registry list's 2,000-row limit. The shared
+    // reader coalesces overlapping HEADs and keeps its existing five-second cap.
+    const [total, waitlist] = await Promise.all([
+      countCanonicalMembers(), countCanonicalMembers({ memberType: 'waitlist' }),
+    ]);
+    if (!Number.isSafeInteger(total) || !Number.isSafeInteger(waitlist)
+      || total < 0 || waitlist < 0 || waitlist > total) throw new Error('Member counts unavailable');
+    return Response.json({
+      ok: true, waitlist, total, timestamp: nowIso(), deploymentMarker: DEPLOYMENT_MARKER,
+    }, { headers: { 'Cache-Control': 'no-store' } });
+  } catch {
+    // Unknown is not zero. Preserve the public contract while making a failed
+    // source retryable and excluding private database messages from the response.
+    return Response.json({
+      ok: false, waitlist: null, total: null,
+      code: 'WAITLIST_STATS_UNAVAILABLE', retryable: true,
+      error: 'Member counts are temporarily unavailable. Please retry.',
+      timestamp: nowIso(), deploymentMarker: DEPLOYMENT_MARKER,
+    }, { status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': '3' } });
   }
-  return Response.json({
-    ok: true,
-    waitlist,
-    total,
-    timestamp: nowIso(),
-    deploymentMarker: DEPLOYMENT_MARKER,
-  });
 });
 
 // tRPC-compatible waitlist join — proxies to the lead capture endpoint

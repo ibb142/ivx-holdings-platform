@@ -475,10 +475,11 @@ export function listCanonicalMemberSummaryRows(): Promise<CanonicalMemberSummary
   );
 }
 
-export async function countCanonicalMembers(): Promise<number> {
-  const url = `${getSupabaseUrl()}/rest/v1/members?select=member_id`;
+export async function countCanonicalMembers(options: { memberType?: 'waitlist' } = {}): Promise<number> {
+  const filter = options.memberType === 'waitlist' ? '&member_type=eq.waitlist' : '';
+  const url = `${getSupabaseUrl()}/rest/v1/members?select=member_id${filter}`;
   const requestHeaders = { ...headers('count=exact'), Range: '0-0' };
-  return shareMemberRead('HEAD:members-count', async signal => {
+  return shareMemberRead(`HEAD:members-count${filter}`, async signal => {
     const response = await fetch(url, {
       method: 'HEAD',
       headers: requestHeaders,
