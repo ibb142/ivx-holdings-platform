@@ -61,7 +61,6 @@ const RED_CONCLUSIONS: ReadonlySet<string> = new Set([
   'timed_out',
   'startup_failure',
   'action_required',
-  'skipped', // added 'skipped' for SHA mismatch handling
 ]);
 
 export type SupervisorGlobalStatus = 'GREEN' | 'RED' | 'PENDING';
@@ -222,7 +221,7 @@ export function computeGlobalCertification(input: GlobalCertificationInput): Glo
       gates.push({
         workflow: required.name,
         gate: required.gate,
-        state: 'SKIPPED',
+        state: onCurrentMainSha ? 'SKIPPED' : 'SHA_MISMATCH',
         runId: run.runId,
         headSha: run.headSha,
         conclusion: run.conclusion,
