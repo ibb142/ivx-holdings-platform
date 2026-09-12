@@ -15,7 +15,7 @@ const proof = { scope: 'native_vercel_management_read_only', startedAt: new Date
 
 async function request(url, token, body, extraHeaders = {}) {
   const response = await fetch(url, { method: body === undefined ? 'GET' : 'POST', redirect: 'error',
-    signal: AbortSignal.timeout(12000), headers: { Accept: 'application/json', Authorization: 'Bearer ' + token,
+    signal: AbortSignal.timeout(30000), headers: { Accept: 'application/json', Authorization: 'Bearer ' + token,
       ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...extraHeaders },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   const reader = response.body.getReader(), chunks = []; let size = 0;
@@ -67,10 +67,24 @@ try {
   proof.selectedBinding = { source: selected.source, name: selected.name };
   const token = selected.value;
   proof.managementCredentialIsGatewayKey = token.startsWith('vck_');
-  const policy = await request(binding.databaseUrl + '/rest/v1/rpc/ivx_ai_budget_status',
-    binding.serviceKey, {}, { apikey: binding.serviceKey });
-  assert.equal(policy.status, 200, 'POLICY_READ_FAILED');
-  proof.sharedPolicy = policy.data;
+  proof.databaseDiagnostics={};
+  if(process.env.SUPABASE_ACCESS_TOKEN) {
+    try {
+      const pool=await request('https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/config/database/pgbouncer',
+        process.env.SUPABASE_ACCESS_TOKEN);
+      proof.databaseDiagnostics.poolConfigStatus=pool.status;
+      proof.databaseDiagnostics.poolConfig=(Array.isArray(pool.data)?pool.data:[pool.data]).map(row=>
+        Object.fromEntries(['database_type','pool_mode','default_pool_size','max_client_conn','server_idle_timeout']
+          .filter(k=>['number','string','boolean'].includes(typeof row?.[k])).map(k=>[k,row[k]])));
+    } catch { proof.databaseDiagnostics.poolConfigError='READ_UNCONFIRMED'; }
+  }
+  try {
+    const policy=await request(binding.databaseUrl+'/rest/v1/rpc/ivx_ai_budget_status',
+      binding.serviceKey,{}, {apikey:binding.serviceKey});
+    proof.databaseDiagnostics.sharedPolicyHttpStatus=policy.status;
+    assert.equal(policy.status,200,'POLICY_READ_FAILED');
+    proof.sharedPolicy=policy.data;
+  } catch { proof.databaseDiagnostics.sharedPolicyError='READ_UNCONFIRMED'; }
   const user = await management('/v2/user', token);
   proof.managementAuthenticated = user.status === 200 && typeof user.data?.user?.id === 'string';
   const teams = await management('/v2/teams?limit=100', token);
@@ -97,6 +111,10 @@ try {
   proof.readyForNativeControl = proof.managementAuthenticated && proof.targetTeamAccessible
     && proof.nativeBudget.state === 'OBSERVED';
   proof.diagnosticCompleted = true;
+  if(!proof.sharedPolicy) {
+    proof.readyForNativeControl=false;
+    throw new Error('SHARED_POLICY_UNAVAILABLE');
+  }
 } catch (error) { proof.error = safeCode(error?.message?.split('\n')[0]) ?? 'DIAGNOSTIC_FAILED'; process.exitCode = 1; }
 finally {
   proof.completedAt = new Date().toISOString();
