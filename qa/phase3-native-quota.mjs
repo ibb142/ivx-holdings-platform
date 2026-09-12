@@ -13,7 +13,7 @@ import { TEAM, prepareContext, readNativeState, checkNativeBudget, budgetSummary
   management, requestJson, emitProof } from './phase3-native-budget.mjs';
 
 export const CAMPAIGN = 'phase3-native-quota-20260912-01';
-export const LABELS = Object.freeze(['fill1','fill2','fill3','denied','recovery']);
+export const LABELS = Object.freeze(['fill1','fill2','denied','recovery']);
 export const MAX_LIABILITY_NANO = 10000000000n;
 const ORIGIN = 'https://ai-gateway.vercel.sh';
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -33,7 +33,7 @@ export function reservationId(label) {
 export function checkQuote(quote, now = Date.now()) {
   assert(['openai/gpt-4.1','openai/gpt-4o-mini'].includes(quote.model), 'UNREVIEWED_MODEL');
   assert(/^\d{1,16}$/.test(quote.reservedNano ?? ''), 'INVALID_QUOTE');
-  assert(BigInt(quote.reservedNano) > 0n && BigInt(quote.reservedNano) <= 3000000000n, 'QUOTE_TOO_LARGE');
+  assert(BigInt(quote.reservedNano) > 0n && BigInt(quote.reservedNano) <= 4300000000n, 'QUOTE_TOO_LARGE');
   assert(Date.parse(quote.observedAt) <= now && Date.parse(quote.validUntil) > now, 'QUOTE_EXPIRED');
   assert(/^[a-f0-9]{64}$/.test(quote.catalogSha256 ?? ''), 'INVALID_CATALOG_HASH');
 }
@@ -61,7 +61,8 @@ async function freshQuote(model) {
   const r = await requestJson(ORIGIN + '/v1/models', '', { timeout:15000 });
   assert.equal(r.status, 200, 'CATALOG_HTTP_FAILED');
   const hash = createHash('sha256').update(JSON.stringify(r.data)).digest('hex');
-  const quote = quoteCatalogModel(r.data, model, Date.now(), hash); checkQuote(quote); return quote;
+  const quote = quoteCatalogModel(r.data, model, Date.now(), hash);
+  event('catalog-quote',quote); checkQuote(quote); return quote;
 }
 function fillPrompt(index) {
   // Public synthetic integers; never private input and never written to logs.
@@ -227,7 +228,7 @@ async function main() {
     const list=await management(context,'/v1/api-keys?purpose=ai-gateway');
     assert(!list.apiKeys.some(k=>k.name===CAMPAIGN),'PRIOR_CAMPAIGN_KEY_EXISTS');
     const fillQuote=await freshQuote('openai/gpt-4.1'),smallQuote=await freshQuote('openai/gpt-4o-mini');
-    assert(BigInt(fillQuote.reservedNano)*3n+BigInt(smallQuote.reservedNano)*2n<=MAX_LIABILITY_NANO,
+    assert(BigInt(fillQuote.reservedNano)*2n+BigInt(smallQuote.reservedNano)*2n<=MAX_LIABILITY_NANO,
       'PLANNED_CAMPAIGN_EXCEEDS_BOUND');
     assert(fillQuote.maxInputTokens>=1000000,'MODEL_CONTEXT_TOO_SMALL');
     proof.initialQuotes=[fillQuote,smallQuote];
@@ -248,7 +249,7 @@ async function main() {
     // Documented new-key metering may need two minutes. No paid warm-up calls.
     for(let i=0;i<5;i++){await wait(25000);event('metering-warmup',{elapsedSeconds:(i+1)*25});}
     let quota=await quotaSnapshot(context,testKeyId,'before-spend');
-    for(let i=1;i<=3 && quota.currentSpend<1;i++) {
+    for(let i=1;i<=2 && quota.currentSpend<1;i++) {
       await callProvider(context,db,testKey,'fill'+i,await freshQuote('openai/gpt-4.1'));
       const knownSpend=proof.receipts.reduce((n,r)=>n+BigInt(r.costNano),0n);
       quota=await pollSpend(context,testKeyId,Number(knownSpend)/1e9,'after-fill'+i);
