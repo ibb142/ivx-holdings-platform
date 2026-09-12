@@ -7,7 +7,12 @@ const unit = process.argv[2];
 const supported = ['reels.autoplay-controls-browser', 'reels.engagement-browser', 'reels.scroll-navigation-browser', 'reels.production-render-browser', 'a11y.touch-targets-browser', 'a11y.contrast-focus-browser', 'perf.console-network-browser', 'e2e.production-browser-suite'];
 assert.ok(supported.includes(unit), `Unsupported unit ${unit}`);
 const base = process.env.LANDING_URL || 'https://ivxholding.com';
-const browser = await chromium.launch();
+const mediaUnit = unit.startsWith('reels.') || unit === 'e2e.production-browser-suite';
+// The published MP4 uses H.264/AAC. Playwright recommends a branded browser
+// for licensed media codecs: https://playwright.dev/docs/browsers#media-codecs
+const channel = mediaUnit ? 'chrome' : undefined;
+const browser = await chromium.launch({ channel });
+const browserInfo = { channel: channel || 'chromium-headless-shell', version: browser.version() };
 const checks = [];
 let error;
 let failurePage, failureSignals;
@@ -22,7 +27,16 @@ try {
     const mediaResponses = [];
     pendingFeedDetails = [];
     failurePage = page;
-    failureSignals = { width, errors, failures, mediaResponses };
+    failureSignals = { width, browser: browserInfo, errors, failures, mediaResponses };
+    if (mediaUnit) {
+      const codecSupport = await page.evaluate(() => {
+        const video = document.createElement('video');
+        return { h264: video.canPlayType('video/mp4; codecs="avc1.42E01E"'), aac: video.canPlayType('audio/mp4; codecs="mp4a.40.2"') };
+      });
+      failureSignals.codecSupport = codecSupport;
+      assert.ok(codecSupport.h264 && codecSupport.aac, 'Media acceptance requires H.264 and AAC support');
+      checks.push({ width, browser: browserInfo, codecSupport });
+    }
     page.on('response', (r) => {
       const url = new URL(r.url());
       if (/\/api\/reels(?:\/|$)|\/api\/ivx\/video-platform\/home-feed$|\/media\/reels\/|\/videos\//.test(url.pathname)) {
@@ -132,7 +146,7 @@ try {
     const response = await page.goto(base, { waitUntil: 'domcontentloaded' });
     assert.equal(response.status(), 200);
     await page.locator('#properties-grid .live-deal-card').first().waitFor({ state: 'visible' });
-    if (unit.startsWith('reels.') || unit === 'e2e.production-browser-suite') {
+    if (mediaUnit) {
       // A recovered request is accepted only after the canonical endpoint has
       // returned a valid nonempty feed. Do not pass while fallback is pending,
       // or substitute the independent homepage reel for the canonical feed.
@@ -273,7 +287,7 @@ try {
 finally {
   for (const context of browser.contexts()) await context.unrouteAll({ behavior: 'wait' });
   await browser.close();
-  const result = { unit, sourceSha: process.env.GITHUB_SHA, passed: !error, checks, error, diagnostics, completedAt: new Date().toISOString() };
+  const result = { unit, browser: browserInfo, sourceSha: process.env.GITHUB_SHA, passed: !error, checks, error, diagnostics, completedAt: new Date().toISOString() };
   result.sha256 = createHash('sha256').update(JSON.stringify(result)).digest('hex');
   await mkdir('evidence/landing-19', { recursive: true });
   await writeFile(`evidence/landing-19/${unit}.json`, JSON.stringify(result));
