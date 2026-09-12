@@ -15,6 +15,7 @@
  * owner can confirm WHICH key is wired without exposing it.
  */
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
+import { ownerAIAuthUnavailableResponse } from './owner-ai-auth-unavailable';
 import { buildCredentialReadiness } from '../services/ivx-credential-readiness';
 import {
   isDurableStoreConfigured,
@@ -40,6 +41,8 @@ async function requireOwner(request: Request): Promise<{ ok: true } | { ok: fals
     }
     return { ok: true };
   } catch (error) {
+    const unavailable = ownerAIAuthUnavailableResponse(error, ownerOnlyJson);
+    if (unavailable) return { ok: false, response: unavailable };
     const message = error instanceof Error ? error.message : 'IVX owner authentication required.';
     const status = message.toLowerCase().includes('missing bearer') ? 401 : 403;
     return { ok: false, response: ownerOnlyJson({ ok: false, error: message }, status) };
