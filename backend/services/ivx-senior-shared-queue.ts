@@ -133,7 +133,7 @@ export async function readSharedSeniorActiveOwnerJob<T extends Job & { ownerId: 
   const direct = preferDirectTransport();
   return sharedRead(`active-owner:${direct}:${ownerId}`, async () => {
     if (direct) return readSeniorActiveOwnerJobPostgres<T>(ownerId);
-    const queue = await readSharedSeniorDocument(file, { jobs: [] as T[] });
+    const queue = await readSharedSeniorWorkQueue(file, { jobs: [] as T[] });
     for (let i = queue.jobs.length - 1; i >= 0; i -= 1) {
       const job = queue.jobs[i];
       if (job.ownerId === ownerId && (SENIOR_QUEUE_ACTIVE_STATUSES as readonly string[]).includes(job.status)) return job;
