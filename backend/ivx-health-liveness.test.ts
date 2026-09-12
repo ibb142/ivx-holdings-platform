@@ -62,4 +62,31 @@ describe('production health liveness', () => {
     auth.mockResolvedValue({ ok: true, detail: {} });
     expect((await app.request('/health/ready')).status).toBe(200);
   });
+
+  it('makes both advertised readiness routes report each dependency failure and recovery', async () => {
+    const healthy = { ok: true, detail: {} };
+    const unavailable = { ok: false, detail: { reason: 'dependency unavailable' } };
+    const ai = spyOn(queue, 'checkAIHealth').mockReturnValue(healthy);
+    const database = spyOn(queue, 'checkDatabaseHealth').mockResolvedValue(healthy);
+    const auth = spyOn(queue, 'checkAuthHealth').mockResolvedValue(healthy);
+    const remoteQueue = spyOn(queue, 'checkQueueHealth').mockResolvedValue(healthy);
+    restores.push(() => ai.mockRestore(), () => database.mockRestore(), () => auth.mockRestore(), () => remoteQueue.mockRestore());
+    for (const failed of ['ai', 'database', 'auth', 'queue', null]) {
+      ai.mockReturnValue(failed === 'ai' ? unavailable : healthy);
+      database.mockResolvedValue(failed === 'database' ? unavailable : healthy);
+      auth.mockResolvedValue(failed === 'auth' ? unavailable : healthy);
+      remoteQueue.mockResolvedValue(failed === 'queue' ? unavailable : healthy);
+      for (const path of ['/readiness', '/health/ready']) {
+        const response = await app.request(path);
+        const body = await response.json();
+        expect(response.status).toBe(failed ? 503 : 200);
+        expect(body.ok).toBe(!failed);
+        expect(body.ready).toBe(!failed);
+        expect(body.status).toBe(failed ? 'degraded' : 'ready');
+        for (const name of ['ai', 'database', 'auth', 'queue']) {
+          expect(body.checks[name].ok).toBe(name !== failed);
+        }
+      }
+    }
+  });
 });

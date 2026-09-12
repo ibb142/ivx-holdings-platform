@@ -580,28 +580,18 @@ export async function handlePlatformHomeFeed(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || '60'), 1), 120);
     const sb = await getSB();
-    const now = Date.now();
-
     /* ---- deals: published jv_deals + admin deal meta controls ---- */
-    // These sources are independent. Start them together so a cold home feed
-    // does not spend its response budget waiting on serial network round trips.
-    const [{ data: dealRows, error: dealsError }, dealMetaDoc,
-      { data: vids, error: vidsError }, playback, metaDoc, analyticsDoc] = await Promise.all([
-      sb.from('jv_deals').select('id,title,project_name,type,description,total_investment,expected_roi,min_investment,status,published,property_address,city,state,zip_code,country,property_type,photos,display_order,created_at,updated_at').eq('published', true).order('display_order', { ascending: true, nullsFirst: false }).order('updated_at', { ascending: false }).limit(100),
-      getDealMetaDoc(),
-      sb
-      .from('project_videos')
-      .select('id,project_id,media_id,title,video_url,thumbnail_url,cover_url,duration_sec,width,height,orientation,is_pinned,is_approved,view_count,created_at')
-      .eq('is_approved', true)
-      .order('is_pinned', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(200),
-      loadPlaybackIndex(),
-      getMetaDoc(),
-      getAnalyticsDoc(),
+    // Home and Reels are requested together by the landing page. Share their
+    // public inputs and start the independent deal reads before awaiting the
+    // catalog; serial query phases can exceed the bounded response deadline.
+    const [inputs, { data: dealRows, error: dealsError }, dealMetaDoc] = await Promise.all([
+      readPlatformFeedInputs(null),
+      Promise.resolve().then(() => sb.from('jv_deals').select('id,title,project_name,type,description,total_investment,expected_roi,min_investment,status,published,property_address,city,state,zip_code,country,property_type,photos,display_order,created_at,updated_at').eq('published', true).order('display_order', { ascending: true, nullsFirst: false }).order('updated_at', { ascending: false }).limit(100)),
+      Promise.resolve().then(getDealMetaDoc),
     ]);
     if (dealsError) return json({ error: dealsError.message, marker: VIDEO_PLATFORM_MARKER }, 500);
-    if (vidsError) return json({ error: vidsError.message, marker: VIDEO_PLATFORM_MARKER }, 500);
+    const { videos, counts, playback, meta: metaDoc, analytics: analyticsDoc } = inputs;
+    const now = Date.now();
 
     const seenDealIds = new Set<string>();
     const deals: HomeFeedDeal[] = [];
@@ -618,9 +608,6 @@ export async function handlePlatformHomeFeed(req: Request): Promise<Response> {
     const orderedDeals = sortHomeFeedDeals(deals);
 
     /* ---- featured project videos: approved + visible + attached to a real deal ---- */
-    const videos: any[] = vids ?? [];
-    const ids = videos.map((v) => String(v.id));
-    const counts = await loadEngagementCounts(sb, ids);
     const metaFor = (id: string): VideoMeta => normalizeVideoMeta(metaDoc[id]);
 
     const visible = videos.filter((v) => {
