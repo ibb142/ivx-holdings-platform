@@ -1,0 +1,40 @@
+name: Phase 1 authorized Auth recovery
+on:
+  push:
+    branches: [ops/phase1-authorized-auth-recovery-20260912]
+    paths:
+      - .github/workflows/phase1-authorized-auth-recovery.yml
+      - scripts/ops/supabase-auth-recovery-20260912.mjs
+      - scripts/ops/supabase-auth-recovery-20260912.test.mjs
+permissions:
+  contents: read
+concurrency:
+  group: ivx-supabase-incident-recovery
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - run: node --test scripts/ops/supabase-auth-recovery-20260912.test.mjs
+  recover:
+    needs: verify
+    if: github.repository == 'ibb142/ivx-holdings-platform' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: Check Auth and consume at most the one authorized restart
+        run: node scripts/ops/supabase-auth-recovery-20260912.mjs
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase1-auth-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qa-results/auth-recovery.json
+          if-no-files-found: error
+          retention-days: 30
