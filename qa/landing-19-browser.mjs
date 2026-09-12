@@ -7,7 +7,12 @@ const unit = process.argv[2];
 const supported = ['reels.autoplay-controls-browser', 'reels.engagement-browser', 'reels.scroll-navigation-browser', 'reels.production-render-browser', 'a11y.touch-targets-browser', 'a11y.contrast-focus-browser', 'perf.console-network-browser', 'e2e.production-browser-suite'];
 assert.ok(supported.includes(unit), `Unsupported unit ${unit}`);
 const base = process.env.LANDING_URL || 'https://ivxholding.com';
-const browser = await chromium.launch();
+// The published MP4 uses H.264/AAC, which the bundled Chromium build cannot
+// decode. Keep Chromium for non-media checks and verify media in real Chrome.
+const mediaUnit = unit.startsWith('reels.') || unit === 'e2e.production-browser-suite';
+const browserChannel = mediaUnit ? 'chrome' : 'chromium';
+const browser = await chromium.launch(mediaUnit ? { channel: 'chrome' } : {});
+const browserVersion = browser.version();
 const checks = [];
 let error;
 let failurePage, failureSignals;
@@ -268,7 +273,7 @@ try {
 finally {
   for (const context of browser.contexts()) await context.unrouteAll({ behavior: 'wait' });
   await browser.close();
-  const result = { unit, sourceSha: process.env.GITHUB_SHA, passed: !error, checks, error, diagnostics, completedAt: new Date().toISOString() };
+  const result = { unit, sourceSha: process.env.GITHUB_SHA, browserChannel, browserVersion, passed: !error, checks, error, diagnostics, completedAt: new Date().toISOString() };
   result.sha256 = createHash('sha256').update(JSON.stringify(result)).digest('hex');
   await mkdir('evidence/landing-19', { recursive: true });
   await writeFile(`evidence/landing-19/${unit}.json`, JSON.stringify(result));
