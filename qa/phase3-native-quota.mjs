@@ -46,6 +46,13 @@ function dbFor(context) {
         { method:'POST', body, headers });
       assert.equal(r.status, 200, 'DATABASE_HTTP_FAILED'); return r.data;
     },
+    async activeRows() {
+      const r = await requestJson(context.databaseUrl + '/rest/v1/ivx_ai_budget_reservations?status=eq.reserved'
+        + '&order=created_at.asc&limit=4&select=reservation_id,worker_instance_id,model,created_at',
+        context.serviceKey, { headers });
+      assert.equal(r.status,200,'ACTIVE_ROWS_HTTP_FAILED');
+      assert(Array.isArray(r.data),'INVALID_ACTIVE_ROWS'); return r.data;
+    },
     async rows() {
       const r = await requestJson(context.databaseUrl + '/rest/v1/ivx_ai_budget_reservations?reservation_id=in.('
         + LABELS.map(reservationId).join(',') + ')&select=reservation_id,worker_instance_id,model,request_sha,'
@@ -130,14 +137,24 @@ async function callProvider(context, db, key, label, quote) {
   const reserve = async (model, hash) => {
     stats.admissions++; assert.equal(stats.admissions,1,'SDK_RETRIED_ADMISSION');
     assert.equal(model,quote.model,'MODEL_QUOTE_MISMATCH'); checkQuote(quote);
-    let admitted;
-    for(let i=0;i<20;i++) {
+    let admitted, nextProgress=Date.now()+15000;
+    const admissionDeadline=Date.now()+180000;
+    stats.admissionChecks=0;
+    do {
+      checkQuote(quote);
+      stats.admissionChecks++;
       admitted = await db.rpc('ivx_ai_budget_reserve', { p_reservation_id:stats.reservationId,
         p_worker_instance_id:worker,p_model:model,p_request_sha:hash,p_reserved_nano:quote.reservedNano,
         p_pricing_evidence:quote });
       if(admitted.allowed || admitted.reason!=='global_capacity_exceeded')break;
-      await wait(1000);
-    }
+      stats.localAdmissionReason=admitted.reason;
+      if(Date.now()>=nextProgress) {
+        event('waiting-for-shared-capacity',{label,checks:stats.admissionChecks,
+          remainingSeconds:Math.max(0,Math.ceil((admissionDeadline-Date.now())/1000))});
+        nextProgress=Date.now()+15000;
+      }
+      await wait(200+Math.floor(Math.random()*200));
+    } while(Date.now()<admissionDeadline);
     if(!admitted.allowed || admitted.reservationId!==stats.reservationId)
       throw new GlobalAIBudgetError(admitted.reason ?? 'unconfirmed');
     assert.equal(Number(admitted.policyRevision),2,'POLICY_REVISION_CHANGED');
@@ -191,7 +208,7 @@ async function callProvider(context, db, key, label, quote) {
   try {
     await generateText({model:provider.chat(quote.model),
       prompt:label.startsWith('fill')?fillPrompt(Number(label.slice(-1))):'Reply only OK.',
-      maxOutputTokens:32,maxRetries:label==='denied'?2:0,abortSignal:AbortSignal.timeout(150000)});
+      maxOutputTokens:32,maxRetries:label==='denied'?2:0,abortSignal:AbortSignal.timeout(330000)});
     succeeded=true;
   } catch(error) {
     stats.sdkStatus=Number.isInteger(error?.statusCode)?error.statusCode:null;
@@ -232,7 +249,8 @@ function existingLimits(state, excludedId) {
   return state.budgets.filter(b=>b.scopeType!=='team' && !['api_key_id_'+excludedId,'api_key_id_jtAnoFZC1LAdFBOuA9gwn8byoEteiOrNxS4y0rwikpKds7aq',
     'api_key_id_pWesf5bv7wl7jAK357RL2q4DlnWYS4SzQN6ufeQiLGbYlURw',
     'api_key_id_UVzvUiLtmTPVjrFIgsOhTOgUMo42t9fNu8FMAL0KcJOUzYaF',
-    'api_key_id_KSPgGHhv0EZq3WMzHszAA7qFVbOnarOiMI08J3YVq6c5a6gG'].includes(b.quotaEntityId)).map(b=>({
+    'api_key_id_KSPgGHhv0EZq3WMzHszAA7qFVbOnarOiMI08J3YVq6c5a6gG',
+    'api_key_id_knOwlYBnQg2O8NXTSmdzabDiELeajwcuAxsOVavJAlvv60K7'].includes(b.quotaEntityId)).map(b=>({
     id:b.quotaEntityId,limit:b.limitAmount,period:b.refreshPeriod,active:b.active,archived:b.archived,
     byok:b.includeByokInQuota,
   })).sort((a,b)=>a.id.localeCompare(b.id));
@@ -254,6 +272,7 @@ async function main() {
       && priorRows[0].generation_id==='gen_01M2ASZFDXDJ0JFAZ5V37KM4JJ'
       && String(priorRows[0].reserved_nano)==='4125468000','CAMPAIGN_REPLAY_OR_PRIOR_STATE_CHANGED');
     proof.priorFailedReservation=priorRows[0];
+    proof.activeGlobalReservationsBefore=await db.activeRows();
     const diagnostic=await requestJson(ORIGIN+'/v1/generation?id=gen_01M2ASZFDXDJ0JFAZ5V37KM4JJ',context.gatewayKey);
     const priorReceipt=diagnostic.data?.data;
     const protectedText=value=>{
