@@ -1,3 +1,4 @@
+import { readTimings } from './ivx-read-timings';
 /**
  * IVX Video Platform Store — durable S3-backed JSON documents powering the
  * enterprise video experience on top of the HLS pipeline:
@@ -225,6 +226,9 @@ async function readDoc<T>(name: string, fallback: T): Promise<T> {
     docCache.set(name, { at: Date.now(), value: durable });
     return durable;
   }
+
+  // Public feeds must not trigger S3 reads/mirror writes on a missing primary.
+  if (readTimings.getStore()?.deadline) throw new Error('Public metadata snapshot unavailable');
 
   // 2. Try S3 (secondary — may have data not yet mirrored to Supabase).
   try {

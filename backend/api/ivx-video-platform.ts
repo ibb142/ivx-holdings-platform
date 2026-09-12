@@ -1,4 +1,4 @@
-import { boundedReadFetch } from '../services/ivx-read-timings';
+import { boundedReadFetch, measuredReadFetch } from '../services/ivx-read-timings';
 import { createFeedResponseCache } from '../services/ivx-feed-response-cache';
 import { loadViewerEngagement } from '../services/ivx-viewer-engagement';
 import { createPlatformFeedLoader } from '../services/ivx-platform-feed-loader';
@@ -84,7 +84,7 @@ function json(data: unknown, status = 200): Response {
 export const videoPlatformOptions = (): Response => new Response(null, { status: 204, headers: CORS_HEADERS });
 
 // Public caches never contain viewer state, failure responses, or unbounded stale data.
-const withFeedCache = createFeedResponseCache({ headers: CORS_HEADERS });
+const withFeedCache = createFeedResponseCache({ headers: CORS_HEADERS, responseTimeoutMs: 2300 });
 
 async function readBody(req: Request): Promise<Record<string, unknown>> {
   try { return await req.json() as Record<string, unknown>; } catch { return {}; }
@@ -253,7 +253,7 @@ async function isPlayableMediaUrl(url: string | null | undefined): Promise<boole
   if (cached && Date.now() - cached.at < PLAYABLE_CACHE_TTL_MS) return cached.ok;
   let ok = false;
   try {
-    const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(4000) });
+    const res = await measuredReadFetch(url, { method: 'HEAD', signal: AbortSignal.timeout(4000) });
     const ct = String(res.headers.get('content-type') || '');
     ok = res.ok && (ct.startsWith('video/') || ct.includes('mpegurl') || ct.includes('octet-stream'));
   } catch {

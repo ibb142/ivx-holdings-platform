@@ -1,4 +1,4 @@
-import { measuredReadFetch } from './ivx-read-timings';
+import { measuredReadFetch, readTimings } from './ivx-read-timings';
 /**
  * IVX durable document store (Supabase-backed) — THE PERMANENT DATA-LOSS FIX (2026-06-07).
  *
@@ -145,6 +145,8 @@ function missingTable(response: Response, payload: unknown): boolean {
 type DurableReadOptions = { sharePendingRead?: boolean };
 
 export class DurableStore {
+  private readonly publicReads = new Map<string, Promise<{ value: unknown }[]>>();
+  private readonly publicCooldown = new Map<string, number>();
   private schemaReady: Promise<void> | null = null;
   private readonly pendingDocumentReads = new Map<string, Promise<{ value: unknown }[]>>();
 
@@ -265,7 +267,38 @@ export class DurableStore {
     });
   }
 
+  /** Web reads consume materialized documents only. Schema/S3 repair belongs
+   * outside public requests. Never retry after the common request deadline. */
+  private async readPublicJson<T>(docKey: string, fallback: T): Promise<T> {
+    let pending = this.publicReads.get(docKey);
+    if (!pending) {
+      if ((this.publicCooldown.get(docKey) ?? 0) > Date.now()) throw new Error('Public document circuit open');
+      this.publicCooldown.delete(docKey);
+      if (this.publicReads.size >= 32) throw new Error('Public document read capacity exceeded');
+      pending = (async () => {
+        const response = await measuredReadFetch(`${this.restBaseUrl()}/ivx_durable_documents?doc_key=eq.${encodeURIComponent(docKey)}&select=value&limit=1`, {
+          method: 'GET', headers: buildHeaders(), signal: readTimings.getStore()!.deadline,
+        });
+        const rows = await parseResponsePayload(response);
+        if (!response.ok || !Array.isArray(rows)) throw new Error('Public document source unavailable');
+        return rows as { value: unknown }[];
+      })().catch(error => {
+        if (this.publicReads.get(docKey) === pending) {
+          if (this.publicCooldown.size >= 128) this.publicCooldown.delete(this.publicCooldown.keys().next().value!);
+          this.publicCooldown.set(docKey, Date.now() + 3000);
+        }
+        throw error;
+      }).finally(() => {
+        if (this.publicReads.get(docKey) === pending) this.publicReads.delete(docKey);
+      });
+      this.publicReads.set(docKey, pending);
+    }
+    const rows = await pending;
+    return rows.length && rows[0]?.value != null ? structuredClone(rows[0].value) as T : fallback;
+  }
+
   async readJson<T>(docKey: string, fallback: T, options: DurableReadOptions = {}): Promise<T> {
+    if (readTimings.getStore()?.deadline) return this.readPublicJson(docKey, fallback);
     await this.ensureSchema();
     // A public page requests the same metadata through several routes. Share
     // only an overlapping read; settled data and caller fallbacks are not cached.
@@ -295,6 +328,8 @@ export class DurableStore {
   async writeJson(docKey: string, value: unknown): Promise<void> {
     await this.ensureSchema();
     this.pendingDocumentReads.delete(docKey);
+    this.publicReads.delete(docKey);
+    this.publicCooldown.delete(docKey);
     try {
       await this.restRequest<unknown>(
         '/ivx_durable_documents?on_conflict=doc_key',
@@ -308,6 +343,8 @@ export class DurableStore {
       // Reads started before/during the write must not serve later callers,
       // including when the write response is uncertain. Never replay the write here.
       this.pendingDocumentReads.delete(docKey);
+      this.publicReads.delete(docKey);
+      this.publicCooldown.delete(docKey);
     }
   }
 

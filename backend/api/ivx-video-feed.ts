@@ -1,3 +1,4 @@
+import { boundedReadFetch } from '../services/ivx-read-timings';
 /**
  * IVX Video Feed API — Instagram-style video experience.
  *
@@ -22,11 +23,7 @@ async function getSB() {
   const { createClient } = await import('@supabase/supabase-js');
   const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
-  const timeoutFetch = (input: any, init?: any) => {
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), SB_TIMEOUT_MS);
-    return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(tid));
-  };
+  const timeoutFetch = (input: any, init?: any) => boundedReadFetch(input, init, SB_TIMEOUT_MS);
   _sb = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false }, global: { fetch: timeoutFetch } });
   return _sb;
 }
