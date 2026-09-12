@@ -139,3 +139,75 @@ test('identifies read versus persistence timeouts without leaking raw errors or 
     expect(JSON.stringify(result)).not.toContain('must-not-escape');
   }
 });
+
+describe('Process presence during database recovery', () => {
+  test('persists liveness without reading tasks, alerting or claiming productive agents', async () => {
+    const saved: Record<string, unknown>[] = [];
+    let reads = 0, alerts = 0;
+    const monitor = new FleetSloMonitor({
+      read: async () => { reads++; return [task(1)]; },
+      persist: async value => { saved.push(value); },
+      alert: async () => { alerts++; return { ok: true }; },
+      now: () => NOW, sha: () => SHA,
+    });
+    const result = await monitor.samplePresence();
+    expect(reads).toBe(0);
+    expect(alerts).toBe(0);
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({
+      commit_sha: SHA, measured_at: new Date(NOW).toISOString(), durable: true,
+      sampling_mode: 'process_presence_only', status: 'UNKNOWN',
+      productive_agents: null, running_agents: null, heartbeat_agents: null,
+    });
+    expect(result.durable).toBe(true);
+    expect(fleetSloPrometheus(result)).toContain('ivx_fleet_slo_met 0');
+    expect(fleetSloPrometheus(result)).toContain('ivx_fleet_telemetry_available 0');
+  });
+
+  test('failed presence writes remain non-durable and do not leak the database error', async () => {
+    const monitor = new FleetSloMonitor({
+      read: async () => { throw new Error('task read must stay paused'); },
+      persist: async () => { throw new Error('timeout secret=must-not-escape'); },
+      alert: async () => { throw new Error('alerts must stay paused'); },
+      now: () => NOW, sha: () => SHA,
+    });
+    const result = await monitor.samplePresence();
+    expect(result.durable).toBe(false);
+    expect(result.status).toBe('UNKNOWN');
+    expect(result.failure_stage).toBe('persist');
+    expect(result.failure_kind).toBe('timeout');
+    expect(result.productive_agents).toBeNull();
+    expect(JSON.stringify(monitor.snapshot())).not.toContain('must-not-escape');
+  });
+
+  test('coalesces slow writes and expires an old process observation', async () => {
+    let now = NOW, writes = 0;
+    let finish: () => void = () => {};
+    const monitor = new FleetSloMonitor({
+      read: async () => { throw new Error('task read must stay paused'); },
+      persist: async () => { writes++; await new Promise<void>(resolve => { finish = resolve; }); },
+      alert: async () => { throw new Error('alerts must stay paused'); },
+      now: () => now, sha: () => SHA,
+    });
+    const first = monitor.samplePresence();
+    const second = monitor.samplePresence();
+    expect(first).toBe(second);
+    expect(writes).toBe(1);
+    finish();
+    await first;
+    now += 61_000;
+    expect(monitor.snapshot()?.status).toBe('UNKNOWN');
+    expect(monitor.snapshot()?.error).toBe('SLO sample is stale');
+    expect(monitor.snapshot()?.productive_agents).toBeNull();
+  });
+
+  test('rejects an unavailable production SHA before publishing presence', async () => {
+    let writes = 0;
+    const monitor = new FleetSloMonitor({
+      read: async () => [], persist: async () => { writes++; },
+      alert: async () => ({ ok: true }), now: () => NOW, sha: () => 'unknown',
+    });
+    await expect(monitor.samplePresence()).rejects.toThrow('Production SHA unavailable');
+    expect(writes).toBe(0);
+  });
+});
