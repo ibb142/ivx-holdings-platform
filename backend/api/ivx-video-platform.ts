@@ -1,4 +1,6 @@
 import { createFeedResponseCache } from '../services/ivx-feed-response-cache';
+import { loadViewerEngagement } from '../services/ivx-viewer-engagement';
+import { createPlatformFeedLoader } from '../services/ivx-platform-feed-loader';
 /**
  * IVX Video Platform API — enterprise Instagram-grade video experience.
  *
@@ -44,7 +46,6 @@ import {
   getMetaDoc,
   getModerationDoc,
   getVideoStats,
-  getViewerProfile,
   getLiveSession,
   ingestLiveSegment,
   isDealMetaVisible,
@@ -177,18 +178,23 @@ type FeedDeal = {
  * matching because project_videos.project_id is often the video's own UUID, not the
  * deal slug. Returns a map keyed by videoId. Never throws; missing deals → null.
  */
-async function loadFeedDeals(sb: any, candidates: string[], titles: Record<string, string>): Promise<Record<string, FeedDeal>> {
+async function readFeedDealRows(sb: any): Promise<any[]> {
+  try {
+    const { data } = await sb.from('jv_deals')
+      .select('id,title,project_name,estimated_value,appraised_value,total_investment,min_investment,expected_roi,type')
+      .limit(200);
+    return data ?? [];
+  } catch { return []; }
+}
+
+function loadFeedDeals(rows: any[], candidates: string[], titles: Record<string, string>): Record<string, FeedDeal> {
   const out: Record<string, FeedDeal> = {};
   const idRe = /^[A-Za-z0-9][A-Za-z0-9_-]{1,63}$/;
   const ids = Array.from(new Set(candidates.filter((c) => idRe.test(c))));
   const allDeals: any[] = [];
 
   try {
-    const { data } = await sb
-      .from('jv_deals')
-      .select('id,title,project_name,estimated_value,appraised_value,total_investment,min_investment,expected_roi,type')
-      .limit(200);
-    for (const d of data ?? []) {
+    for (const d of rows) {
       const id = String(d.id);
       const deal: FeedDeal = {
         id,
@@ -267,6 +273,33 @@ async function filterPlayableEntries<T extends { row: { video_url: string | null
   return results.filter((r) => r.ok).map((r) => r.item);
 }
 
+const readPlatformFeedInputs = createPlatformFeedLoader({
+  videos: async (projectId: string | null): Promise<any[]> => {
+    const sb = await getSB();
+    let query = sb.from('project_videos')
+      .select('id,project_id,media_id,title,video_url,thumbnail_url,cover_url,duration_sec,width,height,orientation,video_type,is_pinned,is_approved,view_count,created_at')
+      .eq('is_approved', true)
+      .order('is_pinned', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (projectId) query = query.eq('project_id', projectId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return data ?? [];
+  },
+  meta: getMetaDoc,
+  counts: async ids => loadEngagementCounts(await getSB(), ids),
+  playback: loadPlaybackIndex,
+  analytics: getAnalyticsDoc,
+  deals: async () => readFeedDealRows(await getSB()),
+  playable: async (videos, metaDoc) => {
+    const now = Date.now();
+    const visible = videos.filter(video => isMetaVisible(normalizeVideoMeta(metaDoc[String(video.id)]), now));
+    const playable = await filterPlayableEntries(visible.map(row => ({ row })));
+    return new Set(playable.map(entry => String(entry.row.id)));
+  },
+});
+
 export async function handlePlatformFeed(req: Request): Promise<Response> {
   return withFeedCache(req, async () => {
   try {
@@ -283,28 +316,11 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
     const reelsOnly = typeParam === 'reel' || typeParam === 'reels';
 
     const sb = await getSB();
-    let query = sb
-      .from('project_videos')
-      .select('id,project_id,media_id,title,video_url,thumbnail_url,cover_url,duration_sec,width,height,orientation,video_type,is_pinned,is_approved,view_count,created_at')
-      .eq('is_approved', true)
-      .order('is_pinned', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(200);
-    if (projectId) query = query.eq('project_id', projectId);
-    const { data: vids, error } = await query;
-    if (error) return json({ error: error.message, marker: VIDEO_PLATFORM_MARKER }, 500);
-
-    const videos: any[] = vids ?? [];
-    const ids = videos.map((v) => String(v.id));
-
-    const [counts, playback, metaDoc, analyticsDoc, profile, followState] = await Promise.all([
-      loadEngagementCounts(sb, ids),
-      loadPlaybackIndex(),
-      getMetaDoc(),
-      getAnalyticsDoc(),
-      viewerId ? getViewerProfile(viewerId) : Promise.resolve(null),
+    const [inputs, followState] = await Promise.all([
+      readPlatformFeedInputs(projectId),
       viewerId ? getFollowState(viewerId) : Promise.resolve({ following: [] as string[] }),
     ]);
+    const { videos, counts, playback, meta: metaDoc, analytics: analyticsDoc, deals, playable: playableIds } = inputs;
 
     const now = Date.now();
     const metaFor = (id: string): VideoMeta => normalizeVideoMeta(metaDoc[id]);
@@ -364,11 +380,11 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
     // Dead-media guard: never lead the feed with a broken card. When the
     // composed list has no playable media, fall back to the published reels.
     {
-      const playable = await filterPlayableEntries(composed);
+      const playable = composed.filter(entry => playableIds.has(entry.id));
       if (playable.length > 0) {
         composed = playable;
       } else if (!reelsOnly && reels.length > 0) {
-        const playableReels = await filterPlayableEntries(reels);
+        const playableReels = reels.filter(entry => playableIds.has(entry.id));
         if (playableReels.length > 0) composed = playableReels;
       }
     }
@@ -384,19 +400,9 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
       if (p.row.project_id) dealCandidates.push(String(p.row.project_id));
       titles[p.id] = p.row.title ?? ((m as Record<string, unknown>).title as string | undefined) ?? '';
     }
-    const dealsById = await loadFeedDeals(sb, dealCandidates, titles);
+    const dealsById = loadFeedDeals(deals, dealCandidates, titles);
     const viewerFollowing = new Set(followState.following);
-    void profile;
-    let likedSet = new Set<string>();
-    let savedSet = new Set<string>();
-    if (viewerId && pageIds.length > 0) {
-      const [lr, sr] = await Promise.all([
-        sb.from('project_likes').select('project_id').in('project_id', pageIds).or(`user_id.eq.${viewerId},guest_id.eq.${viewerId}`),
-        sb.from('project_saves').select('project_id').in('project_id', pageIds).or(`user_id.eq.${viewerId},guest_id.eq.${viewerId}`),
-      ]);
-      likedSet = new Set((lr.data || []).map((r: any) => String(r.project_id)));
-      savedSet = new Set((sr.data || []).map((r: any) => String(r.project_id)));
-    }
+    const { liked: likedSet, saved: savedSet } = await loadViewerEngagement(sb, pageIds, viewerId);
 
     // VP9/webm fallback variants (codec-limited browsers cannot decode H.264).
     const WEBM_VARIANTS: Record<string, string> = { 'c0725a70-497f-4332-8f9d-03a29036d270': '/media/reels/c0725a70.webm' };
@@ -574,14 +580,18 @@ export async function handlePlatformHomeFeed(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const limit = Math.min(Math.max(Number(url.searchParams.get('limit') || '60'), 1), 120);
     const sb = await getSB();
-    const now = Date.now();
-
     /* ---- deals: published jv_deals + admin deal meta controls ---- */
-    const [{ data: dealRows, error: dealsError }, dealMetaDoc] = await Promise.all([
-      sb.from('jv_deals').select('id,title,project_name,type,description,total_investment,expected_roi,min_investment,status,published,property_address,city,state,zip_code,country,property_type,photos,display_order,created_at,updated_at').eq('published', true).order('display_order', { ascending: true, nullsFirst: false }).order('updated_at', { ascending: false }).limit(100),
-      getDealMetaDoc(),
+    // Home and Reels are requested together by the landing page. Share their
+    // public inputs and start the independent deal reads before awaiting the
+    // catalog; serial query phases can exceed the bounded response deadline.
+    const [inputs, { data: dealRows, error: dealsError }, dealMetaDoc] = await Promise.all([
+      readPlatformFeedInputs(null),
+      Promise.resolve().then(() => sb.from('jv_deals').select('id,title,project_name,type,description,total_investment,expected_roi,min_investment,status,published,property_address,city,state,zip_code,country,property_type,photos,display_order,created_at,updated_at').eq('published', true).order('display_order', { ascending: true, nullsFirst: false }).order('updated_at', { ascending: false }).limit(100)),
+      Promise.resolve().then(getDealMetaDoc),
     ]);
     if (dealsError) return json({ error: dealsError.message, marker: VIDEO_PLATFORM_MARKER }, 500);
+    const { videos, counts, playback, meta: metaDoc, analytics: analyticsDoc } = inputs;
+    const now = Date.now();
 
     const seenDealIds = new Set<string>();
     const deals: HomeFeedDeal[] = [];
@@ -598,23 +608,6 @@ export async function handlePlatformHomeFeed(req: Request): Promise<Response> {
     const orderedDeals = sortHomeFeedDeals(deals);
 
     /* ---- featured project videos: approved + visible + attached to a real deal ---- */
-    const { data: vids, error: vidsError } = await sb
-      .from('project_videos')
-      .select('id,project_id,media_id,title,video_url,thumbnail_url,cover_url,duration_sec,width,height,orientation,is_pinned,is_approved,view_count,created_at')
-      .eq('is_approved', true)
-      .order('is_pinned', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(200);
-    if (vidsError) return json({ error: vidsError.message, marker: VIDEO_PLATFORM_MARKER }, 500);
-
-    const videos: any[] = vids ?? [];
-    const ids = videos.map((v) => String(v.id));
-    const [counts, playback, metaDoc, analyticsDoc] = await Promise.all([
-      loadEngagementCounts(sb, ids),
-      loadPlaybackIndex(),
-      getMetaDoc(),
-      getAnalyticsDoc(),
-    ]);
     const metaFor = (id: string): VideoMeta => normalizeVideoMeta(metaDoc[id]);
 
     const visible = videos.filter((v) => {
