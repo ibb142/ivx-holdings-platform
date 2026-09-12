@@ -39,7 +39,7 @@ test('public burst does one GET, no schema probe or mutation, with isolated resu
   expect(values[1].visible).toBe(true);
 });
 
-test('stalled real HTTP body is aborted once and subsequent calls hit the open circuit', async () => {
+test('caller expiry keeps one shared HTTP body until the finite source deadline opens its circuit', async () => {
   let calls = 0, closed = false;
   const server = createServer((_req, res) => {
     calls++;
@@ -54,6 +54,11 @@ test('stalled real HTTP body is aborted once and subsequent calls hit the open c
     const start = performance.now();
     await expect(read(store, 'meta', {}, 60)).rejects.toThrow();
     expect(performance.now() - start).toBeLessThan(500);
+    expect(closed).toBe(false);
+    // The first caller cannot cancel the source for a longer-lived follower.
+    // The actual eight-second source deadline must still close the socket.
+    await expect(read(store, 'meta', {}, 10000)).rejects.toThrow();
+    expect(performance.now() - start).toBeLessThan(10000);
     await expect(read(store, 'meta', {})).rejects.toThrow('circuit open');
     for (let i = 0; i < 20 && !closed; i++) await new Promise(resolve => setTimeout(resolve, 10));
     expect(calls).toBe(1);
@@ -62,7 +67,7 @@ test('stalled real HTTP body is aborted once and subsequent calls hit the open c
     server.closeAllConnections();
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
-});
+}, 12000);
 
 test('late failure before a write cannot reopen the circuit for the new document', async () => {
   let rejectOld!: (error: Error) => void;
