@@ -455,6 +455,7 @@ function emptyLedger(durable: boolean): LedgerDoc {
 let memoryQueue: QueueDoc | null = null;
 let memoryLedger: LedgerDoc | null = null;
 let draining = false;
+const activeDrainExecutions = new Set<Promise<IVXWorkerJobResult | null>>();
 let queueStopping = false;
 
 /** Active job callbacks for cancel signaling. */
@@ -3018,29 +3019,28 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
 }
 
 /**
- * Bounded-concurrent queue drain: processes queued jobs up to
- * IVX_WORKER_MAX_CONCURRENCY at a time. Re-entrancy is guarded so only one
- * drain runs at a time. Expires stale jobs before draining. Each job is
- * claimed race-safely inside processNextSeniorDeveloperJob, so batch
- * parallelism never double-executes a job, and per-owner single-flight is
- * enforced at claim time.
+ * Fill free execution slots without waiting for unrelated jobs or CI waits.
+ * The pump is serialized; running executions retain their own promises and
+ * physical leases. Admission still enforces configured capacity and owner
+ * single-flight. Periodic/enqueue kicks can fill a slot while other work runs.
  */
 export async function drainSeniorDeveloperQueue(): Promise<void> {
   if (draining || queueStopping) return;
   draining = true;
   try {
-    // Expire stale jobs before processing.
-    await expireStaleJobs();
-
-    const maxConcurrent = getWorkerMaxConcurrency();
-    if (maxConcurrent === 0) return;
-    for (let processed = 0; !queueStopping && processed < MAX_QUEUE_RETAINED; processed += maxConcurrent) {
-      const batch: Array<Promise<IVXWorkerJobResult | null>> = [];
-      for (let i = 0; i < maxConcurrent; i += 1) {
-        batch.push(processNextSeniorDeveloperJob());
-      }
-      const results = await Promise.all(batch);
-      if (results.every((r) => r === null)) break;
+    // The independent stale sweep maintains running queues. Avoid reading
+    // retained history again for every completed slot in an active pump.
+    if (activeDrainExecutions.size === 0) await expireStaleJobs();
+    const slots = Math.max(0, getWorkerMaxConcurrency() - activeDrainExecutions.size);
+    for (let i = 0; !queueStopping && i < slots; i++) {
+      const execution = processNextSeniorDeveloperJob();
+      activeDrainExecutions.add(execution);
+      void execution.then(result => {
+        activeDrainExecutions.delete(execution);
+        // Null/rejection can mean no work or uncertain storage. Let the next
+        // bounded periodic kick retry; never spin on an empty or failed queue.
+        if (result && !queueStopping) void drainSeniorDeveloperQueue().catch(() => {});
+      }, () => { activeDrainExecutions.delete(execution); });
     }
   } finally {
     draining = false;
