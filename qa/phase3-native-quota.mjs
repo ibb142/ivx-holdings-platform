@@ -43,13 +43,13 @@ function dbFor(context) {
     async rpc(name, body = {}) {
       assert(['ivx_ai_budget_status','ivx_ai_budget_reserve','ivx_ai_budget_finish'].includes(name), 'UNREVIEWED_RPC');
       const r = await requestJson(context.databaseUrl + '/rest/v1/rpc/' + name, context.serviceKey,
-        { method:'POST', body, headers });
+        { method:'POST', body, headers, timeout:30000 });
       assert.equal(r.status, 200, 'DATABASE_HTTP_FAILED'); return r.data;
     },
     async activeRows() {
       const r = await requestJson(context.databaseUrl + '/rest/v1/ivx_ai_budget_reservations?status=eq.reserved'
         + '&order=created_at.asc&limit=4&select=reservation_id,worker_instance_id,model,created_at',
-        context.serviceKey, { headers });
+        context.serviceKey, { headers, timeout:30000 });
       assert.equal(r.status,200,'ACTIVE_ROWS_HTTP_FAILED');
       assert(Array.isArray(r.data),'INVALID_ACTIVE_ROWS'); return r.data;
     },
@@ -57,7 +57,7 @@ function dbFor(context) {
       const r = await requestJson(context.databaseUrl + '/rest/v1/ivx_ai_budget_reservations?reservation_id=in.('
         + LABELS.map(reservationId).join(',') + ')&select=reservation_id,worker_instance_id,model,request_sha,'
         + 'policy_revision,reserved_nano,status,settled_upper_nano,generation_id,created_at,completed_at',
-        context.serviceKey, { headers });
+        context.serviceKey, { headers, timeout:30000 });
       assert.equal(r.status, 200, 'ROWS_HTTP_FAILED');
       assert(Array.isArray(r.data) && r.data.every(x => LABELS.map(reservationId).includes(x.reservation_id)),
         'INVALID_CAMPAIGN_ROWS'); return r.data;
@@ -153,7 +153,7 @@ async function callProvider(context, db, key, label, quote) {
           remainingSeconds:Math.max(0,Math.ceil((admissionDeadline-Date.now())/1000))});
         nextProgress=Date.now()+15000;
       }
-      await wait(200+Math.floor(Math.random()*200));
+      await wait(700+Math.floor(Math.random()*300));
     } while(Date.now()<admissionDeadline);
     if(!admitted.allowed || admitted.reservationId!==stats.reservationId)
       throw new GlobalAIBudgetError(admitted.reason ?? 'unconfirmed');
@@ -250,11 +250,53 @@ function existingLimits(state, excludedId) {
     'api_key_id_pWesf5bv7wl7jAK357RL2q4DlnWYS4SzQN6ufeQiLGbYlURw',
     'api_key_id_UVzvUiLtmTPVjrFIgsOhTOgUMo42t9fNu8FMAL0KcJOUzYaF',
     'api_key_id_KSPgGHhv0EZq3WMzHszAA7qFVbOnarOiMI08J3YVq6c5a6gG',
-    'api_key_id_knOwlYBnQg2O8NXTSmdzabDiELeajwcuAxsOVavJAlvv60K7'].includes(b.quotaEntityId)).map(b=>({
+    'api_key_id_knOwlYBnQg2O8NXTSmdzabDiELeajwcuAxsOVavJAlvv60K7',
+    'api_key_id_AfVkVmLscQFO0cj0SRJaZcAZVrdVUoj9hagCXBx2kYjfUXID'].includes(b.quotaEntityId)).map(b=>({
     id:b.quotaEntityId,limit:b.limitAmount,period:b.refreshPeriod,active:b.active,archived:b.archived,
     byok:b.includeByokInQuota,
   })).sort((a,b)=>a.id.localeCompare(b.id));
 }
+async function reviewRetiredCapacity(context, db) {
+  // Independently reviewed Render evidence: SIGTERM at 12:50:25, last log
+  // 12:50:48, replacement live at 12:57:51, CPU/instance metrics at 13:08-13:12
+  // identify exactly k9hjm and lzsnj. No current process owns c9sfd.
+  assert(Date.now()<Date.parse('2026-09-12T14:00:00Z'),'RETIREMENT_REVIEW_EXPIRED');
+  const id='1308643c-2af6-4251-b6ea-e1bb651c4296';
+  const worker='ivx-senior-dev-01:srv-d9i15fg4n6ts73bn00j0-5697ddff69-c9sfd:17:cc1c989b-532';
+  const read=async()=>{
+    const r=await requestJson(context.databaseUrl+'/rest/v1/ivx_ai_budget_reservations?reservation_id=eq.'+id
+      +'&select=reservation_id,worker_instance_id,model,status,reserved_nano,settled_upper_nano,generation_id,created_at,completed_at',
+      context.serviceKey,{headers:{apikey:context.serviceKey},timeout:30000});
+    assert.equal(r.status,200,'RETIRED_ROW_READ_FAILED');
+    assert(Array.isArray(r.data)&&r.data.length===1,'RETIRED_ROW_MISSING');return r.data[0];
+  };
+  const before=await read();
+  assert(before.worker_instance_id===worker && before.model==='openai/gpt-4o'
+    && String(before.reserved_nano)==='822728000' && before.settled_upper_nano===null
+    && before.generation_id===null && Date.parse(before.created_at)===Date.parse('2026-09-12T12:50:54.189453Z'),
+    'RETIRED_ROW_BINDING_CHANGED');
+  const review={at:new Date().toISOString(),before,liabilityReleasedNano:'0',
+    physicalInstance:'srv-d9i15fg4n6ts73bn00j0-c9sfd',
+    replacementDeploy:'dep-daiko4tckfvc7394ap5g',
+    physicalTopologyObservedAt:'2026-09-12T13:12:00Z',
+    currentInstances:['srv-d9i15fg4n6ts73bn00j0-k9hjm','srv-d9i15fg4n6ts73bn00j0-lzsnj'],
+    mutationAttempted:false};
+  context.proof.retiredCapacityReview=review;
+  assert(['reserved','uncertain'].includes(before.status),'RETIRED_ROW_STATUS_CHANGED');
+  if(before.status==='reserved') {
+    review.mutationAttempted=true;
+    try {
+      await db.rpc('ivx_ai_budget_finish',{p_reservation_id:id,p_worker_instance_id:worker,
+        p_status:'uncertain',p_settled_upper_nano:null,p_generation_id:null});
+    } catch { review.acknowledgmentUncertain=true; }
+  }
+  const after=await read();
+  assert(after.status==='uncertain' && String(after.reserved_nano)==='822728000'
+    && after.settled_upper_nano===null && after.generation_id===null,'RETIRED_LIABILITY_NOT_CONFIRMED');
+  review.after=after;review.confirmed=true;
+  event('retired-capacity-confirmed',{reservationId:id,status:'uncertain',retainedNano:'822728000'});
+}
+
 async function main() {
   const proof={type:'native-quota-result',campaign:CAMPAIGN,startedAt:new Date().toISOString(),
     sourceSha:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),runId:process.env.GITHUB_RUN_ID,
@@ -272,6 +314,7 @@ async function main() {
       && priorRows[0].generation_id==='gen_01M2ASZFDXDJ0JFAZ5V37KM4JJ'
       && String(priorRows[0].reserved_nano)==='4125468000','CAMPAIGN_REPLAY_OR_PRIOR_STATE_CHANGED');
     proof.priorFailedReservation=priorRows[0];
+    if(process.argv[2]!=='diagnose') await reviewRetiredCapacity(context,db);
     proof.activeGlobalReservationsBefore=await db.activeRows();
     const diagnostic=await requestJson(ORIGIN+'/v1/generation?id=gen_01M2ASZFDXDJ0JFAZ5V37KM4JJ',context.gatewayKey);
     const priorReceipt=diagnostic.data?.data;

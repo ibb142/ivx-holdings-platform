@@ -69,7 +69,7 @@ export async function prepareContext(proof) {
   const team = await management(context, '/v2/teams/' + TEAM);
   assert.equal(team.id, TEAM, 'TEAM_MISMATCH');
   const policy = await requestJson(binding.databaseUrl + '/rest/v1/rpc/ivx_ai_budget_status',
-    binding.serviceKey, { method: 'POST', body: {}, headers: { apikey: binding.serviceKey } });
+    binding.serviceKey, { method: 'POST', body: {}, headers: { apikey: binding.serviceKey }, timeout:30000 });
   assert.equal(policy.status, 200, 'POLICY_READ_FAILED');
   assert.equal(policy.data.enabled, true, 'SHARED_BUDGET_DISABLED');
   assert.equal(policy.data.dailyLimitNano, '200000000000', 'SHARED_BUDGET_CHANGED');
