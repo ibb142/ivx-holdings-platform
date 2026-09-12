@@ -2328,11 +2328,12 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
       error: emergencyStop.source === 'unavailable'
         ? 'EMERGENCY_STOP_UNAVAILABLE: job refused until owner control is readable.'
         : 'EMERGENCY_STOP_ACTIVE: owner emergency stop is engaged; job refused at start boundary.',
-    });
+    }, true);
     return null;
   }
 
-  // Check if this job was cancelled while queued.
+  // Recheck authority inside the serialized write: cancellation can complete
+  // while the admitted job awaits the owner-control read above.
   await updateJob(job.jobId, {
     status: 'running',
     stage: 'RUNNING',
@@ -2341,7 +2342,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
     startedAt: nowIso(),
     lastHeartbeatAt: nowIso(),
     attempts: sharedSeniorQueueEnabled() ? job.attempts : job.attempts + 1,
-  });
+  }, true, true);
 
   leaseHeartbeat = sharedSeniorQueueEnabled() ? setInterval(() => {
     if (controller.cancelled) return;
