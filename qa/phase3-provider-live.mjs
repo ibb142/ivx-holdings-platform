@@ -30,8 +30,8 @@ async function bounded(promise, ms, code) {
 }
 function safeError(error) {
   // Never serialize SDK exceptions, HTTP bodies, headers or environment values.
-  return typeof error?.message === 'string' && /^[A-Z][A-Z0-9_]{2,90}$/.test(error.message)
-    ? error.message : 'PROBE_CHECK_FAILED';
+  const code=typeof error?.message==='string'?error.message.split('\n')[0]:'';
+  return /^[A-Z][A-Z0-9_]{2,90}$/.test(code)?code:'PROBE_CHECK_FAILED';
 }
 async function jsonRead(url, headers = {}, body) {
   const response = await nativeFetch(url,{method:body===undefined?'GET':'POST',redirect:'error',
@@ -174,8 +174,9 @@ function startChild(binding,quote,label,children,proof) {
   children.push(child);return child;
 }
 
-async function refusedCall(binding,quote,label,expectedReason) {
+async function refusedCall(binding,quote,label,expectedReason,proof,key) {
   const stats={label,admissions:0,gatewayAttempts:0},a=admission(binding,quote,label,stats);
+  if(proof)proof[key]=stats;
   const transport=createBudgetedFetch(async(resource,init)=>{
     const r=new Request(resource,init);if(r.method==='GET')return nativeFetch(r);
     stats.gatewayAttempts++;throw new Error('REFUSED_REQUEST_REACHED_TRANSPORT');
@@ -183,7 +184,10 @@ async function refusedCall(binding,quote,label,expectedReason) {
   const gateway=createGateway({apiKey:binding.gatewayKey,fetch:transport});
   let status=null;
   try{await generateText({model:gateway(quote.model),prompt:'Return OK.',maxOutputTokens:4,maxRetries:2});}
-  catch(error){status=error?.statusCode??null;}
+  catch(error){status=error?.statusCode??null;stats.errorCode=safeError(error);
+    stats.errorName=/^[A-Za-z_]{1,80}$/.test(error?.name||'')?error.name:null;
+    stats.lastErrorStatusCode=Number.isInteger(error?.lastError?.statusCode)?error.lastError.statusCode:null;}
+  stats.httpStatus=Number.isInteger(status)?status:null;
   assert.equal(status,402,'REFUSAL_NOT_NONRETRYABLE_402');
   assert.equal(stats.admissions,1,'REFUSED_ADMISSION_WAS_RETRIED');
   assert.equal(stats.gatewayAttempts,0,'REFUSED_REQUEST_REACHED_TRANSPORT');
@@ -236,7 +240,9 @@ async function parentMain() {
           ({scopeType,limitAmount,currentSpend,refreshPeriod,active,archived})),coverageVerified:false};
       } catch(error){proof.nativeBudget={state:'UNOBSERVED',reason:safeError(error)};}
     }
-    rows=await db.rows();checkRows(rows);assert.equal(rows.length,0,'CAMPAIGN_ALREADY_HAS_DURABLE_RESERVATIONS');
+    rows=await db.rows();checkRows(rows);
+    const diagnosticOnly=process.argv[2]==='diagnose';
+    if(!diagnosticOnly)assert.equal(rows.length,0,'CAMPAIGN_ALREADY_HAS_DURABLE_RESERVATIONS');
     const catalog=await jsonRead(gatewayOrigin+'/v1/models'),at=Date.now();
     const hash=createHash('sha256').update(JSON.stringify(catalog)).digest('hex');
     // Select only a model actually present in the current catalog and whose
@@ -245,6 +251,12 @@ async function parentMain() {
     const quotes=allowed.flatMap(model=>{try{const q=quoteCatalogModel(catalog,model,at,hash);checkQuote(q);return[q];}catch{return[];}});
     quotes.sort((a,b)=>BigInt(a.reservedNano)<BigInt(b.reservedNano)?-1:1);
     const quote=quotes[0];assert(quote,'NO_SUPPORTED_MODEL_WITHIN_CAMPAIGN_BOUND');proof.quote=quote;
+    if(diagnosticOnly) {
+      proof.scope='existing_reservation_refusal_diagnostic_no_provider_calls';
+      assert(rows.some(r=>r.reservation_id===reservationId('complete')),'NO_EXISTING_DIAGNOSTIC_RESERVATION');
+      await refusedCall(binding,quote,'complete','reservation_already_exists',proof,'diagnosticRefusal');
+      proof.diagnosticPassed=true;return;
+    }
     // Wait for natural capacity, never pause or change production to force a PASS.
     let idle=false;
     for(let i=0;i<20;i++){const p=await db.rpc('ivx_ai_budget_status');checkPolicy(p);if(p.requestsActive<2){idle=true;break;}await wait(1500);}
@@ -258,12 +270,12 @@ async function parentMain() {
     proof.concurrentAdmission={passed:true,processes:headers.map(h=>h.pid),headers,
       measuredAt:new Date().toISOString(),activeOwnReservations:2,
       semantics:'overlapping_admissions_with_original_responses_held_not_provider_maximum'};
-    proof.refused=await refusedCall(binding,quote,'denied','global_capacity_exceeded');
+    proof.refused=await refusedCall(binding,quote,'denied','global_capacity_exceeded',proof,'refused');
     first.release('complete');second.release('cancel');
     const initial=await bounded(Promise.all([first.done,second.done]),100_000,'INITIAL_PROBES_NOT_FINISHED');
     assert(initial.every(x=>x.ok),'INITIAL_REAL_PROBE_FAILED');
     rows=await db.rows();checkRows(rows);assert(!rows.some(r=>r.status==='reserved'),'OWN_ACTIVE_RESERVATION_LEAK');
-    proof.duplicate=await refusedCall(binding,quote,'complete','reservation_already_exists');
+    proof.duplicate=await refusedCall(binding,quote,'complete','reservation_already_exists',proof,'duplicate');
     const recovered=startChild(binding,quote,'recovery',children,proof);recovered.release('complete');
     const recovery=await bounded(recovered.done,100_000,'RECOVERY_PROBE_NOT_FINISHED');
     assert(recovery.ok,'REAL_PROVIDER_RECOVERY_FAILED');
