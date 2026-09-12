@@ -86,7 +86,7 @@
     if (typeof fn !== 'function' && name === 'shareDeal') {
       fn = function (dealId) {
         var url = 'https://ivxholding.com/?deal=' + encodeURIComponent(dealId);
-        if (navigator.share) navigator.share({ title: 'IVX Investment', url: url }).catch(function () {});
+        if (navigator.share) navigator.share({ title: 'IVX Investment', url: url }).catch(function (error) { console.error('[IVX CSP Actions] Share failed:', error.message); });
         else if (navigator.clipboard) navigator.clipboard.writeText(url).catch(function () {});
       };
     }
