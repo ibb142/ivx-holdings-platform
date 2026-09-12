@@ -231,7 +231,8 @@ async function callProvider(context, db, key, label, quote) {
 function existingLimits(state, excludedId) {
   return state.budgets.filter(b=>b.scopeType!=='team' && !['api_key_id_'+excludedId,'api_key_id_jtAnoFZC1LAdFBOuA9gwn8byoEteiOrNxS4y0rwikpKds7aq',
     'api_key_id_pWesf5bv7wl7jAK357RL2q4DlnWYS4SzQN6ufeQiLGbYlURw',
-    'api_key_id_UVzvUiLtmTPVjrFIgsOhTOgUMo42t9fNu8FMAL0KcJOUzYaF'].includes(b.quotaEntityId)).map(b=>({
+    'api_key_id_UVzvUiLtmTPVjrFIgsOhTOgUMo42t9fNu8FMAL0KcJOUzYaF',
+    'api_key_id_KSPgGHhv0EZq3WMzHszAA7qFVbOnarOiMI08J3YVq6c5a6gG'].includes(b.quotaEntityId)).map(b=>({
     id:b.quotaEntityId,limit:b.limitAmount,period:b.refreshPeriod,active:b.active,archived:b.archived,
     byok:b.includeByokInQuota,
   })).sort((a,b)=>a.id.localeCompare(b.id));
@@ -307,7 +308,7 @@ async function main() {
     assert.equal(quota.refreshPeriod,'none','TEST_QUOTA_PERIOD_MISMATCH');
     assert.equal(quota.currentSpend,0,'NEW_TEST_KEY_ALREADY_SPENT');
     for(let i=2;i<=8 && quota.currentSpend<1;i++) {
-      await callProvider(context,db,testKey,'fill'+i,await freshQuote('openai/gpt-4.1'));
+      await callProvider(context,db,testKey,'fill'+i,await freshQuote(fillQuote.model));
       const knownSpend=proof.receipts.reduce((n,r)=>n+BigInt(r.costNano),0n);
       quota=await pollSpend(context,testKeyId,Number(knownSpend)/1e9,'after-fill'+i);
     }
