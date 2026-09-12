@@ -15,6 +15,65 @@
 
 const DEPLOYMENT_MARKER = 'ivx-canonical-members-v1';
 
+export class CanonicalMembersReadError extends Error {
+  constructor() {
+    super('Members are temporarily unavailable. Please retry.');
+    this.name = 'CanonicalMembersReadError';
+  }
+}
+
+const MEMBER_READ_TIMEOUT_MS = 5000;
+const MAX_PENDING_MEMBER_READS = 32;
+let memberReadScope: { url: string; key: string; pending: Map<string, Promise<unknown>> } | null = null;
+
+function shareMemberRead<T>(key: string, read: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const url = getSupabaseUrl();
+  const serviceKey = getServiceKey();
+  if (!url || !serviceKey) return Promise.reject(new CanonicalMembersReadError());
+  if (!memberReadScope || memberReadScope.url !== url || memberReadScope.key !== serviceKey) {
+    memberReadScope = { url, key: serviceKey, pending: new Map() };
+  }
+  const pending = memberReadScope.pending;
+  let work = pending.get(key) as Promise<T> | undefined;
+  if (!work) {
+    if (pending.size >= MAX_PENDING_MEMBER_READS) return Promise.reject(new CanonicalMembersReadError());
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        const error = new CanonicalMembersReadError();
+        controller.abort(error);
+        reject(error);
+      }, MEMBER_READ_TIMEOUT_MS);
+    });
+    // Keep the deadline through JSON consumption and reject even if a transport
+    // ignores abort. A failed or completed read is never a cached empty registry.
+    work = Promise.race([Promise.resolve().then(() => read(controller.signal)), deadline])
+      .catch(() => { throw new CanonicalMembersReadError(); })
+      .finally(() => {
+        clearTimeout(timer);
+        if (pending.get(key) === work) pending.delete(key);
+      });
+    pending.set(key, work);
+  }
+  return work.then(value => structuredClone(value));
+}
+
+function readMemberRows<T>(query: string): Promise<T[]> {
+  const url = `${getSupabaseUrl()}/rest/v1${query}`;
+  const requestHeaders = headers();
+  return shareMemberRead(`GET:${query}`, async signal => {
+    const response = await fetch(url, { headers: requestHeaders, signal });
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
+      throw new CanonicalMembersReadError();
+    }
+    const rows: unknown = await response.json();
+    if (!Array.isArray(rows)) throw new CanonicalMembersReadError();
+    return rows as T[];
+  });
+}
+
 export interface CanonicalMemberInput {
   fullName?: string;
   email?: string;
@@ -393,7 +452,6 @@ export interface ListMembersOptions {
 }
 
 export async function listCanonicalMembers(options: ListMembersOptions = {}): Promise<CanonicalMemberRow[]> {
-  if (!isCanonicalMembersConfigured()) return [];
   const limit = Math.min(Math.max(options.limit ?? 1000, 1), 2000);
   let query = `/members?select=*&order=created_at.desc&limit=${limit}`;
   const type = normalizeMemberType(options.memberType);
@@ -406,27 +464,32 @@ export async function listCanonicalMembers(options: ListMembersOptions = {}): Pr
     const term = encodeURIComponent(`%${search}%`);
     query += `&or=(full_name.ilike.${term},email.ilike.${term},phone.ilike.${term})`;
   }
-  try {
-    return await rest<CanonicalMemberRow[]>(query);
-  } catch (error) {
-    console.error('[CanonicalMembers] List failed:', error instanceof Error ? error.message : error);
-    return [];
-  }
+  return readMemberRows<CanonicalMemberRow>(query);
+}
+
+export type CanonicalMemberSummaryRow = Pick<CanonicalMemberRow, 'member_type' | 'source' | 'sms_verified' | 'verification_status'>;
+
+export function listCanonicalMemberSummaryRows(): Promise<CanonicalMemberSummaryRow[]> {
+  return readMemberRows<CanonicalMemberSummaryRow>(
+    '/members?select=member_type,source,sms_verified,verification_status&order=created_at.desc&limit=2000',
+  );
 }
 
 export async function countCanonicalMembers(): Promise<number> {
-  if (!isCanonicalMembersConfigured()) return 0;
-  try {
-    const response = await fetch(`${getSupabaseUrl()}/rest/v1/members?select=member_id`, {
+  const url = `${getSupabaseUrl()}/rest/v1/members?select=member_id`;
+  const requestHeaders = { ...headers('count=exact'), Range: '0-0' };
+  return shareMemberRead('HEAD:members-count', async signal => {
+    const response = await fetch(url, {
       method: 'HEAD',
-      headers: { ...headers('count=exact'), Range: '0-0' },
+      headers: requestHeaders,
+      signal,
     });
-    const range = response.headers.get('content-range') || '';
-    const total = range.split('/')[1];
-    return total && total !== '*' ? Number(total) : 0;
-  } catch {
-    return 0;
-  }
+    if (!response.ok) throw new CanonicalMembersReadError();
+    const match = /^(?:\d+-\d+|\*)\/(\d+)$/.exec(response.headers.get('content-range') ?? '');
+    const total = match ? Number(match[1]) : NaN;
+    if (!Number.isSafeInteger(total) || total < 0) throw new CanonicalMembersReadError();
+    return total;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -666,3 +729,4 @@ export async function backfillCanonicalMembers(): Promise<BackfillResult> {
     deploymentMarker: DEPLOYMENT_MARKER,
   };
 }
+
