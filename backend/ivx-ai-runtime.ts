@@ -872,7 +872,14 @@ async function requestIVXAITextInternal(input: {
           baseMs: failureClass === 'rate_limit' ? 2500 : 600, capMs: 30_000,
           retryAfterMs: providerRetryAfterMs(error) });
         if (!retry.retry || input.abortSignal?.aborted) break;
-        await waitForRetry(retry.delayMs, undefined, { signal: input.abortSignal ?? undefined });
+        // A timer may wake before its requested delay. Recheck the not-before
+        // time so Retry-After remains a minimum, including fractional seconds.
+        const retryNotBefore = Date.now() + Math.ceil(retry.delayMs);
+        let remainingDelay = retryNotBefore - Date.now();
+        while (remainingDelay > 0) {
+          await waitForRetry(remainingDelay, undefined, { signal: input.abortSignal ?? undefined });
+          remainingDelay = retryNotBefore - Date.now();
+        }
       }
     }
   } else {

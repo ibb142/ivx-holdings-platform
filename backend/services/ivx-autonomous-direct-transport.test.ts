@@ -48,7 +48,10 @@ for (const fails of [false, true]) test(`configured same-project queue selects o
     if(restCalls!==0 || queries!==6)throw new Error('transport replay or unexpected call count');
     const setups=boundaries.filter(x=>x.startsWith('BEGIN;'));
     if(releases!==4 || setups.length!==4 || setups.some(x=>!x.includes("SET LOCAL statement_timeout = '4s'") || !x.includes("SET LOCAL lock_timeout = '2s'") || !x.includes("SET LOCAL idle_in_transaction_session_timeout = '8s'")))throw new Error('bounded transaction missing for planning, Landing read or RPC');
-    if(boundaries.filter(x=>x==='${fails ? 'ROLLBACK' : 'COMMIT'}').length!==4)throw new Error('incorrect transaction cleanup');
+    // An ambiguous client failure must destroy the connection without sending
+    // more SQL; a successful transaction must still commit exactly once.
+    const endings=boundaries.filter(x=>x==='ROLLBACK' || x==='COMMIT');
+    if(endings.length!==${fails ? 0 : 4} || endings.some(x=>x!=='COMMIT'))throw new Error('incorrect transaction cleanup');
   `], {stdout:'pipe',stderr:'pipe',timeout:10000});
   const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
   if (fails) {
