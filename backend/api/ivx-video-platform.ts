@@ -1,4 +1,4 @@
-import { boundedReadFetch } from '../services/ivx-read-timings';
+import { awaitPublicRead, boundedReadFetch, sharedPublicRead } from '../services/ivx-read-timings';
 import { withPublicFeedAvailability } from '../services/ivx-public-feed-availability';
 import { loadViewerEngagement } from '../services/ivx-viewer-engagement';
 import { createPlatformFeedLoader } from '../services/ivx-platform-feed-loader';
@@ -789,24 +789,65 @@ export async function handlePlatformEvents(req: Request): Promise<Response> {
   }
 }
 
+type DeferredVideoCount = { id: string; view_count: number };
+const pendingDeferredAnalytics = new Map<string, Promise<DeferredVideoCount[]>>();
+
+async function readDeferredVideoAnalytics(ids: string[]): Promise<DeferredVideoCount[]> {
+  const key = JSON.stringify([...ids].sort());
+  let work = pendingDeferredAnalytics.get(key);
+  if (!work) {
+    if (pendingDeferredAnalytics.size >= 32) throw new Error('Analytics read capacity exceeded');
+    work = sharedPublicRead(async () => {
+      const sb = await getSB();
+      // Independent inputs start together. Keep the operation shared until all
+      // source reads settle, even when one fails, so retries cannot duplicate it.
+      const [catalog, metadata, counters] = await Promise.allSettled([
+        Promise.resolve().then(() => sb.from('project_videos').select('id').in('id', ids).eq('is_approved', true)),
+        Promise.resolve().then(getMetaDoc),
+        Promise.resolve().then(getAnalyticsDoc),
+      ]);
+      if (catalog.status === 'rejected') throw catalog.reason;
+      if (metadata.status === 'rejected') throw metadata.reason;
+      const { data, error } = catalog.value;
+      if (error) throw error;
+      // A slow counter read must not retain an earlier publication decision.
+      // Recheck the document cache after all inputs settle; owner writes update
+      // that cache, and an expired snapshot must be read from the source again.
+      const currentMeta = await getMetaDoc();
+      const visible = (data ?? []).filter((v: { id: string }) => isMetaVisible(normalizeVideoMeta(currentMeta[v.id])));
+      if (!visible.length) return [];
+      if (counters.status === 'rejected') throw counters.reason;
+      // Only approved, currently published aggregates may leave this operation.
+      return visible.map((v: { id: string }) => ({ id: v.id, view_count: counters.value.videos[v.id]?.views ?? 0 }));
+    }).finally(() => {
+      if (pendingDeferredAnalytics.get(key) === work) pendingDeferredAnalytics.delete(key);
+    });
+    pendingDeferredAnalytics.set(key, work);
+  }
+  // No aggregate snapshot cache: later calls recheck publication metadata.
+  return structuredClone(await awaitPublicRead(work));
+}
+
 /** Optional public aggregates. Never expose viewer IDs or watch history. */
 export async function handleDeferredVideoAnalytics(req: Request): Promise<Response> {
-  const ids = [...new Set((new URL(req.url).searchParams.get('ids') ?? '').split(',').filter(Boolean))];
-  if (!ids.length || ids.length > 50 || ids.some(id => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
+  const ids = [...new Set((new URL(req.url).searchParams.get('ids') ?? '').split(',').filter(Boolean).map(id => id.toLowerCase()))];
+  if (!ids.length || ids.length > 50 || ids.some(id => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id))) {
     return json({ error: 'Provide 1 to 50 video UUIDs' }, 400);
   }
+  const unavailable = () => json({ videos: [], degraded: true, data_available: false, code: 'ANALYTICS_UNAVAILABLE' });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // Match the optional-analytics contract while the shared source retains its
+  // own deadline and remains available to other callers after this response.
+  const read = async (): Promise<Response> => json({ videos: await readDeferredVideoAnalytics(ids) });
   try {
-    const sb = await getSB();
-    const [{ data, error }, meta] = await Promise.all([
-      sb.from('project_videos').select('id').in('id', ids).eq('is_approved', true), getMetaDoc(),
+    return await Promise.race([
+      read(),
+      new Promise<Response>(resolve => { timer = setTimeout(() => resolve(unavailable()), 2500); }),
     ]);
-    if (error) throw error;
-    const visible = (data ?? []).filter((v: { id: string }) => isMetaVisible(normalizeVideoMeta(meta[v.id])));
-    if (!visible.length) return json({ videos: [] });
-    const analytics = await getAnalyticsDoc();
-    return json({ videos: visible.map((v: { id: string }) => ({ id: v.id, view_count: analytics.videos[v.id]?.views ?? 0 })) });
   } catch {
-    return json({ error: 'Video analytics temporarily unavailable', code: 'ANALYTICS_UNAVAILABLE' }, 503);
+    return unavailable();
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
 
@@ -1388,4 +1429,3 @@ export async function handlePlatformModerationDecision(req: Request, videoId: st
     return json({ error: err instanceof Error ? err.message : 'moderation failed', marker: VIDEO_PLATFORM_MARKER }, 500);
   }
 }
-
