@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { recoverAuth, PROJECT, EXPECTED_BOOT } from './supabase-auth-recovery-20260912.mjs';
+import { recoverAuth, PROJECT, EXPECTED_BOOT, CONFIRMED_INCIDENT } from './supabase-auth-recovery-20260912.mjs';
 
 async function run({ health = [false, false, true, true, true], project = PROJECT,
   status = 'ACTIVE_HEALTHY', boot = EXPECTED_BOOT, restartThrows = false, attempt = '1',
-  now = Date.parse('2026-09-12T01:00:00Z'), healthHttp = 200, bootHttp = 201 } = {}) {
+  now = Date.parse('2026-09-12T01:00:00Z'), healthHttp = 200, bootHttp = 201, confirmedIncident } = {}) {
   let probes = 0; const calls = [];
-  const receipt = await recoverAuth({ token: 'test-only', runAttempt: attempt, clock: () => now,
+  const receipt = await recoverAuth({ token: 'test-only', runAttempt: attempt, confirmedIncident, clock: () => now,
     wait: async () => {}, fetchImpl: async (url, options) => {
       calls.push({ url, method: options.method });
       assert.equal(new URL(url).hostname, 'api.supabase.com');
@@ -28,6 +28,12 @@ test('Auth incident recovers with one restart even when the project is ACTIVE_HE
 });
 test('healthy Auth is never restarted', async () => {
   const r = await run({ health: [true, true] }); assert.equal(r.restarts, 0); assert.equal(r.receipt.result, 'AUTH_ALREADY_HEALTHY');
+});
+test('confirmed failed QA and database lock remain an incident even when Auth liveness is healthy', async () => {
+  const r = await run({ confirmedIncident: CONFIRMED_INCIDENT, health: [true] });
+  assert.equal(r.restarts, 1); assert.equal(r.receipt.result, 'AUTH_RECOVERED');
+  assert.equal((await run({ confirmedIncident: CONFIRMED_INCIDENT, health: [true], boot: '2026-09-12T01:00:00Z' })).restarts, 0);
+  assert.equal((await run({ confirmedIncident: 'unrecognized', health: [true] })).restarts, 0);
 });
 test('wrong project cannot be restarted', async () => { assert.equal((await run({ project: 'wrong' })).restarts, 0); });
 test('credential and ambiguous health failures do not authorize restart', async () => {

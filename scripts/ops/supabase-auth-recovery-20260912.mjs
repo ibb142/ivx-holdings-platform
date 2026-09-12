@@ -3,16 +3,18 @@ import { pathToFileURL } from 'node:url';
 
 export const PROJECT = 'kvclcdjmjghndxsngfzb';
 export const EXPECTED_BOOT = '2026-09-11T16:42:14.546215Z';
+export const CONFIRMED_INCIDENT = 'qa-103469136770-and-cleanup-members-lock-55P03';
 const BASE = `https://api.supabase.com/v1/projects/${PROJECT}`;
 const EXPIRES = Date.parse('2026-09-12T01:45:00Z');
 
 // One owner-authorized incident. This is not a scheduled restart policy.
-export async function recoverAuth({ token, runAttempt, fetchImpl = fetch,
+export async function recoverAuth({ token, runAttempt, confirmedIncident, fetchImpl = fetch,
   wait = ms => new Promise(resolve => setTimeout(resolve, ms)), clock = Date.now,
   checkpoint = () => {} } = {}) {
   const receipt = { project: PROJECT, authorization: 'owner-2026-09-12-0049-single-restart',
     precedingQaJob: 103469136770, expectedBoot: EXPECTED_BOOT, startedAt: new Date(clock()).toISOString(),
-    restartRequests: 0, restartAcknowledged: false, probes: [], result: 'UNVERIFIED' };
+    restartRequests: 0, restartAcknowledged: false, probes: [], result: 'UNVERIFIED',
+    confirmedIncident: confirmedIncident === CONFIRMED_INCIDENT ? CONFIRMED_INCIDENT : null };
   const save = () => checkpoint(structuredClone(receipt));
   const request = async (path, { method = 'GET', body, timeout = 30000 } = {}) => {
     try {
@@ -43,18 +45,22 @@ export async function recoverAuth({ token, runAttempt, fetchImpl = fetch,
       throw new Error('project_identity_or_lifecycle_unverified');
     receipt.initialProjectStatus = project.data.status;
     const first = await probe(); await wait(2000); const second = await probe();
-    if (first === true && second === true) { receipt.result = 'AUTH_ALREADY_HEALTHY'; return receipt; }
-    if (first === null || second === null) throw new Error('two_explicit_unhealthy_auth_probes_required');
+    // Service health alone does not cover the owner-authorized incident: the
+    // actual hosted QA failed and its exact temporary member cleanup hit 55P03.
+    // That confirmed database lock is independent of the Auth liveness probe.
+    const knownLockIncident = confirmedIncident === CONFIRMED_INCIDENT;
+    if (!knownLockIncident && first === true && second === true) { receipt.result = 'AUTH_ALREADY_HEALTHY'; return receipt; }
+    if (!knownLockIncident && (first === null || second === null)) throw new Error('two_explicit_unhealthy_auth_probes_required');
     // Flapping was observed in the first incident sample. Keep the same two
     // consecutive unhealthy requirement, with at most six total observations.
     let unhealthy = second === false ? (first === false ? 2 : 1) : 0;
-    for (let extra = 0; unhealthy < 2 && extra < 4; extra++) {
+    for (let extra = 0; !knownLockIncident && unhealthy < 2 && extra < 4; extra++) {
       await wait(2000);
       const next = await probe();
       if (next === null) throw new Error('auth_health_unverified');
       unhealthy = next === false ? unhealthy + 1 : 0;
     }
-    if (unhealthy < 2) throw new Error('two_explicit_unhealthy_auth_probes_required');
+    if (!knownLockIncident && unhealthy < 2) throw new Error('two_explicit_unhealthy_auth_probes_required');
     const boot = await request('/database/query/read-only', { method: 'POST', timeout: 60000,
       body: { query: 'select pg_catalog.pg_postmaster_start_time() as boot_at' } });
     const rows = Array.isArray(boot.data) ? boot.data : boot.data?.result;
@@ -92,6 +98,7 @@ export async function recoverAuth({ token, runAttempt, fetchImpl = fetch,
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   mkdirSync('qa-results', { recursive: true });
   const receipt = await recoverAuth({ token: process.env.SUPABASE_ACCESS_TOKEN,
+    confirmedIncident: CONFIRMED_INCIDENT,
     runAttempt: process.env.GITHUB_RUN_ATTEMPT,
     checkpoint: value => writeFileSync('qa-results/auth-recovery.json', JSON.stringify(value, null, 2) + '\n') });
   console.log(JSON.stringify(receipt));
