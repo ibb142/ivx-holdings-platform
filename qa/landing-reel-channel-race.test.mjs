@@ -152,16 +152,50 @@ test('expired or incompatible page snapshots cannot be used for recovery', async
 });
 
 function transport(respond) {
-  const requests = [], timers = new Map(); let timerId = 0;
+  const requests = [], timers = new Map(); let timerId = 0, clock = 1000;
   const context = vm.createContext({ URL, AbortController, API: 'https://primary.example',
+    Date: { now: () => clock, parse: Date.parse },
     API_CANDIDATES: ['https://primary.example', 'https://secondary.example'],
-    setTimeout: (fn, ms) => { timers.set(++timerId, { fn, ms }); return timerId; },
+    setTimeout: (fn, ms) => { timers.set(++timerId, { fn, ms, at: clock + ms }); return timerId; },
     clearTimeout: id => timers.delete(id),
     fetch: (url, options) => { requests.push({ url, options }); return Promise.resolve(respond(url, options)); },
   });
   vm.runInContext(source.slice(begin, end), context);
-  return { context, requests, timers };
+  return { context, requests, timers, advance(ms) {
+    clock += ms;
+    for (const [id, timer] of timers) if (timer.at <= clock) { timers.delete(id); timer.fn(); }
+  } };
 }
+
+test('a degraded reel response waits for Retry-After before using the second host', async () => {
+  for (const status of [200, 503, 429]) {
+    const f = transport(url => ({ ok: url.includes('secondary') || status === 200, status,
+      headers: { get: () => '3' }, text: async () => JSON.stringify(
+        url.includes('primary') ? { videos: [], degraded: true } : publicFeed()) }));
+    const pending = f.context.apiFetchJson('/api/reels', 0, 4000);
+    await settle(); assert.equal(f.requests.length, 1);
+    f.advance(2999); await settle(); assert.equal(f.requests.length, 1);
+    f.advance(1); const result = await pending;
+    assert.equal(result.videos.length, 2);
+    assert.equal(f.requests.length, 2);
+    assert.equal(f.context.API, 'https://secondary.example');
+    assert.equal(f.timers.size, 0);
+  }
+});
+
+test('reel Retry-After cannot exceed the combined existing host budgets', async () => {
+  const f = transport(() => ({ ok: false, status: 503, headers: { get: () => '60' } }));
+  await assert.rejects(f.context.apiFetchJson('/api/reels', 0, 4000), /503/);
+  assert.equal(f.requests.length, 1); assert.equal(f.timers.size, 0);
+});
+
+test('reel retries cannot restart after a suspended page exceeds its deadline', async () => {
+  const f = transport(() => ({ ok: false, status: 503, headers: { get: () => '3' } }));
+  const pending = f.context.apiFetchJson('/api/reels', 0, 4000);
+  const rejected = assert.rejects(pending);
+  await settle(); f.advance(9000); await rejected;
+  assert.equal(f.requests.length, 1); assert.equal(f.timers.size, 0);
+});
 
 test('feed transport does not fail over an authorization denial', async () => {
   const f = transport(() => ({ ok: false, status: 403 }));

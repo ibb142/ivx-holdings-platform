@@ -5,9 +5,9 @@ import vm from 'node:vm';
 
 const source = await readFile('expo/ivxholding-landing/ivx-home-feed.js', 'utf8');
 const feed = { blocks: [{ type: 'deal', deal: { id: 'published-deal' } }] };
-const response = (status, body = feed, contentType = 'application/json') => ({
+const response = (status, body = feed, contentType = 'application/json', retryAfter = null) => ({
   ok: status >= 200 && status < 300, status,
-  headers: { get: () => contentType }, json: async () => body,
+  headers: { get: name => name.toLowerCase() === 'retry-after' ? retryAfter : contentType }, json: async () => body,
 });
 
 function fixture(respond) {
@@ -15,7 +15,7 @@ function fixture(respond) {
   let clock = 1000, timerId = 0;
   vm.runInNewContext(source, {
     window, AbortController, URL,
-    Date: { now: () => clock },
+    Date: { now: () => clock, parse: Date.parse },
     document: { readyState: 'complete', createElement: () => ({}), head: { appendChild() {} }, getElementById: () => null },
     console: { error: (...args) => errors.push(args), warn: (...args) => warnings.push(args), log() {} },
     fetch: async (url, options) => { calls.push({ url, signal: options.signal }); return respond(calls.length, options.signal); },
@@ -27,6 +27,39 @@ function fixture(respond) {
   };
 }
 async function settle() { for (let i = 0; i < 25; i++) await new Promise(resolve => setImmediate(resolve)); }
+
+test('recovery waits for the server Retry-After while the public cache warms', async () => {
+  for (const retryAfter of ['3', 'Thu, 01 Jan 1970 00:00:04 GMT']) {
+    const f = fixture(n => n === 1 ? response(200, { blocks: [], degraded: true }, 'application/json', retryAfter) : response(200));
+    await settle();
+    assert.equal(f.calls.length, 1, 'Do not spend the second attempt during the server backoff');
+    assert.equal(f.window.__ivxHomeFeedStatus.state, 'loading');
+    f.advance(2999); await settle(); assert.equal(f.calls.length, 1);
+    f.advance(1); await settle();
+    assert.equal(f.calls.length, 2);
+    assert.equal(f.window.__ivxHomeFeedStatus.state, 'ready');
+    assert.equal(f.window.__ivxHomeFeedStatus.blockCount, 1);
+    assert.equal(f.timers.size, 0);
+  }
+});
+
+test('server backoff cannot extend the total recovery budget or retry an authorization denial', async () => {
+  for (const [status, delay] of [[503, '60'], [429, '18'], [403, '3'], [401, '3']]) {
+    const f = fixture(() => response(status, {}, 'application/json', delay));
+    await settle();
+    assert.equal(f.calls.length, 1);
+    assert.equal(f.window.__ivxHomeFeedStatus.state, 'failed');
+    assert.equal(f.timers.size, 0);
+  }
+});
+
+test('a delayed retry callback cannot issue a request after the operation deadline', async () => {
+  const f = fixture(() => response(503, {}, 'application/json', '3'));
+  await settle(); f.advance(19000); await settle();
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.window.__ivxHomeFeedStatus.state, 'failed');
+  assert.equal(f.timers.size, 0);
+});
 
 test('a successful canonical response completes in one request', async () => {
   const f = fixture(() => response(200)); await settle();

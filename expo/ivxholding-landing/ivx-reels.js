@@ -421,16 +421,23 @@
    * promoted to `API` so all subsequent calls (likes, comments, upload, events)
    * use the working backend.
    */
-  function apiFetchJson(path, hostIdx, timeoutMs) {
+  function apiFetchJson(path, hostIdx, timeoutMs, deadline) {
     hostIdx = hostIdx || 0;
     if (hostIdx >= API_CANDIDATES.length) return Promise.reject(new Error('all API hosts failed'));
+    deadline = deadline || Date.now() + API_CANDIDATES.length * (timeoutMs || 15000);
+    var remaining = deadline - Date.now();
+    if (remaining <= 0) return Promise.reject(new Error('feed request deadline exceeded'));
     var base = API_CANDIDATES[hostIdx];
     var url = base + path;
     /* AbortController timeout so a hung request does not freeze the UI forever. */
     var controller = new AbortController();
-    var timeout = setTimeout(function () { controller.abort(); }, timeoutMs || 15000);
+    var timeout = setTimeout(function () { controller.abort(); }, Math.min(timeoutMs || 15000, remaining));
+    var retryAt = 0;
     return fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } })
       .then(function (r) {
+        var retryAfter = (r.headers && r.headers.get('retry-after') || '').trim();
+        retryAt = /^\d+$/.test(retryAfter) ? Date.now() + Number(retryAfter) * 1000
+          : /^[A-Za-z]{3}, /.test(retryAfter) ? Date.parse(retryAfter) : 0;
         if (!r.ok) {
           var error = new Error('bad status ' + r.status);
           error.retryable = r.status === 408 || r.status === 429 || r.status >= 500;
@@ -453,8 +460,11 @@
       .catch(function (err) {
         clearTimeout(timeout);
         /* Do not swallow abort of the final host; surface it. */
-        if (err.retryable === false || hostIdx >= API_CANDIDATES.length - 1) throw err;
-        return apiFetchJson(path, hostIdx + 1, timeoutMs);
+        var waitMs = Math.max(0, (retryAt || 0) - Date.now());
+        if (err.retryable === false || hostIdx >= API_CANDIDATES.length - 1 || waitMs >= deadline - Date.now()) throw err;
+        if (!waitMs) return apiFetchJson(path, hostIdx + 1, timeoutMs, deadline);
+        return new Promise(function (resolve) { setTimeout(resolve, waitMs); })
+          .then(function () { return apiFetchJson(path, hostIdx + 1, timeoutMs, deadline); });
       });
   }
 

@@ -8,8 +8,9 @@ const source = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].m
 assert.ok(source, 'The shipped homepage must initialize its project reel');
 
 const reel = { video_url: 'https://ivxholding.com/videos/example.mp4', webm_url: '/media/reels/example.webm', thumbnail_url: '/same-reel.jpg' };
-function fixture(respond, now = Date.now) {
+function fixture(respond, now = Date.now, manualTimers = false) {
   const elements = [], deadlines = [];
+  const timers = new Map(); let timerId = 0;
   const window = {};
   function element(tagName) {
     const e = { tagName, children: [], listeners: {}, hidden: false, style: {}, attributes: {},
@@ -30,18 +31,44 @@ function fixture(respond, now = Date.now) {
   video.play = () => Promise.resolve();
   vm.runInNewContext(source, {
     document: { getElementById: () => video, createElement: element },
-    URL, AbortController, window, Date: { now },
+    URL, AbortController, window, Date: { now, parse: Date.parse },
     fetch: async (_url, options) => { assert.ok(options?.signal || process.env.LANDING_BOOTSTRAP_HTML, 'Fetch must have a deadline'); return respond(++calls); },
     // Advance backoff without waiting; network-deadline expiry is covered by
     // the aborted-request case. Cancelled deadline callbacks must not execute.
-    setTimeout: (fn, ms) => { if (ms >= 4000) deadlines.push(ms); if (ms < 4000) queueMicrotask(fn); return {}; },
-    clearTimeout: () => {},
+    setTimeout: (fn, ms) => {
+      if (ms >= 4000) deadlines.push(ms);
+      const id = ++timerId; timers.set(id, { fn, at: now() + ms });
+      if (!manualTimers && ms < 4000) queueMicrotask(() => { if (timers.delete(id)) fn(); });
+      return id;
+    },
+    clearTimeout: id => timers.delete(id),
   });
-  return { video, window, deadlines, get calls() { return calls; }, get loads() { return loads; },
+  return { video, window, deadlines, timers, flushTimers() {
+    for (const [id, timer] of timers) if (timer.at <= now()) { timers.delete(id); timer.fn(); }
+  }, get calls() { return calls; }, get loads() { return loads; },
     button: () => elements.find(e => e.tagName === 'button') };
 }
 const json = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
 async function settle() { for (let i = 0; i < 25; i++) await new Promise(resolve => setImmediate(resolve)); }
+
+test('homepage reel waits for Retry-After without attaching the unavailable response', async () => {
+  let clock = 1000;
+  const f = fixture(n => n === 1 ? { ...json(200, { videos: [], degraded: true }), headers: { get: () => '3' } }
+    : json(200, { videos: [reel] }), () => clock, true);
+  await settle(); assert.equal(f.calls, 1); assert.equal(f.loads, 0);
+  clock += 2999; f.flushTimers(); await settle(); assert.equal(f.calls, 1);
+  clock += 1; f.flushTimers(); await settle();
+  assert.equal(f.calls, 2); assert.equal(f.loads, 1); assert.equal(f.timers.size, 0);
+});
+
+test('homepage reel cannot wait beyond its operation budget or retry a denied request', async () => {
+  for (const [status, delay] of [[503, '60'], [401, '3'], [403, '3']]) {
+    const f = fixture(() => ({ ...json(status, {}), headers: { get: () => delay } }), () => 1000, true);
+    await settle();
+    assert.equal(f.calls, 1); assert.equal(f.loads, 0);
+    assert.equal(f.timers.size, 0); assert.equal(f.button()?.hidden, false);
+  }
+});
 
 test('a temporary feed failure recovers and keeps both formats attached to the same reel', async () => {
   const f = fixture(n => n === 1 ? json(503, {}) : json(200, { videos: [reel] }));
