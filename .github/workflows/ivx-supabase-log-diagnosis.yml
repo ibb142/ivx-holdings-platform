@@ -32,22 +32,30 @@ jobs:
           project = re.search(r"export const PROJECT = '([a-z0-9]+)'", text).group(1)
           end = datetime.datetime.now(datetime.timezone.utc)
           start = end - datetime.timedelta(minutes=30)
-          categories = {
-              'connection_slots': 'too many clients|remaining connection slots|too many connections',
-              'authentication_timeout': 'authentication.*timeout|authentication.*timed out|authentication.*did not complete',
-              'idle_transaction_timeout': 'idle-in-transaction timeout|idle in transaction timeout',
-              'statement_timeout': 'statement timeout',
-              'lock_timeout': 'lock timeout|deadlock detected',
-              'server_shutdown': 'administrator command|database system is shutting down|database system is starting up',
-              'disk_full': 'no space left on device|disk quota',
-              'memory': 'out of memory|cannot allocate memory',
-              'connection_reset': 'connection reset|broken pipe|connection.*closed|connection.*terminated',
-              'pool_timeout': 'pool.*timeout|pool.*timed out|checkout.*timeout',
-              'password_authentication': 'password authentication failed',
-              'client_authentication': 'no pg_hba.conf entry|role .* does not exist|database .* does not exist',
-              'schema_cache': 'schema cache',
-          }
-          sql = "select p.error_severity as severity, p.sql_state_code as sqlstate, count(*) as n from postgres_logs as t cross join unnest(t.metadata) as m cross join unnest(m.parsed) as p where p.error_severity = 'FATAL' and regexp_contains(t.event_message, '(?i)connection to client lost|could not (receive|send) data.*client|connection reset by peer|broken pipe') group by severity, sqlstate limit 50"
+          sql = "select p.sql_state_code as sqlstate, count(*) as n from postgres_logs as t cross join unnest(t.metadata) as m cross join unnest(m.parsed) as p where p.error_severity in ('ERROR', 'FATAL', 'PANIC') and regexp_contains(p.sql_state_code, '^[0-9A-Z]{5}
+          params = urllib.parse.urlencode({'sql': sql, 'iso_timestamp_start': start.isoformat(timespec='milliseconds').replace('+00:00', 'Z'), 'iso_timestamp_end': end.isoformat(timespec='milliseconds').replace('+00:00', 'Z')})
+          request = urllib.request.Request('https://api.supabase.com/v1/projects/' + project + '/analytics/endpoints/logs.all?' + params,
+              headers={'Authorization': 'Bearer ' + token})
+          print(json.dumps({'startedAt': start.isoformat(timespec='milliseconds').replace('+00:00', 'Z'), 'finishedAt': end.isoformat(timespec='milliseconds').replace('+00:00', 'Z'), 'mode': 'read_only'}))
+          try:
+              with urllib.request.urlopen(request, timeout=60) as response:
+                  payload = json.load(response)
+          except urllib.error.HTTPError as error:
+              body = error.read(8192).decode('utf-8', errors='replace').lower()
+              print(json.dumps({'errorHints': [word for word in ['syntax', 'permission', 'unauthorized', 'invalid', 'timestamp', 'not found', 'clickhouse', 'bigquery'] if word in body]}))
+              raise SystemExit('LOGS_API_HTTP_' + str(error.code))
+          except Exception:
+              raise SystemExit('LOGS_API_TRANSPORT_FAILURE')
+          if not isinstance(payload, dict) or payload.get('error') or not isinstance(payload.get('result'), list):
+              error_text = str(payload.get('error', '')).lower() if isinstance(payload, dict) else ''
+              print(json.dumps({'errorHints': [word for word in ['syntax', 'column', 'function', 'unnest', 'timestamp', 'permission', 'unsupported', 'not found', 'regexp_contains'] if word in error_text]}))
+              raise SystemExit('LOGS_API_RESULT_INVALID')
+          for row in payload['result']:
+              if not re.fullmatch(r'[0-9A-Z]{5}', str(row.get('sqlstate', ''))):
+                  raise SystemExit('UNEXPECTED_AGGREGATE_SHAPE')
+              print(json.dumps({'sqlstate': row['sqlstate'], 'count': int(row['n'])}))
+          print('LOG_DIAGNOSIS_COMPLETE')
+) group by sqlstate limit 50"
           params = urllib.parse.urlencode({'sql': sql, 'iso_timestamp_start': start.isoformat(timespec='milliseconds').replace('+00:00', 'Z'), 'iso_timestamp_end': end.isoformat(timespec='milliseconds').replace('+00:00', 'Z')})
           request = urllib.request.Request('https://api.supabase.com/v1/projects/' + project + '/analytics/endpoints/logs.all?' + params,
               headers={'Authorization': 'Bearer ' + token})
