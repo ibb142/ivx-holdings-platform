@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const API = 'https://api.ivxholding.com';
 const PROJECT = 'kvclcdjmjghndxsngfzb';
 const AUTH = `https://${PROJECT}.supabase.co`;
-export const TARGET_SHA = '2ec993814841fdab299c0026ba2e1bd04ce82f36';
+export const TARGET_SHA = '1a8a1eed2898c573375e4cc183527be71d2167a2';
 const sql = value => `'${String(value).replaceAll("'", "''")}'`;
 const json = value => `${sql(JSON.stringify(value))}::jsonb`;
 const now = () => new Date().toISOString();
@@ -104,6 +104,7 @@ export async function runProof(env = process.env) {
   const postApi = (path, body) => request(API, path, { method: 'POST', body, headers: authHeaders() });
   const health = async () => {
     const r = await request(API, `/health?phase1_71=${f.marker}&nonce=${randomUUID()}`);
+    (receipt.healthObservations ??= []).push({ http: r.http, ok: r.data?.ok, commit: r.data?.commit, instanceId: r.data?.instanceId, at: r.at }); save();
     requireProof(r.http === 200 && r.data?.ok === true && r.data.commit === TARGET_SHA, 'Production health/SHA mismatch');
     requireProof(typeof r.data.instanceId === 'string' && r.data.instanceId.startsWith('srv-d7t9ivreo5us73ftose0:'), 'Physical API process identity missing');
     return { instanceId: r.data.instanceId, commit: r.data.commit, at: r.at };
