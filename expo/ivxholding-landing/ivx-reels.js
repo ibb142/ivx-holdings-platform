@@ -480,16 +480,17 @@
       })) throw error;
       var reelsOnly = query.get('type') === 'reel';
       if (query.has('type') && !reelsOnly) throw error;
-      function recoverPublic(data) {
+      function recoverPublic(data, expectedType) {
+        expectedType = expectedType || 'unified';
         var vids = data && data.videos;
         if (!Array.isArray(vids) || !vids.length || data.channel || data.personalized !== false
           || data.degraded === true || data.data_available === false || data.code === 'PUBLIC_DATA_UNAVAILABLE'
-          || data.ordering !== 'canonical-unified-v2' || data.feed_type !== 'unified'
+          || data.ordering !== 'canonical-unified-v2' || data.feed_type !== expectedType
           || !vids.every(function (v) { return v && v.id && v.video_url; })) throw error;
         // The unified endpoint can return published reels when no deal videos
         // are playable. It represents the Reels rail only if that catalog is
         // complete and consists entirely of reels; mixed/incomplete data fails.
-        if (reelsOnly && (data.next_cursor || data.total !== vids.length
+        if (reelsOnly && expectedType === 'unified' && (data.next_cursor || data.total !== vids.length
           || !vids.every(function (v) { return v.video_type === 'reel'; }))) throw error;
         return Object.assign({}, data, { viewer_state_available: false, videos: vids.map(function (v) {
           var copy = Object.assign({}, v, { viewer_state_available: false });
@@ -504,7 +505,14 @@
       if (age >= 0 && age <= 30000) {
         try { return recoverPublic(snapshot.data); } catch (_) { /* request a current catalog */ }
       }
-      return apiFetchJson('/api/reels', 0, 4000).then(recoverPublic);
+      // Optional viewer-state reads must not send Project Reels recovery to
+      // the investor catalog. Keep the requested rail and page size while
+      // removing only the viewer, so its anonymous response can share cache.
+      requested.searchParams.delete('viewer_id');
+      var publicPath = reelsOnly ? requested.pathname + requested.search : '/api/reels';
+      return apiFetchJson(publicPath, 0, 4000).then(function (data) {
+        return recoverPublic(data, reelsOnly ? 'reel' : 'unified');
+      });
     });
   }
 

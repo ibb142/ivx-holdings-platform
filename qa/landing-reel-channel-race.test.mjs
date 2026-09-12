@@ -81,14 +81,76 @@ test('a transient personalized feed failure recovers actual public reels with un
   f.state.channel = '__reels'; f.context.loadMore();
   f.pending[0].reject(new Error('upstream timeout')); await settle();
   assert.equal(f.pending.length, 2);
-  assert.equal(f.pending[1].path, '/api/reels');
-  const data = publicFeed();
+  assert.equal(f.pending[1].path, '/api/reels?limit=6&type=reel');
+  const data = { ...publicFeed(), feed_type: 'reel' };
   f.pending[1].resolve(data); await settle();
   assert.deepEqual(f.feedEl.children.map(x => x.video?.video_url), data.videos.map(x => x.video_url));
   assert.equal(f.state.videos.one.viewer_state_available, false);
   assert.equal(f.state.videos.one.viewer_liked, undefined, 'Public data must not assert the current viewer has not liked a reel');
   assert.equal(data.videos[0].viewer_liked, false, 'Recovery must not mutate the source response');
   assert.equal(f.state.done, true);
+});
+
+test('Project Reels recovery requests its public rail when the homepage snapshot contains deal videos', async () => {
+  const f = fixture();
+  const homepage = publicFeed();
+  homepage.videos.forEach(video => { video.video_type = 'deal'; });
+  f.context.window.__ivxPublicReels = { at: Date.now(), data: homepage };
+  f.state.channel = '__reels'; f.context.loadMore();
+  f.pending[0].reject(new Error('viewer query timed out')); await settle();
+  assert.equal(f.pending[1].path, '/api/reels?limit=6&type=reel');
+  assert.deepEqual(Object.keys(f.state.videos), [], 'An unrelated homepage catalog must not enter the requested rail');
+  const rail = { ...publicFeed(), feed_type: 'reel' };
+  rail.videos.forEach(video => { video.viewer_liked = true; video.viewer_following_creator = true; });
+  f.pending[1].resolve(rail); await settle();
+  assert.deepEqual(f.feedEl.children.map(x => x.video?.id), ['one', 'two']);
+  assert.equal(f.state.videos.one.viewer_liked, undefined);
+  assert.equal(f.state.videos.one.viewer_following_creator, undefined);
+  assert.equal(f.state.videos.one.viewer_state_available, false);
+  assert.equal(rail.videos[0].viewer_liked, true, 'Shared source data must stay unchanged');
+});
+
+test('a matching public rail preserves its cursor and the server-selected property fallback', async () => {
+  const f = fixture();
+  f.state.channel = '__reels'; f.context.loadMore();
+  f.pending[0].reject(new Error('viewer query timed out')); await settle();
+  const rail = { ...publicFeed(), feed_type: 'reel', next_cursor: 'page-two', total: 10 };
+  // The API can explicitly select deal videos when its dedicated rail is empty.
+  // Accept that decision only from the matching type=reel endpoint.
+  rail.videos.forEach(video => { video.video_type = 'deal'; });
+  f.pending[1].resolve(rail); await settle();
+  assert.deepEqual(f.feedEl.children.map(x => x.video?.id), ['one', 'two']);
+  assert.equal(f.state.cursor, 'page-two');
+  assert.equal(f.state.done, false);
+  f.context.loadMore();
+  const next = new URL(f.pending[2].path, 'https://api.ivxholding.com');
+  assert.equal(next.searchParams.get('type'), 'reel');
+  assert.equal(next.searchParams.get('cursor'), 'page-two');
+  f.pending[2].resolve(videos('three')); await settle();
+});
+
+test('matching public rail recovery rejects unavailable, private and mismatched responses', async () => {
+  for (const fields of [{ degraded: true }, { data_available: false }, { code: 'PUBLIC_DATA_UNAVAILABLE' },
+    { personalized: true }, { channel: 'buyer' }, { feed_type: 'unified' }, { ordering: 'other' }, { videos: [] }]) {
+    const f = fixture();
+    f.state.channel = '__reels'; f.context.loadMore();
+    f.pending[0].reject(new Error('timeout')); await settle();
+    f.pending[1].resolve({ ...publicFeed(), feed_type: 'reel', ...fields }); await settle();
+    assert.deepEqual(Object.keys(f.state.videos), [], JSON.stringify(fields));
+    assert.equal(f.state.loading, false);
+    assert.equal(f.errors.length, 1);
+  }
+});
+
+test('a matching public rail arriving after a channel switch cannot replace the current videos', async () => {
+  const f = fixture();
+  f.state.channel = '__reels'; f.context.loadMore();
+  f.pending[0].reject(new Error('timeout')); await settle();
+  f.state.channel = 'buyer'; f.context.resetFeed(); f.context.loadMore();
+  f.pending[2].resolve(videos('buyer')); await settle();
+  f.pending[1].resolve({ ...publicFeed(), feed_type: 'reel' }); await settle();
+  assert.deepEqual(f.feedEl.children.map(x => x.video?.id), ['buyer']);
+  assert.equal(f.state.loading, false);
 });
 
 test('public recovery cannot replace a filtered, paginated, or denied request', async () => {
