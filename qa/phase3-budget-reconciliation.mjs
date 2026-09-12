@@ -10,7 +10,9 @@ const MAX_BODY_BYTES = 512_000;
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 class ObservationError extends Error {
-  constructor(code, status = null) { super(code); this.code = code; this.status = status; }
+  constructor(code, status = null, receiptEvidence = null) {
+    super(code); this.code = code; this.status = status; this.receiptEvidence = receiptEvidence;
+  }
 }
 function requireValue(ok, code) { if (!ok) throw new ObservationError(code); }
 
@@ -104,7 +106,6 @@ export function reconcileReceipt(row, payload, observedAt) {
   for (const alias of ['gateway_cost', 'usage']) {
     if (receipt[alias] !== undefined) requireValue(receiptUsdToNano(receipt[alias]) === total, 'PROVIDER_COST_CONFLICT');
   }
-  requireValue(total <= upper, 'PROVIDER_COST_EXCEEDS_LEDGER');
   const result = { reservationId: row.reservation_id, generationId: receipt.id, model: row.model,
     state: 'RECONCILED', providerCostNano: total.toString(), settledUpperNano: upper.toString(),
     reservedNano: reserved.toString(), providerCreatedAt: receipt.created_at,
@@ -114,6 +115,23 @@ export function reconcileReceipt(row, payload, observedAt) {
     requireValue(typeof receipt[key] === 'number' && Number.isFinite(receipt[key]) && receipt[key] >= 0, 'INVALID_PROVIDER_LATENCY');
     result[key === 'latency' ? 'firstTokenMs' : 'generationMs'] = receipt[key];
   }
+  // The gateway reports add-on charges separately when available. Preserve
+  // their exact validated amounts; do not infer fees from a token difference.
+  for (const [source, target] of [['market_cost', 'marketCostNano'], ['surcharge_cost', 'surchargeCostNano']]) {
+    if (receipt[source] !== undefined) result[target] = receiptUsdToNano(receipt[source]).toString();
+  }
+  for (const [source, target] of [['native_tokens_prompt', 'nativePromptTokens'],
+    ['native_tokens_completion', 'nativeCompletionTokens'], ['native_tokens_reasoning', 'nativeReasoningTokens'],
+    ['native_tokens_cached', 'nativeCachedTokens'], ['native_tokens_cache_creation', 'nativeCacheCreationTokens'],
+    ['billable_web_search_calls', 'billableWebSearchCalls']]) {
+    if (receipt[source] !== undefined) result[target] = count(receipt[source]);
+  }
+  // Preserve validated billing evidence when the bound fails. Throwing before
+  // constructing this allowlist hid the actual amount needed to repair an
+  // undercount. This is still a failed reconciliation, never a zero charge.
+  if (total > upper) throw new ObservationError('PROVIDER_COST_EXCEEDS_LEDGER', null, {
+    ...result, state: 'UNRECONCILED', undercountNano: (total - upper).toString(),
+  });
   return result;
 }
 
@@ -190,7 +208,8 @@ export async function observeBudgetReconciliation({ databaseUrl, serviceKey, gat
           { Authorization: 'Bearer ' + gatewayKey }, deps, true);
         result.records.push({ ...reconcileReceipt(row, receipt.value, new Date(now()).toISOString()), lookupAttempts: receipt.attempts });
       } catch (error) {
-        result.records.push({ reservationId: row.reservation_id, state: 'UNRECONCILED',
+        result.records.push({ ...(error instanceof ObservationError ? error.receiptEvidence : null),
+          reservationId: row.reservation_id, state: 'UNRECONCILED',
           reason: error instanceof ObservationError ? error.code : 'RECEIPT_UNAVAILABLE' });
         if (deps.now() >= deps.deadline || (error instanceof ObservationError && [401,403].includes(error.status))) throw error;
       }

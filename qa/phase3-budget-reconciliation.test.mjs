@@ -66,6 +66,45 @@ test('an actual provider cost beyond the recorded liability is never accepted', 
   assert.throws(() => reconcileReceipt(row, high, new Date(NOW).toISOString()), /PROVIDER_COST_EXCEEDS_LEDGER/);
   assert.throws(() => reconcileReceipt({ ...row, reserved_nano: 1 }, receipt, new Date(NOW).toISOString()), /LEDGER_BOUND_BREACHED/);
 });
+test('an undercount exports validated receipt numbers while remaining unreconciled', async () => {
+  const high = { data: { ...receipt.data, total_cost: '0.0003', gateway_cost: '0.0003', usage: '0.0003',
+    market_cost: '0.0001', surcharge_cost: '0.0002', native_tokens_prompt: 20,
+    native_tokens_completion: 5, native_tokens_reasoning: 0, native_tokens_cached: 0,
+    native_tokens_cache_creation: 0, billable_web_search_calls: 0 } };
+  const result = await observe(fixture({ provider: () => Response.json(high) }));
+  assert.equal(result.state, 'INCOMPLETE');
+  assert.equal(result.reconciledRecords, 0); assert.equal(result.unreconciledRecords, 1);
+  assert.equal(result.providerCostNano, '0'); // Sum of reconciled records only.
+  assert.deepEqual(result.records[0], {
+    reservationId: row.reservation_id, generationId: row.generation_id, model: row.model,
+    state: 'UNRECONCILED', reason: 'PROVIDER_COST_EXCEEDS_LEDGER',
+    providerCostNano: '300000', settledUpperNano: '200000', reservedNano: '1000000', undercountNano: '100000',
+    providerCreatedAt: receipt.data.created_at, ledgerCompletedAt: row.completed_at,
+    observedAt: new Date(NOW).toISOString(), promptTokens: 20, completionTokens: 5,
+    firstTokenMs: 70, generationMs: 900,
+    marketCostNano: '100000', surchargeCostNano: '200000', nativePromptTokens: 20,
+    nativeCompletionTokens: 5, nativeReasoningTokens: 0, nativeCachedTokens: 0,
+    nativeCacheCreationTokens: 0, billableWebSearchCalls: 0,
+  });
+  assert.equal(result.productionRowsChanged, 0); assert.equal(result.modelCallsCreated, 0);
+  const output = JSON.stringify(result);
+  for (const privateValue of ['PRIVATE_PROMPT', 'PRIVATE_RESPONSE', config.serviceKey, config.gatewayKey]) {
+    assert(!output.includes(privateValue));
+  }
+});
+test('a malformed high-cost receipt never becomes trusted diagnostic evidence', async () => {
+  for (const invalid of [{ tokens_prompt: -1 }, { latency: null }, { is_byok: true },
+    { gateway_cost: '0.0004' }, { id: 'PRIVATE_WRONG_ID' }, { created_at: 'invalid' },
+    { surcharge_cost: 'PRIVATE_NOT_MONEY' }, { market_cost: -1 }, { native_tokens_cached: -1 }]) {
+    const payload = { data: { ...receipt.data, total_cost: '0.0003', gateway_cost: '0.0003', usage: '0.0003', ...invalid } };
+    const result = await observe(fixture({ provider: () => Response.json(payload) }));
+    assert.equal(result.state, 'INCOMPLETE'); assert.equal(result.reconciledRecords, 0);
+    assert.equal(result.records[0].providerCostNano, undefined);
+    assert.equal(result.records[0].undercountNano, undefined);
+    assert.equal(result.records[0].generationId, undefined);
+    assert(!JSON.stringify(result).includes('PRIVATE'));
+  }
+});
 test('BYOK, wrong model, wrong receipt, contradictory cost and invalid usage fail closed', () => {
   for (const change of [{ is_byok: true }, { is_byok: undefined }, { model: 'openai/other' },
     { id: 'gen_01ARZ3NDEKTSV4RRFFQ69G5FAA' }, { gateway_cost: 0.1 }, { tokens_prompt: -1 },
@@ -174,4 +213,3 @@ test('the first minute after UTC midnight does not silently substitute the prece
   assert.equal(result.day, '2026-09-12'); assert.equal(result.cutoff, '2026-09-12T00:00:00.000Z');
   assert.equal(result.reason, 'EMPTY_LEDGER_COHORT');
 });
-
