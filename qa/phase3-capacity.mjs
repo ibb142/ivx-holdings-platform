@@ -98,6 +98,8 @@ result.budgetReconciliation = sharedBinding
   ? await observeBudgetReconciliation({ ...binding, sourceSha: sha })
   : { state: 'UNOBSERVED', reason: 'SERVICE_BINDINGS_DIFFER', modelCallsCreated: 0,
       productionRowsChanged: 0, secretsReturned: false, phase3Closed: false };
+result.billingMismatchCount = (result.budgetReconciliation.records || [])
+  .filter(record => record.reason === 'PROVIDER_COST_EXCEEDS_LEDGER').length;
 await checkpoint();
 const samples = [];
 for (let index=0; index<2; index++) {
@@ -114,4 +116,6 @@ for (let index=0; index<2; index++) {
   await checkpoint();
 }
 console.log(JSON.stringify(result));
-
+// A completed observation is not a passing monetary control when real receipts
+// contradict the ledger. Preserve evidence, then fail the protected proof.
+if (result.billingMismatchCount > 0) process.exitCode = 1;
