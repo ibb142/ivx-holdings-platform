@@ -103,9 +103,15 @@ export function createBudgetedFetch(nativeFetch: typeof fetch, dependencies: {
     } catch (error) {
       if (request.signal.aborted) throw request.signal.reason;
       const message = error instanceof GlobalAIBudgetError ? error.message : 'Global AI budget: admission unconfirmed';
-      // A real 402 response crosses the SDK's error adapter without becoming a
-      // retryable 500. No upstream request has been sent on this path.
-      return Response.json({ error: { type: 'quota_for_entity_exceeded', code: 'IVX_GLOBAL_AI_BUDGET_BLOCKED', message } }, { status: 402 });
+      // Occupied slots are temporary admission pressure. Keep monetary and
+      // unconfirmed admission failures closed as 402; only capacity can retry.
+      // No upstream request has been sent on either path.
+      const capacityBlocked = error instanceof GlobalAIBudgetError
+        && error.message === 'Global AI budget: global_capacity_exceeded';
+      return Response.json({ error: {
+        type: capacityBlocked ? 'rate_limit_error' : 'quota_for_entity_exceeded',
+        code: 'IVX_GLOBAL_AI_BUDGET_BLOCKED', message,
+      } }, { status: capacityBlocked ? 429 : 402, ...(capacityBlocked ? { headers: { 'Retry-After': '2' } } : {}) });
     }
     if (request.signal.aborted) { await lease.finish(null, true); throw request.signal.reason; }
     const controller = new AbortController();
