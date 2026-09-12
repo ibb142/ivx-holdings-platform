@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CAMPAIGN,LABELS,MAX_LIABILITY_NANO,reservationId,checkQuote,checkTestKeyIdentity } from './phase3-native-quota.mjs';
+import { CAMPAIGN,LABELS,MAX_LIABILITY_NANO,reservationId,checkQuote,checkTestKeyIdentity,receiptCoverageNano } from './phase3-native-quota.mjs';
 
 test('durable reservation identities cannot change with a workflow replay',()=>{
   const before=LABELS.map(reservationId),old=process.env.GITHUB_RUN_ATTEMPT;
@@ -33,4 +33,15 @@ test('cleanup verifies key ownership without requiring an active hydrated quota'
   assert.throws(()=>checkTestKeyIdentity({...key,teamId:'different-team'},id));
   assert.throws(()=>checkTestKeyIdentity({...key,name:'production-key'},id));
   assert.throws(()=>checkTestKeyIdentity({...key,metadata:{bypassAll:true}},id));
+});
+
+test('late receipts require full retained liability or an adequate settled bound',()=>{
+  const q={reservedNano:'822728000'};
+  assert.equal(receiptCoverageNano(q,{status:'uncertain',settledUpperNano:null},'200000000'),'822728000');
+  assert.equal(receiptCoverageNano(q,{status:'settled',settledUpperNano:'350000000'},'200000000'),'350000000');
+  assert.throws(()=>receiptCoverageNano(q,{status:'uncertain',settledUpperNano:'0'},'200000000'));
+  assert.throws(()=>receiptCoverageNano(q,{status:'cancelled',settledUpperNano:'0'},'200000000'));
+  assert.throws(()=>receiptCoverageNano(q,{status:'settled',settledUpperNano:'100000000'},'200000000'));
+  assert.throws(()=>receiptCoverageNano(q,{status:'uncertain',settledUpperNano:null},'822728001'));
+  assert.throws(()=>receiptCoverageNano(q,{status:'uncertain',settledUpperNano:null},'0'));
 });

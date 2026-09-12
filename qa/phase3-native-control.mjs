@@ -57,6 +57,14 @@ try {
     values.push(env);
   }
   const binding = sharedBinding(values);
+  try {
+    const r=await request('https://ai-gateway.vercel.sh/v1/generation?id=gen_01M2AWQ3GTQ4Z72QX87BBE7NDF',binding.gatewayKey);
+    const data=r.data?.data;
+    proof.priorGenerationReceipt={httpStatus:r.status,
+      ...(data?.id==='gen_01M2AWQ3GTQ4Z72QX87BBE7NDF'?Object.fromEntries(
+        ['id','model','is_byok','created_at','total_cost','gateway_cost','usage','upstream_inference_cost','surcharge_cost','market_cost']
+          .filter(k=>['string','number','boolean'].includes(typeof data[k])).map(k=>[k,data[k]])): {})};
+  } catch { proof.priorGenerationReceipt={error:'READ_UNCONFIRMED'}; }
   proof.sharedGatewayAndDatabaseVerified = true;
   const candidates = [process.env, ...values].flatMap((env, index) => ALIASES
     .filter(name => typeof env[name] === 'string' && env[name].trim())

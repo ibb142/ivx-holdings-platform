@@ -122,6 +122,42 @@ async function pollSpend(context, id, minimum, label) {
   }
   throw new Error('NATIVE_SPEND_NOT_VISIBLE');
 }
+export function receiptCoverageNano(quote, settlement, costNano) {
+  assert(settlement && ['settled','uncertain'].includes(settlement.status),'UNSAFE_RECEIPT_STATE');
+  const reserved=BigInt(quote.reservedNano);
+  let covered;
+  if(settlement.status==='uncertain') {
+    assert.equal(settlement.settledUpperNano,null,'UNKNOWN_LIABILITY_WAS_RELEASED');
+    covered=reserved;
+  } else {
+    assert(/^\d+$/.test(settlement.settledUpperNano??''),'INVALID_SETTLED_AMOUNT');
+    covered=BigInt(settlement.settledUpperNano);
+    assert(covered<=reserved,'SETTLED_AMOUNT_EXCEEDS_RESERVATION');
+  }
+  assert(BigInt(costNano)>0n && BigInt(costNano)<=covered,'RECEIPT_COST_NOT_COVERED');
+  return covered.toString();
+}
+async function observedReceipt(key,id,model) {
+  let receipt;
+  for(let i=0;i<25;i++){
+    const r=await requestJson(ORIGIN+'/v1/generation?id='+encodeURIComponent(id),key);
+    if(r.status===200 && r.data?.data) {
+      receipt=r.data.data;
+      assert(receipt.id===id && receipt.model===model && receipt.is_byok===false,'RECEIPT_BINDING_FAILED');
+      if(BigInt(providerReportedCostNano(receipt.total_cost))>0n)break;
+    }
+    await wait(1500);
+  }
+  assert(receipt,'RECEIPT_NOT_AVAILABLE');
+  const costNano=providerReportedCostNano(receipt.total_cost);
+  assert(BigInt(costNano)>0n,'POSITIVE_RECEIPT_NOT_AVAILABLE');
+  return {id:receipt.id,model:receipt.model,costUsd:receipt.total_cost,costNano,
+    isByok:receipt.is_byok,createdAt:receipt.created_at,at:new Date().toISOString(),
+    costFields:Object.fromEntries(['total_cost','gateway_cost','usage','upstream_inference_cost','surcharge_cost','market_cost']
+      .filter(k=>typeof receipt[k]==='number'||(typeof receipt[k]==='string'&&/^[0-9.eE+-]+$/.test(receipt[k])))
+      .map(k=>[k,receipt[k]]))};
+}
+
 async function callProvider(context, db, key, label, quote) {
   checkQuote(quote);
   const proof = context.proof;
@@ -206,9 +242,10 @@ async function callProvider(context, db, key, label, quote) {
   const provider=createOpenAI({apiKey:key,baseURL:ORIGIN+'/v1',fetch:transport});
   let succeeded=false;
   try {
-    await generateText({model:provider.chat(quote.model),
+    const result=await generateText({model:provider.chat(quote.model),
       prompt:label.startsWith('fill')?fillPrompt(Number(label.slice(-1))):'Reply only OK.',
       maxOutputTokens:32,maxRetries:label==='denied'?2:0,abortSignal:AbortSignal.timeout(330000)});
+    stats.sdkUsage=Object.fromEntries(['inputTokens','outputTokens','totalTokens'].filter(k=>typeof result.usage?.[k]==='number').map(k=>[k,result.usage[k]]));
     succeeded=true;
   } catch(error) {
     stats.sdkStatus=Number.isInteger(error?.statusCode)?error.statusCode:null;
@@ -228,18 +265,11 @@ async function callProvider(context, db, key, label, quote) {
     assert.equal(stats.settlement.settledUpperNano,null,'NATIVE_REJECTION_LIABILITY_REFUNDED');
   } else {
     assert(succeeded && stats.statuses[0]===200,'REAL_PROVIDER_NOT_SUCCESSFUL');
-    assert.equal(stats.settlement.status,'settled','REAL_PROVIDER_NOT_SETTLED');
     assert(/^gen_[0-9A-HJKMNP-TV-Z]{26}$/.test(stats.settlement.generationId??''),'GENERATION_NOT_RETAINED');
-    let receipt;
-    for(let i=0;i<10;i++){
-      const r=await requestJson(ORIGIN+'/v1/generation?id='+encodeURIComponent(stats.settlement.generationId),key);
-      if(r.status===200 && r.data?.data){receipt=r.data.data;break;} await wait(1500);
-    }
-    assert(receipt && receipt.id===stats.settlement.generationId && receipt.model===quote.model,'RECEIPT_BINDING_FAILED');
-    const costNano=providerReportedCostNano(receipt.total_cost);
-    assert(BigInt(costNano)>0n && BigInt(costNano)<=BigInt(stats.settlement.settledUpperNano),'RECEIPT_COST_NOT_COVERED');
-    const record={label,id:receipt.id,model:receipt.model,costUsd:receipt.total_cost,costNano,
-      createdAt:receipt.created_at,at:new Date().toISOString()};
+    const record=await observedReceipt(key,stats.settlement.generationId,quote.model);
+    record.label=label;
+    record.coveredNano=receiptCoverageNano(quote,stats.settlement,record.costNano);
+    record.ledgerState=stats.settlement.status;
     proof.receipts.push(record);
   }
   event('request-finished',{label,httpStatus:stats.statuses[0],settlement:stats.settlement.status});
@@ -251,7 +281,8 @@ function existingLimits(state, excludedId) {
     'api_key_id_UVzvUiLtmTPVjrFIgsOhTOgUMo42t9fNu8FMAL0KcJOUzYaF',
     'api_key_id_KSPgGHhv0EZq3WMzHszAA7qFVbOnarOiMI08J3YVq6c5a6gG',
     'api_key_id_knOwlYBnQg2O8NXTSmdzabDiELeajwcuAxsOVavJAlvv60K7',
-    'api_key_id_AfVkVmLscQFO0cj0SRJaZcAZVrdVUoj9hagCXBx2kYjfUXID'].includes(b.quotaEntityId)).map(b=>({
+    'api_key_id_AfVkVmLscQFO0cj0SRJaZcAZVrdVUoj9hagCXBx2kYjfUXID',
+    'api_key_id_lmcgOgp2P4cc70xHcz9lA1HAvza3uJxyIkR0Ea7zQZVjkvnY'].includes(b.quotaEntityId)).map(b=>({
     id:b.quotaEntityId,limit:b.limitAmount,period:b.refreshPeriod,active:b.active,archived:b.archived,
     byok:b.includeByokInQuota,
   })).sort((a,b)=>a.id.localeCompare(b.id));
@@ -309,11 +340,19 @@ async function main() {
     assert.equal(process.env.IVX_NATIVE_QUOTA_PROBE,CAMPAIGN,'CAMPAIGN_BINDING_REQUIRED');
     context=await prepareContext(proof); db=dbFor(context);
     const priorRows=await db.rows();
-    assert(priorRows.length===1 && priorRows[0].reservation_id===reservationId('fill1')
-      && priorRows[0].status==='uncertain' && priorRows[0].model==='openai/gpt-4.1'
-      && priorRows[0].generation_id==='gen_01M2ASZFDXDJ0JFAZ5V37KM4JJ'
-      && String(priorRows[0].reserved_nano)==='4125468000','CAMPAIGN_REPLAY_OR_PRIOR_STATE_CHANGED');
-    proof.priorFailedReservation=priorRows[0];
+    const priorFirst=priorRows.find(r=>r.reservation_id===reservationId('fill1'));
+    const priorSecond=priorRows.find(r=>r.reservation_id===reservationId('fill2'));
+    assert(priorRows.length===2 && priorFirst?.status==='uncertain'
+      && priorFirst.model==='openai/gpt-4.1' && priorFirst.generation_id==='gen_01M2ASZFDXDJ0JFAZ5V37KM4JJ'
+      && String(priorFirst.reserved_nano)==='4125468000'
+      && priorSecond?.status==='uncertain' && priorSecond.model==='openai/gpt-4o'
+      && priorSecond.generation_id==='gen_01M2AWQ3GTQ4Z72QX87BBE7NDF'
+      && String(priorSecond.reserved_nano)==='822728000','CAMPAIGN_REPLAY_OR_PRIOR_STATE_CHANGED');
+    proof.priorFailedReservation=priorFirst;
+    proof.priorSuccessfulRetainedReservation=priorSecond;
+    proof.priorPaidReceipt=await observedReceipt(context.gatewayKey,priorSecond.generation_id,priorSecond.model);
+    proof.priorPaidReceipt.coveredNano=receiptCoverageNano({reservedNano:String(priorSecond.reserved_nano)},
+      {status:priorSecond.status,settledUpperNano:priorSecond.settled_upper_nano},proof.priorPaidReceipt.costNano);
     if(process.argv[2]!=='diagnose') await reviewRetiredCapacity(context,db);
     proof.activeGlobalReservationsBefore=await db.activeRows();
     const diagnostic=await requestJson(ORIGIN+'/v1/generation?id=gen_01M2ASZFDXDJ0JFAZ5V37KM4JJ',context.gatewayKey);
@@ -329,7 +368,7 @@ async function main() {
       error:typeof priorError==='string'?protectedText(priorError):{
         code:protectedText(priorError?.code),type:protectedText(priorError?.type),message:protectedText(priorError?.message)},
       errorMessage:protectedText(priorReceipt?.error_message),
-      ...(priorReceipt && priorReceipt.id===priorRows[0].generation_id ? {
+      ...(priorReceipt && priorReceipt.id===priorFirst.generation_id ? {
         id:priorReceipt.id,model:priorReceipt.model,costUsd:priorReceipt.total_cost,
         createdAt:priorReceipt.created_at,status:priorReceipt.status,
         availableFields:Object.keys(priorReceipt).filter(k=>/^[a-zA-Z0-9_]{1,80}$/.test(k)),
@@ -347,7 +386,7 @@ async function main() {
     }
     before=await readNativeState(context);checkNativeBudget(before.teamBudget);
     const fillQuote=await freshQuote('openai/gpt-4o'),smallQuote=await freshQuote('openai/gpt-4o-mini');
-    assert(4125468000n+BigInt(fillQuote.reservedNano)*7n+BigInt(smallQuote.reservedNano)*2n<=MAX_LIABILITY_NANO,
+    assert(4125468000n+822728000n+BigInt(fillQuote.reservedNano)*6n+BigInt(smallQuote.reservedNano)*2n<=MAX_LIABILITY_NANO,
       'PLANNED_CAMPAIGN_EXCEEDS_BOUND');
     assert(fillQuote.maxInputTokens>=128000,'MODEL_CONTEXT_TOO_SMALL');
     proof.initialQuotes=[fillQuote,smallQuote];
@@ -369,7 +408,7 @@ async function main() {
     let quota=await waitForQuota(context,testKeyId,'before-spend',1);
     assert.equal(quota.refreshPeriod,'none','TEST_QUOTA_PERIOD_MISMATCH');
     assert.equal(quota.currentSpend,0,'NEW_TEST_KEY_ALREADY_SPENT');
-    for(let i=2;i<=8 && quota.currentSpend<1;i++) {
+    for(let i=3;i<=8 && quota.currentSpend<1;i++) {
       await callProvider(context,db,testKey,'fill'+i,await freshQuote(fillQuote.model));
       const knownSpend=proof.receipts.reduce((n,r)=>n+BigInt(r.costNano),0n);
       quota=await pollSpend(context,testKeyId,Number(knownSpend)/1e9,'after-fill'+i);
@@ -391,7 +430,8 @@ async function main() {
     await callProvider(context,db,testKey,'recovery',await freshQuote('openai/gpt-4o-mini'));
     proof.nativeRecoveryObserved=true;
     assert.equal(new Set(proof.receipts.map(r=>r.id)).size,proof.receipts.length,'DUPLICATE_RECEIPTS');
-    proof.actualReceiptCostNano=proof.receipts.reduce((n,r)=>n+BigInt(r.costNano),0n).toString();
+    proof.newKeyReceiptCostNano=proof.receipts.reduce((n,r)=>n+BigInt(r.costNano),0n).toString();
+    proof.actualReceiptCostNano=(BigInt(proof.newKeyReceiptCostNano)+BigInt(proof.priorPaidReceipt.costNano)).toString();
     proof.passed=true;
   } catch(error) { proof.error=safeError(error); process.exitCode=1; }
   finally {
