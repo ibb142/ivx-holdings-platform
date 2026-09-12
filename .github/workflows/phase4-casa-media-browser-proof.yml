@@ -1,0 +1,29 @@
+name: Diagnose temporary Casa video decoding
+on:
+  push:
+    branches: [ops/phase4-temporary-casa-video-20260912]
+    paths:
+      - .github/workflows/phase4-casa-media-browser-proof.yml
+      - qa/casa-temporary-media-browser-proof.mjs
+permissions:
+  contents: read
+jobs:
+  verify-public-video-decoding:
+    if: github.repository == 'ibb142/ivx-holdings-platform'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.3.9 }
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: bunx playwright install --with-deps chromium chrome
+      - run: node qa/casa-temporary-media-browser-proof.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: casa-temporary-video-decoding
+          path: qa/evidence/casa-temporary-video/browser-proof.json
+          if-no-files-found: error
+          retention-days: 30
