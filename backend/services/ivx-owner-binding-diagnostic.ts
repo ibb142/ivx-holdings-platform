@@ -20,7 +20,7 @@ export async function readOwnerRuntimeBindings(read: (key: string) => Promise<Bi
   const body: Array<{ key: string; value: string }> = [];
   for (const { key, response } of responses) {
     if (response.status === 404) continue;
-    if (!response.ok) return { ok: false, status: response.status, body: [] };
+    if (!response.ok || response.status !== 200) return { ok: false, status: response.status, body: [] };
     const wrapper = response.body && typeof response.body === 'object' ? response.body as Record<string, unknown> : {};
     const entry = wrapper.envVar && typeof wrapper.envVar === 'object' ? wrapper.envVar as Record<string, unknown> : wrapper;
     if (typeof entry.value !== 'string' || (entry.key !== undefined && entry.key !== key)) {
