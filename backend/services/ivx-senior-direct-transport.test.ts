@@ -12,7 +12,7 @@ for (const mode of ['success', 'mutation_failure', 'event_failure']) {
         constructor(config) {
           super(); pools++;
           assert.equal(config.max, 1);
-          assert.equal(config.application_name, 'ivx_repair');
+          assert.equal(config.application_name, 'ivx_worker_repair');
           assert.equal(config.ssl.rejectUnauthorized, true);
           assert(config.ssl.ca.length > 0);
           assert(!config.connectionString.includes('sslmode'));

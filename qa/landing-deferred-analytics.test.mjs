@@ -24,6 +24,14 @@ for (const surface of ['reels', 'home-feed']) {
     load(videos, () => true); await tick();
     assert.equal(videos[0].analytics_status, 'unavailable'); assert.equal(videos.length, 1);
   });
+  test(`${surface}: unavailable HTTP 200 keeps counters unknown and cards intact`, async () => {
+    const load = make(async () => Response.json({ videos: [], analytics_status: 'unavailable',
+      degraded: true, data_available: false, retryable: true, code: 'ANALYTICS_UNAVAILABLE' }),
+    timer, () => {}, AbortController, 'https://example.test', ['https://example.test']);
+    const videos = [{ id: 'a', view_count: null, analytics_status: 'deferred' }];
+    load(videos, () => true); await tick();
+    assert.deepEqual(videos, [{ id: 'a', view_count: null, analytics_status: 'unavailable' }]);
+  });
   test(`${surface}: navigation cancels stale hydration`, async () => {
     let calls = 0;
     const load = make(async () => { calls++; }, timer, () => {}, AbortController, 'https://example.test', ['https://example.test']);

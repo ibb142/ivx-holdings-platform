@@ -1,4 +1,5 @@
-import { awaitPublicRead, boundedReadFetch, sharedPublicRead } from '../services/ivx-read-timings';
+import { publicFeedRead } from '../services/ivx-public-feed-postgres';
+import { boundedReadFetch, newReadTimings, readTimings } from '../services/ivx-read-timings';
 import { withPublicFeedAvailability } from '../services/ivx-public-feed-availability';
 import { loadViewerEngagement } from '../services/ivx-viewer-engagement';
 import { createPlatformFeedLoader } from '../services/ivx-platform-feed-loader';
@@ -131,10 +132,10 @@ async function loadEngagementCounts(sb: any, ids: string[]): Promise<Record<stri
   for (const id of ids) counts[id] = { likes: 0, comments: 0, shares: 0, saves: 0 };
   if (ids.length === 0) return counts;
   const [likesRes, commentsRes, sharesRes, savesRes] = await Promise.all([
-    sb.from('project_likes').select('project_id').in('project_id', ids),
-    sb.from('project_comments').select('project_id').in('project_id', ids).eq('is_approved', true).is('deleted_at', null),
-    sb.from('project_shares').select('project_id').in('project_id', ids),
-    sb.from('project_saves').select('project_id').in('project_id', ids),
+    publicFeedRead<any>('select project_id from public.project_likes where project_id::text = any($1::text[])', [ids], () => sb.from('project_likes').select('project_id').in('project_id', ids)),
+    publicFeedRead<any>('select project_id from public.project_comments where project_id::text = any($1::text[]) and is_approved = true and deleted_at is null', [ids], () => sb.from('project_comments').select('project_id').in('project_id', ids).eq('is_approved', true).is('deleted_at', null)),
+    publicFeedRead<any>('select project_id from public.project_shares where project_id::text = any($1::text[])', [ids], () => sb.from('project_shares').select('project_id').in('project_id', ids)),
+    publicFeedRead<any>('select project_id from public.project_saves where project_id::text = any($1::text[])', [ids], () => sb.from('project_saves').select('project_id').in('project_id', ids)),
   ]);
   for (const row of likesRes.data || []) { const k = String(row.project_id); if (counts[k]) counts[k].likes += 1; }
   for (const row of commentsRes.data || []) { const k = String(row.project_id); if (counts[k]) counts[k].comments += 1; }
@@ -178,9 +179,10 @@ type FeedDeal = {
  */
 async function readFeedDealRows(sb: any): Promise<any[]> {
   try {
-    const { data } = await sb.from('jv_deals')
+    const { data } = await publicFeedRead<any>(
+      'select id,title,project_name,estimated_value,appraised_value,total_investment,min_investment,expected_roi,type from public.jv_deals where published = true limit 200', [], () => sb.from('jv_deals')
       .select('id,title,project_name,estimated_value,appraised_value,total_investment,min_investment,expected_roi,type')
-      .limit(200);
+      .eq('published', true).limit(200));
     return data ?? [];
   } catch { return []; }
 }
@@ -248,7 +250,8 @@ const readPlatformFeedInputs = createPlatformFeedLoader({
       .order('created_at', { ascending: false })
       .limit(200);
     if (projectId) query = query.eq('project_id', projectId);
-    const { data, error } = await query;
+    const { data, error } = await publicFeedRead<any>(
+      'select id,project_id,media_id,title,video_url,thumbnail_url,cover_url,duration_sec,width,height,orientation,video_type,is_pinned,is_approved,view_count,created_at from public.project_videos where is_approved = true and ($1::text is null or project_id::text = $1) order by is_pinned desc, created_at desc limit 200', [projectId], () => query);
     if (error) throw error;
     return data ?? [];
   },
@@ -556,10 +559,10 @@ export async function handlePlatformHomeFeed(req: Request): Promise<Response> {
     // catalog; serial query phases can exceed the bounded response deadline.
     const [inputs, { data: dealRows, error: dealsError }, dealMetaDoc] = await Promise.all([
       readPlatformFeedInputs(null),
-      Promise.resolve().then(() => sb.from('jv_deals').select('id,title,project_name,type,description,total_investment,expected_roi,min_investment,status,published,property_address,city,state,zip_code,country,property_type,photos,display_order,created_at,updated_at').eq('published', true).order('display_order', { ascending: true, nullsFirst: false }).order('updated_at', { ascending: false }).limit(100)),
+      publicFeedRead<any>('select id,title,project_name,type,description,total_investment,expected_roi,min_investment,status,published,property_address,city,state,zip_code,country,property_type,photos,display_order,created_at,updated_at from public.jv_deals where published = true order by display_order asc nulls last, updated_at desc limit 100', [], () => sb.from('jv_deals').select('id,title,project_name,type,description,total_investment,expected_roi,min_investment,status,published,property_address,city,state,zip_code,country,property_type,photos,display_order,created_at,updated_at').eq('published', true).order('display_order', { ascending: true, nullsFirst: false }).order('updated_at', { ascending: false }).limit(100)),
       Promise.resolve().then(getDealMetaDoc),
     ]);
-    if (dealsError) return json({ error: dealsError.message, marker: VIDEO_PLATFORM_MARKER }, 500);
+    if (dealsError) throw dealsError;
     const { videos, counts, playback, meta: metaDoc, analytics: analyticsDoc } = inputs;
     const now = Date.now();
 
@@ -789,66 +792,72 @@ export async function handlePlatformEvents(req: Request): Promise<Response> {
   }
 }
 
-type DeferredVideoCount = { id: string; view_count: number };
-const pendingDeferredAnalytics = new Map<string, Promise<DeferredVideoCount[]>>();
+type DeferredAnalytics = { videos: { id: string; view_count: number }[] };
+// Optional counters get one shared read per process, independent of feed reads.
+// Keep an unfinished producer registered after its HTTP callers time out. Never
+// cache completed visibility decisions or reuse a stale public counter snapshot.
+const deferredAnalyticsPending = new Map<string, Promise<DeferredAnalytics | null>>();
+let deferredAnalyticsRetryAt = 0;
 
-async function readDeferredVideoAnalytics(ids: string[]): Promise<DeferredVideoCount[]> {
-  const key = JSON.stringify([...ids].sort());
-  let work = pendingDeferredAnalytics.get(key);
-  if (!work) {
-    if (pendingDeferredAnalytics.size >= 32) throw new Error('Analytics read capacity exceeded');
-    work = sharedPublicRead(async () => {
-      const sb = await getSB();
-      // Independent inputs start together. Keep the operation shared until all
-      // source reads settle, even when one fails, so retries cannot duplicate it.
-      const [catalog, metadata, counters] = await Promise.allSettled([
-        Promise.resolve().then(() => sb.from('project_videos').select('id').in('id', ids).eq('is_approved', true)),
-        Promise.resolve().then(getMetaDoc),
-        Promise.resolve().then(getAnalyticsDoc),
-      ]);
-      if (catalog.status === 'rejected') throw catalog.reason;
-      if (metadata.status === 'rejected') throw metadata.reason;
-      const { data, error } = catalog.value;
-      if (error) throw error;
-      // A slow counter read must not retain an earlier publication decision.
-      // Recheck the document cache after all inputs settle; owner writes update
-      // that cache, and an expired snapshot must be read from the source again.
-      const currentMeta = await getMetaDoc();
-      const visible = (data ?? []).filter((v: { id: string }) => isMetaVisible(normalizeVideoMeta(currentMeta[v.id])));
-      if (!visible.length) return [];
-      if (counters.status === 'rejected') throw counters.reason;
-      // Only approved, currently published aggregates may leave this operation.
-      return visible.map((v: { id: string }) => ({ id: v.id, view_count: counters.value.videos[v.id]?.views ?? 0 }));
-    }).finally(() => {
-      if (pendingDeferredAnalytics.get(key) === work) pendingDeferredAnalytics.delete(key);
-    });
-    pendingDeferredAnalytics.set(key, work);
-  }
-  // No aggregate snapshot cache: later calls recheck publication metadata.
-  return structuredClone(await awaitPublicRead(work));
+export function deferredAnalyticsUnavailable(): Response {
+  const response = json({ videos: [], analytics_status: 'unavailable', degraded: true,
+    data_available: false, retryable: true, code: 'ANALYTICS_UNAVAILABLE' });
+  response.headers.set('X-IVX-Data-State', 'unavailable');
+  response.headers.set('Retry-After', '3');
+  return response;
 }
 
 /** Optional public aggregates. Never expose viewer IDs or watch history. */
 export async function handleDeferredVideoAnalytics(req: Request): Promise<Response> {
-  const ids = [...new Set((new URL(req.url).searchParams.get('ids') ?? '').split(',').filter(Boolean).map(id => id.toLowerCase()))];
+  const ids = [...new Set((new URL(req.url).searchParams.get('ids') ?? '').split(',').filter(Boolean).map(id => id.toLowerCase()))].sort();
   if (!ids.length || ids.length > 50 || ids.some(id => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id))) {
     return json({ error: 'Provide 1 to 50 video UUIDs' }, 400);
   }
-  const unavailable = () => json({ videos: [], degraded: true, data_available: false, code: 'ANALYTICS_UNAVAILABLE' });
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  // Match the optional-analytics contract while the shared source retains its
-  // own deadline and remains available to other callers after this response.
-  const read = async (): Promise<Response> => json({ videos: await readDeferredVideoAnalytics(ids) });
-  try {
-    return await Promise.race([
-      read(),
-      new Promise<Response>(resolve => { timer = setTimeout(() => resolve(unavailable()), 2500); }),
-    ]);
-  } catch {
-    return unavailable();
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
+  const key = ids.join(',');
+  let work = deferredAnalyticsPending.get(key);
+  if (!work) {
+    if (deferredAnalyticsPending.size >= 1 || Date.now() < deferredAnalyticsRetryAt) return deferredAnalyticsUnavailable();
+    // These aggregates are public for every caller. A caller's disconnect must
+    // not abort the shared read used by other callers. The producer has its own
+    // eight-second public-read budget, matching shared feed metadata; HTTP
+    // callers keep the existing 2.5-second response deadline. Catalog transport
+    // still has its own five-second deadline.
+    work = Promise.resolve().then(() => readTimings.run(newReadTimings(8000), async (): Promise<DeferredAnalytics> => {
+      const sb = await getSB();
+      // An early metadata failure must not free capacity while the catalog
+      // request is still holding its connection (or the other way around).
+      const [catalog, metadata] = await Promise.allSettled([
+        sb.from('project_videos').select('id').in('id', ids).eq('is_approved', true), getMetaDoc(),
+      ]);
+      if (catalog.status === 'rejected') throw catalog.reason;
+      if (metadata.status === 'rejected') throw metadata.reason;
+      const { data, error } = catalog.value;
+      const meta = metadata.value;
+      if (error) throw error;
+      const visible = (data ?? []).filter((v: { id: string }) => isMetaVisible(normalizeVideoMeta(meta[v.id])));
+      if (!visible.length) return { videos: [] };
+      const analytics = await getAnalyticsDoc();
+      // Owner writes can change publication while counters are still loading.
+      // Recheck metadata before returning the shared result; failed checks must
+      // use the existing unavailable response, never an earlier public snapshot.
+      const currentMeta = await getMetaDoc();
+      const stillVisible = visible.filter((v: { id: string }) => isMetaVisible(normalizeVideoMeta(currentMeta[v.id])));
+      return { videos: stillVisible.map((v: { id: string }) => ({ id: v.id, view_count: analytics.videos[v.id]?.views ?? 0 })) };
+    })).catch(() => {
+      deferredAnalyticsRetryAt = Date.now() + 3000;
+      return null;
+    }).finally(() => {
+      if (deferredAnalyticsPending.get(key) === work) deferredAnalyticsPending.delete(key);
+    });
+    deferredAnalyticsPending.set(key, work);
   }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await Promise.race([work, new Promise<null>(resolve => {
+      timer = setTimeout(() => resolve(null), 2500);
+    })]);
+    return result === null ? deferredAnalyticsUnavailable() : json(result);
+  } finally { if (timer) clearTimeout(timer); }
 }
 
 /** GET /api/ivx/video-platform/videos/:videoId/analytics */

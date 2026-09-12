@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import pg from 'pg';
-import { SENIOR_QUEUE_JOB_SQL } from '../backend/services/ivx-senior-work-queue';
+import { SENIOR_ACTIVE_OWNER_JOB_SQL, SENIOR_QUEUE_ACTIVE_STATUSES, SENIOR_QUEUE_JOB_SQL } from '../backend/services/ivx-senior-work-queue';
 
 type Database = { query(sql: string, values?: any[]): Promise<{ rows: any[] }>; exec?: (sql: string) => Promise<unknown> };
 const key = 'senior-developer-worker/queue.json';
@@ -12,6 +12,13 @@ const claimSql = 'select public.ivx_senior_queue_claim($1::text,$2::text,$3::boo
 const oldRead = `select job from public.ivx_durable_documents d
   cross join lateral jsonb_array_elements(d.value->'jobs') as job
   where d.doc_key = $1 and job->>'jobId' = $2 limit 2`;
+const oldOwnerRead = `select d.value->'jobs'->picked.ordinal as job
+  from public.ivx_durable_documents d cross join lateral (
+    select ordinal from generate_series(0, jsonb_array_length(d.value->'jobs') - 1) as positions(ordinal)
+    where (d.value->'jobs'->ordinal)->>'ownerId' = $2
+      and (d.value->'jobs'->ordinal)->>'status' = any($3::text[])
+    order by ordinal desc limit 1
+  ) picked where d.doc_key = $1`;
 const put = (db: Database, value: unknown) => db.query(
   'insert into public.ivx_durable_documents(doc_key,value) values($1,$2::jsonb) on conflict(doc_key) do update set value=excluded.value',
   [key, JSON.stringify(value)]);
@@ -36,7 +43,8 @@ export async function proveSeniorClaimSpill(db: Database) {
     const original = { marker: 'preserved', jobs: [...history, live, target] };
     const explain = async (sql: string, args: any[]) => {
       const plan = (await db.query(`explain (analyze,buffers,format json) ${sql}`, args)).rows[0]['QUERY PLAN'][0];
-      return { tempBlocksWritten: plan.Plan['Temp Written Blocks'] ?? 0, executionMs: plan['Execution Time'] };
+      return { tempBlocksWritten: plan.Plan['Temp Written Blocks'] ?? 0,
+        sharedHitBlocks: plan.Plan['Shared Hit Blocks'] ?? 0, executionMs: plan['Execution Time'] };
     };
     const read = async (sql: string, jobId: string) => (await db.query(sql, [key, jobId])).rows;
     const measure = async (patchedVersion: boolean) => {
@@ -65,6 +73,40 @@ export async function proveSeniorClaimSpill(db: Database) {
     }
     await exec(await migration(patched));
     assert.deepEqual(await access(), privileges, 'Security and caller privileges are unchanged');
+
+    const ownerLatest = { ...target, jobId: 'owner-latest', status: 'testing', result: { checkpoint: 'keep-complete-result' } };
+    const ownerDocument = { marker: 'owner-read-only', jobs: [target, ...history, ownerLatest,
+      { ...target, jobId: 'owner-terminal', status: 'completed' }, { ...live, jobId: 'other-owner-latest' }] };
+    await put(db, ownerDocument);
+    const ownerArgs = [key, target.ownerId, [...SENIOR_QUEUE_ACTIVE_STATUSES]];
+    const ownerBefore = await explain(oldOwnerRead, ownerArgs);
+    const ownerAfter = await explain(SENIOR_ACTIVE_OWNER_JOB_SQL, ownerArgs);
+    assert.deepEqual((await db.query(oldOwnerRead, ownerArgs)).rows, [{ job: ownerLatest }]);
+    assert.deepEqual((await db.query(SENIOR_ACTIVE_OWNER_JOB_SQL, ownerArgs)).rows, [{ job: ownerLatest }]);
+    assert(ownerBefore.sharedHitBlocks > 100, 'Reproduce repeated retained-document reads');
+    assert(ownerAfter.sharedHitBlocks < ownerBefore.sharedHitBlocks / 10, 'Avoid at least 90% of repeated buffer hits');
+    assert.deepEqual((await db.query('select value from public.ivx_durable_documents where doc_key=$1', [key])).rows[0].value,
+      ownerDocument, 'Owner lookup preserves every checkpoint and unrelated owner');
+
+    const owners = ['literal" $owner \\ (true) --', '123', 'true', '["x"]', '{"a": 1}', 'missing', 'owner-duplicate'];
+    await put(db, { jobs: [
+      { ownerId: owners[0], status: 'running' }, { ownerId: '123', status: 'queued' }, { ownerId: 123, status: 'testing' },
+      { ownerId: true, status: 'patching' }, { ownerId: ['x'], status: 'committing' }, { ownerId: { a: 1 }, status: 'verifying' },
+      { ownerId: null, status: 'running' }, {}, null, 'scalar',
+      { ownerId: 'owner-duplicate', status: 'queued', checkpoint: 1 },
+      { ownerId: 'owner-duplicate', status: 'running', checkpoint: 2 },
+      { ownerId: 'owner-duplicate', status: 'completed', checkpoint: 3 },
+      { ownerId: 'owner-duplicate', status: ['running'], checkpoint: 4 },
+    ] });
+    for (const owner of owners) {
+      const args = [key, owner, [...SENIOR_QUEUE_ACTIVE_STATUSES]];
+      assert.deepEqual((await db.query(SENIOR_ACTIVE_OWNER_JOB_SQL, args)).rows,
+        (await db.query(oldOwnerRead, args)).rows, `Identical last-active-owner semantics for ${owner}`);
+    }
+    for (const doc of [{ jobs: [] }, {}]) {
+      await put(db, doc);
+      assert.deepEqual((await db.query(SENIOR_ACTIVE_OWNER_JOB_SQL, ownerArgs)).rows, []);
+    }
 
     // Compare the application query with the old SQL, including malformed IDs,
     // duplicates and strings that must never be interpreted as SQL or JSONPath.
@@ -110,7 +152,8 @@ export async function proveSeniorClaimSpill(db: Database) {
     await exec(originalFunction.replace('begin\n', 'begin\n  -- Concurrent unreviewed implementation\n'));
     await assert.rejects(exec(await migration(patched)), /Senior claim implementation changed/);
     await db.query('rollback to savepoint drift');
-    return { ok: true, before, after, retainedHistoricalJobs: history.length, historyAndLiveHolderPreserved: true,
+    return { ok: true, before, after, ownerBefore, ownerAfter, ownerLatestCheckpointPreserved: true,
+      ownerIdentitySemanticsPreserved: true, retainedHistoricalJobs: history.length, historyAndLiveHolderPreserved: true,
       originalPriorityAndCheckpointPreserved: true, duplicateAndMalformedIdentitySemanticsPreserved: true,
       boundLiteralIdentityVerified: true, recoveredActivePhases: 7, committedAttemptPreserved: true,
       terminalAndLiveLeaseProtected: true, ownerSingleFlightPreserved: true, privateAccessPreserved: true,
@@ -139,4 +182,3 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log(JSON.stringify(output));
   } finally { await Promise.allSettled([a.end(), b.end()]); }
 }
-

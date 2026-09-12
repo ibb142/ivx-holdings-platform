@@ -40,7 +40,7 @@ jobs:
       - name: Verify orphan scroll storage repair
         run: node --test qa/landing-scroll-storage-regression.test.mjs
       - name: Verify homepage reel recovery
-        run: node --test qa/landing-home-reel-recovery.test.mjs qa/landing-home-feed-recovery.test.mjs qa/landing-reel-channel-race.test.mjs qa/landing-analytics-transport.test.mjs qa/landing-auth-config-recovery.test.mjs
+        run: node --test qa/landing-home-reel-recovery.test.mjs qa/landing-home-feed-recovery.test.mjs qa/landing-reel-channel-race.test.mjs qa/landing-analytics-transport.test.mjs qa/landing-deferred-analytics.test.mjs qa/landing-auth-config-recovery.test.mjs
       - name: Verify exclusive playback and modal lifecycle
         run: node --test qa/landing-reel-playback-lifecycle.test.mjs
       - name: Verify direct runtime asset publication
@@ -144,7 +144,11 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with: { bun-version: 1.3.9 }
       - run: bun install --frozen-lockfile --ignore-scripts
-      - run: bunx playwright install chromium
+      - name: Install browser with the required media codecs
+        run: bunx playwright install ${{ (startsWith(matrix.unit, 'reels.') || matrix.unit == 'e2e.production-browser-suite') && 'chrome' || 'chromium' }}
+      - name: Verify Chrome for H.264 and AAC acceptance
+        if: startsWith(matrix.unit, 'reels.') || matrix.unit == 'e2e.production-browser-suite'
+        run: google-chrome --version
       - name: Preview current source with the public read API
         env:
           LANDING_PREVIEW_SOURCE: http://127.0.0.1:4175
@@ -160,6 +164,11 @@ jobs:
             sleep 1
           done
           node qa/landing-19-browser.mjs "${{ matrix.unit }}"
+      - name: Verify preview route cancellation with a local browser fixture
+        if: ${{ !cancelled() && matrix.unit == 'e2e.production-browser-suite' }}
+        env:
+          LANDING_QA_BROWSER_CHANNEL: chrome
+        run: node --test qa/landing-preview-route.test.mjs
   browser-acceptance:
     if: github.event_name != 'pull_request'
     name: Browser / ${{ matrix.unit }}
@@ -176,7 +185,11 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with: { bun-version: 1.3.9 }
       - run: bun install --frozen-lockfile --ignore-scripts
-      - run: bunx playwright install chromium
+      - name: Install browser with the required media codecs
+        run: bunx playwright install ${{ (startsWith(matrix.unit, 'reels.') || matrix.unit == 'e2e.production-browser-suite') && 'chrome' || 'chromium' }}
+      - name: Verify Chrome for H.264 and AAC acceptance
+        if: startsWith(matrix.unit, 'reels.') || matrix.unit == 'e2e.production-browser-suite'
+        run: google-chrome --version
       - name: Install contrast measurement
         run: |
           npm install --prefix "$RUNNER_TEMP/ivx-axe" --no-save --ignore-scripts axe-core@4.10.3

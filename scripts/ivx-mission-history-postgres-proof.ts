@@ -78,11 +78,11 @@ try {
     const started = Date.now();
     await assert.rejects(() => store.readPostgresAutonomousTaskIndex(sha),
       (error: unknown) => error instanceof Error && 'code' in error && error.code === '55P03',
-      'planning must hit its 2s server lock deadline, not an ambiguous client timeout');
+      'planning must hit its 1s server lock deadline, not an ambiguous client timeout');
     const elapsedMs = Date.now() - started;
-    assert(elapsedMs >= 1_500 && elapsedMs < 4_500, 'planning deadline was not bounded');
+    assert(elapsedMs >= 750 && elapsedMs < 2_500, 'planning deadline was not bounded');
     console.log(JSON.stringify({ check: 'planning-server-lock-deadline', result: 'PASS',
-      elapsedMs, expectedCode: '55P03', productionRowsTouched: 0 }));
+      elapsedMs, expectedLockTimeoutMs: 1000, expectedCode: '55P03', productionRowsTouched: 0 }));
   } finally {
     await blocker.query('ROLLBACK').catch(() => undefined);
     await blocker.end();

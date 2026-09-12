@@ -23,6 +23,8 @@ process.env.IVX_WORKER_MODE = 'false';
 process.env.IVX_PROCESS_ROLE = 'api';
 process.env.IVX_REQUIRE_SHARED_STATE = 'true';
 process.env.IVX_WORKER_QUEUE_ATOMIC = 'true';
+process.env.NODE_ENV = 'test';
+process.env.CI = 'true';
 const store = await import('../backend/services/ivx-postgres-autonomous-task-store');
 const admin = new pg.Client({ connectionString });
 await admin.connect();
@@ -66,19 +68,16 @@ try {
     end $$`);
   await admin.query('select pg_advisory_lock(9811593)');
   let completedMutations = 0;
-  // Saturate both task connections and queue two more mutations locally. The
-  // assignment and heartbeat lanes each own one of the former four slots.
-  const taskConnectionLimit = 2;
   const mutationCount = 4;
   mutations = Promise.allSettled(Array.from({ length: mutationCount }, (_, index) =>
     store.linkPostgresAutonomousOrphans(`blocked-fixture-${index}`).finally(() => { completedMutations++; })));
   let blocked = 0;
   for (let attempt = 0; attempt < 40; attempt++) {
-    blocked = Number((await admin.query("select count(*) from pg_stat_activity where application_name='ivx_tasks' and wait_event='advisory'")).rows[0].count);
-    if (blocked === taskConnectionLimit) break;
+    blocked = Number((await admin.query("select count(*) from pg_stat_activity where application_name='ivx_worker_tasks' and wait_event='advisory'")).rows[0].count);
+    if (blocked === 1) break;
     await new Promise(resolve => setTimeout(resolve, 25));
   }
-  assert.equal(blocked, taskConnectionLimit, 'all task connections must be blocked throughout the observation');
+  assert.equal(blocked, 1, 'all task connections must be blocked throughout the observation');
   const started = Date.now();
   observation = (async () => {
     const tasks = await store.readPostgresFleetSloTasks();

@@ -2,7 +2,11 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { Hono } from 'hono';
-import { newReadTimings, readTimings } from './services/ivx-read-timings';
+import { cors } from 'hono/cors';
+import { EventEmitter } from 'node:events';
+import type { Pool } from 'pg';
+import { newReadTimings, readTimings, timingHeaders } from './services/ivx-read-timings';
+import { queryWithPostgresDeadline } from './services/ivx-postgres-deadline';
 import { publicReadTimeout, publicMutationTimeout } from './services/ivx-public-timeout-response';
 
 const readRoutes = ['/api/projects/:projectId/comments', '/api/ivx/properties/featured',
@@ -12,6 +16,38 @@ const readRoutes = ['/api/projects/:projectId/comments', '/api/ivx/properties/fe
   '/api/ivx/video-platform/stories', '/api/ivx/video-platform/live'];
 const writeRoutes = ['/api/projects/:projectId/like', '/api/projects/:projectId/share', '/api/projects/:projectId/save'];
 const source = readFileSync(process.env.IVX_PUBLIC_TIMEOUT_SOURCE || new URL('./hono.ts', import.meta.url), 'utf8');
+
+test('shipped middleware exposes SQL timings to the browser and preserves a failed database response', async () => {
+  const app = new Hono();
+  const begin = source.indexOf('const IVX_ALLOWED_ORIGINS = [');
+  const end = source.indexOf('// ── Enterprise middleware stack ──', begin);
+  if (begin < 0 || end < begin) throw Error('Missing shipped timing middleware');
+  const middleware = new Bun.Transpiler({ loader: 'ts' }).transformSync(source.slice(begin, end));
+  vm.runInNewContext(middleware, { app, cors, newReadTimings, readTimings, timingHeaders });
+  let fail = false;
+  const error = Object.assign(new Error('database unavailable'), { code: '57014' });
+  const client = Object.assign(new EventEmitter(), {
+    query: async (sql: string) => {
+      if (sql === 'select http' && fail) throw error;
+      return { rows: [{ marker: 'actual-data' }] };
+    }, release: () => {},
+  });
+  const pool = { connect: async () => client } as unknown as Pick<Pool, 'connect'>;
+  app.onError((caught, c) => { expect(caught).toBe(error); return c.json({ code: 'DB_FAILED' }, 503); });
+  app.get('/api/deals', async c => c.json((await queryWithPostgresDeadline(pool, 'select http', [])).rows));
+  for (const shouldFail of [false, true]) {
+    fail = shouldFail;
+    const response = await app.request('/api/deals', { headers: { Origin: 'https://ivxholding.com' } });
+    expect(response.status).toBe(shouldFail ? 503 : 200);
+    expect(await response.json()).toEqual(shouldFail ? { code: 'DB_FAILED' } : [{ marker: 'actual-data' }]);
+    for (const header of ['X-Pool-Acquisition-Ms', 'X-SQL-Execution-Ms']) {
+      expect(response.headers.get(header)).not.toBeNull();
+      expect(Number(response.headers.get(header))).toBeGreaterThanOrEqual(0);
+      expect(response.headers.get('access-control-expose-headers')).toContain(header);
+    }
+    expect(response.headers.get('X-IVX-Timing-Scope')).toContain('sql_completed=1; sql_pending=0');
+  }
+});
 
 // Execute the shipped registrations and deadline with Hono, without booting
 // production background workers or connecting unit tests to external services.
