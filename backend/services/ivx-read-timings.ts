@@ -50,3 +50,16 @@ export async function measuredReadFetch(input: string | URL | Request, init?: Re
   });
   return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
 }
+
+/** PostgREST retries TimeoutError as a network failure. Normalize our expired
+ * deadline to AbortError so it cannot create a fresh timeout on every retry. */
+export async function boundedReadFetch(input: string | URL | Request, init?: RequestInit, timeoutMs = 5000): Promise<Response> {
+  const deadline = AbortSignal.timeout(timeoutMs);
+  const caller = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+  const signal = caller ? AbortSignal.any([caller, deadline]) : deadline;
+  try { return await measuredReadFetch(input, { ...init, signal }); }
+  catch (error) {
+    if (signal.aborted) throw new DOMException('Supabase request cancelled or deadline exceeded', 'AbortError');
+    throw error;
+  }
+}

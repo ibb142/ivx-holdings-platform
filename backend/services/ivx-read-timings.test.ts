@@ -1,6 +1,6 @@
 import { test, expect } from 'bun:test';
 import { createServer } from 'node:http';
-import { newReadTimings, readTimings, measuredReadFetch, timingHeaders, recordPoolCheckout } from './ivx-read-timings';
+import { newReadTimings, readTimings, measuredReadFetch, timingHeaders, recordPoolCheckout, boundedReadFetch } from './ivx-read-timings';
 
 test('headers distinguish actual body consumption from invisible upstream pool wait', async () => {
   const server = createServer((_req, res) => {
@@ -40,4 +40,35 @@ test('body abort rejects instead of reporting a successful upstream payload', as
     })).rejects.toThrow();
     expect(metrics.pending).toBe(0);
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+
+test('real Supabase SDK cannot retry a wrapper deadline as a network failure', async () => {
+  const { createClient } = await import('@supabase/supabase-js');
+  const originalFetch = globalThis.fetch;
+  const stop = new AbortController();
+  let calls = 0;
+  globalThis.fetch = ((_input: unknown, init: RequestInit) => {
+    calls++;
+    return new Promise<Response>((_resolve, reject) => {
+      const signal = init.signal!;
+      if (signal.aborted) reject(signal.reason);
+      else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+  }) as typeof fetch;
+  let watchdog: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const sb = createClient('https://example.supabase.co', 'test-public-key', {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: { fetch: (input, init) => boundedReadFetch(input, init, 15) },
+    });
+    const query = Promise.resolve(sb.from('project_videos').select('id').abortSignal(stop.signal));
+    const result = await Promise.race([query, new Promise<null>(resolve => {
+      watchdog = setTimeout(() => { stop.abort(); resolve(null); }, 200);
+    })]);
+    await query;
+    expect(result).not.toBeNull();
+    expect(result?.error).not.toBeNull();
+    expect(calls).toBe(1);
+  } finally { clearTimeout(watchdog); stop.abort(); globalThis.fetch = originalFetch; }
 });

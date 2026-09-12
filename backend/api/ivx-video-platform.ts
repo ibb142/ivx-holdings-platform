@@ -1,4 +1,4 @@
-import { measuredReadFetch } from '../services/ivx-read-timings';
+import { boundedReadFetch } from '../services/ivx-read-timings';
 import { createFeedResponseCache } from '../services/ivx-feed-response-cache';
 import { loadViewerEngagement } from '../services/ivx-viewer-engagement';
 import { createPlatformFeedLoader } from '../services/ivx-platform-feed-loader';
@@ -103,14 +103,8 @@ async function getSB() {
   const { createClient } = await import('@supabase/supabase-js');
   const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_HD3Xvq5bCQNJLFk1ROH9mQ_Wdb9xdDZ').trim();
-  const timeoutFetch = (input: any, init?: any) => {
-    // fetch resolves at headers; keep the same deadline through PostgREST's
-    // JSON body read so a stalled body cannot retain a shared feed indefinitely.
-    const deadline = AbortSignal.timeout(SB_TIMEOUT_MS);
-    const caller = init?.signal ?? (input instanceof Request ? input.signal : undefined);
-    const signal = caller ? AbortSignal.any([caller, deadline]) : deadline;
-    return measuredReadFetch(input, { ...init, signal });
-  };
+  // One timeout must terminate the SDK operation, not restart its retry budget.
+  const timeoutFetch = (input: any, init?: any) => boundedReadFetch(input, init, SB_TIMEOUT_MS);
   _sb = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false }, global: { fetch: timeoutFetch } });
   return _sb;
 }
