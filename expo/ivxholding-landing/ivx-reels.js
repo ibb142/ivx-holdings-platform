@@ -447,7 +447,9 @@
           /* Accept JSON even if the Content-Type header is missing or transformed. */
           var data;
           try { data = JSON.parse(text); } catch (e) { throw new Error('not json'); }
-          if (data && (data.degraded === true || data.data_available === false || data.code === 'PUBLIC_DATA_UNAVAILABLE')) {
+          if ((r.headers && r.headers.get('X-IVX-Data-State') === 'unavailable')
+            || (data && ((data.degraded === true && data.data_available !== true)
+              || data.data_available === false || data.code === 'PUBLIC_DATA_UNAVAILABLE'))) {
             var error = new Error('feed data unavailable');
             error.retryable = true;
             throw error;
@@ -473,8 +475,8 @@
       if (!isCurrentFeed() || error.retryable === false) throw error;
       var requested = new URL(path, API_CANDIDATES[0]);
       var query = requested.searchParams;
-      // Only the first unfiltered public page can recover from the shared
-      // catalog. Never substitute another audience, project, or cursor page.
+      // Only the first public page can recover without viewer state. Keep
+      // the Reels scope; never substitute another audience, project or cursor.
       if (requested.pathname !== '/api/reels' || Array.from(query.keys()).some(function (key) {
         return ['limit', 'viewer_id', 'type'].indexOf(key) < 0;
       })) throw error;
@@ -484,14 +486,14 @@
         expectedType = expectedType || 'unified';
         var vids = data && data.videos;
         if (!Array.isArray(vids) || !vids.length || data.channel || data.personalized !== false
-          || data.degraded === true || data.data_available === false || data.code === 'PUBLIC_DATA_UNAVAILABLE'
+          || (data.degraded === true && data.data_available !== true) || data.data_available === false || data.code === 'PUBLIC_DATA_UNAVAILABLE'
           || data.ordering !== 'canonical-unified-v2' || data.feed_type !== expectedType
           || !vids.every(function (v) { return v && v.id && v.video_url; })) throw error;
-        // The unified endpoint can return published reels when no deal videos
-        // are playable. It represents the Reels rail only if that catalog is
-        // complete and consists entirely of reels; mixed/incomplete data fails.
-        if (reelsOnly && expectedType === 'unified' && (data.next_cursor || data.total !== vids.length
-          || !vids.every(function (v) { return v.video_type === 'reel'; }))) throw error;
+        // An exact public Reels page can preserve its pagination. A shared
+        // unified snapshot represents this rail only when it is complete.
+        // Neither source may insert deal videos into the Project Reels rail.
+        if (reelsOnly && (!vids.every(function (v) { return v.video_type === 'reel'; })
+          || (expectedType === 'unified' && (data.next_cursor || data.total !== vids.length)))) throw error;
         return Object.assign({}, data, { viewer_state_available: false, videos: vids.map(function (v) {
           var copy = Object.assign({}, v, { viewer_state_available: false });
           delete copy.viewer_liked;

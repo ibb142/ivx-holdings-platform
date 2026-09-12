@@ -7,7 +7,7 @@ const source = await readFile('expo/ivxholding-landing/ivx-home-feed.js', 'utf8'
 const feed = { blocks: [{ type: 'deal', deal: { id: 'published-deal' } }] };
 const response = (status, body = feed, contentType = 'application/json', retryAfter = null) => ({
   ok: status >= 200 && status < 300, status,
-  headers: { get: name => name.toLowerCase() === 'retry-after' ? retryAfter : contentType }, json: async () => body,
+  headers: new Headers({ 'content-type': contentType, ...(retryAfter === null ? {} : { 'retry-after': retryAfter }) }), json: async () => body,
 });
 
 function fixture(respond) {
@@ -67,6 +67,36 @@ test('a successful canonical response completes in one request', async () => {
   assert.equal(f.window.__ivxHomeFeedStatus.blockCount, 1);
   assert.equal(f.calls.length, 1); assert.equal(f.errors.length, 0);
   assert.equal(f.warnings.length, 0); assert.equal(f.timers.size, 0);
+});
+
+for (const [name, unavailable] of [
+  ['data_available=false', response(200, { blocks: [], data_available: false })],
+  ['unavailable code', response(200, { blocks: [], code: 'PUBLIC_DATA_UNAVAILABLE' })],
+  ['unavailable header', { ...response(200, { blocks: [] }), headers: new Headers({ 'content-type': 'application/json', 'X-IVX-Data-State': 'unavailable' }) }],
+]) {
+  test(`Home retries HTTP 200 with ${name} and requires an available response`, async () => {
+    const recovered = fixture(n => n === 1 ? unavailable : response(200));
+    await settle();
+    assert.equal(recovered.calls.length, 2);
+    assert.equal(recovered.window.__ivxHomeFeedStatus.state, 'ready');
+    assert.equal(recovered.window.__ivxHomeFeedStatus.blockCount, 1);
+    assert.equal(recovered.timers.size, 0);
+
+    const outage = fixture(() => unavailable);
+    await settle();
+    assert.equal(outage.calls.length, 2);
+    assert.equal(outage.window.__ivxHomeFeedStatus.state, 'failed');
+    assert.equal(outage.window.__ivxHomeFeedStatus.blockCount, 0);
+    assert.equal(outage.timers.size, 0);
+  });
+}
+
+test('an available empty Home catalog remains valid even when served stale', async () => {
+  const f = fixture(() => response(200, { blocks: [], data_available: true, degraded: true }));
+  await settle();
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.window.__ivxHomeFeedStatus.state, 'ready');
+  assert.equal(f.window.__ivxHomeFeedStatus.blockCount, 0);
 });
 
 test('a 503 is recovered only after the alternate host returns a valid feed', async () => {

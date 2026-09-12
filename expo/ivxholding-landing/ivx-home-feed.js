@@ -95,7 +95,7 @@
           : /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/i.test(retryAfter) ? Date.parse(retryAfter) : null;
         if (Number.isNaN(retryAt)) retryAt = null;
         var ct = (r.headers.get('content-type') || '').toLowerCase();
-        if (!r.ok || ct.indexOf('json') === -1) {
+        if (!r.ok || ct.indexOf('json') === -1 || r.headers.get('X-IVX-Data-State') === 'unavailable') {
           var error = new Error('home feed response unavailable: HTTP ' + r.status);
           error.retryable = r.ok || r.status === 408 || r.status === 429 || r.status >= 500;
           throw error;
@@ -106,7 +106,7 @@
         if (!data || !Array.isArray(data.blocks)) throw new Error('invalid home feed response');
         // The API can return an unavailable render structure with HTTP 200.
         // Keep recovery active until the canonical source actually supplies data.
-        if (data.degraded === true || data.data_available === false || data.code === 'PUBLIC_DATA_UNAVAILABLE') {
+        if ((data.degraded === true && data.data_available !== true) || data.data_available === false || data.code === 'PUBLIC_DATA_UNAVAILABLE') {
           throw new Error('home feed data unavailable');
         }
         return data;

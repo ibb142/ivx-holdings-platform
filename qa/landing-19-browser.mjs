@@ -14,6 +14,7 @@ const mediaUnit = unit.startsWith('reels.') || unit === 'e2e.production-browser-
 const browserChannel = mediaUnit ? 'chrome' : 'chromium';
 const browser = await chromium.launch(mediaUnit ? { channel: 'chrome' } : {});
 const browserVersion = browser.version();
+const browserInfo = { channel: mediaUnit ? 'chrome' : 'chromium-headless-shell', version: browserVersion };
 const checks = [];
 let error;
 let failurePage, failureSignals;
@@ -28,20 +29,34 @@ try {
     const mediaResponses = [];
     pendingFeedDetails = [];
     failurePage = page;
-    failureSignals = { width, errors, failures, mediaResponses };
+    failureSignals = { width, browser: browserInfo, errors, failures, mediaResponses };
+    if (mediaUnit) {
+      const codecSupport = await page.evaluate(() => {
+        const video = document.createElement('video');
+        return { h264: video.canPlayType('video/mp4; codecs="avc1.42E01E"'), aac: video.canPlayType('audio/mp4; codecs="mp4a.40.2"') };
+      });
+      failureSignals.codecSupport = codecSupport;
+      assert.ok(codecSupport.h264 && codecSupport.aac, 'Media acceptance requires H.264 and AAC support');
+      checks.push({ width, browser: browserInfo, codecSupport });
+    }
     page.on('response', (r) => {
       const url = new URL(r.url());
-      if (/\/api\/reels(?:\/|$)|\/media\/reels\/|\/videos\//.test(url.pathname)) {
+      if (/\/api\/reels(?:\/|$)|\/api\/ivx\/video-platform\/home-feed$|\/media\/reels\/|\/videos\//.test(url.pathname)) {
         const signal = { path: url.pathname, channel: url.searchParams.get('type'), status: r.status(), type: r.headers()['content-type'] };
         mediaResponses.push(signal);
         // Inspect the response already requested by the UI. Do not issue extra
         // public requests or expose viewer identifiers and response bodies.
-        if (url.pathname === '/api/reels' && mediaResponses.length <= 20) {
+        if (['/api/reels', '/api/ivx/video-platform/home-feed'].includes(url.pathname) && mediaResponses.length <= 20) {
           pendingFeedDetails.push(r.json().then((body) => {
             signal.count = body.count;
             signal.total = body.total;
             signal.feedType = body.feed_type;
             signal.videoCount = Array.isArray(body.videos) ? body.videos.length : null;
+            signal.blockCount = Array.isArray(body.blocks) ? body.blocks.length : null;
+            signal.dataAvailable = typeof body.data_available === 'boolean' ? body.data_available : null;
+            signal.degraded = body.degraded === true;
+            signal.unavailable = r.headers()['x-ivx-data-state'] === 'unavailable' || body.code === 'PUBLIC_DATA_UNAVAILABLE' || body.data_available === false;
+            signal.responseMs = r.request().timing().responseEnd;
             const message = typeof body.error === 'string' ? body.error : '';
             signal.errorMessage = message
               .replace(/https?:\/\/[^\s"'<>]+/gi, '[URL]')
@@ -125,7 +140,7 @@ try {
     const response = await page.goto(base, { waitUntil: 'domcontentloaded' });
     assert.equal(response.status(), 200);
     await page.locator('#properties-grid .live-deal-card').first().waitFor({ state: 'visible' });
-    if (unit.startsWith('reels.') || unit === 'e2e.production-browser-suite') {
+    if (mediaUnit) {
       // A recovered request is accepted only after the canonical endpoint has
       // returned a valid nonempty feed. Do not pass while fallback is pending,
       // or substitute the independent homepage reel for the canonical feed.
@@ -266,7 +281,7 @@ try {
 finally {
   for (const context of browser.contexts()) await context.unrouteAll({ behavior: 'wait' });
   await browser.close();
-  const result = { unit, sourceSha: process.env.GITHUB_SHA, browserChannel, browserVersion, passed: !error, checks, error, diagnostics, completedAt: new Date().toISOString() };
+  const result = { unit, browser: browserInfo, sourceSha: process.env.GITHUB_SHA, browserChannel, browserVersion, passed: !error, checks, error, diagnostics, completedAt: new Date().toISOString() };
   result.sha256 = createHash('sha256').update(JSON.stringify(result)).digest('hex');
   await mkdir('evidence/landing-19', { recursive: true });
   await writeFile(`evidence/landing-19/${unit}.json`, JSON.stringify(result));
