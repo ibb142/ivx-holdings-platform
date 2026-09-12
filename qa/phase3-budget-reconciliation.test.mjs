@@ -213,3 +213,38 @@ test('the first minute after UTC midnight does not silently substitute the prece
   assert.equal(result.day, '2026-09-12'); assert.equal(result.cutoff, '2026-09-12T00:00:00.000Z');
   assert.equal(result.reason, 'EMPTY_LEDGER_COHORT');
 });
+test('an explicit historical review checks exactly its documented IDs under the current budget policy', async () => {
+  const oldRow = {...row,created_at:'2026-09-11T11:00:00Z',completed_at:'2026-09-11T11:00:03Z'};
+  const oldReceipt = {data:{...receipt.data,created_at:'2026-09-11T11:00:01Z'}};
+  const f=fixture({rows:[oldRow],provider:()=>Response.json(oldReceipt)});
+  const result=await observeBudgetReconciliation({...config,reservationIds:[row.reservation_id],reviewDay:'2026-09-11'},
+    {fetcher:f.fetcher,now:()=>NOW,wait:async()=>{}});
+  assert.equal(result.state,'COHORT_RECONCILED');assert.equal(result.day,'2026-09-11');
+  assert.equal(result.cutoff,'2026-09-12T00:00:00.000Z');
+  assert.deepEqual(result.requestedReservationIds,[row.reservation_id]);
+  assert.equal(result.fullDayReconciled,false);assert.equal(result.productionRowsChanged,0);
+  const url=new URL(f.calls[1].url);
+  assert.equal(url.searchParams.get('day'),'eq.2026-09-11');
+  assert.equal(url.searchParams.get('reservation_id'),'in.('+row.reservation_id+')');
+});
+test('missing or substituted review rows cannot certify the requested identities', async()=>{
+  for(const rows of [[],[{...row,reservation_id:'00000000-0000-4000-8000-000000000002'}]]) {
+    const f=fixture({rows});
+    const result=await observeBudgetReconciliation({...config,reservationIds:[row.reservation_id]},
+      {fetcher:f.fetcher,now:()=>NOW,wait:async()=>{}});
+    assert.equal(result.state,'INCOMPLETE');assert.equal(result.reason,'REVIEW_RESERVATIONS_MISSING');
+    assert.equal(f.calls.length,2);
+  }
+});
+test('invalid, duplicate or unbounded review scopes fail before outbound reads',async()=>{
+  for(const reservationIds of [null,{},[],['bad'],[row.reservation_id,row.reservation_id],Array(113).fill(row.reservation_id)]) {
+    const f=fixture();const result=await observeBudgetReconciliation({...config,reservationIds},
+      {fetcher:f.fetcher,now:()=>NOW});
+    assert.equal(result.reason,'INVALID_RECEIPT_REVIEW');assert.equal(f.calls.length,0);
+  }
+  for(const reviewDay of ['2026-09-13','2026-02-30','invalid',1]) {
+    const f=fixture();const result=await observeBudgetReconciliation({...config,reservationIds:[row.reservation_id],reviewDay},
+      {fetcher:f.fetcher,now:()=>NOW});
+    assert.equal(result.reason,'INVALID_REVIEW_DAY');assert.equal(f.calls.length,0);
+  }
+});
