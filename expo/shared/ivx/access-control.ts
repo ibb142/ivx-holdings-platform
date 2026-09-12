@@ -411,8 +411,22 @@ function getIVXSupabaseServerConfig(): IVXSupabaseServerConfig {
   };
 }
 
+// Keep the exact transport scope captured when each client is created. A later
+// environment/key rotation must not attach an old client to a new scope.
+const ownerProfileClientScopes = new WeakMap<SupabaseClient, string>();
+type IVXOwnerProfileRead = {
+  profile: IVXOwnerProfileRow | null;
+  errorMessage: string | null;
+};
+const pendingOwnerProfileReads = new Map<string, Promise<IVXOwnerProfileRead>>();
+const MAX_PENDING_OWNER_PROFILE_READS = 32;
+
 export function createIVXServerClient(accessToken: string, requestSignal?: AbortSignal): SupabaseClient {
   const config = getIVXSupabaseServerConfig();
+  const scopedClient = (client: SupabaseClient): SupabaseClient => {
+    ownerProfileClientScopes.set(client, JSON.stringify([config.url, config.dataKey, accessToken]));
+    return client;
+  };
   const ownerBypassToken = shouldAcceptOpenAccessOwnerToken() && accessToken === IVX_OPEN_ACCESS_OWNER_TOKEN;
   const requestFetch = requestSignal
     ? ((input, init) => fetch(input, {
@@ -422,16 +436,16 @@ export function createIVXServerClient(accessToken: string, requestSignal?: Abort
     : undefined;
 
   if (config.isServiceRole || ownerBypassToken) {
-    return createClient(config.url, config.dataKey, {
+    return scopedClient(createClient(config.url, config.dataKey, {
       global: { fetch: requestFetch },
       auth: {
         autoRefreshToken: false,
         persistSession: false,
       },
-    });
+    }));
   }
 
-  return createClient(config.url, config.dataKey, {
+  return scopedClient(createClient(config.url, config.dataKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -442,13 +456,48 @@ export function createIVXServerClient(accessToken: string, requestSignal?: Abort
         Authorization: `Bearer ${accessToken}`,
       },
     },
-  });
+  }));
 }
 
-async function loadIVXOwnerProfile(client: SupabaseClient, userId: string, logPrefix: string, remainingAuthMs: number): Promise<{
-  profile: IVXOwnerProfileRow | null;
-  errorMessage: string | null;
-}> {
+async function loadIVXOwnerProfile(client: SupabaseClient, userId: string, logPrefix: string, remainingAuthMs: number): Promise<IVXOwnerProfileRead> {
+  if (remainingAuthMs <= 0) throw new IVXAuthServiceUnavailableError();
+  const scope = ownerProfileClientScopes.get(client);
+  if (!scope) throw new IVXAuthServiceUnavailableError();
+  const key = JSON.stringify([scope, userId]);
+  const existing = pendingOwnerProfileReads.get(key);
+  if (existing) {
+    // Every caller has already verified its own identity. A caller whose auth
+    // budget expires leaves the shared read running for the other callers.
+    let callerTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        existing,
+        new Promise<never>((_resolve, reject) => {
+          callerTimer = setTimeout(() => reject(new IVXAuthServiceUnavailableError()), Math.min(5_000, remainingAuthMs));
+          if (typeof callerTimer === 'object' && callerTimer && 'unref' in callerTimer) {
+            (callerTimer as { unref?: () => void }).unref?.();
+          }
+        }),
+      ]);
+    } finally {
+      if (callerTimer !== undefined) clearTimeout(callerTimer);
+    }
+  }
+  if (pendingOwnerProfileReads.size >= MAX_PENDING_OWNER_PROFILE_READS) {
+    throw new IVXAuthServiceUnavailableError();
+  }
+  const operation = readIVXOwnerProfile(client, userId, logPrefix, remainingAuthMs);
+  pendingOwnerProfileReads.set(key, operation);
+  try {
+    return await operation;
+  } finally {
+    // Neither successful profiles nor failed reads are cached. The next
+    // request must observe the current role, including a revoked grant.
+    if (pendingOwnerProfileReads.get(key) === operation) pendingOwnerProfileReads.delete(key);
+  }
+}
+
+async function readIVXOwnerProfile(client: SupabaseClient, userId: string, logPrefix: string, remainingAuthMs: number): Promise<IVXOwnerProfileRead> {
   if (remainingAuthMs <= 0) throw new IVXAuthServiceUnavailableError();
   const controller = new AbortController();
   let profileTimer: ReturnType<typeof setTimeout> | undefined;
