@@ -5,8 +5,12 @@ function publicFeedCacheKey(req: Request): string {
   // Both landing-page hosts and both Home routes call the same controller.
   // Host failover must join its pending read/cache/backoff, not consume another
   // producer slot. Keep all other origins and controllers isolated by default.
-  if (!['https://api.ivxholding.com', 'https://ivx-holdings-platform.onrender.com'].includes(url.origin)
+  // Render terminates TLS before this app's HTTP adapter builds Request.url.
+  // Use its actual allowlisted host, never caller-supplied forwarding headers.
+  if (!['http:', 'https:'].includes(url.protocol) || url.port
+    || !['api.ivxholding.com', 'ivx-holdings-platform.onrender.com'].includes(url.hostname)
     || !['/api/home/feed', '/api/ivx/video-platform/home-feed'].includes(url.pathname)) return req.url;
+  url.protocol = 'https:';
   url.hostname = 'api.ivxholding.com';
   url.pathname = '/api/home/feed';
   // Preserve every query value, including unknown filters and the order of

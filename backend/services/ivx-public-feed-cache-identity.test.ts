@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { once } from 'node:events';
+import { serve } from '@hono/node-server';
 import { withPublicFeedAvailability as cache } from './ivx-public-feed-availability';
 
 const primary = 'https://api.ivxholding.com';
@@ -86,4 +88,47 @@ test('different filters, duplicate-value order and unrecognized origins retain d
     expect(await response.json()).toEqual({ source: i });
   }
   expect(calls).toBe(urls.length);
+});
+
+test('the production HTTP adapter shares Home data after TLS terminates at the load balancer', async () => {
+  let calls = 0;
+  const seen: string[] = [];
+  const read = async () => { calls++; return data(); };
+  const server = serve({ hostname: '127.0.0.1', port: 0, fetch: request => {
+    seen.push(request.url);
+    return cache(request, read);
+  } });
+  try {
+    if (!server.listening) await once(server, 'listening');
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('HTTP test server has no port');
+    const send = (host: string, path: string) => fetch(`http://127.0.0.1:${address.port}${path}`, {
+      headers: { Host: host, 'X-Forwarded-Proto': 'https' },
+    });
+    const first = await send('api.ivxholding.com', home + '?case=http-adapter&limit=60');
+    expect(await first.json()).toMatchObject({ blocks: [{ deal: { id: 'published' } }] });
+    const second = await send('ivx-holdings-platform.onrender.com', '/api/home/feed?limit=60&case=http-adapter');
+    expect(await second.json()).toMatchObject({ blocks: [{ deal: { id: 'published' } }] });
+    expect(seen.every(url => url.startsWith('http://'))).toBe(true);
+    expect(second.headers.get('X-IVX-Cache')).toBe('HIT');
+    const https = await cache(new Request(primary + home + '?case=http-adapter&limit=60'), read);
+    expect(https.headers.get('X-IVX-Cache')).toBe('HIT');
+    expect(calls).toBe(1);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
+
+test('forwarded headers cannot opt unknown hosts or nonstandard ports into the Home cache', async () => {
+  const path = home + '?case=untrusted-forwarding';
+  await cache(new Request(primary + path), async () => data());
+  let calls = 0;
+  for (const origin of ['http://unrelated.example.test', 'http://api.ivxholding.com:10001', 'https://api.ivxholding.com:10001']) {
+    const response = await cache(new Request(origin + path, { headers: {
+      'X-Forwarded-Host': 'api.ivxholding.com', 'X-Forwarded-Proto': 'https',
+      Forwarded: 'proto=https;host=api.ivxholding.com',
+    } }), async () => Response.json({ source: ++calls }));
+    expect(await response.json()).toEqual({ source: calls });
+  }
+  expect(calls).toBe(3);
 });
