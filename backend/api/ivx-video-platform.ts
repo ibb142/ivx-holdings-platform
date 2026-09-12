@@ -84,7 +84,7 @@ function json(data: unknown, status = 200): Response {
 export const videoPlatformOptions = (): Response => new Response(null, { status: 204, headers: CORS_HEADERS });
 
 // Public caches never contain viewer state, failure responses, or unbounded stale data.
-const withFeedCache = createFeedResponseCache({ headers: CORS_HEADERS, responseTimeoutMs: 2300 });
+const withFeedCache = createFeedResponseCache({ headers: CORS_HEADERS, responseTimeoutMs: 2300, staleWhileRevalidate: true });
 
 async function readBody(req: Request): Promise<Record<string, unknown>> {
   try { return await req.json() as Record<string, unknown>; } catch { return {}; }
