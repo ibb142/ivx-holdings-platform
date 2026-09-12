@@ -108,18 +108,19 @@ function getDefaultProjectApiBaseUrl(): string {
 }
 
 function getConfiguredProjectApiBaseUrl(): string {
-  return normalizeBaseUrl(readTrimmedEnv('EXPO_PUBLIC_IVX_API_BASE_URL'));
+  // Expo only embeds public build variables accessed with literal property names.
+  return normalizeBaseUrl(process.env.EXPO_PUBLIC_IVX_API_BASE_URL ?? '');
 }
 
 function getConfiguredDirectApiBaseUrl(): string {
-  return normalizeBaseUrl(readTrimmedEnv('EXPO_PUBLIC_API_BASE_URL'));
+  return normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL ?? '');
 }
 
 function getConfiguredOwnerAIBaseUrl(): {
   configuredBaseUrl: string | null;
   configuredFrom: IVXOwnerAIConfigAudit['configuredFrom'];
 } {
-  const ownerAIBaseUrl = normalizeBaseUrl(readTrimmedEnv('EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL'));
+  const ownerAIBaseUrl = normalizeBaseUrl(process.env.EXPO_PUBLIC_IVX_OWNER_AI_BASE_URL ?? '');
   if (ownerAIBaseUrl) {
     return {
       configuredBaseUrl: ownerAIBaseUrl,
