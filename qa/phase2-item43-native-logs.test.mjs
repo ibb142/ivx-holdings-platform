@@ -56,3 +56,13 @@ test('denials and malformed analytics responses cannot become empty success', as
   assert.throws(() => extractRows({ error: 'private error text', result: [] }), /analytics_query_error/);
   assert.throws(() => extractRows({ unexpected: [] }), /analytics_shape_unrecognized/);
 });
+
+test('connection summaries retain known classes without disclosing custom users or session identifiers', () => {
+  const summary = summarizeRow({ event_time: '2026-09-11T03:07:48.483000', event_message: 'canceling statement due to statement timeout', metadata: [{ parsed: [{ application_name: 'PostgREST', user_name: 'private@example.test', process_id: 1234, session_id: 'private-session', query: "SELECT value FROM ivx_durable_documents WHERE doc_key = 'fixture-secret'" }] }] });
+  assert.deepEqual(summary.applicationClasses, ['PostgREST']);
+  assert.deepEqual(summary.databaseRoleClasses, []);
+  assert.deepEqual(summary.postgresProcessIds, [1234]);
+  assert.deepEqual(summary.statementOperations, ['SELECT']);
+  assert.deepEqual(summary.statementKnownObjects, ['ivx_durable_documents']);
+  for (const secret of ['private@example.test', 'private-session', 'fixture-secret']) assert.equal(JSON.stringify(summary).includes(secret), false);
+});

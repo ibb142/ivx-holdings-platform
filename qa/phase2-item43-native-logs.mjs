@@ -81,6 +81,18 @@ export function extractRows(payload) {
 export function summarizeRow(row) {
   const serialized = JSON.stringify(row);
   const message = String(row.event_message ?? '');
+  const fields = [];
+  function visit(value) {
+    if (!value || typeof value !== 'object') return;
+    for (const [key, child] of Object.entries(value)) {
+      if (child && typeof child === 'object') visit(child);
+      else fields.push([key, child]);
+    }
+  }
+  visit(row.metadata);
+  const applications = ['PostgREST', 'postgrest', 'ivx_tasks', 'ivx_recovery', 'ivx_owner_variables'];
+  const roles = ['service_role', 'authenticator', 'postgres', 'supabase_admin', 'supabase_auth_admin', 'anon', 'authenticated'];
+  const statements = fields.filter(([key, value]) => ['query', 'statement', 'internal_query'].includes(key) && typeof value === 'string').map(([, value]) => value).join('\n');
   const errorClasses = [
     ['statement_timeout', /canceling statement due to statement timeout/i],
     ['user_request_cancel', /canceling statement due to user request/i],
@@ -98,6 +110,13 @@ export function summarizeRow(row) {
     recordSha256: hash(serialized), eventTime, errorClasses, matchingJobIds,
     mentionsWorkerQueue: serialized.includes('senior-developer-worker/queue.json'),
     mentionsDurableDocuments: serialized.includes('ivx_durable_documents'),
+    matchingWorkerInstances: ['srv-d9i15fg4n6ts73bn00j0-9zjqc', 'srv-d9i15fg4n6ts73bn00j0-bsxzt'].filter(instance => serialized.includes(instance)),
+    applicationClasses: [...new Set(fields.filter(([key, value]) => key === 'application_name' && applications.includes(value)).map(([, value]) => value))],
+    databaseRoleClasses: [...new Set(fields.filter(([key, value]) => ['user_name', 'user'].includes(key) && roles.includes(value)).map(([, value]) => value))],
+    postgresProcessIds: [...new Set(fields.filter(([key, value]) => ['process_id', 'pid'].includes(key) && /^[0-9]{1,10}$/.test(String(value))).map(([, value]) => Number(value)))],
+    sessionHashes: [...new Set(fields.filter(([key, value]) => key === 'session_id' && typeof value === 'string' && value).map(([, value]) => hash(value)))],
+    statementOperations: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'].filter(operation => new RegExp(`\\b${operation}\\b`, 'i').test(statements)),
+    statementKnownObjects: ['ivx_durable_documents', 'ivx_durable_events', 'ivx_owner_variables', 'ivx_agent_leases', 'ivx_autonomous_tasks'].filter(name => statements.includes(name)),
     // A shared queue snapshot can contain both IDs. A match is not causal attribution.
     causalAttribution: 'NOT_ESTABLISHED_BY_THIS_RECORD_MATCH',
   };
