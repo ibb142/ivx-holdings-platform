@@ -16,6 +16,14 @@ import {
 } from './ivx-enterprise-deployment-engine';
 
 describe('IVX autonomous one-authority policy', () => {
+  test('atomic Doctor shares the enforcer authority while independent mutators remain counted', () => {
+    const env = { IVX_PROCESS_ROLE: 'worker', IVX_AUTONOMOUS_QUEUE_BACKEND: 'postgres_atomic', IVX_AUTONOMOUS_DOCTOR_REPAIR_ENABLED: 'true' };
+    expect(activeFleetMutationAuthorityCount(env)).toBe(1);
+    expect(activeFleetMutationAuthorityCount({ ...env, IVX_GITHUB_ACTIONS_SUPERVISOR_MUTATIONS_ENABLED: 'true' })).toBe(2);
+    expect(activeFleetMutationAuthorityCount({ ...env, IVX_DEPLOYMENT_AUTO_REPAIR_ENABLED: 'true' })).toBe(2);
+    expect(activeFleetMutationAuthorityCount({ ...env, IVX_AUTONOMOUS_QUEUE_BACKEND: 'durable_json' })).toBe(2);
+    expect(activeFleetMutationAuthorityCount({ ...env, IVX_AUTONOMOUS_RUNTIME_ENFORCER_ENABLED: 'false' })).toBe(1);
+  });
   test('API role cannot execute fleet work even with a legacy enforcer flag', () => {
     expect(autonomousRuntimeEnforcerEnabled({ IVX_PROCESS_ROLE: 'api', IVX_AUTONOMOUS_RUNTIME_ENFORCER_ENABLED: 'true' })).toBe(false);
     expect(autonomousRuntimeEnforcerEnabled({ IVX_PROCESS_ROLE: 'worker', IVX_AUTONOMOUS_RUNTIME_ENFORCER_ENABLED: 'true' })).toBe(true);
