@@ -1,18 +1,42 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateScope, reviewChecks, taskSummary, requireCheckpoint, requireRecovery, requireDuplicate, REPO, BRANCH, TARGET } from './phase1-controlled-recovery.mjs';
+import { validateScope, reviewChecks, taskSummary, requireCheckpoint, requireRecovery, requireDuplicate, requireUnattempted, readonlyObserver, REPO, BRANCH, TARGET } from './phase1-controlled-recovery.mjs';
 
 const scope = () => ({ GITHUB_REPOSITORY: REPO, GITHUB_ACTOR: 'ibb142', GITHUB_EVENT_NAME: 'pull_request',
   IVX_QA_HEAD_BRANCH: BRANCH, IVX_TARGET_SHA: TARGET, IVX_QA_SOURCE_SHA: 'a'.repeat(40), IVX_QA_PR: '1',
   IVX_PHASE1_RESTART_AUTHORIZATION: 'controlled-api-then-worker-once', IVX_SYSTEM_KEY: 'test', RENDER_API_KEY: 'test', GH_TOKEN: 'test',
-  SUPABASE_URL: 'https://kvclcdjmjghndxsngfzb.supabase.co', SUPABASE_DB_URL: 'postgres://postgres:fixture@db.kvclcdjmjghndxsngfzb.supabase.co/postgres' });
+  SUPABASE_URL: 'https://kvclcdjmjghndxsngfzb.supabase.co', SUPABASE_ACCESS_TOKEN: 'fixture' });
 test('hosted actions require the exact actor, repository, branch, deployment and project', () => {
   validateScope(scope());
   for (const field of ['GITHUB_REPOSITORY','GITHUB_ACTOR','GITHUB_EVENT_NAME','IVX_QA_HEAD_BRANCH','IVX_TARGET_SHA',
-    'IVX_QA_SOURCE_SHA','IVX_QA_PR','IVX_PHASE1_RESTART_AUTHORIZATION','IVX_SYSTEM_KEY','RENDER_API_KEY','GH_TOKEN','SUPABASE_URL','SUPABASE_DB_URL']) {
+    'IVX_QA_SOURCE_SHA','IVX_QA_PR','IVX_PHASE1_RESTART_AUTHORIZATION','IVX_SYSTEM_KEY','RENDER_API_KEY','GH_TOKEN','SUPABASE_URL','SUPABASE_ACCESS_TOKEN']) {
     assert.throws(() => validateScope({ ...scope(), [field]: '' }), field);
   }
-  assert.throws(() => validateScope({ ...scope(), SUPABASE_DB_URL: 'postgres://postgres.other:fixture@aws.pooler.supabase.com/postgres' }));
+  assert.throws(() => validateScope({ ...scope(), SUPABASE_URL: 'https://other.supabase.co' }));
+});
+
+test('any prior durable action reservation prevents replay before creating another fixture', () => {
+  requireUnattempted([], '1');
+  requireUnattempted([{ context: 'unrelated', state: 'pending' }], '1');
+  for (const role of ['api','worker']) for (const state of ['pending','failure','success']) {
+    assert.throws(() => requireUnattempted([{ context: `qa/phase1-controlled-restart-1-${role}`, state }], '1'));
+  }
+  assert.throws(() => requireUnattempted(null, '1'));
+});
+
+test('the observer sends bound values only to the same-project read-only endpoint', async () => {
+  const calls = [];
+  const db = readonlyObserver('fixture', async (url, init) => { calls.push({ url, init }); return new Response('[{"task_id":"original"}]', { status: 201 }); });
+  const query = 'select task_id from public.ivx_autonomous_tasks where task_id=$1';
+  const parameters = ["quote' and ; SQL remains a value"];
+  assert.deepEqual((await db.query(query, parameters)).rows, [{ task_id: 'original' }]);
+  assert.equal(calls[0].url, 'https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/database/query/read-only');
+  assert.deepEqual(JSON.parse(calls[0].init.body), { query, parameters });
+  assert.equal(calls[0].init.redirect, 'error');
+  await assert.rejects(db.query('delete from public.ivx_autonomous_tasks'));
+  assert.equal(calls.length, 1);
+  await assert.rejects(readonlyObserver('fixture', async () => new Response('{}', { status: 403 })).query(query, parameters));
+  await assert.rejects(readonlyObserver('fixture', async () => new Response('{}', { status: 201 })).query(query, parameters));
 });
 
 const checks = () => ['Restart acceptance scope and verdict checks','qa-suite','scan-secrets'].map((name,i) => ({ id: i+1, name, status: 'completed', conclusion: 'success' }));

@@ -25,12 +25,33 @@ export function validateScope(env) {
   assert.match(env.IVX_QA_SOURCE_SHA ?? '', /^[a-f0-9]{40}$/);
   assert.match(env.IVX_QA_PR ?? '', /^\d+$/);
   assert.equal(env.IVX_PHASE1_RESTART_AUTHORIZATION, 'controlled-api-then-worker-once');
-  assert(env.IVX_SYSTEM_KEY && env.RENDER_API_KEY && env.GH_TOKEN, 'Protected credentials are required');
+  assert(env.IVX_SYSTEM_KEY && env.RENDER_API_KEY && env.GH_TOKEN && env.SUPABASE_ACCESS_TOKEN, 'Protected credentials are required');
   assert.equal(new URL(env.SUPABASE_URL).origin, `https://${PROJECT}.supabase.co`);
-  const db = new URL(env.SUPABASE_DB_URL || env.DATABASE_URL || 'postgres://invalid');
-  assert(['postgres:', 'postgresql:'].includes(db.protocol) && db.password && db.pathname === '/postgres');
-  assert(db.hostname === `db.${PROJECT}.supabase.co`
-    || (db.hostname.endsWith('.pooler.supabase.com') && decodeURIComponent(db.username) === `postgres.${PROJECT}`), 'Wrong database project');
+}
+
+export function requireUnattempted(statuses, pr) {
+  assert(Array.isArray(statuses), 'Invalid restart journal');
+  for (const role of Object.keys(SERVICES)) assert(!statuses.some(s => s.context === `qa/phase1-controlled-restart-${pr}-${role}`),
+    'An action was already reserved or attempted; automatic replay is forbidden');
+}
+
+// Management API's database:read endpoint is enforced read-only by Supabase.
+// Values are bound using its parameters field, never interpolated into SQL.
+export function readonlyObserver(token, fetchImpl = fetch) {
+  assert(token?.trim(), 'Read-only observer credential missing');
+  return {
+    async query(query, parameters = []) {
+      assert(/^\s*select\b/i.test(query), 'Observer only permits SELECT');
+      const response = await fetchImpl(`https://api.supabase.com/v1/projects/${PROJECT}/database/query/read-only`, {
+        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(20000),
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ query, parameters }),
+      });
+      assert(response.ok, `Read-only observer HTTP ${response.status}`);
+      const rows = await response.json(); assert(Array.isArray(rows), 'Malformed read-only rows');
+      return { rows };
+    },
+    async end() {},
+  };
 }
 
 export function reviewChecks(rows) {
@@ -124,6 +145,13 @@ export async function run() {
   async function exactMain() {
     const branch = await github('branches/main'); assert.equal(branch.commit.sha, TARGET, 'Production target superseded');
   }
+  async function currentApprovedPR() {
+    const pr = await github(`pulls/${env.IVX_QA_PR}`);
+    assert.equal(pr.state, 'open'); assert.equal(pr.head.sha, env.IVX_QA_SOURCE_SHA, 'Acceptance source superseded');
+    assert.equal(pr.head.repo.full_name, REPO); assert.equal(pr.head.ref, BRANCH);
+    assert.equal(pr.base.ref, 'main'); assert.equal(pr.base.sha, TARGET);
+    return pr;
+  }
   async function topology(rolling = null) {
     const result = {};
     for (const [role, id] of Object.entries(SERVICES)) {
@@ -174,7 +202,11 @@ export async function run() {
     if (trafficFailure) throw trafficFailure;
   }
   async function restart(role) {
-    await exactMain();
+    await exactMain(); await currentApprovedPR();
+    const currentChecks = await github(`commits/${env.IVX_QA_SOURCE_SHA}/check-runs?per_page=100`);
+    assert(currentChecks.total_count <= 100 && reviewChecks(currentChecks.check_runs), 'Checks changed before action');
+    const commitStatus = await github(`commits/${env.IVX_QA_SOURCE_SHA}/status`);
+    assert(commitStatus.statuses.every(s => s.state === 'success'), 'A commit status is not approved');
     const context = `qa/phase1-controlled-restart-${env.IVX_QA_PR}-${role}`;
     const statuses = await github(`commits/${TARGET}/statuses?per_page=100`);
     assert(!statuses.some(s => s.context === context), 'Restart already attempted; automatic replay is forbidden');
@@ -192,27 +224,22 @@ export async function run() {
   }
   try {
     validateScope(env); await save();
-    const pr = await github(`pulls/${env.IVX_QA_PR}`);
-    assert.equal(pr.state, 'open'); assert.equal(pr.head.sha, env.IVX_QA_SOURCE_SHA);
-    assert.equal(pr.head.repo.full_name, REPO); assert.equal(pr.head.ref, BRANCH);
-    assert.equal(pr.base.ref, 'main'); assert.equal(pr.base.sha, TARGET);
+    await currentApprovedPR();
+    requireUnattempted(await github(`commits/${TARGET}/statuses?per_page=100`), env.IVX_QA_PR);
     const changed = await github(`pulls/${env.IVX_QA_PR}/files?per_page=100`);
     assert(changed.length === FILES.length && changed.every(f => FILES.includes(f.filename)), 'Unexpected production code in acceptance PR');
     execFileSync('git', ['diff', '--exit-code', TARGET, '--', 'backend', 'scripts', 'supabase', 'expo'], { stdio: 'ignore' });
     for (let i = 0; ; i++) {
-      await exactMain();
+      await exactMain(); await currentApprovedPR();
       const checks = await github(`commits/${env.IVX_QA_SOURCE_SHA}/check-runs?per_page=100`);
       assert(checks.total_count <= 100, 'Check list must not be truncated');
       if (reviewChecks(checks.check_runs)) { receipt.preRestartChecks = checks.check_runs.map(c => ({ id: c.id, name: c.name, status: c.status, conclusion: c.conclusion })); break; }
       assert(i < 90, 'Repository checks did not finish'); await sleep(5000);
     }
-    const [{ default: pg }, { emergencyStopPostgresConfig }, identities] = await Promise.all([
-      import('pg'), import('../backend/services/ivx-emergency-stop-postgres.ts'), import('../scripts/ivx-fleet-ha-identities.ts')]);
+    const identities = await import('../scripts/ivx-fleet-ha-identities.ts');
     const matches = identities.processIdentityMatchesObservedInstance;
-    db = new pg.Client({ ...emergencyStopPostgresConfig(), connectionTimeoutMillis: 8000,
-      query_timeout: 5000, statement_timeout: 4000, application_name: 'phase1-controlled-recovery-observer',
-      options: '-c default_transaction_read_only=on' });
-    db.on('error', () => {}); await db.connect();
+    db = readonlyObserver(env.SUPABASE_ACCESS_TOKEN);
+    receipt.observer = 'Supabase database/query/read-only with bound parameters';
     const control = (await db.query("select active from public.ivx_agent_controls where control_name='emergency_stop' limit 2")).rows;
     assert.equal(control.length, 1); assert.equal(control[0].active, false);
     const before = await topology(); receipt.before = before;
@@ -304,8 +331,10 @@ export async function run() {
         if (!fixture.taskId) receipt.cleanup = { confirmed: true, fixtureCreated: false };
         else {
         const row = await checkpoint(fixture.taskId); assert.equal(row.idempotency_key, fixture.key);
-        const cancelled = await app(`/api/ivx/autonomous-task-engine/tasks/${fixture.taskId}/transition`, { toState: 'CANCELLED' });
-        assert.equal(cancelled.ok, true);
+        if (row.state !== 'CANCELLED') {
+          const cancelled = await app(`/api/ivx/autonomous-task-engine/tasks/${fixture.taskId}/transition`, { toState: 'CANCELLED' });
+          assert.equal(cancelled.ok, true);
+        }
         const final = await checkpoint(fixture.taskId); assert.equal(final.state, 'CANCELLED');
         receipt.cleanup = { confirmed: true, taskId: fixture.taskId, state: final.state,
           auditRetained: true, activeQaTasks: 0 };
