@@ -101,10 +101,34 @@ async function getSB() {
   const { createClient } = await import('@supabase/supabase-js');
   const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_HD3Xvq5bCQNJLFk1ROH9mQ_Wdb9xdDZ').trim();
-  const timeoutFetch = (input: any, init?: any) => {
+  const timeoutFetch = async (input: any, init?: RequestInit) => {
     const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), SB_TIMEOUT_MS);
-    return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(tid));
+    let rejectDeadline!: (reason: unknown) => void;
+    const deadline = new Promise<never>((_resolve, reject) => { rejectDeadline = reject; });
+    const abort = (reason: unknown) => {
+      controller.abort(reason);
+      rejectDeadline(reason);
+    };
+    const tid = setTimeout(() => abort(new Error('Video source read timed out')), SB_TIMEOUT_MS);
+    const callerSignal = init?.signal;
+    const onCallerAbort = () => abort(callerSignal?.reason ?? new Error('Video source read aborted'));
+    callerSignal?.addEventListener('abort', onCallerAbort, { once: true });
+    try {
+      if (callerSignal?.aborted) onCallerAbort();
+      const read = async () => {
+        if (controller.signal.aborted) throw controller.signal.reason;
+        const response = await fetch(input, { ...init, signal: controller.signal });
+        // PostgREST consumes JSON after fetch resolves its headers. Retain the
+        // same deadline through the body, or a stalled body pins shared reads.
+        if (!response.body) return response;
+        const body = await response.arrayBuffer();
+        return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+      };
+      return await Promise.race([read(), deadline]);
+    } finally {
+      clearTimeout(tid);
+      callerSignal?.removeEventListener('abort', onCallerAbort);
+    }
   };
   _sb = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false }, global: { fetch: timeoutFetch } });
   return _sb;
