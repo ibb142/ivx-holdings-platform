@@ -2,6 +2,7 @@ import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { forwardLandingPreviewRoute } from './landing-preview-route.mjs';
 
 const unit = process.argv[2];
 const supported = ['reels.autoplay-controls-browser', 'reels.engagement-browser', 'reels.scroll-navigation-browser', 'reels.production-render-browser', 'a11y.touch-targets-browser', 'a11y.contrast-focus-browser', 'perf.console-network-browser', 'e2e.production-browser-suite'];
@@ -69,15 +70,7 @@ try {
       assert.equal(preview.hostname, '127.0.0.1');
       // Serve reviewed PR files under the real page origin so the public API's
       // actual CORS policy still applies. Never use this as deployed evidence.
-      await context.route(new URL(base).origin + '/**', async (route) => {
-        const request = route.request(), url = new URL(request.url());
-        assert.ok(['GET', 'HEAD'].includes(request.method()), 'Static preview cannot perform public writes');
-        const response = await context.request.fetch(preview.origin + url.pathname + url.search, { method: request.method() });
-        // Media and API routes managed by the existing edge are not static
-        // repository files. Preserve their real public responses in preview.
-        if (response.status() === 404) return route.continue();
-        await route.fulfill({ response });
-      });
+      await context.route(new URL(base).origin + '/**', route => forwardLandingPreviewRoute(context, preview, route));
     }
     if (unit === 'reels.engagement-browser') {
       // Isolated browser interaction fixture. No public likes, comments or
