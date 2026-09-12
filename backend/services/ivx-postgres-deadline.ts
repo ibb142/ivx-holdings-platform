@@ -19,8 +19,9 @@ export function observePostgresPoolErrors(pool: Pick<Pool, 'on'>, purpose: strin
 /** Transaction-local deadlines survive Supavisor transaction pooling. */
 export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
   pool: Pick<Pool, 'connect'>, text: string, values: unknown[],
-  publicRole?: 'anon' | 'service_role',
+  profile?: 'anon' | 'service_role' | 'assignment' | 'default',
 ) {
+  const publicRole = profile === 'anon' || profile === 'service_role' ? profile : undefined;
   const startedAt = Date.now();
   let stageStartedAt = startedAt;
   let stage: 'checkout' | 'setup' | 'query' | 'commit' = 'checkout';

@@ -22,6 +22,13 @@ try {
   await locker.query('select pg_advisory_unlock(9811595)');
   const next = await queryWithPostgresDeadline(pool, 'select 112 as lanes', []);
   assert.equal(next.rows[0].lanes, 112, 'Pool must recover after server cancellation');
+  const assignment = await queryWithPostgresDeadline(pool,
+    "select current_setting('statement_timeout') as statement, current_setting('lock_timeout') as lock", [], 'assignment');
+  assert.equal(assignment.rows[0].statement, '2500ms');
+  assert.equal(assignment.rows[0].lock, '1s');
+  const afterAssignment = await pool.query("select current_setting('statement_timeout') as statement, current_setting('lock_timeout') as lock");
+  assert.equal(afterAssignment.rows[0].statement, '0', 'Assignment statement limit must reset after COMMIT');
+  assert.equal(afterAssignment.rows[0].lock, '0', 'Assignment lock limit must reset after COMMIT');
   const disconnected = assert.rejects(queryWithPostgresDeadline(pool, 'select pg_sleep(20) /* ivx_disconnect_fixture */', []),
     (error: any) => error.code === '57P01' || /connection.*terminated|terminating connection/i.test(error.message));
   let victim = 0;
@@ -50,6 +57,6 @@ try {
   const afterIdle = await queryWithPostgresDeadline(pool, 'select 112 as lanes', []);
   assert.equal(afterIdle.rows[0].lanes, 112);
   console.log(JSON.stringify({ok:true,runtime:process.release.name,nodeVersion:process.version,
-    serverStatementDeadline:true,serverLockDeadline:true,recoveredAfterCancellation:true,
+    serverStatementDeadline:true,serverLockDeadline:true,assignmentLimitsAppliedAndReset:true,recoveredAfterCancellation:true,
     activeDisconnectRejected:true,idleDisconnectHandled:true,processSurvived:true,reconnected:true,productionRowsTouched:0}));
 } finally { await locker.end(); await pool.end(); }

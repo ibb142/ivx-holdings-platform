@@ -11,7 +11,7 @@ import { VERSIONED_INSPECTION_PREFIXES, VERSIONED_MISSION_PREFIXES } from './ivx
 import { localFleetExecutionMetrics } from './ivx-fleet-execution-metrics';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
-import { getWorkerPool, resetDatabasePoolsForTests } from './ivx-database-pools';
+import { getApiPool, getWorkerPool, resetDatabasePoolsForTests } from './ivx-database-pools';
 import { queryWithPostgresDeadline } from './ivx-postgres-deadline';
 import { SENIOR_QUEUE_ACTIVE_STATUSES, SENIOR_QUEUE_JOB_SQL, SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL } from './ivx-senior-work-queue';
 import { emergencyStopPostgresConfig } from './ivx-emergency-stop-postgres';
@@ -60,9 +60,10 @@ function headers(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
 }
 function externalError(payload: unknown, fallback: string): string { if (payload && typeof payload === 'object') { const record = payload as Record<string, unknown>; const candidate = record.message ?? record.error ?? record.details; if (typeof candidate === 'string' && candidate.trim()) return candidate.trim().slice(0, 320); } return fallback; }
 async function parsePayload(response: Response): Promise<unknown> { const text = await response.text(); if (!text) return null; try { return JSON.parse(text) as unknown; } catch { return { message: text.slice(0, 320) }; } }
-type PoolPurpose = 'tasks' | 'telemetry' | 'presence' | 'repair';
-function getDirectPool(env: NodeJS.ProcessEnv = process.env, _purpose: PoolPurpose = 'tasks'): Pool {
-  return getWorkerPool(env);
+type PoolPurpose = 'tasks' | 'assignment' | 'heartbeat' | 'telemetry' | 'presence' | 'repair';
+function getDirectPool(env: NodeJS.ProcessEnv = process.env, purpose: PoolPurpose = 'tasks'): Pool {
+  // Compact dashboard/presence reads must remain available during blocked work.
+  return purpose === 'telemetry' || purpose === 'presence' ? getApiPool(env) : getWorkerPool(env, purpose);
 }
 const DIRECT_RPC_ARGS: Record<string, string[]> = {
   ivx_autonomous_tasks_create_batch: ['p_tasks'],
@@ -98,9 +99,13 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
     if (casts[key] === 'jsonb' && value !== null && value !== undefined) return JSON.stringify(value);
     return value ?? null;
   });
-  const pool = getDirectPool(env, name.startsWith('ivx_senior_') ? 'repair'
-    : ['ivx_fleet_dashboard_observation', 'ivx_work_evidence_hours'].includes(name) ? 'telemetry' : 'tasks');
-  const result = await queryWithPostgresDeadline<{ result: T }>(pool, `select public.${name}(${placeholders}) as result`, values);
+  const purpose: PoolPurpose = name.startsWith('ivx_senior_') ? 'repair'
+    : ['ivx_fleet_dashboard_observation', 'ivx_work_evidence_hours'].includes(name) ? 'telemetry'
+    : ['ivx_autonomous_tasks_claim_batch', 'ivx_autonomous_tasks_start_batch'].includes(name) ? 'assignment'
+    : ['ivx_autonomous_tasks_heartbeat_batch', 'ivx_autonomous_tasks_release_worker'].includes(name) ? 'heartbeat' : 'tasks';
+  const pool = getDirectPool(env, purpose);
+  const result = await queryWithPostgresDeadline<{ result: T }>(pool, `select public.${name}(${placeholders}) as result`, values,
+    purpose === 'assignment' ? 'assignment' : 'default');
   if (!result.rows?.length) throw new Error(`direct_postgres_rpc_empty:${name}`);
   return result.rows[0].result as T;
 }
@@ -590,4 +595,3 @@ export async function readSeniorActiveOwnerJobPostgres<T extends { ownerId: stri
   }
   return job;
 }
-

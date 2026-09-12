@@ -6,6 +6,7 @@ import { publicFeedRead } from './ivx-public-feed-postgres';
 const saved = { ...process.env };
 afterEach(() => { resetDatabasePoolsForTests(); process.env = { ...saved }; });
 function configure() {
+  process.env.NODE_ENV = 'production'; process.env.CI = 'false';
   process.env.SUPABASE_DB_URL = 'postgresql://postgres:test@db.example.supabase.co:5432/postgres';
   process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://example.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-only';
@@ -14,8 +15,8 @@ test('API and worker have distinct singleton pools with independent ceilings', (
   configure(); const api = getApiPool(), worker = getWorkerPool();
   expect(api).not.toBe(worker);
   expect(getApiPool()).toBe(api); expect(getWorkerPool()).toBe(worker);
-  expect((api as any).options.max).toBe(12); expect((worker as any).options.max).toBe(8);
-  expect((worker as any).options.connectionTimeoutMillis).toBe(2000);
+  expect((api as any).options.max).toBe(12); expect((worker as any).options.max).toBe(5);
+  expect((worker as any).options.connectionTimeoutMillis).toBe(1500);
 });
 test('saturated worker checkout cannot delay an API read; reads retain anon role and JSON data', async () => {
   configure(); const api = getApiPool(), worker = getWorkerPool();
@@ -60,4 +61,20 @@ test('native feed errors propagate; mismatched projects never read through SQL o
     await expect(publicFeedRead('select 1', [], async () => { rest++; return { data: [] }; })).rejects.toThrow('project_mismatch');
     expect(rest).toBe(0);
   } finally { mock.mockRestore(); }
+});
+
+for (const flag of ['CI', 'NODE_ENV']) test(`reduced CI pool ceilings via ${flag}`, () => {
+  configure(); process.env[flag] = flag === 'CI' ? 'true' : 'test';
+  expect((getApiPool() as any).options.max).toBe(6);
+  expect((getWorkerPool() as any).options.max).toBe(1);
+});
+
+test('worker lane allocations sum to 8 in production and 4 in CI', () => {
+  for (const ci of ['false', 'true']) {
+    resetDatabasePoolsForTests(); configure(); process.env.CI = ci;
+    const lanes = ['tasks','assignment','heartbeat','repair'] as const;
+    const pools = lanes.map(lane => getWorkerPool(process.env, lane));
+    expect(new Set(pools).size).toBe(4);
+    expect(pools.reduce((sum,pool) => sum + (pool as any).options.max,0)).toBe(ci === 'true' ? 4 : 8);
+  }
 });

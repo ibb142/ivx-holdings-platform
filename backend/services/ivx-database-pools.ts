@@ -3,20 +3,26 @@ import { observePostgresPoolErrors, queryWithPostgresDeadline } from './ivx-post
 import { supabasePostgresTls, withoutPostgresUrlTlsOptions } from './ivx-supabase-postgres-tls';
 
 let apiPool: Pool | null = null;
-let workerPool: Pool | null = null;
+export type WorkerLane = 'tasks' | 'assignment' | 'heartbeat' | 'repair';
+const workerPools = new Map<WorkerLane, Pool>();
 
 /** Separate process-local budgets, not a reservation of server/pooler slots.
  * Across replicas the provider must accommodate the sum of these ceilings. */
-function createPool(kind: 'api' | 'worker', env: NodeJS.ProcessEnv): Pool {
+function createPool(kind: 'api' | `worker_${WorkerLane}`, env: NodeJS.ProcessEnv): Pool {
   const connectionString = (env.SUPABASE_DB_URL || env.DATABASE_URL || env.POSTGRES_URL || env.SUPABASE_POOLER_URL || '').trim();
   if (!connectionString) throw new Error('direct_postgres_not_configured');
+  const isTestEnvironment = env.NODE_ENV === 'test' || env.CI === 'true';
+  // Reserve assignment, heartbeat and repair slots within the worker ceiling.
+  const max = kind === 'api' ? (isTestEnvironment ? 6 : 12)
+    : kind === 'worker_tasks' ? (isTestEnvironment ? 1 : 5) : 1;
   const pool = new Pool({
     connectionString: withoutPostgresUrlTlsOptions(connectionString), ssl: supabasePostgresTls(),
-    application_name: `ivx_${kind}`, max: kind === 'api' ? 12 : 8,
-    idleTimeoutMillis: 5000, connectionTimeoutMillis: 2000,
+    application_name: `ivx_${kind}`, max,
+    idleTimeoutMillis: 3000, connectionTimeoutMillis: 1500,
     query_timeout: 3500, statement_timeout: 2500,
   });
   observePostgresPoolErrors(pool, kind);
+  console.info('[IVX POOL INITIALIZED]', { pool: kind, context: isTestEnvironment ? 'CI_SANDBOX' : 'PRODUCTION', max });
   // Even convenience reads must use a transaction-local server deadline when
   // connected through a transaction pooler. Mutations are never retried here.
   pool.query = <T = Record<string, unknown>>(text: string, values: unknown[] = []) =>
@@ -27,11 +33,15 @@ function createPool(kind: 'api' | 'worker', env: NodeJS.ProcessEnv): Pool {
 export function getApiPool(env: NodeJS.ProcessEnv = process.env): Pool {
   return apiPool ??= createPool('api', env);
 }
-export function getWorkerPool(env: NodeJS.ProcessEnv = process.env): Pool {
-  return workerPool ??= createPool('worker', env);
+export function getWorkerPool(env: NodeJS.ProcessEnv = process.env, lane: WorkerLane = 'tasks'): Pool {
+  const existing = workerPools.get(lane);
+  if (existing) return existing;
+  const pool = createPool(`worker_${lane}`, env);
+  workerPools.set(lane, pool);
+  return pool;
 }
 export function resetDatabasePoolsForTests(): void {
-  const previous = [apiPool, workerPool];
-  apiPool = null; workerPool = null;
+  const previous = [apiPool, ...workerPools.values()];
+  apiPool = null; workerPools.clear();
   for (const pool of previous) if (pool) void pool.end().catch(() => {});
 }

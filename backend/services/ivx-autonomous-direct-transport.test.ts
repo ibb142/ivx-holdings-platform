@@ -4,13 +4,14 @@ for (const fails of [false, true]) test(`configured same-project queue selects o
   const child = Bun.spawn([process.execPath, '-e', `
     import { mock } from 'bun:test';
     import { EventEmitter } from 'node:events';
-    let queries=0, restCalls=0, releases=0; const boundaries=[];
+    let queries=0, restCalls=0, releases=0; const boundaries=[], poolNames=[];
     mock.module('pg',()=>({Client:class {},Pool:class extends EventEmitter {
       constructor(config) {
         super();
         if(config.ssl.rejectUnauthorized!==true || !config.ssl.ca?.length)throw new Error('TLS not verified');
         if(config.connectionString.includes('sslmode'))throw new Error('URL overrides TLS');
-        if(config.connectionTimeoutMillis!==2000 || config.statement_timeout!==2500)throw new Error('unbounded connection');
+        if(config.connectionTimeoutMillis!==1500 || config.statement_timeout!==2500)throw new Error('unbounded connection');
+        poolNames.push(config.application_name);
       }
       async connect() {
         return Object.assign(new EventEmitter(), {
@@ -46,6 +47,7 @@ for (const fails of [false, true]) test(`configured same-project queue selects o
       if(failed!==${fails})throw new Error('incorrect failure result');
     }
     if(restCalls!==0 || queries!==6)throw new Error('transport replay or unexpected call count');
+    if(JSON.stringify(poolNames)!==JSON.stringify(['ivx_worker_tasks','ivx_worker_assignment']))throw new Error('unexpected direct pool creation');
     const setups=boundaries.filter(x=>x.startsWith('BEGIN;'));
     if(releases!==6 || setups.length!==6 || setups.some(x=>!x.includes("SET LOCAL statement_timeout = '2500ms'") || !x.includes("SET LOCAL lock_timeout = '1000ms'") || !x.includes("SET LOCAL idle_in_transaction_session_timeout = '5s'")))throw new Error('bounded transaction missing for planning, Landing read or RPC');
     // An ambiguous client failure must destroy the connection without sending
@@ -57,10 +59,10 @@ for (const fails of [false, true]) test(`configured same-project queue selects o
   if (fails) {
     const lines = stderr.trim().split('\n');
     expect(lines).toHaveLength(6);
-    for (const line of lines) {
+    for (const [index, line] of lines.entries()) {
       expect(line).toStartWith('[IVX PostgreSQL] deadline failure ');
       const diagnostic = JSON.parse(line.slice(line.indexOf('{')));
-      expect(diagnostic).toMatchObject({ pool: 'worker', stage: 'query', sqlState: null });
+      expect(diagnostic).toMatchObject({ pool: index === 4 ? 'worker_assignment' : 'worker_tasks', stage: 'query', sqlState: null });
       expect(diagnostic.queryHash).toMatch(/^[a-f0-9]{16}$/);
       expect(line).not.toContain('ambiguous direct failure');
       expect(line).not.toContain('postgresql://');

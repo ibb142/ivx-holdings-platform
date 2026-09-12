@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { Pool } from 'pg';
+import { Client, Pool } from 'pg';
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -20,6 +20,9 @@ import {
   readPostgresLandingTasks,
   readPostgresFleetProcessObservation,
   readPostgresFleetSloTasks,
+  globalAIBudgetRpc,
+  readSeniorQueuePostgresDocument,
+  releasePostgresWorkerInstanceTasks,
 } from './ivx-postgres-autonomous-task-store';
 
 const savedEnv = { ...process.env };
@@ -37,6 +40,86 @@ function configureAtomicQueue(): void {
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test-only';
   process.env.IVX_AUTONOMOUS_WORKER_INSTANCE_ID = 'render-worker-test-01';
 }
+
+test('saturated task and assignment pools leave heartbeats available within the existing connection budget', async () => {
+  configureAtomicQueue(); process.env.CI = 'true';
+  process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://poolisolation.supabase.co';
+  process.env.SUPABASE_DB_URL = 'postgresql://postgres:fixture@db.poolisolation.supabase.co/postgres';
+  // Exercise the real pg.Pool checkout queue; only replace network I/O.
+  const pools = new Map<string, Pool>();
+  const originalConnect = Pool.prototype.connect;
+  const checkout = spyOn(Pool.prototype, 'connect').mockImplementation(function (this: Pool) {
+    pools.set(this.options.application_name!, this);
+    return originalConnect.call(this) as never;
+  });
+  const connect = spyOn(Client.prototype, 'connect').mockImplementation((callback: (error: Error | null) => void) => {
+    queueMicrotask(() => callback(null));
+    return undefined as never;
+  });
+  const tasksGate = Promise.withResolvers<void>();
+  const tasksOccupied = Promise.withResolvers<void>();
+  const claimGate = Promise.withResolvers<void>();
+  const claimOccupied = Promise.withResolvers<void>();
+  let taskQueries = 0;
+  const setup: string[] = [];
+  const query = spyOn(Client.prototype, 'query').mockImplementation((async (sql: string) => {
+    if (sql.startsWith('BEGIN')) setup.push(sql);
+    if (sql.includes('ivx_ai_budget_status')) {
+      if (++taskQueries === 1) tasksOccupied.resolve();
+      await tasksGate.promise;
+      return { rows: [{ result: { ok: true } }] };
+    }
+    if (sql.includes('ivx_autonomous_tasks_claim_batch')) {
+      claimOccupied.resolve();
+      await claimGate.promise;
+      return { rows: [{ result: [{ workerId: 'worker-1', agentNumber: 1, ok: false, task: null, error: null, stolen: false }] }] };
+    }
+    if (sql.includes('ivx_autonomous_tasks_start_batch')) return { rows: [{ result: [{ taskId: 'task-1', workerId: 'worker-1', ok: true, task: null, error: null }] }] };
+    if (sql.includes('ivx_autonomous_tasks_heartbeat_batch')) return { rows: [{ result: { ok: true, refreshed: 1, rejected: [] } }] };
+    if (sql.includes('ivx_autonomous_tasks_release_worker')) return { rows: [{ result: { ok: true, released: 0 } }] };
+    if (sql.includes('as instances')) return { rows: [{ measuredAt: new Date(), instances: [] }] };
+    return { rows: [] };
+  }) as never);
+  const rest = spyOn(globalThis, 'fetch').mockImplementation(() => { throw new Error('Direct RPC must not replay through REST'); });
+  const pending: Promise<unknown>[] = [];
+  try {
+    pending.push(globalAIBudgetRpc('ivx_ai_budget_status', {}));
+    await tasksOccupied.promise;
+    pending.push(globalAIBudgetRpc('ivx_ai_budget_status', {}));
+    const tasks = pools.get('ivx_worker_tasks')!;
+    expect(tasks.totalCount).toBe(1);
+    expect(tasks.idleCount).toBe(0);
+    expect(tasks.waitingCount).toBe(1);
+
+    pending.push(claimPostgresAutonomousTasks([{ workerId: 'worker-1', agentNumber: 1 }]));
+    await claimOccupied.promise;
+    const leases = [{ taskId: 'task-1', workerId: 'worker-1' }];
+    pending.push(startPostgresAutonomousTasks(leases));
+    expect(pools.get('ivx_worker_assignment')!.waitingCount).toBe(1);
+    expect(await heartbeatPostgresAutonomousTasks(leases)).toEqual({ ok: true, refreshed: 1, rejected: [] });
+    expect(await releasePostgresWorkerInstanceTasks()).toBe(0);
+    expect(tasks.waitingCount).toBe(1);
+    expect(pools.get('ivx_worker_assignment')!.waitingCount).toBe(1);
+    expect(pools.get('ivx_worker_heartbeat')!.idleCount).toBe(1);
+    expect(setup.some(sql => sql.includes("statement_timeout = '2500ms'") && sql.includes("lock_timeout = '1000ms'"))).toBe(true);
+
+    // The remaining observers and repair queue keep independent pools too.
+    await readPostgresFleetSloTasks();
+    await readPostgresFleetProcessObservation();
+    await readSeniorQueuePostgresDocument('senior-developer-worker/queue.json');
+    expect(pools.size).toBe(5);
+    expect([...pools.values()].reduce((max, pool) => max + pool.options.max!, 0)).toBe(10);
+    for (const name of ['ivx_worker_assignment', 'ivx_worker_heartbeat']) expect(pools.get(name)!.options.connectionTimeoutMillis).toBe(1_500);
+    expect(rest).not.toHaveBeenCalled();
+    tasksGate.resolve(); claimGate.resolve();
+    await Promise.all(pending);
+  } finally {
+    tasksGate.resolve(); claimGate.resolve();
+    await Promise.allSettled(pending);
+    await Promise.all([...pools.values()].map(pool => pool.end()));
+    rest.mockRestore(); query.mockRestore(); connect.mockRestore(); checkout.mockRestore();
+  }
+}, 5_000);
 
 describe('PostgreSQL autonomous task store', () => {
   test('SLO filtering precedes the limit and keeps blocked tasks available to recovery callers', async () => {

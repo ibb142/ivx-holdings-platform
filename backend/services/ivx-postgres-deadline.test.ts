@@ -73,8 +73,9 @@ test('untrusted error codes are omitted and failed logging preserves the origina
   } finally { logger.mockRestore(); }
 });
 
+for (const deadline of ['default', 'assignment'] as const) {
 for (const failAt of [null, 'select mutation', 'COMMIT', 'BEGIN', 'SET LOCAL lock_timeout']) {
-  test(`deadline transaction ${failAt ?? 'success'} cleans up without replay`, async () => {
+  test(`${deadline} deadline transaction ${failAt ?? 'success'} cleans up without replay`, async () => {
     const calls: string[] = [], releases: boolean[] = [];
     const error = new Error('query timeout');
     const client = Object.assign(new EventEmitter(), {
@@ -82,7 +83,7 @@ for (const failAt of [null, 'select mutation', 'COMMIT', 'BEGIN', 'SET LOCAL loc
       release: (destroy: boolean) => releases.push(destroy),
     });
     const pool = { connect: async () => client } as unknown as Pick<Pool, 'connect'>;
-    const result = queryWithPostgresDeadline(pool, 'select mutation', []);
+    const result = queryWithPostgresDeadline(pool, 'select mutation', [], deadline);
     if (failAt) {
       await expect(result).rejects.toBe(error);
       expect(calls).not.toContain('ROLLBACK'); expect(releases).toEqual([true]);
@@ -96,6 +97,7 @@ for (const failAt of [null, 'select mutation', 'COMMIT', 'BEGIN', 'SET LOCAL loc
     expect(calls[0]).toContain("BEGIN; SET LOCAL statement_timeout = '2500ms'; SET LOCAL lock_timeout = '1000ms'; SET LOCAL idle_in_transaction_session_timeout = '5s'");
     if (!failAt) expect(calls.length).toBe(3);
   });
+}
 }
 
 for (const disconnectAt of ['BEGIN', 'select mutation', 'COMMIT']) {
