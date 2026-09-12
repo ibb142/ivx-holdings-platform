@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CAMPAIGN,LABELS,MAX_LIABILITY_NANO,reservationId,checkQuote,checkTestKeyIdentity,receiptCoverageNano } from './phase3-native-quota.mjs';
+import { CAMPAIGN,LABELS,MAX_LIABILITY_NANO,reservationId,checkQuote,checkTestKeyIdentity,receiptCoverageNano,terminalRowMatches } from './phase3-native-quota.mjs';
 
 test('durable reservation identities cannot change with a workflow replay',()=>{
   const before=LABELS.map(reservationId),old=process.env.GITHUB_RUN_ATTEMPT;
@@ -44,4 +44,19 @@ test('late receipts require full retained liability or an adequate settled bound
   assert.throws(()=>receiptCoverageNano(q,{status:'settled',settledUpperNano:'100000000'},'200000000'));
   assert.throws(()=>receiptCoverageNano(q,{status:'uncertain',settledUpperNano:null},'822728001'));
   assert.throws(()=>receiptCoverageNano(q,{status:'uncertain',settledUpperNano:null},'0'));
+});
+
+test('a lost acknowledgment is confirmed only by the exact terminal reservation',()=>{
+  const params={p_reservation_id:'one',p_worker_instance_id:'worker',p_status:'uncertain',
+    p_settled_upper_nano:null,p_generation_id:'generation'};
+  const quote={model:'openai/gpt-4o',reservedNano:'822728000'};
+  const row={reservation_id:'one',worker_instance_id:'worker',model:quote.model,request_sha:'hash',
+    policy_revision:2,reserved_nano:822728000,status:'uncertain',settled_upper_nano:null,generation_id:'generation'};
+  assert.equal(terminalRowMatches(row,params,quote,'hash'),true);
+  for(const [key,value] of Object.entries({reservation_id:'other',worker_instance_id:'other',
+    model:'other',request_sha:'other',policy_revision:3,reserved_nano:0,status:'reserved',
+    settled_upper_nano:0,generation_id:'other'})) {
+    assert.equal(terminalRowMatches({...row,[key]:value},params,quote,'hash'),false,key);
+  }
+  assert.equal(MAX_LIABILITY_NANO,11000000000n);
 });

@@ -13,8 +13,8 @@ import { TEAM, prepareContext, readNativeState, checkNativeBudget, budgetSummary
   management, requestJson, emitProof } from './phase3-native-budget.mjs';
 
 export const CAMPAIGN = 'phase3-native-quota-20260912-01';
-export const LABELS = Object.freeze(['fill1','fill2','fill3','fill4','fill5','fill6','fill7','fill8','denied','recovery']);
-export const MAX_LIABILITY_NANO = 10000000000n;
+export const LABELS = Object.freeze(['fill1','fill2','fill3','fill4','fill5','fill6','fill7','fill8','fill9','denied','recovery']);
+export const MAX_LIABILITY_NANO = 11000000000n;
 const ORIGIN = 'https://ai-gateway.vercel.sh';
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const nativeFetch = fetch;
@@ -73,11 +73,11 @@ async function freshQuote(model) {
 }
 function fillPrompt(index) {
   // Public synthetic integers; never private input and never written to logs.
-  // Approximately 80k input tokens, inside GPT-4o's published 128k context.
+  // Approximately 118k input tokens, inside GPT-4o's published 128k context.
   // No token estimate is used for admission: reserve the FULL catalog envelope.
   let value = 100000000 + index * 7919;
   const numbers = [];
-  for (let i=0; i<20000; i++) {
+  for (let i=0; i<29500; i++) {
     value = (value * 48271) % 2147483647;
     numbers.push(String(value % 90000000 + 10000000));
   }
@@ -158,6 +158,16 @@ async function observedReceipt(key,id,model) {
       .map(k=>[k,receipt[k]]))};
 }
 
+export function terminalRowMatches(row, params, quote, hash) {
+  return Boolean(row && row.reservation_id===params.p_reservation_id
+    && row.worker_instance_id===params.p_worker_instance_id && row.model===quote.model
+    && row.request_sha===hash && Number(row.policy_revision)===2
+    && String(row.reserved_nano)===quote.reservedNano && row.status===params.p_status
+    && (params.p_settled_upper_nano===null ? row.settled_upper_nano===null
+      : String(row.settled_upper_nano)===params.p_settled_upper_nano)
+    && (row.generation_id??null)===(params.p_generation_id??null));
+}
+
 async function callProvider(context, db, key, label, quote) {
   checkQuote(quote);
   const proof = context.proof;
@@ -200,10 +210,24 @@ async function callProvider(context, db, key, label, quote) {
         p_status:notStarted?'cancelled':usage?'settled':'uncertain',
         p_settled_upper_nano:notStarted?'0':usage?usageCostUpperNano(quote,usage):null,
         p_generation_id:usage?.generationId??generationId??null};
+      stats.settlementRequested={status:params.p_status,reservedNano:quote.reservedNano,
+        settledUpperNano:params.p_settled_upper_nano,generationId:params.p_generation_id};
       let confirmed=false;
       await settleBudgetWithRetry(p=>db.rpc('ivx_ai_budget_finish',p),params,{
         onConfirmed:()=>{confirmed=true;},onUnconfirmed:()=>{},
       });
+      stats.settlementConfirmation=confirmed?'rpc_ack':null;
+      if(!confirmed) {
+        for(let i=0;i<3;i++) {
+          try {
+            const terminal=(await db.rows()).find(r=>r.reservation_id===stats.reservationId);
+            if(terminalRowMatches(terminal,params,quote,hash)) {
+              confirmed=true;stats.settlementConfirmation='independent_terminal_row';break;
+            }
+          } catch { /* A failed read does not confirm a terminal write. */ }
+          await wait(2000);
+        }
+      }
       assert(confirmed,'SETTLEMENT_UNCONFIRMED');
       stats.settlement={status:params.p_status,reservedNano:quote.reservedNano,
         settledUpperNano:params.p_settled_upper_nano,generationId:params.p_generation_id};
@@ -244,12 +268,13 @@ async function callProvider(context, db, key, label, quote) {
   try {
     const result=await generateText({model:provider.chat(quote.model),
       prompt:label.startsWith('fill')?fillPrompt(Number(label.slice(-1))):'Reply only OK.',
-      maxOutputTokens:32,maxRetries:label==='denied'?2:0,abortSignal:AbortSignal.timeout(330000)});
+      maxOutputTokens:32,maxRetries:label==='denied'?2:0,abortSignal:AbortSignal.timeout(540000)});
     stats.sdkUsage=Object.fromEntries(['inputTokens','outputTokens','totalTokens'].filter(k=>typeof result.usage?.[k]==='number').map(k=>[k,result.usage[k]]));
     succeeded=true;
   } catch(error) {
     stats.sdkStatus=Number.isInteger(error?.statusCode)?error.statusCode:null;
     stats.sdkErrorName=/^[A-Za-z_]{1,90}$/.test(error?.name??'')?error.name:null;
+    stats.sdkErrorCode=safeError(error);
     if(label!=='denied')throw new Error('REAL_PROVIDER_CALL_FAILED');
   }
   stats.completedAt=new Date().toISOString();
@@ -282,7 +307,8 @@ function existingLimits(state, excludedId) {
     'api_key_id_KSPgGHhv0EZq3WMzHszAA7qFVbOnarOiMI08J3YVq6c5a6gG',
     'api_key_id_knOwlYBnQg2O8NXTSmdzabDiELeajwcuAxsOVavJAlvv60K7',
     'api_key_id_AfVkVmLscQFO0cj0SRJaZcAZVrdVUoj9hagCXBx2kYjfUXID',
-    'api_key_id_lmcgOgp2P4cc70xHcz9lA1HAvza3uJxyIkR0Ea7zQZVjkvnY'].includes(b.quotaEntityId)).map(b=>({
+    'api_key_id_lmcgOgp2P4cc70xHcz9lA1HAvza3uJxyIkR0Ea7zQZVjkvnY',
+    'api_key_id_ONdG1MfmiqLYVm0fEbxNUatjdxaWSIJtEhsnKOY7aBaqk3rs'].includes(b.quotaEntityId)).map(b=>({
     id:b.quotaEntityId,limit:b.limitAmount,period:b.refreshPeriod,active:b.active,archived:b.archived,
     byok:b.includeByokInQuota,
   })).sort((a,b)=>a.id.localeCompare(b.id));
@@ -340,19 +366,34 @@ async function main() {
     assert.equal(process.env.IVX_NATIVE_QUOTA_PROBE,CAMPAIGN,'CAMPAIGN_BINDING_REQUIRED');
     context=await prepareContext(proof); db=dbFor(context);
     const priorRows=await db.rows();
+    const expectedPrior=[
+      ['fill1','openai/gpt-4.1','4125468000','gen_01M2ASZFDXDJ0JFAZ5V37KM4JJ'],
+      ['fill2','openai/gpt-4o','822728000','gen_01M2AWQ3GTQ4Z72QX87BBE7NDF'],
+      ['fill3','openai/gpt-4o','822728000','gen_01M2AXCRXSM6DF2VX1EYBMQ9RP'],
+      ['fill4','openai/gpt-4o','822728000','gen_01M2AXDQS1ADMY8PHRF632C6YY'],
+      ['fill5','openai/gpt-4o','822728000','gen_01M2AXEWJ1FDRYNSHVRJQ62XM0'],
+    ];
+    assert.equal(priorRows.length,expectedPrior.length,'CAMPAIGN_REPLAY_OR_PRIOR_STATE_CHANGED');
+    for(const [label,model,reserved,generation] of expectedPrior) {
+      const row=priorRows.find(r=>r.reservation_id===reservationId(label));
+      assert(row && row.worker_instance_id===CAMPAIGN+':'+label && row.model===model
+        && row.status==='uncertain' && row.settled_upper_nano===null
+        && String(row.reserved_nano)===reserved && row.generation_id===generation,
+        'CAMPAIGN_REPLAY_OR_PRIOR_STATE_CHANGED');
+    }
     const priorFirst=priorRows.find(r=>r.reservation_id===reservationId('fill1'));
-    const priorSecond=priorRows.find(r=>r.reservation_id===reservationId('fill2'));
-    assert(priorRows.length===2 && priorFirst?.status==='uncertain'
-      && priorFirst.model==='openai/gpt-4.1' && priorFirst.generation_id==='gen_01M2ASZFDXDJ0JFAZ5V37KM4JJ'
-      && String(priorFirst.reserved_nano)==='4125468000'
-      && priorSecond?.status==='uncertain' && priorSecond.model==='openai/gpt-4o'
-      && priorSecond.generation_id==='gen_01M2AWQ3GTQ4Z72QX87BBE7NDF'
-      && String(priorSecond.reserved_nano)==='822728000','CAMPAIGN_REPLAY_OR_PRIOR_STATE_CHANGED');
     proof.priorFailedReservation=priorFirst;
-    proof.priorSuccessfulRetainedReservation=priorSecond;
-    proof.priorPaidReceipt=await observedReceipt(context.gatewayKey,priorSecond.generation_id,priorSecond.model);
-    proof.priorPaidReceipt.coveredNano=receiptCoverageNano({reservedNano:String(priorSecond.reserved_nano)},
-      {status:priorSecond.status,settledUpperNano:priorSecond.settled_upper_nano},proof.priorPaidReceipt.costNano);
+    proof.priorRetainedReservations=priorRows;
+    proof.priorPaidReceipts=[];
+    for(const [label,model,reserved,generation] of expectedPrior.slice(1)) {
+      const receipt=await observedReceipt(context.gatewayKey,generation,model);
+      receipt.label=label;
+      receipt.coveredNano=receiptCoverageNano({reservedNano:reserved},
+        {status:'uncertain',settledUpperNano:null},receipt.costNano);
+      proof.priorPaidReceipts.push(receipt);
+    }
+    proof.priorReceiptCostNano=proof.priorPaidReceipts.reduce((n,r)=>n+BigInt(r.costNano),0n).toString();
+    proof.priorPaidReceipt=proof.priorPaidReceipts[0];
     if(process.argv[2]!=='diagnose') await reviewRetiredCapacity(context,db);
     proof.activeGlobalReservationsBefore=await db.activeRows();
     const diagnostic=await requestJson(ORIGIN+'/v1/generation?id=gen_01M2ASZFDXDJ0JFAZ5V37KM4JJ',context.gatewayKey);
@@ -386,7 +427,7 @@ async function main() {
     }
     before=await readNativeState(context);checkNativeBudget(before.teamBudget);
     const fillQuote=await freshQuote('openai/gpt-4o'),smallQuote=await freshQuote('openai/gpt-4o-mini');
-    assert(4125468000n+822728000n+BigInt(fillQuote.reservedNano)*6n+BigInt(smallQuote.reservedNano)*2n<=MAX_LIABILITY_NANO,
+    assert(priorRows.reduce((n,r)=>n+BigInt(r.reserved_nano),0n)+BigInt(fillQuote.reservedNano)*4n+BigInt(smallQuote.reservedNano)*2n<=MAX_LIABILITY_NANO,
       'PLANNED_CAMPAIGN_EXCEEDS_BOUND');
     assert(fillQuote.maxInputTokens>=128000,'MODEL_CONTEXT_TOO_SMALL');
     proof.initialQuotes=[fillQuote,smallQuote];
@@ -408,7 +449,7 @@ async function main() {
     let quota=await waitForQuota(context,testKeyId,'before-spend',1);
     assert.equal(quota.refreshPeriod,'none','TEST_QUOTA_PERIOD_MISMATCH');
     assert.equal(quota.currentSpend,0,'NEW_TEST_KEY_ALREADY_SPENT');
-    for(let i=3;i<=8 && quota.currentSpend<1;i++) {
+    for(let i=6;i<=9 && quota.currentSpend<1;i++) {
       await callProvider(context,db,testKey,'fill'+i,await freshQuote(fillQuote.model));
       const knownSpend=proof.receipts.reduce((n,r)=>n+BigInt(r.costNano),0n);
       quota=await pollSpend(context,testKeyId,Number(knownSpend)/1e9,'after-fill'+i);
@@ -431,7 +472,7 @@ async function main() {
     proof.nativeRecoveryObserved=true;
     assert.equal(new Set(proof.receipts.map(r=>r.id)).size,proof.receipts.length,'DUPLICATE_RECEIPTS');
     proof.newKeyReceiptCostNano=proof.receipts.reduce((n,r)=>n+BigInt(r.costNano),0n).toString();
-    proof.actualReceiptCostNano=(BigInt(proof.newKeyReceiptCostNano)+BigInt(proof.priorPaidReceipt.costNano)).toString();
+    proof.actualReceiptCostNano=(BigInt(proof.newKeyReceiptCostNano)+BigInt(proof.priorReceiptCostNano)).toString();
     proof.passed=true;
   } catch(error) { proof.error=safeError(error); process.exitCode=1; }
   finally {
