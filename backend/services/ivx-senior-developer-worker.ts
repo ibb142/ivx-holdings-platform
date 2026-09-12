@@ -1357,7 +1357,7 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     beforeMerge: async () => {
       await assertEmergencyStopInactive('senior-worker-resumed-merge');
       if (controller.cancelled) throw new Error('Worker lease lost before resumed merge');
-      assertRepairResumeEvidence(jobId, job.input.goal, job.result?.validationEvidence);
+      assertRepairResumeEvidence(job.input.taskId ?? jobId, job.input.goal, job.result?.validationEvidence);
       await updateJob(jobId, { lastHeartbeatAt: nowIso() });
     },
     onPhase: (phase, detail) => {
