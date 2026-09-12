@@ -9,6 +9,7 @@
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { readAvailableFeed } from './public-feed-response';
 
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 
@@ -78,11 +79,8 @@ export async function fetchVideoFeed(limit = 24, offset = 0): Promise<FeedVideo[
   const params = new URLSearchParams({ limit: String(limit) });
   if (offset > 0) params.set('offset', String(offset));
   const res = await fetch(`${API_BASE}/api/ivx/video-platform/feed?${params.toString()}`);
-  if (!res.ok) {
-    throw new Error(`Feed request failed (${res.status})`);
-  }
-  const data = (await res.json()) as { videos?: FeedVideo[] };
-  return Array.isArray(data.videos) ? data.videos : [];
+  const data = await readAvailableFeed<{ videos: FeedVideo[] }>(res, 'videos');
+  return data.videos;
 }
 
 /**
@@ -92,11 +90,8 @@ export async function fetchVideoFeed(limit = 24, offset = 0): Promise<FeedVideo[
  */
 export async function fetchProjectReels(limit = 24): Promise<FeedVideo[]> {
   const res = await fetch(`${API_BASE}/api/ivx/video-platform/feed?limit=${limit}&type=reel`);
-  if (!res.ok) {
-    throw new Error(`Reels request failed (${res.status})`);
-  }
-  const data = (await res.json()) as { videos?: FeedVideo[] };
-  return Array.isArray(data.videos) ? data.videos : [];
+  const data = await readAvailableFeed<{ videos: FeedVideo[] }>(res, 'videos');
+  return data.videos;
 }
 
 /** Deal payload inside the investor-first home feed (canonical across platforms). */
@@ -145,10 +140,7 @@ export interface HomeFeedResponse {
  */
 export async function fetchHomeFeed(limit = 60): Promise<HomeFeedResponse> {
   const res = await fetch(`${API_BASE}/api/ivx/video-platform/home-feed?limit=${limit}`);
-  if (!res.ok) {
-    throw new Error(`Home feed request failed (${res.status})`);
-  }
-  const data = (await res.json()) as HomeFeedResponse;
+  const data = await readAvailableFeed<HomeFeedResponse>(res, 'blocks');
   return {
     pattern: data.pattern ?? '',
     ordering: data.ordering ?? '',

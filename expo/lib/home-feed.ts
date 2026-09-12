@@ -6,6 +6,8 @@
  * initializes native media-related modules that Home does not need.
  */
 
+import { readAvailableFeed } from './public-feed-response';
+
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 
 export interface HomeFeedVideoDeal {
@@ -52,9 +54,6 @@ export interface HomeFeedResponse {
 
 export async function fetchHomeFeed(limit = 60): Promise<HomeFeedResponse> {
   const response = await fetch(`${API_BASE}/api/ivx/video-platform/home-feed?limit=${limit}`);
-  if (!response.ok) {
-    throw new Error(`Home feed request failed (${response.status})`);
-  }
-  const payload = (await response.json()) as Partial<HomeFeedResponse>;
-  return { blocks: Array.isArray(payload.blocks) ? payload.blocks : [] };
+  const payload = await readAvailableFeed<HomeFeedResponse>(response, 'blocks');
+  return { blocks: payload.blocks };
 }

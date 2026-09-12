@@ -440,6 +440,12 @@
           /* Accept JSON even if the Content-Type header is missing or transformed. */
           var data;
           try { data = JSON.parse(text); } catch (e) { throw new Error('not json'); }
+          if ((r.headers && r.headers.get('X-IVX-Data-State') === 'unavailable')
+            || (data && (data.data_available === false || data.code === 'PUBLIC_DATA_UNAVAILABLE'))) {
+            var unavailable = new Error('feed data unavailable');
+            unavailable.retryable = true;
+            throw unavailable;
+          }
           clearTimeout(timeout);
           if (API !== base) API = base; /* promote working host */
           return data;
