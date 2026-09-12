@@ -1,4 +1,4 @@
-import { recordPoolCheckout } from './ivx-read-timings';
+import { measuredSqlExecution, recordPoolCheckout } from './ivx-read-timings';
 import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
 
@@ -82,8 +82,11 @@ export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
     await client.query(transactionSetup[deadline]);
     requireConnection();
     stage = 'query'; stageStartedAt = Date.now();
-    const result = await client.query<T>(text, values);
-    requireConnection();
+    const result = await measuredSqlExecution(async () => {
+      const result = await client.query<T>(text, values);
+      requireConnection();
+      return result;
+    });
     stage = 'commit'; stageStartedAt = Date.now();
     await client.query('COMMIT');
     requireConnection();
