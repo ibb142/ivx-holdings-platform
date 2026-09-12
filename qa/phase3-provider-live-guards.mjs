@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 
-export const CAMPAIGN = 'phase3-provider-live-20260912-01';
+export const CAMPAIGN = 'phase3-provider-live-20260912-02';
 export const CAMPAIGN_EXPIRES = Date.parse('2026-09-13T00:00:00Z');
 export const MAX_CAMPAIGN_NANO = 1_000_000_000n;
 export const PAID_LABELS = ['complete', 'cancel', 'recovery'];

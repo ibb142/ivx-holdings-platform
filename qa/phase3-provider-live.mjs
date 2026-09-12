@@ -12,6 +12,7 @@ import { settleBudgetWithRetry } from '../backend/services/ivx-global-ai-budget-
 import { providerReportedCostNano } from '../backend/services/ivx-provider-reported-cost.ts';
 import { CAMPAIGN, MAX_CAMPAIGN_NANO, PAID_LABELS, DB_ORIGIN, SERVICES,
   reservationId, checkPolicy, checkQuote, sharedBinding, checkRows } from './phase3-provider-live-guards.mjs';
+import { paceOriginalResponse } from './phase3-provider-live-stream.mjs';
 
 // Owner-authorized bounded experiment. The production admission/stream parser
 // and installed SDK are unchanged. The injected reservation adapter calls the
@@ -130,6 +131,10 @@ async function childMain(label) {
       // fabricate response data, or report this hold as provider concurrency.
       try {selectedAction=await bounded(action.promise,35_000,'PARENT_RELEASE_TIMEOUT');}
       catch(error){controller.abort();await response.body?.cancel().catch(()=>{});throw error;}
+      if(selectedAction==='cancel') {
+        stats.controlledStreamConsumption={originalBytesPreserved:true,chunkBytes:64,delayMs:10};
+        return paceOriginalResponse(response);
+      }
       return response;
     },{enabled:()=>true,reserve:a.reserve});
     const gateway=createGateway({apiKey:binding.gatewayKey,fetch:transport});

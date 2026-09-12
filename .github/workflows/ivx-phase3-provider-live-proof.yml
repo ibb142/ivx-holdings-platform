@@ -30,7 +30,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with: { bun-version: 1.3.9 }
       - run: bun install --frozen-lockfile
-      - run: node --test qa/phase3-provider-live-guards.test.mjs
+      - run: node --test qa/phase3-provider-live-guards.test.mjs qa/phase3-provider-live-stream.test.mjs
       - run: bun build qa/phase3-provider-live.mjs --target=bun --packages=external --outfile=/tmp/phase3-provider-live-check.mjs
       - run: bun test backend/services/ivx-global-ai-budget.test.ts
       - run: bun scripts/ivx-global-ai-budget-sdk-proof.ts
@@ -39,7 +39,7 @@ jobs:
     if: >-
       github.repository == 'ibb142/ivx-holdings-platform' &&
       (github.event_name == 'push' ||
-       (github.event_name == 'workflow_dispatch' && inputs.campaign == 'phase3-provider-live-20260912-01'))
+       (github.event_name == 'workflow_dispatch' && inputs.campaign == 'phase3-provider-live-20260912-02'))
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -49,9 +49,9 @@ jobs:
         with: { bun-version: 1.3.9 }
       - run: bun install --frozen-lockfile
       - name: Run reviewed bounded experiment with the existing shared admission
-        run: bun qa/phase3-provider-live.mjs diagnose
+        run: bun qa/phase3-provider-live.mjs
         env:
-          IVX_AUTHORIZED_PROVIDER_PROBE: phase3-provider-live-20260912-01
+          IVX_AUTHORIZED_PROVIDER_PROBE: phase3-provider-live-20260912-02
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
