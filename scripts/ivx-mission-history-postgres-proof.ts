@@ -68,6 +68,29 @@ try {
   }
   assert.deepEqual(await snapshot(), before, 'selection must preserve every historical commit, finding and state');
   assert.deepEqual(failures, [], 'mission history must not stop recovery or pollute current planning');
+  // Real contention must cancel on the pinned server transaction before the
+  // pg client's timeout. This isolated local lock never touches production.
+  const blocker = new pg.Client({ connectionString });
+  await blocker.connect();
+  try {
+    await blocker.query('BEGIN');
+    await blocker.query('LOCK TABLE public.ivx_autonomous_tasks IN ACCESS EXCLUSIVE MODE');
+    const started = Date.now();
+    await assert.rejects(() => store.readPostgresAutonomousTaskIndex(sha),
+      (error: unknown) => error instanceof Error && 'code' in error && error.code === '55P03',
+      'planning must hit its 2s server lock deadline, not an ambiguous client timeout');
+    const elapsedMs = Date.now() - started;
+    assert(elapsedMs >= 1_500 && elapsedMs < 4_500, 'planning deadline was not bounded');
+    console.log(JSON.stringify({ check: 'planning-server-lock-deadline', result: 'PASS',
+      elapsedMs, expectedCode: '55P03', productionRowsTouched: 0 }));
+  } finally {
+    await blocker.query('ROLLBACK').catch(() => undefined);
+    await blocker.end();
+  }
+  const resumedPlanning = await store.readPostgresAutonomousTaskIndex(sha);
+  assert(resumedPlanning.some(task => task.taskId === prefix + 'current-complete'),
+    'planning must recover after lock release');
+  assert.deepEqual(await snapshot(), before, 'deadline and recovery must preserve all history');
   await insert(Array.from({ length: 1000 }, (_, index) => ({ taskId: `${prefix}overflow-${index}`,
     idempotencyKey: `module-audit:${sha}:${prefix}overflow-${index}`, state: 'BLOCKED' })));
   await assert.rejects(() => store.readPostgresRecoveryTasks(sha), /recovery is incomplete/,
