@@ -58,7 +58,15 @@ export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
   } catch (error) {
     failed = true;
     reportFailure(error);
-    await client.query('ROLLBACK').catch(() => undefined);
+    // A client timeout or connection failure leaves protocol state uncertain.
+    // Do not enqueue ROLLBACK behind an unanswered query and wait another timeout.
+    // The finally block destroys this connection; never return it to the pool.
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
+    const serverRejected = typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)
+      && !code.startsWith('08') && !['57P01', '57P02', '57P03'].includes(code);
+    if (!connectionError && serverRejected) {
+      await client.query('ROLLBACK').catch(() => undefined);
+    }
     // Never replay an RPC after an ambiguous timeout or commit response loss.
     throw error;
   } finally {
