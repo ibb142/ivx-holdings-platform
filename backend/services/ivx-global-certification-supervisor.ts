@@ -515,6 +515,9 @@ export async function dispatchRepairMission(mission: RepairMission, mayDispatch:
       dispatched: false,
       jobId: null,
       attached: false,
+      // Queue reads/writes may have timed out after taking effect. Preserve the
+      // first mission's identity and let the next bounded cycle reconcile it.
+      deferred: true,
       detail: `Repair dispatch failed: ${error instanceof Error ? error.message : 'unknown'}`,
     };
   }

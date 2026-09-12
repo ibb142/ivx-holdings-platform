@@ -19,6 +19,7 @@ export type FleetSloSnapshot = {
   running_agents: number | null; leased_agents: number | null; heartbeat_agents: number | null;
   retry_waiting_tasks: number | null; evidence_window_seconds: number;
   productivity_ratio: number | null; durable: boolean; error: string | null;
+  sampling_mode?: 'process_presence_only';
   failure_stage?: 'read' | 'build' | 'persist';
   failure_kind?: 'timeout' | 'authorization' | 'upstream' | 'unknown';
 };
@@ -111,6 +112,36 @@ export class FleetSloMonitor {
     this.inFlight = this.collect().finally(() => { this.inFlight = null; });
     return this.inFlight;
   }
+  /** Process liveness during recovery does not read tasks or deliver productivity alerts. */
+  samplePresence(): Promise<FleetSloSnapshot> {
+    if (this.inFlight) return this.inFlight;
+    this.inFlight = this.collectPresence().finally(() => { this.inFlight = null; });
+    return this.inFlight;
+  }
+  private async collectPresence(): Promise<FleetSloSnapshot> {
+    const sha = this.deps.sha();
+    if (!/^[a-f0-9]{40}$/i.test(sha)) throw new Error('Production SHA unavailable');
+    const snapshot: FleetSloSnapshot = {
+      marker: IVX_FLEET_SLO_MARKER, retry_policy: IVX_RETRY_POLICY_MARKER,
+      measured_at: new Date(this.deps.now()).toISOString(), commit_sha: sha,
+      sampling_mode: 'process_presence_only', status: 'UNKNOWN', target_agents: FLEET_SLO_TARGET,
+      productive_agents: null, productive_deficit: null, running_agents: null, leased_agents: null,
+      heartbeat_agents: null, retry_waiting_tasks: null, evidence_window_seconds: FLEET_EVIDENCE_WINDOW_MS / 1_000,
+      productivity_ratio: null, durable: false,
+      error: 'Productivity sampling is paused during database recovery',
+    };
+    try {
+      await this.deps.persist({ ...snapshot, durable: true });
+      snapshot.durable = true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      snapshot.failure_stage = 'persist';
+      snapshot.failure_kind = /timeout|timed out|time budget|aborted/i.test(message) ? 'timeout' : 'unknown';
+      snapshot.error = 'Process presence could not be persisted';
+    }
+    this.latest = snapshot;
+    return { ...snapshot };
+  }
   private async collect(): Promise<FleetSloSnapshot> {
     let snapshot: FleetSloSnapshot;
     let stage: 'read' | 'build' | 'persist' = 'read';
@@ -186,9 +217,12 @@ const monitor = new FleetSloMonitor({
   persist: persistPostgresFleetSloSample, alert: insertAlert, now: Date.now, sha: resolveProductionSha,
 });
 let timer: ReturnType<typeof setInterval> | null = null;
-export function startFleetSloMonitor(): boolean {
+export function startFleetSloMonitor(options: { presenceOnly?: boolean } = {}): boolean {
   if (timer) return true;
-  const tick = () => { void monitor.sample().catch(() => console.error('[IVX Fleet SLO] sampling failed')); };
+  const tick = () => {
+    const pending = options.presenceOnly ? monitor.samplePresence() : monitor.sample();
+    void pending.catch(() => console.error('[IVX Fleet SLO] sampling failed'));
+  };
   tick();
   timer = setInterval(tick, FLEET_SLO_INTERVAL_MS);
   timer.unref?.();

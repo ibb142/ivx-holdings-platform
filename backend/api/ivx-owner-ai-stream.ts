@@ -12,14 +12,11 @@
  *   { type: 'error', error }
  */
 import { computeAdaptiveTimeoutMs, streamIVXAIText } from '../ivx-ai-runtime';
+import { createCancellableEventStream } from '../services/ivx-cancellable-event-stream';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions, type IVXOwnerRequestContext } from './owner-only';
 
 function readTrimmed(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
-}
-
-function sseLine(payload: unknown): string {
-  return `data: ${JSON.stringify(payload)}\n\n`;
 }
 
 export const OPTIONS = (): Response => ownerOnlyOptions();
@@ -57,37 +54,33 @@ export async function handleIVXOwnerAIStreamRequest(request: Request): Promise<R
   const promptChars = prompt.length + (system?.length ?? 0);
   const adaptiveTimeoutMs = computeAdaptiveTimeoutMs({ promptChars, maxOutputTokens });
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      controller.enqueue(encoder.encode(sseLine({
-        type: 'start',
-        requestId,
-        model: model ?? 'default',
-        adaptiveTimeoutMs,
-        promptChars,
-      })));
+  const stream = createCancellableEventStream(request.signal, async (abortSignal, send) => {
+    send({
+      type: 'start',
+      requestId,
+      model: model ?? 'default',
+      adaptiveTimeoutMs,
+      promptChars,
+    });
 
-      try {
-        for await (const chunk of streamIVXAIText({
-          module: 'owner-room',
-          requestId,
-          model,
-          system,
-          prompt,
-          maxOutputTokens,
-        })) {
-          controller.enqueue(encoder.encode(sseLine(chunk)));
-        }
-      } catch (error) {
-        controller.enqueue(encoder.encode(sseLine({
-          type: 'error',
-          error: error instanceof Error ? error.message : 'stream failed',
-        })));
-      } finally {
-        controller.close();
+    try {
+      for await (const chunk of streamIVXAIText({
+        module: 'owner-room',
+        requestId,
+        model,
+        system,
+        prompt,
+        maxOutputTokens,
+        abortSignal,
+      })) {
+        if (!send(chunk)) break;
       }
-    },
+    } catch (error) {
+      send({
+        type: 'error',
+        error: error instanceof Error ? error.message : 'stream failed',
+      });
+    }
   });
 
   return new Response(stream, {
@@ -100,3 +93,4 @@ export async function handleIVXOwnerAIStreamRequest(request: Request): Promise<R
     },
   });
 }
+
