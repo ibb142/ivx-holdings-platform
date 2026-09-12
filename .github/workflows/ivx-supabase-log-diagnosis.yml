@@ -45,27 +45,28 @@ jobs:
               'pool_timeout': 'pool.*timeout|pool.*timed out|checkout.*timeout',
               'schema_cache': 'schema cache',
           }
-          cases = ', '.join("match(event_message, '(?i)" + pattern + "'), '" + label + "'" for label, pattern in categories.items())
-          sql = ("select source, multiIf(" + cases + ", 'other') as category, "
-                 "count() as n from logs where source in ('postgres_logs','supavisor_logs','pgbouncer_logs') "
-                 "and (match(event_message, '(?i)error|fatal|panic|timeout|timed out|terminated|connection reset|too many') "
-                 "or severity_text in ('ERROR','FATAL','PANIC')) group by source,category order by n desc limit 50")
+          sql = "select timestamp, event_message from postgres_logs order by timestamp desc limit 200"
           params = urllib.parse.urlencode({'sql': sql, 'iso_timestamp_start': start.isoformat(), 'iso_timestamp_end': end.isoformat()})
-          request = urllib.request.Request('https://api.supabase.com/v1/projects/' + project + '/analytics/endpoints/logs?' + params,
+          request = urllib.request.Request('https://api.supabase.com/v1/projects/' + project + '/analytics/endpoints/logs.all?' + params,
               headers={'Authorization': 'Bearer ' + token})
           print(json.dumps({'startedAt': start.isoformat(), 'finishedAt': end.isoformat(), 'mode': 'read_only'}))
           try:
               with urllib.request.urlopen(request, timeout=60) as response:
                   payload = json.load(response)
           except urllib.error.HTTPError as error:
+              body = error.read(8192).decode('utf-8', errors='replace').lower()
+              print(json.dumps({'errorHints': [word for word in ['syntax', 'permission', 'unauthorized', 'invalid', 'timestamp', 'not found', 'clickhouse', 'bigquery'] if word in body]}))
               raise SystemExit('LOGS_API_HTTP_' + str(error.code))
           except Exception:
               raise SystemExit('LOGS_API_TRANSPORT_FAILURE')
           if not isinstance(payload, dict) or payload.get('error') or not isinstance(payload.get('result'), list):
               raise SystemExit('LOGS_API_RESULT_INVALID')
-          allowed_sources = {'postgres_logs', 'supavisor_logs', 'pgbouncer_logs'}
+          counts = {}
           for row in payload['result']:
-              if row.get('source') not in allowed_sources or row.get('category') not in {*categories, 'other'}:
-                  raise SystemExit('LOGS_API_UNEXPECTED_CATEGORY')
-              print(json.dumps({'source': row['source'], 'category': row['category'], 'count': int(row['n'])}))
+              message = str(row.get('event_message', ''))
+              if not re.search(r'error|fatal|panic|timeout|timed out|terminated|connection reset|too many', message, re.I):
+                  continue
+              category = next((label for label, pattern in categories.items() if re.search(pattern, message, re.I)), 'other')
+              counts[category] = counts.get(category, 0) + 1
+          print(json.dumps({'source': 'postgres_logs', 'sampleSize': len(payload['result']), 'errorCategories': counts}))
           print('LOG_DIAGNOSIS_COMPLETE')
