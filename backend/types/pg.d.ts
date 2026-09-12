@@ -25,6 +25,10 @@ declare module 'pg' {
 
   export class Pool {
     on(event: 'error', listener: (error: Error, client: PoolClient) => void): this;
+    on(event: 'connect' | 'acquire', listener: (client: PoolClient) => void): this;
+    readonly totalCount: number;
+    readonly idleCount: number;
+    readonly waitingCount: number;
     constructor(config: {
       connectionString: string;
       ssl?: { rejectUnauthorized: boolean; ca?: string | string[] };

@@ -2,6 +2,26 @@ import { expect, spyOn, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import type { Pool } from 'pg';
 import { observePostgresPoolErrors, queryWithPostgresDeadline } from './ivx-postgres-deadline';
+import { newReadTimings, readTimings, timingHeaders } from './ivx-read-timings';
+
+test('native pool events register once and slow checkout is attributed before query execution', async () => {
+  const client = Object.assign(new EventEmitter(), { query: async () => ({ rows: [] }), release: () => {} });
+  const pool = Object.assign(new EventEmitter(), { waitingCount: 1, idleCount: 0, totalCount: 1,
+    connect: async () => { pool.emit('connect', client); pool.emit('acquire', client); return client; } });
+  observePostgresPoolErrors(pool as unknown as Pick<Pool, 'on'>, 'test');
+  observePostgresPoolErrors(pool as unknown as Pick<Pool, 'on'>, 'test');
+  expect(pool.listenerCount('connect')).toBe(1);
+  expect(pool.listenerCount('acquire')).toBe(1);
+  const clock = spyOn(performance, 'now').mockReturnValueOnce(0).mockReturnValue(601);
+  const logger = spyOn(console, 'warn').mockImplementation(() => {});
+  const metrics = newReadTimings();
+  try {
+    await readTimings.run(metrics, () => queryWithPostgresDeadline(pool as unknown as Pick<Pool, 'connect'>, 'select 1', []));
+    expect(timingHeaders(metrics)['X-Pool-Acquisition-Ms']).toBe('601.0');
+    expect(logger.mock.calls[0]?.[1]).toMatchObject({ connects: 1, acquires: 1, waitingAtStart: 1, acquisitionMs: 601, ok: true });
+    expect(timingHeaders(newReadTimings())['X-Pool-Acquisition-Ms']).toBe('unavailable');
+  } finally { clock.mockRestore(); logger.mockRestore(); }
+});
 
 for (const stage of ['checkout', 'setup', 'query', 'commit']) {
   test(`reports ${stage} failure without SQL, parameters or provider error text`, async () => {

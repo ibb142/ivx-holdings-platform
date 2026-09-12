@@ -1,5 +1,5 @@
 import { boundedReadFetch } from '../services/ivx-read-timings';
-import { createFeedResponseCache } from '../services/ivx-feed-response-cache';
+import { withPublicFeedAvailability } from '../services/ivx-public-feed-availability';
 import { loadViewerEngagement } from '../services/ivx-viewer-engagement';
 import { createPlatformFeedLoader } from '../services/ivx-platform-feed-loader';
 /**
@@ -83,8 +83,8 @@ function json(data: unknown, status = 200): Response {
 
 export const videoPlatformOptions = (): Response => new Response(null, { status: 204, headers: CORS_HEADERS });
 
-// Public caches never contain viewer state, failure responses, or unbounded stale data.
-const withFeedCache = createFeedResponseCache({ headers: CORS_HEADERS, responseTimeoutMs: 2300 });
+// Shared public cache excludes viewer state and bounds snapshot age.
+const withFeedCache = withPublicFeedAvailability;
 
 async function readBody(req: Request): Promise<Record<string, unknown>> {
   try { return await req.json() as Record<string, unknown>; } catch { return {}; }

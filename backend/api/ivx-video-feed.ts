@@ -1,3 +1,4 @@
+import { withPublicFeedAvailability } from '../services/ivx-public-feed-availability';
 import { boundedReadFetch } from '../services/ivx-read-timings';
 /**
  * IVX Video Feed API — Instagram-style video experience.
@@ -89,6 +90,10 @@ async function loadPlaybackIndex(): Promise<PlaybackIndexLike> {
 
 /** GET /api/ivx/videos/feed — approved videos, newest/pinned first, with counts. */
 export async function handleVideoFeed(req: Request): Promise<Response> {
+  return withPublicFeedAvailability(req, () => readVideoFeed(req));
+}
+
+async function readVideoFeed(req: Request): Promise<Response> {
   try {
     const url = new URL(req.url);
     const limit = Math.min(Number(url.searchParams.get('limit') || '24'), 50);
@@ -102,17 +107,19 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(limit);
-    if (!error && vids) videos = vids;
+    if (error) throw error;
+    if (vids) videos = vids;
 
     // Fallback: videos stored in project_media only
     if (videos.length === 0) {
-      const { data: media } = await sb
+      const { data: media, error: mediaError } = await sb
         .from('project_media')
         .select('id,project_id,media_type,url,media_url,thumbnail_url,cover_image_url,title,description,duration_sec,width,height,position,is_approved,created_at')
         .eq('media_type', 'video')
         .eq('is_approved', true)
         .order('created_at', { ascending: false })
         .limit(limit);
+      if (mediaError) throw mediaError;
       videos = (media || []).map((m: any) => ({
         id: m.id,
         project_id: m.project_id ?? null,
@@ -173,7 +180,7 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
 
     return json({ videos: feed, count: feed.length, deploymentMarker: DEPLOYMENT_MARKER });
   } catch (err: unknown) {
-    return json({ videos: [], count: 0, deploymentMarker: DEPLOYMENT_MARKER });
+    return json({ code: 'VIDEO_SOURCE_UNAVAILABLE', deploymentMarker: DEPLOYMENT_MARKER }, 503);
   }
 }
 

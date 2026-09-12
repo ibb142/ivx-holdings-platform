@@ -1,16 +1,20 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-type Timings = { headersMs: number; payloadMs: number; completed: number; pending: number; poolMs: number | null; deadline?: AbortSignal };
+type Timings = { headersMs: number; payloadMs: number; completed: number; pending: number; poolMs: number | null; poolMaxMs?: number; deadline?: AbortSignal };
 export const readTimings = new AsyncLocalStorage<Timings>();
 export function newReadTimings(timeoutMs?: number): Timings {
   return { headersMs: 0, payloadMs: 0, completed: 0, pending: 0, poolMs: null, deadline: timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs) };
 }
 export function recordPoolCheckout(ms: number): void {
   const metrics = readTimings.getStore();
-  if (metrics) metrics.poolMs = (metrics.poolMs ?? 0) + ms;
+  if (metrics) {
+    metrics.poolMs = (metrics.poolMs ?? 0) + ms;
+    metrics.poolMaxMs = Math.max(metrics.poolMaxMs ?? 0, ms);
+  }
 }
 export function timingHeaders(metrics: Timings): Record<string, string> {
   return {
+    'X-Pool-Acquisition-Ms': metrics.poolMaxMs === undefined ? 'unavailable' : metrics.poolMaxMs.toFixed(1),
     'X-IVX-Pool-Wait-Ms': metrics.poolMs === null ? 'unavailable' : metrics.poolMs.toFixed(1),
     'X-IVX-Payload-Ms': metrics.completed ? metrics.payloadMs.toFixed(1) : 'unavailable',
     'X-IVX-Upstream-Headers-Ms': metrics.completed || metrics.pending ? metrics.headersMs.toFixed(1) : 'unavailable',

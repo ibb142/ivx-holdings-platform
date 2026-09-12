@@ -1,3 +1,4 @@
+import { startAdaptivePoll } from './ivx-adaptive-poll';
 import { boundedHealthProbe } from './ivx-bounded-health-probe';
 import { createOwnerQueueProviderGate, ownerQueueWorkerReadiness } from './ivx-owner-queue-readiness';
 /**
@@ -603,7 +604,7 @@ const MAX_CONCURRENT_CLAIMS = Number.parseInt(process.env.IVX_QUEUE_MAX_CONCURRE
 const HEARTBEAT_INTERVAL_MS = Number.parseInt(process.env.IVX_QUEUE_HEARTBEAT_MS ?? '15000', 10) || 15_000;
 const SHUTDOWN_GRACE_MS = Number.parseInt(process.env.IVX_QUEUE_SHUTDOWN_GRACE_MS ?? '10000', 10) || 10_000;
 
-let workerTimer: ReturnType<typeof setInterval> | null = null;
+let workerTimer: (() => void) | null = null;
 let workerLastTickAt: string | null = null;
 let workerTickRunning = false;
 let workerShuttingDown = false;
@@ -703,8 +704,8 @@ async function executeTask(task: IVXOwnerAITaskRow): Promise<void> {
   }
 }
 
-async function workerTick(): Promise<void> {
-  if (workerTickRunning || !isTaskQueueConfigured() || workerShuttingDown) return;
+async function workerTick(): Promise<boolean> {
+  if (workerTickRunning || !isTaskQueueConfigured() || workerShuttingDown) return false;
   workerTickRunning = true;
   workerLastTickAt = nowIso();
   try {
@@ -715,22 +716,24 @@ async function workerTick(): Promise<void> {
     const wasReady = isIVXAIConfigured() && ['PROVIDER_READY', 'FALLBACK_READY'].includes(provider.state)
       && provider.lastHttpStatus === 200 && Number.isFinite(Date.parse(provider.lastValidationTime ?? ''));
     const observation = await publishWorkerPulse(wasReady ? 'ready' : 'degraded');
-    if (workerShuttingDown || !await ownerQueueProviderReady(observation.authorized)) return;
-    if (!wasReady && !(await publishWorkerPulse('ready')).authorized) return;
-    if (workerShuttingDown) return;
+    if (workerShuttingDown || !await ownerQueueProviderReady(observation.authorized)) return false;
+    if (!wasReady && !(await publishWorkerPulse('ready')).authorized) return false;
+    if (workerShuttingDown) return false;
     const claimed = await queueRpc<{ authorized: boolean; tasks: IVXOwnerAITaskRow[] }>('ivx_owner_ai_queue_claim', {
       p_worker_id: WORKER_ID, p_limit: Math.min(2, MAX_CONCURRENT_CLAIMS),
     });
-    if (!claimed.authorized || !Array.isArray(claimed.tasks) || claimed.tasks.length > 2) return;
+    if (!claimed.authorized || !Array.isArray(claimed.tasks) || claimed.tasks.length > 2) return false;
     await Promise.all(claimed.tasks.map(async task => {
       if (workerShuttingDown) {
         await updateOwnerLease({ task, lost: false }, 'release').catch(() => {});
-        return;
+        return false;
       }
       await executeTask(task);
     }));
+    return claimed.tasks.length > 0;
   } catch (error) {
     console.warn('[IVXOwnerAITaskQueue] bounded worker tick failed', { error: error instanceof Error ? error.message : 'unknown' });
+    return false;
   } finally { workerTickRunning = false; }
 }
 
@@ -855,9 +858,7 @@ export function startOwnerAITaskWorker(intervalMs: number = 20_000): void {
   workerShuttingDown = false;
   console.log('[IVXOwnerAITaskQueue] starting durable worker', { workerId: WORKER_ID, intervalMs, maxConcurrent: MAX_CONCURRENT_CLAIMS, heartbeatMs: HEARTBEAT_INTERVAL_MS });
   // Schema is deployed by the approved migration, never bootstrapped by a timer.
-  void workerTick();
-  workerTimer = setInterval(() => { void workerTick(); }, intervalMs);
-  (workerTimer as { unref?: () => void }).unref?.();
+  workerTimer = startAdaptivePoll(workerTick, intervalMs, Math.max(intervalMs, 60_000), true);
 }
 
 /** Graceful shutdown: stop polling, wait for active tasks, clear heartbeat timers.
@@ -866,7 +867,7 @@ export async function stopOwnerAITaskWorker(graceMs: number = SHUTDOWN_GRACE_MS)
   workerShuttingDown = true;
   void publishWorkerPulse('draining').catch(() => {});
   if (workerTimer) {
-    clearInterval(workerTimer);
+    workerTimer();
     workerTimer = null;
   }
   console.log('[IVXOwnerAITaskQueue] graceful shutdown initiated', { workerId: WORKER_ID, activeTasks: activeTaskCount, graceMs });

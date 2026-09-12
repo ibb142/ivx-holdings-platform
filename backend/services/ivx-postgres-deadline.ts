@@ -3,10 +3,16 @@ import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
 
 const poolPurposes = new WeakMap<object, string>();
+const poolEvents = new WeakMap<object, { connects: number; acquires: number }>();
 
 /** pg removes failed idle connections itself; observe the error without exiting. */
 export function observePostgresPoolErrors(pool: Pick<Pool, 'on'>, purpose: string): void {
+  if (poolEvents.has(pool)) return;
   poolPurposes.set(pool, purpose);
+  const events = { connects: 0, acquires: 0 };
+  poolEvents.set(pool, events);
+  pool.on('connect', () => { events.connects++; });
+  pool.on('acquire', () => { events.acquires++; });
   pool.on('error', () => console.error('[IVX PostgreSQL] idle connection failed', { pool: purpose }));
 }
 
@@ -31,8 +37,28 @@ export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
       }));
     } catch { /* Preserve the original database failure if logging fails. */ }
   };
-  const client = await pool.connect().catch(error => { reportFailure(error); throw error; });
-  recordPoolCheckout(Math.max(0, Date.now() - startedAt));
+  const acquisitionStarted = performance.now();
+  const snapshot = pool as Partial<Pick<Pool, 'totalCount' | 'idleCount' | 'waitingCount'>>;
+  const waitingAtStart = snapshot.waitingCount ?? null;
+  const idleAtStart = snapshot.idleCount ?? null;
+  const observeAcquisition = (ok: boolean) => {
+    const acquisitionMs = Math.max(0, performance.now() - acquisitionStarted);
+    recordPoolCheckout(acquisitionMs);
+    if (acquisitionMs > 500) {
+      try {
+        console.warn('[IVX PostgreSQL] slow acquisition', {
+          pool: poolPurposes.get(pool) ?? 'unregistered', acquisitionMs, ok,
+          waitingAtStart, idleAtStart, waitingNow: snapshot.waitingCount ?? null,
+          total: snapshot.totalCount ?? null, ...poolEvents.get(pool),
+          // Checkout includes connection establishment. Query time is measured
+          // separately; REST clients cannot observe the provider's pool here.
+          scope: 'local-pg-checkout-including-connect',
+        });
+      } catch { /* Telemetry must never change database semantics. */ }
+    }
+  };
+  const client = await pool.connect().catch(error => { observeAcquisition(false); reportFailure(error); throw error; });
+  observeAcquisition(true);
   let failed = false;
   let connectionError: Error | null = null;
   const onConnectionError = (error: Error) => { connectionError = error; };
