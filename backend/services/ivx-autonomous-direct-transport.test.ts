@@ -51,6 +51,17 @@ for (const fails of [false, true]) test(`configured same-project queue selects o
     if(boundaries.filter(x=>x==='${fails ? 'ROLLBACK' : 'COMMIT'}').length!==4)throw new Error('incorrect transaction cleanup');
   `], {stdout:'pipe',stderr:'pipe',timeout:10000});
   const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
-  expect(stderr).toBe('');
+  if (fails) {
+    const lines = stderr.trim().split('\n');
+    expect(lines).toHaveLength(4);
+    for (const line of lines) {
+      expect(line).toStartWith('[IVX PostgreSQL] deadline failure ');
+      const diagnostic = JSON.parse(line.slice(line.indexOf('{')));
+      expect(diagnostic).toMatchObject({ pool: 'tasks', stage: 'query', sqlState: null });
+      expect(diagnostic.queryHash).toMatch(/^[a-f0-9]{16}$/);
+      expect(line).not.toContain('ambiguous direct failure');
+      expect(line).not.toContain('postgresql://');
+    }
+  } else expect(stderr).toBe('');
   expect(code).toBe(0);
 });
