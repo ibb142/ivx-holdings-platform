@@ -3326,13 +3326,16 @@ app.get('/health/provider', () => {
   return Response.json({ ok: result.ok, ...result.detail, timestamp: new Date().toISOString() }, { status: result.ok ? 200 : 503 });
 });
 
-app.get('/health/ready', async () => {
+async function ownerAIReadinessResponse() {
   const ai = checkOwnerAIHealth();
   const [database, auth, queue] = await Promise.all([checkOwnerAIDatabaseHealth(), checkOwnerAIAuthHealth(), checkOwnerAIQueueHealth()]);
   const ready = ai.ok && database.ok && auth.ok && queue.ok;
   return Response.json({
     ok: ready,
+    ready,
     status: ready ? 'ready' : 'degraded',
+    service: 'ivx-owner-ai-backend',
+    deploymentMarker: DEPLOYMENT_MARKER,
     checks: {
       ai: { ok: ai.ok, ...ai.detail },
       database: { ok: database.ok, ...database.detail },
@@ -3340,8 +3343,10 @@ app.get('/health/ready', async () => {
       queue: { ok: queue.ok, ...queue.detail },
     },
     timestamp: new Date().toISOString(),
-  }, { status: ready ? 200 : 503 });
-});
+  }, { status: ready ? 200 : 503, headers: { 'Cache-Control': 'no-store' } });
+}
+
+app.get('/health/ready', ownerAIReadinessResponse);
 
 // Render uses this endpoint to decide whether to restart the API process.
 // Keep it local: dependency probes belong to /health/ready and /health/queue.
@@ -3408,15 +3413,8 @@ app.options('/ivx/project-dashboard', () => projectDashboardOptions());
 app.get('/api/ivx/project-dashboard', (context) => handleProjectDashboardRequest(context.req.raw));
 app.get('/ivx/project-dashboard', (context) => handleProjectDashboardRequest(context.req.raw));
 
-app.get('/readiness', (context) => {
-  return context.json({
-    ok: true,
-    ready: true,
-    status: 'ok',
-    service: 'ivx-owner-ai-backend',
-    deploymentMarker: DEPLOYMENT_MARKER,
-  });
-});
+// Both advertised readiness URLs must use the same dependency verdict.
+app.get('/readiness', ownerAIReadinessResponse);
 
 // IVX Senior Developer end-to-end proof feature.
 // Created by the Senior Developer, committed to GitHub, and deployed to Render
