@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import type { EventEmitter } from 'node:events';
 import { observePostgresPoolErrors, queryWithPostgresDeadline } from './ivx-postgres-deadline';
-import { SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL } from './ivx-senior-work-queue';
+import { SENIOR_QUEUE_ACTIVE_STATUSES, SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL } from './ivx-senior-work-queue';
 import { emergencyStopPostgresConfig } from './ivx-emergency-stop-postgres';
 import { supabasePostgresTls, withoutPostgresUrlTlsOptions } from './ivx-supabase-postgres-tls';
 import { decideRetry, isTransientFailure, retryAfterMs, RetryQuota } from './ivx-retry-policy';
@@ -591,4 +591,21 @@ export async function readPostgresAutonomousTaskIndex(sourceSha?: string): Promi
     if (rows.length < pageSize) return all;
   }
   throw new Error('postgres_atomic planning index exceeds safe pagination limit');
+}
+
+/** Owner admission reads one full checkpoint, not every owner's retained work. */
+export async function readSeniorActiveOwnerJobPostgres<T extends { ownerId: string; status: string }>(ownerId: string): Promise<T | null> {
+  emergencyStopPostgresConfig();
+  if (!ownerId.trim()) throw new Error('Repair owner identity is required');
+  const result = await queryWithPostgresDeadline<{ job: T }>(getDirectPool(process.env, 'repair'),
+    `select job from public.ivx_durable_documents d
+      cross join lateral jsonb_array_elements(d.value->'jobs') with ordinality as j(job, ordinal)
+      where d.doc_key = $1 and job->>'ownerId' = $2 and job->>'status' = any($3::text[])
+      order by ordinal desc limit 1`,
+    ['senior-developer-worker/queue.json', ownerId, [...SENIOR_QUEUE_ACTIVE_STATUSES]]);
+  const job = result.rows[0]?.job ?? null;
+  if (job && (job.ownerId !== ownerId || !(SENIOR_QUEUE_ACTIVE_STATUSES as readonly string[]).includes(job.status))) {
+    throw new Error('Repair active owner identity or status mismatch');
+  }
+  return job;
 }

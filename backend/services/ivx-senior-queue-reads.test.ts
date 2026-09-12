@@ -1,7 +1,7 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import * as store from './ivx-postgres-autonomous-task-store';
 import * as durable from './ivx-durable-store';
-import { getSeniorDeveloperJob } from './ivx-senior-developer-worker';
+import { getActiveJobForOwner, getSeniorDeveloperJob } from './ivx-senior-developer-worker';
 import { claimSharedSeniorJob, readSharedSeniorDocument, readSharedSeniorWorkQueue, readSharedSeniorJob, rememberSeniorQueue, patchSharedSeniorQueue } from './ivx-senior-shared-queue';
 
 const file = 'senior-developer-worker/queue.json';
@@ -133,4 +133,29 @@ test('the real worker job endpoint uses the bounded durable path and propagates 
   await expect(getSeniorDeveloperJob('job-1')).rejects.toThrow('database unavailable');
   configured.mockReturnValue(false);
   await expect(getSeniorDeveloperJob('job-1')).rejects.toThrow('Shared queue storage unavailable');
+});
+
+test('owner admission does not load other owners or history; overlapping reads stay independent', async () => {
+  direct();
+  const atomic = process.env.IVX_WORKER_QUEUE_ATOMIC;
+  process.env.IVX_WORKER_QUEUE_ATOMIC = 'true';
+  restores.push(() => { if (atomic === undefined) delete process.env.IVX_WORKER_QUEUE_ATOMIC; else process.env.IVX_WORKER_QUEUE_ATOMIC = atomic; });
+  const configured = spyOn(durable, 'isDurableStoreConfigured').mockReturnValue(true);
+  const all = spyOn(store, 'readSeniorQueuePostgresDocument').mockRejectedValue(new Error('history read forbidden'));
+  const work = spyOn(store, 'readSeniorWorkQueuePostgres').mockRejectedValue(new Error('all-owner read forbidden'));
+  const one = spyOn(store, 'readSeniorActiveOwnerJobPostgres').mockImplementation(async ownerId => {
+    await new Promise(resolve => setTimeout(resolve, 5));
+    return { jobId: ownerId, ownerId, status: 'running', input: { taskId: 'unchanged' } };
+  });
+  restores.push(() => configured.mockRestore(), () => all.mockRestore(), () => work.mockRestore(), () => one.mockRestore());
+  const rows = await Promise.all(Array.from({ length: 112 }, (_, i) => getActiveJobForOwner('owner-' + i % 2)));
+  expect(one).toHaveBeenCalledTimes(2);
+  expect(all).not.toHaveBeenCalled();
+  expect(work).not.toHaveBeenCalled();
+  rows[0]!.input.taskId = 'modified';
+  expect(rows[2]!.input.taskId).toBe('unchanged');
+  one.mockRejectedValue(new Error('Query read timeout'));
+  await expect(getActiveJobForOwner('owner-0')).rejects.toThrow('Query read timeout');
+  configured.mockReturnValue(false);
+  await expect(getActiveJobForOwner('owner-0')).rejects.toThrow('Shared queue storage unavailable');
 });
