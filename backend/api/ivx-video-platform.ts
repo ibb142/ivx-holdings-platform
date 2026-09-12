@@ -238,39 +238,6 @@ function loadFeedDeals(rows: any[], candidates: string[], titles: Record<string,
   return out;
 }
 
-const playableUrlCache = new Map<string, { ok: boolean; at: number }>();
-const PLAYABLE_CACHE_TTL_MS = 5 * 60 * 1000;
-
-/**
- * A client-side upload can fail and leave a video_url that serves the site's
- * HTML fallback instead of video. A dead lead card breaks the first paint on
- * every consumer (landing / apps), so the feed HEAD-checks media URLs (5-min
- * in-memory cache) and drops entries that do not answer with video content.
- */
-async function isPlayableMediaUrl(url: string | null | undefined): Promise<boolean> {
-  if (!url) return false;
-  const cached = playableUrlCache.get(url);
-  if (cached && Date.now() - cached.at < PLAYABLE_CACHE_TTL_MS) return cached.ok;
-  let ok = false;
-  try {
-    const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(4000) });
-    const ct = String(res.headers.get('content-type') || '');
-    ok = res.ok && (ct.startsWith('video/') || ct.includes('mpegurl') || ct.includes('octet-stream'));
-  } catch {
-    ok = false;
-  }
-  playableUrlCache.set(url, { ok, at: Date.now() });
-  return ok;
-}
-
-async function filterPlayableEntries<T extends { row: { video_url: string | null } }>(items: T[]): Promise<T[]> {
-  const results = await Promise.all(items.map(async (item) => ({
-    item,
-    ok: await isPlayableMediaUrl(item.row?.video_url ?? null),
-  })));
-  return results.filter((r) => r.ok).map((r) => r.item);
-}
-
 const readPlatformFeedInputs = createPlatformFeedLoader({
   videos: async (projectId: string | null): Promise<any[]> => {
     const sb = await getSB();
@@ -291,11 +258,15 @@ const readPlatformFeedInputs = createPlatformFeedLoader({
   // Feed ranking uses engagement + admin order; analytics are fetched after render.
   analytics: async (): Promise<Awaited<ReturnType<typeof getAnalyticsDoc>>> => ({ videos: {}, history: {} }),
   deals: async () => readFeedDealRows(await getSB()),
-  playable: async (videos, metaDoc) => {
+  mediaCandidates: async (videos, metaDoc) => {
     const now = Date.now();
-    const visible = videos.filter(video => isMetaVisible(normalizeVideoMeta(metaDoc[String(video.id)]), now));
-    const playable = await filterPlayableEntries(visible.map(row => ({ row })));
-    return new Set(playable.map(entry => String(entry.row.id)));
+    // Metadata reads must not depend on media-host availability. The player
+    // validates decoding lazily and retains the source-specific retry UI.
+    // These are candidates, not a claim that a remote file was checked.
+    return new Set(videos.filter(video =>
+      isMetaVisible(normalizeVideoMeta(metaDoc[String(video.id)]), now)
+      && typeof video.video_url === 'string' && video.video_url.trim().length > 0,
+    ).map(video => String(video.id)));
   },
 });
 
@@ -319,7 +290,7 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
       readPlatformFeedInputs(projectId),
       viewerId ? getFollowState(viewerId) : Promise.resolve({ following: [] as string[] }),
     ]);
-    const { videos, counts, playback, meta: metaDoc, analytics: analyticsDoc, deals, playable: playableIds } = inputs;
+    const { videos, counts, playback, meta: metaDoc, analytics: analyticsDoc, deals, mediaCandidates } = inputs;
 
     const now = Date.now();
     const metaFor = (id: string): VideoMeta => normalizeVideoMeta(metaDoc[id]);
@@ -376,15 +347,15 @@ export async function handlePlatformFeed(req: Request): Promise<Response> {
     // the Reels surface never appears broken to visitors.
     let composed = reelsOnly ? (reels.length > 0 ? reels : composeUnifiedFeed(dealVideos, featured)) : composeUnifiedFeed(dealVideos, featured);
 
-    // Dead-media guard: never lead the feed with a broken card. When the
-    // composed list has no playable media, fall back to the published reels.
+    // Prefer published entries with a recorded source URL. Media existence and
+    // decoding are validated by the player after metadata has rendered.
     {
-      const playable = composed.filter(entry => playableIds.has(entry.id));
-      if (playable.length > 0) {
-        composed = playable;
+      const candidates = composed.filter(entry => mediaCandidates.has(entry.id));
+      if (candidates.length > 0) {
+        composed = candidates;
       } else if (!reelsOnly && reels.length > 0) {
-        const playableReels = reels.filter(entry => playableIds.has(entry.id));
-        if (playableReels.length > 0) composed = playableReels;
+        const reelCandidates = reels.filter(entry => mediaCandidates.has(entry.id));
+        if (reelCandidates.length > 0) composed = reelCandidates;
       }
     }
 

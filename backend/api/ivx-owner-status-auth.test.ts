@@ -11,7 +11,7 @@ test('the mounted env-status route verifies once, rejects non-owners and disting
     process.env.IVX_OPEN_ACCESS_MODE = 'false';
     process.env.IVX_TEST_MODE = 'false';
     const unexpectedNetwork = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected network in owner route fixture'));
-    const ownerOnly = await import('./backend/api/owner-only.ts');
+    const ownerOnly = await import(${JSON.stringify(new URL('./owner-only.ts', import.meta.url).href)});
     const originalGuard = ownerOnly.assertIVXOwnerOnly;
     let mode = 'owner', calls = 0;
     const unavailable = () => Object.assign(new Error('Owner verification temporarily unavailable'), { name: 'IVXAuthServiceUnavailableError' });
@@ -23,7 +23,7 @@ test('the mounted env-status route verifies once, rejects non-owners and disting
       if (mode === 'empty-user') return { userId: '' };
       return { userId: 'fixture-owner', role: 'owner' };
     });
-    const { default: app } = await import('./backend/hono.ts');
+    const { default: app } = await import(${JSON.stringify(new URL('../hono.ts', import.meta.url).href)});
     for (const [scenario, status] of [['owner', 200], ['anonymous', 401], ['invalid', 403], ['member', 403], ['empty-user', 401], ['unavailable', 503]]) {
       mode = scenario; calls = 0;
       const headers = mode === 'anonymous' ? {} : { Authorization: 'Bearer invalid-fixture-token' };

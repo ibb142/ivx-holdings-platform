@@ -6,7 +6,7 @@ for (const scenario of ['checked-out disconnect', 'idle disconnect', 'stalled tr
       import assert from 'node:assert/strict';
       import { createServer } from 'node:net';
       import { mock } from 'bun:test';
-      import pg from 'pg';
+      import pg from ${JSON.stringify(import.meta.resolve('pg'))};
       const scenario = ${JSON.stringify(scenario)};
       const timeout = setTimeout(() => process.exit(2), 10000);
       const unhandled = [];
@@ -59,7 +59,7 @@ for (const scenario of ['checked-out disconnect', 'idle disconnect', 'stalled tr
       // Keep the installed pg client and real TCP protocol; substitute only
       // the connection destination, never production TLS or credentials.
       const RealPool = pg.Pool;
-      mock.module('pg', () => ({ Pool: class extends RealPool {
+      mock.module(${JSON.stringify(import.meta.resolve('pg'))}, () => ({ Pool: class extends RealPool {
         constructor(config) {
           super({ ...config, connectionString: undefined, ssl: false, host: '127.0.0.1', port: server.address().port, user: 'fixture', password: 'fixture', database: 'fixture' });
           pool = this;
@@ -70,7 +70,7 @@ for (const scenario of ['checked-out disconnect', 'idle disconnect', 'stalled tr
       process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://fixture.supabase.co';
       process.env.SUPABASE_SERVICE_ROLE_KEY = 'fixture.' + Buffer.from(JSON.stringify({ role: 'service_role' })).toString('base64url') + '.fixture';
       globalThis.fetch = async () => Response.json({ definitions: { fixture_table: { description: 'REST fallback fixture' } } });
-      const { inspectSupabaseTables } = await import('./backend/api/ivx-supabase-inspection.ts');
+      const { inspectSupabaseTables } = await import(${JSON.stringify(new URL('./ivx-supabase-inspection.ts', import.meta.url).href)});
       try {
         const started = Date.now();
         const first = await inspectSupabaseTables('public', null, 1);
