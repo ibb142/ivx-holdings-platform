@@ -23,25 +23,25 @@ test('feed exceptions remain unavailable and cannot poison the cache as empty su
       const req=new Request('https://example.com/api/'+name);
       const failed=await Promise.all([handler(req),handler(req)]);
       for(const response of failed) {
-        assert.equal(response.status,503,name);
+        assert.equal(response.status,200,name);assert.equal(response.headers.get('X-IVX-Data-State'),'unavailable');
         assert.equal(response.headers.get('cache-control'),'no-store');
         const text=await response.text();
         assert.equal(text.includes('synthetic-private-detail'),false);
         const body=JSON.parse(text);
-        assert.ok(body.error);
-        assert.equal('videos' in body || 'blocks' in body || 'count' in body,false);
+        assert.equal(body.degraded,true);assert.equal(body.data_available,false);
+        assert.deepEqual(body[name==='feed'?'videos':'blocks'],[]);
       }
-      const before=reads; mode='empty';
+      const before=reads; mode='empty'; clock+=3001;
       const restored=await handler(req);
       assert.equal(restored.status,200,name);
       assert.ok(reads>before,'A failure must not be reused as a successful empty cache entry');
-      assert.equal((await restored.json()).count,0,'An actually empty upstream collection remains authoritative');
+      const restoredBody=await restored.json();assert.equal(restoredBody.count,0,'An actually empty upstream collection remains authoritative');assert.equal(restoredBody.degraded,undefined);assert.equal(restored.headers.get('X-IVX-Data-State'),'available');
       mode='throw'; clock+=31000;
       const recent=await handler(req);
       assert.equal(recent.status,200,'A recent successful response can cover a transient failure');
-      clock+=60001;
+      await new Promise(resolve=>setImmediate(resolve));clock+=60001;
       const expired=await handler(req);
-      assert.equal(expired.status,503,'Recovery cannot indefinitely extend old publication state');
+      assert.equal(expired.status,200);assert.equal(expired.headers.get('X-IVX-Data-State'),'unavailable');assert.equal((await expired.json()).degraded,true,'Expired publication state must become unavailable');
       assert.equal(expired.headers.get('cache-control'),'no-store');
     }
   `], { cwd: new URL('../', import.meta.url).pathname, stdout: 'pipe', stderr: 'pipe', timeout: 15000 });

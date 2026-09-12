@@ -19,6 +19,7 @@ export function createFeedResponseCache(options: {
   const entries = new Map<string, Entry>();
   const pending = new Map<string, Promise<Entry>>();
   let activeReads = 0;
+  let activeSharedReads = 0;
   const retryAt = new Map<string, number>();
 
   function unavailable(): Entry {
@@ -41,6 +42,7 @@ export function createFeedResponseCache(options: {
   function start(handler: () => Promise<Response>, key: string | null): Promise<Entry> {
     const observedAt = now();
     activeReads++;
+    if (key) activeSharedReads++;
     // The shared producer may outlive its first HTTP response. Give it its own
     // finite budget so a cold timeout cannot permanently prevent cache warming.
     const produce = () => key && options.staleWhileRevalidate
@@ -73,6 +75,7 @@ export function createFeedResponseCache(options: {
       return entry;
     }).finally(() => {
       activeReads--;
+      if (key) activeSharedReads--;
       if (key && pending.get(key) === work) pending.delete(key);
     });
     if (key) pending.set(key, work);
@@ -97,7 +100,12 @@ export function createFeedResponseCache(options: {
     let work = key ? pending.get(key) : undefined;
     const usableStale = cached && age >= 0 && age < maximumAgeMs;
     if (!work) {
-      if (activeReads >= (options.maxActiveReads ?? maxEntries) || (key && (retryAt.get(key) ?? 0) > now())) {
+      // Personalized responses cannot share a response producer. Their public
+      // source inputs already coalesce below the controller; do not turn a
+      // viewer burst into empty feeds through the public producer limit.
+      const atCapacity = key ? activeSharedReads >= (options.maxActiveReads ?? maxEntries)
+        : activeReads - activeSharedReads >= maxEntries;
+      if (atCapacity || (key && (retryAt.get(key) ?? 0) > now())) {
         return usableStale ? response(cached, true, 'STALE') : unavailableResponse();
       }
       work = start(handler, key);
