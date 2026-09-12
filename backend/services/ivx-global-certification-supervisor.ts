@@ -222,7 +222,7 @@ export function computeGlobalCertification(input: GlobalCertificationInput): Glo
       gates.push({
         workflow: required.name,
         gate: required.gate,
-        state: 'SKIPPED',
+        state: onCurrentMainSha ? 'SKIPPED' : 'SHA_MISMATCH',
         runId: run.runId,
         headSha: run.headSha,
         conclusion: run.conclusion,
