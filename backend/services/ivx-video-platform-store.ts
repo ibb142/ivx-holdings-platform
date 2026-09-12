@@ -190,17 +190,15 @@ function durableKey(name: string): string {
   return `${PLATFORM_PREFIX}/${name}`;
 }
 
-/** Try to read from Supabase durable store; return null if not configured or not found. */
+/** An unavailable primary is not a missing document: never seed it from stale S3. */
 async function readDurableFallback<T>(name: string): Promise<T | null> {
-  try {
-    const { readDurableJson } = await import('./ivx-durable-store');
-    const value = await readDurableJson<T>(durableKey(name), null as unknown as T, {
-      sharePendingRead: ['meta.json', 'deals-meta.json', 'analytics.json'].includes(name),
-    });
-    return value === null ? null : value;
-  } catch {
-    return null;
-  }
+  const { isDurableStoreConfigured, readDurableJson } = await import('./ivx-durable-store');
+  if (!isDurableStoreConfigured()) return null;
+  // Propagate timeouts/5xx so readDoc cannot turn an outage into an S3 mirror
+  // write, or let a read-modify-write operation replace unknown primary state.
+  return readDurableJson<T>(durableKey(name), null as unknown as T, {
+    sharePendingRead: ['meta.json', 'deals-meta.json', 'analytics.json'].includes(name),
+  });
 }
 
 /** Write to Supabase durable store (best-effort, never throws). */
