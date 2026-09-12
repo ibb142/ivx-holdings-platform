@@ -67,7 +67,10 @@ test('an actual provider cost beyond the recorded liability is never accepted', 
   assert.throws(() => reconcileReceipt({ ...row, reserved_nano: 1 }, receipt, new Date(NOW).toISOString()), /LEDGER_BOUND_BREACHED/);
 });
 test('an undercount exports validated receipt numbers while remaining unreconciled', async () => {
-  const high = { data: { ...receipt.data, total_cost: '0.0003', gateway_cost: '0.0003', usage: '0.0003' } };
+  const high = { data: { ...receipt.data, total_cost: '0.0003', gateway_cost: '0.0003', usage: '0.0003',
+    market_cost: '0.0001', surcharge_cost: '0.0002', native_tokens_prompt: 20,
+    native_tokens_completion: 5, native_tokens_reasoning: 0, native_tokens_cached: 0,
+    native_tokens_cache_creation: 0, billable_web_search_calls: 0 } };
   const result = await observe(fixture({ provider: () => Response.json(high) }));
   assert.equal(result.state, 'INCOMPLETE');
   assert.equal(result.reconciledRecords, 0); assert.equal(result.unreconciledRecords, 1);
@@ -79,6 +82,9 @@ test('an undercount exports validated receipt numbers while remaining unreconcil
     providerCreatedAt: receipt.data.created_at, ledgerCompletedAt: row.completed_at,
     observedAt: new Date(NOW).toISOString(), promptTokens: 20, completionTokens: 5,
     firstTokenMs: 70, generationMs: 900,
+    marketCostNano: '100000', surchargeCostNano: '200000', nativePromptTokens: 20,
+    nativeCompletionTokens: 5, nativeReasoningTokens: 0, nativeCachedTokens: 0,
+    nativeCacheCreationTokens: 0, billableWebSearchCalls: 0,
   });
   assert.equal(result.productionRowsChanged, 0); assert.equal(result.modelCallsCreated, 0);
   const output = JSON.stringify(result);
@@ -88,7 +94,8 @@ test('an undercount exports validated receipt numbers while remaining unreconcil
 });
 test('a malformed high-cost receipt never becomes trusted diagnostic evidence', async () => {
   for (const invalid of [{ tokens_prompt: -1 }, { latency: null }, { is_byok: true },
-    { gateway_cost: '0.0004' }, { id: 'PRIVATE_WRONG_ID' }, { created_at: 'invalid' }]) {
+    { gateway_cost: '0.0004' }, { id: 'PRIVATE_WRONG_ID' }, { created_at: 'invalid' },
+    { surcharge_cost: 'PRIVATE_NOT_MONEY' }, { market_cost: -1 }, { native_tokens_cached: -1 }]) {
     const payload = { data: { ...receipt.data, total_cost: '0.0003', gateway_cost: '0.0003', usage: '0.0003', ...invalid } };
     const result = await observe(fixture({ provider: () => Response.json(payload) }));
     assert.equal(result.state, 'INCOMPLETE'); assert.equal(result.reconciledRecords, 0);
