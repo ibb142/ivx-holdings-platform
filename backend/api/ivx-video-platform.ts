@@ -1,5 +1,5 @@
 import { publicFeedRead } from '../services/ivx-public-feed-postgres';
-import { boundedReadFetch } from '../services/ivx-read-timings';
+import { boundedReadFetch, newReadTimings, readTimings } from '../services/ivx-read-timings';
 import { withPublicFeedAvailability } from '../services/ivx-public-feed-availability';
 import { loadViewerEngagement } from '../services/ivx-viewer-engagement';
 import { createPlatformFeedLoader } from '../services/ivx-platform-feed-loader';
@@ -792,37 +792,67 @@ export async function handlePlatformEvents(req: Request): Promise<Response> {
   }
 }
 
+type DeferredAnalytics = { videos: { id: string; view_count: number }[] };
+// Optional counters get one shared read per process, independent of feed reads.
+// Keep an unfinished producer registered after its HTTP callers time out. Never
+// cache completed visibility decisions or reuse a stale public counter snapshot.
+const deferredAnalyticsPending = new Map<string, Promise<DeferredAnalytics | null>>();
+let deferredAnalyticsRetryAt = 0;
+
+export function deferredAnalyticsUnavailable(): Response {
+  const response = json({ videos: [], analytics_status: 'unavailable', degraded: true,
+    data_available: false, retryable: true, code: 'ANALYTICS_UNAVAILABLE' });
+  response.headers.set('X-IVX-Data-State', 'unavailable');
+  response.headers.set('Retry-After', '3');
+  return response;
+}
+
 /** Optional public aggregates. Never expose viewer IDs or watch history. */
 export async function handleDeferredVideoAnalytics(req: Request): Promise<Response> {
-  const ids = [...new Set((new URL(req.url).searchParams.get('ids') ?? '').split(',').filter(Boolean))];
-  if (!ids.length || ids.length > 50 || ids.some(id => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
+  const ids = [...new Set((new URL(req.url).searchParams.get('ids') ?? '').split(',').filter(Boolean).map(id => id.toLowerCase()))].sort();
+  if (!ids.length || ids.length > 50 || ids.some(id => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id))) {
     return json({ error: 'Provide 1 to 50 video UUIDs' }, 400);
   }
-  const unavailable = () => json({ videos: [], degraded: true, data_available: false, code: 'ANALYTICS_UNAVAILABLE' });
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  // Bound this response without cancelling metadata reads shared with the feed.
-  // Underlying transports retain their own deadlines.
-  const read = async (): Promise<Response> => {
-    const sb = await getSB();
-    const [{ data, error }, meta] = await Promise.all([
-      sb.from('project_videos').select('id').in('id', ids).eq('is_approved', true), getMetaDoc(),
-    ]);
-    if (error) throw error;
-    const visible = (data ?? []).filter((v: { id: string }) => isMetaVisible(normalizeVideoMeta(meta[v.id])));
-    if (!visible.length) return json({ videos: [] });
-    const analytics = await getAnalyticsDoc();
-    return json({ videos: visible.map((v: { id: string }) => ({ id: v.id, view_count: analytics.videos[v.id]?.views ?? 0 })) });
-  };
-  try {
-    return await Promise.race([
-      read(),
-      new Promise<Response>(resolve => { timer = setTimeout(() => resolve(unavailable()), 2500); }),
-    ]);
-  } catch {
-    return unavailable();
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
+  const key = ids.join(',');
+  let work = deferredAnalyticsPending.get(key);
+  if (!work) {
+    if (deferredAnalyticsPending.size >= 1 || Date.now() < deferredAnalyticsRetryAt) return deferredAnalyticsUnavailable();
+    // These aggregates are public for every caller. A caller's disconnect must
+    // not abort the shared read used by other callers. The producer has its own
+    // eight-second public-read budget, matching shared feed metadata; HTTP
+    // callers keep the existing 2.5-second response deadline. Catalog transport
+    // still has its own five-second deadline.
+    work = Promise.resolve().then(() => readTimings.run(newReadTimings(8000), async (): Promise<DeferredAnalytics> => {
+      const sb = await getSB();
+      // An early metadata failure must not free capacity while the catalog
+      // request is still holding its connection (or the other way around).
+      const [catalog, metadata] = await Promise.allSettled([
+        sb.from('project_videos').select('id').in('id', ids).eq('is_approved', true), getMetaDoc(),
+      ]);
+      if (catalog.status === 'rejected') throw catalog.reason;
+      if (metadata.status === 'rejected') throw metadata.reason;
+      const { data, error } = catalog.value;
+      const meta = metadata.value;
+      if (error) throw error;
+      const visible = (data ?? []).filter((v: { id: string }) => isMetaVisible(normalizeVideoMeta(meta[v.id])));
+      if (!visible.length) return { videos: [] };
+      const analytics = await getAnalyticsDoc();
+      return { videos: visible.map((v: { id: string }) => ({ id: v.id, view_count: analytics.videos[v.id]?.views ?? 0 })) };
+    })).catch(() => {
+      deferredAnalyticsRetryAt = Date.now() + 3000;
+      return null;
+    }).finally(() => {
+      if (deferredAnalyticsPending.get(key) === work) deferredAnalyticsPending.delete(key);
+    });
+    deferredAnalyticsPending.set(key, work);
   }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await Promise.race([work, new Promise<null>(resolve => {
+      timer = setTimeout(() => resolve(null), 2500);
+    })]);
+    return result === null ? deferredAnalyticsUnavailable() : json(result);
+  } finally { if (timer) clearTimeout(timer); }
 }
 
 /** GET /api/ivx/video-platform/videos/:videoId/analytics */
