@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import pg from 'pg';
-import { SENIOR_QUEUE_ACTIVE_STATUSES, SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL,
+import { SENIOR_QUEUE_ACTIVE_STATUSES, SENIOR_QUEUE_AUTHORITY_SQL, SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL,
   isSeniorQueueWorkItem } from '../backend/services/ivx-senior-work-queue';
 
 type Database = { query(sql: string, values?: any[]): Promise<{ rows: any[] }> };
@@ -48,6 +48,19 @@ export async function proveSeniorWorkQueue(db: Database) {
     const workBytes = Buffer.byteLength(JSON.stringify(projected));
     assert(workBytes < fullBytes / 100, 'Historical payloads must not cross the scheduling read');
 
+    const leaseJob = active.find(job => job.status === 'running')!;
+    const authority = async (id: string) => (await db.query(SENIOR_QUEUE_AUTHORITY_SQL,
+      ['senior-developer-worker/queue.json', id])).rows;
+    const [lease] = await authority(leaseJob.jobId);
+    assert.deepEqual(Object.keys(lease).sort(), ['job_id', 'status', 'worker_id', 'lease_expires_at', 'observed_at'].sort());
+    assert.equal(lease.job_id, leaseJob.jobId);
+    assert.equal(lease.worker_id, 'live-worker');
+    assert.equal(lease.status, 'running');
+    assert.equal(lease.lease_expires_at, leaseJob.leaseExpiresAt);
+    assert(Number.isFinite(new Date(lease.observed_at).getTime()), 'Authority uses a real PostgreSQL timestamp');
+    assert.deepEqual(await authority('missing'), []);
+    assert.deepEqual(await full(), original, 'Authority observation cannot renew or mutate stored leases');
+
     const target = active[0]!;
     const next = { ...target, note: 'new checkpoint from the projected snapshot' };
     const patch = async (expectedJob: unknown, nextJob: unknown) => (await db.query(
@@ -65,7 +78,8 @@ export async function proveSeniorWorkQueue(db: Database) {
     return { ok: true, fullBytes, workBytes, retainedJobs: original.jobs.length, workJobs: expected.length,
       terminalJobsPreserved: 200, activeStatuses: active.map(job => job.status), failedDeploymentRetained: true,
       originalOrderAndFields: true, historyUnchanged: true, partialCasPreservesHistory: true,
-      freshReadObserved: true, staleCasRejected: true, productionRowsTouched: 0 };
+      freshReadObserved: true, staleCasRejected: true, authorityReadUsesServerClock: true,
+      authorityReadPreservesLeaseAndHistory: true, productionRowsTouched: 0 };
   } finally { await db.query('rollback'); }
 }
 
