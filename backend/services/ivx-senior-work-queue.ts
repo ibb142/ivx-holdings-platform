@@ -26,3 +26,4 @@ export const SENIOR_QUEUE_JOB_SQL = `select job from public.ivx_durable_document
     'strict $[*] ? (@.jobId == $id || @.jobId.type() != "string")',
     jsonb_build_object('id', $2::text)) as job
   where d.doc_key = $1 and job->>'jobId' = $2 limit 2`;
+

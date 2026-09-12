@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   ensureTaskTable,
+  listTasks,
   isTransientBootstrapStatus,
   __resetBootstrapStateForTests,
   isTransientSupabaseStatus,
@@ -127,5 +128,64 @@ describe('IVXOwnerAITaskQueue Supabase resilience policy', () => {
     expect(isSafeSupabaseRestRetry('PATCH', 'ivx_owner_ai_tasks?id=eq.1')).toBe(false);
     expect(isSafeSupabaseRestRetry('POST', 'messages?select=id')).toBe(false);
     expect(isSafeSupabaseRestRetry('DELETE', 'messages?id=eq.1')).toBe(false);
+  });
+});
+describe('owner task list concurrent reads', () => {
+  test('coalesces identical limits, isolates snapshots and reads again after settlement', async () => {
+    __resetBootstrapStateForTests();
+    const savedFetch = globalThis.fetch;
+    const savedEnv = { ...process.env };
+    process.env.SUPABASE_URL = 'https://localtest.supabase.co';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-only-key';
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      await gate;
+      return new Response(JSON.stringify([{ id: 'task-fixture', worker_data: { phase: 'queued' } }]),
+        { headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch;
+    try {
+      const pending = Array.from({ length: 112 }, () => listTasks(20));
+      const separate = listTasks(40);
+      release();
+      const results = await Promise.all(pending);
+      await separate;
+      expect(calls).toBe(2);
+      (results[0]![0] as any).worker_data.phase = 'changed';
+      expect((results[1]![0] as any).worker_data.phase).toBe('queued');
+      await listTasks(20);
+      expect(calls).toBe(3);
+    } finally {
+      release();
+      globalThis.fetch = savedFetch;
+      process.env = savedEnv;
+      __resetBootstrapStateForTests();
+    }
+  });
+
+  test('does not retain an unavailable result for later reads', async () => {
+    __resetBootstrapStateForTests();
+    const savedFetch = globalThis.fetch;
+    const savedEnv = { ...process.env };
+    process.env.SUPABASE_URL = 'https://localtest.supabase.co';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-only-key';
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return calls === 1
+        ? new Response('{}', { status: 401 })
+        : new Response(JSON.stringify([{ id: 'recovered-task' }]));
+    }) as typeof fetch;
+    try {
+      expect(await listTasks(20)).toEqual([]);
+      expect((await listTasks(20))[0]?.id).toBe('recovered-task');
+      expect(calls).toBe(2);
+    } finally {
+      globalThis.fetch = savedFetch;
+      process.env = savedEnv;
+      __resetBootstrapStateForTests();
+    }
   });
 });
