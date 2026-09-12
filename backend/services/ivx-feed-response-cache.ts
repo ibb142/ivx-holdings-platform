@@ -10,6 +10,8 @@ export function createFeedResponseCache(options: {
   maxActiveReads?: number;
   staleWhileRevalidate?: boolean;
   refreshTimeoutMs?: number;
+  /** Opt-in identity for equivalent public routes; private requests never use it. */
+  cacheKey?: (req: Request) => string;
   fallback?: (req: Request) => Record<string, unknown>;
 } = {}) {
   const now = options.now ?? Date.now;
@@ -85,7 +87,7 @@ export function createFeedResponseCache(options: {
   return async function withFeedCache(req: Request, handler: () => Promise<Response>): Promise<Response> {
     const url = new URL(req.url);
     const shared = !req.headers.has('Authorization') && !req.headers.has('Cookie') && !url.searchParams.has('viewer_id');
-    const key = shared && req.method === 'GET' ? req.url : null;
+    const key = shared && req.method === 'GET' ? (options.cacheKey?.(req) ?? req.url) : null;
     const unavailableResponse = () => {
       if (!options.fallback) return response(unavailable(), false, 'BYPASS');
       const result = response({ body: JSON.stringify({ ...options.fallback(req), degraded: true, data_available: false, retryable: true, code: 'PUBLIC_DATA_UNAVAILABLE' }), status: 200, observedAt: now() }, false, 'FALLBACK');
