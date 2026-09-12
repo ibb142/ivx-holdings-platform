@@ -440,6 +440,11 @@
           /* Accept JSON even if the Content-Type header is missing or transformed. */
           var data;
           try { data = JSON.parse(text); } catch (e) { throw new Error('not json'); }
+          if (data && (data.degraded === true || data.data_available === false || data.code === 'PUBLIC_DATA_UNAVAILABLE')) {
+            var error = new Error('feed data unavailable');
+            error.retryable = true;
+            throw error;
+          }
           clearTimeout(timeout);
           if (API !== base) API = base; /* promote working host */
           return data;
@@ -468,6 +473,7 @@
       function recoverPublic(data) {
         var vids = data && data.videos;
         if (!Array.isArray(vids) || !vids.length || data.channel || data.personalized !== false
+          || data.degraded === true || data.data_available === false || data.code === 'PUBLIC_DATA_UNAVAILABLE'
           || data.ordering !== 'canonical-unified-v2' || data.feed_type !== 'unified'
           || !vids.every(function (v) { return v && v.id && v.video_url; })) throw error;
         // The unified endpoint can return published reels when no deal videos

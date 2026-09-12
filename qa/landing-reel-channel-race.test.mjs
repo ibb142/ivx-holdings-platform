@@ -138,7 +138,9 @@ test('a recent homepage catalog recovers a transient failure without another dat
 
 test('expired or incompatible page snapshots cannot be used for recovery', async () => {
   for (const snapshot of [{ at: Date.now() - 31000, data: publicFeed() },
-    { at: Date.now(), data: { ...publicFeed(), personalized: true } }]) {
+    { at: Date.now(), data: { ...publicFeed(), personalized: true } },
+    { at: Date.now(), data: { ...publicFeed(), degraded: true } },
+    { at: Date.now(), data: { ...publicFeed(), data_available: false } }]) {
     const f = fixture();
     f.context.window.__ivxPublicReels = snapshot;
     f.context.loadMore(); f.pending[0].reject(new Error('timeout')); await settle();
@@ -165,6 +167,25 @@ test('feed transport does not fail over an authorization denial', async () => {
   const f = transport(() => ({ ok: false, status: 403 }));
   await assert.rejects(f.context.apiFetchJson('/api/reels', 0, 4000), /403/);
   assert.equal(f.requests.length, 1);
+  assert.equal(f.timers.size, 0);
+});
+
+test('feed transport fails over degraded HTTP 200 before promoting a host', async () => {
+  for (const flags of [{ degraded: true }, { data_available: false }, { code: 'PUBLIC_DATA_UNAVAILABLE' }]) {
+    const f = transport(url => ({ ok: true, text: async () => JSON.stringify(
+      url.startsWith('https://primary.example') ? { videos: [], ...flags } : publicFeed()) }));
+    const result = await f.context.apiFetchJson('/api/reels', 0, 4000);
+    assert.equal(result.videos.length, 2);
+    assert.equal(f.requests.length, 2);
+    assert.equal(f.context.API, 'https://secondary.example');
+    assert.equal(f.timers.size, 0);
+  }
+});
+
+test('a persistently degraded reel catalog is an error, not a completed empty page', async () => {
+  const f = transport(() => ({ ok: true, text: async () => '{"videos":[],"data_available":false}' }));
+  await assert.rejects(f.context.apiFetchJson('/api/reels', 0, 4000), /unavailable/i);
+  assert.equal(f.requests.length, 2);
   assert.equal(f.timers.size, 0);
 });
 

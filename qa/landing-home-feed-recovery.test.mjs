@@ -50,6 +50,34 @@ test('a 503 is recovered only after the alternate host returns a valid feed', as
   assert.equal(f.timers.size, 0);
 });
 
+test('HTTP 200 unavailable render structures cannot finish canonical feed recovery', async () => {
+  for (const flags of [{ degraded: true }, { data_available: false }, { code: 'PUBLIC_DATA_UNAVAILABLE' }]) {
+    let release;
+    const f = fixture(n => n === 1 ? response(200, { blocks: [], ...flags })
+      : new Promise(resolve => { release = resolve; }));
+    await settle();
+    assert.equal(f.window.__ivxHomeFeedStatus.state, 'loading');
+    assert.equal(f.calls.length, 2);
+    release(response(200)); await settle();
+    assert.equal(f.window.__ivxHomeFeedStatus.state, 'ready');
+    assert.equal(f.window.__ivxHomeFeedStatus.blockCount, 1);
+    assert.equal(f.timers.size, 0);
+  }
+});
+
+test('persistent degraded responses fail, while a real empty catalog remains valid', async () => {
+  const failed = fixture(() => response(200, { blocks: [], degraded: true, data_available: false }));
+  await settle();
+  assert.equal(failed.window.__ivxHomeFeedStatus.state, 'failed');
+  assert.equal(failed.calls.length, 2);
+  assert.equal(failed.timers.size, 0);
+  const empty = fixture(() => response(200, { blocks: [], data_available: true }));
+  await settle();
+  assert.equal(empty.window.__ivxHomeFeedStatus.state, 'ready');
+  assert.equal(empty.window.__ivxHomeFeedStatus.blockCount, 0);
+  assert.equal(empty.calls.length, 1);
+});
+
 test('persistent 503s remain a terminal runtime error and cannot loop', async () => {
   const f = fixture(() => response(503)); await settle();
   assert.equal(f.window.__ivxHomeFeedStatus.state, 'failed');

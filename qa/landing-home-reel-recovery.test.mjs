@@ -69,6 +69,23 @@ test('persistent failure stops after two requests and a user can retry', async (
   assert.equal(f.button().style.display, 'none');
 });
 
+test('degraded HTTP 200 retries before attaching or sharing a reel', async () => {
+  for (const flags of [{ degraded: true }, { data_available: false }, { code: 'PUBLIC_DATA_UNAVAILABLE' }]) {
+    const f = fixture(n => n === 1 ? json(200, { videos: [], ...flags }) : json(200, { videos: [reel] }));
+    await settle();
+    assert.equal(f.calls, 2);
+    assert.equal(f.loads, 1);
+    assert.equal(f.video.children[1].src, reel.video_url);
+  }
+  const unavailable = { videos: [reel], degraded: true, personalized: false,
+    feed_type: 'unified', ordering: 'canonical-unified-v2' };
+  const f = fixture(() => json(200, unavailable)); await settle();
+  assert.equal(f.calls, 2);
+  assert.equal(f.loads, 0);
+  assert.equal(f.window.__ivxPublicReels, undefined);
+  assert.equal(f.button()?.hidden, false);
+});
+
 test('aborted requests get bounded recovery instead of an infinite loop', async () => {
   const f = fixture(() => { throw new DOMException('Timed out', 'AbortError'); });
   await settle();

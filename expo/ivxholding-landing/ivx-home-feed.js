@@ -95,6 +95,11 @@
       })
       .then(function (data) {
         if (!data || !Array.isArray(data.blocks)) throw new Error('invalid home feed response');
+        // The API can return an unavailable render structure with HTTP 200.
+        // Keep recovery active until the canonical source actually supplies data.
+        if (data.degraded === true || data.data_available === false || data.code === 'PUBLIC_DATA_UNAVAILABLE') {
+          throw new Error('home feed data unavailable');
+        }
         return data;
       })
       .finally(function () { clearTimeout(timer); })

@@ -288,6 +288,11 @@
       })
       .then(function(d){
         clearTimeout(timer);
+        if (d && (d.degraded === true || d.data_available === false || d.code === 'PUBLIC_DATA_UNAVAILABLE')) {
+          var error = new Error('Reel feed data unavailable');
+          error.retryable = true;
+          throw error;
+        }
         var list = (d && (d.videos || d.reels)) || [];
         var first = null;
         for (var i=0;i<list.length;i++){ if (list[i] && list[i].video_url) { first = list[i]; break; } }
