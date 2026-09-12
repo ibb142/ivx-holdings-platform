@@ -80,9 +80,17 @@ for file in "${files[@]}"; do
 appId: $APP_ID
 name: $name
 ---
+# A native validation alert from the previous route can survive a deep link and
+# cover the next route. Dismiss only the prior screen's known acknowledgement
+# before navigation; errors raised by the route under test remain observable.
+- tapOn:
+    text: "OK"
+    optional: true
 - openLink: "ivx-app:///${route#/}"
 - waitForAnimationToEnd:
     timeout: 3000
+- assertNotVisible: "Missing Information"
+- assertNotVisible: "Please fill in all required fields"
 - assertNotVisible: "Something went wrong"
 - assertNotVisible: "IVX Provider Error"
 - assertNotVisible: "Application error"

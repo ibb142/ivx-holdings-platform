@@ -950,11 +950,12 @@ export function checkAIHealth(): HealthCheckResult {
   const provider = getProviderHealth();
   const providerOk = (provider.state === 'PROVIDER_READY' || provider.state === 'FALLBACK_READY')
     && provider.lastHttpStatus === 200 && Boolean(provider.lastValidationTime);
-  const needsCredits = provider.lastHttpStatus === 402
-    || /positive credit balance|insufficient_quota|billing_hard_limit/i.test(provider.error ?? '');
+  const budgetBlocked = /^Global AI budget admission blocked or unconfirmed;/.test(provider.error ?? '');
+  const needsCredits = !budgetBlocked && (provider.lastHttpStatus === 402
+    || /positive credit balance|insufficient_quota|billing_hard_limit/i.test(provider.error ?? ''));
   const validationPending = provider.state === 'PROVIDER_VALIDATING' || provider.state === 'FALLBACK_VALIDATING';
   const code = !startup.ok ? 'AI_CONFIGURATION_UNAVAILABLE' : providerOk ? null
-    : needsCredits ? 'AI_CREDITS_REQUIRED' : validationPending ? 'AI_VALIDATION_PENDING' : 'AI_UNAVAILABLE';
+    : budgetBlocked ? 'AI_GLOBAL_BUDGET_BLOCKED' : needsCredits ? 'AI_CREDITS_REQUIRED' : validationPending ? 'AI_VALIDATION_PENDING' : 'AI_UNAVAILABLE';
   return {
     ok: startup.ok && providerOk,
     detail: {
@@ -972,6 +973,7 @@ export function checkAIHealth(): HealthCheckResult {
       providerType: startup.providerType,
       ownerActionRequired: code === 'AI_CREDITS_REQUIRED'
         ? 'The AI provider requires a positive credit balance. Restore the provider balance and validate availability again.'
+        : code === 'AI_GLOBAL_BUDGET_BLOCKED' ? 'Check the global AI budget and database availability, then validate again.'
         : code === 'AI_VALIDATION_PENDING' ? 'AI provider validation has not completed successfully.'
         : code ? 'AI provider is unavailable. Check configuration and /health/ai for the current failure.' : null,
     },
@@ -1029,6 +1031,7 @@ export async function probeAIGatewayLive(): Promise<{
     reason: result.reason,
     ownerActionRequired: result.ok ? null : result.code === 'AI_CREDITS_REQUIRED'
       ? 'The provider requires a positive credit balance. Restore the balance and validate again.'
+      : result.code === 'AI_GLOBAL_BUDGET_BLOCKED' ? 'Check the global AI budget and database availability, then validate again.'
       : result.status === 401 || result.status === 403
         ? 'The provider rejected its configured credential. Verify the existing provider binding.'
         : result.code === 'AI_PROBE_TIMEOUT' ? 'The provider did not finish a completion within 10 seconds.'

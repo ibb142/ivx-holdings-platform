@@ -14,7 +14,7 @@ test('recovery worker stays alive until SIGTERM even when fleet timers are unref
       stopAutonomous112RuntimeEnforcer:async()=>{console.log('FLEET_STOPPED');return 0;}
     }));
     mock.module(${JSON.stringify(servicePath('ivx-autonomous-blocked-reconciler'))},()=>({startBlockedTaskReconciler:()=>{throw new Error('auxiliary started');},stopBlockedTaskReconciler:()=>{}}));
-    mock.module(${JSON.stringify(servicePath('ivx-fleet-slo'))},()=>({startFleetSloMonitor:()=>{throw new Error('auxiliary started');}}));
+    mock.module(${JSON.stringify(servicePath('ivx-fleet-slo'))},()=>({startFleetSloMonitor:({presenceOnly})=>{if(!presenceOnly)throw new Error('full task sampling must stay paused');console.log('PRESENCE_ONLY');}}));
     mock.module(${JSON.stringify(servicePath('ivx-autonomous-doctor'))},()=>({startAutonomousDoctor:()=>{throw new Error('auxiliary started');}}));
     mock.module(${JSON.stringify(servicePath('ivx-autonomous-utilization-guardian'))},()=>({startAutonomousUtilizationGuardian:()=>{throw new Error('auxiliary started');},stopAutonomousUtilizationGuardian:()=>{}}));
     mock.module(${JSON.stringify(servicePath('ivx-certificate-worker'))},()=>({startCertificateWorker:()=>{throw new Error('certificate rescans must remain paused');},stopCertificateWorker:()=>{}}));
@@ -32,6 +32,7 @@ test('recovery worker stays alive until SIGTERM even when fleet timers are unref
     }
     expect(output).toContain('READY');
     expect(output).toContain('FLEET_TICK');
+    expect(output).toContain('PRESENCE_ONLY');
     child.kill('SIGTERM');
     while (true) {
       const chunk = await reader.read();

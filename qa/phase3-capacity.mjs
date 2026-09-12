@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { observeBudgetReconciliation } from './phase3-budget-reconciliation.mjs';
 
 // Read-only production configuration and observed capacity. Never export envs,
 // credentials, request prompts, or private model responses.
@@ -17,6 +18,7 @@ async function get(origin, path, token, system = false) {
 const services = ['srv-d7t9ivreo5us73ftose0', 'srv-d9i15fg4n6ts73bn00j0'];
 const config = [];
 let gatewayKey;
+const reconciliationBindings = [];
 let vercelToken = process.env.VERCEL_TOKEN || process.env.VERCEL_API_TOKEN || process.env.IVX_VERCEL_TOKEN;
 const output = 'qa/evidence/phase3';
 await mkdir(output,{recursive:true});
@@ -47,6 +49,11 @@ for (const serviceId of services) {
   vercelToken ||= ['VERCEL_TOKEN','VERCEL_API_TOKEN','IVX_VERCEL_TOKEN'].map(key=>values[key]).find(Boolean);
   const gatewayAliases = ['IVX_AI_GATEWAY_KEY','AI_GATEWAY_API_KEY','IVX_VERCEL_GATEWAY_API_KEY','OPENAI_API_KEY'];
   gatewayKey ||= gatewayAliases.map(key => values[key]).find(value => value?.startsWith('vck_'));
+  reconciliationBindings.push({
+    databaseUrl: (values.EXPO_PUBLIC_SUPABASE_URL || values.SUPABASE_URL || '').trim().replace(/\/+$/, ''),
+    serviceKey: (values.SUPABASE_SERVICE_ROLE_KEY || values.SUPABASE_SERVICE_KEY || '').trim(),
+    gatewayKey: gatewayAliases.map(key => values[key]).find(value => value?.startsWith('vck_')),
+  });
   // Only numeric operational controls are eligible for output.
   const numericControls = Object.fromEntries(Object.entries(values).filter(([key,value]) =>
     /^IVX_[A-Z_]*(?:POOL_MAX|MAX_CONCURRENCY|TOKEN_CAP|BUDGET_USD|COST_LIMIT_USD|MAX_COST_USD)$/.test(key)
@@ -81,6 +88,19 @@ if (vercelToken) {
   }
 } else result.budgets={state:'UNOBSERVED',reason:'No protected Vercel management token bound'};
 await checkpoint();
+// Bind the receipt read to the same private database and gateway on both
+// services. No credentials are added to the report or to an artifact.
+const [binding, ...otherBindings] = reconciliationBindings;
+const sharedBinding = binding && otherBindings.every(other =>
+  other.databaseUrl === binding.databaseUrl && other.serviceKey === binding.serviceKey
+  && other.gatewayKey === binding.gatewayKey);
+result.budgetReconciliation = sharedBinding
+  ? await observeBudgetReconciliation({ ...binding, sourceSha: sha })
+  : { state: 'UNOBSERVED', reason: 'SERVICE_BINDINGS_DIFFER', modelCallsCreated: 0,
+      productionRowsChanged: 0, secretsReturned: false, phase3Closed: false };
+result.billingMismatchCount = (result.budgetReconciliation.records || [])
+  .filter(record => record.reason === 'PROVIDER_COST_EXCEEDS_LEDGER').length;
+await checkpoint();
 const samples = [];
 for (let index=0; index<2; index++) {
   if(index) await new Promise(resolve=>setTimeout(resolve,20_000));
@@ -96,3 +116,6 @@ for (let index=0; index<2; index++) {
   await checkpoint();
 }
 console.log(JSON.stringify(result));
+// A completed observation is not a passing monetary control when real receipts
+// contradict the ledger. Preserve evidence, then fail the protected proof.
+if (result.billingMismatchCount > 0) process.exitCode = 1;

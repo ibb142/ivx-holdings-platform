@@ -571,7 +571,7 @@ export async function readPostgresAutonomousTaskIndex(sourceSha?: string): Promi
   for (let offset = 0; offset < 20000; offset += pageSize) {
     type IndexRow = { task_id: string; idempotency_key: string; assigned_agent_number: number | null; state: TaskState; title: string };
     const rows = preferDirectTransport()
-      ? (await getDirectPool().query<IndexRow>(
+      ? (await queryWithPostgresDeadline<IndexRow>(getDirectPool(),
         "select task_id, idempotency_key, assigned_agent_number, state, payload->>'title' as title from public.ivx_autonomous_tasks" + where + ' order by created_at asc, task_id asc offset $1 limit $2',
         sourceSha ? [offset, pageSize, families.map(prefix => `${prefix}%`), families.map(prefix => `${prefix}${sourceSha}:%`), startedStates] : [offset, pageSize])).rows
       : await restRequest<IndexRow[]>(

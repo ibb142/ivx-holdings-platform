@@ -12,6 +12,7 @@
  *   { type: 'error', error }
  */
 import { computeAdaptiveTimeoutMs, streamIVXAIText } from '../ivx-ai-runtime';
+import { createCancellableEventStream } from '../services/ivx-cancellable-event-stream';
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions, type IVXOwnerRequestContext } from './owner-only';
 import { IVX_OWNER_AI_ROOM_ID } from '../../expo/constants/ivx-owner-ai';
 import { ownerRuntimeEvidenceHeaders } from '../services/ivx-owner-runtime-evidence';
@@ -19,10 +20,6 @@ import { ownerChatFingerprint, ownerChatRequestKey, ownerChatRequestStore, runOw
 
 function readTrimmed(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
-}
-
-function sseLine(payload: unknown): string {
-  return `data: ${JSON.stringify(payload)}\n\n`;
 }
 
 export const OPTIONS = (): Response => ownerOnlyOptions();
@@ -68,66 +65,59 @@ export async function handleIVXOwnerAIStreamRequest(request: Request): Promise<R
   const fingerprint = ownerChatFingerprint({ conversationId: IVX_OWNER_AI_ROOM_ID,
     message: prompt, streamOptions: { system, model, maxOutputTokens } });
 
-  const encoder = new TextEncoder();
-  let disconnected = false;
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const emit = (payload: unknown): void => {
-        if (disconnected) return;
-        try { controller.enqueue(encoder.encode(sseLine(payload))); } catch { disconnected = true; }
-      };
-      emit({
-        type: 'start',
-        requestId,
-        model: model ?? 'default',
-        adaptiveTimeoutMs,
-        promptChars,
-      });
+  const stream = createCancellableEventStream(request.signal, async (abortSignal, send) => {
+    send({
+      type: 'start',
+      requestId,
+      model: model ?? 'default',
+      adaptiveTimeoutMs,
+      promptChars,
+    });
 
-      try {
-        const response = await runOwnerChatOnce({
-          key, requestId, fingerprint, store: ownerChatRequestStore(owner.client),
-          identity: { ownerId: owner.userId, conversationId: IVX_OWNER_AI_ROOM_ID, requestId },
-          execute: async () => {
-            try {
-              let completed: Record<string, unknown> | null = null;
-              for await (const chunk of streamIVXAIText({ module: 'owner-room', requestId, model, system, prompt, maxOutputTokens })) {
-                if (chunk.type === 'delta') emit(chunk);
-                else if (chunk.type === 'error') throw new Error(chunk.error || 'Provider stream failed.');
-                else if (chunk.type === 'done') completed = { ...chunk };
-              }
-              if (!completed || typeof completed.text !== 'string' || !completed.text.trim()) throw new Error('Provider stream ended without a complete answer.');
-              // Deltas remain live; done is emitted only after the receipt is
-              // durable. This route does not claim to have inserted chat rows.
-              return ownerOnlyJson({ ok: true, status: 'ok', requestId,
-                conversationId: IVX_OWNER_AI_ROOM_ID, answer: completed.text,
-                assistantPersisted: false, assistantMessageId: null, streamResult: completed });
-            } catch (error) {
-              return ownerOnlyJson({ ok: false, status: 'error', code: 'OWNER_STREAM_PROVIDER_FAILED',
-                requestId, error: error instanceof Error ? error.message : 'Provider stream failed.' }, 502);
+    try {
+      const response = await runOwnerChatOnce({
+        key, requestId, fingerprint, store: ownerChatRequestStore(owner.client),
+        identity: { ownerId: owner.userId, conversationId: IVX_OWNER_AI_ROOM_ID, requestId },
+        execute: async () => {
+          try {
+            let completed: Record<string, unknown> | null = null;
+            for await (const chunk of streamIVXAIText({
+              module: 'owner-room', requestId, model, system, prompt, maxOutputTokens, abortSignal,
+            })) {
+              if (chunk.type === 'delta') send(chunk);
+              else if (chunk.type === 'error') throw new Error(chunk.error || 'Provider stream failed.');
+              else if (chunk.type === 'done') completed = { ...chunk };
             }
-          },
-        });
-        const payload = await response.json() as Record<string, unknown>;
-        if (response.ok && payload.ok === true && payload.streamResult && typeof payload.streamResult === 'object') {
-          emit({ ...payload.streamResult, requestId, receiptPersisted: true, assistantPersisted: false,
-            replayed: response.headers.get('X-IVX-Request-Replayed') === 'true' });
-        } else {
-          emit({ type: 'error', requestId, status: response.status, code: payload.code,
-            error: payload.error || 'The original stream outcome is not confirmed.' });
-        }
-      } catch (error) {
-        emit({
-          type: 'error', requestId, status: 503, code: 'OWNER_CHAT_RECONCILIATION_REQUIRED',
-          error: error instanceof Error ? error.message : 'stream failed',
-        });
-      } finally {
-        if (!disconnected) { try { controller.close(); } catch { /* already disconnected */ } }
+            if (!completed || typeof completed.text !== 'string' || !completed.text.trim()) {
+              throw new Error(abortSignal.aborted
+                ? 'Provider stream cancelled after durable admission.'
+                : 'Provider stream ended without a complete answer.');
+            }
+            // Deltas remain live; done is emitted only after the receipt is
+            // durable. This route does not claim to have inserted chat rows.
+            return ownerOnlyJson({ ok: true, status: 'ok', requestId,
+              conversationId: IVX_OWNER_AI_ROOM_ID, answer: completed.text,
+              assistantPersisted: false, assistantMessageId: null, streamResult: completed });
+          } catch (error) {
+            return ownerOnlyJson({ ok: false, status: 'error', code: 'OWNER_STREAM_PROVIDER_FAILED',
+              requestId, error: error instanceof Error ? error.message : 'Provider stream failed.' }, 502);
+          }
+        },
+      });
+      const payload = await response.json() as Record<string, unknown>;
+      if (response.ok && payload.ok === true && payload.streamResult && typeof payload.streamResult === 'object') {
+        send({ ...payload.streamResult, requestId, receiptPersisted: true, assistantPersisted: false,
+          replayed: response.headers.get('X-IVX-Request-Replayed') === 'true' });
+      } else {
+        send({ type: 'error', requestId, status: response.status, code: payload.code,
+          error: payload.error || 'The original stream outcome is not confirmed.' });
       }
-    },
-    // Losing the client connection cannot erase the admitted request or its
-    // eventual receipt. A later request reconciles the same owner/message key.
-    cancel() { disconnected = true; },
+    } catch (error) {
+      send({
+        type: 'error', requestId, status: 503, code: 'OWNER_CHAT_RECONCILIATION_REQUIRED',
+        error: error instanceof Error ? error.message : 'stream failed',
+      });
+    }
   });
 
   return new Response(stream, {
