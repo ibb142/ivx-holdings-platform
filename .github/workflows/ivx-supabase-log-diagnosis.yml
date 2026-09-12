@@ -47,7 +47,7 @@ jobs:
               'client_authentication': 'no pg_hba.conf entry|role .* does not exist|database .* does not exist',
               'schema_cache': 'schema cache',
           }
-          sql = "select p.error_severity as severity, p.sql_state_code as sqlstate, count(*) as n from postgres_logs as t cross join unnest(t.metadata) as m cross join unnest(m.parsed) as p where p.error_severity = 'FATAL' group by severity, sqlstate limit 50"
+          sql = "select p.error_severity as severity, p.sql_state_code as sqlstate, count(*) as n from postgres_logs as t cross join unnest(t.metadata) as m cross join unnest(m.parsed) as p where p.error_severity = 'FATAL' and regexp_contains(t.event_message, '(?i)connection to client lost|could not (receive|send) data.*client|connection reset by peer|broken pipe') group by severity, sqlstate limit 50"
           params = urllib.parse.urlencode({'sql': sql, 'iso_timestamp_start': start.isoformat(timespec='milliseconds').replace('+00:00', 'Z'), 'iso_timestamp_end': end.isoformat(timespec='milliseconds').replace('+00:00', 'Z')})
           request = urllib.request.Request('https://api.supabase.com/v1/projects/' + project + '/analytics/endpoints/logs.all?' + params,
               headers={'Authorization': 'Bearer ' + token})
