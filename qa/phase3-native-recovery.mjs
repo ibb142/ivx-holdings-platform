@@ -51,6 +51,24 @@ export function verifyObservedNativeQuota(prior) {
 }
 const safeError=error=>String(error?.message??'').split('\n')[0].trim().match(/^[A-Z][A-Z0-9_]{2,100}$/)?.[0]
   ??'NATIVE_RECOVERY_CHECK_FAILED';
+export async function prepareRecoveryContext(proof,dependencies={}) {
+  const prepare=dependencies.prepare??prepareContext;
+  const pause=dependencies.pause??(ms=>new Promise(resolve=>setTimeout(resolve,ms)));
+  for(let attempt=1;attempt<=3;attempt++) {
+    proof.contextReadAttempts=attempt;
+    try {return await prepare(proof);} catch(error) {
+      const code=safeError(error);
+      const status=code==='POLICY_READ_FAILED' && Number.isInteger(error?.actual)?error.actual:null;
+      (proof.contextReadFailures??=[]).push({attempt,error:code,httpStatus:status,at:new Date().toISOString()});
+      // prepareContext only reads protected bindings and policy. Never retry a
+      // reservation, provider request, permission failure or changed control.
+      const transient=code==='DATABASE_READ_UNCONFIRMED'
+        || (code==='POLICY_READ_FAILED' && [429,500,502,503,504].includes(status));
+      if(!transient || attempt===3)throw error;
+      await pause(attempt*4000);
+    }
+  }
+}
 // Public evidence contains only explicit QA metrics. Credential identifiers,
 // infrastructure bindings, raw rows and native responses stay in memory.
 export function publicRecoveryProof(proof) {
@@ -70,6 +88,9 @@ export function publicRecoveryProof(proof) {
     priorLogStorageHttpStatus:numeric(proof.priorLogStorageHttpStatus),
     priorSerializedSha256:proof.priorSerializedSha256,priorContentSha256:proof.priorContentSha256,
     errorClass:['AssertionError','TypeError','SyntaxError','TimeoutError'].includes(proof.errorClass)?proof.errorClass:null,
+    contextReadAttempts:numeric(proof.contextReadAttempts),
+    contextReadFailures:(proof.contextReadFailures??[]).map(f=>({attempt:numeric(f.attempt),
+      error:safeError({message:f.error}),httpStatus:numeric(f.httpStatus),at:f.at})),
     passed:proof.passed===true,
     error:proof.error?safeError({message:proof.error}):null,
     finalControlError:proof.finalControlError?safeError({message:proof.finalControlError}):null,
@@ -150,7 +171,7 @@ async function main() {
     proof.priorArtifactSha256=PRIOR_SHA256;
     proof.nativeQuotaRejection=verifyObservedNativeQuota(prior);
     proof.stage='read_protected_bindings';
-    context=await prepareContext(proof);db=dbFor(context);
+    context=await prepareRecoveryContext(proof);db=dbFor(context);
     proof.stage='read_prior_reservations';
     const rows=await db.rows();
     assert.equal(rows.length,10,'COMPLETION_REPLAY_OR_PRIOR_STATE_CHANGED');

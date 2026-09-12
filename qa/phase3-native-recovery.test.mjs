@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { verifyObservedNativeQuota, publicRecoveryProof, evidenceContentHash } from './phase3-native-recovery.mjs';
+import { verifyObservedNativeQuota, publicRecoveryProof, evidenceContentHash, prepareRecoveryContext } from './phase3-native-recovery.mjs';
 import { reservationId } from './phase3-native-quota.mjs';
 
 function fixture() {
@@ -16,6 +16,27 @@ function fixture() {
     quotaSnapshots:[{quotaEntityId:'api_key_id_'+key,scopeId:key,active:true,archived:false,
       limitAmount:1,currentSpend:1.18074}],passed:false};
 }
+test('context reads recover from transient HTTP failures with bounded retries',async()=>{
+  const proof={},pauses=[],context={binding:'synthetic'};let calls=0;
+  const transient=()=>new assert.AssertionError({message:'POLICY_READ_FAILED',actual:503,expected:200});
+  assert.equal(await prepareRecoveryContext(proof,{prepare:async()=>{
+    if(++calls<3)throw transient();return context;
+  },pause:async ms=>pauses.push(ms)}),context);
+  assert.equal(calls,3);assert.deepEqual(pauses,[4000,8000]);
+  assert.deepEqual(proof.contextReadFailures.map(f=>f.httpStatus),[503,503]);
+  calls=0;
+  await assert.rejects(prepareRecoveryContext({},{prepare:async()=>{calls++;throw transient();},pause:async()=>{}}));
+  assert.equal(calls,3);
+});
+test('context retries never repeat permission or changed-budget failures',async()=>{
+  for(const error of [new assert.AssertionError({message:'POLICY_READ_FAILED',actual:403,expected:200}),
+    new Error('SHARED_BUDGET_CHANGED'),new Error('REAL_PROVIDER_CALL_FAILED')]) {
+    let calls=0;
+    await assert.rejects(prepareRecoveryContext({},{prepare:async()=>{calls++;throw error;},
+      pause:async()=>assert.fail('must not wait or retry')}),e=>e===error);
+    assert.equal(calls,1);
+  }
+});
 test('evidence checksum ignores object key ordering but preserves values and array order',()=>{
   const one={a:{x:1,y:2},z:[3,4]};
   assert.equal(evidenceContentHash(one),evidenceContentHash({z:[3,4],a:{y:2,x:1}}));
