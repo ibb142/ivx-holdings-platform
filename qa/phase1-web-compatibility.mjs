@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID, createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
+import { decodeOwnerResponse } from './phase1-owner-response-proof.mjs';
 
 // Production acceptance: no request mocking, no fabricated replies, no trace/session export.
 const API = 'https://api.ivxholding.com';
@@ -60,6 +61,30 @@ const pending = [];
 let ownerSession = null;
 let ownerReply = null;
 let stage = 'preflight';
+// Passive wire observation keeps final SSE frames even when the application
+// cancels its reader after the final envelope. It never changes requests/replies.
+const wire = new Map();
+const cdp = await context.newCDPSession(page);
+await cdp.send('Network.enable', { maxTotalBufferSize: 5_000_000, maxResourceBufferSize: 1_000_000, maxPostDataSize: 300_000 });
+cdp.on('Network.requestWillBeSent', e => {
+  if (e.request.url.startsWith(API + '/api/ivx/owner-ai') && e.request.method === 'POST'
+      && (e.request.postData || '').includes(marker)) wire.set(e.requestId, {
+    path: new URL(e.request.url).pathname, chunks: [], status: null,
+  });
+});
+cdp.on('Network.responseReceived', e => {
+  const entry = wire.get(e.requestId);
+  if (!entry) return;
+  entry.status = e.response.status;
+  entry.mime = e.response.mimeType;
+  pending.push(cdp.send('Network.streamResourceContent', { requestId: e.requestId }).then(result => {
+    if (result.bufferedData) entry.chunks.unshift(Buffer.from(result.bufferedData, 'base64').toString('utf8'));
+  }).catch(() => { entry.captureUnavailable = true; }));
+});
+cdp.on('Network.dataReceived', e => {
+  const entry = wire.get(e.requestId);
+  if (entry && e.data) entry.chunks.push(Buffer.from(e.data, 'base64').toString('utf8'));
+});
 page.on('response', response => {
   const url = response.url();
   if (url.startsWith(AUTH + '/auth/v1/token?grant_type=password') && response.status() === 200) {
@@ -82,6 +107,9 @@ page.on('response', response => {
     try { body = await response.text(); }
     catch { observation.bodyUnavailable = true; await checkpoint(); return; }
     if (mime.includes('text/event-stream')) {
+      const canonical = decodeOwnerResponse(body, marker);
+      if (canonical.valid) ownerReply = canonical.answer;
+      observation.canonical = { ...canonical, answer: undefined };
       const frames = body.split('\n').filter(l => l.startsWith('data: ')).flatMap(l => {
         try { return [JSON.parse(l.slice(6))]; } catch { return []; }
       });
@@ -144,6 +172,12 @@ try {
   await page.waitForFunction(value => [...document.querySelectorAll('[data-testid^="ivx-owner-message-"]')]
     .filter(e => e.textContent.includes(value)).length >= 2, marker, { timeout: 180_000 });
   await Promise.all(pending);
+  for (const entry of wire.values()) {
+    const decoded = decodeOwnerResponse(entry.chunks.join(''), marker);
+    receipt.ownerTransport.push({ source: 'passive_browser_network', path: entry.path, status: entry.status,
+      mime: entry.mime, captureUnavailable: entry.captureUnavailable || false, ...decoded, answer: undefined });
+    if (entry.status === 200 && decoded.valid) ownerReply = decoded.answer;
+  }
   assert(ownerReply?.includes(marker), 'No completed backend reply matching the new marker');
   assert(receipt.ownerTransport.some(r => r.status === 200 && !r.error && !r.fallback), 'Backend response not successful');
   const reply = rows.last();
