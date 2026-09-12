@@ -95,11 +95,21 @@ describe('IVX IA chat device certificate regression', () => {
     expect(liveAndRestored).toHaveLength(2);
     for (const part of liveAndRestored) {
       const search = part.indexOf('id: "ivx-owner-chat-search-open"');
+      const searchFieldWait = part.indexOf(
+        'visible:\n      id: "ivx-owner-chat-search-input"',
+        search,
+      );
       const filter = part.indexOf('inputText: ${CHAT_E2E_SUFFIX}', search);
       const wait = part.indexOf('- extendedWaitUntil:', filter);
       const answer = part.indexOf(assistantReplyElement, wait);
       const owner = part.indexOf(ownerPromptElement, answer);
       expect(search).toBeGreaterThan(-1);
+      expect(searchFieldWait).toBeGreaterThan(search);
+      expect(searchFieldWait).toBeLessThan(filter);
+      expect(part.slice(search, searchFieldWait)).toContain('- waitForAnimationToEnd');
+      expect(part.slice(search, searchFieldWait)).toContain(
+        'visible:\n        id: "ivx-owner-chat-search-open"',
+      );
       expect(filter).toBeGreaterThan(search);
       expect(wait).toBeGreaterThan(filter);
       expect(answer).toBeGreaterThan(wait);

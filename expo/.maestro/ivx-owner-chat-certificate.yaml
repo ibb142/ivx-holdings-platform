@@ -64,6 +64,21 @@ tags:
 # the sender role and the full joined value or full original command.
 - tapOn:
     id: "ivx-owner-chat-search-open"
+- waitForAnimationToEnd
+# A streaming/remote-ack render can land in the same frame as the first tap.
+# Retry the transition once only when the unopened control is still present;
+# the following search-input assertion remains fail-closed.
+- runFlow:
+    when:
+      visible:
+        id: "ivx-owner-chat-search-open"
+    commands:
+      - tapOn:
+          id: "ivx-owner-chat-search-open"
+- extendedWaitUntil:
+    visible:
+      id: "ivx-owner-chat-search-input"
+    timeout: 10000
 - tapOn:
     id: "ivx-owner-chat-search-input"
 - inputText: ${CHAT_E2E_SUFFIX}
@@ -149,6 +164,20 @@ tags:
           id: "ivx-owner-chat-scroll-to-latest"
 - tapOn:
     id: "ivx-owner-chat-search-open"
+- waitForAnimationToEnd
+# Apply the same single recovery after the cold relaunch. The gate still
+# requires the real search field before it can enter or assert the marker.
+- runFlow:
+    when:
+      visible:
+        id: "ivx-owner-chat-search-open"
+    commands:
+      - tapOn:
+          id: "ivx-owner-chat-search-open"
+- extendedWaitUntil:
+    visible:
+      id: "ivx-owner-chat-search-input"
+    timeout: 10000
 - tapOn:
     id: "ivx-owner-chat-search-input"
 - inputText: ${CHAT_E2E_SUFFIX}
