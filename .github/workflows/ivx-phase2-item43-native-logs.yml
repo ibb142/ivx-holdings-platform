@@ -1,0 +1,38 @@
+name: Phase 2 item 4.3 historical log audit
+on:
+  push:
+    branches: ['audit/phase2-item43-native-logs-20260912']
+    paths:
+      - 'qa/phase2-item43-native-logs*'
+      - '.github/workflows/ivx-phase2-item43-native-logs.yml'
+permissions:
+  contents: read
+concurrency:
+  group: phase2-item43-native-logs-20260912
+  cancel-in-progress: false
+jobs:
+  read-historical-logs:
+    if: github.repository == 'ibb142/ivx-holdings-platform'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: Verify request scope and evidence filtering
+        run: node --test qa/phase2-item43-native-logs.test.mjs
+      - name: Read three fixed historical PostgreSQL log windows
+        run: node qa/phase2-item43-native-logs.mjs
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          IVX_OWNER_VARIABLES_ENCRYPTION_KEY: ${{ secrets.IVX_OWNER_VARIABLES_ENCRYPTION_KEY }}
+          APP_SECRET: ${{ secrets.APP_SECRET }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      - name: Preserve filtered evidence and any access failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase2-item43-native-logs-${{ github.sha }}-${{ github.run_attempt }}
+          path: qa/evidence/phase2-item43/native-logs.json
+          if-no-files-found: error
+          retention-days: 30
