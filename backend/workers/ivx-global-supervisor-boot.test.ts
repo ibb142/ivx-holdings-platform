@@ -15,13 +15,13 @@ for (const recovery of [false, true]) {
       mock.module(${JSON.stringify(service('ivx-senior-developer-worker'))},()=>({getWorkerMaxConcurrency:()=>1,stopSeniorDeveloperQueue:()=>{}}));
       mock.module(${JSON.stringify(service('ivx-autonomous-runtime-enforcer'))},()=>({startAutonomous112RuntimeEnforcer:()=>{started.push('fleet');return true;},stopAutonomous112RuntimeEnforcer:async()=>0}));
       mock.module(${JSON.stringify(service('ivx-autonomous-blocked-reconciler'))},()=>({startBlockedTaskReconciler:()=>{},stopBlockedTaskReconciler:()=>{}}));
-      mock.module(${JSON.stringify(service('ivx-fleet-slo'))},()=>({startFleetSloMonitor:()=>{}}));
+      mock.module(${JSON.stringify(service('ivx-fleet-slo'))},()=>({startFleetSloMonitor:({presenceOnly})=>started.push(presenceOnly?'presence':'slo')}));
       mock.module(${JSON.stringify(service('ivx-autonomous-doctor'))},()=>({startAutonomousDoctor:()=>{}}));
       mock.module(${JSON.stringify(service('ivx-autonomous-utilization-guardian'))},()=>({startAutonomousUtilizationGuardian:()=>{},stopAutonomousUtilizationGuardian:()=>{}}));
       mock.module(${JSON.stringify(service('ivx-certificate-worker'))},()=>({startCertificateWorker:()=>started.push('certificate'),stopCertificateWorker:()=>{}}));
       mock.module(${JSON.stringify(service('ivx-owner-ai-task-queue'))},()=>({startOwnerAITaskWorker:()=>started.push('owner'),stopOwnerAITaskWorker:async()=>{}}));
       await import(${JSON.stringify(new URL('./ivx-senior-dev-worker-entry.ts', import.meta.url).pathname)});
-      try { assert.deepEqual(started,${JSON.stringify(recovery ? ['owner','fleet'] : ['certificate','owner','fleet','global'])}); }
+      try { assert.deepEqual(started,${JSON.stringify(recovery ? ['presence','owner','fleet'] : ['slo','certificate','owner','fleet','global'])}); }
       finally { process.emit('SIGTERM'); }
       console.log('SUPERVISOR_BOOT_POLICY_PASS');
     `], { env: { PATH: process.env.PATH, IVX_SUPABASE_RECOVERY_MODE: String(recovery) }, stdout: 'pipe', stderr: 'pipe', timeout: 4000 });

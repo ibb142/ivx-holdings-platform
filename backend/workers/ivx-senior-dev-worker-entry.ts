@@ -32,13 +32,11 @@ console.log('[IVX-SENIOR-DEV-01] process entry', {
   databaseRecoveryMode,
 });
 
-// During a Supabase/PostgREST incident, preserve a single database mutation
-// authority: the 112-lane runtime. Auxiliary supervisors are intentionally
-// suppressed so SLO/Doctor/reconciler/owner-queue polling cannot create a retry
-// storm that starves fleet claim and heartbeat RPCs. Recovery mode never marks
-// an IA working by itself; durable leases/execution evidence remain required.
+// During database recovery, keep full task sampling and auxiliary supervisors
+// paused. A bounded presence write still reports the real process identity via
+// the existing isolated connection; productivity remains UNKNOWN.
+startFleetSloMonitor({ presenceOnly: databaseRecoveryMode });
 if (!databaseRecoveryMode) {
-  startFleetSloMonitor();
   startBlockedTaskReconciler();
   // Pending-certificate discovery can scan retained executions while its
   // index is being recovered. Leave those durable runs queued during recovery.
