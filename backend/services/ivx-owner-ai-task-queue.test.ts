@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
+import * as ownerVariables from '../api/ivx-owner-variables';
 import {
   ensureTaskTable,
   listTasks,
@@ -9,7 +10,39 @@ import {
   IVX_SUPABASE_QUEUE_RESILIENCE_MARKER,
   SUPABASE_FAILURE_THRESHOLD,
   SUPABASE_BACKOFF_MS,
+  classify503Source,
 } from './ivx-owner-ai-task-queue';
+
+describe('owner AI incident attribution', () => {
+  test('attributes the observed owner-profile outage to authentication', () => {
+    expect(classify503Source({ httpStatus: 503, message: JSON.stringify({
+      error: 'IVX owner verification is temporarily unavailable. Please retry.',
+      code: 'AUTH_SERVICE_UNAVAILABLE', retryable: true,
+    }) })).toBe('authentication_unavailable');
+  });
+
+  test('keeps an explicit auth outage separate from generic provider wording', () => {
+    expect(classify503Source({ httpStatus: 503,
+      message: '{"code":"AUTH_SERVICE_UNAVAILABLE","error":"Identity provider timeout"}',
+    })).toBe('authentication_unavailable');
+  });
+
+  test('identifies database pressure and the observed query timeout', () => {
+    expect(classify503Source({ httpStatus: 503, message: '{"code":"DATABASE_PRESSURE"}' })).toBe('database_unavailable');
+    expect(classify503Source({ httpStatus: 503, message: 'Query read timeout' })).toBe('database_unavailable');
+  });
+
+  test('does not infer a provider failure from HTTP status alone', () => {
+    expect(classify503Source({ httpStatus: 503, message: 'Service temporarily unavailable' })).toBe('unknown');
+    expect(classify503Source({ httpStatus: 502, message: '' })).toBe('unknown');
+  });
+
+  test('retains explicit provider, gateway and timeout attribution', () => {
+    expect(classify503Source({ httpStatus: 503, message: 'OpenAI provider unavailable' })).toBe('provider_transient');
+    expect(classify503Source({ httpStatus: 502, message: 'Bad gateway' })).toBe('gateway_or_render_edge');
+    expect(classify503Source({ httpStatus: 504, message: 'Deadline exceeded' })).toBe('timeout_converted');
+  });
+});
 
 describe('IVXOwnerAITaskQueue self-bootstrap DDL', () => {
   const envSnapshot = { ...process.env };
@@ -48,8 +81,13 @@ describe('IVXOwnerAITaskQueue self-bootstrap DDL', () => {
   test('ensureTaskTable retries on 544 and succeeds when DDL returns 201', async () => {
     __resetBootstrapStateForTests();
     setBootstrapEnv();
+    // The bootstrap scenario owns its token fixture. Do not perform a live
+    // Owner Variables lookup before exercising the mocked Management API.
+    const tokenLookup = spyOn(ownerVariables, 'getIVXOwnerVariableRuntimeValue')
+      .mockResolvedValue('sbp_test_management_token_for_retry_tests');
     const originalFetch = globalThis.fetch;
     let calls = 0;
+    let queryCalls = 0;
 
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
@@ -58,18 +96,23 @@ describe('IVXOwnerAITaskQueue self-bootstrap DDL', () => {
         return new Response(JSON.stringify({ code: 'PGRST205', message: 'relation does not exist' }), { status: 404 });
       }
       if (url.includes('database/query')) {
-        return calls === 2
+        if (init?.method !== 'POST') return new Response('method not allowed', { status: 405 });
+        queryCalls++;
+        return queryCalls === 1
           ? new Response('[]', { status: 544, headers: { 'content-type': 'application/json' } })
           : new Response('[]', { status: 201, headers: { 'content-type': 'application/json' } });
       }
-      return originalFetch(input, init);
+      if (url.endsWith('/rest/v1/')) return new Response('{}', { status: 200 });
+      throw new Error(`Unexpected bootstrap test request: ${url}`);
     };
 
     try {
       const result = await ensureTaskTable();
       expect(result).toBe(true);
       expect(calls).toBeGreaterThanOrEqual(2);
+      expect(queryCalls).toBe(2);
     } finally {
+      tokenLookup.mockRestore();
       globalThis.fetch = originalFetch;
       restoreEnv();
     }
@@ -78,16 +121,21 @@ describe('IVXOwnerAITaskQueue self-bootstrap DDL', () => {
   test('ensureTaskTable returns false after max retries on repeated 544', async () => {
     __resetBootstrapStateForTests();
     setBootstrapEnv();
+    const tokenLookup = spyOn(ownerVariables, 'getIVXOwnerVariableRuntimeValue')
+      .mockResolvedValue('sbp_test_management_token_for_retry_tests');
     const originalFetch = globalThis.fetch;
     let calls = 0;
+    let queryCalls = 0;
 
-    globalThis.fetch = async (input: RequestInfo | URL) => {
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
       calls++;
       if (url.includes('rest/v1/ivx_owner_ai_tasks')) {
         return new Response(JSON.stringify({ code: 'PGRST205', message: 'relation does not exist' }), { status: 404 });
       }
       if (url.includes('database/query')) {
+        if (init?.method !== 'POST') return new Response('method not allowed', { status: 405 });
+        queryCalls++;
         return new Response('[]', { status: 544, headers: { 'content-type': 'application/json' } });
       }
       return new Response('not found', { status: 404 });
@@ -97,7 +145,9 @@ describe('IVXOwnerAITaskQueue self-bootstrap DDL', () => {
       const result = await ensureTaskTable();
       expect(result).toBe(false);
       expect(calls).toBeGreaterThanOrEqual(3);
+      expect(queryCalls).toBe(3);
     } finally {
+      tokenLookup.mockRestore();
       globalThis.fetch = originalFetch;
       restoreEnv();
     }

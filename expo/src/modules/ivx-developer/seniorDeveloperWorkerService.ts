@@ -151,7 +151,7 @@ async function workerFetch(suffix: string, init: RequestInit): Promise<WorkerFet
       });
       const payload = await readJson(response);
       last = { ok: response.ok, httpStatus: response.status, payload };
-      if (response.ok) return last;
+      if (response.ok || (response.status === 409 && payload.attached === true)) return last;
     } catch (error) {
       last = { ok: false, httpStatus: 0, payload: { error: error instanceof Error ? error.message : 'WORKER_UNAVAILABLE' } };
     }
@@ -217,6 +217,7 @@ export async function submitSeniorDeveloperWorkerJob(draft: SeniorDeveloperJobDr
   const result = await workerFetch('/api/ivx/senior-developer/worker/jobs', {
     method: 'POST',
     body: JSON.stringify({
+      ...(draft.chatOrigin ? { conversationId: draft.chatOrigin.conversationId, sourceChatMessageId: draft.chatOrigin.messageId } : {}),
       goal: draft.goal,
       templateMode: draft.templateMode,
       proposedPlan: draft.proposedPlan,
@@ -229,7 +230,7 @@ export async function submitSeniorDeveloperWorkerJob(draft: SeniorDeveloperJobDr
     }),
   });
 
-  if (result.ok) {
+  if (result.ok || (result.httpStatus === 409 && result.payload.attached === true)) {
     const jobId = readString(result.payload.job && isRecord(result.payload.job) ? result.payload.job.jobId : null);
     const pollPath = readString(result.payload.poll);
     return { statusCode: 'SUBMITTED', jobId, pollPath, reason: null };

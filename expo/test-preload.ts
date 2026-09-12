@@ -10,6 +10,10 @@ if (typeof (globalThis as Record<string, unknown>).__DEV__ === 'undefined') {
 // Only mock if not already mocked by the test file itself
 const { mock } = require('bun:test');
 
+// Bun has no native Expo networking module. Keep existing per-test network
+// fixtures while the application explicitly selects Expo's streaming fetch.
+mock.module('expo/fetch', () => ({ fetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args) }));
+
 // Mock expo-modules-core and its internal subpaths so __DEV__ is never
 // referenced as a bare global (it doesn't exist in bun test context).
 // mock.module('expo-modules-core') only intercepts the top-level entry;

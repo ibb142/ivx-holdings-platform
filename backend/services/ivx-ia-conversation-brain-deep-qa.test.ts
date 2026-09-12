@@ -217,6 +217,18 @@ describe('IVX IA Conversation Brain — Deep QA (2026-07-28)', () => {
       expect(resolveIVXConversationAnswer('5 plus 3')).toBe('The answer is 8.');
       expect(resolveIVXConversationAnswer('show me deals')).toBeNull();
     });
+
+    test('leaves the certification challenge to the real model', () => {
+      const prompt = 'Return only the result of joining IVX_CHAT_E2E_ and 34591579284_1_1789125042.';
+      expect(detectIVXConversationQuestion(prompt)).toBe('none');
+      expect(resolveIVXConversationAnswer(prompt)).toBeNull();
+      expect(resolveIVXConversationAnswer('Return only the result of joining north_ and star.')).toBeNull();
+    });
+
+    test('does not turn unrestricted prose into a deterministic join', () => {
+      expect(resolveIVXConversationAnswer('Join our owner chat and production systems.')).toBeNull();
+      expect(resolveIVXConversationAnswer('Return only the result of joining a long phrase and another phrase.')).toBeNull();
+    });
   });
 
   // ---- Edge cases ----

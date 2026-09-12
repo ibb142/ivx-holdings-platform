@@ -23,7 +23,7 @@
  * runs it in a dedicated child process, so the coverage is unchanged and the
  * stubs are confined to that process.
  */
-import { describe, test, expect, mock, beforeEach } from 'bun:test';
+import { describe, test, expect, mock, beforeEach, spyOn } from 'bun:test';
 
 async function* defaultStreamGen(): AsyncGenerator<{
   type: 'delta' | 'done' | 'error';
@@ -97,6 +97,8 @@ mock.module('../services/ivx-pre-execution-gate-middleware', () => ({
 }));
 
 const { handlePublicChatStreamPost } = await import('./public-chat-stream');
+const ownerAuth = await import('./owner-only');
+const handoff = await import('../services/ivx-chat-autonomous-handoff');
 
 function makeRequest(body: Record<string, unknown>): Request {
   return new Request('https://ivx.test/api/public-chat/stream', {
@@ -133,6 +135,29 @@ beforeEach(() => {
 });
 
 describe('public chat SSE streaming', () => {
+  test('owner commands pass message identity, never a shared device ID, to Autonomous', async () => {
+    const accepted: Array<string | null | undefined> = [];
+    const auth = spyOn(ownerAuth, 'assertIVXOwnerOnly').mockResolvedValue({ userId: 'owner-fixture' } as any);
+    const enqueue = spyOn(handoff, 'createAutonomousJobFromChat').mockImplementation(async (_message, _owner, _room, messageId) => {
+      accepted.push(messageId);
+      return { ok: true, jobId: 'existing-job', status: 'queued', stage: 'QUEUED', progressPercent: 0,
+        attached: false, error: null, intent: handoff.detectAutonomousExecutionIntent('Fix the chat bug') };
+    });
+    try {
+      for (const body of [
+        { message: 'Fix the chat bug', sessionId: 'room', messageId: 'message-one', requestId: 'attempt-one' },
+        { message: 'Fix the chat bug', sessionId: 'room', requestId: 'message-two' },
+      ]) {
+        const response = await handlePublicChatStreamPost(new Request(makeRequest(body), {
+          headers: { 'content-type': 'application/json', 'x-ivx-client-id': 'same-device', authorization: 'Bearer fixture-only' },
+        }));
+        const events = await readSSE(response);
+        expect(events.find(event => event.event === 'response.autonomous_task')?.data.jobId).toBe('existing-job');
+      }
+      expect(accepted).toEqual(['message-one', 'message-two']);
+    } finally { auth.mockRestore(); enqueue.mockRestore(); }
+  });
+
   test('emits started, deltas, and completed in order', async () => {
     const response = await handlePublicChatStreamPost(makeRequest({
       message: 'Hello',

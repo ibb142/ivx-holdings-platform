@@ -53,7 +53,7 @@ import { runOwnerSessionPreflight, OWNER_SESSION_REQUIRED_LABEL } from '@/src/mo
 import { isOpenAccessModeEnabled } from '@/lib/open-access';
 import { safeSetString } from '@/lib/safe-clipboard';
 import type { IVXMessage, IVXOwnerAIRouterDebug, IVXOwnerAIToolOutput, IVXUploadInput, IVXExecutionStatusPayload } from '@/shared/ivx';
-import { assertCleanOwnerAIResponseText, isIVXServiceUnavailableDiagnostics } from '@/src/modules/ivx-owner-ai/services/ivxAIRequestService';
+import { assertCleanOwnerAIResponseText, assertOwnerAIResponseSucceeded, isIVXServiceUnavailableDiagnostics } from '@/src/modules/ivx-owner-ai/services/ivxAIRequestService';
 import { runDurableOwnerAIFallback, resumePendingDurableTasks, shouldAttemptDurableFallback } from '@/src/modules/ivx-owner-ai/services/ivxDurableTaskService';
 import { ivxAIWatchdog, type WatchdogTraceHandle } from '@/src/modules/ivx-owner-ai/services/ivxAIWatchdog';
 import { IVXWatchdogBanner, IVXWatchdogDrawer } from '@/components/IVXWatchdogPanel';
@@ -113,6 +113,7 @@ import {
   type IVXProofRecord,
   type IVXRoomRuntimeSnapshot} from '@/src/modules/ivx-owner-ai/services';
 import { isIVXLocalFirstChatEnabled } from '@/src/modules/ivx-owner-ai/services/ivxLocalFirstRuntime';
+import { createSingleFlightTask } from '@/lib/single-flight-task';
 import type { IVXOwnerFileInsight } from '@/src/modules/ivx-owner-ai/services/ivxOwnerMemoryService';
 import { transcribeAudioRecording } from '@/src/modules/ivx-owner-ai/services/ivxMultimodalService';
 import { enforceIVXChatQualityFirewall } from '@/src/modules/ivx-owner-ai/services/ivxChatQualityFirewall';
@@ -862,6 +863,8 @@ export default function IVXOwnerChatRoute() {
   const flatListRef = useRef<FlatList<IVXMessage> | null>(null);
   const composerInputRef = useRef<TextInput | null>(null);
   const composerValueRef = useRef<string>('');
+  // React Query pending state updates on the next render; native events can race it.
+  const submissionInFlightRef = useRef(false);
   const highlightedMessageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingJumpMessageIdRef = useRef<string | null>(null);
   const suppressAutoScrollUntilRef = useRef<number>(0);
@@ -1826,7 +1829,7 @@ export default function IVXOwnerChatRoute() {
       senderRole: role,
       senderLabel: role === 'assistant' ? IVX_OWNER_AI_PROFILE.name : 'System',
       attachmentKind: role === 'assistant' ? 'text' : 'system',
-      requireRemote: false});
+      requireRemote: role === 'assistant'});
     console.log('[IVXOwnerChatRoute] Support message persisted:', role, trimmedText.slice(0, 60));
   }, []);
 
@@ -2140,8 +2143,9 @@ export default function IVXOwnerChatRoute() {
     };
   }, [conversationQuery.data?.id, localFirstChatMode, ownerId, ownerLabel, ownerRoomAuthenticated]);
 
-  const assistantReplyMutation = useMutation<void, Error, { text: string; nonBlocking: boolean; watchdogTraceId?: string | null }>({
-    mutationFn: async ({ text, nonBlocking, watchdogTraceId }) => {
+  const assistantReplyMutation = useMutation<void, Error, { text: string; requestId: string; nonBlocking: boolean; watchdogTraceId?: string | null }>({
+    mutationFn: async ({ text, requestId, nonBlocking, watchdogTraceId }) => {
+      const commandConversationId = canonicalConversationIdRef.current;
       const mutationRunId = createTransientMessageId('ivx-owner-ai-run');
       // Resolve the per-send watchdog trace threaded in from handleSend.
       const trace: WatchdogTraceHandle | null = watchdogTraceId
@@ -2205,15 +2209,17 @@ export default function IVXOwnerChatRoute() {
         // Send keys off the single canonical id (adopted from the prior backend
         // response when available). This is the "client conversationId before
         // send" proof value.
-        const reliableConversationId = canonicalConversationIdRef.current;
+        const reliableConversationId = commandConversationId;
         setConversationIdProof((current) => ({ ...current, clientBeforeSend: reliableConversationId }));
         trace?.pass('BACKEND_POST_STARTED', `POST owner-ai (conversation=${reliableConversationId})`);
         setStagedTimeoutRequestStarted(true);
         setStagedTimeoutLastCheckpoint('BACKEND_POST_STARTED');
         const { value: aiResult, trace: reliabilityTrace } = await executeReliably(
           reliableConversationId,
-          async (executorSignal: AbortSignal) => ivxAIRequestService.requestOwnerAI(
+          async (executorSignal: AbortSignal) => {
+            const response = await ivxAIRequestService.requestOwnerAI(
             {
+              requestId,
               conversationId: reliableConversationId,
               message: text,
               senderLabel: ownerLabel,
@@ -2262,7 +2268,10 @@ export default function IVXOwnerChatRoute() {
                   trace.heartbeat(`sse_final:${event.status}`);
                 }
               }},
-          ),
+            );
+            assertOwnerAIResponseSucceeded(response);
+            return response;
+          },
           // ROOT-CAUSE FIX (2026-06-10): heavy audit/fix prompts run the
           // tool-grounded server-side agent for 60–90s+, which exceeds the host's
           // ~60s request cap. requestOwnerAI now consumes the backend SSE stream
@@ -2592,6 +2601,7 @@ export default function IVXOwnerChatRoute() {
           try {
             const nextResult = await ivxAIRequestService.requestOwnerAI({
               conversationId: reliableConversationId,
+              requestId: `${requestId}:continue:${currentPartNumber}`,
               message: 'CONTINUE',
               senderLabel: ownerLabel,
               mode: 'chat',
@@ -2599,6 +2609,7 @@ export default function IVXOwnerChatRoute() {
               persistAssistantMessage: true,
               devTestModeActive: devTestMode.testModeActive,
               continuationToken: currentResult.continuationToken});
+            assertOwnerAIResponseSucceeded(nextResult);
             const nextNormalizedAnswer = assertCleanOwnerAIResponseText(nextResult.answer);
             const nextReplyId = createTransientMessageId('ivx-owner-ai-reply');
             setTransientAssistantMessages((current) => {
@@ -2668,7 +2679,7 @@ export default function IVXOwnerChatRoute() {
           console.log('[IVXOwnerChatRoute] assistant_commit_failed_but_visible_reply_kept:', persistErr instanceof Error ? persistErr.message : 'unknown');
           setRuntimeDebugSnapshot((current) => ({
             ...current,
-            failureDetail: 'Reply delivered locally. Save will retry on refresh.',
+            failureDetail: 'Reply is visible on this device. Saving to shared history failed.',
             hasVisibleResponseText: true}));
         }
         if (!localFirstChatMode) {
@@ -2839,15 +2850,18 @@ export default function IVXOwnerChatRoute() {
               console.log('[IVXOwnerChatRoute] durable_bubble_set_threw_safely_continuing:', bubbleErr instanceof Error ? bubbleErr.message : 'unknown');
             }
           };
-          updateDurableBubble(`♻️ Auto-recovery started — your message is saved server-side and will be answered without retyping.\nTrace: ${watchdogTraceId ?? 'n/a'}`);
+          updateDurableBubble(`Consultando el resultado de tu mensaje original.\nTrace: ${watchdogTraceId ?? 'n/a'}`);
           void (async () => {
             const durableResult = await runDurableOwnerAIFallback({
               message: text,
-              conversationId: conversationQuery.data?.id ?? null,
+              conversationId: commandConversationId,
+              messageId: requestId,
+              primaryRequestId: requestId,
+              idempotencyKey: JSON.stringify([ownerId, commandConversationId, requestId]),
               traceId: watchdogTraceId ?? null,
               onStatus: (task) => {
                 if (task.terminal || task.status === 'COMPLETED') return;
-                updateDurableBubble(`♻️ Auto-recovery in progress — Task ${task.taskId}\nStatus: ${task.status} · Checkpoint: ${task.checkpoint} · Retries: ${task.retryCount}\nYour message is safe; no need to retype it.`);
+                updateDurableBubble(`Solicitud ${task.taskId}\nEstado: ${task.status}. Esperando confirmar el resultado original.`);
               }});
             if (durableResult.ok && durableResult.answer) {
               updateDurableBubble(durableResult.answer);
@@ -2997,7 +3011,8 @@ export default function IVXOwnerChatRoute() {
     const finished: WorkerJobView | null = await pollSeniorDeveloperWorkerJob(jobId, {
       intervalMs: 4000,
       timeoutMs: 180000});
-    const lastProof = await getSeniorDeveloperWorkerLastProof();
+    const observedProof = await getSeniorDeveloperWorkerLastProof();
+    const lastProof = observedProof?.lastJobId === jobId ? observedProof : null;
     const result = finished?.result ?? null;
     const complete = isWorkerJobComplete(result);
     const finalStatus = complete
@@ -3024,7 +3039,7 @@ export default function IVXOwnerChatRoute() {
    * the pending build draft (or reconstructs it from the card goal) and routes
    * it straight to the self-hosted worker — no /confirm reply needed.
    */
-  const handleApproveAndRunFromCard = useCallback(async (cardBody: string): Promise<void> => {
+  const handleApproveAndRunFromCard = useCallback(async (cardBody: string, cardId: string): Promise<void> => {
     let draft = pendingBuildDraftRef.current;
     if (!draft) {
       const rows = parseStructuredSystemMessage(cardBody) ?? [];
@@ -3035,6 +3050,7 @@ export default function IVXOwnerChatRoute() {
       const original = markerIndex >= 0 ? raw.slice(markerIndex + marker.length).trim() : raw;
       draft = buildSeniorDeveloperJobDraft(original.length > 0 ? original : 'Create IVX Worker Proof module');
     }
+    draft = { ...draft, chatOrigin: draft.chatOrigin ?? { conversationId: canonicalConversationIdRef.current, messageId: cardId } };
     pendingBuildDraftRef.current = null;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await runSeniorDeveloperWorkerFromChat(draft);
@@ -3344,7 +3360,8 @@ export default function IVXOwnerChatRoute() {
       // A diagnostic request that contains "deploy it" or "fix" must NOT
       // reach the worker — it was already handled by the diagnostic branch above.
       if (!isConfirmReply && ownerIntent.routesToWorker && isSeniorDeveloperBuildRequest(effectiveText)) {
-        const draft = buildSeniorDeveloperJobDraft(effectiveText);
+        const draft = { ...buildSeniorDeveloperJobDraft(effectiveText),
+          chatOrigin: { conversationId: canonicalConversationIdRef.current, messageId: clientId } };
         await sendQueue.mutateAsync({ text: persistedOwnerText, mode, clientId, replyTo, senderLabel: ownerLabel, capturedText });
         setLastSendAt(new Date().toISOString());
         wdSenior?.pass('AI_TRIGGER_DECISION', `branch=senior_developer_build intent=${ownerIntent.intent}`);
@@ -3401,12 +3418,11 @@ export default function IVXOwnerChatRoute() {
           // queue can never strand this trace at USER_ROW_INSERTED.
           wdLF?.pass('AI_MUTATION_STARTED', `local_first branch invoking assistantReplyMutation mode=${mode}`, { clientId });
           // FIX: Fire AI reply as background — do NOT block the send mutation.
-          void assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: mode === 'send_and_ai', watchdogTraceId }).catch((aiErr: unknown) => {
-            console.log('[IVX_TRACE] 2.X_LOCAL_FIRST_AI_RETRY_1', { clientId, err: aiErr instanceof Error ? aiErr.message : String(aiErr) });
-            void assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: mode === 'send_and_ai', watchdogTraceId }).catch((retryErr: unknown) => {
-              console.log('[IVX_TRACE] 2.X_LOCAL_FIRST_AI_BOTH_FAILED', { clientId, err: retryErr instanceof Error ? retryErr.message : String(retryErr) });
-              wdLF?.fail('AI_MUTATION_STARTED', `local_first assistantReplyMutation rejected twice: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`);
-            });
+          void assistantReplyMutation.mutateAsync({ requestId: clientId, text: effectiveText, nonBlocking: mode === 'send_and_ai', watchdogTraceId }).catch((aiErr: unknown) => {
+            // The mutation already owns bounded transport retries. Restarting
+            // it here doubles attempts and postpones its terminal error UI.
+            console.log('[IVX_TRACE] 2.X_LOCAL_FIRST_AI_FAILED', { clientId, err: aiErr instanceof Error ? aiErr.message : String(aiErr) });
+            wdLF?.fail('AI_MUTATION_STARTED', `local_first assistantReplyMutation failed: ${aiErr instanceof Error ? aiErr.message : String(aiErr)}`);
           });
         } else {
           console.log('[IVX_TRACE] 2.X_LOCAL_FIRST_NO_AI_BRANCH', { clientId, mode });
@@ -3475,7 +3491,7 @@ export default function IVXOwnerChatRoute() {
           // never reports a phantom stall at AI_TRIGGER_DECISION if the async
           // call is delayed or queued behind an earlier mutation.
           wdCmd?.pass('AI_MUTATION_STARTED', `owner_command knowledge invoking assistantReplyMutation`, { command: commandResult.command });
-          await assistantReplyMutation.mutateAsync({ text: `[Knowledge Query] ${commandResult.args}`, nonBlocking: false });
+          await assistantReplyMutation.mutateAsync({ requestId: clientId, text: `[Knowledge Query] ${commandResult.args}`, nonBlocking: false });
         }
         return;
       }
@@ -3485,17 +3501,14 @@ export default function IVXOwnerChatRoute() {
         && !trustContext.requiresElevatedConfirmation
         && shouldStartAssistantBeforePersistence({ localFirstChatMode, mode });
 
-      const triggerAssistantWithRetry = async (): Promise<void> => {
+      const triggerAssistant = async (): Promise<void> => {
         try {
-          await assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: true, watchdogTraceId });
-        } catch (firstErr) {
-          console.log('[IVX_TRACE] 2.X_AI_TRIGGER_RETRY_1', { clientId, err: firstErr instanceof Error ? firstErr.message : String(firstErr) });
-          try {
-            await assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: true, watchdogTraceId });
-          } catch (secondErr) {
-            console.log('[IVX_TRACE] 2.X_AI_TRIGGER_BOTH_FAILED', { clientId, err: secondErr instanceof Error ? secondErr.message : String(secondErr) });
-            watchdogTrace?.fail('AI_MUTATION_STARTED', `assistantReplyMutation rejected twice: ${secondErr instanceof Error ? secondErr.message : String(secondErr)}`);
-          }
+          await assistantReplyMutation.mutateAsync({ requestId: clientId, text: effectiveText, nonBlocking: true, watchdogTraceId });
+        } catch (error) {
+          // executeReliably has already applied the transport retry budget.
+          // Keep the original failure; an explicit owner retry is a new action.
+          console.log('[IVX_TRACE] 2.X_AI_TRIGGER_FAILED', { clientId, err: error instanceof Error ? error.message : String(error) });
+          watchdogTrace?.fail('AI_MUTATION_STARTED', `assistantReplyMutation failed: ${error instanceof Error ? error.message : String(error)}`);
         }
       };
 
@@ -3508,7 +3521,7 @@ export default function IVXOwnerChatRoute() {
         console.log('[IVX_TRACE] 2.2_AI_TRIGGER_BEFORE_PERSISTENCE', { clientId, mode, localFirstChatMode });
         watchdogTrace?.pass('AI_TRIGGER_DECISION', 'branch=send_and_ai persistence=background');
         watchdogTrace?.pass('AI_MUTATION_STARTED', 'send_and_ai invoking assistantReplyMutation before persistence', { clientId });
-        void triggerAssistantWithRetry();
+        void triggerAssistant();
       }
 
       liveIntelligenceService.captureEvent({
@@ -3574,7 +3587,7 @@ export default function IVXOwnerChatRoute() {
         // never reports a phantom stall at AI_TRIGGER_DECISION if the async
         // call is delayed or queued behind an earlier mutation.
         watchdogTrace?.pass('AI_MUTATION_STARTED', 'ai_only branch invoking assistantReplyMutation', { clientId });
-        await assistantReplyMutation.mutateAsync({ text: effectiveText, nonBlocking: false, watchdogTraceId });
+        await assistantReplyMutation.mutateAsync({ requestId: clientId, text: effectiveText, nonBlocking: false, watchdogTraceId });
         return;
       }
 
@@ -3596,7 +3609,7 @@ export default function IVXOwnerChatRoute() {
         // pending message removed, user can send again). The assistantReplyMutation
         // manages its own loading state (aiReplyPending) and inserts the assistant
         // message when the reply arrives via realtime/polling.
-        void triggerAssistantWithRetry();
+        void triggerAssistant();
       } else if (mode === 'send_only') {
         watchdogTrace?.pass('AI_TRIGGER_DECISION', 'branch=send_only_no_ai');
         watchdogTrace?.complete('SUCCESS');
@@ -3607,21 +3620,22 @@ export default function IVXOwnerChatRoute() {
     // request via the per-conversation supersession guard.
     retry: false,
     onSuccess: async (_data, variables) => {
-      // Refetch the authoritative remote thread FIRST so the just-sent owner row
-      // is present in `messages` BEFORE the optimistic pending copy is removed.
-      // This guarantees continuity — the turn is always shown by either the
-      // pending entry or the persisted remote row, never neither (no
-      // "message disappears after send" gap). The owner content-dedup in
-      // `allMessages` suppresses the optimistic copy the moment the remote row
-      // arrives, so the brief overlap never renders a duplicate.
-      // Composer is now cleared immediately in handleSend (before mutate).
-      // This refetch ensures the persisted remote row replaces the optimistic copy.
+      // A resolved invalidation can still return an empty/local fallback during
+      // an outage. Keep the original command until the loaded thread actually
+      // contains its owner row. This is display reconciliation, not a claim of
+      // remote persistence; allMessages suppresses overlapping owner copies.
       try {
         await queryClient.invalidateQueries({ queryKey: IVX_OWNER_MESSAGES_QUERY_KEY });
+        const loadedMessages = queryClient.getQueryData<IVXMessage[]>(IVX_OWNER_MESSAGES_QUERY_KEY) ?? [];
+        const ownerBody = safeTrim(encodeReplyBody(variables.text, variables.replyTo));
+        const ownerRowPresent = ownerBody.length > 0 && loadedMessages.some((message) => (
+          message.senderRole === 'owner' && safeTrim(message.body) === ownerBody
+        ));
+        if (ownerRowPresent) {
+          setPendingOwnerMessages((current) => current.filter((message) => message.clientId !== variables.clientId));
+        }
       } catch (refetchError) {
         console.log('[IVXOwnerChatRoute] Post-send refetch failed (optimistic row retained until next load):', refetchError instanceof Error ? refetchError.message : 'unknown');
-      } finally {
-        setPendingOwnerMessages((current) => current.filter((message) => message.clientId !== variables.clientId));
       }
       requestAnimationFrame(() => {
         // INVERTED FLATLIST: offset 0 = newest message.
@@ -3666,6 +3680,7 @@ export default function IVXOwnerChatRoute() {
 
     const singleProbeAttempt = async (): Promise<Awaited<ReturnType<typeof ivxAIRequestService.probeOwnerAIHealth>>> => {
       const result = await ivxAIRequestService.probeOwnerAIHealth();
+      if (cancelled) return result;
       setAiProbeMetadata((current) => ({
         observedAt: new Date().toISOString(),
         source: result.source,
@@ -3687,12 +3702,14 @@ export default function IVXOwnerChatRoute() {
         source: result.source,
         endpoint: result.endpoint,
         deploymentMarker: result.deploymentMarker,
-        storageMode: result.roomStatus?.storageMode ?? ivxRoomStatus?.storageMode ?? 'unknown'});
+        storageMode: result.roomStatus?.storageMode ?? queryClient.getQueryData<ChatRoomStatus>(IVX_ROOM_STATUS_QUERY_KEY)?.storageMode ?? 'unknown'});
       return result;
     };
 
-    const probe = async () => {
+    const probe = createSingleFlightTask(async () => {
+      if (cancelled) return;
       const result = await singleProbeAttempt();
+      if (cancelled) return;
       void recordIVXOwnerChatAuditEvent({
         action: 'sync_probe',
         conversationId: conversationQuery.data?.id ?? IVX_OWNER_AI_PROFILE.sharedRoom.id,
@@ -3730,14 +3747,20 @@ export default function IVXOwnerChatRoute() {
       setOwnerCommandsActive(false);
       setCodeAwareActive(false);
       setFileUploadActive(false);
+    });
+
+    const runProbe = () => {
+      void probe().catch((error: unknown) => {
+        if (!cancelled) console.log('[IVXOwnerChatRoute] Capability probe failed:', error instanceof Error ? error.message : 'unknown');
+      });
     };
 
     const initialDelay = setTimeout(() => {
-      if (!cancelled) void probe();
+      if (!cancelled) runProbe();
     }, 1500);
 
     intervalId = setInterval(() => {
-      void probe();
+      runProbe();
     }, AI_PROBE_INTERVAL_MS);
 
     return () => {
@@ -3745,7 +3768,7 @@ export default function IVXOwnerChatRoute() {
       clearTimeout(initialDelay);
       if (intervalId) clearInterval(intervalId);
     };
-  }, [ivxRoomStatus?.storageMode, queryClient]);
+  }, [conversationQuery.data?.id, queryClient]);
 
   const runtimeSignals = useMemo<ChatRoomRuntimeSignals>(() => {
     if (localFirstChatMode) {
@@ -3991,28 +4014,37 @@ export default function IVXOwnerChatRoute() {
     }
   }, [conversationQuery.data?.id, displayedMessages.length]);
 
-  const handleAskAI = useCallback((submittedText?: unknown) => {
-    if (sendMessageMutation.isPending || aiReplyPending || attachmentMutation.isPending || isPickingFile || !composerHasText) return;
-    const normalizedText = normalizeComposerText(submittedText, composerValueRef.current);
-    const text = safeTrim(normalizedText);
-    if (!text) {
-      console.log('[IVXOwnerChatRoute] Skipping empty AI ask after normalization');
-      return;
+  const handleAskAI = useCallback(async (submittedText?: unknown) => {
+    if (submissionInFlightRef.current || sendMessageMutation.isPending || aiReplyPending || attachmentMutation.isPending || isPickingFile || !composerHasText || !safeTrim(composerValueRef.current)) return;
+    submissionInFlightRef.current = true;
+    try {
+      const normalizedText = normalizeComposerText(submittedText, composerValueRef.current);
+      const text = safeTrim(normalizedText);
+      if (!text) {
+        console.log('[IVXOwnerChatRoute] Skipping empty AI ask after normalization');
+        return;
+      }
+      const clientId = createTransientMessageId('ivx-owner-ai-only-send');
+      const createdAt = new Date().toISOString();
+      const replyTo = selectedReplyContext;
+      setPendingOwnerMessages((current) => [...current, { clientId, text: normalizedText, createdAt, mode: 'ai_only', status: 'sending', errorMessage: null, replyTo }]);
+      setSelectedReplyContext(null);
+      console.log('[IVXOwnerChatRoute] handleAskAI explicit AI request length:', text.length, 'clientId:', clientId, 'replyTo:', replyTo?.messageId ?? null);
+      // A new owner message always starts a NEW action: replace any prior task
+      // banner with the newly detected task (or clear it when this message is not
+      // a task) so a stale "Auditing & verifying" banner can never hijack a fresh
+      // unrelated message.
+      const detectedTask = detectChatLiveWorkTask(text);
+      setActiveLiveWorkTask(detectedTask ? { ...detectedTask, startedAt: createdAt } : null);
+      commitComposerClear(normalizedText);
+      await sendMessageMutation.mutateAsync({ text, mode: 'ai_only', clientId, capturedText: normalizedText, replyTo });
+    } catch (error) {
+      // Mutation onError retains the original message and presents its error.
+      console.log('[IVXOwnerChatRoute] Submission did not complete:', error instanceof Error ? error.message : 'unknown');
+    } finally {
+      submissionInFlightRef.current = false;
     }
-    const clientId = createTransientMessageId('ivx-owner-ai-only-send');
-    const createdAt = new Date().toISOString();
-    const replyTo = selectedReplyContext;
-    setPendingOwnerMessages((current) => [...current, { clientId, text: normalizedText, createdAt, mode: 'ai_only', status: 'sending', errorMessage: null, replyTo }]);
-    setSelectedReplyContext(null);
-    console.log('[IVXOwnerChatRoute] handleAskAI explicit AI request length:', text.length, 'clientId:', clientId, 'replyTo:', replyTo?.messageId ?? null);
-    // A new owner message always starts a NEW action: replace any prior task
-    // banner with the newly detected task (or clear it when this message is not
-    // a task) so a stale "Auditing & verifying" banner can never hijack a fresh
-    // unrelated message.
-    const detectedTask = detectChatLiveWorkTask(text);
-    setActiveLiveWorkTask(detectedTask ? { ...detectedTask, startedAt: createdAt } : null);
-    sendMessageMutation.mutate({ text, mode: 'ai_only', clientId, capturedText: normalizedText, replyTo });
-  }, [aiReplyPending, attachmentMutation.isPending, composerHasText, isPickingFile, sendMessageMutation.isPending, selectedReplyContext, sendMessageMutation]);
+  }, [commitComposerClear, aiReplyPending, attachmentMutation.isPending, composerHasText, isPickingFile, sendMessageMutation.isPending, selectedReplyContext, sendMessageMutation]);
 
   const handleOpenLiveWork = useCallback((runSupabase?: boolean) => {
     const wantsSupabase = runSupabase ?? activeLiveWorkTask?.isSupabase ?? false;
@@ -4029,40 +4061,48 @@ export default function IVXOwnerChatRoute() {
     }
   }, [activeLiveWorkTask, displayedMessages]);
 
-  const handleRetryMessage = useCallback((message: ChatMessage) => {
+  const handleRetryMessage = useCallback(async (message: ChatMessage) => {
     const pendingMessage = pendingOwnerMessages.find((candidate) => candidate.clientId === message.id);
     const normalizedText = normalizeComposerText(pendingMessage?.text ?? message.text ?? '');
     const text = safeTrim(normalizedText);
     const isAttachmentRetry = pendingMessage?.mode === 'attachment' && pendingMessage.upload;
-    if (!pendingMessage || (!text && !isAttachmentRetry) || sendMessageMutation.isPending || attachmentMutation.isPending) {
+    if (submissionInFlightRef.current || !pendingMessage || (!text && !isAttachmentRetry) || sendMessageMutation.isPending || attachmentMutation.isPending) {
       console.log('[IVXOwnerChatRoute] Retry skipped:', message.id, 'hasPending:', Boolean(pendingMessage), 'busy:', sendMessageMutation.isPending || attachmentMutation.isPending);
       return;
     }
 
-    if (isAttachmentRetry && pendingMessage.upload) {
+    submissionInFlightRef.current = true;
+    try {
+      if (isAttachmentRetry && pendingMessage.upload) {
+        setPendingOwnerMessages((current) => current.map((candidate) => (
+          candidate.clientId === pendingMessage.clientId
+            ? { ...candidate, status: 'uploading', errorMessage: null, uploadProgress: 8 }
+            : candidate
+        )));
+        startUploadProgressTimer(pendingMessage.clientId);
+        console.log('[IVXOwnerChatRoute] Retrying failed owner attachment:', pendingMessage.clientId, pendingMessage.upload.name);
+        await attachmentMutation.mutateAsync({ upload: pendingMessage.upload, clientId: pendingMessage.clientId, capturedBody: normalizedText, replyTo: pendingMessage.replyTo ?? null });
+        return;
+      }
+
       setPendingOwnerMessages((current) => current.map((candidate) => (
         candidate.clientId === pendingMessage.clientId
-          ? { ...candidate, status: 'uploading', errorMessage: null, uploadProgress: 8 }
+          ? { ...candidate, status: 'sending', errorMessage: null }
           : candidate
       )));
-      startUploadProgressTimer(pendingMessage.clientId);
-      console.log('[IVXOwnerChatRoute] Retrying failed owner attachment:', pendingMessage.clientId, pendingMessage.upload.name);
-      attachmentMutation.mutate({ upload: pendingMessage.upload, clientId: pendingMessage.clientId, capturedBody: normalizedText, replyTo: pendingMessage.replyTo ?? null });
-      return;
+      console.log('[IVXOwnerChatRoute] Retrying failed owner message:', pendingMessage.clientId, 'mode:', pendingMessage.mode);
+      await sendMessageMutation.mutateAsync({
+        text,
+        mode: pendingMessage.mode as 'send_only' | 'send_and_ai' | 'ai_only',
+        clientId: pendingMessage.clientId,
+        capturedText: normalizedText,
+        replyTo: pendingMessage.replyTo ?? null});
+    } catch (error) {
+      // Mutation onError retains the original message and presents its error.
+      console.log('[IVXOwnerChatRoute] Submission did not complete:', error instanceof Error ? error.message : 'unknown');
+    } finally {
+      submissionInFlightRef.current = false;
     }
-
-    setPendingOwnerMessages((current) => current.map((candidate) => (
-      candidate.clientId === pendingMessage.clientId
-        ? { ...candidate, status: 'sending', errorMessage: null }
-        : candidate
-    )));
-    console.log('[IVXOwnerChatRoute] Retrying failed owner message:', pendingMessage.clientId, 'mode:', pendingMessage.mode);
-    sendMessageMutation.mutate({
-      text,
-      mode: pendingMessage.mode as 'send_only' | 'send_and_ai' | 'ai_only',
-      clientId: pendingMessage.clientId,
-      capturedText: normalizedText,
-      replyTo: pendingMessage.replyTo ?? null});
   }, [attachmentMutation, sendMessageMutation.isPending, pendingOwnerMessages, sendMessageMutation, startUploadProgressTimer]);
 
   /**
@@ -4198,6 +4238,7 @@ export default function IVXOwnerChatRoute() {
   const sendDraftAttachment = useCallback(async () => {
     if (draftAttachments.length === 0) return;
     const batch = draftAttachments.slice(0, IVX_MAX_DRAFT_ATTACHMENTS);
+    const analysisRequestId = createTransientMessageId('ivx-owner-attachment-analysis');
     const totalCount = batch.length;
     const composerText = normalizeComposerText(composerValueRef.current);
     const trimmed = safeTrim(composerText);
@@ -4284,6 +4325,7 @@ export default function IVXOwnerChatRoute() {
       // watchdog trace here, so we rely on the defensive mutationFn guard and the
       // retry wrapper below. A failure is logged but does not block the user.
       await assistantReplyMutation.mutateAsync({
+        requestId: analysisRequestId,
         text: analysisPrompt,
         nonBlocking: true});
     } catch (error) {
@@ -4291,71 +4333,79 @@ export default function IVXOwnerChatRoute() {
     }
   }, [assistantReplyMutation, attachmentMutation, draftAttachments, selectedReplyContext, startUploadProgressTimer]);
 
-  const handleSend = useCallback((submittedText?: unknown) => {
+  const handleSend = useCallback(async (submittedText?: unknown) => {
     const tapAt = new Date().toISOString();
     console.log('[IVX_TRACE] 0_TAP_ENTER', { tapAt, sendPending: sendMessageMutation.isPending, attachPending: attachmentMutation.isPending, isPickingFile, draftAttachments: draftAttachments.length, composerHasText });
     ivxAIWatchdog.recordTap({ tapAt });
-    if (sendMessageMutation.isPending || attachmentMutation.isPending || isPickingFile) {
+    if (submissionInFlightRef.current || sendMessageMutation.isPending || attachmentMutation.isPending || isPickingFile) {
       console.log('[IVX_TRACE] 0_TAP_BLOCKED_BUSY', { sendPending: sendMessageMutation.isPending, attachPending: attachmentMutation.isPending, isPickingFile });
       ivxAIWatchdog.recordTapBlocked('busy', { sendPending: sendMessageMutation.isPending, attachPending: attachmentMutation.isPending, isPickingFile });
       return;
     }
-    if (draftAttachments.length > 0) {
-      void sendDraftAttachment();
-      return;
+    submissionInFlightRef.current = true;
+    try {
+      if (draftAttachments.length > 0) {
+        await sendDraftAttachment();
+        return;
+      }
+      if (!composerHasText || !safeTrim(composerValueRef.current)) {
+        console.log('[IVX_TRACE] 0_TAP_BLOCKED_NO_TEXT', {});
+        ivxAIWatchdog.recordTapBlocked('no_text', {});
+        return;
+      }
+      const normalizedText = normalizeComposerText(submittedText, composerValueRef.current);
+      const text = safeTrim(normalizedText);
+      if (!text) {
+        console.log('[IVX_TRACE] 0_TAP_BLOCKED_EMPTY_NORMALIZED', {});
+        ivxAIWatchdog.recordTapBlocked('empty_after_normalize', {});
+        return;
+      }
+      const isCommand = !localFirstChatMode && text.startsWith(OWNER_COMMAND_PREFIX);
+      const mode = isCommand ? 'send_only' : 'send_and_ai';
+      const clientId = createTransientMessageId('ivx-owner-local-send');
+      const createdAt = new Date().toISOString();
+      const replyTo = selectedReplyContext;
+      setPendingOwnerMessages((current) => [...current, { clientId, text: normalizedText, createdAt, mode, status: 'sending', errorMessage: null, replyTo }]);
+      setSelectedReplyContext(null);
+      // Create a watchdog trace for this send. Each checkpoint will be reported
+      // as the lifecycle progresses; if any fails or the trace stalls past 10s,
+      // a BLOCKED/SILENT_FAILURE report is published to the in-app drawer + banner.
+      const watchdogTrace = ivxAIWatchdog.createTrace({
+        userMessageId: clientId,
+        userText: text,
+        conversationId: conversationQuery.data?.id ?? null});
+      activeWatchdogTracesRef.current.set(watchdogTrace.traceId, watchdogTrace);
+      // Activate staged timeout banner for AI-bearing modes
+      if (mode !== 'send_only') {
+        stagedTimeoutStartRef.current = Date.now();
+        setStagedTimeoutTraceId(watchdogTrace.traceId);
+        setStagedTimeoutMessageId(clientId);
+        setStagedTimeoutRequestStarted(false);
+        setStagedTimeoutLastCheckpoint('SEND_TAP');
+      }
+      watchdogTrace.pass('SEND_TAP', `mode=${mode} length=${text.length}`, { clientId, isCommand });
+      watchdogTrace.pass('USER_ROW_INSERTED', `pending clientId=${clientId}`, { clientId });
+      console.log('[IVX_TRACE] 1_SEND_TAP', { mode, isCommand, clientId, textLength: text.length, localFirstChatMode, traceId: watchdogTrace.traceId });
+      console.log('[IVX_TRACE] 2_USER_ROW_INSERTED', { clientId, pendingCountAfter: 'see next render', traceId: watchdogTrace.traceId });
+      console.log('[IVXOwnerChatRoute] handleSend mode:', mode, 'isCommand:', isCommand, 'aiReachable:', aiReachableRef.current, 'length:', text.length, 'clientId:', clientId, 'replyTo:', replyTo?.messageId ?? null);
+      // A new owner message always starts a NEW action: replace any prior task
+      // banner with the newly detected task (or clear it when this message is not
+      // a task) so a stale "Auditing & verifying" banner can never hijack a fresh
+      // unrelated message.
+      const detectedTask = detectChatLiveWorkTask(text);
+      setActiveLiveWorkTask(detectedTask ? { ...detectedTask, startedAt: createdAt } : null);
+      // FIX: Clear the composer IMMEDIATELY before firing the mutation so the user
+      // can start typing their next message right away. The previous code only
+      // cleared the composer in sendMessageMutation.onSuccess, which fires AFTER
+      // the entire send+AI round trip — potentially 90s later.
+      commitComposerClear(normalizedText);
+      await sendMessageMutation.mutateAsync({ text, mode: mode as 'send_only' | 'send_and_ai', clientId, capturedText: normalizedText, replyTo, watchdogTraceId: watchdogTrace.traceId });
+    } catch (error) {
+      // Mutation onError retains the original message and presents its error.
+      console.log('[IVXOwnerChatRoute] Submission did not complete:', error instanceof Error ? error.message : 'unknown');
+    } finally {
+      submissionInFlightRef.current = false;
     }
-    if (!composerHasText) {
-      console.log('[IVX_TRACE] 0_TAP_BLOCKED_NO_TEXT', {});
-      ivxAIWatchdog.recordTapBlocked('no_text', {});
-      return;
-    }
-    const normalizedText = normalizeComposerText(submittedText, composerValueRef.current);
-    const text = safeTrim(normalizedText);
-    if (!text) {
-      console.log('[IVX_TRACE] 0_TAP_BLOCKED_EMPTY_NORMALIZED', {});
-      ivxAIWatchdog.recordTapBlocked('empty_after_normalize', {});
-      return;
-    }
-    const isCommand = !localFirstChatMode && text.startsWith(OWNER_COMMAND_PREFIX);
-    const mode = isCommand ? 'send_only' : 'send_and_ai';
-    const clientId = createTransientMessageId('ivx-owner-local-send');
-    const createdAt = new Date().toISOString();
-    const replyTo = selectedReplyContext;
-    setPendingOwnerMessages((current) => [...current, { clientId, text: normalizedText, createdAt, mode, status: 'sending', errorMessage: null, replyTo }]);
-    setSelectedReplyContext(null);
-    // Create a watchdog trace for this send. Each checkpoint will be reported
-    // as the lifecycle progresses; if any fails or the trace stalls past 10s,
-    // a BLOCKED/SILENT_FAILURE report is published to the in-app drawer + banner.
-    const watchdogTrace = ivxAIWatchdog.createTrace({
-      userMessageId: clientId,
-      userText: text,
-      conversationId: conversationQuery.data?.id ?? null});
-    activeWatchdogTracesRef.current.set(watchdogTrace.traceId, watchdogTrace);
-    // Activate staged timeout banner for AI-bearing modes
-    if (mode !== 'send_only') {
-      stagedTimeoutStartRef.current = Date.now();
-      setStagedTimeoutTraceId(watchdogTrace.traceId);
-      setStagedTimeoutMessageId(clientId);
-      setStagedTimeoutRequestStarted(false);
-      setStagedTimeoutLastCheckpoint('SEND_TAP');
-    }
-    watchdogTrace.pass('SEND_TAP', `mode=${mode} length=${text.length}`, { clientId, isCommand });
-    watchdogTrace.pass('USER_ROW_INSERTED', `pending clientId=${clientId}`, { clientId });
-    console.log('[IVX_TRACE] 1_SEND_TAP', { mode, isCommand, clientId, textLength: text.length, localFirstChatMode, traceId: watchdogTrace.traceId });
-    console.log('[IVX_TRACE] 2_USER_ROW_INSERTED', { clientId, pendingCountAfter: 'see next render', traceId: watchdogTrace.traceId });
-    console.log('[IVXOwnerChatRoute] handleSend mode:', mode, 'isCommand:', isCommand, 'aiReachable:', aiReachableRef.current, 'length:', text.length, 'clientId:', clientId, 'replyTo:', replyTo?.messageId ?? null);
-    // A new owner message always starts a NEW action: replace any prior task
-    // banner with the newly detected task (or clear it when this message is not
-    // a task) so a stale "Auditing & verifying" banner can never hijack a fresh
-    // unrelated message.
-    const detectedTask = detectChatLiveWorkTask(text);
-    setActiveLiveWorkTask(detectedTask ? { ...detectedTask, startedAt: createdAt } : null);
-    // FIX: Clear the composer IMMEDIATELY before firing the mutation so the user
-    // can start typing their next message right away. The previous code only
-    // cleared the composer in sendMessageMutation.onSuccess, which fires AFTER
-    // the entire send+AI round trip — potentially 90s later.
-    commitComposerClear(normalizedText);
-    sendMessageMutation.mutate({ text, mode: mode as 'send_only' | 'send_and_ai', clientId, capturedText: normalizedText, replyTo, watchdogTraceId: watchdogTrace.traceId });
   }, [attachmentMutation.isPending, commitComposerClear, composerHasText, draftAttachments.length, isPickingFile, localFirstChatMode, sendMessageMutation.isPending, selectedReplyContext, sendDraftAttachment, sendMessageMutation]);
 
   const handleStartReplyToMessage = useCallback((message: ChatMessage) => {
@@ -4539,7 +4589,7 @@ export default function IVXOwnerChatRoute() {
             {isApprovalCard ? (
               <Pressable
                 style={styles.approveRunButton}
-                onPress={() => { void handleApproveAndRunFromCard(approvalBody); }}
+                onPress={() => { void handleApproveAndRunFromCard(approvalBody, item.id); }}
                 accessibilityRole="button"
                 accessibilityLabel="Approve and run this build job"
                 testID={`ivx-owner-approve-run-${item.id}`}

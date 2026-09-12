@@ -1,0 +1,50 @@
+name: Phase 4 owner session and probe regressions
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/services/ivx-canonical-members.ts'
+      - 'backend/api/ivx-canonical-members.ts'
+      - 'qa/phase4-members-read-pressure.test.mjs'
+      - 'expo/shared/ivx/access-control.ts'
+      - 'expo/shared/ivx/access.ts'
+      - 'qa/phase4-owner-profile-concurrency.test.mjs'
+      - 'expo/lib/auth-context.tsx'
+      - 'expo/lib/verified-session-restore.ts'
+      - 'expo/lib/single-flight-task.ts'
+      - 'expo/app/ivx/chat.tsx'
+      - 'qa/phase4-owner-session*.test.mjs'
+      - '.github/workflows/phase4-session-probe.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/services/ivx-canonical-members.ts'
+      - 'backend/api/ivx-canonical-members.ts'
+      - 'qa/phase4-members-read-pressure.test.mjs'
+      - 'expo/shared/ivx/access-control.ts'
+      - 'expo/shared/ivx/access.ts'
+      - 'qa/phase4-owner-profile-concurrency.test.mjs'
+      - 'expo/lib/auth-context.tsx'
+      - 'expo/lib/verified-session-restore.ts'
+      - 'expo/lib/single-flight-task.ts'
+      - 'expo/app/ivx/chat.tsx'
+      - 'qa/phase4-owner-session*.test.mjs'
+      - '.github/workflows/phase4-session-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  session-and-probe-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify session races, capability probes, member reads and owner profile concurrency
+        run: node --test qa/phase4-owner-session*.test.mjs qa/phase4-members-read-pressure.test.mjs qa/phase4-owner-profile-concurrency.test.mjs

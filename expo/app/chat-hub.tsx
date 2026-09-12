@@ -35,7 +35,7 @@ import {
   streamPublicChatMessage,
   type ChatStreamEvent,
 } from '@/lib/public-chat-stream';
-import { usePublicChatSession } from '@/lib/public-chat-session-context';
+import { PublicChatSessionProvider, usePublicChatSession } from '@/lib/public-chat-session-context';
 import { useWebKeyboard, scrollInputIntoView } from '@/hooks/useWebKeyboard';
 import type { ChatMessage } from '@/types';
 type ConnectionTone = 'live' | 'warn' | 'error';
@@ -197,7 +197,15 @@ const StatusChip = React.memo(function StatusChip({ label, tone, icon }: StatusC
   );
 });
 
-export default function ChatHubScreen() {
+export default function ChatHubRoute() {
+  return (
+    <PublicChatSessionProvider>
+      <ChatHubScreen />
+    </PublicChatSessionProvider>
+  );
+}
+
+function ChatHubScreen() {
   const { width } = useWindowDimensions();
   const isCompact = width < 430;
   const listRef = useRef<FlatList<ChatMessage> | null>(null);

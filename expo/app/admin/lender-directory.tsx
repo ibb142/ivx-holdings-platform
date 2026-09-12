@@ -37,7 +37,7 @@ import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import { ErrorState } from '@/components/ivx';
 import { RefreshControl } from 'react-native';
 import { Lender, LenderType, LenderCategory, LenderStatus } from '@/types';
-import { useLenders } from '@/lib/lender-context';
+import { LenderProvider, useLenders } from '@/lib/lender-context';
 import { formatCurrencyCompact } from '@/lib/formatters';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -183,6 +183,14 @@ const LenderCard = React.memo(({ lender, onPress }: { lender: Lender; onPress: (
 });
 
 export default function LenderDirectoryScreen() {
+  return (
+    <LenderProvider>
+      <LenderDirectoryContent />
+    </LenderProvider>
+  );
+}
+
+function LenderDirectoryContent() {
   // Realtime: auto-invalidate on DB changes
   useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();

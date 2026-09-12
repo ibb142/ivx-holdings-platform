@@ -45,7 +45,7 @@ import Colors from '@/constants/colors';
 import { ShimmerIndicator } from '@/components/ShimmerIndicator';
 import { IVXImage } from '@/components/ivx';
 import { EmptyState } from '@/components/ivx';
-import { useIntro, OnboardingStep, OnboardingFeature } from '@/lib/intro-context';
+import { IntroProvider, useIntro, OnboardingStep, OnboardingFeature } from '@/lib/intro-context';
 
 const ICON_OPTIONS = [
   { id: 'sparkles', name: 'Sparkles', icon: Sparkles },
@@ -67,6 +67,14 @@ const COLOR_PRESETS = [
 ];
 
 export default function IntroManagement() {
+  return (
+    <IntroProvider>
+      <IntroManagementContent />
+    </IntroProvider>
+  );
+}
+
+function IntroManagementContent() {
   // Realtime: auto-invalidate on DB changes
   useRealtimeTable('notifications', [['notifications']]);
   const router = useRouter();

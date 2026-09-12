@@ -1,5 +1,6 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { supabase, ensureSupabaseClient, getSupabaseConfigAudit, SUPABASE_NOT_CONFIGURED_MESSAGE, forceProductionSupabaseClient } from './supabase';
 import { persistAuth, loadStoredAuth, clearStoredAuth, setAuthCredentials } from './auth-store';
@@ -7,6 +8,7 @@ import { clearOwnerResilientSession } from './owner-session-resilience';
 import { LoginTrace } from './login-trace';
 import { signInWithEmailPassword } from './auth-password-sign-in';
 import { deferAuthWork } from './deferred-auth-work';
+import { readVerifiedSession } from './verified-session-restore';
 import { canonicalizeRole, isAdminRole, normalizeRole, sanitizeEmail } from './auth-helpers';
 
 import { extractChallengeId, extractFirstVerifiedMfaFactor, getMfaChallengeRequirement, type ParsedMfaFactor } from './auth-mfa';
@@ -1294,6 +1296,13 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
   }, [clearTwoFactorState]);
 
   const doLogout = useCallback(async () => {
+    // Invalidate pending role/persistence work before remote sign-out can wait.
+    // Otherwise a slow bootstrap can put the old owner back into local state.
+    lastHandledSessionKeyRef.current = null;
+    lastHandledSessionResultRef.current = null;
+    inFlightSessionKeyRef.current = null;
+    inFlightSessionPromiseRef.current = null;
+    manualOwnerLoginRef.current = false;
     try {
       await supabase.auth.signOut();
     } catch (e) {
@@ -1303,11 +1312,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     sessionWarmupKeyRef.current = null;
     ownerRepairKeyRef.current = null;
     activeSessionUserIdRef.current = null;
-    lastHandledSessionKeyRef.current = null;
-    lastHandledSessionResultRef.current = null;
-    inFlightSessionKeyRef.current = null;
-    inFlightSessionPromiseRef.current = null;
-    manualOwnerLoginRef.current = false;
     await clearStoredAuth();
     await clearOwnerResilientSession().catch((error: unknown) => {
       console.log('[Auth] Resilient owner session clear note:', error instanceof Error ? error.message : 'unknown');
@@ -1441,6 +1445,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       return inFlightSessionPromiseRef.current;
     }
 
+    const supersededResult: AuthSessionResult = {
+      accepted: false,
+      role: 'investor',
+      blockedReason: 'Session changed while sign-in was completing. Please sign in again.',
+    };
     const handleSessionWork = async (): Promise<AuthSessionResult> => {
     const meta = supaUser.user_metadata || {};
 
@@ -1486,6 +1495,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       console.log('[Auth] Role resolution threw (non-blocking):', (roleError as Error)?.message ?? 'unknown');
     }
     const resolvedSessionRole = roleBootstrap ?? await resolveLocalSessionRoleFallback(supaUser.id, supaUser.email);
+    // Logout or a newer session can win while role lookup is pending. Match the
+    // actual attempt, including retries with the same token, before committing.
+    if (inFlightSessionPromiseRef.current !== sessionPromise) return supersededResult;
     let role = normalizeRole(resolvedSessionRole.role);
 
     // Owner authorization is determined by the IVX backend via the
@@ -1560,6 +1572,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       userRole: role,
     });
 
+    if (inFlightSessionPromiseRef.current !== sessionPromise) return supersededResult;
     startMonitor();
     console.log('[Auth] Session set for:', supaUser.id, 'role:', role, 'source:', resolvedSessionRole.source);
     warmSessionInBackground(session, authUser, role);
@@ -1575,7 +1588,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     };
 
     const sessionPromise = handleSessionWork().finally(() => {
-      if (inFlightSessionKeyRef.current === sessionKey) {
+      if (inFlightSessionPromiseRef.current === sessionPromise) {
         inFlightSessionKeyRef.current = null;
         inFlightSessionPromiseRef.current = null;
       }
@@ -1712,6 +1725,27 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       logStartup('AUTH_INITIALIZATION_STARTED');
       logStartup('AUTH_INIT_STARTED');
       try {
+        if (Platform.OS === 'web') {
+          const session = await withTimeout(
+            () => readVerifiedSession(supabase.auth),
+            AUTH_BOOTSTRAP_TIMEOUT_MS,
+            'initAuth.restoreWebSession',
+            null,
+          );
+          // A timed-out bootstrap must never overwrite a newer manual login.
+          if (!cancelled && !manualOwnerLoginRef.current && session) {
+            manualOwnerLoginRef.current = true;
+            const challengeRequired = await requireTwoFactorIfNeeded(session, 'web session restore');
+            if (!cancelled && manualOwnerLoginRef.current && !challengeRequired) {
+              await handleSession(session);
+            }
+          }
+          if (!cancelled) {
+            setIsLoading(false);
+            logStartup('AUTH_INIT_COMPLETED', 'web session checked with auth authority');
+          }
+          return;
+        }
         // IVX_STARTUP_SIGNOUT_SERIALIZED_V1
         // Never allow the cold-start sign-out to overlap a new manual login.
         // The previous fire-and-forget signOut could finish after a valid owner
@@ -1853,11 +1887,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
             // IVX_OWNER_OUTAGE_CREDENTIAL_BOUND_V1
             // Bind an emergency session to the exact password supplied by the
-            // owner. The backend compares it in constant time against its
-            // existing owner credential before minting a short-lived token.
+            // owner. Require a refreshable Supabase session so chat preflight
+            // and session restoration use the same authentication authority.
             body: JSON.stringify({
               email: normalizedOwnerEmail,
               emergency: 'ivx_emergency_recovery',
+              requireSupabaseSession: true,
               ...(typeof ownerPassword === 'string' && ownerPassword.length > 0
                 ? { password: ownerPassword }
                 : {}),
@@ -1878,35 +1913,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             continue;
           }
           if (sessionMethod === 'ivx_owner_outage_session') {
-            const outageUserId = typeof parsed.userId === 'string' ? parsed.userId : '';
-            const outageEmail = sanitizeEmail(typeof parsed.email === 'string' ? parsed.email : normalizedOwnerEmail);
-            if (!isValidOwnerVerifiedUserId(outageUserId) || !isOwnerAdminEmail(outageEmail)) {
-              lastError = 'Backend outage owner session identity was not accepted.';
-              continue;
-            }
-            const outageOwnerUser: AuthUser = {
-              id: outageUserId,
-              email: outageEmail,
-              firstName: 'Owner',
-              lastName: 'IVX',
-              kycStatus: 'approved',
-              role: 'owner',
-              emailVerified: true,
-              accountType: 'owner',
-              accountStatus: 'active',
-            };
-            manualOwnerLoginRef.current = true;
-            ownerIPActiveRef.current = false;
-            activeSessionUserIdRef.current = outageUserId;
-            setUser(outageOwnerUser);
-            setUserRole('owner');
-            setIsAuthenticated(true);
-            setIsOwnerIPAccess(false);
-            setAuthCredentials(accessToken, outageUserId, 'owner');
-            await persistAuth({ token: accessToken, refreshToken: '', userId: outageUserId, userRole: 'owner' });
-            sessionInstalled = true;
-            console.log('[Auth] IVX owner outage session installed:', outageUserId, outageEmail);
-            break;
+            // Older backends may ignore requireSupabaseSession. Their outage
+            // tokens cannot be installed in Supabase or used by chat preflight.
+            lastError = 'Owner sign-in could not establish a Supabase session. Please retry when authentication is available.';
+            continue;
           }
           // Mark manual owner login BEFORE setSession so the synchronous
           // onAuthStateChange event does not trigger the owner auto-login block
@@ -2121,7 +2131,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           trace.checkpoint('FAILED', { stage: 'auth', errorCode: sessionError.code, errorMessage: sessionError.message });
           return {
             success: false,
-            message: sessionError.message || 'Session could not be installed on the device.',
+            message: normalizeLoginFailureMessage(sessionError.message || 'Session could not be installed on the device.').message,
             failureReason: 'service_unavailable',
             supabaseErrorMessage: sessionError.message,
             supabaseErrorCode: sessionError.code,
@@ -2263,13 +2273,13 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         ? String((error as { name?: string }).name ?? '')
         : '';
       const normalizedFailure = normalizeLoginFailureMessage(authErrorMessage);
-      const displayMessage = (authErrorMessage?.trim() || normalizedFailure.message).trim();
+      const displayMessage = normalizedFailure.message;
       trace.checkpoint('FAILED', { stage: 'auth', errorCode, errorMessage: displayMessage, httpStatus: Number.isFinite(errorStatus) ? errorStatus : undefined });
       return {
         success: false,
         message: displayMessage,
         failureReason: normalizedFailure.failureReason,
-        supabaseErrorMessage: displayMessage,
+        supabaseErrorMessage: authErrorMessage?.trim() || displayMessage,
         ...(errorCode ? { supabaseErrorCode: errorCode } : {}),
         ...(Number.isFinite(errorStatus) ? { supabaseErrorStatus: errorStatus } : {}),
         ...(errorName ? { supabaseErrorName: errorName } : {}),
@@ -3236,3 +3246,4 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     refetchProfile, isOwnerIPAccess, detectedIP, pendingTwoFactorEmail, pendingTwoFactorFactor,
   ]);
 });
+

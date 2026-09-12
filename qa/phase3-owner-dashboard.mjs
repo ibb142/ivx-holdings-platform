@@ -14,6 +14,10 @@ assert(password, 'Protected Owner password binding is missing');
 const checks = [];
 const samples = [];
 const transport = [];
+const sessionReload = { item: '16.1', passed: false, backendSha: sha,
+  startedAt: null, completedAt: null, persistedBeforeReload: false,
+  identityVerifiedAfterReload: false, ownerControlsAccessible: false,
+  error: null, secretValuesReturned: false };
 function recordTransport(value) {
   transport.push({ observedAt:new Date().toISOString(), ...value });
   if (transport.length > 60) transport.shift();
@@ -69,6 +73,47 @@ async function health() {
   assert.equal(response.status, 200);
   assert.equal((await response.json()).commit, sha, 'Production SHA changed during proof');
 }
+async function verifyOwnerSessionReload() {
+  sessionReload.startedAt = new Date().toISOString();
+  const storageKey = 'sb-kvclcdjmjghndxsngfzb-auth-token';
+  // Wait for the completed client persistence operation, not just a redirect.
+  // The browser returns identity only; tokens never leave its storage.
+  await page.waitForFunction(key => {
+    try {
+      const session = JSON.parse(localStorage.getItem(key) || 'null');
+      return !!(session?.user?.id && session.access_token && session.refresh_token
+        && session.expires_at * 1000 > Date.now() + 5000);
+    } catch { return false; }
+  }, storageKey, { timeout: 45_000 });
+  const identity = await page.evaluate(key => JSON.parse(localStorage.getItem(key)).user.id, storageKey);
+  sessionReload.persistedBeforeReload = true;
+  await page.waitForLoadState('networkidle', { timeout: 45_000 });
+
+  // Observe a fresh authority verification caused by the reload. A cached UI
+  // or a stored identity alone cannot make this acceptance pass.
+  const verification = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return url.origin === 'https://kvclcdjmjghndxsngfzb.supabase.co'
+      && url.pathname === '/auth/v1/user'
+      && response.request().method() === 'GET';
+  }, { timeout: 60_000 }).then(async response => {
+    if (response.status() !== 200) return false;
+    return (await response.json()).id === identity;
+  }).catch(() => false);
+  await page.reload({ waitUntil: 'networkidle', timeout: 60_000 });
+  assert.equal(await verification, true, 'OWNER_RELOAD_AUTHORITY_NOT_VERIFIED');
+  sessionReload.identityVerifiedAfterReload = true;
+  await page.getByTestId('home-runtime-ready').waitFor({ state: 'visible', timeout: 60_000 });
+  assert.equal(await page.getByTestId('login-submit').count(), 0, 'OWNER_RELOAD_RETURNED_TO_LOGIN');
+  await page.waitForFunction(({ key, expected }) => {
+    try {
+      const session = JSON.parse(localStorage.getItem(key) || 'null');
+      return session?.user?.id === expected && !!session.access_token && !!session.refresh_token;
+    } catch { return false; }
+  }, { key: storageKey, expected: identity }, { timeout: 45_000 });
+  await health();
+  checks.push('Owner reload retained persisted identity and received fresh Supabase verification');
+}
 async function capture(label) {
   await page.waitForFunction(() => document.body.innerText.includes('QA OBSERVATIONS'), undefined, { timeout: 45_000 });
   assert(latest, 'No real dashboard response observed');
@@ -112,10 +157,13 @@ try {
   await page.waitForURL(url => !url.pathname.startsWith('/login'), { timeout: 60_000 });
   await page.getByTestId('home-runtime-ready').waitFor({state:'visible'});
   checks.push('Real Owner password submitted through production login UI');
-  // Cold launch deliberately signs out in the current app. Follow the actual
-  // in-app controls so the manually authenticated session stays in this app.
+  await verifyOwnerSessionReload();
   await page.getByTestId('tab-profile').click();
   await page.getByText('Admin Panel', {exact:true}).click();
+  await page.getByTestId('admin-autonomous-live-work-btn').waitFor({ state: 'visible' });
+  sessionReload.ownerControlsAccessible = true;
+  sessionReload.passed = true;
+  sessionReload.completedAt = new Date().toISOString();
   await page.getByTestId('admin-autonomous-live-work-btn').click();
   await page.getByTestId('autonomous-control-ops').click();
   await page.waitForURL(url => url.pathname === '/ivx/autonomous-ops');
@@ -139,6 +187,9 @@ try {
   checks.push('Fresh telemetry recovered after browser reconnection');
 } catch (error) {
   process.exitCode = 1;
+  if (!sessionReload.passed) {
+    sessionReload.error = error?.message?.match(/OWNER_RELOAD_[A-Z_]+/)?.[0] || 'OWNER_RELOAD_ACCEPTANCE_FAILED';
+  }
   checks.push({ failed: error instanceof Error ? error.message.replaceAll(password, '[redacted]') : 'Browser proof failed' });
   // Record only known UI states and transport metadata, never cookies, tokens,
   // input values, the complete page text, or arbitrary response bodies.
@@ -154,6 +205,8 @@ try {
   disconnected=false;
   await context.setOffline(false).catch(() => {});
   await browser.close();
+  sessionReload.completedAt ??= new Date().toISOString();
+  await writeFile(`${output}/owner-session-reload.json`, JSON.stringify(sessionReload, null, 2));
   const result = { item:'9.5', passed:!process.exitCode, sourceSha:sha, observedAt:new Date().toISOString(), checks, samples,
     noProductionMutation:true, secretValuesReturned:false, continuity24x7Certified:false };
   await writeFile(`${output}/owner-dashboard.json`, JSON.stringify(result, null, 2));

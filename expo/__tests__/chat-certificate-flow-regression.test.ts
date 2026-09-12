@@ -30,7 +30,7 @@ const DYNAMIC_MESSAGE_SELECTORS = new Set([OWNER_MESSAGE_SELECTOR, ASSISTANT_MES
 const ROLE_BOUND_MESSAGE_TEST_ID = "testID={`chat-message-body-${isMine ? 'owner' : 'assistant'}-${message.id}`}";
 
 const ownerPromptElement = `element:\n      id: "${OWNER_MESSAGE_SELECTOR}"\n      text: "${E2E_PROMPT_SELECTOR}"`;
-const assistantReplyElement = `element:\n      id: "${ASSISTANT_MESSAGE_SELECTOR}"\n      text: "${E2E_REPLY_SELECTOR}"`;
+const assistantReplyElement = `visible:\n      id: "${ASSISTANT_MESSAGE_SELECTOR}"\n      text: "${E2E_REPLY_SELECTOR}"`;
 
 describe('IVX IA chat device certificate regression', () => {
   test('both device certificate callers bind the fresh reply marker and restart credentials', () => {
@@ -90,6 +90,41 @@ describe('IVX IA chat device certificate regression', () => {
     expect(flowSource).toContain('assertNotVisible: "I was unable to display this reply"');
   });
 
+  test('keeps the pending answer in view and still requires the role-bound exact reply before and after restart', () => {
+    const liveAndRestored = flowSource.split('- stopApp');
+    expect(liveAndRestored).toHaveLength(2);
+    for (const part of liveAndRestored) {
+      const search = part.indexOf('id: "ivx-owner-chat-search-open"');
+      const searchFieldWait = part.indexOf(
+        'visible:\n      id: "ivx-owner-chat-search-input"',
+        search,
+      );
+      const filter = part.indexOf('inputText: ${CHAT_E2E_SUFFIX}', search);
+      const wait = part.indexOf('- extendedWaitUntil:', filter);
+      const answer = part.indexOf(assistantReplyElement, wait);
+      const owner = part.indexOf(ownerPromptElement, answer);
+      expect(search).toBeGreaterThan(-1);
+      expect(searchFieldWait).toBeGreaterThan(search);
+      expect(searchFieldWait).toBeLessThan(filter);
+      expect(part.slice(search, searchFieldWait)).toContain('- waitForAnimationToEnd');
+      expect(part.slice(search, searchFieldWait)).toContain(
+        'visible:\n        id: "ivx-owner-chat-search-open"',
+      );
+      expect(filter).toBeGreaterThan(search);
+      expect(wait).toBeGreaterThan(filter);
+      expect(answer).toBeGreaterThan(wait);
+      expect(owner).toBeGreaterThan(answer);
+      // Searching must not type the expected answer into any UI field, and
+      // waiting for the reply must not drag the thread away before it arrives.
+      expect(part).not.toContain(`inputText: "${E2E_REPLY}"`);
+      expect(part.slice(filter, answer)).not.toContain('- scrollUntilVisible:');
+      const clear = part.indexOf('id: "ivx-owner-chat-search-clear"', owner);
+      const errors = part.indexOf('assertNotVisible: "Not sent"', clear);
+      expect(clear).toBeGreaterThan(owner);
+      expect(errors).toBeGreaterThan(clear);
+    }
+  });
+
   test('starts the normal conversational AI request before durable persistence can stall', () => {
     const triggerIndex = chatSource.indexOf('2.2_AI_TRIGGER_BEFORE_PERSISTENCE');
     const decisionIndex = chatSource.lastIndexOf('const startAssistantImmediately', triggerIndex);
@@ -98,7 +133,7 @@ describe('IVX IA chat device certificate regression', () => {
     expect(triggerIndex).toBeGreaterThan(-1);
     expect(decisionIndex).toBeGreaterThan(-1);
     expect(persistenceIndex).toBeGreaterThan(triggerIndex);
-    expect(chatSource.slice(triggerIndex, persistenceIndex)).toContain('void triggerAssistantWithRetry()');
+    expect(chatSource.slice(triggerIndex, persistenceIndex)).toContain('void triggerAssistant()');
     expect(chatSource.slice(decisionIndex, triggerIndex)).toContain('!trustContext.requiresElevatedConfirmation');
   });
 
