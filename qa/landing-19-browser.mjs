@@ -2,7 +2,7 @@ import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { forwardLandingPreviewRoute } from './landing-preview-route.mjs';
+import { installLandingPreviewRoutes } from './landing-preview-route.mjs';
 
 const unit = process.argv[2];
 const supported = ['reels.autoplay-controls-browser', 'reels.engagement-browser', 'reels.scroll-navigation-browser', 'reels.production-render-browser', 'a11y.touch-targets-browser', 'a11y.contrast-focus-browser', 'perf.console-network-browser', 'e2e.production-browser-suite'];
@@ -85,7 +85,7 @@ try {
       assert.equal(preview.hostname, '127.0.0.1');
       // Serve reviewed PR files under the real page origin so the public API's
       // actual CORS policy still applies. Never use this as deployed evidence.
-      await context.route(new URL(base).origin + '/**', route => forwardLandingPreviewRoute(context, preview, route));
+      await installLandingPreviewRoutes(context, base, preview);
     }
     if (unit === 'reels.engagement-browser') {
       // Isolated browser interaction fixture. No public likes, comments or

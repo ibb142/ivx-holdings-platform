@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { chromium } from 'playwright';
-import { forwardLandingPreviewRoute } from './landing-preview-route.mjs';
+import { forwardLandingPreviewRoute, installLandingPreviewRoutes } from './landing-preview-route.mjs';
 
 async function server(handler) {
   const instance = createServer(handler);
@@ -77,4 +80,55 @@ test('live routing errors and write attempts remain failures', async () => {
   await assert.rejects(forwardLandingPreviewRoute(context, new URL('http://127.0.0.1:4175'), route), error => error === unexpected);
   request.method = () => 'POST';
   await assert.rejects(forwardLandingPreviewRoute(context, new URL('http://127.0.0.1:4175'), route), /cannot perform public writes/);
+});
+
+test('preview routing sends only existing static files to the preview server', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'ivx-preview-routing-'));
+  await mkdir(path.join(root, 'assets'));
+  await writeFile(path.join(root, 'index.html'), '<!doctype html><title>reviewed page</title>');
+  await writeFile(path.join(root, 'assets', 'app.js'), 'reviewed script');
+  const previewReads = [], runtimeReads = [];
+  const preview = await server((req, res) => {
+    previewReads.push(req.url);
+    if (req.url === '/') res.writeHead(200, { 'Content-Type': 'text/html' }).end('<!doctype html><title>reviewed page</title>');
+    else if (req.url.startsWith('/assets/app.js')) res.end('reviewed script');
+    else res.writeHead(404).end();
+  });
+  const runtime = await server((req, res) => {
+    runtimeReads.push(req.url);
+    res.writeHead(req.url.startsWith('/api/') ? 503 : 404).end('real origin response');
+  });
+  const browser = await launch();
+  try {
+    const context = await browser.newContext();
+    await installLandingPreviewRoutes(context, runtime.url.origin, preview.url, root);
+    const page = await context.newPage();
+    assert.equal((await page.goto(runtime.url.origin)).status(), 200);
+    const results = await page.evaluate(async () => {
+      const result = [];
+      for (const url of ['/assets/app.js?v=reviewed', '/api/reels?type=reel', '/videos/missing.mp4', '/missing.js']) {
+        const response = await fetch(url);
+        result.push({ status: response.status, body: await response.text() });
+      }
+      return result;
+    });
+    assert.deepEqual(results, [
+      { status: 200, body: 'reviewed script' },
+      { status: 503, body: 'real origin response' },
+      { status: 404, body: 'real origin response' },
+      { status: 404, body: 'real origin response' },
+    ]);
+    assert.deepEqual(previewReads, ['/', '/assets/app.js?v=reviewed'], 'Dynamic and missing assets must not wait for a local preview lookup');
+    assert.ok(runtimeReads.includes('/api/reels?type=reel'));
+    assert.ok(runtimeReads.includes('/videos/missing.mp4'));
+    await context.unrouteAll({ behavior: 'wait' }); await context.close();
+
+    const registered = [];
+    await installLandingPreviewRoutes({ route: async (match, handler) => registered.push({ match, handler }) },
+      runtime.url.origin, preview.url, root);
+    const guard = registered.find(route => route.match === runtime.url.origin + '/**');
+    assert.ok(guard, 'Preview must retain its public-write guard');
+    await assert.rejects(guard.handler({ request: () => ({ method: () => 'POST' }),
+      fallback: async () => assert.fail('A public write must not reach the origin') }), /cannot perform public writes/);
+  } finally { await browser.close(); await preview.close(); await runtime.close(); await rm(root, { recursive: true, force: true }); }
 });
