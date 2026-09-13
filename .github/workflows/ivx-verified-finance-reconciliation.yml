@@ -1,0 +1,31 @@
+name: IVX Verified Finance Reconciliation Contracts
+
+on:
+  push:
+    branches: [fix/verified-finance-cron-20260913]
+    paths:
+      - 'supabase/migrations/*verified_finance_reconciliation_cron.sql'
+      - 'qa/verified-finance-reconciliation.test.mjs'
+      - '.github/workflows/ivx-verified-finance-reconciliation.yml'
+  pull_request:
+    paths:
+      - 'supabase/migrations/*verified_finance_reconciliation_cron.sql'
+      - 'qa/verified-finance-reconciliation.test.mjs'
+      - '.github/workflows/ivx-verified-finance-reconciliation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install isolated PostgreSQL test runtime
+        run: npm install --prefix "$RUNNER_TEMP/ivx-finance-tests" --no-save --package-lock=false --ignore-scripts @electric-sql/pglite@0.5.8
+      - name: Exercise receipt validation and atomic accounting
+        run: IVX_PGLITE_MODULE="$RUNNER_TEMP/ivx-finance-tests/node_modules/@electric-sql/pglite" node --test qa/verified-finance-reconciliation.test.mjs
