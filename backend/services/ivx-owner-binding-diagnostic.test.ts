@@ -1,5 +1,6 @@
 import { test, expect } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { readVerifiedJson, waitForOwnerRuntime } from '../../scripts/ops/owner-runtime-verify.mjs';
 import * as diagnostics from './ivx-owner-binding-diagnostic';
 import { ownerRuntimeBindingDrift, readOwnerRuntimeBindings } from './ivx-owner-binding-diagnostic';
 
@@ -71,16 +72,26 @@ test('the production workflow rejects wrong services and stale passwords', async
   const workflow = readFileSync(new URL('../../.github/workflows/ivx-112-owner-variable-recovery.yml', import.meta.url), 'utf8');
   const section = workflow.split('name: Compare persisted service bindings with the live process')[1];
   const source = section.split("node --input-type=module <<'NODE'\n")[1].split('\n          NODE')[0];
-  const run = new (Object.getPrototypeOf(async () => {}).constructor)('process', 'fetch', 'console', source);
-  const sha = 'a'.repeat(40), serviceId = 'service-fixture';
+  const executable = source.replace(/^\s*import \{ readVerifiedJson, waitForOwnerRuntime \} from [^\n]+\n/m, '');
+  expect(executable).not.toContain('import {');
+  const run = new (Object.getPrototypeOf(async () => {}).constructor)('process', 'fetch', 'console', 'readVerifiedJson', 'waitForOwnerRuntime', executable);
+  const sha = 'a'.repeat(40), serviceId = 'srv-d7t9ivreo5us73ftose0';
   for (const scenario of ['valid', 'wrong-service', 'stale-password', 'failed-certificate', 'stale-certificate']) {
-    const processFixture = { env: { GITHUB_SHA: sha, RENDER_SERVICE_ID_RECOVERED: serviceId, OWNER_EMAIL: 'owner@example.test', IVX_OWNER_PASSWORD: 'private-password-fixture', EXPO_PUBLIC_SUPABASE_URL: 'https://auth.example.test', API_BASE: 'https://api.example.test' }, exitCode: 0 };
+    const processFixture = { env: { GITHUB_SHA: sha, RENDER_SERVICE_ID_RECOVERED: serviceId, OWNER_EMAIL: 'owner@example.test', IVX_OWNER_PASSWORD: 'private-password-fixture', EXPO_PUBLIC_SUPABASE_URL: 'https://auth.example.test', API_BASE: 'https://api.ivxholding.com' }, exitCode: 0 };
     const logs: string[] = [];
-    const fetchFixture = async (url: string) => ({ ok: true, status: 200, json: async () => url.includes('/auth/v1/token')
+    const requests: Array<{ url: string; method: string }> = [];
+    const fetchFixture = async (url: string, options: RequestInit = {}) => {
+      requests.push({ url, method: options.method || 'GET' });
+      const body = url.includes('/auth/v1/token')
       ? { access_token: 'private-token-fixture', user: { email: 'owner@example.test', app_metadata: { role: 'owner' } } }
       : url.includes('/certification/member-auth/run') ? { certificate: { commit: scenario === 'stale-certificate' ? 'b'.repeat(40) : sha, certified: scenario !== 'failed-certificate', checks: Object.fromEntries(['runtimeConfig','ownerLogin','memberRegistration','memberLogin','memberPersistence','regularClassification','vipClassification','cleanup'].map(name => [name, { ok: scenario !== 'failed-certificate' || name !== 'ownerLogin' }])) } }
-      : { ok: true, service: { id: scenario === 'wrong-service' ? 'unrelated-service' : serviceId }, runtime: { commitSha: sha, serviceId, instanceId: 'instance-fixture' }, ownerAuthEnvPresence: Object.fromEntries(['IVX_OWNER_PASSWORD', 'OWNER_NEW_PASSWORD', 'IVX_OWNER_PASSWORD_BASE64'].map(key => [key, { present: true, runtimePresent: true, matchesRuntime: key === 'IVX_OWNER_PASSWORD_BASE64' && scenario !== 'stale-password', length: 24, runtimeLength: 24 }])) } });
-    await run(processFixture, fetchFixture, { log: (message: string) => logs.push(message), error: (message: string) => logs.push(message) });
+      : { ok: true, service: { id: scenario === 'wrong-service' ? 'unrelated-service' : serviceId }, runtime: { commitSha: sha, serviceId, instanceId: 'instance-fixture' }, latestDeploy: { status: 'live', commitSha: sha }, ownerAuthEnvPresence: Object.fromEntries(['IVX_OWNER_PASSWORD', 'OWNER_NEW_PASSWORD', 'IVX_OWNER_PASSWORD_BASE64'].map(key => [key, { present: true, runtimePresent: true, matchesRuntime: key === 'IVX_OWNER_PASSWORD_BASE64' && scenario !== 'stale-password', length: 24, runtimeLength: 24 }])) };
+      return new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
+    };
+    await run(processFixture, fetchFixture, { log: (message: string) => logs.push(message), error: (message: string) => logs.push(message) }, readVerifiedJson,
+      (options: Parameters<typeof waitForOwnerRuntime>[0]) => waitForOwnerRuntime({ ...options, fetchImpl: fetchFixture, wait: async () => {} }));
+    const certificatePosts = requests.filter(request => request.method === 'POST' && request.url.includes('/certification/member-auth/run'));
+    expect(certificatePosts.length).toBe(['wrong-service', 'stale-password'].includes(scenario) ? 0 : 1);
     expect(processFixture.exitCode).toBe(scenario === 'valid' ? 0 : 1);
     expect(logs.join('\n')).not.toContain('private-password-fixture');
     expect(logs.join('\n')).not.toContain('private-token-fixture');
