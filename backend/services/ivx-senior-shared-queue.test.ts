@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { claimSharedSeniorJob, patchSharedSeniorQueue, putSharedSeniorResult, rememberSeniorQueue, commitSharedSeniorPostMergeResult } from './ivx-senior-shared-queue';
+import { claimSharedSeniorJob, patchSharedSeniorQueue, putSharedSeniorResult, rememberSeniorQueue, commitSharedSeniorPostMergeResult, readSharedSeniorLedgerPage } from './ivx-senior-shared-queue';
 
 const originalFetch = globalThis.fetch;
 const names = ['SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'] as const;
@@ -16,6 +16,31 @@ afterEach(() => {
 });
 
 describe('shared senior queue HTTP contracts', () => {
+  it('requests only one ledger page with a pinned revision and preserves its evidence', async () => {
+    const version = '2026-09-13T13:00:00+00:00';
+    const page = { entries: [{ jobId: 'job-26', proof: { deployed: false } }], total: 26, offset: 25, nextOffset: null, updatedAt: version };
+    globalThis.fetch = (async (url, init) => {
+      expect(String(url)).toEndWith('/rpc/ivx_senior_ledger_page');
+      expect(JSON.parse(String(init?.body))).toEqual({ p_limit: 25, p_offset: 25, p_version: version });
+      return Response.json(page);
+    }) as typeof fetch;
+    expect(await readSharedSeniorLedgerPage(25, 25, version)).toEqual(page);
+  });
+  it('rejects incomplete or changed ledger pages instead of returning a false complete history', async () => {
+    const version = '2026-09-13T13:00:00+00:00';
+    for (const page of [
+      { entries: [], total: 1, offset: 0, nextOffset: null, updatedAt: version },
+      { entries: [{ jobId: 'job-1' }], total: 1, offset: 0, nextOffset: null, updatedAt: '2026-09-13T13:01:00+00:00' },
+      { entries: [{ jobId: 'job-1' }, { jobId: 'job-1' }], total: 2, offset: 0, nextOffset: null, updatedAt: version },
+    ]) {
+      globalThis.fetch = (async () => Response.json(page)) as typeof fetch;
+      await expect(readSharedSeniorLedgerPage(25, 0, version)).rejects.toThrow();
+    }
+    let calls = 0;
+    globalThis.fetch = (async () => { calls++; return new Response(null, { status: 409 }); }) as typeof fetch;
+    await expect(readSharedSeniorLedgerPage(25, 0, version)).rejects.toThrow();
+    expect(calls).toBe(1);
+  });
   it('sends the fenced post-merge snapshots once and accepts a void atomic acknowledgement', async () => {
     let calls = 0;
     const expected = { jobId: 'same-job', result: { pending: true } }, next = { jobId: 'same-job', result: { measured: true } };

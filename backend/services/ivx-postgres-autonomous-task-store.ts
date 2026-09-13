@@ -80,6 +80,7 @@ const DIRECT_RPC_ARGS: Record<string, string[]> = {
   ivx_senior_queue_patch_receipt: ['p_changes'],
   ivx_senior_queue_claim: ['p_job_id', 'p_worker_instance_id', 'p_resume'],
   ivx_senior_ledger_put: ['p_result'],
+  ivx_senior_ledger_page: ['p_limit', 'p_offset', 'p_version'],
   ivx_senior_post_merge_commit: ['p_expected', 'p_next'],
   ivx_work_evidence_hours: ['p_from', 'p_to', 'p_target_hours'],
   ivx_ai_budget_reserve: ['p_reservation_id', 'p_worker_instance_id', 'p_model', 'p_request_sha', 'p_reserved_nano', 'p_pricing_evidence'],
@@ -92,6 +93,7 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
   const casts: Record<string, string> = {
     p_tasks: 'jsonb', p_requests: 'jsonb', p_leases: 'jsonb', p_task: 'jsonb', p_expected_states: 'jsonb',
     p_changes: 'jsonb', p_result: 'jsonb', p_resume: 'boolean', p_expected: 'jsonb', p_next: 'jsonb',
+    p_limit: 'integer', p_offset: 'integer', p_version: 'timestamptz',
     p_from: 'timestamptz', p_to: 'timestamptz', p_target_hours: 'numeric',
     p_reservation_id: 'uuid', p_reserved_nano: 'bigint', p_settled_upper_nano: 'bigint', p_pricing_evidence: 'jsonb',
     p_worker_instance_id: 'text', p_lease_holder: 'text', p_event_type: 'text', p_objective_id: 'text', p_lease_seconds: 'integer',
@@ -108,7 +110,8 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
     : ['ivx_autonomous_tasks_heartbeat_batch', 'ivx_autonomous_tasks_release_worker'].includes(name) ? 'heartbeat' : 'tasks';
   const pool = getDirectPool(env, purpose);
   const result = await queryWithPostgresDeadline<{ result: T }>(pool, `select public.${name}(${placeholders}) as result`, values,
-    purpose === 'assignment' ? 'assignment' : 'default');
+    purpose === 'assignment' ? 'assignment' :
+      ['ivx_senior_queue_patch_receipt', 'ivx_senior_ledger_put', 'ivx_senior_post_merge_commit'].includes(name) ? 'checkpoint' : 'default');
   if (!result.rows?.length) throw new Error(`direct_postgres_rpc_empty:${name}`);
   return result.rows[0].result as T;
 }
@@ -138,11 +141,11 @@ export async function readPostgresWorkEvidenceHours(from: string, to: string, ta
   return result;
 }
 
-type SeniorRpc = 'ivx_senior_queue_patch' | 'ivx_senior_queue_patch_receipt' | 'ivx_senior_queue_claim' | 'ivx_senior_ledger_put' | 'ivx_senior_post_merge_commit';
+type SeniorRpc = 'ivx_senior_queue_patch' | 'ivx_senior_queue_patch_receipt' | 'ivx_senior_queue_claim' | 'ivx_senior_ledger_put' | 'ivx_senior_post_merge_commit' | 'ivx_senior_ledger_page';
 type SeniorDocumentKey = 'senior-developer-worker/queue.json' | 'senior-developer-worker/proof-ledger.json';
 export async function seniorQueuePostgresRpc<T>(name: SeniorRpc, body: Record<string, unknown>): Promise<T> {
   emergencyStopPostgresConfig(); // Reject cross-project bindings before any query.
-  if (!['ivx_senior_queue_patch', 'ivx_senior_queue_patch_receipt', 'ivx_senior_queue_claim', 'ivx_senior_ledger_put', 'ivx_senior_post_merge_commit'].includes(name)) throw new Error('Repair RPC not allowed');
+  if (!['ivx_senior_queue_patch', 'ivx_senior_queue_patch_receipt', 'ivx_senior_queue_claim', 'ivx_senior_ledger_put', 'ivx_senior_post_merge_commit', 'ivx_senior_ledger_page'].includes(name)) throw new Error('Repair RPC not allowed');
   return directRpc<T>(name, body);
 }
 export async function readSeniorQueuePostgresDocument<T>(key: SeniorDocumentKey): Promise<T | null> {

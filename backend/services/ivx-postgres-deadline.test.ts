@@ -4,6 +4,24 @@ import { Client, Pool } from 'pg';
 import { observePostgresPoolErrors, queryWithPostgresDeadline } from './ivx-postgres-deadline';
 import { newReadTimings, readTimings, timingHeaders } from './ivx-read-timings';
 
+test('checkpoint deadline is transaction-local and the following read restores normal bounds', async () => {
+  const calls: string[] = [], releases: boolean[] = [];
+  const client = Object.assign(new EventEmitter(), {
+    query: async (sql: string) => { calls.push(sql); return { rows: [] }; },
+    release: (destroy: boolean) => releases.push(destroy),
+  });
+  const pool = { connect: async () => client } as unknown as Pick<Pool, 'connect'>;
+  await queryWithPostgresDeadline(pool, 'select critical_checkpoint', [], 'checkpoint');
+  await queryWithPostgresDeadline(pool, 'select ordinary_read', []);
+  const setups = calls.filter(sql => sql.startsWith('BEGIN'));
+  expect(setups[0]).toContain("SET LOCAL statement_timeout = '3000ms'");
+  expect(setups[1]).toContain("SET LOCAL statement_timeout = '2500ms'");
+  expect(setups.every(sql => sql.includes("SET LOCAL lock_timeout = '1000ms'"))).toBe(true);
+  expect(calls.filter(sql => sql === 'COMMIT')).toHaveLength(2);
+  expect(calls.filter(sql => sql === 'select critical_checkpoint')).toHaveLength(1);
+  expect(releases).toEqual([false, false]);
+});
+
 for (const code of ['57014', '55P03']) {
   test(`confirmed ${code} rollback preserves the connection for the next request without replay`, async () => {
     const pool = new Pool({ max: 1, idleTimeoutMillis: 0, connectionTimeoutMillis: 1500 });

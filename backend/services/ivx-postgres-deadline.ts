@@ -19,7 +19,7 @@ export function observePostgresPoolErrors(pool: Pick<Pool, 'on'>, purpose: strin
 /** Transaction-local deadlines survive Supavisor transaction pooling. */
 export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
   pool: Pick<Pool, 'connect'>, text: string, values: unknown[],
-  profile?: 'anon' | 'service_role' | 'assignment' | 'default',
+  profile?: 'anon' | 'service_role' | 'assignment' | 'checkpoint' | 'default',
 ) {
   const publicRole = profile === 'anon' || profile === 'service_role' ? profile : undefined;
   const startedAt = Date.now();
@@ -76,7 +76,8 @@ export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
     // local limits. The parameterized mutation is sent only after this succeeds.
     stage = 'setup'; stageStartedAt = Date.now();
     requireConnection();
-    await client.query("BEGIN; SET LOCAL statement_timeout = '2500ms'; SET LOCAL lock_timeout = '1000ms'; SET LOCAL idle_in_transaction_session_timeout = '5s'"
+    const statementMs = profile === 'checkpoint' ? 3000 : 2500;
+    await client.query(`BEGIN; SET LOCAL statement_timeout = '${statementMs}ms'; SET LOCAL lock_timeout = '1000ms'; SET LOCAL idle_in_transaction_session_timeout = '5s'`
       + (publicRole ? `; SET TRANSACTION READ ONLY; SET LOCAL ROLE ${publicRole === 'anon' ? 'anon' : 'service_role'}; SET LOCAL \"request.jwt.claims\" = '${JSON.stringify({ role: publicRole === 'anon' ? 'anon' : 'service_role' })}'; SET LOCAL \"request.jwt.claim.role\" = '${publicRole === 'anon' ? 'anon' : 'service_role'}'` : ''));
     requireConnection();
     stage = 'query'; stageStartedAt = Date.now();
