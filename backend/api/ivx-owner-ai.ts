@@ -176,6 +176,7 @@ import {
 } from '../services/ivx-senior-developer-qa-runtime';
 import { recordOwnerAIDiagnosticStage } from '../services/ivx-owner-ai-diagnostics-log';
 import { withOwnerAIRequestTimeout } from '../services/ivx-owner-ai-timeout';
+import { createCancellableEventStream } from '../services/ivx-cancellable-event-stream';
 import { buildContextPipeline, renderContextPipeline, type IVXContextPipelineInput } from '../services/ivx-context-pipeline';
 import { buildSystemPrompt as buildSeniorDeveloperSystemPrompt } from '../services/ivx-senior-developer-system-prompt';
 import { buildSeniorEngineerSystemPrompt, buildCompactContextPrefix } from '../services/ivx-senior-engineer-persona';
@@ -5934,99 +5935,97 @@ async function handleIVXOwnerAIRequestSSE(
     body: bufferedBody,
   });
 
-  const encoder = new TextEncoder();
-  const sse = (payload: Record<string, unknown>): Uint8Array =>
-    encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
+  const stream = createCancellableEventStream(request.signal, async (transportSignal, send) => {
+    send({ type: 'start', startedAt: new Date(startedAt).toISOString() });
+    send({ type: 'stage', stage: 'request_received' });
 
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      let closed = false;
-      const safeEnqueue = (chunk: Uint8Array): void => {
-        if (closed) return;
-        try {
-          controller.enqueue(chunk);
-        } catch {
-          closed = true;
+    const heartbeatInterval = setInterval(() => {
+      send({ type: 'heartbeat', elapsedMs: Date.now() - startedAt });
+    }, 3_000);
+    const stopHeartbeat = () => clearInterval(heartbeatInterval);
+    transportSignal.addEventListener('abort', stopHeartbeat, { once: true });
+
+    // A disconnected reader closes only this transport. The admitted operation
+    // retains ownership and may still persist its result; closing a socket is
+    // not proof that a billable provider call was cancelled or safe to replay.
+    let auditFinalStatus = 0;
+    let auditSucceeded = false;
+    try {
+      const response = await runWithOwnerAIStreamCallback(
+        (delta: string) => { send({ type: 'delta', delta }); },
+        async () => handleIVXOwnerAIRequestInternal(replayRequest),
+      );
+      auditFinalStatus = response.status;
+      let bodyJson: unknown;
+      try {
+        bodyJson = JSON.parse(await response.text());
+        if (!bodyJson || typeof bodyJson !== 'object' || Array.isArray(bodyJson)) {
+          throw new Error('Invalid owner chat response');
         }
+      } catch {
+        auditFinalStatus = 502;
+        bodyJson = {
+          ok: false,
+          status: 'error',
+          code: 'OWNER_CHAT_RESPONSE_INVALID',
+          error: 'Owner chat response could not be decoded.',
+          executionOutcome: 'unknown',
+        };
+      }
+      const body = bodyJson as Record<string, unknown>;
+      const ok = auditFinalStatus >= 200 && auditFinalStatus < 300
+        && body.ok !== false && body.status !== 'error';
+      auditSucceeded = ok;
+      send({ type: 'stage', stage: ok ? 'provider_ok' : 'provider_failed' });
+      send({ type: 'final', status: auditFinalStatus, ok, body });
+    } catch {
+      auditFinalStatus = 500;
+      auditSucceeded = false;
+      const body = {
+        ok: false,
+        status: 'error',
+        code: 'OWNER_CHAT_RESPONSE_UNAVAILABLE',
+        error: 'Owner chat response unavailable.',
+        executionOutcome: 'unknown',
       };
-
-      safeEnqueue(sse({ type: 'start', startedAt: new Date(startedAt).toISOString() }));
-      safeEnqueue(sse({ type: 'stage', stage: 'request_received' }));
-
-      // Heartbeat ticker — every 3s while the internal handler runs. This is
-      // what keeps the watchdog from declaring BACKEND_POST_FINISHED a silent
-      // failure: each heartbeat is an observable wire-level event.
-      const heartbeatInterval: ReturnType<typeof setInterval> = setInterval(() => {
-        safeEnqueue(sse({ type: 'heartbeat', elapsedMs: Date.now() - startedAt }));
-      }, 3_000);
-
-      // Audit log (same as the JSON path) — fire-and-forget; never blocks the SSE close.
-      let auditFinalStatus: number = 0;
+      send({ type: 'error', error: body.error });
+      send({ type: 'final', status: 500, ok: false, body });
+    } finally {
+      stopHeartbeat();
+      transportSignal.removeEventListener('abort', stopHeartbeat);
+      // Audit the original outcome even if its transport has already closed.
       void (async () => {
         try {
-          await runWithOwnerAIStreamCallback(
-            (delta: string) => {
-              safeEnqueue(sse({ type: 'delta', delta }));
+          const ctx = await assertIVXOwnerOnly(auditAuthRequest).catch(() => null);
+          const status: 'success' | 'error' | 'rate_limited' = auditFinalStatus === 429 ? 'rate_limited' : auditSucceeded ? 'success' : 'error';
+          await logIVXOwnerAIUsageRow({
+            requestId: null,
+            userId: ctx?.userId ?? null,
+            provider: 'chatgpt',
+            model: '',
+            status,
+            latencyMs: Date.now() - startedAt,
+            error: auditSucceeded ? null : 'owner_chat_response_failed',
+            surface: 'ivx_ia_sse',
+            metadata: {
+              httpStatus: auditFinalStatus,
+              endpoint: '/api/ivx/owner-ai',
+              transport: 'sse',
+              deploymentMarker: DEPLOYMENT_MARKER,
             },
-            async () => handleIVXOwnerAIRequestInternal(replayRequest),
-          )
-            .then(async (response) => {
-              auditFinalStatus = response.status;
-              let bodyJson: unknown = null;
-              try {
-                const text = await response.text();
-                bodyJson = text ? JSON.parse(text) : null;
-              } catch (parseError) {
-                bodyJson = { error: 'response_parse_failed', detail: parseError instanceof Error ? parseError.message : 'unknown' };
-              }
-              safeEnqueue(sse({ type: 'stage', stage: response.ok ? 'provider_ok' : 'provider_failed' }));
-              safeEnqueue(sse({ type: 'final', status: response.status, ok: response.ok, body: bodyJson }));
-            })
-            .catch((error) => {
-              auditFinalStatus = 500;
-              safeEnqueue(sse({ type: 'error', error: error instanceof Error ? error.message : 'unknown' }));
-              safeEnqueue(sse({ type: 'final', status: 500, ok: false, body: { error: error instanceof Error ? error.message : 'unknown' } }));
-            });
-        } finally {
-          clearInterval(heartbeatInterval);
-          // Fire-and-forget ai_usage_logs row mirroring the JSON path.
-          void (async () => {
-            try {
-              const ctx = await assertIVXOwnerOnly(auditAuthRequest).catch(() => null);
-              const httpOk = auditFinalStatus >= 200 && auditFinalStatus < 300;
-              const status: 'success' | 'error' | 'rate_limited' = auditFinalStatus === 429 ? 'rate_limited' : httpOk ? 'success' : 'error';
-              await logIVXOwnerAIUsageRow({
-                requestId: null,
-                userId: ctx?.userId ?? null,
-                provider: 'chatgpt',
-                model: '',
-                status,
-                latencyMs: Date.now() - startedAt,
-                error: httpOk ? null : `http_${auditFinalStatus}`,
-                surface: 'ivx_ia_sse',
-                metadata: {
-                  httpStatus: auditFinalStatus,
-                  endpoint: '/api/ivx/owner-ai',
-                  transport: 'sse',
-                  deploymentMarker: DEPLOYMENT_MARKER,
-                },
-              });
-            } catch (logError) {
-              console.log('[IVXOwnerAIBackend] SSE ai_usage_logs failed:', logError instanceof Error ? logError.message : 'unknown');
-            }
-          })();
-          closed = true;
-          try { controller.close(); } catch { /* already closed */ }
+          });
+        } catch (logError) {
+          console.log('[IVXOwnerAIBackend] SSE ai_usage_logs failed:', logError instanceof Error ? logError.message : 'unknown');
         }
       })();
-    },
+    }
   });
 
   return new Response(stream, {
     status: 200,
     headers: {
       'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
+      'Cache-Control': 'no-store, no-transform',
       Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
       'Access-Control-Allow-Origin': 'https://ivxholding.com',
