@@ -19,6 +19,9 @@ test('malformed emails return generic 401 below 200ms without calling Auth or th
     assert.ok(performance.now() - started < 200);
   }
   assert.equal(calls, 0);
+  const blank = await handleMemberLoginRequest(request({ email: 'member@example.com', password: '   ' }), { loginMember, jsonResponse, deploymentMarker });
+  assert.equal(blank.status, 401);
+  assert.equal(calls, 0);
 });
 
 test('empty and non-object JSON bodies preserve validation errors and never call Auth', async () => {
@@ -43,6 +46,8 @@ test('plausible unknown credentials require Auth; confirmed invalid is 401 and o
     [{ success: false, message: 'Invalid email or password.' }, 401],
     [{ success: false, message: 'Please verify your email.', requiresVerification: true }, 403],
     [{ success: false, message: 'Please try again.', errorCode: 'auth_upstream_timeout', retryable: true }, 503],
+    [{ success: false, message: 'Please try again.', errorCode: 'auth_upstream_unavailable', retryable: true }, 503],
+    [{ success: false, message: 'Too many attempts.', errorCode: 'auth_rate_limited', retryable: true }, 429],
   ]) {
     let calls = 0;
     const loginMember = async () => { calls++; return { ...result, deploymentMarker }; };

@@ -6,7 +6,7 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { runAbortableAuthAttempt, readBoundedMemberFallback } from './ivx-auth-attempt';
+import { runAbortableAuthAttempt, readBoundedMemberFallback, MEMBER_FALLBACK_LOOKUP_BUDGET_MS } from './ivx-auth-attempt';
 import { randomUUID, scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -27,6 +27,9 @@ const DEPLOYMENT_MARKER = 'ivx-member-database-v3-login-deadline-fix';
  *  this constant exists to prevent. Guarded by
  *  __tests__/owner-login-timeout-invariant.test.ts. */
 export const MEMBER_LOGIN_INNER_BUDGET_MS = 8_000;
+// A login only reads the existing fallback document. It must not bootstrap
+// schema or replay a failed read before the actual authentication request.
+export const MEMBER_LOGIN_FALLBACK_BUDGET_MS = MEMBER_FALLBACK_LOOKUP_BUDGET_MS;
 /** Internal marker for "upstream auth did not answer in time". Must never reach the member. */
 export const SIGN_IN_TIMEOUT_SENTINEL = 'ivx:sign-in-upstream-timeout';
 
@@ -294,8 +297,6 @@ const MEMBERS_STORE_FILE = (): string =>
 async function readMemberStore(signal?: AbortSignal): Promise<FallbackMemberStore> {
   const file = MEMBERS_STORE_FILE();
   if (isDurableStoreConfigured()) {
-    // Login reads an existing document once, without schema probes or retries.
-    // Preserve failure so a missing verdict cannot become invalid credentials.
     if (signal) return readDurableJson<FallbackMemberStore>(file, {}, { signal });
     try {
       return await readDurableJson<FallbackMemberStore>(file, {});
@@ -577,7 +578,7 @@ export interface MemberLoginResult {
   /** Set when the failure is an INFRASTRUCTURE fault (upstream auth slow/unreachable),
    *  not a credential rejection. The route maps this to HTTP 503 so a member with a
    *  CORRECT password is never told "invalid email or password". */
-  errorCode?: 'auth_upstream_timeout';
+  errorCode?: 'auth_upstream_timeout' | 'auth_upstream_unavailable' | 'auth_rate_limited';
   /** True when the caller should simply retry — nothing is wrong with the credentials. */
   retryable?: boolean;
   deploymentMarker: string;
@@ -666,9 +667,12 @@ export async function loginMember(email: string, password: string): Promise<Memb
 
   // 1. Durable fallback store first (covers members registered during Supabase email rate-limit).
   const fallback = await readBoundedMemberFallback(
-    (signal) => verifyFallbackMemberPassword(normalizedEmail, password, signal),
+    signal => verifyFallbackMemberPassword(normalizedEmail, password, signal),
+    MEMBER_LOGIN_FALLBACK_BUDGET_MS,
   );
   const fallbackUserId = fallback.userId;
+  // A negative primary verdict cannot reject a fallback member while its store is unavailable.
+  const fallbackUnavailable = !fallback.available;
   if (fallbackUserId) {
     // Fire-and-forget: updateMemberLastLogin + audit log + mintSession — all non-blocking
     // with internal timeouts so a stalled Supabase never hangs the login response.
@@ -738,24 +742,25 @@ export async function loginMember(email: string, password: string): Promise<Memb
     }
     const { data, error } = raced;
     if (error) {
-      if (!fallback.available) {
-        return {
-          success: false, message: 'Sign-in is taking longer than usual. Please try again in a moment.',
-          errorCode: 'auth_upstream_timeout', retryable: true, deploymentMarker: DEPLOYMENT_MARKER,
-        };
-      }
       const errorMessage = (error.message || error.msg || JSON.stringify(error) || 'unknown error').trim();
       const msg = errorMessage.toLowerCase();
       if (msg.includes('invalid login credentials') || msg.includes('invalid credentials')) {
+        if (fallbackUnavailable) return {
+          success: false,
+          message: 'Sign-in is temporarily unavailable. Please try again in a moment.',
+          errorCode: 'auth_upstream_unavailable',
+          retryable: true,
+          deploymentMarker: DEPLOYMENT_MARKER,
+        };
         return { success: false, message: 'Invalid email or password.', deploymentMarker: DEPLOYMENT_MARKER };
       }
       if (msg.includes('email not confirmed')) {
         return { success: false, message: 'Please verify your email before signing in.', requiresVerification: true, deploymentMarker: DEPLOYMENT_MARKER };
       }
-      if (msg.includes('rate limit')) {
-        return { success: false, message: 'Too many attempts. Please wait a minute and try again.', deploymentMarker: DEPLOYMENT_MARKER };
+      if (error.status === 429 || msg.includes('rate limit')) {
+        return { success: false, message: 'Too many attempts. Please wait a minute and try again.', errorCode: 'auth_rate_limited', retryable: true, deploymentMarker: DEPLOYMENT_MARKER };
       }
-      return { success: false, message: `Login failed: ${errorMessage}`, deploymentMarker: DEPLOYMENT_MARKER };
+      return { success: false, message: 'Sign-in is temporarily unavailable. Please try again in a moment.', errorCode: 'auth_upstream_unavailable', retryable: true, deploymentMarker: DEPLOYMENT_MARKER };
     }
     const userId = data.user?.id;
     if (!userId) {
@@ -810,14 +815,8 @@ export async function loginMember(email: string, password: string): Promise<Memb
         deploymentMarker: DEPLOYMENT_MARKER,
       };
     }
-    if (!fallback.available) {
-      return {
-        success: false, message: 'Sign-in is taking longer than usual. Please try again in a moment.',
-        errorCode: 'auth_upstream_timeout', retryable: true, deploymentMarker: DEPLOYMENT_MARKER,
-      };
-    }
-    console.error('[MemberDB] Login exception:', message);
-    return { success: false, message, deploymentMarker: DEPLOYMENT_MARKER };
+    console.error('[MemberDB] Login transport unavailable');
+    return { success: false, message: 'Sign-in is temporarily unavailable. Please try again in a moment.', errorCode: 'auth_upstream_unavailable', retryable: true, deploymentMarker: DEPLOYMENT_MARKER };
   }
 }
 

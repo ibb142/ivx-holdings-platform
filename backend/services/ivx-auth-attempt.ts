@@ -21,8 +21,8 @@ export async function runAbortableAuthAttempt<T>(
   }
 }
 
-// Together with two 8s Auth attempts, the lookup fits inside the 20s route budget.
-export const MEMBER_FALLBACK_LOOKUP_BUDGET_MS = 2_000;
+// Preserve the deployed fast-path deadline when using the shared lookup helper.
+export const MEMBER_FALLBACK_LOOKUP_BUDGET_MS = 800;
 
 /** A failed credential-store read is unknown, never proof of a wrong password. */
 export async function readBoundedMemberFallback(

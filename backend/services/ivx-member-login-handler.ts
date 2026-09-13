@@ -21,12 +21,14 @@ export async function handleMemberLoginRequest(request: Request, {
   if (!email || !password) {
     return jsonResponse({ success: false, message: 'Email and password are required.', deploymentMarker }, 400);
   }
-  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !password.trim()) {
     return jsonResponse({ success: false, message: 'Invalid email or password.', deploymentMarker }, 401);
   }
   const result = await loginMember(email, password);
   if (result.success) return jsonResponse(result, 200);
   if (result.requiresVerification) return jsonResponse(result, 403);
   if (result.errorCode === 'auth_upstream_timeout') return jsonResponse(result, 503);
+  if (result.errorCode === 'auth_upstream_unavailable') return jsonResponse(result, 503);
+  if (result.errorCode === 'auth_rate_limited') return jsonResponse(result, 429);
   return jsonResponse(result, 401);
 }
