@@ -102,7 +102,8 @@ try {
   await assert.rejects(() => workerPool.query(`
     select set_config('ivx.rollback_proof','present',true);
     insert into public.ivx_autonomous_tasks(task_id,idempotency_key,state,payload)
-      values ('${rollbackTaskId}','${rollbackTaskId}','QUEUED','{}'::jsonb);
+      values ('${rollbackTaskId}','${rollbackTaskId}','QUEUED',
+        jsonb_build_object('taskId','${rollbackTaskId}','idempotencyKey','${rollbackTaskId}','state','QUEUED'));
     select pg_sleep(3)`),
     (error: unknown) => error instanceof Error && 'code' in error && error.code === '57014');
   const afterCancellation = (await workerPool.query<{ pid: number; marker: string | null; writes: number }>(
