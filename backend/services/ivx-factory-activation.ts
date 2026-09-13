@@ -83,8 +83,8 @@ function runSecurityGate(agent: FactoryAgent): { result: 'PASS' | 'FAIL' | 'BLOC
   }
 
   return {
-    result: 'PASS',
-    evidence: `IA-12 security review: agent ${agent.factory_agent_id} (${agent.name}) verified — factory agent with non-destructive permissions, deploy routed through RM-0001, no direct prod deploy, no secret access.`,
+    result: 'BLOCKED',
+    evidence: `Agent ${agent.factory_agent_id} has a recognized identity, but effective permissions and deployment controls have not been verified.`,
   };
 }
 
@@ -102,17 +102,17 @@ function runQaGate(agent: FactoryAgent): { result: 'PASS' | 'FAIL' | 'BLOCKED'; 
   }
 
   return {
-    result: 'PASS',
-    evidence: `IA-03 QA review: agent ${agent.factory_agent_id} (${agent.name}) passed — valid mission, KPIs defined, QA status: ${agent.qa_status || 'pending -> pass'}.`,
+    result: 'BLOCKED',
+    evidence: `Agent ${agent.factory_agent_id} has a roster entry, but no task execution or test artifacts were verified. Stored QA status is not an execution certificate.`,
   };
 }
 
 /**
- * Perform a real supervised work item for the agent.
- * This is a read-only operation that proves the agent can function.
+ * Describe the supervised work still required. No executor is bound here;
+ * a role description must never be recorded as a completed tool invocation.
  */
 async function performSupervisedWork(agent: FactoryAgent): Promise<{ output: string; toolsUsed: string[] }> {
-  const toolsUsed: string[] = ['supabase_rest_read'];
+  const toolsUsed: string[] = [];
 
   // Each AF agent performs a read-only check relevant to its role
   const roleTasks: Record<string, string> = {
@@ -131,7 +131,7 @@ async function performSupervisedWork(agent: FactoryAgent): Promise<{ output: str
   };
 
   const task = roleTasks[agent.factory_agent_id] || 'Read and verify factory infrastructure exists';
-  const output = `Agent ${agent.factory_agent_id} performed supervised read-only task: "${task}". Result: infrastructure verified present. Agent is ready for production work.`;
+  const output = `NOT EXECUTED: agent ${agent.factory_agent_id} still requires supervised work: "${task}". No execution evidence is available from this verifier.`;
 
   return { output, toolsUsed };
 }
@@ -160,10 +160,11 @@ async function restCall(path: string, init: RequestInit = {}): Promise<{ status:
 function parseRows<T>(body: string): T[] {
   try {
     const parsed = JSON.parse(body) as unknown;
-    return Array.isArray(parsed) ? (parsed as T[]) : [];
+    if (Array.isArray(parsed)) return parsed as T[];
   } catch {
-    return [];
+    // A malformed roster is unavailable, not an empty successful observation.
   }
+  throw new Error('FACTORY_ROSTER_INVALID_RESPONSE');
 }
 
 /**
@@ -267,9 +268,11 @@ export async function runFactoryActivation(): Promise<{
 
   // Fetch all AF agents from Supabase
   const agentsRes = await restCall(
-    '/rest/v1/ivx_ia_agents?agent_id=like.AF-&select=agent_id,name,mission,permissions,kpis,status,updated_at&order=agent_id.asc',
+    '/rest/v1/ivx_ia_agents?agent_id=like.AF-*&select=agent_id,name,mission,permissions,kpis,status,updated_at&order=agent_id.asc',
     { method: 'GET' },
   );
+
+  if (agentsRes.status !== 200) throw new Error('FACTORY_ROSTER_UNAVAILABLE');
 
   const agents = parseRows<{
     agent_id: string;
@@ -286,6 +289,8 @@ export async function runFactoryActivation(): Promise<{
     '/rest/v1/ivx_ia_factory_agents?kind=eq.AGENT&select=factory_agent_id,kind,name,version,qa_status,activation_status,created_by&order=factory_agent_id.asc',
     { method: 'GET' },
   );
+
+  if (factoryRes.status !== 200) throw new Error('FACTORY_ROSTER_UNAVAILABLE');
 
   const factoryAgents = parseRows<FactoryAgent>(factoryRes.body);
 
@@ -360,6 +365,8 @@ export async function getFactoryActivationStatus(): Promise<{
     '/rest/v1/ivx_ia_factory_agents?select=factory_agent_id,kind,name,version,qa_status,activation_status,created_by&order=factory_agent_id.asc',
     { method: 'GET' },
   );
+
+  if (factoryRes.status !== 200) throw new Error('FACTORY_ROSTER_UNAVAILABLE');
 
   const factoryAgents = parseRows<FactoryAgent>(factoryRes.body);
   const agentKind = factoryAgents.filter((a) => a.kind === 'AGENT');

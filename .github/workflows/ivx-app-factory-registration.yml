@@ -1,0 +1,55 @@
+name: IVX App Factory registration contract
+on:
+  pull_request:
+    paths:
+      - 'backend/services/app-factory-engine*'
+      - 'backend/services/ivx-factory-activation*'
+      - 'qa/app-factory-*'
+      - 'supabase/migrations/*app_factory_registration.sql'
+      - '.github/workflows/ivx-app-factory-registration.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/services/app-factory-engine*'
+      - 'backend/services/ivx-factory-activation*'
+      - 'qa/app-factory-*'
+      - 'supabase/migrations/*app_factory_registration.sql'
+      - '.github/workflows/ivx-app-factory-registration.yml'
+permissions:
+  contents: read
+concurrency:
+  group: ivx-app-factory-registration-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  registration-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ivx_factory_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: ./node_modules/.bin/tsc --noEmit -p backend/tsconfig.json
+      - run: bun test backend/services/app-factory-engine.test.ts
+      - run: bun test backend/services/ivx-factory-activation.test.ts
+      - name: Isolated registration and accounting-free rollback tests
+        env:
+          IVX_PGLITE_MODULE: ${{ runner.temp }}/ivx-sql-qa/node_modules/@electric-sql/pglite
+        run: |
+          npm install --prefix "$RUNNER_TEMP/ivx-sql-qa" --ignore-scripts --no-audit --no-fund @electric-sql/pglite@0.3.14
+          bun test qa/app-factory-registration.test.ts
+      - name: Two waves of 100 concurrent registration requests
+        env:
+          IVX_FACTORY_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_factory_test
+        run: bun qa/app-factory-concurrency.ts
