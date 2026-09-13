@@ -31,6 +31,10 @@ test('feed exceptions remain unavailable and cannot poison the cache as empty su
         assert.equal(body.degraded,true);assert.equal(body.data_available,false);
         assert.deepEqual(body[name==='feed'?'videos':'blocks'],[]);
       }
+      // Home can fail on deals while the shared catalog is still settling.
+      // Drain those producers before advancing the fake retry clock: changing
+      // Date.now alone does not advance the event loop or finish an active read.
+      await new Promise(resolve=>setImmediate(resolve));
       const before=reads; mode='empty'; clock+=3001;
       const restored=await handler(req);
       assert.equal(restored.status,200,name);
