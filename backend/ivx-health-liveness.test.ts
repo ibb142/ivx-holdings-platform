@@ -89,4 +89,61 @@ describe('production health liveness', () => {
       }
     }
   });
+
+  it.each(['ai', 'database', 'auth', 'queue'] as const)('contains an unexpected %s exception in a 503 dependency response', async (failed) => {
+    const healthy = { ok: true, detail: {} };
+    const probes = {
+      ai: spyOn(queue, 'checkAIHealth').mockReturnValue(healthy),
+      database: spyOn(queue, 'checkDatabaseHealth').mockResolvedValue(healthy),
+      auth: spyOn(queue, 'checkAuthHealth').mockResolvedValue(healthy),
+      queue: spyOn(queue, 'checkQueueHealth').mockResolvedValue(healthy),
+    };
+    for (const probe of Object.values(probes)) restores.push(() => probe.mockRestore());
+    const failure = new Error('PRIVATE_DEPENDENCY_CREDENTIAL');
+    if (failed === 'ai') probes.ai.mockImplementation(() => { throw failure; });
+    else probes[failed].mockRejectedValue(failure);
+
+    for (const path of ['/health/ready', '/readiness']) {
+      const response = await app.request(path);
+      expect(response.status).toBe(503);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      const body = await response.json();
+      expect(body.ok).toBe(false);
+      expect(body.ready).toBe(false);
+      expect(body.status).toBe('degraded');
+      expect(body.checks[failed].code).toBe('READINESS_CHECK_FAILED');
+      expect(JSON.stringify(body)).not.toContain(failure.message);
+      for (const name of Object.keys(probes)) expect(body.checks[name].ok).toBe(name !== failed);
+    }
+  });
+
+  it('observes AI availability after dependency reads finish and reports recovery on the next request', async () => {
+    const healthy = { ok: true, detail: {} };
+    const blocked = { ok: false, detail: { code: 'AI_GLOBAL_BUDGET_BLOCKED' } };
+    const ai = spyOn(queue, 'checkAIHealth').mockReturnValue(healthy);
+    let observed = blocked as queue.HealthCheckResult;
+    const database = spyOn(queue, 'checkDatabaseHealth').mockImplementation(async () => {
+      ai.mockReturnValue(observed);
+      return healthy;
+    });
+    const auth = spyOn(queue, 'checkAuthHealth').mockResolvedValue(healthy);
+    const remoteQueue = spyOn(queue, 'checkQueueHealth').mockResolvedValue(healthy);
+    restores.push(() => ai.mockRestore(), () => database.mockRestore(), () => auth.mockRestore(), () => remoteQueue.mockRestore());
+
+    for (const path of ['/health/ready', '/readiness']) {
+      ai.mockReturnValue(healthy);
+      observed = blocked;
+      const response = await app.request(path);
+      expect(response.status).toBe(503);
+      const body = await response.json();
+      expect(body.ready).toBe(false);
+      expect(body.checks.ai.code).toBe('AI_GLOBAL_BUDGET_BLOCKED');
+
+      observed = healthy;
+      const recovered = await app.request(path);
+      expect(recovered.status).toBe(200);
+      expect(recovered.headers.get('Cache-Control')).toBe('no-store');
+      expect((await recovered.json()).ready).toBe(true);
+    }
+  });
 });
