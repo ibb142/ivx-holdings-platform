@@ -448,7 +448,8 @@
           var data;
           try { data = JSON.parse(text); } catch (e) { throw new Error('not json'); }
           if ((r.headers && r.headers.get('X-IVX-Data-State') === 'unavailable')
-            || (data && ((data.degraded === true && data.data_available !== true)
+            || (data && (data.ok === false || data.status === 'DEGRADED'
+              || (data.degraded === true && data.data_available !== true)
               || data.data_available === false || data.code === 'PUBLIC_DATA_UNAVAILABLE'))) {
             var error = new Error('feed data unavailable');
             error.retryable = true;
@@ -486,6 +487,7 @@
         expectedType = expectedType || 'unified';
         var vids = data && data.videos;
         if (!Array.isArray(vids) || !vids.length || data.channel || data.personalized !== false
+          || data.ok === false || data.status === 'DEGRADED'
           || (data.degraded === true && data.data_available !== true) || data.data_available === false || data.code === 'PUBLIC_DATA_UNAVAILABLE'
           || data.ordering !== 'canonical-unified-v2' || data.feed_type !== expectedType
           || !vids.every(function (v) { return v && v.id && v.video_url; })) throw error;

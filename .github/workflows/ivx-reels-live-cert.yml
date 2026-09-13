@@ -8,6 +8,8 @@ on:
       - '.github/workflows/ivx-reels-live-cert.yml'
       - 'tests/e2e/reels-acceptance.spec.ts'
       - 'tests/e2e/playwright.config.ts'
+      - 'expo/ivxholding-landing/ivx-reels.js'
+      - 'qa/landing-19-preview.mjs'
   workflow_dispatch:
 
 permissions:
@@ -28,8 +30,8 @@ jobs:
         run: |
           set -euo pipefail
           target="$GITHUB_SHA"
-          # A workflow-only PR validates the checker against current production;
-          # it does not certify that the PR application is deployed.
+          # Production preflight uses main; PR acceptance below serves PR assets.
+          # A PR run does not certify that its application source is deployed.
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             target=$(git ls-remote origin refs/heads/main | awk '{print $1}')
           fi
@@ -87,7 +89,13 @@ jobs:
           # https://playwright.dev/docs/browsers#media-codecs
           npx playwright install --with-deps chrome
 
+      - uses: oven-sh/setup-bun@v2
+        if: github.event_name == 'pull_request'
+        with: { bun-version: 1.3.9 }
+
       - name: Reels playback acceptance and explicit degraded-state behavior
+        env:
+          IVX_REELS_PREVIEW: ${{ github.event_name == 'pull_request' && '1' || '0' }}
         run: npx playwright test --config=tests/e2e/playwright.config.ts
 
       - name: Upload Reels acceptance results including failures

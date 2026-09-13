@@ -14,7 +14,7 @@ test('Reels navigation reaches a healthy feed and advances decoded video frames'
       const url = new URL(response.url());
       if (url.pathname !== '/api/reels' || url.searchParams.get('type') !== 'reel') return false;
       const body = await response.json().catch(() => null);
-      const degraded = !body || body.ok === false || body.degraded === true || body.data_available === false
+      const degraded = !body || body.ok === false || body.status === 'DEGRADED' || body.degraded === true || body.data_available === false
         || body.code === 'PUBLIC_DATA_UNAVAILABLE' || response.headers()['x-ivx-data-state'] === 'unavailable';
       const videoCount = Array.isArray(body?.videos) ? body.videos.length : 0;
       const healthy = response.ok() && !degraded && videoCount > 0;
@@ -36,16 +36,39 @@ test('Reels navigation reaches a healthy feed and advances decoded video frames'
   }
 });
 
-test('a controlled degraded feed exposes retry without claiming playable video', async ({ page }) => {
-  await page.route(/\/api\/reels(?:\?|$)/, route => route.fulfill({
-    status: 200, contentType: 'application/json',
-    body: JSON.stringify({ ok: false, degraded: true, data_available: false, videos: [] }),
-  }));
-  await page.goto('/');
-  await page.locator('#ivxReelsBtn').click();
-  const modal = page.locator('#ivxReels');
-  await modal.getByRole('button', { name: 'Project Reels', exact: true }).click();
-  await expect(modal.getByText('Feed failed to load.', { exact: false })).toBeVisible({ timeout: 20_000 });
-  await expect(modal.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
-  await expect(modal.locator('.ivxr-slide video')).toHaveCount(0);
-});
+for (const scenario of [
+  { name: 'unavailable data', status: 200, flags: { degraded: true, data_available: false } },
+  { name: 'explicit DEGRADED status', status: 200, flags: { status: 'DEGRADED' } },
+  { name: 'explicit ok=false', status: 200, flags: { ok: false } },
+  { name: 'HTTP 503', status: 503, flags: { ok: false } },
+]) {
+  test(`a controlled ${scenario.name} feed exposes retry without claiming playable video`, async ({ page }) => {
+    let requests = 0;
+    await page.route(/\/api\/reels(?:\?|$)/, route => {
+      if (new URL(route.request().url()).searchParams.get('type') === 'reel') requests++;
+      return route.fulfill({
+        status: scenario.status, contentType: 'application/json',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({
+          ...scenario.flags,
+          // Even retained rows in an error response must not enter the rail.
+          videos: [{ id: 'unavailable-reel', title: 'Unverified reel', video_type: 'reel', video_url: '/unavailable.mp4' }],
+        }),
+      });
+    });
+    const navigation = await page.goto('/');
+    expect(navigation?.ok()).toBe(true);
+    await page.locator('#ivxReelsBtn').click();
+    const modal = page.locator('#ivxReels');
+    await modal.getByRole('button', { name: 'Project Reels', exact: true }).click();
+    const retry = modal.getByRole('button', { name: 'Retry', exact: true });
+    await expect(modal.getByText('Feed failed to load.', { exact: false })).toBeVisible({ timeout: 20_000 });
+    await expect(retry).toBeVisible();
+    await expect(modal.locator('.ivxr-slide video')).toHaveCount(0);
+    const before = requests;
+    await retry.click();
+    await expect.poll(() => requests).toBeGreaterThan(before);
+    await expect(retry).toBeVisible({ timeout: 20_000 });
+    await expect(modal.locator('.ivxr-slide video')).toHaveCount(0);
+  });
+}
