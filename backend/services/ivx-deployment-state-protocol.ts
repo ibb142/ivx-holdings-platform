@@ -64,28 +64,33 @@ export type IVXDeploymentProtocolInput = {
   blockerCode: string | null;
 };
 
-/**
- * Returns true only when every evidence field required to claim VERIFIED is
- * present, the production /health and /version endpoints both returned HTTP
- * 2xx, and at least one of healthSha/versionSha is non-null. This is the
- * single gate — no caller may print "STATE: VERIFIED" without passing it.
- */
+function evidenceFailures(evidence: IVXDeploymentVerifiedEvidence | null): string[] {
+  if (!evidence) return ['no evidence attached'];
+  const failures: string[] = [];
+  const fullSha = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{40}$/i.test(value);
+  const identifier = (value: unknown): boolean => typeof value === 'string' && value.length > 0 && !/\s/.test(value);
+  const httpOk = (value: unknown): boolean => typeof value === 'number' && Number.isInteger(value) && value >= 200 && value < 300;
+  if (!fullSha(evidence.githubSha)) failures.push('GitHub SHA missing or invalid (full 40-character SHA required)');
+  if (!identifier(evidence.renderDeployId)) failures.push('Render Deploy ID missing or invalid');
+  if (!httpOk(evidence.healthHttpStatus)) failures.push(`production /health not verified (HTTP ${evidence.healthHttpStatus ?? 'n/a'})`);
+  if (!httpOk(evidence.versionHttpStatus)) failures.push(`production /version not verified (HTTP ${evidence.versionHttpStatus ?? 'n/a'})`);
+  for (const [endpoint, sha] of [['/health', evidence.healthSha], ['/version', evidence.versionSha]] as const) {
+    if (!fullSha(sha) || !fullSha(evidence.githubSha) || sha.toLowerCase() !== evidence.githubSha.toLowerCase()) {
+      failures.push(`${endpoint} SHA missing, invalid, or different from GitHub SHA`);
+    }
+  }
+  const verifiedAt = typeof evidence.verifiedAt === 'string' ? Date.parse(evidence.verifiedAt) : NaN;
+  if (!Number.isFinite(verifiedAt) || verifiedAt > Date.now()) failures.push('Verification timestamp invalid or in the future');
+  if (!identifier(evidence.proofLedgerEntryId)) failures.push('Evidence ledger entry missing or invalid');
+  return failures;
+}
+
+/** Validate the complete receipt shape and commit identity. The caller must
+ * obtain these observations from production and persist the referenced ledger. */
 export function isEvidenceSufficientForVerified(
   evidence: IVXDeploymentVerifiedEvidence | null,
 ): boolean {
-  if (!evidence) {
-    return false;
-  }
-  const hasGithubSha = Boolean(evidence.githubSha && evidence.githubSha.length >= 6);
-  const hasRenderDeployId = Boolean(evidence.renderDeployId && evidence.renderDeployId.length > 0);
-  const healthOk = typeof evidence.healthHttpStatus === 'number'
-    && evidence.healthHttpStatus >= 200
-    && evidence.healthHttpStatus < 300;
-  const versionOk = typeof evidence.versionHttpStatus === 'number'
-    && evidence.versionHttpStatus >= 200
-    && evidence.versionHttpStatus < 300;
-  const hasCommitProof = Boolean(evidence.healthSha || evidence.versionSha);
-  return hasGithubSha && hasRenderDeployId && healthOk && versionOk && hasCommitProof;
+  return evidenceFailures(evidence).length === 0;
 }
 
 /**
@@ -104,22 +109,7 @@ export function formatDeploymentStateProtocol(
   // spec is explicit: never fabricate production evidence, never claim
   // deployment without verification.
   if (input.state === 'VERIFIED' && !isEvidenceSufficientForVerified(input.evidence)) {
-    const missing: string[] = [];
-    if (!input.evidence) {
-      missing.push('no evidence attached');
-    } else {
-      if (!input.evidence.githubSha) missing.push('GitHub SHA missing');
-      if (!input.evidence.renderDeployId) missing.push('Render Deploy ID missing');
-      if (typeof input.evidence.healthHttpStatus !== 'number' || input.evidence.healthHttpStatus < 200 || input.evidence.healthHttpStatus >= 300) {
-        missing.push(`production /health not verified (HTTP ${input.evidence.healthHttpStatus ?? 'n/a'})`);
-      }
-      if (typeof input.evidence.versionHttpStatus !== 'number' || input.evidence.versionHttpStatus < 200 || input.evidence.versionHttpStatus >= 300) {
-        missing.push(`production /version not verified (HTTP ${input.evidence.versionHttpStatus ?? 'n/a'})`);
-      }
-      if (!input.evidence.healthSha && !input.evidence.versionSha) {
-        missing.push('no commit SHA returned from /health or /version');
-      }
-    }
+    const missing = evidenceFailures(input.evidence);
     const exactBlocker = `Cannot claim VERIFIED — evidence insufficient: ${missing.join('; ')}.`;
     return formatDeploymentStateProtocol({
       state: 'BLOCKED',

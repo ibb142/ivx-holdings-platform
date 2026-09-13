@@ -4,26 +4,51 @@ import { fileURLToPath } from 'node:url';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-export async function authenticateOwner({ email, password, supabaseUrl, anonKey }, fetchImpl = fetch) {
+function transportFailure(error) {
+  const code = error?.cause?.code ?? error?.code;
+  if (error?.name === 'TimeoutError' || ['ETIMEDOUT', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT'].includes(code)) return 'timeout';
+  if (['ECONNRESET', 'UND_ERR_SOCKET'].includes(code)) return 'connection_reset';
+  if (code === 'EAI_AGAIN') return 'dns_temporary';
+  return 'unclassified';
+}
+
+export async function authenticateOwner({ email, password, supabaseUrl, anonKey }, fetchImpl = fetch, { sleep = delay } = {}) {
   if (![email, password, supabaseUrl, anonKey].every(value => typeof value === 'string' && value.trim())) {
     throw new Error('owner_auth_credentials_missing');
   }
-  const base = new URL(supabaseUrl);
+  let base;
+  try { base = new URL(supabaseUrl); } catch { throw new Error('owner_auth_url_invalid'); }
   if (base.protocol !== 'https:' || base.username || base.password || base.search || base.hash || !['', '/'].includes(base.pathname)) {
     throw new Error('owner_auth_url_invalid');
   }
-  let response;
-  try {
-    response = await fetchImpl(`${base.origin}/auth/v1/token?grant_type=password`, {
-      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(20000),
-      headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-  } catch { throw new Error('owner_auth_transport_failed'); }
-  if (!response.ok) throw new Error(`owner_auth_http_${response.status}`);
   let data;
-  try { data = await response.json(); } catch { throw new Error('owner_auth_response_invalid'); }
-  const role = data?.user?.app_metadata?.role ?? data?.user?.user_metadata?.role;
+  // Three bounded attempts remain below the former single 20s timeout.
+  // Retry only transient transport/server failures, never credentials, identity,
+  // malformed success, rate limits, TLS failures, or another auth endpoint.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let response;
+    try {
+      response = await fetchImpl(`${base.origin}/auth/v1/token?grant_type=password`, {
+        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(6000),
+        headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+    } catch (error) {
+      const reason = transportFailure(error);
+      if (reason === 'unclassified' || attempt === 2) throw new Error(`owner_auth_transport_failed: ${reason}`);
+      await sleep(250 * (attempt + 1));
+      continue;
+    }
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
+      if (![502, 503, 504].includes(response.status) || attempt === 2) throw new Error(`owner_auth_http_${response.status}`);
+      await sleep(250 * (attempt + 1));
+      continue;
+    }
+    try { data = await response.json(); } catch { throw new Error('owner_auth_response_invalid'); }
+    break;
+  }
+  const role = data?.user?.app_metadata?.role;
   if (String(data?.user?.email ?? '').toLowerCase() !== email.trim().toLowerCase() || !['owner', 'admin'].includes(role)) {
     throw new Error('owner_auth_identity_invalid');
   }

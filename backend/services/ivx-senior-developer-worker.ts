@@ -284,6 +284,8 @@ export type IVXWorkerJob = {
   };
   leaseWorkerInstanceId?: string | null;
   leaseExpiresAt?: string | null;
+  /** Previous failed attempts remain visible after an authorized retry starts. */
+  recoveryHistory?: Array<{ error: string; recordedAt: string; resumedAttempt: number }>;
   jobId: string;
   status: IVXWorkerJobStatus;
   /** Granular execution stage (QUEUED, RUNNING, PATCHING, etc.). */
@@ -2386,6 +2388,12 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
     startedAt: nowIso(),
     lastHeartbeatAt: nowIso(),
     attempts: sharedSeniorQueueEnabled() ? job.attempts : job.attempts + 1,
+    error: null,
+    finishedAt: null,
+    ...(job.error ? { recoveryHistory: [...(job.recoveryHistory ?? []), {
+      error: job.error, recordedAt: nowIso(),
+      resumedAttempt: sharedSeniorQueueEnabled() ? job.attempts : job.attempts + 1,
+    }] } : {}),
   }, true, true);
 
   leaseHeartbeat = sharedSeniorQueueEnabled() ? setInterval(() => {

@@ -27,6 +27,44 @@ test('missing credentials fail before any HTTP request', async () => {
   assert.equal(requests, 0);
 });
 
+test('a transient connection reset retries within the bounded authentication policy', async () => {
+  let requests = 0, waits = 0;
+  const result = await authenticateOwner(owner, async () => {
+    if (++requests === 1) throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } });
+    return json(session);
+  }, { sleep: async () => { waits++; } });
+  assert.deepEqual(result, { token, role: 'owner' });
+  assert.equal(requests, 2);
+  assert.equal(waits, 1);
+});
+
+test('an upstream 503 can recover, but invalid credentials are never retried', async () => {
+  let requests = 0;
+  await authenticateOwner(owner, async () => ++requests === 1 ? json({}, 503) : json(session), { sleep: async () => {} });
+  assert.equal(requests, 2);
+  requests = 0;
+  await assert.rejects(authenticateOwner(owner, async () => { requests++; return json({}, 401); }, { sleep: async () => {} }), /owner_auth_http_401/);
+  assert.equal(requests, 1);
+});
+
+test('user-editable metadata cannot establish Owner authority', async () => {
+  await assert.rejects(authenticateOwner(owner, async () => json({ ...session,
+    user: { email: owner.email, user_metadata: { role: 'owner' } } })), /owner_auth_identity_invalid/);
+});
+
+test('transport failure is bounded and contains no credentials or arbitrary upstream message', async () => {
+  let requests = 0;
+  await assert.rejects(authenticateOwner(owner, async () => {
+    requests++;
+    throw Object.assign(new Error(owner.password), { cause: { code: 'ECONNRESET' } });
+  }, { sleep: async () => {} }), error => {
+    assert.equal(error.message, 'owner_auth_transport_failed: connection_reset');
+    assert.ok(!error.message.includes(owner.password));
+    return true;
+  });
+  assert.equal(requests, 3);
+});
+
 test('rejects invalid credentials without exposing the response body', async () => {
   await assert.rejects(authenticateOwner(owner, async () => json({ error: owner.password }, 401)), error => {
     assert.equal(error.message, 'owner_auth_http_401');
