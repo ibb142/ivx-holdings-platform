@@ -7,6 +7,35 @@ export function newReadTimings(timeoutMs?: number): Timings {
   return { headersMs: 0, payloadMs: 0, completed: 0, pending: 0, poolMs: null,
     sqlMs: null, sqlCompleted: 0, sqlPending: 0, deadline: timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs) };
 }
+/** Public source work belongs to all overlapping callers, not the first HTTP
+ * request. Keep its finite budget and metrics independent of each caller. */
+export function sharedPublicRead<T>(read: () => Promise<T>, timeoutMs = 8000): Promise<T> {
+  return readTimings.run(newReadTimings(timeoutMs), read);
+}
+
+/** Stop waiting at this caller's deadline without aborting another caller's
+ * source or dropping the pending entry while its database read is still live. */
+export function awaitPublicRead<T>(work: Promise<T>): Promise<T> {
+  const deadline = readTimings.getStore()?.deadline;
+  if (!deadline) return work;
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => {
+      deadline.removeEventListener('abort', abort);
+      reject(new DOMException('Public read deadline exceeded', 'AbortError'));
+    };
+    // Always observe the producer, including after an already-expired caller
+    // leaves, so a later source failure cannot become an unhandled rejection.
+    work.then(value => {
+      deadline.removeEventListener('abort', abort);
+      resolve(value);
+    }, error => {
+      deadline.removeEventListener('abort', abort);
+      reject(error);
+    });
+    if (deadline.aborted) abort();
+    else deadline.addEventListener('abort', abort, { once: true });
+  });
+}
 export function recordPoolCheckout(ms: number): void {
   const metrics = readTimings.getStore();
   if (metrics) {

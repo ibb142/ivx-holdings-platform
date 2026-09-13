@@ -1,4 +1,4 @@
-import { measuredReadFetch, readTimings } from './ivx-read-timings';
+import { awaitPublicRead, measuredReadFetch, readTimings, sharedPublicRead } from './ivx-read-timings';
 /**
  * IVX durable document store (Supabase-backed) — THE PERMANENT DATA-LOSS FIX (2026-06-07).
  *
@@ -268,21 +268,22 @@ export class DurableStore {
   }
 
   /** Web reads consume materialized documents only. Schema/S3 repair belongs
-   * outside public requests. Never retry after the common request deadline. */
+   * outside public requests. Share a finite source budget; callers retain their
+   * own deadlines and cannot cancel each other's source or open its circuit. */
   private async readPublicJson<T>(docKey: string, fallback: T): Promise<T> {
     let pending = this.publicReads.get(docKey);
     if (!pending) {
       if ((this.publicCooldown.get(docKey) ?? 0) > Date.now()) throw new Error('Public document circuit open');
       this.publicCooldown.delete(docKey);
       if (this.publicReads.size >= 32) throw new Error('Public document read capacity exceeded');
-      pending = (async () => {
+      pending = sharedPublicRead(async () => {
         const response = await measuredReadFetch(`${this.restBaseUrl()}/ivx_durable_documents?doc_key=eq.${encodeURIComponent(docKey)}&select=value&limit=1`, {
           method: 'GET', headers: buildHeaders(), signal: readTimings.getStore()!.deadline,
         });
         const rows = await parseResponsePayload(response);
         if (!response.ok || !Array.isArray(rows)) throw new Error('Public document source unavailable');
         return rows as { value: unknown }[];
-      })().catch(error => {
+      }).catch(error => {
         if (this.publicReads.get(docKey) === pending) {
           if (this.publicCooldown.size >= 128) this.publicCooldown.delete(this.publicCooldown.keys().next().value!);
           this.publicCooldown.set(docKey, Date.now() + 3000);
@@ -293,7 +294,7 @@ export class DurableStore {
       });
       this.publicReads.set(docKey, pending);
     }
-    const rows = await pending;
+    const rows = await awaitPublicRead(pending);
     return rows.length && rows[0]?.value != null ? structuredClone(rows[0].value) as T : fallback;
   }
 
