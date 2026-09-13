@@ -142,7 +142,7 @@ function missingTable(response: Response, payload: unknown): boolean {
     && (payload as { code?: string }).code === 'PGRST205';
 }
 
-type DurableReadOptions = { sharePendingRead?: boolean };
+type DurableReadOptions = { sharePendingRead?: boolean; signal?: AbortSignal };
 
 export class DurableStore {
   private readonly publicReads = new Map<string, Promise<{ value: unknown }[]>>();
@@ -299,6 +299,19 @@ export class DurableStore {
   }
 
   async readJson<T>(docKey: string, fallback: T, options: DurableReadOptions = {}): Promise<T> {
+    // Control reads consume an existing document within the caller's deadline.
+    // Do not bootstrap schema, retry, or share authorization snapshots here.
+    if (options.signal) {
+      options.signal.throwIfAborted();
+      const response = await measuredReadFetch(`${this.restBaseUrl()}/ivx_durable_documents?doc_key=eq.${encodeURIComponent(docKey)}&select=value&limit=1`, {
+        method: 'GET', headers: buildHeaders(), signal: options.signal,
+      });
+      const rows = await parseResponsePayload(response);
+      options.signal.throwIfAborted();
+      if (!response.ok) throw new Error(extractErrorMessage(rows, `Supabase document read returned HTTP ${response.status}.`));
+      if (!Array.isArray(rows)) throw new Error('Supabase returned an invalid document response; durable state was not replaced');
+      return rows.length && rows[0]?.value != null ? structuredClone(rows[0].value) as T : fallback;
+    }
     if (readTimings.getStore()?.deadline) return this.readPublicJson(docKey, fallback);
     await this.ensureSchema();
     // A public page requests the same metadata through several routes. Share
