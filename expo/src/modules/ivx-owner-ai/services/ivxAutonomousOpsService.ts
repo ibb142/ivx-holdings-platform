@@ -2,6 +2,7 @@ import type { AgentFleetSignal, FleetDashboardSignals } from '../../../../shared
 /** IVX Autonomous Operations Dashboard client (owner-only). */
 import { getDirectApiBaseUrl } from '@/lib/api-base';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
+import { connectDashboardSocket } from './autonomous-dashboard-stream-client';
 
 export type AgentStatus='ASSIGNED'|'UNKNOWN'|'ACTIVE'|'IDLE'|'RUNNING'|'TESTING'|'DEPLOYING'|'VERIFYING'|'RETRYING'|'BLOCKED'|'OWNER_ACTION_REQUIRED'|'FAILED'|'COMPLETED';
 export type ActivityCategory='DEVELOPMENT'|'INVESTORS'|'BUYERS'|'LEADS_CRM'|'PROPERTIES_DEALS'|'MARKETING'|'FINANCIAL'|'AUTONOMOUS_SYSTEM';
@@ -48,7 +49,7 @@ async function ownerFetch(path:string):Promise<unknown>{
   try{
     const res=await fetch(`${getDirectApiBaseUrl()}${path}`,{signal:controller.signal,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,'Cache-Control':'no-store'}});
     if(!res.ok){const b=await res.text().catch(()=>'');throw new Error(`IVX autonomous-ops request failed: HTTP ${res.status}${b?` — ${b.slice(0,200)}`:''}`);}
-    return res.json();
+    return await res.json();
   }catch(error){if(error instanceof Error&&error.name==='AbortError')throw new Error('IVX autonomous dashboard request timed out after 12s.');throw error;}finally{clearTimeout(timeout);}
 }
 
@@ -72,12 +73,5 @@ function toWebSocketUrl(base:string):string{const normalized=base.replace(/\/$/,
 
 export async function openAutonomousDashboardStream(opts:{range:DateRange;onSnapshot:(dashboard:AutonomousOpsDashboard,meta:DashboardStreamMeta)=>void;onState?:(meta:DashboardStreamMeta)=>void;onError?:(error:Error)=>void;}):Promise<{close:()=>void;setRange:(range:DateRange)=>void}> {
   const token=await getIVXAccessToken();if(!token)throw new Error('IVX autonomous dashboard requires an authenticated Owner session.');
-  let sequence=0;let closed=false;let currentRange=opts.range;let latestMeta:DashboardStreamMeta={state:'CONNECTING',sequence:0,serverTime:null,intervalMs:null,marker:null,transport:'websocket'};
-  const emitState=(patch:Partial<DashboardStreamMeta>)=>{latestMeta={...latestMeta,...patch,sequence};opts.onState?.(latestMeta);};emitState({state:'CONNECTING'});
-  const ws=new WebSocket(toWebSocketUrl(getDirectApiBaseUrl()));
-  ws.onopen=()=>{if(closed)return;emitState({state:'AUTHENTICATING'});ws.send(JSON.stringify({type:'auth',token,range:currentRange}));};
-  ws.onmessage=(event)=>{if(closed)return;try{const message=record(JSON.parse(String(event.data)));const type=typeof message.type==='string'?message.type:'';if(type==='auth_ok'){emitState({state:'LIVE',marker:typeof message.marker==='string'?message.marker:null,intervalMs:typeof message.intervalMs==='number'?message.intervalMs:null});return;}if(type==='snapshot'){sequence=typeof message.sequence==='number'?message.sequence:sequence+1;const dashboard=normalizeAutonomousDashboard(record(message.dashboard) as unknown as AutonomousOpsDashboard);const meta:DashboardStreamMeta={state:'LIVE',sequence,serverTime:typeof message.serverTime==='string'?message.serverTime:null,intervalMs:typeof message.intervalMs==='number'?message.intervalMs:null,marker:typeof message.marker==='string'?message.marker:null,transport:'websocket'};latestMeta=meta;opts.onSnapshot(dashboard,meta);opts.onState?.(meta);return;}if(type==='stream_error'||type==='auth_error'||type==='protocol_error')opts.onError?.(new Error(typeof message.error==='string'?message.error:`Autonomous dashboard stream ${type}`));}catch(error){opts.onError?.(error instanceof Error?error:new Error(String(error)));}};
-  ws.onerror=()=>{if(!closed){emitState({state:'ERROR'});opts.onError?.(new Error('Autonomous dashboard WebSocket error.'));}};
-  ws.onclose=()=>{if(!closed)emitState({state:'RECONNECTING'});};
-  return {close:()=>{closed=true;emitState({state:'CLOSED'});try{ws.close();}catch{}},setRange:(range)=>{currentRange=range;if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'set_range',range}));}};
+  return connectDashboardSocket({ ...opts, token, url: toWebSocketUrl(getDirectApiBaseUrl()), normalize: normalizeAutonomousDashboard });
 }

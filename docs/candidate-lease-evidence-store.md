@@ -32,10 +32,50 @@ and safe reason code. Callers must check its acknowledgement. No component can
 promise a durable failure log while the database itself is unavailable; the
 adapter returns the actual failure without recursively trying another write.
 
-Use the existing worker's identity with `acquireLock`, retain its returned token,
-then pass the same event/version to `saveCandidateWithLease`. The service is an
-internal persistence component; adding it does not start 112 workers or wire a
-new learning pipeline. Existing learning stores are not replaced by this patch.
+The production senior worker now calls `persistCoderCandidate` after an actual
+autonomous-coder result, before storing its final job receipt. It requires a
+fenced worker identity, agent identity, inspected source files, a full starting
+SHA, a diagnosis and a proposed technical plan. An incomplete proof is explicitly
+`NOT_APPLICABLE`; no placeholder lesson is manufactured.
+
+The bounded runner protects only this candidate-evidence phase with a 30-second
+lease. Long code execution retains the existing primary queue lease, heartbeat,
+emergency-stop and owner gates. The candidate callback checks that primary
+authority again. The candidate event hashes job ID, persisted attempt, agent and
+source SHA; it is immutable at candidate version 0. That version is not the
+primary queue's fencing version. Candidates remain unverified hypotheses.
+
+The job result's `candidateEvidence` receipt distinguishes `COMMITTED`,
+`CONTENDED`, `ALREADY_RECORDED`, `FAILED` and `NOT_APPLICABLE`. It preserves any
+failure-journal rejection and unknown commit outcome without rerunning code,
+changing a real deploy outcome or claiming a successful evidence write. Late
+callback results after timeout cannot save. No tokens are logged. Existing
+learning stores are not replaced and no automatic promotion is introduced.
+
+The dashboard reconnects stalled sockets and ignores late messages from retired
+connections. Retained rows stay visible; evidence still expires after 15 seconds
+and must match the dashboard's backend SHA. A successful socket authentication
+alone is not a live snapshot. Recovery must be demonstrated against production;
+local transport tests do not prove the database has recovered.
+
+Run `node scripts/ops/audit-112-fleet-activity.mjs` with the backend's existing
+`SUPABASE_DB_URL` (or `DATABASE_URL`). This read-only audit reports current lease
+holders and tasks separately from registry heartbeats. It measures full timestamp
+age, including hours. Incomplete observations fail with a nonzero exit. It does
+not evaluate productive evidence or hours and leaves those counts null.
+
+The proposed production role/index SQL is unnecessary for the audited schema:
+`authenticated` already has a 15-second statement timeout, `anon` has 3 seconds,
+and `anonymous` does not exist. The 112 registry rows use `active`, not `RUNNING`;
+current work comes from the task lease table. No role settings or indexes are
+changed by this patch. Any future concurrent index must be outside a transaction
+and justified by the actual query plan.
+
+The existing deployment governor keeps its real SHA, health and inference
+checks, now with bounded requests and an artifact identifying the failing
+stage. Chat POST requests are not retried. The separate live-status workflow's
+failure description refers to the complete verification, including telemetry,
+instead of declaring that every failure is a SHA mismatch.
 
 The CI suite uses isolated PostgreSQL 17 and separate connections to exercise
 claim and save races. The optional PGlite local run omits multi-connection tests.
