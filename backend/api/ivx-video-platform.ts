@@ -837,7 +837,12 @@ export async function handleDeferredVideoAnalytics(req: Request): Promise<Respon
       const visible = (data ?? []).filter((v: { id: string }) => isMetaVisible(normalizeVideoMeta(meta[v.id])));
       if (!visible.length) return { videos: [] };
       const analytics = await getAnalyticsDoc();
-      return { videos: visible.map((v: { id: string }) => ({ id: v.id, view_count: analytics.videos[v.id]?.views ?? 0 })) };
+      // Owner writes can change publication while counters are still loading.
+      // Recheck metadata before returning the shared result; failed checks must
+      // use the existing unavailable response, never an earlier public snapshot.
+      const currentMeta = await getMetaDoc();
+      const stillVisible = visible.filter((v: { id: string }) => isMetaVisible(normalizeVideoMeta(currentMeta[v.id])));
+      return { videos: stillVisible.map((v: { id: string }) => ({ id: v.id, view_count: analytics.videos[v.id]?.views ?? 0 })) };
     })).catch(() => {
       deferredAnalyticsRetryAt = Date.now() + 3000;
       return null;
@@ -1433,4 +1438,3 @@ export async function handlePlatformModerationDecision(req: Request, videoId: st
     return json({ error: err instanceof Error ? err.message : 'moderation failed', marker: VIDEO_PLATFORM_MARKER }, 500);
   }
 }
-

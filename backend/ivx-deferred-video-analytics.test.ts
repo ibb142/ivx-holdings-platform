@@ -82,6 +82,31 @@ test('deferred analytics backs off after failure without inventing counters and 
   `);
 });
 
+for (const change of ['hidden', 'unavailable']) {
+  test(`deferred analytics rechecks publication changes during shared counters: ${change}`, async () => {
+    await fixture(setup + `
+      let finish;
+      const healthy = await analyticsRead();
+      analyticsRead = () => new Promise(resolve => { finish = resolve; });
+      const first = read(a + ',' + hidden);
+      await tick();
+      assert.equal(analyticsCalls, 1);
+      if (${JSON.stringify(change)} === 'hidden') visible = false;
+      else metaRead = async () => { throw new Error('Publication metadata unavailable'); };
+      const second = read(hidden + ',' + a.toUpperCase() + ',' + a);
+      finish(healthy);
+      for (const response of await Promise.all([first, second])) {
+        if (${JSON.stringify(change)} === 'hidden') {
+          assert.equal(response.status, 200);
+          assert.deepEqual(await response.json(), { videos: [] }, 'A newly hidden video must not escape an earlier publication decision');
+        } else await unavailable(response);
+      }
+      assert.equal(queryCalls, 1, 'Equivalent ID sets must retain one producer');
+      assert.equal(analyticsCalls, 1);
+    `);
+  });
+}
+
 test('30 saturated callers share one read, respond within budget and retain pending work until it settles', async () => {
   await fixture(setup + `
     let finish, producerSignal;
