@@ -30,9 +30,15 @@ export function autonomousRuntimeEnforcerEnabled(env: NodeJS.ProcessEnv = proces
 }
 
 export function activeFleetMutationAuthorityCount(env: NodeJS.ProcessEnv = process.env): number {
-  return Number(autonomousRuntimeEnforcerEnabled(env))
+  const enforcer = autonomousRuntimeEnforcerEnabled(env);
+  // In atomic mode Doctor delegates to the enforcer and returns before legacy
+  // backlog creation/retry. Count the shared authority once. Keep every
+  // independent mutator counted, including Doctor's legacy fallback.
+  const independentDoctor = autonomousDoctorRepairEnabled(env)
+    && !(enforcer && autonomousQueueBackend(env) === 'postgres_atomic');
+  return Number(enforcer)
     + Number(deploymentAutoRepairEnabled(env))
-    + Number(autonomousDoctorRepairEnabled(env))
+    + Number(independentDoctor)
     + Number(githubSupervisorMutationsEnabled(env));
 }
 
