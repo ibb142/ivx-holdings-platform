@@ -13,7 +13,6 @@ const MANUAL_ONLY_FLEET_CONTROLLERS = [
   'ivx-112-force-dispatch-now.yml',
   'ivx-112-hard-start-recovery.yml',
   'ivx-112-per-agent-20h-no-sleep-sla.yml',
-  'ivx-112-per-agent-timer-control.yml',
   'ivx-112-production-3layer-enforcer.yml',
   'ivx-112-self-upgrade-5h-scheduler.yml',
   'ivx-112-war-room-starter.yml',
@@ -47,6 +46,27 @@ describe('IVX fleet control authority workflows', () => {
       expect(triggers, workflow).not.toContain('push:');
       expect(triggers, workflow).not.toContain('workflow_run:');
     }
+  });
+
+  test('scheduled per-agent timers observe evidence without taking fleet control', async () => {
+    const source = await readFile(path.join(REPO_ROOT, '.github/workflows/ivx-112-per-agent-timer-control.yml'), 'utf8');
+    const controller = await readFile(path.join(REPO_ROOT, 'scripts/ivx-per-agent-timer-control.mjs'), 'utf8');
+    expect(triggerBlock(source)).toContain("cron: '*/5 * * * *'");
+    expect(source).toContain("github.ref == 'refs/heads/main'");
+    expect(source).toContain("github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'");
+    expect(source).toContain('timeout-minutes: 4');
+    expect(source).toContain('cancel-in-progress: false');
+    expect(source).toContain('node scripts/ivx-per-agent-timer-control.mjs');
+    expect(source).not.toContain('secrets.');
+    expect(source).not.toContain('contents: write');
+    expect(source).not.toContain('actions: write');
+    expect(source).not.toMatch(/curl[^\n]*\s-X\s*(?:POST|PUT|PATCH|DELETE)/);
+    expect(controller).toContain("method: 'GET'");
+    expect(controller).toContain('/api/ivx/autonomous/agent-ledger?');
+    expect(controller).toContain('control.ownerControl.paused || control.ownerControl.stopped');
+    expect(controller).toContain('productionMutations: 0');
+    expect(controller).not.toMatch(/method:\s*['"](?:POST|PUT|PATCH|DELETE)['"]/);
+    expect(source + controller).not.toMatch(/\b(?:resume_all|start_all|retry_agent|IVX_SYSTEM_AUTH_KEY)\b/);
   });
 
   test('landing force remains manual and owner audit sync has a bounded separate job', async () => {
