@@ -123,7 +123,7 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
     if (userError || !userData.user) {
       const lower = (userError?.message || '').toLowerCase();
       const reason = lower.includes('expired') ? 'token_expired' : 'invalid_token';
-      console.log(`[OwnerAuth] ${traceId} token rejected source=${config.source}: ${userError?.message ?? 'no user'} elapsed=${Date.now() - startedAt}ms`);
+      console.error(`[OwnerAuth] ${traceId} token rejected source=${config.source}: ${userError?.message ?? 'no user'} elapsed=${Date.now() - startedAt}ms`);
       return jsonResponse({
         success: false,
         authorized: false,
@@ -150,7 +150,7 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
         role = typeof profile.role === 'string' ? profile.role : null;
       }
     } catch (profileError) {
-      console.log(`[OwnerAuth] ${traceId} profile lookup note:`, (profileError as Error)?.message ?? 'unknown');
+      console.error(`[OwnerAuth] ${traceId} profile lookup note:`, (profileError as Error)?.message ?? 'unknown');
     }
 
     if (!role) {
@@ -161,7 +161,7 @@ export async function handleOwnerAuthorize(request: Request): Promise<Response> 
           roleSource = 'rpc_verify_admin_access';
         }
       } catch (rpcError) {
-        console.log(`[OwnerAuth] ${traceId} verify_admin_access note:`, (rpcError as Error)?.message ?? 'unknown');
+        console.error(`[OwnerAuth] ${traceId} verify_admin_access note:`, (rpcError as Error)?.message ?? 'unknown');
       }
     }
 
