@@ -11,6 +11,22 @@ concurrency:
   group: landing-19-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  cloudfront-control-audit:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'audit/cloudfront-control-')
+    name: Inspect CloudFront control plane (read only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify account boundary and bounded diagnostic output
+        run: python3 -m unittest discover -s qa -p test_landing_cloudfront_control_audit.py -v
+      - name: Record AWS CLI version
+        run: aws --version
+      - name: Read distribution configuration and subscription state
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: python3 qa/landing_cloudfront_control_audit.py
   media-source-audit:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     name: Inspect registered Casa source (read only)
