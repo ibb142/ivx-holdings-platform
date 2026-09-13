@@ -10,6 +10,7 @@ import { hostname } from 'node:os';
 import { VERSIONED_INSPECTION_PREFIXES, VERSIONED_MISSION_PREFIXES } from './ivx-autonomous-mission-scope';
 import { localFleetExecutionMetrics } from './ivx-fleet-execution-metrics';
 import { randomUUID } from 'node:crypto';
+import { enforceMillisecondScatter } from '../utils/jitter';
 import type { Pool } from 'pg';
 import { getObserverPool, getWorkerPool, resetDatabasePoolsForTests } from './ivx-database-pools';
 import { queryWithPostgresDeadline } from './ivx-postgres-deadline';
@@ -539,7 +540,20 @@ export async function readPostgresAutonomousTasks(): Promise<Task[]> {
   taskReadInFlight = pending; try { return cloneTasks(await pending); } finally { if (taskReadInFlight === pending) taskReadInFlight = null; }
 }
 export async function createPostgresAutonomousTasks(tasks: readonly Task[]): Promise<AtomicCreateResult[]> { if (tasks.length === 0) return []; const results = await rpc<AtomicCreateResult[]>('ivx_autonomous_tasks_create_batch', { p_tasks: tasks }); if (!Array.isArray(results) || results.length !== tasks.length) throw new Error(`postgres_atomic create returned ${Array.isArray(results) ? results.length : 'invalid'} results for ${tasks.length} tasks`); mergeTaskResultsIntoCache(results.map((r) => r.task)); return results; }
-export async function claimPostgresAutonomousTasks(requests: readonly FleetLeaseRequest[]): Promise<FleetLeaseResult[]> { if (requests.length === 0) return []; const results = await rpc<FleetLeaseResult[]>('ivx_autonomous_tasks_claim_batch', { p_requests: requests, p_worker_instance_id: autonomousWorkerInstanceId(), p_lease_seconds: autonomousLeaseSeconds() }); if (!Array.isArray(results) || results.length !== requests.length) throw new Error(`postgres_atomic claim returned ${Array.isArray(results) ? results.length : 'invalid'} results for ${requests.length} lanes`); mergeTaskResultsIntoCache(results.map((r) => r.task)); return results; }
+export async function claimPostgresAutonomousTasks(requests: readonly FleetLeaseRequest[]): Promise<FleetLeaseResult[]> {
+  if (requests.length === 0) return [];
+  // Scatter once per batch, before either transport acquires a connection.
+  // Start and heartbeat RPCs remain independent so existing leases stay live.
+  await enforceMillisecondScatter();
+  const results = await rpc<FleetLeaseResult[]>('ivx_autonomous_tasks_claim_batch', {
+    p_requests: requests,
+    p_worker_instance_id: autonomousWorkerInstanceId(),
+    p_lease_seconds: autonomousLeaseSeconds(),
+  });
+  if (!Array.isArray(results) || results.length !== requests.length) throw new Error(`postgres_atomic claim returned ${Array.isArray(results) ? results.length : 'invalid'} results for ${requests.length} lanes`);
+  mergeTaskResultsIntoCache(results.map((r) => r.task));
+  return results;
+}
 export async function startPostgresAutonomousTasks(leases: readonly FleetTaskLeaseIdentity[]): Promise<FleetTaskMutationResult[]> { if (leases.length === 0) return []; const results = await rpc<FleetTaskMutationResult[]>('ivx_autonomous_tasks_start_batch', { p_leases: leases, p_worker_instance_id: autonomousWorkerInstanceId(), p_lease_seconds: autonomousLeaseSeconds() }); if (!Array.isArray(results) || results.length !== leases.length) throw new Error(`postgres_atomic start returned ${Array.isArray(results) ? results.length : 'invalid'} results for ${leases.length} leases`); mergeTaskResultsIntoCache(results.map((r) => r.task)); return results; }
 export async function heartbeatPostgresAutonomousTasks(leases: readonly FleetTaskLeaseIdentity[]): Promise<{ ok: boolean; refreshed: number; rejected: Array<{ taskId: string; error: string }> }> {
   if (leases.length === 0) return { ok: true, refreshed: 0, rejected: [] }; const result = await rpc<{ ok: boolean; refreshed: number; rejected: Array<{ taskId: string; error: string }>; at?: string }>('ivx_autonomous_tasks_heartbeat_batch', { p_leases: leases, p_worker_instance_id: autonomousWorkerInstanceId(), p_lease_seconds: autonomousLeaseSeconds() }); if (!result || typeof result.refreshed !== 'number' || !Array.isArray(result.rejected)) throw new Error('postgres_atomic heartbeat returned an invalid response');
