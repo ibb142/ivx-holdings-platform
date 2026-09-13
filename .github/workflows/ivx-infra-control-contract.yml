@@ -3,11 +3,17 @@ on:
   pull_request:
     paths:
       - 'scripts/ops/infra-control-tower*'
+      - 'scripts/ops/deploy-fleet-fix.sh'
+      - 'qa/infra-control-budget-postgres.test.mjs'
+      - 'supabase/migrations/20260911203746_ivx_global_ai_budget.sql'
       - '.github/workflows/ivx-infra-control-contract.yml'
   push:
     branches: [main]
     paths:
       - 'scripts/ops/infra-control-tower*'
+      - 'scripts/ops/deploy-fleet-fix.sh'
+      - 'qa/infra-control-budget-postgres.test.mjs'
+      - 'supabase/migrations/20260911203746_ivx_global_ai_budget.sql'
       - '.github/workflows/ivx-infra-control-contract.yml'
 permissions:
   contents: read
@@ -25,5 +31,12 @@ jobs:
           bun-version: '1.3.14'
       - run: bun install --frozen-lockfile --ignore-scripts
       - run: bash -n scripts/ops/infra-control-tower.sh
+      - run: bash -n scripts/ops/deploy-fleet-fix.sh
       - run: ./node_modules/.bin/tsc -p scripts/ops/infra-control-tower.tsconfig.json
       - run: bun test scripts/ops/infra-control-tower.test.ts
+      - name: Verify budget inspection against PostgreSQL
+        env:
+          IVX_PGLITE_MODULE: ${{ runner.temp }}/ivx-sql-qa/node_modules/@electric-sql/pglite
+        run: |
+          npm install --prefix "$RUNNER_TEMP/ivx-sql-qa" --ignore-scripts --no-audit --no-fund @electric-sql/pglite@0.3.14
+          node --test qa/infra-control-budget-postgres.test.mjs

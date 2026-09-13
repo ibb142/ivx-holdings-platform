@@ -32,6 +32,36 @@ select jsonb_build_object(
   'originalPurgeMatchGroups', coalesce((select jsonb_agg(to_jsonb(g)) from groups g), '[]'::jsonb)
 ) as report from activity`;
 
+export const BUDGET_DIAGNOSTIC_SQL = `
+with reservations as (
+  select count(*)::int as active,
+    count(*) filter (where created_at < statement_timestamp() - interval '15 minutes')::int as older_than_15m,
+    count(*) filter (where created_at < statement_timestamp() - interval '15 minutes'
+      and generation_id is null)::int as older_without_generation,
+    coalesce(sum(reserved_nano), 0)::text as reserved_liability_nano
+  from public.ivx_ai_budget_reservations where status = 'reserved'
+)
+select jsonb_build_object(
+  'observedAt', statement_timestamp(),
+  'policyConfigured', p.singleton is not null, 'budgetEnabled', p.enabled,
+  'maxConcurrent', p.max_concurrent, 'activeReservations', r.active,
+  'availableReservationSlots', case when p.max_concurrent is not null
+    then greatest(p.max_concurrent - r.active, 0) else null end,
+  'capacityState', case
+    when p.singleton is null then 'POLICY_UNAVAILABLE'
+    when p.enabled is not true then 'BUDGET_DISABLED'
+    when r.active >= p.max_concurrent then 'CAPACITY_SATURATED'
+    else 'CAPACITY_AVAILABLE' end,
+  'reservedOlderThan15Minutes', r.older_than_15m,
+  'olderReservationsWithoutGeneration', r.older_without_generation,
+  'reservedLiabilityNano', r.reserved_liability_nano,
+  'nextStep', case when r.older_than_15m > 0 then 'REVIEW_RETAINED_SETTLEMENT'
+    else 'NO_AGE_BASED_RECOVERY_CANDIDATE' end,
+  'financialClearanceVerified', false,
+  'ageProvesUnbilled', false, 'reservationsChanged', 0, 'modelCallsCreated', 0
+) as report from reservations r
+left join public.ivx_ai_budget_policy p on p.singleton`;
+
 export const FAILED_TASK_DIAGNOSTIC_SQL = `
 with sample as materialized (
   select task_id, version::text as version, state, updated_at,
@@ -74,10 +104,14 @@ export async function collectInfraDiagnostic(query: Query) {
     return report;
   };
   const connections = await read(CONNECTION_DIAGNOSTIC_SQL);
+  // Slot occupancy is separate from available money. Old or missing-generation
+  // reservations retain their liability until the native accounting path closes
+  // them using reviewed evidence; this observer cannot expire or refund them.
+  const budget = await read(BUDGET_DIAGNOSTIC_SQL);
   const failedTasks = await read(FAILED_TASK_DIAGNOSTIC_SQL);
   return { status: 'DIAGNOSTIC_COMPLETE', recoveryCertified: false,
     mutationsPerformed: 0, connectionsTerminated: 0, tasksRequeued: 0,
-    connections, failedTasks };
+    connections, budget, failedTasks };
 }
 
 export function diagnosticConfig(env: NodeJS.ProcessEnv) {

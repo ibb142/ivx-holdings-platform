@@ -1,16 +1,18 @@
 import { expect, test } from 'bun:test';
-import { collectInfraDiagnostic, diagnosticConfig } from './infra-control-tower';
+import { BUDGET_DIAGNOSTIC_SQL, collectInfraDiagnostic, diagnosticConfig } from './infra-control-tower';
 
 const observedAt = '2026-09-13T21:00:00Z';
 test('reports managed idle sessions and terminal tasks without certifying recovery', async () => {
   let reads = 0;
   const report = await collectInfraDiagnostic(async () => ({ rows: [{ report: ++reads === 1
     ? { observedAt, originalPurgeMatches: 17, originalPurgeMatchGroups: [{ application_name: 'Supavisor', connections: 3 }] }
+    : reads === 2 ? { observedAt, activeReservations: 1, maxConcurrent: 4, capacityState: 'CAPACITY_AVAILABLE' }
     : { observedAt, tasks: [{ task_id: 'retained', version: '9007199254740993', retryAuthorized: false }] } }] }));
-  expect(reads).toBe(2);
+  expect(reads).toBe(3);
   expect(report.recoveryCertified).toBe(false);
   expect(report.connectionsTerminated).toBe(0);
   expect(report.tasksRequeued).toBe(0);
+  expect(report.budget.activeReservations).toBe(1);
   expect(report.failedTasks.tasks).toEqual([{ task_id: 'retained', version: '9007199254740993', retryAuthorized: false }]);
 });
 
@@ -26,9 +28,19 @@ test('a failed read aborts the diagnostic instead of producing zero counters or 
 test('a failed task read does not certify a partially successful diagnostic', async () => {
   let reads = 0;
   await expect(collectInfraDiagnostic(async () => {
-    if (++reads === 2) throw new Error('task read timeout');
+    if (++reads === 3) throw new Error('task read timeout');
     return { rows: [{ report: { observedAt } }] };
   })).rejects.toThrow('task read timeout');
+  expect(reads).toBe(3);
+});
+
+test('a budget timeout stops inspection without claiming zero occupancy or recovery', async () => {
+  let reads = 0;
+  await expect(collectInfraDiagnostic(async (sql) => {
+    reads++;
+    if (sql === BUDGET_DIAGNOSTIC_SQL) throw new Error('budget read timeout');
+    return { rows: [{ report: { observedAt } }] };
+  })).rejects.toThrow('budget read timeout');
   expect(reads).toBe(2);
 });
 
