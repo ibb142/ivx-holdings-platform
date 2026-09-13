@@ -1,0 +1,95 @@
+name: ivx-local-ai
+
+x-logging: &bounded-logs
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  ollama:
+    image: ollama/ollama:0.34.0
+    environment:
+      OLLAMA_HOST: "0.0.0.0:11434"
+      OLLAMA_NUM_PARALLEL: "${IVX_LOCAL_CONCURRENCY:-1}"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_MAX_QUEUE: "8"
+      OLLAMA_CONTEXT_LENGTH: "8192"
+      OLLAMA_KEEP_ALIVE: "10m"
+    volumes:
+      - ollama_storage:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: [CMD, ollama, list]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+    logging: *bounded-logs
+
+  # A listening Ollama server does not mean that the model has been downloaded.
+  model-init:
+    image: ollama/ollama:0.34.0
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-llama3.1:70b}"
+    entrypoint: [/bin/sh, -ec]
+    command: ['exec ollama pull "$$OLLAMA_MODEL"']
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+    logging: *bounded-logs
+
+  qdrant:
+    image: qdrant/qdrant:v1.19.1
+    environment:
+      QDRANT__SERVICE__API_KEY: "${QDRANT_API_KEY:?Run python3 prepare.py first}"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    # No host ports: clients in this project use http://qdrant:6333.
+    restart: unless-stopped
+    logging: *bounded-logs
+
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.100.1
+    ports:
+      - "127.0.0.1:4000:4000"
+    environment:
+      LITELLM_MASTER_KEY: "${LITELLM_MASTER_KEY:?Run python3 prepare.py first}"
+      LITELLM_OLLAMA_MODEL: "ollama_chat/${OLLAMA_MODEL:-llama3.1:70b}"
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-llama3.1:70b}"
+      # Used only by the explicit smoke check, not by LiteLLM for vector memory.
+      QDRANT_API_KEY: "${QDRANT_API_KEY:?Run python3 prepare.py first}"
+    volumes:
+      - ./litellm.yaml:/app/ivx-litellm.yaml:ro
+      - ./smoke.py:/app/ivx-smoke.py:ro
+    command: [--config, /app/ivx-litellm.yaml, --host, "0.0.0.0", --port, "4000"]
+    depends_on:
+      model-init:
+        condition: service_completed_successfully
+      qdrant:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=4).close()"
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+    logging: *bounded-logs
+
+volumes:
+  ollama_storage:
+  qdrant_storage:
