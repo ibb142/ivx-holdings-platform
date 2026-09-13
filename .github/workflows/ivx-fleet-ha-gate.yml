@@ -3,7 +3,7 @@ on:
   push:
     branches: [fix/fleet-render-ha-20260908, fix/fleet-backend-ha-20260908]
   pull_request:
-    paths: ['qa/phase3-budget-reconciliation.mjs', 'qa/phase3-budget-reconciliation.test.mjs', 'qa/phase3-capacity.mjs', 'backend/**', 'expo/**', 'supabase/migrations/**', 'supabase/repair-functions/**', 'scripts/ivx-senior-commit-recovery-postgres-proof.mjs', 'scripts/ivx-senior-compact-receipt-proof.mjs', 'scripts/ivx-senior-queue-spill-proof.mjs', 'scripts/ivx-senior-claim-spill-proof.ts', 'scripts/ivx-senior-work-queue-proof.ts', 'scripts/ivx-coder-workspace-postgres-proof.ts', 'scripts/ivx-objective-link-postgres-proof.mjs', 'scripts/ivx-fleet-ha-postgres-proof.mjs', 'scripts/ivx-global-ai-budget-postgres-proof.mjs', 'scripts/ivx-global-ai-budget-sdk-proof.ts', 'scripts/ivx-task-recovery-postgres-proof.mjs', 'scripts/ivx-fleet-telemetry-postgres-proof.ts', 'scripts/ivx-mission-history-postgres-proof.ts', 'scripts/ivx-landing-read-postgres-proof.ts', 'scripts/ivx-inspection-claim-postgres-proof.mjs', 'scripts/ivx-fleet-ha-live-proof.ts', 'scripts/ivx-fleet-ha-identities.ts', 'scripts/ivx-fleet-ha-identities.test.ts', '.github/workflows/ivx-fleet-ha-gate.yml']
+    paths: ['database/functions/execute_budget_reconciliation_batch.sql', 'scripts/ops/reconcile-uncertain-budget.mjs', 'scripts/ivx-budget-reconciliation-postgres-proof.mjs', 'qa/phase3-budget-reconciliation.mjs', 'qa/phase3-budget-reconciliation.test.mjs', 'qa/phase3-capacity.mjs', 'backend/**', 'expo/**', 'supabase/migrations/**', 'supabase/repair-functions/**', 'scripts/ivx-senior-commit-recovery-postgres-proof.mjs', 'scripts/ivx-senior-compact-receipt-proof.mjs', 'scripts/ivx-senior-queue-spill-proof.mjs', 'scripts/ivx-senior-claim-spill-proof.ts', 'scripts/ivx-senior-work-queue-proof.ts', 'scripts/ivx-coder-workspace-postgres-proof.ts', 'scripts/ivx-objective-link-postgres-proof.mjs', 'scripts/ivx-fleet-ha-postgres-proof.mjs', 'scripts/ivx-global-ai-budget-postgres-proof.mjs', 'scripts/ivx-global-ai-budget-sdk-proof.ts', 'scripts/ivx-task-recovery-postgres-proof.mjs', 'scripts/ivx-fleet-telemetry-postgres-proof.ts', 'scripts/ivx-mission-history-postgres-proof.ts', 'scripts/ivx-landing-read-postgres-proof.ts', 'scripts/ivx-inspection-claim-postgres-proof.mjs', 'scripts/ivx-fleet-ha-live-proof.ts', 'scripts/ivx-fleet-ha-identities.ts', 'scripts/ivx-fleet-ha-identities.test.ts', '.github/workflows/ivx-fleet-ha-gate.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -60,6 +60,8 @@ jobs:
         run: node --experimental-strip-types --test backend/services/ivx-global-ai-budget-settlement.test.mjs
       - name: Reconcile provider receipt metadata without calls or mutations
         run: node --test qa/phase3-budget-reconciliation.test.mjs
+      - name: Verify uncertain-charge receipts before accounting changes
+        run: node --test backend/services/ivx-uncertain-budget-reconciliation.test.mjs
       - name: Verify installed SDK cannot retry a refused monetary admission
         run: bun scripts/ivx-global-ai-budget-sdk-proof.ts
       - name: Verify manager identity, terminal writes, admission, planning and recovery
@@ -78,6 +80,10 @@ jobs:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - name: Prove global monetary admission on four PostgreSQL connections
         run: node --experimental-strip-types scripts/ivx-global-ai-budget-postgres-proof.mjs
+        env:
+          IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
+      - name: Prove atomic receipt reconciliation and lock contention on PostgreSQL
+        run: node scripts/ivx-budget-reconciliation-postgres-proof.mjs
         env:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - name: Recover committed jobs with missing PR identity on PostgreSQL
@@ -159,6 +165,7 @@ jobs:
             qa/evidence/fleet-ha/senior-claim-spill.json
             qa/evidence/fleet-ha/senior-work-queue.json
             qa/evidence/fleet-ha/coder-workspaces.json
+            qa/evidence/fleet-ha/budget-reconciliation.json
             qa/evidence/fleet-ha/global-ai-budget.json
             qa/evidence/fleet-ha/global-ai-budget-sdk.json
             qa/evidence/fleet-ha/pending-execution-discovery.json
