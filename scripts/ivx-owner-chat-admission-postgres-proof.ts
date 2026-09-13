@@ -4,9 +4,63 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import pg from 'pg';
 import { ownerChatRequestKey, runOwnerChatOnce, reconcileOwnerChatRequest, type ChatRequestRecord, type ChatRequestStore } from '../backend/services/ivx-owner-chat-admission';
+import { admitOwnerRequest, ownerRequestDocumentKey, ownerRequestTraceId, replaceOwnerRequest,
+  type OwnerRequestControlStore, type OwnerRequestDocument } from '../backend/services/ivx-owner-request-control-store';
 
 interface Database {
   query(sql: string, values?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
+}
+
+function requestControlStoreFor(db: Database): OwnerRequestControlStore {
+  return {
+    async insert(key, document) {
+      try {
+        await db.query('insert into public.ivx_durable_documents(doc_key,value) values ($1,$2::jsonb)', [key, JSON.stringify(document)]);
+        return true;
+      } catch (error) { if ((error as { code?: string }).code === '23505') return false; throw error; }
+    },
+    async read(key) {
+      const result = await db.query('select value from public.ivx_durable_documents where doc_key=$1 limit 1', [key]);
+      return (result.rows[0]?.value as OwnerRequestDocument | undefined) ?? null;
+    },
+    async replace(key, revision, document) {
+      const result = await db.query("update public.ivx_durable_documents set value=$3::jsonb,updated_at=now() where doc_key=$1 and value->>'revision'=$2 and value->>'ownerId'=$4 returning doc_key",
+        [key, revision, JSON.stringify(document), document.ownerId]);
+      return result.rows.length === 1;
+    },
+  };
+}
+
+async function proveRequestControl(a: Database, b: Database, owner: string, keys: string[]) {
+  const idempotencyKey = 'request-control-fixture';
+  const traceId = ownerRequestTraceId(owner, idempotencyKey);
+  const key = ownerRequestDocumentKey(owner, traceId); keys.push(key);
+  const proposed = (): OwnerRequestDocument => ({ version: 1, ownerId: owner, revision: randomUUID(), fingerprint: 'fixture', record: {
+    traceId, requestId: randomUUID(), conversationId: 'fixture', messageId: 'message', idempotencyKey,
+    status: 'pending', retryCount: 0, providerRequestId: null, startedAt: new Date().toISOString(), completedAt: null,
+    terminalResult: null, structuredError: null,
+  } });
+  const results = await Promise.all([admitOwnerRequest(requestControlStoreFor(a), key, proposed()), admitOwnerRequest(requestControlStoreFor(b), key, proposed())]);
+  assert.equal(new Set(results.map(result => result.document.record.requestId)).size, 1);
+  assert.equal(results.filter(result => !result.duplicate).length, 1);
+  // A fresh repository on an independent connection has no process-local state.
+  const restartReplay = await admitOwnerRequest(requestControlStoreFor(b), key, proposed());
+  assert.equal(restartReplay.duplicate, true);
+  assert.equal(restartReplay.document.record.requestId, results[0].document.record.requestId);
+  assert.equal(await requestControlStoreFor(b).read(ownerRequestDocumentKey('another-owner', traceId)), null);
+  const original = results[0].document;
+  const cancelled: OwnerRequestDocument = { ...original, revision: randomUUID(), record: { ...original.record, status: 'cancelled' } };
+  const inFlight: OwnerRequestDocument = { ...original, revision: randomUUID(), record: { ...original.record, status: 'in_flight' } };
+  const transitions = await Promise.all([
+    replaceOwnerRequest(requestControlStoreFor(a), key, original, cancelled),
+    replaceOwnerRequest(requestControlStoreFor(b), key, original, inFlight),
+  ]);
+  assert.equal(transitions.filter(Boolean).length, 1, 'Exactly one competing state transition may commit');
+  const persisted = await requestControlStoreFor(a).read(key);
+  assert.equal(persisted?.record.requestId, original.record.requestId);
+  assert.equal(await replaceOwnerRequest(requestControlStoreFor(b), key, original, { ...original, revision: randomUUID() }), false);
+  return { verification: 'PASS', scope: 'isolated PostgreSQL request-control admission and revision fencing',
+    concurrentAccepted: 1, concurrentDuplicate: 1, competingTransitionsCommitted: 1, productionRowsTouched: 0 };
 }
 
 /** Real SQL counterpart of the indexed PostgREST INSERT/read/CAS operations. */
@@ -76,7 +130,8 @@ export async function proveOwnerChatAdmission(a: Database, b: Database): Promise
     const blocked = await runOwnerChatOnce({ key: crashKey, requestId: 'crash', fingerprint: 'crash', store: storeFor(b), execute: async () => { throw new Error('must never run'); } });
     assert.equal(blocked.status, 409);
     assert.equal(await storeFor(b).complete(crashKey, 'wrong-token', { version: 1, fingerprint: 'crash', token: 'wrong-token', state: 'completed', startedAt: '2000-01-01T00:00:00Z' }), false);
-    return { verification: 'PASS', scope: 'isolated SQL admission; no production provider or owner session',
+    const requestControl = await proveRequestControl(a, b, owner, keys);
+    return { verification: 'PASS', scope: 'isolated SQL admission; no production provider or owner session', requestControl,
       checks: ['competing admissions, one executor', 'exact terminal replay', 'lost insert acknowledgement', 'lost completion acknowledgement', 'restart without unsafe takeover', 'completion token fencing', 'original message link'],
       providerCallsForConcurrentMessage: providerCalls, productionRowsTouched: 0 };
   } finally {
