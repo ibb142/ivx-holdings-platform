@@ -21,7 +21,7 @@ if(connectionString) {
 }
 await db.exec('create role anon;create role authenticated;create role service_role bypassrls;');
 try {
-  await db.exec(await readFile(new URL('../supabase/migrations/20260913162015_candidate_lease_evidence_store.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20260913162951_candidate_lease_evidence_store.sql',import.meta.url),'utf8'));
 } catch(error) {
   console.error({code:error.code,message:error.message,position:error.position});await db.close();throw new Error('Migration failed');
 }
