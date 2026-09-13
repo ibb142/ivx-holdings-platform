@@ -472,8 +472,13 @@ export async function applyTruthControl(action: TruthControlAction, agentId?: st
     }
   } else {
     if (!agentId && typeof agentNumber !== 'number') throw new Error('agentId or agentNumber required');
-    const state = getAllExecutionStates().find((row) => row.agentId === agentId || row.agentNumber === agentNumber);
+    if (agentNumber !== undefined && (!Number.isInteger(agentNumber) || agentNumber < 1 || agentNumber > 112)) throw new Error('agentNumber must be an integer from 1 to 112');
+    const state = getAllExecutionStates().find((row) => (!agentId || row.agentId === agentId) && (agentNumber === undefined || row.agentNumber === agentNumber));
     if (!state) throw new Error('agent not found');
+    if ((action === 'resume_agent' || action === 'pause_agent') && state.disabledState) throw new Error('Agent is disabled; enable it explicitly first');
+    // Workers read this durable control; process-local flags alone cannot
+    // deliver an API command to a different worker or survive a restart.
+    await updateControlState(action, state.agentNumber);
     if (action === 'pause_agent') pauseAgent(state.agentId);
     if (action === 'resume_agent') resumeAgent(state.agentId);
     if (action === 'disable_agent') disableAgent(state.agentId);

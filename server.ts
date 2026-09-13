@@ -26,7 +26,6 @@ import { startAutonomousLiveBootstrap } from './backend/services/ivx-autonomous-
 import { startAutonomous112RuntimeEnforcer } from './backend/services/ivx-autonomous-runtime-enforcer';
 import { startAutonomousDoctor, getAutonomousDoctorStatus } from './backend/services/ivx-autonomous-doctor';
 import { getAutonomousTruthSnapshot, applyTruthControl, type TruthControlAction } from './backend/services/ivx-autonomous-truth-control';
-import { verifyIVXGitHubActionsOIDCRequest } from './backend/services/ivx-github-actions-oidc';
 import { assertIVXRegisteredOwnerBearer } from './backend/api/owner-only';
 import { getIVXOwnerEmailAllowlist } from './expo/shared/ivx/access-control';
 import { handleCanonicalReelsFeed } from './backend/api/ivx-canonical-reels-feed';
@@ -74,9 +73,9 @@ app.post('/api/ivx/autonomous/control', async (c) => {
   const allowed: TruthControlAction[] = ['start_all','stop_all','pause_all','resume_all','pause_agent','resume_agent','disable_agent','enable_agent','retry_agent'];
   if (!allowed.includes(action)) return c.json({ ok: false, error: `action must be one of: ${allowed.join(', ')}` }, 400);
   try {
-    const oidcRecoveryAuthorized = (action === 'start_all' || action === 'resume_all') && await verifyIVXGitHubActionsOIDCRequest(c.req.raw);
-    let authorization: unknown = 'github_oidc_recovery';
-    if (!oidcRecoveryAuthorized) { const auth = await assertIVXRegisteredOwnerBearer(c.req.raw, `autonomous_control:${action}`); authorization = auth.approval; }
+    // Machine identity does not authorize clearing an owner's pause or stop.
+    const auth = await assertIVXRegisteredOwnerBearer(c.req.raw, `autonomous_control:${action}`);
+    const authorization = auth.approval;
     const snapshot = await applyTruthControl(action, typeof (body as any).agentId === 'string' ? (body as any).agentId : undefined, typeof (body as any).agentNumber === 'number' ? (body as any).agentNumber : undefined);
     return c.json({ ok: true, action, authorization, snapshot });
   } catch (error: any) { const status = typeof error?.status === 'number' ? error.status : 400; return c.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, status); }
