@@ -15,6 +15,12 @@ function scenario(body: string): Record<string, unknown> {
       reads += 1;
       await new Promise(resolve => setTimeout(resolve, 5));
       if (mode === 'error') return Response.json({message:'test unavailable'}, {status:503});
+      if (mode === 'missing') return Response.json([]);
+      if (mode === 'malformed') return Response.json([{control_name:'emergency_stop', active:'false'}]);
+      if (mode === 'duplicate') {
+        const rows = [{control_name:'emergency_stop', active:false}, {control_name:'emergency_stop', active:true}];
+        return Response.json(rows.slice(0, Number(new URL(String(input)).searchParams.get('limit'))));
+      }
       return Response.json([{control_name:'emergency_stop', active:mode === 'stop'}]);
     };
     const {checkEmergencyStop, assertEmergencyStopInactive} = await import(${JSON.stringify(moduleUrl)});
@@ -53,6 +59,32 @@ describe('shared emergency-stop control read', () => {
       const recovered = await assertEmergencyStopInactive('later test task');
       console.log(JSON.stringify({failedReads, refused:outcomes.filter(r=>r.status==='rejected'&&r.reason.message.startsWith('EMERGENCY_STOP_UNAVAILABLE:')).length, reads, recovered:recovered.source}));
     `)).toEqual({failedReads:1, refused:112, reads:2, recovered:'supabase'});
+  });
+
+  for (const invalidMode of ['missing', 'duplicate', 'malformed']) {
+    it(`refuses 112 starts for ${invalidMode} REST control data and immediately retries a repaired control`, () => {
+      expect(scenario(`
+        mode = ${JSON.stringify(invalidMode)};
+        const outcomes = await Promise.allSettled(Array.from({length:112}, () => assertEmergencyStopInactive('test task')));
+        const failedReads = reads;
+        mode = 'ready';
+        const recovered = await assertEmergencyStopInactive('repaired control');
+        console.log(JSON.stringify({failedReads, refused:outcomes.filter(r=>r.status==='rejected'&&r.reason.message.startsWith('EMERGENCY_STOP_UNAVAILABLE:')).length, reads, recovered:recovered.source}));
+      `)).toEqual({failedReads:1, refused:112, reads:2, recovered:'supabase'});
+    });
+  }
+
+  it('never reuses an expired inactive control when the next REST response is missing', () => {
+    expect(scenario(`
+      await assertEmergencyStopInactive('initial task');
+      clock += 15000;
+      mode = 'missing';
+      const outcomes = await Promise.allSettled(Array.from({length:112}, () => assertEmergencyStopInactive('later task')));
+      const failedReads = reads;
+      mode = 'ready';
+      const recovered = await assertEmergencyStopInactive('repaired control');
+      console.log(JSON.stringify({failedReads, refused:outcomes.filter(r=>r.status==='rejected'&&r.reason.message.startsWith('EMERGENCY_STOP_UNAVAILABLE:')).length, reads, recovered:recovered.source}));
+    `)).toEqual({failedReads:2, refused:112, reads:3, recovered:'supabase'});
   });
 
   it('preserves the 15-second cache boundary and observes a new owner stop after expiry', () => {
