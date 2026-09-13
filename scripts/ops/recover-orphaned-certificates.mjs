@@ -17,7 +17,9 @@ export async function recover({fetchImpl=fetch,env=process.env,now=Date.now()}={
     if(!Array.isArray(rows))throw Error('Unexpected database recovery response');
     return rows;
   }
-  const predicate="final_status='running' and workflow=$1 and task_id ~ '^live112-[0-9]+-' and started_at<$2::timestamptz";
+  // A request can persist pending before its running transition times out.
+  // Both states require a terminal, identity-verified GitHub workflow.
+  const predicate="final_status in ('pending','running') and workflow=$1 and task_id ~ '^live112-[0-9]+-' and ((final_status='running' and started_at<$2::timestamptz) or (final_status='pending' and started_at is null and created_at<$2::timestamptz))";
   const candidates=await sql("select distinct split_part(task_id,'-',2) as github_run from public.ivx_agent_executions where "+predicate+" limit 112",[WORKFLOW,cutoff]);
   const ended=[];
   for(const row of candidates){
@@ -33,7 +35,9 @@ export async function recover({fetchImpl=fetch,env=process.env,now=Date.now()}={
     if(run.status==='completed')ended.push(id);
   }
   if(!ended.length){console.log(JSON.stringify({orphanRecovery:true,candidates:candidates.length,closed:0}));return {closed:0};}
-  const rows=await sql("with recovered as (update public.ivx_agent_executions set final_status='failed', finished_at=now(), duration_ms=coalesce(duration_ms,0), verified_output=false, error='RECOVERY_ORPHANED_WORKFLOW: terminal GitHub workflow; interrupted execution closed without verified success' where "+predicate+" and split_part(task_id,'-',2)=any($3::text[]) returning task_id) select count(*)::int as closed from recovered",[WORKFLOW,cutoff,ended],false);
+  // The time-integrity trigger derives duration from these boundaries. A task
+  // that never started receives equal boundaries and zero credited work.
+  const rows=await sql("with recovered as (update public.ivx_agent_executions set final_status='failed', finished_at=case when final_status='pending' then created_at else now() end, duration_ms=coalesce(duration_ms,0), verified_output=false, error='RECOVERY_ORPHANED_WORKFLOW: terminal GitHub workflow; interrupted execution closed without verified success; never-started pending work receives zero duration' where "+predicate+" and split_part(task_id,'-',2)=any($3::text[]) returning task_id) select count(*)::int as closed from recovered",[WORKFLOW,cutoff,ended],false);
   const remaining=await sql("select count(*)::int as remaining from public.ivx_agent_executions where "+predicate+" and split_part(task_id,'-',2)=any($3::text[])",[WORKFLOW,cutoff,ended]);
   if(remaining[0]?.remaining!==0)throw Error('Orphan recovery readback failed');
   const closed=rows[0]?.closed;

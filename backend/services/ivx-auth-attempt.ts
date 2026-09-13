@@ -20,3 +20,19 @@ export async function runAbortableAuthAttempt<T>(
     if (timer !== undefined) clearTimeout(timer);
   }
 }
+
+// Preserve the deployed fast-path deadline when using the shared lookup helper.
+export const MEMBER_FALLBACK_LOOKUP_BUDGET_MS = 800;
+
+/** A failed credential-store read is unknown, never proof of a wrong password. */
+export async function readBoundedMemberFallback(
+  verify: (signal: AbortSignal) => Promise<string | null>,
+  timeoutMs = MEMBER_FALLBACK_LOOKUP_BUDGET_MS,
+): Promise<{ available: boolean; userId: string | null }> {
+  try {
+    const userId = await runAbortableAuthAttempt(verify, timeoutMs, 'ivx:fallback-lookup-timeout');
+    return { available: true, userId };
+  } catch {
+    return { available: false, userId: null };
+  }
+}

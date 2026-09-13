@@ -5,6 +5,21 @@ export type OwnerQueueWorkerObservation = {
 
 type ProviderObservation = { state: string; lastHttpStatus: number | null; lastValidationTime: string | null };
 
+export const OWNER_QUEUE_HEALTH_TIMEOUT_MS = 6_500;
+
+/** Share only concurrent reads. Completed results are never cached, so a later
+ * request observes current Owner authorization and worker heartbeats. */
+export function createOwnerQueueSnapshotReader<T>() {
+  let pending: { key: string; work: Promise<T> } | null = null;
+  return (key: string, read: () => Promise<T>): Promise<T> => {
+    if (pending?.key === key) return pending.work;
+    const entry = { key, work: Promise.resolve().then(read) };
+    entry.work = entry.work.finally(() => { if (pending === entry) pending = null; });
+    pending = entry;
+    return entry.work;
+  };
+}
+
 /** A cold process needs an actual completion before claiming work. Failed probes
  * are bounded to one per minute and never run while owner execution is paused. */
 export function createOwnerQueueProviderGate(deps: {

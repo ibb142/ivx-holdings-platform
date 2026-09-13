@@ -6,7 +6,7 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { runAbortableAuthAttempt } from './ivx-auth-attempt';
+import { runAbortableAuthAttempt, readBoundedMemberFallback, MEMBER_FALLBACK_LOOKUP_BUDGET_MS } from './ivx-auth-attempt';
 import { randomUUID, scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -29,7 +29,7 @@ const DEPLOYMENT_MARKER = 'ivx-member-database-v3-login-deadline-fix';
 export const MEMBER_LOGIN_INNER_BUDGET_MS = 8_000;
 // A login only reads the existing fallback document. It must not bootstrap
 // schema or replay a failed read before the actual authentication request.
-export const MEMBER_LOGIN_FALLBACK_BUDGET_MS = 800;
+export const MEMBER_LOGIN_FALLBACK_BUDGET_MS = MEMBER_FALLBACK_LOOKUP_BUDGET_MS;
 /** Internal marker for "upstream auth did not answer in time". Must never reach the member. */
 export const SIGN_IN_TIMEOUT_SENTINEL = 'ivx:sign-in-upstream-timeout';
 
@@ -666,19 +666,13 @@ export async function loginMember(email: string, password: string): Promise<Memb
   }
 
   // 1. Durable fallback store first (covers members registered during Supabase email rate-limit).
-  let fallbackUserId: string | null = null;
-  let fallbackUnavailable = false;
-  try {
-    fallbackUserId = await runAbortableAuthAttempt(
-      signal => verifyFallbackMemberPassword(normalizedEmail, password, signal),
-      MEMBER_LOGIN_FALLBACK_BUDGET_MS,
-      SIGN_IN_TIMEOUT_SENTINEL,
-    );
-  } catch {
-    // Supabase members can still sign in. A negative Supabase result cannot
-    // establish bad credentials for a fallback member whose store is unavailable.
-    fallbackUnavailable = true;
-  }
+  const fallback = await readBoundedMemberFallback(
+    signal => verifyFallbackMemberPassword(normalizedEmail, password, signal),
+    MEMBER_LOGIN_FALLBACK_BUDGET_MS,
+  );
+  const fallbackUserId = fallback.userId;
+  // A negative primary verdict cannot reject a fallback member while its store is unavailable.
+  const fallbackUnavailable = !fallback.available;
   if (fallbackUserId) {
     // Fire-and-forget: updateMemberLastLogin + audit log + mintSession — all non-blocking
     // with internal timeouts so a stalled Supabase never hangs the login response.
