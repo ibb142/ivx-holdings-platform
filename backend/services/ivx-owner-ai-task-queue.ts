@@ -1,5 +1,6 @@
 import { startAdaptivePoll } from './ivx-adaptive-poll';
 import { boundedHealthProbe } from './ivx-bounded-health-probe';
+import { observeQueueHealth } from './ivx-queue-health-observation';
 import { createOwnerQueueProviderGate, ownerQueueWorkerReadiness } from './ivx-owner-queue-readiness';
 /**
  * IVX Owner AI Durable Task Queue — P0 production reliability layer.
@@ -1058,17 +1059,10 @@ export async function checkQueueHealth(): Promise<HealthCheckResult> {
   const runtime = getWorkerRuntimeInfo();
   const circuit = getSupabaseCircuitState();
   if (!isTaskQueueConfigured()) return { ok: false, detail: { reason: 'queue persistence not configured', circuit, ...runtime } };
-  type Snapshot = { authorized: boolean; pending: Array<{ id: string; status: string; created_at: string }>; dead: Array<{ id: string }>; workers: unknown[] };
-  const observation = await boundedHealthProbe(`${getSupabaseUrl()}/rest/v1/rpc/ivx_owner_ai_queue_health?p_source_sha=${encodeURIComponent(queueSourceSha())}`, restHeaders(),
-    (body): body is Snapshot => {
-      if (!body || typeof body !== 'object') return false;
-      const value = body as Snapshot;
-      return typeof value.authorized === 'boolean' && Array.isArray(value.pending) && value.pending.length <= 200
-        && value.pending.every(row => typeof row?.id === 'string' && ['QUEUED', 'RETRYING', 'RUNNING'].includes(row.status) && Number.isFinite(Date.parse(row.created_at)))
-        && Array.isArray(value.dead) && value.dead.length <= 100 && value.dead.every(row => typeof row?.id === 'string')
-        && Array.isArray(value.workers) && value.workers.length <= 10;
-    });
+  const observation = await observeQueueHealth({ sourceSha: queueSourceSha(), headers: restHeaders(),
+    url: `${getSupabaseUrl()}/rest/v1/rpc/ivx_owner_ai_queue_health?p_source_sha=${encodeURIComponent(queueSourceSha())}` });
   if (!observation.ok) return { ok: false, detail: { ...runtime, circuit,
+    timing: observation.timing,
     reason: observation.error ?? 'Queue observation unavailable', telemetryAvailable: false,
     depth: null, deadLetterCount: null, saturated: null, staleQueue: null } };
   const snapshot = observation.value!, rows = snapshot.pending;
@@ -1078,6 +1072,7 @@ export async function checkQueueHealth(): Promise<HealthCheckResult> {
   const shared = ownerQueueWorkerReadiness(snapshot.workers, queueSourceSha());
   return { ok: snapshot.authorized && shared.ready && !saturated && !stale && !circuit.open,
     detail: { ...runtime, circuit, consumerScope: 'general_owner_ai', running: shared.ready, localWorkerRunning: runtime.running,
+      timing: observation.timing,
       ownerAuthorized: snapshot.authorized,
       workers: shared.workers, workerObservationReason: shared.reason, telemetryAvailable: true, depth: rows.length, depthCapped: rows.length === 200,
       oldestQueuedAgeMinutes: oldestAgeMinutes, deadLetterCount: snapshot.dead.length, deadLetterCountCapped: snapshot.dead.length === 100,

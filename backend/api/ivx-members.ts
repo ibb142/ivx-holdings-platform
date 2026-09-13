@@ -37,6 +37,7 @@ import {
 import { createClient } from '@supabase/supabase-js';
 import { assertIVXOwnerOnly } from './owner-only';
 import { validRegistrationPostalCode } from '../services/ivx-registration-postal-code';
+import { memberLoginInput } from '../services/ivx-member-login-input';
 
 const DEPLOYMENT_MARKER = 'ivx-members-api-v1';
 
@@ -464,12 +465,11 @@ export async function handleVerificationStatus(request: Request): Promise<Respon
 // POST /api/members/login
 export async function handleMemberLogin(request: Request): Promise<Response> {
   const body = await parseBody(request);
-  const email = asString(body.email).toLowerCase();
-  const password = asString(body.password);
-  if (!email || !password) {
-    return jsonResponse({ success: false, message: 'Email and password are required.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+  const input = memberLoginInput(body);
+  if (!input) {
+    return jsonResponse({ success: false, message: 'Invalid email or password.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
   }
-  const result = await loginMember(email, password);
+  const result = await loginMember(input.email, input.password);
   if (result.success) return jsonResponse(result, 200);
   if (result.requiresVerification) return jsonResponse(result, 403);
   // An upstream auth timeout is an infrastructure fault, not a bad password.

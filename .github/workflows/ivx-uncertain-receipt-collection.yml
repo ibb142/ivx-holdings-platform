@@ -1,0 +1,35 @@
+name: IVX Uncertain Provider Receipt Collection
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/runtime-rectification-20260913]
+    paths:
+      - 'qa/collect-uncertain-provider-receipts.mjs'
+      - 'qa/phase3-budget-reconciliation.mjs'
+      - '.github/workflows/ivx-uncertain-receipt-collection.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ivx-uncertain-receipt-collection-20260913
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Validate receipt collection contracts
+        run: node --test qa/phase3-budget-reconciliation.test.mjs qa/collect-uncertain-provider-receipts.test.mjs
+      - name: Collect provider vouchers into the private evidence store
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          IVX_AI_GATEWAY_KEY: ${{ secrets.IVX_AI_GATEWAY_KEY }}
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+        run: node qa/collect-uncertain-provider-receipts.mjs

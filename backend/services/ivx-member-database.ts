@@ -7,6 +7,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { runAbortableAuthAttempt } from './ivx-auth-attempt';
+import { memberLoginInput } from './ivx-member-login-input';
 import { randomUUID, scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -655,10 +656,11 @@ async function mintSessionForFallbackMember(
  *  - Falls back to Supabase Auth signInWithPassword when no fallback record exists.
  *  Records last_login_at on success. Returns accessToken + refreshToken for client session. */
 export async function loginMember(email: string, password: string): Promise<MemberLoginResult> {
-  const normalizedEmail = email.trim().toLowerCase();
-  if (!normalizedEmail || !password) {
-    return { success: false, message: 'Email and password are required.', deploymentMarker: DEPLOYMENT_MARKER };
+  const input = memberLoginInput({ email, password });
+  if (!input) {
+    return { success: false, message: 'Invalid email or password.', deploymentMarker: DEPLOYMENT_MARKER };
   }
+  const normalizedEmail = input.email;
 
   // 1. Durable fallback store first (covers members registered during Supabase email rate-limit).
   const fallbackUserId = await verifyFallbackMemberPassword(normalizedEmail, password);
