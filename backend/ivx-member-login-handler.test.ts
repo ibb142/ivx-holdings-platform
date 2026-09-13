@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { fileURLToPath } from 'node:url';
 
 test('HTTP login rejects malformed requests without auth I/O and preserves genuine auth outcomes', () => {
   const script = `
@@ -25,7 +26,7 @@ test('HTTP login rejects malformed requests without auth I/O and preserves genui
     console.log(JSON.stringify({requests:32,authCallsForInvalid:0,elapsedMs}));
   `;
   const child = Bun.spawnSync([process.execPath, '--preload', './backend-test-preload.ts', '-e', script], {
-    cwd: process.cwd(), env: { ...process.env, NODE_ENV: 'test' }, timeout: 20_000,
+    cwd: fileURLToPath(new URL('../', import.meta.url)), env: { ...process.env, NODE_ENV: 'test' }, timeout: 20_000,
   });
   expect(child.stderr.toString()).not.toContain('AssertionError');
   expect(child.exitCode).toBe(0);

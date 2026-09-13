@@ -95,12 +95,16 @@ export function reconcileReceipt(row, payload, observedAt) {
 /** A provider receipt is evidence for a future settlement, not a ledger write. */
 export function validateUncertainReceipt(row, payload, observedAt) {
   requireValue(row.status === 'uncertain' && row.settled_upper_nano === null, 'RESERVATION_NOT_UNCERTAIN');
+  // Gateway's documented completed-generation response has finish_reason;
+  // cancelled is not a required field in its REST schema.
+  // https://vercel.com/docs/ai-gateway/sdks-and-apis/rest-api#generation
   requireValue(['stop','length','content_filter','tool_calls','function_call','error','cancelled'].includes(payload?.data?.finish_reason)
-    && typeof payload.data.cancelled === 'boolean', 'PROVIDER_TERMINATION_UNOBSERVED');
+    && (payload.data.cancelled === undefined || typeof payload.data.cancelled === 'boolean'), 'PROVIDER_TERMINATION_UNOBSERVED');
   const result = validateReceiptAgainstBound(row, payload, observedAt, integerNano(row.reserved_nano));
   const { settledUpperNano, ...receipt } = result;
   return { ...receipt, state: 'PROVIDER_RECEIPT_OBSERVED', ledgerStatus: 'uncertain',
-    finishReason: payload.data.finish_reason.slice(0, 100), cancelled: payload.data.cancelled };
+    finishReason: payload.data.finish_reason,
+    ...(payload.data.cancelled === undefined ? {} : { cancelled: payload.data.cancelled }) };
 }
 
 function validateReceiptAgainstBound(row, payload, observedAt, upper) {

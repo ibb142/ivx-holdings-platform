@@ -28,10 +28,16 @@ export async function collectUncertainReceipts({ serviceKey, gatewayKey, sourceS
   const report = { sourceSha, observedAt: new Date(now()).toISOString(), requested: rows.length,
     uploaded: 0, unavailable: 0, ledgerRowsChanged: 0, modelCallsCreated: 0, records: [] };
   for (const row of rows) {
+    let shape;
     try {
       if (!/^gen_[0-9A-HJKMNP-TV-Z]{26}$/.test(row.generation_id || '')) throw new Error('INVALID_GENERATION_ID');
       const payload = (await readBudgetJson(GATEWAY + '/v1/generation?id=' + encodeURIComponent(row.generation_id),
         { Authorization: 'Bearer ' + gatewayKey }, deps, true)).value;
+      // Field types only: useful for a provider contract mismatch without
+      // logging identities, amounts, timestamps, prompts or arbitrary fields.
+      shape = Object.fromEntries(['id','model','created_at','total_cost','is_byok','finish_reason','cancelled',
+        'tokens_prompt','tokens_completion','latency','generation_time'].map(key => [key,
+        payload?.data?.[key] === null ? 'null' : typeof payload?.data?.[key]]));
       const receipt = validateUncertainReceipt(row, payload, new Date(now()).toISOString());
       const value = { ...receipt, sourceSha, source: 'https://ai-gateway.vercel.sh/v1/generation',
         providerReceiptSha256: createHash('sha256').update(JSON.stringify(receipt)).digest('hex') };
@@ -51,7 +57,7 @@ export async function collectUncertainReceipts({ serviceKey, gatewayKey, sourceS
       report.unavailable++;
       const code = error?.code ?? error?.message;
       report.records.push({ reservationId: row.reservation_id, state: 'UNAVAILABLE',
-        reason: typeof code === 'string' && /^[A-Z][A-Z0-9_]{1,80}$/.test(code) ? code : 'RECEIPT_OBSERVATION_FAILED' });
+        reason: typeof code === 'string' && /^[A-Z][A-Z0-9_]{1,80}$/.test(code) ? code : 'RECEIPT_OBSERVATION_FAILED', shape });
     }
   }
   return report;
@@ -63,7 +69,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       gatewayKey: process.env.IVX_AI_GATEWAY_KEY || process.env.AI_GATEWAY_API_KEY, sourceSha: process.env.GITHUB_SHA });
     // Reservation IDs and receipt documents stay in the private database.
     console.log(JSON.stringify({ requested: report.requested, uploaded: report.uploaded, unavailable: report.unavailable,
-      ledgerRowsChanged: 0, modelCallsCreated: 0, reasons: [...new Set(report.records.filter(r => r.reason).map(r => r.reason))] }));
+      ledgerRowsChanged: 0, modelCallsCreated: 0, reasons: [...new Set(report.records.filter(r => r.reason).map(r => r.reason))],
+      schemas: [...new Set(report.records.filter(r => r.shape).map(r => JSON.stringify(r.shape)))].map(s => JSON.parse(s)) }));
     if (report.unavailable) process.exitCode = 1;
   } catch (error) {
     const message = String(error?.code ?? error?.message ?? 'RECEIPT_COLLECTION_FAILED');

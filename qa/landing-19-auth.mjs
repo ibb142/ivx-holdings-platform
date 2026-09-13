@@ -34,7 +34,9 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 4174, async fetch(reques
   return await Bun.file(file).exists() ? new Response(Bun.file(file)) : new Response(null, { status: 404 });
 } });
 const password = 'Local-QA-' + randomUUID() + '!9a';
-const payload = () => ({ email: `qa-${randomUUID()}@example.test`, password, firstName: 'QA', lastName: 'Fixture', phone: '+15555550100', country: 'US', zipCode: '33101', roles: ['investor'], acceptTerms: true, dateOfBirth: '1990-01-01', gender: 'prefer_not_to_say', registrationRequestId: randomUUID() });
+// This isolated Auth flow must use an address accepted by public login input
+// validation; special-use .test addresses are deliberately rejected before I/O.
+const payload = () => ({ email: `qa-${randomUUID()}@example.com`, password, firstName: 'QA', lastName: 'Fixture', phone: '+15555550100', country: 'US', zipCode: '33101', roles: ['investor'], acceptTerms: true, dateOfBirth: '1990-01-01', gender: 'prefer_not_to_say', registrationRequestId: randomUUID() });
 const created = [], checks = [];
 let browser, error;
 const reportAsyncError = (reason) => {
@@ -202,7 +204,7 @@ try {
       checks.push('HTTP registration → real Auth identity → Postgres profile/member/wallet → password login → protected profile');
     } else {
       if (unit === 'auth.login-e2e') {
-        const owner = await admin.auth.admin.createUser({ email: `qa-owner-${randomUUID()}@example.test`, password, email_confirm: true, app_metadata: { role: 'owner' } });
+        const owner = await admin.auth.admin.createUser({ email: `qa-owner-${randomUUID()}@example.com`, password, email_confirm: true, app_metadata: { role: 'owner' } });
         assert.equal(owner.error, null); created.push(owner.data.user.id);
         const ownerLogin = await login({ email: owner.data.user.email });
         const verified = await admin.auth.getUser(ownerLogin.accessToken);

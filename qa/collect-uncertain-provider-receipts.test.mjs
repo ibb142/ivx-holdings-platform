@@ -27,6 +27,13 @@ test('uncertain receipt records actual cost without pretending the ledger is set
     assert.throws(() => validateUncertainReceipt(row, { data: { ...payload.data, ...bad } }, new Date(now()).toISOString()));
   }
 });
+test('the documented Gateway response does not require an undocumented cancellation field', () => {
+  const { cancelled, ...documented } = payload.data;
+  const result = validateUncertainReceipt(row, { data: documented }, new Date(now()).toISOString());
+  assert.equal(result.providerCostNano, '150000');
+  assert.equal(result.finishReason, 'stop');
+  assert.equal(result.cancelled, undefined);
+});
 test('only a validated receipt is uploaded; no model or ledger mutations occur', async () => {
   const writes = [];
   const report = await collectUncertainReceipts(config, { ...deps, fetcher: async (url, init) => {
