@@ -1,0 +1,29 @@
+name: IVX public feed connection diagnostics
+on:
+  push:
+    branches: [diag/public-feed-pooler-20260913]
+    paths:
+      - 'qa/public-feed-pooler-diagnostic*'
+      - '.github/workflows/ivx-public-read-diagnostics.yml'
+permissions:
+  contents: read
+concurrency:
+  group: ivx-public-read-diagnostics
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'ibb142/ivx-holdings-platform'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Verify read-only scope and secret redaction
+        run: node --test qa/public-feed-pooler-diagnostic.test.mjs
+      - name: Read provider configuration without changing limits or data
+        run: node qa/public-feed-pooler-diagnostic.mjs
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
