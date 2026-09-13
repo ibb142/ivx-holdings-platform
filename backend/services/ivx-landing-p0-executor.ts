@@ -16,6 +16,7 @@
 import { TERMINAL_SUCCESS_STATES } from './ivx-autonomous-task-engine';
 import { fetchLandingGitHubRead } from './ivx-landing-github-read';
 import { measureMediaWeight } from './ivx-media-weight';
+import { matchesMediaMime, probeMediaAsset } from './ivx-media-asset-probe';
 import {
   fetchMainSha,
   getLandingTasksForSha,
@@ -747,18 +748,18 @@ async function runMedia(fetchImpl: typeof fetch, source: 'deals-images' | 'deals
   }
   const sample = urls.slice(0, max ?? 40);
   const results = await mapLimit(sample, MEDIA_CONCURRENCY, async (url) => ({
-    url, result: assert === 'weight' ? await measureMediaWeight(fetchImpl, url) : await headOrGet(fetchImpl, url),
+    url, result: assert === 'weight' ? await measureMediaWeight(fetchImpl, url) : await probeMediaAsset(fetchImpl, url),
   }));
   for (const { url, result } of results) c.api.push(`${truncate(url, 90)} → ${result.status || result.error} ${result.contentType || '-'} ${result.bytes}B`);
   if (assert === 'resolvable') {
-    const dead = results.filter(({ result }) => result.status === 0 || result.status >= 400);
+    const dead = results.filter(({ result }) => result.status !== 200 && result.status !== 206);
     return dead.length === 0 ? pass(`${sample.length}/${urls.length} media urls resolve`) : fail(`${dead.length}/${sample.length} media unreachable: ${dead.slice(0, 5).map((d) => `${truncate(d.url, 60)} (${d.result.status || d.result.error})`).join(', ')}`, 'media', 'fix broken/missing media URLs');
   }
   if (assert === 'mime') {
     const unavailable = results.filter(({ result }) => result.status !== 200 && result.status !== 206);
     if (unavailable.length > 0) return fail(`${unavailable.length}/${sample.length} media responses unavailable; MIME not verified`, 'media', 'restore the media responses before checking content-type');
-    const expected = source.includes('video') ? /^video\/|^application\/(vnd\.apple\.mpegurl|x-mpegurl|dash\+xml)/ : /^image\//;
-    const wrong = results.filter(({ result }) => !expected.test(result.contentType));
+    const expected = source.includes('video') ? 'video' : 'image';
+    const wrong = results.filter(({ result }) => !matchesMediaMime(result.contentType, expected));
     return wrong.length === 0 ? pass(`${sample.length} media with correct MIME`) : fail(`${wrong.length}/${sample.length} wrong MIME: ${wrong.slice(0, 5).map((w) => `${truncate(w.url, 50)} → ${w.result.contentType || 'none'}`).join(', ')}`, 'media', 'serve media with correct content-type');
   }
   // weight
