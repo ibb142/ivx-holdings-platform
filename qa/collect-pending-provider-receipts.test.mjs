@@ -95,6 +95,9 @@ test('BYOK, cost conflicts, identity changes and unfinished responses do not pro
 test('existing receipt is consumed without repeatedly appending provider evidence',async()=>{
   const f=fixture({existing:true}),r=await collect(f);assert.equal(r.alreadyPresent,1);assert.equal(r.providerLookups,0);
   assert.equal(r.settled,1);assert(!f.writes.some(w=>w.body.doc_key?.startsWith('finance/provider-receipts/')));
+  const lookup=f.calls.find(c=>c.u.searchParams.get('select')==='doc_key').u.searchParams;
+  assert.deepEqual(lookup.getAll('doc_key'),['like.finance/provider-receipts/'+row.day+'/'+row.reservation_id+'/*']);
+  assert.equal(lookup.has('value->>sourceSha'),false);
 });
 test('receipt rejection stays visible after collection',async()=>{
   const f=fixture({settlement:{state:'RECEIPTS_REJECTED',settled:0,rejected:1}}),r=await collect(f);

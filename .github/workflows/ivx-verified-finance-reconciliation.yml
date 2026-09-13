@@ -5,6 +5,7 @@ on:
     branches: [fix/verified-finance-cron-20260913]
     paths:
       - 'supabase/migrations/*verified_finance_reconciliation_cron.sql'
+      - 'supabase/migrations/*finance_receipt_prefix_matching.sql'
       - 'qa/verified-finance-reconciliation.test.mjs'
       - 'qa/collect-pending-provider-receipts*.mjs'
       - 'qa/phase3-budget-reconciliation.mjs'
@@ -12,6 +13,7 @@ on:
   pull_request:
     paths:
       - 'supabase/migrations/*verified_finance_reconciliation_cron.sql'
+      - 'supabase/migrations/*finance_receipt_prefix_matching.sql'
       - 'qa/verified-finance-reconciliation.test.mjs'
       - 'qa/collect-pending-provider-receipts*.mjs'
       - 'qa/phase3-budget-reconciliation.mjs'
@@ -24,14 +26,31 @@ jobs:
   postgres-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: finance_test_only
+          POSTGRES_DB: finance_test
+          POSTGRES_INITDB_ARGS: '--locale=en_US.utf8'
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d finance_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
       - name: Install isolated PostgreSQL test runtime
-        run: npm install --prefix "$RUNNER_TEMP/ivx-finance-tests" --no-save --package-lock=false --ignore-scripts @electric-sql/pglite@0.5.8
+        run: npm install --prefix "$RUNNER_TEMP/ivx-finance-tests" --no-save --package-lock=false --ignore-scripts pg@8.22.0
       - name: Exercise receipt validation and atomic accounting
-        run: IVX_PGLITE_MODULE="$RUNNER_TEMP/ivx-finance-tests/node_modules/@electric-sql/pglite" node --test qa/verified-finance-reconciliation.test.mjs
+        env:
+          IVX_POSTGRES_URL: postgres://postgres:finance_test_only@localhost:5432/finance_test
+        run: IVX_POSTGRES_MODULE="$RUNNER_TEMP/ivx-finance-tests/node_modules/pg" node --test qa/verified-finance-reconciliation.test.mjs
       - name: Verify authenticated collection and evidence boundaries
         run: node --test qa/phase3-budget-reconciliation.test.mjs qa/collect-pending-provider-receipts.test.mjs

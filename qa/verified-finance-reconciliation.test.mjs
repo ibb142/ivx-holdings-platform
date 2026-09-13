@@ -8,11 +8,19 @@ import { test } from 'node:test';
 // npm install --prefix /tmp/ivx-finance-tests @electric-sql/pglite@0.5.8
 // IVX_PGLITE_MODULE=/tmp/ivx-finance-tests/node_modules/@electric-sql/pglite node --test qa/verified-finance-reconciliation.test.mjs
 const require = createRequire(import.meta.url);
-const { PGlite } = require(process.env.IVX_PGLITE_MODULE || '@electric-sql/pglite');
 const migrationUrl = new URL('../supabase/migrations/20260913152950_verified_finance_reconciliation_cron.sql', import.meta.url);
 const migration = (await readFile(migrationUrl,'utf8')).split('-- SCHEDULING:')[0];
 const SOURCE = 'ef429b20225fc01c84f6adc9e5f165291a95d389';
-const db = new PGlite();
+let db;
+if (process.env.IVX_POSTGRES_URL) {
+  const { Client } = require(process.env.IVX_POSTGRES_MODULE || 'pg');
+  const client = new Client({connectionString:process.env.IVX_POSTGRES_URL});
+  await client.connect();
+  db = {query:(s,p)=>client.query(s,p),exec:s=>client.query(s),close:()=>client.end()};
+} else {
+  const { PGlite } = require(process.env.IVX_PGLITE_MODULE || '@electric-sql/pglite');
+  db = new PGlite();
+}
 await db.exec(`
   create role anon; create role authenticated; create role service_role bypassrls;
   create table public.ivx_durable_documents(doc_key text primary key,value jsonb not null,updated_at timestamptz not null default now());
@@ -22,6 +30,7 @@ await db.exec(`
 `);
 await db.exec(await readFile(new URL('../supabase/migrations/20260911203746_ivx_global_ai_budget.sql',import.meta.url),'utf8'));
 await db.exec(migration);
+await db.exec(await readFile(new URL('../supabase/migrations/20260913155726_finance_receipt_prefix_matching.sql',import.meta.url),'utf8'));
 const query = (s,p=[])=>db.query(s,p);
 const call = async()=> (await query('select public.fn_autonomous_finance_depuration() as result')).rows[0].result;
 
@@ -51,6 +60,16 @@ async function reset(){await db.exec(`delete from public.ivx_durable_documents; 
   delete from public.ivx_ai_budget_days; delete from public.ivx_ai_finance_reconciliation_runs;`);}
 
 test('receipt reconciliation safeguards in PostgreSQL',async t=>{
+  await t.test('receipt prefix matching survives the production locale',async()=>{
+    const r=(await query(`select datcollate, 'finance/abc/39.json' < 'finance/abc/~' as locale_comparison,
+      'finance/abc/39.json' ~<~ 'finance/abc/~' as bytewise_comparison
+      from pg_database where datname=current_database()`)).rows[0];
+    assert.equal(r.bytewise_comparison,true);
+    if (process.env.IVX_POSTGRES_URL) {
+      assert.match(r.datcollate,/^en_US\.(UTF-8|utf8)$/);
+      assert.equal(r.locale_comparison,false,'real PostgreSQL must reproduce the production regression');
+    }
+  });
   await t.test('old charges without receipts stay uncertain',async()=>{
     await reset(); const f=await fixture({withReceipt:false}); const r=await call();
     assert.equal(r.state,'NO_ELIGIBLE_RECEIPTS');assert.equal(r.settled,0);assert.equal((await row(f.id)).status,'uncertain');

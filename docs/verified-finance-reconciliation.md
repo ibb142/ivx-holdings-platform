@@ -56,6 +56,12 @@ select cron.alter_job(job_id := jobid, active := false)
 from cron.job where jobname = 'ivx-verified-finance-reconciliation';
 ```
 
-Local tests use a separate PGlite PostgreSQL runtime and do not connect to
-production. See the dedicated GitHub workflow for the reproducible command.
-Cron itself must be checked on the hosted PostgreSQL instance.
+Receipt prefixes use bytewise pattern operators and a `text_pattern_ops` index.
+Ordinary range comparisons against a trailing tilde are invalid under the
+production `en_US.UTF-8` collation. The collector uses a LIKE prefix instead.
+
+The CI contract suite runs against PostgreSQL 17 initialized with `en_US.utf8`
+and reproduces the locale failure before asserting the corrected comparison.
+An optional isolated PGlite runtime supports fast local accounting checks but
+does not reproduce operating-system locale ordering. Tests do not connect to
+production. Cron itself must be checked on the hosted PostgreSQL instance.

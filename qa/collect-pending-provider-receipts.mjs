@@ -105,8 +105,10 @@ export async function collectPendingReceipts({ serviceKey,gatewayKey,sourceRevis
       const identities=bindings.filter(other=>other.generation_id===row.generation_id);
       check(identities.length===1&&identities[0].reservation_id===row.reservation_id,'GENERATION_BINDING_AMBIGUOUS');
       const prefix=`finance/provider-receipts/${row.day}/${row.reservation_id}/`;
-      const existing=await read(urlFor('ivx_durable_documents',[['select','doc_key'],['doc_key','gte.'+prefix],
-        ['doc_key','lt.'+prefix+'~'],['value->>sourceSha','eq.'+sourceRevision],['limit',1]]));
+      // LIKE is independent of locale ordering; the SQL consumer authenticates
+      // existing receipts against their own approved source revision.
+      const existing=await read(urlFor('ivx_durable_documents',[['select','doc_key'],
+        ['doc_key','like.'+prefix+'*'],['limit',1]]));
       check(Array.isArray(existing)&&existing.length<=1,'RECEIPT_DOCUMENT_RESPONSE_INVALID');
       if(existing.length){report.alreadyPresent++;report.records.push({reservationId:row.reservation_id,state:'DOCUMENT_PRESENT'});continue;}
       report.providerLookups++;
