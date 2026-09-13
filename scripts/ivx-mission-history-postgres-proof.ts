@@ -18,6 +18,7 @@ mock.module('../backend/services/ivx-supabase-postgres-tls', () => ({
 process.env.SUPABASE_DB_URL = connectionString;
 process.env.IVX_AUTONOMOUS_QUEUE_BACKEND = 'postgres_atomic';
 const store = await import('../backend/services/ivx-postgres-autonomous-task-store');
+const { getWorkerPool } = await import('../backend/services/ivx-database-pools');
 const admin = new pg.Client({ connectionString });
 await admin.connect();
 const prefix = `mission-history-proof:${randomUUID()}:`;
@@ -72,6 +73,8 @@ try {
   // pg client's timeout. This isolated local lock never touches production.
   const blocker = new pg.Client({ connectionString });
   await blocker.connect();
+  const workerPool = getWorkerPool();
+  const beforeLock = (await workerPool.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0];
   try {
     await blocker.query('BEGIN');
     await blocker.query('LOCK TABLE public.ivx_autonomous_tasks IN ACCESS EXCLUSIVE MODE');
@@ -90,7 +93,27 @@ try {
   const resumedPlanning = await store.readPostgresAutonomousTaskIndex(sha);
   assert(resumedPlanning.some(task => task.taskId === prefix + 'current-complete'),
     'planning must recover after lock release');
+  const afterLock = (await workerPool.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0];
+  assert.equal(afterLock.pid, beforeLock.pid, 'confirmed lock rollback must retain the same connection');
   assert.deepEqual(await snapshot(), before, 'deadline and recovery must preserve all history');
+  // Cancel after an actual write in the isolated database: rollback must undo
+  // the write and transaction-local state before this socket is reused.
+  const rollbackTaskId = `${prefix}rolled-back-write`;
+  await assert.rejects(() => workerPool.query(`
+    select set_config('ivx.rollback_proof','present',true);
+    insert into public.ivx_autonomous_tasks(task_id,idempotency_key,state,payload)
+      values ('${rollbackTaskId}','${rollbackTaskId}','QUEUED',
+        jsonb_build_object('taskId','${rollbackTaskId}','idempotencyKey','${rollbackTaskId}','state','QUEUED'));
+    select pg_sleep(3)`),
+    (error: unknown) => error instanceof Error && 'code' in error && error.code === '57014');
+  const afterCancellation = (await workerPool.query<{ pid: number; marker: string | null; writes: number }>(
+    `select pg_backend_pid() as pid, current_setting('ivx.rollback_proof',true) as marker,
+      (select count(*)::integer from public.ivx_autonomous_tasks where task_id=$1) as writes`, [rollbackTaskId])).rows[0];
+  assert.equal(afterCancellation.pid, afterLock.pid, 'confirmed statement rollback must retain the same connection');
+  assert.equal(afterCancellation.writes, 0, 'cancelled transaction must not retain its write');
+  assert.notEqual(afterCancellation.marker, 'present', 'transaction-local state must not leak');
+  console.log(JSON.stringify({ check: 'confirmed-rollback-connection-reuse', result: 'PASS',
+    sameBackend: true, cancelledWriteAbsent: true, transactionStateReset: true, productionRowsTouched: 0 }));
   await insert(Array.from({ length: 1000 }, (_, index) => ({ taskId: `${prefix}overflow-${index}`,
     idempotencyKey: `module-audit:${sha}:${prefix}overflow-${index}`, state: 'BLOCKED' })));
   await assert.rejects(() => store.readPostgresRecoveryTasks(sha), /recovery is incomplete/,

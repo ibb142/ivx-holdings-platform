@@ -38,10 +38,10 @@ test('saturated worker checkout cannot delay an API read; reads retain anon role
     expect(released).toEqual([false]);
   } finally { ap.mockRestore(); wp.mockRestore(); }
 });
-test('worker convenience query installs server limits and destroys failed client without replay', async () => {
+test('worker convenience query preserves server limits and reuses a confirmed rollback without replay', async () => {
   configure(); const worker = getWorkerPool(); const calls: string[] = [], released: boolean[] = [];
   const client = Object.assign(new EventEmitter(), {
-    query: async (sql: string) => { calls.push(sql); if (sql === 'select queue') throw Object.assign(new Error('cancelled'), { code: '57014' }); return { rows: [] }; },
+    query: async (sql: string) => { calls.push(sql); if (sql === 'select queue') throw Object.assign(new Error('cancelled'), { code: '57014' }); return { command: sql === 'ROLLBACK' ? 'ROLLBACK' : 'SELECT', rows: [] }; },
     release: (destroy: boolean) => released.push(destroy),
   });
   const mock = spyOn(worker, 'connect').mockResolvedValue(client as any);
@@ -50,7 +50,7 @@ test('worker convenience query installs server limits and destroys failed client
     expect(calls[0]).toContain("statement_timeout = '2500ms'");
     expect(calls[0]).toContain("lock_timeout = '1000ms'");
     expect(calls.filter(x => x === 'select queue')).toHaveLength(1);
-    expect(calls.at(-1)).toBe('ROLLBACK'); expect(released).toEqual([true]);
+    expect(calls.at(-1)).toBe('ROLLBACK'); expect(released).toEqual([false]);
   } finally { mock.mockRestore(); }
 });
 test('native feed errors propagate; mismatched projects never read through SQL or REST', async () => {

@@ -1,8 +1,67 @@
 import { expect, spyOn, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
-import type { Pool } from 'pg';
+import { Client, Pool } from 'pg';
 import { observePostgresPoolErrors, queryWithPostgresDeadline } from './ivx-postgres-deadline';
 import { newReadTimings, readTimings, timingHeaders } from './ivx-read-timings';
+
+for (const code of ['57014', '55P03']) {
+  test(`confirmed ${code} rollback preserves the connection for the next request without replay`, async () => {
+    const pool = new Pool({ max: 1, idleTimeoutMillis: 0, connectionTimeoutMillis: 1500 });
+    let connects = 0;
+    pool.on('connect', () => { connects++; });
+    const calls: string[] = [];
+    const original = Object.assign(new Error('server cancelled request'), { code });
+    // Exercise real pg.Pool reuse/removal; substitute only socket I/O.
+    const connect = spyOn(Client.prototype, 'connect').mockImplementation((callback: (error: Error | null) => void) => {
+      queueMicrotask(() => callback(null)); return undefined as never;
+    });
+    const query = spyOn(Client.prototype, 'query').mockImplementation((async (sql: string) => {
+      calls.push(sql);
+      if (sql === 'select cancelled_request') throw original;
+      return { command: sql === 'ROLLBACK' ? 'ROLLBACK' : 'SELECT', rows: [{ ok: true }] };
+    }) as never);
+    const logger = spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await expect(queryWithPostgresDeadline(pool, 'select cancelled_request', [])).rejects.toBe(original);
+      expect((await queryWithPostgresDeadline(pool, 'select following_request', [])).rows).toEqual([{ ok: true }]);
+      expect(calls.filter(sql => sql === 'select cancelled_request')).toHaveLength(1);
+      expect(calls.filter(sql => sql === 'ROLLBACK')).toHaveLength(1);
+      expect(connects).toBe(1);
+      expect(pool.totalCount).toBe(1);
+      expect(pool.idleCount).toBe(1);
+      expect(pool.waitingCount).toBe(0);
+    } finally {
+      await pool.end(); logger.mockRestore(); query.mockRestore(); connect.mockRestore();
+    }
+  });
+}
+
+for (const rollback of ['reject', 'wrong-command', 'connection-error']) {
+  test(`unconfirmed rollback (${rollback}) still discards the connection and preserves the failure`, async () => {
+    const original = Object.assign(new Error('server cancellation'), { code: '57014' });
+    const releases: boolean[] = [], calls: string[] = [];
+    const client = Object.assign(new EventEmitter(), {
+      query: async (sql: string) => {
+        calls.push(sql);
+        if (sql === 'select cancelled_request') throw original;
+        if (sql === 'ROLLBACK') {
+          if (rollback === 'reject') throw new Error('rollback response lost');
+          if (rollback === 'connection-error') client.emit('error', new Error('socket lost'));
+          return { command: rollback === 'wrong-command' ? 'UNKNOWN' : 'ROLLBACK', rows: [] };
+        }
+        return { rows: [] };
+      }, release: (destroy: boolean) => releases.push(destroy),
+    });
+    const logger = spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await expect(queryWithPostgresDeadline({ connect: async () => client } as unknown as Pick<Pool, 'connect'>,
+        'select cancelled_request', [])).rejects.toBe(original);
+      expect(releases).toEqual([true]);
+      expect(calls.filter(sql => sql === 'select cancelled_request')).toHaveLength(1);
+      expect(client.listenerCount('error')).toBe(0);
+    } finally { logger.mockRestore(); }
+  });
+}
 
 test('native pool events register once and slow checkout is attributed before query execution', async () => {
   const client = Object.assign(new EventEmitter(), { query: async () => ({ rows: [] }), release: () => {} });

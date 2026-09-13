@@ -61,7 +61,7 @@ export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
   };
   const client = await pool.connect().catch(error => { observeAcquisition(false); reportFailure(error); throw error; });
   observeAcquisition(true);
-  let failed = false;
+  let discardConnection = false;
   let connectionError: Error | null = null;
   const onConnectionError = (error: Error) => { connectionError = error; };
   const requireConnection = () => { if (connectionError) throw connectionError; };
@@ -87,7 +87,7 @@ export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
     requireConnection();
     return result;
   } catch (error) {
-    failed = true;
+    discardConnection = true;
     reportFailure(error);
     // A client timeout or connection failure leaves protocol state uncertain.
     // Do not enqueue ROLLBACK behind an unanswered query and wait another timeout.
@@ -96,12 +96,22 @@ export async function queryWithPostgresDeadline<T = Record<string, unknown>>(
     const serverRejected = typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)
       && !code.startsWith('08') && !['57P01', '57P02', '57P03'].includes(code);
     if (!connectionError && serverRejected) {
-      await client.query('ROLLBACK').catch(() => undefined);
+      try {
+        const rollback: unknown = await client.query('ROLLBACK');
+        // A server statement/lock cancellation does not poison the socket.
+        // Reuse only after an acknowledged rollback; a lost response, transport
+        // error or unexpected command tag still requires destroying the client.
+        // The original operation remains failed and is never replayed.
+        if ((code === '57014' || code === '55P03') && rollback && typeof rollback === 'object'
+          && 'command' in rollback && rollback.command === 'ROLLBACK') {
+          discardConnection = false;
+        }
+      } catch { /* Preserve the original failure and discard uncertain state. */ }
     }
     // Never replay an RPC after an ambiguous timeout or commit response loss.
     throw error;
   } finally {
-    try { client.release(failed || Boolean(connectionError)); }
+    try { client.release(discardConnection || Boolean(connectionError)); }
     finally { client.removeListener('error', onConnectionError); }
   }
 }
