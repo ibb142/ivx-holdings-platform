@@ -567,7 +567,7 @@ export async function readPostgresFleetLeaseRows(): Promise<AtomicFleetLeaseRow[
 }
 
 /** Planning needs identities and states, never historical evidence payloads. */
-export type AutonomousTaskIndex = Pick<Task, 'taskId' | 'idempotencyKey' | 'assignedAgentNumber' | 'state' | 'title'>;
+export type AutonomousTaskIndex = Pick<Task, 'taskId' | 'idempotencyKey' | 'assignedAgentNumber' | 'state'>;
 export async function readPostgresAutonomousTaskIndex(sourceSha?: string): Promise<AutonomousTaskIndex[]> {
   if (sourceSha !== undefined && !/^[a-f0-9]{40}$/i.test(sourceSha)) throw new Error('Invalid planning source SHA');
   const families = VERSIONED_MISSION_PREFIXES;
@@ -575,24 +575,41 @@ export async function readPostgresAutonomousTaskIndex(sourceSha?: string): Promi
   // deployment. Preserve repairs, owner work, current deduplication identities
   // and previously started work so planning cannot overfill an occupied lane.
   const startedStates = ['LEASED', 'RUNNING', 'PAUSED', 'EXECUTION_COMPLETED', 'QA_IN_PROGRESS', 'READY_FOR_DEPLOYMENT', 'DEPLOYING', 'DEPLOYED', 'PRODUCTION_VERIFYING'];
-  const where = sourceSha ? ` where (not (idempotency_key like any($3::text[])) or idempotency_key like any($4::text[])
-    or state = any($5::text[]) or (lease_holder is not null and (state = 'QUEUED' or lease_expires_at is null or lease_expires_at > now())))` : '';
+  const scope = sourceSha ? ` and (not (idempotency_key like any($4::text[])) or idempotency_key like any($5::text[])
+    or state = any($6::text[]) or (lease_holder is not null and (state = 'QUEUED' or lease_expires_at is null or lease_expires_at > now())))` : '';
   const restFilter = sourceSha ? `&or=(and(${families.map(prefix => `idempotency_key.not.like.${prefix}*`).join(',')}),${families.map(prefix => `idempotency_key.like.${prefix}${sourceSha}:*`).join(',')},state.in.(${startedStates.join(',')}),and(lease_holder.not.is.null,or(state.eq.QUEUED,lease_expires_at.is.null,lease_expires_at.gt.${new Date().toISOString()})))` : '';
   const all: AutonomousTaskIndex[] = [];
   const pageSize = 1000;
-  for (let offset = 0; offset < 20000; offset += pageSize) {
-    type IndexRow = { task_id: string; idempotency_key: string; assigned_agent_number: number | null; state: TaskState; title: string };
+  let cursor: { createdAt: string; taskId: string } | undefined;
+  // OFFSET repeatedly scans old missions and skips surviving work if earlier
+  // rows leave the eligible set between pages. Seek by immutable row identity.
+  // Keep PostgreSQL's timestamp text: JS Date would lose microseconds.
+  for (let page = 0; page < 20; page++) {
+    type IndexRow = { task_id: string; idempotency_key: string; assigned_agent_number: number | null; state: TaskState; created_at: string };
+    const query = new URLSearchParams({ select: 'task_id,idempotency_key,assigned_agent_number,state,created_at',
+      order: 'created_at.asc,task_id.asc', limit: String(pageSize) });
+    if (cursor) query.set('and', `(or(created_at.gt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},task_id.gt.${JSON.stringify(cursor.taskId)})))`);
     const rows = preferDirectTransport()
       ? (await queryWithPostgresDeadline<IndexRow>(getDirectPool(),
-        "select task_id, idempotency_key, assigned_agent_number, state, payload->>'title' as title from public.ivx_autonomous_tasks" + where + ' order by created_at asc, task_id asc offset $1 limit $2',
-        sourceSha ? [offset, pageSize, families.map(prefix => `${prefix}%`), families.map(prefix => `${prefix}${sourceSha}:%`), startedStates] : [offset, pageSize])).rows
+        'select task_id, idempotency_key, assigned_agent_number, state, created_at::text as created_at from public.ivx_autonomous_tasks'
+        + ' where ($1::timestamptz is null or (created_at, task_id) > ($1::timestamptz, $2::text))'
+        + scope + ' order by ivx_autonomous_tasks.created_at asc, task_id asc limit $3',
+        [cursor?.createdAt ?? null, cursor?.taskId ?? null, pageSize,
+          ...(sourceSha ? [families.map(prefix => `${prefix}%`), families.map(prefix => `${prefix}${sourceSha}:%`), startedStates] : [])])).rows
       : await restRequest<IndexRow[]>(
-        `ivx_autonomous_tasks?select=task_id,idempotency_key,assigned_agent_number,state,title:payload->>title${restFilter}&order=created_at.asc,task_id.asc&offset=${offset}&limit=${pageSize}`,
+        `ivx_autonomous_tasks?${query}${restFilter}`,
         { method: 'GET' });
-    if (!Array.isArray(rows)) throw new Error('postgres_atomic planning index is invalid');
+    if (!Array.isArray(rows) || rows.length > pageSize) throw new Error('postgres_atomic planning index is invalid');
     all.push(...rows.map(row => ({ taskId: row.task_id, idempotencyKey: row.idempotency_key,
-      assignedAgentNumber: row.assigned_agent_number, state: row.state, title: row.title })));
+      assignedAgentNumber: row.assigned_agent_number, state: row.state })));
     if (rows.length < pageSize) return all;
+    const last = rows[rows.length - 1];
+    if (typeof last.created_at !== 'string' || !/^\d{4}-\d{2}-\d{2}[T ][\d:.]+(?:Z|[+-]\d{2}(?::?\d{2})?)$/.test(last.created_at)
+      || !Number.isFinite(Date.parse(last.created_at)) || typeof last.task_id !== 'string' || !last.task_id
+      || (last.created_at === cursor?.createdAt && last.task_id === cursor.taskId)) {
+      throw new Error('postgres_atomic planning cursor is invalid or did not advance');
+    }
+    cursor = { createdAt: last.created_at, taskId: last.task_id };
   }
   throw new Error('postgres_atomic planning index exceeds safe pagination limit');
 }
