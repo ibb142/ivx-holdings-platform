@@ -42,12 +42,14 @@ export async function probeGatewayCompletion(options: {
       text += decoder.decode(chunk.value, { stream: true });
     }
     text += decoder.decode();
-    if (status === 402) {
+    // Local admission returns 429 when concurrency is occupied and 402 for
+    // monetary/unconfirmed admission. Neither response contacted the provider.
+    if (status === 402 || status === 429) {
       try {
         if (JSON.parse(text)?.error?.code === 'IVX_GLOBAL_AI_BUDGET_BLOCKED') {
           return fail('AI_GLOBAL_BUDGET_BLOCKED', 'Global AI budget admission blocked or unconfirmed; the provider was not contacted');
         }
-      } catch { /* An upstream non-JSON 402 retains its billing classification. */ }
+      } catch { /* An upstream non-JSON error retains its original classification. */ }
     }
     if (status === 402 || /insufficient_quota|billing_hard_limit|positive credit balance/i.test(text)) {
       return fail('AI_CREDITS_REQUIRED', 'The AI provider requires a positive credit balance');
