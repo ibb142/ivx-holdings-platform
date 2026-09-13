@@ -88,10 +88,29 @@ async function getJson(url, headers, deps, retry404 = false) {
 
 /** Return only numeric/identity receipt fields, never prompts or raw metadata. */
 export function reconcileReceipt(row, payload, observedAt) {
-  requireValue(UUID.test(row.reservation_id || ''), 'INVALID_RESERVATION_ID');
   requireValue(row.status === 'settled', 'RESERVATION_NOT_SETTLED');
+  return validateReceiptAgainstBound(row, payload, observedAt, integerNano(row.settled_upper_nano));
+}
+
+/** A provider receipt is evidence for a future settlement, not a ledger write. */
+export function validateUncertainReceipt(row, payload, observedAt) {
+  requireValue(row.status === 'uncertain' && row.settled_upper_nano === null, 'RESERVATION_NOT_UNCERTAIN');
+  // Gateway's documented completed-generation response has finish_reason;
+  // cancelled is not a required field in its REST schema.
+  // https://vercel.com/docs/ai-gateway/sdks-and-apis/rest-api#generation
+  requireValue(['stop','length','content_filter','tool_calls','function_call','error','cancelled'].includes(payload?.data?.finish_reason)
+    && (payload.data.cancelled === undefined || typeof payload.data.cancelled === 'boolean'), 'PROVIDER_TERMINATION_UNOBSERVED');
+  const result = validateReceiptAgainstBound(row, payload, observedAt, integerNano(row.reserved_nano));
+  const { settledUpperNano, ...receipt } = result;
+  return { ...receipt, state: 'PROVIDER_RECEIPT_OBSERVED', ledgerStatus: 'uncertain',
+    finishReason: payload.data.finish_reason,
+    ...(payload.data.cancelled === undefined ? {} : { cancelled: payload.data.cancelled }) };
+}
+
+function validateReceiptAgainstBound(row, payload, observedAt, upper) {
+  requireValue(UUID.test(row.reservation_id || ''), 'INVALID_RESERVATION_ID');
   requireValue(ID.test(row.generation_id || '') && MODEL.test(row.model || ''), 'MISSING_RECEIPT_IDENTITY');
-  const upper = integerNano(row.settled_upper_nano), reserved = integerNano(row.reserved_nano);
+  const reserved = integerNano(row.reserved_nano);
   requireValue(upper <= reserved && reserved > 0n, 'LEDGER_BOUND_BREACHED');
   const receipt = payload?.data;
   requireValue(receipt && receipt.id === row.generation_id, 'RECEIPT_ID_MISMATCH');
@@ -134,6 +153,8 @@ export function reconcileReceipt(row, payload, observedAt) {
   });
   return result;
 }
+
+export { getJson as readBudgetJson };
 
 /**
  * Read one bounded cohort from the current UTC reservation day, then re-read
