@@ -30,21 +30,26 @@ const predicates = [
   ...outsideFamilies,
   ...currentDeployment,
   'state = ANY($5::text[])',
-  // Match the held-planning expression index, including queued/unknown-expiry
-  // holders indefinitely. Expired terminal leases remain excluded.
-  `lease_holder IS NOT NULL AND (CASE
-    WHEN state = 'QUEUED' OR lease_expires_at IS NULL THEN 'infinity'::timestamptz
-    ELSE lease_expires_at END) > now()`,
 ];
 
 // Any row in the global first N occurs in the first N of a matching branch.
 // Bound branches before UNION removes overlap, then apply the same ordering
 // globally. Keep native timestamp precision through both sorts and the cursor.
-const scopedSql = `WITH candidates AS MATERIALIZED (
+// Held eligibility can retain a broad estimate even after ANALYZE. Resolve it
+// before sorting, so an estimated early LIMIT cannot choose a
+// full chronological scan of expired historical leases. Project no payloads.
+const scopedSql = `WITH held_candidates AS MATERIALIZED (
+SELECT ${projection} FROM public.ivx_autonomous_tasks
+WHERE lease_holder IS NOT NULL AND (CASE
+  WHEN state = 'QUEUED' OR lease_expires_at IS NULL THEN 'infinity'::timestamptz
+  ELSE lease_expires_at END) > now() AND ${afterCursor}
+), candidates AS MATERIALIZED (
 ${predicates.map(predicate => `(SELECT ${projection}
 FROM public.ivx_autonomous_tasks
 WHERE (${predicate}) AND ${afterCursor}
 ORDER BY created_at, task_id LIMIT $3)`).join('\nUNION\n')}
+UNION
+(SELECT ${projection} FROM held_candidates ORDER BY created_at, task_id LIMIT $3)
 )
 SELECT task_id, idempotency_key, assigned_agent_number, state, created_at::text AS created_at
 FROM candidates ORDER BY candidates.created_at, task_id LIMIT $3`;
