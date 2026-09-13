@@ -9,9 +9,14 @@ import { test, expect, type Page } from '@playwright/test';
 const BASE = process.env.E2E_BASE_URL ?? 'https://ivxholding.com';
 const QA_EMAIL = `qa-e2e-fp-${Date.now()}@ivxholding.com`;
 
+function networkFailureCode(errorText?: string): string {
+  return errorText?.match(/^net::[A-Z0-9_]+$/)?.[0] ?? 'REQUEST_FAILED';
+}
+
 const recoveryNetwork = new WeakMap<Page, Array<Record<string, unknown>>>();
 test.beforeEach(async ({ page }) => {
   const events: Array<Record<string, unknown>> = [];
+  const startedAt = Date.now();
   recoveryNetwork.set(page, events);
   const pathFor = (url: string) => {
     const parsed = new URL(url);
@@ -20,11 +25,11 @@ test.beforeEach(async ({ page }) => {
   };
   page.on('response', response => {
     const path = pathFor(response.url());
-    if (path) events.push({ path, status: response.status() });
+    if (path) events.push({ path, status: response.status(), elapsedMs: Date.now() - startedAt });
   });
   page.on('requestfailed', request => {
     const path = pathFor(request.url());
-    if (path) events.push({ path, failed: true });
+    if (path) events.push({ path, failed: true, code: networkFailureCode(request.failure()?.errorText), elapsedMs: Date.now() - startedAt });
   });
 });
 test.afterEach(async ({ page }, info) => {
@@ -66,14 +71,23 @@ test.describe('Forgot Password — landing portal', () => {
   });
 
   test('real reset request: Supabase /auth/v1/recover 200 + success state', async ({ page }) => {
+    // Allow setup, the existing 20s application deadline and the UI assertion.
+    // An aborted request still fails immediately; a longer test is not a retry.
+    test.setTimeout(45000);
     await openPortalForgotView(page);
     await page.locator('#portal-forgot-email').fill(QA_EMAIL);
-    const recoverResponse = page.waitForResponse(
-      (r) => r.url().includes('/auth/v1/recover') && r.request().method() === 'POST',
-      { timeout: 30000 },
-    );
-    await page.locator('#portal-forgot-btn').click();
-    const response = await recoverResponse;
+    const [request] = await Promise.all([
+      page.waitForRequest(
+        (r) => new URL(r.url()).pathname === '/auth/v1/recover' && r.method() === 'POST',
+        { timeout: 10000 }, // Configuration readiness is bounded at 8s.
+      ),
+      page.locator('#portal-forgot-btn').click(),
+    ]);
+    // request.response() resolves to null on transport failure. Waiting only
+    // for a response event hid the application's abort behind a second timeout.
+    const response = await request.response();
+    expect(response, `Supabase recovery transport failed: ${networkFailureCode(request.failure()?.errorText)}`).not.toBeNull();
+    if (!response) throw new Error('Supabase recovery returned no HTTP response');
     expect(response.status()).toBe(200);
     await expect(page.locator('#portal-forgot-success')).toBeVisible({ timeout: 15000 });
     await expect(page.locator('#portal-forgot-success')).toContainText(/reset link has been sent/i);

@@ -1,3 +1,4 @@
+import { publicFeedRead } from '../services/ivx-public-feed-postgres';
 import { withPublicFeedAvailability } from '../services/ivx-public-feed-availability';
 import { measuredReadFetch } from '../services/ivx-read-timings';
 /**
@@ -59,7 +60,7 @@ export function normalizePublicLandingDeals(rows: readonly Record<string, any>[]
     .map((row): Record<string, any> => {
       const normalized: Record<string, any> = { ...row };
       if (String(row.id ?? '') === 'JV-202603-5190') normalized.title = 'IVX JACKSONVILLE PRIME';
-      normalized.videos = (row.videos || row.reels || []).map((video: string) => ({ mime_type: /\.mp4$/i.test(video) ? 'video/mp4' : 'video/unknown', video }));
+      normalized.videos = [...(row.videos || []), ...(row.reels || [])].map((video: string) => ({ mime_type: /\.mp4$/i.test(video) ? 'video/mp4' : 'video/unknown', video }));
       return normalized;
     })
     .sort((a, b) => {
@@ -201,33 +202,36 @@ async function queryPublicDeals(): Promise<Response> {
   try {
     const sb = await getPublicDealsSB();
     stage = 'deals';
-    const { data, error, count } = await sb.from('jv_deals')
+    const { data, error, count } = await publicFeedRead<any>(
+      'select id,title,project_name,description,property_address,city,state,property_type,total_investment,expected_roi,term_months,status,published,photos,display_order,created_at,updated_at,count(*) over()::int as source_count from public.jv_deals where published = true order by display_order asc nulls last, updated_at desc limit 50', [], () => sb.from('jv_deals')
       .select('id,title,project_name,description,property_address,city,state,property_type,total_investment,expected_roi,term_months,status,published,photos,display_order,created_at,updated_at', { count: 'exact' })
       .eq('published', true)
       .order('display_order', { ascending: true, nullsFirst: false })
       .order('updated_at', { ascending: false })
       .limit(50)
-      .abortSignal(controller.signal);
+      .abortSignal(controller.signal), 'anon');
     if (error) throw error;
-    const deals = normalizePublicLandingDeals(data || []);
+    const sourceCount = count ?? data?.[0]?.source_count ?? data?.length ?? 0;
+    const deals = normalizePublicLandingDeals((data || []).map(({ source_count, ...row }: any) => row));
     // Reels are stored separately from jv_deals.photos. Include only approved,
     // published public reels belonging to these deals; global reels must never
     // be presented as footage of a particular property.
     if (deals.length > 0) {
       stage = 'reels';
-      const { data: reels, error: reelsError } = await sb.from('jv_deal_reels')
+      const { data: reels, error: reelsError } = await publicFeedRead<any>(
+        "select id,project_id,video_url,thumbnail_url,caption,published,approved,visibility from public.jv_deal_reels where project_id::text = any($1::text[]) and published = true and approved = true and visibility = 'public' order by sort_order asc", [deals.map(deal => String(deal.id))], () => sb.from('jv_deal_reels')
         .select('id,project_id,video_url,thumbnail_url,caption,published,approved,visibility')
         .in('project_id', deals.map((deal) => String(deal.id)))
         .eq('published', true).eq('approved', true).eq('visibility', 'public')
         .order('sort_order', { ascending: true })
-        .abortSignal(controller.signal);
+        .abortSignal(controller.signal), 'anon');
       if (reelsError) throw reelsError;
       for (const deal of deals) {
         deal.videos = (reels || []).filter((reel) =>
           String(reel.project_id) === String(deal.id) && /^https:\/\//i.test(reel.video_url || ''));
       }
     }
-    return json({ deals, count: deals.length, sourceCount: count ?? deals.length, deploymentMarker: DEPLOYMENT_MARKER });
+    return json({ deals, count: deals.length, sourceCount, deploymentMarker: DEPLOYMENT_MARKER });
   } catch (err: unknown) {
     // Keep only bounded diagnostics; never log query text, values or server messages.
     const code = err && typeof err === 'object' && 'code' in err ? err.code : null;

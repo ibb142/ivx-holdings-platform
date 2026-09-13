@@ -43,7 +43,7 @@ export const IVX_AUTONOMOUS_SECONDARY_WORK_LIST: readonly string[] = [
 
 const ACTIVE_WORK_STATES = new Set<string>(IN_PROGRESS_STATES);
 
-type TaskIndexRecord = Pick<Task, 'taskId' | 'idempotencyKey' | 'assignedAgentNumber' | 'state' | 'title'>;
+type TaskIndexRecord = Pick<Task, 'taskId' | 'idempotencyKey' | 'assignedAgentNumber' | 'state'>;
 
 export type AutonomousWorkLane = {
   agentId: string;

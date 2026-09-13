@@ -10,12 +10,11 @@ import { hostname } from 'node:os';
 import { VERSIONED_INSPECTION_PREFIXES, VERSIONED_MISSION_PREFIXES } from './ivx-autonomous-mission-scope';
 import { localFleetExecutionMetrics } from './ivx-fleet-execution-metrics';
 import { randomUUID } from 'node:crypto';
-import { Pool } from 'pg';
-import type { EventEmitter } from 'node:events';
-import { observePostgresPoolErrors, queryWithPostgresDeadline } from './ivx-postgres-deadline';
-import { SENIOR_QUEUE_ACTIVE_STATUSES, SENIOR_QUEUE_JOB_SQL, SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL } from './ivx-senior-work-queue';
+import type { Pool } from 'pg';
+import { getObserverPool, getWorkerPool, resetDatabasePoolsForTests } from './ivx-database-pools';
+import { queryWithPostgresDeadline } from './ivx-postgres-deadline';
+import { SENIOR_ACTIVE_OWNER_JOB_SQL, SENIOR_QUEUE_ACTIVE_STATUSES, SENIOR_QUEUE_AUTHORITY_SQL, SENIOR_QUEUE_JOB_SQL, SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL } from './ivx-senior-work-queue';
 import { emergencyStopPostgresConfig } from './ivx-emergency-stop-postgres';
-import { supabasePostgresTls, withoutPostgresUrlTlsOptions } from './ivx-supabase-postgres-tls';
 import { decideRetry, isTransientFailure, retryAfterMs, RetryQuota } from './ivx-retry-policy';
 import type { FleetLeaseRequest, FleetLeaseResult, FleetTaskLeaseIdentity, FleetTaskMutationResult, Task, TaskState } from './ivx-autonomous-task-engine';
 
@@ -29,10 +28,6 @@ let taskReadCache: { value: Task[]; at: number } | null = null;
 let taskReadInFlight: Promise<Task[]> | null = null;
 const currentReadsInFlight = new Map<string, Promise<Task[]>>();
 let taskMutationRevision = 0;
-let directPool: Pool | null = null;
-let telemetryPool: Pool | null = null;
-let presencePool: Pool | null = null;
-let repairPool: Pool | null = null;
 const upstreamRetryQuota = new RetryQuota();
 
 type AtomicCreateResult = { ok: boolean; task: Task | null; duplicate: boolean; error: string | null };
@@ -40,7 +35,7 @@ type AtomicCasResult = { ok: boolean; task: Task | null; error: string | null };
 type RestTaskRow = { payload: Task };
 export type AtomicFleetLeaseRow = { taskId: string; idempotencyKey: string; state: TaskState; assignedAgentNumber: number | null; leaseHolder: string; workerInstanceId: string | null; lastHeartbeatAt: string; leaseExpiresAt: string | null };
 
-export function resetPostgresAutonomousTaskStoreForTests(): void { taskReadCache = null; taskReadInFlight = null; currentReadsInFlight.clear(); taskMutationRevision = 0; directPool = null; telemetryPool = null; presencePool = null; repairPool = null; }
+export function resetPostgresAutonomousTaskStoreForTests(): void { taskReadCache = null; taskReadInFlight = null; currentReadsInFlight.clear(); taskMutationRevision = 0; resetDatabasePoolsForTests(); }
 function trimmed(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
 function supabaseUrl(env: NodeJS.ProcessEnv = process.env): string { return trimmed(env.EXPO_PUBLIC_SUPABASE_URL || env.SUPABASE_URL).replace(/\/+$/, ''); }
 function serviceRoleKey(env: NodeJS.ProcessEnv = process.env): string { return trimmed(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_KEY); }
@@ -65,27 +60,11 @@ function headers(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
 }
 function externalError(payload: unknown, fallback: string): string { if (payload && typeof payload === 'object') { const record = payload as Record<string, unknown>; const candidate = record.message ?? record.error ?? record.details; if (typeof candidate === 'string' && candidate.trim()) return candidate.trim().slice(0, 320); } return fallback; }
 async function parsePayload(response: Response): Promise<unknown> { const text = await response.text(); if (!text) return null; try { return JSON.parse(text) as unknown; } catch { return { message: text.slice(0, 320) }; } }
-type PoolPurpose = 'tasks' | 'telemetry' | 'presence' | 'repair';
+type PoolPurpose = 'tasks' | 'assignment' | 'heartbeat' | 'telemetry' | 'presence' | 'repair';
 function getDirectPool(env: NodeJS.ProcessEnv = process.env, purpose: PoolPurpose = 'tasks'): Pool {
-  const connectionString = directDbUrl(env);
-  if (!connectionString) throw new Error('direct_postgres_not_configured');
-  const existing = purpose === 'repair' ? repairPool : purpose === 'presence' ? presencePool : purpose === 'telemetry' ? telemetryPool : directPool;
-  if (existing) return existing;
-  // Both mutations and aggregate monitoring can occupy their entire pool.
-  // Reserve a separate connection for compact process reads and sample writes.
-  const pool = new Pool({ connectionString: withoutPostgresUrlTlsOptions(connectionString), ssl: supabasePostgresTls(),
-    max: purpose === 'tasks' ? 4 : 1, application_name: `ivx_${purpose}`,
-    idleTimeoutMillis: 30_000, connectionTimeoutMillis: 20_000, query_timeout: 5_000, statement_timeout: 5_000 });
-  observePostgresPoolErrors(pool, purpose);
-  if (purpose === 'repair') {
-    // Observe both idle and checked-out connection errors. Query promises still
-    // reject, destroy their failed connection, and never replay a mutation.
-    const events = pool as Pool & EventEmitter;
-    events.on('error', () => console.error('[IVX repair queue] PostgreSQL connection unavailable'));
-    events.on('connect', (client: EventEmitter) => client.on('error', () => {}));
-    repairPool = pool;
-  } else if (purpose === 'presence') presencePool = pool; else if (purpose === 'telemetry') telemetryPool = pool; else directPool = pool;
-  return pool;
+  // Public API saturation must not block fleet observations; aggregate
+  // telemetry must not occupy the connection needed to persist process health.
+  return purpose === 'telemetry' || purpose === 'presence' ? getObserverPool(env, purpose) : getWorkerPool(env, purpose);
 }
 const DIRECT_RPC_ARGS: Record<string, string[]> = {
   ivx_autonomous_tasks_create_batch: ['p_tasks'],
@@ -121,9 +100,13 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
     if (casts[key] === 'jsonb' && value !== null && value !== undefined) return JSON.stringify(value);
     return value ?? null;
   });
-  const pool = getDirectPool(env, name.startsWith('ivx_senior_') ? 'repair'
-    : ['ivx_fleet_dashboard_observation', 'ivx_work_evidence_hours'].includes(name) ? 'telemetry' : 'tasks');
-  const result = await queryWithPostgresDeadline<{ result: T }>(pool, `select public.${name}(${placeholders}) as result`, values);
+  const purpose: PoolPurpose = name.startsWith('ivx_senior_') ? 'repair'
+    : ['ivx_fleet_dashboard_observation', 'ivx_work_evidence_hours'].includes(name) ? 'telemetry'
+    : ['ivx_autonomous_tasks_claim_batch', 'ivx_autonomous_tasks_start_batch'].includes(name) ? 'assignment'
+    : ['ivx_autonomous_tasks_heartbeat_batch', 'ivx_autonomous_tasks_release_worker'].includes(name) ? 'heartbeat' : 'tasks';
+  const pool = getDirectPool(env, purpose);
+  const result = await queryWithPostgresDeadline<{ result: T }>(pool, `select public.${name}(${placeholders}) as result`, values,
+    purpose === 'assignment' ? 'assignment' : 'default');
   if (!result.rows?.length) throw new Error(`direct_postgres_rpc_empty:${name}`);
   return result.rows[0].result as T;
 }
@@ -173,6 +156,29 @@ export async function readSeniorWorkQueuePostgres<T>(): Promise<T | null> {
   const result = await queryWithPostgresDeadline<{ value: T }>(getDirectPool(process.env, 'repair'),
     SENIOR_WORK_QUEUE_SQL, ['senior-developer-worker/queue.json', SENIOR_WORK_QUEUE_PATH]);
   return result.rows[0]?.value ?? null;
+}
+
+/** Fresh, read-only execution guard. Periodic CAS heartbeats still renew leases. */
+export async function assertSeniorQueuePostgresAuthority(jobId: string): Promise<void> {
+  emergencyStopPostgresConfig();
+  if (!jobId.trim()) throw new Error('Repair job identity is required');
+  const started = performance.now();
+  const result = await queryWithPostgresDeadline<{
+    job_id: string; status: string; worker_id: string; lease_expires_at: string; observed_at: Date | string;
+  }>(getDirectPool(process.env, 'repair'), SENIOR_QUEUE_AUTHORITY_SQL,
+    ['senior-developer-worker/queue.json', jobId], 'service_role');
+  const row = result.rows[0];
+  const observed = row?.observed_at instanceof Date ? row.observed_at.getTime() : Date.parse(row?.observed_at ?? '');
+  const remaining = Date.parse(row?.lease_expires_at ?? '') - observed;
+  // Keep at least one heartbeat interval after the entire read round trip.
+  // A delayed response, duplicate, missing job, expired lease or former holder
+  // is never evidence of permission. No cache, write replay or REST failover.
+  if (result.rows.length !== 1 || row?.job_id !== jobId
+    || row.worker_id !== autonomousWorkerInstanceId()
+    || !['running', 'patching', 'testing', 'committing', 'deploying', 'verifying'].includes(row.status)
+    || !(remaining > 20_000 + Math.max(0, performance.now() - started))) {
+    throw new Error('WORKER_AUTHORITY_UNCONFIRMED: fresh worker lease required');
+  }
 }
 /** Polling one repair must not transfer the history of every retained job. */
 export async function readSeniorQueuePostgresJob<T extends { jobId: string }>(jobId: string): Promise<T | null> {
@@ -561,7 +567,7 @@ export async function readPostgresFleetLeaseRows(): Promise<AtomicFleetLeaseRow[
 }
 
 /** Planning needs identities and states, never historical evidence payloads. */
-export type AutonomousTaskIndex = Pick<Task, 'taskId' | 'idempotencyKey' | 'assignedAgentNumber' | 'state' | 'title'>;
+export type AutonomousTaskIndex = Pick<Task, 'taskId' | 'idempotencyKey' | 'assignedAgentNumber' | 'state'>;
 export async function readPostgresAutonomousTaskIndex(sourceSha?: string): Promise<AutonomousTaskIndex[]> {
   if (sourceSha !== undefined && !/^[a-f0-9]{40}$/i.test(sourceSha)) throw new Error('Invalid planning source SHA');
   const families = VERSIONED_MISSION_PREFIXES;
@@ -569,24 +575,41 @@ export async function readPostgresAutonomousTaskIndex(sourceSha?: string): Promi
   // deployment. Preserve repairs, owner work, current deduplication identities
   // and previously started work so planning cannot overfill an occupied lane.
   const startedStates = ['LEASED', 'RUNNING', 'PAUSED', 'EXECUTION_COMPLETED', 'QA_IN_PROGRESS', 'READY_FOR_DEPLOYMENT', 'DEPLOYING', 'DEPLOYED', 'PRODUCTION_VERIFYING'];
-  const where = sourceSha ? ` where (not (idempotency_key like any($3::text[])) or idempotency_key like any($4::text[])
-    or state = any($5::text[]) or (lease_holder is not null and (state = 'QUEUED' or lease_expires_at is null or lease_expires_at > now())))` : '';
+  const scope = sourceSha ? ` and (not (idempotency_key like any($4::text[])) or idempotency_key like any($5::text[])
+    or state = any($6::text[]) or (lease_holder is not null and (state = 'QUEUED' or lease_expires_at is null or lease_expires_at > now())))` : '';
   const restFilter = sourceSha ? `&or=(and(${families.map(prefix => `idempotency_key.not.like.${prefix}*`).join(',')}),${families.map(prefix => `idempotency_key.like.${prefix}${sourceSha}:*`).join(',')},state.in.(${startedStates.join(',')}),and(lease_holder.not.is.null,or(state.eq.QUEUED,lease_expires_at.is.null,lease_expires_at.gt.${new Date().toISOString()})))` : '';
   const all: AutonomousTaskIndex[] = [];
   const pageSize = 1000;
-  for (let offset = 0; offset < 20000; offset += pageSize) {
-    type IndexRow = { task_id: string; idempotency_key: string; assigned_agent_number: number | null; state: TaskState; title: string };
+  let cursor: { createdAt: string; taskId: string } | undefined;
+  // OFFSET repeatedly scans old missions and skips surviving work if earlier
+  // rows leave the eligible set between pages. Seek by immutable row identity.
+  // Keep PostgreSQL's timestamp text: JS Date would lose microseconds.
+  for (let page = 0; page < 20; page++) {
+    type IndexRow = { task_id: string; idempotency_key: string; assigned_agent_number: number | null; state: TaskState; created_at: string };
+    const query = new URLSearchParams({ select: 'task_id,idempotency_key,assigned_agent_number,state,created_at',
+      order: 'created_at.asc,task_id.asc', limit: String(pageSize) });
+    if (cursor) query.set('and', `(or(created_at.gt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},task_id.gt.${JSON.stringify(cursor.taskId)})))`);
     const rows = preferDirectTransport()
       ? (await queryWithPostgresDeadline<IndexRow>(getDirectPool(),
-        "select task_id, idempotency_key, assigned_agent_number, state, payload->>'title' as title from public.ivx_autonomous_tasks" + where + ' order by created_at asc, task_id asc offset $1 limit $2',
-        sourceSha ? [offset, pageSize, families.map(prefix => `${prefix}%`), families.map(prefix => `${prefix}${sourceSha}:%`), startedStates] : [offset, pageSize])).rows
+        'select task_id, idempotency_key, assigned_agent_number, state, created_at::text as created_at from public.ivx_autonomous_tasks'
+        + ' where ($1::timestamptz is null or (created_at, task_id) > ($1::timestamptz, $2::text))'
+        + scope + ' order by ivx_autonomous_tasks.created_at asc, task_id asc limit $3',
+        [cursor?.createdAt ?? null, cursor?.taskId ?? null, pageSize,
+          ...(sourceSha ? [families.map(prefix => `${prefix}%`), families.map(prefix => `${prefix}${sourceSha}:%`), startedStates] : [])])).rows
       : await restRequest<IndexRow[]>(
-        `ivx_autonomous_tasks?select=task_id,idempotency_key,assigned_agent_number,state,title:payload->>title${restFilter}&order=created_at.asc,task_id.asc&offset=${offset}&limit=${pageSize}`,
+        `ivx_autonomous_tasks?${query}${restFilter}`,
         { method: 'GET' });
-    if (!Array.isArray(rows)) throw new Error('postgres_atomic planning index is invalid');
+    if (!Array.isArray(rows) || rows.length > pageSize) throw new Error('postgres_atomic planning index is invalid');
     all.push(...rows.map(row => ({ taskId: row.task_id, idempotencyKey: row.idempotency_key,
-      assignedAgentNumber: row.assigned_agent_number, state: row.state, title: row.title })));
+      assignedAgentNumber: row.assigned_agent_number, state: row.state })));
     if (rows.length < pageSize) return all;
+    const last = rows[rows.length - 1];
+    if (typeof last.created_at !== 'string' || !/^\d{4}-\d{2}-\d{2}[T ][\d:.]+(?:Z|[+-]\d{2}(?::?\d{2})?)$/.test(last.created_at)
+      || !Number.isFinite(Date.parse(last.created_at)) || typeof last.task_id !== 'string' || !last.task_id
+      || (last.created_at === cursor?.createdAt && last.task_id === cursor.taskId)) {
+      throw new Error('postgres_atomic planning cursor is invalid or did not advance');
+    }
+    cursor = { createdAt: last.created_at, taskId: last.task_id };
   }
   throw new Error('postgres_atomic planning index exceeds safe pagination limit');
 }
@@ -596,16 +619,7 @@ export async function readSeniorActiveOwnerJobPostgres<T extends { ownerId: stri
   emergencyStopPostgresConfig();
   if (!ownerId.trim()) throw new Error('Repair owner identity is required');
   const result = await queryWithPostgresDeadline<{ job: T }>(getDirectPool(process.env, 'repair'),
-    `select d.value->'jobs'->picked.ordinal as job
-      from public.ivx_durable_documents d
-      cross join lateral (
-        select ordinal
-        from generate_series(0, jsonb_array_length(d.value->'jobs') - 1) as positions(ordinal)
-        where (d.value->'jobs'->ordinal)->>'ownerId' = $2
-          and (d.value->'jobs'->ordinal)->>'status' = any($3::text[])
-        order by ordinal desc limit 1
-      ) picked
-      where d.doc_key = $1`,
+    SENIOR_ACTIVE_OWNER_JOB_SQL,
     ['senior-developer-worker/queue.json', ownerId, [...SENIOR_QUEUE_ACTIVE_STATUSES]]);
   const job = result.rows[0]?.job ?? null;
   if (job && (job.ownerId !== ownerId || !(SENIOR_QUEUE_ACTIVE_STATUSES as readonly string[]).includes(job.status))) {
@@ -613,4 +627,3 @@ export async function readSeniorActiveOwnerJobPostgres<T extends { ownerId: stri
   }
   return job;
 }
-

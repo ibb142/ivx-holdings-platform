@@ -1,9 +1,40 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-type Timings = { headersMs: number; payloadMs: number; completed: number; pending: number; poolMs: number | null; poolMaxMs?: number; deadline?: AbortSignal };
+type Timings = { headersMs: number; payloadMs: number; completed: number; pending: number;
+  poolMs: number | null; poolMaxMs?: number; sqlMs: number | null; sqlCompleted: number; sqlPending: number; deadline?: AbortSignal };
 export const readTimings = new AsyncLocalStorage<Timings>();
 export function newReadTimings(timeoutMs?: number): Timings {
-  return { headersMs: 0, payloadMs: 0, completed: 0, pending: 0, poolMs: null, deadline: timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs) };
+  return { headersMs: 0, payloadMs: 0, completed: 0, pending: 0, poolMs: null,
+    sqlMs: null, sqlCompleted: 0, sqlPending: 0, deadline: timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs) };
+}
+/** Public source work belongs to all overlapping callers, not the first HTTP
+ * request. Keep its finite budget and metrics independent of each caller. */
+export function sharedPublicRead<T>(read: () => Promise<T>, timeoutMs = 8000): Promise<T> {
+  return readTimings.run(newReadTimings(timeoutMs), read);
+}
+
+/** Stop waiting at this caller's deadline without aborting another caller's
+ * source or dropping the pending entry while its database read is still live. */
+export function awaitPublicRead<T>(work: Promise<T>): Promise<T> {
+  const deadline = readTimings.getStore()?.deadline;
+  if (!deadline) return work;
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => {
+      deadline.removeEventListener('abort', abort);
+      reject(new DOMException('Public read deadline exceeded', 'AbortError'));
+    };
+    // Always observe the producer, including after an already-expired caller
+    // leaves, so a later source failure cannot become an unhandled rejection.
+    work.then(value => {
+      deadline.removeEventListener('abort', abort);
+      resolve(value);
+    }, error => {
+      deadline.removeEventListener('abort', abort);
+      reject(error);
+    });
+    if (deadline.aborted) abort();
+    else deadline.addEventListener('abort', abort, { once: true });
+  });
 }
 export function recordPoolCheckout(ms: number): void {
   const metrics = readTimings.getStore();
@@ -12,13 +43,31 @@ export function recordPoolCheckout(ms: number): void {
     metrics.poolMaxMs = Math.max(metrics.poolMaxMs ?? 0, ms);
   }
 }
+/** Client-observed query round trips, including failed attempts and lock/network
+ * waits. Excludes checkout, transaction setup and commit; not server CPU time.
+ * Capture the request context before awaiting so unrelated requests stay isolated.
+ */
+export async function measuredSqlQuery<T>(operation: () => Promise<T>): Promise<T> {
+  const metrics = readTimings.getStore();
+  if (!metrics) return operation();
+  const started = performance.now();
+  metrics.sqlPending++;
+  try { return await operation(); }
+  finally {
+    metrics.sqlMs = (metrics.sqlMs ?? 0) + Math.max(0, performance.now() - started);
+    metrics.sqlPending--; metrics.sqlCompleted++;
+  }
+}
 export function timingHeaders(metrics: Timings): Record<string, string> {
   return {
     'X-Pool-Acquisition-Ms': metrics.poolMaxMs === undefined ? 'unavailable' : metrics.poolMaxMs.toFixed(1),
+    // A fallback may be returned while a query is still running. Do not present
+    // an incomplete sum, or an unobserved REST/cache read, as finished SQL time.
+    'X-SQL-Execution-Ms': metrics.sqlMs === null || metrics.sqlPending > 0 ? 'unavailable' : metrics.sqlMs.toFixed(1),
     'X-IVX-Pool-Wait-Ms': metrics.poolMs === null ? 'unavailable' : metrics.poolMs.toFixed(1),
     'X-IVX-Payload-Ms': metrics.completed ? metrics.payloadMs.toFixed(1) : 'unavailable',
     'X-IVX-Upstream-Headers-Ms': metrics.completed || metrics.pending ? metrics.headersMs.toFixed(1) : 'unavailable',
-    'X-IVX-Timing-Scope': `request-owned-upstream-sum; completed=${metrics.completed}; pending=${metrics.pending}`,
+    'X-IVX-Timing-Scope': `request-owned-upstream-sum; completed=${metrics.completed}; pending=${metrics.pending}; sql=client-query-roundtrip-sum; sql_completed=${metrics.sqlCompleted}; sql_pending=${metrics.sqlPending}`,
   };
 }
 /** HTTP header wait includes network/server time, NOT a measurement of Supavisor checkout.

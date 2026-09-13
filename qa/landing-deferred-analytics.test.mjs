@@ -18,11 +18,19 @@ for (const surface of ['reels', 'home-feed']) {
     resolve(Response.json({ videos: [{ id: 'a', view_count: 12 }] })); await tick();
     assert.equal(videos[0].view_count, 12); assert.equal(videos[0].analytics_status, 'ready');
   });
-  test(`${surface}: failed analytics cannot fail the already-rendered feed`, async () => {
-    const load = make(async () => Response.json({}, { status: 503 }), timer, () => {}, AbortController, 'https://example.test', ['https://example.test']);
+  for (const status of [503, 200]) test(`${surface}: unavailable analytics (HTTP ${status}) cannot fail the already-rendered feed`, async () => {
+    const load = make(async () => Response.json({ videos: [], degraded: true, data_available: false }, { status }), timer, () => {}, AbortController, 'https://example.test', ['https://example.test']);
     const videos = [{ id: 'a', analytics_status: 'deferred' }];
     load(videos, () => true); await tick();
     assert.equal(videos[0].analytics_status, 'unavailable'); assert.equal(videos.length, 1);
+  });
+  test(`${surface}: unavailable HTTP 200 keeps counters unknown and cards intact`, async () => {
+    const load = make(async () => Response.json({ videos: [], analytics_status: 'unavailable',
+      degraded: true, data_available: false, retryable: true, code: 'ANALYTICS_UNAVAILABLE' }),
+    timer, () => {}, AbortController, 'https://example.test', ['https://example.test']);
+    const videos = [{ id: 'a', view_count: null, analytics_status: 'deferred' }];
+    load(videos, () => true); await tick();
+    assert.deepEqual(videos, [{ id: 'a', view_count: null, analytics_status: 'unavailable' }]);
   });
   test(`${surface}: navigation cancels stale hydration`, async () => {
     let calls = 0;

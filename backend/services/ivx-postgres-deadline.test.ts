@@ -43,9 +43,10 @@ for (const stage of ['checkout', 'setup', 'query', 'commit']) {
     } });
     observePostgresPoolErrors(pool as unknown as Pick<Pool, 'on'>, 'autonomous-repair');
     const logger = spyOn(console, 'error').mockImplementation(() => {});
+    const metrics = newReadTimings();
     try {
-      await expect(queryWithPostgresDeadline(pool as unknown as Pick<Pool, 'connect'>,
-        sql, [{ token: 'private-parameter-value' }])).rejects.toBe(error);
+      await expect(readTimings.run(metrics, () => queryWithPostgresDeadline(pool as unknown as Pick<Pool, 'connect'>,
+        sql, [{ token: 'private-parameter-value' }]))).rejects.toBe(error);
       expect(logger).toHaveBeenCalledTimes(1);
       const line = String(logger.mock.calls[0]?.[0]);
       const diagnostic = JSON.parse(line.slice(line.indexOf('{')));
@@ -56,9 +57,70 @@ for (const stage of ['checkout', 'setup', 'query', 'commit']) {
       expect(line).not.toContain('example_rpc');
       expect(calls.filter(call => call === sql)).toHaveLength(stage === 'checkout' || stage === 'setup' ? 0 : 1);
       expect(client.listenerCount('error')).toBe(0);
+      const sqlTiming = timingHeaders(metrics)['X-SQL-Execution-Ms'];
+      if (stage === 'checkout' || stage === 'setup') expect(sqlTiming).toBe('unavailable');
+      else expect(Number(sqlTiming)).toBeGreaterThanOrEqual(0);
+      expect(metrics.sqlPending).toBe(0);
     } finally { logger.mockRestore(); }
   });
 }
+
+test('SQL timings exclude checkout, setup and commit while summing actual request queries', async () => {
+  let now = 0;
+  const clock = spyOn(performance, 'now').mockImplementation(() => now);
+  const calls: string[] = [], releases: boolean[] = [];
+  const client = Object.assign(new EventEmitter(), {
+    query: async (sql: string) => {
+      calls.push(sql);
+      now += sql.startsWith('BEGIN') ? 31 : sql === 'COMMIT' ? 19 : 13;
+      return { rows: [{ result: 1 }] };
+    }, release: (destroy: boolean) => releases.push(destroy),
+  });
+  const pool = { connect: async () => { now += 17; return client; } } as unknown as Pick<Pool, 'connect'>;
+  const metrics = newReadTimings();
+  try {
+    await readTimings.run(metrics, async () => {
+      await queryWithPostgresDeadline(pool, 'select first', []);
+      await queryWithPostgresDeadline(pool, 'select second', []);
+    });
+    expect(timingHeaders(metrics)).toMatchObject({
+      'X-Pool-Acquisition-Ms': '17.0', 'X-IVX-Pool-Wait-Ms': '34.0', 'X-SQL-Execution-Ms': '26.0',
+    });
+    expect(metrics.sqlCompleted).toBe(2); expect(metrics.sqlPending).toBe(0);
+    expect(calls.filter(sql => sql.startsWith('select'))).toEqual(['select first', 'select second']);
+    expect(releases).toEqual([false, false]);
+  } finally { clock.mockRestore(); }
+});
+
+test('pending SQL is unavailable and completing another request cannot borrow its timing', async () => {
+  let unblock!: () => void, announceStart!: () => void;
+  const started = new Promise<void>(resolve => { announceStart = resolve; });
+  const hold = new Promise<void>(resolve => { unblock = resolve; });
+  function pool(held: boolean) {
+    const client = Object.assign(new EventEmitter(), {
+      query: async (sql: string) => {
+        if (sql === 'select measured' && held) { announceStart(); await hold; }
+        return { rows: [] };
+      }, release: () => {},
+    });
+    return { connect: async () => client } as unknown as Pick<Pool, 'connect'>;
+  }
+  const a = newReadTimings(), b = newReadTimings();
+  const first = readTimings.run(a, () => queryWithPostgresDeadline(pool(true), 'select measured', []));
+  try {
+    await started;
+    expect(a.sqlPending).toBe(1);
+    expect(timingHeaders(a)['X-SQL-Execution-Ms']).toBe('unavailable');
+    await readTimings.run(b, () => queryWithPostgresDeadline(pool(false), 'select measured', []));
+    const secondHeaders = timingHeaders(b);
+    expect(Number(secondHeaders['X-SQL-Execution-Ms'])).toBeGreaterThanOrEqual(0);
+    expect(a.sqlCompleted).toBe(0); expect(b.sqlCompleted).toBe(1);
+    unblock(); await first;
+    expect(a.sqlPending).toBe(0); expect(a.sqlCompleted).toBe(1);
+    expect(timingHeaders(b)).toEqual(secondHeaders);
+    expect(timingHeaders(newReadTimings())['X-SQL-Execution-Ms']).toBe('unavailable');
+  } finally { unblock(); await first; }
+});
 
 test('untrusted error codes are omitted and failed logging preserves the original error', async () => {
   const error = Object.assign(new Error('secret'), { code: 'secret-error-code' });
@@ -73,8 +135,9 @@ test('untrusted error codes are omitted and failed logging preserves the origina
   } finally { logger.mockRestore(); }
 });
 
+for (const deadline of ['default', 'assignment'] as const) {
 for (const failAt of [null, 'select mutation', 'COMMIT', 'BEGIN', 'SET LOCAL lock_timeout']) {
-  test(`deadline transaction ${failAt ?? 'success'} cleans up without replay`, async () => {
+  test(`${deadline} deadline transaction ${failAt ?? 'success'} cleans up without replay`, async () => {
     const calls: string[] = [], releases: boolean[] = [];
     const error = new Error('query timeout');
     const client = Object.assign(new EventEmitter(), {
@@ -82,7 +145,7 @@ for (const failAt of [null, 'select mutation', 'COMMIT', 'BEGIN', 'SET LOCAL loc
       release: (destroy: boolean) => releases.push(destroy),
     });
     const pool = { connect: async () => client } as unknown as Pick<Pool, 'connect'>;
-    const result = queryWithPostgresDeadline(pool, 'select mutation', []);
+    const result = queryWithPostgresDeadline(pool, 'select mutation', [], deadline);
     if (failAt) {
       await expect(result).rejects.toBe(error);
       expect(calls).not.toContain('ROLLBACK'); expect(releases).toEqual([true]);
@@ -93,9 +156,10 @@ for (const failAt of [null, 'select mutation', 'COMMIT', 'BEGIN', 'SET LOCAL loc
     const setupFailure = failAt === 'BEGIN' || failAt === 'SET LOCAL lock_timeout';
     expect(calls.filter(x => x === 'select mutation').length).toBe(setupFailure ? 0 : 1);
     expect(client.listenerCount('error')).toBe(0);
-    expect(calls[0]).toContain("BEGIN; SET LOCAL statement_timeout = '4s'; SET LOCAL lock_timeout = '2s'; SET LOCAL idle_in_transaction_session_timeout = '8s'");
+    expect(calls[0]).toContain("BEGIN; SET LOCAL statement_timeout = '2500ms'; SET LOCAL lock_timeout = '1000ms'; SET LOCAL idle_in_transaction_session_timeout = '5s'");
     if (!failAt) expect(calls.length).toBe(3);
   });
+}
 }
 
 for (const disconnectAt of ['BEGIN', 'select mutation', 'COMMIT']) {

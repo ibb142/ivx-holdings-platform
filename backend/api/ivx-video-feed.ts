@@ -1,3 +1,4 @@
+import { publicFeedRead } from '../services/ivx-public-feed-postgres';
 import { withPublicFeedAvailability } from '../services/ivx-public-feed-availability';
 import { boundedReadFetch } from '../services/ivx-read-timings';
 /**
@@ -96,29 +97,32 @@ export async function handleVideoFeed(req: Request): Promise<Response> {
 async function readVideoFeed(req: Request): Promise<Response> {
   try {
     const url = new URL(req.url);
-    const limit = Math.min(Number(url.searchParams.get('limit') || '24'), 50);
+    const parsedLimit = Number(url.searchParams.get('limit') || '24');
+    const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(Math.trunc(parsedLimit), 1), 50) : 24;
     const sb = await getSB();
 
     let videos: any[] = [];
-    const { data: vids, error } = await sb
+    const { data: vids, error } = await publicFeedRead<any>(
+      'select id,project_id,media_id,title,video_url,thumbnail_url,cover_url,duration_sec,width,height,orientation,is_pinned,is_approved,view_count,created_at from public.project_videos where is_approved = true order by is_pinned desc, created_at desc limit $1', [limit], () => sb
       .from('project_videos')
       .select('id,project_id,media_id,title,video_url,thumbnail_url,cover_url,duration_sec,width,height,orientation,is_pinned,is_approved,view_count,created_at')
       .eq('is_approved', true)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false })
-      .limit(limit);
+      .limit(limit));
     if (error) throw error;
     if (vids) videos = vids;
 
     // Fallback: videos stored in project_media only
     if (videos.length === 0) {
-      const { data: media, error: mediaError } = await sb
+      const { data: media, error: mediaError } = await publicFeedRead<any>(
+        "select id,project_id,media_type,url,media_url,thumbnail_url,cover_image_url,title,description,duration_sec,width,height,position,is_approved,created_at from public.project_media where media_type = 'video' and is_approved = true order by created_at desc limit $1", [limit], () => sb
         .from('project_media')
         .select('id,project_id,media_type,url,media_url,thumbnail_url,cover_image_url,title,description,duration_sec,width,height,position,is_approved,created_at')
         .eq('media_type', 'video')
         .eq('is_approved', true)
         .order('created_at', { ascending: false })
-        .limit(limit);
+        .limit(limit));
       if (mediaError) throw mediaError;
       videos = (media || []).map((m: any) => ({
         id: m.id,
@@ -142,10 +146,10 @@ async function readVideoFeed(req: Request): Promise<Response> {
 
     if (ids.length > 0) {
       const [likesRes, commentsRes, sharesRes, savesRes] = await Promise.all([
-        sb.from('project_likes').select('project_id').in('project_id', ids),
-        sb.from('project_comments').select('project_id').in('project_id', ids).eq('is_approved', true).is('deleted_at', null),
-        sb.from('project_shares').select('project_id').in('project_id', ids),
-        sb.from('project_saves').select('project_id').in('project_id', ids),
+        publicFeedRead<any>('select project_id from public.project_likes where project_id::text = any($1::text[])', [ids], () => sb.from('project_likes').select('project_id').in('project_id', ids)),
+        publicFeedRead<any>('select project_id from public.project_comments where project_id::text = any($1::text[]) and is_approved = true and deleted_at is null', [ids], () => sb.from('project_comments').select('project_id').in('project_id', ids).eq('is_approved', true).is('deleted_at', null)),
+        publicFeedRead<any>('select project_id from public.project_shares where project_id::text = any($1::text[])', [ids], () => sb.from('project_shares').select('project_id').in('project_id', ids)),
+        publicFeedRead<any>('select project_id from public.project_saves where project_id::text = any($1::text[])', [ids], () => sb.from('project_saves').select('project_id').in('project_id', ids)),
       ]);
       for (const row of likesRes.data || []) { const k = String(row.project_id); if (counts[k]) counts[k].likes += 1; }
       for (const row of commentsRes.data || []) { const k = String(row.project_id); if (counts[k]) counts[k].comments += 1; }

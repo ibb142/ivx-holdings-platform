@@ -9,6 +9,8 @@
  * without throwing.
  */
 import { describe, expect, test } from 'bun:test';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import {
   IVX_SCHEDULER_MARKER,
   SCHEDULED_JOB_KINDS,
@@ -161,8 +163,84 @@ describe('scheduler durable run (injected deps, no real scan)', () => {
     } });
     expect(result.ok).toBe(false);
     expect(result.summary).toContain('1 submission(s) failed');
+    expect(result.submissionFailures?.byCode).toEqual({ INVALID_PROPOSAL: 1 });
+    expect(result.submissionFailures?.samples[0]).toMatchObject({
+      proposalId: 'bad', stage: 'proposal_validation', code: 'INVALID_PROPOSAL',
+    });
     const state = await getSchedulerState();
+    expect(state.jobs.daily_self_audit.lastSummary).toContain('INVALID_PROPOSAL=1');
     expect(Date.parse(state.jobs.daily_self_audit.nextDueAt!) - Date.now()).toBeLessThanOrEqual(300_000);
+  });
+
+  test('persists attributed submission failures without losing successful handoffs or logging credentials', async () => {
+    const audit = fakeAudit();
+    const errors = [
+      Object.assign(new Error('column missing; postgres://user:fixture-db-secret@example.invalid/db'), { code: '42703' }),
+      new Error('Query read timeout; Bearer fixture-bearer-secret'),
+      'EMERGENCY_STOP_UNAVAILABLE: fixture-owner-secret',
+      Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }),
+    ];
+    let submitted = 0;
+    const result = await runScheduledJob('daily_self_audit', { selfAudit: {
+      runDailySelfAudit: async () => audit,
+      planSafeAutoImprovements: async () => ({ safeProposals: ['column', 'timeout', 'owner', 'connection', 'accepted'].map(id => ({
+        id, category: 'logging_fix', severity: 'low', recommendedAction: `Repair ${id}`,
+        evidence: [{ relativePath: 'backend/services/example.ts' }],
+      })) }),
+      enqueue: async () => {
+        const index = submitted++;
+        if (index < errors.length) throw errors[index];
+        return { attached: false, activeJobId: null, job: { jobId: 'accepted-fixture' } } as any;
+      },
+    } });
+    expect(submitted).toBe(5);
+    expect(result.ok).toBe(false);
+    expect(result.summary).toContain('1 new code-fix job(s)');
+    expect(result.submissionFailures?.total).toBe(4);
+    expect(result.submissionFailures?.byCode).toEqual({
+      SQLSTATE_42703: 1, TIMEOUT: 1, OWNER_CONTROL_UNAVAILABLE: 1, CONNECTION_EPIPE: 1,
+    });
+    expect(result.submissionFailures?.samples.map(({ proposalId, stage, code }) => ({ proposalId, stage, code }))).toEqual([
+      { proposalId: 'column', stage: 'worker_enqueue', code: 'SQLSTATE_42703' },
+      { proposalId: 'timeout', stage: 'worker_enqueue', code: 'TIMEOUT' },
+      { proposalId: 'owner', stage: 'worker_enqueue', code: 'OWNER_CONTROL_UNAVAILABLE' },
+      { proposalId: 'connection', stage: 'worker_enqueue', code: 'CONNECTION_EPIPE' },
+    ]);
+    for (const sample of result.submissionFailures!.samples) {
+      expect(sample.errorFingerprint).toMatch(/^[a-f0-9]{64}$/);
+    }
+    const events = (await readFile(path.join(process.cwd(), 'logs/audit/scheduler/runs.jsonl'), 'utf8'))
+      .trim().split('\n').map(line => JSON.parse(line));
+    const persisted = events.filter(event => event.type === 'job_run' && event.summary?.includes(audit.auditId));
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0].submissionFailures).toEqual(result.submissionFailures);
+    const state = await getSchedulerState();
+    expect(state.jobs.daily_self_audit.lastStatus).toBe('failed');
+    expect(state.jobs.daily_self_audit.lastSummary).toContain('SQLSTATE_42703=1');
+    const recorded = JSON.stringify({ result, persisted, state });
+    for (const secret of ['fixture-db-secret', 'fixture-bearer-secret', 'fixture-owner-secret']) {
+      expect(recorded).not.toContain(secret);
+    }
+  });
+
+  test('bounds diagnostic samples while retaining every failure in the totals', async () => {
+    const audit = fakeAudit();
+    let attempts = 0;
+    const result = await runScheduledJob('daily_self_audit', { selfAudit: {
+      runDailySelfAudit: async () => audit,
+      planSafeAutoImprovements: async () => ({ safeProposals: Array.from({ length: 55 }, (_, i) => ({
+        id: `failure-${i}`, category: 'logging_fix', severity: 'low', recommendedAction: `Repair ${i}`,
+        evidence: [{ relativePath: 'backend/services/example.ts' }],
+      })) }),
+      enqueue: async () => { attempts++; throw new Error('Unknown provider response: fixture-private-value'); },
+    } });
+    expect(attempts).toBe(55);
+    expect(result.submissionFailures?.total).toBe(55);
+    expect(result.submissionFailures?.byCode).toEqual({ UNCLASSIFIED: 55 });
+    expect(result.submissionFailures?.samples).toHaveLength(50);
+    expect(result.submissionFailures?.omitted).toBe(5);
+    expect(result.summary).toContain('UNCLASSIFIED=55');
+    expect(JSON.stringify(result)).not.toContain('fixture-private-value');
   });
   test('runs a self-audit job, persists + advances the cursor, wires memory/action-loop without throwing', async () => {
     const result = await runScheduledJob('daily_self_audit', {

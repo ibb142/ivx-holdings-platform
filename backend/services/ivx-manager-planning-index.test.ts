@@ -43,23 +43,25 @@ test('planning index paginates identities without hydrating evidence payloads', 
         return Object.assign(new EventEmitter(), {
           query:async(sql,values)=>{
             if(sql.startsWith('BEGIN;')) {
-              if(!sql.includes("SET LOCAL statement_timeout = '4s'") || !sql.includes("SET LOCAL lock_timeout = '2s'"))throw Error('unbounded planning page');
+              if(!sql.includes("SET LOCAL statement_timeout = '2500ms'") || !sql.includes("SET LOCAL lock_timeout = '1000ms'"))throw Error('unbounded planning page');
               setups++;return {rows:[]};
             }
             if(sql==='COMMIT'){commits++;return {rows:[]};}
             if(sql==='ROLLBACK')throw Error('unexpected planning rollback');
-            return this.query(sql,values);
+            return this.rawQuery(sql,values);
           },
           release:destroy=>{if(destroy)throw Error('successful connection discarded');releases++;}
         });
       }
-      async query(sql,values) {
+      async rawQuery(sql,values) {
         reads++;
-        if(sql.includes('select payload ') || !sql.includes("payload->>'title'"))throw Error('full payload requested');
-        const [offset,limit]=values;
+        if(sql.includes('payload') || sql.includes(' offset '))throw Error('historical payload or offset scan requested');
+        const [at,lastId,limit]=values;
+        const offset=lastId===null?0:Number(lastId.slice(1))+1;
+        if(lastId!==null && at!=='2026-09-13 00:00:00.123456+00')throw Error('timestamp precision lost');
         return {rows:Array.from({length:Math.min(limit,10224-offset)},(_,i)=>({
           task_id:'t'+(offset+i),idempotency_key:'key'+(offset+i),
-          assigned_agent_number:(offset+i)%112+1,state:'QUEUED',title:'Existing task'
+          assigned_agent_number:(offset+i)%112+1,state:'QUEUED',created_at:'2026-09-13 00:00:00.123456+00'
         }))};
       }
     }}));
@@ -68,7 +70,7 @@ test('planning index paginates identities without hydrating evidence payloads', 
     const m=await import('./backend/services/ivx-postgres-autonomous-task-store.ts');
     const rows=await m.readPostgresAutonomousTaskIndex();
     if(rows.length!==10224 || reads!==11 || rows[10223].taskId!=='t10223')throw Error('incomplete history');
-    if(Object.keys(rows[0]).length!==5)throw Error('unbounded payload');
+    if(Object.keys(rows[0]).length!==4)throw Error('unbounded payload');
     if(setups!==11 || commits!==11 || releases!==11)throw Error('planning page transaction was not cleaned up');
   `],{cwd:new URL('../../',import.meta.url).pathname,stdout:'pipe',stderr:'pipe',timeout:10000});
   const [exitCode,stderr]=await Promise.all([child.exited,new Response(child.stderr).text()]);

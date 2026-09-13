@@ -4,28 +4,40 @@ import { emergencyStopPostgresConfig, emergencyStopReadCanFailOver } from './ivx
 const moduleUrl = new URL('./ivx-emergency-stop-gate.ts', import.meta.url).href;
 function scenario(restStatus: number, active: unknown, directFails = false, missingRow = false) {
   const child = Bun.spawnSync([process.execPath, '--eval', `
-    import { mock } from 'bun:test';
+    import { spyOn } from 'bun:test';
+    import { Client, Pool } from 'pg';
     let reads = 0, connects = 0, closed = 0;
-    mock.module('pg', () => ({ Client: class {
-      constructor(config) {
-        if (config.ssl.rejectUnauthorized !== true || config.query_timeout !== 3000 || config.statement_timeout !== 3000) throw new Error('unbounded or unverified connection');
+    const nativeCheckout = Pool.prototype.connect;
+    spyOn(Pool.prototype, 'connect').mockImplementation(function () {
+      const config = this.options;
+      if (config.ssl.rejectUnauthorized !== true || config.query_timeout !== 3000 || config.statement_timeout !== 3000) throw new Error('unbounded or unverified connection');
+      return nativeCheckout.call(this);
+    });
+    spyOn(Client.prototype, 'connect').mockImplementation(callback => {
+      connects++; queueMicrotask(() => callback(null));
+    });
+    spyOn(Client.prototype, 'query').mockImplementation(async (sql, args) => {
+      if (sql.startsWith('BEGIN')) {
+        if (!sql.includes("statement_timeout = '2500ms'") || !sql.includes("lock_timeout = '1000ms'")) throw new Error('missing local deadline');
+        return { rows: [] };
       }
-      on() {}
-      async connect() { connects++; }
-      async query(sql, args) {
-        if (!sql.startsWith('SELECT ') || args[0] !== 'emergency_stop') throw new Error('unexpected SQL');
-        reads++;
-        if (${directFails}) throw new Error('direct timeout');
-        return {rows: ${missingRow} ? [] : [{control_name:'emergency_stop', active:${JSON.stringify(active)}}]};
-      }
-      async end() { closed++; }
-    }}));
+      if (sql === 'COMMIT' || sql === 'ROLLBACK') return { rows: [] };
+      if (!sql.startsWith('SELECT ') || args[0] !== 'emergency_stop') throw new Error('unexpected SQL');
+      reads++;
+      if (${directFails}) throw new Error('direct timeout');
+      return {rows: ${missingRow} ? [] : [{control_name:'emergency_stop', active:${JSON.stringify(active)}}]};
+    });
+    spyOn(Client.prototype, 'end').mockImplementation(function () {
+      closed++; this.emit('end'); return Promise.resolve();
+    });
     process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://testproject.supabase.co';
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-only';
     process.env.SUPABASE_DB_URL = 'postgresql://postgres:test@db.testproject.supabase.co/postgres';
     globalThis.fetch = async () => Response.json({}, {status:${restStatus}});
     const {assertEmergencyStopInactive} = await import(${JSON.stringify(moduleUrl)});
     const outcomes = await Promise.allSettled(Array.from({length:112}, () => assertEmergencyStopInactive('test')));
+    const { resetEmergencyStopPoolForTests } = await import(${JSON.stringify(new URL('./ivx-emergency-stop-postgres.ts', import.meta.url).href)});
+    await resetEmergencyStopPoolForTests();
     console.log(JSON.stringify({reads,connects,closed,
       passed:outcomes.filter(x=>x.status==='fulfilled'&&x.value.source==='postgres').length,
       stopped:outcomes.filter(x=>x.status==='rejected'&&x.reason.message.startsWith('EMERGENCY_STOP_ACTIVE:')).length,
