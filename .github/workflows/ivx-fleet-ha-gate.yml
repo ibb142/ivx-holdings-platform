@@ -3,7 +3,7 @@ on:
   push:
     branches: [fix/fleet-render-ha-20260908, fix/fleet-backend-ha-20260908]
   pull_request:
-    paths: ['database/functions/execute_budget_reconciliation_batch.sql', 'scripts/ops/reconcile-uncertain-budget.mjs', 'scripts/ivx-budget-reconciliation-postgres-proof.mjs', 'qa/phase3-budget-reconciliation.mjs', 'qa/phase3-budget-reconciliation.test.mjs', 'qa/phase3-capacity.mjs', 'backend/**', 'expo/**', 'supabase/migrations/**', 'supabase/repair-functions/**', 'scripts/ivx-senior-commit-recovery-postgres-proof.mjs', 'scripts/ivx-senior-compact-receipt-proof.mjs', 'scripts/ivx-senior-queue-spill-proof.mjs', 'scripts/ivx-senior-claim-spill-proof.ts', 'scripts/ivx-senior-work-queue-proof.ts', 'scripts/ivx-coder-workspace-postgres-proof.ts', 'scripts/ivx-objective-link-postgres-proof.mjs', 'scripts/ivx-fleet-ha-postgres-proof.mjs', 'scripts/ivx-global-ai-budget-postgres-proof.mjs', 'scripts/ivx-global-ai-budget-sdk-proof.ts', 'scripts/ivx-task-recovery-postgres-proof.mjs', 'scripts/ivx-fleet-telemetry-postgres-proof.ts', 'scripts/ivx-mission-history-postgres-proof.ts', 'scripts/ivx-landing-read-postgres-proof.ts', 'scripts/ivx-inspection-claim-postgres-proof.mjs', 'scripts/ivx-fleet-ha-live-proof.ts', 'scripts/ivx-fleet-ha-identities.ts', 'scripts/ivx-fleet-ha-identities.test.ts', '.github/workflows/ivx-fleet-ha-gate.yml']
+    paths: ['scripts/ops/recover-failed-patrols.mjs', 'scripts/ops/recover-failed-patrols.test.mjs', 'scripts/ivx-failed-patrol-recovery-postgres-proof.mjs', 'database/functions/execute_budget_reconciliation_batch.sql', 'scripts/ops/reconcile-uncertain-budget.mjs', 'scripts/ivx-budget-reconciliation-postgres-proof.mjs', 'qa/phase3-budget-reconciliation.mjs', 'qa/phase3-budget-reconciliation.test.mjs', 'qa/phase3-capacity.mjs', 'backend/**', 'expo/**', 'supabase/migrations/**', 'supabase/repair-functions/**', 'scripts/ivx-senior-commit-recovery-postgres-proof.mjs', 'scripts/ivx-senior-compact-receipt-proof.mjs', 'scripts/ivx-senior-queue-spill-proof.mjs', 'scripts/ivx-senior-claim-spill-proof.ts', 'scripts/ivx-senior-work-queue-proof.ts', 'scripts/ivx-coder-workspace-postgres-proof.ts', 'scripts/ivx-objective-link-postgres-proof.mjs', 'scripts/ivx-fleet-ha-postgres-proof.mjs', 'scripts/ivx-global-ai-budget-postgres-proof.mjs', 'scripts/ivx-global-ai-budget-sdk-proof.ts', 'scripts/ivx-task-recovery-postgres-proof.mjs', 'scripts/ivx-fleet-telemetry-postgres-proof.ts', 'scripts/ivx-mission-history-postgres-proof.ts', 'scripts/ivx-landing-read-postgres-proof.ts', 'scripts/ivx-inspection-claim-postgres-proof.mjs', 'scripts/ivx-fleet-ha-live-proof.ts', 'scripts/ivx-fleet-ha-identities.ts', 'scripts/ivx-fleet-ha-identities.test.ts', '.github/workflows/ivx-fleet-ha-gate.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -172,3 +172,29 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+
+  failed-patrol-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ivx_patrol_recovery_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.3.9 }
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Verify manual patrol recovery failures and commit uncertainty
+        run: node --test scripts/ops/recover-failed-patrols.test.mjs
+      - name: Prove recovery and audit atomicity on two PostgreSQL connections
+        run: node scripts/ivx-failed-patrol-recovery-postgres-proof.mjs
+        env:
+          IVX_PATROL_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_patrol_recovery_test
