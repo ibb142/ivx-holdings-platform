@@ -32,7 +32,7 @@ export function summarizeBinding(values) {
   } catch { return { configured: true, validUrl: false }; }
 }
 
-async function readJson(fetchImpl, url, token) {
+async function readJson(fetchImpl, url, token, textOnly = false) {
   const response = await fetchImpl(url, { method: 'GET', redirect: 'error', signal: AbortSignal.timeout(12000),
     headers: { Accept: 'application/json', Authorization: `Bearer ${token}` } });
   if (!response.ok) { await response.body?.cancel(); throw new Error(`HTTP_${response.status}`); }
@@ -46,7 +46,28 @@ async function readJson(fetchImpl, url, token) {
       parts.push(next.value);
     }
   } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
-  return JSON.parse(Buffer.concat(parts).toString('utf8'));
+  const text = Buffer.concat(parts).toString('utf8');
+  return textOnly ? text : JSON.parse(text);
+}
+
+export function summarizeMetrics(text) {
+  const totals = {};
+  const exact = new Set(['node_load1', 'node_load5', 'node_load15', 'node_memory_MemTotal_bytes',
+    'node_memory_MemAvailable_bytes', 'node_memory_SwapTotal_bytes', 'node_memory_SwapFree_bytes',
+    'pgbouncer_pools_cl_active', 'pgbouncer_pools_cl_waiting', 'pgbouncer_pools_sv_active',
+    'pgbouncer_pools_sv_idle', 'pgbouncer_pools_maxwait', 'pg_stat_activity_count']);
+  for (const line of text.split('\n')) {
+    const match = /^([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{([^}]*)\})?\s+([+\-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+\-]?\d+)?)(?:\s+\d+)?$/i.exec(line);
+    if (!match) continue;
+    const [, name, labels = '', raw] = match, value = Number(raw);
+    if (!Number.isFinite(value) || value < 0) continue;
+    if (exact.has(name)) totals[name] = (totals[name] || 0) + value;
+    if (name === 'node_cpu_seconds_total') {
+      const mode = /(?:^|,)mode="(user|system|idle|iowait|steal|irq|softirq|nice)"(?:,|$)/.exec(labels)?.[1];
+      if (mode) totals['cpu_seconds_' + mode] = (totals['cpu_seconds_' + mode] || 0) + value;
+    }
+  }
+  return totals;
 }
 
 const safeError = error => /^HTTP_\d{3}$|^RESPONSE_TOO_LARGE$|^PAGINATION_LIMIT$/.test(error?.message || '')
@@ -81,9 +102,16 @@ export async function inspect({ fetchImpl = fetch, env = process.env } = {}) {
   for (const setting of ['pgbouncer', 'pooler', 'postgrest']) {
     if (!managementToken) { evidence.configuration.push({ setting, error: 'MANAGEMENT_CREDENTIAL_MISSING' }); continue; }
     try {
-      const data = await readJson(fetchImpl, `https://api.supabase.com/v1/projects/${PROJECT}/config/database/${setting}`, managementToken);
+      const route = setting === 'postgrest' ? 'config/postgrest' : `config/database/${setting}`;
+      const data = await readJson(fetchImpl, `https://api.supabase.com/v1/projects/${PROJECT}/${route}`, managementToken);
       evidence.configuration.push({ setting, values: summarizePool(data) });
     } catch (error) { evidence.configuration.push({ setting, error: safeError(error) }); }
+  }
+  if (managementToken) {
+    try {
+      const data = await readJson(fetchImpl, `https://api.supabase.com/v1/projects/${PROJECT}/analytics/endpoints/metrics`, managementToken, true);
+      evidence.databaseMetrics = summarizeMetrics(data);
+    } catch (error) { evidence.databaseMetrics = { error: safeError(error) }; }
   }
   return evidence;
 }

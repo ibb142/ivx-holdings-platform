@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { inspect, summarizePool, summarizeBinding } from './public-feed-pooler-diagnostic.mjs';
+import { inspect, summarizePool, summarizeBinding, summarizeMetrics } from './public-feed-pooler-diagnostic.mjs';
 
 const url = 'postgres://postgres.kvclcdjmjghndxsngfzb:PRIVATE_PASSWORD@aws-0-us-west-2.pooler.supabase.com:6543/postgres';
 
@@ -25,11 +25,17 @@ test('inspection issues GETs only to the fixed provider scopes and returns no cr
       assert.ok(options.signal); assert.ok(!options.body);
       if (address.startsWith('https://api.render.com/')) return Response.json([{ envVar: { key: 'SUPABASE_DB_URL', value: url } },
         { envVar: { key: 'UNRELATED_SECRET', value: 'PRIVATE_UNRELATED' } }]);
-      assert.ok(address.startsWith('https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/config/database/'));
+      assert.ok(address.startsWith('https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/'));
       return Response.json({ default_pool_size: 5, password: 'PRIVATE_PASSWORD', connection_string: url });
     } });
-  assert.equal(calls.length, 5); assert.ok(evidence.bindings.every(row => row.targetMatches));
+  assert.equal(calls.length, 6); assert.ok(evidence.bindings.every(row => row.targetMatches));
   assert.ok(!JSON.stringify(evidence).includes('PRIVATE_'));
+});
+test('metrics retain numeric measurements and drop labels and arbitrary metric names', () => {
+  assert.deepEqual(summarizeMetrics('node_load1{tenant="PRIVATE_TENANT"} 3.1\n'
+    + 'node_cpu_seconds_total{cpu="0",mode="idle",host="PRIVATE_HOST"} 120\n'
+    + 'node_cpu_seconds_total{cpu="1",mode="idle"} 130\n'
+    + 'PRIVATE_METRIC 8\nnode_load5 NaN'), { node_load1: 3.1, cpu_seconds_idle: 250 });
 });
 test('provider failures remain explicit without serializing their response or exception', async () => {
   const evidence = await inspect({ env: { RENDER_API_KEY: 'PRIVATE_RENDER', SUPABASE_ACCESS_TOKEN: 'PRIVATE_MANAGEMENT' },
