@@ -24,7 +24,7 @@ export type MonitorState = {
   lastProbeAt: string | null;
   lastAlertAt: string | null;
   consecutiveFailures: number;
-  provider: 'vercel_gateway' | 'openai_direct' | 'unknown';
+  provider: ReturnType<typeof getIVXAIProviderType>;
   lastStatus: number | null;
   lastReason: string | null;
 };
@@ -42,6 +42,7 @@ let state: MonitorState = {
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
 
 function providerLabel(provider: MonitorState['provider']): string {
+  if (provider === 'litellm') return 'LiteLLM';
   if (provider === 'vercel_gateway') return 'Vercel AI Gateway';
   if (provider === 'openai_direct') return 'OpenAI direct';
   return 'AI provider';
@@ -49,6 +50,7 @@ function providerLabel(provider: MonitorState['provider']): string {
 
 function remediation(provider: MonitorState['provider'], status: number | null): string {
   if (status === 401 || status === 403) {
+    if (provider === 'litellm') return 'Check OPENAI_API_BASE and the local gateway key in OPENAI_API_KEY.';
     if (provider === 'vercel_gateway') {
       return 'Check the active Vercel AI Gateway key and its Render binding (IVX_AI_GATEWAY_KEY or AI_GATEWAY_API_KEY).';
     }

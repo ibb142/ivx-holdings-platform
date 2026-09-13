@@ -7,8 +7,9 @@
  */
 
 import { retryAfterMs } from './ivx-retry-policy';
+import { getIVXLiteLLMConfig, isIVXLiteLLMEnabled } from './ivx-litellm-provider';
 
-export type IVXProviderName = 'ivx_ai_gateway' | 'openai_direct' | 'anthropic_direct';
+export type IVXProviderName = 'ivx_ai_gateway' | 'openai_direct' | 'anthropic_direct' | 'litellm';
 
 export type IVXProviderFailureClass =
   | 'auth'
@@ -97,6 +98,13 @@ export function getIVXProviderChainSnapshot(): {
   fallbacks: IVXProviderStatus[];
   fallbackEnabled: boolean;
 } {
+  const local = getIVXLiteLLMConfig();
+  if (local) return {
+    primary: { name: 'litellm', role: 'primary', configured: Boolean(local.apiKey),
+      envGates: ['IVX_AI_PROVIDER', 'OPENAI_API_BASE', 'OPENAI_API_KEY'] },
+    fallbacks: [],
+    fallbackEnabled: false,
+  };
   const openaiConfigured = Boolean(firstOpenAIKey());
   const vercelConfigured = Boolean(firstVercelKey());
   const anthropicConfigured = Boolean(anthropicKey());
@@ -335,6 +343,7 @@ function buildCandidates(): Candidate[] {
  * configured provider.
  */
 export async function attemptProviderFallback(input: FallbackInput): Promise<IVXProviderInvocationResult | null> {
+  if (isIVXLiteLLMEnabled()) return null;
   const chain = buildCandidates().filter(candidate => candidate.key !== input.excludedApiKey).slice(0, 3);
   if (chain.length === 0) return null;
   const deadline = Date.now() + input.timeoutMs;

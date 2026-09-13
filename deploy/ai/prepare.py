@@ -10,9 +10,12 @@ def main():
     directory = Path(__file__).resolve().parent
     target = directory / ".env"
     content = (directory / ".env.example").read_text(encoding="utf-8")
+    gateway_key = "sk-" + secrets.token_hex(32)
     content = content.replace(
-        "LITELLM_MASTER_KEY=\n", "LITELLM_MASTER_KEY=sk-" + secrets.token_hex(32) + "\n"
-    ).replace("QDRANT_API_KEY=\n", "QDRANT_API_KEY=" + secrets.token_hex(32) + "\n")
+        "LITELLM_MASTER_KEY=\n", "LITELLM_MASTER_KEY=" + gateway_key + "\n"
+    ).replace("QDRANT_API_KEY=\n", "QDRANT_API_KEY=" + secrets.token_hex(32) + "\n").replace(
+        "OPENAI_API_KEY=\n", "OPENAI_API_KEY=" + gateway_key + "\n"
+    )
     try:
         descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError:

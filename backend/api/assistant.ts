@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
-import { getIVXAIEndpoint, requestIVXAIText, resolveIVXAIModel } from '../ivx-ai-runtime';
+import { getIVXAIEndpoint, requestIVXAIText, resolveIVXAIModel, type IVXAIProviderMetadata } from '../ivx-ai-runtime';
 import { IVX_OWNER_AI_PROFILE, IVX_OWNER_AI_ROOM_ID, IVX_OWNER_AI_ROOM_SLUG } from '../../expo/constants/ivx-owner-ai';
 import {
   extractIVXRoleCandidate,
@@ -92,16 +92,16 @@ type UserContext = {
 };
 
 type ProviderMetadata = {
-  provider: 'chatgpt';
-  source: 'remote_api';
+  provider: IVXAIProviderMetadata['provider'];
+  source: IVXAIProviderMetadata['source'];
   model: string;
   endpoint: string | null;
   runtime: 'ivx_ai_gateway';
 };
 
 type AssistantGenerationResult = {
-  provider: 'chatgpt';
-  source: 'remote_api';
+  provider: IVXAIProviderMetadata['provider'];
+  source: IVXAIProviderMetadata['source'];
   responseId: string | null;
   answer: string;
   generatedSummary: string;
@@ -134,7 +134,6 @@ const JSON_HEADERS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 } as const;
 
-const DEFAULT_MODEL = 'gpt-4o';
 const DEFAULT_ROOM_KEY = 'ivx-owner-room';
 const WORKSPACE_PROJECT_ID = (process.env.EXPO_PUBLIC_PROJECT_ID ?? '').trim();
 const WORKSPACE_TEAM_ID = (process.env.EXPO_PUBLIC_TEAM_ID ?? '').trim();
@@ -676,8 +675,8 @@ async function callAssistantModel(params: {
   });
 
   return {
-    provider: 'chatgpt',
-    source: 'remote_api',
+    provider: result.providerMetadata.provider,
+    source: result.providerMetadata.source,
     responseId: null,
     answer: result.text,
     generatedSummary: buildGeneratedSummary(result.text, params.flow),
@@ -887,7 +886,7 @@ export async function POST(request: Request): Promise<Response> {
       ?? readTrimmedString(body.roomSlug)
       ?? DEFAULT_ROOM_KEY;
     const requestedProjectId = readTrimmedString(body.projectId);
-    const requestedModel = readTrimmedString(body.model) ?? DEFAULT_MODEL;
+    const requestedModel = readTrimmedString(body.model) ?? resolveIVXAIModel();
     const systemPrompt = readTrimmedString(body.systemPrompt);
     const saveUserMessage = toBoolean(body.saveUserMessage, true);
     const requestId = readTrimmedString(body.requestId) ?? createRequestId();

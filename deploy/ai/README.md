@@ -1,8 +1,9 @@
 # IA local para IVX
 
-Stack separado de Ollama, LiteLLM y Qdrant. Prepara un piloto de inferencia local;
-todavía requiere conectar el backend y probarlo en el servidor GPU. No modifica
-el proveedor activo, las reservas financieras ni los datos de Supabase.
+Stack de Ollama, LiteLLM y Qdrant con adaptador explícito de chat/streaming en el
+backend. Su activación requiere probarlo en el servidor GPU y resolver la tarifa
+de admisión del modelo local. Publicar estos archivos no activa el proveedor en
+producción ni cambia las reservas financieras o los datos de Supabase.
 
 ## Arranque en el servidor GPU
 
@@ -16,16 +17,15 @@ los pesos no es una garantía de que una GPU con esa VRAM pueda ejecutarlo.
 Desde esta carpeta:
 
 ```bash
-docker info
-docker compose version
-nvidia-smi
-python3 prepare.py
-docker compose config --quiet
-docker compose up -d
-docker compose ps -a
-docker compose logs --tail=40 model-init
+bash start.sh
 docker compose exec -T litellm python /app/ivx-smoke.py
 ```
+
+`start.sh` comprueba Docker y NVIDIA, genera claves, valida Compose y arranca los
+servicios. Para seguir la descarga, usar `docker compose logs -f model-init` una
+sola vez; Ctrl+C deja de seguir los logs y no detiene el contenedor. `model-init`
+es el nombre del servicio Compose, no un nombre fijo de contenedor para
+`docker logs`. La salida de logs que muestra `start.sh` es finita.
 
 La primera descarga puede tardar. LiteLLM espera a que Ollama esté saludable y a
 que `model-init` termine correctamente. Su healthcheck solo comprueba que el
@@ -37,6 +37,10 @@ de la aplicación. Las pruebas de inferencia tienen un límite total de 420 segu
 `prepare.py` crea `.env` con permisos 0600, no muestra claves y no sobrescribe un
 archivo existente. `.env` está excluido por el `.gitignore` del repositorio. No
 compartir la salida completa de `docker compose config`: puede mostrar las claves.
+La clave generada de LiteLLM también se guarda como `OPENAI_API_KEY` para el
+backend. Si ya existe un `.env` de la versión anterior, agregar las variables
+de backend indicadas abajo y usar su clave local existente; el generador no lo
+reescribe. Las contraseñas ilustrativas compartidas en el chat no se instalan.
 
 ## Endpoints
 
@@ -58,19 +62,49 @@ El digest del modelo descargado aparece en la prueba para registrar qué se prob
 
 Validación realizada: `config --quiet` con Compose 5.5.1, rechazo de claves
 ausentes, sintaxis YAML/Python y generación de claves con permisos 0600 sin
-sobrescritura. No se arrancaron contenedores: el entorno de preparación carece de
+sobrescritura y con la clave del backend sincronizada. Pasaron 61 pruebas del
+adaptador y regresión, y el typecheck del backend. El arranque con `start.sh`
+se intentó y rechazó explícitamente la ausencia de Docker. No se arrancaron
+contenedores: el entorno de preparación carece de
 Docker Engine y GPU. Las consultas a los registros de imágenes agotaron su tiempo
 de espera; tampoco se verificó una descarga de imágenes desde este entorno.
 
-## Conexión pendiente con IVX
+## Selección del proveedor en IVX
+
+Estas variables se cargan en el **proceso del backend**, además de arrancar
+Compose. El `.env` que genera `prepare.py` ya las incluye con la clave aleatoria:
+
+```dotenv
+IVX_AI_PROVIDER=litellm
+IVX_AI_MODEL=ivx-local-chat
+OPENAI_API_BASE=http://127.0.0.1:4000/v1
+OPENAI_API_KEY=<mismo valor local de LITELLM_MASTER_KEY>
+```
+
+`IVX_AI_PROVIDER=litellm` selecciona el adaptador `createOpenAI(...).chat(...)`
+en ambas rutas del SDK. Las claves antiguas de owner/Vercel no sustituyen la clave
+local. El gateway no usa `/responses`, no sigue redirecciones y sus errores no
+activan el fallback de pago. La telemetría identifica el proveedor como `litellm`.
+Los modelos explícitos que envíen otros módulos o clientes deben existir como
+alias en LiteLLM; un alias desconocido falla, no se transforma en otro modelo.
+
+El chat de owner selecciona el modelo local cuando este modo está activo. Assistant
+y Plan Creator usan el modelo configurado si el cliente no solicita otro. Los
+adjuntos se rechazan en este piloto de texto antes de enviar la solicitud.
+
+Dentro de la red Compose, usar `http://litellm:4000/v1`. Desde Render, usar la URL
+HTTPS o ruta privada del servidor GPU; no usar `localhost`. Quitar el selector
+`IVX_AI_PROVIDER=litellm` permite volver a la selección anterior tras restaurar
+las variables del proveedor anterior.
+
+## Integraciones pendientes
 
 Inspección del código base `9ad722d023823a18f1796f70b52dcf4be1cc05e7`:
 
-1. `backend/ivx-ai-runtime.ts` pasa un nombre de modelo a `generateText` y
-   `streamText`. Esa ruta usa el proveedor predeterminado del SDK; cambiar solo
-   `IVX_AI_GATEWAY_URL` no conecta estas llamadas a LiteLLM. Se necesita un
-   adaptador OpenAI-compatible explícito para chat y streaming, con timeout,
-   cancelación, selección de modelo y telemetría correctos.
+1. El adaptador está comprobado con el SDK real y un servidor HTTP local de prueba:
+   destino, clave, respuesta, streaming, rechazo 401, cancelación, redirecciones y
+   ausencia de fallback de pago. Falta verificar inferencia con Ollama/Llama en
+   GPU, rendimiento y conversación real de owner en el despliegue destino.
 2. `backend/services/operational-memory/vector-memory.ts` persiste en Supabase
    pgvector. Qdrant no consume automáticamente esa memoria. Se necesita un
    adaptador, autorización por propietario, migración verificable y recuperación.
@@ -89,6 +123,11 @@ Inspección del código base `9ad722d023823a18f1796f70b52dcf4be1cc05e7`:
    monetario persistente. Conservar el control de admisión y la contabilidad de
    IVX, e incorporar el coste del servidor. No marcar cargos inciertos como
    conciliados por haber instalado este stack.
+   **Bloqueo de activación:** el control global actual cotiza con el catálogo
+   de Vercel y no tiene una tarifa verificada para `ivx-local-chat`. El adaptador
+   conserva ese control y la solicitud será rechazada si no tiene cotización.
+   Hace falta incorporar una política de coste/concurrencia del servidor local;
+   este cambio no desactiva el control ni inventa un coste cero.
 
 ## Operación y retirada
 
