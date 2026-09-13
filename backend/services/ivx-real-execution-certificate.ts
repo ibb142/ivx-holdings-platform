@@ -530,7 +530,7 @@ export async function getCertificateForApi(): Promise<Record<string, unknown>> {
     uniqueAgents: cert?.unique_agents ?? 0,
     commitSha: cert?.commit_sha ?? null,
     runtimeCommitSha: runtimeCommit,
-    commitMatchesRuntime: Boolean(cert?.commit_sha && runtimeCommit && cert.commit_sha === runtimeCommit),
+    commitMatchesRuntime: Boolean(runtimeCommit && commitSha() === runtimeCommit),
     certifiedAt: cert?.certified_at ?? null,
     runtimeVersion: cert?.runtime_version ?? IVX_AGENT_RUNTIME_VERSION,
     registry,
