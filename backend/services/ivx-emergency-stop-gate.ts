@@ -131,7 +131,7 @@ async function readEmergencyStopFromSupabase(): Promise<EmergencyStopStatus> {
   }
 
   try {
-    const query = `${url}/rest/v1/${CONTROL_TABLE}?control_name=eq.${CONTROL_NAME}&select=control_name,active,reason,updated_by,updated_at&limit=1`;
+    const query = `${url}/rest/v1/${CONTROL_TABLE}?control_name=eq.${CONTROL_NAME}&select=control_name,active,reason,updated_by,updated_at&limit=2`;
     let rows: unknown;
     let source: 'supabase' | 'postgres' = 'supabase';
     try {
@@ -149,16 +149,18 @@ async function readEmergencyStopFromSupabase(): Promise<EmergencyStopStatus> {
       rows = await readEmergencyStopPostgres();
       source = 'postgres';
     }
-    if (!Array.isArray(rows) || rows.length > 1 || rows.some((row: ControlRow | null) =>
+    // A missing or ambiguous control is unknown authority, never permission to run.
+    // Read two rows so both transports can detect an ambiguous response.
+    if (!Array.isArray(rows) || rows.length !== 1 || rows.some((row: ControlRow | null) =>
       !row || row.control_name !== CONTROL_NAME || typeof row.active !== 'boolean')) {
       throw new Error('Invalid emergency-stop control response');
     }
-    const row = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+    const row = rows[0];
     const status: EmergencyStopStatus = {
-      active: row ? row.active === true : false,
-      reason: row ? readTrimmed(row.reason) || null : null,
-      updatedBy: row ? readTrimmed(row.updated_by) || null : null,
-      updatedAt: row ? readTrimmed(row.updated_at) || null : null,
+      active: row.active,
+      reason: readTrimmed(row.reason) || null,
+      updatedBy: readTrimmed(row.updated_by) || null,
+      updatedAt: readTrimmed(row.updated_at) || null,
       checkedAt: nowIso(),
       source,
       error: null,

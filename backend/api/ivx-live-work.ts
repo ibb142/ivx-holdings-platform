@@ -80,6 +80,10 @@ export async function handleLiveWorkFeedRequest(request: Request): Promise<Respo
  */
 export async function handleLiveWorkAgentsRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
+  if (url.searchParams.get('view') === 'live' && url.searchParams.get('individualCerts') !== '1') {
+    const { handleLiveFleetDashboardRequest } = await import('./ivx-live-fleet-dashboard');
+    return handleLiveFleetDashboardRequest(request);
+  }
   // The enterprise handler performs its own owner verification. Keep the
   // individual-certificate route's precedence without authenticating twice.
   if (url.searchParams.get('enterpriseDashboard') === '1' && url.searchParams.get('individualCerts') !== '1') {

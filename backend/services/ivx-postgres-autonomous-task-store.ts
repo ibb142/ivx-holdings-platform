@@ -14,7 +14,7 @@ import { enforceMillisecondScatter } from '../utils/jitter';
 import type { Pool } from 'pg';
 import { getObserverPool, getWorkerPool, resetDatabasePoolsForTests } from './ivx-database-pools';
 import { queryWithPostgresDeadline } from './ivx-postgres-deadline';
-import { SENIOR_ACTIVE_OWNER_JOB_SQL, SENIOR_QUEUE_ACTIVE_STATUSES, SENIOR_QUEUE_AUTHORITY_SQL, SENIOR_QUEUE_JOB_SQL, SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL } from './ivx-senior-work-queue';
+import { seniorJobBatchIds, verifiedSeniorJobBatch, SENIOR_QUEUE_JOBS_SQL, SENIOR_ACTIVE_OWNER_JOB_SQL, SENIOR_QUEUE_ACTIVE_STATUSES, SENIOR_QUEUE_AUTHORITY_SQL, SENIOR_QUEUE_JOB_SQL, SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL } from './ivx-senior-work-queue';
 import { emergencyStopPostgresConfig } from './ivx-emergency-stop-postgres';
 import { decideRetry, isTransientFailure, retryAfterMs, RetryQuota } from './ivx-retry-policy';
 import type { FleetLeaseRequest, FleetLeaseResult, FleetTaskLeaseIdentity, FleetTaskMutationResult, Task, TaskState } from './ivx-autonomous-task-engine';
@@ -196,6 +196,14 @@ export async function readSeniorQueuePostgresJob<T extends { jobId: string }>(jo
   const job = result.rows[0]?.job ?? null;
   if (job && job.jobId !== jobId) throw new Error('Repair job identity mismatch');
   return job;
+}
+export async function readSeniorQueuePostgresJobs<T extends { jobId: string }>(jobIds: readonly string[]): Promise<T[]> {
+  const ids = seniorJobBatchIds(jobIds);
+  emergencyStopPostgresConfig();
+  if (!ids.length) return [];
+  const result = await queryWithPostgresDeadline<{ job: T }>(getDirectPool(process.env, 'repair'),
+    SENIOR_QUEUE_JOBS_SQL, ['senior-developer-worker/queue.json', ids, ids.length + 1]);
+  return verifiedSeniorJobBatch(result.rows.map(row => row.job), ids);
 }
 export async function appendSeniorProofPostgresEvent(event: Record<string, unknown>): Promise<void> {
   emergencyStopPostgresConfig();

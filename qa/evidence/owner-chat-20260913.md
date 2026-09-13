@@ -2,7 +2,67 @@
 
 The Android screenshot is a real failure, not a completed end-to-end certificate.
 This change addresses confirmed client-state defects and an authentication-error
-classification defect. It does not certify the APK currently installed by the owner.
+classification defect, plus excessive per-agent reads in the Autonomous control
+plane. It does not certify the APK currently installed by the owner.
+
+## Follow-up audit and dashboard correction
+
+- The updated branch incorporates main `e52bfee89187eff24f19e618bcd619d63b33a7c7`
+  (PR #1870), preserving its live-fleet endpoint, shared JSON contract, and Expo
+  dashboard. That main SHA was confirmed live on both Render API and worker;
+  it does not contain this PR's chat client changes.
+- The previous PR head `035761791c820d11f34cd4e9aab8f7af70e764d4` had 25 successful
+  checks, one skipped check and one failed check. These results do not certify the
+  updated commit. The [native job](https://github.com/ibb142/ivx-holdings-platform/actions/runs/34781316160/job/103788728436)
+  built the QA APK, then failed the owner-home `IVXHOLDINGS` assertion after a
+  120-second wait. It never reached the chat/dashboard acceptance flows.
+- In that native job's login window, Render recorded two
+  `/api/members/login` responses with HTTP 503, at 20:51:39 and 20:51:56 UTC,
+  taking about 16 seconds each. The application logged
+  `Sign-in upstream timed out after retry`, `stage: aborted`, `elapsedMs: 8000`.
+  The failing stage is the upstream identity-service request with two bounded
+  attempts. The underlying reason that service did not respond is still open.
+  Raising the emulator wait does not establish that authentication works.
+- At 22:01:24 UTC the API's `worker_repair` pool logged 84–86 waiters, a pool
+  size of one, and checkout failures after about 1500 ms. Query hash
+  `1b5e164d5a63209e` matches `SENIOR_QUEUE_JOB_SQL` exactly. The real
+  control-plane GET launched one `getSeniorDeveloperJob` call per assignment
+  through `Promise.all`; up to 112 distinct IDs defeated the existing per-ID
+  in-flight coalescing. This confirms a source of dashboard pool pressure;
+  it does not prove that the same pressure caused the identity-service outage.
+- The GET now reads the selected jobs in one bounded statement through the
+  existing repair pool. It preserves complete selected job evidence, rejects
+  duplicate/mismatched IDs, retains missing jobs as missing, and keeps mutation
+  authority on its existing separate checks. Identical simultaneous batches share
+  only their outstanding read; every caller gets an independent snapshot, and
+  mutation attempts invalidate outstanding reads even if acknowledgement fails.
+- The control-plane auth catch also preserves typed upstream outages as retryable
+  503; cached telemetry remains behind authentication. Database failures remain
+  errors rather than successful empty fleets.
+- The new selected-job SQL passed against isolated PostgreSQL (PGlite 0.3.14):
+  112 jobs, missing IDs, later observations, duplicate identities, malformed IDs,
+  and SQL-looking bound input. This is a correctness check, not a production
+  latency benchmark. Production latency after deployment remains unmeasured.
+- Local follow-up validation: 19 backend batch/bridge/handler tests, six SQL
+  test entries (five subtests plus their parent), three existing truth-contract
+  tests, six existing live-fleet endpoint tests, and the 16 chat regressions pass.
+  Backend TypeScript and `git diff --check` pass. The SQL test now runs in the
+  existing recovery workflow; the native workflow checks out the exact expected
+  commit, not a moving branch. No acceptance assertion was relaxed.
+- The separate main dashboard APK job for version 1.10.32 / build 130 completed
+  its signed build/upload steps. That build certificate is not an authenticated
+  chat execution certificate and does not include this PR's client corrections.
+
+The proposed moving-time partial index was not applied. PostgreSQL requires index
+expressions and predicates to use immutable functions, so `clock_timestamp()`
+cannot define a rolling 60-second index. An index on `(agent_number, status)` is
+also not a case-insensitive lookup. See
+[CREATE INDEX](https://www.postgresql.org/docs/current/sql-createindex.html).
+The proposed `ALTER ROLE` statements change broad role defaults rather than the
+project's telemetry pool. Supabase's standard API roles are `anon` and
+`authenticated`; role/session-specific scope must be verified before changing
+timeouts. See [Supabase timeouts](https://supabase.com/docs/guides/database/postgres/timeouts).
+No role, index, emergency-stop, budget, or task-state production writes were made.
 
 ## Observed evidence
 
@@ -61,14 +121,17 @@ does not expose that compiler API.
 
 ## Remaining closure criteria
 
-1. Determine the exact upstream stage/cause of the live authentication outage.
+1. Determine why the identified upstream identity-service requests time out.
    The client-state and status-code fixes do not restore an unavailable identity provider.
-2. Complete CI/type checking and the real authenticated Android send/stream/error/
+2. Complete CI on the updated head and the real authenticated Android send/stream/error/
    retry/reload flow on the generated APK. Capture the APK source SHA and request ID.
 3. Merge/deploy only with authorization covering this concrete change, then verify
    API SHA and install/test the corresponding APK. A backend deployment alone
    cannot update the client code shown in the screenshot.
 4. Confirm subsequent observation windows before making any reliability claim.
+5. Measure dashboard query checkout and response latency after deploying the
+   batch-read fix. Independently resolve the live AI budget admission gate and
+   durable enqueue timeouts before certifying productive autonomous execution.
 
 There are no database migrations, financial reconciliations, emergency-stop changes
 or fleet requeue operations in this patch. Rollback is a normal code revert and
