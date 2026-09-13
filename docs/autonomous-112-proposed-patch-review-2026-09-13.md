@@ -30,10 +30,55 @@ columnas inexistentes. Esta revisión conserva las implementaciones canónicas.
 5. Workflow `IVX autonomous recovery contract`, limitado a estos archivos:
    typecheck, regresiones y SQL aislado, con permiso de lectura y sin credenciales
    de producción.
+6. `backend/services/ivx-emergency-stop-gate.ts`: exige una única fila válida
+   también por REST. Una respuesta vacía deja de permitir arranques; `limit=2`
+   permite rechazar una respuesta ambigua. El resultado desconocido no se guarda
+   como permiso en caché. Se conserva el failover PostgreSQL y el límite de 15 s
+   para una lectura previamente válida.
 
 Estos cambios no modifican los límites del entorno de producción, no reencolan
 tareas, no liquidan reservas, no sustituyen `backend/hono.ts` y no aplican el
 trigger propuesto. Son endurecimiento y diagnóstico, no una activación de la flota.
+
+## Última revisión: reemplazo del task store y push a main
+
+La revisión que define `processSingleTaskLifecycle` dentro del task store no se
+incorpora. El archivo ya implementa claim/start/heartbeat, presupuesto, lecturas,
+evidencia y protección por instancia; sustituirlo elimina exports utilizados.
+
+Problemas comprobados en esta revisión:
+
+- Desde `backend/services/ivx-postgres-autonomous-task-store.ts`, el import del
+  pool sería `./ivx-database-pools`, no `../ivx-database-pools`. El import de Hono
+  sí está corregido en esta revisión.
+- `taskId` sigue declarado dentro del try y utilizado en el catch. Una prueba
+  aislada de esos dos fragmentos produce TS2307 y TS2304, respectivamente.
+- `ivx_agent_controls.control_name/active` sí es el contrato existente. Falta
+  exigir una fila válida: cero filas no acredita que el owner permita ejecutar.
+  Ese mismo defecto se reprodujo y corrigió en el gate REST real de esta rama.
+- `assignedAgent` y `budgetReserved` siguen sin pertenecer al contrato Task.
+  El claim debe respetar `assigned_agent_number`, dependencias, misión y retry.
+- `priority DESC` vuelve al orden alfabético y no al de prioridad de negocio.
+- El heartbeat ahora solo incrementa version: no renueva expiración ni heartbeat,
+  ni en columnas ni en el payload. Una bandera local no espera consultas en curso.
+- El rechazo de presupuesto cambia columnas a FAILED y deja payload.state
+  anterior. El catch tampoco libera el lease ni diferencia errores de cola vacía.
+- La identidad lógica sigue mezclada con UUID/instancia. El SLO espera
+  `agent:ivx_holdings_N`; la instancia física se protege por separado.
+- El PASS de INTEGRATION_SYNC no ejecuta trabajo ni satisface TaskEvidence. El
+  cierre omite comprobar expiración e instancia, y no ejecuta QA/verificación.
+- Hono ya registra el handler canónico. Reemplazar el servidor elimina rutas;
+  agrupar presencia reciente no demuestra 112 ejecuciones ni horas productivas.
+- SKIP LOCKED evita esperar ciertos locks de fila; no elimina cancelaciones
+  57014, esperas de conexión, costes de consulta ni locks de tabla.
+
+Fuente de semántica SQL: [PostgreSQL SELECT / locking clauses](https://www.postgresql.org/docs/17/sql-select.html#SQL-FOR-UPDATE-SHARE).
+
+La nueva regresión prueba 112 solicitudes concurrentes al guard local, sin lanzar
+112 workers ni llamar modelos. Antes del cambio fallaban tres casos: fila ausente,
+respuesta duplicada y desaparición tras caducar la caché. Después pasan los ocho
+casos de lectura y los siete del transporte alternativo. Una fila válida reparada
+se vuelve a leer inmediatamente, sin esperar una caché de permiso inventado.
 
 ## Revisión por bloque
 
@@ -100,8 +145,8 @@ incompleta; no es una certificación de recuperación.
 
 ## QA reproducible
 
-Resultado local: **105 pruebas Bun + 13 pruebas de presupuesto + 5 pruebas SQL
-= 123 aprobadas, cero fallidas**. Typecheck del backend y `git diff --check`
+Resultado local: **120 pruebas Bun + 13 pruebas de presupuesto + 5 pruebas SQL
+= 138 aprobadas, cero fallidas**. Typecheck del backend y `git diff --check`
 aprobados. Este resultado no representa CI remoto ni prueba de producción.
 
 Instalar con `bun install --frozen-lockfile --ignore-scripts`. Ejecutar:
@@ -112,6 +157,8 @@ bun test backend/services/ivx-database-pools.test.ts \
   backend/services/ivx-candidate-store.test.ts \
   backend/services/ivx-fleet-slo.test.ts \
   backend/services/ivx-failed-agent-recovery.test.ts \
+  backend/services/ivx-emergency-stop-read.regression.test.ts \
+  backend/services/ivx-emergency-stop-failover.test.ts \
   backend/api/ivx-agent-work-ledger-api.test.ts \
   backend/ivx-agent-work-ledger.test.ts \
   backend/services/ivx-postgres-autonomous-task-store.test.ts
