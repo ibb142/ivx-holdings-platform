@@ -1,4 +1,4 @@
-import type { AgentFleetSignal, FleetDashboardSignals } from '../../../../shared/ivx/fleet-signals';
+import { visibleFleetSignals, type AgentFleetSignal, type FleetDashboardSignals } from '../../../../shared/ivx/fleet-signals';
 /** IVX Autonomous Operations Dashboard client (owner-only). */
 import { getDirectApiBaseUrl } from '@/lib/api-base';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
@@ -36,7 +36,14 @@ export function normalizeAutonomousDashboard(raw:AutonomousOpsDashboard):Autonom
   const backendSha=raw.backendCommitSha??null;
   const renderSha=raw.deploymentStatus?.renderCommitSha??null;
   const githubSha=raw.githubHeadSha??null;
-  const productionHealthy=Boolean(backendSha&&renderSha&&sameSha(backendSha,renderSha)&&raw.enterprise112.ledgerOk);
+  // Matching deployments do not override a negative or unknown server verdict.
+  // Use the same freshness and 112-agent validation as the live dashboard view.
+  const productionHealthy=Boolean(
+    raw.deploymentStatus?.productionHealthy===true
+    && visibleFleetSignals(raw.fleetSignals)
+    && backendSha && renderSha && sameSha(backendSha,renderSha)
+    && raw.enterprise112.ledgerOk
+  );
   return {...raw,commitMatch:githubSha?sameSha(backendSha,githubSha):false,deploymentStatus:{...raw.deploymentStatus,productionHealthy},realAgentCount:raw.agents.filter((a)=>a.tasksStartedToday>0||Boolean(a.lastActivityTime)).length,placeholderAgentCount:raw.agents.filter((a)=>a.tasksStartedToday===0&&!a.lastActivityTime).length};
 }
 
