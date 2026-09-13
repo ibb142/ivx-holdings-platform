@@ -463,11 +463,16 @@ export async function handleVerificationStatus(request: Request): Promise<Respon
 
 // POST /api/members/login
 export async function handleMemberLogin(request: Request): Promise<Response> {
-  const body = await parseBody(request);
+  const input = await parseBody(request);
+  const body = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
   const email = asString(body.email).toLowerCase();
-  const password = asString(body.password);
+  // Passwords are opaque: trimming a non-empty password changes credentials.
+  const password = typeof body.password === 'string' ? body.password : '';
   if (!email || !password) {
     return jsonResponse({ success: false, message: 'Email and password are required.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
+  }
+  if (!isValidEmail(email) || !password.trim()) {
+    return jsonResponse({ success: false, message: 'Invalid email or password.', deploymentMarker: DEPLOYMENT_MARKER }, 401);
   }
   const result = await loginMember(email, password);
   if (result.success) return jsonResponse(result, 200);
@@ -476,6 +481,8 @@ export async function handleMemberLogin(request: Request): Promise<Response> {
   // Returning 401 here is what told members with CORRECT credentials that their
   // password was wrong (and latched the app's auth-error state). 503 = retry.
   if (result.errorCode === 'auth_upstream_timeout') return jsonResponse(result, 503);
+  if (result.errorCode === 'auth_upstream_unavailable') return jsonResponse(result, 503);
+  if (result.errorCode === 'auth_rate_limited') return jsonResponse(result, 429);
   return jsonResponse(result, 401);
 }
 
