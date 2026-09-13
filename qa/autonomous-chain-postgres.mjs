@@ -25,7 +25,7 @@ try {
   await client.query(`CREATE TABLE public.ivx_messages (id bigint generated always as identity primary key,
     conversation_id uuid, sender_role text, body text);
     CREATE TABLE public.ivx_durable_documents (doc_key text primary key, value jsonb);`);
-  await client.query(await readFile(new URL('../supabase/migrations/20260912224306_owner_message_preflight_index.sql', import.meta.url), 'utf8'));
+  await client.query(await readFile(new URL('../supabase/migrations/20260913010928_owner_message_preflight_index.sql', import.meta.url), 'utf8'));
   await client.query("SET LOCAL statement_timeout = '4s'");
   // A representative single-conversation history must use the token index,
   // without planner hints or changing the production query's deadline.

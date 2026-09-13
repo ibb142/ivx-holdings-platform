@@ -21,7 +21,7 @@ interrupted, inspect `proof.json` and the recorded request/job IDs; do not creat
 a new token merely to retry an order with an unknown outcome. Existing runtime
 approval gates still apply. A requested approval or blocked job fails acceptance.
 
-Apply `20260912224306_owner_message_preflight_index.sql` before live preflight.
+Apply `20260913010928_owner_message_preflight_index.sql` before live preflight.
 The partial trigram index covers Owner message bodies; the query escapes LIKE
 metacharacters so tokens still match literally. Queue and archive checks remain
 complete. Three independent EXISTS checks let PostgreSQL choose the message
