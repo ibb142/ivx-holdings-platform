@@ -25,7 +25,8 @@ import { join } from 'path';
 
 const ROOT = join(import.meta.dir, '..');
 const memberDb = readFileSync(join(ROOT, 'backend/services/ivx-member-database.ts'), 'utf8');
-const membersApi = readFileSync(join(ROOT, 'backend/api/ivx-members.ts'), 'utf8');
+const membersApi = readFileSync(join(ROOT, 'backend/api/ivx-members.ts'), 'utf8')
+  + readFileSync(join(ROOT, 'backend/services/ivx-member-login-handler.ts'), 'utf8');
 const hono = readFileSync(join(ROOT, 'backend/hono.ts'), 'utf8');
 
 describe('FAULT 1 — an upstream timeout must never read as a bad password', () => {

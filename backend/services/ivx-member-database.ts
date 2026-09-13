@@ -6,7 +6,7 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { runAbortableAuthAttempt } from './ivx-auth-attempt';
+import { runAbortableAuthAttempt, readBoundedMemberFallback } from './ivx-auth-attempt';
 import { randomUUID, scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -291,9 +291,12 @@ type FallbackMemberStore = Record<string, FallbackMemberRecord>;
 const MEMBERS_STORE_FILE = (): string =>
   path.join(process.cwd(), 'logs', 'audit', 'member-database', 'fallback-members.json');
 
-async function readMemberStore(): Promise<FallbackMemberStore> {
+async function readMemberStore(signal?: AbortSignal): Promise<FallbackMemberStore> {
   const file = MEMBERS_STORE_FILE();
   if (isDurableStoreConfigured()) {
+    // Login reads an existing document once, without schema probes or retries.
+    // Preserve failure so a missing verdict cannot become invalid credentials.
+    if (signal) return readDurableJson<FallbackMemberStore>(file, {}, { signal });
     try {
       return await readDurableJson<FallbackMemberStore>(file, {});
     } catch {
@@ -301,9 +304,10 @@ async function readMemberStore(): Promise<FallbackMemberStore> {
     }
   }
   try {
-    const raw = await readFile(file, 'utf8');
+    const raw = await readFile(file, { encoding: 'utf8', signal });
     return JSON.parse(raw) as FallbackMemberStore;
-  } catch {
+  } catch (error) {
+    if (signal && (error as NodeJS.ErrnoException)?.code !== 'ENOENT') throw error;
     return {};
   }
 }
@@ -327,8 +331,8 @@ function hashPassword(password: string, salt: string): string {
 }
 
 /** Verify a fallback member's credentials. Returns the member id on success. */
-export async function verifyFallbackMemberPassword(email: string, password: string): Promise<string | null> {
-  const store = await readMemberStore();
+export async function verifyFallbackMemberPassword(email: string, password: string, signal?: AbortSignal): Promise<string | null> {
+  const store = await readMemberStore(signal);
   const record = Object.values(store).find((m) => m.email === email.toLowerCase());
   if (!record) return null;
   const candidate = Buffer.from(hashPassword(password, record.passwordSalt), 'hex');
@@ -661,7 +665,10 @@ export async function loginMember(email: string, password: string): Promise<Memb
   }
 
   // 1. Durable fallback store first (covers members registered during Supabase email rate-limit).
-  const fallbackUserId = await verifyFallbackMemberPassword(normalizedEmail, password);
+  const fallback = await readBoundedMemberFallback(
+    (signal) => verifyFallbackMemberPassword(normalizedEmail, password, signal),
+  );
+  const fallbackUserId = fallback.userId;
   if (fallbackUserId) {
     // Fire-and-forget: updateMemberLastLogin + audit log + mintSession — all non-blocking
     // with internal timeouts so a stalled Supabase never hangs the login response.
@@ -731,6 +738,12 @@ export async function loginMember(email: string, password: string): Promise<Memb
     }
     const { data, error } = raced;
     if (error) {
+      if (!fallback.available) {
+        return {
+          success: false, message: 'Sign-in is taking longer than usual. Please try again in a moment.',
+          errorCode: 'auth_upstream_timeout', retryable: true, deploymentMarker: DEPLOYMENT_MARKER,
+        };
+      }
       const errorMessage = (error.message || error.msg || JSON.stringify(error) || 'unknown error').trim();
       const msg = errorMessage.toLowerCase();
       if (msg.includes('invalid login credentials') || msg.includes('invalid credentials')) {
@@ -795,6 +808,12 @@ export async function loginMember(email: string, password: string): Promise<Memb
         errorCode: 'auth_upstream_timeout',
         retryable: true,
         deploymentMarker: DEPLOYMENT_MARKER,
+      };
+    }
+    if (!fallback.available) {
+      return {
+        success: false, message: 'Sign-in is taking longer than usual. Please try again in a moment.',
+        errorCode: 'auth_upstream_timeout', retryable: true, deploymentMarker: DEPLOYMENT_MARKER,
       };
     }
     console.error('[MemberDB] Login exception:', message);

@@ -37,6 +37,7 @@ import {
 import { createClient } from '@supabase/supabase-js';
 import { assertIVXOwnerOnly } from './owner-only';
 import { validRegistrationPostalCode } from '../services/ivx-registration-postal-code';
+import { handleMemberLoginRequest } from '../services/ivx-member-login-handler';
 
 const DEPLOYMENT_MARKER = 'ivx-members-api-v1';
 
@@ -463,20 +464,9 @@ export async function handleVerificationStatus(request: Request): Promise<Respon
 
 // POST /api/members/login
 export async function handleMemberLogin(request: Request): Promise<Response> {
-  const body = await parseBody(request);
-  const email = asString(body.email).toLowerCase();
-  const password = asString(body.password);
-  if (!email || !password) {
-    return jsonResponse({ success: false, message: 'Email and password are required.', deploymentMarker: DEPLOYMENT_MARKER }, 400);
-  }
-  const result = await loginMember(email, password);
-  if (result.success) return jsonResponse(result, 200);
-  if (result.requiresVerification) return jsonResponse(result, 403);
-  // An upstream auth timeout is an infrastructure fault, not a bad password.
-  // Returning 401 here is what told members with CORRECT credentials that their
-  // password was wrong (and latched the app's auth-error state). 503 = retry.
-  if (result.errorCode === 'auth_upstream_timeout') return jsonResponse(result, 503);
-  return jsonResponse(result, 401);
+  return handleMemberLoginRequest(request, {
+    loginMember, jsonResponse, deploymentMarker: DEPLOYMENT_MARKER,
+  });
 }
 
 // POST /api/members/forgot-password

@@ -21,6 +21,8 @@ test('only terminal workflow orphans are closed with conditional failure and rea
  const b=JSON.parse(writes[0].options.body);
  assert.match(b.query,/final_status='failed'/);assert.match(b.query,/final_status='running'/);
  assert.match(b.query,/started_at<\$2/);assert.match(b.query,/verified_output=false/);
+ assert.match(b.query,/final_status='pending' and started_at is null and created_at<\$2/);
+ assert.match(b.query,/finished_at=case when final_status='pending' then created_at else now\(\) end/);
  assert.deepEqual(b.parameters[2],['123']);
  assert.equal(b.parameters[1],new Date(1800000000000-900000).toISOString());
 });
