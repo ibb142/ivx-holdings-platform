@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'qa/enterprise-p0-rules*'
+      - 'qa/enterprise-finding-triage*'
       - 'qa/ivx-enterprise-line-audit.mjs'
       - '.github/workflows/ivx-enterprise-line-audit.yml'
   push:
@@ -36,7 +37,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 24 }
-      - run: node --test qa/enterprise-p0-rules.test.mjs
+      - run: node --test qa/enterprise-p0-rules.test.mjs qa/enterprise-finding-triage.test.mjs
 
   repository-line-audit:
     if: github.event_name != 'pull_request'
@@ -62,9 +63,14 @@ jobs:
         continue-on-error: true
         run: node qa/ivx-enterprise-line-audit.mjs
 
+      - name: Classify findings using immutable source evidence
+        id: triage
+        continue-on-error: true
+        run: node qa/enterprise-finding-triage.mjs
+
       - name: Verify P0 detection regressions
         id: p0_regressions
-        run: node --test qa/enterprise-p0-rules.test.mjs
+        run: node --test qa/enterprise-p0-rules.test.mjs qa/enterprise-finding-triage.test.mjs
 
       - name: Enterprise Quality Firewall structural gates
         id: firewall
@@ -115,12 +121,13 @@ jobs:
             --arg sourceSha "$GITHUB_SHA" \
             --arg p0Regressions '${{ steps.p0_regressions.outcome }}' \
             --arg lineAudit '${{ steps.line_audit.outcome }}' \
+            --arg triage '${{ steps.triage.outcome }}' \
             --arg firewall '${{ steps.firewall.outcome }}' \
             --arg consistency '${{ steps.consistency.outcome }}' \
             --arg backendTypecheck '${{ steps.backend_typecheck.outcome }}' \
             --arg expoTypecheck '${{ steps.expo_typecheck.outcome }}' \
             --arg tests '${{ steps.tests.outcome }}' \
-            '{marker:$marker,sourceSha:$sourceSha,generatedAt:(now|todate),gates:{p0Regressions:$p0Regressions,lineAudit:$lineAudit,qualityFirewall:$firewall,repositoryConsistency:$consistency,backendTypecheck:$backendTypecheck,expoTypecheck:$expoTypecheck,focusedTests:$tests},certified:([$p0Regressions,$lineAudit,$firewall,$consistency,$backendTypecheck,$expoTypecheck,$tests]|all(.=="success"))}' \
+            '{marker:$marker,sourceSha:$sourceSha,generatedAt:(now|todate),gates:{p0Regressions:$p0Regressions,lineAudit:$lineAudit,triage:$triage,qualityFirewall:$firewall,repositoryConsistency:$consistency,backendTypecheck:$backendTypecheck,expoTypecheck:$expoTypecheck,focusedTests:$tests},certified:([$p0Regressions,$lineAudit,$triage,$firewall,$consistency,$backendTypecheck,$expoTypecheck,$tests]|all(.=="success"))}' \
             > qa/evidence/enterprise-cert-gate.json
           cat qa/evidence/enterprise-cert-gate.json
 
@@ -132,6 +139,7 @@ jobs:
           path: |
             qa/evidence/enterprise-line-audit.json
             qa/evidence/enterprise-line-findings.json
+            qa/evidence/enterprise-finding-triage.json
             qa/evidence/enterprise-line-file-ledger.json
             qa/evidence/enterprise-line-ledger.jsonl
             qa/evidence/enterprise-quality-firewall.json
@@ -146,6 +154,7 @@ jobs:
           set -euo pipefail
           test '${{ steps.p0_regressions.outcome }}' = success
           test '${{ steps.line_audit.outcome }}' = success
+          test '${{ steps.triage.outcome }}' = success
           test '${{ steps.firewall.outcome }}' = success
           test '${{ steps.consistency.outcome }}' = success
           test '${{ steps.backend_typecheck.outcome }}' = success
