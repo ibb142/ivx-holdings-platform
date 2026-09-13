@@ -41,6 +41,16 @@ not certify an upgrade: `upgradeVerified` always remains false because keyword
 matches and stored claims do not verify CI, source changes or production
 behavior. `versionProgress` remains unassessed with a single snapshot.
 
+The owner-requested mission definition is stored in
+`qa/autonomous/quantum-self-upgrade-mission.json`. It is the initial admission
+payload, not a live status snapshot. Its stable task ID and idempotency key are
+submitted through the existing `ivx_autonomous_tasks_create_batch` function.
+The manager can subsequently attach the active objective and advance the
+version. Re-submission does not reset an existing task or discard its leases,
+evidence or version. All eight acceptance criteria start unmet; no budget or
+10/10 success claim is injected. Publication, merge and deployment retain their
+existing owner gates. Queued admission does not certify worker execution.
+
 The audit does not start the scheduler, call an AI provider, create tasks,
 change budget reservations, or deploy code. Follow the returned evidence
 references and verify their CI/deployment outcomes before certifying a change.
@@ -51,6 +61,8 @@ Validation:
 node --test scripts/ops/audit-quantum-upgrade.test.mjs
 IVX_PGLITE_MODULE=/path/to/node_modules/@electric-sql/pglite \
   node --test qa/quantum-upgrade-postgres.test.mjs
+IVX_PGLITE_MODULE=/path/to/node_modules/@electric-sql/pglite \
+  node --test qa/quantum-upgrade-mission-postgres.test.mjs
 ```
 
 The SQL test uses an isolated PostgreSQL engine with canonical and malformed
