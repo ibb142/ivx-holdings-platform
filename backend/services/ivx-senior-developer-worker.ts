@@ -1,6 +1,7 @@
 import { PollBackoff, startAdaptivePoll } from './ivx-adaptive-poll';
 import { readSharedSeniorActiveOwnerJob, sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult, readSharedSeniorDocument, readSharedSeniorWorkQueue, readSharedSeniorJob, appendSharedSeniorProofEvent } from './ivx-senior-shared-queue';
 import { SENIOR_QUEUE_ACTIVE_STATUSES } from './ivx-senior-work-queue';
+import { assertSeniorQueuePostgresAuthority, preferDirectTransport } from './ivx-postgres-autonomous-task-store';
 import type { CoderWorkspaceEvidence } from './ivx-coder-workspace';
 import { createSeniorJobAdmission } from './ivx-senior-job-admission';
 import { configuredAdmissionLimit } from './ivx-fleet-admission-policy';
@@ -2624,8 +2625,19 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
           if (controller.interrupted || queueStopping) throw new Error('WORKER_AUTHORITY_UNCONFIRMED: checkpoint retained for recovery');
           await assertEmergencyStopInactive('senior-worker-mutation');
           if (controller.cancelled) throw new Error('JOB_CANCELED: owner cancelled the job');
-          try { await updateJob(job.jobId, { lastHeartbeatAt: nowIso() }, true, true); }
+          try {
+            if (sharedSeniorQueueEnabled() && preferDirectTransport()) {
+              // Wait for earlier local phase writes, then observe current DB
+              // authority without competing for the queue's mutation lock.
+              // The independent 20s heartbeat retains the original CAS renewal.
+              await withQueueWrite(() => assertSeniorQueuePostgresAuthority(job.jobId));
+            } else {
+              await updateJob(job.jobId, { lastHeartbeatAt: nowIso() }, true, true);
+            }
+          }
           catch (error) { recordJobInterruption(job.jobId, controller, 'authority_unconfirmed', error); throw error; }
+          if (controller.interrupted || queueStopping) throw new Error('WORKER_AUTHORITY_UNCONFIRMED: checkpoint retained for recovery');
+          if (controller.cancelled) throw new Error('JOB_CANCELED: owner cancelled the job');
         },
         onWorkspaceEvidence: async evidence => {
           const current = await getSeniorDeveloperJob(job.jobId);
