@@ -48,6 +48,8 @@ classification defect. It does not certify the APK currently installed by the ow
 - Existing Expo streaming, auth propagation and transport suites: 28 passing.
 - Existing backend auth availability and response suites: 26 passing.
 - Existing owner-profile concurrency/revocation suite: 11 passing.
+- Existing device mirror concurrency/recovery suite: six passing. A failed local
+  append now explicitly rejects; subsequent writes still succeed.
 - `git diff --check`: clean.
 - The PR adds an independent CI regression job and includes the harness in the
   existing real-owner Android certification workflow. CI/native results must be

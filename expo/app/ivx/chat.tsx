@@ -2283,7 +2283,7 @@ export default function IVXOwnerChatRoute() {
                     ];
                   });
                 } else if (event.type === 'final') {
-                  trace.heartbeat(`sse_final:${event.status}`);
+                  trace?.heartbeat(`sse_final:${event.status}`);
                 }
               }},
             );

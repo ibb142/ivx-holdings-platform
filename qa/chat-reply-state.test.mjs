@@ -173,13 +173,18 @@ test('composer never reports Assistant ready during pending or failed requests',
 test('stream deltas render even when an optional watchdog trace is absent', () => {
   const progress = findNode(route, (node) => ts.isPropertyAssignment(node) && node.name.getText(route) === 'onProgress' && node.getText(route).includes('setStreamingText'));
   let text = '', messages = [assistant()];
-  evaluate(progress.initializer, route, {
+  const onProgress = evaluate(progress.initializer, route, {
     trace: null, transientReplyId: 'reply-1', activeAssistantReplyRef: { current: 'reply-1' },
     conversationQuery: { data: { id: 'room-1' } },
     setStreamingText: (update) => { text = update(text); },
     setTransientAssistantMessages: (update) => { messages = update(messages); },
     buildVisibleAssistantTransient: (input) => input,
-  })({ type: 'delta', delta: 'Hello' });
+  });
+  onProgress({ type: 'start' });
+  onProgress({ type: 'stage', stage: 'provider' });
+  onProgress({ type: 'heartbeat', elapsedMs: 100 });
+  onProgress({ type: 'delta', delta: 'Hello' });
+  onProgress({ type: 'final', status: 200 });
   assert.equal(text, 'Hello');
   assert.equal(messages[0].body, 'Hello');
 });
