@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { inspect, summarizePool, summarizeBinding, summarizeMetrics } from './public-feed-pooler-diagnostic.mjs';
+import { inspect, summarizePool, summarizeBinding, summarizeMetrics, summarizeCompute } from './public-feed-pooler-diagnostic.mjs';
 
 const url = 'postgres://postgres.kvclcdjmjghndxsngfzb:PRIVATE_PASSWORD@aws-0-us-west-2.pooler.supabase.com:6543/postgres';
 
@@ -28,8 +28,17 @@ test('inspection issues GETs only to the fixed provider scopes and returns no cr
       assert.ok(address.startsWith('https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/'));
       return Response.json({ default_pool_size: 5, password: 'PRIVATE_PASSWORD', connection_string: url });
     } });
-  assert.equal(calls.length, 6); assert.ok(evidence.bindings.every(row => row.targetMatches));
+  assert.equal(calls.length, 7); assert.ok(evidence.bindings.every(row => row.targetMatches));
   assert.ok(!JSON.stringify(evidence).includes('PRIVATE_'));
+});
+test('compute diagnostics expose only known sizes and numeric pricing, never account metadata', () => {
+  const result = summarizeCompute({ selected_addons: [{ variant: { id: 'ci_micro', meta: 'PRIVATE_ACCOUNT',
+    price: { amount: 0.01344, interval: 'hourly', type: 'usage', description: 'PRIVATE_DESCRIPTION' } } }],
+    available_addons: [{ variants: [{ id: 'PRIVATE_ACCOUNT', price: { amount: 10 } },
+      { id: 'ci_small', price: { amount: 0.0206, interval: 'hourly' }, meta: { secret: 'PRIVATE_SECRET' } }] }] });
+  assert.deepEqual(result, { selected: [{ id: 'ci_micro', amount: 0.01344, interval: 'hourly', priceType: 'usage' }],
+    available: [{ id: 'ci_small', amount: 0.0206, interval: 'hourly' }] });
+  assert.ok(!JSON.stringify(result).includes('PRIVATE_'));
 });
 test('metrics retain numeric measurements and drop labels and arbitrary metric names', () => {
   assert.deepEqual(summarizeMetrics('node_load1{tenant="PRIVATE_TENANT"} 3.1\n'

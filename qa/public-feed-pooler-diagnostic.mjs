@@ -3,7 +3,23 @@ import { pathToFileURL } from 'node:url';
 const PROJECT = 'kvclcdjmjghndxsngfzb';
 const SERVICES = ['srv-d7t9ivreo5us73ftose0', 'srv-d9i15fg4n6ts73bn00j0'];
 const DATABASE_KEYS = ['SUPABASE_DB_URL', 'DATABASE_URL', 'POSTGRES_URL', 'SUPABASE_POOLER_URL'];
-const numericKeys = ['default_pool_size', 'max_client_conn', 'server_idle_timeout', 'query_wait_timeout', 'db_pool'];
+const numericKeys = ['default_pool_size', 'max_client_conn', 'server_idle_timeout', 'query_wait_timeout', 'db_pool', 'db_pool_acquisition_timeout'];
+
+export function summarizeCompute(data) {
+  const variant = row => {
+    if (!/^ci_(nano|micro|small|medium|large|xl|2xl|4xl|8xl|12xl|16xl)$/.test(row?.id || '')) return [];
+    const result = { id: row.id };
+    if (Number.isFinite(row.price?.amount) && row.price.amount >= 0) result.amount = row.price.amount;
+    if (['hourly', 'monthly', 'yearly'].includes(row.price?.interval)) result.interval = row.price.interval;
+    if (['fixed', 'usage'].includes(row.price?.type)) result.priceType = row.price.type;
+    return [result];
+  };
+  return {
+    selected: (Array.isArray(data?.selected_addons) ? data.selected_addons : []).flatMap(row => variant(row.variant)),
+    available: (Array.isArray(data?.available_addons) ? data.available_addons : [])
+      .flatMap(row => (Array.isArray(row.variants) ? row.variants : []).flatMap(variant)),
+  };
+}
 
 export function summarizePool(value) {
   return (Array.isArray(value) ? value : [value]).slice(0, 10).map(row => {
@@ -55,7 +71,8 @@ export function summarizeMetrics(text) {
   const exact = new Set(['node_load1', 'node_load5', 'node_load15', 'node_memory_MemTotal_bytes',
     'node_memory_MemAvailable_bytes', 'node_memory_SwapTotal_bytes', 'node_memory_SwapFree_bytes',
     'pgbouncer_pools_cl_active', 'pgbouncer_pools_cl_waiting', 'pgbouncer_pools_sv_active',
-    'pgbouncer_pools_sv_idle', 'pgbouncer_pools_maxwait', 'pg_stat_activity_count']);
+    'pgbouncer_pools_sv_idle', 'pgbouncer_pools_maxwait', 'pg_stat_activity_count',
+    'node_vmstat_pswpin', 'node_vmstat_pswpout']);
   for (const line of text.split('\n')) {
     const match = /^([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{([^}]*)\})?\s+([+\-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+\-]?\d+)?)(?:\s+\d+)?$/i.exec(line);
     if (!match) continue;
@@ -65,6 +82,12 @@ export function summarizeMetrics(text) {
     if (name === 'node_cpu_seconds_total') {
       const mode = /(?:^|,)mode="(user|system|idle|iowait|steal|irq|softirq|nice)"(?:,|$)/.exec(labels)?.[1];
       if (mode) totals['cpu_seconds_' + mode] = (totals['cpu_seconds_' + mode] || 0) + value;
+    }
+    if (['node_disk_reads_completed_total', 'node_disk_writes_completed_total',
+      'node_disk_read_bytes_total', 'node_disk_written_bytes_total', 'node_disk_io_time_seconds_total',
+      'node_disk_io_now'].includes(name)) {
+      const device = /(?:^|,)device="(nvme0n1|nvme1n1)"(?:,|$)/.exec(labels)?.[1];
+      if (device) totals[device + '_' + name] = value;
     }
   }
   return totals;
@@ -102,12 +125,16 @@ export async function inspect({ fetchImpl = fetch, env = process.env } = {}) {
   for (const setting of ['pgbouncer', 'pooler', 'postgrest']) {
     if (!managementToken) { evidence.configuration.push({ setting, error: 'MANAGEMENT_CREDENTIAL_MISSING' }); continue; }
     try {
-      const route = setting === 'postgrest' ? 'config/postgrest' : `config/database/${setting}`;
+      const route = setting === 'postgrest' ? 'postgrest' : `config/database/${setting}`;
       const data = await readJson(fetchImpl, `https://api.supabase.com/v1/projects/${PROJECT}/${route}`, managementToken);
       evidence.configuration.push({ setting, values: summarizePool(data) });
     } catch (error) { evidence.configuration.push({ setting, error: safeError(error) }); }
   }
   if (managementToken) {
+    try {
+      const data = await readJson(fetchImpl, `https://api.supabase.com/v1/projects/${PROJECT}/billing/addons`, managementToken);
+      evidence.compute = summarizeCompute(data);
+    } catch (error) { evidence.compute = { error: safeError(error) }; }
     try {
       const data = await readJson(fetchImpl, `https://api.supabase.com/v1/projects/${PROJECT}/analytics/endpoints/metrics`, managementToken, true);
       evidence.databaseMetrics = summarizeMetrics(data);
