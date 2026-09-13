@@ -1,7 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { rm } from 'node:fs/promises';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
-import {
+import type { CreatePipelineInput } from './ivx-capital-pipeline-store';
+
+const previousDataDir = process.env.IVX_DATA_DIR;
+const fixtureRoot = await mkdtemp(path.join(tmpdir(), 'ivx-capital-test-'));
+process.env.IVX_DATA_DIR = fixtureRoot;
+const {
   clampScore,
   computeRemainingGap,
   createPipelineEntry,
@@ -13,10 +19,15 @@ import {
   summarizePipeline,
   updatePipelineEntry,
   validateCreatePipeline,
-  type CreatePipelineInput,
-} from './ivx-capital-pipeline-store';
+} = await import('./ivx-capital-pipeline-store');
 
-const ROOT = path.join(process.cwd(), 'logs', 'audit', 'capital-pipeline');
+const ROOT = path.join(fixtureRoot, 'logs', 'audit', 'capital-pipeline');
+
+afterAll(async () => {
+  if (previousDataDir === undefined) delete process.env.IVX_DATA_DIR;
+  else process.env.IVX_DATA_DIR = previousDataDir;
+  await rm(fixtureRoot, { recursive: true, force: true });
+});
 
 async function clean(): Promise<void> {
   await rm(ROOT, { recursive: true, force: true });

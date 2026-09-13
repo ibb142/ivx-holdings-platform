@@ -6,8 +6,9 @@
  * remote so `git_push` is genuinely verified (push + `ls-remote` confirmation),
  * not mocked.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdtemp, rm, readFile, writeFile, mkdir } from 'node:fs/promises';
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { mkdtemp, rm, readFile, writeFile, mkdir, symlink } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -23,6 +24,7 @@ import {
   type VerificationGate,
 } from './ivx-agent-mutation-tools';
 import { executeRealTool } from './ivx-agent-real-tools';
+import * as engineeringTools from './ivx-agent-engineering-tools';
 
 const OWNER_TOKEN = 'test-owner-token-8c1f2a';
 let previousOwnerToken: string | undefined;
@@ -341,6 +343,10 @@ describe('git_push', () => {
 async function makeGateProject(testBody: string): Promise<{ base: string; cleanup: () => Promise<void> }> {
   const base = await realpath(await mkdtemp(path.join(tmpdir(), 'ivx-gate-')));
   await mkdir(path.join(base, 'src'), { recursive: true });
+  // Use the installed, pinned compiler; bunx must not download a package for a fixture.
+  const compiler = await realpath(fileURLToPath(new URL('../../node_modules/.bin/tsc', import.meta.url)));
+  await mkdir(path.join(base, 'node_modules/.bin'), { recursive: true });
+  await symlink(compiler, path.join(base, 'node_modules/.bin/tsc'));
   await writeFile(
     path.join(base, 'tsconfig.json'),
     JSON.stringify({
@@ -355,6 +361,30 @@ async function makeGateProject(testBody: string): Promise<{ base: string; cleanu
 }
 
 describe('runVerificationGate', () => {
+  const successfulTypecheck = { stdout: '', stderr: '', exitCode: 0, timedOut: false };
+  const successfulTests = { stdout: ' 1 pass\n 0 fail\n', stderr: '', exitCode: 0, timedOut: false };
+
+  for (const [name, typecheck, tests] of [
+    ['compiler exits without a TS diagnostic', { ...successfulTypecheck, exitCode: 1, stderr: 'compiler unavailable' }, successfulTests],
+    ['compiler times out without diagnostics', { ...successfulTypecheck, timedOut: true }, successfulTests],
+    ['tests exit nonzero after a passing summary', successfulTypecheck, { ...successfulTests, exitCode: 1 }],
+    ['tests time out after a passing summary', successfulTypecheck, { ...successfulTests, timedOut: true }],
+    ['failure summary has no parsed test name', successfulTypecheck, { ...successfulTests, stdout: ' 1 pass\n 1 fail\n' }],
+  ] as const) {
+    it(`reports RED when ${name}`, async () => {
+      const run = spyOn(engineeringTools, 'runProcess')
+        .mockResolvedValueOnce(typecheck)
+        .mockResolvedValueOnce(tests);
+      try {
+        const gate = await runVerificationGate('/unused-unit-fixture');
+        expect(gate.passed).toBe(false);
+        expect(gate.detail).toContain('verification RED');
+      } finally {
+        run.mockRestore();
+      }
+    });
+  }
+
   it('reports RED when tests fail, even though the typecheck is clean', async () => {
     const { base, cleanup } = await makeGateProject(
       `import { test, expect } from 'bun:test';\ntest('failing on purpose', () => { expect(1).toBe(2); });\n`,

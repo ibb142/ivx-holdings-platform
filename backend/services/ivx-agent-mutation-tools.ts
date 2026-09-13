@@ -260,7 +260,10 @@ export async function runVerificationGate(
   const tests = await runProcess('bun', ['test', testTarget], repoRoot, timeoutMs);
   const testOut = `${tests.stdout}\n${tests.stderr}`;
   const testParsed = parseBunTestOutput(testOut);
-  const passed = tscParsed.errorCount === 0 && testParsed.failingTestNames.length === 0 && testParsed.pass > 0;
+  const passed = tsc.exitCode === 0 && !tsc.timedOut
+    && tests.exitCode === 0 && !tests.timedOut
+    && tscParsed.errorCount === 0 && testParsed.fail === 0
+    && testParsed.failingTestNames.length === 0 && testParsed.pass > 0;
 
   return {
     passed,
@@ -269,8 +272,8 @@ export async function runVerificationGate(
     failingTestNames: testParsed.failingTestNames.slice(0, 20),
     detail: passed
       ? `verification GREEN — 0 type errors, ${testParsed.pass} tests passing, 0 failing`
-      : `verification RED — ${tscParsed.errorCount} type error(s), ${testParsed.failingTestNames.length} failing test name(s)`,
-    evidenceSha256: sha256(redactSecrets(`${tsc.stdout}${testOut}`)),
+      : `verification RED — typecheck exit=${tsc.exitCode} timedOut=${tsc.timedOut}, tests exit=${tests.exitCode} timedOut=${tests.timedOut}; ${tscParsed.errorCount} type error(s), ${testParsed.fail} failed test(s), ${testParsed.failingTestNames.length} failing test name(s)`,
+    evidenceSha256: sha256(redactSecrets(JSON.stringify({ typecheck: tsc, tests }))),
   };
 }
 

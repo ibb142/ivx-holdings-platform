@@ -114,12 +114,17 @@ describe('ivx-process-watchdog', () => {
   });
 
   it('8. no orphaned child remains after timeout', async () => {
-    await runWithWatchdog(sh('sleep 30'), { timeoutMs: 500, graceMs: 400 });
+    const result = await runWithWatchdog('sleep 30 & child=$!; echo "WATCHDOG_CHILD_PID=$child"; wait "$child"', { timeoutMs: 500, graceMs: 400 });
+    expect(result.status).toBe('timed_out');
+    const childPid = result.stdoutTail.match(/WATCHDOG_CHILD_PID=(\d+)/)?.[1];
+    expect(childPid).toBeDefined();
     await new Promise((r) => setTimeout(r, 300));
     const { spawnSync } = await import('node:child_process');
-    const ps = spawnSync('pgrep', ['-f', 'sleep 30'], { encoding: 'utf8' });
-    const orphans = ps.stdout.trim();
-    expect(orphans).toBe('');
+    const ps = spawnSync('ps', ['-o', 'stat=', '-p', childPid!], { encoding: 'utf8' });
+    expect(ps.error).toBeUndefined();
+    const state = ps.stdout.trim();
+    // A container's PID 1 may not reap immediately; a zombie has already exited.
+    expect(state === '' || state.startsWith('Z')).toBe(true);
   });
 
   it('9. exactly one terminal result is returned (no double-resolve)', async () => {

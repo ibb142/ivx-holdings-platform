@@ -768,6 +768,7 @@ import {
   handleUpdateOwnerActionStatus,
 } from './api/ivx-owner-action-requests';
 import { OPTIONS as autonomousOpsDashboardOptions, handleAutonomousOpsDashboardRequest } from './api/ivx-autonomous-ops-dashboard';
+import { handleFleetStatusMatrixRequest } from './api/ivx-fleet-status-matrix';
 import {
   autonomousControlPlaneOptions,
   handleAutonomousControlPlaneGet,
@@ -6790,6 +6791,8 @@ app.post('/api/ivx/owner-action/:traceId/status', async (context) => handleUpdat
 app.options('/api/ivx/autonomous-ops/dashboard', () => autonomousOpsDashboardOptions());
 app.get('/api/ivx/autonomous/ha', async (context) => handleFleetHaGet(context.req.raw));
 app.get('/api/ivx/autonomous-ops/dashboard', async (context) => handleAutonomousOpsDashboardRequest(context.req.raw));
+app.options('/api/fleet/status-matrix', () => autonomousOpsDashboardOptions());
+app.get('/api/fleet/status-matrix', async (context) => handleFleetStatusMatrixRequest(context.req.raw));
 
 // ============================================================================
 // IVX Autonomous Control Plane — 12x100 campaign state + verify-all endpoint

@@ -10,6 +10,42 @@ import {
   type IVXDeploymentVerifiedEvidence,
 } from './ivx-deployment-state-protocol';
 
+const completeEvidence = (): IVXDeploymentVerifiedEvidence => ({
+  githubSha: 'a'.repeat(40), renderDeployId: 'dep-proof',
+  healthHttpStatus: 200, healthSha: 'a'.repeat(40),
+  versionHttpStatus: 200, versionSha: 'a'.repeat(40),
+  verifiedAt: '2026-07-05T12:00:00.000Z', proofLedgerEntryId: 'ledger-proof',
+});
+
+describe('deployment proof rejects contradictory or malformed receipts', () => {
+  for (const [name, patch, reason] of [
+    ['different health SHA', { healthSha: 'b'.repeat(40) }, '/health SHA'],
+    ['different version SHA', { versionSha: 'b'.repeat(40) }, '/version SHA'],
+    ['missing health SHA', { healthSha: null }, '/health SHA'],
+    ['missing version SHA', { versionSha: null }, '/version SHA'],
+    ['truncated source', { githubSha: 'abc123' }, 'GitHub SHA'],
+    ['41-character source', { githubSha: 'a'.repeat(41) }, 'GitHub SHA'],
+    ['non-hex source', { githubSha: 'x'.repeat(40) }, 'GitHub SHA'],
+    ['missing ledger', { proofLedgerEntryId: null }, 'Evidence ledger'],
+    ['blank ledger', { proofLedgerEntryId: ' ' }, 'Evidence ledger'],
+    ['blank deploy', { renderDeployId: ' ' }, 'Render Deploy ID'],
+    ['invalid date', { verifiedAt: 'invalid' }, 'Verification timestamp'],
+    ['future date', { verifiedAt: '2099-01-01T00:00:00.000Z' }, 'Verification timestamp'],
+    ['non-integer HTTP', { healthHttpStatus: 200.5 }, '/health'],
+  ] as Array<[string, Partial<IVXDeploymentVerifiedEvidence>, string]>) {
+    test(name, () => {
+      const evidence = { ...completeEvidence(), ...patch };
+      expect(isEvidenceSufficientForVerified(evidence)).toBe(false);
+      const answer = buildVerifiedDeploymentProtocol('proof-task', evidence);
+      expect(answer.startsWith('STATE: BLOCKED')).toBe(true);
+      expect(answer).toContain(reason);
+    });
+  }
+  test('a complete consistent historical receipt remains valid', () => {
+    expect(isEvidenceSufficientForVerified(completeEvidence())).toBe(true);
+  });
+});
+
 describe('ivx-deployment-state-protocol — formatDeploymentStateProtocol', () => {
   test('BLOCKED returns only STATE header + exact blocker', () => {
     const out = formatDeploymentStateProtocol({
@@ -59,12 +95,12 @@ describe('ivx-deployment-state-protocol — formatDeploymentStateProtocol', () =
 
   test('VERIFIED with sufficient evidence returns full evidence chain', () => {
     const evidence: IVXDeploymentVerifiedEvidence = {
-      githubSha: 'abc123def456',
+      githubSha: 'abc123def456abc123def456abc123def456abc1',
       renderDeployId: 'dep-abc',
       healthHttpStatus: 200,
-      healthSha: 'abc123def456',
+      healthSha: 'abc123def456abc123def456abc123def456abc1',
       versionHttpStatus: 200,
-      versionSha: 'abc123def456',
+      versionSha: 'abc123def456abc123def456abc123def456abc1',
       verifiedAt: '2026-07-05T12:00:00.000Z',
       proofLedgerEntryId: 'ledger-1',
     };
@@ -87,14 +123,14 @@ describe('ivx-deployment-state-protocol — formatDeploymentStateProtocol', () =
 
   test('VERIFIED with insufficient evidence downgrades to BLOCKED', () => {
     const incomplete: IVXDeploymentVerifiedEvidence = {
-      githubSha: 'abc123def456',
+      githubSha: 'abc123def456abc123def456abc123def456abc1',
       renderDeployId: null, // missing
       healthHttpStatus: 200,
-      healthSha: 'abc123def456',
+      healthSha: 'abc123def456abc123def456abc123def456abc1',
       versionHttpStatus: 200,
-      versionSha: 'abc123def456',
+      versionSha: 'abc123def456abc123def456abc123def456abc1',
       verifiedAt: '2026-07-05T12:00:00.000Z',
-      proofLedgerEntryId: null,
+      proofLedgerEntryId: 'ledger-1',
     };
     const out = formatDeploymentStateProtocol({
       state: 'VERIFIED',
@@ -127,14 +163,14 @@ describe('ivx-deployment-state-protocol — formatDeploymentStateProtocol', () =
 
   test('VERIFIED with non-2xx /health downgrades to BLOCKED', () => {
     const evidence: IVXDeploymentVerifiedEvidence = {
-      githubSha: 'abc123def456',
+      githubSha: 'abc123def456abc123def456abc123def456abc1',
       renderDeployId: 'dep-abc',
       healthHttpStatus: 503, // degraded
-      healthSha: 'abc123def456',
+      healthSha: 'abc123def456abc123def456abc123def456abc1',
       versionHttpStatus: 200,
-      versionSha: 'abc123def456',
+      versionSha: 'abc123def456abc123def456abc123def456abc1',
       verifiedAt: '2026-07-05T12:00:00.000Z',
-      proofLedgerEntryId: null,
+      proofLedgerEntryId: 'ledger-1',
     };
     const out = formatDeploymentStateProtocol({
       state: 'VERIFIED',
@@ -153,14 +189,14 @@ describe('ivx-deployment-state-protocol — formatDeploymentStateProtocol', () =
 describe('ivx-deployment-state-protocol — isEvidenceSufficientForVerified', () => {
   test('returns true when all evidence present and 2xx', () => {
     const evidence: IVXDeploymentVerifiedEvidence = {
-      githubSha: 'abc123def456',
+      githubSha: 'abc123def456abc123def456abc123def456abc1',
       renderDeployId: 'dep-abc',
       healthHttpStatus: 200,
-      healthSha: 'abc123def456',
+      healthSha: 'abc123def456abc123def456abc123def456abc1',
       versionHttpStatus: 200,
-      versionSha: 'abc123def456',
+      versionSha: 'abc123def456abc123def456abc123def456abc1',
       verifiedAt: '2026-07-05T12:00:00.000Z',
-      proofLedgerEntryId: null,
+      proofLedgerEntryId: 'ledger-1',
     };
     expect(isEvidenceSufficientForVerified(evidence)).toBe(true);
   });
@@ -174,25 +210,25 @@ describe('ivx-deployment-state-protocol — isEvidenceSufficientForVerified', ()
       githubSha: null,
       renderDeployId: 'dep-abc',
       healthHttpStatus: 200,
-      healthSha: 'abc123def456',
+      healthSha: 'abc123def456abc123def456abc123def456abc1',
       versionHttpStatus: 200,
-      versionSha: 'abc123def456',
+      versionSha: 'abc123def456abc123def456abc123def456abc1',
       verifiedAt: '2026-07-05T12:00:00.000Z',
-      proofLedgerEntryId: null,
+      proofLedgerEntryId: 'ledger-1',
     };
     expect(isEvidenceSufficientForVerified(evidence)).toBe(false);
   });
 
   test('returns false when both healthSha and versionSha are null', () => {
     const evidence: IVXDeploymentVerifiedEvidence = {
-      githubSha: 'abc123def456',
+      githubSha: 'abc123def456abc123def456abc123def456abc1',
       renderDeployId: 'dep-abc',
       healthHttpStatus: 200,
       healthSha: null,
       versionHttpStatus: 200,
       versionSha: null,
       verifiedAt: '2026-07-05T12:00:00.000Z',
-      proofLedgerEntryId: null,
+      proofLedgerEntryId: 'ledger-1',
     };
     expect(isEvidenceSufficientForVerified(evidence)).toBe(false);
   });
@@ -206,14 +242,14 @@ describe('ivx-deployment-state-protocol — isDeploymentStateProtocolAnswer', ()
 
   test('detects compliant VERIFIED answer', () => {
     const answer = buildVerifiedDeploymentProtocol('task-1', {
-      githubSha: 'abc123def456',
+      githubSha: 'abc123def456abc123def456abc123def456abc1',
       renderDeployId: 'dep-abc',
       healthHttpStatus: 200,
-      healthSha: 'abc123def456',
+      healthSha: 'abc123def456abc123def456abc123def456abc1',
       versionHttpStatus: 200,
-      versionSha: 'abc123def456',
+      versionSha: 'abc123def456abc123def456abc123def456abc1',
       verifiedAt: '2026-07-05T12:00:00.000Z',
-      proofLedgerEntryId: null,
+      proofLedgerEntryId: 'ledger-1',
     });
     expect(isDeploymentStateProtocolAnswer(answer)).toBe(true);
   });

@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, spyOn } from 'bun:test';
 import { createHash } from 'node:crypto';
 import {
   runVerifyUrlSha256,
@@ -22,28 +22,42 @@ describe('verify_url_sha256 (artifact verification)', () => {
     await expect(runVerifyUrlSha256({ url: 'https://' })).rejects.toThrow();
   });
 
-  test('streams a live artifact and returns a matching SHA-256', async () => {
-    const url = 'https://ivxholding.com/ivx-config.json';
-    const direct = await fetch(url);
-    expect(direct.ok).toBe(true);
-    const bytes = new Uint8Array(await direct.arrayBuffer());
+  test('streams multiple binary chunks and returns a matching SHA-256', async () => {
+    const url = 'https://ivxholding.com/apk/test-fixture.apk';
+    const bytes = new Uint8Array([0, 255, 80, 75, 3, 4, 128, 42]);
     const expected = createHash('sha256').update(bytes).digest('hex');
-
-    const result = await runVerifyUrlSha256({ url, expectedSha256: expected });
-    expect(result.ok).toBe(true);
-    expect(result.sha256).toBe(expected);
-    expect(result.match).toBe(true);
-    expect(result.bytes).toBe(bytes.byteLength);
-    expect(result.readOnly).toBe(true);
-    expect(result.secretValuesReturned).toBe(false);
-  }, 30_000);
+    const fetchMock = spyOn(globalThis, 'fetch').mockResolvedValue(new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(bytes.slice(0, 3));
+        controller.enqueue(bytes.slice(3));
+        controller.close();
+      },
+    })));
+    try {
+      const result = await runVerifyUrlSha256({ url, expectedSha256: expected });
+      expect(result.ok).toBe(true);
+      expect(result.sha256).toBe(expected);
+      expect(result.match).toBe(true);
+      expect(result.bytes).toBe(bytes.byteLength);
+      expect(result.readOnly).toBe(true);
+      expect(result.secretValuesReturned).toBe(false);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
 
   test('reports mismatch when the expected hash differs', async () => {
-    const url = 'https://ivxholding.com/ivx-config.json';
-    const result = await runVerifyUrlSha256({ url, expectedSha256: 'deadbeef'.repeat(8) });
-    expect(result.ok).toBe(true);
-    expect(result.match).toBe(false);
-  }, 30_000);
+    const url = 'https://ivxholding.com/apk/test-fixture.apk';
+    const fetchMock = spyOn(globalThis, 'fetch').mockResolvedValue(new Response(new Uint8Array([0, 255, 42])));
+    try {
+      const result = await runVerifyUrlSha256({ url, expectedSha256: 'deadbeef'.repeat(8) });
+      expect(result.ok).toBe(true);
+      expect(result.match).toBe(false);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
 });
 
 describe('github_get_workflow_run input validation', () => {

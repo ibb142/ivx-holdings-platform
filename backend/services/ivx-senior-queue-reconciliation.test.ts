@@ -99,3 +99,31 @@ test('an uncertain phase write preserves the job instead of recording an owner c
     expect(jobs[0].result).toBeNull();
   } finally { claim.mockRestore(); execute.mockRestore(); }
 });
+
+test('a reclaimed job clears its active error and retains the previous attempt failure', async () => {
+  await enqueueOrAttachSeniorDeveloperJob(input('reclaimed-worker'));
+  const previousError = 'Physical worker lease expired; recovery budget enforced.';
+  jobs[0].error = previousError;
+  jobs[0].attempts = 1;
+  const claim = spyOn(shared, 'claimSharedSeniorJob').mockImplementation(async () => {
+    jobs[0].status = 'running'; jobs[0].attempts++;
+    return structuredClone(jobs[0]) as never;
+  });
+  let observed: IVXWorkerJob | null = null;
+  onWrite = next => {
+    if (next.stage === 'RUNNING') observed = structuredClone(next);
+    if (next.stage === 'PATCHING') throw new Error('Query read timeout');
+  };
+  const execute = spyOn(coder, 'runIVXAutonomousCoder').mockImplementation(async parameters => {
+    parameters.onPhase?.('patching', 'applying a recovered repair');
+    await new Promise(resolve => setTimeout(resolve, 10));
+    return {} as never;
+  });
+  try {
+    await processNextSeniorDeveloperJob();
+    expect(observed).not.toBeNull();
+    expect(observed!.error).toBeNull();
+    expect(observed!.recoveryHistory?.at(-1)?.error).toBe(previousError);
+    expect(observed!.recoveryHistory?.at(-1)?.resumedAttempt).toBe(2);
+  } finally { claim.mockRestore(); execute.mockRestore(); }
+});
