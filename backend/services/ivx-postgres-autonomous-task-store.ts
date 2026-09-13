@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { getObserverPool, getWorkerPool, resetDatabasePoolsForTests } from './ivx-database-pools';
 import { queryWithPostgresDeadline } from './ivx-postgres-deadline';
-import { SENIOR_ACTIVE_OWNER_JOB_SQL, SENIOR_QUEUE_ACTIVE_STATUSES, SENIOR_QUEUE_JOB_SQL, SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL } from './ivx-senior-work-queue';
+import { SENIOR_ACTIVE_OWNER_JOB_SQL, SENIOR_QUEUE_ACTIVE_STATUSES, SENIOR_QUEUE_AUTHORITY_SQL, SENIOR_QUEUE_JOB_SQL, SENIOR_WORK_QUEUE_PATH, SENIOR_WORK_QUEUE_SQL } from './ivx-senior-work-queue';
 import { emergencyStopPostgresConfig } from './ivx-emergency-stop-postgres';
 import { decideRetry, isTransientFailure, retryAfterMs, RetryQuota } from './ivx-retry-policy';
 import type { FleetLeaseRequest, FleetLeaseResult, FleetTaskLeaseIdentity, FleetTaskMutationResult, Task, TaskState } from './ivx-autonomous-task-engine';
@@ -156,6 +156,29 @@ export async function readSeniorWorkQueuePostgres<T>(): Promise<T | null> {
   const result = await queryWithPostgresDeadline<{ value: T }>(getDirectPool(process.env, 'repair'),
     SENIOR_WORK_QUEUE_SQL, ['senior-developer-worker/queue.json', SENIOR_WORK_QUEUE_PATH]);
   return result.rows[0]?.value ?? null;
+}
+
+/** Fresh, read-only execution guard. Periodic CAS heartbeats still renew leases. */
+export async function assertSeniorQueuePostgresAuthority(jobId: string): Promise<void> {
+  emergencyStopPostgresConfig();
+  if (!jobId.trim()) throw new Error('Repair job identity is required');
+  const started = performance.now();
+  const result = await queryWithPostgresDeadline<{
+    job_id: string; status: string; worker_id: string; lease_expires_at: string; observed_at: Date | string;
+  }>(getDirectPool(process.env, 'repair'), SENIOR_QUEUE_AUTHORITY_SQL,
+    ['senior-developer-worker/queue.json', jobId], 'service_role');
+  const row = result.rows[0];
+  const observed = row?.observed_at instanceof Date ? row.observed_at.getTime() : Date.parse(row?.observed_at ?? '');
+  const remaining = Date.parse(row?.lease_expires_at ?? '') - observed;
+  // Keep at least one heartbeat interval after the entire read round trip.
+  // A delayed response, duplicate, missing job, expired lease or former holder
+  // is never evidence of permission. No cache, write replay or REST failover.
+  if (result.rows.length !== 1 || row?.job_id !== jobId
+    || row.worker_id !== autonomousWorkerInstanceId()
+    || !['running', 'patching', 'testing', 'committing', 'deploying', 'verifying'].includes(row.status)
+    || !(remaining > 20_000 + Math.max(0, performance.now() - started))) {
+    throw new Error('WORKER_AUTHORITY_UNCONFIRMED: fresh worker lease required');
+  }
 }
 /** Polling one repair must not transfer the history of every retained job. */
 export async function readSeniorQueuePostgresJob<T extends { jobId: string }>(jobId: string): Promise<T | null> {

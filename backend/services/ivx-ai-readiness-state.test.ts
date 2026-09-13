@@ -55,19 +55,33 @@ describe('AI readiness requires a successful provider observation', () => {
     expect(checkAIHealth().ok).toBe(false);
   });
 
-  test('a refused local budget admission cannot claim the provider needs credit', async () => {
+  for (const admissionReason of ['reservation RPC unavailable', 'global_capacity_exceeded'])
+    test(`local admission ${admissionReason} stays unavailable without blaming the provider`, async () => {
     let providerCalls = 0;
     const budgeted = createBudgetedFetch((async () => { providerCalls++; throw new Error('provider must not be contacted'); }) as typeof fetch,
-      { enabled: () => true, reserve: async () => { throw new GlobalAIBudgetError('reservation RPC unavailable'); } });
+      { enabled: () => true, reserve: async () => { throw new GlobalAIBudgetError(admissionReason); } });
     const result = await probeGatewayCompletion({ url: 'https://ai-gateway.vercel.sh/v1/chat/completions',
       apiKey: 'synthetic-budget-probe', model: 'openai/gpt-4o', provider: 'vercel_ai_gateway', fetchImpl: budgeted, timeoutMs: 500 });
     expect(providerCalls).toBe(0);
     expect(result.ok).toBe(false);
+    expect(result.status).toBe(admissionReason === 'global_capacity_exceeded' ? 429 : 402);
     expect(result.code).toBe('AI_GLOBAL_BUDGET_BLOCKED');
     const health = checkAIHealth();
     expect(health.ok).toBe(false);
     expect(health.detail.code).toBe('AI_GLOBAL_BUDGET_BLOCKED');
     expect(health.detail.ownerActionRequired).toContain('global AI budget');
     expect(health.detail.ownerActionRequired).not.toContain('balance');
+  });
+
+  test('an upstream 429 remains a provider failure rather than local budget pressure', async () => {
+    const result = await probeGatewayCompletion({ url: 'https://gateway.example/v1/chat/completions',
+      apiKey: 'synthetic-probe', model: 'local-model', provider: 'local-provider', timeoutMs: 500,
+      fetchImpl: (async () => Response.json({ error: { type: 'rate_limit_error', message: 'Slow down' } },
+        { status: 429, headers: { 'Retry-After': '2' } })) as typeof fetch });
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(429);
+    expect(result.code).toBe('AI_PROBE_HTTP_ERROR');
+    expect(checkAIHealth().ok).toBe(false);
+    expect(checkAIHealth().detail.code).not.toBe('AI_GLOBAL_BUDGET_BLOCKED');
   });
 });
