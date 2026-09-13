@@ -90,21 +90,23 @@ export function parseOwnerResponse(contentType, text) {
 
 // These queries return only scoped counts, IDs and a compact receipt. Never
 // transfer the complete queue/history or change its rows to make a test pass.
+// Keep each EXISTS independent: UNION ALL makes the planner estimate a cheap
+// early match across the combined rows and can discard the message token index.
 export const ORDER_SEEN_SQL = `
-select exists (
+select (exists (
   select 1 from public.ivx_messages where conversation_id = $2::uuid
     and sender_role = 'owner'
     and body like ('%' || replace(replace(replace($1, '!', '!!'), '%', '!%'), '_', '!_') || '%') escape '!'
-  union all
+  ) or exists (
   select 1 from public.ivx_durable_documents d
     cross join lateral jsonb_path_query(d.value, '$.jobs[*].input.goal') g(goal)
     where d.doc_key = 'senior-developer-worker/queue.json'
     and strpos(g.goal #>> '{}', $1) > 0
-  union all
+  ) or exists (
   select 1 from public.ivx_durable_documents d
     where d.doc_key like 'senior-developer-worker/archive/%'
     and strpos(d.value #>> '{job,input,goal}', $1) > 0
-) as seen`;
+)) as seen`;
 
 export const CHAIN_SNAPSHOT_SQL = `
 with candidates as (

@@ -32,15 +32,27 @@ try {
   await client.query(`INSERT INTO public.ivx_messages (conversation_id,sender_role,body)
     SELECT $1::uuid, CASE WHEN n % 4 = 0 THEN 'owner' ELSE 'assistant' END,
       repeat(md5(n::text), 24) FROM generate_series(1,33000) n`, [room]);
+  // Include the retained queue and archives when checking the plan. An empty
+  // document table misses the UNION/EXISTS row estimates seen in production.
+  await client.query(`INSERT INTO public.ivx_durable_documents (doc_key,value)
+    SELECT 'senior-developer-worker/archive/fixture-' || n || '/hash.json',
+      jsonb_build_object('job',jsonb_build_object('input',jsonb_build_object('goal',repeat(md5(n::text),24))))
+    FROM generate_series(1,600) n`);
+  await client.query(`INSERT INTO public.ivx_durable_documents (doc_key,value)
+    SELECT $1, jsonb_build_object('jobs',jsonb_agg(jsonb_build_object('input',jsonb_build_object('goal',md5(n::text)))))
+    FROM generate_series(1,275) n`, [queueKey]);
   await client.query('ANALYZE public.ivx_messages');
+  await client.query('ANALYZE public.ivx_durable_documents');
   const explain = (await client.query('EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ' + ORDER_SEEN_SQL, [token, room])).rows[0]['QUERY PLAN'][0];
   const nodes = [];
   const visit = plan => { nodes.push(plan); for (const child of plan.Plans ?? []) visit(child); };
   visit(explain.Plan);
   assert.ok(nodes.some(node => node['Index Name'] === 'idx_ivx_messages_owner_body_trgm'), 'Token preflight must use its partial index');
   assert.equal(nodes.some(node => node['Node Type'] === 'Seq Scan' && node['Relation Name'] === 'ivx_messages'), false);
-  console.log(JSON.stringify({ fixtureRows: 33000, tokenIndexUsed: true, executionMs: explain['Execution Time'] }));
+  console.log(JSON.stringify({ fixtureRows: 33000, archivedJobs: 600, queuedJobs: 275,
+    tokenIndexUsed: true, executionMs: explain['Execution Time'] }));
   await client.query('DELETE FROM public.ivx_messages');
+  await client.query('DELETE FROM public.ivx_durable_documents');
   // LIKE metacharacters stay literal, and only Owner rows in this conversation
   // count. Queue/archive branches retain their existing literal strpos checks.
   for (const special of ['literal_under_score', 'literal%percent', 'literal!escape', String.raw`literal\backslash`]) {

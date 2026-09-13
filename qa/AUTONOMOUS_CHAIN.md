@@ -24,8 +24,10 @@ approval gates still apply. A requested approval or blocked job fails acceptance
 Apply `20260912224306_owner_message_preflight_index.sql` before live preflight.
 The partial trigram index covers Owner message bodies; the query escapes LIKE
 metacharacters so tokens still match literally. Queue and archive checks remain
-complete. The disposable PostgreSQL gate verifies a 33,000-message history uses
-the index and tests wildcard, role and conversation isolation. Neither a failed
+complete. Three independent EXISTS checks let PostgreSQL choose the message
+index without estimating an early match across a combined UNION of all sources.
+The disposable PostgreSQL gate verifies a 33,000-message history, 275 queued jobs
+and 600 archived jobs use the index, and tests wildcard, role and conversation isolation. Neither a failed
 connection nor a timed-out query establishes that an order is absent.
 The evidence receipt separates `connect`, `setup`, `query`, `rollback` and
 `close` failures, with elapsed times and a SQLSTATE when supplied by PostgreSQL.
