@@ -1,0 +1,29 @@
+name: IVX infrastructure diagnostic contract
+on:
+  pull_request:
+    paths:
+      - 'scripts/ops/infra-control-tower*'
+      - '.github/workflows/ivx-infra-control-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/ops/infra-control-tower*'
+      - '.github/workflows/ivx-infra-control-contract.yml'
+permissions:
+  contents: read
+concurrency:
+  group: ivx-infra-diagnostic-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  diagnostic-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: bash -n scripts/ops/infra-control-tower.sh
+      - run: ./node_modules/.bin/tsc -p scripts/ops/infra-control-tower.tsconfig.json
+      - run: bun test scripts/ops/infra-control-tower.test.ts
