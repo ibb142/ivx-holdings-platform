@@ -20,3 +20,14 @@ it('also requires regression coverage for diagnostic BUG_FIX jobs without a Land
   expect(() => assertRepairPatchQuality('ivx-worker-incident', [patch], '[TEMPLATE_MODE:BUG_FIX] Repair a slow endpoint')).toThrow('REPAIR_REGRESSION_TEST_REQUIRED');
   expect(() => assertRepairPatchQuality('ivx-worker-incident', [patch], '[AUTONOMOUS_DIAGNOSTIC_DATA] Repair observed failure')).toThrow('REPAIR_REGRESSION_TEST_REQUIRED');
 });
+
+it('scheduler repairs require a changed regression before publication', () => {
+  const patch = { path: 'backend/services/worker.ts', oldText: 'return queue.shift();', newText: 'return await queue.claim();' };
+  expect(() => assertRepairPatchQuality('scheduler-repair:sha:scope', [patch], 'Restore the observed queue behavior')).toThrow('REPAIR_REGRESSION_TEST_REQUIRED');
+  expect(() => assertRepairPatchQuality('scheduler-repair:sha:scope', [patch, regression])).not.toThrow();
+});
+
+it('scheduler repairs cannot publish diagnostics alone as a functional fix', () => {
+  const patch = { path: 'expo/ivxholding-landing/ivx-home-feed.js', oldText: 'return fetchHomeFeed(i + 1);', newText: "console.error('API fetch failed'); return fetchHomeFeed(i + 1);" };
+  expect(() => assertRepairPatchQuality('scheduler-repair:sha:scope', [patch, regression])).toThrow('REPAIR_NOT_FUNCTIONAL');
+});

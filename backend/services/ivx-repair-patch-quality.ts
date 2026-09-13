@@ -11,7 +11,7 @@ function withoutDiagnostics(source: string): string {
 }
 
 export function requiresRepairRegression(taskId: string, goal = ''): boolean {
-  return /^(fleet-reasoning|landing-remediation):/.test(taskId)
+  return /^(fleet-reasoning|landing-remediation|scheduler-repair):/.test(taskId)
     || /\[TEMPLATE_MODE:BUG_FIX\]|\[AUTONOMOUS_DIAGNOSTIC_DATA\]/.test(goal);
 }
 
