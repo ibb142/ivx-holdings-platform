@@ -26,11 +26,26 @@ execution does not charge again. Historical liabilities are charged to the
 current UTC admission day, matching the existing `ivx_ai_budget_finish` RPC.
 Budget policy, Owner controls, agent state and certifications are not modified.
 
-The SQL job does **not** call the provider or obtain new vouchers. The existing
-collector is scoped to its original recovery cohort; it does not continuously
-collect future receipts. New cohorts need authenticated collection and review
-of their collector revision before this consumer can settle them. Therefore a
-successful cron execution alone does not mean full financial reconciliation.
+The SQL job does **not** call the provider. The Pending Provider Receipt
+Collection Actions workflow obtains new receipts every five minutes and on
+relevant main pushes. It makes authenticated GET requests only, writes verified
+private evidence, then invokes the atomic consumer for up to two batches.
+GitHub scheduled executions can be delayed; the database cron independently
+consumes evidence that has already arrived.
+
+The new collector's source revision is a 160-bit prefix of SHA-256 over the exact
+collector, validator and collection-workflow bytes. It is a content revision,
+not a Git commit. Approval therefore survives unrelated deployments but changes
+when any trusted collection code changes. The actual Git commit and Actions
+invocation are recorded separately in private collection reports. Review and
+approve a new content revision before enabling modified collection code.
+
+Selection rotates through bounded batches of old, terminal uncertain records
+that have generation IDs. Ambiguous generation bindings are rejected. Existing
+documents are left for the SQL validator instead of repeatedly appending more
+copies. Credentials and private report payloads are not written to Actions logs.
+Missing generation IDs, unavailable receipts and rejected evidence remain
+pending. A successful cron execution alone never certifies full reconciliation.
 
 Operational evidence is in `ivx_ai_finance_reconciliation_runs`; scheduling and
 execution status are in `cron.job` and `cron.job_run_details`. The named job is
