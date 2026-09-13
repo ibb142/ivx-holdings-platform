@@ -5,6 +5,9 @@ on:
     paths:
       - 'expo/app/ivx/autonomous-ops.tsx'
       - 'expo/src/modules/ivx-owner-ai/services/ivxAutonomousOpsService.ts'
+      - 'expo/src/modules/ivx-owner-ai/services/autonomous-dashboard-stream-client.ts'
+      - 'expo/hooks/useTelemetrySync.ts'
+      - 'expo/__tests__/autonomous-dashboard-reconnect.test.ts'
       - 'backend/api/ivx-autonomous-ops-dashboard.ts'
       - 'backend/services/ivx-autonomous-productivity-intelligence.ts'
       - '.github/workflows/ivx-live-ai-radar-cert.yml'
@@ -44,6 +47,7 @@ jobs:
           SERVICE='expo/src/modules/ivx-owner-ai/services/ivxAutonomousOpsService.ts'
           BACKEND='backend/api/ivx-autonomous-ops-dashboard.ts'
           INTEL='backend/services/ivx-autonomous-productivity-intelligence.ts'
+          HOOK='expo/hooks/useTelemetrySync.ts'
 
           grep -Fq 'setInterval(()=>setNow(Date.now()),1000)' "$FILE"
           grep -Fq "type HeartbeatState='LIVE'|'WARM'|'STALE'|'OFFLINE'" "$FILE"
@@ -66,10 +70,11 @@ jobs:
             echo 'Synthetic telemetry implementation found in radar UI' >&2
             exit 1
           fi
-          grep -Fq 'visibleFleetSignals(data?.fleetSignals,now)' "$FILE"
+          grep -Fq 'useTelemetrySync(data,streamMeta.state,now)' "$FILE"
+          grep -Fq 'visibleFleetSignals(data?.fleetSignals, now)' "$HOOK"
           grep -Fq 'Assigned agents' "$FILE"
           grep -Fq 'Productive evidence' "$FILE"
-          bun test backend/services/ivx-fleet-dashboard-signals.test.ts
+          bun test backend/services/ivx-fleet-dashboard-signals.test.ts expo/__tests__/autonomous-dashboard-reconnect.test.ts
           echo 'radar_productivity_contract=PASS'
 
       - name: Productivity intelligence unit tests
