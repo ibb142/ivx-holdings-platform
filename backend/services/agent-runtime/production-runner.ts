@@ -31,14 +31,26 @@ export async function dispatchProductionAutonomousTask(
     || !Number.isInteger(timeToLiveMs) || timeToLiveMs < 1 || timeToLiveMs > 300_000) {
     return { status: 'FAILED', eventId, errorType: 'INVALID_RUN_CONTEXT', outcomeUnknown: false };
   }
+  const startedAt = performance.now();
   const cancellation = new AbortController();
   let stopReason = 'CANDIDATE_PHASE_CANCELLED';
-  const cancel = () => cancellation.abort();
+  const stop = (reason: string) => {
+    if (cancellation.signal.aborted) return;
+    stopReason = reason;
+    cancellation.abort();
+  };
+  const cancel = () => stop('CANDIDATE_PHASE_CANCELLED');
   context.signal?.addEventListener('abort', cancel, { once: true });
   if (context.signal?.aborted) cancel();
   // Start before acquisition: pool/network delay consumes the local budget.
   // PostgreSQL still owns the authoritative expiry and final write fence.
-  const timeout = setTimeout(() => { stopReason = 'CANDIDATE_PHASE_TIMEOUT'; cancel(); }, timeToLiveMs);
+  const timeout = setTimeout(() => stop('CANDIDATE_PHASE_TIMEOUT'), timeToLiveMs);
+  const stopped = () => {
+    // A blocked event loop can resume promises before its overdue timer fires.
+    // Use elapsed monotonic time at both execution and persistence boundaries.
+    if (performance.now() - startedAt >= timeToLiveMs) stop('CANDIDATE_PHASE_TIMEOUT');
+    return cancellation.signal.aborted;
+  };
   const fail = async (errorType: string, outcomeUnknown = false): Promise<CandidateRunResult> => {
     let failureRecord: CandidateFailureRecord;
     try { failureRecord = await store.recordPhaseFailure(eventId, 'CANDIDATE_EVIDENCE', errorType, attempt); }
@@ -48,7 +60,7 @@ export async function dispatchProductionAutonomousTask(
   let acquired = false;
   let writeStarted = false;
   try {
-    if (cancellation.signal.aborted) return { status: 'FAILED', eventId, errorType: stopReason, outcomeUnknown: false };
+    if (stopped()) return { status: 'FAILED', eventId, errorType: stopReason, outcomeUnknown: false };
     const lease = await store.acquireLock(eventId, ownerId, targetVersion, timeToLiveMs);
     if (!lease.acquired) {
       if (lease.errorType === 'EVENT_ALREADY_COMPLETED_IMMUTABLE') return { status: 'ALREADY_RECORDED', eventId };
@@ -56,16 +68,24 @@ export async function dispatchProductionAutonomousTask(
       return fail(lease.errorType, lease.outcomeUnknown ?? false);
     }
     acquired = true;
-    if (cancellation.signal.aborted) return fail(stopReason);
+    if (stopped()) return fail(stopReason);
     let rejectCancelled: (() => void) | undefined;
     const cancelled = new Promise<never>((_, reject) => {
       rejectCancelled = () => reject(new Error('CANDIDATE_PHASE_STOPPED'));
       cancellation.signal.addEventListener('abort', rejectCancelled, { once: true });
     });
     let candidate: CandidateLesson;
-    try { candidate = await Promise.race([execute(cancellation.signal), cancelled]); }
+    try {
+      // Attach both rejection handlers before invoking caller code, which can
+      // abort and throw synchronously even with a Promise-returning signature.
+      const execution = Promise.resolve().then(() => {
+        if (stopped()) throw new Error('CANDIDATE_PHASE_STOPPED');
+        return execute(cancellation.signal);
+      });
+      candidate = await Promise.race([execution, cancelled]);
+    }
     finally { if (rejectCancelled) cancellation.signal.removeEventListener('abort', rejectCancelled); }
-    if (cancellation.signal.aborted) return fail(stopReason);
+    if (stopped()) return fail(stopReason);
     if (candidate.eventId !== eventId || candidate.version !== targetVersion) return fail('CANDIDATE_IDENTITY_MISMATCH');
     // Do not race or retry this write: a lost acknowledgement can follow COMMIT.
     writeStarted = true;
@@ -73,7 +93,7 @@ export async function dispatchProductionAutonomousTask(
     if (!saved.success) return fail(saved.errorType, saved.outcomeUnknown ?? false);
     return { status: 'COMMITTED', eventId, duplicate: saved.duplicate };
   } catch {
-    return fail(cancellation.signal.aborted ? stopReason : 'CANDIDATE_EXECUTION_EXCEPTION', !acquired || writeStarted);
+    return fail(stopped() ? stopReason : 'CANDIDATE_EXECUTION_EXCEPTION', !acquired || writeStarted);
   } finally {
     clearTimeout(timeout);
     context.signal?.removeEventListener('abort', cancel);

@@ -39,6 +39,62 @@ test('late results after timeout cannot commit, even if executor ignores cancell
   resolve(candidate); await Promise.resolve(); expect(f.saved).toHaveLength(0);
   expect(f.failures).toEqual([['event', 'CANDIDATE_EVIDENCE', 'CANDIDATE_PHASE_TIMEOUT', 2]]);
 });
+test('a blocked event loop cannot save evidence before an overdue timer runs', async () => {
+  const f = fixture(); let signal!: AbortSignal;
+  const result = await run({ ...context, timeToLiveMs: 10 }, async s => {
+    signal = s;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    return candidate;
+  }, f.store);
+  expect(result.errorType).toBe('CANDIDATE_PHASE_TIMEOUT');
+  expect(signal.aborted).toBe(true); expect(f.saved).toHaveLength(0);
+});
+test('a delayed acquisition cannot launch evidence production after the local deadline', async () => {
+  const f = fixture(); let executions = 0;
+  const acquire = f.store.acquireLock;
+  f.store.acquireLock = async () => {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    return acquire();
+  };
+  const result = await run({ ...context, timeToLiveMs: 10 }, async () => { executions++; return candidate; }, f.store);
+  expect(result.errorType).toBe('CANDIDATE_PHASE_TIMEOUT');
+  expect(executions).toBe(0); expect(f.saved).toHaveLength(0);
+});
+test('the first owner cancellation remains the cause while acquisition finishes', async () => {
+  const f = fixture(); const controller = new AbortController();
+  const acquire = f.store.acquireLock;
+  f.store.acquireLock = async () => {
+    controller.abort();
+    await new Promise(resolve => setTimeout(resolve, 25));
+    return acquire();
+  };
+  const result = await run({ ...context, timeToLiveMs: 10, signal: controller.signal }, async () => candidate, f.store);
+  expect(result.errorType).toBe('CANDIDATE_PHASE_CANCELLED');
+  expect(f.failures).toEqual([['event', 'CANDIDATE_EVIDENCE', 'CANDIDATE_PHASE_CANCELLED', 2]]);
+  expect(f.saved).toHaveLength(0);
+});
+test('a synchronous executor abort and throw leaves no unhandled cancellation rejection', async () => {
+  const f = fixture(); const controller = new AbortController();
+  const result = await run({ ...context, signal: controller.signal }, () => {
+    controller.abort();
+    throw Error('PRIVATE_EXECUTOR_MESSAGE');
+  }, f.store);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(result.errorType).toBe('CANDIDATE_PHASE_CANCELLED');
+  expect(f.saved).toHaveLength(0);
+  expect(JSON.stringify(result)).not.toContain('PRIVATE_EXECUTOR_MESSAGE');
+});
+test('a successful commit acknowledgement after timeout is retained without replay', async () => {
+  const f = fixture(); let saves = 0;
+  f.store.saveCandidateWithLease = async () => {
+    saves++;
+    await new Promise(resolve => setTimeout(resolve, 25));
+    return { success: true, duplicate: false };
+  };
+  const result = await run({ ...context, timeToLiveMs: 10 }, async () => candidate, f.store);
+  expect(result.status).toBe('COMMITTED'); expect(saves).toBe(1);
+  expect(f.failures).toHaveLength(0);
+});
 test('owner cancellation before acquisition performs no work or lease write', async () => {
   const f = fixture(); let claimed = false; f.store.acquireLock = async () => { claimed = true; throw Error('unexpected'); };
   const controller = new AbortController(); controller.abort();
