@@ -134,9 +134,9 @@ export function buildAutonomous24hTimer(
 }
 
 export async function handleAgentLedgerGet(request: Request): Promise<Response> {
-  const auth = await authorize(request);
-  if (!auth) return ownerOnlyJson({ ok: false, error: 'IVX owner authentication required.' }, 401);
   try {
+    const auth = await authorize(request);
+    if (!auth) return ownerOnlyJson({ ok: false, error: 'IVX owner authentication required.' }, 401);
     const params = new URL(request.url).searchParams;
     if (params.has('from')) {
       const from = Date.parse(params.get('from') ?? '');
@@ -182,17 +182,17 @@ export async function handleAgentLedgerGet(request: Request): Promise<Response> 
       timerPolicy: 'Every IA and Autonomous expose start, end/current state, and evidence-derived productive total for the rolling previous 24 hours. Running timers refresh from real dispatcher/runtime state; no synthetic time.',
       policy: 'Three-layer fail-closed truth: runtime proof, time-integrity reconciliation, then exact-SHA certificate. FAIL/BLOCKED evidence never contributes productive time; ambiguous overlapping sources are never added together.',
     });
-  } catch (error) {
-    return ownerOnlyJson({ ok: false, marker: IVX_AGENT_WORK_LEDGER_MARKER, error: error instanceof Error ? error.message : 'Unable to build agent ledger.' }, 500);
+  } catch {
+    return ownerOnlyJson({ ok: false, marker: IVX_AGENT_WORK_LEDGER_MARKER, error: 'AGENT_LEDGER_UNAVAILABLE' }, 503);
   }
 }
 
 type IngestPayload = { records?: Array<{ agentNumber?: unknown; taskId?: unknown; workerJobId?: unknown; githubRunId?: unknown; githubJobId?: unknown; branch?: unknown; prNumber?: unknown; commitSha?: unknown; deployId?: unknown; status?: unknown; source?: unknown; }> };
 
 export async function handleAgentLedgerIngest(request: Request): Promise<Response> {
-  const auth = await authorize(request);
-  if (!auth) return ownerOnlyJson({ ok: false, error: 'IVX owner authentication required.' }, 401);
   try {
+    const auth = await authorize(request);
+    if (!auth) return ownerOnlyJson({ ok: false, error: 'IVX owner authentication required.' }, 401);
     const body = (await request.json().catch(() => ({}))) as IngestPayload;
     const incoming = Array.isArray(body.records) ? body.records : [];
     if (incoming.length === 0) return ownerOnlyJson({ ok: false, error: 'records[] required.' }, 400);
@@ -206,7 +206,8 @@ export async function handleAgentLedgerIngest(request: Request): Promise<Respons
       accepted.push(agentNumber);
     }
     return ownerOnlyJson({ ok: true, marker: IVX_AGENT_WORK_LEDGER_MARKER, auth, acceptedAgents: accepted.length, rejected: incoming.length - accepted.length });
-  } catch (error) {
-    return ownerOnlyJson({ ok: false, marker: IVX_AGENT_WORK_LEDGER_MARKER, error: error instanceof Error ? error.message : 'Ingest failed.' }, 500);
+  } catch {
+    // Ingest can have partially persisted records. Do not imply that replay is safe.
+    return ownerOnlyJson({ ok: false, marker: IVX_AGENT_WORK_LEDGER_MARKER, error: 'AGENT_LEDGER_INGEST_UNCONFIRMED' }, 500);
   }
 }

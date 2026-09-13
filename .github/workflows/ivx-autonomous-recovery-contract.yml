@@ -1,0 +1,65 @@
+name: IVX autonomous recovery contract
+
+on:
+  pull_request:
+    paths:
+      - 'backend/services/ivx-database-pools*'
+      - 'backend/services/ivx-postgres-deadline*'
+      - 'backend/services/ivx-failed-agent-recovery*'
+      - 'backend/api/ivx-agent-work-ledger-api*'
+      - 'scripts/ops/reconcile-failed-agents.ts'
+      - 'qa/failed-agent-recovery-postgres.test.mjs'
+      - '.github/workflows/ivx-autonomous-recovery-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/services/ivx-database-pools*'
+      - 'backend/services/ivx-postgres-deadline*'
+      - 'backend/services/ivx-failed-agent-recovery*'
+      - 'backend/api/ivx-agent-work-ledger-api*'
+      - 'scripts/ops/reconcile-failed-agents.ts'
+      - 'qa/failed-agent-recovery-postgres.test.mjs'
+      - '.github/workflows/ivx-autonomous-recovery-contract.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ivx-autonomous-recovery-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  recovery-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Backend typecheck
+        run: ./node_modules/.bin/tsc --noEmit -p backend/tsconfig.json
+      - name: Pool, lease, ledger and recovery regressions
+        run: |
+          bun test backend/services/ivx-database-pools.test.ts \
+            backend/services/ivx-postgres-deadline.test.ts \
+            backend/services/ivx-candidate-store.test.ts \
+            backend/services/ivx-fleet-slo.test.ts \
+            backend/services/ivx-failed-agent-recovery.test.ts \
+            backend/api/ivx-agent-work-ledger-api.test.ts \
+            backend/ivx-agent-work-ledger.test.ts \
+            backend/services/ivx-postgres-autonomous-task-store.test.ts
+      - name: Budget receipt regressions
+        run: |
+          node --test backend/services/ivx-global-ai-budget-settlement.test.mjs \
+            backend/services/ivx-uncertain-budget-reconciliation.test.mjs
+      - name: Isolated SQL diagnostic contract
+        env:
+          IVX_PGLITE_MODULE: ${{ runner.temp }}/ivx-sql-qa/node_modules/@electric-sql/pglite
+        run: |
+          npm install --prefix "$RUNNER_TEMP/ivx-sql-qa" --ignore-scripts --no-audit --no-fund @electric-sql/pglite@0.3.14
+          node --test qa/failed-agent-recovery-postgres.test.mjs
