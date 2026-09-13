@@ -2,10 +2,20 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
+import { loadGalleryAssets } from '../expo/scripts/landing-gallery-assets.mjs';
 
 const source = readFileSync(new URL('../expo/deploy-s3-direct.mjs', import.meta.url), 'utf8');
 const functionSource = source.slice(source.indexOf('async function ensureWwwRedirectFunction()'), source.indexOf('\nconst LANDING_DIR'));
 const commands = ['DescribeFunction', 'UpdateFunction', 'CreateFunction', 'PublishFunction'];
+
+test('publishes both property galleries as verified MP4 binaries', () => {
+  const assets = loadGalleryAssets(fileURLToPath(new URL('../expo/ivxholding-landing', import.meta.url)));
+  assert.equal(assets.length, 2);
+  assert.ok(assets.some(asset => asset.key.includes('perez-residence-001')));
+  assert.ok(assets.some(asset => asset.key.includes('jv-202603-5190')));
+  assert.ok(assets.every(asset => asset.type === 'video/mp4'));
+});
 
 function fixture(respond) {
   const calls = [];

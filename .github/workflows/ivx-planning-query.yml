@@ -1,0 +1,43 @@
+name: IVX planning query PostgreSQL proof
+on:
+  pull_request:
+    paths:
+      - 'backend/services/ivx-autonomous-planning-query.ts'
+      - 'backend/services/ivx-postgres-autonomous-task-store.ts'
+      - 'scripts/ivx-planning-query-postgres-proof.ts'
+      - 'supabase/migrations/*ivx_planning_lease_selectivity.sql'
+      - 'supabase/maintenance/*planning*index.sql'
+      - '.github/workflows/ivx-planning-query.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/services/ivx-autonomous-planning-query.ts'
+      - 'backend/services/ivx-postgres-autonomous-task-store.ts'
+      - 'scripts/ivx-planning-query-postgres-proof.ts'
+      - 'supabase/migrations/*ivx_planning_lease_selectivity.sql'
+      - 'supabase/maintenance/*planning*index.sql'
+      - '.github/workflows/ivx-planning-query.yml'
+permissions:
+  contents: read
+jobs:
+  planning-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ivx_planning_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.4'
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Prove ordering, pagination, leases and unchanged evidence
+        run: bun scripts/ivx-planning-query-postgres-proof.ts
+        env:
+          IVX_PLANNING_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_planning_test
