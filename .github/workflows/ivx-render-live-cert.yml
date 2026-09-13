@@ -10,6 +10,7 @@ on:
       - 'bun.lock'
       - 'render.yaml'
       - '.github/workflows/ivx-render-live-cert.yml'
+      - 'qa/deploy-governor-runtime.mjs'
   workflow_dispatch: {}
 
 permissions:
@@ -184,30 +185,16 @@ jobs:
           echo "RENDER_COMMIT=$TARGET_SHA" >> "$GITHUB_ENV"
           echo 'exact_sha_parity=PASS'
 
-      - name: Verify production health and exact version
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -fsS --max-time 20 "$API_BASE/health" -o /tmp/health.json
-          test "$(jq -r '.ok // false' /tmp/health.json)" = true
-          version=$(curl -fsS --max-time 20 "$API_BASE/version")
-          test "$(printf '%s' "$version" | jq -r '.ok // false')" = true
-          test "$(printf '%s' "$version" | jq -r '.commit // empty')" = "$TARGET_SHA"
-          echo 'health_and_version=PASS'
+      - name: Verify production health, exact version and real inference
+        run: node qa/deploy-governor-runtime.mjs
 
-      - name: Verify AI provider and real public-chat inference
-        shell: bash
-        run: |
-          set -euo pipefail
-          ai=$(curl -fsS --retry 4 --retry-delay 2 "$API_BASE/health/ai/live")
-          test "$(printf '%s' "$ai" | jq -r '.ok // false')" = true
-          token="IVX-LIVE-${GITHUB_RUN_ID}-1"
-          body=$(jq -nc --arg message "Return the exact token ${token} and no other text." --arg sessionId 'github-live-cert' --arg requestId "github-live-cert-${GITHUB_RUN_ID}" '{message:$message,sessionId:$sessionId,requestId:$requestId,history:[]}')
-          response=$(curl -fsS --retry 3 --retry-delay 2 -X POST "$API_BASE/api/public/chat" -H 'Content-Type: application/json' -H "x-ivx-client-id: github-live-cert-${GITHUB_RUN_ID}" --data "$body")
-          test "$(printf '%s' "$response" | jq -r '.source // empty')" = chatgpt
-          test -n "$(printf '%s' "$response" | jq -r '.endpoint // empty')"
-          printf '%s' "$response" | jq -r '.answer // .text // empty' | grep -Fq "$token"
-          echo 'ai_and_real_inference=PASS'
+      - name: Preserve runtime validation and failing stage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-governor-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qa/evidence/deploy-governor-runtime.json
+          if-no-files-found: warn
 
       - name: Emit deployment-governor certificate
         shell: bash

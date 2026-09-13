@@ -1,14 +1,24 @@
 name: IVX Candidate Lease and Evidence Contracts
 on:
   push:
-    branches: [fix/candidate-lease-store-20260913]
+    branches: [fix/candidate-lease-store-20260913, fix/autonomous-candidate-integration-20260913]
   pull_request:
     paths:
       - 'backend/services/ivx-candidate-store*'
+      - 'backend/services/agent-runtime/production-runner*'
+      - 'backend/services/ivx-coder-candidate-evidence.ts'
+      - 'backend/services/ivx-senior-developer-worker.ts'
       - 'backend/services/ivx-database-pools.ts'
       - 'backend/services/ivx-postgres-deadline.ts'
       - 'supabase/migrations/*candidate_lease_evidence_store.sql'
       - 'qa/candidate-store-postgres.test.mjs'
+      - 'qa/deploy-governor-runtime*'
+      - 'scripts/ops/audit-112-fleet-activity*'
+      - 'expo/hooks/useTelemetrySync.ts'
+      - 'expo/src/modules/ivx-owner-ai/services/autonomous-dashboard-stream-client.ts'
+      - 'expo/src/modules/ivx-owner-ai/services/ivxAutonomousOpsService.ts'
+      - 'expo/app/ivx/autonomous-ops.tsx'
+      - 'expo/__tests__/autonomous-dashboard-reconnect.test.ts'
       - '.github/workflows/ivx-candidate-store-contracts.yml'
 permissions:
   contents: read
@@ -30,8 +40,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with: {bun-version: 1.3.9}
       - run: bun install --frozen-lockfile --ignore-scripts
-      - name: Verify adapter validation and unknown commit outcomes
-        run: bun test backend/services/ivx-candidate-store.test.ts
+      - name: Verify candidate integration, cancellation and dashboard reconnect
+        run: bun test backend/services/ivx-candidate-store.test.ts backend/services/agent-runtime/production-runner.test.ts expo/__tests__/autonomous-dashboard-reconnect.test.ts
+      - name: Verify fleet audit and deployment diagnostics
+        run: node --test scripts/ops/audit-112-fleet-activity.test.mjs qa/deploy-governor-runtime.test.mjs
       - name: Verify database races, retained evidence, permissions and indexed lookup
         run: node --test qa/candidate-store-postgres.test.mjs
         env:

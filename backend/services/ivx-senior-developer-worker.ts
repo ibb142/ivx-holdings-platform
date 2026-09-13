@@ -11,6 +11,7 @@ import { createPostMergeReconciler, observePostMerge, type PostMergeCheckpoint }
 import { commitSharedSeniorPostMergeResult } from './ivx-senior-shared-queue';
 import { readPostgresPatrolObservations } from './ivx-postgres-autonomous-task-store';
 import { extractRenderApiKey } from './ivx-render-credentials';
+import { persistCoderCandidate, type CoderCandidateReceipt } from './ivx-coder-candidate-evidence';
 /**
  * IVX Self-Hosted Senior Developer Worker — removes the external platform dependency as the
  * code EXECUTOR.
@@ -316,6 +317,7 @@ export type IVXWorkerJob = {
 import type { IVXTaskType } from './ivx-completion-validator';
 
 export type IVXWorkerJobResult = {
+  candidateEvidence?: CoderCandidateReceipt;
   postMergeVerification?: PostMergeCheckpoint;
   workspaceEvidence?: CoderWorkspaceEvidence;
   jobId: string;
@@ -2785,6 +2787,21 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
       }
 
       const coderResult = summarizeAutonomousCoderProof(job.jobId, coderProof);
+      // Persist a candidate diagnosis from this actual executor result. A failed
+      // evidence write is retained on the result; it must never rerun the coder
+      // or undo a real commit/deploy. Candidate status does not certify the job.
+      coderResult.candidateEvidence = await persistCoderCandidate({
+        jobId: job.jobId, attempt: job.attempts, agentId: job.input.agentId ?? null,
+        workerInstanceId: job.leaseWorkerInstanceId ?? null, proof: coderProof,
+        assertAuthority: async () => {
+          if (controller.cancelled || controller.interrupted || queueStopping) throw new Error('WORKER_AUTHORITY_UNCONFIRMED');
+          await assertEmergencyStopInactive('senior-worker-candidate-evidence');
+          if (!sharedSeniorQueueEnabled()) throw new Error('SHARED_WORKER_LEASE_REQUIRED');
+          if (preferDirectTransport()) await withQueueWrite(() => assertSeniorQueuePostgresAuthority(job.jobId));
+          else await updateJob(job.jobId, { lastHeartbeatAt: nowIso() }, true, true);
+          if (controller.cancelled || controller.interrupted || queueStopping) throw new Error('WORKER_AUTHORITY_UNCONFIRMED');
+        },
+      });
       const result = finalizeResultWithStateRecord(job, coderResult);
       const status: IVXWorkerJobStatus = result.finalStatus === 'COMPLETE'
         ? 'completed'
