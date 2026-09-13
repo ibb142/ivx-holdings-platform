@@ -5,6 +5,7 @@
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
 import { verifyIVXGitHubActionsOIDCRequest } from '../services/ivx-github-actions-oidc';
 import { checkIVXAISystemKey } from './owner-only';
+import { readAgentLedgerLive } from '../services/ivx-agent-ledger-live';
 import {
   IVX_AGENT_WORK_LEDGER_MARKER,
   getAgentLedgerDashboard,
@@ -138,6 +139,12 @@ export async function handleAgentLedgerGet(request: Request): Promise<Response> 
     const auth = await authorize(request);
     if (!auth) return ownerOnlyJson({ ok: false, error: 'IVX owner authentication required.' }, 401);
     const params = new URL(request.url).searchParams;
+    if (params.get('view') === 'live') {
+      if (params.has('from') || params.has('to')) {
+        return ownerOnlyJson({ ok: false, error: 'The live view cannot be combined with a historical from/to window.' }, 400);
+      }
+      return ownerOnlyJson({ ok: true, auth, ...await readAgentLedgerLive() });
+    }
     if (params.has('from')) {
       const from = Date.parse(params.get('from') ?? '');
       const to = params.has('to') ? Date.parse(params.get('to') ?? '') : Date.now();
