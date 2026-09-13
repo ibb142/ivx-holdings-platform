@@ -6,6 +6,8 @@ on:
   pull_request:
     paths:
       - '.github/workflows/ivx-reels-live-cert.yml'
+      - 'tests/e2e/reels-acceptance.spec.ts'
+      - 'tests/e2e/playwright.config.ts'
   workflow_dispatch:
 
 permissions:
@@ -84,6 +86,16 @@ jobs:
           # H.264/AAC playback requires the codecs distributed with Chrome.
           # https://playwright.dev/docs/browsers#media-codecs
           npx playwright install --with-deps chrome
+
+      - name: Reels playback acceptance and explicit degraded-state behavior
+        run: npx playwright test --config=tests/e2e/playwright.config.ts
+
+      - name: Upload Reels acceptance results including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reels-acceptance-${{ github.sha }}
+          path: qa/evidence/reels-acceptance/
 
       - name: Verify Reel actually renders in production browser
         shell: bash
