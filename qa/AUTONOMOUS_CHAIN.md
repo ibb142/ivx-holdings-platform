@@ -27,6 +27,10 @@ metacharacters so tokens still match literally. Queue and archive checks remain
 complete. The disposable PostgreSQL gate verifies a 33,000-message history uses
 the index and tests wildcard, role and conversation isolation. Neither a failed
 connection nor a timed-out query establishes that an order is absent.
+The evidence receipt separates `connect`, `setup`, `query`, `rollback` and
+`close` failures, with elapsed times and a SQLSTATE when supplied by PostgreSQL.
+It records no SQL, bound values, connection URLs or raw database errors.
+Failed reads abort before submission and are never retried automatically.
 
 The test uses the actual `ivx-owner-chat-input`, `ivx-owner-chat-send` and execution
 console controls. It double-clicks once and requires one observed owner-AI

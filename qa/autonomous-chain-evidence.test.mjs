@@ -1,6 +1,85 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { digest, parseOwnerResponse, verifyChainEvidence, SERVICE_IDS } from './autonomous-chain-evidence.mjs';
+import { EventEmitter } from 'node:events';
+import { digest, parseOwnerResponse, verifyChainEvidence, readDatabaseEvidence, SERVICE_IDS } from './autonomous-chain-evidence.mjs';
+
+const evidenceSql = 'select evidence';
+function databaseFixture({ failAt, code, rows = [{ seen: false }], disconnect = false, cleanupFails = false } = {}) {
+  const calls = [], observations = [], client = new EventEmitter();
+  const rawError = Object.assign(new Error('private-db-url private-password private-query-value'), { code });
+  const call = async name => {
+    calls.push(name);
+    if (name === failAt || (name === 'end' && cleanupFails)) throw rawError;
+  };
+  client.connect = () => call('connect');
+  client.query = async (sql, values) => {
+    await call(sql);
+    if (sql === evidenceSql) {
+      assert.deepEqual(values, ['private-query-value']);
+      if (disconnect) client.emit('error', rawError);
+    }
+    return { rows };
+  };
+  client.end = () => call('end');
+  const read = () => readDatabaseEvidence(() => client, evidenceSql, ['private-query-value'],
+    observation => observations.push(observation));
+  return { client, calls, observations, read };
+}
+
+test('database absence requires a completed read-only transaction and clean connection', async () => {
+  const db = databaseFixture();
+  assert.deepEqual(await db.read(), { seen: false });
+  assert.deepEqual(db.calls, ['connect', 'BEGIN READ ONLY', "SET LOCAL statement_timeout = '4s'", evidenceSql, 'ROLLBACK', 'end']);
+  assert.deepEqual(db.observations.map(o => [o.stage, o.ok]),
+    ['connect', 'setup', 'query', 'rollback', 'close'].map(stage => [stage, true]));
+  assert.equal(db.client.listenerCount('error'), 0);
+});
+
+for (const [failAt, stage, sqlState] of [
+  ['connect', 'connect', null],
+  ['BEGIN READ ONLY', 'setup', null],
+  ["SET LOCAL statement_timeout = '4s'", 'setup', '57014'],
+  [evidenceSql, 'query', '57014'],
+  ['ROLLBACK', 'rollback', null],
+  ['end', 'close', null],
+]) {
+  test(`database failure at ${failAt} retains its stage without retrying or exposing secrets`, async () => {
+    const db = databaseFixture({ failAt, code: sqlState ?? 'ECONNRESET' });
+    await assert.rejects(db.read(), { message: `DATABASE_${stage.toUpperCase()}_FAILED` });
+    const failure = db.observations.at(-1);
+    assert.equal(failure.stage, stage);
+    assert.equal(failure.ok, false);
+    assert.equal(failure.sqlState, sqlState);
+    assert.ok(failure.elapsedMs >= failure.stageElapsedMs && failure.stageElapsedMs >= 0);
+    assert.equal(JSON.stringify(db.observations).includes('private-'), false);
+    assert.equal(db.calls.filter(call => call === 'connect').length, 1);
+    assert.equal(db.calls.filter(call => call === 'end').length, 1);
+    assert.equal(db.calls.filter(call => call === evidenceSql).length, ['connect', 'setup'].includes(stage) ? 0 : 1);
+    if (['connect', 'setup', 'query'].includes(stage)) assert.equal(db.calls.includes('ROLLBACK'), false);
+  });
+}
+
+test('a socket error alongside a result cannot prove order absence', async () => {
+  const db = databaseFixture({ disconnect: true, code: 'ECONNRESET' });
+  await assert.rejects(db.read(), { message: 'DATABASE_CONNECTION_LOST' });
+  assert.equal(db.observations.at(-1).stage, 'query');
+  assert.equal(db.calls.includes('ROLLBACK'), false);
+});
+
+test('cleanup failure cannot mask the connection failure that prevented the query', async () => {
+  const db = databaseFixture({ failAt: 'connect', cleanupFails: true });
+  await assert.rejects(db.read(), { message: 'DATABASE_CONNECT_FAILED' });
+  assert.deepEqual(db.calls, ['connect', 'end']);
+  assert.equal(db.observations.at(-1).stage, 'connect');
+});
+
+test('missing or ambiguous database evidence rows fail closed', async () => {
+  for (const rows of [[], [{ seen: false }, { seen: true }]]) {
+    const db = databaseFixture({ rows });
+    await assert.rejects(db.read(), { message: 'DATABASE_EVIDENCE_ROW_MISSING' });
+    assert.equal(db.calls.includes('ROLLBACK'), false);
+  }
+});
 
 function fixture() {
   const requestId = 'message-123', conversationId = 'room-1', ownerId = 'owner-1';

@@ -10,6 +10,63 @@ const sha = value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 export const digest = value => createHash('sha256').update(value).digest('hex');
 export const SERVICE_IDS = ['srv-d7t9ivreo5us73ftose0', 'srv-d9i15fg4n6ts73bn00j0', 'srv-d7t9j00sfn5c738a18j0'];
 
+/**
+ * Read one evidence row without treating a failed connection as order absence.
+ * The factory keeps credentials out of this helper and its observations.
+ * @param {() => any} createClient
+ * @param {string} sql
+ * @param {string[]} values
+ * @param {(observation: {stage: string, ok: boolean, elapsedMs: number, stageElapsedMs: number, sqlState: string | null}) => void} observe
+ */
+export async function readDatabaseEvidence(createClient, sql, values, observe = () => {}) {
+  const startedAt = performance.now();
+  let stage = 'connect', stageStartedAt = startedAt;
+  let client, connectionError, closing = false;
+  const onError = error => { connectionError = error; };
+  const record = (ok, error = undefined) => {
+    const code = error?.code;
+    try {
+      observe({ stage, ok, elapsedMs: Math.round(performance.now() - startedAt),
+        stageElapsedMs: Math.round(performance.now() - stageStartedAt),
+        sqlState: typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code) ? code : null });
+    } catch { /* Diagnostic collection must not change the database result. */ }
+  };
+  const run = async (name, action) => {
+    stage = name; stageStartedAt = performance.now();
+    requireProof(!connectionError, 'DATABASE_CONNECTION_LOST');
+    const result = await action();
+    requireProof(!connectionError, 'DATABASE_CONNECTION_LOST');
+    record(true);
+    return result;
+  };
+  try {
+    client = createClient();
+    client.on('error', onError);
+    await run('connect', () => client.connect());
+    await run('setup', async () => {
+      await client.query('BEGIN READ ONLY');
+      await client.query("SET LOCAL statement_timeout = '4s'");
+    });
+    const row = await run('query', async () => {
+      const result = await client.query(sql, values);
+      requireProof(result?.rows?.length === 1, 'DATABASE_EVIDENCE_ROW_MISSING');
+      return result.rows[0];
+    });
+    await run('rollback', () => client.query('ROLLBACK'));
+    await run('close', () => { closing = true; return client.end(); });
+    return row;
+  } catch (error) {
+    record(false, connectionError ?? error);
+    throw new ChainEvidenceError(error instanceof ChainEvidenceError ? error.code
+      : connectionError ? 'DATABASE_CONNECTION_LOST' : `DATABASE_${stage.toUpperCase()}_FAILED`);
+  } finally {
+    // Never retry SQL, nor queue ROLLBACK behind an unanswered statement.
+    // Closing a failed client must not mask the original failure stage.
+    if (client && !closing) { try { await client.end(); } catch {} }
+    client?.removeListener('error', onError);
+  }
+}
+
 // The owner route supports JSON and SSE. Only its terminal receipt identifies
 // the durable worker job; streamed prose is never execution evidence.
 export function parseOwnerResponse(contentType, text) {

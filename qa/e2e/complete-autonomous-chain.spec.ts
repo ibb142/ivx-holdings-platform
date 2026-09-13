@@ -3,7 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import pg from 'pg';
 import { IVX_OWNER_AI_ROOM_ID as ROOM } from '../../expo/constants/ivx-owner-ai';
-import { ChainEvidenceError, requireProof, digest, parseOwnerResponse, verifyChainEvidence,
+import { ChainEvidenceError, requireProof, digest, parseOwnerResponse, verifyChainEvidence, readDatabaseEvidence,
   ORDER_SEEN_SQL, CHAIN_SNAPSHOT_SQL, SERVICE_IDS } from '../autonomous-chain-evidence.mjs';
 
 const API = 'https://api.ivxholding.com';
@@ -13,7 +13,7 @@ const STORAGE_KEY = 'sb-kvclcdjmjghndxsngfzb-auth-token';
 
 test('16.2–16.8: one owner order has a durable IA, commit, PR and live deployment', async ({ page }, info) => {
   const proof: Record<string, any> = { startedAt: new Date().toISOString(), chainPassed: false,
-    phase4Certified: false, continuous24HoursCertified: false, requests: 0, observations: [] };
+    phase4Certified: false, continuous24HoursCertified: false, requests: 0, observations: [], databaseObservations: [] };
   let stage = 'PREFLIGHT';
   const save = async () => {
     await mkdir('qa/evidence/autonomous-chain', { recursive: true });
@@ -43,25 +43,13 @@ test('16.2–16.8: one owner order has a durable IA, commit, PR and live deploym
         && decodeURIComponent(connection.username).endsWith(`.${project}`)), 'DATABASE_PROJECT_MISMATCH');
     // Certificate validation stays enabled, regardless of URL sslmode options.
     for (const key of ['sslmode', 'ssl', 'sslcert', 'sslkey', 'sslrootcert']) connection.searchParams.delete(key);
-    const readDatabase = async (sql: string, values: string[]) => {
-      const client = new pg.Client({ host: connection.hostname, port: Number(connection.port || '5432'),
+    const readDatabase = (label: 'order_preflight' | 'chain_snapshot', sql: string, values: string[]) =>
+      readDatabaseEvidence(() => new pg.Client({ host: connection.hostname, port: Number(connection.port || '5432'),
         user: decodeURIComponent(connection.username), password: decodeURIComponent(connection.password),
         database: decodeURIComponent(connection.pathname.slice(1) || 'postgres'), ssl: { rejectUnauthorized: true },
         connectionTimeoutMillis: 5_000, query_timeout: 6_000,
-        application_name: 'phase4-chain-readonly' });
-      let disconnected = false;
-      client.on('error', () => { disconnected = true; });
-      try {
-        await client.connect();
-        await client.query('BEGIN READ ONLY');
-        await client.query("SET LOCAL statement_timeout = '4s'");
-        const result = await client.query<Record<string, any>>(sql, values);
-        requireProof(!disconnected, 'DATABASE_CONNECTION_LOST');
-        await client.query('ROLLBACK');
-        return result.rows[0];
-      } catch { throw new ChainEvidenceError('DATABASE_EVIDENCE_UNAVAILABLE'); }
-      finally { await client.end(); }
-    };
+        application_name: 'phase4-chain-readonly' }), sql, values,
+      observation => { proof.databaseObservations.push({ label, ...observation }); });
     let ownerToken = '';
     const get = async (url: string, headers: Record<string, string> = {}) => {
       const response = await fetch(url, { method: 'GET', redirect: 'error', headers,
@@ -90,7 +78,7 @@ test('16.2–16.8: one owner order has a durable IA, commit, PR and live deploym
     // Prove evidence access before sending the mutating order.
     await githubGet(`/commits/${baseline.commitSha}`);
     for (const serviceId of SERVICE_IDS) await renderGet(serviceId);
-    requireProof((await readDatabase(ORDER_SEEN_SQL, [orderToken, ROOM])).seen === false, 'ORDER_ALREADY_EXISTS');
+    requireProof((await readDatabase('order_preflight', ORDER_SEEN_SQL, [orderToken, ROOM])).seen === false, 'ORDER_ALREADY_EXISTS');
 
     stage = 'OWNER_LOGIN';
     await page.goto('/login', { waitUntil: 'domcontentloaded' });
@@ -168,7 +156,7 @@ test('16.2–16.8: one owner order has a durable IA, commit, PR and live deploym
 
     stage = 'DURABLE_AND_EXTERNAL_EVIDENCE';
     const requestKey = `owner-chat-requests/${digest(JSON.stringify([identity.id, ROOM, proof.requestId]))}`;
-    const database = await readDatabase(CHAIN_SNAPSHOT_SQL, [proof.requestId, identity.id, ROOM, message, requestKey]);
+    const database = await readDatabase('chain_snapshot', CHAIN_SNAPSHOT_SQL, [proof.requestId, identity.id, ROOM, message, requestKey]);
     requireProof(Number.isInteger(job.result?.prNumber) && job.result.prNumber > 0
       && /^[a-f0-9]{40}$/.test(job.result?.commitSha || ''), 'COMMIT_OR_PR_MISSING');
     const commit = await githubGet(`/commits/${job.result.commitSha}`);
