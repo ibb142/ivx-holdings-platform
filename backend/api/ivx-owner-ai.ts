@@ -5608,6 +5608,8 @@ export async function handleIVXOwnerAIProxyStatus(request: Request): Promise<Res
   try {
     await assertIVXRegisteredOwnerBearer(request, 'owner_ai_proxy_status');
   } catch (error) {
+    const unavailable = ownerAIAuthUnavailableResponse(error, ownerOnlyJson);
+    if (unavailable) return unavailable;
     const status = error instanceof IVXOwnerApprovalError ? error.status : 401;
     return ownerOnlyJson({
       ok: false,

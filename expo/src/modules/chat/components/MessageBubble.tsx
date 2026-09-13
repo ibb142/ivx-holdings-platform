@@ -233,6 +233,10 @@ export const MessageBubble = memo(function MessageBubble({
   const readByCount = otherReaders.length;
   const statusLabel = isFailed
     ? 'Not sent'
+    : isStreaming && !isMine
+      ? 'Receiving'
+    : message.sendStatus === 'saved'
+      ? 'Saved on device'
     : isUploading
       ? 'Uploading'
       : isSending
@@ -384,7 +388,7 @@ export const MessageBubble = memo(function MessageBubble({
             <>
               {hasReadReceipts ? (
                 <CheckCheck size={12} color="#D4A017" />
-              ) : isMine && !isSending ? (
+              ) : isMine && !isSending && message.sendStatus !== 'saved' ? (
                 <Check size={12} color={isMine ? 'rgba(0,0,0,0.5)' : Colors.textTertiary} />
               ) : null}
               <Text style={[styles.metaText, metaColorStyle]}>{formatMessageTime(message.createdAt)}</Text>
@@ -472,24 +476,24 @@ export const MessageBubble = memo(function MessageBubble({
           ) : null}
         </View>
 
-        {isFailed ? (
+        {isFailed && (onRetry || onDismiss) ? (
           <View style={styles.failedActions}>
-            <Pressable
+            {onRetry ? <Pressable
               style={({ pressed }) => [styles.retryAction, pressed ? styles.pressed : null]}
               onPress={handleRetry}
               testID={`chat-message-retry-${message.id}`}
             >
               <RefreshCw size={13} color="#FF4D4D" />
               <Text style={styles.retryActionText}>Retry</Text>
-            </Pressable>
-            <Pressable
+            </Pressable> : null}
+            {onDismiss ? <Pressable
               style={({ pressed }) => [styles.dismissAction, pressed ? styles.pressed : null]}
               onPress={handleDismiss}
               testID={`chat-message-dismiss-${message.id}`}
             >
               <X size={13} color="rgba(0,0,0,0.4)" />
               <Text style={styles.dismissActionText}>Remove</Text>
-            </Pressable>
+            </Pressable> : null}
           </View>
         ) : null}
       </Pressable>

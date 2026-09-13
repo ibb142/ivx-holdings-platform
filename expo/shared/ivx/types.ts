@@ -49,6 +49,8 @@ export type IVXMessage = {
   updatedAt: string;
   /** Optional durable task id attached by execution-mode responses (client-only; not persisted to DB). */
   taskId?: string | null;
+  /** Device-created message; remote delivery has not been acknowledged. */
+  localOnly?: boolean;
 };
 
 export type IVXInboxItem = {

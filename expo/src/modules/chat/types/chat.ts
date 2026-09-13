@@ -1,6 +1,6 @@
 export type ChatFileType = 'image' | 'video' | 'pdf' | 'file';
 
-export type MessageSendStatus = 'sending' | 'sent' | 'failed';
+export type MessageSendStatus = 'sending' | 'saved' | 'sent' | 'failed';
 
 export type DeliveryMode =
   | 'primary_realtime'

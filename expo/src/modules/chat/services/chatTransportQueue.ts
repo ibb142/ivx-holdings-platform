@@ -41,6 +41,7 @@ export type SendOperation = {
   nextRetryAt: number | null;
   retryDelayMs: number;
   upload: { uri: string; name: string; type: string | null; size: number | null } | null;
+  result?: { messageId: string; conversationId: string; persistence?: 'local' | 'remote' };
 };
 
 export type TransportQueueState = {
@@ -267,7 +268,7 @@ function updateOperation(requestId: string, patch: Partial<SendOperation>): void
   emitState();
 }
 
-async function executeSend(operation: SendOperation): Promise<{ messageId: string; conversationId: string }> {
+async function executeSend(operation: SendOperation): Promise<NonNullable<SendOperation['result']>> {
   const start = now();
   const abortController = new AbortController();
   const timeoutHandle = setTimeout(() => {
@@ -277,7 +278,7 @@ async function executeSend(operation: SendOperation): Promise<{ messageId: strin
   emitLifecycle({ type: 'request_started', requestId: operation.requestId, attempt: operation.attempts, timestamp: start });
 
   try {
-    let result: { id: string; conversationId: string };
+    let result: { id: string; conversationId: string; persistence?: 'local' | 'remote' };
 
     if (operation.mode === 'attachment' && operation.upload) {
       emitLifecycle({ type: 'token_attached', requestId: operation.requestId, timestamp: now() });
@@ -294,7 +295,7 @@ async function executeSend(operation: SendOperation): Promise<{ messageId: strin
         senderLabel: operation.senderLabel,
         requireRemote: false,
       });
-      result = { id: sent.id, conversationId: sent.conversationId };
+      result = { id: sent.id, conversationId: sent.conversationId, persistence: sent.persistence };
     }
 
     clearTimeout(timeoutHandle);
@@ -303,7 +304,7 @@ async function executeSend(operation: SendOperation): Promise<{ messageId: strin
     emitLifecycle({ type: 'stream_closed', requestId: operation.requestId, timestamp: now(), durationMs: duration });
     emitLifecycle({ type: 'sent', requestId: operation.requestId, timestamp: now(), durationMs: duration, messageId: result.id });
 
-    return { messageId: result.id, conversationId: result.conversationId };
+    return { messageId: result.id, conversationId: result.conversationId, persistence: result.persistence };
   } catch (error) {
     clearTimeout(timeoutHandle);
     const isTimeout = isAbortError(error);
@@ -359,9 +360,10 @@ async function processNext(): Promise<void> {
   });
 
   try {
-    const { messageId } = await executeSend(op);
+    const result = await executeSend(op);
     updateOperation(op.requestId, {
       status: 'sent',
+      result,
       sentAt: now(),
       lastError: null,
       lastErrorDetail: null,

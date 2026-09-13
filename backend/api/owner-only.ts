@@ -9,6 +9,7 @@ import {
 import { timingSafeEqual } from 'node:crypto';
 import { verifyIVXOutageOwnerSession } from '../services/ivx-outage-owner-session';
 import { resolveActiveIVXSystemSecret } from '../services/ivx-system-secret';
+import { isOwnerAuthUnavailable } from './owner-ai-auth-unavailable';
 
 export type IVXOwnerRequestContext = IVXAuthenticatedRequestContext;
 
@@ -38,8 +39,8 @@ export class IVXOwnerApprovalError extends Error {
   readonly status: number;
   readonly proof: IVXOwnerMutationApprovalProof;
 
-  constructor(message: string, status: number, proof: IVXOwnerMutationApprovalProof) {
-    super(message);
+  constructor(message: string, status: number, proof: IVXOwnerMutationApprovalProof, cause?: unknown) {
+    super(message, { cause });
     this.name = 'IVXOwnerApprovalError';
     this.status = status;
     this.proof = proof;
@@ -356,7 +357,8 @@ export async function assertIVXRegisteredOwnerBearer(
     context = await resolveIVXAuthenticatedRequest(request, '[IVXOwnerMutation]');
   } catch (error) {
     const blocker = error instanceof Error ? error.message : 'Owner bearer verification failed.';
-    throw new IVXOwnerApprovalError(blocker, blocker.toLowerCase().includes('missing bearer') ? 401 : 403, makeOwnerMutationApprovalProof({
+    const status = isOwnerAuthUnavailable(error) ? 503 : blocker.toLowerCase().includes('missing bearer') ? 401 : 403;
+    throw new IVXOwnerApprovalError(blocker, status, makeOwnerMutationApprovalProof({
       context: null,
       action,
       bearerAccepted: false,
@@ -364,7 +366,7 @@ export async function assertIVXRegisteredOwnerBearer(
       ownerEmailMatched: false,
       allowlistConfigured: parseOwnerEmailAllowlist().length > 0,
       blocker,
-    }));
+    }), error);
   }
 
   const evaluation = evaluateIVXRegisteredOwnerBearerContext(context, action);
