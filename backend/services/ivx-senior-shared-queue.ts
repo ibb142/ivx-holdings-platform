@@ -83,6 +83,17 @@ export async function putSharedSeniorResult(result: unknown): Promise<void> {
   } finally { readsInFlight.clear(); }
 }
 
+/** Commit a fenced post-merge observation to the queue and proof ledger atomically. */
+export async function commitSharedSeniorPostMergeResult(expected: unknown, next: unknown): Promise<void> {
+  readsInFlight.clear();
+  try {
+    const body = { p_expected: expected, p_next: next };
+    if (preferDirectTransport()) { await seniorQueuePostgresRpc('ivx_senior_post_merge_commit', body); return; }
+    const response = await requestRpc('ivx_senior_post_merge_commit', body);
+    await response.body?.cancel().catch(() => {});
+  } finally { readsInFlight.clear(); }
+}
+
 export async function readSharedSeniorDocument<T>(file: string, fallback: T): Promise<T> {
   const key = durableKeyForFile(file);
   if (key !== 'senior-developer-worker/queue.json' && key !== 'senior-developer-worker/proof-ledger.json') throw new Error('Repair document not allowed');

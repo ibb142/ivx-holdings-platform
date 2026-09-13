@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { claimSharedSeniorJob, patchSharedSeniorQueue, putSharedSeniorResult, rememberSeniorQueue } from './ivx-senior-shared-queue';
+import { claimSharedSeniorJob, patchSharedSeniorQueue, putSharedSeniorResult, rememberSeniorQueue, commitSharedSeniorPostMergeResult } from './ivx-senior-shared-queue';
 
 const originalFetch = globalThis.fetch;
 const names = ['SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'] as const;
@@ -16,6 +16,24 @@ afterEach(() => {
 });
 
 describe('shared senior queue HTTP contracts', () => {
+  it('sends the fenced post-merge snapshots once and accepts a void atomic acknowledgement', async () => {
+    let calls = 0;
+    const expected = { jobId: 'same-job', result: { pending: true } }, next = { jobId: 'same-job', result: { measured: true } };
+    globalThis.fetch = (async (url, init) => {
+      calls++;
+      expect(String(url)).toEndWith('/rpc/ivx_senior_post_merge_commit');
+      expect(JSON.parse(String(init?.body))).toEqual({ p_expected: expected, p_next: next });
+      return new Response(null, { status: 204 });
+    }) as typeof fetch;
+    await commitSharedSeniorPostMergeResult(expected, next);
+    expect(calls).toBe(1);
+  });
+  it('does not replay a rejected post-merge commit or invent a durable receipt', async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => { calls++; return new Response(null, { status: 409 }); }) as typeof fetch;
+    await expect(commitSharedSeniorPostMergeResult({ jobId: 'same' }, { jobId: 'same' })).rejects.toThrow('concurrent edit');
+    expect(calls).toBe(1);
+  });
   it('accepts a void ledger acknowledgement without failing an already persisted result', async () => {
     let writes = 0;
     globalThis.fetch = (async (url, init) => {

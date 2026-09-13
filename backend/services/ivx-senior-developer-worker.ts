@@ -6,6 +6,10 @@ import type { CoderWorkspaceEvidence } from './ivx-coder-workspace';
 import { createSeniorJobAdmission } from './ivx-senior-job-admission';
 import { configuredAdmissionLimit } from './ivx-fleet-admission-policy';
 import { registerSeniorExecutionMetrics } from './ivx-fleet-execution-metrics';
+import { createPostMergeReconciler, observePostMerge, type PostMergeCheckpoint } from './ivx-post-merge-verifier';
+import { commitSharedSeniorPostMergeResult } from './ivx-senior-shared-queue';
+import { readPostgresPatrolObservations } from './ivx-postgres-autonomous-task-store';
+import { extractRenderApiKey } from './ivx-render-credentials';
 /**
  * IVX Self-Hosted Senior Developer Worker — removes the external platform dependency as the
  * code EXECUTOR.
@@ -74,6 +78,7 @@ import {
 import {
   IVX_AUTONOMOUS_CODER_MARKER,
   runIVXAutonomousCoder,
+  readOwnerRuntimeVariable,
   resumeIVXAutonomousCoderFromCiWait,
   buildAutonomousCoderAnswer,
   type IVXAutonomousCoderProof,
@@ -310,6 +315,7 @@ export type IVXWorkerJob = {
 import type { IVXTaskType } from './ivx-completion-validator';
 
 export type IVXWorkerJobResult = {
+  postMergeVerification?: PostMergeCheckpoint;
   workspaceEvidence?: CoderWorkspaceEvidence;
   jobId: string;
   goal: string;
@@ -3093,7 +3099,37 @@ export async function drainSeniorDeveloperQueue(): Promise<void> {
 /** Recovery and admission have independent, non-overlapping retry schedules. */
 let stopStaleSweep: (() => void) | null = null;
 let stopQueueDrain: (() => void) | null = null;
+let stopPostMergeVerification: (() => void) | null = null;
 const QUEUE_DRAIN_INTERVAL_MS = 15_000;
+
+const reconcilePostMerge = createPostMergeReconciler({
+  list: async () => (await loadQueue()).jobs,
+  claim: async (expected, claimed) => {
+    const queue = rememberSeniorQueue({ ...emptyQueue(true), jobs: [expected] });
+    queue.jobs = [claimed];
+    await patchSharedSeniorQueue(queue, new Set());
+  },
+  commit: commitSharedSeniorPostMergeResult,
+}, async job => {
+  const key = await readOwnerRuntimeVariable('RENDER_API_KEY');
+  return observePostMerge(job, {
+    apiKey: extractRenderApiKey(key) ?? '',
+    // Render's built-in RENDER_SERVICE_ID identifies this process (the worker),
+    // not necessarily the public API. Verify the two explicitly bound services.
+    apiServiceId: process.env.IVX_POST_MERGE_API_SERVICE_ID ?? 'srv-d7t9ivreo5us73ftose0',
+    workerServiceId: process.env.IVX_POST_MERGE_WORKER_SERVICE_ID ?? 'srv-d9i15fg4n6ts73bn00j0',
+    productionBaseUrl: process.env.PRODUCTION_BASE_URL ?? 'https://api.ivxholding.com',
+  }, readPostgresPatrolObservations);
+});
+
+export function startPostMergeVerification(): void {
+  if (!shouldExecuteWorkerQueueInThisProcess() || !sharedSeniorQueueEnabled() || stopPostMergeVerification || queueStopping) return;
+  // Network inspection is separate from task admission, execution and stale-job recovery.
+  stopPostMergeVerification = startAdaptivePoll(async () => {
+    if (queueStopping) return false;
+    return reconcilePostMerge();
+  }, 60_000, 300_000);
+}
 
 export function startStaleJobSweep(): void {
   if (!shouldExecuteWorkerQueueInThisProcess() || stopStaleSweep || queueStopping) return;
@@ -3111,11 +3147,12 @@ export function startQueueDrainTimer(): void {
 
 startStaleJobSweep();
 startQueueDrainTimer();
+startPostMergeVerification();
 
 export function stopSeniorDeveloperQueue(): void {
   queueStopping = true;
-  stopQueueDrain?.(); stopStaleSweep?.();
-  stopQueueDrain = null; stopStaleSweep = null;
+  stopQueueDrain?.(); stopStaleSweep?.(); stopPostMergeVerification?.();
+  stopQueueDrain = null; stopStaleSweep = null; stopPostMergeVerification = null;
   for (const [jobId, controller] of activeJobControllers) recordJobInterruption(jobId, controller, 'worker_shutdown');
 }
 

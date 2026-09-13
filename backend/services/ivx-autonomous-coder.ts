@@ -1399,7 +1399,7 @@ async function readConfiguredRuntimeVariable(name: string, preferStored = false)
 }
 
 const resolveGithubToken = createAutonomousGithubTokenResolver();
-async function readOwnerRuntimeVariable(name: string): Promise<string> {
+export async function readOwnerRuntimeVariable(name: string): Promise<string> {
   if (name !== 'GITHUB_TOKEN') return readConfiguredRuntimeVariable(name);
   return resolveGithubToken(await readConfiguredRuntimeVariable('GITHUB_REPO_URL'),
     preferStored => readConfiguredRuntimeVariable('GITHUB_TOKEN', preferStored));
@@ -2889,8 +2889,9 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
     // After auto-merging the PR in code_change mode, mark COMPLETED immediately.
     // Render auto-deploys on every push to main, so an explicit deploy trigger
     // is redundant AND it restarts the service before the worker can mark
-    // COMPLETED, orphaning the job at COMMITTING (65%). The recovery sweep
-    // handles production verification after the restart.
+    // COMPLETED, orphaning the job at COMMITTING (65%). The independent durable
+    // post-merge verifier inspects the MERGE SHA after restart. Code completion
+    // does not certify a live deployment or the task's functional acceptance.
     if (input.executionMode === 'code_change' && prMerged && prMergeCommitSha) {
       finalStatus = 'COMPLETED';
       deployStatus = 'auto_deploy_triggered';

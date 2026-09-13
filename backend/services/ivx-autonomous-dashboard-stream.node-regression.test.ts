@@ -1,53 +1,48 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { handleAutonomousDashboardStreamConnection } from './ivx-autonomous-dashboard-stream';
-import type WebSocket from 'ws';
-import type { IncomingMessage } from 'node:http';
+import { dashboardStreamFixture } from './test-support/dashboard-stream-fixture';
 
-class MockWebSocket {
-  readyState = 1;
-  bufferedAmount = 0;
-  private listeners = new Map<string, Function[]>();
+test('auth precedes a dashboard snapshot and ranges preserve increasing sequence numbers', async () => {
+  const f = await dashboardStreamFixture();
+  try {
+    const snapshot = f.next('snapshot');
+    f.receive({ type: 'auth', token: 'owner-fixture', range: 'today' });
+    const first = await snapshot;
+    assert.deepEqual(f.sent.map(message => message.type), ['hello', 'auth_ok', 'snapshot']);
+    assert.equal(f.authCalls.length, 1);
+    assert.equal(f.authCalls[0].headers.get('Authorization'), 'Bearer owner-fixture');
+    assert.deepEqual(first.dashboard, { jobs: [{ id: 'fixture-job', state: 'RUNNING' }] });
+    assert.equal(first.sequence, 1);
+    assert.equal(first.intervalMs, 1000);
+    assert.ok(Number.isFinite(Date.parse(first.serverTime)));
+    const changed = f.next('snapshot');
+    f.receive({ type: 'set_range', range: '7d' });
+    assert.equal((await changed).sequence, 2);
+    assert.equal(new URL(f.snapshotCalls[1].url).searchParams.get('range'), '7d');
+  } finally { f.close(); }
+});
 
-  send(data: string) {
-    this.emit('message', Buffer.from(data));
-  }
+test('an unauthenticated request never reaches the dashboard provider', async () => {
+  const f = await dashboardStreamFixture();
+  try {
+    f.receive({ type: 'set_range', range: 'today' });
+    assert.equal(f.closeCode, 4401);
+    assert.equal(f.snapshotCalls.length, 0);
+    assert.equal(f.sent.some(message => message.type === 'snapshot'), false);
+  } finally { f.close(); }
+});
 
-  close() {}
-
-  on(event: string, listener: Function) {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, []);
-    }
-    this.listeners.get(event)?.push(listener);
-  }
-
-  emit(event: string, ...args: unknown[]) {
-    this.listeners.get(event)?.forEach(listener => listener(...args));
-  }
-}
-
-class MockReq {
-  socket = { remoteAddress: '127.0.0.1' };
-  headers = {};
-}
-
-async function simulateConnection() {
-  const mockWs = new MockWebSocket();
-  const req = new MockReq() as unknown as IncomingMessage;
-
-  await handleAutonomousDashboardStreamConnection(mockWs as unknown as WebSocket, req);
-
-  // Simulate receiving an invalid message
-  mockWs.emit('message', Buffer.from('invalid_message'));
-
-  return mockWs;
-}
-
-test('should log error and send stream_error message', async (t) => {
-  const ws = await simulateConnection();
-
-  ws.on('message', (data: Buffer) => {
-    assert.ok(data.toString().includes('stream_error'), 'Should receive stream_error message');
-  });
+test('closing during an in-flight snapshot prevents late data and polling', async () => {
+  let resolveSnapshot!: (response: Response) => void;
+  const f = await dashboardStreamFixture({ snapshot: () => new Promise(resolve => { resolveSnapshot = resolve; }) });
+  try {
+    const auth = f.next('auth_ok');
+    f.receive({ type: 'auth', token: 'owner-fixture' });
+    await auth;
+    f.close();
+    resolveSnapshot(Response.json({ ok: true, dashboard: { late: true } }));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(f.sent.some(message => message.type === 'snapshot'), false);
+    assert.equal(f.intervalCount(), 0);
+  } finally { f.close(); }
 });
