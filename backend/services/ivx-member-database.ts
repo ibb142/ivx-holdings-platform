@@ -27,6 +27,9 @@ const DEPLOYMENT_MARKER = 'ivx-member-database-v3-login-deadline-fix';
  *  this constant exists to prevent. Guarded by
  *  __tests__/owner-login-timeout-invariant.test.ts. */
 export const MEMBER_LOGIN_INNER_BUDGET_MS = 8_000;
+// A login only reads the existing fallback document. It must not bootstrap
+// schema or replay a failed read before the actual authentication request.
+export const MEMBER_LOGIN_FALLBACK_BUDGET_MS = 800;
 /** Internal marker for "upstream auth did not answer in time". Must never reach the member. */
 export const SIGN_IN_TIMEOUT_SENTINEL = 'ivx:sign-in-upstream-timeout';
 
@@ -291,9 +294,10 @@ type FallbackMemberStore = Record<string, FallbackMemberRecord>;
 const MEMBERS_STORE_FILE = (): string =>
   path.join(process.cwd(), 'logs', 'audit', 'member-database', 'fallback-members.json');
 
-async function readMemberStore(): Promise<FallbackMemberStore> {
+async function readMemberStore(signal?: AbortSignal): Promise<FallbackMemberStore> {
   const file = MEMBERS_STORE_FILE();
   if (isDurableStoreConfigured()) {
+    if (signal) return readDurableJson<FallbackMemberStore>(file, {}, { signal });
     try {
       return await readDurableJson<FallbackMemberStore>(file, {});
     } catch {
@@ -301,9 +305,10 @@ async function readMemberStore(): Promise<FallbackMemberStore> {
     }
   }
   try {
-    const raw = await readFile(file, 'utf8');
+    const raw = await readFile(file, { encoding: 'utf8', signal });
     return JSON.parse(raw) as FallbackMemberStore;
-  } catch {
+  } catch (error) {
+    if (signal && (error as NodeJS.ErrnoException)?.code !== 'ENOENT') throw error;
     return {};
   }
 }
@@ -327,8 +332,8 @@ function hashPassword(password: string, salt: string): string {
 }
 
 /** Verify a fallback member's credentials. Returns the member id on success. */
-export async function verifyFallbackMemberPassword(email: string, password: string): Promise<string | null> {
-  const store = await readMemberStore();
+export async function verifyFallbackMemberPassword(email: string, password: string, signal?: AbortSignal): Promise<string | null> {
+  const store = await readMemberStore(signal);
   const record = Object.values(store).find((m) => m.email === email.toLowerCase());
   if (!record) return null;
   const candidate = Buffer.from(hashPassword(password, record.passwordSalt), 'hex');
@@ -573,7 +578,7 @@ export interface MemberLoginResult {
   /** Set when the failure is an INFRASTRUCTURE fault (upstream auth slow/unreachable),
    *  not a credential rejection. The route maps this to HTTP 503 so a member with a
    *  CORRECT password is never told "invalid email or password". */
-  errorCode?: 'auth_upstream_timeout';
+  errorCode?: 'auth_upstream_timeout' | 'auth_upstream_unavailable' | 'auth_rate_limited';
   /** True when the caller should simply retry — nothing is wrong with the credentials. */
   retryable?: boolean;
   deploymentMarker: string;
@@ -661,7 +666,19 @@ export async function loginMember(email: string, password: string): Promise<Memb
   }
 
   // 1. Durable fallback store first (covers members registered during Supabase email rate-limit).
-  const fallbackUserId = await verifyFallbackMemberPassword(normalizedEmail, password);
+  let fallbackUserId: string | null = null;
+  let fallbackUnavailable = false;
+  try {
+    fallbackUserId = await runAbortableAuthAttempt(
+      signal => verifyFallbackMemberPassword(normalizedEmail, password, signal),
+      MEMBER_LOGIN_FALLBACK_BUDGET_MS,
+      SIGN_IN_TIMEOUT_SENTINEL,
+    );
+  } catch {
+    // Supabase members can still sign in. A negative Supabase result cannot
+    // establish bad credentials for a fallback member whose store is unavailable.
+    fallbackUnavailable = true;
+  }
   if (fallbackUserId) {
     // Fire-and-forget: updateMemberLastLogin + audit log + mintSession — all non-blocking
     // with internal timeouts so a stalled Supabase never hangs the login response.
@@ -734,15 +751,22 @@ export async function loginMember(email: string, password: string): Promise<Memb
       const errorMessage = (error.message || error.msg || JSON.stringify(error) || 'unknown error').trim();
       const msg = errorMessage.toLowerCase();
       if (msg.includes('invalid login credentials') || msg.includes('invalid credentials')) {
+        if (fallbackUnavailable) return {
+          success: false,
+          message: 'Sign-in is temporarily unavailable. Please try again in a moment.',
+          errorCode: 'auth_upstream_unavailable',
+          retryable: true,
+          deploymentMarker: DEPLOYMENT_MARKER,
+        };
         return { success: false, message: 'Invalid email or password.', deploymentMarker: DEPLOYMENT_MARKER };
       }
       if (msg.includes('email not confirmed')) {
         return { success: false, message: 'Please verify your email before signing in.', requiresVerification: true, deploymentMarker: DEPLOYMENT_MARKER };
       }
-      if (msg.includes('rate limit')) {
-        return { success: false, message: 'Too many attempts. Please wait a minute and try again.', deploymentMarker: DEPLOYMENT_MARKER };
+      if (error.status === 429 || msg.includes('rate limit')) {
+        return { success: false, message: 'Too many attempts. Please wait a minute and try again.', errorCode: 'auth_rate_limited', retryable: true, deploymentMarker: DEPLOYMENT_MARKER };
       }
-      return { success: false, message: `Login failed: ${errorMessage}`, deploymentMarker: DEPLOYMENT_MARKER };
+      return { success: false, message: 'Sign-in is temporarily unavailable. Please try again in a moment.', errorCode: 'auth_upstream_unavailable', retryable: true, deploymentMarker: DEPLOYMENT_MARKER };
     }
     const userId = data.user?.id;
     if (!userId) {
@@ -797,8 +821,8 @@ export async function loginMember(email: string, password: string): Promise<Memb
         deploymentMarker: DEPLOYMENT_MARKER,
       };
     }
-    console.error('[MemberDB] Login exception:', message);
-    return { success: false, message, deploymentMarker: DEPLOYMENT_MARKER };
+    console.error('[MemberDB] Login transport unavailable');
+    return { success: false, message: 'Sign-in is temporarily unavailable. Please try again in a moment.', errorCode: 'auth_upstream_unavailable', retryable: true, deploymentMarker: DEPLOYMENT_MARKER };
   }
 }
 
