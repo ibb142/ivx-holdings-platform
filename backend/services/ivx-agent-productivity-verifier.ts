@@ -40,7 +40,7 @@ export function parseLandingProductivityEvidence(summary: string): ParsedLanding
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const agentNumber = Number(parsed.agent_number);
-    const productiveSeconds = Number(parsed.productive_seconds);
+    const productiveSeconds = parseInt(String(parsed.productive_seconds), 10);
     if (!Number.isFinite(productiveSeconds) || productiveSeconds <= 0) return null;
     const status = String(parsed.status ?? '');
     const startedAt = String(parsed.started_at ?? '');
