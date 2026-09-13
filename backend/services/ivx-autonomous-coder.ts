@@ -41,6 +41,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { requestIVXAIText } from '../ivx-ai-runtime';
+import { diagnosePatchResponse, PATCH_JSON_GUIDANCE } from './ivx-patch-response';
 import { resolveRuntimeCommand } from './ivx-runtime-resolver';
 import { extractRenderApiKey, extractRenderServiceId } from './ivx-render-credentials';
 import { createAutonomousGithubTokenResolver } from './ivx-autonomous-github-credentials';
@@ -855,14 +856,15 @@ function pickTargetTestFile(goal: string, changedFiles: string[], projectRoot: s
 
 // ── LLM PATCH GENERATION ─────────────────────────────────────────────────────
 
-const PATCH_SYSTEM_PROMPT = `You are the IVX Autonomous Coder — a real senior developer engine.
+export const PATCH_SYSTEM_PROMPT = String.raw`You are the IVX Autonomous Coder — a real senior developer engine.
 Given a GOAL and FILE CONTENTS, generate a JSON patch to achieve the goal.
 
 OUTPUT FORMAT (strict JSON, no markdown fences, no prose before or after):
 {"rootCause":"one-line root cause","technicalPlan":"one-line plan","operations":[{"path":"backend/services/example.ts","kind":"replace_exact","oldText":"the exact text to find","newText":"the replacement text","reason":"why this change"}]}
 
 Rules:
-- Respond with JSON ONLY. No \`\`\`json fences. No explanation. No prose.
+- ${PATCH_JSON_GUIDANCE}
+- Respond with JSON ONLY. No Markdown fences. No explanation. No prose.
 - kind must be "replace_exact" (replace oldText with newText) or "create_file" (new file).
 - oldText must be an EXACT substring of the file content (copy it verbatim from the FILE CONTENTS above).
 - For replace_exact: copy a UNIQUE 20-80 character snippet from the target file as oldText. Do NOT use the entire file as oldText.
@@ -912,58 +914,6 @@ function buildPatchUserPrompt(goal: string, files: { path: string; content: stri
   const lesson = repairRecoveryLesson(failureContext);
   const recoveryBlock = lesson ? `\n\n--- VERSIONED RECOVERY RULE ${lesson.id} ---\n${lesson.instruction}` : '';
   return `GOAL:\n${goal}\n\nFILES:\n${fileBlocks}${failureBlock}${recoveryBlock}`;
-}
-
-function parseLLMPatchResponse(response: string): { rootCause: string; technicalPlan: string; operations: IVXAutonomousCoderPatchOperation[] } | null {
-  try {
-    // Strip markdown code fences if present (be aggressive — LLMs love fences)
-    const cleaned = response.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-    // Some LLMs wrap the JSON in <json>...</json> or return prose before/after
-    const start = cleaned.indexOf('{');
-    const end = cleaned.lastIndexOf('}');
-    if (start < 0 || end < 0 || end <= start) return null;
-    let jsonStr = cleaned.slice(start, end + 1);
-    let parsed: { rootCause?: string; technicalPlan?: string; operations?: Array<{ path?: string; kind?: string; oldText?: string; newText?: string; reason?: string }> };
-    try {
-      parsed = JSON.parse(jsonStr);
-    } catch {
-      // Permissive fallback: strip trailing commas + fix smart quotes LLMs sometimes emit
-      const fixed = jsonStr
-        .replace(/,\s*([}\]])/g, '$1')
-        .replace(/[\u201c\u201d]/g, '"')
-        .replace(/[\u2018\u2019]/g, "'");
-      parsed = JSON.parse(fixed);
-    }
-    if (!Array.isArray(parsed.operations)) return null;
-    const operations: IVXAutonomousCoderPatchOperation[] = [];
-    for (const op of parsed.operations) {
-      if (typeof op.path !== 'string' || typeof op.kind !== 'string') continue;
-      if (op.kind !== 'replace_exact' && op.kind !== 'create_file') continue;
-      if (typeof op.oldText !== 'string' || typeof op.newText !== 'string') continue;
-      operations.push({
-        path: op.path,
-        kind: op.kind,
-        oldText: op.oldText,
-        newText: op.newText,
-        reason: typeof op.reason === 'string' ? op.reason : '',
-      });
-    }
-    // Empty operations is valid when the LLM signals "already satisfied" — return it so the loop exits cleanly (no phantom patch)
-    if (operations.length === 0) {
-      return {
-        rootCause: typeof parsed.rootCause === 'string' ? parsed.rootCause : 'no operations needed',
-        technicalPlan: typeof parsed.technicalPlan === 'string' ? parsed.technicalPlan : 'no change required',
-        operations: [],
-      };
-    }
-    return {
-      rootCause: typeof parsed.rootCause === 'string' ? parsed.rootCause : 'LLM-generated patch',
-      technicalPlan: typeof parsed.technicalPlan === 'string' ? parsed.technicalPlan : 'Replace exact text per operations',
-      operations,
-    };
-  } catch {
-    return null;
-  }
 }
 
 /** Promise-race timeout wrapper so the LLM call can never hang the loop.
@@ -2413,11 +2363,12 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
       break;
     }
 
-    const parsed = parseLLMPatchResponse(llmResponse);
+    const diagnosis = diagnosePatchResponse(llmResponse);
+    const parsed = diagnosis.plan;
     if (!parsed) {
       anyPatchGenerated = false;
       llmAttempts += 1;
-      lastPatchFailureReason = 'LLM response could not be parsed as JSON patch.';
+      lastPatchFailureReason = diagnosis.error ?? 'PATCH_JSON_INVALID';
       const iteration: IVXAutonomousCoderIteration = {
         iteration: iterationCount,
         patchGenerated: false,
@@ -2426,11 +2377,11 @@ async function runIVXAutonomousCoderInner(input: IVXAutonomousCoderInput, starte
         testsPassed: false,
         typecheckRun: false,
         typecheckPassed: false,
-        failureSummary: 'LLM response could not be parsed as JSON patch.',
+        failureSummary: lastPatchFailureReason,
         revised: false,
       };
       iterations.push(iteration);
-      lastFailureContext = `LLM response could not be parsed. Response: ${truncate(llmResponse, 1000)}`;
+      lastFailureContext = `${lastPatchFailureReason}\n${PATCH_JSON_GUIDANCE}\nRejected response: ${truncate(llmResponse, 1000)}`;
       if (llmAttempts < MAX_LLM_ATTEMPTS) {
         onPhase?.('revising', `Iteration ${iterationCount}: unparseable response; requesting revision.`);
         iterationCount -= 1;

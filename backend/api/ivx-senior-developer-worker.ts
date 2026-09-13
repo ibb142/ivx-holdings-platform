@@ -15,7 +15,7 @@ import {
   getSeniorDeveloperJob,
   getSeniorDeveloperLastProof,
   listSeniorDeveloperJobs,
-  listSeniorDeveloperProofLedger,
+  getSeniorDeveloperLedgerPage,
   resumeSeniorDeveloperJob,
   type IVXWorkerJobInput,
 } from '../services/ivx-senior-developer-worker';
@@ -478,8 +478,14 @@ export async function handleSeniorDeveloperWorkerJobsRequest(request: Request): 
 export async function handleSeniorDeveloperWorkerLedgerRequest(request: Request): Promise<Response> {
   try {
     await assertIVXOwnerOnly(request);
-    const ledger = await listSeniorDeveloperProofLedger(25);
-    return ownerOnlyJson({ ok: true, ownerOnly: true, marker: IVX_SENIOR_DEV_WORKER_MARKER, ledger, secretValuesReturned: false });
+    const params = new URL(request.url).searchParams;
+    const limit = Number(params.get('limit') ?? '25'), offset = Number(params.get('offset') ?? '0');
+    const version = params.get('version');
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50 || !Number.isSafeInteger(offset) || offset < 0 || offset > 200
+      || (version !== null && !Number.isFinite(Date.parse(version)))) return ownerOnlyJson({ ok: false, error: 'Invalid ledger pagination' }, 400);
+    const page = await getSeniorDeveloperLedgerPage(limit, offset, version);
+    return ownerOnlyJson({ ok: true, ownerOnly: true, marker: IVX_SENIOR_DEV_WORKER_MARKER,
+      ledger: page.entries, pagination: { limit, offset: page.offset, total: page.total, nextOffset: page.nextOffset, version: page.updatedAt }, secretValuesReturned: false });
   } catch (error) {
     return errorResponse(error);
   }

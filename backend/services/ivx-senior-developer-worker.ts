@@ -1,5 +1,6 @@
+import { readLedgerEntries, assertLedgerPageRequest, type SeniorLedgerPage } from './ivx-senior-ledger-page';
 import { PollBackoff, startAdaptivePoll } from './ivx-adaptive-poll';
-import { readSharedSeniorActiveOwnerJob, sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult, readSharedSeniorDocument, readSharedSeniorWorkQueue, readSharedSeniorJob, appendSharedSeniorProofEvent } from './ivx-senior-shared-queue';
+import { readSharedSeniorLedgerPage, readSharedSeniorActiveOwnerJob, sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult, readSharedSeniorDocument, readSharedSeniorWorkQueue, readSharedSeniorJob, appendSharedSeniorProofEvent } from './ivx-senior-shared-queue';
 import { SENIOR_QUEUE_ACTIVE_STATUSES } from './ivx-senior-work-queue';
 import { assertSeniorQueuePostgresAuthority, preferDirectTransport } from './ivx-postgres-autonomous-task-store';
 import type { CoderWorkspaceEvidence } from './ivx-coder-workspace';
@@ -1916,9 +1917,21 @@ export async function listSeniorDeveloperJobs(limit: number = 25): Promise<IVXWo
 
 /** Read the durable proof ledger (newest first). */
 export async function listSeniorDeveloperProofLedger(limit: number = 25): Promise<IVXWorkerJobResult[]> {
+  const capped = Number.isFinite(limit) ? Math.max(1, Math.min(MAX_LEDGER_RETAINED, Math.floor(limit))) : 25;
+  if (sharedSeniorQueueEnabled()) return readLedgerEntries(capped, readSharedSeniorLedgerPage<IVXWorkerJobResult>);
   const ledger = await loadLedger();
-  const capped = Math.max(1, Math.min(MAX_LEDGER_RETAINED, Math.floor(limit)));
   return ledger.entries.slice(0, capped);
+}
+
+/** Owner-authenticated API pagination; a changed revision requires starting again. */
+export async function getSeniorDeveloperLedgerPage(limit = 25, offset = 0, version: string | null = null): Promise<SeniorLedgerPage<IVXWorkerJobResult>> {
+  assertLedgerPageRequest(limit, offset, version);
+  if (sharedSeniorQueueEnabled()) return readSharedSeniorLedgerPage(limit, offset, version);
+  const ledger = await loadLedger();
+  if (version !== null && ledger.updatedAt !== version) throw new Error('Ledger changed while paging');
+  const entries = ledger.entries.slice(offset, offset + limit);
+  return { entries, total: ledger.entries.length, offset, updatedAt: ledger.updatedAt,
+    nextOffset: offset + entries.length < ledger.entries.length ? offset + entries.length : null };
 }
 
 /** Compact last-proof summary read directly from the durable worker ledger. */
@@ -1936,8 +1949,7 @@ export type IVXWorkerLastProof = {
  * it to the compact owner-facing shape. Returns nulls when the ledger is empty.
  */
 export async function getSeniorDeveloperLastProof(): Promise<IVXWorkerLastProof> {
-  const ledger = await loadLedger();
-  const latest = ledger.entries[0] ?? null;
+  const latest = (await listSeniorDeveloperProofLedger(1))[0] ?? null;
   if (!latest) {
     return {
       lastJobId: null,

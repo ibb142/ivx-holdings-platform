@@ -22,6 +22,7 @@ import {
   readPostgresFleetSloTasks,
   globalAIBudgetRpc,
   readSeniorQueuePostgresDocument,
+  seniorQueuePostgresRpc,
   releasePostgresWorkerInstanceTasks,
 } from './ivx-postgres-autonomous-task-store';
 
@@ -40,6 +41,30 @@ function configureAtomicQueue(): void {
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test-only';
   process.env.IVX_AUTONOMOUS_WORKER_INSTANCE_ID = 'render-worker-test-01';
 }
+
+test('only critical senior checkpoint writes get the longer deadline; claims and pages stay bounded', async () => {
+  configureAtomicQueue();
+  process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://checkpointdeadline.supabase.co';
+  process.env.SUPABASE_DB_URL = 'postgresql://postgres:fixture@db.checkpointdeadline.supabase.co/postgres';
+  const calls: string[] = [];
+  const client = Object.assign(new EventEmitter(), {
+    query: async (sql: string) => { calls.push(sql); return { rows: [{ result: null }] }; }, release: () => {},
+  });
+  const connect = spyOn(Pool.prototype, 'connect').mockImplementation(() => Promise.resolve(client) as never);
+  const rest = spyOn(globalThis, 'fetch').mockImplementation(() => { throw new Error('Direct checkpoint must never replay through REST'); });
+  try {
+    for (const name of ['ivx_senior_queue_patch_receipt', 'ivx_senior_ledger_put', 'ivx_senior_post_merge_commit',
+      'ivx_senior_queue_claim', 'ivx_senior_ledger_page'] as const) {
+      calls.length = 0;
+      await seniorQueuePostgresRpc(name, {});
+      const checkpoint = !['ivx_senior_queue_claim', 'ivx_senior_ledger_page'].includes(name);
+      expect(calls[0]).toContain(`SET LOCAL statement_timeout = '${checkpoint ? 3000 : 2500}ms'`);
+      expect(calls.filter(sql => sql.startsWith('select public.'))).toHaveLength(1);
+      expect(calls.at(-1)).toBe('COMMIT');
+    }
+    expect(rest).not.toHaveBeenCalled();
+  } finally { rest.mockRestore(); connect.mockRestore(); }
+});
 
 test('saturated task and assignment pools leave heartbeats available within the existing connection budget', async () => {
   configureAtomicQueue(); process.env.CI = 'true';

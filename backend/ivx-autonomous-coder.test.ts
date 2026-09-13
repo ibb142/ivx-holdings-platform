@@ -10,10 +10,12 @@ import {
   runAutonomousCoderCommand,
   isPilotLabelChangeGoal,
   IVX_AUTONOMOUS_CODER_MARKER,
+  PATCH_SYSTEM_PROMPT,
   type IVXAutonomousCoderInput,
   type IVXAutonomousCoderTestResult,
 } from './services/ivx-autonomous-coder';
 import { PILOT_LABEL, PILOT_LABEL_TARGET, describePilotSentinel } from './services/ivx-autonomous-coder-pilot';
+import { diagnosePatchResponse } from './services/ivx-patch-response';
 
 const TMP_ROOT = path.join(os.tmpdir(), `ivx-ac-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
 
@@ -45,6 +47,33 @@ async function makeIsolatedRepo(label: string): Promise<{
 }
 
 describe('validation before publication', () => {
+  it('provides valid JSON examples with preserved source newlines to the actual LLM', () => {
+    const examples = PATCH_SYSTEM_PROMPT.split('\n').filter(line => line.startsWith('{"rootCause":'));
+    expect(examples).toHaveLength(4);
+    for (const example of examples) expect(diagnosePatchResponse(example).error).toBeNull();
+    expect(diagnosePatchResponse(examples[2]!).plan!.operations[0]!.newText).toContain('\n');
+  });
+  it('requires an executable regression for IA-015 before mutating source or publishing', async () => {
+    const repo = await makeIsolatedRepo('video-missing-regression');
+    const source = 'backend/api/ivx-public-features.ts';
+    const original = 'export function videoAttachments(value: string[]) { return []; }';
+    await repo.fileWriter(source, original);
+    let writes = 0, commits = 0;
+    const proof = await runIVXAutonomousCoder({
+      taskId: `landing-remediation:${'a'.repeat(40)}:deals.videos-present`,
+      goal: `[TEMPLATE_MODE:BUG_FIX] Repair deals.videos-present by preserving video attachments in ${source}.`,
+      executionMode: 'code_change', approvalPolicy: 'owner_gated', ownerId: 'regression-test',
+      projectRoot: repo.root, maxLlmCalls: 1, fileReader: repo.fileReader,
+      fileWriter: async (file, content) => { writes++; await repo.fileWriter(file, content); },
+      llmCaller: async () => JSON.stringify({ rootCause: 'Attachments discarded', technicalPlan: 'Preserve attachments',
+        operations: [{ path: source, kind: 'replace_exact', oldText: 'return [];', newText: 'return value;', reason: 'Preserve video sources' }] }),
+      commitFn: async () => { commits++; throw new Error('Must not publish without regression'); },
+    });
+    expect(proof.finalStatus).toBe('BLOCKED');
+    expect(proof.iterations.map(iteration => iteration.failureSummary).join('\n')).toMatch(/REGRESSION|TEST_REQUIRED/);
+    expect(writes).toBe(0); expect(commits).toBe(0);
+    expect(await repo.fileReader(source)).toBe(original);
+  });
   for (const allowRevision of [false, true]) {
     it(`${allowRevision ? 'revises and tests' : 'blocks'} a code patch without an executable test`, async () => {
       const repo = await makeIsolatedRepo(`missing-validation-${allowRevision}`);

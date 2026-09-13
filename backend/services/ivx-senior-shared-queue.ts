@@ -1,3 +1,4 @@
+import { assertLedgerPageRequest, type SeniorLedgerPage } from './ivx-senior-ledger-page';
 import { readSeniorActiveOwnerJobPostgres, autonomousWorkerInstanceId, preferDirectTransport, seniorQueuePostgresRpc, readSeniorQueuePostgresDocument, readSeniorQueuePostgresJob, readSeniorWorkQueuePostgres, appendSeniorProofPostgresEvent } from './ivx-postgres-autonomous-task-store';
 import { appendDurableEvent, durableKeyForFile, readDurableJson } from './ivx-durable-store';
 import { SENIOR_QUEUE_ACTIVE_STATUSES, isSeniorQueueWorkItem } from './ivx-senior-work-queue';
@@ -150,5 +151,28 @@ export async function readSharedSeniorActiveOwnerJob<T extends Job & { ownerId: 
       if (job.ownerId === ownerId && (SENIOR_QUEUE_ACTIVE_STATUSES as readonly string[]).includes(job.status)) return job;
     }
     return null;
+  });
+}
+
+/** Read one revision-fenced page without transferring the retained proof history. */
+export async function readSharedSeniorLedgerPage<T extends { jobId: string }>(limit = 25, offset = 0, version: string | null = null): Promise<SeniorLedgerPage<T>> {
+  assertLedgerPageRequest(limit, offset, version);
+  const direct = preferDirectTransport();
+  return sharedRead(`ledger-page:${direct}:${limit}:${offset}:${version ?? ''}`, async () => {
+    const body = { p_limit: limit, p_offset: offset, p_version: version };
+    const page = direct
+      ? await seniorQueuePostgresRpc<SeniorLedgerPage<T>>('ivx_senior_ledger_page', body)
+      : await (await requestRpc('ivx_senior_ledger_page', body)).json() as SeniorLedgerPage<T>;
+    if (!page || !Array.isArray(page.entries) || page.entries.length > limit || page.offset !== offset
+      || !Number.isSafeInteger(page.total) || page.total < 0
+      || page.entries.some(entry => !entry || typeof entry.jobId !== 'string' || !entry.jobId)
+      || new Set(page.entries.map(entry => entry.jobId)).size !== page.entries.length
+      || (page.updatedAt === null ? page.total !== 0 : !Number.isFinite(Date.parse(page.updatedAt)))
+      || (version !== null && page.updatedAt !== version)
+      || page.entries.length !== Math.max(0, Math.min(limit, page.total - offset))
+      || page.nextOffset !== (offset + page.entries.length < page.total ? offset + page.entries.length : null)) {
+      throw new Error('Invalid or changed ledger page; no partial proof returned');
+    }
+    return page;
   });
 }
