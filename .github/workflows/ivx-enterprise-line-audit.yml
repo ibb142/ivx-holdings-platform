@@ -1,6 +1,11 @@
 name: IVX Enterprise Line-by-Line Quality Audit
 
 on:
+  pull_request:
+    paths:
+      - 'qa/enterprise-p0-rules*'
+      - 'qa/ivx-enterprise-line-audit.mjs'
+      - '.github/workflows/ivx-enterprise-line-audit.yml'
   push:
     branches: [main]
     paths:
@@ -24,7 +29,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify-p0-detector:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: node --test qa/enterprise-p0-rules.test.mjs
+
   repository-line-audit:
+    if: github.event_name != 'pull_request'
+    needs: verify-p0-detector
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -45,6 +61,10 @@ jobs:
         id: line_audit
         continue-on-error: true
         run: node qa/ivx-enterprise-line-audit.mjs
+
+      - name: Verify P0 detection regressions
+        id: p0_regressions
+        run: node --test qa/enterprise-p0-rules.test.mjs
 
       - name: Enterprise Quality Firewall structural gates
         id: firewall
@@ -93,13 +113,14 @@ jobs:
           jq -n \
             --arg marker 'IVX-ENTERPRISE-LINE-BY-LINE-CERT-GATE-V1' \
             --arg sourceSha "$GITHUB_SHA" \
+            --arg p0Regressions '${{ steps.p0_regressions.outcome }}' \
             --arg lineAudit '${{ steps.line_audit.outcome }}' \
             --arg firewall '${{ steps.firewall.outcome }}' \
             --arg consistency '${{ steps.consistency.outcome }}' \
             --arg backendTypecheck '${{ steps.backend_typecheck.outcome }}' \
             --arg expoTypecheck '${{ steps.expo_typecheck.outcome }}' \
             --arg tests '${{ steps.tests.outcome }}' \
-            '{marker:$marker,sourceSha:$sourceSha,generatedAt:(now|todate),gates:{lineAudit:$lineAudit,qualityFirewall:$firewall,repositoryConsistency:$consistency,backendTypecheck:$backendTypecheck,expoTypecheck:$expoTypecheck,focusedTests:$tests},certified:([$lineAudit,$firewall,$consistency,$backendTypecheck,$expoTypecheck,$tests]|all(.=="success"))}' \
+            '{marker:$marker,sourceSha:$sourceSha,generatedAt:(now|todate),gates:{p0Regressions:$p0Regressions,lineAudit:$lineAudit,qualityFirewall:$firewall,repositoryConsistency:$consistency,backendTypecheck:$backendTypecheck,expoTypecheck:$expoTypecheck,focusedTests:$tests},certified:([$p0Regressions,$lineAudit,$firewall,$consistency,$backendTypecheck,$expoTypecheck,$tests]|all(.=="success"))}' \
             > qa/evidence/enterprise-cert-gate.json
           cat qa/evidence/enterprise-cert-gate.json
 
@@ -123,6 +144,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test '${{ steps.p0_regressions.outcome }}' = success
           test '${{ steps.line_audit.outcome }}' = success
           test '${{ steps.firewall.outcome }}' = success
           test '${{ steps.consistency.outcome }}' = success

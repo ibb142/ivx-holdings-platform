@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { hasHardcodedSecret, hasTypecheckDisable } from './enterprise-p0-rules.mjs';
 
 const ROOT = process.cwd();
 const EVIDENCE_DIR = path.join(ROOT, 'qa', 'evidence');
@@ -50,12 +51,12 @@ const rules = [
   },
   {
     id: 'TS_NOCHECK',
-    test: (line) => /@ts-nocheck/.test(line),
+    test: hasTypecheckDisable,
     message: 'TypeScript checking disabled for file.',
   },
   {
     id: 'HARDCODED_SECRET',
-    test: (line, file) => !/\.example$|fixtures|test|spec|docs\//.test(file) && /(?:AKIA[0-9A-Z]{16}|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|(?:secret|api[_-]?key|token|password)\s*[:=]\s*['"][A-Za-z0-9_\-\/.+=]{24,}['"])/i.test(line),
+    test: hasHardcodedSecret,
     message: 'Possible hard-coded credential or private key material.',
   },
   {
