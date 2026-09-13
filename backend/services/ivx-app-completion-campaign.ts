@@ -449,6 +449,7 @@ function statusFromDispatcherRecord(record: CampaignJobRecord): { status: ItemSt
 }
 
 const DEFAULT_CONTROL: CampaignControlState = { paused: false, stopped: false, pausedAgents: [], stoppedAgents: [] };
+export const OWNER_CONTROL_READ_TIMEOUT_MS = 2_000;
 
 export async function loadControlState(options: { required?: boolean } = {}): Promise<CampaignControlState> {
   if (!isDurableStoreConfigured()) {
@@ -456,7 +457,14 @@ export async function loadControlState(options: { required?: boolean } = {}): Pr
     cachedControl = { ...DEFAULT_CONTROL };
     return cachedControl;
   }
-  const stored = await readDurableJson<{ control?: CampaignControlState } | null>(STATE_KEY, null);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error('owner_control_read_timeout_2000ms')), OWNER_CONTROL_READ_TIMEOUT_MS);
+  let stored: { control?: CampaignControlState } | null;
+  try {
+    stored = await readDurableJson<{ control?: CampaignControlState } | null>(STATE_KEY, null, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
   const control = stored?.control;
   if (options.required && (!control || typeof control.paused !== 'boolean' || typeof control.stopped !== 'boolean'
     || !Array.isArray(control.pausedAgents) || !Array.isArray(control.stoppedAgents)
