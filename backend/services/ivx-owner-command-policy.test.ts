@@ -64,6 +64,7 @@ function durableControl(mode: 'unavailable' | 'missing' | 'malformed' | 'write-f
   const state = { paused: true, stopped: false, pausedAgents: [1], stoppedAgents: [2] };
   const writes: unknown[] = [];
   const context: Record<string, any> = {
+    AbortController, setTimeout, clearTimeout, OWNER_CONTROL_READ_TIMEOUT_MS: 2_000,
     cachedControl: null, DEFAULT_CONTROL: { paused: false, stopped: false, pausedAgents: [], stoppedAgents: [] },
     STATE_KEY: 'isolated-control', EVENTS_KEY: 'isolated-events', IVX_APP_COMPLETION_MARKER: 'isolated-test',
     nowIso: () => '2026-09-11T00:00:00Z', isDurableStoreConfigured: () => true,
@@ -87,7 +88,7 @@ function durableControl(mode: 'unavailable' | 'missing' | 'malformed' | 'write-f
 test('missing, malformed or unavailable durable controls cannot become a default resume', async () => {
   for (const mode of ['unavailable', 'missing', 'malformed'] as const) {
     const f = durableControl(mode);
-    await expect(f.context.update('resume_all')).rejects.toThrow();
+    await expect(f.context.update('resume_all')).rejects.toThrow(mode === 'unavailable' ? 'DATABASE_PRESSURE' : 'missing or malformed');
     expect(f.writes).toEqual([]);
   }
 });
