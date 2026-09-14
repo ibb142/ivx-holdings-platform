@@ -59,6 +59,9 @@ export function normalizePublicLandingDeals(rows: readonly Record<string, any>[]
     .filter((row) => !(canonicalCasaExists && String(row.id ?? '') === LEGACY_CASA_PLACEHOLDER_ID))
     .map((row): Record<string, any> => {
       const normalized: Record<string, any> = { ...row };
+      if (row.photos && Array.isArray(row.photos)) {
+        normalized.photos = row.photos.filter((photo) => /^https:/.test(photo));
+      }
       if (String(row.id ?? '') === 'JV-202603-5190') normalized.title = 'IVX JACKSONVILLE PRIME';
       normalized.videos = [...(row.videos || []), ...(row.reels || [])].filter((v) => /\.(mp4|webm)$/.test(v)).map((video: string) => ({ mime_type: /\.mp4$/i.test(video) ? 'video/mp4' : 'video/unknown', video }));
       return normalized;

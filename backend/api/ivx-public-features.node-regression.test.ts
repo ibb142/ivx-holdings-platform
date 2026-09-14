@@ -13,4 +13,14 @@ describe('normalizePublicLandingDeals', () => {
     assert.deepEqual(result[0].videos, [{ mime_type: 'video/mp4', video: 'video1.mp4' }, { mime_type: 'video/unknown', video: 'video2.webm' }]);
     assert.deepEqual(result[1].videos, []);
   });
+
+describe('normalizePublicLandingDeals with photos', () => {
+  test('should include only resolvable photos', () => {
+    const dealsWithPhotos = [
+      { id: 'deal-03', photos: ['http://image1.jpg', 'https://image2.jpg'] },
+    ];
+    const result = normalizePublicLandingDeals(dealsWithPhotos);
+    assert.deepEqual(result[0].photos, ['https://image2.jpg']);
+  });
+});
 });
