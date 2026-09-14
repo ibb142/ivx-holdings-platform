@@ -25,6 +25,7 @@ export async function measureMediaWeight(fetchImpl: typeof fetch, url: string, b
     const response = await request('GET');
     status = response.status;
     contentType = response.headers.get('content-type') || '';
+    if (response.status === 404) return result(0, 'resource not found');
     if (!response.ok) { await response.body?.cancel(); return result(0); }
     if (status === 206) {
       const range = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(response.headers.get('content-range') || '');
