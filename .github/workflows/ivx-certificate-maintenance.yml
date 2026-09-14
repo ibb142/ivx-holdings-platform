@@ -31,3 +31,20 @@ jobs:
           # Stop cleanup/upload steps as well as the device test.
           gh api --method POST "repos/$repo/actions/runs/$run_id/force-cancel"
           gh api "repos/$repo/actions/runs/$run_id" --jq '{id,status,conclusion,head_sha}'
+      - name: Retire four verified superseded diagnostic artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const targets = [{"id":10367386400,"name":"ivx-dashboard-chat-e2e-498ec19619737b16f1cc5853cb6142c3e1680bd1","digest":"sha256:047546e11338dadf324994738b67a0b3b10ec5bab78b7eae91df4c7c19544d8c"},{"id":10368208936,"name":"ivx-dashboard-chat-e2e-c2d5a451105bdeba5bb7b311f5e1d8f9ff585207","digest":"sha256:fe0e74e547e8f6f736c2e8da77a90a9f75764cdb658a25c8a054cd5c6248bd7c"},{"id":10369723828,"name":"ivx-dashboard-chat-e2e-e796c1ff8357a1a4a74950de3bf012b7b6971206","digest":"sha256:c9cce89bf673eff0132d7c29b200f238bde332e468d5d1105a920f3171c8d3c0"},{"id":10370433092,"name":"ivx-dashboard-chat-e2e-52f5eab9cb67d86be99f320d260bd1c44d3f341c","digest":"sha256:f9ae0cf9199d8adc5f9f358c5f2047aadde2c3fed213ea0b712fb81131a88c55"}];
+            for (const target of targets) {
+              let metadata;
+              try { metadata = await github.rest.actions.getArtifact({ ...context.repo, artifact_id: target.id }); }
+              catch (error) { if (error.status === 404) { core.info('Artifact already absent: ' + target.id); continue; } throw new Error('ARTIFACT_READ_FAILED'); }
+              if (metadata.data.name !== target.name || metadata.data.digest !== target.digest) throw new Error('ARTIFACT_IDENTITY_CHANGED');
+              await github.rest.actions.deleteArtifact({ ...context.repo, artifact_id: target.id });
+              let absent = false;
+              try { await github.rest.actions.getArtifact({ ...context.repo, artifact_id: target.id }); }
+              catch (error) { if (error.status === 404) absent = true; else throw new Error('ARTIFACT_READBACK_FAILED'); }
+              if (!absent) throw new Error('ARTIFACT_STILL_AVAILABLE');
+              core.info('Artifact retired and absence verified: ' + target.id);
+            }
