@@ -26,17 +26,16 @@ async function scenario(body: string) {
     spyOn(Client.prototype, 'connect').mockImplementation(callback => {
       connections++; queueMicrotask(() => callback(null));
     });
-    spyOn(Client.prototype, 'query').mockImplementation(async (sql, values) => {
+    spyOn(Client.prototype, 'query').mockImplementation(async (sql, _values) => {
       if (!sql.startsWith('SELECT ')) return { rows: [], command: sql === 'ROLLBACK' ? 'ROLLBACK' : 'COMMIT' };
       reads++;
       if (directMode === 'fail') throw new Error('direct transport unavailable');
-      if (directMode === 'missing') return { rows: [] };
-      const rows = values[0] === 'emergency_stop'
-        ? [{ control_name: 'emergency_stop', active: directMode === 'invalid' ? 'false' : active }]
-        : [{ value: { control: directMode === 'invalid' ? {} : control() } }];
-      assert(['emergency_stop', 'app-completion/campaign-state.json'].includes(values[0]));
       if (directMode === 'late') await new Promise(resolve => setTimeout(resolve, 2400));
-      return { rows };
+      if (directMode === 'missing') return { rows: [{ emergency_rows: [], campaign_documents: [] }] };
+      return { rows: [{
+        emergency_rows: [{ control_name: 'emergency_stop', active: directMode === 'invalid' ? 'false' : active }],
+        campaign_documents: [{ control: directMode === 'invalid' ? {} : control() }],
+      }] };
     });
     spyOn(Client.prototype, 'end').mockImplementation(function () { this.emit('end'); return Promise.resolve(); });
     const { loadControlState } = await import('./backend/services/ivx-app-completion-campaign.ts');
@@ -55,7 +54,7 @@ test('slow REST recovers both real controls before the truth deadline and observ
     const first = await Promise.all([loadControlState({ required: true }), assertEmergencyStopInactive('initial')]);
     assert.equal(first[0].paused, false);
     assert.equal(first[1].source, 'postgres');
-    assert.equal(reads, 2);
+    assert.equal(reads, 1);
     assert.equal(connections, 1);
     assert(performance.now() - start < 2000);
     active = true; paused = true; resetEmergencyStopCacheForTests();
@@ -64,7 +63,7 @@ test('slow REST recovers both real controls before the truth deadline and observ
     assert.deepEqual(second[0].pausedAgents, [44]);
     assert.equal(second[1].active, true);
     await assert.rejects(assertEmergencyStopInactive('new task'), /EMERGENCY_STOP_ACTIVE/);
-    assert.equal(reads, 4);
+    assert.equal(reads, 2);
     assert.equal(aborted, 4);
   `);
 });
