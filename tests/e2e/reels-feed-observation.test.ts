@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { observeReelsFeed } from './reels-feed-observation.ts';
+import { canDeferReelsPlayback, observeReelsFeed } from './reels-feed-observation.ts';
 
 const videos = [{ id: 'synthetic-reel', video_url: 'https://media.test/fixture.mp4' }];
 
@@ -45,4 +45,27 @@ test('the canonical legacy response remains a candidate without invented availab
   assert.equal(observation.degraded, false);
   assert.equal(observation.dataAvailable, null);
   assert.equal(observation.videoCount, 1);
+});
+
+test('smoke playback can be deferred only when every retry explicitly reports unavailable HTTP 200 data', () => {
+  const unavailable = observeReelsFeed(200, { data_available: false, videos: [] });
+  for (const body of [{ degraded: true }, { status: 'DEGRADED' },
+    { ok: false, code: 'PUBLIC_DATA_UNAVAILABLE', data_available: false }]) {
+    assert.equal(canDeferReelsPlayback([unavailable, observeReelsFeed(200, body)]), true);
+  }
+  assert.equal(canDeferReelsPlayback([observeReelsFeed(200, { videos: [] }, 'unavailable')]), true);
+  assert.equal(canDeferReelsPlayback([]), false, 'No response is a routing or network failure');
+  for (const observation of [
+    observeReelsFeed(503, { data_available: false }),
+    observeReelsFeed(401, { degraded: true }),
+    observeReelsFeed(200, { code: 'AUTH_GATEWAY_DENIED', degraded: true }),
+    observeReelsFeed(200, { videos: [] }),
+    observeReelsFeed(200, null),
+    observeReelsFeed(200, { degraded: true, data_available: 'false' }),
+    observeReelsFeed(200, { degraded: 'true', data_available: false }),
+    observeReelsFeed(200, { degraded: true, data_available: true, videos }),
+    observeReelsFeed(200, { degraded: true, data_available: true, videos: [] }),
+  ]) {
+    assert.equal(canDeferReelsPlayback([unavailable, observation]), false, JSON.stringify(observation));
+  }
 });
