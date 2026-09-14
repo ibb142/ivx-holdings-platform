@@ -96,3 +96,57 @@ test('bounded pending scopes allow same-scope followers and release capacity whe
   await f.load('three');
   assert.equal(f.calls.filter(c => c.name === 'videos').length, 3);
 });
+
+test('failed feed reads distinguish safe failure kinds without exposing exception details', async () => {
+  const privateDetail = 'postgres://private-user:private-password@private-host/private-db';
+  const cases = [
+    [new Error('owner_control_direct_postgres_project_mismatch', { cause: new Error(privateDetail) }), 'PROJECT_BINDING_REJECTED'],
+    [new Error('direct_postgres_not_configured'), 'DATABASE_NOT_CONFIGURED'],
+    [new Error('postgres_pool_budget_exceeded'), 'POOL_BUDGET_REJECTED'],
+    [new Error('invalid_postgres_pool_limit:IVX_PG_API_MAX_CONNECTIONS'), 'POOL_LIMIT_INVALID'],
+    [new Error('postgres_pool_budget_changed_restart_required'), 'POOL_RESTART_REQUIRED'],
+    [new TypeError('Invalid URL'), 'CONFIG_URL_INVALID'],
+    [Object.assign(new Error(privateDetail), { code: '42501' }), 'DATABASE_PERMISSION'],
+    [Object.assign(new Error(privateDetail), { code: '57014' }), 'QUERY_DEADLINE'],
+    [Object.assign(new Error(privateDetail), { code: '55P03' }), 'LOCK_DEADLINE'],
+    [Object.assign(new Error(privateDetail), { code: 'ECONNRESET' }), 'CONNECTION_ERROR'],
+    [new TypeError(privateDetail), 'RUNTIME_TYPE_ERROR'],
+    [new Error('postgres_pool_budget_exceeded ' + privateDetail), 'UNKNOWN'],
+    [{ message: privateDetail }, 'UNKNOWN'],
+  ];
+  const originalInfo = console.info;
+  const logs = [];
+  console.info = (...args) => { logs.push(args.join(' ')); };
+  try {
+    for (const [failure, expectedKind] of cases) {
+      logs.length = 0;
+      const f = fixture({ videos: async () => { throw failure; } });
+      await assert.rejects(f.load('private-project-id'), error => error === failure);
+      const entries = logs.filter(line => line.startsWith('[IVX Feed dependency] '))
+        .map(line => JSON.parse(line.slice('[IVX Feed dependency] '.length)));
+      const catalog = entries.find(entry => entry.dependency === 'videos');
+      assert.equal(catalog.failureKind, expectedKind);
+      assert.equal(catalog.outcome, 'failure');
+      assert.equal(entries.find(entry => entry.dependency === 'total').failureKind, expectedKind);
+      assert.equal(f.calls.filter(call => call.name === 'videos').length, 1, 'Diagnostics must not retry a failed read');
+      assert.ok(entries.filter(entry => entry.outcome === 'success').every(entry => entry.failureKind === null));
+      for (const secret of [privateDetail, 'private-project-id', 'private-user', 'private-password', 'private-host']) {
+        assert.equal(logs.join('\n').includes(secret), false);
+      }
+    }
+  } finally {
+    console.info = originalInfo;
+  }
+});
+
+test('diagnostic sink failures cannot replace the original feed failure', async () => {
+  const failure = new Error('upstream rejected');
+  const f = fixture({ videos: async () => { throw failure; } });
+  const originalInfo = console.info;
+  console.info = () => { throw new Error('logger unavailable'); };
+  try {
+    await assert.rejects(f.load(null), error => error === failure);
+  } finally {
+    console.info = originalInfo;
+  }
+});

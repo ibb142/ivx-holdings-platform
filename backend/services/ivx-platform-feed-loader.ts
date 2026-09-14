@@ -2,6 +2,30 @@ import { awaitPublicRead, sharedPublicRead } from './ivx-read-timings';
 
 type Video = { id: string };
 
+/** Closed labels only; exception messages and connection details stay private. */
+function feedFailureKind(error: unknown): string {
+  const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
+  if (code === '57014') return 'QUERY_DEADLINE';
+  if (code === '55P03') return 'LOCK_DEADLINE';
+  if (code === '42501') return 'DATABASE_PERMISSION';
+  if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) return 'DATABASE_ERROR';
+  if (['ENOTFOUND', 'EAI_AGAIN', 'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT'].includes(String(code))) return 'CONNECTION_ERROR';
+  if (!(error instanceof Error)) return 'UNKNOWN';
+  switch (error.message) {
+    case 'owner_control_direct_postgres_project_mismatch': return 'PROJECT_BINDING_REJECTED';
+    case 'owner_control_direct_postgres_not_configured':
+    case 'direct_postgres_not_configured': return 'DATABASE_NOT_CONFIGURED';
+    case 'postgres_pool_budget_exceeded': return 'POOL_BUDGET_REJECTED';
+    case 'postgres_pool_budget_changed_restart_required': return 'POOL_RESTART_REQUIRED';
+    case 'Invalid URL': return 'CONFIG_URL_INVALID';
+  }
+  if (/^invalid_postgres_pool_limit:(IVX_PG_API_MAX_CONNECTIONS|IVX_PG_TASKS_MAX_CONNECTIONS|IVX_PG_PROCESS_CONNECTION_LIMIT)$/.test(error.message)) return 'POOL_LIMIT_INVALID';
+  if (error.name === 'AbortError' || error.name === 'TimeoutError') return 'READ_ABORTED';
+  if (error.name === 'TypeError') return 'RUNTIME_TYPE_ERROR';
+  return 'UNKNOWN';
+}
+
+
 /** Share only overlapping public reads. Viewer state is never an input or result. */
 export function createPlatformFeedLoader<V extends Video, M, C, P, A, D>(sources: {
   videos: (projectId: string | null) => Promise<V[]>;
@@ -21,7 +45,7 @@ export function createPlatformFeedLoader<V extends Video, M, C, P, A, D>(sources
         const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
         // Fixed dependency names only: no project IDs, URLs, values or error messages.
         console.info('[IVX Feed dependency] ' + JSON.stringify({
-          dependency, outcome, elapsedMs: Math.max(0, Date.now() - startedAt),
+          dependency, outcome, failureKind: outcome === 'failure' ? feedFailureKind(error) : null, elapsedMs: Math.max(0, Date.now() - startedAt),
           sqlState: typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code) ? code : null,
         }));
       } catch { /* Diagnostics must not change feed behavior. */ }
