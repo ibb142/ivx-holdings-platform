@@ -144,3 +144,49 @@ jobs:
             poolConfig: rows.map(row => ({ databaseType: row.database_type, poolMode: row.pool_mode,
               defaultPoolSize: row.default_pool_size, maxClientConnections: row.max_client_conn })) }));
           NODE
+      - name: Observe database CPU and IO over two metric snapshots
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { setTimeout } from 'node:timers/promises';
+          const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+          assert(key, 'Metrics binding unavailable');
+          const allow = new Set([
+            'node_cpu_seconds_total', 'node_memory_MemAvailable_bytes', 'node_memory_MemTotal_bytes',
+            'node_memory_SwapFree_bytes', 'node_memory_SwapTotal_bytes', 'node_load1',
+            'node_disk_io_time_seconds_total', 'node_disk_io_time_weighted_seconds_total',
+            'node_disk_read_time_seconds_total', 'node_disk_reads_completed_total',
+            'node_disk_read_bytes_total', 'node_disk_written_bytes_total',
+            'node_disk_write_time_seconds_total', 'node_disk_writes_completed_total',
+            'node_pressure_io_waiting_seconds_total', 'node_pressure_cpu_waiting_seconds_total',
+            'node_pressure_memory_waiting_seconds_total',
+          ]);
+          async function snapshot() {
+            const response = await fetch('https://kvclcdjmjghndxsngfzb.supabase.co/customer/v1/privileged/metrics', {
+              method: 'GET', redirect: 'error', signal: AbortSignal.timeout(15000),
+              headers: { Authorization: 'Basic ' + Buffer.from('service_role:' + key).toString('base64') },
+            });
+            assert.equal(response.status, 200, 'Metrics read HTTP ' + response.status);
+            const raw = await response.text();
+            assert(raw.length < 5_000_000, 'Metrics response exceeds the read budget');
+            const series = [];
+            for (const line of raw.split('\n')) {
+              const match = /^([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{([^}]*)\})?\s+([0-9.eE+-]+)(?:\s+[0-9.eE+-]+)?$/.exec(line);
+              if (!match || !allow.has(match[1]) || !Number.isFinite(Number(match[3]))) continue;
+              const mode = /(?:^|,)mode="([a-z]+)"/.exec(match[2] || '')?.[1];
+              const device = /(?:^|,)device="([a-zA-Z0-9_-]+)"/.exec(match[2] || '')?.[1];
+              const cpu = /(?:^|,)cpu="([0-9]+)"/.exec(match[2] || '')?.[1];
+              series.push({ metric: match[1], ...(mode ? { mode } : {}), ...(device ? { device } : {}),
+                ...(cpu ? { cpu } : {}), value: Number(match[3]) });
+            }
+            assert(series.length > 0, 'Required CPU/IO series unavailable');
+            return { observedAt: new Date().toISOString(), series };
+          }
+          const before = await snapshot();
+          console.log(JSON.stringify({ scope: 'database-capacity-read-only', sample: 1, ...before }));
+          await setTimeout(70000);
+          const after = await snapshot();
+          console.log(JSON.stringify({ scope: 'database-capacity-read-only', sample: 2, ...after }));
+          NODE
