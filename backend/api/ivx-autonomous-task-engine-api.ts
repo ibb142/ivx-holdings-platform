@@ -25,6 +25,7 @@
  */
 import type { Context as HonoContext } from 'hono';
 import { withIVXOwnerOnly } from './ivx-owner-route';
+import { parseTaskAdmission } from '../services/ivx-task-admission';
 import {
   createObjective,
   createTask,
@@ -105,25 +106,10 @@ export async function handleListTasks(c: HonoContext): Promise<Response> {
 }
 
 export async function handleCreateTask(c: HonoContext): Promise<Response> {
-  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
-  const result = await createTask({
-    objectiveId: body.objectiveId ? String(body.objectiveId) : null,
-    parentTaskId: body.parentTaskId ? String(body.parentTaskId) : null,
-    title: String(body.title ?? ''),
-    description: String(body.description ?? ''),
-    taskType: body.taskType as 'development' | 'security' | 'investor_research' | 'buyer_research' | 'outreach' | 'deployment' | 'qa' | 'reporting' | 'discovery' | 'configuration' | undefined,
-    idempotencyKey: String(body.idempotencyKey ?? `idem_${Date.now().toString(36)}`),
-    assignedAgentNumber: body.assignedAgentNumber ? Number(body.assignedAgentNumber) : null,
-    assignedEngine: body.assignedEngine ? String(body.assignedEngine) : null,
-    priority: body.priority as 'critical' | 'high' | 'medium' | 'low' | undefined,
-    businessValue: body.businessValue == null ? undefined : Number(body.businessValue),
-    estimatedMinutes: body.estimatedMinutes == null ? null : Number(body.estimatedMinutes),
-    milestone: body.milestone ? String(body.milestone) : null,
-    ownerRole: body.ownerRole ? String(body.ownerRole) : null,
-    dueAt: body.dueAt ? String(body.dueAt) : null,
-    executionOrder: body.executionOrder ? Number(body.executionOrder) : undefined,
-    maxRetries: body.maxRetries ? Number(body.maxRetries) : undefined,
-  });
+  const body: unknown = await c.req.json().catch(() => null);
+  const admission = parseTaskAdmission(body);
+  if (!admission.ok) return c.json(admission, 400);
+  const result = await createTask(admission.input);
   return c.json(result);
 }
 

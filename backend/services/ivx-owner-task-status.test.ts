@@ -26,9 +26,15 @@ test('an autonomous row reports only recorded execution evidence', async () => {
 test('senior job lookup uses the same id and extracts persisted proof', async () => {
   const ids: string[] = [];
   const result = await readOwnerTaskStatus('job-1', async id => { ids.push(id); return null; },
-    async id => { ids.push(id); return { jobId: id, status: 'testing', stage: 'TESTING', result: { commitSha: 'abc123' } }; });
+    async id => { ids.push(id); return { jobId: id, status: 'testing', stage: 'TESTING', result: { commitSha: 'abc123', deployId: 'dep-real' } }; });
   expect(ids).toEqual(['job-1', 'job-1']);
-  expect(result.task).toMatchObject({ source: 'senior_developer', state: 'testing', commitSha: 'abc123' });
+  expect(result.task).toMatchObject({ source: 'senior_developer', state: 'testing', commitSha: 'abc123', deploymentId: 'dep-real' });
+});
+
+test('a linked developer job remains visible without inventing task completion', async () => {
+  const result = await readOwnerTaskStatus('task-1', async () => ({ taskId: 'task-1', state: 'BLOCKED', developerJobId: 'job-1' }), async () => null);
+  expect(result.answer).toContain('Developer job: job-1');
+  expect(result.task).toMatchObject({ state: 'BLOCKED', developerJobId: 'job-1', commitSha: null });
 });
 
 test('an outage cannot be converted to task absence or fall through to another ledger', async () => {

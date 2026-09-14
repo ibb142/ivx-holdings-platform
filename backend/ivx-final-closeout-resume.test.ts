@@ -69,6 +69,19 @@ const RESUME_BASE = {
 } as const;
 
 describe('IVX Autonomous Coder — restart / CI-wait resume (final closeout 2026-08-23)', () => {
+  it('keeps owner-controlled publication disabled across a restart with green checks', async () => {
+    let merges = 0;
+    const proof = await resumeIVXAutonomousCoderFromCiWait({
+      ...RESUME_BASE, autoMergePr: false,
+      prStateFn: async () => ({ state: 'open', merged: false, mergeCommitSha: null }),
+      requiredChecksFn: async () => greenChecks(),
+      mergeFn: async () => { merges++; return { merged: true, mergeCommitSha: 'b'.repeat(40) }; },
+    });
+    expect(proof.finalStatus).toBe('BLOCKED');
+    expect(proof.error).toContain('owner-controlled publication');
+    expect(merges).toBe(0);
+    expect(proof.prMerged).toBe(false);
+  });
   for (const checkpoint of ['original', 'invalid', 'future'] as const) {
     it(`uses ${checkpoint} CI checkpoint time without resetting or bypassing the grace period`, async () => {
       let merges = 0;

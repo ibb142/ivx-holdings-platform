@@ -15,6 +15,7 @@
  * with an explicit OWNER_GATE reason.
  */
 import { createHash } from 'node:crypto';
+import { runDevelopmentHandoff } from './ivx-autonomous-development-handoff';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import {
@@ -258,6 +259,7 @@ export async function runRealEngineeringCycle(input: {
   sourceSha: string;
   /** Task atomically leased + moved to RUNNING by the fleet batch starter. */
   preparedTask?: Task | null;
+  shouldContinue?: () => boolean;
 }): Promise<RealEngineeringCycleResult> {
   const workerId = `agent:${input.agentId}`;
   const base: RealEngineeringCycleResult = {
@@ -377,6 +379,12 @@ export async function runRealEngineeringCycle(input: {
     // ANALYZING — real inspection of the task's module (from title or description path).
     const moduleMatch = /module audit: (\S+)|module (\S+)/i.exec(`${task.title} ${task.description}`);
     const relPath = moduleMatch ? (moduleMatch[1] ?? moduleMatch[2]) : null;
+    if (!relPath && task.taskType === 'development') {
+      const handoff = await runDevelopmentHandoff(task, workerId, input.shouldContinue);
+      return { ...base, ok: handoff.ok, action: !handoff.ok ? 'CYCLE_ERROR' : handoff.states.includes('FAILED') ? 'TASK_FAILED' : 'TASK_BLOCKED',
+        taskId: task.taskId, startedAt, finishedAt: nowIso(), states: [...states, ...handoff.states],
+        productiveMinutes: 0, nextTaskAvailable: handoff.ok, error: handoff.error };
+    }
     if (!relPath) {
       const blocker = 'NO_EXECUTOR: this task has no supported module inspection or Landing executor; no work was performed.';
       await transitionTaskState(task.taskId, 'BLOCKED', { blocker });

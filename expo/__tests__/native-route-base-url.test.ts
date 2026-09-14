@@ -46,4 +46,3 @@ test('AWS web export retains its /app mount', () => {
 test('Render web export keeps root paths without a mount prefix', () => {
   expect(compiledPaths('web', '', ['/chat-hub', '/app-guide'])).toEqual(['chat-hub/', 'app-guide/']);
 }, 15_000);
-

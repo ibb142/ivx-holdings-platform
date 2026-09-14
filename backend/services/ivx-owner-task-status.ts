@@ -51,13 +51,15 @@ export async function readOwnerTaskStatus(
     const snapshot = {
       taskId, source: autonomous !== null ? 'autonomous' : 'senior_developer', state,
       stage: text(task.stage), updatedAt: text(task.updatedAt),
+      developerJobId: text(task.developerJobId),
       commitSha: text(task.commitSha) ?? text(result?.commitSha),
-      deploymentId: text(task.deploymentId) ?? text(result?.deploymentId),
+      deploymentId: text(task.deploymentId) ?? text(result?.deploymentId) ?? text(result?.deployId),
       blocker: text(task.blocker) ?? text(task.error),
     };
     return { ok: true, httpStatus: 200, code: null, task: snapshot,
       answer: [
         `Task: ${taskId}`, `Status: ${state}`, `Ledger: ${snapshot.source}`,
+        ...(snapshot.developerJobId ? [`Developer job: ${snapshot.developerJobId}`] : []),
         ...(snapshot.stage ? [`Stage: ${snapshot.stage}`] : []),
         ...(snapshot.updatedAt ? [`Updated: ${snapshot.updatedAt}`] : []),
         ...(snapshot.blocker ? [`Blocker: ${snapshot.blocker}`] : []),

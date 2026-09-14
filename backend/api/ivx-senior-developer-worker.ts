@@ -27,11 +27,14 @@ import {
   ownerOnlyJson,
   ownerOnlyOptions,
 } from './owner-only';
-import { chatWorkerIdentity } from '../services/ivx-chat-worker-identity';
+import { resolveWorkerEnqueueIdentity } from '../services/ivx-worker-enqueue-identity';
+import { getTaskById } from '../services/ivx-autonomous-task-engine';
+import { developmentOwnerLane } from '../services/ivx-development-job-identity';
 import { authorizeInternalDeploymentRequest, InternalDeployAuthError } from '../services/ivx-internal-deploy-auth';
 import { verifyIVXGitHubActionsOIDCRequest } from '../services/ivx-github-actions-oidc';
 
 type WorkerEnqueueRequest = {
+  taskId?: unknown;
   sourceChatMessageId?: unknown;
   conversationId?: unknown;
   goal?: unknown;
@@ -230,7 +233,11 @@ export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request
       blocker: null,
       secretValuesReturned: false as const,
     });
-    const body = await request.json().catch((): WorkerEnqueueRequest => ({}));
+    const rawBody: unknown = await request.json().catch(() => null);
+    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      return ownerOnlyJson({ ok: false, error: 'A JSON object is required.' }, 400);
+    }
+    const body = rawBody as WorkerEnqueueRequest;
     const goal = readTrimmed(body.goal);
     const templateMode = normalizeTemplateMode(body.templateMode);
     const isSystemMode = (approval.role === 'system' && approval.guardMode === 'system_bypass') || internalAuthorization !== null || oidcMachineAuthorized;
@@ -305,9 +312,14 @@ export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request
     // Prefix the execution template so the worker scaffolds the right shape of
     // work (whole app, module, feature, fix, refactor, or a business workflow).
     const ownerId = internalAuthorization ? `worker:${internalAuthorization.workerId}` : (approval.ownerSessionDetected ? (approval as Record<string, unknown>).userId as string ?? 'owner' : 'owner');
-    const sourceChatMessageId = readTrimmed(body.sourceChatMessageId);
+    const correlation = resolveWorkerEnqueueIdentity(ownerId, body);
+    if (!correlation.ok) return ownerOnlyJson({ ok: false, error: correlation.error }, 400);
+    const mission = body.taskId && correlation.identity.taskId ? await getTaskById(correlation.identity.taskId) : null;
+    const missionHandoff = mission?.taskType === 'development' && executionMode === 'code_change';
     const input: IVXWorkerJobInput = {
-      ...(sourceChatMessageId ? chatWorkerIdentity(ownerId, readTrimmed(body.conversationId) || null, sourceChatMessageId) : {}),
+      ...correlation.identity,
+      ...(missionHandoff ? { autonomousTaskHandoff: true, agentNumber: mission.assignedAgentNumber,
+        agentId: mission.assignedAgentNumber == null ? null : `ivx_holdings_${mission.assignedAgentNumber}` } : {}),
       goal: `[TEMPLATE_MODE:${templateMode}] ${goal}`,
       ownerApproved: true,
       approvePatch,
@@ -320,7 +332,7 @@ export async function handleSeniorDeveloperWorkerEnqueueRequest(request: Request
       validationMode: normalizeValidationMode(body.validationMode),
       systemMode: isSystemMode,
       ownerApprovedAction,
-      ownerId,
+      ownerId: missionHandoff ? developmentOwnerLane(mission.assignedAgentNumber) : ownerId,
     };
 
     const { job, attached, activeJobId } = await enqueueOrAttachSeniorDeveloperJob(input);
