@@ -22,6 +22,9 @@ jobs:
       LANDING_BASE: https://ivxholding.com
     steps:
       - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
 
       - name: Resolve production source for this verification
         shell: bash
@@ -82,13 +85,13 @@ jobs:
 
       - name: Install browser visual verifier
         run: |
-          npm install --no-save playwright@1.55.0
+          bun install --frozen-lockfile
           # H.264/AAC playback requires the codecs distributed with Chrome.
           # https://playwright.dev/docs/browsers#media-codecs
-          npx playwright install --with-deps chrome
+          bunx playwright install --with-deps chrome
 
       - name: Reels playback acceptance and explicit degraded-state behavior
-        run: npx playwright test --config=tests/e2e/playwright.config.ts
+        run: bunx playwright test --config=tests/e2e/playwright.config.ts
 
       - name: Upload Reels acceptance results including failures
         if: always()

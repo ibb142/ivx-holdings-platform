@@ -1,3 +1,5 @@
+import { dispatchNativeIntent } from '../lib/native-intent-dispatch';
+
 // Preserve native destinations; route layouts still enforce authentication.
 function normalizeSystemPath(path: string): string {
   try {
@@ -22,5 +24,8 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
   if (['/chat-hub', '/admin/waitlist-admin', '/app-guide'].includes(pathname)) {
     console.info('[IVX Native Route]', { stage: 'normalized', destination: pathname, initial });
   }
+  // An empty result tells Expo's native subscription that the mounted root
+  // already consumed this link. Cold starts retain Expo's initial-state path.
+  if (!initial && dispatchNativeIntent(destination)) return '';
   return destination;
 }

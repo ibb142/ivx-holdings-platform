@@ -25,19 +25,39 @@ export async function refillFleetBatches(requests: readonly FleetLeaseRequest[],
   shouldStop: () => boolean;
 }): Promise<void> {
   if (!Number.isInteger(options.batchSize) || options.batchSize < 1) throw new Error('Positive fleet batch size required');
+  const dispatchErrors: unknown[] = [];
   for (let offset = 0; offset < requests.length; offset += options.batchSize) {
-    if (options.shouldStop()) return;
+    if (options.shouldStop()) break;
     const leased = (await options.lease(requests.slice(offset, offset + options.batchSize)))
       .filter(result => result.ok && result.task);
     if (!leased.length) continue;
     const identities = leased.map(result => ({ taskId: result.task!.taskId, workerId: result.workerId }));
+    const expected = new Map(identities.map(identity => [identity.taskId, identity.workerId]));
     const accepted = new Set<string>();
+    const observed = new Set<string>();
     try {
-      if (options.shouldStop()) return;
+      if (options.shouldStop()) break;
       const started = await options.start(identities);
       for (const result of started) {
         if (options.shouldStop()) break;
-        if (result.ok && result.task && await options.onStarted(result)) accepted.add(result.task.taskId);
+        if (!result.ok || !result.task) continue;
+        const task = result.task;
+        if (!expected.has(result.taskId) || typeof result.taskId !== 'string' || !result.taskId
+          || typeof result.workerId !== 'string' || !result.workerId
+          || expected.get(result.taskId) !== result.workerId || observed.has(result.taskId)
+          || task.taskId !== result.taskId || task.leaseHolder !== result.workerId
+          || task.state !== 'RUNNING' || typeof task.idempotencyKey !== 'string' || !task.idempotencyKey.trim()) {
+          dispatchErrors.push(new Error('INVALID_FLEET_START_RECEIPT'));
+          continue;
+        }
+        observed.add(result.taskId);
+        try {
+          if (await options.onStarted(result)) accepted.add(task.taskId);
+        } catch (error) {
+          // One bad task must not prevent other lanes from receiving their
+          // already-committed work. Report failure after the remaining batches.
+          dispatchErrors.push(error);
+        }
       }
     } finally {
       // RUNNING in PostgreSQL is not proof that a local executor accepted it.
@@ -48,7 +68,8 @@ export async function refillFleetBatches(requests: readonly FleetLeaseRequest[],
         if (accepted.has(identity.taskId)) continue;
         try { await options.release(identity); } catch (error) { errors.push(error); }
       }
-      if (errors.length) throw new AggregateError(errors, 'PREPARED_TASK_RELEASE_FAILED');
+      if (errors.length) throw new AggregateError([...dispatchErrors, ...errors], 'PREPARED_TASK_RELEASE_FAILED');
     }
   }
+  if (dispatchErrors.length) throw new AggregateError(dispatchErrors, 'FLEET_DISPATCH_FAILED');
 }

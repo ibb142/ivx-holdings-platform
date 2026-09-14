@@ -10,6 +10,11 @@ on:
       - 'expo/app/chat-hub.tsx'
       - 'expo/app/app-guide.tsx'
       - 'expo/app/+native-intent.tsx'
+      - 'expo/app/_providers.tsx'
+      - 'expo/lib/native-intent-dispatch.ts'
+      - 'expo/__tests__/native-intent-dispatch.test.ts'
+      - 'expo/.maestro/ivx-root-chat-navigation-certificate.yaml'
+      - 'scripts/ivx-route-destination.mjs'
       - 'expo/scripts/ivx-metro-transformer.js'
       - 'expo/__tests__/native-route-base-url.test.ts'
       - 'expo/lib/public-chat-session-context.tsx'
@@ -34,6 +39,11 @@ on:
       - 'expo/app/chat-hub.tsx'
       - 'expo/app/app-guide.tsx'
       - 'expo/app/+native-intent.tsx'
+      - 'expo/app/_providers.tsx'
+      - 'expo/lib/native-intent-dispatch.ts'
+      - 'expo/__tests__/native-intent-dispatch.test.ts'
+      - 'expo/.maestro/ivx-root-chat-navigation-certificate.yaml'
+      - 'scripts/ivx-route-destination.mjs'
       - 'expo/scripts/ivx-metro-transformer.js'
       - 'expo/__tests__/native-route-base-url.test.ts'
       - 'expo/lib/public-chat-session-context.tsx'
@@ -79,7 +89,9 @@ jobs:
   certify-dashboard-chat:
     name: Real Owner Dashboard + IVX IA Chat E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    # 272 routes need roughly 100–120 minutes, in addition to the APK build
+    # and real chat/restart proof. Preserve the complete single-process patrol.
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
         with:
@@ -167,8 +179,9 @@ jobs:
           grep -q 'clearState: false' expo/.maestro/ivx-owner-chat-certificate.yaml
           cd expo
           bunx tsc --noEmit
-          bun test __tests__/chat-certificate-flow-regression.test.ts __tests__/chat-transport-reliability.test.ts __tests__/deferred-auth-work.test.ts __tests__/native-route-base-url.test.ts
+          bun test __tests__/chat-certificate-flow-regression.test.ts __tests__/chat-transport-reliability.test.ts __tests__/deferred-auth-work.test.ts __tests__/native-route-base-url.test.ts __tests__/native-intent-dispatch.test.ts
           cd ..
+          node --test scripts/ivx-all-routes-human-e2e.test.mjs
           python3 -m unittest discover -s scripts -p test_ivx_route_suite_proof.py
 
       - name: Wait for exact production SHA on main

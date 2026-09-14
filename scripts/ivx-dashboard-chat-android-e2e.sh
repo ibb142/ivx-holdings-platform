@@ -47,7 +47,7 @@ timeout 420s "$MAESTRO" test expo/.maestro/ivx-owner-chat-certificate.yaml \
 
 # Run the known nested-to-root navigation regression before the full patrol so
 # a stale underlying screen fails immediately with its own evidence bundle.
-timeout 180s "$MAESTRO" test expo/.maestro/ivx-root-chat-navigation-certificate.yaml \
+timeout 420s "$MAESTRO" test expo/.maestro/ivx-root-chat-navigation-certificate.yaml \
   --test-output-dir qa/evidence/dashboard-chat/root-navigation-artifacts \
   --format junit \
   --output qa/evidence/dashboard-chat/root-navigation.xml

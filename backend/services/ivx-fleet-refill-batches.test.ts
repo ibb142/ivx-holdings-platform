@@ -16,7 +16,7 @@ test('starts all 112 lanes incrementally without one fleet-sized claim transacti
       expect(started.length).toBe(batches.reduce((a, b) => a + b, 0));
       batches.push(rows.length); return leased(rows);
     },
-    start: async rows => rows.map(row => ({ ...row, ok: true, error: null, task: { taskId: row.taskId, state: 'RUNNING' } as Task })),
+    start: async rows => rows.map(row => ({ ...row, ok: true, error: null, task: { taskId: row.taskId, idempotencyKey: `mission:${row.taskId}`, leaseHolder: row.workerId, state: 'RUNNING' } as Task })),
     onStarted: row => { started.push(row.taskId); return true; }, release: unexpectedRelease,
   });
   expect(Math.max(...batches)).toBe(4);
@@ -28,7 +28,7 @@ test('a later database timeout preserves already dispatched work and never repla
   await expect(refillFleetBatches(requests, {
     batchSize: 4, shouldStop: () => false,
     lease: async rows => { if (++claims === 2) throw new Error('statement timeout'); return leased(rows); },
-    start: async rows => rows.map(row => ({ ...row, ok: true, error: null, task: { taskId: row.taskId, state: 'RUNNING' } as Task })),
+    start: async rows => rows.map(row => ({ ...row, ok: true, error: null, task: { taskId: row.taskId, idempotencyKey: `mission:${row.taskId}`, leaseHolder: row.workerId, state: 'RUNNING' } as Task })),
     onStarted: row => { started.push(row.taskId); return true; }, release: unexpectedRelease,
   })).rejects.toThrow('statement timeout');
   expect(claims).toBe(2); expect(started).toEqual(requests.slice(0, 4).map(row => row.workerId));

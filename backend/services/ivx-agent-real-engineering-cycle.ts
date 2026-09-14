@@ -48,6 +48,7 @@ import {
 import { executeLandingUnit } from './ivx-landing-p0-executor';
 import { landingTaskEvidence } from './ivx-landing-task-evidence';
 import { executeTechnicalTask, technicalTaskKind } from './ivx-technical-schedule';
+import { executeContinuityVerification, isContinuityVerificationTask } from './ivx-continuity-verification';
 
 export const IVX_REAL_ENGINEERING_CYCLE_MARKER = 'ivx-agent-real-engineering-cycle-2026-09-01';
 
@@ -353,6 +354,15 @@ export async function runRealEngineeringCycle(input: {
         return { ...base, ok: false, action: 'CYCLE_ERROR', taskId: task.taskId, error: `RUNNING transition refused: ${toRunning.error}` };
       }
       states.push('RUNNING');
+    }
+
+    if (isContinuityVerificationTask(task)) {
+      const observation = await executeContinuityVerification({ ...task, state: 'RUNNING' }, workerId, input.sourceSha);
+      const finished = observation.finalized;
+      return { ...base, ok: finished.ok, action: finished.ok ? 'TASK_BLOCKED' : 'CYCLE_ERROR',
+        taskId: task.taskId, startedAt: observation.startedAt, finishedAt: observation.completedAt,
+        states: [...states, ...finished.states], evidenceIds: finished.evidenceId ? [finished.evidenceId] : [],
+        productiveMinutes: 0, nextTaskAvailable: true, error: finished.error ?? finished.task?.blocker ?? null };
     }
 
     if (technicalTaskKind(task)) {
