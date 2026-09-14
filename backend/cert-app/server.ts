@@ -354,6 +354,7 @@ export function createCertApp(): Hono<CertContext> {
 
   app.onError((err, c) => {
     console.error(`[cert-app] error: ${err.message}`, { traceId: c.get('traceId') });
+    console.error(`[cert-app] error: ${err.message}`, { traceId: c.get('traceId') });
     return c.json({
       ok: false,
       error: 'Internal server error.',
