@@ -3,7 +3,8 @@ import { FLEET_CONFIG, fleetPathConcurrency, readFleetOperatingWindow } from './
 import { readFleetConfig } from './agents/multi-agent-framework';
 
 test('one global ceiling reaches both worker paths without overriding a local stop', () => {
-  for (const path of ['IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY', 'IVX_WORKER_MAX_CONCURRENCY']) {
+  for (const path of ['IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY', 'IVX_WORKER_MAX_CONCURRENCY',
+    'IVX_AI_SHORT_POOL_MAX', 'IVX_AI_LONG_POOL_MAX']) {
     expect(fleetPathConcurrency({ GLOBAL_WORKER_CONCURRENCY_LIMIT: '112' }, path, 12)).toBe(112);
     expect(fleetPathConcurrency({ GLOBAL_WORKER_CONCURRENCY_LIMIT: '112', [path]: '0' }, path, 12)).toBe(0);
     expect(fleetPathConcurrency({ GLOBAL_WORKER_CONCURRENCY_LIMIT: '112', [path]: '8' }, path, 12)).toBe(8);

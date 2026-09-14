@@ -24,6 +24,11 @@ The global model budget is a separate database policy. Raising its
 `max_concurrent` requires the owner's operational instruction and preserves the
 existing monetary ceiling, settlement accounting and unknown-charge liabilities.
 Changing an environment variable cannot bypass monetary admission.
+The worker also sets both `IVX_AI_SHORT_POOL_MAX` and `IVX_AI_LONG_POOL_MAX` to
+112 with `IVX_AI_GLOBAL_BUDGET_ENABLED=true`. The common environment ceiling is
+consumed by both local model queues, avoiding their former eight/two defaults.
+Local queue slots are not provider admissions: the shared budget still caps
+combined provider calls across both queues and all replicas.
 
 The additive `MultiAgentFleet` executor is separate from the production
 dispatcher. New installations seed 112 durable capacity slots. An explicit

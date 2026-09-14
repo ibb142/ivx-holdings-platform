@@ -13,7 +13,7 @@
  * the queue is contended.
  */
 
-import { configuredAdmissionLimit } from './ivx-fleet-admission-policy';
+import { fleetPathConcurrency } from './ivx-fleet-operating-policy';
 
 type QueuePool = {
   name: 'short' | 'long';
@@ -24,14 +24,14 @@ type QueuePool = {
 
 const shortPool: QueuePool = {
   name: 'short',
-  maxConcurrent: configuredAdmissionLimit(process.env.IVX_AI_SHORT_POOL_MAX, 8),
+  maxConcurrent: fleetPathConcurrency(process.env, 'IVX_AI_SHORT_POOL_MAX', 8),
   active: 0,
   waiters: [],
 };
 
 const longPool: QueuePool = {
   name: 'long',
-  maxConcurrent: configuredAdmissionLimit(process.env.IVX_AI_LONG_POOL_MAX, 2),
+  maxConcurrent: fleetPathConcurrency(process.env, 'IVX_AI_LONG_POOL_MAX', 2),
   active: 0,
   waiters: [],
 };
