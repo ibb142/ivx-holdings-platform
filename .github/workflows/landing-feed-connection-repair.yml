@@ -1,0 +1,38 @@
+name: Stage verified API feed connection
+on:
+  push:
+    branches: [ops/landing-feed-db-binding-20260914]
+    paths:
+      - '.github/workflows/landing-feed-connection-repair.yml'
+      - 'scripts/ops/landing-feed-connection-repair*'
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Save the verified existing worker binding to the malformed API alias (no deploy)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: ivx-api-feed-connection-binding
+  cancel-in-progress: false
+jobs:
+  verify-and-stage:
+    if: github.ref == 'refs/heads/ops/landing-feed-db-binding-20260914'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: bun test scripts/ops/landing-feed-connection-repair.test.ts
+      - name: Verify existing connection and stage only the API alias
+        run: bun scripts/ops/landing-feed-connection-repair.ts
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          EXPECTED_LIVE_SHA: 97c472982f3c67b797e5a5f2c024c1b7060794cc
+          STAGE_API_BINDING: ${{ github.event_name == 'push' || inputs.stage }}
