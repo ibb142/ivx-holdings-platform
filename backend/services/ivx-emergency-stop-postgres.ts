@@ -63,8 +63,7 @@ async function readOwnerControlSnapshotPostgres(): Promise<OwnerControlSnapshot>
   // small authoritative documents in one transaction and share only that
   // pending read; a settled permission is never cached or reused.
   const pending = (async () => {
-    const result = await queryWithPostgresDeadline<OwnerControlSnapshotRow>(pool, `SELECT
-        COALESCE((
+    const result = await queryWithPostgresDeadline<OwnerControlSnapshotRow>(pool, `SELECT COALESCE((
           SELECT jsonb_agg(to_jsonb(control_rows))
           FROM (
             SELECT control_name, active, reason, updated_by, updated_at
