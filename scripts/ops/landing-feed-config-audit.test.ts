@@ -8,6 +8,12 @@ test('diagnostics use the real configuration validators without leaking values',
   const healthy = auditFeedEnvironment(env);
   assert.equal(healthy.projectBinding, 'valid');
   assert.equal(healthy.poolBudget, 'valid');
+  assert.equal(healthy.restUrls.SUPABASE_URL, 'valid_supabase_url');
+  assert.equal(healthy.restUrls.EXPO_PUBLIC_SUPABASE_URL, 'missing');
+  const malformed = auditFeedEnvironment({ SUPABASE_URL: 'private-invalid-url', SUPABASE_DB_URL: 'private-invalid-database' });
+  assert.equal(malformed.restUrls.SUPABASE_URL, 'invalid_url');
+  assert.equal(malformed.databaseUrls.SUPABASE_DB_URL, 'malformed_uri');
+  assert.doesNotMatch(JSON.stringify(malformed), /private-invalid/);
   assert.equal(auditFeedEnvironment({ ...env, SUPABASE_URL: 'invalid' }).projectBinding, 'invalid_url');
   assert.equal(auditFeedEnvironment({ ...env, SUPABASE_URL: 'https://otherproject.supabase.co' }).projectBinding, 'project_mismatch');
   assert.equal(auditFeedEnvironment({ ...env, IVX_PG_API_MAX_CONNECTIONS: '100' }).poolBudget, 'budget_exceeded');

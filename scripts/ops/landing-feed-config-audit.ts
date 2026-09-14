@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import { getDatabasePoolBudget } from '../../backend/services/ivx-database-pools';
 import { emergencyStopPostgresConfig } from '../../backend/services/ivx-emergency-stop-postgres';
+import { connectionIssue } from './autonomous-db-sync.mjs';
 
 /** Only fixed categories and numeric ceilings may leave the runner. */
 export function auditFeedEnvironment(env: NodeJS.ProcessEnv) {
@@ -16,7 +17,16 @@ export function auditFeedEnvironment(env: NodeJS.ProcessEnv) {
   catch (error) {
     poolBudget = error instanceof Error && error.message === 'postgres_pool_budget_exceeded' ? 'budget_exceeded' : 'invalid_limit';
   }
-  return { scope: 'direct-service-environment', projectBinding, poolBudget, ceilings };
+  const restUrls = Object.fromEntries(['EXPO_PUBLIC_SUPABASE_URL', 'SUPABASE_URL'].map(key => {
+    if (!env[key]?.trim()) return [key, 'missing'];
+    try {
+      const url = new URL(env[key]!.trim());
+      return [key, url.protocol === 'https:' && /^[a-z0-9]+\.supabase\.co$/.test(url.hostname) ? 'valid_supabase_url' : 'other_url'];
+    } catch { return [key, 'invalid_url']; }
+  }));
+  const databaseUrls = Object.fromEntries(['SUPABASE_DB_URL', 'DATABASE_URL', 'POSTGRES_URL', 'SUPABASE_POOLER_URL']
+    .map(key => [key, connectionIssue(env[key])]));
+  return { scope: 'direct-service-environment', projectBinding, poolBudget, ceilings, restUrls, databaseUrls };
 }
 
 export async function auditRenderFeedConfig(fetchImpl = fetch, token = process.env.RENDER_API_KEY) {
