@@ -20,7 +20,7 @@ export async function measureMediaWeight(fetchImpl: typeof fetch, url: string, b
       status = head.status;
       contentType = head.headers.get('content-type') || '';
       const length = Number(head.headers.get('content-length'));
-      if (Number.isSafeInteger(length) && length > 0) return result(length);
+      if (Number.isSafeInteger(length) && length > 0) return result(length); else return result(0, 'missing content-length');
     }
     const response = await request('GET');
     status = response.status;
