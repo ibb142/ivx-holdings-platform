@@ -69,6 +69,7 @@ import {
 } from './services/ivx-owner-ai-task-queue';
 import { OPTIONS as ownerAIJobsOptions, handleIVXAIJobStartRequest, handleIVXAIJobStatusRequest, handleIVXAIJobsListRequest, handleIVXAIRuntimeObservabilityRequest } from './api/ivx-owner-ai-jobs';
 import { startAIKeyMonitor, getAIKeyMonitorState } from './services/ivx-ai-key-monitor';
+import { createApiProviderStartup } from './services/ivx-api-provider-startup';
 import { OPTIONS as auditReportOptions, handleIVXAuditReportRequest } from './api/ivx-audit-report';
 import {
   OPTIONS as auditJobsOptions,
@@ -6741,13 +6742,24 @@ if (!landingFleetFocus) {
 }
 });
 
+const apiProviderStartup = createApiProviderStartup({
+  processRole: process.env.IVX_PROCESS_ROLE,
+  nodeEnv: process.env.NODE_ENV,
+  probe: probeOwnerAIGatewayLive,
+  reportFailure: () => console.warn('[IVX API] Startup provider validation did not complete; readiness remains unconfirmed'),
+});
+apiProviderStartup.start();
+
 // Graceful shutdown: stop the queue worker on SIGTERM/SIGINT so Render
 // doesn't kill tasks mid-execution. The worker waits up to
 // IVX_QUEUE_SHUTDOWN_GRACE_MS for active tasks to complete.
-const stopRuntimeWorkers = () => Promise.allSettled([
+const stopRuntimeWorkers = () => {
+  apiProviderStartup.stop();
+  return Promise.allSettled([
   stopOwnerAITaskWorker(),
   stopAutonomous112RuntimeEnforcer(),
 ]).then(() => process.exit(0));
+};
 process.on('SIGTERM', () => { void stopRuntimeWorkers(); });
 process.on('SIGINT', () => { void stopRuntimeWorkers(); });
 if (process.env.IVX_PROCESS_ROLE !== 'api' && !landingFleetFocus) {
