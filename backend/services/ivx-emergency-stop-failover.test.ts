@@ -16,16 +16,19 @@ function scenario(restStatus: number, active: unknown, directFails = false, miss
     spyOn(Client.prototype, 'connect').mockImplementation(callback => {
       connects++; queueMicrotask(() => callback(null));
     });
-    spyOn(Client.prototype, 'query').mockImplementation(async (sql, args) => {
+    spyOn(Client.prototype, 'query').mockImplementation(async (sql, _args) => {
       if (sql.startsWith('BEGIN')) {
         if (!sql.includes("statement_timeout = '2500ms'") || !sql.includes("lock_timeout = '1000ms'")) throw new Error('missing local deadline');
         return { rows: [] };
       }
       if (sql === 'COMMIT' || sql === 'ROLLBACK') return { rows: [] };
-      if (!sql.startsWith('SELECT ') || args[0] !== 'emergency_stop') throw new Error('unexpected SQL');
+      if (!sql.startsWith('SELECT ')) throw new Error('unexpected SQL');
       reads++;
       if (${directFails}) throw new Error('direct timeout');
-      return {rows: ${missingRow} ? [] : [{control_name:'emergency_stop', active:${JSON.stringify(active)}}]};
+      return {rows:[{
+        emergency_rows:${missingRow} ? [] : [{control_name:'emergency_stop', active:${JSON.stringify(active)}}],
+        campaign_documents:[{control:{paused:false,stopped:false,pausedAgents:[],stoppedAgents:[]}}]
+      }]};
     });
     spyOn(Client.prototype, 'end').mockImplementation(function () {
       closed++; this.emit('end'); return Promise.resolve();

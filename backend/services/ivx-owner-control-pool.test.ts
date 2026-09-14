@@ -25,7 +25,10 @@ function fixture() {
     if (!text.startsWith('SELECT ')) return { rows: [] };
     await gate;
     if (fail) throw Object.assign(new Error('cancelled'), { code: '57014' });
-    return { rows: [{ control_name: 'emergency_stop', active }] };
+    return { rows: [{
+      emergency_rows: [{ control_name: 'emergency_stop', active }],
+      campaign_documents: [{ control: { paused: false, stopped: false, pausedAgents: [], stoppedAgents: [] } }],
+    }] };
   }) as never);
   const end = spyOn(Client.prototype, 'end').mockImplementation(function (this: Client) {
     closed++; (this as unknown as EventEmitter).emit('end'); return Promise.resolve() as never;
