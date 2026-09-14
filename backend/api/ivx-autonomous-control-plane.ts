@@ -1,4 +1,5 @@
 import { assertIVXOwnerOnly, ownerOnlyJson, ownerOnlyOptions } from './owner-only';
+import { ownerAIAuthUnavailableResponse } from './owner-ai-auth-unavailable';
 import { verifyIVXGitHubActionsOIDCRequest } from '../services/ivx-github-actions-oidc';
 import { verifyAllEnterpriseAgents } from '../services/ivx-autonomous-completion-campaign';
 import {
@@ -9,7 +10,7 @@ import { listCampaignDispatcherRecords } from '../services/ivx-campaign-dispatch
 import { getSmsNotifierStatus } from '../services/ivx-autonomous-sms-notifier';
 import { isDurableStoreConfigured } from '../services/ivx-durable-store';
 import { ALL_ENTERPRISE_AGENTS, getFunctionalGroups, getAgentsByFunctionalGroup } from '../services/ivx-enterprise-master-registry';
-import { getSeniorDeveloperJob } from '../services/ivx-senior-developer-worker';
+import { getSeniorDeveloperJobs } from '../services/ivx-senior-developer-worker';
 import { resolveMainSha, runGlobalCertificationSupervision } from '../services/ivx-global-certification-supervisor';
 import { readAllWorkflowAttributions } from '../services/ivx-agent-work-ledger';
 import type { WorkflowAttribution } from '../services/ivx-agent-work-ledger';
@@ -145,7 +146,10 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
     const trustedMachine = await verifyIVXGitHubActionsOIDCRequest(request);
     if (!trustedMachine) await assertIVXOwnerOnly(request);
   } catch (error) {
-    return ownerOnlyJson({ ok: false, error: error instanceof Error ? error.message : 'IVX owner authentication required.' }, 401);
+    const unavailable = ownerAIAuthUnavailableResponse(error, (body, status) => ownerOnlyJson({ ok: false, ...body }, status));
+    if (unavailable) return unavailable;
+    const missing = error instanceof Error && /missing bearer/i.test(error.message);
+    return ownerOnlyJson({ ok: false, error: 'IVX owner authentication required.' }, missing ? 401 : 403);
   }
 
   try {
@@ -190,9 +194,12 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
     const queued = agentStatuses.QUEUED || 0;
 
     const registryByNumber = new Map(ALL_ENTERPRISE_AGENTS.map((agent) => [agent.agentNumber, agent]));
-    const enrichedAgents = await Promise.all(campaign.assignments.map(async (item) => {
+    const jobs = await getSeniorDeveloperJobs(campaign.assignments
+      .map(item => item.workerJobId).filter((id): id is string => Boolean(id)));
+    const jobsById = new Map(jobs.map(job => [job.jobId, job]));
+    const enrichedAgents = campaign.assignments.map((item) => {
       const registry = registryByNumber.get(item.agentNumber);
-      const job = item.workerJobId ? await getSeniorDeveloperJob(item.workerJobId) : null;
+      const job = item.workerJobId ? jobsById.get(item.workerJobId) ?? null : null;
       const heartbeatAt = job?.lastHeartbeatAt || item.lastHeartbeatAt || null;
       const heartbeat = heartbeatState(heartbeatAt);
       const currentTask = job?.input.goal || item.assignedTask || null;
@@ -255,7 +262,7 @@ export async function handleAutonomousControlPlaneGet(request: Request): Promise
           workflowAttribution: attr ? { githubRunId: attr.githubRunId, githubJobId: attr.githubJobId, commitSha: attr.commitSha, prNumber: attr.prNumber, branch: attr.branch, source: attr.source, recordedAt: attr.recordedAt } : null,
         },
       };
-    }));
+    });
 
     const heartbeating = enrichedAgents.filter((agent) => agent.worker.heartbeat === 'live' && agent.worker.hasRealJob).length;
     const staleHeartbeats = enrichedAgents.filter((agent) => agent.worker.heartbeat === 'stale' && agent.worker.hasRealJob).length;

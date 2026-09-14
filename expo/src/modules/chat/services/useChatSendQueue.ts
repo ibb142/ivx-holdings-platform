@@ -39,6 +39,7 @@ export type ChatSendVariables = {
 export type ChatSendResult = {
   messageId: string;
   conversationId: string;
+  persistence?: 'local' | 'remote';
 };
 
 export type ChatSendQueueOptions = {
@@ -86,16 +87,17 @@ export function useChatSendQueue(options?: ChatSendQueueOptions): ChatSendQueueM
 
         if (op.status === 'sent') {
           handledRef.current.add(op.requestId);
-          pending.resolve({
+          const result: ChatSendResult = op.result ?? {
             messageId: op.clientId,
             conversationId: 'ivx-owner-room',
-          });
+          };
+          pending.resolve(result);
           pendingRef.current.delete(op.requestId);
-          setData({ messageId: op.clientId, conversationId: 'ivx-owner-room' });
+          setData(result);
           setIsError(false);
           setError(null);
           void optionsRef.current?.onSuccess?.(
-            { messageId: op.clientId, conversationId: 'ivx-owner-room' },
+            result,
             pending.variables
           );
           optionsRef.current?.onSettled?.(pending.variables);

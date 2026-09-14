@@ -2,6 +2,8 @@ import { afterEach, expect, spyOn, test } from 'bun:test';
 import * as deadline from './ivx-postgres-deadline';
 import { readSeniorActiveOwnerJobPostgres, readSeniorQueuePostgresJob, readSeniorWorkQueuePostgres, resetPostgresAutonomousTaskStoreForTests } from './ivx-postgres-autonomous-task-store';
 import { SENIOR_ACTIVE_OWNER_JOB_SQL, SENIOR_QUEUE_ACTIVE_STATUSES, SENIOR_QUEUE_JOB_SQL, SENIOR_WORK_QUEUE_SQL, SENIOR_WORK_QUEUE_PATH } from './ivx-senior-work-queue';
+import { readSeniorQueuePostgresJobs } from './ivx-postgres-autonomous-task-store';
+import { SENIOR_QUEUE_JOBS_SQL } from './ivx-senior-work-queue';
 
 const env = { ...process.env };
 afterEach(() => { process.env = { ...env }; resetPostgresAutonomousTaskStoreForTests(); });
@@ -9,6 +11,41 @@ function configure() {
   process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://queuereadtest.supabase.co';
   process.env.SUPABASE_DB_URL = 'postgresql://postgres:test-only@db.queuereadtest.supabase.co:5432/postgres';
 }
+
+test('112 distinct dashboard jobs use one checkout and reject ambiguous or unrelated evidence', async () => {
+  configure();
+  const ids = Array.from({ length: 112 }, (_, i) => `job-${i}`);
+  const jobs = ids.map(jobId => ({ jobId, status: 'running' }));
+  const query = spyOn(deadline, 'queryWithPostgresDeadline').mockResolvedValue({ rows: jobs.map(job => ({ job })) } as never);
+  try {
+    expect(await readSeniorQueuePostgresJobs(ids)).toEqual(jobs);
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0][1]).toBe(SENIOR_QUEUE_JOBS_SQL);
+    expect(query.mock.calls[0][2]).toEqual(['senior-developer-worker/queue.json', [...ids].sort(), 113]);
+    expect(await readSeniorQueuePostgresJobs([])).toEqual([]);
+    expect(query).toHaveBeenCalledTimes(1);
+    query.mockResolvedValue({ rows: [{ job: jobs[0] }, { job: jobs[0] }] } as never);
+    await expect(readSeniorQueuePostgresJobs(ids)).rejects.toThrow('Duplicate');
+    query.mockResolvedValue({ rows: [{ job: { jobId: 'unrequested' } }] } as never);
+    await expect(readSeniorQueuePostgresJobs(ids)).rejects.toThrow('mismatch');
+    query.mockRejectedValue(new Error('connection timeout'));
+    await expect(readSeniorQueuePostgresJobs(ids)).rejects.toThrow('connection timeout');
+    expect(query).toHaveBeenCalledTimes(4);
+  } finally { query.mockRestore(); }
+});
+
+test('invalid batch inputs and cross-project bindings fail before database checkout', async () => {
+  configure();
+  const query = spyOn(deadline, 'queryWithPostgresDeadline');
+  try {
+    for (const ids of [[''], [' '], ['x'.repeat(256)], Array(113).fill('job')]) {
+      await expect(readSeniorQueuePostgresJobs(ids)).rejects.toThrow('Invalid');
+    }
+    process.env.SUPABASE_DB_URL = 'postgresql://postgres:test-only@db.otherproject.supabase.co:5432/postgres';
+    await expect(readSeniorQueuePostgresJobs(['job'])).rejects.toThrow('project_mismatch');
+    expect(query).not.toHaveBeenCalled();
+  } finally { query.mockRestore(); }
+});
 
 test('direct polling projects one job with bound identities and detects duplicate or mismatched results', async () => {
   configure();

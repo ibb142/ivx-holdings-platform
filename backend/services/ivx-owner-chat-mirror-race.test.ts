@@ -83,7 +83,7 @@ test('remote insert readback is mirrored before the caller starts slower summary
 
 test('a failed device write does not poison later writes or manufacture remote success', async () => {
   const h = harness(); h.failNextWrite();
-  await h.api.appendLocalMessage(message('failed-local-write'));
+  await expect(h.api.appendLocalMessage(message('failed-local-write'))).rejects.toThrow('Could not save this message on this device. Please retry.');
   expect(h.read()).toEqual([]);
   await h.api.appendLocalMessage(message('later'));
   expect(h.read().map(x => x.id)).toEqual(['later']);

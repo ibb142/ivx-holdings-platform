@@ -261,7 +261,7 @@ type PendingOwnerMessage = {
   text: string;
   createdAt: string;
   mode: 'send_only' | 'send_and_ai' | 'ai_only' | 'attachment';
-  status: 'sending' | 'uploading' | 'uploaded' | 'failed';
+  status: 'sending' | 'saved' | 'sent' | 'uploading' | 'uploaded' | 'failed';
   errorMessage?: string | null;
   upload?: IVXUploadInput | null;
   uploadProgress?: number | null;
@@ -1376,7 +1376,7 @@ export default function IVXOwnerChatRoute() {
         senderUserId: ownerId || null,
         senderRole: 'owner',
         senderLabel: ownerLabel,
-        body: pendingMessage.status === 'failed' ? (pendingMessage.errorMessage ?? pendingMessage.text) : (pendingMessage.mode === 'attachment' ? uploadStatusText : pendingMessage.text),
+        body: pendingMessage.mode === 'attachment' ? uploadStatusText : pendingMessage.text,
         attachmentUrl: pendingUpload?.uri ?? null,
         attachmentName: pendingUpload?.name ?? null,
         attachmentMime: pendingUpload?.type ?? null,
@@ -1385,6 +1385,7 @@ export default function IVXOwnerChatRoute() {
         createdAt: pendingMessage.createdAt,
         updatedAt: pendingMessage.createdAt,
         sendStatus: pendingMessage.status,
+        localOnly: pendingMessage.status !== 'sent',
         replyTo: pendingMessage.replyTo ?? null} as IVXMessage & { sendStatus: PendingOwnerMessage['status']; replyTo?: ChatReplyContext | null });
     }
 
@@ -1835,8 +1836,24 @@ export default function IVXOwnerChatRoute() {
 
   const [aiBackendReachable, setAiBackendReachable] = useState<boolean>(false);
   const [aiHealthDetail, setAiHealthDetail] = useState<ServiceRuntimeHealth>('inactive');
-  const sendQueue = useChatSendQueue();
+  const sendQueue = useChatSendQueue({
+    onSuccess: (result, variables) => {
+      setPendingOwnerMessages((current) => current.map((message) => (
+        message.clientId === variables.clientId && message.mode !== 'attachment'
+          ? { ...message, status: result.persistence === 'remote' ? 'sent' : 'saved', errorMessage: null }
+          : message
+      )));
+    },
+    onError: (error, variables) => {
+      setPendingOwnerMessages((current) => current.map((message) => (
+        message.clientId === variables.clientId
+          ? { ...message, status: 'failed', errorMessage: error.message }
+          : message
+      )));
+    },
+  });
   const [aiReplyPending, setAiReplyPending] = useState<boolean>(false);
+  const activeAssistantReplyRef = useRef<string | null>(null);
   const [streamingText, setStreamingText] = useState<string>('');
   const [ownerCommandsActive, setOwnerCommandsActive] = useState<boolean>(false);
   const [knowledgeActive, setKnowledgeActive] = useState<boolean>(false);
@@ -2159,6 +2176,7 @@ export default function IVXOwnerChatRoute() {
       const startedAt = Date.now();
       const startedAtIso = new Date(startedAt).toISOString();
       const transientReplyId = createTransientMessageId('ivx-owner-ai-reply');
+      activeAssistantReplyRef.current = transientReplyId;
       // INVARIANT: every send must end with at least one visible assistant bubble.
       // We track every bubble id this mutation emits in a local Set. In `finally`
       // we use a FUNCTIONAL setState so we can authoritatively inspect the live
@@ -2190,7 +2208,6 @@ export default function IVXOwnerChatRoute() {
       setTransientAssistantMessages((current) => {
         if (current.some((message) => message.id === transientReplyId)) return current;
         emittedBubbleIds.add(transientReplyId);
-        bubbleEmitted = true;
         return [
           ...current,
           buildVisibleAssistantTransient({
@@ -2201,6 +2218,7 @@ export default function IVXOwnerChatRoute() {
       });
       // Watchdog: force-clear typing indicator after a hard ceiling so it can never get stuck.
       const watchdogTimer = setTimeout(() => {
+        if (activeAssistantReplyRef.current !== transientReplyId) return;
         console.log('[IVXOwnerChatRoute] assistant_reply_watchdog_fired — force-clearing typing indicator after 190s.');
         setAiReplyPending(false);
         setStreamingText('');
@@ -2238,13 +2256,13 @@ export default function IVXOwnerChatRoute() {
               // prompts cannot be misclassified as BACKEND_POST_FINISHED silent
               // failures while the backend is still working.
               onProgress: (event) => {
-                if (!trace) return;
+                if (activeAssistantReplyRef.current !== transientReplyId) return;
                 if (event.type === 'heartbeat') {
-                  trace.heartbeat(`heartbeat:${event.elapsedMs}ms`);
+                  trace?.heartbeat(`heartbeat:${event.elapsedMs}ms`);
                 } else if (event.type === 'stage') {
-                  trace.heartbeat(`stage:${event.stage}`);
+                  trace?.heartbeat(`stage:${event.stage}`);
                 } else if (event.type === 'start') {
-                  trace.heartbeat('sse_start');
+                  trace?.heartbeat('sse_start');
                 } else if (event.type === 'delta') {
                   const delta = event.delta;
                   setStreamingText((prev) => prev + delta);
@@ -2265,7 +2283,7 @@ export default function IVXOwnerChatRoute() {
                     ];
                   });
                 } else if (event.type === 'final') {
-                  trace.heartbeat(`sse_final:${event.status}`);
+                  trace?.heartbeat(`sse_final:${event.status}`);
                 }
               }},
             );
@@ -2817,7 +2835,7 @@ export default function IVXOwnerChatRoute() {
           failureClass: diagnostics?.classification ?? 'provider_exhausted',
           httpStatus: diagnostics?.statusCode !== null && diagnostics?.statusCode !== undefined ? String(diagnostics.statusCode) : 'unavailable',
           responsePreview: '',
-          failureDetail: 'The message was sent. Send another prompt when you are ready.',
+          failureDetail: failureMessage,
           hasVisibleResponseText: false}));
         setAiBackendReachable(false);
         setAiHealthDetail('inactive');
@@ -2885,9 +2903,13 @@ export default function IVXOwnerChatRoute() {
         }
       } finally {
         clearTimeout(watchdogTimer);
-        setAiReplyPending(false);
-        setStreamingText('');
-        setCurrentStreamingMessageId(null);
+        // A superseded request must not clear the next request's streaming UI.
+        if (activeAssistantReplyRef.current === transientReplyId) {
+          activeAssistantReplyRef.current = null;
+          setAiReplyPending(false);
+          setStreamingText('');
+          setCurrentStreamingMessageId(null);
+        }
         // INVARIANT GUARANTEE (state-authoritative):
         // Use functional setState to inspect the LIVE committed transient list.
         // If none of this mutation's emitted bubble ids are present (race,
@@ -2905,7 +2927,10 @@ export default function IVXOwnerChatRoute() {
           emittedBubbleIds: Array.from(emittedBubbleIds)});
         setTransientAssistantMessages((current) => {
           const currentIds = new Set(current.map((message) => message.id));
-          const anyEmittedPresent = Array.from(emittedBubbleIds).some((id) => currentIds.has(id));
+          const anyEmittedPresent = current.some((message) => (
+            emittedBubbleIds.has(message.id)
+            && (safeTrim(message.body).length > 0 || Boolean(message.attachmentUrl))
+          ));
           console.log('[IVX_TRACE] 8_FINAL_BUBBLE_COUNT', {
             mutationRunId,
             currentTransientCount: current.length,
@@ -4533,7 +4558,8 @@ export default function IVXOwnerChatRoute() {
     // body (and no attachment), render a visible error bubble instead of silently
     // dropping it. This prevents the disappearing-reply class of bugs from ever
     // recurring even if upstream payload parsing breaks.
-    if (isAssistant && !item.attachmentUrl && (typeof item.body !== 'string' || item.body.length === 0)) {
+    const isActiveAssistantStream = isAssistant && currentStreamingMessageId === item.id;
+    if (isAssistant && !isActiveAssistantStream && !item.attachmentUrl && (typeof item.body !== 'string' || item.body.trim().length === 0)) {
       if (__DEV__) {
         // eslint-disable-next-line no-console
         console.error('[IVXOwnerChatRoute][dev] Invalid assistant message body — rendering safe fallback bubble.', { id: item.id, body: item.body });
@@ -4647,10 +4673,9 @@ export default function IVXOwnerChatRoute() {
       text: parsedReplyBody.body,
       replyTo: parsedReplyBody.replyTo,
       createdAt: item.createdAt,
-      sendStatus: pendingState?.status === 'uploading' || pendingState?.status === 'uploaded' ? 'sending' : (pendingState?.status ?? 'sent'),
+      sendStatus: pendingState?.status === 'uploading' || pendingState?.status === 'uploaded' ? 'sending' : (pendingState?.status ?? (ownMessage && item.localOnly ? 'saved' : 'sent')),
       optimistic: pendingState?.status === 'sending' || pendingState?.status === 'uploading' || pendingState?.status === 'uploaded',
-      localOnly: Boolean(pendingState),
-      readBy: ownMessage && !pendingState ? ['owner', 'assistant'] : undefined,
+      localOnly: item.localOnly === true || (Boolean(pendingState) && pendingState?.status !== 'sent'),
       fileUrl: item.attachmentUrl ?? undefined,
       fileName: item.attachmentName ?? undefined,
       fileMime: item.attachmentMime ?? undefined,
@@ -5564,7 +5589,7 @@ export default function IVXOwnerChatRoute() {
 
   const composerStatusMessage = useMemo(() => {
     if (devTestMode.testModeActive) {
-      return 'Assistant ready.';
+      return 'Ready to send.';
     }
     // Auth state messages remain — these are not "loading" indicators.
     if (ownerAIAuthState === 'AUTH_INITIALIZING') {
@@ -5585,8 +5610,12 @@ export default function IVXOwnerChatRoute() {
     // Loading indicators removed per owner request: the composer no longer
     // displays "Recording...", "Transcribing...", or "Reply will appear"
     // status text. The underlying voice/reply operations still work.
-    return 'Assistant ready.';
-  }, [devTestMode.testModeActive, ownerAIAuthState]);
+    if (aiReplyPending) return '';
+    if (hasRuntimeFailure(runtimeDebugSnapshot)) {
+      return 'The last reply failed. Your message is preserved.';
+    }
+    return 'Ready to send.';
+  }, [devTestMode.testModeActive, ownerAIAuthState, aiReplyPending, runtimeDebugSnapshot]);
 
   const controlRoomItems = useMemo<IVXControlRoomItem[]>(() => {
     if (controlRoomQuery.data?.statusItems && controlRoomQuery.data.statusItems.length > 0) {

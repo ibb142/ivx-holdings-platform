@@ -1,7 +1,7 @@
 import { readLedgerEntries, assertLedgerPageRequest, type SeniorLedgerPage } from './ivx-senior-ledger-page';
 import { PollBackoff, startAdaptivePoll } from './ivx-adaptive-poll';
-import { readSharedSeniorLedgerPage, readSharedSeniorActiveOwnerJob, sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult, readSharedSeniorDocument, readSharedSeniorWorkQueue, readSharedSeniorJob, appendSharedSeniorProofEvent } from './ivx-senior-shared-queue';
-import { SENIOR_QUEUE_ACTIVE_STATUSES } from './ivx-senior-work-queue';
+import { readSharedSeniorJobs, readSharedSeniorLedgerPage, readSharedSeniorActiveOwnerJob, sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult, readSharedSeniorDocument, readSharedSeniorWorkQueue, readSharedSeniorJob, appendSharedSeniorProofEvent } from './ivx-senior-shared-queue';
+import { seniorJobBatchIds, SENIOR_QUEUE_ACTIVE_STATUSES } from './ivx-senior-work-queue';
 import { assertSeniorQueuePostgresAuthority, preferDirectTransport } from './ivx-postgres-autonomous-task-store';
 import type { CoderWorkspaceEvidence } from './ivx-coder-workspace';
 import { createSeniorJobAdmission } from './ivx-senior-job-admission';
@@ -1906,6 +1906,21 @@ export async function getSeniorDeveloperJob(jobId: string): Promise<IVXWorkerJob
   // as a hard failure and would fail honest agents with
   // "Worker job ... no longer found in the queue").
   return memoryQueue?.jobs.find((j) => j.jobId === jobId) ?? null;
+}
+
+/** Read the dashboard's selected jobs without one pool checkout per agent. */
+export async function getSeniorDeveloperJobs(jobIds: readonly string[]): Promise<IVXWorkerJob[]> {
+  const ids = seniorJobBatchIds(jobIds);
+  if (!ids.length) return [];
+  if (sharedSeniorQueueEnabled()) {
+    if (!isDurableStoreConfigured()) throw new Error('Shared queue storage unavailable');
+    return readSharedSeniorJobs<IVXWorkerJob>(QUEUE_FILE, ids);
+  }
+  const queue = await loadQueue();
+  return ids.flatMap(id => {
+    const job = queue.jobs.find(item => item.jobId === id) ?? memoryQueue?.jobs.find(item => item.jobId === id);
+    return job ? [structuredClone(job)] : [];
+  });
 }
 
 /** List recent jobs (newest first). */

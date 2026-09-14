@@ -355,6 +355,7 @@ function createLocalMessage(input: {
   const timestamp = nowIso();
   return {
     id: createLocalMessageId(),
+    localOnly: true,
     conversationId: input.conversationId,
     senderUserId: input.senderUserId,
     senderRole: input.senderRole,
@@ -372,7 +373,9 @@ function createLocalMessage(input: {
 
 async function appendLocalMessage(message: IVXMessage): Promise<void> {
   const currentMessages = await loadLocalMessages();
-  await saveLocalMessages([...currentMessages, message]);
+  if (!await saveLocalMessages([...currentMessages, message])) {
+    throw new Error('Could not save this message on this device. Please retry.');
+  }
 }
 
 function emitLocalOwnerMessage(message: IVXMessage, reason: string): void {
@@ -1357,7 +1360,7 @@ async function sendOwnerTextMessage(input: {
   body: string;
   senderLabel?: string | null;
   requireRemote?: boolean;
-}): Promise<IVXMessage> {
+}): Promise<IVXMessage & { persistence: 'local' | 'remote' }> {
   const localFirstBody = trimOrNull(input.body);
   if (isIVXLocalFirstChatEnabled()) {
     if (!localFirstBody) {
@@ -1383,7 +1386,7 @@ async function sendOwnerTextMessage(input: {
       reason: 'Stored in the local IVX room.',
     });
     console.log('[IVXChatService] Owner text message stored in local-first mode');
-    return localMessage;
+    return { ...localMessage, persistence: 'local' };
   }
 
   let ownerContext = null as Awaited<ReturnType<typeof getIVXOwnerAuthContext>> | null;
@@ -1425,7 +1428,7 @@ async function sendOwnerTextMessage(input: {
         : 'Owner text send switched to local persistence.'),
     });
     console.log('[IVXChatService] Owner text message stored locally');
-    return localMessage;
+    return { ...localMessage, persistence: 'local' };
   }
 
   console.log('[IVXChatService] Sending owner text message:', {
@@ -1454,7 +1457,7 @@ async function sendOwnerTextMessage(input: {
       senderRole: 'owner',
       reason: `Inserted into ${tables.messages} using shared IVX room persistence.`,
     });
-    return message;
+    return { ...message, persistence: 'remote' };
   } catch (error) {
     if (input.requireRemote === true) {
       console.log('[IVXChatService] Remote owner text send failed in required remote mode:', error instanceof Error ? error.message : 'unknown');
@@ -1479,7 +1482,7 @@ async function sendOwnerTextMessage(input: {
       senderRole: 'owner',
       reason: `Remote owner text insert failed and the message was persisted locally instead: ${error instanceof Error ? error.message : 'unknown error'}`,
     });
-    return localMessage;
+    return { ...localMessage, persistence: 'local' };
   }
 }
 

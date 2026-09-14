@@ -27,6 +27,37 @@ export const SENIOR_QUEUE_JOB_SQL = `select job from public.ivx_durable_document
     jsonb_build_object('id', $2::text)) as job
   where d.doc_key = $1 and job->>'jobId' = $2 limit 2`;
 
+/** A dashboard observation selects its jobs in one bounded read. */
+export function seniorJobBatchIds(jobIds: readonly string[]): string[] {
+  if (!Array.isArray(jobIds) || jobIds.length > 112 || jobIds.some(id =>
+    typeof id !== 'string' || !id.trim() || id.length > 255)) {
+    throw new Error('Invalid repair job batch identities');
+  }
+  return [...new Set(jobIds)].sort();
+}
+
+// One extra row guarantees that duplicate identities cannot be hidden by the
+// result bound. This is an observation only; mutation authority stays a fresh,
+// separate lease check. IDs and the result limit remain SQL parameters.
+export const SENIOR_QUEUE_JOBS_SQL = `select job from public.ivx_durable_documents d
+  cross join lateral jsonb_path_query(coalesce(d.value->'jobs', '[]'::jsonb),
+    'strict $[*] ? (@.jobId == $ids[*] || @.jobId.type() != "string")',
+    jsonb_build_object('ids', to_jsonb($2::text[]))) as job
+  where d.doc_key = $1 and job->>'jobId' = any($2::text[]) limit $3::integer`;
+
+export function verifiedSeniorJobBatch<T extends { jobId: string }>(jobs: T[], ids: readonly string[]): T[] {
+  const requested = new Set(ids);
+  const found = new Set<string>();
+  for (const job of jobs) {
+    if (!job || typeof job.jobId !== 'string' || !requested.has(job.jobId)) {
+      throw new Error('Repair batch job identity mismatch');
+    }
+    if (found.has(job.jobId)) throw new Error('Duplicate repair job identity');
+    found.add(job.jobId);
+  }
+  return jobs;
+}
+
 // Filter the owner and active states before materializing checkpoints. Repeated
 // d.value->'jobs' extraction per ordinal repeatedly expands the retained history.
 // Ordinality preserves the original last-match rule; bound text predicates keep

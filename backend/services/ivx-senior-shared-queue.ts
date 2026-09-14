@@ -1,7 +1,7 @@
 import { assertLedgerPageRequest, type SeniorLedgerPage } from './ivx-senior-ledger-page';
-import { readSeniorActiveOwnerJobPostgres, autonomousWorkerInstanceId, preferDirectTransport, seniorQueuePostgresRpc, readSeniorQueuePostgresDocument, readSeniorQueuePostgresJob, readSeniorWorkQueuePostgres, appendSeniorProofPostgresEvent } from './ivx-postgres-autonomous-task-store';
+import { readSeniorQueuePostgresJobs, readSeniorActiveOwnerJobPostgres, autonomousWorkerInstanceId, preferDirectTransport, seniorQueuePostgresRpc, readSeniorQueuePostgresDocument, readSeniorQueuePostgresJob, readSeniorWorkQueuePostgres, appendSeniorProofPostgresEvent } from './ivx-postgres-autonomous-task-store';
 import { appendDurableEvent, durableKeyForFile, readDurableJson } from './ivx-durable-store';
-import { SENIOR_QUEUE_ACTIVE_STATUSES, isSeniorQueueWorkItem } from './ivx-senior-work-queue';
+import { seniorJobBatchIds, verifiedSeniorJobBatch, SENIOR_QUEUE_ACTIVE_STATUSES, isSeniorQueueWorkItem } from './ivx-senior-work-queue';
 
 export function sharedSeniorQueueEnabled(): boolean { return process.env.IVX_WORKER_QUEUE_ATOMIC === 'true'; }
 type Job = { jobId: string };
@@ -125,6 +125,19 @@ export async function readSharedSeniorJob<T extends Job>(file: string, jobId: st
     const matches = queue.jobs.filter(job => job.jobId === jobId);
     if (matches.length > 1) throw new Error('Duplicate repair job identity');
     return matches[0] ?? null;
+  });
+}
+
+export async function readSharedSeniorJobs<T extends Job>(file: string, jobIds: readonly string[]): Promise<T[]> {
+  if (durableKeyForFile(file) !== 'senior-developer-worker/queue.json') throw new Error('Repair document not allowed');
+  const ids = seniorJobBatchIds(jobIds);
+  if (!ids.length) return [];
+  const direct = preferDirectTransport();
+  return sharedRead(`jobs:${direct}:${JSON.stringify(ids)}`, async () => {
+    if (direct) return readSeniorQueuePostgresJobs<T>(ids);
+    const queue = await readSharedSeniorDocument(file, { jobs: [] as T[] });
+    const requested = new Set(ids);
+    return verifiedSeniorJobBatch(queue.jobs.filter(job => requested.has(job.jobId)), ids);
   });
 }
 

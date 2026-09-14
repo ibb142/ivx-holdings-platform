@@ -1,8 +1,8 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import * as store from './ivx-postgres-autonomous-task-store';
 import * as durable from './ivx-durable-store';
-import { getActiveJobForOwner, getSeniorDeveloperJob } from './ivx-senior-developer-worker';
-import { claimSharedSeniorJob, readSharedSeniorDocument, readSharedSeniorWorkQueue, readSharedSeniorJob, rememberSeniorQueue, patchSharedSeniorQueue } from './ivx-senior-shared-queue';
+import { getActiveJobForOwner, getSeniorDeveloperJob, getSeniorDeveloperJobs } from './ivx-senior-developer-worker';
+import { claimSharedSeniorJob, readSharedSeniorDocument, readSharedSeniorWorkQueue, readSharedSeniorJob, readSharedSeniorJobs, rememberSeniorQueue, patchSharedSeniorQueue } from './ivx-senior-shared-queue';
 
 const file = 'senior-developer-worker/queue.json';
 const restores: Array<() => void> = [];
@@ -11,6 +11,53 @@ function direct() {
   const selected = spyOn(store, 'preferDirectTransport').mockReturnValue(true);
   restores.push(() => selected.mockRestore());
 }
+
+test('overlapping 112-job dashboard reads coalesce by identity set and writes invalidate outstanding reads', async () => {
+  direct();
+  const ids = Array.from({ length: 112 }, (_, i) => `dashboard-job-${i}`);
+  const pending: Array<(value: any) => void> = [];
+  const batch = spyOn(store, 'readSeniorQueuePostgresJobs').mockImplementation(() => new Promise(resolve => pending.push(resolve)));
+  const claim = spyOn(store, 'seniorQueuePostgresRpc').mockRejectedValue(new Error('claim acknowledgement lost'));
+  const full = spyOn(store, 'readSeniorQueuePostgresDocument').mockRejectedValue(new Error('history read forbidden'));
+  restores.push(() => batch.mockRestore(), () => claim.mockRestore(), () => full.mockRestore());
+  const readers = Array.from({ length: 12 }, (_, i) => readSharedSeniorJobs(file, i % 2 ? [...ids].reverse() : ids));
+  expect(batch).toHaveBeenCalledTimes(1);
+  await expect(claimSharedSeniorJob(ids[0])).rejects.toThrow('claim acknowledgement lost');
+  const fresh = readSharedSeniorJobs(file, ids);
+  expect(batch).toHaveBeenCalledTimes(2);
+  pending.forEach((resolve, version) => resolve(ids.map(jobId => ({ jobId, version, status: 'running' }))));
+  const snapshots = await Promise.all(readers);
+  snapshots[0][0].version = -1;
+  expect(snapshots[1][0].version).toBe(0);
+  expect((await fresh)[0].version).toBe(1);
+  batch.mockRejectedValue(new Error('batch unavailable'));
+  await expect(readSharedSeniorJobs(file, ids)).rejects.toThrow('batch unavailable');
+  expect(batch).toHaveBeenCalledTimes(3);
+  expect(full).not.toHaveBeenCalled();
+  await expect(readSharedSeniorJobs('senior-developer-worker/proof-ledger.json', ids)).rejects.toThrow('not allowed');
+});
+
+test('the worker batch bridge preserves missing jobs and never substitutes a local mirror during an outage', async () => {
+  direct();
+  const atomic = process.env.IVX_WORKER_QUEUE_ATOMIC;
+  process.env.IVX_WORKER_QUEUE_ATOMIC = 'true';
+  restores.push(() => { if (atomic === undefined) delete process.env.IVX_WORKER_QUEUE_ATOMIC; else process.env.IVX_WORKER_QUEUE_ATOMIC = atomic; });
+  const configured = spyOn(durable, 'isDurableStoreConfigured').mockReturnValue(true);
+  const batch = spyOn(store, 'readSeniorQueuePostgresJobs').mockResolvedValue([{ jobId: 'present', status: 'queued' }]);
+  const one = spyOn(store, 'readSeniorQueuePostgresJob').mockRejectedValue(new Error('individual reads forbidden'));
+  const full = spyOn(store, 'readSeniorQueuePostgresDocument').mockRejectedValue(new Error('history read forbidden'));
+  restores.push(() => configured.mockRestore(), () => batch.mockRestore(), () => one.mockRestore(), () => full.mockRestore());
+  expect(await getSeniorDeveloperJobs(['present', 'missing'])).toEqual([{ jobId: 'present', status: 'queued' }]);
+  expect(batch).toHaveBeenCalledTimes(1);
+  expect(await getSeniorDeveloperJobs([])).toEqual([]);
+  expect(batch).toHaveBeenCalledTimes(1);
+  batch.mockRejectedValue(new Error('database unavailable'));
+  await expect(getSeniorDeveloperJobs(['present'])).rejects.toThrow('database unavailable');
+  configured.mockReturnValue(false);
+  await expect(getSeniorDeveloperJobs(['present'])).rejects.toThrow('Shared queue storage unavailable');
+  expect(one).not.toHaveBeenCalled();
+  expect(full).not.toHaveBeenCalled();
+});
 
 test('work reads coalesce independently of history and a claim fences their snapshots', async () => {
   direct();
