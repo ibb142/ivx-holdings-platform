@@ -5,6 +5,7 @@ import { readPostgresFleetDashboardObservation, readPostgresPatrolObservations, 
 import { fleetControlObservation, fleetExecutionObservation } from './ivx-fleet-execution-observation';
 import type { PatrolObservation } from './ivx-autonomous-recovery-health';
 import { verifiedPatrolObservations } from './ivx-fleet-patrol-observations';
+import { latestFleetFileObservation } from './ivx-fleet-file-observation';
 
 export const FLEET_SIGNAL_MAX_AGE_MS = 15_000;
 import type { AgentFleetSignal, FleetDashboardSignals, FleetInstance } from '../../expo/shared/ivx/fleet-signals';
@@ -40,7 +41,10 @@ export function buildFleetDashboardSignals(raw: unknown, sha: string, now = Date
     if (!a || !s.activeLease) continue;
     heartbeat(a, task.lastHeartbeatAt, 'task_lease');
     a.running ||= s.running;
-    if (!a.activeTaskId || s.running) a.activeTaskId = task.taskId;
+    if (!a.activeTaskId || s.running) {
+      a.activeTaskId = task.taskId;
+      a.fileObservation = s.running ? latestFleetFileObservation(task, measured) : null;
+    }
     if (s.evidence) {
       a.productive = true;
       a.evidence = { taskId: task.taskId, evidenceId: s.evidence.evidenceId, source: s.evidence.source,

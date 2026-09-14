@@ -50,7 +50,7 @@ export function fleetTaskSignals(task: Task, now: number, sha: string) {
   const activeLease = Number.isInteger(agentNumber) && agentNumber >= 1 && agentNumber <= FLEET_SLO_TARGET
     && Date.parse(task.leaseExpiresAt ?? '') > now;
   const heartbeatFresh = activeLease && fresh(task.lastHeartbeatAt, now, HEARTBEAT_FRESH_MS);
-  const running = activeLease && task.state === 'RUNNING';
+  const running = activeLease && heartbeatFresh && task.state === 'RUNNING';
   const latest = [...(task.evidence ?? [])].filter(e => e.summary?.startsWith('LANDING_P0_RESULT '))
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
   const evidence = running && heartbeatFresh && latest && successfulEvidence(latest, agentNumber, sha, now) ? latest : null;
@@ -65,11 +65,11 @@ export function buildFleetSloSnapshot(tasks: readonly Task[], now = Date.now(), 
   const productive = new Set<number>();
   for (const task of tasks) {
     // Work stealing can differ from assignment. Attribute to the actual holder.
-    const { agentNumber: agent, activeLease, heartbeatFresh: heartbeat, evidence } = fleetTaskSignals(task, now, sha);
+    const { agentNumber: agent, activeLease, heartbeatFresh: heartbeat, running: executing, evidence } = fleetTaskSignals(task, now, sha);
     if (heartbeat) heartbeats.add(agent);
     if (!activeLease) continue;
     if (task.state === 'LEASED') leased.add(agent);
-    if (task.state !== 'RUNNING') continue;
+    if (!executing) continue;
     running.add(agent);
     if (evidence) productive.add(agent);
   }

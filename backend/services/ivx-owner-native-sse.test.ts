@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
+import { createEventStreamDecoder } from '../../expo/shared/ivx/event-stream';
 
 // Exercise the actual parser with the two device transport boundaries. RN's
 // legacy fetch can return SSE headers but no readable body (Android CI log).
@@ -19,7 +20,7 @@ function harness() {
     api, ...(binding ? { [binding[1]]: nativeFetch } : {}),
     fetch: async (...args: unknown[]) => { legacy.push(args); return { status: 200, headers: new Headers({ 'content-type': 'text/event-stream' }), body: null }; },
     assertRemoteRoutingAvailable() {}, getIVXOwnerAIEndpoint: () => 'https://api.ivxholding.com/api/ivx/owner-ai',
-    AbortController, Response, TextDecoder, OWNER_AI_SSE_TIMEOUT_MS: 180000,
+    AbortController, Response, TextDecoder, createEventStreamDecoder, OWNER_AI_SSE_TIMEOUT_MS: 180000,
     createOwnerAICallerAbortError: (message = 'caller aborted') => Object.assign(new Error(message), { name: 'AbortError' }),
     logBackendPostProofStart() {}, logBackendPostProofThrow() {}, logBackendPostProofFinish() {},
     console: { log: (...args: unknown[]) => logs.push(args) },
@@ -87,6 +88,17 @@ test('terminal 503 preserves the auth failure and permits native didComplete', a
   expect(result.response.status).toBe(503);
   expect(await result.response.json()).toEqual({ code: 'AUTH_SERVICE_UNAVAILABLE' });
   expect(h.timers.size).toBe(0);
+});
+
+test('a later final error record preserves status after a separately delivered error event', async () => {
+  const h = harness(); const pending = h.run(); pending.catch(() => {});
+  h.send({ type: 'error', error: 'SERVICE_DEGRADED' }); await flush();
+  h.send({ type: 'final', status: 503, ok: false, body: { ok: false, error: 'SERVICE_DEGRADED' } });
+  await flush(); h.close();
+  const result = await pending;
+  expect(result.response.status).toBe(503);
+  expect(await result.response.json()).toEqual({ ok: false, error: 'SERVICE_DEGRADED' });
+  expect(h.cancelled()).toBe(false);
 });
 
 test('terminal event with missing native completion retains the original deadline', async () => {

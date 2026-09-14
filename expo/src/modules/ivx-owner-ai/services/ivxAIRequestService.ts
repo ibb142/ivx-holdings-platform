@@ -1,4 +1,5 @@
 import { fetch as expoFetch } from 'expo/fetch';
+import { createEventStreamDecoder } from '@/shared/ivx/event-stream';
 import { probeLocalIVXBrain, requestLocalIVXBrain } from './localIVXBrainService';
 import { isIVXLocalFirstChatEnabled } from './ivxLocalFirstRuntime';
 import {
@@ -3242,23 +3243,26 @@ async function fetchOwnerAIWithHeartbeat(
       requestId: payload.requestId,
       conversationId: payload.conversationId,
     });
-    if (!response.body || !contentType.includes('text/event-stream')) {
-      // Backend did not honor SSE (older deploy, proxy stripped it, etc.).
-      // Surface as a recoverable error so requestOwnerAI falls back to the
-      // legacy JSON path.
+    if (!contentType.includes('text/event-stream')) {
+      // Keep the actual JSON response (including auth/admission failures).
+      // Resending the POST merely because the server returned JSON is unsafe.
+      const body = await Promise.race([response.text(), deadline]);
+      return { endpoint, response: new Response(body, {
+        status: response.status, headers: response.headers,
+      }) };
+    }
+    if (!response.body) {
       throw new Error('owner-ai endpoint did not return text/event-stream');
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let buffer = '';
     let finalEvent: { status: number; ok: boolean; body: unknown } | null = null;
     let streamError: string | null = null;
     let deltaCount = 0;
     let firstDeltaAt: string | null = null;
 
-    const dispatchEvent = (line: string): void => {
-      if (!line.startsWith('data:')) return;
-      const jsonText = line.slice(5).trim();
+    const dispatchEvent = (jsonText: string): void => {
+      if (finalEvent) return;
       if (!jsonText) return;
       let payloadEvent: Record<string, unknown> | null = null;
       try {
@@ -3266,6 +3270,7 @@ async function fetchOwnerAIWithHeartbeat(
       } catch {
         return;
       }
+      if (!payloadEvent || typeof payloadEvent !== 'object') return;
       const type = typeof payloadEvent.type === 'string' ? payloadEvent.type : '';
       if (type === 'final') {
         const status = typeof payloadEvent.status === 'number' ? payloadEvent.status : 200;
@@ -3314,6 +3319,7 @@ async function fetchOwnerAIWithHeartbeat(
       }
     };
 
+    const events = createEventStreamDecoder(dispatchEvent);
     try {
       while (true) {
         const { done, value } = await Promise.race([reader.read(), deadline]);
@@ -3321,16 +3327,8 @@ async function fetchOwnerAIWithHeartbeat(
         // The terminal SSE record precedes native didComplete. Drain to EOF
         // under the original deadline: SDK54 reader.cancel() races the native
         // controller.close() callback and raises a global JS exception.
-        if (finalEvent || streamError) continue;
-        buffer += decoder.decode(value, { stream: true });
-        let newlineIdx = buffer.indexOf('\n\n');
-        while (newlineIdx >= 0) {
-          const rawEvent = buffer.slice(0, newlineIdx);
-          buffer = buffer.slice(newlineIdx + 2);
-          const lines = rawEvent.split('\n');
-          for (const line of lines) dispatchEvent(line);
-          newlineIdx = buffer.indexOf('\n\n');
-        }
+        if (finalEvent) continue;
+        events.push(decoder.decode(value, { stream: true }));
       }
     } finally {
       reader.releaseLock();

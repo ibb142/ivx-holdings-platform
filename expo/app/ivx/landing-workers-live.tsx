@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, AppState, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { fetch as expoFetch } from 'expo/fetch';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { AlertTriangle, ArrowLeft, Clock3, Crosshair, Radio, RefreshCw } from 'lucide-react-native';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
-import { currentLiveFleet, fetchLiveFleet, type LiveFleetAgent, type LiveFleetPayload, type LiveFleetStatus } from '@/shared/ivx/live-fleet-dashboard';
+import { currentLiveFleet, type LiveFleetAgent, type LiveFleetPayload, type LiveFleetStatus } from '@/shared/ivx/live-fleet-dashboard';
+import { subscribeLiveFleet } from '@/shared/ivx/live-fleet-stream';
+import { visibleFleetFileObservation } from '@/shared/ivx/fleet-signals';
 
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 const URL = `${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&view=live`;
@@ -36,16 +39,21 @@ export default function LandingWorkersLiveScreen() {
   const inFlight = useRef<AbortController | null>(null);
 
   const load = useCallback(async (silent = false) => {
-    // A slow poll or token refresh owns the request slot until it settles.
-    if (inFlight.current) return;
+    // One stream (or legacy JSON poll) owns the request slot until it settles.
+    if (inFlight.current || (AppState.currentState && AppState.currentState !== 'active')) return;
     const controller = new AbortController();
     inFlight.current = controller;
     if (!silent) setLoading(true);
     try {
-      const next = await fetchLiveFleet({ url: URL, getToken: getIVXAccessToken, signal: controller.signal });
-      if (mounted.current && inFlight.current === controller) {
-        setPayload(next); setError(null); setNow(Date.now());
-      }
+      await subscribeLiveFleet({ url: URL, getToken: getIVXAccessToken, signal: controller.signal,
+        fetch: expoFetch as unknown as typeof fetch,
+        onSnapshot: next => {
+          if (mounted.current && inFlight.current === controller) {
+            setPayload(next); setError(null); setNow(Date.now());
+            setLoading(false); setRefreshing(false);
+          }
+        },
+      });
     } catch (failure) {
       if (mounted.current && !controller.signal.aborted && inFlight.current === controller) {
         setError(failure instanceof Error ? failure.message : 'Telemetría no disponible.');
@@ -63,9 +71,14 @@ export default function LandingWorkersLiveScreen() {
     void load();
     const poll = setInterval(() => void load(true), POLL_MS);
     const clock = setInterval(() => setNow(Date.now()), 1000);
+    const appState = AppState.addEventListener('change', state => {
+      if (state === 'active') void load(true);
+      else { inFlight.current?.abort(); inFlight.current = null; }
+    });
     return () => {
       mounted.current = false;
       clearInterval(poll); clearInterval(clock);
+      appState.remove();
       inFlight.current?.abort(); inFlight.current = null;
     };
   }, [load]);
@@ -80,7 +93,9 @@ export default function LandingWorkersLiveScreen() {
   const state = current ? (working ? 'FLOTA ACTIVA' : heartbeat ? 'FLOTA EN ESPERA' : 'SIN HEARTBEATS')
     : loading && !error ? 'CONECTANDO' : error ? 'SIN TELEMETRÍA' : 'DATOS ANTIGUOS';
   const stateColor = !current ? '#F59E0B' : working ? '#22C55E' : '#94A3B8';
-  const refresh = () => { setRefreshing(true); void load(true); };
+  const refresh = () => {
+    setRefreshing(true); inFlight.current?.abort(); inFlight.current = null; void load(true);
+  };
   const evidenceWindowMinutes = current ? current.fleetSignals.evidenceWindowMs / 60_000 : null;
 
   return (
@@ -129,14 +144,14 @@ export default function LandingWorkersLiveScreen() {
             : agents.filter(agent => agent.signals.running).map(agent => (
               <View key={`activity-${agent.agentId}`} style={styles.alertRow}>
                 <View style={[styles.dot, { backgroundColor: tone(agent.status) }]} />
-                <View style={styles.alertCopy}><Text style={styles.alertName}>IA-{String(agent.agentNumber).padStart(3, '0')} · {agent.name}</Text><Text style={styles.alertTask}>{agent.currentTask}</Text><Text style={styles.alertTask}>Heartbeat: {fmt(agent.lastActivityTime)}</Text></View>
+                <View style={styles.alertCopy}><Text style={styles.alertName}>IA-{String(agent.agentNumber).padStart(3, '0')} · {agent.name}</Text><Text style={styles.alertTask}>{agent.currentTask}</Text><Text style={styles.alertTask}>Heartbeat: {fmt(agent.lastActivityTime)}</Text><FileObservation agent={agent} now={now} /></View>
               </View>
             ))}
         </View>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>IA-001 → IA-112</Text>
           <Text style={styles.sectionSub}>RUNNING: ejecutando · ASSIGNED: tiene trabajo asignado · IDLE: disponible · UNKNOWN: sin presencia reciente.</Text>
-          {agents.map(agent => <AgentCard key={agent.agentId} agent={agent} />)}
+          {agents.map(agent => <AgentCard key={agent.agentId} agent={agent} now={now} />)}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -145,16 +160,28 @@ export default function LandingWorkersLiveScreen() {
 
 function RadarBoard({ agents, active }: { agents: LiveFleetAgent[]; active: boolean }) {
   const spin = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (!active) { spin.setValue(0); return; }
     const animation = Animated.loop(Animated.timing(spin, { toValue: 1, duration: 6500, useNativeDriver: true }));
     animation.start();
     return () => animation.stop();
   }, [spin, active]);
+  useEffect(() => {
+    if (!active) { pulse.setValue(0); return; }
+    const animation = Animated.loop(Animated.timing(pulse, { toValue: 1, duration: 2400, useNativeDriver: true }));
+    animation.start();
+    return () => animation.stop();
+  }, [pulse, active]);
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   return <View style={styles.radarWrap}>
     <View style={styles.radar}>
       <View style={[styles.ring, styles.ringOuter]} /><View style={[styles.ring, styles.ringMid]} /><View style={[styles.ring, styles.ringInner]} />
+      {active ? [0, 1, 2].map(index => <Animated.View key={`wave-${index}`} style={[
+        styles.ring, styles.ringOuter,
+        { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [.55, 0] }),
+          transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [.15 + index * .2, .55 + index * .2] }) }] },
+      ]} />) : null}
       <View style={styles.crossH} /><View style={styles.crossV} />
       {active ? <Animated.View style={[styles.sweep, { transform: [{ rotate }] }]}><View style={styles.sweepBeam} /></Animated.View> : null}
       <View style={styles.centerTarget}><Crosshair size={18} color="#FBBF24" /></View>
@@ -173,12 +200,24 @@ function StatusChip({ label, value, color }: { label: string; value: string | nu
 function Metric({ label, value, color }: { label: string; value: string | number; color: string }) {
   return <View style={styles.metric}><Text style={[styles.metricValue, { color }]}>{value}</Text><Text style={styles.metricLabel}>{label}</Text></View>;
 }
-function AgentCard({ agent }: { agent: LiveFleetAgent }) {
+function FileObservation({ agent, now }: { agent: LiveFleetAgent; now: number }) {
+  const observed = visibleFleetFileObservation(agent.signals, now);
+  if (!observed) return <Text style={styles.alertTask}>Archivo/líneas: sin observación reciente.</Text>;
+  const lines = observed.lineStart === null ? 'líneas no reportadas'
+    : observed.lineStart === observed.lineEnd ? `línea ${observed.lineStart}` : `líneas ${observed.lineStart}–${observed.lineEnd}`;
+  return <View testID={`fleet-file-${agent.agentNumber}`}>
+    <Text style={styles.rowLabel}>ÚLTIMO ARCHIVO OBSERVADO</Text>
+    <Text selectable style={styles.rowValue}>{observed.filePath} · {lines}</Text>
+    <Text style={styles.meta}>{fmt(observed.observedAt)}</Text>
+  </View>;
+}
+function AgentCard({ agent, now }: { agent: LiveFleetAgent; now: number }) {
   return <View style={styles.card}>
     <View style={styles.cardHead}><View style={[styles.dot, { backgroundColor: tone(agent.status) }]} /><View style={styles.identity}><Text style={styles.agentName}>IA-{String(agent.agentNumber).padStart(3, '0')} · {agent.name}</Text><Text style={styles.meta}>{agent.department}</Text></View><Text style={[styles.status, { color: tone(agent.status) }]}>{agent.status}</Text></View>
     <Row label="RESPONSABILIDAD" value={agent.primaryResponsibility} />
     <Row label="TAREA OBSERVADA" value={agent.currentTask || 'Sin tarea con lease vigente'} />
     <Row label="HEARTBEAT" value={fmt(agent.lastActivityTime)} />
+    <FileObservation agent={agent} now={now} />
     <Row label="FUENTE DE EVIDENCIA" value={agent.lastSourceReference || 'Sin evidencia en esta ventana'} />
     <Row label="EVIDENCIA SHA" value={agent.lastEvidenceSha || '—'} />
   </View>;

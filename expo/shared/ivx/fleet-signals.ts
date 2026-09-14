@@ -31,12 +31,24 @@ export function fleetActivityLabel(signal: AgentFleetSignal | null | undefined, 
   if (signal.observation) return `QA ${signal.observation.outcome}`;
   return signal.assignedTasks ? 'WAITING' : 'IDLE';
 }
+export type FleetFileObservation = {
+  taskId: string; filePath: string; lineStart: number | null; lineEnd: number | null;
+  observedAt: string; evidenceId: string; contentHash: string;
+  operation: 'source_file_inspected' | 'source_file_changed' | 'code_diff';
+};
+export function visibleFleetFileObservation(signal: AgentFleetSignal, now = Date.now()): FleetFileObservation | null {
+  const observed = signal.fileObservation;
+  if (!signal.running || !observed || observed.taskId !== signal.activeTaskId) return null;
+  const age = now - Date.parse(observed.observedAt);
+  return Number.isFinite(age) && age >= 0 && age <= 60_000 ? observed : null;
+}
 export type AgentFleetSignal = {
   agentNumber: number; heartbeatAt: string | null; heartbeatFresh: boolean;
   heartbeatSource: 'agent_state' | 'task_lease' | null;
   assignedTasks: number; running: boolean; activeTaskId: string | null;
   productive: boolean; evidence: { taskId: string; evidenceId: string; source: string; contentHash: string; createdAt: string; commitSha: string } | null;
   observation?: FleetPatrolObservation | null;
+  fileObservation?: FleetFileObservation | null;
   control?: { paused: boolean; disabled: boolean; consistent: boolean; oldestSampleAt: string } | null;
 };
 export type FleetInstance = { instanceId: string; role: 'api' | 'worker'; commitSha: string; serviceId: string; lastSeenAt: string };
