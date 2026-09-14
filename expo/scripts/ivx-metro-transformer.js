@@ -46,7 +46,15 @@ function patchMetroUnsafeImports(filename, source) {
 
 function transform(args) {
   const source = patchMetroUnsafeImports(args?.filename, args?.src);
-  const transformedArgs = source === args?.src ? args : { ...args, src: source };
+  // experiments.baseUrl is a web hosting prefix. Expo SDK 54 also inlines it
+  // into native production bundles, where /app strips /app-guide to -guide.
+  // Scope the prefix to web while preserving all other Metro caller options.
+  const native = args?.options?.platform === "android" || args?.options?.platform === "ios";
+  const options = native ? {
+    ...args.options,
+    customTransformOptions: { ...args.options.customTransformOptions, baseUrl: "" },
+  } : args?.options;
+  const transformedArgs = { ...args, src: source, options };
   return upstream.transform(transformedArgs);
 }
 
