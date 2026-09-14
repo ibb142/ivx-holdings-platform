@@ -1,0 +1,67 @@
+name: IVX Bounded Agent Concurrency Ramp
+
+on:
+  pull_request:
+    paths: ['qa/ivx-agent-concurrency-ramp*', '.github/workflows/ivx-agent-concurrency-ramp.yml']
+  push:
+    branches: [main]
+    paths: ['qa/ivx-agent-concurrency-ramp*', '.github/workflows/ivx-agent-concurrency-ramp.yml']
+  workflow_dispatch:
+    inputs:
+      run_load_test:
+        description: Execute the bounded production load test after a healthy lease baseline
+        type: boolean
+        default: false
+      target_sha:
+        description: Exact deployed source SHA to verify
+        type: string
+        required: true
+      max_concurrency:
+        description: Maximum concurrent agent runtime requests
+        type: choice
+        options: ['8', '12', '16']
+        default: '16'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ivx-agent-load-ramp-${{ github.event_name == 'workflow_dispatch' && 'production' || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test qa/ivx-agent-concurrency-ramp.test.mjs
+  load-test:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.run_load_test
+    needs: contract
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run bounded 8/12/16 phases
+        env:
+          IVX_ALLOW_AGENT_LOAD_TEST: 'true'
+          IVX_TARGET_SHA: ${{ inputs.target_sha }}
+          IVX_RAMP_MAX_CONCURRENCY: ${{ inputs.max_concurrency }}
+          IVX_SYSTEM_KEY: ${{ secrets.IVX_AI_SYSTEM_SECRET || secrets.IVX_SYSTEM_SECRET }}
+        run: node qa/ivx-agent-concurrency-ramp.mjs
+      - name: Preserve observations including failed phases
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-concurrency-ramp-${{ github.run_id }}
+          path: qa/evidence/agent-concurrency-ramp.json
+          if-no-files-found: warn
+          retention-days: 30
