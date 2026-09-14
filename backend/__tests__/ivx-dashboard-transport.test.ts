@@ -10,6 +10,7 @@ let ledgerOk = false;
 let fleetAvailable = false;
 let ledgerReadCompleted = false;
 let fleetReads = 0;
+let failingRead: 'ledger' | 'fleet' | null = null;
 const startedAt = new Date(Date.now() - 10_000).toISOString();
 const executions = Array.from({ length: 2000 }, (_, i) => {
   const agent = ALL_AGENT_CONTRACTS[i % 112]!;
@@ -27,6 +28,7 @@ const executions = Array.from({ length: 2000 }, (_, i) => {
 mock.module('../services/ivx-agent-dashboard-ledger', () => ({
   IVX_AGENT_DASHBOARD_LEDGER_MARKER: 'contract-ledger',
   readAgentDashboardLedger: async () => {
+    if (failingRead === 'ledger') throw new Error('internal ledger connection details');
     ledgerReadCompleted = false;
     await Promise.resolve();
     ledgerReadCompleted = true;
@@ -37,6 +39,7 @@ mock.module('../services/ivx-daily-executive-report', () => ({ getLatestReport: 
 mock.module('../services/ivx-durable-store', () => ({ readDurableJson: async () => [] }));
 mock.module('../services/ivx-fleet-dashboard-signals', () => ({
   readFleetDashboardSignals: async () => {
+    if (failingRead === 'fleet') throw new Error('internal fleet connection details');
     expect(ledgerReadCompleted).toBe(true);
     fleetReads += 1;
     return {
@@ -60,6 +63,25 @@ afterAll(() => {
   else process.env.IVX_AI_SYSTEM_SECRET = previousSecret;
   mock.restore();
 });
+
+for (const source of ['ledger', 'fleet'] as const) {
+  test(`contains a rejected ${source} read without inventing an empty fleet`, async () => {
+    failingRead = source;
+    ledgerOk = true;
+    try {
+      const response = await handleAutonomousOpsDashboardRequest(new Request('https://api.ivxholding.com/api/ivx/live-work/agents?enterpriseDashboard=1', {
+        headers: { 'X-IVX-System-Key': 'dashboard-contract-machine-key' },
+      }));
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ ok: false, error: 'Durable dashboard telemetry is unavailable.' });
+    } finally {
+      failingRead = null;
+      ledgerOk = false;
+      fleetReads = 0;
+      ownerGuard.mockClear();
+    }
+  });
+}
 
 test('preserves all 112 agents under the actual transport ceiling and fails closed on unavailable telemetry', async () => {
   const request = () => new Request('https://api.ivxholding.com/api/ivx/live-work/agents?enterpriseDashboard=1', {

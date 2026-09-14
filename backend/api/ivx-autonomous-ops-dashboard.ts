@@ -110,7 +110,13 @@ export async function handleAutonomousOpsDashboardRequest(request:Request):Promi
   else if(range==='30d'){start=now-30*86400000;label='Last 30 days';}
 
   refreshOptionalInputs();
-  const { value: { ledger, fleetSignals, ledgerObservedAt }, observedAt } = await readSharedInputs();
+  let sharedInputs: Awaited<ReturnType<typeof readSharedInputs>>;
+  try {
+    sharedInputs = await readSharedInputs();
+  } catch {
+    return ownerOnlyJson({ok:false,error:'Durable dashboard telemetry is unavailable.'},503);
+  }
+  const { value: { ledger, fleetSignals, ledgerObservedAt }, observedAt } = sharedInputs;
   if (!ledger.ok || !fleetSignals) return ownerOnlyJson({ok:false,error:'Durable dashboard telemetry is unavailable.'},503);
   const latestReport=optionalReport,ownerActions=optionalActions;
   const productivity24h=buildAutonomousProductivity24h(ledger.executions,{now,fleetSize:112,landingBudgetHours:Number.parseFloat(process.env.IVX_LANDING_VERIFIED_HOURS_BUDGET??'120')||120});

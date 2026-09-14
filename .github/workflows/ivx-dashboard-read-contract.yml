@@ -1,0 +1,49 @@
+name: IVX dashboard read contract
+
+on:
+  pull_request:
+    paths:
+      - 'backend/api/ivx-autonomous-ops-dashboard.ts'
+      - 'backend/api/ivx-live-work.ts'
+      - 'backend/services/ivx-dashboard-read-cache.ts'
+      - 'backend/__tests__/ivx-dashboard-transport.test.ts'
+      - 'expo/src/modules/ivx-owner-ai/services/ivxAutonomousOpsService.ts'
+      - 'expo/shared/ivx/fleet-signals.ts'
+      - 'expo/__tests__/autonomous-dashboard-health.test.ts'
+      - '.github/workflows/ivx-dashboard-read-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/api/ivx-autonomous-ops-dashboard.ts'
+      - 'backend/api/ivx-live-work.ts'
+      - 'backend/services/ivx-dashboard-read-cache.ts'
+      - 'backend/__tests__/ivx-dashboard-transport.test.ts'
+      - 'expo/src/modules/ivx-owner-ai/services/ivxAutonomousOpsService.ts'
+      - 'expo/shared/ivx/fleet-signals.ts'
+      - 'expo/__tests__/autonomous-dashboard-health.test.ts'
+      - '.github/workflows/ivx-dashboard-read-contract.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ivx-dashboard-read-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dashboard-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Backend typecheck
+        run: ./node_modules/.bin/tsc --noEmit -p backend/tsconfig.json
+      - name: Owner route, unavailable reads and full 112-agent response
+        run: bun test backend/__tests__/ivx-dashboard-transport.test.ts
+      - name: Mobile health verdict and REST error handling
+        working-directory: expo
+        run: bun test __tests__/autonomous-dashboard-health.test.ts
