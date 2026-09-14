@@ -1,4 +1,4 @@
-name: Quantum Vercel dispatcher read-only audit
+name: Quantum database capacity read-only audit
 on:
   push:
     branches: ['ops/quantum-vercel-dispatcher-audit-20260914']
@@ -15,142 +15,34 @@ jobs:
     steps:
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
-      - name: Locate the linked IVX project and inspect actual cron state
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
-          IVX_VERCEL_TOKEN: ${{ secrets.IVX_VERCEL_TOKEN }}
-        run: |
-          node --input-type=module <<'NODE'
-          import assert from 'node:assert/strict';
-          const key = [process.env.VERCEL_TOKEN, process.env.VERCEL_API_TOKEN, process.env.IVX_VERCEL_TOKEN].find(v => v?.trim())?.trim();
-          if (!key) {
-            console.log(JSON.stringify({ observedAt: new Date().toISOString(), state: 'UNOBSERVED', reason: 'No protected Vercel management binding', shutdownVerified: false }));
-            process.exit(1);
-          }
-          async function get(path, params) {
-            const url = new URL(path, 'https://api.vercel.com');
-            assert.equal(url.origin, 'https://api.vercel.com');
-            for (const [name, value] of Object.entries(params)) if (value != null) url.searchParams.set(name, String(value));
-            const response = await fetch(url, { method: 'GET', redirect: 'error', signal: AbortSignal.timeout(15000), headers: { Authorization: 'Bearer ' + key, Accept: 'application/json' } });
-            if (!response.ok) throw new Error('Vercel audit HTTP ' + response.status);
-            return response.json();
-          }
-          const observations = [];
-          for (const teamId of [null, 'team_fEfCJAenMBXVSGiX6LeoA3Ji']) {
-            const scope = teamId || 'authenticated-default';
-            try {
-              const payload = await get('/v10/projects', { teamId, repoId: '1169662811', limit: 100 });
-              const projects = Array.isArray(payload) ? payload : payload.projects;
-              assert(Array.isArray(projects), 'Malformed project list');
-              assert(!payload.pagination?.next, 'Project results were truncated');
-              const matches = [];
-              for (const project of projects) {
-                assert(/^prj_[a-zA-Z0-9]+$/.test(project.id), 'Malformed project identity');
-                const current = await get('/v9/projects/' + encodeURIComponent(project.id), { teamId });
-                assert.equal(current.id, project.id);
-                const link = current.link || {};
-                const repositoryVerified = String(link.repoId) === '1169662811'
-                  || (link.org === 'ibb142' && link.repo === 'ivx-holdings-platform');
-                const deployed = await get('/v6/deployments', { teamId, projectId: current.id, target: 'production', limit: 3 });
-                assert(Array.isArray(deployed.deployments), 'Malformed deployment list');
-                const ready = await get('/v6/deployments', { teamId, projectId: current.id, target: 'production', state: 'READY', limit: 1 });
-                assert(Array.isArray(ready.deployments), 'Malformed ready deployment list');
-                const production = [];
-                for (const candidate of deployed.deployments) {
-                  const id = candidate.uid || candidate.id;
-                  assert(/^[a-zA-Z0-9_]+$/.test(id), 'Malformed deployment identity');
-                  const detail = await get('/v13/deployments/' + encodeURIComponent(id), { teamId });
-                  production.push({ id, state: detail.readyState ?? detail.status ?? null,
-                    target: detail.target ?? null, sourceSha: detail.meta?.githubCommitSha ?? null,
-                    createdAt: detail.createdAt ?? detail.created ?? null,
-                    cronCount: Array.isArray(detail.crons) ? detail.crons.length : null,
-                    functionPaths: detail.functions && typeof detail.functions === 'object' ? Object.keys(detail.functions) : null });
-                }
-                matches.push({ projectId: current.id, name: current.name, repositoryVerified,
-                  productionTargetId: current.targets?.production?.id ?? null,
-                  readyProductionFound: ready.deployments.length > 0,
-                  readySearchComplete: !ready.pagination?.next,
-                  paused: typeof current.paused === 'boolean' ? current.paused : null, production,
-                  cronState: current.crons ? {
-                    enabledAt: current.crons.enabledAt ?? null, disabledAt: current.crons.disabledAt ?? null,
-                    updatedAt: current.crons.updatedAt ?? null, deploymentId: current.crons.deploymentId ?? null,
-                    definitions: current.crons.definitions?.map(entry => ({ path: new URL(entry.path, 'https://audit.invalid').pathname, schedule: entry.schedule })) ?? null,
-                  } : null });
-              }
-              observations.push({ scope, read: 'OBSERVED', matchingProjects: matches });
-            } catch (error) {
-              // Do not print provider response bodies, environment values or tokens.
-              observations.push({ scope, read: 'UNOBSERVED', reason: error instanceof Error && /^Vercel audit HTTP \d+$/.test(error.message) ? error.message : 'Audit request unavailable or malformed' });
-            }
-          }
-          console.log(JSON.stringify({ observedAt: new Date().toISOString(), observations, shutdownVerified: false, scope: 'project-and-cron-configuration-read-only' }));
-          NODE
-      - name: Inspect database endpoint mode without exposing the binding
-        env:
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-        run: |
-          node --input-type=module <<'NODE'
-          import assert from 'node:assert/strict';
-          const key = process.env.RENDER_API_KEY?.trim();
-          assert(key, 'Render audit binding unavailable');
-          async function read(path) {
-            const response = await fetch('https://api.render.com/v1' + path, { method: 'GET', redirect: 'error', signal: AbortSignal.timeout(15000), headers: { Authorization: 'Bearer ' + key, Accept: 'application/json' } });
-            if (!response.ok) throw new Error('Render audit HTTP ' + response.status);
-            return response.json();
-          }
-          const observations = [];
-          for (const [role, serviceId] of [['api', 'srv-d7t9ivreo5us73ftose0'], ['worker', 'srv-d9i15fg4n6ts73bn00j0']]) {
-            const service = await read('/services/' + serviceId);
-            assert.equal(service.ownerId, 'tea-d7plj9beo5us73ch3ukg');
-            assert.equal(service.repo, 'https://github.com/ibb142/ivx-holdings-platform');
-            const selected = {};
-            let cursor = '';
-            for (let page = 0; page < 10; page++) {
-              const rows = await read('/services/' + serviceId + '/env-vars?limit=100' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : ''));
-              assert(Array.isArray(rows), 'Malformed environment response');
-              for (const item of rows) {
-                const entry = item.envVar ?? item;
-                if (['SUPABASE_DB_URL', 'DATABASE_URL', 'POSTGRES_URL', 'SUPABASE_POOLER_URL'].includes(entry.key)) selected[entry.key] = entry.value;
-              }
-              if (rows.length < 100) { cursor = ''; break; }
-              const next = rows.at(-1)?.cursor;
-              assert(next && next !== cursor, 'Malformed environment cursor');
-              cursor = next;
-            }
-            assert(!cursor, 'Incomplete environment list');
-            const raw = ['SUPABASE_DB_URL', 'DATABASE_URL', 'POSTGRES_URL', 'SUPABASE_POOLER_URL'].map(name => selected[name]).find(value => value?.trim());
-            const parsed = new URL(raw);
-            const kind = parsed.hostname.endsWith('.pooler.supabase.com') ? 'supavisor' : parsed.hostname.endsWith('.supabase.co') ? 'direct-supabase' : 'other';
-            observations.push({ role, kind, port: Number(parsed.port || 5432), scope: 'configured-service-binding' });
-          }
-          console.log(JSON.stringify({ observedAt: new Date().toISOString(), readOnly: true, databaseEndpoints: observations }));
-          NODE
-      - name: Read Supabase pool capacity without exposing connection strings
+      - name: Read selected compute size and public price without changing billing
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           const key = process.env.SUPABASE_ACCESS_TOKEN?.trim();
-          assert(key, 'Supabase audit binding unavailable');
-          const response = await fetch('https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/config/database/pooler', {
-            method: 'GET', redirect: 'error', signal: AbortSignal.timeout(15000), headers: { Authorization: 'Bearer ' + key, Accept: 'application/json' },
+          assert(key, 'Management read binding unavailable');
+          const response = await fetch('https://api.supabase.com/v1/projects/kvclcdjmjghndxsngfzb/billing/addons', {
+            method: 'GET', redirect: 'error', signal: AbortSignal.timeout(15000),
+            headers: { Authorization: 'Bearer ' + key, Accept: 'application/json' },
           });
-          assert.equal(response.status, 200, 'Pool configuration read HTTP ' + response.status);
-          const rows = await response.json();
-          assert(Array.isArray(rows), 'Malformed pool configuration');
-          console.log(JSON.stringify({ observedAt: new Date().toISOString(), readOnly: true,
-            poolConfig: rows.map(row => ({ databaseType: row.database_type, poolMode: row.pool_mode,
-              defaultPoolSize: row.default_pool_size, maxClientConnections: row.max_client_conn })) }));
+          assert.equal(response.status, 200, 'Compute selection read HTTP ' + response.status);
+          const body = await response.json();
+          assert(Array.isArray(body.selected_addons), 'Malformed selected add-ons');
+          const compute = body.selected_addons.filter(entry => entry.type === 'compute' || /^ci_/.test(entry.variant?.id || ''));
+          assert.equal(compute.length, 1, 'Selected compute size could not be identified');
+          console.log(JSON.stringify({ observedAt: new Date().toISOString(), scope: 'selected-database-compute-read-only',
+            compute: compute.map(entry => ({ type: entry.type, id: entry.variant?.id, name: entry.variant?.name,
+              price: entry.variant?.price ? { amount: entry.variant.price.amount, interval: entry.variant.price.interval,
+                type: entry.variant.price.type, description: entry.variant.price.description } : null })) }));
           NODE
-      - name: Observe database CPU and IO over two metric snapshots
+      - name: Read one fresh CPU and IO snapshot
         env:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
-          import { setTimeout } from 'node:timers/promises';
           const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
           assert(key, 'Metrics binding unavailable');
           const allow = new Set([
@@ -186,7 +78,4 @@ jobs:
           }
           const before = await snapshot();
           console.log(JSON.stringify({ scope: 'database-capacity-read-only', sample: 1, ...before }));
-          await setTimeout(70000);
-          const after = await snapshot();
-          console.log(JSON.stringify({ scope: 'database-capacity-read-only', sample: 2, ...after }));
           NODE
