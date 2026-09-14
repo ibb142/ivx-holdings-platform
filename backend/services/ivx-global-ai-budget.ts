@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { settleBudgetWithRetry } from './ivx-global-ai-budget-settlement';
+import { confirmBudgetReservation } from './ivx-global-ai-budget-admission';
 
 export const GLOBAL_AI_BUDGET_MARKER = 'ivx-global-ai-budget-v1';
 export function globalAIBudgetEnabled(): boolean { return process.env.IVX_AI_GLOBAL_BUDGET_ENABLED === 'true'; }
@@ -111,10 +112,26 @@ export async function reserveGlobalAIBudget(model: string, requestSha: string, f
   try {
     const current = await catalog(fetcher);
     quote = quoteCatalogModel(current.value, model, current.at, current.hash);
-    const result = await globalAIBudgetRpc<{ allowed: boolean; reason?: string; reservationId?: string }>('ivx_ai_budget_reserve', {
-      p_reservation_id: id, p_worker_instance_id: worker, p_model: model, p_request_sha: requestSha,
-      p_reserved_nano: quote.reservedNano, p_pricing_evidence: quote,
-    });
+    const result = await confirmBudgetReservation(
+      () => globalAIBudgetRpc<{ allowed: boolean; reason?: string; reservationId?: string }>('ivx_ai_budget_reserve', {
+        p_reservation_id: id, p_worker_instance_id: worker, p_model: model, p_request_sha: requestSha,
+        p_reserved_nano: quote.reservedNano, p_pricing_evidence: quote,
+      }),
+      params => globalAIBudgetRpc<{ ok: boolean; pricingBoundBreached?: boolean }>('ivx_ai_budget_finish', params),
+      { p_reservation_id: id, p_worker_instance_id: worker },
+      {
+        onRetry(_, attempts, delayMs) {
+          console.warn('[IVX Global Budget] unstarted admission cleanup pending', {
+            reservationId: id, workerInstanceId: worker, attempts, delayMs, providerStarted: false,
+          });
+        },
+        onUnconfirmed(_, attempts) {
+          console.error('[IVX Global Budget] unstarted admission cleanup unconfirmed', {
+            reservationId: id, workerInstanceId: worker, attempts, providerStarted: false,
+          });
+        },
+      },
+    );
     if (result?.allowed !== true || result.reservationId !== id) throw new GlobalAIBudgetError(result?.reason ?? 'admission unconfirmed');
   } catch (error) {
     if (error instanceof GlobalAIBudgetError) throw error;
