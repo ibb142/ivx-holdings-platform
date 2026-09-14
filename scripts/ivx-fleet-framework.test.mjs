@@ -51,9 +51,12 @@ describe('lease ownership on the isolated PostgreSQL test database', () => {
     finally { await admin?.end(); }
   });
   let sequence = 0;
-  async function seed() {
+  async function resetRows() {
     await pg.exec(`TRUNCATE public.ivx_autonomous_tasks, public.ivx_autonomous_task_events;
       UPDATE ivx_fleet.resources SET token=NULL,task_id=NULL,expires_at='epoch';`);
+  }
+  async function seed() {
+    await resetRows();
     const taskId = await store.enqueue({
       idempotencyKey: `test-${++sequence}`, baseCommit: 'a'.repeat(40), priority: 'high',
       files: [{ path: 'src/test.txt', beforeSha256: null, content: 'test' }],
@@ -63,6 +66,39 @@ describe('lease ownership on the isolated PostgreSQL test database', () => {
     return lease;
   }
   async function taskRow(id) { return (await pg.query('SELECT * FROM public.ivx_autonomous_tasks WHERE task_id=$1', [id])).rows[0]; }
+  test('two concurrent workers cannot claim the same queued task', async () => {
+    await resetRows();
+    const id = await store.enqueue({ idempotencyKey: `race-${++sequence}`, baseCommit: 'a'.repeat(40), priority: 'high',
+      files: [{ path: 'src/race.txt', beforeSha256: null, content: 'race' }] });
+    const claims = await Promise.all([store.claim(), otherStore.claim()]);
+    const winners = claims.filter(Boolean);
+    assert.equal(winners.length, 1);
+    assert.equal(winners[0].taskId, id);
+    const row = await taskRow(id);
+    assert.equal(row.lease_holder, winners[0].token);
+    assert.equal(row.worker_instance_id, claims[0] ? 'worker-A' : 'worker-B');
+    assert.equal((await pg.query("SELECT count(*)::int AS n FROM public.ivx_autonomous_task_events WHERE task_id=$1 AND event_type='fleet_claimed'", [id])).rows[0].n, 1);
+  });
+  test('concurrent tasks cannot hold the same file resource', async () => {
+    await resetRows();
+    for (let n = 0; n < 2; n++) await store.enqueue({ idempotencyKey: `file-race-${++sequence}`, baseCommit: 'a'.repeat(40), priority: 'high',
+      files: [{ path: 'src/shared.txt', beforeSha256: null, content: `change-${n}` }] });
+    const claims = await Promise.all([store.claim(), otherStore.claim()]);
+    assert.equal(claims.filter(Boolean).length, 1);
+    const counts = await pg.query('SELECT state,count(*)::int AS n FROM public.ivx_autonomous_tasks GROUP BY state ORDER BY state');
+    assert.deepEqual(counts.rows, [{ state: 'RECEIVED', n: 1 }, { state: 'RUNNING', n: 1 }]);
+    assert.equal((await pg.query("SELECT count(*)::int AS n FROM ivx_fleet.resources WHERE kind='file' AND expires_at>clock_timestamp()")).rows[0].n, 1);
+  });
+  test('two workers share the global eight-lease admission ceiling', async () => {
+    await resetRows();
+    for (let n = 0; n < 12; n++) await store.enqueue({ idempotencyKey: `capacity-${++sequence}`, baseCommit: 'a'.repeat(40), priority: 'high',
+      files: [{ path: `src/independent-${n}.txt`, beforeSha256: null, content: 'change' }] });
+    const claims = (await Promise.all(Array.from({ length: 12 }, (_, n) => (n % 2 ? otherStore : store).claim()))).filter(Boolean);
+    assert.equal(claims.length, 8);
+    assert.equal(new Set(claims.map(lease => lease.taskId)).size, 8);
+    assert.equal(new Set(claims.map(lease => lease.agentNumber)).size, 8);
+    assert.equal((await pg.query("SELECT count(*)::int AS n FROM ivx_fleet.resources WHERE kind='capacity' AND expires_at>clock_timestamp()")).rows[0].n, 8);
+  });
   test('renewal extends only owned live lease without changing its state or fencing counters', async () => {
     const lease = await seed();
     const otherId = await store.enqueue({ idempotencyKey: 'untouched-pending', baseCommit: 'a'.repeat(40), priority: 'low',
@@ -197,6 +233,28 @@ describe('GitHub CI evidence verification with deterministic HTTP fixtures', () 
     assert(report.checks.every(c => c.evidence.length > 0));
     assert.equal(calls.filter(u => u.endsWith('/pulls/12')).length, 2);
     assert.equal(await fw.forceOmittedChecks(value), true);
+  });
+  test('eleven green runs cannot replace a missing required autonomy guard', async () => {
+    const checks = Array.from({ length: 11 }, (_, i) => ({ ...goodCheck, id: 1000 + i, name: `unrelated-${i}` }));
+    const { value } = options({ checks });
+    value.required = [{ source: 'check_run', name: 'Senior Developer + 12 IA autonomy invariants', appId: 123 }];
+    const report = await fw.verifyRequiredGitHubChecks(value);
+    assert.equal(report.ok, false);
+    assert.deepEqual(report.blockers, ['Senior Developer + 12 IA autonomy invariants:REQUIRED_CHECK_MISSING']);
+  });
+  test('the policy checks all named requirements even when exactly eleven runs exist', async () => {
+    const checks = Array.from({ length: 11 }, (_, i) => ({ ...goodCheck, id: 1000 + i, name: `gate-${i}` }));
+    const { value } = options({ checks });
+    value.required = checks.map(check => ({ source: 'check_run', name: check.name, appId: 123 }));
+    assert.equal((await fw.verifyRequiredGitHubChecks(value)).ok, true);
+    checks[10] = { ...checks[10], conclusion: 'failure' };
+    const failed = await fw.verifyRequiredGitHubChecks(value);
+    assert.equal(failed.ok, false);
+    assert.deepEqual(failed.blockers, ['gate-10:REQUIRED_CHECK_NOT_SUCCESSFUL']);
+  });
+  test('additional successful workflow jobs do not invalidate satisfied requirements', async () => {
+    const checks = [goodCheck, ...Array.from({ length: 11 }, (_, i) => ({ ...goodCheck, id: 1000 + i, name: `additional-${i}` }))];
+    assert.equal((await fw.verifyRequiredGitHubChecks(options({ checks }).value)).ok, true);
   });
   for (const conclusion of ['skipped','neutral','failure','cancelled','timed_out','action_required',null]) {
     test(`required ${conclusion} check blocks approval`, async () => {
