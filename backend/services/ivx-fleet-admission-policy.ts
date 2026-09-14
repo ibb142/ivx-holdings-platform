@@ -4,7 +4,7 @@ export const FLEET_IDENTITIES = 112;
 export function configuredAdmissionLimit(value: string | undefined, fallback: number): number {
   if (value === undefined) return fallback;
   if (!/^\d+$/.test(value.trim())) return 0;
-  const parsed = Number(value);
+  const parsed = Math.max(1, Number(value));
   return Number.isSafeInteger(parsed) ? Math.min(parsed, FLEET_IDENTITIES) : 0;
 }
 
