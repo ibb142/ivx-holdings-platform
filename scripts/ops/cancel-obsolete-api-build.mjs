@@ -5,7 +5,7 @@ const serviceId = 'srv-d7t9ivreo5us73ftose0';
 const deployId = 'dep-dak532dckfvc73ab4gd0';
 const obsoleteSha = 'b8778a5052ab5dab1502c5b22611d663e52e2a38';
 
-export async function cancelObsoleteApiBuild({ token, expectedMain, fetcher = fetch, now = Date.now }) {
+export async function cancelObsoleteApiBuild({ token, expectedMain, fetcher = fetch, now = Date.now, wait = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
   assert.ok(token, 'RENDER_BINDING_UNAVAILABLE');
   assert.match(expectedMain ?? '', /^[a-f0-9]{40}$/);
   const origin = 'https://api.render.com/v1';
@@ -38,10 +38,15 @@ export async function cancelObsoleteApiBuild({ token, expectedMain, fetcher = fe
   }); } catch { /* Reconcile below. */ }
   if (response && !response.ok && response.status < 500) throw new Error(`CANCEL_REJECTED_HTTP_${response.status}`);
   await response?.body?.cancel().catch(() => {});
-  const after = await read(`/services/${serviceId}/deploys/${deployId}`);
-  assert.ok(['canceled', 'cancelled'].includes(after.status), 'CANCEL_UNCONFIRMED_DO_NOT_REPLAY');
-  return { changed: true, deployId, status: after.status, successorId: successor.id, successorSha: expectedMain,
-    servingReleaseCancelled: false, deploymentCreated: false, observedAt: new Date(now()).toISOString() };
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt) await wait(500 * attempt);
+    const after = await read(`/services/${serviceId}/deploys/${deployId}`);
+    if (['canceled', 'cancelled'].includes(after.status)) {
+      return { changed: true, deployId, status: after.status, successorId: successor.id, successorSha: expectedMain,
+        servingReleaseCancelled: false, deploymentCreated: false, observedAt: new Date(now()).toISOString() };
+    }
+  }
+  throw new Error('CANCEL_UNCONFIRMED_DO_NOT_REPLAY');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
