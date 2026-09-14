@@ -1,6 +1,12 @@
 import { test, expect } from '@playwright/test';
+import { installLandingPreviewRoutes } from './landing-preview-route.mjs';
 
-test('mobile navigation responds and the canonical feed reaches the rendered page', async ({ page }, testInfo) => {
+test('mobile navigation responds and the canonical feed reaches the rendered page', async ({ page, context, baseURL }, testInfo) => {
+  if (process.env.LANDING_PREVIEW_SOURCE) {
+    // Preserve HTTPS, CSP and the API's actual CORS policy. Only the reviewed
+    // static source comes from the preview; API responses remain live.
+    await installLandingPreviewRoutes(context, baseURL, new URL(process.env.LANDING_PREVIEW_SOURCE));
+  }
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   const feedResponse = page.waitForResponse(response =>
@@ -43,6 +49,7 @@ test('mobile navigation responds and the canonical feed reaches the rendered pag
     body: JSON.stringify({
       observedAt: new Date().toISOString(),
       testSourceSha: process.env.GITHUB_SHA ?? null,
+      branchPreview: Boolean(process.env.LANDING_PREVIEW_SOURCE),
       landingUrl: page.url(),
       device: testInfo.project.name,
       feedHttp: response.status(),
