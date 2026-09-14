@@ -31,6 +31,7 @@ async function scenario(body: string) {
       reads++;
       if (directMode === 'fail') throw new Error('direct transport unavailable');
       if (directMode === 'late') await new Promise(resolve => setTimeout(resolve, 2400));
+      else await new Promise(resolve => setTimeout(resolve, 5));
       if (directMode === 'missing') return { rows: [{ emergency_rows: [], campaign_documents: [] }] };
       return { rows: [{
         emergency_rows: [{ control_name: 'emergency_stop', active: directMode === 'invalid' ? 'false' : active }],
