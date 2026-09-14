@@ -1,0 +1,33 @@
+name: IVX certificate workflow maintenance
+on:
+  push:
+    branches: [ops/ivx-certificate-maintenance-20260914]
+    paths: ['.github/workflows/ivx-certificate-maintenance.yml']
+permissions:
+  contents: read
+  actions: write
+jobs:
+  contain-certificate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Stop the exact superseded certificate run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo='ibb142/ivx-holdings-platform'
+          run_id='34906336212'
+          expected='325dd7f4b371f9e3d87742c77cb46f863fd5f523'
+          state="$RUNNER_TEMP/certificate-run.json"
+          gh api "repos/$repo/actions/runs/$run_id" > "$state"
+          test "$(jq -r '.head_sha' "$state")" = "$expected"
+          test "$(jq -r '.path' "$state")" = '.github/workflows/ivx-dashboard-chat-e2e-cert.yml'
+          if [ "$(jq -r '.status' "$state")" = completed ]; then
+            echo 'Target run already completed; no cancellation sent.'
+            exit 0
+          fi
+          # Stop cleanup/upload steps as well as the device test.
+          gh api --method POST "repos/$repo/actions/runs/$run_id/force-cancel"
+          gh api "repos/$repo/actions/runs/$run_id" --jq '{id,status,conclusion,head_sha}'
