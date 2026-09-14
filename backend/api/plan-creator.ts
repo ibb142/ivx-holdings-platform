@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
-import { getIVXAIEndpoint, requestIVXAIText, resolveIVXAIModel } from '../ivx-ai-runtime';
+import { getIVXAIEndpoint, requestIVXAIText, resolveIVXAIModel, type IVXAIProviderMetadata } from '../ivx-ai-runtime';
 import {
   extractIVXRoleCandidate,
   isPrivilegedIVXRole,
@@ -30,8 +30,8 @@ type UserContext = {
 };
 
 type ProviderMetadata = {
-  provider: 'chatgpt';
-  source: 'remote_api';
+  provider: IVXAIProviderMetadata['provider'];
+  source: IVXAIProviderMetadata['source'];
   model: string;
   endpoint: string | null;
   runtime: 'ivx_ai_gateway';
@@ -63,7 +63,6 @@ const JSON_HEADERS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 } as const;
 
-const DEFAULT_MODEL = 'gpt-4o';
 const DEPLOYMENT_MARKER = 'p1-plan-creator-2026-04-25t0000z';
 const WORKSPACE_PROJECT_ID = (process.env.EXPO_PUBLIC_PROJECT_ID ?? '').trim();
 const WORKSPACE_TEAM_ID = (process.env.EXPO_PUBLIC_TEAM_ID ?? '').trim();
@@ -473,7 +472,7 @@ export async function POST(request: Request): Promise<Response> {
     const audience = readTrimmedString(body.audience);
     const timeline = readTrimmedString(body.timeline);
     const projectId = readTrimmedString(body.projectId) ?? (WORKSPACE_PROJECT_ID || 'workspace');
-    const model = readTrimmedString(body.model) ?? DEFAULT_MODEL;
+    const model = readTrimmedString(body.model) ?? resolveIVXAIModel();
     const requestId = readTrimmedString(body.requestId) ?? createRequestId();
 
     if (!goal) {

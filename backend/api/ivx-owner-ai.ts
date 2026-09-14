@@ -8,7 +8,8 @@ import { ownerChatFingerprint, ownerChatRequestKey, ownerChatRequestStore, runOw
 import path from 'node:path';
 import { checkPreExecutionGate } from '../services/ivx-pre-execution-gate-middleware';
 import { IVX_OWNER_AI_PROFILE, IVX_OWNER_AI_ROOM_ID, IVX_OWNER_AI_ROOM_SLUG } from '../../expo/constants/ivx-owner-ai';
-import { getIVXAIConfigurationSnapshot, getIVXAIEndpoint, getIVXAIKeySource, getIVXAIActiveEndpoint, getIVXAIActiveProviderLabel, requestIVXAIText, resolveIVXAIModel, runWithOwnerAIStreamCallback } from '../ivx-ai-runtime';
+import { getIVXAIConfigurationSnapshot, getIVXAIEndpoint, getIVXAIKeySource, getIVXAIActiveEndpoint, getIVXAIActiveProviderLabel, requestIVXAIText, resolveIVXAIModel, runWithOwnerAIStreamCallback, type IVXAIProviderMetadata } from '../ivx-ai-runtime';
+import { isIVXLiteLLMEnabled } from '../services/ivx-litellm-provider';
 import { executeIVXAIBrainTool, type IVXAIBrainToolName, type IVXAIBrainToolResult } from '../services/ivx-ai-brain-tool-executor';
 import {
   buildIVXAgentRuntimeV2Envelope,
@@ -1381,6 +1382,7 @@ async function searchLocalDevCode(query: string): Promise<Record<string, unknown
 }
 
 function getOwnerAIModel(): string {
+  if (isIVXLiteLLMEnabled()) return resolveIVXAIModel();
   const configuredModel = readTrimmedString(process.env.IVX_OWNER_AI_MODEL);
   // Force-upgrade away from the free-tier mini even if an old env value pins it.
   const ownerModel = !configuredModel || configuredModel === 'gpt-4o-mini'
@@ -4655,8 +4657,8 @@ async function generateOwnerAIAnswer(input: {
 }): Promise<{
   answer: string;
   model: string;
-  source: 'remote_api';
-  provider: 'chatgpt';
+  source: IVXAIProviderMetadata['source'];
+  provider: IVXAIProviderMetadata['provider'];
   endpoint: string;
 }> {
   const images = (input.images ?? [])
@@ -4784,7 +4786,7 @@ async function generateOwnerAIAnswer(input: {
       requestId: input.sessionId,
       stage: 'provider_ok',
       detail: {
-        source: 'remote_api',
+        source: result.providerMetadata.source,
         provider: result.providerMetadata.provider,
         model: result.providerMetadata.model,
         endpoint: result.providerMetadata.endpoint ?? '',
@@ -4794,7 +4796,7 @@ async function generateOwnerAIAnswer(input: {
     return {
       answer: result.text,
       model: result.providerMetadata.model,
-      source: 'remote_api',
+      source: result.providerMetadata.source,
       provider: result.providerMetadata.provider,
       endpoint: result.providerMetadata.endpoint ?? '',
     };
@@ -4902,8 +4904,8 @@ async function generateOwnerAIAnswerWithToolGrounding(input: OwnerAIToolGroundin
 type OwnerAIToolSynthesisResult = {
   answer: string;
   model: string;
-  source: 'remote_api';
-  provider: 'chatgpt';
+  source: IVXAIProviderMetadata['source'];
+  provider: IVXAIProviderMetadata['provider'];
   endpoint: string;
 };
 
@@ -5637,7 +5639,7 @@ export async function handleIVXOwnerAIProxyStatus(request: Request): Promise<Res
       note: 'Client-direct gateway fallback is disabled by default; the IVX backend proxy is the only active AI path.',
     },
     runtime: {
-      provider: activeProviderLabel === 'openai_direct' ? 'openai_direct' : activeProviderLabel === 'vercel_gateway' ? 'vercel_ai_gateway' : 'chatgpt',
+      provider: activeProviderLabel === 'litellm' ? 'litellm' : activeProviderLabel === 'openai_direct' ? 'openai_direct' : activeProviderLabel === 'vercel_gateway' ? 'vercel_ai_gateway' : 'chatgpt',
       gateway: activeProviderLabel === 'openai_direct' ? 'openai_direct' : 'ivx_ai_gateway',
       layer: snapshot.layer,
       phase: snapshot.phase,
@@ -6860,7 +6862,7 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           history: knowledgeHistory,
           liveContext: knowledgeLiveCtx,
         });
-        const llmModel = resolveIVXAIModel(OWNER_TEXT_MODEL);
+        const llmModel = resolveIVXAIModel(isIVXLiteLLMEnabled() ? undefined : OWNER_TEXT_MODEL);
         const { result: llmResult, assistantMessageId } = await executeTextTurn('owner-room-knowledge', llmModel, knowledgeInput);
         const answer = assertVisibleOwnerAIAnswer(llmResult.text);
         return ownerOnlyJson(buildOwnerAIResponsePayload({
@@ -6870,7 +6872,7 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           model: llmResult.providerMetadata.model,
           status: 'ok',
         }, {
-          source: 'remote_api',
+          source: llmResult.providerMetadata.source,
           provider: llmResult.providerMetadata.provider,
           endpoint: llmResult.providerMetadata.endpoint ?? '/api/ivx/owner-ai/knowledge',
           deploymentMarker: DEPLOYMENT_MARKER,
@@ -6955,7 +6957,7 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           history: manualHistory,
           liveContext: manualLiveCtx,
         });
-        const llmModel = resolveIVXAIModel(OWNER_TEXT_MODEL);
+        const llmModel = resolveIVXAIModel(isIVXLiteLLMEnabled() ? undefined : OWNER_TEXT_MODEL);
         const { result: llmResult, assistantMessageId } = await executeTextTurn('owner-room-manual', llmModel, manualInput);
         const answer = assertVisibleOwnerAIAnswer(llmResult.text);
         return ownerOnlyJson(buildOwnerAIResponsePayload({
@@ -6965,7 +6967,7 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           model: llmResult.providerMetadata.model,
           status: 'ok',
         }, {
-          source: 'remote_api',
+          source: llmResult.providerMetadata.source,
           provider: llmResult.providerMetadata.provider,
           endpoint: llmResult.providerMetadata.endpoint ?? '/api/ivx/owner-ai/manual-llm',
           deploymentMarker: DEPLOYMENT_MARKER,

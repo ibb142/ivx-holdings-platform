@@ -20,6 +20,7 @@ import {
 export { getProviderHealth, type IVXProviderHealth };
 import { randomUUID } from 'crypto';
 import { isBlockedDomain } from './services/ivx-domain-blocklist';
+import { getIVXLiteLLMConfig, isIVXLiteLLMEnabled, resolveIVXAIProviderModel } from './services/ivx-litellm-provider';
 
 export type IVXAIModule = 'owner-room' | 'p0-ai-assistant' | 'p1-plan-creator' | 'public-chat' | string;
 export type IVXAIMessageRole = 'user' | 'assistant';
@@ -46,7 +47,7 @@ export type IVXAIFileAttachment = {
 };
 
 export type IVXAIProviderMetadata = {
-  provider: 'chatgpt';
+  provider: 'chatgpt' | 'litellm';
   source: 'remote_api';
   model: string;
   endpoint: string | null;
@@ -56,7 +57,7 @@ export type IVXAIProviderMetadata = {
     phase: 'agent_runtime_v2';
     layer: 'ivx_ai_runtime_wrapper';
     module: string;
-    providerDependency: 'chatgpt_current_baseline';
+    providerDependency: 'chatgpt_current_baseline' | 'self_hosted_litellm';
     requestId: string | null;
     generatedAt: string;
   };
@@ -192,6 +193,7 @@ function isOpenAIDirectKey(key: string): boolean {
 let _ownerVariableGatewayKey = '';
 
 export async function preloadIVXAIGatewayKeyFromOwnerVariables(): Promise<void> {
+  if (isIVXLiteLLMEnabled()) return;
   try {
     // ENV-FIRST PRIORITY: Render dashboard env vars are the owner's direct control.
     // Only fall back to the Owner Variables store when process.env is empty.
@@ -215,6 +217,8 @@ export async function preloadIVXAIGatewayKeyFromOwnerVariables(): Promise<void> 
 }
 
 export function getIVXAIGatewayApiKey(): string {
+  const local = getIVXLiteLLMConfig();
+  if (local) return local.apiKey;
   // Phase 4 independence: owner-owned keys take priority over Rork-managed keys.
   //
   // Priority order:
@@ -254,7 +258,8 @@ export function getIVXAIGatewayApiKey(): string {
  * 'openai_direct'   → sk- key, routes to api.openai.com/v1
  * 'unknown'         → key not loaded or unrecognized prefix
  */
-export function getIVXAIProviderType(): 'vercel_gateway' | 'openai_direct' | 'unknown' {
+export function getIVXAIProviderType(): 'vercel_gateway' | 'openai_direct' | 'litellm' | 'unknown' {
+  if (isIVXLiteLLMEnabled()) return 'litellm';
   const key = getIVXAIGatewayApiKey();
   if (!key) return 'unknown';
   if (isVercelGatewayKey(key)) return 'vercel_gateway';
@@ -276,6 +281,8 @@ export function getIVXAIProviderType(): 'vercel_gateway' | 'openai_direct' | 'un
  * the Vercel gateway is still set on the host.
  */
 function getIVXAIGatewayRootUrl(): string {
+  const local = getIVXLiteLLMConfig();
+  if (local) return local.baseURL;
   // Owner-owned keys take absolute priority — route to the matching direct API
   if (readTrimmed(process.env.IVX_OPENAI_API_KEY)) {
     return OPENAI_DIRECT_BASE;
@@ -307,6 +314,7 @@ function getGatewayBaseUrl(): string | null {
 
 function getGatewayBaseUrlCandidates(): string[] {
   const configured = getGatewayBaseUrl();
+  if (isIVXLiteLLMEnabled()) return configured ? [configured] : [];
   // Auto-detect fallback candidate based on key prefix.
   // If the primary is a Vercel key (vck_), the fallback candidate is OpenAI direct.
   // If the primary is an OpenAI key (sk-), the fallback candidate is the Vercel gateway.
@@ -438,7 +446,7 @@ export function resolveIVXAIModel(explicitModel?: string | null, envCandidates: 
     }
   }
 
-  return normalizeModelForProvider(DEFAULT_IVX_AI_MODEL);
+  return normalizeModelForProvider(getIVXLiteLLMConfig()?.model ?? DEFAULT_IVX_AI_MODEL);
 }
 
 /**
@@ -462,8 +470,8 @@ function stripOpenaiPrefix(model: string): string {
 
 // Initialize provider state machine at module load — after all helper functions are defined
 initProviderStateMachine(
-  getIVXAIProviderType() === 'vercel_gateway' ? 'vercel_ai_gateway' : 'openai',
-  normalizeModelForProvider(DEFAULT_IVX_AI_MODEL),
+  isIVXLiteLLMEnabled() ? 'litellm' : getIVXAIProviderType() === 'vercel_gateway' ? 'vercel_ai_gateway' : 'openai',
+  resolveIVXAIModel(),
   getIVXAIGatewayApiKey().length > 0,
   false,
 );
@@ -487,7 +495,7 @@ export function getIVXAIEndpoint(model: string = DEFAULT_IVX_AI_MODEL): string |
 export type IVXAIStartupValidation = {
   ok: boolean;
   provider: string;
-  providerType: 'vercel_gateway' | 'openai_direct' | 'unknown';
+  providerType: 'vercel_gateway' | 'openai_direct' | 'litellm' | 'unknown';
   model: string;
   adapterVersion: string;
   keyLoaded: boolean;
@@ -512,11 +520,11 @@ function getAdapterVersion(): string {
 
 export function validateIVXAIStartup(): IVXAIStartupValidation {
   const errors: string[] = [];
-  const model = normalizeModelForProvider(DEFAULT_IVX_AI_MODEL);
+  const model = resolveIVXAIModel();
   const rootUrl = getIVXAIGatewayRootUrl();
   const apiKey = getIVXAIGatewayApiKey();
   const keyLoaded = apiKey.length > 0;
-  const keyPrefix = keyLoaded ? `${apiKey.slice(0, 4)}***` : 'none';
+  const keyPrefix = keyLoaded ? (isIVXLiteLLMEnabled() ? 'configured' : `${apiKey.slice(0, 4)}***`) : 'none';
   const providerType = getIVXAIProviderType();
   const baseUrl = getGatewayBaseUrl();
   const adapterVersion = getAdapterVersion();
@@ -543,7 +551,7 @@ export function validateIVXAIStartup(): IVXAIStartupValidation {
 
   return {
     ok: errors.length === 0,
-    provider: providerType === 'vercel_gateway' ? 'vercel_ai_gateway' : 'openai',
+    provider: providerType === 'litellm' ? 'litellm' : providerType === 'vercel_gateway' ? 'vercel_ai_gateway' : 'openai',
     providerType,
     model,
     adapterVersion,
@@ -565,6 +573,7 @@ export function generateTraceId(): string {
  * Used by status endpoints so the owner can see the truth — not a hardcoded string.
  */
 export function getIVXAIKeySource(): string {
+  if (isIVXLiteLLMEnabled()) return readTrimmed(process.env.OPENAI_API_KEY) ? 'OPENAI_API_KEY' : 'none';
   if (readTrimmed(process.env.IVX_OPENAI_API_KEY)) return 'IVX_OPENAI_API_KEY';
   if (readTrimmed(process.env.IVX_ANTHROPIC_API_KEY)) return 'IVX_ANTHROPIC_API_KEY';
   if (readTrimmed(process.env.IVX_AI_GATEWAY_KEY)) return 'IVX_AI_GATEWAY_KEY';
@@ -579,7 +588,7 @@ export function getIVXAIActiveEndpoint(): string {
 }
 
 /** Reports the actual provider type the runtime is using (auto-detected from key prefix). */
-export function getIVXAIActiveProviderLabel(): 'openai_direct' | 'vercel_gateway' | 'unknown' {
+export function getIVXAIActiveProviderLabel(): 'openai_direct' | 'vercel_gateway' | 'litellm' | 'unknown' {
   return getIVXAIProviderType();
 }
 
@@ -587,7 +596,7 @@ export function isIVXAIConfigured(): boolean {
   return getIVXAIGatewayRootUrl().length > 0 && getIVXAIGatewayApiKey().length > 0;
 }
 
-export function getIVXAIConfigurationSnapshot(model: string = DEFAULT_IVX_AI_MODEL): IVXAIConfigurationSnapshot {
+export function getIVXAIConfigurationSnapshot(model: string = resolveIVXAIModel()): IVXAIConfigurationSnapshot {
   const hasGatewayUrl = getIVXAIGatewayRootUrl().length > 0;
   const hasGatewayApiKey = getIVXAIGatewayApiKey().length > 0;
   return {
@@ -661,6 +670,10 @@ async function requestIVXAITextInternal(input: {
     (file) => readTrimmed(file.mediaType).length > 0 && file.data != null,
   );
 
+  if (isIVXLiteLLMEnabled() && (images.length > 0 || files.length > 0)) {
+    throw new Error('The configured LiteLLM pilot supports text only; image and file inputs require a compatible model');
+  }
+
   if (!prompt && messages.length === 0) {
     throw new Error('IVX AI request requires a prompt or messages.');
   }
@@ -679,7 +692,7 @@ async function requestIVXAITextInternal(input: {
     hasSystem: system.length > 0,
     promptLength: prompt.length,
     messageCount: messages.length,
-    authKeySource: 'OPENAI_API_KEY',
+    authKeySource: getIVXAIKeySource(),
     requestShape: messages.length > 0 ? 'messages' : 'prompt',
     maxOutputTokens: input.maxOutputTokens ?? null,
     phase: 'agent_runtime_v2',
@@ -717,7 +730,7 @@ async function requestIVXAITextInternal(input: {
       throw new Error('IVX AI stream returned an empty response.');
     }
     const providerMetadata: IVXAIProviderMetadata = streamProviderMetadata ?? {
-      provider: 'chatgpt',
+      provider: isIVXLiteLLMEnabled() ? 'litellm' : 'chatgpt',
       source: 'remote_api',
       model,
       endpoint: baseUrlCandidates[0] ?? null,
@@ -727,7 +740,7 @@ async function requestIVXAITextInternal(input: {
         phase: 'agent_runtime_v2',
         layer: 'ivx_ai_runtime_wrapper',
         module: input.module,
-        providerDependency: 'chatgpt_current_baseline',
+        providerDependency: isIVXLiteLLMEnabled() ? 'self_hosted_litellm' : 'chatgpt_current_baseline',
         requestId: input.requestId ?? null,
         generatedAt: nowIso(),
       },
@@ -799,7 +812,7 @@ async function requestIVXAITextInternal(input: {
             ? [...baseMessages, multimodalUser]
             : [...messages, multimodalUser];
           result = await runWithHardTimeout('IVX AI direct (multimodal)', generateText({
-            model,
+            model: resolveIVXAIProviderModel(model),
             maxRetries: 0, // The runtime owns the bounded retry policy.
             system: system.length > 0 ? system : undefined,
             maxOutputTokens: input.maxOutputTokens,
@@ -810,7 +823,7 @@ async function requestIVXAITextInternal(input: {
         } else {
           result = messages.length > 0
             ? await runWithHardTimeout('IVX AI direct (messages)', generateText({
-                model,
+                model: resolveIVXAIProviderModel(model),
                 maxRetries: 0,
                 system: system.length > 0 ? system : undefined,
                 maxOutputTokens: input.maxOutputTokens,
@@ -818,7 +831,7 @@ async function requestIVXAITextInternal(input: {
                 messages,
               }), callTimeoutMs)
             : await runWithHardTimeout('IVX AI direct (prompt)', generateText({
-                model,
+                model: resolveIVXAIProviderModel(model),
                 maxRetries: 0,
                 system: system.length > 0 ? system : undefined,
                 maxOutputTokens: input.maxOutputTokens,
@@ -828,7 +841,7 @@ async function requestIVXAITextInternal(input: {
         }
         successfulBaseUrl = baseURL;
         markProviderReady(
-          isVercelKey ? 'vercel_ai_gateway' : 'openai_direct',
+          isIVXLiteLLMEnabled() ? 'litellm' : isVercelKey ? 'vercel_ai_gateway' : 'openai_direct',
           model,
         );
       } catch (error) {
@@ -898,7 +911,7 @@ async function requestIVXAITextInternal(input: {
     // The state machine ensures we only try fallback if the primary is FAILED.
     // The fallback module skips any provider using the same key as the primary.
     const failureClass = lastError ? classifyProviderFailure(lastError) : 'auth';
-    if (!input.abortSignal?.aborted && Date.now() - callStartedAt < adaptiveTimeoutMs
+    if (!isIVXLiteLLMEnabled() && !input.abortSignal?.aborted && Date.now() - callStartedAt < adaptiveTimeoutMs
         && failureClass !== 'rate_limit' && shouldTryFallback() && isFailureRetryable(failureClass)) {
       const fallbackResult = await attemptProviderFallback({
         module: String(input.module),
@@ -1001,7 +1014,7 @@ async function requestIVXAITextInternal(input: {
   }
 
   const providerMetadata: IVXAIProviderMetadata = {
-    provider: 'chatgpt',
+    provider: isIVXLiteLLMEnabled() ? 'litellm' : 'chatgpt',
     source: 'remote_api',
     model,
     endpoint: successfulBaseUrl,
@@ -1011,7 +1024,7 @@ async function requestIVXAITextInternal(input: {
       phase: 'agent_runtime_v2',
       layer: 'ivx_ai_runtime_wrapper',
       module: input.module,
-      providerDependency: 'chatgpt_current_baseline',
+      providerDependency: isIVXLiteLLMEnabled() ? 'self_hosted_litellm' : 'chatgpt_current_baseline',
       requestId: input.requestId ?? null,
       generatedAt: nowIso(),
     },
@@ -1153,7 +1166,7 @@ export async function* streamIVXAIText(input: {
     controller.signal.throwIfAborted();
     ensureIVXAIGatewayEnvironment();
     const streamResult = streamText({
-      model,
+      model: resolveIVXAIProviderModel(model),
       maxRetries: 0,
       system: system.length > 0 ? system : undefined,
       maxOutputTokens: input.maxOutputTokens,
@@ -1219,7 +1232,7 @@ export async function* streamIVXAIText(input: {
   }
 
   const providerMetadata: IVXAIProviderMetadata = {
-    provider: 'chatgpt',
+    provider: isIVXLiteLLMEnabled() ? 'litellm' : 'chatgpt',
     source: 'remote_api',
     model,
     endpoint: baseURL,
@@ -1229,7 +1242,7 @@ export async function* streamIVXAIText(input: {
       phase: 'agent_runtime_v2',
       layer: 'ivx_ai_runtime_wrapper',
       module: input.module,
-      providerDependency: 'chatgpt_current_baseline',
+      providerDependency: isIVXLiteLLMEnabled() ? 'self_hosted_litellm' : 'chatgpt_current_baseline',
       requestId: input.requestId ?? null,
       generatedAt: nowIso(),
     },

@@ -13,6 +13,7 @@
 
 export const VERCEL_AI_GATEWAY_BASE = 'https://ai-gateway.vercel.sh/v1';
 export const OPENAI_DIRECT_BASE = 'https://api.openai.com/v1';
+import { getIVXLiteLLMConfig, isIVXLiteLLMEnabled } from './ivx-litellm-provider';
 
 function readTrimmed(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -22,11 +23,14 @@ import { isBlockedDomain } from './ivx-domain-blocklist';
 
 /** Returns the API key from OPENAI_API_KEY or IVX_AI_GATEWAY_KEY (fallback). */
 export function getIVXApiKey(): string {
+  const local = getIVXLiteLLMConfig();
+  if (local) return local.apiKey;
   return readTrimmed(process.env.OPENAI_API_KEY) || readTrimmed(process.env.IVX_AI_GATEWAY_KEY);
 }
 
 /** Detect the provider type from the key prefix. */
-export function detectIVXProviderType(): 'vercel_gateway' | 'openai_direct' | 'unknown' {
+export function detectIVXProviderType(): 'vercel_gateway' | 'openai_direct' | 'litellm' | 'unknown' {
+  if (isIVXLiteLLMEnabled()) return 'litellm';
   const key = getIVXApiKey();
   if (!key) return 'unknown';
   if (key.startsWith('vck_')) return 'vercel_gateway';
@@ -40,6 +44,8 @@ export function detectIVXProviderType(): 'vercel_gateway' | 'openai_direct' | 'u
  * external domain, it takes priority. Otherwise, the key prefix determines the endpoint.
  */
 export function autoDetectGatewayBaseUrl(): string {
+  const local = getIVXLiteLLMConfig();
+  if (local) return local.baseURL;
   const configured = readTrimmed(process.env.IVX_AI_GATEWAY_URL) || readTrimmed(process.env.IVX_AI_BASE_URL);
   if (configured && !isBlockedDomain(configured)) {
     return configured.replace(/\/+$/, '');

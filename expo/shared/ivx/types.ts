@@ -152,7 +152,7 @@ export type IVXOwnerAIResponse = {
   status: 'ok' | 'error';
   failure?: { classification: string; statusCode: number | null; detail: string };
   source?: 'remote_api' | 'local_app_brain' | 'provider_fallback' | 'local_runtime';
-  provider?: 'chatgpt' | 'ivx_daily_improvement' | 'ivx_self_developer_runtime' | 'ivx_readonly_inspection_runtime' | 'ivx_qa_only_runtime';
+  provider?: 'chatgpt' | 'litellm' | 'ivx_daily_improvement' | 'ivx_self_developer_runtime' | 'ivx_readonly_inspection_runtime' | 'ivx_qa_only_runtime';
   endpoint?: string;
   deploymentMarker?: string;
   assistantMessageId?: string | null;
