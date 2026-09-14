@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { Hono } from 'hono';
+import { readOwnerControlWithFallback } from './ivx-owner-control-transport';
 
 const apiSource = readFileSync(process.env.IVX_OWNER_COMMAND_SOURCE || new URL('../api/ivx-agent-api.ts', import.meta.url), 'utf8');
 const campaignSource = readFileSync(process.env.IVX_OWNER_CAMPAIGN_SOURCE || new URL('./ivx-app-completion-campaign.ts', import.meta.url), 'utf8');
@@ -65,6 +66,8 @@ function durableControl(mode: 'unavailable' | 'missing' | 'malformed' | 'write-f
   const writes: unknown[] = [];
   const context: Record<string, any> = {
     AbortController, setTimeout, clearTimeout, OWNER_CONTROL_READ_TIMEOUT_MS: 2_000,
+    readOwnerControlWithFallback,
+    readCampaignControlPostgres: async () => { throw Error('Unexpected fallback in owner command policy fixture'); },
     cachedControl: null, DEFAULT_CONTROL: { paused: false, stopped: false, pausedAgents: [], stoppedAgents: [] },
     STATE_KEY: 'isolated-control', EVENTS_KEY: 'isolated-events', IVX_APP_COMPLETION_MARKER: 'isolated-test',
     nowIso: () => '2026-09-11T00:00:00Z', isDurableStoreConfigured: () => true,
