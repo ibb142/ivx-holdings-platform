@@ -22,6 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 60
+    outputs:
+      apk_hash: ${{ steps.apk.outputs.hash }}
     env:
       IVX_RELEASE_KEYSTORE_BASE64: ${{ secrets.IVX_RELEASE_KEYSTORE_BASE64 }}
       IVX_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.IVX_RELEASE_KEYSTORE_PASSWORD }}
@@ -118,7 +120,60 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+  android-launch:
+    name: Signed APK Android emulator gate
+    needs: build-certify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the signed APK from this run
+        uses: actions/download-artifact@v4
+        with:
+          name: IVX-Holdings-v1.10.32-MISSION-CONTROL-${{ github.sha }}
+          path: apk-under-test
+      - name: Verify the tested APK matches the build receipt
+        working-directory: apk-under-test
+        env:
+          EXPECTED_APK_SHA256: ${{ needs.build-certify.outputs.apk_hash }}
+        run: |
+          set -euo pipefail
+          sha256sum --check IVX-Holdings-v1.10.32-MISSION-CONTROL.sha256
+          test "$(sha256sum IVX-Holdings-v1.10.32-MISSION-CONTROL.apk | awk '{print $1}')" = "$EXPECTED_APK_SHA256"
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Cold-launch the signed APK twice and verify visible Sign In
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          profile: pixel_2
+          target: google_apis
+          disable-animations: false
+          disable-linux-hw-accel: false
+          ram-size: 2048M
+          heap-size: 512M
+          emulator-options: -no-window -gpu off -no-snapshot -noaudio -no-boot-anim
+          script: bash expo/scripts/certify-android-launch.sh apk-under-test/IVX-Holdings-v1.10.32-MISSION-CONTROL.apk com.ivxholdings.app android-launch.png android-runtime-logcat.txt android-launch.txt android-package-version.txt "Sign In"
+      - name: Preserve Android runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-apk-emulator-${{ github.sha }}
+          path: |
+            android-launch*.png
+            android-launch*.txt
+            android-launch*-ui.xml
+            android-runtime-logcat.txt
+            android-package-version.txt
+          if-no-files-found: warn
+          retention-days: 30
       - name: Write dashboard APK certificate
+        env:
+          APK_SHA256: ${{ needs.build-certify.outputs.apk_hash }}
         run: |
           set -euo pipefail
           mkdir -p qa/evidence
@@ -127,9 +182,9 @@ jobs:
             --arg sourceSha "$GITHUB_SHA" \
             --arg version '1.10.32' \
             --argjson versionCode 130 \
-            --arg apkSha256 '${{ steps.apk.outputs.hash }}' \
+            --arg apkSha256 "$APK_SHA256" \
             --arg artifact "IVX-Holdings-v1.10.32-MISSION-CONTROL-${GITHUB_SHA}" \
-            '{marker:$marker,sourceSha:$sourceSha,version:$version,versionCode:$versionCode,apkSha256:$apkSha256,artifact:$artifact,signed:true,typecheck:true,dashboardRoute:"/ivx/landing-workers-live",status:"PASS"}' \
+            '{marker:$marker,sourceSha:$sourceSha,version:$version,versionCode:$versionCode,apkSha256:$apkSha256,artifact:$artifact,signed:true,typecheck:true,androidEmulator:true,coldLaunches:2,visibleScreen:"Sign In",authenticatedHomeVerified:false,certificateScope:"Production signature, source checks and unauthenticated Android cold launch. Authenticated Home and fleet continuity require separate evidence.",dashboardRoute:"/ivx/landing-workers-live",status:"PASS"}' \
             > qa/evidence/ivx-mission-control-apk-certificate.json
 
       - name: Upload certificate
