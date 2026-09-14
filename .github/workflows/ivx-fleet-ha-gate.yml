@@ -3,7 +3,7 @@ on:
   push:
     branches: [fix/fleet-render-ha-20260908, fix/fleet-backend-ha-20260908]
   pull_request:
-    paths: ['database/functions/execute_budget_reconciliation_batch.sql', 'scripts/ops/reconcile-uncertain-budget.mjs', 'scripts/ivx-budget-reconciliation-postgres-proof.mjs', 'qa/phase3-budget-reconciliation.mjs', 'qa/phase3-budget-reconciliation.test.mjs', 'qa/phase3-capacity.mjs', 'backend/**', 'expo/**', 'supabase/migrations/**', 'supabase/repair-functions/**', 'scripts/ivx-senior-commit-recovery-postgres-proof.mjs', 'scripts/ivx-senior-compact-receipt-proof.mjs', 'scripts/ivx-senior-queue-spill-proof.mjs', 'scripts/ivx-senior-checkpoint-metadata-proof.mjs', 'scripts/ivx-senior-claim-spill-proof.ts', 'scripts/ivx-senior-work-queue-proof.ts', 'scripts/ivx-coder-workspace-postgres-proof.ts', 'scripts/ivx-objective-link-postgres-proof.mjs', 'scripts/ivx-fleet-ha-postgres-proof.mjs', 'scripts/ivx-fleet-framework.test.mjs', 'scripts/ivx-global-ai-budget-postgres-proof.mjs', 'scripts/ivx-global-ai-budget-sdk-proof.ts', 'scripts/ivx-task-recovery-postgres-proof.mjs', 'scripts/ivx-fleet-telemetry-postgres-proof.ts', 'scripts/ivx-mission-history-postgres-proof.ts', 'scripts/ivx-landing-read-postgres-proof.ts', 'scripts/ivx-inspection-claim-postgres-proof.mjs', 'scripts/ivx-fleet-ha-live-proof.ts', 'scripts/ivx-fleet-ha-identities.ts', 'scripts/ivx-fleet-ha-identities.test.ts', '.github/workflows/ivx-fleet-ha-gate.yml']
+    paths: ['scripts/ivx-feed-engagement-postgres-proof.ts', 'qa/production-feed-check.mjs', 'qa/production-feed-check.test.mjs', 'qa/landing-19-production-ready.mjs', 'database/functions/execute_budget_reconciliation_batch.sql', 'scripts/ops/reconcile-uncertain-budget.mjs', 'scripts/ivx-budget-reconciliation-postgres-proof.mjs', 'qa/phase3-budget-reconciliation.mjs', 'qa/phase3-budget-reconciliation.test.mjs', 'qa/phase3-capacity.mjs', 'backend/**', 'expo/**', 'supabase/migrations/**', 'supabase/repair-functions/**', 'scripts/ivx-senior-commit-recovery-postgres-proof.mjs', 'scripts/ivx-senior-compact-receipt-proof.mjs', 'scripts/ivx-senior-queue-spill-proof.mjs', 'scripts/ivx-senior-checkpoint-metadata-proof.mjs', 'scripts/ivx-senior-claim-spill-proof.ts', 'scripts/ivx-senior-work-queue-proof.ts', 'scripts/ivx-coder-workspace-postgres-proof.ts', 'scripts/ivx-objective-link-postgres-proof.mjs', 'scripts/ivx-fleet-ha-postgres-proof.mjs', 'scripts/ivx-fleet-framework.test.mjs', 'scripts/ivx-global-ai-budget-postgres-proof.mjs', 'scripts/ivx-global-ai-budget-sdk-proof.ts', 'scripts/ivx-task-recovery-postgres-proof.mjs', 'scripts/ivx-fleet-telemetry-postgres-proof.ts', 'scripts/ivx-mission-history-postgres-proof.ts', 'scripts/ivx-landing-read-postgres-proof.ts', 'scripts/ivx-inspection-claim-postgres-proof.mjs', 'scripts/ivx-fleet-ha-live-proof.ts', 'scripts/ivx-fleet-ha-identities.ts', 'scripts/ivx-fleet-ha-identities.test.ts', '.github/workflows/ivx-fleet-ha-gate.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -80,6 +80,12 @@ jobs:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - name: Verify owned lease renewal and exact-SHA GitHub check evidence
         run: node --import tsx --test scripts/ivx-fleet-framework.test.mjs
+        env:
+          IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
+      - name: Reject empty or degraded production feed readiness
+        run: node --test qa/production-feed-check.test.mjs
+      - name: Verify indexed feed counts, RLS and timeout recovery on PostgreSQL
+        run: bun scripts/ivx-feed-engagement-postgres-proof.ts
         env:
           IVX_HA_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/ivx_ha_test
       - name: Prove global monetary admission on four PostgreSQL connections
