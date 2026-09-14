@@ -23,3 +23,30 @@ name: IVX Nested Admin to Public Chat Navigation
     id: "app_guide_root_view"
 - assertNotVisible: "Waitlist Admin"
 - takeScreenshot: "app-guide-after-public-chat"
+
+# Repeated external links must release the replaced screen, preserve the
+# authenticated process, and paint each new destination while data loads.
+- repeat:
+    times: 8
+    commands:
+      - openLink: "ivx-app:///analytics-brain"
+      - extendedWaitUntil:
+          visible:
+            id: "^ivx-current-route/analytics-brain$"
+          timeout: 15000
+      - openLink: "ivx-app:///chat-hub"
+      - extendedWaitUntil:
+          visible:
+            id: "public-chat-message-input"
+          timeout: 15000
+      - assertVisible:
+          id: "^ivx-current-route/chat-hub$"
+      - assertNotVisible: "Loading Analytics Brain..."
+      - assertNotVisible: "IVX public chat unavailable"
+      - openLink: "ivx-app:///app-guide"
+      - extendedWaitUntil:
+          visible:
+            id: "^ivx-current-route/app-guide$"
+          timeout: 15000
+      - assertVisible: "App Guide"
+- takeScreenshot: "public-chat-navigation-after-repeated-links"

@@ -69,6 +69,7 @@ mapfile -t files < <(find expo/app -type f \( -name '*.tsx' -o -name '*.ts' \) -
 total=0
 for file in "${files[@]}"; do
   route=$(route_from_file "$file") || continue
+  destination_id=$(node scripts/ivx-route-destination.mjs "$route")
   total=$((total + 1))
   name="IVX automated route $total"
   screenshot="route-$total"
@@ -87,6 +88,12 @@ name: $name
     text: "OK"
     optional: true
 - openLink: "ivx-app:///${route#/}"
+# Wait for the actual navigator destination before inspecting its screen. A
+# live process showing a previous route cannot satisfy this assertion.
+- extendedWaitUntil:
+    visible:
+      id: '$destination_id'
+    timeout: 15000
 - waitForAnimationToEnd:
     timeout: 3000
 - assertNotVisible: "Missing Information"
@@ -104,6 +111,8 @@ name: $name
     timeout: 3000
 - assertNotVisible: "Something went wrong"
 - assertNotVisible: "IVX Provider Error"
+- assertVisible:
+    id: '$destination_id'
 YAML
   if [ "$route" = '/chat-hub' ]; then
     cat >> "$flow" <<'YAML'

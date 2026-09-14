@@ -81,7 +81,11 @@ tags:
     timeout: 10000
 - tapOn:
     id: "ivx-owner-chat-search-input"
+- waitForAnimationToEnd
 - inputText: ${CHAT_E2E_SUFFIX}
+- assertVisible:
+    id: "ivx-owner-chat-search-input"
+    text: "${CHAT_E2E_SUFFIX}"
 - hideKeyboard
 - extendedWaitUntil:
     visible:
@@ -117,11 +121,13 @@ tags:
 - assertNotVisible: "I was unable to display this reply"
 - assertVisible:
     id: "ivx-owner-chat-composer-dock"
-# Kill/relaunch without clearing app state. This proves the rendered thread is
-# restored from the durable owner-chat persistence path, not just memory.
+# Kill/relaunch without clearing app state. Use the canonical Android deep-link
+# dispatch instead of Maestro's generic launchApp command: on the software
+# emulator, launchApp can wait indefinitely after stopApp without issuing an
+# Android activity start. openLink cold-starts the same installed package and
+# leaves its data intact, so the persistence proof remains fail-closed.
 - stopApp
-- launchApp:
-    clearState: false
+- openLink: "ivx-app:///"
 # Cold launch intentionally signs out; authenticate again without clearing history.
 - extendedWaitUntil:
     visible:
@@ -180,7 +186,11 @@ tags:
     timeout: 10000
 - tapOn:
     id: "ivx-owner-chat-search-input"
+- waitForAnimationToEnd
 - inputText: ${CHAT_E2E_SUFFIX}
+- assertVisible:
+    id: "ivx-owner-chat-search-input"
+    text: "${CHAT_E2E_SUFFIX}"
 - hideKeyboard
 - extendedWaitUntil:
     visible:
