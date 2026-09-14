@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { classifyIntent } from '../services/ivx-authoritative-intent-router';
 import { parseOwnerTaskStatusCommand, readOwnerTaskStatus } from '../services/ivx-owner-task-status';
+import { ownerTextFailure } from '../services/ivx-owner-text-failure';
 
 // Execute the production entry function, replacing I/O at its boundary. Importing
 // the giant route would initialize unrelated runtime modules and global mocks.
@@ -66,4 +67,28 @@ test('the exact audit/fix request reaches developer routing instead of returning
   expect(result.decisions).toEqual(['DEVELOPER_WORKER']); expect(result.externalCalls).toBe(0);
   expect(result.response.status).toBe(503);
   expect(result.body).toMatchObject({ ok: false, status: 'error', code: 'STORAGE_UNAVAILABLE', requestId: 'original-request' });
+});
+
+test('both production text error branches expose admission failure without creating a replacement request', async () => {
+  for (const marker of ['// ── Knowledge requests', '// ── Manual answer mode']) {
+    const start = source.indexOf('} catch (llmError) {', source.indexOf(marker)) + '} catch (llmError) {'.length;
+    const end = source.indexOf('\n    }\n', start);
+    const branch = source.slice(start, end).replace(/\n      }\s*$/, '');
+    const execute = runInNewContext(new Bun.Transpiler({ loader: 'ts' }).transformSync(
+      `async function executeFailure(llmError) { ${branch} }`) + '\nexecuteFailure', {
+      ownerTextFailure, Error, console: { error() {} }, requestId: 'original-request',
+      body: { requestId: 'original-request' }, conversation: { id: 'owner-room' },
+      readTrimmedString: (value: string) => value, createRequestId: () => { throw new Error('ID changed'); },
+      authoritativeDecision: { intent: 'conversation' }, DEPLOYMENT_MARKER: 'fixture',
+      buildRouterDebug: (value: unknown) => value,
+      buildOwnerAIResponsePayload: (safe: object, metadata: object) => ({ ...safe, ...metadata }),
+      ownerOnlyJson: (body: unknown, status: number) => Response.json(body, { status }),
+    });
+    const response: Response = await execute(new Error('Global AI budget: durable admission unavailable'));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ ok: false, status: 'error',
+      requestId: 'original-request', traceId: 'original-request',
+      code: 'IVX_AI_BUDGET_ADMISSION_UNAVAILABLE', providerRequestState: 'not_started',
+      error: 'Global AI budget: durable admission unavailable', selectedTool: null });
+  }
 });

@@ -1,3 +1,4 @@
+import { ownerTextFailure } from '../services/ivx-owner-text-failure';
 import { parseOwnerTaskStatusCommand, readOwnerTaskStatus } from '../services/ivx-owner-task-status';
 import { readPostgresTaskById } from '../services/ivx-postgres-autonomous-task-store';
 import { buildOwnerTextModelInput, OWNER_TEXT_MODEL } from '../services/ivx-owner-text-prompt';
@@ -6852,15 +6853,16 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           toolOutputs: [],
         }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
       } catch (llmError) {
+        const { httpStatus, ...failure } = ownerTextFailure(llmError);
         console.error('[IVXOwnerAIBackend] LLM knowledge response failed:', llmError instanceof Error ? llmError.message : 'unknown');
         // CRITICAL FIX: Do NOT fall through to the old routing chain — it would
         // misroute knowledge questions to the developer executor (the original bug).
         // Return an honest error instead. Knowledge questions must NEVER trigger
         // a deploy, commit, or task creation, even if the LLM fails.
-        return ownerOnlyJson(buildOwnerAIResponsePayload({
+        return ownerOnlyJson({ ...buildOwnerAIResponsePayload({
           requestId: readTrimmedString(body.requestId) || createRequestId(),
           conversationId: conversation.id,
-          answer: 'The text reply could not be completed and saved. A model response may have been generated. Recover this request before submitting it again.',
+          answer: failure.answer,
           model: 'ivx_authoritative_router_error',
           status: 'error',
         }, {
@@ -6883,7 +6885,7 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           toolOutput: [],
           fallbackUsed: false,
           toolOutputs: [],
-        }, body.devTestModeActive === true) as unknown as Record<string, unknown>, 503);
+        }, body.devTestModeActive === true), ...failure, ok: false, traceId: requestId }, httpStatus);
       }
     }
 
@@ -6947,13 +6949,14 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           toolOutputs: [],
         }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
       } catch (llmError) {
+        const { httpStatus, ...failure } = ownerTextFailure(llmError);
         console.error('[IVXOwnerAIBackend] Manual LLM response failed:', llmError instanceof Error ? llmError.message : 'unknown');
         // CRITICAL FIX: Do NOT fall through to the old routing chain. Return an
         // honest error instead. Manual answer mode must NEVER trigger execution.
-        return ownerOnlyJson(buildOwnerAIResponsePayload({
+        return ownerOnlyJson({ ...buildOwnerAIResponsePayload({
           requestId: readTrimmedString(body.requestId) || createRequestId(),
           conversationId: conversation.id,
-          answer: 'The text reply could not be completed and saved. A model response may have been generated. Recover this request before submitting it again.',
+          answer: failure.answer,
           model: 'ivx_authoritative_router_error',
           status: 'error',
         }, {
@@ -6976,7 +6979,7 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           toolOutput: [],
           fallbackUsed: false,
           toolOutputs: [],
-        }, body.devTestModeActive === true) as unknown as Record<string, unknown>, 503);
+        }, body.devTestModeActive === true), ...failure, ok: false, traceId: requestId }, httpStatus);
       }
     }
 

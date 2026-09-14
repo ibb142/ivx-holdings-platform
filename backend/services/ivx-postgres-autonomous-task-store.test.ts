@@ -21,6 +21,7 @@ import {
   readPostgresFleetProcessObservation,
   readPostgresFleetSloTasks,
   globalAIBudgetRpc,
+  readGlobalAIBudgetReservation,
   readSeniorQueuePostgresDocument,
   seniorQueuePostgresRpc,
   releasePostgresWorkerInstanceTasks,
@@ -41,6 +42,51 @@ function configureAtomicQueue(): void {
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test-only';
   process.env.IVX_AUTONOMOUS_WORKER_INSTANCE_ID = 'render-worker-test-01';
 }
+
+test('budget recovery reads one exact reservation and its current policy without another mutation', async () => {
+  configureAtomicQueue(); delete process.env.SUPABASE_DB_URL; delete process.env.DATABASE_URL;
+  const paths: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    expect(init?.method).toBe('GET');
+    const url = new URL(String(input)); paths.push(url.pathname);
+    if (url.pathname.endsWith('ivx_ai_budget_reservations')) {
+      expect(url.searchParams.get('reservation_id')).toBe('eq.12345678-1234-1234-1234-123456789abc');
+      expect(url.searchParams.get('limit')).toBe('1');
+      return Response.json([{ reservation_id: '12345678-1234-1234-1234-123456789abc', worker_instance_id: 'worker-a',
+        model: 'model-a', request_sha: 'request-sha', reserved_nano: 1000, status: 'reserved', policy_revision: 6,
+        pricing_evidence: { catalogSha256: 'catalog-sha', validUntil: '2026-09-14T19:05:00Z' } }]);
+    }
+    expect(url.searchParams.get('singleton')).toBe('eq.true');
+    return Response.json([{ enabled: true, revision: 6 }]);
+  }) as typeof fetch;
+  expect(await readGlobalAIBudgetReservation('12345678-1234-1234-1234-123456789abc')).toMatchObject({
+    reservationId: '12345678-1234-1234-1234-123456789abc', workerInstanceId: 'worker-a',
+    reservedNano: '1000', policyRevision: '6', currentPolicyRevision: '6', policyEnabled: true });
+  expect(paths).toHaveLength(2);
+});
+
+test('budget direct proof shares the bounded pool and releases its connection', async () => {
+  configureAtomicQueue();
+  process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://budgetproof.supabase.co';
+  process.env.SUPABASE_DB_URL = 'postgresql://postgres:fixture@db.budgetproof.supabase.co/postgres';
+  const proof = { reservationId: '12345678-1234-1234-1234-123456789abc' };
+  let released = 0, selected = 0;
+  const client = Object.assign(new EventEmitter(), { release: () => { released++; },
+    query: async (sql: string, values?: unknown[]) => {
+      if (sql.includes('from public.ivx_ai_budget_reservations')) {
+        expect(values).toEqual([proof.reservationId]); selected++;
+        expect(sql).toContain('r.reservation_id = $1::uuid');
+        expect(sql).toContain('p.revision::text');
+        return { rows: [proof] };
+      }
+      return { rows: [] };
+    } });
+  const connect = spyOn(Pool.prototype, 'connect').mockImplementation(() => Promise.resolve(client) as never);
+  try {
+    expect(await readGlobalAIBudgetReservation(proof.reservationId)).toEqual(proof);
+    expect(selected).toBe(1); expect(released).toBe(1);
+  } finally { connect.mockRestore(); }
+});
 
 test('only critical senior checkpoint writes get the longer deadline; claims and pages stay bounded', async () => {
   configureAtomicQueue();

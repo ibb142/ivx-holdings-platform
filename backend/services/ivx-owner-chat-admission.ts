@@ -1,3 +1,4 @@
+import { ownerTextFailure, readOwnerBudgetFailureReason } from './ivx-owner-text-failure';
 import { createHash, randomUUID } from 'node:crypto';
 import type { IVXOwnerRequestContext } from '../api/owner-only';
 
@@ -142,14 +143,16 @@ export async function reconcileOwnerChatRequest(store: ChatRequestStore, key: st
     && payload.status !== 'error' && payload.ok !== false && typeof payload.answer === 'string' && !!payload.answer.trim();
   const nonempty = (value: unknown): string | null => typeof value === 'string' && value.trim() ? value : null;
   const requestId = record.identity?.requestId ?? nonempty(payload.requestId) ?? taskId.replace(/^owner-request:/, '');
+  const legacyReason = readOwnerBudgetFailureReason((payload.routerDebug as { reason?: unknown } | null)?.reason);
+  const legacyFailure = legacyReason ? ownerTextFailure(`Global AI budget: ${legacyReason}`) : null;
   return { taskId, requestId, traceId: nonempty(payload.traceId) ?? requestId,
     status: completed ? (succeeded ? 'COMPLETED' : 'FAILED') : 'RUNNING',
     terminal: completed, checkpoint: completed ? (succeeded ? 'ORIGINAL_RESPONSE_RECONCILED' : 'ORIGINAL_REQUEST_FAILED') : 'ORIGINAL_REQUEST_PENDING',
     retryCount: 0, answer: succeeded ? payload.answer : null,
     assistantMessageId: payload.assistantMessageId ?? null, assistantPersisted: payload.assistantPersisted === true,
     httpStatus: record.response?.status ?? null,
-    errorCode: completed && !succeeded ? (nonempty(payload.code) ?? 'ORIGINAL_REQUEST_FAILED') : null,
-    errorMessage: completed && !succeeded ? (nonempty(payload.error) ?? nonempty(payload.detail) ?? 'La solicitud original terminó con error.') : null,
+    errorCode: completed && !succeeded ? (nonempty(payload.code) ?? legacyFailure?.code ?? 'ORIGINAL_REQUEST_FAILED') : null,
+    errorMessage: completed && !succeeded ? (nonempty(payload.error) ?? nonempty(payload.detail) ?? legacyFailure?.error ?? 'La solicitud original terminó con error.') : null,
     // This receipt describes the original execution; it is not a queue job.
     // Replaying it cannot restart or cancel a provider/tool side effect.
     canRetry: false, canCancel: false,

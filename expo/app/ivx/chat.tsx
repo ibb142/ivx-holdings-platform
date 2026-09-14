@@ -1421,9 +1421,9 @@ export default function IVXOwnerChatRoute() {
     const taskIdSeen = new Map<string, IVXMessage>();
     for (const message of visibleTransientAssistantMessages) {
       if (!message.taskId) {
-        if (!deduped.has(message.id)) {
-          deduped.set(message.id, message);
-        }
+        // The mirror can contain an older streaming snapshot under this same
+        // ID. The live completed body must replace it, especially during search.
+        deduped.set(message.id, message);
         continue;
       }
       const existing = taskIdSeen.get(message.taskId);
@@ -1432,9 +1432,7 @@ export default function IVXOwnerChatRoute() {
       }
     }
     for (const message of taskIdSeen.values()) {
-      if (!deduped.has(message.id)) {
-        deduped.set(message.id, message);
-      }
+      deduped.set(message.id, message);
     }
     // Canonical server-created order with a stable message-ID tiebreak.
     // This keeps reloads and realtime duplicates from moving existing bubbles.
@@ -1455,6 +1453,9 @@ export default function IVXOwnerChatRoute() {
   // is persisted; the helper dedupes so this is idempotent.
   const durableMirrorPayload = useMemo<IVXMessage[]>(() => {
     return allMessages.filter((message) => {
+      // A delta is visible progress, not a committed assistant response. Saving
+      // it here produces stale rows with the same ID as the eventual full text.
+      if (message.id === currentStreamingMessageId) return false;
       if (isInternalTranscriptMessage(message)) {
         return false;
       }
@@ -1464,7 +1465,7 @@ export default function IVXOwnerChatRoute() {
       }
       return safeTrim(message.body).length > 0 || !!message.attachmentUrl;
     });
-  }, [allMessages]);
+  }, [allMessages, currentStreamingMessageId]);
   const durableMirrorSignature = useMemo<string>(
     () => durableMirrorPayload.map((message) => `${message.id}:${safeTrim(message.body).length}`).join('|'),
     [durableMirrorPayload],

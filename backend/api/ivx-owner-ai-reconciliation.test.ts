@@ -93,6 +93,17 @@ test('legacy corrupt or null JSON receipts fail visibly instead of crashing reco
   }
 });
 
+test('the production incident receipt recovers the budget diagnosis hidden in old router metadata', async () => {
+  rows.set(key(), { version: 1, state: 'completed', response: { status: 503,
+    body: JSON.stringify({ status: 'error', answer: 'The text reply could not be completed and saved.',
+      routerDebug: { reason: 'LLM call failed for knowledge question (conversation). No deploy, no commit, no task creation. Error: Global AI budget: durable admission unavailable' } }) } });
+  const response = await handleOwnerAITaskStatus(request(), 'owner-request:message-1');
+  expect((await response.json()).task).toMatchObject({ status: 'FAILED', httpStatus: 503,
+    errorCode: 'IVX_AI_BUDGET_ADMISSION_UNAVAILABLE', errorMessage: 'Global AI budget: durable admission unavailable',
+    canRetry: false, canCancel: false });
+  expect(enqueues).toBe(0);
+});
+
 test('retry and cancel on an original receipt cannot mutate the unrelated legacy queue', async () => {
   for (const handle of [handleOwnerAITaskRetry, handleOwnerAITaskCancel]) {
     const response = await handle(request(), 'owner-request:message-1');
