@@ -73,3 +73,43 @@ test('cancelled heartbeat and ID-only calls cannot open a connection', async () 
   await expect(emitFleetHeartbeat('agent-1' as never, 'task-1' as never)).rejects.toThrow('OWNED_FLEET_LEASE_REQUIRED');
   expect(h.connects()).toBe(0);
 });
+
+for (const phase of ['setup', 'heartbeat', 'commit'] as const) {
+  test(`an asynchronous socket error during ${phase} cannot certify a heartbeat`, async () => {
+    const h = harness();
+    const failure = new Error('socket disconnected');
+    const query = h.client.query;
+    h.client.query = async sql => {
+      const result = await query(sql);
+      if ((phase === 'setup' && sql.includes('set_config'))
+        || (phase === 'heartbeat' && sql === 'HEARTBEAT')
+        || (phase === 'commit' && sql === 'COMMIT')) h.client.emit('error', failure);
+      return result;
+    };
+    const pending = emitFleetHeartbeat(h.store, lease);
+    if (phase === 'commit') await expect(pending).rejects.toThrow('FLEET_COMMIT_OUTCOME_UNKNOWN');
+    else await expect(pending).rejects.toBe(failure);
+    if (phase === 'setup') expect(h.calls).not.toContain('HEARTBEAT');
+    if (phase !== 'commit') expect(h.calls).not.toContain('COMMIT');
+    expect(h.calls).not.toContain('ROLLBACK');
+    expect(h.releases).toEqual([true]);
+    expect(h.connects()).toBe(1);
+    expect(h.client.listenerCount('error')).toBe(0);
+  });
+}
+
+test('a client read timeout discards the connection without queuing rollback behind the query', async () => {
+  const h = harness();
+  const query = h.client.query;
+  const failure = new Error('Query read timeout');
+  h.client.query = async sql => {
+    const result = await query(sql);
+    if (sql === 'HEARTBEAT') throw failure;
+    return result;
+  };
+  await expect(emitFleetHeartbeat(h.store, lease)).rejects.toBe(failure);
+  expect(h.calls.at(-1)).toBe('HEARTBEAT');
+  expect(h.calls).not.toContain('ROLLBACK');
+  expect(h.releases).toEqual([true]);
+  expect(h.connects()).toBe(1);
+});

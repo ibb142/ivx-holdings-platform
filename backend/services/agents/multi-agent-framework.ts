@@ -1097,19 +1097,26 @@ export class FleetDatabase {
       let client: FleetClient | undefined;
       let committing = false;
       let destroy = false;
-      const onError = (): void => { destroy = true; };
+      let connectionError: Error | null = null;
+      const onError = (error: Error): void => { connectionError = error; destroy = true; };
+      const requireConnection = (): void => { if (connectionError) throw connectionError; };
       try {
         client = await this.pool.connect();
         client.on('error', onError);
         signal?.throwIfAborted();
+        requireConnection();
         await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+        requireConnection();
         await client.query(`SELECT set_config('statement_timeout','2500',true),
           set_config('lock_timeout','750',true),
           set_config('idle_in_transaction_session_timeout','10000',true)`);
+        requireConnection();
         const result = await work(client);
+        requireConnection();
         signal?.throwIfAborted();
         committing = true;
         await client.query('COMMIT');
+        requireConnection();
         return result;
       } catch (error: unknown) {
         const code = fleetErrorCode(error);
@@ -1117,8 +1124,15 @@ export class FleetDatabase {
         // Losing the COMMIT response does not imply rollback. Abandon/reconcile.
         const ambiguous = committing && !serverAborted;
         if (client) {
-          try { await client.query('ROLLBACK'); } catch { destroy = true; }
-          if (fleetTransient(error) || ambiguous || (error instanceof Error && /query read timeout/i.test(error.message))) destroy = true;
+          // An unanswered query still owns the pg protocol queue. Destroy the
+          // uncertain socket instead of adding ROLLBACK behind it and waiting
+          // through another timeout. Server-rejected or local failures can
+          // rollback normally; only a healthy connection returns to the pool.
+          const uncertainConnection = Boolean(connectionError) || ambiguous ||
+            (fleetTransient(error) && !serverAborted) ||
+            (error instanceof Error && /query read timeout/i.test(error.message));
+          if (uncertainConnection) destroy = true;
+          else { try { await client.query('ROLLBACK'); } catch { destroy = true; } }
         }
         if (ambiguous) throw new FleetCommitUnknown();
         if (attempt >= 4 || !fleetTransient(error) || signal?.aborted) throw error;
@@ -1126,8 +1140,8 @@ export class FleetDatabase {
       } finally {
         if (client) {
           // Keep the listener installed until release/destroy has completed.
-          client.release(destroy);
-          client.removeListener('error', onError);
+          try { client.release(destroy); }
+          finally { client.removeListener('error', onError); }
         }
       }
       await fleetDelay(fleetBackoff(attempt), undefined, signal ? { signal } : undefined);
