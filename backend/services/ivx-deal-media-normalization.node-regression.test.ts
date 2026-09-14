@@ -4,7 +4,7 @@ import { normalizePublicLandingDeals } from '../api/ivx-public-features';
 
 const mockDeals = [
   { id: 'deal-01', title: 'Deal 1', videos: ['video1.mp4'], reels: ['reel1.mp4'] },
-  { id: 'deal-02', title: 'Deal 2', reels: ['reel2.mp4'] },
+  { id: 'deal-02', title: 'Deal 2', videos: ['invalid_video.avi'], reels: ['reel2.mp4'] },
 ];
 
 describe('normalizePublicLandingDeals with reels', () => {
