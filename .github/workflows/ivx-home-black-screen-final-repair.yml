@@ -278,8 +278,13 @@ jobs:
             > qa/evidence/focused-e2e/home-black-screen-final.json
           cat qa/evidence/focused-e2e/home-black-screen-final.json
 
-      - uses: actions/upload-artifact@v4
+      - name: Sanitize authenticated QA evidence
+        id: sanitize_evidence
         if: always()
+        run: python3 scripts/ivx_sanitize_qa_artifacts.py qa/evidence/focused-e2e/home-black-screen-final.json production-owner-home.xml production-owner-home.png production-owner-home-ui.xml
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && steps.sanitize_evidence.outcome == 'success' }}
         with:
           name: ivx-home-black-screen-final-${{ steps.persist.outputs.source_sha }}
           path: |

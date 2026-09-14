@@ -12,6 +12,8 @@ on:
       - 'expo/lib/native-intent-dispatch.ts'
       - 'expo/__tests__/native-intent-dispatch.test.ts'
       - 'scripts/ivx-route-destination.mjs'
+      - 'scripts/ivx_sanitize_qa_artifacts.py'
+      - 'scripts/test_ivx_sanitize_qa_artifacts.py'
       - 'expo/app/_layout.tsx'
       - 'expo/app/_providers.tsx'
       - 'expo/app.config.ts'
@@ -42,6 +44,8 @@ on:
       - 'expo/lib/native-intent-dispatch.ts'
       - 'expo/__tests__/native-intent-dispatch.test.ts'
       - 'scripts/ivx-route-destination.mjs'
+      - 'scripts/ivx_sanitize_qa_artifacts.py'
+      - 'scripts/test_ivx_sanitize_qa_artifacts.py'
       - 'expo/app/_layout.tsx'
       - 'expo/app/_providers.tsx'
       - 'expo/app.config.ts'
@@ -191,6 +195,7 @@ jobs:
           cd ..
           node --test scripts/ivx-all-routes-human-e2e.test.mjs
           python3 -m unittest discover -s scripts -p test_ivx_route_suite_proof.py
+          python3 -m unittest discover -s scripts -p test_ivx_sanitize_qa_artifacts.py
 
       - name: Wait for exact production SHA on main
         if: ${{ github.event_name == 'push' }}
@@ -270,6 +275,11 @@ jobs:
           test "$(jq -r '.liveAIReply' qa/evidence/dashboard-chat/certificate.json)" = true
           test "$(jq -r '.chatPersistenceAfterRestart' qa/evidence/dashboard-chat/certificate.json)" = true
 
+      - name: Sanitize evidence before artifact publication
+        id: sanitize_evidence
+        if: always()
+        run: python3 scripts/ivx_sanitize_qa_artifacts.py qa/evidence/dashboard-chat qa/evidence/all-routes-human-e2e
+
       - uses: actions/upload-artifact@v4
         if: success()
         with:
@@ -282,7 +292,7 @@ jobs:
           retention-days: 30
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: ${{ always() && steps.sanitize_evidence.outcome == 'success' }}
         with:
           name: ivx-dashboard-chat-e2e-${{ github.event.pull_request.head.sha || github.sha }}
           path: |

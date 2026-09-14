@@ -111,8 +111,14 @@ jobs:
         run: |
           xcrun simctl io "${{ steps.sim.outputs.id }}" screenshot screenshot-02-post-test.png 2>/dev/null || true
           xcrun simctl spawn "${{ steps.sim.outputs.id }}" log show --last 5m > simulator-log.txt 2>&1 || true
-      - name: Upload certification artifacts
+      - name: Sanitize authenticated QA evidence
+        id: sanitize_evidence
         if: always()
+        env:
+          OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
+        run: python3 scripts/ivx_sanitize_qa_artifacts.py screenshot-*.png simulator-log.txt expo/expo-build.log expo/maestro-*.xml expo/maestro-*.log
+      - name: Upload certification artifacts
+        if: ${{ always() && steps.sanitize_evidence.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: ios-simulator-qa-${{ github.sha }}
