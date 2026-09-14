@@ -21,6 +21,9 @@ import {
 } from './ivx-durable-store';
 import type { CampaignJobRecord, DispatcherAssignmentInput } from './ivx-campaign-dispatcher';
 import { ensureCampaignAssignment, supersedeOrphanCampaignRecords } from './ivx-campaign-dispatcher';
+import { readCampaignControlPostgres } from './ivx-emergency-stop-postgres';
+import { readOwnerControlWithFallback } from './ivx-owner-control-transport';
+export { OWNER_CONTROL_READ_TIMEOUT_MS } from './ivx-owner-control-transport';
 
 export const IVX_APP_COMPLETION_MARKER = 'ivx-app-completion-campaign-2026-08-21';
 
@@ -449,7 +452,6 @@ function statusFromDispatcherRecord(record: CampaignJobRecord): { status: ItemSt
 }
 
 const DEFAULT_CONTROL: CampaignControlState = { paused: false, stopped: false, pausedAgents: [], stoppedAgents: [] };
-export const OWNER_CONTROL_READ_TIMEOUT_MS = 2_000;
 
 export async function loadControlState(options: { required?: boolean } = {}): Promise<CampaignControlState> {
   if (!isDurableStoreConfigured()) {
@@ -457,14 +459,10 @@ export async function loadControlState(options: { required?: boolean } = {}): Pr
     cachedControl = { ...DEFAULT_CONTROL };
     return cachedControl;
   }
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new Error('owner_control_read_timeout_2000ms')), OWNER_CONTROL_READ_TIMEOUT_MS);
-  let stored: { control?: CampaignControlState } | null;
-  try {
-    stored = await readDurableJson<{ control?: CampaignControlState } | null>(STATE_KEY, null, { signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
+  const stored = await readOwnerControlWithFallback(
+    signal => readDurableJson<unknown>(STATE_KEY, null, { signal }),
+    readCampaignControlPostgres,
+  ) as { control?: CampaignControlState } | null;
   const control = stored?.control;
   if (options.required && (!control || typeof control.paused !== 'boolean' || typeof control.stopped !== 'boolean'
     || !Array.isArray(control.pausedAgents) || !Array.isArray(control.stoppedAgents)

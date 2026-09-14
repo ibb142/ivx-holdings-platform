@@ -17,6 +17,7 @@
  */
 
 import { emergencyStopReadCanFailOver, readEmergencyStopPostgres } from './ivx-emergency-stop-postgres';
+import { readOwnerControlWithFallback } from './ivx-owner-control-transport';
 
 const CONTROL_TABLE = 'ivx_agent_controls';
 const CONTROL_NAME = 'emergency_stop';
@@ -132,23 +133,22 @@ async function readEmergencyStopFromSupabase(): Promise<EmergencyStopStatus> {
 
   try {
     const query = `${url}/rest/v1/${CONTROL_TABLE}?control_name=eq.${CONTROL_NAME}&select=control_name,active,reason,updated_by,updated_at&limit=2`;
-    let rows: unknown;
     let source: 'supabase' | 'postgres' = 'supabase';
-    try {
+    const rows = await readOwnerControlWithFallback(async signal => {
       const response = await fetch(query, {
         method: 'GET',
         headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' },
-        signal: AbortSignal.timeout(8_000),
+        signal,
       });
       if (!response.ok) {
         throw new Error(`Supabase read failed with HTTP ${response.status}`);
       }
-      rows = await response.json();
-    } catch (error) {
-      if (!emergencyStopReadCanFailOver(error)) throw error;
-      rows = await readEmergencyStopPostgres();
+      return await response.json();
+    }, async () => {
+      const directRows = await readEmergencyStopPostgres();
       source = 'postgres';
-    }
+      return directRows;
+    }, emergencyStopReadCanFailOver);
     // A missing or ambiguous control is unknown authority, never permission to run.
     // Read two rows so both transports can detect an ambiguous response.
     if (!Array.isArray(rows) || rows.length !== 1 || rows.some((row: ControlRow | null) =>
