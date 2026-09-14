@@ -17,7 +17,7 @@ function fixture() {
         cooldown.observe(rows, results, scope, now);
         return results;
       },
-      start: async rows => rows.map(row => ({ ...row, ok: true, error: null, task: { taskId: row.taskId, state: 'RUNNING' } })),
+      start: async rows => rows.map(row => ({ ...row, ok: true, error: null, task: { taskId: row.taskId, state: 'RUNNING', leaseHolder: row.workerId, idempotencyKey: `mission:${row.taskId}` } })),
       onStarted: row => { dispatched.push(row.taskId); return true; },
       release: async () => { throw new Error('Accepted tasks retain their lease'); },
     });
