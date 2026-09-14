@@ -1,15 +1,10 @@
 /**
  * IVX Owner AI Durable Task client — P0 503 recovery fallback.
  *
- * When the primary Owner AI request fails with a transient failure
- * (503/502/504/429/timeout/network), the owner message is handed to the
- * backend durable task queue instead of being lost:
- *   1. POST /api/ivx/owner-ai/tasks persists the message FIRST and returns a
- *      task id immediately — the mobile HTTP request never stays open.
- *   2. The client polls the task id; the backend worker retries with backoff,
- *      fails over providers, and persists the assistant reply.
- *   3. Pending task ids survive app restart via AsyncStorage so progress is
- *      restored when the app reopens.
+ * With primaryRequestId, POST only reconciles the original admitted request.
+ * It cannot hand an uncertain provider/tool outcome to a second executor.
+ * Explicit new jobs without primaryRequestId still use the durable queue.
+ * Pending receipt identities survive restart; lookup failure is not success.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,6 +14,19 @@ const TASKS_ENDPOINT = `${IVX_CANONICAL_API_BASE_URL}/api/ivx/owner-ai/tasks`;
 const PENDING_TASKS_STORAGE_KEY = 'ivx_owner_ai_pending_durable_tasks';
 const POLL_INTERVAL_MS = 3_000;
 const DEFAULT_POLL_BUDGET_MS = 5 * 60_000;
+const LOOKUP_TIMEOUT_MS = 12_000;
+
+/** A dropped network connection cannot leave reconciliation pending forever. */
+async function taskFetch(url: string, init: RequestInit): Promise<{ response: Response; payload: unknown }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LOOKUP_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    const payload: unknown = await response.json().catch(() => null);
+    return { response, payload };
+  }
+  finally { clearTimeout(timer); }
+}
 
 const TRANSIENT_STATUS_CODES = [408, 429, 502, 503, 504];
 const TRANSIENT_MESSAGE_PATTERN = /timed?\s?out|timeout|network|connection|abort|unavailable|fetch failed|socket/i;
@@ -34,6 +42,10 @@ export interface DurableTaskView {
   errorCode: string | null;
   errorMessage: string | null;
   deadLetter: boolean;
+  httpStatus: number | null;
+  source: string | null;
+  assistantMessageId: string | null;
+  assistantPersisted: boolean;
 }
 
 export interface DurableFallbackResult {
@@ -43,6 +55,10 @@ export interface DurableFallbackResult {
   checkpoint: string | null;
   answer: string | null;
   error: string | null;
+  httpStatus?: number | null;
+  errorCode?: string | null;
+  source?: string | null;
+  assistantMessageId?: string | null;
 }
 
 interface PendingTaskRecord {
@@ -53,8 +69,8 @@ interface PendingTaskRecord {
 }
 
 /**
- * Decide whether a primary-route failure is safe to hand to the durable queue.
- * Only transient failures qualify — auth/validation failures are never retried.
+ * Decide whether to query the original receipt after a transport failure.
+ * This is a read of admitted work, not permission to execute the prompt again.
  */
 export function shouldAttemptDurableFallback(
   diagnostics: { statusCode?: number | null; stage?: string | null } | null,
@@ -74,7 +90,9 @@ export function shouldAttemptDurableFallback(
 function parseTaskView(payload: unknown): DurableTaskView | null {
   if (!payload || typeof payload !== 'object') return null;
   const task = (payload as { task?: Record<string, unknown> }).task;
-  if (!task || typeof task !== 'object') return null;
+  if (!task || typeof task !== 'object' || Array.isArray(task)
+    || typeof task.taskId !== 'string' || !task.taskId.trim()
+    || typeof task.status !== 'string' || !task.status.trim()) return null;
   return {
     taskId: String(task.taskId ?? ''),
     traceId: String(task.traceId ?? ''),
@@ -86,6 +104,10 @@ function parseTaskView(payload: unknown): DurableTaskView | null {
     errorCode: typeof task.errorCode === 'string' ? task.errorCode : null,
     errorMessage: typeof task.errorMessage === 'string' ? task.errorMessage : null,
     deadLetter: task.deadLetter === true,
+    httpStatus: typeof task.httpStatus === 'number' ? task.httpStatus : null,
+    source: typeof task.source === 'string' ? task.source : null,
+    assistantMessageId: typeof task.assistantMessageId === 'string' ? task.assistantMessageId : null,
+    assistantPersisted: task.assistantPersisted === true,
   };
 }
 
@@ -125,7 +147,7 @@ async function clearPendingTask(taskId: string): Promise<void> {
   }
 }
 
-/** Enqueue the owner message as a durable backend task (persist-first, 202). */
+/** Reconcile a primary receipt, or explicitly enqueue a new durable job. */
 export async function enqueueDurableOwnerAITask(input: {
   message: string;
   conversationId: string | null;
@@ -136,8 +158,14 @@ export async function enqueueDurableOwnerAITask(input: {
 }): Promise<{ ok: boolean; task: DurableTaskView | null; duplicate: boolean; error: string | null }> {
   const headers = await authHeaders();
   if (!headers) return { ok: false, task: null, duplicate: false, error: 'Owner session unavailable for durable fallback.' };
+  if (input.primaryRequestId) {
+    // Store the known identity BEFORE a lookup that may time out. This does not
+    // claim the prompt was persisted; reopening can reconcile the same receipt.
+    await savePendingTask({ taskId: `owner-request:${input.primaryRequestId}`,
+      conversationId: input.conversationId, messagePreview: input.message.slice(0, 120), createdAt: new Date().toISOString() });
+  }
   try {
-    const response = await fetch(TASKS_ENDPOINT, {
+    const { response, payload: rawPayload } = await taskFetch(TASKS_ENDPOINT, {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -149,7 +177,7 @@ export async function enqueueDurableOwnerAITask(input: {
         idempotencyKey: input.idempotencyKey ?? null,
       }),
     });
-    const payload = await response.json().catch(() => null) as { duplicate?: boolean; error?: string } | null;
+    const payload = rawPayload as { duplicate?: boolean; error?: string } | null;
     const task = parseTaskView(payload);
     if (!response.ok && response.status !== 202) {
       return { ok: false, task, duplicate: payload?.duplicate === true, error: payload?.error ?? `Durable intake failed (HTTP ${response.status}).` };
@@ -173,9 +201,9 @@ export async function getDurableTask(taskId: string): Promise<DurableTaskView | 
   const headers = await authHeaders();
   if (!headers) return null;
   try {
-    const response = await fetch(`${TASKS_ENDPOINT}/${encodeURIComponent(taskId)}`, { method: 'GET', headers });
+    const { response, payload } = await taskFetch(`${TASKS_ENDPOINT}/${encodeURIComponent(taskId)}`, { method: 'GET', headers });
     if (!response.ok) return null;
-    return parseTaskView(await response.json().catch(() => null));
+    return parseTaskView(payload);
   } catch {
     return null;
   }
@@ -234,8 +262,8 @@ export async function pollDurableTask(
 }
 
 /**
- * Full durable fallback: enqueue + poll to completion.
- * The owner message is preserved server-side regardless of what the app does next.
+ * Reconcile a primary receipt, or poll an explicitly queued job. A receipt lookup
+ * never implies that a repair ran or that an unsuccessful prompt was persisted.
  */
 export async function runDurableOwnerAIFallback(input: {
   message: string;
@@ -248,9 +276,13 @@ export async function runDurableOwnerAIFallback(input: {
 }): Promise<DurableFallbackResult> {
   const intake = await enqueueDurableOwnerAITask(input);
   if (!intake.ok || !intake.task) {
-    return { ok: false, taskId: intake.task?.taskId ?? null, status: intake.task?.status ?? null, checkpoint: null, answer: null, error: intake.error };
+    return { ok: false, taskId: intake.task?.taskId ?? (input.primaryRequestId ? `owner-request:${input.primaryRequestId}` : null),
+      status: intake.task?.status ?? null, checkpoint: null, answer: null, error: intake.error };
   }
-  const final = await pollDurableTask(intake.task.taskId, { onStatus: input.onStatus });
+  // A terminal intake already contains the persisted result. A second fetch
+  // could fail and must not erase the result we have just confirmed.
+  const final = intake.task.terminal ? intake.task : await pollDurableTask(intake.task.taskId, { onStatus: input.onStatus });
+  if (final?.terminal) await clearPendingTask(final.taskId);
   if (!final) {
     return { ok: false, taskId: intake.task.taskId, status: 'UNKNOWN', checkpoint: null, answer: null, error: 'No se pudo confirmar el estado de la solicitud. Conservamos su identificador para consultarlo al reabrir.' };
   }
@@ -262,6 +294,8 @@ export async function runDurableOwnerAIFallback(input: {
     checkpoint: final.checkpoint,
     answer: final.answer,
     error: succeeded ? null : (final.errorMessage ?? `Task ended in ${final.status}.`),
+    httpStatus: final.httpStatus, errorCode: final.errorCode, source: final.source,
+    assistantMessageId: final.assistantMessageId,
   };
 }
 

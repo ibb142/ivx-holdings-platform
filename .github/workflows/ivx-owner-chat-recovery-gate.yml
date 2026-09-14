@@ -1,0 +1,60 @@
+name: IVX Owner Chat Recovery Gate
+
+on:
+  pull_request:
+    paths:
+      - 'backend/api/ivx-owner-ai*'
+      - 'backend/services/ivx-owner-*'
+      - 'expo/app/ivx/chat.tsx'
+      - 'expo/src/modules/ivx-owner-ai/services/**'
+      - 'expo/__tests__/owner-*.test.ts'
+      - '.github/workflows/ivx-owner-chat-recovery-gate.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/api/ivx-owner-ai*'
+      - 'backend/services/ivx-owner-*'
+      - 'expo/app/ivx/chat.tsx'
+      - 'expo/src/modules/ivx-owner-ai/services/**'
+      - 'expo/__tests__/owner-*.test.ts'
+      - '.github/workflows/ivx-owner-chat-recovery-gate.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: owner-chat-recovery-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: '1.3.9' }
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: bun install --cwd expo --frozen-lockfile --ignore-scripts
+      - name: Backend typecheck
+        run: cd backend && ../node_modules/.bin/tsc --noEmit
+      - name: Chat typecheck
+        run: cd expo && node --max-old-space-size=6144 node_modules/typescript/bin/tsc --noEmit
+      - name: Admission and command routing
+        run: >-
+          bun test backend/api/ivx-owner-ai-routing-boundary.test.ts
+          backend/services/ivx-owner-task-status.test.ts
+          backend/services/ivx-owner-chat-admission.test.ts
+          backend/services/ivx-owner-chat-retry-boundary.test.ts
+          backend/services/ivx-owner-chat-mirror-race.test.ts
+          backend/services/ivx-owner-ai-intent-router.test.ts
+      - name: Receipt API (isolated global mocks)
+        run: bun test backend/api/ivx-owner-ai-reconciliation.test.ts
+      - name: Streaming admission and cancellation
+        run: bun test backend/api/ivx-owner-ai-stream.test.ts
+      - name: Client submission and error presentation
+        run: cd expo && bun test __tests__/owner-chat-submission.test.ts __tests__/owner-recovery-state.test.ts
+      - name: Reconciliation transport (isolated global mocks)
+        run: cd expo && bun test __tests__/owner-durable-reconciliation.test.ts

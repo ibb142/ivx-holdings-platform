@@ -1,3 +1,4 @@
+import { describeOwnerRecovery, ownerConnectionStatus, ownerFailureNextStep } from '@/src/modules/ivx-owner-ai/services/ivxOwnerRecoveryState';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
@@ -968,24 +969,26 @@ export default function IVXOwnerChatRoute() {
   // restart, re-poll any pending durable tasks so recovered answers are
   // restored instead of lost.
   useEffect(() => {
+    if (!ownerId) return;
     let mounted = true;
     void resumePendingDurableTasks((task) => {
       if (!mounted || !task.answer) return;
       if (task.status !== 'VERIFIED' && task.status !== 'COMPLETED') return;
-      const restoredId = createTransientMessageId('ivx-owner-ai-durable-restored');
+      const restoredId = task.assistantMessageId ?? `ivx-owner-reconciled:${task.taskId}`;
+      const restoredAnswer = task.answer;
       setTransientAssistantMessages((current) => [
         ...current.filter((message) => message.id !== restoredId),
         buildVisibleAssistantTransient({
           id: restoredId,
           conversationId: 'ivx-owner-room',
-          body: `${task.answer}\n\n♻️ Restored from durable task ${task.taskId} after app restart.`}),
+          body: restoredAnswer}),
       ]);
     }).catch((restoreErr) => {
       console.log('[IVXOwnerChatRoute] durable_restore_failed_safely:', restoreErr instanceof Error ? restoreErr.message : 'unknown');
     });
     return () => { mounted = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ownerId]);
 
   // Diagnostics overlay removed — moved to protected /admin/diagnostics route.
   // The button in the control room now navigates to /admin/diagnostics instead.
@@ -2738,7 +2741,7 @@ export default function IVXOwnerChatRoute() {
         const failureReasonSuffix = (() => {
           if (!diagnostics) return '';
           const status = diagnostics.statusCode ?? null;
-          if (status === 401 || status === 403 || diagnostics.stage === 'auth') {
+          if (status === 401 || status === 403 || (status === null && diagnostics.stage === 'auth')) {
             return ' (your owner session needs to be refreshed — open Auth Diagnostics)';
           }
           if (diagnostics.stage === 'network') {
@@ -2761,20 +2764,8 @@ export default function IVXOwnerChatRoute() {
         const statusLabel = diagnostics?.statusCode != null
           ? String(diagnostics.statusCode)
           : (diagnostics?.stage === 'network' ? 'network' : 'no-response');
-        const nextFix = (() => {
-          const status = diagnostics?.statusCode ?? null;
-          if (status === 401 || status === 403 || diagnostics?.stage === 'auth') {
-            return 'Open Auth Diagnostics to refresh your owner session.';
-          }
-          if (diagnostics?.stage === 'network' || statusLabel === 'network' || statusLabel === 'no-response') {
-            return 'Check your connection and tap send again to retry.';
-          }
-          if (status != null && status >= 500) {
-            return 'The server is warming up — retry in a moment.';
-          }
-          return 'Tap send to retry; if it persists, open Auth Diagnostics.';
-        })();
-        const diagnosticsCardLine = `Route: ${routePath} · Status: ${statusLabel} · Trace: ${watchdogTraceId ?? 'n/a'}\nNext: ${nextFix}`;
+        const nextFix = ownerFailureNextStep(diagnostics?.statusCode ?? null, diagnostics?.stage ?? null);
+        const diagnosticsCardLine = `Route: ${routePath} · Status: ${statusLabel} · Trace: ${diagnostics?.requestId ?? watchdogTraceId ?? requestId}\nNext: ${nextFix}`;
         try {
           setTransientAssistantMessages((current) => [
             ...current.filter((message) => message.id !== transientReplyId),
@@ -2817,7 +2808,7 @@ export default function IVXOwnerChatRoute() {
           failureClass: diagnostics?.classification ?? 'provider_exhausted',
           httpStatus: diagnostics?.statusCode !== null && diagnostics?.statusCode !== undefined ? String(diagnostics.statusCode) : 'unavailable',
           responsePreview: '',
-          failureDetail: 'The message was sent. Send another prompt when you are ready.',
+          failureDetail: failureMessage,
           hasVisibleResponseText: false}));
         setAiBackendReachable(false);
         setAiHealthDetail('inactive');
@@ -2830,19 +2821,18 @@ export default function IVXOwnerChatRoute() {
           originalFailureMessage: failureMessage,
           diagnostics,
           serviceUnavailable});
-        // P0 DURABLE FALLBACK (503-recovery mandate): a transient 5xx/timeout/
-        // network failure must never lose the owner request. Hand the message
-        // to the persisted server-side task queue and poll it to completion —
-        // the owner never retypes anything.
+        // A transport failure does not prove that execution failed. Reconcile
+        // the original request, retaining its identity across app restarts.
+        // This path cannot create replacement work or promise automatic repair.
         if (shouldAttemptDurableFallback(diagnostics, failureMessage)) {
-          const durableBubbleId = createTransientMessageId('ivx-owner-ai-durable');
+          const durableBubbleId = errorTransientId;
           emittedBubbleIds.add(durableBubbleId);
-          const updateDurableBubble = (body: string) => {
+          const updateDurableBubble = (body: string, messageId: string = durableBubbleId) => {
             try {
               setTransientAssistantMessages((current) => [
-                ...current.filter((message) => message.id !== durableBubbleId),
+                ...current.filter((message) => message.id !== durableBubbleId && message.id !== messageId),
                 buildVisibleAssistantTransient({
-                  id: durableBubbleId,
+                  id: messageId,
                   conversationId: conversationQuery.data?.id ?? 'ivx-owner-room',
                   body}),
               ]);
@@ -2864,22 +2854,20 @@ export default function IVXOwnerChatRoute() {
                 updateDurableBubble(`Solicitud ${task.taskId}\nEstado: ${task.status}. Esperando confirmar el resultado original.`);
               }});
             if (durableResult.ok && durableResult.answer) {
-              updateDurableBubble(durableResult.answer);
+              updateDurableBubble(durableResult.answer, durableResult.assistantMessageId ?? `ivx-owner-reconciled:${durableResult.taskId}`);
               setRuntimeDebugSnapshot((current) => ({
                 ...current,
                 requestStage: 'response_ok',
                 failureClass: 'none',
                 httpStatus: '200',
                 responsePreview: (durableResult.answer ?? '').slice(0, 160),
-                failureDetail: `Recovered automatically via durable task ${durableResult.taskId}.`,
+                failureDetail: `Original result confirmed via ${durableResult.taskId}.`,
                 hasVisibleResponseText: true,
                 lastVerifiedAt: new Date().toISOString()}));
               setAiBackendReachable(true);
               setAiHealthDetail('active');
-            } else if (durableResult.taskId) {
-              updateDurableBubble(`Auto-recovery did not finish. Task ${durableResult.taskId} · Status: ${durableResult.status ?? 'UNKNOWN'}\nLast checkpoint: ${durableResult.checkpoint ?? 'n/a'}\nYour message is preserved server-side — you can retry or cancel it.`);
             } else {
-              updateDurableBubble(`Auto-recovery could not start (${durableResult.error ?? 'unknown reason'}). Your message stays visible above — tap send to retry.`);
+              updateDurableBubble(describeOwnerRecovery(durableResult));
             }
           })();
         }
@@ -4511,15 +4499,16 @@ export default function IVXOwnerChatRoute() {
     const ownMessage = isOwnMessage(item, ownerId);
     const isAssistant = item.senderRole === 'assistant';
     const isSystem = item.senderRole === 'system';
+    const assistantBody = typeof item.body === 'string' ? item.body : '';
     if (isAssistant) {
-      console.log('[IVX_TRACE] 9_RENDER_MESSAGE_ASSISTANT', { id: item.id, bodyLength: (item.body ?? '').length, bodyPreview: (item.body ?? '').slice(0, 60), senderRole: item.senderRole });
+      console.log('[IVX_TRACE] 9_RENDER_MESSAGE_ASSISTANT', { id: item.id, bodyLength: assistantBody.length, bodyPreview: assistantBody.slice(0, 60), senderRole: item.senderRole });
       // Report the RENDER_MESSAGE_CALLED checkpoint OUTSIDE the render phase.
       // trace.pass() notifies watchdog subscribers (setState in useWatchdogSnapshot),
       // and renderMessage runs inside React's render. Scheduling on a microtask
       // moves the watchdog update out of render so React never warns
       // "Cannot update a component (IVXWatchdog…) while rendering a different component."
       const renderTraceItemId = item.id;
-      const renderTraceBodyLen = (item.body ?? '').length;
+      const renderTraceBodyLen = assistantBody.length;
       const scheduleRenderCheckpoint = typeof queueMicrotask === 'function'
         ? queueMicrotask
         : (cb: () => void): void => { setTimeout(cb, 0); };
@@ -4533,7 +4522,7 @@ export default function IVXOwnerChatRoute() {
     // body (and no attachment), render a visible error bubble instead of silently
     // dropping it. This prevents the disappearing-reply class of bugs from ever
     // recurring even if upstream payload parsing breaks.
-    if (isAssistant && !item.attachmentUrl && (typeof item.body !== 'string' || item.body.length === 0)) {
+    if (isAssistant && currentStreamingMessageId !== item.id && !item.attachmentUrl && !assistantBody.trim()) {
       if (__DEV__) {
         // eslint-disable-next-line no-console
         console.error('[IVXOwnerChatRoute][dev] Invalid assistant message body — rendering safe fallback bubble.', { id: item.id, body: item.body });
@@ -4543,10 +4532,10 @@ export default function IVXOwnerChatRoute() {
         conversationId: item.conversationId,
         senderId: item.senderUserId ?? item.senderRole,
         senderLabel: item.senderLabel ?? IVX_OWNER_AI_PROFILE.name,
-        text: 'I was unable to display this reply. Please try resending.',
+        text: 'This saved reply has no readable content. Refresh the conversation to check it again.',
         replyTo: null,
         createdAt: item.createdAt,
-        sendStatus: 'failed' as const,
+        sendStatus: 'sent' as const,
         optimistic: false,
         localOnly: false} satisfies ChatMessage;
       return (
@@ -4556,7 +4545,13 @@ export default function IVXOwnerChatRoute() {
             style={[styles.messageRow, styles.messageRowOther]}
             testID={`ivx-owner-message-${item.id}`}
           >
-            <MessageBubble message={fallbackChatMessage} isMine={false} />
+            <View>
+              <MessageBubble message={fallbackChatMessage} isMine={false} />
+              <Pressable accessibilityRole="button" accessibilityLabel="Refresh saved reply"
+                onPress={() => { void queryClient.invalidateQueries({ queryKey: IVX_OWNER_MESSAGES_QUERY_KEY }); }}>
+                <Text style={{ color: Colors.primary, padding: 12 }}>Refresh conversation</Text>
+              </Pressable>
+            </View>
           </View>
         </>
       );
@@ -4691,7 +4686,7 @@ export default function IVXOwnerChatRoute() {
         </View>
       </>
     );
-  }, [currentStreamingMessageId, displayedMessages, executionStatusByMessageId, handleApproveAndRunFromCard, handleDismissFailedMessage, handleJumpToMessage, handleRetryMessage, handleStartReplyToMessage, handleTogglePinnedMessage, highlightedMessageId, messageSearchQuery, ownerId, pendingOwnerMessages, pinnedMessageIdSet]);
+  }, [currentStreamingMessageId, displayedMessages, executionStatusByMessageId, handleApproveAndRunFromCard, handleDismissFailedMessage, handleJumpToMessage, handleRetryMessage, handleStartReplyToMessage, handleTogglePinnedMessage, highlightedMessageId, messageSearchQuery, ownerId, pendingOwnerMessages, pinnedMessageIdSet, queryClient]);
 
   useEffect(() => {
     const pendingMessageId = pendingJumpMessageIdRef.current;
@@ -5585,8 +5580,8 @@ export default function IVXOwnerChatRoute() {
     // Loading indicators removed per owner request: the composer no longer
     // displays "Recording...", "Transcribing...", or "Reply will appear"
     // status text. The underlying voice/reply operations still work.
-    return 'Assistant ready.';
-  }, [devTestMode.testModeActive, ownerAIAuthState]);
+    return ownerConnectionStatus(aiProbeMetadata.observedAt ? aiBackendReachable : null);
+  }, [devTestMode.testModeActive, ownerAIAuthState, aiBackendReachable, aiProbeMetadata.observedAt]);
 
   const controlRoomItems = useMemo<IVXControlRoomItem[]>(() => {
     if (controlRoomQuery.data?.statusItems && controlRoomQuery.data.statusItems.length > 0) {

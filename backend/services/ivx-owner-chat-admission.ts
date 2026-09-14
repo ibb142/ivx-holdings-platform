@@ -133,15 +133,25 @@ export async function reconcileOwnerChatRequest(store: ChatRequestStore, key: st
   const record = await store.read(key);
   if (!record || record.version !== 1) return null;
   let payload: Record<string, unknown> = {};
-  try { if (record.response) payload = JSON.parse(record.response.body); } catch { /* Invalid data is never a success. */ }
+  try {
+    const parsed: unknown = record.response ? JSON.parse(record.response.body) : null;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) payload = parsed as Record<string, unknown>;
+  } catch { /* Invalid data is never a success. */ }
   const completed = record.state === 'completed';
   const succeeded = completed && !!record.response && record.response.status >= 200 && record.response.status < 300
     && payload.status !== 'error' && payload.ok !== false && typeof payload.answer === 'string' && !!payload.answer.trim();
-  return { taskId, traceId: taskId, status: completed ? (succeeded ? 'COMPLETED' : 'FAILED') : 'RUNNING',
-    terminal: completed, checkpoint: completed ? 'ORIGINAL_RESPONSE_RECONCILED' : 'ORIGINAL_REQUEST_PENDING',
+  const nonempty = (value: unknown): string | null => typeof value === 'string' && value.trim() ? value : null;
+  const requestId = record.identity?.requestId ?? nonempty(payload.requestId) ?? taskId.replace(/^owner-request:/, '');
+  return { taskId, requestId, traceId: nonempty(payload.traceId) ?? requestId,
+    status: completed ? (succeeded ? 'COMPLETED' : 'FAILED') : 'RUNNING',
+    terminal: completed, checkpoint: completed ? (succeeded ? 'ORIGINAL_RESPONSE_RECONCILED' : 'ORIGINAL_REQUEST_FAILED') : 'ORIGINAL_REQUEST_PENDING',
     retryCount: 0, answer: succeeded ? payload.answer : null,
     assistantMessageId: payload.assistantMessageId ?? null, assistantPersisted: payload.assistantPersisted === true,
-    errorCode: completed && !succeeded ? 'ORIGINAL_REQUEST_FAILED' : null,
-    errorMessage: completed && !succeeded ? (payload.error ?? payload.detail ?? 'La solicitud original terminó con error.') : null,
+    httpStatus: record.response?.status ?? null,
+    errorCode: completed && !succeeded ? (nonempty(payload.code) ?? 'ORIGINAL_REQUEST_FAILED') : null,
+    errorMessage: completed && !succeeded ? (nonempty(payload.error) ?? nonempty(payload.detail) ?? 'La solicitud original terminó con error.') : null,
+    // This receipt describes the original execution; it is not a queue job.
+    // Replaying it cannot restart or cancel a provider/tool side effect.
+    canRetry: false, canCancel: false,
     deadLetter: false, source: 'original_owner_chat_request' };
 }
