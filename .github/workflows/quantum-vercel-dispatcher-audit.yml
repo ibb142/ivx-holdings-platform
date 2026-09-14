@@ -1,4 +1,4 @@
-name: Quantum database capacity recovery
+name: Quantum database recovery verification
 on:
   push:
     branches: ['ops/quantum-vercel-dispatcher-audit-20260914']
@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
-      - name: Apply bounded Small compute recovery after reservation reconciliation
+      - name: Verify recovered Small runtime without mutations
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -38,44 +38,9 @@ jobs:
             assert.equal(rows.length, 1, 'Ambiguous selected compute');
             return rows[0].variant;
           }
-          const proofResponse = await fetch('https://kvclcdjmjghndxsngfzb.supabase.co/rest/v1/ivx_durable_documents?select=value&doc_key=eq.ops%2Fbudget-recovery%2Fquantum-20260914-12&limit=2', {
-            method: 'GET', redirect: 'error', signal: AbortSignal.timeout(15000),
-            headers: { apikey: serviceKey, Authorization: 'Bearer ' + serviceKey, Accept: 'application/json' },
-          });
-          assert.equal(proofResponse.status, 200, 'Recovery receipt read HTTP ' + proofResponse.status);
-          const proofs = await proofResponse.json();
-          assert.equal(proofs.length, 1, 'Recovery receipt missing or ambiguous');
-          const proof = proofs[0].value;
-          assert.equal(proof.cohortSha256, '9f1812e7f8af006dc1f9cb867b6a087355a8d04d11e8dc41c9267cb45bc37c08');
-          assert.equal(proof.reconciledCount, 12);
-          assert.equal(proof.retainedCohortNano, '9872736000');
-          assert.equal(proof.after.requestsActive, 0);
-          assert.equal(proof.before.unsettledLiabilityNano, proof.after.unsettledLiabilityNano);
-          const before = await read('/billing/addons');
-          const selected = compute(before);
-          if (selected.id !== 'ci_small') {
-            assert.equal(selected.id, 'ci_micro', 'Only the reviewed Micro to Small transition is allowed');
-            const target = before.available_addons?.filter(entry => entry.type === 'compute_instance' || entry.type === 'compute')
-              .flatMap(entry => entry.variants || []).find(variant => variant.id === 'ci_small');
-            assert.equal(target?.price?.interval, 'hourly');
-            assert.equal(selected.price?.interval, 'hourly');
-            const targetPrice = Number(target.price.amount), priorPrice = Number(selected.price.amount);
-            assert(Number.isFinite(targetPrice) && Number.isFinite(priorPrice));
-            const increment = (targetPrice - priorPrice) * 24;
-            assert(targetPrice <= 0.0206 && increment >= 0 && increment <= 0.18, 'Reviewed infrastructure price bound exceeded');
-            assert.equal((await read('')).status, 'ACTIVE_HEALTHY', 'A project transition is already in progress');
-            console.log(JSON.stringify({ observedAt: new Date().toISOString(), action: 'micro_to_small',
-              hourlyPrice: targetPrice, incrementalDailyUsd: increment, recoveryReceiptVerified: true }));
-            // One PATCH only. A missing acknowledgement requires readback, never automatic replay.
-            const changed = await fetch(base + '/billing/addons', { method: 'PATCH', redirect: 'error',
-              signal: AbortSignal.timeout(20000), headers: { Authorization: 'Bearer ' + key,
-                Accept: 'application/json', 'Content-Type': 'application/json' },
-              body: JSON.stringify({ addon_type: 'compute_instance', addon_variant: 'ci_small' }) });
-            await changed.body?.cancel();
-            assert.equal(changed.status, 200, 'Compute change acknowledgement HTTP ' + changed.status + '; inspect selection before retry');
-          }
+          assert.equal(compute(await read('/billing/addons')).id, 'ci_small', 'Recovered Small configuration changed');
           let confirmed = false;
-          for (let sample = 0; sample < 30; sample++) {
+          for (let sample = 0; sample < 3; sample++) {
             const selection = compute(await read('/billing/addons'));
             const project = await read('');
             let memoryBytes = null;
@@ -161,4 +126,46 @@ jobs:
           }
           const before = await snapshot();
           console.log(JSON.stringify({ scope: 'database-capacity-read-only', sample: 1, ...before }));
+          await new Promise(resolve => setTimeout(resolve, 60_000));
+          const after = await snapshot();
+          console.log(JSON.stringify({ scope: 'database-capacity-read-only', sample: 2, ...after }));
+          const id = row => [row.metric, row.mode || '', row.cpu || '', row.device || ''].join(':');
+          const baseline = new Map(before.series.map(row => [id(row), row.value]));
+          const deltas = after.series.map(row => ({ ...row, delta: row.value - (baseline.get(id(row)) ?? row.value) }));
+          const cpu = deltas.filter(row => row.metric === 'node_cpu_seconds_total');
+          const totalCpu = cpu.reduce((sum, row) => sum + row.delta, 0);
+          assert(totalCpu > 0 && cpu.every(row => row.delta >= 0), 'CPU counters reset during observation');
+          const seconds = (Date.parse(after.observedAt) - Date.parse(before.observedAt)) / 1000;
+          const io = deltas.filter(row => row.metric === 'node_disk_reads_completed_total' || row.metric === 'node_disk_writes_completed_total');
+          assert(io.every(row => row.delta >= 0), 'Disk counters reset during observation');
+          console.log(JSON.stringify({ scope: 'database-recovery-delta', observedAt: after.observedAt, seconds,
+            iowaitPercent: cpu.filter(row => row.mode === 'iowait').reduce((sum, row) => sum + row.delta, 0) / totalCpu * 100,
+            idlePercent: cpu.filter(row => row.mode === 'idle').reduce((sum, row) => sum + row.delta, 0) / totalCpu * 100,
+            operationsPerSecond: io.reduce((sum, row) => sum + row.delta, 0) / seconds,
+            memoryAvailableBytes: after.series.find(row => row.metric === 'node_memory_MemAvailable_bytes')?.value }));
+
+          NODE
+      - name: Verify live readiness and nonempty public feeds
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          for (const [endpoint, collection] of [['/health/ready', null], ['/api/reels?limit=2', 'videos'], ['/api/ivx/video-platform/home-feed?limit=4', 'blocks']]) {
+            const started = performance.now();
+            const response = await fetch('https://api.ivxholding.com' + endpoint, {
+              method: 'GET', redirect: 'error', signal: AbortSignal.timeout(12_000),
+              headers: { Accept: 'application/json' },
+            });
+            assert.equal(response.status, 200, endpoint + ': HTTP ' + response.status);
+            assert.match(response.headers.get('content-type') || '', /application\/json/i, endpoint + ': JSON required');
+            assert.equal(response.headers.get('x-ivx-qa-fixture'), null, 'Synthetic responses cannot certify public production');
+            assert.notEqual(response.headers.get('x-ivx-data-state'), 'unavailable', endpoint + ': unavailable');
+            const body = await response.json();
+            if (collection) {
+              assert(!body.qa_fixture && body.data_available !== false && body.degraded !== true && !body.error && body.code !== 'PUBLIC_DATA_UNAVAILABLE');
+              assert(Array.isArray(body[collection]) && body[collection].length > 0, endpoint + ': empty ' + collection);
+            } else assert(body.ok === true && body.ready === true, 'Actual execution readiness unavailable');
+            console.log(JSON.stringify({ scope: 'live-production-recovery', observedAt: new Date().toISOString(), endpoint,
+              status: response.status, durationMs: Math.round(performance.now() - started),
+              ...(collection ? { count: body[collection].length } : { ready: body.ready }) }));
+          }
           NODE
