@@ -50,8 +50,16 @@ node scripts/ops/reconcile-uncertain-budget.mjs --reservation-ids=<uuid1>,<uuid2
 node scripts/ops/reconcile-uncertain-budget.mjs --reservation-ids=<uuid1>,<uuid2> --apply
 ```
 
-The first command is a dry run. The second re-fetches receipts, starts a
-transaction, sets `statement_timeout = '4s'` before invoking the RPC, and verifies
+Supply 1–112 distinct full reservation UUIDs. Abbreviations, task IDs, duplicate
+IDs, duplicate flags and unknown arguments are rejected before a database client
+is created. `--apply` is the only live switch: `--commit=true` is rejected, and
+the `DRY_RUN` environment variable does not select the mode. The project binding
+and provider key are required before connection; validation errors do not print
+credentials.
+
+The first command is a dry run. A preview with blocked receipts exits nonzero
+and retains the structured report for review. The second re-fetches receipts,
+starts a transaction, sets `statement_timeout = '4s'` before invoking the RPC, and verifies
 durable results after commit. Provider reads have a 120-second batch deadline
 and 5-second per-read limit outside database locks. A missing acknowledgement
 is `WRITE_UNCONFIRMED`, never a claim that no rows changed. Inspect durable
@@ -64,8 +72,14 @@ reservation-to-provider linkage must first be recovered from external evidence
 and reviewed individually. This operation does not assign IDs to them, and
 neither a request hash nor a Git commit proves a provider charge.
 
-Validation covers receipt rejection, dry runs and lost acknowledgements in
-Node tests. The PostgreSQL proof checks monetary atomicity, idempotency, UTC
+Validation covers receipt rejection, dry runs, lost acknowledgements, CLI mode
+and cohort validation, credential redaction, and client cleanup in Node tests:
+
+```sh
+node --test scripts/ops/reconcile-uncertain-budget-cli.test.mjs backend/services/ivx-uncertain-budget-reconciliation.test.mjs
+```
+
+The PostgreSQL proof checks monetary atomicity, idempotency, UTC
 accounting, original timestamps, privilege boundaries, amount breaches, and
 two-session lock contention. Run it only against the disposable local
 `ivx_ha_test` database after the existing global-budget proof. The fleet workflow
