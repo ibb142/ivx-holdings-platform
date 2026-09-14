@@ -18,6 +18,8 @@ import { tmpdir } from 'node:os';
 import { setTimeout as fleetDelay } from 'node:timers/promises';
 import type { Pool as FleetPool, PoolClient as FleetClient } from 'pg';
 import { getWorkerPool as fleetWorkerPool } from '../ivx-database-pools';
+import { FLEET_CONFIG, fleetPathConcurrency } from '../ivx-fleet-operating-policy';
+export { FLEET_CONFIG } from '../ivx-fleet-operating-policy';
 
 /**
  * IVX Block 25 — Multi-Agent Framework.
@@ -845,9 +847,9 @@ type FleetMode = 'simulation' | 'production';
 type FleetEndState = 'NO_ACTION_REQUIRED' | 'VERIFIED' | 'FAILED' | 'QA_FAILED' | 'BLOCKED' | 'WAITING_FOR_APPROVAL' | 'RECEIVED';
 
 /** Apply through the normal reviewed migration pipeline, NOT on worker boot.
- * The eight capacity rows impose one GLOBAL limit across Render replicas.
- * Capacity is a DB setting: add/remove INACTIVE capacity rows in a migration to
- * change it. Do not delete file/agent rows: their fencing counters are durable.
+ * The 112 capacity rows impose one GLOBAL limit across this executor's replicas.
+ * Existing eight-slot installations expand only through an explicit call to
+ * unlockFullFleetCapacity. Never reset live leases or durable fencing counters.
  * Use an online index migration separately if the task table is already large.
  * Existing workers must route these executor-tagged jobs to this implementation.
  * RECEIVED is the ready state here; the legacy QUEUED dispatcher must not adopt
@@ -870,7 +872,7 @@ REVOKE ALL ON ivx_fleet.resources FROM PUBLIC, anon, authenticated;
 GRANT USAGE ON SCHEMA ivx_fleet TO service_role;
 GRANT SELECT, INSERT, UPDATE ON ivx_fleet.resources TO service_role;
 INSERT INTO ivx_fleet.resources(resource_key,kind)
-SELECT 'capacity/' || lpad(n::text,3,'0'), 'capacity' FROM generate_series(1,8) n
+SELECT 'capacity/' || lpad(n::text,3,'0'), 'capacity' FROM generate_series(1,112) n
 ON CONFLICT DO NOTHING;
 INSERT INTO ivx_fleet.resources(resource_key,kind)
 SELECT 'agent/' || lpad(n::text,3,'0'), 'agent' FROM generate_series(1,112) n
@@ -1039,12 +1041,14 @@ export function readFleetConfig(env: NodeJS.ProcessEnv = process.env): FleetConf
   if (mode !== 'simulation' && mode !== 'production') throw new Error('INVALID_IVX_FLEET_MODE');
   const repository = (env.IVX_FLEET_REPOSITORY ?? 'ibb142/ivx-holdings-platform').toLowerCase();
   if (!/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/.test(repository)) throw new Error('INVALID_FLEET_REPOSITORY');
-  const leaseMs = fleetNumber(env, 'IVX_FLEET_LEASE_MS', 90_000, 30_000, 600_000);
-  const heartbeatMs = fleetNumber(env, 'IVX_FLEET_HEARTBEAT_MS', 20_000, 5_000, 60_000);
-  if (heartbeatMs * 3 >= leaseMs) throw new Error('HEARTBEAT_MUST_BE_BELOW_ONE_THIRD_OF_LEASE');
+  const leaseMs = fleetNumber(env, 'IVX_FLEET_LEASE_MS', FLEET_CONFIG.LEASE_EXPIRY_TIMEOUT_MS, 30_000, 600_000);
+  const heartbeatMs = fleetNumber(env, 'IVX_FLEET_HEARTBEAT_MS', FLEET_CONFIG.LEASE_RENEWAL_INTERVAL_MS, 5_000, 60_000);
+  if (heartbeatMs * 3 > leaseMs) throw new Error('HEARTBEAT_MUST_NOT_EXCEED_ONE_THIRD_OF_LEASE');
+  const localConcurrency = fleetPathConcurrency(env, 'IVX_FLEET_CONCURRENCY', FLEET_SIZE);
+  if (localConcurrency < 1) throw new Error('FLEET_ADMISSION_DISABLED');
   return {
     mode, repository, leaseMs, heartbeatMs,
-    localConcurrency: fleetNumber(env, 'IVX_FLEET_CONCURRENCY', 8, 1, FLEET_SIZE),
+    localConcurrency,
     pollMs: fleetNumber(env, 'IVX_FLEET_POLL_MS', 5_000, 1_000, 60_000),
     taskTimeoutMs: fleetNumber(env, 'IVX_FLEET_TASK_TIMEOUT_MS', 600_000, 30_000, 3_600_000),
     maxAttempts: fleetNumber(env, 'IVX_FLEET_MAX_ATTEMPTS', 3, 1, 10),
@@ -1156,6 +1160,27 @@ export class FleetTaskStore {
     private readonly config: FleetConfig,
     private readonly instanceId: string,
   ) {}
+
+  /** Explicit, monotonic capacity expansion; no boot DDL or lease reclamation. */
+  async optimizeConcurrencyBoundaries(capacity: number, signal?: AbortSignal): Promise<void> {
+    if (!Number.isSafeInteger(capacity) || capacity < 1 || capacity > FLEET_SIZE) {
+      throw new Error('INVALID_FLEET_CAPACITY');
+    }
+    await this.db.transaction(async client => {
+      const current = await client.query<{ resource_key: string }>(
+        "SELECT resource_key FROM ivx_fleet.resources WHERE kind='capacity' ORDER BY resource_key FOR UPDATE");
+      if (current.rows.some(row => !/^capacity\/\d{3}$/.test(row.resource_key)
+        || Number(row.resource_key.slice(9)) < 1 || Number(row.resource_key.slice(9)) > capacity)) {
+        throw new Error('FLEET_CAPACITY_SHRINK_REQUIRES_DRAIN');
+      }
+      await client.query(`INSERT INTO ivx_fleet.resources(resource_key,kind)
+        SELECT 'capacity/' || lpad(n::text,3,'0'), 'capacity' FROM generate_series(1,$1::int) n
+        ON CONFLICT DO NOTHING`, [capacity]);
+      const result = await client.query<{ count: number }>(
+        "SELECT count(*)::int AS count FROM ivx_fleet.resources WHERE kind='capacity'");
+      if (result.rows[0]?.count !== capacity) throw new Error('FLEET_CAPACITY_NOT_CONFIRMED');
+    }, signal);
+  }
 
   async verifySchema(signal?: AbortSignal): Promise<void> {
     await this.db.transaction(async client => {
@@ -1390,6 +1415,12 @@ export class FleetTaskStore {
     await client.query(`INSERT INTO public.ivx_autonomous_task_events(event_type,task_id,worker_instance_id,event)
       VALUES($1,$2,$3,$4::jsonb)`, [type,taskId,this.instanceId,JSON.stringify(event)]);
   }
+}
+
+/** Prepares durable capacity only; starting an executor still requires its
+ * installed schema and a real production pipeline adapter. */
+export async function unlockFullFleetCapacity(store: FleetTaskStore, signal?: AbortSignal): Promise<void> {
+  await store.optimizeConcurrencyBoundaries(FLEET_CONFIG.GLOBAL_CONCURRENCY_LIMIT, signal);
 }
 
 async function fleetGit(args: readonly string[], cwd: string, signal: AbortSignal): Promise<string> {

@@ -7,6 +7,7 @@
  * execution; otherwise PostgREST is used. Mutations never replay across transports.
  */
 import { hostname } from 'node:os';
+import { FLEET_CONFIG } from './ivx-fleet-operating-policy';
 import { VERSIONED_INSPECTION_PREFIXES, VERSIONED_MISSION_PREFIXES } from './ivx-autonomous-mission-scope';
 import { localFleetExecutionMetrics } from './ivx-fleet-execution-metrics';
 import { randomUUID } from 'node:crypto';
@@ -22,7 +23,7 @@ import type { FleetLeaseRequest, FleetLeaseResult, FleetTaskLeaseIdentity, Fleet
 export const IVX_POSTGRES_AUTONOMOUS_TASK_STORE_MARKER = 'ivx-postgres-autonomous-task-store-2026-09-08-current-work-v3-direct-failover';
 const DEFAULT_TIMEOUT_MS = 30_000;
 export const TRUTH_TIMEOUT_MS = 30_000;
-const DEFAULT_LEASE_SECONDS = 120;
+const DEFAULT_LEASE_SECONDS = FLEET_CONFIG.LEASE_EXPIRY_TIMEOUT_MS / 1000;
 const TASK_READ_CACHE_TTL_MS = 1_500;
 const BOOT_NONCE = randomUUID().slice(0, 12);
 let taskReadCache: { value: Task[]; at: number } | null = null;

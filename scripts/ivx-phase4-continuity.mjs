@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 
 // Observation acceptance policy, not a throughput estimate or a worker control.
 export const POLICY = Object.freeze({ agents: 112, evidenceMaxAgeMs: 120_000,
-  sampleMaxGapMs: 120_000, initialWindowMs: 24 * 60 * 60 * 1000 });
+  sampleMaxGapMs: 120_000, minimumWindowMs: 20 * 60 * 60 * 1000, initialWindowMs: 24 * 60 * 60 * 1000 });
 const hash = value => createHash('sha256').update(value).digest('hex');
 
 export function evaluateSample(snapshot) {
@@ -91,9 +91,11 @@ export function evaluateWindow(samples) {
   const coverageGaps = pairs.filter(pair => pair.coverageGap).length;
   const enoughTime = Number.isFinite(durationMs) && durationMs >= POLICY.initialWindowMs;
   return { policy: POLICY, sampleCount: results.length, durationMs, coverageGaps,
+    minimumWindowPassed: Number.isFinite(durationMs) && durationMs >= POLICY.minimumWindowMs
+      && coverageGaps === 0 && results.every(result => result.passed),
     initialWindowPassed: enoughTime && coverageGaps === 0 && results.every(result => result.passed),
     phase4Certified: false,
-    limitation: 'Chat, deployment, failure drills and restored data need their own evidence. An elapsed 24-hour interval alone is insufficient.',
+    limitation: '20-hour and 24-hour windows require complete observed coverage. Chat, deployment, failure drills, model execution and restored data need their own evidence.',
     latest: results.at(-1) ?? null, pairs };
 }
 

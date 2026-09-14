@@ -11,8 +11,8 @@ describe('lease ownership on the isolated PostgreSQL test database', () => {
   let databaseCreated = false;
   let connected = 0;
   const config = {
-    mode: 'simulation', repository: 'ibb142/ivx-holdings-platform', localConcurrency: 8,
-    leaseMs: 90_000, heartbeatMs: 20_000, pollMs: 5000, taskTimeoutMs: 600_000, maxAttempts: 3,
+    mode: 'simulation', repository: 'ibb142/ivx-holdings-platform', localConcurrency: 112,
+    leaseMs: 90_000, heartbeatMs: 30_000, pollMs: 5000, taskTimeoutMs: 600_000, maxAttempts: 3,
   };
   before(async () => {
     const connectionString = process.env.IVX_HA_TEST_DATABASE_URL;
@@ -89,15 +89,33 @@ describe('lease ownership on the isolated PostgreSQL test database', () => {
     assert.deepEqual(counts.rows, [{ state: 'RECEIVED', n: 1 }, { state: 'RUNNING', n: 1 }]);
     assert.equal((await pg.query("SELECT count(*)::int AS n FROM ivx_fleet.resources WHERE kind='file' AND expires_at>clock_timestamp()")).rows[0].n, 1);
   });
-  test('two workers share the global eight-lease admission ceiling', async () => {
+  test('two workers share 112 durable slots and refuse the 113th task', async () => {
     await resetRows();
-    for (let n = 0; n < 12; n++) await store.enqueue({ idempotencyKey: `capacity-${++sequence}`, baseCommit: 'a'.repeat(40), priority: 'high',
+    for (let n = 0; n < 113; n++) await store.enqueue({ idempotencyKey: `capacity-${++sequence}`, baseCommit: 'a'.repeat(40), priority: 'high',
       files: [{ path: `src/independent-${n}.txt`, beforeSha256: null, content: 'change' }] });
-    const claims = (await Promise.all(Array.from({ length: 12 }, (_, n) => (n % 2 ? otherStore : store).claim()))).filter(Boolean);
-    assert.equal(claims.length, 8);
-    assert.equal(new Set(claims.map(lease => lease.taskId)).size, 8);
-    assert.equal(new Set(claims.map(lease => lease.agentNumber)).size, 8);
-    assert.equal((await pg.query("SELECT count(*)::int AS n FROM ivx_fleet.resources WHERE kind='capacity' AND expires_at>clock_timestamp()")).rows[0].n, 8);
+    const claims = (await Promise.all(Array.from({ length: 113 }, (_, n) => (n % 2 ? otherStore : store).claim()))).filter(Boolean);
+    assert.equal(claims.length, 112);
+    assert.equal(new Set(claims.map(lease => lease.taskId)).size, 112);
+    assert.equal(new Set(claims.map(lease => lease.agentNumber)).size, 112);
+    assert.equal((await pg.query("SELECT count(*)::int AS n FROM ivx_fleet.resources WHERE kind='capacity' AND expires_at>clock_timestamp()")).rows[0].n, 112);
+    assert.equal(await store.claim(), null);
+    const renewed = await Promise.all(claims.map(async lease => {
+      const owner = (await taskRow(lease.taskId)).worker_instance_id === 'worker-A' ? store : otherStore;
+      return fw.emitFleetHeartbeat(owner, lease);
+    }));
+    assert.equal(renewed.filter(Boolean).length, 112);
+  });
+  test('expanding an existing eight-slot installation preserves live tokens and fences', async () => {
+    await resetRows();
+    await pg.query("DELETE FROM ivx_fleet.resources WHERE kind='capacity' AND resource_key>'capacity/008'");
+    const lease = await seed();
+    const before = (await pg.query('SELECT * FROM ivx_fleet.resources WHERE token=$1 ORDER BY resource_key', [lease.token])).rows;
+    await Promise.all([fw.unlockFullFleetCapacity(store), fw.unlockFullFleetCapacity(otherStore)]);
+    assert.equal((await pg.query("SELECT count(*)::int AS n FROM ivx_fleet.resources WHERE kind='capacity'")).rows[0].n, 112);
+    assert.deepEqual((await pg.query('SELECT * FROM ivx_fleet.resources WHERE token=$1 ORDER BY resource_key', [lease.token])).rows, before);
+    assert.equal(await fw.emitFleetHeartbeat(store, lease), true);
+    await assert.rejects(store.optimizeConcurrencyBoundaries(8), /SHRINK_REQUIRES_DRAIN/);
+    await assert.rejects(store.optimizeConcurrencyBoundaries(113), /INVALID_FLEET_CAPACITY/);
   });
   test('renewal extends only owned live lease without changing its state or fencing counters', async () => {
     const lease = await seed();

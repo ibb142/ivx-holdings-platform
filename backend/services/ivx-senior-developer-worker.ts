@@ -5,7 +5,7 @@ import { SENIOR_QUEUE_ACTIVE_STATUSES } from './ivx-senior-work-queue';
 import { assertSeniorQueuePostgresAuthority, preferDirectTransport } from './ivx-postgres-autonomous-task-store';
 import type { CoderWorkspaceEvidence } from './ivx-coder-workspace';
 import { createSeniorJobAdmission } from './ivx-senior-job-admission';
-import { configuredAdmissionLimit } from './ivx-fleet-admission-policy';
+import { fleetPathConcurrency } from './ivx-fleet-operating-policy';
 import { registerSeniorExecutionMetrics } from './ivx-fleet-execution-metrics';
 import { createPostMergeReconciler, observePostMerge, type PostMergeCheckpoint } from './ivx-post-merge-verifier';
 import { commitSharedSeniorPostMergeResult } from './ivx-senior-shared-queue';
@@ -504,7 +504,7 @@ const claimedJobIds = new Set<string>();
 
 /** Max concurrent senior-developer job executions (configurable, bounded). */
 export function getWorkerMaxConcurrency(): number {
-  return configuredAdmissionLimit(process.env.IVX_WORKER_MAX_CONCURRENCY, 12);
+  return fleetPathConcurrency(process.env, 'IVX_WORKER_MAX_CONCURRENCY', 12);
 }
 
 /**
