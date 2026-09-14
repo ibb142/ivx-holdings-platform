@@ -135,10 +135,29 @@ try {
   const taskId = created.task?.taskId;
   assert.ok(taskId, 'CORE_TASK_ID_MISSING');
   assert.equal(created.task.idempotencyKey, idempotencyKey, 'ADMISSION_IDENTITY_MISMATCH');
-  const persisted = await request(`${api}/api/ivx/autonomous-task-engine/tasks/${encodeURIComponent(taskId)}`);
+  let persisted = await request(`${api}/api/ivx/autonomous-task-engine/tasks/${encodeURIComponent(taskId)}`);
   assert.equal(persisted.ok, true, 'MISSION_READBACK_FAILED');
   assert.equal(persisted.task?.taskId, taskId, 'PERSISTED_TASK_ID_CHANGED');
   assert.equal(persisted.task?.idempotencyKey, idempotencyKey, 'PERSISTED_IDEMPOTENCY_CHANGED');
+  if (process.env.RECOVER_SUPPORTED_EXECUTOR === 'true') {
+    const topology = await request(`${api}/api/ivx/autonomous/ha`);
+    assert.equal(topology.ok, true, 'PROCESS_TOPOLOGY_UNAVAILABLE');
+    assert.equal(topology.ready, true, 'NEW_EXECUTOR_NOT_READY_ON_ALL_REPLICAS');
+    assert.equal(topology.commitSha, expectedSha, 'EXECUTOR_REPLICA_SHA_MISMATCH');
+    const current = persisted.task;
+    if (current.state === 'BLOCKED' && current.blocker?.startsWith('NO_EXECUTOR:')) {
+      assert.ok(!current.leaseHolder || Date.parse(current.leaseExpiresAt ?? '') <= Date.now(), 'PRIOR_LEASE_STILL_ACTIVE');
+      assert.equal(current.taskType, 'qa');
+      assert.equal(current.milestone, mission);
+      assert.ok(current.retryCount < current.maxRetries, 'MISSION_RETRY_BUDGET_EXHAUSTED');
+      const retry = await request(`${api}/api/ivx/autonomous-task-engine/tasks/${encodeURIComponent(taskId)}/transition`, {
+        method: 'POST', body: JSON.stringify({ toState: 'RETRYING' }),
+      });
+      assert.equal(retry.ok, true, 'CANONICAL_RETRY_REFUSED');
+      assert.equal(retry.task?.taskId, taskId, 'RETRY_TASK_ID_CHANGED');
+      persisted = await request(`${api}/api/ivx/autonomous-task-engine/tasks/${encodeURIComponent(taskId)}`);
+    }
+  }
   const repair = process.env.REQUEST_EXECUTOR_REPAIR === 'true'
     ? await requestExecutorRepair(persisted.task, version.commit) : null;
   const proof = {
