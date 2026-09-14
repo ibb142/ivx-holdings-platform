@@ -6,6 +6,7 @@ import { observePostgresPoolErrors, queryWithPostgresDeadline } from './ivx-post
 let ownerReadPool: Pool | null = null;
 let poolBinding: string | null = null;
 let readInFlight: Promise<unknown> | null = null;
+let campaignReadInFlight: Promise<unknown> | null = null;
 
 /** Only the same Supabase project may answer an owner-control read. */
 export function emergencyStopPostgresConfig(env: NodeJS.ProcessEnv = process.env): ClientConfig {
@@ -31,18 +32,22 @@ export function emergencyStopPostgresConfig(env: NodeJS.ProcessEnv = process.env
     application_name: 'ivx_owner_stop_read' };
 }
 
-export async function readEmergencyStopPostgres(): Promise<unknown> {
+function getOwnerReadPool(): Pool {
   // Validate every request, including concurrent reads, before reusing a pool.
   const config = emergencyStopPostgresConfig();
   const binding = createHash('sha256').update(JSON.stringify(config)).digest('hex');
   if (ownerReadPool && binding !== poolBinding) throw new Error('owner_control_postgres_binding_changed');
-  if (readInFlight) return readInFlight;
   if (!ownerReadPool) {
     ownerReadPool = new Pool({ ...config, max: 1, connectionTimeoutMillis: 1500, idleTimeoutMillis: 3000 });
     poolBinding = binding;
     observePostgresPoolErrors(ownerReadPool, 'owner_control');
   }
-  const pool = ownerReadPool;
+  return ownerReadPool;
+}
+
+export async function readEmergencyStopPostgres(): Promise<unknown> {
+  const pool = getOwnerReadPool();
+  if (readInFlight) return readInFlight;
   // Share only the current read. Never reuse a settled control value here.
   const pending = (async () => {
     const result = await queryWithPostgresDeadline(pool,
@@ -59,9 +64,25 @@ export async function readEmergencyStopPostgres(): Promise<unknown> {
   }
 }
 
+/** Read only the canonical campaign control document; never create or repair it. */
+export async function readCampaignControlPostgres(): Promise<unknown> {
+  const pool = getOwnerReadPool();
+  if (campaignReadInFlight) return campaignReadInFlight;
+  const pending = (async () => {
+    const result = await queryWithPostgresDeadline<{ value: unknown }>(pool,
+      'SELECT value FROM public.ivx_durable_documents WHERE doc_key = $1 LIMIT 2',
+      ['app-completion/campaign-state.json'], 'assignment');
+    if (result.rows.length !== 1) throw new Error('owner_control_direct_postgres_document_missing_or_duplicate');
+    return structuredClone(result.rows[0].value);
+  })();
+  campaignReadInFlight = pending;
+  try { return await pending; }
+  finally { if (campaignReadInFlight === pending) campaignReadInFlight = null; }
+}
+
 export async function resetEmergencyStopPoolForTests(): Promise<void> {
   const previous = ownerReadPool;
-  ownerReadPool = null; poolBinding = null; readInFlight = null;
+  ownerReadPool = null; poolBinding = null; readInFlight = null; campaignReadInFlight = null;
   if (previous) await previous.end();
 }
 
