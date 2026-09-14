@@ -8,6 +8,9 @@ test('owner dashboard and fleet links preserve their destination on warm and col
     }
     expect(redirectSystemPath({ path: 'ivx-app:///ivx/autonomous-ops?range=24h', initial })).toBe('/ivx/autonomous-ops?range=24h');
     expect(redirectSystemPath({ path: 'https://chat.ivxholding.com/ivx/autonomous-ops', initial })).toBe('/ivx/autonomous-ops');
+    for (const path of ['ivx-app:///app-guide', 'ivx-app://app-guide', '/app-guide']) {
+      expect(redirectSystemPath({ path, initial })).toBe('/app-guide');
+    }
   }
 });
 test('invalid and unrelated external URLs return safely to the shell', () => {

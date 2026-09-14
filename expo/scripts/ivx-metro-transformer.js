@@ -46,7 +46,24 @@ function patchMetroUnsafeImports(filename, source) {
 
 function transform(args) {
   const source = patchMetroUnsafeImports(args?.filename, args?.src);
-  const transformedArgs = source === args?.src ? args : { ...args, src: source };
+  const platform = args?.options?.platform;
+  const isNative = platform === "android" || platform === "ios";
+  // experiments.baseUrl describes the web host's mount path. Expo 54 passes
+  // it to native Babel callers too, where Router strips /app from /app-guide
+  // and resolves -guide as a missing route. Native binaries have no web mount.
+  // Keep web exports (including AWS /app) and every other Metro option intact.
+  const options = isNative
+    ? {
+        ...args.options,
+        customTransformOptions: {
+          ...args.options.customTransformOptions,
+          baseUrl: "",
+        },
+      }
+    : args.options;
+  const transformedArgs = source === args?.src && options === args.options
+    ? args
+    : { ...args, src: source, options };
   return upstream.transform(transformedArgs);
 }
 

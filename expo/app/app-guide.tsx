@@ -1097,7 +1097,7 @@ export default function AppGuideScreen() {
   const isSmall = width < 380;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="app_guide_root_view">
       <SafeAreaView edges={['top']} style={styles.safeTop}>
         <View style={styles.headerBar}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>

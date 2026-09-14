@@ -23,6 +23,26 @@ test('API and worker have distinct singleton pools with independent ceilings', (
   expect((worker as any).options.connectionTimeoutMillis).toBe(1500);
 });
 
+test('112 logical agents reuse bounded transaction-pooler lanes with verified TLS', () => {
+  configure();
+  process.env.SUPABASE_DB_URL = 'postgresql://postgres.example:test@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require';
+  process.env.IVX_PG_API_MAX_CONNECTIONS = '3';
+  process.env.IVX_PG_TASKS_MAX_CONNECTIONS = '2';
+  process.env.IVX_PG_PROCESS_CONNECTION_LIMIT = '10';
+  const lanes = ['tasks', 'assignment', 'heartbeat', 'repair'] as const;
+  const pools = new Set(Array.from({ length: 112 }, (_, index) => getWorkerPool(process.env, lanes[index % lanes.length]!)));
+  expect(pools.size).toBe(4);
+  expect([...pools].reduce((sum, pool) => sum + pool.options.max!, 0)).toBe(5);
+  for (const pool of pools) {
+    const client = new Client(pool.options);
+    expect(client.port).toBe(6543);
+    expect(client.host).toBe('aws-0-us-east-1.pooler.supabase.com');
+    expect(client.ssl).toMatchObject({ rejectUnauthorized: true });
+    expect((client.ssl as { ca: string[] }).ca.length).toBeGreaterThan(0);
+    expect(pool.totalCount).toBe(0);
+  }
+});
+
 test('a reduced configured budget preserves every isolated lane and verified TLS', () => {
   configure();
   process.env.IVX_PG_API_MAX_CONNECTIONS = '3';
