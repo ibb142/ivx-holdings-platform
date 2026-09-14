@@ -4,7 +4,7 @@ import { encodeLandingResult, type LandingResultRecord } from './ivx-landing-p0-
 
 /** Identical evidence contract for one-shot tasks, repairs and patrols. */
 export function landingTaskEvidence(record: LandingResultRecord, source: string, evidenceType: TaskEvidence['evidenceType']): Omit<TaskEvidence, 'evidenceId' | 'createdAt'> {
-  if (!record.production_sha || !/^[a-f0-9]{40}$/i.test(record.production_sha)) {
+  if (!source || !record.production_sha || !/^[a-f0-9]{40}$/i.test(record.production_sha)) {
     throw new Error('LANDING_EVIDENCE_SOURCE_REQUIRED: observed production SHA is missing or invalid');
   }
   const summary = encodeLandingResult(record);
