@@ -29,6 +29,7 @@ import {
 } from '@aws-sdk/client-cloudfront';
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
 import { completeLandingInvalidation } from './scripts/landing-cloudfront-invalidation.mjs';
+import { loadGalleryAssets } from './scripts/landing-gallery-assets.mjs';
 
 // ── AWS Configuration ─────────────────────────────────
 const ACCESS_KEY = process.env.AWS_ACCESS_KEY_ID || process.env.IVX_AWS_ACCESS_KEY_ID || '';
@@ -302,6 +303,7 @@ async function deploy() {
 
   // ── CSS/JS files (immutable, long cache, security headers) ───
   const assetFiles = [
+    ...loadGalleryAssets(LANDING_DIR),
     { path: LANDING_DIR + '/ivx-styles.css', key: 'ivx-styles.css', type: 'text/css; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-app.js', key: 'ivx-app.js', type: 'application/javascript; charset=utf-8' },
     { path: LANDING_DIR + '/ivx-app.js', key: 'ivx-app-landing-e2e-20260818.js', type: 'application/javascript; charset=utf-8' },

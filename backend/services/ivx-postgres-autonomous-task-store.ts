@@ -8,6 +8,7 @@
  */
 import { hostname } from 'node:os';
 import { VERSIONED_INSPECTION_PREFIXES, VERSIONED_MISSION_PREFIXES } from './ivx-autonomous-mission-scope';
+import { buildAutonomousPlanningPageQuery, PLANNING_STARTED_STATES } from './ivx-autonomous-planning-query';
 import { localFleetExecutionMetrics } from './ivx-fleet-execution-metrics';
 import { randomUUID } from 'node:crypto';
 import { enforceMillisecondScatter } from '../utils/jitter';
@@ -592,9 +593,7 @@ export async function readPostgresAutonomousTaskIndex(sourceSha?: string): Promi
   // Old deployment audits are historical evidence, not eligible work for this
   // deployment. Preserve repairs, owner work, current deduplication identities
   // and previously started work so planning cannot overfill an occupied lane.
-  const startedStates = ['LEASED', 'RUNNING', 'PAUSED', 'EXECUTION_COMPLETED', 'QA_IN_PROGRESS', 'READY_FOR_DEPLOYMENT', 'DEPLOYING', 'DEPLOYED', 'PRODUCTION_VERIFYING'];
-  const scope = sourceSha ? ` and (not (idempotency_key like any($4::text[])) or idempotency_key like any($5::text[])
-    or state = any($6::text[]) or (lease_holder is not null and (state = 'QUEUED' or lease_expires_at is null or lease_expires_at > now())))` : '';
+  const startedStates = PLANNING_STARTED_STATES;
   const restFilter = sourceSha ? `&or=(and(${families.map(prefix => `idempotency_key.not.like.${prefix}*`).join(',')}),${families.map(prefix => `idempotency_key.like.${prefix}${sourceSha}:*`).join(',')},state.in.(${startedStates.join(',')}),and(lease_holder.not.is.null,or(state.eq.QUEUED,lease_expires_at.is.null,lease_expires_at.gt.${new Date().toISOString()})))` : '';
   const all: AutonomousTaskIndex[] = [];
   const pageSize = 1000;
@@ -607,13 +606,9 @@ export async function readPostgresAutonomousTaskIndex(sourceSha?: string): Promi
     const query = new URLSearchParams({ select: 'task_id,idempotency_key,assigned_agent_number,state,created_at',
       order: 'created_at.asc,task_id.asc', limit: String(pageSize) });
     if (cursor) query.set('and', `(or(created_at.gt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},task_id.gt.${JSON.stringify(cursor.taskId)})))`);
+    const planningPage = buildAutonomousPlanningPageQuery(sourceSha, cursor, pageSize);
     const rows = preferDirectTransport()
-      ? (await queryWithPostgresDeadline<IndexRow>(getDirectPool(),
-        'select task_id, idempotency_key, assigned_agent_number, state, created_at::text as created_at from public.ivx_autonomous_tasks'
-        + ' where ($1::timestamptz is null or (created_at, task_id) > ($1::timestamptz, $2::text))'
-        + scope + ' order by ivx_autonomous_tasks.created_at asc, task_id asc limit $3',
-        [cursor?.createdAt ?? null, cursor?.taskId ?? null, pageSize,
-          ...(sourceSha ? [families.map(prefix => `${prefix}%`), families.map(prefix => `${prefix}${sourceSha}:%`), startedStates] : [])])).rows
+      ? (await queryWithPostgresDeadline<IndexRow>(getDirectPool(), planningPage.text, planningPage.values)).rows
       : await restRequest<IndexRow[]>(
         `ivx_autonomous_tasks?${query}${restFilter}`,
         { method: 'GET' });
