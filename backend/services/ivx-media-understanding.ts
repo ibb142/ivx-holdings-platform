@@ -137,7 +137,7 @@ export function extractVideoAttachments(input: unknown): VideoAttachment[] {
     if (!looksLikeVideo(trimmedUrl, trimmedMime)) {
       return;
     }
-    out.push({ url: trimmedUrl, name: readTrimmed(name) || null, mimeType: trimmedMime || null });
+    out.push({ url: trimmedUrl.replace('http://', 'https://'), name: readTrimmed(name) || null, mimeType: trimmedMime || null });
   };
 
   const record = input as Record<string, unknown>;
