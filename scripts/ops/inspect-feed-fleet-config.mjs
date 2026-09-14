@@ -27,9 +27,20 @@ export function summarizeConfig(env) {
     presence: Object.fromEntries([...keys, 'SUPABASE_SERVICE_ROLE_KEY', 'APP_SECRET', 'IVX_OWNER_VARIABLES_ENCRYPTION_KEY'].map(key => [key, Boolean(env[key]?.trim())])), controls };
 }
 
+export function apiRepairCandidate(apiEnv, workerEnv) {
+  const api = summarizeConfig(apiEnv), worker = summarizeConfig(workerEnv);
+  const replacement = summarizeConfig({ ...apiEnv, SUPABASE_DB_URL: workerEnv.SUPABASE_DB_URL });
+  return { sourceServiceId: services[1], targetServiceId: services[0], key: 'SUPABASE_DB_URL',
+    sameProjectBinding: worker.binding === 'valid' && replacement.binding === 'valid',
+    eligible: api.selectedDatabaseKey === 'SUPABASE_DB_URL' && api.binding === 'invalid_url'
+      && worker.selectedDatabaseKey === 'SUPABASE_DB_URL' && worker.binding === 'valid' && replacement.binding === 'valid',
+    applied: false, unresolved: 'database_authentication_and_deployment_approval' };
+}
+
 export async function inspect({ token = process.env.RENDER_API_KEY, fetchImpl = fetch } = {}) {
   if (!token) throw new Error('RENDER_API_KEY_MISSING');
   const output = [];
+  const environments = [];
   for (const serviceId of services) {
     const env = {};
     let cursor = '';
@@ -49,7 +60,9 @@ export async function inspect({ token = process.env.RENDER_API_KEY, fetchImpl = 
     }
     output.push({ serviceId, scope: 'service_environment_api_response',
       unresolved: 'linked_group_inheritance_and_runtime_overrides', ...summarizeConfig(env) });
+    environments.push(env);
   }
+  output[0].repairCandidate = apiRepairCandidate(environments[0], environments[1]);
   return output;
 }
 

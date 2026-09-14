@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { inspect, summarizeConfig } from './inspect-feed-fleet-config.mjs';
+import { apiRepairCandidate, inspect, summarizeConfig } from './inspect-feed-fleet-config.mjs';
 
 test('configuration reports binding and presence without credentials or raw unknown values', () => {
   const summary = summarizeConfig({ EXPO_PUBLIC_SUPABASE_URL: 'https://fixture.supabase.co',
@@ -43,4 +43,19 @@ test('inspection only sends GETs to the two configured IVX services and paginate
 test('HTTP and pagination failures never return a partial successful inspection', async () => {
   await assert.rejects(inspect({ token: 'private-token', fetchImpl: async () => new Response('private-error', { status: 403 }) }), /^Error: RENDER_CONFIG_HTTP_403$/);
   await assert.rejects(inspect({ token: 'private-token', fetchImpl: async () => Response.json(Array.from({ length: 100 }, () => ({ cursor: 'repeat' }))) }), /RENDER_CONFIG_PAGINATION_INCOMPLETE/);
+});
+
+test('a repair candidate requires a malformed target and a valid worker binding to the same API project', () => {
+  const api = { SUPABASE_URL: 'https://fixture.supabase.co', SUPABASE_DB_URL: 'private-invalid-url' };
+  const worker = { SUPABASE_URL: api.SUPABASE_URL,
+    SUPABASE_DB_URL: 'postgres://postgres.fixture:private-password@aws-0-us-west-2.pooler.supabase.com:6543/postgres' };
+  const candidate = apiRepairCandidate(api, worker);
+  assert.equal(candidate.eligible, true);
+  assert.equal(candidate.sameProjectBinding, true);
+  assert.equal(candidate.applied, false);
+  assert.equal(JSON.stringify(candidate).includes('private-'), false);
+  assert.equal(apiRepairCandidate({ ...api, SUPABASE_URL: 'https://other.supabase.co' }, worker).eligible, false);
+  assert.equal(apiRepairCandidate(api, { ...worker, SUPABASE_URL: 'https://other.supabase.co' }).eligible, false);
+  assert.equal(apiRepairCandidate(worker, worker).eligible, false);
+  assert.equal(apiRepairCandidate(api, api).eligible, false);
 });
