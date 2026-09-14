@@ -6,7 +6,17 @@ on:
     paths:
       - 'expo/app/admin/dashboard.tsx'
       - 'expo/app/ivx/chat.tsx'
+      - 'expo/app/ivx/autonomous-ops.tsx'
       - 'expo/app/chat-hub.tsx'
+      - 'expo/app/app-guide.tsx'
+      - 'expo/app/+native-intent.tsx'
+      - 'expo/app/_providers.tsx'
+      - 'expo/lib/native-intent-dispatch.ts'
+      - 'expo/__tests__/native-intent-dispatch.test.ts'
+      - 'expo/.maestro/ivx-root-chat-navigation-certificate.yaml'
+      - 'scripts/ivx-route-destination.mjs'
+      - 'expo/scripts/ivx-metro-transformer.js'
+      - 'expo/__tests__/native-route-base-url.test.ts'
       - 'expo/lib/public-chat-session-context.tsx'
       - 'expo/src/modules/chat/**'
       - 'expo/src/modules/ivx-owner-ai/**'
@@ -15,6 +25,7 @@ on:
       - 'expo/lib/supabase.ts'
       - 'expo/.maestro/ivx-owner-home-certificate.yaml'
       - 'expo/.maestro/ivx-owner-dashboard-certificate.yaml'
+      - 'expo/.maestro/ivx-owner-autonomous-certificate.yaml'
       - 'expo/.maestro/ivx-owner-chat-certificate.yaml'
       - 'scripts/ivx-dashboard-chat-android-e2e.sh'
       - 'scripts/ivx-all-routes-human-e2e.sh'
@@ -24,7 +35,17 @@ on:
     paths:
       - 'expo/app/admin/dashboard.tsx'
       - 'expo/app/ivx/chat.tsx'
+      - 'expo/app/ivx/autonomous-ops.tsx'
       - 'expo/app/chat-hub.tsx'
+      - 'expo/app/app-guide.tsx'
+      - 'expo/app/+native-intent.tsx'
+      - 'expo/app/_providers.tsx'
+      - 'expo/lib/native-intent-dispatch.ts'
+      - 'expo/__tests__/native-intent-dispatch.test.ts'
+      - 'expo/.maestro/ivx-root-chat-navigation-certificate.yaml'
+      - 'scripts/ivx-route-destination.mjs'
+      - 'expo/scripts/ivx-metro-transformer.js'
+      - 'expo/__tests__/native-route-base-url.test.ts'
       - 'expo/lib/public-chat-session-context.tsx'
       - 'expo/src/modules/chat/**'
       - 'expo/src/modules/ivx-owner-ai/**'
@@ -33,6 +54,7 @@ on:
       - 'expo/lib/supabase.ts'
       - 'expo/.maestro/ivx-owner-home-certificate.yaml'
       - 'expo/.maestro/ivx-owner-dashboard-certificate.yaml'
+      - 'expo/.maestro/ivx-owner-autonomous-certificate.yaml'
       - 'expo/.maestro/ivx-owner-chat-certificate.yaml'
       - 'scripts/ivx-dashboard-chat-android-e2e.sh'
       - 'scripts/ivx-all-routes-human-e2e.sh'
@@ -67,11 +89,13 @@ jobs:
   certify-dashboard-chat:
     name: Real Owner Dashboard + IVX IA Chat E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    # 272 routes need roughly 100–120 minutes, in addition to the APK build
+    # and real chat/restart proof. Preserve the complete single-process patrol.
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
 
       - uses: oven-sh/setup-bun@v2
@@ -84,6 +108,10 @@ jobs:
           java-version: '17'
 
       - uses: android-actions/setup-android@v3
+        with:
+          # The action's default legacy "tools" package is no longer in the
+          # SDK catalog. Install current build packages in the retry step below.
+          packages: 'platform-tools'
 
       - name: Install Android SDK packages with corruption recovery
         shell: bash
@@ -152,11 +180,13 @@ jobs:
           grep -q "analytics_dashboard" expo/app/admin/dashboard.tsx
           grep -q 'ivx-owner-chat-composer-dock' expo/.maestro/ivx-owner-chat-certificate.yaml
           grep -Fq 'IVX_CHAT_E2E_${CHAT_E2E_SUFFIX}' expo/.maestro/ivx-owner-chat-certificate.yaml
-          grep -q 'clearState: false' expo/.maestro/ivx-owner-chat-certificate.yaml
+          grep -Fq 'openLink: "ivx-app:///"' expo/.maestro/ivx-owner-chat-certificate.yaml
+          ! sed -n '/^- stopApp/,$p' expo/.maestro/ivx-owner-chat-certificate.yaml | grep -q 'launchApp:'
           cd expo
           bunx tsc --noEmit
-          bun test __tests__/chat-certificate-flow-regression.test.ts __tests__/chat-transport-reliability.test.ts __tests__/deferred-auth-work.test.ts
+          bun test __tests__/chat-certificate-flow-regression.test.ts __tests__/chat-transport-reliability.test.ts __tests__/deferred-auth-work.test.ts __tests__/native-route-base-url.test.ts __tests__/native-intent-dispatch.test.ts
           cd ..
+          node --test scripts/ivx-all-routes-human-e2e.test.mjs
           python3 -m unittest discover -s scripts -p test_ivx_route_suite_proof.py
 
       - name: Wait for exact production SHA on main
@@ -196,6 +226,17 @@ jobs:
           test -n "$APK"
           echo "APK_PATH=$(realpath "$APK")" >> "$GITHUB_ENV"
 
+      - name: Record APK build provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa/evidence/dashboard-chat
+          sha256sum "$APK_PATH" | awk '{print $1}' > qa/evidence/dashboard-chat/apk.sha256
+          jq -n --arg sha "$EXPO_PUBLIC_SOURCE_COMMIT_SHA" --arg runId "$GITHUB_RUN_ID" \
+            --arg hash "$(cat qa/evidence/dashboard-chat/apk.sha256)" \
+            '{sourceSha:$sha,workflowRunId:$runId,sha256:$hash,variant:"owner-qa"}' \
+            > qa/evidence/dashboard-chat/apk-build.json
+
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -225,6 +266,17 @@ jobs:
           test "$(jq -r '.dashboardRendered' qa/evidence/dashboard-chat/certificate.json)" = true
           test "$(jq -r '.liveAIReply' qa/evidence/dashboard-chat/certificate.json)" = true
           test "$(jq -r '.chatPersistenceAfterRestart' qa/evidence/dashboard-chat/certificate.json)" = true
+
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: ivx-owner-qa-apk-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ env.APK_PATH }}
+            qa/evidence/dashboard-chat/apk-build.json
+            qa/evidence/dashboard-chat/certificate.json
+          if-no-files-found: error
+          retention-days: 30
 
       - uses: actions/upload-artifact@v4
         if: always()

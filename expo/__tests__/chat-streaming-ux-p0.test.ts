@@ -88,6 +88,35 @@ function buildSSEResponse(events: string[]): Response {
 }
 
 describe('P0 chat streaming UX', () => {
+  it('consumes a JSON reply to the streaming request without resending the owner command', async () => {
+    const originalFetch = globalThis.fetch; let posts = 0;
+    globalThis.fetch = async () => {
+      posts++;
+      return Response.json({ ok: true, status: 'ok', answer: 'Respuesta real', source: 'chatgpt',
+        model: 'openai/gpt-4o', requestId: 'json-one', conversationId: 'conv-json', assistantPersisted: true, assistantMessageId: 'message-json' });
+    };
+    try {
+      const result = await ivxAIRequestService.requestOwnerAI(
+        { conversationId: 'conv-json', message: 'Say hello once', senderLabel: 'Test', mode: 'chat' }, { onProgress: () => {} });
+      expect(result.answer).toBe('Respuesta real'); expect(posts).toBe(1);
+    } finally { globalThis.fetch = originalFetch; }
+  });
+
+  it('parses fragmented CRLF records and preserves the canonical final response', async () => {
+    const originalFetch = globalThis.fetch;
+    const body = { ok: true, status: 'ok', answer: 'Hola', source: 'chatgpt', model: 'openai/gpt-4o',
+      requestId: 'crlf-one', conversationId: 'conv-crlf', assistantPersisted: true, assistantMessageId: 'message-crlf' };
+    const wire = 'data: {"type":"delta","delta":"Hola"}\r\n\r\n'
+      + 'data: ' + JSON.stringify({ type: 'final', status: 200, ok: true, body }) + '\r\n\r\n';
+    globalThis.fetch = async () => buildSSEResponse([...wire]);
+    try {
+      const deltas: string[] = [];
+      const result = await ivxAIRequestService.requestOwnerAI(
+        { conversationId: 'conv-crlf', message: 'Say hello', senderLabel: 'Test', mode: 'chat' },
+        { onProgress: event => { if (event.type === 'delta') deltas.push(event.delta); } });
+      expect(result.answer).toBe('Hola'); expect(deltas).toEqual(['Hola']);
+    } finally { globalThis.fetch = originalFetch; }
+  });
   it('uses the canonical full-pipeline route and renders its final-event contract', async () => {
     const events = [
       'data: {"type":"start","startedAt":"2026-08-10T12:00:00.000Z"}\n\n',

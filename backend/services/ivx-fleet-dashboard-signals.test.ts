@@ -5,6 +5,8 @@ import { buildFleetSloSnapshot } from './ivx-fleet-slo';
 import { visibleFleetSignals } from '../../expo/shared/ivx/fleet-signals';
 import { autonomousWorkerInstanceId } from './ivx-postgres-autonomous-task-store';
 import type { Task } from './ivx-autonomous-task-engine';
+import { latestFleetFileObservation } from './ivx-fleet-file-observation';
+import { visibleFleetFileObservation } from '../../expo/shared/ivx/fleet-signals';
 
 const now = Date.parse('2026-09-08T20:00:00Z');
 const sha = 'a'.repeat(40);
@@ -46,6 +48,36 @@ describe('shared fleet observation', () => {
     expect(buildFleetDashboardSignals(raw, sha, now).counts.running).toBe(0);
     raw.states[0].lastHeartbeatAt = iso(30_000);
     expect(buildFleetDashboardSignals(raw, sha, now).counts.heartbeat).toBe(0);
+  });
+  test('RUNNING with a stale heartbeat is not live execution even while its lease is valid', () => {
+    const raw = observation(); raw.activeTasks = [runningTask()];
+    raw.activeTasks[0].lastHeartbeatAt = iso(-60_001);
+    const result = buildFleetDashboardSignals(raw, sha, now);
+    expect(result.counts.running).toBe(0);
+    expect(result.agents[2].productive).toBe(false);
+    expect(buildFleetSloSnapshot(raw.activeTasks, now, sha).running_agents).toBe(0);
+  });
+  test('file and line observations come from current-attempt tool evidence and expire', () => {
+    const task = runningTask(); task.startedAt = iso(-4000);
+    const summary = 'Inspected backend/hono.ts lines 50–52';
+    task.evidence = [{ ...task.evidence[0], evidenceId: 'file-observed', evidenceType: 'source_file_inspected',
+      source: 'backend/hono.ts#L50-L52', summary, contentHash: createHash('sha256').update(summary).digest('hex') }];
+    const raw = observation(); raw.activeTasks = [task];
+    const result = buildFleetDashboardSignals(raw, sha, now);
+    expect(result.agents[2].fileObservation).toMatchObject({ taskId: task.taskId, filePath: 'backend/hono.ts', lineStart: 50, lineEnd: 52 });
+    expect(result.counts.productive).toBe(0);
+    expect(visibleFleetFileObservation(result.agents[2], now + 60_001)).toBeNull();
+    task.attemptStartedAt = iso();
+    expect(latestFleetFileObservation(task, now)).toBeNull();
+  });
+  test('absent line numbers stay unknown; invalid paths and line numbers never become code locations', () => {
+    const task = runningTask(); task.startedAt = iso(-4000);
+    task.evidence = [{ ...task.evidence[0], evidenceType: 'source_file_changed', source: 'backend/hono.ts' }];
+    expect(latestFleetFileObservation(task, now)?.lineStart).toBeNull();
+    for (const source of ['../private.ts:4', '/etc/private.ts:2', 'backend/hono.ts:abc', 'backend/hono.ts:0', 'backend/hono.ts:5-2']) {
+      task.evidence[0].source = source;
+      expect(latestFleetFileObservation(task, now)).toBeNull();
+    }
   });
   test('database truncation and stale evidence fail closed in server and disconnected UI', () => {
     const raw = observation();

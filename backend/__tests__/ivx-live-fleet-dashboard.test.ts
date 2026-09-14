@@ -67,6 +67,18 @@ test('simultaneous authorized polls share one observer read', async () => {
   expect(ownerGuard).toHaveBeenCalledTimes(6);
 });
 
+test('the actual live route negotiates SSE with owner authentication and the same roster', async () => {
+  const req = request(); req.headers.set('Accept', 'text/event-stream');
+  const response = await handleLiveWorkAgentsRequest(req);
+  expect(response.headers.get('content-type')).toContain('text/event-stream');
+  const reader = response.body!.getReader();
+  const data = new TextDecoder().decode((await reader.read()).value);
+  const event = JSON.parse(data.trim().slice(6));
+  expect(parseLiveFleetPayload(event.payload, now).dashboard.agents).toHaveLength(112);
+  expect(ownerGuard).toHaveBeenCalledTimes(1);
+  await reader.cancel();
+});
+
 for (const invalid of ['unavailable', 'duplicate', 'stale'] as const) {
   test(`${invalid} observation returns 503 with no fabricated empty dashboard`, async () => {
     mode = invalid;

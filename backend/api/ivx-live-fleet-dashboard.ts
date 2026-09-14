@@ -5,6 +5,7 @@ import { ALL_AGENT_CONTRACTS } from '../services/ivx-agent-contracts';
 import { getAgentByNumber } from '../services/ivx-enterprise-master-registry';
 import { readFleetDashboardSignals } from '../services/ivx-fleet-dashboard-signals';
 import { createDashboardReadCache } from '../services/ivx-dashboard-read-cache';
+import { createLiveFleetStream } from '../services/ivx-live-fleet-stream';
 
 // The existing reader uses the observer lane and authoritative task leases.
 // Coalesce concurrent polls; this view never reads the execution history ledger.
@@ -44,4 +45,18 @@ export async function handleLiveFleetDashboardRequest(request: Request): Promise
   } catch {
     return ownerOnlyJson({ ok: false, error: 'FLEET_TELEMETRY_UNAVAILABLE', retryable: true }, 503);
   }
+}
+
+export async function handleLiveFleetDashboardStreamRequest(request: Request): Promise<Response> {
+  const initial = await handleLiveFleetDashboardRequest(request);
+  if (!initial.ok) return initial;
+  const stream = createLiveFleetStream({
+    signal: request.signal, initial: await initial.json(),
+    read: () => handleLiveFleetDashboardRequest(request),
+  });
+  const headers = new Headers(initial.headers);
+  headers.set('Content-Type', 'text/event-stream; charset=utf-8');
+  headers.set('Cache-Control', 'no-store, no-transform');
+  headers.set('X-Accel-Buffering', 'no');
+  return new Response(stream, { headers });
 }

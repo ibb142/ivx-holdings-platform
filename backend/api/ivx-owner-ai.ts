@@ -176,6 +176,7 @@ import {
 } from '../services/ivx-senior-developer-qa-runtime';
 import { recordOwnerAIDiagnosticStage } from '../services/ivx-owner-ai-diagnostics-log';
 import { withOwnerAIRequestTimeout } from '../services/ivx-owner-ai-timeout';
+import { createOwnerChatProgressStream } from '../services/ivx-owner-chat-progress-stream';
 import { buildContextPipeline, renderContextPipeline, type IVXContextPipelineInput } from '../services/ivx-context-pipeline';
 import { buildSystemPrompt as buildSeniorDeveloperSystemPrompt } from '../services/ivx-senior-developer-system-prompt';
 import { buildSeniorEngineerSystemPrompt, buildCompactContextPrefix } from '../services/ivx-senior-engineer-persona';
@@ -5833,7 +5834,7 @@ export async function handleIVXOwnerAIRequest(request: Request): Promise<Respons
 
   // JSON path: hard ceiling so a stuck planner/AI gateway can never hold the
   // connection longer than the frontend watchdog budget. The SSE path above is
-  // exempt — it emits heartbeats every 3s and is intended for long-running work.
+  // bounded separately at 150s while admitted durable work may finish later.
   const OWNER_AI_JSON_TIMEOUT_MS = 60_000;
   const response = withOwnerRuntimeEvidence(await withOwnerAIRequestTimeout(
     handleIVXOwnerAIRequestInternal(request),
@@ -5934,91 +5935,30 @@ async function handleIVXOwnerAIRequestSSE(
     body: bufferedBody,
   });
 
-  const encoder = new TextEncoder();
-  const sse = (payload: Record<string, unknown>): Uint8Array =>
-    encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
-
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      let closed = false;
-      const safeEnqueue = (chunk: Uint8Array): void => {
-        if (closed) return;
-        try {
-          controller.enqueue(chunk);
-        } catch {
-          closed = true;
-        }
-      };
-
-      safeEnqueue(sse({ type: 'start', startedAt: new Date(startedAt).toISOString() }));
-      safeEnqueue(sse({ type: 'stage', stage: 'request_received' }));
-
-      // Heartbeat ticker — every 3s while the internal handler runs. This is
-      // what keeps the watchdog from declaring BACKEND_POST_FINISHED a silent
-      // failure: each heartbeat is an observable wire-level event.
-      const heartbeatInterval: ReturnType<typeof setInterval> = setInterval(() => {
-        safeEnqueue(sse({ type: 'heartbeat', elapsedMs: Date.now() - startedAt }));
-      }, 3_000);
-
-      // Audit log (same as the JSON path) — fire-and-forget; never blocks the SSE close.
-      let auditFinalStatus: number = 0;
-      void (async () => {
-        try {
-          await runWithOwnerAIStreamCallback(
-            (delta: string) => {
-              safeEnqueue(sse({ type: 'delta', delta }));
-            },
-            async () => handleIVXOwnerAIRequestInternal(replayRequest),
-          )
-            .then(async (response) => {
-              auditFinalStatus = response.status;
-              let bodyJson: unknown = null;
-              try {
-                const text = await response.text();
-                bodyJson = text ? JSON.parse(text) : null;
-              } catch (parseError) {
-                bodyJson = { error: 'response_parse_failed', detail: parseError instanceof Error ? parseError.message : 'unknown' };
-              }
-              safeEnqueue(sse({ type: 'stage', stage: response.ok ? 'provider_ok' : 'provider_failed' }));
-              safeEnqueue(sse({ type: 'final', status: response.status, ok: response.ok, body: bodyJson }));
-            })
-            .catch((error) => {
-              auditFinalStatus = 500;
-              safeEnqueue(sse({ type: 'error', error: error instanceof Error ? error.message : 'unknown' }));
-              safeEnqueue(sse({ type: 'final', status: 500, ok: false, body: { error: error instanceof Error ? error.message : 'unknown' } }));
-            });
-        } finally {
-          clearInterval(heartbeatInterval);
-          // Fire-and-forget ai_usage_logs row mirroring the JSON path.
-          void (async () => {
-            try {
-              const ctx = await assertIVXOwnerOnly(auditAuthRequest).catch(() => null);
-              const httpOk = auditFinalStatus >= 200 && auditFinalStatus < 300;
-              const status: 'success' | 'error' | 'rate_limited' = auditFinalStatus === 429 ? 'rate_limited' : httpOk ? 'success' : 'error';
-              await logIVXOwnerAIUsageRow({
-                requestId: null,
-                userId: ctx?.userId ?? null,
-                provider: 'chatgpt',
-                model: '',
-                status,
-                latencyMs: Date.now() - startedAt,
-                error: httpOk ? null : `http_${auditFinalStatus}`,
-                surface: 'ivx_ia_sse',
-                metadata: {
-                  httpStatus: auditFinalStatus,
-                  endpoint: '/api/ivx/owner-ai',
-                  transport: 'sse',
-                  deploymentMarker: DEPLOYMENT_MARKER,
-                },
-              });
-            } catch (logError) {
-              console.log('[IVXOwnerAIBackend] SSE ai_usage_logs failed:', logError instanceof Error ? logError.message : 'unknown');
-            }
-          })();
-          closed = true;
-          try { controller.close(); } catch { /* already closed */ }
-        }
-      })();
+  let requestId: string | null = null;
+  try {
+    const parsed = JSON.parse(bufferedBody);
+    if (typeof parsed?.requestId === 'string') requestId = parsed.requestId;
+  } catch { /* the canonical handler returns the request validation error */ }
+  const stream = createOwnerChatProgressStream({
+    signal: request.signal, startedAt, requestId,
+    execute: emitDelta => runWithOwnerAIStreamCallback(emitDelta,
+      async () => handleIVXOwnerAIRequestInternal(replayRequest)),
+    onSettled: async (httpStatus) => {
+      try {
+        const ctx = await assertIVXOwnerOnly(auditAuthRequest).catch(() => null);
+        const httpOk = httpStatus >= 200 && httpStatus < 300;
+        await logIVXOwnerAIUsageRow({
+          requestId, userId: ctx?.userId ?? null, provider: 'chatgpt', model: '',
+          status: httpStatus === 429 ? 'rate_limited' : httpOk ? 'success' : 'error',
+          latencyMs: Date.now() - startedAt, error: httpOk ? null : `http_${httpStatus}`,
+          surface: 'ivx_ia_sse', metadata: {
+            httpStatus, endpoint: '/api/ivx/owner-ai', transport: 'sse', deploymentMarker: DEPLOYMENT_MARKER,
+          },
+        });
+      } catch (error) {
+        console.log('[IVXOwnerAIBackend] SSE audit failed:', error instanceof Error ? error.message : 'unknown');
+      }
     },
   });
 

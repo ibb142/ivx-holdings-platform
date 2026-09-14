@@ -165,15 +165,15 @@ describe('IVX IA chat device certificate regression', () => {
     expect(ownerAIRequestSource).not.toContain('Task completed (HTTP ${final.status})');
   });
 
-  test('hard-gates app restart persistence without clearing state', () => {
+  test('hard-gates app restart persistence through the canonical deep link without clearing state', () => {
     const stopIndex = flowSource.indexOf('- stopApp');
-    const launchIndex = flowSource.indexOf('- launchApp:');
-    const clearStateIndex = flowSource.indexOf('clearState: false');
+    const launchIndex = flowSource.indexOf('- openLink: "ivx-app:///"');
     expect(stopIndex).toBeGreaterThan(-1);
     expect(launchIndex).toBeGreaterThan(stopIndex);
-    expect(clearStateIndex).toBeGreaterThan(launchIndex);
+    expect(flowSource.slice(stopIndex)).not.toContain('- launchApp:');
+    expect(flowSource).not.toContain('clearState: true');
 
-    const afterRestart = flowSource.slice(clearStateIndex);
+    const afterRestart = flowSource.slice(launchIndex);
     expect(afterRestart).toContain('inputText: ${OWNER_EMAIL}');
     expect(afterRestart).toContain('inputText: ${OWNER_PASSWORD}');
     expect(afterRestart.indexOf('id: "login-submit"')).toBeLessThan(afterRestart.indexOf('id: "tab-chat"'));

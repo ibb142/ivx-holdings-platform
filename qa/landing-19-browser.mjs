@@ -3,11 +3,15 @@ import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { installLandingPreviewRoutes } from './landing-preview-route.mjs';
+import { createFixtureMedia, installLandingFeedFixture, FIXTURE_SCOPE } from './landing-feed-fixture.mjs';
 
 const unit = process.argv[2];
 const supported = ['reels.autoplay-controls-browser', 'reels.engagement-browser', 'reels.scroll-navigation-browser', 'reels.production-render-browser', 'a11y.touch-targets-browser', 'a11y.contrast-focus-browser', 'perf.console-network-browser', 'e2e.production-browser-suite'];
 assert.ok(supported.includes(unit), `Unsupported unit ${unit}`);
 const base = process.env.LANDING_URL || 'https://ivxholding.com';
+const syntheticFeed = process.env.LANDING_QA_FEED_FIXTURE === 'true';
+if (syntheticFeed) assert.equal(process.env.LANDING_PREVIEW_SOURCE, 'http://127.0.0.1:4175', 'Synthetic feed requires the local PR preview');
+const fixtureMedia = syntheticFeed ? await createFixtureMedia() : null;
 // The published MP4 uses H.264/AAC, which the bundled Chromium build cannot
 // decode. Keep Chromium for non-media checks and verify media in real Chrome.
 const mediaUnit = unit.startsWith('reels.') || unit === 'e2e.production-browser-suite';
@@ -87,6 +91,7 @@ try {
       // actual CORS policy still applies. Never use this as deployed evidence.
       await installLandingPreviewRoutes(context, base, preview);
     }
+    if (syntheticFeed) await installLandingFeedFixture(context, process.env.LANDING_PREVIEW_SOURCE, fixtureMedia);
     if (unit === 'reels.engagement-browser') {
       // Isolated browser interaction fixture. No public likes, comments or
       // shares are posted; this unit certifies browser request/response wiring.
@@ -116,7 +121,7 @@ try {
         const url = new URL(route.request().url());
         if (url.searchParams.get('type') === 'reel') {
           releaseOldChannel();
-          return route.continue();
+          return route.fallback();
         }
         if (!heldInitial && url.searchParams.get('limit') === '6' && !url.searchParams.has('type') && !url.searchParams.has('channel')) {
           heldInitial = true;
@@ -125,14 +130,14 @@ try {
           clearTimeout(timer);
           return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ videos: [{ id: 'stale-channel-fixture', title: 'Stale channel response', video_url: 'https://ivxholding.com/qa-stale-channel.mp4' }] }) });
         }
-        return route.continue();
+        return route.fallback();
       });
     }
     if (process.env.LANDING_PREVIEW_SOURCE && unit === 'reels.production-render-browser') {
-      // Reproduce the observed startup failure before accepting the real feed.
+      // Reproduce startup failure before accepting a recovered response.
       let injectedUnavailable = false;
       await page.route('https://api.ivxholding.com/api/reels', async (route) => {
-        if (injectedUnavailable || route.request().method() !== 'GET') return route.continue();
+        if (injectedUnavailable || route.request().method() !== 'GET') return route.fallback();
         injectedUnavailable = true;
         await route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"isolated startup recovery fixture"}' });
       });
@@ -281,7 +286,9 @@ try {
 finally {
   for (const context of browser.contexts()) await context.unrouteAll({ behavior: 'wait' });
   await browser.close();
-  const result = { unit, browser: browserInfo, sourceSha: process.env.GITHUB_SHA, browserChannel, browserVersion, passed: !error, checks, error, diagnostics, completedAt: new Date().toISOString() };
+  const result = { unit, scope: syntheticFeed ? FIXTURE_SCOPE : process.env.LANDING_PREVIEW_SOURCE ? 'preview-with-live-feed' : 'production',
+    usesSyntheticFeed: syntheticFeed,
+    browser: browserInfo, sourceSha: process.env.GITHUB_SHA, browserChannel, browserVersion, passed: !error, checks, error, diagnostics, completedAt: new Date().toISOString() };
   result.sha256 = createHash('sha256').update(JSON.stringify(result)).digest('hex');
   await mkdir('evidence/landing-19', { recursive: true });
   await writeFile(`evidence/landing-19/${unit}.json`, JSON.stringify(result));
