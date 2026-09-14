@@ -1418,9 +1418,9 @@ export default function IVXOwnerChatRoute() {
     const taskIdSeen = new Map<string, IVXMessage>();
     for (const message of visibleTransientAssistantMessages) {
       if (!message.taskId) {
-        if (!deduped.has(message.id)) {
-          deduped.set(message.id, message);
-        }
+        // A refetch may contain an older local snapshot of this same ID.
+        // The live reply must replace it, including while a stream is growing.
+        deduped.set(message.id, message);
         continue;
       }
       const existing = taskIdSeen.get(message.taskId);
@@ -1429,9 +1429,7 @@ export default function IVXOwnerChatRoute() {
       }
     }
     for (const message of taskIdSeen.values()) {
-      if (!deduped.has(message.id)) {
-        deduped.set(message.id, message);
-      }
+      deduped.set(message.id, message);
     }
     // Canonical server-created order with a stable message-ID tiebreak.
     // This keeps reloads and realtime duplicates from moving existing bubbles.
@@ -1452,6 +1450,9 @@ export default function IVXOwnerChatRoute() {
   // is persisted; the helper dedupes so this is idempotent.
   const durableMirrorPayload = useMemo<IVXMessage[]>(() => {
     return allMessages.filter((message) => {
+      if (message.id === currentStreamingMessageId) {
+        return false;
+      }
       if (isInternalTranscriptMessage(message)) {
         return false;
       }
@@ -1461,7 +1462,7 @@ export default function IVXOwnerChatRoute() {
       }
       return safeTrim(message.body).length > 0 || !!message.attachmentUrl;
     });
-  }, [allMessages]);
+  }, [allMessages, currentStreamingMessageId]);
   const durableMirrorSignature = useMemo<string>(
     () => durableMirrorPayload.map((message) => `${message.id}:${safeTrim(message.body).length}`).join('|'),
     [durableMirrorPayload],

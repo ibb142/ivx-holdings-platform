@@ -75,31 +75,30 @@ export function mergeOwnerMessages<T extends MergeableOwnerMessage>(
   const renderableRemote = filterRenderableOwnerMessages(remoteMessages);
   const renderableLocal = filterRenderableOwnerMessages(localMessages);
 
-  if (renderableLocal.length === 0) {
-    return sortByCreatedAtAscending(renderableRemote);
-  }
-
   const merged = new Map<string, T>();
   const remoteContentKeys = new Set<string>();
 
-  for (const message of renderableRemote) {
-    merged.set(buildOwnerMessageSignature(message), message);
+  // A streamed message keeps its ID as its body grows. Old mirrors can contain
+  // several snapshots of that ID; retain the latest authoritative snapshot.
+  for (const message of sortByCreatedAtAscending(renderableRemote)) {
+    merged.set(message.id, message);
+  }
+  for (const message of merged.values()) {
     const contentKey = buildOwnerMessageContentKey(message);
     if (contentKey) {
       remoteContentKeys.add(contentKey);
     }
   }
 
-  for (const message of renderableLocal) {
-    const signature = buildOwnerMessageSignature(message);
-    if (merged.has(signature)) {
+  for (const message of sortByCreatedAtAscending(renderableLocal).reverse()) {
+    if (merged.has(message.id)) {
       continue;
     }
     const contentKey = buildOwnerMessageContentKey(message);
     if (contentKey && remoteContentKeys.has(contentKey)) {
       continue;
     }
-    merged.set(signature, message);
+    merged.set(message.id, message);
   }
 
   return sortByCreatedAtAscending(Array.from(merged.values()));

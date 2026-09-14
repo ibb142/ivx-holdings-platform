@@ -19,6 +19,27 @@ function makeMessage(overrides: Partial<MergeableOwnerMessage> & { id: string; c
 }
 
 describe('mergeOwnerMessages', () => {
+  it('keeps the completed reply when a stale same-ID stream chunk returns from storage', () => {
+    const partial = makeMessage({ id: 'stream-1', senderRole: 'assistant', body: 'IV', createdAt: '2026-09-14T19:04:38Z' });
+    const completed = { ...partial, body: 'IVX_CHAT_E2E_current_request', createdAt: '2026-09-14T19:04:49Z' };
+    const mirrored = mergeOwnerMessages([completed], [partial]);
+    expect(mirrored).toEqual([completed]);
+    expect(mergeOwnerMessages([], mirrored)).toEqual([completed]);
+  });
+
+  it('repairs an old mirror containing several snapshots of one reply', () => {
+    const partial = makeMessage({ id: 'stream-1', senderRole: 'assistant', body: 'IV', createdAt: '2026-09-14T19:04:38Z' });
+    const completed = { ...partial, body: 'IVX_CHAT_E2E_current_request', createdAt: '2026-09-14T19:04:49Z' };
+    expect(mergeOwnerMessages([], [completed, partial])).toEqual([completed]);
+    expect(mergeOwnerMessages([completed, partial], [])).toEqual([completed]);
+  });
+
+  it('honors an authoritative edit even when the new body is shorter', () => {
+    const local = makeMessage({ id: 'edited-1', body: 'Long outdated response', createdAt: '2026-09-14T19:04:38Z' });
+    const remote = { ...local, body: 'Corrected' };
+    expect(mergeOwnerMessages([remote], [local])).toEqual([remote]);
+  });
+
   it('returns remote messages sorted chronologically when there is no local shadow', () => {
     const remote = [
       makeMessage({ id: 'b', body: 'second', createdAt: '2026-05-31T00:00:02Z' }),

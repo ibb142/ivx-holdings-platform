@@ -313,14 +313,11 @@ async function appendOwnerMessagesToLocalMirror(messages: IVXMessage[]): Promise
   }
 
   try {
-    const existing = await loadLocalMessages();
-    // Union existing (authoritative base) with the newly rendered messages,
-    // deduped by exact signature + content key, then re-cap and persist.
-    const merged = mergeOwnerMessages(existing, durable);
-    if (!await saveLocalMessages(merged)) return;
+    // The newly committed render is authoritative over older same-ID shadows.
+    // saveLocalMessages reads and merges the current mirror inside its queue.
+    if (!await saveLocalMessages(durable)) return;
     console.log('[IVXChatHydration] Durable mirror appended', {
       added: durable.length,
-      total: merged.length,
     });
   } catch (error) {
     console.log('[IVXChatHydration] Durable mirror append failed (message still rendered):', error instanceof Error ? error.message : 'unknown');
