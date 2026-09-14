@@ -66,6 +66,7 @@ import {
   checkQueueHealth as checkOwnerAIQueueHealth,
   checkProviderHealthDetail as checkOwnerAIProviderDetail,
   auditDatabaseEnvConfig,
+  type HealthCheckResult,
 } from './services/ivx-owner-ai-task-queue';
 import { OPTIONS as ownerAIJobsOptions, handleIVXAIJobStartRequest, handleIVXAIJobStatusRequest, handleIVXAIJobsListRequest, handleIVXAIRuntimeObservabilityRequest } from './api/ivx-owner-ai-jobs';
 import { startAIKeyMonitor, getAIKeyMonitorState } from './services/ivx-ai-key-monitor';
@@ -3342,9 +3343,27 @@ app.get('/health/provider', () => {
   return Response.json({ ok: result.ok, ...result.detail, timestamp: new Date().toISOString() }, { status: result.ok ? 200 : 503 });
 });
 
+async function ownerAIReadinessCheck(check: () => HealthCheckResult | Promise<HealthCheckResult>): Promise<HealthCheckResult> {
+  try {
+    return await check();
+  } catch {
+    // Preserve every other dependency observation without disclosing exception
+    // messages or converting an unavailable dependency into a successful HTTP status.
+    return { ok: false, detail: { code: 'READINESS_CHECK_FAILED', reason: 'Dependency check unavailable' } };
+  }
+}
+
 async function ownerAIReadinessResponse() {
-  const ai = checkOwnerAIHealth();
-  const [database, auth, queue] = await Promise.all([checkOwnerAIDatabaseHealth(), checkOwnerAIAuthHealth(), checkOwnerAIQueueHealth()]);
+  // These transport probes already bound their reads and deadlines. Reuse them
+  // instead of opening another pool or replacing readiness with an emergency-stop read.
+  const [database, auth, queue] = await Promise.all([
+    ownerAIReadinessCheck(checkOwnerAIDatabaseHealth),
+    ownerAIReadinessCheck(checkOwnerAIAuthHealth),
+    ownerAIReadinessCheck(checkOwnerAIQueueHealth),
+  ]);
+  // The local provider/budget observation can change while the remote probes
+  // are pending. Read it last; this does not initiate a paid provider request.
+  const ai = await ownerAIReadinessCheck(checkOwnerAIHealth);
   const ready = ai.ok && database.ok && auth.ok && queue.ok;
   return Response.json({
     ok: ready,
@@ -3353,10 +3372,10 @@ async function ownerAIReadinessResponse() {
     service: 'ivx-owner-ai-backend',
     deploymentMarker: DEPLOYMENT_MARKER,
     checks: {
-      ai: { ok: ai.ok, ...ai.detail },
-      database: { ok: database.ok, ...database.detail },
-      auth: { ok: auth.ok, ...auth.detail },
-      queue: { ok: queue.ok, ...queue.detail },
+      ai: { ...ai.detail, ok: ai.ok },
+      database: { ...database.detail, ok: database.ok },
+      auth: { ...auth.detail, ok: auth.ok },
+      queue: { ...queue.detail, ok: queue.ok },
     },
     timestamp: new Date().toISOString(),
   }, { status: ready ? 200 : 503, headers: { 'Cache-Control': 'no-store' } });

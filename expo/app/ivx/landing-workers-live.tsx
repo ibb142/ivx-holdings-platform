@@ -133,7 +133,7 @@ export default function LandingWorkersLiveScreen() {
               </View>
             ))}
         </View>
-        <View style={styles.section}>
+        <View style={styles.section} testID={current ? 'agent-telemetry-grid' : undefined}>
           <Text style={styles.sectionTitle}>IA-001 → IA-112</Text>
           <Text style={styles.sectionSub}>RUNNING: ejecutando · ASSIGNED: tiene trabajo asignado · IDLE: disponible · UNKNOWN: sin presencia reciente.</Text>
           {agents.map(agent => <AgentCard key={agent.agentId} agent={agent} />)}
@@ -174,7 +174,7 @@ function Metric({ label, value, color }: { label: string; value: string | number
   return <View style={styles.metric}><Text style={[styles.metricValue, { color }]}>{value}</Text><Text style={styles.metricLabel}>{label}</Text></View>;
 }
 function AgentCard({ agent }: { agent: LiveFleetAgent }) {
-  return <View style={styles.card}>
+  return <View style={styles.card} testID={`agent-telemetry-card-${agent.agentNumber}`}>
     <View style={styles.cardHead}><View style={[styles.dot, { backgroundColor: tone(agent.status) }]} /><View style={styles.identity}><Text style={styles.agentName}>IA-{String(agent.agentNumber).padStart(3, '0')} · {agent.name}</Text><Text style={styles.meta}>{agent.department}</Text></View><Text style={[styles.status, { color: tone(agent.status) }]}>{agent.status}</Text></View>
     <Row label="RESPONSABILIDAD" value={agent.primaryResponsibility} />
     <Row label="TAREA OBSERVADA" value={agent.currentTask || 'Sin tarea con lease vigente'} />

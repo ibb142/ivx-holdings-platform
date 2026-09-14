@@ -128,6 +128,7 @@ test('a matching public Reels rail preserves its cursor', async () => {
 
 test('matching public rail recovery rejects unavailable, private and mismatched responses', async () => {
   for (const fields of [{ degraded: true }, { data_available: false }, { code: 'PUBLIC_DATA_UNAVAILABLE' },
+    { status: 'DEGRADED' }, { ok: false },
     { personalized: true }, { channel: 'buyer' }, { feed_type: 'unified' }, { ordering: 'other' }, { videos: [] }]) {
     const f = fixture();
     f.state.channel = '__reels'; f.context.loadMore();
@@ -222,6 +223,8 @@ test('expired or incompatible page snapshots cannot be used for recovery', async
   for (const snapshot of [{ at: Date.now() - 31000, data: publicFeed() },
     { at: Date.now(), data: { ...publicFeed(), personalized: true } },
     { at: Date.now(), data: { ...publicFeed(), degraded: true } },
+    { at: Date.now(), data: { ...publicFeed(), status: 'DEGRADED' } },
+    { at: Date.now(), data: { ...publicFeed(), ok: false } },
     { at: Date.now(), data: { ...publicFeed(), data_available: false } }]) {
     const f = fixture();
     f.context.window.__ivxPublicReels = snapshot;
@@ -306,6 +309,8 @@ test('a persistently degraded reel catalog is an error, not a completed empty pa
 });
 
 for (const [name, unavailable] of [
+  ['status=DEGRADED with retained videos', () => Response.json({ ...publicFeed(), status: 'DEGRADED' })],
+  ['ok=false with retained videos', () => Response.json({ ...publicFeed(), ok: false })],
   ['data_available=false', () => Response.json({ videos: [], data_available: false })],
   ['unavailable code', () => Response.json({ videos: [], code: 'PUBLIC_DATA_UNAVAILABLE' })],
   ['unavailable header', () => Response.json({ videos: [] }, { headers: { 'X-IVX-Data-State': 'unavailable' } })],
