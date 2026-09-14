@@ -94,6 +94,9 @@ function progressFor(state: IVXMediaJobState): number {
 }
 
 export function createMediaJob(input: IVXMediaJobCreateInput): IVXMediaJob {
+  if (Object.keys(input.mediaTypes).length === 0) {
+    throw new Error('at least one media type must be specified');
+  }
   cleanupExpired();
   const id = genId();
   const ts = nowIso();
