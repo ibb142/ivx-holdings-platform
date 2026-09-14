@@ -1281,8 +1281,9 @@ export class FleetTaskStore {
   private async owned(client: FleetClient, lease: FleetLease): Promise<void> {
     const task = await client.query(`SELECT task_id FROM public.ivx_autonomous_tasks
       WHERE task_id=$1 AND lease_holder=$2 AND worker_instance_id=$3
-      AND state=ANY($4::text[]) AND lease_expires_at>clock_timestamp() FOR UPDATE`,
-    [lease.taskId,lease.token,this.instanceId,FLEET_LIVE_STATES]);
+      AND state=ANY($4::text[]) AND assigned_agent_number=$5
+      AND lease_expires_at>clock_timestamp() FOR UPDATE`,
+    [lease.taskId,lease.token,this.instanceId,FLEET_LIVE_STATES,lease.agentNumber]);
     if (task.rowCount !== 1) throw new FleetLeaseLost();
     const resources = await client.query<{ resource_key: string; fence: string }>(`
       SELECT resource_key,fence::text FROM ivx_fleet.resources
@@ -1606,7 +1607,7 @@ export class MultiAgentFleet {
       try {
         while (!keeperSignal.aborted) {
           await fleetDelay(this.config.heartbeatMs,undefined,{signal:keeperSignal});
-          await renewOwnedFleetLease(this.store,lease,keeperSignal);
+          if (!await emitFleetHeartbeat(this.store,lease,keeperSignal)) throw new FleetLeaseLost();
         }
       } catch (error: unknown) {
         if (!keeperSignal.aborted) {
@@ -1703,6 +1704,24 @@ export async function renewOwnedFleetLease(
   }
   signal?.throwIfAborted();
   await store.heartbeat(lease, signal);
+}
+
+/** A heartbeat needs the claimed token, agent, resource fences and live expiry.
+ * Agent/task IDs alone are not authority. Use the existing dedicated heartbeat
+ * pool and transaction-local deadlines. Confirmed ownership loss returns false;
+ * transport, cancellation and uncertain COMMIT errors reject so the keeper stops
+ * and retains the actual failure reason. Never manufacture observation evidence.
+ */
+export async function emitFleetHeartbeat(
+  store: FleetTaskStore, lease: FleetLease, signal?: AbortSignal,
+): Promise<boolean> {
+  try {
+    await renewOwnedFleetLease(store, lease, signal);
+    return true;
+  } catch (error) {
+    if (error instanceof FleetLeaseLost) return false;
+    throw error;
+  }
 }
 
 /** @deprecated Use renewOwnedFleetLease. The old no-argument bulk renewal

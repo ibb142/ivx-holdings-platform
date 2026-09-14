@@ -120,6 +120,22 @@ describe('lease ownership on the isolated PostgreSQL test database', () => {
     await assert.rejects(fw.renewOwnedFleetLease(otherStore, lease), /FLEET_LEASE_LOST/);
     assert.deepEqual(await taskRow(lease.taskId), before);
   });
+  test('heartbeat accepts a complete owned lease and rejects a different agent identity', async () => {
+    const lease = await seed();
+    assert.equal(await fw.emitFleetHeartbeat(store, lease), true);
+    const before = await taskRow(lease.taskId);
+    const forged = { ...lease, agentNumber: lease.agentNumber === 112 ? 1 : lease.agentNumber + 1 };
+    assert.equal(await fw.emitFleetHeartbeat(store, forged), false);
+    assert.deepEqual(await taskRow(lease.taskId), before);
+  });
+  test('heartbeat refusal never revives an expired lease or accepts another worker', async () => {
+    const lease = await seed();
+    assert.equal(await fw.emitFleetHeartbeat(otherStore, lease), false);
+    await pg.query("UPDATE public.ivx_autonomous_tasks SET lease_expires_at='epoch' WHERE task_id=$1", [lease.taskId]);
+    const before = await taskRow(lease.taskId);
+    assert.equal(await fw.emitFleetHeartbeat(store, lease), false);
+    assert.deepEqual(await taskRow(lease.taskId), before);
+  });
   test('stale or forged ownership token cannot renew', async () => {
     const lease = await seed();
     await assert.rejects(fw.renewOwnedFleetLease(store, { ...lease, token: '00000000-0000-4000-8000-000000000001' }), /FLEET_LEASE_LOST/);
