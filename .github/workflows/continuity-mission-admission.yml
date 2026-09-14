@@ -1,0 +1,41 @@
+name: Admit owner continuity mission
+on:
+  push:
+    branches: [ops/quantum-mission-admission-20260914]
+    paths:
+      - '.github/workflows/continuity-mission-admission.yml'
+      - 'scripts/ops/admit-continuity-mission.mjs'
+permissions:
+  contents: read
+concurrency:
+  group: continuity-mission-admission-20260914
+  cancel-in-progress: false
+jobs:
+  admit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with: {node-version: 24}
+      - name: Admit once through the verified owner task engine
+        run: node scripts/ops/admit-continuity-mission.mjs
+        env:
+          EXPECTED_PRODUCTION_SHA: e8abadfe1d3ec7c0c48ae41bd82b41420313851e
+          SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          OWNER_NEW_PASSWORD: ${{ secrets.OWNER_NEW_PASSWORD }}
+          OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
+          IVX_OWNER_PASSWORD: ${{ secrets.IVX_OWNER_PASSWORD }}
+          IVX_OWNER_NEW_PASSWORD: ${{ secrets.IVX_OWNER_NEW_PASSWORD }}
+          OWNER_LOGIN_PASSWORD: ${{ secrets.OWNER_LOGIN_PASSWORD }}
+          IVX_OWNER_LOGIN_PASSWORD: ${{ secrets.IVX_OWNER_LOGIN_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: continuity-mission-admission-${{ github.run_id }}
+          path: qa/evidence/continuity-admission/receipt.json
+          if-no-files-found: warn
+          retention-days: 30
