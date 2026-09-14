@@ -1,0 +1,69 @@
+name: Quantum Vercel dispatcher read-only audit
+on:
+  push:
+    branches: ['ops/quantum-vercel-dispatcher-audit-20260914']
+    paths: ['.github/workflows/quantum-vercel-dispatcher-audit.yml']
+permissions:
+  contents: read
+concurrency:
+  group: quantum-vercel-dispatcher-audit
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Locate the linked IVX project and inspect actual cron state
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
+          IVX_VERCEL_TOKEN: ${{ secrets.IVX_VERCEL_TOKEN }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          const key = [process.env.VERCEL_TOKEN, process.env.VERCEL_API_TOKEN, process.env.IVX_VERCEL_TOKEN].find(v => v?.trim())?.trim();
+          if (!key) {
+            console.log(JSON.stringify({ observedAt: new Date().toISOString(), state: 'UNOBSERVED', reason: 'No protected Vercel management binding', shutdownVerified: false }));
+            process.exit(1);
+          }
+          async function get(path, params) {
+            const url = new URL(path, 'https://api.vercel.com');
+            assert.equal(url.origin, 'https://api.vercel.com');
+            for (const [name, value] of Object.entries(params)) if (value != null) url.searchParams.set(name, String(value));
+            const response = await fetch(url, { method: 'GET', redirect: 'error', signal: AbortSignal.timeout(15000), headers: { Authorization: 'Bearer ' + key, Accept: 'application/json' } });
+            if (!response.ok) throw new Error('Vercel audit HTTP ' + response.status);
+            return response.json();
+          }
+          const observations = [];
+          for (const teamId of [null, 'team_fEfCJAenMBXVSGiX6LeoA3Ji']) {
+            const scope = teamId || 'authenticated-default';
+            try {
+              const payload = await get('/v10/projects', { teamId, repoId: '1169662811', limit: 100 });
+              const projects = Array.isArray(payload) ? payload : payload.projects;
+              assert(Array.isArray(projects), 'Malformed project list');
+              assert(!payload.pagination?.next, 'Project results were truncated');
+              const matches = [];
+              for (const project of projects) {
+                assert(/^prj_[a-zA-Z0-9]+$/.test(project.id), 'Malformed project identity');
+                const current = await get('/v9/projects/' + encodeURIComponent(project.id), { teamId });
+                assert.equal(current.id, project.id);
+                const link = current.link || {};
+                const repositoryVerified = String(link.repoId) === '1169662811'
+                  || (link.org === 'ibb142' && link.repo === 'ivx-holdings-platform');
+                matches.push({ projectId: current.id, repositoryVerified,
+                  cronState: current.crons ? {
+                    enabledAt: current.crons.enabledAt ?? null, disabledAt: current.crons.disabledAt ?? null,
+                    updatedAt: current.crons.updatedAt ?? null, deploymentId: current.crons.deploymentId ?? null,
+                    definitions: current.crons.definitions?.map(entry => ({ path: new URL(entry.path, 'https://audit.invalid').pathname, schedule: entry.schedule })) ?? null,
+                  } : null });
+              }
+              observations.push({ scope, read: 'OBSERVED', matchingProjects: matches });
+            } catch (error) {
+              // Do not print provider response bodies, environment values or tokens.
+              observations.push({ scope, read: 'UNOBSERVED', reason: error instanceof Error && /^Vercel audit HTTP \d+$/.test(error.message) ? error.message : 'Audit request unavailable or malformed' });
+            }
+          }
+          console.log(JSON.stringify({ observedAt: new Date().toISOString(), observations, shutdownVerified: false, scope: 'project-and-cron-configuration-read-only' }));
+          NODE
