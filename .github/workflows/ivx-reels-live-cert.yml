@@ -6,20 +6,66 @@ on:
   pull_request:
     paths:
       - '.github/workflows/ivx-reels-live-cert.yml'
-      - 'tests/e2e/reels-acceptance.spec.ts'
-      - 'tests/e2e/playwright.config.ts'
+      - 'tests/e2e/**'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  reels-feed-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify degraded feed admission without production requests
+        run: node --test tests/e2e/reels-feed-observation.test.ts
+
+  reels-degraded-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      LANDING_BASE: http://127.0.0.1:4173
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install the isolated browser test runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/ivx-reels-guard" --ignore-scripts --no-audit --no-fund @playwright/test@1.55.0 playwright@1.55.0
+          ln -s "$RUNNER_TEMP/ivx-reels-guard/node_modules" node_modules
+          node node_modules/playwright/cli.js install --with-deps chrome
+      - name: Verify the real Reels UI with controlled dependency failures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory expo/ivxholding-landing > "$RUNNER_TEMP/ivx-reels-preview.log" 2>&1 &
+          ivx_preview_pid=$!
+          trap 'kill "$ivx_preview_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:4173/ -o /dev/null; then break; fi
+            sleep 0.25
+          done
+          curl -fsS http://127.0.0.1:4173/ -o /dev/null
+          node node_modules/@playwright/test/cli.js test --config=tests/e2e/playwright.config.ts --grep 'a controlled'
+      - name: Upload controlled UI results including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reels-degraded-ui-${{ github.sha }}
+          path: qa/evidence/reels-acceptance/
+
   reels-live-cert:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       API_BASE: https://api.ivxholding.com
       LANDING_BASE: https://ivxholding.com
+      IVX_REELS_REQUIRE_PLAYBACK: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
