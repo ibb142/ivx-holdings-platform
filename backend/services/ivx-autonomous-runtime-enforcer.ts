@@ -132,7 +132,7 @@ export function classifyContinuityResult(result: { ok: boolean; action: string; 
     return result.evidenceIds?.some(id => typeof id === 'string' && id.trim()) ? 'observed' : 'idle';
   }
   if (result.action === 'PATROL_SESSION_LOST') return 'failed';
-  if (result.states.includes('ALREADY_VERIFIED')) return 'idle';
+  if (result.states.includes('ALREADY_VERIFIED')) return 'observed';
   if (!result.taskId) return 'failed';
   if (result.action === 'TASK_BLOCKED') return 'blocked';
   if (result.action === 'TASK_COMPLETED' || result.action === 'TASK_OWNER_GATE') return 'completed';
