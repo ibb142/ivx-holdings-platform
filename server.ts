@@ -1,35 +1,14 @@
 /**
- * IVX Holdings — Production Entry Point
- * 
- * Starts the Hono API server (backend/hono.ts) which serves all API routes
- * including engagement APIs, member APIs, deploy tools, and chat endpoints.
- * 
- * Runtime: Node.js (tsx) on Render (render.yaml dockerCommand override)
- * Port:    PORT env var (default 3000)
+ * IVX Holdings — Vercel Hono entrypoint
+ *
+ * Vercel detects this file as the backend entrypoint and invokes the exported
+ * Hono application for each request. Local hosting belongs in a separate
+ * development launcher rather than starting a listener at module load time.
  */
-import { serve } from '@hono/node-server';
+import { Hono } from 'hono';
 import app from './backend/hono';
 
-const PORT = parseInt(process.env.PORT || '3000', 10);
-const HOST = process.env.HOST || '0.0.0.0';
+// Keep the framework import in the entrypoint for Vercel's backend detector.
+void Hono;
 
-console.log('[IVX Server] Starting Hono API server...', {
-  host: HOST,
-  port: PORT,
-  nodeEnv: process.env.NODE_ENV || 'development',
-});
-
-serve(
-  {
-    fetch: app.fetch,
-    port: PORT,
-    hostname: HOST,
-  },
-  (info) => {
-    console.log('[IVX Server] Hono API server online', {
-      host: HOST,
-      port: info.port,
-      family: info.family,
-    });
-  },
-);
+export default app;
