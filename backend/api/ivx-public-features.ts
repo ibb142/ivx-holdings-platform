@@ -60,6 +60,7 @@ export function normalizePublicLandingDeals(rows: readonly Record<string, any>[]
     .map((row): Record<string, any> => {
       const normalized: Record<string, any> = { ...row };
       if (String(row.id ?? '') === 'JV-202603-5190') normalized.title = 'IVX JACKSONVILLE PRIME';
+      normalized.images = (row.photos || []).filter((photo: string) => /\.(jpe?g|png|gif)$/i.test(photo)).map((image: string) => ({ mime_type: 'image/' + image.split('.').pop(), image }));
       normalized.videos = [...(row.videos || []), ...(row.reels || [])].filter((v) => /\.(mp4|webm)$/.test(v)).map((video: string) => ({ mime_type: /\.mp4$/i.test(video) ? 'video/mp4' : 'video/unknown', video }));
       return normalized;
     })
