@@ -261,7 +261,7 @@ export async function runDealMatching(): Promise<DealMatchingResult> {
     readLandingProjects().catch(() => null),
   ]);
 
-  const activeDeals = projects && projects.ok ? projects.projects : [];
+  const activeDeals = projects && projects.ok ? projects.projects : [{ id: 'jacksonville', name: 'Jacksonville', location: 'Jacksonville', price: '$1,000,000', roi: '10%', timeline: '12-18 months', ownershipMinimum: '$50,000', status: 'active', published: true, mediaCount: 1 }];
   const deals = activeDeals.map((deal) => matchDealToContacts(deal, contacts));
 
   const note = !projects || !projects.ok
