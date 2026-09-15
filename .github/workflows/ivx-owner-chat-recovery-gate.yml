@@ -1,0 +1,92 @@
+name: IVX Owner Chat Recovery Gate
+
+on:
+  pull_request:
+    paths:
+      - 'backend/api/ivx-owner-ai*'
+      - 'backend/services/ivx-owner-*'
+      - 'backend/services/ivx-autonomous-development-handoff*'
+      - 'backend/services/ivx-task-admission*'
+      - 'backend/services/ivx-worker-enqueue-identity*'
+      - 'backend/api/ivx-autonomous-task-engine-api*'
+      - 'backend/api/ivx-senior-developer-worker*'
+      - 'backend/services/ivx-*budget*'
+      - 'backend/services/ivx-postgres-autonomous-task-store*'
+      - 'expo/app/ivx/chat.tsx'
+      - 'expo/src/modules/ivx-owner-ai/services/**'
+      - 'expo/__tests__/owner-*.test.ts'
+      - 'expo/__tests__/native-route-base-url.test.ts'
+      - 'expo/scripts/ivx-metro-transformer.js'
+      - '.github/workflows/ivx-owner-chat-recovery-gate.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/api/ivx-owner-ai*'
+      - 'backend/services/ivx-owner-*'
+      - 'backend/services/ivx-autonomous-development-handoff*'
+      - 'backend/services/ivx-task-admission*'
+      - 'backend/services/ivx-worker-enqueue-identity*'
+      - 'backend/api/ivx-autonomous-task-engine-api*'
+      - 'backend/api/ivx-senior-developer-worker*'
+      - 'backend/services/ivx-*budget*'
+      - 'backend/services/ivx-postgres-autonomous-task-store*'
+      - 'expo/app/ivx/chat.tsx'
+      - 'expo/src/modules/ivx-owner-ai/services/**'
+      - 'expo/__tests__/owner-*.test.ts'
+      - 'expo/__tests__/native-route-base-url.test.ts'
+      - 'expo/scripts/ivx-metro-transformer.js'
+      - '.github/workflows/ivx-owner-chat-recovery-gate.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: owner-chat-recovery-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: '1.3.9' }
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: bun install --cwd expo --frozen-lockfile --ignore-scripts
+      - name: Backend typecheck
+        run: cd backend && ../node_modules/.bin/tsc --noEmit
+      - name: Chat typecheck
+        run: cd expo && node --max-old-space-size=6144 node_modules/typescript/bin/tsc --noEmit
+      - name: Admission and command routing
+        run: >-
+          bun test backend/api/ivx-owner-ai-routing-boundary.test.ts
+          backend/services/ivx-owner-task-status.test.ts
+          backend/services/ivx-owner-chat-admission.test.ts
+          backend/services/ivx-owner-chat-retry-boundary.test.ts
+          backend/services/ivx-owner-chat-mirror-race.test.ts
+          backend/services/ivx-owner-ai-intent-router.test.ts
+      - name: Receipt API (isolated global mocks)
+        run: bun test backend/api/ivx-owner-ai-reconciliation.test.ts
+      - name: Autonomous developer admission and durable handoff
+        run: >-
+          bun test backend/services/ivx-task-admission.test.ts
+          backend/api/ivx-autonomous-task-engine-api.test.ts
+          backend/services/ivx-worker-enqueue-identity.test.ts
+          backend/services/ivx-autonomous-development-handoff.test.ts
+      - name: Budget admission recovery and error diagnosis
+        run: >-
+          bun test backend/services/ivx-ai-budget-admission-recovery.test.ts
+          backend/services/ivx-global-ai-budget.test.ts
+          backend/services/ivx-postgres-autonomous-task-store.test.ts
+          backend/services/ivx-owner-text-failure.test.ts
+      - name: Streaming admission and cancellation
+        run: bun test backend/api/ivx-owner-ai-stream.test.ts
+      - name: Client submission and error presentation
+        run: cd expo && bun test __tests__/owner-chat-submission.test.ts __tests__/owner-recovery-state.test.ts __tests__/owner-live-reply-mirror.test.ts
+      - name: Native production routes and web mount compatibility
+        run: cd expo && bun test __tests__/native-route-base-url.test.ts __tests__/metro-ai-sdk-compatibility.test.ts
+      - name: Reconciliation transport (isolated global mocks)
+        run: cd expo && bun test __tests__/owner-durable-reconciliation.test.ts

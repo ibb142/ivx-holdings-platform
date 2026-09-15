@@ -3063,6 +3063,8 @@ async function fetchPullRequestState(prNumber: number, expected: { commitSha: st
 }
 
 export type IVXAutonomousCoderResumeInput = {
+  /** False retains an open PR for owner review even after a process restart. */
+  autoMergePr?: boolean;
   taskId: string;
   goal: string;
   ownerId: string;
@@ -3164,6 +3166,9 @@ export async function resumeIVXAutonomousCoderFromCiWait(
     } else if (prState.state === 'closed') {
       finalStatus = 'BLOCKED';
       error = `Restart resume: PR #${input.prNumber} is CLOSED without merging. Task BLOCKED, never COMPLETED.`;
+      onPhase?.('blocked', error);
+    } else if (input.autoMergePr === false) {
+      error = `PR #${input.prNumber} is prepared and awaiting owner-controlled publication. Restart recovery cannot grant merge approval.`;
       onPhase?.('blocked', error);
     } else {
       // PR open — resume the CI-before-merge wait with the same fail-closed

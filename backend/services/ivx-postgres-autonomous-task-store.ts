@@ -118,10 +118,49 @@ async function directRpc<T>(name: string, body: Record<string, unknown>, env: No
 }
 
 export type GlobalAIBudgetRpc = 'ivx_ai_budget_reserve' | 'ivx_ai_budget_finish' | 'ivx_ai_budget_status';
+/** Exact, read-only proof after an uncertain budget reservation acknowledgement. */
+export async function readGlobalAIBudgetReservation(reservationId: string): Promise<import('./ivx-ai-budget-admission-recovery').BudgetReservationProof | null> {
+  type Proof = import('./ivx-ai-budget-admission-recovery').BudgetReservationProof;
+  const directRead = async (): Promise<Proof | null> => {
+    const result = await queryWithPostgresDeadline<Proof>(getDirectPool(), `
+      select r.reservation_id::text as "reservationId", r.worker_instance_id as "workerInstanceId",
+        r.model, r.request_sha as "requestSha", r.reserved_nano::text as "reservedNano", r.status,
+        r.policy_revision::text as "policyRevision", p.revision::text as "currentPolicyRevision",
+        p.enabled as "policyEnabled", r.pricing_evidence->>'catalogSha256' as "catalogSha256",
+        r.pricing_evidence->>'validUntil' as "validUntil"
+      from public.ivx_ai_budget_reservations r cross join public.ivx_ai_budget_policy p
+      where r.reservation_id = $1::uuid and p.singleton limit 1`, [reservationId]);
+    return result.rows[0] ?? null;
+  };
+  if (preferDirectTransport()) return directRead();
+  try {
+    type Row = { reservation_id: string; worker_instance_id: string; model: string; request_sha: string;
+      reserved_nano: string | number; status: string; policy_revision: string | number;
+      pricing_evidence: { catalogSha256: string; validUntil: string } };
+    const query = new URLSearchParams({ select: 'reservation_id,worker_instance_id,model,request_sha,reserved_nano,status,policy_revision,pricing_evidence',
+      reservation_id: `eq.${reservationId}`, limit: '1' });
+    const rows = await restRequest<Row[]>(`ivx_ai_budget_reservations?${query}`, { method: 'GET' }, { timeoutMs: 5_000, attempts: 1 });
+    if (!Array.isArray(rows) || rows.length > 1) throw new Error('Invalid budget proof response');
+    if (!rows.length) return null;
+    const policies = await restRequest<Array<{ enabled: boolean; revision: string | number }>>(
+      'ivx_ai_budget_policy?select=enabled,revision&singleton=eq.true&limit=1', { method: 'GET' }, { timeoutMs: 5_000, attempts: 1 });
+    if (!Array.isArray(policies) || policies.length !== 1) throw new Error('Budget policy unavailable');
+    const row = rows[0]; const policy = policies[0];
+    return { reservationId: row.reservation_id, workerInstanceId: row.worker_instance_id, model: row.model,
+      requestSha: row.request_sha, reservedNano: String(row.reserved_nano), status: row.status,
+      policyRevision: String(row.policy_revision), currentPolicyRevision: String(policy.revision), policyEnabled: policy.enabled,
+      catalogSha256: row.pricing_evidence.catalogSha256, validUntil: row.pricing_evidence.validUntil };
+  } catch (error) {
+    if (!mayFailoverRead(error)) throw error;
+    return directRead();
+  }
+}
+
 export async function globalAIBudgetRpc<T>(name: GlobalAIBudgetRpc, body: Record<string, unknown>): Promise<T> {
   if (!['ivx_ai_budget_reserve', 'ivx_ai_budget_finish', 'ivx_ai_budget_status'].includes(name)) throw new Error('Budget RPC not allowed');
-  // Reuse existing bounded pools. Choose transport before the mutation; no
-  // fallback or replay after a response whose commit state is unknown.
+  // Reuse bounded pools; select the transport before each call. Reservation
+  // recovery keeps one UUID and validates its owned row before provider work.
+  // This transport function never performs an automatic mutation failover.
   return rpc<T>(name, body, 5_000);
 }
 

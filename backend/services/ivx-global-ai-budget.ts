@@ -1,12 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { settleBudgetWithRetry } from './ivx-global-ai-budget-settlement';
+import { admitBudgetWithRecovery } from './ivx-ai-budget-admission-recovery';
 
 export const GLOBAL_AI_BUDGET_MARKER = 'ivx-global-ai-budget-v1';
 export function globalAIBudgetEnabled(): boolean { return process.env.IVX_AI_GLOBAL_BUDGET_ENABLED === 'true'; }
 export class GlobalAIBudgetError extends Error {
   readonly statusCode = 402;
   readonly code = 'IVX_GLOBAL_AI_BUDGET_BLOCKED';
-  constructor(reason: string) { super(`Global AI budget: ${reason}`); this.name = 'GlobalAIBudgetError'; }
+  constructor(reason: string, options?: ErrorOptions) { super(`Global AI budget: ${reason}`, options); this.name = 'GlobalAIBudgetError'; }
 }
 export type BudgetQuote = { model: string; maxInputTokens: number; maxOutputTokens: number;
   inputNanoPerToken: string; outputNanoPerToken: string; reservedNano: string;
@@ -105,20 +106,30 @@ export function usageCostUpperNano(quote: BudgetQuote, usage: BudgetUsage): stri
   return (reported > tokenUpper ? reported : tokenUpper).toString();
 }
 export async function reserveGlobalAIBudget(model: string, requestSha: string, fetcher: typeof fetch): Promise<BudgetLease> {
-  const { autonomousWorkerInstanceId, globalAIBudgetRpc } = await import('./ivx-postgres-autonomous-task-store');
+  const { autonomousWorkerInstanceId, globalAIBudgetRpc, readGlobalAIBudgetReservation } = await import('./ivx-postgres-autonomous-task-store');
   let quote: BudgetQuote;
   const id = randomUUID(), worker = autonomousWorkerInstanceId();
   try {
     const current = await catalog(fetcher);
     quote = quoteCatalogModel(current.value, model, current.at, current.hash);
-    const result = await globalAIBudgetRpc<{ allowed: boolean; reason?: string; reservationId?: string }>('ivx_ai_budget_reserve', {
+    const parameters = {
       p_reservation_id: id, p_worker_instance_id: worker, p_model: model, p_request_sha: requestSha,
       p_reserved_nano: quote.reservedNano, p_pricing_evidence: quote,
+    };
+    const result = await admitBudgetWithRecovery({
+      parameters,
+      reserve: () => globalAIBudgetRpc('ivx_ai_budget_reserve', parameters),
+      readProof: () => readGlobalAIBudgetReservation(id),
     });
     if (result?.allowed !== true || result.reservationId !== id) throw new GlobalAIBudgetError(result?.reason ?? 'admission unconfirmed');
   } catch (error) {
     if (error instanceof GlobalAIBudgetError) throw error;
-    throw new GlobalAIBudgetError('durable admission unavailable');
+    console.error('[IVX Global Budget] admission unconfirmed', {
+      reservationId: id, workerInstanceId: worker,
+      errorName: error instanceof Error ? error.name : 'unknown',
+      storageCode: typeof record(error).code === 'string' ? record(error).code : null,
+    });
+    throw new GlobalAIBudgetError('durable admission unavailable', { cause: error });
   }
   let finishPending: Promise<void> | null = null;
   return { quote, finish(usage, notStarted = false, generationId) {

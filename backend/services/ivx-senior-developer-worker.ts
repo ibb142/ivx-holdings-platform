@@ -1,5 +1,6 @@
 import { readLedgerEntries, assertLedgerPageRequest, type SeniorLedgerPage } from './ivx-senior-ledger-page';
 import { PollBackoff, startAdaptivePoll } from './ivx-adaptive-poll';
+import { developmentJobId } from './ivx-development-job-identity';
 import { readSharedSeniorLedgerPage, readSharedSeniorActiveOwnerJob, sharedSeniorQueueEnabled, rememberSeniorQueue, patchSharedSeniorQueue, claimSharedSeniorJob, putSharedSeniorResult, readSharedSeniorDocument, readSharedSeniorWorkQueue, readSharedSeniorJob, appendSharedSeniorProofEvent } from './ivx-senior-shared-queue';
 import { SENIOR_QUEUE_ACTIVE_STATUSES } from './ivx-senior-work-queue';
 import { assertSeniorQueuePostgresAuthority, preferDirectTransport } from './ivx-postgres-autonomous-task-store';
@@ -207,6 +208,9 @@ const STAGE_PROGRESS: Record<IVXWorkerJobStage, number> = {
 
 /** Owner-approved task accepted by the worker. Never carries secret values. */
 export type IVXWorkerJobInput = {
+  /** Server-verified autonomous task binding. Reuses one job in every state;
+   * publication remains owner-gated, including after worker restart. */
+  autonomousTaskHandoff?: boolean;
   goal: string;
   /** Owner approval was verified at the API boundary before enqueue. */
   ownerApproved: boolean;
@@ -1351,6 +1355,7 @@ async function resumeCiWaitJob(jobId: string): Promise<void> {
     ? savedCi.persistedAt : undefined;
   await updateJobStage(jobId, 'COMMITTING', `Worker restart detected — resuming CI wait for PR #${prNumber} (commit ${commitSha.slice(0, 12)}) with the original taskId. No duplicate job created.`);
   const proof = await resumeIVXAutonomousCoderFromCiWait({
+    autoMergePr: job.input.autonomousTaskHandoff ? false : undefined,
     taskId: job.input.taskId ?? job.jobId,
     goal: job.input.goal,
     ownerId: job.ownerId,
@@ -1696,6 +1701,20 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
 
   const ownerId = input.ownerId ?? 'default';
 
+  const handoffJobId = input.autonomousTaskHandoff ? developmentJobId(input.taskId ?? '') : null;
+  if (handoffJobId) {
+    if (input.executionMode !== 'code_change' || input.approveGitDeploy) {
+      throw new Error('Autonomous task handoff only permits code preparation; deployment needs its owner-approved pipeline.');
+    }
+    const existing = await getSeniorDeveloperJob(handoffJobId);
+    if (existing) {
+      if (existing.input.taskId !== input.taskId || existing.input.autonomousTaskHandoff !== true) {
+        throw new Error('Autonomous task job identity mismatch');
+      }
+      return { job: existing, attached: true, activeJobId: existing.jobId };
+    }
+  }
+
   // Check for an existing active job; shared-queue maintenance belongs to workers.
   const activeJob = await getActiveJobForOwner(ownerId);
   if (activeJob && (input.taskId && activeJob.input.taskId
@@ -1788,7 +1807,7 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
 
   // No active job — create a new one.
   const job: IVXWorkerJob = {
-    jobId: `ivx-worker-${randomUUID()}`,
+    jobId: handoffJobId ?? `ivx-worker-${randomUUID()}`,
     status: 'queued',
     stage: 'QUEUED',
     progressPercent: 0,
@@ -1811,6 +1830,13 @@ export async function enqueueOrAttachSeniorDeveloperJob(input: IVXWorkerJobInput
     await saveQueue(queue);
   } catch (error) {
     if (!sharedSeniorQueueEnabled()) throw error;
+    if (handoffJobId) {
+      // A terminal result can arrive before an enqueue acknowledgement. Never
+      // manufacture a replacement execution because it is no longer active.
+      const accepted = await getSeniorDeveloperJob(handoffJobId).catch(() => null);
+      if (!accepted || accepted.input.taskId !== input.taskId || accepted.input.autonomousTaskHandoff !== true) throw error;
+      return { job: accepted, attached: true, activeJobId: accepted.jobId };
+    }
     // Another replica can insert after our read, or a committed insert can lose
     // its acknowledgement. Reconcile by identity once, without replaying the
     // mutation or weakening PostgreSQL's uniqueness/lease checks.
@@ -2637,7 +2663,7 @@ export async function processNextSeniorDeveloperJob(): Promise<IVXWorkerJobResul
         approvalPolicy: 'owner_gated',
         deployApproved: job.input.approveGitDeploy,
         deployConfirmationText: job.input.gitDeployConfirmationText,
-        autoMergePr: true,
+        autoMergePr: job.input.autonomousTaskHandoff !== true,
         isCanceled: () => controller.cancelled && !controller.interrupted,
         assertExecutionAuthority: async () => {
           if (controller.interrupted || queueStopping) throw new Error('WORKER_AUTHORITY_UNCONFIRMED: checkpoint retained for recovery');

@@ -1,3 +1,6 @@
+import { ownerTextFailure } from '../services/ivx-owner-text-failure';
+import { parseOwnerTaskStatusCommand, readOwnerTaskStatus } from '../services/ivx-owner-task-status';
+import { readPostgresTaskById } from '../services/ivx-postgres-autonomous-task-store';
 import { buildOwnerTextModelInput, OWNER_TEXT_MODEL } from '../services/ivx-owner-text-prompt';
 import { deliverOwnerTextTurn } from '../services/ivx-owner-text-delivery';
 import { withOwnerRuntimeEvidence } from '../services/ivx-owner-runtime-evidence';
@@ -5394,6 +5397,8 @@ export function classifyOwnerAIFailure(error: unknown): IVXOwnerAIErrorClass {
 }
 
 function getErrorStatus(error: unknown): number {
+  const declaredStatus = error && typeof error === 'object' && 'status' in error ? error.status : null;
+  if (typeof declaredStatus === 'number' && Number.isInteger(declaredStatus) && declaredStatus >= 400 && declaredStatus <= 599) return declaredStatus;
   const klass = classifyOwnerAIFailure(error);
   switch (klass) {
     case 'expired_session':
@@ -6034,58 +6039,6 @@ async function handleIVXOwnerAIRequestSSE(
   });
 }
 
-/**
- * V6.15 LIVE PROOF: If the owner explicitly asks for proof/evidence/test/audit of
- * senior developer capability, do NOT route through the LLM or conversation brain.
- * Run a real, live health check and return the actual status, commit SHA, and
- * production evidence. This is the only honest answer to "prove you are a senior
- * developer" — a real task with real HTTP status and verified data, not a paragraph.
- */
-function detectProofOfSeniorDeveloperRequest(message: string): boolean {
-  const normalized = (message ?? '').trim().toLowerCase();
-  if (!normalized) return false;
-  const asksForEvidence = /\b(proof|evidence|test|testing|audit|verify|demonstrate|show\s+me|prove)\b/i.test(normalized);
-  const mentionsSeniorDev = /\b(senior\s+developer|senior\s+engineer|real\s+developer|real\s+engineer|desarrollador\s+senior|ingeniero\s+senior|tu\s+eres|eres\s+(un\s+)?senior|you\s+are\s+(a\s+)?senior|developer\s+senior|developer|engineer|desarrollador|ingeniero)\b/i.test(normalized);
-  return asksForEvidence && mentionsSeniorDev;
-}
-
-async function buildLiveSeniorDeveloperProofAnswer(): Promise<string> {
-  const startedAt = Date.now();
-  let healthStatus = 'unknown';
-  let commitSha = 'unknown';
-  let version = 'unknown';
-  let bootTime = 'unknown';
-  let responseTimeMs = -1;
-  try {
-    const req = new Request('https://api.ivxholding.com/health', { method: 'GET' });
-    const healthStart = Date.now();
-    const resp = await fetch(req, { signal: AbortSignal.timeout(15000) });
-    responseTimeMs = Date.now() - healthStart;
-    healthStatus = `${resp.status} ${resp.statusText}`;
-    const body = await resp.json().catch(() => ({} as Record<string, unknown>));
-    commitSha = String(body?.commitSha || body?.commit || 'unknown');
-    version = String(body?.version || 'unknown');
-    bootTime = String(body?.bootTime || 'unknown');
-  } catch (err) {
-    healthStatus = err instanceof Error ? `ERROR: ${err.message}` : 'ERROR';
-  }
-  const elapsed = Date.now() - startedAt;
-  return [
-    'LIVE SENIOR DEVELOPER PROOF — real runtime check, not a description.',
-    '',
-    `Health check: api.ivxholding.com/health`,
-    `HTTP status: ${healthStatus}`,
-    `Response time: ${responseTimeMs} ms`,
-    `Production commit: ${commitSha}`,
-    `Production version: ${version}`,
-    `Production boot: ${bootTime}`,
-    `Proof generated at: ${new Date().toISOString()}`,
-    `Total proof time: ${elapsed} ms`,
-    '',
-    'This is a real HTTP call against the live IVX production API. If you want a real task executed, say "deploy the latest commit to production" or "run the backend tests" and you will get a task ID with live progress.',
-  ].join('\n');
-}
-
 async function handleIVXOwnerAIRequestInternal(request: Request): Promise<Response> {
   try {
     const authRequest = new Request(request.url, { method: request.method, headers: request.headers });
@@ -6131,29 +6084,12 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
     const persistUserMessage = body.persistUserMessage !== false;
     const persistAssistantMessage = body.persistAssistantMessage !== false;
     const model = getOwnerAIModel();
-    // ── V6.15 LIVE SENIOR DEVELOPER PROOF BYPASS ───────────────────────────
-    // If the owner asks for proof/test/audit of senior developer capability, run a
-    // real live health check and return actual HTTP status / commit SHA. This bypasses
-    // the LLM fallback and all narrative guards so the answer is evidence, not text.
-    if (detectProofOfSeniorDeveloperRequest(prompt)) {
-      const requestId = readTrimmedString(body.requestId) || createRequestId();
-      const proofAnswer = assertVisibleOwnerAIAnswer(await buildLiveSeniorDeveloperProofAnswer());
-      return ownerOnlyJson({
-        ok: true,
-        status: 'ok',
-        source: 'local_runtime',
-        model: 'ivx_live_proof',
-        provider: 'ivx_live_proof',
-        answer: proofAnswer,
-        deploymentMarker: DEPLOYMENT_MARKER,
-        assistantMessageId: null,
-        assistantPersisted: false,
-        selectedTool: 'live_health_check',
-        toolInput: [{ url: 'https://api.ivxholding.com/health' }],
-        toolOutput: [],
-        fallbackUsed: false,
-        toolOutputs: [],
-      }, 200);
+    // Capability claims and liveness checks must not intercept an owner's
+    // audit/fix request. The authoritative router below selects the real worker.
+    const taskStatusCommand = parseOwnerTaskStatusCommand(prompt);
+    if (taskStatusCommand?.error) {
+      return ownerOnlyJson({ ok: false, status: 'error', code: 'INVALID_TASK_STATUS_COMMAND',
+        requestId: body.requestId, error: taskStatusCommand.error, answer: taskStatusCommand.error }, 400);
     }
 
     // ── IVX IA Identity Brain ───────────────────────────────────────────────
@@ -6259,6 +6195,32 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
     const conversation = await ensureOwnerConversation(ownerContext.client, tables);
     const requestId = readTrimmedString(body.requestId) || createRequestId();
 
+    // Deterministic read before conversation memory, model calls and worker handoff.
+    if (taskStatusCommand?.taskId) {
+      if (persistUserMessage) {
+        await insertMessage(ownerContext.client, tables, {
+          conversationId: conversation.id, senderRole: 'owner',
+          senderUserId: tables.schema === 'generic' ? ownerContext.userId : null,
+          senderLabel, body: prompt,
+        });
+      }
+      const result = await readOwnerTaskStatus(taskStatusCommand.taskId, readPostgresTaskById, getSeniorDeveloperJob);
+      const assistant = persistAssistantMessage ? await insertMessage(ownerContext.client, tables, {
+        conversationId: conversation.id, senderRole: 'assistant',
+        senderUserId: tables.schema === 'generic' ? ownerContext.userId : null,
+        senderLabel: IVX_OWNER_AI_PROFILE.name, body: result.answer,
+      }) : null;
+      return ownerOnlyJson({
+        ok: result.ok, status: result.ok ? 'ok' : 'error', code: result.code,
+        requestId, conversationId: conversation.id, answer: result.answer,
+        error: result.ok ? undefined : result.answer,
+        source: 'local_runtime', provider: 'ivx_task_status', model: 'ivx_task_status',
+        selectedTool: 'task_status', task: result.task, fallbackUsed: false,
+        assistantMessageId: assistant?.id ?? null, assistantPersisted: Boolean(assistant),
+        deploymentMarker: DEPLOYMENT_MARKER,
+      }, result.httpStatus);
+    }
+
     // Capability probes have their own contract and must not become chat turns.
     if (isHealthProbe(prompt)) {
       const plannerDecision = buildIVXOwnerAIPlannerDecision(prompt);
@@ -6291,9 +6253,12 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           requestId,
           conversationId: conversation.id,
           answer: aiResult?.answer ?? 'Health probe completed. See capabilityProofs for executable runtime checks.',
-          model: aiResult?.model ?? getOwnerAIModel(),
+          model: aiResult?.model ?? 'ivx_health_probe_unavailable',
           status: 'ok',
-          source: aiResult?.source,
+          // The fallback body is generated by this backend, not by the remote
+          // provider. Keep the response canonical without claiming a model call
+          // that failed; capabilityProofs remains the authority for AI health.
+          source: aiResult?.source ?? 'local_app_brain',
           provider: aiResult?.provider,
           endpoint: aiResult?.endpoint,
           deploymentMarker: DEPLOYMENT_MARKER,
@@ -6891,15 +6856,16 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           toolOutputs: [],
         }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
       } catch (llmError) {
+        const { httpStatus, ...failure } = ownerTextFailure(llmError);
         console.error('[IVXOwnerAIBackend] LLM knowledge response failed:', llmError instanceof Error ? llmError.message : 'unknown');
         // CRITICAL FIX: Do NOT fall through to the old routing chain — it would
         // misroute knowledge questions to the developer executor (the original bug).
         // Return an honest error instead. Knowledge questions must NEVER trigger
         // a deploy, commit, or task creation, even if the LLM fails.
-        return ownerOnlyJson(buildOwnerAIResponsePayload({
+        return ownerOnlyJson({ ...buildOwnerAIResponsePayload({
           requestId: readTrimmedString(body.requestId) || createRequestId(),
           conversationId: conversation.id,
-          answer: 'The text reply could not be completed and saved. A model response may have been generated. Recover this request before submitting it again.',
+          answer: failure.answer,
           model: 'ivx_authoritative_router_error',
           status: 'error',
         }, {
@@ -6922,7 +6888,7 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           toolOutput: [],
           fallbackUsed: false,
           toolOutputs: [],
-        }, body.devTestModeActive === true) as unknown as Record<string, unknown>, 503);
+        }, body.devTestModeActive === true), ...failure, ok: false, traceId: requestId }, httpStatus);
       }
     }
 
@@ -6986,13 +6952,14 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           toolOutputs: [],
         }, body.devTestModeActive === true) as unknown as Record<string, unknown>);
       } catch (llmError) {
+        const { httpStatus, ...failure } = ownerTextFailure(llmError);
         console.error('[IVXOwnerAIBackend] Manual LLM response failed:', llmError instanceof Error ? llmError.message : 'unknown');
         // CRITICAL FIX: Do NOT fall through to the old routing chain. Return an
         // honest error instead. Manual answer mode must NEVER trigger execution.
-        return ownerOnlyJson(buildOwnerAIResponsePayload({
+        return ownerOnlyJson({ ...buildOwnerAIResponsePayload({
           requestId: readTrimmedString(body.requestId) || createRequestId(),
           conversationId: conversation.id,
-          answer: 'The text reply could not be completed and saved. A model response may have been generated. Recover this request before submitting it again.',
+          answer: failure.answer,
           model: 'ivx_authoritative_router_error',
           status: 'error',
         }, {
@@ -7015,7 +6982,7 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
           toolOutput: [],
           fallbackUsed: false,
           toolOutputs: [],
-        }, body.devTestModeActive === true) as unknown as Record<string, unknown>, 503);
+        }, body.devTestModeActive === true), ...failure, ok: false, traceId: requestId }, httpStatus);
       }
     }
 
@@ -10559,10 +10526,10 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
     // Auth/role failures must still surface as auth errors so the client can
     // refresh the session.
     if (status === 401 || status === 403) {
-      return ownerOnlyJson({ error: message }, status);
+      return ownerOnlyJson({ ok: false, status: 'error', requestId: body.requestId, error: message }, status);
     }
 
-    const fallbackRequestId = createRequestId();
+    const fallbackRequestId = readTrimmedString(body.requestId) || createRequestId();
     const isTimeout = /timed out/i.test(message) || /timeout/i.test(message);
     const isGatewayFailure = /IVX AI gateway request failed/i.test(message) || /IVXAIGatewayTimeoutError/i.test(message);
     const category = isTimeout
@@ -10591,12 +10558,15 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
     });
 
     return ownerOnlyJson({
+      ok: false,
+      code: typeof (error as { code?: unknown })?.code === 'string' ? (error as { code: string }).code : 'OWNER_CHAT_EXECUTION_FAILED',
+      error: message,
       requestId: fallbackRequestId,
       conversationId: 'ivx-owner-ai-provider-error',
       answer: visibleAnswer,
       model: 'ivx_provider_error_fallback',
       status: 'error',
-      source: 'local_app_brain',
+      source: 'local_runtime',
       provider: 'chatgpt',
       endpoint: '/api/ivx/owner-ai/provider-error',
       deploymentMarker: DEPLOYMENT_MARKER,
@@ -10616,6 +10586,6 @@ async function executeIVXOwnerAIRequestInternal(request: Request, ownerContext: 
         message,
         stack: stack.slice(0, 4000),
       },
-    });
+    }, status >= 400 && status <= 599 ? status : 500);
   }
 }

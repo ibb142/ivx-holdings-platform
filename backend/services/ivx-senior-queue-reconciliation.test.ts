@@ -22,6 +22,9 @@ beforeEach(() => {
     file.endsWith('queue.json') ? { jobs: structuredClone(jobs), durable: true } : { entries: [], durable: true }
   ) as T);
   const work = spyOn(shared, 'readSharedSeniorWorkQueue').mockImplementation(async () => ({ jobs: structuredClone(jobs), durable: true }));
+  const single = spyOn(shared, 'readSharedSeniorJob').mockImplementation(async <T extends { jobId: string }>(_file: string, id: string): Promise<T | null> => {
+    return (structuredClone(jobs.find(job => job.jobId === id) ?? null)) as T | null;
+  });
   const write = spyOn(shared, 'patchSharedSeniorQueue').mockImplementation(async <T extends { jobs: { jobId: string }[] }>(queue: T): Promise<T> => {
     writes++;
     const next = queue.jobs.at(-1) as IVXWorkerJob;
@@ -30,7 +33,7 @@ beforeEach(() => {
     return queue;
   });
   const event = spyOn(durable, 'appendDurableEvent').mockResolvedValue(undefined);
-  restores.push(() => guard.mockRestore(), () => read.mockRestore(), () => work.mockRestore(), () => write.mockRestore(), () => event.mockRestore());
+  restores.push(() => guard.mockRestore(), () => read.mockRestore(), () => work.mockRestore(), () => single.mockRestore(), () => write.mockRestore(), () => event.mockRestore());
 });
 afterEach(() => { restores.splice(0).forEach(restore => restore()); process.env = { ...savedEnv }; });
 
@@ -47,6 +50,20 @@ test('finds a retry behind a newer different task for the same owner', async () 
   expect(retry.job.jobId).toBe(first.job.jobId);
   expect(jobs).toHaveLength(2);
   expect(writes).toBe(2);
+});
+
+test('a handoff reconciles a terminal result after lost acknowledgement without another write', async () => {
+  onWrite = next => {
+    jobs = [{ ...structuredClone(next), status: 'blocked' }];
+    throw new Error('committed insert acknowledgement lost');
+  };
+  const request = { ...input('durable-handoff'), autonomousTaskHandoff: true };
+  const accepted = await enqueueOrAttachSeniorDeveloperJob(request);
+  expect(accepted.attached).toBe(true);
+  expect(accepted.job.status).toBe('blocked');
+  expect((await enqueueOrAttachSeniorDeveloperJob(request)).job.jobId).toBe(accepted.job.jobId);
+  expect(writes).toBe(1);
+  expect(jobs).toHaveLength(1);
 });
 
 test('attaches to the other replica after an atomic duplicate rejection without a second write', async () => {

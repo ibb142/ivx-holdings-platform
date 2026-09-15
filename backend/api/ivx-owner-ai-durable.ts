@@ -199,6 +199,7 @@ export async function handleOwnerAITaskList(request: Request): Promise<Response>
 export async function handleOwnerAITaskRetry(request: Request, taskId: string): Promise<Response> {
   const authFailure = await requireOwner(request);
   if (authFailure) return authFailure;
+  if (taskId.startsWith('owner-request:')) return originalReceiptActionUnsupported(taskId);
   const result = await retryTask(taskId);
   if (!result.task) return ownerOnlyJson({ ok: false, error: 'Task not found.', taskId }, 404);
   if (!result.ok && result.reason === 'already_in_flight') {
@@ -211,6 +212,7 @@ export async function handleOwnerAITaskRetry(request: Request, taskId: string): 
 export async function handleOwnerAITaskCancel(request: Request, taskId: string): Promise<Response> {
   const authFailure = await requireOwner(request);
   if (authFailure) return authFailure;
+  if (taskId.startsWith('owner-request:')) return originalReceiptActionUnsupported(taskId);
   let reason = 'Canceled by owner.';
   try {
     const body = await request.json() as { reason?: string };
@@ -219,6 +221,13 @@ export async function handleOwnerAITaskCancel(request: Request, taskId: string):
   const task = await cancelTask(taskId, reason);
   if (!task) return ownerOnlyJson({ ok: false, error: 'Task not found.', taskId }, 404);
   return ownerOnlyJson({ ok: true, task: taskView(task) }, 200);
+}
+
+function originalReceiptActionUnsupported(taskId: string): Response {
+  return ownerOnlyJson({ ok: false, code: 'OWNER_CHAT_RECEIPT_ACTION_UNSUPPORTED', taskId,
+    canRetry: false, canCancel: false,
+    poll: `/api/ivx/owner-ai/tasks/${encodeURIComponent(taskId)}`,
+    error: 'This is an original request receipt. Check its status; queue retry and cancellation do not apply.' }, 409);
 }
 
 /** POST /api/ivx/owner-ai/tasks/recover */

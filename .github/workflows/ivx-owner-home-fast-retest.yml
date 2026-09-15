@@ -122,8 +122,13 @@ jobs:
             '{certificate:"IVX-OWNER-HOME-EXACT-APK-RUNTIME",passed:true,apkSourceSha:$apkSourceSha,harnessSha:$harnessSha,credentialBinding:$binding,realOwnerPasswordEntry:true,homeMarker:"IVXHOLDINGS",homeReelsButtonVisible:true,homeTabVisible:true,homeTabRetap:true,homeVisibleImmediate:true,homeVisibleAfter2Seconds:true,homeVisibleAfter5Seconds:true,homeVisibleAfter10Seconds:true,homeVisibleAfter20Seconds:true,blackScreenObserved:false,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-home-exact-apk-runtime.json
           cat qa/evidence/ivx-owner-home-exact-apk-runtime.json
 
-      - uses: actions/upload-artifact@v4
+      - name: Sanitize authenticated QA evidence
+        id: sanitize_evidence
         if: always()
+        run: python3 scripts/ivx_sanitize_qa_artifacts.py owner-home-apk-sha256.txt owner-home-*.xml owner-home-*.png owner-home-*-pid.txt owner-home-*-logcat.txt qa/evidence/ivx-owner-home-exact-apk-runtime.json
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && steps.sanitize_evidence.outcome == 'success' }}
         with:
           name: ivx-owner-home-fast-runtime-${{ github.event.pull_request.head.sha || github.sha }}
           path: |

@@ -69,6 +69,23 @@ function makeInput(overrides: Partial<IVXWorkerJobInput> = {}): IVXWorkerJobInpu
 }
 
 describe('worker owner-control enforcement', () => {
+  test('an autonomous handoff reuses its cancelled job and never grants deployment', async () => {
+    const previousRole = process.env.IVX_PROCESS_ROLE;
+    process.env.IVX_PROCESS_ROLE = 'api';
+    try {
+      const input = makeInput({ taskId: `task-handoff-${Date.now()}`, autonomousTaskHandoff: true, executionMode: 'code_change' });
+      const first = await enqueueOrAttachSeniorDeveloperJob(input);
+      await cancelSeniorDeveloperJob(first.job.jobId);
+      const retry = await enqueueOrAttachSeniorDeveloperJob(input);
+      expect(retry.attached).toBe(true);
+      expect(retry.job.jobId).toBe(first.job.jobId);
+      expect(retry.job.status).toBe('cancelled');
+      await expect(enqueueOrAttachSeniorDeveloperJob({ ...input, approveGitDeploy: true })).rejects.toThrow('code preparation');
+    } finally {
+      if (previousRole === undefined) delete process.env.IVX_PROCESS_ROLE;
+      else process.env.IVX_PROCESS_ROLE = previousRole;
+    }
+  });
   test('refuses enqueue when owner control is unavailable or stopped', async () => {
     const count = (await listSeniorDeveloperJobs(200)).length;
     stopState.source = 'unavailable';

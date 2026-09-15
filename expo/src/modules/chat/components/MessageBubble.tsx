@@ -27,9 +27,15 @@ type MessageBubbleProps = {
   isStreaming?: boolean;
 };
 
-function useBlinkingCursor(): Animated.Value {
+function useBlinkingCursor(active: boolean): Animated.Value {
   const opacity = useRef(new Animated.Value(1)).current;
   useEffect(() => {
+    // Stop native updates as soon as the streaming cursor leaves the view tree.
+    // Keeping its loop alive after finalization targets a detached Android view.
+    if (!active) {
+      opacity.setValue(1);
+      return;
+    }
     const animation = Animated.loop(
       Animated.sequence([
         Animated.timing(opacity, { toValue: 0.2, duration: 420, useNativeDriver: true }),
@@ -40,7 +46,7 @@ function useBlinkingCursor(): Animated.Value {
     return () => {
       animation.stop();
     };
-  }, [opacity]);
+  }, [active, opacity]);
   return opacity;
 }
 
@@ -123,12 +129,13 @@ export const MessageBubble = memo(function MessageBubble({
   isStreaming = false,
 }: MessageBubbleProps) {
   const fadeAnim = useRef(new Animated.Value(1)).current;
-  const cursorOpacity = useBlinkingCursor();
+  const cursorOpacity = useBlinkingCursor(isStreaming && !isMine);
   const [pickerVisible, setPickerVisible] = useState<boolean>(false);
 
   useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 150, useNativeDriver: true }).start();
-    return undefined;
+    const animation = Animated.timing(fadeAnim, { toValue: 1, duration: 150, useNativeDriver: true });
+    animation.start();
+    return () => animation.stop();
   }, [message.sendStatus, fadeAnim]);
 
   const handleOpenAttachment = useCallback(async () => {

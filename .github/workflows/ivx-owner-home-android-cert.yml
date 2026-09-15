@@ -198,8 +198,13 @@ jobs:
             '{certificate:"IVX-OWNER-SIGNIN-HOME-PROFILE-ANDROID-E2E",passed:true,sourceSha:$sha,credentialBinding:$binding,realOwnerPasswordEntry:true,homeReadyMarker:true,homeTabRetap:true,homeVisibleImmediate:true,homeVisibleAfter2Seconds:true,homeVisibleAfter5Seconds:true,homeVisibleAfter10Seconds:true,homeVisibleAfter20Seconds:true,homeBlackScreenObserved:false,profileTabTapped:true,profileVisibleImmediate:true,profileVisibleAfter2Seconds:true,profileVisibleAfter5Seconds:true,profileVisibleAfter10Seconds:true,profileBlackScreenObserved:false,processAlive:true,secretValuesReturned:false,verifiedAt:$verifiedAt}' > qa/evidence/ivx-owner-home-profile-android-e2e.json
           cat qa/evidence/ivx-owner-home-profile-android-e2e.json
 
-      - uses: actions/upload-artifact@v4
+      - name: Sanitize authenticated QA evidence
+        id: sanitize_evidence
         if: always()
+        run: python3 scripts/ivx_sanitize_qa_artifacts.py owner-home-*.xml owner-home-*.png owner-home-*-pid.txt owner-home-*-logcat.txt owner-profile-*.xml owner-profile-*.png owner-profile-*-pid.txt owner-profile-*-logcat.txt owner-chat-*.xml owner-chat-*.png owner-chat-*-pid.txt owner-chat-*-logcat.txt qa/evidence/ivx-owner-home-profile-android-e2e.json
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && steps.sanitize_evidence.outcome == 'success' }}
         with:
           name: ivx-owner-home-profile-android-e2e-${{ github.event.pull_request.head.sha || github.sha }}
           path: |

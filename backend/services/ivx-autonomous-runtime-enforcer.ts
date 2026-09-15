@@ -305,7 +305,8 @@ function startContinuityRun(agentId: string, agentNumber: number, preparedTask: 
       nextTaskAvailable: true,
       error: result.error,
     }))
-    : runRealEngineeringCycle({ agentId, agentNumber, sourceSha, preparedTask });
+    : runRealEngineeringCycle({ agentId, agentNumber, sourceSha, preparedTask,
+      shouldContinue: () => !stopping && continuityEnabled && ownerAllowsAgent(agentId) });
   const promise = cycle
     .then((result) => {
       outcome = classifyContinuityResult(result);

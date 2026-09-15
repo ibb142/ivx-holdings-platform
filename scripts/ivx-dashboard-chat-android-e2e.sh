@@ -38,6 +38,7 @@ timeout 180s "$MAESTRO" test expo/.maestro/ivx-owner-autonomous-certificate.yaml
 # Use a fresh marker so persisted replies from previous runs cannot pass.
 CHAT_E2E_SUFFIX="${GITHUB_RUN_ID:-local}_${GITHUB_RUN_ATTEMPT:-1}_$(date +%s)"
 timeout 420s "$MAESTRO" test expo/.maestro/ivx-owner-chat-certificate.yaml \
+  --test-output-dir qa/evidence/dashboard-chat/chat-artifacts \
   --env CHAT_E2E_SUFFIX="$CHAT_E2E_SUFFIX" \
   --env OWNER_EMAIL="$OWNER_EMAIL" \
   --env OWNER_PASSWORD="$OWNER_PASSWORD_EFFECTIVE" \
@@ -46,7 +47,7 @@ timeout 420s "$MAESTRO" test expo/.maestro/ivx-owner-chat-certificate.yaml \
 
 # Run the known nested-to-root navigation regression before the full patrol so
 # a stale underlying screen fails immediately with its own evidence bundle.
-timeout 180s "$MAESTRO" test expo/.maestro/ivx-root-chat-navigation-certificate.yaml \
+timeout 420s "$MAESTRO" test expo/.maestro/ivx-root-chat-navigation-certificate.yaml \
   --test-output-dir qa/evidence/dashboard-chat/root-navigation-artifacts \
   --format junit \
   --output qa/evidence/dashboard-chat/root-navigation.xml

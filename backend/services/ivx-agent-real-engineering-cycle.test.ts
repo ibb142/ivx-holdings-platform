@@ -18,6 +18,7 @@ import { createHash } from 'node:crypto';
 import { resolveRepoRoot } from './ivx-agent-engineering-tools';
 import {
   createTask,
+  checkpointDevelopmentHandoff,
   finalizeEvidenceTask,
   getAllTasks,
   heartbeat,
@@ -339,4 +340,28 @@ describe('112-agent durable task ownership', () => {
       names.forEach((name, index) => { if (saved[index] === undefined) delete process.env[name]; else process.env[name] = saved[index]; });
     }
   });
+});
+
+it('fences developer checkpoints by live lease and retains one job binding', async () => {
+  const created = await createTask({ title: 'Handoff checkpoint fixture', description: 'Verify lease ownership', idempotencyKey: `handoff-fence-${Date.now()}` });
+  const taskId = created.task!.taskId;
+  const installLease = async (expiresAt: string) => {
+    const tasks = JSON.parse(await readFile(STORE_FILE, 'utf8')) as Task[];
+    const row = tasks.find(t => t.taskId === taskId)!;
+    row.state = 'RUNNING'; row.leaseHolder = 'handoff-owner'; row.leaseExpiresAt = expiresAt;
+    await writeFile(STORE_FILE, JSON.stringify(tasks), 'utf8');
+  };
+  await installLease(new Date(Date.now() + 300_000).toISOString());
+  expect((await checkpointDevelopmentHandoff({ taskId, workerId: 'old-worker', jobId: 'job-1', state: 'RUNNING' })).ok).toBe(false);
+  const linked = await checkpointDevelopmentHandoff({ taskId, workerId: 'handoff-owner', jobId: 'job-1', state: 'RUNNING' });
+  expect(linked.ok).toBe(true);
+  expect(linked.task?.developerJobId).toBe('job-1');
+  expect((await checkpointDevelopmentHandoff({ taskId, workerId: 'handoff-owner', jobId: 'job-2', state: 'RUNNING' })).ok).toBe(false);
+  await installLease(new Date(Date.now() - 1_000).toISOString());
+  expect((await checkpointDevelopmentHandoff({ taskId, workerId: 'handoff-owner', jobId: 'job-1', state: 'BLOCKED' })).ok).toBe(false);
+  await installLease(new Date(Date.now() + 300_000).toISOString());
+  const result = await checkpointDevelopmentHandoff({ taskId, workerId: 'handoff-owner', jobId: 'job-1', state: 'BLOCKED', blocker: 'Waiting for functional acceptance' });
+  expect(result.ok).toBe(true);
+  expect(result.task?.leaseHolder).toBeNull();
+  expect(result.task?.acceptanceCriteria.every(c => !c.met)).toBe(true);
 });

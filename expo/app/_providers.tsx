@@ -5,7 +5,7 @@ import React, { Component, type ReactNode } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Stack, usePathname, useRouter, useSegments, useRootNavigationState } from 'expo-router';
+import { Stack, usePathname, useRouter, useSegments, useRootNavigationState, type Href } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { DiagnosticErrorBoundary } from '@/components/DiagnosticErrorBoundary';
@@ -14,6 +14,7 @@ import { checkForUpdates } from '@/lib/app-update-checker';
 import { logStartup } from '@/lib/startup-trace';
 import { supabase } from '@/lib/supabase';
 import Colors from '@/constants/colors';
+import { registerNativeIntentHandler } from '@/lib/native-intent-dispatch';
 
 import { I18nProvider } from '@/lib/i18n-context';
 import { AuthProvider } from '@/lib/auth-context';
@@ -137,8 +138,16 @@ function NativeRouteTrace() {
 }
 
 function AppStack() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const rootState = useRootNavigationState();
+  React.useEffect(() => {
+    if (Platform.OS === 'web' || !rootState?.key) return;
+    return registerNativeIntentHandler(destination => router.replace(destination as Href));
+  }, [router, rootState?.key]);
+
   return (
-    <>
+    <View style={{ flex: 1 }} testID={`ivx-current-route${pathname}`} collapsable={false}>
       <NativeRouteTrace />
       <VerificationGate />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0A0A0F' } }}>
@@ -153,7 +162,7 @@ function AppStack() {
         <Stack.Screen name="verify-access" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
-    </>
+    </View>
   );
 }
 

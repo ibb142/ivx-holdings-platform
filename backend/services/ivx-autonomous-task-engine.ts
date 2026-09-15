@@ -186,6 +186,8 @@ export type Objective = {
 
 export type Task = {
   taskId: string;
+  /** Persisted before enqueue so unknown acknowledgements reconcile one job. */
+  developerJobId?: string | null;
   objectiveId: string | null;
   parentTaskId: string | null;
   title: string;
@@ -1096,6 +1098,38 @@ export async function transitionTaskState(
     });
   }
   return withTaskMutationLock(() => transitionTaskStateUnlocked(taskId, toState, metadata));
+}
+
+/** Only the current process lease may bind or record a developer handoff.
+ * A worker result is evidence for later acceptance, never automatic VERIFIED. */
+export async function checkpointDevelopmentHandoff(input: {
+  taskId: string; workerId: string; jobId: string;
+  state: 'RUNNING' | 'BLOCKED' | 'FAILED'; blocker?: string;
+  commitSha?: string | null; deploymentId?: string | null; filesChanged?: string[];
+}): Promise<{ ok: boolean; task: Task | null; error: string | null }> {
+  return withTaskMutationLock(async () => {
+    const postgres = postgresAtomicQueueSelected();
+    const tasks = postgres ? null : await readAllTasks();
+    const task = postgres ? await readPostgresTaskById(input.taskId) : tasks!.find(t => t.taskId === input.taskId) ?? null;
+    if (!task || task.state !== 'RUNNING' || task.leaseHolder !== input.workerId || !(Date.parse(task.leaseExpiresAt ?? '') > Date.now())) {
+      return { ok: false, task, error: 'Developer handoff requires the current unexpired RUNNING lease.' };
+    }
+    if (task.developerJobId && task.developerJobId !== input.jobId) return { ok: false, task, error: 'Task is already bound to a different developer job.' };
+    const next: Task = { ...task, developerJobId: input.jobId, state: input.state, updatedAt: nowIso(),
+      ...(input.blocker !== undefined ? { blocker: input.blocker } : {}),
+      ...(input.commitSha ? { commitSha: input.commitSha } : {}),
+      ...(input.deploymentId ? { deploymentId: input.deploymentId } : {}),
+      ...(input.filesChanged ? { filesChanged: [...new Set([...task.filesChanged, ...input.filesChanged])] } : {}),
+      ...(input.state === 'RUNNING' ? {} : { leaseHolder: null, leaseExpiresAt: null }),
+      ...(input.state === 'FAILED' ? { completedAt: nowIso() } : {}),
+    };
+    if (postgres) return compareAndSetPostgresAutonomousTask({ task: next, expectedStates: ['RUNNING'],
+      leaseHolder: input.workerId, eventType: 'developer_handoff_checkpoint' });
+    tasks![tasks!.findIndex(t => t.taskId === input.taskId)] = next;
+    await writeAllTasks(tasks!);
+    await appendEvent({ type: 'developer_handoff_checkpoint', taskId: input.taskId, jobId: input.jobId, state: next.state });
+    return { ok: true, task: next, error: null };
+  });
 }
 
 // ── Phase 8: Leasing ─────────────────────────────────────────────────────────
