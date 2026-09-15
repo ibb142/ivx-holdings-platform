@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { verifyProductionFeed } from './production-feed-check.mjs';
 const sha = process.env.GITHUB_SHA;
 assert.match(sha || '', /^[a-f0-9]{40}$/);
 const assets = ['ivx-invest.js', 'ivx-home-feed.js', 'ivx-reels.js', 'ivx-styles.css', 'ivx-web-vitals.js', 'ivx-app.js'];
@@ -31,7 +32,9 @@ for (let attempt = 0; attempt < 120; attempt++) {
       assert.equal(response.status, 200);
       assert.equal(hash(Buffer.from(await response.arrayBuffer())), expected.get(file), `Static asset ${file} is not this commit`);
     }
-    if (++stable === 6) { console.log(`Backend and frontend verified at ${sha}`); process.exit(0); }
+    const feed = await verifyProductionFeed();
+    assert.equal(feed.isValid, true, feed.reason || 'Production Reels feed is unavailable');
+    if (++stable === 6) { console.log(`Backend, frontend and non-degraded Reels feed verified at ${sha}`); process.exit(0); }
   } catch (error) {
     stable = 0;
     const reason = error.message || String(error);
@@ -39,4 +42,4 @@ for (let attempt = 0; attempt < 120; attempt++) {
   }
   await new Promise((resolve) => setTimeout(resolve, 5000));
 }
-throw new Error('Production backend/frontend did not stabilize on this exact commit');
+throw new Error('Production backend/frontend/feed did not stabilize on this exact commit');

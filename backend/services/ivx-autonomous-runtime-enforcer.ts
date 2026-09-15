@@ -1,4 +1,5 @@
 import { RefillBackoff } from './ivx-refill-backoff';
+import { FLEET_CONFIG, readFleetOperatingWindow } from './ivx-fleet-operating-policy';
 import { createEmptyClaimCooldown } from './ivx-empty-claim-cooldown';
 import { ensureTechnicalScheduleSeeded } from './ivx-technical-schedule';
 import { createRefillWakeup } from './ivx-refill-wakeup';
@@ -522,6 +523,7 @@ export function startAutonomous112RuntimeEnforcer(): boolean {
     return false;
   }
   startedAt = new Date().toISOString();
+  console.log('[IVX Fleet Operating Window]', readFleetOperatingWindow());
   bootKick = setTimeout(() => { void run('boot'); }, 5_000);
   bootKick.unref?.();
   timer = setInterval(() => { void run('interval'); }, IVX_AUTONOMOUS_TRUTH_ENFORCER_INTERVAL_MS);
@@ -530,7 +532,7 @@ export function startAutonomous112RuntimeEnforcer(): boolean {
   leaseMirrorTimer = setInterval(() => { void runLeaseMirror(); }, 10_000);
   leaseMirrorTimer.unref?.();
 
-  heartbeatTimer = setInterval(() => { void runHeartbeatRefresh(); }, 20_000);
+  heartbeatTimer = setInterval(() => { void runHeartbeatRefresh(); }, FLEET_CONFIG.LEASE_RENEWAL_INTERVAL_MS);
   heartbeatTimer.unref?.();
 
   refillTimer = setInterval(() => {
@@ -596,6 +598,8 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     claimBatchSize: postgresAtomicQueueSelected() ? POSTGRES_FLEET_CLAIM_BATCH_SIZE : IVX_AUTONOMOUS_FLEET_SIZE,
     continuityMaxConcurrency: getContinuityMaxConcurrency(),
     canonicalFleetSize: IVX_AUTONOMOUS_FLEET_SIZE,
+    operatingWindow: readFleetOperatingWindow(),
+    heartbeatIntervalMs: FLEET_CONFIG.LEASE_RENEWAL_INTERVAL_MS,
     continuityInFlight: continuityRuns.size,
     refillStarted,
     refillCompleted,
@@ -616,7 +620,7 @@ export function getAutonomous112RuntimeEnforcerStatus() {
     semantic360: getAutonomousSemantic360Status(),
     decisionQuality: getAutonomousDecisionQualityStatus(),
     autonomousManager: getAutonomousWorkManagerStatus(),
-    truthPolicy: 'IVX production fleet capacity is a hard 112-lane invariant whenever Autonomous is enabled. Environment drift cannot silently reduce concurrency. Backlog creation, leasing, RUNNING transitions and 20-second lease heartbeats use bounded fleet batches. A dedicated 5-second refill repairs capacity independently from the heavier supervisor. Only durable active tasks with a real leaseHolder are mirrored into busy/activeTaskId; heartbeat alone is never productive evidence. Explicit owner/system pause, stop, disable and failed-health controls remain respected.',
+    truthPolicy: 'Up to 112 logical lanes share durable PostgreSQL leases across replicas. Configured lower admission and owner stop remain authoritative. Backlog, claims, starts and 30-second heartbeats use bounded fleet batches. A 20–24-hour operating objective spans recoverable tasks; it is not a minimum task duration or measured uptime. Only durable active tasks with a live lease are mirrored as working; heartbeat alone is never productive evidence.',
   };
 }
 

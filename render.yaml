@@ -26,6 +26,14 @@ services:
       - api.ivxholding.com
     renderSubdomainPolicy: disabled
     envVars:
+      # Shared manager ceiling per process: API 3 + tasks 2 + five isolated lanes.
+      # Replicas and other pool owners must be budgeted separately.
+      - key: IVX_PG_API_MAX_CONNECTIONS
+        value: "3"
+      - key: IVX_PG_TASKS_MAX_CONNECTIONS
+        value: "2"
+      - key: IVX_PG_PROCESS_CONNECTION_LIMIT
+        value: "10"
       - key: IVX_PROCESS_ROLE
         value: api
       - key: IVX_WORKER_MODE
@@ -193,6 +201,14 @@ services:
     plan: starter
     autoDeployTrigger: commit
     envVars:
+      # Shared manager ceiling per process: API 3 + tasks 2 + five isolated lanes.
+      # Replicas and other pool owners must be budgeted separately.
+      - key: IVX_PG_API_MAX_CONNECTIONS
+        value: "3"
+      - key: IVX_PG_TASKS_MAX_CONNECTIONS
+        value: "2"
+      - key: IVX_PG_PROCESS_CONNECTION_LIMIT
+        value: "10"
       - key: NODE_ENV
         value: production
       - key: IVX_DEPLOYMENT_ENV
@@ -238,6 +254,14 @@ services:
     plan: starter
     autoDeployTrigger: commit
     envVars:
+      # Shared manager ceiling per process: API 3 + tasks 2 + five isolated lanes.
+      # Replicas and other pool owners must be budgeted separately.
+      - key: IVX_PG_API_MAX_CONNECTIONS
+        value: "3"
+      - key: IVX_PG_TASKS_MAX_CONNECTIONS
+        value: "2"
+      - key: IVX_PG_PROCESS_CONNECTION_LIMIT
+        value: "10"
       - key: IVX_PROCESS_ROLE
         value: worker
       - key: IVX_WORKER_QUEUE_ATOMIC
@@ -250,6 +274,21 @@ services:
         value: "112"
       - key: IVX_AUTONOMOUS_RUNTIME_ENFORCER_ENABLED
         value: "true"
+      # The shared monetary admission RPC caps both model lanes across replicas.
+      - key: IVX_AI_GLOBAL_BUDGET_ENABLED
+        value: "true"
+      - key: IVX_AI_SHORT_POOL_MAX
+        value: "112"
+      - key: IVX_AI_LONG_POOL_MAX
+        value: "112"
+      - key: GLOBAL_WORKER_CONCURRENCY_LIMIT
+        value: "112"
+      - key: MIN_AUTONOMY_HOURS
+        value: "20"
+      - key: MAX_AUTONOMY_HOURS
+        value: "24"
+      - key: IVX_AUTONOMOUS_LEASE_SECONDS
+        value: "90"
       - key: NODE_ENV
         value: production
       - key: IVX_DEPLOYMENT_ENV

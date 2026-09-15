@@ -6,6 +6,7 @@
  * second controller merely because it started.
  */
 import { configuredAdmissionLimit } from './ivx-fleet-admission-policy';
+import { fleetPathConcurrency } from './ivx-fleet-operating-policy';
 export const IVX_AUTONOMOUS_CONTROL_POLICY_MARKER = 'ivx-autonomous-control-policy-v1-2026-09-06';
 
 export function explicitEnvFlag(name: string, env: NodeJS.ProcessEnv = process.env): boolean {
@@ -41,7 +42,7 @@ export function autonomousQueueBackend(env: NodeJS.ProcessEnv = process.env): st
 }
 
 export function autonomousContinuityCapacity(env: NodeJS.ProcessEnv = process.env): number {
-  return configuredAdmissionLimit(env.IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY, 12);
+  return fleetPathConcurrency(env, 'IVX_AUTONOMOUS_CONTINUITY_MAX_CONCURRENCY', 12);
 }
 
 /**

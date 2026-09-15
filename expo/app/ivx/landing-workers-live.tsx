@@ -1,14 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, FlatList, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { AlertTriangle, ArrowLeft, Clock3, Crosshair, Radio, RefreshCw } from 'lucide-react-native';
 import { getIVXAccessToken } from '@/lib/ivx-supabase-client';
 import { currentLiveFleet, fetchLiveFleet, type LiveFleetAgent, type LiveFleetPayload, type LiveFleetStatus } from '@/shared/ivx/live-fleet-dashboard';
 
 const API_BASE = (process.env.EXPO_PUBLIC_IVX_API_BASE_URL || 'https://api.ivxholding.com').replace(/\/+$/, '');
 const URL = `${API_BASE}/api/ivx/live-work/agents?enterpriseDashboard=1&view=live`;
-const POLL_MS = 5_000;
+const POLL_MS = 10_000;
 const RADAR_SIZE = 270;
 const RADAR_CENTER = RADAR_SIZE / 2;
 const RADAR_RADIUS = 112;
@@ -58,8 +58,9 @@ export default function LandingWorkersLiveScreen() {
     }
   }, []);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     mounted.current = true;
+    setNow(Date.now());
     void load();
     const poll = setInterval(() => void load(true), POLL_MS);
     const clock = setInterval(() => setNow(Date.now()), 1000);
@@ -68,7 +69,7 @@ export default function LandingWorkersLiveScreen() {
       clearInterval(poll); clearInterval(clock);
       inFlight.current?.abort(); inFlight.current = null;
     };
-  }, [load]);
+  }, [load]));
 
   const current = currentLiveFleet(payload, error, now);
   const agents = current?.agents ?? [];
@@ -90,11 +91,21 @@ export default function LandingWorkersLiveScreen() {
         <TouchableOpacity style={styles.iconBtn} accessibilityLabel="Volver" onPress={() => router.back()}><ArrowLeft size={20} color="#E2E8F0" /></TouchableOpacity>
         <View style={styles.headerCopy}>
           <Text style={styles.title}>IVX MISSION CONTROL</Text>
-          <Text style={styles.subtitle}>112 IA · actividad observada · actualización cada 5 s</Text>
+          <Text style={styles.subtitle}>112 IA · actividad observada · actualización cada 10 s</Text>
         </View>
         <TouchableOpacity style={styles.iconBtn} accessibilityLabel="Actualizar flota" onPress={refresh}><RefreshCw size={18} color="#FBBF24" /></TouchableOpacity>
       </View>
-      <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#FBBF24" />}>
+      <FlatList
+        testID="fleet_virtualized_container"
+        data={agents}
+        keyExtractor={agent => agent.agentId}
+        renderItem={({ item }) => <AgentCard agent={item} />}
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={5}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor="#FBBF24" />}
+        ListHeaderComponent={<>
         {!current ? <View style={styles.alert} accessibilityRole="alert" testID="fleet-telemetry-status">
           <AlertTriangle size={18} color="#F59E0B" />
           <Text style={styles.error}>{error || (loading ? 'Conectando con la flota…' : 'La última observación venció. Esperando datos actuales.')}</Text>
@@ -136,9 +147,9 @@ export default function LandingWorkersLiveScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>IA-001 → IA-112</Text>
           <Text style={styles.sectionSub}>RUNNING: ejecutando · ASSIGNED: tiene trabajo asignado · IDLE: disponible · UNKNOWN: sin presencia reciente.</Text>
-          {agents.map(agent => <AgentCard key={agent.agentId} agent={agent} />)}
         </View>
-      </ScrollView>
+        </>}
+      />
     </SafeAreaView>
   );
 }
@@ -174,7 +185,7 @@ function Metric({ label, value, color }: { label: string; value: string | number
   return <View style={styles.metric}><Text style={[styles.metricValue, { color }]}>{value}</Text><Text style={styles.metricLabel}>{label}</Text></View>;
 }
 function AgentCard({ agent }: { agent: LiveFleetAgent }) {
-  return <View style={styles.card}>
+  return <View style={styles.card} testID={`fleet-agent-${agent.agentNumber}`}>
     <View style={styles.cardHead}><View style={[styles.dot, { backgroundColor: tone(agent.status) }]} /><View style={styles.identity}><Text style={styles.agentName}>IA-{String(agent.agentNumber).padStart(3, '0')} · {agent.name}</Text><Text style={styles.meta}>{agent.department}</Text></View><Text style={[styles.status, { color: tone(agent.status) }]}>{agent.status}</Text></View>
     <Row label="RESPONSABILIDAD" value={agent.primaryResponsibility} />
     <Row label="TAREA OBSERVADA" value={agent.currentTask || 'Sin tarea con lease vigente'} />

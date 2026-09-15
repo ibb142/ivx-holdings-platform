@@ -14,6 +14,8 @@ declare module 'pg' {
   }
   export type QueryResult<T = Record<string, unknown>> = {
     rows: T[];
+    /** PostgreSQL command count; null for commands that do not report a count. */
+    rowCount: number | null;
   };
 
   export type PoolClient = {

@@ -1,4 +1,5 @@
 import { publicFeedRead } from '../services/ivx-public-feed-postgres';
+import { readFeedEngagementCounts } from '../services/ivx-feed-engagement-counts';
 import { boundedReadFetch, newReadTimings, readTimings } from '../services/ivx-read-timings';
 import { withPublicFeedAvailability } from '../services/ivx-public-feed-availability';
 import { loadViewerEngagement } from '../services/ivx-viewer-engagement';
@@ -128,20 +129,7 @@ async function loadPlaybackIndex(): Promise<PlaybackIndexLike> {
 }
 
 async function loadEngagementCounts(sb: any, ids: string[]): Promise<Record<string, { likes: number; comments: number; shares: number; saves: number }>> {
-  const counts: Record<string, { likes: number; comments: number; shares: number; saves: number }> = {};
-  for (const id of ids) counts[id] = { likes: 0, comments: 0, shares: 0, saves: 0 };
-  if (ids.length === 0) return counts;
-  const [likesRes, commentsRes, sharesRes, savesRes] = await Promise.all([
-    publicFeedRead<any>('select project_id from public.project_likes where project_id::text = any($1::text[])', [ids], () => sb.from('project_likes').select('project_id').in('project_id', ids)),
-    publicFeedRead<any>('select project_id from public.project_comments where project_id::text = any($1::text[]) and is_approved = true and deleted_at is null', [ids], () => sb.from('project_comments').select('project_id').in('project_id', ids).eq('is_approved', true).is('deleted_at', null)),
-    publicFeedRead<any>('select project_id from public.project_shares where project_id::text = any($1::text[])', [ids], () => sb.from('project_shares').select('project_id').in('project_id', ids)),
-    publicFeedRead<any>('select project_id from public.project_saves where project_id::text = any($1::text[])', [ids], () => sb.from('project_saves').select('project_id').in('project_id', ids)),
-  ]);
-  for (const row of likesRes.data || []) { const k = String(row.project_id); if (counts[k]) counts[k].likes += 1; }
-  for (const row of commentsRes.data || []) { const k = String(row.project_id); if (counts[k]) counts[k].comments += 1; }
-  for (const row of sharesRes.data || []) { const k = String(row.project_id); if (counts[k]) counts[k].shares += 1; }
-  for (const row of savesRes.data || []) { const k = String(row.project_id); if (counts[k]) counts[k].saves += 1; }
-  return counts;
+  return readFeedEngagementCounts(sb, ids);
 }
 
 /* ---------------- feed ---------------- */

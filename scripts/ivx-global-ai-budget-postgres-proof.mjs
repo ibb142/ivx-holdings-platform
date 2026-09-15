@@ -40,6 +40,12 @@ export async function proveGlobalAIBudget(clients, realConnections = true) {
   await finish(a,c1.reservationId,'uncertain',null);
   assert.equal((await snapshot()).unsettledLiabilityNano,'6000');
   assert.equal((await reserve(b)).allowed,true,'uncertain completion releases concurrency, never money');
+  await reset(1_000_000,112);
+  const fullFleet=await Promise.all(Array.from({length:113},(_,n)=>reserve(clients[n%clients.length])));
+  assert.equal(fullFleet.filter(result=>result.allowed).length,112);
+  assert.equal(fullFleet.filter(result=>result.reason==='global_capacity_exceeded').length,1);
+  assert.equal((await snapshot()).requestsActive,112);
+  assert.equal((await snapshot()).unsettledLiabilityNano,'336000');
   await reset(10000);
   const old=await reserve(a,randomUUID(),7000);
   await a.query("update public.ivx_ai_budget_reservations set day=(clock_timestamp() at time zone 'UTC')::date-1 where reservation_id=$1",[old.reservationId]);
@@ -102,7 +108,8 @@ export async function proveGlobalAIBudget(clients, realConnections = true) {
   assert.equal((await a.query('select generation_id from public.ivx_ai_budget_reservations where reservation_id=$1',
     [retryReservation.reservationId])).rows[0].generation_id,'isolated-generation-receipt');
   const result={verification:'PASS',realConnections,connections:clients.length,attemptedAdmissions:20,admittedWithinBudget:3,
-    sharedMonetaryAdmission:true,sharedCapacity:true,duplicateAdmissionRejected:true,settlementIdempotent:true,
+    sharedMonetaryAdmission:true,sharedCapacity:true,fullFleetCapacityProved:112,overflowAdmissionRejected:true,
+    duplicateAdmissionRejected:true,settlementIdempotent:true,
     staleWorkerRejected:true,unknownChargesRetained:true,midnightLiabilityCarried:true,lostResponseFenced:true,
     committedSettlementLostAckRecovered:true,settlementRetryAttempts:settlementAttempts,providerReceiptPreserved:true,
     priceOverrunStopsAdmission:true,rollbackAtomic:true,lockRecoveryTested:realConnections,privateAccess:true,

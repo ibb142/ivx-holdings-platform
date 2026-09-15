@@ -49,7 +49,17 @@ test('24 elapsed hours with missing samples cannot certify continuous operation'
   const report = evaluateWindow([observationSnapshot(), observationSnapshot(now + 86400000)]);
   expect(report.coverageGaps).toBe(1);
   expect(report.initialWindowPassed).toBe(false);
+  expect(report.minimumWindowPassed).toBe(false);
   expect(report.phase4Certified).toBe(false);
+});
+test('a fully observed 20-hour window reaches the minimum, while 24 hours remains pending', () => {
+  const samples = Array.from({ length: 601 }, (_, i) => observationSnapshot(now + i * 120_000));
+  const report = evaluateWindow(samples);
+  expect(report.minimumWindowPassed).toBe(true);
+  expect(report.initialWindowPassed).toBe(false);
+  expect(report.phase4Certified).toBe(false);
+  samples.splice(200, 1);
+  expect(evaluateWindow(samples).minimumWindowPassed).toBe(false);
 });
 test('a deployment starts a different continuity window', () => {
   const after = observationSnapshot(now + 60000); after.sourceSha = 'b'.repeat(40);
