@@ -92,3 +92,16 @@ test('both production text error branches expose admission failure without creat
       error: 'Global AI budget: durable admission unavailable', selectedTool: null });
   }
 });
+
+test('health probe fallback stays canonical without fabricating a provider result', () => {
+  const probeStart = source.indexOf('const probePayload: IVXOwnerAIHealthProbeResponse = {');
+  const probeEnd = source.indexOf('\n        };', probeStart);
+
+  expect(probeStart).toBeGreaterThan(-1);
+  expect(probeEnd).toBeGreaterThan(probeStart);
+  const probeBranch = source.slice(probeStart, probeEnd);
+  expect(probeBranch).toContain("model: aiResult?.model ?? 'ivx_health_probe_unavailable'");
+  expect(probeBranch).toContain("source: aiResult?.source ?? 'local_app_brain'");
+  expect(probeBranch).toContain('provider: aiResult?.provider');
+  expect(probeBranch).not.toContain("provider: aiResult?.provider ?? 'chatgpt'");
+});
