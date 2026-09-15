@@ -5,8 +5,17 @@ import { observePostgresPoolErrors, queryWithPostgresDeadline } from './ivx-post
 
 let ownerReadPool: Pool | null = null;
 let poolBinding: string | null = null;
-let readInFlight: Promise<unknown> | null = null;
-let campaignReadInFlight: Promise<unknown> | null = null;
+let snapshotReadInFlight: Promise<OwnerControlSnapshot> | null = null;
+
+type OwnerControlSnapshot = {
+  emergencyRows: unknown[];
+  campaignDocuments: unknown[];
+};
+
+type OwnerControlSnapshotRow = {
+  emergency_rows: unknown;
+  campaign_documents: unknown;
+};
 
 /** Only the same Supabase project may answer an owner-control read. */
 export function emergencyStopPostgresConfig(env: NodeJS.ProcessEnv = process.env): ClientConfig {
@@ -45,44 +54,72 @@ function getOwnerReadPool(): Pool {
   return ownerReadPool;
 }
 
-export async function readEmergencyStopPostgres(): Promise<unknown> {
+async function readOwnerControlSnapshotPostgres(): Promise<OwnerControlSnapshot> {
   const pool = getOwnerReadPool();
-  if (readInFlight) return readInFlight;
-  // Share only the current read. Never reuse a settled control value here.
+  if (snapshotReadInFlight) return snapshotReadInFlight;
+  // The truth snapshot requests campaign control and emergency stop in
+  // parallel. A max:1 safety pool cannot service two independent fallbacks
+  // within the same two-second deadline under connection pressure. Read both
+  // small authoritative documents in one transaction and share only that
+  // pending read; a settled permission is never cached or reused.
   const pending = (async () => {
-    const result = await queryWithPostgresDeadline(pool,
-      'SELECT control_name, active, reason, updated_by, updated_at FROM public.ivx_agent_controls WHERE control_name = $1 LIMIT 2',
-      ['emergency_stop'], 'assignment');
-    if (result.rows.length !== 1) throw new Error('owner_control_direct_postgres_row_missing_or_duplicate');
-    return result.rows;
+    const result = await queryWithPostgresDeadline<OwnerControlSnapshotRow>(pool, `SELECT COALESCE((
+          SELECT jsonb_agg(to_jsonb(control_rows))
+          FROM (
+            SELECT control_name, active, reason, updated_by, updated_at
+            FROM public.ivx_agent_controls
+            WHERE control_name = 'emergency_stop'
+            LIMIT 2
+          ) control_rows
+        ), '[]'::jsonb) AS emergency_rows,
+        COALESCE((
+          SELECT jsonb_agg(document_rows.value)
+          FROM (
+            SELECT value
+            FROM public.ivx_durable_documents
+            WHERE doc_key = 'app-completion/campaign-state.json'
+            LIMIT 2
+          ) document_rows
+        ), '[]'::jsonb) AS campaign_documents
+    `, [], 'assignment');
+    if (result.rows.length !== 1) throw new Error('owner_control_direct_postgres_snapshot_missing_or_duplicate');
+    const row = result.rows[0];
+    if (!Array.isArray(row.emergency_rows) || !Array.isArray(row.campaign_documents)) {
+      throw new Error('owner_control_direct_postgres_snapshot_malformed');
+    }
+    return {
+      emergencyRows: structuredClone(row.emergency_rows),
+      campaignDocuments: structuredClone(row.campaign_documents),
+    };
   })();
-  readInFlight = pending;
+  snapshotReadInFlight = pending;
   try {
     return await pending;
   } finally {
-    if (readInFlight === pending) readInFlight = null;
+    if (snapshotReadInFlight === pending) snapshotReadInFlight = null;
   }
+}
+
+export async function readEmergencyStopPostgres(): Promise<unknown> {
+  const snapshot = await readOwnerControlSnapshotPostgres();
+  if (snapshot.emergencyRows.length !== 1) {
+    throw new Error('owner_control_direct_postgres_row_missing_or_duplicate');
+  }
+  return snapshot.emergencyRows;
 }
 
 /** Read only the canonical campaign control document; never create or repair it. */
 export async function readCampaignControlPostgres(): Promise<unknown> {
-  const pool = getOwnerReadPool();
-  if (campaignReadInFlight) return campaignReadInFlight;
-  const pending = (async () => {
-    const result = await queryWithPostgresDeadline<{ value: unknown }>(pool,
-      'SELECT value FROM public.ivx_durable_documents WHERE doc_key = $1 LIMIT 2',
-      ['app-completion/campaign-state.json'], 'assignment');
-    if (result.rows.length !== 1) throw new Error('owner_control_direct_postgres_document_missing_or_duplicate');
-    return structuredClone(result.rows[0].value);
-  })();
-  campaignReadInFlight = pending;
-  try { return await pending; }
-  finally { if (campaignReadInFlight === pending) campaignReadInFlight = null; }
+  const snapshot = await readOwnerControlSnapshotPostgres();
+  if (snapshot.campaignDocuments.length !== 1) {
+    throw new Error('owner_control_direct_postgres_document_missing_or_duplicate');
+  }
+  return structuredClone(snapshot.campaignDocuments[0]);
 }
 
 export async function resetEmergencyStopPoolForTests(): Promise<void> {
   const previous = ownerReadPool;
-  ownerReadPool = null; poolBinding = null; readInFlight = null; campaignReadInFlight = null;
+  ownerReadPool = null; poolBinding = null; snapshotReadInFlight = null;
   if (previous) await previous.end();
 }
 
