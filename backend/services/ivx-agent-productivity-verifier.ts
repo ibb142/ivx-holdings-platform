@@ -49,7 +49,7 @@ export function parseLandingProductivityEvidence(summary: string): ParsedLanding
     const unitId = String(parsed.unit_id ?? '');
     if (!Number.isInteger(agentNumber) || agentNumber < 1 || agentNumber > 112) return null;
     if (!Number.isFinite(productiveSeconds) || productiveSeconds < 0) return null;
-    if (!['PASS', 'FAIL', 'BLOCKED'].includes(status)) return null;
+    if (!['PASS', 'FAIL', 'BLOCKED', 'RUNNING'].includes(status)) return null;
     if (!unitId || !productionSha || !startedAt || !completedAt) return null;
     return { unitId, agentNumber, status: status as ParsedLandingProductivityEvidence['status'], startedAt, completedAt, productiveSeconds, productionSha };
   } catch {
