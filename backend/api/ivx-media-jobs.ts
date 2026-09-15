@@ -110,7 +110,7 @@ export async function handleIVXMediaJobsCreateRequest(request: Request): Promise
   const prompt = readString(body.prompt);
   const ownerId = readString(body.ownerId) || null;
 
-  if (mediaCount <= 0) {
+  if (mediaCount <= 0 || Object.keys(mediaTypes).length === 0) {
     return jsonResponse({ ok: false, error: 'mediaCount must be > 0.' }, 400);
   }
   if (!prompt) {
